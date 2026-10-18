@@ -9,6 +9,7 @@ import expo.modules.wavenative.artwork.AndroidArtworkProcessor
 import expo.modules.wavenative.artwork.ArtworkStore
 import expo.modules.wavenative.log.AndroidMemory
 import expo.modules.wavenative.log.JsHeap
+import expo.modules.wavenative.log.LogUnits
 import expo.modules.wavenative.log.NativeLog
 import expo.modules.wavenative.log.WaveLog
 import expo.modules.wavenative.player.JsRuntime
@@ -27,6 +28,7 @@ import expo.modules.wavenative.tags.MediaRetrieverTagReader
 import expo.modules.wavenative.yt.AndroidAudioDuration
 import expo.modules.wavenative.yt.AndroidYtAudioStreams
 import expo.modules.wavenative.yt.YtAudioDownload
+import expo.modules.wavenative.yt.YtClient
 import expo.modules.wavenative.yt.YtDownloadService
 import expo.modules.wavenative.yt.YtException
 import expo.modules.wavenative.yt.YtStreamFailure
@@ -113,14 +115,18 @@ class AndroidDownloads private constructor(private val context: Context) {
       throw DurableFailure("cancelled", error)
     } catch (error: YtException) {
       if (cancelled()) throw DurableFailure("cancelled", error)
-      val reason = when (YtStreamResolver.failureOf(error)) {
-        YtStreamFailure.OFFLINE -> "offline"
+      val failure = YtStreamResolver.failureOf(error)
+      val reason = when {
+        // Offline stays retryable, whatever YouTube's last answer was.
+        failure == YtStreamFailure.OFFLINE || !ytStreams.online() -> "offline"
         // YT Music was turned off: with Download in best quality off too, there's no source left.
-        YtStreamFailure.DISABLED -> "noSource"
-        YtStreamFailure.UNAVAILABLE -> "ytUnavailable"
-        YtStreamFailure.FAILED -> "failed"
+        failure == YtStreamFailure.DISABLED -> "noSource"
+        // Refused without a clear reason, as when YouTube limits downloads: tried again (YtRefusal).
+        failure == YtStreamFailure.UNAVAILABLE && YtStreamResolver.refused(error) -> "ytRefused"
+        failure == YtStreamFailure.UNAVAILABLE -> "ytUnavailable"
+        else -> "failed"
       }
-      WaveLog.w(TAG, "A YouTube transfer failed ($reason)")
+      // The lookup already wrote its one line, with the song and YouTube's answer (YtStreamResolver).
       throw DurableFailure(reason, error)
     } catch (error: CancellationException) {
       throw DurableFailure("cancelled", error)
@@ -216,6 +222,9 @@ class AndroidDownloads private constructor(private val context: Context) {
   }
 
   fun subscribe(listener: () -> Unit): () -> Unit { listeners.add(listener); return { listeners.remove(listener) } }
+  /** The run as JS last pushed it for the notification (#476); null with no run or a one-song run. */
+  @Volatile var runNotice: DownloadRunNotice? = null
+
   /**
    * The journal may have changed. Listeners (JS, which then asks for what changed since its
    * revision) only hear of it when it did, at most every [NOTIFY_MS]: transfer progress arrives
@@ -227,6 +236,21 @@ class AndroidDownloads private constructor(private val context: Context) {
     later = { delay, run -> main.postDelayed(run, delay) },
     notify = { for (listener in listeners) runCatching(listener) },
   )
+
+  /**
+   * Pauses YouTube downloads until [until] at backoff [level], as JS decided (Core's
+   * `ytThrottle`). A new pause renews YouTube's visitor data and proof-of-origin tokens first,
+   * so the downloads after it go out afresh; a pause JS lifts or that's over only keeps the level.
+   */
+  suspend fun pauseYoutube(until: Long, level: Long) {
+    val now = System.currentTimeMillis()
+    if (until > now && jobs.youtubePause()?.until != until) {
+      YtClient.get(context).streams.renewSession()
+      WaveLog.w(TAG, "YouTube downloads paused for ${LogUnits.duration(until - now)}: YouTube is limiting them (burst $level)")
+    }
+    jobs.pauseYoutube(until, level)
+    changed()
+  }
 
   /** Called from the user's tap or the resumed Activity. Failure never starts unprotected work. */
   fun requestService() {

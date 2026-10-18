@@ -1,4 +1,10 @@
-import type { Appearance, LaunchTheme, TagDestination, TagWriteStep } from "@wave/core";
+import type {
+  Appearance,
+  FramingSquare,
+  LaunchTheme,
+  TagDestination,
+  TagWriteStep,
+} from "@wave/core";
 import { NativeModule, requireNativeModule } from "expo";
 
 /** One audio file as read by the native scanner (`modules/wave-native`). Tag values are raw. */
@@ -134,6 +140,8 @@ declare class WaveNativeModule extends NativeModule<WaveNativeEvents> {
   pickStatFiles(): Promise<readonly PickedPlaylistFile[]>;
   /** The clipboard's text, or null when it holds none. Only readable while Wave is in front. */
   readClipboardText(): Promise<string | null>;
+  /** Puts [text] on the clipboard, labelled [label] (Android shows its own "Copied" on 13+). */
+  writeClipboardText(label: string, text: string): Promise<void>;
   /**
    * The latest text shared to Wave from another app's share sheet, once: the
    * share that started Wave or one since. Null when nothing new was shared.
@@ -183,12 +191,18 @@ declare class WaveNativeModule extends NativeModule<WaveNativeEvents> {
   /** Deletes every downloaded artist photo. */
   clearArtistPhotos(): Promise<void>;
   /**
-   * Opens Android's photo picker for a playlist's image and saves the picked
-   * photo, cropped to a square, in Wave's storage (new files each time).
-   * Null when nothing was picked; rejects when the photo can't be read.
+   * Opens Android's photo picker for a playlist's image and keeps the picked
+   * photo, upright, in Wave's storage as the image's original (a new file
+   * each time). Null when nothing was picked; rejects when the photo can't be read.
    */
-  pickPlaylistImage(): Promise<PlaylistImageFiles | null>;
-  /** Deletes playlist image files `pickPlaylistImage` saved; other paths are left alone. */
+  pickPlaylistPhoto(): Promise<PlaylistPhoto | null>;
+  /**
+   * Saves [square] (px, Core's `framingSquare`) of the original at [path] as
+   * a playlist image (new files each time); rejects when [path] isn't a
+   * playlist image Wave saved or can't be read.
+   */
+  cropPlaylistImage(path: string, square: FramingSquare): Promise<PlaylistImageFiles>;
+  /** Deletes playlist images and originals Wave saved; other paths are left alone. */
   deletePlaylistImages(paths: readonly string[]): Promise<void>;
   /**
    * Makes `alias` (one of `aliases`, activity-alias names without the package)
@@ -272,6 +286,13 @@ export interface ArtistPhotoFiles {
 interface PlaylistImageFiles {
   readonly path: string;
   readonly thumbPath: string;
+}
+
+/** A photo kept as a playlist image's original, and its size in px. */
+export interface PlaylistPhoto {
+  readonly path: string;
+  readonly width: number;
+  readonly height: number;
 }
 
 /** What became of a file `deleteFiles` was asked to delete (Core's `SongDeleteFailureReason` otherwise). */

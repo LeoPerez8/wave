@@ -7,6 +7,7 @@
 import {
   FAVORITES_DOWNLOAD_ORIGIN,
   YT_DOWNLOADS_NONE,
+  qualityDirection,
   applyJournalChanges,
   readStarDownloads,
   starAskedAfter,
@@ -19,6 +20,7 @@ import {
   downloadFailurePlan,
   downloadSource,
   downloadStorageFull,
+  failedDownloadCount,
   failedDownloads,
   isWithin,
   libraryFinder,
@@ -45,6 +47,8 @@ import {
   qualityReplacementTarget,
   queuedDownloads,
   settledDownloadFailures,
+  throttledFailures,
+  throttledFailuresLine,
   soulseekCandidates,
   soulseekQuery,
   soulseekReceivedMatches,
@@ -73,6 +77,7 @@ import {
   type DownloadSource,
   type DownloadingList,
   type FailedDownload,
+  type FailedDownloadsInput,
   type MissingSongJob,
   type MissingSongVideo,
   type MissingSongsDownload,
@@ -81,6 +86,7 @@ import {
   type PlaylistItem,
   type QualityDirection,
   type QueuedDownload,
+  type QueuedDownloadCounts,
   type ReplacedTrack,
   type SoulseekCandidate,
   type UnsearchedSong,
@@ -100,6 +106,7 @@ import * as Cause from "effect/Cause";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
+import { Storage } from "expo-sqlite/kv-store";
 import { useMemo, useSyncExternalStore } from "react";
 
 import { appLog } from "@/log/appLog";
@@ -113,7 +120,7 @@ import {
   toIndexedArtwork,
   toIndexedTrack,
 } from "@/library/LibraryScan";
-import { publishSavedStars } from "@/library/libraryChanges";
+import { publishSavedStars, publishYtSongSignal } from "@/library/libraryChanges";
 import { LibraryStore, type SongRow } from "@/library/LibraryStore";
 import { useLoadedMissingSongs, useMissingSongs } from "@/library/hooks";
 import { refreshDownloadPolicy } from "@/library/downloadPolicy";
@@ -144,7 +151,10 @@ import {
 import { ytMusicEnabled } from "@/settings/ytMusic";
 
 import { readYtAlbum } from "./albumPages";
+import { failedJobsNow, journal, queuedCountsNow } from "./downloadJournal";
+import { followDownloadRuns } from "./downloadRun";
 import { useLoadedLibraryFinder } from "./libraryFinder";
+import { followYoutubeThrottle } from "./youtubeThrottle";
 import { withSearchTurn } from "./searchAllowance";
 import { YtMusic, type YtMusicError } from "./YtMusic";
 
@@ -846,8 +856,6 @@ export const importQualityReplacement = (
   });
 
 const downloads = makeExternalStore<YtDownloads<NativeYtSong>>(YT_DOWNLOADS_NONE);
-/** The journal's last snapshot as it came, for album and playlist views (Core's `ytSongsDownload`). */
-const journal = makeExternalStore<readonly NativeDownloadJob[]>([]);
 
 /** Re-reads folder policy so a publication never lands outside the current Library folders. */
 const publicationTarget = (claim: NativeDownloadDecision) =>
@@ -1241,6 +1249,8 @@ const refresh = async (): Promise<void> => {
       const snapshotJobs = applyJournalChanges(followed, changes);
       followed = snapshotJobs;
       followedRevision = changes.revision;
+      // YouTube refusing songs in a burst pauses its downloads (Core's `ytThrottle`).
+      void followYoutubeThrottle(snapshotJobs);
       // A failed Library read keeps the journal intact and mustn't hide new progress or decisions.
       const jobs = await forgetDeletedDownloads(snapshotJobs).catch(() => snapshotJobs);
       if (jobs !== shown) {
@@ -1330,6 +1340,52 @@ const forgetSettledFailures = (): void => {
     .catch(() => undefined);
 };
 
+/** Set on this phone once the songs YouTube's Oct 18 limit failed went back to the queue. */
+const THROTTLED_REQUEUE_KEY = "downloads.throttledFailuresRequeued";
+
+/**
+ * Once an install, after the update that tells YouTube refusing a song from saying it's
+ * unavailable: asks again for the songs that failed as unavailable at their first attempt and
+ * were never tried again (Core's `throttledFailures`), as Retry would, so they follow the pause
+ * and try-again rules, and logs how many. Waits for YT Music to be on; a read or a request that
+ * fails leaves it for the next launch.
+ */
+const requeueThrottledFailures = (): void => {
+  if (Storage.getItemSync(THROTTLED_REQUEUE_KEY) !== null || !ytMusicEnabled()) return;
+  requests = requests
+    .then(async () => {
+      if (Storage.getItemSync(THROTTLED_REQUEUE_KEY) !== null) return;
+      const jobs = await WaveSoulseek.jobsSnapshot();
+      const session = await sessionNow();
+      const library = await appRuntime.runPromise(
+        Effect.gen(function* () {
+          const store = yield* LibraryStore;
+          return yield* Effect.all({
+            songs: store.listSongs,
+            missing: store.missingSongs(),
+            files: store.qualityFiles,
+            upgrade: store.noBetterCopies("upgrade"),
+            downgrade: store.noBetterCopies("downgrade"),
+          });
+        }),
+      );
+      const find = libraryFinder(library.songs);
+      const failed = throttledFailures(jobs, {
+        inLibrary: (song) => find(song) !== null,
+        missingTrackIds: new Set(library.missing.map((track) => track.id)),
+        files: library.files,
+        noBetterCopy: { upgrade: new Set(library.upgrade), downgrade: new Set(library.downgrade) },
+        direction: qualityDirection(session.status !== "off"),
+      });
+      const asked = failed.length === 0 ? [] : await retryRequests(failed);
+      if (asked.length > 0) await enqueueJobs(asked);
+      Storage.setItemSync(THROTTLED_REQUEUE_KEY, String(Date.now()));
+      appLog("info", "downloads", throttledFailuresLine(asked.length));
+      if (asked.length > 0) await refresh();
+    })
+    .catch(() => undefined);
+};
+
 let attached = false;
 /**
  * Follows the native journal. The app and the headless task (started by the
@@ -1340,6 +1396,7 @@ let attached = false;
 export const startDownloads = (resume = false): void => {
   if (!attached) {
     attached = true;
+    followDownloadRuns();
     WaveSoulseek.addListener("onJobsChanged", refreshQuietly);
     libraryVersion.subscribe(refreshQuietly);
   }
@@ -1348,6 +1405,7 @@ export const startDownloads = (resume = false): void => {
   if (resume) {
     void WaveSoulseek.resumeJobs().catch(() => undefined);
     forgetSettledFailures();
+    requeueThrottledFailures();
   }
 };
 
@@ -1360,6 +1418,7 @@ const songRequest = (
 ): JobRequest => ({ song, recording: soulseekRecording(song), equivalentId, source, origin });
 
 export const downloadYtSong = (song: NativeYtSong): void => {
+  publishYtSongSignal("download", [song.videoId]);
   askForNotifications();
   startDownloads();
   // One at a time, so a second tap sees the first one's job in the journal.
@@ -1401,6 +1460,10 @@ const downloadYtSongs = (
   inLibrary: InLibrary,
   origin: DownloadOrigin | null,
 ): void => {
+  publishYtSongSignal(
+    "download",
+    songs.map((song) => song.videoId),
+  );
   askForNotifications();
   startDownloads();
   requests = requests
@@ -1786,15 +1849,6 @@ export const useMissingSongsDownload = (): MissingSongsDownload<MissingSongJob> 
 };
 
 /**
- * Settings › Downloads' songs on their way (Core's `queuedDownloads`), following the journal: the
- * ones downloading first, then the waiting ones in queue order, each with its progress line.
- */
-export const useQueuedDownloads = (): readonly QueuedDownload<NativeYtSong>[] => {
-  const jobs = useSyncExternalStore(journal.subscribe, journal.get);
-  return useMemo(() => queuedDownloads(jobs), [jobs]);
-};
-
-/**
  * Settings › Downloads' Downloading list (Core's `downloadingList`), following the journal: the
  * songs downloading now, then the waiting ones grouped by the playlist, album or mix they're from.
  */
@@ -1849,23 +1903,38 @@ export const moveQueuedDownloads = (ids: readonly string[]): void => {
  * in or taken out leaves too).
  */
 export const useFailedDownloads = (): readonly FailedDownload<NativeYtSong>[] => {
-  const jobs = useSyncExternalStore(journal.subscribe, journal.get);
-  // The Library is read for the finder only while some download has failed.
-  const find = useLoadedLibraryFinder(jobs.some(hasFailed));
+  const failed = useSyncExternalStore(journal.subscribe, failedJobsNow);
+  const input = useFailedDownloadsInput(failed.length > 0);
+  return useMemo(() => failedDownloads(failed, input), [failed, input]);
+};
+
+/**
+ * What tells whether a failure settled another way: the Library (read for the finder only
+ * while [active], some download having failed) and its missing songs.
+ */
+const useFailedDownloadsInput = (active: boolean): FailedDownloadsInput<NativeYtSong> => {
+  const find = useLoadedLibraryFinder(active);
   const missing = useLoadedMissingSongs();
-  const missingTrackIds = useMemo(
-    () => (missing === null ? null : new Set(missing.map((track) => track.id))),
-    [missing],
-  );
   return useMemo(
-    () =>
-      failedDownloads(jobs, {
-        // Nothing has settled until the Library is read.
-        inLibrary: (song) => find !== null && find(song) !== null,
-        missingTrackIds,
-      }),
-    [jobs, find, missingTrackIds],
+    () => ({
+      // Nothing has settled until the Library is read.
+      inLibrary: (song: NativeYtSong) => find !== null && find(song) !== null,
+      missingTrackIds: missing === null ? null : new Set(missing.map((track) => track.id)),
+    }),
+    [find, missing],
   );
+};
+
+/**
+ * The Settings row's counts (Core's `failedDownloadCount`, `queuedDownloadCounts`): how many songs
+ * failed, and how many are downloading, saving and waiting, without building either list.
+ */
+export const useDownloadCounts = (): { failed: number; queued: QueuedDownloadCounts } => {
+  const failedJobsList = useSyncExternalStore(journal.subscribe, failedJobsNow);
+  const queued = useSyncExternalStore(journal.subscribe, queuedCountsNow);
+  const input = useFailedDownloadsInput(failedJobsList.length > 0);
+  const failed = useMemo(() => failedDownloadCount(failedJobsList, input), [failedJobsList, input]);
+  return useMemo(() => ({ failed, queued }), [failed, queued]);
 };
 
 /**
@@ -1877,33 +1946,40 @@ export const retryFailedDownloads = (failed: readonly FailedDownload<NativeYtSon
   startDownloads();
   requests = requests
     .then(async () => {
-      const trackIds = failed.flatMap(({ retry }) =>
-        retry.kind === "missingSong" ? [retry.trackId] : [],
-      );
-      const missing = new Map(
-        (trackIds.length === 0 ? [] : await missingSongJobs(trackIds)).map((job) => [
-          job.missing.trackId,
-          job,
-        ]),
-      );
-      const session = await sessionNow();
-      const ytMusicOn = ytMusicEnabled();
-      const asked: JobRequest[] = [];
-      for (const { retry } of failed) {
-        if (retry.kind === "quality") {
-          asked.push(...(await qualityReplacementRequests(retry.direction, [retry.trackId])));
-        } else if (retry.kind === "song") {
-          // Asked with no origin, the job keeps the one it was first asked from.
-          asked.push(songRequest(retry.song, null, currentSource(session, ytMusicOn), null));
-        } else {
-          const job = missing.get(retry.trackId);
-          if (job !== undefined) asked.push(missingSongRequest(job, session, ytMusicOn));
-        }
-      }
-      await enqueueJobs(asked);
+      await enqueueJobs(await retryRequests(failed));
       await refresh();
     })
     .catch(() => undefined);
+};
+
+/** What Retry asks the journal for again, for each of [failed] (`retryFailedDownloads`). */
+const retryRequests = async (
+  failed: readonly FailedDownload<NativeYtSong>[],
+): Promise<JobRequest[]> => {
+  const trackIds = failed.flatMap(({ retry }) =>
+    retry.kind === "missingSong" ? [retry.trackId] : [],
+  );
+  const missing = new Map(
+    (trackIds.length === 0 ? [] : await missingSongJobs(trackIds)).map((job) => [
+      job.missing.trackId,
+      job,
+    ]),
+  );
+  const session = await sessionNow();
+  const ytMusicOn = ytMusicEnabled();
+  const asked: JobRequest[] = [];
+  for (const { retry } of failed) {
+    if (retry.kind === "quality") {
+      asked.push(...(await qualityReplacementRequests(retry.direction, [retry.trackId])));
+    } else if (retry.kind === "song") {
+      // Asked with no origin, the job keeps the one it was first asked from.
+      asked.push(songRequest(retry.song, null, currentSource(session, ytMusicOn), null));
+    } else {
+      const job = missing.get(retry.trackId);
+      if (job !== undefined) asked.push(missingSongRequest(job, session, ytMusicOn));
+    }
+  }
+  return asked;
 };
 
 /**

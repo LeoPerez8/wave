@@ -1,6 +1,7 @@
 import {
   filesLeavingWithRoot,
   rememberSearch,
+  type ArtistFirstPlay,
   type BlackPlayerPlay,
   type BlackPlayerTrack,
   type ImportedPlays,
@@ -10,6 +11,8 @@ import {
   type LibraryTrack,
   type MissingTrack,
   type PendingFavorite,
+  type CountedListening,
+  type RecapSongGenre,
   type CreditedPlayTotals,
   type PlayEvent,
   type PlayTotals,
@@ -91,9 +94,11 @@ import {
 import { listeningSums } from "./db/playTotals";
 import {
   removePlaylistImage,
+  selectPlaylistImageOriginal,
   setPlaylistImage,
   takeDeletedPlaylistImages,
   type PlaylistImageFiles,
+  type PlaylistImageOriginal,
 } from "./db/playlistImages";
 import {
   addToPlaylist,
@@ -155,12 +160,21 @@ import {
   trackArtistIds,
   selectPlayableSongs,
   selectSongGenres,
+  selectVideoIds,
   trackQuery,
   type SongGenres,
   type TrackScope,
   withFile,
 } from "./db/tracks";
-import { artistPlays, creditedPlayTotals, trackPlayTotals, type ArtistPlays } from "./db/stats";
+import {
+  artistFirstPlays,
+  artistPlays,
+  countedListening,
+  creditedPlayTotals,
+  songGenres,
+  trackPlayTotals,
+  type ArtistPlays,
+} from "./db/stats";
 import { keyRecordings, stampPreference } from "./db/sync";
 import {
   filesGone,
@@ -621,6 +635,10 @@ export class LibraryStore extends Context.Service<
     readonly songsByIds: (
       ids: readonly number[],
     ) => Effect.Effect<readonly PlayableSongRow[], LibraryStoreError>;
+    /** The YouTube video id each of the songs [ids] was downloaded from, by song id (those with one). */
+    readonly videoIds: (
+      ids: readonly number[],
+    ) => Effect.Effect<ReadonlyMap<number, string>, LibraryStoreError>;
     readonly loadPlayback: Effect.Effect<SavedPlayback | null, LibraryStoreError>;
     /** Saves the queue with where its current entry is. */
     readonly saveQueue: (
@@ -659,13 +677,18 @@ export class LibraryStore extends Context.Service<
     readonly deletePlaylist: (id: number) => Effect.Effect<void, LibraryStoreError>;
     /**
      * Gives a playlist its own image (it stays on this phone); returns the
-     * files nothing shows any more: its old image's, or [files] when it's gone.
+     * files nothing shows or keeps any more: its old image's (but an original
+     * [files] keeps), or [files] when it's gone.
      */
     readonly setPlaylistImage: (
       id: number,
       files: PlaylistImageFiles,
     ) => Effect.Effect<readonly string[], LibraryStoreError>;
-    /** Brings a playlist's mosaic back; returns its image's files to delete. */
+    /** The original photo and last framing Adjust Image reframes; null without an image. */
+    readonly playlistImageOriginal: (
+      id: number,
+    ) => Effect.Effect<PlaylistImageOriginal | null, LibraryStoreError>;
+    /** Brings a playlist's mosaic back; returns its image's files (original too) to delete. */
     readonly removePlaylistImage: (
       id: number,
     ) => Effect.Effect<readonly string[], LibraryStoreError>;
@@ -847,6 +870,22 @@ export class LibraryStore extends Context.Service<
      * totals (`play_totals`); Core's `summedListeningTotals` reads it.
      */
     readonly listeningSums: Effect.Effect<ListeningSums, LibraryStoreError>;
+    /**
+     * The whole history's counted listening, summed per quarter hour (deleted
+     * songs included): what Core's `availableRecaps` and `recap` read.
+     */
+    readonly countedListening: Effect.Effect<readonly CountedListening[], LibraryStoreError>;
+    /** The genre tags of these songs still in the library, in no order (Core's `recap` reads them). */
+    readonly songGenres: (
+      ids: readonly number[],
+    ) => Effect.Effect<readonly RecapSongGenre[], LibraryStoreError>;
+    /**
+     * When each of these artists had their first counted play ever, deleted
+     * songs included, in no order; artists never played are left out.
+     */
+    readonly artistFirstPlays: (
+      ids: readonly number[],
+    ) => Effect.Effect<readonly ArtistFirstPlay[], LibraryStoreError>;
     /**
      * What [artistId]'s page needs for its stats block (Core's `artistStats`),
      * read from that artist's songs and their plays alone: the songs in the
@@ -1278,6 +1317,8 @@ const make = Effect.gen(function* () {
     songsByIds: (ids) =>
       attempt("read queued songs", () => selectPlayableSongs(db, ids).filter(songHasFile)),
 
+    videoIds: (ids) => attempt("read the songs' video ids", () => selectVideoIds(db, ids)),
+
     loadPlayback: attempt(
       "read the saved queue",
       () =>
@@ -1340,6 +1381,9 @@ const make = Effect.gen(function* () {
 
     setPlaylistImage: (id, files) =>
       attempt("change the playlist's image", () => setPlaylistImage(db, id, files)),
+
+    playlistImageOriginal: (id) =>
+      attempt("read the playlist's image", () => selectPlaylistImageOriginal(db, id)),
 
     removePlaylistImage: (id) =>
       attempt("remove the playlist's image", () => removePlaylistImage(db, id)),
@@ -1458,6 +1502,13 @@ const make = Effect.gen(function* () {
     linkRows: (ids) => attempt("read linked rows", () => selectLinkRows(db, ids)),
 
     listeningSums: attempt("sum up listening", () => listeningSums(db)),
+
+    countedListening: attempt("sum up counted listening", () => countedListening(db)),
+
+    songGenres: (ids) => attempt("read the songs' genres", () => songGenres(db, ids)),
+
+    artistFirstPlays: (ids) =>
+      attempt("read the artists' first plays", () => artistFirstPlays(db, ids)),
 
     artistPlays: (artistId, now) =>
       attempt("sum up the artist's plays", () => artistPlays(db, artistId, now)),

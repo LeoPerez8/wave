@@ -22,7 +22,11 @@ type Props = {
   value: string;
   onChange: (text: string) => void;
   /** The keyboard's search key. */
-  onSubmit: () => void;
+  onSubmit?: () => void;
+  /** What the empty field says (Search's own by default). */
+  placeholder?: string;
+  /** What a screen reader calls the field (Search's own by default). */
+  accessibilityLabel?: string;
   /** Focus it on mount (the Design preview's focused state). */
   autoFocus?: boolean;
   /** The field was laid out: it is in the window, and can take the focus. */
@@ -43,6 +47,8 @@ export function SearchField({
   value,
   onChange,
   onSubmit,
+  placeholder = "Songs, albums, artists, genres",
+  accessibilityLabel = "Search your library",
   autoFocus = false,
   onLayout,
   onFocusChange,
@@ -73,14 +79,14 @@ export function SearchField({
             onFocusChange?.(false);
           }}
           autoFocus={autoFocus}
-          placeholder="Songs, albums, artists, genres"
+          placeholder={placeholder}
           placeholderTextColor={secondary}
           selectionColor={accent}
           cursorColor={accent}
           returnKeyType="search"
           autoCapitalize="none"
           autoCorrect={false}
-          accessibilityLabel="Search your library"
+          accessibilityLabel={accessibilityLabel}
         />
         <View style={{ width: TARGET, height: TARGET, marginRight: -OVERHANG }}>
           {value.length > 0 && (

@@ -4,6 +4,7 @@ import {
   downloadsSummary,
   libraryLookupProgress,
   type SettingsPage,
+  type SpotifySession,
   type WaveSession,
   type YtSession,
 } from "@wave/core";
@@ -14,9 +15,11 @@ import { useCallback, useEffect, useState } from "react";
 import { useLibraryLookup } from "@/library/findLyricsAndGenre";
 import { useScanRoots, useScanState } from "@/library/hooks";
 import { WaveAccount } from "@/native/waveAccount";
+import { WaveSpotify } from "@/native/waveSpotify";
 import { WaveYtMusic } from "@/native/waveYtMusic";
+import { askSpotify } from "@/spotify/askSpotify";
 import { askYtMusic } from "@/ytmusic/askYtMusic";
-import { useFailedDownloads, useQueuedDownloads } from "@/ytmusic/YtDownloads";
+import { useDownloadCounts } from "@/ytmusic/YtDownloads";
 
 /**
  * The accounts this phone is signed into (Core's `accountsSummary`), from the
@@ -27,13 +30,16 @@ import { useFailedDownloads, useQueuedDownloads } from "@/ytmusic/YtDownloads";
 const useAccountsSummary = (): string | null => {
   const [yt, setYt] = useState<YtSession>({ status: "signedOut" });
   const [wave, setWave] = useState<WaveSession>({ status: "signedOut" });
+  const [spotify, setSpotify] = useState<SpotifySession>({ status: "signedOut" });
 
   useEffect(() => {
     const ytChanged = WaveYtMusic.addListener("onSessionChanged", setYt);
     const waveChanged = WaveAccount.addListener("onSessionChanged", setWave);
+    const spotifyChanged = WaveSpotify.addListener("onSessionChanged", setSpotify);
     return () => {
       ytChanged.remove();
       waveChanged.remove();
+      spotifyChanged.remove();
     };
   }, []);
 
@@ -49,13 +55,16 @@ const useAccountsSummary = (): string | null => {
         },
         () => {},
       );
+      void askSpotify((account) => account.session).then((result) => {
+        if (current && Result.isSuccess(result)) setSpotify(result.success);
+      });
       return () => {
         current = false;
       };
     }, []),
   );
 
-  return accountsSummary(yt, wave);
+  return accountsSummary(yt, wave, spotify);
 };
 
 /**
@@ -69,8 +78,8 @@ export const useSettingsSummaries = (): Record<SettingsPage, string | null> => {
   const scanning = useScanState().status === "scanning";
   const lookup = useLibraryLookup();
   const accounts = useAccountsSummary();
-  const failedDownloads = useFailedDownloads().length;
-  const queuedDownloads = useQueuedDownloads();
+  // Counts only: building the failed or queued lists here froze Settings with hundreds of songs.
+  const downloads = useDownloadCounts();
   return {
     library: scanning
       ? "Scanning…"
@@ -82,7 +91,7 @@ export const useSettingsSummaries = (): Record<SettingsPage, string | null> => {
     playback: null,
     lyricsAndTags:
       lookup.status === "running" ? libraryLookupProgress(lookup.done, lookup.total).line : null,
-    downloads: downloadsSummary(failedDownloads, queuedDownloads),
+    downloads: downloadsSummary(downloads.failed, downloads.queued),
     accounts,
     developer: null,
   };

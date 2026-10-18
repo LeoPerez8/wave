@@ -1,6 +1,7 @@
 import type {
   DownloadFailurePlan,
   DownloadOrigin,
+  DownloadRunNotice,
   DownloadSource,
   JournalChanges,
   SoulseekCandidate,
@@ -38,6 +39,17 @@ export interface NativeDownloadJob extends YtDownloadJournalJob<NativeYtSong> {
   readonly failurePlan?: DownloadFailurePlan;
   /** YouTube Music's fallback for a Soulseek job, as the last prepare answer planned it. */
   readonly fallback?: unknown;
+  /** When YouTube last refused the job's song, and served its stream (epoch ms): what Core's `ytThrottle` reads. */
+  readonly refusedAt?: number;
+  readonly servedAt?: number;
+  /** The attempts the job's last try made (Core's `throttledFailures` reads it). */
+  readonly attempts?: number;
+}
+
+/** The pause on YouTube downloads the journal keeps (Core's `YtThrottlePause`). */
+export interface NativeYoutubePause {
+  readonly until: number;
+  readonly level: number;
 }
 
 /** A decision the journal leased to JS; answered with `submitDecision` before [leaseUntil]. */
@@ -130,6 +142,19 @@ declare class WaveSoulseekModule extends NativeModule<{
     payload: string,
   ): Promise<boolean>;
   refreshDownloadPolicy(roots: readonly string[], excluded: readonly string[]): Promise<number>;
+  /**
+   * While YouTube limits downloads (Core's `ytThrottle`): no YouTube job starts until [until]
+   * (epoch ms), and a new pause renews YouTube's visitor data and tokens. [level] is the backoff
+   * kept across restarts; a pause already over only keeps it.
+   */
+  pauseYoutube(until: number, level: number): Promise<void>;
+  /** The pause the journal keeps, or null when YouTube downloads aren't paused. */
+  youtubePause(): Promise<NativeYoutubePause | null>;
+  /**
+   * The run for the download notification (Core's `downloadRunNotice`), about once a second;
+   * null with no run or a one-song run, which keeps the per-song notification.
+   */
+  showDownloadRun(notice: DownloadRunNotice | null): void;
   cancelJob(id: string): Promise<void>;
   /**
    * Settings › Downloads' drag: the waiting jobs [ids] take the places they held, in this order,

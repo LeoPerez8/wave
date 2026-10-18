@@ -27,8 +27,9 @@ import kotlin.concurrent.thread
  * YouTube Music's downloads alike, as a
  * `dataSync` foreground service, so downloads continue with the screen off,
  * beside playback and after Android recreates the process (sticky restart).
- * Its notification shows the current job and offers Cancel; it stops once the
- * journal has no work left.
+ * Its notification shows the current job, or with several songs the whole run
+ * as JS follows it ([AndroidDownloads.runNotice]), and offers Cancel; it stops
+ * once the journal has no work left.
  */
 class YtDownloadService : Service() {
   private val downloads get() = AndroidDownloads.get(this)
@@ -94,12 +95,17 @@ class YtDownloadService : Service() {
     wakeLock?.acquire(LOCK_MS)
     val current = downloads.jobs.current()
     // Android drops notifications posted too often; only post what changed.
-    val shown = listOf(current?.get("id"), current?.get("phase"), current?.get("queuePosition"), percent(current), downloads.jobs.counts())
+    val shown = listOf(current?.get("id"), current?.get("phase"), current?.get("queuePosition"), percent(current), downloads.jobs.counts(), downloads.jobs.youtubePausedNow(), downloads.runNotice)
     if (shown == lastShown) return
+    // A run's songs change many times a second; its notification follows at most about once a second (the tick reposts).
+    val now = SystemClock.elapsedRealtime()
+    if (downloads.runNotice != null && now - lastPostedAt < RUN_NOTIFY_MS) return
     lastShown = shown
+    lastPostedAt = now
     getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, notification(current))
   }
   private var lastShown: List<Any?>? = null
+  private var lastPostedAt = 0L
   private fun percent(job: Map<String, Any?>?): Int? {
     val received = (job?.get("received") as? Number)?.toLong() ?: 0L
     val total = (job?.get("total") as? Number)?.toLong() ?: 0L
@@ -120,18 +126,35 @@ class YtDownloadService : Service() {
     // As the rows say: YouTube has no peer to connect to, so its job waits until the audio flows.
     val waiting = if (current?.get("source") == DurableDownloads.YOUTUBE) listOf("queued", "preparing", "prepared") else listOf("queued", "preparing")
     val queued = current?.get("queuePosition") != null || current?.get("phase") in waiting
-    builder.setContentTitle(if (saving) "Saving to the Library" else if (queued) "Waiting to download" else "Downloading")
-      .setContentText(song?.get("title") as? String ?: "A YT Music song")
-    // Several songs (an album, or songs asked for one after another): how many download now and how many are left.
-    val (running, left) = downloads.jobs.counts()
-    if (running + left > 1) builder.setSubText(listOfNotNull("$running downloading".takeIf { running > 0 }, "$left left".takeIf { left > 0 }).joinToString(" · "))
-    val percent = percent(current)
-    if (percent != null && !saving && !queued) builder.setProgress(100, percent, false) else builder.setProgress(0, 0, true)
+    // While YouTube limits downloads, its songs wait for the next try, which the notification counts down to.
+    val pause = downloads.jobs.youtubePausedNow()?.takeIf { current?.get("source") == DurableDownloads.YOUTUBE && current["phase"] == "prepared" }
+    // With several songs on their way, the whole run (Core's `downloadRunNotice`, as Settings › Downloads counts it).
+    val run = downloads.runNotice
+    val title = when {
+      pause != null -> "Paused: YouTube is limiting downloads"
+      run != null -> run.title
+      saving -> "Saving to the Library"
+      queued -> "Waiting to download"
+      else -> "Downloading"
+    }
+    builder.setContentTitle(title).setContentText(run?.text ?: song?.get("title") as? String ?: "A YT Music song")
+    if (pause != null) builder.setWhen(pause.until).setShowWhen(true).setUsesChronometer(true).setChronometerCountDown(true)
+    if (run != null) builder.setProgress(run.total, run.finished, false) else songProgress(builder, current, saving, queued)
     if (current != null && !saving) {
       val intent = Intent(this, YtDownloadService::class.java).setAction(CANCEL).putExtra("jobId", current["id"] as String)
       builder.addAction(Notification.Action.Builder(null, "Cancel", PendingIntent.getService(this, 1, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)).build())
     }
     return builder.build()
+  }
+
+  /** A song on its own: its percent, and how many songs download, wait to be saved and are left. */
+  private fun songProgress(builder: Notification.Builder, current: Map<String, Any?>?, saving: Boolean, queued: Boolean) {
+    // Several songs (an album, or songs asked for one after another): how many download now (hold a slot), how many
+    // wait their turn to be saved, and how many are left (Core's `queuedDownloadCounts`, the same rule).
+    val (running, left, toSave) = downloads.jobs.counts()
+    if (running + left + toSave > 1) builder.setSubText(listOfNotNull("$running downloading".takeIf { running > 0 }, "$toSave saving".takeIf { toSave > 0 }, "$left left".takeIf { left > 0 }).joinToString(" · "))
+    val percent = percent(current)
+    if (percent != null && !saving && !queued) builder.setProgress(100, percent, false) else builder.setProgress(0, 0, true)
   }
 
   private companion object {
@@ -140,5 +163,6 @@ class YtDownloadService : Service() {
     const val NOTIFICATION_ID = 0x5759
     const val CANCEL = "wave.download.CANCEL"
     const val LOCK_MS = 15 * 60_000L
+    const val RUN_NOTIFY_MS = 900L
   }
 }

@@ -8,7 +8,7 @@ import {
   lyricCardColours,
   lyricCardFileName,
   lyricCardInk,
-  lyricCardTextSize,
+  lyricCardLayout,
   lyricShareDestinations,
   lyricStoryBackground,
   instagramStoriesAppId,
@@ -222,21 +222,56 @@ describe("lyricCardInk", () => {
 const lines = (count: number, length: number): string[] =>
   Array.from({ length: count }, () => "word ".repeat(length / 5).trim());
 
-describe("lyricCardTextSize", () => {
-  test("a few short lines get the largest size", () => {
-    assert.equal(lyricCardTextSize(lines(1, 15)), Math.max(...LYRIC_CARD_TEXT_SIZES));
-    assert.equal(lyricCardTextSize(lines(3, 15)), Math.max(...LYRIC_CARD_TEXT_SIZES));
+describe("lyricCardLayout", () => {
+  const largest = Math.max(...LYRIC_CARD_TEXT_SIZES);
+
+  test("one short line gives a square card in the largest size", () => {
+    assert.deepEqual(lyricCardLayout(["Hold on"]), { aspect: 1, textSize: largest });
   });
 
-  test("more and longer lines get smaller, so they fit the card", () => {
-    const five = lyricCardTextSize(lines(5, 30));
-    const longer = lyricCardTextSize(lines(5, 60));
-    assert.ok(five < Math.max(...LYRIC_CARD_TEXT_SIZES));
-    assert.ok(longer < five);
+  test("five long lines give a taller card in a smaller size", () => {
+    const five = lyricCardLayout([
+      "I've been walking down this empty road for days",
+      "Looking for the light that used to guide me home",
+      "Every step I take, the shadows follow close behind",
+      "And I can hear your voice still calling out my name",
+      "So I keep on moving till the morning finds me here",
+    ]);
+    assert.ok(five.aspect > 1.2, `aspect ${five.aspect}`);
+    assert.ok(five.aspect <= 16 / 9);
+    assert.ok(five.textSize < largest, `size ${five.textSize}`);
   });
 
-  test("never go below the smallest size, however long", () => {
-    assert.equal(lyricCardTextSize(lines(5, 400)), Math.min(...LYRIC_CARD_TEXT_SIZES));
+  test("the size never grows as the text does", () => {
+    let previous = largest;
+    for (const [count, length] of [
+      [1, 10],
+      [1, 40],
+      [2, 40],
+      [3, 40],
+      [4, 50],
+      [5, 50],
+      [5, 80],
+      [5, 200],
+    ] as const) {
+      const { textSize } = lyricCardLayout(lines(count, length));
+      assert.ok(textSize <= previous, `${count} × ${length}: ${textSize} > ${previous}`);
+      previous = textSize;
+    }
+  });
+
+  test("the card stays between square and 9:16, however much text", () => {
+    for (const picked of [[], ["Oh"], lines(3, 40), lines(5, 400), ["x".repeat(500)]]) {
+      const { aspect } = lyricCardLayout(picked);
+      assert.ok(aspect >= 1 && aspect <= 16 / 9, `aspect ${aspect}`);
+    }
+  });
+
+  test("text too long for 9:16 takes the smallest size on a 9:16 card", () => {
+    assert.deepEqual(lyricCardLayout(lines(5, 400)), {
+      aspect: 16 / 9,
+      textSize: Math.min(...LYRIC_CARD_TEXT_SIZES),
+    });
   });
 });
 

@@ -3,16 +3,24 @@ import { describe, test } from "node:test";
 
 import {
   EMPTY_PLAY_TRACKER,
+  EMPTY_QUEUE,
   fadingPlaySoFar,
   isCountedPlay,
   keptPlayingEntry,
+  movedToFollowing,
+  playEndPending,
   playSoFar,
+  reduceQueue,
   queueSourceAfter,
+  RECAP_PLAY_CONTEXT,
   resumePlay,
   trackPlays,
   type PlayEvent,
+  type PlayStep,
   type PlaybackSignal,
   type PlayTrackerState,
+  type QueueCommand,
+  type QueueState,
 } from "./index.ts";
 
 const MIN = 60_000;
@@ -53,7 +61,8 @@ const moved = (
   at: number,
   key: string | null,
   reason: Extract<PlaybackSignal, { type: "transition" }>["reason"],
-): PlaybackSignal => ({ type: "transition", at, key, reason });
+  toFollowing = false,
+): PlaybackSignal => ({ type: "transition", at, key, reason, toFollowing });
 
 /** The player jumped from `fromMs` to `toMs` within entry `key`. */
 const seeked = (at: number, key: string, fromMs: number, toMs: number): PlaybackSignal => ({
@@ -75,7 +84,10 @@ const run = (
   for (const signal of signals) {
     const result = trackPlays(state, signal);
     state = result.state;
-    for (const step of result.steps) (step.type === "started" ? started : ended).push(step.play);
+    for (const step of result.steps) {
+      if (step.type === "started") started.push(step.play);
+      else if (step.type === "ended") ended.push(step.play);
+    }
   }
   return { state, started, ended };
 };
@@ -145,6 +157,23 @@ describe("trackPlays", () => {
         ["a", "completed", MIN],
         ["b", "skipped", 3 * MIN],
       ],
+    );
+  });
+
+  test("a song a Recap plays is never on record, and the queue's songs after it are", () => {
+    const { started, ended } = run([
+      playing(0, "1", "a", { context: RECAP_PLAY_CONTEXT }),
+      moved(MIN, "2", "sync"),
+      playing(MIN, "2", "b"),
+      moved(4 * MIN, "3", "seek"),
+    ]);
+    assert.deepEqual(
+      started.map((play) => play.trackId),
+      ["b"],
+    );
+    assert.deepEqual(
+      ended.map((play) => [play.trackId, play.listenedMs]),
+      [["b", 3 * MIN]],
     );
   });
 
@@ -598,5 +627,123 @@ describe("trackPlays with crossfade", () => {
       ["b"],
     );
     assert.deepEqual(ended, []);
+  });
+});
+
+/** Every step the signals give, in order. */
+const stepsOf = (signals: readonly PlaybackSignal[]): PlayStep[] => {
+  let state = EMPTY_PLAY_TRACKER;
+  const steps: PlayStep[] = [];
+  for (const signal of signals) {
+    const result = trackPlays(state, signal);
+    state = result.state;
+    steps.push(...result.steps);
+  }
+  return steps;
+};
+
+/** The ends among [steps], as [kind, trackId, endReason, byNext]. */
+const endsOf = (steps: readonly PlayStep[]) =>
+  steps.flatMap((step) =>
+    step.type === "started"
+      ? []
+      : [[step.type, step.play.trackId, step.play.endReason, step.byNext]],
+  );
+
+describe("how a play ended, for its listeners", () => {
+  test("a streamed song's end is heard, though it's never on record", () => {
+    const steps = stepsOf([
+      playing(0, "1", "yt:abc"),
+      moved(10_000, "2", "seek", true),
+      playing(10_000, "2", "yt:def"),
+      moved(200_000, "3", "auto"),
+      playing(200_000, "3", "b"),
+    ]);
+    assert.deepEqual(endsOf(steps), [
+      ["heard", "yt:abc", "skipped", true],
+      ["heard", "yt:def", "completed", false],
+    ]);
+    assert.deepEqual(
+      steps.filter((step) => step.type === "started").map((step) => step.play.trackId),
+      ["b"],
+    );
+  });
+
+  test("a streamed song playing now isn't a play to keep up to date", () => {
+    const { state } = run([playing(0, "1", "yt:abc")]);
+    assert.equal(playSoFar(state, 5_000), null);
+  });
+
+  test("tells a Next apart from Previous, picking another entry and a replay", () => {
+    const steps = stepsOf([
+      playing(0, "1", "a"),
+      moved(5_000, "2", "sync", true),
+      playing(5_000, "2", "b"),
+      moved(8_000, "1", "sync"),
+      playing(8_000, "1", "a"),
+      seeked(14_000, "1", 6_000, 0),
+      playing(14_000, "1", "a"),
+      moved(20_000, "5", "seek"),
+    ]);
+    assert.deepEqual(endsOf(steps), [
+      ["ended", "a", "skipped", true],
+      ["ended", "b", "skipped", false],
+      ["ended", "a", "skipped", false],
+      ["ended", "a", "skipped", false],
+    ]);
+  });
+
+  test("a song that plays through to the following one isn't ended by Next", () => {
+    const steps = stepsOf([playing(0, "1", "a"), moved(180_000, "2", "auto", true)]);
+    assert.deepEqual(endsOf(steps), [["ended", "a", "completed", false]]);
+  });
+});
+
+/** [state] after [commands], in order. */
+const queueAfter = (state: QueueState, ...commands: QueueCommand[]): QueueState =>
+  commands.reduce((current, command) => reduceQueue(current, command).state, state);
+
+describe("movedToFollowing", () => {
+  const context = { kind: "album", id: "7" };
+  const queue = queueAfter(EMPTY_QUEUE, {
+    type: "play",
+    trackIds: ["a", "b", "c", "d"],
+    startIndex: 1,
+    context,
+  });
+  const key = (trackId: string): string =>
+    queue.entries.find((entry) => entry.trackId === trackId)!.key;
+
+  test("is the move to the entry right after the one left: Next", () => {
+    assert.equal(movedToFollowing(queue, key("b"), key("c")), true);
+    assert.equal(movedToFollowing(queueAfter(queue, { type: "next" }), key("b"), key("c")), true);
+  });
+
+  test("isn't a move back, a jump further on, or from an entry no longer queued", () => {
+    assert.equal(movedToFollowing(queue, key("b"), key("a")), false);
+    assert.equal(movedToFollowing(queue, key("b"), key("d")), false);
+    assert.equal(movedToFollowing(queue, "gone", key("c")), false);
+    assert.equal(movedToFollowing(queue, null, key("c")), false);
+    assert.equal(movedToFollowing(queue, key("b"), null), false);
+  });
+});
+
+describe("playEndPending", () => {
+  test("a play still open on another entry than the current one is yet to end", () => {
+    const { state } = run([playing(0, "1", "a")]);
+    assert.equal(playEndPending(state, "1"), false);
+    assert.equal(playEndPending(state, "2"), true);
+    assert.equal(playEndPending(EMPTY_PLAY_TRACKER, "2"), false);
+  });
+
+  test("so is a streamed song's play, and a song fading out", () => {
+    assert.equal(playEndPending(run([playing(0, "1", "yt:abc")]).state, "2"), true);
+    const { state } = run([
+      playing(0, "1", "a", { durationMs: 180_000 }),
+      moved(176_000, "2", "crossfade"),
+      playing(176_000, "2", "b"),
+    ]);
+    assert.equal(playEndPending(state, "2"), true);
+    assert.equal(playEndPending(trackPlays(state, fadeEnded(181_000)).state, "2"), false);
   });
 });

@@ -6,6 +6,8 @@
  * by page. Requests go through the app's transport; Core builds and reads them.
  */
 
+import { array, at, positive, text } from "./json.ts";
+
 /** A song as Spotify lists it in a playlist. */
 export interface SpotifySong {
   readonly title: string;
@@ -47,52 +49,69 @@ export type SpotifyEmbed =
   /** No such public playlist (unknown, malformed, private or deleted). */
   | { readonly status: "notFound" };
 
-type Json = Readonly<Record<string, unknown>>;
-
-const object = (value: unknown): Json | null =>
-  typeof value === "object" && value !== null && !Array.isArray(value) ? (value as Json) : null;
-const array = (value: unknown): readonly unknown[] => (Array.isArray(value) ? value : []);
-const text = (value: unknown): string | null => (typeof value === "string" ? value : null);
-const at = (value: unknown, ...path: readonly string[]): unknown =>
-  path.reduce<unknown>((node, key) => object(node)?.[key], value);
-const positive = (value: unknown): number | null =>
-  typeof value === "number" && Number.isFinite(value) && value > 0 ? value : null;
-const nonEmpty = (value: string | null): string | null =>
-  value === null || value.trim() === "" ? null : value.trim();
-
 /** The first source's address of a list of images (`[{ sources: [{ url }] }]` or `{ sources }`). */
-const firstImage = (sources: unknown): string | null =>
+export const firstImage = (sources: unknown): string | null =>
   array(sources)
     .map((source) => text(at(source, "url")))
-    .find((url) => url !== null && url !== "") ?? null;
+    .find((url) => url !== null) ?? null;
+
+/** What one page of a paged read says: how many items it held and how many there are in all, or that the read ends with [done]. */
+export type SpotifyPageStep<R> =
+  { readonly items: number; readonly total: number } | { readonly done: R };
+
+/**
+ * Reads a Spotify list page by page with [page], from offset 0, each page
+ * starting after the items of the one before, until a page is empty or the
+ * items reach its total: then [end]'s result. A page can end the read sooner
+ * with its own (`done`).
+ */
+export const readSpotifyPages = async <R>(
+  page: (offset: number) => Promise<SpotifyPageStep<R>>,
+  end: () => R,
+): Promise<R> => {
+  for (let offset = 0; ;) {
+    const step = await page(offset);
+    if ("done" in step) return step.done;
+    offset += step.items;
+    if (step.items === 0 || offset >= step.total) return end();
+  }
+};
 
 /** A `fetchPlaylist` item, or null when it isn't a song. */
-const pageSong = (item: unknown): SpotifySong | null => {
-  const wrapper = at(item, "itemV2");
-  const data = at(wrapper, "data");
+const pageSong = (item: unknown): SpotifySong | null =>
+  spotifyTrackSong(at(item, "itemV2", "data"));
+
+/**
+ * A track's `data` as the web player's queries give it (a `fetchPlaylist`
+ * item's, a `fetchLibraryTracks` item's), or null when it isn't a song:
+ * an episode, or a song Spotify no longer has.
+ */
+export const spotifyTrackSong = (data: unknown): SpotifySong | null => {
   const kind = text(at(data, "__typename"));
   if (kind === "Track") {
-    const title = nonEmpty(text(at(data, "name")));
+    const title = text(at(data, "name"));
     if (title === null) return null;
     const artworkUrl = firstImage(at(data, "albumOfTrack", "coverArt", "sources"));
     const song: SpotifySong = {
       title,
       artists: array(at(data, "artists", "items"))
-        .map((artist) => nonEmpty(text(at(artist, "profile", "name"))))
+        .map((artist) => text(at(artist, "profile", "name")))
         .filter((name) => name !== null),
-      album: nonEmpty(text(at(data, "albumOfTrack", "name"))),
-      durationMs: positive(at(data, "trackDuration", "totalMilliseconds")),
+      album: text(at(data, "albumOfTrack", "name")),
+      durationMs:
+        positive(at(data, "trackDuration", "totalMilliseconds")) ??
+        positive(at(data, "duration", "totalMilliseconds")),
     };
     return artworkUrl === null ? song : { ...song, artworkUrl };
   }
   if (kind === "LocalTrack") {
-    const title = nonEmpty(text(at(data, "name")));
+    const title = text(at(data, "name"));
     if (title === null) return null;
-    const artist = nonEmpty(text(at(data, "artistName")));
+    const artist = text(at(data, "artistName"));
     return {
       title,
       artists: artist === null ? [] : [artist],
-      album: nonEmpty(text(at(data, "albumName"))),
+      album: text(at(data, "albumName")),
       durationMs: positive(at(data, "localTrackDuration", "totalMilliseconds")),
     };
   }
@@ -223,32 +242,36 @@ const readPages = async (
 ): Promise<SpotifyPlaylist | null> => {
   const songs: SpotifySong[] = [];
   let first: SpotifyPlaylistPage | null = null;
-  let offset = 0;
-  let total = 0;
-  do {
-    if (signal?.aborted === true) return null;
-    let answer: SpotifyAnswer;
-    try {
-      answer = await send(pageRequest(playlistId, offset, token));
-    } catch {
-      return null;
-    }
-    const page = answer.status === 200 ? spotifyPlaylistPage(parsed(answer.body)) : null;
-    if (page === null || page === "notFound") return null;
-    first ??= page;
-    total = page.total;
-    songs.push(...page.songs);
-    if (page.items === 0) break;
-    offset += page.items;
-  } while (offset < total);
-  if (first === null) return null;
-  return {
-    title: first.title,
-    artworkUrl: first.artworkUrl,
-    songs,
-    truncated: offset < total,
-    total,
-  };
+  let last: SpotifyPlaylistPage | null = null;
+  let reached = 0;
+  return readSpotifyPages<SpotifyPlaylist | null>(
+    async (offset) => {
+      if (signal?.aborted === true) return { done: null };
+      let answer: SpotifyAnswer;
+      try {
+        answer = await send(pageRequest(playlistId, offset, token));
+      } catch {
+        return { done: null };
+      }
+      const page = answer.status === 200 ? spotifyPlaylistPage(parsed(answer.body)) : null;
+      if (page === null || page === "notFound") return { done: null };
+      first ??= page;
+      last = page;
+      reached = offset + page.items;
+      songs.push(...page.songs);
+      return page;
+    },
+    () =>
+      first === null || last === null
+        ? null
+        : {
+            title: first.title,
+            artworkUrl: first.artworkUrl,
+            songs,
+            truncated: reached < last.total,
+            total: last.total,
+          },
+  );
 };
 
 /**
@@ -299,7 +322,7 @@ const embedArtists = (subtitle: string | null): string[] =>
     .filter((name) => name !== "");
 
 const embedSong = (track: unknown): SpotifySong | null => {
-  const title = nonEmpty(text(at(track, "title")));
+  const title = text(at(track, "title"));
   if (title === null || text(at(track, "entityType")) !== "track") return null;
   return {
     title,
@@ -332,7 +355,7 @@ export const spotifyEmbed = (html: string): SpotifyEmbed | null => {
   if (text(at(entity, "type")) !== "playlist" || !Array.isArray(tracks)) return null;
   return {
     status: "found",
-    token: nonEmpty(text(at(props, "state", "settings", "session", "accessToken"))),
+    token: text(at(props, "state", "settings", "session", "accessToken")),
     playlist: {
       title: text(at(entity, "name")) ?? text(at(entity, "title")) ?? "",
       artworkUrl: firstImage(at(entity, "coverArt", "sources")),

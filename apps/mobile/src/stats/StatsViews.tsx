@@ -1,8 +1,16 @@
 import { IconChartBar } from "@tabler/icons-react-native";
 import { LegendList } from "@legendapp/list/react-native";
-import { counted, STATS_PERIODS, type QueueContext, type StatsPeriod } from "@wave/core";
+import {
+  counted,
+  recapId,
+  recapTitle,
+  STATS_PERIODS,
+  type QueueContext,
+  type RecapPeriod,
+  type StatsPeriod,
+} from "@wave/core";
 import { useCallback, useMemo, type ReactElement } from "react";
-import { Text, View } from "react-native";
+import { ScrollView, Text, View } from "react-native";
 
 import { CELL, grid } from "@/catalog/grid";
 import { NameRow } from "@/catalog/NameRow";
@@ -11,7 +19,7 @@ import { useChromeInset } from "@/chrome/chrome";
 import { EmptyState } from "@/components/EmptyState";
 import { useFavoriteIds } from "@/library/favorites";
 import type { AlbumRow, ArtistRow, SongRow } from "@/library/LibraryStore";
-import { openAlbum, openArtist } from "@/library/routes";
+import { openAlbum, openArtist, openRecap } from "@/library/routes";
 import { toTrackSummary } from "@/library/TrackList";
 import { Press } from "@/motion/Press";
 import { playSongs } from "@/playback/actions";
@@ -298,6 +306,86 @@ export function RankedSongList({
       contentContainerStyle={{ paddingHorizontal: grid.margin, paddingBottom: bottomInset }}
       ListHeaderComponent={header}
     />
+  );
+}
+
+/** A Recap's tile on Stats' Recaps row. */
+const RECAP_TILE = { width: CELL * 17, height: CELL * 21 } as const;
+
+/**
+ * How a Recap's tile and Home's card read, by period kind: a year's stand
+ * apart from the months' by their label, their "ready" line and their colour
+ * (purple for a year, indigo for a month).
+ */
+const RECAP_LOOK: {
+  readonly [K in RecapPeriod["kind"]]: {
+    readonly label: string;
+    readonly ready: string;
+    readonly colour: string;
+  };
+} = {
+  month: { label: "Recap", ready: "Your Recap is ready", colour: "bg-recap-indigo" },
+  year: { label: "Year in music", ready: "Your year in music is ready", colour: "bg-recap-purple" },
+};
+
+/**
+ * Home's card for a new Recap (Core's `recapToAnnounce`), shown until it's
+ * opened. Tapping it plays its stories.
+ */
+export function RecapCard({ period }: { period: RecapPeriod }) {
+  const { ready, colour } = RECAP_LOOK[period.kind];
+  return (
+    <Press
+      accessibilityRole="button"
+      accessibilityLabel={`${ready}: ${recapTitle(period)}`}
+      onPress={() => openRecap(period)}
+      haptic="selection"
+      className={`rounded-2xl ${colour}`}
+      style={{ padding: CELL * 2, gap: CELL / 2 }}
+    >
+      <Text className="font-sans text-footnote font-semibold text-on-recap opacity-80">
+        {ready}
+      </Text>
+      <Text numberOfLines={1} className="font-sans text-title2 font-bold text-on-recap">
+        {recapTitle(period)}
+      </Text>
+      <Text className="font-sans text-subheadline text-on-recap opacity-80">Tap to watch</Text>
+    </Press>
+  );
+}
+
+/**
+ * Stats' Recaps row: a tile for every Recap, newest first (each year ahead
+ * of its months), scrolling sideways to the screen's edges. Tapping one
+ * plays its stories.
+ */
+export function RecapsRow({ recaps }: { recaps: readonly RecapPeriod[] }) {
+  return (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      style={{ marginHorizontal: -grid.margin }}
+      contentContainerStyle={{ paddingHorizontal: grid.margin, gap: CELL * 1.5 }}
+    >
+      {recaps.map((period) => (
+        <Press
+          key={recapId(period)}
+          accessibilityRole="button"
+          accessibilityLabel={`${recapTitle(period)} ${RECAP_LOOK[period.kind].label}`}
+          onPress={() => openRecap(period)}
+          haptic="selection"
+          className={`justify-end rounded-2xl ${RECAP_LOOK[period.kind].colour}`}
+          style={{ ...RECAP_TILE, padding: CELL * 1.5 }}
+        >
+          <Text className="font-sans text-footnote font-semibold text-on-recap opacity-80">
+            {RECAP_LOOK[period.kind].label}
+          </Text>
+          <Text numberOfLines={2} className="font-sans text-title3 font-bold text-on-recap">
+            {recapTitle(period)}
+          </Text>
+        </Press>
+      ))}
+    </ScrollView>
   );
 }
 

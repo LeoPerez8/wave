@@ -10,11 +10,12 @@ object CorePlans {
 
   val youtube: Map<String, Any?> = mapOf(
     "retry" to listOf("offline"), "end" to ENDS, "exhausted" to "failed", "rejected" to "ytUnavailable", "fallsBack" to emptyList<String>(),
+    "refused" to mapOf("failure" to "ytRefused", "pausesMs" to listOf(30_000L, 90_000L, 240_000L), "exhausted" to "ytUnavailable"),
   )
 
   fun soulseek(ytMusicOn: Boolean): Map<String, Any?> = mapOf(
     "retry" to if (ytMusicOn) listOf("offline") else listOf("offline", "unreachable"),
     "end" to ENDS, "exhausted" to "unavailable", "rejected" to null,
-    "fallsBack" to if (ytMusicOn) FALLS_BACK else emptyList(),
+    "fallsBack" to if (ytMusicOn) FALLS_BACK else emptyList(), "refused" to null,
   )
 }

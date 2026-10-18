@@ -33,6 +33,7 @@ import { addYtToQueue, playYtNext } from "@/playback/actions";
 import type { MenuOptions } from "@/playback/ActionsMenu";
 import { showError } from "@/overlay/alert";
 import { useYtMusicEnabled } from "@/settings/ytMusic";
+import { shareStreamedSong } from "@/share/songShare";
 
 import { useLibraryFinder, useLoadedInLibrary, type FindInLibrary } from "./libraryFinder";
 import { openYtAlbum, ytAlbumPageHere } from "./routes";
@@ -79,7 +80,7 @@ type Entry =
   | {
       readonly kind: "queue";
       readonly action:
-        "playNext" | "addToQueue" | "addToPlaylist" | "removeFromPlaylist" | "select";
+        "playNext" | "addToQueue" | "addToPlaylist" | "removeFromPlaylist" | "share" | "select";
     }
   | { readonly kind: "album"; readonly action: "goToAlbum"; readonly album: string }
   | {
@@ -171,6 +172,10 @@ const run = (
       return;
     case "cancelDownload":
       cancelYtDownload(song.videoId);
+      return;
+    case "share":
+      // The song share sheet, with YouTube's cover cached on the phone.
+      shareStreamedSong(song);
       return;
     case "select":
       onSelect?.();

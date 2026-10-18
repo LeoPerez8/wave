@@ -7,7 +7,12 @@
  */
 
 import { moveItem } from "./playlists.ts";
-import { queuedDownloads, type QueuedDownload } from "./queuedDownloads.ts";
+import {
+  queuedDownloadCounts,
+  queuedDownloads,
+  type QueuedDownload,
+  type QueuedDownloadCounts,
+} from "./queuedDownloads.ts";
 import type { YtSong } from "./ytMusic.ts";
 import type { YtDownloadJournalJob } from "./ytDownloads.ts";
 
@@ -64,12 +69,15 @@ export interface DownloadGroup<S extends YtSong = YtSong> {
 export interface DownloadingList<S extends YtSong = YtSong> {
   readonly downloading: readonly QueuedDownload<S>[];
   readonly groups: readonly DownloadGroup<S>[];
+  /** How many songs are downloading, saving and waiting (`queuedDownloadCounts`): the section's line. */
+  readonly counts: QueuedDownloadCounts;
 }
 
 /** The group songs asked for on their own wait in. */
 export const SONGS_GROUP_NAME = "Songs";
 
-const keyOf = (origin: DownloadOrigin | null): string =>
+/** A group's key (`DownloadGroup.key`) for the jobs from [origin] (null for Songs). */
+export const downloadGroupKey = (origin: DownloadOrigin | null): string =>
   origin === null ? "songs" : `${origin.kind}:${origin.id}`;
 
 const songsLeft = (count: number): string =>
@@ -100,7 +108,7 @@ export const downloadingList = <S extends YtSong>(
   for (const row of rows) {
     const origin = originOf.get(row.id) ?? null;
     const index = place.get(row.id) ?? 0;
-    const key = keyOf(origin);
+    const key = downloadGroupKey(origin);
     let group = groups.get(key);
     if (group === undefined) {
       group = { origin, first: index, next: null, left: 0, queued: [] };
@@ -119,6 +127,7 @@ export const downloadingList = <S extends YtSong>(
   );
   return {
     downloading: rows.filter((row) => !row.waiting),
+    counts: queuedDownloadCounts(jobs),
     groups: sorted.map(([key, group]) => ({
       key,
       origin: group.origin,

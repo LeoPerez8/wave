@@ -50,6 +50,9 @@ const play = (names: string, startIndex = 0, shuffle = false): QueueState =>
     })(),
   ).state;
 
+/** The searches going on for the songs [names] stand for. */
+const askingFor = (names: string) => ({ asking: new Set(names.split(" ").map(id)) });
+
 const searched = (state: QueueState, now = 0, searching = {}): string[] =>
   playingSearches(state, searching, now).map((search) => search.trackId);
 
@@ -122,15 +125,24 @@ describe("what the player holds of a queue with unsearched songs", () => {
     // The player, which doesn't hold it, would fade into the song after it.
     const state = play("1 u:A 2", 0);
     const playing = state.entries[0]!.key;
-    assert.equal(searchingAfter(state, new Set([id("u:A")])), playing);
-    // Not being searched (it failed a moment ago): the player passes over it, as it plays along.
-    assert.equal(searchingAfter(state, new Set()), null);
+    assert.equal(searchingAfter(state, askingFor("u:A")), playing);
+    // Nothing asked for it: the player passes over it, as it plays along.
+    assert.equal(searchingAfter(state, {}), null);
     // A song searched further on, or a held next song, doesn't hold this one's overlap.
-    assert.equal(searchingAfter(play("1 2 u:A", 0), new Set([id("u:A")])), null);
+    assert.equal(searchingAfter(play("1 2 u:A", 0), askingFor("u:A")), null);
     // Repeat all: the first song comes after the last.
     const last = { ...play("u:A 1", 1), repeat: "all" as const };
-    assert.equal(searchingAfter(last, new Set([id("u:A")])), last.entries[1]!.key);
-    assert.equal(searchingAfter({ ...last, repeat: "off" }, new Set([id("u:A")])), null);
+    assert.equal(searchingAfter(last, askingFor("u:A")), last.entries[1]!.key);
+    assert.equal(searchingAfter({ ...last, repeat: "off" }, askingFor("u:A")), null);
+  });
+
+  test("a next song whose search is queued to be asked again counts as searched", () => {
+    // Its last search failed: the queue asks it again a while later, so the overlap waits for it
+    // rather than fade into the song after it and be cut when it's found.
+    const state = play("1 u:A 2", 0);
+    const failedAt = new Map([[id("u:A"), 1000]]);
+    assert.equal(searchingAfter(state, { failedAt }), state.entries[0]!.key);
+    assert.equal(searchingAfter(play("1 2 u:A", 0), { failedAt }), null);
   });
 
   test("an empty queue is an empty player", () => {

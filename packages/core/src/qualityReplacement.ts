@@ -314,6 +314,23 @@ export const qualityDowngradeSongs = <F extends QualityFile>(
   );
 };
 
+/** The files a replacement in [direction] offers to replace (`qualityUpgradeSongs`, `qualityDowngradeSongs`). */
+export const qualitySongs = <F extends QualityFile>(
+  direction: QualityDirection,
+  files: readonly F[],
+  memory: QualityMemory,
+): F[] =>
+  direction === "upgrade"
+    ? qualityUpgradeSongs(files, memory)
+    : qualityDowngradeSongs(files, memory);
+
+/**
+ * The replacement Download in best quality gives as it's [on] (signed in to Soulseek) or not:
+ * on, the Library's low-quality songs get better copies; off, its MP3 320s give way to YouTube
+ * Music's copies to free up space.
+ */
+export const qualityDirection = (on: boolean): QualityDirection => (on ? "upgrade" : "downgrade");
+
 /**
  * Where replacement runs wait in Settings › Downloads (`downloadingList`):
  * "Quality upgrade" and "Free up space", reorderable and cancellable like

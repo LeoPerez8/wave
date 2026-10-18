@@ -10,6 +10,7 @@ import {
   type ActionSurface,
   type ItemAction,
   type ItemActionEntry,
+  type MagicSeed,
   albumDownloadOrigin,
 } from "@wave/core";
 import * as Haptics from "expo-haptics";
@@ -30,6 +31,7 @@ import {
   type SongsCollection,
 } from "@/library/hooks";
 import {
+  adjustPlaylistImageFlow,
   changePlaylistImageFlow,
   confirmDeletePlaylists,
   openAddToPlaylist,
@@ -37,6 +39,7 @@ import {
   renamePlaylistFlow,
 } from "@/library/PlaylistSheets";
 import { removePlaylistItems } from "@/library/playlists";
+import { appRuntime } from "@/library/runtime";
 import { openAlbum } from "@/library/routes";
 import { showError } from "@/overlay/alert";
 import {
@@ -44,6 +47,8 @@ import {
   useLyricsAndGenreLookupsEnabled,
 } from "@/settings/lyricsAndGenre";
 import { ytMusicEnabled } from "@/settings/ytMusic";
+import { openSharePlaylist } from "@/share/sharePlaylist";
+import { shareLibrarySong, shareStreamedSong } from "@/share/songShare";
 import {
   cancelMissingSongDownload,
   downloadMissingSongs,
@@ -69,6 +74,7 @@ import {
   type TargetEntry,
 } from "./actionTargets";
 import { addToQueue, playNext, queueDiscoverSongs } from "./actions";
+import { startMagicQueue } from "./MagicQueue";
 
 /**
  * Wave's actions on library items, defined once for the long-press menu (one
@@ -95,6 +101,31 @@ export interface ActionOptions {
   /** The songs of the collection the menu is about, read before it opened (`readMenuSongs`). */
   readonly collectionSongs?: readonly SongRow[] | undefined;
 }
+
+/** What a Magic Queue started from [target]'s menu grows from: its one song, album, artist or playlist. */
+const magicSeed = (target: ActionItems): MagicSeed | null => {
+  switch (target.kind) {
+    case "track": {
+      const [only] = target.items;
+      return only === undefined || !isLibraryTrack(only)
+        ? null
+        : { kind: "track", id: String(only.song.id), title: only.song.title };
+    }
+    case "album": {
+      const [only] = target.items;
+      return only === undefined ? null : { kind: "album", id: String(only.id), title: only.title };
+    }
+    case "artist":
+    case "playlist": {
+      const [only] = target.items;
+      return only === undefined
+        ? null
+        : { kind: target.kind, id: String(only.id), title: only.name };
+    }
+    default:
+      return null;
+  }
+};
 
 /** The one missing song [target] is, if it is one: its menu offers its download. */
 const onlyMissingSong = (target: ActionItems): number | null => {
@@ -344,6 +375,21 @@ export function useItemActions(
         return queue("playNext");
       case "addToQueue":
         return queue("addToQueue");
+      case "magicQueue":
+        return run(() => {
+          const seed = magicSeed(target);
+          if (seed === null) return;
+          entriesNow()
+            .then((entries) =>
+              appRuntime.runPromise(
+                startMagicQueue(
+                  seed,
+                  entries.flatMap((song) => (song.source === "library" ? [song.track] : [])),
+                ),
+              ),
+            )
+            .catch((error: unknown) => showError("Couldn't start the Magic Queue", error));
+        });
       case "addToPlaylist":
         return run(() =>
           openAddToPlaylist({
@@ -379,6 +425,8 @@ export function useItemActions(
         return run(() => playlist !== undefined && void renamePlaylistFlow(playlist));
       case "changeImage":
         return run(() => playlist !== undefined && void changePlaylistImageFlow(playlist));
+      case "adjustImage":
+        return run(() => playlist !== undefined && void adjustPlaylistImageFlow(playlist));
       case "removeImage":
         return run(() => playlist !== undefined && void removePlaylistImageFlow(playlist));
       case "deletePlaylist":
@@ -402,6 +450,16 @@ export function useItemActions(
               target.kind === "track" ? withFiles : collectionSongs.filter(songHasFile),
             ),
         );
+      case "share":
+        // A playlist goes out as a playlist on another service (#483); one song, as a card on
+        // the song share sheet: a Library song, a YT Music one or an unsearched entry (#481).
+        if (playlist !== undefined) return run(() => openSharePlaylist(playlist));
+        return run(() => {
+          const [only] = allTracks;
+          if (only === undefined) return;
+          if (isLibraryTrack(only)) shareLibrarySong(only.song);
+          else shareStreamedSong(isUnsearchedTrack(only) ? only.unsearched : only.ytSong);
+        });
       case "select":
         return run(() => onSelect?.());
       case "delete":

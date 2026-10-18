@@ -71,8 +71,9 @@ import java.util.Locale
  * shows the lyrics JS sends, drawn over the cover ([AutoLyrics],
  * [LyricArtworkPlayer]).
  *
- * With Crossfade on, a second player plays the outgoing song's last seconds
- * while the session's player moves on to the next one ([Crossfade]).
+ * With Crossfade on, the next song opens on a second player ahead of the
+ * overlap; at the handoff that player becomes the session's, and the one it
+ * replaces fades the outgoing song out ([Crossfade], [promoteNext]).
  */
 class PlaybackService : MediaLibraryService() {
   private var session: MediaLibrarySession? = null
@@ -164,8 +165,7 @@ class PlaybackService : MediaLibraryService() {
 
     override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
       val player = exoPlayer ?: return
-      val streamed = YtMedia.videoIdOf(mediaItem?.localConfiguration?.uri?.toString() ?: "") != null
-      player.setWakeMode(if (streamed) C.WAKE_MODE_NETWORK else C.WAKE_MODE_LOCAL)
+      player.setWakeMode(if (streams(mediaItem)) C.WAKE_MODE_NETWORK else C.WAKE_MODE_LOCAL)
       if (pausedOnStreamFailure && reason == Player.MEDIA_ITEM_TRANSITION_REASON_SEEK) {
         pausedOnStreamFailure = false
         if (player.playbackState == Player.STATE_IDLE) player.prepare()
@@ -178,55 +178,126 @@ class PlaybackService : MediaLibraryService() {
     }
   }
 
-  /** Builds a player: the session's, or the tail a crossfade plays the outgoing song on. */
+  /**
+   * Builds a player: the session's, or the one a crossfade opens the next song
+   * on, which becomes the session's at the handoff ([takeSession]).
+   */
   @OptIn(UnstableApi::class)
-  private fun buildPlayer(forSession: Boolean): ExoPlayer {
+  private fun buildPlayer(): ExoPlayer {
     // Library files play from storage; YT Music songs (`yt:` items) are streamed,
     // their address resolved as the player loads them (YtDataSource).
     val dataSources = YtDataSource.Factory(
       DefaultDataSource.Factory(this, DefaultHttpDataSource.Factory().setAllowCrossProtocolRedirects(true)),
     ) { YtClient.get(this) }
     return ExoPlayer.Builder(this, WaveRenderersFactory(this))
+      // Keeps the Buffer setting's streamed audio ahead (StreamBuffer).
+      .setLoadControl(StreamLoadControl())
       .setMediaSourceFactory(DefaultMediaSourceFactory(dataSources))
-      // The tail follows the session's player, which alone holds audio focus.
-      .setAudioAttributes(
-        AudioAttributes.Builder()
-          .setUsage(C.USAGE_MEDIA)
-          .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
-          .build(),
-        /* handleAudioFocus = */ forSession,
-      )
-      .setHandleAudioBecomingNoisy(forSession)
-      .setWakeMode(if (forSession) C.WAKE_MODE_LOCAL else C.WAKE_MODE_NONE)
+      // Only the session's player holds audio focus ([takeSession]); the other follows it.
+      .setAudioAttributes(MUSIC, /* handleAudioFocus = */ false)
+      .setWakeMode(C.WAKE_MODE_NONE)
       .build()
   }
 
-  /** The player the outgoing song fades out on during a crossfade; null otherwise. */
-  private var tailPlayer: ExoPlayer? = null
+  /** The session's player's listeners, which move with the role at a crossfade's handoff. */
+  private val sessionListeners: List<Player.Listener>
+    get() = listOf(sleepTimerListener, resumeListener, streamListener, crossfadeListener)
+
+  /**
+   * Makes [player] the session's player: audio focus, becoming noisy, the wake
+   * lock and the service's listeners. [from] is the one it replaces, which
+   * gives them up first, so the two never compete for audio focus.
+   */
+  private fun takeSession(player: ExoPlayer, from: ExoPlayer?) {
+    from?.let { old ->
+      sessionListeners.forEach(old::removeListener)
+      old.setAudioAttributes(MUSIC, /* handleAudioFocus = */ false)
+      old.setHandleAudioBecomingNoisy(false)
+      old.setWakeMode(C.WAKE_MODE_NONE)
+    }
+    player.setAudioAttributes(MUSIC, /* handleAudioFocus = */ true)
+    player.setHandleAudioBecomingNoisy(true)
+    player.setWakeMode(if (streams(player.currentMediaItem)) C.WAKE_MODE_NETWORK else C.WAKE_MODE_LOCAL)
+    sessionListeners.forEach(player::addListener)
+    exoPlayer = player
+  }
+
+  /** Whether [item] is a streamed YT Music song. */
+  private fun streams(item: MediaItem?) = YtMedia.videoIdOf(item?.localConfiguration?.uri?.toString() ?: "") != null
+
+  /** The player the media session shows ([LyricArtworkPlayer] over [exoPlayer]). */
+  private var shown: LyricArtworkPlayer? = null
+
+  private fun showOnSession(player: ExoPlayer): LyricArtworkPlayer =
+    LyricArtworkPlayer(player) { itemId, cover ->
+      ArtworkProvider.authority?.let { AutoLyrics.artworks.uriFor(it, AutoLyrics.state.linesFor(itemId), cover) }
+    }.also { shown = it }
+
+  /**
+   * A crossfade's handoff: the second player, already playing the next song,
+   * becomes the session's player with no seek. It gets the rest of the queue
+   * around its song (inserting around the playing item doesn't interrupt it),
+   * the repeat mode and the end-of-song sleep timer, audio focus and the
+   * listeners; the media session, and so the notification, Auto and Wave's
+   * own controller, switch to it. The player it replaces keeps only the
+   * outgoing song, so it stops at its end, and becomes the second player.
+   */
+  private fun promoteNext(): ExoPlayer? {
+    val old = exoPlayer ?: return null
+    val incoming = secondPlayer ?: return null
+    val next = old.nextMediaItemIndex
+    if (next == C.INDEX_UNSET) return null
+    val count = old.mediaItemCount
+    incoming.addMediaItems(0, (0 until next).map(old::getMediaItemAt))
+    incoming.addMediaItems((next + 1 until count).map(old::getMediaItemAt))
+    incoming.repeatMode = old.repeatMode
+    incoming.shuffleModeEnabled = old.shuffleModeEnabled
+    incoming.pauseAtEndOfMediaItems = old.pauseAtEndOfMediaItems
+    takeSession(incoming, from = old)
+    val current = old.currentMediaItemIndex
+    old.repeatMode = Player.REPEAT_MODE_OFF
+    old.removeMediaItems(current + 1, count)
+    old.removeMediaItems(0, current)
+    secondPlayer = old
+    incoming.currentMediaItem?.mediaId?.let { CrossfadeLink.handoff.mark(it, SystemClock.elapsedRealtime()) }
+    session?.player = showOnSession(incoming)
+    ResumeStore.savePlayer(incoming, withItems = true)
+    main.removeCallbacks(resumePositionSave)
+    main.postDelayed(resumePositionSave, RESUME_SAVE_INTERVAL_MS)
+    return old
+  }
+
+  /**
+   * The player [player] gives each time, as [Crossfade] drives it: a fixed
+   * one, or whichever is the session's (a handoff changes it). With none, it
+   * stands still and silent.
+   */
+  private fun deckOf(player: () -> ExoPlayer?): CrossfadeDeck =
+    object : CrossfadeDeck {
+      override val positionMs get() = player()?.currentPosition ?: 0L
+      override val isPlaying get() = player()?.isPlaying == true
+      override val ended get() = player()?.playbackState == Player.STATE_ENDED
+      override val ready get() = player()?.playbackState == Player.STATE_READY
+
+      override fun setVolume(volume: Float) {
+        player()?.volume = volume
+      }
+
+      override fun setPlaying(playing: Boolean) {
+        player()?.playWhenReady = playing
+      }
+    }
+
+  /**
+   * A crossfade's second player: the next song's, waiting for the handoff,
+   * then the outgoing song's as it fades out; null otherwise.
+   */
+  private var secondPlayer: ExoPlayer? = null
 
   private val crossfade = Crossfade(
     object : CrossfadeHost {
-      override val main: CrossfadeDeck = object : CrossfadeDeck {
-        override val positionMs get() = exoPlayer?.currentPosition ?: 0L
-        override val isPlaying get() = exoPlayer?.isPlaying == true
-        override val ended get() = exoPlayer?.playbackState == Player.STATE_ENDED
-
-        override fun setVolume(volume: Float) {
-          exoPlayer?.volume = volume
-        }
-
-        override fun setSpeed(speed: Float) {
-          exoPlayer?.setPlaybackSpeed(speed)
-        }
-
-        override fun seekTo(positionMs: Long) {
-          exoPlayer?.seekTo(positionMs)
-        }
-
-        override fun setPlaying(playing: Boolean) {
-          exoPlayer?.playWhenReady = playing
-        }
-      }
+      // Whichever player is the session's: a handoff changes it.
+      override val main: CrossfadeDeck = deckOf { exoPlayer }
 
       override val mainDurationMs: Long?
         get() = exoPlayer?.duration?.takeIf { it != C.TIME_UNSET && it > 0 }
@@ -245,18 +316,6 @@ class PlaybackService : MediaLibraryService() {
             next != C.INDEX_UNSET && next != player.currentMediaItemIndex
         }
 
-      // The player loads the next song once this one is loaded (a preload
-      // started it earlier, [prefetchNext]), so what's buffered past this
-      // song's end is the next one's start.
-      override val nextReady: Boolean
-        get() {
-          val player = exoPlayer ?: return false
-          // The next song is an unsearched one JS is still searching: the player's next isn't it.
-          if (searchingNext()) return false
-          val durationMs = mainDurationMs ?: return false
-          return player.totalBufferedDuration - (durationMs - player.currentPosition) >= NEXT_READY_MS
-        }
-
       override val currentKey: String?
         get() = exoPlayer?.currentMediaItem?.mediaId
 
@@ -267,75 +326,43 @@ class PlaybackService : MediaLibraryService() {
           return if (next == C.INDEX_UNSET) null else player.getMediaItemAt(next).mediaId
         }
 
-      // Preloads the next playlist item while this one plays: a YT Music
-      // song's address is resolved (YtDataSource) and its start buffered.
-      // Off again once the player moves (crossfadeListener).
+      // Preloads the next playlist item on the session's player too, so a song
+      // change without an overlap stays gapless: a YT Music song's address is
+      // resolved (YtDataSource) and its start buffered. Off again once the
+      // player moves (crossfadeListener).
       @OptIn(UnstableApi::class)
       override fun prefetchNext() {
         exoPlayer?.preloadConfiguration = ExoPlayer.PreloadConfiguration(Util.msToUs(PRELOAD_MS))
       }
 
-      override fun nextLate(lateMs: Long, overlapMs: Long) {
-        val late =
-          if (searchingNext()) "the next song was still being searched after ${seconds(lateMs)}"
-          else "the next song was ${seconds(lateMs)} late"
-        WaveLog.i(
-          CROSSFADE_LOG_TAG,
-          if (overlapMs > 0) "Crossfade shortened to ${seconds(overlapMs)}: $late"
-          else "Crossfade dropped, the song ended gapless: $late",
-        )
+      override val nowMs: Long
+        get() = SystemClock.elapsedRealtime()
+
+      override val nextSearching: Boolean
+        get() = searchingNext()
+
+      override fun outcome(outcome: CrossfadeOutcome) {
+        WaveLog.i(CROSSFADE_LOG_TAG, describe(outcome))
       }
 
-      override fun endedEarly(why: CrossfadeEnd, overlapping: Boolean) {
-        WaveLog.i(
-          CROSSFADE_LOG_TAG,
-          if (overlapping) "Crossfade ended early: ${why.reason}"
-          else "Crossfade called off before the overlap: ${why.reason}",
-        )
+      override fun openNext(): CrossfadeDeck {
+        closeSecond()
+        val player = exoPlayer
+        val next = player?.nextMediaItemIndex ?: C.INDEX_UNSET
+        val incoming = buildPlayer()
+        if (player != null && next != C.INDEX_UNSET) incoming.setMediaItem(player.getMediaItemAt(next), 0L)
+        incoming.volume = 0f
+        incoming.playWhenReady = false
+        incoming.prepare()
+        secondPlayer = incoming
+        return deckOf { incoming }
       }
 
-      override fun openTail(positionMs: Long): CrossfadeDeck {
-        closeTail()
-        val tail = buildPlayer(forSession = false)
-        exoPlayer?.currentMediaItem?.let { tail.setMediaItem(it, positionMs) }
-        tail.playWhenReady = true
-        tail.prepare()
-        tailPlayer = tail
-        return object : CrossfadeDeck {
-          override val positionMs get() = tail.currentPosition
-          override val isPlaying get() = tail.isPlaying
-          override val ended get() = tail.playbackState == Player.STATE_ENDED
+      override fun promote(): CrossfadeDeck? = promoteNext()?.let { old -> deckOf { old } }
 
-          override fun setVolume(volume: Float) {
-            tail.volume = volume
-          }
-
-          override fun setSpeed(speed: Float) {
-            tail.setPlaybackSpeed(speed)
-          }
-
-          override fun seekTo(positionMs: Long) {
-            tail.seekTo(positionMs)
-          }
-
-          override fun setPlaying(playing: Boolean) {
-            tail.playWhenReady = playing
-          }
-        }
-      }
-
-      override fun closeTail() {
-        tailPlayer?.release()
-        tailPlayer = null
-      }
-
-      override fun advance() {
-        val player = exoPlayer ?: return
-        val next = player.nextMediaItemIndex
-        if (next == C.INDEX_UNSET) return
-        val key = player.getMediaItemAt(next).mediaId
-        CrossfadeLink.handoff.mark(key, SystemClock.elapsedRealtime())
-        player.seekTo(next, 0)
+      override fun closeSecond() {
+        secondPlayer?.release()
+        secondPlayer = null
       }
 
       override fun fadeEnded() {
@@ -343,6 +370,36 @@ class PlaybackService : MediaLibraryService() {
       }
     },
   )
+
+  /** One app-log line for a song change's crossfade outcome. */
+  private fun describe(outcome: CrossfadeOutcome): String =
+    when (outcome) {
+      is CrossfadeOutcome.Skipped ->
+        "Crossfade skipped: ${outcome.why.reason}" +
+          if (outcome.lateMs > 0) " (${seconds(outcome.lateMs)} late)" else ""
+      is CrossfadeOutcome.Done ->
+        "Crossfade done: ${seconds(outcome.overlapMs)} overlap" +
+          if (outcome.lateMs > LATE_REPORT_MS) " (${seconds(outcome.lateMs)} short, the next song was late)" else ""
+      is CrossfadeOutcome.Cut -> {
+        val of = outcome.overlapMs?.let { "of ${seconds(it)}" } ?: "before the next song sounded"
+        "Crossfade cut ${seconds(outcome.elapsedMs)} in $of: ${outcome.why.reason}; " +
+          "main ${deckState(exoPlayer)}; outgoing ${deckState(secondPlayer)}"
+      }
+    }
+
+  /** A player's position, playback state, isPlaying and suppression reason, for the app log. */
+  private fun deckState(player: Player?): String {
+    if (player == null) return "none"
+    val state = when (player.playbackState) {
+      Player.STATE_IDLE -> "idle"
+      Player.STATE_BUFFERING -> "buffering"
+      Player.STATE_READY -> "ready"
+      Player.STATE_ENDED -> "ended"
+      else -> "state ${player.playbackState}"
+    }
+    return "at ${player.currentPosition} ms, $state, isPlaying=${player.isPlaying}, " +
+      "suppression=${player.playbackSuppressionReason}"
+  }
 
   private val crossfadeTick: Runnable = Runnable { scheduleCrossfade(crossfade.tick()) }
 
@@ -419,12 +476,10 @@ class PlaybackService : MediaLibraryService() {
   override fun onCreate() {
     super.onCreate()
     ResumeStore.init(this)
-    val player = buildPlayer(forSession = true)
-    player.addListener(sleepTimerListener)
-    player.addListener(resumeListener)
-    player.addListener(streamListener)
-    player.addListener(crossfadeListener)
-    exoPlayer = player
+    // The stored Buffer setting, before JS (if any) sends it again.
+    StreamBuffer.init(this)
+    val player = buildPlayer()
+    takeSession(player, from = null)
     CrossfadeLink.init(this)
     crossfade.overlapMs = CrossfadeLink.overlapMs
     CrossfadeLink.onOverlapChanged = { overlapMs ->
@@ -435,16 +490,13 @@ class PlaybackService : MediaLibraryService() {
     setMediaNotificationProvider(WaveNotificationProvider(this))
     stopAccent = NotificationAccent.state.listen { triggerNotificationUpdate() }
     AutoLyrics.state.init(PreferencesLyricsToggleStore(this))
-    val shown = LyricArtworkPlayer(player) { itemId, cover ->
-      ArtworkProvider.authority?.let { AutoLyrics.artworks.uriFor(it, AutoLyrics.state.linesFor(itemId), cover) }
-    }
-    session = MediaLibrarySession.Builder(this, shown, SessionCallback())
+    session = MediaLibrarySession.Builder(this, showOnSession(player), SessionCallback())
       .apply { openAppIntent()?.let(::setSessionActivity) }
       .build()
     showModes(AutoModes.state.current)
     stopModes = AutoModes.state.listen(::showModes)
     stopLyrics = AutoLyrics.state.listen {
-      shown.refresh()
+      shown?.refresh()
       showModes(AutoModes.state.current)
     }
     carConnection = CarConnection(this).type.also { it.observeForever(carConnectionObserver) }
@@ -812,10 +864,15 @@ class PlaybackService : MediaLibraryService() {
 
     const val RESUME_SAVE_INTERVAL_MS = 10_000L
 
+    val MUSIC: AudioAttributes = AudioAttributes.Builder()
+      .setUsage(C.USAGE_MEDIA)
+      .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
+      .build()
+
     const val CROSSFADE_LOG_TAG = "WaveCrossfade"
 
-    /** Buffered of the next song for it to sound at once (ExoPlayer's default to start playing). */
-    const val NEXT_READY_MS = 2500L
+    /** A done overlap shorter than the song's whole one by more than this says it was late. */
+    const val LATE_REPORT_MS = 500L
 
     /** How much of the next song a crossfade preloads. */
     const val PRELOAD_MS = 10_000L

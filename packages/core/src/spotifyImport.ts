@@ -135,9 +135,12 @@ const sameRecording = (wanted: Reading, found: Reading): boolean =>
  * "The" aside), the same edition notes (a live version, a remix or another
  * edit isn't the song; a remaster note, an album's edition, a soundtrack's
  * "From …" doesn't count), no guest either side doesn't credit, and both
- * lengths known and within 3 seconds.
+ * lengths known and within 3 seconds. Sharing on Spotify matches Spotify's
+ * results by the same rules.
  */
-export const spotifyYtMatch = <S extends YtSong>(
+export const spotifyYtMatch = <
+  S extends Pick<YtSong, "title" | "artists" | "album" | "durationMs">,
+>(
   song: SpotifySong,
   results: readonly S[],
 ): S | null => {
