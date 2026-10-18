@@ -192,3 +192,35 @@ export const downloadRunLines = ({
   ].join(" · "),
   fraction: total === 0 ? 0 : (done + failed) / total,
 });
+
+/**
+ * The download notification's run: "Downloading 1,234 of 2,500", the bar's songs finished
+ * (done or failed) of all, and "12 failed · 1,254 left · About 2 h left".
+ */
+export interface DownloadRunNotice {
+  readonly title: string;
+  readonly text: string;
+  readonly finished: number;
+  readonly total: number;
+}
+
+/**
+ * What the download notification shows of the run ([overall], `downloadRunProgress`), with
+ * [timeLeft] (`downloadTimeLeft`) once there's one. Null with no run or a one-song run, which
+ * keeps the notification's per-song progress.
+ */
+export const downloadRunNotice = (
+  overall: DownloadRunCounts | null,
+  timeLeft: number | null,
+): DownloadRunNotice | null => {
+  if (overall === null || overall.total <= 1) return null;
+  const lines = downloadRunLines(overall);
+  return {
+    title: `Downloading ${lines.count}`,
+    text: [lines.detail, ...(timeLeft === null ? [] : [downloadTimeLeftLine(timeLeft)])].join(
+      " · ",
+    ),
+    finished: overall.done + overall.failed,
+    total: overall.total,
+  };
+};

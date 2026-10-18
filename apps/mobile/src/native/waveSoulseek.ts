@@ -1,6 +1,7 @@
 import type {
   DownloadFailurePlan,
   DownloadOrigin,
+  DownloadRunNotice,
   DownloadSource,
   JournalChanges,
   SoulseekCandidate,
@@ -147,6 +148,11 @@ declare class WaveSoulseekModule extends NativeModule<{
   pauseYoutube(until: number, level: number): Promise<void>;
   /** The pause the journal keeps, or null when YouTube downloads aren't paused. */
   youtubePause(): Promise<NativeYoutubePause | null>;
+  /**
+   * The run for the download notification (Core's `downloadRunNotice`), about once a second;
+   * null with no run or a one-song run, which keeps the per-song notification.
+   */
+  showDownloadRun(notice: DownloadRunNotice | null): void;
   cancelJob(id: string): Promise<void>;
   /**
    * Settings › Downloads' drag: the waiting jobs [ids] take the places they held, in this order,
