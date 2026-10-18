@@ -49,11 +49,14 @@ export interface QualityMemory {
 export const LOW_QUALITY_BELOW_KBPS = 256;
 
 /**
- * How far under [LOW_QUALITY_BELOW_KBPS] a header may average and the file
- * still count as 256k: an AAC 256k file's header gives its average, which
- * can land a little under.
+ * How far under [LOW_QUALITY_BELOW_KBPS] an AAC file's header may average
+ * and the file still count as 256k: an AAC 256k file's header gives its
+ * average, which can land a little under. Any other file under 256 is offered.
  */
 const HEADER_SLACK_KBPS = 8;
+
+/** The files an AAC 256k copy comes as (YouTube Music's M4A, raw AAC). */
+const AAC = new Set(["m4a", "aac", "mp4"]);
 
 /** Files no replacement ever touches. */
 const LOSSLESS = new Set(["flac", "wav", "wave", "aif", "aiff", "ape", "wv", "alac", "dsf", "dff"]);
@@ -136,14 +139,22 @@ export interface QualityOffer {
 const songs = (count: number): string =>
   `${count.toLocaleString("en")} ${count === 1 ? "song" : "songs"}`;
 
-/** What the card adds on mobile data: the run's size, and that the phone isn't on Wi-Fi. */
-const mobileDataNote = (downloadBytes: number): string =>
-  `It downloads about ${formatStorageSize(downloadBytes)}, and the phone isn't on Wi-Fi.`;
+/** From this much to download, a run is large: on mobile data the card says so. */
+const MOBILE_DATA_NOTE_FROM_BYTES = 100e6;
+
+/**
+ * What the card adds on mobile data ([onMobileData]) for a large run: what it
+ * downloads, and that the phone isn't on Wi-Fi. Null otherwise.
+ */
+const mobileDataNote = (downloadBytes: number, onMobileData: boolean): string | null =>
+  onMobileData && downloadBytes >= MOBILE_DATA_NOTE_FROM_BYTES
+    ? `It downloads about ${formatStorageSize(downloadBytes)}, and the phone isn't on Wi-Fi.`
+    : null;
 
 /**
  * Turning best quality on: the offer to replace [files] (`qualityUpgradeSongs`)
  * with MP3 320 copies, its estimate the difference to 320 kbps over their
- * lengths. On mobile data ([onMobileData]) the card says what the run
+ * lengths. On mobile data ([onMobileData]) the card says what a large run
  * downloads. Null when no song qualifies.
  */
 export const qualityUpgradeOffer = (
@@ -159,6 +170,7 @@ export const qualityUpgradeOffer = (
     bytes += Math.max(0, best - sizeOf(file));
   }
   const estimate = `About +${formatStorageSize(bytes)}`;
+  const note = mobileDataNote(downloadBytes, onMobileData);
   return {
     direction: "upgrade",
     trackIds: files.map((file) => file.id),
@@ -166,7 +178,7 @@ export const qualityUpgradeOffer = (
     downloadBytes,
     alert: {
       title: `Replace ${songs(files.length)} with best quality?`,
-      message: onMobileData ? `${estimate}. ${mobileDataNote(downloadBytes)}` : estimate,
+      message: note === null ? estimate : `${estimate}. ${note}`,
       action: { label: "Replace" },
       dismissLabel: "Not now",
     },
@@ -185,8 +197,8 @@ const YOUTUBE_KBPS = 128;
  * (`qualityDowngradeSongs`) with YouTube Music's copies, at the bitrate the
  * owner's YouTube downloads get ([youTubeKbps], `youTubeCopyKbps`), its
  * estimate what that saves over their lengths. On mobile data
- * ([onMobileData]) the card says what the run downloads. Null when nothing
- * would be saved.
+ * ([onMobileData]) the card says what a large run downloads. Null when
+ * nothing would be saved.
  */
 export const qualityDowngradeOffer = (
   files: readonly QualityFile[],
@@ -204,6 +216,7 @@ export const qualityDowngradeOffer = (
   const copies = `YouTube Music's copies are AAC at ${
     youTubeKbps >= YOUTUBE_PREMIUM_KBPS ? "" : "about "
   }${youTubeKbps} kbps.`;
+  const note = mobileDataNote(downloadBytes, onMobileData);
   return {
     direction: "downgrade",
     trackIds: files.map((file) => file.id),
@@ -211,7 +224,7 @@ export const qualityDowngradeOffer = (
     downloadBytes,
     alert: {
       title: `Free about ${size} by replacing ${songs(files.length)} with YouTube Music copies?`,
-      message: onMobileData ? `${copies} ${mobileDataNote(downloadBytes)}` : copies,
+      message: note === null ? copies : `${copies} ${note}`,
       action: { label: "Replace" },
       dismissLabel: "Not now",
     },
@@ -251,6 +264,10 @@ const onTheirWay = (
   return ids;
 };
 
+/** Whether [file] is under 256 kbps: an AAC file's header may average a little under. */
+const lowQuality = (file: QualityFile, kbps: number): boolean =>
+  kbps < LOW_QUALITY_BELOW_KBPS - (AAC.has(extensionOf(file.path)) ? HEADER_SLACK_KBPS : 0);
+
 /**
  * The files turning best quality on offers to replace: every one under 256
  * kbps, whoever put it there. AAC 256k, MP3 320 and lossless files stay, as
@@ -266,7 +283,7 @@ export const qualityUpgradeSongs = <F extends QualityFile>(
     (file) =>
       file.bitrateKbps !== null &&
       file.bitrateKbps > 0 &&
-      file.bitrateKbps < LOW_QUALITY_BELOW_KBPS - HEADER_SLACK_KBPS &&
+      lowQuality(file, file.bitrateKbps) &&
       !isLosslessFile(file.path) &&
       !noBetterCopy.has(file.id) &&
       !asked.has(file.id),
@@ -391,7 +408,8 @@ const text = (lyrics: string | null): string | null =>
  * them, its cover (the Library's copy) and its lyrics, picked as the Lyrics
  * view picks them (Core's `pickLyrics`: synced lyrics in a sidecar win, else
  * the tags', else the sidecar's), so the owner's edits and Fix Song's fills
- * stay.
+ * stay. Every other tag the old file has (composer, comments, BPM, every
+ * genre value…) is copied from it as the file is tagged (`keepTagsOf`).
  */
 export const qualityReplacementTags = (
   track: ReplacedTrack,
@@ -412,6 +430,7 @@ export const qualityReplacementTags = (
     lyrics: synced ? sidecar : (embedded ?? sidecar),
     artworkUrl: track.artworkPath,
     advisory: advisoryTag(track.explicit),
+    keepTagsOf: track.path,
   };
 };
 
