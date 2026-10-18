@@ -36,9 +36,9 @@ import {
 
 import { ytMusicEnabled, useYtMusicEnabled } from "./ytMusic";
 
-type NoBetterCopy = { readonly [D in QualityDirection]: ReadonlySet<number> };
+type NoBetterCopiesByDirection = { readonly [D in QualityDirection]: ReadonlySet<number> };
 
-const readNoBetterCopy = (): Promise<NoBetterCopy> =>
+const readNoBetterCopy = (): Promise<NoBetterCopiesByDirection> =>
   appRuntime.runPromise(
     Effect.gen(function* () {
       const store = yield* LibraryStore;
@@ -51,7 +51,7 @@ const readNoBetterCopy = (): Promise<NoBetterCopy> =>
   );
 
 /** The songs recorded as having no better copy, each way; null until first read. */
-const noBetterCopy = makeExternalStore<NoBetterCopy | null>(null);
+const noBetterCopy = makeExternalStore<NoBetterCopiesByDirection | null>(null);
 const reloadNoBetterCopy = (): void => {
   void readNoBetterCopy().then(noBetterCopy.set, () => undefined);
 };

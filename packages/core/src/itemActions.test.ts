@@ -8,6 +8,7 @@ import {
   isDestructiveAction,
   ITEM_ACTION_LABELS,
   commonKind,
+  isCollectionKind,
   itemActions,
   splitActionBar,
   ytSongActions,
@@ -1025,5 +1026,16 @@ describe("ytSongActions", () => {
       ...queue,
       "removeFromPlaylist",
     ]);
+  });
+});
+
+describe("isCollectionKind", () => {
+  test("albums, artists, playlists and genres hold songs; tracks, Library entries and mixed checks don't", () => {
+    for (const kind of ["album", "artist", "playlist", "genre"] as const) {
+      assert.equal(isCollectionKind(kind), true, kind);
+    }
+    for (const kind of ["track", "section", "mixed"] as const) {
+      assert.equal(isCollectionKind(kind), false, kind);
+    }
   });
 });

@@ -12,7 +12,7 @@ import Animated, {
 
 import { CELL } from "@/catalog/grid";
 import { followArtistLink, followStreamedArtistLink } from "@/library/ArtistChoice";
-import { toggleFavorite, useIsFavorite } from "@/library/favorites";
+import { toggleFavorite, useIsFavorite, useYtSongStarred } from "@/library/favorites";
 import { useLinkRows } from "@/library/hooks";
 import type { TrackDetails } from "@/library/LibraryStore";
 import { openAlbum, useCurrentPath } from "@/library/routes";
@@ -23,7 +23,7 @@ import { useCurrentTrackId } from "@/playback/hooks";
 import { playbackState, type PlaybackState } from "@/playback/Player";
 import { queueTracks, type QueueTrack } from "@/playback/queueTracks";
 import { useThemeColor } from "@/theme/useThemeColor";
-import { useLoadedLibraryFinder, type FindInLibrary } from "@/ytmusic/libraryFinder";
+import { useLoadedLibraryFinder } from "@/ytmusic/libraryFinder";
 import { useStreamedArtistLink } from "@/ytmusic/streamedArtist";
 
 import { usePlayingYtSong } from "./hooks";
@@ -129,34 +129,37 @@ function MetaLink({ label, open, hint, className }: LinkProps) {
   );
 }
 
-const findsNothing: FindInLibrary = () => null;
-
 /**
  * Stars the current track; in sync with every other star (rows, menus). A
  * YT Music song's star is the Library song's once the Library has it, else
- * its pending favorite; starring it downloads it (`starSongs`: a star means
- * downloaded).
+ * its pending favorite (`useYtSongStarred`); starring it downloads it
+ * (`starSongs`: a star means downloaded). A YT Music song's star waits for
+ * the Library's first read: until then a song the Library has would be taken
+ * for one it lacks, and downloaded again.
  */
 function FavoriteStar({ title }: { title: string }) {
   const accent = useThemeColor("accent");
   const highlight = useThemeColor("highlight");
   const trackId = useCurrentTrackId();
+  const streamed = trackId !== null && parseTrackId(trackId)?.kind === "yt";
   const ytSong = usePlayingYtSong(trackId);
-  const find = useLoadedLibraryFinder(ytSong !== null) ?? findsNothing;
-  const track = ytSong === null ? null : find(ytSong);
-  const pendingStar = useIsFavorite(trackId);
-  const libraryStar = useIsFavorite(track?.id ?? null);
-  // Either, so the star stays lit while the arriving file settles its pending favorite.
-  const favorite = pendingStar || libraryStar;
+  const find = useLoadedLibraryFinder(ytSong !== null);
+  const track = ytSong === null || find === null ? null : find(ytSong);
+  const libraryStar = useIsFavorite(streamed ? null : trackId);
+  const ytStar = useYtSongStarred(streamed ? (ytSong?.videoId ?? null) : null, track);
+  const favorite = streamed ? ytStar : libraryStar;
+  const disabled = trackId === null || (streamed && (ytSong === null || find === null));
   return (
     <Press
       accessibilityRole="button"
       accessibilityLabel={favorite ? `Remove ${title} from Favorites` : `Favorite ${title}`}
-      accessibilityState={{ selected: favorite, disabled: trackId === null }}
-      disabled={trackId === null}
+      accessibilityState={{ selected: favorite, disabled }}
+      disabled={disabled}
       onPress={() => {
-        if (ytSong !== null) void starSongs({ tracks: [], ytSongs: [ytSong] }, !favorite, find);
-        else if (trackId !== null) void toggleFavorite(trackId);
+        if (streamed) {
+          if (ytSong !== null && find !== null)
+            void starSongs({ tracks: [], ytSongs: [ytSong] }, !favorite, find);
+        } else if (trackId !== null) void toggleFavorite(trackId);
       }}
       haptic="impact"
       depth={0.1}

@@ -306,12 +306,17 @@ const ALBUM_DOWNLOAD_ACTIONS: {
 };
 
 /** The kinds whose items hold songs Fix Songs can run on. */
-const COLLECTIONS: ReadonlySet<ItemKind> = new Set<ItemKind>([
+export type CollectionKind = Extract<ItemKind, "album" | "artist" | "playlist" | "genre">;
+
+const COLLECTIONS: ReadonlySet<ItemKind> = new Set<CollectionKind>([
   "album",
   "artist",
   "playlist",
   "genre",
 ]);
+
+/** Whether [kind]'s items hold songs (an album, artist, playlist or genre). */
+export const isCollectionKind = (kind: ItemKind): kind is CollectionKind => COLLECTIONS.has(kind);
 
 /** A song that's a Library file Fix Song can do something for. */
 const fixableFile = (song: ActionItem): boolean =>
@@ -387,7 +392,7 @@ export const itemActions = <A extends LibraryArtistRef = LibraryArtistRef>(
   // A collection's songs the same way: only its Library files count (not its
   // missing songs, nor a playlist's streamed entries), so it runs on those.
   if (
-    COLLECTIONS.has(kind) &&
+    isCollectionKind(kind) &&
     subject.onlineLookups === true &&
     items.some((item) => (item.songs ?? []).some(fixableFile))
   )

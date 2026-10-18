@@ -8,7 +8,9 @@ import {
   compareAlbumTracks,
   compareByTitle,
   normalizeTrack,
+  readStoredGenres,
   splitCredit,
+  storedGenres,
   sortKey,
 } from "./index.ts";
 
@@ -421,5 +423,25 @@ describe("ordering", () => {
       songs.sort(compareByTitle).map((t) => t.path),
       [null, "/two.mp3"],
     );
+  });
+});
+
+describe("A song's stored genre values", () => {
+  test("store several values as a list, one or none as nothing", () => {
+    assert.equal(storedGenres(["Metalcore", "Rock"]), '["Metalcore","Rock"]');
+    assert.equal(storedGenres(["Rock"]), null);
+    assert.equal(storedGenres([]), null);
+  });
+
+  test("read back as stored", () => {
+    assert.deepEqual(readStoredGenres(storedGenres(["Metalcore", "Rock"])), ["Metalcore", "Rock"]);
+    assert.deepEqual(readStoredGenres(null), []);
+  });
+
+  test("read as none when they aren't a list of text", () => {
+    assert.deepEqual(readStoredGenres('["Metalcore",'), []);
+    assert.deepEqual(readStoredGenres('{"genre":"Rock"}'), []);
+    assert.deepEqual(readStoredGenres("[1, 2]"), []);
+    assert.deepEqual(readStoredGenres('["Rock", 2]'), []);
   });
 });

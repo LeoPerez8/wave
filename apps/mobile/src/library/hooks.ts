@@ -1,6 +1,7 @@
 import {
   listeningOverview,
   summedListeningTotals,
+  type CollectionKind,
   type LibraryReads,
   type ListeningOverview,
   type ListeningSums,
@@ -32,6 +33,7 @@ import {
   type SongRow,
 } from "./LibraryStore";
 import { knownPlaylists, listPlaylistsRemembered } from "./playlists";
+import { appRuntime } from "./runtime";
 import { libraryQuery, useLibraryQuery, type LibraryQuery } from "./sharedQueries";
 
 export { libraryQuery, useLibraryQuery } from "./sharedQueries";
@@ -118,7 +120,7 @@ export const useAlbumsMissingSongs = (
 };
 
 /** A collection whose Library songs a menu reads (`useCollectionSongs`). */
-export type SongsCollection = "album" | "artist" | "playlist" | "genre";
+export type SongsCollection = CollectionKind;
 
 const COLLECTION_SONGS: {
   readonly [K in SongsCollection]: (
@@ -153,18 +155,27 @@ export const useCollectionSongs = (
   const kind = collection?.kind;
   const id = collection?.id;
   const query = useMemo(
-    () =>
-      kind === undefined || id === undefined
-        ? null
-        : storeQuery(
-            `collectionSongs:${kind}:${id}`,
-            kind === "playlist" ? { playlists: [id], tracks: true } : TRACKS,
-            (store) => COLLECTION_SONGS[kind](store, id),
-          ),
+    () => (kind === undefined || id === undefined ? null : collectionSongsQuery(kind, id)),
     [kind, id],
   );
   return useLibraryQuery<readonly SongRow[] | undefined>(query, undefined);
 };
+
+const collectionSongsQuery = (kind: SongsCollection, id: number) =>
+  storeQuery(
+    `collectionSongs:${kind}:${id}`,
+    kind === "playlist" ? { playlists: [id], tracks: true } : TRACKS,
+    (store) => COLLECTION_SONGS[kind](store, id),
+  );
+
+/**
+ * The Library songs of the collection [kind] [id], read once: what a menu
+ * reads before it opens, so Fix Songs doesn't join it under a finger.
+ */
+export const readCollectionSongs = (
+  kind: SongsCollection,
+  id: number,
+): Promise<readonly SongRow[]> => appRuntime.runPromise(collectionSongsQuery(kind, id).read);
 
 const listSongs = storeQuery("songs", TRACKS, (store) => store.listSongs);
 const countTracks = storeQuery("trackCount", TRACKS, (store) => store.countTracks);

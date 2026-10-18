@@ -19,7 +19,7 @@ import { Text, View } from "react-native";
 import { Artwork } from "@/catalog/Artwork";
 import { CELL } from "@/catalog/grid";
 import { followStreamedArtistLink } from "@/library/ArtistChoice";
-import { useFavoriteIds, usePendingFavoriteVideos } from "@/library/favorites";
+import { useYtSongStarred } from "@/library/favorites";
 import { starSongs } from "@/library/starSongs";
 import type { ArtistRow } from "@/library/LibraryStore";
 import { openAddToPlaylist } from "@/library/PlaylistSheets";
@@ -198,11 +198,9 @@ function YtSongActionsMenu({
   // A song downloaded earlier and since deleted from the Library can be downloaded again
   // (taken as still there until the Library has been read).
   const inLibrary = useLoadedInLibrary()(song);
-  // Starred as the Library's song once the Library has it, else as a pending favorite.
+  // Starred as its pending favorite, or as the Library song it is by now.
   const track = find(song);
-  const favorites = useFavoriteIds();
-  const pending = usePendingFavoriteVideos();
-  const favorite = track === null ? pending.has(song.videoId) : favorites.has(track.id);
+  const favorite = useYtSongStarred(song.videoId, track);
   // Its artists open integrated: their Library page, else the YouTube Music artist page.
   // Kept as the menu opened with it, so Go to Artist never appears while it's shown.
   const link = useStreamedArtistLink(song.artists);

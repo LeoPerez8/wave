@@ -8,8 +8,8 @@
  * (`settledDownloadFailures`).
  */
 
-import { missingSongTrackId } from "./missingSongDownload.ts";
-import { foundNoBetterCopy, qualityJobOf, type QualityDirection } from "./qualityReplacement.ts";
+import { downloadJobKind } from "./downloadJobKind.ts";
+import { foundNoBetterCopy, type QualityDirection } from "./qualityReplacement.ts";
 import type { YtSong } from "./ytMusic.ts";
 import {
   ytDownloadLine,
@@ -110,9 +110,10 @@ const settled = <S extends YtSong>(
   job: YtDownloadJournalJob<S>,
   { inLibrary, missingTrackIds }: FailedDownloadsInput<S>,
 ): boolean => {
-  if (qualityJobOf(job.id) !== null) return foundNoBetterCopy(job);
-  const trackId = missingSongTrackId(job.id);
-  if (trackId !== null) return missingTrackIds !== null && !missingTrackIds.has(trackId);
+  const kind = downloadJobKind(job.id);
+  if (kind.kind === "quality") return foundNoBetterCopy(job);
+  if (kind.kind === "missing")
+    return missingTrackIds !== null && !missingTrackIds.has(kind.trackId);
   return [job.song, ...(job.aliases ?? [])].some(inLibrary);
 };
 
@@ -134,8 +135,7 @@ export const failedDownloads = <S extends YtSong>(
   jobs.flatMap((job) => {
     const status = failureOf(job);
     if (status === null || settled(job, input)) return [];
-    const trackId = missingSongTrackId(job.id);
-    const replacement = qualityJobOf(job.id);
+    const kind = downloadJobKind(job.id);
     return [
       {
         id: job.id,
@@ -146,11 +146,11 @@ export const failedDownloads = <S extends YtSong>(
             ? null
             : causeLine(job.cause),
         retry:
-          replacement !== null
-            ? { kind: "quality", ...replacement }
-            : trackId === null
-              ? { kind: "song", song: job.song }
-              : { kind: "missingSong", trackId },
+          kind.kind === "quality"
+            ? { kind: "quality", direction: kind.direction, trackId: kind.trackId }
+            : kind.kind === "missing"
+              ? { kind: "missingSong", trackId: kind.trackId }
+              : { kind: "song", song: job.song },
         clear: videosOf(job),
       },
     ];

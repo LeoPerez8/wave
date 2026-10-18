@@ -23,6 +23,7 @@ import { useFavoriteIds, usePendingFavoriteVideos } from "@/library/favorites";
 import { starSongs } from "@/library/starSongs";
 import { fixSongs } from "@/library/findLyricsAndGenre";
 import {
+  readCollectionSongs,
   useAlbumsMissingSongs,
   useCollectionSongs,
   useLinkRows,
@@ -38,7 +39,10 @@ import {
 import { removePlaylistItems } from "@/library/playlists";
 import { openAlbum } from "@/library/routes";
 import { showError } from "@/overlay/alert";
-import { useLyricsAndGenreLookupsEnabled } from "@/settings/lyricsAndGenre";
+import {
+  lyricsAndGenreLookupsEnabled,
+  useLyricsAndGenreLookupsEnabled,
+} from "@/settings/lyricsAndGenre";
 import { ytMusicEnabled } from "@/settings/ytMusic";
 import {
   cancelMissingSongDownload,
@@ -48,7 +52,7 @@ import {
   useMissingSongDownloadStatuses,
   downloadYtSong,
 } from "@/ytmusic/YtDownloads";
-import { useLoadedLibraryFinder, type FindInLibrary } from "@/ytmusic/libraryFinder";
+import { useLibraryFinder, type FindInLibrary } from "@/ytmusic/libraryFinder";
 import { useStreamedArtistContext } from "@/ytmusic/streamedArtist";
 
 import {
@@ -88,6 +92,8 @@ export interface ActionOptions {
   readonly finish: () => void;
   /** The menu's list can select: offers Select, which calls this. */
   readonly onSelect?: (() => void) | undefined;
+  /** The songs of the collection the menu is about, read before it opened (`readMenuSongs`). */
+  readonly collectionSongs?: readonly SongRow[] | undefined;
 }
 
 /** The one missing song [target] is, if it is one: its menu offers its download. */
@@ -98,14 +104,11 @@ const onlyMissingSong = (target: ActionItems): number | null => {
     : only.song.id;
 };
 
-const findsNothing: FindInLibrary = () => null;
-
 /**
  * The Library finder, read only while YT Music songs are among the items
  * ([streams]): the Library song each is by now, if any.
  */
-const useStreamedSongFinder = (streams: boolean): FindInLibrary =>
-  useLoadedLibraryFinder(streams) ?? findsNothing;
+const useStreamedSongFinder = (streams: boolean): FindInLibrary => useLibraryFinder(streams);
 
 /**
  * The one album, artist, playlist or genre [target]'s menu is about, while
@@ -132,9 +135,24 @@ const menuCollection = (
 
 const NO_SONGS: readonly SongRow[] = [];
 
+/**
+ * What [target]'s menu reads before it opens: the songs of the collection
+ * it's about, while online lookups are on, so Fix Songs is there from the
+ * first frame instead of joining later and moving the entries under a
+ * sliding finger. Undefined for other menus, or when they can't be read.
+ */
+export const readMenuSongs = (target: ActionItems): Promise<readonly SongRow[] | undefined> => {
+  const collection = menuCollection(target, "menu", lyricsAndGenreLookupsEnabled());
+  return collection === null
+    ? Promise.resolve(undefined)
+    : readCollectionSongs(collection.kind, collection.id).catch(() => undefined);
+};
+
 interface PlanOptions {
   readonly surface: ActionSurface;
   readonly selectable: boolean;
+  /** The collection's songs, read before the menu opened. */
+  readonly collectionSongs?: readonly SongRow[] | undefined;
 }
 
 /**
@@ -145,7 +163,7 @@ interface PlanOptions {
 function usePlan(
   target: ActionItems,
   favorites: ReadonlySet<number>,
-  { surface, selectable }: PlanOptions,
+  { surface, selectable, collectionSongs: readFirst }: PlanOptions,
 ): {
   readonly planned: readonly ItemActionEntry<ArtistRow>[];
   readonly missingSongs: readonly number[];
@@ -166,8 +184,9 @@ function usePlan(
   );
   const missingSongs = useMemo(() => perAlbum.flat(), [perAlbum]);
   const statuses = useMissingSongDownloadStatuses(missingSongs);
+  // Kept current while the menu shows; the songs read before it opened stand in until then.
   const collectionSongs =
-    useCollectionSongs(menuCollection(target, surface, onlineLookups)) ?? NO_SONGS;
+    useCollectionSongs(menuCollection(target, surface, onlineLookups)) ?? readFirst ?? NO_SONGS;
   const songFacts = useMemo(() => collectionSongFacts(collectionSongs), [collectionSongs]);
   // Each album's share of [statuses], in the albums' order.
   const albumStatuses = (index: number) => {
@@ -233,7 +252,7 @@ export const actionEntries = <A extends { readonly id: number; readonly name: st
  */
 export function useItemActions(
   target: ActionItems,
-  { surface, finish, onSelect }: ActionOptions,
+  { surface, finish, onSelect, collectionSongs: readFirst }: ActionOptions,
 ): readonly ActionEntry[] {
   const here = usePathname();
   const favorites = useFavoriteIds();
@@ -306,6 +325,7 @@ export function useItemActions(
   const { planned, missingSongs, perAlbum, collectionSongs } = usePlan(target, favorites, {
     surface,
     selectable: onSelect !== undefined,
+    collectionSongs: readFirst,
   });
 
   // Read ahead, so Go to Album / Go to Artist open header-first.

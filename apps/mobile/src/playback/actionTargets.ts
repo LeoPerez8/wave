@@ -14,6 +14,7 @@ import {
   type QueueSong,
   type UnsearchedSong,
   ytSongCredit,
+  ytSongStarred,
 } from "@wave/core";
 
 import type { ArtistImageSource } from "@/catalog/ArtistImage";
@@ -166,7 +167,7 @@ const ytFacts = (
   artistNames: item.ytSong.artists ?? [],
   inPlaylist: item.playlistItem !== undefined,
   downloaded: track?.path != null,
-  favorite: track === null ? pending.has(item.ytSong.videoId) : favorites.has(track.id),
+  favorite: ytSongStarred(item.ytSong.videoId, track, favorites, pending),
 });
 
 const KIND_TRACK: KindInfo<TrackItem> = {

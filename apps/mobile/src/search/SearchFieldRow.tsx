@@ -2,7 +2,7 @@ import { listActionsForms } from "@wave/core";
 import { useState, type ReactNode } from "react";
 import { View, type LayoutChangeEvent } from "react-native";
 
-import { CELL } from "@/catalog/grid";
+import { CELL, widthOf } from "@/catalog/grid";
 import type { LineToggle } from "@/catalog/PlayShuffle";
 import { OnlineToggle, OnlineToggleFaces } from "@/ytmusic/OnlineToggle";
 
@@ -43,7 +43,7 @@ export function SearchFieldRow({ field, toggle }: { field: ReactNode; toggle: Li
     <View
       className="flex-row items-center"
       style={{ columnGap: GAP }}
-      onLayout={(event: LayoutChangeEvent) => measured("line")(event.nativeEvent.layout.width)}
+      onLayout={(event: LayoutChangeEvent) => measured("line")(widthOf(event))}
     >
       <View className="flex-1">{field}</View>
       {toggle !== null && form !== null && (

@@ -796,7 +796,7 @@ describe("a Library album's YT Music songs", () => {
       enabled: context.enabled ?? true,
       now: context.now ?? NOW,
       integrated: context.integrated ?? true,
-      always: context.always,
+      always: context.always ?? false,
       pick: context.pick ?? null,
       keepTracklist: context.keepTracklist,
       releasePage: (release) => {

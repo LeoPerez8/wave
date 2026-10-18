@@ -46,13 +46,13 @@ import {
 } from "@/search/rows";
 import { useSearchRequests } from "@/search/queryRequest";
 import { useYtMusicSection } from "@/search/ytMusicSearch";
-import { openSearchOnlineChoices } from "@/settings/searchOnline";
 import { useSearchFieldFocus } from "@/search/fieldFocus";
 import { SearchField } from "@/search/SearchField";
 import { SearchFieldRow } from "@/search/SearchFieldRow";
 import { useSearchIndex } from "@/search/searchIndex";
 import { SearchResultsList } from "@/search/SearchResultsList";
 import { useListSelection } from "@/selection/useListSelection";
+import { useLineToggle } from "@/ytmusic/OnlineToggle";
 import { useHeldSongs, useSongsInPlace } from "@/ytmusic/songsInPlace";
 
 const NO_KINDS: ReadonlySet<SearchKind> = new Set();
@@ -143,12 +143,7 @@ export default function SearchScreen() {
   // songs, artists and albums the library doesn't have join the library's.
   // Until the library is ready, nothing is asked.
   const [ytSection, pickYt] = useYtMusicSection(deferredQuery, !libraryEmpty);
-  const selected = ytSectionToggle(ytSection);
-  const toggle = useMemo(
-    () =>
-      selected === null ? null : { selected, onPick: pickYt, onLongPress: openSearchOnlineChoices },
-    [selected, pickYt],
-  );
+  const toggle = useLineToggle(ytSectionToggle(ytSection), pickYt);
   const inLibrary = library?.library;
   const ytView = useMemo(
     () =>

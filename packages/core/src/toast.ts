@@ -37,18 +37,13 @@ export const toastDuration = (
       (withAction ? ACTION_MS : 0),
   );
 
-/** How a drag on the toast ended. */
+/** How a drag on the toast ended, up and down (sideways is no swipe). */
 export interface ToastSwipe {
-  /** Distance dragged, in dp; negative is left. */
-  readonly translationX: number;
   /** Distance dragged, in dp; negative is up. */
   readonly translationY: number;
-  /** Speed when the finger lifted, in dp/s; negative is left. */
-  readonly velocityX: number;
   /** Speed when the finger lifted, in dp/s; negative is up. */
   readonly velocityY: number;
-  /** Size of the toast, in dp. */
-  readonly width: number;
+  /** Height of the toast, in dp. */
   readonly height: number;
 }
 

@@ -32,7 +32,7 @@ import { useLoadedInLibrary } from "@/ytmusic/libraryFinder";
 import { runYtPlaylistDownloadAction, useYtPlaylistDownload } from "@/ytmusic/YtDownloads";
 
 import { targetHeading, type ActionItems, type Heading, type PlaylistPlace } from "./actionTargets";
-import { useItemActions, type ActionEntry } from "./itemActions";
+import { readMenuSongs, useItemActions, type ActionEntry } from "./itemActions";
 import { playTarget } from "./playTarget";
 
 const NO_ENTRIES: readonly PlaylistEntryRow[] = [];
@@ -58,12 +58,16 @@ export const openItemCard = (
   openOverlay({ label: targetHeading(target, undefined)?.title ?? "Actions", anchor, render });
 };
 
-/** Opens [target]'s menu. A playlist's menu is given its [entries], for its download entries. */
+/**
+ * Opens [target]'s menu. A playlist's menu is given its [entries], for its
+ * download entries, and a collection's its [songs], for Fix Songs.
+ */
 const openActions = (
   target: ActionItems,
   options: MenuOptions = {},
   anchor = pressedRect(),
   entries: readonly PlaylistEntryRow[] = NO_ENTRIES,
+  songs?: readonly SongRow[],
 ): void =>
   openItemCard(
     target,
@@ -76,10 +80,23 @@ const openActions = (
           close={close}
           onSelect={options.onSelect}
           playlistEntries={entries}
+          collectionSongs={songs}
         />
       ),
     anchor,
   );
+
+/**
+ * Opens the menu for an album, artist or genre once its songs are read
+ * (`readMenuSongs`), so the card opens with every entry it will have.
+ */
+const openCollectionActions = (target: ActionItems, options?: MenuOptions): void => {
+  const anchor = pressedRect();
+  void followUp(async () => {
+    const songs = await readMenuSongs(target);
+    openActions(target, options, anchor, NO_ENTRIES, songs);
+  });
+};
 
 /** Opens the long-press menu for a track (in a playlist, pass its place there). */
 export const openTrackActions = (
@@ -121,23 +138,27 @@ export const openTrackActionsById = (id: number, options: MenuOptions = {}): voi
  */
 export const openPlaylistActions = (playlist: PlaylistRow, options?: MenuOptions): void => {
   const anchor = pressedRect();
+  const target: ActionItems = { kind: "playlist", items: [playlist] };
   void followUp(async () => {
-    const entries = await playlistEntries(playlist.id).catch(() => NO_ENTRIES);
-    openActions({ kind: "playlist", items: [playlist] }, options, anchor, entries);
+    const [entries, songs] = await Promise.all([
+      playlistEntries(playlist.id).catch(() => NO_ENTRIES),
+      readMenuSongs(target),
+    ]);
+    openActions(target, options, anchor, entries, songs);
   });
 };
 
 /** Opens the long-press menu for an album (Play Next and Add to Queue take the whole album). */
 export const openAlbumActions = (album: AlbumRow, options?: MenuOptions): void =>
-  openActions({ kind: "album", items: [album] }, options);
+  openCollectionActions({ kind: "album", items: [album] }, options);
 
 /** Opens the long-press menu for an artist (their songs, in the artist screen's order). */
 export const openArtistActions = (artist: ArtistRow, options?: MenuOptions): void =>
-  openActions({ kind: "artist", items: [artist] }, options);
+  openCollectionActions({ kind: "artist", items: [artist] }, options);
 
 /** Opens the long-press menu for a genre (its songs, in the genre screen's order). */
 export const openGenreActions = (genre: GenreRow, options?: MenuOptions): void =>
-  openActions({ kind: "genre", items: [genre] }, options);
+  openCollectionActions({ kind: "genre", items: [genre] }, options);
 
 /** Opens the menu for a Library entry (Songs, Albums…): every song it holds, in its order. */
 export const openLibrarySectionActions = (section: LibrarySection): void =>
@@ -195,6 +216,7 @@ function ActionsMenu({
   onSelect,
   sectionSongs,
   playlistEntries: listed,
+  collectionSongs,
 }: {
   target: ActionItems;
   close: () => void;
@@ -203,8 +225,15 @@ function ActionsMenu({
   sectionSongs?: LibraryCounts | undefined;
   /** A playlist's entries, for its download entries; none for other targets. */
   playlistEntries: readonly PlaylistEntryRow[];
+  /** A collection's songs, read before it opened; none for other targets. */
+  collectionSongs?: readonly SongRow[] | undefined;
 }) {
-  const actions = useItemActions(target, { surface: "menu", finish: close, onSelect });
+  const actions = useItemActions(target, {
+    surface: "menu",
+    finish: close,
+    onSelect,
+    collectionSongs,
+  });
   const playlist = target.kind === "playlist" ? target.items[0] : undefined;
   const downloads = usePlaylistDownloadEntries(
     listed,

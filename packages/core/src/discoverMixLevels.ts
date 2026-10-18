@@ -18,12 +18,11 @@ import type {
   DiscoverSeedSong,
   DiscoverSongPlays,
 } from "./discoverMixes.ts";
-import { mixLibrarySong } from "./discoverMixes.ts";
+import { mixLibrarySong, mixRecordingOf, mixSeedArtists } from "./discoverMixes.ts";
 import { isExplicit, type ExplicitFlag } from "./explicit.ts";
 import { ofGenreFamily } from "./genreMixes.ts";
 import { identityKey } from "./library.ts";
 import type { MixKnownSongs } from "./mixKnownSongs.ts";
-import { normalizeSearchText } from "./search.ts";
 import type { MixedSong, YtAlbumSong } from "./ytDiscover.ts";
 
 /** How much of each mix is new: 1 = 20% new songs, up to 5 = all new. */
@@ -203,9 +202,6 @@ export interface DiscoverMixPoolSources<L extends DiscoverLibrarySong> {
   readonly length: number;
 }
 
-const recordingOf = (song: Pick<YtAlbumSong, "title" | "artists">): string =>
-  `${normalizeSearchText(song.title)}\u001f${song.artists.map(normalizeSearchText).join("\u001f")}`;
-
 /**
  * The songs [seed]'s mix may play as its familiar share, in the order the
  * share takes them: first the songs the owner knows that its radio played,
@@ -234,7 +230,7 @@ export const discoverMixFamiliarPool = <L extends DiscoverLibrarySong>(
     pool.push({ source: "library", track: mixLibrarySong(song) });
   };
   const addStream = (song: YtAlbumSong): void => {
-    const recording = recordingOf(song);
+    const recording = mixRecordingOf(song);
     if (pool.length >= most || videos.has(song.videoId) || recordings.has(recording)) return;
     videos.add(song.videoId);
     recordings.add(recording);
@@ -251,9 +247,7 @@ export const discoverMixFamiliarPool = <L extends DiscoverLibrarySong>(
     // oxlint-disable-next-line unicorn/no-array-sort -- sorts the fresh array filter made; Hermes lacks toSorted
     .sort((a, b) => playsOf(b) - playsOf(a) || b.addedAt - a.addedAt);
   for (const song of rest) addTrack(song);
-  const seedArtists = new Set(
-    (seed.artists?.map((artist) => artist.name) ?? [seed.name]).map(identityKey),
-  );
+  const seedArtists = new Set(mixSeedArtists(seed).map((artist) => identityKey(artist.name)));
   for (const { song } of known.nonD) {
     const artists = song.artists.flatMap((artist) => splitCredit(artist)).map(identityKey);
     if (artists.some((artist) => seedArtists.has(artist))) addStream(song);

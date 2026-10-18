@@ -12,6 +12,7 @@ import type {
   DiscoverSeedArtist,
   DiscoverSongPlays,
 } from "./discoverMixes.ts";
+import { genreMixId } from "./discoverMixes.ts";
 import { identityKey } from "./library.ts";
 import { freshFirst, type MixRefreshAvoid } from "./mixRefresh.ts";
 import { pickWeighted, playsWeight, type RandomSource } from "./weightedPick.ts";
@@ -199,6 +200,13 @@ export const GENRE_MIX_COUNT = 4;
 /** How many Library songs a family needs to have a mix. */
 const FAMILY_FEWEST = 5;
 
+/**
+ * What a family's song count may fall short of [FAMILY_FEWEST] by and still
+ * count: songs in several families add shares (1/3, 1/7…) that don't add up
+ * to a whole number exactly in floating point.
+ */
+const SHARES_ROUNDING = 1e-9;
+
 /** How many of a family's artists a mix grows from at most. */
 const SEED_ARTISTS = 3;
 
@@ -320,6 +328,8 @@ const seedableArtists = (family: RankedFamily): FamilyArtist[] =>
  * five or more Library songs, most played first (their songs' counted
  * plays), then those with more songs. Each grows from up to three of its
  * artists (`seedArtists`); a family with none that may seed has no mix.
+ * Every seed is from "plays" once any Library song has counted plays (the
+ * ranking used them), else from "library".
  *
  * A refresh ([avoid], `mixRefreshAvoid`) keeps the families while there are
  * four at most, growing them from other artists; with more, it brings in the
@@ -333,23 +343,30 @@ export const genreMixSeeds = (
 ): DiscoverMixSeed[] => {
   const seeds: DiscoverMixSeed[] = [];
   const ranked = libraryFamilies(library)
-    .filter((family) => family.songs >= FAMILY_FEWEST && seedableArtists(family).length > 0)
+    .filter(
+      (family) =>
+        family.songs >= FAMILY_FEWEST - SHARES_ROUNDING && seedableArtists(family).length > 0,
+    )
     // oxlint-disable-next-line unicorn/no-array-sort -- sorts the fresh array filter made; Hermes lacks toSorted
     .sort((a, b) => b.plays - a.plays || b.songs - a.songs);
   const { fresh, shown } = freshFirst(
     ranked,
-    avoid === undefined ? null : ({ family }) => avoid.mixes.get(`genre:${family.key}`),
+    avoid === undefined ? null : ({ family }) => avoid.mixes.get(genreMixId(family.key)),
   );
   const chosen = new Set([...fresh, ...shown].slice(0, GENRE_MIX_COUNT));
+  // The families are ranked by plays once there are any, whichever families
+  // they fell in: a build then counts as from plays, so the first plays
+  // (`discoverMixesDue`) bring one rebuild, not one on every visit.
+  const played = (library.plays ?? []).some((entry) => entry.countedPlays > 0);
   for (const family of ranked) {
     if (!chosen.has(family)) continue;
     const artists = seedArtists(family, random, avoid);
     const { key, name } = family.family;
     seeds.push({
       kind: "genre",
-      id: `genre:${key}`,
+      id: genreMixId(key),
       name,
-      from: family.plays > 0 ? "plays" : "library",
+      from: played ? "plays" : "library",
       genre: name,
       artists,
     });

@@ -79,6 +79,21 @@ describe("qualityUpgradeSongs", () => {
 
   test("an AAC 256k file whose header averages a little under 256 still stays", () => {
     assert.deepEqual(qualityUpgradeSongs([file(1, { bitrateKbps: 251 })], none), []);
+    const aac = file(2, { path: "/Music/b.aac", bitrateKbps: 249 });
+    assert.deepEqual(qualityUpgradeSongs([aac], none), []);
+  });
+
+  test("an MP3 or any other file averaging under 256 is offered: the slack is AAC's", () => {
+    const songs = [
+      file(1, { path: "/Music/a.mp3", bitrateKbps: 250 }),
+      file(2, { path: "/Music/b.mp3", bitrateKbps: 255 }),
+      file(3, { path: "/Music/c.ogg", bitrateKbps: 251 }),
+      file(4, { path: "/Music/d.mp3", bitrateKbps: 256 }),
+    ];
+    assert.deepEqual(
+      qualityUpgradeSongs(songs, none).map((song) => song.id),
+      [1, 2, 3],
+    );
   });
 
   test("never offers a song recorded as having no better copy", () => {
@@ -199,12 +214,20 @@ describe("qualityUpgradeOffer", () => {
     assert.equal(offer?.bytes, 4_800_000);
   });
 
-  test("on mobile data, says how much it downloads and that the phone isn't on Wi-Fi", () => {
-    const offer = qualityUpgradeOffer([file(1)], { onMobileData: true });
+  test("on mobile data, a large run says how much it downloads and that the phone isn't on Wi-Fi", () => {
+    // 13 songs × 8,000,000 bytes at 320 kbps = 104 MB to download.
+    const songs = Array.from({ length: 13 }, (_, index) => file(index + 1));
+    const offer = qualityUpgradeOffer(songs, { onMobileData: true });
     assert.equal(
       offer?.alert.message,
-      "About +5 MB. It downloads about 8 MB, and the phone isn't on Wi-Fi.",
+      "About +62 MB. It downloads about 104 MB, and the phone isn't on Wi-Fi.",
     );
+  });
+
+  test("on mobile data, a small run says nothing about it", () => {
+    // 12 songs × 8,000,000 bytes = 96 MB, under the 100 MB a note takes.
+    const songs = Array.from({ length: 12 }, (_, index) => file(index + 1));
+    assert.equal(qualityUpgradeOffer(songs, { onMobileData: true })?.alert.message, "About +58 MB");
   });
 
   test("offers nothing when no song qualifies", () => {
@@ -235,16 +258,22 @@ describe("qualityDowngradeOffer", () => {
     assert.equal(offer?.alert.message, "YouTube Music's copies are AAC at 256 kbps.");
   });
 
-  test("on mobile data, says how much it downloads and that the phone isn't on Wi-Fi", () => {
+  test("on mobile data, a large run says how much it downloads and that the phone isn't on Wi-Fi", () => {
+    // 21 songs × 4,800,000 bytes at 128 kbps = 101 MB to download.
+    const offer = qualityDowngradeOffer(mp3s(21), { onMobileData: true, youTubeKbps: 128 });
+    assert.equal(
+      offer?.alert.message,
+      "YouTube Music's copies are AAC at about 128 kbps. It downloads about 101 MB, and the phone isn't on Wi-Fi.",
+    );
+  });
+
+  test("on mobile data, a small run says nothing about it", () => {
     const offer = qualityDowngradeOffer(mp3s(1), { onMobileData: true, youTubeKbps: 128 });
     assert.equal(
       offer?.alert.title,
       "Free about 7 MB by replacing 1 song with YouTube Music copies?",
     );
-    assert.equal(
-      offer?.alert.message,
-      "YouTube Music's copies are AAC at about 128 kbps. It downloads about 5 MB, and the phone isn't on Wi-Fi.",
-    );
+    assert.equal(offer?.alert.message, "YouTube Music's copies are AAC at about 128 kbps.");
   });
 
   test("offers nothing when nothing would be saved", () => {
@@ -389,6 +418,7 @@ describe("qualityReplacementTags", () => {
       lyrics: "Plain words",
       artworkUrl: "/data/artwork/hash.jpg",
       advisory: 1,
+      keepTagsOf: track().path,
     });
   });
 

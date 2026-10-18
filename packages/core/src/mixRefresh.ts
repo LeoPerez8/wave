@@ -10,7 +10,7 @@
  * `genreMixSeeds`', given the avoid-list.
  */
 
-import type { DiscoverMixes } from "./discoverMixes.ts";
+import { isNumber, localDay, type DiscoverMixes } from "./discoverMixes.ts";
 import { identityKey } from "./library.ts";
 import { readStoredRecord } from "./storedJson.ts";
 
@@ -27,8 +27,6 @@ export interface ShownMixes {
   /** Its new songs' video ids. */
   readonly songs: readonly string[];
 }
-
-const localDay = (ms: number): string => new Date(ms).toDateString();
 
 /** The sets of [memory] shown on [now]'s calendar day: the memory resets each day. */
 const shownToday = (memory: readonly ShownMixes[], now: number): ShownMixes[] =>
@@ -123,8 +121,6 @@ export const undoneMixRefresh = (
 export const storedMixesShown = (memory: readonly ShownMixes[]): string =>
   JSON.stringify({ sets: memory });
 
-const isNumber = (value: unknown): value is number =>
-  typeof value === "number" && Number.isFinite(value);
 const strings = (value: unknown): string[] | null =>
   Array.isArray(value) && value.every((item) => typeof item === "string") ? value : null;
 

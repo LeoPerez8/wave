@@ -3,6 +3,7 @@ import {
   parseTrackId,
   starWriteSettled,
   starWriteStarted,
+  ytSongStarred,
   type FavoriteStar,
   type PendingFavorite,
 } from "@wave/core";
@@ -293,14 +294,21 @@ export const setPendingFavorites = (
   );
 };
 
-/** Whether YT Music song [videoId] is a pending favorite now. */
-export const isPendingFavorite = (videoId: string): boolean =>
-  pendingFavorites.get().videos.has(videoId);
-
 /** The videos of every pending favorite (for marking YT Music songs starred). */
 export const usePendingFavoriteVideos = (): ReadonlySet<string> => {
   useEffect(loadPendingFavorites, []);
   return useSyncExternalStore(pendingFavorites.subscribe, () => pendingFavorites.get().videos);
+};
+
+/**
+ * Whether YT Music song [videoId] shows starred (Core's `ytSongStarred`): its pending favorite,
+ * or [track]'s star, the Library song it is by now. The one rule for every star a YT Music
+ * song shows (Now Playing, its menu).
+ */
+export const useYtSongStarred = (videoId: string | null, track: { id: number } | null): boolean => {
+  const favoriteIds = useFavoriteIds();
+  const pending = usePendingFavoriteVideos();
+  return videoId !== null && ytSongStarred(videoId, track, favoriteIds, pending);
 };
 
 // A download or scan that brought in a pending favorite starred it as it saved the song.

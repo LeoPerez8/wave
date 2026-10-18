@@ -70,6 +70,7 @@ import { listLibrary } from "./playlistImports";
 import { cancelPlaylistImport, settlePlaylistImport, startLinkImport } from "./playlistImports";
 import { createPlaylist, currentPlaylists, replacePlaylistSongs } from "./playlists";
 import { appRuntime } from "./runtime";
+import { downloadSyncedStars } from "./starSongs";
 
 const LOG_TAG = "WaveImport";
 
@@ -176,6 +177,8 @@ const fill = async (read: YtLibraryRead): Promise<string | null> => {
       // Before it leaves the batch: Wave stopped in between stars again, which changes nothing.
       const favorites = ytLibraryFavorites(read, plan);
       await setFavorites(favorites.star, true);
+      // A liked song the Library has only as a missing song downloads, as any new star does.
+      void downloadSyncedStars();
       // Before any download is queued, so each one's landing finds its pending favorite; the
       // stars then ask for their downloads, under Favorites (a star means downloaded).
       await setPendingFavorites(favorites.pending, true);

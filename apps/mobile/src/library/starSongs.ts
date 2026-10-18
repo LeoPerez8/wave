@@ -1,6 +1,7 @@
 import {
   pendingFavorite,
   readSyncedStars,
+  starredHere,
   syncedStarDownloads,
   writeSyncedStars,
 } from "@wave/core";
@@ -37,6 +38,18 @@ export interface SongsToStar {
   readonly ytSongs: readonly NativeYtSong[];
 }
 
+/**
+ * The starred missing songs this phone has seen, by Track id (Core's `syncedStarDownloads`):
+ * their stars have asked for their downloads already. Kept on this phone, never synced.
+ */
+const seenStars = persistedSetting<ReadonlySet<number>>({
+  key: "downloads.syncedStars",
+  read: readSyncedStars,
+  write: writeSyncedStars,
+});
+
+let syncing = Promise.resolve();
+
 /** The stars' downloads, asked for one star after another. */
 let downloads = Promise.resolve();
 
@@ -70,20 +83,16 @@ export const starSongs = (
           missing,
         );
     });
+  // The missing songs' stars, set here, have asked for their downloads: should another phone
+  // take one off before the file arrives, the next sync takes the download back. In turn with
+  // the syncs, once the stars are kept, so a sync reads the stars and what it has seen alike.
+  if (missing.length > 0)
+    syncing = syncing
+      .then(() => stars)
+      .then(() => seenStars.set(starredHere(seenStars.get(), missing, on)))
+      .catch(() => undefined);
   return Promise.all([stars, pending]).then(() => undefined);
 };
-
-/**
- * The starred missing songs this phone has seen, by Track id (Core's `syncedStarDownloads`):
- * their stars have asked for their downloads already. Kept on this phone, never synced.
- */
-const seenStars = persistedSetting<ReadonlySet<number>>({
-  key: "downloads.syncedStars",
-  read: readSyncedStars,
-  write: writeSyncedStars,
-});
-
-let syncing = Promise.resolve();
 
 /**
  * Stars that came from the Wave account mean downloaded too (docs/spec.md, "A star means
