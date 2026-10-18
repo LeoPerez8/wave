@@ -29,6 +29,7 @@ import {
   type PlaylistDetail,
   type PlaylistRow,
   type ScanRootSummary,
+  type SongRow,
 } from "./LibraryStore";
 import { knownPlaylists, listPlaylistsRemembered } from "./playlists";
 import { libraryQuery, useLibraryQuery, type LibraryQuery } from "./sharedQueries";
@@ -114,6 +115,55 @@ export const useAlbumsMissingSongs = (
     );
   }, [key]);
   return useLibraryQuery(query, NO_ALBUMS_MISSING_SONGS);
+};
+
+/** A collection whose Library songs a menu reads (`useCollectionSongs`). */
+export type SongsCollection = "album" | "artist" | "playlist" | "genre";
+
+const COLLECTION_SONGS: {
+  readonly [K in SongsCollection]: (
+    store: LibraryStore["Service"],
+    id: number,
+  ) => Effect.Effect<readonly SongRow[], LibraryStoreError>;
+} = {
+  album: (store, id) => store.getAlbum(id).pipe(Effect.map((album) => album?.tracks ?? [])),
+  artist: (store, id) => store.getArtist(id).pipe(Effect.map((artist) => artist?.songs ?? [])),
+  genre: (store, id) => store.getGenre(id).pipe(Effect.map((genre) => genre?.songs ?? [])),
+  // Its Library songs only: a YT Music or unsearched entry has no file.
+  playlist: (store, id) =>
+    store
+      .getPlaylist(id)
+      .pipe(
+        Effect.map((playlist) =>
+          (playlist?.items ?? []).flatMap((entry) =>
+            entry.source === "library" ? [entry.track] : [],
+          ),
+        ),
+      ),
+};
+
+/**
+ * The Library songs of [collection] (missing songs included), or undefined
+ * until read; null asks nothing. A menu reads them to tell whether any lacks
+ * what Fix Song fills in.
+ */
+export const useCollectionSongs = (
+  collection: { readonly kind: SongsCollection; readonly id: number } | null,
+): readonly SongRow[] | undefined => {
+  const kind = collection?.kind;
+  const id = collection?.id;
+  const query = useMemo(
+    () =>
+      kind === undefined || id === undefined
+        ? null
+        : storeQuery(
+            `collectionSongs:${kind}:${id}`,
+            kind === "playlist" ? { playlists: [id], tracks: true } : TRACKS,
+            (store) => COLLECTION_SONGS[kind](store, id),
+          ),
+    [kind, id],
+  );
+  return useLibraryQuery<readonly SongRow[] | undefined>(query, undefined);
 };
 
 const listSongs = storeQuery("songs", TRACKS, (store) => store.listSongs);
