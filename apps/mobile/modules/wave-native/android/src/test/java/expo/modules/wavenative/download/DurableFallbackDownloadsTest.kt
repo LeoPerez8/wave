@@ -221,8 +221,9 @@ class DurableFallbackDownloadsTest {
       owner.enqueue(song, null, emptyMap(), "soulseek")
       prepareSoulseek(owner, File(folder, "Recording.mp3"), File(folder, "Recording.m4a"))
       // A peer that trickles bytes keeps its turn until the job's time is up.
-      val trickle = transfer { _, candidate, source ->
+      val trickle = transfer { id, candidate, source ->
         if (candidate["source"] == "youtube") { source.parentFile.mkdirs(); source.writeBytes(SERVED); return@transfer youtubeAudio(source) }
+        progress(id, 64_000)
         now += DurableDownloads.JOB_MS
         owner.expire(NoTransfer)
         throw DurableFailure("cancelled")
@@ -231,10 +232,177 @@ class DurableFallbackDownloadsTest {
       val job = owner.snapshot().single()
       assertEquals("youtube", job["source"])
       assertEquals("timedOut", job["fellBackFrom"])
+      assertEquals("Out of time while transferring", job["fellBackCause"])
       assertEquals(now + DurableDownloads.JOB_MS, job["deadline"])
       now += 60_000
       owner.advance(trickle, Untouched)
       assertEquals("sourceReady", owner.snapshot().single()["phase"])
+    }
+  }
+
+  @Test fun aSongNoSoulseekPeerDeliversGoesToYoutubeMusicTwoMinutesAfterItWentToSoulseek() {
+    withFolder { folder ->
+      var now = 1_000L
+      val owner = DurableDownloads(File(folder, "jobs"), clock = { now })
+      owner.enqueue(song, null, emptyMap(), "soulseek")
+      // The job goes to Soulseek at 1 s; three peers, none of which ever connects back.
+      prepareSoulseek(owner, File(folder, "Recording.mp3"), File(folder, "Recording.m4a"), peers = listOf(peer, peer + ("username" to "b"), peer + ("username" to "c")))
+      val cancelled = mutableListOf<String>()
+      var wantedJustBefore: Boolean? = null
+      var wantedAt: Boolean? = null
+      val connecting = object : DurableTransfer {
+        override fun cancel(id: String) { cancelled += id }
+        override fun receive(id: String, candidate: Map<String, Any?>, source: File, durationMs: Long, progress: (Long, Long, Long?) -> Unit): Map<String, Any?> {
+          if (candidate["source"] == "youtube") { source.parentFile.mkdirs(); source.writeBytes(SERVED); return youtubeAudio(source) }
+          now = 1_000L + 119_999; owner.expire(this); wantedJustBefore = owner.transferWanted(id)
+          now = 1_000L + 120_000; owner.expire(this); wantedAt = owner.transferWanted(id)
+          throw DurableFailure("cancelled")
+        }
+      }
+      owner.advance(connecting, Untouched)
+      assertEquals(true, wantedJustBefore)
+      assertEquals(false, wantedAt)
+      assertEquals(listOf("song"), cancelled)
+      val job = owner.snapshot().single()
+      assertEquals("youtube", job["source"])
+      assertEquals("prepared", job["phase"])
+      assertEquals("timedOut", job["fellBackFrom"])
+      assertEquals("Soulseek didn't start a transfer within 2 minutes", job["fellBackCause"])
+      // YouTube Music has its own 20 minutes from the hand-over.
+      assertEquals(now + DurableDownloads.JOB_MS, job["deadline"])
+      owner.advance(connecting, Untouched)
+      assertEquals("sourceReady", owner.snapshot().single()["phase"])
+    }
+  }
+
+  @Test fun soulseeksTwoMinutesDoNotRunWhileTheDownloadWorkIsStopped() {
+    withFolder { folder ->
+      var now = 1_000L
+      val owner = DurableDownloads(File(folder, "jobs"), clock = { now })
+      owner.enqueue(song, null, emptyMap(), "soulseek")
+      prepareSoulseek(owner, File(folder, "Recording.mp3"), File(folder, "Recording.m4a"))
+      now += 60_000
+      owner.stopWork(NoTransfer)
+      now += 600_000
+      owner.startWork()
+      now += 59_000; owner.expire(NoTransfer)
+      assertEquals("soulseek", owner.snapshot().single()["source"])
+      now += 1_000; owner.expire(NoTransfer)
+      assertEquals("youtube", owner.snapshot().single()["source"])
+    }
+  }
+
+  @Test fun aPlaceInAPeersQueueIsNoStartedTransfer() {
+    withFolder { folder ->
+      var now = 1_000L
+      val owner = DurableDownloads(File(folder, "jobs"), clock = { now })
+      owner.enqueue(song, null, emptyMap(), "soulseek")
+      prepareSoulseek(owner, File(folder, "Recording.mp3"), File(folder, "Recording.m4a"))
+      owner.advance(transfer { id, candidate, source ->
+        if (candidate["source"] == "youtube") { source.parentFile.mkdirs(); source.writeBytes(SERVED); return@transfer youtubeAudio(source) }
+        now += 30_000; progressOf.getValue(id)(0, 0, 4)
+        now += 90_000; owner.expire(NoTransfer)
+        throw DurableFailure("cancelled")
+      }, Untouched)
+      assertEquals("youtube", owner.snapshot().single()["source"])
+      assertEquals("timedOut", owner.snapshot().single()["fellBackFrom"])
+    }
+  }
+
+  @Test fun aSoulseekTransferStartedWithinTwoMinutesIsNotCutOffAtTheTwoMinuteMark() {
+    withFolder { folder ->
+      var now = 1_000L
+      val owner = DurableDownloads(File(folder, "jobs"), clock = { now })
+      owner.enqueue(song, null, emptyMap(), "soulseek")
+      prepareSoulseek(owner, File(folder, "Recording.mp3"), File(folder, "Recording.m4a"))
+      val wanted = mutableListOf<Boolean>()
+      val slowPeer = transfer { id, _, source ->
+        now += 90_000; progress(id, 64_000)
+        // Well past the 2 minutes, bytes still arriving: Soulseek's quality keeps its chance.
+        now += 50_000; owner.expire(NoTransfer); wanted += owner.transferWanted(id); progress(id, 128_000)
+        now += 50_000; owner.expire(NoTransfer); wanted += owner.transferWanted(id)
+        source.parentFile.mkdirs(); source.writeText("complete validated audio")
+        mapOf("durationMs" to 12_000L, "receivedTags" to emptyMap<String, Any?>())
+      }
+      owner.advance(slowPeer, Untouched)
+      assertEquals(listOf(true, true), wanted)
+      val job = owner.snapshot().single()
+      assertEquals("sourceReady", job["phase"])
+      assertEquals("soulseek", job["source"])
+      assertNull(job["fellBackFrom"])
+    }
+  }
+
+  @Test fun aSearchThatOutlastsSoulseeksTwoMinutesHandsTheSongToYoutubeMusicWithoutTryingAPeer() {
+    withFolder { folder ->
+      var now = 1_000L
+      val owner = DurableDownloads(File(folder, "jobs"), clock = { now })
+      owner.enqueue(song, null, emptyMap(), "soulseek")
+      owner.advance(NoTransfer, Untouched)
+      val lease = owner.claim("song")!!
+      // The search takes its time; JS keeps its lease meanwhile.
+      repeat(5) { now += 25_000; assertTrue(owner.renew("song", lease["generation"] as Long, lease["token"] as String)) }
+      assertTrue(owner.submit("song", lease["generation"] as Long, lease["token"] as String, "prepare", mapOf("source" to "soulseek", "candidates" to listOf(peer), "targetPath" to File(folder, "Recording.mp3").path, "tags" to emptyMap<String, Any?>(), "failurePlan" to CorePlans.soulseek(ytMusicOn = true), "fallback" to fallback(File(folder, "Recording.m4a")))))
+      val asked = mutableListOf<Any?>()
+      val transport = transfer { _, candidate, source ->
+        asked += candidate["source"] ?: "soulseek"
+        source.parentFile.mkdirs(); source.writeBytes(SERVED); youtubeAudio(source)
+      }
+      repeat(2) { owner.advance(transport, Untouched) }
+      assertEquals(listOf<Any?>("youtube"), asked)
+      assertEquals("timedOut", owner.snapshot().single()["fellBackFrom"])
+    }
+  }
+
+  @Test fun withYtMusicOffSoulseekKeepsTheJobsWholeTime() {
+    withFolder { folder ->
+      var now = 1_000L
+      val owner = DurableDownloads(File(folder, "jobs"), clock = { now })
+      owner.enqueue(song, null, emptyMap(), "soulseek")
+      prepareSoulseek(owner, File(folder, "Recording.mp3"), m4a = null)
+      var wanted: Boolean? = null
+      owner.advance(transfer { id, _, source ->
+        // A peer that takes its time to connect still has its 3 minutes.
+        now += 150_000; owner.expire(NoTransfer); wanted = owner.transferWanted(id)
+        progress(id, 64_000)
+        source.parentFile.mkdirs(); source.writeText("complete validated audio")
+        mapOf("durationMs" to 12_000L, "receivedTags" to emptyMap<String, Any?>())
+      }, Untouched)
+      assertEquals(true, wanted)
+      assertEquals("sourceReady", owner.snapshot().single()["phase"])
+      assertEquals("soulseek", owner.snapshot().single()["source"])
+    }
+  }
+
+  @Test fun aPeerThatStartedInTimeKeepsSoulseeksTurnAcrossProcessDeath() {
+    withFolder { folder ->
+      var now = 1_000L
+      val journal = File(folder, "jobs")
+      val owner = DurableDownloads(journal, clock = { now })
+      class ProcessDeath : Error()
+      owner.enqueue(song, null, emptyMap(), "soulseek")
+      // Soulseek's 2 minutes run from 1 s to 121 s; the search takes until 100 s, when the peer's own windows start.
+      owner.advance(NoTransfer, Untouched)
+      val lease = owner.claim("song")!!
+      repeat(3) { now += 33_000; assertTrue(owner.renew("song", lease["generation"] as Long, lease["token"] as String)) }
+      assertTrue(owner.submit("song", lease["generation"] as Long, lease["token"] as String, "prepare", mapOf("source" to "soulseek", "candidates" to listOf(peer), "targetPath" to File(folder, "Recording.mp3").path, "tags" to emptyMap<String, Any?>(), "failurePlan" to CorePlans.soulseek(ytMusicOn = true), "fallback" to fallback(File(folder, "Recording.m4a")))))
+      // The peer's first bytes come at 103 s, and Wave dies straight after.
+      assertThrows(ProcessDeath::class.java) {
+        owner.advance(transfer { id, _, _ -> now += 3_000; progress(id, 64_000); throw ProcessDeath() }, Untouched)
+      }
+      // Relaunched later; the budget's clock goes on from 103 s, so 22 s on it is at 125 s: past
+      // Soulseek's 2 minutes, within the peer's windows.
+      now += 3_600_000
+      val relaunched = DurableDownloads(journal, clock = { now })
+      now += 22_000
+      val asked = mutableListOf<Any?>()
+      relaunched.advance(transfer { _, candidate, source ->
+        asked += candidate["source"] ?: "soulseek"
+        source.parentFile.mkdirs(); source.writeText("complete validated audio")
+        mapOf("durationMs" to 12_000L, "receivedTags" to emptyMap<String, Any?>())
+      }, Untouched)
+      assertEquals(listOf<Any?>("soulseek"), asked)
+      assertEquals("sourceReady", relaunched.snapshot().single()["phase"])
     }
   }
 
@@ -374,9 +542,15 @@ class DurableFallbackDownloadsTest {
   }
   private fun audioFiles(folder: File) = folder.walk().filter { it.isFile && !it.name.startsWith(".") && it.extension in listOf("m4a", "mp3") }.map { it.name }.sorted().toList()
   private fun youtubeAudio(source: File) = mapOf("partPath" to source.path, "bytes" to source.length(), "mimeType" to "audio/mp4", "durationMs" to 12_000L)
+  /** The progress callback of the transfer under way, which [progress] reports through. */
+  private val progressOf = HashMap<String, (Long, Long, Long?) -> Unit>()
+  private fun progress(id: String, received: Long) = progressOf.getValue(id)(received, 1_000_000L, null)
   private fun transfer(receive: (String, Map<String, Any?>, File) -> Map<String, Any?>) = object : DurableTransfer {
     override fun cancel(id: String) {}
-    override fun receive(id: String, candidate: Map<String, Any?>, source: File, durationMs: Long, progress: (Long, Long, Long?) -> Unit) = receive(id, candidate, source)
+    override fun receive(id: String, candidate: Map<String, Any?>, source: File, durationMs: Long, progress: (Long, Long, Long?) -> Unit): Map<String, Any?> {
+      progressOf[id] = progress
+      return receive(id, candidate, source)
+    }
   }
   private object NoTransfer : DurableTransfer {
     override fun receive(id: String, candidate: Map<String, Any?>, source: File, durationMs: Long, progress: (Long, Long, Long?) -> Unit): Map<String, Any?> = error("No transfer expected")
