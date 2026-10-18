@@ -1365,8 +1365,13 @@ export {
   qualityReplacementJob,
   qualityReplacementTags,
   qualityReplacementTarget,
+  qualityDowngradeOffer,
+  qualityDowngradeSearch,
+  qualityDowngradeSongs,
+  qualityDowngradeVideo,
   qualityUpgradeOffer,
   qualityUpgradeSongs,
+  youTubeCopyKbps,
 } from "./qualityReplacement.ts";
 export type {
   NoBetterCopy,

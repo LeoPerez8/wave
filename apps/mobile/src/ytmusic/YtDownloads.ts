@@ -34,6 +34,8 @@ import {
   NO_BETTER_COPY_FOUND,
   noBetterCopies,
   QUALITY_ORIGINS,
+  qualityDowngradeSearch,
+  qualityDowngradeVideo,
   qualityJobOf,
   qualityJobsToCancel,
   qualityReplacementJob,
@@ -77,6 +79,7 @@ import {
   type PlaylistItem,
   type QualityDirection,
   type QueuedDownload,
+  type ReplacedTrack,
   type SoulseekCandidate,
   type UnsearchedSong,
   type YtAlbumDownload,
@@ -664,15 +667,15 @@ const fileLyrics = (path: string) =>
  * (`noBetterCopies`) without listing it as a failed download. The new file goes beside the old one
  * under its name, with the old one's tags, cover and lyrics (`qualityReplacementTarget`,
  * `qualityReplacementTags`). A Track gone meanwhile has nothing left to replace: it settles the
- * same way (there's no Track left to record).
+ * same way (there's no Track left to record). Freeing space is YouTube Music's copy
+ * (`prepareQualityDowngrade`).
  */
 const prepareQualityReplacement = (direction: QualityDirection, trackId: number) =>
   Effect.gen(function* () {
-    // Free up space (YouTube Music's copies) isn't offered yet: only upgrades are queued.
-    if (direction !== "upgrade") return yield* new DownloadFailed({ reason: "noSource" });
     const store = yield* LibraryStore;
     const track = yield* store.replacedTrack(trackId).pipe(Effect.mapError(libraryFailure));
     if (track === null) return yield* new DownloadFailed({ reason: NO_BETTER_COPY_FOUND });
+    if (direction === "downgrade") return yield* prepareQualityDowngrade(track);
     const session = yield* native(() => WaveSoulseek.session());
     if (session.status === "off") return yield* new DownloadFailed({ reason: "noSource" });
     const job = qualityReplacementJob(direction, track);
@@ -692,6 +695,41 @@ const prepareQualityReplacement = (direction: QualityDirection, trackId: number)
       tags,
       targetPath: qualityReplacementTarget(track.path, "soulseek").targetPath,
       failurePlan,
+    } satisfies PrepareAnswer;
+  });
+
+/**
+ * `prepareQualityReplacement` freeing space for [track] (job `downgrade:<id>`): YouTube Music's
+ * copy, found as a listing's song is (a Songs search for its title and artists, matched by
+ * title, artists and length: Core's `qualityDowngradeSearch`, `qualityDowngradeVideo`) and
+ * downloaded as the usual M4A beside the MP3, with its tags, cover and lyrics. No match fails it
+ * as Core's `NO_BETTER_COPY_FOUND`: the song keeps its MP3 and isn't offered again. YT Music
+ * turned off since has no source, which isn't the song's.
+ */
+const prepareQualityDowngrade = (track: ReplacedTrack) =>
+  Effect.gen(function* () {
+    if (!ytMusicEnabled()) return yield* new DownloadFailed({ reason: "noSource" });
+    const ytMusic = yield* YtMusic;
+    const job = qualityReplacementJob("downgrade", track);
+    const query = qualityDowngradeSearch(job);
+    const [page, lyrics] = yield* Effect.all(
+      [
+        withSearchTurn("download", query, ytMusic.searchSongs(query)).pipe(
+          Effect.mapError(searchFailure),
+        ),
+        fileLyrics(track.path),
+      ],
+      { concurrency: "unbounded" },
+    );
+    const video = qualityDowngradeVideo(job, page.songs);
+    if (video === null) return yield* new DownloadFailed({ reason: NO_BETTER_COPY_FOUND });
+    return {
+      source: "youtube",
+      video,
+      candidates: [],
+      tags: qualityReplacementTags(track, lyrics),
+      targetPath: qualityReplacementTarget(track.path, "youtube").targetPath,
+      failurePlan: downloadFailurePlan("youtube", { ytMusicOn: true }),
     } satisfies PrepareAnswer;
   });
 
@@ -741,9 +779,13 @@ export const importDownload = (
  * A quality replacement's file takes over Track [trackId] in place (the store's
  * `replaceTrackFile`): the same Track id, favorites, plays, playlist entries and recording key.
  * Only then is the old file deleted, unless the new one took its very path. A Track removed
- * meanwhile takes its new file with it.
+ * meanwhile takes its new file with it. YouTube Music's copy carries its [videoId].
  */
-export const importQualityReplacement = (saved: NativeSavedDownload, trackId: number) =>
+export const importQualityReplacement = (
+  saved: NativeSavedDownload,
+  trackId: number,
+  videoId: string | null = null,
+) =>
   Effect.gen(function* () {
     if (!(yield* downloadPathIncluded(saved.path)))
       return yield* new DownloadFailed({ reason: "noFolder" });
@@ -751,7 +793,7 @@ export const importQualityReplacement = (saved: NativeSavedDownload, trackId: nu
     const replaced = yield* store
       .replaceTrackFile(
         trackId,
-        toIndexedTrack(saved.track),
+        { ...toIndexedTrack(saved.track), ...(videoId === null ? {} : { videoId }) },
         saved.artwork === null ? [] : [toIndexedArtwork(saved.artwork)],
       )
       .pipe(Effect.mapError(libraryFailure));
@@ -812,9 +854,9 @@ const publicationTarget = (claim: NativeDownloadDecision) =>
 
 /** What the log says about [claim]'s YouTube download once its [audio] is checked (Core's `ytDownloadReport`). */
 const youtubeReport = (claim: NativeDownloadDecision, audio: NativeYoutubeAudio): string => {
-  // A missing song's job has no video of its own: its length is its Track's. Nor has an
-  // unsearched song's: its length is what Spotify listed.
-  const missing = missingSongTrackId(claim.id) !== null;
+  // A missing song's job has no video of its own: its length is its Track's, as a quality
+  // replacement's is. Nor has an unsearched song's: its length is what Spotify listed.
+  const missing = missingSongTrackId(claim.id) !== null || qualityJobOf(claim.id) !== null;
   const unsearched = isUnsearchedSongJob(claim.id);
   return ytDownloadReport({
     song: missing || unsearched ? null : claim.song.videoId,
@@ -884,10 +926,13 @@ const answer = (claim: NativeDownloadDecision) =>
       case "import": {
         if (claim.saved === undefined) return yield* new DownloadFailed({ reason: "failed" });
         yield* refreshDownloadPolicy;
-        // A quality replacement's file takes over its Track in place.
+        // A quality replacement's file takes over its Track in place; YouTube Music's copy
+        // gives it the video it came from, as any YouTube download has.
         const replaced = qualityJobOf(claim.id);
-        if (replaced !== null)
-          return { path: yield* importQualityReplacement(claim.saved, replaced.trackId) };
+        if (replaced !== null) {
+          const video = claim.source === "youtube" ? (claim.video ?? null) : null;
+          return { path: yield* importQualityReplacement(claim.saved, replaced.trackId, video) };
+        }
         // A missing song's job is named after its Track, an unsearched song's after what Spotify
         // listed: their video is the one prepare named.
         const fills = missingSongTrackId(claim.id);
@@ -1557,7 +1602,8 @@ export const runMissingSongsDownloadAction = (
 /**
  * Asks the journal to replace the Library songs [trackIds] in [direction], in order, each as
  * its own job (`upgrade:<id>`, Core's `qualityReplacementJob`) waiting under the run's group
- * (Core's `QUALITY_ORIGINS`). An upgrade comes from Soulseek. A song gone meanwhile is skipped.
+ * (Core's `QUALITY_ORIGINS`). An upgrade comes from Soulseek, freeing space from YouTube Music. A
+ * song gone meanwhile is skipped.
  */
 const enqueueQualityReplacements = async (
   direction: QualityDirection,
