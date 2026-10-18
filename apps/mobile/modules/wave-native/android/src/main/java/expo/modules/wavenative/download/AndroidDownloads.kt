@@ -9,6 +9,7 @@ import expo.modules.wavenative.artwork.AndroidArtworkProcessor
 import expo.modules.wavenative.artwork.ArtworkStore
 import expo.modules.wavenative.log.AndroidMemory
 import expo.modules.wavenative.log.JsHeap
+import expo.modules.wavenative.log.NativeLog
 import expo.modules.wavenative.log.WaveLog
 import expo.modules.wavenative.player.JsRuntime
 import expo.modules.wavenative.scan.LibraryScanner
@@ -194,7 +195,12 @@ class AndroidDownloads private constructor(private val context: Context) {
     val ticking = minuteTicker.scheduleWithFixedDelay({ tick() }, period, period, TimeUnit.MILLISECONDS)
     ({ ticking.cancel(false) })
   }).also { minutes ->
-    minutes.add { WaveLog.i(TAG, DownloadServiceLines.memory(jobs.counts(), AndroidMemory.read(), JsHeap.app.read())) }
+    minutes.add {
+      val use = AndroidMemory.read()
+      WaveLog.i(TAG, DownloadServiceLines.memory(jobs.counts(), use, JsHeap.app.read()))
+      // Android 14+ no longer sends the running memory warnings: the tick checks for itself (#450).
+      NativeLog.memoryChecked(use, AndroidMemory.phoneLow(context))
+    }
     // What the journal's writes cost since the last line (#452).
     minutes.add { WaveLog.i(TAG, jobs.takeWriteStats().line()) }
     // What went to the media scanner, in how many batches (#455).

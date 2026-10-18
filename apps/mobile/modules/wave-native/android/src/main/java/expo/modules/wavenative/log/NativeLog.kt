@@ -68,6 +68,12 @@ object NativeLog {
     warned = { for (listener in memoryWarned) runCatching(listener) },
   )
 
+  /**
+   * The download service's minute check of Wave's memory [use] and whether the phone is low
+   * ([phoneLow]): a warning when it turns short, as Android's own no longer come (`MemoryWarnings.checked`).
+   */
+  fun memoryChecked(use: MemoryUse, phoneLow: Boolean) = memoryWarnings.checked(use, phoneLow)
+
   /** [listener] runs at each memory warning of Android's, until the returned function is called. */
   fun onMemoryWarning(listener: () -> Unit): () -> Unit {
     memoryWarned.add(listener)

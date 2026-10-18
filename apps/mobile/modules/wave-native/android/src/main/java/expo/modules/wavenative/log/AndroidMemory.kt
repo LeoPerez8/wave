@@ -1,5 +1,7 @@
 package expo.modules.wavenative.log
 
+import android.app.ActivityManager
+import android.content.Context
 import android.os.Debug
 
 /**
@@ -17,4 +19,11 @@ object AndroidMemory {
       pss = runCatching { Debug.getPss() * 1024 }.getOrDefault(0L),
     )
   }
+
+  /** Whether Android counts the phone as low on memory (`ActivityManager.MemoryInfo.lowMemory`); false when it can't tell. */
+  fun phoneLow(context: Context): Boolean = runCatching {
+    val info = ActivityManager.MemoryInfo()
+    context.getSystemService(ActivityManager::class.java).getMemoryInfo(info)
+    info.lowMemory
+  }.getOrDefault(false)
 }
