@@ -60,6 +60,7 @@ describe("ytDownloadTags", () => {
         trackNumber: null,
         discNumber: null,
         year: null,
+        explicit: "unknown",
       },
       null,
     );
@@ -117,7 +118,8 @@ describe("ytDownloadTags", () => {
       trackNumber: 8,
       discNumber: 2,
       year: 2013,
-    };
+      explicit: "unknown",
+    } as const;
     const withoutPage = ytDownloadTags(getLucky, null, found, null);
     assert.deepEqual(
       [withoutPage.trackNumber, withoutPage.discNumber, withoutPage.year],
@@ -132,7 +134,14 @@ describe("ytDownloadTags", () => {
   });
 
   test("the album page's track number, disc and year win over Deezer's", () => {
-    const found = { lyrics: null, genre: null, trackNumber: 3, discNumber: 2, year: 2023 };
+    const found = {
+      lyrics: null,
+      genre: null,
+      trackNumber: 3,
+      discNumber: 2,
+      year: 2023,
+      explicit: "unknown",
+    } as const;
     const tags = ytDownloadTags(getLucky, ram, found, null);
     // The page numbers the song without a disc: Deezer's disc doesn't go with its number.
     assert.deepEqual([tags.trackNumber, tags.discNumber, tags.year], [8, null, 2013]);
@@ -144,7 +153,7 @@ describe("ytDownloadTags", () => {
   });
 
   test("YouTube Music's own lyrics are only the fallback", () => {
-    const place = { trackNumber: null, discNumber: null, year: null };
+    const place = { trackNumber: null, discNumber: null, year: null, explicit: "unknown" } as const;
     const found = { lyrics: { synced: false, text: "Plain from LRCLIB" }, genre: null, ...place };
     assert.equal(ytDownloadTags(getLucky, ram, found, "From YouTube").lyrics, "Plain from LRCLIB");
     const none = { lyrics: null, genre: "Disco", ...place };
