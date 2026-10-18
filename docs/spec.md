@@ -215,6 +215,7 @@ Opening Lyrics on a non-D song searches for its lyrics online instead of leaving
 - **A network failure** (a source that couldn't be reached while none had lyrics) isn't remembered: the view says it couldn't search and offers Try Again.
 - **Switch.** The search obeys "Fix songs online" (Settings › Lyrics and tags). Off, a non-D song shows "No lyrics" and nothing is asked; lyrics already saved on the phone still show.
 - **No video yet.** An unsearched entry still being searched has no video: it searches LRCLIB only and saves nothing until it has a video id.
+- **Downloads reuse them** (#418). Downloading a song whose lyrics are saved for its video writes those into the file, with no LRCLIB or YT Music lyrics request (Deezer is still asked for the genre and the rest; Core's `ytDownloadHas`, `ytDownloadTags`). A remembered miss doesn't stop the download's own search. Once the file is in the Library, what was saved for the song's video is dropped, and the Lyrics view, still open on the streamed song in the queue, reads the file (the Library song it now is, `libraryFinder`).
 - **Share** works on lyrics found this way.
 
 ### Lyrics on Android Auto

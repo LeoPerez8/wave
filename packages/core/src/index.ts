@@ -687,6 +687,7 @@ export {
   ytDownloadTags,
   listedSongTags,
   ytDownloadTarget,
+  ytDownloadHas,
 } from "./ytDownload.ts";
 export type {
   YtAlbum,
