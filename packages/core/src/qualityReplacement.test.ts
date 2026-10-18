@@ -307,7 +307,10 @@ describe("a replacement's failure in Settings › Downloads", () => {
   const input = { inLibrary: () => true, missingTrackIds: new Set<number>() };
 
   test("one that failed after retries is listed, to retry as a replacement", () => {
-    const failed = failedDownloads([job("upgrade:2", { phase: "failed", reason: "timedOut" })], input);
+    const failed = failedDownloads(
+      [job("upgrade:2", { phase: "failed", reason: "timedOut" })],
+      input,
+    );
     assert.deepEqual(
       failed.map((each) => each.retry),
       [{ kind: "quality", direction: "upgrade", trackId: 2 }],

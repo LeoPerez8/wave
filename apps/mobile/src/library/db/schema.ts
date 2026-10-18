@@ -667,3 +667,21 @@ export const pendingFavorites = sqliteTable("pending_favorites", {
   durationMs: integer("duration_ms"),
   addedAt: integer("added_at").notNull(),
 });
+
+/**
+ * The songs a quality replacement found no better copy of (Core's
+ * `noBetterCopies`): no Soulseek 320 for an upgrade, no YouTube Music match
+ * for a downgrade, or a failure after retries. Each keeps its file and isn't
+ * offered in that direction again. Goes with its Track; this phone only.
+ */
+export const noBetterCopies = sqliteTable(
+  "no_better_copies",
+  {
+    trackId: integer("track_id")
+      .notNull()
+      .references(() => tracks.id, { onDelete: "cascade" }),
+    /** Core's `QualityDirection`: "upgrade" or "downgrade". */
+    direction: text("direction").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.trackId, t.direction] })],
+);

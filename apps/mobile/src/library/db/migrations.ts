@@ -850,6 +850,16 @@ CREATE TABLE \`pending_favorites\` (
 );
 `;
 
+// The songs a quality replacement found no better copy of (\`schema.ts\`'s \`noBetterCopies\`).
+const mNoBetterCopies = `
+CREATE TABLE \`no_better_copies\` (
+	\`track_id\` integer NOT NULL,
+	\`direction\` text NOT NULL,
+	PRIMARY KEY(\`track_id\`, \`direction\`),
+	FOREIGN KEY (\`track_id\`) REFERENCES \`tracks\`(\`id\`) ON UPDATE no action ON DELETE cascade
+);
+`;
+
 export default {
   journal: {
     entries: [
@@ -881,6 +891,7 @@ export default {
       { idx: 25, when: 1_793_966_400_000, tag: "0025_unsearched_titles", breakpoints: true },
       { idx: 26, when: 1_794_052_800_000, tag: "0026_explicit", breakpoints: true },
       { idx: 27, when: 1_794_139_200_000, tag: "0027_pending_favorites", breakpoints: true },
+      { idx: 28, when: 1_794_225_600_000, tag: "0028_no_better_copies", breakpoints: true },
     ],
   },
   migrations: {
@@ -912,5 +923,6 @@ export default {
     m0025: mUnsearchedTitles,
     m0026: mExplicit,
     m0027: mPendingFavorites,
+    m0028: mNoBetterCopies,
   },
 };

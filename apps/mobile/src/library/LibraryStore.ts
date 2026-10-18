@@ -20,6 +20,10 @@ import {
   type YtAlbumSong,
   type YtArtistSaved,
   type ExplicitFlag,
+  type NoBetterCopy,
+  type QualityDirection,
+  type QualityFile,
+  type ReplacedTrack,
 } from "@wave/core";
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { drizzle, type ExpoSQLiteDatabase } from "drizzle-orm/expo-sqlite";
@@ -110,6 +114,14 @@ import {
   type UnsearchedEntriesSettled,
 } from "./db/playlists";
 import { addPendingFavorites } from "./db/pendingFavorites";
+import {
+  rememberNoBetterCopies,
+  replaceTrackFile,
+  selectNoBetterCopies,
+  selectQualityFiles,
+  selectReplacedTrack,
+  type ReplacedFile,
+} from "./db/qualityReplacement";
 import { hasUnscannedRoot, pruneOrphans, saveBatch, type SavedBatch } from "./db/save";
 import * as schema from "./db/schema";
 import {
@@ -701,6 +713,29 @@ export class LibraryStore extends Context.Service<
     readonly addPendingFavorites: (
       songs: readonly PendingFavorite[],
     ) => Effect.Effect<void, LibraryStoreError>;
+    /** Every Library file with its length, bitrate and size (Core's `qualityUpgradeSongs` weighs them). */
+    readonly qualityFiles: Effect.Effect<readonly QualityFile[], LibraryStoreError>;
+    /** The Tracks recorded as having no better copy in [direction]. This phone only. */
+    readonly noBetterCopies: (
+      direction: QualityDirection,
+    ) => Effect.Effect<readonly number[], LibraryStoreError>;
+    /** Records songs as having no better copy (Core's `noBetterCopies`), each once. */
+    readonly rememberNoBetterCopies: (
+      songs: readonly NoBetterCopy[],
+    ) => Effect.Effect<void, LibraryStoreError>;
+    /** Library song [trackId] as its replacement takes it; null when gone or without a file. */
+    readonly replacedTrack: (
+      trackId: number,
+    ) => Effect.Effect<ReplacedTrack | null, LibraryStoreError>;
+    /**
+     * A replacement's new file takes over Track [trackId] in place, keeping its id, favorites,
+     * plays, playlist entries and recording key; "gone" when the Track was removed meanwhile.
+     */
+    readonly replaceTrackFile: (
+      trackId: number,
+      track: IndexedTrack,
+      artworkRows: readonly IndexedArtwork[],
+    ) => Effect.Effect<ReplacedFile, LibraryStoreError>;
     /** Records a play as it starts (Core's `PlayEvent`); returns its id, to update it as it goes on. */
     readonly recordPlay: (
       play: PlayEvent,
@@ -1259,6 +1294,18 @@ const make = Effect.gen(function* () {
 
     addPendingFavorites: (songs) =>
       attempt("keep pending favorites", () => addPendingFavorites(db, songs, Date.now())),
+
+    qualityFiles: attempt("read the files' quality", () => selectQualityFiles(db)),
+    noBetterCopies: (direction) =>
+      attempt("read the songs with no better copy", () => selectNoBetterCopies(db, direction)),
+    rememberNoBetterCopies: (songs) =>
+      attempt("remember the songs with no better copy", () => rememberNoBetterCopies(db, songs)),
+    replacedTrack: (trackId) =>
+      attempt("read a song to replace", () => selectReplacedTrack(db, trackId)),
+    replaceTrackFile: (trackId, track, artworkRows) =>
+      attempt("replace a song's file", () =>
+        replaceTrackFile(db, splits, trackId, track, artworkRows, Date.now()),
+      ),
 
     recordPlay: (play, overlapping) =>
       attempt("record the play", () => recordPlay(db, play, overlapping)),
