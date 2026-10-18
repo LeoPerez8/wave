@@ -241,13 +241,19 @@ class SoulseekClientTest {
             }
           } catch (e: Throwable) { verified.completeExceptionally(e) }
         }
-        val client = SoulseekClient(MemoryCredentials(), "127.0.0.1", server.localPort, switch = MemorySwitch())
+        // The peer threads that receive the song run at background priority (#455).
+        val lowered = java.util.concurrent.CopyOnWriteArrayList<String>()
+        val client = SoulseekClient(
+          MemoryCredentials(), "127.0.0.1", server.localPort, switch = MemorySwitch(),
+          lowerDownloadPeer = { lowered += Thread.currentThread().name },
+        )
         val part = Files.createTempFile("wave-soulseek", ".mp3").toFile()
         try {
           client.connect("wave-fixture", "fixture-secret")
           val candidate = SoulseekCandidate("fixture-peer", "Music\\Fixture Artist\\Fixture Title.mp3", fixture.size.toLong(), 320, 1500, false, 100000, 3)
           val result = client.download("recording", candidate, part, 1500, onQueued = { queued.add(it) }, isCancelled = giveUpAfterSeconds(5))
           verified.get(2, TimeUnit.SECONDS)
+          assertTrue("lowered: $lowered", lowered.isNotEmpty() && lowered.all { it.startsWith("Wave Soulseek peer ") })
           assertEquals(listOf(3L), queued)
           assertEquals(fixture.size.toLong(), result.bytes)
           assertEquals(fixture.toList(), part.readBytes().toList())

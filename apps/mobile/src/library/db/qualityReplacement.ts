@@ -9,7 +9,7 @@ import type { NoBetterCopy, QualityDirection, QualityFile, ReplacedTrack } from 
 import { and, eq, isNotNull, ne } from "drizzle-orm";
 
 import type { IndexedArtwork, IndexedTrack } from "../LibraryStore.ts";
-import type { CreditSplits } from "./credits.ts";
+import { readCredits, type CreditSplits } from "./credits.ts";
 import type { LibraryDatabase } from "./database.ts";
 import { recordFileDeletions } from "./fileDeletions.ts";
 import { saveBatch, type SavedBatch } from "./save.ts";
@@ -97,7 +97,7 @@ export const selectReplacedTrack = (db: LibraryDatabase, trackId: number): Repla
   return {
     ...row,
     path: row.path,
-    artists: row.artists === null ? [row.artist] : (JSON.parse(row.artists) as string[]),
+    artists: readCredits(row.artist, row.artists),
     genre: row.genre ?? null,
     artworkPath: row.artworkPath ?? null,
   };

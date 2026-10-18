@@ -176,22 +176,29 @@ class SongTagWriterTest {
     assertEquals(TagWriteStep.READ, failure.step)
   }
 
-  /** What JS logs of a failure: the step, the original exception, and the file as it was then. */
+  /**
+   * What JS logs of a failure: the step, the original exception, and the file as it was when the
+   * write ran, read before it (a failed write may have truncated or renamed it).
+   */
   @Test
-  fun aFailureTellsJsTheStepTheExceptionAndTheFile() {
+  fun aFailureTellsJsTheStepTheExceptionAndTheFileAsItWasWhenTheWriteRan() {
     val file = copyOf("tagged.mp3")
+    val bytes = file.length()
+    val before = TagWriteFile.of(file)
     val failure = TagWriteStepException(TagWriteStep.WRITE, java.io.IOException("No space left on device"))
+    // The failed write left the file cut short.
+    file.writeBytes(ByteArray(0))
     assertEquals(
       mapOf(
         "step" to "write",
         "exception" to "java.io.IOException",
         "message" to "No space left on device",
         "fileExists" to true,
-        "fileBytes" to file.length().toDouble(),
+        "fileBytes" to bytes.toDouble(),
       ),
-      TagWriteFailure.of(failure, file).toMap(),
+      TagWriteFailure.of(failure, before).toMap(),
     )
-    val gone = TagWriteFailure.of(failure, File(file.parentFile, "gone.mp3")).toMap()
+    val gone = TagWriteFailure.of(failure, TagWriteFile.of(File(file.parentFile, "gone.mp3"))).toMap()
     assertEquals(false, gone["fileExists"])
     assertNull(gone["fileBytes"])
   }

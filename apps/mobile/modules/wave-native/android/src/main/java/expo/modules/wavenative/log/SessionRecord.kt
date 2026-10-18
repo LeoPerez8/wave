@@ -82,18 +82,23 @@ class SessionRecord(private val folder: File) {
    * not the history from before the log existed.
    *
    * [downloads] reads the download journal's counts as the previous session last
-   * wrote them, only when that session's end is reported; its line says whether
-   * downloads were running.
+   * wrote them, only when that session's end is reported, and first of all (a
+   * download service Android restarts may rewrite the journal meanwhile); its
+   * line says whether downloads were running.
+   *
+   * An end while Wave was cached (Android trimming its cached processes, a
+   * low-memory kill in the background) is information, not an error; a crash or
+   * an ANR is an error however Wave stood.
    */
   fun reportPrevious(exits: List<Exit>, downloads: () -> DownloadCounts? = { null }) {
     val reportedUpTo = runCatching { reportedFile.readText().trim().toLong() }.getOrNull()
     val latest = exits.maxByOrNull { it.at }
     val unreported = if (reportedUpTo == null) listOfNotNull(latest) else exits.filter { it.at > reportedUpTo }
-    val inProgress by lazy {
+    val inProgress = if (previousCrashed || (latest != null && latest in unreported && !ordinary(latest))) {
       runCatching(downloads).getOrNull()
         ?.takeIf { it.running + it.left > 0 }
         ?.let { "Downloads were in progress: ${it.running} downloading, ${it.left} waiting" }
-    }
+    } else null
     // Wave wrote its own crash: Android's record of it only adds what Wave was doing and its memory.
     val ownCrash = latest?.takeIf { previousCrashed && it.reason == ExitReason.CRASH && it in unreported }
     for (exit in unreported.sortedBy { it.at }) {
@@ -102,7 +107,7 @@ class SessionRecord(private val folder: File) {
       val message = describe(exit, if (previous) "The previous session" else "An earlier session") {
         if (previous && !previousCrashed) inProgress else null
       } ?: continue
-      WaveLog.e(TAG_APP, message)
+      if (routine(exit)) WaveLog.i(TAG_APP, message) else WaveLog.e(TAG_APP, message)
     }
     if (previousCrashed) {
       WaveLog.e(TAG_APP, listOfNotNull("The previous session ended in a crash", ownCrash?.let(::state), inProgress).joinToString("\n"))
@@ -114,6 +119,18 @@ class SessionRecord(private val folder: File) {
       }
     }
   }
+
+  /** Whether [exit] is an ordinary end, which writes nothing: the user's, a package update, swiping Wave away. */
+  private fun ordinary(exit: Exit): Boolean = when (exit.reason) {
+    ExitReason.USER_REQUESTED, ExitReason.USER_STOPPED, ExitReason.PACKAGE_UPDATED -> true
+    ExitReason.OTHER -> exit.description == SWIPED_AWAY
+    else -> false
+  }
+
+  /** Whether [exit] is routine, written as information: Wave was cached, and it wasn't a crash, an ANR or a failed start. */
+  private fun routine(exit: Exit): Boolean =
+    exit.importance == RunningAppProcessInfo.IMPORTANCE_CACHED &&
+      exit.reason !in setOf(ExitReason.CRASH, ExitReason.CRASH_NATIVE, ExitReason.ANR, ExitReason.INITIALIZATION_FAILURE)
 
   /** [exit]'s entry, null for an ordinary end; [downloads] gives its downloads line, if it has one. */
   private fun describe(exit: Exit, session: String, downloads: () -> String?): String? {
@@ -132,8 +149,8 @@ class SessionRecord(private val folder: File) {
       ExitReason.PERMISSION_CHANGE -> "$session was closed because a permission changed ($record)"
       ExitReason.PACKAGE_STATE_CHANGE -> "$session was closed because Wave's package changed state ($record)"
       ExitReason.UNKNOWN -> "$session ended for a reason Android didn't record ($record)"
-      // Swiping Wave away from Recents: Android's description of an older version's record of it.
-      ExitReason.OTHER -> if (exit.description == SWIPED_AWAY) return null else "$session was closed by Android ($record)"
+      // Swiping Wave away from Recents (Android's description of an older version's record of it) is ordinary.
+      ExitReason.OTHER -> if (ordinary(exit)) return null else "$session was closed by Android ($record)"
       ExitReason.USER_REQUESTED, ExitReason.USER_STOPPED, ExitReason.PACKAGE_UPDATED -> return null
     }
     val described = listOfNotNull(if (exit.description.isNullOrBlank()) what else "$what: ${exit.description}", state(exit), downloads())

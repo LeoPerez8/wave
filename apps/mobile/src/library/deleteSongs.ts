@@ -7,11 +7,11 @@ import {
 import * as Effect from "effect/Effect";
 
 import { WaveAccount } from "@/native/waveAccount";
-import { WaveNative, type FileDeleteOutcome } from "@/native/waveNative";
 import { confirmAction, showMessage } from "@/overlay/alert";
 import { Queue } from "@/playback/Queue";
 
 import { forgetFavorites } from "./favorites";
+import { deleteFilesOrFailed } from "./fileDeletions";
 import { libraryEdited } from "./LibraryScan";
 import { LibraryStore } from "./LibraryStore";
 import { appRuntime } from "./runtime";
@@ -29,12 +29,6 @@ export interface SongsDeleted<S extends DeletableSong> {
   readonly failed: readonly { readonly song: S; readonly reason: SongDeleteFailureReason }[];
 }
 
-const deleteFiles = (paths: readonly string[]) =>
-  Effect.tryPromise(() => WaveNative.deleteFiles(paths, null)).pipe(
-    // The native call failing as a whole leaves every file where it was.
-    Effect.orElseSucceed((): readonly FileDeleteOutcome[] => paths.map(() => "failed")),
-  );
-
 /**
  * Deletes the songs' audio files (and sidecar `.lrc` files) from the phone,
  * without asking. The songs whose files are gone leave the library and,
@@ -46,7 +40,10 @@ export const deleteSongs = <S extends DeletableSong>(
 ): Promise<SongsDeleted<S>> =>
   appRuntime.runPromise(
     Effect.gen(function* () {
-      const outcomes = yield* deleteFiles(songs.map((song) => song.path));
+      const outcomes = yield* deleteFilesOrFailed(
+        songs.map((song) => song.path),
+        null,
+      );
       const deleted: S[] = [];
       const failed: { song: S; reason: SongDeleteFailureReason }[] = [];
       songs.forEach((song, i) => {

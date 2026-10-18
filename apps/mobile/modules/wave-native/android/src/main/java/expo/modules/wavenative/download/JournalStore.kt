@@ -25,8 +25,9 @@ import java.util.zip.CRC32
  * Once the log outgrows the snapshot (and [MIN_LOG_BYTES]), the next write is whole: a new
  * snapshot one epoch on, then a log holding only that epoch. Each file is replaced atomically and
  * synced; a log whose epoch isn't the snapshot's (a crash between the two) is ignored, as the
- * snapshot holds it all. Records are framed with their length and a CRC, so a record a crash cut
- * short ends the log there. A journal written before the log existed (no epoch, no log) reads as
+ * snapshot holds it all. Opening the journal adopts the highest epoch on disk, so a new
+ * process's first snapshot never shares its epoch with a log an earlier session left. Records are
+ * framed with their length and a CRC, so a record a crash cut short ends the log there. A journal written before the log existed (no epoch, no log) reads as
  * epoch 0.
  *
  * Not thread-safe: [DurableDownloads] calls it under its lock; only [takeStats] may come from
@@ -57,13 +58,17 @@ internal class JournalStore(private val journal: File) {
     val snapshot = if (journal.isFile) runCatching {
       FileInputStream(journal).use { ObjectInputStream(it).readObject() } as Map<String, Any?>
     }.getOrNull() else null
+    val records = readLog()
+    val snapshotEpoch = (snapshot?.get("epoch") as? Number)?.toLong() ?: 0L
+    val logEpoch = (records.firstOrNull()?.get("epoch") as? Number)?.toLong()
+    // The next snapshot goes one past both, so a log left from an earlier session never matches it.
+    epoch = maxOf(epoch, snapshotEpoch, logEpoch ?: 0L)
     snapshot ?: return null
     val jobs = LinkedHashMap<String, MutableMap<String, Any?>>()
     for ((id, job) in snapshot["jobs"] as? Map<String, Any?> ?: emptyMap()) jobs[id] = LinkedHashMap(job as Map<String, Any?>)
     var policy = snapshot["libraryPolicy"]
     var budgetClock = snapshot["budgetClock"]
-    val records = readLog()
-    if ((records.firstOrNull()?.get("epoch") as? Number)?.toLong() == ((snapshot["epoch"] as? Number)?.toLong() ?: 0L)) {
+    if (logEpoch == snapshotEpoch) {
       for (record in records.drop(1)) {
         for (id in record["removed"] as? List<String> ?: emptyList()) jobs.remove(id)
         for ((id, change) in record["jobs"] as? Map<String, Map<String, Any?>> ?: emptyMap()) {

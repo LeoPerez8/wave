@@ -58,4 +58,29 @@ class MemoryWarningsTest {
     warnings.trimmed(70)
     assertEquals(listOf("level 70"), lines.map { it.substringAfter(": ").substringBefore(";") })
   }
+
+  /**
+   * Since Android 14 the running levels and `onLowMemory` never arrive, so the download service's
+   * minute tick checks for itself: the phone low on memory, or Wave's Java heap near its limit.
+   */
+  @Test fun theMinuteCheckWarnsOncePerChangeAndJsWritesWhileMemoryIsShort() {
+    val fine = MemoryUse(45 * mb, 256 * mb, 80 * mb, 210 * mb)
+    val fullHeap = MemoryUse(230 * mb, 256 * mb, 80 * mb, 400 * mb)
+    warnings.checked(fine, phoneLow = false)
+    warnings.checked(fine, phoneLow = true)
+    warnings.checked(fine, phoneLow = true)
+    warnings.checked(fullHeap, phoneLow = true)
+    warnings.checked(fine, phoneLow = false)
+    warnings.checked(fullHeap, phoneLow = false)
+    assertEquals(
+      listOf(
+        "Memory is short: the phone is low on memory; Java heap 45/256 MB, native heap 80 MB, PSS 210 MB",
+        "Memory is short: the phone is low on memory and Wave's Java heap is near its limit; Java heap 230/256 MB, native heap 80 MB, PSS 400 MB",
+        "Memory is short: Wave's Java heap is near its limit; Java heap 230/256 MB, native heap 80 MB, PSS 400 MB",
+      ),
+      lines,
+    )
+    // At every check while it's short, as at every warning: a kill may follow.
+    assertEquals(4, flushes)
+  }
 }

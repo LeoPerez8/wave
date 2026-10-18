@@ -30,6 +30,27 @@ class MemoryWarnings(
   /** Android's older call, sent when the whole phone runs low: as the last level. */
   fun lowMemory() = trimmed(ComponentCallbacks2.TRIM_MEMORY_COMPLETE)
 
+  /** Why the last [checked] found memory short (empty: it wasn't). */
+  private var shortBecause: List<String> = emptyList()
+
+  /**
+   * The download service's own check, about once a minute ([use], and whether Android says the
+   * phone is low on memory, [phoneLow]): since Android 14 the running levels and `onLowMemory`
+   * never arrive, so a queue running while memory runs short would write nothing. Memory is short
+   * when the phone is low or Wave's Java heap is past [HEAP_SHORT] of its limit; it's written once
+   * per change, and JS writes what it holds at every check while it's short.
+   */
+  fun checked(use: MemoryUse, phoneLow: Boolean) {
+    val because = listOfNotNull(
+      "the phone is low on memory".takeIf { phoneLow },
+      "Wave's Java heap is near its limit".takeIf { use.javaLimit > 0 && use.javaUsed >= use.javaLimit * HEAP_SHORT },
+    )
+    val changed = synchronized(this) { (because != shortBecause).also { shortBecause = because } }
+    if (because.isEmpty()) return
+    if (changed) warn("Memory is short: ${because.joinToString(" and ")}; ${use.line()}")
+    warned()
+  }
+
   private fun name(level: Int): String = when (level) {
     ComponentCallbacks2.TRIM_MEMORY_RUNNING_MODERATE -> "running moderate (level $level)"
     ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW -> "running low (level $level)"
@@ -38,5 +59,10 @@ class MemoryWarnings(
     ComponentCallbacks2.TRIM_MEMORY_MODERATE -> "moderate (level $level)"
     ComponentCallbacks2.TRIM_MEMORY_COMPLETE -> "complete (level $level)"
     else -> "level $level"
+  }
+
+  private companion object {
+    /** The share of its limit past which Wave's Java heap counts as short. */
+    const val HEAP_SHORT = 0.85
   }
 }

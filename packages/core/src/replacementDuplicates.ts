@@ -3,11 +3,10 @@
  * Music" › Download quality › Left twice): before replacements recorded the
  * old file's deletion, a kill between the swap and the deletion left the old
  * file on disk, and a scan made it a second song (`505.mp3` and `505.m4a`).
- * Which Library files are such a pair, which Track and file each keeps, and
- * what the check writes to the log.
+ * Which Library files are such a pair, which Track and file each keeps, when
+ * the check runs, and what it writes to the log.
  */
 
-import type { QualityDirection } from "./qualityReplacement.ts";
 import { qualityJobOf, qualityReplacementTarget } from "./qualityReplacement.ts";
 import { normalizeSearchText } from "./search.ts";
 import { RECORDING_LENGTH_TOLERANCE_MS } from "./sync.ts";
@@ -16,7 +15,7 @@ import { ytDownloadsFromJournal } from "./ytDownloads.ts";
 
 /** A Library file as the check sees it. */
 export interface DuplicateCheckFile {
-  /** Its Track. */
+  /** Its Track: a higher id is a Track made later. */
   readonly id: number;
   readonly path: string;
   /** Core's `recordingKey`; null while the Library isn't keyed yet. */
@@ -25,11 +24,19 @@ export interface DuplicateCheckFile {
   readonly artists: readonly string[];
   /** As its tags say it; 0 when unknown. */
   readonly durationMs: number;
-  /** Whether its Track has favorites, plays or playlist entries. */
-  readonly history: boolean;
+  /** Whether its Track is starred. */
+  readonly favorite: boolean;
+  /** How many plays its Track has. */
+  readonly plays: number;
+  /** The playlists holding an entry of its Track (each once, in id order). */
+  readonly playlists: readonly number[];
 }
 
-/** Two Tracks a replacement in a direction made of one song: the file it replaced, and its own. */
+/**
+ * Two Tracks of one song a replacement left: [new], the Track the replacement
+ * moved onto its new file (the older Track, with the song's history), and
+ * [old], the Track a later scan made for the file it left behind.
+ */
 export interface ReplacementDuplicate<F extends DuplicateCheckFile = DuplicateCheckFile> {
   readonly old: F;
   readonly new: F;
@@ -50,30 +57,49 @@ const sameRecording = (a: DuplicateCheckFile, b: DuplicateCheckFile): boolean =>
     Math.abs(a.durationMs - b.durationMs) <= RECORDING_LENGTH_TOLERANCE_MS);
 
 /**
- * The pairs among [files] a replacement in [direction] left: one file and the
- * one its replacement goes to (Core's `qualityReplacementTarget`: the same
- * folder and name with the other extension), when both are one recording
- * (`sameRecording`). Anything else is no pair.
+ * The pairs among [files] a replacement left: an MP3 and an M4A of the same
+ * folder and name (what a replacement either way makes of a file, Core's
+ * `qualityReplacementTarget`) that are one recording (`sameRecording`).
+ * Whichever way the replacement went, the older Track is the one it moved onto
+ * its new file, and the newer one a scan made of the file left behind, so the
+ * Download in best quality switch as it stands now doesn't matter.
  */
 export const replacementDuplicates = <F extends DuplicateCheckFile>(
   files: readonly F[],
-  direction: QualityDirection,
 ): ReplacementDuplicate<F>[] => {
   const byPath = new Map(files.map((file) => [file.path, file]));
-  const source = direction === "upgrade" ? "soulseek" : "youtube";
-  return files.flatMap((old) => {
-    const { targetPath } = qualityReplacementTarget(old.path, source);
-    const replacement = targetPath === old.path ? undefined : byPath.get(targetPath);
-    return replacement === undefined || !sameRecording(old, replacement)
-      ? []
-      : [{ old, new: replacement }];
-  });
+  return files.flatMap((older) =>
+    (["soulseek", "youtube"] as const).flatMap((source) => {
+      const { targetPath } = qualityReplacementTarget(older.path, source);
+      const newer = targetPath === older.path ? undefined : byPath.get(targetPath);
+      return newer === undefined || newer.id <= older.id || !sameRecording(older, newer)
+        ? []
+        : [{ old: newer, new: older }];
+    }),
+  );
 };
 
 /**
+ * The bare-or-not Track that goes hands what it has to the one kept: its star
+ * when the kept one has none, its plays, and its playlist entries (those in a
+ * playlist already holding the kept Track go, so no playlist names it twice).
+ */
+export interface DuplicateMerge {
+  /** Star the kept Track: the one that goes is starred and it isn't. */
+  readonly star: boolean;
+  /** Move the plays of the Track that goes to the kept one. */
+  readonly movePlays: boolean;
+  /** Playlists whose entries of the Track that goes now name the kept one. */
+  readonly repoint: readonly number[];
+  /** Playlists already holding the kept Track: the entries of the one that goes leave them. */
+  readonly remove: readonly number[];
+}
+
+/**
  * What becomes of a pair: the Track [keep] keeps its favorites, plays and
- * playlist entries and ends on the file at [path]; the bare Track [drop]
- * goes, and the file at [deleted] is deleted. Or the pair is left as it is.
+ * playlist entries, takes [drop]'s ([merge], null when [drop] is bare) and
+ * ends on the file at [path]; [drop] goes, and the file at [deleted] is
+ * deleted. Or the pair is left as it is.
  */
 export type DuplicateFix<F extends DuplicateCheckFile = DuplicateCheckFile> =
   | {
@@ -82,15 +108,14 @@ export type DuplicateFix<F extends DuplicateCheckFile = DuplicateCheckFile> =
       readonly drop: F;
       readonly path: string;
       readonly deleted: string;
+      readonly merge: DuplicateMerge | null;
     }
-  /** A file isn't complete audio ([incomplete], old first): never delete what may be the only copy. */
+  /** Neither file is complete audio ([incomplete], old first): never delete what may be the only copy. */
   | {
       readonly kind: "leave";
       readonly reason: "incomplete";
       readonly incomplete: readonly string[];
-    }
-  /** Both Tracks have favorites, plays or playlist entries: which keeps them can't be told. */
-  | { readonly kind: "leave"; readonly reason: "bothHistory" };
+    };
 
 /** How long each file of a pair plays, read from its audio to its end; null when it can't be read. */
 export interface DuplicateLengths {
@@ -106,33 +131,45 @@ const complete = (file: DuplicateCheckFile, lengthMs: number | null): boolean =>
   lengthMs > 0 &&
   (file.durationMs <= 0 || lengthMs >= file.durationMs - RECORDING_LENGTH_TOLERANCE_MS);
 
+const hasHistory = (file: DuplicateCheckFile): boolean =>
+  file.favorite || file.plays > 0 || file.playlists.length > 0;
+
+/** What [drop] hands to [keep] ([DuplicateMerge]); null when it has nothing. */
+const mergeOf = (keep: DuplicateCheckFile, drop: DuplicateCheckFile): DuplicateMerge | null =>
+  hasHistory(drop)
+    ? {
+        star: drop.favorite && !keep.favorite,
+        movePlays: drop.plays > 0,
+        repoint: drop.playlists.filter((id) => !keep.playlists.includes(id)),
+        remove: drop.playlists.filter((id) => keep.playlists.includes(id)),
+      }
+    : null;
+
 /**
  * How [pair] goes back to one song, given how long each file plays
- * ([lengths]). Both files must read as complete audio, or it's left as it
- * is. The Track with the history keeps it (with none on either, the one on
- * the file kept), and ends on the new file when it plays the old one's full
- * length (within 3 seconds), else on the old one. History on both is left.
+ * ([lengths]). The older Track (the replacement's, [pair.new]) stays and takes
+ * the other's history. It ends on the new file when that is complete audio and
+ * plays the song's full length (the old file's, within 3 seconds; its tags'
+ * when the old file is cut short), else on the old file when that is complete.
+ * With neither complete, the pair is left as it is.
  */
 export const replacementDuplicateFix = <F extends DuplicateCheckFile>(
   pair: ReplacementDuplicate<F>,
   lengths: DuplicateLengths,
 ): DuplicateFix<F> => {
-  const incomplete = [
-    ...(complete(pair.old, lengths.old) ? [] : [pair.old.path]),
-    ...(complete(pair.new, lengths.new) ? [] : [pair.new.path]),
-  ];
-  if (incomplete.length > 0) return { kind: "leave", reason: "incomplete", incomplete };
-  if (pair.old.history && pair.new.history) return { kind: "leave", reason: "bothHistory" };
-  const oldLength = lengths.old ?? pair.old.durationMs;
-  const onNew = lengths.new !== null && within(lengths.new, oldLength);
-  const [kept, gone] = onNew ? [pair.new, pair.old] : [pair.old, pair.new];
-  const keep = gone.history ? gone : kept;
+  const oldComplete = complete(pair.old, lengths.old);
+  const songLength = oldComplete ? (lengths.old ?? 0) : pair.old.durationMs;
+  const onNew =
+    complete(pair.new, lengths.new) && (songLength <= 0 || within(lengths.new ?? 0, songLength));
+  if (!onNew && !oldComplete)
+    return { kind: "leave", reason: "incomplete", incomplete: [pair.old.path, pair.new.path] };
   return {
     kind: "fix",
-    keep,
-    drop: keep === kept ? gone : kept,
-    path: kept.path,
-    deleted: gone.path,
+    keep: pair.new,
+    drop: pair.old,
+    path: onNew ? pair.new.path : pair.old.path,
+    deleted: onNew ? pair.old.path : pair.new.path,
+    merge: mergeOf(pair.new, pair.old),
   };
 };
 
@@ -164,6 +201,93 @@ export const replacementsUnderway = (jobs: readonly YtDownloadJournalJob[]): boo
       (status.kind === "queued" || status.kind === "downloading" || status.kind === "saving"),
   );
 
+/** Where the check stands this launch (`duplicateCheckOpened`, `duplicateCheckStep`). */
+export interface DuplicateCheck {
+  /** Why it's due (kept on the phone), or null. */
+  readonly due: DuplicateCheckWhen | null;
+  /** Whether the launch scan finished: the check reads the Library it leaves. */
+  readonly scanned: boolean;
+  /** Whether the last journal read found replacements on their way; null before the launch's first. */
+  readonly underway: boolean | null;
+  /** The check running now, or null. */
+  readonly running: DuplicateCheckWhen | null;
+  /** Whether it ran this launch: at most once, and one that failed stays due for the next. */
+  readonly checked: boolean;
+}
+
+/** What the app tells the check: the launch scan finished, the journal was read, or it ran. */
+export type DuplicateCheckEvent =
+  | { readonly kind: "scanDone" }
+  | { readonly kind: "journalRead"; readonly underway: boolean }
+  | { readonly kind: "ran"; readonly ok: boolean };
+
+/**
+ * After an event: where the check stands, what to keep on the phone (null: as
+ * it is), whether to run it now (and why), and whether to read the journal
+ * first (nothing read it yet this launch).
+ */
+export interface DuplicateCheckStep {
+  readonly check: DuplicateCheck;
+  readonly store: string | null;
+  readonly run: DuplicateCheckWhen | null;
+  readonly readJournal: boolean;
+}
+
+/** The check as a launch finds it, from what the phone keeps ([stored]). */
+export const duplicateCheckOpened = (stored: string | null): DuplicateCheck => ({
+  due: duplicateCheckDue(stored),
+  scanned: false,
+  underway: null,
+  running: null,
+  checked: false,
+});
+
+/**
+ * The check after [event]. Replacements on their way at the launch's first
+ * journal read mean the last run was interrupted, which makes the check due
+ * (unless the update's is). It runs when it's due, the launch scan is through,
+ * no replacement is on its way and it hasn't run this launch; once it ran
+ * without failing, it's due no more until another run is interrupted, however
+ * many pairs it left alone.
+ */
+export const duplicateCheckStep = (
+  check: DuplicateCheck,
+  event: DuplicateCheckEvent,
+): DuplicateCheckStep => {
+  let next = check;
+  let store: string | null = null;
+  switch (event.kind) {
+    case "scanDone":
+      next = { ...check, scanned: true };
+      break;
+    case "journalRead":
+      if (check.underway === null && event.underway && check.due !== "update") {
+        next = { ...next, due: "interruptedRun" };
+        store = storedDuplicateCheck("interruptedRun");
+      }
+      next = { ...next, underway: event.underway };
+      break;
+    case "ran":
+      next = { ...check, running: null };
+      if (event.ok && check.due === check.running) {
+        next = { ...next, due: null };
+        store = storedDuplicateCheck(null);
+      }
+      break;
+  }
+  const ready = next.due !== null && next.scanned && next.running === null && !next.checked;
+  if (ready && next.underway === false) {
+    const run = next.due;
+    return { check: { ...next, running: run, checked: true }, store, run, readJournal: false };
+  }
+  return {
+    check: next,
+    store,
+    run: null,
+    readJournal: ready && next.underway === null && event.kind === "scanDone",
+  };
+};
+
 /** What became of a pair: its fix, or left because the Library changed while it was checked. */
 export type DuplicateOutcome =
   DuplicateFix | { readonly kind: "leave"; readonly reason: "changed" };
@@ -177,12 +301,10 @@ const outcomeLine = (pair: ReplacementDuplicate, outcome: DuplicateOutcome): str
   const song = `"${pair.old.title}"`;
   const files = `(${pair.old.path}, ${pair.new.path})`;
   if (outcome.kind === "fix")
-    return `${song} back to one song: its Track keeps its favorites, plays and playlist entries on ${outcome.path}; the second song went and ${outcome.deleted} was deleted`;
+    return `${song} back to one song: its Track keeps its favorites, plays and playlist entries on ${outcome.path}${outcome.merge === null ? "" : " and takes the second song's"}; the second song went and ${outcome.deleted} was deleted`;
   switch (outcome.reason) {
     case "incomplete":
       return `${song} left twice: ${outcome.incomplete.join(" and ")} ${outcome.incomplete.length === 1 ? "isn't" : "aren't"} complete audio ${files}`;
-    case "bothHistory":
-      return `${song} left twice: both songs have favorites, plays or playlist entries ${files}`;
     case "changed":
       return `${song} left twice: the Library changed while it was checked ${files}`;
   }

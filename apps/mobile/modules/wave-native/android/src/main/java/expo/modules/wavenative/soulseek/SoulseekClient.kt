@@ -1,5 +1,6 @@
 package expo.modules.wavenative.soulseek
 
+import expo.modules.wavenative.download.BackgroundThreads
 import java.io.Closeable
 import java.io.File
 import java.io.IOException
@@ -47,7 +48,11 @@ class SoulseekClient(
   private val switch: SoulseekSwitchStore,
   /** While the phone is signed in to one, the Soulseek account belongs to the Wave account. */
   private val waveAccount: WaveAccountSoulseek = NoWaveAccount,
+  /** Lowers a download's peer thread to background priority before it receives (#455). */
+  lowerDownloadPeer: () -> Unit = BackgroundThreads::lowerThisThread,
 ) : Closeable {
+  /** A download's peer threads: they receive the song's bytes, at background priority like the rest of download work. */
+  private val downloadPeers = BackgroundThreads("Wave Soulseek peer", daemon = true, lower = lowerDownloadPeer)
   @Volatile private var server: Socket? = null
   private var listener: ServerSocket? = null
   private var credentials = credentialsStore.load()
@@ -427,9 +432,10 @@ class SoulseekClient(
   private fun launchPeer(remote: Socket? = null, forDownload: Boolean, work: () -> Unit) {
     val slots = if (forDownload) downloadSlots else searchSlots
     if (!slots.tryAcquire()) { remote?.close(); return }
-    thread(isDaemon = true, name = "Wave Soulseek peer") {
-      try { work() } catch (_: Throwable) { remote?.close() } finally { slots.release() }
-    }
+    val run = Runnable { try { work() } catch (_: Throwable) { remote?.close() } finally { slots.release() } }
+    // A search's peers answer the owner waiting on Search: they keep their priority.
+    if (forDownload) downloadPeers.newThread(run).start()
+    else thread(isDaemon = true, name = "Wave Soulseek peer") { run.run() }
   }
 
   private fun open(address: InetSocketAddress): Socket {

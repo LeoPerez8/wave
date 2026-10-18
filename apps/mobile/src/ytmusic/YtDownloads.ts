@@ -108,6 +108,7 @@ import { askForNotifications } from "@/lib/askForNotifications";
 import { persistedSetting } from "@/lib/persistedSetting";
 import {
   libraryVersion,
+  songsFilledIn,
   songsLanded,
   toIndexedArtwork,
   toIndexedTrack,
@@ -125,7 +126,9 @@ import { makeExternalStore } from "@/lib/externalStore";
 import { WaveNative } from "@/native/waveNative";
 import {
   WaveSoulseek,
+  enqueueJobs,
   soulseekErrorCode,
+  type JobRequest,
   type NativeDownloadDecision,
   type NativeDownloadJob,
   type NativeYoutubeAudio,
@@ -755,15 +758,22 @@ export const downloadPathIncluded = (path: string) =>
  * others (`songsLanded`), so what reads the Library to reconcile downloads follows both
  * (`downloadLibraryVersion`).
  */
-let landings = 0;
+let landedCount = 0;
 
-const landed = (trackIds: readonly number[], last: boolean): void => {
-  landings++;
-  songsLanded(trackIds, { last });
+/**
+ * The Tracks each imported file (by path) landed, until its fill-in is done (`answerJob`): they
+ * wait for it, so the song and its fill-in reach the lists as one change (`songsFilledIn`).
+ */
+const awaitingFillIn = new Map<string, readonly number[]>();
+
+const countAndLand = (path: string, trackIds: readonly number[], last: boolean): void => {
+  landedCount++;
+  awaitingFillIn.set(path, trackIds);
+  songsLanded(trackIds, { last, fillIn: true });
 };
 
 /** The Library as downloads' reconciliation knows it: every edit and every landing changes it. */
-const downloadLibraryVersion = (): string => `${libraryVersion.get()}:${landings}`;
+const downloadLibraryVersion = (): string => `${libraryVersion.get()}:${landedCount}`;
 
 /**
  * Transactional upsert preserves ids, favorites, playlists and history on
@@ -790,7 +800,7 @@ export const importDownload = (
         saved.artwork === null ? [] : [toIndexedArtwork(saved.artwork)],
       )
       .pipe(Effect.mapError(libraryFailure));
-    landed(trackIds, last);
+    countAndLand(saved.path, trackIds, last);
     // A liked song a pending favorite was waiting for has its star.
     publishSavedStars(starred);
     return saved.path;
@@ -824,9 +834,13 @@ export const importQualityReplacement = (
     // The swap recorded the old file's deletion (or the new file's, the Track gone): finished
     // now, and by the next launch if Wave dies first. A replayed import whose Track already has
     // the new file finds the old one still recorded. The media scanner sees the old file go with
-    // the new one, once its fill-in is done (`fillInLyricsAndGenre`).
-    yield* finishFileDeletions("import", saved.path);
-    landed(replaced.kind === "gone" ? [] : [trackId], last);
+    // the new one, once its fill-in is done (`fillInLyricsAndGenre`). Only other runs' leftovers
+    // it finishes get a line: its own deletion is the usual end of a replacement.
+    yield* finishFileDeletions("import", {
+      scanWith: saved.path,
+      own: replaced.kind === "replaced" ? replaced.oldPath : saved.path,
+    });
+    countAndLand(saved.path, replaced.kind === "gone" ? [] : [trackId], last);
     if (replaced.kind === "replaced") publishSavedStars(replaced.starred);
     return saved.path;
   });
@@ -1036,10 +1050,21 @@ const answerJob = async (id: string): Promise<void> => {
       claim.decision,
       JSON.stringify(payload),
     );
-    if (accepted && claim.decision === "import" && claim.saved !== undefined && "path" in payload)
-      void appRuntime.runPromise(
-        fillInLyricsAndGenre(downloadedSong(claim.saved), downloadTagWriteOrigin(claim.id)),
-      );
+    if (claim.decision === "import" && claim.saved !== undefined) {
+      const { path } = claim.saved;
+      const landedIds = awaitingFillIn.get(path) ?? [];
+      awaitingFillIn.delete(path);
+      if (accepted && "path" in payload)
+        void appRuntime.runPromise(
+          fillInLyricsAndGenre(
+            downloadedSong(claim.saved),
+            downloadTagWriteOrigin(claim.id),
+            landedIds,
+          ),
+        );
+      // No fill-in follows: the song goes with its run's change now.
+      else songsFilledIn(landedIds, { wrote: false });
+    }
   } catch {
     // JS or the bridge went away mid-answer: the native lease expires and replays the decision.
   } finally {
@@ -1228,6 +1253,9 @@ const refresh = async (): Promise<void> => {
       removeFailedReplacementFiles(jobs);
       replacementJournalRead(jobs);
       const active = jobs.some(unfinished);
+      // The run is over (its last songs answered in one poll, or it ended in a failure or a
+      // cancel): what landed reaches the lists now, with any fill-in still on its way.
+      if (!active) songsLanded([], { last: true });
       if (active && poll === null) poll = setInterval(refreshQuietly, 5_000);
       if (!active && poll !== null) {
         clearInterval(poll);
@@ -1323,6 +1351,14 @@ export const startDownloads = (resume = false): void => {
   }
 };
 
+/** A YT Music [song] asked for, to [enqueueJobs]. */
+const songRequest = (
+  song: NativeYtSong,
+  equivalentId: string | null,
+  source: DownloadSource | null,
+  origin: DownloadOrigin | null,
+): JobRequest => ({ song, recording: soulseekRecording(song), equivalentId, source, origin });
+
 export const downloadYtSong = (song: NativeYtSong): void => {
   askForNotifications();
   startDownloads();
@@ -1372,8 +1408,11 @@ const downloadYtSongs = (
       ownerAsked(songs.map((song) => song.videoId));
       const jobs = await WaveSoulseek.jobsSnapshot();
       const source = await requestedSource();
-      for (const { song, sharedJob } of ytSongsDownload(songs, { inLibrary, jobs }).toDownload)
-        await WaveSoulseek.enqueueJob(song, soulseekRecording(song), sharedJob, source, origin);
+      await enqueueJobs(
+        ytSongsDownload(songs, { inLibrary, jobs }).toDownload.map(({ song, sharedJob }) =>
+          songRequest(song, sharedJob, source, origin),
+        ),
+      );
       await refresh();
     })
     .catch(() => undefined);
@@ -1394,8 +1433,11 @@ const retryYtSongs = (
     .then(async () => {
       const jobs = await WaveSoulseek.jobsSnapshot();
       const source = await requestedSource();
-      for (const { song, sharedJob } of ytSongsDownload(songs, { inLibrary, jobs }).toRetry)
-        await WaveSoulseek.enqueueJob(song, soulseekRecording(song), sharedJob, source, origin);
+      await enqueueJobs(
+        ytSongsDownload(songs, { inLibrary, jobs }).toRetry.map(({ song, sharedJob }) =>
+          songRequest(song, sharedJob, source, origin),
+        ),
+      );
       await refresh();
     })
     .catch(() => undefined);
@@ -1485,8 +1527,9 @@ export const runYtPlaylistDownloadAction = (
       } else {
         const source = await requestedSource();
         const asked = action === "downloadPlaylist" ? download.toDownload : download.toRetry;
-        for (const { song, sharedJob } of asked)
-          await WaveSoulseek.enqueueJob(song, soulseekRecording(song), sharedJob, source, origin);
+        await enqueueJobs(
+          asked.map(({ song, sharedJob }) => songRequest(song, sharedJob, source, origin)),
+        );
       }
       await refresh();
     })
@@ -1527,19 +1570,18 @@ const journalSong = (job: MissingSongJob): NativeYtSong => ({
  * Asks the journal for missing song [job], from the source Core picks for it now, remembering
  * [origin] (a Library album's Download Missing Songs; none for a song on its own).
  */
-const enqueueMissingSong = (
+const missingSongRequest = (
   job: MissingSongJob,
   session: SoulseekSession,
   ytMusicOn: boolean,
   origin: DownloadOrigin | null = null,
-): Promise<string> =>
-  WaveSoulseek.enqueueJob(
-    journalSong(job),
-    soulseekRecording(job),
-    null,
-    currentSource(session, ytMusicOn, job.missing.videoId !== null),
-    origin,
-  );
+): JobRequest => ({
+  song: journalSong(job),
+  recording: soulseekRecording(job),
+  equivalentId: null,
+  source: currentSource(session, ytMusicOn, job.missing.videoId !== null),
+  origin,
+});
 
 /** Asks the journal for missing songs [jobs], in order, each from the source Core picks for it. */
 const enqueueMissingSongs = async (
@@ -1548,7 +1590,7 @@ const enqueueMissingSongs = async (
 ): Promise<void> => {
   const session = await sessionNow();
   const ytMusicOn = ytMusicEnabled();
-  for (const job of jobs) await enqueueMissingSong(job, session, ytMusicOn, origin);
+  await enqueueJobs(jobs.map((job) => missingSongRequest(job, session, ytMusicOn, origin)));
 };
 
 /** The missing songs as they are now ([trackIds] only, when given), as download jobs. */
@@ -1663,6 +1705,14 @@ const enqueueQualityReplacements = async (
   direction: QualityDirection,
   trackIds: readonly number[],
 ): Promise<void> => {
+  await enqueueJobs(await qualityReplacementRequests(direction, trackIds));
+};
+
+/** What [enqueueQualityReplacements] asks the journal for. */
+const qualityReplacementRequests = async (
+  direction: QualityDirection,
+  trackIds: readonly number[],
+): Promise<JobRequest[]> => {
   const tracks = await appRuntime.runPromise(
     Effect.gen(function* () {
       // An earlier run's old files still recorded go first.
@@ -1672,17 +1722,19 @@ const enqueueQualityReplacements = async (
     }),
   );
   const source: DownloadSource = direction === "upgrade" ? "soulseek" : "youtube";
-  for (const track of tracks) {
-    if (track === null) continue;
+  return tracks.flatMap((track) => {
+    if (track === null) return [];
     const job = qualityReplacementJob(direction, track);
-    await WaveSoulseek.enqueueJob(
-      { ...job, albumId: null },
-      soulseekRecording(job),
-      null,
-      source,
-      QUALITY_ORIGINS[direction],
-    );
-  }
+    return [
+      {
+        song: { ...job, albumId: null },
+        recording: soulseekRecording(job),
+        equivalentId: null,
+        source,
+        origin: QUALITY_ORIGINS[direction],
+      },
+    ];
+  });
 };
 
 /**
@@ -1836,24 +1888,19 @@ export const retryFailedDownloads = (failed: readonly FailedDownload<NativeYtSon
       );
       const session = await sessionNow();
       const ytMusicOn = ytMusicEnabled();
+      const asked: JobRequest[] = [];
       for (const { retry } of failed) {
         if (retry.kind === "quality") {
-          await enqueueQualityReplacements(retry.direction, [retry.trackId]);
+          asked.push(...(await qualityReplacementRequests(retry.direction, [retry.trackId])));
         } else if (retry.kind === "song") {
-          const { song } = retry;
           // Asked with no origin, the job keeps the one it was first asked from.
-          await WaveSoulseek.enqueueJob(
-            song,
-            soulseekRecording(song),
-            null,
-            currentSource(session, ytMusicOn),
-            null,
-          );
+          asked.push(songRequest(retry.song, null, currentSource(session, ytMusicOn), null));
         } else {
           const job = missing.get(retry.trackId);
-          if (job !== undefined) await enqueueMissingSong(job, session, ytMusicOn);
+          if (job !== undefined) asked.push(missingSongRequest(job, session, ytMusicOn));
         }
       }
+      await enqueueJobs(asked);
       await refresh();
     })
     .catch(() => undefined);
@@ -1897,6 +1944,7 @@ export const downloadStarredSongs = (
       const queued: string[] = [];
       const session = await sessionNow();
       const ytMusicOn = ytMusicEnabled();
+      const asked: JobRequest[] = [];
       for (const song of songs) {
         const shared = ytDownloadSharedJob(jobs, song);
         const step = starredDownload(
@@ -1904,26 +1952,30 @@ export const downloadStarredSongs = (
             (shared === null ? null : ytDownloadStatus(state, shared)),
         );
         if (step === "keep") continue;
-        await WaveSoulseek.enqueueJob(
-          song,
-          soulseekRecording(song),
-          shared,
-          currentSource(session, ytMusicOn),
-          step === "queue" ? FAVORITES_DOWNLOAD_ORIGIN : null,
+        asked.push(
+          songRequest(
+            song,
+            shared,
+            currentSource(session, ytMusicOn),
+            step === "queue" ? FAVORITES_DOWNLOAD_ORIGIN : null,
+          ),
         );
         if (step === "queue") queued.push(song.videoId);
       }
       for (const job of inOrder(missing, trackIds)) {
         const step = starredDownload(ytDownloadStatus(state, job.videoId));
         if (step === "keep") continue;
-        await enqueueMissingSong(
-          job,
-          session,
-          ytMusicOn,
-          step === "queue" ? FAVORITES_DOWNLOAD_ORIGIN : null,
+        asked.push(
+          missingSongRequest(
+            job,
+            session,
+            ytMusicOn,
+            step === "queue" ? FAVORITES_DOWNLOAD_ORIGIN : null,
+          ),
         );
         if (step === "queue") queued.push(job.videoId);
       }
+      await enqueueJobs(asked);
       starAsked.set(starAskedAfter(starAsked.get(), { kind: "starred", queued }));
       await refresh();
     })

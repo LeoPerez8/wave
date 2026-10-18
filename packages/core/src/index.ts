@@ -568,8 +568,14 @@ export {
   ytSectionView,
   ytSearchArtistReads,
   ytSearchArtistSongs,
+  YT_SEARCH_ARTISTS_UNKNOWN,
+  ytSearchArtistToRead,
+  ytSearchArtistsKnownAfter,
+  ytSearchTopArtistSongs,
 } from "./ytSearch.ts";
 export type {
+  YtSearchArtistsKnown,
+  YtSearchArtistsEvent,
   YtKeptAnswer,
   YtAskedBy,
   YtQuietReason,
@@ -810,6 +816,7 @@ export {
   ytArtistFullPage,
   ytArtistLookup,
   ytArtistPageAsks,
+  ytArtistSavedStands,
   ytArtistPageView,
   ytArtistQuery,
   ytArtistRelease,
@@ -1434,12 +1441,13 @@ export type { CollectionKind } from "./itemActions.ts";
 export { mixSectionOfId, mixSeedArtists } from "./discoverMixes.ts";
 export { downloadJobKind } from "./downloadJobKind.ts";
 export type { DownloadJobKind } from "./downloadJobKind.ts";
-export { downloadGroupDrop, downloadListRows } from "./downloadRows.ts";
+export { downloadListRows, dropDownload, movableGroups } from "./downloadRows.ts";
 export type {
-  DownloadGroupDrag,
+  DownloadDrop,
   DownloadHeaderRow,
   DownloadingSongRow,
   DownloadListRow,
+  StartedHeaderRow,
   WaitingSongRow,
 } from "./downloadRows.ts";
 export { createLandings, LANDING_BURST_MS } from "./landings.ts";
@@ -1466,6 +1474,8 @@ export {
   replacementDuplicates,
   replacementsUnderway,
   storedDuplicateCheck,
+  duplicateCheckOpened,
+  duplicateCheckStep,
 } from "./replacementDuplicates.ts";
 export type {
   DuplicateCheckFile,
@@ -1474,4 +1484,8 @@ export type {
   DuplicateOutcome,
   DuplicateLengths,
   ReplacementDuplicate,
+  DuplicateMerge,
+  DuplicateCheck,
+  DuplicateCheckEvent,
+  DuplicateCheckStep,
 } from "./replacementDuplicates.ts";

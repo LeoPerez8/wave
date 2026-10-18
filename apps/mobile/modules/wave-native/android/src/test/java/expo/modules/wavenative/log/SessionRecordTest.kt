@@ -268,7 +268,6 @@ class SessionRecordTest {
       ActivityManager.RunningAppProcessInfo.IMPORTANCE_SERVICE to "in the background (a service)",
       ActivityManager.RunningAppProcessInfo.IMPORTANCE_TOP_SLEEPING to "on screen with the screen off",
       ActivityManager.RunningAppProcessInfo.IMPORTANCE_CANT_SAVE_STATE to "in the background",
-      ActivityManager.RunningAppProcessInfo.IMPORTANCE_CACHED to "cached",
     )
     for ((importance, doing) in words) {
       assertEquals(
@@ -276,6 +275,48 @@ class SessionRecordTest {
         reported(Exit(at - 60_000 + importance, ExitReason.LOW_MEMORY, null, pssKb = 80 * 1024, importance = importance)),
       )
     }
+  }
+
+  /** Android trimming a cached Wave is routine: reported, but as information, not an error (#449). */
+  @Test
+  fun aCachedWavesEndIsInformation() {
+    val cached = ActivityManager.RunningAppProcessInfo.IMPORTANCE_CACHED
+    nextLaunch(Exit(at - 600_000, ExitReason.USER_REQUESTED, null))
+    nextLaunch(
+      Exit(at - 120_000, ExitReason.OTHER, "empty for 1800s", importance = cached),
+      Exit(at - 60_000, ExitReason.LOW_MEMORY, null, importance = cached),
+    )
+
+    assertEquals(
+      listOf(
+        "2026-10-16T14:03:22.415Z I app: An earlier session was closed by Android (Android's record of 2026-10-16T14:01:22.415Z): empty for 1800s\n  Wave was cached",
+        "2026-10-16T14:03:22.415Z I app: The previous session was killed for low memory (Android's record of 2026-10-16T14:02:22.415Z)\n  Wave was cached",
+      ),
+      entries(),
+    )
+  }
+
+  @Test
+  fun aCachedWavesCrashIsStillAnError() {
+    val cached = ActivityManager.RunningAppProcessInfo.IMPORTANCE_CACHED
+    nextLaunch(Exit(at - 60_000, ExitReason.CRASH_NATIVE, "signal 11 (SIGSEGV)", importance = cached))
+
+    assertTrue(entries().single().contains(" E app: The previous session ended in a crash (native"))
+  }
+
+  /** The journal is read before anything else, ANR traces included: a restarted service may rewrite it meanwhile. */
+  @Test
+  fun theDownloadCountsAreReadBeforeAnyTrace() {
+    nextLaunch(Exit(at - 600_000, ExitReason.USER_REQUESTED, null))
+    val order = mutableListOf<String>()
+    SessionRecord(folder).reportPrevious(
+      listOf(
+        Exit(at - 120_000, ExitReason.ANR, "Input dispatching timed out", trace = { order += "trace"; null }),
+        Exit(at - 60_000, ExitReason.LOW_MEMORY, null),
+      ),
+    ) { order += "journal"; DownloadCounts(running = 1, left = 0) }
+
+    assertEquals(listOf("journal", "trace"), order)
   }
 
   @Test

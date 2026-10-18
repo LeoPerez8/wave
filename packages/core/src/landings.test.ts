@@ -90,8 +90,70 @@ describe("songs landing during a download run", () => {
   test("nothing landed, nothing announced", () => {
     const { landings, announced, advance } = setup();
     landings.land([], { last: true });
+    landings.land([]);
     advance(10_000);
 
     assert.deepEqual(announced, []);
+  });
+});
+
+describe("a song and its fill-in make one change", () => {
+  test("the last song plus its fill-in make one change", () => {
+    const { landings, announced, advance } = setup();
+    landings.land([7], { last: true, fillIn: true });
+    advance(800);
+    assert.deepEqual(announced, []);
+    landings.filled([7], { wrote: true });
+
+    assert.deepEqual(announced, [{ at: 800, change: { kind: "tracks", ids: [7], burst: true } }]);
+    advance(10_000);
+    assert.equal(announced.length, 1);
+  });
+
+  test("a fill-in slower than the burst holds its song back, with the rest, until it lands", () => {
+    const { landings, announced, advance } = setup();
+    landings.land([1]);
+    advance(500);
+    landings.land([2], { fillIn: true });
+    // The burst is over at 2 s; song 2's fill-in lands at 2.3 s.
+    advance(1800);
+    landings.filled([2], { wrote: true });
+    advance(10_000);
+
+    assert.deepEqual(announced, [
+      { at: 2300, change: { kind: "tracks", ids: [1, 2], burst: true } },
+    ]);
+  });
+
+  test("a song waits for its fill-in 2 s at most; a fill-in that writes later is a change of its own", () => {
+    const { landings, announced, advance } = setup();
+    landings.land([7], { last: true, fillIn: true });
+    advance(5000);
+    landings.filled([7], { wrote: true });
+    advance(10_000);
+
+    assert.deepEqual(announced, [
+      { at: 2000, change: { kind: "tracks", ids: [7], burst: true } },
+      { at: 7000, change: { kind: "tracks", ids: [7], burst: true } },
+    ]);
+  });
+
+  test("a late fill-in that wrote nothing changes nothing", () => {
+    const { landings, announced, advance } = setup();
+    landings.land([7], { last: true, fillIn: true });
+    advance(5000);
+    landings.filled([7], { wrote: false });
+    advance(10_000);
+
+    assert.deepEqual(announced, [{ at: 2000, change: { kind: "tracks", ids: [7], burst: true } }]);
+  });
+
+  test("the run ending flushes what's gathered at once", () => {
+    const { landings, announced, advance } = setup();
+    landings.land([1]);
+    advance(300);
+    landings.land([], { last: true });
+
+    assert.deepEqual(announced, [{ at: 300, change: { kind: "tracks", ids: [1], burst: true } }]);
   });
 });

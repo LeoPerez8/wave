@@ -64,10 +64,15 @@ const leftTwice = () => {
   save([file(MP3), file(M4A, { bitrateKbps: 128, sizeBytes: 4_050_000, hasLyrics: false })]);
   const mp3 = idOf(MP3);
   setFavorites(db, [mp3], true, 1);
-  createPlaylist(db, "Indie", [{ source: "library", trackId: mp3 }], 1);
+  const indie = createPlaylist(db, "Indie", [{ source: "library", trackId: mp3 }], 1).playlistId;
+  play(mp3, 5);
+  return { mp3, m4a: idOf(M4A), indie };
+};
+
+const play = (trackId: number, startedAt: number) =>
   recordPlay(db, {
-    trackId: String(mp3),
-    startedAt: 5,
+    trackId: String(trackId),
+    startedAt,
     listenedMs: 253_000,
     durationMs: 253_000,
     endReason: "completed",
@@ -75,12 +80,26 @@ const leftTwice = () => {
     context: null,
     source: "phone",
   });
-  return { mp3, m4a: idOf(M4A) };
+
+/** What the check read of Track [id]: its file, star and playlists (`selectDuplicateCheckFiles`). */
+const checked = (id: number) => {
+  const found = selectDuplicateCheckFiles(db).find((song) => song.id === id)!;
+  return { id, path: found.path, favorite: found.favorite, playlists: found.playlists };
 };
 
+const liveEntries = () =>
+  db
+    .select({ playlistId: schema.playlistItems.playlistId, trackId: schema.playlistItems.trackId })
+    .from(schema.playlistItems)
+    .where(eq(schema.playlistItems.deleted, false))
+    .orderBy(schema.playlistItems.playlistId)
+    .all();
+
 describe("the files the duplicate check looks at", () => {
-  test("MP3 and M4A files, with their recordings and whether their Track has history", () => {
-    const { mp3, m4a } = leftTwice();
+  test("MP3 and M4A files, with their recordings and their Track's star, plays and playlists", () => {
+    const { mp3, m4a, indie } = leftTwice();
+    play(mp3, 6);
+    const rock = createPlaylist(db, "Rock", [{ source: "library", trackId: mp3 }], 1).playlistId;
     save([file("/Music/b.flac", { title: "Lossless" })]);
     assert.deepEqual(
       selectDuplicateCheckFiles(db).map((song) => [
@@ -89,12 +108,14 @@ describe("the files the duplicate check looks at", () => {
         song.title,
         song.artists,
         song.durationMs,
-        song.history,
+        song.favorite,
+        song.plays,
+        song.playlists,
         song.recordingKey !== null,
       ]),
       [
-        [mp3, MP3, "505", ["Arctic Monkeys"], 253_000, true, true],
-        [m4a, M4A, "505", ["Arctic Monkeys"], 253_000, false, true],
+        [mp3, MP3, "505", ["Arctic Monkeys"], 253_000, true, 2, [indie, rock], true],
+        [m4a, M4A, "505", ["Arctic Monkeys"], 253_000, false, 0, [], true],
       ],
     );
   });
@@ -107,7 +128,7 @@ describe("putting a song left twice back to one", () => {
       fixReplacementDuplicate(
         db,
         creditSplits(),
-        { keep: { id: mp3, path: MP3 }, drop: { id: m4a, path: M4A }, path: M4A, deleted: MP3 },
+        { keep: checked(mp3), drop: checked(m4a), path: M4A, deleted: MP3, merge: null },
         2,
       ),
       true,
@@ -132,7 +153,7 @@ describe("putting a song left twice back to one", () => {
     fixReplacementDuplicate(
       db,
       creditSplits(),
-      { keep: { id: mp3, path: MP3 }, drop: { id: m4a, path: M4A }, path: MP3, deleted: M4A },
+      { keep: checked(mp3), drop: checked(m4a), path: MP3, deleted: M4A, merge: null },
       2,
     );
     assert.deepEqual(songs(), [
@@ -143,6 +164,7 @@ describe("putting a song left twice back to one", () => {
 
   test("a Library changed since the check read it is left as it is", () => {
     const { mp3, m4a } = leftTwice();
+    const [keep, drop] = [checked(mp3), checked(m4a)];
     // A scan moved the bare song meanwhile.
     db.update(schema.tracks)
       .set({ path: "/Music/moved.m4a" })
@@ -152,12 +174,63 @@ describe("putting a song left twice back to one", () => {
       fixReplacementDuplicate(
         db,
         creditSplits(),
-        { keep: { id: mp3, path: MP3 }, drop: { id: m4a, path: M4A }, path: M4A, deleted: MP3 },
+        { keep, drop, path: M4A, deleted: MP3, merge: null },
         2,
       ),
       false,
     );
     assert.equal(songs().length, 2);
     assert.deepEqual(pendingFileDeletions(db), []);
+  });
+
+  test("both Tracks with history merge: either's star, all plays, entries named once", () => {
+    const { mp3, m4a, indie } = leftTwice();
+    // The bare song picked up a play, and entries in Indie (already holding the MP3) and Gym.
+    play(m4a, 9);
+    db.insert(schema.playlistItems)
+      .values({ playlistId: indie, trackId: m4a, orderKey: "z", addedAt: 3, changedAt: 3 })
+      .run();
+    const gym = createPlaylist(db, "Gym", [{ source: "library", trackId: m4a }], 3).playlistId;
+    setFavorites(db, [mp3], false, 4);
+    setFavorites(db, [m4a], true, 4);
+    const merge = { star: true, movePlays: true, repoint: [gym], remove: [indie] };
+    assert.equal(
+      fixReplacementDuplicate(
+        db,
+        creditSplits(),
+        { keep: checked(mp3), drop: checked(m4a), path: M4A, deleted: MP3, merge },
+        5,
+      ),
+      true,
+    );
+    assert.deepEqual(
+      songs().map((song) => [song.id, song.path]),
+      [[mp3, M4A]],
+    );
+    assert.deepEqual(selectFavoriteTrackIds(db), [mp3]);
+    assert.deepEqual(
+      db.select({ trackId: schema.playEvents.trackId }).from(schema.playEvents).all(),
+      [{ trackId: mp3 }, { trackId: mp3 }],
+    );
+    assert.deepEqual(liveEntries(), [
+      { playlistId: indie, trackId: mp3 },
+      { playlistId: gym, trackId: mp3 },
+    ]);
+  });
+
+  test("history that changed since the check read it leaves the pair as it is", () => {
+    const { mp3, m4a } = leftTwice();
+    const [keep, drop] = [checked(mp3), checked(m4a)];
+    createPlaylist(db, "Gym", [{ source: "library", trackId: m4a }], 3);
+    assert.equal(
+      fixReplacementDuplicate(
+        db,
+        creditSplits(),
+        { keep, drop, path: M4A, deleted: MP3, merge: null },
+        5,
+      ),
+      false,
+    );
+    assert.equal(songs().length, 2);
   });
 });

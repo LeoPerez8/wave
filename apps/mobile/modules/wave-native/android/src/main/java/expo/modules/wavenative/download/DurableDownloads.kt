@@ -114,6 +114,7 @@ class DurableDownloads(
       // Imported and cancelled jobs have nothing left to show; a failure keeps Retry until it's
       // retried or cleared (Settings › Downloads cancels it). The app cancels one that settled
       // another way (the song reached the Library) at launch, so failures don't pile up here.
+      carryForgottenReplacements()
       jobs.values.removeAll { it["phase"] == "cancelled" || it["acknowledged"] == true }
       // A socket cannot survive process recreation. Counts and deadlines do, on the budget's clock,
       // which stood still while Wave was closed: a peer keeps what was left of its turn. Across a
@@ -155,7 +156,7 @@ class DurableDownloads(
       .flatMap { job -> listOfNotNull(job["targetPath"] as? String, job.map("fallback")["targetPath"] as? String) }
       .mapNotNull { File(it).parentFile }.toSet()
     for (folder in folders) {
-      folder.listFiles { file -> file.name.startsWith(".wave-") && file.name.contains(".part.") && file.path !in held }?.forEach { it.delete() }
+      folder.listFiles { file -> DownloadFiles.isWavePartFile(file) && file.path !in held }?.forEach { it.delete() }
     }
   }
 
@@ -202,8 +203,30 @@ class DurableDownloads(
    * `name`; Core's `DownloadOrigin`), null for a song asked for on its own. A job keeps the first
    * origin it was asked from; asked again after it ended, it takes the new one, or keeps its own
    * when asked with none (Settings › Downloads' Retry).
+   *
+   * The journal is written before it returns, so a crash loses no song asked for. Many songs at
+   * once go through [enqueueAll]: one write for them all.
    */
-  @Synchronized fun enqueue(song: Map<String, Any?>, equivalentId: String?, recording: Map<String, Any?> = emptyMap(), source: String? = null, origin: Map<String, Any?>? = null): String {
+  @Synchronized fun enqueue(song: Map<String, Any?>, equivalentId: String?, recording: Map<String, Any?> = emptyMap(), source: String? = null, origin: Map<String, Any?>? = null): String =
+    add(Request(song, equivalentId, recording, source, origin)).also { persistNow() }
+
+  /** One song asked for: [enqueue]'s arguments. */
+  data class Request(
+    val song: Map<String, Any?>,
+    val equivalentId: String?,
+    val recording: Map<String, Any?> = emptyMap(),
+    val source: String? = null,
+    val origin: Map<String, Any?>? = null,
+  )
+
+  /** [enqueue] for each of [requests], in order, written in one write; the jobs' ids. */
+  @Synchronized fun enqueueAll(requests: List<Request>): List<String> {
+    if (requests.isEmpty()) return emptyList()
+    return requests.map(::add).also { persistNow() }
+  }
+
+  private fun add(request: Request): String {
+    val (song, equivalentId, recording, source, origin) = request
     val id = song["videoId"] as String
     val existing = jobs.values.firstOrNull { it["id"] == id || it.maps("aliases").any { alias -> alias["videoId"] == id } }
       ?: equivalentId?.let { jobs[it] }?.takeIf { it["phase"] !in TERMINAL && it["importFailure"] == null }
@@ -221,8 +244,11 @@ class DurableDownloads(
         jobs.remove(key); jobs[key] = existing
         if (origin != null) existing["origin"] = clean(origin)
         existing["decisionAttempts"] = 0L; startBudget(existing)
+        // Retried, it joins the run under way, or starts one.
+        for (key in listOf("replacementRun", RUN_REPLACED, RUN_KEPT, RUN_CANCELLED)) existing.remove(key)
+        joinRun(existing)
         if (savedGone) {
-          for (key in listOf("saved", "acknowledged", "finalPath", "digest", "taggedDigest", "publishSource", "replaces")) existing.remove(key)
+          for (key in listOf("saved", "acknowledged", "replaces") + PUBLICATION_KEYS) existing.remove(key)
         }
         if (existing["saved"] != null) existing["phase"] = "completed"
         // Only while the file there is still this download's: one replaced since downloads again.
@@ -230,14 +256,13 @@ class DurableDownloads(
           existing["phase"] = "awaitingPublication"; existing["publicationAttempts"] = 0L
         } else {
           cleanup(existing)
-          for (key in listOf("finalPath", "digest", "taggedDigest", "publishSource", "replaces")) existing.remove(key)
+          for (key in PUBLICATION_KEYS + "replaces") existing.remove(key)
           existing["phase"] = "queued"; existing["attempts"] = 0L; existing["candidateIndex"] = 0L
           setSource(existing, source)
         }
       } else if (existing.map("song")["videoId"] != id && existing.maps("aliases").none { it["videoId"] == id }) {
         existing["aliases"] = existing.maps("aliases") + clean(song)
       }
-      persist()
       return existing["id"] as String
     }
     jobs[id] = mutableMapOf(
@@ -247,7 +272,7 @@ class DurableDownloads(
     )
     setSource(jobs.getValue(id), source)
     if (origin != null) jobs.getValue(id)["origin"] = clean(origin)
-    persist()
+    joinRun(jobs.getValue(id))
     return id
   }
 
@@ -364,17 +389,13 @@ class DurableDownloads(
     if (lastEnd == "cancelled") DownloadServiceStop.CANCELLED else DownloadServiceStop.QUEUE_EMPTY
 
   /** The songs started and not yet in the Library, and those still waiting to start; the notification shows both. */
-  fun counts(): DownloadCounts {
-    val all = published
-    val left = all.count { it["phase"] == "queued" }
-    return DownloadCounts(running = all.count(::pending) - left, left = left)
-  }
+  fun counts(): DownloadCounts = DownloadCounts.of(published)
 
   /** The first song started, else the next one waiting; what the notification shows. */
   fun current(): Map<String, Any?>? =
     published.firstOrNull { it["phase"] != "queued" && pending(it) } ?: published.firstOrNull { it["phase"] == "queued" }
 
-  private fun pending(job: Map<String, Any?>) = job["phase"] !in TERMINAL && !(job["phase"] == "completed" && (job["acknowledged"] == true || job["importFailure"] != null))
+  private fun pending(job: Map<String, Any?>) = DownloadCounts.pending(job)
 
   /** Between its publish decision and its import: what only one song does at a time. */
   private fun saving(job: Map<String, Any?>) = pending(job) &&
@@ -505,15 +526,57 @@ class DurableDownloads(
    * was opened, as a run's stop line says it; null when it holds none.
    */
   @Synchronized fun replacementRun(): ReplacementRun? {
-    val replacements = jobs.values.filter { replacement(it) }
-    if (replacements.isEmpty()) return null
+    val all = jobs.values.filter { replacement(it) }
+    if (all.isEmpty()) return null
+    // The latest run only: an earlier run's songs aren't counted again.
+    val latest = all.maxOf(::runOf)
+    val replacements = all.filter { runOf(it) == latest }
+    // What the run's jobs the journal forgot as it opened (imported, cancelled) counted, carried on its others.
+    fun carried(key: String) = replacements.maxOf { it.number(key) }.toInt()
     return ReplacementRun(
-      replaced = replacements.count { it["acknowledged"] == true },
-      kept = replacements.count { it["reason"] == NO_BETTER_COPY && it["phase"] in TERMINAL },
+      replaced = replacements.count { it["acknowledged"] == true } + carried(RUN_REPLACED),
+      kept = replacements.count { kept(it) } + carried(RUN_KEPT),
       failed = replacements.count { it["importFailure"] != null || (it["phase"] == "failed" && it["reason"] != NO_BETTER_COPY) },
       waiting = replacements.count(::pending),
-      cancelled = replacements.count { it["phase"] == "cancelled" && it["reason"] != NO_BETTER_COPY },
+      cancelled = replacements.count { cancelledReplacement(it) } + carried(RUN_CANCELLED),
     )
+  }
+
+  /** The replacement run [job] belongs to (when its run started; 0 for a job from before runs were kept). */
+  private fun runOf(job: Map<String, Any?>): Long = job.number("replacementRun")
+
+  private fun kept(job: Map<String, Any?>) = job["reason"] == NO_BETTER_COPY && job["phase"] in TERMINAL
+  private fun cancelledReplacement(job: Map<String, Any?>) = job["phase"] == "cancelled" && job["reason"] != NO_BETTER_COPY
+
+  /**
+   * Stamps [job], a quality replacement just asked for, with its run: the one under way (a
+   * replacement still on its way), else a new one starting now.
+   */
+  private fun joinRun(job: MutableMap<String, Any?>) {
+    if (!replacement(job)) return
+    val underway = jobs.values.firstOrNull { it !== job && replacement(it) && pending(it) }
+    job["replacementRun"] = underway?.let(::runOf) ?: clock()
+  }
+
+  /**
+   * As the journal opens and forgets its imported and cancelled jobs, each run with jobs left
+   * carries what the forgotten ones counted on those, so its line still counts them ([replacementRun]).
+   */
+  private fun carryForgottenReplacements() {
+    for ((_, run) in jobs.values.filter { replacement(it) }.groupBy(::runOf)) {
+      val forgotten = run.filter { it["phase"] == "cancelled" || it["acknowledged"] == true }
+      val left = run - forgotten.toSet()
+      if (forgotten.isEmpty() || left.isEmpty()) continue
+      val counts = mapOf(
+        RUN_REPLACED to forgotten.count { it["acknowledged"] == true },
+        RUN_KEPT to forgotten.count { kept(it) },
+        RUN_CANCELLED to forgotten.count { cancelledReplacement(it) },
+      )
+      for ((key, count) in counts) {
+        val total = run.maxOf { it.number(key) } + count
+        for (job in left) job[key] = total
+      }
+    }
   }
 
   /** A quality replacement's counts ([replacementRun]): what its stop line says. */
@@ -759,7 +822,7 @@ class DurableDownloads(
     if (moving) {
       if (digest(publishSource) != sum) {
         onJob { job ->
-          for (key in listOf("finalPath", "digest", "publishSource")) job.remove(key)
+          for (key in PUBLICATION_KEYS) job.remove(key)
           fail(job, "failed", "The copy to publish changed after its digest was taken; ${final.path} was left as it was"); persist()
         }
         return
@@ -772,7 +835,7 @@ class DurableDownloads(
     if (!movedHere && digest(final) != sum) {
       onJob { job ->
         // Wave's own copy is gone and another file holds its name: Retry downloads the song again.
-        for (key in listOf("finalPath", "digest", "publishSource")) job.remove(key)
+        for (key in PUBLICATION_KEYS) job.remove(key)
         fail(job, "failed", "Another file took ${final.path} before it was imported"); persist()
       }
       return
@@ -999,11 +1062,12 @@ class DurableDownloads(
     job["soulseekDeadline"] != null && job.number("soulseekDeadline") <= budgetNow() && job["source"] != YOUTUBE &&
       charged(job) && fallsBack(job, "timedOut")
 
-  // Persistence (#452). A change a restart must keep (a job enqueued, a phase, a decision, a
-  // failure, a cancel, a peer's queue place) is shown to readers at once and written by [persist]
-  // with the changes around it, at most every [WRITE_MS]; a write appends only what changed
-  // ([JournalStore]). Only the publication writes at once ([persistNow]), before a file is copied
-  // into or moved to the Library folder. A crash loses at most the last [WRITE_MS] of changes: the
+  // Persistence (#452). A change a restart must keep (a phase, a decision, a failure, a cancel, a
+  // peer's queue place) is shown to readers at once and written by [persist] with the changes
+  // around it, at most every [WRITE_MS]; a write appends only what changed ([JournalStore]). Only
+  // new jobs ([enqueue], [enqueueAll]: one write for a whole run) and the publication write at
+  // once ([persistNow]), the latter before a file is copied into or moved to the Library folder.
+  // So a crash loses no job, and at most the last [WRITE_MS] of changes to one: the
   // job goes on from the step it last wrote, which can only redo a step, and a part file that step
   // had made is swept as the journal opens ([sweepParts]). Transfer progress only marks the journal
   // [progressed]: it's written with the next change, or once [PROGRESS_WRITE_MS] has passed (the
@@ -1059,8 +1123,8 @@ class DurableDownloads(
 
   /**
    * Publishes and writes the journal now, with every change waiting: only before file work a
-   * restart must find in the journal (a file copied into or moved to the Library folder), and as
-   * the journal opens.
+   * restart must find in the journal (a file copied into or moved to the Library folder), for new
+   * jobs ([enqueue], [enqueueAll]: a crash loses no song asked for), and as the journal opens.
    */
   private fun persistNow() { publish(); write() }
 
@@ -1155,6 +1219,12 @@ class DurableDownloads(
     private const val MP3_320 = "mp3-320"
     private const val YOUTUBE_M4A = "youtube-m4a"
     private val TERMINAL = setOf("failed", "cancelled")
+    /** What a publication writes on its job: where it goes, the digests that tell it, the copy it moves. Every reset clears them all. */
+    /** What a replacement run's jobs the journal forgot as it opened counted, carried on the run's others. */
+    private const val RUN_REPLACED = "runReplaced"
+    private const val RUN_KEPT = "runKept"
+    private const val RUN_CANCELLED = "runCancelled"
+    private val PUBLICATION_KEYS = listOf("finalPath", "digest", "taggedDigest", "publishSource")
     /** Quality replacements' job ids (Core's `qualityJobId`). */
     private val REPLACEMENT_PREFIXES = listOf("upgrade:", "downgrade:")
     /** A replacement's failure for finding no better copy (Core's `NO_BETTER_COPY_FOUND`): the song keeps its file. */
@@ -1185,7 +1255,20 @@ private class JournalView(val entries: List<PublishedJob>, val revision: Long, v
 }
 
 /** What the download notification counts: songs on their way ([running]) and songs not started yet ([left]). */
-data class DownloadCounts(val running: Int, val left: Int)
+data class DownloadCounts(val running: Int, val left: Int) {
+  companion object {
+    /** Whether [job] is still on its way: not failed or cancelled, nor imported (or failed to import). */
+    fun pending(job: Map<*, *>): Boolean =
+      job["phase"] != "failed" && job["phase"] != "cancelled" &&
+        !(job["phase"] == "completed" && (job["acknowledged"] == true || job["importFailure"] != null))
+
+    /** [jobs] counted: those on their way that started, and those waiting. The one rule, for the notification and the app log. */
+    fun of(jobs: Collection<Map<*, *>>): DownloadCounts {
+      val left = jobs.count { it["phase"] == "queued" }
+      return DownloadCounts(running = jobs.count(::pending) - left, left = left)
+    }
+  }
+}
 
 /**
  * What went wrong, as `<exception class>: <message>`, then what caused it (`<-`). A

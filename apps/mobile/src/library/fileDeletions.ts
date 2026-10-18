@@ -5,6 +5,16 @@ import { WaveNative, type FileDeleteOutcome } from "@/native/waveNative";
 
 import { LibraryStore } from "./LibraryStore";
 
+/**
+ * Deletes the files [paths] (`WaveNative.deleteFiles`, telling the media scanner with
+ * [scanWith]): each one's outcome, every one "failed" when the native call fails as a whole
+ * (every file left where it was).
+ */
+export const deleteFilesOrFailed = (paths: readonly string[], scanWith: string | null) =>
+  Effect.tryPromise(() => WaveNative.deleteFiles(paths, scanWith)).pipe(
+    Effect.orElseSucceed((): readonly FileDeleteOutcome[] => paths.map(() => "failed")),
+  );
+
 /** Why the recorded deletions are being finished, as the log line says it. */
 export type FileDeletionsWhen =
   "scan" | "import" | "replacementRun" | "failedReplacement" | "duplicateCheck";
@@ -22,31 +32,32 @@ const WHEN: Record<FileDeletionsWhen, string> = {
  * a quality replacement's old file once its Track took the new one, or a failed
  * replacement's new file. A record is cleared once its file is gone or missing;
  * one that couldn't be deleted stays for the next time. Writes which files went
- * (but for an import's own, one per replaced song) and which couldn't (tag
- * `downloads`). Never fails: resolves to the files still
- * recorded, which a scan leaves out so they never come back as songs. The
- * media scanner hears of the deleted files with its next batch, along with
- * [scanWith] when given (an import's new file, once its fill-in is done).
+ * and which couldn't (tag `downloads`), but for [own], the deletion the caller
+ * recorded itself (an import's old file: the usual end of a replacement, one
+ * per song); other runs' leftovers it finishes are written all the same.
+ * Never fails: resolves to the files still recorded, which a scan leaves out
+ * so they never come back as songs. The media scanner hears of the deleted
+ * files with its next batch, along with [scanWith] when given (an import's
+ * new file, once its fill-in is done).
  */
-export const finishFileDeletions = (when: FileDeletionsWhen, scanWith: string | null = null) =>
+export const finishFileDeletions = (
+  when: FileDeletionsWhen,
+  { scanWith = null, own = null }: { scanWith?: string | null; own?: string | null } = {},
+) =>
   Effect.gen(function* () {
     const store = yield* LibraryStore;
     const pending = yield* store.pendingFileDeletions;
     if (pending.length === 0) return pending;
-    const outcomes = yield* Effect.tryPromise(() => WaveNative.deleteFiles(pending, scanWith)).pipe(
-      // The native call failing as a whole leaves every file where it was.
-      Effect.orElseSucceed((): readonly FileDeleteOutcome[] => pending.map(() => "failed")),
-    );
+    const outcomes = yield* deleteFilesOrFailed(pending, scanWith);
     const outcomeOf = (path: string) => outcomes[pending.indexOf(path)] ?? "failed";
-    const deleted = pending.filter((path) => outcomeOf(path) === "deleted");
+    const deleted = pending.filter((path) => outcomeOf(path) === "deleted" && path !== own);
     const done = pending.filter((path) => {
       const outcome = outcomeOf(path);
       return outcome === "deleted" || outcome === "missing";
     });
     const left = pending.filter((path) => !done.includes(path));
     yield* store.forgetFileDeletions(done);
-    // An import's own deletion is the usual end of a replacement, one per song: not worth a line.
-    if (deleted.length > 0 && when !== "import")
+    if (deleted.length > 0)
       appLog(
         "info",
         "downloads",

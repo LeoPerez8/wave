@@ -1,13 +1,14 @@
 import {
-  duplicateCheckDue,
+  duplicateCheckOpened,
+  duplicateCheckStep,
   replacementDuplicateFix,
   replacementDuplicateLines,
   replacementDuplicates,
   replacementsUnderway,
-  storedDuplicateCheck,
+  type DuplicateCheck,
+  type DuplicateCheckEvent,
   type DuplicateCheckWhen,
   type DuplicateOutcome,
-  type QualityDirection,
   type ReplacementDuplicate,
   type YtDownloadJournalJob,
 } from "@wave/core";
@@ -26,42 +27,25 @@ import { appRuntime } from "./runtime";
 /**
  * The check for songs an interrupted quality replacement left twice (docs/spec.md, "YT Music" ›
  * Download quality › Left twice): due once after the update that brings it, and again after a
- * replacement run that was interrupted (Core's `duplicateCheckDue`), kept on this phone.
+ * replacement run that was interrupted, kept on this phone. When it runs is Core's
+ * (`duplicateCheckStep`); this module only keeps the phone's copy and runs it.
  */
 const KEY = "downloads.replacementDuplicatesCheck";
 
 /** The check's log lines go with the download service's own. */
 const TAG = "WaveDownloads";
 
-let due: DuplicateCheckWhen | null | undefined;
-const dueNow = (): DuplicateCheckWhen | null =>
-  (due ??= duplicateCheckDue(Storage.getItemSync(KEY)));
-const setDue = (when: DuplicateCheckWhen | null): void => {
-  due = when;
-  Storage.setItemSync(KEY, storedDuplicateCheck(when));
-};
-
-/** Whether this launch's scan finished: the check reads the Library it leaves. */
-let scanned = false;
-/** Whether the journal was read since launch: its first read tells an interrupted run. */
-let journalRead = false;
-let running = false;
-/** At most once a launch: one that failed stays due for the next. */
-let checked = false;
-
 /**
- * Finds the pairs a replacement left (Core's `replacementDuplicates`, in the direction Download
- * in best quality's switch calls for), reads how long both files play, and puts each pair back
- * to one song as Core decides (`replacementDuplicateFix`): the bare Track goes and the other
- * file is deleted through the recorded deletion (`finishFileDeletions`). Writes what it did
- * (tag `WaveDownloads`, as the download service's own lines).
+ * Finds the pairs a replacement left (Core's `replacementDuplicates`), reads how long both files
+ * play, and puts each pair back to one song as Core decides (`replacementDuplicateFix`): the
+ * second Track hands its history to the kept one and goes, and the other file is deleted through
+ * the recorded deletion (`finishFileDeletions`). Writes what it did (tag `WaveDownloads`, as the
+ * download service's own lines).
  */
 const checkReplacementDuplicates = (when: DuplicateCheckWhen) =>
   Effect.gen(function* () {
     const store = yield* LibraryStore;
-    const session = yield* Effect.tryPromise(() => WaveSoulseek.session());
-    const direction: QualityDirection = session.status === "off" ? "downgrade" : "upgrade";
-    const pairs = replacementDuplicates(yield* store.duplicateCheckFiles, direction);
+    const pairs = replacementDuplicates(yield* store.duplicateCheckFiles);
     const lengths =
       pairs.length === 0
         ? []
@@ -93,41 +77,41 @@ const checkReplacementDuplicates = (when: DuplicateCheckWhen) =>
       appLog(outcomes[i]?.outcome.kind === "fix" ? "info" : "warn", TAG, line);
   });
 
-/** Runs the check when it's due, the launch scan is through and no replacement is on its way. */
-const checkWhenDue = (jobs: readonly YtDownloadJournalJob[] | null): void => {
-  const when = dueNow();
-  if (when === null || !scanned || running || checked) return;
-  running = true;
-  void (async () => {
-    try {
-      if (replacementsUnderway(jobs ?? (await WaveSoulseek.jobsSnapshot()))) return;
-      checked = true;
-      await appRuntime.runPromise(checkReplacementDuplicates(when));
-      // Not again until another run is interrupted, however many pairs it left alone.
-      if (dueNow() === when) setDue(null);
-    } catch (error: unknown) {
-      // Due still: the next launch tries again.
-      appLog("warn", TAG, `Couldn't check for songs a replacement left twice: ${String(error)}`);
-    } finally {
-      running = false;
-    }
-  })();
+let check: DuplicateCheck | undefined;
+
+/** Tells the check [event] (Core's `duplicateCheckStep`) and does what it asks. */
+const tell = (event: DuplicateCheckEvent): void => {
+  const step = duplicateCheckStep(
+    (check ??= duplicateCheckOpened(Storage.getItemSync(KEY))),
+    event,
+  );
+  check = step.check;
+  if (step.store !== null) Storage.setItemSync(KEY, step.store);
+  if (step.readJournal)
+    void WaveSoulseek.jobsSnapshot()
+      .then(replacementJournalRead)
+      .catch(() => undefined);
+  if (step.run !== null) void run(step.run);
+};
+
+const run = async (when: DuplicateCheckWhen): Promise<void> => {
+  try {
+    await appRuntime.runPromise(checkReplacementDuplicates(when));
+    tell({ kind: "ran", ok: true });
+  } catch (error: unknown) {
+    // Due still: the next launch tries again.
+    appLog("warn", TAG, `Couldn't check for songs a replacement left twice: ${String(error)}`);
+    tell({ kind: "ran", ok: false });
+  }
 };
 
 /** The launch scan finished: the check runs now if it's due. */
-export const launchScanDone = (): void => {
-  scanned = true;
-  checkWhenDue(null);
-};
+export const launchScanDone = (): void => tell({ kind: "scanDone" });
 
 /**
- * The journal's [jobs] as the downloads read them: replacements still on their way at the
- * first read since launch mean the last run was interrupted (Core's `replacementsUnderway`),
- * which makes the check due; once none are, a due check runs.
+ * The journal's [jobs] as the downloads read them: whether quality replacements are on their way
+ * (Core's `replacementsUnderway`), which at the launch's first read means the last run was
+ * interrupted, and otherwise lets a due check run.
  */
-export const replacementJournalRead = (jobs: readonly YtDownloadJournalJob[]): void => {
-  const underway = replacementsUnderway(jobs);
-  if (!journalRead && underway && dueNow() !== "update") setDue("interruptedRun");
-  journalRead = true;
-  if (!underway) checkWhenDue(jobs);
-};
+export const replacementJournalRead = (jobs: readonly YtDownloadJournalJob[]): void =>
+  tell({ kind: "journalRead", underway: replacementsUnderway(jobs) });

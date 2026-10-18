@@ -8,6 +8,7 @@ import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 import expo.modules.wavenative.account.WaveAccountException
 import expo.modules.wavenative.download.AndroidDownloads
+import expo.modules.wavenative.download.DurableDownloads
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -34,6 +35,25 @@ class SoulseekModule : Module() {
       withContext(Dispatchers.IO) {
         val id = downloads.jobs.enqueue(song, equivalentId, recording, source, origin)
         downloads.changed(); downloads.requestService(); id
+      }
+    }
+    // Many songs at once (an album, a playlist, a replacement run), in one journal write: each
+    // request is `enqueueJob`'s arguments as an object. JSON, as a song's nulls sit a level deeper.
+    AsyncFunction("enqueueJobs") Coroutine { requests: String ->
+      withContext(Dispatchers.IO) {
+        @Suppress("UNCHECKED_CAST")
+        val asked = (fromJson(JSONTokener(requests).nextValue()) as? List<Map<String, Any?>> ?: emptyList()).map { request ->
+          DurableDownloads.Request(
+            song = request["song"] as Map<String, Any?>,
+            equivalentId = request["equivalentId"] as String?,
+            recording = request["recording"] as? Map<String, Any?> ?: emptyMap(),
+            source = request["source"] as String?,
+            origin = request["origin"] as Map<String, Any?>?,
+          )
+        }
+        val ids = downloads.jobs.enqueueAll(asked)
+        if (ids.isNotEmpty()) { downloads.changed(); downloads.requestService() }
+        ids
       }
     }
     AsyncFunction("jobsSnapshot") Coroutine { -> withContext(Dispatchers.IO) { downloads.jobs.snapshot() } }

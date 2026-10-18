@@ -55,7 +55,7 @@ import * as Effect from "effect/Effect";
 import { WaveNative } from "@/native/waveNative";
 import { lyricsAndGenreLookupsEnabled } from "@/settings/lyricsAndGenre";
 
-import { libraryEdited, songsLanded, toIndexedArtwork, toIndexedTrack } from "./LibraryScan";
+import { libraryEdited, songsFilledIn, toIndexedArtwork, toIndexedTrack } from "./LibraryScan";
 import { publishSavedStars } from "./libraryChanges";
 import { LibraryStore } from "./LibraryStore";
 import { lyricsWritten } from "./lyricsEdits";
@@ -150,7 +150,7 @@ const findTracklist = async (
     return tracklist;
   } catch (cause) {
     if (signal.aborted) throw cause;
-    console.warn(`[wave] ${lookupFailureLine("Deezer album tracklist lookup", "Deezer", cause)}`);
+    logLookupFailure("Deezer album tracklist lookup", "Deezer", cause);
     return null;
   }
 };
@@ -189,7 +189,7 @@ const settle = <A>(
     Effect.match({
       onSuccess: (value): TagLookup<A> => ({ ok: true, value }),
       onFailure: (cause): TagLookup<A> => {
-        console.warn(`[wave] ${lookupFailureLine("Fix Song lookup", service, cause)}`);
+        logLookupFailure("Fix Song lookup", service, cause);
         return { ok: false };
       },
     }),
@@ -217,9 +217,6 @@ export const searchLrclibLyrics = (
     ),
   );
 };
-
-/** A download's fill-in saved [trackIds]: it lands as its import did. */
-const landedFillIn = (trackIds: readonly number[] = []): void => songsLanded(trackIds);
 
 /** A song with nothing yet (a download being tagged): everything is looked up. */
 const HAS_NOTHING: IndexedTags = {
@@ -281,8 +278,8 @@ const NOTHING_WRITTEN: TagWriteReport = {
  * any it has), then brings its index entry up to date so Genres, Search, the
  * album page, the Lyrics view and the E badge show the new values without a
  * rescan. Finding nothing leaves the file untouched. [announce] tells the
- * lists of the updated entry (its track, once saved): an edit by default, a
- * landing for a download's fill-in (`songsLanded`). A failure is logged with
+ * lists of the updated entry (its track, once saved): an edit by default; a download's
+ * fill-in noting it changed the file (`fillInLyricsAndGenre`). A failure is logged with
  * why (Core's `tagWriteFailureLine`: the step, the file, the song's [origin]
  * and the native exception); an index update failing is logged and left to
  * the next scan.
@@ -327,6 +324,20 @@ export const writeLyricsAndGenre = (
       });
     }
     if (written.lyrics !== "none") lyricsWritten(path);
+    // The file has its new tags; the next scan brings the index up to date, as when saving it fails.
+    if (written.reindexFailed != null)
+      logTagWriteFailure(
+        path,
+        origin,
+        new TagWriteFailed({
+          cause: new NativeTagWriteError(
+            written.reindexFailed.exception,
+            written.reindexFailed.message,
+          ),
+          step: "reindex",
+          file: null,
+        }),
+      );
     if (written.track !== null) {
       const store = yield* LibraryStore;
       let saved: readonly number[] | undefined;
@@ -370,6 +381,10 @@ export const writeLyricsAndGenre = (
   }).pipe(
     Effect.tapError((failure) => Effect.sync(() => logTagWriteFailure(path, origin, failure))),
   );
+
+/** Logs a lookup ([what], from [service]) that failed, with why (Core's `lookupFailureLine`). */
+export const logLookupFailure = (what: string, service: LookupService, cause: unknown): void =>
+  console.warn(`[wave] ${lookupFailureLine(what, service, cause)}`);
 
 const logTagWriteFailure = (path: string, origin: TagWriteOrigin, failure: TagWriteFailed): void =>
   console.warn(
@@ -425,9 +440,10 @@ const fixSong = (
  * Fix Song on a song just added to the Library (a download, or a quality
  * replacement's new copy: [origin], Core's `downloadTagWriteOrigin`),
  * quietly: it gets what its file still lacks. Never fails: a song left
- * incomplete can still be fixed from its menu. What it writes lands as the
- * download did (`songsLanded`), joining its import's change while that still
- * waits. A failed write is logged with why (`writeLyricsAndGenre`); a failed
+ * incomplete can still be fixed from its menu. Its import's Tracks
+ * ([landedIds]) wait for it, so the song and what it writes reach the lists
+ * as one change (`songsFilledIn`, once it's done, whatever it wrote). A
+ * failed write is logged with why (`writeLyricsAndGenre`); a failed
  * lookup, by each service's line and this. Once it's done, whatever it wrote,
  * the file goes to Android's media scanner with its next batch, along with
  * the file it replaced (`downloadFilledIn`), so other apps scan it once.
@@ -435,8 +451,13 @@ const fixSong = (
 export const fillInLyricsAndGenre = (
   song: TaggableSong,
   origin: TagWriteOrigin,
-): Effect.Effect<void, never, LibraryStore> =>
-  fixSong(song, origin, landedFillIn).pipe(
+  landedIds: readonly number[],
+): Effect.Effect<void, never, LibraryStore> => {
+  // Told once the saved entry is up to date: the file changed.
+  let wrote = false;
+  return fixSong(song, origin, () => {
+    wrote = true;
+  }).pipe(
     Effect.flatMap((outcome) =>
       Effect.sync(() => {
         if (outcome.kind === "failed" && outcome.reason === "lookup")
@@ -446,9 +467,11 @@ export const fillInLyricsAndGenre = (
     Effect.catch((error) =>
       Effect.sync(() => console.warn(`[wave] couldn't fill in ${song.path}`, error)),
     ),
+    Effect.ensuring(Effect.sync(() => songsFilledIn(landedIds, { wrote }))),
     // Unasked, the file is scanned all the same a minute after it was published.
     Effect.ensuring(Effect.promise(() => WaveNative.downloadFilledIn(song.path).catch(() => {}))),
   );
+};
 
 /**
  * The least time one song takes in a run: keeps Deezer's requests under its

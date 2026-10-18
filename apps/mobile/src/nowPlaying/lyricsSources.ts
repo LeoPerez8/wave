@@ -1,5 +1,4 @@
 import {
-  lookupFailureLine,
   ytMusicFoundLyrics,
   type FoundLyrics,
   type LyricsAnswer,
@@ -9,7 +8,7 @@ import {
 } from "@wave/core";
 import * as Effect from "effect/Effect";
 
-import { searchLrclibLyrics } from "@/library/lyricsAndGenre";
+import { logLookupFailure, searchLrclibLyrics } from "@/library/lyricsAndGenre";
 import { appRuntime } from "@/library/runtime";
 import { WaveYtDownloads } from "@/native/waveYtDownloads";
 
@@ -25,7 +24,7 @@ const settle = (
     Effect.match({
       onSuccess: (lyrics): LyricsAnswer => ({ ok: true, lyrics }),
       onFailure: (cause): LyricsAnswer => {
-        console.warn(`[wave] ${lookupFailureLine("lyrics search", service, cause)}`);
+        logLookupFailure("lyrics search", service, cause);
         return { ok: false };
       },
     }),
