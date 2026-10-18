@@ -51,25 +51,31 @@ type Json = Readonly<Record<string, unknown>>;
 
 const object = (value: unknown): Json | null =>
   typeof value === "object" && value !== null && !Array.isArray(value) ? (value as Json) : null;
-const array = (value: unknown): readonly unknown[] => (Array.isArray(value) ? value : []);
-const text = (value: unknown): string | null => (typeof value === "string" ? value : null);
-const at = (value: unknown, ...path: readonly string[]): unknown =>
+export const array = (value: unknown): readonly unknown[] => (Array.isArray(value) ? value : []);
+export const text = (value: unknown): string | null => (typeof value === "string" ? value : null);
+export const at = (value: unknown, ...path: readonly string[]): unknown =>
   path.reduce<unknown>((node, key) => object(node)?.[key], value);
-const positive = (value: unknown): number | null =>
+export const positive = (value: unknown): number | null =>
   typeof value === "number" && Number.isFinite(value) && value > 0 ? value : null;
 const nonEmpty = (value: string | null): string | null =>
   value === null || value.trim() === "" ? null : value.trim();
 
 /** The first source's address of a list of images (`[{ sources: [{ url }] }]` or `{ sources }`). */
-const firstImage = (sources: unknown): string | null =>
+export const firstImage = (sources: unknown): string | null =>
   array(sources)
     .map((source) => text(at(source, "url")))
     .find((url) => url !== null && url !== "") ?? null;
 
 /** A `fetchPlaylist` item, or null when it isn't a song. */
-const pageSong = (item: unknown): SpotifySong | null => {
-  const wrapper = at(item, "itemV2");
-  const data = at(wrapper, "data");
+const pageSong = (item: unknown): SpotifySong | null =>
+  spotifyTrackSong(at(item, "itemV2", "data"));
+
+/**
+ * A track's `data` as the web player's queries give it (a `fetchPlaylist`
+ * item's, a `fetchLibraryTracks` item's), or null when it isn't a song:
+ * an episode, or a song Spotify no longer has.
+ */
+export const spotifyTrackSong = (data: unknown): SpotifySong | null => {
   const kind = text(at(data, "__typename"));
   if (kind === "Track") {
     const title = nonEmpty(text(at(data, "name")));
@@ -81,7 +87,9 @@ const pageSong = (item: unknown): SpotifySong | null => {
         .map((artist) => nonEmpty(text(at(artist, "profile", "name"))))
         .filter((name) => name !== null),
       album: nonEmpty(text(at(data, "albumOfTrack", "name"))),
-      durationMs: positive(at(data, "trackDuration", "totalMilliseconds")),
+      durationMs:
+        positive(at(data, "trackDuration", "totalMilliseconds")) ??
+        positive(at(data, "duration", "totalMilliseconds")),
     };
     return artworkUrl === null ? song : { ...song, artworkUrl };
   }

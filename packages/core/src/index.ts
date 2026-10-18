@@ -1137,6 +1137,21 @@ export type {
   SpotifySong,
   SpotifyTransport,
 } from "./spotifyPlaylist.ts";
+export {
+  SPOTIFY_LIKED_SONGS_SOURCE,
+  isSpotifyLibrarySource,
+  readSpotifyAccountPlaylist,
+  readSpotifyLibrary,
+  spotifyLibraryFailure,
+} from "./spotifyLibrary.ts";
+export type {
+  SpotifyAccountAnswer,
+  SpotifyAccountFailure,
+  SpotifyAccountRead,
+  SpotifyAccountRequest,
+  SpotifyLibraryPlaylist,
+  SpotifyLibraryRead,
+} from "./spotifyLibrary.ts";
 export { compareOrderKeys, orderKeyBetween, placeEntries } from "./orderKey.ts";
 export type { EntryPlacement, OrderedEntry } from "./orderKey.ts";
 export {
@@ -1355,6 +1370,7 @@ export {
   ytLibraryFailure,
   ytLibraryPicker,
   ytLibraryPickerView,
+  spotifyLibraryPicker,
 } from "./ytLibrary.ts";
 export type {
   YtLibraryFailure,
