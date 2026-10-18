@@ -38,6 +38,7 @@ import expo.modules.wavenative.launcher.LauncherIconSwitcher
 import expo.modules.wavenative.launch.LaunchTheme
 import expo.modules.wavenative.launch.LaunchThemeStore
 import expo.modules.wavenative.lyrics.LyricsReader
+import expo.modules.wavenative.net.Connectivity
 import expo.modules.wavenative.playlists.AndroidPlaylistImages
 import expo.modules.wavenative.playlists.PlaylistFiles
 import expo.modules.wavenative.playlists.PlaylistImageStore
@@ -121,6 +122,9 @@ class WaveNativeModule : Module() {
         launch(Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
       }
     }
+
+    /** Whether the phone is on mobile data rather than Wi-Fi (a quality replacement's card says so). */
+    Function("onMobileData") { Connectivity(context).onMobileData() }
 
     Function("getDefaultMusicFolder") {
       @Suppress("DEPRECATION")

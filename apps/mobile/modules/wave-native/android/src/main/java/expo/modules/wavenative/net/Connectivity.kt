@@ -23,6 +23,16 @@ class Connectivity(context: Context) {
     it.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) && it.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
   } == true
 
+  /**
+   * The default network is the phone's mobile data, not Wi-Fi or a cable: a big download is the
+   * owner's data plan (a quality replacement's card says so).
+   */
+  fun onMobileData(): Boolean = capabilities()?.let {
+    it.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) &&
+      !it.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) &&
+      !it.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)
+  } == true
+
   private fun capabilities(): NetworkCapabilities? {
     val network = manager?.activeNetwork ?: return null
     return manager.getNetworkCapabilities(network)

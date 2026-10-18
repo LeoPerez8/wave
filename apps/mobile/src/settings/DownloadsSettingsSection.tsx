@@ -6,7 +6,11 @@ import { Hairline } from "@/catalog/Hairline";
 import { SettingsSwitch } from "@/components/SettingsSwitch";
 import { WaveSoulseek, soulseekErrorCode, type SoulseekSession } from "@/native/waveSoulseek";
 
+import { cancelQualityReplacements } from "@/ytmusic/YtDownloads";
+
 import { setBestQuality } from "./bestQuality";
+import { offerQualityUpgrade, useQualityUpgradeOffer } from "./qualityUpgrade";
+import { SettingsPageRow } from "./SettingsPage";
 
 const sessionCall = <A,>(call: () => Promise<A>) =>
   Effect.runPromise(Effect.tryPromise({ try: call, catch: (cause) => cause }));
@@ -23,10 +27,17 @@ const turnOnMessage = (error: unknown): string => {
   }
 };
 
+/** Offers the upgrade (`offerQualityUpgrade`); a failed read offers nothing. */
+const offerUpgrade = (): void => {
+  void offerQualityUpgrade().catch(() => undefined);
+};
+
 /**
  * Settings › Downloads: Download in best quality. On, downloads come from Soulseek as MP3 320 kbps,
  * with an account the native module makes (or the phone's own); off, from YouTube Music while YT
- * Music is on. The account never reaches JS beyond the session's status.
+ * Music is on. The account never reaches JS beyond the session's status. Turning it on offers to
+ * replace the Library's low-quality songs, and while songs are left a row offers it again;
+ * turning it off cancels the waiting replacements.
  */
 export function DownloadsSettingsSection() {
   const [session, setSession] = useState<SoulseekSession>({ status: "off", username: null });
@@ -34,6 +45,7 @@ export function DownloadsSettingsSection() {
   const [asked, setAsked] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(true);
   const [message, setMessage] = useState<string | null>(null);
+  const upgrade = useQualityUpgradeOffer(session.status !== "off");
 
   useEffect(() => {
     let current = true;
@@ -69,6 +81,8 @@ export function DownloadsSettingsSection() {
           setSession(next);
           // The switch syncs as a preference once it has moved here.
           setBestQuality(on);
+          if (on) offerUpgrade();
+          else cancelQualityReplacements("upgrade");
         },
         (error: unknown) =>
           setMessage(on ? turnOnMessage(error) : "Couldn't turn it off. Try again."),
@@ -89,6 +103,13 @@ export function DownloadsSettingsSection() {
         onValueChange={change}
       />
       <Hairline />
+      {upgrade !== null && asked === null && (
+        <SettingsPageRow
+          title={upgrade.row}
+          summary={upgrade.alert.message}
+          onPress={offerUpgrade}
+        />
+      )}
       <Text className="mt-2 font-sans text-footnote text-secondary">
         Best quality is MP3 320 kbps from other people's shared music. It's slower than YouTube
         Music, and a song it can't find comes from YouTube Music instead. Off, downloads come from

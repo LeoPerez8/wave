@@ -1350,3 +1350,31 @@ export type { RandomSource } from "./weightedPick.ts";
 export { ARTIST_MIX_COUNT, artistMixSeeds, artistMixSimilarSource } from "./artistMixes.ts";
 export type { ArtistMixPools, PlayedSeedArtist } from "./artistMixes.ts";
 export type { YtPick } from "./onlineToggle.ts";
+export {
+  BEST_QUALITY_KBPS,
+  LOW_QUALITY_BELOW_KBPS,
+  NO_BETTER_COPY_FOUND,
+  QUALITY_ORIGINS,
+  formatStorageSize,
+  foundNoBetterCopy,
+  isLosslessFile,
+  noBetterCopies,
+  qualityJobId,
+  qualityJobOf,
+  qualityJobsToCancel,
+  qualityReplacementJob,
+  qualityReplacementTags,
+  qualityReplacementTarget,
+  qualityUpgradeOffer,
+  qualityUpgradeSongs,
+} from "./qualityReplacement.ts";
+export type {
+  NoBetterCopy,
+  QualityDirection,
+  QualityFile,
+  QualityJobId,
+  QualityMemory,
+  QualityOffer,
+  QualityReplacementTarget,
+  ReplacedTrack,
+} from "./qualityReplacement.ts";
