@@ -32,12 +32,11 @@ import { appRuntime } from "@/library/runtime";
 import { searchUnsearchedSong } from "@/library/unsearchedEntries";
 import { showToast } from "@/overlay/toast";
 import { crossfadeMs } from "@/settings/crossfade";
-import { dontPlayExplicit } from "@/settings/dontPlayExplicit";
 import { ytMusicEnabled } from "@/settings/ytMusic";
 
 import { playbackState } from "./Player";
 import { setPlayingSearcher } from "./playingSearch";
-import { Queue, queueState } from "./Queue";
+import { passOverNow, Queue, queueState } from "./Queue";
 import { learnQueueTracks, toYtQueueTrack } from "./queueTracks";
 import { cacheYtCoversInBackground } from "./ytQueueTracks";
 
@@ -102,11 +101,12 @@ const settleComingUp = (trackId: string, settled: Settlement | null): void => {
   if (!entries.some((entry, at) => at !== index && entry.trackId === trackId)) return;
   const song = readUnsearchedTrackId(trackId);
   if (settled.kind === "found") {
-    // Found as an explicit song, it leaves the queue (Core's `reduceQueue` passes it over).
-    if (song !== null && dontPlayExplicit() && settled.becomes.song.explicit) {
+    // Found as a song the queue passes over (explicit), it leaves the queue (Core's `reduceQueue`).
+    const becomes = ytTrackId(settled.becomes.song.videoId);
+    if (song !== null && passOverNow([toYtQueueTrack(settled.becomes.song, null)])(becomes)) {
       void showToast(explicitSkipNotice(song.title));
     }
-    void dispatch(trackId, ytTrackId(settled.becomes.song.videoId));
+    void dispatch(trackId, becomes);
     return;
   }
   const step = song === null ? null : playingAnswerStep(song, settled, { chosen: false });

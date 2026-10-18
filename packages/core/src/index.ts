@@ -44,6 +44,7 @@ export {
   nextRepeatMode,
   parseQueueState,
   readShuffleKind,
+  playReplacesQueue,
   reduceQueue,
   shuffledTrackIds,
   shufflesQueue,

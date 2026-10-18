@@ -154,9 +154,8 @@ const play = (
   kind: Shuffle,
   passOver: PassOver,
 ): QueueResult => {
+  if (!playReplacesQueue(command, passOver)) return result(state);
   const { trackIds, startIndex: tapped } = playedTracks(command, passOver);
-  // Every song passed over: nothing plays instead, and the queue stays.
-  if (trackIds.length === 0 && command.trackIds.length > 0) return result(state);
   const { entries, nextKey } = makeEntries(trackIds, state.nextKey, (i) => i);
   if (entries.length === 0) return result({ ...EMPTY_QUEUE, repeat: state.repeat, nextKey });
   const shuffle = command.shuffle ?? state.shuffle;
@@ -247,6 +246,16 @@ export type PassOver = (trackId: string) => boolean;
 
 /** Passes over nothing: every song plays. */
 const playsAll: PassOver = () => false;
+
+/**
+ * Whether [command] replaces the queue: a play does, unless [passOver]
+ * passes every one of its songs over, when nothing plays instead and the
+ * queue stays (a play of no songs at all empties it). So the app knows
+ * whether to forget the old queue's tracks.
+ */
+export const playReplacesQueue = (command: QueueCommand, passOver: PassOver = playsAll): boolean =>
+  command.type === "play" &&
+  (command.trackIds.length === 0 || command.trackIds.some((trackId) => !passOver(trackId)));
 
 /** The songs of [trackIds] that play, in order. */
 const playing = (trackIds: readonly string[], passOver: PassOver): readonly string[] =>

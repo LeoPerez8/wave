@@ -14,6 +14,7 @@ import {
   planPlayerSync,
   playerQueueList,
   queueSourceAfter,
+  playReplacesQueue,
   queuedPassedOver,
   reduceQueue,
   shuffledTrackIds,
@@ -186,7 +187,7 @@ const itemFor = (entry: QueueEntry): Effect.Effect<PlayerItem, PlayerError> => {
  * ones while Don't play explicit is on, by what the queue knows of them and
  * of the tracks a command adds ([added]).
  */
-const passOverNow = (added: readonly QueueTrack[] = []): PassOver => {
+export const passOverNow = (added: readonly QueueTrack[] = []): PassOver => {
   if (!dontPlayExplicit()) return () => false;
   const adding = new Map(added.map((track) => [track.id, track]));
   return explicitPassOver({
@@ -197,17 +198,15 @@ const passOverNow = (added: readonly QueueTrack[] = []): PassOver => {
 
 /**
  * Learns the tracks a command adds, before the queue changes, so Up Next
- * shows them on its first frame; a new play forgets the old queue's, unless
- * it plays nothing ([passOver] passes every song over) and the queue stays.
+ * shows them on its first frame; a play that replaces the queue (Core's
+ * `playReplacesQueue`: not one whose every song [passOver] passes over)
+ * forgets the old queue's.
  */
 const learnTracks = (
   command: QueueCommand,
   added: readonly QueueTrack[],
   passOver: PassOver,
-): void =>
-  learnQueueTracks(added, {
-    forgetOthers: command.type === "play" && command.trackIds.some((trackId) => !passOver(trackId)),
-  });
+): void => learnQueueTracks(added, { forgetOthers: playReplacesQueue(command, passOver) });
 
 /** A song's title for a notice, from what the queue knows of it. */
 const titleOf = (trackId: string): string => queueTracks.get().get(trackId)?.title ?? "This song";
