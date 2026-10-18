@@ -55,6 +55,12 @@ export default function DiscoverMixScreen() {
     );
   }
   return (
-    <YtSongList known={undefined} load={load} context={context} numbered={false} albumDownload />
+    <YtSongList
+      known={undefined}
+      load={load}
+      context={context}
+      numbered={false}
+      albumDownload="mix"
+    />
   );
 }

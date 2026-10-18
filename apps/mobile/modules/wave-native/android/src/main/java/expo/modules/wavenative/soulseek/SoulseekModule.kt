@@ -29,13 +29,18 @@ class SoulseekModule : Module() {
     OnDestroy { detachDownloads?.invoke(); detachDownloads = null }
 
     // [source] is Core's `downloadSource`: "soulseek", "youtube", or null when there's none.
-    AsyncFunction("enqueueJob") Coroutine { song: Map<String, Any?>, recording: Map<String, Any?>, equivalentId: String?, source: String? ->
+    // [origin] is Core's `DownloadOrigin` (the playlist, album or mix that asked), null for a song on its own.
+    AsyncFunction("enqueueJob") Coroutine { song: Map<String, Any?>, recording: Map<String, Any?>, equivalentId: String?, source: String?, origin: Map<String, Any?>? ->
       withContext(Dispatchers.IO) {
-        val id = downloads.jobs.enqueue(song, equivalentId, recording, source)
+        val id = downloads.jobs.enqueue(song, equivalentId, recording, source, origin)
         downloads.changed(); downloads.requestService(); id
       }
     }
     AsyncFunction("jobsSnapshot") Coroutine { -> withContext(Dispatchers.IO) { downloads.jobs.snapshot() } }
+    // What changed since the revision JS last saw: the rows follow a big queue without copying it whole.
+    AsyncFunction("jobsChangedSince") Coroutine { revision: Double ->
+      withContext(Dispatchers.IO) { downloads.jobs.changesSince(revision.toLong()).toMap() }
+    }
     AsyncFunction("forgetCompletedJob") Coroutine { id: String, generation: Double ->
       withContext(Dispatchers.IO) {
         downloads.jobs.forgetCompleted(id, generation.toLong()).also { if (it) downloads.changed() }

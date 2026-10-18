@@ -3,7 +3,7 @@ import { useEffect, useSyncExternalStore } from "react";
 
 import { makeExternalStore } from "@/lib/externalStore";
 
-import { publishLibraryChange } from "./libraryChanges";
+import { onSavedStars, publishLibraryChange } from "./libraryChanges";
 import { LibraryStore } from "./LibraryStore";
 import { appRuntime } from "./runtime";
 
@@ -178,6 +178,9 @@ export const reloadFavorites = (): void => {
     })
     .catch(() => {});
 };
+
+// A download or scan that brought in a pending favorite starred it as it saved the song.
+onSavedStars(reloadFavorites);
 
 /** Calls [listener] whenever a star has been saved; returns how to stop. */
 export const onFavoritesSaved = (listener: () => void): (() => void) => {

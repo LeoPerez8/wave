@@ -57,10 +57,12 @@ class DurableDownloads(
   /** The transfers under way, which [stopWork] cancels without the lock. */
   private val transfers = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
   /**
-   * What readers see, copied whenever the journal changes. The notification reads it on the main
-   * thread while the worker holds the lock for slow work (cover fetch, tag writing, publication).
+   * What readers see, copied whenever the journal changes (transfer progress about once a second,
+   * [PROGRESS_SHOW_MS]), each job with the revision it last changed at ([changesSince]). The
+   * notification reads it on the main thread without waiting for the lock.
    */
-  @Volatile private var published: List<Map<String, Any?>> = emptyList()
+  @Volatile private var view = JournalView(emptyList(), 0L, 0L)
+  private val published get() = view.jobs
 
   init {
     // An unreadable journal (never expected: writes are atomic) must not crash every launch.
@@ -106,6 +108,25 @@ class DurableDownloads(
 
   fun snapshot(): List<Map<String, Any?>> = published
 
+  /** The journal's revision: it moves whenever a job readers see changes, or the jobs' order. */
+  val revision: Long get() = view.revision
+
+  /**
+   * What changed since [revision], a revision this journal gave the reader before (0, or one from
+   * another process, for everything): each job changed since, as it is now, and the jobs' ids in
+   * order when the order changed (a job added, retried to the end or forgotten). The reader keeps
+   * the rest, so a big queue isn't copied whole for every bit of progress.
+   */
+  fun changesSince(revision: Long): JournalChanges {
+    val current = view
+    val since = if (revision > current.revision) 0L else revision
+    return JournalChanges(
+      revision = current.revision,
+      jobs = current.entries.filter { it.revision > since }.map { it.job },
+      ids = if (current.orderRevision > since) current.jobs.map { it["id"] as String } else null,
+    )
+  }
+
   /**
    * Core found that this imported job's song no longer has a Library file. A
    * stale Library read cannot forget a job retried since its snapshot. The
@@ -123,8 +144,13 @@ class DurableDownloads(
   /**
    * Asks for [song], from the [source] Core decided for it (null when there's none, which the
    * prepare decision then reports). A Retry takes the source decided again.
+   *
+   * [origin] is the playlist, album or Discover mix whose Download asked for it (`kind`, `id`,
+   * `name`; Core's `DownloadOrigin`), null for a song asked for on its own. A job keeps the first
+   * origin it was asked from; asked again after it ended, it takes the new one, or keeps its own
+   * when asked with none (Settings › Downloads' Retry).
    */
-  @Synchronized fun enqueue(song: Map<String, Any?>, equivalentId: String?, recording: Map<String, Any?> = emptyMap(), source: String? = null): String {
+  @Synchronized fun enqueue(song: Map<String, Any?>, equivalentId: String?, recording: Map<String, Any?> = emptyMap(), source: String? = null, origin: Map<String, Any?>? = null): String {
     val id = song["videoId"] as String
     val existing = jobs.values.firstOrNull { it["id"] == id || it.maps("aliases").any { alias -> alias["videoId"] == id } }
       ?: equivalentId?.let { jobs[it] }?.takeIf { it["phase"] !in TERMINAL && it["importFailure"] == null }
@@ -138,6 +164,7 @@ class DurableDownloads(
         // Asked for again: it waits behind what's already queued.
         val key = existing["id"] as String
         jobs.remove(key); jobs[key] = existing
+        if (origin != null) existing["origin"] = clean(origin)
         existing["decisionAttempts"] = 0L; existing["deadline"] = clock() + JOB_MS
         if (deletedCompletion) {
           for (key in listOf("saved", "acknowledged", "finalPath", "digest", "publishSource")) existing.remove(key)
@@ -164,6 +191,7 @@ class DurableDownloads(
       "aliases" to emptyList<Map<String, Any?>>(), "attempts" to 0L, "candidateIndex" to 0L,
     )
     setSource(jobs.getValue(id), source)
+    if (origin != null) jobs.getValue(id)["origin"] = clean(origin)
     persist()
     return id
   }
@@ -363,21 +391,28 @@ class DurableDownloads(
 
   /** Called by Android's deadline thread, including the dataSync timeout callback. */
   @Synchronized fun expire(transport: DurableTransfer, stopAll: Boolean = false, stopCause: String? = null) {
+    // Checked twice a second: the journal is only written when something was due.
+    var changed = false
     for (job in jobs.values) {
       if (job["phase"] in TERMINAL || job["acknowledged"] == true || job["importFailure"] != null) continue
       // A queued job's time starts when it gets a slot.
       if (job["phase"] == "queued") continue
+      // A song being saved (outside the lock: [save]) is judged once its save is done.
+      if (job["phase"] == "publishing" && job["id"] in running) continue
       if (stopAll || job.number("deadline") <= clock()) {
+        changed = true
         val cause = if (stopAll) stopCause ?: "Android stopped the download service" else "Out of time while ${job["phase"]}"
         if (job["phase"] == "completed") { importFailed(job, "failed", cause); job.remove("token") }
         // Android stopping the work isn't the source's fault; running out of time is.
         else fail(job, if (stopAll) "failed" else "timedOut", cause)
         transport.cancel(job["id"] as String)
       } else if (job["phase"] == "transferring" && (job.number("attemptDeadline") <= clock() || (job["queuePosition"] != null && job.number("queueDeadline") <= clock()))) {
+        changed = true
         transport.cancel(job["id"] as String)
         nextCandidate(job)
         job["generation"] = job.number("generation") + 1
       } else if (job["token"] != null && job.number("leaseUntil") < clock()) {
+        changed = true
         job.remove("token"); job["generation"] = job.number("generation") + 1
         if (job.number("decisionAttempts") >= MAX_DECISIONS) {
           // JS never answered (it went away, or answering threw): that isn't storage.
@@ -386,7 +421,7 @@ class DurableDownloads(
         }
       }
     }
-    persist()
+    if (changed) persist() else writeProgressIfDue()
   }
 
   /** Expires what's out of time, then runs the next native step, if there is one, on this thread. */
@@ -436,16 +471,17 @@ class DurableDownloads(
         "transferring" -> {
           val source = File(work["sourcePath"] as String)
           transfers += id
-          var lastProgressAt = 0L
           val durationMs = work.map("song").number("durationMs").takeIf { it > 0 } ?: work.map("peer").number("durationMs")
           val audio = transport.receive(id, work.map("peer"), source, durationMs) { received, total, queue ->
             synchronized(this) {
               val job = held(id, generation, "transferring") ?: return@synchronized
               // Arriving bytes keep a slow peer's turn; one that goes quiet for STALL_MS is replaced.
               if (received > job.number("received")) job["attemptDeadline"] = minOf(clock() + STALL_MS, job.number("deadline"))
+              // A peer's queue place is rare news a restart keeps; bytes are progress.
+              val queueMoved = queue != job["queuePosition"]
               job["received"] = received; job["total"] = total; job["queuePosition"] = queue
               if (queue != null && job.number("queueDeadline") <= clock()) transport.cancel(id)
-              if (queue != null || received == total || clock() - lastProgressAt >= 500) { lastProgressAt = clock(); persist() } else publish()
+              if (queueMoved) persist() else progressed(job)
             }
           }
           synchronized(this) {
@@ -465,42 +501,7 @@ class DurableDownloads(
             transition(job, "awaitingPublication"); persist()
           }
         }
-        "publishing" -> synchronized(this) {
-          val job = held(id, generation, "publishing") ?: return
-          if (stopped) return
-          if (job.number("policyRevision") != policy.number("revision")) { transition(job, "awaitingPublication"); persist(); return }
-          if (!included(File(job["targetPath"] as String))) { fail(job, "noFolder"); persist(); return }
-          var source = File(job["sourcePath"] as String)
-          if (job["finalPath"] == null) {
-            val target = File(job["targetPath"] as String)
-            target.parentFile.mkdirs()
-            if (!target.parentFile.isDirectory) throw DurableFailure("storage", java.io.IOException("Couldn't make the folder ${target.parentFile.path}"))
-            // A changed root requires a new hidden file on the destination filesystem.
-            if (source.parentFile.canonicalFile != target.parentFile.canonicalFile) {
-              val local = DownloadFiles.partFileFor(target, "$id-$generation-publication")
-              job["outputPath"] = local.path; persist()
-              FileInputStream(source).use { input -> FileOutputStream(local).use { out -> input.copyTo(out); out.fd.sync() } }
-              source = local
-            }
-            job["finalPath"] = DownloadFiles.freeName(target).path; job["digest"] = digest(source); job["publishSource"] = source.path
-            persist()
-          }
-          var final = File(job["finalPath"] as String)
-          if (!included(final)) { fail(job, "noFolder"); persist(); return }
-          val publishSource = File(job["publishSource"] as String)
-          // Another file took the chosen name before this one was moved there: the next free one.
-          if (final.exists() && publishSource.isFile && digest(final) != job["digest"]) {
-            final = DownloadFiles.freeName(File(job["targetPath"] as String)); job["finalPath"] = final.path; persist()
-          }
-          if (!final.exists()) Files.move(publishSource.toPath(), final.toPath())
-          if (digest(final) != job["digest"]) {
-            // Wave's own copy is gone and another file holds its name: Retry downloads the song again.
-            for (key in listOf("finalPath", "digest", "publishSource")) job.remove(key)
-            fail(job, "failed", "Another file took ${final.path} before it was imported"); persist(); return
-          }
-          // Keep the chosen path and proof until scanner/outbox persistence succeeds.
-          job["saved"] = clean(publication.index(final)); transition(job, "completed"); cleanup(job); persist()
-        }
+        "publishing" -> save(id, generation, publication)
       }
     } catch (error: Exception) {
       synchronized(this) {
@@ -525,6 +526,64 @@ class DurableDownloads(
         persist()
       }
     } finally { transfers -= id }
+  }
+
+  /**
+   * Saves job [id]'s file to the Library: a copy beside its target when the roots changed, then
+   * its hash, the move to a free name and the scanner's index. That file work runs outside the
+   * journal's lock, so other songs' transfers and decisions go on meanwhile; [expire] leaves the
+   * job alone until it's done. Only one song saves at a time ([saving]), and each choice (the
+   * copy, the name and hash) is in the journal before the work it leads to, so a crash takes the
+   * save up again where it was.
+   */
+  private fun save(id: String, generation: Long, publication: DurablePublication) {
+    val start = synchronized(this) {
+      val job = held(id, generation, "publishing") ?: return
+      if (stopped) return
+      if (job.number("policyRevision") != policy.number("revision")) { transition(job, "awaitingPublication"); persist(); return }
+      if (!included(File(job["targetPath"] as String))) { fail(job, "noFolder"); persist(); return }
+      job.toMap()
+    }
+    /** Runs [change] on the job under the lock, unless it moved on meanwhile. */
+    fun <T> onJob(change: (MutableMap<String, Any?>) -> T): T? = synchronized(this) { held(id, generation, "publishing")?.let(change) }
+    val target = File(start["targetPath"] as String)
+    if (start["finalPath"] == null) {
+      var source = File(start["sourcePath"] as String)
+      target.parentFile.mkdirs()
+      if (!target.parentFile.isDirectory) throw DurableFailure("storage", java.io.IOException("Couldn't make the folder ${target.parentFile.path}"))
+      // A changed root requires a new hidden file on the destination filesystem.
+      if (source.parentFile.canonicalFile != target.parentFile.canonicalFile) {
+        val local = DownloadFiles.partFileFor(target, "$id-$generation-publication")
+        onJob { job -> job["outputPath"] = local.path; persist() } ?: return
+        FileInputStream(source).use { input -> FileOutputStream(local).use { out -> input.copyTo(out); out.fd.sync() } }
+        source = local
+      }
+      val chosen = DownloadFiles.freeName(target).path
+      val sum = digest(source)
+      onJob { job -> job["finalPath"] = chosen; job["digest"] = sum; job["publishSource"] = source.path; persist() } ?: return
+    }
+    val chosen = onJob { job ->
+      val final = File(job["finalPath"] as String)
+      if (!included(final)) { fail(job, "noFolder"); persist(); null } else Triple(final, File(job["publishSource"] as String), job["digest"] as String)
+    } ?: return
+    var (final, publishSource, sum) = chosen
+    // Another file took the chosen name before this one was moved there: the next free one.
+    if (final.exists() && publishSource.isFile && digest(final) != sum) {
+      final = DownloadFiles.freeName(target)
+      onJob { job -> job["finalPath"] = final.path; persist() } ?: return
+    }
+    if (!final.exists()) Files.move(publishSource.toPath(), final.toPath())
+    if (digest(final) != sum) {
+      onJob { job ->
+        // Wave's own copy is gone and another file holds its name: Retry downloads the song again.
+        for (key in listOf("finalPath", "digest", "publishSource")) job.remove(key)
+        fail(job, "failed", "Another file took ${final.path} before it was imported"); persist()
+      }
+      return
+    }
+    // Keep the chosen path and proof until scanner/outbox persistence succeeds.
+    val saved = clean(publication.index(final))
+    onJob { job -> job["saved"] = saved; transition(job, "completed"); cleanup(job); persist() }
   }
 
   private fun held(id: String, generation: Long, phase: String): MutableMap<String, Any?>? = jobs[id]?.takeIf { it.number("generation") == generation && it["phase"] == phase }
@@ -632,11 +691,68 @@ class DurableDownloads(
     return policy.strings("roots").any { path.startsWith(File(it).canonicalFile.toPath()) } && !policy.strings("excluded").any { path.startsWith(File(it).canonicalFile.toPath()) }
   }
 
+  /**
+   * Copies the journal for readers. A job whose copy is unchanged keeps its revision; each one
+   * that changed gets a new one, as does a change in the jobs' order.
+   */
   @Suppress("UNCHECKED_CAST")
-  private fun publish() { published = jobs.values.map { clean(it) as Map<String, Any?> } }
+  private fun publish() {
+    val before = view
+    val previous = before.entries.associateBy { it.job["id"] }
+    var revision = before.revision
+    val entries = jobs.values.map { job ->
+      val copy = clean(job) as Map<String, Any?>
+      previous[job["id"]]?.takeIf { it.job == copy } ?: PublishedJob(copy, ++revision)
+    }
+    val reordered = entries.size != before.entries.size || entries.indices.any { entries[it].job["id"] != before.entries[it].job["id"] }
+    if (reordered && revision == before.revision) revision++
+    view = JournalView(entries, revision, if (reordered) revision else before.orderRevision)
+  }
 
+  // Persistence. A change a restart must keep (a job enqueued, a phase, a decision, a failure, a
+  // cancel, a peer's queue place) is written at once by [persist]. Transfer progress only marks
+  // the journal [progressed]: it's written with the next change, or once [PROGRESS_WRITE_MS] has
+  // passed (the deadline thread's [expire] sees to that), so a crash loses a few seconds of
+  // progress, never a job.
+
+  /** When the journal file was last written ([clock]). */
+  private var writtenAt = 0L
+  /** Whether progress changed since the journal file was last written. */
+  private var progressUnwritten = false
+
+  /** When readers were last shown each job's transfer progress ([clock]). */
+  private val progressShownAt = HashMap<String, Long>()
+
+  /**
+   * [job]'s transfer progress: readers see it within [PROGRESS_SHOW_MS] (only that job is copied
+   * for them), the file within [PROGRESS_WRITE_MS].
+   */
+  private fun progressed(job: Map<String, Any?>) {
+    progressUnwritten = true
+    val id = job["id"] as String
+    if (clock() - (progressShownAt[id] ?: Long.MIN_VALUE / 2) >= PROGRESS_SHOW_MS) { progressShownAt[id] = clock(); publishJob(job) }
+    writeProgressIfDue()
+  }
+
+  /** Copies only [job] for readers, with a new revision if it changed. */
+  @Suppress("UNCHECKED_CAST")
+  private fun publishJob(job: Map<String, Any?>) {
+    val before = view
+    val index = before.entries.indexOfFirst { it.job["id"] == job["id"] }
+    if (index < 0) { publish(); return }
+    val copy = clean(job) as Map<String, Any?>
+    if (before.entries[index].job == copy) return
+    val revision = before.revision + 1
+    val entries = before.entries.toMutableList().also { it[index] = PublishedJob(copy, revision) }
+    view = JournalView(entries, revision, before.orderRevision)
+  }
+
+  private fun writeProgressIfDue() { if (progressUnwritten && clock() - writtenAt >= PROGRESS_WRITE_MS) persist() }
+
+  /** Publishes the journal to readers and writes it to its file, atomically and synced. */
   private fun persist() {
     publish()
+    writtenAt = clock(); progressUnwritten = false
     journal.parentFile?.mkdirs()
     val temp = File(journal.path + ".tmp")
     FileOutputStream(temp).use { output ->
@@ -662,6 +778,10 @@ class DurableDownloads(
     const val ATTEMPT_MS = 180_000L
     /** How long a sending peer may go quiet. */
     const val STALL_MS = 60_000L
+    /** How long transfer progress may go unwritten: what a crash can lose of it. */
+    const val PROGRESS_WRITE_MS = 5_000L
+    /** How often readers (JS's rows, the notification) are shown a transfer's progress. */
+    const val PROGRESS_SHOW_MS = 1_000L
     const val MAX_ATTEMPTS = 6L
     /** The pause before a transfer from the same peer, or YouTube's stream, again: times the attempts so far. */
     const val RETRY_PAUSE_MS = 2_000L
@@ -683,6 +803,19 @@ class DurableDownloads(
 }
 
 class DurableFailure(val reason: String, cause: Throwable? = null) : java.io.IOException(reason, cause)
+
+/** What changed in the journal since a reader's revision ([DurableDownloads.changesSince]). */
+data class JournalChanges(val revision: Long, val jobs: List<Map<String, Any?>>, val ids: List<String>?) {
+  fun toMap(): Map<String, Any?> = mapOf("revision" to revision, "jobs" to jobs, "ids" to ids)
+}
+
+/** A job as readers see it, with the revision it last changed at. */
+private class PublishedJob(val job: Map<String, Any?>, val revision: Long)
+
+/** What readers see of the journal: its jobs in order, its revision and when the order last changed. */
+private class JournalView(val entries: List<PublishedJob>, val revision: Long, val orderRevision: Long) {
+  val jobs: List<Map<String, Any?>> = entries.map { it.job }
+}
 
 /** What the download notification counts: songs on their way ([running]) and songs not started yet ([left]). */
 data class DownloadCounts(val running: Int, val left: Int)

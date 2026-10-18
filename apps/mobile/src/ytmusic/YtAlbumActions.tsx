@@ -97,7 +97,12 @@ function YtAlbumActionsMenu({
     if (entry === undefined) return;
     close();
     if (entry.kind === "queue") void queueDiscoverSongs(discoverSongs(songs, find), entry.action);
-    else runYtDownloadAction(entry.action, songs, inLibrary);
+    else
+      runYtDownloadAction(entry.action, songs, inLibrary, {
+        kind: "album",
+        id: album.browseId,
+        name: album.title,
+      });
   };
   const { underFinger, trackEntry, trackList } = useSlideToChoose(choose);
   const flow = useOverlayFlow();

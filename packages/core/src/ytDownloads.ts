@@ -6,6 +6,7 @@
  */
 
 import type { DownloadSource } from "./downloadSource.ts";
+import type { DownloadOrigin } from "./downloadGroups.ts";
 import type { YtSong } from "./ytMusic.ts";
 import { soulseekSameRecording } from "./soulseekDownload.ts";
 
@@ -108,6 +109,12 @@ export interface YtDownloadJournalJob<S extends YtSong = YtSong> {
   /** The Library imported the file. */
   readonly acknowledged?: boolean;
   readonly saved?: { readonly path: string };
+  /**
+   * The playlist, album or Discover mix whose Download asked for the job
+   * (`downloadingList` groups by it); null or absent for a song asked for on
+   * its own, and for jobs queued before downloads remembered it.
+   */
+  readonly origin?: DownloadOrigin | null;
 }
 
 const downloading = (phase: YtDownloadPhase): YtDownloadStatus => ({

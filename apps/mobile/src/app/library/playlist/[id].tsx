@@ -1,7 +1,7 @@
 import { IconDots } from "@tabler/icons-react-native";
 import { playlistSongsLine } from "@wave/core";
 import { useLocalSearchParams } from "expo-router";
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { Text, useWindowDimensions, View } from "react-native";
 
 import { CELL, grid } from "@/catalog/grid";
@@ -52,7 +52,11 @@ function PlaylistHead({ shown }: { shown: Shown }) {
     });
   };
   // Its YT Music entries download into the Library (Core's `ytPlaylistDownload`).
-  const download = useYtPlaylistDownloadButton(items ?? NO_ENTRIES);
+  const origin = useMemo(
+    () => ({ kind: "playlist", id: String(playlist.id), name: playlist.name }) as const,
+    [playlist.id, playlist.name],
+  );
+  const download = useYtPlaylistDownloadButton(items ?? NO_ENTRIES, origin);
   const count = items?.length ?? playlist.trackCount;
   // Every entry counts, and the line says how many can't play (Core's `playlistSongsLine`).
   const furniture =

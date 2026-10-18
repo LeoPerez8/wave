@@ -97,7 +97,11 @@ function DiscoverMixActionsMenu({
         saveAsPlaylist(mix);
         return;
       default:
-        runYtDownloadAction(entry.action, fresh, inLibrary);
+        runYtDownloadAction(entry.action, fresh, inLibrary, {
+          kind: "mix",
+          id: mix.id,
+          name: caption.title,
+        });
     }
   };
   const { underFinger, trackEntry, trackList } = useSlideToChoose(choose);

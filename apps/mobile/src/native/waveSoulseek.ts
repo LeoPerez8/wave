@@ -1,6 +1,8 @@
 import type {
   DownloadFailurePlan,
+  DownloadOrigin,
   DownloadSource,
+  JournalChanges,
   SoulseekCandidate,
   SoulseekReceivedTags,
   SoulseekRecording,
@@ -90,8 +92,19 @@ declare class WaveSoulseekModule extends NativeModule<{
     equivalentId: string | null,
     /** Core's `downloadSource`; null fails the job as `noSource` when it's prepared. */
     source: DownloadSource | null,
+    /**
+     * The playlist, album or Discover mix whose Download asks, null for a song asked for on its
+     * own. A job keeps the first one it was asked from.
+     */
+    origin: DownloadOrigin | null,
   ): Promise<string>;
   jobsSnapshot(): Promise<NativeDownloadJob[]>;
+  /**
+   * What changed in the journal since [revision], one it answered before (0 for everything):
+   * each job changed since, and every id in order when the order changed. Core's
+   * `applyJournalChanges` keeps the rest.
+   */
+  jobsChangedSince(revision: number): Promise<JournalChanges<NativeDownloadJob>>;
   /** Forgets an imported job Core found absent from the Library, if it hasn't been retried since. */
   forgetCompletedJob(id: string, generation: number): Promise<boolean>;
   resumeJobs(): Promise<void>;

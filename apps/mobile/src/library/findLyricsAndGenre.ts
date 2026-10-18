@@ -154,11 +154,11 @@ const lookUpLibrary = async (
 
 /**
  * Fix Song on the songs in the Library missing lyrics, a genre, a track
- * number or a year (Core's `songsToFix`) in the background: a
+ * number, a year or a checked explicit flag (Core's `songsToFix`) in the background: a
  * foreground service with a progress notification and Cancel keeps it going
  * with Wave in the background and the screen off. Settings follows it with
  * `useLibraryLookup`; `cancelLibraryLookup` stops it. Ends with the updated /
- * not found / failed summary and the songs skipped as having all four, in a notification and
+ * not found / failed summary and the songs skipped as having all five, in a notification and
  * in Wave (now, or when Wave is next on screen: `followLibraryLookupSummary`).
  * Does nothing while one runs.
  */
