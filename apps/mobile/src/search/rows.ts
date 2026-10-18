@@ -16,6 +16,7 @@ import type { SongRow } from "@/library/LibraryStore";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 
 import { songHit, type SearchHit } from "./searchIndex";
+import type { TopArtistSongs } from "./topArtistSongs";
 
 /** A song result: the Library's, or one YT Music found that the Library lacks. */
 export type ResultSong = MixedSong<NativeYtSong, SongRow>;
@@ -42,6 +43,11 @@ export type ResultRow =
       readonly songs: readonly ResultSong[];
       /** For songs: YT Music's songs are among the results, so the Library's show as downloaded. */
       readonly downloaded: boolean;
+      /**
+       * For the top-hit Library artist with Online: their song count with the
+       * online songs the Library lacks (`useTopArtistSongs`); null: the Library's.
+       */
+      readonly artistSongs: number | null;
     }
   | {
       readonly type: "more";
@@ -157,12 +163,14 @@ const ytAlbumRow = (album: YtArtistAlbum, top: boolean): ResultRow => ({
  * YT Music's songs kept in place for the visit: one whose download finished
  * shows as the Library's song in its row (and [results] leave it out), and
  * one shown as an earlier row's Library file plays from that row.
+ * [topArtist] is the top-hit Library artist's merged song count, for their rows.
  */
 export const resultRows = (
   results: SearchResults<SearchHit>,
   expanded: ReadonlySet<SearchKind>,
   yt: YtSectionView<NativeYtSong> | null,
   { songs: placed, rowOf }: PlacedYtSongs,
+  topArtist: TopArtistSongs | null = null,
 ): ResultRow[] => {
   const rows: ResultRow[] = [];
   const ytArtists = yt?.artists ?? NO_YT_ARTISTS;
@@ -188,6 +196,8 @@ export const resultRows = (
     top,
     songs,
     downloaded,
+    artistSongs:
+      hit.kind === "artist" && topArtist?.artistId === hit.artist.id ? topArtist.songs : null,
   });
   const placedRow = (row: PlacedYtSong, index: number, top: boolean): ResultRow =>
     row.source === "library" ? hitRow(songHit(row.track), top) : ytSongRow(row.song, index, top);
