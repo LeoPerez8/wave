@@ -28,18 +28,11 @@ object PlayerMediaItems {
     artworkPath: String?,
   ): MediaItem {
     val uri = if (YtMedia.videoIdOf(path) != null) Uri.parse(path) else Uri.fromFile(File(path))
-    val artworkFile = artworkPath?.takeUnless(::isAddress)
     val metadata = MediaMetadata.Builder()
       .setTitle(title)
       .setArtist(artist)
       .setAlbumTitle(album)
-      // Auto, the notification and System UI read artwork through Wave's content provider;
-      // the app keeps the file (see [appArtworkUri]).
-      .setArtworkUri(
-        artworkFile?.let { ArtworkProvider.uriFor(listOf(it)) ?: Uri.fromFile(File(it)) }
-          ?: artworkPath?.let(Uri::parse),
-      )
-      .setExtras(artworkFile?.let { Bundle().apply { putString(ARTWORK_PATH, it) } })
+      .artworkOf(artworkPath)
       .build()
     return MediaItem.Builder()
       .setMediaId(id)
@@ -49,6 +42,30 @@ object PlayerMediaItems {
       .setRequestMetadata(MediaItem.RequestMetadata.Builder().setMediaUri(uri).build())
       .setMediaMetadata(metadata)
       .build()
+  }
+
+  /**
+   * [item] showing [artworkPath] (a cover cached after the item was set), the
+   * rest kept: same media ID and URI, so the player swaps it in place and
+   * playback goes on.
+   */
+  fun withArtwork(item: MediaItem, artworkPath: String): MediaItem =
+    item.buildUpon()
+      .setMediaMetadata(item.mediaMetadata.buildUpon().artworkOf(artworkPath).build())
+      .build()
+
+  /**
+   * Auto, the notification and System UI read artwork through Wave's content
+   * provider; the app keeps the file (see [appArtworkUri]). An address (a
+   * YT Music cover not cached yet) is the artwork URI itself.
+   */
+  private fun MediaMetadata.Builder.artworkOf(artworkPath: String?): MediaMetadata.Builder {
+    val artworkFile = artworkPath?.takeUnless(::isAddress)
+    return setArtworkUri(
+      artworkFile?.let { ArtworkProvider.uriFor(listOf(it)) ?: Uri.fromFile(File(it)) }
+        ?: artworkPath?.let(Uri::parse),
+    )
+      .setExtras(artworkFile?.let { Bundle().apply { putString(ARTWORK_PATH, it) } })
   }
 
   /** Whether [path] is an image's web address (a YT Music cover) rather than a file. */

@@ -8,6 +8,7 @@ import com.metrolist.innertubex.extraction.InnerTubeExtractor
 import com.metrolist.innertubex.extraction.StreamResolveException
 import com.metrolist.innertubex.extraction.YtConfigParser
 import com.metrolist.innertubex.extraction.YtConfigParserImpl
+import expo.modules.wavenative.log.WaveLog
 import expo.modules.wavenative.yt.potoken.YtPoTokens
 
 /**
@@ -89,12 +90,38 @@ class YtStreamResolver(context: Context) {
    */
   suspend fun resolve(videoId: String, preferM4a: Boolean = false): YtStream {
     cache.get(videoId, preferM4a, now())?.let { return it }
-    return client.request {
-      visitorData.restoreInto(client.innerTube)
-      val stream = extract(videoId, preferM4a)
-      visitorData.saveFrom(client.innerTube)
-      stream
+    val startedAt = now()
+    client.lookups.watch(videoId)
+    var failure: YtException? = null
+    try {
+      return client.request {
+        visitorData.restoreInto(client.innerTube)
+        val stream = extract(videoId, preferM4a)
+        visitorData.saveFrom(client.innerTube)
+        stream
+      }
+    } catch (e: YtException) {
+      failure = e
+      throw e
+    } finally {
+      val attempts = client.lookups.take(videoId)
+      failure?.let { logFailure(videoId, it, now() - startedAt, attempts) }
     }
+  }
+
+  /**
+   * The one line a failed lookup writes to the app log ([YtLookupLog]): the song and what each
+   * player client was told. Not while YT Music is off, nor offline when nothing was asked.
+   */
+  private fun logFailure(videoId: String, error: YtException, elapsedMs: Long, attempts: List<YtPlayerAttempt>) {
+    val failure = failureOf(error)
+    if (failure == YtStreamFailure.DISABLED || (failure == YtStreamFailure.OFFLINE && attempts.isEmpty())) return
+    val resolve = generateSequence(error as Throwable) { it.cause }.filterIsInstance<StreamResolveException>().firstOrNull()
+    val outcomes = resolve?.diagnostics?.attempts.orEmpty().map { "${it.clientName} ${it.outcome}" }
+    WaveLog.w(
+      LOG_TAG,
+      YtLookupLog.failedLine(videoId, failure.name.lowercase(), resolve?.reason?.name, elapsedMs, attempts, outcomes),
+    )
   }
 
   /**
@@ -137,6 +164,8 @@ class YtStreamResolver(context: Context) {
   private fun now() = System.currentTimeMillis()
 
   companion object {
+    private const val LOG_TAG = "WaveYtStreams"
+
     /** Why [error] (from [resolve]) means the song can't stream: offline, off, unavailable or failed. */
     fun failureOf(error: YtException): YtStreamFailure {
       val reason = generateSequence(error as Throwable) { it.cause }

@@ -2,14 +2,18 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import {
+  failedDownloadCount,
+  failedDownloadRows,
   failedDownloads,
+  failedJobs,
+  sameFailedDownload,
   settledDownloadFailures,
   ytAudioRejection,
   ytDownloadActions,
   ytDownloadStatus,
   ytDownloadsFromJournal,
 } from "./index.ts";
-import type { YtDownloadJournalJob, YtSong } from "./index.ts";
+import type { FailedDownload, YtDownloadJournalJob, YtSong } from "./index.ts";
 
 const song = (videoId: string): YtSong => ({
   videoId,
@@ -236,5 +240,147 @@ describe("Failures the journal can forget: those that settled another way", () =
     const listed = failedDownloads(jobs, input).flatMap((failed) => failed.clear);
     const settled = settledDownloadFailures(jobs, input);
     assert.deepEqual([...listed, ...settled].toSorted(), ["a", "b", "missing:1", "missing:2"]);
+  });
+});
+
+describe("how many songs failed, for the Settings row", () => {
+  test("counts the songs the Downloads page lists, settled ones left out", () => {
+    const jobs = [
+      job("a"),
+      job("b"),
+      job("missing:1"),
+      job("missing:2"),
+      unfailed("moving", { phase: "transferring" }),
+      unfailed("unimported", { phase: "completed", importFailure: "storage" }),
+    ];
+    const input = {
+      inLibrary: (found: YtSong) => found.videoId === "b",
+      missingTrackIds: new Set([2]),
+    };
+    assert.equal(failedDownloadCount(jobs, input), 3);
+    assert.equal(failedDownloadCount(jobs, nothingInLibrary), 5);
+    assert.equal(failedDownloadCount([], nothingInLibrary), 0);
+  });
+});
+
+describe("the failed jobs, followed across journal changes", () => {
+  test("a change to the songs on their way keeps the very same failed jobs", () => {
+    const before = failedJobs([
+      job("a"),
+      unfailed("moving", { phase: "transferring", received: 10, total: 100 }),
+    ]);
+    // The journal is read afresh: the failed job is a new, equal object.
+    const after = failedJobs(
+      [job("a"), unfailed("moving", { phase: "transferring", received: 50, total: 100 })],
+      before,
+    );
+    assert.equal(after, before);
+    assert.deepEqual(
+      after.map((each) => each.id),
+      ["a"],
+    );
+  });
+
+  test("a failure that comes, goes or changes is a new list", () => {
+    const before = failedJobs([job("a"), unfailed("b", { phase: "transferring" })]);
+    const failedToo = failedJobs([job("a"), job("b")], before);
+    assert.notEqual(failedToo, before);
+    assert.deepEqual(
+      failedToo.map((each) => each.id),
+      ["a", "b"],
+    );
+    const caused = failedJobs([job("a", { cause: "Timed out" }), job("b")], failedToo);
+    assert.notEqual(caused, failedToo);
+    const unimported = failedJobs(
+      [unfailed("c", { phase: "completed", importFailure: "storage" })],
+      caused,
+    );
+    assert.deepEqual(
+      unimported.map((each) => each.id),
+      ["c"],
+    );
+  });
+});
+
+describe("the failed section's rows", () => {
+  const failed = () =>
+    failedDownloads(
+      [
+        job("a", { reason: "ytUnavailable" }),
+        job("b", { reason: "failed" }),
+        job("c", { reason: "ytUnavailable" }),
+      ],
+      nothingInLibrary,
+    );
+
+  test("collapsed, the section is one row saying how many songs failed", () => {
+    assert.deepEqual(failedDownloadRows(failed(), { expanded: false }), [
+      { kind: "failedHeader", key: "failed", line: "3 songs failed", expanded: false },
+    ]);
+  });
+
+  test("expanded, the songs follow grouped by why they failed, each group under its header", () => {
+    const rows = failedDownloadRows(failed(), { expanded: true });
+    assert.deepEqual(
+      rows.map((row) =>
+        row.kind === "failedSong" ? [row.key, row.failed.id] : [row.key, row.line],
+      ),
+      [
+        ["failed", "3 songs failed"],
+        [
+          "failedGroup:This song is unavailable on YouTube Music",
+          "This song is unavailable on YouTube Music · 2",
+        ],
+        ["failed:a", "a"],
+        ["failed:c", "c"],
+        ["failedGroup:Download failed", "Download failed · 1"],
+        ["failed:b", "b"],
+      ],
+    );
+    const group = rows[1];
+    assert.equal(group?.kind, "failedGroup");
+    // A group's Retry and Remove act on its songs.
+    assert.deepEqual(group?.kind === "failedGroup" ? group.failed.map((each) => each.id) : null, [
+      "a",
+      "c",
+    ]);
+  });
+
+  test("a row shows the same as before only when its song, words, Retry and Remove are the same", () => {
+    const row = (patch: Partial<FailedDownload> = {}): FailedDownload => ({
+      id: "upgrade:7",
+      song: song("upgrade:7"),
+      line: "Download failed",
+      detail: null,
+      retry: { kind: "quality", direction: "upgrade", trackId: 7 },
+      clear: ["upgrade:7"],
+      ...patch,
+    });
+    // The journal is read afresh on every change: equal rows are new objects.
+    assert.equal(sameFailedDownload(row(), row()), true);
+    assert.equal(
+      sameFailedDownload(
+        row(),
+        row({ retry: { kind: "quality", direction: "downgrade", trackId: 7 } }),
+      ),
+      false,
+    );
+    assert.equal(
+      sameFailedDownload(
+        row(),
+        row({ retry: { kind: "quality", direction: "upgrade", trackId: 8 } }),
+      ),
+      false,
+    );
+    assert.equal(sameFailedDownload(row(), row({ detail: "Timed out" })), false);
+    assert.equal(sameFailedDownload(row(), row({ clear: ["upgrade:7", "x"] })), false);
+    assert.equal(
+      sameFailedDownload(row(), row({ song: { ...song("upgrade:7"), title: "Other" } })),
+      false,
+    );
+  });
+
+  test("no failed song, no section", () => {
+    assert.deepEqual(failedDownloadRows([], { expanded: true }), []);
   });
 });

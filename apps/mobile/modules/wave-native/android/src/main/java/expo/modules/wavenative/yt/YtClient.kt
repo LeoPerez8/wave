@@ -34,9 +34,16 @@ class YtClient private constructor(private val context: Context) {
   private val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
   private val connectivity = Connectivity(context)
 
+  /**
+   * The player requests sent for the songs whose stream is being looked up, with YouTube's
+   * answers ([YtPlayerRecorder]): what a failed lookup logs ([YtStreamResolver]).
+   */
+  internal val lookups = YtLookupAttempts()
+
   /** innertubex brings no HTTP engine and sends `@Serializable` bodies, hence content negotiation. */
   internal val http: HttpClient by lazy {
     HttpClient(OkHttp) {
+      engine { addInterceptor(YtPlayerRecorder(lookups)) }
       // innertubex checks statuses and retries transient failures itself.
       expectSuccess = false
       install(ContentNegotiation) {

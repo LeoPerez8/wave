@@ -94,3 +94,24 @@ export const createQueueCoverBatcher = ({
     flush,
   };
 };
+
+/** A player item's new artwork: the entry [key] now shows the cached file [artworkPath]. */
+export interface PlayerCoverUpdate {
+  readonly key: string;
+  readonly artworkPath: string;
+}
+
+/**
+ * What the player's items get from a batch of cached [covers] (by track id):
+ * each queue entry of a covered song, in queue order, gets its file, so Now
+ * Playing, the notification and Android Auto show it rather than YouTube's
+ * address. Entries of other songs are left alone.
+ */
+export const playerCoverUpdates = (
+  entries: readonly { readonly key: string; readonly trackId: string }[],
+  covers: ReadonlyMap<string, Pick<QueueCover, "artworkPath">>,
+): PlayerCoverUpdate[] =>
+  entries.flatMap(({ key, trackId }) => {
+    const cover = covers.get(trackId);
+    return cover === undefined ? [] : [{ key, artworkPath: cover.artworkPath }];
+  });
