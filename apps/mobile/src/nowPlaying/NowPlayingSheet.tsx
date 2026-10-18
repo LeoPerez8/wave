@@ -80,8 +80,10 @@ type Item = NonNullable<PlaybackState["item"]>;
  * shows its rows as they were, re-rendering only what changed meanwhile.
  * Hidden, it follows nothing (its store subscriptions, gestures and frame
  * callbacks are effects, which `Activity` tears down) and holds only the
- * rows Legend List had drawn. Memoized, so the sheet's renders (the playing
- * state) don't reach it while it's hidden.
+ * rows Legend List had drawn; each showing places Up Next again through the
+ * list (`UpNextList`), so the rows show at once even if the queue changed out
+ * of sight. Memoized, so the sheet's renders (the playing state) don't reach
+ * it while it's hidden.
  */
 const QueuePane = memo(function QueuePane({ item }: { item: Item }) {
   return (

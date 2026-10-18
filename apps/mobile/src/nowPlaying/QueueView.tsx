@@ -1,4 +1,4 @@
-import { LegendList } from "@legendapp/list/react-native";
+import { LegendList, type LegendListRef } from "@legendapp/list/react-native";
 import { IconMenu2, IconRepeat, IconRepeatOnce, IconX } from "@tabler/icons-react-native";
 import {
   currentEntry,
@@ -8,6 +8,7 @@ import {
   withPendingMoves,
   type PendingMove,
   type QueueEntry,
+  type QueueState,
   type RepeatMode,
 } from "@wave/core";
 import {
@@ -46,6 +47,7 @@ import { useQueueTracks } from "./hooks";
 import { useShuffleControl } from "./ShuffleMenu";
 import { TrackHeader } from "./TrackHeader";
 import { ROW, useUpNextDrag, useUpNextRowDrag, type UpNextDragRows } from "./upNextDrag";
+import { upNextScroll } from "./upNextScroll";
 
 type IconProps = { size?: number; color?: string; strokeWidth?: number };
 
@@ -266,14 +268,16 @@ export function UpNextList({ bottomInset }: { bottomInset: number }) {
     onMove,
   });
 
-  // The Queue stays mounted between showings (NowPlayingSheet's `QueuePane`) and
-  // keeps its place, except that a new play's Up Next starts from the top.
-  const context = useRef(queue.context);
+  // The Queue stays mounted between showings (NowPlayingSheet's `QueuePane`),
+  // hidden in an `Activity` that tears this effect down and sets it up again
+  // on each showing. Each showing places Up Next through Legend List: a new
+  // play's starts from the top, the same play's keeps its place, and the list
+  // draws the rows for that offset even if its queue changed out of sight.
+  const listRef = useRef<LegendListRef>(null);
+  const [placeUpNext] = useState(() => upNextScroll<QueueState["context"]>());
   useLayoutEffect(() => {
-    if (context.current === queue.context) return;
-    context.current = queue.context;
-    scrollRef.current?.scrollTo({ y: 0, animated: false });
-  }, [queue.context, scrollRef]);
+    placeUpNext(listRef.current, queue.context);
+  }, [placeUpNext, queue.context]);
 
   const renderItem = useCallback(
     ({ item, index }: { item: QueueEntry; index: number }) => (
@@ -317,6 +321,7 @@ export function UpNextList({ bottomInset }: { bottomInset: number }) {
       }}
     >
       <LegendList
+        ref={listRef}
         refScrollView={scrollRef}
         className="flex-1"
         data={entries}
