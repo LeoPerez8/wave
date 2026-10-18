@@ -1,10 +1,12 @@
 import {
   APP_LOG_LIMITS,
+  appBuildName,
   describeLogArgs,
   formatLogEntry,
   logFileName,
   logHeader,
   trimLog,
+  type LogDevice,
   type LogEntry,
   type LogLevel,
 } from "@wave/core";
@@ -24,6 +26,19 @@ import { WaveAppLog } from "@/native/waveAppLog";
  * scroll no more than an array push. A fatal error is written at once instead,
  * before the process goes.
  */
+
+/**
+ * What CI built, such as `PR #438 @ 90970e3` (docs/spec.md, "Build and CI"): Expo inlines it
+ * into the bundle, so a repacked APK carries the label of the run that repacked it. Unset in a
+ * local or debug build.
+ */
+const BUILD_LABEL = process.env.EXPO_PUBLIC_WAVE_BUILD_LABEL;
+
+/** The phone and the Wave build, with this bundle's build label. */
+const logDevice = (log: NonNullable<typeof WaveAppLog>): LogDevice => ({
+  ...log.device(),
+  buildLabel: BUILD_LABEL,
+});
 
 /** How long entries wait to be written together. */
 const FLUSH_DELAY_MS = 2_000;
@@ -101,8 +116,8 @@ export const exportAppLog = async (): Promise<void> => {
   if (WaveAppLog === null) throw new Error("This build of Wave has no app log");
   await flushAppLog();
   const now = Date.now();
-  const device = WaveAppLog.device();
-  await WaveAppLog.share(logHeader(device, now), logFileName(device.appVersion, now));
+  const build = logDevice(WaveAppLog);
+  await WaveAppLog.share(logHeader(build, now), logFileName(build.appVersion, now));
 };
 
 /**
@@ -234,8 +249,7 @@ export const installAppLog = (): void => {
     if (state !== "active") void flushAppLog();
   });
   try {
-    const { appVersion, appBuild } = WaveAppLog.device();
-    appLog("info", "app", `Wave ${appVersion} (build ${appBuild}) started`);
+    appLog("info", "app", `${appBuildName(logDevice(WaveAppLog))} started`);
   } catch {
     appLog("info", "app", "Wave started");
   }

@@ -211,7 +211,7 @@ describe("a failed read", () => {
 
   test("its playlist's page says so, with Try Again; the others' pages say nothing", () => {
     const view = ytLibraryReadView(gymFailed, 42);
-    assert.equal(view?.line, "Couldn't read it from YouTube Music");
+    assert.equal(view?.line, "Couldn't read it online");
     assert.deepEqual(kept({ ...gymFailed, reads: view ? [view.read] : [] }), [
       {
         source: "PLgym",
@@ -228,7 +228,7 @@ describe("a failed read", () => {
 
   test("is kept as failed while Wave is closed, and isn't read again on its own", () => {
     const resumed = keptAndRead(gymFailed);
-    assert.equal(ytLibraryReadView(resumed, 42)?.line, "Couldn't read it from YouTube Music");
+    assert.equal(ytLibraryReadView(resumed, 42)?.line, "Couldn't read it online");
     assert.equal(nextYtLibraryRead(readDone(resumed, 43)), undefined);
   });
 
@@ -268,7 +268,7 @@ describe("a read offline, or with YT Music off", () => {
       const gym = ytLibraryReadView(gymFailed, 42)?.read;
       assert.ok(gym);
       const { batch } = ytLibraryReadFailed(gymFailed, gym, reason);
-      assert.equal(ytLibraryReadView(batch, 42)?.line, "Couldn't read it from YouTube Music");
+      assert.equal(ytLibraryReadView(batch, 42)?.line, "Couldn't read it online");
     });
   }
 
