@@ -29,6 +29,7 @@ import type { LineToggle } from "@/catalog/PlayShuffle";
 import { LibraryStore, type AlbumRow } from "@/library/LibraryStore";
 import { appRuntime } from "@/library/runtime";
 import type { NativeYtSong } from "@/native/waveYtMusic";
+import { openSearchOnlineChoices, useSearchOnlineAlways } from "@/settings/searchOnline";
 import { useYtMusicEnabled } from "@/settings/ytMusic";
 
 import { useLoadedLibraryFinder } from "./libraryFinder";
@@ -259,8 +260,10 @@ export interface YtArtistSectionShown {
  * toggle. It reads what was saved and hides with YT Music off (Core's
  * `stepYtArtistSection`). It asks YouTube Music only once Online is selected
  * with nothing standing for the artist: picked, or the page opened integrated
- * ([openedIntegrated], from a streamed song's artist) (Core's
- * `ytArtistSectionAsks`); after a failure, picking Online asks again. Library
+ * ([openedIntegrated], from a streamed song's artist) or with Search online
+ * set to Always (Core's `ytArtistSectionAsks`); after a failure, picking
+ * Online asks again. A long press on the toggle opens the Search online
+ * card (`openSearchOnlineChoices`). Library
  * hides what YouTube Music added, with no request. [artistId] and the page's
  * Library [albums] tell which of the artist's releases the Library already
  * has. The songs the page [held] in place this visit stay among the
@@ -274,6 +277,7 @@ export const useYtArtistSection = (
   held: HeldSongs<NativeYtSong>,
 ): YtArtistSectionShown => {
   const { state, enabled, openedAt, show } = useYtArtistAnswer(name, { allSongs: true });
+  const always = useSearchOnlineAlways();
   // The toggle's segment picked while the page is open; null until one is.
   const [pick, setPick] = useState<YtPick | null>(null);
   const asks = ytArtistSectionAsks(state, {
@@ -281,6 +285,7 @@ export const useYtArtistSection = (
     enabled,
     now: openedAt,
     integrated: openedIntegrated,
+    always,
     pick,
   });
   // Once per state: a remounted effect doesn't send the request twice.
@@ -304,10 +309,11 @@ export const useYtArtistSection = (
             enabled,
             now: openedAt,
             integrated: openedIntegrated,
+            always,
             pick,
             inLibrary: inLibraryUnlessHeld(held, (song) => find(song) !== null),
           }),
-    [find, state, name, enabled, openedAt, openedIntegrated, pick, held],
+    [find, state, name, enabled, openedAt, openedIntegrated, always, pick, held],
   );
   const shelves = useMemo(
     () => ytArtistShelves(state, { name, enabled, now: openedAt, libraryAlbum: findAlbum, pick }),
@@ -325,7 +331,8 @@ export const useYtArtistSection = (
   );
   const selected = view?.toggle;
   const toggle = useMemo(
-    () => (selected === undefined ? null : { selected, onPick }),
+    () =>
+      selected === undefined ? null : { selected, onPick, onLongPress: openSearchOnlineChoices },
     [selected, onPick],
   );
   return { view, shelves, integrated, toggle };

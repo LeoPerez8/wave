@@ -213,7 +213,7 @@ describe("selectKnownFiles", () => {
   });
 
   test("a song indexed before Wave read every value of a genre tag is read again by the next scan", async () => {
-    const old = await openTestDatabase({ through: "0030_lyrics_misses" });
+    const old = await openTestDatabase({ through: "0031_streamed_songs" });
     addTrack(old, { title: "Airbag", album: "OK Computer", genre: "Rock", addedAt: 1_234 });
     await migrateTestDatabase(old);
     const [known] = selectKnownFiles(old, ["/Music"]);

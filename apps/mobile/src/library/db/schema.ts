@@ -722,3 +722,18 @@ export const lyricsMisses = sqliteTable("lyrics_misses", {
   /** When the search found nothing (ms since the epoch). */
   checkedAt: integer("checked_at").notNull(),
 });
+
+/**
+ * YT Music songs the owner streamed (`writePlaylistYtSong`'s JSON, by video):
+ * how many times and when first and last. Streamed plays aren't play history
+ * (Stats stays about the Library); Home's mixes read this to keep songs the
+ * owner knows out of their new songs and to stream them in their familiar
+ * share (Core's `mixKnownSongs`). This phone only, never synced.
+ */
+export const streamedSongs = sqliteTable("streamed_songs", {
+  videoId: text("video_id").primaryKey(),
+  song: text("song").notNull(),
+  plays: integer("plays").notNull(),
+  firstPlayedAt: integer("first_played_at").notNull(),
+  lastPlayedAt: integer("last_played_at").notNull(),
+});

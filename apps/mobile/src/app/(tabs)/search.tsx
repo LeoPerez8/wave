@@ -46,6 +46,7 @@ import {
 } from "@/search/rows";
 import { useSearchRequests } from "@/search/queryRequest";
 import { useYtMusicSection } from "@/search/ytMusicSearch";
+import { openSearchOnlineChoices } from "@/settings/searchOnline";
 import { useSearchFieldFocus } from "@/search/fieldFocus";
 import { SearchField } from "@/search/SearchField";
 import { SearchFieldRow } from "@/search/SearchFieldRow";
@@ -137,13 +138,15 @@ export default function SearchScreen() {
   );
   const libraryEmpty = results !== null && results.groups.length === 0;
   // YT Music is asked once Online is picked on the toggle beside the field, or on
-  // its own when the library has nothing; it answers on its own time, and its
+  // its own when the library has nothing, or as you type with Search online set to
+  // Always (the toggle's long press chooses it); it answers on its own time, and its
   // songs, artists and albums the library doesn't have join the library's.
   // Until the library is ready, nothing is asked.
   const [ytSection, pickYt] = useYtMusicSection(deferredQuery, !libraryEmpty);
   const selected = ytSectionToggle(ytSection);
   const toggle = useMemo(
-    () => (selected === null ? null : { selected, onPick: pickYt }),
+    () =>
+      selected === null ? null : { selected, onPick: pickYt, onLongPress: openSearchOnlineChoices },
     [selected, pickYt],
   );
   const inLibrary = library?.library;

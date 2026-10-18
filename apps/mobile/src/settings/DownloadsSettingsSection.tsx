@@ -1,3 +1,4 @@
+import type { QualityDirection } from "@wave/core";
 import * as Effect from "effect/Effect";
 import { useEffect, useState } from "react";
 import { Text, View } from "react-native";
@@ -9,7 +10,7 @@ import { WaveSoulseek, soulseekErrorCode, type SoulseekSession } from "@/native/
 import { cancelQualityReplacements } from "@/ytmusic/YtDownloads";
 
 import { setBestQuality } from "./bestQuality";
-import { offerQualityUpgrade, useQualityUpgradeOffer } from "./qualityUpgrade";
+import { offerQualityReplacement, useQualityOffer } from "./qualityOffers";
 import { SettingsPageRow } from "./SettingsPage";
 
 const sessionCall = <A,>(call: () => Promise<A>) =>
@@ -27,17 +28,18 @@ const turnOnMessage = (error: unknown): string => {
   }
 };
 
-/** Offers the upgrade (`offerQualityUpgrade`); a failed read offers nothing. */
-const offerUpgrade = (): void => {
-  void offerQualityUpgrade().catch(() => undefined);
+/** Offers the replacement in [direction] (`offerQualityReplacement`); a failed read offers nothing. */
+const offer = (direction: QualityDirection): void => {
+  void offerQualityReplacement(direction).catch(() => undefined);
 };
 
 /**
  * Settings › Downloads: Download in best quality. On, downloads come from Soulseek as MP3 320 kbps,
  * with an account the native module makes (or the phone's own); off, from YouTube Music while YT
  * Music is on. The account never reaches JS beyond the session's status. Turning it on offers to
- * replace the Library's low-quality songs, and while songs are left a row offers it again;
- * turning it off cancels the waiting replacements.
+ * replace the Library's low-quality songs, turning it off to free space by replacing its MP3
+ * 320s with YouTube Music's copies; while songs are left a row offers the current direction
+ * again. Either way the other direction's waiting replacements are cancelled.
  */
 export function DownloadsSettingsSection() {
   const [session, setSession] = useState<SoulseekSession>({ status: "off", username: null });
@@ -45,7 +47,9 @@ export function DownloadsSettingsSection() {
   const [asked, setAsked] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(true);
   const [message, setMessage] = useState<string | null>(null);
-  const upgrade = useQualityUpgradeOffer(session.status !== "off");
+  const replacement = useQualityOffer(
+    busy ? null : session.status !== "off" ? "upgrade" : "downgrade",
+  );
 
   useEffect(() => {
     let current = true;
@@ -81,8 +85,8 @@ export function DownloadsSettingsSection() {
           setSession(next);
           // The switch syncs as a preference once it has moved here.
           setBestQuality(on);
-          if (on) offerUpgrade();
-          else cancelQualityReplacements("upgrade");
+          cancelQualityReplacements(on ? "downgrade" : "upgrade");
+          offer(on ? "upgrade" : "downgrade");
         },
         (error: unknown) =>
           setMessage(on ? turnOnMessage(error) : "Couldn't turn it off. Try again."),
@@ -103,11 +107,11 @@ export function DownloadsSettingsSection() {
         onValueChange={change}
       />
       <Hairline />
-      {upgrade !== null && asked === null && (
+      {replacement !== null && asked === null && (
         <SettingsPageRow
-          title={upgrade.row}
-          summary={upgrade.alert.message}
-          onPress={offerUpgrade}
+          title={replacement.row}
+          summary={replacement.summary}
+          onPress={() => offer(replacement.direction)}
         />
       )}
       <Text className="mt-2 font-sans text-footnote text-secondary">

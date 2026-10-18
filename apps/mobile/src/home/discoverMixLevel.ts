@@ -2,6 +2,8 @@ import { readDiscoverMixLevel, type DiscoverMixLevel, type HomeSectionId } from 
 
 import { persistedSetting } from "@/lib/persistedSetting";
 
+import { refreshKnownVideos } from "./mixKnown";
+
 /** Home's mix sections, each with its own mixes, build and level. */
 export type MixSectionId = Extract<HomeSectionId, "artist-mixes" | "genre-mixes">;
 
@@ -24,5 +26,11 @@ const LEVELS: Record<MixSectionId, ReturnType<typeof levelSetting>> = {
 export const useDiscoverMixLevel = (section: MixSectionId): DiscoverMixLevel =>
   LEVELS[section].useValue();
 
-export const setDiscoverMixLevel = (section: MixSectionId, value: DiscoverMixLevel): void =>
+/**
+ * Sets the level of the mix section [section]: its mixes re-blend, leaving
+ * out the new songs the owner has come to know since the build.
+ */
+export const setDiscoverMixLevel = (section: MixSectionId, value: DiscoverMixLevel): void => {
+  refreshKnownVideos();
   LEVELS[section].set(value);
+};

@@ -893,6 +893,17 @@ ALTER TABLE \`tracks\` ADD \`genres\` text;
 UPDATE \`tracks\` SET \`modified_at\` = 0;
 `;
 
+// YT Music songs the owner streamed (\`schema.ts\`'s \`streamedSongs\`), for Home's mixes.
+const mStreamedSongs = `
+CREATE TABLE \`streamed_songs\` (
+	\`video_id\` text PRIMARY KEY NOT NULL,
+	\`song\` text NOT NULL,
+	\`plays\` integer NOT NULL,
+	\`first_played_at\` integer NOT NULL,
+	\`last_played_at\` integer NOT NULL
+);
+`;
+
 export default {
   journal: {
     entries: [
@@ -927,7 +938,8 @@ export default {
       { idx: 28, when: 1_794_225_600_000, tag: "0028_saved_lyrics", breakpoints: true },
       { idx: 29, when: 1_794_312_000_000, tag: "0029_no_better_copies", breakpoints: true },
       { idx: 30, when: 1_794_398_400_000, tag: "0030_lyrics_misses", breakpoints: true },
-      { idx: 31, when: 1_794_484_800_000, tag: "0031_genre_tags", breakpoints: true },
+      { idx: 31, when: 1_794_484_800_000, tag: "0031_streamed_songs", breakpoints: true },
+      { idx: 32, when: 1_794_571_200_000, tag: "0032_genre_tags", breakpoints: true },
     ],
   },
   migrations: {
@@ -962,6 +974,7 @@ export default {
     m0028: mSavedLyrics,
     m0029: mNoBetterCopies,
     m0030: mLyricsMisses,
-    m0031: mGenreTags,
+    m0031: mStreamedSongs,
+    m0032: mGenreTags,
   },
 };

@@ -12,6 +12,7 @@ import type { DownloadSource } from "./downloadSource.ts";
 import { advisoryTag, type ExplicitFlag } from "./explicit.ts";
 import { UNKNOWN_ALBUM } from "./library.ts";
 import { parseLyrics, type LyricsSources } from "./lyrics.ts";
+import { spotifySearchQuery, spotifyYtMatch } from "./spotifyImport.ts";
 import type { MissingTrack } from "./missingSongDownload.ts";
 import type { YtDownloadTags } from "./ytDownload.ts";
 import type { YtDownloadFailure, YtDownloadJournalJob } from "./ytDownloads.ts";
@@ -32,6 +33,8 @@ export interface QualityFile {
   readonly bitrateKbps: number | null;
   /** 0 when unknown. */
   readonly sizeBytes: number;
+  /** The YouTube Music video it was downloaded from: only YouTube downloads carry one. */
+  readonly videoId?: string | null;
 }
 
 /** What the offer leaves out besides the files' own quality. */
@@ -126,6 +129,8 @@ export interface QualityOffer {
   };
   /** Settings › Downloads' row while songs are left: "Replace 342 songs with best quality". */
   readonly row: string;
+  /** What the row says under it: the estimate ("About +1.2 GB", "Frees about 900 MB"). */
+  readonly summary: string;
 }
 
 const songs = (count: number): string =>
@@ -166,7 +171,69 @@ export const qualityUpgradeOffer = (
       dismissLabel: "Not now",
     },
     row: `Replace ${songs(files.length)} with best quality`,
+    summary: estimate,
   };
+};
+
+/** YouTube Music's AAC with Premium. */
+const YOUTUBE_PREMIUM_KBPS = 256;
+/** YouTube Music's AAC without Premium, about. */
+const YOUTUBE_KBPS = 128;
+
+/**
+ * Turning best quality off: the offer to free space by replacing [files]
+ * (`qualityDowngradeSongs`) with YouTube Music's copies, at the bitrate the
+ * owner's YouTube downloads get ([youTubeKbps], `youTubeCopyKbps`), its
+ * estimate what that saves over their lengths. On mobile data
+ * ([onMobileData]) the card says what the run downloads. Null when nothing
+ * would be saved.
+ */
+export const qualityDowngradeOffer = (
+  files: readonly QualityFile[],
+  { onMobileData, youTubeKbps }: { readonly onMobileData: boolean; readonly youTubeKbps: number },
+): QualityOffer | null => {
+  let downloadBytes = 0;
+  let bytes = 0;
+  for (const file of files) {
+    const copy = bytesAt(youTubeKbps, file.durationMs);
+    downloadBytes += copy;
+    bytes += Math.max(0, sizeOf(file) - copy);
+  }
+  if (bytes <= 0) return null;
+  const size = formatStorageSize(bytes);
+  const copies = `YouTube Music's copies are AAC at ${
+    youTubeKbps >= YOUTUBE_PREMIUM_KBPS ? "" : "about "
+  }${youTubeKbps} kbps.`;
+  return {
+    direction: "downgrade",
+    trackIds: files.map((file) => file.id),
+    bytes,
+    downloadBytes,
+    alert: {
+      title: `Free about ${size} by replacing ${songs(files.length)} with YouTube Music copies?`,
+      message: onMobileData ? `${copies} ${mobileDataNote(downloadBytes)}` : copies,
+      action: { label: "Replace" },
+      dismissLabel: "Not now",
+    },
+    row: `Free up space: replace ${songs(files.length)}`,
+    summary: `Frees about ${size}`,
+  };
+};
+
+/**
+ * The bitrate the owner's YouTube downloads get, as the Library's latest one
+ * (the highest Track id with a video and a known bitrate) shows it: 256 with
+ * Premium, else about 128, as it is with no YouTube download to tell by.
+ */
+export const youTubeCopyKbps = (files: readonly QualityFile[]): number => {
+  let latest: QualityFile | null = null;
+  for (const file of files) {
+    if (file.videoId == null || file.bitrateKbps === null || file.bitrateKbps <= 0) continue;
+    if (latest === null || file.id > latest.id) latest = file;
+  }
+  return latest !== null && (latest.bitrateKbps ?? 0) >= YOUTUBE_PREMIUM_KBPS - HEADER_SLACK_KBPS
+    ? YOUTUBE_PREMIUM_KBPS
+    : YOUTUBE_KBPS;
 };
 
 /** The Tracks whose replacement in [direction] is queued, downloading or saving. */
@@ -201,6 +268,30 @@ export const qualityUpgradeSongs = <F extends QualityFile>(
       file.bitrateKbps > 0 &&
       file.bitrateKbps < LOW_QUALITY_BELOW_KBPS - HEADER_SLACK_KBPS &&
       !isLosslessFile(file.path) &&
+      !noBetterCopy.has(file.id) &&
+      !asked.has(file.id),
+  );
+};
+
+/**
+ * The files turning best quality off offers to replace with YouTube Music's
+ * copies, to free space: every MP3 at 320 kbps, wherever it came from (the
+ * header may average a few kbps under). Lossless files, AAC copies and
+ * smaller MP3s stay, as does one whose length isn't known (YouTube Music's
+ * match needs it), one YouTube Music had no copy of, and one whose
+ * replacement is on its way.
+ */
+export const qualityDowngradeSongs = <F extends QualityFile>(
+  files: readonly F[],
+  { noBetterCopy, jobs }: QualityMemory,
+): F[] => {
+  const asked = onTheirWay(jobs, "downgrade");
+  return files.filter(
+    (file) =>
+      extensionOf(file.path) === "mp3" &&
+      file.bitrateKbps !== null &&
+      file.bitrateKbps >= BEST_QUALITY_KBPS - HEADER_SLACK_KBPS &&
+      file.durationMs > 0 &&
       !noBetterCopy.has(file.id) &&
       !asked.has(file.id),
   );
@@ -247,6 +338,22 @@ export const qualityReplacementJob = (
   artworkUrl: null,
   explicit: false,
 });
+
+/**
+ * What YouTube Music is searched for to find downgrade [job]'s copy: the
+ * Track's title and artists, as a listing's song is looked up.
+ */
+export const qualityDowngradeSearch = (job: YtSong): string => spotifySearchQuery(job);
+
+/**
+ * The video downgrade [job] downloads: the first of YouTube Music's
+ * [results] that is the Track's recording, by the rules a listing's song is
+ * matched by (`spotifyYtMatch`: title, main artist, edition, and length
+ * within 3 seconds). Null when none is: the song has no copy to free space
+ * with.
+ */
+export const qualityDowngradeVideo = (job: YtSong, results: readonly YtSong[]): string | null =>
+  spotifyYtMatch(job, results)?.videoId ?? null;
 
 /** Where a replacement's file goes: beside the old one, under its name. */
 export interface QualityReplacementTarget {
