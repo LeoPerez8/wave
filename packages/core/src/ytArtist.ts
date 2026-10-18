@@ -521,6 +521,69 @@ export const ytArtistIntegrated = (
   standsOnArtistPage(state.saved, context.now) &&
   context.pick !== "library";
 
+/** An artist's album and song counts, as their page's header line reads them. */
+export interface YtArtistCounts {
+  readonly albums: number;
+  readonly songs: number;
+}
+
+/** What the Library has of an artist's online answer, so counting it doesn't repeat it. */
+export interface YtArtistCountsLibrary<S extends YtSong> {
+  /** Whether the Library already has a song (Core's `libraryMatcher`). */
+  readonly inLibrary: (song: S) => boolean;
+  /** Whether the Library already has a release (Core's `libraryAlbumFinder`). */
+  readonly libraryRelease: (album: YtArtistAlbum) => boolean;
+}
+
+/**
+ * The Library's counts [local] with what the artist's answer [saved] adds:
+ * every song of theirs (`allSongs`) and every release (Albums, then Singles
+ * & EPs) the Library lacks, each once (by video id, by browse id). [local]
+ * alone while no match stands on the artist page at [now] (no answer, no
+ * match, a week old, or saved without the full list).
+ */
+export const ytArtistMergedCounts = <S extends YtSong>(
+  local: YtArtistCounts,
+  saved: YtArtistSaved<S> | null,
+  context: YtArtistCountsLibrary<S> & { readonly now: number },
+): YtArtistCounts => {
+  if (saved?.outcome !== "found" || !standsOnArtistPage(saved, context.now)) return local;
+  const songs = new Set<string>();
+  for (const song of saved.page.allSongs ?? [])
+    if (!context.inLibrary(song)) songs.add(song.videoId);
+  const releases = new Set<string>();
+  for (const album of [...saved.page.albums, ...saved.page.singles])
+    if (!context.libraryRelease(album)) releases.add(album.browseId);
+  return { albums: local.albums + releases.size, songs: local.songs + songs.size };
+};
+
+export interface YtArtistCountsContext<S extends YtSong>
+  extends YtArtistToggleContext, YtArtistCountsLibrary<S> {
+  /** The Library artist's name. */
+  readonly name: string;
+  /** Whether YT Music is on in Settings. */
+  readonly enabled: boolean;
+  /** The Library's counts for the artist. */
+  readonly local: YtArtistCounts;
+}
+
+/**
+ * The counts a Library artist page's header line reads: with Online selected
+ * (`ytArtistToggle`) and a match standing, the Library's plus what the
+ * answer adds, the same songs and releases the page draws
+ * (`ytArtistMergedCounts`); otherwise, the answer still on its way included,
+ * the Library's.
+ */
+export const ytArtistCounts = <S extends YtSong>(
+  state: YtArtistSection<S>,
+  context: YtArtistCountsContext<S>,
+): YtArtistCounts => {
+  const { local } = context;
+  if (!context.enabled || ytArtistQuery(context.name) === null) return local;
+  if (state.status !== "ready" || ytArtistToggle(state, context) !== "online") return local;
+  return ytArtistMergedCounts(local, state.saved, context);
+};
+
 /** A release on one of the section's shelves, with the Library album it already is. */
 export interface YtArtistRelease<A> {
   readonly album: YtArtistAlbum;
@@ -807,6 +870,17 @@ export const ytLibraryAlbumView = <S extends YtSong, L extends LibraryAlbumTrack
   }
   return { ...albumNote(null, online.retry), toggle: "library" };
 };
+
+/**
+ * The song count a Library album's header reads: the combined tracklist's
+ * length once it shows ([view]'s `tracks`, `ytLibraryAlbumView`), else the
+ * Library's [local] count (Library selected, the release on its way, not
+ * found, a failure, or nothing on it the Library lacks).
+ */
+export const ytAlbumSongCount = (
+  local: number,
+  view: Pick<YtLibraryAlbumView<YtSong, unknown>, "tracks"> | null,
+): number => view?.tracks?.length ?? local;
 
 export interface YtArtistPageContext {
   /** Whether YT Music is on in Settings. */

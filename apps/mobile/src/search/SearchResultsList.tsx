@@ -133,6 +133,7 @@ function Hit({
   top,
   songs,
   downloaded,
+  artistSongs,
   integrated,
   playing,
   onOpen,
@@ -143,6 +144,8 @@ function Hit({
   songs: readonly ResultSong[];
   /** A song among YT Music's: marked downloaded. */
   downloaded: boolean;
+  /** An artist's song count with what Online adds; null: the Library's. */
+  artistSongs: number | null;
   /** An album opens integrated. */
   integrated: boolean;
   playing: boolean;
@@ -164,7 +167,7 @@ function Hit({
         <NameRow
           name={hit.name}
           artist={hit.artist}
-          detail={top ? "Artist" : counted(hit.artist.trackCount, "song")}
+          detail={top ? "Artist" : counted(artistSongs ?? hit.artist.trackCount, "song")}
           onPress={open(() => openArtist(hit.artist.id, hit.artist))}
           onLongPress={menu(() => openArtistActions(hit.artist))}
         />
@@ -254,6 +257,7 @@ export function SearchResultsList({ rows, onOpen, onShowAll, integrated, selecti
               top={item.top}
               songs={item.songs}
               downloaded={item.downloaded}
+              artistSongs={item.artistSongs}
               integrated={integrated}
               playing={item.hit.kind === "song" && String(item.hit.song.id) === currentId}
               onOpen={onOpen}

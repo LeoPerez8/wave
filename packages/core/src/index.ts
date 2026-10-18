@@ -566,6 +566,8 @@ export {
   ytSearchQuery,
   ytSectionToggle,
   ytSectionView,
+  ytSearchArtistReads,
+  ytSearchArtistSongs,
 } from "./ytSearch.ts";
 export type {
   YtKeptAnswer,
@@ -818,6 +820,9 @@ export {
   ytAlbumTracklist,
   ytLibraryAlbumView,
   ytArtistToggle,
+  ytArtistCounts,
+  ytArtistMergedCounts,
+  ytAlbumSongCount,
 } from "./ytArtist.ts";
 export type {
   LibraryAlbumKey,
@@ -848,6 +853,9 @@ export type {
   YtLibraryAlbumView,
   YtReleaseLoad,
   YtArtistToggleContext,
+  YtArtistCounts,
+  YtArtistCountsContext,
+  YtArtistCountsLibrary,
 } from "./ytArtist.ts";
 export { streamedArtistLink } from "./streamedArtist.ts";
 export type {
