@@ -96,11 +96,11 @@ const itemKey = (item: Item): string => {
   }
 };
 
-/** The quiet line under the tracks about the album on YouTube Music: an outcome (loading shows skeleton rows). */
+/** The quiet line under the tracks about the album online: an outcome (loading shows skeleton rows). */
 const YT_NOTE: Readonly<Record<Exclude<YtLibraryAlbumNote, "loading">, string>> = {
-  notFound: "Not found on YouTube Music.",
+  notFound: "Not found online.",
   offline: "You're offline. Tap Online to try again when you're back online.",
-  failed: "YouTube Music didn't answer. Tap Online to try again.",
+  failed: "No answer online. Tap Online to try again.",
 };
 
 /** The entries as playback takes them: the Library's files, the rest streamed. */

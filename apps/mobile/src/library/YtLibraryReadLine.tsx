@@ -8,7 +8,7 @@ import { readYtLibraryPlaylistAgain, useReadingAgain, useYtLibraryBatch } from "
 
 /**
  * The playlist page's line for a playlist From YT Music couldn't read (Core's
- * `ytLibraryReadView`): "Couldn't read it from YouTube Music", with Try
+ * `ytLibraryReadView`): "Couldn't read it online", with Try
  * Again while YT Music is on, which reads "Reading…", not tappable, until
  * the read ends.
  */

@@ -458,9 +458,7 @@ export function YtSongList({
             {load.status === "quiet" && (
               <EmptyState
                 icon={load.reason === "offline" ? IconWifiOff : IconCloudOff}
-                title={
-                  load.reason === "offline" ? "You're offline" : "No answer from YouTube Music"
-                }
+                title={load.reason === "offline" ? "You're offline" : "No answer online"}
                 message={
                   load.reason === "offline"
                     ? "These songs need the network."

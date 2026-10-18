@@ -11,10 +11,10 @@ import { openYtAlbumActions } from "./YtAlbumActions";
  */
 export const YT_ARTIST_NOTE: Readonly<Record<Exclude<YtArtistSectionNote, "loading">, string>> = {
   allInLibrary: "Your library already has every song of this artist.",
-  noSongs: "YouTube Music lists no songs for this artist.",
-  notFound: "Not found on YouTube Music.",
+  noSongs: "No songs online for this artist.",
+  notFound: "Not found online.",
   offline: "You're offline. Tap Online to try again when you're back online.",
-  failed: "YouTube Music didn't answer. Tap Online to try again.",
+  failed: "No answer online. Tap Online to try again.",
 };
 
 /** A tile's furniture line when YouTube Music gives no year. */

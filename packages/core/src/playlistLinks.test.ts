@@ -98,7 +98,7 @@ describe("linkImportView", () => {
     const failed = linkImportView({ status: "failed", reason: "failed" });
     assert.equal(
       failed.line,
-      "Couldn't read this playlist. It may be private or deleted, or YouTube Music didn't answer.",
+      "Couldn't read this playlist. It may be private or deleted, or there was no answer online.",
     );
     assert.deepEqual([failed.canImport, failed.retry], [false, true]);
   });

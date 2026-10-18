@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { describeLogArgs, formatLogEntry, logFileName, logHeader, trimLog } from "./index.ts";
+import {
+  appBuildName,
+  describeLogArgs,
+  formatLogEntry,
+  logFileName,
+  logHeader,
+  trimLog,
+} from "./index.ts";
 
 const at = Date.UTC(2026, 9, 16, 14, 3, 22, 415);
 
@@ -252,6 +259,31 @@ describe("the exported file", () => {
         "",
         "",
       ].join("\n"),
+    );
+  });
+
+  test("names a CI build's label next to the version, for a PR build its PR and commit", () => {
+    assert.equal(
+      logHeader({ ...device, buildLabel: "PR #438 @ 90970e3" }, at).split("\n")[0],
+      "Wave 0.5.3-ti (build 503, PR #438 @ 90970e3)",
+    );
+  });
+
+  test("a build without a label, or with an empty one, is named as before labels", () => {
+    assert.equal(
+      appBuildName({ appVersion: "0.10.1", appBuild: "1001" }),
+      "Wave 0.10.1 (build 1001)",
+    );
+    assert.equal(
+      appBuildName({ appVersion: "0.10.1", appBuild: "1001", buildLabel: "" }),
+      "Wave 0.10.1 (build 1001)",
+    );
+  });
+
+  test("a ti or main build is named with its label", () => {
+    assert.equal(
+      appBuildName({ appVersion: "0.11.2-ti", appBuild: "1102", buildLabel: "ti @ 1a2b3c4" }),
+      "Wave 0.11.2-ti (build 1102, ti @ 1a2b3c4)",
     );
   });
 
