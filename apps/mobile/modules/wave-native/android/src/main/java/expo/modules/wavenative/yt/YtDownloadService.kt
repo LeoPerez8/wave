@@ -72,7 +72,7 @@ class YtDownloadService : Service() {
       thread(name = "Wave download cancel") { runCatching { downloads.jobs.cancelJob(id, downloads.transport); downloads.changed() } }
     }
     // A null intent is Android's sticky restart, after Wave's process was gone.
-    downloads.start(onIdle = { stopping = DownloadServiceStop.QUEUE_EMPTY; stopSelf() }, refresh = { refresh() }, restarted = intent == null)
+    downloads.start(onIdle = { stopping = downloads.jobs.idleStop(); stopSelf() }, refresh = { refresh() }, restarted = intent == null)
     return START_STICKY
   }
 

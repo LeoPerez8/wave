@@ -53,10 +53,17 @@ class DurableDownloads(
   /** News rather than trouble (a transfer that finished, its speed); [log] unless told otherwise. */
   private val note: (String) -> Unit = log,
   private val slots: Int = SLOTS,
+  /**
+   * Whether jobs' budgets are charged from the start. The app's journal, opened as Wave starts and
+   * before its download service does, passes false: its clock waits for [startWork].
+   */
+  budgetRunning: Boolean = true,
 ) {
   private val jobs = LinkedHashMap<String, MutableMap<String, Any?>>()
   private var policy = mutableMapOf<String, Any?>("roots" to emptyList<String>(), "excluded" to emptyList<String>(), "revision" to 0L)
   @Volatile private var stopped = false
+  /** How the last job to end did (cancelled, failed, imported): why the service goes idle ([idleStop]). */
+  @Volatile private var lastEnd: String? = null
   /** The jobs a worker is on (under the lock), so no job's step ever runs twice at once. */
   private val running = HashSet<String>()
   /** Why the journal ended a job's transfer (out of time, silence), for the attempt's line when its worker returns. */
@@ -85,7 +92,7 @@ class DurableDownloads(
     val saved = if (journal.isFile) runCatching {
       FileInputStream(journal).use { ObjectInputStream(it).readObject() } as Map<String, Any?>
     }.getOrNull() else null
-    budget = BudgetClock(clock, (saved?.get("budgetClock") as? Number)?.toLong())
+    budget = BudgetClock(clock, (saved?.get("budgetClock") as? Number)?.toLong(), running = budgetRunning)
     if (saved != null) {
       for ((id, job) in saved.map("jobs")) {
         @Suppress("UNCHECKED_CAST")
@@ -98,8 +105,10 @@ class DurableDownloads(
       // another way (the song reached the Library) at launch, so failures don't pile up here.
       jobs.values.removeAll { it["phase"] == "cancelled" || it["acknowledged"] == true }
       // A socket cannot survive process recreation. Counts and deadlines do, on the budget's clock,
-      // which stood still while Wave was closed: a peer keeps what was left of its turn. YouTube's stream starts over from byte 0 at an address resolved
-      // afresh, so its transfer gets a whole window again, within the job's own deadline.
+      // which stood still while Wave was closed: a peer keeps what was left of its turn. Across a
+      // restart YouTube's stream starts over from byte 0 (its part file goes: [cleanup]) at an
+      // address resolved afresh, so its transfer gets a whole window again, within the job's own
+      // deadline. Between attempts in one process it goes on from its part file ([keepsPart]).
       for (job in jobs.values) if (job["phase"] == "transferring") {
         cleanup(job)
         job["generation"] = job.number("generation") + 1
@@ -299,7 +308,7 @@ class DurableDownloads(
       }
       "import" -> {
         if (payload["path"] != job.map("saved")["path"] || !included(File(payload["path"] as String))) return false
-        job["acknowledged"] = true; job.remove("token")
+        job["acknowledged"] = true; job.remove("token"); lastEnd = "imported"
       }
       else -> return false
     }
@@ -315,6 +324,10 @@ class DurableDownloads(
   }
 
   fun hasWork(): Boolean = published.any(::pending)
+
+  /** Why the download service stops once there's no work ([hasWork]): the last song cancelled, or none left. */
+  fun idleStop(): DownloadServiceStop =
+    if (lastEnd == "cancelled") DownloadServiceStop.CANCELLED else DownloadServiceStop.QUEUE_EMPTY
 
   /** The songs started and not yet in the Library, and those still waiting to start; the notification shows both. */
   fun counts(): DownloadCounts {
@@ -419,6 +432,7 @@ class DurableDownloads(
     job["phase"] != "publishing" && !(job["phase"] == "completed" && job["importFailure"] == null)
 
   private fun end(job: MutableMap<String, Any?>, transport: DurableTransfer) {
+    lastEnd = "cancelled"
     job["phase"] = "cancelled"; job["generation"] = job.number("generation") + 1; job.remove("token")
     persist(); transport.cancel(job["id"] as String); cleanup(job)
   }
@@ -445,6 +459,7 @@ class DurableDownloads(
         transport.cancel(job["id"] as String)
       } else if (soulseekTurnOver(job)) {
         changed = true
+        if (job["phase"] == "transferring") endings[job["id"] as String] = "cancelled after Soulseek's 2 minutes"
         transport.cancel(job["id"] as String)
         fail(job, "timedOut", SOULSEEK_OUT_OF_TIME)
       } else if (job["phase"] == "transferring" && (job.number("attemptDeadline") <= budgetNow() || (job["queuePosition"] != null && job.number("queueDeadline") <= budgetNow()))) {
@@ -540,7 +555,12 @@ class DurableDownloads(
             }
           }
           synchronized(this) {
-            val job = held(id, generation, "transferring") ?: run { transfer.ended(endings.remove(id) ?: "cancelled"); source.delete(); return }
+            val job = held(id, generation, "transferring") ?: run {
+              transfer.ended(endings.remove(id) ?: "cancelled")
+              // Ended by the journal as it returned (silence): the next YouTube attempt goes on from its bytes.
+              if (!partWaits(jobs[id], source)) source.delete()
+              return
+            }
             if (stopped) { transfer.ended("stopped"); cleanup(job); transition(job, "prepared"); persist(); return }
             transfer.ended("finished", audio.number("bytes"))
             job["audio"] = clean(audio); job["receiptId"] = UUID.randomUUID().toString(); job.remove("soulseekDeadline"); transition(job, "sourceReady"); persist()
@@ -694,6 +714,9 @@ class DurableDownloads(
    * on from its last byte; a peer's next transfer starts afresh. [fail] and [end] still delete it.
    */
   private fun keepsPart(job: Map<String, Any?>) = job["source"] == YOUTUBE && job["phase"] == "transferring"
+  /** Whether [part] is [job]'s YouTube part file, kept for its next attempt ([keepsPart]): the job goes on. */
+  private fun partWaits(job: Map<String, Any?>?, part: File) =
+    job != null && job["source"] == YOUTUBE && job["phase"] !in TERMINAL && job["sourcePath"] == part.path
   /** The next peer, or for YouTube its one stream again; failing once there's none left to try. */
   private fun nextCandidate(job: MutableMap<String, Any?>) {
     job.remove("resumeAttemptDeadline"); job.remove("resumeQueueDeadline")
@@ -788,6 +811,7 @@ class DurableDownloads(
       job.remove("fellBackCause")?.let { job["cause"] = it } ?: job.remove("cause")
     } else job["reason"] = reason
     job["endedAt"] = clock(); transition(job, "failed"); job["generation"] = job.number("generation") + 1; cleanup(job)
+    lastEnd = "failed"
   }
   /** A published file the Library couldn't import, with what went wrong. */
   private fun importFailed(job: MutableMap<String, Any?>, reason: String, cause: String?) {

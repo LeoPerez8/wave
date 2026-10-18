@@ -108,6 +108,27 @@ class DurableJobBudgetTest {
     assertEquals("timedOut", owner.snapshot().single()["reason"])
   }
 
+  /** Wave opens its journal before the download service starts: the time in between isn't charged. */
+  @Test fun noBudgetIsChargedBeforeTheDownloadServiceStarts() = inFolder { folder ->
+    var now = 1_000L
+    val journal = File(folder, "jobs")
+    val owner = DurableDownloads(journal, clock = { now })
+    owner.enqueue(song, null)
+    owner.advance(NoTransfer, NoPublication)
+    now += 15 * MINUTE
+    owner.expire(NoTransfer)
+    // Killed with five minutes left; opened again, and the service starts an hour later.
+    val reopened = DurableDownloads(copyOf(journal), clock = { now }, budgetRunning = false)
+    now += HOUR
+    reopened.startWork()
+    now += 5 * MINUTE - DurableDownloads.BUDGET_WRITE_MS - 1_000
+    reopened.expire(NoTransfer)
+    assertEquals("preparing", reopened.snapshot().single()["phase"])
+    now += 2 * DurableDownloads.BUDGET_WRITE_MS + 1_000
+    reopened.expire(NoTransfer)
+    assertEquals("timedOut", reopened.snapshot().single()["reason"])
+  }
+
   private val song = mapOf("videoId" to "song", "title" to "Recording", "durationMs" to 12_000L)
   private val candidate = mapOf("username" to "peer", "filename" to "Recording.mp3", "bitrateKbps" to 320)
   private fun prepare(owner: DurableDownloads, target: File) {
