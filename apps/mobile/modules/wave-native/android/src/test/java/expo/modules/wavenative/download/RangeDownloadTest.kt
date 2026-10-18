@@ -41,7 +41,7 @@ class RangeDownloadTest {
     }
   }
 
-  private fun downloader() = RangeDownload(chunkBytes = 4_096, attempts = 3, pause = {})
+  private fun downloader() = RangeDownload(chunkBytes = 4_096, attempts = 3, pause = {}, overlapBytes = 1_024)
 
   @Test
   fun downloadsTheFileInRangesOfTheChunkSize() {
@@ -149,5 +149,94 @@ class RangeDownloadTest {
     downloader().download(source(), remote.size.toLong(), target)
 
     assertArrayEquals(remote, target.readBytes())
+  }
+
+  // Resuming: a YouTube attempt goes on in the part file the attempt before it left.
+
+  @Test
+  fun resumingGoesOnFromThePartFilesLastByteAndTheFileComesOutWhole() {
+    val target = target()
+    target.writeBytes(remote.copyOfRange(0, 5_000))
+    val resumedAt = mutableListOf<Long>()
+    val progress = mutableListOf<Long>()
+
+    downloader().download(source(), remote.size.toLong(), target, onProgress = { progress += it }, resume = true, onResume = { resumedAt += it })
+
+    assertArrayEquals(remote, target.readBytes())
+    assertEquals(listOf(5_000L), resumedAt)
+    // Only a little before the kept bytes' end is asked for again, to check they're this file's.
+    assertTrue(requested.none { it.first == 0L })
+    assertEquals(10_000L, progress.last())
+    assertTrue(progress.all { it >= 5_000L })
+  }
+
+  @Test
+  fun resumingAPartFileThatHoldsAnotherFileStartsItOver() {
+    val target = target()
+    target.writeBytes(ByteArray(5_000) { (it % 13).toByte() })
+    val resumedAt = mutableListOf<Long>()
+
+    downloader().download(source(), remote.size.toLong(), target, resume = true, onResume = { resumedAt += it })
+
+    assertArrayEquals(remote, target.readBytes())
+    assertEquals(listOf(0L), resumedAt)
+  }
+
+  @Test
+  fun resumingAPartFileAlreadyAsLongAsTheFileStartsItOver() {
+    val target = target()
+    target.writeBytes(ByteArray(remote.size) { 7 })
+
+    downloader().download(source(), remote.size.toLong(), target, resume = true)
+
+    assertArrayEquals(remote, target.readBytes())
+    assertEquals(0L, requested.first().first)
+  }
+
+  @Test
+  fun whenResumingAFailureKeepsTheBytesThatArrivedForTheNextAttempt() {
+    val target = target()
+
+    assertThrows(IOException::class.java) {
+      downloader().download(source(failures = mutableListOf(0, 1_000, 0, 0)), remote.size.toLong(), target, resume = true)
+    }
+
+    // 1,000 bytes arrived before the connection went for good.
+    assertArrayEquals(remote.copyOfRange(0, 1_000), target.readBytes())
+    downloader().download(source(), remote.size.toLong(), target, resume = true)
+    assertArrayEquals(remote, target.readBytes())
+  }
+
+  @Test
+  fun whenResumingACancellationKeepsTheBytesThatArrived() {
+    val target = target()
+    var cancelled = false
+
+    assertThrows(CancellationException::class.java) {
+      downloader().download(source(), remote.size.toLong(), target, onProgress = { if (it >= 4_096) cancelled = true }, isCancelled = { cancelled }, resume = true)
+    }
+
+    assertArrayEquals(remote.copyOfRange(0, 4_096), target.readBytes())
+  }
+
+  @Test
+  fun aPauseCutShortByACancelIsACancellation() {
+    val target = target()
+    val interrupted = RangeDownload(chunkBytes = 4_096, attempts = 3, pause = { throw InterruptedException() })
+
+    assertThrows(CancellationException::class.java) {
+      interrupted.download(source(failures = mutableListOf(0)), remote.size.toLong(), target, resume = true)
+    }
+  }
+
+  @Test
+  fun aRequestBrokenByACancelIsACancellationNotAFailure() {
+    val target = target()
+    var cancelled = false
+    val breaking = RangeSource { _, _ -> cancelled = true; throw IOException("Socket closed") }
+
+    assertThrows(CancellationException::class.java) {
+      downloader().download(breaking, remote.size.toLong(), target, isCancelled = { cancelled }, resume = true)
+    }
   }
 }
