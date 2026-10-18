@@ -192,7 +192,7 @@ class DurableDownloads(
         if (origin != null) existing["origin"] = clean(origin)
         existing["decisionAttempts"] = 0L; startBudget(existing)
         if (deletedCompletion) {
-          for (key in listOf("saved", "acknowledged", "finalPath", "digest", "publishSource")) existing.remove(key)
+          for (key in listOf("saved", "acknowledged", "finalPath", "digest", "publishSource", "replaces")) existing.remove(key)
         }
         if (existing["saved"] != null) existing["phase"] = "completed"
         // Only while the file there is still this download's: one replaced since downloads again.
@@ -200,7 +200,7 @@ class DurableDownloads(
           existing["phase"] = "awaitingPublication"; existing["publicationAttempts"] = 0L
         } else {
           cleanup(existing)
-          for (key in listOf("finalPath", "digest", "publishSource")) existing.remove(key)
+          for (key in listOf("finalPath", "digest", "publishSource", "replaces")) existing.remove(key)
           existing["phase"] = "queued"; existing["attempts"] = 0L; existing["candidateIndex"] = 0L
           setSource(existing, source)
         }
@@ -303,6 +303,9 @@ class DurableDownloads(
         if (!included(target)) fail(job, "noFolder")
         else {
           job["targetPath"] = target.path; job["policyRevision"] = policy.number("revision")
+          // A quality replacement's new file takes the old one's very path (Core's
+          // `qualityReplacementTarget`): only ever the target itself.
+          if (payload["replaces"] == target.path) job["replaces"] = target.path else job.remove("replaces")
           transition(job, "publishing")
         }
       }
@@ -640,7 +643,8 @@ class DurableDownloads(
         FileInputStream(source).use { input -> FileOutputStream(local).use { out -> input.copyTo(out); out.fd.sync() } }
         source = local
       }
-      val chosen = DownloadFiles.freeName(target).path
+      // A replacement overwrites the file it replaces; anything else gets a free name beside it.
+      val chosen = if (start["replaces"] == target.path) target.path else DownloadFiles.freeName(target).path
       val sum = digest(source)
       onJob { job -> job["finalPath"] = chosen; job["digest"] = sum; job["publishSource"] = source.path; persist() } ?: return
     }
@@ -649,12 +653,15 @@ class DurableDownloads(
       if (!included(final)) { fail(job, "noFolder"); persist(); null } else Triple(final, File(job["publishSource"] as String), job["digest"] as String)
     } ?: return
     var (final, publishSource, sum) = chosen
+    val replacing = start["replaces"] == final.path
     // Another file took the chosen name before this one was moved there: the next free one.
-    if (final.exists() && publishSource.isFile && digest(final) != sum) {
+    if (!replacing && final.exists() && publishSource.isFile && digest(final) != sum) {
       final = DownloadFiles.freeName(target)
       onJob { job -> job["finalPath"] = final.path; persist() } ?: return
     }
-    if (!final.exists()) Files.move(publishSource.toPath(), final.toPath())
+    // The replaced file goes in the same step the new one arrives, never before.
+    if (replacing && publishSource.isFile) Files.move(publishSource.toPath(), final.toPath(), StandardCopyOption.REPLACE_EXISTING)
+    else if (!final.exists()) Files.move(publishSource.toPath(), final.toPath())
     if (digest(final) != sum) {
       onJob { job ->
         // Wave's own copy is gone and another file holds its name: Retry downloads the song again.

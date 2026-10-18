@@ -236,8 +236,8 @@ function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegr
   );
   // The artist's songs YouTube Music added that the page has shown keep their rows this visit.
   const holding = useHeldSongs();
-  // Asked on Show on YouTube Music, or on its own when opened integrated (from a streamed
-  // song's artist); nothing shows until the page is read.
+  // Asked once Online is picked on the page's toggle, or on its own when opened integrated
+  // (from a streamed song's artist); nothing shows until the page is read.
   const yt = useYtArtistSection(
     detail.artist.name,
     detail.artist.id,
@@ -393,17 +393,14 @@ function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegr
             mixed={loaded ? mixed : undefined}
             context={context}
             sortControl={<SongSortButton kind="artist" />}
+            toggle={loaded ? yt.toggle : null}
           />
           {loaded && <ArtistStatsBlock artistId={detail.artist.id} songs={detail.songs} />}
         </>
       }
       ListFooterComponent={
         ytView === null ? null : (
-          <YtLookupFooter
-            note={ytView.note === null ? null : YT_ARTIST_NOTE[ytView.note]}
-            button={ytView.button}
-            onShow={yt.show}
-          />
+          <YtLookupFooter note={ytView.note === null ? null : YT_ARTIST_NOTE[ytView.note]} />
         )
       }
     />
@@ -412,14 +409,15 @@ function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegr
 
 /**
  * An artist: their albums, the albums they appear on (each shelf one row of
- * covers that scrolls sideways), their songs and, while YT Music is on, Show
- * on YouTube Music (asked only on a tap): then the releases and every song
- * YouTube Music has of theirs that the Library lacks join the albums and songs, the
- * Library's songs are marked downloaded, and Play, Shuffle and taps play the
- * mixed list. Opened integrated (`openArtist`'s `integrated`, from a streamed
- * song's artist), it asks on its own, with no tap. Opened from a list that
- * knows the artist, the head is there on the first frame and the rest
- * follows once read.
+ * covers that scrolls sideways), their songs and, while YT Music is on, a
+ * Library | Online toggle after Play and Shuffle (asked only once Online is
+ * picked): then the releases and every song YouTube Music has of theirs that
+ * the Library lacks join the albums and songs, the Library's songs are marked
+ * downloaded, and Play, Shuffle and taps play the mixed list; Library hides
+ * them again. Opened integrated (`openArtist`'s `integrated`, from a streamed
+ * song's artist), it opens with Online selected and asks on its own. Opened
+ * from a list that knows the artist, the head is there on the first frame and
+ * the rest follows once read.
  */
 export default function ArtistScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();

@@ -16,7 +16,7 @@ import { Text, useWindowDimensions, View } from "react-native";
 import { Artwork } from "@/catalog/Artwork";
 import { CatalogLine } from "@/catalog/CatalogLine";
 import { CELL, grid } from "@/catalog/grid";
-import { PlayShuffle } from "@/catalog/PlayShuffle";
+import { PlayShuffle, type LineToggle } from "@/catalog/PlayShuffle";
 import { TrackRow } from "@/catalog/TrackRow";
 import { useChromeInset } from "@/chrome/chrome";
 import { Press } from "@/motion/Press";
@@ -98,8 +98,8 @@ const itemKey = (item: Item): string => {
 const YT_NOTE: Readonly<Record<YtLibraryAlbumNote, string>> = {
   loading: "Looking on YouTube Music…",
   notFound: "Not found on YouTube Music.",
-  offline: "You're offline. Try again when you're back online.",
-  failed: "YouTube Music didn't answer. Try again in a moment.",
+  offline: "You're offline. Tap Online to try again when you're back online.",
+  failed: "YouTube Music didn't answer. Tap Online to try again.",
 };
 
 /** The entries as playback takes them: the Library's files, the rest streamed. */
@@ -114,12 +114,15 @@ function AlbumHead({
   shown,
   mixed,
   ytSongs,
+  toggle,
 }: {
   shown: Shown;
   /** With YouTube Music's songs joined in, Play and Shuffle play them too. */
   mixed: readonly MixedSong<YtSong, SongRow>[] | null;
   /** The album's release on YouTube Music, once read: Download beside Play and Shuffle. */
   ytSongs: readonly NativeYtSong[];
+  /** The Library | Online toggle ending the Play and Shuffle line, YT Music on. */
+  toggle: LineToggle | null;
 }) {
   const { width } = useWindowDimensions();
   const { album, genre, tracks } = shown;
@@ -196,6 +199,7 @@ function AlbumHead({
         onPlay={() => play(false)}
         onShuffle={() => play(true)}
         last={listDownloadAction(download.button)}
+        toggle={toggle}
       />
     </View>
   );
@@ -358,15 +362,16 @@ function AlbumTracks({ shown, openedIntegrated }: { shown: Shown; openedIntegrat
       recycleItems
       contentContainerStyle={{ paddingHorizontal: grid.margin, paddingBottom: bottomInset }}
       ListHeaderComponent={
-        <AlbumHead shown={shown} mixed={mixed} ytSongs={ytView?.songs ?? NO_SONGS} />
+        <AlbumHead
+          shown={shown}
+          mixed={mixed}
+          ytSongs={ytView?.songs ?? NO_SONGS}
+          toggle={ytView === null ? null : yt.toggle}
+        />
       }
       ListFooterComponent={
         ytView === null ? null : (
-          <YtLookupFooter
-            note={ytView.note === null ? null : YT_NOTE[ytView.note]}
-            button={ytView.button}
-            onShow={yt.show}
-          />
+          <YtLookupFooter note={ytView.note === null ? null : YT_NOTE[ytView.note]} />
         )
       }
     />
@@ -377,10 +382,11 @@ function AlbumTracks({ shown, openedIntegrated }: { shown: Shown; openedIntegrat
  * An album: large cover, title, album artist, furniture, Play / Shuffle,
  * tracks by disc and number. Opened from a list that knows the album, the
  * header is there on the first frame and the tracks follow once read. While
- * YT Music is on it ends with Show on YouTube Music; opened from an
- * integrated view (`openAlbum`'s `integrated`), or once that's tapped, the
- * album's songs on YouTube Music that the Library lacks join the tracks,
- * streamed, and the Library's are marked downloaded.
+ * YT Music is on a Library | Online toggle ends the Play and Shuffle line;
+ * opened from an integrated view (`openAlbum`'s `integrated`) it opens with
+ * Online selected. With Online, the album's songs on YouTube Music that the
+ * Library lacks join the tracks, streamed, and the Library's are marked
+ * downloaded; Library shows the album as it is again.
  */
 export default function AlbumScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();

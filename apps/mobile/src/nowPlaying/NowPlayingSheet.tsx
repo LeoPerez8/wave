@@ -20,6 +20,7 @@ import { useThemeColor } from "@/theme/useThemeColor";
 import { Background } from "./Background";
 import { DismissArea } from "./DismissArea";
 import {
+  useDownloadedPath,
   useNowPlayingGradient,
   useNowPlayingPalette,
   usePlayingYtSong,
@@ -172,6 +173,9 @@ export function NowPlayingSheet() {
   const [view, setView] = useState<NowPlayingView>("player");
   // The Queue, once shown, stays mounted while another view shows (`QueuePane`).
   const [queueWarm, setQueueWarm] = useState(false);
+  // A streamed song downloaded since it was queued: Lyrics reads its file, as for a Library song.
+  const downloadedPath = useDownloadedPath(ytSong, shown && view === "lyrics");
+  const lyricsPath = details?.path ?? downloadedPath;
 
   useEffect(() => resizeNowPlaying(height), [height]);
 
@@ -237,8 +241,8 @@ export function NowPlayingSheet() {
             )}
             {view === "lyrics" && (
               <LyricsView
-                path={details?.path ?? null}
-                trackId={trackId}
+                path={lyricsPath}
+                trackId={lyricsPath === null ? trackId : null}
                 item={item}
                 palette={palette}
               />
