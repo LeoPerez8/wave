@@ -44,7 +44,7 @@ type Props = {
   onPick: (pick: YtPick) => void;
   /** Labelled, or icons alone where the row is tight (labels stay for screen readers). */
   form: OnlineToggleForm;
-  /** A long press on either segment (#435: the "Always search online" card). */
+  /** A long press on either segment: the Search online card (`openSearchOnlineChoices`). */
   onLongPress?: () => void;
 };
 
@@ -100,7 +100,9 @@ function Segment({
     <Press
       accessibilityRole="radio"
       accessibilityLabel={label}
-      accessibilityHint={hint}
+      accessibilityHint={
+        onLongPress === undefined ? hint : `${hint}. Long press to choose when to search online`
+      }
       accessibilityState={{ checked: selected, selected }}
       onPress={onPress}
       onLongPress={onLongPress}

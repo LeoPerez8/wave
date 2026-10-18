@@ -3,11 +3,12 @@
  * YT Music, "Search allowance"): at most `SEARCH_ALLOWANCE` searches in any
  * `SEARCH_WINDOW_MS`, kept while Wave is closed, who goes next when several
  * wait for it, and what the app log says about a wait. A search typed in
- * Search is outside it.
+ * Search is outside it, unless Search online is set to Always (`SearchOnline`):
+ * then Search asks as you type, on its own, and takes its turn too.
  */
 
 /** Who asks an automatic YouTube Music search. */
-export type SearchAsker = "playing" | "download" | "tryAgain" | "discover" | "fill";
+export type SearchAsker = "playing" | "search" | "download" | "tryAgain" | "discover" | "fill";
 
 /**
  * At most this many searches in any `SEARCH_WINDOW_MS`. YouTube Music began
@@ -30,6 +31,8 @@ interface AskerTurn {
 /** Where each asker stands. A new one is one more row. */
 const ASKERS: Readonly<Record<SearchAsker, AskerTurn>> = {
   playing: { rank: 0, most: SEARCH_ALLOWANCE, name: "the song about to play" },
+  // Search asking as you type under Search online's Always: someone is waiting on it, as for playing.
+  search: { rank: 0, most: SEARCH_ALLOWANCE, name: "Search" },
   download: { rank: 1, most: SEARCH_ALLOWANCE, name: "a download" },
   // A playlist's unavailable entries searched again: downloads' priority, named apart in the log.
   tryAgain: { rank: 1, most: SEARCH_ALLOWANCE, name: "Try Again" },

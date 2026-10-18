@@ -1354,7 +1354,8 @@ export { ARTIST_MIX_COUNT, artistMixSeeds, artistMixSimilarSource } from "./arti
 export type { ArtistMixPools, PlayedSeedArtist } from "./artistMixes.ts";
 export { GENRE_MIX_COUNT, genreFamily, genreMixSeeds, interleaveRadios } from "./genreMixes.ts";
 export type { GenreFamily, GenreMixLibrary } from "./genreMixes.ts";
-export type { YtPick } from "./onlineToggle.ts";
+export type { SearchOnline, YtPick } from "./onlineToggle.ts";
+export { readSearchOnline, writeSearchOnline } from "./onlineToggle.ts";
 export {
   BEST_QUALITY_KBPS,
   LOW_QUALITY_BELOW_KBPS,
