@@ -1,4 +1,4 @@
-import { IconX } from "@tabler/icons-react-native";
+import { IconShare3, IconX } from "@tabler/icons-react-native";
 import {
   RECAP_SLIDE_MS,
   recapBack,
@@ -6,7 +6,9 @@ import {
   recapForward,
   recapHourLabel,
   recapWeekdayLabel,
+  type GenreFamily,
   type RecapGenre,
+  type SettingsTileColour,
 } from "@wave/core";
 import { StatusBar } from "expo-status-bar";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
@@ -39,7 +41,10 @@ import { Artwork } from "@/catalog/Artwork";
 import { CELL, grid } from "@/catalog/grid";
 import { Press } from "@/motion/Press";
 import type { AlbumRow, ArtistRow, SongRow } from "@/library/LibraryStore";
+import { useInCapture } from "@/share/imageCapture";
+import { useThemeColor } from "@/theme/useThemeColor";
 
+import { RecapSharePreview } from "./RecapShare";
 import type { LoadedRecap, LoadedRecapSlide, Ranked } from "./Stats";
 import { useRecapMusic } from "./recapMusic";
 import { playCount } from "./StatsViews";
@@ -64,6 +69,9 @@ const slideFade = FadeIn.duration(150).reduceMotion(ReduceMotion.Never);
 /** One line of a slide, rising in after `step` others. */
 function Rise({ step, children }: { step: number; children: ReactNode }) {
   const reduceMotion = useReducedMotion();
+  // A slide drawn into a shared image stands still.
+  const still = useInCapture();
+  if (still) return <View>{children}</View>;
   return (
     <Animated.View entering={reduceMotion ? slideFade : slideRise.delay(step * 120)}>
       {children}
@@ -72,14 +80,15 @@ function Rise({ step, children }: { step: number; children: ReactNode }) {
 }
 
 /** Each slide kind's backdrop: a tile colour, white ink on it. */
-const BACKDROP: Record<LoadedRecapSlide["kind"], string> = {
-  minutes: "bg-tile-indigo",
-  topSongs: "bg-tile-pink",
-  topArtists: "bg-tile-purple",
-  topAlbum: "bg-tile-blue",
-  topGenres: "bg-tile-orange",
-  habits: "bg-tile-green",
-  discovered: "bg-tile-red",
+const BACKDROP: Record<LoadedRecapSlide["kind"], SettingsTileColour> = {
+  minutes: "indigo",
+  topSongs: "pink",
+  topArtists: "purple",
+  topAlbum: "blue",
+  topGenres: "orange",
+  habits: "green",
+  discovered: "red",
+  summary: "indigo",
 };
 
 function MinutesSlide({ title, minutes }: { title: string; minutes: number }) {
@@ -378,6 +387,92 @@ function DiscoveredSlide({
   );
 }
 
+/** A column of the summary card: a heading over up to 5 numbered names. */
+function SummaryColumn({ heading, names }: { heading: string; names: readonly string[] }) {
+  return (
+    <View className="flex-1" style={{ gap: CELL }}>
+      <Text className="font-sans text-footnote font-semibold text-on-tile opacity-80">
+        {heading}
+      </Text>
+      {names.map((name, index) => (
+        <Text
+          // A name can repeat (two songs with one title); the rank can't.
+          key={index}
+          numberOfLines={1}
+          className="font-sans text-subheadline font-semibold text-on-tile"
+        >
+          <Text style={{ fontVariant: ["tabular-nums"] }}>{index + 1} </Text>
+          {name}
+        </Text>
+      ))}
+    </View>
+  );
+}
+
+/** A figure of the summary card: a label over a large value. */
+function SummaryFigure({ label, value }: { label: string; value: string }) {
+  return (
+    <View className="flex-1">
+      <Text className="font-sans text-footnote font-semibold text-on-tile opacity-80">{label}</Text>
+      <Text
+        adjustsFontSizeToFit
+        numberOfLines={1}
+        className="font-sans text-title1 font-bold text-on-tile"
+        style={{ fontVariant: ["tabular-nums"] }}
+      >
+        {value}
+      </Text>
+    </View>
+  );
+}
+
+/** The summary card, the last slide: top artists and songs, minutes and top genre, as Wrapped's. */
+function SummarySlide({
+  minutes,
+  songs,
+  artists,
+  genre,
+}: {
+  minutes: number;
+  songs: readonly Ranked<SongRow>[];
+  artists: readonly Ranked<ArtistRow>[];
+  genre: GenreFamily | null;
+}) {
+  const top = artists[0];
+  return (
+    <View className="flex-1 justify-center" style={{ gap: CELL * 4 }}>
+      {top !== undefined && (
+        <Rise step={0}>
+          <View className="items-center">
+            <ArtistImage artist={top.item} size={CELL * 20} large />
+          </View>
+        </Rise>
+      )}
+      {(artists.length > 0 || songs.length > 0) && (
+        <Rise step={1}>
+          <View className="flex-row" style={{ gap: CELL * 2 }}>
+            {artists.length > 0 && (
+              <SummaryColumn
+                heading="Top artists"
+                names={artists.map((entry) => entry.item.name)}
+              />
+            )}
+            {songs.length > 0 && (
+              <SummaryColumn heading="Top songs" names={songs.map((entry) => entry.item.title)} />
+            )}
+          </View>
+        </Rise>
+      )}
+      <Rise step={2}>
+        <View className="flex-row" style={{ gap: CELL * 2 }}>
+          <SummaryFigure label="Minutes listened" value={minutes.toLocaleString("en")} />
+          {genre !== null && <SummaryFigure label="Top genre" value={genre.name} />}
+        </View>
+      </Rise>
+    </View>
+  );
+}
+
 function Slide({ recap, slide }: { recap: LoadedRecap; slide: LoadedRecapSlide }) {
   switch (slide.kind) {
     case "minutes":
@@ -400,6 +495,15 @@ function Slide({ recap, slide }: { recap: LoadedRecap; slide: LoadedRecapSlide }
       );
     case "discovered":
       return <DiscoveredSlide count={slide.count} artists={slide.artists} />;
+    case "summary":
+      return (
+        <SummarySlide
+          minutes={slide.minutes}
+          songs={slide.songs}
+          artists={slide.artists}
+          genre={slide.genre}
+        />
+      );
   }
 }
 
@@ -440,7 +544,10 @@ export function RecapStories({
 }) {
   const insets = useSafeAreaInsets();
   const [index, setIndex] = useState(0);
-  const [paused, setPaused] = useState(false);
+  const [held, setPaused] = useState(false);
+  /** The slide's share preview is open: the stories and their music wait under it. */
+  const [sharing, setSharing] = useState(false);
+  const paused = held || sharing;
   /** Goes up each time back restarts a slide, so its timer and entrance start again. */
   const [restarts, setRestarts] = useState(0);
   const progress = useSharedValue(0);
@@ -449,6 +556,9 @@ export function RecapStories({
   const closed = useRef(false);
   const count = recap?.slides.length ?? 0;
   useRecapMusic(recap, index, paused);
+  const slide = recap?.slides[index];
+  const backdrop = useThemeColor(`tile-${slide === undefined ? "grey" : BACKDROP[slide.kind]}`);
+  const closeShare = useCallback(() => setSharing(false), []);
 
   const close = useCallback(() => {
     if (closed.current) return;
@@ -537,15 +647,17 @@ export function RecapStories({
     borderRadius: Math.min(offset.get() / 4, 24),
   }));
 
-  const slide = recap?.slides[index];
-
   return (
     <View className="flex-1 bg-scrim">
       <StatusBar style="light" />
       <Animated.View
         accessibilityViewIsModal
-        className={`flex-1 overflow-hidden ${slide === undefined ? "bg-scrim" : BACKDROP[slide.kind]}`}
-        style={[{ paddingTop: insets.top + CELL }, dragStyle]}
+        className="flex-1 overflow-hidden bg-scrim"
+        style={[
+          { paddingTop: insets.top + CELL },
+          slide !== undefined && { backgroundColor: backdrop },
+          dragStyle,
+        ]}
         onLayout={(event) => {
           width.current = event.nativeEvent.layout.width;
         }}
@@ -559,9 +671,24 @@ export function RecapStories({
           className="flex-row items-center justify-between"
           style={{ paddingLeft: grid.margin, paddingRight: CELL / 2 }}
         >
-          <Text numberOfLines={1} className="font-sans text-subheadline font-semibold text-on-tile">
+          <Text
+            numberOfLines={1}
+            className="flex-1 font-sans text-subheadline font-semibold text-on-tile"
+          >
             {recap?.title ?? ""}
           </Text>
+          {recap !== null && recap !== undefined && slide !== undefined && (
+            <Press
+              accessibilityRole="button"
+              accessibilityLabel="Share slide"
+              onPress={() => setSharing(true)}
+              haptic="selection"
+              className="items-center justify-center"
+              style={{ width: 48, height: 48 }}
+            >
+              <IconShare3 size={24} color="#ffffff" strokeWidth={1.5} />
+            </Press>
+          )}
           <Press
             accessibilityRole="button"
             accessibilityLabel="Close Recap"
@@ -594,6 +721,11 @@ export function RecapStories({
           </View>
         </GestureDetector>
       </Animated.View>
+      {sharing && recap !== null && recap !== undefined && slide !== undefined && (
+        <RecapSharePreview title={recap.title} colour={backdrop} onClose={closeShare}>
+          <Slide recap={recap} slide={slide} />
+        </RecapSharePreview>
+      )}
     </View>
   );
 }
