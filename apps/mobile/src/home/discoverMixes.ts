@@ -28,12 +28,19 @@ import {
   discoverMixesDue,
   discoverMixesSection,
   genreMixSeeds,
+  homeSectionTitle,
   identityKey,
   interleaveRadios,
+  mixesShown,
+  mixRefreshAvoid,
+  mixRefreshWaitNotice,
   parseDiscoverMixes,
+  parseMixesShown,
   pickYtArtist,
   savedDiscoverMix,
   storedDiscoverMixes,
+  storedMixesShown,
+  undoneMixRefresh,
   ytArtistLookup,
   type ArtistMixPools,
   type BlendedDiscoverMix,
@@ -44,6 +51,8 @@ import {
   type DiscoverMixes,
   type DiscoverMixesSection,
   type DiscoverSimilarArtists,
+  type MixRefreshAvoid,
+  type ShownMixes,
   type YtAlbumSong,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
@@ -59,10 +68,11 @@ import { LibraryStore, type SongRow } from "@/library/LibraryStore";
 import { appRuntime } from "@/library/runtime";
 import { useLibraryQuery } from "@/library/sharedQueries";
 import type { NativeYtRadioSong } from "@/native/waveYtMusic";
+import { showToast } from "@/overlay/toast";
 import { useDontPlayExplicit } from "@/settings/dontPlayExplicit";
 import { useYtMusicEnabled } from "@/settings/ytMusic";
 import { Stats } from "@/stats/Stats";
-import { withSearchTurn } from "@/ytmusic/searchAllowance";
+import { searchAllowanceFreeAt, withSearchTurn } from "@/ytmusic/searchAllowance";
 import { YtMusic } from "@/ytmusic/YtMusic";
 
 import { useDiscoverMixLevel, type MixSectionId } from "./discoverMixLevel";
@@ -220,14 +230,22 @@ const readLibrary = mixIndexes;
  * null when no seed made a usable mix. It gives the JavaScript thread back
  * after each radio (`freeTurnEffect`), so Home stays smooth.
  */
-const mixesOf = (seeds: readonly DiscoverMixSeed[], library: MixIndexes) =>
+const mixesOf = (
+  seeds: readonly DiscoverMixSeed[],
+  library: MixIndexes,
+  avoid: MixRefreshAvoid | undefined,
+) =>
   Effect.gen(function* () {
     const { known } = library;
+    // A refresh's new songs leave out those the section showed today, where it can.
+    const avoidSongs = avoid === undefined ? {} : { avoid: avoid.songs };
     const taken = new Set<string>();
     const takenFamiliar = { tracks: new Set<number>(), videos: new Set<string>() };
     const mixes: DiscoverMix[] = [];
     for (const seed of seeds) {
-      const read = yield* Effect.result(readRadios(seed, { known: known.known, taken }));
+      const read = yield* Effect.result(
+        readRadios(seed, { known: known.known, taken, ...avoidSongs }),
+      );
       if (Result.isFailure(read) || read.success === null) continue;
       yield* freeTurnEffect;
       const { kept, radio } = read.success;
@@ -256,40 +274,45 @@ const mixesOf = (seeds: readonly DiscoverMixSeed[], library: MixIndexes) =>
  * Library's when plays are short, then artists similar to the Library's when
  * its artists are too few. "nothing-to-build-from" when there are no seeds
  * (no plays and an empty Library), null when no seed made a usable mix:
- * either way what was saved stays, and a later visit can try again.
+ * either way what was saved stays, and a later visit can try again. A
+ * refresh passes [avoid] (`mixRefreshAvoid`): other artists, other songs.
  */
-const buildArtistMixes = Effect.gen(function* () {
-  const stats = yield* Stats;
-  const artists = yield* stats.topArtists("all", SEED_POOL);
-  const library = yield* readLibrary;
-  const seeds = artistMixSeeds(
-    yield* withSimilar({
-      played: artists.map(({ item, countedPlays }) => ({
-        id: item.id,
-        name: item.name,
-        countedPlays,
-      })),
-      library: library.artists.map((artist) => ({ ...artist, songCount: artist.trackCount })),
-    }),
-    Math.random,
-  );
-  if (seeds.length === 0) return "nothing-to-build-from" as const;
-  return yield* mixesOf(seeds, library);
-});
+const buildArtistMixes = (avoid?: MixRefreshAvoid) =>
+  Effect.gen(function* () {
+    const stats = yield* Stats;
+    const artists = yield* stats.topArtists("all", SEED_POOL);
+    const library = yield* readLibrary;
+    const seeds = artistMixSeeds(
+      yield* withSimilar({
+        played: artists.map(({ item, countedPlays }) => ({
+          id: item.id,
+          name: item.name,
+          countedPlays,
+        })),
+        library: library.artists.map((artist) => ({ ...artist, songCount: artist.trackCount })),
+        ...(avoid === undefined ? {} : { avoid }),
+      }),
+      Math.random,
+    );
+    if (seeds.length === 0) return "nothing-to-build-from" as const;
+    return yield* mixesOf(seeds, library, avoid);
+  });
 
 /**
  * Builds Genre mixes from the Library's genre families with five songs or
  * more, most played first, each from up to three of its artists picked at
  * random (`Math.random`) leaning towards those most played in it.
  * "nothing-to-build-from" when no family has enough songs (the section
- * hides), null when no seed made a usable mix.
+ * hides), null when no seed made a usable mix. A refresh passes [avoid]
+ * (`mixRefreshAvoid`): other families or other artists, other songs.
  */
-const buildGenreMixes = Effect.gen(function* () {
-  const library = yield* readLibrary;
-  const seeds = genreMixSeeds(library, Math.random);
-  if (seeds.length === 0) return "nothing-to-build-from" as const;
-  return yield* mixesOf(seeds, library);
-});
+const buildGenreMixes = (avoid?: MixRefreshAvoid) =>
+  Effect.gen(function* () {
+    const library = yield* readLibrary;
+    const seeds = genreMixSeeds(library, Math.random, avoid);
+    if (seeds.length === 0) return "nothing-to-build-from" as const;
+    return yield* mixesOf(seeds, library, avoid);
+  });
 
 /** When a build made no mixes: try again after a while, not on every visit. */
 const RETRY_MS = 10 * 60 * 1000;
@@ -308,6 +331,11 @@ interface MixSection {
    * nothing to build from doesn't flash a skeleton on every launch.
    */
   readonly nothingToBuildFrom: PersistedSetting<boolean>;
+  /**
+   * The sets of mixes the section showed today (Core's `mixesShown`): what
+   * a refresh avoids. The day's automatic build starts it afresh.
+   */
+  readonly shown: PersistedSetting<ShownMixes[]>;
   readonly build: typeof buildArtistMixes;
   /**
    * How long a build that found nothing to build from waits for the next:
@@ -343,6 +371,11 @@ const section = (
     write: (mixes) => (mixes === null ? null : storedDiscoverMixes(mixes)),
   }),
   nothingToBuildFrom: flag(`${key}.nothingToBuildFrom`),
+  shown: persistedSetting<ShownMixes[]>({
+    key: `${key}.shown`,
+    read: parseMixesShown,
+    write: (memory) => (memory.length === 0 ? null : storedMixesShown(memory)),
+  }),
   build,
   nothingRetryMs,
   building: makeExternalStore(false),
@@ -371,13 +404,15 @@ const refresh = (id: MixSectionId, played: boolean): void => {
   if (mixSection.retryAt !== null && now < mixSection.retryAt) return;
   mixSection.building.set(true);
   void appRuntime
-    .runPromise(Effect.result(mixSection.build))
+    .runPromise(Effect.result(mixSection.build()))
     .then((result) => {
       const built = Result.isSuccess(result) ? result.success : null;
       if (built !== null && built !== "nothing-to-build-from") {
         mixSection.retryAt = null;
         mixSection.nothingToBuildFrom.set(false);
         mixSection.saved.set(built);
+        // The day's build: what refreshes avoid starts again from it.
+        mixSection.shown.set(mixesShown([], built, Date.now()));
         return;
       }
       if (built === "nothing-to-build-from") {
@@ -391,6 +426,60 @@ const refresh = (id: MixSectionId, played: boolean): void => {
     })
     .finally(() => {
       mixSection.building.set(false);
+    });
+};
+
+/** The toast after a refresh saved new mixes; its Undo puts the previous ones back. */
+const NEW_MIXES = "New mixes";
+
+/**
+ * Builds [id]'s mixes again now, for new ones (the owner pulled its
+ * carousel past its start): only that section, whether or not a build is
+ * due, its new mixes avoiding the seeds and new songs it showed today where
+ * others are left (Core's `mixRefreshAvoid`). Does nothing while the
+ * section builds. Its saved mixes stay, "Updating…" in the header, until
+ * the new ones are saved and crossfade in, counting as the section's build
+ * for the day; a "New mixes" toast then offers Undo, which puts the
+ * previous set back while the toast shows. A refresh that makes no mixes
+ * (offline, nothing usable) keeps them and says so. Its searches share the
+ * search allowance, and a toast says when that holds them back.
+ */
+export const refreshMixes = (id: MixSectionId): void => {
+  const mixSection = SECTIONS[id];
+  if (mixSection.building.get()) return;
+  const { saved, shown, building } = mixSection;
+  const now = Date.now();
+  const previous = saved.get();
+  const memory = previous === null ? shown.get() : mixesShown(shown.get(), previous, now);
+  const freeAt = searchAllowanceFreeAt("discover");
+  if (freeAt !== null) void showToast(mixRefreshWaitNotice(freeAt - now));
+  building.set(true);
+  void appRuntime
+    .runPromise(Effect.result(mixSection.build(mixRefreshAvoid(memory, now))))
+    .then((result) => {
+      const built = Result.isSuccess(result) ? result.success : null;
+      if (built === null || built === "nothing-to-build-from") {
+        void showToast(`Couldn't refresh ${homeSectionTitle(id)}`);
+        return;
+      }
+      mixSection.retryAt = null;
+      mixSection.nothingToBuildFrom.set(false);
+      saved.set(built);
+      shown.set(mixesShown(memory, built, Date.now()));
+      if (previous === null) return;
+      void showToast(NEW_MIXES, {
+        label: "Undo",
+        run: () => {
+          // Another build saved since: Undo would throw its mixes away.
+          if (saved.get() !== built || building.get()) return;
+          const undone = undoneMixRefresh(previous, built, Date.now());
+          saved.set(undone);
+          shown.set(mixesShown(shown.get(), undone, Date.now()));
+        },
+      });
+    })
+    .finally(() => {
+      building.set(false);
     });
 };
 
