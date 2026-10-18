@@ -12,6 +12,7 @@ import type {
   DiscoverSeedArtist,
   DiscoverSongPlays,
 } from "./discoverMixes.ts";
+import { genreMixId } from "./discoverMixes.ts";
 import { identityKey } from "./library.ts";
 import { freshFirst, type MixRefreshAvoid } from "./mixRefresh.ts";
 import { pickWeighted, playsWeight, type RandomSource } from "./weightedPick.ts";
@@ -350,7 +351,7 @@ export const genreMixSeeds = (
     .sort((a, b) => b.plays - a.plays || b.songs - a.songs);
   const { fresh, shown } = freshFirst(
     ranked,
-    avoid === undefined ? null : ({ family }) => avoid.mixes.get(`genre:${family.key}`),
+    avoid === undefined ? null : ({ family }) => avoid.mixes.get(genreMixId(family.key)),
   );
   const chosen = new Set([...fresh, ...shown].slice(0, GENRE_MIX_COUNT));
   // The families are ranked by plays once there are any, whichever families
@@ -363,7 +364,7 @@ export const genreMixSeeds = (
     const { key, name } = family.family;
     seeds.push({
       kind: "genre",
-      id: `genre:${key}`,
+      id: genreMixId(key),
       name,
       from: played ? "plays" : "library",
       genre: name,

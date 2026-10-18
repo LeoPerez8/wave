@@ -1416,3 +1416,4 @@ export type {
   MixPlaylistEntry,
   StreamedSong,
 } from "./mixKnownSongs.ts";
+export { mixSectionOfId, mixSeedArtists } from "./discoverMixes.ts";

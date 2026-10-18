@@ -89,7 +89,6 @@ describe("A refreshed mix's new songs", () => {
   const filter = (avoid: ReadonlySet<string>) => ({
     known: () => false,
     taken: new Set<string>(),
-    seedVideo: null,
     avoid,
   });
   const radio = Array.from({ length: 30 }, (_, at) => yt(`v${at}`, "Dayseeker"));

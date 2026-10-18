@@ -79,7 +79,6 @@ describe("A mix's songs", () => {
   const nothing = {
     known: () => false,
     taken: new Set<string>(),
-    seedVideo: null,
   };
   const ids = (songs: readonly { videoId: string }[]) => songs.map((song) => song.videoId);
 
@@ -95,11 +94,10 @@ describe("A mix's songs", () => {
     );
   });
 
-  test("leave out the seed, music videos and songs the owner knows", () => {
+  test("leave out music videos and songs the owner knows", () => {
     const songs = discoverMixSongs(
       [
         [
-          yt("seed", "Glory Box", ["Portishead"]),
           yt("video", "Unfinished Sympathy", ["Massive Attack"], { video: true }),
           yt("owned", "Teardrop", ["Massive Attack"]),
           yt("played", "Roads", ["Portishead"]),
@@ -109,7 +107,6 @@ describe("A mix's songs", () => {
       {
         known: (song) => song.title === "Teardrop" || song.title === "Roads",
         taken: new Set(),
-        seedVideo: "seed",
       },
     );
     assert.deepEqual(ids(songs), ["new"]);
@@ -226,35 +223,6 @@ describe("A mix", () => {
       line: "12 songs",
       artworkUrl: null,
     });
-  });
-
-  test("from a genre another mix took first, is numbered, and a lowercase genre is capitalised", () => {
-    const seedOf = (name: string, genre: string) => ({
-      kind: "artist" as const,
-      id: `artist:${name.toLowerCase()}`,
-      name,
-      from: "library" as const,
-      genre,
-    });
-    const seeds = [
-      seedOf("Foo Fighters", "rock"),
-      seedOf("Massive Attack", "Trip Hop"),
-      seedOf("Muse", "Rock"),
-    ];
-    const built = discoverMixesBuilt(
-      seeds.map((seed) => discoverMix(seed, songs(12))!),
-      1,
-      seeds,
-    );
-    assert.deepEqual(
-      built?.mixes.map((mix) => captionOf(mix).title),
-      ["Rock mix", "Trip Hop mix", "Rock mix 2"],
-    );
-    const again = parseDiscoverMixes(storedDiscoverMixes(built!));
-    assert.deepEqual(
-      again?.mixes.map((mix) => captionOf(mix).title),
-      ["Rock mix", "Trip Hop mix", "Rock mix 2"],
-    );
   });
 
   test("keeps its genre and its seed's artists", () => {

@@ -10,6 +10,7 @@
 import { splitCredit } from "./credits.ts";
 import type { BlendedDiscoverMix, DiscoverMixSong } from "./discoverMixLevels.ts";
 import type { ExplicitFlag } from "./explicit.ts";
+import type { HomeSectionId } from "./homeSections.ts";
 import { identityKey } from "./library.ts";
 import { normalizeSearchText } from "./search.ts";
 import { readStoredRecord } from "./storedJson.ts";
@@ -105,7 +106,30 @@ export interface DiscoverMixSeed {
   readonly artists?: readonly DiscoverSeedArtist[];
 }
 
+/** The artists whose radios [seed]'s mix grows from: a genre mix's seed artists, an artist mix's artist. */
+export const mixSeedArtists = (
+  seed: DiscoverMixSeed,
+): readonly Pick<DiscoverMixSeed, "name" | "browseId">[] => seed.artists ?? [seed];
+
+const GENRE_MIX_ID = "genre:";
+
+/** A genre mix's id (`DiscoverMixSeed.id`), from its family's key (`genreFamily`). */
+export const genreMixId = (familyKey: string): string => `${GENRE_MIX_ID}${familyKey}`;
+
+/** The Home section a mix (by its seed's [id]) is of: Genre mixes' or Artist mixes'. */
+export const mixSectionOfId = (
+  id: string,
+): Extract<HomeSectionId, "artist-mixes" | "genre-mixes"> =>
+  id.startsWith(GENRE_MIX_ID) ? "genre-mixes" : "artist-mixes";
+
 const FIELD = "\u001f";
+
+/**
+ * What tells a radio song's recording apart within mixes: its title and
+ * artists, compared as Search compares text.
+ */
+export const mixRecordingOf = (song: Pick<YtSong, "title" | "artists">): string =>
+  `${normalizeSearchText(song.title)}${FIELD}${song.artists.map(normalizeSearchText).join(FIELD)}`;
 const TRAILING_FEATURE = /\s(?:feat|ft|featuring)\s.*$/u;
 const TRAILING_REMASTER = /\s(?:\d{4}\s)?remaster(?:ed)?(?:\s(?:\d{4}|version))*$/u;
 
@@ -173,8 +197,6 @@ export interface DiscoverMixFilter<S extends DiscoverRadioSong> {
   readonly known: (song: S) => boolean;
   /** The songs the mixes before this one have, by video id. */
   readonly taken: ReadonlySet<string>;
-  /** The video the radio started from, for a song seed. */
-  readonly seedVideo: string | null;
   /**
    * For a refresh: the new songs of the sets the section showed today
    * (`mixRefreshAvoid`), by video id. They come back only to make up a mix's
@@ -193,10 +215,9 @@ const RADIO_PAGES = 3;
 /**
  * A mix's songs from its seed's radio, as read so far ([pages], in order):
  * the songs, in the radio's order, the owner doesn't know yet. Music videos,
- * the seed, songs the owner knows (the Library's, played, streamed or in a
- * playlist), songs an earlier mix has and a song the radio plays again are
- * left out; 50 at most. Reading a
- * page at a time, pass the songs kept from the pages before as [before]:
+ * songs the owner knows (the Library's, played, streamed or in a playlist),
+ * songs an earlier mix has and a song the radio plays again are left out;
+ * 50 at most. Reading a page at a time, pass the songs kept from the pages before as [before]:
  * they come first, and only the new pages' songs are looked at.
  */
 export const discoverMixSongs = <S extends DiscoverRadioSong>(
@@ -204,19 +225,16 @@ export const discoverMixSongs = <S extends DiscoverRadioSong>(
   filter: DiscoverMixFilter<S>,
   before: readonly S[] = [],
 ): S[] => {
-  const recordingOf = (song: S): string =>
-    `${normalizeSearchText(song.title)}${FIELD}${song.artists.map(normalizeSearchText).join(FIELD)}`;
   const videos = new Set(filter.taken);
-  if (filter.seedVideo !== null) videos.add(filter.seedVideo);
   for (const song of before) videos.add(song.videoId);
-  const recordings = new Set(before.map(recordingOf));
+  const recordings = new Set(before.map(mixRecordingOf));
   const kept: S[] = [...before];
   // Songs a refresh avoids, kept back in case the mix is short without them.
   const held: S[] = [];
   const radio = pages.flat();
   for (const song of radio) {
     if (kept.length >= MIX_MOST) break;
-    const recording = recordingOf(song);
+    const recording = mixRecordingOf(song);
     if (song.video || videos.has(song.videoId) || recordings.has(recording)) continue;
     if (filter.known(song)) continue;
     videos.add(song.videoId);
@@ -258,14 +276,8 @@ export interface DiscoverMix {
     /** The Library genre the mix stands for (`DiscoverMixSeed.genre`); absent for the others. */
     readonly genre?: string;
     /**
-     * Which of its genre's mixes it is, from 2 ("Rock mix 2"), when an
-     * earlier mix of the build took the genre first; absent for the first.
-     * Worked out from the mixes' order whenever they're saved or read.
-     */
-    readonly part?: number;
-    /**
-     * The seed's artists: the artist, or the artists a song seed credits.
-     * Absent on mixes saved before they were kept.
+     * The seed's artists: an artist mix's artist, a genre mix's seed
+     * artists. Absent on mixes saved before they were kept.
      */
     readonly artists?: readonly string[];
   };
@@ -343,7 +355,7 @@ export const discoverMix = (
           kind: seed.kind,
           name: seed.name,
           ...(seed.genre === undefined ? {} : { genre: seed.genre }),
-          artists: seed.artists?.map((artist) => artist.name) ?? [seed.name],
+          artists: mixSeedArtists(seed).map((artist) => artist.name),
         },
         songs: songs.map(({ video: _video, ...song }) => song),
         familiar: familiar.map((song): DiscoverMixFamiliarSong =>
@@ -390,10 +402,9 @@ export const discoverMixCaption = (
     const key = identityKey(lead);
     if (!artists.has(key)) artists.set(key, lead);
   }
-  const { part } = mix.seed;
   const name = genre === undefined ? mix.seed.name : genreTitle(genre);
   return {
-    title: `${name} mix${part === undefined ? "" : ` ${part}`}`,
+    title: `${name} mix`,
     artists: [...artists.values()].join(", "),
     line: `${mix.songs.length} songs`,
     artworkUrl: mixCover(mix),
@@ -444,28 +455,11 @@ const genreTitle = (genre: string): string =>
       )
     : genre;
 
-/**
- * [mixes] with each mix of a genre an earlier one took numbered (`part`), so
- * a reused genre's tiles and playlists don't share a name.
- */
-const numberGenreMixes = (mixes: readonly DiscoverMix[]): DiscoverMix[] => {
-  const taken = new Map<string, number>();
-  return mixes.map((mix) => {
-    const { part, ...seed } = mix.seed;
-    const key = seed.genre === undefined ? null : identityKey(seed.genre.trim());
-    const count = key === null ? 1 : (taken.get(key) ?? 0) + 1;
-    if (key !== null) taken.set(key, count);
-    if (count > 1) return { ...mix, seed: { ...seed, part: count } };
-    return part === undefined ? mix : { ...mix, seed };
-  });
-};
-
 const built = (
   mixes: readonly DiscoverMix[],
   builtAt: number,
   playSeeds: boolean,
-): DiscoverMixes | null =>
-  mixes.length === 0 ? null : { builtAt, playSeeds, mixes: numberGenreMixes(mixes) };
+): DiscoverMixes | null => (mixes.length === 0 ? null : { builtAt, playSeeds, mixes });
 
 /**
  * What a build from [seeds] that made [mixes] saves. Only a build with usable
@@ -496,7 +490,7 @@ export const storedDiscoverMixes = (mixes: DiscoverMixes): string =>
 const isString = (value: unknown): value is string => typeof value === "string";
 const isNullable = <T>(value: unknown, is: (value: unknown) => value is T): boolean =>
   value === null || is(value);
-const isNumber = (value: unknown): value is number =>
+export const isNumber = (value: unknown): value is number =>
   typeof value === "number" && Number.isFinite(value);
 const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
@@ -576,7 +570,8 @@ export const parseDiscoverMixes = (stored: string | null): DiscoverMixes | null 
   );
 };
 
-const localDay = (ms: number): string => new Date(ms).toDateString();
+/** [ms]'s day on the phone's calendar, to tell days apart. */
+export const localDay = (ms: number): string => new Date(ms).toDateString();
 
 /**
  * Whether to build the mixes again at [now], given the last build ([last],

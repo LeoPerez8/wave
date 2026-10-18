@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import {
+  artistMixSeeds,
   blendDiscoverMix,
   discoverMix,
   discoverMixCaption,
@@ -12,6 +13,8 @@ import {
   genreMixSeeds,
   interleaveRadios,
   mixKnownSongs,
+  mixSectionOfId,
+  mixSeedArtists,
   parseDiscoverMixes,
   storedDiscoverMixes,
 } from "./index.ts";
@@ -410,5 +413,30 @@ describe("A genre mix", () => {
       mix && discoverMixCaption(blendDiscoverMix(mix, { level: 5 })).title,
       "Dream Pop Shoegaze mix",
     );
+  });
+});
+
+describe("A mix's seed", () => {
+  const library = libraryOf([...songsOf(3, "Metalcore", 1, 10), ...songsOf(3, "Metal", 2, 5)]);
+  const genre = genreMixSeeds(library, always(0))[0]!;
+  const artist = artistMixSeeds(
+    { played: [{ id: 3, name: "Spiritbox", countedPlays: 4 }] },
+    always(0),
+  )[0]!;
+
+  test("grows from a genre mix's seed artists, or an artist mix's own artist", () => {
+    assert.deepEqual(
+      mixSeedArtists(genre).map((seedArtist) => seedArtist.name),
+      ["Bad Omens", "Sleep Token"],
+    );
+    assert.deepEqual(
+      mixSeedArtists(artist).map((seedArtist) => seedArtist.name),
+      ["Spiritbox"],
+    );
+  });
+
+  test("tells by its mix's id which section the mix is of", () => {
+    assert.equal(mixSectionOfId(genre.id), "genre-mixes");
+    assert.equal(mixSectionOfId(artist.id), "artist-mixes");
   });
 });
