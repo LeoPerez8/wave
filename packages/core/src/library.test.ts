@@ -8,7 +8,9 @@ import {
   compareAlbumTracks,
   compareByTitle,
   normalizeTrack,
+  readStoredGenres,
   splitCredit,
+  storedGenres,
   sortKey,
 } from "./index.ts";
 
@@ -97,6 +99,28 @@ describe("multi-value artist tags", () => {
       normalizeTrack({ path: `${MUSIC}/x.mp3`, artist: "Björk", artists: [] }).artist,
       "Björk",
     );
+  });
+});
+
+describe("multi-value genre tags", () => {
+  test("keep every value, while the Library files the song under the first", () => {
+    const track = normalizeTrack({
+      path: `${MUSIC}/x.flac`,
+      genre: "Metalcore",
+      genres: ["Metalcore", " (17)Rock ", "", "Electronic"],
+    });
+    assert.equal(track.genre, "Metalcore");
+    assert.deepEqual(track.genres, ["Metalcore", "Rock", "Electronic"]);
+  });
+
+  test("a single genre is the only value; none is none", () => {
+    assert.deepEqual(normalizeTrack({ path: `${MUSIC}/x.mp3`, genre: "Metalcore; Rock" }).genres, [
+      "Metalcore; Rock",
+    ]);
+    assert.deepEqual(normalizeTrack({ path: `${MUSIC}/x.mp3`, genre: "Rock", genres: [] }).genres, [
+      "Rock",
+    ]);
+    assert.deepEqual(normalizeTrack({ path: `${MUSIC}/x.mp3` }).genres, []);
   });
 });
 
@@ -399,5 +423,25 @@ describe("ordering", () => {
       songs.sort(compareByTitle).map((t) => t.path),
       [null, "/two.mp3"],
     );
+  });
+});
+
+describe("A song's stored genre values", () => {
+  test("store several values as a list, one or none as nothing", () => {
+    assert.equal(storedGenres(["Metalcore", "Rock"]), '["Metalcore","Rock"]');
+    assert.equal(storedGenres(["Rock"]), null);
+    assert.equal(storedGenres([]), null);
+  });
+
+  test("read back as stored", () => {
+    assert.deepEqual(readStoredGenres(storedGenres(["Metalcore", "Rock"])), ["Metalcore", "Rock"]);
+    assert.deepEqual(readStoredGenres(null), []);
+  });
+
+  test("read as none when they aren't a list of text", () => {
+    assert.deepEqual(readStoredGenres('["Metalcore",'), []);
+    assert.deepEqual(readStoredGenres('{"genre":"Rock"}'), []);
+    assert.deepEqual(readStoredGenres("[1, 2]"), []);
+    assert.deepEqual(readStoredGenres('["Rock", 2]'), []);
   });
 });

@@ -1,12 +1,14 @@
 /**
  * The YT Music section of an artist page (docs/spec.md, "YT Music"): support
- * for the Library, asked for only when Show on YouTube Music is tapped. Core
- * decides who gets the button, which YouTube Music artist the Library's artist
- * is, what tapping asks, how long a saved answer stands, what the section
- * shows and which of the artist's releases the Library already has. The
- * native module asks and reads; the app saves and lays out.
+ * for the Library, asked for only when Online is picked on the page's
+ * Library | Online toggle (or the page opens integrated). Core decides who
+ * gets the toggle, which YouTube Music artist the Library's artist is, what
+ * picking Online asks, how long a saved answer stands, what the section shows
+ * and which of the artist's releases the Library already has. The native
+ * module asks and reads; the app saves and lays out.
  */
 
+import type { YtPick } from "./onlineToggle.ts";
 import { artistPhotoName, artistPhotoQuery } from "./artistPhoto.ts";
 import { normalizeSearchText } from "./search.ts";
 import { discoverSongs, type DiscoverSong, type YtShelfItem } from "./ytDiscover.ts";
@@ -16,7 +18,7 @@ import type { YtQuietReason } from "./ytSearch.ts";
 /**
  * The name to search YouTube Music for, or null when the name isn't an
  * artist's ("Various Artists", "Unknown Artist", no letters): those get no
- * button. Names are read as artist photos read them.
+ * Library | Online toggle. Names are read as artist photos read them.
  */
 export const ytArtistQuery = (name: string): string | null => artistPhotoQuery(name);
 
@@ -167,7 +169,7 @@ export type YtArtistSaved<S extends YtSong = YtSong> =
     }
   | { readonly outcome: "unmatched"; readonly checkedAt: number };
 
-/** What tapping Show on YouTube Music asks: an Artists search, or the matched artist's page. */
+/** What picking Online asks: an Artists search, or the matched artist's page. */
 export type YtArtistLookup =
   | { readonly kind: "search"; readonly query: string }
   | { readonly kind: "page"; readonly browseId: string };
@@ -324,7 +326,7 @@ export const YT_ARTIST_SECTION_START: { readonly status: "reading" } = { status:
 export type YtArtistSectionEvent<S extends YtSong = YtSong> =
   /** What the database has for the artist (null: nothing). */
   | { readonly type: "restored"; readonly saved: YtArtistSaved<S> | null }
-  /** Show on YouTube Music was tapped. */
+  /** Online was picked (or the page opened integrated): YouTube Music is asked. */
   | { readonly type: "requested" }
   /** YouTube Music answered, and the answer was saved. */
   | { readonly type: "answered"; readonly saved: YtArtistSaved<S> }
@@ -371,34 +373,75 @@ export interface YtArtistSectionView<S extends YtSong> {
   /** Every song of the artist the Library doesn't have (`allSongs`), in YouTube Music's order. */
   readonly songs: readonly S[];
   readonly note: YtArtistSectionNote | null;
-  /** Whether Show on YouTube Music is offered. */
-  readonly button: boolean;
+  /** The segment the page's Library | Online toggle shows selected (`ytArtistToggle`). */
+  readonly toggle: YtPick;
+  /** Whether picking Online asks YouTube Music again: the last ask got no answer. */
+  readonly retry: boolean;
 }
 
-export interface YtArtistSectionContext<S extends YtSong> {
+/** How a Library artist page was opened, and what its toggle was picked as. */
+export interface YtArtistToggleContext {
+  readonly now: number;
+  /**
+   * Whether the page opens with Online selected: opened integrated (from a
+   * streamed song's artist), it asks on its own with nothing standing
+   * (`ytArtistSectionAsks`). Undefined: opened as the Library's.
+   */
+  readonly integrated?: boolean;
+  /**
+   * Whether Search online is set to Always (`SearchOnline`): the page opens
+   * with Online selected and asks as an integrated opening does, though an
+   * ask on its own that got no answer leaves Library selected, with the
+   * quiet line. Undefined: Only on demand.
+   */
+  readonly always?: boolean;
+  /** The segment of the toggle picked on this visit; null or undefined: none yet. */
+  readonly pick?: YtPick | null;
+}
+
+export interface YtArtistSectionContext<S extends YtSong> extends YtArtistToggleContext {
   /** The Library artist's name. */
   readonly name: string;
   /** Whether YT Music is on in Settings. */
   readonly enabled: boolean;
-  readonly now: number;
-  /**
-   * Whether the page was opened integrated (from a streamed song's artist):
-   * with nothing standing it asks on its own (`ytArtistSectionAsks`) instead
-   * of offering the button. Undefined: opened as the Library's.
-   */
-  readonly integrated?: boolean;
   /** Whether the Library already has a song (Core's `libraryMatcher`). */
   readonly inLibrary: (song: S) => boolean;
 }
 
 /**
+ * The segment a Library artist page's Library | Online toggle shows
+ * selected: the one picked on this visit; else Online while YouTube Music is
+ * asked, its answer stands (a week), the last ask failed, or the page opened
+ * integrated; else Library. Under Always it's Online too, unless the last
+ * ask failed: the page never blocks on it, and opens as Library.
+ */
+export const ytArtistToggle = (state: YtArtistSection, context: YtArtistToggleContext): YtPick => {
+  if (context.pick != null) return context.pick;
+  if (context.integrated === true || state.status === "loading") return "online";
+  if (state.status !== "ready") return "library";
+  const standing = state.saved !== null && standsOnArtistPage(state.saved, context.now);
+  if (standing) return "online";
+  if (state.failure !== null) return context.always === true ? "library" : "online";
+  return context.always === true ? "online" : "library";
+};
+
+/** The quiet line a page under Always shows with Library selected: its ask on its own failed. */
+const alwaysFailure = (
+  state: YtArtistSection,
+  context: YtArtistToggleContext,
+): YtQuietReason | null =>
+  context.always === true && context.pick == null && state.status === "ready"
+    ? state.failure
+    : null;
+
+/**
  * What the section shows at the end of the artist page, or null when it's
- * hidden: YT Music off, a name that isn't an artist's, or what was saved not
- * read yet. A saved answer shows for a week without the button; after that,
+ * hidden, toggle and all: YT Music off, a name that isn't an artist's, or
+ * what was saved not read yet. With Library selected (`ytArtistToggle`) it
+ * shows nothing. With Online, a saved answer shows for a week; after that,
  * with nothing saved, or with a match saved before the artist's full list
- * was read (no `allSongs`), the button is back, unless the page was opened
- * integrated: then it's looking (it asks on its own, `ytArtistSectionAsks`)
- * until an ask fails.
+ * was read (no `allSongs`), it's looking (it asks, `ytArtistSectionAsks`)
+ * until an ask fails, which leaves a quiet line.
  */
 export const ytArtistSectionView = <S extends YtSong>(
   state: YtArtistSection<S>,
@@ -406,20 +449,22 @@ export const ytArtistSectionView = <S extends YtSong>(
 ): YtArtistSectionView<S> | null => {
   if (!context.enabled || ytArtistQuery(context.name) === null) return null;
   if (state.status === "reading") return null;
-  if (state.status === "loading") return { songs: [], note: "loading", button: false };
+  const retry = state.status === "ready" && state.failure !== null;
+  if (ytArtistToggle(state, context) === "library")
+    return { songs: [], note: alwaysFailure(state, context), toggle: "library", retry };
+  const online = { toggle: "online", retry } as const;
+  if (state.status === "loading") return { songs: [], note: "loading", ...online };
   const { saved } = state;
   if (saved !== null && standsOnArtistPage(saved, context.now)) {
-    if (saved.outcome === "unmatched") return { songs: [], note: "notFound", button: false };
+    if (saved.outcome === "unmatched") return { songs: [], note: "notFound", ...online };
     const all = saved.page.allSongs ?? [];
     const songs = all.filter((song) => !context.inLibrary(song));
     // A list cut short can't tell that the Library has every song, or that there are none.
     const quiet = songs.length > 0 || saved.page.allSongsCut === true;
     const note = quiet ? null : all.length === 0 ? "noSongs" : "allInLibrary";
-    return { songs, note, button: false };
+    return { songs, note, ...online };
   }
-  if (context.integrated === true && state.failure === null)
-    return { songs: [], note: "loading", button: false };
-  return { songs: [], note: state.failure, button: true };
+  return { songs: [], note: state.failure ?? "loading", ...online };
 };
 
 export interface YtArtistSectionAsksContext {
@@ -430,41 +475,51 @@ export interface YtArtistSectionAsksContext {
   readonly now: number;
   /** Whether the page was opened integrated (from a streamed song's artist). */
   readonly integrated: boolean;
+  /** Whether Search online is set to Always (`YtArtistToggleContext`). */
+  readonly always?: boolean;
+  /** The segment of the toggle picked on this visit; null or undefined: none yet. */
+  readonly pick?: YtPick | null;
 }
 
 /**
- * Whether a Library artist page asks YouTube Music now, on its own: only
- * when it was opened integrated, once what was saved is read, with nothing
+ * Whether a Library artist page asks YouTube Music now: with Online selected
+ * (picked, or opened integrated), once what was saved is read, with nothing
  * standing for the artist (`YT_ARTIST_FRESH_MS`, or a match saved without
- * the artist's full list) and YT Music on. After a
- * failure it waits for the button (`requested`).
+ * the artist's full list) and YT Music on. After a failure it waits for
+ * Online to be picked again (`requested`).
  */
 export const ytArtistSectionAsks = (
   state: YtArtistSection,
   context: YtArtistSectionAsksContext,
 ): boolean =>
-  context.integrated &&
   context.enabled &&
   ytArtistQuery(context.name) !== null &&
   state.status === "ready" &&
   state.failure === null &&
-  (state.saved === null || !standsOnArtistPage(state.saved, context.now));
+  (state.saved === null || !standsOnArtistPage(state.saved, context.now)) &&
+  ytArtistToggle(state, context) === "online";
 
 /**
- * Whether the artist page is an integrated view: YT Music on and the
- * artist's answer, a match, standing (`ytArtistSectionView` shows it). A
- * Library album opened from it reads its release on its own
+ * Whether the artist page is an integrated view: YT Music on, Online
+ * selected and the artist's answer, a match, standing (`ytArtistSectionView`
+ * shows it). A Library album opened from it reads its release on its own
  * (`ytLibraryAlbumView`).
  */
 export const ytArtistIntegrated = (
   state: YtArtistSection,
-  context: { readonly name: string; readonly enabled: boolean; readonly now: number },
+  context: {
+    readonly name: string;
+    readonly enabled: boolean;
+    readonly now: number;
+    readonly pick?: YtPick | null;
+  },
 ): boolean =>
   context.enabled &&
   ytArtistQuery(context.name) !== null &&
   state.status === "ready" &&
   state.saved?.outcome === "found" &&
-  standsOnArtistPage(state.saved, context.now);
+  standsOnArtistPage(state.saved, context.now) &&
+  context.pick !== "library";
 
 /** A release on one of the section's shelves, with the Library album it already is. */
 export interface YtArtistRelease<A> {
@@ -487,6 +542,8 @@ export interface YtArtistShelvesContext<A> {
   readonly now: number;
   /** The Library album a release already is, or null (Core's `libraryAlbumFinder`). */
   readonly libraryAlbum: (album: YtArtistAlbum) => A | null;
+  /** The segment of the toggle picked on this visit: Library hides the shelves. */
+  readonly pick?: YtPick | null;
 }
 
 /** Newest first; a release without a year goes last, and ties keep the page's order. */
@@ -520,13 +577,15 @@ const pageShelves = <A>(
 /**
  * The shelves under the section's songs: Albums, then Singles & EPs, from
  * the saved artist page, each newest first. They show while the saved page
- * does (`ytArtistSectionView`); a shelf with nothing on it is left out.
+ * does (`ytArtistSectionView`), so not with Library picked; a shelf with
+ * nothing on it is left out.
  */
 export const ytArtistShelves = <A>(
   state: YtArtistSection,
   context: YtArtistShelvesContext<A>,
 ): YtArtistShelf<A>[] => {
   if (!context.enabled || ytArtistQuery(context.name) === null) return [];
+  if (context.pick === "library") return [];
   if (state.status !== "ready" || state.saved?.outcome !== "found") return [];
   if (!standsOnArtistPage(state.saved, context.now)) return [];
   return pageShelves(state.saved.page, context.libraryAlbum);
@@ -616,17 +675,22 @@ export interface YtLibraryAlbumView<S extends YtSong, L> {
   /** The release's songs, once its page is read: what Download acts on. */
   readonly songs: readonly S[] | null;
   readonly note: YtLibraryAlbumNote | null;
+  /** The segment the page's Library | Online toggle shows selected. */
+  readonly toggle: YtPick;
   /**
-   * Whether Show on YouTube Music is offered: it asks for the artist or, once
-   * the release is known, reads the release's page again.
+   * What picking Online asks again after an ask got no answer: the artist,
+   * or the release's page once the release is known; null: nothing.
    */
-  readonly button: boolean;
-  /** The YouTube Music release the album is, once known; its page gives the songs. */
+  readonly retry: "artist" | "release" | null;
+  /**
+   * The YouTube Music release the album is, once known and Online is
+   * selected: its page gives the songs.
+   */
   readonly release: YtArtistAlbum | null;
   /**
-   * Whether the album asks YouTube Music for its artist now, on its own: it's
-   * integrated and nothing stands for the artist yet. Asked once; a failure
-   * leaves the button.
+   * Whether the album asks YouTube Music for its artist now, on its own:
+   * Online is selected and nothing stands for the artist yet. Asked once; a
+   * failure waits for Online to be picked again.
    */
   readonly askArtist: boolean;
 }
@@ -645,11 +709,19 @@ export interface YtLibraryAlbumContext<S extends YtSong, L> {
   readonly enabled: boolean;
   readonly now: number;
   /**
-   * Whether the album is an integrated view: opened from one (an integrated
-   * artist page, Search showing YouTube Music's results), or Show on YouTube
-   * Music was tapped. Otherwise it shows the Library's tracks and the button.
+   * Whether the album opens with Online selected: opened from an integrated
+   * view (an integrated artist page, Search showing YouTube Music's results).
+   * Otherwise Library is, and it shows the Library's tracks.
    */
   readonly integrated: boolean;
+  /**
+   * Whether Search online is set to Always (`SearchOnline`): the album opens
+   * with Online selected wherever it's opened from, though an ask on its own
+   * that got no answer leaves Library selected, with the quiet line.
+   */
+  readonly always?: boolean;
+  /** The segment of the toggle picked on this visit; null or undefined: none yet. */
+  readonly pick?: YtPick | null;
   /**
    * Whether the page has shown the tracklist during this visit: it stays when
    * the last download finishes, every row in its place, instead of the album
@@ -662,27 +734,63 @@ export interface YtLibraryAlbumContext<S extends YtSong, L> {
 
 const albumNote = <S extends YtSong, L>(
   note: YtLibraryAlbumNote | null,
-  button: boolean,
+  retry: YtLibraryAlbumView<S, L>["retry"] = null,
   release: YtArtistAlbum | null = null,
 ): YtLibraryAlbumView<S, L> => ({
   tracks: null,
   songs: null,
   note,
-  button,
+  toggle: "online",
+  retry,
   release,
   askArtist: false,
 });
 
+/** What the album shows with Online selected. */
+const onlineAlbumView = <S extends YtSong, L extends LibraryAlbumTrack>(
+  state: Exclude<YtArtistSection<S>, { readonly status: "reading" }>,
+  context: YtLibraryAlbumContext<S, L>,
+): YtLibraryAlbumView<S, L> => {
+  if (state.status === "loading") return albumNote("loading");
+  const { saved } = state;
+  if (saved === null || !isFresh(saved, context.now))
+    return state.failure === null
+      ? { ...albumNote<S, L>("loading"), askArtist: true }
+      : albumNote(state.failure, "artist");
+  if (saved.outcome === "unmatched") return albumNote("notFound");
+  const release = ytArtistRelease(saved.page, context.artistId, context.album);
+  if (release === null) return albumNote("notFound");
+  const page = context.releasePage(release);
+  if (page === undefined || page.status === "loading") return albumNote("loading", null, release);
+  if (page.status === "quiet") return albumNote(page.reason, "release", release);
+  const tracks = ytAlbumTracklist(page.songs, context.tracks, context.elsewhere);
+  const streams = tracks.some((entry) => entry.source === "stream");
+  return {
+    tracks: streams || context.keepTracklist === true ? tracks : null,
+    songs: page.songs,
+    note: null,
+    toggle: "online",
+    retry: null,
+    release,
+    askArtist: false,
+  };
+};
+
 /**
  * What a Library album's page shows from YouTube Music, or null when it shows
- * nothing: YT Music off, an album artist that isn't an artist's name, or
- * what was saved for the artist not read yet. Not integrated, it's the
- * button, whatever is saved. Integrated, it goes by the artist page's saved
- * answer (`stepYtArtistSection`): while that stands, the album is looked up
- * among the artist's releases and, when it's there, the release's page is
- * read and its songs join the album's tracks. With nothing saved, or once
- * it's a week old, it asks for the artist on its own (`askArtist`); a failed
- * ask is a quiet line with the button.
+ * nothing, toggle and all: YT Music off, an album artist that isn't an
+ * artist's name, or what was saved for the artist not read yet. Its Library |
+ * Online toggle shows the segment picked on this visit, else Online when it
+ * was opened integrated or Search online is set to Always (where an ask on
+ * its own that got no answer shows Library, with the quiet line), else
+ * Library. With Library it shows the album as it
+ * is, whatever is saved, and reads nothing. With Online it goes by the artist
+ * page's saved answer (`stepYtArtistSection`): while that stands, the album
+ * is looked up among the artist's releases and, when it's there, the
+ * release's page is read and its songs join the album's tracks. With nothing
+ * saved, or once it's a week old, it asks for the artist on its own
+ * (`askArtist`); a failed ask is a quiet line, and picking Online asks again
+ * (`retry`).
  */
 export const ytLibraryAlbumView = <S extends YtSong, L extends LibraryAlbumTrack>(
   state: YtArtistSection<S>,
@@ -690,29 +798,14 @@ export const ytLibraryAlbumView = <S extends YtSong, L extends LibraryAlbumTrack
 ): YtLibraryAlbumView<S, L> | null => {
   if (!context.enabled || ytArtistQuery(context.name) === null) return null;
   if (state.status === "reading") return null;
-  if (!context.integrated) return albumNote(null, true);
-  if (state.status === "loading") return albumNote("loading", false);
-  const { saved } = state;
-  if (saved === null || !isFresh(saved, context.now))
-    return state.failure === null
-      ? { ...albumNote<S, L>("loading", false), askArtist: true }
-      : albumNote(state.failure, true);
-  if (saved.outcome === "unmatched") return albumNote("notFound", false);
-  const release = ytArtistRelease(saved.page, context.artistId, context.album);
-  if (release === null) return albumNote("notFound", false);
-  const page = context.releasePage(release);
-  if (page === undefined || page.status === "loading") return albumNote("loading", false, release);
-  if (page.status === "quiet") return albumNote(page.reason, true, release);
-  const tracks = ytAlbumTracklist(page.songs, context.tracks, context.elsewhere);
-  const streams = tracks.some((entry) => entry.source === "stream");
-  return {
-    tracks: streams || context.keepTracklist === true ? tracks : null,
-    songs: page.songs,
-    note: null,
-    button: false,
-    release,
-    askArtist: false,
-  };
+  const online = onlineAlbumView(state, context);
+  if (context.pick === "online" || (context.pick == null && context.integrated)) return online;
+  if (context.pick == null && context.always === true) {
+    // Under Always, an ask on its own that got no answer leaves Library, never blocking.
+    if (online.retry === null) return online;
+    return { ...albumNote(online.note, online.retry), toggle: "library" };
+  }
+  return { ...albumNote(null, online.retry), toggle: "library" };
 };
 
 export interface YtArtistPageContext {

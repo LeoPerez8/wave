@@ -7,6 +7,8 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.jaudiotagger.audio.AudioFileIO
+import org.jaudiotagger.tag.FieldKey
 import org.junit.Test
 
 /**
@@ -23,6 +25,7 @@ class TagReadingTest {
     assertEquals("$name album", "Fixture Album", tags.album)
     assertEquals("$name album artist", "Fixture Album Artist", tags.albumArtist)
     assertEquals("$name genre", "Ambient", tags.genre)
+    assertEquals("$name genres", listOf("Ambient"), tags.genres)
     assertEquals("$name year", "2024", tags.year)
     assertEquals("$name track", "3/12", tags.trackNumber)
     assertEquals("$name disc", "1/2", tags.discNumber)
@@ -59,6 +62,25 @@ class TagReadingTest {
     assertEquals("Ambient", tags.genre)
     assertEquals("2024", tags.year)
     assertDuration("tagged.wav", tags)
+  }
+
+  /** A copy of the fixture [name] with a second genre added to its tag. */
+  private fun withSecondGenre(name: String): java.io.File {
+    val file = Fixtures.tempDir().resolve(name)
+    Fixtures.file(name).copyTo(file)
+    val audio = AudioFileIO.read(file)
+    audio.tag.addField(FieldKey.GENRE, "Electronic")
+    AudioFileIO.write(audio)
+    return file
+  }
+
+  @Test
+  fun everyValueOfAMultiValueGenreTagIsKept() {
+    for (name in listOf("tagged.flac", "tagged.ogg")) {
+      val tags = reader.read(withSecondGenre(name))
+      assertEquals("$name genre", "Ambient", tags.genre)
+      assertEquals("$name genres", listOf("Ambient", "Electronic"), tags.genres)
+    }
   }
 
   @Test

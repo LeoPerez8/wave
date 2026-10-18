@@ -2,11 +2,13 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import {
+  YT_SEARCH_DEBOUNCE_MS,
   YT_SECTION_HIDDEN,
   libraryArtistFinder,
   libraryReleaseFinder,
   stepYtSection,
   ytSearchQuery,
+  ytSectionToggle,
   ytSectionView,
 } from "./index.ts";
 import type { YtArtistAlbum, YtArtistCandidate, YtSection, YtSong } from "./index.ts";
@@ -47,6 +49,9 @@ const typed = (
   enabled = true,
   libraryHasResults = false,
 ): YtSection => stepYtSection(state, { type: "typed", query, enabled, libraryHasResults });
+
+/** Online picked on the toggle. */
+const ONLINE = { type: "picked", pick: "online" } as const;
 
 /** Typing [query] that the Library has results for. */
 const typedFound = (state: YtSection, query: string): YtSection => typed(state, query, true, true);
@@ -93,14 +98,12 @@ describe("ytSectionView", () => {
     assert.deepEqual(ytSectionView(results([]), library), {
       ...EMPTY,
       note: "noMatches",
-      offer: false,
       integrated: true,
     });
     const mine = results([song("mine")], [artist("Mine")], [album("Mine", "Me")]);
     assert.deepEqual(ytSectionView(mine, library), {
       ...EMPTY,
       note: "allInLibrary",
-      offer: false,
       integrated: true,
     });
   });
@@ -117,7 +120,6 @@ describe("ytSectionView", () => {
     assert.deepEqual(ytSectionView(first, library), {
       ...EMPTY,
       note: "searching",
-      offer: false,
       integrated: true,
     });
     const next: YtSection = { ...first, artists: [artist("Daft Punk")] };
@@ -130,22 +132,22 @@ describe("ytSectionView", () => {
     assert.deepEqual(ytSectionView(quiet, library), {
       ...EMPTY,
       note: "offline",
-      offer: false,
       integrated: false,
     });
   });
 
-  test("offers Search YouTube Music while nothing is asked, and isn't integrated", () => {
-    assert.deepEqual(ytSectionView({ status: "offered", query: "q" }, library), {
+  test("shows nothing while nothing is asked, and isn't integrated", () => {
+    const offered: YtSection = { status: "offered", query: "q", picked: false, kept: null };
+    assert.deepEqual(ytSectionView(offered, library), {
       ...EMPTY,
       note: null,
-      offer: true,
       integrated: false,
     });
   });
 
-  test("a hidden section shows nothing", () => {
+  test("a hidden section, or one with too little typed, shows nothing", () => {
     assert.equal(ytSectionView(YT_SECTION_HIDDEN, library), null);
+    assert.equal(ytSectionView({ status: "idle", pick: "online" }, library), null);
   });
 
   test("YT Music's best is the result shown that matches the query best, artists first", () => {
@@ -213,12 +215,17 @@ describe("ytSearchQuery", () => {
 });
 
 describe("stepYtSection", () => {
-  test("typing a query the Library has results for asks nothing and offers to ask", () => {
-    assert.deepEqual(typedFound(YT_SECTION_HIDDEN, "daft"), { status: "offered", query: "daft" });
+  test("typing a query the Library has results for asks nothing", () => {
+    assert.deepEqual(typedFound(YT_SECTION_HIDDEN, "daft"), {
+      status: "offered",
+      query: "daft",
+      picked: false,
+      kept: null,
+    });
   });
 
-  test("Search YouTube Music asks for the offered query at once", () => {
-    const asked = stepYtSection(typedFound(YT_SECTION_HIDDEN, "daft"), { type: "asked" });
+  test("Online asks for the typed query at once", () => {
+    const asked = stepYtSection(typedFound(YT_SECTION_HIDDEN, "daft"), ONLINE);
     assert.deepEqual(asked, {
       status: "loading",
       query: "daft",
@@ -230,7 +237,7 @@ describe("stepYtSection", () => {
   });
 
   test("once asked, refining the query keeps YT Music's songs up and asks for the new one", () => {
-    const asked = stepYtSection(typedFound(YT_SECTION_HIDDEN, "daft"), { type: "asked" });
+    const asked = stepYtSection(typedFound(YT_SECTION_HIDDEN, "daft"), ONLINE);
     const shown = stepYtSection(asked, {
       type: "found",
       query: "daft",
@@ -254,23 +261,30 @@ describe("stepYtSection", () => {
       songs: [song("a")],
       ...NONE,
     });
-    assert.deepEqual(typedFound(shown, "daf"), { status: "offered", query: "daf" });
-  });
-
-  test("clearing the field ends what the user asked for", () => {
-    const asked = stepYtSection(typedFound(YT_SECTION_HIDDEN, "daft"), { type: "asked" });
-    assert.equal(typedFound(asked, ""), YT_SECTION_HIDDEN);
-    assert.deepEqual(typedFound(typedFound(asked, ""), "daft"), {
+    assert.deepEqual(typedFound(shown, "daf"), {
       status: "offered",
-      query: "daft",
+      query: "daf",
+      picked: false,
+      kept: { query: "dafy", songs: [song("a")], ...NONE },
     });
   });
 
-  test("with YT Music off nothing is offered, and asking does nothing", () => {
+  test("clearing the field ends what the user asked for", () => {
+    const asked = stepYtSection(typedFound(YT_SECTION_HIDDEN, "daft"), ONLINE);
+    assert.deepEqual(typedFound(asked, ""), { status: "idle", pick: null });
+    assert.deepEqual(typedFound(typedFound(asked, ""), "daft"), {
+      status: "offered",
+      query: "daft",
+      picked: false,
+      kept: null,
+    });
+  });
+
+  test("with YT Music off nothing is shown, and asking does nothing", () => {
     const off = typed(YT_SECTION_HIDDEN, "daft", false, true);
     assert.equal(off, YT_SECTION_HIDDEN);
-    assert.equal(stepYtSection(off, { type: "asked" }), YT_SECTION_HIDDEN);
-    const asked = stepYtSection(typedFound(YT_SECTION_HIDDEN, "daft"), { type: "asked" });
+    assert.equal(stepYtSection(off, ONLINE), YT_SECTION_HIDDEN);
+    const asked = stepYtSection(typedFound(YT_SECTION_HIDDEN, "daft"), ONLINE);
     assert.equal(typed(asked, "daft", false, true), YT_SECTION_HIDDEN);
   });
 
@@ -399,10 +413,10 @@ describe("stepYtSection", () => {
     });
   });
 
-  test("the section hides with nothing to search for", () => {
+  test("the section shows nothing with nothing to search for", () => {
     const loading = typed(YT_SECTION_HIDDEN, "daft");
-    assert.equal(typed(loading, "d"), YT_SECTION_HIDDEN);
-    assert.equal(typed(loading, ""), YT_SECTION_HIDDEN);
+    assert.deepEqual(typed(loading, "d"), { status: "idle", pick: null });
+    assert.deepEqual(typed(loading, ""), { status: "idle", pick: null });
   });
 
   test("with YT Music off the section stays hidden and nothing loads", () => {
@@ -461,5 +475,139 @@ describe("libraryArtistFinder", () => {
   test("is null for anyone else, and for names that aren't an artist", () => {
     assert.equal(find("Daft Punk"), null);
     assert.equal(find("Unknown Artist"), null);
+  });
+});
+
+/** The Library has nothing of what YT Music finds. */
+const NOTHING_HELD = {
+  hasSong: (): boolean => false,
+  hasArtist: (): boolean => false,
+  hasAlbum: (): boolean => false,
+};
+
+/** YT Music answers [query] with [songs]. */
+const found = (state: YtSection, query: string, songs: YtSong[]): YtSection =>
+  stepYtSection(state, { type: "found", query, songs, ...NONE });
+
+/** A segment of the toggle is tapped. */
+const pick = (state: YtSection, picked: "library" | "online"): YtSection =>
+  stepYtSection(state, { type: "picked", pick: picked });
+
+describe("the Library | Online toggle in Search", () => {
+  test("Online asks YT Music for the typed query at once", () => {
+    const online = pick(typedFound(YT_SECTION_HIDDEN, "daft"), "online");
+    assert.equal(online.status, "loading");
+    assert.equal(online.status === "loading" && online.query, "daft");
+    assert.equal(online.status === "loading" && online.delayMs, 0);
+    assert.equal(ytSectionToggle(online), "online");
+  });
+
+  test("Library hides YT Music's results without asking; Online shows them again with no request", () => {
+    const shown = found(pick(typedFound(YT_SECTION_HIDDEN, "daft"), "online"), "daft", [song("a")]);
+    const libraryOnly = pick(shown, "library");
+    assert.equal(ytSectionToggle(libraryOnly), "library");
+    assert.equal(ytSectionView(libraryOnly, NOTHING_HELD)?.songs.length, 0);
+    assert.equal(ytSectionView(libraryOnly, NOTHING_HELD)?.integrated, false);
+    const again = pick(libraryOnly, "online");
+    assert.equal(again.status, "results");
+    assert.deepEqual(ytSectionView(again, NOTHING_HELD)?.songs, [song("a")]);
+  });
+
+  test("a query changed while Library showed is asked once Online is picked", () => {
+    const shown = found(pick(typedFound(YT_SECTION_HIDDEN, "daft"), "online"), "daft", [song("a")]);
+    const refined = typedFound(pick(shown, "library"), "daft punk");
+    assert.equal(refined.status, "offered");
+    const again = pick(refined, "online");
+    assert.equal(again.status === "loading" && again.query, "daft punk");
+    assert.equal(again.status === "loading" && again.delayMs, 0);
+  });
+
+  test("going back to the query Online answered while Library shows reuses its answer", () => {
+    const shown = found(pick(typedFound(YT_SECTION_HIDDEN, "daft"), "online"), "daft", [song("a")]);
+    const back = typedFound(typedFound(pick(shown, "library"), "daft punk"), "daft");
+    assert.equal(pick(back, "online").status, "results");
+  });
+
+  test("with Library picked, a query the Library has nothing for isn't asked on its own", () => {
+    const libraryOnly = pick(typedFound(YT_SECTION_HIDDEN, "daft"), "library");
+    const nothing = typed(libraryOnly, "dafty");
+    assert.equal(nothing.status, "offered");
+    assert.equal(ytSectionToggle(nothing), "library");
+  });
+
+  test("asked on its own, the toggle shows Online; picking it keeps YT Music once the Library has results", () => {
+    const auto = typed(YT_SECTION_HIDDEN, "dafy");
+    assert.equal(ytSectionToggle(auto), "online");
+    const kept = typedFound(pick(found(auto, "dafy", [song("a")]), "online"), "daft");
+    assert.equal(kept.status, "loading");
+    assert.equal(ytSectionToggle(kept), "online");
+  });
+
+  test("Online picked with nothing typed asks for the first query worth asking", () => {
+    const empty = typedFound(YT_SECTION_HIDDEN, "");
+    assert.equal(ytSectionToggle(empty), "library");
+    const online = pick(empty, "online");
+    assert.equal(ytSectionToggle(online), "online");
+    assert.equal(ytSectionView(online, NOTHING_HELD), null);
+    const one = typedFound(online, "d");
+    assert.equal(ytSectionToggle(one), "online");
+    const asked = typedFound(one, "da");
+    assert.equal(asked.status === "loading" && asked.query, "da");
+  });
+
+  test("clearing the field puts the toggle back to Library", () => {
+    const online = pick(typedFound(YT_SECTION_HIDDEN, "daft"), "online");
+    const cleared = typedFound(online, "");
+    assert.equal(ytSectionToggle(cleared), "library");
+    assert.equal(typedFound(cleared, "daft").status, "offered");
+    const libraryOnly = pick(typed(YT_SECTION_HIDDEN, "dafy"), "library");
+    assert.equal(typed(typed(libraryOnly, ""), "dafy").status, "loading");
+  });
+
+  test("Online on a failure asks again at once", () => {
+    const quiet = stepYtSection(pick(typedFound(YT_SECTION_HIDDEN, "daft"), "online"), {
+      type: "failed",
+      query: "daft",
+      reason: "offline",
+    });
+    const retry = pick(quiet, "online");
+    assert.equal(retry.status === "loading" && retry.delayMs, 0);
+  });
+
+  test("with YT Music off there's no toggle, and picking does nothing", () => {
+    const off = typed(YT_SECTION_HIDDEN, "daft", false, true);
+    assert.equal(ytSectionToggle(off), null);
+    assert.equal(pick(off, "online"), off);
+  });
+});
+
+/** Typing [query] the Library has results for, with Search online set to Always. */
+const typedAlways = (state: YtSection, query: string): YtSection =>
+  stepYtSection(state, {
+    type: "typed",
+    query,
+    enabled: true,
+    libraryHasResults: true,
+    always: true,
+  });
+
+describe("Search with Search online set to Always", () => {
+  test("typing asks YT Music once typing pauses, without a tap, even when the Library has results", () => {
+    const asked = typedAlways(typedAlways(YT_SECTION_HIDDEN, ""), "daft");
+    assert.equal(asked.status, "loading");
+    assert.equal(asked.status === "loading" && asked.query, "daft");
+    assert.equal(asked.status === "loading" && asked.delayMs, YT_SEARCH_DEBOUNCE_MS);
+    assert.equal(ytSectionToggle(asked), "online");
+  });
+
+  test("the empty field shows Online; Library tapped holds until the field is cleared", () => {
+    const empty = typedAlways(YT_SECTION_HIDDEN, "");
+    assert.equal(ytSectionToggle(empty), "online");
+    const libraryOnly = typedAlways(pick(typedAlways(empty, "daft"), "library"), "daft punk");
+    assert.equal(libraryOnly.status, "offered");
+    assert.equal(ytSectionToggle(libraryOnly), "library");
+    const cleared = typedAlways(libraryOnly, "");
+    assert.equal(ytSectionToggle(cleared), "online");
+    assert.equal(typedAlways(cleared, "daft").status, "loading");
   });
 });

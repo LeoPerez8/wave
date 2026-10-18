@@ -1,13 +1,14 @@
 import { IconPlayerPlay } from "@tabler/icons-react-native";
-import { lastListActionForm, type ListActionsRoom } from "@wave/core";
+import { listActionsForms, type ListActionsRoom, type YtPick } from "@wave/core";
 import { useState, type ComponentType, type ReactNode } from "react";
 import { Text, View, type LayoutChangeEvent } from "react-native";
 
 import { Press } from "@/motion/Press";
 import { useShuffleControl } from "@/nowPlaying/ShuffleMenu";
 import { useThemeColor } from "@/theme/useThemeColor";
+import { OnlineToggle, OnlineToggleFaces } from "@/ytmusic/OnlineToggle";
 
-import { CELL } from "./grid";
+import { CELL, widthOf } from "./grid";
 
 type IconProps = { size?: number; color?: string; strokeWidth?: number };
 
@@ -83,19 +84,29 @@ type Props = {
   last?: LastListAction | null;
   /** What ends the line (a playlist's actions button); a last action's icon alone sits before it. */
   menu?: ReactNode;
+  /** The Library | Online toggle ending the line (an album's or artist's page, YT Music on). */
+  toggle?: LineToggle | null;
 };
+
+/** The Library | Online toggle as a list's line carries it. */
+export interface LineToggle {
+  readonly selected: YtPick;
+  readonly onPick: (pick: YtPick) => void;
+  readonly onLongPress?: () => void;
+}
 
 /**
  * Play and Shuffle for a list: two teal line-icon actions, no containers, on
  * one line. An action after them keeps its label when it fits beside them
- * and shows its icon alone at the end of the line when it doesn't (Core's
- * `lastListActionForm`).
+ * and shows its icon alone at the end of the line when it doesn't; a Library
+ * | Online toggle ending the line shows its icons alone first (Core's
+ * `listActionsForms`).
  */
-export function PlayShuffle({ onPlay, onShuffle, last, menu }: Props) {
+export function PlayShuffle({ onPlay, onShuffle, last, menu, toggle }: Props) {
   const shuffle = useShuffleControl();
   return (
     <View className="flex-row items-center" style={{ flexGrow: 1, flexShrink: 1 }}>
-      {last == null ? (
+      {last == null && toggle == null ? (
         <View className="flex-1 flex-row items-center" style={{ columnGap: GAP }}>
           <ListAction icon={IconPlayerPlay} label="Play" onPress={onPlay} />
           <ListAction {...shuffle} onPress={onShuffle} />
@@ -104,7 +115,8 @@ export function PlayShuffle({ onPlay, onShuffle, last, menu }: Props) {
         <LineWithLast
           onPlay={onPlay}
           onShuffle={onShuffle}
-          last={last}
+          last={last ?? null}
+          toggle={toggle ?? null}
           shuffle={shuffle}
           endsLine={menu === undefined}
         />
@@ -114,23 +126,31 @@ export function PlayShuffle({ onPlay, onShuffle, last, menu }: Props) {
   );
 }
 
-type Measured = Omit<ListActionsRoom, "gap">;
+type Measured = Omit<ListActionsRoom, "gap" | "toggle"> & {
+  readonly toggle: { readonly labelled: number | undefined; readonly icons: number | undefined };
+};
 
-const NOTHING_MEASURED: Measured = { line: undefined, before: [undefined, undefined], last: {} };
+const NOTHING_MEASURED: Measured = {
+  line: undefined,
+  before: [undefined, undefined],
+  last: {},
+  toggle: { labelled: undefined, icons: undefined },
+};
 
-/** The width a layout pass gave a view. */
-const widthOf = (event: LayoutChangeEvent): number => event.nativeEvent.layout.width;
+const NO_LABELS: readonly string[] = [];
 
 function LineWithLast({
   onPlay,
   onShuffle,
   last,
+  toggle,
   shuffle,
   endsLine,
 }: {
   onPlay: () => void;
   onShuffle: () => void;
-  last: LastListAction;
+  last: LastListAction | null;
+  toggle: LineToggle | null;
   shuffle: ReturnType<typeof useShuffleControl>;
   /** Nothing after it on the line: its icon alone sits on the right margin. */
   endsLine: boolean;
@@ -160,8 +180,23 @@ function LineWithLast({
         : { ...current, last: { ...current.last, [label]: width } },
     );
   };
-  const form = lastListActionForm({ ...measured, gap: GAP }, last.label);
-  const labels = last.labels.includes(last.label) ? last.labels : [...last.labels, last.label];
+  const measureToggle = (form: "labelled" | "icons") => (width: number) =>
+    update((current) =>
+      current.toggle[form] === width
+        ? null
+        : { ...current, toggle: { ...current.toggle, [form]: width } },
+    );
+  const forms = listActionsForms(
+    { ...measured, gap: GAP, toggle: toggle === null ? undefined : measured.toggle },
+    last?.label ?? null,
+  );
+  const form = forms.last;
+  const labels =
+    last === null
+      ? NO_LABELS
+      : last.labels.includes(last.label)
+        ? last.labels
+        : [...last.labels, last.label];
 
   return (
     <View
@@ -171,7 +206,7 @@ function LineWithLast({
     >
       <ListAction icon={IconPlayerPlay} label="Play" onPress={onPlay} />
       <ListAction {...shuffle} onPress={onShuffle} />
-      {form === "labelled" && (
+      {last !== null && form === "labelled" && (
         <ListAction
           icon={last.icon}
           label={last.label}
@@ -179,19 +214,32 @@ function LineWithLast({
           onPress={last.onPress}
         />
       )}
-      {form === "icon" && (
+      {last !== null && form === "icon" && (
         <Press
           accessibilityRole="button"
           accessibilityLabel={last.accessibilityLabel}
           onPress={last.onPress}
           haptic="impact"
           depth={0.1}
-          // Ending the line, its glyph sits on the right margin, as a playlist's ⋯ does.
-          className={`ml-auto items-center justify-center${endsLine ? " -mr-3" : ""}`}
+          // Ending the line, its glyph sits on the right margin, as a playlist's ⋯ does;
+          // before a toggle, it sits beside it.
+          className={`items-center justify-center${toggle === null ? " ml-auto" : ""}${
+            endsLine && toggle === null ? " -mr-3" : ""
+          }`}
           style={{ width: 48, height: 48 }}
         >
           <last.icon size={24} color={accent} strokeWidth={1.5} />
         </Press>
+      )}
+      {toggle !== null && forms.toggle !== null && (
+        <View className="ml-auto">
+          <OnlineToggle
+            selected={toggle.selected}
+            onPick={toggle.onPick}
+            onLongPress={toggle.onLongPress}
+            form={forms.toggle}
+          />
+        </View>
       )}
       {/* Every action measured with its label, unseen, whatever the line shows. */}
       <View
@@ -202,9 +250,16 @@ function LineWithLast({
       >
         <Face icon={IconPlayerPlay} label="Play" onLayout={measureBefore(0)} />
         <Face icon={shuffle.icon} label={shuffle.label} onLayout={measureBefore(1)} />
-        {labels.map((label) => (
-          <Face key={label} icon={last.icon} label={label} onLayout={measureLast(label)} />
-        ))}
+        {last !== null &&
+          labels.map((label) => (
+            <Face key={label} icon={last.icon} label={label} onLayout={measureLast(label)} />
+          ))}
+        {toggle !== null && (
+          <OnlineToggleFaces
+            onLabelled={measureToggle("labelled")}
+            onIcons={measureToggle("icons")}
+          />
+        )}
       </View>
     </View>
   );

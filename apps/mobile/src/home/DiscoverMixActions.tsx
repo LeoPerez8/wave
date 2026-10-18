@@ -76,7 +76,7 @@ function DiscoverMixActionsMenu({
   // Blended again without Library songs the Library no longer has (Home doesn't read every song).
   const mix = useDiscoverMix(pressed.id, tracks) ?? pressed;
   const inLibrary = useLoadedInLibrary();
-  // Its new songs download; its Library songs are on the phone already.
+  // Its songs that stream download (new ones, and familiar ones with no file); the rest are here.
   const fresh = useMemo(() => newSongsOf(mix), [mix]);
   const download = useYtAlbumDownload(fresh, inLibrary);
   const caption = discoverMixCaption(mix);

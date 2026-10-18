@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { View } from "react-native";
+import { Text, View } from "react-native";
 
 import { TextButton } from "@/components/TextButton";
 
@@ -11,6 +11,7 @@ export function TitledSection({
   title,
   action,
   control,
+  status,
   first = false,
   children,
 }: {
@@ -18,6 +19,11 @@ export function TitledSection({
   action?: { label: string; onPress: () => void };
   /** A control of its own in the action's place (Discover mixes' level), when it has no action. */
   control?: ReactNode;
+  /**
+   * A quiet line after the title for what the section is doing ("Updating…"
+   * while mixes rebuild), read out as it changes; absent for none.
+   */
+  status?: string | undefined;
   /** The first section sits closer to the large title. */
   first?: boolean;
   children: ReactNode;
@@ -25,8 +31,17 @@ export function TitledSection({
   return (
     <View style={{ marginTop: first ? CELL : CELL * 5, gap: CELL * 1.5 }}>
       <View className="flex-row items-center justify-between" style={{ minHeight: CELL * 6 }}>
-        <View className="flex-1">
-          <CatalogLine>{title}</CatalogLine>
+        <View className="flex-1 flex-row items-center" style={{ gap: CELL }}>
+          <CatalogLine className="shrink">{title}</CatalogLine>
+          {status !== undefined && (
+            <Text
+              numberOfLines={1}
+              accessibilityLiveRegion="polite"
+              className="font-sans text-footnote text-secondary"
+            >
+              {status}
+            </Text>
+          )}
         </View>
         {action !== undefined ? (
           <TextButton label={action.label} onPress={action.onPress} />

@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import {
+  fixLookups,
   listedSongTags,
   ytDownloadDestination,
+  ytDownloadHas,
   ytDownloadLookup,
   ytDownloadRoot,
   ytDownloadTags,
@@ -183,6 +185,35 @@ describe("ytDownloadTags", () => {
     assert.equal(ytDownloadTags(getLucky, ram, none, " \r\n ").lyrics, null);
   });
 
+  test("lyrics the Lyrics view saved for the song's video are the ones the file gets", () => {
+    const saved = {
+      kind: "found",
+      lyrics: { synced: true, text: "[00:01.00]Like the legend of the phoenix" },
+    } as const;
+    const deezer = {
+      lyrics: null,
+      genre: "Disco",
+      trackNumber: null,
+      discNumber: null,
+      year: null,
+      explicit: "unknown",
+    } as const;
+    const tags = ytDownloadTags(getLucky, ram, deezer, null, saved);
+    assert.equal(tags.lyrics, "[00:01.00]Like the legend of the phoenix");
+    assert.equal(tags.genre, "Disco");
+    // Without Deezer's answer (or any lookup) they still go in.
+    assert.equal(
+      ytDownloadTags(getLucky, ram, null, null, saved).lyrics,
+      "[00:01.00]Like the legend of the phoenix",
+    );
+  });
+
+  test("a remembered miss leaves the download's lyrics to its own search", () => {
+    const miss = { kind: "miss", checkedAt: 0 } as const;
+    assert.equal(ytDownloadTags(getLucky, ram, null, "From YouTube", miss).lyrics, "From YouTube");
+    assert.equal(ytDownloadTags(getLucky, ram, null, null, miss).lyrics, null);
+  });
+
   test("a cover that isn't on YouTube Music's image server is kept as it is", () => {
     const song = { ...getLucky, artworkUrl: "https://i.ytimg.com/vi/x/hqdefault.jpg" };
     assert.equal(
@@ -229,6 +260,22 @@ test("a download from YouTube Music lands in the same place as an M4A, under the
     "/sdcard/Other/Daft Punk, Pharrell Williams & Nile Rodgers/Random Access Memories/08 Get Lucky (feat. Pharrell Williams and Nile Rodgers).m4a",
   );
   assert.equal(ytDownloadDestination(roots, [ROOT, "/sdcard/Other"], tags, "youtube"), null);
+});
+
+describe("ytDownloadHas", () => {
+  test("with nothing saved, a download looks everything up", () => {
+    assert.deepEqual(fixLookups(ytDownloadHas(null)), { lyrics: true, deezer: true });
+  });
+
+  test("lyrics the Lyrics view saved aren't asked for again; Deezer still is", () => {
+    const saved = { kind: "found", lyrics: { synced: false, text: "Plain" } } as const;
+    assert.deepEqual(fixLookups(ytDownloadHas(saved)), { lyrics: false, deezer: true });
+  });
+
+  test("a remembered miss doesn't stop the download's own search", () => {
+    const miss = { kind: "miss", checkedAt: Date.now() } as const;
+    assert.deepEqual(fixLookups(ytDownloadHas(miss)), { lyrics: true, deezer: true });
+  });
 });
 
 describe("ytDownloadLookup", () => {

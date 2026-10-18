@@ -8,12 +8,14 @@ import { SettingsSwitch } from "@/components/SettingsSwitch";
 import { TextButton } from "@/components/TextButton";
 
 import { AccountPhoto } from "./AccountPhoto";
+import { ChoiceSection } from "./ChoiceRow";
+import { searchOnlineChoice } from "./searchOnline";
 import { useYtAccount } from "./ytAccount";
 import { setYtMusicEnabled, useYtMusicEnabled } from "./ytMusic";
 
 const NOTES: Record<YtAccountNote, string> = {
   optional:
-    "Signing in is optional. Signed in, Search, playback and Discover mixes use your " +
+    "Signing in is optional. Signed in, Search, playback and Home's mixes use your " +
     "account. The session stays on this phone. With Download in best quality off, or when Soulseek " +
     "can't deliver a song, downloads come from YouTube Music: AAC at 256 kbps with Premium, " +
     "about 128 kbps without.",
@@ -56,7 +58,7 @@ function AccountRow({ account, onSignOut }: { account: YtAccount; onSignOut: () 
         <TextButton label="Sign Out" onPress={onSignOut} />
       </View>
       <Text className="font-sans text-footnote text-secondary">
-        Search, playback and Discover mixes use this account. Signing out forgets it on this phone.
+        Search, playback and Home's mixes use this account. Signing out forgets it on this phone.
       </Text>
     </>
   );
@@ -65,6 +67,7 @@ function AccountRow({ account, onSignOut }: { account: YtAccount; onSignOut: () 
 /** Settings › Accounts › YT Music: whether Search also looks on YouTube Music, and the account it uses. */
 export function YtMusicSettingsSection() {
   const enabled = useYtMusicEnabled();
+  const searchOnline = searchOnlineChoice.setting.useValue();
   const account = useYtAccount();
   const view = ytAccountView(account.state, enabled);
 
@@ -78,6 +81,16 @@ export function YtMusicSettingsSection() {
         Search also finds songs on YouTube Music, which means sending what you type to YouTube.
         Nothing from your library is sent. Off, Wave makes no YT Music requests.
       </Text>
+
+      {enabled && (
+        <View className="mt-6">
+          <ChoiceSection
+            choice={searchOnlineChoice}
+            current={searchOnline}
+            note="Always opens albums and artists with Online selected and searches YouTube Music as you type. On demand waits for Online to be tapped. Long-press the Library | Online toggle to change it there."
+          />
+        </View>
+      )}
 
       {view !== null && (
         <View className="mt-6">

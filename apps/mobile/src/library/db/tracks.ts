@@ -2,6 +2,7 @@
  * The track rows every song list reads (a `SongRow`). Kept free of Expo so
  * the store tests run them against a real SQLite (`testDatabase.ts`).
  */
+import { readStoredGenres } from "@wave/core";
 import { and, asc, eq, inArray, isNotNull, sql, type SQL } from "drizzle-orm";
 
 import { chunks } from "./chunks.ts";
@@ -104,6 +105,29 @@ export const selectPlayableSongs = (db: LibraryDatabase, ids: readonly number[])
   chunks(ids).flatMap((some) =>
     trackQuery(db, "files").where(inArray(schema.tracks.id, some)).all(),
   );
+
+/** A song whose genre tag has several values, with each of them. */
+export interface SongGenres {
+  readonly id: number;
+  readonly genres: readonly string[];
+}
+
+/**
+ * The songs whose genre tag has several values, with every value (the first
+ * is the genre the Library files them under): what Genre mixes count. A
+ * song whose stored values can't be read (`readStoredGenres`) is left out.
+ */
+export const selectSongGenres = (db: LibraryDatabase): SongGenres[] =>
+  db
+    .select({ id: schema.tracks.id, genres: schema.tracks.genres })
+    .from(schema.tracks)
+    .where(isNotNull(schema.tracks.genres))
+    .orderBy(asc(schema.tracks.id))
+    .all()
+    .flatMap((row) => {
+      const genres = readStoredGenres(row.genres);
+      return genres.length === 0 ? [] : [{ id: row.id, genres }];
+    });
 
 /** The order of song lists (Songs, an artist's or a genre's songs): by title, then artist. */
 export const BY_TITLE = [

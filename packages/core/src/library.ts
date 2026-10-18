@@ -32,6 +32,11 @@ export interface RawTrack {
   /** Every value of a multi-value album artist tag, as [artists]. */
   readonly albumArtists?: readonly string[] | null | undefined;
   readonly genre?: string | null | undefined;
+  /**
+   * Every value of a multi-value genre tag (Vorbis comments, ID3v2.4), when
+   * the reader has them, where [genre] holds the first.
+   */
+  readonly genres?: readonly string[] | null | undefined;
   /** Year or date as tagged, e.g. `1997` or `1997-05-21`. */
   readonly year?: string | null | undefined;
   /** Track number as tagged, e.g. `3` or `3/12`. */
@@ -78,6 +83,11 @@ export interface LibraryTrack {
   readonly genre: string | null;
   readonly genreSort: string | null;
   readonly genreKey: string | null;
+  /**
+   * Every value of the genre tag ([genre] is the first; none without one).
+   * The Library files the song under [genre] alone; Genre mixes count each.
+   */
+  readonly genres: readonly string[];
 
   readonly year: number | null;
   readonly trackNumber: number | null;
@@ -217,6 +227,26 @@ const creditsOf = (
 const shownCredit = (credits: readonly string[]): string | null =>
   credits.length > 0 ? credits.join(", ") : null;
 
+/** How a track's genre tag values (`LibraryTrack.genres`) are stored: null for one or none, else each of them. */
+export const storedGenres = (genres: readonly string[]): string | null =>
+  genres.length > 1 ? JSON.stringify(genres) : null;
+
+/**
+ * A track's genre tag values as `storedGenres` saved them; none for nothing
+ * stored or a value that isn't a list of text, so one bad row reads as a
+ * song with no extra genres instead of stopping the whole read.
+ */
+export const readStoredGenres = (stored: string | null): string[] => {
+  if (stored === null) return [];
+  let raw: unknown;
+  try {
+    raw = JSON.parse(stored);
+  } catch {
+    return [];
+  }
+  return Array.isArray(raw) && raw.every((value) => typeof value === "string") ? raw : [];
+};
+
 /** Turns raw scanner output into a library track with fallbacks, parsed numbers and keys. */
 export const normalizeTrack = (raw: RawTrack): LibraryTrack => {
   const { folder, fileName } = splitPath(raw.path);
@@ -239,6 +269,7 @@ export const normalizeTrack = (raw: RawTrack): LibraryTrack => {
         ? [VARIOUS_ARTISTS]
         : artistCredits;
   const genre = parseGenre(raw.genre);
+  const genreValues = (raw.genres ?? []).flatMap((value) => parseGenre(value) ?? []);
   const track = parseNumberOfTotal(raw.trackNumber);
   const disc = parseNumberOfTotal(raw.discNumber);
   const durationMs =
@@ -266,6 +297,7 @@ export const normalizeTrack = (raw: RawTrack): LibraryTrack => {
     genre,
     genreSort: genre === null ? null : sortKey(genre),
     genreKey: genre === null ? null : identityKey(genre),
+    genres: genreValues.length > 0 ? genreValues : genre === null ? [] : [genre],
     year: parseYear(raw.year),
     trackNumber: track.number,
     trackTotal: track.total,

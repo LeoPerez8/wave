@@ -19,7 +19,9 @@
  * read stars its songs the Library has (Core's `ytLibraryFavorites`), kept
  * in the batch so a resumed read or Try Again still stars; the others are
  * kept as pending favorites, each starred once a download or scan brings
- * it in. The star syncs like any other, and the import never takes one away.
+ * it in, and their downloads join the queue under Favorites as any star's do
+ * (Import & Download queues them as the playlist's instead). The star syncs
+ * like any other, and the import never takes one away.
  *
  * Each playlist's origin (the YouTube Music playlist it came from) is kept
  * on this phone, unsynced: the picker marks those rows Imported, and ticking
@@ -45,7 +47,6 @@ import {
   ytLibraryReadFailed,
   ytLibraryReadLogLine,
   ytLibraryReadView,
-  type PendingFavorite,
   type YtLibraryBatch,
   type YtLibraryOrigins,
   type YtLibraryPicker,
@@ -61,14 +62,15 @@ import { persistedSetting } from "@/lib/persistedSetting";
 import { appLog } from "@/log/appLog";
 import { askYtMusic } from "@/ytmusic/askYtMusic";
 import { currentLibraryFinder } from "@/ytmusic/libraryFinder";
-import { runYtPlaylistDownloadAction } from "@/ytmusic/YtDownloads";
+import { downloadStarredSongs, runYtPlaylistDownloadAction } from "@/ytmusic/YtDownloads";
 
-import { setFavorites } from "./favorites";
+import { setFavorites, setPendingFavorites } from "./favorites";
 import { LibraryStore } from "./LibraryStore";
 import { listLibrary } from "./playlistImports";
 import { cancelPlaylistImport, settlePlaylistImport, startLinkImport } from "./playlistImports";
 import { createPlaylist, currentPlaylists, replacePlaylistSongs } from "./playlists";
 import { appRuntime } from "./runtime";
+import { downloadSyncedStars } from "./starSongs";
 
 const LOG_TAG = "WaveImport";
 
@@ -152,18 +154,6 @@ const queueDownloads = async (read: YtLibraryRead): Promise<void> => {
 };
 
 /**
- * Keeps the liked songs the Library hasn't as pending favorites: each gets
- * its star once a download or scan brings it in (the store's `saveBatch`).
- */
-const keepPendingFavorites = async (songs: readonly PendingFavorite[]): Promise<void> => {
-  if (songs.length === 0) return;
-  await appRuntime.runPromise(
-    // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
-    LibraryStore.use((store) => store.addPendingFavorites(songs)),
-  );
-};
-
-/**
  * Reads [read]'s playlist and gives its Wave playlist the songs, as a link
  * import does (whose line goes to the app log), starring the Library's songs
  * when it was asked to. A read whose playlist was refreshed or deleted
@@ -187,8 +177,12 @@ const fill = async (read: YtLibraryRead): Promise<string | null> => {
       // Before it leaves the batch: Wave stopped in between stars again, which changes nothing.
       const favorites = ytLibraryFavorites(read, plan);
       await setFavorites(favorites.star, true);
-      // Before any download is queued, so each one's landing finds its pending favorite.
-      await keepPendingFavorites(favorites.pending);
+      // A liked song the Library has only as a missing song downloads, as any new star does.
+      void downloadSyncedStars();
+      // Before any download is queued, so each one's landing finds its pending favorite; the
+      // stars then ask for their downloads, under Favorites (a star means downloaded).
+      await setPendingFavorites(favorites.pending, true);
+      downloadStarredSongs(favorites.download);
       // Checked again with no wait before the link import starts: a refresh from here on
       // empties the playlist and ends that import.
       if (!isYtLibraryReadQueued(batch.get(), read)) return null;

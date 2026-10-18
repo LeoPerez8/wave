@@ -27,6 +27,7 @@ import type {
   YtArtistSectionEvent,
   YtArtistShelf,
   YtAlbumEntry,
+  YtPick,
   YtReleaseLoad,
   YtSong,
 } from "./index.ts";
@@ -190,22 +191,23 @@ const view = (
     inLibrary,
   });
 
-const BUTTON = { songs: [], note: null, button: true };
+const BUTTON = { songs: [], note: null, toggle: "library", retry: false };
 
 describe("the artist page's YT Music section", () => {
   test("shows nothing until what was saved has been read", () => {
     assert.equal(view(YT_ARTIST_SECTION_START), null);
   });
 
-  test("with nothing saved it's the button, and nothing is asked", () => {
+  test("with nothing saved Library shows, and nothing is asked", () => {
     assert.deepEqual(view(restored(null)), BUTTON);
   });
 
-  test("tapping loads, without the button meanwhile", () => {
+  test("tapping loads, with Online selected", () => {
     assert.deepEqual(view(step(restored(null), { type: "requested" })), {
       songs: [],
       note: "loading",
-      button: false,
+      toggle: "online",
+      retry: false,
     });
   });
 
@@ -215,7 +217,12 @@ describe("the artist page's YT Music section", () => {
       { type: "requested" },
       { type: "answered", saved: found(NOW, [song("b"), song("mine1"), song("a")]) },
     );
-    assert.deepEqual(view(answered), { songs: [song("b"), song("a")], note: null, button: false });
+    assert.deepEqual(view(answered), {
+      songs: [song("b"), song("a")],
+      note: null,
+      toggle: "online",
+      retry: false,
+    });
   });
 
   test("adds every song of the artist the Library lacks, not just the top songs", () => {
@@ -228,7 +235,12 @@ describe("the artist page's YT Music section", () => {
         ),
       ),
     );
-    assert.deepEqual(shown, { songs: [song("c"), song("d")], note: null, button: false });
+    assert.deepEqual(shown, {
+      songs: [song("c"), song("d")],
+      note: null,
+      toggle: "online",
+      retry: false,
+    });
   });
 
   test("says so quietly when the Library has every song of the artist, or there are none", () => {
@@ -236,47 +248,59 @@ describe("the artist page's YT Music section", () => {
     assert.deepEqual(view(restored(found(NOW, [song("mine1")], all))), {
       songs: [],
       note: "allInLibrary",
-      button: false,
+      toggle: "online",
+      retry: false,
     });
-    assert.deepEqual(view(restored(found(NOW, []))), { songs: [], note: "noSongs", button: false });
+    assert.deepEqual(view(restored(found(NOW, []))), {
+      songs: [],
+      note: "noSongs",
+      toggle: "online",
+      retry: false,
+    });
   });
 
   test("a list cut short never says the Library has every song, or that there are none", () => {
-    const quiet = { songs: [], note: null, button: false };
+    const quiet = { songs: [], note: null, toggle: "online", retry: false };
     assert.deepEqual(view(restored(cut([song("mine1"), song("mine2")]))), quiet);
     assert.deepEqual(view(restored(cut([]))), quiet);
     assert.deepEqual(view(restored(cut([song("mine1"), song("c")]))), {
       songs: [song("c")],
       note: null,
-      button: false,
+      toggle: "online",
+      retry: false,
     });
   });
 
-  test("a saved section shows straight away for a week, then the button comes back", () => {
+  test("a saved section shows straight away for a week, then Library shows again", () => {
     const saved = restored(found(NOW - 6 * DAY, [song("a")]));
-    assert.deepEqual(view(saved), { songs: [song("a")], note: null, button: false });
+    assert.deepEqual(view(saved), {
+      songs: [song("a")],
+      note: null,
+      toggle: "online",
+      retry: false,
+    });
     assert.deepEqual(view(saved, { now: NOW + DAY }), BUTTON);
   });
 
-  test("an answer saved without the artist's full list counts as expired: the button is back", () => {
+  test("an answer saved without the artist's full list counts as expired: Library shows", () => {
     assert.deepEqual(view(restored(savedBefore(NOW - DAY))), BUTTON);
   });
 
-  test("'no match' is a quiet line for a week, then the button comes back", () => {
+  test("'no match' is a quiet line for a week, then Library shows again", () => {
     const saved = restored(unmatched(NOW - DAY));
-    assert.deepEqual(view(saved), { songs: [], note: "notFound", button: false });
+    assert.deepEqual(view(saved), { songs: [], note: "notFound", toggle: "online", retry: false });
     assert.deepEqual(view(saved, { now: NOW + 6 * DAY }), BUTTON);
   });
 
-  test("offline or failing, a quiet line with the button to try again", () => {
+  test("offline or failing, a quiet line and Online asks again", () => {
     const failed = step(
       restored(null),
       { type: "requested" },
       { type: "failed", reason: "offline" },
     );
-    assert.deepEqual(view(failed), { songs: [], note: "offline", button: true });
+    assert.deepEqual(view(failed), { songs: [], note: "offline", toggle: "online", retry: true });
     const again = step(failed, { type: "requested" }, { type: "failed", reason: "failed" });
-    assert.deepEqual(view(again), { songs: [], note: "failed", button: true });
+    assert.deepEqual(view(again), { songs: [], note: "failed", toggle: "online", retry: true });
   });
 
   test("a failure keeps what was saved before", () => {
@@ -289,7 +313,7 @@ describe("the artist page's YT Music section", () => {
     assert.deepEqual(failed, { status: "ready", saved: expired, failure: "failed" });
   });
 
-  test("turned off meanwhile, it goes back to the button without a line", () => {
+  test("turned off meanwhile, it asks nothing more, with no line", () => {
     const off = step(restored(null), { type: "requested" }, { type: "failed", reason: "disabled" });
     assert.deepEqual(view(off), BUTTON);
   });
@@ -334,8 +358,8 @@ describe("an artist page opened integrated", () => {
     assert.equal(asks(restored(savedBefore(NOW - DAY))), true);
   });
 
-  test("is looking meanwhile, without the button", () => {
-    const loading = { songs: [], note: "loading", button: false };
+  test("is looking meanwhile, with Online selected", () => {
+    const loading = { songs: [], note: "loading", toggle: "online", retry: false };
     assert.deepEqual(view(restored(null), { integrated: true }), loading);
     assert.deepEqual(view(restored(found(NOW - 8 * DAY)), { integrated: true }), loading);
     assert.deepEqual(
@@ -351,12 +375,13 @@ describe("an artist page opened integrated", () => {
     assert.deepEqual(view(saved, { integrated: true }), {
       songs: [song("a")],
       note: null,
-      button: false,
+      toggle: "online",
+      retry: false,
     });
     assert.equal(asks(restored(unmatched(NOW - DAY))), false);
   });
 
-  test("after a failure it waits for the button", () => {
+  test("after a failure it waits for Online to be picked again", () => {
     const failed = step(
       restored(null),
       { type: "requested" },
@@ -366,7 +391,8 @@ describe("an artist page opened integrated", () => {
     assert.deepEqual(view(failed, { integrated: true }), {
       songs: [],
       note: "offline",
-      button: true,
+      toggle: "online",
+      retry: true,
     });
   });
 
@@ -395,7 +421,7 @@ describe("ytArtistIntegrated", () => {
     assert.equal(integrated(answered), true);
   });
 
-  test("not with the button, while asking, after 'no match', a week on or with YT Music off", () => {
+  test("not with Library selected, while asking, after 'no match', a week on or with YT Music off", () => {
     assert.equal(integrated(YT_ARTIST_SECTION_START), false);
     assert.equal(integrated(restored(null)), false);
     assert.equal(integrated(step(restored(found(NOW - 8 * DAY)), { type: "requested" })), false);
@@ -754,6 +780,8 @@ describe("a Library album's YT Music songs", () => {
       name?: string;
       artistId?: number;
       integrated?: boolean;
+      always?: boolean;
+      pick?: YtPick | null;
       keepTracklist?: boolean;
       releasePage?: YtReleaseLoad | undefined;
     } = {},
@@ -768,6 +796,8 @@ describe("a Library album's YT Music songs", () => {
       enabled: context.enabled ?? true,
       now: context.now ?? NOW,
       integrated: context.integrated ?? true,
+      always: context.always ?? false,
+      pick: context.pick ?? null,
       keepTracklist: context.keepTracklist,
       releasePage: (release) => {
         asked.push(release.browseId);
@@ -777,18 +807,18 @@ describe("a Library album's YT Music songs", () => {
     return { shown, asked };
   };
 
-  test("opened from a view that isn't integrated, it's the button, even with the artist's answer saved", () => {
+  test("opened from a view that isn't integrated, Library is selected, even with the artist's answer saved", () => {
     for (const state of [restored(found(NOW - DAY)), restored(null), restored(unmatched(NOW))]) {
-      const { shown, asked } = albumView(state, { integrated: false });
-      assert.deepEqual(shown, {
+      // No release to read: nothing is read.
+      assert.deepEqual(albumView(state, { integrated: false }).shown, {
         tracks: null,
         songs: null,
         note: null,
-        button: true,
+        toggle: "library",
+        retry: null,
         release: null,
         askArtist: false,
       });
-      assert.deepEqual(asked, []);
     }
   });
 
@@ -798,7 +828,7 @@ describe("a Library album's YT Music songs", () => {
     assert.deepEqual(shape(shown?.tracks ?? []), ["1:#1", "2:give-life-back", "3:#3", "4:touch"]);
     assert.deepEqual(shown?.songs, songs);
     assert.equal(shown?.note, null);
-    assert.equal(shown?.button, false);
+    assert.equal(shown?.retry, null);
     assert.equal(shown?.release?.browseId, "MPREb_ram");
   });
 
@@ -814,7 +844,7 @@ describe("a Library album's YT Music songs", () => {
       const { shown } = albumView(restored(found(NOW)), { releasePage });
       assert.equal(shown?.tracks, null);
       assert.equal(shown?.note, "loading");
-      assert.equal(shown?.button, false);
+      assert.equal(shown?.retry, null);
     }
   });
 
@@ -824,7 +854,7 @@ describe("a Library album's YT Music songs", () => {
     });
     assert.equal(shown?.tracks, null);
     assert.equal(shown?.note, null);
-    assert.equal(shown?.button, false);
+    assert.equal(shown?.retry, null);
   });
 
   test("the last download finishing while the tracklist shows keeps it, rows in place, for the visit", () => {
@@ -836,19 +866,19 @@ describe("a Library album's YT Music songs", () => {
     assert.equal(shown?.note, null);
   });
 
-  test("a release page that can't be read is a quiet line with the button to read it again", () => {
+  test("a release page that can't be read is a quiet line that Online reads again", () => {
     const { shown } = albumView(restored(found(NOW)), {
       releasePage: { status: "quiet", reason: "offline" },
     });
     assert.equal(shown?.note, "offline");
-    assert.equal(shown?.button, true);
+    assert.equal(shown?.retry, "release");
     assert.equal(shown?.release?.browseId, "MPREb_ram");
   });
 
   test("not on the artist's page, or no artist matched: not found, and nothing is read", () => {
     const elsewhere = albumView(restored(withReleases([release("tron", 2010)], [])));
     assert.equal(elsewhere.shown?.note, "notFound");
-    assert.equal(elsewhere.shown?.button, false);
+    assert.equal(elsewhere.shown?.retry, null);
     assert.deepEqual(elsewhere.asked, []);
     const nobody = albumView(restored(unmatched(NOW)));
     assert.equal(nobody.shown?.note, "notFound");
@@ -862,7 +892,8 @@ describe("a Library album's YT Music songs", () => {
         tracks: null,
         songs: null,
         note: "loading",
-        button: false,
+        toggle: "online",
+        retry: null,
         release: null,
         askArtist: true,
       });
@@ -870,15 +901,15 @@ describe("a Library album's YT Music songs", () => {
     }
   });
 
-  test("asking for the artist loads, and a failure is a quiet line with the button", () => {
+  test("asking for the artist loads, and a failure is a quiet line that Online asks again", () => {
     const asking = step(restored(null), { type: "requested" });
     assert.equal(albumView(asking).shown?.note, "loading");
-    assert.equal(albumView(asking).shown?.button, false);
+    assert.equal(albumView(asking).shown?.retry, null);
     assert.equal(albumView(asking).shown?.askArtist, false);
     const failed = step(asking, { type: "failed", reason: "failed" });
     assert.equal(albumView(failed).shown?.note, "failed");
-    assert.equal(albumView(failed).shown?.button, true);
-    // Asked once: a failure waits for the button.
+    assert.equal(albumView(failed).shown?.retry, "artist");
+    // Asked once: a failure waits for Online to be picked again.
     assert.equal(albumView(failed).shown?.askArtist, false);
   });
 
@@ -898,5 +929,225 @@ describe("a Library album's YT Music songs", () => {
     assert.equal(albumView(restored(found(NOW)), { enabled: false }).shown, null);
     assert.equal(albumView(restored(found(NOW)), { name: "Various Artists" }).shown, null);
     assert.equal(albumView(YT_ARTIST_SECTION_START).shown, null);
+  });
+
+  test("opened as the Library's, Library is selected and nothing is read or asked", () => {
+    const { shown } = albumView(restored(found(NOW - DAY)), { integrated: false });
+    assert.equal(shown?.toggle, "library");
+    assert.equal(shown?.askArtist, false);
+    assert.equal(shown?.release, null);
+  });
+
+  test("opened integrated, Online is selected", () => {
+    assert.equal(albumView(restored(found(NOW - DAY))).shown?.toggle, "online");
+  });
+
+  test("picking Online reads the release and joins its songs, as an integrated opening does", () => {
+    const { shown, asked } = albumView(restored(found(NOW - DAY)), {
+      integrated: false,
+      pick: "online",
+    });
+    assert.equal(shown?.toggle, "online");
+    assert.deepEqual(asked, ["MPREb_ram"]);
+    assert.deepEqual(shape(shown?.tracks ?? []), ["1:#1", "2:give-life-back", "3:#3", "4:touch"]);
+    const nothingSaved = albumView(restored(null), { integrated: false, pick: "online" });
+    assert.equal(nothingSaved.shown?.askArtist, true);
+  });
+
+  test("picking Library shows the album as it is, with nothing read or asked", () => {
+    for (const state of [restored(found(NOW - DAY)), restored(null)]) {
+      assert.deepEqual(albumView(state, { pick: "library" }).shown, {
+        tracks: null,
+        songs: null,
+        note: null,
+        toggle: "library",
+        retry: null,
+        release: null,
+        askArtist: false,
+      });
+    }
+  });
+
+  test("Online after a failure asks again: the artist, or the release's page", () => {
+    const failed = step(
+      restored(null),
+      { type: "requested" },
+      { type: "failed", reason: "failed" },
+    );
+    assert.equal(albumView(failed).shown?.retry, "artist");
+    assert.equal(albumView(failed, { pick: "library" }).shown?.retry, "artist");
+    const unread = albumView(restored(found(NOW)), {
+      releasePage: { status: "quiet", reason: "offline" },
+    });
+    assert.equal(unread.shown?.retry, "release");
+    assert.equal(albumView(restored(found(NOW))).shown?.retry, null);
+  });
+
+  test("with Search online set to Always, opened from anywhere it shows Online and asks at once", () => {
+    const always = { integrated: false, always: true };
+    const nothingSaved = albumView(restored(null), always).shown;
+    assert.equal(nothingSaved?.toggle, "online");
+    assert.equal(nothingSaved?.askArtist, true);
+    const { shown, asked } = albumView(restored(found(NOW - DAY)), always);
+    assert.equal(shown?.toggle, "online");
+    assert.deepEqual(asked, ["MPREb_ram"]);
+  });
+
+  test("with Always, an ask that got no answer leaves the album on Library, with the quiet line", () => {
+    const always = { integrated: false, always: true };
+    const offline = step(
+      restored(null),
+      { type: "requested" },
+      { type: "failed", reason: "offline" },
+    );
+    assert.deepEqual(albumView(offline, always).shown, {
+      tracks: null,
+      songs: null,
+      note: "offline",
+      toggle: "library",
+      retry: "artist",
+      release: null,
+      askArtist: false,
+    });
+    const unread = albumView(restored(found(NOW)), {
+      ...always,
+      releasePage: { status: "quiet", reason: "failed" },
+    }).shown;
+    assert.equal(unread?.toggle, "library");
+    assert.equal(unread?.note, "failed");
+    assert.equal(unread?.retry, "release");
+    // Online picked, the failure shows under Online as before; Library picked, nothing shows.
+    assert.equal(albumView(offline, { ...always, pick: "online" }).shown?.toggle, "online");
+    assert.equal(albumView(offline, { ...always, pick: "library" }).shown?.note, null);
+    // Opened integrated, the failure stays under Online.
+    assert.equal(albumView(offline, { integrated: true, always: true }).shown?.toggle, "online");
+  });
+});
+
+describe("the artist page's Library | Online toggle", () => {
+  const picked = (state: Section, pick: YtPick | null, integratedOpening = false) =>
+    ytArtistSectionView(state, {
+      name: "Daft Punk",
+      enabled: true,
+      now: NOW,
+      integrated: integratedOpening,
+      pick,
+      inLibrary,
+    });
+  const asksPicked = (state: Section, pick: YtPick | null, integratedOpening = false) =>
+    ytArtistSectionAsks(state, {
+      name: "Daft Punk",
+      enabled: true,
+      now: NOW,
+      integrated: integratedOpening,
+      pick,
+    });
+  const context = { name: "Daft Punk", enabled: true, now: NOW };
+
+  test("with nothing standing, Library is selected and nothing is asked", () => {
+    assert.equal(picked(restored(null), null)?.toggle, "library");
+    assert.equal(asksPicked(restored(null), null), false);
+  });
+
+  test("picking Online asks YouTube Music, once", () => {
+    assert.equal(asksPicked(restored(null), "online"), true);
+    assert.deepEqual(picked(restored(null), "online"), {
+      songs: [],
+      note: "loading",
+      toggle: "online",
+      retry: false,
+    });
+    assert.equal(asksPicked(step(restored(null), { type: "requested" }), "online"), false);
+  });
+
+  test("a standing answer shows with Online selected; Library hides it with nothing asked", () => {
+    const saved = restored(found(NOW - DAY, [song("a")]));
+    assert.equal(picked(saved, null)?.toggle, "online");
+    assert.deepEqual(picked(saved, "library"), {
+      songs: [],
+      note: null,
+      toggle: "library",
+      retry: false,
+    });
+    assert.equal(asksPicked(saved, "library"), false);
+    const shelvesOf = (pick: YtPick | null) =>
+      ytArtistShelves(saved, { ...context, libraryAlbum: () => null, pick });
+    assert.equal(shelvesOf("library").length, 0);
+    assert.equal(ytArtistIntegrated(saved, { ...context, pick: "library" }), false);
+    assert.equal(ytArtistIntegrated(saved, { ...context, pick: "online" }), true);
+    assert.deepEqual(picked(saved, "online")?.songs, [song("a")]);
+  });
+
+  test("opened integrated, Online is selected; Library picked, nothing is asked", () => {
+    assert.equal(picked(restored(null), null, true)?.toggle, "online");
+    assert.equal(asksPicked(restored(null), "library", true), false);
+    assert.equal(picked(restored(null), "library", true)?.note, null);
+  });
+
+  test("after a failure Online stays selected, and picking it asks again", () => {
+    const failed = step(
+      restored(null),
+      { type: "requested" },
+      { type: "failed", reason: "offline" },
+    );
+    assert.deepEqual(picked(failed, "online"), {
+      songs: [],
+      note: "offline",
+      toggle: "online",
+      retry: true,
+    });
+    assert.equal(picked(failed, "library")?.retry, true);
+    assert.equal(asksPicked(failed, "online"), false);
+  });
+});
+
+describe("an artist page with Search online set to Always", () => {
+  const shown = (state: Section, pick: YtPick | null = null) =>
+    ytArtistSectionView(state, {
+      name: "Daft Punk",
+      enabled: true,
+      now: NOW,
+      always: true,
+      pick,
+      inLibrary,
+    });
+  const asksAlways = (state: Section, pick: YtPick | null = null) =>
+    ytArtistSectionAsks(state, {
+      name: "Daft Punk",
+      enabled: true,
+      now: NOW,
+      integrated: false,
+      always: true,
+      pick,
+    });
+
+  test("opens with Online selected and asks at once with nothing standing", () => {
+    assert.equal(shown(restored(null))?.toggle, "online");
+    assert.equal(shown(restored(null))?.note, "loading");
+    assert.equal(asksAlways(restored(null)), true);
+    assert.equal(asksAlways(restored(found(NOW - 8 * DAY))), true);
+    assert.equal(asksAlways(restored(found(NOW - DAY))), false);
+  });
+
+  test("Library picked hides YouTube Music for the visit, with nothing asked", () => {
+    assert.equal(shown(restored(null), "library")?.toggle, "library");
+    assert.equal(asksAlways(restored(null), "library"), false);
+  });
+
+  test("an ask that got no answer leaves the page on Library, with the quiet line", () => {
+    const offline = step(
+      restored(null),
+      { type: "requested" },
+      { type: "failed", reason: "offline" },
+    );
+    assert.deepEqual(shown(offline), {
+      songs: [],
+      note: "offline",
+      toggle: "library",
+      retry: true,
+    });
+    assert.equal(asksAlways(offline), false);
+    assert.equal(shown(offline, "online")?.toggle, "online");
+    assert.equal(shown(offline, "library")?.note, null);
   });
 });

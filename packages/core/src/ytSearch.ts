@@ -1,14 +1,18 @@
 /**
  * What Search has asked YouTube Music: the songs, artists and albums it found
- * for what's typed, which join the Library's results (the integrated view). Typing alone asks only
- * when the Library has nothing for the query; otherwise Search offers Search
- * YouTube Music, and once the user taps it the view follows the query until
- * the field is cleared. It loads in the background, keeps the last results up
+ * for what's typed, which join the Library's results (the integrated view).
+ * The Library | Online toggle at the end of the search field's row picks it.
+ * Typing alone asks only when the Library has nothing for the query (and
+ * Library wasn't picked); once Online is picked the view follows the query
+ * until the field is cleared. Library hides YouTube Music's results with no
+ * new request, and Online shows them again without asking when the query is
+ * the one they answer. It loads in the background, keeps the last results up
  * while the next query loads, drops answers to queries that are no longer
  * typed, and turns a failure into a quiet line. Off in Settings, it stays
- * hidden and nothing is requested.
+ * hidden, with no toggle, and nothing is requested.
  */
 
+import type { YtPick } from "./onlineToggle.ts";
 import { createSearchIndex, type SearchEntry } from "./search.ts";
 import type { YtArtistAlbum, YtArtistCandidate } from "./ytArtist.ts";
 import type { YtSong } from "./ytMusic.ts";
@@ -17,8 +21,8 @@ import type { YtSong } from "./ytMusic.ts";
 export type YtQuietReason = "offline" | "failed";
 
 /**
- * Who asked YT Music: the user, with Search YouTube Music, or Search on its
- * own because the Library has nothing for the query.
+ * Who asked YT Music: the user, by picking Online, or Search on its own
+ * because the Library has nothing for the query.
  */
 export type YtAskedBy = "user" | "auto";
 
@@ -31,11 +35,31 @@ export interface YtSearchAnswer<S extends YtSong = YtSong> {
 
 const NO_ANSWER: YtSearchAnswer<never> = { songs: [], artists: [], albums: [] };
 
+/** YT Music's answer to [query], kept while Library shows, for Online to show again. */
+export type YtKeptAnswer<S extends YtSong = YtSong> = {
+  readonly query: string;
+} & YtSearchAnswer<S>;
+
 /** The section's state; [S] is the song as the caller has it (the native result, say). */
 export type YtSection<S extends YtSong = YtSong> =
+  /** YT Music is off: no toggle, nothing asked. */
   | { readonly status: "hidden" }
-  /** The Library has results for [query]: nothing is asked, Search offers to ask. */
-  | { readonly status: "offered"; readonly query: string }
+  /**
+   * Too little is typed to ask about: nothing shows. [pick] is the toggle's
+   * segment picked since the field was last cleared (null: none).
+   */
+  | { readonly status: "idle"; readonly pick: YtPick | null }
+  /**
+   * The Library's results for [query] show alone, nothing asked: the Library
+   * has results for it, or Library was [picked]. [kept] is the last answer
+   * Online showed.
+   */
+  | {
+      readonly status: "offered";
+      readonly query: string;
+      readonly picked: boolean;
+      readonly kept: YtKeptAnswer<S> | null;
+    }
   /**
    * [songs], [artists] and [albums] are the last results, kept up until the
    * new ones arrive. YT Music is asked [delayMs] from now: at once when
@@ -69,9 +93,15 @@ export type YtSectionEvent<S extends YtSong = YtSong> =
       readonly query: string;
       readonly enabled: boolean;
       readonly libraryHasResults: boolean;
+      /**
+       * Whether Search online is set to Always (`SearchOnline`): with nothing
+       * picked since the field was last cleared, Online is, and every query
+       * is asked once typing pauses. Undefined: Only on demand.
+       */
+      readonly always?: boolean;
     }
-  /** Search YouTube Music was tapped. */
-  | { readonly type: "asked" }
+  /** A segment of the Library | Online toggle was tapped. */
+  | { readonly type: "picked"; readonly pick: YtPick }
   | ({ readonly type: "found"; readonly query: string } & YtSearchAnswer<S>)
   | { readonly type: "failed"; readonly query: string; readonly reason: YtQuietReason };
 
@@ -116,8 +146,6 @@ export interface YtSectionView<S extends YtSong> extends YtSearchAnswer<S> {
    */
   readonly top: YtSearchTop<S> | null;
   readonly note: YtSectionNote | null;
-  /** Search YouTube Music is offered: nothing is asked yet for the query. */
-  readonly offer: boolean;
   /**
    * Search shows YouTube Music's results (an integrated view): a Library
    * album opened from it opens integrated.
@@ -167,9 +195,28 @@ const ytTop = <S extends YtSong>(
 const QUIET = { ...NO_ANSWER, top: null };
 
 /**
- * What the section shows, or null when it's hidden: YT Music's songs, artists
- * and albums, each in its order, minus those the Library already has, which
- * already show as the Library's.
+ * The segment the Library | Online toggle shows selected, or null with YT
+ * Music off (no toggle): Online while YouTube Music is asked or shows, by the
+ * user or on its own.
+ */
+export const ytSectionToggle = (section: YtSection<YtSong>): YtPick | null => {
+  switch (section.status) {
+    case "hidden":
+      return null;
+    case "idle":
+      return section.pick ?? "library";
+    case "offered":
+      return "library";
+    default:
+      return "online";
+  }
+};
+
+/**
+ * What the section shows, or null when it's hidden or too little is typed:
+ * YT Music's songs, artists and albums, each in its order, minus those the
+ * Library already has, which already show as the Library's. While Library is
+ * the toggle's segment, nothing.
  */
 export const ytSectionView = <S extends YtSong>(
   section: YtSection<S>,
@@ -177,11 +224,12 @@ export const ytSectionView = <S extends YtSong>(
 ): YtSectionView<S> | null => {
   switch (section.status) {
     case "hidden":
+    case "idle":
       return null;
     case "offered":
-      return { ...QUIET, note: null, offer: true, integrated: false };
+      return { ...QUIET, note: null, integrated: false };
     case "quiet":
-      return { ...QUIET, note: section.reason, offer: false, integrated: false };
+      return { ...QUIET, note: section.reason, integrated: false };
     case "loading":
     case "results": {
       const shown: YtSearchAnswer<S> = {
@@ -191,7 +239,7 @@ export const ytSectionView = <S extends YtSong>(
       };
       // Loading, what's shown answers the last query, not this one: it has no best yet.
       const top = section.status === "results" ? ytTop(section.query, shown) : null;
-      const view = { ...shown, top, offer: false, integrated: true };
+      const view = { ...shown, top, integrated: true };
       if (isEmpty(shown)) {
         const note =
           section.status === "loading"
@@ -215,9 +263,84 @@ const shownAnswer = <S extends YtSong>(state: YtSection<S>): YtSearchAnswer<S> =
     ? { songs: state.songs, artists: state.artists, albums: state.albums }
     : NO_ANSWER;
 
-/** Who asked YT Music, or null when it isn't asked (hidden, or only offered). */
+/** Who asked YT Music, or null when it isn't asked (hidden, idle, or the Library's alone). */
 const askedBy = <S extends YtSong>(state: YtSection<S>): YtAskedBy | null =>
-  state.status === "hidden" || state.status === "offered" ? null : state.by;
+  state.status === "hidden" || state.status === "idle" || state.status === "offered"
+    ? null
+    : state.by;
+
+/** The segment the user picked since the field was last cleared, or null. */
+const pickOf = <S extends YtSong>(state: YtSection<S>): YtPick | null => {
+  switch (state.status) {
+    case "hidden":
+      return null;
+    case "idle":
+      return state.pick;
+    case "offered":
+      return state.picked ? "library" : null;
+    default:
+      return state.by === "user" ? "online" : null;
+  }
+};
+
+/** The answer Online last showed, kept for showing again. */
+const keptOf = <S extends YtSong>(state: YtSection<S>): YtKeptAnswer<S> | null => {
+  if (state.status === "offered") return state.kept;
+  if (state.status !== "results") return null;
+  const { query, songs, artists, albums } = state;
+  return { query, songs, artists, albums };
+};
+
+/** The Library's results for [query] alone; [picked] when Library is the user's pick. */
+const offered = <S extends YtSong>(
+  state: YtSection<S>,
+  query: string,
+  picked: boolean,
+): YtSection<S> => {
+  const kept = keptOf(state);
+  if (
+    state.status === "offered" &&
+    state.query === query &&
+    state.picked === picked &&
+    state.kept === kept
+  )
+    return state;
+  return { status: "offered", query, picked, kept };
+};
+
+/** Asks YT Music for [query] at once, as the user did by picking Online. */
+const askedNow = <S extends YtSong>(query: string): YtSection<S> => ({
+  status: "loading",
+  query,
+  ...NO_ANSWER,
+  by: "user",
+  delayMs: 0,
+});
+
+/** What tapping a segment of the toggle does. */
+const picked = <S extends YtSong>(state: YtSection<S>, pick: YtPick): YtSection<S> => {
+  switch (state.status) {
+    case "hidden":
+      return state;
+    case "idle":
+      return state.pick === pick ? state : { status: "idle", pick };
+    case "offered": {
+      if (pick === "library") return offered(state, state.query, true);
+      const { kept } = state;
+      // Online again for the query its answer is kept for: shown again, not asked again.
+      if (kept !== null && kept.query === state.query)
+        return { status: "results", ...kept, by: "user" };
+      return askedNow(state.query);
+    }
+    case "quiet":
+      // Online on a failure asks again.
+      return pick === "library" ? offered(state, state.query, true) : askedNow(state.query);
+    case "loading":
+    case "results":
+      if (pick === "library") return offered(state, state.query, true);
+      return state.by === "user" ? state : { ...state, by: "user" };
+  }
+};
 
 export const stepYtSection = <S extends YtSong>(
   state: YtSection<S>,
@@ -225,16 +348,19 @@ export const stepYtSection = <S extends YtSong>(
 ): YtSection<S> => {
   switch (event.type) {
     case "typed": {
-      const query = event.enabled ? ytSearchQuery(event.query) : null;
-      if (query === null) return YT_SECTION_HIDDEN;
-      const was = askedBy(state);
-      // Asked by the user, it follows the query; on its own, only while the Library has nothing.
-      const by = was === "user" ? "user" : event.libraryHasResults ? null : "auto";
-      if (by === null)
-        return state.status === "offered" && state.query === query
-          ? state
-          : { status: "offered", query };
-      if (was === by && state.status !== "hidden" && state.query === query) return state;
+      if (!event.enabled) return YT_SECTION_HIDDEN;
+      // Clearing the field puts the toggle back (on Online under Always); a pick holds until then.
+      const pick =
+        (event.query.trim() === "" ? null : pickOf(state)) ??
+        (event.always === true ? "online" : null);
+      const query = ytSearchQuery(event.query);
+      if (query === null)
+        return state.status === "idle" && state.pick === pick ? state : { status: "idle", pick };
+      if (pick === "library") return offered(state, query, true);
+      // Picked Online, it follows the query; on its own, only while the Library has nothing.
+      const by = pick === "online" ? "user" : event.libraryHasResults ? null : "auto";
+      if (by === null) return offered(state, query, false);
+      if (askedBy(state) === by && "query" in state && state.query === query) return state;
       return {
         status: "loading",
         query,
@@ -243,9 +369,8 @@ export const stepYtSection = <S extends YtSong>(
         delayMs: YT_SEARCH_DEBOUNCE_MS,
       };
     }
-    case "asked":
-      if (state.status !== "offered") return state;
-      return { status: "loading", query: state.query, ...NO_ANSWER, by: "user", delayMs: 0 };
+    case "picked":
+      return picked(state, event.pick);
     case "found":
       if (state.status !== "loading" || state.query !== event.query) return state;
       return {

@@ -54,7 +54,6 @@ const HEIGHT: Readonly<Record<ResultRow["type"], number>> = {
   ytArtist: grid.row,
   ytAlbum: grid.row,
   note: CELL * 6,
-  askYt: CELL * 6,
 };
 
 /** Non-song results stay in place while selecting. */
@@ -123,8 +122,6 @@ type Props = {
   /** Called when a result opens, so the search is kept among the recent ones. */
   onOpen: () => void;
   onShowAll: (kind: SearchKind) => void;
-  /** Search YouTube Music was tapped. */
-  onAskYt: () => void;
   /** Search shows YouTube Music's results (an integrated view): Library albums open integrated. */
   integrated: boolean;
   /** Song results are selectable; other results ignore taps while selecting. */
@@ -232,14 +229,7 @@ function Hit({
  * Search results in one virtualised list of fixed-height rows: section heads,
  * results and "Show all". Scrolling or tapping a row lets the keyboard go.
  */
-export function SearchResultsList({
-  rows,
-  onOpen,
-  onShowAll,
-  onAskYt,
-  integrated,
-  selection,
-}: Props) {
+export function SearchResultsList({ rows, onOpen, onShowAll, integrated, selection }: Props) {
   const scrollable = useListScrollable();
   const bottomInset = useChromeInset();
   const currentId = useCurrentTrackId();
@@ -342,16 +332,6 @@ export function SearchResultsList({
             />
           );
         }
-        case "askYt":
-          return (
-            <View style={{ height: HEIGHT.askYt }}>
-              <TextButton
-                label="Search YouTube Music"
-                disabled={selection.selecting}
-                onPress={onAskYt}
-              />
-            </View>
-          );
         case "note":
           return (
             <View className="justify-center" style={{ height: HEIGHT.note }}>
@@ -362,7 +342,7 @@ export function SearchResultsList({
           );
       }
     },
-    [currentId, onOpen, onShowAll, onAskYt, integrated, selection],
+    [currentId, onOpen, onShowAll, integrated, selection],
   );
 
   return (
