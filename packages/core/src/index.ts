@@ -1466,6 +1466,8 @@ export {
   replacementDuplicates,
   replacementsUnderway,
   storedDuplicateCheck,
+  duplicateCheckOpened,
+  duplicateCheckStep,
 } from "./replacementDuplicates.ts";
 export type {
   DuplicateCheckFile,
@@ -1474,4 +1476,8 @@ export type {
   DuplicateOutcome,
   DuplicateLengths,
   ReplacementDuplicate,
+  DuplicateMerge,
+  DuplicateCheck,
+  DuplicateCheckEvent,
+  DuplicateCheckStep,
 } from "./replacementDuplicates.ts";
