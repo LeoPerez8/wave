@@ -49,7 +49,10 @@ export interface ActionItem {
    * credit names, each album artist an album's credit names.
    */
   readonly artistIds?: readonly number[] | undefined;
-  /** A starred track. */
+  /**
+   * A starred track, or a starred streamed song (a pending favorite, its
+   * download asked for: a star means downloaded).
+   */
   readonly favorite?: boolean | undefined;
   /** A track shown in a playlist, which it can be removed from. */
   readonly inPlaylist?: boolean | undefined;
@@ -65,8 +68,9 @@ export interface ActionItem {
   readonly hasImage?: boolean | undefined;
   /**
    * A YT Music song checked beside the Library's (Search, a playlist's
-   * entry…): streamed, not a file. It joins the queue and playlists and can
-   * be downloaded; what acts on files (favorites, Delete) isn't for it.
+   * entry…): streamed, not a file. It joins the queue and playlists, can be
+   * downloaded, and starred (which downloads it); what acts on files (Fix
+   * Song, Delete) isn't for it.
    */
   readonly streamed?: boolean | undefined;
   /** A streamed song's artists, as YouTube Music credits them. */
@@ -76,7 +80,8 @@ export interface ActionItem {
   /**
    * A playlist's unsearched entry (a song a Spotify import listed, not
    * searched yet), streamed as a YT Music entry is: it queues, joins
-   * playlists and downloads (its download searches it first).
+   * playlists and downloads (its download searches it first). It has no
+   * video to star yet, so songs checked with it offer no Favorite.
    */
   readonly unsearched?: boolean | undefined;
   /**
@@ -303,7 +308,7 @@ export const itemActions = <A extends LibraryArtistRef = LibraryArtistRef>(
   const surface = subject.surface ?? "menu";
   // Missing songs have no file: they don't play, and there's none to delete or write to.
   const missing = items.filter((item) => item.missing === true).length;
-  // Streamed songs have no file either, and aren't the Library's to star or delete.
+  // Streamed songs have no file either: starring one downloads it, and there's none to delete.
   const streamed = items.filter((item) => item.streamed === true).length;
   const files = items.length - missing - streamed;
   const [only] = items;
@@ -327,7 +332,7 @@ export const itemActions = <A extends LibraryArtistRef = LibraryArtistRef>(
       ),
     );
   if (kind === "track") {
-    if (streamed === 0)
+    if (!items.some((item) => item.unsearched === true))
       entries.push({ action: items.every((item) => item.favorite) ? "unfavorite" : "favorite" });
     if (items.every((item) => item.inPlaylist)) entries.push({ action: "removeFromPlaylist" });
   }
@@ -375,7 +380,13 @@ export const itemActions = <A extends LibraryArtistRef = LibraryArtistRef>(
 export type YtSongActionEntry<A> =
   | {
       readonly action:
-        "playNext" | "addToQueue" | "addToPlaylist" | "removeFromPlaylist" | "select";
+        | "playNext"
+        | "addToQueue"
+        | "addToPlaylist"
+        | "favorite"
+        | "unfavorite"
+        | "removeFromPlaylist"
+        | "select";
     }
   /** The song's YT Music album page, by its browse id (`MPREb_…`). */
   | { readonly action: "goToAlbum"; readonly album: string }
@@ -388,6 +399,12 @@ export type YtSongActionEntry<A> =
 export interface YtSongActionOptions {
   /** Shown in a playlist, which it can be removed from. */
   readonly inPlaylist?: boolean | undefined;
+  /**
+   * Whether the song is starred (a pending favorite, or the Library's song
+   * it is by now): it offers Remove from Favorites, else Favorite, which
+   * downloads it. Absent, it offers neither.
+   */
+  readonly favorite?: boolean | undefined;
   /** The browse id (`MPREb_…`) of the song's YT Music album, when it has one. */
   readonly album?: string | null | undefined;
   /** The browse id of the YT Music album page you're on, so Go to Album doesn't lead to it. */
@@ -400,19 +417,21 @@ export interface YtSongActionOptions {
 
 /**
  * The entries a YT Music song's long-press menu offers: it can join the
- * queue and playlists beside the Library's songs (shown in a playlist
- * ([inPlaylist]), it can leave it too); with YT Music on, Go to Album opens
+ * queue and playlists beside the Library's songs; it can be starred as a
+ * Library song is ([favorite]), the star downloading it; shown in a playlist
+ * ([inPlaylist]), it can leave it too; with YT Music on, Go to Album opens
  * its YT Music [album] page (none on that page, or for a song without an
  * album); and, given where its [artists] link leads (Core's
  * `streamedArtistLink`), Go to Artist opens them integrated (none when its
  * only artist is the page you're on); last, Select, opened from a list that
- * can select ([selectable]). The Library's other entries (favorites, Delete)
+ * can select ([selectable]). The Library's other entries (Fix Song, Delete)
  * are about its files, which a streamed song isn't.
  */
 export const ytSongActions = <A>(
   artists?: StreamedArtistLink<A>,
   {
     inPlaylist = false,
+    favorite,
     album,
     ytAlbumHere,
     ytMusic = false,
@@ -422,6 +441,9 @@ export const ytSongActions = <A>(
   { action: "playNext" },
   { action: "addToQueue" },
   { action: "addToPlaylist" },
+  ...(favorite === undefined
+    ? []
+    : [{ action: favorite ? "unfavorite" : "favorite" } as const]),
   ...(inPlaylist ? [{ action: "removeFromPlaylist" } as const] : []),
   ...(ytMusic && album !== undefined && album !== null && album !== "" && album !== ytAlbumHere
     ? [{ action: "goToAlbum", album } as const]

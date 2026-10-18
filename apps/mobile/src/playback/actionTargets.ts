@@ -134,9 +134,15 @@ interface KindInfo<T> {
   readonly heading: (item: T, sectionSongs: LibraryCounts | undefined) => Heading;
   /**
    * What Core's `itemActions` needs to know about it; [find] tells whether a
-   * YT Music song is the Library's file by now.
+   * YT Music song is the Library's file by now, and [pending] which YT Music
+   * songs are starred, waiting for their files (pending favorites, by video).
    */
-  readonly facts: (item: T, favorites: ReadonlySet<number>, find: FindInLibrary) => ActionItem;
+  readonly facts: (
+    item: T,
+    favorites: ReadonlySet<number>,
+    find: FindInLibrary,
+    pending: ReadonlySet<string>,
+  ) => ActionItem;
   /** What a count of them is called ("12 songs"). */
   readonly noun: string;
 }
@@ -145,6 +151,23 @@ const cover = (thumbPath: string | null): readonly string[] =>
   thumbPath === null ? [] : [thumbPath];
 
 const NO_FACTS: ActionItem = {};
+
+/**
+ * A YT Music song's facts: starred as the Library's song ([track]) once the
+ * Library has it, else as a pending favorite ([pending]).
+ */
+const ytFacts = (
+  item: YtTrackItem,
+  favorites: ReadonlySet<number>,
+  track: SongRow | null,
+  pending: ReadonlySet<string>,
+): ActionItem => ({
+  streamed: true,
+  artistNames: item.ytSong.artists ?? [],
+  inPlaylist: item.playlistItem !== undefined,
+  downloaded: track?.path != null,
+  favorite: track === null ? pending.has(item.ytSong.videoId) : favorites.has(track.id),
+});
 
 const KIND_TRACK: KindInfo<TrackItem> = {
   // A YT Music song has no Library songs: the queue and playlist actions take it as it is (`targetEntries`).
@@ -159,7 +182,7 @@ const KIND_TRACK: KindInfo<TrackItem> = {
             covers: [],
           }
         : { title: item.ytSong.title, subtitle: ytSongCredit(item.ytSong), covers: [] },
-  facts: (item, favorites, find) =>
+  facts: (item, favorites, find, pending) =>
     isLibraryTrack(item)
       ? {
           albumId: item.song.albumId,
@@ -176,12 +199,7 @@ const KIND_TRACK: KindInfo<TrackItem> = {
             artistNames: item.unsearched.artists,
             inPlaylist: item.playlistItem !== undefined,
           }
-        : {
-            streamed: true,
-            artistNames: item.ytSong.artists ?? [],
-            inPlaylist: item.playlistItem !== undefined,
-            downloaded: find(item.ytSong)?.path != null,
-          },
+        : ytFacts(item, favorites, find(item.ytSong), pending),
   noun: "song",
 };
 
@@ -254,9 +272,9 @@ const KINDS: { readonly [K in ItemKind]: KindInfo<ItemOf[K]> } = {
     heading: (mixed, sectionSongs) =>
       asOwnKind(mixed, (kind, item) => kind.heading(item, sectionSongs)),
     // An album counts as its own album, so songs checked with it share it (Go to Album).
-    facts: (mixed, favorites, find) =>
+    facts: (mixed, favorites, find, pending) =>
       mixed.kind === "track"
-        ? KIND_TRACK.facts(mixed.item, favorites, find)
+        ? KIND_TRACK.facts(mixed.item, favorites, find, pending)
         : { albumId: mixed.item.id, artistIds: mixed.item.albumArtistIds },
     noun: "item",
   },
@@ -345,14 +363,18 @@ export const toPlaylistSongs = (entries: readonly TargetEntry[]): PlaylistSong[]
     entry.source === "library" ? { source: "library", trackId: entry.track.id } : entry,
   );
 
-/** What Core's `itemActions` needs to know about each of [target]'s items. */
+/**
+ * What Core's `itemActions` needs to know about each of [target]'s items;
+ * [pending] are the starred YT Music songs waiting for their files, by video.
+ */
 export const targetFacts = (
   target: ActionItems,
   favorites: ReadonlySet<number>,
   find: FindInLibrary,
+  pending: ReadonlySet<string> = new Set(),
 ): readonly ActionItem[] => {
   const kind = kindInfo(target);
-  return itemsOf(target).map((item) => kind.facts(item, favorites, find));
+  return itemsOf(target).map((item) => kind.facts(item, favorites, find, pending));
 };
 
 /**
