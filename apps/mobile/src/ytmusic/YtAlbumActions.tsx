@@ -1,10 +1,10 @@
 import {
-  ITEM_ACTION_LABELS,
+  PLAY_ACTION_LABELS,
   YT_ALBUM_DOWNLOAD_ACTION_LABELS,
   discoverSongs,
-  entryDivider,
+  menuLayout,
   ytAlbumSongs,
-  type YtAlbumDownloadAction,
+  type PlayCard,
 } from "@wave/core";
 import * as Result from "effect/Result";
 import { Text, View } from "react-native";
@@ -14,13 +14,10 @@ import { CELL } from "@/catalog/grid";
 import { pressedRect } from "@/motion/pressedRect";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 import { showMessage } from "@/overlay/alert";
-import { CardEntries } from "@/overlay/CardEntries";
 import { CardHeading } from "@/overlay/CardHeading";
-import { useOverlayFlow } from "@/overlay/flow";
-import { MenuRow } from "@/overlay/MenuRow";
+import { MenuChoices, type MenuChoice } from "@/overlay/MenuChoices";
 import { followUp, openOverlay } from "@/overlay/overlay";
-import { useSlideToChoose } from "@/overlay/useSlideToChoose";
-import { queueDiscoverSongs } from "@/playback/actions";
+import { playDiscoverSongs, queueDiscoverSongs } from "@/playback/actions";
 
 import { askYtMusic } from "./askYtMusic";
 import { useLibraryFinder, useLoadedInLibrary } from "./libraryFinder";
@@ -33,11 +30,11 @@ export interface YtAlbumTarget extends YtListHead {
 }
 
 /**
- * Opens a YT Music album's long-press menu next to its tile: Play Next and
- * Add to Queue for its songs, then Download Album, or Cancel Album Download
- * while its songs are on their way, or Retry Failed after (Core's
- * `ytAlbumDownload`). The album's page is read first (once a session, see
- * `readYtAlbum`), so the card opens with every entry it will have.
+ * Opens a YT Music album's long-press menu next to its tile: Play, Play Next
+ * and Add to Queue cards for its songs, then Shuffle, then Download Album, or
+ * Cancel Album Download while its songs are on their way, or Retry Failed
+ * after (Core's `ytAlbumDownload`). The album's page is read first (once a
+ * session, see `readYtAlbum`), so the card opens with every entry it will have.
  */
 export const openYtAlbumActions = (album: YtAlbumTarget): void => {
   const anchor = pressedRect();
@@ -61,21 +58,7 @@ export const openYtAlbumActions = (album: YtAlbumTarget): void => {
   });
 };
 
-type Entry =
-  | { readonly kind: "queue"; readonly action: "playNext" | "addToQueue" }
-  | { readonly kind: "download"; readonly action: YtAlbumDownloadAction };
-
-const QUEUE_ENTRIES: readonly Entry[] = [
-  { kind: "queue", action: "playNext" },
-  { kind: "queue", action: "addToQueue" },
-];
-
-const label = (entry: Entry): string =>
-  entry.kind === "queue"
-    ? ITEM_ACTION_LABELS[entry.action]
-    : YT_ALBUM_DOWNLOAD_ACTION_LABELS[entry.action];
-
-/** The menu card: the album (unless its tile is highlighted), then its entries. */
+/** The menu card: the album (unless its tile is highlighted), then its cards and entries. */
 function YtAlbumActionsMenu({
   album,
   songs,
@@ -88,24 +71,39 @@ function YtAlbumActionsMenu({
   const find = useLibraryFinder();
   const inLibrary = useLoadedInLibrary();
   const download = useYtAlbumDownload(songs, inLibrary);
-  const entries: Entry[] = [
-    ...QUEUE_ENTRIES,
-    ...download.actions.map((action): Entry => ({ kind: "download", action })),
-  ];
-  const choose = (index: number) => {
-    const entry = entries[index];
-    if (entry === undefined) return;
+  // As its page plays them: the Library's files for the songs it has, the rest streamed.
+  const listed = discoverSongs(songs, find);
+  const context = { kind: "ytAlbum", id: album.browseId };
+  const closing = (action: () => void) => () => {
     close();
-    if (entry.kind === "queue") void queueDiscoverSongs(discoverSongs(songs, find), entry.action);
-    else
-      runYtDownloadAction(entry.action, songs, inLibrary, {
-        kind: "album",
-        id: album.browseId,
-        name: album.title,
-      });
+    action();
   };
-  const { underFinger, trackEntry, trackList } = useSlideToChoose(choose);
-  const flow = useOverlayFlow();
+  const play = (shuffle: boolean) =>
+    closing(() => void playDiscoverSongs(listed, undefined, context, { shuffle }));
+  const layout = menuLayout(
+    "ytAlbum",
+    download.actions.map((action) => ({ action })),
+  );
+  const cards = layout.cards.map((action: PlayCard) => ({
+    action,
+    onPress:
+      action === "play" ? play(false) : closing(() => void queueDiscoverSongs(listed, action)),
+  }));
+  const entries = layout.list.map(({ action }): MenuChoice =>
+    action === "shuffle"
+      ? { action, label: PLAY_ACTION_LABELS.shuffle, onPress: play(true) }
+      : {
+          action,
+          label: YT_ALBUM_DOWNLOAD_ACTION_LABELS[action],
+          onPress: closing(() =>
+            runYtDownloadAction(action, songs, inLibrary, {
+              kind: "album",
+              id: album.browseId,
+              name: album.title,
+            }),
+          ),
+        },
+  );
 
   return (
     <>
@@ -122,20 +120,7 @@ function YtAlbumActionsMenu({
           )}
         </View>
       </CardHeading>
-      {/* Play Next sits nearest the finger, whichever side of the tile the card opened on. */}
-      <CardEntries listRef={trackList}>
-        {entries.map((entry, index) => (
-          <View key={entry.action} ref={trackEntry(index)} collapsable={false}>
-            <MenuRow
-              action={entry.action}
-              label={label(entry)}
-              onPress={() => choose(index)}
-              divider={entryDivider(index, entries.length, flow)}
-              highlighted={index === underFinger}
-            />
-          </View>
-        ))}
-      </CardEntries>
+      <MenuChoices cards={cards} entries={entries} />
     </>
   );
 }

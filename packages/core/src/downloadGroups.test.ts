@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { applyJournalChanges, downloadingList } from "./index.ts";
+import {
+  applyJournalChanges,
+  downloadingList,
+  moveDownloadGroup,
+  moveDownloadInGroup,
+  moveQueuedJobs,
+} from "./index.ts";
 import type { DownloadOrigin, YtDownloadJournalJob, YtSong } from "./index.ts";
 
 const song = (videoId: string): YtSong => ({
@@ -136,6 +142,84 @@ describe("Settings › Downloads › Downloading: waiting songs grouped by where
     ];
     assert.deepEqual(groupsOf(jobs), [["Focus", "1 song left", ["d"]]]);
     assert.deepEqual(downloadingList([]), { downloading: [], groups: [] });
+  });
+});
+
+/** The journal's waiting jobs, in the order its queue starts them. */
+const startOrder = (jobs: readonly YtDownloadJournalJob[]) =>
+  jobs.filter((entry) => entry.phase === "queued").map((entry) => entry.id);
+
+describe("Settings › Downloads › Downloading: dragging changes what downloads first", () => {
+  test("dragging playlist B's header above A's makes B's songs start before A's", () => {
+    const jobs = [
+      job("a1", { origin: roadTrip }),
+      job("a2", { origin: roadTrip }),
+      job("b1", { origin: focus }),
+      job("b2", { origin: focus }),
+    ];
+    const moved = moveQueuedJobs(jobs, moveDownloadGroup(downloadingList(jobs), 1, 0));
+    assert.deepEqual(startOrder(moved), ["b1", "b2", "a1", "a2"]);
+    assert.deepEqual(
+      groupsOf(moved).map(([name]) => name),
+      ["Focus", "Road Trip"],
+    );
+  });
+
+  test("dragging a song to the top of its group makes it the next of that group to start", () => {
+    // The two playlists' songs were asked for in turns.
+    const jobs = [
+      job("a1", { origin: roadTrip }),
+      job("b1", { origin: focus }),
+      job("a2", { origin: roadTrip }),
+      job("b2", { origin: focus }),
+      job("a3", { origin: roadTrip }),
+    ];
+    const [roadTripGroup] = downloadingList(jobs).groups;
+    assert.ok(roadTripGroup !== undefined);
+    const moved = moveQueuedJobs(jobs, moveDownloadInGroup(roadTripGroup, 2, 0));
+    // Focus's songs keep their places.
+    assert.deepEqual(startOrder(moved), ["a3", "b1", "a1", "b2", "a2"]);
+    assert.deepEqual(groupsOf(moved), [
+      ["Road Trip", "3 songs left", ["a3", "a1", "a2"]],
+      ["Focus", "2 songs left", ["b1", "b2"]],
+    ]);
+  });
+
+  test("a song can't be dropped into another group: past its group's end it stays last in it", () => {
+    const jobs = [
+      job("a1", { origin: roadTrip }),
+      job("a2", { origin: roadTrip }),
+      job("b1", { origin: focus }),
+    ];
+    const [roadTripGroup] = downloadingList(jobs).groups;
+    assert.ok(roadTripGroup !== undefined);
+    const moved = moveQueuedJobs(jobs, moveDownloadInGroup(roadTripGroup, 0, 5));
+    assert.deepEqual(groupsOf(moved), [
+      ["Road Trip", "2 songs left", ["a2", "a1"]],
+      ["Focus", "1 song left", ["b1"]],
+    ]);
+  });
+
+  test("a song that started while the drag was on keeps its place; the rest still move", () => {
+    const jobs = [
+      job("a1", { origin: roadTrip }),
+      job("a2", { origin: roadTrip }),
+      job("b1", { origin: focus }),
+      job("b2", { origin: focus }),
+    ];
+    const order = moveDownloadGroup(downloadingList(jobs), 1, 0);
+    const meanwhile = jobs.map((entry) =>
+      entry.id === "a1" ? { ...entry, phase: "preparing" as const } : entry,
+    );
+    const moved = moveQueuedJobs(meanwhile, order);
+    assert.deepEqual(
+      moved.map((entry) => entry.id),
+      ["a1", "b1", "b2", "a2"],
+    );
+    assert.deepEqual(
+      downloadingList(moved).downloading.map((row) => row.id),
+      ["a1"],
+    );
   });
 });
 

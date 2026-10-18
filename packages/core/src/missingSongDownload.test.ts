@@ -146,7 +146,8 @@ describe("missingSongTags", () => {
     discNumber: 2,
     year: 2009,
     lyrics: { synced: true, text: "[00:01.00] Remember" },
-  };
+    explicit: "explicit",
+  } as const;
 
   test("the file is tagged as the Track is, so it's the same recording for the Wave account", () => {
     const missing = track();

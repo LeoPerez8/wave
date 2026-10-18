@@ -3,7 +3,7 @@ import { Text, View } from "react-native";
 import { CELL, grid } from "@/catalog/grid";
 import { Hairline } from "@/catalog/Hairline";
 import { Press } from "@/motion/Press";
-import { ACTION_ICONS, type MenuAction } from "@/playback/actionIcons";
+import { ACTION_ICONS, type ActionIcon, type MenuAction } from "@/playback/actionIcons";
 import { useThemeColor } from "@/theme/useThemeColor";
 
 /** A menu row's icon: a Tabler line icon a little taller than the Body label beside it. */
@@ -13,6 +13,8 @@ const ICON_STROKE = 1.75;
 type Props = {
   /** What the row does: it picks the row's icon (`ACTION_ICONS`), the same in every menu. */
   action: MenuAction;
+  /** Draws another icon than the action's (Shuffle's follows the shuffle kind chosen). */
+  icon?: ActionIcon | undefined;
   label: string;
   onPress: () => void;
   /** The hairline under the row; the one at the card's edge goes without (Core `entryDivider`). */
@@ -31,6 +33,7 @@ type Props = {
  */
 export function MenuRow({
   action,
+  icon,
   label,
   onPress,
   divider = true,
@@ -39,7 +42,7 @@ export function MenuRow({
 }: Props) {
   // The icon's colour is a native prop; the label takes the same token as a class.
   const tone = useThemeColor(destructive ? "destructive" : "foreground");
-  const Icon = ACTION_ICONS[action];
+  const Icon = icon ?? ACTION_ICONS[action];
   return (
     <Press
       accessibilityRole="button"

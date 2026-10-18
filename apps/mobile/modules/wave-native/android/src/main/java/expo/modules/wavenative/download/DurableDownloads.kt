@@ -31,7 +31,8 @@ interface DurablePublication {
  *
  * What a failure leads to (trying again, the next peer, the end of the job, YouTube Music) is
  * Core's `downloadFailurePlan` for the job's source, which the prepare answer brings
- * (`failurePlan`). The journal only carries it out, with its own counts and deadlines.
+ * (`failurePlan`). The journal only carries it out, with its own counts and deadlines. Each job has
+ * [JOB_MS] until its file is downloaded, charged only while the download work runs ([BudgetClock]).
  *
  * Every failure keeps what actually went wrong as the job's `cause` (an exception's class and
  * message, or what JS reported with its answer) and writes it to [log]. The cause belongs to the
@@ -64,6 +65,14 @@ class DurableDownloads(
    */
   @Volatile private var view = JournalView(emptyList(), 0L, 0L)
   private val published get() = view.jobs
+  /** What jobs' budgets are charged on ([budgetNow]). */
+  private val budget: BudgetClock
+  /**
+   * What [budget] showed when the journal was last written. While jobs are charged, [expire]
+   * writes it again every [BUDGET_WRITE_MS], so a process killed without warning is forgiven no
+   * more than that of their time.
+   */
+  private var budgetWrittenAt = 0L
 
   init {
     // An unreadable journal (never expected: writes are atomic) must not crash every launch.
@@ -71,6 +80,7 @@ class DurableDownloads(
     val saved = if (journal.isFile) runCatching {
       FileInputStream(journal).use { ObjectInputStream(it).readObject() } as Map<String, Any?>
     }.getOrNull() else null
+    budget = BudgetClock(clock, (saved?.get("budgetClock") as? Number)?.toLong())
     if (saved != null) {
       for ((id, job) in saved.map("jobs")) {
         @Suppress("UNCHECKED_CAST")
@@ -82,8 +92,8 @@ class DurableDownloads(
       // retried or cleared (Settings › Downloads cancels it). The app cancels one that settled
       // another way (the song reached the Library) at launch, so failures don't pile up here.
       jobs.values.removeAll { it["phase"] == "cancelled" || it["acknowledged"] == true }
-      // A socket cannot survive process recreation. Counts and absolute deadlines do: a peer keeps
-      // what was left of its turn. YouTube's stream starts over from byte 0 at an address resolved
+      // A socket cannot survive process recreation. Counts and deadlines do, on the budget's clock,
+      // which stood still while Wave was closed: a peer keeps what was left of its turn. YouTube's stream starts over from byte 0 at an address resolved
       // afresh, so its transfer gets a whole window again, within the job's own deadline.
       for (job in jobs.values) if (job["phase"] == "transferring") {
         cleanup(job)
@@ -166,7 +176,7 @@ class DurableDownloads(
         val key = existing["id"] as String
         jobs.remove(key); jobs[key] = existing
         if (origin != null) existing["origin"] = clean(origin)
-        existing["decisionAttempts"] = 0L; existing["deadline"] = clock() + JOB_MS
+        existing["decisionAttempts"] = 0L; startBudget(existing)
         if (deletedCompletion) {
           for (key in listOf("saved", "acknowledged", "finalPath", "digest", "publishSource")) existing.remove(key)
         }
@@ -202,15 +212,10 @@ class DurableDownloads(
     if (job["phase"] !in DECISIONS || job["token"] != null || job["acknowledged"] == true || job["importFailure"] != null || job.number("retryAt") > clock()) return null
     // Songs join the Library one at a time: the next is offered once the one before is imported.
     if (job["phase"] == "awaitingPublication" && jobs.values.any { it !== job && saving(it) }) return null
-    if (job.number("deadline") <= clock()) {
-      // As in expire(): a published file is never a failed download, only one the Library didn't import.
-      val cause = "Out of time before the ${DECISIONS[job["phase"]]} decision"
-      if (job["phase"] == "completed") importFailed(job, "failed", cause) else fail(job, "timedOut", cause)
-      persist(); return null
-    }
+    if (outOfTime(job)) { fail(job, "timedOut", "Out of time before the ${DECISIONS[job["phase"]]} decision"); persist(); return null }
     job["decisionAttempts"] = job.number("decisionAttempts") + 1
     job["token"] = UUID.randomUUID().toString()
-    job["leaseUntil"] = minOf(clock() + LEASE_MS, job.number("deadline"))
+    job["leaseUntil"] = clock() + minOf(LEASE_MS, budgetLeft(job))
     persist()
     return job.toMap() + ("decision" to DECISIONS[job["phase"]])
   }
@@ -223,7 +228,7 @@ class DurableDownloads(
   @Synchronized fun renew(id: String, generation: Long, token: String): Boolean {
     val job = jobs[id] ?: return false
     if (job.number("generation") != generation || job["token"] != token || job.number("leaseUntil") < clock()) return false
-    job["leaseUntil"] = minOf(clock() + LEASE_MS, job.number("deadline"))
+    job["leaseUntil"] = clock() + minOf(LEASE_MS, budgetLeft(job))
     persist()
     return true
   }
@@ -336,15 +341,18 @@ class DurableDownloads(
     for (job in jobs.values) {
       if (busy >= slots || startedCount >= slots * 2) break
       if (job["phase"] != "queued") continue
-      job["deadline"] = clock() + JOB_MS; transition(job, "preparing")
+      startBudget(job); transition(job, "preparing")
       busy++; startedCount++; changed = true
     }
     if (changed) persist()
   }
 
-  fun startWork() { stopped = false }
-  /** Stops socket work immediately, without waiting for an IO operation's journal lock. */
-  fun stopWork(transport: DurableTransfer) { stopped = true; for (id in transfers) transport.cancel(id) }
+  fun startWork() { stopped = false; budget.resume() }
+  /**
+   * Stops socket work immediately, without waiting for an IO operation's journal lock. No budget
+   * is charged until the work starts again.
+   */
+  fun stopWork(transport: DurableTransfer) { stopped = true; budget.pause(); for (id in transfers) transport.cancel(id) }
 
   /**
    * Whether [id]'s transfer still has its turn: it is the job's current step and within its start,
@@ -354,8 +362,8 @@ class DurableDownloads(
   fun transferWanted(id: String): Boolean {
     if (stopped) return false
     val job = published.firstOrNull { it["id"] == id } ?: return false
-    return job["phase"] == "transferring" && job.number("attemptDeadline") > clock() &&
-      (job["queuePosition"] == null || job.number("queueDeadline") > clock())
+    return job["phase"] == "transferring" && job.number("attemptDeadline") > budgetNow() &&
+      (job["queuePosition"] == null || job.number("queueDeadline") > budgetNow())
   }
 
   /**
@@ -379,6 +387,26 @@ class DurableDownloads(
   }
 
   /**
+   * Settings › Downloads' drag (Core's `moveQueuedJobs`, which this mirrors): the waiting jobs
+   * [order] names take the places those same jobs held, in [order]'s order, so they start in
+   * that order. Every other job keeps its place, and so does one that started meanwhile. The
+   * new order is written at once, so it survives a restart; readers following [changesSince]
+   * get it as the jobs' order.
+   */
+  @Synchronized fun moveQueued(order: List<String>) {
+    val named = order.toSet()
+    fun moves(job: Map<String, Any?>) = job["phase"] == "queued" && job["id"] in named
+    val moving = order.distinct().mapNotNull { id -> jobs[id]?.takeIf(::moves) }
+    if (moving.isEmpty()) return
+    val next = moving.iterator()
+    val reordered = jobs.values.map { job -> if (moves(job)) next.next() else job }
+    if (reordered.map { it["id"] } == jobs.keys.toList()) return
+    jobs.clear()
+    for (job in reordered) jobs[job["id"] as String] = job
+    persist()
+  }
+
+  /**
    * Too late while publishing or importing. A published file the Library couldn't import shows as a
    * failure with Cancel: cancelling forgets the row and leaves the file in the Library folder.
    */
@@ -394,20 +422,22 @@ class DurableDownloads(
   @Synchronized fun expire(transport: DurableTransfer, stopAll: Boolean = false, stopCause: String? = null) {
     // Checked twice a second: the journal is only written when something was due.
     var changed = false
+    var charging = false
     for (job in jobs.values) {
       if (job["phase"] in TERMINAL || job["acknowledged"] == true || job["importFailure"] != null) continue
       // A queued job's time starts when it gets a slot.
       if (job["phase"] == "queued") continue
-      // A song being saved (outside the lock: [save]) is judged once its save is done.
+      charging = charging || charged(job)
+      // A song being saved (outside the lock: [save]) is left alone until its save is done.
       if (job["phase"] == "publishing" && job["id"] in running) continue
-      if (stopAll || job.number("deadline") <= clock()) {
+      if (stopAll || outOfTime(job)) {
         changed = true
         val cause = if (stopAll) stopCause ?: "Android stopped the download service" else "Out of time while ${job["phase"]}"
         if (job["phase"] == "completed") { importFailed(job, "failed", cause); job.remove("token") }
         // Android stopping the work isn't the source's fault; running out of time is.
         else fail(job, if (stopAll) "failed" else "timedOut", cause)
         transport.cancel(job["id"] as String)
-      } else if (job["phase"] == "transferring" && (job.number("attemptDeadline") <= clock() || (job["queuePosition"] != null && job.number("queueDeadline") <= clock()))) {
+      } else if (job["phase"] == "transferring" && (job.number("attemptDeadline") <= budgetNow() || (job["queuePosition"] != null && job.number("queueDeadline") <= budgetNow()))) {
         changed = true
         transport.cancel(job["id"] as String)
         nextCandidate(job)
@@ -422,7 +452,7 @@ class DurableDownloads(
         }
       }
     }
-    if (changed) persist() else writeProgressIfDue()
+    if (changed || (charging && budgetNow() - budgetWrittenAt >= BUDGET_WRITE_MS)) persist() else writeProgressIfDue()
   }
 
   /** Expires what's out of time, then runs the next native step, if there is one, on this thread. */
@@ -445,15 +475,15 @@ class DurableDownloads(
       if (id in running || job.number("retryAt") > clock()) continue
       if (job["phase"] == "prepared") {
         if (job.number("attempts") >= MAX_ATTEMPTS || job.number("candidateIndex") >= job.maps("candidates").size) { fail(job, exhausted(job)); persist(); continue }
-        if (job.number("resumeAttemptDeadline") in 1..clock() || job.number("resumeQueueDeadline") in 1..clock()) { nextCandidate(job); persist(); continue }
+        if (job.number("resumeAttemptDeadline") in 1..budgetNow() || job.number("resumeQueueDeadline") in 1..budgetNow()) { nextCandidate(job); persist(); continue }
         job["attempts"] = job.number("attempts") + 1
         // YouTube goes on in the part file its last attempt left (YtAudioDownload checks it's the same stream's).
         val kept = (job["sourcePath"] as? String)?.takeIf { job["source"] == YOUTUBE && File(it).isFile }
         job["sourcePath"] = kept ?: DownloadFiles.partFileFor(File(job["targetPath"] as String), "${job["id"]}-${job["generation"]}-${job["attempts"]}").path
         job["peer"] = job.maps("candidates")[job.number("candidateIndex").toInt()]
         job.remove("received"); job.remove("total")
-        job["queuePosition"] = null; job["queueDeadline"] = job.remove("resumeQueueDeadline") ?: minOf(clock() + QUEUE_MS, job.number("deadline"))
-        job["attemptDeadline"] = job.remove("resumeAttemptDeadline") ?: minOf(clock() + if (job["source"] == YOUTUBE) YOUTUBE_STALL_MS else ATTEMPT_MS, job.number("deadline"))
+        job["queuePosition"] = null; job["queueDeadline"] = job.remove("resumeQueueDeadline") ?: withinBudget(job, QUEUE_MS)
+        job["attemptDeadline"] = job.remove("resumeAttemptDeadline") ?: withinBudget(job, if (job["source"] == YOUTUBE) YOUTUBE_STALL_MS else ATTEMPT_MS)
         transition(job, "transferring")
         persist()
       }
@@ -480,11 +510,11 @@ class DurableDownloads(
               val job = held(id, generation, "transferring") ?: return@synchronized
               // Arriving bytes keep a slow peer's turn; one that goes quiet for STALL_MS is replaced.
               // YouTube's range retries get YOUTUBE_STALL_MS before the journal steps in.
-              if (received > job.number("received")) job["attemptDeadline"] = minOf(clock() + if (job["source"] == YOUTUBE) YOUTUBE_STALL_MS else STALL_MS, job.number("deadline"))
+              if (received > job.number("received")) job["attemptDeadline"] = withinBudget(job, if (job["source"] == YOUTUBE) YOUTUBE_STALL_MS else STALL_MS)
               // A peer's queue place is rare news a restart keeps; bytes are progress.
               val queueMoved = queue != job["queuePosition"]
               job["received"] = received; job["total"] = total; job["queuePosition"] = queue
-              if (queue != null && job.number("queueDeadline") <= clock()) transport.cancel(id)
+              if (queue != null && job.number("queueDeadline") <= budgetNow()) transport.cancel(id)
               if (queueMoved) persist() else progressed(job)
             }
           }
@@ -662,7 +692,7 @@ class DurableDownloads(
     (fallback["video"] as? String)?.let { job["video"] = it }
     job["targetPath"] = fallback["targetPath"]
     job["candidates"] = youtubeCandidates(job); job["candidateIndex"] = 0L; job["attempts"] = 0L
-    job["deadline"] = clock() + JOB_MS
+    startBudget(job)
     job["generation"] = job.number("generation") + 1
     transition(job, if (fallback["prepare"] == true) "preparing" else "prepared")
     return true
@@ -718,6 +748,23 @@ class DurableDownloads(
     view = JournalView(entries, revision, if (reordered) revision else before.orderRevision)
   }
 
+  // The job's budget: [JOB_MS] from leaving the queue until its file is downloaded, charged on
+  // [budget]'s clock, which stands still while Wave is closed. Saving to the Library (the confirm
+  // decision, tagging, its turn and publication) is outside it: a song downloaded in its last
+  // minute is saved however long that takes. A peer's turn ([QUEUE_MS], [ATTEMPT_MS],
+  // [STALL_MS]) is a deadline on the same clock, within the job's.
+
+  private fun budgetNow(): Long = budget.now()
+  /** [job]'s budget starts afresh: leaving the queue, retried, or handed over to YouTube Music. */
+  private fun startBudget(job: MutableMap<String, Any?>) { job["deadline"] = budgetNow() + JOB_MS }
+  /** Whether [job] is where its time is charged: started, and its file not downloaded yet. */
+  private fun charged(job: Map<String, Any?>) = job["phase"] in CHARGED
+  /** How much of its budget [job] has left (none, or less, once it's over); no end once it's downloaded. */
+  private fun budgetLeft(job: Map<String, Any?>): Long = if (charged(job)) job.number("deadline") - budgetNow() else Long.MAX_VALUE
+  private fun outOfTime(job: Map<String, Any?>) = budgetLeft(job) <= 0
+  /** A deadline [ms] from now on the budget's clock, never past [job]'s own. */
+  private fun withinBudget(job: Map<String, Any?>, ms: Long): Long = minOf(budgetNow() + ms, job.number("deadline"))
+
   // Persistence. A change a restart must keep (a job enqueued, a phase, a decision, a failure, a
   // cancel, a peer's queue place) is written at once by [persist]. Transfer progress only marks
   // the journal [progressed]: it's written with the next change, or once [PROGRESS_WRITE_MS] has
@@ -761,12 +808,12 @@ class DurableDownloads(
   /** Publishes the journal to readers and writes it to its file, atomically and synced. */
   private fun persist() {
     publish()
-    writtenAt = clock(); progressUnwritten = false
+    writtenAt = clock(); progressUnwritten = false; budgetWrittenAt = budgetNow()
     journal.parentFile?.mkdirs()
     val temp = File(journal.path + ".tmp")
     FileOutputStream(temp).use { output ->
       val stream = ObjectOutputStream(output)
-      stream.writeObject(clean(mapOf("jobs" to jobs, "libraryPolicy" to policy)))
+      stream.writeObject(clean(mapOf("jobs" to jobs, "libraryPolicy" to policy, "budgetClock" to budgetWrittenAt)))
       stream.flush()
       output.fd.sync()
     }
@@ -779,7 +826,7 @@ class DurableDownloads(
     /** How long a started song may wait for JS's answer before it leaves its slot to the next. */
     const val DECISION_WAIT_MS = 30_000L
     const val LEASE_MS = 45_000L
-    /** A job's whole budget from leaving the queue: search, peers' queues, transfers and saving. */
+    /** A job's budget from leaving the queue until its file is downloaded: search, peers' queues and transfers. */
     const val JOB_MS = 20 * 60_000L
     /** How long one peer may keep us in its upload queue. */
     const val QUEUE_MS = 120_000L
@@ -795,6 +842,11 @@ class DurableDownloads(
     const val YOUTUBE_STALL_MS = 4 * 60_000L
     /** How long transfer progress may go unwritten: what a crash can lose of it. */
     const val PROGRESS_WRITE_MS = 5_000L
+    /**
+     * How long the budget's clock may go unwritten while jobs are charged: what a crash, or
+     * Android killing Wave, can forgive of a job's budget.
+     */
+    const val BUDGET_WRITE_MS = 30_000L
     /** How often readers (JS's rows, the notification) are shown a transfer's progress. */
     const val PROGRESS_SHOW_MS = 1_000L
     const val MAX_ATTEMPTS = 6L
@@ -811,6 +863,8 @@ class DurableDownloads(
     private val TERMINAL = setOf("failed", "cancelled")
     /** Until the audio is accepted; afterwards a failure is the save's, which YouTube would share. */
     private val ACQUIRING = setOf("preparing", "prepared", "transferring", "sourceReady")
+    /** Where a job's budget is charged: until its file is downloaded. */
+    private val CHARGED = setOf("preparing", "prepared", "transferring")
     private val DECISIONS = mapOf("preparing" to "prepare", "sourceReady" to "confirm", "awaitingPublication" to "publish", "completed" to "import")
     /** The phases with native work: a worker thread runs them. */
     private val WORK = setOf("transferring", "tagging", "publishing")

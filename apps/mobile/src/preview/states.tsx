@@ -176,7 +176,9 @@ function PreviewItemMenu({
 }) {
   // The Library's Songs and Albums can select, so their menus offer Select.
   const planned = usePlannedActions(target, favorites, { surface: "menu", selectable: true });
-  return <ItemMenuCard target={target} actions={actionEntries(planned, () => close)} />;
+  return (
+    <ItemMenuCard target={target} actions={actionEntries(planned, () => close)} play={close} />
+  );
 }
 
 // Synthetic album and artist ids: Go to Album and Go to Artist show, and go nowhere.

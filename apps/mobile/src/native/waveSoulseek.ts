@@ -45,6 +45,7 @@ export interface NativeDownloadDecision extends NativeDownloadJob {
   readonly token: string;
   readonly decision: "prepare" | "confirm" | "publish" | "import";
   readonly leaseUntil: number;
+  /** The job's budget, on the journal's own clock (it stands still while Wave is closed), not `Date.now()`'s. */
   readonly deadline: number;
 }
 
@@ -124,6 +125,11 @@ declare class WaveSoulseekModule extends NativeModule<{
   ): Promise<boolean>;
   refreshDownloadPolicy(roots: readonly string[], excluded: readonly string[]): Promise<number>;
   cancelJob(id: string): Promise<void>;
+  /**
+   * Settings › Downloads' drag: the waiting jobs [ids] take the places they held, in this order,
+   * so they start in it (Core's `moveQueuedJobs`); kept across a restart.
+   */
+  moveQueuedJobs(ids: readonly string[]): Promise<void>;
   session(): Promise<SoulseekSession>;
   /** Download in best quality: connects the phone's Soulseek account, making one when it has none. */
   turnOn(): Promise<SoulseekSession>;

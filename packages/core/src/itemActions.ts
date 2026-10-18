@@ -81,7 +81,7 @@ export interface ActionItem {
   readonly unsearched?: boolean | undefined;
   /**
    * A song Fix Song can do something for: it lacks lyrics, a track number, a
-   * year or a genre (`canFixSong`).
+   * year, a genre or a checked explicit flag (`canFixSong`).
    */
   readonly fixable?: boolean | undefined;
   /**
@@ -198,10 +198,13 @@ export const ITEM_ACTION_LABELS: { readonly [A in ItemAction]: string } = {
 /**
  * Entries that delete something for good, shown in the destructive colour:
  * a song's file, a song from the Library, a playlist (its menu's Delete
- * Playlist; the selection bar's Delete Playlists keeps the usual colour).
+ * Playlist) or several (the selection bar's Delete Playlists).
  */
 export const isDestructiveAction = (action: ItemAction): boolean =>
-  action === "delete" || action === "removeFromLibrary" || action === "deletePlaylist";
+  action === "delete" ||
+  action === "removeFromLibrary" ||
+  action === "deletePlaylist" ||
+  action === "deletePlaylists";
 
 /**
  * Entries that ask before acting: selection mode stays until the question is
