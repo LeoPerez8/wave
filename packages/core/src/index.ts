@@ -1528,3 +1528,25 @@ export type {
   DuplicateCheckEvent,
   DuplicateCheckStep,
 } from "./replacementDuplicates.ts";
+export {
+  matchSharedSongs,
+  PLAYLIST_SHARE_LABELS,
+  playlistShareServices,
+  shareSignInAlert,
+  sharedEditBatches,
+  sharedPlaylistChanges,
+  sharedPlaylistMoves,
+  sharedSongsLine,
+  ytMusicPlaylistUrl,
+  ytShareMatch,
+  ytShareSong,
+} from "./playlistShare.ts";
+export type {
+  PlaylistShareService,
+  ShareSong,
+  SharedEntry,
+  SharedMove,
+  SharedPlaylistChanges,
+  SharedSongs,
+  YtShareItem,
+} from "./playlistShare.ts";

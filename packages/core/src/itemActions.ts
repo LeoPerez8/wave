@@ -132,6 +132,11 @@ export interface ActionSubject<A extends LibraryArtistRef = LibraryArtistRef> {
    * artists they share with the other items; without it, they offer none.
    */
   readonly streamedArtists?: StreamedArtists<A> | undefined;
+  /**
+   * A service a playlist can be shared on is on (YT Music): a playlist's
+   * menu offers Share.
+   */
+  readonly sharing?: boolean | undefined;
 }
 
 export type ItemAction =
@@ -146,6 +151,7 @@ export type ItemAction =
   | "renamePlaylist"
   | "changeImage"
   | "removeImage"
+  | "share"
   | "deletePlaylist"
   | "deletePlaylists"
   | "fixSong"
@@ -194,6 +200,7 @@ export const ITEM_ACTION_LABELS: { readonly [A in ItemAction]: string } = {
   renamePlaylist: "Rename Playlist",
   changeImage: "Change Image",
   removeImage: "Remove Image",
+  share: "Share",
   deletePlaylist: "Delete Playlist",
   deletePlaylists: "Delete Playlists",
   fixSong: "Fix Song",
@@ -378,6 +385,8 @@ export const itemActions = <A extends LibraryArtistRef = LibraryArtistRef>(
     if (surface === "menu") {
       entries.push({ action: "changeImage" });
       if (only?.hasImage === true) entries.push({ action: "removeImage" });
+      // Shared as a playlist on another service, from its menu alone (#483).
+      if (subject.sharing === true) entries.push({ action: "share" });
     }
   }
   // Looks up online what the songs lack and writes it into their files; it
