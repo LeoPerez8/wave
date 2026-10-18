@@ -1127,17 +1127,12 @@ export {
   snapCrossfade,
 } from "./crossfade.ts";
 export {
-  DISCOVER_MIX_COUNT,
   discoverMix,
   discoverMixCaption,
   discoverMixReadsMore,
-  discoverMixSeeds,
   discoverMixSongs,
   discoverMixesBuilt,
   discoverMixesDue,
-  discoverSeedQuery,
-  discoverSeedVideo,
-  discoverSimilarSource,
   parseDiscoverMixes,
   playedFinder,
   storedDiscoverMixes,
@@ -1152,7 +1147,6 @@ export type {
   DiscoverLibrarySong,
   DiscoverRadioSong,
   DiscoverSeedArtist,
-  DiscoverSeedPools,
   DiscoverSeedSong,
   DiscoverSeedSource,
   DiscoverSimilarArtist,
@@ -1316,6 +1310,35 @@ export type { ExplicitPlayback } from "./explicitPlayback.ts";
 export type { PassOver } from "./queue.ts";
 export { discoverMixKeep } from "./discoverMixLevels.ts";
 export type { DiscoverMixKeep } from "./discoverMixLevels.ts";
+export { nowPlayingDownload } from "./nowPlayingDownload.ts";
+export type { NowPlayingDownload } from "./nowPlayingDownload.ts";
+export {
+  LYRICS_MISS_RETRY_MS,
+  nonDLyrics,
+  nonDLyricsSong,
+  ytMusicFoundLyrics,
+} from "./onlineLyrics.ts";
+export type {
+  NonDSongDetails,
+  LyricsAnswer,
+  LyricsSearchSong,
+  LyricsSource,
+  NonDLyrics,
+  NonDLyricsState,
+  SavedLyrics,
+} from "./onlineLyrics.ts";
+export {
+  FAVORITES_DOWNLOAD_ORIGIN,
+  readStarDownloads,
+  starredDownload,
+  unstarredDownload,
+  writeStarDownloads,
+} from "./starDownloads.ts";
+export type { StarredDownload, UnstarredDownload } from "./starDownloads.ts";
+export { pickWeighted, playsWeight } from "./weightedPick.ts";
+export type { RandomSource } from "./weightedPick.ts";
+export { ARTIST_MIX_COUNT, artistMixSeeds, artistMixSimilarSource } from "./artistMixes.ts";
+export type { ArtistMixPools, PlayedSeedArtist } from "./artistMixes.ts";
 export {
   BEST_QUALITY_KBPS,
   LOW_QUALITY_BELOW_KBPS,

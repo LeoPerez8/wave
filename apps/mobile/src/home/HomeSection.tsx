@@ -149,7 +149,7 @@ const SECTIONS: Record<HomeSectionId, ComponentType<SectionProps>> = {
     ),
   "most-played-albums": MostPlayedAlbums,
   "most-played-artists": MostPlayedArtists,
-  "discover-mixes": DiscoverMixes,
+  "artist-mixes": DiscoverMixes,
   favorites: ({ home, title }) =>
     home.favorites.length > 0 && (
       <TitledSection

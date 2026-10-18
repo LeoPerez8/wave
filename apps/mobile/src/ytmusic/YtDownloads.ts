@@ -5,8 +5,13 @@
  * (`downloadFailurePlan`).
  */
 import {
+  FAVORITES_DOWNLOAD_ORIGIN,
   YT_DOWNLOADS_NONE,
   applyJournalChanges,
+  readStarDownloads,
+  starredDownload,
+  unstarredDownload,
+  writeStarDownloads,
   downloadFailureAnswer,
   downloadFailurePlan,
   downloadSource,
@@ -94,6 +99,7 @@ import { useMemo, useSyncExternalStore } from "react";
 import { appLog } from "@/log/appLog";
 
 import { askForNotifications } from "@/lib/askForNotifications";
+import { persistedSetting } from "@/lib/persistedSetting";
 import {
   libraryEdited,
   libraryVersion,
@@ -1123,6 +1129,28 @@ const hasFailed = (job: NativeDownloadJob): boolean =>
 
 let requests = Promise.resolve();
 
+/**
+ * The downloads only a star asked for, by job id (Core's `readStarDownloads`): unstarring the
+ * song before its file arrives cancels them (`cancelUnstarredDownloads`). Kept on this phone,
+ * so it survives Wave closing; the owner asking for one of them (`ownerAsked`) takes it out.
+ */
+const starAsked = persistedSetting<ReadonlySet<string>>({
+  key: "downloads.starAsked",
+  read: readStarDownloads,
+  write: writeStarDownloads,
+});
+
+/**
+ * The owner asked for the downloads [jobIds] themselves (Download, an album's, a playlist's,
+ * Download All): they carry on whatever happens to the songs' stars.
+ */
+const ownerAsked = (jobIds: readonly string[]): void => {
+  const asked = starAsked.get();
+  if (!jobIds.some((id) => asked.has(id))) return;
+  const owners = new Set(jobIds);
+  starAsked.set(new Set([...asked].filter((id) => !owners.has(id))));
+};
+
 let forgotSettled = false;
 /**
  * Has the journal forget the failures that settled another way since (Core's
@@ -1180,6 +1208,7 @@ export const startDownloads = (resume = false): void => {
 export const downloadYtSong = (song: NativeYtSong): void => {
   askForNotifications();
   startDownloads();
+  ownerAsked([song.videoId]);
   // One at a time, so a second tap sees the first one's job in the journal.
   requests = requests
     .then(async () => {
@@ -1220,6 +1249,7 @@ const downloadYtSongs = (
 ): void => {
   askForNotifications();
   startDownloads();
+  ownerAsked(songs.map((song) => song.videoId));
   requests = requests
     .then(async () => {
       const jobs = await WaveSoulseek.jobsSnapshot();
@@ -1417,6 +1447,7 @@ const missingSongJobs = (trackIds?: readonly number[]): Promise<MissingSongJob[]
 export const downloadMissingSongs = (trackIds: readonly number[]): void => {
   askForNotifications();
   startDownloads();
+  ownerAsked(trackIds.map(missingSongJobId));
   requests = requests
     .then(async () => {
       await enqueueMissingSongs(await missingSongJobs(trackIds));
@@ -1487,6 +1518,7 @@ export const runMissingSongsDownloadAction = (
       ]);
       const missing = trackIds === undefined ? found : inOrder(found, trackIds);
       const download = missingSongsDownload(missing, jobs);
+      if (action === "downloadAll") ownerAsked(missing.map((job) => job.videoId));
       switch (action) {
         case "downloadAll":
           await enqueueMissingSongs(download.toDownload, origin);
@@ -1715,6 +1747,92 @@ export const clearFailedDownloads = (failed: readonly FailedDownload<NativeYtSon
     .then(async () => {
       for (const { clear } of failed)
         for (const videoId of clear) await WaveSoulseek.cancelJob(videoId);
+      await refresh();
+    })
+    .catch(() => undefined);
+};
+
+/**
+ * A star means downloaded: starring YT Music [songs] and missing songs [trackIds] (Core's
+ * `starredDownload`) queues each one never asked for under Favorites, the star the only one
+ * that asked; asks again for a failed one, keeping where it was asked from; and leaves one
+ * already on its way as it is. A song sharing a job on its way (another result id of the same
+ * recording) leaves that job be too: its pending favorite settles when the job's file arrives.
+ */
+export const downloadStarredSongs = (
+  songs: readonly NativeYtSong[],
+  trackIds: readonly number[] = [],
+): void => {
+  if (songs.length === 0 && trackIds.length === 0) return;
+  askForNotifications();
+  startDownloads();
+  requests = requests
+    .then(async () => {
+      const [jobs, missing] = await Promise.all([
+        WaveSoulseek.jobsSnapshot(),
+        trackIds.length === 0 ? Promise.resolve([]) : missingSongJobs(trackIds),
+      ]);
+      const state = ytDownloadsFromJournal(jobs);
+      const asked = new Set(starAsked.get());
+      const session = await sessionNow();
+      const ytMusicOn = ytMusicEnabled();
+      for (const song of songs) {
+        const shared = ytDownloadSharedJob(jobs, song);
+        const step = starredDownload(
+          ytDownloadStatus(state, song.videoId) ??
+            (shared === null ? null : ytDownloadStatus(state, shared)),
+        );
+        if (step === "keep") continue;
+        await WaveSoulseek.enqueueJob(
+          song,
+          soulseekRecording(song),
+          shared,
+          currentSource(session, ytMusicOn),
+          step === "queue" ? FAVORITES_DOWNLOAD_ORIGIN : null,
+        );
+        if (step === "queue") asked.add(song.videoId);
+      }
+      for (const job of inOrder(missing, trackIds)) {
+        const step = starredDownload(ytDownloadStatus(state, job.videoId));
+        if (step === "keep") continue;
+        await enqueueMissingSong(
+          job,
+          session,
+          ytMusicOn,
+          step === "queue" ? FAVORITES_DOWNLOAD_ORIGIN : null,
+        );
+        if (step === "queue") asked.add(job.videoId);
+      }
+      starAsked.set(asked);
+      await refresh();
+    })
+    .catch(() => undefined);
+};
+
+/**
+ * Unstarring YT Music songs (by video, [videoIds]) and missing songs [trackIds] before their
+ * files arrive (Core's `unstarredDownload`): a download only the star asked for is cancelled,
+ * waiting, downloading or failed; one the owner asked for separately carries on, as does one
+ * already saving to the Library.
+ */
+export const cancelUnstarredDownloads = (
+  videoIds: readonly string[],
+  trackIds: readonly number[] = [],
+): void => {
+  const ids = [...videoIds, ...trackIds.map(missingSongJobId)];
+  if (ids.length === 0) return;
+  // In turn after the stars before it, so a star taken straight back finds its download.
+  requests = requests
+    .then(async () => {
+      if (!ids.some((id) => starAsked.get().has(id))) return;
+      const state = ytDownloadsFromJournal(await WaveSoulseek.jobsSnapshot());
+      const asked = new Set(starAsked.get());
+      for (const id of ids) {
+        const step = unstarredDownload(ytDownloadStatus(state, id), { starAsked: asked.has(id) });
+        asked.delete(id);
+        if (step === "cancel") await WaveSoulseek.cancelJob(id);
+      }
+      starAsked.set(asked);
       await refresh();
     })
     .catch(() => undefined);

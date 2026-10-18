@@ -196,14 +196,6 @@ describe("A mix's Library pool", () => {
     assert.deepEqual(ids(pool), [11, 21, 20]);
   });
 
-  test("for a song seed, is its artists' other songs, never the seed itself", () => {
-    const pool = discoverMixLibraryPool(
-      { kind: "song", id: "song:10", name: "Glory Box", from: "plays", song: songs[0]! },
-      { radio: radio(["Glory Box"]), find, library, taken: new Set(), length: 25 },
-    );
-    assert.deepEqual(ids(pool), [12, 11]);
-  });
-
   test("leaves out music videos, songs twice and the songs earlier mixes' pools have", () => {
     const pool = discoverMixLibraryPool(tripHop, {
       radio: radio(["Angel", "Overcome", "Angel", "Roads"], ["Overcome"]),
@@ -307,6 +299,7 @@ describe("A saved mix's Library pool", () => {
 
   test("leaves out an entry it can't read", () => {
     const stored = JSON.stringify({
+      version: 2,
       builtAt: 1_700_000_000_000,
       mixes: [{ ...mix, library: [librarySong(1), { id: "2", title: "x", artist: "y" }, null] }],
     });

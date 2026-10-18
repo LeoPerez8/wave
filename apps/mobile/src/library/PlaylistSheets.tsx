@@ -9,7 +9,7 @@ import {
   type PlaylistSong,
 } from "@wave/core";
 import { Fragment, useState } from "react";
-import { Text, TextInput, ToastAndroid, View } from "react-native";
+import { Text, TextInput, View } from "react-native";
 
 import { CatalogLine } from "@/catalog/CatalogLine";
 import { CELL, grid } from "@/catalog/grid";
@@ -20,6 +20,7 @@ import { Press } from "@/motion/Press";
 import { confirmAction } from "@/overlay/alert";
 import { CardEntries } from "@/overlay/CardEntries";
 import { followUp, openOverlay, presentOverlay } from "@/overlay/overlay";
+import { showToast } from "@/overlay/toast";
 import { useThemeColor } from "@/theme/useThemeColor";
 
 import { usePlaylists } from "./hooks";
@@ -38,7 +39,7 @@ import {
 } from "./playlists";
 import { forgetDeletedYtLibraryOrigins } from "./ytLibraryImport";
 
-const toast = (message: string): void => ToastAndroid.show(message, ToastAndroid.SHORT);
+const toast = (message: string): void => void showToast(message);
 
 const failed = (what: string) => (): void => toast(`Couldn't ${what}`);
 

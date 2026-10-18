@@ -20,6 +20,7 @@ import {
   type YtAlbumSong,
   type YtArtistSaved,
   type ExplicitFlag,
+  type SavedLyrics,
   type NoBetterCopy,
   type QualityDirection,
   type QualityFile,
@@ -113,7 +114,12 @@ import {
   type PlaylistUnsearched,
   type UnsearchedEntriesSettled,
 } from "./db/playlists";
-import { addPendingFavorites } from "./db/pendingFavorites";
+import {
+  addPendingFavorites,
+  removePendingFavorites,
+  selectPendingFavorites,
+} from "./db/pendingFavorites";
+import { forgetSavedLyrics, keepSavedLyrics, selectSavedLyrics } from "./db/savedLyrics";
 import {
   rememberNoBetterCopies,
   replaceTrackFile,
@@ -713,6 +719,12 @@ export class LibraryStore extends Context.Service<
     readonly addPendingFavorites: (
       songs: readonly PendingFavorite[],
     ) => Effect.Effect<void, LibraryStoreError>;
+    /** Every pending favorite kept, starred songs waiting for their files. */
+    readonly listPendingFavorites: Effect.Effect<readonly PendingFavorite[], LibraryStoreError>;
+    /** Forgets the pending favorites of videos [videoIds]: unstarred before their files arrived. */
+    readonly removePendingFavorites: (
+      videoIds: readonly string[],
+    ) => Effect.Effect<void, LibraryStoreError>;
     /** Every Library file with its length, bitrate and size (Core's `qualityUpgradeSongs` weighs them). */
     readonly qualityFiles: Effect.Effect<readonly QualityFile[], LibraryStoreError>;
     /** The Tracks recorded as having no better copy in [direction]. This phone only. */
@@ -834,6 +846,20 @@ export class LibraryStore extends Context.Service<
      * anew) and its missing songs go (`signOut`).
      */
     readonly leaveAccount: Effect.Effect<void, LibraryStoreError>;
+    /**
+     * What the Lyrics view saved for a non-D song's video (Core's
+     * `SavedLyrics`): lyrics it found online, or a miss; null for nothing.
+     */
+    readonly savedLyrics: (videoId: string) => Effect.Effect<SavedLyrics | null, LibraryStoreError>;
+    /** Saves [saved] for [videoId], replacing what was saved before. This phone only. */
+    readonly keepSavedLyrics: (
+      videoId: string,
+      saved: SavedLyrics,
+    ) => Effect.Effect<void, LibraryStoreError>;
+    /** Drops what was saved for [videoIds] (their lyrics are in a file now). */
+    readonly forgetSavedLyrics: (
+      videoIds: readonly string[],
+    ) => Effect.Effect<void, LibraryStoreError>;
   }
 >()("@wave/mobile/library/LibraryStore") {}
 
@@ -1295,6 +1321,11 @@ const make = Effect.gen(function* () {
     addPendingFavorites: (songs) =>
       attempt("keep pending favorites", () => addPendingFavorites(db, songs, Date.now())),
 
+    listPendingFavorites: attempt("read pending favorites", () => selectPendingFavorites(db)),
+
+    removePendingFavorites: (videoIds) =>
+      attempt("forget pending favorites", () => removePendingFavorites(db, videoIds)),
+
     qualityFiles: attempt("read the files' quality", () => selectQualityFiles(db)),
     noBetterCopies: (direction) =>
       attempt("read the songs with no better copy", () => selectNoBetterCopies(db, direction)),
@@ -1370,6 +1401,14 @@ const make = Effect.gen(function* () {
       }),
 
     leaveAccount: attempt("leave the Wave account", () => signOut(db, splits)),
+
+    savedLyrics: (videoId) => attempt("read saved lyrics", () => selectSavedLyrics(db, videoId)),
+
+    keepSavedLyrics: (videoId, saved) =>
+      attempt("save lyrics", () => keepSavedLyrics(db, videoId, saved, Date.now())),
+
+    forgetSavedLyrics: (videoIds) =>
+      attempt("forget saved lyrics", () => forgetSavedLyrics(db, videoIds)),
   });
 });
 

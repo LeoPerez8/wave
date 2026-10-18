@@ -11,6 +11,7 @@ import {
   type YtDownloadAction,
   type YtSongActionOptions,
 } from "@wave/core";
+import * as Haptics from "expo-haptics";
 import { usePathname } from "expo-router";
 import { useState } from "react";
 import { Text, View } from "react-native";
@@ -18,6 +19,8 @@ import { Text, View } from "react-native";
 import { Artwork } from "@/catalog/Artwork";
 import { CELL } from "@/catalog/grid";
 import { followStreamedArtistLink } from "@/library/ArtistChoice";
+import { useFavoriteIds, usePendingFavoriteVideos } from "@/library/favorites";
+import { starSongs } from "@/library/starSongs";
 import type { ArtistRow } from "@/library/LibraryStore";
 import { openAddToPlaylist } from "@/library/PlaylistSheets";
 import { removePlaylistItems } from "@/library/playlists";
@@ -43,7 +46,8 @@ export interface YtSongMenuOptions extends MenuOptions {
 
 /**
  * Opens a YT Music song's long-press menu next to its row: Play Next and Add
- * to Queue as cards, then Add to Playlist (Remove from Playlist for a playlist's entry), Go to
+ * to Queue as cards, then Add to Playlist, Favorite or Remove from Favorites (a star means
+ * downloaded: Favorite queues its download), Remove from Playlist for a playlist's entry, Go to
  * Album and Go to Artist (Core's `ytSongActions`), then Download, or Cancel Download /
  * Retry Download while one is on its way or has failed. It opens once the
  * Library's artists are read, so Go to Artist is there from its first frame
@@ -83,7 +87,8 @@ type Entry =
       readonly action: "goToArtist";
       readonly artists: StreamedArtistLink<ArtistRow>;
     }
-  | { readonly kind: "download"; readonly action: YtDownloadAction };
+  | { readonly kind: "download"; readonly action: YtDownloadAction }
+  | { readonly kind: "star"; readonly action: "favorite" | "unfavorite" };
 
 const songEntries = (
   artists: StreamedArtistLink<ArtistRow> | undefined,
@@ -95,6 +100,9 @@ const songEntries = (
         return { kind: "album", ...entry };
       case "goToArtist":
         return { kind: "artist", ...entry };
+      case "favorite":
+      case "unfavorite":
+        return { kind: "star", action: entry.action };
       default:
         return { kind: "queue", action: entry.action };
     }
@@ -130,6 +138,12 @@ const run = (
   }
   if (entry.kind === "artist") {
     followStreamedArtistLink(entry.artists);
+    return;
+  }
+  if (entry.kind === "star") {
+    // A star means downloaded: the song joins the download queue with it.
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    void starSongs({ tracks: [], ytSongs: [song] }, entry.action === "favorite", find);
     return;
   }
   switch (entry.action) {
@@ -184,6 +198,11 @@ function YtSongActionsMenu({
   // A song downloaded earlier and since deleted from the Library can be downloaded again
   // (taken as still there until the Library has been read).
   const inLibrary = useLoadedInLibrary()(song);
+  // Starred as the Library's song once the Library has it, else as a pending favorite.
+  const track = find(song);
+  const favorites = useFavoriteIds();
+  const pending = usePendingFavoriteVideos();
+  const favorite = track === null ? pending.has(song.videoId) : favorites.has(track.id);
   // Its artists open integrated: their Library page, else the YouTube Music artist page.
   // Kept as the menu opened with it, so Go to Artist never appears while it's shown.
   const link = useStreamedArtistLink(song.artists);
@@ -195,6 +214,7 @@ function YtSongActionsMenu({
   const entries: Entry[] = [
     ...songEntries(artists, {
       inPlaylist: playlistItem !== undefined,
+      favorite,
       album: song.albumId,
       ytAlbumHere,
       ytMusic,

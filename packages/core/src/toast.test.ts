@@ -26,37 +26,36 @@ describe("toastDuration", () => {
 
 describe("toastSwipeDismisses", () => {
   const still = { translationX: 0, translationY: 0, velocityX: 0, velocityY: 0 };
-  const pill = { width: 240, height: 48 };
+  // Two lines tall, so a short flick is shorter than a third of it.
+  const pill = { width: 240, height: 72 };
 
-  test("sends the toast away on a drag a third of the way across, either way", () => {
-    assert.equal(toastSwipeDismisses({ ...still, ...pill, translationX: 80 }), true);
-    assert.equal(toastSwipeDismisses({ ...still, ...pill, translationX: -80 }), true);
-    assert.equal(toastSwipeDismisses({ ...still, ...pill, translationX: 40 }), false);
-  });
-
-  test("sends it away on a drag down a third of its height, or a flick down", () => {
-    assert.equal(toastSwipeDismisses({ ...still, ...pill, translationY: 16 }), true);
-    assert.equal(toastSwipeDismisses({ ...still, ...pill, translationY: 10 }), false);
+  test("sends the toast away on a drag up a third of its height, or a flick up", () => {
+    assert.equal(toastSwipeDismisses({ ...still, ...pill, translationY: -24 }), true);
+    assert.equal(toastSwipeDismisses({ ...still, ...pill, translationY: -18 }), false);
     assert.equal(
-      toastSwipeDismisses({ ...still, ...pill, translationY: 18, velocityY: 900 }),
+      toastSwipeDismisses({ ...still, ...pill, translationY: -18, velocityY: -900 }),
       true,
     );
   });
 
-  test("keeps it on a drag up, which points into the screen", () => {
+  test("keeps it on a drag down or sideways: it leaves only off the top", () => {
     assert.equal(
-      toastSwipeDismisses({ ...still, ...pill, translationY: -40, velocityY: -900 }),
+      toastSwipeDismisses({ ...still, ...pill, translationY: 40, velocityY: 900 }),
+      false,
+    );
+    assert.equal(
+      toastSwipeDismisses({ ...still, ...pill, translationX: 120, velocityX: 900 }),
+      false,
+    );
+    assert.equal(
+      toastSwipeDismisses({ ...still, ...pill, translationX: -120, velocityX: -900 }),
       false,
     );
   });
 
-  test("keeps it when the finger flicks back against the drag", () => {
+  test("keeps it when the finger flicks back down against the drag", () => {
     assert.equal(
-      toastSwipeDismisses({ ...still, ...pill, translationY: 30, velocityY: -900 }),
-      false,
-    );
-    assert.equal(
-      toastSwipeDismisses({ ...still, ...pill, translationX: 100, velocityX: -900 }),
+      toastSwipeDismisses({ ...still, ...pill, translationY: -30, velocityY: 900 }),
       false,
     );
   });
