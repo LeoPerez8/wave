@@ -53,10 +53,7 @@ export function ShareDestinations({
           >
             <Icon size={26} color={disabled ? tertiary : foreground} strokeWidth={1.5} />
           </View>
-          <Text
-            numberOfLines={2}
-            className={`text-center font-sans text-caption ${disabled ? "text-tertiary" : "text-secondary"}`}
-          >
+          <Text numberOfLines={2} className="text-center font-sans text-caption text-secondary">
             {label}
           </Text>
         </Press>

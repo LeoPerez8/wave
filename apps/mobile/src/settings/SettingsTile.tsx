@@ -9,10 +9,11 @@ import {
   IconUser,
   type Icon,
 } from "@tabler/icons-react-native";
-import { SETTINGS_TILE_GLYPH, type SettingsIcon, type SettingsTileColour } from "@wave/core";
+import type { SettingsIcon, SettingsTileColour } from "@wave/core";
 import { View } from "react-native";
 
 import { CELL } from "@/catalog/grid";
+import { useThemeColor } from "@/theme/useThemeColor";
 
 /** The tile's side: four cells, as iOS Settings sizes its icons against a row. */
 export const SETTINGS_TILE = CELL * 4;
@@ -44,6 +45,7 @@ const FILLS: Readonly<Record<SettingsTileColour, string>> = {
 /** The glyph a Settings page's row leads with: white, on its own colour, in a rounded square. */
 export function SettingsTile({ icon, colour }: { icon: SettingsIcon; colour: SettingsTileColour }) {
   const Glyph = GLYPHS[icon];
+  const glyph = useThemeColor("on-tile");
   return (
     <View
       className={`items-center justify-center ${FILLS[colour]}`}
@@ -54,7 +56,7 @@ export function SettingsTile({ icon, colour }: { icon: SettingsIcon; colour: Set
         borderCurve: "continuous",
       }}
     >
-      <Glyph size={GLYPH} color={SETTINGS_TILE_GLYPH} strokeWidth={1.75} />
+      <Glyph size={GLYPH} color={glyph} strokeWidth={1.75} />
     </View>
   );
 }

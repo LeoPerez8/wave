@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { describe, test } from "node:test";
 
-import { DEFAULT_THEME, SETTINGS_TILE_COLOURS, TONES } from "@wave/core";
+import { DEFAULT_THEME, SETTINGS_TILE_COLOURS, SETTINGS_TILE_GLYPH, TONES } from "@wave/core";
 
 const read = (path: string): string => readFileSync(new URL(path, import.meta.url), "utf8");
 
@@ -26,7 +26,7 @@ const variant = (scheme: "light" | "dark"): Record<string, string> => {
 };
 
 describe("global.css colour tokens", () => {
-  test("each scheme declares exactly Core's default theme, and the Settings tiles", () => {
+  test("each scheme declares exactly Core's default theme, and the Settings tiles and their glyph", () => {
     for (const scheme of ["light", "dark"] as const) {
       const tiles = Object.fromEntries(
         Object.entries(SETTINGS_TILE_COLOURS[scheme]).map(([name, value]) => [
@@ -34,7 +34,11 @@ describe("global.css colour tokens", () => {
           value,
         ]),
       );
-      assert.deepEqual(variant(scheme), { ...DEFAULT_THEME[scheme], ...tiles });
+      assert.deepEqual(variant(scheme), {
+        ...DEFAULT_THEME[scheme],
+        ...tiles,
+        "on-tile": SETTINGS_TILE_GLYPH,
+      });
     }
   });
 
