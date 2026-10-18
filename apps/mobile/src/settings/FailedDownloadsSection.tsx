@@ -1,7 +1,7 @@
 import { IconTrash } from "@tabler/icons-react-native";
 import { downloadsSummary, type FailedDownload } from "@wave/core";
 import { memo } from "react";
-import { View } from "react-native";
+import { View, type StyleProp, type ViewStyle } from "react-native";
 
 import { CatalogLine } from "@/catalog/CatalogLine";
 import { CELL } from "@/catalog/grid";
@@ -60,14 +60,14 @@ const retryKey = (retry: FailedDownload<NativeYtSong>["retry"]): string =>
  * Settings › Downloads, under the switch: the songs whose download failed (Core's
  * `failedDownloads`), with Retry All and Clear All above them. Nothing while none has.
  */
-export function FailedDownloadsSection() {
+export function FailedDownloadsSection({ style }: { style?: StyleProp<ViewStyle> }) {
   const failed = useFailedDownloads();
   // With YT Music off Wave asks YouTube for nothing, covers included.
   const covers = useYtMusicEnabled();
   const summary = downloadsSummary(failed.length);
   if (summary === null) return null;
   return (
-    <View>
+    <View style={style}>
       <CatalogLine className="mb-2">{summary}</CatalogLine>
       <View className="flex-row items-center" style={{ gap: CELL * 3 }}>
         <TextButton label="Retry All" onPress={() => retryFailedDownloads(failed)} />

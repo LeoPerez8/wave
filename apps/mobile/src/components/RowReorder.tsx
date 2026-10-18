@@ -1,4 +1,3 @@
-import { IconMenu2 } from "@tabler/icons-react-native";
 import { reorderShift, reorderTarget } from "@wave/core";
 import * as Haptics from "expo-haptics";
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -11,12 +10,11 @@ import { CELL, grid } from "@/catalog/grid";
 import { useThemeColor } from "@/theme/useThemeColor";
 
 /**
- * Dragging a row of a list up or down by its handle (the arrangement editors,
- * Settings › Downloads' groups and songs), with every row mounted: the
- * dragged row lifts and follows the finger, the rows it passes step aside,
- * and the drop hands its move to the list (Core's `reorderTarget` /
- * `reorderShift` decide where it lands). Rows may be of different heights
- * (large text, a group's songs): each reports its own. The drag lives in
+ * Dragging a row of a list up or down by its handle (the arrangement editors),
+ * with every row mounted: the dragged row lifts and follows the finger, the
+ * rows it passes step aside, and the drop hands its move to the list (Core's
+ * `reorderTarget` / `reorderShift` decide where it lands). Rows may be of
+ * different heights (large text): each reports its own. The drag lives in
  * shared values, so a long list doesn't render again as it passes rows.
  */
 
@@ -203,24 +201,44 @@ export const useReorderRow = <Id,>({
   return { style, underline, handle };
 };
 
+/** The handle's three lines, as the 20dp menu icon draws them at stroke 1.5. */
+const LINE = { width: 14.6, height: 1.25, borderRadius: 0.625 } as const;
+
+/**
+ * A drag handle's three lines, drawn with plain views rather than an SVG icon:
+ * a list of hundreds of handles dispatches no SVG layout events (each one made
+ * Reanimated flush its queued props on the main thread, #447).
+ */
+function HandleLines() {
+  return (
+    <View style={{ gap: 3.75 }}>
+      <View className="bg-secondary" style={LINE} />
+      <View className="bg-secondary" style={LINE} />
+      <View className="bg-secondary" style={LINE} />
+    </View>
+  );
+}
+
 /**
  * A row's drag handle, as Up Next's: three lines in a 48dp target, at the
  * row's end. Screen readers move the row with its Move up / Move down actions
- * instead.
+ * instead. With no [gesture] it's only drawn (a dragged row's lifted copy).
  */
-export function ReorderHandle({ gesture }: { gesture: ReturnType<typeof usePanGesture> }) {
-  const secondary = useThemeColor("secondary");
-  return (
-    <GestureDetector gesture={gesture}>
-      <View
-        accessibilityElementsHidden
-        importantForAccessibility="no-hide-descendants"
-        className="items-center justify-center"
-        style={{ width: HANDLE, height: HANDLE, marginRight: -CELL * 1.5 }}
-      >
-        <IconMenu2 size={20} color={secondary} strokeWidth={1.5} />
-      </View>
-    </GestureDetector>
+export function ReorderHandle({ gesture }: { gesture?: ReturnType<typeof usePanGesture> }) {
+  const handle = (
+    <View
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
+      className="items-center justify-center"
+      style={{ width: HANDLE, height: HANDLE, marginRight: -CELL * 1.5 }}
+    >
+      <HandleLines />
+    </View>
+  );
+  return gesture === undefined ? (
+    handle
+  ) : (
+    <GestureDetector gesture={gesture}>{handle}</GestureDetector>
   );
 }
 
