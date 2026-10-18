@@ -16,6 +16,7 @@ export type HomeSectionId =
   | "most-played-albums"
   | "most-played-artists"
   | "artist-mixes"
+  | "genre-mixes"
   | "favorites"
   | "stats"
   | "listening-overview";
@@ -43,6 +44,7 @@ export const HOME_SECTIONS: readonly HomeSection[] = [
   { id: "most-played-albums", title: "Most played albums", fromPlays: true },
   { id: "most-played-artists", title: "Most played artists", fromPlays: true },
   { id: "artist-mixes", title: "Artist mixes", fromPlays: false, needsYtMusic: true },
+  { id: "genre-mixes", title: "Genre mixes", fromPlays: false, needsYtMusic: true },
   { id: "favorites", title: "Favorites", fromPlays: false },
   { id: "stats", title: "Stats", fromPlays: false },
   { id: "listening-overview", title: "Listening overview", fromPlays: false },

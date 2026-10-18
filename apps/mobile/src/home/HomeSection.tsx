@@ -21,7 +21,7 @@ import type { Ranked } from "@/stats/Stats";
 import { playCount } from "@/stats/StatsViews";
 import { openDiscoverMix } from "@/ytmusic/routes";
 
-import { useDiscoverMixes } from "./discoverMixes";
+import { useDiscoverMixes, type MixSectionId } from "./discoverMixes";
 import { openDiscoverMixActions } from "./DiscoverMixActions";
 import { DiscoverMixLevelButton } from "./DiscoverMixLevelButton";
 import { DiscoverMixesSkeleton } from "./DiscoverMixesSkeleton";
@@ -68,18 +68,19 @@ function MostPlayedAlbums({ title }: SectionProps) {
 const MIXES_UPDATING = "Updating…";
 
 /**
- * The mixes as covers, each opening its page; placeholder tiles while the
- * first ones build; nothing with YT Music off (Core's `discoverMixesSection`).
- * The header's control sets how much of every mix is new, and says
+ * A mix section's mixes (Artist mixes or Genre mixes) as covers, each
+ * opening its page; placeholder tiles while the first ones build; nothing
+ * with YT Music off (Core's `discoverMixesSection`). The header's control
+ * sets how much of each of the section's mixes is new, and says
  * "Updating…" while a rebuild runs.
  */
-function DiscoverMixes({ home, title }: SectionProps) {
-  const section = useDiscoverMixes(home.mostPlayed.length > 0);
+function DiscoverMixes({ home, title, id }: SectionProps & { id: MixSectionId }) {
+  const section = useDiscoverMixes(id, home.mostPlayed.length > 0);
   if (section.kind === "hidden") return null;
   return (
     <TitledSection
       title={title}
-      control={<DiscoverMixLevelButton />}
+      control={<DiscoverMixLevelButton section={id} />}
       status={section.kind === "mixes" && section.updating ? MIXES_UPDATING : undefined}
     >
       {section.kind === "skeleton" ? (
@@ -167,7 +168,8 @@ const SECTIONS: Record<HomeSectionId, ComponentType<SectionProps>> = {
     ),
   "most-played-albums": MostPlayedAlbums,
   "most-played-artists": MostPlayedArtists,
-  "artist-mixes": DiscoverMixes,
+  "artist-mixes": (props) => <DiscoverMixes {...props} id="artist-mixes" />,
+  "genre-mixes": (props) => <DiscoverMixes {...props} id="genre-mixes" />,
   favorites: ({ home, title }) =>
     home.favorites.length > 0 && (
       <TitledSection

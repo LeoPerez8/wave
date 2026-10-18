@@ -77,17 +77,24 @@ export interface DiscoverSimilarArtists {
   readonly artists: readonly DiscoverSimilarArtist[];
 }
 
-/** What a mix starts from: an artist (`artistMixSeeds`). */
+/**
+ * What a mix starts from: an artist (`artistMixSeeds`), or a genre family
+ * and up to three of its artists, whose radios are interleaved
+ * (`genreMixSeeds`).
+ */
 export interface DiscoverMixSeed {
-  readonly kind: "artist";
+  readonly kind: "artist" | "genre";
   /** Tells the mix apart from the others, and from itself on another day. */
   readonly id: string;
+  /** The artist's name, or the genre family's ("Metal"). */
   readonly name: string;
   readonly from: DiscoverSeedSource;
   /** Their YouTube Music page, for a similar artist: their radio starts there. */
   readonly browseId?: string;
-  /** The Library genre the mix stands for; absent for an artist's mix. */
+  /** The genre family the mix stands for (Core's `genreFamily` name); absent for an artist's mix. */
   readonly genre?: string;
+  /** A genre mix's seed artists, whose radios it grows from, in the radios' turn order. */
+  readonly artists?: readonly DiscoverSeedArtist[];
 }
 
 const FIELD = "\u001f";
@@ -309,7 +316,7 @@ export const discoverMix = (
           kind: seed.kind,
           name: seed.name,
           ...(seed.genre === undefined ? {} : { genre: seed.genre }),
-          artists: [seed.name],
+          artists: seed.artists?.map((artist) => artist.name) ?? [seed.name],
         },
         songs: songs.map(({ video: _video, ...song }) => song),
         library: library.map(mixLibrarySong),
@@ -481,7 +488,7 @@ const readSong = (value: unknown): YtAlbumSong | null => {
 const readMix = (value: unknown): DiscoverMix | null => {
   if (!isRecord(value) || !isString(value.id) || !isRecord(value.seed)) return null;
   const { kind, name, genre, artists } = value.seed;
-  if (kind !== "artist" || !isString(name)) return null;
+  if ((kind !== "artist" && kind !== "genre") || !isString(name)) return null;
   if (!Array.isArray(value.songs)) return null;
   const songs = value.songs.flatMap((song) => readSong(song) ?? []);
   const seed: DiscoverMix["seed"] = {
