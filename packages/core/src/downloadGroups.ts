@@ -7,7 +7,12 @@
  */
 
 import { moveItem } from "./playlists.ts";
-import { queuedDownloads, type QueuedDownload } from "./queuedDownloads.ts";
+import {
+  queuedDownloadCounts,
+  queuedDownloads,
+  type QueuedDownload,
+  type QueuedDownloadCounts,
+} from "./queuedDownloads.ts";
 import type { YtSong } from "./ytMusic.ts";
 import type { YtDownloadJournalJob } from "./ytDownloads.ts";
 
@@ -64,6 +69,8 @@ export interface DownloadGroup<S extends YtSong = YtSong> {
 export interface DownloadingList<S extends YtSong = YtSong> {
   readonly downloading: readonly QueuedDownload<S>[];
   readonly groups: readonly DownloadGroup<S>[];
+  /** How many songs are downloading, saving and waiting (`queuedDownloadCounts`): the section's line. */
+  readonly counts: QueuedDownloadCounts;
 }
 
 /** The group songs asked for on their own wait in. */
@@ -119,6 +126,7 @@ export const downloadingList = <S extends YtSong>(
   );
   return {
     downloading: rows.filter((row) => !row.waiting),
+    counts: queuedDownloadCounts(jobs),
     groups: sorted.map(([key, group]) => ({
       key,
       origin: group.origin,

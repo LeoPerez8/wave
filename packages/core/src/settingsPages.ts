@@ -138,7 +138,7 @@ export const accountsSummary = (yt: YtSession, wave: WaveSession): string | null
  */
 export const downloadsSummary = (
   failed: number,
-  queued: QueuedDownloadCounts = { downloading: 0, waiting: 0 },
+  queued: QueuedDownloadCounts = { downloading: 0, saving: 0, waiting: 0 },
 ): string | null => {
   const parts = [
     queuedDownloadsSummary(queued),

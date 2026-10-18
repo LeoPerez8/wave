@@ -125,7 +125,5 @@ export const dropDownload = (
   const groups = movableGroups(list);
   const keys = groups.map((group) => group.key);
   const [from, to] = [keys.indexOf(drop.from), keys.indexOf(drop.to)];
-  return from < 0 || to < 0
-    ? null
-    : moveDownloadGroup({ downloading: list.downloading, groups }, from, to);
+  return from < 0 || to < 0 ? null : moveDownloadGroup({ ...list, groups }, from, to);
 };
