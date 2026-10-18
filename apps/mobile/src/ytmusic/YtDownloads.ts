@@ -6,7 +6,14 @@
  */
 import {
   FAVORITES_DOWNLOAD_ORIGIN,
+  NO_DOWNLOAD_RUN,
   YT_DOWNLOADS_NONE,
+  downloadRunProgress,
+  downloadTimeLeft,
+  downloadsPaused,
+  followDownloadRun,
+  type DownloadRun,
+  type DownloadRunProgress,
   applyJournalChanges,
   readStarDownloads,
   starAskedAfter,
@@ -105,7 +112,7 @@ import * as Cause from "effect/Cause";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
-import { useMemo, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 
 import { appLog } from "@/log/appLog";
 
@@ -1917,6 +1924,66 @@ const queuedCountsNow = (): QueuedDownloadCounts => {
     counts.waiting === queuedShown.counts.waiting;
   queuedShown = { jobs, counts: same ? queuedShown.counts : counts };
   return queuedShown.counts;
+};
+
+/**
+ * The run (Core's `followDownloadRun`): the songs queued since the queue was last empty,
+ * followed through every journal change from launch, whether Settings › Downloads is open or not.
+ */
+let downloadRun: DownloadRun = NO_DOWNLOAD_RUN;
+journal.subscribe(() => {
+  downloadRun = followDownloadRun(downloadRun, journal.get(), Date.now());
+});
+
+/** Settings › Downloads' run panel: the run's counts, overall and per group, and its time left. */
+export interface DownloadRunState {
+  readonly progress: DownloadRunProgress;
+  /** Ms, or null until there's a pace and while paused (Core's `downloadTimeLeft`). */
+  readonly timeLeft: number | null;
+  /** Songs are left but none is downloading or saving (Core's `downloadsPaused`). */
+  readonly paused: boolean;
+}
+
+/** How often the run panel reads the run again: at most about once a second. */
+const RUN_PANEL_MS = 1_000;
+
+const downloadRunNow = (): DownloadRunState => {
+  const paused = downloadsPaused(queuedCountsNow());
+  return {
+    progress: downloadRunProgress(downloadRun),
+    timeLeft: downloadTimeLeft(downloadRun, { now: Date.now(), paused }),
+    paused,
+  };
+};
+
+/** What the panel shows of [state], to skip a render when a second changed nothing. */
+const runStateKey = ({ progress, timeLeft, paused }: DownloadRunState): string =>
+  JSON.stringify([
+    progress.overall,
+    [...progress.groups],
+    timeLeft === null ? null : Math.round(timeLeft / 60_000),
+    paused,
+  ]);
+
+/**
+ * The run as Settings › Downloads' panel shows it, read again about once a second (not on each
+ * journal change, which a big run makes many times a second) and only rendered when it changed.
+ */
+export const useDownloadRun = (): DownloadRunState => {
+  const [state, setState] = useState(downloadRunNow);
+  useEffect(() => {
+    // The first tick renders once more at most: it may follow a change since the first render.
+    let key = "";
+    const timer = setInterval(() => {
+      const next = downloadRunNow();
+      const nextKey = runStateKey(next);
+      if (nextKey === key) return;
+      key = nextKey;
+      setState(next);
+    }, RUN_PANEL_MS);
+    return () => clearInterval(timer);
+  }, []);
+  return state;
 };
 
 /**
