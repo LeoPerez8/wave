@@ -55,7 +55,9 @@ type Dragging<Id> = {
  * that changes the order, as the dragged row's place and where it lands among
  * the rows as they are at the drop (a row that left meanwhile drops nothing);
  * the rows land in place in the frame the new order renders. [rowHeight] is a
- * row's height until it reports one.
+ * row's height until it reports one. The callbacks read [ids] and [move] as
+ * they last rendered, so they stay the same while the list changes under
+ * them (a journal notice): rows' gestures aren't rebuilt, or swapped mid-drag.
  */
 export const useRowReorder = <Id,>({
   ids,
@@ -72,15 +74,19 @@ export const useRowReorder = <Id,>({
   const height = useSharedValue(0);
   const travel = useSharedValue(0);
   const dragNow = useRef<Dragging<Id> | null>(null);
+  const latest = useRef({ ids, move, assumed });
+  useLayoutEffect(() => {
+    latest.current = { ids, move, assumed };
+  });
   // Each row's laid-out height, by row: large text makes rows taller, and unequal.
   const heights = useRef(new Map<Id, number>());
   const measure = useCallback((id: Id, laidOut: number) => {
     heights.current.set(id, laidOut);
   }, []);
-  const heightOf = useCallback(
-    (id: Id | undefined) => (id === undefined ? assumed : (heights.current.get(id) ?? assumed)),
-    [assumed],
-  );
+  const heightOf = useCallback((id: Id | undefined) => {
+    const fallback = latest.current.assumed;
+    return id === undefined ? fallback : (heights.current.get(id) ?? fallback);
+  }, []);
 
   // Rows drop into place in the same frame the new order renders.
   const resetAfterRender = useRef(false);
@@ -94,7 +100,7 @@ export const useRowReorder = <Id,>({
 
   const pickUp = useCallback(
     (index: number) => {
-      const id = ids[index];
+      const id = latest.current.ids[index];
       if (id === undefined) return;
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       dragNow.current = { from: index, to: index, id, over: id };
@@ -103,40 +109,42 @@ export const useRowReorder = <Id,>({
       from.set(index);
       setDragging(true);
     },
-    [from, to, height, heightOf, ids],
+    [from, to, height, heightOf],
   );
   const dragTo = useCallback(
     (distance: number) => {
       const current = dragNow.current;
       if (current === null) return;
+      const rows = latest.current.ids;
       const next = reorderTarget({
         from: current.from,
         distance,
-        rowHeight: ids.map(heightOf),
-        count: ids.length,
+        rowHeight: rows.map(heightOf),
+        count: rows.length,
       });
       if (next === current.to) return;
       void Haptics.selectionAsync();
-      dragNow.current = { ...current, to: next, over: ids[next] ?? current.over };
+      dragNow.current = { ...current, to: next, over: rows[next] ?? current.over };
       to.set(next);
     },
-    [to, heightOf, ids],
+    [to, heightOf],
   );
-  const drop = useCallback(
-    (canceled: boolean) => {
-      const current = dragNow.current;
-      dragNow.current = null;
-      resetAfterRender.current = true;
-      setDragging(false);
-      if (current === null || canceled || current.over === current.id) return;
-      const start = ids.indexOf(current.id);
-      const end = ids.indexOf(current.over);
-      if (start !== -1 && end !== -1 && start !== end) move(start, end);
-    },
-    [ids, move],
-  );
+  const drop = useCallback((canceled: boolean) => {
+    const current = dragNow.current;
+    dragNow.current = null;
+    resetAfterRender.current = true;
+    setDragging(false);
+    if (current === null || canceled || current.over === current.id) return;
+    const { ids: rows, move: moveNow } = latest.current;
+    const start = rows.indexOf(current.id);
+    const end = rows.indexOf(current.over);
+    if (start !== -1 && end !== -1 && start !== end) moveNow(start, end);
+  }, []);
 
-  return { dragging, from, to, height, travel, measure, pickUp, dragTo, drop };
+  return useMemo(
+    () => ({ dragging, from, to, height, travel, measure, pickUp, dragTo, drop }),
+    [dragging, from, to, height, travel, measure, pickUp, dragTo, drop],
+  );
 };
 
 /**

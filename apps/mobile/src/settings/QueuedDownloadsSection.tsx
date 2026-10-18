@@ -151,20 +151,22 @@ function WaitingDownloadRow({
 
 /**
  * A group's header: the playlist, album or mix its songs are from (or Songs), how many are
- * left, and the handle that drags the whole group, its waiting songs with it.
+ * left, and the handle that drags the whole group, its waiting songs with it. A group whose
+ * songs have all started has nothing to move: no handle (room for one, so the counts line up)
+ * and no Move up / Move down.
  */
 function DownloadGroupHeader({
   group,
-  grip,
-  index,
-  count,
+  grip = null,
+  index = 0,
+  count = 1,
   onAccessibilityAction,
 }: {
   group: DownloadGroup<NativeYtSong>;
-  grip: Grip;
-  index: number;
-  count: number;
-  onAccessibilityAction: (event: AccessibilityActionEvent) => void;
+  grip?: Grip | null;
+  index?: number;
+  count?: number;
+  onAccessibilityAction?: (event: AccessibilityActionEvent) => void;
 }) {
   return (
     <View>
@@ -191,7 +193,11 @@ function DownloadGroupHeader({
             {group.line}
           </Text>
         </View>
-        <ReorderHandle gesture={grip} />
+        {grip === null ? (
+          <View style={{ width: REORDER_HANDLE_ROOM }} />
+        ) : (
+          <ReorderHandle gesture={grip} />
+        )}
       </View>
       <Hairline />
     </View>
@@ -265,21 +271,24 @@ function DownloadGroupSection({
  * runs). Nothing while none is.
  */
 export function QueuedDownloadsSection() {
-  const list = useDownloadingList();
-  const { downloading, groups } = list;
+  const { downloading, groups } = useDownloadingList();
   // With YT Music off Wave asks YouTube for nothing, covers included.
   const covers = useYtMusicEnabled();
   const summary = useMemo(
     () => queuedDownloadsSummary([...downloading, ...groups.flatMap((group) => group.queued)]),
     [downloading, groups],
   );
-  const keys = useMemo(() => groups.map((group) => group.key), [groups]);
+  // A group whose songs have all started (Core lists it first) has none to drag: only the
+  // groups with waiting songs move, among themselves.
+  const started = useMemo(() => groups.filter((group) => group.queued.length === 0), [groups]);
+  const movable = useMemo(() => groups.filter((group) => group.queued.length > 0), [groups]);
+  const keys = useMemo(() => movable.map((group) => group.key), [movable]);
   const moveGroup = useCallback(
     (from: number, to: number) => {
-      if (to < 0 || to >= list.groups.length) return;
-      moveQueuedDownloads(moveDownloadGroup(list, from, to));
+      if (to < 0 || to >= movable.length) return;
+      moveQueuedDownloads(moveDownloadGroup({ downloading, groups: movable }, from, to));
     },
-    [list],
+    [downloading, movable],
   );
   const groupDrag = useRowReorder({ ids: keys, rowHeight: grid.row * 2, move: moveGroup });
   useHoldPageScroll(groupDrag.dragging);
@@ -297,12 +306,15 @@ export function QueuedDownloadsSection() {
           handleRoom={groups.length > 0}
         />
       ))}
-      {groups.map((group, index) => (
+      {started.map((group) => (
+        <DownloadGroupHeader key={group.key} group={group} />
+      ))}
+      {movable.map((group, index) => (
         <DownloadGroupSection
           key={group.key}
           group={group}
           index={index}
-          count={groups.length}
+          count={movable.length}
           covers={covers}
           groups={groupDrag}
           moveGroup={moveGroup}
