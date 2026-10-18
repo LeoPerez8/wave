@@ -19,7 +19,7 @@ import { LyricCard } from "./LyricCard";
 import { closeLyricCard, useLyricCard, type LyricCardContent } from "./lyricCard";
 import { ShareDestinations } from "./ShareDestinations";
 import type { ImageSource } from "./shareImage";
-import { useImageShare } from "./useImageShare";
+import { useDrawingCorners, useImageShare } from "./useImageShare";
 
 const LOG_TAG = "LyricsShare";
 
@@ -110,20 +110,7 @@ function LyricCardPreview({ content }: { content: LyricCardContent }) {
   const [ready, setReady] = useState(content.artworkUri === undefined);
   const card: ImageSource = useRef(null);
   // Instagram's sticker is drawn from the card with the preview's corners, then squared again.
-  const [rounded, setRounded] = useState(false);
-  const roundedDrawn = useRef<(() => void) | null>(null);
-  useEffect(() => {
-    if (!rounded) return;
-    const drawn = roundedDrawn.current;
-    roundedDrawn.current = null;
-    // A frame, so the corners reach the native view the image is drawn from.
-    requestAnimationFrame(() => drawn?.());
-  }, [rounded]);
-  const roundCorners = (): Promise<void> =>
-    new Promise((resolve) => {
-      roundedDrawn.current = resolve;
-      setRounded(true);
-    });
+  const corners = useDrawingCorners();
 
   useEffect(
     () =>
@@ -141,8 +128,9 @@ function LyricCardPreview({ content }: { content: LyricCardContent }) {
     sheetTitle: "Share Lyrics",
     logTag: LOG_TAG,
     storyBackground: lyricStoryBackground(colour),
-    prepareSticker: roundCorners,
-    afterDraw: () => setRounded(false),
+    prepare: (destination) =>
+      destination === "instagramStories" ? corners.startDrawing() : Promise.resolve(),
+    afterDraw: corners.endDrawing,
   });
 
   return (
@@ -173,7 +161,7 @@ function LyricCardPreview({ content }: { content: LyricCardContent }) {
             colour={colour}
             area={area}
             cardRef={card}
-            rounded={rounded}
+            rounded={corners.drawing}
             onReady={() => setReady(true)}
             onPress={() => setColour((current) => nextLyricCardColour(content.colours, current))}
           />
