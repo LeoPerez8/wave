@@ -8,6 +8,8 @@ import {
   planLinkImport,
   pruneYtLibraryBatch,
   queueYtLibraryReads,
+  ytLibraryDownloadsQueued,
+  ytLibraryDownloadsToQueue,
   ytLibraryFavorites,
   ytLibraryPauseLogLine,
   ytLibraryReadDone,
@@ -455,12 +457,40 @@ describe("Import & Download's choice to download", () => {
   });
 
   test("survives Wave closing: the playlists read after the restart still download", () => {
-    const resumed = keptAndRead(readDone(downloading, 41));
+    const roadRead = readDone(downloading, 41);
+    const resumed = keptAndRead(ytLibraryDownloadsQueued(roadRead, readOf(roadRead, 41)));
     assert.deepEqual(choices(resumed), [
       [42, true],
       [43, false],
     ]);
     assert.equal(nextYtLibraryRead(resumed)?.download, true);
+  });
+
+  test("read and filled, a playlist keeps its choice until its downloads are queued, through Wave closing", () => {
+    const roadRead = readDone(downloading, 41);
+    const resumed = keptAndRead(roadRead);
+    assert.deepEqual(
+      ytLibraryDownloadsToQueue(resumed).map((read) => read.playlistId),
+      [41],
+    );
+    // It isn't read again, and its page says nothing.
+    assert.equal(nextYtLibraryRead(resumed)?.playlistId, 42);
+    assert.equal(ytLibraryReadView(resumed, 41), null);
+    const queued = ytLibraryDownloadsQueued(resumed, readOf(resumed, 41));
+    assert.deepEqual(ytLibraryDownloadsToQueue(queued), []);
+    assert.deepEqual(choices(queued), [
+      [42, true],
+      [43, false],
+    ]);
+  });
+
+  test("an Import playlist, with nothing to download, leaves the batch once read", () => {
+    const chillRead = readDone(downloading, 43);
+    assert.deepEqual(choices(chillRead), [
+      [41, true],
+      [42, true],
+    ]);
+    assert.deepEqual(ytLibraryDownloadsToQueue(chillRead), []);
   });
 
   test("a playlist kept by a Wave from before Import & Download downloads nothing", () => {

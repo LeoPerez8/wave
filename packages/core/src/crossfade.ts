@@ -31,6 +31,8 @@ export const crossfadeDuration = (seconds: number): number => snapCrossfade(seco
 /**
  * How long before the overlap the playback service opens its second copy of
  * the outgoing song, to get it in step (Kotlin `CrossfadeTiming.PREROLL_MS`).
+ * The playback service keeps a copy of this timing; its `CrossfadeTimingTest`
+ * runs this file's test cases, so change both together.
  */
 export const CROSSFADE_PRE_ROLL_MS = 3000;
 

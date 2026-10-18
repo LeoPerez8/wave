@@ -75,6 +75,25 @@ export const playerQueueList = (state: QueueState): QueueList | null => {
 const held = (entry: QueueEntry): boolean => !isUnsearchedTrackId(entry.trackId);
 
 /**
+ * The player entry whose next song is still being searched: the playing
+ * entry's key when the entry after it (the first, after the last with repeat
+ * all) is an unsearched song [asking] is searching now; else null. The
+ * player doesn't hold that song, so a crossfade would fade into the one
+ * after it: the playback service holds the overlap at full volume while it
+ * waits (its late-song path), and it begins once the song found joins the
+ * player, or the song ends gapless. One not being searched (its search
+ * failed a moment ago) is passed over, as the player plays along.
+ */
+export const searchingAfter = (state: QueueState, asking: ReadonlySet<string>): string | null => {
+  const current = state.entries[state.index];
+  if (current === undefined || !held(current) || state.repeat === "one") return null;
+  const after = state.index + 1 < state.entries.length ? state.index + 1 : null;
+  const nextIndex = after ?? (state.repeat === "all" && state.entries.length > 1 ? 0 : null);
+  const next = nextIndex === null ? undefined : state.entries[nextIndex];
+  return next !== undefined && !held(next) && asking.has(next.trackId) ? current.key : null;
+};
+
+/**
  * [state] with its playing entry one the player holds, for a queue that
  * can't wait for a search (picked back up after a restart, paused, or run
  * out on an unsearched song): the first held entry after the playing one,

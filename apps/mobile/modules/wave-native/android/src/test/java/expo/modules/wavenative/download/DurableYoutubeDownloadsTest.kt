@@ -209,6 +209,30 @@ class DurableYoutubeDownloadsTest {
     }
   }
 
+  /** The stream returning just as the journal cancels it for silence: the next attempt still has its bytes. */
+  @Test fun aYoutubeTransferEndingAsItsSilenceCancelLandsKeepsItsPartFile() {
+    withFolder { folder ->
+      var now = 1_000L
+      val owner = DurableDownloads(File(folder, "jobs"), clock = { now })
+      var part: File? = null
+      val late = transfer { id, _, source ->
+        part = source; source.parentFile.mkdirs(); source.writeText("first bytes")
+        now += DurableDownloads.YOUTUBE_STALL_MS + 1_000
+        owner.expire(NoCancel)
+        assertFalse(owner.transferWanted(id))
+        // The request returns normally all the same, as a read already under way can.
+        audio(source)
+      }
+      owner.enqueue(song, null, emptyMap(), "youtube")
+      prepareYoutube(owner, File(folder, "Recording.m4a"))
+      owner.advance(late, Untouched)
+      val job = owner.snapshot().single()
+      assertEquals("prepared", job["phase"])
+      assertEquals(part!!.path, job["sourcePath"])
+      assertEquals("first bytes", part!!.readText())
+    }
+  }
+
   /** Each restart downloads the song again from its first byte: on mobile data, never back to back. */
   @Test fun aBrokenTransferStartsAgainOnlyAfterAPauseThatGrowsWithEachAttempt() {
     withFolder { folder ->

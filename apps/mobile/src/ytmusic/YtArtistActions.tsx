@@ -32,8 +32,8 @@ type Song = DiscoverSong<NativeYtSong, SongRow>;
  * Opens a YouTube Music artist's long-press menu next to their row: Play,
  * Play Next and Add to Queue cards, then Shuffle, for the songs their page
  * plays (`ytArtistPageSongs`: what was saved for it, else read now). The
- * songs are read first, so the card opens ready; offline or without an
- * answer, a message card says so instead.
+ * songs are read first, so the card opens ready; offline, without an
+ * answer or with no songs, a message card says so instead.
  */
 export const openYtArtistActions = (artist: YtArtistTarget): void => {
   const anchor = pressedRect();
@@ -53,6 +53,12 @@ export const openYtArtistActions = (artist: YtArtistTarget): void => {
       return;
     }
     const songs = result.success;
+    // With no songs to play (Core's empty layout), a message, as their page shows no Play.
+    const layout = menuLayout("ytArtist", [], { empty: songs.length === 0 });
+    if (layout.cards.length === 0 && layout.list.length === 0) {
+      await showMessage(artist.name, "YouTube Music has no songs for this artist.");
+      return;
+    }
     openOverlay({
       label: artist.name,
       anchor,
@@ -79,7 +85,7 @@ function YtArtistActionsMenu({
   };
   const play = (shuffle: boolean) =>
     closing(() => void playPage(songs, undefined, context, { shuffle }));
-  const layout = menuLayout("ytArtist", []);
+  const layout = menuLayout("ytArtist", [], { empty: songs.length === 0 });
   const cards = layout.cards.map((action) => ({
     action,
     onPress:

@@ -39,6 +39,8 @@ import {
   writeYtLibraryOrigins,
   ytLibraryFavorites,
   ytLibraryPauseLogLine,
+  ytLibraryDownloadsQueued,
+  ytLibraryDownloadsToQueue,
   ytLibraryReadDone,
   ytLibraryReadFailed,
   ytLibraryReadLogLine,
@@ -48,6 +50,7 @@ import {
   type YtLibraryOrigins,
   type YtLibraryPicker,
   type YtLibraryRead,
+  playlistDownloadOrigin,
 } from "@wave/core";
 import * as Result from "effect/Result";
 import { useSyncExternalStore } from "react";
@@ -63,7 +66,7 @@ import { runYtPlaylistDownloadAction } from "@/ytmusic/YtDownloads";
 import { setFavorites } from "./favorites";
 import { LibraryStore } from "./LibraryStore";
 import { listLibrary } from "./playlistImports";
-import { cancelPlaylistImport, startLinkImport } from "./playlistImports";
+import { cancelPlaylistImport, settlePlaylistImport, startLinkImport } from "./playlistImports";
 import { createPlaylist, currentPlaylists, replacePlaylistSongs } from "./playlists";
 import { appRuntime } from "./runtime";
 
@@ -127,11 +130,25 @@ const downloadPlaylist = async (playlistId: number): Promise<void> => {
   ]);
   if (detail === null || detail.items.length === 0) return;
   const { playlist } = detail;
-  runYtPlaylistDownloadAction("downloadPlaylist", detail.items, (song) => find(song) !== null, {
-    kind: "playlist",
-    id: String(playlist.id),
-    name: playlist.name,
+  runYtPlaylistDownloadAction(
+    "downloadPlaylist",
+    detail.items,
+    (song) => find(song) !== null,
+    playlistDownloadOrigin(playlist),
+  );
+};
+
+/**
+ * Queues filled [read]'s downloads (`downloadPlaylist`), then lets it leave
+ * the batch: until then it's kept, so Wave stopping in between still queues
+ * them as the batch resumes (Core's `ytLibraryDownloadsToQueue`).
+ */
+const queueDownloads = async (read: YtLibraryRead): Promise<void> => {
+  await downloadPlaylist(read.playlistId).catch((error: unknown) => {
+    const why = error instanceof Error ? error.message : String(error);
+    appLog("warn", LOG_TAG, `Import of "${read.name}" couldn't queue its downloads: ${why}`);
   });
+  batch.set(ytLibraryDownloadsQueued(batch.get(), read));
 };
 
 /**
@@ -175,15 +192,11 @@ const fill = async (read: YtLibraryRead): Promise<string | null> => {
       // Checked again with no wait before the link import starts: a refresh from here on
       // empties the playlist and ends that import.
       if (!isYtLibraryReadQueued(batch.get(), read)) return null;
-      // Read: the link import, kept on its own, gives it its songs from here.
+      // Read: the link import, kept on its own, gives it its songs from here. Import &
+      // Download's read stays, filled, until its downloads are queued.
       batch.set(ytLibraryReadDone(batch.get(), read));
       await startLinkImport(plan, { playlistId: read.playlistId, name: read.name });
-      if (read.download) {
-        await downloadPlaylist(read.playlistId).catch((error: unknown) => {
-          const why = error instanceof Error ? error.message : String(error);
-          appLog("warn", LOG_TAG, `Import of "${read.name}" couldn't queue its downloads: ${why}`);
-        });
-      }
+      if (read.download) await queueDownloads(read);
       return null;
     }
     reason = answer.failure.reason;
@@ -219,13 +232,21 @@ const prune = async (): Promise<void> => {
  * or until a read finds Wave offline or YT Music off: the batch then waits
  * for its next turn (Wave starting again, coming back to the foreground, or
  * another Import). The playlists deleted are dropped once, as it starts; one
- * deleted while it runs is read, and its link import ends at once.
+ * deleted while it runs is read, and its link import ends at once. First, the
+ * playlists Import & Download filled before Wave stopped queue their downloads.
  */
 const readBatch = async (): Promise<void> => {
-  if (reading || nextYtLibraryRead(batch.get()) === undefined) return;
+  const left = batch.get();
+  if (reading) return;
+  if (nextYtLibraryRead(left) === undefined && ytLibraryDownloadsToQueue(left).length === 0) return;
   reading = true;
   try {
     await prune();
+    // Filled before Wave stopped, their downloads not queued yet: once their import is done.
+    for (const read of ytLibraryDownloadsToQueue(batch.get())) {
+      await settlePlaylistImport(read.playlistId);
+      await queueDownloads(read);
+    }
     for (;;) {
       const next = nextYtLibraryRead(batch.get());
       if (next === undefined) return;

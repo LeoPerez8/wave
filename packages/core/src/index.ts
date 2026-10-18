@@ -44,6 +44,7 @@ export {
   nextRepeatMode,
   parseQueueState,
   readShuffleKind,
+  playReplacesQueue,
   reduceQueue,
   shuffledTrackIds,
   shufflesQueue,
@@ -675,6 +676,7 @@ export {
   ytDownloadLookup,
   ytDownloadRoot,
   ytDownloadTags,
+  listedSongTags,
   ytDownloadTarget,
 } from "./ytDownload.ts";
 export type {
@@ -714,6 +716,8 @@ export {
   moveDownloadGroup,
   moveDownloadInGroup,
   moveQueuedJobs,
+  playlistDownloadOrigin,
+  albumDownloadOrigin,
 } from "./downloadGroups.ts";
 export type { DownloadGroup, DownloadingList, DownloadOrigin } from "./downloadGroups.ts";
 export type {
@@ -907,6 +911,7 @@ export {
   keptQueue,
   passedOverNotice,
   playerQueueList,
+  searchingAfter,
   playingAnswerStep,
   playingSearches,
   startPlayingWalk,
@@ -1233,6 +1238,8 @@ export {
   ytLibraryFavorites,
   ytLibraryPauseLogLine,
   ytLibraryReadDone,
+  ytLibraryDownloadsToQueue,
+  ytLibraryDownloadsQueued,
   ytLibraryReadFailed,
   ytLibraryReadLogLine,
   ytLibraryReadView,
@@ -1245,7 +1252,7 @@ export type {
   YtLibraryReadView,
   YtLibraryReadToQueue,
 } from "./ytLibraryBatch.ts";
-export { discoverMixesSection } from "./discoverMixesSection.ts";
+export { discoverMixesSection, savedDiscoverMix } from "./discoverMixesSection.ts";
 export type { DiscoverMixesSection } from "./discoverMixesSection.ts";
 export { streamedCoverUrl, streamedCoverUrls } from "./streamedCover.ts";
 export { advisoryTag, explicitFromAdvisory, isExplicit, showsExplicitBadge } from "./explicit.ts";

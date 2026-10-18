@@ -943,6 +943,35 @@ describe("A mix", () => {
     });
   });
 
+  test("from a genre another mix took first, is numbered, and a lowercase genre is capitalised", () => {
+    const seedOf = (name: string, genre: string) => ({
+      kind: "artist" as const,
+      id: `artist:${name.toLowerCase()}`,
+      name,
+      from: "library" as const,
+      genre,
+    });
+    const seeds = [
+      seedOf("Foo Fighters", "rock"),
+      seedOf("Massive Attack", "Trip Hop"),
+      seedOf("Muse", "Rock"),
+    ];
+    const built = discoverMixesBuilt(
+      seeds.map((seed) => discoverMix(seed, songs(12))!),
+      1,
+      seeds,
+    );
+    assert.deepEqual(
+      built?.mixes.map((mix) => captionOf(mix).title),
+      ["Rock mix", "Trip Hop mix", "Rock mix 2"],
+    );
+    const again = parseDiscoverMixes(storedDiscoverMixes(built!));
+    assert.deepEqual(
+      again?.mixes.map((mix) => captionOf(mix).title),
+      ["Rock mix", "Trip Hop mix", "Rock mix 2"],
+    );
+  });
+
   test("keeps its genre and its seed's artists", () => {
     assert.deepEqual(
       discoverMix(

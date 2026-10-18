@@ -9,6 +9,7 @@ import android.os.Environment
 import android.provider.MediaStore
 import androidx.core.content.FileProvider
 import expo.modules.kotlin.exception.Exceptions
+import expo.modules.kotlin.functions.Queues
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 import java.io.File
@@ -16,7 +17,9 @@ import java.io.File
 /**
  * Sharing images Wave draws (the lyrics card): JS sends a PNG as base64
  * ([SharedImages]), then saves it to the gallery, opens the share sheet with it,
- * or hands it straight to Instagram Stories or WhatsApp.
+ * or hands it straight to Instagram Stories or WhatsApp. The functions that open
+ * another app run on the main thread and start it there, so an app that can't
+ * be opened (uninstalled since the check) rejects the call instead of crashing.
  */
 class ShareModule : Module() {
   private val context: Context get() = appContext.reactContext ?: throw Exceptions.ReactContextLost()
@@ -35,7 +38,7 @@ class ShareModule : Module() {
     AsyncFunction("shareImage") { path: String, title: String ->
       val send = imageIntent(File(path))
       startActivity(Intent.createChooser(send, title))
-    }
+    }.runOnQueue(Queues.MAIN)
 
     /**
      * Which apps an image can go straight to: `instagramStories` (Instagram
@@ -66,12 +69,12 @@ class ShareModule : Module() {
         putExtra("bottom_background_color", bottom)
       }
       startActivity(story)
-    }
+    }.runOnQueue(Queues.MAIN)
 
     /** Sends the image at [path] straight to WhatsApp's share flow; only WhatsApp can read it. */
     AsyncFunction("shareToWhatsApp") { path: String ->
       startActivity(imageIntent(File(path)).setPackage(WHATSAPP))
-    }
+    }.runOnQueue(Queues.MAIN)
   }
 
   /** Instagram's Stories intent, addressed to Instagram only, with no image yet. */
@@ -100,10 +103,14 @@ class ShareModule : Module() {
     }
   }
 
+  /**
+   * Starts [intent] now, on the main thread the calling function runs on: an
+   * `ActivityNotFoundException` rejects the JS promise (its toast says so).
+   */
   private fun startActivity(intent: Intent) {
     val activity = appContext.currentActivity
     if (activity != null) {
-      activity.runOnUiThread { activity.startActivity(intent) }
+      activity.startActivity(intent)
     } else {
       context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     }

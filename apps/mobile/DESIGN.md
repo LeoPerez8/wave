@@ -152,7 +152,7 @@ The world rejects the category default it was chosen against: bold large titles,
 - Artwork as photographs: square, unrounded, unframed (artists are circles; the mini player's thumbnail follows its pill).
 - Light large titles; one size per list, rank by weight and tint.
 - Small tracked-caps catalog lines for section heads and cover captions.
-- Teal for active, ember for favorite and now playing; nothing else is coloured, save the red on a Delete or Remove button.
+- Teal for active, ember for favorite and now playing; nothing else is coloured, save the red on a Delete or Remove button and the tiles that lead Settings' rows (each page's own `tile-*` colour, a signpost rather than a state).
 - Flat: no shadows, no gradients (the Now Playing ground is the one exception). Glass only on what floats: the chrome (tab bar, Search pill, mini player), dialog and menu cards, and the toast.
 - Every press sinks and dims for a duration the owner sets in Settings.
 
@@ -192,7 +192,7 @@ These are the shipped colours. In Settings › Theme the owner picks a backgroun
 
 **The Ground Rule.** The ground is fog in light and true black in dark. Never ship a screen on `#ffffff`, and never put a card, group or hairline on black without a ramp step between them.
 
-**The Two Voices Rule.** Teal means active, ember means favorite or playing. If a colour on screen means neither, it should be a neutral. The one exception is the destructive red on a Delete or Remove button.
+**The Two Voices Rule.** Teal means active, ember means favorite or playing. If a colour on screen means neither, it should be a neutral. The exceptions are the destructive red on a Delete or Remove button and Settings' page tiles: eight fixed `tile-*` colours (Core's `SETTINGS_TILE_COLOURS`, the grey one a ramp step) that tell the pages apart, as iOS Settings' do, under a white glyph (`on-tile`). They appear nowhere else and never mean a state.
 
 **The Pewter Is Not Text Rule.** `tertiary` sits near 3:1 on the ground: enough for an icon, not for words. Text uses `foreground` or `secondary`.
 
@@ -258,7 +258,7 @@ The world is flat. There are no shadows, no elevation and no gradients (save the
 
 ## Shapes
 
-Square everywhere. Artwork, empty cover slots, track thumbnails and placeholder fields have no corner radius and no frame, with two exceptions that take the shape of what holds them: artists' circles (below) and the mini player's thumbnail, whose corners are concentric with its glass pill. Structure is drawn with one-pixel hairlines in the separator tone, running the full content width between entries; there are no boxed cards and no chips. What floats is the exception: the chrome's glass surfaces are pills (fully rounded ends) and dialog cards have 24dp corners, set apart from the square content beneath. Artists are circles: their image (their downloaded photo when there is one, else Core's `artistArtwork`: the cover of their own album with the most songs, else the album they appear on most), or their initial in graphite on a `fill` circle when they have no artwork, so artists read apart from albums. Rows lead with a 40dp circle, Home's artist shelf and the artist page head with a large one. The YouTube account's picture in Settings is a 40dp circle too, a person like an artist. The recurring silhouettes are the thin vertical column of spine letters on the right and the pills at the bottom.
+Square everywhere. Artwork, empty cover slots, track thumbnails and placeholder fields have no corner radius and no frame, with two exceptions that take the shape of what holds them: artists' circles (below) and the mini player's thumbnail, whose corners are concentric with its glass pill. Two small marks are rounded on purpose, after Apple Music, and aren't chips: the **E badge** after an explicit song's title (`src/catalog/ExplicitBadge.tsx`: a 14dp square in graphite with 3dp corners, the letter cut out of it, growing with the system font size like the title beside it) and Settings' page tiles (Entry Row, below). Structure is drawn with one-pixel hairlines in the separator tone, running the full content width between entries; there are no boxed cards and no chips. What floats is the exception: the chrome's glass surfaces are pills (fully rounded ends) and dialog cards have 24dp corners, set apart from the square content beneath. Artists are circles: their image (their downloaded photo when there is one, else Core's `artistArtwork`: the cover of their own album with the most songs, else the album they appear on most), or their initial in graphite on a `fill` circle when they have no artwork, so artists read apart from albums. Rows lead with a 40dp circle, Home's artist shelf and the artist page head with a large one. The YouTube account's picture in Settings is a 40dp circle too, a person like an artist. The recurring silhouettes are the thin vertical column of spine letters on the right and the pills at the bottom.
 
 ### Named Rules
 

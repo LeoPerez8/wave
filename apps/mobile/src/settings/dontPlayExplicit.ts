@@ -15,9 +15,15 @@ const dontPlayExplicitSetting = persistedSetting<boolean>({
 
 let listener: ((on: boolean) => void) | null = null;
 
-/** Tells [next] each value the switch takes (the queue drops its explicit songs as it turns on). */
-export const onDontPlayExplicit = (next: (on: boolean) => void): void => {
+/**
+ * Tells [next] each value the switch takes (the queue drops its explicit
+ * songs as it turns on), until the returned stop is called.
+ */
+export const onDontPlayExplicit = (next: (on: boolean) => void): (() => void) => {
   listener = next;
+  return () => {
+    if (listener === next) listener = null;
+  };
 };
 
 export const dontPlayExplicit = dontPlayExplicitSetting.get;

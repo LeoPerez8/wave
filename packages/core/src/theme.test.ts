@@ -146,6 +146,15 @@ describe("SETTINGS_TILE_COLOURS", () => {
     }
   });
 
+  test("takes the grey tile from the tone ramp in both schemes (no ad-hoc greys)", () => {
+    for (const scheme of schemes) {
+      assert.ok(
+        (TONES as readonly string[]).includes(SETTINGS_TILE_COLOURS[scheme].grey),
+        `${scheme} grey ${SETTINGS_TILE_COLOURS[scheme].grey}`,
+      );
+    }
+  });
+
   test("sets every tile off dark mode's black ground", () => {
     for (const [name, colour] of Object.entries(SETTINGS_TILE_COLOURS.dark)) {
       const ratio = contrastRatio(colour, DEFAULT_THEME.dark.background);

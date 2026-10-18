@@ -11,8 +11,12 @@ import type { LinkImportPlan } from "./playlistImport.ts";
 import { readStoredRecord } from "./storedJson.ts";
 import type { YtSong } from "./ytMusic.ts";
 
-/** Waiting its turn to be read, or read and failed (its playlist stays empty). */
-export type YtLibraryReadState = "waiting" | "failed";
+/**
+ * Waiting its turn to be read, read and failed (its playlist stays empty),
+ * or read and filled with its downloads still to queue (Import & Download):
+ * kept until they're queued, so Wave stopping in between still queues them.
+ */
+export type YtLibraryReadState = "waiting" | "failed" | "filled";
 
 /** A playlist Import made, to be read from YouTube Music. */
 export interface YtLibraryRead {
@@ -101,13 +105,39 @@ export const isYtLibraryReadQueued = (batch: YtLibraryBatch, read: YtLibraryRead
 
 /**
  * [batch] once [read]'s playlist was read (its songs go to the link import
- * from then on): it's no longer in the batch. A newer read of the same
- * playlist stays.
+ * from then on): it's no longer waiting. One that downloads stays, filled,
+ * until its downloads are queued (`ytLibraryDownloadsQueued`); any other
+ * leaves the batch. A newer read of the same playlist stays.
  */
 export const ytLibraryReadDone = (batch: YtLibraryBatch, read: YtLibraryRead): YtLibraryBatch =>
+  read.download
+    ? {
+        ...batch,
+        reads: batch.reads.map((queued) =>
+          queued.token === read.token ? { ...queued, state: "filled" as const } : queued,
+        ),
+      }
+    : withoutRead(batch, read);
+
+/** [batch] without [read], by its token. */
+const withoutRead = (batch: YtLibraryBatch, read: YtLibraryRead): YtLibraryBatch =>
   isYtLibraryReadQueued(batch, read)
     ? { ...batch, reads: batch.reads.filter((queued) => queued.token !== read.token) }
     : batch;
+
+/**
+ * The playlists read and filled whose downloads still need queuing: Wave
+ * stopped between filling them and queuing them, so it queues them as it
+ * resumes the batch.
+ */
+export const ytLibraryDownloadsToQueue = (batch: YtLibraryBatch): YtLibraryRead[] =>
+  batch.reads.filter((read) => read.state === "filled");
+
+/** [batch] once filled [read]'s downloads were queued: it leaves the batch. */
+export const ytLibraryDownloadsQueued = (
+  batch: YtLibraryBatch,
+  read: YtLibraryRead,
+): YtLibraryBatch => withoutRead(batch, read);
 
 /** [batch] without the playlists deleted meanwhile: those not among [playlistIds], here or on another phone. */
 export const pruneYtLibraryBatch = (
@@ -254,7 +284,8 @@ const readRead = (value: unknown, token: number): YtLibraryRead | null => {
   if (typeof source !== "string" || typeof playlistId !== "number" || typeof name !== "string") {
     return null;
   }
-  if (typeof capped !== "boolean" || (state !== "waiting" && state !== "failed")) return null;
+  if (typeof capped !== "boolean") return null;
+  if (state !== "waiting" && state !== "failed" && state !== "filled") return null;
   return {
     token,
     source,

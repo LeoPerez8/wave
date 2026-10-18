@@ -143,7 +143,7 @@ export const SETTINGS_TILE_COLOURS: {
     indigo: "#5b5fd6",
     purple: "#9853cf",
     pink: "#d6427d",
-    grey: "#6b7679",
+    grey: TONES[5],
   },
 };
 

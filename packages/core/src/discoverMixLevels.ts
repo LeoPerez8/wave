@@ -123,9 +123,11 @@ const interleave = <A, B>(fresh: readonly A[], familiar: readonly B[]): (A | B)[
 /**
  * [mix] at [level]: as many songs as it has new ones (its level-5 length),
  * level fifths of them new (rounded) and the rest from its Library pool, in
- * the pool's order, interleaved from a new song. A pool too short for the
- * familiar share leaves the rest to new songs, so the mix keeps its length.
- * The songs [keep] refuses are out of both pools first. Every reading of a
+ * the pool's order, interleaved from a new song. The songs [keep] refuses
+ * are out of both pools first; the length stays the stored new songs'. A
+ * pool too short for the familiar share leaves the rest to new songs, and
+ * too few new songs (explicit ones left out) leave theirs to the pool, so
+ * the mix keeps its length as far as both pools go. Every reading of a
  * saved mix (Home, its page, its actions) goes through this.
  */
 export const blendDiscoverMix = (
@@ -136,8 +138,9 @@ export const blendDiscoverMix = (
   const pool = (mix.library ?? [])
     .map((track): DiscoverMixSong => ({ source: "library", track }))
     .filter(keep);
-  const length = fresh.length;
-  const familiar = pool.slice(0, length - Math.round((length * level) / LEVELS));
+  const length = mix.songs.length;
+  const freshShare = Math.min(fresh.length, Math.round((length * level) / LEVELS));
+  const familiar = pool.slice(0, length - freshShare);
   return {
     id: mix.id,
     seed: mix.seed,
@@ -198,6 +201,7 @@ export const discoverMixLibraryPool = <S extends DiscoverRadioSong>(
   }
   const rest = library.songs
     .filter(mixSongFilter(seed, library.artists))
+    // oxlint-disable-next-line unicorn/no-array-sort -- sorts the fresh array filter made; Hermes lacks toSorted
     .sort((a, b) => playsOf(b) - playsOf(a) || b.addedAt - a.addedAt);
   for (const song of rest) add(song);
   return pool;

@@ -22,7 +22,8 @@
  *
  * The `tile-*` colours are the rounded squares in front of Settings' rows
  * (Core's SETTINGS_TILE_COLOURS, each page naming its own in SETTINGS_PAGES).
- * The chosen theme leaves them as they are; each keeps a white glyph legible.
+ * The chosen theme leaves them as they are; each keeps its glyph (`on-tile`,
+ * white, Core's SETTINGS_TILE_GLYPH) legible.
  */
 @layer theme {
   :root {
@@ -48,6 +49,7 @@
       --color-tile-purple: #8a45c2;
       --color-tile-pink: #c93370;
       --color-tile-grey: #606b6e;
+      --color-on-tile: #ffffff;
     }
 
     @variant dark {
@@ -71,7 +73,8 @@
       --color-tile-indigo: #5b5fd6;
       --color-tile-purple: #9853cf;
       --color-tile-pink: #d6427d;
-      --color-tile-grey: #6b7679;
+      --color-tile-grey: #778385;
+      --color-on-tile: #ffffff;
     }
   }
 }

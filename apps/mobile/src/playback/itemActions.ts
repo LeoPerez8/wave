@@ -10,6 +10,7 @@ import {
   type ActionSurface,
   type ItemAction,
   type ItemActionEntry,
+  albumDownloadOrigin,
 } from "@wave/core";
 import * as Haptics from "expo-haptics";
 import { router, usePathname } from "expo-router";
@@ -370,11 +371,7 @@ export function useItemActions(
           target.items.forEach((album, index) => {
             const trackIds = perAlbum[index] ?? [];
             if (trackIds.length === 0) return;
-            runMissingSongsDownloadAction(action, trackIds, {
-              kind: "album",
-              id: String(album.id),
-              name: album.title,
-            });
+            runMissingSongsDownloadAction(action, trackIds, albumDownloadOrigin(album));
           });
         });
       case "removeFromLibrary": {

@@ -6,6 +6,8 @@ import expo.modules.wavenative.log.LogUnits
 enum class DownloadServiceStop(val line: String) {
   /** Nothing is left to download: every song finished, failed or was cancelled. */
   QUEUE_EMPTY("its queue is empty"),
+  /** Nothing is left because the last song on its way was cancelled. */
+  CANCELLED("the last song was cancelled"),
   /** Android ended it on the time limit it gives data-sync services. */
   TIME_LIMIT("Android's time limit"),
   /** Android destroyed it with work left. */

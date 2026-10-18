@@ -12,7 +12,6 @@
  * `discoverMixesSection`).
  */
 import {
-  blendDiscoverMix,
   discoverMixKeep,
   discoverMix,
   discoverMixLibraryPool,
@@ -30,6 +29,7 @@ import {
   parseDiscoverMixes,
   pickYtArtist,
   playedFinder,
+  savedDiscoverMix,
   statsWindow,
   storedDiscoverMixes,
   ytArtistLookup,
@@ -263,8 +263,15 @@ const refresh = (played: boolean): void => {
         saved.set(built);
         return;
       }
+      // Nothing to build from (an empty Library, no plays) costs no request, so it doesn't
+      // wait: the next visit after an import builds at once.
+      if (built === "nothing-to-build-from") {
+        failedAt = null;
+        nothingToBuildFrom.set(true);
+        return;
+      }
       failedAt = Date.now();
-      if (Result.isSuccess(result)) nothingToBuildFrom.set(built !== null);
+      if (Result.isSuccess(result)) nothingToBuildFrom.set(false);
     })
     .finally(() => {
       building = false;
@@ -327,7 +334,8 @@ export const useDiscoverMixes = (played: boolean): DiscoverMixesSection => {
 /**
  * The mix [id] as last built, blended by the owner's level with the Library
  * songs [tracks] has (`useLibraryTracks`), or null when there's none (YT
- * Music off, or rebuilt without it).
+ * Music off, rebuilt without it, or too short with Don't play explicit on:
+ * Core's `savedDiscoverMix`).
  */
 export const useDiscoverMix = (
   id: string,
@@ -336,8 +344,8 @@ export const useDiscoverMix = (
   const enabled = useYtMusicEnabled();
   const mixes = saved.useValue();
   const blend = useBlend(tracks);
-  return useMemo(() => {
-    const mix = enabled ? mixes?.mixes.find((candidate) => candidate.id === id) : undefined;
-    return mix === undefined ? null : blendDiscoverMix(mix, blend);
-  }, [enabled, mixes, id, blend]);
+  return useMemo(
+    () => (enabled ? savedDiscoverMix(mixes, id, blend) : null),
+    [enabled, mixes, id, blend],
+  );
 };

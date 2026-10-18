@@ -14,7 +14,7 @@ const TILES = 3;
 function Line({ lineHeight, width }: { lineHeight: number; width: `${number}%` }) {
   return (
     <View className="justify-center" style={{ height: lineHeight }}>
-      <View className="bg-fill" style={{ width, height: lineHeight / 2, borderRadius: CELL / 4 }} />
+      <View className="bg-fill" style={{ width, height: lineHeight / 2 }} />
     </View>
   );
 }

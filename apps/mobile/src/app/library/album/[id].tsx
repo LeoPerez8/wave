@@ -7,6 +7,7 @@ import {
   type YtAlbumEntry,
   type YtLibraryAlbumNote,
   type YtSong,
+  albumDownloadOrigin,
 } from "@wave/core";
 import { useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useMemo } from "react";
@@ -130,7 +131,7 @@ function AlbumHead({
   );
   const play = usePlayPage(songs, context);
   const origin = useMemo(
-    () => ({ kind: "album", id: String(album.id), name: album.title }) as const,
+    () => albumDownloadOrigin({ id: album.id, title: album.title }),
     [album.id, album.title],
   );
   const download = useYtAlbumDownloadButton(ytSongs, origin);

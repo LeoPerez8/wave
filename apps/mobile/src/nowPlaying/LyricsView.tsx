@@ -336,7 +336,9 @@ function PickingBar({
     <View className="flex-row items-center justify-between" style={{ height: grid.row + CELL * 2 }}>
       <TextButton label="Cancel" onPress={onCancel} />
       <Text className="font-sans text-subheadline text-secondary" accessibilityLiveRegion="polite">
-        {count === 0 ? "Select up to 5 lines" : `${count} of ${MAX_SHARED_LYRIC_LINES}`}
+        {count === 0
+          ? `Select up to ${MAX_SHARED_LYRIC_LINES} lines`
+          : `${count} of ${MAX_SHARED_LYRIC_LINES}`}
       </Text>
       <TextButton label="Next" onPress={onNext} disabled={count === 0} />
     </View>

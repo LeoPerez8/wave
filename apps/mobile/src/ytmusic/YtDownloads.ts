@@ -15,6 +15,7 @@ import {
   isUnsearchedSongJob,
   isWithin,
   libraryFinder,
+  listedSongTags,
   missingSongJob,
   missingSongJobId,
   missingSongLookup,
@@ -532,14 +533,15 @@ const prepareMissingSong = (trackId: number) =>
 
 /**
  * The tags of a song downloaded without a YouTube Music video: what it keeps (an unsearched
- * song's, what Spotify listed), filled in from the lookup Fix Song uses (Deezer, LRCLIB).
+ * song's, what Spotify listed), filled in from the lookup Fix Song uses (Deezer, LRCLIB), its
+ * explicit flag Deezer's (Core's `listedSongTags`: the listing's own is a placeholder).
  * Nothing is asked of YouTube Music: it has no video to read an album page by.
  */
 const listingTags = (song: YtSong) =>
   Effect.gen(function* () {
     const lookup = ytDownloadLookup(song, null);
     const found = lookup === null ? null : yield* optional(lookUpLyricsAndGenre(lookup));
-    return ytDownloadTags(song, null, found, null);
+    return listedSongTags(song, found);
   });
 
 /**

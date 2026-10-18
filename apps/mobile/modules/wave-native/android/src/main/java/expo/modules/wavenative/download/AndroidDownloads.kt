@@ -43,8 +43,14 @@ import java.util.concurrent.TimeUnit
 /** Application-context owner, independent of Expo module and Activity lifetimes. */
 class AndroidDownloads private constructor(private val context: Context) {
   // Each failure's cause also goes to the app log, so a device run shows why a download stopped;
-  // and each transfer's speed, so it shows where a download's time went.
-  val jobs = DurableDownloads(File(context.noBackupFilesDir, "soulseek-download-jobs-v1"), log = { WaveLog.w(TAG, it) }, note = { WaveLog.i(TAG, it) })
+  // and each transfer's speed, so it shows where a download's time went. Its budgets wait for the
+  // download service (startWork): Wave opening before the service starts isn't charged.
+  val jobs = DurableDownloads(
+    File(context.noBackupFilesDir, "soulseek-download-jobs-v1"),
+    log = { WaveLog.w(TAG, it) },
+    note = { WaveLog.i(TAG, it) },
+    budgetRunning = false,
+  )
   private val soulseek = AndroidSoulseek.get(context)
   private val main = Handler(Looper.getMainLooper())
   private var worker: ScheduledExecutorService? = null

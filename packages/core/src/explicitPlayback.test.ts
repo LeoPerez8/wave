@@ -6,6 +6,7 @@ import {
   answerPlayingWalk,
   explicitPassOver,
   explicitPlayNotice,
+  playReplacesQueue,
   queuedPassedOver,
   reduceQueue,
   settleUnsearched,
@@ -72,6 +73,14 @@ describe("the queue passes over explicit songs (Don't play explicit)", () => {
     const { state, playback } = play("b d", 0, playing);
     assert.equal(state, playing);
     assert.equal(playback, "keep");
+  });
+
+  test("a play replaces the queue unless it passes every song over (an empty one clears it)", () => {
+    assert.equal(playReplacesQueue(playOf("a b"), passOver), true);
+    assert.equal(playReplacesQueue(playOf("b d"), passOver), false);
+    assert.equal(playReplacesQueue({ type: "play", trackIds: [], context: songs }, passOver), true);
+    assert.equal(playReplacesQueue({ type: "addToQueue", trackIds: ["a"] }, passOver), false);
+    assert.equal(playReplacesQueue(playOf("b d")), true);
   });
 
   test("Next never lands on an explicit song", () => {

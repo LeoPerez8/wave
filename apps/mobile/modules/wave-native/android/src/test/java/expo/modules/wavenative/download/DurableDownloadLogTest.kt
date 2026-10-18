@@ -133,6 +133,31 @@ class DurableDownloadLogTest {
     }
   }
 
+  /** The service's stop line says "cancelled" when the user cancelled the last song, not "its queue is empty". */
+  @Test fun theServiceStopsBecauseTheLastSongWasCancelledOrBecauseTheQueueRanOut() {
+    withFolder { folder ->
+      val owner = DurableDownloads(File(folder, "jobs"), clock = { 1_000L })
+      owner.enqueue(song, null, emptyMap(), "youtube")
+      owner.enqueue(song + ("videoId" to "other"), null, emptyMap(), "youtube")
+      owner.cancel("song", NoCancel)
+      assertTrue(owner.hasWork())
+      owner.advance(NoCancel, Untouched)
+      answer(owner, "prepare", mapOf("source" to "youtube", "targetPath" to File(folder, "Other.m4a").path, "tags" to emptyMap<String, Any?>(), "failurePlan" to CorePlans.youtube), id = "other")
+      owner.advance(transfer { _, _ -> throw DurableFailure("ytUnavailable") }, Untouched)
+      assertFalse(owner.hasWork())
+      assertEquals(DownloadServiceStop.QUEUE_EMPTY, owner.idleStop())
+
+      owner.enqueue(song + ("videoId" to "third"), null, emptyMap(), "youtube")
+      owner.cancelJob("third", NoCancel)
+      assertFalse(owner.hasWork())
+      assertEquals(DownloadServiceStop.CANCELLED, owner.idleStop())
+    }
+    assertEquals(
+      "The download service stopped after 5 s: the last song was cancelled",
+      DownloadServiceLines.stopped(DownloadServiceStop.CANCELLED, 5_000L, DownloadCounts(0, 0)),
+    )
+  }
+
   private val song = mapOf("videoId" to "song", "title" to "Recording", "durationMs" to 12_000L)
 
   private fun withFolder(block: (File) -> Unit) {

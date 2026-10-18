@@ -141,6 +141,46 @@ class CrossfadeTest {
   }
 
   @Test
+  fun atFifteenSecondsThePreRollGetsInStepAndTheOverlapRunsItsWholeLength() {
+    // #407's longest setting, on a 3-minute song: next song asked for at 2:12, the tail opened at
+    // 2:42 (3 s before the overlap) and brought in step, the move at 2:45.
+    val service = Service()
+    val crossfade = crossfade(service, overlapMs = 15_000)
+    crossfade.playTo(service, 131_900)
+    assertEquals(0, service.prefetches)
+    crossfade.playTo(service, 132_000)
+    assertEquals(1, service.prefetches)
+    crossfade.playTo(service, 161_900)
+    assertNull(service.tail)
+    crossfade.playTo(service, 162_000)
+    val outgoing = service.tail!!
+    // Opened a little behind, the tail catches up by speed.
+    outgoing.positionMs = 162_100
+    service.main.positionMs = 162_250
+    crossfade.tick()
+    assertTrue(outgoing.rate > 1f)
+    crossfade.playTo(service, 164_000)
+    assertEquals(1f, outgoing.rate)
+    assertEquals(0, service.advanced)
+
+    crossfade.playTo(service, 165_000)
+    assertEquals(1, service.advanced)
+    service.main.positionMs = 7500
+    outgoing.positionMs = 172_500
+    crossfade.tick()
+    assertEquals(0.707f, outgoing.level, 0.01f)
+    assertEquals(0.707f, service.main.level, 0.01f)
+    service.main.positionMs = 15_000
+    outgoing.positionMs = 180_000
+    outgoing.ended = true
+    crossfade.tick()
+    assertNull(service.tail)
+    assertEquals(1f, service.main.level)
+    assertTrue(service.endedEarly.isEmpty())
+    assertTrue(service.late.isEmpty())
+  }
+
+  @Test
   fun aSongThatDoesNotMoveOnNaturallyDoesNotFade() {
     // Repeat one, the last song, or an end-of-song sleep timer.
     val service = Service().apply { movesOnNaturally = false }
@@ -288,6 +328,37 @@ class CrossfadeTest {
     assertEquals(1, service.prefetches)
     crossfade.playTo(service, 150_000)
     assertEquals(1, service.prefetches)
+  }
+
+  @Test
+  fun aQueueSyncReportingTheSameSongAgainDoesntAskForTheNextOneAgain() {
+    val service = Service()
+    val crossfade = crossfade(service, overlapMs = 10_000)
+    assertTrue(crossfade.moved("a"))
+    crossfade.playTo(service, 137_000)
+    assertEquals(1, service.prefetches)
+    // JS syncs the queue: the player reports the song it's on again.
+    assertFalse(crossfade.moved("a"))
+    crossfade.playTo(service, 140_000)
+    assertEquals(1, service.prefetches)
+    // Another song: its next one is asked for in its turn.
+    assertTrue(crossfade.moved("c"))
+    crossfade.playTo(service, 137_000)
+    assertEquals(2, service.prefetches)
+  }
+
+  @Test
+  fun onlyAMoveToAnotherSongCountsAsTheSongChangingDuringThePreRollAndTheOverlap() {
+    // The service turns the next song's preload off again only when the song changes.
+    val service = Service()
+    val crossfade = crossfade(service)
+    crossfade.moved("a")
+    crossfade.playTo(service, 172_000)
+    assertFalse(crossfade.moved("a"))
+    crossfade.playTo(service, 175_000)
+    assertTrue(crossfade.moved("b"))
+    assertFalse(crossfade.moved("b"))
+    assertTrue(service.endedEarly.isEmpty())
   }
 
   @Test

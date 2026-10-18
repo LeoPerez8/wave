@@ -89,6 +89,14 @@ describe("menuLayout", () => {
     assert.ok(!names(unsearched.list).includes("addToQueue"));
   });
 
+  test("a collection with no songs (a YT Music artist without any) has no cards and no Shuffle, and keeps its list", () => {
+    assert.deepEqual(menuLayout("ytArtist", [], { empty: true }), { cards: [], list: [] });
+    const songs = [ytSong("a")];
+    const download = ytAlbumDownload(songs, { inLibrary: () => false, jobs: [] });
+    const entries = download.actions.map((action) => ({ action }));
+    assert.deepEqual(menuLayout("ytAlbum", entries, { empty: true }), { cards: [], list: entries });
+  });
+
   test("a missing song, which can't be queued, and an unavailable entry show no cards and keep their list", () => {
     const missing = menu("track", { albumId: 1, artistIds: [3], missing: true });
     const layout = menuLayout("track", missing);
