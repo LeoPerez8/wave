@@ -18,6 +18,7 @@ import {
   type SpotifyPlaylist,
   type SpotifySong,
 } from "./spotifyPlaylist.ts";
+import { SPOTIFY_CHANGED_LINE } from "./spotifyAccount.ts";
 import type { YtLibraryFailureView } from "./ytLibrary.ts";
 
 /**
@@ -54,10 +55,7 @@ const FAILURES: Record<SpotifyAccountFailure, YtLibraryFailureView> = {
     line: "Your Spotify session ended. Sign in again to see your playlists.",
     action: "signIn",
   },
-  changed: {
-    line: "Spotify changed something. Try again after updating Wave.",
-    action: "tryAgain",
-  },
+  changed: { line: SPOTIFY_CHANGED_LINE, action: "tryAgain" },
 };
 
 /** The From Spotify picker's message for a library that wasn't read, and what it offers. */

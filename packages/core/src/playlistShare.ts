@@ -207,6 +207,128 @@ export const sharedPlaylistMoves = (
   return moves;
 };
 
+/** What brings a remembered shared playlist up to date before it's put in order. */
+export interface SharedPlaylistChange extends SharedPlaylistChanges {
+  /** The Wave playlist's name, which the shared one takes. */
+  readonly name: string;
+}
+
+/**
+ * A service's side of sharing a playlist (`syncSharedPlaylist`): where the
+ * playlist made for this Wave playlist is remembered, and the requests that
+ * read, change and make it. Each rejects when its request fails.
+ */
+export interface SharedPlaylistService {
+  /** The id of the playlist sharing made for this Wave playlist before; null for none. */
+  readonly recall: () => Promise<string | null>;
+  /** Remembers [playlistId] as the playlist made for this Wave playlist. */
+  readonly remember: (playlistId: string) => Promise<void>;
+  /**
+   * Whether the account still holds [playlistId], asked before it's read:
+   * Spotify still reads a playlist deleted from the account's library.
+   * Without it, a playlist that reads is held.
+   */
+  readonly holds?: (playlistId: string) => Promise<boolean>;
+  /** The entries of the account's playlist [playlistId] in order; null when it's gone. */
+  readonly read: (playlistId: string) => Promise<readonly SharedEntry[] | null>;
+  /** Renames the playlist [playlistId], takes the removes out and adds the adds at its end, in order. */
+  readonly change: (playlistId: string, change: SharedPlaylistChange) => Promise<void>;
+  /** Applies [moves] to the playlist [playlistId], one after another. */
+  readonly move: (playlistId: string, moves: readonly SharedMove[]) => Promise<void>;
+  /** Makes a playlist [name] on the account holding [ids] in order: its id. */
+  readonly create: (name: string, ids: readonly string[]) => Promise<string>;
+}
+
+/** Brings the account's playlist [playlistId] to [ids] under [name]: false when it's gone. */
+const updateSharedPlaylist = async (
+  service: SharedPlaylistService,
+  playlistId: string,
+  name: string,
+  ids: readonly string[],
+): Promise<boolean> => {
+  if (service.holds !== undefined && !(await service.holds(playlistId))) return false;
+  const before = await service.read(playlistId);
+  if (before === null) return false;
+  const { removes, adds } = sharedPlaylistChanges(before, ids);
+  await service.change(playlistId, { name, removes, adds });
+  // Added songs go at the end, and only the service knows their entries: read it again to order them.
+  const after = removes.length + adds.length === 0 ? before : await service.read(playlistId);
+  if (after === null) return false;
+  const moves = sharedPlaylistMoves(after, ids);
+  if (moves.length > 0) await service.move(playlistId, moves);
+  return true;
+};
+
+/**
+ * Shares the songs [ids] (`matchSharedSongs`) as [name] on [service]: the
+ * playlist made for this Wave playlist before, when it's remembered and the
+ * account still has it, is brought up to date (renamed, its songs changed,
+ * read again and put in order); otherwise a new one is made and remembered.
+ * Resolves the shared playlist's id; rejects when a request does.
+ */
+export const syncSharedPlaylist = async (
+  service: SharedPlaylistService,
+  name: string,
+  ids: readonly string[],
+): Promise<string> => {
+  const remembered = await service.recall();
+  if (remembered !== null && (await updateSharedPlaylist(service, remembered, name, ids)))
+    return remembered;
+  const playlistId = await service.create(name, ids);
+  await service.remember(playlistId);
+  return playlistId;
+};
+
+/**
+ * Why sharing a playlist stopped: a search got no answer, no connection,
+ * the service signed the account out, the service changed (Spotify's web
+ * player), or it didn't take a request.
+ */
+export type SharePlaylistFailure =
+  "noSearchAnswer" | "offline" | "signedOut" | "changed" | "failed";
+
+/** What sharing's messages call each service. */
+const SERVICE_NAMES: { readonly [S in PlaylistShareService]: string } = {
+  ytMusic: "YouTube Music",
+  spotify: "Spotify",
+};
+
+/** What sharing a playlist on [service] says when it stopped for [failure]. */
+export const sharePlaylistFailureLine = (
+  service: PlaylistShareService,
+  failure: SharePlaylistFailure,
+): string => {
+  const name = SERVICE_NAMES[service];
+  switch (failure) {
+    case "noSearchAnswer":
+      return `${name} didn't answer a search. Try again.`;
+    case "offline":
+      return "Sharing needs a connection.";
+    case "signedOut":
+      return `${name} signed you out. Sign in and share again.`;
+    case "changed":
+      return `${name} changed something. Try again after updating Wave.`;
+    case "failed":
+      return `${name} didn't take the playlist. Try again.`;
+  }
+};
+
+/** A Library song as its playlist's sharing and its links search for it. */
+export interface LibrarySearchTrack {
+  readonly title: string;
+  readonly artist: string;
+  readonly album: string | null;
+  readonly durationMs: number | null;
+}
+
+/** What a Library song is searched by on another service: its title, artist, album and length. */
+export const librarySearchSong = ({
+  title,
+  artist,
+  album,
+  durationMs,
+}: LibrarySearchTrack): SpotifySong => ({ title, artists: [artist], album, durationMs });
+
 /**
  * A playlist's song as sharing it on YT Music sees it: a Library song with
  * the YouTube video id it was downloaded from (or null), a YT Music entry,
