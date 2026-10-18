@@ -19,6 +19,9 @@ object DownloadFiles {
     File(target.parentFile, if (jobId == null) ".${target.nameWithoutExtension}.part.${target.extension}"
       else ".wave-${UUID.nameUUIDFromBytes(jobId.toByteArray(Charsets.UTF_8))}.part.${target.extension}")
 
+  /** Whether [file] is one of Wave's own part files, as [partFileFor] names them for a job. */
+  fun isWavePartFile(file: File): Boolean = file.name.startsWith(".wave-") && file.name.contains(".part.")
+
   /**
    * Moves the finished [part] file to [target], creating its folders. A file
    * already there is never replaced: the download gets the first free

@@ -155,7 +155,7 @@ class DurableDownloads(
       .flatMap { job -> listOfNotNull(job["targetPath"] as? String, job.map("fallback")["targetPath"] as? String) }
       .mapNotNull { File(it).parentFile }.toSet()
     for (folder in folders) {
-      folder.listFiles { file -> file.name.startsWith(".wave-") && file.name.contains(".part.") && file.path !in held }?.forEach { it.delete() }
+      folder.listFiles { file -> DownloadFiles.isWavePartFile(file) && file.path !in held }?.forEach { it.delete() }
     }
   }
 
@@ -244,7 +244,7 @@ class DurableDownloads(
         if (origin != null) existing["origin"] = clean(origin)
         existing["decisionAttempts"] = 0L; startBudget(existing)
         if (savedGone) {
-          for (key in listOf("saved", "acknowledged", "finalPath", "digest", "taggedDigest", "publishSource", "replaces")) existing.remove(key)
+          for (key in listOf("saved", "acknowledged", "replaces") + PUBLICATION_KEYS) existing.remove(key)
         }
         if (existing["saved"] != null) existing["phase"] = "completed"
         // Only while the file there is still this download's: one replaced since downloads again.
@@ -252,7 +252,7 @@ class DurableDownloads(
           existing["phase"] = "awaitingPublication"; existing["publicationAttempts"] = 0L
         } else {
           cleanup(existing)
-          for (key in listOf("finalPath", "digest", "taggedDigest", "publishSource", "replaces")) existing.remove(key)
+          for (key in PUBLICATION_KEYS + "replaces") existing.remove(key)
           existing["phase"] = "queued"; existing["attempts"] = 0L; existing["candidateIndex"] = 0L
           setSource(existing, source)
         }
@@ -775,7 +775,7 @@ class DurableDownloads(
     if (moving) {
       if (digest(publishSource) != sum) {
         onJob { job ->
-          for (key in listOf("finalPath", "digest", "publishSource")) job.remove(key)
+          for (key in PUBLICATION_KEYS) job.remove(key)
           fail(job, "failed", "The copy to publish changed after its digest was taken; ${final.path} was left as it was"); persist()
         }
         return
@@ -788,7 +788,7 @@ class DurableDownloads(
     if (!movedHere && digest(final) != sum) {
       onJob { job ->
         // Wave's own copy is gone and another file holds its name: Retry downloads the song again.
-        for (key in listOf("finalPath", "digest", "publishSource")) job.remove(key)
+        for (key in PUBLICATION_KEYS) job.remove(key)
         fail(job, "failed", "Another file took ${final.path} before it was imported"); persist()
       }
       return
@@ -1172,6 +1172,8 @@ class DurableDownloads(
     private const val MP3_320 = "mp3-320"
     private const val YOUTUBE_M4A = "youtube-m4a"
     private val TERMINAL = setOf("failed", "cancelled")
+    /** What a publication writes on its job: where it goes, the digests that tell it, the copy it moves. Every reset clears them all. */
+    private val PUBLICATION_KEYS = listOf("finalPath", "digest", "taggedDigest", "publishSource")
     /** Quality replacements' job ids (Core's `qualityJobId`). */
     private val REPLACEMENT_PREFIXES = listOf("upgrade:", "downgrade:")
     /** A replacement's failure for finding no better copy (Core's `NO_BETTER_COPY_FOUND`): the song keeps its file. */
