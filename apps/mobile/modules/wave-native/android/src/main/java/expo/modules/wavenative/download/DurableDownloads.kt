@@ -202,8 +202,30 @@ class DurableDownloads(
    * `name`; Core's `DownloadOrigin`), null for a song asked for on its own. A job keeps the first
    * origin it was asked from; asked again after it ended, it takes the new one, or keeps its own
    * when asked with none (Settings › Downloads' Retry).
+   *
+   * The journal is written before it returns, so a crash loses no song asked for. Many songs at
+   * once go through [enqueueAll]: one write for them all.
    */
-  @Synchronized fun enqueue(song: Map<String, Any?>, equivalentId: String?, recording: Map<String, Any?> = emptyMap(), source: String? = null, origin: Map<String, Any?>? = null): String {
+  @Synchronized fun enqueue(song: Map<String, Any?>, equivalentId: String?, recording: Map<String, Any?> = emptyMap(), source: String? = null, origin: Map<String, Any?>? = null): String =
+    add(Request(song, equivalentId, recording, source, origin)).also { persistNow() }
+
+  /** One song asked for: [enqueue]'s arguments. */
+  data class Request(
+    val song: Map<String, Any?>,
+    val equivalentId: String?,
+    val recording: Map<String, Any?> = emptyMap(),
+    val source: String? = null,
+    val origin: Map<String, Any?>? = null,
+  )
+
+  /** [enqueue] for each of [requests], in order, written in one write; the jobs' ids. */
+  @Synchronized fun enqueueAll(requests: List<Request>): List<String> {
+    if (requests.isEmpty()) return emptyList()
+    return requests.map(::add).also { persistNow() }
+  }
+
+  private fun add(request: Request): String {
+    val (song, equivalentId, recording, source, origin) = request
     val id = song["videoId"] as String
     val existing = jobs.values.firstOrNull { it["id"] == id || it.maps("aliases").any { alias -> alias["videoId"] == id } }
       ?: equivalentId?.let { jobs[it] }?.takeIf { it["phase"] !in TERMINAL && it["importFailure"] == null }
@@ -237,7 +259,6 @@ class DurableDownloads(
       } else if (existing.map("song")["videoId"] != id && existing.maps("aliases").none { it["videoId"] == id }) {
         existing["aliases"] = existing.maps("aliases") + clean(song)
       }
-      persist()
       return existing["id"] as String
     }
     jobs[id] = mutableMapOf(
@@ -247,7 +268,6 @@ class DurableDownloads(
     )
     setSource(jobs.getValue(id), source)
     if (origin != null) jobs.getValue(id)["origin"] = clean(origin)
-    persist()
     return id
   }
 
@@ -999,11 +1019,12 @@ class DurableDownloads(
     job["soulseekDeadline"] != null && job.number("soulseekDeadline") <= budgetNow() && job["source"] != YOUTUBE &&
       charged(job) && fallsBack(job, "timedOut")
 
-  // Persistence (#452). A change a restart must keep (a job enqueued, a phase, a decision, a
-  // failure, a cancel, a peer's queue place) is shown to readers at once and written by [persist]
-  // with the changes around it, at most every [WRITE_MS]; a write appends only what changed
-  // ([JournalStore]). Only the publication writes at once ([persistNow]), before a file is copied
-  // into or moved to the Library folder. A crash loses at most the last [WRITE_MS] of changes: the
+  // Persistence (#452). A change a restart must keep (a phase, a decision, a failure, a cancel, a
+  // peer's queue place) is shown to readers at once and written by [persist] with the changes
+  // around it, at most every [WRITE_MS]; a write appends only what changed ([JournalStore]). Only
+  // new jobs ([enqueue], [enqueueAll]: one write for a whole run) and the publication write at
+  // once ([persistNow]), the latter before a file is copied into or moved to the Library folder.
+  // So a crash loses no job, and at most the last [WRITE_MS] of changes to one: the
   // job goes on from the step it last wrote, which can only redo a step, and a part file that step
   // had made is swept as the journal opens ([sweepParts]). Transfer progress only marks the journal
   // [progressed]: it's written with the next change, or once [PROGRESS_WRITE_MS] has passed (the
@@ -1059,8 +1080,8 @@ class DurableDownloads(
 
   /**
    * Publishes and writes the journal now, with every change waiting: only before file work a
-   * restart must find in the journal (a file copied into or moved to the Library folder), and as
-   * the journal opens.
+   * restart must find in the journal (a file copied into or moved to the Library folder), for new
+   * jobs ([enqueue], [enqueueAll]: a crash loses no song asked for), and as the journal opens.
    */
   private fun persistNow() { publish(); write() }
 

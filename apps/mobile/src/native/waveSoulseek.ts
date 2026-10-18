@@ -99,6 +99,12 @@ declare class WaveSoulseekModule extends NativeModule<{
      */
     origin: DownloadOrigin | null,
   ): Promise<string>;
+  /**
+   * [enqueueJob] for many songs, in order, in one journal write: an album, a playlist, a
+   * replacement run. The requests as JSON ([enqueueJobs] below makes it): a song's nulls sit too
+   * deep for the bridge.
+   */
+  enqueueJobs(requests: string): Promise<string[]>;
   jobsSnapshot(): Promise<NativeDownloadJob[]>;
   /**
    * What changed in the journal since [revision], one it answered before (0 for everything):
@@ -147,6 +153,24 @@ declare class WaveSoulseekModule extends NativeModule<{
 }
 
 export const WaveSoulseek = requireNativeModule<WaveSoulseekModule>("WaveSoulseek");
+
+/** One song asked for: [WaveSoulseekModule.enqueueJob]'s arguments. */
+export interface JobRequest {
+  readonly song: NativeYtSong;
+  readonly recording: SoulseekRecording;
+  readonly equivalentId: string | null;
+  readonly source: DownloadSource | null;
+  readonly origin: DownloadOrigin | null;
+}
+
+/**
+ * Asks for each of [requests], in order, in one journal write (a crash loses none of them, and a
+ * run of hundreds isn't hundreds of synced writes). The jobs' ids.
+ */
+export const enqueueJobs = (requests: readonly JobRequest[]): Promise<string[]> =>
+  requests.length === 0
+    ? Promise.resolve([])
+    : WaveSoulseek.enqueueJobs(JSON.stringify(requests));
 
 /** Never includes credentials or raw native error messages in user-facing copy. */
 export const soulseekErrorCode = (error: unknown): string | null => {
