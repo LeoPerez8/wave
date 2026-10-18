@@ -99,6 +99,13 @@ export interface DownloadFailurePlan {
 }
 
 /**
+ * A failure the native journal's transfer reports, which a failure plan matches: a job's own
+ * failures, and YouTube refusing the song (`ytRefused`), which the journal handles itself
+ * (`DownloadRefusalPlan`) and never keeps as a job's reason.
+ */
+export type NativeDownloadFailure = YtDownloadFailure | "ytRefused";
+
+/**
  * What the journal does when YouTube refuses a song without a clear reason (an UNPLAYABLE
  * answer, a bot check, no answer at all), which a limit on the session looks like: the
  * transfer is tried again after each pause in turn, then the song is unavailable. Refusals
@@ -108,7 +115,7 @@ export interface DownloadFailurePlan {
  */
 export interface DownloadRefusalPlan {
   /** The native failure a refusal comes as. */
-  readonly failure: "ytRefused";
+  readonly failure: Exclude<NativeDownloadFailure, YtDownloadFailure>;
   /** The pause before each try again, in order. */
   readonly pausesMs: readonly number[];
   /** The failure once every try was refused. */

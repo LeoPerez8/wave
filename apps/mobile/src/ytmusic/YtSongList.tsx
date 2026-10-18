@@ -1,5 +1,6 @@
 import { LegendList, type LegendListRef } from "@legendapp/list/react-native";
 import {
+  IconCircleCheck,
   IconCloudOff,
   IconDownload,
   IconRefresh,
@@ -192,8 +193,9 @@ const totalMinutes = (songs: readonly Song[]): string | null => {
 /** What a list's download button can show: an entry to act on, or that every song is downloaded. */
 type YtListDownloadButtonAction = YtListDownloadAction | "downloaded";
 
+/** Downloaded has a check of its own, so an icon-only button doesn't look like Download. */
 const DOWNLOAD_ICONS: { readonly [A in YtListDownloadButtonAction]: typeof IconDownload } = {
-  downloaded: IconDownload,
+  downloaded: IconCircleCheck,
   downloadAlbum: IconDownload,
   downloadPlaylist: IconDownload,
   retryFailed: IconRefresh,

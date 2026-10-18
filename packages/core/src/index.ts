@@ -788,6 +788,7 @@ export type {
   DownloadFallbackSetup,
   DownloadSource,
   DownloadSourceSetup,
+  NativeDownloadFailure,
   YtDownloadReport,
 } from "./downloadSource.ts";
 export {
@@ -1597,6 +1598,8 @@ export {
   qualityDowngradeVideo,
   qualityUpgradeOffer,
   qualityUpgradeSongs,
+  qualityDirection,
+  qualitySongs,
   youTubeCopyKbps,
   failedReplacementFiles,
 } from "./qualityReplacement.ts";

@@ -13,12 +13,7 @@ import {
   type FailedDownloadsInput,
 } from "./failedDownloads.ts";
 import { counted } from "./listening.ts";
-import {
-  qualityDowngradeSongs,
-  qualityUpgradeSongs,
-  type QualityDirection,
-  type QualityFile,
-} from "./qualityReplacement.ts";
+import { qualitySongs, type QualityDirection, type QualityFile } from "./qualityReplacement.ts";
 import type { YtSong } from "./ytMusic.ts";
 import type { YtDownloadJournalJob } from "./ytDownloads.ts";
 
@@ -64,10 +59,7 @@ export const throttledFailures = <S extends YtSong>(
   if (candidates.length === 0) return [];
   const memory = { noBetterCopy: input.noBetterCopy[input.direction], jobs };
   const offered = new Set(
-    (input.direction === "upgrade"
-      ? qualityUpgradeSongs(input.files, memory)
-      : qualityDowngradeSongs(input.files, memory)
-    ).map((file) => file.id),
+    qualitySongs(input.direction, input.files, memory).map((file) => file.id),
   );
   return failedDownloads(candidates, input).filter(({ id }) => {
     const kind = downloadJobKind(id);

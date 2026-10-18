@@ -7,6 +7,7 @@
 import {
   FAVORITES_DOWNLOAD_ORIGIN,
   NO_DOWNLOAD_RUN,
+  qualityDirection,
   YT_DOWNLOADS_NONE,
   downloadRunNotice,
   downloadRunProgress,
@@ -1384,7 +1385,7 @@ const requeueThrottledFailures = (): void => {
         missingTrackIds: new Set(library.missing.map((track) => track.id)),
         files: library.files,
         noBetterCopy: { upgrade: new Set(library.upgrade), downgrade: new Set(library.downgrade) },
-        direction: session.status === "off" ? "downgrade" : "upgrade",
+        direction: qualityDirection(session.status !== "off"),
       });
       const asked = failed.length === 0 ? [] : await retryRequests(failed);
       if (asked.length > 0) await enqueueJobs(asked);
