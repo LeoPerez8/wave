@@ -127,6 +127,7 @@ describe("queue tracks", () => {
       thumbPath: "/files/artwork/abc_thumb.jpg",
       palette: { dominant: "#203040" },
       explicit: false,
+      durationMs: 229_000,
     });
   });
 

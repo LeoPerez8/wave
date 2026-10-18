@@ -55,6 +55,12 @@ export interface QueueTrack {
    * as clean (unknown, or saved before it was kept).
    */
   readonly explicit?: boolean;
+  /**
+   * A streamed or unsearched song's length as listed, for finding its lyrics
+   * online (Core's `nonDLyricsSong`). Missing from a Library track's, and
+   * from a song's saved before it was kept.
+   */
+  readonly durationMs?: number | null;
 }
 
 /** A library song as the queue needs it. */
@@ -96,6 +102,7 @@ export const toYtQueueTrack = (song: YtSong, artwork: CachedArtwork | null): Que
     thumbPath: artwork?.thumbPath ?? null,
     palette: artwork?.palette ?? null,
     explicit: song.explicit,
+    durationMs: song.durationMs,
   };
 };
 
@@ -117,6 +124,7 @@ export const toUnsearchedQueueTrack = (song: UnsearchedSong): QueueTrack => {
     artworkPath: song.artworkUrl,
     thumbPath: null,
     palette: null,
+    durationMs: song.durationMs,
   };
 };
 

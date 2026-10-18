@@ -227,7 +227,12 @@ export function NowPlayingSheet() {
               </Activity>
             )}
             {view === "lyrics" && (
-              <LyricsView path={details?.path ?? null} item={item} palette={palette} />
+              <LyricsView
+                path={details?.path ?? null}
+                trackId={trackId}
+                item={item}
+                palette={palette}
+              />
             )}
             <Activity mode={view === "player" ? "visible" : "hidden"} name="Player">
               <PlayerPane item={item} details={details} playing={playing} />
