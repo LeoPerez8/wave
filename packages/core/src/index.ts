@@ -1215,3 +1215,5 @@ export type {
   YtLibraryReadState,
   YtLibraryReadView,
 } from "./ytLibraryBatch.ts";
+export { applyJournalChanges } from "./journalChanges.ts";
+export type { JournalChanges } from "./journalChanges.ts";

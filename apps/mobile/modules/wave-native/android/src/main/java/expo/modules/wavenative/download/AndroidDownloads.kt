@@ -72,7 +72,7 @@ class AndroidDownloads private constructor(private val context: Context) {
     return try {
       source.parentFile?.mkdirs()
       val file = ytAudio.download(videoId, source,
-        onProgress = { received, total -> progress(received, total, null); changedSoon() },
+        onProgress = { received, total -> progress(received, total, null); changed() },
         isCancelled = cancelled,
       )
       val durationMs = AndroidM4aDuration.of(source, cancelled)
@@ -112,7 +112,7 @@ class AndroidDownloads private constructor(private val context: Context) {
 
   private fun fromSoulseek(id: String, candidate: Map<String, Any?>, source: File, durationMs: Long, progress: (Long, Long, Long?) -> Unit): Map<String, Any?> = try {
       soulseek.download(id, SoulseekCandidate.fromJs(candidate), source, durationMs,
-        onProgress = { received, total -> progress(received, total, null); changedSoon() },
+        onProgress = { received, total -> progress(received, total, null); changed() },
         onQueued = { place -> progress(0, 0, place); changed() },
         // The journal's start, queue and stall rules bound the wait, even if a cancel goes missing.
         isCancelled = { Thread.currentThread().isInterrupted || !jobs.transferWanted(id) },
@@ -155,10 +155,17 @@ class AndroidDownloads private constructor(private val context: Context) {
   }
 
   fun subscribe(listener: () -> Unit): () -> Unit { listeners.add(listener); return { listeners.remove(listener) } }
-  fun changed() { lastChangedAt = SystemClock.elapsedRealtime(); for (listener in listeners) runCatching(listener) }
-  @Volatile private var lastChangedAt = 0L
-  /** Transfer progress arrives per chunk; JS and the notification only need a few updates a second. */
-  private fun changedSoon() { if (SystemClock.elapsedRealtime() - lastChangedAt >= 500) changed() }
+  /**
+   * The journal may have changed. Listeners (JS, which then asks for what changed since its
+   * revision) only hear of it when it did, at most every [NOTIFY_MS]: transfer progress arrives
+   * per chunk, and the deadline thread and the worker call this twice a second.
+   */
+  fun changed() = notices.changed()
+  private val notices = JournalNotices(
+    revision = { jobs.revision }, clock = SystemClock::elapsedRealtime, intervalMs = NOTIFY_MS,
+    later = { delay, run -> main.postDelayed(run, delay) },
+    notify = { for (listener in listeners) runCatching(listener) },
+  )
 
   /** Called from the user's tap or the resumed Activity. Failure never starts unprotected work. */
   fun requestService() {
@@ -231,6 +238,8 @@ class AndroidDownloads private constructor(private val context: Context) {
   companion object {
     private const val OWNER = "downloads"
     private const val TAG = "WaveDownloads"
+    /** How often, at most, JS hears that the journal changed. */
+    private const val NOTIFY_MS = 500L
     /** Less free space than this beside the part file means the write failed for want of room. */
     private const val MIN_FREE_BYTES = 8L shl 20
     @Volatile private var instance: AndroidDownloads? = null
