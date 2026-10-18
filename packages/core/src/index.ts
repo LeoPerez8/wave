@@ -1215,3 +1215,5 @@ export type {
   YtLibraryReadState,
   YtLibraryReadView,
 } from "./ytLibraryBatch.ts";
+export { advisoryTag, explicitFromAdvisory, isExplicit, showsExplicitBadge } from "./explicit.ts";
+export type { ExplicitFlag } from "./explicit.ts";
