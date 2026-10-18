@@ -1487,7 +1487,16 @@ export type {
   LyricStoryBackground,
 } from "./lyricsShare.ts";
 export { songCardColours, songCardFileName, songShareDestinations } from "./songShare.ts";
-export type { SongCardColours, SongShareDestination } from "./songShare.ts";
+export type { SongCardColours, SongLinkOption, SongShareDestination } from "./songShare.ts";
+export { lookUpSongLinks, songLinkView } from "./songLinks.ts";
+export type {
+  SongLinkAsk,
+  SongLinkView,
+  SongLinkLookup,
+  SongLinks,
+  SongLinkSearch,
+  SongLinksState,
+} from "./songLinks.ts";
 export type { YtLibraryFavorites } from "./ytLibraryBatch.ts";
 export { pendingFavorite, settlePendingFavorites } from "./pendingFavorites.ts";
 export type { EnteringSong, PendingFavorite, SettledFavorites } from "./pendingFavorites.ts";
