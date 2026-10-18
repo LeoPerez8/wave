@@ -92,7 +92,7 @@ class DownloadTagWriter {
       )
     }
     audio.tag = tag
-    return FragmentedMp4.writeTag(audio, file)
+    return FragmentedMp4.writeTag(audio, file, hashed = true)
   }
 
   /** The tag of the file a replacement replaces; null when it's gone or can't be read. */
