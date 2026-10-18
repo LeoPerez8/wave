@@ -573,7 +573,7 @@ class DurableDownloadsTest {
     } finally { folder.deleteRecursively() }
   }
 
-  @Test fun aPublishedFileAwaitingImportPastTheDeadlineIsAnImportFailureNotAFailedDownload() {
+  @Test fun aPublishedFileAwaitingImportPastTheJobsBudgetIsStillImported() {
     val folder = Files.createTempDirectory("wave-late-import").toFile()
     try {
       var now = 1_000L
@@ -582,11 +582,12 @@ class DurableDownloadsTest {
       owner.enqueue(song, null)
       publish(owner, target)
       now += DurableDownloads.JOB_MS + 1
-      assertNull(owner.claim("song"))
+      owner.expire(NoTransfer)
+      answer(owner, "import", mapOf("path" to target.path))
       val job = owner.snapshot().single()
       assertEquals("completed", job["phase"])
-      assertEquals("failed", job["importFailure"])
-      assertNull(job["reason"])
+      assertEquals(true, job["acknowledged"])
+      assertNull(job["importFailure"])
       assertTrue(target.isFile)
     } finally { folder.deleteRecursively() }
   }

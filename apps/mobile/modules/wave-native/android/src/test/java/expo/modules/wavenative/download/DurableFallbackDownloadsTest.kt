@@ -275,6 +275,23 @@ class DurableFallbackDownloadsTest {
     }
   }
 
+  @Test fun soulseeksTwoMinutesDoNotRunWhileTheDownloadWorkIsStopped() {
+    withFolder { folder ->
+      var now = 1_000L
+      val owner = DurableDownloads(File(folder, "jobs"), clock = { now })
+      owner.enqueue(song, null, emptyMap(), "soulseek")
+      prepareSoulseek(owner, File(folder, "Recording.mp3"), File(folder, "Recording.m4a"))
+      now += 60_000
+      owner.stopWork(NoTransfer)
+      now += 600_000
+      owner.startWork()
+      now += 59_000; owner.expire(NoTransfer)
+      assertEquals("soulseek", owner.snapshot().single()["source"])
+      now += 1_000; owner.expire(NoTransfer)
+      assertEquals("youtube", owner.snapshot().single()["source"])
+    }
+  }
+
   @Test fun aPlaceInAPeersQueueIsNoStartedTransfer() {
     withFolder { folder ->
       var now = 1_000L
@@ -373,9 +390,11 @@ class DurableFallbackDownloadsTest {
       assertThrows(ProcessDeath::class.java) {
         owner.advance(transfer { id, _, _ -> now += 3_000; progress(id, 64_000); throw ProcessDeath() }, Untouched)
       }
-      // Relaunched at 125 s: past Soulseek's 2 minutes, within the peer's windows.
-      now = 125_000
+      // Relaunched later; the budget's clock goes on from 103 s, so 22 s on it is at 125 s: past
+      // Soulseek's 2 minutes, within the peer's windows.
+      now += 3_600_000
       val relaunched = DurableDownloads(journal, clock = { now })
+      now += 22_000
       val asked = mutableListOf<Any?>()
       relaunched.advance(transfer { _, candidate, source ->
         asked += candidate["source"] ?: "soulseek"

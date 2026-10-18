@@ -45,6 +45,7 @@ export interface NativeDownloadDecision extends NativeDownloadJob {
   readonly token: string;
   readonly decision: "prepare" | "confirm" | "publish" | "import";
   readonly leaseUntil: number;
+  /** The job's budget, on the journal's own clock (it stands still while Wave is closed), not `Date.now()`'s. */
   readonly deadline: number;
 }
 
