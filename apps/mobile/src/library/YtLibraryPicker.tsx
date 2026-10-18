@@ -1,24 +1,29 @@
 /**
- * Library › Playlists › Import Playlists › From YT Music (docs/spec.md,
- * "Importing playlists from a link"): signed out, it signs in first (the
- * sign-in Settings › Accounts uses), then a full-screen sheet rises with the
- * playlists in the account's YouTube Music library. Core decides the rows,
- * the ticks, Select All and the Also add to Favorites switch under Liked
- * Songs (`ytLibraryPicker`); Import makes the playlists and reads them in
+ * Library › Playlists › Import Playlists › From YT Music and From Spotify
+ * (docs/spec.md, "Importing playlists from a link"): signed out, it signs in
+ * first (the sign-in Settings › Accounts uses), then a full-screen sheet
+ * rises with the playlists in the account's YouTube Music or Spotify
+ * library. Core decides the rows, the ticks, Select All and, From YT Music,
+ * the Also add to Favorites switch under Liked Songs (`ytLibraryPicker`,
+ * `spotifyLibraryPicker`); Import makes the playlists and reads them in
  * the background (`importYtLibrary`), and Import & Download beside it also
  * queues each playlist's downloads once it's read. Cancel, Back or dragging
  * the sheet down imports nothing.
  */
 import {
   pressYtLibrarySelectAll,
+  readSpotifyLibrary,
   settleSheet,
+  spotifyLibraryFailure,
+  spotifyLibraryPicker,
   toggleYtLibraryFavorites,
   toggleYtLibraryRow,
   YT_LIKED_SONGS_ID,
   ytLibraryFailure,
   ytLibraryPicker,
   ytLibraryPickerView,
-  type YtLibraryFailure,
+  type SpotifySignInFailure,
+  type YtLibraryFailureView,
   type YtLibraryPicker as Picker,
   type YtLibraryPickerView,
   type YtLibraryRow,
@@ -49,6 +54,7 @@ import { CELL, grid } from "@/catalog/grid";
 import { Hairline } from "@/catalog/Hairline";
 import { TextButton } from "@/components/TextButton";
 import { makeExternalStore } from "@/lib/externalStore";
+import { askSpotifyAccount, spotifySignInFailure, WaveSpotify } from "@/native/waveSpotify";
 import { Press } from "@/motion/Press";
 import { showError, showMessage } from "@/overlay/alert";
 import { useThemeColor } from "@/theme/useThemeColor";
@@ -59,8 +65,11 @@ import { currentYtLibraryOrigins, importYtLibrary } from "./ytLibraryImport";
 // ---------------------------------------------------------------------------
 // Entry
 
-/** Whether the picker is up (`YtLibraryPickerHost` draws it). */
-const shown = makeExternalStore(false);
+/** Whose library a picker lists. */
+type LibraryService = "ytMusic" | "spotify";
+
+/** The picker that is up, if any (`YtLibraryPickerHost` draws it). */
+const shown = makeExternalStore<LibraryService | null>(null);
 
 const SIGN_IN_FAILED: Record<"offline" | "failed", string> = {
   offline: "Couldn't sign in without a connection.",
@@ -88,14 +97,44 @@ const signIn = async (): Promise<boolean> => {
 export const openYtLibraryImport = async (): Promise<void> => {
   const session = await askYtMusic((ytMusic) => ytMusic.session);
   const signedIn = Result.isSuccess(session) && session.success.status === "signedIn";
-  if (signedIn || (await signIn())) shown.set(true);
+  if (signedIn || (await signIn())) shown.set("ytMusic");
+};
+
+const SPOTIFY_SIGN_IN_FAILED: Record<SpotifySignInFailure, string> = {
+  offline: "Couldn't sign in without a connection.",
+  failed: "Spotify didn't confirm the sign-in. Try again.",
+  changed: "Spotify changed something. Try again after updating Wave.",
+};
+
+/**
+ * Opens Spotify's sign-in page (Settings › Accounts' sign-in); true once
+ * signed in. Backing out of it is false with nothing said; a sign-in that
+ * didn't work says why.
+ */
+const signInToSpotify = async (): Promise<boolean> => {
+  try {
+    const session = await WaveSpotify.signIn();
+    return session?.status === "signedIn";
+  } catch (error) {
+    void showMessage("Couldn't sign in", SPOTIFY_SIGN_IN_FAILED[spotifySignInFailure(error)]);
+    return false;
+  }
+};
+
+/**
+ * From Spotify: the picker, once signed in to Spotify. Signed out (or the
+ * session expired), Spotify's sign-in opens first; leaving it opens nothing.
+ */
+export const openSpotifyLibraryImport = async (): Promise<void> => {
+  const session = await WaveSpotify.session().catch(() => null);
+  if (session?.status === "signedIn" || (await signInToSpotify())) shown.set("spotify");
 };
 
 /** Draws the picker while it's up; mounted once at the root. */
 export function YtLibraryPickerHost() {
   const open = useSyncExternalStore(shown.subscribe, shown.get);
-  const close = useCallback(() => shown.set(false), []);
-  return open ? <PickerSheet onClosed={close} /> : null;
+  const close = useCallback(() => shown.set(null), []);
+  return open === null ? null : <PickerSheet key={open} service={open} onClosed={close} />;
 }
 
 // ---------------------------------------------------------------------------
@@ -104,15 +143,51 @@ export function YtLibraryPickerHost() {
 type LibraryRead =
   | { readonly status: "reading" }
   | { readonly status: "read"; readonly picker: Picker }
-  | { readonly status: "failed"; readonly reason: YtLibraryFailure };
+  | { readonly status: "failed"; readonly failure: YtLibraryFailureView };
 
 const READING: LibraryRead = { status: "reading" };
 
-const readLibrary = async (): Promise<LibraryRead> => {
+const readYtLibrary = async (): Promise<LibraryRead> => {
   const answer = await askYtMusic((ytMusic) => ytMusic.libraryPlaylists);
   return Result.isFailure(answer)
-    ? { status: "failed", reason: answer.failure.reason }
+    ? { status: "failed", failure: ytLibraryFailure(answer.failure.reason) }
     : { status: "read", picker: ytLibraryPicker(answer.success, await currentYtLibraryOrigins()) };
+};
+
+const readSpotifyAccountLibrary = async (): Promise<LibraryRead> => {
+  const answer = await readSpotifyLibrary((offset) =>
+    askSpotifyAccount(() => WaveSpotify.library(offset)),
+  );
+  return answer.ok
+    ? {
+        status: "read",
+        picker: spotifyLibraryPicker(answer.playlists, await currentYtLibraryOrigins()),
+      }
+    : { status: "failed", failure: spotifyLibraryFailure(answer.reason) };
+};
+
+/** What differs between the two pickers. */
+const SERVICES: Record<
+  LibraryService,
+  {
+    readonly title: string;
+    readonly reading: string;
+    readonly read: () => Promise<LibraryRead>;
+    readonly signIn: () => Promise<boolean>;
+  }
+> = {
+  ytMusic: {
+    title: "From YT Music",
+    reading: "Reading your YouTube Music library",
+    read: readYtLibrary,
+    signIn,
+  },
+  spotify: {
+    title: "From Spotify",
+    reading: "Reading your Spotify library",
+    read: readSpotifyAccountLibrary,
+    signIn: signInToSpotify,
+  },
 };
 
 // ---------------------------------------------------------------------------
@@ -130,7 +205,8 @@ const COVER = CELL * 6;
  * The picker: rises from the bottom as it opens, reads the library (again on
  * Try Again), and goes back down on Cancel, Back, a drag down or Import.
  */
-function PickerSheet({ onClosed }: { onClosed: () => void }) {
+function PickerSheet({ service, onClosed }: { service: LibraryService; onClosed: () => void }) {
+  const config = SERVICES[service];
   const { height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const accent = useThemeColor("accent");
@@ -150,13 +226,13 @@ function PickerSheet({ onClosed }: { onClosed: () => void }) {
 
   useEffect(() => {
     let current = true;
-    void readLibrary().then((next) => {
+    void config.read().then((next) => {
       if (current) setAnswer({ attempt, read: next });
     });
     return () => {
       current = false;
     };
-  }, [attempt]);
+  }, [attempt, config]);
 
   /**
    * Slides the sheet away, then runs [then] (Import or Import & Download) once it has gone. A drag
@@ -232,7 +308,7 @@ function PickerSheet({ onClosed }: { onClosed: () => void }) {
   };
 
   const signInAgain = () => {
-    void signIn().then((signedIn) => {
+    void config.signIn().then((signedIn) => {
       if (signedIn) setAttempt((n) => n + 1);
     });
   };
@@ -263,7 +339,7 @@ function PickerSheet({ onClosed }: { onClosed: () => void }) {
                   accessibilityRole="header"
                   className="font-sans text-body font-medium text-foreground"
                 >
-                  From YT Music
+                  {config.title}
                 </Text>
                 {/* Balances Cancel, so the title sits in the middle. */}
                 <View style={{ width: CELL * 7 }} />
@@ -286,13 +362,13 @@ function PickerSheet({ onClosed }: { onClosed: () => void }) {
                 <ActivityIndicator
                   size="large"
                   color={accent}
-                  accessibilityLabel="Reading your YouTube Music library"
+                  accessibilityLabel={config.reading}
                 />
               </View>
             )}
             {read.status === "failed" && (
               <Failure
-                reason={read.reason}
+                failure={read.failure}
                 tryAgain={() => setAttempt((n) => n + 1)}
                 signIn={signInAgain}
               />
@@ -433,17 +509,19 @@ function FavoritesSwitch({
   );
 }
 
-/** Why the library wasn't read (Core's `ytLibraryFailure`), with Try Again or Sign In Again. */
+/**
+ * Why the library wasn't read (Core's `ytLibraryFailure`,
+ * `spotifyLibraryFailure`), with Try Again or Sign In Again.
+ */
 function Failure({
-  reason,
+  failure: { line, action },
   tryAgain,
   signIn: signInAgain,
 }: {
-  reason: YtLibraryFailure;
+  failure: YtLibraryFailureView;
   tryAgain: () => void;
   signIn: () => void;
 }) {
-  const { line, action } = ytLibraryFailure(reason);
   return (
     <View
       className="flex-1 items-center justify-center"

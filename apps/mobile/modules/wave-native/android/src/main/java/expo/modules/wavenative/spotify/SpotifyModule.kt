@@ -11,6 +11,7 @@ import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.JsonObject
 import kotlin.coroutines.resume
 
 /**
@@ -61,6 +62,24 @@ class SpotifyModule : Module() {
       coded { client.signIn(credentials).toMap() }
     }
 
+    /**
+     * From Spotify (#486): a page of the account's library, of Liked Songs
+     * or of a playlist, as the query's `data` in JSON for Core to read.
+     * Rejects with an `ERR_SPOTIFY_*` code; a playlist that isn't a
+     * `spotify:playlist:<id>` URI is never asked for.
+     */
+    AsyncFunction("library") Coroutine { offset: Int ->
+      read(SpotifyLibraryQueries.library(offset))
+    }
+
+    AsyncFunction("likedSongs") Coroutine { offset: Int ->
+      read(SpotifyLibraryQueries.likedSongs(offset))
+    }
+
+    AsyncFunction("playlist") Coroutine { uri: String, offset: Int ->
+      read(SpotifyLibraryQueries.playlist(uri, offset) ?: throw CodedException(SpotifyFailure.FAILED.code, "Not a playlist", null))
+    }
+
     /** Forgets the session, its token and everything the sign-in web view kept. */
     AsyncFunction("signOut") Coroutine { ->
       withContext(Dispatchers.IO) { client.session.signOut() }
@@ -71,6 +90,9 @@ class SpotifyModule : Module() {
       client.session.state.toMap()
     }
   }
+
+  private suspend fun read(query: Pair<SpotifyOperation, JsonObject>): String =
+    coded { client.query(query.first, query.second).toString() }
 
   private suspend fun <T> coded(block: suspend () -> T): T =
     try {
