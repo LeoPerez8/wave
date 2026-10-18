@@ -1273,3 +1273,5 @@ export { pendingFavorite, settlePendingFavorites } from "./pendingFavorites.ts";
 export type { EnteringSong, PendingFavorite, SettledFavorites } from "./pendingFavorites.ts";
 export { applyJournalChanges } from "./journalChanges.ts";
 export type { JournalChanges } from "./journalChanges.ts";
+export { PLAY_ACTION_LABELS, menuLayout } from "./menuLayout.ts";
+export type { MenuLayout, MenuSubject, PlayAction, PlayCard } from "./menuLayout.ts";

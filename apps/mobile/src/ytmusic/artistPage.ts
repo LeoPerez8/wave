@@ -16,7 +16,7 @@ import { LibraryStore, type AlbumRow, type SongRow } from "@/library/LibraryStor
 import type { NativeYtSong } from "@/native/waveYtMusic";
 
 import { fetchArtist, readArtist, useSavedYtArtist } from "./artistSection";
-import { useLoadedLibraryFinder } from "./libraryFinder";
+import { useLoadedLibraryFinder, type FindInLibrary } from "./libraryFinder";
 
 type Saved = YtArtistSaved<NativeYtSong>;
 
@@ -42,6 +42,29 @@ const fetchPage = (browseId: string) =>
   });
 
 const nowhere = (): null => null;
+
+/**
+ * The songs the YouTube Music artist page [browseId] plays, as its Play does
+ * (Core's `ytArtistPageView`, [find] telling the Library's songs among them):
+ * from what was saved for it while that stands, otherwise read now and saved
+ * (`fetchPage`), as opening the page would. Their long-press menu plays them.
+ */
+export const ytArtistPageSongs = (browseId: string, find: FindInLibrary) =>
+  Effect.gen(function* () {
+    const store = yield* LibraryStore;
+    const now = Date.now();
+    const saved = yield* store
+      .ytArtist(savedKey(browseId))
+      .pipe(Effect.orElseSucceed((): Saved | null => null));
+    const context = { enabled: true, now };
+    const stands =
+      saved !== null && !ytArtistPageAsks({ status: "ready", saved, failure: null }, context);
+    const answer = stands ? saved : yield* fetchPage(browseId);
+    return ytArtistPageView(
+      { status: "ready", saved: answer, failure: null },
+      { ...context, librarySong: find, libraryAlbum: nowhere },
+    ).songs;
+  });
 
 /**
  * Which of the artist [name]'s releases the Library has: the albums of the

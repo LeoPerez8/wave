@@ -38,6 +38,7 @@ import { selectableRow } from "@/selection/selectableRow";
 import type { ListSelection } from "@/selection/useListSelection";
 import { openYtAlbum, openYtArtist } from "@/ytmusic/routes";
 import { openYtAlbumActions } from "@/ytmusic/YtAlbumActions";
+import { openYtArtistActions } from "@/ytmusic/YtArtistActions";
 import { YtSongRow } from "@/ytmusic/YtSongRow";
 import { openYtSongActions } from "@/ytmusic/YtSongActions";
 
@@ -318,7 +319,7 @@ export function SearchResultsList({
                       openYtArtist(artist.browseId, artist.name);
                     }
               }
-              onLongPress={selection.selecting ? ignore : undefined}
+              onLongPress={selection.selecting ? ignore : () => openYtArtistActions(artist)}
             />
           );
         }
