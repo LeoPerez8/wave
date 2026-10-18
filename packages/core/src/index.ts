@@ -1386,3 +1386,15 @@ export type {
 export { libraryLyrics, libraryLyricsSong } from "./libraryLyrics.ts";
 export type { LibraryLyrics, LibraryLyricsState, LibraryLyricsTrack } from "./libraryLyrics.ts";
 export type { SyncedStarDownloads } from "./starDownloads.ts";
+export {
+  MIX_PULL_THRESHOLD,
+  mixesShown,
+  mixPull,
+  mixRefreshAvoid,
+  mixRefreshWaitNotice,
+  parseMixesShown,
+  storedMixesShown,
+  undoneMixRefresh,
+} from "./mixRefresh.ts";
+export type { MixPull, MixRefreshAvoid, ShownMixes } from "./mixRefresh.ts";
+export { searchRoomAt } from "./searchAllowance.ts";

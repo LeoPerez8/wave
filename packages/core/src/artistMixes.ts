@@ -17,6 +17,7 @@ import type {
   DiscoverSimilarArtists,
 } from "./discoverMixes.ts";
 import { identityKey } from "./library.ts";
+import { freshFirst, type MixRefreshAvoid } from "./mixRefresh.ts";
 import { pickWeighted, playsWeight, type RandomSource } from "./weightedPick.ts";
 import { libraryArtistFinder, ytArtistQuery } from "./ytArtist.ts";
 
@@ -42,6 +43,8 @@ export interface ArtistMixPools {
    * `artistMixSimilarSource` asked for them. Used with [library] only.
    */
   readonly similar?: readonly DiscoverSimilarArtists[];
+  /** For a refresh: what the section showed today (`mixRefreshAvoid`). */
+  readonly avoid?: MixRefreshAvoid;
 }
 
 /**
@@ -66,33 +69,77 @@ const artistSeed = (
   from,
 });
 
+/** The seeds [pools] give before a refresh brings any back. */
+interface SeedPick {
+  /** From plays, then the Library, then similar artists; none a refresh avoids. */
+  readonly seeds: DiscoverMixSeed[];
+  /** The artists a refresh avoids that could seed, the least recently shown first. */
+  readonly comeback: DiscoverMixSeed[];
+}
+
+const pickSeeds = (pools: ArtistMixPools, random: RandomSource): SeedPick => {
+  const { avoid } = pools;
+  const shownAt =
+    avoid === undefined
+      ? null
+      : (artist: { readonly name: string }) => avoid.artists.get(identityKey(artist.name));
+  const played = freshFirst(seedable(pools.played, new Set()), shownAt);
+  const picked = new Set(
+    pickWeighted(
+      played.fresh,
+      ARTIST_MIX_COUNT,
+      (artist) => playsWeight(artist.countedPlays),
+      random,
+    ),
+  );
+  const seeds = played.fresh
+    .filter((artist) => picked.has(artist))
+    .map((artist) => artistSeed(artist, "plays"));
+  const chosen = new Set([...picked].map((artist) => identityKey(artist.name)));
+  const library = freshFirst(
+    seedable(
+      // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh copy; Hermes lacks toSorted
+      [...(pools.library ?? [])].sort((a, b) => b.songCount - a.songCount).slice(0, LIBRARY_ARTISTS),
+      chosen,
+    ),
+    shownAt,
+  );
+  for (const artist of library.fresh.slice(0, ARTIST_MIX_COUNT - seeds.length))
+    seeds.push(artistSeed(artist, "library"));
+  const similar = freshFirst(similarOf(pools), shownAt);
+  for (const artist of similar.fresh.slice(0, ARTIST_MIX_COUNT - seeds.length))
+    seeds.push({ ...artistSeed(artist, "similar"), browseId: artist.browseId });
+  const ids = new Set<string>();
+  const comeback = [
+    ...played.shown.map((artist) => artistSeed(artist, "plays")),
+    ...library.shown.map((artist) => artistSeed(artist, "library")),
+    ...similar.shown.map((artist) => ({
+      ...artistSeed(artist, "similar"),
+      browseId: artist.browseId,
+    })),
+  ].filter((seed) => {
+    if (ids.has(seed.id)) return false;
+    ids.add(seed.id);
+    return true;
+  });
+  // oxlint-disable-next-line unicorn/no-array-sort -- sorts the fresh array filter made; Hermes lacks toSorted
+  comeback.sort((a, b) => (shownAt?.(a) ?? 0) - (shownAt?.(b) ?? 0));
+  return { seeds, comeback };
+};
+
 /**
  * The Artist mixes' seeds, four at most. First the owner's most played
  * artists, picked by [random] (`pickWeighted`), the most played more likely
  * (`playsWeight`), most played first. With fewer, the Library's artists with
- * the most songs (of its 20 with the most) fill the rest. Names that aren't
- * an artist's seed nothing, and an artist seeds once.
+ * the most songs (of its 20 with the most) fill the rest, then similar
+ * artists. Names that aren't an artist's seed nothing, and an artist seeds
+ * once. A refresh (`ArtistMixPools.avoid`) passes over the artists the
+ * section showed today while others are left, then brings them back, the
+ * least recently shown first.
  */
 export const artistMixSeeds = (pools: ArtistMixPools, random: RandomSource): DiscoverMixSeed[] => {
-  const seen = new Set<string>();
-  const played = seedable(pools.played, seen);
-  const picked = new Set(
-    pickWeighted(played, ARTIST_MIX_COUNT, (artist) => playsWeight(artist.countedPlays), random),
-  );
-  const seeds = played
-    .filter((artist) => picked.has(artist))
-    .map((artist) => artistSeed(artist, "plays"));
-  const chosen = new Set([...picked].map((artist) => identityKey(artist.name)));
-  const library = seedable(
-    // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh copy; Hermes lacks toSorted
-    [...(pools.library ?? [])].sort((a, b) => b.songCount - a.songCount).slice(0, LIBRARY_ARTISTS),
-    chosen,
-  );
-  for (const artist of library.slice(0, ARTIST_MIX_COUNT - seeds.length))
-    seeds.push(artistSeed(artist, "library"));
-  for (const artist of similarOf(pools).slice(0, ARTIST_MIX_COUNT - seeds.length))
-    seeds.push({ ...artistSeed(artist, "similar"), browseId: artist.browseId });
-  return seeds;
+  const { seeds, comeback } = pickSeeds(pools, random);
+  return [...seeds, ...comeback.slice(0, ARTIST_MIX_COUNT - seeds.length)];
 };
 
 /** How many Library artists' pages are read for similar artists at most. */
@@ -109,8 +156,8 @@ const SIMILAR_PAGES = 3;
 export const artistMixSimilarSource = (pools: ArtistMixPools): DiscoverSeedArtist | null => {
   const { played, library, similar = [] } = pools;
   if (library === undefined || similar.length >= SIMILAR_PAGES) return null;
-  const room = ARTIST_MIX_COUNT - artistMixSeeds({ played, library }, () => 0).length;
-  if (similarOf(pools).length >= room) return null;
+  // A refresh's avoided artists leave room: pages are read for others first.
+  if (pickSeeds(pools, () => 0).seeds.length >= ARTIST_MIX_COUNT) return null;
   const read = new Set(similar.map((page) => identityKey(page.of)));
   // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh copy; Hermes lacks toSorted
   const byMostSongs = [...library].sort((a, b) => b.songCount - a.songCount);

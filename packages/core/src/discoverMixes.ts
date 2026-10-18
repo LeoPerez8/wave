@@ -166,6 +166,12 @@ export interface DiscoverMixFilter<S extends DiscoverRadioSong> {
   readonly taken: ReadonlySet<string>;
   /** The video the radio started from, for a song seed. */
   readonly seedVideo: string | null;
+  /**
+   * For a refresh: the new songs of the sets the section showed today
+   * (`mixRefreshAvoid`), by video id. They come back only to make up a mix's
+   * fewest songs, in the radio's order.
+   */
+  readonly avoid?: ReadonlySet<string>;
 }
 
 /** The most songs a mix has. */
@@ -195,16 +201,23 @@ export const discoverMixSongs = <S extends DiscoverRadioSong>(
   for (const song of before) videos.add(song.videoId);
   const recordings = new Set(before.map(recordingOf));
   const kept: S[] = [...before];
-  for (const song of pages.flat()) {
+  // Songs a refresh avoids, kept back in case the mix is short without them.
+  const held: S[] = [];
+  const radio = pages.flat();
+  for (const song of radio) {
     if (kept.length >= MIX_MOST) break;
     const recording = recordingOf(song);
     if (song.video || videos.has(song.videoId) || recordings.has(recording)) continue;
     if (filter.inLibrary(song) || filter.played(song)) continue;
     videos.add(song.videoId);
     recordings.add(recording);
-    kept.push(song);
+    if (filter.avoid?.has(song.videoId) === true) held.push(song);
+    else kept.push(song);
   }
-  return kept;
+  if (kept.length >= MIX_FEWEST || held.length === 0) return kept;
+  const back = new Set(held.slice(0, MIX_FEWEST - kept.length));
+  const fromPages = new Set(kept.slice(before.length));
+  return [...before, ...radio.filter((song) => fromPages.has(song) || back.has(song))];
 };
 
 /**

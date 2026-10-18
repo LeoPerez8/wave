@@ -12,6 +12,8 @@ import type {
   DiscoverSeedArtist,
   DiscoverSongPlays,
 } from "./discoverMixes.ts";
+import { identityKey } from "./library.ts";
+import { freshFirst, type MixRefreshAvoid } from "./mixRefresh.ts";
 import { pickWeighted, playsWeight, type RandomSource } from "./weightedPick.ts";
 import { ytArtistQuery } from "./ytArtist.ts";
 
@@ -272,43 +274,64 @@ const libraryFamilies = (library: GenreMixLibrary): RankedFamily[] => {
  * Up to three of [family]'s artists to grow its mix from, picked by
  * [random] (`pickWeighted`), those most played in the family more likely
  * (`playsWeight`); most played in it first, then those with more songs in
- * it. Names that aren't an artist's ("Various Artists") seed nothing.
+ * it. Names that aren't an artist's ("Various Artists") seed nothing. A
+ * refresh ([avoid]) picks from the artists the section didn't show today,
+ * then fills up with those it did, the least recently shown first.
  */
-const seedArtists = (family: RankedFamily, random: RandomSource): DiscoverSeedArtist[] => {
-  const artists = [...family.artists.values()].filter(
-    ({ artist }) => ytArtistQuery(artist.name) !== null,
+const seedArtists = (
+  family: RankedFamily,
+  random: RandomSource,
+  avoid: MixRefreshAvoid | undefined,
+): DiscoverSeedArtist[] => {
+  const { fresh, shown } = freshFirst(
+    seedableArtists(family),
+    avoid === undefined ? null : ({ artist }) => avoid.artists.get(identityKey(artist.name)),
   );
   const picked = new Set(
-    pickWeighted(artists, SEED_ARTISTS, (artist) => playsWeight(artist.plays), random),
+    pickWeighted(fresh, SEED_ARTISTS, (artist) => playsWeight(artist.plays), random),
   );
-  return (
-    artists
+  return [
+    ...fresh
       .filter((artist) => picked.has(artist))
       // oxlint-disable-next-line unicorn/no-array-sort -- sorts the fresh array filter made; Hermes lacks toSorted
-      .sort((a, b) => b.plays - a.plays || b.songs - a.songs)
-      .map(({ artist }) => ({ id: artist.id, name: artist.name }))
-  );
+      .sort((a, b) => b.plays - a.plays || b.songs - a.songs),
+    ...shown.slice(0, SEED_ARTISTS - picked.size),
+  ].map(({ artist }) => ({ id: artist.id, name: artist.name }));
 };
+
+/** [family]'s artists whose names are an artist's. */
+const seedableArtists = (family: RankedFamily): FamilyArtist[] =>
+  [...family.artists.values()].filter(({ artist }) => ytArtistQuery(artist.name) !== null);
 
 /**
  * Genre mixes' seeds, four at most, one per genre family: the families with
  * five or more Library songs, most played first (their songs' counted
  * plays), then those with more songs. Each grows from up to three of its
  * artists (`seedArtists`); a family with none that may seed has no mix.
+ *
+ * A refresh ([avoid], `mixRefreshAvoid`) keeps the families while there are
+ * four at most, growing them from other artists; with more, it brings in the
+ * families the section didn't show today first, then those it did, the
+ * least recently shown first. The mixes stay in the families' order.
  */
 export const genreMixSeeds = (
   library: GenreMixLibrary,
   random: RandomSource,
+  avoid?: MixRefreshAvoid,
 ): DiscoverMixSeed[] => {
   const seeds: DiscoverMixSeed[] = [];
   const ranked = libraryFamilies(library)
-    .filter((family) => family.songs >= FAMILY_FEWEST)
+    .filter((family) => family.songs >= FAMILY_FEWEST && seedableArtists(family).length > 0)
     // oxlint-disable-next-line unicorn/no-array-sort -- sorts the fresh array filter made; Hermes lacks toSorted
     .sort((a, b) => b.plays - a.plays || b.songs - a.songs);
+  const { fresh, shown } = freshFirst(
+    ranked,
+    avoid === undefined ? null : ({ family }) => avoid.mixes.get(`genre:${family.key}`),
+  );
+  const chosen = new Set([...fresh, ...shown].slice(0, GENRE_MIX_COUNT));
   for (const family of ranked) {
-    if (seeds.length === GENRE_MIX_COUNT) break;
-    const artists = seedArtists(family, random);
-    if (artists.length === 0) continue;
+    if (!chosen.has(family)) continue;
+    const artists = seedArtists(family, random, avoid);
     const { key, name } = family.family;
     seeds.push({
       kind: "genre",

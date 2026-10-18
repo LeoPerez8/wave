@@ -185,6 +185,20 @@ export const searchTurns = (allowance: SearchAllowance, now: number): SearchTurn
   };
 };
 
+/**
+ * When the window has room for a search of [asker]'s again, at the earliest
+ * (ms); null when it has room at [now]. Searches waiting aren't counted.
+ */
+export const searchRoomAt = (
+  allowance: SearchAllowance,
+  asker: SearchAsker,
+  now: number,
+): number | null => {
+  const searchesAt = recent(allowance.searchesAt, now);
+  const { most } = ASKERS[asker];
+  return searchesAt.length < most ? null : freeAt(searchesAt, most, now);
+};
+
 // ---------------------------------------------------------------------------
 // The app log
 
