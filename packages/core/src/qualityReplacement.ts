@@ -489,6 +489,20 @@ export const noBetterCopies = (jobs: readonly YtDownloadJournalJob[]): NoBetterC
   });
 
 /**
+ * The new files the journal's failed replacement [jobs] left in the Library's
+ * folders: the one published (`finalPath`) before the job failed, or the one
+ * saved whose import failed. Each must go, or a scan makes it a second song;
+ * the song keeps its old file. A file that took the old one's very path
+ * (`replaces`) is the song's own file now, and stays.
+ */
+export const failedReplacementFiles = (jobs: readonly YtDownloadJournalJob[]): string[] =>
+  jobs.flatMap((job) => {
+    if (qualityJobOf(job.id) === null || failureOf(job) === null) return [];
+    const path = job.importFailure !== undefined ? job.saved?.path : job.finalPath;
+    return path === undefined || path === job.replaces ? [] : [path];
+  });
+
+/**
  * Turning the switch back: the replacements in [direction] to cancel, those
  * queued or downloading. One already saving finishes.
  */

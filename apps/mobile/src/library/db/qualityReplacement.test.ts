@@ -9,6 +9,7 @@ import type { IndexedTrack } from "../LibraryStore.ts";
 import { creditSplits } from "./credits.ts";
 import { selectMissingSongs } from "./missingSongs.ts";
 import { selectFavoriteTrackIds, setFavorites } from "./playHistory.ts";
+import { forgetFileDeletions, pendingFileDeletions } from "./fileDeletions.ts";
 import { createPlaylist } from "./playlists.ts";
 import {
   rememberNoBetterCopies,
@@ -214,4 +215,87 @@ describe("replacing a Track's file in place", () => {
     deleteTracksById(db, [id]);
     assert.deepEqual(selectNoBetterCopies(db, "upgrade"), []);
   });
+});
+
+describe("the old file's recorded deletion", () => {
+  test("the swap records that the old file must go, in its transaction", () => {
+    save([file(OLD)]);
+    replaceTrackFile(db, creditSplits(), idOf(OLD), file(NEW, { bitrateKbps: 320 }), [], 2);
+    assert.deepEqual(pendingFileDeletions(db), [OLD]);
+  });
+
+  test("a new file at the old one's very path leaves nothing to delete", () => {
+    save([file(NEW)]);
+    replaceTrackFile(db, creditSplits(), idOf(NEW), file(NEW, { bitrateKbps: 320 }), [], 2);
+    assert.deepEqual(pendingFileDeletions(db), []);
+  });
+
+  test("a replayed import after the swap still finds the old file to delete", () => {
+    save([file(OLD)]);
+    const id = idOf(OLD);
+    replaceTrackFile(db, creditSplits(), id, file(NEW, { bitrateKbps: 320 }), [], 2);
+    // Killed before the old file was deleted: the journal asks for the import again.
+    const replayed = replaceTrackFile(
+      db,
+      creditSplits(),
+      id,
+      file(NEW, { bitrateKbps: 320 }),
+      [],
+      3,
+    );
+    assert.equal(replayed.kind === "replaced" && replayed.oldPath, NEW);
+    assert.deepEqual(pendingFileDeletions(db), [OLD]);
+  });
+
+  test("a deletion done, or a file already missing, is cleared", () => {
+    save([file(OLD)]);
+    replaceTrackFile(db, creditSplits(), idOf(OLD), file(NEW, { bitrateKbps: 320 }), [], 2);
+    forgetFileDeletions(db, [OLD]);
+    assert.deepEqual(pendingFileDeletions(db), []);
+  });
+
+  test("a recorded file a Track holds is a Library song's: never deleted, its record goes", () => {
+    save([file(OLD)]);
+    const id = idOf(OLD);
+    replaceTrackFile(db, creditSplits(), id, file(NEW, { bitrateKbps: 320 }), [], 2);
+    // Say a Track came to hold that path again (a replacement back the other way).
+    replaceTrackFile(db, creditSplits(), id, file(OLD), [], 3);
+    assert.deepEqual(pendingFileDeletions(db), [NEW]);
+  });
+
+  test("a Track removed before its new file arrived leaves the new file to delete", () => {
+    save([file(OLD)]);
+    const id = idOf(OLD);
+    deleteTracksById(db, [id]);
+    assert.deepEqual(replaceTrackFile(db, creditSplits(), id, file(NEW), [], 2), { kind: "gone" });
+    assert.deepEqual(pendingFileDeletions(db), [NEW]);
+  });
+
+  for (const killedAt of ["before the swap", "after the swap", "after the deletion"] as const)
+    test(`killed ${killedAt}, the song ends with one Track and one file`, () => {
+      const disk = new Set([OLD, NEW]);
+      save([file(OLD)]);
+      const id = idOf(OLD);
+      setFavorites(db, [id], true, 1);
+      const swap = () =>
+        replaceTrackFile(db, creditSplits(), id, file(NEW, { bitrateKbps: 320 }), [], 2);
+      /** What the app does after the swap, and at each launch: finishes the recorded deletions. */
+      const finish = () => {
+        const pending = pendingFileDeletions(db);
+        for (const path of pending) disk.delete(path);
+        forgetFileDeletions(db, pending);
+      };
+      if (killedAt !== "before the swap") swap();
+      if (killedAt === "after the deletion") finish();
+      // The next launch finishes what's recorded, and the journal replays the import.
+      finish();
+      swap();
+      finish();
+      assert.deepEqual(
+        songs().map((song) => [song.id, song.path]),
+        [[id, NEW]],
+      );
+      assert.deepEqual([...disk], [NEW]);
+      assert.deepEqual(selectFavoriteTrackIds(db), [id]);
+    });
 });

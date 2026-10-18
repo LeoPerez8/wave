@@ -66,6 +66,7 @@ class DurableDownloadFailuresTest {
       assertEquals(cause, job["cause"])
       assertTrue(log.joinToString("\n"), log.any { it.contains(cause) && it.contains("tagging") })
       // The journal keeps it across a restart, so the next start can still show it.
+      owner.flush()
       assertEquals(cause, DurableDownloads(File(folder, "jobs")).snapshot().single()["cause"])
     }
   }
@@ -227,7 +228,7 @@ class DurableDownloadFailuresTest {
     tag: (File) -> Unit = {},
     index: (File) -> Map<String, Any?> = { mapOf("path" to it.path, "track" to mapOf("path" to it.path), "artwork" to null) },
   ) = object : DurablePublication {
-    override fun tag(source: File, tags: Map<String, Any?>) = tag(source)
+    override fun tag(source: File, tags: Map<String, Any?>): String? { tag(source); return null }
     override fun index(file: File): Map<String, Any?> = index(file)
   }
   private val Untouched = publication()

@@ -5,8 +5,6 @@ import org.jaudiotagger.audio.AudioFileIO
 import org.jaudiotagger.tag.FieldKey
 import org.jaudiotagger.tag.Tag
 import org.jaudiotagger.tag.images.ArtworkFactory
-import org.jaudiotagger.tag.mp4.Mp4Tag
-import org.jaudiotagger.tag.mp4.Mp4TagCreator
 
 /** The tags a YT Music download gets (Core's `ytDownloadTags`); null fields are left out. */
 data class DownloadTags(
@@ -61,7 +59,11 @@ class DownloadTagWriter {
     JAudioTaggerReader.configure()
   }
 
-  fun write(file: File, tags: DownloadTags, artwork: ByteArray?) {
+  /**
+   * Returns the file's SHA-256 as written, when the write went through every byte of it (a
+   * fragmented M4A, rewritten whole), else null ([FragmentedMp4.writeTag]).
+   */
+  fun write(file: File, tags: DownloadTags, artwork: ByteArray?): String? {
     val audio = AudioFileIO.read(file)
     val tag = audio.createDefaultTag()
     val kept = tags.keepTagsOf?.let { keptTagOf(File(it)) }
@@ -89,13 +91,8 @@ class DownloadTagWriter {
         },
       )
     }
-    if (tag is Mp4Tag && FragmentedMp4.isFragmented(file)) {
-      val ilst = Mp4TagCreator().convertMetadata(tag)
-      FragmentedMp4.writeIlst(file, ByteArray(ilst.remaining()).also(ilst::get))
-    } else {
-      audio.tag = tag
-      AudioFileIO.write(audio)
-    }
+    audio.tag = tag
+    return FragmentedMp4.writeTag(audio, file, hashed = true)
   }
 
   /** The tag of the file a replacement replaces; null when it's gone or can't be read. */

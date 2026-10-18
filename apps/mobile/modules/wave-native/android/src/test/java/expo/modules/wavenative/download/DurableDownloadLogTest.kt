@@ -1,5 +1,6 @@
 package expo.modules.wavenative.download
 
+import expo.modules.wavenative.log.MemoryUse
 import java.io.File
 import java.nio.file.Files
 import org.junit.Assert.*
@@ -153,8 +154,8 @@ class DurableDownloadLogTest {
       assertEquals(DownloadServiceStop.CANCELLED, owner.idleStop())
     }
     assertEquals(
-      "The download service stopped after 5 s: the last song was cancelled",
-      DownloadServiceLines.stopped(DownloadServiceStop.CANCELLED, 5_000L, DownloadCounts(0, 0)),
+      "The download service stopped after 5 s: the last song was cancelled; Java heap 0/256 MB, native heap 0 MB, PSS 0 MB",
+      DownloadServiceLines.stopped(DownloadServiceStop.CANCELLED, 5_000L, DownloadCounts(0, 0), MemoryUse(0, 256L shl 20, 0, 0)),
     )
   }
 
@@ -178,7 +179,7 @@ class DurableDownloadLogTest {
     override fun cancel(id: String) {}
   }
   private object Untouched : DurablePublication {
-    override fun tag(source: File, tags: Map<String, Any?>) {}
+    override fun tag(source: File, tags: Map<String, Any?>): String? = null
     override fun index(file: File): Map<String, Any?> = mapOf("path" to file.path, "track" to mapOf("path" to file.path), "artwork" to null)
   }
   private fun prepareYoutube(owner: DurableDownloads, target: File) {

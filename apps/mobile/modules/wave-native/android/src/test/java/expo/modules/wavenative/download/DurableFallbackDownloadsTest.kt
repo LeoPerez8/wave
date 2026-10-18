@@ -419,6 +419,7 @@ class DurableFallbackDownloadsTest {
         owner.advance(transfer { _, _, source -> source.parentFile.mkdirs(); source.writeText("half"); throw ProcessDeath() }, Untouched)
       }
       now += 10_000
+      owner.flush()
       owner = DurableDownloads(journal, clock = { now })
       val asked = mutableListOf<Any?>()
       val transport = transfer { _, candidate, source ->
@@ -557,7 +558,7 @@ class DurableFallbackDownloadsTest {
     override fun cancel(id: String) {}
   }
   private object Untouched : DurablePublication {
-    override fun tag(source: File, tags: Map<String, Any?>) {}
+    override fun tag(source: File, tags: Map<String, Any?>): String? = null
     override fun index(file: File): Map<String, Any?> = mapOf("path" to file.path, "track" to mapOf("path" to file.path), "artwork" to null)
   }
   /** What JS's prepare answer carries with YT Music on: the M4A's place and YouTube's failure plan. */

@@ -737,3 +737,17 @@ export const streamedSongs = sqliteTable("streamed_songs", {
   firstPlayedAt: integer("first_played_at").notNull(),
   lastPlayedAt: integer("last_played_at").notNull(),
 });
+
+/**
+ * Files Wave must delete, recorded in the transaction that made them
+ * leftovers: a quality replacement's old file once its Track took the new
+ * one (`replaceTrackFile`), or a failed replacement's new file. Cleared once
+ * the file is gone or missing; each launch and each replacement run finishes
+ * what's still here (the app's `finishFileDeletions`), and scans leave these
+ * files out. This phone only, never synced.
+ */
+export const fileDeletions = sqliteTable("file_deletions", {
+  path: text("path").primaryKey(),
+  /** When the deletion was recorded (ms since the epoch). */
+  recordedAt: integer("recorded_at").notNull(),
+});

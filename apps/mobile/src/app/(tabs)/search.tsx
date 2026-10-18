@@ -3,6 +3,7 @@ import {
   heldTracks,
   inLibraryUnlessHeld,
   type SearchKind,
+  type YtPick,
   ytSectionToggle,
   ytSectionView,
 } from "@wave/core";
@@ -50,6 +51,7 @@ import { useSearchFieldFocus } from "@/search/fieldFocus";
 import { SearchField } from "@/search/SearchField";
 import { SearchFieldRow } from "@/search/SearchFieldRow";
 import { useSearchIndex } from "@/search/searchIndex";
+import { useTopArtistSongs } from "@/search/topArtistSongs";
 import { SearchResultsList } from "@/search/SearchResultsList";
 import { useListSelection } from "@/selection/useListSelection";
 import { useLineToggle } from "@/ytmusic/OnlineToggle";
@@ -142,7 +144,16 @@ export default function SearchScreen() {
   // Always (the toggle's long press chooses it); it answers on its own time, and its
   // songs, artists and albums the library doesn't have join the library's.
   // Until the library is ready, nothing is asked.
-  const [ytSection, pickYt] = useYtMusicSection(deferredQuery, !libraryEmpty);
+  const [ytSection, pickYtSection] = useYtMusicSection(deferredQuery, !libraryEmpty);
+  // Each tap on Online, so a top artist whose page couldn't be read is tried again.
+  const [onlineTaps, setOnlineTaps] = useState(0);
+  const pickYt = useCallback(
+    (pick: YtPick) => {
+      if (pick === "online") setOnlineTaps((taps) => taps + 1);
+      pickYtSection(pick);
+    },
+    [pickYtSection],
+  );
   const toggle = useLineToggle(ytSectionToggle(ytSection), pickYt);
   const inLibrary = library?.library;
   const ytView = useMemo(
@@ -156,6 +167,14 @@ export default function SearchScreen() {
     [ytSection, inLibrary, holding.held],
   );
   const placed = useSongsInPlace(holding, ytView?.songs ?? NO_YT_SONGS, find);
+  // A Library artist on top, with Online, counts the songs their online page adds.
+  const topArtist = results?.top?.kind === "artist" ? results.top.artist : null;
+  const topArtistSongs = useTopArtistSongs(
+    ytSection,
+    topArtist,
+    inLibrary?.hasSong ?? null,
+    onlineTaps,
+  );
   const rows = useMemo(() => {
     if (results === null) return [];
     const ytFound =
@@ -163,9 +182,9 @@ export default function SearchScreen() {
     const ours =
       libraryEmpty && ytFound === 0
         ? [noLibraryResultsRow(deferredQuery)]
-        : resultRows(results, expanded, ytView, placed);
+        : resultRows(results, expanded, ytView, placed, topArtistSongs);
     return [...ours, ...ytFooterRows(ytView)];
-  }, [results, libraryEmpty, deferredQuery, expanded, ytView, placed]);
+  }, [results, libraryEmpty, deferredQuery, expanded, ytView, placed, topArtistSongs]);
 
   // Song results can be selected. The selection lives here, not in the list,
   // so a new query (or none matching) keeps it: checked songs that drop out of

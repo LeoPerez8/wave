@@ -2,12 +2,14 @@ package expo.modules.wavenative.download
 
 import android.content.Context
 import android.content.Intent
-import android.media.MediaScannerConnection
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import expo.modules.wavenative.artwork.AndroidArtworkProcessor
 import expo.modules.wavenative.artwork.ArtworkStore
+import expo.modules.wavenative.log.AndroidMemory
+import expo.modules.wavenative.log.JsHeap
+import expo.modules.wavenative.log.NativeLog
 import expo.modules.wavenative.log.WaveLog
 import expo.modules.wavenative.player.JsRuntime
 import expo.modules.wavenative.scan.LibraryScanner
@@ -22,7 +24,7 @@ import expo.modules.wavenative.tags.DownloadTagWriter
 import expo.modules.wavenative.tags.DownloadTags
 import expo.modules.wavenative.tags.JAudioTaggerReader
 import expo.modules.wavenative.tags.MediaRetrieverTagReader
-import expo.modules.wavenative.yt.AndroidM4aDuration
+import expo.modules.wavenative.yt.AndroidAudioDuration
 import expo.modules.wavenative.yt.AndroidYtAudioStreams
 import expo.modules.wavenative.yt.YtAudioDownload
 import expo.modules.wavenative.yt.YtDownloadService
@@ -42,14 +44,17 @@ import java.util.concurrent.TimeUnit
 
 /** Application-context owner, independent of Expo module and Activity lifetimes. */
 class AndroidDownloads private constructor(private val context: Context) {
+  /** Writes the journal's changes that wait for their second (#452), off the main thread and whether or not the service runs. */
+  private val journalWriter = Executors.newSingleThreadScheduledExecutor(BackgroundThreads("Wave download journal", daemon = true))
   // Each failure's cause also goes to the app log, so a device run shows why a download stopped;
   // and each transfer's speed, so it shows where a download's time went. Its budgets wait for the
   // download service (startWork): Wave opening before the service starts isn't charged.
   val jobs = DurableDownloads(
-    File(context.noBackupFilesDir, "soulseek-download-jobs-v1"),
+    journal(context),
     log = { WaveLog.w(TAG, it) },
     note = { WaveLog.i(TAG, it) },
     budgetRunning = false,
+    later = { delay, run -> journalWriter.schedule(run, delay, TimeUnit.MILLISECONDS) },
   )
   private val soulseek = AndroidSoulseek.get(context)
   private val main = Handler(Looper.getMainLooper())
@@ -95,7 +100,7 @@ class AndroidDownloads private constructor(private val context: Context) {
           WaveLog.i(TAG, if (from > 0) "A YouTube transfer goes on from byte $from of $total" else "A YouTube transfer starts over: its part file held another stream")
         },
       )
-      val durationMs = AndroidM4aDuration.of(source, cancelled)
+      val durationMs = AndroidAudioDuration.of(source, cancelled)
       // What YouTube answered with goes along, so the confirm decision logs it beside the lengths.
       mapOf(
         "partPath" to source.path, "bytes" to file.bytes, "mimeType" to file.mimeType, "itag" to file.itag.toLong(),
@@ -160,11 +165,13 @@ class AndroidDownloads private constructor(private val context: Context) {
       throw DurableFailure(if (DownloadFiles.storageProblem(error, source.parentFile)) "storage" else "unavailable", error)
     }
     catch (error: Exception) { WaveLog.w(TAG, "A Soulseek transfer failed", error); throw error }
+  /** Where the media scanner's paths wait for their batch (#455). */
+  private val scans = AndroidMediaScans.get(context)
   private val publication = object : DurablePublication {
-    override fun tag(source: File, tags: Map<String, Any?>) {
+    override fun tag(source: File, tags: Map<String, Any?>): String? {
       val fields = DownloadTags.fromJs(tags) ?: throw java.io.IOException("Invalid download tags")
       val cover = (tags["artworkUrl"] as? String)?.let { runCatching { cover(it) }.getOrNull() }
-      DownloadTagWriter().write(source, fields, cover)
+      return DownloadTagWriter().write(source, fields, cover)
     }
     override fun index(file: File): Map<String, Any?> {
       val scanner = LibraryScanner(
@@ -172,9 +179,40 @@ class AndroidDownloads private constructor(private val context: Context) {
         artworkStore = ArtworkStore(File(context.filesDir, "artwork"), AndroidArtworkProcessor()),
       )
       val (track, artwork) = scanner.index(file)
-      MediaScannerConnection.scanFile(context, arrayOf(file.path), null, null)
+      // Android's media scanner sees it once its lyrics and genre are written (the fill-in, then
+      // `downloadFilledIn`), with the file it replaces, in a batch (#455).
+      scans.hold(file.path)
       return mapOf("path" to file.path, "track" to trackToMap(track), "artwork" to artwork?.let(::artworkToMap))
     }
+  }
+
+  /**
+   * The lines written about once a minute while the service runs, on a thread of their own (the
+   * memory line waits up to half a second for JS's heap). Another line takes the same beat with
+   * `minutes.add { WaveLog.i(TAG, …) }` here.
+   */
+  private val minutes = MinuteLines(SystemClock::elapsedRealtime, every = { period, tick ->
+    val ticking = minuteTicker.scheduleWithFixedDelay({ tick() }, period, period, TimeUnit.MILLISECONDS)
+    ({ ticking.cancel(false) })
+  }).also { minutes ->
+    minutes.add {
+      val use = AndroidMemory.read()
+      WaveLog.i(TAG, DownloadServiceLines.memory(jobs.counts(), use, JsHeap.app.read()))
+      // Android 14+ no longer sends the running memory warnings: the tick checks for itself (#450).
+      NativeLog.memoryChecked(use, AndroidMemory.phoneLow(context))
+    }
+    // What the journal's writes cost since the last line (#452).
+    minutes.add { WaveLog.i(TAG, jobs.takeWriteStats().line()) }
+    // What went to the media scanner, in how many batches (#455).
+    minutes.add { WaveLog.i(TAG, scans.takeLine()) }
+  }
+  private val minuteTicker by lazy {
+    Executors.newSingleThreadScheduledExecutor { tick -> Thread(tick, "WaveDownloadMinutes").apply { isDaemon = true } }
+  }
+
+  /** Writes a service line that reads Wave's memory on the minute lines' thread, in order with them. */
+  private fun offMain(line: () -> Unit) {
+    try { minuteTicker.execute { runCatching(line) } } catch (_: java.util.concurrent.RejectedExecutionException) {}
   }
 
   fun subscribe(listener: () -> Unit): () -> Unit { listeners.add(listener); return { listeners.remove(listener) } }
@@ -195,10 +233,10 @@ class AndroidDownloads private constructor(private val context: Context) {
     if (!jobs.hasWork()) return
     try { context.startForegroundService(Intent(context, YtDownloadService::class.java)) }
     catch (error: Exception) {
-      // Never unprotected work: started jobs fail with Retry; queued ones wait for the next launch.
+      // Never unprotected work: started jobs go back in line, and all wait for the next launch.
       if (synchronized(this) { worker == null }) {
         WaveLog.w(TAG, DownloadServiceLines.refused(restart = false, describe(error)))
-        jobs.expire(transport, stopAll = true); changed()
+        jobs.interrupt(transport); changed()
       } else WaveLog.w(TAG, "Android refused to start the download service again; it goes on", error)
     }
   }
@@ -206,17 +244,23 @@ class AndroidDownloads private constructor(private val context: Context) {
   /** Starts the work, unless it runs already; [restarted] when Android restarted the service after Wave was closed. */
   @Synchronized fun start(onIdle: () -> Unit, refresh: () -> Unit, restarted: Boolean = false) {
     if (worker != null) return
-    WaveLog.i(TAG, DownloadServiceLines.started(restarted, jobs.counts()))
+    val counts = jobs.counts()
+    // Wave's memory is read off the main thread, where the service starts.
+    offMain { WaveLog.i(TAG, DownloadServiceLines.started(restarted, counts, AndroidMemory.read())) }
     startedAt = SystemClock.elapsedRealtime()
     jobs.startWork()
+    minutes.start()
+    // The journal's line counts its writes from the service's start.
+    jobs.takeWriteStats()
     main.post { JsRuntime.ensureStarted(context, OWNER) }
-    deadlines = Executors.newSingleThreadScheduledExecutor().also { executor ->
+    // Download work runs at background priority (#455): the UI and playback keep theirs.
+    deadlines = Executors.newSingleThreadScheduledExecutor(BackgroundThreads("Wave download deadlines")).also { executor ->
       // Also refreshes the notification and the rows while transfers go on.
       executor.scheduleWithFixedDelay({ runCatching { jobs.expire(transport); changed(); main.post(refresh) } }, 1, 1, TimeUnit.SECONDS)
     }
     // Each song's transfer, tagging or publication runs on a thread of its own, several songs at once.
-    val pool = Executors.newCachedThreadPool().also { steps = it }
-    worker = Executors.newSingleThreadScheduledExecutor().also { executor ->
+    val pool = Executors.newCachedThreadPool(BackgroundThreads("Wave download step")).also { steps = it }
+    worker = Executors.newSingleThreadScheduledExecutor(BackgroundThreads("Wave download worker")).also { executor ->
       executor.scheduleWithFixedDelay({
         runCatching {
           jobs.expire(transport)
@@ -239,15 +283,33 @@ class AndroidDownloads private constructor(private val context: Context) {
     runCatching { jobs.expire(transport, true, stopCause = describe(error)) }
   }
 
-  /** Android's time limit stops actual socket work before removing foreground protection. */
+  /**
+   * Android's time limit stops actual socket work before removing foreground protection; the
+   * songs it stopped go back in line for the next start. A replacement run stopped under it says
+   * what it did.
+   */
   @Synchronized fun stop(why: DownloadServiceStop, timedOut: Boolean = false) {
-    if (worker != null) WaveLog.i(TAG, DownloadServiceLines.stopped(why, SystemClock.elapsedRealtime() - startedAt, jobs.counts()))
+    if (worker != null) {
+      val ranMs = SystemClock.elapsedRealtime() - startedAt
+      val counts = jobs.counts()
+      val run = jobs.replacementRun()?.takeIf { it.waiting > 0 }
+      // Wave's memory is read off the main thread (the PSS reads `/proc`, slower when memory is short).
+      offMain {
+        WaveLog.i(TAG, DownloadServiceLines.stopped(why, ranMs, counts, AndroidMemory.read()))
+        run?.let { WaveLog.i(TAG, DownloadServiceLines.replacementRun(it, why)) }
+      }
+    }
     jobs.stopWork(transport)
+    minutes.stop()
+    // The run's last batch for the media scanner goes now; files still waiting for their tags follow.
+    scans.flush()
+    // What waits for its second is written now, off the main thread (a full disk keeps it for the next write).
+    journalWriter.execute { runCatching { jobs.flush() } }
     worker?.shutdownNow(); worker = null
     steps?.shutdownNow(); steps = null
     deadlines?.shutdownNow(); deadlines = null
-    if (timedOut) Executors.newSingleThreadExecutor().also { executor ->
-      executor.execute { try { jobs.expire(transport, true); changed() } finally { executor.shutdown() } }
+    if (timedOut) Executors.newSingleThreadExecutor(BackgroundThreads("Wave download stop")).also { executor ->
+      executor.execute { try { jobs.interrupt(transport); changed() } finally { executor.shutdown() } }
     }
     main.post { JsRuntime.release(OWNER) }
   }
@@ -281,6 +343,8 @@ class AndroidDownloads private constructor(private val context: Context) {
     private const val NOTIFY_MS = 500L
     /** Less free space than this beside the part file means the write failed for want of room. */
     private const val MIN_FREE_BYTES = 8L shl 20
+    /** The journal's file, which the app log also reads at launch ([savedDownloadCounts]). */
+    fun journal(context: Context): File = File(context.noBackupFilesDir, "soulseek-download-jobs-v1")
     @Volatile private var instance: AndroidDownloads? = null
     fun get(context: Context): AndroidDownloads = instance ?: synchronized(this) { instance ?: AndroidDownloads(context.applicationContext).also { instance = it } }
   }

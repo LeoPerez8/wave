@@ -6,6 +6,7 @@ import {
   pickYtArtist,
   stepYtArtistSection,
   ytArtistAnswerKept,
+  ytArtistCounts,
   ytArtistFullPage,
   ytArtistIntegrated,
   ytArtistLookup,
@@ -13,6 +14,7 @@ import {
   ytArtistSectionView,
   ytArtistShelves,
   type HeldSongs,
+  type YtArtistCounts,
   type YtArtistSaved,
   type YtArtistSection,
   type YtArtistSectionEvent,
@@ -39,7 +41,7 @@ import { YtMusic, YtMusicError } from "./YtMusic";
 type Saved = YtArtistSaved<NativeYtSong>;
 
 /** What was saved for the artist; nothing when it can't be read. */
-const readSaved = (artistKey: string) =>
+export const readSaved = (artistKey: string) =>
   Effect.gen(function* () {
     const store = yield* LibraryStore;
     return yield* store.ytArtist(artistKey);
@@ -254,6 +256,11 @@ export interface YtArtistSectionShown {
   readonly integrated: boolean;
   /** The page's Library | Online toggle, or null when it has none (YT Music off…). */
   readonly toggle: LineToggle | null;
+  /**
+   * The header's album and song counts from the Library's [local] ones: with
+   * Online and a match standing, what the page draws (Core's `ytArtistCounts`).
+   */
+  readonly counts: (local: YtArtistCounts) => YtArtistCounts;
 }
 
 /**
@@ -331,5 +338,23 @@ export const useYtArtistSection = (
     [retry, show],
   );
   const toggle = useLineToggle(view?.toggle, onPick);
-  return { view, shelves, integrated, toggle };
+  // The Library's files of songs held in place count as the Library's, as the page draws them once.
+  const counts = useCallback(
+    (local: YtArtistCounts) =>
+      find === null
+        ? local
+        : ytArtistCounts(state, {
+            name,
+            enabled,
+            now: openedAt,
+            integrated: openedIntegrated,
+            always,
+            pick,
+            local,
+            inLibrary: (song) => find(song) !== null,
+            libraryRelease: (album) => findAlbum(album) !== null,
+          }),
+    [find, state, name, enabled, openedAt, openedIntegrated, always, pick, findAlbum],
+  );
+  return { view, shelves, integrated, toggle, counts };
 };

@@ -18,6 +18,7 @@ class DurableDownloadOrderTest {
       for (id in listOf("a1", "a2", "b1", "b2")) owner.enqueue(song(id), null)
       // Playlist B's header dragged above A's.
       owner.moveQueued(listOf("b1", "b2", "a1", "a2"))
+      owner.flush()
       val restored = DurableDownloads(journal, slots = 1)
       assertEquals(listOf("b1", "b2", "a1", "a2"), restored.snapshot().map { it["id"] })
       restored.advance(NoTransfer, NoPublication)

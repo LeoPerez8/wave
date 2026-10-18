@@ -131,14 +131,14 @@ export const readYtPlaylist = async <S extends YtSong>(
 export type YtPlaylistRest = "reading" | "read" | YtQuietReason;
 
 /**
- * The line under a playlist's songs on Discover while the rest is read, or
- * when it couldn't be: the songs above stay and play either way. Null once
- * every page is in.
+ * The line under a playlist's songs on Discover when the rest couldn't be
+ * read: the songs above stay and play either way. Null while pages are still
+ * coming (skeleton rows stand at the list's end instead) and once every page
+ * is in.
  */
 export const ytPlaylistRestLine = (rest: YtPlaylistRest): string | null => {
   switch (rest) {
     case "reading":
-      return "Loading more songs…";
     case "read":
       return null;
     case "offline":

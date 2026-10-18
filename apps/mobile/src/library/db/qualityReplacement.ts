@@ -9,8 +9,9 @@ import type { NoBetterCopy, QualityDirection, QualityFile, ReplacedTrack } from 
 import { and, eq, isNotNull, ne } from "drizzle-orm";
 
 import type { IndexedArtwork, IndexedTrack } from "../LibraryStore.ts";
-import type { CreditSplits } from "./credits.ts";
+import { readCredits, type CreditSplits } from "./credits.ts";
 import type { LibraryDatabase } from "./database.ts";
+import { recordFileDeletions } from "./fileDeletions.ts";
 import { saveBatch, type SavedBatch } from "./save.ts";
 import * as schema from "./schema.ts";
 import { deleteTracksById } from "./tracks.ts";
@@ -96,7 +97,7 @@ export const selectReplacedTrack = (db: LibraryDatabase, trackId: number): Repla
   return {
     ...row,
     path: row.path,
-    artists: row.artists === null ? [row.artist] : (JSON.parse(row.artists) as string[]),
+    artists: readCredits(row.artist, row.artists),
     genre: row.genre ?? null,
     artworkPath: row.artworkPath ?? null,
   };
@@ -106,11 +107,14 @@ export const selectReplacedTrack = (db: LibraryDatabase, trackId: number): Repla
 export type ReplacedFile =
   | {
       readonly kind: "replaced";
-      /** The file the Track had: delete it unless the new one took its very path. */
+      /**
+       * The file the Track had. Unless the new one took its very path, its deletion is
+       * recorded with the swap (`schema.fileDeletions`).
+       */
       readonly oldPath: string;
       readonly starred: SavedBatch["starred"];
     }
-  /** The Track was removed meanwhile, or has no file: nothing was saved. */
+  /** The Track was removed meanwhile, or has no file: nothing was saved; the new file's deletion is recorded. */
   | { readonly kind: "gone" };
 
 /**
@@ -119,7 +123,10 @@ export type ReplacedFile =
  * recording key whatever the new tags say (as a missing song's download
  * keeps it, `IndexedTrack.fills`). A Track a scan made of the new file
  * before this (it was published a moment ago) goes: the path is the
- * replaced song's. One transaction.
+ * replaced song's. The old file's deletion is recorded in the same
+ * transaction (`recordFileDeletions`), so a kill before it's deleted leaves
+ * it recorded for the next launch, and a replayed import (its Track already
+ * on the new file) still finds it.
  */
 export const replaceTrackFile = (
   db: LibraryDatabase,
@@ -132,7 +139,11 @@ export const replaceTrackFile = (
   const t = schema.tracks;
   return db.transaction((tx): ReplacedFile => {
     const old = tx.select({ path: t.path }).from(t).where(eq(t.id, trackId)).get();
-    if (old === undefined || old.path === null) return { kind: "gone" };
+    if (old === undefined || old.path === null) {
+      // Nothing takes the new file: it goes, never to come back as a song of its own.
+      recordFileDeletions(tx, [track.path], now);
+      return { kind: "gone" };
+    }
     const oldPath = old.path;
     if (oldPath !== track.path) {
       const stray = tx
@@ -151,6 +162,8 @@ export const replaceTrackFile = (
       oldPath === track.path ? [] : [{ from: oldPath, to: track.path }],
       now,
     );
+    // The old file must go: recorded with the swap, so a kill before it's deleted can't leave it.
+    if (oldPath !== track.path) recordFileDeletions(tx, [oldPath], now);
     return { kind: "replaced", oldPath, starred };
   });
 };

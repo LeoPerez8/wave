@@ -1,4 +1,5 @@
 import {
+  createLandings,
   explicitFromAdvisory,
   normalizeTrack,
   planAddRoot,
@@ -12,6 +13,7 @@ import {
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import { refreshDownloadPolicy } from "./downloadPolicy";
+import { finishFileDeletions } from "./fileDeletions";
 import * as Stream from "effect/Stream";
 
 import { freeTurnEffect } from "@/lib/backgroundWork";
@@ -67,15 +69,40 @@ const ENTRIES_LINKED: LibraryChange = { kind: "playlists" };
 let linkedAtRevision: number | null = null;
 
 /**
- * The owner changed the library outside a scan (deleted songs, edited tags, a
- * download landed, the Wave account sent changes): lists over tracks re-read
- * straight away. [trackIds]: the tracks changed, when known.
+ * The owner changed the library outside a scan (deleted songs, edited tags,
+ * the Wave account sent changes): lists over tracks re-read straight away.
+ * [trackIds]: the tracks changed, when known. A download landing is
+ * `songsLanded`.
  */
 export const libraryEdited = (trackIds?: readonly number[]): void => {
   bumpLibraryVersion(
     trackIds === undefined ? { kind: "tracks" } : { kind: "tracks", ids: trackIds },
   );
 };
+
+const landings = createLandings({
+  schedule: (ms, run) => {
+    const timer = setTimeout(run, ms);
+    return () => clearTimeout(timer);
+  },
+  announce: (change) => bumpLibraryVersion(change),
+});
+
+/**
+ * Downloads landed Tracks [trackIds] in the Library (an import, a quality
+ * replacement): lists hear of them together, as a burst naming them, at most
+ * every 2 s, and at once for the run's [last] song or when the run ends (no
+ * ids). [fillIn]: they wait for their fill-in (`songsFilledIn`), 2 s at most,
+ * so a song and its fill-in are one change (Core's `createLandings`).
+ */
+export const songsLanded = (
+  trackIds: readonly number[],
+  options?: { readonly last?: boolean; readonly fillIn?: boolean },
+): void => landings.land(trackIds, options);
+
+/** The fill-in of downloaded Tracks [trackIds] is done; [wrote]: it changed them (Core's `Landings.filled`). */
+export const songsFilledIn = (trackIds: readonly number[], options: { readonly wrote: boolean }) =>
+  landings.filled(trackIds, options);
 
 /** A track as the scanner read it, as the index stores it. */
 export const toIndexedTrack = (native: NativeScannedTrack): IndexedTrack => ({
@@ -131,6 +158,9 @@ const scanFolders = (roots: readonly string[]) =>
     const scanner = yield* NativeScanner;
     // Without access the folders look empty, and every song would be removed as missing.
     if (!(yield* scanner.hasAllFilesAccess)) return;
+    // Files recorded for deletion (a replaced song's old file) go first, at launch included;
+    // one that couldn't be deleted is left out, so it never comes back as a second song.
+    const undeletedRecordedFiles = new Set(yield* finishFileDeletions("scan"));
     const excluded = yield* store.excludedFolders;
     const known = yield* store.knownFiles(roots);
     const kind = known.length === 0 ? "full" : "incremental";
@@ -170,7 +200,10 @@ const scanFolders = (roots: readonly string[]) =>
           case "Batch": {
             const changes = reconcileScan({
               missing,
-              read: event.tracks.map(toIndexedTrack),
+              read: (undeletedRecordedFiles.size === 0
+                ? event.tracks
+                : event.tracks.filter((track) => !undeletedRecordedFiles.has(track.path))
+              ).map(toIndexedTrack),
               isIndexed: (path) => indexed.has(path),
             });
             missing = changes.unmatched;

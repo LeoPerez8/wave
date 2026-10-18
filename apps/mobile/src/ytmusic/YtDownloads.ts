@@ -15,6 +15,7 @@ import {
   writeStarDownloads,
   downloadFailureAnswer,
   downloadJobKind,
+  downloadTagWriteOrigin,
   downloadFailurePlan,
   downloadSource,
   downloadStorageFull,
@@ -30,6 +31,7 @@ import {
   missingSongVideo,
   missingSongsDownload,
   downloadingList,
+  failedReplacementFiles,
   moveQueuedJobs,
   NO_BETTER_COPY_FOUND,
   noBetterCopies,
@@ -105,8 +107,9 @@ import { appLog } from "@/log/appLog";
 import { askForNotifications } from "@/lib/askForNotifications";
 import { persistedSetting } from "@/lib/persistedSetting";
 import {
-  libraryEdited,
   libraryVersion,
+  songsFilledIn,
+  songsLanded,
   toIndexedArtwork,
   toIndexedTrack,
 } from "@/library/LibraryScan";
@@ -114,6 +117,8 @@ import { publishSavedStars } from "@/library/libraryChanges";
 import { LibraryStore, type SongRow } from "@/library/LibraryStore";
 import { useLoadedMissingSongs, useMissingSongs } from "@/library/hooks";
 import { refreshDownloadPolicy } from "@/library/downloadPolicy";
+import { finishFileDeletions } from "@/library/fileDeletions";
+import { replacementJournalRead } from "@/library/replacementDuplicates";
 import { fillInLyricsAndGenre, lookUpLyricsAndGenre } from "@/library/lyricsAndGenre";
 import { appRuntime } from "@/library/runtime";
 import { settleUnsearchedSong } from "@/library/unsearchedEntries";
@@ -121,7 +126,9 @@ import { makeExternalStore } from "@/lib/externalStore";
 import { WaveNative } from "@/native/waveNative";
 import {
   WaveSoulseek,
+  enqueueJobs,
   soulseekErrorCode,
+  type JobRequest,
   type NativeDownloadDecision,
   type NativeDownloadJob,
   type NativeYoutubeAudio,
@@ -747,29 +754,53 @@ export const downloadPathIncluded = (path: string) =>
   });
 
 /**
+ * Downloads landed so far this process. A landing reaches `libraryVersion` only with the run's
+ * others (`songsLanded`), so what reads the Library to reconcile downloads follows both
+ * (`downloadLibraryVersion`).
+ */
+let landedCount = 0;
+
+/**
+ * The Tracks each imported file (by path) landed, until its fill-in is done (`answerJob`): they
+ * wait for it, so the song and its fill-in reach the lists as one change (`songsFilledIn`).
+ */
+const awaitingFillIn = new Map<string, readonly number[]>();
+
+const countAndLand = (path: string, trackIds: readonly number[], last: boolean): void => {
+  landedCount++;
+  awaitingFillIn.set(path, trackIds);
+  songsLanded(trackIds, { last, fillIn: true });
+};
+
+/** The Library as downloads' reconciliation knows it: every edit and every landing changes it. */
+const downloadLibraryVersion = (): string => `${libraryVersion.get()}:${landedCount}`;
+
+/**
  * Transactional upsert preserves ids, favorites, playlists and history on
  * repeated delivery. A song downloaded from YouTube Music keeps its
  * [videoId] on its Track; a Soulseek download has none. A missing song's
  * download fills in its Track ([fills]), so its places, star and plays stay.
  * Any download of a liked song a pending favorite waits for stars it
- * (`saveBatch` settles it).
+ * (`saveBatch` settles it). The song lands with the run's others
+ * (`songsLanded`), at once when it's the run's [last].
  */
 export const importDownload = (
   saved: NativeSavedDownload,
   videoId: string | null,
   fills: number | null = null,
+  last = false,
 ) =>
   Effect.gen(function* () {
     if (!(yield* downloadPathIncluded(saved.path)))
       return yield* new DownloadFailed({ reason: "noFolder" });
     const store = yield* LibraryStore;
-    const { starred } = yield* store
+    const { starred, trackIds } = yield* store
       .saveBatch(
         [{ ...toIndexedTrack(saved.track), videoId, ...(fills === null ? {} : { fills }) }],
         saved.artwork === null ? [] : [toIndexedArtwork(saved.artwork)],
       )
       .pipe(Effect.mapError(libraryFailure));
-    libraryEdited();
+    countAndLand(saved.path, trackIds, last);
     // A liked song a pending favorite was waiting for has its star.
     publishSavedStars(starred);
     return saved.path;
@@ -778,13 +809,16 @@ export const importDownload = (
 /**
  * A quality replacement's file takes over Track [trackId] in place (the store's
  * `replaceTrackFile`): the same Track id, favorites, plays, playlist entries and recording key.
- * Only then is the old file deleted, unless the new one took its very path. A Track removed
- * meanwhile takes its new file with it. YouTube Music's copy carries its [videoId].
+ * Only then is the old file deleted (recorded with the swap: `finishFileDeletions`), unless the
+ * new one took its very path. A Track removed
+ * meanwhile takes its new file with it. YouTube Music's copy carries its [videoId]. The Track
+ * lands as an import does (`songsLanded`).
  */
 export const importQualityReplacement = (
   saved: NativeSavedDownload,
   trackId: number,
   videoId: string | null = null,
+  last = false,
 ) =>
   Effect.gen(function* () {
     if (!(yield* downloadPathIncluded(saved.path)))
@@ -797,23 +831,16 @@ export const importQualityReplacement = (
         saved.artwork === null ? [] : [toIndexedArtwork(saved.artwork)],
       )
       .pipe(Effect.mapError(libraryFailure));
-    const leftOver =
-      replaced.kind === "gone"
-        ? saved.path
-        : replaced.oldPath === saved.path
-          ? null
-          : replaced.oldPath;
-    if (leftOver !== null)
-      yield* Effect.tryPromise(() => WaveNative.deleteFiles([leftOver])).pipe(
-        Effect.tap((outcomes) =>
-          Effect.sync(() => {
-            if (outcomes.some((outcome) => outcome !== "deleted" && outcome !== "missing"))
-              appLog("warn", "downloads", `A replaced file wasn't deleted: ${leftOver}`);
-          }),
-        ),
-        Effect.orElseSucceed(() => undefined),
-      );
-    libraryEdited();
+    // The swap recorded the old file's deletion (or the new file's, the Track gone): finished
+    // now, and by the next launch if Wave dies first. A replayed import whose Track already has
+    // the new file finds the old one still recorded. The media scanner sees the old file go with
+    // the new one, once its fill-in is done (`fillInLyricsAndGenre`). Only other runs' leftovers
+    // it finishes get a line: its own deletion is the usual end of a replacement.
+    yield* finishFileDeletions("import", {
+      scanWith: saved.path,
+      own: replaced.kind === "replaced" ? replaced.oldPath : saved.path,
+    });
+    countAndLand(saved.path, replaced.kind === "gone" ? [] : [trackId], last);
     if (replaced.kind === "replaced") publishSavedStars(replaced.starred);
     return saved.path;
   });
@@ -929,9 +956,10 @@ const answer = (claim: NativeDownloadDecision) =>
         // A quality replacement's file takes over its Track in place; YouTube Music's copy
         // gives it the video it came from, as any YouTube download has.
         const job = downloadJobKind(claim.id);
+        const last = lastOfRun(claim.id);
         if (job.kind === "quality") {
           const video = claim.source === "youtube" ? (claim.video ?? null) : null;
-          return { path: yield* importQualityReplacement(claim.saved, job.trackId, video) };
+          return { path: yield* importQualityReplacement(claim.saved, job.trackId, video, last) };
         }
         // A missing song's job is named after its Track, an unsearched song's after what Spotify
         // listed: their video is the one prepare named.
@@ -942,7 +970,7 @@ const answer = (claim: NativeDownloadDecision) =>
           claim.source !== "youtube"
             ? null
             : (claim.video ?? (ownVideo ? claim.song.videoId : null));
-        const path = yield* importDownload(claim.saved, videoId, fills);
+        const path = yield* importDownload(claim.saved, videoId, fills, last);
         // The file carries the song's lyrics now: what the Lyrics view saved for it isn't needed.
         yield* forgetLyricsSavedFor(claim);
         return { path };
@@ -1022,8 +1050,21 @@ const answerJob = async (id: string): Promise<void> => {
       claim.decision,
       JSON.stringify(payload),
     );
-    if (accepted && claim.decision === "import" && claim.saved !== undefined && "path" in payload)
-      void appRuntime.runPromise(fillInLyricsAndGenre(downloadedSong(claim.saved)));
+    if (claim.decision === "import" && claim.saved !== undefined) {
+      const { path } = claim.saved;
+      const landedIds = awaitingFillIn.get(path) ?? [];
+      awaitingFillIn.delete(path);
+      if (accepted && "path" in payload)
+        void appRuntime.runPromise(
+          fillInLyricsAndGenre(
+            downloadedSong(claim.saved),
+            downloadTagWriteOrigin(claim.id),
+            landedIds,
+          ),
+        );
+      // No fill-in follows: the song goes with its run's change now.
+      else songsFilledIn(landedIds, { wrote: false });
+    }
   } catch {
     // JS or the bridge went away mid-answer: the native lease expires and replays the decision.
   } finally {
@@ -1045,6 +1086,10 @@ const unfinished = (job: NativeDownloadJob): boolean =>
   job.acknowledged !== true &&
   job.importFailure === undefined;
 
+/** Whether job [id], being imported, is the last of its run: nothing else is on its way. */
+const lastOfRun = (id: string): boolean =>
+  followed.every((job) => job.id === id || !unfinished(job));
+
 /**
  * The journal as JS follows it, and the journal revision that is at: each refresh asks only for
  * what changed since (Core's `applyJournalChanges`), so a big queue isn't copied over the bridge
@@ -1059,8 +1104,8 @@ let poll: ReturnType<typeof setInterval> | null = null;
 
 let refreshing = false;
 let refreshAgain = false;
-/** Read once per Library version, including when downloads finish between edits. */
-let downloadLibrary: { readonly version: number; readonly songs: readonly SongRow[] } | null = null;
+/** Read once per Library version (`downloadLibraryVersion`), including when downloads land between edits. */
+let downloadLibrary: { readonly version: string; readonly songs: readonly SongRow[] } | null = null;
 /** Progress on unfinished jobs doesn't change which finished jobs the Library still has. */
 let reconciledDownloads = "";
 
@@ -1069,7 +1114,7 @@ const forgetDeletedDownloads = async (
   jobs: readonly NativeDownloadJob[],
 ): Promise<readonly NativeDownloadJob[]> => {
   if (!jobs.some((job) => job.phase === "completed" && job.acknowledged === true)) return jobs;
-  const version = libraryVersion.get();
+  const version = downloadLibraryVersion();
   const revision = JSON.stringify([
     version,
     jobs
@@ -1085,7 +1130,7 @@ const forgetDeletedDownloads = async (
       }),
     );
     // A scan or import landed while the read was pending. Re-read both snapshots before deciding.
-    if (version !== libraryVersion.get()) {
+    if (version !== downloadLibraryVersion()) {
       refreshAgain = true;
       return jobs;
     }
@@ -1093,7 +1138,7 @@ const forgetDeletedDownloads = async (
   }
   const forgotten = new Set<string>();
   for (const id of ytDownloadsToForget(jobs, downloadLibrary.songs)) {
-    if (version !== libraryVersion.get()) {
+    if (version !== downloadLibraryVersion()) {
       refreshAgain = true;
       break;
     }
@@ -1101,7 +1146,7 @@ const forgetDeletedDownloads = async (
     if (job !== undefined && (await WaveSoulseek.forgetCompletedJob(id, job.generation)))
       forgotten.add(id);
   }
-  if (version === libraryVersion.get()) reconciledDownloads = revision;
+  if (version === downloadLibraryVersion()) reconciledDownloads = revision;
   return forgotten.size === 0 ? jobs : jobs.filter((job) => !forgotten.has(job.id));
 };
 
@@ -1150,6 +1195,32 @@ const rememberNoBetterCopies = (jobs: readonly NativeDownloadJob[]): Promise<boo
   return recordingNoBetterCopies;
 };
 
+/** The failed replacements' new files already recorded for deletion this launch. */
+const removedReplacementFiles = new Set<string>();
+
+/**
+ * Removes the new files failed replacements left in the Library's folders (Core's
+ * `failedReplacementFiles`), each once a launch: the song keeps its old file, and a scan
+ * mustn't make the new one a second song. Recorded first (a file a Track holds is never
+ * deleted), then deleted; a Retry downloads the song again.
+ */
+const removeFailedReplacementFiles = (jobs: readonly NativeDownloadJob[]): void => {
+  const fresh = failedReplacementFiles(jobs).filter((path) => !removedReplacementFiles.has(path));
+  if (fresh.length === 0) return;
+  for (const path of fresh) removedReplacementFiles.add(path);
+  void appRuntime
+    .runPromise(
+      Effect.gen(function* () {
+        const store = yield* LibraryStore;
+        yield* store.recordFileDeletions(fresh);
+        yield* finishFileDeletions("failedReplacement");
+      }),
+    )
+    .catch(() => {
+      for (const path of fresh) removedReplacementFiles.delete(path);
+    });
+};
+
 /** Calls [listener] once songs were recorded as having no better copy; returns how to stop. */
 export const onNoBetterCopies = (listener: () => void): (() => void) => {
   noBetterCopyListeners.add(listener);
@@ -1179,7 +1250,12 @@ const refresh = async (): Promise<void> => {
       }
       for (const job of jobs) if (awaitsAnswer(job)) void answerJob(job.id);
       void rememberNoBetterCopies(jobs);
+      removeFailedReplacementFiles(jobs);
+      replacementJournalRead(jobs);
       const active = jobs.some(unfinished);
+      // The run is over (its last songs answered in one poll, or it ended in a failure or a
+      // cancel): what landed reaches the lists now, with any fill-in still on its way.
+      if (!active) songsLanded([], { last: true });
       if (active && poll === null) poll = setInterval(refreshQuietly, 5_000);
       if (!active && poll !== null) {
         clearInterval(poll);
@@ -1275,6 +1351,14 @@ export const startDownloads = (resume = false): void => {
   }
 };
 
+/** A YT Music [song] asked for, to [enqueueJobs]. */
+const songRequest = (
+  song: NativeYtSong,
+  equivalentId: string | null,
+  source: DownloadSource | null,
+  origin: DownloadOrigin | null,
+): JobRequest => ({ song, recording: soulseekRecording(song), equivalentId, source, origin });
+
 export const downloadYtSong = (song: NativeYtSong): void => {
   askForNotifications();
   startDownloads();
@@ -1324,8 +1408,11 @@ const downloadYtSongs = (
       ownerAsked(songs.map((song) => song.videoId));
       const jobs = await WaveSoulseek.jobsSnapshot();
       const source = await requestedSource();
-      for (const { song, sharedJob } of ytSongsDownload(songs, { inLibrary, jobs }).toDownload)
-        await WaveSoulseek.enqueueJob(song, soulseekRecording(song), sharedJob, source, origin);
+      await enqueueJobs(
+        ytSongsDownload(songs, { inLibrary, jobs }).toDownload.map(({ song, sharedJob }) =>
+          songRequest(song, sharedJob, source, origin),
+        ),
+      );
       await refresh();
     })
     .catch(() => undefined);
@@ -1346,8 +1433,11 @@ const retryYtSongs = (
     .then(async () => {
       const jobs = await WaveSoulseek.jobsSnapshot();
       const source = await requestedSource();
-      for (const { song, sharedJob } of ytSongsDownload(songs, { inLibrary, jobs }).toRetry)
-        await WaveSoulseek.enqueueJob(song, soulseekRecording(song), sharedJob, source, origin);
+      await enqueueJobs(
+        ytSongsDownload(songs, { inLibrary, jobs }).toRetry.map(({ song, sharedJob }) =>
+          songRequest(song, sharedJob, source, origin),
+        ),
+      );
       await refresh();
     })
     .catch(() => undefined);
@@ -1437,8 +1527,9 @@ export const runYtPlaylistDownloadAction = (
       } else {
         const source = await requestedSource();
         const asked = action === "downloadPlaylist" ? download.toDownload : download.toRetry;
-        for (const { song, sharedJob } of asked)
-          await WaveSoulseek.enqueueJob(song, soulseekRecording(song), sharedJob, source, origin);
+        await enqueueJobs(
+          asked.map(({ song, sharedJob }) => songRequest(song, sharedJob, source, origin)),
+        );
       }
       await refresh();
     })
@@ -1479,19 +1570,18 @@ const journalSong = (job: MissingSongJob): NativeYtSong => ({
  * Asks the journal for missing song [job], from the source Core picks for it now, remembering
  * [origin] (a Library album's Download Missing Songs; none for a song on its own).
  */
-const enqueueMissingSong = (
+const missingSongRequest = (
   job: MissingSongJob,
   session: SoulseekSession,
   ytMusicOn: boolean,
   origin: DownloadOrigin | null = null,
-): Promise<string> =>
-  WaveSoulseek.enqueueJob(
-    journalSong(job),
-    soulseekRecording(job),
-    null,
-    currentSource(session, ytMusicOn, job.missing.videoId !== null),
-    origin,
-  );
+): JobRequest => ({
+  song: journalSong(job),
+  recording: soulseekRecording(job),
+  equivalentId: null,
+  source: currentSource(session, ytMusicOn, job.missing.videoId !== null),
+  origin,
+});
 
 /** Asks the journal for missing songs [jobs], in order, each from the source Core picks for it. */
 const enqueueMissingSongs = async (
@@ -1500,7 +1590,7 @@ const enqueueMissingSongs = async (
 ): Promise<void> => {
   const session = await sessionNow();
   const ytMusicOn = ytMusicEnabled();
-  for (const job of jobs) await enqueueMissingSong(job, session, ytMusicOn, origin);
+  await enqueueJobs(jobs.map((job) => missingSongRequest(job, session, ytMusicOn, origin)));
 };
 
 /** The missing songs as they are now ([trackIds] only, when given), as download jobs. */
@@ -1615,24 +1705,36 @@ const enqueueQualityReplacements = async (
   direction: QualityDirection,
   trackIds: readonly number[],
 ): Promise<void> => {
+  await enqueueJobs(await qualityReplacementRequests(direction, trackIds));
+};
+
+/** What [enqueueQualityReplacements] asks the journal for. */
+const qualityReplacementRequests = async (
+  direction: QualityDirection,
+  trackIds: readonly number[],
+): Promise<JobRequest[]> => {
   const tracks = await appRuntime.runPromise(
     Effect.gen(function* () {
+      // An earlier run's old files still recorded go first.
+      yield* finishFileDeletions("replacementRun");
       const store = yield* LibraryStore;
       return yield* Effect.forEach(trackIds, (id) => store.replacedTrack(id));
     }),
   );
   const source: DownloadSource = direction === "upgrade" ? "soulseek" : "youtube";
-  for (const track of tracks) {
-    if (track === null) continue;
+  return tracks.flatMap((track) => {
+    if (track === null) return [];
     const job = qualityReplacementJob(direction, track);
-    await WaveSoulseek.enqueueJob(
-      { ...job, albumId: null },
-      soulseekRecording(job),
-      null,
-      source,
-      QUALITY_ORIGINS[direction],
-    );
-  }
+    return [
+      {
+        song: { ...job, albumId: null },
+        recording: soulseekRecording(job),
+        equivalentId: null,
+        source,
+        origin: QUALITY_ORIGINS[direction],
+      },
+    ];
+  });
 };
 
 /**
@@ -1786,24 +1888,19 @@ export const retryFailedDownloads = (failed: readonly FailedDownload<NativeYtSon
       );
       const session = await sessionNow();
       const ytMusicOn = ytMusicEnabled();
+      const asked: JobRequest[] = [];
       for (const { retry } of failed) {
         if (retry.kind === "quality") {
-          await enqueueQualityReplacements(retry.direction, [retry.trackId]);
+          asked.push(...(await qualityReplacementRequests(retry.direction, [retry.trackId])));
         } else if (retry.kind === "song") {
-          const { song } = retry;
           // Asked with no origin, the job keeps the one it was first asked from.
-          await WaveSoulseek.enqueueJob(
-            song,
-            soulseekRecording(song),
-            null,
-            currentSource(session, ytMusicOn),
-            null,
-          );
+          asked.push(songRequest(retry.song, null, currentSource(session, ytMusicOn), null));
         } else {
           const job = missing.get(retry.trackId);
-          if (job !== undefined) await enqueueMissingSong(job, session, ytMusicOn);
+          if (job !== undefined) asked.push(missingSongRequest(job, session, ytMusicOn));
         }
       }
+      await enqueueJobs(asked);
       await refresh();
     })
     .catch(() => undefined);
@@ -1847,6 +1944,7 @@ export const downloadStarredSongs = (
       const queued: string[] = [];
       const session = await sessionNow();
       const ytMusicOn = ytMusicEnabled();
+      const asked: JobRequest[] = [];
       for (const song of songs) {
         const shared = ytDownloadSharedJob(jobs, song);
         const step = starredDownload(
@@ -1854,26 +1952,30 @@ export const downloadStarredSongs = (
             (shared === null ? null : ytDownloadStatus(state, shared)),
         );
         if (step === "keep") continue;
-        await WaveSoulseek.enqueueJob(
-          song,
-          soulseekRecording(song),
-          shared,
-          currentSource(session, ytMusicOn),
-          step === "queue" ? FAVORITES_DOWNLOAD_ORIGIN : null,
+        asked.push(
+          songRequest(
+            song,
+            shared,
+            currentSource(session, ytMusicOn),
+            step === "queue" ? FAVORITES_DOWNLOAD_ORIGIN : null,
+          ),
         );
         if (step === "queue") queued.push(song.videoId);
       }
       for (const job of inOrder(missing, trackIds)) {
         const step = starredDownload(ytDownloadStatus(state, job.videoId));
         if (step === "keep") continue;
-        await enqueueMissingSong(
-          job,
-          session,
-          ytMusicOn,
-          step === "queue" ? FAVORITES_DOWNLOAD_ORIGIN : null,
+        asked.push(
+          missingSongRequest(
+            job,
+            session,
+            ytMusicOn,
+            step === "queue" ? FAVORITES_DOWNLOAD_ORIGIN : null,
+          ),
         );
         if (step === "queue") queued.push(job.videoId);
       }
+      await enqueueJobs(asked);
       starAsked.set(starAskedAfter(starAsked.get(), { kind: "starred", queued }));
       await refresh();
     })

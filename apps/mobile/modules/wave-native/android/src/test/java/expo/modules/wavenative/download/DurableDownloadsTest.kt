@@ -52,6 +52,7 @@ class DurableDownloadsTest {
       }
       repeat(8) {
         owner.advance(disconnected, GoodPublication)
+        owner.flush()
         owner = DurableDownloads(journal, clock = { now })
         now += 15_000
       }
@@ -136,6 +137,7 @@ class DurableDownloadsTest {
       assertEquals(7L, before["queuePosition"])
       assertEquals("peer", (before["peer"] as Map<*, *>)["username"])
       now += 90_000
+      owner.flush()
       owner = DurableDownloads(journal, clock = { now })
       assertFalse(File(before["sourcePath"] as String).exists())
       owner.advance(GoodTransfer, GoodPublication)
@@ -177,6 +179,7 @@ class DurableDownloadsTest {
 
       assertTrue(owner.forgetCompleted("song", generation))
       assertTrue(owner.snapshot().isEmpty())
+      owner.flush()
       assertTrue(DurableDownloads(journal).snapshot().isEmpty())
       assertTrue(target.isFile)
 
@@ -186,6 +189,7 @@ class DurableDownloadsTest {
       assertNull(fresh["saved"])
       assertNull(fresh["acknowledged"])
       assertTrue((fresh["aliases"] as? List<*>)?.isEmpty() != false)
+      owner.flush()
       assertEquals("queued", DurableDownloads(journal).snapshot().single()["phase"])
     } finally { folder.deleteRecursively() }
   }
@@ -236,6 +240,7 @@ class DurableDownloadsTest {
       val owner = DurableDownloads(journal)
       assertEquals(emptyList<Any>(), owner.snapshot())
       owner.enqueue(song, null)
+      owner.flush()
       assertEquals("queued", DurableDownloads(journal).snapshot().single()["phase"])
     } finally { folder.deleteRecursively() }
   }
@@ -251,6 +256,7 @@ class DurableDownloadsTest {
       assertEquals("queued", reopened.snapshot().single()["phase"])
       unwritable.delete()
       reopened.enqueue(song + ("videoId" to "second"), null)
+      reopened.flush()
       assertEquals(listOf("song", "second"), DurableDownloads(journal).snapshot().map { it["id"] })
     } finally { folder.deleteRecursively() }
   }
@@ -407,6 +413,7 @@ class DurableDownloadsTest {
       owner.advance(NoTransfer, NoPublication)
       val lease = owner.claim("failed")!!
       owner.submit("failed", lease["generation"] as Long, lease["token"] as String, "prepare", mapOf("failure" to "unavailable"))
+      owner.flush()
       assertEquals(listOf("failed"), DurableDownloads(journal, clock = { now }).snapshot().map { it["id"] })
       // A failure waits on Settings › Downloads however long it takes, until it's cleared there.
       now += 30L * 24 * 60 * 60_000L
@@ -414,6 +421,7 @@ class DurableDownloadsTest {
       assertEquals(listOf("failed"), later.snapshot().map { it["id"] })
       assertEquals("unavailable", later.snapshot().single()["reason"])
       later.cancel("failed", NoTransfer)
+      later.flush()
       assertEquals(emptyList<Any>(), DurableDownloads(journal, clock = { now }).snapshot())
     } finally { folder.deleteRecursively() }
   }
@@ -425,6 +433,7 @@ class DurableDownloadsTest {
       val owner = DurableDownloads(journal)
       val ids = (1..12).map { "song-$it" }
       for (id in ids) owner.enqueue(song + ("videoId" to id), null)
+      owner.flush()
       val restored = DurableDownloads(journal)
       assertEquals(ids, restored.snapshot().map { it["id"] })
       restored.advance(NoTransfer, NoPublication)
@@ -694,7 +703,7 @@ class DurableDownloadsTest {
     }
   }
   private val GoodPublication = object : DurablePublication {
-    override fun tag(source: File, tags: Map<String, Any?>) { source.appendText(" trusted tags") }
+    override fun tag(source: File, tags: Map<String, Any?>): String? { source.appendText(" trusted tags"); return null }
     override fun index(file: File): Map<String, Any?> = mapOf("path" to file.path, "track" to mapOf("path" to file.path), "artwork" to null)
   }
   private fun prepare(owner: DurableDownloads, target: File, candidates: List<Map<String, Any?>> = listOf(candidate)) {
@@ -736,7 +745,7 @@ class DurableDownloadsTest {
       }
       var scannerFails = true
       val publisher = object : DurablePublication {
-        override fun tag(source: File, tags: Map<String, Any?>) { source.appendText(" trusted tags") }
+        override fun tag(source: File, tags: Map<String, Any?>): String? { source.appendText(" trusted tags"); return null }
         override fun index(file: File): Map<String, Any?> {
           if (scannerFails) throw java.io.IOException("Scanner interrupted")
           return mapOf("path" to file.path, "track" to mapOf("path" to file.path), "artwork" to null)
@@ -777,7 +786,7 @@ class DurableDownloadsTest {
       val tagging = CountDownLatch(1)
       val coverArrives = CountDownLatch(1)
       val slowCover = object : DurablePublication {
-        override fun tag(source: File, tags: Map<String, Any?>) { tagging.countDown(); coverArrives.await(10, TimeUnit.SECONDS) }
+        override fun tag(source: File, tags: Map<String, Any?>): String? { tagging.countDown(); coverArrives.await(10, TimeUnit.SECONDS); return null }
         override fun index(file: File): Map<String, Any?> = error("No publication expected")
       }
       val worker = thread { owner.advance(GoodTransfer, slowCover) }
