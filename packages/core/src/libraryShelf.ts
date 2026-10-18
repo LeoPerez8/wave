@@ -5,7 +5,7 @@
  * it has something to show.
  */
 
-import { homeSectionTitle, type HomeSectionId } from "./homeSections.ts";
+import { homeSectionTitle, storedHomeSectionId, type HomeSectionId } from "./homeSections.ts";
 
 /** A section of Home's catalogue drawn under the Library's rows, or nothing there. */
 export type LibraryShelf = HomeSectionId | "none";
@@ -20,7 +20,7 @@ const SHELVES: readonly HomeSectionId[] = [
   "recently-played",
   "most-played-albums",
   "most-played-artists",
-  "discover-mixes",
+  "artist-mixes",
   "favorites",
 ];
 
@@ -36,9 +36,14 @@ export const LIBRARY_SHELF_CHOICES: readonly {
 /** The shelf of an install that never picked one. */
 const DEFAULT_LIBRARY_SHELF: LibraryShelf = "recently-added";
 
-/** The shelf a stored value names: nothing stored is Recently added. */
-export const parseLibraryShelf = (stored: string | null): LibraryShelf =>
-  LIBRARY_SHELF_CHOICES.find(({ shelf }) => shelf === stored)?.shelf ?? DEFAULT_LIBRARY_SHELF;
+/**
+ * The shelf a stored value names (a renamed section by its old id too):
+ * nothing stored is Recently added.
+ */
+export const parseLibraryShelf = (stored: string | null): LibraryShelf => {
+  const named = stored === "none" ? stored : storedHomeSectionId(stored);
+  return LIBRARY_SHELF_CHOICES.find(({ shelf }) => shelf === named)?.shelf ?? DEFAULT_LIBRARY_SHELF;
+};
 
 /** What to store for [shelf]: null (nothing) for the default, so None is stored as "none". */
 export const storedLibraryShelf = (shelf: LibraryShelf): string | null =>

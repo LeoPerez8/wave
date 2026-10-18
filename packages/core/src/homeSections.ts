@@ -15,7 +15,7 @@ export type HomeSectionId =
   | "most-played"
   | "most-played-albums"
   | "most-played-artists"
-  | "discover-mixes"
+  | "artist-mixes"
   | "favorites"
   | "stats"
   | "listening-overview";
@@ -42,7 +42,7 @@ export const HOME_SECTIONS: readonly HomeSection[] = [
   { id: "most-played", title: "Most played", fromPlays: true },
   { id: "most-played-albums", title: "Most played albums", fromPlays: true },
   { id: "most-played-artists", title: "Most played artists", fromPlays: true },
-  { id: "discover-mixes", title: "Discover mixes", fromPlays: false, needsYtMusic: true },
+  { id: "artist-mixes", title: "Artist mixes", fromPlays: false, needsYtMusic: true },
   { id: "favorites", title: "Favorites", fromPlays: false },
   { id: "stats", title: "Stats", fromPlays: false },
   { id: "listening-overview", title: "Listening overview", fromPlays: false },
@@ -125,9 +125,21 @@ export const parseHomeArrangement = (stored: string | null): HomeArrangement => 
 const isSectionId = (value: unknown): value is HomeSectionId =>
   HOME_SECTIONS.some(({ id }) => id === value);
 
+/** Ids a section had before it was renamed, by the id it has now. */
+const RENAMED_SECTIONS: Readonly<Record<string, HomeSectionId>> = {
+  // Discover mixes became Artist mixes, keeping its place and whether it shows.
+  "discover-mixes": "artist-mixes",
+};
+
+/** The section a stored id names, by its id today (a renamed section's old id too), or null. */
+export const storedHomeSectionId = (value: unknown): HomeSectionId | null => {
+  const id = typeof value === "string" ? (RENAMED_SECTIONS[value] ?? value) : value;
+  return isSectionId(id) ? id : null;
+};
+
 /** The catalogue's sections [values] name, in their order, each once; anything else left out. */
 const knownSections = (values: readonly unknown[]): HomeSectionId[] => [
-  ...new Set(values.filter(isSectionId)),
+  ...new Set(values.flatMap((value) => storedHomeSectionId(value) ?? [])),
 ];
 
 /**
