@@ -834,8 +834,12 @@ export const importQualityReplacement = (
     // The swap recorded the old file's deletion (or the new file's, the Track gone): finished
     // now, and by the next launch if Wave dies first. A replayed import whose Track already has
     // the new file finds the old one still recorded. The media scanner sees the old file go with
-    // the new one, once its fill-in is done (`fillInLyricsAndGenre`).
-    yield* finishFileDeletions("import", saved.path);
+    // the new one, once its fill-in is done (`fillInLyricsAndGenre`). Only other runs' leftovers
+    // it finishes get a line: its own deletion is the usual end of a replacement.
+    yield* finishFileDeletions("import", {
+      scanWith: saved.path,
+      own: replaced.kind === "replaced" ? replaced.oldPath : saved.path,
+    });
     countAndLand(saved.path, replaced.kind === "gone" ? [] : [trackId], last);
     if (replaced.kind === "replaced") publishSavedStars(replaced.starred);
     return saved.path;
