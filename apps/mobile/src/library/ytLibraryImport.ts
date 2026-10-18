@@ -1,5 +1,7 @@
 /**
- * From YT Music's Import (docs/spec.md, "Importing playlists from a link"):
+ * From YT Music's and From Spotify's Import (docs/spec.md, "Importing
+ * playlists from a link"; one batch and one set of origins for both, a
+ * Spotify source told apart by Core's `isSpotifyLibrarySource`):
  * each ticked playlist becomes a Wave playlist at once, empty and named by
  * Core (`planYtLibraryImport`: Keep Both's name on a clash, without asking).
  * Wave then reads them one at a time, in the picker's order, and fills each
@@ -28,12 +30,14 @@
  * one refreshes that playlist as Replace does. Deleting it forgets it.
  */
 import {
+  isSpotifyLibrarySource,
   isYtLibraryReadQueued,
   liveYtLibraryOrigins,
   nextYtLibraryRead,
   planLinkImport,
   planYtLibraryImport,
   pruneYtLibraryBatch,
+  readSpotifyAccountPlaylist,
   queueYtLibraryReads,
   readYtLibraryBatch,
   readYtLibraryOrigins,
@@ -47,6 +51,7 @@ import {
   ytLibraryReadFailed,
   ytLibraryReadLogLine,
   ytLibraryReadView,
+  type LinkedSource,
   type YtLibraryBatch,
   type YtLibraryOrigins,
   type YtLibraryPicker,
@@ -60,6 +65,8 @@ import { AppState } from "react-native";
 import { makeExternalStore } from "@/lib/externalStore";
 import { persistedSetting } from "@/lib/persistedSetting";
 import { appLog } from "@/log/appLog";
+import { askSpotifyAccount, WaveSpotify } from "@/native/waveSpotify";
+import type { NativeYtSong } from "@/native/waveYtMusic";
 import { askYtMusic } from "@/ytmusic/askYtMusic";
 import { currentLibraryFinder } from "@/ytmusic/libraryFinder";
 import { downloadStarredSongs, runYtPlaylistDownloadAction } from "@/ytmusic/YtDownloads";
@@ -153,27 +160,56 @@ const queueDownloads = async (read: YtLibraryRead): Promise<void> => {
   batch.set(ytLibraryDownloadsQueued(batch.get(), read));
 };
 
+type SourceRead =
+  | { readonly ok: true; readonly source: LinkedSource<NativeYtSong> }
+  | { readonly ok: false; readonly reason: string };
+
+/**
+ * [read]'s playlist as its service gives it: a From Spotify read as the
+ * signed-in Spotify account, whole (Core's `readSpotifyAccountPlaylist`),
+ * any other from YouTube Music, up to the cap unless it's Liked Songs.
+ */
+const readSource = async (read: YtLibraryRead): Promise<SourceRead> => {
+  if (isSpotifyLibrarySource(read.source)) {
+    const answer = await readSpotifyAccountPlaylist(read.source, (request) =>
+      askSpotifyAccount(() =>
+        request.kind === "likedSongs"
+          ? WaveSpotify.likedSongs(request.offset)
+          : WaveSpotify.playlist(request.uri, request.offset),
+      ),
+    );
+    if (!answer.ok) return answer;
+    // Typed whole, not narrowed to Spotify's side, so the plan's songs are YT Music's as the app reads them.
+    const source = {
+      service: "spotify" as const,
+      playlist: answer.playlist,
+    } as LinkedSource<NativeYtSong>;
+    return { ok: true, source };
+  }
+  const answer = await askYtMusic((ytMusic) =>
+    ytMusic.playlist(read.source, { uncapped: !read.capped }),
+  );
+  return Result.isSuccess(answer)
+    ? { ok: true, source: { service: "ytMusic", playlist: answer.success } }
+    : { ok: false, reason: answer.failure.reason };
+};
+
 /**
  * Reads [read]'s playlist and gives its Wave playlist the songs, as a link
  * import does (whose line goes to the app log), starring the Library's songs
  * when it was asked to. A read whose playlist was refreshed or deleted
  * meanwhile gives its answer to nothing (Core's `isYtLibraryReadQueued`).
- * Offline or with YT Music off, nothing changes and it resolves the reason:
- * the batch pauses there. Any other failure leaves the playlist empty, marks
+ * Offline, with YT Music off or signed out of Spotify, nothing changes and
+ * it resolves the reason: the batch pauses there. Any other failure leaves the playlist empty, marks
  * it failed and says so in the log.
  */
 const fill = async (read: YtLibraryRead): Promise<string | null> => {
   let reason: string;
   try {
-    const answer = await askYtMusic((ytMusic) =>
-      ytMusic.playlist(read.source, { uncapped: !read.capped }),
-    );
-    if (Result.isSuccess(answer)) {
+    const answer = await readSource(read);
+    if (answer.ok) {
       if (!isYtLibraryReadQueued(batch.get(), read)) return null;
-      const plan = planLinkImport(
-        { service: "ytMusic", playlist: answer.success },
-        await listLibrary(),
-      );
+      const plan = planLinkImport(answer.source, await listLibrary());
       // Before it leaves the batch: Wave stopped in between stars again, which changes nothing.
       const favorites = ytLibraryFavorites(read, plan);
       await setFavorites(favorites.star, true);
@@ -193,7 +229,7 @@ const fill = async (read: YtLibraryRead): Promise<string | null> => {
       if (read.download) await queueDownloads(read);
       return null;
     }
-    reason = answer.failure.reason;
+    reason = answer.reason;
   } catch (error) {
     reason = error instanceof Error ? error.message : String(error);
   }

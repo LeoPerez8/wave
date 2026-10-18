@@ -1168,6 +1168,21 @@ export type {
   SpotifySong,
   SpotifyTransport,
 } from "./spotifyPlaylist.ts";
+export {
+  SPOTIFY_LIKED_SONGS_SOURCE,
+  isSpotifyLibrarySource,
+  readSpotifyAccountPlaylist,
+  readSpotifyLibrary,
+  spotifyLibraryFailure,
+} from "./spotifyLibrary.ts";
+export type {
+  SpotifyAccountAnswer,
+  SpotifyAccountFailure,
+  SpotifyAccountRead,
+  SpotifyAccountRequest,
+  SpotifyLibraryPlaylist,
+  SpotifyLibraryRead,
+} from "./spotifyLibrary.ts";
 export { compareOrderKeys, orderKeyBetween, placeEntries } from "./orderKey.ts";
 export type { EntryPlacement, OrderedEntry } from "./orderKey.ts";
 export {
@@ -1386,6 +1401,7 @@ export {
   ytLibraryFailure,
   ytLibraryPicker,
   ytLibraryPickerView,
+  spotifyLibraryPicker,
 } from "./ytLibrary.ts";
 export type {
   YtLibraryFailure,
@@ -1696,3 +1712,5 @@ export {
   ytThrottleSucceeded,
 } from "./ytThrottle.ts";
 export type { YtThrottle, YtThrottleJob, YtThrottlePause } from "./ytThrottle.ts";
+export { throttledFailures, throttledFailuresLine } from "./throttledFailures.ts";
+export type { ThrottledFailureJob, ThrottledFailuresInput } from "./throttledFailures.ts";
