@@ -1,7 +1,7 @@
 /**
- * Wave's toast: a line on a small glass pill above the mini player that goes
- * away on its own, or sooner on a tap or a swipe. Decide how long it stays
- * and which swipes send it away.
+ * Wave's toast: a line on a small glass pill at the top of the screen, just
+ * under the status bar, that goes away on its own, or sooner on a tap or a
+ * swipe up. Decide how long it stays and which swipes send it away.
  */
 
 import { resolveSkipSwipe } from "./swipe.ts";
@@ -54,19 +54,9 @@ export interface ToastSwipe {
 
 /**
  * Whether a finished drag sends the toast away; otherwise it settles back.
- * Sideways either way, or down off the screen, with the mini player's
- * thresholds (a third of the way, or a flick); never up, into the screen.
+ * Up, off the top of the screen, with the mini player's thresholds (a third
+ * of the way, or a flick).
  */
-export const toastSwipeDismisses = ({
-  translationX,
-  translationY,
-  velocityX,
-  velocityY,
-  width,
-  height,
-}: ToastSwipe): boolean =>
-  Math.abs(translationX) >= Math.abs(translationY)
-    ? resolveSkipSwipe({ translationX, velocityX, width }) !== null
-    : // Down is "previous" on the mini player's axis, where positive is right.
-      resolveSkipSwipe({ translationX: translationY, velocityX: velocityY, width: height }) ===
-      "previous";
+export const toastSwipeDismisses = ({ translationY, velocityY, height }: ToastSwipe): boolean =>
+  // Up is "next" on the mini player's axis, where negative is left.
+  resolveSkipSwipe({ translationX: translationY, velocityX: velocityY, width: height }) === "next";
