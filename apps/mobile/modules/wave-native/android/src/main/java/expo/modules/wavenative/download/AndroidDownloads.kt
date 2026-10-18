@@ -210,6 +210,11 @@ class AndroidDownloads private constructor(private val context: Context) {
     Executors.newSingleThreadScheduledExecutor { tick -> Thread(tick, "WaveDownloadMinutes").apply { isDaemon = true } }
   }
 
+  /** Writes a service line that reads Wave's memory on the minute lines' thread, in order with them. */
+  private fun offMain(line: () -> Unit) {
+    try { minuteTicker.execute { runCatching(line) } } catch (_: java.util.concurrent.RejectedExecutionException) {}
+  }
+
   fun subscribe(listener: () -> Unit): () -> Unit { listeners.add(listener); return { listeners.remove(listener) } }
   /**
    * The journal may have changed. Listeners (JS, which then asks for what changed since its
@@ -239,7 +244,9 @@ class AndroidDownloads private constructor(private val context: Context) {
   /** Starts the work, unless it runs already; [restarted] when Android restarted the service after Wave was closed. */
   @Synchronized fun start(onIdle: () -> Unit, refresh: () -> Unit, restarted: Boolean = false) {
     if (worker != null) return
-    WaveLog.i(TAG, DownloadServiceLines.started(restarted, jobs.counts(), AndroidMemory.read()))
+    val counts = jobs.counts()
+    // Wave's memory is read off the main thread, where the service starts.
+    offMain { WaveLog.i(TAG, DownloadServiceLines.started(restarted, counts, AndroidMemory.read())) }
     startedAt = SystemClock.elapsedRealtime()
     jobs.startWork()
     minutes.start()
@@ -283,8 +290,14 @@ class AndroidDownloads private constructor(private val context: Context) {
    */
   @Synchronized fun stop(why: DownloadServiceStop, timedOut: Boolean = false) {
     if (worker != null) {
-      WaveLog.i(TAG, DownloadServiceLines.stopped(why, SystemClock.elapsedRealtime() - startedAt, jobs.counts(), AndroidMemory.read()))
-      jobs.replacementRun()?.takeIf { it.waiting > 0 }?.let { WaveLog.i(TAG, DownloadServiceLines.replacementRun(it, why)) }
+      val ranMs = SystemClock.elapsedRealtime() - startedAt
+      val counts = jobs.counts()
+      val run = jobs.replacementRun()?.takeIf { it.waiting > 0 }
+      // Wave's memory is read off the main thread (the PSS reads `/proc`, slower when memory is short).
+      offMain {
+        WaveLog.i(TAG, DownloadServiceLines.stopped(why, ranMs, counts, AndroidMemory.read()))
+        run?.let { WaveLog.i(TAG, DownloadServiceLines.replacementRun(it, why)) }
+      }
     }
     jobs.stopWork(transport)
     minutes.stop()
