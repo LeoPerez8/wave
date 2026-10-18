@@ -7,6 +7,7 @@
  * entries. The app pushes the resulting ordered list to the native player.
  */
 
+import { isRecord } from "./storedJson.ts";
 import { libraryTrackIds } from "./ytQueue.ts";
 
 export type RepeatMode = "off" | "all" | "one";
@@ -635,9 +636,6 @@ export const upNextMove = (state: QueueState, key: string, toUpNextIndex: number
  */
 export const withPendingMoves = (state: QueueState, moves: readonly PendingMove[]): QueueState =>
   moves.reduce((current, pending) => move(current, pending).state, state);
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
 
 const parseContext = (value: unknown): QueueContext | null | undefined => {
   if (value === null) return null;

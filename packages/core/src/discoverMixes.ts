@@ -14,7 +14,7 @@ import type { MixAffinity } from "./genreAffinity.ts";
 import type { HomeSectionId } from "./homeSections.ts";
 import { identityKey } from "./library.ts";
 import { normalizeSearchText } from "./search.ts";
-import { readStoredRecord } from "./storedJson.ts";
+import { isRecord, readStoredRecord } from "./storedJson.ts";
 import type { MixedSong, YtAlbumSong } from "./ytDiscover.ts";
 import type { YtSong } from "./ytMusic.ts";
 
@@ -511,8 +511,6 @@ const isNullable = <T>(value: unknown, is: (value: unknown) => value is T): bool
   value === null || is(value);
 export const isNumber = (value: unknown): value is number =>
   typeof value === "number" && Number.isFinite(value);
-const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
 
 const readSong = (value: unknown): YtAlbumSong | null => {
   if (!isRecord(value)) return null;
