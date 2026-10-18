@@ -204,9 +204,6 @@ class PlaybackService : MediaLibraryService() {
   /** The player the outgoing song fades out on during a crossfade; null otherwise. */
   private var tailPlayer: ExoPlayer? = null
 
-  /** The entry the session's player moved to as the overlap started, until it reports the move. */
-  private var crossfadeTarget: String? = null
-
   private val crossfade = Crossfade(
     object : CrossfadeHost {
       override val main: CrossfadeDeck = object : CrossfadeDeck {
@@ -258,6 +255,16 @@ class PlaybackService : MediaLibraryService() {
           return player.totalBufferedDuration - (durationMs - player.currentPosition) >= NEXT_READY_MS
         }
 
+      override val currentKey: String?
+        get() = exoPlayer?.currentMediaItem?.mediaId
+
+      override val nextKey: String?
+        get() {
+          val player = exoPlayer ?: return null
+          val next = player.nextMediaItemIndex
+          return if (next == C.INDEX_UNSET) null else player.getMediaItemAt(next).mediaId
+        }
+
       // Preloads the next playlist item while this one plays: a YT Music
       // song's address is resolved (YtDataSource) and its start buffered.
       // Off again once the player moves (crossfadeListener).
@@ -272,6 +279,14 @@ class PlaybackService : MediaLibraryService() {
           CROSSFADE_LOG_TAG,
           if (overlapMs > 0) "Crossfade shortened to ${seconds(overlapMs)}: $late"
           else "Crossfade dropped, the song ended gapless: $late",
+        )
+      }
+
+      override fun endedEarly(why: CrossfadeEnd, overlapping: Boolean) {
+        WaveLog.i(
+          CROSSFADE_LOG_TAG,
+          if (overlapping) "Crossfade ended early: ${why.reason}"
+          else "Crossfade called off before the overlap: ${why.reason}",
         )
       }
 
@@ -315,7 +330,6 @@ class PlaybackService : MediaLibraryService() {
         val next = player.nextMediaItemIndex
         if (next == C.INDEX_UNSET) return
         val key = player.getMediaItemAt(next).mediaId
-        crossfadeTarget = key
         CrossfadeLink.handoff.mark(key, SystemClock.elapsedRealtime())
         player.seekTo(next, 0)
       }
@@ -335,19 +349,19 @@ class PlaybackService : MediaLibraryService() {
   }
 
   /**
-   * Hands the crossfade play and pause, and switches at once when anything
-   * but the crossfade itself moves the player: skip, previous, picking a song,
-   * a seek, the list changing, an error. Ticks are posted, never run inside a
-   * listener, so the crossfade's own move is reported before the next tick.
+   * Hands the crossfade play and pause, and every move of the player: one to
+   * another song than the one being faded into (skip, previous, picking a
+   * song, the next song replaced), a seek or an error switches at once, while
+   * the crossfade's own move and queue syncs around it don't. Ticks are
+   * posted, never run inside a listener, so the crossfade's own move is
+   * reported before the next tick.
    */
   private val crossfadeListener = object : Player.Listener {
     @OptIn(UnstableApi::class)
     override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
-      val own = reason == Player.MEDIA_ITEM_TRANSITION_REASON_SEEK && mediaItem?.mediaId == crossfadeTarget
-      crossfadeTarget = null
       // The song after this one is preloaded only once this one nears its overlap.
       exoPlayer?.preloadConfiguration = ExoPlayer.PreloadConfiguration.DEFAULT
-      if (!own) crossfade.interrupt()
+      crossfade.moved(mediaItem?.mediaId)
       scheduleCrossfade()
     }
 
@@ -357,7 +371,7 @@ class PlaybackService : MediaLibraryService() {
       reason: Int,
     ) {
       val within = PlayerEvents.isSeekWithinItem(reason, oldPosition.mediaItem?.mediaId, newPosition.mediaItem?.mediaId)
-      if (within) crossfade.interrupt()
+      if (within) crossfade.interrupt(CrossfadeEnd.Seek)
     }
 
     override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
@@ -375,7 +389,7 @@ class PlaybackService : MediaLibraryService() {
     }
 
     override fun onPlayerError(error: PlaybackException) {
-      crossfade.interrupt()
+      crossfade.interrupt(CrossfadeEnd.Error)
     }
   }
 
@@ -514,7 +528,7 @@ class PlaybackService : MediaLibraryService() {
     main.removeCallbacks(resumePositionSave)
     main.removeCallbacks(crossfadeTick)
     CrossfadeLink.onOverlapChanged = null
-    crossfade.interrupt()
+    crossfade.interrupt(CrossfadeEnd.Stopped)
     exoPlayer?.let { ResumeStore.savePlayer(it, withItems = false) }
     exoPlayer = null
     session?.run {
