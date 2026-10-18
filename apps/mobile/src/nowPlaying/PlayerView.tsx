@@ -11,6 +11,7 @@ import Animated, {
 } from "react-native-reanimated";
 
 import { CELL } from "@/catalog/grid";
+import { subscribeAll } from "@/lib/externalStore";
 import { followArtistLink, followStreamedArtistLink } from "@/library/ArtistChoice";
 import { toggleFavorite, useIsFavorite, useYtSongStarred } from "@/library/favorites";
 import { useLinkRows } from "@/library/hooks";
@@ -201,14 +202,7 @@ function FavoriteStar({ title }: { title: string }) {
 
 type StreamedCover = { key: string; thumb: string | null };
 
-const subscribeQueueAndTracks = (listener: () => void): (() => void) => {
-  const stopQueue = queueState.subscribe(listener);
-  const stopTracks = queueTracks.subscribe(listener);
-  return () => {
-    stopQueue();
-    stopTracks();
-  };
-};
+const subscribeQueueAndTracks = subscribeAll(queueState, queueTracks);
 
 /**
  * A streamed song's cover for Now Playing: the player item [itemKey]'s key and

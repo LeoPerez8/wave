@@ -4,7 +4,12 @@ import { describe, test } from "node:test";
 import {
   EMPTY_QUEUE,
   MAGIC_QUEUE_CONTEXT,
+  genreProfile,
+  magicArtistKey,
   magicBatch,
+  magicLibrarySongs,
+  magicSeedProfile,
+  magicYtSong,
   magicRadioArtists,
   magicYtCandidates,
   magicQueueEdits,
@@ -16,8 +21,8 @@ import {
   startMagicQueue,
   wantsMagicBatch,
   type DiscoverRadioSong,
+  type GenreProfileOf,
   type MagicSeed,
-  type MixAffinity,
   type MagicSession,
   type MagicSignalKind,
   type MagicSong,
@@ -30,7 +35,7 @@ const first = () => 0;
 
 const song = (trackId: string, artist: string, genre: string | null = "Rock"): MagicSong => ({
   trackId,
-  artists: [artist],
+  artists: [magicArtistKey(artist)],
   genre,
 });
 
@@ -148,22 +153,105 @@ describe("A Magic Queue's signals", () => {
   });
 });
 
+/** What a play's end tells a Magic Queue: ended for [endReason] after [listenedMs], by Next or not. */
+const ended = (
+  endReason: "completed" | "skipped" | "stopped" | "interrupted",
+  listenedMs: number,
+  byNext = false,
+) => magicPlaySignal({ play: { endReason, listenedMs }, byNext });
+
 describe("How a play ends, as a Magic Queue signal", () => {
-  test("skipped within the first 30 s is a skip", () => {
-    assert.equal(magicPlaySignal({ endReason: "skipped", listenedMs: 29_999 }), "skip");
+  test("Next within the first 30 s is a skip", () => {
+    assert.equal(ended("skipped", 29_999, true), "skip");
   });
 
-  test("skipped after 30 s is neutral", () => {
-    assert.equal(magicPlaySignal({ endReason: "skipped", listenedMs: 30_000 }), null);
+  test("Next after 30 s is neutral", () => {
+    assert.equal(ended("skipped", 30_000, true), null);
+  });
+
+  test("Previous, picking another Up Next entry or a replay within 30 s is neutral", () => {
+    assert.equal(ended("skipped", 5_000), null);
   });
 
   test("played to the end is positive", () => {
-    assert.equal(magicPlaySignal({ endReason: "completed", listenedMs: 200_000 }), "playedThrough");
+    assert.equal(ended("completed", 200_000), "playedThrough");
   });
 
   test("stopped or interrupted says nothing", () => {
-    assert.equal(magicPlaySignal({ endReason: "stopped", listenedMs: 1_000 }), null);
-    assert.equal(magicPlaySignal({ endReason: "interrupted", listenedMs: 1_000 }), null);
+    assert.equal(ended("stopped", 1_000, true), null);
+    assert.equal(ended("interrupted", 1_000), null);
+  });
+});
+
+describe("A Magic Queue's songs from both sources", () => {
+  const artists = [
+    { id: 1, name: "Seed Artist" },
+    { id: 2, name: "Paramore" },
+    { id: 3, name: "Popper" },
+    { id: 4, name: "Metaller" },
+  ];
+  const fromLibrary = magicLibrarySongs(artists);
+  const seedSong = fromLibrary({ id: 10, artistIds: [1], genre: "Rock" });
+  const metal = genreProfile([{ genre: "Metal" }]);
+  const profileOf: GenreProfileOf = (artist) => (artist === "Deezer Band" ? metal : undefined);
+  const start = () => startMagicQueue(SONG_SEED, [seedSong], { id: "m1", random: first })!.session;
+
+  test("a Library song weighs by its artists' names and its genre family", () => {
+    const one = fromLibrary({ id: 11, artistIds: [2, 1], genre: "Alt Rock" });
+    assert.deepEqual(one, {
+      trackId: "11",
+      artists: [magicArtistKey("Paramore"), magicArtistKey("Seed Artist")],
+      genre: genreProfile([{ genre: "Alt Rock" }])!
+        .keys()
+        .next().value,
+    });
+  });
+
+  test("a skipped YouTube Music song's artist is excluded from the Library's songs too", () => {
+    const library = [
+      seedSong,
+      fromLibrary({ id: 20, artistIds: [2], genre: "Rock" }),
+      fromLibrary({ id: 30, artistIds: [3], genre: "Rock" }),
+    ];
+    const skipped = magicYtSong({ trackId: "yt:p", artists: ["paramore"] }, profileOf);
+    const session = magicSignal(start(), { kind: "skip", song: skipped });
+    assert.deepEqual(magicBatch(session, library, first).trackIds, ["30"]);
+  });
+
+  test("a skipped Library song's artist is excluded from YouTube Music's songs too", () => {
+    const skipped = fromLibrary({ id: 20, artistIds: [2], genre: "Rock" });
+    const yt = [
+      magicYtSong({ trackId: "yt:p", artists: ["Paramore"] }, profileOf),
+      magicYtSong({ trackId: "yt:o", artists: ["Other"] }, profileOf),
+    ];
+    const session = magicSignal(start(), { kind: "skip", song: skipped });
+    assert.deepEqual(magicBatch(session, [seedSong], first, yt).trackIds, ["yt:o"]);
+  });
+
+  test("the seed's artists weigh on their YouTube Music songs too", () => {
+    const yt = [
+      magicYtSong({ trackId: "yt:o", artists: ["Other"] }, profileOf),
+      magicYtSong({ trackId: "yt:s", artists: ["Seed Artist"] }, profileOf),
+    ];
+    assert.deepEqual(magicBatch(start(), [seedSong], first, yt).trackIds, ["yt:s", "yt:o"]);
+  });
+
+  test("a YouTube Music song's genre comes from its artist's Deezer profile", () => {
+    const deezer = magicYtSong({ trackId: "yt:d", artists: ["Nobody", "Deezer Band"] }, profileOf);
+    assert.equal(deezer.genre, metal!.keys().next().value);
+    assert.equal(magicYtSong({ trackId: "yt:n", artists: ["Nobody"] }, profileOf).genre, null);
+  });
+
+  test("so its skip lowers that genre's weight for the Library's songs too", () => {
+    const library = [
+      seedSong,
+      fromLibrary({ id: 40, artistIds: [4], genre: "Metal" }),
+      fromLibrary({ id: 30, artistIds: [3], genre: "Pop" }),
+    ];
+    assert.deepEqual(magicBatch(start(), library, first).trackIds, ["40", "30"]);
+    const skipped = magicYtSong({ trackId: "yt:d", artists: ["Deezer Band"] }, profileOf);
+    const session = magicSignal(start(), { kind: "skip", song: skipped });
+    assert.deepEqual(magicBatch(session, library, first).trackIds, ["30", "40"]);
   });
 });
 
@@ -246,6 +334,28 @@ describe("A Magic Queue in the queue", () => {
     assert.equal(parseMagicSession({ id: "m1" }), null);
     assert.equal(parseMagicSession(null), null);
   });
+
+  test("keeps what its YouTube Music radio grows from, through a restart", () => {
+    const profile = genreProfile([{ genre: "Metal" }, { genre: "Pop" }]);
+    const seed: MagicSeed = { kind: "album", id: "7", title: "An Album" };
+    const started = startMagicQueue(seed, [song("a1", "A"), song("a2", "A")], {
+      id: "m2",
+      random: first,
+      radio: { artists: ["A", "A"], profile },
+    })!.session;
+    assert.deepEqual(started.radioArtists, ["A"]);
+    assert.deepEqual(magicSeedProfile(started), profile);
+    const read = parseMagicSession(JSON.parse(JSON.stringify(started)))!;
+    assert.deepEqual(read, started);
+    assert.deepEqual(magicSeedProfile(read), profile);
+  });
+
+  test("a session saved before it kept its radio reads back with none", () => {
+    const { radioArtists: _artists, seedProfile: _profile, ...older } = session;
+    const read = parseMagicSession({ ...older, radioArtists: "A" })!;
+    assert.deepEqual(read.radioArtists, []);
+    assert.equal(magicSeedProfile(read), null);
+  });
 });
 
 describe("A Magic Queue's YouTube Music share", () => {
@@ -320,7 +430,18 @@ describe("A Magic Queue's YouTube Music share", () => {
     const sources = magicBatch(session, library, first, yt).trackIds.map((id) =>
       id.startsWith("yt:") ? "yt" : "library",
     );
-    assert.deepEqual(sources, ["library", "yt", "library", "yt", "library", "yt", "library", "yt", "library", "yt"]);
+    assert.deepEqual(sources, [
+      "library",
+      "yt",
+      "library",
+      "yt",
+      "library",
+      "yt",
+      "library",
+      "yt",
+      "library",
+      "yt",
+    ]);
   });
 
   test("reads back as it was saved, and afresh from a session saved before it", () => {
@@ -342,9 +463,12 @@ describe("A Magic Queue's YouTube Music candidates", () => {
     explicit: false,
     video,
   });
-  const affinity = (tagged: { readonly artists: readonly string[] }): MixAffinity =>
-    tagged.artists[0] === "Alike" ? "match" : tagged.artists[0] === "Unlike" ? "miss" : "unknown";
+  const rock = genreProfile([{ genre: "Rock" }]);
+  const jazz = genreProfile([{ genre: "Jazz" }]);
+  const profileOf: GenreProfileOf = (artist) =>
+    artist === "Alike" ? rock : artist === "Unlike" ? jazz : undefined;
   const none = () => false;
+  const options = { seedProfile: rock, profileOf, inLibrary: none };
 
   test("keep only songs whose artist passes the genre affinity check", () => {
     const radio = [
@@ -353,18 +477,27 @@ describe("A Magic Queue's YouTube Music candidates", () => {
       radioSong("n", "Nobody Knows"),
       radioSong("b", "Alike"),
     ];
-    const candidates = magicYtCandidates(radio, { affinity, inLibrary: none });
+    const candidates = magicYtCandidates(radio, options);
     assert.deepEqual(
       candidates.map((candidate) => candidate.trackId),
       ["yt:a", "yt:b"],
     );
   });
 
-  test("are songs the Magic Queue weighs, by their YouTube Music artists", () => {
-    const [candidate] = magicYtCandidates([radioSong("a", "Alike")], { affinity, inLibrary: none });
-    assert.deepEqual(candidate?.artists, ["Alike"]);
-    assert.equal(candidate?.genre, null);
+  test("are songs the Magic Queue weighs, by their artists and their genre from Deezer", () => {
+    const [candidate] = magicYtCandidates([radioSong("a", "Alike")], options);
+    assert.deepEqual(candidate?.artists, [magicArtistKey("Alike")]);
+    assert.equal(candidate?.genre, rock!.keys().next().value);
     assert.equal(candidate?.song.videoId, "a");
+  });
+
+  test("keep any song for a seed with no genre", () => {
+    const radio = [radioSong("u", "Unlike"), radioSong("n", "Nobody Knows")];
+    const candidates = magicYtCandidates(radio, { ...options, seedProfile: null });
+    assert.deepEqual(
+      candidates.map((candidate) => candidate.trackId),
+      ["yt:u", "yt:n"],
+    );
   });
 
   test("leave out music videos, songs the Library has, and a song the radio plays again", () => {
@@ -376,7 +509,7 @@ describe("A Magic Queue's YouTube Music candidates", () => {
       radioSong("a", "Alike"),
     ];
     const inLibrary = (played: DiscoverRadioSong) => played.videoId === "l";
-    const candidates = magicYtCandidates(radio, { affinity, inLibrary });
+    const candidates = magicYtCandidates(radio, { ...options, inLibrary });
     assert.deepEqual(
       candidates.map((candidate) => candidate.trackId),
       ["yt:a"],

@@ -190,6 +190,8 @@ export {
   fadingPlaySoFar,
   isCountedPlay,
   keptPlayingEntry,
+  movedToFollowing,
+  playEndPending,
   playSoFar,
   queueSourceAfter,
   resumePlay,
@@ -197,6 +199,7 @@ export {
 } from "./playEvents.ts";
 export type {
   PlayContext,
+  PlayEnd,
   PlayEndReason,
   PlayEvent,
   PlayStep,
@@ -590,9 +593,13 @@ export {
   MAGIC_QUEUE_CONTEXT,
   MAGIC_SKIP_MS,
   isMagicQueue,
+  magicArtistKey,
   magicBatch,
+  magicLibrarySongs,
   magicRadioArtists,
+  magicSeedProfile,
   magicYtCandidates,
+  magicYtSong,
   magicPlaySignal,
   magicQueueEdits,
   magicQueueLabel,
@@ -602,7 +609,10 @@ export {
   wantsMagicBatch,
 } from "./magicQueue.ts";
 export type {
+  MagicArtistKey,
+  MagicLibrarySong,
   MagicQueueEdits,
+  MagicRadioSeed,
   MagicSeed,
   MagicSession,
   MagicSignal,

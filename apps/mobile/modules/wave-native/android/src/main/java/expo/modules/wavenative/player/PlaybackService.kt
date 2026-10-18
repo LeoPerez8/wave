@@ -267,20 +267,24 @@ class PlaybackService : MediaLibraryService() {
     return old
   }
 
-  /** A player as [Crossfade] drives it. */
-  private fun deckOf(player: ExoPlayer): CrossfadeDeck =
+  /**
+   * The player [player] gives each time, as [Crossfade] drives it: a fixed
+   * one, or whichever is the session's (a handoff changes it). With none, it
+   * stands still and silent.
+   */
+  private fun deckOf(player: () -> ExoPlayer?): CrossfadeDeck =
     object : CrossfadeDeck {
-      override val positionMs get() = player.currentPosition
-      override val isPlaying get() = player.isPlaying
-      override val ended get() = player.playbackState == Player.STATE_ENDED
-      override val ready get() = player.playbackState == Player.STATE_READY
+      override val positionMs get() = player()?.currentPosition ?: 0L
+      override val isPlaying get() = player()?.isPlaying == true
+      override val ended get() = player()?.playbackState == Player.STATE_ENDED
+      override val ready get() = player()?.playbackState == Player.STATE_READY
 
       override fun setVolume(volume: Float) {
-        player.volume = volume
+        player()?.volume = volume
       }
 
       override fun setPlaying(playing: Boolean) {
-        player.playWhenReady = playing
+        player()?.playWhenReady = playing
       }
     }
 
@@ -293,20 +297,7 @@ class PlaybackService : MediaLibraryService() {
   private val crossfade = Crossfade(
     object : CrossfadeHost {
       // Whichever player is the session's: a handoff changes it.
-      override val main: CrossfadeDeck = object : CrossfadeDeck {
-        override val positionMs get() = exoPlayer?.currentPosition ?: 0L
-        override val isPlaying get() = exoPlayer?.isPlaying == true
-        override val ended get() = exoPlayer?.playbackState == Player.STATE_ENDED
-        override val ready get() = exoPlayer?.playbackState == Player.STATE_READY
-
-        override fun setVolume(volume: Float) {
-          exoPlayer?.volume = volume
-        }
-
-        override fun setPlaying(playing: Boolean) {
-          exoPlayer?.playWhenReady = playing
-        }
-      }
+      override val main: CrossfadeDeck = deckOf { exoPlayer }
 
       override val mainDurationMs: Long?
         get() = exoPlayer?.duration?.takeIf { it != C.TIME_UNSET && it > 0 }
@@ -364,10 +355,10 @@ class PlaybackService : MediaLibraryService() {
         incoming.playWhenReady = false
         incoming.prepare()
         secondPlayer = incoming
-        return deckOf(incoming)
+        return deckOf { incoming }
       }
 
-      override fun promote(): CrossfadeDeck? = promoteNext()?.let(::deckOf)
+      override fun promote(): CrossfadeDeck? = promoteNext()?.let { old -> deckOf { old } }
 
       override fun closeSecond() {
         secondPlayer?.release()

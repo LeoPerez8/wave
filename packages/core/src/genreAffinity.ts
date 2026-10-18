@@ -11,7 +11,7 @@
 import { artistPhotoName } from "./artistPhoto.ts";
 import type { DiscoverLibrarySong, DiscoverMixSeed, DiscoverSeedArtist } from "./discoverMixes.ts";
 import { songFamilies } from "./genreMixes.ts";
-import { readStoredRecord } from "./storedJson.ts";
+import { isRecord, readStoredRecord } from "./storedJson.ts";
 import { libraryArtistFinder, ytArtistQuery } from "./ytArtist.ts";
 
 /**
@@ -166,9 +166,6 @@ export const mixProfileLookups = (
     }
   return names;
 };
-
-const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
 
 /** Deezer's albums by the artist [artistId] (the first 50), each with its genre id. */
 export const deezerArtistAlbumsUrl = (artistId: number): string =>

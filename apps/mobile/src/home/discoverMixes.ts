@@ -29,9 +29,7 @@ import {
   discoverMixesSection,
   genreMixSeeds,
   homeSectionTitle,
-  identityKey,
   interleaveRadios,
-  libraryGenreProfiles,
   mixAffinity,
   mixesShown,
   mixProfileLookups,
@@ -42,12 +40,10 @@ import {
   mixSeedArtists,
   parseDiscoverMixes,
   parseMixesShown,
-  pickYtArtist,
   savedDiscoverMix,
   storedDiscoverMixes,
   storedMixesShown,
   undoneMixRefresh,
-  ytArtistLookup,
   type ArtistMixPools,
   type BlendedDiscoverMix,
   type DiscoverMix,
@@ -72,7 +68,7 @@ import { freeTurnEffect } from "@/lib/backgroundWork";
 import { makeExternalStore, type ExternalStore } from "@/lib/externalStore";
 import { persistedSetting, type PersistedSetting } from "@/lib/persistedSetting";
 import { libraryListQueries } from "@/library/hooks";
-import { LibraryStore, type SongRow } from "@/library/LibraryStore";
+import type { SongRow } from "@/library/LibraryStore";
 import { appRuntime } from "@/library/runtime";
 import { useLibraryQuery } from "@/library/sharedQueries";
 import type { NativeYtRadioSong } from "@/native/waveYtMusic";
@@ -80,40 +76,18 @@ import { showToast } from "@/overlay/toast";
 import { useDontPlayExplicit } from "@/settings/dontPlayExplicit";
 import { useYtMusicEnabled } from "@/settings/ytMusic";
 import { Stats } from "@/stats/Stats";
-import { searchAllowanceFreeAt, withSearchTurn } from "@/ytmusic/searchAllowance";
+import { searchAllowanceFreeAt } from "@/ytmusic/searchAllowance";
 import { YtMusic } from "@/ytmusic/YtMusic";
 
-import { lookUpArtistProfiles, lookedUpProfileOf } from "./artistGenres";
+import { lookUpArtistProfiles, mixProfileOf } from "./artistGenres";
 import { useDiscoverMixLevel, type MixSectionId } from "./discoverMixLevel";
 import { mixIndexes, refreshKnownVideos, useKnownVideos, type MixIndexes } from "./mixKnown";
+import { savedYtArtist, ytArtistBrowseId } from "./ytArtistPage";
 
 export type { MixSectionId } from "./discoverMixLevel";
 
 /** How many of the most played artists Artist mixes' seeds are picked from. */
 const SEED_POOL = 20;
-
-/** What was saved for a Library artist's YT Music section, or null. */
-const savedYtArtist = (name: string) =>
-  Effect.gen(function* () {
-    const store = yield* LibraryStore;
-    return yield* store.ytArtist(identityKey(name)).pipe(Effect.orElseSucceed(() => null));
-  });
-
-/**
- * The YT Music artist page a Library artist's mix starts from: the match
- * their artist page saved, or the one an Artists search finds. Null when
- * YouTube Music has no such artist.
- */
-const artistPage = (name: string) =>
-  Effect.gen(function* () {
-    const ytMusic = yield* YtMusic;
-    const lookup = ytArtistLookup(name, yield* savedYtArtist(name));
-    if (lookup === null) return null;
-    if (lookup.kind === "page") return lookup.browseId;
-    const { query } = lookup;
-    const artists = yield* withSearchTurn("discover", query, ytMusic.searchArtists(query));
-    return pickYtArtist(name, artists);
-  });
 
 /**
  * The artists a Library artist's YT Music page lists as similar: the page
@@ -125,7 +99,7 @@ const similarArtists = (name: string) =>
     const answer = yield* savedYtArtist(name);
     const listed = answer?.outcome === "found" ? answer.page.similar : undefined;
     if (listed !== undefined) return listed;
-    const browseId = yield* artistPage(name);
+    const browseId = yield* ytArtistBrowseId(name);
     if (browseId === null) return [];
     const ytMusic = yield* YtMusic;
     return (yield* ytMusic.artist(browseId)).similar ?? [];
@@ -157,7 +131,7 @@ const withSimilar = (pools: ArtistMixPools) =>
  */
 const firstRadioPage = (artist: { readonly name: string; readonly browseId?: string }) =>
   Effect.gen(function* () {
-    const browseId = artist.browseId ?? (yield* artistPage(artist.name));
+    const browseId = artist.browseId ?? (yield* ytArtistBrowseId(artist.name));
     if (browseId === null) return null;
     return yield* (yield* YtMusic).radio({ browseId });
   });
@@ -175,20 +149,11 @@ interface MixGenres {
   readonly profileOf: GenreProfileOf;
 }
 
-/**
- * The build's genre profiles (Core's `libraryGenreProfiles`): a Library
- * artist's from their songs, an outside artist's as Deezer gave it.
- */
-const mixGenres = (library: GenreProfileLibrary): MixGenres => {
-  const ofLibrary = libraryGenreProfiles(library);
-  return {
-    library,
-    profileOf: (artist) => {
-      const own = ofLibrary(artist);
-      return own === undefined ? lookedUpProfileOf(artist) : own;
-    },
-  };
-};
+/** The build's genre profiles (`mixProfileOf`). */
+const mixGenres = (library: GenreProfileLibrary): MixGenres => ({
+  library,
+  profileOf: mixProfileOf(library),
+});
 
 /**
  * [seed]'s radios, read at the same time and interleaved (`interleaveRadios`;
