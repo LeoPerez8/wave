@@ -1405,6 +1405,8 @@ export type {
   LyricShareDestination,
   LyricStoryBackground,
 } from "./lyricsShare.ts";
+export { songCardColours, songCardFileName, songShareDestinations } from "./songShare.ts";
+export type { SongCardColours, SongShareDestination } from "./songShare.ts";
 export type { YtLibraryFavorites } from "./ytLibraryBatch.ts";
 export { pendingFavorite, settlePendingFavorites } from "./pendingFavorites.ts";
 export type { EnteringSong, PendingFavorite, SettledFavorites } from "./pendingFavorites.ts";

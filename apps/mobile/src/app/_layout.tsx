@@ -27,6 +27,7 @@ import { NowPlayingSheet, UnderNowPlaying } from "@/nowPlaying/NowPlayingSheet";
 import { PERF_ENABLED, perfTouch, useRenderCount } from "@/perf/perf";
 import { PerfProbe } from "@/perf/PerfProbe";
 import { startServices } from "@/services";
+import { SongShareLayer } from "@/share/SongSharePreview";
 import { useNavigationBarScheme } from "@/settings/appearance";
 import { startSync } from "@/sync/startSync";
 import { useThemeColor } from "@/theme/useThemeColor";
@@ -114,6 +115,8 @@ export default function RootLayout() {
           </UnderNowPlaying>
           {/* Always mounted, out of sight until opened, so a tap only starts its spring. */}
           {granted ? <NowPlayingSheet /> : null}
+          {/* The song share sheet (Share in Now Playing and song menus), over both. */}
+          <SongShareLayer />
           {/* Library › Playlists › Import › From YT Music's sheet, while it's up. */}
           <YtLibraryPickerHost />
         </OverlayHost>

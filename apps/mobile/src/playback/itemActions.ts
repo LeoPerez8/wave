@@ -46,6 +46,7 @@ import {
   useLyricsAndGenreLookupsEnabled,
 } from "@/settings/lyricsAndGenre";
 import { ytMusicEnabled } from "@/settings/ytMusic";
+import { shareLibrarySong, shareStreamedSong } from "@/share/songShare";
 import {
   cancelMissingSongDownload,
   downloadMissingSongs,
@@ -445,6 +446,14 @@ export function useItemActions(
               target.kind === "track" ? withFiles : collectionSongs.filter(songHasFile),
             ),
         );
+      case "share":
+        // The song share sheet, on the one song: a Library song, a YT Music one or an unsearched entry.
+        return run(() => {
+          const [only] = allTracks;
+          if (only === undefined) return;
+          if (isLibraryTrack(only)) shareLibrarySong(only.song);
+          else shareStreamedSong(isUnsearchedTrack(only) ? only.unsearched : only.ytSong);
+        });
       case "select":
         return run(() => onSelect?.());
       case "delete":

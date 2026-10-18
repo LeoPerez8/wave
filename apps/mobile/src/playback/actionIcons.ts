@@ -16,6 +16,7 @@ import {
   IconRefresh,
   IconRowInsertBottom,
   IconSearch,
+  IconShare3,
   IconSparkles,
   IconStar,
   IconStarOff,
@@ -90,4 +91,5 @@ export const ACTION_ICONS: { readonly [A in MenuAction]: ActionIcon } = {
   cancelPlaylistDownload: IconX,
   saveAsPlaylist: IconDeviceFloppy,
   search: IconSearch,
+  share: IconShare3,
 };
