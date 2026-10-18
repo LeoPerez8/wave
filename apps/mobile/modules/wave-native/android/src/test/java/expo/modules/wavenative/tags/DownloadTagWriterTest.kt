@@ -134,6 +134,30 @@ class DownloadTagWriterTest {
   }
 
   @Test
+  fun writesTheAdvisoryAScanReadsBack() {
+    val explicit = DownloadTags.fromJs(mapOf("title" to "Get Lucky", "artist" to "Daft Punk", "advisory" to 1))!!
+    val clean = explicit.copy(advisory = 0)
+    val mp3 = Fixtures.libraryOf("soulseek-320.mp3" to "a.mp3").resolve("a.mp3")
+    val m4a = download()
+    val youtube = youtubeDownload()
+
+    DownloadTagWriter().write(mp3, explicit, null)
+    DownloadTagWriter().write(m4a, clean, null)
+    DownloadTagWriter().write(youtube, explicit, null)
+
+    assertEquals("1", reader.read(mp3).advisory)
+    assertEquals("0", reader.read(m4a).advisory)
+    assertEquals("1", reader.read(youtube).advisory)
+  }
+
+  @Test
+  fun writesNoAdvisoryWhenNoneIsGiven() {
+    val file = Fixtures.libraryOf("soulseek-320.mp3" to "a.mp3").resolve("a.mp3")
+    DownloadTagWriter().write(file, DownloadTags.fromJs(mapOf("title" to "Halo", "artist" to "Beyoncé"))!!, null)
+    assertNull(reader.read(file).advisory)
+  }
+
+  @Test
   fun retagsAFragmentedM4aItAlreadyTagged() {
     val file = youtubeDownload()
     val audioBefore = AudioPayload.of(file)
