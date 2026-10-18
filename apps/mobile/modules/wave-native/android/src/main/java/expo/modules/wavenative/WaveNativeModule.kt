@@ -8,7 +8,6 @@ import android.content.ClipboardManager
 import android.content.ContentUris
 import android.content.Context
 import android.content.Intent
-import android.media.MediaScannerConnection
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
@@ -31,6 +30,8 @@ import expo.modules.wavenative.artwork.ArtistPhotoStore
 import expo.modules.wavenative.artwork.ArtworkInfo
 import expo.modules.wavenative.artwork.ArtworkProvider
 import expo.modules.wavenative.artwork.ArtworkStore
+import expo.modules.wavenative.download.AndroidMediaScans
+import expo.modules.wavenative.download.BackgroundThreads
 import expo.modules.wavenative.files.AudioLengths
 import expo.modules.wavenative.files.DeleteOutcome
 import expo.modules.wavenative.files.TrackFileDeleter
@@ -268,19 +269,26 @@ class WaveNativeModule : Module() {
     /**
      * Deletes songs' audio files (and their sidecar `.lrc`), one outcome per
      * path, in order: `deleted`, `missing`, `denied`, `readOnly` or `failed`.
-     * Other apps' view of the media (MediaStore) is told about the deleted ones.
+     * Other apps' view of the media (MediaStore) is told about the deleted ones
+     * with the media scanner's next batch (#455): along with [scanWith], a
+     * download whose fill-in isn't done yet (a quality replacement's new file),
+     * when given.
      */
-    AsyncFunction("deleteFiles") { paths: List<String> ->
+    AsyncFunction("deleteFiles") { paths: List<String>, scanWith: String? ->
       val deleter = TrackFileDeleter(isReadOnly = { file ->
         Environment.getExternalStorageState(file) == Environment.MEDIA_MOUNTED_READ_ONLY
       })
       val outcomes = paths.map { deleter.delete(File(it)) }
       val deleted = paths.filterIndexed { i, _ -> outcomes[i] == DeleteOutcome.DELETED }
-      if (deleted.isNotEmpty()) {
-        MediaScannerConnection.scanFile(context, deleted.toTypedArray(), null, null)
-      }
+      if (deleted.isNotEmpty()) AndroidMediaScans.get(context).add(deleted, with = scanWith)
       outcomes.map { it.id }
     }
+
+    /**
+     * A download's fill-in is done, whatever it wrote: its file goes to the
+     * media scanner with the next batch, with the file it replaced (#455).
+     */
+    AsyncFunction("downloadFilledIn") { path: String -> AndroidMediaScans.get(context).release(path) }
 
     /**
      * How long each file plays in milliseconds, read from its audio samples to their end (which
@@ -321,7 +329,9 @@ class WaveNativeModule : Module() {
      * changed, the file read again as a scan reads it (`track`, `artwork`) so
      * the index can be updated. A failure resolves `{ failed }` instead
      * ([TagWriteFailure]: the step, the exception, and the file as it was then),
-     * so the app log can say why. Off the main thread.
+     * so the app log can say why. Off the main thread, at background priority
+     * (#455); the media scanner hears of the file with its next batch, or
+     * once a download's fill-in is done (`downloadFilledIn`).
      */
     AsyncFunction("writeLyricsAndGenre") {
         path: String,
@@ -334,24 +344,27 @@ class WaveNativeModule : Module() {
       ->
       val file = File(path)
       try {
-        val report =
-          SongTagWriter().write(
-            file,
-            lyrics,
-            genre,
-            AlbumPlace(trackNumber, discNumber, year),
-            advisory?.takeIf { it == 0 || it == 1 },
-          )
-        val tagsChanged =
-          report.lyrics == LyricsDestination.TAGS ||
-            listOf(report.genre, report.trackNumber, report.year, report.explicit).any { it == TagDestination.TAGS }
-        // A sidecar alone leaves the tags as they were, but the index learns the song has lyrics.
-        val reindex = tagsChanged || report.lyrics == LyricsDestination.SIDECAR
-        val (track, artwork) =
-          if (reindex) TagWriteStep.REINDEX.attempt { singleFileScanner().index(file) } else null to null
-        if (tagsChanged) MediaScannerConnection.scanFile(context, arrayOf(path), null, null)
-        report.toMap() +
-          mapOf("track" to track?.let(::trackToMap), "artwork" to artwork?.let(::artworkToMap))
+        BackgroundThreads.during {
+          val report =
+            SongTagWriter().write(
+              file,
+              lyrics,
+              genre,
+              AlbumPlace(trackNumber, discNumber, year),
+              advisory?.takeIf { it == 0 || it == 1 },
+            )
+          val tagsChanged =
+            report.lyrics == LyricsDestination.TAGS ||
+              listOf(report.genre, report.trackNumber, report.year, report.explicit).any { it == TagDestination.TAGS }
+          // A sidecar alone leaves the tags as they were, but the index learns the song has lyrics.
+          val reindex = tagsChanged || report.lyrics == LyricsDestination.SIDECAR
+          val (track, artwork) =
+            if (reindex) TagWriteStep.REINDEX.attempt { singleFileScanner().index(file) } else null to null
+          // A download's file waits for its fill-in to be done (`downloadFilledIn`), so it's scanned once.
+          if (tagsChanged) AndroidMediaScans.get(context).add(listOf(path))
+          report.toMap() +
+            mapOf("track" to track?.let(::trackToMap), "artwork" to artwork?.let(::artworkToMap))
+        }
       } catch (e: TagWriteStepException) {
         mapOf("failed" to TagWriteFailure.of(e, file).toMap())
       }

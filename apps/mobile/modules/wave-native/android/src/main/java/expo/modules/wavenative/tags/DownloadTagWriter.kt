@@ -59,7 +59,11 @@ class DownloadTagWriter {
     JAudioTaggerReader.configure()
   }
 
-  fun write(file: File, tags: DownloadTags, artwork: ByteArray?) {
+  /**
+   * Returns the file's SHA-256 as written, when the write went through every byte of it (a
+   * fragmented M4A, rewritten whole), else null ([FragmentedMp4.writeTag]).
+   */
+  fun write(file: File, tags: DownloadTags, artwork: ByteArray?): String? {
     val audio = AudioFileIO.read(file)
     val tag = audio.createDefaultTag()
     val kept = tags.keepTagsOf?.let { keptTagOf(File(it)) }
@@ -88,7 +92,7 @@ class DownloadTagWriter {
       )
     }
     audio.tag = tag
-    FragmentedMp4.writeTag(audio, file)
+    return FragmentedMp4.writeTag(audio, file)
   }
 
   /** The tag of the file a replacement replaces; null when it's gone or can't be read. */

@@ -116,7 +116,7 @@ class DurableFailurePlanTest {
     override fun cancel(id: String) {}
   }
   private object Untouched : DurablePublication {
-    override fun tag(source: File, tags: Map<String, Any?>) {}
+    override fun tag(source: File, tags: Map<String, Any?>): String? = null
     override fun index(file: File): Map<String, Any?> = mapOf("path" to file.path, "track" to mapOf("path" to file.path), "artwork" to null)
   }
   private fun prepare(owner: DurableDownloads, target: File, plan: Map<String, Any?>, peers: List<Map<String, Any?>> = listOf(peer), source: String = "soulseek") {

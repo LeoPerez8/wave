@@ -157,7 +157,7 @@ class DurableJobBudgetTest {
     }
   }
   private val GoodPublication = object : DurablePublication {
-    override fun tag(source: File, tags: Map<String, Any?>) { source.appendText(" trusted tags") }
+    override fun tag(source: File, tags: Map<String, Any?>): String? { source.appendText(" trusted tags"); return null }
     override fun index(file: File): Map<String, Any?> = mapOf("path" to file.path, "track" to mapOf("path" to file.path), "artwork" to null)
   }
   private object NoTransfer : DurableTransfer {

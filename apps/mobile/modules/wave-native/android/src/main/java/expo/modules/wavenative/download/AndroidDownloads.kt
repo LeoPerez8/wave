@@ -2,7 +2,6 @@ package expo.modules.wavenative.download
 
 import android.content.Context
 import android.content.Intent
-import android.media.MediaScannerConnection
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
@@ -45,7 +44,7 @@ import java.util.concurrent.TimeUnit
 /** Application-context owner, independent of Expo module and Activity lifetimes. */
 class AndroidDownloads private constructor(private val context: Context) {
   /** Writes the journal's changes that wait for their second (#452), off the main thread and whether or not the service runs. */
-  private val journalWriter = Executors.newSingleThreadScheduledExecutor { run -> Thread(run, "Wave download journal").apply { isDaemon = true } }
+  private val journalWriter = Executors.newSingleThreadScheduledExecutor(BackgroundThreads("Wave download journal", daemon = true))
   // Each failure's cause also goes to the app log, so a device run shows why a download stopped;
   // and each transfer's speed, so it shows where a download's time went. Its budgets wait for the
   // download service (startWork): Wave opening before the service starts isn't charged.
@@ -165,11 +164,13 @@ class AndroidDownloads private constructor(private val context: Context) {
       throw DurableFailure(if (DownloadFiles.storageProblem(error, source.parentFile)) "storage" else "unavailable", error)
     }
     catch (error: Exception) { WaveLog.w(TAG, "A Soulseek transfer failed", error); throw error }
+  /** Where the media scanner's paths wait for their batch (#455). */
+  private val scans = AndroidMediaScans.get(context)
   private val publication = object : DurablePublication {
-    override fun tag(source: File, tags: Map<String, Any?>) {
+    override fun tag(source: File, tags: Map<String, Any?>): String? {
       val fields = DownloadTags.fromJs(tags) ?: throw java.io.IOException("Invalid download tags")
       val cover = (tags["artworkUrl"] as? String)?.let { runCatching { cover(it) }.getOrNull() }
-      DownloadTagWriter().write(source, fields, cover)
+      return DownloadTagWriter().write(source, fields, cover)
     }
     override fun index(file: File): Map<String, Any?> {
       val scanner = LibraryScanner(
@@ -177,7 +178,9 @@ class AndroidDownloads private constructor(private val context: Context) {
         artworkStore = ArtworkStore(File(context.filesDir, "artwork"), AndroidArtworkProcessor()),
       )
       val (track, artwork) = scanner.index(file)
-      MediaScannerConnection.scanFile(context, arrayOf(file.path), null, null)
+      // Android's media scanner sees it once its lyrics and genre are written (the fill-in, then
+      // `downloadFilledIn`), with the file it replaces, in a batch (#455).
+      scans.hold(file.path)
       return mapOf("path" to file.path, "track" to trackToMap(track), "artwork" to artwork?.let(::artworkToMap))
     }
   }
@@ -194,6 +197,8 @@ class AndroidDownloads private constructor(private val context: Context) {
     minutes.add { WaveLog.i(TAG, DownloadServiceLines.memory(jobs.counts(), AndroidMemory.read(), JsHeap.app.read())) }
     // What the journal's writes cost since the last line (#452).
     minutes.add { WaveLog.i(TAG, jobs.takeWriteStats().line()) }
+    // What went to the media scanner, in how many batches (#455).
+    minutes.add { WaveLog.i(TAG, scans.takeLine()) }
   }
   private val minuteTicker by lazy {
     Executors.newSingleThreadScheduledExecutor { tick -> Thread(tick, "WaveDownloadMinutes").apply { isDaemon = true } }
@@ -235,13 +240,14 @@ class AndroidDownloads private constructor(private val context: Context) {
     // The journal's line counts its writes from the service's start.
     jobs.takeWriteStats()
     main.post { JsRuntime.ensureStarted(context, OWNER) }
-    deadlines = Executors.newSingleThreadScheduledExecutor().also { executor ->
+    // Download work runs at background priority (#455): the UI and playback keep theirs.
+    deadlines = Executors.newSingleThreadScheduledExecutor(BackgroundThreads("Wave download deadlines")).also { executor ->
       // Also refreshes the notification and the rows while transfers go on.
       executor.scheduleWithFixedDelay({ runCatching { jobs.expire(transport); changed(); main.post(refresh) } }, 1, 1, TimeUnit.SECONDS)
     }
     // Each song's transfer, tagging or publication runs on a thread of its own, several songs at once.
-    val pool = Executors.newCachedThreadPool().also { steps = it }
-    worker = Executors.newSingleThreadScheduledExecutor().also { executor ->
+    val pool = Executors.newCachedThreadPool(BackgroundThreads("Wave download step")).also { steps = it }
+    worker = Executors.newSingleThreadScheduledExecutor(BackgroundThreads("Wave download worker")).also { executor ->
       executor.scheduleWithFixedDelay({
         runCatching {
           jobs.expire(transport)
@@ -276,12 +282,14 @@ class AndroidDownloads private constructor(private val context: Context) {
     }
     jobs.stopWork(transport)
     minutes.stop()
+    // The run's last batch for the media scanner goes now; files still waiting for their tags follow.
+    scans.flush()
     // What waits for its second is written now, off the main thread (a full disk keeps it for the next write).
     journalWriter.execute { runCatching { jobs.flush() } }
     worker?.shutdownNow(); worker = null
     steps?.shutdownNow(); steps = null
     deadlines?.shutdownNow(); deadlines = null
-    if (timedOut) Executors.newSingleThreadExecutor().also { executor ->
+    if (timedOut) Executors.newSingleThreadExecutor(BackgroundThreads("Wave download stop")).also { executor ->
       executor.execute { try { jobs.interrupt(transport); changed() } finally { executor.shutdown() } }
     }
     main.post { JsRuntime.release(OWNER) }

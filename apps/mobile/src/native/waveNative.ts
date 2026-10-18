@@ -157,9 +157,19 @@ declare class WaveNativeModule extends NativeModule<WaveNativeEvents> {
   readLyrics(path: string): Promise<NativeLyrics>;
   /**
    * Deletes audio files and their sidecar `.lrc`; one outcome per path, in
-   * order. MediaStore is told about the deleted ones.
+   * order. MediaStore is told about the deleted ones with the media scanner's
+   * next batch: along with `scanWith`, a download whose fill-in isn't done yet
+   * (a quality replacement's new file), when given.
    */
-  deleteFiles(paths: readonly string[]): Promise<readonly FileDeleteOutcome[]>;
+  deleteFiles(
+    paths: readonly string[],
+    scanWith: string | null,
+  ): Promise<readonly FileDeleteOutcome[]>;
+  /**
+   * A download's fill-in is done, whatever it wrote: its file goes to the
+   * media scanner with the next batch, with the file it replaced.
+   */
+  downloadFilledIn(path: string): Promise<void>;
   /**
    * How long each file plays (ms), read from its audio samples to their end, which proves the
    * audio is there to its end; one per path, in order, null for a file missing or unreadable.

@@ -135,6 +135,22 @@ class DownloadTagWriterTest {
     assertEquals(moofs, indexed.toSet())
   }
 
+  /** A YouTube download is written whole as it's tagged: its digest comes with the write (#455). */
+  @Test
+  fun tellsTheDigestOfTheFragmentedM4aItWroteWhole() {
+    val file = youtubeDownload()
+    val written = DownloadTagWriter().write(file, tags, Fixtures.cover())
+    val sha = java.security.MessageDigest.getInstance("SHA-256").digest(file.readBytes()).joinToString("") { "%02x".format(it) }
+    assertEquals(sha, written)
+  }
+
+  /** jaudiotagger writes an MP3's tag in place: it never saw the rest of the file. */
+  @Test
+  fun tellsNoDigestForAFileItTaggedInPlace() {
+    val file = Fixtures.libraryOf("soulseek-320.mp3" to ".download.part.mp3").resolve(".download.part.mp3")
+    assertNull(DownloadTagWriter().write(file, DownloadTags.fromJs(mapOf("title" to "Get Lucky", "artist" to "Daft Punk"))!!, null))
+  }
+
   @Test
   fun writesTheAdvisoryAScanReadsBack() {
     val explicit = DownloadTags.fromJs(mapOf("title" to "Get Lucky", "artist" to "Daft Punk", "advisory" to 1))!!

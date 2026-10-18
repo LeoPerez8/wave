@@ -185,7 +185,7 @@ class DurableParallelDownloadsTest {
     val tagging = CountDownLatch(1)
     val coverArrives = CountDownLatch(1)
     val slowCover = object : DurablePublication {
-      override fun tag(source: File, tags: Map<String, Any?>) { tagging.countDown(); coverArrives.await(10, TimeUnit.SECONDS); source.writeText("tagged audio") }
+      override fun tag(source: File, tags: Map<String, Any?>): String? { tagging.countDown(); coverArrives.await(10, TimeUnit.SECONDS); source.writeText("tagged audio"); return null }
       override fun index(file: File): Map<String, Any?> = error("No publication expected")
     }
     val worker = thread { owner.advance(NoTransfer, slowCover) }
@@ -212,7 +212,7 @@ class DurableParallelDownloadsTest {
     }
   }
   private val GoodPublication = object : DurablePublication {
-    override fun tag(source: File, tags: Map<String, Any?>) { source.appendText(" trusted tags") }
+    override fun tag(source: File, tags: Map<String, Any?>): String? { source.appendText(" trusted tags"); return null }
     override fun index(file: File): Map<String, Any?> = mapOf("path" to file.path, "track" to mapOf("path" to file.path), "artwork" to null)
   }
   private val ids = (1..12).map { "song-$it" }
