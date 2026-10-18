@@ -140,6 +140,44 @@ class DurableReplacementRecoveryTest {
     }
   }
 
+  /** The run line counts one run: an earlier run's failures aren't counted again. */
+  @Test fun aRunCountsOnlyItsOwnSongs() {
+    withFolder { folder ->
+      val owner = DurableDownloads(File(folder, "jobs"), clock = { now }, log = {})
+      owner.enqueue(song + ("videoId" to "upgrade:1"), null)
+      owner.advance(GoodTransfer, GoodPublication)
+      val lease = owner.claim("upgrade:1")!!
+      owner.submit("upgrade:1", lease["generation"] as Long, lease["token"] as String, "prepare", mapOf("failure" to "ytUnavailable"))
+      assertEquals(DurableDownloads.ReplacementRun(replaced = 0, kept = 0, failed = 1, waiting = 0, cancelled = 0), owner.replacementRun())
+      // A later run, once the first is over.
+      now += 60_000
+      owner.enqueue(song + ("videoId" to "upgrade:2"), null)
+      assertEquals(DurableDownloads.ReplacementRun(replaced = 0, kept = 0, failed = 0, waiting = 1, cancelled = 0), owner.replacementRun())
+    }
+  }
+
+  /** Killed and resumed, a run still counts the songs it replaced before the kill, though the journal forgets them as it opens. */
+  @Test fun aResumedRunCountsWhatItReplacedBeforeTheKill() {
+    withFolder { folder ->
+      val journal = File(folder, "jobs")
+      fun job(id: String, phase: String, vararg more: Pair<String, Any?>) =
+        mapOf("id" to id, "song" to song + ("videoId" to id), "generation" to 1L, "phase" to phase, "replacementRun" to 5L) + more
+      JournalStore(journal).write(
+        listOf(
+          job("upgrade:1", "completed", "acknowledged" to true),
+          job("upgrade:2", "cancelled"),
+          job("upgrade:3", "queued"),
+        ),
+        emptyMap(),
+        0L,
+      )
+      val expected = DurableDownloads.ReplacementRun(replaced = 1, kept = 0, failed = 0, waiting = 1, cancelled = 1)
+      assertEquals(expected, DurableDownloads(journal, clock = { now }).replacementRun())
+      // And again after another kill: what it carried isn't lost or counted twice.
+      assertEquals(expected, DurableDownloads(journal, clock = { now }).replacementRun())
+    }
+  }
+
   @Test fun aJournalWithNoReplacementHasNoRun() {
     withFolder { folder ->
       val owner = DurableDownloads(File(folder, "jobs"), clock = { now })

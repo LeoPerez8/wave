@@ -114,6 +114,7 @@ class DurableDownloads(
       // Imported and cancelled jobs have nothing left to show; a failure keeps Retry until it's
       // retried or cleared (Settings › Downloads cancels it). The app cancels one that settled
       // another way (the song reached the Library) at launch, so failures don't pile up here.
+      carryForgottenReplacements()
       jobs.values.removeAll { it["phase"] == "cancelled" || it["acknowledged"] == true }
       // A socket cannot survive process recreation. Counts and deadlines do, on the budget's clock,
       // which stood still while Wave was closed: a peer keeps what was left of its turn. Across a
@@ -243,6 +244,9 @@ class DurableDownloads(
         jobs.remove(key); jobs[key] = existing
         if (origin != null) existing["origin"] = clean(origin)
         existing["decisionAttempts"] = 0L; startBudget(existing)
+        // Retried, it joins the run under way, or starts one.
+        for (key in listOf("replacementRun", RUN_REPLACED, RUN_KEPT, RUN_CANCELLED)) existing.remove(key)
+        joinRun(existing)
         if (savedGone) {
           for (key in listOf("saved", "acknowledged", "replaces") + PUBLICATION_KEYS) existing.remove(key)
         }
@@ -268,6 +272,7 @@ class DurableDownloads(
     )
     setSource(jobs.getValue(id), source)
     if (origin != null) jobs.getValue(id)["origin"] = clean(origin)
+    joinRun(jobs.getValue(id))
     return id
   }
 
@@ -521,15 +526,57 @@ class DurableDownloads(
    * was opened, as a run's stop line says it; null when it holds none.
    */
   @Synchronized fun replacementRun(): ReplacementRun? {
-    val replacements = jobs.values.filter { replacement(it) }
-    if (replacements.isEmpty()) return null
+    val all = jobs.values.filter { replacement(it) }
+    if (all.isEmpty()) return null
+    // The latest run only: an earlier run's songs aren't counted again.
+    val latest = all.maxOf(::runOf)
+    val replacements = all.filter { runOf(it) == latest }
+    // What the run's jobs the journal forgot as it opened (imported, cancelled) counted, carried on its others.
+    fun carried(key: String) = replacements.maxOf { it.number(key) }.toInt()
     return ReplacementRun(
-      replaced = replacements.count { it["acknowledged"] == true },
-      kept = replacements.count { it["reason"] == NO_BETTER_COPY && it["phase"] in TERMINAL },
+      replaced = replacements.count { it["acknowledged"] == true } + carried(RUN_REPLACED),
+      kept = replacements.count { kept(it) } + carried(RUN_KEPT),
       failed = replacements.count { it["importFailure"] != null || (it["phase"] == "failed" && it["reason"] != NO_BETTER_COPY) },
       waiting = replacements.count(::pending),
-      cancelled = replacements.count { it["phase"] == "cancelled" && it["reason"] != NO_BETTER_COPY },
+      cancelled = replacements.count { cancelledReplacement(it) } + carried(RUN_CANCELLED),
     )
+  }
+
+  /** The replacement run [job] belongs to (when its run started; 0 for a job from before runs were kept). */
+  private fun runOf(job: Map<String, Any?>): Long = job.number("replacementRun")
+
+  private fun kept(job: Map<String, Any?>) = job["reason"] == NO_BETTER_COPY && job["phase"] in TERMINAL
+  private fun cancelledReplacement(job: Map<String, Any?>) = job["phase"] == "cancelled" && job["reason"] != NO_BETTER_COPY
+
+  /**
+   * Stamps [job], a quality replacement just asked for, with its run: the one under way (a
+   * replacement still on its way), else a new one starting now.
+   */
+  private fun joinRun(job: MutableMap<String, Any?>) {
+    if (!replacement(job)) return
+    val underway = jobs.values.firstOrNull { it !== job && replacement(it) && pending(it) }
+    job["replacementRun"] = underway?.let(::runOf) ?: clock()
+  }
+
+  /**
+   * As the journal opens and forgets its imported and cancelled jobs, each run with jobs left
+   * carries what the forgotten ones counted on those, so its line still counts them ([replacementRun]).
+   */
+  private fun carryForgottenReplacements() {
+    for ((_, run) in jobs.values.filter { replacement(it) }.groupBy(::runOf)) {
+      val forgotten = run.filter { it["phase"] == "cancelled" || it["acknowledged"] == true }
+      val left = run - forgotten.toSet()
+      if (forgotten.isEmpty() || left.isEmpty()) continue
+      val counts = mapOf(
+        RUN_REPLACED to forgotten.count { it["acknowledged"] == true },
+        RUN_KEPT to forgotten.count { kept(it) },
+        RUN_CANCELLED to forgotten.count { cancelledReplacement(it) },
+      )
+      for ((key, count) in counts) {
+        val total = run.maxOf { it.number(key) } + count
+        for (job in left) job[key] = total
+      }
+    }
   }
 
   /** A quality replacement's counts ([replacementRun]): what its stop line says. */
@@ -1173,6 +1220,10 @@ class DurableDownloads(
     private const val YOUTUBE_M4A = "youtube-m4a"
     private val TERMINAL = setOf("failed", "cancelled")
     /** What a publication writes on its job: where it goes, the digests that tell it, the copy it moves. Every reset clears them all. */
+    /** What a replacement run's jobs the journal forgot as it opened counted, carried on the run's others. */
+    private const val RUN_REPLACED = "runReplaced"
+    private const val RUN_KEPT = "runKept"
+    private const val RUN_CANCELLED = "runCancelled"
     private val PUBLICATION_KEYS = listOf("finalPath", "digest", "taggedDigest", "publishSource")
     /** Quality replacements' job ids (Core's `qualityJobId`). */
     private val REPLACEMENT_PREFIXES = listOf("upgrade:", "downgrade:")
