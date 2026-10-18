@@ -1378,3 +1378,5 @@ export type {
   QualityReplacementTarget,
   ReplacedTrack,
 } from "./qualityReplacement.ts";
+export { libraryLyrics, libraryLyricsSong } from "./libraryLyrics.ts";
+export type { LibraryLyrics, LibraryLyricsState, LibraryLyricsTrack } from "./libraryLyrics.ts";

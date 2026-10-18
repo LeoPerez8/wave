@@ -68,8 +68,8 @@ const NOTHING: LyricsAnswer = { ok: true, lyrics: null };
 
 const SEARCHING: NonDLyricsShown = { kind: "searching" };
 
-/** Asks [source] for [song]'s lyrics. Never fails: a failure is an answer. */
-const ask = (source: LyricsSource, song: LyricsSearchSong): Promise<LyricsAnswer> => {
+/** Asks [source] for [song]'s lyrics (the non-D and Library searches alike). Never fails: a failure is an answer. */
+export const askLyrics = (source: LyricsSource, song: LyricsSearchSong): Promise<LyricsAnswer> => {
   if (source === "lrclib") {
     return song.lookup === null
       ? Promise.resolve(NOTHING)
@@ -162,7 +162,7 @@ export const useNonDLyrics = (
         show(SEARCHING);
         // Gone from the view (another song, closed): no more requests.
         if (!current) return;
-        answers.push(await ask(step.ask, song));
+        answers.push(await askLyrics(step.ask, song));
       }
     })();
     return () => {
