@@ -37,6 +37,10 @@ class SoulseekModule : Module() {
       }
     }
     AsyncFunction("jobsSnapshot") Coroutine { -> withContext(Dispatchers.IO) { downloads.jobs.snapshot() } }
+    // What changed since the revision JS last saw: the rows follow a big queue without copying it whole.
+    AsyncFunction("jobsChangedSince") Coroutine { revision: Double ->
+      withContext(Dispatchers.IO) { downloads.jobs.changesSince(revision.toLong()).toMap() }
+    }
     AsyncFunction("forgetCompletedJob") Coroutine { id: String, generation: Double ->
       withContext(Dispatchers.IO) {
         downloads.jobs.forgetCompleted(id, generation.toLong()).also { if (it) downloads.changed() }

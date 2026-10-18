@@ -1262,3 +1262,5 @@ export type { LyricSelection, LyricSelectionTap } from "./lyricsShare.ts";
 export type { YtLibraryFavorites } from "./ytLibraryBatch.ts";
 export { pendingFavorite, settlePendingFavorites } from "./pendingFavorites.ts";
 export type { EnteringSong, PendingFavorite, SettledFavorites } from "./pendingFavorites.ts";
+export { applyJournalChanges } from "./journalChanges.ts";
+export type { JournalChanges } from "./journalChanges.ts";
