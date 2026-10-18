@@ -8,6 +8,22 @@ import {
   songShareDestinations,
 } from "./index.ts";
 
+describe("songShareDestinations with links", () => {
+  test("with YT Music on, Copy Link, Spotify and YT Music sit between the apps and More", () => {
+    assert.deepEqual(
+      songShareDestinations({ instagramStories: true, whatsapp: true }, { links: true }),
+      ["instagramStories", "whatsapp", "copyLink", "spotify", "ytMusic", "more"],
+    );
+  });
+
+  test("with YT Music off, the link options are hidden", () => {
+    assert.deepEqual(
+      songShareDestinations({ instagramStories: false, whatsapp: true }, { links: false }),
+      ["whatsapp", "more"],
+    );
+  });
+});
+
 describe("songShareDestinations", () => {
   test("with Instagram Stories and WhatsApp on hand, they come first, then More", () => {
     assert.deepEqual(songShareDestinations({ instagramStories: true, whatsapp: true }), [

@@ -859,6 +859,7 @@ export {
   DOWNLOAD_PACE_WINDOW_MS,
   NO_DOWNLOAD_RUN,
   downloadRunLines,
+  downloadRunNotice,
   downloadRunProgress,
   downloadTimeLeft,
   downloadTimeLeftLine,
@@ -869,6 +870,7 @@ export type {
   DownloadRun,
   DownloadRunCounts,
   DownloadRunLines,
+  DownloadRunNotice,
   DownloadRunProgress,
 } from "./downloadRun.ts";
 export type {
@@ -1166,6 +1168,21 @@ export type {
   SpotifySong,
   SpotifyTransport,
 } from "./spotifyPlaylist.ts";
+export {
+  SPOTIFY_LIKED_SONGS_SOURCE,
+  isSpotifyLibrarySource,
+  readSpotifyAccountPlaylist,
+  readSpotifyLibrary,
+  spotifyLibraryFailure,
+} from "./spotifyLibrary.ts";
+export type {
+  SpotifyAccountAnswer,
+  SpotifyAccountFailure,
+  SpotifyAccountRead,
+  SpotifyAccountRequest,
+  SpotifyLibraryPlaylist,
+  SpotifyLibraryRead,
+} from "./spotifyLibrary.ts";
 export { compareOrderKeys, orderKeyBetween, placeEntries } from "./orderKey.ts";
 export type { EntryPlacement, OrderedEntry } from "./orderKey.ts";
 export {
@@ -1384,6 +1401,7 @@ export {
   ytLibraryFailure,
   ytLibraryPicker,
   ytLibraryPickerView,
+  spotifyLibraryPicker,
 } from "./ytLibrary.ts";
 export type {
   YtLibraryFailure,
@@ -1469,7 +1487,16 @@ export type {
   LyricStoryBackground,
 } from "./lyricsShare.ts";
 export { songCardColours, songCardFileName, songShareDestinations } from "./songShare.ts";
-export type { SongCardColours, SongShareDestination } from "./songShare.ts";
+export type { SongCardColours, SongLinkOption, SongShareDestination } from "./songShare.ts";
+export { lookUpSongLinks, songLinkView } from "./songLinks.ts";
+export type {
+  SongLinkAsk,
+  SongLinkView,
+  SongLinkLookup,
+  SongLinks,
+  SongLinkSearch,
+  SongLinksState,
+} from "./songLinks.ts";
 export type { YtLibraryFavorites } from "./ytLibraryBatch.ts";
 export { pendingFavorite, settlePendingFavorites } from "./pendingFavorites.ts";
 export type { EnteringSong, PendingFavorite, SettledFavorites } from "./pendingFavorites.ts";
@@ -1702,3 +1729,5 @@ export {
   ytThrottleSucceeded,
 } from "./ytThrottle.ts";
 export type { YtThrottle, YtThrottleJob, YtThrottlePause } from "./ytThrottle.ts";
+export { throttledFailures, throttledFailuresLine } from "./throttledFailures.ts";
+export type { ThrottledFailureJob, ThrottledFailuresInput } from "./throttledFailures.ts";

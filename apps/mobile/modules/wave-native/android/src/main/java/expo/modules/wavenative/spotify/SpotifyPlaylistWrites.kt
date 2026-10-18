@@ -13,11 +13,13 @@ import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
 
-/** The web-player operations sharing a playlist sends (docs/spotify-account.md, 2026-10-18 hashes). */
+/**
+ * The web-player operations sharing a playlist sends (docs/spotify-account.md,
+ * 2026-10-18 hashes). Reading the playlist and the library back is
+ * [SpotifyLibraryQueries]'s, as From Spotify reads them.
+ */
 object SpotifyShareOperations {
   val SEARCH_TRACKS = SpotifyOperation("searchTracks", "b02683192a98dde7966b5e6655a79eeb62713eab703eda9902c932818dd52751")
-  val FETCH_PLAYLIST = SpotifyOperation("fetchPlaylist", "21ea11a6ac75a5f3e01fd365d29c18e0a4a8b7dc09f89bbb5d73910190c6acaf")
-  val LIBRARY = SpotifyOperation("libraryV3", "390c78e5b951029bad359785e69b07b536a509c581cbcd0aded5e5067f187455")
 
   /** The playlist mutations share one hash. */
   private const val MUTATIONS = "b907ad6b088d5bf7680fa81198996d58398c2d55dfcdf59fcc959e0be98a418a"
@@ -28,9 +30,8 @@ object SpotifyShareOperations {
 
 /**
  * Sharing a playlist on Spotify (docs/spec.md, "Sharing playlists"), as the
- * account [client] is signed in to: searching songs, reading the playlist
- * back and finding it in the library (answering the GraphQL `data` as JSON
- * for Core to read), and making and changing the playlist. Which songs go
+ * account [client] is signed in to: searching songs (answering the GraphQL
+ * `data` as JSON for Core to read), and making and changing the playlist. Which songs go
  * where is Core's (`playlistShare.ts`, `spotifyShare.ts`).
  */
 class SpotifyPlaylistWrites(private val client: SpotifyClient) {
@@ -48,36 +49,6 @@ class SpotifyPlaylistWrites(private val client: SpotifyClient) {
         put("includeAudiobooks", false)
         put("includePreReleases", false)
         put("includeAuthors", false)
-      },
-    ).toString()
-
-  /** A page of the playlist [uri] from [offset] (`fetchPlaylist`): its data. */
-  suspend fun playlistPage(uri: String, offset: Int): String =
-    client.query(
-      SpotifyShareOperations.FETCH_PLAYLIST,
-      buildJsonObject {
-        put("uri", uri)
-        put("offset", offset)
-        put("limit", PAGE)
-        put("enableWatchFeedEntrypoint", false)
-      },
-    ).toString()
-
-  /** A page of the account's playlists from [offset] (`libraryV3`, flattened): its data. */
-  suspend fun libraryPage(offset: Int): String =
-    client.query(
-      SpotifyShareOperations.LIBRARY,
-      buildJsonObject {
-        putJsonArray("filters") { add(JsonPrimitive("Playlists")) }
-        put("order", JsonNull)
-        put("textFilter", JsonNull)
-        putJsonArray("features") {}
-        put("limit", LIBRARY_PAGE)
-        put("offset", offset)
-        put("flatten", true)
-        putJsonArray("expandedFolders") {}
-        put("folderUri", JsonNull)
-        put("includeFoldersWhenFlattening", true)
       },
     ).toString()
 
@@ -198,9 +169,6 @@ class SpotifyPlaylistWrites(private val client: SpotifyClient) {
   }
 
   private companion object {
-    /** How many entries one `fetchPlaylist` page asks for (the web player's most). */
-    const val PAGE = 500
-    const val LIBRARY_PAGE = 50
     val SOURCE = buildJsonObject { putJsonObject("source") { put("client", "WEBPLAYER") } }
 
     fun id(uri: String): String = uri.substringAfterLast(':')

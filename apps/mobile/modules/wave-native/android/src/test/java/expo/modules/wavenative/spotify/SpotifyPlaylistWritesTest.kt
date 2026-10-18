@@ -132,23 +132,13 @@ class SpotifyPlaylistWritesTest {
   }
 
   @Test
-  fun searchingAndReadingAnswerTheQuerysDataForCoreToRead() {
+  fun searchingAnswersTheQuerysDataForCoreToRead() {
     spotify.query = { SpotifyResponse(200, """{"data":{"searchV2":{"tracksV2":{"items":[]}}}}""") }
     val data = runBlocking { writes.search("Get Lucky Daft Punk") }
     assertEquals("""{"searchV2":{"tracksV2":{"items":[]}}}""", data)
     val sent = spotify.queries().single()
     assertEquals("searchTracks", body(sent)["operationName"]!!.jsonPrimitive.content)
     assertEquals("Get Lucky Daft Punk", variables(sent)["searchTerm"]!!.jsonPrimitive.content)
-    runBlocking {
-      writes.playlistPage(playlist, offset = 500)
-      writes.libraryPage(offset = 50)
-    }
-    val (_, page, library) = spotify.queries()
-    assertEquals("fetchPlaylist", body(page)["operationName"]!!.jsonPrimitive.content)
-    assertEquals("500", variables(page)["offset"]!!.jsonPrimitive.content)
-    assertEquals(playlist, variables(page)["uri"]!!.jsonPrimitive.content)
-    assertEquals("libraryV3", body(library)["operationName"]!!.jsonPrimitive.content)
-    assertEquals("50", variables(library)["offset"]!!.jsonPrimitive.content)
   }
 
   @Test

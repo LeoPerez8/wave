@@ -1,4 +1,9 @@
-import type { SpotifySession, SpotifySignInFailure } from "@wave/core";
+import type {
+  SpotifyAccountAnswer,
+  SpotifyAccountFailure,
+  SpotifySession,
+  SpotifySignInFailure,
+} from "@wave/core";
 import { NativeModule, requireNativeModule } from "expo";
 
 /**
@@ -7,10 +12,7 @@ import { NativeModule, requireNativeModule } from "expo";
  * changed its web player so Wave needs an update.
  */
 export type SpotifyErrorCode =
-  | "ERR_SPOTIFY_OFFLINE"
-  | "ERR_SPOTIFY_FAILED"
-  | "ERR_SPOTIFY_SIGNED_OUT"
-  | "ERR_SPOTIFY_CHANGED";
+  "ERR_SPOTIFY_OFFLINE" | "ERR_SPOTIFY_FAILED" | "ERR_SPOTIFY_SIGNED_OUT" | "ERR_SPOTIFY_CHANGED";
 
 /**
  * The Spotify account's native module (`modules/wave-native`, package
@@ -33,16 +35,27 @@ declare class WaveSpotifyModule extends NativeModule<{
   signIn(): Promise<SpotifySession | null>;
   /** Forgets the session and clears the sign-in web view's cookies and storage. */
   signOut(): Promise<SpotifySession>;
+  /**
+   * A page of the account's library (`libraryV3`: playlists, folders
+   * flattened, Liked Songs) from [offset], as the query's `data` in JSON
+   * (Core's `readSpotifyLibrary` reads it).
+   */
+  library(offset: number): Promise<string>;
+  /** A page of Liked Songs (`fetchLibraryTracks`, 50 a page) from [offset], as the query's `data` in JSON. */
+  likedSongs(offset: number): Promise<string>;
+  /**
+   * A page of the playlist [uri] (`spotify:playlist:<id>`; `fetchPlaylist`,
+   * 500 a page) from [offset], as the account reads it, as the query's
+   * `data` in JSON.
+   */
+  playlist(uri: string, offset: number): Promise<string>;
 
-  // Sharing a playlist (docs/spec.md, "Sharing playlists"). Reads resolve the
-  // GraphQL answer's `data` as JSON, for Core to read (`spotifyShare.ts`).
+  // Sharing a playlist (docs/spec.md, "Sharing playlists"). It reads the
+  // playlist and the library back with `playlist` and `library` above; a
+  // search resolves its GraphQL `data` as JSON, for Core to read (`spotifyShare.ts`).
 
   /** A `searchTracks` for [term]. */
   searchTracks(term: string): Promise<string>;
-  /** A page of the playlist [uri] (`spotify:playlist:<id>`) from [offset] (`fetchPlaylist`). */
-  playlistPage(uri: string, offset: number): Promise<string>;
-  /** A page of the account's playlists from [offset] (`libraryV3`). */
-  libraryPage(offset: number): Promise<string>;
   /** Makes a public playlist [name] in the account's library, anyone with its link can open: its URI. */
   createPlaylist(name: string): Promise<string>;
   /** Shows the playlist [uri] on the profile and lets anyone with its link open it. */
@@ -66,6 +79,31 @@ export const spotifyErrorCode = (error: unknown): SpotifyErrorCode => {
     code === "ERR_SPOTIFY_CHANGED"
     ? code
     : "ERR_SPOTIFY_FAILED";
+};
+
+/** Why a query as the account didn't answer, as Core's library reads take it. */
+const ACCOUNT_FAILURES: Record<SpotifyErrorCode, SpotifyAccountFailure> = {
+  ERR_SPOTIFY_OFFLINE: "offline",
+  ERR_SPOTIFY_FAILED: "failed",
+  ERR_SPOTIFY_SIGNED_OUT: "signedOut",
+  ERR_SPOTIFY_CHANGED: "changed",
+};
+
+/** [query]'s `data`, read from its JSON, or why it didn't answer (Core's `SpotifyAccountAnswer`). */
+export const askSpotifyAccount = async (
+  query: () => Promise<string>,
+): Promise<SpotifyAccountAnswer> => {
+  let json: string;
+  try {
+    json = await query();
+  } catch (error) {
+    return { ok: false, reason: ACCOUNT_FAILURES[spotifyErrorCode(error)] };
+  }
+  try {
+    return { ok: true, data: JSON.parse(json) as unknown };
+  } catch {
+    return { ok: false, reason: "failed" };
+  }
 };
 
 /** Why a sign-in didn't work, as Settings says it. */

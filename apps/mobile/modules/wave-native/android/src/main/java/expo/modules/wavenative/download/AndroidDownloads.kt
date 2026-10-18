@@ -222,6 +222,9 @@ class AndroidDownloads private constructor(private val context: Context) {
   }
 
   fun subscribe(listener: () -> Unit): () -> Unit { listeners.add(listener); return { listeners.remove(listener) } }
+  /** The run as JS last pushed it for the notification (#476); null with no run or a one-song run. */
+  @Volatile var runNotice: DownloadRunNotice? = null
+
   /**
    * The journal may have changed. Listeners (JS, which then asks for what changed since its
    * revision) only hear of it when it did, at most every [NOTIFY_MS]: transfer progress arrives

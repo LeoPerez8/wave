@@ -134,6 +134,8 @@ declare class WaveNativeModule extends NativeModule<WaveNativeEvents> {
   pickStatFiles(): Promise<readonly PickedPlaylistFile[]>;
   /** The clipboard's text, or null when it holds none. Only readable while Wave is in front. */
   readClipboardText(): Promise<string | null>;
+  /** Puts [text] on the clipboard, labelled [label] (Android shows its own "Copied" on 13+). */
+  writeClipboardText(label: string, text: string): Promise<void>;
   /**
    * The latest text shared to Wave from another app's share sheet, once: the
    * share that started Wave or one since. Null when nothing new was shared.

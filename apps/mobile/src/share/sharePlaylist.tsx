@@ -287,9 +287,7 @@ const searchSpotifyTrack = async (song: SpotifySong): Promise<string | null> => 
 
 /** The account's Spotify playlist [uri]'s entries, read back; null when it's gone. */
 const readSpotifyEntries = (uri: string) =>
-  spotify(() =>
-    readSpotifySharedPlaylist((offset) => parsed(WaveSpotify.playlistPage(uri, offset))),
-  );
+  spotify(() => readSpotifySharedPlaylist((offset) => parsed(WaveSpotify.playlist(uri, offset))));
 
 /** Adds [ids] at the end of the Spotify playlist [uri], a request's worth at a time. */
 const addSpotifyTracks = async (uri: string, ids: readonly string[]): Promise<void> => {
@@ -309,7 +307,7 @@ const updateSpotifyShared = async (
   ids: readonly string[],
 ): Promise<boolean> => {
   const inLibrary = await spotify(() =>
-    spotifyLibraryHas(uri, (offset) => parsed(WaveSpotify.libraryPage(offset))),
+    spotifyLibraryHas(uri, (offset) => parsed(WaveSpotify.library(offset))),
   );
   if (!inLibrary) return false;
   const before = await readSpotifyEntries(uri);
