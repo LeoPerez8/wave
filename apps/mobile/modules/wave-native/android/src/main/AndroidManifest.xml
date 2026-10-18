@@ -75,6 +75,14 @@
       android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|density|keyboard|keyboardHidden|navigation|uiMode|fontScale"
       android:windowSoftInputMode="adjustResize" />
 
+    <!-- Settings › Accounts › Spotify › Sign In: Spotify's sign-in page in a web view (SpotifySignInActivity). -->
+    <activity
+      android:name="expo.modules.wavenative.spotify.SpotifySignInActivity"
+      android:exported="false"
+      android:theme="@android:style/Theme.DeviceDefault.DayNight"
+      android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|density|keyboard|keyboardHidden|navigation|uiMode|fontScale"
+      android:windowSoftInputMode="adjustResize" />
+
     <!-- Cached artwork as content URIs: Android Auto can't read Wave's files (ArtworkProvider). -->
     <provider
       android:name="expo.modules.wavenative.artwork.ArtworkProvider"

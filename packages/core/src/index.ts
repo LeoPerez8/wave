@@ -608,6 +608,20 @@ export type {
   WaveAccountView,
   WaveSession,
 } from "./waveAccount.ts";
+export {
+  SPOTIFY_ACCOUNT_SIGNED_OUT,
+  spotifyAccountView,
+  stepSpotifyAccount,
+} from "./spotifyAccount.ts";
+export type {
+  SpotifyAccount,
+  SpotifyAccountEvent,
+  SpotifyAccountNote,
+  SpotifyAccountState,
+  SpotifyAccountView,
+  SpotifySession,
+  SpotifySignInFailure,
+} from "./spotifyAccount.ts";
 export { YT_ACCOUNT_SIGNED_OUT, stepYtAccount, ytAccountView } from "./ytAccount.ts";
 export type {
   YtAccount,
