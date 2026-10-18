@@ -368,10 +368,7 @@ export const recapToAnnounce = (
   );
 };
 
-/**
- * One slide of a Recap's stories. Each kind carries what it shows; later
- * slides (the summary card) join as new kinds.
- */
+/** One slide of a Recap's stories. Each kind carries what it shows. */
 export type RecapSlide =
   | { readonly kind: "minutes"; readonly minutes: number }
   | {
@@ -387,12 +384,24 @@ export type RecapSlide =
       readonly kind: "discovered";
       /** Every artist discovered in the period, the most played first. */
       readonly artists: readonly PlayTotals[];
+    }
+  | {
+      /** The summary card, always last: the Recap on one slide, as Wrapped's is. */
+      readonly kind: "summary";
+      readonly minutes: number;
+      /** The top songs (up to 5), the top one first. */
+      readonly songs: readonly PlayTotals[];
+      /** The top artists (up to 5), the top one first. */
+      readonly artists: readonly PlayTotals[];
+      /** The top genre family; null with no song with a genre. */
+      readonly genre: GenreFamily | null;
     };
 
 /**
  * A Recap's slides, in the order the stories play them: minutes, top songs,
- * top artists, top album, top genres, habits, discovered artists. A slide
- * with nothing to show is left out.
+ * top artists, top album, top genres, habits, discovered artists, then the
+ * summary card. A slide with nothing to show is left out; the summary card
+ * always closes the stories.
  */
 export const recapSlides = (shown: Recap): RecapSlide[] => {
   const slides: RecapSlide[] = [{ kind: "minutes", minutes: shown.minutesListened }];
@@ -404,6 +413,13 @@ export const recapSlides = (shown: Recap): RecapSlide[] => {
   if (shown.discoveredArtists.length > 0) {
     slides.push({ kind: "discovered", artists: shown.discoveredArtists });
   }
+  slides.push({
+    kind: "summary",
+    minutes: shown.minutesListened,
+    songs: shown.topSongs,
+    artists: shown.topArtists,
+    genre: shown.topGenres[0]?.family ?? null,
+  });
   return slides;
 };
 

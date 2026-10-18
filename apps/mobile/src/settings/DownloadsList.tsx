@@ -1,12 +1,14 @@
 import { LegendList, type LegendListRef } from "@legendapp/list/react-native";
 import {
   downloadListRows,
+  downloadRunLines,
   failedDownloadRows,
   queuedDownloadsSummary,
   reorderShift,
   type DownloadGroup,
   type DownloadHeaderRow,
   type DownloadListRow,
+  type DownloadRunCounts,
   type FailedListRow,
   type QueuedDownload,
   type WaitingSongRow,
@@ -32,6 +34,7 @@ import { Hairline } from "@/catalog/Hairline";
 import { REORDER_HANDLE_ROOM, ReorderHandle } from "@/components/RowReorder";
 import { PlainTextButton } from "@/components/PlainTextButton";
 import type { NativeYtSong } from "@/native/waveYtMusic";
+import { DownloadRunPanel, groupRunLine, RunBar } from "@/settings/DownloadRunPanel";
 import { DownloadSongRow } from "@/settings/DownloadSongRow";
 import {
   DOWNLOAD_ROW_ESTIMATE,
@@ -49,6 +52,7 @@ import {
 import { useYtMusicEnabled } from "@/settings/ytMusic";
 import {
   cancelQueuedDownload,
+  useDownloadRun,
   useDownloadingList,
   useFailedDownloads,
 } from "@/ytmusic/YtDownloads";
@@ -92,6 +96,16 @@ const sameQueued = (a: QueuedDownload<NativeYtSong>, b: QueuedDownload<NativeYtS
 /** Two group headers show the same name and line. */
 const sameGroupLine = (a: DownloadGroup<NativeYtSong>, b: DownloadGroup<NativeYtSong>) =>
   a.name === b.name && a.line === b.line;
+
+/** Two groups' run counts are the same (or both absent). */
+const sameRunCounts = (a: DownloadRunCounts | undefined, b: DownloadRunCounts | undefined) =>
+  a === b ||
+  (a !== undefined &&
+    b !== undefined &&
+    a.done === b.done &&
+    a.failed === b.failed &&
+    a.left === b.left &&
+    a.total === b.total);
 
 /**
  * One song on its way: its artwork, title and artists, the progress line its row shows
@@ -142,24 +156,28 @@ const QueuedDownloadRow = memo(
 );
 
 /**
- * A group's header: the playlist, album or mix its songs are from (or Songs), how many are
- * left, and the handle that drags the whole group, its waiting songs with it. A group whose
- * songs have all started has nothing to move: no handle (room for one, so the counts line up)
- * and no Move up / Move down.
+ * A group's header: the playlist, album or mix its songs are from (or Songs), its run's counts
+ * and bar ([progress], Core's `downloadRunProgress`; how many are left without one), and the
+ * handle that drags the whole group, its waiting songs with it. A group whose songs have all
+ * started has nothing to move: no handle (room for one, so the counts line up) and no Move up /
+ * Move down.
  */
 function DownloadGroupHeader({
   group,
+  progress,
   handle,
   index = 0,
   count = 1,
   onAccessibilityAction,
 }: {
   group: DownloadGroup<NativeYtSong>;
+  progress: DownloadRunCounts | undefined;
   handle: Handle;
   index?: number;
   count?: number;
   onAccessibilityAction?: (event: AccessibilityActionEvent) => void;
 }) {
+  const line = progress === undefined ? group.line : groupRunLine(progress);
   return (
     <View>
       <View className="flex-row items-center" style={{ gap: CELL * 1.5, paddingTop: CELL }}>
@@ -168,7 +186,7 @@ function DownloadGroupHeader({
           style={{ gap: CELL * 1.5 }}
           accessible
           accessibilityRole="header"
-          accessibilityLabel={`${group.name}, ${group.line}`}
+          accessibilityLabel={`${group.name}, ${line}`}
           accessibilityActions={moveActions(index, count)}
           onAccessibilityAction={onAccessibilityAction}
         >
@@ -182,11 +200,16 @@ function DownloadGroupHeader({
             className="font-sans text-footnote text-secondary"
             style={{ fontVariant: ["tabular-nums"] }}
           >
-            {group.line}
+            {line}
           </Text>
         </View>
         <HandleSlot handle={handle} />
       </View>
+      {progress !== undefined && (
+        <View style={{ paddingTop: CELL, paddingBottom: CELL / 2 }}>
+          <RunBar fraction={downloadRunLines(progress).fraction} />
+        </View>
+      )}
       <Hairline />
     </View>
   );
@@ -301,12 +324,14 @@ const WaitingDownloadRow = memo(
 const MovableGroupHeader = memo(
   function MovableGroupHeader({
     row,
+    progress,
     lifted,
     steps,
     rowDrag,
     moveGroup,
   }: {
     row: DownloadHeaderRow<NativeYtSong>;
+    progress: DownloadRunCounts | undefined;
     lifted: boolean;
     /** Another group is being dragged. */
     steps: boolean;
@@ -325,6 +350,7 @@ const MovableGroupHeader = memo(
         <View ref={view} collapsable={false} style={lifted ? LIFTED : undefined}>
           <DownloadGroupHeader
             group={row.group}
+            progress={progress}
             handle={grip}
             index={row.index}
             count={row.count}
@@ -342,15 +368,23 @@ const MovableGroupHeader = memo(
     before.row.key === after.row.key &&
     before.row.index === after.row.index &&
     before.row.count === after.row.count &&
-    sameGroupLine(before.row.group, after.row.group),
+    sameGroupLine(before.row.group, after.row.group) &&
+    sameRunCounts(before.progress, after.progress),
 );
 
 /** The header of a group whose songs have all started: nothing to drag. */
 const StartedGroupHeader = memo(
-  function StartedGroupHeader({ group }: { group: DownloadGroup<NativeYtSong> }) {
-    return <DownloadGroupHeader group={group} handle="room" />;
+  function StartedGroupHeader({
+    group,
+    progress,
+  }: {
+    group: DownloadGroup<NativeYtSong>;
+    progress: DownloadRunCounts | undefined;
+  }) {
+    return <DownloadGroupHeader group={group} progress={progress} handle="room" />;
   },
-  (before, after) => sameGroupLine(before.group, after.group),
+  (before, after) =>
+    sameGroupLine(before.group, after.group) && sameRunCounts(before.progress, after.progress),
 );
 
 /** The dragged row as it lifts over the list: on the fill colour, under the finger. */
@@ -358,15 +392,21 @@ function LiftedCopy({
   drag,
   rows,
   covers,
+  groupProgress,
 }: {
   drag: DownloadDrag;
   rows: readonly DownloadListRow<NativeYtSong>[];
   covers: boolean;
+  groupProgress: ReadonlyMap<string, DownloadRunCounts>;
 }) {
   const row = rows.find((each) => each.key === drag.key);
   if (row === undefined || row.kind === "downloading" || row.kind === "startedHeader") return null;
   return row.kind === "header" ? (
-    <DownloadGroupHeader group={row.group} handle="drawn" />
+    <DownloadGroupHeader
+      group={row.group}
+      progress={groupProgress.get(row.group.key)}
+      handle="drawn"
+    />
   ) : (
     <QueuedDownloadRow queued={row.queued} covers={covers} handle="drawn" />
   );
@@ -392,6 +432,8 @@ const typeOf = (row: PageRow) => row.kind;
  */
 export function DownloadsList({ header }: { header: ReactElement }) {
   const list = useDownloadingList();
+  const run = useDownloadRun();
+  const groupProgress = run.progress.groups;
   const failed = useFailedDownloads();
   const [failedShown, setFailedShown] = useState(false);
   const toggleFailed = useCallback(() => setFailedShown((shown) => !shown), []);
@@ -424,12 +466,17 @@ export function DownloadsList({ header }: { header: ReactElement }) {
       if (item.kind === "downloading") {
         return <QueuedDownloadRow queued={item.queued} covers={covers} handle="room" />;
       }
-      if (item.kind === "startedHeader") return <StartedGroupHeader group={item.group} />;
+      if (item.kind === "startedHeader") {
+        return (
+          <StartedGroupHeader group={item.group} progress={groupProgress.get(item.group.key)} />
+        );
+      }
       const groupDragged = drag?.kind === "group" ? drag.groupKey : null;
       if (item.kind === "header") {
         return (
           <MovableGroupHeader
             row={item}
+            progress={groupProgress.get(item.group.key)}
             lifted={drag?.key === item.key}
             steps={groupDragged !== null && groupDragged !== item.group.key}
             rowDrag={rowDrag}
@@ -455,10 +502,13 @@ export function DownloadsList({ header }: { header: ReactElement }) {
         />
       );
     },
-    [covers, drag, rowDrag, moveSong, moveGroup, failed, toggleFailed],
+    [covers, drag, rowDrag, moveSong, moveGroup, failed, toggleFailed, groupProgress],
   );
   // Legend List renders a row again only when its item or extraData changes.
-  const rowState = useMemo(() => ({ covers, drag, failed }), [covers, drag, failed]);
+  const rowState = useMemo(
+    () => ({ covers, drag, failed, groupProgress }),
+    [covers, drag, failed, groupProgress],
+  );
 
   const listHeader = (
     <View style={{ gap: SECTION_GAP }}>
@@ -466,15 +516,7 @@ export function DownloadsList({ header }: { header: ReactElement }) {
       {summary !== null && (
         <View>
           <CatalogLine className="mb-1">Downloading</CatalogLine>
-          <Text className="mb-2 font-sans text-footnote text-secondary">{summary}</Text>
-          {pauseNotice !== null && (
-            <Text
-              accessibilityLiveRegion="polite"
-              className="mb-2 font-sans text-footnote text-foreground"
-            >
-              {pauseNotice}
-            </Text>
-          )}
+          <DownloadRunPanel run={run} summary={summary} pauseNotice={pauseNotice} />
           <Hairline />
         </View>
       )}
@@ -514,7 +556,7 @@ export function DownloadsList({ header }: { header: ReactElement }) {
           className="absolute top-0 bg-fill"
           style={[{ left: grid.margin, right: grid.margin }, liftedStyle]}
         >
-          <LiftedCopy drag={drag} rows={rows} covers={covers} />
+          <LiftedCopy drag={drag} rows={rows} covers={covers} groupProgress={groupProgress} />
         </Animated.View>
       )}
     </View>

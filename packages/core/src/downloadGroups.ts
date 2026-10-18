@@ -76,7 +76,8 @@ export interface DownloadingList<S extends YtSong = YtSong> {
 /** The group songs asked for on their own wait in. */
 export const SONGS_GROUP_NAME = "Songs";
 
-const keyOf = (origin: DownloadOrigin | null): string =>
+/** A group's key (`DownloadGroup.key`) for the jobs from [origin] (null for Songs). */
+export const downloadGroupKey = (origin: DownloadOrigin | null): string =>
   origin === null ? "songs" : `${origin.kind}:${origin.id}`;
 
 const songsLeft = (count: number): string =>
@@ -107,7 +108,7 @@ export const downloadingList = <S extends YtSong>(
   for (const row of rows) {
     const origin = originOf.get(row.id) ?? null;
     const index = place.get(row.id) ?? 0;
-    const key = keyOf(origin);
+    const key = downloadGroupKey(origin);
     let group = groups.get(key);
     if (group === undefined) {
       group = { origin, first: index, next: null, left: 0, queued: [] };
