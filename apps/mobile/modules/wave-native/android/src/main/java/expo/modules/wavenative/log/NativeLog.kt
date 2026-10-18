@@ -11,6 +11,8 @@ import android.os.Looper
 import android.os.Process
 import android.os.SystemClock
 import com.facebook.react.bridge.ReactContext
+import expo.modules.wavenative.download.AndroidDownloads
+import expo.modules.wavenative.download.savedDownloadCounts
 import expo.modules.wavenative.log.SessionRecord.Exit
 import expo.modules.wavenative.log.SessionRecord.ExitReason
 import java.util.concurrent.Executors
@@ -59,7 +61,8 @@ object NativeLog {
     WaveLog.install(app)
     val record = SessionRecord(AppLogFile.of(app).file.parentFile!!)
     catchUncaught(record)
-    Thread({ record.reportPrevious(exits(app)) }, "WaveLogLaunch").start()
+    // Read before the journal is opened, as a rule: what the service does next changes its counts.
+    Thread({ record.reportPrevious(exits(app)) { savedDownloadCounts(AndroidDownloads.journal(app)) } }, "WaveLogLaunch").start()
     val main = Handler(Looper.getMainLooper())
     watchdog.watch(FreezeWatch("main", FREEZE_MS, SystemClock::uptimeMillis, main::post, { screen }, ::mainThreadStack))
     (app as? Application)?.registerActivityLifecycleCallbacks(OnScreen)
@@ -114,20 +117,32 @@ object NativeLog {
   private fun exits(context: Context): List<Exit> {
     val activities = context.getSystemService(ActivityManager::class.java) ?: return emptyList()
     return activities.getHistoricalProcessExitReasons(context.packageName, 0, MAX_EXITS).map { info ->
-      Exit(info.timestamp, reasonOf(info.reason), info.description) {
+      Exit(info.timestamp, reasonOf(info.reason), info.description, info.status, info.pss, info.rss, info.importance) {
         if (info.reason == ApplicationExitInfo.REASON_ANR) readTrace(info) else null
       }
     }
   }
 
+  // The freezer's reason is Android 13's, the package's Android 14's: older versions never record them.
+  @Suppress("InlinedApi")
   private fun reasonOf(reason: Int): ExitReason = when (reason) {
     ApplicationExitInfo.REASON_CRASH -> ExitReason.CRASH
     ApplicationExitInfo.REASON_CRASH_NATIVE -> ExitReason.CRASH_NATIVE
     ApplicationExitInfo.REASON_ANR -> ExitReason.ANR
     ApplicationExitInfo.REASON_INITIALIZATION_FAILURE -> ExitReason.INITIALIZATION_FAILURE
     ApplicationExitInfo.REASON_EXCESSIVE_RESOURCE_USAGE -> ExitReason.EXCESSIVE_RESOURCE_USAGE
+    ApplicationExitInfo.REASON_LOW_MEMORY -> ExitReason.LOW_MEMORY
+    ApplicationExitInfo.REASON_SIGNALED -> ExitReason.SIGNALED
+    ApplicationExitInfo.REASON_EXIT_SELF -> ExitReason.EXIT_SELF
+    ApplicationExitInfo.REASON_DEPENDENCY_DIED -> ExitReason.DEPENDENCY_DIED
+    ApplicationExitInfo.REASON_PERMISSION_CHANGE -> ExitReason.PERMISSION_CHANGE
     ApplicationExitInfo.REASON_USER_REQUESTED -> ExitReason.USER_REQUESTED
-    else -> ExitReason.OTHER
+    ApplicationExitInfo.REASON_USER_STOPPED -> ExitReason.USER_STOPPED
+    ApplicationExitInfo.REASON_OTHER -> ExitReason.OTHER
+    ApplicationExitInfo.REASON_FREEZER -> ExitReason.FREEZER
+    ApplicationExitInfo.REASON_PACKAGE_STATE_CHANGE -> ExitReason.PACKAGE_STATE_CHANGE
+    ApplicationExitInfo.REASON_PACKAGE_UPDATED -> ExitReason.PACKAGE_UPDATED
+    else -> ExitReason.UNKNOWN
   }
 
   private fun readTrace(info: ApplicationExitInfo): String? = runCatching {
