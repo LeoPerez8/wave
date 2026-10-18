@@ -484,12 +484,15 @@ const NOTHING_HELD = {
   hasAlbum: (): boolean => false,
 };
 
-describe("the Library | Online toggle in Search", () => {
-  const found = (state: YtSection, query: string, songs: YtSong[]): YtSection =>
-    stepYtSection(state, { type: "found", query, songs, ...NONE });
-  const pick = (state: YtSection, picked: "library" | "online"): YtSection =>
-    stepYtSection(state, { type: "picked", pick: picked });
+/** YT Music answers [query] with [songs]. */
+const found = (state: YtSection, query: string, songs: YtSong[]): YtSection =>
+  stepYtSection(state, { type: "found", query, songs, ...NONE });
 
+/** A segment of the toggle is tapped. */
+const pick = (state: YtSection, picked: "library" | "online"): YtSection =>
+  stepYtSection(state, { type: "picked", pick: picked });
+
+describe("the Library | Online toggle in Search", () => {
   test("Online asks YT Music for the typed query at once", () => {
     const online = pick(typedFound(YT_SECTION_HIDDEN, "daft"), "online");
     assert.equal(online.status, "loading");
@@ -500,11 +503,11 @@ describe("the Library | Online toggle in Search", () => {
 
   test("Library hides YT Music's results without asking; Online shows them again with no request", () => {
     const shown = found(pick(typedFound(YT_SECTION_HIDDEN, "daft"), "online"), "daft", [song("a")]);
-    const library = pick(shown, "library");
-    assert.equal(ytSectionToggle(library), "library");
-    assert.equal(ytSectionView(library, NOTHING_HELD)?.songs.length, 0);
-    assert.equal(ytSectionView(library, NOTHING_HELD)?.integrated, false);
-    const again = pick(library, "online");
+    const libraryOnly = pick(shown, "library");
+    assert.equal(ytSectionToggle(libraryOnly), "library");
+    assert.equal(ytSectionView(libraryOnly, NOTHING_HELD)?.songs.length, 0);
+    assert.equal(ytSectionView(libraryOnly, NOTHING_HELD)?.integrated, false);
+    const again = pick(libraryOnly, "online");
     assert.equal(again.status, "results");
     assert.deepEqual(ytSectionView(again, NOTHING_HELD)?.songs, [song("a")]);
   });
@@ -525,8 +528,8 @@ describe("the Library | Online toggle in Search", () => {
   });
 
   test("with Library picked, a query the Library has nothing for isn't asked on its own", () => {
-    const library = pick(typedFound(YT_SECTION_HIDDEN, "daft"), "library");
-    const nothing = typed(library, "dafty");
+    const libraryOnly = pick(typedFound(YT_SECTION_HIDDEN, "daft"), "library");
+    const nothing = typed(libraryOnly, "dafty");
     assert.equal(nothing.status, "offered");
     assert.equal(ytSectionToggle(nothing), "library");
   });
@@ -556,8 +559,8 @@ describe("the Library | Online toggle in Search", () => {
     const cleared = typedFound(online, "");
     assert.equal(ytSectionToggle(cleared), "library");
     assert.equal(typedFound(cleared, "daft").status, "offered");
-    const library = pick(typed(YT_SECTION_HIDDEN, "dafy"), "library");
-    assert.equal(typed(typed(library, ""), "dafy").status, "loading");
+    const libraryOnly = pick(typed(YT_SECTION_HIDDEN, "dafy"), "library");
+    assert.equal(typed(typed(libraryOnly, ""), "dafy").status, "loading");
   });
 
   test("Online on a failure asks again at once", () => {

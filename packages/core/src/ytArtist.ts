@@ -18,7 +18,7 @@ import type { YtQuietReason } from "./ytSearch.ts";
 /**
  * The name to search YouTube Music for, or null when the name isn't an
  * artist's ("Various Artists", "Unknown Artist", no letters): those get no
- * button. Names are read as artist photos read them.
+ * Library | Online toggle. Names are read as artist photos read them.
  */
 export const ytArtistQuery = (name: string): string | null => artistPhotoQuery(name);
 
@@ -169,7 +169,7 @@ export type YtArtistSaved<S extends YtSong = YtSong> =
     }
   | { readonly outcome: "unmatched"; readonly checkedAt: number };
 
-/** What tapping Show on YouTube Music asks: an Artists search, or the matched artist's page. */
+/** What picking Online asks: an Artists search, or the matched artist's page. */
 export type YtArtistLookup =
   | { readonly kind: "search"; readonly query: string }
   | { readonly kind: "page"; readonly browseId: string };
@@ -326,7 +326,7 @@ export const YT_ARTIST_SECTION_START: { readonly status: "reading" } = { status:
 export type YtArtistSectionEvent<S extends YtSong = YtSong> =
   /** What the database has for the artist (null: nothing). */
   | { readonly type: "restored"; readonly saved: YtArtistSaved<S> | null }
-  /** Show on YouTube Music was tapped. */
+  /** Online was picked (or the page opened integrated): YouTube Music is asked. */
   | { readonly type: "requested" }
   /** YouTube Music answered, and the answer was saved. */
   | { readonly type: "answered"; readonly saved: YtArtistSaved<S> }

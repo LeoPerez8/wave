@@ -36,7 +36,9 @@ export interface YtSearchAnswer<S extends YtSong = YtSong> {
 const NO_ANSWER: YtSearchAnswer<never> = { songs: [], artists: [], albums: [] };
 
 /** YT Music's answer to [query], kept while Library shows, for Online to show again. */
-export type YtKeptAnswer<S extends YtSong = YtSong> = { readonly query: string } & YtSearchAnswer<S>;
+export type YtKeptAnswer<S extends YtSong = YtSong> = {
+  readonly query: string;
+} & YtSearchAnswer<S>;
 
 /** The section's state; [S] is the song as the caller has it (the native result, say). */
 export type YtSection<S extends YtSong = YtSong> =
