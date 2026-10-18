@@ -5,11 +5,12 @@ import {
   blendDiscoverMix,
   discoverMix,
   discoverMixCaption,
-  discoverMixLibraryPool,
+  discoverMixFamiliarPool,
   discoverMixesBuilt,
   genreFamily,
   genreMixSeeds,
   interleaveRadios,
+  mixKnownSongs,
   parseDiscoverMixes,
   storedDiscoverMixes,
 } from "./index.ts";
@@ -261,15 +262,20 @@ describe("A genre mix", () => {
       ...songsOf(1, "Deathcore", 2),
     ]);
     const [seed] = genreMixSeeds(library, always(0));
-    const pool = discoverMixLibraryPool(seed!, {
+    const pool = discoverMixFamiliarPool(seed!, {
       radio: [],
-      find: () => null,
+      known: mixKnownSongs({
+        library: library.songs,
+        playedRecordingKeys: [],
+        streamed: [],
+        playlisted: [],
+      }),
       library,
-      taken: new Set([4]),
+      taken: { tracks: new Set([4]), videos: new Set() },
       length: 20,
     });
     assert.deepEqual(
-      pool.map((song) => song.id),
+      pool.map((song) => (song.source === "library" ? song.track.id : song.song.videoId)),
       [3, 1, 5, 7],
     );
   });

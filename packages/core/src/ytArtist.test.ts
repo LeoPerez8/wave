@@ -780,6 +780,7 @@ describe("a Library album's YT Music songs", () => {
       name?: string;
       artistId?: number;
       integrated?: boolean;
+      always?: boolean;
       pick?: YtPick | null;
       keepTracklist?: boolean;
       releasePage?: YtReleaseLoad | undefined;
@@ -795,6 +796,7 @@ describe("a Library album's YT Music songs", () => {
       enabled: context.enabled ?? true,
       now: context.now ?? NOW,
       integrated: context.integrated ?? true,
+      always: context.always,
       pick: context.pick ?? null,
       keepTracklist: context.keepTracklist,
       releasePage: (release) => {
@@ -980,6 +982,46 @@ describe("a Library album's YT Music songs", () => {
     assert.equal(unread.shown?.retry, "release");
     assert.equal(albumView(restored(found(NOW))).shown?.retry, null);
   });
+
+  test("with Search online set to Always, opened from anywhere it shows Online and asks at once", () => {
+    const always = { integrated: false, always: true };
+    const nothingSaved = albumView(restored(null), always).shown;
+    assert.equal(nothingSaved?.toggle, "online");
+    assert.equal(nothingSaved?.askArtist, true);
+    const { shown, asked } = albumView(restored(found(NOW - DAY)), always);
+    assert.equal(shown?.toggle, "online");
+    assert.deepEqual(asked, ["MPREb_ram"]);
+  });
+
+  test("with Always, an ask that got no answer leaves the album on Library, with the quiet line", () => {
+    const always = { integrated: false, always: true };
+    const offline = step(
+      restored(null),
+      { type: "requested" },
+      { type: "failed", reason: "offline" },
+    );
+    assert.deepEqual(albumView(offline, always).shown, {
+      tracks: null,
+      songs: null,
+      note: "offline",
+      toggle: "library",
+      retry: "artist",
+      release: null,
+      askArtist: false,
+    });
+    const unread = albumView(restored(found(NOW)), {
+      ...always,
+      releasePage: { status: "quiet", reason: "failed" },
+    }).shown;
+    assert.equal(unread?.toggle, "library");
+    assert.equal(unread?.note, "failed");
+    assert.equal(unread?.retry, "release");
+    // Online picked, the failure shows under Online as before; Library picked, nothing shows.
+    assert.equal(albumView(offline, { ...always, pick: "online" }).shown?.toggle, "online");
+    assert.equal(albumView(offline, { ...always, pick: "library" }).shown?.note, null);
+    // Opened integrated, the failure stays under Online.
+    assert.equal(albumView(offline, { integrated: true, always: true }).shown?.toggle, "online");
+  });
 });
 
 describe("the artist page's Library | Online toggle", () => {
@@ -1056,5 +1098,56 @@ describe("the artist page's Library | Online toggle", () => {
     });
     assert.equal(picked(failed, "library")?.retry, true);
     assert.equal(asksPicked(failed, "online"), false);
+  });
+});
+
+describe("an artist page with Search online set to Always", () => {
+  const shown = (state: Section, pick: YtPick | null = null) =>
+    ytArtistSectionView(state, {
+      name: "Daft Punk",
+      enabled: true,
+      now: NOW,
+      always: true,
+      pick,
+      inLibrary,
+    });
+  const asksAlways = (state: Section, pick: YtPick | null = null) =>
+    ytArtistSectionAsks(state, {
+      name: "Daft Punk",
+      enabled: true,
+      now: NOW,
+      integrated: false,
+      always: true,
+      pick,
+    });
+
+  test("opens with Online selected and asks at once with nothing standing", () => {
+    assert.equal(shown(restored(null))?.toggle, "online");
+    assert.equal(shown(restored(null))?.note, "loading");
+    assert.equal(asksAlways(restored(null)), true);
+    assert.equal(asksAlways(restored(found(NOW - 8 * DAY))), true);
+    assert.equal(asksAlways(restored(found(NOW - DAY))), false);
+  });
+
+  test("Library picked hides YouTube Music for the visit, with nothing asked", () => {
+    assert.equal(shown(restored(null), "library")?.toggle, "library");
+    assert.equal(asksAlways(restored(null), "library"), false);
+  });
+
+  test("an ask that got no answer leaves the page on Library, with the quiet line", () => {
+    const offline = step(
+      restored(null),
+      { type: "requested" },
+      { type: "failed", reason: "offline" },
+    );
+    assert.deepEqual(shown(offline), {
+      songs: [],
+      note: "offline",
+      toggle: "library",
+      retry: true,
+    });
+    assert.equal(asksAlways(offline), false);
+    assert.equal(shown(offline, "online")?.toggle, "online");
+    assert.equal(shown(offline, "library")?.note, null);
   });
 });

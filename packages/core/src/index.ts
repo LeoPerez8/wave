@@ -1150,6 +1150,7 @@ export {
 export type {
   DiscoverMix,
   DiscoverMixFilter,
+  DiscoverMixFamiliarSong,
   DiscoverMixLibrarySong,
   DiscoverMixSeed,
   DiscoverMixes,
@@ -1267,7 +1268,7 @@ export {
   DEFAULT_DISCOVER_MIX_LEVEL,
   DISCOVER_MIX_LEVELS,
   blendDiscoverMix,
-  discoverMixLibraryPool,
+  discoverMixFamiliarPool,
   placeDiscoverMixSongs,
   readDiscoverMixLevel,
 } from "./discoverMixLevels.ts";
@@ -1276,6 +1277,7 @@ export type {
   DiscoverMixBlend,
   DiscoverMixLevel,
   DiscoverMixPoolSources,
+  DiscoverMixTaken,
   DiscoverMixSong,
 } from "./discoverMixLevels.ts";
 export {
@@ -1354,7 +1356,8 @@ export { ARTIST_MIX_COUNT, artistMixSeeds, artistMixSimilarSource } from "./arti
 export type { ArtistMixPools, PlayedSeedArtist } from "./artistMixes.ts";
 export { GENRE_MIX_COUNT, genreFamily, genreMixSeeds, interleaveRadios } from "./genreMixes.ts";
 export type { GenreFamily, GenreMixLibrary } from "./genreMixes.ts";
-export type { YtPick } from "./onlineToggle.ts";
+export type { SearchOnline, YtPick } from "./onlineToggle.ts";
+export { readSearchOnline, writeSearchOnline } from "./onlineToggle.ts";
 export {
   BEST_QUALITY_KBPS,
   LOW_QUALITY_BELOW_KBPS,
@@ -1370,8 +1373,13 @@ export {
   qualityReplacementJob,
   qualityReplacementTags,
   qualityReplacementTarget,
+  qualityDowngradeOffer,
+  qualityDowngradeSearch,
+  qualityDowngradeSongs,
+  qualityDowngradeVideo,
   qualityUpgradeOffer,
   qualityUpgradeSongs,
+  youTubeCopyKbps,
 } from "./qualityReplacement.ts";
 export type {
   NoBetterCopy,
@@ -1398,3 +1406,11 @@ export {
 } from "./mixRefresh.ts";
 export type { MixPull, MixRefreshAvoid, ShownMixes } from "./mixRefresh.ts";
 export { searchRoomAt } from "./searchAllowance.ts";
+export { mixKnownSongs } from "./mixKnownSongs.ts";
+export type {
+  KnownNonDSong,
+  MixKnownSongs,
+  MixKnownSources,
+  MixPlaylistEntry,
+  StreamedSong,
+} from "./mixKnownSongs.ts";

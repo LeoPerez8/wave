@@ -13,7 +13,7 @@ import type { ExplicitFlag } from "./explicit.ts";
 import { identityKey } from "./library.ts";
 import { normalizeSearchText } from "./search.ts";
 import { readStoredRecord } from "./storedJson.ts";
-import type { YtAlbumSong } from "./ytDiscover.ts";
+import type { MixedSong, YtAlbumSong } from "./ytDiscover.ts";
 import type { YtSong } from "./ytMusic.ts";
 
 /** A Library artist as seeding sees it. */
@@ -93,7 +93,10 @@ export interface DiscoverMixSeed {
   readonly browseId?: string;
   /** The genre family the mix stands for (Core's `genreFamily` name); absent for an artist's mix. */
   readonly genre?: string;
-  /** A genre mix's seed artists, whose radios it grows from, in the radios' turn order. */
+  /**
+   * A genre mix's seed artists, whose radios it grows from, in the radios'
+   * turn order; its familiar share takes their non-D songs. Absent: [name].
+   */
   readonly artists?: readonly DiscoverSeedArtist[];
 }
 
@@ -158,10 +161,11 @@ export interface DiscoverRadioSong extends YtSong {
 
 /** What a mix leaves out of its seed's radio. */
 export interface DiscoverMixFilter<S extends DiscoverRadioSong> {
-  /** Whether the Library has the song (Core's `libraryFinder`). */
-  readonly inLibrary: (song: S) => boolean;
-  /** Whether the owner has played the song (`playedFinder`). */
-  readonly played: (song: S) => boolean;
+  /**
+   * Whether the owner knows the song (`mixKnownSongs`): the Library has it,
+   * it was played or streamed, or a playlist has it.
+   */
+  readonly known: (song: S) => boolean;
   /** The songs the mixes before this one have, by video id. */
   readonly taken: ReadonlySet<string>;
   /** The video the radio started from, for a song seed. */
@@ -184,8 +188,9 @@ const RADIO_PAGES = 3;
 /**
  * A mix's songs from its seed's radio, as read so far ([pages], in order):
  * the songs, in the radio's order, the owner doesn't know yet. Music videos,
- * the seed, songs the Library has or the owner played, songs an earlier mix
- * has and a song the radio plays again are left out; 50 at most. Reading a
+ * the seed, songs the owner knows (the Library's, played, streamed or in a
+ * playlist), songs an earlier mix has and a song the radio plays again are
+ * left out; 50 at most. Reading a
  * page at a time, pass the songs kept from the pages before as [before]:
  * they come first, and only the new pages' songs are looked at.
  */
@@ -208,7 +213,7 @@ export const discoverMixSongs = <S extends DiscoverRadioSong>(
     if (kept.length >= MIX_MOST) break;
     const recording = recordingOf(song);
     if (song.video || videos.has(song.videoId) || recordings.has(recording)) continue;
-    if (filter.inLibrary(song) || filter.played(song)) continue;
+    if (filter.known(song)) continue;
     videos.add(song.videoId);
     recordings.add(recording);
     if (filter.avoid?.has(song.videoId) === true) held.push(song);
@@ -265,12 +270,16 @@ export interface DiscoverMix {
    */
   readonly songs: readonly YtAlbumSong[];
   /**
-   * The Library songs its familiar share takes, in the order it takes them
-   * (`discoverMixLibraryPool`). Absent on mixes saved before levels: they
-   * play their new songs alone until the next build.
+   * The songs its familiar share takes, in the order it takes them
+   * (`discoverMixFamiliarPool`): Library songs, and songs the owner knows
+   * that the phone has no file for, which stream. Absent: it plays its new
+   * songs alone.
    */
-  readonly library?: readonly DiscoverMixLibrarySong[];
+  readonly familiar?: readonly DiscoverMixFamiliarSong[];
 }
+
+/** A song of a mix's familiar share: one of the Library's, or one the owner knows that streams. */
+export type DiscoverMixFamiliarSong = MixedSong<YtAlbumSong, DiscoverMixLibrarySong>;
 
 /** A Library song a mix may play as one of its familiar songs. */
 export interface DiscoverMixLibrarySong {
@@ -312,14 +321,14 @@ export const mixLibrarySong = ({
 });
 
 /**
- * The mix [seed] makes of [songs] (`discoverMixSongs`) and the Library songs
- * of [library] (`discoverMixLibraryPool`), or null when its new songs are
- * fewer than ten: too few to be a mix.
+ * The mix [seed] makes of [songs] (`discoverMixSongs`) and its [familiar]
+ * share (`discoverMixFamiliarPool`), or null when its new songs are fewer
+ * than ten: too few to be a mix.
  */
 export const discoverMix = (
   seed: DiscoverMixSeed,
   songs: readonly (DiscoverRadioSong & { readonly albumId: string | null })[],
-  library: readonly DiscoverMixLibrarySong[] = [],
+  familiar: readonly DiscoverMixFamiliarSong[] = [],
 ): DiscoverMix | null =>
   songs.length < MIX_FEWEST
     ? null
@@ -332,7 +341,11 @@ export const discoverMix = (
           artists: seed.artists?.map((artist) => artist.name) ?? [seed.name],
         },
         songs: songs.map(({ video: _video, ...song }) => song),
-        library: library.map(mixLibrarySong),
+        familiar: familiar.map((song): DiscoverMixFamiliarSong =>
+          song.source === "stream"
+            ? song
+            : { source: "library", track: mixLibrarySong(song.track) },
+        ),
       };
 
 /** How many of a mix's artists its tile names. */
@@ -341,9 +354,10 @@ const CAPTION_ARTISTS = 3;
 /**
  * A mix's tile on Home, as the owner's level blends it (`blendDiscoverMix`):
  * named after its seed, over the first three artists it plays (each song's
- * lead artist, the Library's songs' too), with how many songs it has, under
- * the cover of the first song of the share it mostly plays: its first Library
- * song's when familiar songs outnumber new ones (20% and 40% new), else its
+ * lead artist, the familiar songs' too), with how many songs it has, under
+ * the cover of the first song of the share it mostly plays: its first
+ * familiar song's (a Library song's, or one that streams) when familiar
+ * songs outnumber new ones (20% and 40% new), else its
  * first new song's. A song without a cover passes to the next of that share,
  * then to the mix's first song with one. So changing the level changes the
  * tile. [artworkUrl] is an address the image loads from: YouTube Music's, or
@@ -392,12 +406,16 @@ const coverOf = (song: DiscoverMixSong): string | null => {
 const coversOf = (songs: readonly DiscoverMixSong[]): string[] =>
   songs.flatMap((song) => coverOf(song) ?? []);
 
+/** Whether [song] is of a mix's familiar share: a Library song, or a familiar one that streams. */
+const isFamiliar = (song: DiscoverMixSong): boolean =>
+  song.source === "library" || song.familiar === true;
+
 /** The cover of the first song of the share [mix] mostly plays (`discoverMixCaption`). */
 const mixCover = (mix: BlendedDiscoverMix): string | null => {
-  const familiar = mix.songs.filter((song) => song.source === "library").length;
-  const leaning = familiar > mix.songs.length - familiar ? "library" : "stream";
+  const familiar = mix.songs.filter(isFamiliar).length;
+  const leansFamiliar = familiar > mix.songs.length - familiar;
   return (
-    coversOf(mix.songs.filter((song) => song.source === leaning))[0] ??
+    coversOf(mix.songs.filter((song) => isFamiliar(song) === leansFamiliar))[0] ??
     coversOf(mix.songs)[0] ??
     null
   );
@@ -460,11 +478,11 @@ export const discoverMixesBuilt = (
   );
 
 /**
- * The saved mixes' format. 2: Artist mixes (#420). Mixes saved in an older
- * one (Discover mixes, with their song, varied and genre seeds) read as none,
- * so the next Home visit builds new ones.
+ * The saved mixes' format. 2: Artist mixes (#420). 3: familiar shares that
+ * stream songs the owner knows (#428). Mixes saved in an older one read as
+ * none, so the next Home visit builds new ones.
  */
-const MIXES_VERSION = 2;
+const MIXES_VERSION = 3;
 
 /** What to save for [mixes]. */
 export const storedDiscoverMixes = (mixes: DiscoverMixes): string =>
@@ -511,22 +529,30 @@ const readMix = (value: unknown): DiscoverMix | null => {
     ...(Array.isArray(artists) && artists.every(isString) ? { artists } : {}),
   };
   if (songs.length === 0) return null;
-  if (!Array.isArray(value.library)) return { id: value.id, seed, songs };
-  return { id: value.id, seed, songs, library: value.library.flatMap(readLibrarySong) };
+  if (!Array.isArray(value.familiar)) return { id: value.id, seed, songs };
+  return { id: value.id, seed, songs, familiar: value.familiar.flatMap(readFamiliarSong) };
 };
 
-const readLibrarySong = (value: unknown): DiscoverMixLibrarySong[] => {
+const readFamiliarSong = (value: unknown): DiscoverMixFamiliarSong[] => {
   if (!isRecord(value)) return [];
-  const { id, title, artist, explicit, artworkPath } = value;
+  if (value.source === "stream") {
+    const song = readSong(value.song);
+    return song === null ? [] : [{ source: "stream", song }];
+  }
+  if (value.source !== "library" || !isRecord(value.track)) return [];
+  const { id, title, artist, explicit, artworkPath } = value.track;
   if (!isNumber(id) || !isString(title) || !isString(artist)) return [];
   return [
-    mixLibrarySong({
-      id,
-      title,
-      artist,
-      ...(explicit === "explicit" || explicit === "clean" ? { explicit } : {}),
-      ...(isString(artworkPath) ? { artworkPath } : {}),
-    }),
+    {
+      source: "library",
+      track: mixLibrarySong({
+        id,
+        title,
+        artist,
+        ...(explicit === "explicit" || explicit === "clean" ? { explicit } : {}),
+        ...(isString(artworkPath) ? { artworkPath } : {}),
+      }),
+    },
   ];
 };
 

@@ -388,6 +388,13 @@ export interface YtArtistToggleContext {
    * (`ytArtistSectionAsks`). Undefined: opened as the Library's.
    */
   readonly integrated?: boolean;
+  /**
+   * Whether Search online is set to Always (`SearchOnline`): the page opens
+   * with Online selected and asks as an integrated opening does, though an
+   * ask on its own that got no answer leaves Library selected, with the
+   * quiet line. Undefined: Only on demand.
+   */
+  readonly always?: boolean;
   /** The segment of the toggle picked on this visit; null or undefined: none yet. */
   readonly pick?: YtPick | null;
 }
@@ -405,15 +412,27 @@ export interface YtArtistSectionContext<S extends YtSong> extends YtArtistToggle
  * The segment a Library artist page's Library | Online toggle shows
  * selected: the one picked on this visit; else Online while YouTube Music is
  * asked, its answer stands (a week), the last ask failed, or the page opened
- * integrated; else Library.
+ * integrated; else Library. Under Always it's Online too, unless the last
+ * ask failed: the page never blocks on it, and opens as Library.
  */
 export const ytArtistToggle = (state: YtArtistSection, context: YtArtistToggleContext): YtPick => {
   if (context.pick != null) return context.pick;
   if (context.integrated === true || state.status === "loading") return "online";
   if (state.status !== "ready") return "library";
   const standing = state.saved !== null && standsOnArtistPage(state.saved, context.now);
-  return standing || state.failure !== null ? "online" : "library";
+  if (standing) return "online";
+  if (state.failure !== null) return context.always === true ? "library" : "online";
+  return context.always === true ? "online" : "library";
 };
+
+/** The quiet line a page under Always shows with Library selected: its ask on its own failed. */
+const alwaysFailure = (
+  state: YtArtistSection,
+  context: YtArtistToggleContext,
+): YtQuietReason | null =>
+  context.always === true && context.pick == null && state.status === "ready"
+    ? state.failure
+    : null;
 
 /**
  * What the section shows at the end of the artist page, or null when it's
@@ -432,7 +451,7 @@ export const ytArtistSectionView = <S extends YtSong>(
   if (state.status === "reading") return null;
   const retry = state.status === "ready" && state.failure !== null;
   if (ytArtistToggle(state, context) === "library")
-    return { songs: [], note: null, toggle: "library", retry };
+    return { songs: [], note: alwaysFailure(state, context), toggle: "library", retry };
   const online = { toggle: "online", retry } as const;
   if (state.status === "loading") return { songs: [], note: "loading", ...online };
   const { saved } = state;
@@ -456,6 +475,8 @@ export interface YtArtistSectionAsksContext {
   readonly now: number;
   /** Whether the page was opened integrated (from a streamed song's artist). */
   readonly integrated: boolean;
+  /** Whether Search online is set to Always (`YtArtistToggleContext`). */
+  readonly always?: boolean;
   /** The segment of the toggle picked on this visit; null or undefined: none yet. */
   readonly pick?: YtPick | null;
 }
@@ -693,6 +714,12 @@ export interface YtLibraryAlbumContext<S extends YtSong, L> {
    * Otherwise Library is, and it shows the Library's tracks.
    */
   readonly integrated: boolean;
+  /**
+   * Whether Search online is set to Always (`SearchOnline`): the album opens
+   * with Online selected wherever it's opened from, though an ask on its own
+   * that got no answer leaves Library selected, with the quiet line.
+   */
+  readonly always?: boolean;
   /** The segment of the toggle picked on this visit; null or undefined: none yet. */
   readonly pick?: YtPick | null;
   /**
@@ -754,7 +781,9 @@ const onlineAlbumView = <S extends YtSong, L extends LibraryAlbumTrack>(
  * nothing, toggle and all: YT Music off, an album artist that isn't an
  * artist's name, or what was saved for the artist not read yet. Its Library |
  * Online toggle shows the segment picked on this visit, else Online when it
- * was opened integrated, else Library. With Library it shows the album as it
+ * was opened integrated or Search online is set to Always (where an ask on
+ * its own that got no answer shows Library, with the quiet line), else
+ * Library. With Library it shows the album as it
  * is, whatever is saved, and reads nothing. With Online it goes by the artist
  * page's saved answer (`stepYtArtistSection`): while that stands, the album
  * is looked up among the artist's releases and, when it's there, the
@@ -770,8 +799,12 @@ export const ytLibraryAlbumView = <S extends YtSong, L extends LibraryAlbumTrack
   if (!context.enabled || ytArtistQuery(context.name) === null) return null;
   if (state.status === "reading") return null;
   const online = onlineAlbumView(state, context);
-  const toggle = context.pick ?? (context.integrated ? "online" : "library");
-  if (toggle === "online") return online;
+  if (context.pick === "online" || (context.pick == null && context.integrated)) return online;
+  if (context.pick == null && context.always === true) {
+    // Under Always, an ask on its own that got no answer leaves Library, never blocking.
+    if (online.retry === null) return online;
+    return { ...albumNote(online.note, online.retry), toggle: "library" };
+  }
   return { ...albumNote(null, online.retry), toggle: "library" };
 };
 

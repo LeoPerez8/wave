@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import {
+  YT_SEARCH_DEBOUNCE_MS,
   YT_SECTION_HIDDEN,
   libraryArtistFinder,
   libraryReleaseFinder,
@@ -577,5 +578,36 @@ describe("the Library | Online toggle in Search", () => {
     const off = typed(YT_SECTION_HIDDEN, "daft", false, true);
     assert.equal(ytSectionToggle(off), null);
     assert.equal(pick(off, "online"), off);
+  });
+});
+
+/** Typing [query] the Library has results for, with Search online set to Always. */
+const typedAlways = (state: YtSection, query: string): YtSection =>
+  stepYtSection(state, {
+    type: "typed",
+    query,
+    enabled: true,
+    libraryHasResults: true,
+    always: true,
+  });
+
+describe("Search with Search online set to Always", () => {
+  test("typing asks YT Music once typing pauses, without a tap, even when the Library has results", () => {
+    const asked = typedAlways(typedAlways(YT_SECTION_HIDDEN, ""), "daft");
+    assert.equal(asked.status, "loading");
+    assert.equal(asked.status === "loading" && asked.query, "daft");
+    assert.equal(asked.status === "loading" && asked.delayMs, YT_SEARCH_DEBOUNCE_MS);
+    assert.equal(ytSectionToggle(asked), "online");
+  });
+
+  test("the empty field shows Online; Library tapped holds until the field is cleared", () => {
+    const empty = typedAlways(YT_SECTION_HIDDEN, "");
+    assert.equal(ytSectionToggle(empty), "online");
+    const libraryOnly = typedAlways(pick(typedAlways(empty, "daft"), "library"), "daft punk");
+    assert.equal(libraryOnly.status, "offered");
+    assert.equal(ytSectionToggle(libraryOnly), "library");
+    const cleared = typedAlways(libraryOnly, "");
+    assert.equal(ytSectionToggle(cleared), "online");
+    assert.equal(typedAlways(cleared, "daft").status, "loading");
   });
 });

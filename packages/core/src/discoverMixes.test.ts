@@ -77,8 +77,7 @@ describe("A song the owner has played", () => {
 
 describe("A mix's songs", () => {
   const nothing = {
-    inLibrary: () => false,
-    played: () => false,
+    known: () => false,
     taken: new Set<string>(),
     seedVideo: null,
   };
@@ -96,7 +95,7 @@ describe("A mix's songs", () => {
     );
   });
 
-  test("leave out the seed, music videos, Library songs and songs played", () => {
+  test("leave out the seed, music videos and songs the owner knows", () => {
     const songs = discoverMixSongs(
       [
         [
@@ -108,8 +107,7 @@ describe("A mix's songs", () => {
         ],
       ],
       {
-        inLibrary: (song) => song.title === "Teardrop",
-        played: (song) => song.title === "Roads",
+        known: (song) => song.title === "Teardrop" || song.title === "Roads",
         taken: new Set(),
         seedVideo: "seed",
       },
@@ -136,7 +134,7 @@ describe("A mix's songs", () => {
     const asked: string[] = [];
     const filter = {
       ...nothing,
-      inLibrary: (song: { videoId: string }) => {
+      known: (song: { videoId: string }) => {
         asked.push(song.videoId);
         return false;
       },
@@ -347,7 +345,7 @@ describe("The saved mixes", () => {
     };
     assert.deepEqual(parseDiscoverMixes(storedDiscoverMixes(rock)), rock);
     const garbled = JSON.stringify({
-      version: 2,
+      version: 3,
       ...rock,
       mixes: [
         {
@@ -369,6 +367,11 @@ describe("The saved mixes", () => {
     assert.equal(discoverMixesDue(parseDiscoverMixes(before), { now, played: true }), true);
   });
 
+  test("saved before familiar songs could stream (only Library songs familiar), are none, so the next visit builds", () => {
+    const before = JSON.stringify({ version: 2, ...saved });
+    assert.equal(parseDiscoverMixes(before), null);
+  });
+
   test("a refresh with no usable mixes cannot replace the saved mixes", () => {
     assert.equal(discoverMixesBuilt([], 1_700_000_000_000, playSeed), null);
   });
@@ -384,26 +387,26 @@ describe("The saved mixes", () => {
   test("are none when nothing, or nothing readable, is saved", () => {
     assert.equal(parseDiscoverMixes(null), null);
     assert.equal(parseDiscoverMixes("{"), null);
-    assert.equal(parseDiscoverMixes(JSON.stringify({ version: 2, mixes: [] })), null);
+    assert.equal(parseDiscoverMixes(JSON.stringify({ version: 3, mixes: [] })), null);
   });
 
   test("an empty cache doesn't postpone rebuilding until tomorrow", () => {
     const now = new Date(2026, 9, 16, 12).getTime();
-    const cached = parseDiscoverMixes(JSON.stringify({ version: 2, builtAt: now, mixes: [] }));
+    const cached = parseDiscoverMixes(JSON.stringify({ version: 3, builtAt: now, mixes: [] }));
     assert.equal(discoverMixesDue(cached, { now, played: true }), true);
   });
 
   test("a cache whose mixes are all unreadable is rebuilt too", () => {
     const now = new Date(2026, 9, 16, 12).getTime();
     const cached = parseDiscoverMixes(
-      JSON.stringify({ version: 2, builtAt: now, mixes: [{ ...saved.mixes[0], songs: [] }] }),
+      JSON.stringify({ version: 3, builtAt: now, mixes: [{ ...saved.mixes[0], songs: [] }] }),
     );
     assert.equal(discoverMixesDue(cached, { now, played: true }), true);
   });
 
   test("leave out a song or a mix that can't be read", () => {
     const stored = JSON.stringify({
-      version: 2,
+      version: 3,
       builtAt: 5,
       playSeeds: true,
       mixes: [

@@ -84,6 +84,17 @@ describe("the files a quality replacement looks at", () => {
     );
   });
 
+  test("a YouTube download's file carries its video, which tells the bitrate YouTube gives", () => {
+    save([file(OLD, { videoId: "abc" }), file("/Music/b.mp3", { bitrateKbps: 320 })]);
+    assert.deepEqual(
+      selectQualityFiles(db).map((song) => [song.path, song.videoId]),
+      [
+        [OLD, "abc"],
+        ["/Music/b.mp3", null],
+      ],
+    );
+  });
+
   test("remembers the songs with no better copy, each way on its own, once", () => {
     save([file(OLD), file("/Music/b.mp3")]);
     const [a, b] = [idOf(OLD), idOf("/Music/b.mp3")];
@@ -139,6 +150,16 @@ describe("replacing a Track's file in place", () => {
         .where(eq(schema.playlistItems.playlistId, playlistId))
         .all(),
       [{ trackId: id }],
+    );
+  });
+
+  test("YouTube Music's copy freeing space gives the Track its video", () => {
+    save([file(NEW, { bitrateKbps: 320, sizeBytes: 9_920_000 })]);
+    const id = idOf(NEW);
+    replaceTrackFile(db, creditSplits(), id, file(OLD, { videoId: "xyz" }), [], 2);
+    assert.deepEqual(
+      selectQualityFiles(db).map((song) => [song.id, song.path, song.bitrateKbps, song.videoId]),
+      [[id, OLD, 128, "xyz"]],
     );
   });
 

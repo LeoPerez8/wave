@@ -87,8 +87,7 @@ const LIBRARY = [
 
 describe("A refreshed mix's new songs", () => {
   const filter = (avoid: ReadonlySet<string>) => ({
-    inLibrary: () => false,
-    played: () => false,
+    known: () => false,
     taken: new Set<string>(),
     seedVideo: null,
     avoid,

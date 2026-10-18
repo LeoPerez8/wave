@@ -11,11 +11,16 @@ import {
   qualityReplacementJob,
   qualityReplacementTags,
   qualityReplacementTarget,
+  qualityDowngradeOffer,
+  qualityDowngradeSearch,
+  qualityDowngradeSongs,
+  qualityDowngradeVideo,
   qualityUpgradeOffer,
+  youTubeCopyKbps,
   qualityUpgradeSongs,
   settledDownloadFailures,
 } from "./index.ts";
-import type { QualityFile, ReplacedTrack, YtDownloadJournalJob } from "./index.ts";
+import type { QualityFile, ReplacedTrack, YtDownloadJournalJob, YtSong } from "./index.ts";
 
 const file = (id: number, patch: Partial<QualityFile> = {}): QualityFile => ({
   id,
@@ -27,6 +32,20 @@ const file = (id: number, patch: Partial<QualityFile> = {}): QualityFile => ({
 });
 
 const none = { noBetterCopy: new Set<number>(), jobs: [] };
+
+const mp3 = (id: number, patch: Partial<QualityFile> = {}): QualityFile =>
+  file(id, { path: `/Music/Song ${id}.mp3`, bitrateKbps: 320, sizeBytes: 8_000_000, ...patch });
+
+// MP3 320 over 300 s is 12,000,000 bytes; 128 kbps is 4,800,000, 256 kbps 9,600,000.
+const mp3s = (count: number): QualityFile[] =>
+  Array.from({ length: count }, (_, index) =>
+    file(index + 1, {
+      path: `/Music/${index}.mp3`,
+      durationMs: 300_000,
+      bitrateKbps: 320,
+      sizeBytes: 12_000_000,
+    }),
+  );
 
 describe("qualityUpgradeSongs", () => {
   test("offers a 128k YouTube download and keeps an AAC 256k one", () => {
@@ -83,6 +102,65 @@ describe("qualityUpgradeSongs", () => {
   });
 });
 
+describe("qualityDowngradeSongs", () => {
+  test("offers MP3s at 320 kbps, wherever they came from", () => {
+    const songs = [mp3(1), mp3(2, { path: "/Music/b.MP3", bitrateKbps: 319 })];
+    assert.deepEqual(
+      qualityDowngradeSongs(songs, none).map((song) => song.id),
+      [1, 2],
+    );
+  });
+
+  test("never offers lossless files, AAC copies or smaller MP3s", () => {
+    const songs = [
+      file(1, { path: "/Music/a.flac", bitrateKbps: 900 }),
+      file(2, { path: "/Music/b.m4a", bitrateKbps: 256 }),
+      file(3, { path: "/Music/c.m4a", bitrateKbps: 320 }),
+      mp3(4, { bitrateKbps: 256 }),
+      mp3(5, { bitrateKbps: 192 }),
+      mp3(6, { bitrateKbps: null }),
+    ];
+    assert.deepEqual(qualityDowngradeSongs(songs, none), []);
+  });
+
+  test("leaves out a song whose length isn't known: YouTube Music's match needs it", () => {
+    assert.deepEqual(qualityDowngradeSongs([mp3(1, { durationMs: 0 })], none), []);
+  });
+
+  test("never offers a song YouTube Music had no copy of, nor one on its way", () => {
+    const songs = [mp3(1), mp3(2), mp3(3), mp3(4)];
+    const jobs: YtDownloadJournalJob[] = [
+      job("downgrade:2", { phase: "transferring" }),
+      job("upgrade:3", { phase: "queued" }),
+    ];
+    assert.deepEqual(
+      qualityDowngradeSongs(songs, { noBetterCopy: new Set([1]), jobs }).map((song) => song.id),
+      [3, 4],
+    );
+  });
+});
+
+describe("youTubeCopyKbps", () => {
+  test("256 when the owner's latest YouTube download is AAC 256k (Premium)", () => {
+    const files = [
+      file(1, { videoId: "a", bitrateKbps: 129 }),
+      file(2, { videoId: "b", bitrateKbps: 252 }),
+      file(3, { path: "/Music/c.mp3", bitrateKbps: 320 }),
+    ];
+    assert.equal(youTubeCopyKbps(files), 256);
+  });
+
+  test("about 128 when the latest one is ~128k, whatever came before", () => {
+    const files = [file(1, { videoId: "a", bitrateKbps: 256 }), file(2, { videoId: "b" })];
+    assert.equal(youTubeCopyKbps(files), 128);
+  });
+
+  test("about 128 with no YouTube download to tell by", () => {
+    assert.equal(youTubeCopyKbps([file(1, { bitrateKbps: 256 })]), 128);
+    assert.equal(youTubeCopyKbps([file(1, { videoId: "a", bitrateKbps: null })]), 128);
+  });
+});
+
 describe("qualityUpgradeOffer", () => {
   // 320 kbps is 40,000 bytes a second: a 200 s song is 8,000,000 bytes.
   test("estimates the difference to 320 kbps over the songs' lengths", () => {
@@ -105,6 +183,7 @@ describe("qualityUpgradeOffer", () => {
       dismissLabel: "Not now",
     });
     assert.equal(offer?.row, "Replace 342 songs with best quality");
+    assert.equal(offer?.summary, "About +1.2 GB");
   });
 
   test("says one song, and a few MB", () => {
@@ -130,6 +209,48 @@ describe("qualityUpgradeOffer", () => {
 
   test("offers nothing when no song qualifies", () => {
     assert.equal(qualityUpgradeOffer([], { onMobileData: true }), null);
+  });
+});
+
+describe("qualityDowngradeOffer", () => {
+  test("asks with the space it frees at about 128k, Replace or Not now", () => {
+    const offer = qualityDowngradeOffer(mp3s(125), { onMobileData: false, youTubeKbps: 128 });
+    assert.equal(offer?.direction, "downgrade");
+    assert.equal(offer?.bytes, 900_000_000);
+    assert.equal(offer?.downloadBytes, 600_000_000);
+    assert.equal(offer?.trackIds.length, 125);
+    assert.deepEqual(offer?.alert, {
+      title: "Free about 900 MB by replacing 125 songs with YouTube Music copies?",
+      message: "YouTube Music's copies are AAC at about 128 kbps.",
+      action: { label: "Replace" },
+      dismissLabel: "Not now",
+    });
+    assert.equal(offer?.row, "Free up space: replace 125 songs");
+    assert.equal(offer?.summary, "Frees about 900 MB");
+  });
+
+  test("with Premium's 256k it frees less", () => {
+    const offer = qualityDowngradeOffer(mp3s(125), { onMobileData: false, youTubeKbps: 256 });
+    assert.equal(offer?.bytes, 300_000_000);
+    assert.equal(offer?.alert.message, "YouTube Music's copies are AAC at 256 kbps.");
+  });
+
+  test("on mobile data, says how much it downloads and that the phone isn't on Wi-Fi", () => {
+    const offer = qualityDowngradeOffer(mp3s(1), { onMobileData: true, youTubeKbps: 128 });
+    assert.equal(
+      offer?.alert.title,
+      "Free about 7 MB by replacing 1 song with YouTube Music copies?",
+    );
+    assert.equal(
+      offer?.alert.message,
+      "YouTube Music's copies are AAC at about 128 kbps. It downloads about 5 MB, and the phone isn't on Wi-Fi.",
+    );
+  });
+
+  test("offers nothing when nothing would be saved", () => {
+    const small = file(1, { path: "/Music/a.mp3", bitrateKbps: 320, sizeBytes: 1_000_000 });
+    assert.equal(qualityDowngradeOffer([small], { onMobileData: false, youTubeKbps: 128 }), null);
+    assert.equal(qualityDowngradeOffer([], { onMobileData: false, youTubeKbps: 128 }), null);
   });
 });
 
@@ -190,6 +311,44 @@ describe("qualityReplacementJob", () => {
       downloadingList(jobs).groups.map((group) => [group.name, group.line]),
       [["Quality upgrade", "2 songs left"]],
     );
+  });
+});
+
+const result = (videoId: string, patch: Partial<YtSong> = {}): YtSong => ({
+  videoId,
+  title: "Song",
+  artists: ["Artist", "Guest"],
+  album: "Album",
+  durationMs: 201_000,
+  artworkUrl: null,
+  explicit: false,
+  ...patch,
+});
+
+describe("a downgrade's YouTube Music match", () => {
+  const downgrade = qualityReplacementJob("downgrade", track({ path: "/Music/03 Song.mp3" }));
+
+  test("searches for the Track's title and artists", () => {
+    assert.equal(downgrade.videoId, "downgrade:7");
+    assert.equal(qualityDowngradeSearch(downgrade), "Song Artist Guest");
+  });
+
+  test("downloads the first result that is the recording: title, artists and length", () => {
+    const results = [
+      result("live", { title: "Song (Live)" }),
+      result("long", { durationMs: 230_000 }),
+      result("cover", { artists: ["Someone Else"] }),
+      result("right"),
+    ];
+    assert.equal(qualityDowngradeVideo(downgrade, results), "right");
+  });
+
+  test("no result that is the recording: no copy", () => {
+    assert.equal(
+      qualityDowngradeVideo(downgrade, [result("live", { title: "Song (Live)" })]),
+      null,
+    );
+    assert.equal(qualityDowngradeVideo(downgrade, []), null);
   });
 });
 
@@ -274,6 +433,13 @@ describe("noBetterCopies", () => {
     ]);
   });
 
+  test("remembers a song YouTube Music had no copy of for freeing space only", () => {
+    assert.deepEqual(
+      noBetterCopies([job("downgrade:4", { phase: "failed", reason: "notFound" })]),
+      [{ direction: "downgrade", trackId: 4 }],
+    );
+  });
+
   test("forgets nothing for the phone's own trouble, a cancel, or another job", () => {
     const jobs = [
       job("upgrade:1", { phase: "failed", reason: "offline" }),
@@ -300,6 +466,15 @@ describe("qualityJobsToCancel", () => {
       job("song", { phase: "queued" }),
     ];
     assert.deepEqual(qualityJobsToCancel(jobs, "upgrade"), ["upgrade:1", "upgrade:2"]);
+  });
+
+  test("turning it on again cancels the waiting replacements that free space", () => {
+    const jobs = [
+      job("downgrade:1", { phase: "queued" }),
+      job("downgrade:2", { phase: "publishing" }),
+      job("upgrade:3", { phase: "queued" }),
+    ];
+    assert.deepEqual(qualityJobsToCancel(jobs, "downgrade"), ["downgrade:1"]);
   });
 });
 

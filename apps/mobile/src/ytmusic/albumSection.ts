@@ -14,6 +14,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { LineToggle } from "@/catalog/PlayShuffle";
 import type { SongRow } from "@/library/LibraryStore";
 import type { NativeYtSong } from "@/native/waveYtMusic";
+import { openSearchOnlineChoices, useSearchOnlineAlways } from "@/settings/searchOnline";
 
 import { useYtArtistAnswer } from "./artistSection";
 import { askYtMusic } from "./askYtMusic";
@@ -42,7 +43,9 @@ export interface YtAlbumSection {
 /**
  * What a Library [album]'s page shows from YouTube Music, through its album
  * artist [name] ([artistId]), and its Library | Online toggle. Opened from an
- * integrated view ([openedIntegrated]) it opens with Online selected; with
+ * integrated view ([openedIntegrated]), or with Search online set to Always,
+ * it opens with Online selected (Always: Library again after an ask on its
+ * own that got no answer, with the quiet line); with
  * Online, the album is integrated: it asks for the artist's page if nothing
  * stands for them (the page only, not every song of theirs: saved, it
  * doesn't stand on their artist page, and it never replaces an answer that
@@ -62,6 +65,7 @@ export const useYtAlbumSection = (
 ): YtAlbumSection => {
   const { state, enabled, openedAt, show: askArtist } = useYtArtistAnswer(name, RELEASES_ONLY);
   const find = useLoadedLibraryFinder();
+  const always = useSearchOnlineAlways();
   // The toggle's segment picked while the page is open; null until one is.
   const [pick, setPick] = useState<YtPick | null>(null);
   // Bumped to read the release's page again after it got no answer.
@@ -87,6 +91,7 @@ export const useYtAlbumSection = (
           enabled,
           now: openedAt,
           integrated: openedIntegrated,
+          always,
           pick,
           releasePage,
           keepTracklist,
@@ -132,7 +137,8 @@ export const useYtAlbumSection = (
   );
   const selected = view?.toggle;
   const toggle = useMemo(
-    () => (selected === undefined ? null : { selected, onPick }),
+    () =>
+      selected === undefined ? null : { selected, onPick, onLongPress: openSearchOnlineChoices },
     [selected, onPick],
   );
   return { view, toggle };

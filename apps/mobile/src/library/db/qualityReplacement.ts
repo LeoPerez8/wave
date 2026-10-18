@@ -15,7 +15,10 @@ import { saveBatch, type SavedBatch } from "./save.ts";
 import * as schema from "./schema.ts";
 import { deleteTracksById } from "./tracks.ts";
 
-/** Every Library file with its length, bitrate and size; missing songs have no file. */
+/**
+ * Every Library file with its length, bitrate, size and the video a YouTube
+ * download came from; missing songs have no file.
+ */
 export const selectQualityFiles = (db: LibraryDatabase): QualityFile[] => {
   const t = schema.tracks;
   return db
@@ -25,6 +28,7 @@ export const selectQualityFiles = (db: LibraryDatabase): QualityFile[] => {
       durationMs: t.durationMs,
       bitrateKbps: t.bitrateKbps,
       sizeBytes: t.sizeBytes,
+      videoId: t.videoId,
     })
     .from(t)
     .where(isNotNull(t.path))
