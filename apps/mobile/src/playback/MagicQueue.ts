@@ -4,6 +4,7 @@ import {
   isMagicQueue,
   libraryTrackIds,
   magicBatch,
+  magicBatchLoading,
   magicLibrarySongs,
   magicPlaySignal,
   magicQueueEdits,
@@ -92,6 +93,26 @@ const subscribeLabel = subscribeAll(queueState, magicSession);
 export const useMagicQueueLabel = (): string | null =>
   useSyncExternalStore(subscribeLabel, labelNow);
 
+/**
+ * The id of the session a batch is being picked for, from the moment it's
+ * wanted until it's added, fails, times out or turns out not to be wanted;
+ * null while none is.
+ */
+const picking = makeExternalStore<string | null>(null);
+
+const batchLoadingNow = (): boolean =>
+  magicBatchLoading(activeMagicSession(), picking.get(), queueState.get());
+
+const subscribeBatchLoading = subscribeAll(queueState, magicSession, picking);
+
+/**
+ * Whether the Magic Queue under way is picking its next batch, which Up Next
+ * still waits for (`magicBatchLoading`): false once the batch lands, the
+ * picking ends, or something else plays. Re-renders on change.
+ */
+export const useMagicBatchLoading = (): boolean =>
+  useSyncExternalStore(subscribeBatchLoading, batchLoadingNow);
+
 /** The Library's songs and artists: what a Magic Queue grows from, and names its songs' artists. */
 const libraryNow = Effect.gen(function* () {
   const store = yield* LibraryStore;
@@ -123,6 +144,8 @@ export const startMagicQueue = (seed: MagicSeed, seedSongs: readonly SongRow[]) 
     const first = playable.find((song) => String(song.id) === started?.first);
     if (started === null || first === undefined) return;
     save(started.session);
+    // The first batch is on its way as the seed starts: Up Next shows it loading from the first frame.
+    picking.set(started.session.id);
     const queue = yield* Queue;
     yield* queue.dispatch(
       {
@@ -235,6 +258,7 @@ export const layer = Layer.effectDiscard(
       Effect.gen(function* () {
         const wanted = activeMagicSession();
         if (wanted === null || !wantsMagicBatch(wanted, queueState.get())) return;
+        picking.set(wanted.id);
         yield* awaitSignals;
         const library = yield* Effect.provideService(libraryNow, LibraryStore, store);
         const yt = yield* magicRadioCandidates(wanted, library).pipe(
@@ -263,7 +287,10 @@ export const layer = Layer.effectDiscard(
             .filter((candidate) => picked.has(candidate.trackId))
             .map((candidate) => candidate.song),
         ).pipe(Effect.provideService(YtMusic, ytMusic), Effect.provideService(Player, player));
-      }),
+      }).pipe(
+        // However the picking ends: added, failed, timed out or no longer wanted.
+        Effect.ensuring(Effect.sync(() => picking.set(null))),
+      ),
     );
 
     let previous = queueState.get();

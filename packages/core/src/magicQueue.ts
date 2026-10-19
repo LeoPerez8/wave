@@ -417,6 +417,19 @@ export const wantsMagicBatch = (session: MagicSession, state: QueueState): boole
   state.index >= 0 &&
   !state.entries.slice(state.index + 1).some(recommended);
 
+/**
+ * Whether Up Next shows [session]'s next batch loading (skeleton rows where
+ * it will land): a batch is being picked for it ([picking] is the id of the
+ * session one is picked for, null while none is) and [state] still wants it.
+ * So the loading goes the moment the batch lands in Up Next, and the moment
+ * something else plays, whenever the picking itself ends.
+ */
+export const magicBatchLoading = (
+  session: MagicSession | null,
+  picking: string | null,
+  state: QueueState,
+): boolean => session !== null && picking === session.id && wantsMagicBatch(session, state);
+
 /** What the owner did to a Magic Queue between two states of it, by track id. */
 export interface MagicQueueEdits {
   /** Songs lined up by hand (Play Next, Add to Queue): positive. */
