@@ -32,6 +32,7 @@ import {
   mixAffinity,
   mixesShown,
   mixProfileLookups,
+  mixProfileLookupsNext,
   mixSeedProfile,
   mixRefreshAvoid,
   mixRefreshWaitNotice,
@@ -148,8 +149,10 @@ const mixGenres = (library: GenreProfileLibrary): MixGenres => ({
  * an artist mix has one), a page of each after another while Core asks for
  * more (a radio whose start or later page fails is left at what was read):
  * every song the radios played, interleaved, and how the seed's genres hold
- * its songs (`mixAffinity`, outside artists' looked up on Deezer as their
- * songs come). A page more is read while the songs the mix would keep
+ * its songs (`mixAffinity`; the seed's outside artists' looked up on Deezer
+ * first, then only the radio artists that decide the songs the mix would
+ * keep next, a round at a time, till 50 match: `mixProfileLookupsNext`). A
+ * page more is read while the songs the mix would keep
  * (`discoverMixSongs`, enough for level 5) are too few, the other seeds'
  * mixes aside: they're read at the same time, and Core takes out what an
  * earlier seed's mix has once every seed is read (`discoverMixesOfRadios`).
@@ -169,11 +172,25 @@ const readRadios = (seed: DiscoverMixSeed, filter: Filter, genres: MixGenres) =>
     );
     if (radios.length === 0) return null;
     const { library, profileOf } = genres;
-    const knowGenres = (songs: readonly { readonly artists: readonly string[] }[]) =>
-      lookUpArtistProfiles(mixProfileLookups(songs, profileOf));
+    // The seed's own artists first: an outside seed needs its profile to judge any song.
     const seedArtists = { artists: mixSeedArtists(seed).map((artist) => artist.name) };
-    yield* knowGenres([seedArtists, ...interleaveRadios(radios.map((r) => r.songs))]);
+    yield* lookUpArtistProfiles(mixProfileLookups([seedArtists], profileOf));
     const affinity = mixAffinity(mixSeedProfile(seed, library, profileOf), profileOf);
+    const asked: string[] = [];
+    // Only the artists that decide the songs the mix would keep next, a round at a time.
+    const knowGenres = Effect.gen(function* () {
+      for (;;) {
+        const names = mixProfileLookupsNext(interleaveRadios(radios.map((r) => r.songs)), {
+          filter: { ...filter, affinity },
+          profileOf,
+          asked,
+        });
+        if (names.length === 0) return;
+        asked.push(...names);
+        yield* lookUpArtistProfiles(names);
+      }
+    });
+    yield* knowGenres;
     const kept = () =>
       discoverMixSongs([interleaveRadios(radios.map((r) => r.songs))], { ...filter, affinity })
         .length;
@@ -203,7 +220,7 @@ const readRadios = (seed: DiscoverMixSeed, filter: Filter, genres: MixGenres) =>
         ),
         { concurrency: "unbounded" },
       );
-      yield* knowGenres(interleaveRadios(radios.map((r) => r.songs)));
+      yield* knowGenres;
     }
     return { seed, radio: interleaveRadios(radios.map((r) => r.songs)), affinity };
   });

@@ -214,7 +214,7 @@ export interface DiscoverMixFilter<S extends DiscoverRadioSong> {
 }
 
 /** The most songs a mix has. */
-const MIX_MOST = 50;
+export const MIX_MOST = 50;
 /** A mix with this many songs stops reading its radio. */
 const MIX_ENOUGH = 25;
 /** The most pages of a radio a mix reads. */
