@@ -11,6 +11,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class YtAudioCacheTest {
@@ -25,8 +26,8 @@ class YtAudioCacheTest {
 
   /** A real Media3 cache on disk, as the player's, holding at most [maxBytes]. */
   @Suppress("DEPRECATION")
-  private fun audioCache(maxBytes: Long = YtAudioCache.MAX_BYTES): YtAudioCache {
-    val cache = SimpleCache(dir, YtAudioCache.evictor(maxBytes))
+  private fun audioCache(maxBytes: Long = YtAudioCache.MAX_BYTES, listed: Set<String> = emptySet()): YtAudioCache {
+    val cache = SimpleCache(dir, YtAudioCache.evictor(maxBytes) { listed })
     // The JVM's android.os.ConditionVariable doesn't wait: wait for the cache's own start.
     Thread.getAllStackTraces().keys.filter { it.name == "ExoPlayer:SimpleCacheInit" }.forEach { it.join() }
     opened = cache
@@ -46,6 +47,8 @@ class YtAudioCacheTest {
 
   /** What playing [length] bytes of a song from [from] leaves in the cache under [key], as the player's reads write it. */
   private fun Cache.played(key: String, length: Long, songLength: Long, from: Long = 0) {
+    // Each play later than the last, as the evictor tells them apart by time.
+    Thread.sleep(5)
     val hole = startReadWrite(key, from, length)
     val file = startFile(key, from, length)
     file.writeBytes(ByteArray(length.toInt()))
@@ -137,5 +140,37 @@ class YtAudioCacheTest {
     audio.cache.played(before, 1_500, songLength = 4_200)
     audio.keyFor("v1", stream(251, null))
     assertEquals(1_500L, audio.cache.getCachedBytes(before, 0, 4_200))
+  }
+
+  @Test
+  fun songsFetchedAheadThatTheListNoLongerHasLeaveBeforePlayedOnes() {
+    val audio = audioCache(maxBytes = 10_000, listed = setOf("today"))
+    val (played, yesterday, today, next) = listOf("played", "yesterday", "today", "next").map { audio.keyFor(it, stream(251, 3_000)) }
+    audio.cache.played(played, 3_000, songLength = 3_000)
+    audio.markFetchedAhead(yesterday)
+    audio.cache.played(yesterday, 3_000, songLength = 3_000)
+    audio.markFetchedAhead(today)
+    audio.cache.played(today, 3_000, songLength = 3_000)
+    audio.cache.played(next, 3_000, songLength = 3_000)
+    assertEquals(played, audio.wholeKey("played"))
+    assertNull(audio.wholeKey("yesterday"))
+    assertEquals(today, audio.wholeKey("today"))
+    assertEquals(next, audio.wholeKey("next"))
+  }
+
+  @Test
+  fun aSongFetchedAheadThatPlaysCountsAsPlayed() {
+    val audio = audioCache(maxBytes = 10_000)
+    val (older, fetched, next) = listOf("older", "fetched", "next").map { audio.keyFor(it, stream(251, 4_000)) }
+    audio.cache.played(older, 4_000, songLength = 4_000)
+    audio.markFetchedAhead(fetched)
+    audio.cache.played(fetched, 4_000, songLength = 4_000)
+    assertTrue(audio.fetchedAhead(fetched))
+    audio.notePlayed(fetched)
+    assertFalse(audio.fetchedAhead(fetched))
+    audio.cache.played(next, 4_000, songLength = 4_000)
+    // Least recently played out first again.
+    assertNull(audio.wholeKey("older"))
+    assertEquals(fetched, audio.wholeKey("fetched"))
   }
 }

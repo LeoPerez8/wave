@@ -104,6 +104,13 @@ declare class WaveYtMusicModule extends NativeModule<WaveYtMusicEvents> {
   startNetworkMeter(): string;
   /** What the meter [id] counted, ending it (nothing for one already taken). */
   takeNetworkUse(id: string): HostNetworkUse;
+  /**
+   * Hands over the day's Wi-Fi pre-download list (Core's `mixPreDownload`;
+   * empty for none): a native job fetches those songs into the audio cache
+   * on an unmetered network with battery not low, without JS. Handing over
+   * the same list again does nothing.
+   */
+  schedulePreDownload(videoIds: readonly string[]): Promise<void>;
   /** Songs on YT Music for [query] (YouTube Music's "Songs" filter). */
   searchSongs(query: string): Promise<NativeYtSearchPage>;
   /** Artists on YT Music named like [query] (YouTube Music's "Artists" filter), in its order. */

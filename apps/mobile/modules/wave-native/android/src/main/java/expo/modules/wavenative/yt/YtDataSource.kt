@@ -51,7 +51,10 @@ class YtOfflineException(message: String?) : IOException(message) {
  * it plays. Each load reports, as it closes, how many bytes it read from the
  * network and how many from the cache ([onLoaded]; by default a line in the
  * app log, [YtAudioCache.loadLine]). Reading a `yt:` item to its end also
- * fills the cache, which is how audio can be fetched ahead of playback.
+ * fills the cache, which is how audio is fetched ahead of playback on Wi-Fi
+ * ([ahead], [PreDownloads]): a song only fetched ahead is marked so in the
+ * cache, and the player's next load of it counts it as played
+ * ([YtAudioCache.notePlayed]).
  */
 @OptIn(UnstableApi::class)
 class YtDataSource(
@@ -59,6 +62,8 @@ class YtDataSource(
   private val client: () -> YtClient,
   audioCache: () -> YtAudioCache? = { null },
   private val onLoaded: (videoId: String, networkBytes: Long, cacheBytes: Long) -> Unit = ::logLoad,
+  /** Reads fetch audio ahead of playback (the Wi-Fi pre-download), not for the player. */
+  private val ahead: Boolean = false,
 ) : DataSource {
   /** The `yt:` URI of the song open now, or null for anything else. */
   private var streamed: Uri? = null
@@ -101,7 +106,9 @@ class YtDataSource(
     val whole = audio.wholeKey(videoId)
     if (whole != null && !client().enabled) throw YtStreamException(YtStreamFailure.DISABLED, null)
     val stream = if (whole == null) resolve(videoId) else null
+    val aheadOnly = ahead && audio.aheadOnly(videoId)
     val key = whole ?: audio.keyFor(videoId, checkNotNull(stream))
+    if (!ahead) audio.notePlayed(key) else if (aheadOnly) audio.markFetchedAhead(key)
     network.prepare(videoId, stream, key)
     current = cached
     return cached.open(dataSpec.buildUpon().setKey(key).build())
