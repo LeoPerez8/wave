@@ -215,7 +215,7 @@ function SyncedLyrics({
     (line: LyricLine, at: number) => {
       stopResume();
       following.current = true;
-      seekTo(line.timeMs);
+      seekTo(line.timeMs, "lyric");
       // Brings the tapped line to rest even when it's the one already sung.
       currentIndex.current = at;
       scrollToCurrent(!reduceMotion);

@@ -44,6 +44,16 @@ object CrossfadeLink {
    * the crossfade keeps it at full volume rather than fade into the song after the one searched.
    */
   var searchingAfter: String? = null
+
+  /**
+   * Whether the app paused the player while the song it moves to is searched
+   * (Core's playing walk), until play is pressed again or the app pauses for
+   * another reason. For the app log's crossfade lines.
+   */
+  var pausedForSearch = false
+
+  /** Who asked for the player's next move or seek, for the app log's crossfade lines. */
+  val causes = CrossfadeCauses()
 }
 
 /**

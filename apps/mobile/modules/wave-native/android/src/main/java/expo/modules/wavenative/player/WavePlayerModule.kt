@@ -248,9 +248,12 @@ class WavePlayerModule : Module() {
      * Applies Core's sync plan. Items already loaded are reused by key, so JS
      * only sends [items] for keys new to the player; [QueueSync] reads loaded
      * ones only when a step re-inserts them, so a skip doesn't walk the list.
+     * [cause] is what the sync is (Core's `SongChangeCause`), which names a
+     * song change it makes in the app log's crossfade lines.
      */
-    AsyncFunction("applySync") { steps: List<SyncStepRecord>, items: List<PlayerItem>, promise: Promise ->
+    AsyncFunction("applySync") { steps: List<SyncStepRecord>, items: List<PlayerItem>, cause: String?, promise: Promise ->
       withController(promise) { player ->
+        cause?.let { CrossfadeLink.causes.noteApp(it, SystemClock.elapsedRealtime()) }
         val incoming = items.associate { it.id to toMediaItem(it) }
         syncing = true
         QueueSnapshot.resumed = false
@@ -356,6 +359,7 @@ class WavePlayerModule : Module() {
 
     AsyncFunction("play") { promise: Promise ->
       withController(promise) { player ->
+        CrossfadeLink.pausedForSearch = false
         // A finished or failed item starts over.
         if (player.playbackState == Player.STATE_ENDED) player.seekToDefaultPosition()
         if (player.playbackState == Player.STATE_IDLE) player.prepare()
@@ -364,15 +368,19 @@ class WavePlayerModule : Module() {
       }
     }.runOnQueue(Queues.MAIN)
 
-    AsyncFunction("pause") { promise: Promise ->
+    /** [forSearch]: paused while the song to play is searched, as the app log's crossfade lines say. */
+    AsyncFunction("pause") { forSearch: Boolean?, promise: Promise ->
       withController(promise) { player ->
+        CrossfadeLink.pausedForSearch = forSearch == true
         player.pause()
         promise.resolve(null)
       }
     }.runOnQueue(Queues.MAIN)
 
-    AsyncFunction("seekTo") { positionMs: Double, promise: Promise ->
+    /** [source] is where the seek came from (Core's `SeekSource`), for the app log's crossfade lines. */
+    AsyncFunction("seekTo") { positionMs: Double, source: String?, promise: Promise ->
       withController(promise) { player ->
+        source?.let { CrossfadeLink.causes.noteApp(it, SystemClock.elapsedRealtime()) }
         player.seekTo(positionMs.toLong())
         promise.resolve(null)
       }
