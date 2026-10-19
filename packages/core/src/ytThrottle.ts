@@ -6,12 +6,12 @@
  */
 
 /** How many different songs refused within [BURST_MS] make a burst. */
-export const YT_THROTTLE_BURST = 5;
+const YT_THROTTLE_BURST = 5;
 /** The window a burst's refusals fall in. */
-export const YT_THROTTLE_BURST_MS = 60_000;
+const YT_THROTTLE_BURST_MS = 60_000;
 /** The first pause; each burst that follows one doubles it, up to [YT_THROTTLE_MAX_PAUSE_MS]. */
-export const YT_THROTTLE_PAUSE_MS = 2 * 60_000;
-export const YT_THROTTLE_MAX_PAUSE_MS = 30 * 60_000;
+const YT_THROTTLE_PAUSE_MS = 2 * 60_000;
+const YT_THROTTLE_MAX_PAUSE_MS = 30 * 60_000;
 
 /** One refusal: the song YouTube refused and when (epoch ms). */
 interface Refusal {

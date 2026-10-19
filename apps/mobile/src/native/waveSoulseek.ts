@@ -47,7 +47,7 @@ export interface NativeDownloadJob extends YtDownloadJournalJob<NativeYtSong> {
 }
 
 /** The pause on YouTube downloads the journal keeps (Core's `YtThrottlePause`). */
-export interface NativeYoutubePause {
+interface NativeYoutubePause {
   readonly until: number;
   readonly level: number;
 }
