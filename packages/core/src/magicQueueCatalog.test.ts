@@ -267,9 +267,15 @@ describe("A Magic Queue's refill", () => {
       magicRefillDue(session, { catalog: never, left: 0 }, tried(HARVEST_RETRY_MS - 1)),
       false,
     );
-    assert.equal(magicRefillDue(session, { catalog: never, left: 0 }, tried(HARVEST_RETRY_MS)), true);
+    assert.equal(
+      magicRefillDue(session, { catalog: never, left: 0 }, tried(HARVEST_RETRY_MS)),
+      true,
+    );
     const other = new Map([["another session", NOW]]);
-    assert.equal(magicRefillDue(session, { catalog: never, left: 0 }, { ...WIFI, tried: other }), true);
+    assert.equal(
+      magicRefillDue(session, { catalog: never, left: 0 }, { ...WIFI, tried: other }),
+      true,
+    );
   });
 
   test("never for a session with no radio artists", () => {
