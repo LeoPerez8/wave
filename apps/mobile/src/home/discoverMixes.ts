@@ -559,7 +559,7 @@ export const useDiscoverMixes = (id: MixSectionId, played: boolean): DiscoverMix
       refresh(id, played);
     }, [enabled, id, played]),
   );
-  const section = useMemo(
+  const shown = useMemo(
     () =>
       discoverMixesSection(mixes, {
         ytMusic: enabled,
@@ -570,8 +570,8 @@ export const useDiscoverMixes = (id: MixSectionId, played: boolean): DiscoverMix
     [mixes, enabled, nothing, blend, rebuilding],
   );
   // The start of what Home shows is fetched ahead on Wi-Fi.
-  useEffect(() => noteMixesShown(id, section), [id, section]);
-  return section;
+  useEffect(() => noteMixesShown(id, shown), [id, shown]);
+  return shown;
 };
 
 /**
