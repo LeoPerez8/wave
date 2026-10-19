@@ -189,7 +189,12 @@ import {
   selectMissingSongs,
   signOut,
 } from "./db/missingSongs";
-import { saveYtArtist, selectYtArtist } from "./db/ytArtists";
+import {
+  saveYtArtist,
+  selectYtArtist,
+  selectYtArtistSimilar,
+  type YtArtistSimilar,
+} from "./db/ytArtists";
 import {
   selectSongOrder,
   selectSongSummaries,
@@ -993,6 +998,11 @@ export class LibraryStore extends Context.Service<
     ) => Effect.Effect<void, LibraryStoreError>;
     /** The candidate catalog: every song with the radios that brought it. */
     readonly candidateCatalog: Effect.Effect<readonly CatalogSong[], LibraryStoreError>;
+    /**
+     * Every saved YT Music artist page's artist with who "Fans might also
+     * like", in the page's order (the artist graph's similar artists).
+     */
+    readonly ytArtistSimilar: Effect.Effect<readonly YtArtistSimilar[], LibraryStoreError>;
   }
 >()("@wave/mobile/library/LibraryStore") {}
 
@@ -1590,6 +1600,10 @@ const make = Effect.gen(function* () {
       attempt("add to the candidate catalog", () => addCandidates(db, page, at)),
 
     candidateCatalog: attempt("read the candidate catalog", () => selectCandidateCatalog(db)),
+
+    ytArtistSimilar: attempt("read the saved artist pages' similar artists", () =>
+      selectYtArtistSimilar(db),
+    ),
   });
 });
 

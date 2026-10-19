@@ -3,9 +3,10 @@ import assert from "node:assert/strict";
 import { beforeEach, describe, test } from "node:test";
 
 import type { YtArtistSaved } from "@wave/core";
+import { sql } from "drizzle-orm";
 
 import { openTestDatabase, type TestDatabase } from "./testDatabase.ts";
-import { saveYtArtist, selectYtArtist } from "./ytArtists.ts";
+import { saveYtArtist, selectYtArtist, selectYtArtistSimilar } from "./ytArtists.ts";
 
 let db: TestDatabase;
 
@@ -78,5 +79,33 @@ describe("the artist page's saved YT Music section", () => {
     // Saved as an older or damaged build could have written it.
     saveYtArtist(db, "daft punk", { ...found, page: broken } as unknown as YtArtistSaved);
     assert.equal(selectYtArtist(db, "daft punk"), null);
+  });
+});
+
+describe("the saved pages' similar artists, for the artist graph", () => {
+  const portishead = { name: "Portishead", browseId: "UCportishead", audience: 1_000 };
+
+  test("every found page gives its artist and who 'Fans might also like', in its order", () => {
+    saveYtArtist(db, "daft punk", {
+      ...found,
+      page: { ...found.page, similar: [portishead, { ...portishead, name: "Justice" }] },
+    });
+    saveYtArtist(db, "yt:UCjustice", { ...found, page: { ...found.page, name: "Justice" } });
+    saveYtArtist(db, "air", { outcome: "unmatched", checkedAt: 500 });
+    assert.deepEqual(selectYtArtistSimilar(db), [
+      { name: "Daft Punk", similar: [portishead, { ...portishead, name: "Justice" }] },
+      { name: "Justice", similar: [] },
+    ]);
+  });
+
+  test("a page that can't be read, or whose similar artists aren't a list, gives none", () => {
+    saveYtArtist(db, "daft punk", {
+      ...found,
+      page: { ...found.page, similar: { name: "Portishead" } },
+    } as unknown as YtArtistSaved);
+    db.run(
+      sql`INSERT INTO yt_artists (artist_key, outcome, checked_at, browse_id, page) VALUES ('x', 'found', 1, 'UCx', 'not json')`,
+    );
+    assert.deepEqual(selectYtArtistSimilar(db), [{ name: "Daft Punk", similar: [] }]);
   });
 });
