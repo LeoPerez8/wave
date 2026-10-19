@@ -18,6 +18,7 @@ import { CELL, grid } from "@/catalog/grid";
 import { PlayShuffle, type LineToggle } from "@/catalog/PlayShuffle";
 import { type TrackSummary, TrackRow } from "@/catalog/TrackRow";
 import { useChromeInset } from "@/chrome/chrome";
+import { fileUri } from "@/lib/fileUri";
 import { useRenderCount } from "@/perf/perf";
 import { playSongs } from "@/playback/actions";
 import { useCurrentTrackId, usePlayPage } from "@/playback/hooks";
@@ -42,7 +43,7 @@ export const toTrackSummary = (song: SongRow): TrackSummary => ({
   title: song.title,
   artist: song.artist,
   durationMs: song.durationMs,
-  artworkUri: song.thumbPath === null ? undefined : `file://${song.thumbPath}`,
+  artworkUri: fileUri(song.thumbPath),
   // A missing song: dimmed, as a YT Music song not downloaded is.
   missingTrackId: song.path === null ? song.id : undefined,
   explicit: showsExplicitBadge(song.explicit),

@@ -10,11 +10,13 @@ import { View } from "react-native";
 
 import { AlbumTile } from "@/catalog/AlbumTile";
 import { COVER_ROW_TILE } from "@/catalog/CoverRow";
+import { CoverTile } from "@/catalog/CoverTile";
 import { EntryRow } from "@/catalog/EntryRow";
 import { CELL } from "@/catalog/grid";
 import { Hairline } from "@/catalog/Hairline";
 import { PullRefreshRow } from "@/catalog/PullRefreshRow";
 import { TitledSection } from "@/catalog/TitledSection";
+import { fileUri } from "@/lib/fileUri";
 import type { HomeSections, MostPlayedRow } from "@/library/db/playHistory";
 import { openStats, openStatsSeeAll } from "@/library/routes";
 import type { PlayableSongRow } from "@/library/LibraryStore";
@@ -194,19 +196,13 @@ function MagicQueue({ title }: SectionProps) {
 
 /** A song of the Magic Queue section: its cover (its album's), title, artist and album. */
 function MagicQueueTile({ song }: { song: PlayableSongRow }) {
-  const cover = song.artworkPath ?? song.thumbPath;
   return (
-    <AlbumTile
-      album={{
-        id: String(song.id),
-        title: song.title,
-        albumArtist: song.artist,
-        trackCount: 1,
-        durationMs: song.durationMs,
-        artworkUri: cover === null ? undefined : `file://${cover}`,
-      }}
-      size={COVER_ROW_TILE}
+    <CoverTile
+      title={song.title}
+      byline={song.artist}
       detail={song.album}
+      artworkUri={fileUri(song.artworkPath ?? song.thumbPath)}
+      size={COVER_ROW_TILE}
       onPress={() => startMagicQueueFrom(song)}
       onLongPress={() => openTrackActions(song)}
     />
