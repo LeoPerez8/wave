@@ -1,40 +1,50 @@
 /**
- * A song's links for its share sheet (docs/spec.md, "Sharing a song"): Odesli
- * (song.link's free, keyless API) is asked by the song's YouTube video id for
- * its universal song.link page and its Spotify and YT Music links.
+ * A song's links for its share sheet (docs/spec.md, "Sharing a song"): YT
+ * Music's and song.link's pages come from the song's YouTube video id (its
+ * own, else one YouTube Music search), Spotify's from Wave's own Spotify
+ * search as the signed-in account. Each destination stands on its own.
  */
 
-import { at, text } from "./json.ts";
 import { ytShareMatch } from "./playlistShare.ts";
 import type { SongLinkOption } from "./songShare.ts";
+import { spotifySearchQuery } from "./spotifyImport.ts";
+import type { SpotifyAccountAnswer, SpotifyAccountFailure } from "./spotifyLibrary.ts";
 import type { SpotifySong } from "./spotifyPlaylist.ts";
+import { spotifyShareMatch, spotifyShareSong } from "./spotifyShare.ts";
 import type { YtSong } from "./ytMusic.ts";
 
-/** A song's links: song.link's page (any platform), and the song on Spotify and YT Music. */
-export interface SongLinks {
-  readonly page: string;
-  readonly spotify: string | null;
-  readonly ytMusic: string;
+/** Why a lookup has no link: nothing is the song, no answer (offline), or a failure. */
+type NoLink =
+  { readonly status: "notFound" } | { readonly status: "offline" } | { readonly status: "failed" };
+
+/** Where the song's YouTube video id stands: loading, found, or why there's none. */
+export type SongVideoState =
+  { readonly status: "loading" } | { readonly status: "found"; readonly videoId: string } | NoLink;
+
+/** Where the song's Spotify track stands: loading, its link, or why there's none. */
+export type SpotifyTrackState =
+  | { readonly status: "loading" }
+  | { readonly status: "found"; readonly url: string }
+  | { readonly status: "signedOut" }
+  | NoLink;
+
+/** Where a song's links stand: its video id (Copy Link, YT Music) and its Spotify track. */
+export interface SongLinksState {
+  readonly video: SongVideoState;
+  readonly spotify: SpotifyTrackState;
 }
 
-/** Where a song's links stand: loading, found, or why there are none. */
-export type SongLinksState =
-  | { readonly status: "loading" }
-  | { readonly status: "found"; readonly links: SongLinks }
-  | { readonly status: "notFound" }
-  | { readonly status: "offline" }
-  | { readonly status: "failed" };
+/** A song's links before any lookup has answered. */
+export const SONG_LINKS_LOADING: SongLinksState = {
+  video: { status: "loading" },
+  spotify: { status: "loading" },
+};
 
-/** A song whose links are looked up: its video id, else what YT Music is searched for. */
+/** A song whose links are looked up: its video id, else what is searched for. */
 export interface SongLinkLookup {
   readonly videoId: string | null;
   readonly search: SpotifySong | null;
 }
-
-/** One GET of [url]: its status and body. Rejects when it can't be sent (offline). */
-export type SongLinkAsk = (
-  url: string,
-) => Promise<{ readonly status: number; readonly body: string }>;
 
 /** One YouTube Music Songs search for [song], as sharing searches (`ytShareMatch`). */
 export type SongLinkSearch = (
@@ -44,105 +54,102 @@ export type SongLinkSearch = (
   | { readonly ok: false; readonly reason: "offline" | "failed" | "disabled" }
 >;
 
-const ODESLI = "https://api.song.link/v1-alpha.1/links";
-
-const ytMusicSongUrl = (videoId: string): string => `https://music.youtube.com/watch?v=${videoId}`;
-
-/** Odesli's lookup for the song YouTube has as [videoId]. */
-const odesliUrl = (videoId: string): string =>
-  `${ODESLI}?url=${encodeURIComponent(ytMusicSongUrl(videoId))}`;
-
-/** The url Odesli's answer gives for [platform], or null. */
-const platformUrl = (links: unknown, platform: string): string | null =>
-  text(at(links, platform, "url"));
-
 /**
- * The links in Odesli's answer [body] about [videoId], or null when it has no
- * song.link page. YT Music always has the video it was asked about.
+ * [song]'s YouTube video id: its own, else the first result of one YouTube
+ * Music search ([search]) by its title and artists that is the same
+ * recording (`ytShareMatch`).
  */
-const odesliLinks = (body: string, videoId: string): SongLinks | null => {
-  let answer: unknown;
-  try {
-    answer = JSON.parse(body);
-  } catch {
-    return null;
-  }
-  const page = text(at(answer, "pageUrl"));
-  if (page === null) return null;
-  const links = at(answer, "linksByPlatform");
-  return {
-    page,
-    spotify: platformUrl(links, "spotify"),
-    ytMusic: platformUrl(links, "youtubeMusic") ?? ytMusicSongUrl(videoId),
-  };
-};
-
-/** [song]'s video id: its own, else the first result of one search that is the same recording. */
-const findVideoId = async (
+export const lookUpSongVideo = async (
   song: SongLinkLookup,
   search: SongLinkSearch,
-): Promise<string | Exclude<SongLinksState, { status: "found" | "loading" }>> => {
-  if (song.videoId !== null) return song.videoId;
+): Promise<SongVideoState> => {
+  if (song.videoId !== null) return { status: "found", videoId: song.videoId };
   if (song.search === null) return { status: "notFound" };
   const answer = await search(song.search);
   if (!answer.ok) return { status: answer.reason === "offline" ? "offline" : "failed" };
-  return ytShareMatch(song.search, answer.songs) ?? { status: "notFound" };
+  const videoId = ytShareMatch(song.search, answer.songs);
+  return videoId === null ? { status: "notFound" } : { status: "found", videoId };
 };
 
+/** The signed-in Spotify account, as the share sheet asks it. */
+export interface SongLinkSpotify {
+  /** Whether Wave holds a Spotify session (as saved; Spotify isn't asked). */
+  readonly signedIn: () => Promise<boolean>;
+  /** One `searchTracks` for [term] as the account: its `data`, or why there wasn't one. */
+  readonly search: (term: string) => Promise<SpotifyAccountAnswer>;
+}
+
+/** How a Spotify search with no answer leaves the link: a session Spotify refused is signed out. */
+const SPOTIFY_FAILURES = {
+  offline: "offline",
+  signedOut: "signedOut",
+  failed: "failed",
+  changed: "failed",
+} as const satisfies Record<SpotifyAccountFailure, SpotifyTrackState["status"]>;
+
+/** `open.spotify.com`'s page of the track [uri] (`spotify:track:<id>`). */
+const spotifyTrackUrl = (uri: string): string =>
+  `https://open.spotify.com/track/${uri.split(":").at(-1) ?? ""}`;
+
 /**
- * Looks up [song]'s links: Odesli is asked by its video id; a song without
- * one (a Library song not downloaded from YouTube) is first searched once on
- * YouTube Music by its title and artists ([search]), taking the result that
- * is the same recording (`ytShareMatch`). Odesli gets nothing but the video id.
+ * [song]'s track on Spotify: one search with Spotify's own search as the
+ * signed-in account ([spotify]) for its title and artists, taking the first
+ * result that is the same recording and that Spotify plays, as sharing a
+ * playlist does (`spotifyShareSong`, `spotifyShareMatch`). Nothing is sent
+ * signed out.
  */
-export const lookUpSongLinks = async (
-  song: SongLinkLookup,
-  search: SongLinkSearch,
-  ask: SongLinkAsk,
-): Promise<SongLinksState> => {
-  const videoId = await findVideoId(song, search);
-  if (typeof videoId !== "string") return videoId;
-  let response: Awaited<ReturnType<SongLinkAsk>>;
-  try {
-    response = await ask(odesliUrl(videoId));
-  } catch {
-    return { status: "offline" };
-  }
-  // Odesli answers a song it can't resolve with 400 or 404; a refusal (429, about 10 a minute) fails.
-  if (response.status === 400 || response.status === 404) return { status: "notFound" };
-  if (response.status !== 200) return { status: "failed" };
-  const links = odesliLinks(response.body, videoId);
-  return links === null ? { status: "failed" } : { status: "found", links };
+export const lookUpSpotifyTrack = async (
+  song: SpotifySong | null,
+  spotify: SongLinkSpotify,
+): Promise<SpotifyTrackState> => {
+  if (!(await spotify.signedIn())) return { status: "signedOut" };
+  const search = song === null ? undefined : spotifyShareSong({ source: "library", song }).search;
+  if (search === undefined) return { status: "notFound" };
+  const answer = await spotify.search(spotifySearchQuery(search));
+  if (!answer.ok) return { status: SPOTIFY_FAILURES[answer.reason] };
+  const uri = spotifyShareMatch(search, answer.data);
+  if (uri === undefined) return { status: "failed" };
+  return uri === null ? { status: "notFound" } : { status: "found", url: spotifyTrackUrl(uri) };
 };
 
 /** How a link option shows: the link it shares (null: disabled), loading, or why it has none. */
 export interface SongLinkView {
   readonly url: string | null;
   readonly loading: boolean;
-  readonly note: "Offline" | "Unavailable" | "No Match" | null;
+  readonly note: "Offline" | "Unavailable" | "No Match" | "Signed Out" | null;
 }
 
 const NOTES = {
   offline: "Offline",
   failed: "Unavailable",
   notFound: "No Match",
+  signedOut: "Signed Out",
 } as const satisfies Record<string, SongLinkView["note"]>;
+
+/** The song.link page (any platform) and the YT Music page of the video [videoId]. */
+const VIDEO_URLS = {
+  copyLink: (videoId: string) => `https://song.link/y/${videoId}`,
+  ytMusic: (videoId: string) => `https://music.youtube.com/watch?v=${videoId}`,
+} as const;
+
+/** How a lookup that is [state] shows, its link being [url] once found. */
+const viewOf = <S extends { readonly status: string }>(
+  state: S,
+  url: (found: Extract<S, { status: "found" }>) => string,
+): SongLinkView => {
+  if (state.status === "loading") return { url: null, loading: true, note: null };
+  if (state.status === "found")
+    return { url: url(state as Extract<S, { status: "found" }>), loading: false, note: null };
+  return { url: null, loading: false, note: NOTES[state.status as keyof typeof NOTES] };
+};
 
 /**
  * How the link [option] shows in the share sheet while the song's links are
- * [state]: Copy Link shares song.link's page, Spotify and YT Music their
- * platform's link, and one with no link is disabled and says why.
+ * [state]: Copy Link shares the song.link page of the song's video, YT Music
+ * the video's own page, Spotify the matching track; one with no link is
+ * disabled and says why. Each goes by its own lookup only.
  */
-export const songLinkView = (option: SongLinkOption, state: SongLinksState): SongLinkView => {
-  switch (state.status) {
-    case "loading":
-      return { url: null, loading: true, note: null };
-    case "found": {
-      const { page, spotify, ytMusic } = state.links;
-      const url = { copyLink: page, spotify, ytMusic }[option];
-      return { url, loading: false, note: url === null ? NOTES.notFound : null };
-    }
-    default:
-      return { url: null, loading: false, note: NOTES[state.status] };
-  }
-};
+export const songLinkView = (option: SongLinkOption, state: SongLinksState): SongLinkView =>
+  option === "spotify"
+    ? viewOf(state.spotify, (found) => found.url)
+    : viewOf(state.video, (found) => VIDEO_URLS[option](found.videoId));
