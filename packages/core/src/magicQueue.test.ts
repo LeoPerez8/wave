@@ -7,6 +7,7 @@ import {
   genreProfile,
   magicArtistKey,
   magicBatch,
+  magicBatchLoading,
   magicLibrarySongs,
   magicSeedProfile,
   magicYtSong,
@@ -322,6 +323,38 @@ describe("A Magic Queue in the queue", () => {
       added: [],
       removed: [],
     });
+  });
+
+  test("shows its batch loading while it's picked, until the batch lands", () => {
+    const seedOnly = run(EMPTY_QUEUE, { type: "play", trackIds: ["s1"], startIndex: 0, context });
+    assert.equal(magicBatchLoading(session, "m1", seedOnly), true);
+    assert.equal(magicBatchLoading(session, null, seedOnly), false);
+    // The batch in Up Next takes the loading's place, before the picking is cleared.
+    const landed = run(seedOnly, { type: "append", trackIds: ["a", "b"] });
+    assert.equal(magicBatchLoading(session, "m1", landed), false);
+  });
+
+  test("shows a later batch loading under the songs lined up by hand", () => {
+    const last = run(
+      playing,
+      { type: "next" },
+      { type: "next" },
+      { type: "addToQueue", trackIds: ["q"] },
+    );
+    assert.equal(magicBatchLoading(session, "m1", last), true);
+  });
+
+  test("shows no batch loading once something else plays, or for another session", () => {
+    const last = run(playing, { type: "next" }, { type: "next" });
+    const other = run(last, {
+      type: "play",
+      trackIds: ["x"],
+      startIndex: 0,
+      context: { kind: "album", id: "4" },
+    });
+    assert.equal(magicBatchLoading(session, "m1", other), false);
+    assert.equal(magicBatchLoading(session, "m0", last), false);
+    assert.equal(magicBatchLoading(null, "m1", last), false);
   });
 
   test("Up Next names the seed", () => {
