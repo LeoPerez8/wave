@@ -17,6 +17,7 @@ import { useChromeInset } from "@/chrome/chrome";
 import { EmptyState } from "@/components/EmptyState";
 import { ScanProgressBanner } from "@/components/ScanProgressBanner";
 import { TextButton } from "@/components/TextButton";
+import { fileUri } from "@/lib/fileUri";
 import { useListScrollable } from "@/motion/heldTouch";
 import { perfMark, useRenderCount } from "@/perf/perf";
 import { playTrackIds } from "@/playback/actions";
@@ -98,7 +99,7 @@ const toTrackSummary = (song: SongSummary): TrackSummary => ({
   title: song.title,
   artist: song.artist,
   durationMs: song.durationMs,
-  artworkUri: song.thumbPath === null ? undefined : `file://${song.thumbPath}`,
+  artworkUri: fileUri(song.thumbPath),
   // A missing song: dimmed, as a YT Music song not downloaded is.
   missingTrackId: song.hasFile ? undefined : song.id,
   explicit: showsExplicitBadge(song.explicit),

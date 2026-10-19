@@ -920,6 +920,33 @@ ALTER TABLE \`playlists\` ADD \`image_original_path\` text;
 ALTER TABLE \`playlists\` ADD \`image_framing\` text;
 `;
 
+// The candidate catalog (\`schema.ts\`'s \`candidateSongs\`, \`candidateRadios\`): the songs
+// radios and artist pages brought, and which radios. Self-contained, so it can take any
+// number when merged.
+const mCandidateCatalog = `
+CREATE TABLE \`candidate_songs\` (
+	\`video_id\` text PRIMARY KEY NOT NULL,
+	\`song\` text NOT NULL,
+	\`first_seen_at\` integer NOT NULL,
+	\`last_seen_at\` integer NOT NULL
+);
+--> statement-breakpoint
+CREATE INDEX \`candidate_songs_last_seen_idx\` ON \`candidate_songs\` (\`last_seen_at\`);
+--> statement-breakpoint
+CREATE TABLE \`candidate_radios\` (
+	\`video_id\` text NOT NULL,
+	\`seed_key\` text NOT NULL,
+	\`seed_name\` text NOT NULL,
+	\`last_seen_at\` integer NOT NULL,
+	PRIMARY KEY(\`video_id\`, \`seed_key\`),
+	FOREIGN KEY (\`video_id\`) REFERENCES \`candidate_songs\`(\`video_id\`) ON UPDATE no action ON DELETE cascade
+);
+--> statement-breakpoint
+CREATE INDEX \`candidate_radios_seed_idx\` ON \`candidate_radios\` (\`seed_key\`);
+--> statement-breakpoint
+CREATE INDEX \`candidate_radios_last_seen_idx\` ON \`candidate_radios\` (\`last_seen_at\`);
+`;
+
 export default {
   journal: {
     entries: [
@@ -963,6 +990,7 @@ export default {
         tag: "0034_playlist_image_originals",
         breakpoints: true,
       },
+      { idx: 35, when: 1_794_830_400_000, tag: "0035_candidate_catalog", breakpoints: true },
     ],
   },
   migrations: {
@@ -1001,5 +1029,6 @@ export default {
     m0032: mGenreTags,
     m0033: mFileDeletions,
     m0034: mPlaylistImageOriginals,
+    m0035: mCandidateCatalog,
   },
 };

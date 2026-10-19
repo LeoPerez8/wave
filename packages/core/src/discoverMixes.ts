@@ -214,7 +214,7 @@ export interface DiscoverMixFilter<S extends DiscoverRadioSong> {
 }
 
 /** The most songs a mix has. */
-const MIX_MOST = 50;
+export const MIX_MOST = 50;
 /** A mix with this many songs stops reading its radio. */
 const MIX_ENOUGH = 25;
 /** The most pages of a radio a mix reads. */
@@ -463,6 +463,21 @@ export interface DiscoverMixes {
   /** Whether any of the build's seeds came from plays (not every seed makes a mix). */
   readonly playSeeds: boolean;
   readonly mixes: readonly DiscoverMix[];
+  /**
+   * What the build started from, so a slider move ranks the catalog for it
+   * again (`discoverMixesRerun`). Absent on mixes saved before it was kept.
+   */
+  readonly build?: DiscoverMixesBuild;
+}
+
+/** What a section's build started from, kept with its mixes. */
+export interface DiscoverMixesBuild {
+  /** Its seeds, in their order: those that made no mix too, as a re-rank may make one of them. */
+  readonly seeds: readonly DiscoverMixSeed[];
+  /** A refresh's avoided new songs (`mixRefreshAvoid`); none for the day's build. */
+  readonly avoid: readonly string[];
+  /** What its variety nudge was made from (`catalogMixReader`); absent: none. */
+  readonly variety?: number;
 }
 
 /** A genre as a mix's title names it: one typed all in lowercase gets capital initials. */
@@ -478,21 +493,29 @@ const built = (
   mixes: readonly DiscoverMix[],
   builtAt: number,
   playSeeds: boolean,
-): DiscoverMixes | null => (mixes.length === 0 ? null : { builtAt, playSeeds, mixes });
+  build?: DiscoverMixesBuild,
+): DiscoverMixes | null =>
+  mixes.length === 0
+    ? null
+    : { builtAt, playSeeds, mixes, ...(build === undefined ? {} : { build }) };
 
 /**
- * What a build from [seeds] that made [mixes] saves. Only a build with usable
- * mixes replaces the cache and starts a new daily interval.
+ * What a build from [seeds] that made [mixes] saves, with what it started
+ * from: the seeds, a refresh's [avoid]ed songs and its [variety]
+ * (`DiscoverMixesBuild`). Only a build with usable mixes replaces the cache
+ * and starts a new daily interval.
  */
 export const discoverMixesBuilt = (
   mixes: readonly DiscoverMix[],
   builtAt: number,
   seeds: readonly DiscoverMixSeed[],
+  { avoid, variety }: { readonly avoid?: ReadonlySet<string>; readonly variety?: number } = {},
 ): DiscoverMixes | null =>
   built(
     mixes,
     builtAt,
     seeds.some((seed) => seed.from === "plays"),
+    { seeds, avoid: [...(avoid ?? [])], ...(variety === undefined ? {} : { variety }) },
   );
 
 /**
@@ -578,13 +601,54 @@ const readFamiliarSong = (value: unknown): DiscoverMixFamiliarSong[] => {
  * a mix that can't be read is left out.
  */
 export const parseDiscoverMixes = (stored: string | null): DiscoverMixes | null => {
-  const { version, builtAt, playSeeds, mixes } = readStoredRecord(stored);
+  const { version, builtAt, playSeeds, mixes, build } = readStoredRecord(stored);
   if (version !== MIXES_VERSION || !isNumber(builtAt) || !Array.isArray(mixes)) return null;
   return built(
     mixes.flatMap((mix) => readMix(mix) ?? []),
     builtAt,
     playSeeds === true,
+    readBuild(build) ?? undefined,
   );
+};
+
+const SEED_SOURCES: readonly unknown[] = [
+  "plays",
+  "library",
+  "similar",
+] satisfies DiscoverSeedSource[];
+
+const readSeedArtist = (value: unknown): DiscoverSeedArtist[] => {
+  if (!isRecord(value) || !isNumber(value.id) || !isString(value.name)) return [];
+  return [{ id: value.id, name: value.name }];
+};
+
+const readSeed = (value: unknown): DiscoverMixSeed[] => {
+  if (!isRecord(value)) return [];
+  const { kind, id, name, from, browseId, genre, artists } = value;
+  if ((kind !== "artist" && kind !== "genre") || !isString(id) || !isString(name)) return [];
+  if (!SEED_SOURCES.includes(from)) return [];
+  return [
+    {
+      kind,
+      id,
+      name,
+      from: from as DiscoverSeedSource,
+      ...(isString(browseId) ? { browseId } : {}),
+      ...(isString(genre) ? { genre } : {}),
+      ...(Array.isArray(artists) ? { artists: artists.flatMap(readSeedArtist) } : {}),
+    },
+  ];
+};
+
+/** A saved build's start (`DiscoverMixesBuild`), or null when there's none readable. */
+const readBuild = (value: unknown): DiscoverMixesBuild | null => {
+  if (!isRecord(value) || !Array.isArray(value.seeds)) return null;
+  const { variety } = value;
+  return {
+    seeds: value.seeds.flatMap(readSeed),
+    avoid: Array.isArray(value.avoid) ? value.avoid.filter(isString) : [],
+    ...(isNumber(variety) ? { variety } : {}),
+  };
 };
 
 /** [ms]'s day on the phone's calendar, to tell days apart. */

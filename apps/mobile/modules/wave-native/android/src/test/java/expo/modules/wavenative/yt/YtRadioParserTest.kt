@@ -82,4 +82,13 @@ class YtRadioParserTest {
     assertEquals(YtRadioStart(playlistId = "RDEMni3jl65KF37F9JYsJM8DGg", params = "wAEB"), start)
     assertNull(YtRadioParser.artistRadio(Fixtures.file("yt/album-page.json").readText()))
   }
+
+  @Test
+  fun anArtistsRadioTellsJsWhereItStarted() {
+    val more = page("radio-more.json")
+    val radio = YtArtistRadio(more, YtRadioStart(playlistId = "RDEMabc", params = null)).toMap()
+    assertEquals(more.toMap()["songs"], radio["songs"])
+    assertEquals(more.continuation, radio["continuation"])
+    assertEquals(mapOf("playlistId" to "RDEMabc", "params" to null), radio["start"])
+  }
 }

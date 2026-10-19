@@ -144,6 +144,31 @@ export const artistMixSeeds = (pools: ArtistMixPools, random: RandomSource): Dis
   return [...seeds, ...comeback.slice(0, ARTIST_MIX_COUNT - seeds.length)];
 };
 
+/**
+ * Every artist Artist mixes' seeds may be picked from, in their order: the
+ * owner's played artists, then, while plays give fewer than four, the
+ * Library's (of its 20 with the most songs, the most songs first), then,
+ * while those still give fewer, the similar artists. What the harvest keeps
+ * the candidate catalog full for, so any day's pick has songs.
+ */
+export const artistMixSeedPool = (pools: ArtistMixPools): DiscoverMixSeed[] => {
+  const seen = new Set<string>();
+  const seeds = seedable(pools.played, seen).map((artist) => artistSeed(artist, "plays"));
+  if (seeds.length >= ARTIST_MIX_COUNT) return seeds;
+  const library = seedable(
+    [...(pools.library ?? [])]
+      // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh copy; Hermes lacks toSorted
+      .sort((a, b) => b.songCount - a.songCount)
+      .slice(0, LIBRARY_ARTISTS),
+    seen,
+  );
+  seeds.push(...library.map((artist) => artistSeed(artist, "library")));
+  if (seeds.length >= ARTIST_MIX_COUNT) return seeds;
+  for (const artist of similarOf(pools))
+    seeds.push({ ...artistSeed(artist, "similar"), browseId: artist.browseId });
+  return seeds;
+};
+
 /** How many Library artists' pages are read for similar artists at most. */
 const SIMILAR_PAGES = 3;
 

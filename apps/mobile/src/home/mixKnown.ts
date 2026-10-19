@@ -10,6 +10,7 @@ import { useSyncExternalStore } from "react";
 
 import { freeTurnEffect } from "@/lib/backgroundWork";
 import { makeExternalStore } from "@/lib/externalStore";
+import { sharedRead } from "@/lib/sharedRead";
 import { LibraryStore, type ArtistRow, type SongRow } from "@/library/LibraryStore";
 import { appRuntime } from "@/library/runtime";
 
@@ -61,27 +62,15 @@ const readIndexes = Effect.gen(function* () {
   return { songs, artists, plays, known } satisfies MixIndexes;
 });
 
-/** Indexes this recent serve another section's build. */
-const SHARED_FOR_MS = 60_000;
-let shared: { readonly at: number; readonly indexes: Promise<MixIndexes> } | null = null;
-
 /**
  * The indexes for a mix build: read once, then shared by the builds that
  * start within a minute (Home's sections build on the same visit). A failed
  * read isn't kept.
  */
-export const mixIndexes: Effect.Effect<MixIndexes, unknown> = Effect.suspend(() => {
-  const now = Date.now();
-  if (shared === null || now - shared.at > SHARED_FOR_MS) {
-    const indexes = appRuntime.runPromise(readIndexes);
-    shared = { at: now, indexes };
-    indexes.catch(() => {
-      if (shared?.indexes === indexes) shared = null;
-    });
-  }
-  const { indexes } = shared;
-  return Effect.tryPromise({ try: () => indexes, catch: (cause) => cause });
-});
+export const mixIndexes: Effect.Effect<MixIndexes, unknown, LibraryStore> = sharedRead(
+  readIndexes,
+  { keepMs: 60_000 },
+).get;
 
 /**
  * The videos the owner knows now (`LibraryStore.knownVideos`), as of the

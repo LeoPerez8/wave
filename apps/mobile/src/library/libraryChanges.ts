@@ -41,6 +41,25 @@ export const onStarred = (listener: (trackIds: readonly number[]) => void): (() 
   };
 };
 
+const unstarredListeners = new Set<(trackIds: readonly string[]) => void>();
+
+/**
+ * Tells what follows stars (the taste profile) that the owner unstarred
+ * [trackIds] (queue track ids: the Library's and YT Music songs').
+ */
+export const publishUnstarred = (trackIds: readonly string[]): void => {
+  if (trackIds.length === 0) return;
+  for (const listener of unstarredListeners) listener(trackIds);
+};
+
+/** Calls [listener] with the tracks each unstar by the owner unstarred (`publishUnstarred`); returns how to stop. */
+export const onUnstarred = (listener: (trackIds: readonly string[]) => void): (() => void) => {
+  unstarredListeners.add(listener);
+  return () => {
+    unstarredListeners.delete(listener);
+  };
+};
+
 const starListeners = new Set<(trackIds: readonly number[]) => void>();
 
 /**
