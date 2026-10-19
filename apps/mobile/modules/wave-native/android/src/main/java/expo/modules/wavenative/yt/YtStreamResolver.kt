@@ -8,6 +8,7 @@ import com.metrolist.innertubex.extraction.InnerTubeExtractor
 import com.metrolist.innertubex.extraction.StreamResolveException
 import com.metrolist.innertubex.extraction.YtConfigParser
 import com.metrolist.innertubex.extraction.YtConfigParserImpl
+import expo.modules.wavenative.log.WaveLog
 import expo.modules.wavenative.yt.potoken.YtPoTokens
 
 /**
@@ -89,12 +90,52 @@ class YtStreamResolver(context: Context) {
    */
   suspend fun resolve(videoId: String, preferM4a: Boolean = false): YtStream {
     cache.get(videoId, preferM4a, now())?.let { return it }
-    return client.request {
-      visitorData.restoreInto(client.innerTube)
-      val stream = extract(videoId, preferM4a)
-      visitorData.saveFrom(client.innerTube)
-      stream
+    val startedAt = now()
+    client.lookups.watch(videoId)
+    var failure: YtException? = null
+    try {
+      return client.request {
+        visitorData.restoreInto(client.innerTube)
+        val stream = extract(videoId, preferM4a)
+        visitorData.saveFrom(client.innerTube)
+        stream
+      }
+    } catch (e: YtException) {
+      failure = e
+      throw e
+    } finally {
+      val attempts = client.lookups.take(videoId)
+      failure?.let {
+        it.answers = attempts
+        logFailure(videoId, it, now() - startedAt, attempts)
+      }
     }
+  }
+
+  /**
+   * The one line a failed lookup writes to the app log ([YtLookupLog]): the song and what each
+   * player client was told. Not while YT Music is off, nor offline when nothing was asked.
+   */
+  private fun logFailure(videoId: String, error: YtException, elapsedMs: Long, attempts: List<YtPlayerAttempt>) {
+    val failure = failureOf(error)
+    if (failure == YtStreamFailure.DISABLED || (failure == YtStreamFailure.OFFLINE && attempts.isEmpty())) return
+    val resolve = resolveFailure(error)
+    val outcomes = resolve?.diagnostics?.attempts.orEmpty().map { "${it.clientName} ${it.outcome}" }
+    WaveLog.w(
+      LOG_TAG,
+      YtLookupLog.failedLine(videoId, failure.name.lowercase(), resolve?.reason?.name, elapsedMs, attempts, outcomes),
+    )
+  }
+
+  /**
+   * Starts YouTube's session afresh, as a pause while YouTube limits downloads begins
+   * (docs/spec.md, Downloads): new visitor data, and with it new proof-of-origin tokens, minted
+   * in a new web view. The lookups after the pause go out with them.
+   */
+  suspend fun renewSession() {
+    visitorData.forget(client.innerTube)
+    poTokens.close()
+    WaveLog.i(LOG_TAG, "YouTube's visitor data and proof-of-origin tokens renewed")
   }
 
   /**
@@ -137,14 +178,22 @@ class YtStreamResolver(context: Context) {
   private fun now() = System.currentTimeMillis()
 
   companion object {
+    private const val LOG_TAG = "WaveYtStreams"
+
+    /** The extractor's own failure behind [error] (from [resolve]), if one is in its causes. */
+    private fun resolveFailure(error: YtException): StreamResolveException? =
+      generateSequence(error as Throwable) { it.cause }.filterIsInstance<StreamResolveException>().firstOrNull()
+
     /** Why [error] (from [resolve]) means the song can't stream: offline, off, unavailable or failed. */
-    fun failureOf(error: YtException): YtStreamFailure {
-      val reason = generateSequence(error as Throwable) { it.cause }
-        .filterIsInstance<StreamResolveException>()
-        .firstOrNull()
-        ?.reason
-        ?.name
-      return YtStreamFailure.of(error.failure, reason)
+    fun failureOf(error: YtException): YtStreamFailure = YtStreamFailure.of(error.failure, resolveFailure(error)?.reason?.name)
+
+    /**
+     * Whether [error] (from [resolve]) is YouTube refusing the song rather than saying it's
+     * unavailable ([YtRefusal]): what a download tries again, as YouTube limiting it looks so.
+     */
+    fun refused(error: YtException): Boolean {
+      if (failureOf(error) != YtStreamFailure.UNAVAILABLE) return false
+      return YtRefusal.refused(resolveFailure(error)?.reason?.name, error.answers)
     }
 
     /**

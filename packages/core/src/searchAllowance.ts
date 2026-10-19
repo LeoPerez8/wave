@@ -3,12 +3,14 @@
  * YT Music, "Search allowance"): at most `SEARCH_ALLOWANCE` searches in any
  * `SEARCH_WINDOW_MS`, kept while Wave is closed, who goes next when several
  * wait for it, and what the app log says about a wait. A search typed in
- * Search is outside it, unless Search online is set to Always (`SearchOnline`):
- * then Search asks as you type, on its own, and takes its turn too.
+ * Search is outside it, unless Search online acts as Always
+ * (`searchOnlineAlways`): then Search asks as you type, on its own, and takes
+ * its turn too.
  */
 
 /** Who asks an automatic YouTube Music search. */
-export type SearchAsker = "playing" | "search" | "download" | "tryAgain" | "discover" | "fill";
+export type SearchAsker =
+  "playing" | "search" | "download" | "tryAgain" | "share" | "discover" | "fill";
 
 /**
  * At most this many searches in any `SEARCH_WINDOW_MS`. YouTube Music began
@@ -36,6 +38,8 @@ const ASKERS: Readonly<Record<SearchAsker, AskerTurn>> = {
   download: { rank: 1, most: SEARCH_ALLOWANCE, name: "a download" },
   // A playlist's unavailable entries searched again: downloads' priority, named apart in the log.
   tryAgain: { rank: 1, most: SEARCH_ALLOWANCE, name: "Try Again" },
+  // Sharing a playlist on YT Music searches its songs without a video id: downloads' priority too.
+  share: { rank: 1, most: SEARCH_ALLOWANCE, name: "sharing a playlist" },
   discover: { rank: 2, most: SEARCH_ALLOWANCE, name: "a Discover mix" },
   // Unsearched entries searched while Wave runs: last, and never the 200 kept for playing and downloads.
   fill: { rank: 3, most: 800, name: "the background fill" },

@@ -10,6 +10,7 @@ import { TextButton } from "@/components/TextButton";
 import { AccountPhoto } from "./AccountPhoto";
 import { ChoiceSection } from "./ChoiceRow";
 import { searchOnlineChoice } from "./searchOnline";
+import { SignInRows } from "./SignInRows";
 import { useYtAccount } from "./ytAccount";
 import { setYtMusicEnabled, useYtMusicEnabled } from "./ytMusic";
 
@@ -24,12 +25,6 @@ const NOTES: Record<YtAccountNote, string> = {
   offline: "Couldn't sign in without a connection.",
   failed: "YouTube didn't confirm the sign-in. Try again.",
 };
-
-const SIGN_IN_LABELS = {
-  signIn: "Sign In",
-  signInAgain: "Sign In Again",
-  signingIn: "Signing In…",
-} as const;
 
 /** The signed-in account: its picture, name and email, and Sign Out. */
 function AccountRow({ account, onSignOut }: { account: YtAccount; onSignOut: () => void }) {
@@ -87,7 +82,7 @@ export function YtMusicSettingsSection() {
           <ChoiceSection
             choice={searchOnlineChoice}
             current={searchOnline}
-            note="Always search online opens albums and artists with Online selected and has Search look online as you type. Only on demand waits for Online to be tapped. Long-press the Library | Online toggle to change it there."
+            note="Always search online opens albums and artists with Online selected and has Search look online as you type. Always search on Wi-Fi does so only off mobile data. Only on demand waits for Online to be tapped. Long-press the Library | Online toggle to change it there."
           />
         </View>
       )}
@@ -98,22 +93,7 @@ export function YtMusicSettingsSection() {
           {view.kind === "account" ? (
             <AccountRow account={view.account} onSignOut={account.signOut} />
           ) : (
-            <>
-              <View
-                className="items-start"
-                style={{ minHeight: grid.row, justifyContent: "center" }}
-              >
-                <TextButton
-                  label={SIGN_IN_LABELS[view.action]}
-                  disabled={view.action === "signingIn"}
-                  onPress={account.signIn}
-                />
-              </View>
-              <Hairline />
-              <Text className="mt-2 font-sans text-footnote text-secondary">
-                {NOTES[view.note]}
-              </Text>
-            </>
+            <SignInRows action={view.action} note={NOTES[view.note]} onSignIn={account.signIn} />
           )}
         </View>
       )}

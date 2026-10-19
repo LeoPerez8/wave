@@ -1,11 +1,16 @@
 import { LegendList, type LegendListRef } from "@legendapp/list/react-native";
 import {
   downloadListRows,
+  downloadRunGroupLine,
+  downloadRunLines,
+  failedDownloadRows,
   queuedDownloadsSummary,
   reorderShift,
   type DownloadGroup,
   type DownloadHeaderRow,
   type DownloadListRow,
+  type DownloadRunCounts,
+  type FailedListRow,
   type QueuedDownload,
   type WaitingSongRow,
 } from "@wave/core";
@@ -15,6 +20,7 @@ import {
   useLayoutEffect,
   useMemo,
   useRef,
+  useState,
   type ComponentRef,
   type ReactElement,
   type ReactNode,
@@ -27,8 +33,9 @@ import { CatalogLine } from "@/catalog/CatalogLine";
 import { CELL, grid } from "@/catalog/grid";
 import { Hairline } from "@/catalog/Hairline";
 import { REORDER_HANDLE_ROOM, ReorderHandle } from "@/components/RowReorder";
-import { TextButton } from "@/components/TextButton";
+import { PlainTextButton } from "@/components/PlainTextButton";
 import type { NativeYtSong } from "@/native/waveYtMusic";
+import { DownloadRunPanel, RunBar } from "@/settings/DownloadRunPanel";
 import { DownloadSongRow } from "@/settings/DownloadSongRow";
 import {
   DOWNLOAD_ROW_ESTIMATE,
@@ -38,8 +45,19 @@ import {
   type DownloadRowDrag,
 } from "@/settings/downloadsDrag";
 import { SECTION_GAP } from "@/settings/SettingsPage";
+import {
+  FailedDownloadRow,
+  FailedGroupHeader,
+  FailedSectionHeader,
+} from "@/settings/FailedDownloadsSection";
 import { useYtMusicEnabled } from "@/settings/ytMusic";
-import { cancelQueuedDownload, useDownloadingList } from "@/ytmusic/YtDownloads";
+import { useDownloadRun } from "@/ytmusic/downloadRun";
+import {
+  cancelQueuedDownload,
+  useDownloadingList,
+  useFailedDownloads,
+} from "@/ytmusic/YtDownloads";
+import { useYoutubePauseNotice } from "@/ytmusic/youtubeThrottle";
 
 type Grip = ReturnType<typeof usePanGesture>;
 /** A row's handle: one to drag it by, one only drawn (a lifted copy), or room for one. */
@@ -80,6 +98,16 @@ const sameQueued = (a: QueuedDownload<NativeYtSong>, b: QueuedDownload<NativeYtS
 const sameGroupLine = (a: DownloadGroup<NativeYtSong>, b: DownloadGroup<NativeYtSong>) =>
   a.name === b.name && a.line === b.line;
 
+/** Two groups' run counts are the same (or both absent). */
+const sameRunCounts = (a: DownloadRunCounts | undefined, b: DownloadRunCounts | undefined) =>
+  a === b ||
+  (a !== undefined &&
+    b !== undefined &&
+    a.done === b.done &&
+    a.failed === b.failed &&
+    a.left === b.left &&
+    a.total === b.total);
+
 /**
  * One song on its way: its artwork, title and artists, the progress line its row shows
  * elsewhere, Cancel until it's saving to the Library, and a waiting song's drag handle (one
@@ -113,7 +141,7 @@ const QueuedDownloadRow = memo(
         onAccessibilityAction={onAccessibilityAction}
       >
         {cancel !== null && (
-          <TextButton label="Cancel" onPress={() => cancelQueuedDownload(queued)} />
+          <PlainTextButton label="Cancel" onPress={() => cancelQueuedDownload(queued)} />
         )}
         <HandleSlot handle={handle} />
       </DownloadSongRow>
@@ -129,24 +157,28 @@ const QueuedDownloadRow = memo(
 );
 
 /**
- * A group's header: the playlist, album or mix its songs are from (or Songs), how many are
- * left, and the handle that drags the whole group, its waiting songs with it. A group whose
- * songs have all started has nothing to move: no handle (room for one, so the counts line up)
- * and no Move up / Move down.
+ * A group's header: the playlist, album or mix its songs are from (or Songs), its run's counts
+ * and bar ([progress], Core's `downloadRunProgress`; how many are left without one), and the
+ * handle that drags the whole group, its waiting songs with it. A group whose songs have all
+ * started has nothing to move: no handle (room for one, so the counts line up) and no Move up /
+ * Move down.
  */
 function DownloadGroupHeader({
   group,
+  progress,
   handle,
   index = 0,
   count = 1,
   onAccessibilityAction,
 }: {
   group: DownloadGroup<NativeYtSong>;
+  progress: DownloadRunCounts | undefined;
   handle: Handle;
   index?: number;
   count?: number;
   onAccessibilityAction?: (event: AccessibilityActionEvent) => void;
 }) {
+  const line = progress === undefined ? group.line : downloadRunGroupLine(progress);
   return (
     <View>
       <View className="flex-row items-center" style={{ gap: CELL * 1.5, paddingTop: CELL }}>
@@ -155,7 +187,7 @@ function DownloadGroupHeader({
           style={{ gap: CELL * 1.5 }}
           accessible
           accessibilityRole="header"
-          accessibilityLabel={`${group.name}, ${group.line}`}
+          accessibilityLabel={`${group.name}, ${line}`}
           accessibilityActions={moveActions(index, count)}
           onAccessibilityAction={onAccessibilityAction}
         >
@@ -169,11 +201,16 @@ function DownloadGroupHeader({
             className="font-sans text-footnote text-secondary"
             style={{ fontVariant: ["tabular-nums"] }}
           >
-            {group.line}
+            {line}
           </Text>
         </View>
         <HandleSlot handle={handle} />
       </View>
+      {progress !== undefined && (
+        <View style={{ paddingTop: CELL, paddingBottom: CELL / 2 }}>
+          <RunBar fraction={downloadRunLines(progress).fraction} />
+        </View>
+      )}
       <Hairline />
     </View>
   );
@@ -288,12 +325,14 @@ const WaitingDownloadRow = memo(
 const MovableGroupHeader = memo(
   function MovableGroupHeader({
     row,
+    progress,
     lifted,
     steps,
     rowDrag,
     moveGroup,
   }: {
     row: DownloadHeaderRow<NativeYtSong>;
+    progress: DownloadRunCounts | undefined;
     lifted: boolean;
     /** Another group is being dragged. */
     steps: boolean;
@@ -312,6 +351,7 @@ const MovableGroupHeader = memo(
         <View ref={view} collapsable={false} style={lifted ? LIFTED : undefined}>
           <DownloadGroupHeader
             group={row.group}
+            progress={progress}
             handle={grip}
             index={row.index}
             count={row.count}
@@ -329,15 +369,23 @@ const MovableGroupHeader = memo(
     before.row.key === after.row.key &&
     before.row.index === after.row.index &&
     before.row.count === after.row.count &&
-    sameGroupLine(before.row.group, after.row.group),
+    sameGroupLine(before.row.group, after.row.group) &&
+    sameRunCounts(before.progress, after.progress),
 );
 
 /** The header of a group whose songs have all started: nothing to drag. */
 const StartedGroupHeader = memo(
-  function StartedGroupHeader({ group }: { group: DownloadGroup<NativeYtSong> }) {
-    return <DownloadGroupHeader group={group} handle="room" />;
+  function StartedGroupHeader({
+    group,
+    progress,
+  }: {
+    group: DownloadGroup<NativeYtSong>;
+    progress: DownloadRunCounts | undefined;
+  }) {
+    return <DownloadGroupHeader group={group} progress={progress} handle="room" />;
   },
-  (before, after) => sameGroupLine(before.group, after.group),
+  (before, after) =>
+    sameGroupLine(before.group, after.group) && sameRunCounts(before.progress, after.progress),
 );
 
 /** The dragged row as it lifts over the list: on the fill colour, under the finger. */
@@ -345,61 +393,91 @@ function LiftedCopy({
   drag,
   rows,
   covers,
+  groupProgress,
 }: {
   drag: DownloadDrag;
   rows: readonly DownloadListRow<NativeYtSong>[];
   covers: boolean;
+  groupProgress: ReadonlyMap<string, DownloadRunCounts>;
 }) {
   const row = rows.find((each) => each.key === drag.key);
   if (row === undefined || row.kind === "downloading" || row.kind === "startedHeader") return null;
   return row.kind === "header" ? (
-    <DownloadGroupHeader group={row.group} handle="drawn" />
+    <DownloadGroupHeader
+      group={row.group}
+      progress={groupProgress.get(row.group.key)}
+      handle="drawn"
+    />
   ) : (
     <QueuedDownloadRow queued={row.queued} covers={covers} handle="drawn" />
   );
 }
 
-const keyOf = (row: DownloadListRow) => row.key;
-const typeOf = (row: DownloadListRow) => row.kind;
+/** A row of the page's list: the songs on their way (and their groups), then the failed section. */
+type PageRow = DownloadListRow<NativeYtSong> | FailedListRow<NativeYtSong>;
+
+const keyOf = (row: PageRow) => row.key;
+const typeOf = (row: PageRow) => row.kind;
 
 /**
  * Settings › Downloads as one virtualized list (as the Library's song lists are): [header]
  * (the download settings) above, then the Downloading section (Core's `downloadingList`), the
  * songs downloading now first, then the waiting ones grouped by the playlist, album or mix
- * they were asked from, in queue order, under how many of each there are; then [footer] (the
- * failed songs). Groups and songs are rows of the list (Core's `downloadListRows`), so only
- * the rows around the screen are mounted however long the queue is. Dragging a group's header
+ * they were asked from, in queue order, under how many of each there are; then the failed
+ * songs, collapsed to how many with Retry All until shown, then grouped by why they failed.
+ * Groups and songs, waiting or failed, are rows of the list (Core's `downloadListRows`,
+ * `failedDownloadRows`), so only the rows around the screen are mounted however long the
+ * queue is or however many failed. Dragging a group's header
  * changes which group downloads first; dragging a song changes its order in its group (Core's
  * `moveDownloadGroup` / `moveDownloadInGroup`, which the journal then runs; `downloadsDrag.ts`).
  */
-export function DownloadsList({ header, footer }: { header: ReactElement; footer: ReactElement }) {
+export function DownloadsList({ header }: { header: ReactElement }) {
   const list = useDownloadingList();
+  const run = useDownloadRun();
+  const groupProgress = run.progress.groups;
+  const failed = useFailedDownloads();
+  const [failedShown, setFailedShown] = useState(false);
+  const toggleFailed = useCallback(() => setFailedShown((shown) => !shown), []);
   // With YT Music off Wave asks YouTube for nothing, covers included.
   const covers = useYtMusicEnabled();
   const rows = useMemo(() => downloadListRows(list), [list]);
-  const summary = useMemo(
-    () =>
-      queuedDownloadsSummary([
-        ...list.downloading,
-        ...list.groups.flatMap((group) => group.queued),
-      ]),
-    [list],
+  const failedRows = useMemo(
+    () => failedDownloadRows(failed, { expanded: failedShown }),
+    [failed, failedShown],
   );
+  const pageRows = useMemo<readonly PageRow[]>(
+    () => (failedRows.length === 0 ? rows : [...rows, ...failedRows]),
+    [rows, failedRows],
+  );
+  const summary = useMemo(() => queuedDownloadsSummary(list.counts), [list]);
+  const pauseNotice = useYoutubePauseNotice();
   const listRef = useRef<LegendListRef>(null);
   const { drag, rowDrag, moveSong, moveGroup, liftedStyle, scrollRef, container, onLayout } =
     useDownloadsDrag({ list, rows, listRef });
 
   const renderItem = useCallback(
-    ({ item }: { item: DownloadListRow<NativeYtSong> }) => {
+    ({ item }: { item: PageRow }) => {
+      if (item.kind === "failedHeader") {
+        return <FailedSectionHeader row={item} failed={failed} onToggle={toggleFailed} />;
+      }
+      if (item.kind === "failedGroup") return <FailedGroupHeader row={item} />;
+      if (item.kind === "failedSong") {
+        return <FailedDownloadRow failed={item.failed} covers={covers} />;
+      }
       if (item.kind === "downloading") {
         return <QueuedDownloadRow queued={item.queued} covers={covers} handle="room" />;
       }
-      if (item.kind === "startedHeader") return <StartedGroupHeader group={item.group} />;
+      if (item.kind === "startedHeader") {
+        return (
+          <StartedGroupHeader group={item.group} progress={groupProgress.get(item.group.key)} />
+        );
+      }
       const groupDragged = drag?.kind === "group" ? drag.groupKey : null;
       if (item.kind === "header") {
         return (
           <MovableGroupHeader
             row={item}
+            progress={groupProgress.get(item.group.key)}
             lifted={drag?.key === item.key}
             steps={groupDragged !== null && groupDragged !== item.group.key}
             rowDrag={rowDrag}
@@ -425,10 +503,13 @@ export function DownloadsList({ header, footer }: { header: ReactElement; footer
         />
       );
     },
-    [covers, drag, rowDrag, moveSong, moveGroup],
+    [covers, drag, rowDrag, moveSong, moveGroup, failed, toggleFailed, groupProgress],
   );
   // Legend List renders a row again only when its item or extraData changes.
-  const rowState = useMemo(() => ({ covers, drag }), [covers, drag]);
+  const rowState = useMemo(
+    () => ({ covers, drag, failed, groupProgress }),
+    [covers, drag, failed, groupProgress],
+  );
 
   const listHeader = (
     <View style={{ gap: SECTION_GAP }}>
@@ -436,7 +517,7 @@ export function DownloadsList({ header, footer }: { header: ReactElement; footer
       {summary !== null && (
         <View>
           <CatalogLine className="mb-1">Downloading</CatalogLine>
-          <Text className="mb-2 font-sans text-footnote text-secondary">{summary}</Text>
+          <DownloadRunPanel run={run} summary={summary} pauseNotice={pauseNotice} />
           <Hairline />
         </View>
       )}
@@ -454,7 +535,7 @@ export function DownloadsList({ header, footer }: { header: ReactElement; footer
         ref={listRef}
         refScrollView={scrollRef}
         className="flex-1"
-        data={rows}
+        data={pageRows}
         keyExtractor={keyOf}
         getItemType={typeOf}
         renderItem={renderItem}
@@ -467,7 +548,6 @@ export function DownloadsList({ header, footer }: { header: ReactElement; footer
         scrollEventThrottle={16}
         contentContainerStyle={{ paddingHorizontal: grid.margin, paddingBottom: SECTION_GAP }}
         ListHeaderComponent={listHeader}
-        ListFooterComponent={footer}
       />
       {drag !== null && (
         <Animated.View
@@ -477,7 +557,7 @@ export function DownloadsList({ header, footer }: { header: ReactElement; footer
           className="absolute top-0 bg-fill"
           style={[{ left: grid.margin, right: grid.margin }, liftedStyle]}
         >
-          <LiftedCopy drag={drag} rows={rows} covers={covers} />
+          <LiftedCopy drag={drag} rows={rows} covers={covers} groupProgress={groupProgress} />
         </Animated.View>
       )}
     </View>

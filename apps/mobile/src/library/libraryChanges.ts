@@ -25,6 +25,22 @@ export const onLibraryChange = (listener: (change: LibraryChange) => void): (() 
   };
 };
 
+const starredListeners = new Set<(trackIds: readonly number[]) => void>();
+
+/** Tells what follows stars (the Magic Queue) that the owner starred [trackIds]. */
+export const publishStarred = (trackIds: readonly number[]): void => {
+  if (trackIds.length === 0) return;
+  for (const listener of starredListeners) listener(trackIds);
+};
+
+/** Calls [listener] with the tracks each star by the owner starred (`publishStarred`); returns how to stop. */
+export const onStarred = (listener: (trackIds: readonly number[]) => void): (() => void) => {
+  starredListeners.add(listener);
+  return () => {
+    starredListeners.delete(listener);
+  };
+};
+
 const starListeners = new Set<(trackIds: readonly number[]) => void>();
 
 /**
@@ -42,5 +58,26 @@ export const onSavedStars = (listener: (trackIds: readonly number[]) => void): (
   starListeners.add(listener);
   return () => {
     starListeners.delete(listener);
+  };
+};
+
+/** What the owner did to YT Music songs that a Magic Queue learns from. */
+export type YtSongSignal = "favorite" | "download";
+
+const ytSignalListeners = new Set<(kind: YtSongSignal, videoIds: readonly string[]) => void>();
+
+/** Tells what follows YT Music songs (the Magic Queue) that the owner starred or downloaded [videoIds]. */
+export const publishYtSongSignal = (kind: YtSongSignal, videoIds: readonly string[]): void => {
+  if (videoIds.length === 0) return;
+  for (const listener of ytSignalListeners) listener(kind, videoIds);
+};
+
+/** Calls [listener] with each YT Music star or download by the owner (`publishYtSongSignal`); returns how to stop. */
+export const onYtSongSignal = (
+  listener: (kind: YtSongSignal, videoIds: readonly string[]) => void,
+): (() => void) => {
+  ytSignalListeners.add(listener);
+  return () => {
+    ytSignalListeners.delete(listener);
   };
 };

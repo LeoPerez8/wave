@@ -150,6 +150,33 @@ export const SETTINGS_TILE_COLOURS: {
 /** The glyph on every Settings tile, in both schemes. */
 export const SETTINGS_TILE_GLYPH = "#ffffff";
 
+/** A Recap colour's name: the theme token `--color-recap-<name>`. */
+export type RecapColour =
+  "red" | "orange" | "green" | "blue" | "indigo" | "purple" | "pink" | "grey";
+
+/**
+ * The colours a Recap's slides, its share image, Stats' Recap tiles and
+ * Home's Recap card sit on; global.css declares them as
+ * `--color-recap-<name>`, the same in both schemes (a story keeps its colour
+ * whatever the theme). They are a Recap's own, apart from Settings' tiles,
+ * and deep enough that the white ink (`on-recap`, `RECAP_INK`) reads as
+ * text, its quieter lines at 80% too. The grey, a step of the ramp, is the
+ * viewer's while a Recap loads.
+ */
+export const RECAP_COLOURS: Readonly<Record<RecapColour, string>> = {
+  red: "#b02c24",
+  orange: "#9c4600",
+  green: "#1e6e35",
+  blue: "#1a5fb8",
+  indigo: "#3f43b8",
+  purple: "#7a3bb0",
+  pink: "#a8285e",
+  grey: TONES[7],
+};
+
+/** The ink on every Recap colour. */
+export const RECAP_INK = "#ffffff";
+
 type Token = keyof ThemeColors;
 
 /** A colour pair that falls short of the contrast its use needs. */

@@ -120,7 +120,7 @@ export function Scrubber() {
         scheduleOnUI(letGo, released, at);
         return;
       }
-      seekTo(at);
+      seekTo(at, "scrubber");
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       seeked.current = at;
       rerender();
@@ -220,7 +220,7 @@ export function Scrubber() {
           accessibilityActions={[{ name: "increment" }, { name: "decrement" }]}
           onAccessibilityAction={(event) => {
             const step = event.nativeEvent.actionName === "increment" ? STEP_MS : -STEP_MS;
-            if (enabled) seekTo(Math.min(duration, Math.max(0, positionMs + step)));
+            if (enabled) seekTo(Math.min(duration, Math.max(0, positionMs + step)), "scrubber");
           }}
           className="justify-center"
           style={{ height: CELL * 4 }}

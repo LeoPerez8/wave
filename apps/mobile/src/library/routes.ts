@@ -1,4 +1,11 @@
-import { detailPath, type DetailScreen, type StatsPeriod, type StatsRanking } from "@wave/core";
+import {
+  detailPath,
+  recapId,
+  type DetailScreen,
+  type RecapPeriod,
+  type StatsPeriod,
+  type StatsRanking,
+} from "@wave/core";
 import {
   router,
   useGlobalSearchParams,
@@ -148,6 +155,10 @@ export const statsSeeAllHref = (ranking: StatsRanking, period: StatsPeriod) =>
   `/library/stats/${ranking}?period=${period}` as const;
 export const openStatsSeeAll = (ranking: StatsRanking, period: StatsPeriod): void =>
   router.push(statsSeeAllHref(ranking, period));
+
+/** A Recap's stories, full screen over everything (read back with Core's `parseRecapId`). */
+const recapHref = (period: RecapPeriod) => `/recap/${recapId(period)}` as const;
+export const openRecap = (period: RecapPeriod): void => router.push(recapHref(period));
 
 /** Parses a route's `[id]` param; NaN-safe (an unknown id shows the "gone" state). */
 export const parseId = (param: string | string[] | undefined): number => {

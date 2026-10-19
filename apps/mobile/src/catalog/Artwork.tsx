@@ -1,7 +1,8 @@
 import { IconMusic } from "@tabler/icons-react-native";
 import { Image } from "expo-image";
-import { View } from "react-native";
+import { Image as SoftwareImage, View } from "react-native";
 
+import { useCapturedImage } from "@/share/imageCapture";
 import { useThemeColor } from "@/theme/useThemeColor";
 
 type Props = {
@@ -18,6 +19,19 @@ type Props = {
 export function Artwork({ uri, tint, size, radius = 0 }: Props) {
   const tertiary = useThemeColor("tertiary");
   const fill = useThemeColor("fill");
+  const captured = useCapturedImage(uri);
+  if (uri !== undefined && captured !== undefined) {
+    // Drawn into a shared image: a bitmap the snapshot's software canvas can draw.
+    return (
+      <SoftwareImage
+        source={{ uri }}
+        style={{ width: size, height: size, borderRadius: radius, backgroundColor: fill }}
+        resizeMode="cover"
+        onLoadEnd={captured}
+        accessibilityIgnoresInvertColors
+      />
+    );
+  }
   if (uri !== undefined) {
     return (
       <Image

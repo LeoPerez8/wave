@@ -398,7 +398,7 @@ export interface YtArtistToggleContext {
    */
   readonly integrated?: boolean;
   /**
-   * Whether Search online is set to Always (`SearchOnline`): the page opens
+   * Whether Search online acts as Always (`searchOnlineAlways`): the page opens
    * with Online selected and asks as an integrated opening does, though an
    * ask on its own that got no answer leaves Library selected, with the
    * quiet line. Undefined: Only on demand.
@@ -805,7 +805,7 @@ export interface YtLibraryAlbumContext<S extends YtSong, L> {
    */
   readonly integrated: boolean;
   /**
-   * Whether Search online is set to Always (`SearchOnline`): the album opens
+   * Whether Search online acts as Always (`searchOnlineAlways`): the album opens
    * with Online selected wherever it's opened from, though an ask on its own
    * that got no answer leaves Library selected, with the quiet line.
    */
@@ -871,7 +871,7 @@ const onlineAlbumView = <S extends YtSong, L extends LibraryAlbumTrack>(
  * nothing, toggle and all: YT Music off, an album artist that isn't an
  * artist's name, or what was saved for the artist not read yet. Its Library |
  * Online toggle shows the segment picked on this visit, else Online when it
- * was opened integrated or Search online is set to Always (where an ask on
+ * was opened integrated or Search online acts as Always (where an ask on
  * its own that got no answer shows Library, with the quiet line), else
  * Library. With Library it shows the album as it
  * is, whatever is saved, and reads nothing. With Online it goes by the artist

@@ -25,16 +25,17 @@ enum class DownloadServiceStop(val line: String) {
 object DownloadServiceLines {
   fun started(restarted: Boolean, counts: DownloadCounts, memory: MemoryUse): String =
     (if (restarted) "Android restarted the download service after Wave was closed" else "The download service started") +
-      ": ${counts.running} downloading, ${counts.left} waiting; ${memory.line()}"
+      ": ${counts.line()}; ${memory.line()}"
 
   fun stopped(why: DownloadServiceStop, ranMs: Long, counts: DownloadCounts, memory: MemoryUse): String {
-    val left = if (counts.running + counts.left > 0) ", with ${counts.running} downloading and ${counts.left} waiting" else ""
+    val saving = if (counts.saving > 0) ", ${counts.saving} saving" else ""
+    val left = if (counts.running + counts.left + counts.saving > 0) ", with ${counts.running} downloading$saving and ${counts.left} waiting" else ""
     return "The download service stopped after ${LogUnits.duration(ranMs)}: ${why.line}$left; ${memory.line()}"
   }
 
   /** The line written about once a minute while the service runs; [hermesHeap] when JS reported it. */
   fun memory(counts: DownloadCounts, memory: MemoryUse, hermesHeap: Long?): String =
-    "Memory while downloading (${counts.running} downloading, ${counts.left} waiting): ${memory.line(hermesHeap)}"
+    "Memory while downloading (${counts.line()}): ${memory.line(hermesHeap)}"
 
   /**
    * Android said no ([error]) to Wave's start, or to its own sticky [restart]. A refused restart

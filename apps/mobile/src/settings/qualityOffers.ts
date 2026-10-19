@@ -5,13 +5,12 @@
  * MP3 320s with YouTube Music's copies ("Free about 900 MB by replacing 410 songs with YouTube
  * Music copies?"), with Replace / Not now. Settings › Downloads' row offers the current direction
  * again while songs are left. Core decides which songs qualify and the estimates
- * (`qualityUpgradeSongs`/`qualityUpgradeOffer`, `qualityDowngradeSongs`/`qualityDowngradeOffer`).
+ * (`qualitySongs`, `qualityUpgradeOffer`/`qualityDowngradeOffer`).
  */
 import {
   qualityDowngradeOffer,
-  qualityDowngradeSongs,
+  qualitySongs,
   qualityUpgradeOffer,
-  qualityUpgradeSongs,
   youTubeCopyKbps,
   type QualityDirection,
   type QualityFile,
@@ -25,7 +24,7 @@ import { makeExternalStore } from "@/lib/externalStore";
 import { LibraryStore } from "@/library/LibraryStore";
 import { appRuntime } from "@/library/runtime";
 import { libraryQuery, useLibraryQuery } from "@/library/sharedQueries";
-import { WaveNative } from "@/native/waveNative";
+import { onMobileData } from "@/native/waveNative";
 import { confirmAction } from "@/overlay/alert";
 import {
   downloadJournal,
@@ -64,15 +63,6 @@ const readQualityFiles = Effect.gen(function* () {
 
 const qualityFiles = libraryQuery("qualityFiles", { tracks: true }, readQualityFiles);
 
-/** Whether the phone is on mobile data now; Wi-Fi when the module can't tell. */
-const onMobileData = (): boolean => {
-  try {
-    return WaveNative.onMobileData();
-  } catch {
-    return false;
-  }
-};
-
 /**
  * Core's offer in [direction] for the Library's [files]: freeing space comes at the bitrate the
  * owner's YouTube downloads get (`youTubeCopyKbps`).
@@ -84,8 +74,8 @@ const offerFor = (
   mobileData: boolean,
 ): QualityOffer | null =>
   direction === "upgrade"
-    ? qualityUpgradeOffer(qualityUpgradeSongs(files, memory), { onMobileData: mobileData })
-    : qualityDowngradeOffer(qualityDowngradeSongs(files, memory), {
+    ? qualityUpgradeOffer(qualitySongs(direction, files, memory), { onMobileData: mobileData })
+    : qualityDowngradeOffer(qualitySongs(direction, files, memory), {
         onMobileData: mobileData,
         youTubeKbps: youTubeCopyKbps(files),
       });

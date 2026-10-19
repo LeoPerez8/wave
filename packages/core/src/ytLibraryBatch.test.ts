@@ -286,6 +286,42 @@ describe("a read offline, or with YT Music off", () => {
   });
 });
 
+describe("a From Spotify read in the batch", () => {
+  const spotify = queueYtLibraryReads(imported, [
+    {
+      source: "spotify:playlist:37i9dQZF1DX0XUsuxWHRQd",
+      playlistId: 44,
+      name: "RapCaviar",
+      capped: false,
+      favorites: false,
+    },
+  ]);
+
+  test("the Spotify session ending pauses the batch, as being offline does", () => {
+    const { batch, pause } = ytLibraryReadFailed(spotify, readOf(spotify, 44), "signedOut");
+    assert.equal(pause, true);
+    assert.equal(readOf(batch, 44).state, "waiting");
+  });
+
+  test("Spotify changing its web player fails that playlist, with Try Again", () => {
+    const { batch, pause } = ytLibraryReadFailed(spotify, readOf(spotify, 44), "changed");
+    assert.equal(pause, false);
+    assert.equal(ytLibraryReadView(batch, 44)?.line, "Couldn't read it online");
+  });
+
+  test("the app log names Spotify", () => {
+    const read = readOf(spotify, 44);
+    assert.equal(
+      ytLibraryReadLogLine(read, "missing"),
+      `Import of "RapCaviar" from Spotify couldn't read the playlist (missing); it stays empty, with Try Again`,
+    );
+    assert.equal(
+      ytLibraryPauseLogLine(read, "signedOut"),
+      `Import of "RapCaviar" from Spotify waits (signedOut); the batch goes on when Wave starts again, comes back to the foreground or imports again`,
+    );
+  });
+});
+
 describe("a playlist deleted meanwhile", () => {
   test("leaves the batch, waiting or failed, and the others keep their order", () => {
     const batch = readFailed(imported, 41);

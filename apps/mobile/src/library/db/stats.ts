@@ -9,12 +9,16 @@
  * `songListening`, or from `artistPlays` for one artist's page. Kept free of
  * Expo so the store tests run them against a real SQLite (`testDatabase.ts`).
  */
-import type {
-  ArtistStatsInput,
-  CreditedPlayTotals,
-  PlayTotals,
-  SongListening,
-  StatsWindow,
+import {
+  readStoredGenres,
+  type ArtistFirstPlay,
+  type ArtistStatsInput,
+  type CountedListening,
+  type CreditedPlayTotals,
+  type PlayTotals,
+  type RecapSongGenre,
+  type SongListening,
+  type StatsWindow,
 } from "@wave/core";
 import { and, eq, gte, inArray, lte, sql, type SQL } from "drizzle-orm";
 
@@ -232,6 +236,67 @@ const artistListening = (db: LibraryDatabase, artistId: number): SongListening[]
     } else known.artistIds.push(credited);
   }
   return [...songs.values()];
+};
+
+/**
+ * The genre tags of the songs [ids] still in the library, in no order: the
+ * genre each is filed under and, for a multi-value tag, every value (Core's
+ * `recap` ranks their families).
+ */
+export const songGenres = (db: LibraryDatabase, ids: readonly number[]): RecapSongGenre[] => {
+  const { tracks, genres } = schema;
+  return chunks(ids).flatMap((only) =>
+    db
+      .select({ id: tracks.id, genre: genres.name, genres: tracks.genres })
+      .from(tracks)
+      .leftJoin(genres, eq(tracks.genreId, genres.id))
+      .where(inArray(tracks.id, only))
+      .all()
+      .map((row) => {
+        const values = readStoredGenres(row.genres);
+        return { id: row.id, genre: row.genre, genres: values.length === 0 ? null : values };
+      }),
+  );
+};
+
+/**
+ * When each of the artists [ids] had their first counted play ever, deleted
+ * songs' kept credits included, in no order; an artist never played isn't
+ * listed (Core's `recap` tells the period's discoveries from these). Reads
+ * only those artists' songs' plays, through the play events' track index.
+ */
+export const artistFirstPlays = (db: LibraryDatabase, ids: readonly number[]): ArtistFirstPlay[] =>
+  chunks(ids).flatMap((only) =>
+    db.all<ArtistFirstPlay>(
+      sql`WITH credited AS (${CREDITED_ARTISTS})
+        SELECT credited.artist_id AS id, min(play_events.started_at) AS "firstPlayAt"
+        FROM credited CROSS JOIN play_events ON play_events.track_id = credited.track_id
+        WHERE credited.artist_id IN (${sql.join(
+          only.map((id) => sql`${id}`),
+          sql`, `,
+        )}) AND play_events.counted
+        GROUP BY credited.artist_id`,
+    ),
+  );
+
+/** A quarter hour: every time zone's offset is a whole number of them. */
+const QUARTER_HOUR_MS = 15 * 60_000;
+
+/**
+ * The whole history's counted listening, summed per quarter hour (each row
+ * starts at its quarter hour), deleted songs included: what Core's
+ * `availableRecaps` and `recap` read. A quarter hour never straddles a local
+ * month or day, so the sums lose nothing a Recap needs, at a fraction of the rows.
+ */
+export const countedListening = (db: LibraryDatabase): CountedListening[] => {
+  const { playEvents } = schema;
+  const quarter = sql<number>`(${playEvents.startedAt} / ${QUARTER_HOUR_MS}) * ${QUARTER_HOUR_MS}`;
+  return db
+    .select({ startedAt: quarter, listenedMs: sql<number>`sum(${playEvents.listenedMs})` })
+    .from(playEvents)
+    .where(eq(playEvents.counted, true))
+    .groupBy(quarter)
+    .all();
 };
 
 /**

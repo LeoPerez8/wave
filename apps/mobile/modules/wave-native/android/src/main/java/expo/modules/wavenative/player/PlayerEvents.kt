@@ -17,12 +17,15 @@ object PlayerEvents {
    * Why the current item changed: played through, repeated, skipped/seeked, or
    * the list changed. Transitions caused by Wave syncing the queue are `sync`,
    * so JS doesn't mistake its own seeks for the notification's; the move to
-   * the next song as a crossfade's overlap starts is `crossfade`.
+   * the next song as a crossfade's overlap starts is `crossfade`. That move is
+   * the session's player changing at the handoff, which Media3 reports to
+   * controllers as a repeat.
    */
   fun transitionReason(reason: Int, duringSync: Boolean = false, crossfade: Boolean = false): String =
     when {
       duringSync -> "sync"
-      crossfade && reason == Player.MEDIA_ITEM_TRANSITION_REASON_SEEK -> "crossfade"
+      crossfade && (reason == Player.MEDIA_ITEM_TRANSITION_REASON_REPEAT || reason == Player.MEDIA_ITEM_TRANSITION_REASON_SEEK) ->
+        "crossfade"
       reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO -> "auto"
       reason == Player.MEDIA_ITEM_TRANSITION_REASON_REPEAT -> "repeat"
       reason == Player.MEDIA_ITEM_TRANSITION_REASON_SEEK -> "seek"

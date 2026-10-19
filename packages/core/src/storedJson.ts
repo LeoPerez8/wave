@@ -1,3 +1,7 @@
+/** Whether [value] is a plain JSON object (not null, not an array), to read field by field. */
+export const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
 /**
  * A setting stored as a JSON object, as a plain record to read field by field.
  * Nothing stored, unreadable JSON or anything but an object reads as empty, so
@@ -11,9 +15,7 @@ export const readStoredRecord = (stored: string | null): Readonly<Record<string,
   } catch {
     return {};
   }
-  return typeof raw === "object" && raw !== null && !Array.isArray(raw)
-    ? (raw as Record<string, unknown>)
-    : {};
+  return isRecord(raw) ? raw : {};
 };
 
 /**
