@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { artistMixSeeds, artistMixSimilarSource } from "./index.ts";
+import { artistMixSeedPool, artistMixSeeds, artistMixSimilarSource } from "./index.ts";
 
 const played = (id: number, name: string, countedPlays: number) => ({ id, name, countedPlays });
 const library = (id: number, name: string, songCount: number) => ({ id, name, songCount });
@@ -194,5 +194,40 @@ describe("Artist mixes' seeds from artists similar to the Library's", () => {
       }),
       { id: 2, name: "Erra" },
     );
+  });
+});
+
+describe("Artist mixes' seed pool (what the harvest keeps candidates for)", () => {
+  test("is every played artist, in plays' order", () => {
+    assert.deepEqual(seedNames(artistMixSeedPool({ played: MOST_PLAYED })), [
+      "plays: Bad Omens",
+      "plays: Sleep Token",
+      "plays: Spiritbox",
+      "plays: Bring Me the Horizon",
+      "plays: Nothing But Thieves",
+      "plays: Architects",
+    ]);
+  });
+
+  test("with plays for fewer than four, the Library's artists with the most songs, then similar artists", () => {
+    const pool = artistMixSeedPool({
+      played: [played(1, "Sleep Token", 500)],
+      library: [library(1, "Sleep Token", 20), library(2, "Spiritbox", 10), library(3, "Various Artists", 90)],
+      similar: [{ of: "Sleep Token", artists: [similar("Spiritbox"), similar("Bad Omens")] }],
+    });
+    assert.deepEqual(seedNames(pool), [
+      "plays: Sleep Token",
+      "library: Spiritbox",
+      "similar: Bad Omens",
+    ]);
+    assert.equal(pool[2]?.browseId, "UC-Bad Omens");
+  });
+
+  test("with plays for four or more, no Library artist", () => {
+    const pool = artistMixSeedPool({
+      played: MOST_PLAYED.slice(0, 4),
+      library: [library(9, "Polaris", 40)],
+    });
+    assert.equal(pool.length, 4);
   });
 });

@@ -26,6 +26,12 @@ export interface DiscoverMixRead<S extends MixRadioSong> {
   readonly radio: readonly S[];
   /** Whether a song suits the seed's genres (`mixAffinity`); absent: every song does. */
   readonly affinity?: (song: S) => MixAffinity;
+  /**
+   * The songs its familiar share looks at first, in order (the familiar
+   * songs its radios played); absent: [radio]. A mix built from the catalog
+   * passes the songs its seed's radios brought, as a radio read would have.
+   */
+  readonly familiar?: readonly S[];
 }
 
 /**
@@ -49,7 +55,7 @@ export const discoverMixesOfRadios = <S extends MixRadioSong, L extends Discover
   const taken = new Set<string>();
   const takenFamiliar = { tracks: new Set<number>(), videos: new Set<string>() };
   const mixes: DiscoverMix[] = [];
-  for (const { seed, radio, affinity } of reads) {
+  for (const { seed, radio, affinity, familiar: played = radio } of reads) {
     const kept = discoverMixSongs([radio], {
       known: known.known,
       taken,
@@ -57,7 +63,7 @@ export const discoverMixesOfRadios = <S extends MixRadioSong, L extends Discover
       ...(affinity === undefined ? {} : { affinity }),
     });
     const familiar = discoverMixFamiliarPool(seed, {
-      radio,
+      radio: played,
       known,
       library,
       taken: takenFamiliar,

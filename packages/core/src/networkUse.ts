@@ -32,6 +32,10 @@ export const withNetworkUse = (
   [host]: { requests: use[host].requests + more.requests, bytes: use[host].bytes + more.bytes },
 });
 
+/** Every host's bytes in [use]: what a run received. */
+export const networkUseBytes = (use: NetworkUse): number =>
+  Object.values(use).reduce((total, host) => total + host.bytes, 0);
+
 /** [text]'s size in UTF-8. */
 const utf8Bytes = (text: string): number => {
   let bytes = 0;
