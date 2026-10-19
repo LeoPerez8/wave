@@ -107,3 +107,39 @@ export const createPlaylistFinder = <T>(
     },
   };
 };
+
+/** What a song list shows for a query: the places found, and the rows. */
+export interface ShownInPlaylist<T> extends FoundInPlaylist<T> {
+  /** The places in the list of the songs found, or null while the whole list shows. */
+  readonly found: readonly number[] | null;
+}
+
+/** A song list that Find in Playlist may narrow. */
+export interface FindableList<T> {
+  /** What the list shows while [query] is typed. */
+  readonly show: (query: string) => ShownInPlaylist<T>;
+}
+
+/**
+ * A song list over [songs], findable or not. With Find on ([findable]), each
+ * query narrows it as a finder does (`createPlaylistFinder`). With Find off,
+ * nothing for Find is prepared and the list always shows all its songs in
+ * their order.
+ */
+export const createFindableList = <T>(
+  songs: readonly T[],
+  describe: (song: T) => PlaylistFindText | null,
+  findable: boolean,
+): FindableList<T> => {
+  if (!findable) {
+    const whole: ShownInPlaylist<T> = { found: null, ...foundInPlaylist(songs, null) };
+    return { show: () => whole };
+  }
+  const finder = createPlaylistFinder(songs, describe);
+  return {
+    show: (query) => {
+      const found = finder.find(query);
+      return { found, ...foundInPlaylist(songs, found) };
+    },
+  };
+};

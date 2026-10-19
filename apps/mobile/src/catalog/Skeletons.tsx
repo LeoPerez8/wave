@@ -32,11 +32,23 @@ export function SkeletonGroup({ label, children }: { label: string; children: Re
 const THUMB = CELL * 5;
 
 /**
+ * What ends a track row: `TrackRow`'s favorite cell and length, or an Up Next
+ * row's two cells (remove and the drag handle, `nowPlaying/QueueView.tsx`).
+ */
+type SkeletonTrailing = "length" | "queue";
+
+/**
  * A track row's stand-in, laid out as `TrackRow` is: the leading cover square
  * (or a numbered list's number), two lines (body), the favorite cell and the
- * length.
+ * length; or as an Up Next row is, ending in the space of its two cells.
  */
-function TrackRowSkeleton({ leading = "artwork" }: { leading?: "artwork" | "number" }) {
+function TrackRowSkeleton({
+  leading = "artwork",
+  trailing = "length",
+}: {
+  leading?: "artwork" | "number";
+  trailing?: SkeletonTrailing;
+}) {
   return (
     <View className="flex-row items-center" style={{ height: grid.row, gap: CELL * 1.5 }}>
       {leading === "artwork" ? (
@@ -50,10 +62,16 @@ function TrackRowSkeleton({ leading = "artwork" }: { leading?: "artwork" | "numb
         <Line lineHeight={22} width="60%" />
         <Line lineHeight={22} width="40%" />
       </View>
-      <View style={{ width: CELL * 3 }} />
-      <View style={{ width: CELL * 5 }}>
-        <Line lineHeight={18} width="70%" />
-      </View>
+      {trailing === "queue" ? (
+        <View style={{ width: CELL * 12 }} />
+      ) : (
+        <>
+          <View style={{ width: CELL * 3 }} />
+          <View style={{ width: CELL * 5 }}>
+            <Line lineHeight={18} width="70%" />
+          </View>
+        </>
+      )}
     </View>
   );
 }
@@ -66,15 +84,17 @@ export function TrackSkeletons({
   label = "Loading songs",
   count = SKELETON_ROWS,
   leading,
+  trailing,
 }: {
   label?: string;
   count?: number;
   leading?: "artwork" | "number";
+  trailing?: SkeletonTrailing;
 }) {
   return (
     <SkeletonGroup label={label}>
       {Array.from({ length: count }, (_, index) => (
-        <TrackRowSkeleton key={index} leading={leading} />
+        <TrackRowSkeleton key={index} leading={leading} trailing={trailing} />
       ))}
     </SkeletonGroup>
   );

@@ -139,8 +139,15 @@ export {
   findInPlaylistHead,
   foundInPlaylist,
   hasFindQuery,
+  createFindableList,
 } from "./findInPlaylist.ts";
-export type { FoundInPlaylist, PlaylistFinder, PlaylistFindText } from "./findInPlaylist.ts";
+export type {
+  FoundInPlaylist,
+  PlaylistFinder,
+  PlaylistFindText,
+  FindableList,
+  ShownInPlaylist,
+} from "./findInPlaylist.ts";
 export { createSearchCatalog } from "./searchCatalog.ts";
 export type { SearchCatalog, SearchCatalogStats } from "./searchCatalog.ts";
 export { SEARCH_FOCUS_LIMITS, startSearchFocus, stepSearchFocus } from "./searchFocus.ts";
@@ -620,6 +627,7 @@ export type {
   MagicSong,
   MagicYtCandidate,
 } from "./magicQueue.ts";
+export { magicBatchLoading } from "./magicQueue.ts";
 export { artistRanking } from "./moreFromArtist.ts";
 export type { ArtistRankingInput, ArtistRankingSong } from "./moreFromArtist.ts";
 export { artistPageItems } from "./artistPage.ts";

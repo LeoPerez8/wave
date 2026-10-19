@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import {
+  createFindableList,
   createPlaylistFinder,
   findInPlaylistHead,
   foundInPlaylist,
@@ -129,5 +130,43 @@ describe("what sits under Find in Playlist's field", () => {
   test("a query that finds songs shows just them", () => {
     assert.equal(findInPlaylistHead([2], true), "none");
     assert.equal(findInPlaylistHead([2], false), "none");
+  });
+});
+
+describe("a song list, with Find in Playlist on or off", () => {
+  test("with Find off, the list shows all its songs in their order, and nothing for Find is prepared", () => {
+    let described = 0;
+    const list = createFindableList(
+      PLAYLIST,
+      (s) => {
+        described += 1;
+        return s;
+      },
+      false,
+    );
+    const shown = list.show("");
+    assert.deepEqual(shown.songs, PLAYLIST);
+    assert.equal(shown.found, null);
+    assert.equal(shown.placeOf(3), 3);
+    assert.equal(described, 0);
+  });
+
+  test("with Find off, a query never narrows the list", () => {
+    const shown = createFindableList(PLAYLIST, (s) => s, false).show("beyonce");
+    assert.deepEqual(shown.songs, PLAYLIST);
+    assert.equal(shown.found, null);
+  });
+
+  test("with Find on, the whole list shows until a query narrows it to the songs found", () => {
+    const list = createFindableList(PLAYLIST, (s) => s, true);
+    assert.deepEqual(list.show("").songs, PLAYLIST);
+    assert.equal(list.show("").found, null);
+    const shown = list.show("beyonce");
+    assert.deepEqual(shown.found, [0, 2]);
+    assert.deepEqual(
+      shown.songs.map((s) => s.title),
+      ["Halo", "Crazy in Love"],
+    );
+    assert.equal(shown.placeOf(1), 2);
   });
 });
