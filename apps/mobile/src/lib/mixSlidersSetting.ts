@@ -8,7 +8,7 @@ import { readMixSliders, storedMixSliders, type MixSliders } from "@wave/core";
 import { persistedSetting } from "./persistedSetting";
 
 /** How long a dragged slider waits before it's written: the last step wins. */
-export const SLIDERS_PERSIST_MS = 500;
+const SLIDERS_PERSIST_MS = 500;
 
 /** A section's Genre faithfulness and Popularity sliders, kept on this phone under [key]. */
 export const mixSlidersSetting = (key: string) =>

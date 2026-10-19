@@ -19,17 +19,13 @@ import { YtMusic } from "./YtMusic";
  * Adds [page] to the catalog, seen now, on the next free turn. Never fails:
  * a write that can't be made is left out (the catalog is a cache).
  */
-export const noteCandidates = (page: CatalogPage): Effect.Effect<void, never, LibraryStore> =>
+const noteCandidates = (page: CatalogPage): Effect.Effect<void, never, LibraryStore> =>
   Effect.gen(function* () {
     if (page.songs.length === 0) return;
     const store = yield* LibraryStore;
     const at = Date.now();
     whenFree(() => Effect.runFork(store.addCandidates(page, at).pipe(Effect.ignore)));
   });
-
-/** Adds the songs [seed]'s radio played (every page read of it) to the catalog. */
-export const noteRadio = (seed: string, songs: readonly CatalogPageSong[]) =>
-  noteCandidates({ songs, seed });
 
 /**
  * Adds the songs a page of [seed]'s radio played to the catalog now, done
@@ -52,7 +48,7 @@ export const noteRadioNow = (
  * top songs: every song of a prolific artist (`allSongs`, up to the
  * playlist cap) would push the radios' songs out.
  */
-export const noteArtistPage = (page: NativeYtArtistPage) =>
+const noteArtistPage = (page: NativeYtArtistPage) =>
   noteCandidates({ songs: page.songs, seed: null });
 
 /**

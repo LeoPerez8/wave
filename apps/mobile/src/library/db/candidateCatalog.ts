@@ -14,7 +14,8 @@ import {
   type CatalogRadio,
   type CatalogSong,
 } from "@wave/core";
-import { inArray, lte, sql } from "drizzle-orm";
+import { inArray, lte, sql, type SQL } from "drizzle-orm";
+import type { SQLiteColumn } from "drizzle-orm/sqlite-core";
 
 import { chunks } from "./chunks.ts";
 import type { LibraryDatabase } from "./database.ts";
@@ -27,16 +28,26 @@ const ROWS_PER_INSERT = 100;
 const excluded = (column: { readonly name: string }) =>
   sql`excluded.${sql.identifier(column.name)}`;
 
+/**
+ * [read] for every row with null [videoIds], else for the rows whose
+ * [column] is one of [videoIds], in chunks (SQLite's variable limit).
+ */
+const rowsOf = <Row>(
+  videoIds: readonly string[] | null,
+  column: SQLiteColumn,
+  read: (where: SQL | undefined) => Row[],
+): Row[] =>
+  videoIds === null
+    ? read(undefined)
+    : chunks(videoIds).flatMap((ids) => read(inArray(column, ids)));
+
 /** The radios of the songs [videoIds] (every song's with null), by video id. */
 const radiosOf = (
   db: LibraryDatabase,
   videoIds: readonly string[] | null,
 ): Map<string, CatalogRadio[]> => {
   const t = schema.candidateRadios;
-  const rows =
-    videoIds === null
-      ? db.select().from(t).all()
-      : chunks(videoIds).flatMap((ids) => db.select().from(t).where(inArray(t.videoId, ids)).all());
+  const rows = rowsOf(videoIds, t.videoId, (where) => db.select().from(t).where(where).all());
   const radios = new Map<string, CatalogRadio[]>();
   for (const row of rows) {
     const radio = { seed: row.seedKey, seedName: row.seedName, lastSeenAt: row.lastSeenAt };
@@ -53,10 +64,7 @@ const radiosOf = (
  */
 const catalogSongs = (db: LibraryDatabase, videoIds: readonly string[] | null): CatalogSong[] => {
   const t = schema.candidateSongs;
-  const rows =
-    videoIds === null
-      ? db.select().from(t).all()
-      : chunks(videoIds).flatMap((ids) => db.select().from(t).where(inArray(t.videoId, ids)).all());
+  const rows = rowsOf(videoIds, t.videoId, (where) => db.select().from(t).where(where).all());
   const radios = radiosOf(db, videoIds);
   return rows.flatMap((row) => {
     const song = readPlaylistYtSong(row.song);

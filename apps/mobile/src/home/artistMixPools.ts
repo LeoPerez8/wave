@@ -13,7 +13,7 @@ import { Stats } from "@/stats/Stats";
 import type { MixIndexes } from "./mixKnown";
 
 /** How many of the most played artists Artist mixes' seeds are picked from. */
-export const SEED_POOL = 20;
+const SEED_POOL = 20;
 
 /**
  * The pools of [library]'s artists and the owner's all-time most played
