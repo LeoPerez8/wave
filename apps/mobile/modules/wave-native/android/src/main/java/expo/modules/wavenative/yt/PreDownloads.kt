@@ -38,15 +38,14 @@ object PreDownloads {
   /** The job's id in JobScheduler (one per app: a new list replaces the pending job). */
   private const val JOB_ID = 514_001
 
-  private const val TAG = "WavePreDownload"
+  internal const val TAG = "WavePreDownload"
 
-  @Volatile private var memo: List<String>? = null
+  private val kept = PreDownloadList()
 
   private fun preferences(context: Context) =
     (context.applicationContext ?: context).getSharedPreferences(FILE, Context.MODE_PRIVATE)
 
-  private fun list(context: Context): List<String> =
-    memo ?: preferences(context).getString(KEY_LIST, null).orEmpty().split(',').filter(String::isNotEmpty).also { memo = it }
+  private fun list(context: Context): List<String> = kept.get { preferences(context).getString(KEY_LIST, null) }
 
   /** The videos the list has now: what the audio cache keeps of what was fetched ahead. */
   fun listed(context: Context): Set<String> = list(context).toSet()
@@ -63,8 +62,7 @@ object PreDownloads {
     val joined = videoIds.joinToString(",")
     val preferences = preferences(app)
     if (videoIds == list(app) && (scheduler.getPendingJob(JOB_ID) != null || preferences.getString(KEY_DONE, null) == joined)) return
-    preferences.edit().putString(KEY_LIST, joined).remove(KEY_DONE).apply()
-    memo = videoIds
+    kept.set(videoIds) { preferences.edit().putString(KEY_LIST, it).remove(KEY_DONE).apply() }
     if (videoIds.isEmpty()) {
       scheduler.cancel(JOB_ID)
       return
@@ -146,7 +144,7 @@ class PreDownloadJob : JobService() {
       val again = try {
         PreDownloads.run(applicationContext, stop)
       } catch (e: Exception) {
-        WaveLog.w("WavePreDownload", "The Wi-Fi pre-download failed", e)
+        WaveLog.w(PreDownloads.TAG, "The Wi-Fi pre-download failed", e)
         false
       }
       if (!stop.get()) jobFinished(params, again)
@@ -157,5 +155,28 @@ class PreDownloadJob : JobService() {
   override fun onStopJob(params: JobParameters): Boolean {
     stop?.set(true)
     return true
+  }
+}
+
+/**
+ * The day's list as [PreDownloads] keeps it: read from where it's kept the
+ * first time it's asked for, then remembered. Reads and hand-overs take one
+ * lock: the job's thread, the audio cache's loaders and JS all read it, and
+ * a first read finishing after a new list was handed over mustn't put the
+ * old one back (the job would fetch it, the evictor drop the new one's songs).
+ */
+internal class PreDownloadList {
+  private var memo: List<String>? = null
+
+  /** The list, read with [stored] (the ids joined by commas) the first time. */
+  @Synchronized
+  fun get(stored: () -> String?): List<String> =
+    memo ?: stored().orEmpty().split(',').filter(String::isNotEmpty).also { memo = it }
+
+  /** Keeps [videoIds] as the list, [store]d first (joined by commas). */
+  @Synchronized
+  fun set(videoIds: List<String>, store: (String) -> Unit) {
+    store(videoIds.joinToString(","))
+    memo = videoIds
   }
 }
