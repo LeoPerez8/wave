@@ -249,17 +249,20 @@ class WavePlayerModule : Module() {
      * only sends [items] for keys new to the player; [QueueSync] reads loaded
      * ones only when a step re-inserts them, so a skip doesn't walk the list.
      * [cause] is what the sync is (Core's `SongChangeCause`), which names a
-     * song change it makes in the app log's crossfade lines.
+     * song change it makes in the app log's crossfade lines; a sync that
+     * changes no song names nothing.
      */
     AsyncFunction("applySync") { steps: List<SyncStepRecord>, items: List<PlayerItem>, cause: String?, promise: Promise ->
       withController(promise) { player ->
-        cause?.let { CrossfadeLink.causes.noteApp(it, SystemClock.elapsedRealtime()) }
         val incoming = items.associate { it.id to toMediaItem(it) }
+        val playlist = ControllerPlaylist(player)
         syncing = true
         QueueSnapshot.resumed = false
         try {
           val plan = steps.map { SyncStep.of(it.type, it.at, it.removeCount, it.keys, it.index, it.key) }
-          QueueSync.apply(plan, ControllerPlaylist(player), incoming)
+          CrossfadeLink.causes.sync(cause, SystemClock.elapsedRealtime(), { playlist.currentKey }) {
+            QueueSync.apply(plan, playlist, incoming)
+          }
           if (player.playbackState == Player.STATE_IDLE && player.mediaItemCount > 0) player.prepare()
           promise.resolve(null)
         } catch (error: IllegalArgumentException) {

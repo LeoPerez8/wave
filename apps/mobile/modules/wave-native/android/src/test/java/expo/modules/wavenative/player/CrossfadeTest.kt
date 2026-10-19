@@ -835,6 +835,45 @@ class CrossfadeTest {
   }
 
   @Test
+  fun aSeekPastTheHandoffBeforeTheNextSongOpensNamesWhereItCameFrom() {
+    val service = Service()
+    val crossfade = crossfade(service)
+    crossfade.moved("a")
+    crossfade.playTo(service, 100_000)
+    // Scrubbed to 3 s before the end, before the next song opened.
+    crossfade.interrupt(CrossfadeEnd.Seek, SCRUBBER)
+    crossfade.playTo(service, 177_000)
+    crossfade.moved("b", cause = CrossfadeCause.SongEnded)
+    assertEquals(
+      listOf<CrossfadeOutcome>(
+        CrossfadeOutcome.Skipped(CrossfadeSkip.PastHandoff, cause = CrossfadeCause.SongEnded, seekFrom = SCRUBBER),
+      ),
+      service.outcomes,
+    )
+  }
+
+  @Test
+  fun aSeekThatLandedBeforeTheHandoffIsntNamedWhenTheSongPassesItLater() {
+    val service = Service()
+    val crossfade = crossfade(service)
+    crossfade.moved("a")
+    crossfade.playTo(service, 100_000)
+    crossfade.interrupt(CrossfadeEnd.Seek, SCRUBBER)
+    crossfade.playTo(service, 120_000)
+    // The next song is searched until the song is past its handoff point.
+    service.nextSearching = true
+    crossfade.playTo(service, 172_000)
+    crossfade.playTo(service, 176_000)
+    service.nextSearching = false
+    crossfade.playTo(service, 177_000)
+    crossfade.moved("b", cause = CrossfadeCause.SongEnded)
+    assertEquals(
+      listOf<CrossfadeOutcome>(CrossfadeOutcome.Skipped(CrossfadeSkip.PastHandoff, cause = CrossfadeCause.SongEnded)),
+      service.outcomes,
+    )
+  }
+
+  @Test
   fun previousTwiceWhileTheNextSongWaitsNamesTheRestartAndTheMove() {
     val service = Service()
     val crossfade = crossfade(service)

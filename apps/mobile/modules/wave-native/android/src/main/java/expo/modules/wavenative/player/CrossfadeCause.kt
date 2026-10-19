@@ -7,7 +7,7 @@ import androidx.media3.common.Player
  * the app log names it ("song changed by Next"), so a skip or a seek by the
  * owner can't be taken for a crossfade failure.
  */
-data class CrossfadeCause(val says: String) {
+data class CrossfadeCause(val phrase: String) {
   companion object {
     val SongEnded = CrossfadeCause("the song ending")
     val Repeat = CrossfadeCause("repeat one")
@@ -15,8 +15,8 @@ data class CrossfadeCause(val says: String) {
     val UnnamedMove = CrossfadeCause("an unnamed move")
     val UnnamedSeek = CrossfadeCause("an unnamed seek")
 
-    /** Core's `SongChangeCause` and `SeekSource`, which JS sends with each move and seek. */
-    private val APP = mapOf(
+    /** The phrase for each id of Core's `SongChangeCause` and `SeekSource`, which JS sends with each move and seek. */
+    internal val APP_PHRASES = mapOf(
       "next" to "Next",
       "previous" to "Previous",
       "queueTap" to "a tap in the queue",
@@ -33,7 +33,7 @@ data class CrossfadeCause(val says: String) {
       "queueEnd" to "the queue ending",
     )
 
-    fun fromApp(id: String) = CrossfadeCause(APP[id] ?: "the app ($id)")
+    fun fromApp(id: String) = CrossfadeCause(APP_PHRASES[id] ?: "the app ($id)")
   }
 }
 
@@ -43,7 +43,8 @@ data class CrossfadeCause(val says: String) {
  * media session controller (the notification, Android Auto, the system's
  * media controls), or a media button (a headset). Each note names one change;
  * one that never came is forgotten after [WAIT_MS]. A song ending on its own
- * is that whatever was noted. Times are elapsed-realtime ms. Main thread only.
+ * (or repeat one starting it again) is that whatever was noted, and spends
+ * the note. Times are elapsed-realtime ms. Main thread only.
  */
 class CrossfadeCauses {
   private var noted: CrossfadeCause? = null
@@ -52,6 +53,25 @@ class CrossfadeCauses {
 
   /** The app's move or seek: an id of Core's `SongChangeCause` or `SeekSource`. */
   fun noteApp(id: String, nowMs: Long) = note(CrossfadeCause.fromApp(id), nowMs)
+
+  /**
+   * The app's sync, which [apply] makes on the player: [id] (Core's
+   * `SongChangeCause`, or null) names the song change it makes. A sync that
+   * leaves the player on its song ([currentKey] the same before and after)
+   * names nothing, so its note can't be pinned on a later move or seek. The
+   * player may move before [apply] returns; that move takes the note.
+   */
+  fun <T> sync(id: String?, nowMs: Long, currentKey: () -> String?, apply: () -> T): T {
+    if (id == null) return apply()
+    val before = currentKey()
+    val cause = CrossfadeCause.fromApp(id)
+    note(cause, nowMs)
+    try {
+      return apply()
+    } finally {
+      if (currentKey() == before && noted === cause) noted = null
+    }
+  }
 
   /** A player command from the session controller described as [from]. */
   fun noteSession(from: String, nowMs: Long) {
@@ -70,14 +90,26 @@ class CrossfadeCauses {
   /** What moved the player to another song, for a media item transition's [reason]. */
   fun move(reason: Int, nowMs: Long): CrossfadeCause =
     when (reason) {
-      Player.MEDIA_ITEM_TRANSITION_REASON_AUTO -> CrossfadeCause.SongEnded
-      Player.MEDIA_ITEM_TRANSITION_REASON_REPEAT -> CrossfadeCause.Repeat
+      Player.MEDIA_ITEM_TRANSITION_REASON_AUTO -> CrossfadeCause.SongEnded.also { take(nowMs) }
+      Player.MEDIA_ITEM_TRANSITION_REASON_REPEAT -> CrossfadeCause.Repeat.also { take(nowMs) }
       Player.MEDIA_ITEM_TRANSITION_REASON_PLAYLIST_CHANGED -> take(nowMs) ?: CrossfadeCause.ListChanged
       else -> take(nowMs) ?: CrossfadeCause.UnnamedMove
     }
 
   /** Where a seek within the playing song came from. */
   fun seek(nowMs: Long): CrossfadeCause = take(nowMs) ?: CrossfadeCause.UnnamedSeek
+
+  /**
+   * The note still waiting for its move, left in place: a request the service
+   * answers later (Android Auto playing a song that is searched first) gives
+   * it to [noteAgain] with the answer, however long that took.
+   */
+  fun held(nowMs: Long): CrossfadeCause? = noted?.takeIf { nowMs - notedAtMs <= WAIT_MS }
+
+  /** Notes [cause] (from [held]) again, for the move a late answer makes; null notes nothing. */
+  fun noteAgain(cause: CrossfadeCause?, nowMs: Long) {
+    if (cause != null) note(cause, nowMs)
+  }
 
   private fun note(cause: CrossfadeCause, nowMs: Long) {
     noted = cause

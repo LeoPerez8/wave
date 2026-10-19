@@ -40,6 +40,23 @@ class CrossfadeLogTest {
   }
 
   @Test
+  fun aSkipPastTheHandoffAfterASeekSaysWhereTheSeekCameFrom() {
+    assertEquals(
+      "Crossfade skipped: the song was already past the handoff point (after a seek by the scrubber); " +
+        "song changed by the song ending",
+      CrossfadeLog.line(
+        CrossfadeOutcome.Skipped(
+          CrossfadeSkip.PastHandoff,
+          cause = CrossfadeCause.SongEnded,
+          seekFrom = CrossfadeCause("the scrubber"),
+        ),
+        main = null,
+        outgoing = null,
+      ),
+    )
+  }
+
+  @Test
   fun aDoneLineSaysHowLongTheOverlapWas() {
     assertEquals("Crossfade done: 13.3 s overlap", CrossfadeLog.line(CrossfadeOutcome.Done(13_300, 0), null, null))
     assertEquals(
@@ -63,7 +80,7 @@ class CrossfadeLogTest {
       ),
     )
     assertEquals(
-      "Crossfade cut 0.0 s in before the next song sounded: the player moved to another song (Next); " +
+      "Crossfade cut 0.0 s in before the next song sounded: the player moved to another song; song changed by Next; " +
         "main at 0 ms, buffering, playWhenReady=true, isPlaying=false, suppression=0; outgoing none",
       CrossfadeLog.line(CrossfadeOutcome.Cut(CrossfadeEnd.Moved, 0, null, cause = next), main, null),
     )

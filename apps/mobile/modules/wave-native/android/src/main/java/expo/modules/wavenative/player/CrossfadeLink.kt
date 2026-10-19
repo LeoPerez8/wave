@@ -47,8 +47,9 @@ object CrossfadeLink {
 
   /**
    * Whether the app paused the player while the song it moves to is searched
-   * (Core's playing walk), until play is pressed again or the app pauses for
-   * another reason. For the app log's crossfade lines.
+   * (Core's playing walk), until play is pressed again, the app pauses for
+   * another reason, or play or pause comes from anywhere else (the
+   * notification, a headset, Android Auto). For the app log's crossfade lines.
    */
   var pausedForSearch = false
 

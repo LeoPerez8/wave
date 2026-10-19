@@ -24,21 +24,32 @@ object CrossfadeLog {
     when (outcome) {
       is CrossfadeOutcome.Skipped -> {
         val late = if (outcome.lateMs > 0) " (${seconds(outcome.lateMs)} late)" else ""
-        val changedBy = outcome.cause?.let { "; song changed by ${it.says}" } ?: ""
-        "Crossfade skipped: ${reason(outcome.why, outcome.seekFrom)}$late$changedBy"
+        "Crossfade skipped: ${reason(outcome.why, outcome.seekFrom)}$late${changedBy(outcome.cause)}"
       }
       is CrossfadeOutcome.Done ->
         "Crossfade done: ${seconds(outcome.overlapMs)} overlap" +
           if (outcome.lateMs > LATE_REPORT_MS) " (${seconds(outcome.lateMs)} short, the next song was late)" else ""
       is CrossfadeOutcome.Cut -> {
         val of = outcome.overlapMs?.let { "of ${seconds(it)}" } ?: "before the next song sounded"
-        "Crossfade cut ${seconds(outcome.elapsedMs)} in $of: ${reason(outcome.why, outcome.cause)}; " +
-          "main ${state(main)}; outgoing ${state(outgoing)}"
+        // A seek's cause is where it came from; any other's, what changed the song.
+        val why = if (outcome.why == CrossfadeEnd.Seek) {
+          reason(outcome.why, outcome.cause)
+        } else {
+          outcome.why.reason + changedBy(outcome.cause)
+        }
+        "Crossfade cut ${seconds(outcome.elapsedMs)} in $of: $why; main ${state(main)}; outgoing ${state(outgoing)}"
       }
     }
 
-  private fun reason(why: CrossfadeReason, by: CrossfadeCause?): String =
-    if (by == null) why.reason else "${why.reason} (${by.says})"
+  /** [why], with where the seek that led to it came from ([seekFrom]), if one did. */
+  private fun reason(why: CrossfadeReason, seekFrom: CrossfadeCause?): String =
+    when {
+      seekFrom == null -> why.reason
+      why == CrossfadeEnd.Seek -> "${why.reason} (${seekFrom.phrase})"
+      else -> "${why.reason} (after a seek by ${seekFrom.phrase})"
+    }
+
+  private fun changedBy(cause: CrossfadeCause?): String = cause?.let { "; song changed by ${it.phrase}" } ?: ""
 
   private fun state(deck: DeckState?): String {
     if (deck == null) return "none"
