@@ -56,6 +56,27 @@ const radiosReadAt = (catalog: CatalogMixSources["catalog"]): Map<string, number
   return readAt;
 };
 
+/** The earliest of [names]' radios' latest reads in [readAt]; null when one never was. */
+const earliestReadAt = (readAt: ReadonlyMap<string, number>, names: readonly string[]) => {
+  let earliest: number | null = Number.POSITIVE_INFINITY;
+  for (const name of names) {
+    const key = catalogSeedKey(name);
+    const at = key === null ? undefined : readAt.get(key);
+    earliest = at === undefined || earliest === null ? null : Math.min(earliest, at);
+  }
+  return earliest === Number.POSITIVE_INFINITY ? null : earliest;
+};
+
+/**
+ * When the radios of the artists [names] were last read, as [catalog] has
+ * them: the earliest of each one's latest; null when one never was (or for
+ * no artist).
+ */
+export const catalogRadiosReadAt = (
+  catalog: CatalogMixSources["catalog"],
+  names: readonly string[],
+): number | null => earliestReadAt(radiosReadAt(catalog), names);
+
 /**
  * What the harvest wants of each of [seeds]: how many new songs its mix
  * would keep from the catalog now (`catalogMixRead`, then
@@ -80,18 +101,8 @@ export const harvestWants = <S extends DiscoverMixSeed>(
             taken: new Set(),
             ...(read.affinity === undefined ? {} : { affinity: read.affinity }),
           }).length;
-    let earliest: number | null = Number.POSITIVE_INFINITY;
-    for (const { name } of mixSeedArtists(seed)) {
-      const key = catalogSeedKey(name);
-      const at = key === null ? undefined : readAt.get(key);
-      earliest = at === undefined || earliest === null ? null : Math.min(earliest, at);
-    }
-    return {
-      seed,
-      id: seed.id,
-      candidates,
-      readAt: earliest === Number.POSITIVE_INFINITY ? null : earliest,
-    };
+    const names = mixSeedArtists(seed).map((artist) => artist.name);
+    return { seed, id: seed.id, candidates, readAt: earliestReadAt(readAt, names) };
   });
 };
 
@@ -106,11 +117,13 @@ export interface HarvestRun {
   readonly read: number;
   /** When each seed was last tried in this session (a read that may have brought nothing), by id. */
   readonly tried?: ReadonlyMap<string, number>;
+  /** Fewer candidates than this run low on Wi-Fi; absent: `HARVEST_LOW` (a Magic Queue's is its own). */
+  readonly low?: number;
 }
 
 /**
  * The seed of [wants] the harvest reads next, or null for none: on Wi-Fi,
- * one running low (fewer than `HARVEST_LOW` candidates); on mobile data,
+ * one running low (fewer than [low] candidates, `HARVEST_LOW` by default); on mobile data,
  * only one with no candidates left, while the day's ~5 MB
  * (`HARVEST_MOBILE_BYTES`) aren't used up. Never one read or tried in the
  * last 12 hours (`HARVEST_RETRY_MS`), nor more than eight a run
@@ -118,7 +131,7 @@ export interface HarvestRun {
  */
 export const harvestNext = <W extends HarvestWant>(
   wants: readonly W[],
-  { onMobileData, usedToday, now, read, tried }: HarvestRun,
+  { onMobileData, usedToday, now, read, tried, low = HARVEST_LOW }: HarvestRun,
 ): W | null => {
   if (read >= HARVEST_SEEDS) return null;
   if (onMobileData && usedToday >= HARVEST_MOBILE_BYTES) return null;
@@ -126,7 +139,7 @@ export const harvestNext = <W extends HarvestWant>(
   for (const want of wants) {
     const lastAt = Math.max(want.readAt ?? 0, tried?.get(want.id) ?? 0);
     if (lastAt > 0 && now - lastAt < HARVEST_RETRY_MS) continue;
-    if (onMobileData ? want.candidates > 0 : want.candidates >= HARVEST_LOW) continue;
+    if (onMobileData ? want.candidates > 0 : want.candidates >= low) continue;
     if (
       next === null ||
       want.candidates < next.want.candidates ||

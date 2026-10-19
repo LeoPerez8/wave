@@ -76,6 +76,14 @@ class YtMusicModule : Module() {
      */
     AsyncFunction("schedulePreDownload") { videoIds: List<String> -> PreDownloads.schedule(context, videoIds) }
 
+    /**
+     * The video ids whose audio the audio cache holds whole: the songs that
+     * play offline ([YtAudioCache.wholeVideos]; none when it can't open).
+     */
+    AsyncFunction("cachedVideos") Coroutine { ->
+      withContext(Dispatchers.IO) { YtAudioCache.get(context)?.wholeVideos()?.toList() ?: emptyList() }
+    }
+
     /** `{ songs, continuation }` for [query], or a rejection with an `ERR_YT_*` code. */
     AsyncFunction("searchSongs") Coroutine { query: String ->
       coded { client.searchSongs(query).toMap() }

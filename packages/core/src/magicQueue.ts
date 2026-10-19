@@ -258,6 +258,14 @@ const weightOf = (session: MagicSession, song: MagicSong, taste: TasteProfile | 
 };
 
 /**
+ * How heavily [song] weighs by what [session] learned alone (its artists'
+ * and its genre's weight), as a batch weighs it before the taste profile:
+ * 1 for a song the session knows nothing about.
+ */
+export const magicSessionWeight = (session: MagicSession, song: MagicSong): number =>
+  weightOf(session, song, null);
+
+/**
  * [count] of [songs] picked at random from [random], the heavier more often
  * (weighed with [taste]); a song [session] queued already, or one by an
  * artist it excluded, never.

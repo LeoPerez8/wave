@@ -1897,3 +1897,15 @@ export {
   withSimilarArtistsKept,
 } from "./similarArtistsKept.ts";
 export type { SimilarArtistsKept } from "./similarArtistsKept.ts";
+export {
+  MAGIC_CATALOG_LOW,
+  MAGIC_CATALOG_POOL,
+  magicCatalogCandidates,
+  magicRefillDue,
+} from "./magicQueueCatalog.ts";
+export { catalogRadiosReadAt } from "./harvest.ts";
+export type {
+  MagicCatalogCandidate,
+  MagicCatalogOptions,
+  MagicCatalogPick,
+} from "./magicQueueCatalog.ts";

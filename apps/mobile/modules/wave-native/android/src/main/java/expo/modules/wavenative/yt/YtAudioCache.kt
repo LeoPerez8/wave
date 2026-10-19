@@ -42,6 +42,13 @@ class YtAudioCache(val cache: Cache) {
     }
 
   /**
+   * The video ids whose audio is all cached ([wholeKey]): the YT Music songs
+   * that play offline (a Magic Queue offline keeps to them).
+   */
+  fun wholeVideos(): Set<String> =
+    cache.keys.mapNotNullTo(mutableSetOf(), ::videoIdOfKey).filterTo(mutableSetOf()) { wholeKey(it) != null }
+
+  /**
    * The key [stream]'s audio is cached under: the song and its format, whatever
    * the address, so what an earlier play left (a part or all of it) is read
    * from the cache. The song's bytes in another format, or in this one at
