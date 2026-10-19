@@ -8,6 +8,7 @@ import {
   harvestDue,
   harvestMobileUsedToday,
   harvestNext,
+  harvestSeedPool,
   harvestWants,
   mixKnownSongs,
   networkUseBytes,
@@ -76,6 +77,48 @@ describe("What the harvest wants", () => {
       [
         { id: "artist:tricky", candidates: 13, readAt: NOW - DAY },
         { id: "artist:björk", candidates: 0, readAt: null },
+      ],
+    );
+  });
+});
+
+describe("The seeds a harvest may read", () => {
+  const rock: DiscoverMixSeed = {
+    kind: "genre",
+    id: "genre:rock",
+    name: "Rock",
+    from: "plays",
+    genre: "Rock",
+    artists: [],
+  };
+  const played = (names: string[]) =>
+    names.map((name, at) => ({ id: at + 1, name, countedPlays: 10 - at }));
+
+  test("on mobile data, only the seeds the builds picked, each once", () => {
+    const picked = [artistSeed("Tricky"), rock, artistSeed("Tricky")];
+    assert.deepEqual(
+      harvestSeedPool({ picked, wifi: null }).map((seed) => seed.id),
+      ["artist:tricky", "genre:rock"],
+    );
+  });
+
+  test("on Wi-Fi, every artist Artist mixes may pick and the families, then the picked seeds left", () => {
+    const seeds = harvestSeedPool({
+      picked: [artistSeed("Tricky"), artistSeed("Björk")],
+      wifi: {
+        pools: { played: played(["Tricky", "Portishead", "Massive Attack", "Air"]) },
+        families: [rock],
+      },
+    });
+    assert.deepEqual(
+      seeds.map((seed) => seed.id),
+      [
+        "artist:tricky",
+        "artist:portishead",
+        "artist:massive attack",
+        "artist:air",
+        "genre:rock",
+        "artist:björk",
       ],
     );
   });

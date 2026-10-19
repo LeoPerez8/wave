@@ -1926,3 +1926,5 @@ export { seededRandom } from "./weightedPick.ts";
 export type { DiscoverMixesBuild } from "./discoverMixes.ts";
 export { discoverMixesRerun, rerankedDiscoverMixes } from "./mixRerank.ts";
 export type { DiscoverMixesRerun } from "./mixRerank.ts";
+export { harvestSeedPool } from "./harvest.ts";
+export type { HarvestSeedSources } from "./harvest.ts";

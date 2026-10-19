@@ -7,6 +7,7 @@
  * within about 5 MB a day.
  */
 
+import { artistMixSeedPool, type ArtistMixPools } from "./artistMixes.ts";
 import { catalogSeedKey } from "./candidateCatalog.ts";
 import { catalogMixRead, type CatalogMixSources } from "./catalogMixes.ts";
 import {
@@ -31,6 +32,37 @@ export interface HarvestWant {
    */
   readonly readAt: number | null;
 }
+
+/** Where a harvest's seeds come from. */
+export interface HarvestSeedSources {
+  /** The seeds Home's builds picked (each section's last build), those that made no mix too. */
+  readonly picked: readonly DiscoverMixSeed[];
+  /**
+   * On Wi-Fi: the pools Artist mixes' seeds are picked from
+   * (`artistMixSeedPool`, similar artists read) and the Genre mixes'
+   * families; null on mobile data, which reads only [picked].
+   */
+  readonly wifi: {
+    readonly pools: ArtistMixPools;
+    readonly families: readonly DiscoverMixSeed[];
+  } | null;
+}
+
+/**
+ * The seeds a harvest may read, each once (by id), in order: on mobile
+ * data only those the builds picked; on Wi-Fi every artist Artist mixes may
+ * pick, the Genre mixes' families, then the picked seeds not among them.
+ */
+export const harvestSeedPool = ({ picked, wifi }: HarvestSeedSources): DiscoverMixSeed[] => {
+  const seeds =
+    wifi === null ? picked : [...artistMixSeedPool(wifi.pools), ...wifi.families, ...picked];
+  const ids = new Set<string>();
+  return seeds.filter((seed) => {
+    if (ids.has(seed.id)) return false;
+    ids.add(seed.id);
+    return true;
+  });
+};
 
 /** A seed with fewer candidates than this runs low: a mix's most songs. */
 export const HARVEST_LOW = MIX_MOST;

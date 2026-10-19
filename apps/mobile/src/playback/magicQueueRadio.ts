@@ -28,7 +28,7 @@ import * as Effect from "effect/Effect";
 import { lookUpArtistProfiles, lookedUpProfileOf, mixProfileOf } from "@/home/artistGenres";
 import { artistGraphNow, forgetArtistGraph } from "@/home/artistGraphNow";
 import { forgetMixCatalog, mixCatalog } from "@/home/mixCatalog";
-import { harvestMobileUsed, noteHarvestMobileUse } from "@/home/mixHarvest";
+import { harvestMobileUsed, noteHarvestMobileUse } from "@/home/harvestMobileUse";
 import { artistRadio } from "@/home/ytArtistPage";
 import { freeTurnEffect } from "@/lib/backgroundWork";
 import { withNetworkLog } from "@/lib/networkMeter";

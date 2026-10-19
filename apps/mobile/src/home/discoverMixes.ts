@@ -71,10 +71,10 @@ import { showToast } from "@/overlay/toast";
 import { tasteProfileNow } from "@/playback/TasteProfile";
 import { useDontPlayExplicit } from "@/settings/dontPlayExplicit";
 import { useYtMusicEnabled } from "@/settings/ytMusic";
-import { Stats } from "@/stats/Stats";
 
 import { mixProfileOf } from "./artistGenres";
 import { artistGraphNow } from "./artistGraphNow";
+import { artistMixPools } from "./artistMixPools";
 import {
   mixSlidersOf,
   onMixSlidersMoved,
@@ -82,7 +82,7 @@ import {
   type MixSectionId,
 } from "./discoverMixLevel";
 import { mixCatalog } from "./mixCatalog";
-import { harvestSoon, noteSeedsPicked, onHarvested, SEED_POOL } from "./mixHarvest";
+import { harvestSoon, onHarvested, setPickedSeeds } from "./mixHarvest";
 import { mixIndexes, refreshKnownVideos, useKnownVideos, type MixIndexes } from "./mixKnown";
 import { noteMixesShown } from "./mixPreDownload";
 import { similarOffline, withSimilar } from "./similarArtists";
@@ -110,7 +110,7 @@ const mixesOf = (
   avoid: MixRefreshAvoid | undefined,
 ) =>
   Effect.gen(function* () {
-    noteSeedsPicked(id, seeds);
+    SECTIONS[id].picked = seeds;
     // A build's variety, kept with its mixes so a slider move re-ranks them as they were.
     const variety = Math.floor(Math.random() * 2 ** 31);
     const reader = yield* readerOf(id, library, variety);
@@ -291,22 +291,9 @@ onMixSlidersMoved(rerank);
  */
 const buildArtistMixes = (avoid?: MixRefreshAvoid) =>
   Effect.gen(function* () {
-    const stats = yield* Stats;
-    const artists = yield* stats.topArtists("all", SEED_POOL);
     const library = yield* mixIndexes;
     const seeds = artistMixSeeds(
-      yield* withSimilar(
-        {
-          played: artists.map(({ item, countedPlays }) => ({
-            id: item.id,
-            name: item.name,
-            countedPlays,
-          })),
-          library: library.artists.map((artist) => ({ ...artist, songCount: artist.trackCount })),
-          ...(avoid === undefined ? {} : { avoid }),
-        },
-        similarOffline,
-      ),
+      yield* withSimilar(yield* artistMixPools(library, avoid), similarOffline),
       Math.random,
     );
     if (seeds.length === 0) return "nothing-to-build-from" as const;
@@ -384,6 +371,8 @@ interface MixSection {
   readonly building: ExternalStore<boolean>;
   /** After a build that made no mixes: no build before then (ms since the epoch). */
   retryAt: number | null;
+  /** The seeds this session's last build picked, those it made no mix of too; null before one. */
+  picked: readonly DiscoverMixSeed[] | null;
   /** The last reader of catalog reads, for re-ranks at once (`readerOf`). */
   reader: ReaderMemo | null;
   /** The sliders the saved mixes were last ranked at; null: not known (saved before this launch). */
@@ -421,6 +410,7 @@ const section = (
   nothingRetryMs,
   building: makeExternalStore(false),
   retryAt: null,
+  picked: null,
   reader: null,
   rankedWith: null,
   reranking: false,
@@ -432,6 +422,16 @@ const SECTIONS: Record<MixSectionId, MixSection> = {
   "artist-mixes": section("home.discoverMixes", buildArtistMixes, 0),
   "genre-mixes": section("home.genreMixes", buildGenreMixes, RETRY_MS),
 };
+
+// What a harvest on mobile data refills: each section's last build's seeds,
+// this session's or, after a relaunch, those its saved mixes were built from.
+setPickedSeeds(() =>
+  Object.values(SECTIONS).flatMap((mixSection) => {
+    if (mixSection.picked !== null) return mixSection.picked;
+    const saved = mixSection.saved.get();
+    return saved === null ? [] : discoverMixesRerun(saved, []).seeds;
+  }),
+);
 
 /**
  * Builds [id]'s mixes again when Core says they're due ([played]: the owner
