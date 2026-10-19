@@ -17,7 +17,7 @@ import type { QueueState } from "./queue.ts";
 import { isRecord } from "./storedJson.ts";
 import { MAGIC_SKIP_MS, genreKey, tasteWeight, type TasteProfile } from "./tasteProfile.ts";
 import { pickWeighted, type RandomSource } from "./weightedPick.ts";
-import { parseTrackId, ytTrackId } from "./ytMusic.ts";
+import { parseTrackId } from "./ytMusic.ts";
 
 /**
  * An artist as the Magic Queue tells them apart, the same for the Library's
