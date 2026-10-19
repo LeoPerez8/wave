@@ -1,4 +1,10 @@
-import { readDiscoverMixLevel, type DiscoverMixLevel } from "@wave/core";
+import {
+  readDiscoverMixLevel,
+  readMixSliders,
+  storedMixSliders,
+  type DiscoverMixLevel,
+  type MixSliders,
+} from "@wave/core";
 
 import { persistedSetting } from "@/lib/persistedSetting";
 
@@ -13,3 +19,24 @@ export const magicQueueLevel = persistedSetting<DiscoverMixLevel>({
   read: readDiscoverMixLevel,
   write: String,
 });
+
+/** How long a dragged slider waits before it's written: the last step wins. */
+export const SLIDERS_PERSIST_MS = 500;
+
+/** A section's Genre faithfulness and Popularity sliders, kept on this phone under [key]. */
+export const mixSlidersSetting = (key: string) =>
+  persistedSetting<MixSliders>({
+    key,
+    read: readMixSliders,
+    write: storedMixSliders,
+    equals: (a, b) => a.faithfulness === b.faithfulness && a.popularity === b.popularity,
+    persistDelayMs: SLIDERS_PERSIST_MS,
+  });
+
+/**
+ * The Magic Queue section's Genre faithfulness and Popularity sliders
+ * (Core's `mixSlidersEngine`): how the engine ranks every Magic Queue's
+ * YouTube Music candidates, from Home or any long-press menu, read again
+ * for each batch.
+ */
+export const magicQueueSliders = mixSlidersSetting("home.magicQueueSliders");

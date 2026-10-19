@@ -3,7 +3,10 @@ import { describe, test } from "node:test";
 
 import {
   artistGraph,
+  catalogMixRead,
+  catalogMixReader,
   discoverMixesOfCatalog,
+  mixSlidersEngine,
   mixKnownSongs,
   type CatalogSong,
   type DiscoverMix,
@@ -189,5 +192,62 @@ describe("Mixes built from the candidate catalog", () => {
     });
     assert.equal(mix?.songs.length, 10);
     assert.deepEqual(videos(mix)?.filter((id) => avoid.has(id)).length, 2);
+  });
+});
+
+describe("Re-ranking a seed's catalog read", () => {
+  const rock: GenreProfile = new Map([["rock", 1]]);
+  const rockPop: GenreProfile = new Map([
+    ["rock", 0.5],
+    ["pop", 0.5],
+  ]);
+  const profiles: Record<string, GenreProfile> = { Tricky: rock, Pixies: rockPop };
+  const profileOf: GenreProfileOf = (artist) => profiles[artist];
+  const catalog = [
+    ...songs("t", 6, "Tricky", "Tricky"),
+    ...songs("p", 6, "Pixies", "Tricky").map((entry, n) =>
+      n % 2 === 0
+        ? {
+            ...entry,
+            radios: [...entry.radios, { seed: "blur", seedName: "Blur", lastSeenAt: NOW }],
+          }
+        : entry,
+    ),
+    ...songs("u", 4, "Unknown", "Tricky"),
+  ];
+  const seed = artistSeed("Tricky");
+  const read = (got: ReturnType<typeof catalogMixRead>) =>
+    got === null
+      ? null
+      : {
+          radio: got.radio.map((song) => song.videoId),
+          affinity: got.radio.map((song) => got.affinity?.(song)),
+          familiar: got.familiar?.map((song) => song.videoId),
+        };
+  const settings = [
+    mixSlidersEngine({ faithfulness: 3, popularity: 3 }),
+    mixSlidersEngine({ faithfulness: 1, popularity: 1 }),
+    mixSlidersEngine({ faithfulness: 5, popularity: 5 }),
+    mixSlidersEngine({ faithfulness: 3, popularity: 3 }),
+  ];
+
+  test("at any sliders reads what a fresh read at them does", () => {
+    const reader = catalogMixReader({ ...sources(catalog, profileOf), library });
+    for (const engine of settings)
+      assert.deepEqual(
+        read(reader.read(seed, engine)),
+        read(catalogMixRead(seed, { ...sources(catalog, profileOf), library }, engine)),
+      );
+  });
+
+  test("keeps the build's variety: the same variety reads the same, sliders back where they were", () => {
+    const of = (variety: number) =>
+      catalogMixReader({ ...sources(catalog, profileOf), library }, { variety });
+    const reader = of(7);
+    const first = read(reader.read(seed, settings[0]!));
+    for (const engine of settings.slice(1)) reader.read(seed, engine);
+    assert.deepEqual(read(reader.read(seed, settings[0]!)), first);
+    assert.deepEqual(read(of(7).read(seed, settings[0]!)), first);
+    assert.notDeepEqual(read(of(8).read(seed, settings[0]!)), first);
   });
 });

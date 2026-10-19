@@ -20,31 +20,37 @@
  */
 import {
   artistMixSeeds,
-  catalogMixRead,
+  catalogMixReader,
   discoverMixKeep,
   discoverMixesBuilt,
   discoverMixesDue,
   discoverMixesOfRadios,
+  discoverMixesRerun,
   discoverMixesSection,
   genreMixSeeds,
   homeSectionTitle,
   mixesShown,
   mixRefreshAvoid,
+  mixSlidersEngine,
   mixSectionOfId,
   parseDiscoverMixes,
   parseMixesShown,
+  rerankedDiscoverMixes,
   savedDiscoverMix,
   storedDiscoverMixes,
   storedMixesShown,
   undoneMixRefresh,
   type BlendedDiscoverMix,
+  type CatalogMixReader,
   type CatalogMixSong,
+  type CatalogSong,
   type DiscoverMixBlend,
   type DiscoverMixRead,
   type DiscoverMixSeed,
   type DiscoverMixes,
   type DiscoverMixesSection,
   type MixRefreshAvoid,
+  type MixSliders,
   type ShownMixes,
   type YtAlbumSong,
 } from "@wave/core";
@@ -69,7 +75,12 @@ import { Stats } from "@/stats/Stats";
 
 import { mixProfileOf } from "./artistGenres";
 import { artistGraphNow } from "./artistGraphNow";
-import { useDiscoverMixLevel, type MixSectionId } from "./discoverMixLevel";
+import {
+  mixSlidersOf,
+  onMixSlidersMoved,
+  useDiscoverMixLevel,
+  type MixSectionId,
+} from "./discoverMixLevel";
 import { mixCatalog } from "./mixCatalog";
 import { harvestSoon, noteSeedsPicked, onHarvested, SEED_POOL } from "./mixHarvest";
 import { mixIndexes, refreshKnownVideos, useKnownVideos, type MixIndexes } from "./mixKnown";
@@ -80,10 +91,12 @@ export type { MixSectionId } from "./discoverMixLevel";
 
 /**
  * The mixes [seeds] make from the candidate catalog, or null when no seed
- * made a usable mix: each seed's catalog read (`catalogMixRead`: the
+ * made a usable mix: each seed's catalog read (`catalogMixReader`: the
  * engine's ranking over the catalog, the artist graph, the genre profiles
- * and the owner's taste profile, [avoid]ed songs last, a random nudge each
- * build), then the seeds take their songs in seed order (Core's
+ * and the owner's taste profile at the section's sliders, [avoid]ed songs
+ * last, a random nudge each build, its variety saved with the mixes along
+ * with the seeds, so a slider move re-ranks them: `rerank`), then the
+ * seeds take their songs in seed order (Core's
  * `discoverMixesOfRadios`), so no new song is in two of the section's mixes
  * (and no familiar song in two of its shares). A seed the catalog has no
  * songs for yet makes no mix: the harvest refills it, and the section has
@@ -98,30 +111,160 @@ const mixesOf = (
 ) =>
   Effect.gen(function* () {
     noteSeedsPicked(id, seeds);
-    const { known } = library;
+    // A build's variety, kept with its mixes so a slider move re-ranks them as they were.
+    const variety = Math.floor(Math.random() * 2 ** 31);
+    const reader = yield* readerOf(id, library, variety);
+    yield* freeTurnEffect;
+    // A refresh's new songs leave out those the section showed today, where it can.
+    const avoidSongs = avoid === undefined ? undefined : avoid.songs;
+    const ranked = yield* readsOf(id, reader, seeds, avoidSongs);
+    const mixes = discoverMixesOfRadios(ranked.reads, {
+      known: library.known,
+      library,
+      ...(avoidSongs === undefined ? {} : { avoid: avoidSongs }),
+    });
+    return discoverMixesBuilt(mixes, Date.now(), seeds, {
+      ...(avoidSongs === undefined ? {} : { avoid: avoidSongs }),
+      variety,
+    });
+  });
+
+/**
+ * [seeds]' catalog reads by [reader], ranked at [id]'s sliders as they are
+ * once every seed's walk is done (giving the JavaScript thread back before
+ * each, `freeTurnEffect`, which waits out a finger on a slider), with the
+ * sliders they were ranked at.
+ */
+const readsOf = (
+  id: MixSectionId,
+  reader: CatalogMixReader,
+  seeds: readonly DiscoverMixSeed[],
+  avoid: ReadonlySet<string> | undefined,
+) =>
+  Effect.gen(function* () {
+    for (const seed of seeds) {
+      reader.read(seed);
+      yield* freeTurnEffect;
+    }
+    const sliders = mixSlidersOf(id);
+    const options = { ...mixSlidersEngine(sliders), ...(avoid === undefined ? {} : { avoid }) };
+    const reads: DiscoverMixRead<CatalogMixSong>[] = seeds.flatMap(
+      (seed) => reader.read(seed, options) ?? [],
+    );
+    SECTIONS[id].rankedWith = sliders;
+    return { reads, sliders };
+  });
+
+/** A section's last reader of catalog reads, with what it reads: kept for the re-ranks after a build. */
+interface ReaderMemo {
+  readonly reader: CatalogMixReader;
+  readonly variety: number | undefined;
+  readonly catalog: readonly CatalogSong[];
+  readonly graph: unknown;
+  readonly taste: unknown;
+  readonly library: MixIndexes;
+}
+
+/**
+ * [id]'s reader of catalog reads (`catalogMixReader`) over the catalog, the
+ * artist graph, the genre profiles and the owner's taste profile now, with
+ * [variety]: the section's last one while all of them are the same, so a
+ * re-rank after a build only weighs its songs again.
+ */
+const readerOf = (id: MixSectionId, library: MixIndexes, variety: number | undefined) =>
+  Effect.gen(function* () {
     const catalog = yield* mixCatalog;
     const graph = yield* artistGraphNow;
     const taste = yield* tasteProfileNow;
-    yield* freeTurnEffect;
-    const sources = {
-      catalog,
-      graph,
-      profileOf: mixProfileOf(library),
-      taste,
-      now: Date.now(),
-      library,
-    };
-    // A refresh's new songs leave out those the section showed today, where it can.
-    const avoidSongs = avoid === undefined ? {} : { avoid: avoid.songs };
-    const reads: DiscoverMixRead<CatalogMixSong>[] = [];
-    for (const seed of seeds) {
-      const read = catalogMixRead(seed, sources, { ...avoidSongs, random: Math.random });
-      if (read !== null) reads.push(read);
-      yield* freeTurnEffect;
-    }
-    const mixes = discoverMixesOfRadios(reads, { known, library, ...avoidSongs });
-    return discoverMixesBuilt(mixes, Date.now(), seeds);
+    const memo = SECTIONS[id].reader;
+    if (
+      memo !== null &&
+      memo.variety === variety &&
+      memo.catalog === catalog &&
+      memo.graph === graph &&
+      memo.taste === taste &&
+      memo.library === library
+    )
+      return memo.reader;
+    const sources = { catalog, graph, profileOf: mixProfileOf(library), taste, now: Date.now() };
+    const reader = catalogMixReader(
+      { ...sources, library },
+      variety === undefined ? {} : { variety },
+    );
+    SECTIONS[id].reader = { reader, variety, catalog, graph, taste, library };
+    return reader;
   });
+
+/**
+ * [saved] ranked again from the catalog at [id]'s sliders now: the build's
+ * seeds, avoided songs and variety (Core's `discoverMixesRerun`), no new
+ * seed picked and no request, then the seeds take their songs in order as
+ * a build's do. The saved mixes when it makes none.
+ */
+const rerankedOf = (id: MixSectionId, saved: DiscoverMixes) =>
+  Effect.gen(function* () {
+    const library = yield* mixIndexes;
+    const { seeds, avoid, variety } = discoverMixesRerun(saved, library.artists);
+    const reader = yield* readerOf(id, library, variety);
+    const avoidSongs = avoid.size === 0 ? undefined : avoid;
+    const { reads } = yield* readsOf(id, reader, seeds, avoidSongs);
+    const mixes = discoverMixesOfRadios(reads, {
+      known: library.known,
+      library,
+      ...(avoidSongs === undefined ? {} : { avoid: avoidSongs }),
+    });
+    return rerankedDiscoverMixes(saved, mixes);
+  });
+
+/** Whether two settings of the sliders are the same. */
+const sameSliders = (a: MixSliders | null, b: MixSliders): boolean =>
+  a !== null && a.faithfulness === b.faithfulness && a.popularity === b.popularity;
+
+/**
+ * Re-ranks [id]'s saved mixes at its sliders now (`rerankedOf`), at once
+ * and offline, and saves them as the same build, so Home's tiles and the
+ * mix pages crossfade to them. One at a time: sliders moved while it or a
+ * build goes on re-rank once more after it, when they differ from those it
+ * ranked at. The re-ranked set replaces itself in what a refresh avoids.
+ */
+const rerank = (id: MixSectionId): void => {
+  const mixSection = SECTIONS[id];
+  const saved = mixSection.saved.get();
+  if (mixSection.building.get() || mixSection.reranking) {
+    mixSection.rerankAfter = true;
+    return;
+  }
+  if (saved === null || sameSliders(mixSection.rankedWith, mixSlidersOf(id))) return;
+  mixSection.reranking = true;
+  void appRuntime
+    .runPromise(Effect.result(rerankedOf(id, saved)))
+    .then((result) => {
+      // A build or a refresh saved others meanwhile: they're ranked at the sliders they read.
+      if (!Result.isSuccess(result)) return;
+      if (mixSection.saved.get() !== saved) {
+        mixSection.rankedWith = null;
+        mixSection.rerankAfter = true;
+        return;
+      }
+      if (result.success === saved) return;
+      mixSection.saved.set(result.success);
+      mixSection.shown.set(mixesShown(mixSection.shown.get(), result.success, Date.now()));
+    })
+    .finally(() => {
+      mixSection.reranking = false;
+      rerankAfterward(id);
+    });
+};
+
+/** After a build or a re-rank: the re-rank sliders moved meanwhile asked for. */
+const rerankAfterward = (id: MixSectionId): void => {
+  const mixSection = SECTIONS[id];
+  if (!mixSection.rerankAfter) return;
+  mixSection.rerankAfter = false;
+  rerank(id);
+};
+
+onMixSlidersMoved(rerank);
 
 /**
  * Builds Artist mixes from the owner's all-time most played artists, picked
@@ -228,6 +371,14 @@ interface MixSection {
   readonly building: ExternalStore<boolean>;
   /** After a build that made no mixes: no build before then (ms since the epoch). */
   retryAt: number | null;
+  /** The last reader of catalog reads, for re-ranks at once (`readerOf`). */
+  reader: ReaderMemo | null;
+  /** The sliders the saved mixes were last ranked at; null: not known (saved before this launch). */
+  rankedWith: MixSliders | null;
+  /** A re-rank going on (`rerank`). */
+  reranking: boolean;
+  /** Sliders moved while a build or a re-rank went on: re-rank after it. */
+  rerankAfter: boolean;
 }
 
 const flag = (key: string) =>
@@ -257,6 +408,10 @@ const section = (
   nothingRetryMs,
   building: makeExternalStore(false),
   retryAt: null,
+  reader: null,
+  rankedWith: null,
+  reranking: false,
+  rerankAfter: false,
 });
 
 const SECTIONS: Record<MixSectionId, MixSection> = {
@@ -305,6 +460,7 @@ const refresh = (id: MixSectionId, played: boolean): void => {
     })
     .finally(() => {
       mixSection.building.set(false);
+      rerankAfterward(id);
       harvestSoon();
     });
 };
@@ -363,12 +519,15 @@ export const refreshMixes = (id: MixSectionId): void => {
           if (saved.get() !== built || building.get()) return;
           const undone = undoneMixRefresh(previous, built, Date.now());
           saved.set(undone);
+          // It was ranked at the sliders of its time: the next slider move ranks it again.
+          mixSection.rankedWith = null;
           shown.set(mixesShown(shown.get(), undone, Date.now()));
         },
       });
     })
     .finally(() => {
       building.set(false);
+      rerankAfterward(id);
       harvestSoon();
     });
 };

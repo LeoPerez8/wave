@@ -19,11 +19,16 @@ import {
 } from "./discoverMixes.ts";
 import { mixSeedProfile, type GenreProfileLibrary, type MixAffinity } from "./genreAffinity.ts";
 import {
+  rankRecommended,
   recommend,
+  recommendCandidates,
+  type RecommendCandidate,
+  type RecommendedSong,
   type RecommendOptions,
   type RecommendSeed,
   type RecommendSources,
 } from "./recommend.ts";
+import { seededRandom } from "./weightedPick.ts";
 import type { YtAlbumSong } from "./ytDiscover.ts";
 
 /** A catalog song as a mix keeps it: a song, never a music video. */
@@ -55,8 +60,14 @@ export const catalogMixRead = (
   seed: DiscoverMixSeed,
   sources: CatalogMixSources,
   options: RecommendOptions = {},
+): DiscoverMixRead<CatalogMixSong> | null =>
+  readOfRanked(seed, recommend(catalogMixSeed(seed, sources), sources, options));
+
+/** [seed]'s read out of the engine's [ranked] songs (`catalogMixRead`). */
+const readOfRanked = (
+  seed: DiscoverMixSeed,
+  ranked: readonly RecommendedSong[],
 ): DiscoverMixRead<CatalogMixSong> | null => {
-  const ranked = recommend(catalogMixSeed(seed, sources), sources, options);
   if (ranked.length === 0) return null;
   const affinities = new Map<string, MixAffinity>();
   const radio: CatalogMixSong[] = [];
@@ -72,6 +83,53 @@ export const catalogMixRead = (
     radio,
     affinity: (song) => affinities.get(song.videoId) ?? "unknown",
     familiar,
+  };
+};
+
+/** Seeds' catalog reads that re-rank at once: what a section's sliders move. */
+export interface CatalogMixReader {
+  /**
+   * [seed]'s catalog read (`catalogMixRead`) ranked by [options] (the
+   * sliders' weights and threshold, a refresh's avoided songs). The engine
+   * walks the catalog once per seed (by its id); every read after that only
+   * weighs the songs again.
+   */
+  readonly read: (
+    seed: DiscoverMixSeed,
+    options?: Omit<RecommendOptions, "random" | "neighbourhood">,
+  ) => DiscoverMixRead<CatalogMixSong> | null;
+}
+
+/**
+ * A reader of seeds' catalog reads over [sources] (`CatalogMixReader`), for
+ * one build and the re-ranks after it while [sources] stay the same. With a
+ * [variety], each seed's variety nudge is the same whenever it's read, by
+ * any reader with that variety (`seededRandom` of it and the seed's id), so
+ * a build re-ranked at its sliders makes its mixes again; without one there
+ * is no nudge.
+ */
+export const catalogMixReader = (
+  sources: CatalogMixSources,
+  {
+    variety,
+    neighbourhood,
+  }: Pick<RecommendOptions, "neighbourhood"> & {
+    readonly variety?: number;
+  } = {},
+): CatalogMixReader => {
+  const walks = new Map<string, readonly RecommendCandidate[]>();
+  return {
+    read: (seed, options = {}) => {
+      let candidates = walks.get(seed.id);
+      if (candidates === undefined) {
+        candidates = recommendCandidates(catalogMixSeed(seed, sources), sources, {
+          ...(neighbourhood === undefined ? {} : { neighbourhood }),
+          ...(variety === undefined ? {} : { random: seededRandom(`${variety}:${seed.id}`) }),
+        });
+        walks.set(seed.id, candidates);
+      }
+      return readOfRanked(seed, rankRecommended(candidates, options));
+    },
   };
 };
 

@@ -39,3 +39,20 @@ export const pickWeighted = <T>(
  */
 export const playsWeight = (countedPlays: number): number =>
   Math.sqrt(Math.max(0, countedPlays) + 1);
+
+/**
+ * A random source that gives the same numbers for the same [key] every
+ * time (mulberry32, seeded with the key's FNV-1a hash): a build's variety
+ * made again, for a re-rank.
+ */
+export const seededRandom = (key: string): RandomSource => {
+  let state = 0x81_1c_9d_c5;
+  for (let index = 0; index < key.length; index++)
+    state = Math.imul(state ^ key.charCodeAt(index), 0x01_00_01_93);
+  return () => {
+    state = (state + 0x6d_2b_79_f5) | 0;
+    let mixed = Math.imul(state ^ (state >>> 15), 1 | state);
+    mixed = (mixed + Math.imul(mixed ^ (mixed >>> 7), 61 | mixed)) ^ mixed;
+    return ((mixed ^ (mixed >>> 14)) >>> 0) / 4_294_967_296;
+  };
+};
