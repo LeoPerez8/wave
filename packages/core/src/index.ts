@@ -1525,14 +1525,20 @@ export type {
 } from "./lyricsShare.ts";
 export { songCardColours, songCardFileName, songShareDestinations } from "./songShare.ts";
 export type { SongCardColours, SongLinkOption, SongShareDestination } from "./songShare.ts";
-export { lookUpSongLinks, songLinkView } from "./songLinks.ts";
+export {
+  lookUpSongVideo,
+  lookUpSpotifyTrack,
+  SONG_LINKS_LOADING,
+  songLinkView,
+} from "./songLinks.ts";
 export type {
-  SongLinkAsk,
   SongLinkView,
   SongLinkLookup,
-  SongLinks,
   SongLinkSearch,
+  SongLinkSpotify,
   SongLinksState,
+  SongVideoState,
+  SpotifyTrackState,
 } from "./songLinks.ts";
 export type { YtLibraryFavorites } from "./ytLibraryBatch.ts";
 export { pendingFavorite, settlePendingFavorites } from "./pendingFavorites.ts";

@@ -5,6 +5,7 @@ import {
   songCardFileName,
   songLinkView,
   songShareDestinations,
+  SONG_LINKS_LOADING,
   type LyricStoryBackground,
   type SongLinkOption,
   type SongLinksState,
@@ -74,8 +75,6 @@ const shareLink = async (url: string, title: string): Promise<void> => {
     void showToast("Couldn't share the link");
   }
 };
-
-const LOADING: SongLinksState = { status: "loading" };
 
 /** The link [option] as a destination while the song's links are [state] (Core's `songLinkView`). */
 const linkDestination = (option: SongLinkOption, state: SongLinksState): ShareDestination => {
@@ -151,7 +150,7 @@ function SongSharePreview({ content }: { content: SongShareContent }) {
   });
   const destinations = songShareDestinations(share.apps, { links: links !== null }).map((key) =>
     key === "copyLink" || key === "spotify" || key === "ytMusic"
-      ? linkDestination(key, links ?? LOADING)
+      ? linkDestination(key, links ?? SONG_LINKS_LOADING)
       : share.image[key],
   );
 
