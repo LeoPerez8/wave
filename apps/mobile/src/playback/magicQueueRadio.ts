@@ -24,6 +24,7 @@ import * as Effect from "effect/Effect";
 
 import { lookUpArtistProfiles, lookedUpProfileOf, mixProfileOf } from "@/home/artistGenres";
 import { ytArtistBrowseId } from "@/home/ytArtistPage";
+import { withNetworkLog } from "@/lib/networkMeter";
 import type { SongRow } from "@/library/LibraryStore";
 import type { NativeYtRadioSong } from "@/native/waveYtMusic";
 import { ytMusicEnabled } from "@/settings/ytMusic";
@@ -61,20 +62,12 @@ let found: {
   readonly profileOf: GenreProfileOf;
 } | null = null;
 
-/**
- * [session]'s YouTube Music candidates (`magicYtCandidates`), out of the
- * radios of its `radioArtists`, weighed against [library] (its songs and
- * artists): read once per session, again while none could be read
- * (offline, say). None with the YT Music switch off. Never fails.
- */
-export const magicRadioCandidates = (
+/** [session]'s candidates, out of the radios of its `radioArtists` read now. */
+const readRadioCandidates = (
   session: MagicSession,
   library: GenreProfileLibrary & { readonly songs: readonly SongRow[] },
 ) =>
   Effect.gen(function* () {
-    if (!ytMusicEnabled()) return [];
-    if (found?.sessionId === session.id) return found.candidates;
-    if (session.radioArtists.length === 0) return [];
     const radios = yield* Effect.all(session.radioArtists.map(artistRadio), {
       concurrency: "unbounded",
     });
@@ -90,10 +83,32 @@ export const magicRadioCandidates = (
     });
     found = { sessionId: session.id, candidates, profileOf };
     return candidates;
-  }).pipe(
-    Effect.timeout(RADIO_TIMEOUT),
-    Effect.orElseSucceed((): readonly MagicRadioCandidate[] => []),
-  );
+  });
+
+const candidatesOutcome = (candidates: readonly MagicRadioCandidate[]): string =>
+  candidates.length === 1 ? "1 candidate" : `${candidates.length} candidates`;
+
+/**
+ * [session]'s YouTube Music candidates (`magicYtCandidates`), out of the
+ * radios of its `radioArtists`, weighed against [library] (its songs and
+ * artists): read once per session, again while none could be read
+ * (offline, say), each read writing its network use to the app log
+ * (`withNetworkLog`). None with the YT Music switch off. Never fails.
+ */
+export const magicRadioCandidates = (
+  session: MagicSession,
+  library: GenreProfileLibrary & { readonly songs: readonly SongRow[] },
+) =>
+  Effect.gen(function* () {
+    if (!ytMusicEnabled()) return [];
+    if (found?.sessionId === session.id) return found.candidates;
+    if (session.radioArtists.length === 0) return [];
+    return yield* withNetworkLog(
+      "Magic Queue radio",
+      readRadioCandidates(session, library).pipe(Effect.timeout(RADIO_TIMEOUT)),
+      candidatesOutcome,
+    ).pipe(Effect.orElseSucceed((): readonly MagicRadioCandidate[] => []));
+  });
 
 /**
  * A YT Music song of the queue as the Magic Queue weighs it (`magicYtSong`):

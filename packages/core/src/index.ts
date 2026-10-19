@@ -1795,3 +1795,5 @@ export {
   tasteWeight,
 } from "./tasteProfile.ts";
 export type { TasteHistory, TasteProfile, TasteSignal, TasteSignalKind } from "./tasteProfile.ts";
+export { NO_NETWORK_USE, answerBytes, networkUseLine, withNetworkUse } from "./networkUse.ts";
+export type { HostNetworkUse, NetworkHost, NetworkUse, NetworkUseRun } from "./networkUse.ts";

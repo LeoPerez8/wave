@@ -4,6 +4,8 @@ import android.content.Context
 import com.metrolist.innertubex.InnerTube
 import expo.modules.wavenative.log.WaveLog
 import expo.modules.wavenative.net.Connectivity
+import expo.modules.wavenative.net.NetworkMeters
+import expo.modules.wavenative.net.meteredBy
 import com.metrolist.innertubex.InnerTubeHttpException
 import com.metrolist.innertubex.models.YouTubeClient
 import com.metrolist.innertubex.models.YouTubeLocale
@@ -40,10 +42,17 @@ class YtClient private constructor(private val context: Context) {
    */
   internal val lookups = YtLookupAttempts()
 
+  /**
+   * What each run JS measures (a mix build, a Magic Queue batch) asked of YouTube Music: the
+   * requests made inside its [expo.modules.wavenative.net.NetworkMeter], and their bytes on the wire.
+   */
+  val meters = NetworkMeters()
+
   /** innertubex brings no HTTP engine and sends `@Serializable` bodies, hence content negotiation. */
   internal val http: HttpClient by lazy {
     HttpClient(OkHttp) {
       engine { addInterceptor(YtPlayerRecorder(lookups)) }
+      meteredBy(meters)
       // innertubex checks statuses and retries transient failures itself.
       expectSuccess = false
       install(ContentNegotiation) {
