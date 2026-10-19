@@ -279,6 +279,15 @@ export type FileDeleteOutcome = "deleted" | "missing" | "denied" | "readOnly" | 
 
 export const WaveNative = requireNativeModule<WaveNativeModule>("WaveNative");
 
+/** Whether the phone is on mobile data now; Wi-Fi when the module can't tell. */
+export const onMobileData = (): boolean => {
+  try {
+    return WaveNative.onMobileData();
+  } catch {
+    return false;
+  }
+};
+
 /** Converts a signed ARGB int from Android into a `#rrggbb` CSS colour. */
 export const argbToHex = (argb: number): string =>
   `#${((argb >>> 0) & 0xffffff).toString(16).padStart(6, "0")}`;

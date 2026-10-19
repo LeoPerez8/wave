@@ -25,7 +25,7 @@ import { makeExternalStore } from "@/lib/externalStore";
 import { LibraryStore } from "@/library/LibraryStore";
 import { appRuntime } from "@/library/runtime";
 import { libraryQuery, useLibraryQuery } from "@/library/sharedQueries";
-import { WaveNative } from "@/native/waveNative";
+import { onMobileData } from "@/native/waveNative";
 import { confirmAction } from "@/overlay/alert";
 import {
   downloadJournal,
@@ -63,15 +63,6 @@ const readQualityFiles = Effect.gen(function* () {
 });
 
 const qualityFiles = libraryQuery("qualityFiles", { tracks: true }, readQualityFiles);
-
-/** Whether the phone is on mobile data now; Wi-Fi when the module can't tell. */
-const onMobileData = (): boolean => {
-  try {
-    return WaveNative.onMobileData();
-  } catch {
-    return false;
-  }
-};
 
 /**
  * Core's offer in [direction] for the Library's [files]: freeing space comes at the bitrate the

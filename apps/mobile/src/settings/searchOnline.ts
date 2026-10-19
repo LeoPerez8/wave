@@ -1,6 +1,12 @@
-import { readSearchOnline, writeSearchOnline, type SearchOnline } from "@wave/core";
+import {
+  readSearchOnline,
+  searchOnlineAlways,
+  writeSearchOnline,
+  type SearchOnline,
+} from "@wave/core";
 
 import { persistedSetting } from "@/lib/persistedSetting";
+import { onMobileData } from "@/native/waveNative";
 import { openTitleChoices } from "@/overlay/titleChoices";
 
 import type { ChoiceSetting } from "./ChoiceRow";
@@ -8,8 +14,9 @@ import type { ChoiceSetting } from "./ChoiceRow";
 /**
  * Search online (Core's `SearchOnline`): one preference for every Library |
  * Online toggle, kept on this phone. Always opens album and artist pages
- * with Online selected and has Search ask as you type; Only on demand (the
- * default) asks nothing until Online is tapped, except in integrated views.
+ * with Online selected and has Search ask as you type; Always on Wi-Fi does
+ * so off mobile data; Only on demand (the default) asks nothing until Online
+ * is tapped, except in integrated views.
  */
 const searchOnline = persistedSetting<SearchOnline>({
   key: "settings.searchOnline",
@@ -17,12 +24,18 @@ const searchOnline = persistedSetting<SearchOnline>({
   write: writeSearchOnline,
 });
 
-/** Whether Search online is set to Always; re-renders when it changes. */
-export const useSearchOnlineAlways = (): boolean => searchOnline.useValue() === "always";
+/**
+ * Whether views search online as Always does (Core's `searchOnlineAlways`):
+ * re-renders when the preference changes, and reads the network on each
+ * render, so leaving Wi-Fi acts as choosing Only on demand there.
+ */
+export const useSearchOnlineAlways = (): boolean =>
+  searchOnlineAlways(searchOnline.useValue(), { onMobileData: onMobileData() });
 
 /** Search online's choices, as Settings and the toggle's long-press card both label them. */
 const CHOICES: ChoiceSetting<SearchOnline>["choices"] = [
   { value: "always", label: "Always search online" },
+  { value: "wifi", label: "Always search on Wi-Fi" },
   { value: "onDemand", label: "Only on demand" },
 ];
 
@@ -35,8 +48,8 @@ export const searchOnlineChoice: ChoiceSetting<SearchOnline> = {
 
 /**
  * The card a long press on any Library | Online toggle opens: Always search
- * online and Only on demand, the current one checked. The choice holds for
- * album pages, artist pages and Search alike.
+ * online, Always search on Wi-Fi and Only on demand, the current one checked.
+ * The choice holds for album pages, artist pages and Search alike.
  */
 export const openSearchOnlineChoices = (): void =>
   openTitleChoices({

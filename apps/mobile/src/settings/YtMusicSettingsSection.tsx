@@ -87,7 +87,7 @@ export function YtMusicSettingsSection() {
           <ChoiceSection
             choice={searchOnlineChoice}
             current={searchOnline}
-            note="Always search online opens albums and artists with Online selected and has Search look online as you type. Only on demand waits for Online to be tapped. Long-press the Library | Online toggle to change it there."
+            note="Always search online opens albums and artists with Online selected and has Search look online as you type. Always search on Wi-Fi does so only off mobile data. Only on demand waits for Online to be tapped. Long-press the Library | Online toggle to change it there."
           />
         </View>
       )}

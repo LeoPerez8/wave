@@ -102,7 +102,7 @@ export type YtSectionEvent<S extends YtSong = YtSong> =
       readonly enabled: boolean;
       readonly libraryHasResults: boolean;
       /**
-       * Whether Search online is set to Always (`SearchOnline`): with nothing
+       * Whether Search online acts as Always (`searchOnlineAlways`): with nothing
        * picked since the field was last cleared, Online is, and every query
        * is asked once typing pauses. Undefined: Only on demand.
        */
