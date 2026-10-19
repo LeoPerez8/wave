@@ -133,46 +133,62 @@ export interface RecommendedSong {
 const keysOf = (names: readonly string[]): string[] =>
   names.flatMap((name) => catalogSeedKey(name) ?? []);
 
-/** The closest of [artists]' affinities to [seed], with how it holds at [threshold]. */
+/**
+ * The closest of [artists]' affinities to [seed] (1 for a seed with no
+ * genre: every song matches it), null when none has a genre known.
+ */
 const affinityOf = (
   artists: readonly string[],
   seed: GenreProfile | null,
   profileOf: GenreProfileOf,
-  threshold: number,
-): { readonly value: number; readonly affinity: MixAffinity } => {
-  if (seed === null) return { value: 1, affinity: "match" };
+): number | null => {
+  if (seed === null) return 1;
   let best: number | null = null;
   for (const artist of artists) {
     const profile = profileOf(artist);
     if (profile === null || profile === undefined) continue;
     best = Math.max(best ?? 0, genreAffinity(seed, profile));
   }
-  if (best === null) return { value: 0, affinity: "unknown" };
-  return { value: best, affinity: best >= threshold ? "match" : "miss" };
+  return best;
 };
+
+/** How an affinity (`affinityOf`) holds at [threshold]. */
+const affinityAt = (affinity: number | null, threshold: number): MixAffinity =>
+  affinity === null ? "unknown" : affinity >= threshold ? "match" : "miss";
 
 /** Whether one of [artists]' profiles has a share of the family [key]. */
 const inFamily = (artists: readonly string[], key: string, profileOf: GenreProfileOf): boolean =>
   artists.some((artist) => (profileOf(artist)?.get(key) ?? 0) > 0);
 
 /**
- * [seed]'s candidates in [sources]' catalog, best first: the songs one of
- * the seed artists' radios brought or by a seed artist (as close as can be),
- * the songs of artists in the seeds' neighbourhood in the artist graph (as
- * close as it says), and, for a genre family, any song whose artist's
- * profile has a share of it. Each scores its signals weighed by [options]'
- * weights (`RecommendWeights`); the songs [options] avoid go after every
- * other. Songs the owner knows aren't left out: what a mix keeps is
- * `discoverMixSongs`'s, and its familiar share takes them. Ties go to the
- * song the catalog saw first, then by video id.
+ * A catalog song as the engine found it for a seed, before it's weighed:
+ * its signals, each from 0 to 1 (taste from -1 to 1). Weighing them again
+ * is all a slider move costs (`rankRecommended`).
  */
-export const recommend = (
+export interface RecommendCandidate {
+  readonly entry: CatalogSong;
+  /** Whether one of the seed artists' radios brought it. */
+  readonly onSeedRadio: boolean;
+  readonly closeness: number;
+  /** Its closest artist's genre affinity to the seed; null when none of its artists has a genre known. */
+  readonly affinity: number | null;
+  readonly taste: number;
+  readonly newness: number;
+  readonly popularity: number;
+  readonly variety: number;
+}
+
+/**
+ * [seed]'s candidates in [sources]' catalog, in the catalog's order, each
+ * with its signals (`RecommendCandidate`): the engine's walk over the
+ * catalog, which weights, threshold and avoided songs don't change.
+ * [options]' random gives each its variety nudge, in that order.
+ */
+export const recommendCandidates = (
   seed: RecommendSeed,
   sources: RecommendSources,
-  options: RecommendOptions = {},
-): RecommendedSong[] => {
-  const weights = { ...RECOMMEND_WEIGHTS, ...options.weights };
-  const threshold = options.threshold ?? GENRE_AFFINITY_THRESHOLD;
+  options: Pick<RecommendOptions, "neighbourhood" | "random"> = {},
+): RecommendCandidate[] => {
   const { catalog, graph, profileOf, taste, now } = sources;
   const profile = seed.profile ?? null;
   const seeds = new Set(keysOf(seed.artists));
@@ -184,8 +200,7 @@ export const recommend = (
     }))
       near.set(neighbour.key, neighbour.closeness);
   const family = seed.family === undefined ? null : (genreFamily(seed.family)?.key ?? null);
-  const ranked: (RecommendedSong & { readonly entry: CatalogSong; readonly avoided: boolean })[] =
-    [];
+  const candidates: RecommendCandidate[] = [];
   for (const entry of catalog) {
     const { song } = entry;
     const artists = keysOf(song.artists);
@@ -195,7 +210,6 @@ export const recommend = (
       closeness = Math.max(closeness, seeds.has(artist) ? 1 : (near.get(artist) ?? 0));
     if (closeness === 0 && (family === null || !inFamily(song.artists, family, profileOf)))
       continue;
-    const { value, affinity } = affinityOf(song.artists, profile, profileOf, threshold);
     const liked =
       taste === null || taste === undefined
         ? 0
@@ -205,39 +219,77 @@ export const recommend = (
               magicYtSong({ trackId: ytTrackId(song.videoId), artists: song.artists }, profileOf),
             ),
           ) / 4;
-    const newness = 0.5 ** (Math.max(0, now - entry.firstSeenAt) / RECOMMEND_NEWNESS_HALF_LIFE_MS);
-    const popularity = 1 - 0.5 ** entry.radios.length;
-    const nudge = options.random === undefined ? 0 : options.random();
-    const score =
-      weights.closeness * closeness +
-      weights.affinity * value +
-      weights.taste * liked +
-      weights.newness * newness +
-      weights.popularity * popularity +
-      weights.variety * nudge;
-    ranked.push({
+    candidates.push({
       entry,
-      song,
-      score,
-      affinity,
       onSeedRadio,
       closeness,
-      avoided: options.avoid?.has(song.videoId) === true,
+      affinity: affinityOf(song.artists, profile, profileOf),
+      taste: liked,
+      newness: 0.5 ** (Math.max(0, now - entry.firstSeenAt) / RECOMMEND_NEWNESS_HALF_LIFE_MS),
+      popularity: 1 - 0.5 ** entry.radios.length,
+      variety: options.random === undefined ? 0 : options.random(),
     });
   }
-  // oxlint-disable-next-line unicorn/no-array-sort -- sorts the fresh array the loop made; Hermes lacks toSorted
+  return candidates;
+};
+
+const byVideoId = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
+
+/**
+ * [candidates] (`recommendCandidates`) best first: each scores its signals
+ * weighed by [options]' weights (`RecommendWeights`) and says how its genre
+ * affinity holds at [options]' threshold; the songs [options] avoid go after
+ * every other. Ties go to the song the catalog saw first, then by video id.
+ */
+export const rankRecommended = (
+  candidates: readonly RecommendCandidate[],
+  options: Pick<RecommendOptions, "weights" | "threshold" | "avoid"> = {},
+): RecommendedSong[] => {
+  const weights = { ...RECOMMEND_WEIGHTS, ...options.weights };
+  const threshold = options.threshold ?? GENRE_AFFINITY_THRESHOLD;
+  const ranked = candidates.map((candidate) => ({
+    candidate,
+    score:
+      weights.closeness * candidate.closeness +
+      weights.affinity * (candidate.affinity ?? 0) +
+      weights.taste * candidate.taste +
+      weights.newness * candidate.newness +
+      weights.popularity * candidate.popularity +
+      weights.variety * candidate.variety,
+    avoided: options.avoid?.has(candidate.entry.song.videoId) === true,
+  }));
+  // oxlint-disable-next-line unicorn/no-array-sort -- sorts the fresh array map made; Hermes lacks toSorted
   ranked.sort(
     (a, b) =>
       Number(a.avoided) - Number(b.avoided) ||
       b.score - a.score ||
-      a.entry.firstSeenAt - b.entry.firstSeenAt ||
-      (a.song.videoId < b.song.videoId ? -1 : a.song.videoId > b.song.videoId ? 1 : 0),
+      a.candidate.entry.firstSeenAt - b.candidate.entry.firstSeenAt ||
+      byVideoId(a.candidate.entry.song.videoId, b.candidate.entry.song.videoId),
   );
-  return ranked.map(({ song, score, affinity, onSeedRadio, closeness }) => ({
-    song,
+  return ranked.map(({ candidate, score }) => ({
+    song: candidate.entry.song,
     score,
-    affinity,
-    onSeedRadio,
-    closeness,
+    affinity: affinityAt(candidate.affinity, threshold),
+    onSeedRadio: candidate.onSeedRadio,
+    closeness: candidate.closeness,
   }));
 };
+
+/**
+ * [seed]'s candidates in [sources]' catalog, best first: the songs one of
+ * the seed artists' radios brought or by a seed artist (as close as can be),
+ * the songs of artists in the seeds' neighbourhood in the artist graph (as
+ * close as it says), and, for a genre family, any song whose artist's
+ * profile has a share of it. Each scores its signals weighed by [options]'
+ * weights (`RecommendWeights`); the songs [options] avoid go after every
+ * other. Songs the owner knows aren't left out: what a mix keeps is
+ * `discoverMixSongs`'s, and its familiar share takes them. Ties go to the
+ * song the catalog saw first, then by video id. The walk
+ * (`recommendCandidates`) and the weighing (`rankRecommended`) come apart,
+ * so sliders weigh one walk again.
+ */
+export const recommend = (
+  seed: RecommendSeed,
+  sources: RecommendSources,
+  options: RecommendOptions = {},
+): RecommendedSong[] => rankRecommended(recommendCandidates(seed, sources, options), options);

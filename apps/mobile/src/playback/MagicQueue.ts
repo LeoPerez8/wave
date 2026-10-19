@@ -11,6 +11,7 @@ import {
   magicQueueLabel,
   magicQueueShare,
   magicSignal,
+  mixSlidersEngine,
   parseMagicSession,
   playEndPending,
   startMagicQueue as startSession,
@@ -32,7 +33,7 @@ import { onStarred, onYtSongSignal } from "@/library/libraryChanges";
 import { LibraryStore, songHasFile, type SongRow } from "@/library/LibraryStore";
 import { YtMusic } from "@/ytmusic/YtMusic";
 
-import { magicQueueLevel } from "./magicQueueLevel";
+import { magicQueueLevel, magicQueueSliders } from "./magicQueueLevel";
 import { magicQueueYtCandidates } from "./magicQueueRadio";
 import { magicSongsOf } from "./magicSongs";
 import { Player } from "./Player";
@@ -255,7 +256,9 @@ export const layer = Layer.effectDiscard(
         const library = yield* Effect.provideService(libraryNow, LibraryStore, store);
         // The owner's taste weighs from the session's first batch on.
         const taste = yield* Effect.provideService(tasteProfileNow, LibraryStore, store);
-        const yt = yield* magicQueueYtCandidates(wanted, library, { taste }).pipe(
+        // The Magic Queue section's sliders as they are now: a move applies from the next batch.
+        const engine = mixSlidersEngine(magicQueueSliders.get());
+        const yt = yield* magicQueueYtCandidates(wanted, library, { taste, engine }).pipe(
           Effect.provideService(LibraryStore, store),
           Effect.provideService(YtMusic, ytMusic),
         );

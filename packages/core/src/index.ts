@@ -1909,3 +1909,20 @@ export type {
   MagicCatalogOptions,
   MagicCatalogPick,
 } from "./magicQueueCatalog.ts";
+export {
+  DEFAULT_MIX_SLIDERS,
+  GENRE_FAITHFULNESS_STEPS,
+  POPULARITY_STEPS,
+  mixSlidersEngine,
+  readMixSliders,
+  storedMixSliders,
+} from "./mixSliders.ts";
+export type { MixSliderStep, MixSliders } from "./mixSliders.ts";
+export { catalogMixReader } from "./catalogMixes.ts";
+export type { CatalogMixReader } from "./catalogMixes.ts";
+export { rankRecommended, recommendCandidates } from "./recommend.ts";
+export type { RecommendCandidate } from "./recommend.ts";
+export { seededRandom } from "./weightedPick.ts";
+export type { DiscoverMixesBuild } from "./discoverMixes.ts";
+export { discoverMixesRerun, rerankedDiscoverMixes } from "./mixRerank.ts";
+export type { DiscoverMixesRerun } from "./mixRerank.ts";
