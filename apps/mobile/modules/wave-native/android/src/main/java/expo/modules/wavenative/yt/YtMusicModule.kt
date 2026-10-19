@@ -69,6 +69,13 @@ class YtMusicModule : Module() {
     /** What meter [id] counted, `{ requests, bytes }` (bytes on the wire), ending it. */
     Function("takeNetworkUse") { id: String -> client.meters.take(id).toMap() }
 
+    /**
+     * Hands over the day's Wi-Fi pre-download list ([videoIds], in the order
+     * to fetch; empty for none): the start of Home's mixes goes into the
+     * audio cache on Wi-Fi with battery not low ([PreDownloads]).
+     */
+    AsyncFunction("schedulePreDownload") { videoIds: List<String> -> PreDownloads.schedule(context, videoIds) }
+
     /** `{ songs, continuation }` for [query], or a rejection with an `ERR_YT_*` code. */
     AsyncFunction("searchSongs") Coroutine { query: String ->
       coded { client.searchSongs(query).toMap() }

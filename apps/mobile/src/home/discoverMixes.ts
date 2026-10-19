@@ -83,6 +83,7 @@ import { YtMusic } from "@/ytmusic/YtMusic";
 import { lookUpArtistProfiles, mixProfileOf } from "./artistGenres";
 import { useDiscoverMixLevel, type MixSectionId } from "./discoverMixLevel";
 import { mixIndexes, refreshKnownVideos, useKnownVideos, type MixIndexes } from "./mixKnown";
+import { noteMixesShown } from "./mixPreDownload";
 import { savedYtArtist, ytArtistBrowseId } from "./ytArtistPage";
 
 export type { MixSectionId } from "./discoverMixLevel";
@@ -558,7 +559,7 @@ export const useDiscoverMixes = (id: MixSectionId, played: boolean): DiscoverMix
       refresh(id, played);
     }, [enabled, id, played]),
   );
-  return useMemo(
+  const section = useMemo(
     () =>
       discoverMixesSection(mixes, {
         ytMusic: enabled,
@@ -568,6 +569,9 @@ export const useDiscoverMixes = (id: MixSectionId, played: boolean): DiscoverMix
       }),
     [mixes, enabled, nothing, blend, rebuilding],
   );
+  // The start of what Home shows is fetched ahead on Wi-Fi.
+  useEffect(() => noteMixesShown(id, section), [id, section]);
+  return section;
 };
 
 /**

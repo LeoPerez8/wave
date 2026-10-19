@@ -13,7 +13,7 @@ import androidx.media3.datasource.cache.CacheDataSink
 import androidx.media3.datasource.cache.CacheDataSource
 import androidx.media3.datasource.cache.CacheEvictor
 import androidx.media3.datasource.cache.ContentMetadata
-import androidx.media3.datasource.cache.LeastRecentlyUsedCacheEvictor
+import androidx.media3.datasource.cache.ContentMetadataMutations
 import androidx.media3.datasource.cache.SimpleCache
 import expo.modules.wavenative.log.WaveLog
 import java.io.File
@@ -22,8 +22,9 @@ import java.util.Locale
 /**
  * The audio of the YT Music songs the player streams, kept on the phone so
  * replaying or seeking back doesn't download it again (docs/spec.md, YT
- * Music, Streaming): 1 GB at most, the least recently played out first
- * ([evictor]). A song's bytes are keyed by its video id and format (itag),
+ * Music, Streaming): 1 GB at most, the least recently played out first,
+ * except that songs fetched ahead on Wi-Fi ([PreDownloads]) that the day's
+ * list no longer has and that haven't played since go before them ([evictor]). A song's bytes are keyed by its video id and format (itag),
  * not by the stream address, so a fresh address finds them, and a song
  * cached whole plays without asking YouTube at all ([wholeKey]). It isn't a
  * Library download: the star's M4A downloads go their own way.
@@ -55,6 +56,29 @@ class YtAudioCache(val cache: Cache) {
     }
     return key
   }
+
+  /**
+   * Whether [key] holds audio fetched ahead of playback ([markFetchedAhead])
+   * that hasn't played since ([notePlayed]).
+   */
+  fun fetchedAhead(key: String): Boolean = isFetchedAhead(cache, key)
+
+  /** [key]'s audio is being fetched ahead of playback, on Wi-Fi. */
+  fun markFetchedAhead(key: String) {
+    if (!fetchedAhead(key)) cache.applyContentMetadataMutations(key, ContentMetadataMutations().set(FETCHED_AHEAD, 1L))
+  }
+
+  /** [key]'s audio was loaded for playback: it counts as played, no longer as fetched ahead. */
+  fun notePlayed(key: String) {
+    if (fetchedAhead(key)) cache.applyContentMetadataMutations(key, ContentMetadataMutations().remove(FETCHED_AHEAD))
+  }
+
+  /**
+   * Whether audio fetched ahead for [videoId] would be the fetch's alone: the
+   * cache has nothing of it, or only what an earlier fetch ahead left. A song
+   * the owner played isn't marked again, so it keeps its place.
+   */
+  fun aheadOnly(videoId: String): Boolean = keysOf(videoId).all(::fetchedAhead)
 
   /** Drops [key]'s bytes. */
   fun forget(key: String) {
@@ -95,8 +119,22 @@ class YtAudioCache(val cache: Cache) {
     /** Under the app's cache folder, so clearing Wave's storage (or its cache) clears it. */
     private const val FOLDER = "yt-audio"
 
-    /** What leaves the cache for new audio: the least recently played, beyond [maxBytes]. */
-    fun evictor(maxBytes: Long = MAX_BYTES): CacheEvictor = LeastRecentlyUsedCacheEvictor(maxBytes)
+    /** Content metadata on a key fetched ahead and not played since. */
+    private const val FETCHED_AHEAD = "wave.fetchedAhead"
+
+    private fun isFetchedAhead(cache: Cache, key: String): Boolean =
+      cache.getContentMetadata(key).get(FETCHED_AHEAD, 0L) != 0L
+
+    /** The video id a cache key ([keyFor]) holds the audio of. */
+    fun videoIdOfKey(key: String): String? = YtMedia.videoIdOf(key.substringBeforeLast(':'))
+
+    /**
+     * What leaves the cache for new audio, beyond [maxBytes]: first songs
+     * fetched ahead and not played since that [listed] (the videos the day's
+     * pre-download lists) no longer has, then the least recently played.
+     */
+    fun evictor(maxBytes: Long = MAX_BYTES, listed: () -> Set<String> = { emptySet() }): CacheEvictor =
+      YtAudioEvictor(maxBytes) { cache, key -> isFetchedAhead(cache, key) && videoIdOfKey(key) !in listed() }
 
     @Volatile private var shared: YtAudioCache? = null
 
@@ -113,7 +151,8 @@ class YtAudioCache(val cache: Cache) {
       return synchronized(this) {
         shared ?: try {
           val app = context.applicationContext ?: context
-          YtAudioCache(SimpleCache(File(app.cacheDir, FOLDER), evictor(), StandaloneDatabaseProvider(app))).also { shared = it }
+          val evictor = evictor { PreDownloads.listed(app) }
+          YtAudioCache(SimpleCache(File(app.cacheDir, FOLDER), evictor, StandaloneDatabaseProvider(app))).also { shared = it }
         } catch (e: RuntimeException) {
           failed = true
           WaveLog.w(LOG_TAG, "The audio cache couldn't open; songs stream without it", e)
