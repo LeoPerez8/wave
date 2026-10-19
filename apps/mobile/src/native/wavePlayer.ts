@@ -3,7 +3,9 @@ import type {
   PlayerCoverUpdate,
   PlaySource,
   RepeatMode,
+  SeekSource,
   SleepTimer,
+  SongChangeCause,
 } from "@wave/core";
 import { NativeModule, requireNativeModule } from "expo";
 
@@ -184,8 +186,15 @@ declare class WavePlayerModule extends NativeModule<WavePlayerEvents> {
    * `searchingAfter`), or null: a crossfade from it waits for the search at full volume.
    */
   setSearchingAfter(key: string | null): Promise<void>;
-  /** Edits the item list per the plan; `items` holds only the keys new to the player. */
-  applySync(steps: readonly NativeSyncStep[], items: readonly PlayerItem[]): Promise<void>;
+  /**
+   * Edits the item list per the plan; `items` holds only the keys new to the player.
+   * `cause` names a song change the plan makes in the app log's crossfade lines.
+   */
+  applySync(
+    steps: readonly NativeSyncStep[],
+    items: readonly PlayerItem[],
+    cause: SongChangeCause,
+  ): Promise<void>;
   setRepeatMode(mode: RepeatMode): Promise<void>;
   /** The queue's shuffle and repeat, for the toggles on Auto's player screen. */
   setModes(shuffle: boolean, repeat: RepeatMode): Promise<void>;
@@ -215,8 +224,10 @@ declare class WavePlayerModule extends NativeModule<WavePlayerEvents> {
    */
   takeResumed(): boolean;
   play(): Promise<void>;
-  pause(): Promise<void>;
-  seekTo(positionMs: number): Promise<void>;
+  /** `forSearch`: paused while the song to play is searched, as the app log's crossfade lines say. */
+  pause(forSearch: boolean): Promise<void>;
+  /** `source` is where the seek came from, for the app log's crossfade lines. */
+  seekTo(positionMs: number, source: SeekSource): Promise<void>;
   getState(): Promise<NativePlayerState>;
   /**
    * Starts the sleep timer in the playback service, which enforces it even with
