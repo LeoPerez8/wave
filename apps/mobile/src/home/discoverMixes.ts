@@ -77,8 +77,8 @@ import { artistGraphNow } from "./artistGraphNow";
 import { artistMixPools } from "./artistMixPools";
 import {
   mixSlidersOf,
-  onMixSlidersMoved,
-  useDiscoverMixLevel,
+  setMixSlidersListener,
+  useSectionLevel,
   type MixSectionId,
 } from "./discoverMixLevel";
 import { mixCatalog } from "./mixCatalog";
@@ -270,7 +270,7 @@ const rerankAfterward = (id: MixSectionId): void => {
   rerank(id);
 };
 
-onMixSlidersMoved(rerank);
+setMixSlidersListener(rerank);
 
 /**
  * Builds Artist mixes from the owner's all-time most played artists, picked
@@ -551,7 +551,7 @@ const useBlend = (
   id: MixSectionId,
   tracks: ReadonlyMap<number, SongRow> | null,
 ): DiscoverMixBlend => {
-  const level = useDiscoverMixLevel(id);
+  const level = useSectionLevel(id);
   const dontPlayExplicit = useDontPlayExplicit();
   const knownVideos = useKnownVideos();
   return useMemo(

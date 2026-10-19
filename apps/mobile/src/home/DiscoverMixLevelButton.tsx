@@ -1,11 +1,9 @@
 import {
-  DISCOVER_MIX_LEVELS,
   GENRE_FAITHFULNESS_STEPS,
-  MAGIC_QUEUE_LEVELS,
   POPULARITY_STEPS,
   homeSectionTitle,
-  type DiscoverMixLevel,
-  type MixSliderStep,
+  sliderStep,
+  sliderStepLabel,
   type SliderRange,
 } from "@wave/core";
 import { Text, View } from "react-native";
@@ -19,36 +17,16 @@ import { openOverlay } from "@/overlay/overlay";
 
 import {
   mixSlidersOf,
-  setDiscoverMixLevel,
+  sectionLevelShare,
   setMixSliders,
-  useDiscoverMixLevel,
+  setSectionLevel,
   useMixSliders,
+  useSectionLevel,
   type LevelSectionId,
 } from "./discoverMixLevel";
 
-type Levels = typeof DISCOVER_MIX_LEVELS;
-
-/** Each section's new-music levels, with the share each gives. */
-const LEVELS: Record<LevelSectionId, Levels> = {
-  "artist-mixes": DISCOVER_MIX_LEVELS,
-  "genre-mixes": DISCOVER_MIX_LEVELS,
-  "magic-queue": MAGIC_QUEUE_LEVELS,
-};
-
 /** Every slider of the card: five steps, from its left end to its right one. */
 const STEPS: SliderRange = { min: 1, max: 5, step: 1 };
-
-/** [value] as one of the five steps. */
-const asStep = (value: number): MixSliderStep =>
-  Math.min(5, Math.max(1, Math.round(value))) as MixSliderStep;
-
-const levelOf = (levels: Levels, level: number) =>
-  levels.find((entry) => entry.level === level) ?? levels[0]!;
-
-const stepLabel = (
-  steps: readonly { readonly step: MixSliderStep; readonly label: string }[],
-  value: number,
-) => steps.find((entry) => entry.step === asStep(value))?.label ?? "";
 
 /**
  * The level card: the section's three sliders, applied as they move. New
@@ -58,8 +36,7 @@ const stepLabel = (
  * and a drag both show at once.
  */
 function LevelCard({ section }: { section: LevelSectionId }) {
-  const levels = LEVELS[section];
-  const level = useDiscoverMixLevel(section);
+  const level = useSectionLevel(section);
   const sliders = useMixSliders(section);
   return (
     <>
@@ -77,17 +54,17 @@ function LevelCard({ section }: { section: LevelSectionId }) {
           label="New music"
           value={level}
           range={STEPS}
-          format={(value) => levelOf(levels, value).share}
-          onChange={(value) => setDiscoverMixLevel(section, asStep(value) as DiscoverMixLevel)}
+          format={(value) => sectionLevelShare(section, sliderStep(value))}
+          onChange={(value) => setSectionLevel(section, sliderStep(value))}
         />
         <SettingsSlider
           compact
           label="Genre faithfulness"
           value={sliders.faithfulness}
           range={STEPS}
-          format={(value) => stepLabel(GENRE_FAITHFULNESS_STEPS, value)}
+          format={(value) => sliderStepLabel(GENRE_FAITHFULNESS_STEPS, value)}
           onChange={(value) =>
-            setMixSliders(section, { ...mixSlidersOf(section), faithfulness: asStep(value) })
+            setMixSliders(section, { ...mixSlidersOf(section), faithfulness: sliderStep(value) })
           }
         />
         <SettingsSlider
@@ -95,9 +72,9 @@ function LevelCard({ section }: { section: LevelSectionId }) {
           label="Popularity"
           value={sliders.popularity}
           range={STEPS}
-          format={(value) => stepLabel(POPULARITY_STEPS, value)}
+          format={(value) => sliderStepLabel(POPULARITY_STEPS, value)}
           onChange={(value) =>
-            setMixSliders(section, { ...mixSlidersOf(section), popularity: asStep(value) })
+            setMixSliders(section, { ...mixSlidersOf(section), popularity: sliderStep(value) })
           }
         />
       </View>
@@ -122,7 +99,7 @@ export function DiscoverMixLevelButton({
   section: LevelSectionId;
   disabledNote?: string;
 }) {
-  const level = useDiscoverMixLevel(section);
+  const level = useSectionLevel(section);
   const open = () => {
     openOverlay({
       label: homeSectionTitle(section),
@@ -132,7 +109,7 @@ export function DiscoverMixLevelButton({
   };
   return (
     <TextButton
-      label={disabledNote ?? levelOf(LEVELS[section], level).share}
+      label={disabledNote ?? sectionLevelShare(section, level)}
       opensMenu
       disabled={disabledNote !== undefined}
       onPress={open}

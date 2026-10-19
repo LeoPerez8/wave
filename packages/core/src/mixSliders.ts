@@ -7,12 +7,13 @@
  * says what each step does to the engine and how a section keeps them.
  */
 
+import type { DiscoverMixLevel } from "./discoverMixLevels.ts";
 import { GENRE_AFFINITY_THRESHOLD } from "./genreAffinity.ts";
 import { RECOMMEND_WEIGHTS, type RecommendOptions } from "./recommend.ts";
 import { readStoredRecord } from "./storedJson.ts";
 
-/** A slider's step, from its left end (1) to its right one (5). */
-export type MixSliderStep = 1 | 2 | 3 | 4 | 5;
+/** A slider's step, from its left end (1) to its right one (5): the new-music level's steps too. */
+export type MixSliderStep = DiscoverMixLevel;
 
 /** A section's two engine sliders. */
 export interface MixSliders {
@@ -75,6 +76,16 @@ export const mixSlidersEngine = (
 
 const readStep = (value: unknown): MixSliderStep | null =>
   value === 1 || value === 2 || value === 3 || value === 4 || value === 5 ? value : null;
+
+/** A level card slider at [value] (where a drag left it) as the nearest of its five steps. */
+export const sliderStep = (value: number): MixSliderStep =>
+  readStep(Math.min(5, Math.max(1, Math.round(value)))) ?? DEFAULT_MIX_SLIDERS.faithfulness;
+
+/** The label of the step of [steps] a slider at [value] is on ("Same genres", "Deep cuts"). */
+export const sliderStepLabel = (
+  steps: readonly { readonly step: MixSliderStep; readonly label: string }[],
+  value: number,
+): string => stepOf(steps, sliderStep(value)).label;
 
 /** A section's sliders as kept on the phone ([stored], null for none): the middle for any that isn't a step. */
 export const readMixSliders = (stored: string | null): MixSliders => {

@@ -9,6 +9,8 @@ import {
   mixSlidersEngine,
   readMixSliders,
   recommend,
+  sliderStep,
+  sliderStepLabel,
   storedMixSliders,
   type CatalogSong,
   type GenreProfile,
@@ -163,5 +165,19 @@ describe("Keeping a section's sliders", () => {
       popularity: 4,
     });
     assert.deepEqual(readMixSliders('{"faithfulness":2.5,"popularity":"1"}'), DEFAULT_MIX_SLIDERS);
+  });
+});
+
+describe("A level card slider's position", () => {
+  test("lands on the nearest of the five steps, within them", () => {
+    assert.deepEqual(
+      [0, 1, 2.4, 2.6, 5, 9].map((value) => sliderStep(value)),
+      [1, 1, 2, 3, 5, 5],
+    );
+  });
+
+  test("reads as its step's label", () => {
+    assert.equal(sliderStepLabel(GENRE_FAITHFULNESS_STEPS, 1.2), "Same genres");
+    assert.equal(sliderStepLabel(POPULARITY_STEPS, 4.8), "Deep cuts");
   });
 });

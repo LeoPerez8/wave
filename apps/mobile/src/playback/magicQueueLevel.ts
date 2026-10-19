@@ -1,11 +1,6 @@
-import {
-  readDiscoverMixLevel,
-  readMixSliders,
-  storedMixSliders,
-  type DiscoverMixLevel,
-  type MixSliders,
-} from "@wave/core";
+import { readDiscoverMixLevel, type DiscoverMixLevel } from "@wave/core";
 
+import { mixSlidersSetting } from "@/lib/mixSlidersSetting";
 import { persistedSetting } from "@/lib/persistedSetting";
 
 /**
@@ -19,19 +14,6 @@ export const magicQueueLevel = persistedSetting<DiscoverMixLevel>({
   read: readDiscoverMixLevel,
   write: String,
 });
-
-/** How long a dragged slider waits before it's written: the last step wins. */
-export const SLIDERS_PERSIST_MS = 500;
-
-/** A section's Genre faithfulness and Popularity sliders, kept on this phone under [key]. */
-export const mixSlidersSetting = (key: string) =>
-  persistedSetting<MixSliders>({
-    key,
-    read: readMixSliders,
-    write: storedMixSliders,
-    equals: (a, b) => a.faithfulness === b.faithfulness && a.popularity === b.popularity,
-    persistDelayMs: SLIDERS_PERSIST_MS,
-  });
 
 /**
  * The Magic Queue section's Genre faithfulness and Popularity sliders
