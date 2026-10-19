@@ -123,11 +123,23 @@ const mixesOf = (
       library,
       ...(avoidSongs === undefined ? {} : { avoid: avoidSongs }),
     });
-    return discoverMixesBuilt(mixes, Date.now(), seeds, {
+    const built = discoverMixesBuilt(mixes, Date.now(), seeds, {
       ...(avoidSongs === undefined ? {} : { avoid: avoidSongs }),
       variety,
     });
+    if (built !== null) rankedAt.set(built, ranked.sliders);
+    return built;
   });
+
+/** The sliders each build's mixes were ranked at: the section's `rankedWith` once they're saved. */
+const rankedAt = new WeakMap<DiscoverMixes, MixSliders>();
+
+/** Saves [built] as [id]'s mixes, with the sliders they were ranked at. */
+const saveBuilt = (id: MixSectionId, built: DiscoverMixes): void => {
+  const mixSection = SECTIONS[id];
+  mixSection.saved.set(built);
+  mixSection.rankedWith = rankedAt.get(built) ?? null;
+};
 
 /**
  * [seeds]' catalog reads by [reader], ranked at [id]'s sliders as they are
@@ -151,7 +163,6 @@ const readsOf = (
     const reads: DiscoverMixRead<CatalogMixSong>[] = seeds.flatMap(
       (seed) => reader.read(seed, options) ?? [],
     );
-    SECTIONS[id].rankedWith = sliders;
     return { reads, sliders };
   });
 
@@ -207,13 +218,13 @@ const rerankedOf = (id: MixSectionId, saved: DiscoverMixes) =>
     const { seeds, avoid, variety } = discoverMixesRerun(saved, library.artists);
     const reader = yield* readerOf(id, library, variety);
     const avoidSongs = avoid.size === 0 ? undefined : avoid;
-    const { reads } = yield* readsOf(id, reader, seeds, avoidSongs);
+    const { reads, sliders } = yield* readsOf(id, reader, seeds, avoidSongs);
     const mixes = discoverMixesOfRadios(reads, {
       known: library.known,
       library,
       ...(avoidSongs === undefined ? {} : { avoid: avoidSongs }),
     });
-    return rerankedDiscoverMixes(saved, mixes);
+    return { mixes: rerankedDiscoverMixes(saved, mixes), sliders };
   });
 
 /** Whether two settings of the sliders are the same. */
@@ -239,16 +250,18 @@ const rerank = (id: MixSectionId): void => {
   void appRuntime
     .runPromise(Effect.result(rerankedOf(id, saved)))
     .then((result) => {
-      // A build or a refresh saved others meanwhile: they're ranked at the sliders they read.
       if (!Result.isSuccess(result)) return;
+      // A build, a refresh or an Undo saved others meanwhile: they say what they're ranked at.
       if (mixSection.saved.get() !== saved) {
-        mixSection.rankedWith = null;
         mixSection.rerankAfter = true;
         return;
       }
-      if (result.success === saved) return;
-      mixSection.saved.set(result.success);
-      mixSection.shown.set(mixesShown(mixSection.shown.get(), result.success, Date.now()));
+      const { mixes, sliders } = result.success;
+      // Unchanged or not, the saved mixes are what the sliders now rank.
+      mixSection.rankedWith = sliders;
+      if (mixes === saved) return;
+      mixSection.saved.set(mixes);
+      mixSection.shown.set(mixesShown(mixSection.shown.get(), mixes, Date.now()));
     })
     .finally(() => {
       mixSection.reranking = false;
@@ -444,7 +457,7 @@ const refresh = (id: MixSectionId, played: boolean): void => {
       if (built !== null && built !== "nothing-to-build-from") {
         mixSection.retryAt = null;
         mixSection.nothingToBuildFrom.set(false);
-        mixSection.saved.set(built);
+        saveBuilt(id, built);
         // The day's build: what refreshes avoid starts again from it.
         mixSection.shown.set(mixesShown([], built, Date.now()));
         return;
@@ -509,7 +522,7 @@ export const refreshMixes = (id: MixSectionId): void => {
       }
       mixSection.retryAt = null;
       mixSection.nothingToBuildFrom.set(false);
-      saved.set(built);
+      saveBuilt(id, built);
       shown.set(mixesShown(memory, built, Date.now()));
       if (previous === null) return;
       void showToast(NEW_MIXES, {
