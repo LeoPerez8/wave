@@ -624,14 +624,15 @@ export const layer = Layer.effect(
           source: queueSource.get(),
         };
         return {
-          play: (track) =>
-            walkOut(
-              start(
-                { type: "play", trackIds: [track.id], context: RECAP_PLAY_CONTEXT, shuffle: false },
-                [track],
-              ),
-              apply("play"),
-            ),
+          play: (track) => {
+            const command: QueueCommand = {
+              type: "play",
+              trackIds: [track.id],
+              context: RECAP_PLAY_CONTEXT,
+              shuffle: false,
+            };
+            return walkOut(start(command, [track]), apply(songChangeCause(command)));
+          },
           giveBack: lane.withPermit(putBack(lent)),
         };
       }),
