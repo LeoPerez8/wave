@@ -20,6 +20,7 @@ const TODAYS_HOME = [
   "most-played",
   "most-played-albums",
   "most-played-artists",
+  "magic-queue",
   "artist-mixes",
   "genre-mixes",
   "favorites",
@@ -39,6 +40,7 @@ describe("Home's section catalogue", () => {
         ["most-played", "Most played"],
         ["most-played-albums", "Most played albums"],
         ["most-played-artists", "Most played artists"],
+        ["magic-queue", "Magic Queue"],
         ["artist-mixes", "Artist mixes"],
         ["genre-mixes", "Genre mixes"],
         ["favorites", "Favorites"],
@@ -94,6 +96,7 @@ describe("Home's arrangement", () => {
         "recently-played",
         "most-played-albums",
         "most-played-artists",
+        "magic-queue",
         "artist-mixes",
         "genre-mixes",
         "stats",
@@ -129,6 +132,37 @@ describe("Home's arrangement", () => {
     assert.deepEqual(parseHomeArrangement(discover), ["favorites", "artist-mixes", "genre-mixes"]);
   });
 
+  test("Magic Queue joins a Home arranged before it, right before Artist mixes", () => {
+    // Saved by a Wave whose catalogue had no Magic Queue.
+    const before = TODAYS_HOME.filter((id) => id !== "magic-queue");
+    const moved = JSON.stringify({
+      shown: ["favorites", "artist-mixes", "most-played-artists", "recently-added"],
+      hidden: before.filter(
+        (id) => !["favorites", "artist-mixes", "most-played-artists", "recently-added"].includes(id),
+      ),
+    });
+    assert.deepEqual(parseHomeArrangement(moved), [
+      "favorites",
+      "magic-queue",
+      "artist-mixes",
+      "most-played-artists",
+      "recently-added",
+    ]);
+  });
+
+  test("Magic Queue joins a Home that hid Artist mixes after the section it follows in the catalogue", () => {
+    const before = TODAYS_HOME.filter((id) => id !== "magic-queue");
+    const stored = JSON.stringify({
+      shown: ["most-played-artists", "favorites"],
+      hidden: before.filter((id) => id !== "most-played-artists" && id !== "favorites"),
+    });
+    assert.deepEqual(parseHomeArrangement(stored), [
+      "most-played-artists",
+      "magic-queue",
+      "favorites",
+    ]);
+  });
+
   test("Artist mixes and Genre mixes join a Home arranged before them, after Most played artists", () => {
     const stored = JSON.stringify({
       shown: ["favorites", "most-played-artists", "recently-added"],
@@ -143,6 +177,7 @@ describe("Home's arrangement", () => {
     assert.deepEqual(parseHomeArrangement(stored), [
       "favorites",
       "most-played-artists",
+      "magic-queue",
       "artist-mixes",
       "genre-mixes",
       "recently-added",
@@ -215,6 +250,7 @@ describe("what Home lists", () => {
           "most-played",
           "most-played-albums",
           "most-played-artists",
+          "magic-queue",
           "artist-mixes",
           "genre-mixes",
           "favorites",
@@ -241,11 +277,11 @@ describe("what Home lists", () => {
 
   test("with YT Music off, sections that need it aren't listed", () => {
     assert.deepEqual(
-      homeItems(["favorites", "artist-mixes", "genre-mixes", "stats"], {
+      homeItems(["favorites", "magic-queue", "artist-mixes", "genre-mixes", "stats"], {
         nothingPlayed: false,
         ytMusic: false,
       }),
-      sections("favorites", "stats"),
+      sections("favorites", "magic-queue", "stats"),
     );
     assert.deepEqual(
       homeItems(["artist-mixes", "favorites", "most-played"], {
@@ -282,6 +318,7 @@ describe("Home's editor", () => {
       "recently-played",
       "most-played-albums",
       "most-played-artists",
+      "magic-queue",
       "artist-mixes",
       "genre-mixes",
       "listening-overview",
@@ -294,6 +331,7 @@ describe("Home's editor", () => {
     assert.equal(homeSectionNote("artist-mixes", { ytMusic: true }), null);
     assert.equal(homeSectionNote("genre-mixes", { ytMusic: false }), "Needs YT Music");
     assert.equal(homeSectionNote("favorites", { ytMusic: false }), null);
+    assert.equal(homeSectionNote("magic-queue", { ytMusic: false }), null);
   });
 
   test("removing a section takes it off Home, the rest keeping their order", () => {

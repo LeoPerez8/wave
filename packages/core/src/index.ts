@@ -1795,3 +1795,13 @@ export {
   tasteWeight,
 } from "./tasteProfile.ts";
 export type { TasteHistory, TasteProfile, TasteSignal, TasteSignalKind } from "./tasteProfile.ts";
+export {
+  MAGIC_QUEUE_PICKS,
+  magicQueuePicks,
+  parseMagicQueuePicks,
+  refreshedMagicQueuePicks,
+  storedMagicQueuePicks,
+  undoneMagicQueueRefresh,
+} from "./magicQueueSection.ts";
+export type { MagicQueuePicking, MagicQueuePicks } from "./magicQueueSection.ts";
+export { MAGIC_QUEUE_LEVELS, magicQueueShare } from "./magicQueue.ts";

@@ -15,6 +15,7 @@ export type HomeSectionId =
   | "most-played"
   | "most-played-albums"
   | "most-played-artists"
+  | "magic-queue"
   | "artist-mixes"
   | "genre-mixes"
   | "favorites"
@@ -30,6 +31,12 @@ export interface HomeSection {
   readonly fromPlays: boolean;
   /** It shows only while YT Music is on in Settings. */
   readonly needsYtMusic?: boolean;
+  /**
+   * Where it joins a Home arranged before it existed: right before this
+   * section, when that Home shows it. Absent (or that section not shown):
+   * after the shown section it follows in the catalogue.
+   */
+  readonly joinsBefore?: HomeSectionId;
 }
 
 /**
@@ -43,6 +50,7 @@ export const HOME_SECTIONS: readonly HomeSection[] = [
   { id: "most-played", title: "Most played", fromPlays: true },
   { id: "most-played-albums", title: "Most played albums", fromPlays: true },
   { id: "most-played-artists", title: "Most played artists", fromPlays: true },
+  { id: "magic-queue", title: "Magic Queue", fromPlays: false, joinsBefore: "artist-mixes" },
   { id: "artist-mixes", title: "Artist mixes", fromPlays: false, needsYtMusic: true },
   { id: "genre-mixes", title: "Genre mixes", fromPlays: false, needsYtMusic: true },
   { id: "favorites", title: "Favorites", fromPlays: false },
@@ -104,9 +112,10 @@ const sameOrder = (a: HomeArrangement, b: HomeArrangement): boolean =>
 /**
  * The arrangement a stored value holds: the sections it shows, in its order,
  * those this Wave doesn't know left out. A catalogue section it neither shows
- * nor hides is newer than the arrangement, and shows after the shown section
- * it follows in the catalogue (on top when none does). Nothing stored, or
- * anything unreadable, is the default.
+ * nor hides is newer than the arrangement. It shows right before the section
+ * it joins before (`joinsBefore`) when the arrangement shows that one, else
+ * after the shown section it follows in the catalogue (on top when none
+ * does). Nothing stored, or anything unreadable, is the default.
  */
 export const parseHomeArrangement = (stored: string | null): HomeArrangement => {
   if (stored === null) return DEFAULT_HOME_ARRANGEMENT;
@@ -114,13 +123,21 @@ export const parseHomeArrangement = (stored: string | null): HomeArrangement => 
   if (!Array.isArray(shown)) return DEFAULT_HOME_ARRANGEMENT;
   const arrangement = knownSections(shown);
   const known = new Set([...arrangement, ...knownSections(Array.isArray(hidden) ? hidden : [])]);
-  DEFAULT_HOME_ARRANGEMENT.forEach((id, place) => {
-    if (known.has(id)) return;
+  const newer = HOME_SECTIONS.filter(({ id }) => !known.has(id));
+  // Those that join before a section go last, once the section they join before has its place.
+  const anchored = newer.filter(({ joinsBefore }) => joinsBefore !== undefined);
+  for (const { id, joinsBefore } of [...newer.filter((section) => !anchored.includes(section)), ...anchored]) {
+    const anchor = joinsBefore === undefined ? -1 : arrangement.indexOf(joinsBefore);
+    if (anchor !== -1) {
+      arrangement.splice(anchor, 0, id);
+      continue;
+    }
+    const place = DEFAULT_HOME_ARRANGEMENT.indexOf(id);
     const before = DEFAULT_HOME_ARRANGEMENT.slice(0, place).findLast((earlier) =>
       arrangement.includes(earlier),
     );
     arrangement.splice(before === undefined ? 0 : arrangement.indexOf(before) + 1, 0, id);
-  });
+  }
   return arrangement;
 };
 
