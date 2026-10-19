@@ -654,6 +654,7 @@ export type {
   WaveAccountView,
   WaveSession,
 } from "./waveAccount.ts";
+export type { AccountSession, AccountSignInEvent, AccountSignInState } from "./accountSignIn.ts";
 export {
   SPOTIFY_ACCOUNT_SIGNED_OUT,
   SPOTIFY_CHANGED_LINE,
@@ -678,6 +679,7 @@ export type {
   YtAccountState,
   YtAccountView,
   YtSession,
+  YtSignInFailure,
 } from "./ytAccount.ts";
 export {
   YT_SEARCH_DEBOUNCE_MS,
