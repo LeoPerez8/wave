@@ -20,7 +20,7 @@ import { songFamilies } from "./genreMixes.ts";
 import type { PlayEnd } from "./playEvents.ts";
 import type { QueueState } from "./queue.ts";
 import { isRecord } from "./storedJson.ts";
-import { MAGIC_SKIP_MS, tasteWeight, type TasteProfile } from "./tasteProfile.ts";
+import { MAGIC_SKIP_MS, genreKey, tasteWeight, type TasteProfile } from "./tasteProfile.ts";
 import { pickWeighted, type RandomSource } from "./weightedPick.ts";
 import { parseTrackId, ytTrackId } from "./ytMusic.ts";
 
@@ -183,12 +183,6 @@ export const MAGIC_QUEUE_LEVELS: readonly {
   label,
   share: `${Math.round(magicQueueShare(level) * 100)}% new`,
 }));
-
-/** A genre tag compared without case or surrounding spaces. */
-const genreKey = (genre: string | null): string | null => {
-  const key = genre?.trim().toLowerCase() ?? "";
-  return key === "" ? null : key;
-};
 
 /**
  * Starts a Magic Queue from [seed], whose songs are [seedSongs] (the song
