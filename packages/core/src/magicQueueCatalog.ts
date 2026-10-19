@@ -125,13 +125,15 @@ export const MAGIC_CATALOG_LOW = 20;
  * mobile data only when none is left, while the harvest's ~5 MB a day
  * (`HARVEST_MOBILE_BYTES`, the same count) aren't used up. Never when its
  * radios were all read in the last 12 hours (`HARVEST_RETRY_MS`: another
- * read would bring the same songs), nor for a session with no radio
+ * read would bring the same songs) or its refill was [run]'s `tried` (by
+ * session id) in that time, even one that brought nothing (an artist YT
+ * Music doesn't have, an empty radio), nor for a session with no radio
  * artists.
  */
 export const magicRefillDue = (
   session: MagicSession,
   { catalog, left }: { readonly catalog: readonly CatalogSong[]; readonly left: number },
-  run: Pick<HarvestRun, "onMobileData" | "usedToday" | "now">,
+  run: Pick<HarvestRun, "onMobileData" | "usedToday" | "now" | "tried">,
 ): boolean => {
   if (session.radioArtists.length === 0) return false;
   const want = {

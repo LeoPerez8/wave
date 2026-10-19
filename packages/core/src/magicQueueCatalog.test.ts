@@ -259,6 +259,19 @@ describe("A Magic Queue's refill", () => {
     );
   });
 
+  test("a refill tried this session that brought nothing isn't due again within 12 hours", () => {
+    const session = sessionOf("Muse");
+    const tried = (ago: number) => ({ ...WIFI, tried: new Map([[session.id, NOW - ago]]) });
+    assert.equal(magicRefillDue(session, { catalog: never, left: 0 }, tried(DAY / 24)), false);
+    assert.equal(
+      magicRefillDue(session, { catalog: never, left: 0 }, tried(HARVEST_RETRY_MS - 1)),
+      false,
+    );
+    assert.equal(magicRefillDue(session, { catalog: never, left: 0 }, tried(HARVEST_RETRY_MS)), true);
+    const other = new Map([["another session", NOW]]);
+    assert.equal(magicRefillDue(session, { catalog: never, left: 0 }, { ...WIFI, tried: other }), true);
+  });
+
   test("never for a session with no radio artists", () => {
     const session = { ...sessionOf("Muse"), radioArtists: [] };
     assert.equal(magicRefillDue(session, { catalog: never, left: 0 }, WIFI), false);

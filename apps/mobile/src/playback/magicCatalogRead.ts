@@ -4,7 +4,8 @@
  * `magicCatalogCandidates`), with no request while it has enough; when the
  * session runs low, its radio artists' radios are read into the catalog
  * first, under the harvest's network policy (`magicRefillDue`: on Wi-Fi when
- * low, on mobile data only when none is left, within the harvest's day).
+ * low, on mobile data only when none is left, within the harvest's day;
+ * once in 12 hours a session).
  * Offline, only the songs the audio cache holds whole. Kept free of Expo so
  * it runs under plain Node tests; the app's is `magicQueueRadio.ts`.
  */
@@ -21,6 +22,12 @@ import {
   type YtSong,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
+
+/** What a refill did: the bytes it used, and whether it reached YouTube Music. */
+export interface MagicRefill {
+  readonly bytes: number;
+  readonly reached: boolean;
+}
 
 /** What a read ranks, and how it reaches the network and the audio cache. */
 export interface MagicCatalogReadDeps<R> {
@@ -42,11 +49,20 @@ export interface MagicCatalogReadDeps<R> {
   readonly cached: Effect.Effect<ReadonlySet<string>, never, R>;
   /**
    * Reads the session's radios into the catalog (their artists' genres
-   * looked up); gives the bytes it used. Never fails.
+   * looked up); gives the bytes it used, and whether it reached YouTube
+   * Music. Never fails.
    */
-  readonly refill: Effect.Effect<number, never, R>;
+  readonly refill: Effect.Effect<MagicRefill, never, R>;
   /** Counts [bytes] of mobile data used (only called on mobile data). */
   readonly usedOnMobile: (bytes: number) => void;
+  /**
+   * When each session's refill was last tried, by session id: kept for the
+   * launch, so a refill that reached YouTube Music but brought nothing (an
+   * artist it doesn't have, an empty radio) isn't tried again for 12 hours;
+   * one that didn't reach it (offline, say) is tried by the next batch.
+   * Written here.
+   */
+  readonly tried: Map<string, number>;
   /** How the engine ranks (the Magic Queue section's sliders); absent: its defaults. */
   readonly engine?: Omit<RecommendOptions, "avoid">;
 }
@@ -71,10 +87,11 @@ export const magicCatalogRead = <R>(
     }
     const catalog = yield* deps.catalog;
     const pick = pickFrom(catalog);
-    const { onMobileData, usedToday } = deps;
-    if (!magicRefillDue(session, { catalog, left: pick.left }, { onMobileData, usedToday, now }))
-      return pick;
-    const bytes = yield* deps.refill;
+    const { onMobileData, usedToday, tried } = deps;
+    const run = { onMobileData, usedToday, now, tried };
+    if (!magicRefillDue(session, { catalog, left: pick.left }, run)) return pick;
+    const { bytes, reached } = yield* deps.refill;
+    if (reached) tried.set(session.id, now);
     if (onMobileData) deps.usedOnMobile(bytes);
     return pickFrom(yield* deps.catalog);
   });
