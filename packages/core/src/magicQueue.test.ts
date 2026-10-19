@@ -7,6 +7,8 @@ import {
   genreProfile,
   magicArtistKey,
   magicBatch,
+  magicBatchLoading,
+  magicPickEnded,
   magicLibrarySongs,
   magicSeedProfile,
   magicYtSong,
@@ -322,6 +324,62 @@ describe("A Magic Queue in the queue", () => {
       added: [],
       removed: [],
     });
+  });
+
+  test("shows its batch loading while it's picked, until the batch lands", () => {
+    const seedOnly = run(EMPTY_QUEUE, { type: "play", trackIds: ["s1"], startIndex: 0, context });
+    assert.equal(magicBatchLoading(session, "m1", seedOnly), true);
+    assert.equal(magicBatchLoading(session, null, seedOnly), false);
+    // The batch in Up Next takes the loading's place, before the picking is cleared.
+    const landed = run(seedOnly, { type: "append", trackIds: ["a", "b"] });
+    assert.equal(magicBatchLoading(session, "m1", landed), false);
+  });
+
+  test("shows a later batch loading under the songs lined up by hand", () => {
+    const last = run(
+      playing,
+      { type: "next" },
+      { type: "next" },
+      { type: "addToQueue", trackIds: ["q"] },
+    );
+    assert.equal(magicBatchLoading(session, "m1", last), true);
+  });
+
+  test("shows no batch loading once something else plays, or for another session", () => {
+    const last = run(playing, { type: "next" }, { type: "next" });
+    const other = run(last, {
+      type: "play",
+      trackIds: ["x"],
+      startIndex: 0,
+      context: { kind: "album", id: "4" },
+    });
+    assert.equal(magicBatchLoading(session, "m1", other), false);
+    assert.equal(magicBatchLoading(session, "m0", last), false);
+    assert.equal(magicBatchLoading(null, "m1", last), false);
+  });
+
+  test("a pick that ends clears only its own session's loading", () => {
+    const seedOnly = run(EMPTY_QUEUE, { type: "play", trackIds: ["s1"], startIndex: 0, context });
+    assert.equal(magicPickEnded("m1", "m1", session, seedOnly).picking, null);
+    // An older session's pick ends after this one started: this one is still loading.
+    const older = magicPickEnded("m0", "m1", session, seedOnly);
+    assert.equal(older.picking, "m1");
+    assert.equal(magicBatchLoading(session, older.picking, seedOnly), true);
+  });
+
+  test("a pick that ends for an older session picks again for the one under way", () => {
+    const seedOnly = run(EMPTY_QUEUE, { type: "play", trackIds: ["s1"], startIndex: 0, context });
+    assert.equal(magicPickEnded("m0", "m1", session, seedOnly).again, true);
+    // Not once its batch is in, not with no session under way.
+    const landed = run(seedOnly, { type: "append", trackIds: ["a"] });
+    assert.equal(magicPickEnded("m0", "m1", session, landed).again, false);
+    assert.equal(magicPickEnded("m0", null, null, seedOnly).again, false);
+  });
+
+  test("a pick that ends for the session under way doesn't pick again, even with no batch", () => {
+    const seedOnly = run(EMPTY_QUEUE, { type: "play", trackIds: ["s1"], startIndex: 0, context });
+    // It failed or found nothing: the next queue change asks again.
+    assert.equal(magicPickEnded("m1", "m1", session, seedOnly).again, false);
   });
 
   test("Up Next names the seed", () => {

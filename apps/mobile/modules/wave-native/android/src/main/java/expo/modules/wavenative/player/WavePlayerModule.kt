@@ -248,15 +248,21 @@ class WavePlayerModule : Module() {
      * Applies Core's sync plan. Items already loaded are reused by key, so JS
      * only sends [items] for keys new to the player; [QueueSync] reads loaded
      * ones only when a step re-inserts them, so a skip doesn't walk the list.
+     * [cause] is what the sync is (Core's `SongChangeCause`), which names a
+     * song change it makes in the app log's crossfade lines; a sync that
+     * changes no song names nothing.
      */
-    AsyncFunction("applySync") { steps: List<SyncStepRecord>, items: List<PlayerItem>, promise: Promise ->
+    AsyncFunction("applySync") { steps: List<SyncStepRecord>, items: List<PlayerItem>, cause: String?, promise: Promise ->
       withController(promise) { player ->
         val incoming = items.associate { it.id to toMediaItem(it) }
+        val playlist = ControllerPlaylist(player)
         syncing = true
         QueueSnapshot.resumed = false
         try {
           val plan = steps.map { SyncStep.of(it.type, it.at, it.removeCount, it.keys, it.index, it.key) }
-          QueueSync.apply(plan, ControllerPlaylist(player), incoming)
+          CrossfadeLink.causes.sync(cause, SystemClock.elapsedRealtime(), { playlist.currentKey }) {
+            QueueSync.apply(plan, playlist, incoming)
+          }
           if (player.playbackState == Player.STATE_IDLE && player.mediaItemCount > 0) player.prepare()
           promise.resolve(null)
         } catch (error: IllegalArgumentException) {
@@ -356,6 +362,7 @@ class WavePlayerModule : Module() {
 
     AsyncFunction("play") { promise: Promise ->
       withController(promise) { player ->
+        CrossfadeLink.pausedForSearch = false
         // A finished or failed item starts over.
         if (player.playbackState == Player.STATE_ENDED) player.seekToDefaultPosition()
         if (player.playbackState == Player.STATE_IDLE) player.prepare()
@@ -364,15 +371,19 @@ class WavePlayerModule : Module() {
       }
     }.runOnQueue(Queues.MAIN)
 
-    AsyncFunction("pause") { promise: Promise ->
+    /** [forSearch]: paused while the song to play is searched, as the app log's crossfade lines say. */
+    AsyncFunction("pause") { forSearch: Boolean?, promise: Promise ->
       withController(promise) { player ->
+        CrossfadeLink.pausedForSearch = forSearch == true
         player.pause()
         promise.resolve(null)
       }
     }.runOnQueue(Queues.MAIN)
 
-    AsyncFunction("seekTo") { positionMs: Double, promise: Promise ->
+    /** [source] is where the seek came from (Core's `SeekSource`), for the app log's crossfade lines. */
+    AsyncFunction("seekTo") { positionMs: Double, source: String?, promise: Promise ->
       withController(promise) { player ->
+        source?.let { CrossfadeLink.causes.noteApp(it, SystemClock.elapsedRealtime()) }
         player.seekTo(positionMs.toLong())
         promise.resolve(null)
       }

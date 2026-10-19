@@ -1,13 +1,15 @@
 import {
   joinArtists,
   librarySearchSong,
-  lookUpSongLinks,
+  lookUpSongVideo,
+  lookUpSpotifyTrack,
   parseTrackId,
+  SONG_LINKS_LOADING,
   spotifySearchQuery,
   type ArtworkPalette,
-  type SongLinkAsk,
   type SongLinkLookup,
   type SongLinkSearch,
+  type SongLinkSpotify,
   type SongLinksState,
   type UnsearchedSong,
 } from "@wave/core";
@@ -19,7 +21,9 @@ import { LibraryStore, type SongRow } from "@/library/LibraryStore";
 import { appRuntime } from "@/library/runtime";
 import { appLog } from "@/log/appLog";
 import { cacheStreamedCover } from "@/playback/queueTracks";
+import { spotifySignedIn } from "@/settings/spotifyAccount";
 import { ytMusicEnabled } from "@/settings/ytMusic";
+import { askSpotifyAccount } from "@/spotify/askSpotify";
 import { searchSongsInTurn } from "@/ytmusic/askYtMusic";
 import { YtMusic } from "@/ytmusic/YtMusic";
 
@@ -46,31 +50,30 @@ const shared = makeExternalStore<SongShareContent | null>(null);
 /** Which sheet is open: what arrives for an earlier one is dropped. */
 let opened = 0;
 
-/** How long Odesli gets before the links count as out of reach. */
-const ODESLI_TIMEOUT_MS = 15_000;
-
-/** Odesli asked through `fetch`, given up after `ODESLI_TIMEOUT_MS`; rejects when out of reach. */
-const askOdesli: SongLinkAsk = async (url) => {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), ODESLI_TIMEOUT_MS);
-  try {
-    const response = await fetch(url, { signal: controller.signal });
-    return { status: response.status, body: await response.text() };
-  } finally {
-    clearTimeout(timer);
-  }
-};
-
 /** One YouTube Music Songs search for a song without a video id, in the search allowance (as Share). */
 const searchForLinks: SongLinkSearch = async (song) =>
   (await searchSongsInTurn("share", spotifySearchQuery(song))) ?? { ok: false, reason: "failed" };
 
+/** The signed-in Spotify account: its saved session, and its own search (as sharing a playlist). */
+const spotifyForLinks: SongLinkSpotify = {
+  signedIn: spotifySignedIn,
+  search: (term) => askSpotifyAccount((spotify) => spotify.searchTracks(term)),
+};
+
+/** [lookUp]'s answer, a lookup that threw counting as a failure. */
+const settled = <S>(what: string, lookUp: Promise<S>): Promise<S | { status: "failed" }> =>
+  lookUp.catch((error: unknown) => {
+    appLog("warn", LOG_TAG, `Couldn't look up the song's ${what}: ${String(error)}`);
+    return { status: "failed" } as const;
+  });
+
 /**
  * Opens the song share sheet on [content]. [later], when given, finishes it
  * (the cover's palette, the cover cached on the phone), and [links] looks up
- * the song's links while YT Music is on (Core's `lookUpSongLinks`); the sheet
- * shows what it has meanwhile and takes the rest if it's still open on that
- * song.
+ * the song's links while YT Music is on: its video id, for Copy Link and YT
+ * Music (Core's `lookUpSongVideo`), and apart from it its Spotify track
+ * (`lookUpSpotifyTrack`). The sheet shows what it has meanwhile and takes
+ * each answer if it's still open on that song.
  */
 const openSongShare = (
   content: Omit<SongShareContent, "links">,
@@ -79,7 +82,7 @@ const openSongShare = (
 ): void => {
   const sheet = ++opened;
   const withLinks = ytMusicEnabled() && links !== undefined;
-  shared.set({ ...content, links: withLinks ? { status: "loading" } : null });
+  shared.set({ ...content, links: withLinks ? SONG_LINKS_LOADING : null });
   const take = (more: Partial<SongShareContent>): void => {
     const now = shared.get();
     if (sheet === opened && now !== null) shared.set({ ...now, ...more });
@@ -90,17 +93,21 @@ const openSongShare = (
       appLog("warn", LOG_TAG, `Couldn't read the cover: ${String(error)}`),
     );
   if (!withLinks) return;
-  links()
-    .then((song) => lookUpSongLinks(song, searchForLinks, askOdesli))
-    .catch((error: unknown): SongLinksState => {
-      appLog("warn", LOG_TAG, `Couldn't look up the song's links: ${String(error)}`);
-      return { status: "failed" };
-    })
-    .then((state) => {
-      if (state.status !== "found")
-        appLog("info", LOG_TAG, `No links for the song: ${state.status}`);
-      take({ links: state });
+  const song = links();
+  // Each destination's answer lands on its own: Spotify doesn't wait for the video, or fail it.
+  /** Looks up the song's [what] with [find] and takes the answer as its [key] links. */
+  const lookUp = <K extends keyof SongLinksState>(
+    key: K,
+    what: string,
+    find: (found: SongLinkLookup) => Promise<SongLinksState[K]>,
+  ): void => {
+    void settled(what, song.then(find)).then((state) => {
+      if (state.status !== "found") appLog("info", LOG_TAG, `No ${key} link: ${state.status}`);
+      take({ links: { ...(shared.get()?.links ?? SONG_LINKS_LOADING), [key]: state } });
     });
+  };
+  lookUp("video", "video", (found) => lookUpSongVideo(found, searchForLinks));
+  lookUp("spotify", "Spotify track", (found) => lookUpSpotifyTrack(found.search, spotifyForLinks));
 };
 
 export const closeSongShare = (): void => {

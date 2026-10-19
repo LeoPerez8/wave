@@ -417,6 +417,47 @@ export const wantsMagicBatch = (session: MagicSession, state: QueueState): boole
   state.index >= 0 &&
   !state.entries.slice(state.index + 1).some(recommended);
 
+/**
+ * Whether Up Next shows [session]'s next batch loading (skeleton rows where
+ * it will land): a batch is being picked for it ([picking] is the id of the
+ * session one is picked for, null while none is) and [state] still wants it.
+ * So the loading goes the moment the batch lands in Up Next, and the moment
+ * something else plays, whenever the picking itself ends.
+ */
+export const magicBatchLoading = (
+  session: MagicSession | null,
+  picking: MagicSession["id"] | null,
+  state: QueueState,
+): boolean => session !== null && picking === session.id && wantsMagicBatch(session, state);
+
+/** What follows a batch's picking once it ends (`magicPickEnded`). */
+export interface MagicPickEnd {
+  /** The session a batch is picked for now: still the one that took over, if another did. */
+  readonly picking: MagicSession["id"] | null;
+  /** Whether to pick again, now for the session under way. */
+  readonly again: boolean;
+}
+
+/**
+ * What follows the picking of a batch for session [ran] once it ends,
+ * however it ended, while a batch is picked for [picking] and [session] is
+ * under way in [state]: it clears only its own picking, so an older
+ * session's pick ending leaves a newer one loading; and when another
+ * session took over meanwhile and wants its batch, that one is picked at
+ * once rather than at the next queue change. The session it ran for never
+ * picks again on its own (a failed or empty pick would go round): the next
+ * queue change asks again.
+ */
+export const magicPickEnded = (
+  ran: MagicSession["id"],
+  picking: MagicSession["id"] | null,
+  session: MagicSession | null,
+  state: QueueState,
+): MagicPickEnd => ({
+  picking: picking === ran ? null : picking,
+  again: session !== null && session.id !== ran && wantsMagicBatch(session, state),
+});
+
 /** What the owner did to a Magic Queue between two states of it, by track id. */
 export interface MagicQueueEdits {
   /** Songs lined up by hand (Play Next, Add to Queue): positive. */

@@ -139,8 +139,15 @@ export {
   findInPlaylistHead,
   foundInPlaylist,
   hasFindQuery,
+  createFindableList,
 } from "./findInPlaylist.ts";
-export type { FoundInPlaylist, PlaylistFinder, PlaylistFindText } from "./findInPlaylist.ts";
+export type {
+  FoundInPlaylist,
+  PlaylistFinder,
+  PlaylistFindText,
+  FindableList,
+  ShownInPlaylist,
+} from "./findInPlaylist.ts";
 export { createSearchCatalog } from "./searchCatalog.ts";
 export type { SearchCatalog, SearchCatalogStats } from "./searchCatalog.ts";
 export { SEARCH_FOCUS_LIMITS, startSearchFocus, stepSearchFocus } from "./searchFocus.ts";
@@ -620,6 +627,9 @@ export type {
   MagicSong,
   MagicYtCandidate,
 } from "./magicQueue.ts";
+export { magicBatchLoading } from "./magicQueue.ts";
+export { magicPickEnded } from "./magicQueue.ts";
+export type { MagicPickEnd } from "./magicQueue.ts";
 export { artistRanking } from "./moreFromArtist.ts";
 export type { ArtistRankingInput, ArtistRankingSong } from "./moreFromArtist.ts";
 export { artistPageItems } from "./artistPage.ts";
@@ -1517,14 +1527,20 @@ export type {
 } from "./lyricsShare.ts";
 export { songCardColours, songCardFileName, songShareDestinations } from "./songShare.ts";
 export type { SongCardColours, SongLinkOption, SongShareDestination } from "./songShare.ts";
-export { lookUpSongLinks, songLinkView } from "./songLinks.ts";
+export {
+  lookUpSongVideo,
+  lookUpSpotifyTrack,
+  SONG_LINKS_LOADING,
+  songLinkView,
+} from "./songLinks.ts";
 export type {
-  SongLinkAsk,
   SongLinkView,
   SongLinkLookup,
-  SongLinks,
   SongLinkSearch,
+  SongLinkSpotify,
   SongLinksState,
+  SongVideoState,
+  SpotifyTrackState,
 } from "./songLinks.ts";
 export type { YtLibraryFavorites } from "./ytLibraryBatch.ts";
 export { pendingFavorite, settlePendingFavorites } from "./pendingFavorites.ts";
@@ -1769,3 +1785,5 @@ export {
 export type { YtThrottle, YtThrottleJob, YtThrottlePause } from "./ytThrottle.ts";
 export { throttledFailures, throttledFailuresLine } from "./throttledFailures.ts";
 export type { ThrottledFailureJob, ThrottledFailuresInput } from "./throttledFailures.ts";
+export { songChangeCause } from "./songChangeCause.ts";
+export type { SeekSource, SongChangeCause } from "./songChangeCause.ts";

@@ -1,5 +1,5 @@
 /**
- * Reading answers parsed from JSON (Spotify's, Odesli's) field by field, for
+ * Reading answers parsed from JSON (Spotify's, for one) field by field, for
  * Core's own modules: anything that isn't what a field should be reads as
  * nothing, so a reader falls back instead of trusting a shape it was never
  * promised. Not part of Core's public API.

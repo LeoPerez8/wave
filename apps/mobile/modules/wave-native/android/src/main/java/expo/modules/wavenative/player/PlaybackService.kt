@@ -11,6 +11,7 @@ import android.os.Looper
 import android.os.Process
 import android.os.SystemClock
 import android.util.Log
+import android.view.KeyEvent
 import androidx.annotation.OptIn
 import androidx.car.app.connection.CarConnection
 import androidx.lifecycle.LiveData
@@ -43,7 +44,6 @@ import expo.modules.wavenative.yt.YtClient
 import expo.modules.wavenative.yt.YtDataSource
 import expo.modules.wavenative.yt.YtMedia
 import expo.modules.wavenative.yt.YtStreamFailure
-import java.util.Locale
 
 /**
  * Hosts the player. Media3 provides the media notification, lock-screen and
@@ -278,6 +278,7 @@ class PlaybackService : MediaLibraryService() {
       override val isPlaying get() = player()?.isPlaying == true
       override val ended get() = player()?.playbackState == Player.STATE_ENDED
       override val ready get() = player()?.playbackState == Player.STATE_READY
+      override val buffering get() = player()?.playbackState == Player.STATE_BUFFERING
 
       override fun setVolume(volume: Float) {
         player()?.volume = volume
@@ -306,6 +307,12 @@ class PlaybackService : MediaLibraryService() {
         get() = exoPlayer?.let {
           it.playWhenReady && it.playbackSuppressionReason == Player.PLAYBACK_SUPPRESSION_REASON_NONE
         } == true
+
+      override val mainPlayWhenReady: Boolean
+        get() = exoPlayer?.playWhenReady == true
+
+      override val mainPausedForSearch: Boolean
+        get() = CrossfadeLink.pausedForSearch
 
       override val movesOnNaturally: Boolean
         get() {
@@ -342,7 +349,7 @@ class PlaybackService : MediaLibraryService() {
         get() = searchingNext()
 
       override fun outcome(outcome: CrossfadeOutcome) {
-        WaveLog.i(CROSSFADE_LOG_TAG, describe(outcome))
+        WaveLog.i(CROSSFADE_LOG_TAG, CrossfadeLog.line(outcome, deckState(exoPlayer), deckState(secondPlayer)))
       }
 
       override fun openNext(): CrossfadeDeck {
@@ -371,35 +378,23 @@ class PlaybackService : MediaLibraryService() {
     },
   )
 
-  /** One app-log line for a song change's crossfade outcome. */
-  private fun describe(outcome: CrossfadeOutcome): String =
-    when (outcome) {
-      is CrossfadeOutcome.Skipped ->
-        "Crossfade skipped: ${outcome.why.reason}" +
-          if (outcome.lateMs > 0) " (${seconds(outcome.lateMs)} late)" else ""
-      is CrossfadeOutcome.Done ->
-        "Crossfade done: ${seconds(outcome.overlapMs)} overlap" +
-          if (outcome.lateMs > LATE_REPORT_MS) " (${seconds(outcome.lateMs)} short, the next song was late)" else ""
-      is CrossfadeOutcome.Cut -> {
-        val of = outcome.overlapMs?.let { "of ${seconds(it)}" } ?: "before the next song sounded"
-        "Crossfade cut ${seconds(outcome.elapsedMs)} in $of: ${outcome.why.reason}; " +
-          "main ${deckState(exoPlayer)}; outgoing ${deckState(secondPlayer)}"
-      }
+  /** A player's state for a crossfade line in the app log. */
+  private fun deckState(player: Player?): CrossfadeLog.DeckState? =
+    player?.let {
+      CrossfadeLog.DeckState(it.currentPosition, it.playbackState, it.playWhenReady, it.isPlaying, it.playbackSuppressionReason)
     }
 
-  /** A player's position, playback state, isPlaying and suppression reason, for the app log. */
-  private fun deckState(player: Player?): String {
-    if (player == null) return "none"
-    val state = when (player.playbackState) {
-      Player.STATE_IDLE -> "idle"
-      Player.STATE_BUFFERING -> "buffering"
-      Player.STATE_READY -> "ready"
-      Player.STATE_ENDED -> "ended"
-      else -> "state ${player.playbackState}"
+  /**
+   * How the app log names [controller], when it moves or seeks the player:
+   * null for Wave's own (JS names its moves itself, [CrossfadeLink.causes]).
+   */
+  private fun describeController(session: MediaSession, controller: MediaSession.ControllerInfo): String? =
+    when {
+      session.isMediaNotificationController(controller) -> "the notification"
+      session.isAutoCompanionController(controller) || session.isAutomotiveController(controller) -> "Android Auto"
+      controller.packageName == packageName -> null
+      else -> controller.packageName
     }
-    return "at ${player.currentPosition} ms, $state, isPlaying=${player.isPlaying}, " +
-      "suppression=${player.playbackSuppressionReason}"
-  }
 
   private val crossfadeTick: Runnable = Runnable { scheduleCrossfade(crossfade.tick()) }
 
@@ -429,7 +424,8 @@ class PlaybackService : MediaLibraryService() {
       // The song after this one is preloaded only once this one nears its overlap; a queue sync
       // reporting the same song again keeps a preload already asked for.
       val restarted = reason == Player.MEDIA_ITEM_TRANSITION_REASON_REPEAT
-      if (crossfade.moved(mediaItem?.mediaId, restarted)) {
+      val cause = CrossfadeLink.causes.move(reason, SystemClock.elapsedRealtime())
+      if (crossfade.moved(mediaItem?.mediaId, restarted, cause)) {
         exoPlayer?.preloadConfiguration = ExoPlayer.PreloadConfiguration.DEFAULT
       }
       scheduleCrossfade()
@@ -441,10 +437,11 @@ class PlaybackService : MediaLibraryService() {
       reason: Int,
     ) {
       val within = PlayerEvents.isSeekWithinItem(reason, oldPosition.mediaItem?.mediaId, newPosition.mediaItem?.mediaId)
-      if (within) crossfade.interrupt(CrossfadeEnd.Seek)
+      if (within) crossfade.interrupt(CrossfadeEnd.Seek, CrossfadeLink.causes.seek(SystemClock.elapsedRealtime()))
     }
 
     override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+      if (playWhenReady) CrossfadeLink.pausedForSearch = false
       crossfade.onPlayingChanged()
       scheduleCrossfade()
     }
@@ -653,6 +650,39 @@ class PlaybackService : MediaLibraryService() {
       return result.build()
     }
 
+    /**
+     * Notes who moves or seeks the player, for the app log's crossfade lines:
+     * the notification, Android Auto, the system's media controls. Changes nothing.
+     * Deprecated, but still asked before each controller's command in Media3
+     * 1.11; nothing else names the controller before the player moves.
+     */
+    @Suppress("OVERRIDE_DEPRECATION", "DEPRECATION")
+    override fun onPlayerCommandRequest(
+      session: MediaSession,
+      controller: MediaSession.ControllerInfo,
+      playerCommand: Int,
+    ): Int {
+      val from = describeController(session, controller)
+      if (playerCommand in MOVING_COMMANDS && from != null) CrossfadeLink.causes.noteSession(from, SystemClock.elapsedRealtime())
+      // Play or pause from anywhere but the app: no longer the app's pause for a search.
+      if (playerCommand == Player.COMMAND_PLAY_PAUSE && from != null) CrossfadeLink.pausedForSearch = false
+      return super.onPlayerCommandRequest(session, controller, playerCommand)
+    }
+
+    /** Notes a media button (a headset, the notification's buttons) the same way; the session handles it as before. */
+    override fun onMediaButtonEvent(
+      session: MediaSession,
+      controllerInfo: MediaSession.ControllerInfo,
+      intent: Intent,
+    ): Boolean {
+      val from = describeController(session, controllerInfo) ?: controllerInfo.packageName
+      CrossfadeLink.causes.noteMediaButton(from, SystemClock.elapsedRealtime())
+      @Suppress("DEPRECATION")
+      val key = intent.getParcelableExtra<KeyEvent>(Intent.EXTRA_KEY_EVENT)?.keyCode
+      if (key in PLAY_PAUSE_KEYS) CrossfadeLink.pausedForSearch = false
+      return super.onMediaButtonEvent(session, controllerInfo, intent)
+    }
+
     override fun onDisconnected(session: MediaSession, controller: MediaSession.ControllerInfo) {
       if (browsers.remove(controller) && browsers.isEmpty()) JsRuntime.release()
     }
@@ -723,8 +753,15 @@ class PlaybackService : MediaLibraryService() {
       val requested = mediaItems.getOrNull(startIndex) ?: mediaItems.firstOrNull()
         ?: return Futures.immediateFailedFuture(AutoPlayException("Nothing to play."))
       keepJsFor(controller)
-      return AutoLibrary.play(requested.mediaId)
-        .alsoReportFailure(mediaSession, controller, "play ${requested.mediaId}")
+      // JS may search the song first, longer than a note waits: the move its answer makes keeps
+      // the controller's name in the app log's crossfade lines.
+      val cause = CrossfadeLink.causes.held(SystemClock.elapsedRealtime())
+      val answer = Futures.transform(
+        AutoLibrary.play(requested.mediaId),
+        { items -> items.also { CrossfadeLink.causes.noteAgain(cause, SystemClock.elapsedRealtime()) } },
+        mainExecutor,
+      )
+      return answer.alsoReportFailure(mediaSession, controller, "play ${requested.mediaId}")
     }
 
     /**
@@ -871,12 +908,30 @@ class PlaybackService : MediaLibraryService() {
 
     const val CROSSFADE_LOG_TAG = "WaveCrossfade"
 
-    /** A done overlap shorter than the song's whole one by more than this says it was late. */
-    const val LATE_REPORT_MS = 500L
-
     /** How much of the next song a crossfade preloads. */
     const val PRELOAD_MS = 10_000L
 
-    fun seconds(ms: Long) = String.format(Locale.ROOT, "%.1f s", ms / 1000.0)
+    /** The player commands that move the player to another song or seek it, whose controller the app log names. */
+    val MOVING_COMMANDS = setOf(
+      Player.COMMAND_SEEK_TO_NEXT,
+      Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM,
+      Player.COMMAND_SEEK_TO_PREVIOUS,
+      Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM,
+      Player.COMMAND_SEEK_TO_MEDIA_ITEM,
+      Player.COMMAND_SEEK_TO_DEFAULT_POSITION,
+      Player.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM,
+      Player.COMMAND_SEEK_BACK,
+      Player.COMMAND_SEEK_FORWARD,
+      Player.COMMAND_SET_MEDIA_ITEM,
+      Player.COMMAND_CHANGE_MEDIA_ITEMS,
+    )
+
+    /** The media buttons that play or pause. */
+    val PLAY_PAUSE_KEYS = setOf(
+      KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE,
+      KeyEvent.KEYCODE_MEDIA_PLAY,
+      KeyEvent.KEYCODE_MEDIA_PAUSE,
+      KeyEvent.KEYCODE_HEADSETHOOK,
+    )
   }
 }

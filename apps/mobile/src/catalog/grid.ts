@@ -7,7 +7,14 @@ import type { LayoutChangeEvent } from "react-native";
  */
 export const CELL = 8;
 
+/** Width and height of each of an Up Next row's end cells: remove, then the drag handle. */
+const UP_NEXT_CELL = CELL * 6;
+
 export const grid = {
+  /** Width and height of each of an Up Next row's end cells (`nowPlaying/QueueView.tsx`). */
+  upNextCell: UP_NEXT_CELL,
+  /** Width of an Up Next row's two end cells together, which its stand-ins leave empty. */
+  upNextTrailing: UP_NEXT_CELL * 2,
   /** Screen side margin. */
   margin: CELL * 3,
   /** Gap between album tiles. */
