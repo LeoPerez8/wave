@@ -36,4 +36,19 @@ describe("The similar artists the harvest read, kept for offline builds", () => 
     assert.equal(parseSimilarArtistsKept("{}").size, 0);
     assert.equal(parseSimilarArtistsKept(null).size, 0);
   });
+
+  test("read back, a stray entry is left out and the others kept", () => {
+    const stored = JSON.stringify({
+      version: 1,
+      artists: [
+        ["sleep token", [["Bad Omens", "UC-Bad Omens"], ["no page"], "Spiritbox"]],
+        { "sleep token": [] },
+        ["spiritbox", "not a list"],
+        [7, []],
+        "deftones",
+      ],
+    });
+    const kept = parseSimilarArtistsKept(stored);
+    assert.deepEqual([...kept], [["sleep token", [similar("Bad Omens")]]]);
+  });
 });
