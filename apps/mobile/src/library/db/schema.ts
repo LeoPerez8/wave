@@ -746,6 +746,47 @@ export const streamedSongs = sqliteTable("streamed_songs", {
 });
 
 /**
+ * The candidate catalog (docs/spec.md, "Candidate catalog"): the YT Music
+ * songs radios and artist pages brought (`writePlaylistYtSong`'s JSON, by
+ * video), with when first and last seen. Core decides what comes in and
+ * what leaves (`catalogSeen`, `catalogLeaving`). A rebuildable cache, like
+ * the saved mixes: this phone only, never synced.
+ */
+export const candidateSongs = sqliteTable(
+  "candidate_songs",
+  {
+    videoId: text("video_id").primaryKey(),
+    song: text("song").notNull(),
+    firstSeenAt: integer("first_seen_at").notNull(),
+    lastSeenAt: integer("last_seen_at").notNull(),
+  },
+  (t) => [index("candidate_songs_last_seen_idx").on(t.lastSeenAt)],
+);
+
+/**
+ * The candidate catalog's radio evidence: each radio that brought a song,
+ * by its seed artist (Core's `catalogSeedKey`), and when it last did. A
+ * song's radio count is its rows; an artist's radio is the songs of its
+ * seed key. This phone only, never synced.
+ */
+export const candidateRadios = sqliteTable(
+  "candidate_radios",
+  {
+    videoId: text("video_id")
+      .notNull()
+      .references(() => candidateSongs.videoId, { onDelete: "cascade" }),
+    seedKey: text("seed_key").notNull(),
+    seedName: text("seed_name").notNull(),
+    lastSeenAt: integer("last_seen_at").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.videoId, t.seedKey] }),
+    index("candidate_radios_seed_idx").on(t.seedKey),
+    index("candidate_radios_last_seen_idx").on(t.lastSeenAt),
+  ],
+);
+
+/**
  * Files Wave must delete, recorded in the transaction that made them
  * leftovers: a quality replacement's old file once its Track took the new
  * one (`replaceTrackFile`), or a failed replacement's new file. Cleared once

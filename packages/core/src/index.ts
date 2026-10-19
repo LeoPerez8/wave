@@ -1821,3 +1821,18 @@ export type { ArtistRadioStarts, YtRadioStart } from "./artistRadioStarts.ts";
 export { MIX_PRE_DOWNLOAD_SONGS, mixPreDownload } from "./mixPreDownload.ts";
 export { MIX_MOST } from "./discoverMixes.ts";
 export { magicRadioLookups, mixProfileLookupsNext } from "./mixGenreLookups.ts";
+export {
+  CATALOG_MOST,
+  CATALOG_UNSEEN_MS,
+  catalogLeaving,
+  catalogSeedKey,
+  catalogSeen,
+} from "./candidateCatalog.ts";
+export type {
+  CatalogLeaving,
+  CatalogPage,
+  CatalogPageSong,
+  CatalogRadio,
+  CatalogSeenSong,
+  CatalogSong,
+} from "./candidateCatalog.ts";
