@@ -8,21 +8,20 @@ import type { ArtistGraph } from "@wave/core";
 import * as Effect from "effect/Effect";
 
 import { freeTurnEffect } from "@/lib/backgroundWork";
+import { sharedRead } from "@/lib/sharedRead";
 import { LibraryStore } from "@/library/LibraryStore";
-import { appRuntime } from "@/library/runtime";
 
-import { artistGraphOnce, readArtistGraph } from "./artistGraph";
+import { readArtistGraph } from "./artistGraph";
 
-const once = artistGraphOnce(() =>
-  appRuntime.runPromise(
-    Effect.gen(function* () {
-      return yield* readArtistGraph(yield* LibraryStore, freeTurnEffect);
-    }),
-  ),
+const shared = sharedRead(
+  Effect.gen(function* () {
+    return yield* readArtistGraph(yield* LibraryStore, freeTurnEffect);
+  }),
 );
 
-/** The artist graph, derived once per session; null while it can't be read. */
-export const artistGraphNow: Effect.Effect<ArtistGraph | null> = once.now;
+/** The artist graph, derived once per session; null while it can't be read (derived again next time). */
+export const artistGraphNow: Effect.Effect<ArtistGraph | null, never, LibraryStore> =
+  shared.get.pipe(Effect.orElseSucceed(() => null));
 
 /** Forgets the artist graph: the next ask derives it again (after a harvest grew the catalog). */
-export const forgetArtistGraph: () => void = once.forget;
+export const forgetArtistGraph = (): void => shared.forget();

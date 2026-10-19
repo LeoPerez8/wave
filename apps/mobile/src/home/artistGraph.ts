@@ -46,36 +46,3 @@ export const readArtistGraph = (
     });
     return artistGraph({ catalog, pages, plays });
   });
-
-/** A graph derived once and kept, until forgotten. */
-export interface ArtistGraphOnce {
-  /** The graph, derived the first time it's asked for; null when it can't be read (asked again next time). */
-  readonly now: Effect.Effect<ArtistGraph | null>;
-  /** Forgets the graph: the next ask derives it again. */
-  readonly forget: () => void;
-}
-
-/**
- * A graph [derive]d the first time it's asked for and kept: asks while it's
- * derived wait for the same graph. One that can't be derived isn't kept.
- */
-export const artistGraphOnce = (derive: () => Promise<ArtistGraph>): ArtistGraphOnce => {
-  let derived: Promise<ArtistGraph> | null = null;
-  const now = Effect.suspend(() => {
-    if (derived === null) {
-      const deriving = derive();
-      derived = deriving;
-      deriving.catch(() => {
-        if (derived === deriving) derived = null;
-      });
-    }
-    const graph = derived;
-    return Effect.tryPromise(() => graph);
-  }).pipe(Effect.orElseSucceed(() => null));
-  return {
-    now,
-    forget: () => {
-      derived = null;
-    },
-  };
-};
