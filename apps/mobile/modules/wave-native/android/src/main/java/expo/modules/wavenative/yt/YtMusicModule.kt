@@ -133,9 +133,21 @@ class YtMusicModule : Module() {
       coded(meter) { YtPages(client).songRadio(videoId).toMap() }
     }
 
-    /** The first page of an artist's radio, from their page (`UC…`), as [songRadio]. */
+    /**
+     * The first page of an artist's radio, from their page (`UC…`), as
+     * [songRadio], with where it started: `start: { playlistId, params }`.
+     */
     AsyncFunction("artistRadio") Coroutine { browseId: String, meter: String? ->
       coded(meter) { YtPages(client).artistRadio(browseId).toMap() }
+    }
+
+    /**
+     * The first page of an artist's radio from a `start` [artistRadio] gave,
+     * without reading their page, as [songRadio]: `ERR_YT_FAILED` when
+     * YouTube Music no longer starts a radio there.
+     */
+    AsyncFunction("startedRadio") Coroutine { playlistId: String, params: String?, meter: String? ->
+      coded(meter) { YtPages(client).startedRadio(YtRadioStart(playlistId, params)).toMap() }
     }
 
     /** The radio page a `continuation` leads to, as [songRadio]. */

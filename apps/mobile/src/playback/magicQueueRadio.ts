@@ -23,7 +23,7 @@ import {
 import * as Effect from "effect/Effect";
 
 import { lookUpArtistProfiles, lookedUpProfileOf, mixProfileOf } from "@/home/artistGenres";
-import { ytArtistBrowseId } from "@/home/ytArtistPage";
+import { artistRadio } from "@/home/ytArtistPage";
 import { withNetworkLog } from "@/lib/networkMeter";
 import type { SongRow } from "@/library/LibraryStore";
 import type { NativeYtRadioSong } from "@/native/waveYtMusic";
@@ -39,13 +39,12 @@ const RADIO_TIMEOUT = "15 seconds";
  * The first page of [name]'s artist radio, and the next one when there is
  * one; none when YouTube Music doesn't have the artist or can't be reached.
  */
-const artistRadio = (name: string) =>
+const artistRadioSongs = (name: string) =>
   Effect.gen(function* () {
-    const browseId = yield* ytArtistBrowseId(name);
-    if (browseId === null) return [];
-    const ytMusic = yield* YtMusic;
-    const first = yield* ytMusic.radio({ browseId });
+    const first = yield* artistRadio({ name });
+    if (first === null) return [];
     if (first.continuation === null) return first.songs;
+    const ytMusic = yield* YtMusic;
     const next = yield* ytMusic
       .radioMore(first.continuation)
       .pipe(Effect.orElseSucceed(() => ({ songs: [], continuation: null })));
@@ -68,7 +67,7 @@ const readRadioCandidates = (
   library: GenreProfileLibrary & { readonly songs: readonly SongRow[] },
 ) =>
   Effect.gen(function* () {
-    const radios = yield* Effect.all(session.radioArtists.map(artistRadio), {
+    const radios = yield* Effect.all(session.radioArtists.map(artistRadioSongs), {
       concurrency: "unbounded",
     });
     const radio = radios.flat();

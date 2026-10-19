@@ -1,0 +1,76 @@
+/**
+ * A mix section's mixes out of its seeds' radios read at the same time
+ * (docs/spec.md, "Artist mixes", "Genre mixes"): the app reads every seed's
+ * radios at once, then the seeds take their songs in seed order, so a new
+ * song two radios found stays in the earlier seed's mix and a familiar song
+ * in the earlier seed's share, as when the seeds were read one after another.
+ */
+
+import { discoverMixFamiliarPool, type DiscoverMixPoolSources } from "./discoverMixLevels.ts";
+import {
+  discoverMix,
+  discoverMixSongs,
+  type DiscoverLibrarySong,
+  type DiscoverMix,
+  type DiscoverMixSeed,
+  type DiscoverRadioSong,
+} from "./discoverMixes.ts";
+import type { MixAffinity } from "./genreAffinity.ts";
+
+/** A radio song as a mix keeps it. */
+type MixRadioSong = DiscoverRadioSong & { readonly albumId: string | null };
+
+/** A seed's radios as read: interleaved (`interleaveRadios`), every page read. */
+export interface DiscoverMixRead<S extends MixRadioSong> {
+  readonly seed: DiscoverMixSeed;
+  readonly radio: readonly S[];
+  /** Whether a song suits the seed's genres (`mixAffinity`); absent: every song does. */
+  readonly affinity?: (song: S) => MixAffinity;
+}
+
+/**
+ * The mixes [reads] make, in seed order (a seed whose radio couldn't be read
+ * is left out of [reads]): each seed's new songs (`discoverMixSongs`) less
+ * those an earlier mix has, its familiar share (`discoverMixFamiliarPool`)
+ * less what an earlier share has. A seed left with fewer than ten new songs
+ * makes no mix, and takes nothing from the seeds after it. A refresh passes
+ * the new songs the section showed today as [avoid] (`mixRefreshAvoid`).
+ */
+export const discoverMixesOfRadios = <S extends MixRadioSong, L extends DiscoverLibrarySong>(
+  reads: readonly DiscoverMixRead<S>[],
+  {
+    known,
+    library,
+    avoid,
+  }: Pick<DiscoverMixPoolSources<L>, "known" | "library"> & {
+    readonly avoid?: ReadonlySet<string>;
+  },
+): DiscoverMix[] => {
+  const taken = new Set<string>();
+  const takenFamiliar = { tracks: new Set<number>(), videos: new Set<string>() };
+  const mixes: DiscoverMix[] = [];
+  for (const { seed, radio, affinity } of reads) {
+    const kept = discoverMixSongs([radio], {
+      known: known.known,
+      taken,
+      ...(avoid === undefined ? {} : { avoid }),
+      ...(affinity === undefined ? {} : { affinity }),
+    });
+    const familiar = discoverMixFamiliarPool(seed, {
+      radio,
+      known,
+      library,
+      taken: takenFamiliar,
+      length: kept.length,
+    });
+    const mix = discoverMix(seed, kept, familiar);
+    if (mix === null) continue;
+    mixes.push(mix);
+    for (const song of mix.songs) taken.add(song.videoId);
+    for (const song of familiar) {
+      if (song.source === "library") takenFamiliar.tracks.add(song.track.id);
+      else takenFamiliar.videos.add(song.song.videoId);
+    }
+  }
+  return mixes;
+};
