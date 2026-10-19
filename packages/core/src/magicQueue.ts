@@ -9,13 +9,8 @@
 
 import { artistPhotoName } from "./artistPhoto.ts";
 import { DISCOVER_MIX_LEVELS, type DiscoverMixLevel } from "./discoverMixLevels.ts";
-import { mixRecordingOf, type DiscoverRadioSong } from "./discoverMixes.ts";
-import {
-  mixAffinity,
-  type GenreProfile,
-  type GenreProfileOf,
-  type GenreTagged,
-} from "./genreAffinity.ts";
+import type { DiscoverRadioSong } from "./discoverMixes.ts";
+import { type GenreProfile, type GenreProfileOf, type GenreTagged } from "./genreAffinity.ts";
 import { songFamilies } from "./genreMixes.ts";
 import type { PlayEnd } from "./playEvents.ts";
 import type { QueueState } from "./queue.ts";
@@ -555,44 +550,6 @@ export const magicRadioArtists = (
 
 /** A YouTube Music candidate of a Magic Queue: a song it weighs, with the radio's [song] it is. */
 export type MagicYtCandidate<S extends DiscoverRadioSong> = MagicSong & { readonly song: S };
-
-/**
- * The YouTube Music candidates in a seed's [radio], in its order: songs whose
- * artist suits the seed's genres ([seedProfile], `magicSeedProfile`, by the
- * shared `mixAffinity` check over [profileOf]: a match only, so an artist
- * with no genre known stays out; any song for a seed with no genre). Music
- * videos, songs the Library has ([inLibrary]) and a song the radio plays
- * again are left out. Each weighs as `magicYtSong` has it.
- */
-export const magicYtCandidates = <S extends DiscoverRadioSong>(
-  radio: readonly S[],
-  {
-    seedProfile,
-    profileOf,
-    inLibrary,
-  }: {
-    readonly seedProfile: GenreProfile | null;
-    readonly profileOf: GenreProfileOf;
-    readonly inLibrary: (song: S) => boolean;
-  },
-): MagicYtCandidate<S>[] => {
-  const affinity = mixAffinity(seedProfile, profileOf);
-  const seen = new Set<string>();
-  const candidates: MagicYtCandidate<S>[] = [];
-  for (const song of radio) {
-    const recording = mixRecordingOf(song);
-    if (song.video || seen.has(song.videoId) || seen.has(recording)) continue;
-    seen.add(song.videoId);
-    seen.add(recording);
-    if (inLibrary(song) || affinity(song) !== "match") continue;
-    const weighed = magicYtSong(
-      { trackId: ytTrackId(song.videoId), artists: song.artists },
-      profileOf,
-    );
-    candidates.push({ ...weighed, song });
-  }
-  return candidates;
-};
 
 /** What Up Next says over a Magic Queue: "Magic Queue · from <seed>". */
 export const magicQueueLabel = (session: MagicSession): string =>
