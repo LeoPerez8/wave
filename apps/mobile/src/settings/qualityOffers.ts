@@ -5,13 +5,12 @@
  * MP3 320s with YouTube Music's copies ("Free about 900 MB by replacing 410 songs with YouTube
  * Music copies?"), with Replace / Not now. Settings › Downloads' row offers the current direction
  * again while songs are left. Core decides which songs qualify and the estimates
- * (`qualityUpgradeSongs`/`qualityUpgradeOffer`, `qualityDowngradeSongs`/`qualityDowngradeOffer`).
+ * (`qualitySongs`, `qualityUpgradeOffer`/`qualityDowngradeOffer`).
  */
 import {
   qualityDowngradeOffer,
-  qualityDowngradeSongs,
+  qualitySongs,
   qualityUpgradeOffer,
-  qualityUpgradeSongs,
   youTubeCopyKbps,
   type QualityDirection,
   type QualityFile,
@@ -75,8 +74,8 @@ const offerFor = (
   mobileData: boolean,
 ): QualityOffer | null =>
   direction === "upgrade"
-    ? qualityUpgradeOffer(qualityUpgradeSongs(files, memory), { onMobileData: mobileData })
-    : qualityDowngradeOffer(qualityDowngradeSongs(files, memory), {
+    ? qualityUpgradeOffer(qualitySongs(direction, files, memory), { onMobileData: mobileData })
+    : qualityDowngradeOffer(qualitySongs(direction, files, memory), {
         onMobileData: mobileData,
         youTubeKbps: youTubeCopyKbps(files),
       });

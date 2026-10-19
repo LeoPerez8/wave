@@ -31,6 +31,7 @@ export function FavoritesList({ empty }: { empty: string }) {
       songs={songs}
       context={FAVORITES_CONTEXT}
       sort={sort}
+      findable
       header={
         <ListIntro
           line={songCount(songs.length)}

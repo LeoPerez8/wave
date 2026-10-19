@@ -24,6 +24,15 @@ class YtVisitorData(context: Context) {
     if (current != prefs.getString(KEY, null)) prefs.edit().putString(KEY, current).apply()
   }
 
+  /**
+   * Drops the session's visitor data and the one kept, while YouTube limits downloads: innertubex
+   * fetches a new one with the next request, and the proof-of-origin token follows it.
+   */
+  fun forget(innerTube: InnerTube) {
+    innerTube.visitorData = null
+    prefs.edit().remove(KEY).apply()
+  }
+
   private companion object {
     const val PREFS = "wave_yt_visitor"
     const val KEY = "visitor_data"

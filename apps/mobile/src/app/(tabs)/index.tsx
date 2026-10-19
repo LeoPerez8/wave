@@ -12,9 +12,14 @@ import { HomeSection, SECTION_GAP } from "@/home/HomeSection";
 import { useHome } from "@/library/hooks";
 import { useRenderCount } from "@/perf/perf";
 import { useYtMusicEnabled } from "@/settings/ytMusic";
+import { useRecapToAnnounce } from "@/stats/hooks";
+import { RecapCard } from "@/stats/StatsViews";
 
 /** The first section sits a cell under the large title, not a section's gap. */
 const FIRST_SECTION = { marginTop: CELL - SECTION_GAP } as const;
+
+/** A new Recap's card sits a cell under the large title, a section's gap above the sections. */
+const RECAP_CARD = { marginTop: CELL } as const;
 
 /** A quiet line in Home's flow (no sections, nothing played yet). */
 function HomeLine({ children, top }: { children: string; top: number }) {
@@ -30,6 +35,7 @@ export default function HomeScreen() {
   const home = useHome();
   const arrangement = useHomeArrangement();
   const ytMusic = useYtMusicEnabled();
+  const newRecap = useRecapToAnnounce();
   const empty = home !== undefined && home.recentlyAdded.length === 0;
   const nothingPlayed =
     home !== undefined && home.recentlyPlayed.length === 0 && home.mostPlayed.length === 0;
@@ -51,8 +57,13 @@ export default function HomeScreen() {
       )}
       {home !== undefined && !empty && (
         <>
+          {newRecap !== null && (
+            <View style={RECAP_CARD}>
+              <RecapCard period={newRecap} />
+            </View>
+          )}
           {/* Sections with nothing to show draw nothing, so whichever shows first is pulled up. */}
-          <View style={FIRST_SECTION}>
+          <View style={newRecap === null ? FIRST_SECTION : undefined}>
             {homeItems(arrangement, { nothingPlayed, ytMusic }).map((item, index) =>
               item === "no-sections" ? (
                 <HomeLine key={item} top={SECTION_GAP}>

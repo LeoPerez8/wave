@@ -1,5 +1,6 @@
-import { LegendList } from "@legendapp/list/react-native";
+import { LegendList, type LegendListRef } from "@legendapp/list/react-native";
 import {
+  IconCircleCheck,
   IconCloudOff,
   IconDownload,
   IconRefresh,
@@ -20,13 +21,14 @@ import {
   type MixedSong,
   type PlaylistItem,
   type QueueContext,
+  type YtListDownloadButtonState,
   type YtPlaylistRest,
   type YtQuietReason,
 } from "@wave/core";
 import type { DownloadOrigin } from "@wave/core";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Text, useWindowDimensions, View } from "react-native";
 
 import { Artwork } from "@/catalog/Artwork";
@@ -41,17 +43,24 @@ import {
 import { useChromeInset } from "@/chrome/chrome";
 import { EmptyState } from "@/components/EmptyState";
 import { ScreenHeader } from "@/components/ScreenHeader";
+import {
+  entryText,
+  FIND_FIELD_HEIGHT,
+  FindHead,
+  useFindInLegendList,
+} from "@/library/FindInPlaylist";
 import type { SongRow } from "@/library/LibraryStore";
 import { songCount } from "@/library/TrackList";
 import { useListScrollable } from "@/motion/heldTouch";
 import type { NativeYtPlaylist, NativeYtSong } from "@/native/waveYtMusic";
+import { showToast } from "@/overlay/toast";
 import { playDiscoverSongs } from "@/playback/actions";
 import { listedTrackItem, trackItemKey, tracksTarget } from "@/playback/actionTargets";
 import { useListSelection } from "@/selection/useListSelection";
 
 import { askYtMusic } from "./askYtMusic";
 import { DiscoverSongRow } from "./DiscoverSongRow";
-import { useLibraryFinder, useLoadedInLibrary } from "./libraryFinder";
+import { useLibraryFinder, useLoadedInLibrary, useLoadedLibraryFinder } from "./libraryFinder";
 import type { YtListHead, YtListScreen } from "./routes";
 import {
   runYtDownloadAction,
@@ -179,7 +188,12 @@ const totalMinutes = (songs: readonly Song[]): string | null => {
   return ms === 0 ? null : `${Math.max(1, Math.round(ms / 60_000))} min`;
 };
 
-const DOWNLOAD_ICONS: { readonly [A in YtListDownloadAction]: typeof IconDownload } = {
+/** What a list's download button can show: an entry to act on, or that every song is downloaded. */
+type YtListDownloadButtonAction = YtListDownloadAction | "downloaded";
+
+/** Downloaded has a check of its own, so an icon-only button doesn't look like Download. */
+const DOWNLOAD_ICONS: { readonly [A in YtListDownloadButtonAction]: typeof IconDownload } = {
+  downloaded: IconCircleCheck,
   downloadAlbum: IconDownload,
   downloadPlaylist: IconDownload,
   retryFailed: IconRefresh,
@@ -192,15 +206,35 @@ const DOWNLOAD_ICONS: { readonly [A in YtListDownloadAction]: typeof IconDownloa
  * `ytAlbumDownloadButton`, `ytPlaylistDownloadButton`).
  */
 export interface YtListDownloadButton {
-  readonly action: YtListDownloadAction;
+  readonly action: YtListDownloadButtonAction;
   readonly label: string;
   readonly onPress: () => void;
 }
 
 /** The full name of each download button, heard in either of its forms. */
-const DOWNLOAD_NAMES: { readonly [A in YtListDownloadAction]: string } = {
+const DOWNLOAD_NAMES: { readonly [A in YtListDownloadButtonAction]: string } = {
   ...YT_ALBUM_DOWNLOAD_ACTION_LABELS,
   ...YT_PLAYLIST_DOWNLOAD_ACTION_LABELS,
+  downloaded: "Downloaded",
+};
+
+/** Tapping Downloaded only says so: it never removes a file. */
+const sayDownloaded = (): void => void showToast("Downloaded");
+
+/**
+ * A page's download button from Core's [button]: an entry runs [run];
+ * Downloaded only says so, and waits for the Library's first read ([loaded]),
+ * before which every song counts as in it.
+ */
+const pageButton = <A extends YtListDownloadAction>(
+  button: YtListDownloadButtonState<A> | null,
+  loaded: boolean,
+  run: (action: A) => void,
+): YtListDownloadButton | null => {
+  if (button === null) return null;
+  const { action, label } = button;
+  if (action === "downloaded") return loaded ? { action, label, onPress: sayDownloaded } : null;
+  return { action, label, onPress: () => run(action) };
 };
 
 /** An album's or a playlist's download button, as the list action after Play and Shuffle. */
@@ -226,17 +260,17 @@ export const useYtAlbumDownloadButton = (
   origin: DownloadOrigin | null,
 ): { readonly progress: string | null; readonly button: YtListDownloadButton | null } => {
   const inLibrary = useLoadedInLibrary();
+  const loaded = useLoadedLibraryFinder() !== null;
   const download = useYtAlbumDownload(songs, inLibrary);
   const button = ytAlbumDownloadButton(download);
   return {
     progress: download.line,
     button:
-      button === null || songs.length === 0
+      songs.length === 0
         ? null
-        : {
-            ...button,
-            onPress: () => runYtDownloadAction(button.action, songs, inLibrary, origin),
-          },
+        : pageButton(button, loaded, (action) =>
+            runYtDownloadAction(action, songs, inLibrary, origin),
+          ),
   };
 };
 
@@ -250,17 +284,14 @@ export const useYtPlaylistDownloadButton = (
   origin: DownloadOrigin | null,
 ): { readonly progress: string | null; readonly button: YtListDownloadButton | null } => {
   const inLibrary = useLoadedInLibrary();
+  const loaded = useLoadedLibraryFinder() !== null;
   const download = useYtPlaylistDownload(entries, inLibrary);
   const button = ytPlaylistDownloadButton(download);
   return {
     progress: download.line,
-    button:
-      button === null
-        ? null
-        : {
-            ...button,
-            onPress: () => runYtPlaylistDownloadAction(button.action, entries, inLibrary, origin),
-          },
+    button: pageButton(button, loaded, (action) =>
+      runYtPlaylistDownloadAction(action, entries, inLibrary, origin),
+    ),
   };
 };
 
@@ -364,6 +395,7 @@ export function YtSongList({
   context,
   numbered,
   albumDownload,
+  findable = false,
 }: {
   /** What the tapped cover knew, shown until the page arrives. */
   known: YtListHead | undefined;
@@ -376,6 +408,12 @@ export function YtSongList({
    * progress. Its songs remember it, by [context]'s id and its title.
    */
   albumDownload?: "album" | "mix";
+  /**
+   * Find in Playlist (a playlist): its field waits above the head until the
+   * list is pulled down, and narrows the songs read so far as you type; while
+   * more pages come, their skeleton rows stay and "No songs match" waits for them.
+   */
+  findable?: boolean;
 }) {
   const scrollable = useListScrollable();
   const bottomInset = useChromeInset();
@@ -407,8 +445,13 @@ export function YtSongList({
       void playDiscoverSongs(songs, startIndex, context, { shuffle }),
     [songs, context],
   );
+  const list = useRef<LegendListRef>(null);
+  const findInList = useFindInLegendList(list, songs, entryText, findable);
+  const { shown, placeOf } = findInList;
   const head = page?.head ?? known;
   const loading = load.status === "loading";
+  // More of a playlist's pages on their way.
+  const reading = load.status === "loaded" && load.rest === "reading";
   const restLine = load.status === "loaded" ? ytPlaylistRestLine(load.rest) : null;
   const furniture =
     page === null
@@ -422,11 +465,38 @@ export function YtSongList({
       <DiscoverSongRow
         song={item}
         selection={selection}
-        trackNumber={numbered ? index + 1 : undefined}
-        onPress={() => play(index)}
+        trackNumber={numbered ? placeOf(index) + 1 : undefined}
+        // A found song plays the whole playlist from its own place in it.
+        onPress={() => play(placeOf(index))}
       />
     ),
-    [numbered, play, selection],
+    [numbered, play, selection, placeOf],
+  );
+
+  const pageHead = (
+    <>
+      {(head !== undefined || loading) && (
+        <Head
+          head={head}
+          loading={loading}
+          furniture={furniture}
+          progress={download.progress}
+          onPlay={songs.length === 0 ? null : (shuffle) => play(undefined, shuffle)}
+          download={download.button}
+        />
+      )}
+      {load.status === "quiet" && (
+        <EmptyState
+          icon={load.reason === "offline" ? IconWifiOff : IconCloudOff}
+          title={load.reason === "offline" ? "You're offline" : "No answer online"}
+          message={
+            load.reason === "offline"
+              ? "These songs need the network."
+              : "Go back and open it again to try once more."
+          }
+        />
+      )}
+    </>
   );
 
   return (
@@ -434,44 +504,33 @@ export function YtSongList({
       <ScreenHeader />
       <LegendList
         scrollEnabled={scrollable}
+        ref={list}
         className="flex-1"
-        data={songs}
+        data={shown}
         keyExtractor={keyOf}
         renderItem={renderItem}
         extraData={selection.selection}
         getFixedItemSize={() => grid.row}
         estimatedItemSize={grid.row}
         recycleItems
-        contentContainerStyle={{ paddingHorizontal: grid.margin, paddingBottom: bottomInset }}
+        contentContainerStyle={{
+          paddingHorizontal: grid.margin,
+          paddingBottom: bottomInset,
+          minHeight: findable ? findInList.minHeight : undefined,
+        }}
+        initialScrollOffset={findable ? FIND_FIELD_HEIGHT : undefined}
         ListHeaderComponent={
-          <>
-            {(head !== undefined || loading) && (
-              <Head
-                head={head}
-                loading={loading}
-                furniture={furniture}
-                progress={download.progress}
-                onPlay={songs.length === 0 ? null : (shuffle) => play(undefined, shuffle)}
-                download={download.button}
-              />
-            )}
-            {load.status === "quiet" && (
-              <EmptyState
-                icon={load.reason === "offline" ? IconWifiOff : IconCloudOff}
-                title={load.reason === "offline" ? "You're offline" : "No answer online"}
-                message={
-                  load.reason === "offline"
-                    ? "These songs need the network."
-                    : "Go back and open it again to try once more."
-                }
-              />
-            )}
-          </>
+          findable ? (
+            // Pages still on their way may hold matches: no "No songs match" until they're all in.
+            <FindHead find={findInList} header={pageHead} allRead={!reading} />
+          ) : (
+            pageHead
+          )
         }
         ListFooterComponent={
           loading ? (
             <TrackSkeletons count={PAGE_SKELETON_ROWS} leading={numbered ? "number" : "artwork"} />
-          ) : load.status === "loaded" && load.rest === "reading" ? (
+          ) : reading ? (
             // More pages coming: skeleton rows at the list's end, where their songs will go.
             <TrackSkeletons leading={numbered ? "number" : "artwork"} />
           ) : (

@@ -2,10 +2,18 @@ import {
   albumPlayTotals,
   artistStats,
   artistPlayTotals,
+  availableRecaps,
   rankPlays,
+  recap,
+  recapId,
+  recapSlides,
+  recapWindow,
   statsWindow,
   type ArtistStats as ArtistStatsLines,
+  type GenreFamily,
   type PlayTotals,
+  type RecapPeriod,
+  type RecapSlide,
   type StatsPeriod,
 } from "@wave/core";
 import * as Context from "effect/Context";
@@ -33,6 +41,38 @@ export type ArtistStats =
       readonly mostPlayed: readonly Ranked<SongRow>[];
     });
 
+/** A Recap slide with the rows it shows loaded. */
+export type LoadedRecapSlide =
+  | Exclude<RecapSlide, { kind: "topSongs" | "topArtists" | "topAlbum" | "discovered" | "summary" }>
+  | { readonly kind: "topSongs"; readonly songs: readonly Ranked<SongRow>[] }
+  | { readonly kind: "topArtists"; readonly artists: readonly Ranked<ArtistRow>[] }
+  | { readonly kind: "topAlbum"; readonly album: Ranked<AlbumRow> }
+  | {
+      readonly kind: "discovered";
+      /** How many artists the period discovered. */
+      readonly count: number;
+      /** The most played of them, the top one first. */
+      readonly artists: readonly Ranked<ArtistRow>[];
+    }
+  | {
+      /** The summary card: the top songs and artists still in the Library. */
+      readonly kind: "summary";
+      readonly minutes: number;
+      readonly songs: readonly Ranked<SongRow>[];
+      readonly artists: readonly Ranked<ArtistRow>[];
+      readonly genre: GenreFamily | null;
+    };
+
+/** How many discovered artists a Recap's slide names. */
+const DISCOVERED_SHOWN = 5;
+
+/** A Recap as its stories show it: Core's slides, their songs loaded. */
+export interface LoadedRecap {
+  readonly period: RecapPeriod;
+  readonly title: string;
+  readonly slides: readonly LoadedRecapSlide[];
+}
+
 export class Stats extends Context.Service<
   Stats,
   {
@@ -56,6 +96,10 @@ export class Stats extends Context.Service<
      * names the artist (a collaboration counts for each of its artists).
      */
     readonly artist: (artistId: number) => Effect.Effect<ArtistStats, LibraryStoreError>;
+    /** Every period with a Recap now, newest first (Core's `availableRecaps`). */
+    readonly recaps: Effect.Effect<readonly RecapPeriod[], LibraryStoreError>;
+    /** `period`'s Recap, its slides' rows loaded; null when the period has no Recap now. */
+    readonly recap: (period: RecapPeriod) => Effect.Effect<LoadedRecap | null, LibraryStoreError>;
   }
 >()("@wave/mobile/stats/Stats") {}
 
@@ -111,6 +155,83 @@ export const topAlbumsAndArtists = (
       }),
   );
 
+/** Loads a slide's rows; a slide whose songs, artists or album all left the library is dropped. */
+const loadSlide = (
+  store: LibraryStore["Service"],
+  slide: RecapSlide,
+): Effect.Effect<readonly LoadedRecapSlide[], LibraryStoreError> => {
+  switch (slide.kind) {
+    case "minutes":
+      return Effect.succeed([slide]);
+    case "topSongs":
+      return Effect.map(withRows(slide.songs, store.songsByIds), (songs) =>
+        songs.length === 0 ? [] : [{ kind: "topSongs", songs }],
+      );
+    case "topArtists":
+      return Effect.map(withRows(slide.artists, store.artistsByIds), (artists) =>
+        artists.length === 0 ? [] : [{ kind: "topArtists", artists }],
+      );
+    case "topAlbum":
+      return Effect.map(withRows([slide.album], store.albumsByIds), ([album]) =>
+        album === undefined ? [] : [{ kind: "topAlbum", album }],
+      );
+    case "discovered":
+      return Effect.map(
+        withRows(slide.artists.slice(0, DISCOVERED_SHOWN), store.artistsByIds),
+        (artists) =>
+          artists.length === 0
+            ? []
+            : [{ kind: "discovered", count: slide.artists.length, artists }],
+      );
+    case "summary":
+      return Effect.map(
+        Effect.all([
+          withRows(slide.songs, store.songsByIds),
+          withRows(slide.artists, store.artistsByIds),
+        ]),
+        ([songs, artists]) => [
+          { kind: "summary", minutes: slide.minutes, songs, artists, genre: slide.genre },
+        ],
+      );
+    case "topGenres":
+    case "habits":
+      return Effect.succeed([slide]);
+  }
+};
+
+/** `period`'s Recap from the store, or null when it has none at `now`. */
+const loadRecap = (
+  store: LibraryStore["Service"],
+  period: RecapPeriod,
+  now: number,
+): Effect.Effect<LoadedRecap | null, LibraryStoreError> =>
+  Effect.gen(function* () {
+    const listening = yield* store.countedListening;
+    const id = recapId(period);
+    if (!availableRecaps(listening, now).some((available) => recapId(available) === id)) {
+      return null;
+    }
+    const window = recapWindow(period);
+    const songs = yield* store.trackPlayTotals(window);
+    const credits = yield* store.creditedPlayTotals(window);
+    const artists = artistPlayTotals(credits);
+    const played = songs.filter((song) => song.countedPlays > 0).map((song) => song.id);
+    const songGenres = played.length === 0 ? [] : yield* store.songGenres(played);
+    const artistFirstPlays =
+      artists.length === 0 ? [] : yield* store.artistFirstPlays(artists.map((artist) => artist.id));
+    const computed = recap({
+      period,
+      listening,
+      songs,
+      artists,
+      albums: albumPlayTotals(credits),
+      songGenres,
+      artistFirstPlays,
+    });
+    const slides = yield* Effect.forEach(recapSlides(computed), (slide) => loadSlide(store, slide));
+    return { period, title: computed.title, slides: slides.flat() };
+  });
+
 export const layer = Layer.effect(
   Stats,
   Effect.gen(function* () {
@@ -142,6 +263,11 @@ export const layer = Layer.effect(
           },
         );
       },
+      recaps: Effect.map(
+        Effect.suspend(() => store.countedListening),
+        (listening) => availableRecaps(listening, Date.now()),
+      ),
+      recap: (period) => Effect.suspend(() => loadRecap(store, period, Date.now())),
     };
   }),
 );

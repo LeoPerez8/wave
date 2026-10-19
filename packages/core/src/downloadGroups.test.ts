@@ -87,6 +87,17 @@ describe("Settings › Downloads › Downloading: waiting songs grouped by where
     ]);
   });
 
+  test("the section's counts are the queue's: songs waiting their turn to be saved aren't downloading", () => {
+    const jobs = [
+      job("a", { origin: roadTrip, phase: "transferring" }),
+      job("b", { origin: roadTrip, phase: "awaitingPublication" }),
+      job("c", { origin: roadTrip, phase: "awaitingPublication" }),
+      job("d", { origin: focus, phase: "publishing" }),
+      job("e", { origin: focus }),
+    ];
+    assert.deepEqual(downloadingList(jobs).counts, { downloading: 1, saving: 3, waiting: 1 });
+  });
+
   test("groups come in queue order: the one whose next song starts soonest first", () => {
     // The journal lists jobs in the order its queue starts them.
     const jobs = [
@@ -155,7 +166,11 @@ describe("Settings › Downloads › Downloading: waiting songs grouped by where
       job("d", { origin: focus }),
     ];
     assert.deepEqual(groupsOf(jobs), [["Focus", "1 song left", ["d"]]]);
-    assert.deepEqual(downloadingList([]), { downloading: [], groups: [] });
+    assert.deepEqual(downloadingList([]), {
+      downloading: [],
+      counts: { downloading: 0, saving: 0, waiting: 0 },
+      groups: [],
+    });
   });
 });
 

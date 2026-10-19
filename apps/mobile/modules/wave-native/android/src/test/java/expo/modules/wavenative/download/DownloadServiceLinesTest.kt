@@ -44,6 +44,15 @@ class DownloadServiceLinesTest {
       "Memory while downloading (0 downloading, 3 waiting): Java heap 45/256 MB, native heap 80 MB, PSS 210 MB",
       DownloadServiceLines.memory(DownloadCounts(running = 0, left = 3), memory, hermesHeap = null),
     )
+    // Songs downloaded and waiting their turn to be saved aren't downloading (#466).
+    assertEquals(
+      "Memory while downloading (5 downloading, 600 saving, 428 waiting): Java heap 45/256 MB, native heap 80 MB, PSS 210 MB",
+      DownloadServiceLines.memory(DownloadCounts(running = 5, left = 428, saving = 600), memory, hermesHeap = null),
+    )
+    assertEquals(
+      "The download service stopped after 30 s: Android stopped it, with 0 downloading, 2 saving and 0 waiting; Java heap 45/256 MB, native heap 80 MB, PSS 210 MB",
+      DownloadServiceLines.stopped(DownloadServiceStop.ANDROID, 30_000L, DownloadCounts(running = 0, left = 0, saving = 2), memory),
+    )
   }
 
   @Test fun aRefusedStartOrRestartSaysWhatAndroidAnsweredAndWhatHappensToTheDownloads() {

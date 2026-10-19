@@ -37,7 +37,14 @@ import { UnsearchedSongRow } from "./UnsearchedSongRow";
 
 import { useFavoriteIds } from "./favorites";
 import type { PlaylistEntryRow } from "./LibraryStore";
-import { useDragCell, useListDrag, type DragHandlers, type DragState } from "./listDrag";
+import { entryText, FIND_FIELD_HEIGHT, FindHead, useFindInList } from "./FindInPlaylist";
+import {
+  useDragCell,
+  useListDrag,
+  type DragHandlers,
+  type DragState,
+  type ListDrag,
+} from "./listDrag";
 import { movePlaylistItem, removePlaylistItems } from "./playlists";
 import { toTrackSummary } from "./TrackList";
 import { useListScrollable } from "@/motion/heldTouch";
@@ -61,6 +68,8 @@ type RowProps = {
   downloaded: boolean;
   /** Whether the list is in selection mode: no dragging or swiping then. */
   selecting: boolean;
+  /** Whether the row can be dragged to a new place: not while Find in Playlist narrows the list. */
+  reorderable: boolean;
   /** In selection mode, whether the row is checked; undefined otherwise. */
   checked: boolean | undefined;
   onPress: () => void;
@@ -86,6 +95,7 @@ function PlaylistItem({
   favorite,
   downloaded,
   selecting,
+  reorderable,
   checked,
   onPress,
   onLongPress,
@@ -102,7 +112,7 @@ function PlaylistItem({
     drag,
     index,
     cells: CELLS,
-    enabled: !selecting,
+    enabled: !selecting && reorderable,
     liftedColor: fill,
     handlers,
   });
@@ -155,8 +165,8 @@ function PlaylistItem({
   const accessibilityActions = selecting
     ? []
     : [
-        ...(index > 0 ? [{ name: "moveUp", label: "Move up" }] : []),
-        ...(index < count - 1 ? [{ name: "moveDown", label: "Move down" }] : []),
+        ...(reorderable && index > 0 ? [{ name: "moveUp", label: "Move up" }] : []),
+        ...(reorderable && index < count - 1 ? [{ name: "moveDown", label: "Move down" }] : []),
         { name: "remove", label: "Remove from playlist" },
       ];
   const onAccessibilityAction = (event: AccessibilityActionEvent) => {
@@ -240,8 +250,10 @@ function PlaylistItem({
             // 48dp of target for a grip drawn in the 32dp state cell.
             style={{ width: grid.stateCell + CELL * 2, height: ROW, marginLeft: -CELL * 2 }}
           >
-            {/* Hidden, not removed, while selecting: the rows keep their width. */}
-            {!selecting && <IconGripVertical size={20} color={secondary} strokeWidth={1.5} />}
+            {/* Hidden, not removed, while selecting or finding: the rows keep their width. */}
+            {!selecting && reorderable && (
+              <IconGripVertical size={20} color={secondary} strokeWidth={1.5} />
+            )}
           </View>
         </GestureDetector>
       </Animated.View>
@@ -349,12 +361,24 @@ export function PlaylistItems({ playlistId, items, header, empty }: Props) {
     keyOf: entryKey,
     target: tracksOf,
   });
+  // Find in Playlist: the list scrolls back to where it was once the query is cleared.
+  const dragRef = useRef<ListDrag | null>(null);
+  const find = useFindInList(
+    order,
+    entryText,
+    () => dragRef.current?.drag.scroll.get() ?? 0,
+    (y) => dragRef.current?.scrollRef.current?.scrollTo({ y, animated: false }),
+  );
+  // The rows shown: the whole playlist, or the songs the query finds, in playlist order.
+  const { found, shown } = find;
   const orderRef = useRef(order);
   useLayoutEffect(() => {
     orderRef.current = order;
   });
 
   const reorder = (fromIndex: number, toIndex: number): boolean => {
+    // A narrowed list has no places to move to.
+    if (found !== null) return false;
     const current = orderRef.current;
     const item = current[fromIndex];
     if (item === undefined || toIndex === fromIndex || toIndex < 0 || toIndex >= current.length)
@@ -363,8 +387,11 @@ export function PlaylistItems({ playlistId, items, header, empty }: Props) {
     void movePlaylistItem(playlistId, item.itemId, toIndex);
     return true;
   };
-  const listDrag = useListDrag({ count: order.length, cells: CELLS, bottomInset, move: reorder });
+  const listDrag = useListDrag({ count: shown.length, cells: CELLS, bottomInset, move: reorder });
   const { scrollRef } = listDrag;
+  useLayoutEffect(() => {
+    dragRef.current = listDrag;
+  });
 
   const onRemove = (item: PlaylistEntryRow) => {
     setOrder((current) => current.filter((row) => row.itemId !== item.itemId));
@@ -374,9 +401,10 @@ export function PlaylistItems({ playlistId, items, header, empty }: Props) {
   const context = { kind: "playlist", id: String(playlistId) } as const;
 
   const renderRow = (index: number) => {
-    const item = order[index];
+    const item = shown[index];
     if (item === undefined) return null;
-    const play = () => playPlaylistEntries(order, index, context);
+    // A found song plays the whole playlist from its own place in it.
+    const play = () => playPlaylistEntries(order, find.placeOf(index), context);
     const row =
       item.source === "unavailable" && listSelection.selecting
         ? INERT_ROW
@@ -392,12 +420,13 @@ export function PlaylistItems({ playlistId, items, header, empty }: Props) {
         key={item.itemId}
         item={item}
         index={index}
-        count={order.length}
+        count={shown.length}
         drag={listDrag.drag}
         playing={queueId(item) !== null && queueId(item) === currentId}
         favorite={item.source === "library" && favorites.has(item.track.id)}
         downloaded={mixed}
         selecting={listSelection.selecting}
+        reorderable={found === null}
         {...row}
         handlers={listDrag}
         onMove={reorder}
@@ -413,13 +442,20 @@ export function PlaylistItems({ playlistId, items, header, empty }: Props) {
       className="flex-1"
       onLayout={listDrag.onLayout}
       onContentSizeChange={listDrag.onContentSizeChange}
-      contentContainerStyle={{ paddingHorizontal: grid.margin, paddingBottom: bottomInset }}
+      // Find in Playlist waits above the head until the list is pulled down.
+      contentOffset={{ x: 0, y: FIND_FIELD_HEIGHT }}
+      contentContainerStyle={{
+        paddingHorizontal: grid.margin,
+        paddingBottom: bottomInset,
+        minHeight: find.minHeight,
+      }}
     >
-      <View onLayout={listDrag.onHeaderLayout}>{header}</View>
-      {items === undefined ? null : order.length === 0 ? (
-        empty
-      ) : (
-        <View style={{ height: order.length * ROW }}>
+      <View onLayout={listDrag.onHeaderLayout}>
+        <FindHead find={find} header={header} />
+      </View>
+      {items !== undefined && found === null && order.length === 0 && empty}
+      {items !== undefined && shown.length > 0 && (
+        <View style={{ height: shown.length * ROW }}>
           {/* The dragged row stays mounted however far auto-scroll takes the list. */}
           {listDrag.indices.map(renderRow)}
         </View>

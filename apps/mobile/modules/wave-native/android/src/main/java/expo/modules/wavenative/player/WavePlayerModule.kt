@@ -34,6 +34,12 @@ class PlayerItem : Record {
   @Field val artworkPath: String? = null
 }
 
+/** A loaded item's new artwork, as JS sends it (Core's `PlayerCoverUpdate`). */
+class ItemArtworkRecord : Record {
+  @Field val key: String = ""
+  @Field val artworkPath: String = ""
+}
+
 /** The lines Core's `autoLyricLines` picked, as JS sends them ([LyricFrame]). */
 class AutoLyricsFrameRecord : Record {
   @Field val previous: String? = null
@@ -219,6 +225,17 @@ class WavePlayerModule : Module() {
     }.runOnQueue(Queues.MAIN)
 
     /**
+     * How much streamed audio the session's player keeps loaded ahead, in ms
+     * (Core's `streamBufferMs`). Kept natively, so the service follows it
+     * without JS too; it applies from the player's next buffering decision.
+     */
+    AsyncFunction("setStreamBuffer") { aheadMs: Double, promise: Promise ->
+      StreamBuffer.init(context)
+      StreamBuffer.setChosen(aheadMs.toLong())
+      promise.resolve(null)
+    }.runOnQueue(Queues.MAIN)
+
+    /**
      * The entry whose next song is an unsearched one still being searched (Core's
      * `searchingAfter`), or null: a crossfade from it waits for the search.
      */
@@ -231,19 +248,48 @@ class WavePlayerModule : Module() {
      * Applies Core's sync plan. Items already loaded are reused by key, so JS
      * only sends [items] for keys new to the player; [QueueSync] reads loaded
      * ones only when a step re-inserts them, so a skip doesn't walk the list.
+     * [cause] is what the sync is (Core's `SongChangeCause`), which names a
+     * song change it makes in the app log's crossfade lines; a sync that
+     * changes no song names nothing.
      */
-    AsyncFunction("applySync") { steps: List<SyncStepRecord>, items: List<PlayerItem>, promise: Promise ->
+    AsyncFunction("applySync") { steps: List<SyncStepRecord>, items: List<PlayerItem>, cause: String?, promise: Promise ->
       withController(promise) { player ->
         val incoming = items.associate { it.id to toMediaItem(it) }
+        val playlist = ControllerPlaylist(player)
         syncing = true
         QueueSnapshot.resumed = false
         try {
           val plan = steps.map { SyncStep.of(it.type, it.at, it.removeCount, it.keys, it.index, it.key) }
-          QueueSync.apply(plan, ControllerPlaylist(player), incoming)
+          CrossfadeLink.causes.sync(cause, SystemClock.elapsedRealtime(), { playlist.currentKey }) {
+            QueueSync.apply(plan, playlist, incoming)
+          }
           if (player.playbackState == Player.STATE_IDLE && player.mediaItemCount > 0) player.prepare()
           promise.resolve(null)
         } catch (error: IllegalArgumentException) {
           promise.reject("ERR_PLAYER_SYNC", error.message, error)
+        } finally {
+          syncing = false
+        }
+      }
+    }.runOnQueue(Queues.MAIN)
+
+    /**
+     * Gives loaded items a cover cached after they were set (a YT Music song's
+     * file in place of YouTube's address), so the notification, Auto and Now
+     * Playing show the file. Same media ID and URI, so the player swaps each
+     * item in place without interrupting playback. Keys it doesn't hold are skipped.
+     */
+    AsyncFunction("setItemArtwork") { updates: List<ItemArtworkRecord>, promise: Promise ->
+      withController(promise) { player ->
+        val byKey = updates.associate { it.key to it.artworkPath }
+        syncing = true
+        try {
+          for (index in 0 until player.mediaItemCount) {
+            val item = player.getMediaItemAt(index)
+            val artworkPath = byKey[item.mediaId] ?: continue
+            player.replaceMediaItem(index, PlayerMediaItems.withArtwork(item, artworkPath))
+          }
+          promise.resolve(null)
         } finally {
           syncing = false
         }
@@ -316,6 +362,7 @@ class WavePlayerModule : Module() {
 
     AsyncFunction("play") { promise: Promise ->
       withController(promise) { player ->
+        CrossfadeLink.pausedForSearch = false
         // A finished or failed item starts over.
         if (player.playbackState == Player.STATE_ENDED) player.seekToDefaultPosition()
         if (player.playbackState == Player.STATE_IDLE) player.prepare()
@@ -324,15 +371,19 @@ class WavePlayerModule : Module() {
       }
     }.runOnQueue(Queues.MAIN)
 
-    AsyncFunction("pause") { promise: Promise ->
+    /** [forSearch]: paused while the song to play is searched, as the app log's crossfade lines say. */
+    AsyncFunction("pause") { forSearch: Boolean?, promise: Promise ->
       withController(promise) { player ->
+        CrossfadeLink.pausedForSearch = forSearch == true
         player.pause()
         promise.resolve(null)
       }
     }.runOnQueue(Queues.MAIN)
 
-    AsyncFunction("seekTo") { positionMs: Double, promise: Promise ->
+    /** [source] is where the seek came from (Core's `SeekSource`), for the app log's crossfade lines. */
+    AsyncFunction("seekTo") { positionMs: Double, source: String?, promise: Promise ->
       withController(promise) { player ->
+        source?.let { CrossfadeLink.causes.noteApp(it, SystemClock.elapsedRealtime()) }
         player.seekTo(positionMs.toLong())
         promise.resolve(null)
       }

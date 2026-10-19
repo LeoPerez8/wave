@@ -26,8 +26,10 @@ import { useThemeColor } from "@/theme/useThemeColor";
 import { usePlaylists } from "./hooks";
 import type { PlaylistRow } from "./LibraryStore";
 import { cancelPlaylistImport } from "./playlistImports";
+import { framePhoto } from "./PhotoCropper";
 import {
   addToPlaylist,
+  adjustPlaylistImage,
   createPlaylist,
   currentPlaylists,
   deletePlaylist,
@@ -294,9 +296,16 @@ const renameNamedPlaylist = async (playlist: NamedPlaylist): Promise<void> => {
   await renamePlaylist(playlist.id, name).catch(failed("rename the playlist"));
 };
 
-/** Change Image: Android's photo picker, then the picked photo, square, in place of the mosaic. */
+/**
+ * Change Image: Android's photo picker, then the crop screen on the picked
+ * photo, then that square of it in place of the mosaic.
+ */
 export const changePlaylistImageFlow = (playlist: NamedPlaylist): Promise<void> =>
-  pickPlaylistImage(playlist.id).then(() => {}, failed("change the image"));
+  pickPlaylistImage(playlist.id, framePhoto).then(() => {}, failed("change the image"));
+
+/** Adjust Image: the crop screen on the original photo, at the last framing. */
+export const adjustPlaylistImageFlow = (playlist: NamedPlaylist): Promise<void> =>
+  adjustPlaylistImage(playlist.id, framePhoto).then(() => {}, failed("adjust the image"));
 
 /** Remove Image: the playlist's mosaic shows again. */
 export const removePlaylistImageFlow = (playlist: NamedPlaylist): Promise<void> =>

@@ -1,4 +1,12 @@
-import type { AutoLyricsFrame, PlaySource, RepeatMode, SleepTimer } from "@wave/core";
+import type {
+  AutoLyricsFrame,
+  PlayerCoverUpdate,
+  PlaySource,
+  RepeatMode,
+  SeekSource,
+  SleepTimer,
+  SongChangeCause,
+} from "@wave/core";
 import { NativeModule, requireNativeModule } from "expo";
 
 /** One track handed to the native player (`modules/wave-native`, `WavePlayerModule`). */
@@ -168,12 +176,25 @@ declare class WavePlayerModule extends NativeModule<WavePlayerEvents> {
    */
   setCrossfadeDuration(durationMs: number): Promise<void>;
   /**
+   * How much streamed audio to keep loaded ahead, in ms (Core's
+   * `streamBufferMs`). Kept natively, so it holds without JS too; library
+   * files keep the player's default.
+   */
+  setStreamBuffer(aheadMs: number): Promise<void>;
+  /**
    * The player entry whose next song is an unsearched one still being searched (Core's
    * `searchingAfter`), or null: a crossfade from it waits for the search at full volume.
    */
   setSearchingAfter(key: string | null): Promise<void>;
-  /** Edits the item list per the plan; `items` holds only the keys new to the player. */
-  applySync(steps: readonly NativeSyncStep[], items: readonly PlayerItem[]): Promise<void>;
+  /**
+   * Edits the item list per the plan; `items` holds only the keys new to the player.
+   * `cause` names a song change the plan makes in the app log's crossfade lines.
+   */
+  applySync(
+    steps: readonly NativeSyncStep[],
+    items: readonly PlayerItem[],
+    cause: SongChangeCause,
+  ): Promise<void>;
   setRepeatMode(mode: RepeatMode): Promise<void>;
   /** The queue's shuffle and repeat, for the toggles on Auto's player screen. */
   setModes(shuffle: boolean, repeat: RepeatMode): Promise<void>;
@@ -183,6 +204,12 @@ declare class WavePlayerModule extends NativeModule<WavePlayerEvents> {
    */
   setNotificationAccent(light: string, dark: string): Promise<void>;
   getItemIds(): Promise<NativeItemIds>;
+  /**
+   * Gives loaded items new artwork (Core's `playerCoverUpdates`: a YT Music
+   * cover cached after its item was set), without touching playback. Keys
+   * the player doesn't hold are skipped.
+   */
+  setItemArtwork(updates: readonly PlayerCoverUpdate[]): Promise<void>;
   /**
    * Keeps the queue (JSON) in the native process, for when JS restarts, and on
    * disk with where it was started from, for a cold start (playback resumption).
@@ -197,8 +224,10 @@ declare class WavePlayerModule extends NativeModule<WavePlayerEvents> {
    */
   takeResumed(): boolean;
   play(): Promise<void>;
-  pause(): Promise<void>;
-  seekTo(positionMs: number): Promise<void>;
+  /** `forSearch`: paused while the song to play is searched, as the app log's crossfade lines say. */
+  pause(forSearch: boolean): Promise<void>;
+  /** `source` is where the seek came from, for the app log's crossfade lines. */
+  seekTo(positionMs: number, source: SeekSource): Promise<void>;
   getState(): Promise<NativePlayerState>;
   /**
    * Starts the sleep timer in the playback service, which enforces it even with

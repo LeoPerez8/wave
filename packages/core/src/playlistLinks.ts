@@ -11,20 +11,23 @@ import type { YtQuietReason } from "./ytSearch.ts";
 
 /**
  * Where Library › Playlists › Import takes a playlist from: a link, M3U
- * files, or the signed-in account's YouTube Music library (`ytLibrary.ts`).
+ * files, or the signed-in account's YouTube Music library (`ytLibrary.ts`)
+ * or Spotify library (`spotifyLibrary.ts`).
  */
-export type PlaylistImportSource = "link" | "files" | "ytMusic";
+export type PlaylistImportSource = "link" | "files" | "ytMusic" | "spotify";
 
 /**
- * What Import offers, in order: From a Link, From Files and From YT Music
- * (signed in or not: signed out, it signs in first), or with YT Music off
- * only the files (Import opens the file picker at once, as before links).
+ * What Import offers, in order: From a Link, From Files, From YT Music and
+ * From Spotify (signed in or not: signed out, each signs in first), or with
+ * YT Music off only the files (Import opens the file picker at once, as
+ * before links; a Spotify import's songs are searched on YouTube Music).
  */
 export const playlistImportSources = ({
   ytMusic,
 }: {
   readonly ytMusic: boolean;
-}): readonly PlaylistImportSource[] => (ytMusic ? ["link", "files", "ytMusic"] : ["files"]);
+}): readonly PlaylistImportSource[] =>
+  ytMusic ? ["link", "files", "ytMusic", "spotify"] : ["files"];
 
 /** A playlist Wave can read from its service, as a link names it. */
 export type PlaylistLink =

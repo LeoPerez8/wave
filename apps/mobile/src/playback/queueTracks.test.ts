@@ -290,6 +290,47 @@ describe("queue tracks", () => {
     ]);
   });
 
+  test("cached covers reach the player too, once the queue's tracks have them", async () => {
+    const songs = ["a", "b"].map(ytSong);
+    learnQueueTracks(
+      songs.map((s) => toYtQueueTrack(s, null)),
+      { forgetOthers: true },
+    );
+    const handed: [string, string, string | null | undefined][] = [];
+    await Effect.runPromise(
+      cacheYtCoversLater(
+        songs,
+        (url) => Effect.succeed(cover(url)),
+        () => false,
+        (covers) => {
+          for (const [id, { artworkPath }] of covers) {
+            handed.push([id, artworkPath, queueTracks.get().get(id)?.artworkPath]);
+          }
+        },
+      ),
+    );
+
+    assert.deepEqual(handed, [
+      ["yt:a", "https://covers/a.jpg", "https://covers/a.jpg"],
+      ["yt:b", "https://covers/b.jpg", "https://covers/b.jpg"],
+    ]);
+  });
+
+  test("a cover cached after its song left the queue doesn't reach the player", async () => {
+    learnQueueTracks([toYtQueueTrack(ytSong("a"), null)], { forgetOthers: true });
+    const handed: string[] = [];
+    await Effect.runPromise(
+      cacheYtCoversLater(
+        [ytSong("a")],
+        cacheAfterNewPlay,
+        () => false,
+        (covers) => handed.push(...covers.keys()),
+      ),
+    );
+
+    assert.deepEqual(handed, []);
+  });
+
   test("a song that left the queue before its turn isn't cached", async () => {
     const songs = ["a", "b", "c", "d"].map(ytSong);
     learnQueueTracks(

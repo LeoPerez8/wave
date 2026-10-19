@@ -4,6 +4,8 @@ import { describe, test } from "node:test";
 import {
   DEFAULT_THEME,
   NIGHT_SLATE,
+  RECAP_COLOURS,
+  RECAP_INK,
   SETTINGS_PAGES,
   SETTINGS_TILE_COLOURS,
   SETTINGS_TILE_GLYPH,
@@ -160,5 +162,47 @@ describe("SETTINGS_TILE_COLOURS", () => {
       const ratio = contrastRatio(colour, DEFAULT_THEME.dark.background);
       assert.ok(ratio >= 3, `${name} on the dark ground is ${ratio.toFixed(2)}:1`);
     }
+  });
+});
+
+describe("RECAP_COLOURS", () => {
+  /** [ink] laid at [opacity] over [ground], as the app's `opacity-80` lines draw it. */
+  const over = (ink: string, opacity: number, ground: string): string => {
+    const channel = (hex: string, at: number) => Number.parseInt(hex.slice(at, at + 2), 16);
+    return `#${[1, 3, 5]
+      .map((at) =>
+        Math.round(channel(ink, at) * opacity + channel(ground, at) * (1 - opacity))
+          .toString(16)
+          .padStart(2, "0"),
+      )
+      .join("")}`;
+  };
+
+  test("keeps a Recap's white ink readable as text on every colour (4.5:1)", () => {
+    assert.equal(RECAP_INK, "#ffffff");
+    for (const [name, colour] of Object.entries(RECAP_COLOURS)) {
+      const ratio = contrastRatio(RECAP_INK, colour);
+      assert.ok(ratio >= 4.5, `white on ${name} is ${ratio.toFixed(2)}:1`);
+    }
+  });
+
+  test("keeps the quieter lines, the ink at 80%, readable as text too", () => {
+    for (const [name, colour] of Object.entries(RECAP_COLOURS)) {
+      const ratio = contrastRatio(over(RECAP_INK, 0.8, colour), colour);
+      assert.ok(ratio >= 4.5, `80% white on ${name} is ${ratio.toFixed(2)}:1`);
+    }
+  });
+
+  test("are a Recap's own, apart from Settings' tiles", () => {
+    const tiles = new Set(
+      [SETTINGS_TILE_COLOURS.light, SETTINGS_TILE_COLOURS.dark].flatMap((c) => Object.values(c)),
+    );
+    for (const [name, colour] of Object.entries(RECAP_COLOURS)) {
+      if (name !== "grey") assert.ok(!tiles.has(colour), `${name} ${colour} is a Settings tile's`);
+    }
+  });
+
+  test("takes the grey from the tone ramp (no ad-hoc greys)", () => {
+    assert.ok((TONES as readonly string[]).includes(RECAP_COLOURS.grey));
   });
 });

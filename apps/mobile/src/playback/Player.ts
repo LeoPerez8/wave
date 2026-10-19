@@ -1,4 +1,12 @@
-import { playerErrorNotice, type PlaySource, type RepeatMode, type SleepTimer } from "@wave/core";
+import {
+  playerErrorNotice,
+  type PlayerCoverUpdate,
+  type PlaySource,
+  type RepeatMode,
+  type SeekSource,
+  type SleepTimer,
+  type SongChangeCause,
+} from "@wave/core";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -68,15 +76,24 @@ export const sleepTimerState = makeExternalStore<SleepTimer | null>(null);
 export class Player extends Context.Service<
   Player,
   {
-    /** Edits the native item list; `items` carries metadata for the keys new to the player. */
+    /**
+     * Edits the native item list; `items` carries metadata for the keys new to
+     * the player. `cause` is the command the sync follows, which names a song
+     * change it makes in the app log's crossfade lines.
+     */
     readonly applySync: (
       steps: readonly NativeSyncStep[],
       items: readonly PlayerItem[],
+      cause: SongChangeCause,
     ) => Effect.Effect<void, PlayerError>;
     readonly setRepeatMode: (mode: RepeatMode) => Effect.Effect<void, PlayerError>;
     /** Shows the queue's shuffle and repeat on Android Auto's player screen. */
     readonly setModes: (shuffle: boolean, repeat: RepeatMode) => Effect.Effect<void, PlayerError>;
     readonly getItemIds: Effect.Effect<NativeItemIds, PlayerError>;
+    /** Gives loaded items their cached cover (Core's `playerCoverUpdates`); playback goes on. */
+    readonly setItemArtwork: (
+      updates: readonly PlayerCoverUpdate[],
+    ) => Effect.Effect<void, PlayerError>;
     readonly saveQueue: (json: string, source: PlaySource) => Effect.Effect<void>;
     readonly savedQueue: Effect.Effect<string | null>;
     readonly savedQueueSource: Effect.Effect<PlaySource | null>;
@@ -96,7 +113,10 @@ export class Player extends Context.Service<
     ) => Effect.Effect<void, never, Scope.Scope>;
     readonly play: Effect.Effect<void, PlayerError>;
     readonly pause: Effect.Effect<void, PlayerError>;
-    readonly seekTo: (positionMs: number) => Effect.Effect<void, PlayerError>;
+    /** Pauses while the song to play is searched (Core's playing walk); the app log says so. */
+    readonly pauseForSearch: Effect.Effect<void, PlayerError>;
+    /** Seeks the current item; `source` names the seek in the app log's crossfade lines. */
+    readonly seekTo: (positionMs: number, source: SeekSource) => Effect.Effect<void, PlayerError>;
     /** Starts (or, with null, cancels) the sleep timer in the playback service. */
     readonly setSleepTimer: (timer: SleepTimer | null) => Effect.Effect<void, PlayerError>;
   }
@@ -157,12 +177,16 @@ export const layer = Layer.effect(
   Effect.gen(function* () {
     yield* syncState;
     return Player.of({
-      applySync: (steps, items) =>
-        call("update the queue", () => WavePlayer.applySync(steps, items)),
+      applySync: (steps, items, cause) =>
+        call("update the queue", () => WavePlayer.applySync(steps, items, cause)),
       setRepeatMode: (mode) => call("set repeat", () => WavePlayer.setRepeatMode(mode)),
       setModes: (shuffle, repeat) =>
         call("show shuffle and repeat", () => WavePlayer.setModes(shuffle, repeat)),
       getItemIds: call("read the queue", () => WavePlayer.getItemIds()),
+      setItemArtwork: (updates) =>
+        updates.length === 0
+          ? Effect.void
+          : call("show the cached covers", () => WavePlayer.setItemArtwork(updates)),
       saveQueue: (json, source) => Effect.sync(() => WavePlayer.saveQueue(json, source)),
       savedQueue: Effect.sync(() => WavePlayer.savedQueue()),
       savedQueueSource: Effect.sync(() => WavePlayer.savedQueueSource()),
@@ -189,8 +213,9 @@ export const layer = Layer.effect(
           ),
         ),
       play: call("resume playback", () => WavePlayer.play()),
-      pause: call("pause playback", () => WavePlayer.pause()),
-      seekTo: (positionMs) => call("seek", () => WavePlayer.seekTo(positionMs)),
+      pause: call("pause playback", () => WavePlayer.pause(false)),
+      pauseForSearch: call("pause playback", () => WavePlayer.pause(true)),
+      seekTo: (positionMs, source) => call("seek", () => WavePlayer.seekTo(positionMs, source)),
       setSleepTimer: (timer) =>
         timer === null
           ? call("cancel the sleep timer", () => WavePlayer.cancelSleepTimer())

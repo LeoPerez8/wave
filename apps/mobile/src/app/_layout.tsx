@@ -17,6 +17,7 @@ import { resumePlaylistImports } from "@/library/playlistImports";
 import { resumeYtLibraryImport } from "@/library/ytLibraryImport";
 import { primePlaylists } from "@/library/playlists";
 import { OverlayHost } from "@/overlay/OverlayHost";
+import { PhotoCropperHost } from "@/library/PhotoCropper";
 import { FollowCurrentRoute } from "@/library/routes";
 import { useOpenSharedText } from "@/library/sharedText";
 import { YtLibraryPickerHost } from "@/library/YtLibraryPicker";
@@ -27,6 +28,7 @@ import { NowPlayingSheet, UnderNowPlaying } from "@/nowPlaying/NowPlayingSheet";
 import { PERF_ENABLED, perfTouch, useRenderCount } from "@/perf/perf";
 import { PerfProbe } from "@/perf/PerfProbe";
 import { startServices } from "@/services";
+import { SongShareLayer } from "@/share/SongSharePreview";
 import { useNavigationBarScheme } from "@/settings/appearance";
 import { startSync } from "@/sync/startSync";
 import { useThemeColor } from "@/theme/useThemeColor";
@@ -101,6 +103,11 @@ export default function RootLayout() {
             >
               <Stack.Protected guard={granted}>
                 <Stack.Screen name="(tabs)" />
+                {/* A Recap's stories cover the whole screen, mini player and tab bar too. */}
+                <Stack.Screen
+                  name="recap/[id]"
+                  options={{ animation: "fade_from_bottom", gestureEnabled: false }}
+                />
               </Stack.Protected>
               <Stack.Protected guard={!granted}>
                 <Stack.Screen name="access" options={{ animation: "fade" }} />
@@ -109,8 +116,12 @@ export default function RootLayout() {
           </UnderNowPlaying>
           {/* Always mounted, out of sight until opened, so a tap only starts its spring. */}
           {granted ? <NowPlayingSheet /> : null}
+          {/* The song share sheet (Share in Now Playing and song menus), over both. */}
+          <SongShareLayer />
           {/* Library › Playlists › Import › From YT Music's sheet, while it's up. */}
           <YtLibraryPickerHost />
+          {/* A playlist image's crop screen (Change Image, Adjust Image), while it's up. */}
+          <PhotoCropperHost />
         </OverlayHost>
       </SafeAreaProvider>
     </GestureHandlerRootView>

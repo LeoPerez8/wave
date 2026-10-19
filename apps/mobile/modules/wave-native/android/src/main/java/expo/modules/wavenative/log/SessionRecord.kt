@@ -96,8 +96,8 @@ class SessionRecord(private val folder: File) {
     val unreported = if (reportedUpTo == null) listOfNotNull(latest) else exits.filter { it.at > reportedUpTo }
     val inProgress = if (previousCrashed || (latest != null && latest in unreported && !ordinary(latest))) {
       runCatching(downloads).getOrNull()
-        ?.takeIf { it.running + it.left > 0 }
-        ?.let { "Downloads were in progress: ${it.running} downloading, ${it.left} waiting" }
+        ?.takeIf { it.running + it.left + it.saving > 0 }
+        ?.let { "Downloads were in progress: ${it.line()}" }
     } else null
     // Wave wrote its own crash: Android's record of it only adds what Wave was doing and its memory.
     val ownCrash = latest?.takeIf { previousCrashed && it.reason == ExitReason.CRASH && it in unreported }

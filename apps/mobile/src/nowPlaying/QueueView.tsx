@@ -26,8 +26,9 @@ import Animated from "react-native-reanimated";
 
 import { Artwork } from "@/catalog/Artwork";
 import { CatalogLine } from "@/catalog/CatalogLine";
-import { CELL } from "@/catalog/grid";
+import { CELL, grid } from "@/catalog/grid";
 import { Hairline } from "@/catalog/Hairline";
+import { TrackSkeletons } from "@/catalog/Skeletons";
 import { Press } from "@/motion/Press";
 import { usePerfVisible, useRenderCount } from "@/perf/perf";
 import {
@@ -38,6 +39,7 @@ import {
   toggleShuffle,
 } from "@/playback/actions";
 import { useQueue } from "@/playback/hooks";
+import { useMagicBatchLoading, useMagicQueueLabel } from "@/playback/MagicQueue";
 import { queueState } from "@/playback/Queue";
 import type { PlaybackState } from "@/playback/Player";
 import type { QueueTrack } from "@/playback/queueTracks";
@@ -103,12 +105,13 @@ const REPEAT_LABEL: Record<RepeatMode, string> = {
 /**
  * The top of the Queue view: what's playing (small), the shuffle and repeat
  * toggles (a long press on shuffle opens the shuffle card; it reads Smart
- * Shuffle, with its own icon, while that's chosen), then the Up Next heading. Sits in the sheet's drag-to-dismiss area.
+ * Shuffle, with its own icon, while that's chosen), then the Up Next heading ("Magic Queue · from <seed>" over a Magic Queue). Sits in the sheet's drag-to-dismiss area.
  */
 export function QueueHeader({ item }: { item: NonNullable<PlaybackState["item"]> }) {
   const queue = useQueue();
   const shuffle = useShuffleControl();
   const count = queue.entries.length - queue.index - 1;
+  const magic = useMagicQueueLabel();
   return (
     <View>
       <TrackHeader item={item} />
@@ -127,7 +130,7 @@ export function QueueHeader({ item }: { item: NonNullable<PlaybackState["item"]>
         className="flex-row items-center justify-between"
         style={{ paddingTop: CELL * 2, paddingBottom: CELL }}
       >
-        <CatalogLine>Up next</CatalogLine>
+        <CatalogLine className="shrink">{magic ?? "Up next"}</CatalogLine>
         {count > 0 && (
           <Text
             className="font-sans text-footnote text-secondary"
@@ -218,7 +221,7 @@ const UpNextRow = memo(function UpNextRow({ entry, index, track, lifted, drag, c
           haptic="selection"
           depth={0.1}
           className="items-center justify-center"
-          style={{ width: CELL * 6, height: CELL * 6 }}
+          style={{ width: grid.upNextCell, height: grid.upNextCell }}
         >
           <IconX size={20} color={secondary} strokeWidth={1.5} />
         </Press>
@@ -227,7 +230,7 @@ const UpNextRow = memo(function UpNextRow({ entry, index, track, lifted, drag, c
             accessibilityElementsHidden
             importantForAccessibility="no-hide-descendants"
             className="items-center justify-center"
-            style={{ width: CELL * 6, height: CELL * 6 }}
+            style={{ width: grid.upNextCell, height: grid.upNextCell }}
           >
             <IconMenu2 size={20} color={secondary} strokeWidth={1.5} />
           </View>
@@ -236,6 +239,11 @@ const UpNextRow = memo(function UpNextRow({ entry, index, track, lifted, drag, c
     </Animated.View>
   );
 });
+
+/** Up Next rows' stand-ins while a Magic Queue batch is picked, heard as one busy group. */
+function UpNextSkeletons() {
+  return <TrackSkeletons trailing="queue" />;
+}
 
 /**
  * Up Next: tap a row to play it, X to remove it, and drag its handle to move
@@ -246,6 +254,10 @@ const UpNextRow = memo(function UpNextRow({ entry, index, track, lifted, drag, c
  * target. On drop the lifted copy settles into its slot, then the new order
  * lands in one render with the offsets reset, and stays shown
  * (`withPendingMoves`) until the queue has it.
+ *
+ * While a Magic Queue picks its next batch, skeleton rows stand where it will
+ * land: in place of "Nothing up next.", or under the songs already in Up
+ * Next, which stay put (docs/spec.md, Skeletons).
  */
 export function UpNextList({ bottomInset }: { bottomInset: number }) {
   useRenderCount("UpNextList");
@@ -256,6 +268,7 @@ export function UpNextList({ bottomInset }: { bottomInset: number }) {
   const entries = useMemo(() => upNext(shown), [shown]);
   const tracks = useQueueTracks(queue.entries);
   const playingKey = currentEntry(queue)?.key ?? null;
+  const batchLoading = useMagicBatchLoading();
 
   const onMove = useCallback((move: PendingMove, moved: Promise<void>) => {
     setPending((list) => [...list, move]);
@@ -296,6 +309,14 @@ export function UpNextList({ bottomInset }: { bottomInset: number }) {
   // queue picked back up after JS restarted learns its tracks after the first render.
   const rowState = useMemo(() => ({ tracks, drag }), [tracks, drag]);
 
+  if (entries.length === 0 && batchLoading) {
+    return (
+      <View className="flex-1">
+        <UpNextSkeletons />
+      </View>
+    );
+  }
+
   if (entries.length === 0) {
     return (
       <View className="flex-1" style={{ paddingTop: CELL * 2 }}>
@@ -333,15 +354,18 @@ export function UpNextList({ bottomInset }: { bottomInset: number }) {
         scrollEnabled={drag === null}
         scrollEventThrottle={16}
         contentContainerStyle={{ paddingBottom: bottomInset }}
+        ListFooterComponent={batchLoading ? <UpNextSkeletons /> : null}
       />
       {drag !== null && (
         <Animated.View
           pointerEvents="none"
           className="absolute left-0 right-0 top-0 flex-row items-center bg-surface"
-          style={[{ height: ROW, gap: CELL * 1.5 }, liftedStyle]}
+          style={[{ height: ROW }, liftedStyle]}
         >
-          <RowText track={liftedTrack} />
-          <View style={{ width: CELL * 12 }} />
+          <View className="flex-1 flex-row items-center" style={{ gap: CELL * 1.5 }}>
+            <RowText track={liftedTrack} />
+          </View>
+          <View style={{ width: grid.upNextTrailing }} />
         </Animated.View>
       )}
     </View>

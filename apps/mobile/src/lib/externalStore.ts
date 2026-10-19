@@ -8,6 +8,19 @@ export interface ExternalStore<A> {
   readonly listenerCount: () => number;
 }
 
+/**
+ * Subscribes to every one of [stores] at once (for `useSyncExternalStore`
+ * over several): the listener runs when any changes; one call stops them all.
+ */
+export const subscribeAll =
+  (...stores: readonly Pick<ExternalStore<unknown>, "subscribe">[]) =>
+  (listener: () => void): (() => void) => {
+    const stops = stores.map((store) => store.subscribe(listener));
+    return () => {
+      for (const stop of stops) stop();
+    };
+  };
+
 export const makeExternalStore = <A>(initial: A): ExternalStore<A> => {
   let value = initial;
   const listeners = new Set<() => void>();

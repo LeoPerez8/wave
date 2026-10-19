@@ -29,21 +29,21 @@ import {
   discoverMixesSection,
   genreMixSeeds,
   homeSectionTitle,
-  identityKey,
   interleaveRadios,
+  mixAffinity,
   mixesShown,
+  mixProfileLookups,
+  mixSeedProfile,
   mixRefreshAvoid,
   mixRefreshWaitNotice,
   mixSectionOfId,
   mixSeedArtists,
   parseDiscoverMixes,
   parseMixesShown,
-  pickYtArtist,
   savedDiscoverMix,
   storedDiscoverMixes,
   storedMixesShown,
   undoneMixRefresh,
-  ytArtistLookup,
   type ArtistMixPools,
   type BlendedDiscoverMix,
   type DiscoverMix,
@@ -53,6 +53,8 @@ import {
   type DiscoverMixes,
   type DiscoverMixesSection,
   type DiscoverSimilarArtists,
+  type GenreProfileLibrary,
+  type GenreProfileOf,
   type MixRefreshAvoid,
   type ShownMixes,
   type YtAlbumSong,
@@ -66,7 +68,7 @@ import { freeTurnEffect } from "@/lib/backgroundWork";
 import { makeExternalStore, type ExternalStore } from "@/lib/externalStore";
 import { persistedSetting, type PersistedSetting } from "@/lib/persistedSetting";
 import { libraryListQueries } from "@/library/hooks";
-import { LibraryStore, type SongRow } from "@/library/LibraryStore";
+import type { SongRow } from "@/library/LibraryStore";
 import { appRuntime } from "@/library/runtime";
 import { useLibraryQuery } from "@/library/sharedQueries";
 import type { NativeYtRadioSong } from "@/native/waveYtMusic";
@@ -74,39 +76,18 @@ import { showToast } from "@/overlay/toast";
 import { useDontPlayExplicit } from "@/settings/dontPlayExplicit";
 import { useYtMusicEnabled } from "@/settings/ytMusic";
 import { Stats } from "@/stats/Stats";
-import { searchAllowanceFreeAt, withSearchTurn } from "@/ytmusic/searchAllowance";
+import { searchAllowanceFreeAt } from "@/ytmusic/searchAllowance";
 import { YtMusic } from "@/ytmusic/YtMusic";
 
+import { lookUpArtistProfiles, mixProfileOf } from "./artistGenres";
 import { useDiscoverMixLevel, type MixSectionId } from "./discoverMixLevel";
 import { mixIndexes, refreshKnownVideos, useKnownVideos, type MixIndexes } from "./mixKnown";
+import { savedYtArtist, ytArtistBrowseId } from "./ytArtistPage";
 
 export type { MixSectionId } from "./discoverMixLevel";
 
 /** How many of the most played artists Artist mixes' seeds are picked from. */
 const SEED_POOL = 20;
-
-/** What was saved for a Library artist's YT Music section, or null. */
-const savedYtArtist = (name: string) =>
-  Effect.gen(function* () {
-    const store = yield* LibraryStore;
-    return yield* store.ytArtist(identityKey(name)).pipe(Effect.orElseSucceed(() => null));
-  });
-
-/**
- * The YT Music artist page a Library artist's mix starts from: the match
- * their artist page saved, or the one an Artists search finds. Null when
- * YouTube Music has no such artist.
- */
-const artistPage = (name: string) =>
-  Effect.gen(function* () {
-    const ytMusic = yield* YtMusic;
-    const lookup = ytArtistLookup(name, yield* savedYtArtist(name));
-    if (lookup === null) return null;
-    if (lookup.kind === "page") return lookup.browseId;
-    const { query } = lookup;
-    const artists = yield* withSearchTurn("discover", query, ytMusic.searchArtists(query));
-    return pickYtArtist(name, artists);
-  });
 
 /**
  * The artists a Library artist's YT Music page lists as similar: the page
@@ -118,7 +99,7 @@ const similarArtists = (name: string) =>
     const answer = yield* savedYtArtist(name);
     const listed = answer?.outcome === "found" ? answer.page.similar : undefined;
     if (listed !== undefined) return listed;
-    const browseId = yield* artistPage(name);
+    const browseId = yield* ytArtistBrowseId(name);
     if (browseId === null) return [];
     const ytMusic = yield* YtMusic;
     return (yield* ytMusic.artist(browseId)).similar ?? [];
@@ -150,7 +131,7 @@ const withSimilar = (pools: ArtistMixPools) =>
  */
 const firstRadioPage = (artist: { readonly name: string; readonly browseId?: string }) =>
   Effect.gen(function* () {
-    const browseId = artist.browseId ?? (yield* artistPage(artist.name));
+    const browseId = artist.browseId ?? (yield* ytArtistBrowseId(artist.name));
     if (browseId === null) return null;
     return yield* (yield* YtMusic).radio({ browseId });
   });
@@ -162,15 +143,28 @@ interface ReadingRadio {
   continuation: string | null;
 }
 
+/** What a build knows of artists' genres: the Library, and every artist's profile by name. */
+interface MixGenres {
+  readonly library: GenreProfileLibrary;
+  readonly profileOf: GenreProfileOf;
+}
+
+/** The build's genre profiles (`mixProfileOf`). */
+const mixGenres = (library: GenreProfileLibrary): MixGenres => ({
+  library,
+  profileOf: mixProfileOf(library),
+});
+
 /**
  * [seed]'s radios, read at the same time and interleaved (`interleaveRadios`;
  * an artist mix has one), a page of each after another while Core asks for
  * more (a radio whose start or later page fails is left at what was read):
- * the new songs the mix keeps (`discoverMixSongs`, enough for level 5) and
- * every song the radios played, interleaved, for the mix's familiar share.
- * Null when no radio could be read.
+ * the new songs the mix keeps (`discoverMixSongs`, enough for level 5, held
+ * to the seed's genres by `mixAffinity`, outside artists' looked up on
+ * Deezer as their songs come) and every song the radios played,
+ * interleaved, for the mix's familiar share. Null when no radio could be read.
  */
-const readRadios = (seed: DiscoverMixSeed, filter: Filter) =>
+const readRadios = (seed: DiscoverMixSeed, filter: Filter, genres: MixGenres) =>
   Effect.gen(function* () {
     const ytMusic = yield* YtMusic;
     const firstPages = yield* Effect.all(
@@ -183,7 +177,14 @@ const readRadios = (seed: DiscoverMixSeed, filter: Filter) =>
         : [],
     );
     if (radios.length === 0) return null;
-    const keep = () => discoverMixSongs([interleaveRadios(radios.map((r) => r.songs))], filter);
+    const { library, profileOf } = genres;
+    const knowGenres = (songs: readonly { readonly artists: readonly string[] }[]) =>
+      lookUpArtistProfiles(mixProfileLookups(songs, profileOf));
+    const seedArtists = { artists: mixSeedArtists(seed).map((artist) => artist.name) };
+    yield* knowGenres([seedArtists, ...interleaveRadios(radios.map((r) => r.songs))]);
+    const affinity = mixAffinity(mixSeedProfile(seed, library, profileOf), profileOf);
+    const keep = () =>
+      discoverMixSongs([interleaveRadios(radios.map((r) => r.songs))], { ...filter, affinity });
     let pages = 1;
     let kept = keep();
     while (
@@ -211,6 +212,7 @@ const readRadios = (seed: DiscoverMixSeed, filter: Filter) =>
         { concurrency: "unbounded" },
       );
       pages += 1;
+      yield* knowGenres(interleaveRadios(radios.map((r) => r.songs)));
       kept = keep();
     }
     return { kept, radio: interleaveRadios(radios.map((r) => r.songs)) };
@@ -229,6 +231,7 @@ const mixesOf = (
 ) =>
   Effect.gen(function* () {
     const { known } = library;
+    const genres = mixGenres(library);
     // A refresh's new songs leave out those the section showed today, where it can.
     const avoidSongs = avoid === undefined ? {} : { avoid: avoid.songs };
     const taken = new Set<string>();
@@ -236,7 +239,7 @@ const mixesOf = (
     const mixes: DiscoverMix[] = [];
     for (const seed of seeds) {
       const read = yield* Effect.result(
-        readRadios(seed, { known: known.known, taken, ...avoidSongs }),
+        readRadios(seed, { known: known.known, taken, ...avoidSongs }, genres),
       );
       if (Result.isFailure(read) || read.success === null) continue;
       yield* freeTurnEffect;

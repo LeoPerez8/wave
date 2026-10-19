@@ -8,10 +8,11 @@ import { useChromeInset } from "@/chrome/chrome";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { openStatsSeeAll } from "@/library/routes";
 import { useListScrollable } from "@/motion/heldTouch";
-import { useTopAlbums, useTopArtists, useTopSongs } from "@/stats/hooks";
+import { useRecaps, useTopAlbums, useTopArtists, useTopSongs } from "@/stats/hooks";
 import {
   NothingPlayed,
   PeriodTabs,
+  RecapsRow,
   RankedAlbums,
   RankedArtists,
   RankedSongs,
@@ -24,6 +25,7 @@ export default function StatsScreen() {
   const topSongs = useTopSongs(period);
   const topAlbums = useTopAlbums(period);
   const topArtists = useTopArtists(period);
+  const recaps = useRecaps();
   const bottomInset = useChromeInset();
   const scrollable = useListScrollable();
 
@@ -34,6 +36,11 @@ export default function StatsScreen() {
         scrollEnabled={scrollable}
         contentContainerStyle={{ paddingHorizontal: grid.margin, paddingBottom: bottomInset }}
       >
+        {recaps !== undefined && recaps.length > 0 && (
+          <TitledSection title="Recaps" first>
+            <RecapsRow recaps={recaps} />
+          </TitledSection>
+        )}
         <PeriodTabs period={period} onChange={setPeriod} />
         {topSongs !== undefined && topSongs.length === 0 && <NothingPlayed period={period} />}
         {topSongs !== undefined && topSongs.length > 0 && (

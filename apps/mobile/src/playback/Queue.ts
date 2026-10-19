@@ -1,6 +1,7 @@
 import {
   EMPTY_QUEUE,
   REAL_SHUFFLE,
+  RECAP_PLAY_CONTEXT,
   answerPlayingWalk,
   applyPlayerSync,
   explicitPassOver,
@@ -22,6 +23,7 @@ import {
   reduceQueue,
   shuffledTrackIds,
   shufflesQueue,
+  songChangeCause,
   startPlayingWalk,
   statsWindow,
   undoneQueue,
@@ -38,6 +40,7 @@ import {
   type QueueUndo,
   type RepeatMode,
   type Shuffle,
+  type SongChangeCause,
   type SyncStep,
   type UnsearchedSettlement,
   type YtAlbumSong,
@@ -121,8 +124,21 @@ export class Queue extends Context.Service<
     ) => Effect.Effect<QueueHandOver, PlayerError>;
     /** Serialises a queue change still settling right away (Wave is leaving the foreground). */
     readonly flush: Effect.Effect<void>;
+    /**
+     * Borrows the player for a Recap's music: notes the queue as it is now,
+     * where the player is in its current song, for the loan to give back.
+     */
+    readonly borrow: Effect.Effect<QueueLoan>;
   }
 >()("@wave/mobile/playback/Queue") {}
+
+/** The player borrowed from the queue (`Queue.borrow`). */
+export interface QueueLoan {
+  /** Plays [track] on its own, in place of the queue, offering no Undo and kept off the play history. */
+  readonly play: (track: QueueTrack) => Effect.Effect<void, PlayerError>;
+  /** Puts the queue back as it was borrowed, paused where it was in its current song. */
+  readonly giveBack: Effect.Effect<void, PlayerError>;
+}
 
 /** Starting playback of a list: the only command a session request hands over. */
 export type PlayCommand = Extract<QueueCommand, { readonly type: "play" }>;
@@ -289,7 +305,8 @@ export const layer = Layer.effect(
       if (settleTimer !== null) settle();
     });
 
-    const applyPlan = (state: QueueState) =>
+    /** Brings the player in line with [state]; [cause] names a song change it makes in the app log. */
+    const applyPlan = (state: QueueState, cause: SongChangeCause) =>
       Effect.gen(function* () {
         // The player holds no unsearched entry, and waits while the playing one is searched.
         const list = playerQueueList(state);
@@ -305,7 +322,7 @@ export const layer = Layer.effect(
                 state.entries.filter((entry) => toLoad.has(entry.key)),
                 itemFor,
               );
-        yield* player.applySync(steps.map(toNative), items);
+        yield* player.applySync(steps.map(toNative), items, cause);
         native = applyPlayerSync(native, steps);
         // The `skip` perf scenario's response: what the plan did, on how long a queue.
         perfMark(
@@ -320,12 +337,15 @@ export const layer = Layer.effect(
     });
 
     /** Syncs the player; if JS's picture of it was off, re-reads it and tries once more. */
-    const sync = (state: QueueState) =>
-      (nativeKnown ? applyPlan(state) : Effect.andThen(readNative, applyPlan(state))).pipe(
+    const sync = (state: QueueState, cause: SongChangeCause) =>
+      (nativeKnown
+        ? applyPlan(state, cause)
+        : Effect.andThen(readNative, applyPlan(state, cause))
+      ).pipe(
         Effect.catch(() =>
           Effect.gen(function* () {
             yield* readNative;
-            yield* applyPlan(state);
+            yield* applyPlan(state, cause);
           }),
         ),
       );
@@ -394,7 +414,7 @@ export const layer = Layer.effect(
           case "search": {
             queueState.set(step.state);
             if (!pausedForSearch && playbackState.get().playWhenReady) {
-              yield* player.pause;
+              yield* player.pauseForSearch;
               pausedForSearch = true;
             }
             const answer =
@@ -509,8 +529,12 @@ export const layer = Layer.effect(
         (answer) => walkOut(answered(w, answer), finish),
       );
 
-    /** What a dispatched command's end does: the queue becomes its state, and the player follows. */
-    const apply = (done: Done) =>
+    /**
+     * What a dispatched command's end does: the queue becomes its state, and
+     * the player follows. [cause] is the command, as the app log names the
+     * song change it makes (Core's `songChangeCause`).
+     */
+    const apply = (cause: SongChangeCause) => (done: Done) =>
       Effect.gen(function* () {
         if (done.kind !== "go") return;
         const { state, playback, newQueue } = done;
@@ -518,7 +542,7 @@ export const layer = Layer.effect(
         if (state === shown && playback === "keep") return;
         queueState.set(state);
         if (state !== shown) queueChanged();
-        yield* sync(state);
+        yield* sync(state, cause);
         yield* applyRepeat(state);
         switch (playback) {
           case "play":
@@ -526,11 +550,11 @@ export const layer = Layer.effect(
             break;
           // The player reports the seek back to the start, which ends the play (`PlayHistory`).
           case "restart":
-            yield* player.seekTo(0);
+            yield* player.seekTo(0, "previousRestart");
             break;
           case "stop":
             yield* player.pause;
-            yield* player.seekTo(0);
+            yield* player.seekTo(0, "queueEnd");
             break;
           case "keep":
             break;
@@ -565,22 +589,54 @@ export const layer = Layer.effect(
         Effect.gen(function* () {
           if (offered?.takeBack !== takeBack) return;
           offered = null;
-          const { undo, tracks, source } = takeBack;
-          waiting = null;
-          pausedForSearch = false;
-          learnQueueTracks([...tracks.values()], { forgetOthers: true });
-          queueSource.set(source);
-          const state = undoneQueue(undo, queueState.get());
-          queueState.set(state);
-          queueChanged();
-          // Paused while the player changes songs, so the old one doesn't play from its start first.
-          yield* player.pause;
-          yield* sync(state);
-          yield* applyRepeat(state);
-          yield* player.seekTo(undo.positionMs);
+          yield* putBack(takeBack);
           yield* player.play;
         }),
       );
+
+    /**
+     * Brings back a queue a play replaced (Core's `undoneQueue`), paused on
+     * its song where it was. A command still waiting for a search gives way.
+     * Runs in the lane.
+     */
+    const putBack = ({ undo, tracks, source }: Omit<TakeBack, "notice">) =>
+      Effect.gen(function* () {
+        waiting = null;
+        pausedForSearch = false;
+        learnQueueTracks([...tracks.values()], { forgetOthers: true });
+        queueSource.set(source);
+        const state = undoneQueue(undo, queueState.get());
+        queueState.set(state);
+        queueChanged();
+        // Paused while the player changes songs, so the old one doesn't play from its start first.
+        yield* player.pause;
+        yield* sync(state, "undo");
+        yield* applyRepeat(state);
+        if (state.index >= 0) yield* player.seekTo(undo.positionMs, "undo");
+      });
+
+    // A Recap's music plays without Undo (no source to put back) and gives the queue back itself.
+    const borrow = lane.withPermit(
+      Effect.sync((): QueueLoan => {
+        const lent = {
+          undo: { state: queueState.get(), positionMs: currentPositionMs() },
+          tracks: queueTracks.get(),
+          source: queueSource.get(),
+        };
+        return {
+          play: (track) => {
+            const command: QueueCommand = {
+              type: "play",
+              trackIds: [track.id],
+              context: RECAP_PLAY_CONTEXT,
+              shuffle: false,
+            };
+            return walkOut(start(command, [track]), apply(songChangeCause(command)));
+          },
+          giveBack: lane.withPermit(putBack(lent)),
+        };
+      }),
+    );
 
     const dispatch = (command: QueueCommand, added: readonly QueueTrack[] = []) =>
       walkOut(
@@ -589,7 +645,7 @@ export const layer = Layer.effect(
           queueSource.set(queueSourceAfter(source, command, "phone"));
           return start(command, added, source);
         }),
-        apply,
+        apply(songChangeCause(command)),
       );
 
     // An unsearched song played from Auto is searched first, as on the phone.
@@ -641,8 +697,9 @@ export const layer = Layer.effect(
       if (native.currentKey !== null) {
         const outcome = yield* start({ type: "playerMoved", key: native.currentKey }, []);
         // The lane is this one's already: a wait (none follows the player) goes on outside it.
-        if (outcome.kind === "wait") Effect.runFork(Effect.ignore(waitOut(outcome.waiting, apply)));
-        else yield* apply(outcome);
+        if (outcome.kind === "wait")
+          Effect.runFork(Effect.ignore(waitOut(outcome.waiting, apply("restore"))));
+        else yield* apply("restore")(outcome);
       }
     }).pipe(Effect.catch(() => Effect.void));
 
@@ -713,10 +770,10 @@ export const layer = Layer.effect(
           learnQueueTracks(added);
           queueState.set(state);
           // A fresh player stays paused: nothing here asks it to play.
-          yield* sync(state);
+          yield* sync(state, "restore");
           yield* player.setRepeatMode(state.repeat);
           appliedRepeat = state.repeat;
-          if (positionMs > 0 && state === saved) yield* player.seekTo(positionMs);
+          if (positionMs > 0 && state === saved) yield* player.seekTo(positionMs, "restore");
           settle();
           return true;
         }).pipe(Effect.tapError(() => Effect.sync(() => queueState.set(EMPTY_QUEUE)))),
@@ -724,6 +781,6 @@ export const layer = Layer.effect(
 
     yield* Effect.addFinalizer(() => flush);
 
-    return Queue.of({ dispatch, handOver, restore: restoreSaved, flush });
+    return Queue.of({ dispatch, handOver, restore: restoreSaved, flush, borrow });
   }),
 );

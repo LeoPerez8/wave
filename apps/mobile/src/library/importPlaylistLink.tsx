@@ -40,7 +40,7 @@ import { askYtMusic } from "@/ytmusic/askYtMusic";
 
 import { importPlaylists, saveImportedPlaylist, type ImportedPlaylist } from "./importPlaylists";
 import { listLibrary, startLinkImport } from "./playlistImports";
-import { openYtLibraryImport } from "./YtLibraryPicker";
+import { openSpotifyLibraryImport, openYtLibraryImport } from "./YtLibraryPicker";
 import { openPlaylist } from "./routes";
 
 // ---------------------------------------------------------------------------
@@ -180,8 +180,8 @@ export const openSharedText = (text: string): void => {
 };
 
 /**
- * Library › Playlists › Import: From a Link, From Files or From YT Music
- * (Core's `playlistImportSources`). With YT Music off it opens the file
+ * Library › Playlists › Import: From a Link, From Files, From YT Music or
+ * From Spotify (Core's `playlistImportSources`). With YT Music off it opens the file
  * picker at once.
  */
 export const openPlaylistImport = (): void => {
@@ -193,6 +193,7 @@ export const openPlaylistImport = (): void => {
   openSourceMenu(sources, (source) => {
     if (source === "files") void importPlaylists();
     else if (source === "ytMusic") void openYtLibraryImport();
+    else if (source === "spotify") void openSpotifyLibraryImport();
     else void followUp(fromClipboard).then(askForLink);
   });
 };
@@ -225,6 +226,7 @@ const SOURCE_LABELS: Record<PlaylistImportSource, string> = {
   link: "From a Link",
   files: "From Files",
   ytMusic: "From YT Music",
+  spotify: "From Spotify",
 };
 
 /** The Import card: one entry per source, each handed to [choose]. */

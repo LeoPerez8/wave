@@ -8,6 +8,11 @@
 
 import { counted } from "./listening.ts";
 import { importNameClash, importedPlaylistName, keepBothName } from "./m3u.ts";
+import {
+  isSpotifyLibrarySource,
+  SPOTIFY_LIKED_SONGS_SOURCE,
+  type SpotifyLibraryPlaylist,
+} from "./spotifyLibrary.ts";
 import { readStoredRecord } from "./storedJson.ts";
 import type { YtQuietReason } from "./ytSearch.ts";
 
@@ -172,6 +177,50 @@ export const ytLibraryPicker = (
   };
 };
 
+const spotifyPickerRow = (
+  { source, artworkUrl, songCount }: SpotifyLibraryPlaylist,
+  title: string,
+): Omit<YtLibraryRow, "imported" | "ticked"> =>
+  pickerRow({ playlistId: source, artworkUrl, songCount }, title);
+
+/**
+ * The From Spotify picker for the account's library [playlists]
+ * (`readSpotifyLibrary`): Liked Songs first, always listed (its cover and
+ * count from the library when it lists it), then the created and followed
+ * playlists in Spotify's order. Rows are keyed by their Spotify source, so
+ * From Spotify shares From YT Music's ticks, Import, batch and origins. It
+ * has no Also add to Favorites: Spotify's songs the Library lacks go in
+ * unsearched, with nothing to star yet. Rows start ticked but those
+ * [origins] say were imported on this phone.
+ */
+export const spotifyLibraryPicker = (
+  playlists: readonly SpotifyLibraryPlaylist[],
+  origins: YtLibraryOrigins = NO_ORIGINS,
+): YtLibraryPicker => {
+  const liked = playlists.find((playlist) => playlist.source === SPOTIFY_LIKED_SONGS_SOURCE);
+  return {
+    rows: markImported(
+      [
+        spotifyPickerRow(
+          liked ?? {
+            source: SPOTIFY_LIKED_SONGS_SOURCE,
+            title: LIKED_SONGS,
+            artworkUrl: null,
+            songCount: null,
+          },
+          LIKED_SONGS,
+        ),
+        ...playlists
+          .filter((playlist) => playlist !== liked)
+          .map((playlist) => spotifyPickerRow(playlist, playlist.title)),
+      ],
+      origins,
+    ),
+    origins,
+    favorites: false,
+  };
+};
+
 /** [picker] with the row for [playlistId] ticked if it wasn't, unticked if it was. */
 export const toggleYtLibraryRow = (
   picker: YtLibraryPicker,
@@ -240,8 +289,9 @@ export interface YtLibraryImportItem {
    */
   readonly replaces: number | null;
   /**
-   * Read whole (`readYtPlaylist`'s `uncapped`): Liked Songs. The others stop
-   * at `YT_PLAYLIST_SONG_CAP`.
+   * Read whole (`readYtPlaylist`'s `uncapped`): Liked Songs, and every
+   * Spotify playlist (read with no song limit, as a link import reads it).
+   * The other YouTube Music ones stop at `YT_PLAYLIST_SONG_CAP`.
    */
   readonly uncapped: boolean;
   /**
@@ -258,7 +308,8 @@ export interface YtLibraryImportItem {
  * names it (`importedPlaylistName`; Liked Songs is "Liked Songs"), and a name
  * one of [playlists] (or an earlier one of these) has goes in under Keep
  * Both's name ("Name 2"), without asking. With Also add to Favorites on,
- * Liked Songs' read stars its songs the Library has.
+ * YouTube Music's Liked Songs' read stars its songs the Library has. The
+ * From Spotify picker's rows plan alike, each read whole.
  */
 export const planYtLibraryImport = (
   picker: YtLibraryPicker,
@@ -268,8 +319,9 @@ export const planYtLibraryImport = (
   const items: YtLibraryImportItem[] = [];
   for (const row of picker.rows) {
     if (!row.ticked) continue;
-    const uncapped = row.playlistId === YT_LIKED_SONGS_ID;
-    const favorites = uncapped && picker.favorites;
+    const ytLiked = row.playlistId === YT_LIKED_SONGS_ID;
+    const uncapped = ytLiked || isSpotifyLibrarySource(row.playlistId);
+    const favorites = ytLiked && picker.favorites;
     const origin = picker.origins.get(row.playlistId);
     const refreshed = playlists.find((playlist) => playlist.id === origin);
     if (refreshed !== undefined) {
