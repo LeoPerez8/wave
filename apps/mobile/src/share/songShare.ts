@@ -93,20 +93,21 @@ const openSongShare = (
       appLog("warn", LOG_TAG, `Couldn't read the cover: ${String(error)}`),
     );
   if (!withLinks) return;
-  // Each destination's answer lands on its own: Spotify doesn't wait for the video, or fail it.
-  const takeLink = <K extends keyof SongLinksState>(key: K, state: SongLinksState[K]): void => {
-    if (state.status !== "found") appLog("info", LOG_TAG, `No ${key} link: ${state.status}`);
-    take({ links: { ...(shared.get()?.links ?? SONG_LINKS_LOADING), [key]: state } });
-  };
   const song = links();
-  void settled(
-    "video",
-    song.then((found) => lookUpSongVideo(found, searchForLinks)),
-  ).then((state) => takeLink("video", state));
-  void settled(
-    "Spotify track",
-    song.then((found) => lookUpSpotifyTrack(found.search, spotifyForLinks)),
-  ).then((state) => takeLink("spotify", state));
+  // Each destination's answer lands on its own: Spotify doesn't wait for the video, or fail it.
+  /** Looks up the song's [what] with [find] and takes the answer as its [key] links. */
+  const lookUp = <K extends keyof SongLinksState>(
+    key: K,
+    what: string,
+    find: (found: SongLinkLookup) => Promise<SongLinksState[K]>,
+  ): void => {
+    void settled(what, song.then(find)).then((state) => {
+      if (state.status !== "found") appLog("info", LOG_TAG, `No ${key} link: ${state.status}`);
+      take({ links: { ...(shared.get()?.links ?? SONG_LINKS_LOADING), [key]: state } });
+    });
+  };
+  lookUp("video", "video", (found) => lookUpSongVideo(found, searchForLinks));
+  lookUp("spotify", "Spotify track", (found) => lookUpSpotifyTrack(found.search, spotifyForLinks));
 };
 
 export const closeSongShare = (): void => {
