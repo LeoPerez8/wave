@@ -9,11 +9,13 @@ import expo.modules.kotlin.modules.ModuleDefinition
 import expo.modules.wavenative.artwork.AndroidArtworkProcessor
 import expo.modules.wavenative.artwork.ArtistPhotoStore
 import expo.modules.wavenative.artwork.ArtworkStore
+import expo.modules.wavenative.net.NetworkMeter
 import java.io.File
 import java.io.IOException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import kotlin.coroutines.EmptyCoroutineContext
 import kotlin.coroutines.resume
 
 /**
@@ -26,6 +28,10 @@ import kotlin.coroutines.resume
  * through the process-wide [YtClient]; failures reject with the codes of
  * [YtFailure]. Nothing returned carries cookies or stream addresses: the
  * account is `{ status, account: { name, email, photoUrl } }`.
+ *
+ * The reads mixes and the Magic Queue make (artist search, artist page,
+ * radios) take an optional meter (`startNetworkMeter`): their requests count
+ * on it, and `takeNetworkUse` says what it counted ([expo.modules.wavenative.net.NetworkMeters]).
  */
 class YtMusicModule : Module() {
   private val context: Context
@@ -57,6 +63,12 @@ class YtMusicModule : Module() {
 
     Function("isEnabled") { client.enabled }
 
+    /** A new meter's id, for the metered reads below. */
+    Function("startNetworkMeter") { client.meters.start() }
+
+    /** What meter [id] counted, `{ requests, bytes }` (bytes on the wire), ending it. */
+    Function("takeNetworkUse") { id: String -> client.meters.take(id).toMap() }
+
     /** `{ songs, continuation }` for [query], or a rejection with an `ERR_YT_*` code. */
     AsyncFunction("searchSongs") Coroutine { query: String ->
       coded { client.searchSongs(query).toMap() }
@@ -66,8 +78,8 @@ class YtMusicModule : Module() {
      * Artists named like [query] (YouTube Music's "Artists" filter):
      * `[{ name, browseId, audience, artworkUrl }]`, or a rejection with an `ERR_YT_*` code.
      */
-    AsyncFunction("searchArtists") Coroutine { query: String ->
-      coded { client.searchArtists(query).map(YtArtistCandidate::toMap) }
+    AsyncFunction("searchArtists") Coroutine { query: String, meter: String? ->
+      coded(meter) { client.searchArtists(query).map(YtArtistCandidate::toMap) }
     }
 
     /**
@@ -83,8 +95,8 @@ class YtMusicModule : Module() {
      * The artist page [browseId] (`UC…`): `{ name, songs, albums, singles }`,
      * or an `ERR_YT_*` rejection.
      */
-    AsyncFunction("artist") Coroutine { browseId: String ->
-      coded { YtPages(client).artist(browseId).toMap() }
+    AsyncFunction("artist") Coroutine { browseId: String, meter: String? ->
+      coded(meter) { YtPages(client).artist(browseId).toMap() }
     }
 
     /**
@@ -117,18 +129,18 @@ class YtMusicModule : Module() {
      * with `video` (a music video rather than a song), or an `ERR_YT_*`
      * rejection. Needs no sign-in.
      */
-    AsyncFunction("songRadio") Coroutine { videoId: String ->
-      coded { YtPages(client).songRadio(videoId).toMap() }
+    AsyncFunction("songRadio") Coroutine { videoId: String, meter: String? ->
+      coded(meter) { YtPages(client).songRadio(videoId).toMap() }
     }
 
     /** The first page of an artist's radio, from their page (`UC…`), as [songRadio]. */
-    AsyncFunction("artistRadio") Coroutine { browseId: String ->
-      coded { YtPages(client).artistRadio(browseId).toMap() }
+    AsyncFunction("artistRadio") Coroutine { browseId: String, meter: String? ->
+      coded(meter) { YtPages(client).artistRadio(browseId).toMap() }
     }
 
     /** The radio page a `continuation` leads to, as [songRadio]. */
-    AsyncFunction("radioMore") Coroutine { continuation: String ->
-      coded { YtPages(client).radioMore(continuation).toMap() }
+    AsyncFunction("radioMore") Coroutine { continuation: String, meter: String? ->
+      coded(meter) { YtPages(client).radioMore(continuation).toMap() }
     }
 
     /**
@@ -208,9 +220,10 @@ class YtMusicModule : Module() {
     }
   }
 
-  private suspend fun <T> coded(block: suspend () -> T): T =
+  /** [block] with its failure as an `ERR_YT_*` code; its requests count on [meter] when given. */
+  private suspend fun <T> coded(meter: String? = null, block: suspend () -> T): T =
     try {
-      block()
+      withContext(meter?.let(::NetworkMeter) ?: EmptyCoroutineContext) { block() }
     } catch (e: YtException) {
       throw CodedException(e.failure.code, e.message, e.cause)
     }
