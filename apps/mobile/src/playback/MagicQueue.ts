@@ -5,6 +5,7 @@ import {
   libraryTrackIds,
   magicBatch,
   magicBatchLoading,
+  magicPickEnded,
   magicLibrarySongs,
   magicPlaySignal,
   magicQueueEdits,
@@ -98,7 +99,7 @@ export const useMagicQueueLabel = (): string | null =>
  * wanted until it's added, fails, times out or turns out not to be wanted;
  * null while none is.
  */
-const picking = makeExternalStore<string | null>(null);
+const picking = makeExternalStore<MagicSession["id"] | null>(null);
 
 const batchLoadingNow = (): boolean =>
   magicBatchLoading(activeMagicSession(), picking.get(), queueState.get());
@@ -249,16 +250,9 @@ export const layer = Layer.effectDiscard(
       );
     };
 
-    /**
-     * Adds the next batch once the session wants one (`wantsMagicBatch`),
-     * weighing every signal so far. Asked for again while it runs, it does
-     * nothing (`oneAtATime`), so no two batches are picked at once.
-     */
-    const fill = oneAtATime(
+    /** Picks [wanted]'s next batch, weighing every signal so far, and adds it while still wanted. */
+    const pick = (wanted: MagicSession) =>
       Effect.gen(function* () {
-        const wanted = activeMagicSession();
-        if (wanted === null || !wantsMagicBatch(wanted, queueState.get())) return;
-        picking.set(wanted.id);
         yield* awaitSignals;
         const library = yield* Effect.provideService(libraryNow, LibraryStore, store);
         const yt = yield* magicRadioCandidates(wanted, library).pipe(
@@ -287,10 +281,48 @@ export const layer = Layer.effectDiscard(
             .filter((candidate) => picked.has(candidate.trackId))
             .map((candidate) => candidate.song),
         ).pipe(Effect.provideService(YtMusic, ytMusic), Effect.provideService(Player, player));
-      }).pipe(
+      });
+
+    /**
+     * Picks a batch for the session under way if it wants one
+     * (`wantsMagicBatch`); then whether to pick again (`magicPickEnded`):
+     * another session took over while it was picked and wants its own.
+     */
+    const pickOnce = Effect.suspend(() => {
+      const wanted = activeMagicSession();
+      if (wanted === null || !wantsMagicBatch(wanted, queueState.get()))
+        return Effect.succeed(false);
+      picking.set(wanted.id);
+      let again = false;
+      return pick(wanted).pipe(
+        Effect.ignore,
         // However the picking ends: added, failed, timed out or no longer wanted.
-        Effect.ensuring(Effect.sync(() => picking.set(null))),
-      ),
+        Effect.ensuring(
+          Effect.sync(() => {
+            const ended = magicPickEnded(
+              wanted.id,
+              picking.get(),
+              activeMagicSession(),
+              queueState.get(),
+            );
+            picking.set(ended.picking);
+            again = ended.again;
+          }),
+        ),
+        Effect.map(() => again),
+      );
+    });
+
+    /**
+     * Adds the next batch once the session wants one. Asked for again while
+     * it runs, it does nothing (`oneAtATime`), so no two batches are picked
+     * at once; a session started meanwhile gets its batch once it's done.
+     */
+    const fill = oneAtATime(
+      Effect.gen(function* () {
+        let again = yield* pickOnce;
+        while (again) again = yield* pickOnce;
+      }),
     );
 
     let previous = queueState.get();
