@@ -628,6 +628,8 @@ export type {
   MagicYtCandidate,
 } from "./magicQueue.ts";
 export { magicBatchLoading } from "./magicQueue.ts";
+export { magicPickEnded } from "./magicQueue.ts";
+export type { MagicPickEnd } from "./magicQueue.ts";
 export { artistRanking } from "./moreFromArtist.ts";
 export type { ArtistRankingInput, ArtistRankingSong } from "./moreFromArtist.ts";
 export { artistPageItems } from "./artistPage.ts";

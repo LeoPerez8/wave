@@ -31,6 +31,9 @@ export function SkeletonGroup({ label, children }: { label: string; children: Re
 /** As `TrackRow`'s thumbnail. */
 const THUMB = CELL * 5;
 
+/** As `TrackRow`'s gap between its cells. */
+const ROW_GAP = CELL * 1.5;
+
 /**
  * What ends a track row: `TrackRow`'s favorite cell and length, or an Up Next
  * row's two cells (remove and the drag handle, `nowPlaying/QueueView.tsx`).
@@ -49,8 +52,8 @@ function TrackRowSkeleton({
   leading?: "artwork" | "number";
   trailing?: SkeletonTrailing;
 }) {
-  return (
-    <View className="flex-row items-center" style={{ height: grid.row, gap: CELL * 1.5 }}>
+  const start = (
+    <>
       {leading === "artwork" ? (
         <View className="bg-fill" style={{ width: THUMB, height: THUMB }} />
       ) : (
@@ -62,16 +65,25 @@ function TrackRowSkeleton({
         <Line lineHeight={22} width="60%" />
         <Line lineHeight={22} width="40%" />
       </View>
-      {trailing === "queue" ? (
-        <View style={{ width: CELL * 12 }} />
-      ) : (
-        <>
-          <View style={{ width: CELL * 3 }} />
-          <View style={{ width: CELL * 5 }}>
-            <Line lineHeight={18} width="70%" />
-          </View>
-        </>
-      )}
+    </>
+  );
+  if (trailing === "queue")
+    // As an Up Next row: the gap only runs between cover and lines, its end cells sit flush.
+    return (
+      <View className="flex-row items-center" style={{ height: grid.row }}>
+        <View className="flex-1 flex-row items-center" style={{ gap: ROW_GAP }}>
+          {start}
+        </View>
+        <View style={{ width: grid.upNextTrailing }} />
+      </View>
+    );
+  return (
+    <View className="flex-row items-center" style={{ height: grid.row, gap: ROW_GAP }}>
+      {start}
+      <View style={{ width: CELL * 3 }} />
+      <View style={{ width: CELL * 5 }}>
+        <Line lineHeight={18} width="70%" />
+      </View>
     </View>
   );
 }
