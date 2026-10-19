@@ -1,9 +1,8 @@
 import {
   FIND_IN_PLAYLIST_NO_MATCH,
   FIND_IN_PLAYLIST_PLACEHOLDER,
-  createPlaylistFinder,
+  createFindableList,
   findInPlaylistHead,
-  foundInPlaylist,
   hasFindQuery,
   joinArtists,
   type PlaylistFindText,
@@ -81,22 +80,26 @@ export interface FindInList<T = unknown> {
 }
 
 /**
- * Find in Playlist over [songs] (Core's `createPlaylistFinder`): what the
+ * Find in Playlist over [songs] (Core's `createFindableList`): what the
  * query finds, and the scroll position kept while it's typed. Starting a
  * query remembers where the list was ([offset]); clearing it puts the list
- * back there ([scrollTo]) once the full list is shown again.
+ * back there ([scrollTo]) once the full list is shown again. Off
+ * ([findable] false), nothing is prepared and the list shows whole.
  */
 export function useFindInList<T>(
   songs: readonly T[],
   describe: (song: T) => PlaylistFindText | null,
   offset: () => number,
   scrollTo: (y: number) => void,
+  findable = true,
 ): FindInList<T> {
   const { height } = useWindowDimensions();
   const [query, setQuery] = useState("");
-  const finder = useMemo(() => createPlaylistFinder(songs, describe), [songs, describe]);
-  const found = useMemo(() => finder.find(query), [finder, query]);
-  const { songs: shown, placeOf } = useMemo(() => foundInPlaylist(songs, found), [songs, found]);
+  const list = useMemo(
+    () => createFindableList(songs, describe, findable),
+    [songs, describe, findable],
+  );
+  const { found, songs: shown, placeOf } = useMemo(() => list.show(query), [list, query]);
   // The list's latest scroll handles, for a change made after the render that passed them.
   const scroll = useRef({ offset, scrollTo });
   useLayoutEffect(() => {
@@ -136,14 +139,13 @@ export function useFindInLegendList<T>(
   enabled: boolean,
 ): FindInList<T> {
   return useFindInList(
-    enabled ? songs : NO_SONGS,
+    songs,
     describe,
     () => list.current?.getState().scroll ?? 0,
     (y) => void list.current?.scrollToOffset({ offset: y, animated: false }),
+    enabled,
   );
 }
-
-const NO_SONGS: readonly never[] = [];
 
 /**
  * The top of a findable list: the Find in Playlist field, then the list's
