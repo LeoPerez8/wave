@@ -12,8 +12,8 @@ import {
   libraryFinder,
   magicSeedProfile,
   magicYtCandidates,
+  magicRadioLookups,
   magicYtSong,
-  mixProfileLookups,
   type GenreProfileLibrary,
   type GenreProfileOf,
   type MagicSession,
@@ -51,62 +51,111 @@ const artistRadioSongs = (name: string) =>
     return [...first.songs, ...next.songs];
   }).pipe(Effect.orElseSucceed((): readonly NativeYtRadioSong[] => []));
 
-/**
- * The candidates found for a session, kept so each batch doesn't read the
- * radio again, with the genre profiles they were weighed by.
- */
-let found: {
+/** The radio read for a session, kept so each batch doesn't read it again. */
+interface RadioRead {
   readonly sessionId: string;
-  readonly candidates: readonly MagicRadioCandidate[];
-  readonly profileOf: GenreProfileOf;
-} | null = null;
+  readonly radio: readonly NativeYtRadioSong[];
+  /** The artists whose genres it asked for so far (`magicRadioLookups`). */
+  readonly asked: string[];
+  /** The candidates last found in it, and the genre profiles they were weighed by. */
+  candidates: readonly MagicRadioCandidate[];
+  profileOf: GenreProfileOf;
+}
+
+let found: RadioRead | null = null;
+
+type MagicLibrary = GenreProfileLibrary & { readonly songs: readonly SongRow[] };
+
+/**
+ * How [session]'s radio [read] is weighed against [library] now: the
+ * artists to look up next (Core's `magicRadioLookups`: those that decide
+ * the next candidates, till there are enough; the artists further down wait
+ * for a later batch), and the candidates as the genres known now have them.
+ */
+const weighing = (session: MagicSession, library: MagicLibrary, read: RadioRead) => {
+  const profileOf = mixProfileOf(library);
+  const find = libraryFinder(library.songs);
+  const inLibrary = (song: NativeYtRadioSong) => find(song) !== null;
+  return {
+    next: () => magicRadioLookups(session, read.radio, { profileOf, inLibrary, asked: read.asked }),
+    candidates: () => {
+      read.candidates = magicYtCandidates(read.radio, {
+        seedProfile: magicSeedProfile(session),
+        profileOf,
+        inLibrary,
+      });
+      read.profileOf = profileOf;
+      return read.candidates;
+    },
+  };
+};
+
+/** Looks up what [weigh] asks for, a round at a time, till it asks nothing more. */
+const lookUpNeeded = (read: RadioRead, weigh: ReturnType<typeof weighing>) =>
+  Effect.gen(function* () {
+    for (let names = weigh.next(); names.length > 0; names = weigh.next()) {
+      read.asked.push(...names);
+      yield* lookUpArtistProfiles(names);
+    }
+    return weigh.candidates();
+  });
 
 /** [session]'s candidates, out of the radios of its `radioArtists` read now. */
-const readRadioCandidates = (
-  session: MagicSession,
-  library: GenreProfileLibrary & { readonly songs: readonly SongRow[] },
-) =>
+const readRadioCandidates = (session: MagicSession, library: MagicLibrary) =>
   Effect.gen(function* () {
     const radios = yield* Effect.all(session.radioArtists.map(artistRadioSongs), {
       concurrency: "unbounded",
     });
     const radio = radios.flat();
     if (radio.length === 0) return [];
-    const profileOf = mixProfileOf(library);
-    yield* lookUpArtistProfiles(mixProfileLookups(radio, profileOf));
-    const find = libraryFinder(library.songs);
-    const candidates = magicYtCandidates(radio, {
-      seedProfile: magicSeedProfile(session),
-      profileOf,
-      inLibrary: (song) => find(song) !== null,
-    });
-    found = { sessionId: session.id, candidates, profileOf };
-    return candidates;
+    // Kept before the genres are looked up, so a batch that runs out of time
+    // leaves the radio to the next one.
+    const read: RadioRead = {
+      sessionId: session.id,
+      radio,
+      asked: [],
+      candidates: [],
+      profileOf: mixProfileOf(library),
+    };
+    found = read;
+    return yield* lookUpNeeded(read, weighing(session, library, read));
   });
 
 const candidatesOutcome = (candidates: readonly MagicRadioCandidate[]): string =>
   candidates.length === 1 ? "1 candidate" : `${candidates.length} candidates`;
+
+/** [run], measured for the app log as [what] and cut short after a while. */
+const loggedRead = <E, R>(what: string, run: Effect.Effect<readonly MagicRadioCandidate[], E, R>) =>
+  withNetworkLog(what, run.pipe(Effect.timeout(RADIO_TIMEOUT)), candidatesOutcome);
 
 /**
  * [session]'s YouTube Music candidates (`magicYtCandidates`), out of the
  * radios of its `radioArtists`, weighed against [library] (its songs and
  * artists): read once per session, again while none could be read
  * (offline, say), each read writing its network use to the app log
- * (`withNetworkLog`). None with the YT Music switch off. Never fails.
+ * (`withNetworkLog`). Only the genres of the next candidates are looked up
+ * (`magicRadioLookups`), so a later batch may look up more, writing its
+ * own line. None with the YT Music switch off. Never fails.
  */
-export const magicRadioCandidates = (
-  session: MagicSession,
-  library: GenreProfileLibrary & { readonly songs: readonly SongRow[] },
-) =>
+export const magicRadioCandidates = (session: MagicSession, library: MagicLibrary) =>
   Effect.gen(function* () {
     if (!ytMusicEnabled()) return [];
-    if (found?.sessionId === session.id) return found.candidates;
-    if (session.radioArtists.length === 0) return [];
-    return yield* withNetworkLog(
-      "Magic Queue radio",
-      readRadioCandidates(session, library).pipe(Effect.timeout(RADIO_TIMEOUT)),
-      candidatesOutcome,
-    ).pipe(Effect.orElseSucceed((): readonly MagicRadioCandidate[] => []));
+    const read = found?.sessionId === session.id ? found : null;
+    if (read === null) {
+      if (session.radioArtists.length === 0) return [];
+      return yield* loggedRead("Magic Queue radio", readRadioCandidates(session, library)).pipe(
+        // Out of time: the candidates the genres looked up so far make, if the radio was read.
+        Effect.orElseSucceed((): readonly MagicRadioCandidate[] =>
+          found?.sessionId === session.id ? weighing(session, library, found).candidates() : [],
+        ),
+      );
+    }
+    const weigh = weighing(session, library, read);
+    if (weigh.next().length === 0) return weigh.candidates();
+    return yield* loggedRead("Magic Queue genres", lookUpNeeded(read, weigh)).pipe(
+      // Out of time: the candidates the genres looked up so far make.
+      Effect.orElseSucceed(weigh.candidates),
+    );
   });
 
 /**

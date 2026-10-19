@@ -61,8 +61,6 @@ export const mixProfileOf = (library: GenreProfileLibrary): GenreProfileOf => {
  */
 const CONCURRENCY = 3;
 const lookups = Semaphore.makeUnsafe(CONCURRENCY);
-/** The most artists one call looks up: the rest wait for the next pages or build. */
-const MOST_LOOKUPS = 40;
 /** A request that takes longer than this has failed. */
 const REQUEST_TIMEOUT = "15 seconds";
 
@@ -141,8 +139,9 @@ const lookUpNow = (artists: readonly string[]) =>
 const looking = new Map<string, Deferred.Deferred<void>>();
 
 /**
- * Looks [artists] up on Deezer (40 at most, three at a time across every
- * call going on) and keeps what it finds; an artist whose lookup fails stays
+ * Looks [artists] up on Deezer (three at a time across every call going
+ * on: which ones and how many is Core's, `mixProfileLookupsNext`) and
+ * keeps what it finds; an artist whose lookup fails stays
  * unknown, and so do all of them when Deezer's genres can't be read. An
  * artist another call is looking up is waited for, not looked up again.
  * Does nothing while the Lyrics and genre switch is off. Never fails.
@@ -150,9 +149,8 @@ const looking = new Map<string, Deferred.Deferred<void>>();
 export const lookUpArtistProfiles = (artists: readonly string[]) =>
   Effect.gen(function* () {
     if (artists.length === 0 || !lyricsAndGenreLookupsEnabled()) return;
-    const asked = artists.slice(0, MOST_LOOKUPS);
-    const others = new Set(asked.flatMap((artist) => looking.get(artist) ?? []));
-    const mine = asked.filter((artist) => !looking.has(artist));
+    const others = new Set(artists.flatMap((artist) => looking.get(artist) ?? []));
+    const mine = artists.filter((artist) => !looking.has(artist));
     const done = Deferred.makeUnsafe<void>();
     for (const artist of mine) looking.set(artist, done);
     yield* lookUpNow(mine).pipe(

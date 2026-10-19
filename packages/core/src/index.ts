@@ -1819,3 +1819,5 @@ export {
 } from "./artistRadioStarts.ts";
 export type { ArtistRadioStarts, YtRadioStart } from "./artistRadioStarts.ts";
 export { MIX_PRE_DOWNLOAD_SONGS, mixPreDownload } from "./mixPreDownload.ts";
+export { MIX_MOST } from "./discoverMixes.ts";
+export { magicRadioLookups, mixProfileLookupsNext } from "./mixGenreLookups.ts";
