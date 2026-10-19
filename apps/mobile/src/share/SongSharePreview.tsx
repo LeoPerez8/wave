@@ -1,5 +1,5 @@
 import { Canvas, LinearGradient, Rect, vec } from "@shopify/react-native-skia";
-import { IconBrandSpotify, IconBrandYoutube, IconLink, IconX } from "@tabler/icons-react-native";
+import { IconBrandSpotify, IconBrandYoutube, IconLink } from "@tabler/icons-react-native";
 import {
   songCardColours,
   songCardFileName,
@@ -11,16 +11,15 @@ import {
 } from "@wave/core";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { PixelRatio, Share, StyleSheet, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { CELL, grid } from "@/catalog/grid";
-import { IconButton } from "@/components/IconButton";
+import { CELL } from "@/catalog/grid";
 import { appLog } from "@/log/appLog";
 import { WaveNative } from "@/native/waveNative";
 import { addScreenBackHandler } from "@/overlay/back";
 import { showToast } from "@/overlay/toast";
 
 import { ShareDestinations, type ShareDestination } from "./ShareDestinations";
+import { SharePreviewFrame } from "./SharePreviewFrame";
 import type { ImageSource } from "./shareImage";
 import { SONG_CARD_ASPECT, SongCard } from "./SongCard";
 import { closeSongShare, useSongShare, type SongShareContent } from "./songShare";
@@ -121,9 +120,7 @@ function StoryGround({
  * it. Close (or Back) closes it.
  */
 function SongSharePreview({ content }: { content: SongShareContent }) {
-  const insets = useSafeAreaInsets();
   const colours = useMemo(() => songCardColours(content.palette), [content.palette]);
-  const [area, setArea] = useState<{ width: number; height: number } | null>(null);
   // A cover still loading would be missing from the image.
   const [loaded, setLoaded] = useState<string | undefined>(undefined);
   const ready = content.artworkUri === undefined || loaded === content.artworkUri;
@@ -158,36 +155,18 @@ function SongSharePreview({ content }: { content: SongShareContent }) {
       : share.image[key],
   );
 
-  // The Story fitted into the area; the card laid out at the export's size, scaled down onto it.
-  const storyWidth = area === null ? 0 : Math.min(area.width, area.height / STORY_ASPECT);
-  const storyHeight = storyWidth * STORY_ASPECT;
-  const stickerWidth = storyWidth * STICKER_SHARE;
   const exportWidth = EXPORT_PX / PixelRatio.get();
-  const scale = exportWidth === 0 ? 1 : stickerWidth / exportWidth;
 
   return (
-    <View
-      className="bg-background"
-      style={[
-        StyleSheet.absoluteFill,
-        { paddingTop: insets.top, paddingBottom: insets.bottom + CELL * 3 },
-      ]}
-    >
-      <View
-        className="flex-row items-center"
-        style={{ height: CELL * 7, paddingHorizontal: grid.margin - 12 }}
-      >
-        <IconButton icon={IconX} label="Close" onPress={closeSongShare} />
-      </View>
-      <View
-        className="flex-1 items-center justify-center"
-        style={{ paddingHorizontal: grid.margin * 2, paddingVertical: CELL * 2 }}
-        onLayout={(event) => {
-          const { width, height } = event.nativeEvent.layout;
-          setArea({ width: width - grid.margin * 4, height: height - CELL * 4 });
-        }}
-      >
-        {storyWidth > 0 && (
+    <SharePreviewFrame
+      onClose={closeSongShare}
+      renderPreview={(area) => {
+        // The Story fitted into the area; the card laid out at the export's size, scaled down onto it.
+        const storyWidth = Math.min(area.width, area.height / STORY_ASPECT);
+        const storyHeight = storyWidth * STORY_ASPECT;
+        const stickerWidth = storyWidth * STICKER_SHARE;
+        const scale = exportWidth === 0 ? 1 : stickerWidth / exportWidth;
+        return (
           <View
             accessible
             accessibilityLabel={`${content.title}, ${content.artist}`}
@@ -220,13 +199,14 @@ function SongSharePreview({ content }: { content: SongShareContent }) {
               </View>
             </View>
           </View>
-        )}
-      </View>
+        );
+      }}
+    >
       {/* Hidden, not left out, until some answer is known: the row's height stays. */}
       <View style={{ opacity: share.known ? 1 : 0, marginTop: CELL * 2 }}>
         <ShareDestinations destinations={destinations} disabled={share.disabled || !ready} />
       </View>
-    </View>
+    </SharePreviewFrame>
   );
 }
 
