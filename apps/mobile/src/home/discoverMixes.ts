@@ -66,6 +66,7 @@ import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
 
 import { freeTurnEffect } from "@/lib/backgroundWork";
 import { makeExternalStore, type ExternalStore } from "@/lib/externalStore";
+import { withNetworkLog } from "@/lib/networkMeter";
 import { persistedSetting, type PersistedSetting } from "@/lib/persistedSetting";
 import { libraryListQueries } from "@/library/hooks";
 import type { SongRow } from "@/library/LibraryStore";
@@ -309,6 +310,24 @@ const buildGenreMixes = (avoid?: MixRefreshAvoid) =>
     return yield* mixesOf(seeds, library, avoid);
   });
 
+/** What a build made, for its line in the app log. */
+const builtOutcome = (built: DiscoverMixes | null | "nothing-to-build-from"): string => {
+  if (built === "nothing-to-build-from") return "nothing to build from";
+  const count = built?.mixes.length ?? 0;
+  return count === 0 ? "no mix" : count === 1 ? "1 mix" : `${count} mixes`;
+};
+
+/**
+ * [id]'s build ([pulled]: a refresh the owner pulled for), writing its
+ * network use to the app log as it ends (`withNetworkLog`).
+ */
+const loggedBuild = (id: MixSectionId, pulled: boolean, avoid?: MixRefreshAvoid) =>
+  withNetworkLog(
+    `${homeSectionTitle(id)} ${pulled ? "refresh" : "build"}`,
+    SECTIONS[id].build(avoid),
+    builtOutcome,
+  );
+
 /** When a build made no mixes: try again after a while, not on every visit. */
 const RETRY_MS = 10 * 60 * 1000;
 
@@ -392,7 +411,7 @@ const refresh = (id: MixSectionId, played: boolean): void => {
   if (mixSection.retryAt !== null && now < mixSection.retryAt) return;
   mixSection.building.set(true);
   void appRuntime
-    .runPromise(Effect.result(mixSection.build()))
+    .runPromise(Effect.result(loggedBuild(id, false)))
     .then((result) => {
       const built = Result.isSuccess(result) ? result.success : null;
       if (built !== null && built !== "nothing-to-build-from") {
@@ -443,7 +462,7 @@ export const refreshMixes = (id: MixSectionId): void => {
   if (freeAt !== null) void showToast(mixRefreshWaitNotice(freeAt - now));
   building.set(true);
   void appRuntime
-    .runPromise(Effect.result(mixSection.build(mixRefreshAvoid(memory, now))))
+    .runPromise(Effect.result(loggedBuild(id, true, mixRefreshAvoid(memory, now))))
     .then((result) => {
       const built = Result.isSuccess(result) ? result.success : null;
       if (built === null || built === "nothing-to-build-from") {

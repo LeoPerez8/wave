@@ -13,6 +13,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
+import { ytNetworkMeter } from "@/lib/networkMeter";
 import type { IndexedArtwork } from "@/library/LibraryStore";
 import { toIndexedArtwork } from "@/library/LibraryScan";
 import type { NativeYtAlbum } from "@/native/waveYtDownloads";
@@ -138,17 +139,26 @@ export class YtMusic extends Context.Service<
   }
 >()("@wave/mobile/ytmusic/YtMusic") {}
 
+/**
+ * A native read that counts on the network meter of the run it's part of
+ * (`withNetworkLog`: a mix build, a Magic Queue batch), if any.
+ */
+const metered = <A>(
+  read: (meter: string | undefined) => Promise<A>,
+): Effect.Effect<A, YtMusicError> =>
+  Effect.flatMap(ytNetworkMeter, (meter) =>
+    Effect.tryPromise({ try: () => read(meter), catch: fromNative }),
+  );
+
 // Reading, checking or forgetting the session doesn't fail (no answer leaves it
 // as it was), so a rejection there is a defect.
 export const layer = Layer.succeed(YtMusic, {
   searchSongs: (query) =>
     Effect.tryPromise({ try: () => WaveYtMusic.searchSongs(query), catch: fromNative }),
-  searchArtists: (query) =>
-    Effect.tryPromise({ try: () => WaveYtMusic.searchArtists(query), catch: fromNative }),
+  searchArtists: (query) => metered((meter) => WaveYtMusic.searchArtists(query, meter)),
   searchAlbums: (query) =>
     Effect.tryPromise({ try: () => WaveYtMusic.searchAlbums(query), catch: fromNative }),
-  artist: (browseId) =>
-    Effect.tryPromise({ try: () => WaveYtMusic.artist(browseId), catch: fromNative }),
+  artist: (browseId) => metered((meter) => WaveYtMusic.artist(browseId, meter)),
   // Album pages are read by the downloads module (a download's tags come from them), once a session.
   album: (browseId) => Effect.tryPromise({ try: () => readYtAlbum(browseId), catch: fromNative }),
   playlist: (playlistId, options = {}) =>
@@ -178,15 +188,12 @@ export const layer = Layer.succeed(YtMusic, {
       catch: libraryFailure,
     }),
   radio: (seed) =>
-    Effect.tryPromise({
-      try: () =>
-        "videoId" in seed
-          ? WaveYtMusic.songRadio(seed.videoId)
-          : WaveYtMusic.artistRadio(seed.browseId),
-      catch: fromNative,
-    }),
-  radioMore: (continuation) =>
-    Effect.tryPromise({ try: () => WaveYtMusic.radioMore(continuation), catch: fromNative }),
+    metered((meter) =>
+      "videoId" in seed
+        ? WaveYtMusic.songRadio(seed.videoId, meter)
+        : WaveYtMusic.artistRadio(seed.browseId, meter),
+    ),
+  radioMore: (continuation) => metered((meter) => WaveYtMusic.radioMore(continuation, meter)),
   cacheArtwork: (url) =>
     Effect.tryPromise({ try: () => WaveYtMusic.cacheArtwork(url), catch: fromNative }).pipe(
       Effect.map(toIndexedArtwork),

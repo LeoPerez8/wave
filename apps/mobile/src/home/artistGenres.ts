@@ -24,6 +24,7 @@ import {
 } from "@wave/core";
 import * as Effect from "effect/Effect";
 
+import { countAnswer } from "@/lib/networkMeter";
 import { persistedSetting } from "@/lib/persistedSetting";
 import { lyricsAndGenreLookupsEnabled } from "@/settings/lyricsAndGenre";
 
@@ -59,12 +60,23 @@ const MOST_LOOKUPS = 40;
 /** A request that takes longer than this has failed. */
 const REQUEST_TIMEOUT = "15 seconds";
 
+/** Deezer's answer at [url], counted on the run being measured (`countAnswer`). */
 const getJson = (url: string) =>
   Effect.tryPromise(async (signal) => {
     const response = await fetch(url, { signal });
-    if (!response.ok) throw new Error(`HTTP ${response.status} for ${url}`);
-    return (await response.json()) as unknown;
-  }).pipe(Effect.timeout(REQUEST_TIMEOUT));
+    return { response, body: await response.text() };
+  }).pipe(
+    Effect.tap(({ response, body }) =>
+      countAnswer("deezer", response.headers.get("content-length"), body),
+    ),
+    Effect.flatMap(({ response, body }) =>
+      Effect.try(() => {
+        if (!response.ok) throw new Error(`HTTP ${response.status} for ${url}`);
+        return JSON.parse(body) as unknown;
+      }),
+    ),
+    Effect.timeout(REQUEST_TIMEOUT),
+  );
 
 /** Deezer's genre names by id, read once per app session (again after a failure). */
 let genreNames: ReadonlyMap<number, string> | null = null;
