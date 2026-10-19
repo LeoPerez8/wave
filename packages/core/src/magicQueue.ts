@@ -8,6 +8,7 @@
  */
 
 import { artistPhotoName } from "./artistPhoto.ts";
+import { DISCOVER_MIX_LEVELS, type DiscoverMixLevel } from "./discoverMixLevels.ts";
 import { mixRecordingOf, type DiscoverRadioSong } from "./discoverMixes.ts";
 import {
   mixAffinity,
@@ -163,6 +164,26 @@ const YT_SHARE_MAX = 0.8;
 
 const clampShare = (share: number): number => Math.min(YT_SHARE_MAX, Math.max(YT_SHARE_MIN, share));
 
+/**
+ * The YouTube Music share a Magic Queue starts at for the new-music [level]
+ * of Home's Magic Queue section: from 20% at level 1 to 80% at level 5, half
+ * at level 3 (the default). Signals then move it within those bounds.
+ */
+export const magicQueueShare = (level: DiscoverMixLevel): number =>
+  YT_SHARE_MIN + ((level - 1) * (YT_SHARE_MAX - YT_SHARE_MIN)) / 4;
+
+/** The levels the Magic Queue section's level card offers, each with the share it starts at. */
+export const MAGIC_QUEUE_LEVELS: readonly {
+  readonly level: DiscoverMixLevel;
+  readonly label: string;
+  /** "35% new": the header control's own label. */
+  readonly share: string;
+}[] = DISCOVER_MIX_LEVELS.map(({ level, label }) => ({
+  level,
+  label,
+  share: `${Math.round(magicQueueShare(level) * 100)}% new`,
+}));
+
 /** A genre tag compared without case or surrounding spaces. */
 const genreKey = (genre: string | null): string | null => {
   const key = genre?.trim().toLowerCase() ?? "";
@@ -173,7 +194,9 @@ const genreKey = (genre: string | null): string | null => {
  * Starts a Magic Queue from [seed], whose songs are [seedSongs] (the song
  * itself for a song seed): it plays that song, or a random one of the
  * seed's otherwise. Its YouTube Music radio grows from [radio] (none
- * without). Null when the seed has no songs.
+ * without). YouTube Music's share of a batch starts at [ytShare]
+ * (`magicQueueShare`, kept within 20-80%), half without. Null when the seed
+ * has no songs.
  */
 export const startMagicQueue = (
   seed: MagicSeed,
@@ -182,10 +205,12 @@ export const startMagicQueue = (
     id,
     random,
     radio,
+    ytShare = YT_SHARE_START,
   }: {
     readonly id: string;
     readonly random: RandomSource;
     readonly radio?: MagicRadioSeed;
+    readonly ytShare?: number;
   },
 ): { readonly session: MagicSession; readonly first: string } | null => {
   const pick =
@@ -209,7 +234,7 @@ export const startMagicQueue = (
       artistAffinity,
       genreAffinity,
       excludedArtists: [],
-      ytShare: YT_SHARE_START,
+      ytShare: clampShare(ytShare),
       radioArtists: radio === undefined ? [] : magicRadioArtists(seed, radio.artists),
       seedProfile:
         radio === undefined || radio.profile === null ? null : Object.fromEntries(radio.profile),

@@ -1797,3 +1797,14 @@ export {
 export type { TasteHistory, TasteProfile, TasteSignal, TasteSignalKind } from "./tasteProfile.ts";
 export { NO_NETWORK_USE, answerBytes, networkUseLine, withNetworkUse } from "./networkUse.ts";
 export type { HostNetworkUse, NetworkHost, NetworkUse, NetworkUseRun } from "./networkUse.ts";
+export {
+  MAGIC_QUEUE_PICKS,
+  magicQueuePicks,
+  magicQueuePicksDue,
+  parseMagicQueuePicks,
+  refreshedMagicQueuePicks,
+  storedMagicQueuePicks,
+  undoneMagicQueueRefresh,
+} from "./magicQueueSection.ts";
+export type { MagicQueuePicking, MagicQueuePicks } from "./magicQueueSection.ts";
+export { MAGIC_QUEUE_LEVELS, magicQueueShare } from "./magicQueue.ts";
