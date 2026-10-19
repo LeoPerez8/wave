@@ -108,4 +108,33 @@ describe("the saved pages' similar artists, for the artist graph", () => {
     );
     assert.deepEqual(selectYtArtistSimilar(db), [{ name: "Daft Punk", similar: [] }]);
   });
+
+  test("a similar artist saved without a name or a page id is left out, the others kept", () => {
+    saveYtArtist(db, "daft punk", {
+      ...found,
+      page: {
+        ...found.page,
+        similar: [null, { name: "Justice" }, { browseId: "UCx" }, portishead, "Air"],
+      },
+    } as unknown as YtArtistSaved);
+    assert.deepEqual(selectYtArtistSimilar(db), [
+      {
+        name: "Daft Punk",
+        similar: [{ name: "Portishead", browseId: "UCportishead", audience: 1_000 }],
+      },
+    ]);
+  });
+
+  test("a similar artist's audience or picture of the wrong kind reads as none", () => {
+    saveYtArtist(db, "daft punk", {
+      ...found,
+      page: { ...found.page, similar: [{ ...portishead, audience: "many", artworkUrl: 3 }] },
+    } as unknown as YtArtistSaved);
+    assert.deepEqual(selectYtArtistSimilar(db), [
+      {
+        name: "Daft Punk",
+        similar: [{ name: "Portishead", browseId: "UCportishead", audience: null }],
+      },
+    ]);
+  });
 });

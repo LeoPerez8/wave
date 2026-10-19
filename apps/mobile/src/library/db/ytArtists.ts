@@ -62,14 +62,32 @@ export const saveYtArtist = (
 /** A saved page's artist and who "Fans might also like", as the artist graph reads them. */
 export type YtArtistSimilar = Required<Pick<YtArtistPage, "name" | "similar">>;
 
-/** [json] read as a list of similar artists: none when it isn't a list. */
-const readSimilar = (json: string | null): YtArtistSimilar["similar"] => {
+type SimilarArtist = YtArtistSimilar["similar"][number];
+
+/** [value] read field by field as a similar artist; null without a name and a page id. */
+const readSimilarArtist = (value: unknown): SimilarArtist | null => {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
+  const { name, browseId, audience, artworkUrl } = value as Readonly<Record<string, unknown>>;
+  if (typeof name !== "string" || typeof browseId !== "string") return null;
+  return {
+    name,
+    browseId,
+    audience: typeof audience === "number" && Number.isFinite(audience) ? audience : null,
+    ...(typeof artworkUrl === "string" || artworkUrl === null ? { artworkUrl } : {}),
+  };
+};
+
+/** [json] read as a list of similar artists: none when it isn't a list, an entry that isn't one left out. */
+const readSimilar = (json: string | null): SimilarArtist[] => {
+  let similar: unknown;
   try {
-    const similar: unknown = json === null ? null : JSON.parse(json);
-    return Array.isArray(similar) ? (similar as YtArtistSimilar["similar"]) : [];
+    similar = json === null ? null : JSON.parse(json);
   } catch {
     return [];
   }
+  return Array.isArray(similar)
+    ? similar.flatMap((entry: unknown) => readSimilarArtist(entry) ?? [])
+    : [];
 };
 
 /**
