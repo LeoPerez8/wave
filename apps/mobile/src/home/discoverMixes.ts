@@ -20,12 +20,11 @@ import {
   artistMixSeeds,
   artistMixSimilarSource,
   discoverMixKeep,
-  discoverMix,
-  discoverMixFamiliarPool,
   discoverMixReadsMore,
   discoverMixSongs,
   discoverMixesBuilt,
   discoverMixesDue,
+  discoverMixesOfRadios,
   discoverMixesSection,
   genreMixSeeds,
   homeSectionTitle,
@@ -46,7 +45,6 @@ import {
   undoneMixRefresh,
   type ArtistMixPools,
   type BlendedDiscoverMix,
-  type DiscoverMix,
   type DiscoverMixBlend,
   type DiscoverMixFilter,
   type DiscoverMixSeed,
@@ -83,7 +81,7 @@ import { YtMusic } from "@/ytmusic/YtMusic";
 import { lookUpArtistProfiles, mixProfileOf } from "./artistGenres";
 import { useDiscoverMixLevel, type MixSectionId } from "./discoverMixLevel";
 import { mixIndexes, refreshKnownVideos, useKnownVideos, type MixIndexes } from "./mixKnown";
-import { savedYtArtist, ytArtistBrowseId } from "./ytArtistPage";
+import { artistRadio, savedYtArtist, ytArtistBrowseId } from "./ytArtistPage";
 
 export type { MixSectionId } from "./discoverMixLevel";
 
@@ -125,18 +123,6 @@ const withSimilar = (pools: ArtistMixPools) =>
     return { ...pools, similar };
   });
 
-/**
- * The first page of an artist's radio (the Start radio of their artist page:
- * [browseId], else the one their name finds), or null when YouTube Music
- * doesn't have the artist; fails when the radio can't be started.
- */
-const firstRadioPage = (artist: { readonly name: string; readonly browseId?: string }) =>
-  Effect.gen(function* () {
-    const browseId = artist.browseId ?? (yield* ytArtistBrowseId(artist.name));
-    if (browseId === null) return null;
-    return yield* (yield* YtMusic).radio({ browseId });
-  });
-
 type Filter = DiscoverMixFilter<NativeYtRadioSong>;
 
 interface ReadingRadio {
@@ -160,16 +146,19 @@ const mixGenres = (library: GenreProfileLibrary): MixGenres => ({
  * [seed]'s radios, read at the same time and interleaved (`interleaveRadios`;
  * an artist mix has one), a page of each after another while Core asks for
  * more (a radio whose start or later page fails is left at what was read):
- * the new songs the mix keeps (`discoverMixSongs`, enough for level 5, held
- * to the seed's genres by `mixAffinity`, outside artists' looked up on
- * Deezer as their songs come) and every song the radios played,
- * interleaved, for the mix's familiar share. Null when no radio could be read.
+ * every song the radios played, interleaved, and how the seed's genres hold
+ * its songs (`mixAffinity`, outside artists' looked up on Deezer as their
+ * songs come). A page more is read while the songs the mix would keep
+ * (`discoverMixSongs`, enough for level 5) are too few, the other seeds'
+ * mixes aside: they're read at the same time, and Core takes out what an
+ * earlier seed's mix has once every seed is read (`discoverMixesOfRadios`).
+ * Null when no radio could be read.
  */
 const readRadios = (seed: DiscoverMixSeed, filter: Filter, genres: MixGenres) =>
   Effect.gen(function* () {
     const ytMusic = yield* YtMusic;
     const firstPages = yield* Effect.all(
-      mixSeedArtists(seed).map((artist) => Effect.result(firstRadioPage(artist))),
+      mixSeedArtists(seed).map((artist) => Effect.result(artistRadio(artist))),
       { concurrency: "unbounded" },
     );
     const radios: ReadingRadio[] = firstPages.flatMap((page) =>
@@ -184,16 +173,17 @@ const readRadios = (seed: DiscoverMixSeed, filter: Filter, genres: MixGenres) =>
     const seedArtists = { artists: mixSeedArtists(seed).map((artist) => artist.name) };
     yield* knowGenres([seedArtists, ...interleaveRadios(radios.map((r) => r.songs))]);
     const affinity = mixAffinity(mixSeedProfile(seed, library, profileOf), profileOf);
-    const keep = () =>
-      discoverMixSongs([interleaveRadios(radios.map((r) => r.songs))], { ...filter, affinity });
-    let pages = 1;
-    let kept = keep();
-    while (
+    const kept = () =>
+      discoverMixSongs([interleaveRadios(radios.map((r) => r.songs))], { ...filter, affinity })
+        .length;
+    for (
+      let pages = 1;
       discoverMixReadsMore({
         pages,
-        kept: kept.length,
+        kept: kept(),
         more: radios.some((radio) => radio.continuation !== null),
-      })
+      });
+      pages += 1
     ) {
       yield* Effect.all(
         radios.map((radio) =>
@@ -212,18 +202,18 @@ const readRadios = (seed: DiscoverMixSeed, filter: Filter, genres: MixGenres) =>
         ),
         { concurrency: "unbounded" },
       );
-      pages += 1;
       yield* knowGenres(interleaveRadios(radios.map((r) => r.songs)));
-      kept = keep();
     }
-    return { kept, radio: interleaveRadios(radios.map((r) => r.songs)) };
+    return { seed, radio: interleaveRadios(radios.map((r) => r.songs)), affinity };
   });
 
 /**
- * The mixes [seeds] make, one seed after another so no new song is in two
- * of the section's mixes (and no familiar song in two of its shares), or
- * null when no seed made a usable mix. It gives the JavaScript thread back
- * after each radio (`freeTurnEffect`), so Home stays smooth.
+ * The mixes [seeds] make, or null when no seed made a usable mix. Every
+ * seed's radios are read at the same time; then the seeds take their songs
+ * in seed order (Core's `discoverMixesOfRadios`), so no new song is in two
+ * of the section's mixes (and no familiar song in two of its shares), the
+ * earlier seed's keeping it. It gives the JavaScript thread back after each
+ * seed's radios (`freeTurnEffect`), so Home stays smooth.
  */
 const mixesOf = (
   seeds: readonly DiscoverMixSeed[],
@@ -235,32 +225,19 @@ const mixesOf = (
     const genres = mixGenres(library);
     // A refresh's new songs leave out those the section showed today, where it can.
     const avoidSongs = avoid === undefined ? {} : { avoid: avoid.songs };
-    const taken = new Set<string>();
-    const takenFamiliar = { tracks: new Set<number>(), videos: new Set<string>() };
-    const mixes: DiscoverMix[] = [];
-    for (const seed of seeds) {
-      const read = yield* Effect.result(
-        readRadios(seed, { known: known.known, taken, ...avoidSongs }, genres),
-      );
-      if (Result.isFailure(read) || read.success === null) continue;
-      yield* freeTurnEffect;
-      const { kept, radio } = read.success;
-      const familiar = discoverMixFamiliarPool(seed, {
-        radio,
-        known,
-        library,
-        taken: takenFamiliar,
-        length: kept.length,
-      });
-      const mix = discoverMix(seed, kept, familiar);
-      if (mix === null) continue;
-      mixes.push(mix);
-      for (const song of mix.songs) taken.add(song.videoId);
-      for (const song of familiar) {
-        if (song.source === "library") takenFamiliar.tracks.add(song.track.id);
-        else takenFamiliar.videos.add(song.song.videoId);
-      }
-    }
+    const filter: Filter = { known: known.known, taken: new Set(), ...avoidSongs };
+    const reads = yield* Effect.all(
+      seeds.map((seed) =>
+        Effect.result(readRadios(seed, filter, genres)).pipe(Effect.tap(() => freeTurnEffect)),
+      ),
+      { concurrency: "unbounded" },
+    );
+    const mixes = discoverMixesOfRadios(
+      reads.flatMap((read) =>
+        Result.isSuccess(read) && read.success !== null ? [read.success] : [],
+      ),
+      { known, library, ...avoidSongs },
+    );
     return discoverMixesBuilt(mixes, Date.now(), seeds);
   });
 

@@ -8,6 +8,7 @@ import type {
   YtPlaylistFirstPage,
   YtPlaylistPage,
   YtLibraryPlaylist,
+  YtRadioStart,
   YtSession,
   YtSong,
 } from "@wave/core";
@@ -53,6 +54,11 @@ export interface NativeYtRadioSong extends NativeYtSong, DiscoverRadioSong {}
 export interface NativeYtRadioPage {
   readonly songs: readonly NativeYtRadioSong[];
   readonly continuation: string | null;
+}
+
+/** An artist radio's first page, read from their page, and where it started (Core's `YtRadioStart`). */
+export interface NativeYtArtistRadio extends NativeYtRadioPage {
+  readonly start: YtRadioStart;
 }
 
 /**
@@ -128,8 +134,21 @@ declare class WaveYtMusicModule extends NativeModule<WaveYtMusicEvents> {
   editPlaylist(playlistId: string, edits: readonly NativeYtPlaylistEdit[]): Promise<void>;
   /** The first page of the radio YouTube Music plays after the song [videoId] (it first). */
   songRadio(videoId: string, meter?: string): Promise<NativeYtRadioPage>;
-  /** The first page of the radio of the artist whose page is [browseId] (`UC…`). */
-  artistRadio(browseId: string, meter?: string): Promise<NativeYtRadioPage>;
+  /**
+   * The first page of the radio of the artist whose page is [browseId]
+   * (`UC…`), read from the page, with where it started.
+   */
+  artistRadio(browseId: string, meter?: string): Promise<NativeYtArtistRadio>;
+  /**
+   * The first page of an artist's radio from where [artistRadio] found it
+   * starts ([playlistId], [params]), without reading their page: rejects
+   * with `ERR_YT_FAILED` when YouTube Music no longer starts one there.
+   */
+  startedRadio(
+    playlistId: string,
+    params: string | null,
+    meter?: string,
+  ): Promise<NativeYtRadioPage>;
   /** The radio page a radio page's [continuation] leads to. */
   radioMore(continuation: string, meter?: string): Promise<NativeYtRadioPage>;
   /**

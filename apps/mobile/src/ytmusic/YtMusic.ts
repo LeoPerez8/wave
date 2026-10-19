@@ -6,6 +6,7 @@ import {
   type YtLibraryPlaylist,
   type YtPlaylistReadOptions,
   type YtQuietReason,
+  type YtRadioStart,
   type YtSession,
 } from "@wave/core";
 import * as Context from "effect/Context";
@@ -21,6 +22,7 @@ import {
   WaveYtMusic,
   ytErrorCode,
   type NativeYtArtistPage,
+  type NativeYtArtistRadio,
   type NativeYtOwnEntry,
   type NativeYtPlaylist,
   type NativeYtPlaylistEdit,
@@ -115,12 +117,18 @@ export class YtMusic extends Context.Service<
       edits: readonly NativeYtPlaylistEdit[],
     ) => Effect.Effect<void, YtLibraryError>;
     /**
-     * The first page of a radio: the song [videoId]'s, or the artist's whose
-     * page is [browseId]. Needs no sign-in.
+     * The first page of a radio: the song [videoId]'s, or an artist's from
+     * where [artistRadio] found it starts ([start]), without their page.
+     * Needs no sign-in.
      */
     readonly radio: (
-      seed: { readonly videoId: string } | { readonly browseId: string },
+      seed: { readonly videoId: string } | { readonly start: YtRadioStart },
     ) => Effect.Effect<NativeYtRadioPage, YtMusicError>;
+    /**
+     * The first page of the radio of the artist whose page is [browseId]
+     * (`UC…`), from the page's Start radio, with where it started.
+     */
+    readonly artistRadio: (browseId: string) => Effect.Effect<NativeYtArtistRadio, YtMusicError>;
     /** The radio page a radio page's [continuation] leads to. */
     readonly radioMore: (continuation: string) => Effect.Effect<NativeYtRadioPage, YtMusicError>;
     /** Caches a song's cover from [url] beside the Library's artwork, with its palette. */
@@ -191,8 +199,9 @@ export const layer = Layer.succeed(YtMusic, {
     metered((meter) =>
       "videoId" in seed
         ? WaveYtMusic.songRadio(seed.videoId, meter)
-        : WaveYtMusic.artistRadio(seed.browseId, meter),
+        : WaveYtMusic.startedRadio(seed.start.playlistId, seed.start.params, meter),
     ),
+  artistRadio: (browseId) => metered((meter) => WaveYtMusic.artistRadio(browseId, meter)),
   radioMore: (continuation) => metered((meter) => WaveYtMusic.radioMore(continuation, meter)),
   cacheArtwork: (url) =>
     Effect.tryPromise({ try: () => WaveYtMusic.cacheArtwork(url), catch: fromNative }).pipe(

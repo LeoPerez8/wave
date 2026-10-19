@@ -56,14 +56,25 @@ class YtPages(private val client: YtClient) {
 
   /**
    * The first page of the radio of the artist whose page is [browseId]
-   * (`UC…`), as their page's Mix button starts it, and the token for the next.
+   * (`UC…`), as their page's Mix button starts it, the token for the next,
+   * and where it started (for [startedRadio] next time).
    */
-  suspend fun artistRadio(browseId: String): YtRadioPage = client.request {
+  suspend fun artistRadio(browseId: String): YtArtistRadio = client.request {
     val page = client.innerTube.browse(YouTubeClient.WEB_REMIX, browseId).bodyAsText()
     val start = YtRadioParser.artistRadio(page)
       ?: throw IllegalStateException("No radio on the artist page: $browseId")
-    radio(videoId = null, playlistId = start.playlistId, params = start.params ?: RADIO_PARAMS)
+    YtArtistRadio(startRadio(start), start)
   }
+
+  /**
+   * The first page of an artist's radio from where [artistRadio] once found
+   * it starts, without reading their page; fails as [YtFailure.FAILED] when
+   * YouTube Music no longer starts a radio there.
+   */
+  suspend fun startedRadio(start: YtRadioStart): YtRadioPage = client.request { startRadio(start) }
+
+  private suspend fun startRadio(start: YtRadioStart): YtRadioPage =
+    radio(videoId = null, playlistId = start.playlistId, params = start.params ?: RADIO_PARAMS)
 
   /** The radio page [continuation] leads to: its songs and the token for the next. */
   suspend fun radioMore(continuation: String): YtRadioPage = client.request {

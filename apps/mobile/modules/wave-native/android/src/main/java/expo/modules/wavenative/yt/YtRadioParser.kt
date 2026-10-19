@@ -23,7 +23,17 @@ data class YtRadioPage(val songs: List<YtRadioSong>, val continuation: String?) 
 }
 
 /** Where an artist's radio starts: the `next` request their page's Mix button makes. */
-data class YtRadioStart(val playlistId: String, val params: String?)
+data class YtRadioStart(val playlistId: String, val params: String?) {
+  fun toMap(): Map<String, Any?> = mapOf("playlistId" to playlistId, "params" to params)
+}
+
+/**
+ * The first page of an artist's radio and where it started, so JS can
+ * remember the start and begin the radio there next time without the page.
+ */
+data class YtArtistRadio(val page: YtRadioPage, val start: YtRadioStart) {
+  fun toMap(): Map<String, Any?> = page.toMap() + ("start" to start.toMap())
+}
 
 /**
  * Reads YouTube Music's (WEB_REMIX) radio, the queue `next` answers with for
