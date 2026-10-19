@@ -21,8 +21,7 @@ import * as Effect from "effect/Effect";
 
 import { persistedSetting } from "@/lib/persistedSetting";
 import type { LibraryStore } from "@/library/LibraryStore";
-import { noteArtistPage } from "@/ytmusic/candidateCatalog";
-import { YtMusic } from "@/ytmusic/YtMusic";
+import { readArtistPage } from "@/ytmusic/candidateCatalog";
 
 import { savedYtArtist, ytArtistBrowseId } from "./ytArtistPage";
 
@@ -65,14 +64,7 @@ export const similarOnline = (name: string) =>
     const listed = yield* similarOnPhone(name);
     if (listed !== undefined) return listed;
     const browseId = yield* ytArtistBrowseId(name);
-    const artists =
-      browseId === null
-        ? []
-        : yield* Effect.gen(function* () {
-            const page = yield* (yield* YtMusic).artist(browseId);
-            yield* noteArtistPage(page);
-            return page.similar ?? [];
-          });
+    const artists = browseId === null ? [] : ((yield* readArtistPage(browseId)).similar ?? []);
     kept.set(withSimilarArtistsKept(kept.get(), name, artists));
     return artists;
   });

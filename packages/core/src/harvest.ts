@@ -7,6 +7,7 @@
  * within about 5 MB a day.
  */
 
+import { artistMixSeedPool, type ArtistMixPools } from "./artistMixes.ts";
 import { catalogSeedKey } from "./candidateCatalog.ts";
 import { catalogMixRead, type CatalogMixSources } from "./catalogMixes.ts";
 import {
@@ -16,6 +17,7 @@ import {
   mixSeedArtists,
   type DiscoverMixSeed,
 } from "./discoverMixes.ts";
+import type { RecommendOptions } from "./recommend.ts";
 import { isRecord, readStoredRecord } from "./storedJson.ts";
 import type { YtSong } from "./ytMusic.ts";
 
@@ -31,6 +33,37 @@ export interface HarvestWant {
    */
   readonly readAt: number | null;
 }
+
+/** Where a harvest's seeds come from. */
+export interface HarvestSeedSources {
+  /** The seeds Home's builds picked (each section's last build), those that made no mix too. */
+  readonly picked: readonly DiscoverMixSeed[];
+  /**
+   * On Wi-Fi: the pools Artist mixes' seeds are picked from
+   * (`artistMixSeedPool`, similar artists read) and the Genre mixes'
+   * families; null on mobile data, which reads only [picked].
+   */
+  readonly wifi: {
+    readonly pools: ArtistMixPools;
+    readonly families: readonly DiscoverMixSeed[];
+  } | null;
+}
+
+/**
+ * The seeds a harvest may read, each once (by id), in order: on mobile
+ * data only those the builds picked; on Wi-Fi every artist Artist mixes may
+ * pick, the Genre mixes' families, then the picked seeds not among them.
+ */
+export const harvestSeedPool = ({ picked, wifi }: HarvestSeedSources): DiscoverMixSeed[] => {
+  const seeds =
+    wifi === null ? picked : [...artistMixSeedPool(wifi.pools), ...wifi.families, ...picked];
+  const ids = new Set<string>();
+  return seeds.filter((seed) => {
+    if (ids.has(seed.id)) return false;
+    ids.add(seed.id);
+    return true;
+  });
+};
 
 /** A seed with fewer candidates than this runs low: a mix's most songs. */
 export const HARVEST_LOW = MIX_MOST;
@@ -81,7 +114,9 @@ export const catalogRadiosReadAt = (
  * What the harvest wants of each of [seeds]: how many new songs its mix
  * would keep from the catalog now (`catalogMixRead`, then
  * `discoverMixSongs` with what the owner [known]s, the other seeds aside),
- * and when its radios were last read.
+ * ranked by [options] (the section's sliders, `mixSlidersEngine`: a mix
+ * that keeps only its seed's own genres counts fewer), and when its radios
+ * were last read.
  */
 export const harvestWants = <S extends DiscoverMixSeed>(
   seeds: readonly S[],
@@ -89,10 +124,11 @@ export const harvestWants = <S extends DiscoverMixSeed>(
     /** The songs the owner knows (`mixKnownSongs`): never a mix's new songs. */
     readonly known: { readonly known: (song: YtSong) => boolean };
   },
+  options: RecommendOptions = {},
 ): (HarvestWant & { readonly seed: S })[] => {
   const readAt = radiosReadAt(sources.catalog);
   return seeds.map((seed) => {
-    const read = catalogMixRead(seed, sources);
+    const read = catalogMixRead(seed, sources, options);
     const candidates =
       read === null
         ? 0

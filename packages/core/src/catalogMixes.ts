@@ -135,7 +135,9 @@ export const catalogMixReader = (
 
 /** What the section's mixes leave out and blend in: the songs the owner knows, the Library, a refresh's avoided songs. */
 export interface CatalogMixesOptions<L extends DiscoverLibrarySong>
-  extends Pick<DiscoverMixPoolSources<L>, "known" | "library">, Omit<RecommendOptions, "avoid"> {
+  extends
+    Pick<DiscoverMixPoolSources<L>, "known" | "library">,
+    Omit<RecommendOptions, "avoid" | "random" | "neighbourhood"> {
   /** For a refresh: the new songs the section showed today (`mixRefreshAvoid`). */
   readonly avoid?: ReadonlySet<string>;
 }
@@ -143,21 +145,19 @@ export interface CatalogMixesOptions<L extends DiscoverLibrarySong>
 /**
  * The mixes [seeds] make from the catalog, in seed order, as
  * `discoverMixesOfRadios` makes them of radios read: each seed's catalog
- * read (`catalogMixRead`); a seed with none yet, or fewer than ten new
- * songs, makes no mix, and the section has what the others make. The
- * engine's weights, threshold and neighbourhood come in [options] (the
- * sliders'); a refresh's [avoid] goes last in the ranking and only makes up
- * a mix's ten songs.
+ * read by [reader] (`catalogMixReader`: a build's, whose walks a re-rank
+ * reuses); a seed with none yet, or fewer than ten new songs, makes no mix,
+ * and the section has what the others make. The engine's weights and
+ * threshold come in [options] (the sliders'); a refresh's [avoid] goes last
+ * in the ranking and only makes up a mix's ten songs.
  */
 export const discoverMixesOfCatalog = <L extends DiscoverLibrarySong>(
   seeds: readonly DiscoverMixSeed[],
-  sources: Omit<CatalogMixSources, "library">,
+  reader: CatalogMixReader,
   { known, library, avoid, ...engine }: CatalogMixesOptions<L>,
 ): DiscoverMix[] => {
-  const options: RecommendOptions = { ...engine, ...(avoid === undefined ? {} : { avoid }) };
-  const reads = seeds.flatMap(
-    (seed) => catalogMixRead(seed, { ...sources, library }, options) ?? [],
-  );
+  const options = { ...engine, ...(avoid === undefined ? {} : { avoid }) };
+  const reads = seeds.flatMap((seed) => reader.read(seed, options) ?? []);
   return discoverMixesOfRadios(reads, {
     known,
     library,

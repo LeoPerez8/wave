@@ -7,7 +7,7 @@
 
 import type { DiscoverSimilarArtist } from "./discoverMixes.ts";
 import { identityKey } from "./library.ts";
-import { isRecord, readStoredRecord } from "./storedJson.ts";
+import { readStoredTuples, storedTuples, withLatest } from "./storedJson.ts";
 
 /** The similar artists read, by Library artist (`identityKey` of the name), the latest last. */
 export type SimilarArtistsKept = ReadonlyMap<string, readonly DiscoverSimilarArtist[]>;
@@ -22,13 +22,7 @@ export const withSimilarArtistsKept = (
   kept: SimilarArtistsKept,
   of: string,
   artists: readonly DiscoverSimilarArtist[],
-): SimilarArtistsKept => {
-  const next = new Map(kept);
-  const key = identityKey(of);
-  next.delete(key);
-  next.set(key, artists);
-  return new Map([...next].slice(-KEPT));
-};
+): SimilarArtistsKept => withLatest(kept, identityKey(of), artists, KEPT);
 
 /** The similar artists [name]'s page listed, as kept; undefined when it was never read. */
 export const similarArtistsKeptOf = (
@@ -38,37 +32,27 @@ export const similarArtistsKeptOf = (
 
 /** What to save for [kept]; null (nothing saved) for none. */
 export const storedSimilarArtistsKept = (kept: SimilarArtistsKept): string | null =>
-  kept.size === 0
-    ? null
-    : JSON.stringify({
-        version: 1,
-        artists: [...kept].map(([key, artists]) => [
-          key,
-          artists.map(({ name, browseId }) => [name, browseId]),
-        ]),
-      });
+  storedTuples(kept, "artists", (key, artists) => [
+    key,
+    artists.map(({ name, browseId }) => [name, browseId]),
+  ]);
+
+/** [value] as a kept similar artist (`[name, browseId]`); null when it isn't one. */
+const readSimilarArtist = (value: unknown): DiscoverSimilarArtist | null => {
+  if (!Array.isArray(value)) return null;
+  const [name, browseId] = value as readonly unknown[];
+  return typeof name === "string" && typeof browseId === "string" ? { name, browseId } : null;
+};
 
 /** The similar artists [stored] holds; none when nothing readable is saved. */
-export const parseSimilarArtistsKept = (stored: string | null): SimilarArtistsKept => {
-  const { version, artists } = readStoredRecord(stored);
-  if (version !== 1 || !Array.isArray(artists)) return NO_SIMILAR_ARTISTS_KEPT;
-  return new Map(
-    artists.flatMap((entry: unknown): (readonly [string, DiscoverSimilarArtist[]])[] => {
-      if (!Array.isArray(entry) || isRecord(entry)) return [];
-      const [key, list] = entry as unknown[];
-      if (typeof key !== "string" || !Array.isArray(list)) return [];
-      return [
-        [
-          key,
-          list.flatMap((artist: unknown): DiscoverSimilarArtist[] => {
-            if (!Array.isArray(artist)) return [];
-            const [name, browseId] = artist as unknown[];
-            return typeof name === "string" && typeof browseId === "string"
-              ? [{ name, browseId }]
-              : [];
-          }),
-        ],
-      ];
-    }),
+export const parseSimilarArtistsKept = (stored: string | null): SimilarArtistsKept =>
+  new Map(
+    readStoredTuples(
+      stored,
+      "artists",
+      ([key, list]): readonly [string, DiscoverSimilarArtist[]] | null =>
+        typeof key === "string" && Array.isArray(list)
+          ? [key, list.flatMap((artist: unknown) => readSimilarArtist(artist) ?? [])]
+          : null,
+    ),
   );
-};

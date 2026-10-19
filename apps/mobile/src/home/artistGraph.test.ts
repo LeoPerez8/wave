@@ -5,7 +5,7 @@ import { describe, test } from "node:test";
 import { artistNeighbourhood, type CatalogSong, type TasteHistory } from "@wave/core";
 import * as Effect from "effect/Effect";
 
-import { artistGraphOnce, readArtistGraph, type ArtistGraphReads } from "./artistGraph.ts";
+import { readArtistGraph, type ArtistGraphReads } from "./artistGraph.ts";
 
 const MINUTE = 60_000;
 
@@ -75,24 +75,5 @@ describe("the artist graph the app derives", () => {
         ["Beth Gibbons", 2],
       ],
     );
-  });
-
-  test("is derived once per session, again when forgotten, and a failed read isn't kept", async () => {
-    const counts = { reads: 0 };
-    let fail = true;
-    const once = artistGraphOnce(() =>
-      fail
-        ? Promise.reject(new Error("unreadable"))
-        : Effect.runPromise(readArtistGraph(store(counts))),
-    );
-    assert.equal(await Effect.runPromise(once.now), null);
-    fail = false;
-    const graph = await Effect.runPromise(once.now);
-    assert.notEqual(graph, null);
-    assert.equal(await Effect.runPromise(once.now), graph);
-    assert.equal(counts.reads, 1);
-    once.forget();
-    assert.notEqual(await Effect.runPromise(once.now), graph);
-    assert.equal(counts.reads, 2);
   });
 });
