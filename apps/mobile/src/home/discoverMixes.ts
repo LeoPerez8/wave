@@ -1,59 +1,49 @@
 /**
  * Home's mix sections (docs/spec.md, "Artist mixes" and "Genre mixes"):
- * YouTube Music radios' songs the owner doesn't know, and a familiar share
- * (Library songs, and songs the owner played or has in a playlist, which
- * stream) the section's level blends in (`blendDiscoverMix`). Artist mixes grow from one artist's
- * radio each: the owner's most played artists, picked at random each build
- * but leaning towards the most played (the Library's artists when plays are
+ * songs the owner doesn't know, and a familiar share (Library songs, and
+ * songs the owner played or has in a playlist, which stream) the section's
+ * level blends in (`blendDiscoverMix`). Artist mixes grow from one artist
+ * each: the owner's most played artists, picked at random each build but
+ * leaning towards the most played (the Library's artists when plays are
  * short, then artists similar to the Library's). Genre mixes grow from a
- * genre family's radios, up to three of its artists' read at once and
- * interleaved. Which seeds, which artist pages to read for similar artists,
- * which songs are new, which are familiar and when to build again are
- * Core's (`artistMixSeeds`, `genreMixSeeds`, `artistMixSimilarSource`,
- * `interleaveRadios`, `mixKnownSongs`, `discoverMixSongs`,
- * `discoverMixFamiliarPool`, `discoverMixesDue`); this asks YouTube Music and keeps each section's last
- * mixes built, so Home shows them at once (and what a section shows
- * meanwhile is Core's `discoverMixesSection`). Each section builds, saves
- * and blends on its own: a song may be in an artist mix and a genre mix.
+ * genre family and up to three of its artists. A build reads only the
+ * phone: each seed's songs are Wave's engine's ranking of the candidate
+ * catalog (`catalogMixRead`, `recommend`: the seed's radios and its
+ * neighbourhood in the artist graph, a genre mix's family across artists),
+ * and the mixes' rules are Core's (`artistMixSeeds`, `genreMixSeeds`,
+ * `mixKnownSongs`, `discoverMixesOfRadios`, `discoverMixesDue`). The
+ * network only refills the catalog, in the background (`mixHarvest.ts`).
+ * This keeps each section's last mixes built, so Home shows them at once
+ * (and what a section shows meanwhile is Core's `discoverMixesSection`).
+ * Each section builds, saves and blends on its own: a song may be in an
+ * artist mix and a genre mix.
  */
 import {
   artistMixSeeds,
-  artistMixSimilarSource,
+  catalogMixRead,
   discoverMixKeep,
-  discoverMixReadsMore,
-  discoverMixSongs,
   discoverMixesBuilt,
   discoverMixesDue,
   discoverMixesOfRadios,
   discoverMixesSection,
   genreMixSeeds,
   homeSectionTitle,
-  interleaveRadios,
-  mixAffinity,
   mixesShown,
-  mixProfileLookups,
-  mixProfileLookupsNext,
-  mixSeedProfile,
   mixRefreshAvoid,
-  mixRefreshWaitNotice,
   mixSectionOfId,
-  mixSeedArtists,
   parseDiscoverMixes,
   parseMixesShown,
   savedDiscoverMix,
   storedDiscoverMixes,
   storedMixesShown,
   undoneMixRefresh,
-  type ArtistMixPools,
   type BlendedDiscoverMix,
+  type CatalogMixSong,
   type DiscoverMixBlend,
-  type DiscoverMixFilter,
+  type DiscoverMixRead,
   type DiscoverMixSeed,
   type DiscoverMixes,
   type DiscoverMixesSection,
-  type DiscoverSimilarArtists,
-  type GenreProfileLibrary,
-  type GenreProfileOf,
   type MixRefreshAvoid,
   type ShownMixes,
   type YtAlbumSong,
@@ -71,209 +61,65 @@ import { libraryListQueries } from "@/library/hooks";
 import type { SongRow } from "@/library/LibraryStore";
 import { appRuntime } from "@/library/runtime";
 import { useLibraryQuery } from "@/library/sharedQueries";
-import type { NativeYtRadioSong } from "@/native/waveYtMusic";
 import { showToast } from "@/overlay/toast";
+import { tasteProfileNow } from "@/playback/TasteProfile";
 import { useDontPlayExplicit } from "@/settings/dontPlayExplicit";
 import { useYtMusicEnabled } from "@/settings/ytMusic";
 import { Stats } from "@/stats/Stats";
-import { noteArtistPage, noteRadio } from "@/ytmusic/candidateCatalog";
-import { searchAllowanceFreeAt } from "@/ytmusic/searchAllowance";
-import { YtMusic } from "@/ytmusic/YtMusic";
 
-import { lookUpArtistProfiles, mixProfileOf } from "./artistGenres";
+import { mixProfileOf } from "./artistGenres";
+import { artistGraphNow } from "./artistGraphNow";
 import { useDiscoverMixLevel, type MixSectionId } from "./discoverMixLevel";
+import { mixCatalog } from "./mixCatalog";
+import { harvestSoon, noteSeedsPicked, onHarvested, SEED_POOL } from "./mixHarvest";
 import { mixIndexes, refreshKnownVideos, useKnownVideos, type MixIndexes } from "./mixKnown";
 import { noteMixesShown } from "./mixPreDownload";
-import { artistRadio, savedYtArtist, ytArtistBrowseId } from "./ytArtistPage";
+import { similarOffline, withSimilar } from "./similarArtists";
 
 export type { MixSectionId } from "./discoverMixLevel";
 
-/** How many of the most played artists Artist mixes' seeds are picked from. */
-const SEED_POOL = 20;
-
 /**
- * The artists a Library artist's YT Music page lists as similar: the page
- * their artist page saved when it has them, else the page read now. None
- * when YouTube Music has no such artist; fails when it doesn't answer.
- */
-const similarArtists = (name: string) =>
-  Effect.gen(function* () {
-    const answer = yield* savedYtArtist(name);
-    const listed = answer?.outcome === "found" ? answer.page.similar : undefined;
-    if (listed !== undefined) return listed;
-    const browseId = yield* ytArtistBrowseId(name);
-    if (browseId === null) return [];
-    const ytMusic = yield* YtMusic;
-    const page = yield* ytMusic.artist(browseId);
-    yield* noteArtistPage(page);
-    return page.similar ?? [];
-  });
-
-/**
- * [pools] with the similar artists Core asks for (`artistMixSimilarSource`),
- * one Library artist's page at a time (a page read now feeds the candidate
- * catalog its top songs). A page that can't be read counts as
- * one with no similar artists, so the other seeds stand as they are.
- */
-const withSimilar = (pools: ArtistMixPools) =>
-  Effect.gen(function* () {
-    const similar: DiscoverSimilarArtists[] = [];
-    for (
-      let source = artistMixSimilarSource(pools);
-      source !== null;
-      source = artistMixSimilarSource({ ...pools, similar })
-    ) {
-      const artists = yield* similarArtists(source.name).pipe(Effect.orElseSucceed(() => []));
-      similar.push({ of: source.name, artists });
-    }
-    return { ...pools, similar };
-  });
-
-type Filter = DiscoverMixFilter<NativeYtRadioSong>;
-
-interface ReadingRadio {
-  /** The radio's artist, whose radio the candidate catalog files its songs under. */
-  readonly seed: string;
-  readonly songs: NativeYtRadioSong[];
-  continuation: string | null;
-}
-
-/** What a build knows of artists' genres: the Library, and every artist's profile by name. */
-interface MixGenres {
-  readonly library: GenreProfileLibrary;
-  readonly profileOf: GenreProfileOf;
-}
-
-/** The build's genre profiles (`mixProfileOf`). */
-const mixGenres = (library: GenreProfileLibrary): MixGenres => ({
-  library,
-  profileOf: mixProfileOf(library),
-});
-
-/**
- * [seed]'s radios, read at the same time and interleaved (`interleaveRadios`;
- * an artist mix has one), a page of each after another while Core asks for
- * more (a radio whose start or later page fails is left at what was read):
- * every song the radios played, interleaved, and how the seed's genres hold
- * its songs (`mixAffinity`; the seed's outside artists' looked up on Deezer
- * first, then only the radio artists that decide the songs the mix would
- * keep next, a round at a time, till 50 match: `mixProfileLookupsNext`). A
- * page more is read while the songs the mix would keep
- * (`discoverMixSongs`, enough for level 5) are too few, the other seeds'
- * mixes aside: they're read at the same time, and Core takes out what an
- * earlier seed's mix has once every seed is read (`discoverMixesOfRadios`).
- * Every page read goes into the candidate catalog as its artist's radio
- * (`noteRadio`), however the read ends. Null when no radio could be read.
- */
-const readRadios = (seed: DiscoverMixSeed, filter: Filter, genres: MixGenres) =>
-  Effect.gen(function* () {
-    const ytMusic = yield* YtMusic;
-    const artists = mixSeedArtists(seed);
-    const firstPages = yield* Effect.all(
-      artists.map((artist) => Effect.result(artistRadio(artist))),
-      { concurrency: "unbounded" },
-    );
-    const radios: ReadingRadio[] = firstPages.flatMap((page, at) =>
-      Result.isSuccess(page) && page.success !== null
-        ? [
-            {
-              seed: artists[at]?.name ?? seed.name,
-              songs: [...page.success.songs],
-              continuation: page.success.continuation,
-            },
-          ]
-        : [],
-    );
-    if (radios.length === 0) return null;
-    // Whatever the reading below comes to, every page read feeds the candidate catalog.
-    yield* Effect.addFinalizer(() =>
-      Effect.forEach(radios, (radio) => noteRadio(radio.seed, radio.songs), { discard: true }),
-    );
-    const { library, profileOf } = genres;
-    // The seed's own artists first: an outside seed needs its profile to judge any song.
-    const seedArtists = { artists: mixSeedArtists(seed).map((artist) => artist.name) };
-    yield* lookUpArtistProfiles(mixProfileLookups([seedArtists], profileOf));
-    const affinity = mixAffinity(mixSeedProfile(seed, library, profileOf), profileOf);
-    const asked: string[] = [];
-    // Only the artists that decide the songs the mix would keep next, a round at a time.
-    const knowGenres = Effect.gen(function* () {
-      for (;;) {
-        const names = mixProfileLookupsNext(interleaveRadios(radios.map((r) => r.songs)), {
-          filter: { ...filter, affinity },
-          profileOf,
-          asked,
-        });
-        if (names.length === 0) return;
-        asked.push(...names);
-        yield* lookUpArtistProfiles(names);
-      }
-    });
-    yield* knowGenres;
-    const kept = () =>
-      discoverMixSongs([interleaveRadios(radios.map((r) => r.songs))], { ...filter, affinity })
-        .length;
-    for (
-      let pages = 1;
-      discoverMixReadsMore({
-        pages,
-        kept: kept(),
-        more: radios.some((radio) => radio.continuation !== null),
-      });
-      pages += 1
-    ) {
-      yield* Effect.all(
-        radios.map((radio) =>
-          radio.continuation === null
-            ? Effect.void
-            : Effect.result(ytMusic.radioMore(radio.continuation)).pipe(
-                Effect.map((next) => {
-                  if (Result.isFailure(next)) {
-                    radio.continuation = null;
-                    return;
-                  }
-                  radio.songs.push(...next.success.songs);
-                  radio.continuation = next.success.continuation;
-                }),
-              ),
-        ),
-        { concurrency: "unbounded" },
-      );
-      yield* knowGenres;
-    }
-    return { seed, radio: interleaveRadios(radios.map((r) => r.songs)), affinity };
-  }).pipe(Effect.scoped);
-
-/**
- * The mixes [seeds] make, or null when no seed made a usable mix. Every
- * seed's radios are read at the same time; then the seeds take their songs
- * in seed order (Core's `discoverMixesOfRadios`), so no new song is in two
- * of the section's mixes (and no familiar song in two of its shares), the
- * earlier seed's keeping it. It gives the JavaScript thread back after each
- * seed's radios (`freeTurnEffect`), so Home stays smooth.
+ * The mixes [seeds] make from the candidate catalog, or null when no seed
+ * made a usable mix: each seed's catalog read (`catalogMixRead`: the
+ * engine's ranking over the catalog, the artist graph, the genre profiles
+ * and the owner's taste profile, [avoid]ed songs last, a random nudge each
+ * build), then the seeds take their songs in seed order (Core's
+ * `discoverMixesOfRadios`), so no new song is in two of the section's mixes
+ * (and no familiar song in two of its shares). A seed the catalog has no
+ * songs for yet makes no mix: the harvest refills it, and the section has
+ * what the others make. No request; it gives the JavaScript thread back
+ * after each seed (`freeTurnEffect`), so Home stays smooth.
  */
 const mixesOf = (
+  id: MixSectionId,
   seeds: readonly DiscoverMixSeed[],
   library: MixIndexes,
   avoid: MixRefreshAvoid | undefined,
 ) =>
   Effect.gen(function* () {
+    noteSeedsPicked(id, seeds);
     const { known } = library;
-    const genres = mixGenres(library);
+    const catalog = yield* mixCatalog;
+    const graph = yield* artistGraphNow;
+    const taste = yield* tasteProfileNow;
+    yield* freeTurnEffect;
+    const sources = {
+      catalog,
+      graph,
+      profileOf: mixProfileOf(library),
+      taste,
+      now: Date.now(),
+      library,
+    };
     // A refresh's new songs leave out those the section showed today, where it can.
     const avoidSongs = avoid === undefined ? {} : { avoid: avoid.songs };
-    const filter: Filter = { known: known.known, taken: new Set(), ...avoidSongs };
-    const reads = yield* Effect.all(
-      seeds.map((seed) =>
-        Effect.result(readRadios(seed, filter, genres)).pipe(Effect.tap(() => freeTurnEffect)),
-      ),
-      { concurrency: "unbounded" },
-    );
-    const mixes = discoverMixesOfRadios(
-      reads.flatMap((read) =>
-        Result.isSuccess(read) && read.success !== null ? [read.success] : [],
-      ),
-      { known, library, ...avoidSongs },
-    );
+    const reads: DiscoverMixRead<CatalogMixSong>[] = [];
+    for (const seed of seeds) {
+      const read = catalogMixRead(seed, sources, { ...avoidSongs, random: Math.random });
+      if (read !== null) reads.push(read);
+      yield* freeTurnEffect;
+    }
+    const mixes = discoverMixesOfRadios(reads, { known, library, ...avoidSongs });
     return discoverMixesBuilt(mixes, Date.now(), seeds);
   });
 
@@ -281,10 +127,11 @@ const mixesOf = (
  * Builds Artist mixes from the owner's all-time most played artists, picked
  * at random (`Math.random`) leaning towards the most played, and the
  * Library's when plays are short, then artists similar to the Library's when
- * its artists are too few. "nothing-to-build-from" when there are no seeds
- * (no plays and an empty Library), null when no seed made a usable mix:
- * either way what was saved stays, and a later visit can try again. A
- * refresh passes [avoid] (`mixRefreshAvoid`): other artists, other songs.
+ * its artists are too few (those the phone has read: `similarOffline`).
+ * "nothing-to-build-from" when there are no seeds (no plays and an empty
+ * Library), null when no seed made a usable mix: either way what was saved
+ * stays, and a later visit can try again. A refresh passes [avoid]
+ * (`mixRefreshAvoid`): other artists, other songs.
  */
 const buildArtistMixes = (avoid?: MixRefreshAvoid) =>
   Effect.gen(function* () {
@@ -292,19 +139,22 @@ const buildArtistMixes = (avoid?: MixRefreshAvoid) =>
     const artists = yield* stats.topArtists("all", SEED_POOL);
     const library = yield* mixIndexes;
     const seeds = artistMixSeeds(
-      yield* withSimilar({
-        played: artists.map(({ item, countedPlays }) => ({
-          id: item.id,
-          name: item.name,
-          countedPlays,
-        })),
-        library: library.artists.map((artist) => ({ ...artist, songCount: artist.trackCount })),
-        ...(avoid === undefined ? {} : { avoid }),
-      }),
+      yield* withSimilar(
+        {
+          played: artists.map(({ item, countedPlays }) => ({
+            id: item.id,
+            name: item.name,
+            countedPlays,
+          })),
+          library: library.artists.map((artist) => ({ ...artist, songCount: artist.trackCount })),
+          ...(avoid === undefined ? {} : { avoid }),
+        },
+        similarOffline,
+      ),
       Math.random,
     );
     if (seeds.length === 0) return "nothing-to-build-from" as const;
-    return yield* mixesOf(seeds, library, avoid);
+    return yield* mixesOf("artist-mixes", seeds, library, avoid);
   });
 
 /**
@@ -320,7 +170,7 @@ const buildGenreMixes = (avoid?: MixRefreshAvoid) =>
     const library = yield* mixIndexes;
     const seeds = genreMixSeeds(library, Math.random, avoid);
     if (seeds.length === 0) return "nothing-to-build-from" as const;
-    return yield* mixesOf(seeds, library, avoid);
+    return yield* mixesOf("genre-mixes", seeds, library, avoid);
   });
 
 /** What a build made, for its line in the app log. */
@@ -415,13 +265,22 @@ const SECTIONS: Record<MixSectionId, MixSection> = {
   "genre-mixes": section("home.genreMixes", buildGenreMixes, RETRY_MS),
 };
 
-/** Builds [id]'s mixes again when Core says they're due; [played]: the owner has counted plays. */
+/**
+ * Builds [id]'s mixes again when Core says they're due ([played]: the owner
+ * has counted plays), then lets the harvest refill the catalog
+ * (`harvestSoon`); when no build is due, the harvest goes at once.
+ */
 const refresh = (id: MixSectionId, played: boolean): void => {
   const mixSection = SECTIONS[id];
   const now = Date.now();
-  if (mixSection.building.get() || !discoverMixesDue(mixSection.saved.get(), { now, played }))
+  if (
+    mixSection.building.get() ||
+    !discoverMixesDue(mixSection.saved.get(), { now, played }) ||
+    (mixSection.retryAt !== null && now < mixSection.retryAt)
+  ) {
+    harvestSoon();
     return;
-  if (mixSection.retryAt !== null && now < mixSection.retryAt) return;
+  }
   mixSection.building.set(true);
   void appRuntime
     .runPromise(Effect.result(loggedBuild(id, false)))
@@ -446,8 +305,20 @@ const refresh = (id: MixSectionId, played: boolean): void => {
     })
     .finally(() => {
       mixSection.building.set(false);
+      harvestSoon();
     });
 };
+
+// A harvest that refilled the catalog builds a section that has no mixes yet
+// (a fresh install's first ones), without waiting for its retry.
+onHarvested(() => {
+  for (const id of Object.keys(SECTIONS) as MixSectionId[]) {
+    const mixSection = SECTIONS[id];
+    if (mixSection.saved.get() !== null) continue;
+    mixSection.retryAt = null;
+    refresh(id, false);
+  }
+});
 
 /** The toast after a refresh saved new mixes; its Undo puts the previous ones back. */
 const NEW_MIXES = "New mixes";
@@ -461,8 +332,8 @@ const NEW_MIXES = "New mixes";
  * the new ones are saved and crossfade in, counting as the section's build
  * for the day; a "New mixes" toast then offers Undo, which puts the
  * previous set back while the toast shows. A refresh that makes no mixes
- * (offline, nothing usable) keeps them and says so. Its searches share the
- * search allowance, and a toast says when that holds them back.
+ * (nothing usable in the catalog) keeps them and says so. It reads only
+ * the phone; the harvest after it refills what it used up.
  */
 export const refreshMixes = (id: MixSectionId): void => {
   const mixSection = SECTIONS[id];
@@ -471,8 +342,6 @@ export const refreshMixes = (id: MixSectionId): void => {
   const now = Date.now();
   const previous = saved.get();
   const memory = previous === null ? shown.get() : mixesShown(shown.get(), previous, now);
-  const freeAt = searchAllowanceFreeAt("discover");
-  if (freeAt !== null) void showToast(mixRefreshWaitNotice(freeAt - now));
   building.set(true);
   void appRuntime
     .runPromise(Effect.result(loggedBuild(id, true, mixRefreshAvoid(memory, now))))
@@ -500,6 +369,7 @@ export const refreshMixes = (id: MixSectionId): void => {
     })
     .finally(() => {
       building.set(false);
+      harvestSoon();
     });
 };
 

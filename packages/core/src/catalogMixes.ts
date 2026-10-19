@@ -97,7 +97,9 @@ export const discoverMixesOfCatalog = <L extends DiscoverLibrarySong>(
   { known, library, avoid, ...engine }: CatalogMixesOptions<L>,
 ): DiscoverMix[] => {
   const options: RecommendOptions = { ...engine, ...(avoid === undefined ? {} : { avoid }) };
-  const reads = seeds.flatMap((seed) => catalogMixRead(seed, { ...sources, library }, options) ?? []);
+  const reads = seeds.flatMap(
+    (seed) => catalogMixRead(seed, { ...sources, library }, options) ?? [],
+  );
   return discoverMixesOfRadios(reads, {
     known,
     library,

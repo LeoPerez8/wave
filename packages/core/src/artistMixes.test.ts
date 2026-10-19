@@ -212,7 +212,11 @@ describe("Artist mixes' seed pool (what the harvest keeps candidates for)", () =
   test("with plays for fewer than four, the Library's artists with the most songs, then similar artists", () => {
     const pool = artistMixSeedPool({
       played: [played(1, "Sleep Token", 500)],
-      library: [library(1, "Sleep Token", 20), library(2, "Spiritbox", 10), library(3, "Various Artists", 90)],
+      library: [
+        library(1, "Sleep Token", 20),
+        library(2, "Spiritbox", 10),
+        library(3, "Various Artists", 90),
+      ],
       similar: [{ of: "Sleep Token", artists: [similar("Spiritbox"), similar("Bad Omens")] }],
     });
     assert.deepEqual(seedNames(pool), [

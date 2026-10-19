@@ -76,7 +76,10 @@ describe("The engine's candidates", () => {
     ];
     const ranked = recommend({ artists: ["Muse"] }, sources(catalog));
     assert.deepEqual(ids(ranked).slice(4), ["placebo3", "radiohead2"]);
-    assert.deepEqual(new Set(ids(ranked).slice(0, 4)), new Set(["muse1", "placebo1", "placebo2", "radiohead1"]));
+    assert.deepEqual(
+      new Set(ids(ranked).slice(0, 4)),
+      new Set(["muse1", "placebo1", "placebo2", "radiohead1"]),
+    );
     assert.ok(!ids(ranked).includes("abba1"));
   });
 });
@@ -138,13 +141,13 @@ describe("The engine's signals", () => {
   });
 });
 
-describe("The engine's weights", () => {
-  /** Two songs on Muse's radio, alike but for [a]'s and [b]'s entries. */
-  const pair = (a: Partial<CatalogSong>, b: Partial<CatalogSong>): CatalogSong[] => [
-    { ...catalogSong("a", ["Band A"], ["Muse"]), ...a },
-    { ...catalogSong("b", ["Band B"], ["Muse"]), ...b },
-  ];
+/** Two songs on Muse's radio, alike but for [a]'s and [b]'s entries. */
+const pair = (a: Partial<CatalogSong>, b: Partial<CatalogSong>): CatalogSong[] => [
+  { ...catalogSong("a", ["Band A"], ["Muse"]), ...a },
+  { ...catalogSong("b", ["Band B"], ["Muse"]), ...b },
+];
 
+describe("The engine's weights", () => {
   test("taste: a song by an artist the owner likes ranks first, one they skip last", () => {
     const catalog = [
       catalogSong("skipped", ["Skipped"], ["Muse"]),

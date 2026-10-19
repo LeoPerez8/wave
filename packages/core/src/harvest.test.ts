@@ -58,7 +58,9 @@ const want = (id: string, candidates: number, readAt: number | null = null): Har
 describe("What the harvest wants", () => {
   test("each seed's candidates (the new songs its mix would keep) and when its radio was last read", () => {
     const catalog = [
-      ...Array.from({ length: 12 }, (_, n) => catalogSong(`t${n}`, "Tricky", "Tricky", NOW - 2 * DAY)),
+      ...Array.from({ length: 12 }, (_, n) =>
+        catalogSong(`t${n}`, "Tricky", "Tricky", NOW - 2 * DAY),
+      ),
       catalogSong("t-late", "Tricky", "Tricky", NOW - DAY),
     ];
     const wants = harvestWants([artistSeed("Tricky"), artistSeed("Björk")], {
@@ -83,10 +85,15 @@ describe("Which seed the harvest reads next", () => {
   const wifi = { onMobileData: false, usedToday: 0, now: NOW, read: 0 };
 
   test("on Wi-Fi: any seed running low, the emptiest first, then the least recently read", () => {
-    const wants = [want("full", 60), want("low", 20, NOW - 2 * DAY), want("empty", 0), want("low2", 20)];
+    const wants = [
+      want("full", 60),
+      want("low", 20, NOW - 2 * DAY),
+      want("empty", 0),
+      want("low2", 20),
+    ];
     const order: string[] = [];
     const tried = new Map<string, number>();
-    for (let next = harvestNext(wants, { ...wifi, tried }); next !== null; ) {
+    for (let next = harvestNext(wants, { ...wifi, tried }); next !== null;) {
       order.push(next.id);
       tried.set(next.id, NOW);
       next = harvestNext(wants, { ...wifi, tried, read: order.length });
@@ -115,7 +122,10 @@ describe("Which seed the harvest reads next", () => {
     assert.equal(harvestNext([want("low", 5)], mobile), null);
     assert.equal(HARVEST_MOBILE_BYTES, 5 * 1024 * 1024);
     assert.equal(harvestNext(wants, { ...mobile, usedToday: HARVEST_MOBILE_BYTES }), null);
-    assert.equal(harvestNext(wants, { ...mobile, usedToday: HARVEST_MOBILE_BYTES - 1 })?.id, "empty");
+    assert.equal(
+      harvestNext(wants, { ...mobile, usedToday: HARVEST_MOBILE_BYTES - 1 })?.id,
+      "empty",
+    );
   });
 });
 

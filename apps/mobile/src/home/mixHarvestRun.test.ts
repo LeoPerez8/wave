@@ -19,8 +19,14 @@ const want = (id: string, candidates: number) => ({
 
 /** A run over [wants] where every read uses [bytes]; what it read, in order, and the mobile bytes it noted. */
 const run = (
-  wants: readonly (HarvestWant & { readonly seed: { readonly id: string; readonly name: string } })[],
-  { onMobileData, bytes, usedToday = 0 }: { onMobileData: boolean; bytes: number; usedToday?: number },
+  wants: readonly (HarvestWant & {
+    readonly seed: { readonly id: string; readonly name: string };
+  })[],
+  {
+    onMobileData,
+    bytes,
+    usedToday = 0,
+  }: { onMobileData: boolean; bytes: number; usedToday?: number },
 ) => {
   const read: string[] = [];
   let mobile = 0;
@@ -54,7 +60,7 @@ describe("A harvest run", () => {
     assert.deepEqual(read, ["empty", "low"]);
     assert.equal(count, 2);
     assert.equal(mobile, 0);
-    assert.deepEqual([...tried.keys()].sort(), ["empty", "low"]);
+    assert.deepEqual(new Set(tried.keys()), new Set(["empty", "low"]));
   });
 
   test("on mobile data reads only empty seeds, and stops once the day's ~5 MB are used", () => {

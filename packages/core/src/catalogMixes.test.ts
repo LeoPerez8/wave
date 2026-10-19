@@ -4,7 +4,6 @@ import { describe, test } from "node:test";
 import {
   artistGraph,
   discoverMixesOfCatalog,
-
   mixKnownSongs,
   type CatalogSong,
   type DiscoverMix,
@@ -106,8 +105,12 @@ describe("Mixes built from the candidate catalog", () => {
       library,
     });
     assert.equal(others.length, 0);
-    assert.deepEqual(videos(mix)?.slice(0, 10).sort(), songs("t", 10, "", "").map((s) => s.song.videoId).sort());
-    assert.deepEqual(videos(mix)?.slice(10).sort(), ["tt1", "tt2", "tt3"]);
+    // The radio's songs first, then the neighbour's own radio's.
+    assert.deepEqual(
+      new Set(videos(mix)?.slice(0, 10)),
+      new Set(["t1", "t2", "t3", "t4", "t5", "t6", "t7", "t8", "t9", "t10"]),
+    );
+    assert.deepEqual(new Set(videos(mix)?.slice(10)), new Set(["tt1", "tt2", "tt3"]));
     // The owner's song its radio played leads its familiar share.
     assert.deepEqual(
       mix?.familiar?.map((song) => (song.source === "library" ? song.track.id : null)),
@@ -137,12 +140,18 @@ describe("Mixes built from the candidate catalog", () => {
       sources(catalog, (artist: string) => profiles[artist]),
       { known, library },
     );
-    assert.deepEqual(new Set(videos(mix)?.map((id) => id.replace(/\d+$/u, ""))), new Set(["weezer", "pixies"]));
+    assert.deepEqual(
+      new Set(videos(mix)?.map((id) => id.replace(/\d+$/u, ""))),
+      new Set(["weezer", "pixies"]),
+    );
     assert.equal(mix?.songs.length, 12);
   });
 
   test("a seed with too few candidates yet makes no mix; the others are built", () => {
-    const catalog = [...songs("t", 12, "Tricky", "Tricky"), ...songs("m", 3, "Massive Attack", "Massive Attack")];
+    const catalog = [
+      ...songs("t", 12, "Tricky", "Tricky"),
+      ...songs("m", 3, "Massive Attack", "Massive Attack"),
+    ];
     const mixes = discoverMixesOfCatalog(
       [artistSeed("Massive Attack"), artistSeed("Tricky")],
       sources(catalog),
@@ -179,9 +188,6 @@ describe("Mixes built from the candidate catalog", () => {
       avoid,
     });
     assert.equal(mix?.songs.length, 10);
-    assert.deepEqual(
-      videos(mix)?.filter((id) => avoid.has(id)).length,
-      2,
-    );
+    assert.deepEqual(videos(mix)?.filter((id) => avoid.has(id)).length, 2);
   });
 });
