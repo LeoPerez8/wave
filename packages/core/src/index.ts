@@ -605,7 +605,6 @@ export {
   magicLibrarySongs,
   magicRadioArtists,
   magicSeedProfile,
-  magicYtCandidates,
   magicYtSong,
   magicPlaySignal,
   magicQueueEdits,

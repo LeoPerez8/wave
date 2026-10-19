@@ -59,6 +59,8 @@ const read = (
     refilled = catalog,
     cached = new Set<string>(),
     bytes = MB,
+    tried = new Map<string, number>(),
+    reached = true,
   }: {
     online?: boolean;
     onMobileData?: boolean;
@@ -66,6 +68,8 @@ const read = (
     refilled?: CatalogSong[];
     cached?: ReadonlySet<string>;
     bytes?: number;
+    tried?: Map<string, number>;
+    reached?: boolean;
   } = {},
 ) => {
   let refills = 0;
@@ -87,11 +91,12 @@ const read = (
     }),
     refill: Effect.sync(() => {
       refills += 1;
-      return bytes;
+      return { bytes, reached };
     }),
     usedOnMobile: (used) => {
       mobile += used;
     },
+    tried,
   };
   const pick = Effect.runSync(magicCatalogRead(session, deps));
   return {
@@ -124,6 +129,19 @@ describe("A Magic Queue batch's YT Music candidates", () => {
     assert.equal(empty.ids.length, 10);
     assert.equal(empty.mobile, 2 * MB);
     assert.equal(read([], { onMobileData: true, usedToday: HARVEST_MOBILE_BYTES }).refills, 0);
+  });
+
+  test("a refill that brought nothing isn't tried again in the session within 12 hours", () => {
+    const tried = new Map<string, number>();
+    assert.equal(read([], { tried }).refills, 1);
+    assert.equal(read([], { tried }).refills, 0);
+    assert.equal(read([], { onMobileData: true, tried }).refills, 0);
+  });
+
+  test("a refill that didn't reach YouTube Music is tried again by the next batch", () => {
+    const tried = new Map<string, number>();
+    assert.equal(read([], { tried, reached: false, bytes: 0 }).refills, 1);
+    assert.equal(read([], { tried }).refills, 1);
   });
 
   test("offline, only the songs the audio cache holds whole, and no request", () => {

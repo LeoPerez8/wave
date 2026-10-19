@@ -4,6 +4,7 @@ import {
   starredHere,
   syncedStarDownloads,
   writeSyncedStars,
+  ytTrackId,
 } from "@wave/core";
 
 import { persistedSetting } from "@/lib/persistedSetting";
@@ -12,7 +13,7 @@ import type { FindInLibrary } from "@/ytmusic/libraryFinder";
 import { cancelUnstarredDownloads, downloadStarredSongs } from "@/ytmusic/YtDownloads";
 
 import { currentFavoriteIds, setFavorites, setPendingFavorites } from "./favorites";
-import { publishYtSongSignal } from "./libraryChanges";
+import { publishUnstarred, publishYtSongSignal } from "./libraryChanges";
 import { LibraryStore, songHasFile, type SongRow } from "./LibraryStore";
 import { appRuntime } from "./runtime";
 
@@ -73,6 +74,8 @@ export const starSongs = (
       "favorite",
       ytSongs.map((song) => song.videoId),
     );
+  // The Library's unstars say it themselves (`setFavorites`).
+  else publishUnstarred(streamed.map((song) => ytTrackId(song.videoId)));
   const stars = setFavorites([...library.keys()], on);
   // Unstarring takes back the songs' pending favorites too, the ones the Library has by now
   // included, so none stars them later.

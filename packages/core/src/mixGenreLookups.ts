@@ -130,8 +130,9 @@ export const mixProfileLookupsNext = <S extends DiscoverRadioSong>(
 const MAGIC_CANDIDATES_WANTED = 20;
 
 /**
- * The artists of [session]'s [radio] to look up next (`magicYtCandidates`
- * keeps only the songs that match): as a mix asks (`mixProfileLookupsNext`),
+ * The artists of [session]'s [radio] to look up next (a Magic Queue's
+ * catalog candidates, `magicCatalogCandidates`, keep only the songs whose
+ * artist matches): as a mix asks (`mixProfileLookupsNext`),
  * until 20 candidates match, leaving out the songs the Library has
  * ([inLibrary]). Artists further down the radio wait for a later batch.
  */
