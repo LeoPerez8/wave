@@ -1836,3 +1836,20 @@ export type {
   CatalogSeenSong,
   CatalogSong,
 } from "./candidateCatalog.ts";
+export {
+  ARTIST_GRAPH_WEIGHTS,
+  ARTIST_HOP_DECAY,
+  ARTIST_NEIGHBOURHOOD_HOPS,
+  ARTIST_SESSION_GAP_MS,
+  artistGraph,
+  artistNeighbourhood,
+  artistNeighbours,
+} from "./artistGraph.ts";
+export type {
+  ArtistGraph,
+  ArtistGraphPlay,
+  ArtistGraphSources,
+  ArtistGraphWeights,
+  ArtistNeighbour,
+  ArtistNeighbourhoodOptions,
+} from "./artistGraph.ts";

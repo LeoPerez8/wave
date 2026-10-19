@@ -7,7 +7,7 @@
  * of Expo so the store tests run it against a real SQLite.
  */
 import type { YtArtistPage, YtArtistSaved, YtSong } from "@wave/core";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 
 import type { LibraryDatabase } from "./database.ts";
 import * as schema from "./schema.ts";
@@ -57,4 +57,44 @@ export const saveYtArtist = (
     .values({ artistKey, ...row })
     .onConflictDoUpdate({ target: schema.ytArtists.artistKey, set: row })
     .run();
+};
+
+/** A saved page's artist and who "Fans might also like", as the artist graph reads them. */
+export type YtArtistSimilar = Required<Pick<YtArtistPage, "name" | "similar">>;
+
+/** [json] read as a list of similar artists: none when it isn't a list. */
+const readSimilar = (json: string | null): YtArtistSimilar["similar"] => {
+  try {
+    const similar: unknown = json === null ? null : JSON.parse(json);
+    return Array.isArray(similar) ? (similar as YtArtistSimilar["similar"]) : [];
+  } catch {
+    return [];
+  }
+};
+
+/**
+ * Every found page's artist with the artists it lists as similar, in its
+ * order (none for a page saved before they were read), by artist key. Only
+ * those two are read out of each page, not its songs; a page that can't be
+ * read is left out.
+ */
+export const selectYtArtistSimilar = (db: LibraryDatabase): YtArtistSimilar[] => {
+  const { ytArtists } = schema;
+  const valid = sql`json_valid(${ytArtists.page})`;
+  return db
+    .select({
+      name: sql<
+        string | null
+      >`CASE WHEN ${valid} THEN json_extract(${ytArtists.page}, '$.name') END`,
+      similar: sql<
+        string | null
+      >`CASE WHEN ${valid} THEN json_extract(${ytArtists.page}, '$.similar') END`,
+    })
+    .from(ytArtists)
+    .where(eq(ytArtists.outcome, "found"))
+    .orderBy(ytArtists.artistKey)
+    .all()
+    .flatMap(({ name, similar }) =>
+      typeof name === "string" ? [{ name, similar: readSimilar(similar) }] : [],
+    );
 };
