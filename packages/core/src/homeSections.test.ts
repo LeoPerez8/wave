@@ -138,7 +138,8 @@ describe("Home's arrangement", () => {
     const moved = JSON.stringify({
       shown: ["favorites", "artist-mixes", "most-played-artists", "recently-added"],
       hidden: before.filter(
-        (id) => !["favorites", "artist-mixes", "most-played-artists", "recently-added"].includes(id),
+        (id) =>
+          !["favorites", "artist-mixes", "most-played-artists", "recently-added"].includes(id),
       ),
     });
     assert.deepEqual(parseHomeArrangement(moved), [

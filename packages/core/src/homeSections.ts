@@ -126,7 +126,10 @@ export const parseHomeArrangement = (stored: string | null): HomeArrangement => 
   const newer = HOME_SECTIONS.filter(({ id }) => !known.has(id));
   // Those that join before a section go last, once the section they join before has its place.
   const anchored = newer.filter(({ joinsBefore }) => joinsBefore !== undefined);
-  for (const { id, joinsBefore } of [...newer.filter((section) => !anchored.includes(section)), ...anchored]) {
+  for (const { id, joinsBefore } of [
+    ...newer.filter((section) => !anchored.includes(section)),
+    ...anchored,
+  ]) {
     const anchor = joinsBefore === undefined ? -1 : arrangement.indexOf(joinsBefore);
     if (anchor !== -1) {
       arrangement.splice(anchor, 0, id);

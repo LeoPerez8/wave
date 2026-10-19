@@ -4,6 +4,7 @@ import { describe, test } from "node:test";
 import {
   magicArtistKey,
   magicQueuePicks,
+  magicQueuePicksDue,
   parseMagicQueuePicks,
   refreshedMagicQueuePicks,
   storedMagicQueuePicks,
@@ -90,15 +91,27 @@ describe("Home's Magic Queue section", () => {
 
   test("keeps its list all day, the same object when nothing changed", () => {
     const songs = library(30);
-    const morning = magicQueuePicks(null, songs, { now: NOON - 3 * 3600_000, taste: null, random: seeded(1) });
-    const evening = magicQueuePicks(morning, songs, { now: NOON + 8 * 3600_000, taste: null, random: seeded(2) });
+    const morning = magicQueuePicks(null, songs, {
+      now: NOON - 3 * 3600_000,
+      taste: null,
+      random: seeded(1),
+    });
+    const evening = magicQueuePicks(morning, songs, {
+      now: NOON + 8 * 3600_000,
+      taste: null,
+      random: seeded(2),
+    });
     assert.equal(evening, morning);
   });
 
   test("brings a new list the next day", () => {
     const songs = library(30);
     const today = magicQueuePicks(null, songs, { now: NOON, taste: null, random: seeded(1) });
-    const tomorrow = magicQueuePicks(today, songs, { now: NOON + DAY, taste: null, random: seeded(2) });
+    const tomorrow = magicQueuePicks(today, songs, {
+      now: NOON + DAY,
+      taste: null,
+      random: seeded(2),
+    });
     assert.notEqual(tomorrow.day, today.day);
     assert.equal(tomorrow.trackIds.length, 10);
     assert.notDeepEqual(tomorrow.trackIds, today.trackIds);
@@ -110,7 +123,11 @@ describe("Home's Magic Queue section", () => {
     const today = magicQueuePicks(null, songs, { now: NOON, taste: null, random: seeded(1) });
     const gone = today.trackIds[3]!;
     const left = songs.filter((candidate) => candidate.trackId !== gone);
-    const later = magicQueuePicks(today, left, { now: NOON + 3600_000, taste: null, random: seeded(2) });
+    const later = magicQueuePicks(today, left, {
+      now: NOON + 3600_000,
+      taste: null,
+      random: seeded(2),
+    });
     assert.equal(later.trackIds.length, 10);
     assert.ok(!later.trackIds.includes(gone));
     assert.deepEqual(
@@ -121,24 +138,41 @@ describe("Home's Magic Queue section", () => {
   });
 
   test("shows nothing with nothing in the Library", () => {
-    assert.deepEqual(magicQueuePicks(null, [], { now: NOON, taste: null, random: seeded(1) }).trackIds, []);
+    assert.deepEqual(
+      magicQueuePicks(null, [], { now: NOON, taste: null, random: seeded(1) }).trackIds,
+      [],
+    );
   });
 
   test("a pull brings another list, avoiding every song it showed today", () => {
     const songs = library(30);
     const today = magicQueuePicks(null, songs, { now: NOON, taste: null, random: seeded(1) });
-    const pulled = refreshedMagicQueuePicks(today, songs, { now: NOON, taste: null, random: seeded(2) });
+    const pulled = refreshedMagicQueuePicks(today, songs, {
+      now: NOON,
+      taste: null,
+      random: seeded(2),
+    });
     assert.equal(pulled.trackIds.length, 10);
     assert.ok(pulled.trackIds.every((id) => !today.trackIds.includes(id)));
-    const again = refreshedMagicQueuePicks(pulled, songs, { now: NOON, taste: null, random: seeded(3) });
-    assert.ok(again.trackIds.every((id) => !today.trackIds.includes(id) && !pulled.trackIds.includes(id)));
+    const again = refreshedMagicQueuePicks(pulled, songs, {
+      now: NOON,
+      taste: null,
+      random: seeded(3),
+    });
+    assert.ok(
+      again.trackIds.every((id) => !today.trackIds.includes(id) && !pulled.trackIds.includes(id)),
+    );
     assert.equal(new Set(again.shownToday).size, 30);
   });
 
   test("once every song was shown today, a pull brings back songs from earlier lists", () => {
     const songs = library(15);
     const today = magicQueuePicks(null, songs, { now: NOON, taste: null, random: seeded(1) });
-    const pulled = refreshedMagicQueuePicks(today, songs, { now: NOON, taste: null, random: seeded(2) });
+    const pulled = refreshedMagicQueuePicks(today, songs, {
+      now: NOON,
+      taste: null,
+      random: seeded(2),
+    });
     assert.equal(pulled.trackIds.length, 10);
     assert.equal(new Set(pulled.trackIds).size, 10);
     const fresh = pulled.trackIds.filter((id) => !today.trackIds.includes(id));
@@ -149,8 +183,16 @@ describe("Home's Magic Queue section", () => {
 
   test("a pull on a new day avoids only that day's songs", () => {
     const songs = library(20);
-    const yesterday = magicQueuePicks(null, songs, { now: NOON - DAY, taste: null, random: seeded(1) });
-    const pulled = refreshedMagicQueuePicks(yesterday, songs, { now: NOON, taste: null, random: seeded(2) });
+    const yesterday = magicQueuePicks(null, songs, {
+      now: NOON - DAY,
+      taste: null,
+      random: seeded(1),
+    });
+    const pulled = refreshedMagicQueuePicks(yesterday, songs, {
+      now: NOON,
+      taste: null,
+      random: seeded(2),
+    });
     assert.notEqual(pulled.day, yesterday.day);
     assert.deepEqual(pulled.shownToday, pulled.trackIds);
   });
@@ -158,11 +200,21 @@ describe("Home's Magic Queue section", () => {
   test("Undo after a pull puts the list before it back, still avoiding both on the next pull", () => {
     const songs = library(30);
     const today = magicQueuePicks(null, songs, { now: NOON, taste: null, random: seeded(1) });
-    const pulled = refreshedMagicQueuePicks(today, songs, { now: NOON, taste: null, random: seeded(2) });
+    const pulled = refreshedMagicQueuePicks(today, songs, {
+      now: NOON,
+      taste: null,
+      random: seeded(2),
+    });
     const undone = undoneMagicQueueRefresh(today, pulled);
     assert.deepEqual(undone.trackIds, today.trackIds);
-    const next = refreshedMagicQueuePicks(undone, songs, { now: NOON, taste: null, random: seeded(3) });
-    assert.ok(next.trackIds.every((id) => !today.trackIds.includes(id) && !pulled.trackIds.includes(id)));
+    const next = refreshedMagicQueuePicks(undone, songs, {
+      now: NOON,
+      taste: null,
+      random: seeded(3),
+    });
+    assert.ok(
+      next.trackIds.every((id) => !today.trackIds.includes(id) && !pulled.trackIds.includes(id)),
+    );
   });
 
   test("what it shows reads back as it was stored", () => {
@@ -171,7 +223,28 @@ describe("Home's Magic Queue section", () => {
   });
 
   test("nothing stored, or anything unreadable, reads as nothing shown yet", () => {
-    for (const stored of [null, "", "junk", "[]", "{}", '{"day":3,"trackIds":[],"shownToday":[]}', '{"day":"d","trackIds":[1],"shownToday":[]}'])
+    for (const stored of [
+      null,
+      "",
+      "junk",
+      "[]",
+      "{}",
+      '{"day":3,"trackIds":[],"shownToday":[]}',
+      '{"day":"d","trackIds":[1],"shownToday":[]}',
+    ])
       assert.equal(parseMagicQueuePicks(stored), null, String(stored));
+  });
+
+  test("tells when what it shows needs picking: nothing yet, a new day, a song gone, room for more", () => {
+    const songs = library(30);
+    const today = magicQueuePicks(null, songs, { now: NOON, taste: null, random: seeded(1) });
+    assert.equal(magicQueuePicksDue(null, songs, NOON), true);
+    assert.equal(magicQueuePicksDue(today, songs, NOON + 3600_000), false);
+    assert.equal(magicQueuePicksDue(today, songs, NOON + DAY), true);
+    const gone = songs.filter((candidate) => candidate.trackId !== today.trackIds[0]);
+    assert.equal(magicQueuePicksDue(today, gone, NOON), true);
+    const few = magicQueuePicks(null, library(4), { now: NOON, taste: null, random: seeded(1) });
+    assert.equal(magicQueuePicksDue(few, library(4), NOON), false);
+    assert.equal(magicQueuePicksDue(few, library(6), NOON), true);
   });
 });

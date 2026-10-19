@@ -41,9 +41,12 @@ const pick = (
   count: number,
   { taste, random }: MagicQueuePicking,
 ): string[] =>
-  pickWeighted(songs, count, (candidate) => (taste === null ? 1 : tasteWeight(taste, candidate)), random).map(
-    (picked) => picked.trackId,
-  );
+  pickWeighted(
+    songs,
+    count,
+    (candidate) => (taste === null ? 1 : tasteWeight(taste, candidate)),
+    random,
+  ).map((picked) => picked.trackId);
 
 /**
  * Up to [count] of [songs] [avoid] doesn't name, picked as `pick` does, then,
@@ -70,18 +73,38 @@ const pickAvoiding = (
 };
 
 /**
+ * Whether what the section shows ([saved], null for nothing yet) needs
+ * picking at [now] with the Library's playable [songs]: nothing picked yet,
+ * picked on another day, a song of it gone from the Library, or fewer than
+ * 10 songs while the Library has more. Asks nothing of the taste profile.
+ */
+export const magicQueuePicksDue = (
+  saved: MagicQueuePicks | null,
+  songs: readonly MagicSong[],
+  now: number,
+): boolean => {
+  if (saved === null || saved.day !== localDay(now)) return true;
+  const there = new Set(songs.map((candidate) => candidate.trackId));
+  return (
+    saved.trackIds.some((id) => !there.has(id)) ||
+    saved.trackIds.length < Math.min(MAGIC_QUEUE_PICKS, there.size)
+  );
+};
+
+/**
  * What the section shows at [now], given what it showed last ([saved], null
- * for nothing yet) and the Library's playable [songs]: [saved] itself while
- * it's from today and its songs are all still there; a new list on a new
- * day. A song gone from the Library since is replaced in its place (by one
- * not shown today where others are left), and a list short of 10 songs
- * fills up as the Library grows.
+ * for nothing yet) and the Library's playable [songs]: [saved] itself unless
+ * it's due (`magicQueuePicksDue`); a new list on a new day. A song gone from
+ * the Library since is replaced in its place (by one not shown today where
+ * others are left), and a list short of 10 songs fills up as the Library
+ * grows.
  */
 export const magicQueuePicks = (
   saved: MagicQueuePicks | null,
   songs: readonly MagicSong[],
   picking: MagicQueuePicking,
 ): MagicQueuePicks => {
+  if (!magicQueuePicksDue(saved, songs, picking.now)) return saved!;
   const day = localDay(picking.now);
   if (saved === null || saved.day !== day) {
     const trackIds = pick(songs, MAGIC_QUEUE_PICKS, picking);
@@ -89,19 +112,18 @@ export const magicQueuePicks = (
   }
   const there = new Set(songs.map((candidate) => candidate.trackId));
   const kept = saved.trackIds.filter((id) => there.has(id));
-  const wanted = Math.min(MAGIC_QUEUE_PICKS, there.size);
-  if (kept.length === saved.trackIds.length && kept.length >= wanted) return saved;
   const added = pickAvoiding(
     songs,
-    wanted - kept.length,
+    Math.min(MAGIC_QUEUE_PICKS, there.size) - kept.length,
     { avoid: new Set(saved.shownToday), keep: new Set(kept) },
     picking,
   );
   // Each gone song's place takes the next one picked; the rest join at the end.
+  let next = 0;
   const trackIds = saved.trackIds.flatMap((id) =>
-    there.has(id) ? [id] : added.length > 0 ? [added.shift()!] : [],
+    there.has(id) ? [id] : next < added.length ? [added[next++]!] : [],
   );
-  trackIds.push(...added);
+  trackIds.push(...added.slice(next));
   return { day, trackIds, shownToday: [...new Set([...saved.shownToday, ...trackIds])] };
 };
 

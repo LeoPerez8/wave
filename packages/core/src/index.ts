@@ -1798,6 +1798,7 @@ export type { TasteHistory, TasteProfile, TasteSignal, TasteSignalKind } from ".
 export {
   MAGIC_QUEUE_PICKS,
   magicQueuePicks,
+  magicQueuePicksDue,
   parseMagicQueuePicks,
   refreshedMagicQueuePicks,
   storedMagicQueuePicks,
