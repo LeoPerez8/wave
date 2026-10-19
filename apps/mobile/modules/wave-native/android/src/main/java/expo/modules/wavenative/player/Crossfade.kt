@@ -269,10 +269,14 @@ class Crossfade(private val host: CrossfadeHost) {
   /** Why this song wouldn't overlap the next as things stand ([idle]'s rules); null while it's not due yet. */
   private var skipState: CrossfadeReason? = null
 
-  /** Why this song's overlap was given up (a waiting next song called off, a late one), how late, and by what. */
-  private var skipEvent: CrossfadeReason? = null
-  private var skipLateMs = 0L
-  private var skipBy: CrossfadeCause? = null
+  /**
+   * This song's overlap given up (a waiting next song called off, a late one): the line its song
+   * change gets, with how late and where a seek came from, once the move that changes it is known.
+   */
+  private var givenUp: CrossfadeOutcome.Skipped? = null
+
+  /** Where a seek made while nothing waited came from, while it may have put the song past its handoff point. */
+  private var seekedBy: CrossfadeCause? = null
 
   /** Whether the overlap under way still owes its song change's outcome. */
   private var owed = false
@@ -314,10 +318,18 @@ class Crossfade(private val host: CrossfadeHost) {
       interrupt(CrossfadeEnd.Moved, cause)
     }
     if (changed && from != null && key != null) {
-      val why = if (overlapMs <= 0) CrossfadeSkip.Off else skipEvent ?: skipState ?: CrossfadeSkip.Early
-      val event = why == skipEvent
-      val seekFrom = if (event && why == CrossfadeEnd.Seek) skipBy else null
-      host.outcome(CrossfadeOutcome.Skipped(why, if (event) skipLateMs else 0L, cause, seekFrom))
+      val pending = givenUp
+      host.outcome(
+        when {
+          overlapMs <= 0 -> CrossfadeOutcome.Skipped(CrossfadeSkip.Off, cause = cause)
+          pending != null -> pending.copy(cause = cause)
+          else -> {
+            val why = skipState ?: CrossfadeSkip.Early
+            val seekFrom = if (why == CrossfadeSkip.PastHandoff) seekedBy else null
+            CrossfadeOutcome.Skipped(why, cause = cause, seekFrom = seekFrom)
+          }
+        },
+      )
     }
     if (changed) forgetSkip()
     return changed
@@ -325,15 +337,13 @@ class Crossfade(private val host: CrossfadeHost) {
 
   private fun forgetSkip() {
     skipState = null
-    skipEvent = null
-    skipLateMs = 0L
-    skipBy = null
+    givenUp = null
+    seekedBy = null
   }
 
-  private fun giveUp(why: CrossfadeReason, lateMs: Long = 0L, by: CrossfadeCause? = null) {
-    skipEvent = why
-    skipLateMs = lateMs
-    skipBy = by
+  /** [seekFrom] is where the seek came from, when one was [why]. */
+  private fun giveUp(why: CrossfadeReason, lateMs: Long = 0L, seekFrom: CrossfadeCause? = null) {
+    givenUp = CrossfadeOutcome.Skipped(why, lateMs, seekFrom = if (why == CrossfadeEnd.Seek) seekFrom else null)
   }
 
   /**
@@ -343,10 +353,11 @@ class Crossfade(private val host: CrossfadeHost) {
   fun interrupt(why: CrossfadeEnd, cause: CrossfadeCause? = null) {
     prefetched = false
     when (val current = phase) {
-      Idle -> {}
+      // A seek past the handoff point gives its song change's line (past the handoff) its source.
+      Idle -> if (why == CrossfadeEnd.Seek) seekedBy = cause
       is Waiting -> {
         // A move gives its own song change's line: it changed while the next song waited.
-        giveUp(if (why == CrossfadeEnd.Moved) CrossfadeSkip.WhileWaiting else why, by = cause)
+        giveUp(if (why == CrossfadeEnd.Moved) CrossfadeSkip.WhileWaiting else why, seekFrom = cause)
         host.closeSecond()
       }
       is Fading -> {
@@ -375,6 +386,8 @@ class Crossfade(private val host: CrossfadeHost) {
     val positionMs = host.main.positionMs
     val openAt = CrossfadeTiming.prefetchAt(overlapMs, durationMs)
     skipState = null
+    // A seek that landed before the handoff point didn't put the song past it.
+    if (positionMs < handoffAt) seekedBy = null
     if (positionMs < openAt) return (openAt - positionMs).coerceIn(TICK_MS, POLL_MS)
     // It doesn't move on, or it's too late to wait for the next song: it ends gapless.
     if (!host.movesOnNaturally) return skip(CrossfadeSkip.NoNext, POLL_MS)
@@ -386,7 +399,7 @@ class Crossfade(private val host: CrossfadeHost) {
     if (host.nextSearching) return skip(CrossfadeSkip.Searching, POLL_MS)
     if (positionMs >= handoffAt) return skip(CrossfadeSkip.PastHandoff, POLL_MS)
     val nextKey = host.nextKey ?: return skip(CrossfadeSkip.NoNext, POLL_MS)
-    skipEvent = null
+    givenUp = null
     val next = host.openNext()
     next.setVolume(0f)
     next.setPlaying(false)

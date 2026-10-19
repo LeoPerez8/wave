@@ -11,6 +11,7 @@ import android.os.Looper
 import android.os.Process
 import android.os.SystemClock
 import android.util.Log
+import android.view.KeyEvent
 import androidx.annotation.OptIn
 import androidx.car.app.connection.CarConnection
 import androidx.lifecycle.LiveData
@@ -661,9 +662,10 @@ class PlaybackService : MediaLibraryService() {
       controller: MediaSession.ControllerInfo,
       playerCommand: Int,
     ): Int {
-      if (playerCommand in MOVING_COMMANDS) {
-        describeController(session, controller)?.let { CrossfadeLink.causes.noteSession(it, SystemClock.elapsedRealtime()) }
-      }
+      val from = describeController(session, controller)
+      if (playerCommand in MOVING_COMMANDS && from != null) CrossfadeLink.causes.noteSession(from, SystemClock.elapsedRealtime())
+      // Play or pause from anywhere but the app: no longer the app's pause for a search.
+      if (playerCommand == Player.COMMAND_PLAY_PAUSE && from != null) CrossfadeLink.pausedForSearch = false
       return super.onPlayerCommandRequest(session, controller, playerCommand)
     }
 
@@ -675,6 +677,9 @@ class PlaybackService : MediaLibraryService() {
     ): Boolean {
       val from = describeController(session, controllerInfo) ?: controllerInfo.packageName
       CrossfadeLink.causes.noteMediaButton(from, SystemClock.elapsedRealtime())
+      @Suppress("DEPRECATION")
+      val key = intent.getParcelableExtra<KeyEvent>(Intent.EXTRA_KEY_EVENT)?.keyCode
+      if (key in PLAY_PAUSE_KEYS) CrossfadeLink.pausedForSearch = false
       return super.onMediaButtonEvent(session, controllerInfo, intent)
     }
 
@@ -748,8 +753,15 @@ class PlaybackService : MediaLibraryService() {
       val requested = mediaItems.getOrNull(startIndex) ?: mediaItems.firstOrNull()
         ?: return Futures.immediateFailedFuture(AutoPlayException("Nothing to play."))
       keepJsFor(controller)
-      return AutoLibrary.play(requested.mediaId)
-        .alsoReportFailure(mediaSession, controller, "play ${requested.mediaId}")
+      // JS may search the song first, longer than a note waits: the move its answer makes keeps
+      // the controller's name in the app log's crossfade lines.
+      val cause = CrossfadeLink.causes.held(SystemClock.elapsedRealtime())
+      val answer = Futures.transform(
+        AutoLibrary.play(requested.mediaId),
+        { items -> items.also { CrossfadeLink.causes.noteAgain(cause, SystemClock.elapsedRealtime()) } },
+        mainExecutor,
+      )
+      return answer.alsoReportFailure(mediaSession, controller, "play ${requested.mediaId}")
     }
 
     /**
@@ -912,6 +924,14 @@ class PlaybackService : MediaLibraryService() {
       Player.COMMAND_SEEK_FORWARD,
       Player.COMMAND_SET_MEDIA_ITEM,
       Player.COMMAND_CHANGE_MEDIA_ITEMS,
+    )
+
+    /** The media buttons that play or pause. */
+    val PLAY_PAUSE_KEYS = setOf(
+      KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE,
+      KeyEvent.KEYCODE_MEDIA_PLAY,
+      KeyEvent.KEYCODE_MEDIA_PAUSE,
+      KeyEvent.KEYCODE_HEADSETHOOK,
     )
   }
 }
