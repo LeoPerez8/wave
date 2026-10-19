@@ -30,6 +30,22 @@ export const noteRadio = (seed: string, songs: readonly CatalogPageSong[]) =>
   noteCandidates({ songs, seed });
 
 /**
+ * Adds the songs a page of [seed]'s radio played to the catalog now, done
+ * when it's written: for a read the catalog is read again right after (the
+ * harvest, a Magic Queue's refill). Never fails: a write that can't be made
+ * is left out.
+ */
+export const noteRadioNow = (
+  seed: string,
+  songs: readonly CatalogPageSong[],
+): Effect.Effect<void, never, LibraryStore> =>
+  Effect.gen(function* () {
+    if (songs.length === 0) return;
+    const store = yield* LibraryStore;
+    yield* store.addCandidates({ songs, seed }, Date.now()).pipe(Effect.ignore);
+  });
+
+/**
  * Adds an artist page's top songs to the catalog, with no radio. Only the
  * top songs: every song of a prolific artist (`allSongs`, up to the
  * playlist cap) would push the radios' songs out.

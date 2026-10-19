@@ -29,7 +29,6 @@ import {
   discoverMixReadsMore,
   discoverMixSongs,
   networkUseBytes,
-  type CatalogPageSong,
   type DiscoverMixFilter,
   type DiscoverMixSeed,
   type GenreProfileLibrary,
@@ -47,6 +46,7 @@ import type { NativeYtRadioSong } from "@/native/waveYtMusic";
 import { onMobileData, online } from "@/native/waveNative";
 import { tasteProfileNow } from "@/playback/TasteProfile";
 import { ytMusicEnabled } from "@/settings/ytMusic";
+import { noteRadioNow } from "@/ytmusic/candidateCatalog";
 import { YtMusic } from "@/ytmusic/YtMusic";
 
 import { lookUpArtistProfiles, mixProfileOf } from "./artistGenres";
@@ -82,21 +82,25 @@ interface MixGenres {
  * the genres of the radio artists that decide the songs the mix would keep
  * looked up on Deezer (the seed's outside artists first, then a round at a
  * time, till 50 match: `mixProfileLookupsNext`). A page more is read while
- * the songs the mix would keep (`discoverMixSongs`) are too few. Every page
- * read is [note]d as its artist's radio (into the candidate catalog),
- * however the read ends. Null when no radio could be read.
+ * the songs the mix would keep (`discoverMixSongs`) are too few. Each page
+ * goes into the candidate catalog as it arrives, as its artist's radio
+ * (`noteRadioNow`), so a read cut short keeps what it read. Null when no
+ * radio could be read.
  */
-const readRadios = (
-  seed: DiscoverMixSeed,
-  filter: Filter,
-  genres: MixGenres,
-  note: (seed: string, songs: readonly CatalogPageSong[]) => Effect.Effect<void>,
-) =>
+const readRadios = (seed: DiscoverMixSeed, filter: Filter, genres: MixGenres) =>
   Effect.gen(function* () {
     const ytMusic = yield* YtMusic;
     const artists = mixSeedArtists(seed);
     const firstPages = yield* Effect.all(
-      artists.map((artist) => Effect.result(artistRadio(artist))),
+      artists.map((artist) =>
+        Effect.result(
+          artistRadio(artist).pipe(
+            Effect.tap((page) =>
+              page === null ? Effect.void : noteRadioNow(artist.name, page.songs),
+            ),
+          ),
+        ),
+      ),
       { concurrency: "unbounded" },
     );
     const radios: ReadingRadio[] = firstPages.flatMap((page, at) =>
@@ -111,10 +115,6 @@ const readRadios = (
         : [],
     );
     if (radios.length === 0) return null;
-    // Whatever the reading below comes to, every page read feeds the candidate catalog.
-    yield* Effect.addFinalizer(() =>
-      Effect.forEach(radios, (radio) => note(radio.seed, radio.songs), { discard: true }),
-    );
     const { library, profileOf } = genres;
     // The seed's own artists first: an outside seed needs its profile to judge any song.
     const seedArtists = { artists: mixSeedArtists(seed).map((artist) => artist.name) };
@@ -152,13 +152,14 @@ const readRadios = (
           radio.continuation === null
             ? Effect.void
             : Effect.result(ytMusic.radioMore(radio.continuation)).pipe(
-                Effect.map((next) => {
+                Effect.flatMap((next) => {
                   if (Result.isFailure(next)) {
                     radio.continuation = null;
-                    return;
+                    return Effect.void;
                   }
                   radio.songs.push(...next.success.songs);
                   radio.continuation = next.success.continuation;
+                  return noteRadioNow(radio.seed, next.success.songs);
                 }),
               ),
         ),
@@ -167,7 +168,7 @@ const readRadios = (
       yield* knowGenres;
     }
     return interleaveRadios(radios.map((r) => r.songs)).length;
-  }).pipe(Effect.scoped);
+  });
 
 /** The seeds Home's builds picked (each section's last build): what a harvest on mobile data refills. */
 let picked: () => readonly DiscoverMixSeed[] = () => [];
@@ -242,9 +243,6 @@ const harvest = Effect.gen(function* () {
   }
   const filter: Filter = { known: library.known.known, taken: new Set() };
   const genres: MixGenres = { library, profileOf };
-  // The harvest's pages go into the catalog as they're read, so the build after it has them.
-  const note = (seed: string, songs: readonly CatalogPageSong[]) =>
-    store.addCandidates({ songs, seed }, Date.now()).pipe(Effect.ignore);
   return yield* harvestRun({
     wants,
     onMobileData: mobile,
@@ -256,7 +254,7 @@ const harvest = Effect.gen(function* () {
       let reached = false;
       return withNetworkLog(
         `Mix harvest of ${seed.name}`,
-        readRadios(seed, filter, genres, note),
+        readRadios(seed, filter, genres),
         (songs) => (songs === null ? "no radio" : `${songs} songs`),
         (use) => {
           bytes = networkUseBytes(use);

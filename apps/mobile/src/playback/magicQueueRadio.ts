@@ -27,15 +27,16 @@ import * as Effect from "effect/Effect";
 
 import { lookUpArtistProfiles, lookedUpProfileOf, mixProfileOf } from "@/home/artistGenres";
 import { artistGraphNow, forgetArtistGraph } from "@/home/artistGraphNow";
-import { forgetMixCatalog, mixCatalog } from "@/home/mixCatalog";
 import { harvestMobileUsed, noteHarvestMobileUse } from "@/home/harvestMobileUse";
+import { forgetMixCatalog, mixCatalog } from "@/home/mixCatalog";
 import { artistRadio } from "@/home/ytArtistPage";
 import { freeTurnEffect } from "@/lib/backgroundWork";
 import { withNetworkLog } from "@/lib/networkMeter";
-import { LibraryStore, type SongRow } from "@/library/LibraryStore";
+import type { SongRow } from "@/library/LibraryStore";
 import { onMobileData, online } from "@/native/waveNative";
 import { WaveYtMusic, type NativeYtRadioSong } from "@/native/waveYtMusic";
 import { ytMusicEnabled } from "@/settings/ytMusic";
+import { noteRadioNow } from "@/ytmusic/candidateCatalog";
 import { YtMusic } from "@/ytmusic/YtMusic";
 
 import { magicCatalogRead } from "./magicCatalogRead";
@@ -75,16 +76,9 @@ const inLibraryOf = (library: MagicLibrary) => {
  */
 const readRadios = (session: MagicSession, library: MagicLibrary, profileOf: GenreProfileOf) =>
   Effect.gen(function* () {
-    const store = yield* LibraryStore;
     const radios = yield* Effect.all(
       session.radioArtists.map((name) =>
-        artistRadioSongs(name).pipe(
-          Effect.tap((songs) =>
-            songs.length === 0
-              ? Effect.void
-              : store.addCandidates({ songs, seed: name }, Date.now()).pipe(Effect.ignore),
-          ),
-        ),
+        artistRadioSongs(name).pipe(Effect.tap((songs) => noteRadioNow(name, songs))),
       ),
       { concurrency: "unbounded" },
     );
