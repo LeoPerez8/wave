@@ -1769,3 +1769,5 @@ export {
 export type { YtThrottle, YtThrottleJob, YtThrottlePause } from "./ytThrottle.ts";
 export { throttledFailures, throttledFailuresLine } from "./throttledFailures.ts";
 export type { ThrottledFailureJob, ThrottledFailuresInput } from "./throttledFailures.ts";
+export { songChangeCause } from "./songChangeCause.ts";
+export type { SeekSource, SongChangeCause } from "./songChangeCause.ts";

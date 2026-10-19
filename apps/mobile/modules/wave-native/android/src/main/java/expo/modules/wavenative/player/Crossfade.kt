@@ -16,6 +16,9 @@ interface CrossfadeDeck {
   /** Whether it has its song's start buffered, ready to sound at once. */
   val ready: Boolean
 
+  /** Whether it's loading more of its song before it can go on. */
+  val buffering: Boolean
+
   fun setVolume(volume: Float)
 
   fun setPlaying(playing: Boolean)
@@ -31,6 +34,12 @@ interface CrossfadeHost {
 
   /** Whether the session's player is to play: play pressed, and nothing (a call) holding it back. */
   val mainWantsToPlay: Boolean
+
+  /** Whether play is pressed on the session's player, whatever holds it back. */
+  val mainPlayWhenReady: Boolean
+
+  /** Whether the app paused the session's player while the song it moves to is searched. */
+  val mainPausedForSearch: Boolean
 
   /**
    * Whether the current song, ending on its own, moves on to another one: there
@@ -87,31 +96,55 @@ interface CrossfadeReason {
   val reason: String
 }
 
-/** What crossfade did at one song change: the app log gets exactly one per change. */
+/**
+ * What crossfade did at one song change: the app log gets exactly one per change.
+ * A [CrossfadeCause] names what changed the song, or where a seek came from.
+ */
 sealed interface CrossfadeOutcome {
-  /** No overlap, for [why]; [lateMs] is how late the next song was, when that was why. */
-  data class Skipped(val why: CrossfadeReason, val lateMs: Long = 0) : CrossfadeOutcome
+  /**
+   * No overlap, for [why]; [lateMs] is how late the next song was, when that was why.
+   * [cause] changed the song; [seekFrom] is where the seek came from, when one was why.
+   */
+  data class Skipped(
+    val why: CrossfadeReason,
+    val lateMs: Long = 0,
+    val cause: CrossfadeCause? = null,
+    val seekFrom: CrossfadeCause? = null,
+  ) : CrossfadeOutcome
 
   /** The overlap ran to its end over [overlapMs], [lateMs] shorter than the song's whole one. */
   data class Done(val overlapMs: Long, val lateMs: Long) : CrossfadeOutcome
 
   /**
    * The overlap was cut for [why], [elapsedMs] into it (real time, from when the incoming song
-   * sounded, or from the handoff while it hadn't: [overlapMs] null).
+   * sounded, or from the handoff while it hadn't: [overlapMs] null). [cause] moved the
+   * player, or seeked it, when that was why.
    */
-  data class Cut(val why: CrossfadeEnd, val elapsedMs: Long, val overlapMs: Long?) : CrossfadeOutcome
+  data class Cut(
+    val why: CrossfadeEnd,
+    val elapsedMs: Long,
+    val overlapMs: Long?,
+    val cause: CrossfadeCause? = null,
+  ) : CrossfadeOutcome
 }
 
 /** The rules that leave a song change without an overlap, besides a waiting next song called off ([CrossfadeEnd]). */
 enum class CrossfadeSkip(override val reason: String) : CrossfadeReason {
   Off("crossfade is off"),
-  NotPlaying("the song wasn't playing"),
+  Buffering("the song was buffering"),
+  Paused("the song was paused"),
+  PausedForSearch("the song was paused while the song to play was searched"),
+  HeldBack("the song was held back (a call, or another app's audio)"),
+  NotPlaying("the player was stopped or at its end"),
   UnknownLength("the song's length wasn't known"),
   PastHandoff("the song was already past the handoff point"),
   NoNext("no song plays next on its own"),
   NotReady("the next song wasn't ready"),
   Searching("the next song was still being searched"),
   Early("the song changed before its overlap was due"),
+
+  /** A move while the next song was open on the second player, waiting for the handoff. */
+  WhileWaiting("the song changed while the next song waited for its overlap"),
 }
 
 /** Why a waiting next song was called off or an overlap ended before its time, as the app log says it. */
@@ -236,9 +269,10 @@ class Crossfade(private val host: CrossfadeHost) {
   /** Why this song wouldn't overlap the next as things stand ([idle]'s rules); null while it's not due yet. */
   private var skipState: CrossfadeReason? = null
 
-  /** Why this song's overlap was given up (a waiting next song called off, a late one), and how late. */
+  /** Why this song's overlap was given up (a waiting next song called off, a late one), how late, and by what. */
   private var skipEvent: CrossfadeReason? = null
   private var skipLateMs = 0L
+  private var skipBy: CrossfadeCause? = null
 
   /** Whether the overlap under way still owes its song change's outcome. */
   private var owed = false
@@ -260,11 +294,12 @@ class Crossfade(private val host: CrossfadeHost) {
    * changes nothing (its next song stays asked for); any other move ends a
    * waiting next song or an overlap at once ([interrupt]): a skip, picking a
    * song, or the next song replaced. [restarted]: the same entry again from
-   * its start (repeat). Returns whether the song changed, so the service only
-   * then turns the next song's preload off again. The handoff itself is no
-   * move: the session's player changes instead.
+   * its start (repeat). [cause] is what moved it, for the app log. Returns
+   * whether the song changed, so the service only then turns the next song's
+   * preload off again. The handoff itself is no move: the session's player
+   * changes instead.
    */
-  fun moved(key: String?, restarted: Boolean = false): Boolean {
+  fun moved(key: String?, restarted: Boolean = false, cause: CrossfadeCause? = null): Boolean {
     val changed = key == null || key != movedTo || restarted
     val from = movedTo
     movedTo = key
@@ -274,13 +309,15 @@ class Crossfade(private val host: CrossfadeHost) {
       is Fading -> current.incomingKey
     }
     if (phase == Idle) {
-      if (changed) interrupt(CrossfadeEnd.Moved)
+      if (changed) interrupt(CrossfadeEnd.Moved, cause)
     } else if (key == null || key != expected) {
-      interrupt(CrossfadeEnd.Moved)
+      interrupt(CrossfadeEnd.Moved, cause)
     }
     if (changed && from != null && key != null) {
       val why = if (overlapMs <= 0) CrossfadeSkip.Off else skipEvent ?: skipState ?: CrossfadeSkip.Early
-      host.outcome(CrossfadeOutcome.Skipped(why, if (why == skipEvent) skipLateMs else 0L))
+      val event = why == skipEvent
+      val seekFrom = if (event && why == CrossfadeEnd.Seek) skipBy else null
+      host.outcome(CrossfadeOutcome.Skipped(why, if (event) skipLateMs else 0L, cause, seekFrom))
     }
     if (changed) forgetSkip()
     return changed
@@ -290,25 +327,31 @@ class Crossfade(private val host: CrossfadeHost) {
     skipState = null
     skipEvent = null
     skipLateMs = 0L
+    skipBy = null
   }
 
-  private fun giveUp(why: CrossfadeReason, lateMs: Long = 0L) {
+  private fun giveUp(why: CrossfadeReason, lateMs: Long = 0L, by: CrossfadeCause? = null) {
     skipEvent = why
     skipLateMs = lateMs
+    skipBy = by
   }
 
-  /** The owner moved the session's player ([why]): no fade, the outgoing song stops now. */
-  fun interrupt(why: CrossfadeEnd) {
+  /**
+   * The owner moved the session's player ([why]): no fade, the outgoing song
+   * stops now. [cause] moved or seeked it, for the app log.
+   */
+  fun interrupt(why: CrossfadeEnd, cause: CrossfadeCause? = null) {
     prefetched = false
     when (val current = phase) {
       Idle -> {}
       is Waiting -> {
-        giveUp(why)
+        // A move gives its own song change's line: it changed while the next song waited.
+        giveUp(if (why == CrossfadeEnd.Moved) CrossfadeSkip.WhileWaiting else why, by = cause)
         host.closeSecond()
       }
       is Fading -> {
         current.step(host.nowMs, host.mainWantsToPlay)
-        if (current.outgoing != null) cut(current, why)
+        if (current.outgoing != null) cut(current, why, cause)
         endOutgoing(current)
         host.main.setVolume(1f)
       }
@@ -325,7 +368,7 @@ class Crossfade(private val host: CrossfadeHost) {
 
   private fun idle(): Long? {
     if (overlapMs <= 0) return skip(CrossfadeSkip.Off, null)
-    if (!host.main.isPlaying) return skip(CrossfadeSkip.NotPlaying, null)
+    if (!host.main.isPlaying) return skip(notPlaying(), null)
     val durationMs = host.mainDurationMs ?: return skip(CrossfadeSkip.UnknownLength, POLL_MS)
     val overlap = min(overlapMs, durationMs / 2)
     val handoffAt = durationMs - overlap
@@ -452,10 +495,20 @@ class Crossfade(private val host: CrossfadeHost) {
     host.outcome(outcome)
   }
 
-  private fun cut(current: Fading, why: CrossfadeEnd) {
+  private fun cut(current: Fading, why: CrossfadeEnd, cause: CrossfadeCause? = null) {
     val elapsedMs = if (current.overlapMs == null) current.runMs else current.runMs - current.soundedAtRunMs
-    report(CrossfadeOutcome.Cut(why, elapsedMs, current.overlapMs))
+    report(CrossfadeOutcome.Cut(why, elapsedMs, current.overlapMs, cause))
   }
+
+  /** Why the session's player isn't playing, for the app log. */
+  private fun notPlaying(): CrossfadeSkip =
+    when {
+      host.mainPausedForSearch && !host.mainPlayWhenReady -> CrossfadeSkip.PausedForSearch
+      !host.mainPlayWhenReady -> CrossfadeSkip.Paused
+      !host.mainWantsToPlay -> CrossfadeSkip.HeldBack
+      host.main.buffering -> CrossfadeSkip.Buffering
+      else -> CrossfadeSkip.NotPlaying
+    }
 
   /** This song won't overlap the next for [why], as things stand; returns [delayMs]. */
   private fun skip(why: CrossfadeReason, delayMs: Long?): Long? {

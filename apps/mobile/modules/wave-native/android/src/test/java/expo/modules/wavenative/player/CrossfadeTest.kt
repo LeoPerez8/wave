@@ -12,6 +12,7 @@ class CrossfadeTest {
     override var positionMs = 0L
     override var ended = false
     override var ready = true
+    override var buffering = false
 
     // Plain fields under other names: a `var volume` would clash with setVolume on the JVM.
     var sounding = true
@@ -35,6 +36,8 @@ class CrossfadeTest {
     override var main = Deck().apply { positionMs = 100_000 }
     override var mainDurationMs: Long? = 180_000
     override var mainWantsToPlay = true
+    override var mainPlayWhenReady = true
+    override var mainPausedForSearch = false
     override var movesOnNaturally = true
     override var currentKey: String? = "a"
     override var nextKey: String? = "b"
@@ -87,6 +90,12 @@ class CrossfadeTest {
     }
 
     override var nextSearching = false
+
+    /** Pause pressed. */
+    fun pause() {
+      mainPlayWhenReady = false
+      mainWantsToPlay = false
+    }
 
     /** What the app log heard of each song change. */
     val outcomes = mutableListOf<CrossfadeOutcome>()
@@ -765,7 +774,7 @@ class CrossfadeTest {
     Service().let { service ->
       // A skip while the next song waits.
       crossfade(service).songChange(service, 172_000, 173_000, to = "c")
-      assertEquals(skipped(CrossfadeEnd.Moved), service.outcomes)
+      assertEquals(skipped(CrossfadeSkip.WhileWaiting), service.outcomes)
     }
   }
 
@@ -788,6 +797,85 @@ class CrossfadeTest {
   }
 
   @Test
+  fun aSkipNamesWhatChangedTheSong() {
+    val service = Service()
+    val crossfade = crossfade(service)
+    crossfade.moved("a")
+    crossfade.playTo(service, 100_000)
+    crossfade.moved("c", cause = NEXT)
+    assertEquals(listOf<CrossfadeOutcome>(CrossfadeOutcome.Skipped(CrossfadeSkip.Early, cause = NEXT)), service.outcomes)
+  }
+
+  @Test
+  fun aMoveThatCutsTheOverlapNamesWhatMovedThePlayerOnBothLines() {
+    val service = Service()
+    val crossfade = crossfade(service)
+    crossfade.moved("a")
+    crossfade.handOff(service)
+    crossfade.moved("c", cause = NEXT)
+    assertEquals(
+      listOf(
+        CrossfadeOutcome.Cut(CrossfadeEnd.Moved, elapsedMs = 0, overlapMs = null, cause = NEXT),
+        CrossfadeOutcome.Skipped(CrossfadeSkip.Early, cause = NEXT),
+      ),
+      service.outcomes,
+    )
+  }
+
+  @Test
+  fun aSeekThatCutsTheOverlapNamesWhereItCameFrom() {
+    val service = Service()
+    val crossfade = crossfade(service)
+    crossfade.handOff(service)
+    crossfade.interrupt(CrossfadeEnd.Seek, SCRUBBER)
+    assertEquals(
+      listOf<CrossfadeOutcome>(CrossfadeOutcome.Cut(CrossfadeEnd.Seek, elapsedMs = 0, overlapMs = null, cause = SCRUBBER)),
+      service.outcomes,
+    )
+  }
+
+  @Test
+  fun previousTwiceWhileTheNextSongWaitsNamesTheRestartAndTheMove() {
+    val service = Service()
+    val crossfade = crossfade(service)
+    crossfade.moved("a")
+    crossfade.playTo(service, 172_000)
+    crossfade.interrupt(CrossfadeEnd.Seek, RESTART)
+    crossfade.moved("z", cause = PREVIOUS)
+    assertEquals(
+      listOf<CrossfadeOutcome>(CrossfadeOutcome.Skipped(CrossfadeEnd.Seek, cause = PREVIOUS, seekFrom = RESTART)),
+      service.outcomes,
+    )
+  }
+
+  @Test
+  fun aSongChangeWhileTheSongWasntPlayingSaysWhy() {
+    fun changeWhile(setUp: Service.() -> Unit): List<CrossfadeOutcome> {
+      val service = Service().apply(setUp)
+      crossfade(service).songChange(service, 100_000, 100_000, to = "c")
+      return service.outcomes
+    }
+    fun skipped(why: CrossfadeReason) = listOf<CrossfadeOutcome>(CrossfadeOutcome.Skipped(why))
+
+    assertEquals(skipped(CrossfadeSkip.Buffering), changeWhile { main.sounding = false; main.buffering = true })
+    assertEquals(skipped(CrossfadeSkip.Paused), changeWhile { main.sounding = false; pause() })
+    assertEquals(
+      skipped(CrossfadeSkip.PausedForSearch),
+      changeWhile { main.sounding = false; pause(); mainPausedForSearch = true },
+    )
+    // A call, or another app, holding playback back.
+    assertEquals(skipped(CrossfadeSkip.HeldBack), changeWhile { main.sounding = false; mainWantsToPlay = false })
+    assertEquals(skipped(CrossfadeSkip.NotPlaying), changeWhile { main.sounding = false })
+  }
+
+  @Test
+  fun aSongChangeWhileTheNextSongWaitsSaysSo() {
+    val service = Service()
+    crossfade(service).songChange(service, 172_000, 173_000, to = "c")
+    assertEquals(listOf<CrossfadeOutcome>(CrossfadeOutcome.Skipped(CrossfadeSkip.WhileWaiting)), service.outcomes)
+  }
+
+  @Test
   fun aSyncReportingTheSameSongAgainLogsNoChange() {
     val service = Service()
     val crossfade = crossfade(service)
@@ -795,6 +883,13 @@ class CrossfadeTest {
     crossfade.moved("a")
     crossfade.moved("a")
     assertTrue(service.outcomes.isEmpty())
+  }
+
+  private companion object {
+    val NEXT = CrossfadeCause("Next")
+    val PREVIOUS = CrossfadeCause("Previous")
+    val RESTART = CrossfadeCause("Previous restarting the song")
+    val SCRUBBER = CrossfadeCause("the scrubber")
   }
 
   /** Equal-power gain [fraction] of the way into a fade-in, worked out by hand: sin(fraction × 90°). */

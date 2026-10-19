@@ -16,6 +16,7 @@ import {
   type QueueContext,
   type QueueSong,
   type RepeatMode,
+  type SeekSource,
   type ShuffleKind,
   type SleepTimerChoice,
   type YtSong,
@@ -447,13 +448,14 @@ export const removeQueueEntry = (key: string): Promise<void> => dispatch({ type:
 /**
  * Seeks the current track. The position shows at once, before the player
  * confirms it, so the scrubber doesn't jump back and "previous" sees it.
+ * [source] names the seek in the app log's crossfade lines.
  */
-export const seekTo = (positionMs: number): void => {
+export const seekTo = (positionMs: number, source: SeekSource): void => {
   playbackState.update((state) => ({ ...state, positionMs, at: Date.now() }));
   void run(
     Effect.gen(function* () {
       const player = yield* Player;
-      yield* player.seekTo(positionMs);
+      yield* player.seekTo(positionMs, source);
     }),
   );
 };
