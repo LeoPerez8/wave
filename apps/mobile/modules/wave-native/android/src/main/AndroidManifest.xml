@@ -19,6 +19,9 @@
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
   <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+  <!-- The Wi-Fi pre-download's job is kept across reboots (PreDownloads, JobInfo.setPersisted). -->
+  <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
   <!--
     The lyrics card's Instagram Stories and WhatsApp destinations show only when the app is
     installed (ShareModule's shareApps); Android 11+ hides other packages unless they're queried.
@@ -45,6 +48,12 @@
       android:name="expo.modules.wavenative.yt.YtDownloadService"
       android:exported="false"
       android:foregroundServiceType="dataSync" />
+
+    <!-- Fetches the start of the day's mixes into the audio cache on Wi-Fi, silently (PreDownloads). -->
+    <service
+      android:name="expo.modules.wavenative.yt.PreDownloadJob"
+      android:permission="android.permission.BIND_JOB_SERVICE"
+      android:exported="false" />
 
     <!-- Keeps Settings' whole-Library lyrics and genre run going in the background (LibraryLookupService). -->
     <service

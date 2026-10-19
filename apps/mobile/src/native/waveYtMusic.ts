@@ -1,5 +1,6 @@
 import type {
   DiscoverRadioSong,
+  HostNetworkUse,
   YtArtistAlbum,
   YtArtistCandidate,
   YtArtistPage,
@@ -7,6 +8,7 @@ import type {
   YtPlaylistFirstPage,
   YtPlaylistPage,
   YtLibraryPlaylist,
+  YtRadioStart,
   YtSession,
   YtSong,
 } from "@wave/core";
@@ -54,6 +56,11 @@ export interface NativeYtRadioPage {
   readonly continuation: string | null;
 }
 
+/** An artist radio's first page, read from their page, and where it started (Core's `YtRadioStart`). */
+export interface NativeYtArtistRadio extends NativeYtRadioPage {
+  readonly start: YtRadioStart;
+}
+
 /**
  * The codes a YT Music request rejects with: no network, YouTube answered
  * with an error or something unreadable, YT Music is off in Settings, or a
@@ -90,14 +97,30 @@ declare class WaveYtMusicModule extends NativeModule<WaveYtMusicEvents> {
    */
   setEnabled(on: boolean): void;
   isEnabled(): boolean;
+  /**
+   * A new network meter's id: the reads given it (artist search, artist
+   * page, radios) count their requests and bytes on the wire on it.
+   */
+  startNetworkMeter(): string;
+  /** What the meter [id] counted, ending it (nothing for one already taken). */
+  takeNetworkUse(id: string): HostNetworkUse;
+  /**
+   * Hands over the day's Wi-Fi pre-download list (Core's `mixPreDownload`;
+   * empty for none): a native job fetches those songs into the audio cache
+   * on an unmetered network with battery not low, without JS. Handing over
+   * the same list again does nothing.
+   */
+  schedulePreDownload(videoIds: readonly string[]): Promise<void>;
+  /** The video ids whose audio the audio cache holds whole: the songs that play offline. */
+  cachedVideos(): Promise<readonly string[]>;
   /** Songs on YT Music for [query] (YouTube Music's "Songs" filter). */
   searchSongs(query: string): Promise<NativeYtSearchPage>;
   /** Artists on YT Music named like [query] (YouTube Music's "Artists" filter), in its order. */
-  searchArtists(query: string): Promise<readonly YtArtistCandidate[]>;
+  searchArtists(query: string, meter?: string): Promise<readonly YtArtistCandidate[]>;
   /** Albums, singles and EPs on YT Music for [query] (YouTube Music's "Albums" filter), in its order. */
   searchAlbums(query: string): Promise<readonly YtArtistAlbum[]>;
   /** The artist page [browseId] (`UC…`): their top songs, albums, singles and songs playlist. */
-  artist(browseId: string): Promise<NativeYtArtistPage>;
+  artist(browseId: string, meter?: string): Promise<NativeYtArtistPage>;
   /** The playlist [playlistId] (without `VL`): its head and its first page of songs. */
   playlist(playlistId: string): Promise<NativeYtPlaylistPage>;
   /** The playlist page a first page's (or a later page's) [continuation] leads to. */
@@ -119,11 +142,24 @@ declare class WaveYtMusicModule extends NativeModule<WaveYtMusicEvents> {
   /** Applies [edits] to the account's playlist [playlistId], in order, in one request. */
   editPlaylist(playlistId: string, edits: readonly NativeYtPlaylistEdit[]): Promise<void>;
   /** The first page of the radio YouTube Music plays after the song [videoId] (it first). */
-  songRadio(videoId: string): Promise<NativeYtRadioPage>;
-  /** The first page of the radio of the artist whose page is [browseId] (`UC…`). */
-  artistRadio(browseId: string): Promise<NativeYtRadioPage>;
+  songRadio(videoId: string, meter?: string): Promise<NativeYtRadioPage>;
+  /**
+   * The first page of the radio of the artist whose page is [browseId]
+   * (`UC…`), read from the page, with where it started.
+   */
+  artistRadio(browseId: string, meter?: string): Promise<NativeYtArtistRadio>;
+  /**
+   * The first page of an artist's radio from where [artistRadio] found it
+   * starts ([playlistId], [params]), without reading their page: rejects
+   * with `ERR_YT_FAILED` when YouTube Music no longer starts one there.
+   */
+  startedRadio(
+    playlistId: string,
+    params: string | null,
+    meter?: string,
+  ): Promise<NativeYtRadioPage>;
   /** The radio page a radio page's [continuation] leads to. */
-  radioMore(continuation: string): Promise<NativeYtRadioPage>;
+  radioMore(continuation: string, meter?: string): Promise<NativeYtRadioPage>;
   /**
    * Caches a YT Music song's cover from [url] beside the Library's artwork, so
    * the player, the notification and Auto show it as they do a Library

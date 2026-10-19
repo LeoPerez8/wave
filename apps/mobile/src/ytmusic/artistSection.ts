@@ -34,6 +34,7 @@ import type { NativeYtSong } from "@/native/waveYtMusic";
 import { useSearchOnlineAlways } from "@/settings/searchOnline";
 import { useYtMusicEnabled } from "@/settings/ytMusic";
 
+import { readArtistPage } from "./candidateCatalog";
 import { useLoadedLibraryFinder } from "./libraryFinder";
 import { useLineToggle } from "./OnlineToggle";
 import { YtMusic, YtMusicError } from "./YtMusic";
@@ -59,7 +60,7 @@ export const readSaved = (artistKey: string) =>
 export const readArtist = (browseId: string) =>
   Effect.gen(function* () {
     const ytMusic = yield* YtMusic;
-    const page = yield* ytMusic.artist(browseId);
+    const page = yield* readArtistPage(browseId);
     const playlistId = page.songsPlaylistId ?? null;
     let read: YtArtistSongsRead<NativeYtSong> | null = null;
     if (playlistId !== null) {
@@ -119,7 +120,7 @@ export const fetchArtist = (
             outcome: "found",
             checkedAt,
             browseId,
-            page: reads.allSongs ? yield* readArtist(browseId) : yield* ytMusic.artist(browseId),
+            page: reads.allSongs ? yield* readArtist(browseId) : yield* readArtistPage(browseId),
           };
     const kept = ytArtistAnswerKept(yield* readSaved(artistKey), answer, checkedAt);
     if (kept !== answer) return kept;

@@ -13,16 +13,18 @@ import {
   magicSeedProfile,
   magicYtSong,
   magicRadioArtists,
-  magicYtCandidates,
   magicQueueEdits,
   magicQueueLabel,
+  MAGIC_QUEUE_LEVELS,
+  magicQueueShare,
   magicSignal,
   magicPlaySignal,
   parseMagicSession,
   reduceQueue,
   startMagicQueue,
+  tasteProfile,
   wantsMagicBatch,
-  type DiscoverRadioSong,
+  type DiscoverMixLevel,
   type GenreProfileOf,
   type MagicSeed,
   type MagicSession,
@@ -152,6 +154,73 @@ describe("A Magic Queue's signals", () => {
     const pool = [seedSong, song("r2", "Removed"), song("o1", "Other")];
     const session = magicSignal(start(), { kind: "removed", song: song("r1", "Removed") });
     assert.deepEqual(magicBatch(session, pool, first).trackIds, ["o1"]);
+  });
+});
+
+describe("A Magic Queue and the taste profile", () => {
+  const NOW = 1_000_000_000_000;
+  const seedSong = song("s1", "Seed Artist", "Seed");
+  const start = () => startMagicQueue(SONG_SEED, [seedSong], { id: "m1", random: first })!.session;
+  const pool = [
+    seedSong,
+    song("plain", "Plain", "Pop"),
+    song("liked", "Liked", "Pop"),
+    song("skipped", "Skipper", "Pop"),
+  ];
+  const songOf = (trackId: string) => pool.find((candidate) => candidate.trackId === trackId);
+  const play = (trackId: string, endReason: "completed" | "skipped", listenedMs: number) => ({
+    trackId,
+    startedAt: NOW,
+    listenedMs,
+    endReason,
+  });
+
+  test("a new session ranks candidates by the profile from its first batch", () => {
+    const taste = tasteProfile(
+      {
+        plays: [play("skipped", "skipped", 4_000)],
+        favorites: [{ trackId: "liked", changedAt: NOW }],
+        downloads: [],
+      },
+      songOf,
+      NOW,
+    );
+    assert.deepEqual(magicBatch(start(), pool, first).trackIds, ["plain", "liked", "skipped"]);
+    assert.deepEqual(magicBatch(start(), pool, first, [], taste).trackIds, [
+      "liked",
+      "plain",
+      "skipped",
+    ]);
+  });
+
+  test("weighs songs never played by how much their artist and genre were liked", () => {
+    const history = [song("old", "Liked", "Pop"), song("jazz", "Someone", "Jazz")];
+    const taste = tasteProfile(
+      {
+        plays: [play("old", "completed", 200_000), play("jazz", "completed", 200_000)],
+        favorites: [],
+        downloads: [],
+      },
+      (trackId) => history.find((candidate) => candidate.trackId === trackId),
+      NOW,
+    );
+    const fresh = [
+      seedSong,
+      song("n1", "Neutral", "Rock"),
+      song("j1", "Other", "Jazz"),
+      song("l1", "Liked", "Rock"),
+    ];
+    assert.deepEqual(magicBatch(start(), fresh, first, [], taste).trackIds, ["l1", "j1", "n1"]);
+  });
+
+  test("keeps the session's own rules: a liked artist skipped in the session is out", () => {
+    const taste = tasteProfile(
+      { plays: [], favorites: [{ trackId: "liked", changedAt: NOW }], downloads: [] },
+      songOf,
+      NOW,
+    );
+    const session = magicSignal(start(), { kind: "skip", song: song("l0", "Liked", "Pop") });
+    assert.deepEqual(magicBatch(session, pool, first, [], taste).trackIds, ["plain", "skipped"]);
   });
 });
 
@@ -451,6 +520,50 @@ describe("A Magic Queue's YouTube Music share", () => {
     assert.ok(ytInBatch(learnYt(start(), "removed", 1)) < 5);
   });
 
+  test("starts at the share its new-music level gives, from 20% to 80%", () => {
+    const at = (level: DiscoverMixLevel) =>
+      startMagicQueue(SONG_SEED, [seedSong], {
+        id: "m1",
+        random: first,
+        ytShare: magicQueueShare(level),
+      })!.session;
+    assert.equal(ytInBatch(at(1)), 2);
+    assert.equal(ytInBatch(at(3)), 5);
+    assert.equal(ytInBatch(at(5)), 8);
+    assert.ok(ytInBatch(at(2)) > 2 && ytInBatch(at(2)) < 5);
+    assert.ok(ytInBatch(at(4)) > 5 && ytInBatch(at(4)) < 8);
+  });
+
+  test("its level card offers five levels, each saying its share of new music", () => {
+    assert.deepEqual(
+      MAGIC_QUEUE_LEVELS.map(({ level, share }) => [level, share]),
+      [
+        [1, "20% new"],
+        [2, "35% new"],
+        [3, "50% new"],
+        [4, "65% new"],
+        [5, "80% new"],
+      ],
+    );
+  });
+
+  test("a share outside 20-80% starts at the nearest bound", () => {
+    const at = (ytShare: number) =>
+      startMagicQueue(SONG_SEED, [seedSong], { id: "m1", random: first, ytShare })!.session;
+    assert.equal(ytInBatch(at(1)), 8);
+    assert.equal(ytInBatch(at(0)), 2);
+  });
+
+  test("signals keep moving a level's share within 20-80%", () => {
+    const high = startMagicQueue(SONG_SEED, [seedSong], {
+      id: "m1",
+      random: first,
+      ytShare: magicQueueShare(5),
+    })!.session;
+    assert.equal(ytInBatch(learnYt(high, "favorite", 3)), 8);
+    assert.ok(ytInBatch(learnYt(high, "skip", 1)) < 8);
+  });
+
   test("always stays between 20% and 80%", () => {
     assert.equal(ytInBatch(learnYt(start(), "favorite", 30)), 8);
     assert.equal(ytInBatch(learnYt(start(), "skip", 30)), 2);
@@ -510,70 +623,7 @@ describe("A Magic Queue's YouTube Music share", () => {
   });
 });
 
-describe("A Magic Queue's YouTube Music candidates", () => {
-  const radioSong = (videoId: string, artist: string, video = false): DiscoverRadioSong => ({
-    videoId,
-    title: `Song ${videoId}`,
-    artists: [artist],
-    album: null,
-    durationMs: null,
-    artworkUrl: null,
-    explicit: false,
-    video,
-  });
-  const rock = genreProfile([{ genre: "Rock" }]);
-  const jazz = genreProfile([{ genre: "Jazz" }]);
-  const profileOf: GenreProfileOf = (artist) =>
-    artist === "Alike" ? rock : artist === "Unlike" ? jazz : undefined;
-  const none = () => false;
-  const options = { seedProfile: rock, profileOf, inLibrary: none };
-
-  test("keep only songs whose artist passes the genre affinity check", () => {
-    const radio = [
-      radioSong("a", "Alike"),
-      radioSong("u", "Unlike"),
-      radioSong("n", "Nobody Knows"),
-      radioSong("b", "Alike"),
-    ];
-    const candidates = magicYtCandidates(radio, options);
-    assert.deepEqual(
-      candidates.map((candidate) => candidate.trackId),
-      ["yt:a", "yt:b"],
-    );
-  });
-
-  test("are songs the Magic Queue weighs, by their artists and their genre from Deezer", () => {
-    const [candidate] = magicYtCandidates([radioSong("a", "Alike")], options);
-    assert.deepEqual(candidate?.artists, [magicArtistKey("Alike")]);
-    assert.equal(candidate?.genre, rock!.keys().next().value);
-    assert.equal(candidate?.song.videoId, "a");
-  });
-
-  test("keep any song for a seed with no genre", () => {
-    const radio = [radioSong("u", "Unlike"), radioSong("n", "Nobody Knows")];
-    const candidates = magicYtCandidates(radio, { ...options, seedProfile: null });
-    assert.deepEqual(
-      candidates.map((candidate) => candidate.trackId),
-      ["yt:u", "yt:n"],
-    );
-  });
-
-  test("leave out music videos, songs the Library has, and a song the radio plays again", () => {
-    const radio = [
-      radioSong("v", "Alike", true),
-      radioSong("l", "Alike"),
-      radioSong("a", "Alike"),
-      { ...radioSong("a2", "Alike"), title: "Song a" },
-      radioSong("a", "Alike"),
-    ];
-    const inLibrary = (played: DiscoverRadioSong) => played.videoId === "l";
-    const candidates = magicYtCandidates(radio, { ...options, inLibrary });
-    assert.deepEqual(
-      candidates.map((candidate) => candidate.trackId),
-      ["yt:a"],
-    );
-  });
-
+describe("A Magic Queue's radio artists", () => {
   test("come from the radio of the seed's artist, or its songs' most credited artists", () => {
     const artistSeed: MagicSeed = { kind: "artist", id: "4", title: "The Seed" };
     assert.deepEqual(magicRadioArtists(artistSeed, ["Someone"]), ["The Seed"]);

@@ -8,19 +8,16 @@
  */
 
 import { artistPhotoName } from "./artistPhoto.ts";
-import { mixRecordingOf, type DiscoverRadioSong } from "./discoverMixes.ts";
-import {
-  mixAffinity,
-  type GenreProfile,
-  type GenreProfileOf,
-  type GenreTagged,
-} from "./genreAffinity.ts";
+import { DISCOVER_MIX_LEVELS, type DiscoverMixLevel } from "./discoverMixLevels.ts";
+import type { DiscoverRadioSong } from "./discoverMixes.ts";
+import { type GenreProfile, type GenreProfileOf, type GenreTagged } from "./genreAffinity.ts";
 import { songFamilies } from "./genreMixes.ts";
 import type { PlayEnd } from "./playEvents.ts";
 import type { QueueState } from "./queue.ts";
 import { isRecord } from "./storedJson.ts";
+import { MAGIC_SKIP_MS, genreKey, tasteWeight, type TasteProfile } from "./tasteProfile.ts";
 import { pickWeighted, type RandomSource } from "./weightedPick.ts";
-import { parseTrackId, ytTrackId } from "./ytMusic.ts";
+import { parseTrackId } from "./ytMusic.ts";
 
 /**
  * An artist as the Magic Queue tells them apart, the same for the Library's
@@ -162,17 +159,33 @@ const YT_SHARE_MAX = 0.8;
 
 const clampShare = (share: number): number => Math.min(YT_SHARE_MAX, Math.max(YT_SHARE_MIN, share));
 
-/** A genre tag compared without case or surrounding spaces. */
-const genreKey = (genre: string | null): string | null => {
-  const key = genre?.trim().toLowerCase() ?? "";
-  return key === "" ? null : key;
-};
+/**
+ * The YouTube Music share a Magic Queue starts at for the new-music [level]
+ * of Home's Magic Queue section: from 20% at level 1 to 80% at level 5, half
+ * at level 3 (the default). Signals then move it within those bounds.
+ */
+export const magicQueueShare = (level: DiscoverMixLevel): number =>
+  YT_SHARE_MIN + ((level - 1) * (YT_SHARE_MAX - YT_SHARE_MIN)) / 4;
+
+/** The levels the Magic Queue section's level card offers, each with the share it starts at. */
+export const MAGIC_QUEUE_LEVELS: readonly {
+  readonly level: DiscoverMixLevel;
+  readonly label: string;
+  /** "35% new": the header control's own label. */
+  readonly share: string;
+}[] = DISCOVER_MIX_LEVELS.map(({ level, label }) => ({
+  level,
+  label,
+  share: `${Math.round(magicQueueShare(level) * 100)}% new`,
+}));
 
 /**
  * Starts a Magic Queue from [seed], whose songs are [seedSongs] (the song
  * itself for a song seed): it plays that song, or a random one of the
  * seed's otherwise. Its YouTube Music radio grows from [radio] (none
- * without). Null when the seed has no songs.
+ * without). YouTube Music's share of a batch starts at [ytShare]
+ * (`magicQueueShare`, kept within 20-80%), half without. Null when the seed
+ * has no songs.
  */
 export const startMagicQueue = (
   seed: MagicSeed,
@@ -181,10 +194,12 @@ export const startMagicQueue = (
     id,
     random,
     radio,
+    ytShare = YT_SHARE_START,
   }: {
     readonly id: string;
     readonly random: RandomSource;
     readonly radio?: MagicRadioSeed;
+    readonly ytShare?: number;
   },
 ): { readonly session: MagicSession; readonly first: string } | null => {
   const pick =
@@ -208,7 +223,7 @@ export const startMagicQueue = (
       artistAffinity,
       genreAffinity,
       excludedArtists: [],
-      ytShare: YT_SHARE_START,
+      ytShare: clampShare(ytShare),
       radioArtists: radio === undefined ? [] : magicRadioArtists(seed, radio.artists),
       seedProfile:
         radio === undefined || radio.profile === null ? null : Object.fromEntries(radio.profile),
@@ -217,25 +232,39 @@ export const startMagicQueue = (
   };
 };
 
-/** How heavily [song] weighs in [session]'s next batch. */
-const weightOf = (session: MagicSession, song: MagicSong): number => {
+/**
+ * How heavily [song] weighs in [session]'s next batch: by what the session
+ * learned, times what the owner's [taste] profile says of it (`tasteWeight`).
+ */
+const weightOf = (session: MagicSession, song: MagicSong, taste: TasteProfile | null): number => {
   const artists = song.artists.reduce(
     (sum, artist) => sum + (session.artistAffinity[artist] ?? 0),
     0,
   );
   const genre = genreKey(song.genre);
-  return (1 + artists) * (genre === null ? 1 : (session.genreAffinity[genre] ?? 1));
+  const learned = (1 + artists) * (genre === null ? 1 : (session.genreAffinity[genre] ?? 1));
+  return taste === null ? learned : learned * tasteWeight(taste, song);
 };
 
 /**
- * [count] of [songs] picked at random from [random], the heavier more often;
- * a song [session] queued already, or one by an artist it excluded, never.
+ * How heavily [song] weighs by what [session] learned alone (its artists'
+ * and its genre's weight), as a batch weighs it before the taste profile:
+ * 1 for a song the session knows nothing about.
+ */
+export const magicSessionWeight = (session: MagicSession, song: MagicSong): number =>
+  weightOf(session, song, null);
+
+/**
+ * [count] of [songs] picked at random from [random], the heavier more often
+ * (weighed with [taste]); a song [session] queued already, or one by an
+ * artist it excluded, never.
  */
 const pick = (
   session: MagicSession,
   songs: readonly MagicSong[],
   count: number,
   random: RandomSource,
+  taste: TasteProfile | null,
 ): MagicSong[] => {
   if (count <= 0) return [];
   const used = new Set(session.used);
@@ -246,7 +275,7 @@ const pick = (
     if (used.has(candidate.trackId) || seen.has(candidate.trackId)) continue;
     if (candidate.artists.some((artist) => excluded.has(artist))) continue;
     seen.add(candidate.trackId);
-    candidates.push({ song: candidate, weight: weightOf(session, candidate) });
+    candidates.push({ song: candidate, weight: weightOf(session, candidate, taste) });
   }
   // Heaviest first, so the luckiest draw lands on the heaviest song.
   // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh array; Hermes lacks toSorted
@@ -277,25 +306,29 @@ const interleave = <T>(a: readonly T[], b: readonly T[]): T[] => {
  * with the YT Music switch off). YouTube Music gets its share of the batch
  * (`ytShare`) and the Library the rest, either making up for the other
  * running short; the two's songs are spread through each other. Each song
- * is picked at random from [random], the heavier more often. A song the
- * session queued already never comes back, nor one by an artist it
- * excluded; fewer (or none) when both run dry.
+ * is picked at random from [random], the heavier more often: by what the
+ * session learned and, from the first batch, by the owner's [taste] profile
+ * (`tasteProfile`; none weighs by the session alone). A song the session
+ * queued already never comes back, nor one by an artist it excluded; fewer
+ * (or none) when both run dry.
  */
 export const magicBatch = (
   session: MagicSession,
   library: readonly MagicSong[],
   random: RandomSource,
   yt: readonly MagicSong[] = [],
+  taste: TasteProfile | null = null,
 ): { readonly session: MagicSession; readonly trackIds: readonly string[] } => {
   const size = session.batches === 0 ? FIRST_BATCH : BATCH;
-  const fromYt = pick(session, yt, Math.round(size * session.ytShare), random);
-  const fromLibrary = pick(session, library, size - fromYt.length, random);
+  const fromYt = pick(session, yt, Math.round(size * session.ytShare), random, taste);
+  const fromLibrary = pick(session, library, size - fromYt.length, random, taste);
   const taken = new Set(fromYt.map((song) => song.trackId));
   const moreYt = pick(
     session,
     yt.filter((song) => !taken.has(song.trackId)),
     size - fromYt.length - fromLibrary.length,
     random,
+    taste,
   );
   const trackIds = interleave(fromLibrary, [...fromYt, ...moreYt]).map((song) => song.trackId);
   return {
@@ -377,7 +410,7 @@ export const magicSignal = (learning: MagicSession, { kind, song }: MagicSignal)
 };
 
 /** Tapping Next before this much of a song played is a skip; later, it's neutral. */
-export const MAGIC_SKIP_MS = 30_000;
+export { MAGIC_SKIP_MS };
 
 /**
  * What a play's end tells a Magic Queue: Next (moving on to the following
@@ -517,44 +550,6 @@ export const magicRadioArtists = (
 
 /** A YouTube Music candidate of a Magic Queue: a song it weighs, with the radio's [song] it is. */
 export type MagicYtCandidate<S extends DiscoverRadioSong> = MagicSong & { readonly song: S };
-
-/**
- * The YouTube Music candidates in a seed's [radio], in its order: songs whose
- * artist suits the seed's genres ([seedProfile], `magicSeedProfile`, by the
- * shared `mixAffinity` check over [profileOf]: a match only, so an artist
- * with no genre known stays out; any song for a seed with no genre). Music
- * videos, songs the Library has ([inLibrary]) and a song the radio plays
- * again are left out. Each weighs as `magicYtSong` has it.
- */
-export const magicYtCandidates = <S extends DiscoverRadioSong>(
-  radio: readonly S[],
-  {
-    seedProfile,
-    profileOf,
-    inLibrary,
-  }: {
-    readonly seedProfile: GenreProfile | null;
-    readonly profileOf: GenreProfileOf;
-    readonly inLibrary: (song: S) => boolean;
-  },
-): MagicYtCandidate<S>[] => {
-  const affinity = mixAffinity(seedProfile, profileOf);
-  const seen = new Set<string>();
-  const candidates: MagicYtCandidate<S>[] = [];
-  for (const song of radio) {
-    const recording = mixRecordingOf(song);
-    if (song.video || seen.has(song.videoId) || seen.has(recording)) continue;
-    seen.add(song.videoId);
-    seen.add(recording);
-    if (inLibrary(song) || affinity(song) !== "match") continue;
-    const weighed = magicYtSong(
-      { trackId: ytTrackId(song.videoId), artists: song.artists },
-      profileOf,
-    );
-    candidates.push({ ...weighed, song });
-  }
-  return candidates;
-};
 
 /** What Up Next says over a Magic Queue: "Magic Queue · from <seed>". */
 export const magicQueueLabel = (session: MagicSession): string =>

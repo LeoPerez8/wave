@@ -5,6 +5,7 @@ import {
   type BlackPlayerPlay,
   type BlackPlayerTrack,
   type ImportedPlays,
+  type TasteHistory,
   type IndexedFile,
   type LibrarySongSort,
   type PlaylistSong,
@@ -31,6 +32,8 @@ import {
   type MixPlaylistEntry,
   type StreamedSong,
   type DuplicateCheckFile,
+  type CatalogPage,
+  type CatalogSong,
 } from "@wave/core";
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { drizzle, type ExpoSQLiteDatabase } from "drizzle-orm/expo-sqlite";
@@ -92,6 +95,7 @@ import {
   type RecordedPlay,
 } from "./db/playHistory";
 import { listeningSums } from "./db/playTotals";
+import { tasteHistory } from "./db/taste";
 import {
   removePlaylistImage,
   selectPlaylistImageOriginal,
@@ -149,6 +153,7 @@ import {
   selectPlaylistedSongs,
   selectStreamedSongs,
 } from "./db/mixKnown";
+import { addCandidates, selectCandidateCatalog } from "./db/candidateCatalog";
 import { hasUnscannedRoot, pruneOrphans, saveBatch, type SavedBatch } from "./db/save";
 import * as schema from "./db/schema";
 import {
@@ -184,7 +189,12 @@ import {
   selectMissingSongs,
   signOut,
 } from "./db/missingSongs";
-import { saveYtArtist, selectYtArtist } from "./db/ytArtists";
+import {
+  saveYtArtist,
+  selectYtArtist,
+  selectYtArtistSimilar,
+  type YtArtistSimilar,
+} from "./db/ytArtists";
 import {
   selectSongOrder,
   selectSongSummaries,
@@ -748,6 +758,8 @@ export class LibraryStore extends Context.Service<
     ) => Effect.Effect<void, LibraryStoreError>;
     /** The recording key of every song ever played (Core's `recordingKey`), files gone or not. */
     readonly playedRecordingKeys: Effect.Effect<readonly string[], LibraryStoreError>;
+    /** The plays, stars and downloads Core's taste profile is derived from (`db/taste.ts`). */
+    readonly tasteHistory: Effect.Effect<TasteHistory, LibraryStoreError>;
     /** The ids of every starred track. */
     readonly favoriteTrackIds: Effect.Effect<readonly number[], LibraryStoreError>;
     /** Stars (or unstars) the tracks; those starred already keep when they were starred. */
@@ -975,6 +987,22 @@ export class LibraryStore extends Context.Service<
      * them out (Core's `discoverMixKeep`).
      */
     readonly knownVideos: Effect.Effect<readonly string[], LibraryStoreError>;
+    /**
+     * Adds what a radio or an artist page brought at [at] to the candidate
+     * catalog (Core's `catalogSeen`), and takes out what leaves
+     * (`catalogLeaving`). This phone only.
+     */
+    readonly addCandidates: (
+      page: CatalogPage,
+      at: number,
+    ) => Effect.Effect<void, LibraryStoreError>;
+    /** The candidate catalog: every song with the radios that brought it. */
+    readonly candidateCatalog: Effect.Effect<readonly CatalogSong[], LibraryStoreError>;
+    /**
+     * Every saved YT Music artist page's artist with who "Fans might also
+     * like", in the page's order (the artist graph's similar artists).
+     */
+    readonly ytArtistSimilar: Effect.Effect<readonly YtArtistSimilar[], LibraryStoreError>;
   }
 >()("@wave/mobile/library/LibraryStore") {}
 
@@ -1431,6 +1459,8 @@ const make = Effect.gen(function* () {
 
     playedRecordingKeys: attempt("read the songs played", () => playedRecordingKeys(db)),
 
+    tasteHistory: attempt("read the taste history", () => tasteHistory(db)),
+
     favoriteTrackIds: attempt("read favorites", () => selectFavoriteTrackIds(db)),
 
     setFavorites: (trackIds, on) =>
@@ -1565,6 +1595,15 @@ const make = Effect.gen(function* () {
     playlistedSongs: attempt("read the playlists' songs", () => selectPlaylistedSongs(db)),
 
     knownVideos: attempt("read the videos the owner knows", () => selectKnownVideos(db)),
+
+    addCandidates: (page, at) =>
+      attempt("add to the candidate catalog", () => addCandidates(db, page, at)),
+
+    candidateCatalog: attempt("read the candidate catalog", () => selectCandidateCatalog(db)),
+
+    ytArtistSimilar: attempt("read the saved artist pages' similar artists", () =>
+      selectYtArtistSimilar(db),
+    ),
   });
 });
 

@@ -6,6 +6,7 @@ import {
   type YtLibraryPlaylist,
   type YtPlaylistReadOptions,
   type YtQuietReason,
+  type YtRadioStart,
   type YtSession,
 } from "@wave/core";
 import * as Context from "effect/Context";
@@ -13,6 +14,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
+import { ytNetworkMeter } from "@/lib/networkMeter";
 import type { IndexedArtwork } from "@/library/LibraryStore";
 import { toIndexedArtwork } from "@/library/LibraryScan";
 import type { NativeYtAlbum } from "@/native/waveYtDownloads";
@@ -20,6 +22,7 @@ import {
   WaveYtMusic,
   ytErrorCode,
   type NativeYtArtistPage,
+  type NativeYtArtistRadio,
   type NativeYtOwnEntry,
   type NativeYtPlaylist,
   type NativeYtPlaylistEdit,
@@ -114,12 +117,18 @@ export class YtMusic extends Context.Service<
       edits: readonly NativeYtPlaylistEdit[],
     ) => Effect.Effect<void, YtLibraryError>;
     /**
-     * The first page of a radio: the song [videoId]'s, or the artist's whose
-     * page is [browseId]. Needs no sign-in.
+     * The first page of a radio: the song [videoId]'s, or an artist's from
+     * where [artistRadio] found it starts ([start]), without their page.
+     * Needs no sign-in.
      */
     readonly radio: (
-      seed: { readonly videoId: string } | { readonly browseId: string },
+      seed: { readonly videoId: string } | { readonly start: YtRadioStart },
     ) => Effect.Effect<NativeYtRadioPage, YtMusicError>;
+    /**
+     * The first page of the radio of the artist whose page is [browseId]
+     * (`UC…`), from the page's Start radio, with where it started.
+     */
+    readonly artistRadio: (browseId: string) => Effect.Effect<NativeYtArtistRadio, YtMusicError>;
     /** The radio page a radio page's [continuation] leads to. */
     readonly radioMore: (continuation: string) => Effect.Effect<NativeYtRadioPage, YtMusicError>;
     /** Caches a song's cover from [url] beside the Library's artwork, with its palette. */
@@ -138,17 +147,26 @@ export class YtMusic extends Context.Service<
   }
 >()("@wave/mobile/ytmusic/YtMusic") {}
 
+/**
+ * A native read that counts on the network meter of the run it's part of
+ * (`withNetworkLog`: a mix build, a Magic Queue batch), if any.
+ */
+const metered = <A>(
+  read: (meter: string | undefined) => Promise<A>,
+): Effect.Effect<A, YtMusicError> =>
+  Effect.flatMap(ytNetworkMeter, (meter) =>
+    Effect.tryPromise({ try: () => read(meter), catch: fromNative }),
+  );
+
 // Reading, checking or forgetting the session doesn't fail (no answer leaves it
 // as it was), so a rejection there is a defect.
 export const layer = Layer.succeed(YtMusic, {
   searchSongs: (query) =>
     Effect.tryPromise({ try: () => WaveYtMusic.searchSongs(query), catch: fromNative }),
-  searchArtists: (query) =>
-    Effect.tryPromise({ try: () => WaveYtMusic.searchArtists(query), catch: fromNative }),
+  searchArtists: (query) => metered((meter) => WaveYtMusic.searchArtists(query, meter)),
   searchAlbums: (query) =>
     Effect.tryPromise({ try: () => WaveYtMusic.searchAlbums(query), catch: fromNative }),
-  artist: (browseId) =>
-    Effect.tryPromise({ try: () => WaveYtMusic.artist(browseId), catch: fromNative }),
+  artist: (browseId) => metered((meter) => WaveYtMusic.artist(browseId, meter)),
   // Album pages are read by the downloads module (a download's tags come from them), once a session.
   album: (browseId) => Effect.tryPromise({ try: () => readYtAlbum(browseId), catch: fromNative }),
   playlist: (playlistId, options = {}) =>
@@ -178,15 +196,13 @@ export const layer = Layer.succeed(YtMusic, {
       catch: libraryFailure,
     }),
   radio: (seed) =>
-    Effect.tryPromise({
-      try: () =>
-        "videoId" in seed
-          ? WaveYtMusic.songRadio(seed.videoId)
-          : WaveYtMusic.artistRadio(seed.browseId),
-      catch: fromNative,
-    }),
-  radioMore: (continuation) =>
-    Effect.tryPromise({ try: () => WaveYtMusic.radioMore(continuation), catch: fromNative }),
+    metered((meter) =>
+      "videoId" in seed
+        ? WaveYtMusic.songRadio(seed.videoId, meter)
+        : WaveYtMusic.startedRadio(seed.start.playlistId, seed.start.params, meter),
+    ),
+  artistRadio: (browseId) => metered((meter) => WaveYtMusic.artistRadio(browseId, meter)),
+  radioMore: (continuation) => metered((meter) => WaveYtMusic.radioMore(continuation, meter)),
   cacheArtwork: (url) =>
     Effect.tryPromise({ try: () => WaveYtMusic.cacheArtwork(url), catch: fromNative }).pipe(
       Effect.map(toIndexedArtwork),

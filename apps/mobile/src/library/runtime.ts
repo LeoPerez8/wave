@@ -9,6 +9,7 @@ import { whenFree } from "@/lib/backgroundWork";
 import * as MagicQueue from "@/playback/MagicQueue";
 import * as PlaybackPersistence from "@/playback/PlaybackPersistence";
 import * as PlayHistory from "@/playback/PlayHistory";
+import * as TasteProfile from "@/playback/TasteProfile";
 import * as Player from "@/playback/Player";
 import * as Queue from "@/playback/Queue";
 import * as Spotify from "@/spotify/Spotify";
@@ -45,6 +46,7 @@ export const appLayer = Layer.mergeAll(
   PlaybackPersistence.layer,
   PlayHistory.layer,
   MagicQueue.layer,
+  TasteProfile.layer,
   Stats.layer,
   Auto.layer,
   WaveSync.layer,

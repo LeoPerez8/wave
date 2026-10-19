@@ -1,11 +1,4 @@
-import { Text, View } from "react-native";
-
-import { Press } from "@/motion/Press";
-
-import { Artwork } from "./Artwork";
-import { CatalogLine } from "./CatalogLine";
-import { TileCheck } from "./CheckCell";
-import { CELL } from "./grid";
+import { CoverTile } from "./CoverTile";
 
 export type AlbumSummary = {
   id: string;
@@ -53,39 +46,18 @@ type Props = {
 };
 
 export function AlbumTile({ album, size, onPress, onLongPress, detail, checked }: Props) {
-  const selecting = checked !== undefined;
   return (
-    <Press
-      accessibilityRole={selecting ? "checkbox" : "button"}
-      accessibilityLabel={`${album.title} by ${album.albumArtist}, ${detail ?? furnitureLabel(album)}`}
-      accessibilityState={selecting ? { checked } : undefined}
+    <CoverTile
+      title={album.title}
+      byline={album.albumArtist}
+      detail={detail ?? furnitureLine(album)}
+      detailLabel={detail ?? furnitureLabel(album)}
+      artworkUri={album.artworkUri}
+      tint={album.tint}
+      size={size}
       onPress={onPress}
       onLongPress={onLongPress}
-      depth={0.02}
-      style={{ width: size }}
-    >
-      <View>
-        <Artwork uri={album.artworkUri} tint={album.tint} size={size} />
-        {selecting && <TileCheck checked={checked} />}
-      </View>
-      <View style={{ paddingTop: CELL * 1.5, gap: CELL / 4 }}>
-        <CatalogLine>{album.albumArtist}</CatalogLine>
-        {/* Two lines reserved, so the furniture line lands in the same place on every tile. */}
-        <Text
-          numberOfLines={2}
-          className="font-sans text-body font-medium text-foreground"
-          style={{ minHeight: CELL * 5.5 }}
-        >
-          {album.title}
-        </Text>
-        <Text
-          numberOfLines={1}
-          className="font-sans text-footnote text-secondary"
-          style={{ fontVariant: ["tabular-nums"] }}
-        >
-          {detail ?? furnitureLine(album)}
-        </Text>
-      </View>
-    </Press>
+      checked={checked}
+    />
   );
 }

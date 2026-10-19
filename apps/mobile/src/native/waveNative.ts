@@ -132,6 +132,8 @@ declare class WaveNativeModule extends NativeModule<WaveNativeEvents> {
   getDefaultMusicFolder(): string;
   /** Whether the phone is on mobile data rather than Wi-Fi (a quality replacement's card says so). */
   onMobileData(): boolean;
+  /** Whether the phone is online: Android checked its default network reaches the internet. */
+  online(): boolean;
   /** Opens the system folder picker and resolves the picked folder's absolute path. */
   pickFolder(): Promise<FolderPick>;
   /** Opens the system file picker for M3U playlists; one result per picked file, none when cancelled. */
@@ -306,6 +308,15 @@ export const onMobileData = (): boolean => {
     return WaveNative.onMobileData();
   } catch {
     return false;
+  }
+};
+
+/** Whether the phone is online now; online when the module can't tell. */
+export const online = (): boolean => {
+  try {
+    return WaveNative.online();
+  } catch {
+    return true;
   }
 };
 

@@ -145,6 +145,9 @@ class WaveNativeModule : Module() {
     /** Whether the phone is on mobile data rather than Wi-Fi (a quality replacement's card says so). */
     Function("onMobileData") { Connectivity(context).onMobileData() }
 
+    /** Whether the phone is online: Android checked its default network reaches the internet. */
+    Function("online") { Connectivity(context).online() }
+
     Function("getDefaultMusicFolder") {
       @Suppress("DEPRECATION")
       Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC).absolutePath
