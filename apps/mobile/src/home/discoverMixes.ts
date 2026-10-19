@@ -76,6 +76,7 @@ import { showToast } from "@/overlay/toast";
 import { useDontPlayExplicit } from "@/settings/dontPlayExplicit";
 import { useYtMusicEnabled } from "@/settings/ytMusic";
 import { Stats } from "@/stats/Stats";
+import { noteArtistPage, noteRadio } from "@/ytmusic/candidateCatalog";
 import { searchAllowanceFreeAt } from "@/ytmusic/searchAllowance";
 import { YtMusic } from "@/ytmusic/YtMusic";
 
@@ -103,12 +104,15 @@ const similarArtists = (name: string) =>
     const browseId = yield* ytArtistBrowseId(name);
     if (browseId === null) return [];
     const ytMusic = yield* YtMusic;
-    return (yield* ytMusic.artist(browseId)).similar ?? [];
+    const page = yield* ytMusic.artist(browseId);
+    yield* noteArtistPage(page);
+    return page.similar ?? [];
   });
 
 /**
  * [pools] with the similar artists Core asks for (`artistMixSimilarSource`),
- * one Library artist's page at a time. A page that can't be read counts as
+ * one Library artist's page at a time (a page read now feeds the candidate
+ * catalog its top songs). A page that can't be read counts as
  * one with no similar artists, so the other seeds stand as they are.
  */
 const withSimilar = (pools: ArtistMixPools) =>
@@ -128,6 +132,8 @@ const withSimilar = (pools: ArtistMixPools) =>
 type Filter = DiscoverMixFilter<NativeYtRadioSong>;
 
 interface ReadingRadio {
+  /** The radio's artist, whose radio the candidate catalog files its songs under. */
+  readonly seed: string;
   readonly songs: NativeYtRadioSong[];
   continuation: string | null;
 }
@@ -156,21 +162,33 @@ const mixGenres = (library: GenreProfileLibrary): MixGenres => ({
  * (`discoverMixSongs`, enough for level 5) are too few, the other seeds'
  * mixes aside: they're read at the same time, and Core takes out what an
  * earlier seed's mix has once every seed is read (`discoverMixesOfRadios`).
- * Null when no radio could be read.
+ * Every page read goes into the candidate catalog as its artist's radio
+ * (`noteRadio`), however the read ends. Null when no radio could be read.
  */
 const readRadios = (seed: DiscoverMixSeed, filter: Filter, genres: MixGenres) =>
   Effect.gen(function* () {
     const ytMusic = yield* YtMusic;
+    const artists = mixSeedArtists(seed);
     const firstPages = yield* Effect.all(
-      mixSeedArtists(seed).map((artist) => Effect.result(artistRadio(artist))),
+      artists.map((artist) => Effect.result(artistRadio(artist))),
       { concurrency: "unbounded" },
     );
-    const radios: ReadingRadio[] = firstPages.flatMap((page) =>
+    const radios: ReadingRadio[] = firstPages.flatMap((page, at) =>
       Result.isSuccess(page) && page.success !== null
-        ? [{ songs: [...page.success.songs], continuation: page.success.continuation }]
+        ? [
+            {
+              seed: artists[at]?.name ?? seed.name,
+              songs: [...page.success.songs],
+              continuation: page.success.continuation,
+            },
+          ]
         : [],
     );
     if (radios.length === 0) return null;
+    // Whatever the reading below comes to, every page read feeds the candidate catalog.
+    yield* Effect.addFinalizer(() =>
+      Effect.forEach(radios, (radio) => noteRadio(radio.seed, radio.songs), { discard: true }),
+    );
     const { library, profileOf } = genres;
     // The seed's own artists first: an outside seed needs its profile to judge any song.
     const seedArtists = { artists: mixSeedArtists(seed).map((artist) => artist.name) };
@@ -223,7 +241,7 @@ const readRadios = (seed: DiscoverMixSeed, filter: Filter, genres: MixGenres) =>
       yield* knowGenres;
     }
     return { seed, radio: interleaveRadios(radios.map((r) => r.songs)), affinity };
-  });
+  }).pipe(Effect.scoped);
 
 /**
  * The mixes [seeds] make, or null when no seed made a usable mix. Every

@@ -32,6 +32,8 @@ import {
   type MixPlaylistEntry,
   type StreamedSong,
   type DuplicateCheckFile,
+  type CatalogPage,
+  type CatalogSong,
 } from "@wave/core";
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { drizzle, type ExpoSQLiteDatabase } from "drizzle-orm/expo-sqlite";
@@ -151,6 +153,7 @@ import {
   selectPlaylistedSongs,
   selectStreamedSongs,
 } from "./db/mixKnown";
+import { addCandidates, selectCandidateCatalog } from "./db/candidateCatalog";
 import { hasUnscannedRoot, pruneOrphans, saveBatch, type SavedBatch } from "./db/save";
 import * as schema from "./db/schema";
 import {
@@ -979,6 +982,17 @@ export class LibraryStore extends Context.Service<
      * them out (Core's `discoverMixKeep`).
      */
     readonly knownVideos: Effect.Effect<readonly string[], LibraryStoreError>;
+    /**
+     * Adds what a radio or an artist page brought at [at] to the candidate
+     * catalog (Core's `catalogSeen`), and takes out what leaves
+     * (`catalogLeaving`). This phone only.
+     */
+    readonly addCandidates: (
+      page: CatalogPage,
+      at: number,
+    ) => Effect.Effect<void, LibraryStoreError>;
+    /** The candidate catalog: every song with the radios that brought it. */
+    readonly candidateCatalog: Effect.Effect<readonly CatalogSong[], LibraryStoreError>;
   }
 >()("@wave/mobile/library/LibraryStore") {}
 
@@ -1571,6 +1585,11 @@ const make = Effect.gen(function* () {
     playlistedSongs: attempt("read the playlists' songs", () => selectPlaylistedSongs(db)),
 
     knownVideos: attempt("read the videos the owner knows", () => selectKnownVideos(db)),
+
+    addCandidates: (page, at) =>
+      attempt("add to the candidate catalog", () => addCandidates(db, page, at)),
+
+    candidateCatalog: attempt("read the candidate catalog", () => selectCandidateCatalog(db)),
   });
 });
 

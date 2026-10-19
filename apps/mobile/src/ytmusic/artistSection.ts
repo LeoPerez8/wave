@@ -34,6 +34,7 @@ import type { NativeYtSong } from "@/native/waveYtMusic";
 import { useSearchOnlineAlways } from "@/settings/searchOnline";
 import { useYtMusicEnabled } from "@/settings/ytMusic";
 
+import { noteArtistPage } from "./candidateCatalog";
 import { useLoadedLibraryFinder } from "./libraryFinder";
 import { useLineToggle } from "./OnlineToggle";
 import { YtMusic, YtMusicError } from "./YtMusic";
@@ -47,6 +48,15 @@ export const readSaved = (artistKey: string) =>
     return yield* store.ytArtist(artistKey);
   }).pipe(Effect.orElseSucceed(() => null));
 
+/** The artist page [browseId] alone; its top songs feed the candidate catalog (`noteArtistPage`). */
+const readArtistPage = (browseId: string) =>
+  Effect.gen(function* () {
+    const ytMusic = yield* YtMusic;
+    const page = yield* ytMusic.artist(browseId);
+    yield* noteArtistPage(page);
+    return page;
+  });
+
 /**
  * The artist page [browseId] with every song of the artist (`allSongs`): the
  * Songs shelf's playlist read after the page (Core's `readYtPlaylist`, with
@@ -59,7 +69,7 @@ export const readSaved = (artistKey: string) =>
 export const readArtist = (browseId: string) =>
   Effect.gen(function* () {
     const ytMusic = yield* YtMusic;
-    const page = yield* ytMusic.artist(browseId);
+    const page = yield* readArtistPage(browseId);
     const playlistId = page.songsPlaylistId ?? null;
     let read: YtArtistSongsRead<NativeYtSong> | null = null;
     if (playlistId !== null) {
@@ -119,7 +129,7 @@ export const fetchArtist = (
             outcome: "found",
             checkedAt,
             browseId,
-            page: reads.allSongs ? yield* readArtist(browseId) : yield* ytMusic.artist(browseId),
+            page: reads.allSongs ? yield* readArtist(browseId) : yield* readArtistPage(browseId),
           };
     const kept = ytArtistAnswerKept(yield* readSaved(artistKey), answer, checkedAt);
     if (kept !== answer) return kept;

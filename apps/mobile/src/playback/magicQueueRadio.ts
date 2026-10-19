@@ -28,6 +28,7 @@ import { withNetworkLog } from "@/lib/networkMeter";
 import type { SongRow } from "@/library/LibraryStore";
 import type { NativeYtRadioSong } from "@/native/waveYtMusic";
 import { ytMusicEnabled } from "@/settings/ytMusic";
+import { noteRadio } from "@/ytmusic/candidateCatalog";
 import { YtMusic } from "@/ytmusic/YtMusic";
 
 type MagicRadioCandidate = MagicYtCandidate<NativeYtRadioSong>;
@@ -38,17 +39,20 @@ const RADIO_TIMEOUT = "15 seconds";
 /**
  * The first page of [name]'s artist radio, and the next one when there is
  * one; none when YouTube Music doesn't have the artist or can't be reached.
+ * What it read goes into the candidate catalog as [name]'s radio (`noteRadio`).
  */
 const artistRadioSongs = (name: string) =>
   Effect.gen(function* () {
     const first = yield* artistRadio({ name });
     if (first === null) return [];
-    if (first.continuation === null) return first.songs;
     const ytMusic = yield* YtMusic;
-    const next = yield* ytMusic
-      .radioMore(first.continuation)
-      .pipe(Effect.orElseSucceed(() => ({ songs: [], continuation: null })));
-    return [...first.songs, ...next.songs];
+    const next =
+      first.continuation === null
+        ? null
+        : yield* ytMusic.radioMore(first.continuation).pipe(Effect.orElseSucceed(() => null));
+    const songs = next === null ? first.songs : [...first.songs, ...next.songs];
+    yield* noteRadio(name, songs);
+    return songs;
   }).pipe(Effect.orElseSucceed((): readonly NativeYtRadioSong[] => []));
 
 /** The radio read for a session, kept so each batch doesn't read it again. */
