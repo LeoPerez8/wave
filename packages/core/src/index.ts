@@ -1787,3 +1787,11 @@ export { throttledFailures, throttledFailuresLine } from "./throttledFailures.ts
 export type { ThrottledFailureJob, ThrottledFailuresInput } from "./throttledFailures.ts";
 export { songChangeCause } from "./songChangeCause.ts";
 export type { SeekSource, SongChangeCause } from "./songChangeCause.ts";
+export {
+  TASTE_HALF_LIFE_MS,
+  tasteLearned,
+  tastePlaySignal,
+  tasteProfile,
+  tasteWeight,
+} from "./tasteProfile.ts";
+export type { TasteHistory, TasteProfile, TasteSignal, TasteSignalKind } from "./tasteProfile.ts";

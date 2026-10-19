@@ -2,7 +2,6 @@ import {
   MAGIC_QUEUE_CONTEXT,
   genreProfile,
   isMagicQueue,
-  libraryTrackIds,
   magicBatch,
   magicBatchLoading,
   magicPickEnded,
@@ -12,7 +11,6 @@ import {
   magicQueueLabel,
   magicSignal,
   parseMagicSession,
-  parseTrackId,
   playEndPending,
   startMagicQueue as startSession,
   wantsMagicBatch,
@@ -33,11 +31,13 @@ import { onStarred, onYtSongSignal } from "@/library/libraryChanges";
 import { LibraryStore, songHasFile, type SongRow } from "@/library/LibraryStore";
 import { YtMusic } from "@/ytmusic/YtMusic";
 
-import { magicRadioCandidates, magicStreamedSong } from "./magicQueueRadio";
+import { magicRadioCandidates } from "./magicQueueRadio";
+import { magicSongsOf } from "./magicSongs";
 import { Player } from "./Player";
 import { onPlayEnded, playTracker } from "./PlayHistory";
 import { Queue, queueState, toQueueTrack, type QueueTrack } from "./Queue";
-import { queueTracks, toYtQueueTrack } from "./queueTracks";
+import { toYtQueueTrack } from "./queueTracks";
+import { tasteProfileNow } from "./TasteProfile";
 import { cacheYtCoversInBackground } from "./ytQueueTracks";
 
 /**
@@ -223,17 +223,9 @@ export const layer = Layer.effectDiscard(
     const learn = (kind: MagicSignalKind, trackIds: readonly string[]) =>
       Effect.gen(function* () {
         if (activeMagicSession() === null) return;
-        const ids = libraryTrackIds(trackIds);
-        const library = ids.length === 0 ? [] : yield* store.songsByIds(ids);
-        const toMagicSong = magicLibrarySongs(library.length === 0 ? [] : yield* store.listArtists);
-        const known = queueTracks.get();
-        const streamed = trackIds.flatMap((id) => {
-          const track = known.get(id);
-          return track === undefined || parseTrackId(id)?.kind !== "yt"
-            ? []
-            : [magicStreamedSong({ id, artists: track.artists ?? [track.artist] })];
-        });
-        const songs = [...library.map(toMagicSong), ...streamed];
+        const songs = yield* magicSongsOf(trackIds).pipe(
+          Effect.provideService(LibraryStore, store),
+        );
         const session = activeMagicSession();
         if (session === null || songs.length === 0) return;
         save(songs.reduce((learned, song) => magicSignal(learned, { kind, song }), session));
@@ -255,6 +247,8 @@ export const layer = Layer.effectDiscard(
       Effect.gen(function* () {
         yield* awaitSignals;
         const library = yield* Effect.provideService(libraryNow, LibraryStore, store);
+        // The owner's taste weighs from the session's first batch on.
+        const taste = yield* Effect.provideService(tasteProfileNow, LibraryStore, store);
         const yt = yield* magicRadioCandidates(wanted, library).pipe(
           Effect.provideService(LibraryStore, store),
           Effect.provideService(YtMusic, ytMusic),
@@ -265,7 +259,7 @@ export const layer = Layer.effectDiscard(
         if (session?.id !== wanted.id || !wantsMagicBatch(session, queueState.get())) return;
         const playable = library.songs.filter(songHasFile);
         const toMagicSong = magicLibrarySongs(library.artists);
-        const batch = magicBatch(session, playable.map(toMagicSong), Math.random, yt);
+        const batch = magicBatch(session, playable.map(toMagicSong), Math.random, yt, taste);
         if (batch.trackIds.length === 0) return;
         save(batch.session);
         const tracks = new Map<string, QueueTrack>(
