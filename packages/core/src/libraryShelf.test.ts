@@ -35,6 +35,7 @@ describe("Library shelf", () => {
     assert.equal(parseLibraryShelf("stats"), "recently-added");
     assert.equal(parseLibraryShelf("most-played"), "recently-added");
     assert.equal(parseLibraryShelf("listening-overview"), "recently-added");
+    assert.equal(parseLibraryShelf("magic-queue"), "recently-added");
     assert.equal(parseLibraryShelf("NONE"), "recently-added");
   });
 

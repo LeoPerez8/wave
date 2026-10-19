@@ -9,6 +9,7 @@ import {
   magicPlaySignal,
   magicQueueEdits,
   magicQueueLabel,
+  magicQueueShare,
   magicSignal,
   parseMagicSession,
   playEndPending,
@@ -31,6 +32,7 @@ import { onStarred, onYtSongSignal } from "@/library/libraryChanges";
 import { LibraryStore, songHasFile, type SongRow } from "@/library/LibraryStore";
 import { YtMusic } from "@/ytmusic/YtMusic";
 
+import { magicQueueLevel } from "./magicQueueLevel";
 import { magicRadioCandidates } from "./magicQueueRadio";
 import { magicSongsOf } from "./magicSongs";
 import { Player } from "./Player";
@@ -128,6 +130,8 @@ const libraryNow = Effect.gen(function* () {
  * does) with the seed's first song; the first 9 recommendations follow as
  * the session's first batch, once the seed's radio was read. The radio
  * grows from the seed songs' primary artists, held to their genres.
+ * YouTube Music's share of a batch starts at the Magic Queue section's
+ * level (`magicQueueLevel`), from Home or any long-press menu.
  */
 export const startMagicQueue = (seed: MagicSeed, seedSongs: readonly SongRow[]) =>
   Effect.gen(function* () {
@@ -141,6 +145,7 @@ export const startMagicQueue = (seed: MagicSeed, seedSongs: readonly SongRow[]) 
         artists: playable.flatMap((song) => names.get(song.artistId) ?? []),
         profile: genreProfile(playable),
       },
+      ytShare: magicQueueShare(magicQueueLevel.get()),
     });
     const first = playable.find((song) => String(song.id) === started?.first);
     if (started === null || first === undefined) return;
