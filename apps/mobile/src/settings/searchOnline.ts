@@ -1,6 +1,13 @@
-import { readSearchOnline, writeSearchOnline, type SearchOnline } from "@wave/core";
+import {
+  readSearchOnline,
+  searchOnlineAlways,
+  writeSearchOnline,
+  type SearchOnline,
+} from "@wave/core";
+import { useMemo } from "react";
 
 import { persistedSetting } from "@/lib/persistedSetting";
+import { onMobileData } from "@/native/waveNative";
 import { openTitleChoices } from "@/overlay/titleChoices";
 
 import type { ChoiceSetting } from "./ChoiceRow";
@@ -8,8 +15,9 @@ import type { ChoiceSetting } from "./ChoiceRow";
 /**
  * Search online (Core's `SearchOnline`): one preference for every Library |
  * Online toggle, kept on this phone. Always opens album and artist pages
- * with Online selected and has Search ask as you type; Only on demand (the
- * default) asks nothing until Online is tapped, except in integrated views.
+ * with Online selected and has Search ask as you type; Always on Wi-Fi does
+ * so off mobile data; Only on demand (the default) asks nothing until Online
+ * is tapped, except in integrated views.
  */
 const searchOnline = persistedSetting<SearchOnline>({
   key: "settings.searchOnline",
@@ -17,12 +25,27 @@ const searchOnline = persistedSetting<SearchOnline>({
   write: writeSearchOnline,
 });
 
-/** Whether Search online is set to Always; re-renders when it changes. */
-export const useSearchOnlineAlways = (): boolean => searchOnline.useValue() === "always";
+/**
+ * Whether the view searches online as Always does (Core's
+ * `searchOnlineAlways`); re-renders when the preference changes. The network
+ * is read once a visit: as the view opens, when the preference changes, and
+ * when [visit] does (Search's starts as typing starts in an empty field), so
+ * changing networks mid-visit neither flips a page nor asks again.
+ */
+export const useSearchOnlineAlways = (visit: unknown = null): boolean => {
+  const preference = searchOnline.useValue();
+  return useMemo(
+    () => searchOnlineAlways(preference, { onMobileData: onMobileData() }),
+    // [visit] only says when to read the network again.
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
+    [preference, visit],
+  );
+};
 
 /** Search online's choices, as Settings and the toggle's long-press card both label them. */
 const CHOICES: ChoiceSetting<SearchOnline>["choices"] = [
   { value: "always", label: "Always search online" },
+  { value: "wifi", label: "Always search on Wi-Fi" },
   { value: "onDemand", label: "Only on demand" },
 ];
 
@@ -35,8 +58,8 @@ export const searchOnlineChoice: ChoiceSetting<SearchOnline> = {
 
 /**
  * The card a long press on any Library | Online toggle opens: Always search
- * online and Only on demand, the current one checked. The choice holds for
- * album pages, artist pages and Search alike.
+ * online, Always search on Wi-Fi and Only on demand, the current one checked.
+ * The choice holds for album pages, artist pages and Search alike.
  */
 export const openSearchOnlineChoices = (): void =>
   openTitleChoices({

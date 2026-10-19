@@ -3,8 +3,9 @@
  * YT Music, "Search allowance"): at most `SEARCH_ALLOWANCE` searches in any
  * `SEARCH_WINDOW_MS`, kept while Wave is closed, who goes next when several
  * wait for it, and what the app log says about a wait. A search typed in
- * Search is outside it, unless Search online is set to Always (`SearchOnline`):
- * then Search asks as you type, on its own, and takes its turn too.
+ * Search is outside it, unless Search online acts as Always
+ * (`searchOnlineAlways`): then Search asks as you type, on its own, and takes
+ * its turn too.
  */
 
 /** Who asks an automatic YouTube Music search. */

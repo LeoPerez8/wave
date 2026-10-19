@@ -1620,7 +1620,7 @@ export type {
   MixAffinity,
 } from "./genreAffinity.ts";
 export type { SearchOnline, YtPick } from "./onlineToggle.ts";
-export { readSearchOnline, writeSearchOnline } from "./onlineToggle.ts";
+export { readSearchOnline, searchOnlineAlways, writeSearchOnline } from "./onlineToggle.ts";
 export {
   BEST_QUALITY_KBPS,
   LOW_QUALITY_BELOW_KBPS,

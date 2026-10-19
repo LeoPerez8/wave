@@ -39,7 +39,8 @@ export const useYtMusicSection = (
   libraryHasResults: boolean,
 ): readonly [YtSection<NativeYtSong>, (pick: YtPick) => void] => {
   const enabled = useYtMusicEnabled();
-  const always = useSearchOnlineAlways();
+  // A search visit lasts until the field is cleared.
+  const always = useSearchOnlineAlways(query === "");
   const [section, dispatch] = useReducer(stepYtSection<NativeYtSong>, YT_SECTION_HIDDEN);
 
   // Choosing Always asks for what's typed now; On demand leaves what shows until the field is cleared.
