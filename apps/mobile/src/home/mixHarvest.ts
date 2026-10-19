@@ -47,7 +47,7 @@ import { persistedSetting } from "@/lib/persistedSetting";
 import { LibraryStore } from "@/library/LibraryStore";
 import { appRuntime } from "@/library/runtime";
 import type { NativeYtRadioSong } from "@/native/waveYtMusic";
-import { onMobileData } from "@/native/waveNative";
+import { onMobileData, online } from "@/native/waveNative";
 import { tasteProfileNow } from "@/playback/TasteProfile";
 import { ytMusicEnabled } from "@/settings/ytMusic";
 import { Stats } from "@/stats/Stats";
@@ -282,17 +282,19 @@ const harvest = Effect.gen(function* () {
     tried,
     read: (seed) => {
       let bytes = 0;
+      let reached = false;
       return withNetworkLog(
         `Mix harvest of ${seed.name}`,
         readRadios(seed, filter, genres, note),
         (songs) => (songs === null ? "no radio" : `${songs} songs`),
         (use) => {
           bytes = networkUseBytes(use);
+          reached = use.ytMusic.requests > 0;
         },
       ).pipe(
         Effect.ignore,
         Effect.andThen(freeTurnEffect),
-        Effect.map(() => bytes),
+        Effect.map(() => ({ bytes, reached })),
       );
     },
     usedOnMobile: noteHarvestMobileUse,
@@ -313,11 +315,12 @@ const once = oneAtATime(
 
 /**
  * Starts a harvest in the background when one is due (`harvestDue`: every
- * 15 minutes at most) and YT Music is on; one at a time.
+ * 15 minutes at most), YT Music is on and the phone is online (offline, the
+ * next visit tries again); one at a time.
  */
 export const harvestSoon = (): void => {
   const now = Date.now();
-  if (!ytMusicEnabled() || !harvestDue(lastRunAt, now)) return;
+  if (!ytMusicEnabled() || !online() || !harvestDue(lastRunAt, now)) return;
   lastRunAt = now;
   void appRuntime.runPromise(once).catch(() => {});
 };

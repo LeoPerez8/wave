@@ -26,7 +26,13 @@ const run = (
     onMobileData,
     bytes,
     usedToday = 0,
-  }: { onMobileData: boolean; bytes: number; usedToday?: number },
+    reached = () => true,
+  }: {
+    onMobileData: boolean;
+    bytes: number;
+    usedToday?: number;
+    reached?: (id: string) => boolean;
+  },
 ) => {
   const read: string[] = [];
   let mobile = 0;
@@ -41,7 +47,7 @@ const run = (
       read: (seed) =>
         Effect.sync(() => {
           read.push(seed.id);
-          return bytes;
+          return { bytes, reached: reached(seed.id) };
         }),
       usedOnMobile: (used) => {
         mobile += used;
@@ -70,5 +76,15 @@ describe("A harvest run", () => {
     assert.equal(mobile, 6 * MB);
     const spent = run(wants, { onMobileData: true, bytes: MB, usedToday: HARVEST_MOBILE_BYTES });
     assert.deepEqual(spent.read, []);
+  });
+
+  test("a read that never reached YouTube Music (offline) isn't held back for 12 hours, nor read twice in the run", () => {
+    const { read, tried } = run([want("offline", 0), want("online", 0)], {
+      onMobileData: false,
+      bytes: 0,
+      reached: (id) => id === "online",
+    });
+    assert.deepEqual(read, ["offline", "online"]);
+    assert.deepEqual([...tried.keys()], ["online"]);
   });
 });
