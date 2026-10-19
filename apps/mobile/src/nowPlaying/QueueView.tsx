@@ -26,7 +26,7 @@ import Animated from "react-native-reanimated";
 
 import { Artwork } from "@/catalog/Artwork";
 import { CatalogLine } from "@/catalog/CatalogLine";
-import { CELL } from "@/catalog/grid";
+import { CELL, grid } from "@/catalog/grid";
 import { Hairline } from "@/catalog/Hairline";
 import { TrackSkeletons } from "@/catalog/Skeletons";
 import { Press } from "@/motion/Press";
@@ -221,7 +221,7 @@ const UpNextRow = memo(function UpNextRow({ entry, index, track, lifted, drag, c
           haptic="selection"
           depth={0.1}
           className="items-center justify-center"
-          style={{ width: CELL * 6, height: CELL * 6 }}
+          style={{ width: grid.upNextCell, height: grid.upNextCell }}
         >
           <IconX size={20} color={secondary} strokeWidth={1.5} />
         </Press>
@@ -230,7 +230,7 @@ const UpNextRow = memo(function UpNextRow({ entry, index, track, lifted, drag, c
             accessibilityElementsHidden
             importantForAccessibility="no-hide-descendants"
             className="items-center justify-center"
-            style={{ width: CELL * 6, height: CELL * 6 }}
+            style={{ width: grid.upNextCell, height: grid.upNextCell }}
           >
             <IconMenu2 size={20} color={secondary} strokeWidth={1.5} />
           </View>
@@ -360,10 +360,12 @@ export function UpNextList({ bottomInset }: { bottomInset: number }) {
         <Animated.View
           pointerEvents="none"
           className="absolute left-0 right-0 top-0 flex-row items-center bg-surface"
-          style={[{ height: ROW, gap: CELL * 1.5 }, liftedStyle]}
+          style={[{ height: ROW }, liftedStyle]}
         >
-          <RowText track={liftedTrack} />
-          <View style={{ width: CELL * 12 }} />
+          <View className="flex-1 flex-row items-center" style={{ gap: CELL * 1.5 }}>
+            <RowText track={liftedTrack} />
+          </View>
+          <View style={{ width: grid.upNextTrailing }} />
         </Animated.View>
       )}
     </View>

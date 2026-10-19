@@ -132,15 +132,21 @@ const VIDEO_URLS = {
   ytMusic: (videoId: string) => `https://music.youtube.com/watch?v=${videoId}`,
 } as const;
 
-/** How a lookup that is [state] shows, its link being [url] once found. */
-const viewOf = <S extends { readonly status: string }>(
-  state: S,
-  url: (found: Extract<S, { status: "found" }>) => string,
-): SongLinkView => {
+/**
+ * Where one link option's lookup stands: loading, its link, or a reason with
+ * a note. A lookup state with a status that has no note isn't one, so it
+ * fails to compile until `NOTES` has it.
+ */
+type LinkState =
+  | { readonly status: "loading" }
+  | { readonly status: "found"; readonly url: string }
+  | { readonly status: keyof typeof NOTES };
+
+/** How a link option whose lookup is [state] shows. */
+const viewOf = (state: LinkState): SongLinkView => {
   if (state.status === "loading") return { url: null, loading: true, note: null };
-  if (state.status === "found")
-    return { url: url(state as Extract<S, { status: "found" }>), loading: false, note: null };
-  return { url: null, loading: false, note: NOTES[state.status as keyof typeof NOTES] };
+  if (state.status === "found") return { url: state.url, loading: false, note: null };
+  return { url: null, loading: false, note: NOTES[state.status] };
 };
 
 /**
@@ -150,6 +156,10 @@ const viewOf = <S extends { readonly status: string }>(
  * disabled and says why. Each goes by its own lookup only.
  */
 export const songLinkView = (option: SongLinkOption, state: SongLinksState): SongLinkView =>
-  option === "spotify"
-    ? viewOf(state.spotify, (found) => found.url)
-    : viewOf(state.video, (found) => VIDEO_URLS[option](found.videoId));
+  viewOf(
+    option === "spotify"
+      ? state.spotify
+      : state.video.status === "found"
+        ? { status: "found", url: VIDEO_URLS[option](state.video.videoId) }
+        : state.video,
+  );
