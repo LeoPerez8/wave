@@ -70,12 +70,14 @@ const endedBy = (cause: Cause.Cause<unknown>): string =>
 /**
  * Runs [effect], measured: when it ends (done, failed, timed out or
  * stopped), the app log gets [what]'s line, with [outcome] of what it gave
- * when that says something ("4 mixes").
+ * when that says something ("4 mixes"), and [used] is told what it used
+ * (the harvest counts its mobile data with it).
  */
 export const withNetworkLog = <A, E, R>(
   what: string,
   effect: Effect.Effect<A, E, R>,
   outcome?: (value: A) => string | undefined,
+  used?: (use: NetworkUse) => void,
 ): Effect.Effect<A, E, R> =>
   Effect.suspend(() => {
     const startedAt = Date.now();
@@ -87,6 +89,7 @@ export const withNetworkLog = <A, E, R>(
           const ended = Exit.isSuccess(exit) ? outcome?.(exit.value) : endedBy(exit.cause);
           const use = { ...meter.use, ytMusic: WaveYtMusic.takeNetworkUse(meter.yt) };
           const durationMs = Date.now() - startedAt;
+          used?.(use);
           appLog(
             "info",
             TAG,

@@ -1589,7 +1589,12 @@ export {
 export type { StarredDownload, UnstarredDownload } from "./starDownloads.ts";
 export { pickWeighted, playsWeight } from "./weightedPick.ts";
 export type { RandomSource } from "./weightedPick.ts";
-export { ARTIST_MIX_COUNT, artistMixSeeds, artistMixSimilarSource } from "./artistMixes.ts";
+export {
+  ARTIST_MIX_COUNT,
+  artistMixSeedPool,
+  artistMixSeeds,
+  artistMixSimilarSource,
+} from "./artistMixes.ts";
 export type { ArtistMixPools, PlayedSeedArtist } from "./artistMixes.ts";
 export { GENRE_MIX_COUNT, genreFamily, genreMixSeeds, interleaveRadios } from "./genreMixes.ts";
 export type { GenreFamily, GenreMixLibrary } from "./genreMixes.ts";
@@ -1795,7 +1800,13 @@ export {
   tasteWeight,
 } from "./tasteProfile.ts";
 export type { TasteHistory, TasteProfile, TasteSignal, TasteSignalKind } from "./tasteProfile.ts";
-export { NO_NETWORK_USE, answerBytes, networkUseLine, withNetworkUse } from "./networkUse.ts";
+export {
+  NO_NETWORK_USE,
+  answerBytes,
+  networkUseBytes,
+  networkUseLine,
+  withNetworkUse,
+} from "./networkUse.ts";
 export type { HostNetworkUse, NetworkHost, NetworkUse, NetworkUseRun } from "./networkUse.ts";
 export {
   MAGIC_QUEUE_PICKS,
@@ -1853,3 +1864,36 @@ export type {
   ArtistNeighbour,
   ArtistNeighbourhoodOptions,
 } from "./artistGraph.ts";
+export { RECOMMEND_NEWNESS_HALF_LIFE_MS, RECOMMEND_WEIGHTS, recommend } from "./recommend.ts";
+export type {
+  RecommendOptions,
+  RecommendSeed,
+  RecommendSources,
+  RecommendWeights,
+  RecommendedSong,
+} from "./recommend.ts";
+export { catalogMixRead, catalogMixSeed, discoverMixesOfCatalog } from "./catalogMixes.ts";
+export type { CatalogMixSong, CatalogMixSources, CatalogMixesOptions } from "./catalogMixes.ts";
+export {
+  HARVEST_EVERY_MS,
+  HARVEST_LOW,
+  HARVEST_MOBILE_BYTES,
+  HARVEST_RETRY_MS,
+  HARVEST_SEEDS,
+  harvestDue,
+  harvestMobileUsedToday,
+  harvestNext,
+  harvestWants,
+  parseHarvestMobileUse,
+  storedHarvestMobileUse,
+  withHarvestMobileUse,
+} from "./harvest.ts";
+export type { HarvestMobileUse, HarvestRun, HarvestWant } from "./harvest.ts";
+export {
+  NO_SIMILAR_ARTISTS_KEPT,
+  parseSimilarArtistsKept,
+  similarArtistsKeptOf,
+  storedSimilarArtistsKept,
+  withSimilarArtistsKept,
+} from "./similarArtistsKept.ts";
+export type { SimilarArtistsKept } from "./similarArtistsKept.ts";
