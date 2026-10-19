@@ -17,6 +17,7 @@ import {
   mixSeedArtists,
   type DiscoverMixSeed,
 } from "./discoverMixes.ts";
+import type { RecommendOptions } from "./recommend.ts";
 import { isRecord, readStoredRecord } from "./storedJson.ts";
 import type { YtSong } from "./ytMusic.ts";
 
@@ -113,7 +114,9 @@ export const catalogRadiosReadAt = (
  * What the harvest wants of each of [seeds]: how many new songs its mix
  * would keep from the catalog now (`catalogMixRead`, then
  * `discoverMixSongs` with what the owner [known]s, the other seeds aside),
- * and when its radios were last read.
+ * ranked by [options] (the section's sliders, `mixSlidersEngine`: a mix
+ * that keeps only its seed's own genres counts fewer), and when its radios
+ * were last read.
  */
 export const harvestWants = <S extends DiscoverMixSeed>(
   seeds: readonly S[],
@@ -121,10 +124,11 @@ export const harvestWants = <S extends DiscoverMixSeed>(
     /** The songs the owner knows (`mixKnownSongs`): never a mix's new songs. */
     readonly known: { readonly known: (song: YtSong) => boolean };
   },
+  options: RecommendOptions = {},
 ): (HarvestWant & { readonly seed: S })[] => {
   const readAt = radiosReadAt(sources.catalog);
   return seeds.map((seed) => {
-    const read = catalogMixRead(seed, sources);
+    const read = catalogMixRead(seed, sources, options);
     const candidates =
       read === null
         ? 0

@@ -11,12 +11,14 @@ import {
   harvestSeedPool,
   harvestWants,
   mixKnownSongs,
+  mixSlidersEngine,
   networkUseBytes,
   parseHarvestMobileUse,
   storedHarvestMobileUse,
   withHarvestMobileUse,
   type CatalogSong,
   type DiscoverMixSeed,
+  type GenreProfile,
   type HarvestWant,
 } from "./index.ts";
 
@@ -121,6 +123,39 @@ describe("The seeds a harvest may read", () => {
         "artist:björk",
       ],
     );
+  });
+});
+
+describe("What the harvest wants, at a section's sliders", () => {
+  test("counts only the songs the mix would keep at its Genre faithfulness", () => {
+    const rock: GenreProfile = new Map([["rock", 1]]);
+    const rockPop: GenreProfile = new Map([
+      ["rock", 0.5],
+      ["pop", 0.5],
+    ]);
+    const profiles: Record<string, GenreProfile> = { Tricky: rock, Pixies: rockPop };
+    const at = NOW - DAY;
+    const catalog = [
+      ...Array.from({ length: 6 }, (_, n) => catalogSong(`t${n}`, "Tricky", "Tricky", at)),
+      ...Array.from({ length: 6 }, (_, n) => catalogSong(`p${n}`, "Pixies", "Tricky", at)),
+    ];
+    const sources = {
+      catalog,
+      graph: artistGraph({ catalog, pages: [], plays: [] }),
+      profileOf: (artist: string) => profiles[artist],
+      now: NOW,
+      library,
+      known,
+    };
+    const candidates = (faithfulness: 1 | 3) =>
+      harvestWants(
+        [artistSeed("Tricky")],
+        sources,
+        mixSlidersEngine({ faithfulness, popularity: 3 }),
+      )[0]?.candidates;
+    assert.equal(candidates(3), 12);
+    // "Same genres": Pixies' half-rock songs don't make the mix, so the seed runs lower.
+    assert.equal(candidates(1), 6);
   });
 });
 
