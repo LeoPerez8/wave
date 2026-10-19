@@ -4,6 +4,7 @@ import {
   writeSearchOnline,
   type SearchOnline,
 } from "@wave/core";
+import { useMemo } from "react";
 
 import { persistedSetting } from "@/lib/persistedSetting";
 import { onMobileData } from "@/native/waveNative";
@@ -25,12 +26,21 @@ const searchOnline = persistedSetting<SearchOnline>({
 });
 
 /**
- * Whether views search online as Always does (Core's `searchOnlineAlways`):
- * re-renders when the preference changes, and reads the network on each
- * render, so leaving Wi-Fi acts as choosing Only on demand there.
+ * Whether the view searches online as Always does (Core's
+ * `searchOnlineAlways`); re-renders when the preference changes. The network
+ * is read once a visit: as the view opens, when the preference changes, and
+ * when [visit] does (Search's starts as typing starts in an empty field), so
+ * changing networks mid-visit neither flips a page nor asks again.
  */
-export const useSearchOnlineAlways = (): boolean =>
-  searchOnlineAlways(searchOnline.useValue(), { onMobileData: onMobileData() });
+export const useSearchOnlineAlways = (visit: unknown = null): boolean => {
+  const preference = searchOnline.useValue();
+  return useMemo(
+    () => searchOnlineAlways(preference, { onMobileData: onMobileData() }),
+    // [visit] only says when to read the network again.
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
+    [preference, visit],
+  );
+};
 
 /** Search online's choices, as Settings and the toggle's long-press card both label them. */
 const CHOICES: ChoiceSetting<SearchOnline>["choices"] = [
