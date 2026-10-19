@@ -39,7 +39,7 @@ import { ytMusicEnabled } from "@/settings/ytMusic";
 import { noteRadioNow } from "@/ytmusic/candidateCatalog";
 import { YtMusic } from "@/ytmusic/YtMusic";
 
-import { magicCatalogRead } from "./magicCatalogRead";
+import { magicCatalogRead, type MagicRefill } from "./magicCatalogRead";
 
 /** A refill's radio reads take this long at most; past it, the batch has what the catalog has. */
 const RADIO_TIMEOUT = "15 seconds";
@@ -100,22 +100,23 @@ const readRadios = (session: MagicSession, library: MagicLibrary, profileOf: Gen
  * [session]'s refill: its radios read into the catalog (`readRadios`), 15 s
  * at most, written to the app log as "Magic Queue radio" with its network
  * use; the catalog and the artist graph are read again after it. Gives the
- * bytes it used. Never fails.
+ * bytes it used, and whether YouTube Music answered (any of its bytes came,
+ * even for an artist it doesn't have). Never fails.
  */
 const refill = (session: MagicSession, library: MagicLibrary, profileOf: GenreProfileOf) =>
   Effect.gen(function* () {
-    let bytes = 0;
+    let used: MagicRefill = { bytes: 0, reached: false };
     yield* withNetworkLog(
       "Magic Queue radio",
       readRadios(session, library, profileOf).pipe(Effect.timeout(RADIO_TIMEOUT)),
       (songs) => (songs === 0 ? "no radio" : `${songs} songs`),
       (use) => {
-        bytes = networkUseBytes(use);
+        used = { bytes: networkUseBytes(use), reached: use.ytMusic.bytes > 0 };
       },
     ).pipe(Effect.ignore);
     forgetMixCatalog();
     forgetArtistGraph();
-    return bytes;
+    return used;
   });
 
 /** The video ids the audio cache holds whole; none when it can't tell. */
@@ -123,6 +124,9 @@ const cachedVideos = Effect.tryPromise(() => WaveYtMusic.cachedVideos()).pipe(
   Effect.map((ids): ReadonlySet<string> => new Set(ids)),
   Effect.orElseSucceed((): ReadonlySet<string> => new Set()),
 );
+
+/** When each Magic Queue's refill was last tried this launch, by session id (`magicCatalogRead`). */
+const refillsTried = new Map<string, number>();
 
 /** The session's latest candidates, and the genre profiles they were weighed by. */
 let found: {
@@ -164,6 +168,7 @@ export const magicQueueYtCandidates = (
       cached: cachedVideos,
       refill: refill(session, library, profileOf),
       usedOnMobile: noteHarvestMobileUse,
+      tried: refillsTried,
       ...(engine === undefined ? {} : { engine }),
     });
     found = { candidates: pick.candidates, profileOf };

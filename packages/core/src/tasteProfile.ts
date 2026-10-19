@@ -79,8 +79,11 @@ const add = (scores: Map<string, number>, key: string, points: number): void => 
   scores.set(key, (scores.get(key) ?? 0) + points);
 };
 
-/** A genre family's key as the profile scores it: without case or surrounding spaces. */
-const genreKey = (genre: string | null): string | null => {
+/**
+ * A genre family's key as the profile and a Magic Queue session score it:
+ * without case or surrounding spaces; null for none.
+ */
+export const genreKey = (genre: string | null): string | null => {
   const key = genre?.trim().toLowerCase() ?? "";
   return key === "" ? null : key;
 };

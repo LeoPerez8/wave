@@ -13,7 +13,6 @@ import {
   magicSeedProfile,
   magicYtSong,
   magicRadioArtists,
-  magicYtCandidates,
   magicQueueEdits,
   magicQueueLabel,
   MAGIC_QUEUE_LEVELS,
@@ -26,7 +25,6 @@ import {
   tasteProfile,
   wantsMagicBatch,
   type DiscoverMixLevel,
-  type DiscoverRadioSong,
   type GenreProfileOf,
   type MagicSeed,
   type MagicSession,
@@ -625,70 +623,7 @@ describe("A Magic Queue's YouTube Music share", () => {
   });
 });
 
-describe("A Magic Queue's YouTube Music candidates", () => {
-  const radioSong = (videoId: string, artist: string, video = false): DiscoverRadioSong => ({
-    videoId,
-    title: `Song ${videoId}`,
-    artists: [artist],
-    album: null,
-    durationMs: null,
-    artworkUrl: null,
-    explicit: false,
-    video,
-  });
-  const rock = genreProfile([{ genre: "Rock" }]);
-  const jazz = genreProfile([{ genre: "Jazz" }]);
-  const profileOf: GenreProfileOf = (artist) =>
-    artist === "Alike" ? rock : artist === "Unlike" ? jazz : undefined;
-  const none = () => false;
-  const options = { seedProfile: rock, profileOf, inLibrary: none };
-
-  test("keep only songs whose artist passes the genre affinity check", () => {
-    const radio = [
-      radioSong("a", "Alike"),
-      radioSong("u", "Unlike"),
-      radioSong("n", "Nobody Knows"),
-      radioSong("b", "Alike"),
-    ];
-    const candidates = magicYtCandidates(radio, options);
-    assert.deepEqual(
-      candidates.map((candidate) => candidate.trackId),
-      ["yt:a", "yt:b"],
-    );
-  });
-
-  test("are songs the Magic Queue weighs, by their artists and their genre from Deezer", () => {
-    const [candidate] = magicYtCandidates([radioSong("a", "Alike")], options);
-    assert.deepEqual(candidate?.artists, [magicArtistKey("Alike")]);
-    assert.equal(candidate?.genre, rock!.keys().next().value);
-    assert.equal(candidate?.song.videoId, "a");
-  });
-
-  test("keep any song for a seed with no genre", () => {
-    const radio = [radioSong("u", "Unlike"), radioSong("n", "Nobody Knows")];
-    const candidates = magicYtCandidates(radio, { ...options, seedProfile: null });
-    assert.deepEqual(
-      candidates.map((candidate) => candidate.trackId),
-      ["yt:u", "yt:n"],
-    );
-  });
-
-  test("leave out music videos, songs the Library has, and a song the radio plays again", () => {
-    const radio = [
-      radioSong("v", "Alike", true),
-      radioSong("l", "Alike"),
-      radioSong("a", "Alike"),
-      { ...radioSong("a2", "Alike"), title: "Song a" },
-      radioSong("a", "Alike"),
-    ];
-    const inLibrary = (played: DiscoverRadioSong) => played.videoId === "l";
-    const candidates = magicYtCandidates(radio, { ...options, inLibrary });
-    assert.deepEqual(
-      candidates.map((candidate) => candidate.trackId),
-      ["yt:a"],
-    );
-  });
-
+describe("A Magic Queue's radio artists", () => {
   test("come from the radio of the seed's artist, or its songs' most credited artists", () => {
     const artistSeed: MagicSeed = { kind: "artist", id: "4", title: "The Seed" };
     assert.deepEqual(magicRadioArtists(artistSeed, ["Someone"]), ["The Seed"]);

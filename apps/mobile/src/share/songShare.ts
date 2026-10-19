@@ -17,6 +17,7 @@ import * as Effect from "effect/Effect";
 import { useSyncExternalStore } from "react";
 
 import { makeExternalStore } from "@/lib/externalStore";
+import { fileUri } from "@/lib/fileUri";
 import { LibraryStore, type SongRow } from "@/library/LibraryStore";
 import { appRuntime } from "@/library/runtime";
 import { appLog } from "@/log/appLog";
@@ -117,9 +118,6 @@ export const closeSongShare = (): void => {
 
 export const useSongShare = (): SongShareContent | null =>
   useSyncExternalStore(shared.subscribe, shared.get);
-
-const fileUri = (path: string | null): string | undefined =>
-  path === null ? undefined : `file://${path}`;
 
 /**
  * The links lookup of the Library song [id]: by the video id it was
