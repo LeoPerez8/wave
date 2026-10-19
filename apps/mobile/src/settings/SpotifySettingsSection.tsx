@@ -12,6 +12,7 @@ import { Hairline } from "@/catalog/Hairline";
 import { TextButton } from "@/components/TextButton";
 
 import { AccountPhoto } from "./AccountPhoto";
+import { SignInRows } from "./SignInRows";
 import { useSpotifyAccount } from "./spotifyAccount";
 
 const NOTES: Record<SpotifyAccountNote, string> = {
@@ -22,12 +23,6 @@ const NOTES: Record<SpotifyAccountNote, string> = {
   expired: "Spotify ended your session, so Wave is signed out. Sign in again to use your account.",
   ...SPOTIFY_SIGN_IN_FAILURE_LINES,
 };
-
-const SIGN_IN_LABELS = {
-  signIn: "Sign In",
-  signInAgain: "Sign In Again",
-  signingIn: "Signing In…",
-} as const;
 
 /** The signed-in account: its photo and name, and Sign Out. */
 function AccountRow({ account, onSignOut }: { account: SpotifyAccount; onSignOut: () => void }) {
@@ -67,17 +62,7 @@ export function SpotifySettingsSection() {
       {view.kind === "account" ? (
         <AccountRow account={view.account} onSignOut={account.signOut} />
       ) : (
-        <>
-          <View className="items-start" style={{ minHeight: grid.row, justifyContent: "center" }}>
-            <TextButton
-              label={SIGN_IN_LABELS[view.action]}
-              disabled={view.action === "signingIn"}
-              onPress={account.signIn}
-            />
-          </View>
-          <Hairline />
-          <Text className="mt-2 font-sans text-footnote text-secondary">{NOTES[view.note]}</Text>
-        </>
+        <SignInRows action={view.action} note={NOTES[view.note]} onSignIn={account.signIn} />
       )}
     </View>
   );

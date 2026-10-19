@@ -1,4 +1,3 @@
-import { IconX } from "@tabler/icons-react-native";
 import {
   LYRIC_CARD_FALLBACK,
   lyricCardFileName,
@@ -7,17 +6,16 @@ import {
   nextLyricCardColour,
 } from "@wave/core";
 import { useEffect, useRef, useState } from "react";
-import { PixelRatio, StyleSheet, Text, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { PixelRatio, Text, View } from "react-native";
 
-import { CELL, grid } from "@/catalog/grid";
-import { IconButton } from "@/components/IconButton";
+import { CELL } from "@/catalog/grid";
 import { Press } from "@/motion/Press";
 import { addScreenBackHandler } from "@/overlay/back";
 
 import { LyricCard } from "./LyricCard";
 import { closeLyricCard, useLyricCard, type LyricCardContent } from "./lyricCard";
 import { ShareDestinations } from "./ShareDestinations";
+import { SharePreviewFrame } from "./SharePreviewFrame";
 import type { ImageSource } from "./shareImage";
 import { useDrawingCorners, useImageShare } from "./useImageShare";
 
@@ -103,9 +101,7 @@ function FittedCard({
  * Back) goes back to picking lines.
  */
 function LyricCardPreview({ content }: { content: LyricCardContent }) {
-  const insets = useSafeAreaInsets();
   const [colour, setColour] = useState(content.colours[0] ?? LYRIC_CARD_FALLBACK);
-  const [area, setArea] = useState<{ width: number; height: number } | null>(null);
   // A cover still loading would be missing from the image.
   const [ready, setReady] = useState(content.artworkUri === undefined);
   const card: ImageSource = useRef(null);
@@ -134,39 +130,20 @@ function LyricCardPreview({ content }: { content: LyricCardContent }) {
   });
 
   return (
-    <View
-      className="bg-background"
-      style={[
-        StyleSheet.absoluteFill,
-        { paddingTop: insets.top, paddingBottom: insets.bottom + CELL * 3 },
-      ]}
+    <SharePreviewFrame
+      onClose={closeLyricCard}
+      renderPreview={(area) => (
+        <FittedCard
+          content={content}
+          colour={colour}
+          area={area}
+          cardRef={card}
+          rounded={corners.drawing}
+          onReady={() => setReady(true)}
+          onPress={() => setColour((current) => nextLyricCardColour(content.colours, current))}
+        />
+      )}
     >
-      <View
-        className="flex-row items-center"
-        style={{ height: CELL * 7, paddingHorizontal: grid.margin - 12 }}
-      >
-        <IconButton icon={IconX} label="Close" onPress={closeLyricCard} />
-      </View>
-      <View
-        className="flex-1 items-center justify-center"
-        style={{ paddingHorizontal: grid.margin * 2, paddingVertical: CELL * 2 }}
-        onLayout={(event) => {
-          const { width, height } = event.nativeEvent.layout;
-          setArea({ width: width - grid.margin * 4, height: height - CELL * 4 });
-        }}
-      >
-        {area !== null && area.width > 0 && area.height > 0 && (
-          <FittedCard
-            content={content}
-            colour={colour}
-            area={area}
-            cardRef={card}
-            rounded={corners.drawing}
-            onReady={() => setReady(true)}
-            onPress={() => setColour((current) => nextLyricCardColour(content.colours, current))}
-          />
-        )}
-      </View>
       <Text
         className="text-center font-sans text-footnote text-secondary"
         style={{ marginBottom: CELL * 3 }}
@@ -177,7 +154,7 @@ function LyricCardPreview({ content }: { content: LyricCardContent }) {
       <View style={{ opacity: share.known ? 1 : 0 }}>
         <ShareDestinations destinations={share.destinations} disabled={share.disabled || !ready} />
       </View>
-    </View>
+    </SharePreviewFrame>
   );
 }
 

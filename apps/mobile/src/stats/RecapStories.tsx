@@ -12,7 +12,7 @@ import {
   type RecapColour,
 } from "@wave/core";
 import { StatusBar } from "expo-status-bar";
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type Key, type ReactNode } from "react";
 import { Text, View } from "react-native";
 import {
   GestureDetector,
@@ -148,17 +148,15 @@ function TopSongsSlide({ songs }: { songs: readonly Ranked<SongRow>[] }) {
           </View>
         </View>
       </Rise>
-      <View style={{ gap: CELL * 1.5 }}>
-        {rest.map((entry, index) => (
-          <RankedLine
-            key={entry.item.id}
-            rank={index + 2}
-            step={index + 2}
-            title={entry.item.title}
-            detail={`${entry.item.artist} · ${playCount(entry.countedPlays)}`}
-          />
-        ))}
-      </View>
+      <RankedLines
+        entries={rest}
+        firstRank={2}
+        entryKey={(entry) => entry.item.id}
+        line={(entry) => ({
+          title: entry.item.title,
+          detail: `${entry.item.artist} · ${playCount(entry.countedPlays)}`,
+        })}
+      />
     </View>
   );
 }
@@ -172,6 +170,13 @@ function Heading({ children }: { children: ReactNode }) {
   );
 }
 
+/** What a ranked line shows besides its rank: an optional image, a title over its detail. */
+interface RankedLineContent {
+  image?: ReactNode;
+  title: string;
+  detail?: string;
+}
+
 /** A numbered line under a slide's #1: rank, an optional image, a title over its detail. */
 function RankedLine({
   rank,
@@ -179,13 +184,7 @@ function RankedLine({
   image,
   title,
   detail,
-}: {
-  rank: number;
-  step: number;
-  image?: ReactNode;
-  title: string;
-  detail?: string;
-}) {
+}: RankedLineContent & { rank: number; step: number }) {
   return (
     <Rise step={step}>
       <View className="flex-row items-center" style={{ gap: CELL * 2 }}>
@@ -211,6 +210,44 @@ function RankedLine({
   );
 }
 
+/**
+ * A slide's numbered lines, ranked from [firstRank] (#2 under a #1 of its
+ * own), each rising in after the slide's first lines.
+ */
+function RankedLines<T>({
+  entries,
+  firstRank,
+  entryKey,
+  line,
+}: {
+  entries: readonly T[];
+  firstRank: number;
+  entryKey: (entry: T) => Key;
+  line: (entry: T) => RankedLineContent;
+}) {
+  return (
+    <View style={{ gap: CELL * 1.5 }}>
+      {entries.map((entry, index) => (
+        <RankedLine
+          key={entryKey(entry)}
+          rank={index + firstRank}
+          step={index + 2}
+          {...line(entry)}
+        />
+      ))}
+    </View>
+  );
+}
+
+const artistKey = (entry: Ranked<ArtistRow>): Key => entry.item.id;
+
+/** An artist's ranked line: its image, its name over its plays. */
+const artistLine = (entry: Ranked<ArtistRow>): RankedLineContent => ({
+  image: <ArtistImage artist={entry.item} size={CELL * 5} />,
+  title: entry.item.name,
+  detail: playCount(entry.countedPlays),
+});
+
 function TopArtistsSlide({ artists }: { artists: readonly Ranked<ArtistRow>[] }) {
   const [top, ...rest] = artists;
   if (top === undefined) return null;
@@ -230,18 +267,7 @@ function TopArtistsSlide({ artists }: { artists: readonly Ranked<ArtistRow>[] })
           </View>
         </View>
       </Rise>
-      <View style={{ gap: CELL * 1.5 }}>
-        {rest.map((entry, index) => (
-          <RankedLine
-            key={entry.item.id}
-            rank={index + 2}
-            step={index + 2}
-            image={<ArtistImage artist={entry.item} size={CELL * 5} />}
-            title={entry.item.name}
-            detail={playCount(entry.countedPlays)}
-          />
-        ))}
-      </View>
+      <RankedLines entries={rest} firstRank={2} entryKey={artistKey} line={artistLine} />
     </View>
   );
 }
@@ -290,17 +316,12 @@ function TopGenresSlide({ genres }: { genres: readonly RecapGenre[] }) {
           </Text>
         </View>
       </Rise>
-      <View style={{ gap: CELL * 1.5 }}>
-        {rest.map((entry, index) => (
-          <RankedLine
-            key={entry.family.key}
-            rank={index + 2}
-            step={index + 2}
-            title={entry.family.name}
-            detail={percent(entry.share)}
-          />
-        ))}
-      </View>
+      <RankedLines
+        entries={rest}
+        firstRank={2}
+        entryKey={(entry) => entry.family.key}
+        line={(entry) => ({ title: entry.family.name, detail: percent(entry.share) })}
+      />
     </View>
   );
 }
@@ -362,18 +383,7 @@ function DiscoveredSlide({
           {count === 1 ? "new artist" : "new artists"}
         </Text>
       </Rise>
-      <View style={{ gap: CELL * 1.5 }}>
-        {artists.map((entry, index) => (
-          <RankedLine
-            key={entry.item.id}
-            rank={index + 1}
-            step={index + 2}
-            image={<ArtistImage artist={entry.item} size={CELL * 5} />}
-            title={entry.item.name}
-            detail={playCount(entry.countedPlays)}
-          />
-        ))}
-      </View>
+      <RankedLines entries={artists} firstRank={1} entryKey={artistKey} line={artistLine} />
     </View>
   );
 }

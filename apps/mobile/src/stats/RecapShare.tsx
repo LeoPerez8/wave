@@ -1,16 +1,14 @@
-import { IconX } from "@tabler/icons-react-native";
 import { recapCardFileName, recapStoryBackground } from "@wave/core";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { PixelRatio, StyleSheet, Text, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { PixelRatio, Text, View } from "react-native";
 
 import { CELL, grid } from "@/catalog/grid";
-import { IconButton } from "@/components/IconButton";
 import { addScreenBackHandler } from "@/overlay/back";
 import { ImageCaptureContext, type ImageCapture } from "@/share/imageCapture";
 import { WaveMark } from "@/share/LyricCard";
 import { ShareDestinations } from "@/share/ShareDestinations";
+import { SharePreviewFrame } from "@/share/SharePreviewFrame";
 import type { ImageSource } from "@/share/shareImage";
 import { useImageShare } from "@/share/useImageShare";
 import { useThemeColor } from "@/theme/useThemeColor";
@@ -96,8 +94,6 @@ export function RecapSharePreview({
   /** The slide to share. */
   children: ReactNode;
 }) {
-  const insets = useSafeAreaInsets();
-  const [area, setArea] = useState<{ width: number; height: number } | null>(null);
   const image: ImageSource = useRef(null);
   // The slide's images report in: the image waits for every one of them.
   const [pending, setPending] = useState(0);
@@ -127,36 +123,14 @@ export function RecapSharePreview({
   });
 
   const exportWidth = EXPORT_WIDTH_PX / PixelRatio.get();
-  const fitted =
-    area === null || area.width <= 0 || area.height <= 0
-      ? null
-      : Math.min(area.width, area.height / EXPORT_ASPECT);
 
   return (
-    <View
-      className="bg-background"
-      style={[
-        StyleSheet.absoluteFill,
-        { paddingTop: insets.top, paddingBottom: insets.bottom + CELL * 3 },
-      ]}
-    >
-      <StatusBar style="auto" />
-      <View
-        className="flex-row items-center"
-        style={{ height: CELL * 7, paddingHorizontal: grid.margin - 12 }}
-      >
-        <IconButton icon={IconX} label="Close" onPress={onClose} />
-      </View>
-      <View
-        className="flex-1 items-center justify-center"
-        style={{ paddingHorizontal: grid.margin * 2, paddingVertical: CELL * 2 }}
-        onLayout={(event) => {
-          const { width, height } = event.nativeEvent.layout;
-          setArea({ width: width - grid.margin * 4, height: height - CELL * 4 });
-        }}
-      >
-        {fitted !== null && (
-          // The image is drawn at the export's size and scaled down, so what's previewed is it.
+    <SharePreviewFrame
+      onClose={onClose}
+      renderPreview={(area) => {
+        const fitted = Math.min(area.width, area.height / EXPORT_ASPECT);
+        // The image is drawn at the export's size and scaled down, so what's previewed is it.
+        return (
           <View
             accessible
             accessibilityRole="image"
@@ -189,8 +163,10 @@ export function RecapSharePreview({
               </ImageCaptureContext.Provider>
             </View>
           </View>
-        )}
-      </View>
+        );
+      }}
+    >
+      <StatusBar style="auto" />
       {/* Hidden, not left out, until some answer is known: the row's height stays. */}
       <View style={{ opacity: share.known ? 1 : 0, marginTop: CELL * 3 }}>
         <ShareDestinations
@@ -198,6 +174,6 @@ export function RecapSharePreview({
           disabled={share.disabled || !laidOut || pending > 0}
         />
       </View>
-    </View>
+    </SharePreviewFrame>
   );
 }

@@ -29,7 +29,7 @@ import type { NativeYtRadioSong } from "@/native/waveYtMusic";
 import { ytMusicEnabled } from "@/settings/ytMusic";
 import { YtMusic } from "@/ytmusic/YtMusic";
 
-export type MagicRadioCandidate = MagicYtCandidate<NativeYtRadioSong>;
+type MagicRadioCandidate = MagicYtCandidate<NativeYtRadioSong>;
 
 /** A radio read takes this long at most; past it, the batch comes from the Library. */
 const RADIO_TIMEOUT = "15 seconds";

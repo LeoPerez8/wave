@@ -72,7 +72,7 @@ const searchForLinks: SongLinkSearch = async (song) =>
  * shows what it has meanwhile and takes the rest if it's still open on that
  * song.
  */
-export const openSongShare = (
+const openSongShare = (
   content: Omit<SongShareContent, "links">,
   later?: Promise<Partial<SongShareContent>>,
   links?: () => Promise<SongLinkLookup>,

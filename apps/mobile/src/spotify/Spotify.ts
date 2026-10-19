@@ -1,4 +1,4 @@
-import type { SpotifyAccountFailure, SpotifySession, SpotifySignInFailure } from "@wave/core";
+import type { SpotifyAccountFailure, SpotifySession } from "@wave/core";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -13,12 +13,7 @@ import { WaveSpotify, spotifyErrorCode, type SpotifyErrorCode } from "@/native/w
  */
 export class SpotifyError extends Data.TaggedError("SpotifyError")<{
   readonly reason: SpotifyAccountFailure;
-}> {
-  /** Why a sign-in that failed so didn't work: Spotify not taking the session is its not confirming it. */
-  get signInFailure(): SpotifySignInFailure {
-    return this.reason === "signedOut" ? "failed" : this.reason;
-  }
-}
+}> {}
 
 const REASONS: Record<SpotifyErrorCode, SpotifyAccountFailure> = {
   ERR_SPOTIFY_OFFLINE: "offline",
