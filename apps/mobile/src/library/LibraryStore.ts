@@ -5,6 +5,7 @@ import {
   type BlackPlayerPlay,
   type BlackPlayerTrack,
   type ImportedPlays,
+  type TasteHistory,
   type IndexedFile,
   type LibrarySongSort,
   type PlaylistSong,
@@ -92,6 +93,7 @@ import {
   type RecordedPlay,
 } from "./db/playHistory";
 import { listeningSums } from "./db/playTotals";
+import { tasteHistory } from "./db/taste";
 import {
   removePlaylistImage,
   selectPlaylistImageOriginal,
@@ -748,6 +750,8 @@ export class LibraryStore extends Context.Service<
     ) => Effect.Effect<void, LibraryStoreError>;
     /** The recording key of every song ever played (Core's `recordingKey`), files gone or not. */
     readonly playedRecordingKeys: Effect.Effect<readonly string[], LibraryStoreError>;
+    /** The plays, stars and downloads Core's taste profile is derived from (`db/taste.ts`). */
+    readonly tasteHistory: Effect.Effect<TasteHistory, LibraryStoreError>;
     /** The ids of every starred track. */
     readonly favoriteTrackIds: Effect.Effect<readonly number[], LibraryStoreError>;
     /** Stars (or unstars) the tracks; those starred already keep when they were starred. */
@@ -1430,6 +1434,8 @@ const make = Effect.gen(function* () {
       attempt("save the imported plays", () => saveImportedPlays(db, plays)),
 
     playedRecordingKeys: attempt("read the songs played", () => playedRecordingKeys(db)),
+
+    tasteHistory: attempt("read the taste history", () => tasteHistory(db)),
 
     favoriteTrackIds: attempt("read favorites", () => selectFavoriteTrackIds(db)),
 

@@ -21,6 +21,7 @@ import {
   parseMagicSession,
   reduceQueue,
   startMagicQueue,
+  tasteProfile,
   wantsMagicBatch,
   type DiscoverRadioSong,
   type GenreProfileOf,
@@ -152,6 +153,73 @@ describe("A Magic Queue's signals", () => {
     const pool = [seedSong, song("r2", "Removed"), song("o1", "Other")];
     const session = magicSignal(start(), { kind: "removed", song: song("r1", "Removed") });
     assert.deepEqual(magicBatch(session, pool, first).trackIds, ["o1"]);
+  });
+});
+
+describe("A Magic Queue and the taste profile", () => {
+  const NOW = 1_000_000_000_000;
+  const seedSong = song("s1", "Seed Artist", "Seed");
+  const start = () => startMagicQueue(SONG_SEED, [seedSong], { id: "m1", random: first })!.session;
+  const pool = [
+    seedSong,
+    song("plain", "Plain", "Pop"),
+    song("liked", "Liked", "Pop"),
+    song("skipped", "Skipper", "Pop"),
+  ];
+  const songOf = (trackId: string) => pool.find((candidate) => candidate.trackId === trackId);
+  const play = (trackId: string, endReason: "completed" | "skipped", listenedMs: number) => ({
+    trackId,
+    startedAt: NOW,
+    listenedMs,
+    endReason,
+  });
+
+  test("a new session ranks candidates by the profile from its first batch", () => {
+    const taste = tasteProfile(
+      {
+        plays: [play("skipped", "skipped", 4_000)],
+        favorites: [{ trackId: "liked", changedAt: NOW }],
+        downloads: [],
+      },
+      songOf,
+      NOW,
+    );
+    assert.deepEqual(magicBatch(start(), pool, first).trackIds, ["plain", "liked", "skipped"]);
+    assert.deepEqual(magicBatch(start(), pool, first, [], taste).trackIds, [
+      "liked",
+      "plain",
+      "skipped",
+    ]);
+  });
+
+  test("weighs songs never played by how much their artist and genre were liked", () => {
+    const history = [song("old", "Liked", "Pop"), song("jazz", "Someone", "Jazz")];
+    const taste = tasteProfile(
+      {
+        plays: [play("old", "completed", 200_000), play("jazz", "completed", 200_000)],
+        favorites: [],
+        downloads: [],
+      },
+      (trackId) => history.find((candidate) => candidate.trackId === trackId),
+      NOW,
+    );
+    const fresh = [
+      seedSong,
+      song("n1", "Neutral", "Rock"),
+      song("j1", "Other", "Jazz"),
+      song("l1", "Liked", "Rock"),
+    ];
+    assert.deepEqual(magicBatch(start(), fresh, first, [], taste).trackIds, ["l1", "j1", "n1"]);
+  });
+
+  test("keeps the session's own rules: a liked artist skipped in the session is out", () => {
+    const taste = tasteProfile(
+      { plays: [], favorites: [{ trackId: "liked", changedAt: NOW }], downloads: [] },
+      songOf,
+      NOW,
+    );
+    const session = magicSignal(start(), { kind: "skip", song: song("l0", "Liked", "Pop") });
+    assert.deepEqual(magicBatch(session, pool, first, [], taste).trackIds, ["plain", "skipped"]);
   });
 });
 

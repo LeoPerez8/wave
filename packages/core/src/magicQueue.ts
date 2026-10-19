@@ -19,6 +19,7 @@ import { songFamilies } from "./genreMixes.ts";
 import type { PlayEnd } from "./playEvents.ts";
 import type { QueueState } from "./queue.ts";
 import { isRecord } from "./storedJson.ts";
+import { MAGIC_SKIP_MS, tasteWeight, type TasteProfile } from "./tasteProfile.ts";
 import { pickWeighted, type RandomSource } from "./weightedPick.ts";
 import { parseTrackId, ytTrackId } from "./ytMusic.ts";
 
@@ -217,25 +218,31 @@ export const startMagicQueue = (
   };
 };
 
-/** How heavily [song] weighs in [session]'s next batch. */
-const weightOf = (session: MagicSession, song: MagicSong): number => {
+/**
+ * How heavily [song] weighs in [session]'s next batch: by what the session
+ * learned, times what the owner's [taste] profile says of it (`tasteWeight`).
+ */
+const weightOf = (session: MagicSession, song: MagicSong, taste: TasteProfile | null): number => {
   const artists = song.artists.reduce(
     (sum, artist) => sum + (session.artistAffinity[artist] ?? 0),
     0,
   );
   const genre = genreKey(song.genre);
-  return (1 + artists) * (genre === null ? 1 : (session.genreAffinity[genre] ?? 1));
+  const learned = (1 + artists) * (genre === null ? 1 : (session.genreAffinity[genre] ?? 1));
+  return taste === null ? learned : learned * tasteWeight(taste, song);
 };
 
 /**
- * [count] of [songs] picked at random from [random], the heavier more often;
- * a song [session] queued already, or one by an artist it excluded, never.
+ * [count] of [songs] picked at random from [random], the heavier more often
+ * (weighed with [taste]); a song [session] queued already, or one by an
+ * artist it excluded, never.
  */
 const pick = (
   session: MagicSession,
   songs: readonly MagicSong[],
   count: number,
   random: RandomSource,
+  taste: TasteProfile | null,
 ): MagicSong[] => {
   if (count <= 0) return [];
   const used = new Set(session.used);
@@ -246,7 +253,7 @@ const pick = (
     if (used.has(candidate.trackId) || seen.has(candidate.trackId)) continue;
     if (candidate.artists.some((artist) => excluded.has(artist))) continue;
     seen.add(candidate.trackId);
-    candidates.push({ song: candidate, weight: weightOf(session, candidate) });
+    candidates.push({ song: candidate, weight: weightOf(session, candidate, taste) });
   }
   // Heaviest first, so the luckiest draw lands on the heaviest song.
   // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh array; Hermes lacks toSorted
@@ -277,25 +284,29 @@ const interleave = <T>(a: readonly T[], b: readonly T[]): T[] => {
  * with the YT Music switch off). YouTube Music gets its share of the batch
  * (`ytShare`) and the Library the rest, either making up for the other
  * running short; the two's songs are spread through each other. Each song
- * is picked at random from [random], the heavier more often. A song the
- * session queued already never comes back, nor one by an artist it
- * excluded; fewer (or none) when both run dry.
+ * is picked at random from [random], the heavier more often: by what the
+ * session learned and, from the first batch, by the owner's [taste] profile
+ * (`tasteProfile`; none weighs by the session alone). A song the session
+ * queued already never comes back, nor one by an artist it excluded; fewer
+ * (or none) when both run dry.
  */
 export const magicBatch = (
   session: MagicSession,
   library: readonly MagicSong[],
   random: RandomSource,
   yt: readonly MagicSong[] = [],
+  taste: TasteProfile | null = null,
 ): { readonly session: MagicSession; readonly trackIds: readonly string[] } => {
   const size = session.batches === 0 ? FIRST_BATCH : BATCH;
-  const fromYt = pick(session, yt, Math.round(size * session.ytShare), random);
-  const fromLibrary = pick(session, library, size - fromYt.length, random);
+  const fromYt = pick(session, yt, Math.round(size * session.ytShare), random, taste);
+  const fromLibrary = pick(session, library, size - fromYt.length, random, taste);
   const taken = new Set(fromYt.map((song) => song.trackId));
   const moreYt = pick(
     session,
     yt.filter((song) => !taken.has(song.trackId)),
     size - fromYt.length - fromLibrary.length,
     random,
+    taste,
   );
   const trackIds = interleave(fromLibrary, [...fromYt, ...moreYt]).map((song) => song.trackId);
   return {
@@ -377,7 +388,7 @@ export const magicSignal = (learning: MagicSession, { kind, song }: MagicSignal)
 };
 
 /** Tapping Next before this much of a song played is a skip; later, it's neutral. */
-export const MAGIC_SKIP_MS = 30_000;
+export { MAGIC_SKIP_MS };
 
 /**
  * What a play's end tells a Magic Queue: Next (moving on to the following
