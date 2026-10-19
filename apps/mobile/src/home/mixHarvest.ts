@@ -197,6 +197,14 @@ const mobileUse = persistedSetting<HarvestMobileUse | null>({
   write: (use) => (use === null ? null : storedHarvestMobileUse(use)),
 });
 
+/** The mobile data the harvest used today, in bytes: a Magic Queue's refill counts in it too. */
+export const harvestMobileUsed = (): number => harvestMobileUsedToday(mobileUse.get(), Date.now());
+
+/** Counts [bytes] of mobile data the harvest (or a Magic Queue's refill) used now. */
+export const noteHarvestMobileUse = (bytes: number): void => {
+  mobileUse.set(withHarvestMobileUse(mobileUse.get(), bytes, Date.now()));
+};
+
 /** When each seed was last tried this session, by id. */
 const tried = new Map<string, number>();
 
@@ -269,7 +277,7 @@ const harvest = Effect.gen(function* () {
   return yield* harvestRun({
     wants,
     onMobileData: mobile,
-    usedToday: harvestMobileUsedToday(mobileUse.get(), Date.now()),
+    usedToday: harvestMobileUsed(),
     now: Date.now,
     tried,
     read: (seed) => {
@@ -287,8 +295,7 @@ const harvest = Effect.gen(function* () {
         Effect.map(() => bytes),
       );
     },
-    usedOnMobile: (bytes) =>
-      mobileUse.set(withHarvestMobileUse(mobileUse.get(), bytes, Date.now())),
+    usedOnMobile: noteHarvestMobileUse,
   });
 });
 

@@ -68,6 +68,16 @@ class YtAudioCacheTest {
     assertNull(audio.wholeKey("v2"))
   }
 
+  @Test
+  fun theSongsThatPlayOfflineAreThoseCachedWhole() {
+    val audio = audioCache()
+    val whole = audio.keyFor("whole", stream(251, 4_000))
+    audio.cache.played(whole, 4_000, songLength = 4_000)
+    val half = audio.keyFor("half", stream(251, 4_000))
+    audio.cache.played(half, 2_000, songLength = 4_000)
+    assertEquals(setOf("whole"), audio.wholeVideos())
+  }
+
   /** A replay reading [key]'s bytes from the cache. */
   private fun Cache.replayed(key: String) {
     Thread.sleep(5)

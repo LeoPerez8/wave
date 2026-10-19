@@ -33,7 +33,7 @@ import { LibraryStore, songHasFile, type SongRow } from "@/library/LibraryStore"
 import { YtMusic } from "@/ytmusic/YtMusic";
 
 import { magicQueueLevel } from "./magicQueueLevel";
-import { magicRadioCandidates } from "./magicQueueRadio";
+import { magicQueueYtCandidates } from "./magicQueueRadio";
 import { magicSongsOf } from "./magicSongs";
 import { Player } from "./Player";
 import { onPlayEnded, playTracker } from "./PlayHistory";
@@ -47,7 +47,7 @@ import { cacheYtCoversInBackground } from "./ytQueueTracks";
  * and learns; this module starts a session from a long-press menu, feeds it
  * what happens (plays ending, stars, downloads, Up Next edits) and adds a
  * batch once the last recommendation plays, out of the Library and the
- * seed's YouTube Music radio (`magicQueueRadio`), after every signal so far
+ * candidate catalog (`magicQueueRadio`), after every signal so far
  * was learned. The session is saved beside the queue, so it goes on after
  * Wave restarts, while the queue is still its own.
  */
@@ -128,8 +128,9 @@ const libraryNow = Effect.gen(function* () {
  * Starts a Magic Queue from [seed], whose songs are [seedSongs] (the song
  * itself for a song seed): it replaces the queue (with Undo, as any play
  * does) with the seed's first song; the first 9 recommendations follow as
- * the session's first batch, once the seed's radio was read. The radio
- * grows from the seed songs' primary artists, held to their genres.
+ * the session's first batch, at once when the candidate catalog has enough
+ * of the seed's songs, else once its radio was read. Its YouTube Music
+ * songs grow from the seed songs' primary artists, held to their genres.
  * YouTube Music's share of a batch starts at the Magic Queue section's
  * level (`magicQueueLevel`), from Home or any long-press menu.
  */
@@ -254,11 +255,11 @@ export const layer = Layer.effectDiscard(
         const library = yield* Effect.provideService(libraryNow, LibraryStore, store);
         // The owner's taste weighs from the session's first batch on.
         const taste = yield* Effect.provideService(tasteProfileNow, LibraryStore, store);
-        const yt = yield* magicRadioCandidates(wanted, library).pipe(
+        const yt = yield* magicQueueYtCandidates(wanted, library, { taste }).pipe(
           Effect.provideService(LibraryStore, store),
           Effect.provideService(YtMusic, ytMusic),
         );
-        // Signals may have come, and the queue moved on, while the radio was read.
+        // Signals may have come, and the queue moved on, while the catalog was ranked (or refilled).
         yield* awaitSignals;
         const session = activeMagicSession();
         if (session?.id !== wanted.id || !wantsMagicBatch(session, queueState.get())) return;

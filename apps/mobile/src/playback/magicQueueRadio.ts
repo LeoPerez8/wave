@@ -1,45 +1,51 @@
 /**
- * A Magic Queue's YouTube Music candidates (docs/spec.md, Magic Queue): the
- * radio of the seed's artist (or its songs' most credited artists), kept to
- * the seed's genres by the shared genre affinity check, outside artists'
- * genres looked up on Deezer. Which artists, which songs and how a batch
- * splits are Core's (`magicRadioArtists`, kept in the session,
- * `magicYtCandidates`, `magicBatch`); this asks YouTube Music and keeps
- * what it found for the session. None offline, or with the YT Music switch
- * off.
+ * A Magic Queue's YouTube Music candidates (docs/spec.md, Magic Queue): out
+ * of the candidate catalog, ranked by the engine for the session's radio
+ * artists and the seed songs' genres, the session's signals and the owner's
+ * taste on top (`magicCatalogRead`), with no request while the session has
+ * enough. When it runs low, the radios of its radio artists are read as
+ * before, into the catalog, under the harvest's network policy (on mobile
+ * data only when none is left, counted in the harvest's ~5 MB a day), and
+ * the genres of the artists that decide the next candidates looked up on
+ * Deezer (`magicRadioLookups`). Offline, only the songs the audio cache
+ * holds whole; none with the YT Music switch off.
  */
 import {
   libraryFinder,
-  magicSeedProfile,
-  magicYtCandidates,
   magicRadioLookups,
   magicYtSong,
+  networkUseBytes,
   type GenreProfileLibrary,
   type GenreProfileOf,
+  type MagicCatalogCandidate,
   type MagicSession,
   type MagicSong,
-  type MagicYtCandidate,
+  type RecommendOptions,
+  type TasteProfile,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
 
 import { lookUpArtistProfiles, lookedUpProfileOf, mixProfileOf } from "@/home/artistGenres";
+import { artistGraphNow, forgetArtistGraph } from "@/home/artistGraphNow";
+import { forgetMixCatalog, mixCatalog } from "@/home/mixCatalog";
+import { harvestMobileUsed, noteHarvestMobileUse } from "@/home/mixHarvest";
 import { artistRadio } from "@/home/ytArtistPage";
+import { freeTurnEffect } from "@/lib/backgroundWork";
 import { withNetworkLog } from "@/lib/networkMeter";
-import type { SongRow } from "@/library/LibraryStore";
-import type { NativeYtRadioSong } from "@/native/waveYtMusic";
+import { LibraryStore, type SongRow } from "@/library/LibraryStore";
+import { onMobileData, online } from "@/native/waveNative";
+import { WaveYtMusic, type NativeYtRadioSong } from "@/native/waveYtMusic";
 import { ytMusicEnabled } from "@/settings/ytMusic";
-import { noteRadio } from "@/ytmusic/candidateCatalog";
 import { YtMusic } from "@/ytmusic/YtMusic";
 
-type MagicRadioCandidate = MagicYtCandidate<NativeYtRadioSong>;
+import { magicCatalogRead } from "./magicCatalogRead";
 
-/** A radio read takes this long at most; past it, the batch comes from the Library. */
+/** A refill's radio reads take this long at most; past it, the batch has what the catalog has. */
 const RADIO_TIMEOUT = "15 seconds";
 
 /**
  * The first page of [name]'s artist radio, and the next one when there is
  * one; none when YouTube Music doesn't have the artist or can't be reached.
- * What it read goes into the candidate catalog as [name]'s radio (`noteRadio`).
  */
 const artistRadioSongs = (name: string) =>
   Effect.gen(function* () {
@@ -50,122 +56,130 @@ const artistRadioSongs = (name: string) =>
       first.continuation === null
         ? null
         : yield* ytMusic.radioMore(first.continuation).pipe(Effect.orElseSucceed(() => null));
-    const songs = next === null ? first.songs : [...first.songs, ...next.songs];
-    yield* noteRadio(name, songs);
-    return songs;
+    return next === null ? first.songs : [...first.songs, ...next.songs];
   }).pipe(Effect.orElseSucceed((): readonly NativeYtRadioSong[] => []));
-
-/** The radio read for a session, kept so each batch doesn't read it again. */
-interface RadioRead {
-  readonly sessionId: string;
-  readonly radio: readonly NativeYtRadioSong[];
-  /** The artists whose genres it asked for so far (`magicRadioLookups`). */
-  readonly asked: string[];
-  /** The candidates last found in it, and the genre profiles they were weighed by. */
-  candidates: readonly MagicRadioCandidate[];
-  profileOf: GenreProfileOf;
-}
-
-let found: RadioRead | null = null;
 
 type MagicLibrary = GenreProfileLibrary & { readonly songs: readonly SongRow[] };
 
-/**
- * How [session]'s radio [read] is weighed against [library] now: the
- * artists to look up next (Core's `magicRadioLookups`: those that decide
- * the next candidates, till there are enough; the artists further down wait
- * for a later batch), and the candidates as the genres known now have them.
- */
-const weighing = (session: MagicSession, library: MagicLibrary, read: RadioRead) => {
-  const profileOf = mixProfileOf(library);
+/** Whether the Library has a YouTube Music song, as [library]'s songs tell. */
+const inLibraryOf = (library: MagicLibrary) => {
   const find = libraryFinder(library.songs);
-  const inLibrary = (song: NativeYtRadioSong) => find(song) !== null;
-  return {
-    next: () => magicRadioLookups(session, read.radio, { profileOf, inLibrary, asked: read.asked }),
-    candidates: () => {
-      read.candidates = magicYtCandidates(read.radio, {
-        seedProfile: magicSeedProfile(session),
-        profileOf,
-        inLibrary,
-      });
-      read.profileOf = profileOf;
-      return read.candidates;
-    },
-  };
+  return (song: Parameters<typeof find>[0]) => find(song) !== null;
 };
 
-/** Looks up what [weigh] asks for, a round at a time, till it asks nothing more. */
-const lookUpNeeded = (read: RadioRead, weigh: ReturnType<typeof weighing>) =>
+/**
+ * Reads [session]'s radio artists' radios at once, each into the catalog as
+ * it comes (as that artist's radio), then looks up the genres of the
+ * artists that decide its next 20 candidates (`magicRadioLookups`, a round
+ * at a time). Gives how many songs the radios brought.
+ */
+const readRadios = (session: MagicSession, library: MagicLibrary, profileOf: GenreProfileOf) =>
   Effect.gen(function* () {
-    for (let names = weigh.next(); names.length > 0; names = weigh.next()) {
-      read.asked.push(...names);
+    const store = yield* LibraryStore;
+    const radios = yield* Effect.all(
+      session.radioArtists.map((name) =>
+        artistRadioSongs(name).pipe(
+          Effect.tap((songs) =>
+            songs.length === 0
+              ? Effect.void
+              : store.addCandidates({ songs, seed: name }, Date.now()).pipe(Effect.ignore),
+          ),
+        ),
+      ),
+      { concurrency: "unbounded" },
+    );
+    const radio = radios.flat();
+    const inLibrary = inLibraryOf(library);
+    const asked: string[] = [];
+    for (
+      let names = magicRadioLookups(session, radio, { profileOf, inLibrary, asked });
+      names.length > 0;
+      names = magicRadioLookups(session, radio, { profileOf, inLibrary, asked })
+    ) {
+      asked.push(...names);
       yield* lookUpArtistProfiles(names);
     }
-    return weigh.candidates();
+    return radio.length;
   });
-
-/** [session]'s candidates, out of the radios of its `radioArtists` read now. */
-const readRadioCandidates = (session: MagicSession, library: MagicLibrary) =>
-  Effect.gen(function* () {
-    const radios = yield* Effect.all(session.radioArtists.map(artistRadioSongs), {
-      concurrency: "unbounded",
-    });
-    const radio = radios.flat();
-    if (radio.length === 0) return [];
-    // Kept before the genres are looked up, so a batch that runs out of time
-    // leaves the radio to the next one.
-    const read: RadioRead = {
-      sessionId: session.id,
-      radio,
-      asked: [],
-      candidates: [],
-      profileOf: mixProfileOf(library),
-    };
-    found = read;
-    return yield* lookUpNeeded(read, weighing(session, library, read));
-  });
-
-const candidatesOutcome = (candidates: readonly MagicRadioCandidate[]): string =>
-  candidates.length === 1 ? "1 candidate" : `${candidates.length} candidates`;
-
-/** [run], measured for the app log as [what] and cut short after a while. */
-const loggedRead = <E, R>(what: string, run: Effect.Effect<readonly MagicRadioCandidate[], E, R>) =>
-  withNetworkLog(what, run.pipe(Effect.timeout(RADIO_TIMEOUT)), candidatesOutcome);
 
 /**
- * [session]'s YouTube Music candidates (`magicYtCandidates`), out of the
- * radios of its `radioArtists`, weighed against [library] (its songs and
- * artists): read once per session, again while none could be read
- * (offline, say), each read writing its network use to the app log
- * (`withNetworkLog`). Only the genres of the next candidates are looked up
- * (`magicRadioLookups`), so a later batch may look up more, writing its
- * own line. None with the YT Music switch off. Never fails.
+ * [session]'s refill: its radios read into the catalog (`readRadios`), 15 s
+ * at most, written to the app log as "Magic Queue radio" with its network
+ * use; the catalog and the artist graph are read again after it. Gives the
+ * bytes it used. Never fails.
  */
-export const magicRadioCandidates = (session: MagicSession, library: MagicLibrary) =>
+const refill = (session: MagicSession, library: MagicLibrary, profileOf: GenreProfileOf) =>
+  Effect.gen(function* () {
+    let bytes = 0;
+    yield* withNetworkLog(
+      "Magic Queue radio",
+      readRadios(session, library, profileOf).pipe(Effect.timeout(RADIO_TIMEOUT)),
+      (songs) => (songs === 0 ? "no radio" : `${songs} songs`),
+      (use) => {
+        bytes = networkUseBytes(use);
+      },
+    ).pipe(Effect.ignore);
+    forgetMixCatalog();
+    forgetArtistGraph();
+    return bytes;
+  });
+
+/** The video ids the audio cache holds whole; none when it can't tell. */
+const cachedVideos = Effect.tryPromise(() => WaveYtMusic.cachedVideos()).pipe(
+  Effect.map((ids): ReadonlySet<string> => new Set(ids)),
+  Effect.orElseSucceed((): ReadonlySet<string> => new Set()),
+);
+
+/** The session's latest candidates, and the genre profiles they were weighed by. */
+let found: {
+  readonly candidates: readonly MagicCatalogCandidate[];
+  readonly profileOf: GenreProfileOf;
+} | null = null;
+
+/**
+ * [session]'s YouTube Music candidates for its next batch, weighed against
+ * [library] (its songs and artists) and the owner's [taste]: out of the
+ * candidate catalog (`magicCatalogRead`), the radios read first only when
+ * the session runs low and the network policy allows it. The engine ranks
+ * with [engine]'s weights (the Magic Queue section's sliders; absent: its
+ * defaults). None with the YT Music switch off. Never fails.
+ */
+export const magicQueueYtCandidates = (
+  session: MagicSession,
+  library: MagicLibrary,
+  {
+    taste,
+    engine,
+  }: { readonly taste: TasteProfile | null; readonly engine?: Omit<RecommendOptions, "avoid"> },
+) =>
   Effect.gen(function* () {
     if (!ytMusicEnabled()) return [];
-    const read = found?.sessionId === session.id ? found : null;
-    if (read === null) {
-      if (session.radioArtists.length === 0) return [];
-      return yield* loggedRead("Magic Queue radio", readRadioCandidates(session, library)).pipe(
-        // Out of time: the candidates the genres looked up so far make, if the radio was read.
-        Effect.orElseSucceed((): readonly MagicRadioCandidate[] =>
-          found?.sessionId === session.id ? weighing(session, library, found).candidates() : [],
-        ),
-      );
-    }
-    const weigh = weighing(session, library, read);
-    if (weigh.next().length === 0) return weigh.candidates();
-    return yield* loggedRead("Magic Queue genres", lookUpNeeded(read, weigh)).pipe(
-      // Out of time: the candidates the genres looked up so far make.
-      Effect.orElseSucceed(weigh.candidates),
-    );
+    const profileOf = mixProfileOf(library);
+    const graph = yield* artistGraphNow;
+    yield* freeTurnEffect;
+    const pick = yield* magicCatalogRead(session, {
+      online: online(),
+      onMobileData: onMobileData(),
+      usedToday: harvestMobileUsed(),
+      now: Date.now(),
+      catalog: mixCatalog.pipe(Effect.orElseSucceed(() => [])),
+      graph,
+      profileOf,
+      taste,
+      inLibrary: inLibraryOf(library),
+      cached: cachedVideos,
+      refill: refill(session, library, profileOf),
+      usedOnMobile: noteHarvestMobileUse,
+      ...(engine === undefined ? {} : { engine }),
+    });
+    found = { candidates: pick.candidates, profileOf };
+    return pick.candidates;
   });
 
 /**
  * A YT Music song of the queue as the Magic Queue weighs it (`magicYtSong`):
- * by its artists, and its genre as the session's radio read weighed it (an
- * outside artist's as Deezer gave it, when no radio was read yet).
+ * by its artists, and its genre as the session's latest candidates weighed
+ * it (an outside artist's as Deezer gave it, when it isn't among them).
  */
 export const magicStreamedSong = (track: {
   readonly id: string;

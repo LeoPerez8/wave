@@ -111,6 +111,8 @@ declare class WaveYtMusicModule extends NativeModule<WaveYtMusicEvents> {
    * the same list again does nothing.
    */
   schedulePreDownload(videoIds: readonly string[]): Promise<void>;
+  /** The video ids whose audio the audio cache holds whole: the songs that play offline. */
+  cachedVideos(): Promise<readonly string[]>;
   /** Songs on YT Music for [query] (YouTube Music's "Songs" filter). */
   searchSongs(query: string): Promise<NativeYtSearchPage>;
   /** Artists on YT Music named like [query] (YouTube Music's "Artists" filter), in its order. */
