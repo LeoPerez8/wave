@@ -40,6 +40,7 @@ import com.google.common.util.concurrent.ListenableFuture
 import expo.modules.wavenative.artwork.ArtworkProvider
 import expo.modules.wavenative.launcher.LauncherIconSwitcher
 import expo.modules.wavenative.log.WaveLog
+import expo.modules.wavenative.yt.YtAudioCache
 import expo.modules.wavenative.yt.YtClient
 import expo.modules.wavenative.yt.YtDataSource
 import expo.modules.wavenative.yt.YtMedia
@@ -185,9 +186,11 @@ class PlaybackService : MediaLibraryService() {
   @OptIn(UnstableApi::class)
   private fun buildPlayer(): ExoPlayer {
     // Library files play from storage; YT Music songs (`yt:` items) are streamed,
-    // their address resolved as the player loads them (YtDataSource).
+    // their address resolved as the player loads them (YtDataSource), their audio
+    // kept in the audio cache, which both players share (YtAudioCache).
     val dataSources = YtDataSource.Factory(
       DefaultDataSource.Factory(this, DefaultHttpDataSource.Factory().setAllowCrossProtocolRedirects(true)),
+      audioCache = { YtAudioCache.get(this) },
     ) { YtClient.get(this) }
     return ExoPlayer.Builder(this, WaveRenderersFactory(this))
       // Keeps the Buffer setting's streamed audio ahead (StreamBuffer).
