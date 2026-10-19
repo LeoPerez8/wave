@@ -24,7 +24,7 @@ import {
   discoverMixKeep,
   discoverMixesBuilt,
   discoverMixesDue,
-  discoverMixesOfRadios,
+  discoverMixesOfCatalog,
   discoverMixesRerun,
   discoverMixesSection,
   genreMixSeeds,
@@ -40,18 +40,18 @@ import {
   storedDiscoverMixes,
   storedMixesShown,
   undoneMixRefresh,
+  type ArtistGraph,
   type BlendedDiscoverMix,
   type CatalogMixReader,
-  type CatalogMixSong,
   type CatalogSong,
   type DiscoverMixBlend,
-  type DiscoverMixRead,
   type DiscoverMixSeed,
   type DiscoverMixes,
   type DiscoverMixesSection,
   type MixRefreshAvoid,
   type MixSliders,
   type ShownMixes,
+  type TasteProfile,
   type YtAlbumSong,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
@@ -96,12 +96,12 @@ export type { MixSectionId } from "./discoverMixLevel";
  * and the owner's taste profile at the section's sliders, [avoid]ed songs
  * last, a random nudge each build, its variety saved with the mixes along
  * with the seeds, so a slider move re-ranks them: `rerank`), then the
- * seeds take their songs in seed order (Core's
- * `discoverMixesOfRadios`), so no new song is in two of the section's mixes
- * (and no familiar song in two of its shares). A seed the catalog has no
- * songs for yet makes no mix: the harvest refills it, and the section has
- * what the others make. No request; it gives the JavaScript thread back
- * after each seed (`freeTurnEffect`), so Home stays smooth.
+ * seeds take their songs in seed order (Core's `discoverMixesOfCatalog`),
+ * so no new song is in two of the section's mixes (and no familiar song in
+ * two of its shares). A seed the catalog has no songs for yet makes no mix:
+ * the harvest refills it, and the section has what the others make. No
+ * request; it gives the JavaScript thread back after each seed
+ * (`freeTurnEffect`), so Home stays smooth.
  */
 const mixesOf = (
   id: MixSectionId,
@@ -117,13 +117,8 @@ const mixesOf = (
     yield* freeTurnEffect;
     // A refresh's new songs leave out those the section showed today, where it can.
     const avoidSongs = avoid === undefined ? undefined : avoid.songs;
-    const ranked = yield* readsOf(id, reader, seeds, avoidSongs);
-    const mixes = discoverMixesOfRadios(ranked.reads, {
-      known: library.known,
-      library,
-      ...(avoidSongs === undefined ? {} : { avoid: avoidSongs }),
-    });
-    const built = discoverMixesBuilt(mixes, Date.now(), seeds, {
+    const ranked = yield* rankedMixes(id, reader, seeds, library, avoidSongs);
+    const built = discoverMixesBuilt(ranked.mixes, Date.now(), seeds, {
       ...(avoidSongs === undefined ? {} : { avoid: avoidSongs }),
       variety,
     });
@@ -142,15 +137,16 @@ const saveBuilt = (id: MixSectionId, built: DiscoverMixes): void => {
 };
 
 /**
- * [seeds]' catalog reads by [reader], ranked at [id]'s sliders as they are
- * once every seed's walk is done (giving the JavaScript thread back before
- * each, `freeTurnEffect`, which waits out a finger on a slider), with the
- * sliders they were ranked at.
+ * The mixes [seeds] make by [reader] (Core's `discoverMixesOfCatalog`),
+ * ranked at [id]'s sliders as they are once every seed's walk is done
+ * (giving the JavaScript thread back before each, `freeTurnEffect`, which
+ * waits out a finger on a slider), with the sliders they were ranked at.
  */
-const readsOf = (
+const rankedMixes = (
   id: MixSectionId,
   reader: CatalogMixReader,
   seeds: readonly DiscoverMixSeed[],
+  library: MixIndexes,
   avoid: ReadonlySet<string> | undefined,
 ) =>
   Effect.gen(function* () {
@@ -159,11 +155,13 @@ const readsOf = (
       yield* freeTurnEffect;
     }
     const sliders = mixSlidersOf(id);
-    const options = { ...mixSlidersEngine(sliders), ...(avoid === undefined ? {} : { avoid }) };
-    const reads: DiscoverMixRead<CatalogMixSong>[] = seeds.flatMap(
-      (seed) => reader.read(seed, options) ?? [],
-    );
-    return { reads, sliders };
+    const mixes = discoverMixesOfCatalog(seeds, reader, {
+      known: library.known,
+      library,
+      ...mixSlidersEngine(sliders),
+      ...(avoid === undefined ? {} : { avoid }),
+    });
+    return { mixes, sliders };
   });
 
 /** A section's last reader of catalog reads, with what it reads: kept for the re-ranks after a build. */
@@ -171,8 +169,8 @@ interface ReaderMemo {
   readonly reader: CatalogMixReader;
   readonly variety: number | undefined;
   readonly catalog: readonly CatalogSong[];
-  readonly graph: unknown;
-  readonly taste: unknown;
+  readonly graph: ArtistGraph | null;
+  readonly taste: TasteProfile | null;
   readonly library: MixIndexes;
 }
 
@@ -218,12 +216,7 @@ const rerankedOf = (id: MixSectionId, saved: DiscoverMixes) =>
     const { seeds, avoid, variety } = discoverMixesRerun(saved, library.artists);
     const reader = yield* readerOf(id, library, variety);
     const avoidSongs = avoid.size === 0 ? undefined : avoid;
-    const { reads, sliders } = yield* readsOf(id, reader, seeds, avoidSongs);
-    const mixes = discoverMixesOfRadios(reads, {
-      known: library.known,
-      library,
-      ...(avoidSongs === undefined ? {} : { avoid: avoidSongs }),
-    });
+    const { mixes, sliders } = yield* rankedMixes(id, reader, seeds, library, avoidSongs);
     return { mixes: rerankedDiscoverMixes(saved, mixes), sliders };
   });
 

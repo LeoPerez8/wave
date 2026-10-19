@@ -90,6 +90,10 @@ const sources = (catalog: CatalogSong[], profileOf: GenreProfileOf = () => undef
   now: NOW,
 });
 
+/** A reader of catalog reads over [catalog], as a build makes one. */
+const readerOf = (catalog: CatalogSong[], profileOf?: GenreProfileOf) =>
+  catalogMixReader({ ...sources(catalog, profileOf), library });
+
 const videos = (mix: DiscoverMix | undefined) => mix?.songs.map((song) => song.videoId);
 
 describe("Mixes built from the candidate catalog", () => {
@@ -103,7 +107,7 @@ describe("Mixes built from the candidate catalog", () => {
       // Nobody near Portishead.
       ...songs("abba", 12, "ABBA", "ABBA"),
     ];
-    const [mix, ...others] = discoverMixesOfCatalog([artistSeed("Portishead")], sources(catalog), {
+    const [mix, ...others] = discoverMixesOfCatalog([artistSeed("Portishead")], readerOf(catalog), {
       known,
       library,
     });
@@ -140,7 +144,7 @@ describe("Mixes built from the candidate catalog", () => {
     };
     const [mix] = discoverMixesOfCatalog(
       [seed],
-      sources(catalog, (artist: string) => profiles[artist]),
+      readerOf(catalog, (artist: string) => profiles[artist]),
       { known, library },
     );
     assert.deepEqual(
@@ -157,7 +161,7 @@ describe("Mixes built from the candidate catalog", () => {
     ];
     const mixes = discoverMixesOfCatalog(
       [artistSeed("Massive Attack"), artistSeed("Tricky")],
-      sources(catalog),
+      readerOf(catalog),
       { known, library },
     );
     assert.deepEqual(
@@ -173,7 +177,7 @@ describe("Mixes built from the candidate catalog", () => {
     }));
     const mixes = discoverMixesOfCatalog(
       [artistSeed("Portishead"), artistSeed("Tricky")],
-      sources(catalog),
+      readerOf(catalog),
       { known, library },
     );
     assert.deepEqual(
@@ -185,7 +189,7 @@ describe("Mixes built from the candidate catalog", () => {
   test("a refresh's avoided songs come back only to make up the mix's ten", () => {
     const catalog = songs("t", 14, "Tricky", "Tricky");
     const avoid = new Set(["t1", "t2", "t3", "t4", "t5", "t6"]);
-    const [mix] = discoverMixesOfCatalog([artistSeed("Tricky")], sources(catalog), {
+    const [mix] = discoverMixesOfCatalog([artistSeed("Tricky")], readerOf(catalog), {
       known,
       library,
       avoid,
