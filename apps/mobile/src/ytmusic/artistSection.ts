@@ -34,7 +34,7 @@ import type { NativeYtSong } from "@/native/waveYtMusic";
 import { useSearchOnlineAlways } from "@/settings/searchOnline";
 import { useYtMusicEnabled } from "@/settings/ytMusic";
 
-import { noteArtistPage } from "./candidateCatalog";
+import { readArtistPage } from "./candidateCatalog";
 import { useLoadedLibraryFinder } from "./libraryFinder";
 import { useLineToggle } from "./OnlineToggle";
 import { YtMusic, YtMusicError } from "./YtMusic";
@@ -47,15 +47,6 @@ export const readSaved = (artistKey: string) =>
     const store = yield* LibraryStore;
     return yield* store.ytArtist(artistKey);
   }).pipe(Effect.orElseSucceed(() => null));
-
-/** The artist page [browseId] alone; its top songs feed the candidate catalog (`noteArtistPage`). */
-const readArtistPage = (browseId: string) =>
-  Effect.gen(function* () {
-    const ytMusic = yield* YtMusic;
-    const page = yield* ytMusic.artist(browseId);
-    yield* noteArtistPage(page);
-    return page;
-  });
 
 /**
  * The artist page [browseId] with every song of the artist (`allSongs`): the

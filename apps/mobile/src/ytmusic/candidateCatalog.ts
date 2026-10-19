@@ -13,6 +13,8 @@ import { whenFree } from "@/lib/backgroundWork";
 import { LibraryStore } from "@/library/LibraryStore";
 import type { NativeYtArtistPage } from "@/native/waveYtMusic";
 
+import { YtMusic } from "./YtMusic";
+
 /**
  * Adds [page] to the catalog, seen now, on the next free turn. Never fails:
  * a write that can't be made is left out (the catalog is a cache).
@@ -52,3 +54,15 @@ export const noteRadioNow = (
  */
 export const noteArtistPage = (page: NativeYtArtistPage) =>
   noteCandidates({ songs: page.songs, seed: null });
+
+/**
+ * The artist page [browseId] alone, its top songs fed to the catalog
+ * (`noteArtistPage`): how an artist section and the harvest's similar
+ * artists read a page.
+ */
+export const readArtistPage = (browseId: string) =>
+  Effect.gen(function* () {
+    const page = yield* (yield* YtMusic).artist(browseId);
+    yield* noteArtistPage(page);
+    return page;
+  });
