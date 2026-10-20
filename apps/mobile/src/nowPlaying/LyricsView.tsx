@@ -1,4 +1,4 @@
-import { IconQuoteOff, IconShare3 } from "@tabler/icons-react-native";
+import { IconLanguage, IconQuoteOff, IconShare3 } from "@tabler/icons-react-native";
 import {
   MAX_SHARED_LYRIC_LINES,
   currentLyricIndex,
@@ -32,6 +32,7 @@ import { Press } from "@/motion/Press";
 import { addScreenBackHandler } from "@/overlay/back";
 import { seekTo } from "@/playback/actions";
 import type { PlaybackState } from "@/playback/Player";
+import { setLyricsTranslationOn, useLyricsTranslationOn } from "@/settings/lyricsTranslation";
 import { closeLyricCard, openLyricCard } from "@/share/lyricCard";
 import { useThemeColor } from "@/theme/useThemeColor";
 
@@ -39,6 +40,7 @@ import { DismissArea } from "./DismissArea";
 import { usePlayhead, type LibraryFile } from "./hooks";
 import { TrackHeader } from "./TrackHeader";
 import { useLibraryLyrics, type LibraryLyricsShown } from "./useLibraryLyrics";
+import { useLyricsTranslation, type TranslationShown } from "./useLyricsTranslation";
 import { useNonDLyrics, type NonDLyricsShown } from "./useNonDLyrics";
 
 /** Where the sung line rests, as a fraction of the view's height from its top. */
@@ -67,6 +69,66 @@ interface Picking {
 /** The backdrop of a selected line: the ink, faint. */
 const useSelectedFill = (): string => withOpacity(useThemeColor("foreground"), 0.12);
 
+/** A Body line's height (global.css), for a translation's skeleton. */
+const TRANSLATION_LINE_HEIGHT = 22;
+/** How wide each line's translation skeleton is, by its place: ragged, as lyrics are. */
+const TRANSLATION_SKELETON = ["64%", "48%", "72%", "56%", "68%"] as const;
+
+/** What shows under the line at [at] with words [text]: its translation, or its skeleton while it loads. */
+const lineTranslation = (
+  shown: TranslationShown | null,
+  at: number,
+  text: string,
+): { readonly translation: string | null; readonly translating: boolean } => ({
+  translation: shown?.kind === "translated" ? (shown.lines[at] ?? null) : null,
+  translating: shown?.kind === "loading" && text.trim() !== "",
+});
+
+/** A translation's placeholder under its line while Google is asked. */
+function TranslationSkeleton({ at }: { at: number }) {
+  return (
+    <View style={{ paddingTop: CELL / 2 }}>
+      <SkeletonLine
+        lineHeight={TRANSLATION_LINE_HEIGHT}
+        width={TRANSLATION_SKELETON[at % TRANSLATION_SKELETON.length]!}
+      />
+    </View>
+  );
+}
+
+/**
+ * The quiet line above translated lyrics when there's nothing to put under
+ * them: they're already in the phone's language, or the translation failed
+ * (with Try Again). Null otherwise.
+ */
+function TranslationNote({ shown, retry }: { shown: TranslationShown | null; retry: () => void }) {
+  if (shown?.kind === "sameLanguage") {
+    return (
+      <Text
+        className="font-sans text-footnote text-secondary"
+        style={{ paddingBottom: CELL }}
+        accessibilityLiveRegion="polite"
+      >
+        {`These lyrics are already in ${shown.language}.`}
+      </Text>
+    );
+  }
+  if (shown?.kind === "failed") {
+    return (
+      <View className="flex-row items-center justify-between" style={{ gap: CELL * 2 }}>
+        <Text
+          className="flex-1 font-sans text-footnote text-secondary"
+          accessibilityLiveRegion="polite"
+        >
+          Couldn't translate the lyrics.
+        </Text>
+        <TextButton label="Try Again" onPress={retry} />
+      </View>
+    );
+  }
+  return null;
+}
+
 /** The square dots standing in for a pause between sung lines. */
 function PauseDots({ current }: { current: boolean }) {
   return (
@@ -89,15 +151,20 @@ type LineProps = {
   /** Share is picking lines: a tap selects instead of seeking. */
   picking: boolean;
   selected: boolean;
+  /** The line's translation, shown under it in smaller, dimmed text. */
+  translation: string | null;
+  /** Its translation is on its way: a skeleton under it. */
+  translating: boolean;
   onSeek: (line: LyricLine, index: number) => void;
   onPick: (index: number) => void;
   onLayoutLine: (index: number, y: number) => void;
 };
 
 /**
- * One synced line: ink while it's sung, graphite otherwise. Tap it to play
- * from there. While Share picks lines, ink on a faint backdrop marks the
- * selected ones, and a tap picks instead.
+ * One synced line: ink while it's sung, graphite otherwise, with its
+ * translation under it lit along with it. Tap either to play from there.
+ * While Share picks lines, ink on a faint backdrop marks the selected ones,
+ * and a tap picks instead.
  */
 const SyncedLine = memo(function SyncedLine({
   line,
@@ -105,12 +172,16 @@ const SyncedLine = memo(function SyncedLine({
   current,
   picking,
   selected,
+  translation,
+  translating,
   onSeek,
   onPick,
   onLayoutLine,
 }: LineProps) {
   const foreground = useThemeColor("foreground");
   const secondary = useThemeColor("secondary");
+  const tertiary = useThemeColor("tertiary");
+  const translationLit = withOpacity(foreground, 0.72);
   const selectedFill = useSelectedFill();
   const reduceMotion = useReducedMotion();
   const on = picking ? selected : current;
@@ -124,12 +195,21 @@ const SyncedLine = memo(function SyncedLine({
   const tint = useAnimatedStyle(() => ({
     color: interpolateColor(lit.get(), [0, 1], [secondary, foreground]),
   }));
+  const translationTint = useAnimatedStyle(() => ({
+    color: interpolateColor(lit.get(), [0, 1], [tertiary, translationLit]),
+  }));
 
   return (
     <View onLayout={(event) => onLayoutLine(index, event.nativeEvent.layout.y)}>
       <Press
         accessibilityRole="button"
-        accessibilityLabel={line.text === "" ? "Instrumental" : line.text}
+        accessibilityLabel={
+          line.text === ""
+            ? "Instrumental"
+            : translation === null
+              ? line.text
+              : `${line.text}. ${translation}`
+        }
         accessibilityHint={picking ? "Selects this line to share" : "Plays from this line"}
         accessibilityState={{ selected: on }}
         onPress={() => (picking ? onPick(index) : onSeek(line, index))}
@@ -149,6 +229,15 @@ const SyncedLine = memo(function SyncedLine({
             {line.text}
           </Animated.Text>
         )}
+        {translation !== null && (
+          <Animated.Text
+            className="font-sans text-body"
+            style={[{ paddingTop: CELL / 2 }, translationTint]}
+          >
+            {translation}
+          </Animated.Text>
+        )}
+        {translation === null && translating && <TranslationSkeleton at={index} />}
       </Press>
     </View>
   );
@@ -163,9 +252,13 @@ const SyncedLine = memo(function SyncedLine({
 function SyncedLyrics({
   lines,
   picking,
+  translation,
+  retryTranslation,
 }: {
   lines: readonly LyricLine[];
   picking: Picking | null;
+  translation: TranslationShown | null;
+  retryTranslation: () => void;
 }) {
   const { positionMs } = usePlayhead();
   const index = currentLyricIndex(lines, positionMs);
@@ -256,6 +349,8 @@ function SyncedLyrics({
       }}
       contentContainerStyle={{ paddingTop: CELL * 2, paddingBottom: height * (1 - ANCHOR) }}
     >
+      {/* Above the lines, so their offsets (where they rest) count it in. */}
+      <TranslationNote shown={translation} retry={retryTranslation} />
       {lines.map((line, at) => (
         <SyncedLine
           // Lines never reorder; a time can't repeat, as Core merges lines that share one.
@@ -265,6 +360,7 @@ function SyncedLyrics({
           current={at === index}
           picking={isPicking}
           selected={picking?.isSelected(at) ?? false}
+          {...lineTranslation(translation, at, line.text)}
           onSeek={onSeek}
           onPick={onPick}
           onLayoutLine={onLayoutLine}
@@ -275,11 +371,22 @@ function SyncedLyrics({
 }
 
 /**
- * Unsynced lyrics: the words as tagged, to scroll through at your own pace.
- * While Share picks lines each is a tap target, the selected ones in ink on a
- * faint backdrop and the rest in graphite.
+ * Unsynced lyrics: the words as tagged, to scroll through at your own pace,
+ * each line's translation under it while translation is on. While Share
+ * picks lines each is a tap target, the selected ones in ink on a faint
+ * backdrop and the rest in graphite.
  */
-function UnsyncedLyrics({ lines, picking }: { lines: readonly string[]; picking: Picking | null }) {
+function UnsyncedLyrics({
+  lines,
+  picking,
+  translation,
+  retryTranslation,
+}: {
+  lines: readonly string[];
+  picking: Picking | null;
+  translation: TranslationShown | null;
+  retryTranslation: () => void;
+}) {
   const selectedFill = useSelectedFill();
   return (
     <ScrollView
@@ -287,15 +394,24 @@ function UnsyncedLyrics({ lines, picking }: { lines: readonly string[]; picking:
       showsVerticalScrollIndicator={false}
       contentContainerStyle={{ paddingTop: CELL * 2, paddingBottom: CELL * 6 }}
     >
+      <TranslationNote shown={translation} retry={retryTranslation} />
       {lines.map((line, at) => {
         if (line === "") {
           // A blank line between stanzas.
           return <View key={at} style={{ height: CELL * 2 }} />;
         }
+        const under = lineTranslation(translation, at, line);
         if (picking === null) {
           return (
-            <View key={at} style={LINE_INSET}>
+            <View
+              key={at}
+              style={[LINE_INSET, under.translation !== null && { paddingBottom: CELL }]}
+            >
               <Text className="font-sans text-title2 font-medium text-foreground">{line}</Text>
+              {under.translation !== null && (
+                <Text className="font-sans text-body text-secondary">{under.translation}</Text>
+              )}
+              {under.translation === null && under.translating && <TranslationSkeleton at={at} />}
             </View>
           );
         }
@@ -309,17 +425,48 @@ function UnsyncedLyrics({ lines, picking }: { lines: readonly string[]; picking:
             accessibilityState={{ selected }}
             onPress={() => picking.onTap(at)}
             depth={0.015}
-            style={[LINE_INSET, selected && { backgroundColor: selectedFill }]}
+            style={[
+              LINE_INSET,
+              under.translation !== null && { paddingBottom: CELL },
+              selected && { backgroundColor: selectedFill },
+            ]}
           >
             <Text
               className={`font-sans text-title2 font-medium ${selected ? "text-foreground" : "text-secondary"}`}
             >
               {line}
             </Text>
+            {under.translation !== null && (
+              <Text className="font-sans text-body text-tertiary">{under.translation}</Text>
+            )}
           </Press>
         );
       })}
     </ScrollView>
+  );
+}
+
+/**
+ * Translate, beside Share: turns translation into the phone's language on
+ * and off, for every song until it's turned off. Teal while on, graphite
+ * while off, as the sleep timer's glyph.
+ */
+function TranslateButton({ on, onPress }: { on: boolean; onPress: () => void }) {
+  const accent = useThemeColor("accent");
+  const secondary = useThemeColor("secondary");
+  return (
+    <Press
+      accessibilityRole="switch"
+      accessibilityLabel="Translate Lyrics"
+      accessibilityState={{ checked: on }}
+      onPress={onPress}
+      haptic="selection"
+      depth={0.1}
+      className="items-center justify-center"
+      style={{ width: 48, height: 48 }}
+    >
+      <IconLanguage size={24} color={on ? accent : secondary} strokeWidth={1.5} />
+    </Press>
   );
 }
 
@@ -382,10 +529,14 @@ function LyricsBody({
   shown,
   picking,
   retry,
+  translation,
+  retryTranslation,
 }: {
   shown: Shown | null;
   picking: Picking | null;
   retry: () => void;
+  translation: TranslationShown | null;
+  retryTranslation: () => void;
 }) {
   // Reading takes a moment; an empty field avoids flashing the empty state.
   if (shown === null) {
@@ -398,9 +549,23 @@ function LyricsBody({
 
   switch (shown.kind) {
     case "synced":
-      return <SyncedLyrics lines={shown.lines} picking={picking} />;
+      return (
+        <SyncedLyrics
+          lines={shown.lines}
+          picking={picking}
+          translation={translation}
+          retryTranslation={retryTranslation}
+        />
+      );
     case "unsynced":
-      return <UnsyncedLyrics lines={shown.lines} picking={picking} />;
+      return (
+        <UnsyncedLyrics
+          lines={shown.lines}
+          picking={picking}
+          translation={translation}
+          retryTranslation={retryTranslation}
+        />
+      );
     case "searching":
       return <LyricsSkeleton />;
     case "none":
@@ -459,7 +624,9 @@ type Item = NonNullable<PlaybackState["item"]>;
  * unsynced lyrics as text, a skeleton while it searches, or an empty state
  * when the song has none. A song with lyrics gets Share, which picks up to
  * five lines (Core's `tapLyricLine`), then Next previews them as a card
- * (`LyricCardPreview`) in the cover's colours.
+ * (`LyricCardPreview`) in the cover's colours, and Translate, which puts
+ * each line's translation into the phone's language under it
+ * (`useLyricsTranslation`) until it's turned off.
  */
 export function LyricsView({
   file,
@@ -486,6 +653,16 @@ export function LyricsView({
   const lines = useMemo(() => shareableLyricLines(lyrics), [lyrics]);
   // The song whose lines are picked: its file, or a non-D song's track id.
   const song = path ?? nonDTrackId;
+  const translationOn = useLyricsTranslationOn();
+  // A Library track by its id, a non-D song by its track id: its saved translation's key.
+  const translationSong =
+    file !== null ? `library:${file.id}` : nonDTrackId === null ? null : `track:${nonDTrackId}`;
+  // Only lyrics with words to share have words to translate.
+  const translation = useLyricsTranslation(
+    translationSong,
+    lines === null ? null : lyrics,
+    translationOn,
+  );
   // The lines picked for that song; another song's lyrics start afresh.
   const [picked, setPicked] = useState<{
     readonly song: string | null;
@@ -554,7 +731,11 @@ export function LyricsView({
             </View>
             {lines !== null && (
               // The icon's 48dp target reaches past the margin, so the glyph lines up with it.
-              <View style={{ marginRight: -12 }}>
+              <View className="flex-row" style={{ marginRight: -12 }}>
+                <TranslateButton
+                  on={translationOn}
+                  onPress={() => setLyricsTranslationOn(!translationOn)}
+                />
                 <IconButton
                   icon={IconShare3}
                   label="Share Lyrics"
@@ -569,6 +750,8 @@ export function LyricsView({
         shown={shown}
         picking={picking}
         retry={nonD.shown === null ? library.retry : nonD.retry}
+        translation={translation.shown}
+        retryTranslation={translation.retry}
       />
     </View>
   );
