@@ -103,11 +103,11 @@ const LEVELS = 5;
 /** The level of a fresh install. */
 export const DEFAULT_DISCOVER_MIX_LEVEL: DiscoverMixLevel = 3;
 
-/** The levels the section header's control offers, from mostly familiar to all new. */
+/** The levels Discover's New music slider offers, from mostly familiar to all new. */
 export const DISCOVER_MIX_LEVELS: readonly {
   readonly level: DiscoverMixLevel;
   readonly label: string;
-  /** How much of each mix is new at it ("60% new"): the control's own label. */
+  /** How much of what Discover plays is new at it ("60% new"). */
   readonly share: string;
 }[] = (
   [
@@ -118,6 +118,16 @@ export const DISCOVER_MIX_LEVELS: readonly {
     [5, "All new"],
   ] as const
 ).map(([level, label]) => ({ level, label, share: `${(level * 100) / LEVELS}% new` }));
+
+/**
+ * What Discover's New music slider says at [level]: the step's name and its
+ * share ("Balanced · 60% new"). One scale for the Magic Queue and the mixes
+ * (`magicQueueShare`).
+ */
+export const discoverLevelLabel = (level: DiscoverMixLevel): string => {
+  const entry = DISCOVER_MIX_LEVELS.find((candidate) => candidate.level === level)!;
+  return `${entry.label} · ${entry.share}`;
+};
 
 /** The level kept on the phone ([stored], null for none): 3 for anything that isn't one. */
 export const readDiscoverMixLevel = (stored: string | null): DiscoverMixLevel =>

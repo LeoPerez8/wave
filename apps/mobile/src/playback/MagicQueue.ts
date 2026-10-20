@@ -8,6 +8,7 @@ import {
   magicLibraryCandidates,
   magicLibraryLookups,
   magicLibrarySongs,
+  magicLibraryThreshold,
   magicPlaySignal,
   magicQueueEdits,
   magicQueueLabel,
@@ -31,13 +32,13 @@ import { Storage } from "expo-sqlite/kv-store";
 import { useSyncExternalStore } from "react";
 
 import { lookUpArtistProfiles, magicProfileOf } from "@/home/artistGenres";
+import { discoverLevel, discoverSliders } from "@/lib/discoverSettings";
 import { makeExternalStore, subscribeAll } from "@/lib/externalStore";
 import { oneAtATime } from "@/lib/oneAtATime";
 import { onStarred, onYtSongSignal } from "@/library/libraryChanges";
 import { LibraryStore, songHasFile, type SongRow } from "@/library/LibraryStore";
 import { YtMusic } from "@/ytmusic/YtMusic";
 
-import { magicQueueLevel, magicQueueSliders } from "./magicQueueLevel";
 import { magicQueueYtCandidates } from "./magicQueueRadio";
 import { magicSongsOf } from "./magicSongs";
 import { Player } from "./Player";
@@ -136,8 +137,8 @@ const libraryNow = Effect.gen(function* () {
  * the session's first batch, at once when the candidate catalog has enough
  * of the seed's songs, else once its radio was read. Its YouTube Music
  * songs grow from the seed songs' primary artists, held to their genres.
- * YouTube Music's share of a batch starts at the Magic Queue section's
- * level (`magicQueueLevel`), from Home or any long-press menu.
+ * YouTube Music's share of a batch starts at Discover's New music level
+ * (`discoverLevel`), from Home or any long-press menu.
  */
 export const startMagicQueue = (seed: MagicSeed, seedSongs: readonly SongRow[]) =>
   Effect.gen(function* () {
@@ -151,7 +152,7 @@ export const startMagicQueue = (seed: MagicSeed, seedSongs: readonly SongRow[]) 
         artists: playable.flatMap((song) => names.get(song.artistId) ?? []),
         profile: genreProfile(playable),
       },
-      ytShare: magicQueueShare(magicQueueLevel.get()),
+      ytShare: magicQueueShare(discoverLevel.get()),
     });
     const first = playable.find((song) => String(song.id) === started?.first);
     if (started === null || first === undefined) return;
@@ -263,8 +264,9 @@ export const layer = Layer.effectDiscard(
         const library = yield* Effect.provideService(libraryNow, LibraryStore, store);
         // The owner's taste weighs from the session's first batch on.
         const taste = yield* Effect.provideService(tasteProfileNow, LibraryStore, store);
-        // The Magic Queue section's sliders as they are now: a move applies from the next batch.
-        const engine = mixSlidersEngine(magicQueueSliders.get());
+        // Discover's sliders as they are now: a move applies from the next batch.
+        const sliders = discoverSliders.get();
+        const engine = mixSlidersEngine(sliders);
         // Both sources are held to the seed's genres: an untagged seed's are its artists' (Deezer's).
         const profileOf = magicProfileOf(library);
         yield* lookUpArtistProfiles(magicSeedLookups(wanted, profileOf)).pipe(
@@ -284,22 +286,17 @@ export const layer = Layer.effectDiscard(
         const session = activeMagicSession();
         if (session?.id !== wanted.id || !wantsMagicBatch(session, queueState.get())) return;
         const playable = library.songs.filter(songHasFile);
-        const libraryCandidates = magicLibraryCandidates(
-          session,
-          { artists: library.artists, songs: playable },
-          { profileOf, threshold: engine.threshold },
-        );
+        const ofLibrary = { artists: library.artists, songs: playable };
+        // At Wander the Library keeps every genre (null).
+        const threshold = magicLibraryThreshold(sliders);
+        const libraryCandidates = magicLibraryCandidates(session, ofLibrary, {
+          profileOf,
+          threshold,
+        });
         const batch = magicBatch(session, libraryCandidates, Math.random, yt, taste);
         // Library songs with no genre known stay out: their artists' genres are looked up for later batches.
-        fork(
-          lookUpArtistProfiles(
-            magicLibraryLookups(
-              session,
-              { artists: library.artists, songs: playable },
-              { profileOf },
-            ),
-          ),
-        );
+        if (threshold !== null)
+          fork(lookUpArtistProfiles(magicLibraryLookups(session, ofLibrary, { profileOf })));
         if (batch.trackIds.length === 0) return;
         save(batch.session);
         const tracks = new Map<string, QueueTrack>(

@@ -18,7 +18,6 @@ import {
   magicRadioArtists,
   magicQueueEdits,
   magicQueueLabel,
-  MAGIC_QUEUE_LEVELS,
   magicQueueShare,
   magicSignal,
   magicPlaySignal,
@@ -525,52 +524,50 @@ describe("A Magic Queue's YouTube Music share", () => {
     assert.ok(ytInBatch(learnYt(start(), "removed", 1)) < 5);
   });
 
-  test("starts at the share its new-music level gives, from 20% to 80%", () => {
+  test("starts at the share its new-music level gives, from 20% to 100%", () => {
     const at = (level: DiscoverMixLevel) =>
       startMagicQueue(SONG_SEED, [seedSong], {
         id: "m1",
         random: first,
         ytShare: magicQueueShare(level),
       })!.session;
-    assert.equal(ytInBatch(at(1)), 2);
-    assert.equal(ytInBatch(at(3)), 5);
-    assert.equal(ytInBatch(at(5)), 8);
-    assert.ok(ytInBatch(at(2)) > 2 && ytInBatch(at(2)) < 5);
-    assert.ok(ytInBatch(at(4)) > 5 && ytInBatch(at(4)) < 8);
-  });
-
-  test("its level card offers five levels, each saying its share of new music", () => {
     assert.deepEqual(
-      MAGIC_QUEUE_LEVELS.map(({ level, share }) => [level, share]),
-      [
-        [1, "20% new"],
-        [2, "35% new"],
-        [3, "50% new"],
-        [4, "65% new"],
-        [5, "80% new"],
-      ],
+      ([1, 2, 3, 4, 5] as const).map((level) => ytInBatch(at(level))),
+      [2, 4, 6, 8, 10],
     );
   });
 
-  test("a share outside 20-80% starts at the nearest bound", () => {
+  test("at All new plays only YouTube Music songs while it has them, and the Library without", () => {
+    const allNew = startMagicQueue(SONG_SEED, [seedSong], {
+      id: "m1",
+      random: first,
+      ytShare: magicQueueShare(5),
+    })!.session;
+    assert.equal(ytInBatch(allNew), 10);
+    const offline = magicBatch(allNew, library, first);
+    assert.equal(offline.trackIds.length, 9);
+    assert.ok(offline.trackIds.every((id) => !id.startsWith("yt:")));
+  });
+
+  test("a share outside 20-100% starts at the nearest bound", () => {
     const at = (ytShare: number) =>
       startMagicQueue(SONG_SEED, [seedSong], { id: "m1", random: first, ytShare })!.session;
-    assert.equal(ytInBatch(at(1)), 8);
+    assert.equal(ytInBatch(at(1.5)), 10);
     assert.equal(ytInBatch(at(0)), 2);
   });
 
-  test("signals keep moving a level's share within 20-80%", () => {
+  test("signals keep moving a level's share within 20-100%", () => {
     const high = startMagicQueue(SONG_SEED, [seedSong], {
       id: "m1",
       random: first,
       ytShare: magicQueueShare(5),
     })!.session;
-    assert.equal(ytInBatch(learnYt(high, "favorite", 3)), 8);
-    assert.ok(ytInBatch(learnYt(high, "skip", 1)) < 8);
+    assert.equal(ytInBatch(learnYt(high, "favorite", 3)), 10);
+    assert.ok(ytInBatch(learnYt(high, "skip", 1)) < 10);
   });
 
-  test("always stays between 20% and 80%", () => {
-    assert.equal(ytInBatch(learnYt(start(), "favorite", 30)), 8);
+  test("always stays between 20% and 100%", () => {
+    assert.equal(ytInBatch(learnYt(start(), "favorite", 30)), 10);
     assert.equal(ytInBatch(learnYt(start(), "skip", 30)), 2);
   });
 

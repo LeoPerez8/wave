@@ -22,7 +22,6 @@ import {
   mixAffinity,
   mixProfileLookups,
   mixProfileLookupsNext,
-  mixSectionOfId,
   mixSeedArtists,
   mixSlidersEngine,
   mixSeedProfile,
@@ -52,7 +51,7 @@ import { YtMusic } from "@/ytmusic/YtMusic";
 import { lookUpArtistProfiles, mixProfileOf } from "./artistGenres";
 import { artistGraphNow, forgetArtistGraph } from "./artistGraphNow";
 import { artistMixPools } from "./artistMixPools";
-import { mixSlidersOf } from "./discoverMixLevel";
+import { discoverSlidersNow } from "./discoverMixLevel";
 import { harvestMobileUsed, noteHarvestMobileUse } from "./harvestMobileUse";
 import { forgetMixCatalog } from "./mixCatalog";
 import { harvestRun } from "./mixHarvestRun";
@@ -234,10 +233,10 @@ const harvest = Effect.gen(function* () {
     known: library.known,
   };
   // A seed at a time, giving the JavaScript thread back between them, each
-  // counted at its section's sliders, as its mix would keep songs.
+  // counted at Discover's sliders, as its mix would keep songs.
   const wants: ReturnType<typeof harvestWants<DiscoverMixSeed>> = [];
+  const engine = mixSlidersEngine(discoverSlidersNow());
   for (const seed of seeds) {
-    const engine = mixSlidersEngine(mixSlidersOf(mixSectionOfId(seed.id)));
     wants.push(...harvestWants([seed], sources, engine));
     yield* freeTurnEffect;
   }
