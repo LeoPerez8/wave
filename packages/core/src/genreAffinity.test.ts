@@ -299,6 +299,18 @@ describe("An artist's profile from Deezer", () => {
     assert.equal(deezerArtistProfile({ error: { code: 4 } }, genres!), undefined);
     assert.equal(deezerGenreNames("nope"), null);
   });
+
+  test("tells Soul & Funk albums apart from Rap/Hip Hop ones, even at the loosest match", () => {
+    const names = new Map([
+      [116, "Rap/Hip Hop"],
+      [169, "Soul & Funk"],
+    ]);
+    const fortMinor = deezerArtistProfile({ data: [{ genre_id: 116 }] }, names)!;
+    const funk = deezerArtistProfile({ data: [{ genre_id: 169 }, { genre_id: 169 }] }, names)!;
+    assert.deepEqual(shares(fortMinor), { hiphop: 100 });
+    assert.deepEqual(shares(funk), { rb: 100 });
+    assert.equal(genreAffinity(fortMinor, funk), 0);
+  });
 });
 
 describe("Artists' profiles from Deezer, kept on the phone", () => {

@@ -5,11 +5,14 @@ import {
   magicBatch,
   magicBatchLoading,
   magicPickEnded,
+  magicLibraryCandidates,
+  magicLibraryLookups,
   magicLibrarySongs,
   magicPlaySignal,
   magicQueueEdits,
   magicQueueLabel,
   magicQueueShare,
+  magicSeedLookups,
   magicSignal,
   mixSlidersEngine,
   parseMagicSession,
@@ -27,6 +30,7 @@ import * as Layer from "effect/Layer";
 import { Storage } from "expo-sqlite/kv-store";
 import { useSyncExternalStore } from "react";
 
+import { lookUpArtistProfiles, magicProfileOf } from "@/home/artistGenres";
 import { makeExternalStore, subscribeAll } from "@/lib/externalStore";
 import { oneAtATime } from "@/lib/oneAtATime";
 import { onStarred, onYtSongSignal } from "@/library/libraryChanges";
@@ -190,6 +194,9 @@ const subscribeSignals = subscribeAll(learning, playTracker, queueState);
 /** The longest a batch waits for signals, should the player go quiet (paused mid-crossfade). */
 const SIGNALS_WAIT = "15 seconds";
 
+/** The longest a batch waits for an untagged seed's artists' genres from Deezer. */
+const SEED_LOOKUP_WAIT = "10 seconds";
+
 /**
  * Waits until every signal so far was learned (`signalsLearned`): the play
  * that just ended, the 9th song of the batch say, has its say in the next.
@@ -258,7 +265,17 @@ export const layer = Layer.effectDiscard(
         const taste = yield* Effect.provideService(tasteProfileNow, LibraryStore, store);
         // The Magic Queue section's sliders as they are now: a move applies from the next batch.
         const engine = mixSlidersEngine(magicQueueSliders.get());
-        const yt = yield* magicQueueYtCandidates(wanted, library, { taste, engine }).pipe(
+        // Both sources are held to the seed's genres: an untagged seed's are its artists' (Deezer's).
+        const profileOf = magicProfileOf(library);
+        yield* lookUpArtistProfiles(magicSeedLookups(wanted, profileOf)).pipe(
+          Effect.timeout(SEED_LOOKUP_WAIT),
+          Effect.ignore,
+        );
+        const yt = yield* magicQueueYtCandidates(wanted, library, {
+          taste,
+          engine,
+          profileOf,
+        }).pipe(
           Effect.provideService(LibraryStore, store),
           Effect.provideService(YtMusic, ytMusic),
         );
@@ -267,8 +284,22 @@ export const layer = Layer.effectDiscard(
         const session = activeMagicSession();
         if (session?.id !== wanted.id || !wantsMagicBatch(session, queueState.get())) return;
         const playable = library.songs.filter(songHasFile);
-        const toMagicSong = magicLibrarySongs(library.artists);
-        const batch = magicBatch(session, playable.map(toMagicSong), Math.random, yt, taste);
+        const libraryCandidates = magicLibraryCandidates(
+          session,
+          { artists: library.artists, songs: playable },
+          { profileOf, threshold: engine.threshold },
+        );
+        const batch = magicBatch(session, libraryCandidates, Math.random, yt, taste);
+        // Library songs with no genre known stay out: their artists' genres are looked up for later batches.
+        fork(
+          lookUpArtistProfiles(
+            magicLibraryLookups(
+              session,
+              { artists: library.artists, songs: playable },
+              { profileOf },
+            ),
+          ),
+        );
         if (batch.trackIds.length === 0) return;
         save(batch.session);
         const tracks = new Map<string, QueueTrack>(

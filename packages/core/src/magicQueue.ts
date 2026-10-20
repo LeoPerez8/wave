@@ -10,7 +10,14 @@
 import { artistPhotoName } from "./artistPhoto.ts";
 import { DISCOVER_MIX_LEVELS, type DiscoverMixLevel } from "./discoverMixLevels.ts";
 import type { DiscoverRadioSong } from "./discoverMixes.ts";
-import { type GenreProfile, type GenreProfileOf, type GenreTagged } from "./genreAffinity.ts";
+import {
+  GENRE_AFFINITY_THRESHOLD,
+  genreAffinity as profileAffinity,
+  genreProfile,
+  type GenreProfile,
+  type GenreProfileOf,
+  type GenreTagged,
+} from "./genreAffinity.ts";
 import { songFamilies } from "./genreMixes.ts";
 import type { PlayEnd } from "./playEvents.ts";
 import type { QueueState } from "./queue.ts";
@@ -60,6 +67,45 @@ export const magicLibrarySongs = (
     trackId: String(song.id),
     artists: song.artistIds.flatMap((id) => keys.get(id) ?? []),
     genre: songFamilies(song)[0]?.key ?? null,
+  });
+};
+
+/**
+ * The Library's songs a Magic Queue's batch may pick from (as
+ * `magicLibrarySongs` weighs them): those that pass the genre affinity check
+ * against [session]'s seed profile (`magicSeedProfile`) at [threshold] (the
+ * Magic Queue section's Genre faithfulness), as its YouTube Music candidates
+ * do. A song's genre is its genre tag's profile; without a tag, its primary
+ * artist's ([profileOf]: the Library's, else Deezer's); with no genre known
+ * anywhere it stays out. Every song passes for a seed with no genre known.
+ */
+export const magicLibraryCandidates = (
+  session: MagicSession,
+  library: {
+    readonly artists: readonly { readonly id: number; readonly name: string }[];
+    readonly songs: readonly MagicLibrarySong[];
+  },
+  {
+    profileOf,
+    threshold = GENRE_AFFINITY_THRESHOLD,
+  }: { readonly profileOf: GenreProfileOf; readonly threshold?: number },
+): MagicSong[] => {
+  const toMagicSong = magicLibrarySongs(library.artists);
+  const seed = magicSeedProfile(session, profileOf);
+  if (seed === null) return library.songs.map(toMagicSong);
+  const names = new Map(library.artists.map((artist) => [artist.id, artist.name]));
+  const profileOfSong = (song: MagicLibrarySong): GenreProfile | null => {
+    const own = genreProfile([song]);
+    if (own !== null) return own;
+    const primary = song.artistIds[0];
+    const name = primary === undefined ? undefined : names.get(primary);
+    return name === undefined ? null : (profileOf(name) ?? null);
+  };
+  return library.songs.flatMap((song) => {
+    const profile = profileOfSong(song);
+    return profile !== null && profileAffinity(seed, profile) >= threshold
+      ? [toMagicSong(song)]
+      : [];
   });
 };
 
@@ -137,9 +183,30 @@ export interface MagicRadioSeed {
   readonly profile: GenreProfile | null;
 }
 
-/** The genre profile [session]'s YouTube Music candidates are held to; null keeps any genre. */
-export const magicSeedProfile = (session: MagicSession): GenreProfile | null =>
-  session.seedProfile === null ? null : new Map(Object.entries(session.seedProfile));
+/**
+ * The genre profile [session]'s candidates, from both sources, are held to:
+ * the seed songs' (`seedProfile`); when none of them has a genre tag, its
+ * radio artists' profiles together ([profileOf]: the Library's, else
+ * Deezer's), each counting alike. Null keeps any genre: nothing is known
+ * anywhere (or no [profileOf] to ask).
+ */
+export const magicSeedProfile = (
+  session: MagicSession,
+  profileOf?: GenreProfileOf,
+): GenreProfile | null => {
+  if (session.seedProfile !== null) return new Map(Object.entries(session.seedProfile));
+  if (profileOf === undefined) return null;
+  const weights = new Map<string, number>();
+  let known = 0;
+  for (const artist of session.radioArtists) {
+    const profile = profileOf(artist);
+    if (profile === null || profile === undefined || profile.size === 0) continue;
+    known += 1;
+    for (const [family, share] of profile) weights.set(family, (weights.get(family) ?? 0) + share);
+  }
+  if (known === 0) return null;
+  return new Map([...weights].map(([family, weight]) => [family, weight / known]));
+};
 
 /** The context kind of a Magic Queue's queue; its id is the session's. */
 export const MAGIC_QUEUE_CONTEXT = "magic";

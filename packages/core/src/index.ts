@@ -1928,3 +1928,5 @@ export type { DiscoverMixesRerun } from "./mixRerank.ts";
 export { harvestSeedPool } from "./harvest.ts";
 export type { HarvestSeedSources } from "./harvest.ts";
 export { sliderStep, sliderStepLabel } from "./mixSliders.ts";
+export { magicLibraryCandidates } from "./magicQueue.ts";
+export { magicLibraryLookups, magicSeedLookups } from "./mixGenreLookups.ts";
