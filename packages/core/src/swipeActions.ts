@@ -7,22 +7,42 @@
  * inert: the row doesn't move that way. How a swipe ends is `resolveRowSwipe`.
  */
 
-import type { ItemAction } from "./itemActions.ts";
+import { ITEM_ACTION_LABELS, type ItemAction } from "./itemActions.ts";
 import type { UnavailableEntryAction } from "./playlistEntries.ts";
+import { readStoredRecord } from "./storedJson.ts";
 
 /** An entry of a song row's long-press menu: the Library's, a YT Music song's, an unavailable entry's. */
 export type RowMenuAction = ItemAction | UnavailableEntryAction;
 
 /**
- * What a swipe direction is set to run. Most choices are a menu entry of
- * their own; `remove` is the row's way out (Remove from Playlist inside a
- * playlist, Delete or Remove from Library elsewhere), and `favorite` the
- * star either way (Favorite, or Remove from Favorites on a starred song), as
- * the row's menu offers it.
+ * What a swipe direction can be set to run, in the order Settings › Swipe
+ * actions lists them: a song row's long-press menu entries. Most stand for
+ * the entry of their name; `remove` is the row's way out (Remove from
+ * Playlist inside a playlist, Delete or Remove from Library elsewhere),
+ * `favorite` the star either way (Favorite, or Remove from Favorites on a
+ * starred song) and `download` the song's download (Download, or Retry
+ * Download after a failure), as the row's menu offers them.
  */
-export type SwipeChoice = "remove" | Exclude<RowMenuAction, RemoveAction | "unfavorite">;
+export const SWIPE_CHOICES = [
+  "playNext",
+  "addToQueue",
+  "magicQueue",
+  "addToPlaylist",
+  "favorite",
+  "download",
+  "goToAlbum",
+  "goToArtist",
+  "fixSong",
+  "share",
+  "remove",
+] as const satisfies readonly (RowMenuAction | "remove")[];
 
-type RemoveAction = "removeFromPlaylist" | "delete" | "removeFromLibrary";
+/** One of `SWIPE_CHOICES`. */
+export type SwipeChoice = (typeof SWIPE_CHOICES)[number];
+
+/** What Settings calls [choice]: its menu entry's name, or Remove. */
+export const swipeChoiceLabel = (choice: SwipeChoice): string =>
+  choice === "remove" ? "Remove" : ITEM_ACTION_LABELS[choice];
 
 /** How the rows swipe: on or off, and what each direction runs. */
 export interface SwipeSettings {
@@ -38,10 +58,36 @@ export const DEFAULT_SWIPE_SETTINGS: SwipeSettings = {
   left: "remove",
 };
 
+const isSwipeChoice = (value: unknown): value is SwipeChoice =>
+  (SWIPE_CHOICES as readonly unknown[]).includes(value);
+
+/**
+ * The swipe settings as kept on the phone and synced ([stored], null for
+ * none): each field this Wave doesn't understand (a choice a newer Wave
+ * added) at its default.
+ */
+export const readSwipeSettings = (stored: string | null): SwipeSettings => {
+  const { enabled, right, left } = readStoredRecord(stored);
+  return {
+    enabled: typeof enabled === "boolean" ? enabled : DEFAULT_SWIPE_SETTINGS.enabled,
+    right: isSwipeChoice(right) ? right : DEFAULT_SWIPE_SETTINGS.right,
+    left: isSwipeChoice(left) ? left : DEFAULT_SWIPE_SETTINGS.left,
+  };
+};
+
+/** What to keep for [settings]: null (nothing) at the defaults. */
+export const storedSwipeSettings = ({ enabled, right, left }: SwipeSettings): string | null =>
+  enabled === DEFAULT_SWIPE_SETTINGS.enabled &&
+  right === DEFAULT_SWIPE_SETTINGS.right &&
+  left === DEFAULT_SWIPE_SETTINGS.left
+    ? null
+    : JSON.stringify({ enabled, right, left });
+
 /** The menu entries a choice stands for, the first a row offers winning. */
 const CHOICE_ACTIONS: { readonly [C in SwipeChoice]?: readonly RowMenuAction[] } = {
   remove: ["removeFromPlaylist", "delete", "removeFromLibrary"],
   favorite: ["favorite", "unfavorite"],
+  download: ["download", "retryDownload"],
 };
 
 /**
@@ -79,3 +125,11 @@ export const rowSwipeActions = <A extends RowMenuAction>(
         left: swipeChoiceAction(settings.left, menu),
       }
     : { right: null, left: null };
+
+/**
+ * Whether a swipe direction runs [choice] under [settings]: a row works out
+ * what only some choices need (a streamed song's artists, a download's
+ * state) only then.
+ */
+export const swipesChoose = (settings: SwipeSettings, choice: SwipeChoice): boolean =>
+  settings.enabled && (settings.right === choice || settings.left === choice);

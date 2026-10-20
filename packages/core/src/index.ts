@@ -1951,5 +1951,14 @@ export type { LyricsTranslation, LyricsTranslationRequest } from "./lyricsTransl
 export { magicLibraryCandidates } from "./magicQueue.ts";
 export { magicLibraryLookups, magicSeedLookups } from "./mixGenreLookups.ts";
 export { magicLibraryThreshold } from "./mixSliders.ts";
-export { DEFAULT_SWIPE_SETTINGS, rowSwipeActions, swipeChoiceAction } from "./swipeActions.ts";
+export {
+  DEFAULT_SWIPE_SETTINGS,
+  SWIPE_CHOICES,
+  readSwipeSettings,
+  rowSwipeActions,
+  storedSwipeSettings,
+  swipeChoiceAction,
+  swipeChoiceLabel,
+  swipesChoose,
+} from "./swipeActions.ts";
 export type { RowMenuAction, RowSwipeActions, SwipeChoice, SwipeSettings } from "./swipeActions.ts";
