@@ -3,8 +3,11 @@ import { describe, test } from "node:test";
 
 import {
   createFindableList,
+  artistFindText,
   createPlaylistFinder,
   findInPlaylistHead,
+  findNoMatch,
+  findPlaceholder,
   foundInPlaylist,
   hasFindQuery,
 } from "./index.ts";
@@ -168,5 +171,46 @@ describe("a song list, with Find in Playlist on or off", () => {
       ["Halo", "Crazy in Love"],
     );
     assert.equal(shown.placeOf(1), 2);
+  });
+});
+
+describe("Find in the Library's Artists", () => {
+  const ARTISTS = ["AC/DC", "Beyoncé", "The Beatles", "Beach House", "a-ha"];
+  const list = () => createFindableList(ARTISTS, artistFindText, true);
+
+  test("an artist is found by its name, folded as a song's title is", () => {
+    assert.deepEqual(list().show("beyo").found, [1]);
+    assert.deepEqual(list().show("ac/dc").found, [0]);
+    assert.deepEqual(list().show("acdc").found, [0]);
+  });
+
+  test("the artists found keep the list's order, and a row leads back to its place", () => {
+    const shown = list().show("bea");
+    assert.deepEqual(shown.songs, ["The Beatles", "Beach House"]);
+    assert.equal(shown.placeOf(1), 3);
+  });
+
+  test("every word of the query starts a word of the name, in any order", () => {
+    assert.deepEqual(list().show("house beach").found, [3]);
+    assert.deepEqual(list().show("eatles").found, []);
+  });
+
+  test("a blank query shows every artist", () => {
+    assert.equal(list().show(" ").found, null);
+    assert.deepEqual(list().show("").songs, ARTISTS);
+  });
+});
+
+describe("what a findable list's field and empty line say", () => {
+  test("each list's field names it", () => {
+    assert.equal(findPlaceholder("playlist"), "Find in Playlist");
+    assert.equal(findPlaceholder("songs"), "Find in Songs");
+    assert.equal(findPlaceholder("artists"), "Find in Artists");
+  });
+
+  test("a query that finds nothing says what wasn't found", () => {
+    assert.equal(findNoMatch("playlist"), "No songs match");
+    assert.equal(findNoMatch("songs"), "No songs match");
+    assert.equal(findNoMatch("artists"), "No artists match");
   });
 });
