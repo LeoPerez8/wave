@@ -1325,7 +1325,6 @@ export {
   editHomeArrangement,
   hiddenHomeSections,
   homeItems,
-  homeSectionNote,
   homeSectionTitle,
   parseHomeArrangement,
   storedHomeArrangement,
@@ -1680,6 +1679,7 @@ export {
   undoneMixRefresh,
 } from "./mixRefresh.ts";
 export type { MixPull, MixRefreshAvoid, ShownMixes } from "./mixRefresh.ts";
+export { MIX_PULL_SLOP, mixPullCanStart } from "./mixRefresh.ts";
 export { searchRoomAt } from "./searchAllowance.ts";
 export { mixKnownSongs } from "./mixKnownSongs.ts";
 export type {
@@ -1822,7 +1822,7 @@ export {
   undoneMagicQueueRefresh,
 } from "./magicQueueSection.ts";
 export type { MagicQueuePicking, MagicQueuePicks } from "./magicQueueSection.ts";
-export { MAGIC_QUEUE_LEVELS, magicQueueShare } from "./magicQueue.ts";
+export { magicQueueShare } from "./magicQueue.ts";
 export { discoverMixesOfRadios } from "./discoverMixRadios.ts";
 export type { DiscoverMixRead } from "./discoverMixRadios.ts";
 export {
@@ -1935,5 +1935,21 @@ export type { HarvestSeedSources } from "./harvest.ts";
 export { sliderStep, sliderStepLabel } from "./mixSliders.ts";
 export { DOUBLE_TAP_MS, coverDoubleTap, createCoverTaps } from "./coverGestures.ts";
 export type { CoverDoubleTap, CoverTaps } from "./coverGestures.ts";
+export { discoverLevelLabel } from "./discoverMixLevels.ts";
+export { DISCOVER_ROWS, discoverRowTitle } from "./homeSections.ts";
+export type { DiscoverRowId, MixRowId } from "./homeSections.ts";
+export {
+  lyricsTranslationKey,
+  lyricsTranslationLanguageName,
+  lyricsTranslationRequest,
+  lyricsTranslationTarget,
+  parseLyricsTranslation,
+  savedLyricsTranslation,
+  storedLyricsTranslation,
+} from "./lyricsTranslation.ts";
+export type { LyricsTranslation, LyricsTranslationRequest } from "./lyricsTranslation.ts";
+export { magicLibraryCandidates } from "./magicQueue.ts";
+export { magicLibraryLookups, magicSeedLookups } from "./mixGenreLookups.ts";
+export { magicLibraryThreshold } from "./mixSliders.ts";
 export { DEFAULT_SWIPE_SETTINGS, rowSwipeActions, swipeChoiceAction } from "./swipeActions.ts";
 export type { RowMenuAction, RowSwipeActions, SwipeChoice, SwipeSettings } from "./swipeActions.ts";

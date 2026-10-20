@@ -16,11 +16,11 @@ export type LibraryShelf = HomeSectionId | "none";
  * listening overview stay on Home.
  */
 const SHELVES: readonly HomeSectionId[] = [
+  "discover",
   "recently-added",
   "recently-played",
   "most-played-albums",
   "most-played-artists",
-  "artist-mixes",
   "favorites",
 ];
 
@@ -37,7 +37,7 @@ export const LIBRARY_SHELF_CHOICES: readonly {
 const DEFAULT_LIBRARY_SHELF: LibraryShelf = "recently-added";
 
 /**
- * The shelf a stored value names (a renamed section by its old id too):
+ * The shelf a stored value names (Artist mixes, or Discover mixes, by Discover, which holds them):
  * nothing stored is Recently added.
  */
 export const parseLibraryShelf = (stored: string | null): LibraryShelf => {
