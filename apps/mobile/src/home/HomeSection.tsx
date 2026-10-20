@@ -1,12 +1,14 @@
 import {
   discoverMixCaption,
+  discoverRowTitle,
   homeSectionTitle,
   type BlendedDiscoverMix,
+  type DiscoverMixesSection,
   type HomeSectionId,
 } from "@wave/core";
 import { router } from "expo-router";
-import type { ComponentType } from "react";
-import { View } from "react-native";
+import type { ComponentType, ReactNode } from "react";
+import { Text, View } from "react-native";
 
 import { AlbumTile } from "@/catalog/AlbumTile";
 import { COVER_ROW_TILE } from "@/catalog/CoverRow";
@@ -29,9 +31,13 @@ import { openDiscoverMix } from "@/ytmusic/routes";
 
 import { refreshMixes, useDiscoverMixes, type MixSectionId } from "./discoverMixes";
 import { openDiscoverMixActions } from "./DiscoverMixActions";
-import { DiscoverMixLevelButton } from "./DiscoverMixLevelButton";
 import { DiscoverMixesSkeleton } from "./DiscoverMixesSkeleton";
-import { startMagicQueueFrom, useMagicQueueSection } from "./magicQueueSection";
+import { DiscoverSettingsButton } from "./DiscoverSettings";
+import {
+  startMagicQueueFrom,
+  useMagicQueueSection,
+  type MagicQueueSection,
+} from "./magicQueueSection";
 import { useMostPlayedOfAllTime } from "./mostPlayedOfAllTime";
 
 import { AlbumShelf, ArtistShelf, SongRows } from "./HomeSections";
@@ -71,23 +77,96 @@ function MostPlayedAlbums({ title }: SectionProps) {
   );
 }
 
-/** The header's quiet line while a section's mixes rebuild over the saved ones. */
+/** The quiet line after a mix row's label while its mixes rebuild over the saved ones. */
 const MIXES_UPDATING = "Updating…";
 
 /**
- * A mix section's mixes (Artist mixes or Genre mixes) as covers, each
- * opening its page; placeholder tiles while the first ones build; nothing
- * with YT Music off (Core's `discoverMixesSection`). The header's control
- * sets how much of each of the section's mixes is new, and says
+ * Home's Discover section: one header, its adjustments icon opening the
+ * settings card all three rows share (`DiscoverSettingsButton`), then the
+ * Magic Queue, Artist mixes and Genre mixes rows, each under its label. A
+ * row with nothing to show isn't drawn: a mix row shows placeholder tiles
+ * while its first mixes build and is gone with YT Music off (Core's
+ * `discoverMixesSection`), the Magic Queue row is gone without songs to
+ * show. The section is gone only when all three are.
+ */
+function Discover({ home, title }: SectionProps) {
+  const ytMusic = useYtMusicEnabled();
+  const played = home.mostPlayed.length > 0;
+  const magicQueue = useMagicQueueSection();
+  const artistMixes = useDiscoverMixes("artist-mixes", played);
+  const genreMixes = useDiscoverMixes("genre-mixes", played);
+  const showsMagicQueue = magicQueue !== null && magicQueue.songs.length > 0;
+  if (!showsMagicQueue && artistMixes.kind === "hidden" && genreMixes.kind === "hidden")
+    return null;
+  return (
+    <TitledSection title={title} control={<DiscoverSettingsButton ytMusic={ytMusic} />}>
+      <View style={{ gap: CELL * 3 }}>
+        {showsMagicQueue && <MagicQueueRow section={magicQueue} />}
+        <MixRow id="artist-mixes" section={artistMixes} />
+        <MixRow id="genre-mixes" section={genreMixes} />
+      </View>
+    </TitledSection>
+  );
+}
+
+/**
+ * The label over a row of Discover, one level below the section's title,
+ * with a quiet [status] after it ("Updating…" while mixes rebuild), read
+ * out as it changes.
+ */
+function DiscoverRowLabel({ children, status }: { children: string; status?: string | undefined }) {
+  return (
+    <View className="flex-row items-baseline" style={{ gap: CELL }}>
+      <Text
+        accessibilityRole="header"
+        numberOfLines={1}
+        className="shrink font-sans text-footnote font-medium text-secondary"
+      >
+        {children}
+      </Text>
+      {status !== undefined && (
+        <Text
+          numberOfLines={1}
+          accessibilityLiveRegion="polite"
+          className="font-sans text-footnote text-secondary"
+        >
+          {status}
+        </Text>
+      )}
+    </View>
+  );
+}
+
+/** A row of Discover: its label over its tiles. */
+function DiscoverRow({
+  label,
+  status,
+  children,
+}: {
+  label: string;
+  status?: string | undefined;
+  children: ReactNode;
+}) {
+  return (
+    <View style={{ gap: CELL }}>
+      <DiscoverRowLabel status={status}>{label}</DiscoverRowLabel>
+      {children}
+    </View>
+  );
+}
+
+/**
+ * A mix row of Discover (Artist mixes or Genre mixes) as covers, each
+ * opening its mix's page; placeholder tiles while the first ones build;
+ * nothing while [section] is hidden (YT Music off). Its label says
  * "Updating…" while a rebuild runs.
  */
-function DiscoverMixes({ home, title, id }: SectionProps & { id: MixSectionId }) {
-  const section = useDiscoverMixes(id, home.mostPlayed.length > 0);
+function MixRow({ id, section }: { id: MixSectionId; section: DiscoverMixesSection }) {
   if (section.kind === "hidden") return null;
+  const label = discoverRowTitle(id);
   return (
-    <TitledSection
-      title={title}
-      control={<DiscoverMixLevelButton section={id} />}
+    <DiscoverRow
+      label={label}
       status={section.kind === "mixes" && section.updating ? MIXES_UPDATING : undefined}
     >
       {section.kind === "skeleton" ? (
@@ -97,15 +176,15 @@ function DiscoverMixes({ home, title, id }: SectionProps & { id: MixSectionId })
           mixes={section.mixes}
           onRefresh={() => refreshMixes(id)}
           refreshing={section.updating}
-          refreshLabel={`Get new ${title.toLowerCase()}`}
+          refreshLabel={`Get new ${label.toLowerCase()}`}
         />
       )}
-    </TitledSection>
+    </DiscoverRow>
   );
 }
 
 /**
- * A mixes section's row of covers (Artist mixes, Genre mixes). Each place in
+ * A mix row's covers (Artist mixes, Genre mixes). Each place in
  * the row crossfades its tile when what it shows changes: the level
  * re-blending the mix, or a rebuild saving new mixes (a plain swap with
  * reduce motion). Keyed by place, not by mix, so a new set fades over the
@@ -152,32 +231,16 @@ function DiscoverMixRow({
   );
 }
 
-/** What the Magic Queue's level says in its place while YT Music is off: it's disabled. */
-const LEVEL_NEEDS_YT_MUSIC = "Needs YT Music";
-
 /**
- * Home's Magic Queue section: 10 Library songs as covers, a tap on one
+ * Discover's Magic Queue row: 10 Library songs as covers, a tap on one
  * starting a Magic Queue from it, its long-press the song's menu. A new list
  * each day; pulled right past its start, the row brings other songs, with
- * Undo. Each place crossfades its tile when its song changes. The header's
- * control sets how much YouTube Music a Magic Queue starts with; with YT
- * Music off it's disabled, saying it needs YT Music, and the queues play
- * from the Library alone.
+ * Undo. Each place crossfades its tile when its song changes. With YT Music
+ * off it stays, and its queues play from the Library alone.
  */
-function MagicQueue({ title }: SectionProps) {
-  const section = useMagicQueueSection();
-  const ytMusic = useYtMusicEnabled();
-  if (section === null || section.songs.length === 0) return null;
+function MagicQueueRow({ section }: { section: MagicQueueSection }) {
   return (
-    <TitledSection
-      title={title}
-      control={
-        <DiscoverMixLevelButton
-          section="magic-queue"
-          {...(ytMusic ? {} : { disabledNote: LEVEL_NEEDS_YT_MUSIC })}
-        />
-      }
-    >
+    <DiscoverRow label={discoverRowTitle("magic-queue")}>
       <PullRefreshRow
         onRefresh={section.refresh}
         enabled={!section.picking}
@@ -190,11 +253,11 @@ function MagicQueue({ title }: SectionProps) {
           </Crossfade>
         ))}
       </PullRefreshRow>
-    </TitledSection>
+    </DiscoverRow>
   );
 }
 
-/** A song of the Magic Queue section: its cover (its album's), title, artist and album. */
+/** A song of Discover's Magic Queue row: its cover (its album's), title, artist and album. */
 function MagicQueueTile({ song }: { song: PlayableSongRow }) {
   return (
     <CoverTile
@@ -228,6 +291,7 @@ function MostPlayedArtists({ title }: SectionProps) {
  * entry here (the type insists).
  */
 const SECTIONS: Record<HomeSectionId, ComponentType<SectionProps>> = {
+  discover: Discover,
   "recently-added": ({ home, title }) =>
     home.recentlyAdded.length > 0 && (
       <TitledSection title={title}>
@@ -248,9 +312,6 @@ const SECTIONS: Record<HomeSectionId, ComponentType<SectionProps>> = {
     ),
   "most-played-albums": MostPlayedAlbums,
   "most-played-artists": MostPlayedArtists,
-  "magic-queue": MagicQueue,
-  "artist-mixes": (props) => <DiscoverMixes {...props} id="artist-mixes" />,
-  "genre-mixes": (props) => <DiscoverMixes {...props} id="genre-mixes" />,
   favorites: ({ home, title }) =>
     home.favorites.length > 0 && (
       <TitledSection

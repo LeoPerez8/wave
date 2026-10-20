@@ -1320,7 +1320,6 @@ export {
   editHomeArrangement,
   hiddenHomeSections,
   homeItems,
-  homeSectionNote,
   homeSectionTitle,
   parseHomeArrangement,
   storedHomeArrangement,
@@ -1817,7 +1816,7 @@ export {
   undoneMagicQueueRefresh,
 } from "./magicQueueSection.ts";
 export type { MagicQueuePicking, MagicQueuePicks } from "./magicQueueSection.ts";
-export { MAGIC_QUEUE_LEVELS, magicQueueShare } from "./magicQueue.ts";
+export { magicQueueShare } from "./magicQueue.ts";
 export { discoverMixesOfRadios } from "./discoverMixRadios.ts";
 export type { DiscoverMixRead } from "./discoverMixRadios.ts";
 export {
@@ -1928,3 +1927,6 @@ export type { DiscoverMixesRerun } from "./mixRerank.ts";
 export { harvestSeedPool } from "./harvest.ts";
 export type { HarvestSeedSources } from "./harvest.ts";
 export { sliderStep, sliderStepLabel } from "./mixSliders.ts";
+export { discoverLevelLabel } from "./discoverMixLevels.ts";
+export { DISCOVER_ROWS, discoverRowTitle } from "./homeSections.ts";
+export type { DiscoverRowId, MixRowId } from "./homeSections.ts";

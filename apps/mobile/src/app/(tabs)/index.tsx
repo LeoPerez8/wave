@@ -11,7 +11,6 @@ import { useHomeArrangement, homeTitleLongPress } from "@/home/homeArrangement";
 import { HomeSection, SECTION_GAP } from "@/home/HomeSection";
 import { useHome } from "@/library/hooks";
 import { useRenderCount } from "@/perf/perf";
-import { useYtMusicEnabled } from "@/settings/ytMusic";
 import { useRecapToAnnounce } from "@/stats/hooks";
 import { RecapCard } from "@/stats/StatsViews";
 
@@ -34,7 +33,6 @@ export default function HomeScreen() {
   useRenderCount("HomeScreen");
   const home = useHome();
   const arrangement = useHomeArrangement();
-  const ytMusic = useYtMusicEnabled();
   const newRecap = useRecapToAnnounce();
   const empty = home !== undefined && home.recentlyAdded.length === 0;
   const nothingPlayed =
@@ -64,7 +62,7 @@ export default function HomeScreen() {
           )}
           {/* Sections with nothing to show draw nothing, so whichever shows first is pulled up. */}
           <View style={newRecap === null ? FIRST_SECTION : undefined}>
-            {homeItems(arrangement, { nothingPlayed, ytMusic }).map((item, index) =>
+            {homeItems(arrangement, { nothingPlayed }).map((item, index) =>
               item === "no-sections" ? (
                 <HomeLine key={item} top={SECTION_GAP}>
                   Long-press Home to add sections back.
