@@ -74,10 +74,11 @@ export const magicLibrarySongs = (
  * The Library's songs a Magic Queue's batch may pick from (as
  * `magicLibrarySongs` weighs them): those that pass the genre affinity check
  * against [session]'s seed profile (`magicSeedProfile`) at [threshold] (the
- * Magic Queue section's Genre faithfulness), as its YouTube Music candidates
- * do. A song's genre is its genre tag's profile; without a tag, its primary
- * artist's ([profileOf]: the Library's, else Deezer's); with no genre known
- * anywhere it stays out. Every song passes for a seed with no genre known.
+ * Magic Queue section's Genre faithfulness, `magicLibraryThreshold`), as its
+ * YouTube Music candidates do. A song's genre is its genre tag's profile;
+ * without a tag, its primary artist's ([profileOf]: the Library's, else
+ * Deezer's); with no genre known anywhere it stays out. Every song passes
+ * for a seed with no genre known, and at a null [threshold] (Wander).
  */
 export const magicLibraryCandidates = (
   session: MagicSession,
@@ -88,11 +89,11 @@ export const magicLibraryCandidates = (
   {
     profileOf,
     threshold = GENRE_AFFINITY_THRESHOLD,
-  }: { readonly profileOf: GenreProfileOf; readonly threshold?: number },
+  }: { readonly profileOf: GenreProfileOf; readonly threshold?: number | null },
 ): MagicSong[] => {
   const toMagicSong = magicLibrarySongs(library.artists);
-  const seed = magicSeedProfile(session, profileOf);
-  if (seed === null) return library.songs.map(toMagicSong);
+  const seed = threshold === null ? null : magicSeedProfile(session, profileOf);
+  if (seed === null || threshold === null) return library.songs.map(toMagicSong);
   const names = new Map(library.artists.map((artist) => [artist.id, artist.name]));
   const profileOfSong = (song: MagicLibrarySong): GenreProfile | null => {
     const own = genreProfile([song]);

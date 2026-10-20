@@ -12,6 +12,7 @@ import {
   magicPickEnded,
   magicLibraryCandidates,
   magicLibrarySongs,
+  magicLibraryThreshold,
   magicSeedProfile,
   magicYtSong,
   magicRadioArtists,
@@ -33,6 +34,7 @@ import {
   type MagicSession,
   type MagicSignalKind,
   type MagicSong,
+  type MixSliderStep,
   type QueueCommand,
   type QueueState,
 } from "./index.ts";
@@ -742,22 +744,37 @@ describe("A Magic Queue's Library songs and Genre faithfulness", () => {
     );
   });
 
-  test("at Wander, Library songs of other genres can still be picked", () => {
-    // A seed mostly of Hip-Hop, with some Pop: a Pop song only half matches.
-    const profile = genreProfile([
-      { genre: "Hip Hop" },
-      { genre: "Hip Hop" },
-      { genre: "Rap" },
-      { genre: "Pop" },
-    ]);
-    const songs: MagicLibrarySong[] = [seedRow, { id: 60, artistIds: [3], genre: "Pop" }];
-    const at = (label: string) =>
-      magicLibraryCandidates(start(seedRow, profile), libraryOf(songs), {
+  test("at Wander, Library songs of any genre can still be picked, as before", () => {
+    const songs: MagicLibrarySong[] = [
+      seedRow,
+      { id: 30, artistIds: [3], genre: "Indie Rock" },
+      { id: 40, artistIds: [4], genre: null },
+      { id: 50, artistIds: [5], genre: null },
+    ];
+    const at = (faithfulness: MixSliderStep) =>
+      magicLibraryCandidates(start(), libraryOf(songs), {
         profileOf: deezer,
-        threshold: GENRE_FAITHFULNESS_STEPS.find((step) => step.label === label)!.threshold,
+        threshold: magicLibraryThreshold({ faithfulness, popularity: 3 }),
       }).map((picked) => picked.trackId);
-    assert.deepEqual(at("Wander"), ["10", "60"]);
-    assert.deepEqual(at("Same genres"), ["10"]);
+    const wander = GENRE_FAITHFULNESS_STEPS.find((step) => step.label === "Wander")!.step;
+    assert.deepEqual(at(wander), ["10", "30", "40", "50"]);
+    assert.deepEqual(at(4), ["10"]);
+    assert.deepEqual(
+      magicBatch(
+        start(),
+        magicLibraryCandidates(start(), libraryOf(songs), {
+          profileOf: deezer,
+          threshold: magicLibraryThreshold({ faithfulness: wander, popularity: 3 }),
+        }),
+        first,
+      ).trackIds.toSorted(),
+      ["30", "40", "50"],
+    );
+  });
+
+  test("holds Library songs at each other step's threshold, as YouTube Music's", () => {
+    for (const { step, threshold } of GENRE_FAITHFULNESS_STEPS.slice(0, 4))
+      assert.equal(magicLibraryThreshold({ faithfulness: step, popularity: 3 }), threshold);
   });
 
   test("YouTube Music makes up for the Library songs the filter leaves out", () => {
