@@ -176,7 +176,8 @@ export type {
   PlaylistPlace,
   PlaylistRemoval,
 } from "./playlists.ts";
-export { resolveRemoveSwipe } from "./rowGestures.ts";
+export { resolveRowSwipe, rowSwipeArmed } from "./rowGestures.ts";
+export type { RowSwipeSide, RowSwipeSides } from "./rowGestures.ts";
 export { currentLyricIndex, parseLyrics, pickLyrics } from "./lyrics.ts";
 export type { LyricLine, Lyrics, LyricsSources } from "./lyrics.ts";
 export { autoLyricLines } from "./autoLyricLines.ts";
@@ -1928,3 +1929,10 @@ export type { DiscoverMixesRerun } from "./mixRerank.ts";
 export { harvestSeedPool } from "./harvest.ts";
 export type { HarvestSeedSources } from "./harvest.ts";
 export { sliderStep, sliderStepLabel } from "./mixSliders.ts";
+export { DEFAULT_SWIPE_SETTINGS, rowSwipeActions, swipeChoiceAction } from "./swipeActions.ts";
+export type {
+  RowMenuAction,
+  RowSwipeActions,
+  SwipeChoice,
+  SwipeSettings,
+} from "./swipeActions.ts";

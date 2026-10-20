@@ -1,0 +1,81 @@
+/**
+ * Which action each swipe direction runs on a song row. A row swipes to run
+ * one of its own long-press menu's entries, so a swipe never does what the
+ * menu wouldn't: right adds the song to the queue, left removes it (from the
+ * playlist it's shown in, else deleting its file or taking a missing song out
+ * of the Library). A direction whose action the row's menu doesn't offer is
+ * inert: the row doesn't move that way. How a swipe ends is `resolveRowSwipe`.
+ */
+
+import type { ItemAction } from "./itemActions.ts";
+import type { UnavailableEntryAction } from "./playlistEntries.ts";
+
+/** An entry of a song row's long-press menu: the Library's, a YT Music song's, an unavailable entry's. */
+export type RowMenuAction = ItemAction | UnavailableEntryAction;
+
+/**
+ * What a swipe direction is set to run. Most choices are a menu entry of
+ * their own; `remove` is the row's way out (Remove from Playlist inside a
+ * playlist, Delete or Remove from Library elsewhere), and `favorite` the
+ * star either way (Favorite, or Remove from Favorites on a starred song), as
+ * the row's menu offers it.
+ */
+export type SwipeChoice = "remove" | Exclude<RowMenuAction, RemoveAction | "unfavorite">;
+
+type RemoveAction = "removeFromPlaylist" | "delete" | "removeFromLibrary";
+
+/** How the rows swipe: on or off, and what each direction runs. */
+export interface SwipeSettings {
+  readonly enabled: boolean;
+  readonly right: SwipeChoice;
+  readonly left: SwipeChoice;
+}
+
+/** Swipes on, right adding to the queue, left removing. */
+export const DEFAULT_SWIPE_SETTINGS: SwipeSettings = {
+  enabled: true,
+  right: "addToQueue",
+  left: "remove",
+};
+
+/** The menu entries a choice stands for, the first a row offers winning. */
+const CHOICE_ACTIONS: { readonly [C in SwipeChoice]?: readonly RowMenuAction[] } = {
+  remove: ["removeFromPlaylist", "delete", "removeFromLibrary"],
+  favorite: ["favorite", "unfavorite"],
+};
+
+/**
+ * The entry of a row's [menu] (its long-press menu's actions) that [choice]
+ * runs, or null when the menu has none: the direction does nothing there.
+ */
+export const swipeChoiceAction = <A extends RowMenuAction>(
+  choice: SwipeChoice,
+  menu: readonly A[],
+): A | null => {
+  for (const action of CHOICE_ACTIONS[choice] ?? [choice]) {
+    const offered = menu.find((entry) => entry === action);
+    if (offered !== undefined) return offered;
+  }
+  return null;
+};
+
+/** What a row's swipes run: an entry of its menu per direction, null where it doesn't move. */
+export interface RowSwipeActions<A extends RowMenuAction = RowMenuAction> {
+  readonly right: A | null;
+  readonly left: A | null;
+}
+
+/**
+ * The entry of a song row's long-press [menu] each swipe direction runs, as
+ * [settings] set them (Wave's defaults otherwise); both null with swipes off.
+ */
+export const rowSwipeActions = <A extends RowMenuAction>(
+  menu: readonly A[],
+  settings: SwipeSettings = DEFAULT_SWIPE_SETTINGS,
+): RowSwipeActions<A> =>
+  settings.enabled
+    ? {
+        right: swipeChoiceAction(settings.right, menu),
+        left: swipeChoiceAction(settings.left, menu),
+      }
+    : { right: null, left: null };
