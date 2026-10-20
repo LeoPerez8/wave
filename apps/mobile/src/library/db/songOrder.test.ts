@@ -5,7 +5,12 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import * as schema from "./schema.ts";
-import { selectSongOrder, selectSongSummaries, selectSongsWithIds } from "./songOrder.ts";
+import {
+  selectSongFindTexts,
+  selectSongOrder,
+  selectSongSummaries,
+  selectSongsWithIds,
+} from "./songOrder.ts";
 import { addMissingSong, addTrack, openTestDatabase, type TestDatabase } from "./testDatabase.ts";
 import { BY_TITLE, trackQuery } from "./tracks.ts";
 
@@ -123,5 +128,25 @@ describe("selectSongsWithIds", () => {
     const songs = everySong(db);
     const ids = [songs[40]!.id, songs[0]!.id, 12_345, songs[11]!.id];
     assert.deepEqual(selectSongsWithIds(db, ids), [songs[40], songs[0], songs[11]]);
+  });
+});
+
+describe("selectSongFindTexts", () => {
+  test("gives what finds each song, missing songs too: its title, artist credit and album", async () => {
+    const db = await openTestDatabase();
+    const airbag = addTrack(db, { title: "Airbag", artist: "Radiohead", album: "OK Computer" });
+    const gone = addMissingSong(db, { title: "Gone", artist: "Nobody", album: "Lost" });
+    const texts = selectSongFindTexts(db);
+    assert.equal(texts.size, 2);
+    assert.deepEqual(texts.get(airbag), {
+      title: "Airbag",
+      artist: "Radiohead",
+      album: "OK Computer",
+    });
+    assert.deepEqual(texts.get(gone), { title: "Gone", artist: "Nobody", album: "Lost" });
+  });
+
+  test("an empty Library has nothing to find", async () => {
+    assert.equal(selectSongFindTexts(await openTestDatabase()).size, 0);
   });
 });

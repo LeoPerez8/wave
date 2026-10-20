@@ -1,10 +1,11 @@
 import {
-  FIND_IN_PLAYLIST_NO_MATCH,
-  FIND_IN_PLAYLIST_PLACEHOLDER,
   createFindableList,
   findInPlaylistHead,
+  findNoMatch,
+  findPlaceholder,
   hasFindQuery,
   joinArtists,
+  type FindableListKind,
   type PlaylistFindText,
 } from "@wave/core";
 import type { LegendListRef } from "@legendapp/list/react-native";
@@ -148,48 +149,53 @@ export function useFindInLegendList<T>(
 }
 
 /**
- * The top of a findable list: the Find in Playlist field, then the list's
- * [header] while nothing is typed, or "No songs match" when the query finds
- * nothing (Core's `findInPlaylistHead`). A list still reading its pages
- * ([allRead] false) doesn't say so yet: its skeleton rows stand for the rest.
+ * The top of a findable list ([of]: a playlist, the Library's Songs or
+ * Artists): the field ("Find in Playlist"), then the list's [header] while
+ * nothing is typed, or "No songs match" ("No artists match") when the query
+ * finds nothing (Core's `findInPlaylistHead`, `findNoMatch`). A list still
+ * reading what it finds by ([allRead] false: a YT Music playlist's pages,
+ * the Library's songs) doesn't say so yet.
  */
 export function FindHead({
   find,
   header,
   allRead = true,
+  of = "playlist",
 }: {
   find: FindInList;
   header: ReactNode;
   allRead?: boolean;
+  of?: FindableListKind;
 }) {
   const head = findInPlaylistHead(find.found, allRead);
   return (
     <>
-      <FindInPlaylistField find={find} />
-      {head === "header" ? header : head === "noMatch" ? <NoSongsMatch /> : null}
+      <FindField find={find} of={of} />
+      {head === "header" ? header : head === "noMatch" ? <NoMatch of={of} /> : null}
     </>
   );
 }
 
-/** The Find in Playlist field, at the top of a playlist's list. */
-function FindInPlaylistField({ find }: { find: FindInList }) {
+/** The Find field, at the top of a findable list. */
+function FindField({ find, of }: { find: FindInList; of: FindableListKind }) {
+  const placeholder = findPlaceholder(of);
   return (
     <View style={{ height: FIND_FIELD_HEIGHT }}>
       <SearchField
         value={find.query}
         onChange={find.onChange}
-        placeholder={FIND_IN_PLAYLIST_PLACEHOLDER}
-        accessibilityLabel={FIND_IN_PLAYLIST_PLACEHOLDER}
+        placeholder={placeholder}
+        accessibilityLabel={placeholder}
       />
     </View>
   );
 }
 
-/** Under the field when the query finds no song. */
-function NoSongsMatch() {
+/** Under the field when the query finds nothing. */
+function NoMatch({ of }: { of: FindableListKind }) {
   return (
     <View style={{ paddingTop: CELL * 3 }}>
-      <Text className="font-sans text-subheadline text-secondary">{FIND_IN_PLAYLIST_NO_MATCH}</Text>
+      <Text className="font-sans text-subheadline text-secondary">{findNoMatch(of)}</Text>
     </View>
   );
 }

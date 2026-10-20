@@ -11,6 +11,7 @@ import {
   type ExplicitFlag,
   type IndexEntry,
   type LibrarySongSort,
+  type PlaylistFindText,
   type SongOrderField,
 } from "@wave/core";
 import { asc, desc, eq, inArray, sql, type SQL } from "drizzle-orm";
@@ -151,3 +152,23 @@ export const selectSongSummaries = (
  */
 export const selectSongsWithIds = (db: LibraryDatabase, ids: readonly number[]) =>
   byIds(ids, (some) => trackQuery(db).where(inArray(schema.tracks.id, some)).all());
+
+/**
+ * What finds each song of the Library, missing songs included, by Track id:
+ * its title, artist credit and album (Find in Songs, #530). Read only once a
+ * query is typed, so opening Songs still reads no row's details.
+ */
+export const selectSongFindTexts = (db: LibraryDatabase): ReadonlyMap<number, PlaylistFindText> => {
+  const { tracks, albums } = schema;
+  const rows = db
+    .select({
+      id: tracks.id,
+      title: tracks.title,
+      artist: tracks.artistCredit,
+      album: albums.title,
+    })
+    .from(tracks)
+    .innerJoin(albums, eq(tracks.albumId, albums.id))
+    .all();
+  return new Map(rows.map(({ id, title, artist, album }) => [id, { title, artist, album }]));
+};
