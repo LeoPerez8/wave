@@ -25,7 +25,7 @@ import {
 } from "@wave/core";
 import * as Effect from "effect/Effect";
 
-import { lookUpArtistProfiles, lookedUpProfileOf, mixProfileOf } from "@/home/artistGenres";
+import { lookUpArtistProfiles, lookedUpProfileOf } from "@/home/artistGenres";
 import { artistGraphNow, forgetArtistGraph } from "@/home/artistGraphNow";
 import { harvestMobileUsed, noteHarvestMobileUse } from "@/home/harvestMobileUse";
 import { forgetMixCatalog, mixCatalog } from "@/home/mixCatalog";
@@ -136,8 +136,10 @@ let found: {
 
 /**
  * [session]'s YouTube Music candidates for its next batch, weighed against
- * [library] (its songs and artists) and the owner's [taste]: out of the
- * candidate catalog (`magicCatalogRead`), the radios read first only when
+ * [library] (its songs and artists), the genre profiles [profileOf] gives
+ * (the Library's, else Deezer's: `magicProfileOf`) and the owner's
+ * [taste]: out of the candidate catalog (`magicCatalogRead`), the radios
+ * read first only when
  * the session runs low and the network policy allows it. The engine ranks
  * with [engine]'s weights (the Magic Queue section's sliders; absent: its
  * defaults). None with the YT Music switch off. Never fails.
@@ -148,11 +150,15 @@ export const magicQueueYtCandidates = (
   {
     taste,
     engine,
-  }: { readonly taste: TasteProfile | null; readonly engine?: Omit<RecommendOptions, "avoid"> },
+    profileOf,
+  }: {
+    readonly taste: TasteProfile | null;
+    readonly engine?: Omit<RecommendOptions, "avoid">;
+    readonly profileOf: GenreProfileOf;
+  },
 ) =>
   Effect.gen(function* () {
     if (!ytMusicEnabled()) return [];
-    const profileOf = mixProfileOf(library);
     const graph = yield* artistGraphNow;
     yield* freeTurnEffect;
     const pick = yield* magicCatalogRead(session, {

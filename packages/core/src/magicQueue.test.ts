@@ -3,13 +3,16 @@ import { describe, test } from "node:test";
 
 import {
   EMPTY_QUEUE,
+  GENRE_FAITHFULNESS_STEPS,
   MAGIC_QUEUE_CONTEXT,
   genreProfile,
   magicArtistKey,
   magicBatch,
   magicBatchLoading,
   magicPickEnded,
+  magicLibraryCandidates,
   magicLibrarySongs,
+  magicLibraryThreshold,
   magicSeedProfile,
   magicYtSong,
   magicRadioArtists,
@@ -25,10 +28,12 @@ import {
   wantsMagicBatch,
   type DiscoverMixLevel,
   type GenreProfileOf,
+  type MagicLibrarySong,
   type MagicSeed,
   type MagicSession,
   type MagicSignalKind,
   type MagicSong,
+  type MixSliderStep,
   type QueueCommand,
   type QueueState,
 } from "./index.ts";
@@ -627,5 +632,164 @@ describe("A Magic Queue's radio artists", () => {
     const playlist: MagicSeed = { kind: "playlist", id: "2", title: "Mine" };
     assert.deepEqual(magicRadioArtists(playlist, ["B", "A", "C", "A", "B", "A"]), ["A", "B"]);
     assert.deepEqual(magicRadioArtists(SONG_SEED, ["Solo"]), ["Solo"]);
+  });
+});
+
+describe("A Magic Queue's Library songs and Genre faithfulness", () => {
+  const artists = [
+    { id: 1, name: "Fort Minor" },
+    { id: 2, name: "Linkin Park" },
+    { id: 3, name: "The Strokes" },
+    { id: 4, name: "MC's Jhowzinho & Kadinho" },
+    { id: 5, name: "Nobody Knows" },
+  ];
+  const hipHop = genreProfile([{ genre: "Rap/Hip Hop" }]);
+  const soulAndFunk = genreProfile([{ genre: "Soul & Funk" }]);
+  /** The Library's profiles, else Deezer's, as the app gives them. */
+  const deezer: GenreProfileOf = (artist) =>
+    artist === "Fort Minor" || artist === "Linkin Park"
+      ? hipHop
+      : artist === "MC's Jhowzinho & Kadinho"
+        ? soulAndFunk
+        : undefined;
+  const same = GENRE_FAITHFULNESS_STEPS.find((step) => step.label === "Same genres")!.threshold;
+  const fromLibrary = magicLibrarySongs(artists);
+  const seedRow: MagicLibrarySong = { id: 10, artistIds: [1], genre: "Rap/Hip Hop" };
+  const start = (row: MagicLibrarySong = seedRow, profile = genreProfile([row])) =>
+    startMagicQueue(SONG_SEED, [fromLibrary(row)], {
+      id: "m1",
+      random: first,
+      radio: { artists: ["Fort Minor"], profile },
+    })!.session;
+  const libraryOf = (songs: readonly MagicLibrarySong[]) => ({ artists, songs });
+
+  test("at Same genres, a Rap/Hip Hop seed leaves out Library songs tagged with another family", () => {
+    const songs: MagicLibrarySong[] = [
+      seedRow,
+      { id: 20, artistIds: [2], genre: "Hip Hop" },
+      { id: 30, artistIds: [3], genre: "Indie Rock" },
+      { id: 31, artistIds: [3], genre: "Rock" },
+    ];
+    const library = magicLibraryCandidates(start(), libraryOf(songs), {
+      profileOf: deezer,
+      threshold: same,
+    });
+    assert.deepEqual(magicBatch(start(), library, first).trackIds, ["20"]);
+  });
+
+  test("at Same genres, a Rap/Hip Hop seed leaves out a song whose artist is Soul & Funk", () => {
+    const songs: MagicLibrarySong[] = [
+      seedRow,
+      { id: 20, artistIds: [2], genre: "Hip Hop" },
+      { id: 40, artistIds: [4], genre: null },
+    ];
+    const library = magicLibraryCandidates(start(), libraryOf(songs), {
+      profileOf: deezer,
+      threshold: same,
+    });
+    assert.deepEqual(magicBatch(start(), library, first).trackIds, ["20"]);
+  });
+
+  test("a song without a genre tag takes its artist's profile; with no genre known, it stays out", () => {
+    const songs: MagicLibrarySong[] = [
+      seedRow,
+      { id: 21, artistIds: [2, 4], genre: null },
+      { id: 50, artistIds: [5], genre: null },
+    ];
+    const library = magicLibraryCandidates(start(), libraryOf(songs), {
+      profileOf: deezer,
+      threshold: same,
+    });
+    assert.deepEqual(
+      library.map((picked) => picked.trackId),
+      ["10", "21"],
+    );
+  });
+
+  test("a seed whose songs have no genre tag is held to its artist's profile", () => {
+    const untagged: MagicLibrarySong = { id: 10, artistIds: [1], genre: null };
+    const session = start(untagged);
+    assert.equal(magicSeedProfile(session), null);
+    assert.deepEqual(magicSeedProfile(session, deezer), hipHop);
+    const songs: MagicLibrarySong[] = [
+      untagged,
+      { id: 20, artistIds: [2], genre: "Hip Hop" },
+      { id: 30, artistIds: [3], genre: "Indie Rock" },
+      { id: 40, artistIds: [4], genre: null },
+    ];
+    const library = magicLibraryCandidates(session, libraryOf(songs), {
+      profileOf: deezer,
+      threshold: same,
+    });
+    assert.deepEqual(magicBatch(session, library, first).trackIds, ["20"]);
+  });
+
+  test("keeps every genre with nothing known of the seed's anywhere", () => {
+    const untagged: MagicLibrarySong = { id: 10, artistIds: [1], genre: null };
+    const songs: MagicLibrarySong[] = [
+      untagged,
+      { id: 30, artistIds: [3], genre: "Indie Rock" },
+      { id: 50, artistIds: [5], genre: null },
+    ];
+    const library = magicLibraryCandidates(start(untagged), libraryOf(songs), {
+      profileOf: () => undefined,
+      threshold: same,
+    });
+    assert.deepEqual(
+      library.map((picked) => picked.trackId),
+      ["10", "30", "50"],
+    );
+  });
+
+  test("at Wander, Library songs of any genre can still be picked, as before", () => {
+    const songs: MagicLibrarySong[] = [
+      seedRow,
+      { id: 30, artistIds: [3], genre: "Indie Rock" },
+      { id: 40, artistIds: [4], genre: null },
+      { id: 50, artistIds: [5], genre: null },
+    ];
+    const at = (faithfulness: MixSliderStep) =>
+      magicLibraryCandidates(start(), libraryOf(songs), {
+        profileOf: deezer,
+        threshold: magicLibraryThreshold({ faithfulness, popularity: 3 }),
+      }).map((picked) => picked.trackId);
+    const wander = GENRE_FAITHFULNESS_STEPS.find((step) => step.label === "Wander")!.step;
+    assert.deepEqual(at(wander), ["10", "30", "40", "50"]);
+    assert.deepEqual(at(4), ["10"]);
+    assert.deepEqual(
+      magicBatch(
+        start(),
+        magicLibraryCandidates(start(), libraryOf(songs), {
+          profileOf: deezer,
+          threshold: magicLibraryThreshold({ faithfulness: wander, popularity: 3 }),
+        }),
+        first,
+      ).trackIds.toSorted(),
+      ["30", "40", "50"],
+    );
+  });
+
+  test("holds Library songs at each other step's threshold, as YouTube Music's", () => {
+    for (const { step, threshold } of GENRE_FAITHFULNESS_STEPS.slice(0, 4))
+      assert.equal(magicLibraryThreshold({ faithfulness: step, popularity: 3 }), threshold);
+  });
+
+  test("YouTube Music makes up for the Library songs the filter leaves out", () => {
+    const songs: MagicLibrarySong[] = [
+      seedRow,
+      ...Array.from({ length: 10 }, (_, i) => ({ id: 100 + i, artistIds: [3], genre: "Rock" })),
+      { id: 20, artistIds: [2], genre: "Hip Hop" },
+    ];
+    const library = magicLibraryCandidates(start(), libraryOf(songs), {
+      profileOf: deezer,
+      threshold: same,
+    });
+    const yt = songsBy("yt:v", "Linkin Park", 20, "Hip-Hop");
+    const batch = magicBatch(start(), library, first, yt);
+    assert.equal(batch.trackIds.length, 9);
+    assert.deepEqual(
+      batch.trackIds.filter((id) => !id.startsWith("yt:")),
+      ["20"],
+    );
   });
 });
