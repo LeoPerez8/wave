@@ -19,23 +19,31 @@ import { Text, View } from "react-native";
 import { Artwork } from "@/catalog/Artwork";
 import { CELL } from "@/catalog/grid";
 import { followStreamedArtistLink } from "@/library/ArtistChoice";
-import { useYtSongStarred } from "@/library/favorites";
+import { useYtSongStarred, ytSongStarredNow } from "@/library/favorites";
 import { starSongs } from "@/library/starSongs";
 import type { ArtistRow } from "@/library/LibraryStore";
 import { openAddToPlaylist } from "@/library/PlaylistSheets";
 import { removePlaylistItems } from "@/library/playlists";
+import { currentPath, useCurrentPath } from "@/library/routes";
 import { pressedRect } from "@/motion/pressedRect";
 import type { NativeYtSong } from "@/native/waveYtMusic";
+import { NO_SWIPE, type RowSwipe } from "@/catalog/SwipeableRow";
 import { CardHeading } from "@/overlay/CardHeading";
 import { MenuChoices, type MenuChoice, type PlayCardChoice } from "@/overlay/MenuChoices";
 import { followUp, openOverlay } from "@/overlay/overlay";
 import { addYtToQueue, playYtNext } from "@/playback/actions";
 import type { MenuOptions } from "@/playback/ActionsMenu";
+import { rowSwipe, swipeEntryNow, type RowSwipeOptions } from "@/playback/rowSwipe";
 import { showError } from "@/overlay/alert";
 import { useYtMusicEnabled } from "@/settings/ytMusic";
 import { shareStreamedSong } from "@/share/songShare";
 
-import { useLibraryFinder, useLoadedInLibrary, type FindInLibrary } from "./libraryFinder";
+import {
+  currentLibraryFinder,
+  useLibraryFinder,
+  useLoadedInLibrary,
+  type FindInLibrary,
+} from "./libraryFinder";
 import { openYtAlbum, ytAlbumPageHere } from "./routes";
 import { libraryArtistsRead, useStreamedArtistLink } from "./streamedArtist";
 import { cancelYtDownload, downloadYtSong, useYtDownloadStatus } from "./YtDownloads";
@@ -181,6 +189,45 @@ const run = (
       onSelect?.();
       return;
   }
+};
+
+/**
+ * What swiping a YT Music [song]'s row runs (none for null, so a row of
+ * several kinds can ask for each): its menu's entries (`rowSwipe`), run as
+ * the menu runs them. A list mounts many rows, so it follows nothing: the
+ * route and the stars are read as it renders and again as a swipe runs, and
+ * its artists aren't resolved (Go to Artist isn't among its entries), nor
+ * are its download entries.
+ */
+export const useYtSongSwipe = (
+  song: NativeYtSong | null,
+  options: RowSwipeOptions = {},
+): RowSwipe => {
+  const ytMusic = useYtMusicEnabled();
+  const here = useCurrentPath(false);
+  if (song === null) return NO_SWIPE;
+  const { playlistItem } = options;
+  const entriesWith = (find: FindInLibrary, at: string): Entry[] =>
+    songEntries(undefined, {
+      inPlaylist: playlistItem !== undefined,
+      favorite: ytSongStarredNow(song.videoId, find(song)),
+      album: song.albumId,
+      ytAlbumHere: ytAlbumPageHere(at),
+      ytMusic,
+      selectable: false,
+    });
+  return rowSwipe(
+    entriesWith(() => null, here).map((entry) => entry.action),
+    (_, side) => {
+      currentLibraryFinder()
+        .then((find) => {
+          const entry = swipeEntryNow(entriesWith(find, currentPath()), side);
+          if (entry !== undefined) run(entry, song, { find, playlistItem, onSelect: undefined });
+        })
+        .catch((error: unknown) => showError("Couldn't load the song", error));
+    },
+    options,
+  );
 };
 
 /**

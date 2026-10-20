@@ -14,7 +14,7 @@ import { ScrollView, Text, View } from "react-native";
 
 import { CELL, grid } from "@/catalog/grid";
 import { NameRow } from "@/catalog/NameRow";
-import { TrackRow } from "@/catalog/TrackRow";
+import { SwipeTrackRow } from "@/library/SwipeTrackRow";
 import { useChromeInset } from "@/chrome/chrome";
 import { EmptyState } from "@/components/EmptyState";
 import { useFavoriteIds } from "@/library/favorites";
@@ -103,7 +103,8 @@ function RankedSongRow({
   favorites: ReadonlySet<number>;
 }) {
   return (
-    <TrackRow
+    <SwipeTrackRow
+      song={song}
       track={{ ...toTrackSummary(song), trackNumber: index + 1 }}
       plays={countedPlays}
       state={String(song.id) === currentId ? "playing" : undefined}

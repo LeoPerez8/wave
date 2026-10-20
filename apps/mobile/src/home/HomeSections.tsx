@@ -5,7 +5,7 @@ import { AlbumTile } from "@/catalog/AlbumTile";
 import { ArtistImage } from "@/catalog/ArtistImage";
 import { COVER_ROW_TILE, CoverRow } from "@/catalog/CoverRow";
 import { CELL } from "@/catalog/grid";
-import { TrackRow } from "@/catalog/TrackRow";
+import { SwipeTrackRow } from "@/library/SwipeTrackRow";
 import { toAlbumSummary } from "@/library/AlbumGrid";
 import { useFavoriteIds } from "@/library/favorites";
 import type { AlbumRow, ArtistRow, SongRow } from "@/library/LibraryStore";
@@ -62,7 +62,8 @@ export function SongRows<A extends SongRow>({
   return (
     <View>
       {songs.map((song, index) => (
-        <TrackRow
+        <SwipeTrackRow
+          song={song}
           key={song.id}
           track={toTrackSummary(song)}
           plays={plays?.(song)}

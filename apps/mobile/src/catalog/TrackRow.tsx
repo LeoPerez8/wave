@@ -11,6 +11,7 @@ import { CheckCell } from "./CheckCell";
 import { ExplicitBadge } from "./ExplicitBadge";
 import { CELL, grid } from "./grid";
 import { RankNumber } from "./RankNumber";
+import { SwipeableRow, swipeAccessibility, type RowSwipe } from "./SwipeableRow";
 import { WavyUnderline } from "./WavyUnderline";
 
 export type TrackSummary = {
@@ -74,6 +75,12 @@ type Props = {
   /** Screen-reader actions standing in for gestures (move, remove in a playlist). */
   accessibilityActions?: PressProps["accessibilityActions"];
   onAccessibilityAction?: PressProps["onAccessibilityAction"];
+  /**
+   * What swiping the row runs (`SwipeableRow`), each direction an entry of
+   * its menu, offered to screen readers too. Undefined: the row doesn't swipe.
+   * Never while selecting.
+   */
+  swipe?: RowSwipe | undefined;
 };
 
 const THUMB = CELL * 5;
@@ -102,6 +109,7 @@ export function TrackRow({
   onLongPress,
   accessibilityActions,
   onAccessibilityAction,
+  swipe,
 }: Props) {
   const highlight = useThemeColor("highlight");
   const accent = useThemeColor("accent");
@@ -115,8 +123,12 @@ export function TrackRow({
   const selecting = checked !== undefined;
   const fileNotFoundIcon = <IconFileOff size={18} color={tertiary} strokeWidth={1.5} />;
   const trailing = trackRowTrailing({ durationMs: track.durationMs, countedPlays: plays });
+  const actions =
+    swipe === undefined || selecting
+      ? { accessibilityActions, onAccessibilityAction }
+      : swipeAccessibility(swipe, accessibilityActions, onAccessibilityAction);
 
-  return (
+  const row = (
     <Press
       accessibilityRole={selecting ? "checkbox" : "button"}
       accessibilityLabel={[
@@ -137,8 +149,8 @@ export function TrackRow({
       disabled={fileNotFound}
       onPress={onPress}
       onLongPress={onLongPress}
-      accessibilityActions={accessibilityActions}
-      onAccessibilityAction={onAccessibilityAction}
+      accessibilityActions={actions.accessibilityActions}
+      onAccessibilityAction={actions.onAccessibilityAction}
       depth={0.015}
     >
       <View
@@ -210,5 +222,12 @@ export function TrackRow({
         </Text>
       </View>
     </Press>
+  );
+  return swipe === undefined ? (
+    row
+  ) : (
+    <SwipeableRow swipe={swipe} enabled={!selecting}>
+      {row}
+    </SwipeableRow>
   );
 }

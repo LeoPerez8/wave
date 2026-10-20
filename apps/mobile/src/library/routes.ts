@@ -62,6 +62,9 @@ export const useCurrentRoute = <A>(select: (route: CurrentRoute) => A, active = 
 
 const pathOf = (route: CurrentRoute): string => route.pathname;
 
+/** The path showing now, unfollowed: for what runs outside a render (a swipe). */
+export const currentPath = (): string => currentRoute.get().pathname;
+
 /** The path showing, followed while [active] (`useCurrentRoute`). */
 export const useCurrentPath = (active = true): string => useCurrentRoute(pathOf, active);
 

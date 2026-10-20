@@ -14,6 +14,7 @@ import { useMemo, type ComponentProps } from "react";
 import { Text, View } from "react-native";
 
 import { Artwork } from "@/catalog/Artwork";
+import { NO_SWIPE, type RowSwipe } from "@/catalog/SwipeableRow";
 import { CELL } from "@/catalog/grid";
 import { TrackRow } from "@/catalog/TrackRow";
 import { TextButton } from "@/components/TextButton";
@@ -26,6 +27,7 @@ import { MenuRow } from "@/overlay/MenuRow";
 import { openOverlay } from "@/overlay/overlay";
 import { showToast } from "@/overlay/toast";
 import { useSlideToChoose } from "@/overlay/useSlideToChoose";
+import { rowSwipe, type RowSwipeOptions } from "@/playback/rowSwipe";
 import { openSearch } from "@/search/queryRequest";
 import { useTabBar } from "@/settings/tabBar";
 import { useYtMusicEnabled } from "@/settings/ytMusic";
@@ -47,6 +49,7 @@ export function UnavailableSongRow({
   onLongPress,
   accessibilityActions,
   onAccessibilityAction,
+  swipe,
 }: {
   song: UnavailableSong;
   checked?: boolean | undefined;
@@ -54,6 +57,7 @@ export function UnavailableSongRow({
   onLongPress: () => void;
   accessibilityActions?: ComponentProps<typeof TrackRow>["accessibilityActions"];
   onAccessibilityAction?: ComponentProps<typeof TrackRow>["onAccessibilityAction"];
+  swipe?: RowSwipe | undefined;
 }) {
   const ytMusic = useYtMusicEnabled();
   return (
@@ -72,6 +76,7 @@ export function UnavailableSongRow({
       onLongPress={onLongPress}
       accessibilityActions={accessibilityActions}
       onAccessibilityAction={onAccessibilityAction}
+      swipe={swipe}
     />
   );
 }
@@ -115,6 +120,24 @@ const run = (
       openSearch(unavailableSearchQuery(song));
       return;
   }
+};
+
+/**
+ * What swiping an unavailable entry's row runs (none for null, so a row of
+ * several kinds can ask for each): its menu's entries (`rowSwipe`), so it
+ * swipes out of its playlist and never joins the queue.
+ */
+export const useUnavailableSwipe = (
+  song: UnavailableSong | null,
+  options: RowSwipeOptions & { readonly playlistItem: PlaylistPlace },
+): RowSwipe => {
+  const search = useTabBar().includes("search");
+  if (song === null) return NO_SWIPE;
+  return rowSwipe(
+    unavailableEntryActions({ search }),
+    (action) => run(action, song, options.playlistItem),
+    options,
+  );
 };
 
 /** The menu card: the song as its row shows it, then its entries. */
