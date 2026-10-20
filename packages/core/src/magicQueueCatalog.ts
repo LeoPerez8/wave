@@ -78,7 +78,7 @@ export const magicCatalogCandidates = (
   { inLibrary, playable, engine = {} }: MagicCatalogOptions,
 ): MagicCatalogPick => {
   const ranked = recommend(
-    { artists: session.radioArtists, profile: magicSeedProfile(session) },
+    { artists: session.radioArtists, profile: magicSeedProfile(session, sources.profileOf) },
     sources,
     engine,
   );

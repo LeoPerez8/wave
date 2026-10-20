@@ -1947,3 +1947,6 @@ export {
   storedLyricsTranslation,
 } from "./lyricsTranslation.ts";
 export type { LyricsTranslation, LyricsTranslationRequest } from "./lyricsTranslation.ts";
+export { magicLibraryCandidates } from "./magicQueue.ts";
+export { magicLibraryLookups, magicSeedLookups } from "./mixGenreLookups.ts";
+export { magicLibraryThreshold } from "./mixSliders.ts";

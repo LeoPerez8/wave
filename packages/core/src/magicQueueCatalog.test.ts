@@ -7,6 +7,7 @@ import {
   MAGIC_CATALOG_LOW,
   MAGIC_CATALOG_POOL,
   artistGraph,
+  genreProfile,
   magicArtistKey,
   magicCatalogCandidates,
   magicRefillDue,
@@ -14,6 +15,7 @@ import {
   startMagicQueue,
   ytTrackId,
   type CatalogSong,
+  type GenreProfile,
   type GenreProfileOf,
   type MagicSession,
   type RecommendSources,
@@ -145,6 +147,28 @@ describe("A Magic Queue's catalog candidates", () => {
       { inLibrary: notInLibrary },
     );
     assert.deepEqual(new Set(ids(candidates)), new Set(["muse1", "placebo1"]));
+  });
+
+  test("a seed whose songs have no genre tag keeps to its radio artist's genres", () => {
+    const hipHop = genreProfile([{ genre: "Rap/Hip Hop" }]);
+    const profiles: Record<string, GenreProfile | null> = {
+      "Fort Minor": hipHop,
+      "Linkin Park": hipHop,
+      "The Strokes": genreProfile([{ genre: "Alternative" }]),
+      "MC's Jhowzinho & Kadinho": genreProfile([{ genre: "Soul & Funk" }]),
+    };
+    const catalog = [
+      catalogSong("lp1", ["Linkin Park"], ["Fort Minor"]),
+      catalogSong("strokes1", ["The Strokes"], ["Fort Minor"]),
+      catalogSong("funk1", ["MC's Jhowzinho & Kadinho"], ["Fort Minor"]),
+      catalogSong("nobody1", ["Nobody"], ["Fort Minor"]),
+    ];
+    const { candidates } = magicCatalogCandidates(
+      sessionOf("Fort Minor"),
+      sources(catalog, { profileOf: (artist) => profiles[artist] }),
+      { inLibrary: notInLibrary, engine: { threshold: 0.8 } },
+    );
+    assert.deepEqual(ids(candidates), ["lp1"]);
   });
 
   test("hold the best 50 for a batch, and say how many the session has left", () => {
