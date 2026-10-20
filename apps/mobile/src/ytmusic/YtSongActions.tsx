@@ -2,6 +2,8 @@ import {
   ITEM_ACTION_LABELS,
   YT_DOWNLOAD_ACTION_LABELS,
   menuLayout,
+  streamedArtistLink,
+  swipesChoose,
   ytDownloadActions,
   ytSongActions,
   ytSongCredit,
@@ -35,18 +37,29 @@ import { addYtToQueue, playYtNext } from "@/playback/actions";
 import type { MenuOptions } from "@/playback/ActionsMenu";
 import { rowSwipe, swipeEntryNow, type RowSwipeOptions } from "@/playback/rowSwipe";
 import { showError } from "@/overlay/alert";
+import { useSwipeSettings } from "@/settings/swipeActions";
 import { useYtMusicEnabled } from "@/settings/ytMusic";
 import { shareStreamedSong } from "@/share/songShare";
 
 import {
   currentLibraryFinder,
+  knownLibraryFinder,
   useLibraryFinder,
   useLoadedInLibrary,
   type FindInLibrary,
 } from "./libraryFinder";
 import { openYtAlbum, ytAlbumPageHere } from "./routes";
-import { libraryArtistsRead, useStreamedArtistLink } from "./streamedArtist";
-import { cancelYtDownload, downloadYtSong, useYtDownloadStatus } from "./YtDownloads";
+import {
+  libraryArtistsRead,
+  streamedArtistContextNow,
+  useStreamedArtistLink,
+} from "./streamedArtist";
+import {
+  cancelYtDownload,
+  downloadYtSong,
+  useYtDownloadStatus,
+  ytDownloadStatusNow,
+} from "./YtDownloads";
 
 /** Where the menu was opened: a playlist's entry offers Remove from Playlist. */
 export interface YtSongMenuOptions extends MenuOptions {
@@ -194,34 +207,57 @@ const run = (
 /**
  * What swiping a YT Music [song]'s row runs (none for null, so a row of
  * several kinds can ask for each): its menu's entries (`rowSwipe`), run as
- * the menu runs them. A list mounts many rows, so it follows nothing: the
- * route and the stars are read as it renders and again as a swipe runs, and
- * its artists aren't resolved (Go to Artist isn't among its entries), nor
- * are its download entries.
+ * the menu runs them. A list mounts many rows, so it follows nothing but the
+ * swipe settings: the route and the stars are read as it renders and again
+ * as a swipe runs, and so, only while a direction is set to them, are its
+ * artists (Go to Artist, once the Library's artists are read) and its
+ * download's state (Download).
  */
 export const useYtSongSwipe = (
   song: NativeYtSong | null,
   options: RowSwipeOptions = {},
 ): RowSwipe => {
+  const settings = useSwipeSettings();
   const ytMusic = useYtMusicEnabled();
   const here = useCurrentPath(false);
-  if (song === null) return NO_SWIPE;
+  if (song === null || !settings.enabled) return NO_SWIPE;
   const { playlistItem } = options;
-  const entriesWith = (find: FindInLibrary, at: string): Entry[] =>
-    songEntries(undefined, {
-      inPlaylist: playlistItem !== undefined,
-      favorite: ytSongStarredNow(song.videoId, find(song)),
-      album: song.albumId,
-      ytAlbumHere: ytAlbumPageHere(at),
-      ytMusic,
-      selectable: false,
-    });
+  const entriesWith = (find: FindInLibrary, at: string, inLibrary: boolean): Entry[] => {
+    const artists = swipesChoose(settings, "goToArtist") ? streamedArtistContextNow() : undefined;
+    return [
+      ...songEntries(
+        artists === undefined ? undefined : streamedArtistLink(song.artists ?? [], artists),
+        {
+          inPlaylist: playlistItem !== undefined,
+          favorite: ytSongStarredNow(song.videoId, find(song)),
+          album: song.albumId,
+          ytAlbumHere: ytAlbumPageHere(at),
+          ytMusic,
+          selectable: false,
+        },
+      ),
+      ...(swipesChoose(settings, "download")
+        ? ytDownloadActions(ytDownloadStatusNow(song.videoId), { inLibrary }).map(
+            (action): Entry => ({ kind: "download", action }),
+          )
+        : []),
+    ];
+  };
+  if (swipesChoose(settings, "goToArtist") && streamedArtistContextNow() === undefined)
+    void libraryArtistsRead();
+  // Download: until the Library is read, a song counts as in it, so Download never shows only to go away.
+  const known = swipesChoose(settings, "download") ? knownLibraryFinder() : null;
   return rowSwipe(
-    entriesWith(() => null, here).map((entry) => entry.action),
+    entriesWith(() => null, here, known === null || known(song) !== null).map(
+      (entry) => entry.action,
+    ),
     (_, side) => {
-      currentLibraryFinder()
-        .then((find) => {
-          const entry = swipeEntryNow(entriesWith(find, currentPath()), side);
+      Promise.all([
+        currentLibraryFinder(),
+        swipesChoose(settings, "goToArtist") ? libraryArtistsRead() : undefined,
+      ])
+        .then(([find]) => {
+          const entry = swipeEntryNow(entriesWith(find, currentPath(), find(song) !== null), side);
           if (entry !== undefined) run(entry, song, { find, playlistItem, onSelect: undefined });
         })
         .catch((error: unknown) => showError("Couldn't load the song", error));

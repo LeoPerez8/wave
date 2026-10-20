@@ -29,6 +29,7 @@ import { showToast } from "@/overlay/toast";
 import { useSlideToChoose } from "@/overlay/useSlideToChoose";
 import { rowSwipe, type RowSwipeOptions } from "@/playback/rowSwipe";
 import { openSearch } from "@/search/queryRequest";
+import { useSwipeSettings } from "@/settings/swipeActions";
 import { useTabBar } from "@/settings/tabBar";
 import { useYtMusicEnabled } from "@/settings/ytMusic";
 
@@ -131,8 +132,9 @@ export const useUnavailableSwipe = (
   song: UnavailableSong | null,
   options: RowSwipeOptions & { readonly playlistItem: PlaylistPlace },
 ): RowSwipe => {
+  const settings = useSwipeSettings();
   const search = useTabBar().includes("search");
-  if (song === null) return NO_SWIPE;
+  if (song === null || !settings.enabled) return NO_SWIPE;
   return rowSwipe(
     unavailableEntryActions({ search }),
     (action) => run(action, song, options.playlistItem),

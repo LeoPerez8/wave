@@ -6,6 +6,7 @@ import {
   IconPalette,
   IconPlayerPlay,
   IconQuote,
+  IconSwipe,
   IconUser,
   type Icon,
 } from "@tabler/icons-react-native";
@@ -23,6 +24,7 @@ const GLYPHS: Readonly<Record<SettingsIcon, Icon>> = {
   books: IconBooks,
   palette: IconPalette,
   layout: IconLayoutGrid,
+  swipe: IconSwipe,
   play: IconPlayerPlay,
   quote: IconQuote,
   download: IconDownload,
@@ -35,6 +37,7 @@ const FILLS: Readonly<Record<SettingsTileColour, string>> = {
   red: "bg-tile-red",
   orange: "bg-tile-orange",
   green: "bg-tile-green",
+  cyan: "bg-tile-cyan",
   blue: "bg-tile-blue",
   indigo: "bg-tile-indigo",
   purple: "bg-tile-purple",
