@@ -140,6 +140,9 @@ export {
   foundInPlaylist,
   hasFindQuery,
   createFindableList,
+  findPlaceholder,
+  findNoMatch,
+  artistFindText,
 } from "./findInPlaylist.ts";
 export type {
   FoundInPlaylist,
@@ -147,6 +150,7 @@ export type {
   PlaylistFindText,
   FindableList,
   ShownInPlaylist,
+  FindableListKind,
 } from "./findInPlaylist.ts";
 export { createSearchCatalog } from "./searchCatalog.ts";
 export type { SearchCatalog, SearchCatalogStats } from "./searchCatalog.ts";
@@ -1320,7 +1324,6 @@ export {
   editHomeArrangement,
   hiddenHomeSections,
   homeItems,
-  homeSectionNote,
   homeSectionTitle,
   parseHomeArrangement,
   storedHomeArrangement,
@@ -1818,7 +1821,7 @@ export {
   undoneMagicQueueRefresh,
 } from "./magicQueueSection.ts";
 export type { MagicQueuePicking, MagicQueuePicks } from "./magicQueueSection.ts";
-export { MAGIC_QUEUE_LEVELS, magicQueueShare } from "./magicQueue.ts";
+export { magicQueueShare } from "./magicQueue.ts";
 export { discoverMixesOfRadios } from "./discoverMixRadios.ts";
 export type { DiscoverMixRead } from "./discoverMixRadios.ts";
 export {
@@ -1929,3 +1932,8 @@ export type { DiscoverMixesRerun } from "./mixRerank.ts";
 export { harvestSeedPool } from "./harvest.ts";
 export type { HarvestSeedSources } from "./harvest.ts";
 export { sliderStep, sliderStepLabel } from "./mixSliders.ts";
+export { DOUBLE_TAP_MS, coverDoubleTap, createCoverTaps } from "./coverGestures.ts";
+export type { CoverDoubleTap, CoverTaps } from "./coverGestures.ts";
+export { discoverLevelLabel } from "./discoverMixLevels.ts";
+export { DISCOVER_ROWS, discoverRowTitle } from "./homeSections.ts";
+export type { DiscoverRowId, MixRowId } from "./homeSections.ts";

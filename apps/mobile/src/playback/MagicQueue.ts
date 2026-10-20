@@ -27,13 +27,13 @@ import * as Layer from "effect/Layer";
 import { Storage } from "expo-sqlite/kv-store";
 import { useSyncExternalStore } from "react";
 
+import { discoverLevel, discoverSliders } from "@/lib/discoverSettings";
 import { makeExternalStore, subscribeAll } from "@/lib/externalStore";
 import { oneAtATime } from "@/lib/oneAtATime";
 import { onStarred, onYtSongSignal } from "@/library/libraryChanges";
 import { LibraryStore, songHasFile, type SongRow } from "@/library/LibraryStore";
 import { YtMusic } from "@/ytmusic/YtMusic";
 
-import { magicQueueLevel, magicQueueSliders } from "./magicQueueLevel";
 import { magicQueueYtCandidates } from "./magicQueueRadio";
 import { magicSongsOf } from "./magicSongs";
 import { Player } from "./Player";
@@ -132,8 +132,8 @@ const libraryNow = Effect.gen(function* () {
  * the session's first batch, at once when the candidate catalog has enough
  * of the seed's songs, else once its radio was read. Its YouTube Music
  * songs grow from the seed songs' primary artists, held to their genres.
- * YouTube Music's share of a batch starts at the Magic Queue section's
- * level (`magicQueueLevel`), from Home or any long-press menu.
+ * YouTube Music's share of a batch starts at Discover's New music level
+ * (`discoverLevel`), from Home or any long-press menu.
  */
 export const startMagicQueue = (seed: MagicSeed, seedSongs: readonly SongRow[]) =>
   Effect.gen(function* () {
@@ -147,7 +147,7 @@ export const startMagicQueue = (seed: MagicSeed, seedSongs: readonly SongRow[]) 
         artists: playable.flatMap((song) => names.get(song.artistId) ?? []),
         profile: genreProfile(playable),
       },
-      ytShare: magicQueueShare(magicQueueLevel.get()),
+      ytShare: magicQueueShare(discoverLevel.get()),
     });
     const first = playable.find((song) => String(song.id) === started?.first);
     if (started === null || first === undefined) return;
@@ -256,8 +256,8 @@ export const layer = Layer.effectDiscard(
         const library = yield* Effect.provideService(libraryNow, LibraryStore, store);
         // The owner's taste weighs from the session's first batch on.
         const taste = yield* Effect.provideService(tasteProfileNow, LibraryStore, store);
-        // The Magic Queue section's sliders as they are now: a move applies from the next batch.
-        const engine = mixSlidersEngine(magicQueueSliders.get());
+        // Discover's sliders as they are now: a move applies from the next batch.
+        const engine = mixSlidersEngine(discoverSliders.get());
         const yt = yield* magicQueueYtCandidates(wanted, library, { taste, engine }).pipe(
           Effect.provideService(LibraryStore, store),
           Effect.provideService(YtMusic, ytMusic),

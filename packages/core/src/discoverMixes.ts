@@ -11,7 +11,7 @@ import { splitCredit } from "./credits.ts";
 import type { BlendedDiscoverMix, DiscoverMixSong } from "./discoverMixLevels.ts";
 import type { ExplicitFlag } from "./explicit.ts";
 import type { MixAffinity } from "./genreAffinity.ts";
-import type { HomeSectionId } from "./homeSections.ts";
+import type { MixRowId } from "./homeSections.ts";
 import { identityKey } from "./library.ts";
 import { normalizeSearchText } from "./search.ts";
 import { isRecord, readStoredRecord } from "./storedJson.ts";
@@ -117,10 +117,8 @@ const GENRE_MIX_ID = "genre:";
 /** A genre mix's id (`DiscoverMixSeed.id`), from its family's key (`genreFamily`). */
 export const genreMixId = (familyKey: string): string => `${GENRE_MIX_ID}${familyKey}`;
 
-/** The Home section a mix (by its seed's [id]) is of: Genre mixes' or Artist mixes'. */
-export const mixSectionOfId = (
-  id: string,
-): Extract<HomeSectionId, "artist-mixes" | "genre-mixes"> =>
+/** The Discover row a mix (by its seed's [id]) is of: Genre mixes' or Artist mixes'. */
+export const mixSectionOfId = (id: string): MixRowId =>
   id.startsWith(GENRE_MIX_ID) ? "genre-mixes" : "artist-mixes";
 
 const FIELD = "\u001f";

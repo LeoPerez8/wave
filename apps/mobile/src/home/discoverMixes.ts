@@ -28,7 +28,7 @@ import {
   discoverMixesRerun,
   discoverMixesSection,
   genreMixSeeds,
-  homeSectionTitle,
+  discoverRowTitle,
   mixesShown,
   mixRefreshAvoid,
   mixSlidersEngine,
@@ -76,9 +76,9 @@ import { mixProfileOf } from "./artistGenres";
 import { artistGraphNow } from "./artistGraphNow";
 import { artistMixPools } from "./artistMixPools";
 import {
-  mixSlidersOf,
+  discoverSlidersNow,
   setMixSlidersListener,
-  useSectionLevel,
+  useDiscoverLevel,
   type MixSectionId,
 } from "./discoverMixLevel";
 import { mixCatalog } from "./mixCatalog";
@@ -154,7 +154,7 @@ const rankedMixes = (
       reader.read(seed);
       yield* freeTurnEffect;
     }
-    const sliders = mixSlidersOf(id);
+    const sliders = discoverSlidersNow();
     const mixes = discoverMixesOfCatalog(seeds, reader, {
       known: library.known,
       library,
@@ -238,7 +238,7 @@ const rerank = (id: MixSectionId): void => {
     mixSection.rerankAfter = true;
     return;
   }
-  if (saved === null || sameSliders(mixSection.rankedWith, mixSlidersOf(id))) return;
+  if (saved === null || sameSliders(mixSection.rankedWith, discoverSlidersNow())) return;
   mixSection.reranking = true;
   void appRuntime
     .runPromise(Effect.result(rerankedOf(id, saved)))
@@ -322,7 +322,7 @@ const builtOutcome = (built: DiscoverMixes | null | "nothing-to-build-from"): st
  */
 const loggedBuild = (id: MixSectionId, pulled: boolean, avoid?: MixRefreshAvoid) =>
   withNetworkLog(
-    `${homeSectionTitle(id)} ${pulled ? "refresh" : "build"}`,
+    `${discoverRowTitle(id)} ${pulled ? "refresh" : "build"}`,
     SECTIONS[id].build(avoid),
     builtOutcome,
   );
@@ -510,7 +510,7 @@ export const refreshMixes = (id: MixSectionId): void => {
     .then((result) => {
       const built = Result.isSuccess(result) ? result.success : null;
       if (built === null || built === "nothing-to-build-from") {
-        void showToast(`Couldn't refresh ${homeSectionTitle(id)}`);
+        void showToast(`Couldn't refresh ${discoverRowTitle(id)}`);
         return;
       }
       mixSection.retryAt = null;
@@ -551,7 +551,7 @@ const useBlend = (
   id: MixSectionId,
   tracks: ReadonlyMap<number, SongRow> | null,
 ): DiscoverMixBlend => {
-  const level = useSectionLevel(id);
+  const level = useDiscoverLevel();
   const dontPlayExplicit = useDontPlayExplicit();
   const knownVideos = useKnownVideos();
   return useMemo(
