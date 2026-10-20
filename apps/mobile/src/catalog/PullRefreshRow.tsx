@@ -1,11 +1,13 @@
 import { IconRefresh } from "@tabler/icons-react-native";
-import { mixPull } from "@wave/core";
+import { MIX_PULL_SLOP, mixPull, mixPullCanStart } from "@wave/core";
 import * as Haptics from "expo-haptics";
 import { useState, type ReactNode } from "react";
-import { ActivityIndicator, ScrollView, View, type AccessibilityActionEvent } from "react-native";
-import { GestureDetector, useNativeGesture, usePanGesture } from "react-native-gesture-handler";
+import { ActivityIndicator, View, type AccessibilityActionEvent } from "react-native";
+import { GestureDetector, usePanGesture } from "react-native-gesture-handler";
 import Animated, {
+  useAnimatedScrollHandler,
   useAnimatedStyle,
+  useDerivedValue,
   useReducedMotion,
   useSharedValue,
   withSpring,
@@ -17,9 +19,6 @@ import { useThemeColor } from "@/theme/useThemeColor";
 
 import { COVER_ROW_TILE } from "./CoverRow";
 import { CELL, grid } from "./grid";
-
-/** Travel before a drag counts as a pull, in dp. */
-const DRAG_SLOP = CELL * 1.5;
 
 /** The refresh arrow's size, in dp. */
 const ICON = CELL * 3;
@@ -35,6 +34,15 @@ const SPRING = { damping: 20, stiffness: 240 };
  * done. Under reduce motion the arrow stays still and the spinner is a still
  * arrow. With [enabled] off (a refresh already running) it's a plain row.
  * Screen readers get the refresh as the row's action, named [refreshLabel].
+ *
+ * The row scrolls as a plain `CoverRow` does, with no gesture of its own on
+ * its scroll view: Home's scroll view is React Native's, which Gesture
+ * Handler can't arbitrate with, and a native gesture wrapping the row kept a
+ * vertical drag begun on its bare part (beside a lone mix, past the last
+ * cover) from scrolling Home (#525). The pull is a pan around the row, armed
+ * only while the row sits at its start (`mixPullCanStart`), and it settles
+ * within `MIX_PULL_SLOP`, before Android's touch slop: rightwards first it
+ * takes the touch, up or down first it fails and Home scrolls.
  */
 export function PullRefreshRow({
   children,
@@ -51,9 +59,12 @@ export function PullRefreshRow({
   const reduceMotion = useReducedMotion();
   const accent = useThemeColor("accent");
   const secondary = useThemeColor("secondary");
-  // How far the row is scrolled, in dp, and the finger's travel when it last sat at its start.
+  // How far the row is scrolled, in dp, followed on the UI thread; a pull can start only at its start.
   const scrollX = useSharedValue(0);
-  const base = useSharedValue(0);
+  const onScroll = useAnimatedScrollHandler((event) => {
+    scrollX.set(event.contentOffset.x);
+  });
+  const pullable = useDerivedValue(() => enabled && mixPullCanStart(scrollX.get()), [enabled]);
   // How far the row has given to the pull, in dp, and how near it is to refreshing (0–1).
   const offset = useSharedValue(0);
   const progress = useSharedValue(0);
@@ -70,24 +81,14 @@ export function PullRefreshRow({
     if (refresh) onRefresh();
   };
 
-  // The row's own scrolling, which the pull goes along with.
-  const scroll = useNativeGesture({ disallowInterruption: true });
-
   const pull = usePanGesture({
-    enabled,
-    // Rightwards only; a vertical move belongs to the screen.
-    activeOffsetX: [-1_000_000, DRAG_SLOP],
-    failOffsetY: [-DRAG_SLOP, DRAG_SLOP],
-    simultaneousWith: scroll,
-    onActivate: () => {
-      "worklet";
-      base.set(0);
-    },
+    enabled: pullable,
+    // Rightwards only; a vertical move belongs to the screen, a leftward one to the row.
+    activeOffsetX: [-1_000_000, MIX_PULL_SLOP],
+    failOffsetY: [-MIX_PULL_SLOP, MIX_PULL_SLOP],
     onUpdate: (event) => {
       "worklet";
-      // A drag begun along the row scrolls it back first: only travel at its start pulls.
-      if (scrollX.get() > 0.5) base.set(event.translationX);
-      const now = mixPull(event.translationX - base.get());
+      const now = mixPull(event.translationX);
       offset.set(now.offset);
       progress.set(now.progress);
       if (now.armed !== armedNow.get()) {
@@ -97,7 +98,7 @@ export function PullRefreshRow({
     },
     onDeactivate: (event) => {
       "worklet";
-      const refresh = !event.canceled && mixPull(event.translationX - base.get()).armed;
+      const refresh = !event.canceled && mixPull(event.translationX).armed;
       armedNow.set(false);
       offset.set(withSpring(0, SPRING));
       progress.set(withSpring(0, SPRING));
@@ -141,19 +142,17 @@ export function PullRefreshRow({
       </Animated.View>
       <GestureDetector gesture={pull}>
         <Animated.View style={rowStyle}>
-          <GestureDetector gesture={scroll}>
-            <ScrollView
-              scrollEnabled={scrollable}
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              overScrollMode="never"
-              scrollEventThrottle={16}
-              onScroll={(event) => scrollX.set(event.nativeEvent.contentOffset.x)}
-              contentContainerStyle={{ paddingHorizontal: grid.margin, gap: grid.gutter }}
-            >
-              {children}
-            </ScrollView>
-          </GestureDetector>
+          <Animated.ScrollView
+            scrollEnabled={scrollable}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            overScrollMode="never"
+            scrollEventThrottle={16}
+            onScroll={onScroll}
+            contentContainerStyle={{ paddingHorizontal: grid.margin, gap: grid.gutter }}
+          >
+            {children}
+          </Animated.ScrollView>
         </Animated.View>
       </GestureDetector>
     </View>

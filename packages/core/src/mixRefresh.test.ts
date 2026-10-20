@@ -7,8 +7,10 @@ import {
   discoverMix,
   discoverMixesBuilt,
   discoverMixesDue,
+  MIX_PULL_SLOP,
   MIX_PULL_THRESHOLD,
   mixPull,
+  mixPullCanStart,
   mixRefreshWaitNotice,
   NO_SEARCHES,
   parseMixesShown,
@@ -361,6 +363,19 @@ describe("Pulling a mixes carousel", () => {
     assert.equal(mixPull(MIX_PULL_THRESHOLD).armed, true);
     assert.equal(mixPull(MIX_PULL_THRESHOLD / 2).progress, 0.5);
     assert.equal(mixPull(MIX_PULL_THRESHOLD * 3).progress, 1);
+  });
+
+  test("starts only with the row at its start, so a row scrolled along just scrolls back", () => {
+    assert.equal(mixPullCanStart(0), true);
+    assert.equal(mixPullCanStart(0.4), true);
+    assert.equal(mixPullCanStart(-3), true);
+    assert.equal(mixPullCanStart(1), false);
+    assert.equal(mixPullCanStart(240), false);
+  });
+
+  test("tells a pull from a scroll of Home before Android's 8 dp touch slop", () => {
+    // Home's scroll view and the row's own scrolling claim the touch past the touch slop.
+    assert.ok(MIX_PULL_SLOP > 0 && MIX_PULL_SLOP < 8);
   });
 });
 

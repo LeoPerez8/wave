@@ -10,11 +10,11 @@ describe("Library shelf", () => {
 
   test("the card offers the catalogue's shelves by their Home titles, then None", () => {
     assert.deepEqual(LIBRARY_SHELF_CHOICES, [
+      { shelf: "discover", label: "Discover" },
       { shelf: "recently-added", label: "Recently added" },
       { shelf: "recently-played", label: "Recently played" },
       { shelf: "most-played-albums", label: "Most played albums" },
       { shelf: "most-played-artists", label: "Most played artists" },
-      { shelf: "artist-mixes", label: "Artist mixes" },
       { shelf: "favorites", label: "Favorites" },
       { shelf: "none", label: "None" },
     ]);
@@ -26,8 +26,9 @@ describe("Library shelf", () => {
     }
   });
 
-  test("Discover mixes, picked before it became Artist mixes, reads as Artist mixes", () => {
-    assert.equal(parseLibraryShelf("discover-mixes"), "artist-mixes");
+  test("Artist mixes, or Discover mixes before it, picked before Discover held them, reads as Discover", () => {
+    assert.equal(parseLibraryShelf("artist-mixes"), "discover");
+    assert.equal(parseLibraryShelf("discover-mixes"), "discover");
   });
 
   test("anything else stored (junk, a section that isn't a shelf, one this Wave doesn't know) is Recently added", () => {
@@ -35,7 +36,6 @@ describe("Library shelf", () => {
     assert.equal(parseLibraryShelf("stats"), "recently-added");
     assert.equal(parseLibraryShelf("most-played"), "recently-added");
     assert.equal(parseLibraryShelf("listening-overview"), "recently-added");
-    assert.equal(parseLibraryShelf("magic-queue"), "recently-added");
     assert.equal(parseLibraryShelf("NONE"), "recently-added");
   });
 

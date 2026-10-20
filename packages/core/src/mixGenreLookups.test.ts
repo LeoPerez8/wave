@@ -6,7 +6,9 @@ import {
   genreProfile,
   mixAffinity,
   magicArtistKey,
+  magicLibraryLookups,
   magicRadioLookups,
+  magicSeedLookups,
   mixProfileLookupsNext,
   ytTrackId,
   type DiscoverRadioSong,
@@ -200,5 +202,80 @@ describe("The genres a Magic Queue looks up next", () => {
       "U1",
       "U2",
     ]);
+  });
+});
+
+describe("The genres a Magic Queue's seed looks up", () => {
+  const untagged: MagicSession = {
+    id: "m1",
+    seed: { kind: "track", id: "1", title: "Remember the Name" },
+    used: [],
+    batches: 0,
+    artistAffinity: {},
+    genreAffinity: {},
+    excludedArtists: [],
+    ytShare: 0.5,
+    radioArtists: ["Seed", "M1"],
+    seedProfile: null,
+  };
+
+  test("are its radio artists with nothing known, when its songs have no genre tag", () => {
+    assert.deepEqual(magicSeedLookups(untagged, profileOf), ["Seed"]);
+    const tagged = { ...untagged, seedProfile: Object.fromEntries(rock ?? []) };
+    assert.deepEqual(magicSeedLookups(tagged, profileOf), []);
+  });
+
+  test("come before a refill's radio songs, which are then held to the artists' genres", () => {
+    const radio = [...songsBy("X", 2), ...songsBy("U", 2)];
+    const options = { profileOf, inLibrary: () => false };
+    assert.deepEqual(magicRadioLookups(untagged, radio, options), ["Seed"]);
+    const known: GenreProfileOf = (artist) => (artist === "Seed" ? rock : profileOf(artist));
+    assert.deepEqual(magicRadioLookups(untagged, radio, { ...options, profileOf: known }), [
+      "U0",
+      "U1",
+    ]);
+  });
+});
+
+describe("The genres a Magic Queue's Library songs look up", () => {
+  const session: MagicSession = {
+    id: "m1",
+    seed: { kind: "track", id: "1", title: "Seed" },
+    used: [],
+    batches: 1,
+    artistAffinity: {},
+    genreAffinity: {},
+    excludedArtists: [],
+    ytShare: 0.5,
+    radioArtists: ["Seed"],
+    seedProfile: Object.fromEntries(rock ?? []),
+  };
+  const artists = [
+    { id: 1, name: "U1" },
+    { id: 2, name: "U2" },
+    { id: 3, name: "M3" },
+    { id: 4, name: "Various Artists" },
+    { id: 5, name: "U5" },
+  ];
+  const songs = [
+    { id: 10, artistIds: [1], genre: null },
+    { id: 20, artistIds: [2], genre: null },
+    { id: 21, artistIds: [2], genre: null },
+    { id: 22, artistIds: [2], genre: "Rock" },
+    { id: 30, artistIds: [3], genre: null },
+    { id: 40, artistIds: [4], genre: null },
+    { id: 50, artistIds: [5], genre: "Jazz" },
+  ];
+
+  test("are the primary artists with nothing known of songs without a genre tag, most songs first", () => {
+    assert.deepEqual(magicLibraryLookups(session, { artists, songs }, { profileOf }), ["U2", "U1"]);
+    assert.deepEqual(magicLibraryLookups(session, { artists, songs }, { profileOf, most: 1 }), [
+      "U2",
+    ]);
+  });
+
+  test("are none while the seed has no genre known: every song passes", () => {
+    const unknown = { ...session, seedProfile: null, radioArtists: ["U9"] };
+    assert.deepEqual(magicLibraryLookups(unknown, { artists, songs }, { profileOf }), []);
   });
 });

@@ -1,36 +1,31 @@
-import { IconGripVertical, IconTrash } from "@tabler/icons-react-native";
-import { moveItem, queueSongTrackId, resolveRemoveSwipe, type QueueContext } from "@wave/core";
-import * as Haptics from "expo-haptics";
+import { IconGripVertical } from "@tabler/icons-react-native";
+import { moveItem, queueSongTrackId, type PlaylistPlace, type QueueContext } from "@wave/core";
 import { useCallback, useLayoutEffect, useMemo, useRef, useState, type ReactElement } from "react";
-import { Text, View, type AccessibilityActionEvent } from "react-native";
-import { GestureDetector, usePanGesture } from "react-native-gesture-handler";
-import Animated, {
-  useAnimatedStyle,
-  useReducedMotion,
-  useSharedValue,
-  withSpring,
-  withTiming,
-} from "react-native-reanimated";
-import { scheduleOnRN } from "react-native-worklets";
+import { View, type AccessibilityActionEvent } from "react-native";
+import { GestureDetector } from "react-native-gesture-handler";
+import Animated from "react-native-reanimated";
 
 import { CELL, grid } from "@/catalog/grid";
+import { SwipeableRow, swipeAccessibility, type RowSwipe } from "@/catalog/SwipeableRow";
 import { TrackRow } from "@/catalog/TrackRow";
 import { useChromeInset } from "@/chrome/chrome";
 import { playPlaylist } from "@/playback/actions";
 import { useCurrentTrackId } from "@/playback/hooks";
 import { openTrackActions, openUnsearchedActions } from "@/playback/ActionsMenu";
 import type { ActionItems, TrackItem } from "@/playback/actionTargets";
+import { useSongSwipe, useUnsearchedSwipe } from "@/playback/rowSwipe";
 import { selectableRow } from "@/selection/selectableRow";
 import { useListSelection } from "@/selection/useListSelection";
 import { useThemeColor } from "@/theme/useThemeColor";
 import { showToast } from "@/overlay/toast";
 import { YtSongRow } from "@/ytmusic/YtSongRow";
-import { openYtSongActions } from "@/ytmusic/YtSongActions";
+import { openYtSongActions, useYtSongSwipe } from "@/ytmusic/YtSongActions";
 
 import {
   explainUnavailable,
   openUnavailableEntryActions,
   UnavailableSongRow,
+  useUnavailableSwipe,
 } from "./UnavailableEntry";
 
 import { UnsearchedSongRow } from "./UnsearchedSongRow";
@@ -52,10 +47,11 @@ import { useListScrollable } from "@/motion/heldTouch";
 const ROW = grid.row;
 /** One column of rows, a row tall. */
 const CELLS = { columns: 1, width: 0, height: ROW };
-const DRAG_SLOP = 12;
 
 type RowProps = {
   item: PlaylistEntryRow;
+  /** The entry's place in the playlist: what its menu and swipe act on. */
+  place: PlaylistPlace;
   index: number;
   count: number;
   drag: DragState;
@@ -80,14 +76,46 @@ type RowProps = {
 };
 
 /**
+ * What swiping a playlist entry runs, whatever kind it is (`rowSwipe`): left
+ * takes it out of the playlist at once ([onRemove]), right queues it when
+ * its menu can.
+ */
+const useEntrySwipe = (
+  item: PlaylistEntryRow,
+  place: PlaylistPlace,
+  onRemove: (item: PlaylistEntryRow) => void,
+): RowSwipe => {
+  const options = { playlistItem: place, onRemove: () => onRemove(item) };
+  const song = useSongSwipe(item.source === "library" ? item.track : null, options);
+  const stream = useYtSongSwipe(item.source === "stream" ? item.song : null, options);
+  const unsearched = useUnsearchedSwipe(item.source === "unsearched" ? item.song : null, options);
+  const unavailable = useUnavailableSwipe(
+    item.source === "unavailable" ? item.song : null,
+    options,
+  );
+  switch (item.source) {
+    case "library":
+      return song;
+    case "stream":
+      return stream;
+    case "unsearched":
+      return unsearched;
+    case "unavailable":
+      return unavailable;
+  }
+};
+
+/**
  * A playlist entry: a Library song's track row, a YT Music entry's stream
  * row with the YT Music song's menu, or an unavailable entry's dimmed row,
- * that swipes left to remove, with a grip on the right to drag it elsewhere.
- * Screen readers get Move up / Move down / Remove. While selecting, an
- * unavailable entry can't be checked.
+ * that swipes as every song row does (`SwipeableRow`: left removes it from
+ * the playlist), with a grip on the right to drag it elsewhere. Screen
+ * readers get Move up / Move down and the swipes' actions. While selecting,
+ * an unavailable entry can't be checked.
  */
 function PlaylistItem({
   item,
+  place,
   index,
   count,
   drag,
@@ -105,9 +133,7 @@ function PlaylistItem({
 }: RowProps) {
   const fill = useThemeColor("fill");
   const secondary = useThemeColor("secondary");
-  const reduceMotion = useReducedMotion();
-  // No swipe-to-remove while the long-pressed finger slides to choose in the menu.
-  const swipeable = useListScrollable() && !selecting;
+  const swipe = useEntrySwipe(item, place, onRemove);
   const { style: rowStyle, grip } = useDragCell({
     drag,
     index,
@@ -117,85 +143,28 @@ function PlaylistItem({
     handlers,
   });
 
-  const offsetX = useSharedValue(0);
-  const width = useSharedValue(1);
-  const widthRef = useRef(1);
-
-  const contentStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: offsetX.get() }],
-  }));
-  const revealStyle = useAnimatedStyle(() => ({
-    opacity: Math.min(1, -offsetX.get() / (width.get() / 3)),
-  }));
-
-  const finishSwipe = (translationX: number, velocityX: number, canceled: boolean) => {
-    const remove =
-      !canceled && resolveRemoveSwipe({ translationX, velocityX, width: widthRef.current });
-    if (!remove) {
-      offsetX.set(withSpring(0, { damping: 20, stiffness: 240 }));
-      return;
-    }
-    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    if (reduceMotion) {
-      onRemove(item);
-      return;
-    }
-    offsetX.set(
-      withTiming(-widthRef.current, { duration: 160 }, (finished) => {
-        if (finished) scheduleOnRN(onRemove, item);
-      }),
-    );
-  };
-
-  const swipe = usePanGesture({
-    enabled: swipeable,
-    // Leftwards only; a vertical move belongs to the list.
-    activeOffsetX: -DRAG_SLOP,
-    failOffsetY: [-DRAG_SLOP, DRAG_SLOP],
-    onUpdate: (event) => {
-      "worklet";
-      offsetX.set(Math.min(0, event.translationX));
-    },
-    onDeactivate: (event) => {
-      "worklet";
-      scheduleOnRN(finishSwipe, event.translationX, event.velocityX, event.canceled);
-    },
-  });
-
-  const accessibilityActions = selecting
+  const moves = selecting
     ? []
     : [
         ...(reorderable && index > 0 ? [{ name: "moveUp", label: "Move up" }] : []),
         ...(reorderable && index < count - 1 ? [{ name: "moveDown", label: "Move down" }] : []),
-        { name: "remove", label: "Remove from playlist" },
       ];
-  const onAccessibilityAction = (event: AccessibilityActionEvent) => {
+  const onMoveAction = (event: AccessibilityActionEvent) => {
     const action = event.nativeEvent.actionName;
     if (action === "moveUp") onMove(index, index - 1);
     else if (action === "moveDown") onMove(index, index + 1);
-    else if (action === "remove") onRemove(item);
   };
+  const { accessibilityActions, onAccessibilityAction } = selecting
+    ? { accessibilityActions: moves, onAccessibilityAction: onMoveAction }
+    : swipeAccessibility(swipe, moves, onMoveAction);
 
   return (
     <Animated.View
       // Placed by index: only a window of rows is mounted (see `rowWindow`).
       style={[{ position: "absolute", top: index * ROW, left: 0, right: 0 }, rowStyle]}
-      onLayout={(event) => {
-        const measured = Math.max(1, event.nativeEvent.layout.width);
-        widthRef.current = measured;
-        width.set(measured);
-      }}
     >
-      <Animated.View
-        pointerEvents="none"
-        className="absolute bottom-0 right-0 top-0 flex-row items-center bg-fill"
-        style={[{ gap: CELL, paddingHorizontal: CELL * 2 }, revealStyle]}
-      >
-        <IconTrash size={20} color={secondary} strokeWidth={1.5} />
-        <Text className="font-sans text-body font-medium text-secondary">Remove</Text>
-      </Animated.View>
-      <Animated.View className="flex-row items-center bg-background" style={contentStyle}>
-        <GestureDetector gesture={swipe}>
+      <SwipeableRow swipe={swipe} enabled={!selecting}>
+        <View className="flex-row items-center">
           <View className="flex-1">
             {item.source === "library" ? (
               <TrackRow
@@ -241,22 +210,22 @@ function PlaylistItem({
               />
             )}
           </View>
-        </GestureDetector>
-        <GestureDetector gesture={grip}>
-          <View
-            accessible={false}
-            importantForAccessibility="no-hide-descendants"
-            className="items-end justify-center"
-            // 48dp of target for a grip drawn in the 32dp state cell.
-            style={{ width: grid.stateCell + CELL * 2, height: ROW, marginLeft: -CELL * 2 }}
-          >
-            {/* Hidden, not removed, while selecting or finding: the rows keep their width. */}
-            {!selecting && reorderable && (
-              <IconGripVertical size={20} color={secondary} strokeWidth={1.5} />
-            )}
-          </View>
-        </GestureDetector>
-      </Animated.View>
+          <GestureDetector gesture={grip}>
+            <View
+              accessible={false}
+              importantForAccessibility="no-hide-descendants"
+              className="items-end justify-center"
+              // 48dp of target for a grip drawn in the 32dp state cell.
+              style={{ width: grid.stateCell + CELL * 2, height: ROW, marginLeft: -CELL * 2 }}
+            >
+              {/* Hidden, not removed, while selecting or finding: the rows keep their width. */}
+              {!selecting && reorderable && (
+                <IconGripVertical size={20} color={secondary} strokeWidth={1.5} />
+              )}
+            </View>
+          </GestureDetector>
+        </View>
+      </SwipeableRow>
     </Animated.View>
   );
 }
@@ -311,8 +280,9 @@ export const playPlaylistEntries = (
 /**
  * A playlist's songs in order, the Library's and YT Music's (streamed, with
  * the YT Music song's menu): tap plays the playlist from the song, the grip
- * drags it to a new place (scrolling the list near its edges), a left swipe
- * removes it, long-press opens its menu. The menu's Select starts selection
+ * drags it to a new place (scrolling the list near its edges), a swipe runs
+ * an entry of its menu as every song row's does (left removes it from the
+ * playlist at once, right adds it to the queue), long-press opens its menu. The menu's Select starts selection
  * mode (check cells, taps toggle, no dragging or swiping), whose bar adds
  * Remove from Playlist, for Library and YT Music songs alike.
  */
@@ -419,6 +389,7 @@ export function PlaylistItems({ playlistId, items, header, empty }: Props) {
       <PlaylistItem
         key={item.itemId}
         item={item}
+        place={placeOf(item)}
         index={index}
         count={shown.length}
         drag={listDrag.drag}

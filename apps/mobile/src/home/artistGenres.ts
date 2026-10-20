@@ -56,6 +56,17 @@ export const mixProfileOf = (library: GenreProfileLibrary): GenreProfileOf => {
 };
 
 /**
+ * Every artist's genre profile by name, as the Magic Queue holds both its
+ * sources to the seed's genres: a Library artist's from their songs in
+ * [library] when those have a genre, else (an outside artist, or a Library
+ * artist whose songs have no genre tag) as Deezer gave it.
+ */
+export const magicProfileOf = (library: GenreProfileLibrary): GenreProfileOf => {
+  const ofLibrary = libraryGenreProfiles(library);
+  return (artist) => ofLibrary(artist) ?? lookedUpProfileOf(artist);
+};
+
+/**
  * Lookups running at once, across every build and Magic Queue batch going
  * on: gentle on Deezer, whose open API limits bursts.
  */

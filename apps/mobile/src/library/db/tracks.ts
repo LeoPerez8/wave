@@ -54,7 +54,7 @@ export type TrackScope = "library" | "files";
 export const inScope = (on: SQL, scope: TrackScope): SQL => (scope === "files" ? withFile(on) : on);
 
 /** A track's genre; null without one. */
-const trackGenre = sql<string | null>`(
+export const trackGenre = sql<string | null>`(
   SELECT name FROM genres WHERE genres.id = ${schema.tracks.genreId})`;
 
 /** What every track list shows (a `SongRow`), plus what orders albums. Join `tracks` `inScope`. */

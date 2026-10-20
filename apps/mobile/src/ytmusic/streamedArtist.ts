@@ -8,10 +8,15 @@ import { useMemo, useSyncExternalStore } from "react";
 
 import { libraryVersion } from "@/library/LibraryScan";
 import { LibraryStore, type ArtistRow } from "@/library/LibraryStore";
-import { useCurrentPath, useCurrentRoute, type CurrentRoute } from "@/library/routes";
+import {
+  currentRouteNow,
+  useCurrentPath,
+  useCurrentRoute,
+  type CurrentRoute,
+} from "@/library/routes";
 import { appRuntime } from "@/library/runtime";
 import { makeVersionedCache } from "@/lib/versionedCache";
-import { useYtMusicEnabled } from "@/settings/ytMusic";
+import { useYtMusicEnabled, ytMusicEnabled } from "@/settings/ytMusic";
 
 import { ytArtistPageHere } from "./routes";
 
@@ -34,6 +39,9 @@ const idle = () => () => {};
 /** How long a menu waits for the Library's artists before it opens without them. */
 const ARTISTS_WAIT_MS = 500;
 
+/** The wait under way for the Library's artists, shared by whoever asks meanwhile. */
+let reading: Promise<void> | null = null;
+
 /**
  * Resolves once the Library's artists have been read (at once when they
  * have), so a menu offering Go to Artist opens with it. A failed read (tried
@@ -42,16 +50,19 @@ const ARTISTS_WAIT_MS = 500;
  */
 export const libraryArtistsRead = (): Promise<void> => {
   if (sharedArtists.get() !== null) return Promise.resolve();
-  return new Promise((resolve) => {
+  // One wait at a time, however many rows (each a swipe set to Go to Artist) ask.
+  reading ??= new Promise<void>((resolve) => {
     const done = () => {
       clearTimeout(timer);
       stop();
+      reading = null;
       resolve();
     };
     const timer = setTimeout(done, ARTISTS_WAIT_MS);
     // Told once the read settles, read or failed.
     const stop = sharedArtists.subscribe(done);
   });
+  return reading;
 };
 
 /**
@@ -92,4 +103,21 @@ export const useStreamedArtistContext = (
     () => (libraryArtist === null ? undefined : { libraryArtist, enabled, here, ytArtistHere }),
     [libraryArtist, enabled, here, ytArtistHere],
   );
+};
+
+/**
+ * The artist resolution a streamed song's menu would use, as things are now,
+ * unfollowed: for a row's swipe, which follows nothing. Undefined until the
+ * Library's artists are read (`libraryArtistsRead`).
+ */
+export const streamedArtistContextNow = (): StreamedArtistContext<ArtistRow> | undefined => {
+  const libraryArtist = sharedArtists.get();
+  if (libraryArtist === null) return undefined;
+  const route = currentRouteNow();
+  return {
+    libraryArtist,
+    enabled: ytMusicEnabled(),
+    here: route.pathname,
+    ytArtistHere: ytArtistOf(route),
+  };
 };

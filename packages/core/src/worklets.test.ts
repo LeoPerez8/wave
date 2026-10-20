@@ -14,6 +14,7 @@ import {
   reorderScrollSpeed,
   reorderShift,
   reorderTarget,
+  rowSwipeArmed,
   scrubPosition,
 } from "./index.ts";
 
@@ -37,6 +38,7 @@ const onUiThread = {
   reorderScrollSpeed,
   reorderShift,
   reorderTarget,
+  rowSwipeArmed,
   scrubPosition,
 };
 

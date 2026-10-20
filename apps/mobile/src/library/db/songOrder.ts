@@ -5,12 +5,14 @@
  * Expo so the store tests run them against a real SQLite (`testDatabase.ts`).
  */
 import {
+  canFixSong,
   songOrderTerms,
   songSpineField,
   spineEntries,
   type ExplicitFlag,
   type IndexEntry,
   type LibrarySongSort,
+  type PlaylistFindText,
   type SongOrderField,
 } from "@wave/core";
 import { asc, desc, eq, inArray, sql, type SQL } from "drizzle-orm";
@@ -19,7 +21,7 @@ import type { SQLiteColumn } from "drizzle-orm/sqlite-core";
 import { chunks } from "./chunks.ts";
 import type { LibraryDatabase } from "./database.ts";
 import * as schema from "./schema.ts";
-import { trackQuery } from "./tracks.ts";
+import { trackGenre, trackQuery } from "./tracks.ts";
 
 /** The Songs list in one sort: every Track's place, its A–Z spine and its missing songs. */
 export interface SongOrder {
@@ -43,6 +45,11 @@ export interface SongSummary {
   readonly hasFile: boolean;
   /** Whether it's explicit, as its file's advisory tag says: the row shows the E badge for it. */
   readonly explicit: ExplicitFlag;
+  /** Its album and primary artist, for what its row's swipes offer (Go to Album, Go to Artist). */
+  readonly albumId: number;
+  readonly artistId: number;
+  /** Whether Fix Song can do something for it (Core's `canFixSong`): what its swipe offers. */
+  readonly fixable: boolean;
 }
 
 /** Where each field Core's order terms name lives. */
@@ -135,13 +142,24 @@ export const selectSongSummaries = (
         artist: tracks.artistCredit,
         durationMs: tracks.durationMs,
         thumbPath: artwork.thumbPath,
-        hasFile: sql<boolean>`${tracks.path} IS NOT NULL`.mapWith((value) => value === 1),
+        path: tracks.path,
         explicit: tracks.explicit,
+        albumId: tracks.albumId,
+        artistId: tracks.artistId,
+        hasLyrics: tracks.hasLyrics,
+        genre: trackGenre,
+        trackNumber: tracks.trackNumber,
+        year: tracks.year,
       })
       .from(tracks)
       .leftJoin(artwork, eq(tracks.artworkHash, artwork.hash))
       .where(inArray(tracks.id, some))
-      .all(),
+      .all()
+      .map(({ path, hasLyrics, genre, trackNumber, year, ...row }): SongSummary => ({
+        ...row,
+        hasFile: path !== null,
+        fixable: canFixSong({ path, hasLyrics, genre, trackNumber, year, explicit: row.explicit }),
+      })),
   );
 };
 
@@ -151,3 +169,23 @@ export const selectSongSummaries = (
  */
 export const selectSongsWithIds = (db: LibraryDatabase, ids: readonly number[]) =>
   byIds(ids, (some) => trackQuery(db).where(inArray(schema.tracks.id, some)).all());
+
+/**
+ * What finds each song of the Library, missing songs included, by Track id:
+ * its title, artist credit and album (Find in Songs, #530). Read only once a
+ * query is typed, so opening Songs still reads no row's details.
+ */
+export const selectSongFindTexts = (db: LibraryDatabase): ReadonlyMap<number, PlaylistFindText> => {
+  const { tracks, albums } = schema;
+  const rows = db
+    .select({
+      id: tracks.id,
+      title: tracks.title,
+      artist: tracks.artistCredit,
+      album: albums.title,
+    })
+    .from(tracks)
+    .innerJoin(albums, eq(tracks.albumId, albums.id))
+    .all();
+  return new Map(rows.map(({ id, title, artist, album }) => [id, { title, artist, album }]));
+};

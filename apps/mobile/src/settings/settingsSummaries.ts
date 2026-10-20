@@ -21,6 +21,8 @@ import { askSpotify } from "@/spotify/askSpotify";
 import { askYtMusic } from "@/ytmusic/askYtMusic";
 import { useDownloadCounts } from "@/ytmusic/YtDownloads";
 
+import { useSwipeSettings } from "./swipeActions";
+
 /**
  * The accounts this phone is signed into (Core's `accountsSummary`), from the
  * sessions the native modules hold, without asking YouTube or Wave's server.
@@ -80,6 +82,7 @@ export const useSettingsSummaries = (): Record<SettingsPage, string | null> => {
   const accounts = useAccountsSummary();
   // Counts only: building the failed or queued lists here froze Settings with hundreds of songs.
   const downloads = useDownloadCounts();
+  const swipes = useSwipeSettings().enabled;
   return {
     library: scanning
       ? "Scanning…"
@@ -88,6 +91,7 @@ export const useSettingsSummaries = (): Record<SettingsPage, string | null> => {
         : counted(roots.length, "music folder"),
     appearance: null,
     layout: null,
+    swipeActions: swipes ? null : "Off",
     playback: null,
     lyricsAndTags:
       lookup.status === "running" ? libraryLookupProgress(lookup.done, lookup.total).line : null,

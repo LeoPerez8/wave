@@ -170,6 +170,24 @@ export const mixPull = (drag: number): MixPull => {
 };
 
 /**
+ * The finger travel, in dp, over which a drag on a mixes carousel is told
+ * apart: rightwards first, it's a pull; up or down first, it's Home's scroll.
+ * It must stay under Android's touch slop (8 dp), where Home's scroll view and
+ * the row's own scrolling claim the touch, so the pull is decided before them.
+ */
+export const MIX_PULL_SLOP = 6;
+
+/**
+ * Whether a pull can start on a mixes carousel scrolled [scrollX] dp along:
+ * only at its start (an overscroll reads as the start). A row scrolled along
+ * takes a rightward drag as its own scroll back.
+ */
+export const mixPullCanStart = (scrollX: number): boolean => {
+  "worklet";
+  return scrollX <= 0.5;
+};
+
+/**
  * The toast for a refresh whose YouTube Music searches wait for the search
  * allowance, [waitMs] more at most (`searchRoomAt`).
  */
