@@ -218,9 +218,10 @@ const useSongEntries = (
         ytMusic,
         selectable: onSelect !== undefined,
       }),
-      ...ytDownloadActions(status, { inLibrary: inLibrary(song) }).map(
-        (action): Entry => ({ kind: "download", action }),
-      ),
+      ...ytDownloadActions(status, { inLibrary: inLibrary(song) }).map((action): Entry => ({
+        kind: "download",
+        action,
+      })),
     ],
     find,
   };
@@ -242,7 +243,7 @@ export const useYtSongSwipe = (
   return rowSwipe(
     entries.map((entry) => entry.action),
     (action) => {
-      const entry = entries.find((entry) => entry.action === action);
+      const entry = entries.find((each) => each.action === action);
       if (entry !== undefined) run(entry, song, { find, playlistItem, onSelect: undefined });
     },
     options,

@@ -15,7 +15,7 @@ import type { NativeYtSong } from "@/native/waveYtMusic";
 import { useYtMusicEnabled } from "@/settings/ytMusic";
 
 import { useYtDownloadStatus } from "./YtDownloads";
-import { openYtSongActions } from "./YtSongActions";
+import { openYtSongActions, useYtSongSwipe } from "./YtSongActions";
 
 /**
  * A YT Music song as a Songs-list row: YouTube's cover, the artists and
@@ -81,4 +81,13 @@ export function YtSongRow({
       swipe={swipe}
     />
   );
+}
+
+/**
+ * A YT Music song's row in a list of songs: a `YtSongRow` that swipes to run
+ * its menu's entries (right Add to Queue; `useYtSongSwipe`).
+ */
+export function SwipeYtSongRow(props: Omit<ComponentProps<typeof YtSongRow>, "swipe">) {
+  const swipe = useYtSongSwipe(props.song);
+  return <YtSongRow {...props} swipe={swipe} />;
 }

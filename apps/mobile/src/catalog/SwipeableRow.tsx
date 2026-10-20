@@ -1,7 +1,12 @@
 import { resolveRowSwipe, rowSwipeArmed, type RowSwipeSide } from "@wave/core";
 import * as Haptics from "expo-haptics";
 import { useLayoutEffect, useRef, type ReactNode } from "react";
-import { Text, View, type AccessibilityActionEvent, type AccessibilityActionInfo } from "react-native";
+import {
+  Text,
+  View,
+  type AccessibilityActionEvent,
+  type AccessibilityActionInfo,
+} from "react-native";
 import { GestureDetector, usePanGesture } from "react-native-gesture-handler";
 import Animated, {
   useAnimatedStyle,
@@ -42,6 +47,9 @@ export interface RowSwipe {
 export const NO_SWIPE: RowSwipe = { right: null, left: null };
 
 const DRAG_SLOP = 12;
+
+/** The light tick a row gives as it arms. */
+const tick = () => void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 const SIDES: readonly RowSwipeSide[] = ["right", "left"];
 const actionName = (side: RowSwipeSide): string => `swipe-${side}`;
 
@@ -143,8 +151,6 @@ export function SwipeableRow({
   const rightStyle = useAnimatedStyle(() => ({ opacity: strength(offsetX.get()) }));
   const leftStyle = useAnimatedStyle(() => ({ opacity: strength(-offsetX.get()) }));
 
-  const tick = () => void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-
   const settle = () => {
     offsetX.set(reduceMotion ? 0 : withSpring(0, { damping: 20, stiffness: 240 }));
   };
@@ -177,7 +183,8 @@ export function SwipeableRow({
   const pan = usePanGesture({
     enabled: active,
     // Only towards the sides with an action; a vertical move belongs to the list.
-    activeOffsetX: canRight && canLeft ? [-DRAG_SLOP, DRAG_SLOP] : canRight ? DRAG_SLOP : -DRAG_SLOP,
+    activeOffsetX:
+      canRight && canLeft ? [-DRAG_SLOP, DRAG_SLOP] : canRight ? DRAG_SLOP : -DRAG_SLOP,
     failOffsetY: [-DRAG_SLOP, DRAG_SLOP],
     onUpdate: (event) => {
       "worklet";

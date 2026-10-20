@@ -1936,9 +1936,4 @@ export { sliderStep, sliderStepLabel } from "./mixSliders.ts";
 export { DOUBLE_TAP_MS, coverDoubleTap, createCoverTaps } from "./coverGestures.ts";
 export type { CoverDoubleTap, CoverTaps } from "./coverGestures.ts";
 export { DEFAULT_SWIPE_SETTINGS, rowSwipeActions, swipeChoiceAction } from "./swipeActions.ts";
-export type {
-  RowMenuAction,
-  RowSwipeActions,
-  SwipeChoice,
-  SwipeSettings,
-} from "./swipeActions.ts";
+export type { RowMenuAction, RowSwipeActions, SwipeChoice, SwipeSettings } from "./swipeActions.ts";

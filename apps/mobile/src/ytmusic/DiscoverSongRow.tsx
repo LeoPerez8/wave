@@ -1,6 +1,6 @@
 import { discoverTrackId, type MixedSong } from "@wave/core";
 
-import { TrackRow } from "@/catalog/TrackRow";
+import { SwipeTrackRow } from "@/library/SwipeTrackRow";
 import { useFavoriteIds } from "@/library/favorites";
 import type { SongRow } from "@/library/LibraryStore";
 import { toTrackSummary } from "@/library/TrackList";
@@ -12,7 +12,7 @@ import { selectableRow } from "@/selection/selectableRow";
 import type { ListSelection } from "@/selection/useListSelection";
 
 import { openYtSongActions } from "./YtSongActions";
-import { YtSongRow } from "./YtSongRow";
+import { SwipeYtSongRow } from "./YtSongRow";
 
 type Song = MixedSong<NativeYtSong, SongRow>;
 
@@ -42,9 +42,10 @@ export function DiscoverSongRow({
       : openYtSongActions(song.song, options),
   );
   if (song.source === "stream")
-    return <YtSongRow song={song.song} playing={playing} trackNumber={trackNumber} {...row} />;
+    return <SwipeYtSongRow song={song.song} playing={playing} trackNumber={trackNumber} {...row} />;
   return (
-    <TrackRow
+    <SwipeTrackRow
+      song={song.track}
       track={{ ...toTrackSummary(song.track), trackNumber }}
       state={playing ? "playing" : undefined}
       favorite={favorites.has(song.track.id)}

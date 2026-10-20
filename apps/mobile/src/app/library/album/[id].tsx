@@ -19,7 +19,7 @@ import { CatalogLine } from "@/catalog/CatalogLine";
 import { CELL, grid } from "@/catalog/grid";
 import { PlayShuffle, type LineToggle } from "@/catalog/PlayShuffle";
 import { TrackSkeletons } from "@/catalog/Skeletons";
-import { TrackRow } from "@/catalog/TrackRow";
+import { SwipeTrackRow } from "@/library/SwipeTrackRow";
 import { useChromeInset } from "@/chrome/chrome";
 import { Press } from "@/motion/Press";
 import { playPage, playSongs } from "@/playback/actions";
@@ -46,7 +46,7 @@ import { useListSelection, type ListSelection } from "@/selection/useListSelecti
 import { useYtAlbumSection } from "@/ytmusic/albumSection";
 import { YtLookupFooter } from "@/ytmusic/YtLookupFooter";
 import { listDownloadAction, useYtAlbumDownloadButton } from "@/ytmusic/YtSongList";
-import { YtSongRow } from "@/ytmusic/YtSongRow";
+import { SwipeYtSongRow } from "@/ytmusic/YtSongRow";
 import { openYtSongActions } from "@/ytmusic/YtSongActions";
 
 type Entry = YtAlbumEntry<NativeYtSong, SongRow>;
@@ -229,7 +229,7 @@ function EntryRow({
 }) {
   if (entry.source === "stream")
     return (
-      <YtSongRow
+      <SwipeYtSongRow
         song={entry.song}
         trackNumber={entry.number}
         playing={playing}
@@ -239,7 +239,8 @@ function EntryRow({
       />
     );
   return (
-    <TrackRow
+    <SwipeTrackRow
+      song={entry.track}
       track={{ ...toTrackSummary(entry.track), trackNumber: entry.number ?? undefined }}
       state={playing ? "playing" : undefined}
       favorite={favorite}
@@ -332,7 +333,8 @@ function AlbumTracks({ shown, openedIntegrated }: { shown: Shown; openedIntegrat
         }
         case "track":
           return (
-            <TrackRow
+            <SwipeTrackRow
+              song={item.track}
               track={{
                 ...toTrackSummary(item.track),
                 trackNumber: item.track.trackNumber ?? undefined,

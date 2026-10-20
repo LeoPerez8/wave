@@ -88,7 +88,7 @@ const runPlanned = (
   here: string,
   find: FindInLibrary,
 ): void => {
-  const entry = planned.find((planned) => planned.action === action);
+  const entry = planned.find((each) => each.action === action);
   if (entry === undefined) return;
   itemActionPress({ target, surface: "menu", finish: nothing, here, find })(entry)();
 };

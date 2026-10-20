@@ -12,7 +12,7 @@ import { View } from "react-native";
 import { Artwork } from "@/catalog/Artwork";
 import { AlphabetSpine } from "@/catalog/AlphabetSpine";
 import { CELL, grid } from "@/catalog/grid";
-import { type TrackSummary, TrackRow } from "@/catalog/TrackRow";
+import type { TrackSummary } from "@/catalog/TrackRow";
 import { useChromeInset } from "@/chrome/chrome";
 import { EmptyState } from "@/components/EmptyState";
 import { ScanProgressBanner } from "@/components/ScanProgressBanner";
@@ -36,6 +36,7 @@ import { usePagedSongs, useSongFindTexts, useSongOrder } from "./pagedSongs";
 import { promptForMusicFolder } from "./promptForMusicFolder";
 import { songsWithIds } from "./sectionSongs";
 import { SongSortButton } from "./SongSortButton";
+import { SwipeSummaryRow } from "./SwipeTrackRow";
 import { useSongSort } from "./songSort";
 import { ListIntroLayout, songCount } from "./TrackList";
 import { useSpineEntries } from "./useSpine";
@@ -243,7 +244,8 @@ function PagedSongList({ order }: { order: SongOrder }) {
       const song = pages.rowOf(item);
       if (song === undefined) return <LoadingRow />;
       return (
-        <TrackRow
+        <SwipeSummaryRow
+          summary={song}
           track={toTrackSummary(song)}
           state={String(item) === currentId ? "playing" : undefined}
           favorite={favorites.has(item)}

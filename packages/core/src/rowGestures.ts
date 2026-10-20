@@ -49,7 +49,6 @@ export const resolveRowSwipe = (
   const armed = rowSwipeArmed({ translationX, width });
   if (armed === null || !sides[armed]) return null;
   const flickedBack =
-    Math.abs(velocityX) >= FLICK_BACK_VELOCITY &&
-    Math.sign(velocityX) !== Math.sign(translationX);
+    Math.abs(velocityX) >= FLICK_BACK_VELOCITY && Math.sign(velocityX) !== Math.sign(translationX);
   return flickedBack ? null : armed;
 };

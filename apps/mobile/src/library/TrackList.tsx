@@ -16,7 +16,7 @@ import { AlphabetSpine } from "@/catalog/AlphabetSpine";
 import { CatalogLine } from "@/catalog/CatalogLine";
 import { CELL, grid } from "@/catalog/grid";
 import { PlayShuffle, type LineToggle } from "@/catalog/PlayShuffle";
-import { type TrackSummary, TrackRow } from "@/catalog/TrackRow";
+import type { TrackSummary } from "@/catalog/TrackRow";
 import { useChromeInset } from "@/chrome/chrome";
 import { fileUri } from "@/lib/fileUri";
 import { useRenderCount } from "@/perf/perf";
@@ -35,6 +35,7 @@ import {
   useFindInLegendList,
 } from "./FindInPlaylist";
 import type { SongRow } from "./LibraryStore";
+import { SwipeTrackRow } from "./SwipeTrackRow";
 import { useSpine } from "./useSpine";
 import { useListScrollable } from "@/motion/heldTouch";
 
@@ -189,7 +190,8 @@ export function TrackList({ songs, context, header, sort, findable = false }: Pr
 
   const renderItem = useCallback(
     ({ item, index }: { item: SongRow; index: number }) => (
-      <TrackRow
+      <SwipeTrackRow
+        song={item}
         track={toTrackSummary(item)}
         state={String(item.id) === currentId ? "playing" : undefined}
         favorite={favorites.has(item.id)}
