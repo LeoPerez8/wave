@@ -13,7 +13,7 @@ import Animated, {
 import { CELL } from "@/catalog/grid";
 import { subscribeAll } from "@/lib/externalStore";
 import { followArtistLink, followStreamedArtistLink } from "@/library/ArtistChoice";
-import { toggleFavorite, useIsFavorite, useYtSongStarred } from "@/library/favorites";
+import { setFavorite, useIsFavorite, useYtSongStarred } from "@/library/favorites";
 import { useLinkRows } from "@/library/hooks";
 import type { TrackDetails } from "@/library/LibraryStore";
 import { openAlbum, useCurrentPath } from "@/library/routes";
@@ -28,6 +28,7 @@ import { useThemeColor } from "@/theme/useThemeColor";
 import { useLoadedLibraryFinder } from "@/ytmusic/libraryFinder";
 import { useStreamedArtistLink } from "@/ytmusic/streamedArtist";
 
+import { CoverPress } from "./CoverPress";
 import { usePlayingYtSong } from "./hooks";
 import { closeNowPlaying, useNowPlayingShown } from "./sheet";
 
@@ -54,9 +55,14 @@ type ArtworkProps = {
   streamed: StreamedCover | null;
 };
 
-/** Album art at the largest square the space allows; it shrinks back while paused. */
+/**
+ * Album art at the largest square the space allows; it shrinks back while
+ * paused. A tap plays or pauses, a double-tap adds the song to Favorites
+ * (`CoverPress`).
+ */
 function NowPlayingArtwork({ uri, playing, streamed }: ArtworkProps) {
   const [box, setBox] = useState(lastBox);
+  const { favorite, disabled, star } = useNowPlayingStar();
   const reduceMotion = useReducedMotion();
   const fill = useThemeColor("fill");
   const tertiary = useThemeColor("tertiary");
@@ -91,32 +97,40 @@ function NowPlayingArtwork({ uri, playing, streamed }: ArtworkProps) {
         setBox(lastBox);
       }}
     >
-      <Animated.View style={[{ width: size, height: size, backgroundColor: fill }, style]}>
-        {streamed !== null && streamed.thumb !== null ? (
-          <Image
-            key={`thumb-${streamed.key}`}
-            source={{ uri: streamed.thumb }}
-            style={{ position: "absolute", width: size, height: size }}
-            contentFit="cover"
-            accessibilityIgnoresInvertColors
-          />
-        ) : uri === null || streamed !== null ? (
-          <View className="absolute inset-0 items-center justify-center">
-            <IconMusic size={size / 4} color={tertiary} strokeWidth={1.25} />
-          </View>
-        ) : null}
-        {uri === null ? null : (
-          <Image
-            // A new song's full-size cover starts over from its own thumbnail.
-            key={streamed?.key}
-            source={{ uri }}
-            style={{ width: size, height: size }}
-            contentFit="cover"
-            transition={240}
-            accessibilityIgnoresInvertColors
-          />
-        )}
-      </Animated.View>
+      <CoverPress
+        size={size}
+        playing={playing}
+        starred={favorite}
+        canStar={!disabled}
+        addFavorite={() => star(true)}
+      >
+        <Animated.View style={[{ width: size, height: size, backgroundColor: fill }, style]}>
+          {streamed !== null && streamed.thumb !== null ? (
+            <Image
+              key={`thumb-${streamed.key}`}
+              source={{ uri: streamed.thumb }}
+              style={{ position: "absolute", width: size, height: size }}
+              contentFit="cover"
+              accessibilityIgnoresInvertColors
+            />
+          ) : uri === null || streamed !== null ? (
+            <View className="absolute inset-0 items-center justify-center">
+              <IconMusic size={size / 4} color={tertiary} strokeWidth={1.25} />
+            </View>
+          ) : null}
+          {uri === null ? null : (
+            <Image
+              // A new song's full-size cover starts over from its own thumbnail.
+              key={streamed?.key}
+              source={{ uri }}
+              style={{ width: size, height: size }}
+              contentFit="cover"
+              transition={240}
+              accessibilityIgnoresInvertColors
+            />
+          )}
+        </Animated.View>
+      </CoverPress>
     </View>
   );
 }
@@ -155,16 +169,18 @@ function MetaLink({ label, open, hint, className }: LinkProps) {
 }
 
 /**
- * Stars the current track; in sync with every other star (rows, menus). A
+ * The current track's star; in sync with every other star (rows, menus). A
  * YT Music song's star is the Library song's once the Library has it, else
  * its pending favorite (`useYtSongStarred`); starring it downloads it
- * (`starSongs`: a star means downloaded). A YT Music song's star waits for
- * the Library's first read: until then a song the Library has would be taken
- * for one it lacks, and downloaded again.
+ * (`starSongs`: a star means downloaded), as its menu's Favorite does. A
+ * YT Music song's star waits for the Library's first read: until then a
+ * song the Library has would be taken for one it lacks, and downloaded again.
  */
-function FavoriteStar({ title }: { title: string }) {
-  const accent = useThemeColor("accent");
-  const highlight = useThemeColor("highlight");
+function useNowPlayingStar(): {
+  favorite: boolean;
+  disabled: boolean;
+  star: (on: boolean) => void;
+} {
   const trackId = useCurrentTrackId();
   const streamed = trackId !== null && parseTrackId(trackId)?.kind === "yt";
   const ytSong = usePlayingYtSong(trackId);
@@ -174,18 +190,27 @@ function FavoriteStar({ title }: { title: string }) {
   const ytStar = useYtSongStarred(streamed ? (ytSong?.videoId ?? null) : null, track);
   const favorite = streamed ? ytStar : libraryStar;
   const disabled = trackId === null || (streamed && (ytSong === null || find === null));
+  const star = (on: boolean): void => {
+    if (streamed) {
+      if (ytSong !== null && find !== null)
+        void starSongs({ tracks: [], ytSongs: [ytSong] }, on, find);
+    } else if (trackId !== null) void setFavorite(trackId, on);
+  };
+  return { favorite, disabled, star };
+}
+
+/** Stars or unstars the current track (`useNowPlayingStar`). */
+function FavoriteStar({ title }: { title: string }) {
+  const accent = useThemeColor("accent");
+  const highlight = useThemeColor("highlight");
+  const { favorite, disabled, star } = useNowPlayingStar();
   return (
     <Press
       accessibilityRole="button"
       accessibilityLabel={favorite ? `Remove ${title} from Favorites` : `Favorite ${title}`}
       accessibilityState={{ selected: favorite, disabled }}
       disabled={disabled}
-      onPress={() => {
-        if (streamed) {
-          if (ytSong !== null && find !== null)
-            void starSongs({ tracks: [], ytSongs: [ytSong] }, !favorite, find);
-        } else if (trackId !== null) void toggleFavorite(trackId);
-      }}
+      onPress={() => star(!favorite)}
       haptic="impact"
       depth={0.1}
       className="items-center justify-center"

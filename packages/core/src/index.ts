@@ -140,6 +140,9 @@ export {
   foundInPlaylist,
   hasFindQuery,
   createFindableList,
+  findPlaceholder,
+  findNoMatch,
+  artistFindText,
 } from "./findInPlaylist.ts";
 export type {
   FoundInPlaylist,
@@ -147,6 +150,7 @@ export type {
   PlaylistFindText,
   FindableList,
   ShownInPlaylist,
+  FindableListKind,
 } from "./findInPlaylist.ts";
 export { createSearchCatalog } from "./searchCatalog.ts";
 export type { SearchCatalog, SearchCatalogStats } from "./searchCatalog.ts";
@@ -1928,5 +1932,7 @@ export type { DiscoverMixesRerun } from "./mixRerank.ts";
 export { harvestSeedPool } from "./harvest.ts";
 export type { HarvestSeedSources } from "./harvest.ts";
 export { sliderStep, sliderStepLabel } from "./mixSliders.ts";
+export { DOUBLE_TAP_MS, coverDoubleTap, createCoverTaps } from "./coverGestures.ts";
+export type { CoverDoubleTap, CoverTaps } from "./coverGestures.ts";
 export { magicLibraryCandidates } from "./magicQueue.ts";
 export { magicLibraryLookups, magicSeedLookups } from "./mixGenreLookups.ts";

@@ -1,4 +1,9 @@
-import { createPagedRows, type LibrarySongSort, type PagedRows } from "@wave/core";
+import {
+  createPagedRows,
+  type LibrarySongSort,
+  type PagedRows,
+  type PlaylistFindText,
+} from "@wave/core";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 import { registerPerfMeta } from "@/perf/perf";
@@ -34,6 +39,22 @@ const orderQuery = (sort: LibrarySongSort): LibraryQuery<SongOrder> => {
 export const useSongOrder = (sort: LibrarySongSort): SongOrder | null =>
   useLibraryQuery<SongOrder | null>(orderQuery(sort), null);
 
+/** What finds each Library song: a tag edit or a scan may change any of them. */
+const findTextsQuery = libraryQuery(
+  "songFindTexts",
+  { tracks: true },
+  // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
+  LibraryStore.use((store) => store.songFindTexts),
+);
+
+/**
+ * What finds each Library song by Track id (Find in Songs), or null until
+ * read. Asked only once [wanted] (a query typed), so opening Songs reads no
+ * row's details; then followed as every shared Library query is.
+ */
+export const useSongFindTexts = (wanted: boolean): ReadonlyMap<number, PlaylistFindText> | null =>
+  useLibraryQuery(wanted ? findTextsQuery : null, null);
+
 /** Reads the rows of [ids], outside whatever asked (a scroll, a commit). */
 const readSummaries = (
   ids: readonly number[],
@@ -54,21 +75,22 @@ registerPerfMeta("songPages", () => ({ ...shownPages?.stats() }));
 const keyOf = (row: SongSummary): number => row.id;
 
 /**
- * The rows of [order], read a page at a time around the rows on screen
- * (Core's `createPagedRows`). Tell it what is on screen with `view`; `version`
- * changes whenever rows arrive. A new order (a scan, an edit, another sort)
- * keeps the rows read so far showing while those on screen are read again.
+ * The rows of [ids] (an order's, or the songs Find in Songs found in it),
+ * read a page at a time around the rows on screen (Core's
+ * `createPagedRows`). Tell it what is on screen with `view`; `version`
+ * changes whenever rows arrive. New ids (a scan, an edit, another sort, a
+ * query) keep the rows read so far showing while those on screen are read again.
  */
 export const usePagedSongs = (
-  order: SongOrder | null,
+  ids: readonly number[] | null,
 ): { readonly pages: PagedRows<number, SongSummary>; readonly version: number } => {
   const [pages] = useState(() => createPagedRows({ read: readSummaries, keyOf }));
   /** How many times rows have arrived: what re-renders the list. */
   const arrived = useRef(0);
 
   useEffect(() => {
-    if (order !== null) pages.setOrder(order.ids);
-  }, [pages, order]);
+    if (ids !== null) pages.setOrder(ids);
+  }, [pages, ids]);
 
   useEffect(() => {
     shownPages = pages;
