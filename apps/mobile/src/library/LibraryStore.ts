@@ -34,6 +34,7 @@ import {
   type DuplicateCheckFile,
   type CatalogPage,
   type CatalogSong,
+  type PlaylistFindText,
 } from "@wave/core";
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { drizzle, type ExpoSQLiteDatabase } from "drizzle-orm/expo-sqlite";
@@ -196,6 +197,7 @@ import {
   type YtArtistSimilar,
 } from "./db/ytArtists";
 import {
+  selectSongFindTexts,
   selectSongOrder,
   selectSongSummaries,
   selectSongsWithIds,
@@ -531,6 +533,8 @@ export class LibraryStore extends Context.Service<
      * for the rows on screen).
      */
     readonly listSongOrder: (sort: LibrarySongSort) => Effect.Effect<SongOrder, LibraryStoreError>;
+    /** What finds each Library song by id (its title, artist and album), for Find in Songs. */
+    readonly songFindTexts: Effect.Effect<ReadonlyMap<number, PlaylistFindText>, LibraryStoreError>;
     /** What the Songs list's rows of [ids] show, in that order; ids gone are left out. */
     readonly songSummaries: (
       ids: readonly number[],
@@ -1220,6 +1224,8 @@ const make = Effect.gen(function* () {
     ),
 
     listSongOrder: (sort) => attempt("order songs", () => selectSongOrder(db, sort)),
+
+    songFindTexts: attempt("read songs to find", () => selectSongFindTexts(db)),
 
     songSummaries: (ids) => attempt("read songs", () => selectSongSummaries(db, ids)),
 
