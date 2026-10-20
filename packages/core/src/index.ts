@@ -1928,3 +1928,5 @@ export type { DiscoverMixesRerun } from "./mixRerank.ts";
 export { harvestSeedPool } from "./harvest.ts";
 export type { HarvestSeedSources } from "./harvest.ts";
 export { sliderStep, sliderStepLabel } from "./mixSliders.ts";
+export { DOUBLE_TAP_MS, coverDoubleTap, createCoverTaps } from "./coverGestures.ts";
+export type { CoverDoubleTap, CoverTaps } from "./coverGestures.ts";
