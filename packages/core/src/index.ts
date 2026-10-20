@@ -1678,6 +1678,7 @@ export {
   undoneMixRefresh,
 } from "./mixRefresh.ts";
 export type { MixPull, MixRefreshAvoid, ShownMixes } from "./mixRefresh.ts";
+export { MIX_PULL_SLOP, mixPullCanStart } from "./mixRefresh.ts";
 export { searchRoomAt } from "./searchAllowance.ts";
 export { mixKnownSongs } from "./mixKnownSongs.ts";
 export type {
