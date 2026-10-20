@@ -140,6 +140,9 @@ export {
   foundInPlaylist,
   hasFindQuery,
   createFindableList,
+  findPlaceholder,
+  findNoMatch,
+  artistFindText,
 } from "./findInPlaylist.ts";
 export type {
   FoundInPlaylist,
@@ -147,6 +150,7 @@ export type {
   PlaylistFindText,
   FindableList,
   ShownInPlaylist,
+  FindableListKind,
 } from "./findInPlaylist.ts";
 export { createSearchCatalog } from "./searchCatalog.ts";
 export type { SearchCatalog, SearchCatalogStats } from "./searchCatalog.ts";
