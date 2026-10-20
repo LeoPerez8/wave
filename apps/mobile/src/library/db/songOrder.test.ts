@@ -99,6 +99,7 @@ describe("selectSongSummaries", () => {
       explicit: "explicit",
     });
     const gone = addMissingSong(db, { title: "Gone", artist: "Nobody" });
+    const [goneRow, airbagRow] = selectSongsWithIds(db, [gone, airbag]);
     assert.deepEqual(selectSongSummaries(db, [gone, 999, airbag]), [
       {
         id: gone,
@@ -108,6 +109,9 @@ describe("selectSongSummaries", () => {
         thumbPath: null,
         hasFile: false,
         explicit: "unknown",
+        albumId: goneRow?.albumId,
+        artistId: goneRow?.artistIds[0],
+        fixable: true,
       },
       {
         id: airbag,
@@ -117,8 +121,27 @@ describe("selectSongSummaries", () => {
         thumbPath: "/covers/ok.thumb.jpg",
         hasFile: true,
         explicit: "explicit",
+        albumId: airbagRow?.albumId,
+        artistId: airbagRow?.artistIds[0],
+        fixable: true,
       },
     ]);
+  });
+
+  test("says Fix Song has nothing to do for a song with every tag it looks up", async () => {
+    const db = await openTestDatabase();
+    const tagged = { title: "Airbag", hasLyrics: true, genre: "Rock", year: 1997, trackNumber: 1 };
+    const complete = addTrack(db, { ...tagged, explicit: "clean" });
+    const noGenre = addTrack(db, {
+      ...tagged,
+      title: "Lucky",
+      genre: undefined,
+      explicit: "clean",
+    });
+    assert.deepEqual(
+      selectSongSummaries(db, [complete, noGenre]).map((song) => song.fixable),
+      [false, true],
+    );
   });
 });
 

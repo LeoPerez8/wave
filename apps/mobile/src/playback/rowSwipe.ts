@@ -5,11 +5,14 @@ import {
   isDestructiveAction,
   itemActions,
   rowSwipeActions,
+  swipesChoose,
+  type ActionItem,
   type ItemActionEntry,
   type PlaylistPlace,
   type RowMenuAction,
   type RowSwipeActions,
   type RowSwipeSide,
+  type SwipeSettings,
   type UnsearchedSong,
 } from "@wave/core";
 import { useMemo } from "react";
@@ -21,9 +24,12 @@ import { currentPath, useCurrentPath } from "@/library/routes";
 import { songsWithIds } from "@/library/sectionSongs";
 import { showError } from "@/overlay/alert";
 import { lyricsAndGenreLookupsEnabled } from "@/settings/lyricsAndGenre";
+import { swipeSettingsNow, useSwipeSettings } from "@/settings/swipeActions";
 import { currentLibraryFinder, type FindInLibrary } from "@/ytmusic/libraryFinder";
+import { libraryArtistsRead, streamedArtistContextNow } from "@/ytmusic/streamedArtist";
+import { missingSongDownloadStatusNow } from "@/ytmusic/YtDownloads";
 
-import { hasStreamedSongs, targetFacts, type ActionItems } from "./actionTargets";
+import { hasStreamedSongs, isLibraryTrack, targetFacts, type ActionItems } from "./actionTargets";
 import { itemActionPress } from "./itemActions";
 
 /**
@@ -31,9 +37,14 @@ import { itemActionPress } from "./itemActions";
  * row's own long-press menu, the one Core's `rowSwipeActions` picks, and runs
  * it as the menu does (the same toast, the same confirmation).
  *
- * A list mounts many rows, so a row follows nothing to work out its swipe:
- * it reads the route and the stars as it renders (its list renders it again
- * when its star changes), and reads them afresh when a swipe runs.
+ * What each direction runs is Settings › Swipe actions' choice
+ * (`settings/swipeActions`): a row renders again when that changes.
+ *
+ * A list mounts many rows, so a row follows nothing else to work out its
+ * swipe: it reads the route, the stars and, when a direction is set to them,
+ * a download's state and a streamed song's artists as it renders (its list
+ * renders it again when its star changes), and reads them afresh when a
+ * swipe runs.
  */
 
 /** Where a row is shown, for what its swipes do. */
@@ -48,11 +59,11 @@ export interface RowSwipeOptions {
 }
 
 /**
- * The entry of a row's [menu] each direction runs. The one place the swipes'
- * settings come in: Wave's defaults for now.
+ * The entry of a row's [menu] each direction runs: the one place the swipes'
+ * settings (Settings › Swipe actions, as they are now) come in.
  */
 export const swipeActionsOf = <A extends RowMenuAction>(menu: readonly A[]): RowSwipeActions<A> =>
-  rowSwipeActions(menu);
+  rowSwipeActions(menu, swipeSettingsNow());
 
 const fullLabel = (action: RowMenuAction): string =>
   action === "search" ? UNAVAILABLE_ENTRY_ACTION_LABELS[action] : ITEM_ACTION_LABELS[action];
@@ -106,48 +117,86 @@ const findNothing: FindInLibrary = () => null;
 
 /**
  * [target]'s menu entries as its long-press menu plans them on the screen at
- * [here] (Core's `itemActions`), the stars as they are now. Its streamed
- * artists aren't resolved: Go to Artist on a streamed song isn't among them.
+ * [here] (Core's `itemActions`), the stars as they are now. What only some
+ * swipe choices need is read only while [settings] choose them: a missing
+ * song's download (Download), a streamed song's artists (Go to Artist, once
+ * the Library's artists are read).
  */
 const planTrack = (
   target: ActionItems,
   here: string,
   find: FindInLibrary,
-): readonly ItemActionEntry<ArtistRow>[] =>
-  itemActions<ArtistRow>({
+  settings: SwipeSettings,
+): readonly ItemActionEntry<ArtistRow>[] => {
+  const facts = targetFacts(target, favoriteIdsNow(), find);
+  const downloads = swipesChoose(settings, "download");
+  const items = target.kind === "track" ? target.items : [];
+  return itemActions<ArtistRow>({
     kind: "track",
-    items: targetFacts(target, favoriteIdsNow(), find),
+    items: downloads
+      ? facts.map((fact, index): ActionItem => {
+          const item = items[index];
+          return fact.missing === true && item !== undefined && isLibraryTrack(item)
+            ? { ...fact, download: missingSongDownloadStatusNow(item.song.id) }
+            : fact;
+        })
+      : facts,
     surface: "menu",
     selectable: false,
     onlineLookups: lyricsAndGenreLookupsEnabled(),
     here,
+    streamedArtists:
+      hasStreamedSongs(target) && swipesChoose(settings, "goToArtist")
+        ? streamedArtistContextNow()
+        : undefined,
   });
+};
 
 /**
  * Runs what swiping towards [side] does on [target] now, as its menu would:
  * the entry planned for it, pressed through `itemActionPress`. Streamed
- * songs among it are first looked up in the Library.
+ * songs among it are first looked up in the Library (and their artists read
+ * when a direction is set to Go to Artist).
  */
 const runTrackSwipe = (target: ActionItems, side: RowSwipeSide): void => {
   const here = currentPath();
+  const settings = swipeSettingsNow();
   const press = (find: FindInLibrary) => {
-    const entry = swipeEntryNow(planTrack(target, here, find), side);
+    const entry = swipeEntryNow(planTrack(target, here, find, settings), side);
     if (entry !== undefined)
       itemActionPress({ target, surface: "menu", finish: nothing, here, find })(entry)();
   };
   if (!hasStreamedSongs(target)) press(findNothing);
   else
-    currentLibraryFinder()
-      .then(press)
+    Promise.all([
+      currentLibraryFinder(),
+      swipesChoose(settings, "goToArtist") ? libraryArtistsRead() : undefined,
+    ])
+      .then(([find]) => press(find))
       .catch((error: unknown) => showError("Couldn't load the song", error));
+};
+
+/**
+ * Starts reading the Library's artists for a streamed row set to Go to
+ * Artist, so the row offers it once they're read (as its list renders it again).
+ */
+const readArtistsFor = (target: ActionItems, settings: SwipeSettings): void => {
+  if (
+    swipesChoose(settings, "goToArtist") &&
+    hasStreamedSongs(target) &&
+    streamedArtistContextNow() === undefined
+  )
+    void libraryArtistsRead();
 };
 
 /** A Library song's or unsearched entry's swipe, from the menu `openTrackActions` opens. */
 const useTrackItemSwipe = (target: ActionItems, options: RowSwipeOptions): RowSwipe => {
+  const settings = useSwipeSettings();
   const here = useCurrentPath(false);
-  if (target.items.length === 0) return NO_SWIPE;
+  if (!settings.enabled || target.items.length === 0) return NO_SWIPE;
+  readArtistsFor(target, settings);
   return rowSwipe(
-    planTrack(target, here, findNothing).map((entry) => entry.action),
+    planTrack(target, here, findNothing, settings).map((entry) => entry.action),
     (_, side) => runTrackSwipe(target, side),
     options,
   );
@@ -186,12 +235,25 @@ export const useUnsearchedSwipe = (
  * read when one runs, as its menu reads it before opening.
  */
 export const useSongSummarySwipe = (summary: SongSummary | undefined): RowSwipe => {
+  const settings = useSwipeSettings();
   const here = useCurrentPath(false);
-  if (summary === undefined) return NO_SWIPE;
-  const { id } = summary;
+  if (!settings.enabled || summary === undefined) return NO_SWIPE;
+  const { id, hasFile } = summary;
   const menu = itemActions({
     kind: "track",
-    items: [{ missing: !summary.hasFile, favorite: favoriteIdsNow().has(id) }],
+    items: [
+      {
+        missing: !hasFile,
+        favorite: favoriteIdsNow().has(id),
+        albumId: summary.albumId,
+        artistIds: [summary.artistId],
+        fixable: summary.fixable,
+        ...(!hasFile && swipesChoose(settings, "download")
+          ? { download: missingSongDownloadStatusNow(id) }
+          : {}),
+      },
+    ],
+    onlineLookups: lyricsAndGenreLookupsEnabled(),
     here,
   }).map((entry) => entry.action);
   return rowSwipe(menu, (_, side) => {
