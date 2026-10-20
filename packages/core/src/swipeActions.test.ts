@@ -23,6 +23,25 @@ const songMenu = (song: ActionItem, here = "/library/songs") =>
 
 const libraryFile: ActionItem = { albumId: 3, artistIds: [7], missing: false };
 
+/** A Library song's menu in Songs, with online lookups on or off (Fix Song). */
+const lookupsMenu = (song: ActionItem, onlineLookups: boolean) =>
+  itemActions({ kind: "track", items: [song], here: "/library/songs", onlineLookups }).map(
+    (entry) => entry.action,
+  );
+
+/** Both directions set to [choice]. */
+const both = (choice: SwipeSettings["right"]): SwipeSettings => ({
+  enabled: true,
+  right: choice,
+  left: choice,
+});
+
+/** A YT Music song's menu, its download entries after the rest, as its row offers them. */
+const ytMenu = (
+  options: Parameters<typeof ytSongActions>[1],
+  download: ReturnType<typeof ytDownloadActions> = [],
+) => [...ytSongActions(undefined, options).map((entry) => entry.action), ...download];
+
 describe("rowSwipeActions", () => {
   test("a Library song swipes right to Add to Queue and left to Delete", () => {
     assert.deepEqual(rowSwipeActions(songMenu(libraryFile)), {
@@ -92,13 +111,20 @@ describe("rowSwipeActions", () => {
 
   test("Download runs on a missing song and does nothing on a song with a file", () => {
     const settings = { enabled: true, right: "download", left: "remove" } as const;
-    assert.equal(rowSwipeActions(songMenu({ ...libraryFile, missing: true }), settings).right, "download");
+    assert.equal(
+      rowSwipeActions(songMenu({ ...libraryFile, missing: true }), settings).right,
+      "download",
+    );
     assert.equal(rowSwipeActions(songMenu(libraryFile), settings).right, null);
   });
 
   test("Download retries a failed download and does nothing while one is on its way", () => {
     const settings = { enabled: true, right: "remove", left: "download" } as const;
-    const failed = { ...libraryFile, missing: true, download: { kind: "failed", reason: "failed" } } as const;
+    const failed = {
+      ...libraryFile,
+      missing: true,
+      download: { kind: "failed", reason: "failed" },
+    } as const;
     assert.equal(rowSwipeActions(songMenu(failed), settings).left, "retryDownload");
     const queued = { ...libraryFile, missing: true, download: { kind: "queued" } } as const;
     assert.equal(rowSwipeActions(songMenu(queued), settings).left, null);
@@ -106,27 +132,22 @@ describe("rowSwipeActions", () => {
 });
 
 describe("configured swipes on each kind of row", () => {
-  const both = (choice: SwipeSettings["right"]): SwipeSettings => ({
-    enabled: true,
-    right: choice,
-    left: choice,
-  });
-  /** A YT Music song's menu, its download entries after the rest, as its row offers them. */
-  const ytMenu = (
-    options: Parameters<typeof ytSongActions>[1],
-    download: ReturnType<typeof ytDownloadActions> = [],
-  ) => [...ytSongActions(undefined, options).map((entry) => entry.action), ...download];
-
   test("Go to Album on a YT Music song without an album does nothing", () => {
     const withAlbum = ytMenu({ album: "MPREb_1", ytMusic: true });
     assert.equal(rowSwipeActions(withAlbum, both("goToAlbum")).right, "goToAlbum");
-    assert.equal(rowSwipeActions(ytMenu({ album: null, ytMusic: true }), both("goToAlbum")).right, null);
+    assert.equal(
+      rowSwipeActions(ytMenu({ album: null, ytMusic: true }), both("goToAlbum")).right,
+      null,
+    );
   });
 
   test("Download on a YT Music song downloads it until the Library has it", () => {
     const notYet = ytMenu({}, ytDownloadActions(null, { inLibrary: false }));
     assert.equal(rowSwipeActions(notYet, both("download")).left, "download");
-    const done = ytMenu({}, ytDownloadActions({ kind: "done", path: "/a.m4a" }, { inLibrary: true }));
+    const done = ytMenu(
+      {},
+      ytDownloadActions({ kind: "done", path: "/a.m4a" }, { inLibrary: true }),
+    );
     assert.equal(rowSwipeActions(done, both("download")).left, null);
   });
 
@@ -138,13 +159,9 @@ describe("configured swipes on each kind of row", () => {
 
   test("Fix Song runs only on a song it can fix, with online lookups on", () => {
     const fixable = { ...libraryFile, fixable: true };
-    const menu = (song: ActionItem, onlineLookups: boolean) =>
-      itemActions({ kind: "track", items: [song], here: "/library/songs", onlineLookups }).map(
-        (entry) => entry.action,
-      );
-    assert.equal(rowSwipeActions(menu(fixable, true), both("fixSong")).right, "fixSong");
-    assert.equal(rowSwipeActions(menu(fixable, false), both("fixSong")).right, null);
-    assert.equal(rowSwipeActions(menu(libraryFile, true), both("fixSong")).right, null);
+    assert.equal(rowSwipeActions(lookupsMenu(fixable, true), both("fixSong")).right, "fixSong");
+    assert.equal(rowSwipeActions(lookupsMenu(fixable, false), both("fixSong")).right, null);
+    assert.equal(rowSwipeActions(lookupsMenu(libraryFile, true), both("fixSong")).right, null);
   });
 });
 
@@ -178,7 +195,11 @@ describe("SWIPE_CHOICES", () => {
 
 describe("stored swipe settings", () => {
   test("a fresh install swipes, right adding to the queue and left removing", () => {
-    assert.deepEqual(readSwipeSettings(null), { enabled: true, right: "addToQueue", left: "remove" });
+    assert.deepEqual(readSwipeSettings(null), {
+      enabled: true,
+      right: "addToQueue",
+      left: "remove",
+    });
   });
 
   test("nothing is kept at the defaults", () => {
