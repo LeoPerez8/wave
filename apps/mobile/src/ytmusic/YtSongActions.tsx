@@ -19,11 +19,12 @@ import { Text, View } from "react-native";
 import { Artwork } from "@/catalog/Artwork";
 import { CELL } from "@/catalog/grid";
 import { followStreamedArtistLink } from "@/library/ArtistChoice";
-import { useYtSongStarred } from "@/library/favorites";
+import { useYtSongStarred, ytSongStarredNow } from "@/library/favorites";
 import { starSongs } from "@/library/starSongs";
 import type { ArtistRow } from "@/library/LibraryStore";
 import { openAddToPlaylist } from "@/library/PlaylistSheets";
 import { removePlaylistItems } from "@/library/playlists";
+import { currentPath, useCurrentPath } from "@/library/routes";
 import { pressedRect } from "@/motion/pressedRect";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 import { NO_SWIPE, type RowSwipe } from "@/catalog/SwipeableRow";
@@ -32,12 +33,17 @@ import { MenuChoices, type MenuChoice, type PlayCardChoice } from "@/overlay/Men
 import { followUp, openOverlay } from "@/overlay/overlay";
 import { addYtToQueue, playYtNext } from "@/playback/actions";
 import type { MenuOptions } from "@/playback/ActionsMenu";
-import { rowSwipe, type RowSwipeOptions } from "@/playback/rowSwipe";
+import { rowSwipe, swipeEntryNow, type RowSwipeOptions } from "@/playback/rowSwipe";
 import { showError } from "@/overlay/alert";
 import { useYtMusicEnabled } from "@/settings/ytMusic";
 import { shareStreamedSong } from "@/share/songShare";
 
-import { useLibraryFinder, useLoadedInLibrary, type FindInLibrary } from "./libraryFinder";
+import {
+  currentLibraryFinder,
+  useLibraryFinder,
+  useLoadedInLibrary,
+  type FindInLibrary,
+} from "./libraryFinder";
 import { openYtAlbum, ytAlbumPageHere } from "./routes";
 import { libraryArtistsRead, useStreamedArtistLink } from "./streamedArtist";
 import { cancelYtDownload, downloadYtSong, useYtDownloadStatus } from "./YtDownloads";
@@ -186,65 +192,39 @@ const run = (
 };
 
 /**
- * The entries [song]'s menu offers, as `YtSongActionsMenu` lists them: Core's
- * `ytSongActions`, then its download entries. [artists] is where its
- * artists lead, [playlistItem] its place in a playlist, if shown in one.
- */
-const useSongEntries = (
-  song: NativeYtSong | null,
-  artists: StreamedArtistLink<ArtistRow> | undefined,
-  playlistItem: PlaylistPlace | undefined,
-  onSelect: (() => void) | undefined,
-): { readonly entries: Entry[]; readonly find: FindInLibrary } => {
-  const status = useYtDownloadStatus(song?.videoId ?? "");
-  const find = useLibraryFinder();
-  // A song downloaded earlier and since deleted from the Library can be downloaded again
-  // (taken as still there until the Library has been read).
-  const inLibrary = useLoadedInLibrary();
-  // Starred as its pending favorite, or as the Library song it is by now.
-  const favorite = useYtSongStarred(song?.videoId ?? null, song === null ? null : find(song));
-  // A playlist's entry opens this menu with YT Music off too: then nothing is asked of YouTube.
-  const ytMusic = useYtMusicEnabled();
-  // Go to Album leaves out the YT Music album page you're on.
-  const ytAlbumHere = ytAlbumPageHere(usePathname());
-  if (song === null) return { entries: [], find };
-  return {
-    entries: [
-      ...songEntries(artists, {
-        inPlaylist: playlistItem !== undefined,
-        favorite,
-        album: song.albumId,
-        ytAlbumHere,
-        ytMusic,
-        selectable: onSelect !== undefined,
-      }),
-      ...ytDownloadActions(status, { inLibrary: inLibrary(song) }).map((action): Entry => ({
-        kind: "download",
-        action,
-      })),
-    ],
-    find,
-  };
-};
-
-/**
  * What swiping a YT Music [song]'s row runs (none for null, so a row of
  * several kinds can ask for each): its menu's entries (`rowSwipe`), run as
- * the menu runs them.
+ * the menu runs them. A list mounts many rows, so it follows nothing: the
+ * route and the stars are read as it renders and again as a swipe runs, and
+ * its artists aren't resolved (Go to Artist isn't among its entries), nor
+ * are its download entries.
  */
 export const useYtSongSwipe = (
   song: NativeYtSong | null,
   options: RowSwipeOptions = {},
 ): RowSwipe => {
-  const { playlistItem } = options;
-  const artists = useStreamedArtistLink(song?.artists ?? null, song !== null);
-  const { entries, find } = useSongEntries(song, artists, playlistItem, undefined);
+  const ytMusic = useYtMusicEnabled();
+  const here = useCurrentPath(false);
   if (song === null) return NO_SWIPE;
+  const { playlistItem } = options;
+  const entriesWith = (find: FindInLibrary, at: string): Entry[] =>
+    songEntries(undefined, {
+      inPlaylist: playlistItem !== undefined,
+      favorite: ytSongStarredNow(song.videoId, find(song)),
+      album: song.albumId,
+      ytAlbumHere: ytAlbumPageHere(at),
+      ytMusic,
+      selectable: false,
+    });
   return rowSwipe(
-    entries.map((entry) => entry.action),
-    (action) => {
-      const entry = entries.find((each) => each.action === action);
-      if (entry !== undefined) run(entry, song, { find, playlistItem, onSelect: undefined });
+    entriesWith(() => null, here).map((entry) => entry.action),
+    (_, side) => {
+      currentLibraryFinder()
+        .then((find) => {
+          const entry = swipeEntryNow(entriesWith(find, currentPath()), side);
+          if (entry !== undefined) run(entry, song, { find, playlistItem, onSelect: undefined });
+        })
+        .catch((error: unknown) => showError("Couldn't load the song", error));
     },
     options,
   );
@@ -265,12 +245,36 @@ function YtSongActionsMenu({
   onSelect: (() => void) | undefined;
   close: () => void;
 }) {
+  const status = useYtDownloadStatus(song.videoId);
+  const find = useLibraryFinder();
+  // A song downloaded earlier and since deleted from the Library can be downloaded again
+  // (taken as still there until the Library has been read).
+  const inLibrary = useLoadedInLibrary()(song);
+  // Starred as its pending favorite, or as the Library song it is by now.
+  const track = find(song);
+  const favorite = useYtSongStarred(song.videoId, track);
   // Its artists open integrated: their Library page, else the YouTube Music artist page.
   // Kept as the menu opened with it, so Go to Artist never appears while it's shown.
   const link = useStreamedArtistLink(song.artists);
   const [artists] = useState(link);
+  // A playlist's entry opens this menu with YT Music off too: then nothing is asked of YouTube.
   const ytMusic = useYtMusicEnabled();
-  const { entries, find } = useSongEntries(song, artists, playlistItem, onSelect);
+  // Go to Album leaves out the YT Music album page you're on.
+  const ytAlbumHere = ytAlbumPageHere(usePathname());
+  const entries: Entry[] = [
+    ...songEntries(artists, {
+      inPlaylist: playlistItem !== undefined,
+      favorite,
+      album: song.albumId,
+      ytAlbumHere,
+      ytMusic,
+      selectable: onSelect !== undefined,
+    }),
+    ...ytDownloadActions(status, { inLibrary }).map((action): Entry => ({
+      kind: "download",
+      action,
+    })),
+  ];
   const choose = (entry: Entry) => () => {
     close();
     run(entry, song, { find, playlistItem, onSelect });
