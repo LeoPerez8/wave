@@ -82,7 +82,7 @@ export function ShareDestinations({
               {note !== null && (
                 <Text
                   numberOfLines={1}
-                  className="text-center font-sans text-caption text-tertiary"
+                  className="text-center font-sans text-caption text-secondary"
                 >
                   {note}
                 </Text>

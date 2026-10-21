@@ -180,7 +180,6 @@ const SyncedLine = memo(function SyncedLine({
 }: LineProps) {
   const foreground = useThemeColor("foreground");
   const secondary = useThemeColor("secondary");
-  const tertiary = useThemeColor("tertiary");
   const translationLit = withOpacity(foreground, 0.72);
   const selectedFill = useSelectedFill();
   const reduceMotion = useReducedMotion();
@@ -196,7 +195,7 @@ const SyncedLine = memo(function SyncedLine({
     color: interpolateColor(lit.get(), [0, 1], [secondary, foreground]),
   }));
   const translationTint = useAnimatedStyle(() => ({
-    color: interpolateColor(lit.get(), [0, 1], [tertiary, translationLit]),
+    color: interpolateColor(lit.get(), [0, 1], [secondary, translationLit]),
   }));
 
   return (
@@ -427,6 +426,7 @@ function UnsyncedLyrics({
             depth={0.015}
             style={[
               LINE_INSET,
+              { minHeight: CELL * 6, justifyContent: "center" },
               under.translation !== null && { paddingBottom: CELL },
               selected && { backgroundColor: selectedFill },
             ]}
@@ -437,7 +437,7 @@ function UnsyncedLyrics({
               {line}
             </Text>
             {under.translation !== null && (
-              <Text className="font-sans text-body text-tertiary">{under.translation}</Text>
+              <Text className="font-sans text-body text-secondary">{under.translation}</Text>
             )}
           </Press>
         );
@@ -481,9 +481,15 @@ function PickingBar({
   onNext: () => void;
 }) {
   return (
-    <View className="flex-row items-center justify-between" style={{ height: grid.row + CELL * 2 }}>
+    <View
+      className="flex-row items-center justify-between"
+      style={{ minHeight: grid.row + CELL * 2, gap: CELL }}
+    >
       <TextButton label="Cancel" onPress={onCancel} />
-      <Text className="font-sans text-subheadline text-secondary" accessibilityLiveRegion="polite">
+      <Text
+        className="flex-1 text-center font-sans text-subheadline text-secondary"
+        accessibilityLiveRegion="polite"
+      >
         {count === 0
           ? `Select up to ${MAX_SHARED_LYRIC_LINES} lines`
           : `${count} of ${MAX_SHARED_LYRIC_LINES}`}
