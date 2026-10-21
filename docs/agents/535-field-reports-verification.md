@@ -125,3 +125,55 @@ match. Coarse or inaccurate tags cannot distinguish styles they label
 identically; the reported songs need their real metadata collected on the
 owner's APK to judge this case. Physical playback/recommendation validation
 remains pending with the parent.
+
+## #542 — bounded long-press investigation and cancellation
+
+No hardware reproduction exists here. Source inspection establishes two
+asynchronous windows: `Press` measures its anchor before invoking the handler;
+paged Library/collection/playlist and YT Music menus then read songs/artists or
+network data before opening. Previously neither completion checked whether the
+originating gesture was cancelled. This is a demonstrable stale-request path,
+not proof of the owner's precise timing sequence. The second hypothesis,
+React's `scrollEnabled` propagation reaching native too late, is still unproven.
+
+A per-touch Core request gate now invalidates pending anchor completion on
+press cancellation, leaving a pending press, release before measurement, a new
+touch or unmount. Async menu data reads capture the same permission before
+awaiting and check it before opening. An admitted long press may leave the
+row and release while its menu data finishes loading, preserving ordinary
+long presses and slide-to-choose. Old completions cannot cancel a newer touch.
+
+The installed React Native 0.88 Pressability forwards its responder event to
+`onPressOut`; the public event's `dispatchConfig.registrationName` distinguishes
+`onResponderTerminate` from an ordinary slide outside the row. Termination or
+touch cancellation clears the hold and dismisses that origin's open menu; an
+ordinary slide keeps it. There is no responder capture/rejection, added timer,
+long-press-delay change, native gesture rewrite, or scroll lock at initial
+touch. The existing hold-driven list scroll lock begins at the existing
+long-press threshold. Native lock delivery and absence of background scroll
+still need device confirmation.
+
+Opt-in instrumentation: bundle with `EXPO_PUBLIC_WAVE_LONG_PRESS_TRACE=1`,
+restart the process and export Settings > Developer > Export Logs after a
+short trial. `WaveLongPress` logs at most **256 lines per process**, with
+monotonic JS timestamps, Press keys, touch start/configured delay, threshold
+elapsed time, anchor admission/discard, async-menu admission/discard,
+actual overlay creation, press-out/termination, release/cancel/unmount, and React list-scroll-prop
+commits. No per-frame/move logging or artificial stall is installed. A React
+commit is not native acknowledgement; compare with a screen recording and
+native input/scroll trace before concluding lock propagation is the cause.
+
+Public Core tests cover cancellation during measurement, cancellation during
+menu data loading, slide-out plus normal release, late timers after a scroll,
+release before measurement and stale callbacks across a new touch. Existing
+slide-to-choose tests verify target selection decisions. These are policy
+regressions, not automated UI or hardware gesture evidence.
+
+Parent's pending hardware matrix: immediate vertical drags and flings from a
+row; drift beginning just before/at/after the configured threshold; stationary
+long presses; slide onto each menu side and release; slow Library/YT metadata
+reads; cancellation/unmount; reduced motion and TalkBack. Record APK/build/SHA,
+device/OS, configured delay, traces and recording. If scroll still overlaps an
+admitted menu, inspect native responder/scroll timing first and decide on a
+bounded UI-thread arbitration follow-up only from those traces. Do not delay
+or block initial scrolling as a fallback. This ticket remains device-pending.

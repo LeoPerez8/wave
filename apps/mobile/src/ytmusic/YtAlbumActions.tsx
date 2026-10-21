@@ -11,7 +11,7 @@ import { Text, View } from "react-native";
 
 import { Artwork } from "@/catalog/Artwork";
 import { CELL } from "@/catalog/grid";
-import { pressedRect } from "@/motion/pressedRect";
+import { pressedMenuAllowed, pressedRect } from "@/motion/pressedRect";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 import { showMessage } from "@/overlay/alert";
 import { CardHeading } from "@/overlay/CardHeading";
@@ -38,8 +38,10 @@ export interface YtAlbumTarget extends YtListHead {
  */
 export const openYtAlbumActions = (album: YtAlbumTarget): void => {
   const anchor = pressedRect();
+  const allowed = pressedMenuAllowed();
   void followUp(async () => {
     const result = await askYtMusic((ytMusic) => ytMusic.album(album.browseId));
+    if (!allowed()) return;
     if (Result.isFailure(result)) {
       await showMessage(
         album.title,

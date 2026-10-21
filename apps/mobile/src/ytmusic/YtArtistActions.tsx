@@ -7,7 +7,7 @@ import { ArtistImage } from "@/catalog/ArtistImage";
 import { CELL } from "@/catalog/grid";
 import type { SongRow } from "@/library/LibraryStore";
 import { appRuntime } from "@/library/runtime";
-import { pressedRect } from "@/motion/pressedRect";
+import { pressedMenuAllowed, pressedRect } from "@/motion/pressedRect";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 import { showMessage } from "@/overlay/alert";
 import { CardHeading } from "@/overlay/CardHeading";
@@ -37,11 +37,13 @@ type Song = DiscoverSong<NativeYtSong, SongRow>;
  */
 export const openYtArtistActions = (artist: YtArtistTarget): void => {
   const anchor = pressedRect();
+  const allowed = pressedMenuAllowed();
   void followUp(async () => {
     const find = await currentLibraryFinder();
     const result = await appRuntime.runPromise(
       Effect.result(ytArtistPageSongs(artist.browseId, find)),
     );
+    if (!allowed()) return;
     if (Result.isFailure(result)) {
       const offline = "reason" in result.failure && result.failure.reason === "offline";
       await showMessage(

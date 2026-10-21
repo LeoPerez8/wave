@@ -13,6 +13,8 @@ export interface PressedElement {
    * Library | Online toggle. Undefined for the usual corners, square like the row.
    */
   readonly radius: number | undefined;
+  /** A long-press menu's read may complete only while its originating gesture still permits it. */
+  readonly menuAllowed?: (() => boolean) | undefined;
 }
 
 /**
@@ -34,6 +36,10 @@ export const pressedElement = (): PressedElement | undefined => {
 /** The window rect of the `Press` whose handler is running, if one is. */
 export const pressedRect = (): OverlayRect | undefined => pressedElement()?.rect;
 
+/** Capture before an async menu read; taps and Design preview requests always remain allowed. */
+export const pressedMenuAllowed = (): (() => boolean) =>
+  pressedElement()?.menuAllowed ?? (() => true);
+
 /**
  * Runs a press handler with `rect` as the pressed rect (of the `Press` known as
  * `key`, on the floating chrome or not, its highlight's corners rounded by
@@ -47,9 +53,15 @@ export const runPressedAt = (
     key = 0,
     onChrome = false,
     radius,
-  }: { key?: number; onChrome?: boolean; radius?: number | undefined } = {},
+    menuAllowed,
+  }: {
+    key?: number;
+    onChrome?: boolean;
+    radius?: number | undefined;
+    menuAllowed?: () => boolean;
+  } = {},
 ): boolean => {
-  current = { key, rect, onChrome, radius };
+  current = { key, rect, onChrome, radius, menuAllowed };
   read = false;
   try {
     handler();
