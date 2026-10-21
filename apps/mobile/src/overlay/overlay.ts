@@ -121,8 +121,13 @@ export const followUp = <T>(work: () => Promise<T>): Promise<T> => {
 export const useIsOverlayOrigin = (key: number): boolean =>
   useSyncExternalStore(entries.subscribe, () => highlightedOrigin(entries.get())?.key === key);
 
-/** Whether a card is showing (and not on its way out). */
-export const hasOpenOverlay = (): boolean => entries.get().some((entry) => !entry.closing);
+/** Consume Back using live state, including while the last card is fading away. */
+export const dismissTopOverlay = (): boolean => {
+  const list = entries.get();
+  const top = list.findLast((entry) => !entry.closing);
+  if (top !== undefined) dismissOverlay(top);
+  return list.length > 0;
+};
 
 // For OverlayHost.
 

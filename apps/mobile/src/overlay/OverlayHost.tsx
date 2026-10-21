@@ -38,6 +38,7 @@ import { useThemeColor } from "@/theme/useThemeColor";
 import {
   closeOverlay,
   dismissOverlay,
+  dismissTopOverlay,
   removeOverlay,
   useOverlayEntries,
   type OverlayEntry,
@@ -93,16 +94,11 @@ export function OverlayHost({ children }: { children: ReactNode }) {
   const open = entries.some((entry) => !entry.closing);
 
   useEffect(() => {
-    if (!open) return undefined;
-    // Runs before any screen's handler: screens register theirs through
-    // `addScreenBackHandler`, which steps aside while a card is open.
-    const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
-      const top = entries.findLast((entry) => !entry.closing);
-      if (top !== undefined) dismissOverlay(top);
-      return true;
-    });
+    if (entries.length === 0) return undefined;
+    // Screen handlers also dismiss the live top card through `addScreenBackHandler`.
+    const subscription = BackHandler.addEventListener("hardwareBackPress", dismissTopOverlay);
     return () => subscription.remove();
-  }, [open, entries]);
+  }, [entries.length]);
 
   const frontmost = entries.findLast((entry) => !entry.closing);
 
