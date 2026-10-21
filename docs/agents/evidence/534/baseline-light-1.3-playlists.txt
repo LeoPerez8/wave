@@ -1,0 +1,27 @@
+Page: dev.leoperez.wave
+App: dev.leoperez.wave
+Snapshot: 22 visible nodes (52 total)
+Collapsed 30 Android helper nodes from the agent-facing text snapshot; use --raw or --json for the full hierarchy.
+@e1 [scroll-area] [scrollable]
+@e2 [scroll-area] [scrollable]
+@e3 [button] "Back"
+@e4 [group] "Playlists"
+@e6 [scroll-area] "12 PLAYLISTS, Workout, 90 songs, Throwbacks, 200 songs, Sunday Morning, 45 songs, Running, 60 songs, Road Trip, 300 songs, Rainy Days, 35 songs, Party, 120 songs, Late Night, 80 songs, Focus, 150 songs, Everything I Love, 2,000 songs, Discoveries, 25 songs, Chill, 70 songs, New Playlist, Import Playlists" [scrollable]
+  [content below scroll-area hidden]
+@e8 [button] "Import Playlists"
+@e10 [button] "New Playlist"
+@e12 [button] "Chill, 70 songs"
+@e15 [button] "Discoveries, 25 songs"
+@e18 [button] "Everything I Love, 2,000 songs"
+@e21 [button] "Focus, 150 songs"
+@e24 [button] "Late Night, 80 songs"
+@e27 [button] "Party, 120 songs"
+@e30 [button] "Rainy Days, 35 songs"
+@e33 [button] "Road Trip, 300 songs"
+@e36 [button] "Running, 60 songs"
+@e39 [button] "Sunday Morning, 45 songs"
+@e42 [button] "Throwbacks, 200 songs"
+@e45 [button] "Workout, 90 songs"
+@e48 [button] "Now playing: Blue, Ada Duarte"
+@e51 [button] "Play Blue"
+@e52 [button] "Next track"

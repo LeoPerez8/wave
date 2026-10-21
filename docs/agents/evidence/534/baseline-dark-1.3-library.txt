@@ -1,0 +1,25 @@
+Page: dev.leoperez.wave
+App: dev.leoperez.wave
+Snapshot: 20 visible nodes (48 total)
+Collapsed 28 Android helper nodes from the agent-facing text snapshot; use --raw or --json for the full hierarchy.
+@e1 [scroll-area] [scrollable]
+@e2 [scroll-area] "RECENTLY ADDED, ZENO ORSI, Light, 1987 · 11 · 6 min, Running, 1990 · 15 · 8 min, ZENO ROSSI, River, 2004 · 9 · 5 min, Favorites, Genres, Songs, 10,000, Albums, Artists, Playlists, Library" [scrollable]
+  [content below scroll-area hidden]
+@e3 [group] "Library"
+@e5 [button] "Playlists, 12"
+@e8 [button] "Artists, 245"
+@e11 [button] "Albums, 837"
+@e14 [button] "Songs, 10,000"
+@e17 [button] "Genres, 15"
+@e20 [button] "Favorites, 400"
+@e24 [horizontalscrollview] [scrollable]
+@e25 [button] "River by Zeno Rossi, 2004, 9 tracks, 5 minutes"
+@e29 [button] "Running by Zeno Orsi, 1990, 15 tracks, 8 minutes"
+@e33 [button] "Light by Zeno Orsi, 1987, 11 tracks, 6 minutes"
+@e37 [button] "Now playing: Blue, Ada Duarte"
+@e40 [button] "Play Blue"
+@e41 [button] "Next track"
+@e42 [group] "Home"
+@e44 [group] "Library" [selected]
+@e46 [group] "Playlists"
+@e48 [group] "Search"
