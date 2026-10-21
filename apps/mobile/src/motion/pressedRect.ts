@@ -61,7 +61,7 @@ export const runPressedAt = (
     menuAllowed?: () => boolean;
   } = {},
 ): boolean => {
-  current = { key, rect, onChrome, radius, menuAllowed };
+  current = { key, rect, onChrome, radius, ...(menuAllowed ? { menuAllowed } : {}) };
   read = false;
   try {
     handler();
