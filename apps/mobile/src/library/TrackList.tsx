@@ -211,6 +211,8 @@ export function TrackList({ songs, context, header, sort, findable = false }: Pr
   return (
     <View className="flex-1">
       <LegendList
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
         scrollEnabled={scrollable}
         ref={list}
         className="flex-1"

@@ -29,6 +29,7 @@ import { CELL, grid } from "@/catalog/grid";
 import { Hairline } from "@/catalog/Hairline";
 import { TextButton } from "@/components/TextButton";
 import { confirmAction } from "@/overlay/alert";
+import { CardEntries } from "@/overlay/CardEntries";
 import { presentOverlay } from "@/overlay/overlay";
 import { useThemeColor } from "@/theme/useThemeColor";
 
@@ -85,6 +86,7 @@ function ColourPickerCard({
   const [hsv, setHsv] = useState<Hsv>(() => hexToHsv(initial));
   const [text, setText] = useState(initial.slice(1));
   const hex = hsvToHex(hsv);
+  const entered = parseHexColour(text);
   const preview = customInkPreview(choice, group, hex);
 
   const pick = (next: Hsv, fromText = false) => {
@@ -102,49 +104,57 @@ function ColourPickerCard({
   return (
     <>
       <CatalogLine className="mb-2">{TITLE[group]}</CatalogLine>
-      <HueAndShade hsv={hsv} onPick={pick} />
-      <View className="flex-row items-center" style={{ height: grid.row }}>
-        <Text className="font-sans text-title3 text-secondary">#</Text>
-        <TextInput
-          value={text}
-          onChangeText={typed}
-          onBlur={() => setText(hex.slice(1))}
-          onSubmitEditing={() => setText(hex.slice(1))}
-          maxLength={7}
-          autoCapitalize="none"
-          autoCorrect={false}
-          returnKeyType="done"
-          accessibilityLabel="Hex colour"
-          placeholder="rrggbb"
-          placeholderTextColor={secondary}
-          selectionColor={accent}
-          cursorColor={accent}
-          className="flex-1 font-sans text-title3 text-foreground"
-          style={{ padding: 0, marginLeft: CELL / 2 }}
-        />
-        <View className="flex-row" style={{ gap: CELL }}>
+      <CardEntries>
+        <HueAndShade hsv={hsv} onPick={pick} />
+        <View className="flex-row items-center" style={{ height: grid.row }}>
+          <Text className="font-sans text-title3 text-secondary">#</Text>
+          <TextInput
+            value={text}
+            onChangeText={typed}
+            maxLength={7}
+            autoCapitalize="none"
+            autoCorrect={false}
+            returnKeyType="done"
+            accessibilityLabel="Hex colour"
+            placeholder="rrggbb"
+            placeholderTextColor={secondary}
+            selectionColor={accent}
+            cursorColor={accent}
+            className="flex-1 font-sans text-title3 text-foreground"
+            style={{ padding: 0, marginLeft: CELL / 2 }}
+          />
+        </View>
+        <View className="flex-row flex-wrap" style={{ gap: CELL, paddingBottom: CELL }}>
           <AppliesAs label="Light" preview={preview.light} />
           <AppliesAs label="Dark" preview={preview.dark} />
         </View>
-      </View>
-      <Hairline />
-      {/* The line is reserved so the actions don't jump when the note appears. */}
-      <Text
-        accessibilityLiveRegion="polite"
-        className="font-sans text-footnote text-secondary"
-        style={{ minHeight: CELL * 5, paddingTop: CELL / 2 }}
-      >
-        {preview.light.adjusted || preview.dark.adjusted
-          ? `Adjusted to read on your ${
-              preview.light.adjusted && preview.dark.adjusted
-                ? "backgrounds"
-                : `${preview.light.adjusted ? "light" : "dark"} background`
-            }, as shown.`
-          : ""}
-      </Text>
+        <Hairline />
+        {/* The line is reserved so the actions don't jump when the note appears. */}
+        <Text
+          accessibilityLiveRegion="polite"
+          className="font-sans text-footnote text-secondary"
+          style={{ minHeight: CELL * 5, paddingTop: CELL / 2 }}
+        >
+          {entered === null
+            ? "Enter a 3- or 6-digit hex colour."
+            : preview.light.adjusted || preview.dark.adjusted
+              ? `Adjusted to read on your ${
+                  preview.light.adjusted && preview.dark.adjusted
+                    ? "backgrounds"
+                    : `${preview.light.adjusted ? "light" : "dark"} background`
+                }, as shown.`
+              : ""}
+        </Text>
+      </CardEntries>
       <View className="flex-row justify-end" style={{ gap: CELL * 3 }}>
         <TextButton label="Cancel" onPress={() => finish(null)} />
-        <TextButton label="Done" onPress={() => finish(hex)} />
+        <TextButton
+          label="Done"
+          disabled={entered === null}
+          onPress={() => {
+            if (entered !== null) finish(entered);
+          }}
+        />
       </View>
     </>
   );

@@ -408,6 +408,8 @@ export function PlaylistItems({ playlistId, items, header, empty }: Props) {
 
   return (
     <Animated.ScrollView
+      keyboardShouldPersistTaps="handled"
+      keyboardDismissMode="on-drag"
       scrollEnabled={scrollable}
       ref={scrollRef}
       className="flex-1"

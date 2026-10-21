@@ -548,9 +548,10 @@ export function RecapStories({
   const insets = useSafeAreaInsets();
   const [index, setIndex] = useState(0);
   const [held, setPaused] = useState(false);
+  const [readerPaused, setReaderPaused] = useState(false);
   /** The slide's share preview is open: the stories and their music wait under it. */
   const [sharing, setSharing] = useState(false);
-  const paused = held || sharing;
+  const paused = held || sharing || readerPaused;
   /** Goes up each time back restarts a slide, so its timer and entrance start again. */
   const [restarts, setRestarts] = useState(0);
   const progress = useSharedValue(0);
@@ -606,7 +607,12 @@ export function RecapStories({
     progress.set(
       withTiming(
         1,
-        { duration: (1 - progress.get()) * RECAP_SLIDE_MS, easing: Easing.linear },
+        {
+          duration: (1 - progress.get()) * RECAP_SLIDE_MS,
+          easing: Easing.linear,
+          // This is the story clock; reduced motion must not skip its reading time.
+          reduceMotion: ReduceMotion.Never,
+        },
         (finished) => {
           "worklet";
           if (finished === true) scheduleOnRN(timeUp);
@@ -666,6 +672,7 @@ export function RecapStories({
       <StatusBar style="light" />
       <Animated.View
         accessibilityViewIsModal
+        importantForAccessibility={sharing ? "no-hide-descendants" : "auto"}
         className="flex-1 overflow-hidden"
         style={[{ paddingTop: insets.top + CELL, backgroundColor: backdrop }, dragStyle]}
         onLayout={(event) => {
@@ -682,6 +689,28 @@ export function RecapStories({
           style={{ paddingLeft: grid.margin, paddingRight: CELL / 2 }}
         >
           <Text
+            accessibilityRole="header"
+            accessibilityLabel={
+              recap == null ? "Recap" : `${recap.title}, slide ${index + 1} of ${count}`
+            }
+            accessibilityValue={{ text: paused ? "Paused" : "Playing" }}
+            accessibilityActions={
+              count === 0
+                ? []
+                : [
+                    { name: "previousSlide", label: "Previous slide" },
+                    { name: "nextSlide", label: "Next slide" },
+                    {
+                      name: "togglePause",
+                      label: readerPaused ? "Resume stories" : "Pause stories",
+                    },
+                  ]
+            }
+            onAccessibilityAction={({ nativeEvent: { actionName } }) => {
+              if (actionName === "previousSlide") back();
+              if (actionName === "nextSlide") forward();
+              if (actionName === "togglePause") setReaderPaused((value) => !value);
+            }}
             numberOfLines={1}
             className="flex-1 font-sans text-subheadline font-semibold text-on-recap"
           >
@@ -727,7 +756,13 @@ export function RecapStories({
               <View key={`${index}-${restarts}`} className="flex-1">
                 <Slide recap={recap} slide={slide} />
               </View>
-            ) : null}
+            ) : (
+              <View
+                accessible
+                accessibilityLabel="Loading Recap"
+                accessibilityState={{ busy: true }}
+              />
+            )}
           </View>
         </GestureDetector>
       </Animated.View>

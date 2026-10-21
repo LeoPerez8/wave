@@ -270,6 +270,7 @@ export default function SearchScreen() {
             <RecentSearches onPick={pickRecent} />
           ) : content === "preparing" ? (
             <Text
+              accessibilityLiveRegion="polite"
               className="font-sans text-subheadline text-secondary"
               style={{ paddingHorizontal: grid.margin, paddingTop: CELL * 3 }}
             >

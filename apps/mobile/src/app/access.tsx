@@ -1,5 +1,5 @@
 import { IconFolderOpen } from "@tabler/icons-react-native";
-import { Text, View } from "react-native";
+import { ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { CELL, grid } from "@/catalog/grid";
@@ -17,9 +17,10 @@ export default function AccessScreen() {
   const { denied, request } = useAllFilesAccess();
 
   return (
-    <View
+    <ScrollView
       className="flex-1 bg-background"
-      style={{
+      contentContainerStyle={{
+        flexGrow: 1,
         paddingHorizontal: grid.margin,
         paddingTop: insets.top + CELL * 12,
         paddingBottom: insets.bottom + CELL * 4,
@@ -42,6 +43,6 @@ export default function AccessScreen() {
       <View className="items-start">
         <TextButton label={denied ? "Try again" : "Open settings"} onPress={request} />
       </View>
-    </View>
+    </ScrollView>
   );
 }

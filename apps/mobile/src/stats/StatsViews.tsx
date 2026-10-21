@@ -10,7 +10,7 @@ import {
   type StatsPeriod,
 } from "@wave/core";
 import { useCallback, useMemo, type ReactElement } from "react";
-import { ScrollView, Text, View } from "react-native";
+import { ScrollView, Text, useWindowDimensions, View } from "react-native";
 
 import { CELL, grid } from "@/catalog/grid";
 import { NameRow } from "@/catalog/NameRow";
@@ -361,6 +361,9 @@ export function RecapCard({ period }: { period: RecapPeriod }) {
  * plays its stories.
  */
 export function RecapsRow({ recaps }: { recaps: readonly RecapPeriod[] }) {
+  const { fontScale } = useWindowDimensions();
+  // Keep full month names readable as system type grows, on the catalog's cell grid.
+  const tileWidth = Math.ceil((RECAP_TILE.width * Math.max(1, fontScale)) / CELL) * CELL;
   return (
     <ScrollView
       horizontal
@@ -376,13 +379,13 @@ export function RecapsRow({ recaps }: { recaps: readonly RecapPeriod[] }) {
           onPress={() => openRecap(period)}
           haptic="selection"
           className={`justify-end rounded-2xl ${RECAP_LOOK[period.kind].colour}`}
-          style={{ ...RECAP_TILE, padding: CELL * 1.5 }}
+          style={{ width: tileWidth, minHeight: RECAP_TILE.height, padding: CELL * 1.5 }}
         >
           <Text className="font-sans text-footnote font-semibold text-on-recap opacity-80">
             {RECAP_LOOK[period.kind].label}
           </Text>
-          <Text numberOfLines={2} className="font-sans text-title3 font-bold text-on-recap">
-            {recapTitle(period)}
+          <Text className="font-sans text-title3 font-bold text-on-recap">
+            {recapTitle(period).replace(" ", "\n")}
           </Text>
         </Press>
       ))}

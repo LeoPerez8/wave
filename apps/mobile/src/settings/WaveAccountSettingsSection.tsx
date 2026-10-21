@@ -58,7 +58,7 @@ function AccountRow({
     <>
       <View
         accessible
-        accessibilityLabel={`Signed in as ${name}`}
+        accessibilityLabel={`Signed in as ${name}${account.name === null ? "" : `, ${account.email}`}`}
         className="flex-row items-center"
         style={{ minHeight: grid.row, gap: CELL * 1.5 }}
       >
@@ -75,7 +75,7 @@ function AccountRow({
         </View>
       </View>
       <Hairline />
-      <View className="mt-4 flex-row items-center" style={{ gap: CELL * 3 }}>
+      <View className="mt-4 flex-row flex-wrap items-center" style={{ columnGap: CELL * 3 }}>
         <TextButton
           label={busy === "signingOut" ? "Signing Out…" : "Sign Out"}
           disabled={busy !== null}
@@ -88,7 +88,7 @@ function AccountRow({
           onPress={onDelete}
         />
       </View>
-      <Text className="font-sans text-footnote text-secondary">
+      <Text accessibilityLiveRegion="polite" className="font-sans text-footnote text-secondary">
         {note === null
           ? "Signing out keeps everything on this phone. Deleting the account deletes what " +
             "Wave's server has of it, not what's on this phone."
@@ -115,7 +115,7 @@ function MissingSongsDownloadRows() {
         </View>
       )}
       {actions.length > 0 && (
-        <View className="flex-row items-center" style={{ gap: CELL * 3 }}>
+        <View className="flex-row flex-wrap items-center" style={{ columnGap: CELL * 3 }}>
           {actions.map((action) => (
             <TextButton
               key={action}
@@ -176,7 +176,12 @@ export function WaveAccountSettingsSection() {
             />
           </View>
           <Hairline />
-          <Text className="mt-2 font-sans text-footnote text-secondary">{NOTES[view.note]}</Text>
+          <Text
+            accessibilityLiveRegion="polite"
+            className="mt-2 font-sans text-footnote text-secondary"
+          >
+            {NOTES[view.note]}
+          </Text>
         </>
       ) : (
         <Text className="mt-2 font-sans text-footnote text-secondary">

@@ -51,6 +51,10 @@ function Tab({ name, showLabel = true, onSwitch, onTap }: TabProps) {
       accessibilityLabel={label}
       accessibilityHint="Long press to edit the tab bar"
       accessibilityState={{ selected: focused }}
+      accessibilityActions={[{ name: "editTabBar", label: "Edit the tab bar" }]}
+      onAccessibilityAction={({ nativeEvent: { actionName } }) => {
+        if (actionName === "editTabBar") openTabBarEditor();
+      }}
       onPress={(event) => {
         onTap?.();
         onSwitch(name, { switchTab, press: () => triggerProps.onPress?.(event) });

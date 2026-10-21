@@ -131,30 +131,30 @@ function SleepTimerMenu({ close }: { close: () => void }) {
       <Hairline />
       {custom ? (
         <>
-          <View className="flex-row items-center" style={{ minHeight: grid.row }}>
-            <Text className="flex-1 font-sans text-title3 font-normal text-foreground">
-              Pause After
-            </Text>
-            <IconButton
-              icon={IconMinus}
-              label="Shorter"
-              disabled={minutes <= CUSTOM_SLEEP_MINUTES.min}
-              onPress={() => setMinutes((current) => stepSleepMinutes(current, -1))}
-            />
-            <Text
-              accessibilityLiveRegion="polite"
-              className="text-center font-sans text-body font-medium text-foreground"
-              numberOfLines={1}
-              style={{ minWidth: CELL * 12, fontVariant: ["tabular-nums"] }}
-            >
-              {formatSleepMinutes(minutes)}
-            </Text>
-            <IconButton
-              icon={IconPlus}
-              label="Longer"
-              disabled={minutes >= CUSTOM_SLEEP_MINUTES.max}
-              onPress={() => setMinutes((current) => stepSleepMinutes(current, 1))}
-            />
+          <View style={{ paddingVertical: CELL }}>
+            <Text className="font-sans text-title3 font-normal text-foreground">Pause After</Text>
+            <View className="flex-row items-center justify-center" style={{ minHeight: grid.row }}>
+              <IconButton
+                icon={IconMinus}
+                label="Shorter"
+                disabled={minutes <= CUSTOM_SLEEP_MINUTES.min}
+                onPress={() => setMinutes((current) => stepSleepMinutes(current, -1))}
+              />
+              <Text
+                accessibilityLiveRegion="polite"
+                className="text-center font-sans text-body font-medium text-foreground"
+                numberOfLines={1}
+                style={{ minWidth: CELL * 12, fontVariant: ["tabular-nums"] }}
+              >
+                {formatSleepMinutes(minutes)}
+              </Text>
+              <IconButton
+                icon={IconPlus}
+                label="Longer"
+                disabled={minutes >= CUSTOM_SLEEP_MINUTES.max}
+                onPress={() => setMinutes((current) => stepSleepMinutes(current, 1))}
+              />
+            </View>
           </View>
           <Hairline />
           <View className="flex-row items-center justify-between">

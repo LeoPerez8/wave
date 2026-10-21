@@ -1,6 +1,6 @@
 import { IconX } from "@tabler/icons-react-native";
-import { useState, type ReactNode } from "react";
-import { StyleSheet, View } from "react-native";
+import { useEffect, useRef, useState, type ComponentRef, type ReactNode } from "react";
+import { AccessibilityInfo, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { CELL, grid } from "@/catalog/grid";
@@ -28,9 +28,17 @@ export function SharePreviewFrame({
 }) {
   const insets = useSafeAreaInsets();
   const [area, setArea] = useState<PreviewArea | null>(null);
+  const preview = useRef<ComponentRef<typeof View>>(null);
+  useEffect(() => {
+    if (preview.current !== null)
+      AccessibilityInfo.sendAccessibilityEvent(preview.current, "focus");
+  }, []);
 
   return (
     <View
+      ref={preview}
+      accessibilityViewIsModal
+      accessibilityLabel="Share preview"
       className="bg-background"
       style={[
         StyleSheet.absoluteFill,

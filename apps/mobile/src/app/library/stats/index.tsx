@@ -3,6 +3,7 @@ import { useState } from "react";
 import { ScrollView, View } from "react-native";
 
 import { grid } from "@/catalog/grid";
+import { TrackSkeletons } from "@/catalog/Skeletons";
 import { TitledSection } from "@/catalog/TitledSection";
 import { useChromeInset } from "@/chrome/chrome";
 import { ScreenHeader } from "@/components/ScreenHeader";
@@ -42,6 +43,7 @@ export default function StatsScreen() {
           </TitledSection>
         )}
         <PeriodTabs period={period} onChange={setPeriod} />
+        {topSongs === undefined && <TrackSkeletons label="Loading listening stats" />}
         {topSongs !== undefined && topSongs.length === 0 && <NothingPlayed period={period} />}
         {topSongs !== undefined && topSongs.length > 0 && (
           <TitledSection
