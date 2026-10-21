@@ -8,7 +8,7 @@ import {
   sliderStepLabel,
   type SliderRange,
 } from "@wave/core";
-import { Text, View } from "react-native";
+import { ScrollView, Text, View } from "react-native";
 
 import { CELL } from "@/catalog/grid";
 import { Hairline } from "@/catalog/Hairline";
@@ -43,7 +43,7 @@ function DiscoverCard() {
   const level = useDiscoverLevel();
   const sliders = useDiscoverSliders();
   return (
-    <>
+    <ScrollView style={{ flexShrink: 1 }} keyboardShouldPersistTaps="handled">
       <Text
         accessibilityRole="header"
         className="font-sans text-body font-medium text-foreground"
@@ -82,7 +82,7 @@ function DiscoverCard() {
           }
         />
       </View>
-    </>
+    </ScrollView>
   );
 }
 

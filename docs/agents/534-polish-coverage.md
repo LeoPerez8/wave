@@ -195,3 +195,8 @@ Pending: final integration SHA/APK identity; parent screenshots before/after per
 - **548-C / P2 / Adaptivity:** `app/music-folders.tsx` constrains the folder name/path to a fixed 56dp row while system text scales; nonvirtualized rows can grow without affecting list indexing. Correction: minimum-height rows; pad the scroll end by the navigation inset. Long paths/counts at 1.3x and button Back P.
 
 Source confirmation will use TypeScript and diff review. No new constants-only test is appropriate for native scroll/semantics/layout props; device evidence remains required.
+
+### #549 baseline findings → source corrections
+
+- **549-A / P1 / Adaptivity:** `home/DiscoverSettings.tsx` renders a heading and three slider rows as a non-scrolling fragment inside OverlayHost's capped/hidden card. At large font or a short window the later sliders have no overflow path. Correction: scroll the complete form inside its existing card, preserving order and values. Native adapt/harden. Scenario: open Discover settings beside a mix → 1.3x/short window → reach all three sliders; TB/NAV/M P.
+- Home editing also relies on shared `TitlePress`'s long-press-only hint; record the shared semantic action fix under #556 and verify Home as a consumer. Magic Queue tiles/identity/gesture work stays under #537–542. No redesign or recommendation edits.
