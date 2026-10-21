@@ -1,4 +1,5 @@
 import {
+  acceptPlaylistRecommendation,
   dismissPlaylistRecommendation,
   selectPlaylistRecommendationInput,
   type PlaylistRecommendationInput,
@@ -536,6 +537,10 @@ export class LibraryStore extends Context.Service<
       id: number,
     ) => Effect.Effect<PlaylistRecommendationInput, LibraryStoreError>;
     readonly dismissPlaylistRecommendation: (
+      id: number,
+      offer: PlaylistRecommendationSlot,
+    ) => Effect.Effect<boolean, LibraryStoreError>;
+    readonly acceptPlaylistRecommendation: (
       id: number,
       offer: PlaylistRecommendationSlot,
     ) => Effect.Effect<boolean, LibraryStoreError>;
@@ -1235,6 +1240,10 @@ const make = Effect.gen(function* () {
     dismissPlaylistRecommendation: (id, offer) =>
       attempt("save playlist dismissal", () =>
         dismissPlaylistRecommendation(db, id, offer, Date.now()),
+      ),
+    acceptPlaylistRecommendation: (id, offer) =>
+      attempt("add playlist recommendation", () =>
+        acceptPlaylistRecommendation(db, id, offer, Date.now()),
       ),
     listSongs: attempt("list songs", () =>
       trackQuery(db)

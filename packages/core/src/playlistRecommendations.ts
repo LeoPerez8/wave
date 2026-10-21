@@ -4,7 +4,7 @@ import { catalogSeedKey, type CatalogSong } from "./candidateCatalog.ts";
 import { genreProfile, type GenreProfileOf } from "./genreAffinity.ts";
 import { recommend, type RecommendSources } from "./recommend.ts";
 import { normalizeSearchText } from "./search.ts";
-import { libraryFinder } from "./ytMusic.ts";
+import { libraryFinder, libraryMatches } from "./ytMusic.ts";
 import type { YtAlbumSong } from "./ytDiscover.ts";
 
 export interface PlaylistRecommendationTrack extends YtAlbumSong {
@@ -37,14 +37,28 @@ export interface PlaylistRecommendationSources extends Pick<RecommendSources, "g
 }
 
 /** Same recording rules as integrated Library/YT Music pages, including remasters and duration. */
-export const playlistRecordingMatch = (tracks: readonly PlaylistRecommendationTrack[]) =>
-  libraryFinder(
+export const playlistRecordingMatch = (tracks: readonly PlaylistRecommendationTrack[]) => {
+  const byId = new Map(tracks.map((track) => [track.id, track]));
+  const byVideo = new Map(
+    tracks.filter((track) => track.videoId !== "").map((track) => [track.videoId, track]),
+  );
+  const find = libraryFinder(
     tracks.map((track) => ({
       ...track,
       artist: track.artists.join(" & "),
       durationMs: track.durationMs ?? 0,
     })),
   );
+  return (
+    song: Pick<PlaylistRecommendationTrack, "title" | "artists" | "durationMs"> & {
+      readonly id?: string;
+      readonly videoId?: string;
+    },
+  ) =>
+    (song.id === undefined ? undefined : byId.get(song.id)) ??
+    (song.videoId === undefined ? undefined : byVideo.get(song.videoId)) ??
+    find(song);
+};
 
 /** Full eligible order, shared with the visible-slot controller. */
 export const rankedPlaylistRecommendations = (
@@ -77,7 +91,7 @@ export const rankedPlaylistRecommendations = (
   const artistSignals = new Map<string, number>();
   const genreSignals = new Map<string, number>();
   const signals = sources.feedback ?? [];
-  const exact = libraryFinder(
+  const exact = libraryMatches(
     signals.map((signal) => ({
       ...signal,
       title: signal.track.title,
@@ -109,7 +123,8 @@ export const rankedPlaylistRecommendations = (
     const genres = genreProfile([track]) ?? profileOf(track.artists[0] ?? "");
     let genre = 0;
     for (const [family, share] of genres ?? []) genre += (genreSignals.get(family) ?? 0) * share;
-    return Math.max(-0.35, Math.min(0.35, artist + genre + (exact(track)?.value ?? 0) * 0.1));
+    const recording = exact(track).reduce((sum, signal) => sum + signal.value, 0);
+    return Math.max(-0.35, Math.min(0.35, artist + genre + recording * 0.1));
   };
   const present = playlistRecordingMatch(playlist);
   const excluded = playlistRecordingMatch(sources.exclude ?? []);

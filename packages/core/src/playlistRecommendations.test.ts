@@ -20,6 +20,35 @@ const track = (
   ...fields,
 });
 
+test("a downloaded video's Library representation wins even when its edited tags differ from the catalog", () => {
+  const seed = track("seed");
+  const downloaded = track("downloaded", {
+    title: "My edited title",
+    videoId: "same-video",
+    downloaded: true,
+  });
+  const catalog = [
+    {
+      song: { ...downloaded, title: "Original title", videoId: "same-video" },
+      firstSeenAt: 0,
+      lastSeenAt: 0,
+      radios: [],
+    },
+  ];
+  const sources = { library: [seed, downloaded], catalog, graph: null, now: 0 };
+  assert.deepEqual(
+    playlistRecommendations([seed], sources).map((x) => x.track.id),
+    ["downloaded"],
+  );
+  assert.deepEqual(
+    playlistRecommendations(
+      [{ ...downloaded, source: "stream", id: "yt:same-video", title: "Original title" }],
+      sources,
+    ).map((x) => x.track.id),
+    ["seed"],
+  );
+});
+
 test("a playlist ranks five compatible distinct recordings through the shared engine and artist graph", () => {
   const seed = track("seed");
   const graph = artistGraph({
@@ -150,4 +179,28 @@ test("dismissing Taylor Swift mildly lowers only this playlist while keeping her
   assert.equal(taylor.favorite, true);
   assert.deepEqual(playlistRecommendations([seed], sources), before);
   assert.deepEqual(graph, beforeGraph);
+});
+
+test("accepting a previously dismissed recording offsets its negative signal and strengthens related picks", () => {
+  const seed = track("seed");
+  const song = track("accepted", { artists: ["Slowdive"] });
+  const related = track("related", { artists: ["Slowdive"] });
+  const sources = { library: [seed, song, related], catalog: [], graph: null, now: 0 };
+  const baseline = playlistRecommendations([seed], sources);
+  const after = playlistRecommendations([seed], {
+    ...sources,
+    feedback: [
+      { track: song, value: -1 },
+      { track: song, value: 1 },
+    ],
+  });
+  assert.deepEqual(after, baseline);
+  const positive = playlistRecommendations([seed], {
+    ...sources,
+    feedback: [{ track: song, value: 1 }],
+  });
+  assert.ok(
+    positive.find((x) => x.track.id === "related")!.score >
+      baseline.find((x) => x.track.id === "related")!.score,
+  );
 });

@@ -1,15 +1,16 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { selectPendingFavorites } from "./pendingFavorites.ts";
 /** The editable playlist's recommendation inputs, read through the Library store. */
 import {
   showsExplicitBadge,
+  playlistRecordingMatch,
   type PlaylistRecommendationTrack,
   type PlaylistRecommendationSlot,
 } from "@wave/core";
 import type { SongRow } from "../LibraryStore.ts";
 import type { LibraryDatabase } from "./database.ts";
 import { selectCandidateCatalog } from "./candidateCatalog.ts";
-import { selectPlaylist, selectPlaylistEntries } from "./playlists.ts";
+import { addToPlaylist, selectPlaylist, selectPlaylistEntries } from "./playlists.ts";
 import { selectSongGenres, trackQuery } from "./tracks.ts";
 import * as schema from "./schema.ts";
 
@@ -31,21 +32,21 @@ export const selectPlaylistRecommendationInput = (db: LibraryDatabase, playlistI
       .all()
       .map((row) => row.id),
   );
-  const downloads = new Set(
+  const videos = new Map(
     db
       .select({ id: schema.tracks.id, videoId: schema.tracks.videoId })
       .from(schema.tracks)
       .all()
       .filter((row) => row.videoId !== null)
-      .map((row) => row.id),
+      .map((row) => [row.id, row.videoId!]),
   );
   const favoriteVideos = new Set(selectPendingFavorites(db).map((song) => song.videoId));
   const local = (song: SongRow): PlaylistRecommendationTrack => ({
     favorite: favorites.has(song.id),
-    downloaded: downloads.has(song.id) && song.path !== null,
+    downloaded: videos.has(song.id) && song.path !== null,
     id: String(song.id),
     source: "library",
-    videoId: "",
+    videoId: videos.get(song.id) ?? "",
     title: song.title,
     artists: song.artistIds.flatMap((id) => names.get(id) ?? []),
     album: song.album,
@@ -101,3 +102,52 @@ export const dismissPlaylistRecommendation = (
       .all().length === 1
   );
 };
+
+/** Membership and its positive signal commit together; a failed write rolls both back. */
+export const acceptPlaylistRecommendation = (
+  db: LibraryDatabase,
+  playlistId: number,
+  offer: PlaylistRecommendationSlot,
+  now: number,
+): boolean =>
+  db.transaction((tx) => {
+    const input = selectPlaylistRecommendationInput(tx, playlistId);
+    const feedback = schema.playlistRecommendationFeedback;
+    if (
+      tx
+        .select({ key: feedback.offerKey })
+        .from(feedback)
+        .where(and(eq(feedback.playlistId, playlistId), eq(feedback.offerKey, offer.key)))
+        .get() !== undefined
+    )
+      return false;
+    const available = input.library.filter((track) => track.available !== false);
+    // A download may have completed since the offer appeared; prefer its Library recording.
+    const local =
+      offer.track.source === "library"
+        ? available.find((track) => track.id === offer.track.id)
+        : playlistRecordingMatch(available)(offer.track);
+    if (offer.track.source === "library" && local == null)
+      throw new Error("This song is no longer available");
+    const track = local ?? offer.track;
+    if (
+      playlistRecordingMatch(input.playlist)(track) !== null ||
+      input.playlist.some((song) => song.id === track.id)
+    )
+      return false;
+    const result = addToPlaylist(
+      tx,
+      playlistId,
+      [
+        track.source === "library"
+          ? { source: "library", trackId: Number(track.id) }
+          : { source: "stream", song: track },
+      ],
+      now,
+    );
+    if (result.added !== 1) return false;
+    tx.insert(feedback)
+      .values({ playlistId, offerKey: offer.key, track, value: 1, createdAt: now })
+      .run();
+    return true;
+  });

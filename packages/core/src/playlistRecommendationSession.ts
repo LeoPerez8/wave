@@ -1,5 +1,6 @@
 import {
   playlistRecommendations,
+  playlistRecordingMatch,
   rankedPlaylistRecommendations,
   type PlaylistRecommendationSources,
   type PlaylistRecommendationTrack,
@@ -25,6 +26,7 @@ export const playlistRecommendationSession = (options: {
   readonly newId: () => string;
   readonly read: () => Promise<PlaylistRecommendationSessionInput>;
   readonly dismiss: (offer: PlaylistRecommendationSlot) => Promise<unknown>;
+  readonly accept?: (offer: PlaylistRecommendationSlot) => Promise<unknown>;
 }) => {
   let state: PlaylistRecommendationState = { slots: [], loading: true, pending: null, error: null };
   const listeners = new Set<() => void>();
@@ -42,6 +44,43 @@ export const playlistRecommendationSession = (options: {
     key: options.newId(),
     track,
   });
+  const act = async (
+    key: string,
+    save: ((offer: PlaylistRecommendationSlot) => Promise<unknown>) | undefined,
+  ): Promise<boolean> => {
+    const index = state.slots.findIndex((x) => x?.key === key);
+    const offer = state.slots[index];
+    if (working || offer == null || save === undefined) return false;
+    working = true;
+    publish({ pending: key, error: null });
+    try {
+      await save(offer);
+    } catch {
+      working = false;
+      publish({ pending: null, error: "save" });
+      return false;
+    }
+    consumed.push(offer.track);
+    const slots = [...state.slots];
+    slots[index] = null;
+    publish({ slots });
+    try {
+      const input = await read();
+      const held = slots.flatMap((x) => (x === null ? [] : [x.track]));
+      const next = playlistRecommendations(input.playlist, {
+        ...input.sources,
+        exclude: [...consumed, ...held],
+      })[0];
+      if (next !== undefined) slots[index] = slot(next.track);
+      publish({ slots: [...slots] });
+    } catch {
+      publish({ error: "refill" });
+    } finally {
+      working = false;
+      publish({ pending: null });
+    }
+    return true;
+  };
   return {
     get: () => state,
     subscribe: (listener: () => void) => {
@@ -70,10 +109,8 @@ export const playlistRecommendationSession = (options: {
         for (let index = 0; index < slots.length; index++) {
           if (slots[index] !== null) continue;
           const held = slots.flatMap((x) => (x === null ? [] : [x.track]));
-          const next = playlistRecommendations(input.playlist, {
-            ...input.sources,
-            exclude: [...consumed, ...held],
-          })[0];
+          const occupied = playlistRecordingMatch(held);
+          const next = ranked.find((candidate) => occupied(candidate.track) === null);
           if (next !== undefined) slots[index] = slot(next.track);
         }
         publish({ slots });
@@ -84,39 +121,7 @@ export const playlistRecommendationSession = (options: {
         publish({ loading: false });
       }
     },
-    dismiss: async (key: string): Promise<boolean> => {
-      const index = state.slots.findIndex((x) => x?.key === key);
-      const offer = state.slots[index];
-      if (working || offer == null) return false;
-      working = true;
-      publish({ pending: key, error: null });
-      try {
-        await options.dismiss(offer);
-      } catch {
-        working = false;
-        publish({ pending: null, error: "save" });
-        return false;
-      }
-      consumed.push(offer.track);
-      const slots = [...state.slots];
-      slots[index] = null;
-      publish({ slots });
-      try {
-        const input = await read();
-        const held = slots.flatMap((x) => (x === null ? [] : [x.track]));
-        const next = playlistRecommendations(input.playlist, {
-          ...input.sources,
-          exclude: [...consumed, ...held],
-        })[0];
-        if (next !== undefined) slots[index] = slot(next.track);
-        publish({ slots: [...slots] });
-      } catch {
-        publish({ error: "refill" });
-      } finally {
-        working = false;
-        publish({ pending: null });
-      }
-      return true;
-    },
+    dismiss: (key: string) => act(key, options.dismiss),
+    accept: (key: string) => act(key, options.accept),
   };
 };

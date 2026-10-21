@@ -1,4 +1,4 @@
-import { IconX } from "@tabler/icons-react-native";
+import { IconPlus, IconX } from "@tabler/icons-react-native";
 import { playlistRecommendationSession, type PlaylistRecommendationSlot } from "@wave/core";
 import * as Effect from "effect/Effect";
 import { useEffect, useState, useSyncExternalStore } from "react";
@@ -19,6 +19,7 @@ import { useThemeColor } from "@/theme/useThemeColor";
 
 import { LibraryStore, type PlaylistEntryRow } from "./LibraryStore";
 import { appRuntime } from "./runtime";
+import { playlistsChanged } from "./playlists";
 
 let nextOffer = 0;
 
@@ -63,6 +64,18 @@ export function PlaylistRecommendations({
             return yield* store.dismissPlaylistRecommendation(playlistId, offer);
           }),
         ),
+      accept: (offer) =>
+        appRuntime
+          .runPromise(
+            Effect.gen(function* () {
+              const store = yield* LibraryStore;
+              return yield* store.acceptPlaylistRecommendation(playlistId, offer);
+            }),
+          )
+          .then((added) => {
+            if (added) playlistsChanged([playlistId]);
+            return added;
+          }),
     }),
   );
   const state = useSyncExternalStore(session.subscribe, session.get);
@@ -126,6 +139,19 @@ export function PlaylistRecommendations({
                 }}
               />
             </View>
+            <Press
+              accessibilityRole="button"
+              accessibilityLabel={`Add ${song.track.title} to playlist`}
+              accessibilityState={{ disabled: busy, busy: state.pending === song.key }}
+              disabled={busy}
+              onPress={() => {
+                void session.accept(song.key);
+              }}
+              className="items-center justify-center"
+              style={{ width: 48, minHeight: 48, opacity: busy ? 0.45 : 1 }}
+            >
+              <IconPlus size={20} color={secondary} />
+            </Press>
             <Press
               accessibilityRole="button"
               accessibilityLabel={`Dismiss ${song.track.title} recommendation`}
