@@ -1,0 +1,20 @@
+Page: dev.leoperez.wave
+App: dev.leoperez.wave
+Snapshot: 15 visible nodes (41 total)
+Collapsed 26 Android helper nodes from the agent-facing text snapshot; use --raw or --json for the full hierarchy.
+@e1 [scroll-area] [scrollable]
+@e2 [scroll-area] [scrollable]
+@e3 [button] "Back"
+@e4 [scroll-area] "Abbey Marlow, 15 ALBUMS · 203 SONGS, STATS, 6,778 plays, ·, 3,501 minutes listened, 202 of 203 songs, Last played 4 days ago, MOST PLAYED, Summer, Abbey Marlow, Otto Holm, 123 plays, Dream Shadow, 125 plays, Dream, 283 plays, Shuffle, Play" [scrollable]
+  [content below scroll-area hidden]
+@e7 [button] "Play"
+@e9 [button] "Shuffle"
+@e11 [radiobutton] "Library" [selected] [checked]
+@e12 [radiobutton] "Online" [unchecked]
+@e13 [button] "Sort, Song name, A to Z"
+@e22 [button] "Dream, Abbey Marlow, 283 plays"
+@e27 [button] "Dream Shadow, Abbey Marlow, 125 plays"
+@e32 [button] "Summer, Abbey Marlow, Otto Holm, 123 plays"
+@e37 [button] "Now playing: Blue, Ada Duarte"
+@e40 [button] "Play Blue"
+@e41 [button] "Next track"
