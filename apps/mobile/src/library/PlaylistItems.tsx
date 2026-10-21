@@ -1,3 +1,4 @@
+import { PlaylistRecommendations } from "./PlaylistRecommendations";
 import { IconGripVertical } from "@tabler/icons-react-native";
 import { moveItem, queueSongTrackId, type PlaylistPlace, type QueueContext } from "@wave/core";
 import { useCallback, useLayoutEffect, useMemo, useRef, useState, type ReactElement } from "react";
@@ -430,6 +431,9 @@ export function PlaylistItems({ playlistId, items, header, empty }: Props) {
           {/* The dragged row stays mounted however far auto-scroll takes the list. */}
           {listDrag.indices.map(renderRow)}
         </View>
+      )}
+      {items !== undefined && found === null && !listSelection.selecting && (
+        <PlaylistRecommendations key={playlistId} playlistId={playlistId} items={items} />
       )}
     </Animated.ScrollView>
   );

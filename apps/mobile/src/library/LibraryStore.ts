@@ -1,4 +1,8 @@
 import {
+  selectPlaylistRecommendationInput,
+  type PlaylistRecommendationInput,
+} from "./db/playlistRecommendations";
+import {
   filesLeavingWithRoot,
   rememberSearch,
   type ArtistFirstPlay,
@@ -526,6 +530,9 @@ export class LibraryStore extends Context.Service<
     /** How big the Library is, for a perf build's run metadata (docs/performance/README.md). */
     readonly measureScale: Effect.Effect<LibraryScale, LibraryStoreError>;
     /** Every track ordered by title, for Library › Songs. */
+    readonly playlistRecommendationInput: (
+      id: number,
+    ) => Effect.Effect<PlaylistRecommendationInput, LibraryStoreError>;
     readonly listSongs: Effect.Effect<readonly SongRow[], LibraryStoreError>;
     /**
      * Library › Songs in [sort] as Track ids, with its A–Z spine and its
@@ -1217,6 +1224,8 @@ const make = Effect.gen(function* () {
     countSectionSongs: attempt("count the library's songs", () => sectionSongCounts(db)),
     measureScale: attempt("measure the library", () => libraryScale(db)),
 
+    playlistRecommendationInput: (id) =>
+      attempt("read playlist recommendations", () => selectPlaylistRecommendationInput(db, id)),
     listSongs: attempt("list songs", () =>
       trackQuery(db)
         .orderBy(...BY_TITLE)
