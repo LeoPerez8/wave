@@ -1,4 +1,10 @@
 import {
+  acceptPlaylistRecommendation,
+  dismissPlaylistRecommendation,
+  selectPlaylistRecommendationInput,
+  type PlaylistRecommendationInput,
+} from "./db/playlistRecommendations";
+import {
   filesLeavingWithRoot,
   rememberSearch,
   type ArtistFirstPlay,
@@ -35,6 +41,7 @@ import {
   type CatalogPage,
   type CatalogSong,
   type PlaylistFindText,
+  type PlaylistRecommendationSlot,
 } from "@wave/core";
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { drizzle, type ExpoSQLiteDatabase } from "drizzle-orm/expo-sqlite";
@@ -526,6 +533,17 @@ export class LibraryStore extends Context.Service<
     /** How big the Library is, for a perf build's run metadata (docs/performance/README.md). */
     readonly measureScale: Effect.Effect<LibraryScale, LibraryStoreError>;
     /** Every track ordered by title, for Library › Songs. */
+    readonly playlistRecommendationInput: (
+      id: number,
+    ) => Effect.Effect<PlaylistRecommendationInput, LibraryStoreError>;
+    readonly dismissPlaylistRecommendation: (
+      id: number,
+      offer: PlaylistRecommendationSlot,
+    ) => Effect.Effect<boolean, LibraryStoreError>;
+    readonly acceptPlaylistRecommendation: (
+      id: number,
+      offer: PlaylistRecommendationSlot,
+    ) => Effect.Effect<boolean, LibraryStoreError>;
     readonly listSongs: Effect.Effect<readonly SongRow[], LibraryStoreError>;
     /**
      * Library › Songs in [sort] as Track ids, with its A–Z spine and its
@@ -1217,6 +1235,16 @@ const make = Effect.gen(function* () {
     countSectionSongs: attempt("count the library's songs", () => sectionSongCounts(db)),
     measureScale: attempt("measure the library", () => libraryScale(db)),
 
+    playlistRecommendationInput: (id) =>
+      attempt("read playlist recommendations", () => selectPlaylistRecommendationInput(db, id)),
+    dismissPlaylistRecommendation: (id, offer) =>
+      attempt("save playlist dismissal", () =>
+        dismissPlaylistRecommendation(db, id, offer, Date.now()),
+      ),
+    acceptPlaylistRecommendation: (id, offer) =>
+      attempt("add playlist recommendation", () =>
+        acceptPlaylistRecommendation(db, id, offer, Date.now()),
+      ),
     listSongs: attempt("list songs", () =>
       trackQuery(db)
         .orderBy(...BY_TITLE)
