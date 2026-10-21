@@ -14,7 +14,13 @@ import {
   type DiscoverRadioSong,
 } from "./discoverMixes.ts";
 import { mixAffinity, type GenreProfileOf } from "./genreAffinity.ts";
-import { magicArtistKey, magicSeedProfile, type MagicSession } from "./magicQueue.ts";
+import { songFamilies } from "./genreMixes.ts";
+import {
+  magicArtistKey,
+  magicSeedProfile,
+  type MagicLibrarySong,
+  type MagicSession,
+} from "./magicQueue.ts";
 import { ytTrackId } from "./ytMusic.ts";
 import { ytArtistQuery } from "./ytArtist.ts";
 
@@ -129,10 +135,65 @@ export const mixProfileLookupsNext = <S extends DiscoverRadioSong>(
  */
 const MAGIC_CANDIDATES_WANTED = 20;
 
+/** Whether [name] is an artist's, worth a lookup ("Various Artists" isn't). */
+const anArtist = (name: string): boolean => ytArtistQuery(name) !== null;
+
+/**
+ * The artists whose genres [session]'s seed profile waits for
+ * (`magicSeedProfile`): when none of the seed songs has a genre tag, its
+ * radio artists with nothing known of them yet ([profileOf] undefined).
+ * None for a seed whose songs have one.
+ */
+export const magicSeedLookups = (session: MagicSession, profileOf: GenreProfileOf): string[] =>
+  session.seedProfile !== null
+    ? []
+    : session.radioArtists.filter((name) => anArtist(name) && profileOf(name) === undefined);
+
+/** How many Library artists a batch looks up at most (`magicLibraryLookups`). */
+const MAGIC_LIBRARY_LOOKUPS = 10;
+
+/**
+ * The Library artists to look up for [session]'s next batches
+ * (`magicLibraryCandidates` leaves out a song with no genre known): the
+ * primary artists, with nothing known of them yet ([profileOf] undefined),
+ * of the Library's songs without a genre tag, those with the most such
+ * songs first, [most] (10) at most. None while the seed has no genre known,
+ * when every song passes.
+ */
+export const magicLibraryLookups = (
+  session: MagicSession,
+  library: {
+    readonly artists: readonly { readonly id: number; readonly name: string }[];
+    readonly songs: readonly MagicLibrarySong[];
+  },
+  {
+    profileOf,
+    most = MAGIC_LIBRARY_LOOKUPS,
+  }: { readonly profileOf: GenreProfileOf; readonly most?: number },
+): string[] => {
+  if (magicSeedProfile(session, profileOf) === null) return [];
+  const names = new Map(library.artists.map((artist) => [artist.id, artist.name]));
+  const untagged = new Map<string, number>();
+  for (const song of library.songs) {
+    if (songFamilies(song).length > 0) continue;
+    const primary = song.artistIds[0];
+    const name = primary === undefined ? undefined : names.get(primary);
+    if (name === undefined) continue;
+    untagged.set(name, (untagged.get(name) ?? 0) + 1);
+  }
+  const unknown = [...untagged].filter(([name]) => anArtist(name) && profileOf(name) === undefined);
+  // Stable: artists with as many songs keep the Library's order.
+  // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh array; Hermes lacks toSorted
+  unknown.sort((a, b) => b[1] - a[1]);
+  return unknown.slice(0, Math.max(0, most)).map(([name]) => name);
+};
+
 /**
  * The artists of [session]'s [radio] to look up next (a Magic Queue's
  * catalog candidates, `magicCatalogCandidates`, keep only the songs whose
- * artist matches): as a mix asks (`mixProfileLookupsNext`),
+ * artist matches): first its seed's radio artists when its songs have no
+ * genre tag and nothing is known of them (`magicSeedLookups`); then as a
+ * mix asks (`mixProfileLookupsNext`), against the seed's profile,
  * until 20 candidates match, leaving out the songs the Library has
  * ([inLibrary]). Artists further down the radio wait for a later batch.
  */
@@ -149,6 +210,8 @@ export const magicRadioLookups = <S extends DiscoverRadioSong>(
     readonly asked?: readonly string[];
   },
 ): string[] => {
+  const seed = magicSeedLookups(session, profileOf).filter((name) => !asked.includes(name));
+  if (seed.length > 0) return seed;
   const used = new Set(session.used);
   const excluded = new Set(session.excludedArtists);
   // Songs no batch picks: the Library's, those queued already and those by excluded artists.
@@ -160,7 +223,7 @@ export const magicRadioLookups = <S extends DiscoverRadioSong>(
     filter: {
       known,
       taken: new Set(),
-      affinity: mixAffinity(magicSeedProfile(session), profileOf),
+      affinity: mixAffinity(magicSeedProfile(session, profileOf), profileOf),
     },
     profileOf,
     asked,

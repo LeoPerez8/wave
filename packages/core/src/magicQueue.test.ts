@@ -3,19 +3,21 @@ import { describe, test } from "node:test";
 
 import {
   EMPTY_QUEUE,
+  GENRE_FAITHFULNESS_STEPS,
   MAGIC_QUEUE_CONTEXT,
   genreProfile,
   magicArtistKey,
   magicBatch,
   magicBatchLoading,
   magicPickEnded,
+  magicLibraryCandidates,
   magicLibrarySongs,
+  magicLibraryThreshold,
   magicSeedProfile,
   magicYtSong,
   magicRadioArtists,
   magicQueueEdits,
   magicQueueLabel,
-  MAGIC_QUEUE_LEVELS,
   magicQueueShare,
   magicSignal,
   magicPlaySignal,
@@ -26,10 +28,12 @@ import {
   wantsMagicBatch,
   type DiscoverMixLevel,
   type GenreProfileOf,
+  type MagicLibrarySong,
   type MagicSeed,
   type MagicSession,
   type MagicSignalKind,
   type MagicSong,
+  type MixSliderStep,
   type QueueCommand,
   type QueueState,
 } from "./index.ts";
@@ -520,52 +524,50 @@ describe("A Magic Queue's YouTube Music share", () => {
     assert.ok(ytInBatch(learnYt(start(), "removed", 1)) < 5);
   });
 
-  test("starts at the share its new-music level gives, from 20% to 80%", () => {
+  test("starts at the share its new-music level gives, from 20% to 100%", () => {
     const at = (level: DiscoverMixLevel) =>
       startMagicQueue(SONG_SEED, [seedSong], {
         id: "m1",
         random: first,
         ytShare: magicQueueShare(level),
       })!.session;
-    assert.equal(ytInBatch(at(1)), 2);
-    assert.equal(ytInBatch(at(3)), 5);
-    assert.equal(ytInBatch(at(5)), 8);
-    assert.ok(ytInBatch(at(2)) > 2 && ytInBatch(at(2)) < 5);
-    assert.ok(ytInBatch(at(4)) > 5 && ytInBatch(at(4)) < 8);
-  });
-
-  test("its level card offers five levels, each saying its share of new music", () => {
     assert.deepEqual(
-      MAGIC_QUEUE_LEVELS.map(({ level, share }) => [level, share]),
-      [
-        [1, "20% new"],
-        [2, "35% new"],
-        [3, "50% new"],
-        [4, "65% new"],
-        [5, "80% new"],
-      ],
+      ([1, 2, 3, 4, 5] as const).map((level) => ytInBatch(at(level))),
+      [2, 4, 6, 8, 10],
     );
   });
 
-  test("a share outside 20-80% starts at the nearest bound", () => {
+  test("at All new plays only YouTube Music songs while it has them, and the Library without", () => {
+    const allNew = startMagicQueue(SONG_SEED, [seedSong], {
+      id: "m1",
+      random: first,
+      ytShare: magicQueueShare(5),
+    })!.session;
+    assert.equal(ytInBatch(allNew), 10);
+    const offline = magicBatch(allNew, library, first);
+    assert.equal(offline.trackIds.length, 9);
+    assert.ok(offline.trackIds.every((id) => !id.startsWith("yt:")));
+  });
+
+  test("a share outside 20-100% starts at the nearest bound", () => {
     const at = (ytShare: number) =>
       startMagicQueue(SONG_SEED, [seedSong], { id: "m1", random: first, ytShare })!.session;
-    assert.equal(ytInBatch(at(1)), 8);
+    assert.equal(ytInBatch(at(1.5)), 10);
     assert.equal(ytInBatch(at(0)), 2);
   });
 
-  test("signals keep moving a level's share within 20-80%", () => {
+  test("signals keep moving a level's share within 20-100%", () => {
     const high = startMagicQueue(SONG_SEED, [seedSong], {
       id: "m1",
       random: first,
       ytShare: magicQueueShare(5),
     })!.session;
-    assert.equal(ytInBatch(learnYt(high, "favorite", 3)), 8);
-    assert.ok(ytInBatch(learnYt(high, "skip", 1)) < 8);
+    assert.equal(ytInBatch(learnYt(high, "favorite", 3)), 10);
+    assert.ok(ytInBatch(learnYt(high, "skip", 1)) < 10);
   });
 
-  test("always stays between 20% and 80%", () => {
-    assert.equal(ytInBatch(learnYt(start(), "favorite", 30)), 8);
+  test("always stays between 20% and 100%", () => {
+    assert.equal(ytInBatch(learnYt(start(), "favorite", 30)), 10);
     assert.equal(ytInBatch(learnYt(start(), "skip", 30)), 2);
   });
 
@@ -630,5 +632,164 @@ describe("A Magic Queue's radio artists", () => {
     const playlist: MagicSeed = { kind: "playlist", id: "2", title: "Mine" };
     assert.deepEqual(magicRadioArtists(playlist, ["B", "A", "C", "A", "B", "A"]), ["A", "B"]);
     assert.deepEqual(magicRadioArtists(SONG_SEED, ["Solo"]), ["Solo"]);
+  });
+});
+
+describe("A Magic Queue's Library songs and Genre faithfulness", () => {
+  const artists = [
+    { id: 1, name: "Fort Minor" },
+    { id: 2, name: "Linkin Park" },
+    { id: 3, name: "The Strokes" },
+    { id: 4, name: "MC's Jhowzinho & Kadinho" },
+    { id: 5, name: "Nobody Knows" },
+  ];
+  const hipHop = genreProfile([{ genre: "Rap/Hip Hop" }]);
+  const soulAndFunk = genreProfile([{ genre: "Soul & Funk" }]);
+  /** The Library's profiles, else Deezer's, as the app gives them. */
+  const deezer: GenreProfileOf = (artist) =>
+    artist === "Fort Minor" || artist === "Linkin Park"
+      ? hipHop
+      : artist === "MC's Jhowzinho & Kadinho"
+        ? soulAndFunk
+        : undefined;
+  const same = GENRE_FAITHFULNESS_STEPS.find((step) => step.label === "Same genres")!.threshold;
+  const fromLibrary = magicLibrarySongs(artists);
+  const seedRow: MagicLibrarySong = { id: 10, artistIds: [1], genre: "Rap/Hip Hop" };
+  const start = (row: MagicLibrarySong = seedRow, profile = genreProfile([row])) =>
+    startMagicQueue(SONG_SEED, [fromLibrary(row)], {
+      id: "m1",
+      random: first,
+      radio: { artists: ["Fort Minor"], profile },
+    })!.session;
+  const libraryOf = (songs: readonly MagicLibrarySong[]) => ({ artists, songs });
+
+  test("at Same genres, a Rap/Hip Hop seed leaves out Library songs tagged with another family", () => {
+    const songs: MagicLibrarySong[] = [
+      seedRow,
+      { id: 20, artistIds: [2], genre: "Hip Hop" },
+      { id: 30, artistIds: [3], genre: "Indie Rock" },
+      { id: 31, artistIds: [3], genre: "Rock" },
+    ];
+    const library = magicLibraryCandidates(start(), libraryOf(songs), {
+      profileOf: deezer,
+      threshold: same,
+    });
+    assert.deepEqual(magicBatch(start(), library, first).trackIds, ["20"]);
+  });
+
+  test("at Same genres, a Rap/Hip Hop seed leaves out a song whose artist is Soul & Funk", () => {
+    const songs: MagicLibrarySong[] = [
+      seedRow,
+      { id: 20, artistIds: [2], genre: "Hip Hop" },
+      { id: 40, artistIds: [4], genre: null },
+    ];
+    const library = magicLibraryCandidates(start(), libraryOf(songs), {
+      profileOf: deezer,
+      threshold: same,
+    });
+    assert.deepEqual(magicBatch(start(), library, first).trackIds, ["20"]);
+  });
+
+  test("a song without a genre tag takes its artist's profile; with no genre known, it stays out", () => {
+    const songs: MagicLibrarySong[] = [
+      seedRow,
+      { id: 21, artistIds: [2, 4], genre: null },
+      { id: 50, artistIds: [5], genre: null },
+    ];
+    const library = magicLibraryCandidates(start(), libraryOf(songs), {
+      profileOf: deezer,
+      threshold: same,
+    });
+    assert.deepEqual(
+      library.map((picked) => picked.trackId),
+      ["10", "21"],
+    );
+  });
+
+  test("a seed whose songs have no genre tag is held to its artist's profile", () => {
+    const untagged: MagicLibrarySong = { id: 10, artistIds: [1], genre: null };
+    const session = start(untagged);
+    assert.equal(magicSeedProfile(session), null);
+    assert.deepEqual(magicSeedProfile(session, deezer), hipHop);
+    const songs: MagicLibrarySong[] = [
+      untagged,
+      { id: 20, artistIds: [2], genre: "Hip Hop" },
+      { id: 30, artistIds: [3], genre: "Indie Rock" },
+      { id: 40, artistIds: [4], genre: null },
+    ];
+    const library = magicLibraryCandidates(session, libraryOf(songs), {
+      profileOf: deezer,
+      threshold: same,
+    });
+    assert.deepEqual(magicBatch(session, library, first).trackIds, ["20"]);
+  });
+
+  test("keeps every genre with nothing known of the seed's anywhere", () => {
+    const untagged: MagicLibrarySong = { id: 10, artistIds: [1], genre: null };
+    const songs: MagicLibrarySong[] = [
+      untagged,
+      { id: 30, artistIds: [3], genre: "Indie Rock" },
+      { id: 50, artistIds: [5], genre: null },
+    ];
+    const library = magicLibraryCandidates(start(untagged), libraryOf(songs), {
+      profileOf: () => undefined,
+      threshold: same,
+    });
+    assert.deepEqual(
+      library.map((picked) => picked.trackId),
+      ["10", "30", "50"],
+    );
+  });
+
+  test("at Wander, Library songs of any genre can still be picked, as before", () => {
+    const songs: MagicLibrarySong[] = [
+      seedRow,
+      { id: 30, artistIds: [3], genre: "Indie Rock" },
+      { id: 40, artistIds: [4], genre: null },
+      { id: 50, artistIds: [5], genre: null },
+    ];
+    const at = (faithfulness: MixSliderStep) =>
+      magicLibraryCandidates(start(), libraryOf(songs), {
+        profileOf: deezer,
+        threshold: magicLibraryThreshold({ faithfulness, popularity: 3 }),
+      }).map((picked) => picked.trackId);
+    const wander = GENRE_FAITHFULNESS_STEPS.find((step) => step.label === "Wander")!.step;
+    assert.deepEqual(at(wander), ["10", "30", "40", "50"]);
+    assert.deepEqual(at(4), ["10"]);
+    assert.deepEqual(
+      magicBatch(
+        start(),
+        magicLibraryCandidates(start(), libraryOf(songs), {
+          profileOf: deezer,
+          threshold: magicLibraryThreshold({ faithfulness: wander, popularity: 3 }),
+        }),
+        first,
+      ).trackIds.toSorted(),
+      ["30", "40", "50"],
+    );
+  });
+
+  test("holds Library songs at each other step's threshold, as YouTube Music's", () => {
+    for (const { step, threshold } of GENRE_FAITHFULNESS_STEPS.slice(0, 4))
+      assert.equal(magicLibraryThreshold({ faithfulness: step, popularity: 3 }), threshold);
+  });
+
+  test("YouTube Music makes up for the Library songs the filter leaves out", () => {
+    const songs: MagicLibrarySong[] = [
+      seedRow,
+      ...Array.from({ length: 10 }, (_, i) => ({ id: 100 + i, artistIds: [3], genre: "Rock" })),
+      { id: 20, artistIds: [2], genre: "Hip Hop" },
+    ];
+    const library = magicLibraryCandidates(start(), libraryOf(songs), {
+      profileOf: deezer,
+      threshold: same,
+    });
+    const yt = songsBy("yt:v", "Linkin Park", 20, "Hip-Hop");
+    const batch = magicBatch(start(), library, first, yt);
+    assert.equal(batch.trackIds.length, 9);
+    assert.deepEqual(
+      batch.trackIds.filter((id) => !id.startsWith("yt:")),
+      ["20"],
+    );
   });
 });

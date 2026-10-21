@@ -140,6 +140,9 @@ export {
   foundInPlaylist,
   hasFindQuery,
   createFindableList,
+  findPlaceholder,
+  findNoMatch,
+  artistFindText,
 } from "./findInPlaylist.ts";
 export type {
   FoundInPlaylist,
@@ -147,6 +150,7 @@ export type {
   PlaylistFindText,
   FindableList,
   ShownInPlaylist,
+  FindableListKind,
 } from "./findInPlaylist.ts";
 export { createSearchCatalog } from "./searchCatalog.ts";
 export type { SearchCatalog, SearchCatalogStats } from "./searchCatalog.ts";
@@ -176,7 +180,8 @@ export type {
   PlaylistPlace,
   PlaylistRemoval,
 } from "./playlists.ts";
-export { resolveRemoveSwipe } from "./rowGestures.ts";
+export { resolveRowSwipe, rowSwipeArmed } from "./rowGestures.ts";
+export type { RowSwipeSide, RowSwipeSides } from "./rowGestures.ts";
 export { currentLyricIndex, parseLyrics, pickLyrics } from "./lyrics.ts";
 export type { LyricLine, Lyrics, LyricsSources } from "./lyrics.ts";
 export { autoLyricLines } from "./autoLyricLines.ts";
@@ -1320,7 +1325,6 @@ export {
   editHomeArrangement,
   hiddenHomeSections,
   homeItems,
-  homeSectionNote,
   homeSectionTitle,
   parseHomeArrangement,
   storedHomeArrangement,
@@ -1675,6 +1679,7 @@ export {
   undoneMixRefresh,
 } from "./mixRefresh.ts";
 export type { MixPull, MixRefreshAvoid, ShownMixes } from "./mixRefresh.ts";
+export { MIX_PULL_SLOP, mixPullCanStart } from "./mixRefresh.ts";
 export { searchRoomAt } from "./searchAllowance.ts";
 export { mixKnownSongs } from "./mixKnownSongs.ts";
 export type {
@@ -1817,7 +1822,7 @@ export {
   undoneMagicQueueRefresh,
 } from "./magicQueueSection.ts";
 export type { MagicQueuePicking, MagicQueuePicks } from "./magicQueueSection.ts";
-export { MAGIC_QUEUE_LEVELS, magicQueueShare } from "./magicQueue.ts";
+export { magicQueueShare } from "./magicQueue.ts";
 export { discoverMixesOfRadios } from "./discoverMixRadios.ts";
 export type { DiscoverMixRead } from "./discoverMixRadios.ts";
 export {
@@ -1928,3 +1933,33 @@ export type { DiscoverMixesRerun } from "./mixRerank.ts";
 export { harvestSeedPool } from "./harvest.ts";
 export type { HarvestSeedSources } from "./harvest.ts";
 export { sliderStep, sliderStepLabel } from "./mixSliders.ts";
+export { DOUBLE_TAP_MS, coverDoubleTap, createCoverTaps } from "./coverGestures.ts";
+export type { CoverDoubleTap, CoverTaps } from "./coverGestures.ts";
+export { discoverLevelLabel } from "./discoverMixLevels.ts";
+export { DISCOVER_ROWS, discoverRowTitle } from "./homeSections.ts";
+export type { DiscoverRowId, MixRowId } from "./homeSections.ts";
+export {
+  lyricsTranslationKey,
+  lyricsTranslationLanguageName,
+  lyricsTranslationRequest,
+  lyricsTranslationTarget,
+  parseLyricsTranslation,
+  savedLyricsTranslation,
+  storedLyricsTranslation,
+} from "./lyricsTranslation.ts";
+export type { LyricsTranslation, LyricsTranslationRequest } from "./lyricsTranslation.ts";
+export { magicLibraryCandidates } from "./magicQueue.ts";
+export { magicLibraryLookups, magicSeedLookups } from "./mixGenreLookups.ts";
+export { magicLibraryThreshold } from "./mixSliders.ts";
+export {
+  DEFAULT_SWIPE_SETTINGS,
+  SWIPE_CHOICES,
+  readSwipeSettings,
+  rowSwipeActions,
+  storedSwipeSettings,
+  swipeChoiceAction,
+  swipeChoiceLabel,
+  swipesChoose,
+} from "./swipeActions.ts";
+export type { RowMenuAction, RowSwipeActions, SwipeChoice, SwipeSettings } from "./swipeActions.ts";
+export { BACK_EXIT_WINDOW_MS, createBackExitConfirmation } from "./backExit.ts";

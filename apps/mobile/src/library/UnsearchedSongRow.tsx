@@ -7,6 +7,7 @@ import {
 } from "@wave/core";
 import type { ComponentProps } from "react";
 
+import type { RowSwipe } from "@/catalog/SwipeableRow";
 import { TrackRow } from "@/catalog/TrackRow";
 import { useYtMusicEnabled } from "@/settings/ytMusic";
 import { useYtDownloadStatus } from "@/ytmusic/YtDownloads";
@@ -27,6 +28,7 @@ export function UnsearchedSongRow({
   onLongPress,
   accessibilityActions,
   onAccessibilityAction,
+  swipe,
 }: {
   song: UnsearchedSong;
   playing: boolean;
@@ -35,6 +37,8 @@ export function UnsearchedSongRow({
   onLongPress: () => void;
   accessibilityActions?: ComponentProps<typeof TrackRow>["accessibilityActions"];
   onAccessibilityAction?: ComponentProps<typeof TrackRow>["onAccessibilityAction"];
+  /** What swiping the row runs (`useUnsearchedSwipe`); undefined, it doesn't swipe. */
+  swipe?: RowSwipe | undefined;
 }) {
   // With YT Music off (a playlist's entries still show) Wave asks for no cover.
   const ytMusic = useYtMusicEnabled();
@@ -60,6 +64,7 @@ export function UnsearchedSongRow({
       onLongPress={onLongPress}
       accessibilityActions={accessibilityActions}
       onAccessibilityAction={onAccessibilityAction}
+      swipe={swipe}
     />
   );
 }

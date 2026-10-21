@@ -17,6 +17,7 @@ import { resumePlaylistImports } from "@/library/playlistImports";
 import { resumeYtLibraryImport } from "@/library/ytLibraryImport";
 import { primePlaylists } from "@/library/playlists";
 import { OverlayHost } from "@/overlay/OverlayHost";
+import { AndroidBack } from "@/overlay/AndroidBack";
 import { PhotoCropperHost } from "@/library/PhotoCropper";
 import { FollowCurrentRoute } from "@/library/routes";
 import { useOpenSharedText } from "@/library/sharedText";
@@ -94,6 +95,7 @@ export default function RootLayout() {
       {/* Lets library screens open inside the tab they were opened from. The root itself
           doesn't follow the route: that would render it and Now Playing on every navigation. */}
       <FollowCurrentRoute />
+      <AndroidBack />
       <SafeAreaProvider>
         <StatusBar style="auto" />
         <OverlayHost>

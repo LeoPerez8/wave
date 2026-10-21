@@ -14,7 +14,7 @@ import { CatalogLine } from "@/catalog/CatalogLine";
 import { CELL, grid } from "@/catalog/grid";
 import { NameRow } from "@/catalog/NameRow";
 import { SKELETON_ROWS, TrackSkeletons } from "@/catalog/Skeletons";
-import { TrackRow } from "@/catalog/TrackRow";
+import { SwipeTrackRow } from "@/library/SwipeTrackRow";
 import { useChromeInset } from "@/chrome/chrome";
 import { TextButton } from "@/components/TextButton";
 import type { TrackItem } from "@/playback/actionTargets";
@@ -40,7 +40,7 @@ import type { ListSelection } from "@/selection/useListSelection";
 import { openYtAlbum, openYtArtist } from "@/ytmusic/routes";
 import { openYtAlbumActions } from "@/ytmusic/YtAlbumActions";
 import { openYtArtistActions } from "@/ytmusic/YtArtistActions";
-import { YtSongRow } from "@/ytmusic/YtSongRow";
+import { SwipeYtSongRow } from "@/ytmusic/YtSongRow";
 import { openYtSongActions } from "@/ytmusic/YtSongActions";
 
 /** Tapping a song plays the song results from it. */
@@ -90,7 +90,7 @@ function SearchYtSongRow({
   selection: ListSelection<TrackItem>;
 }) {
   return (
-    <YtSongRow
+    <SwipeYtSongRow
       song={song}
       kind={top ? "Song · " : ""}
       playing={playing}
@@ -187,7 +187,8 @@ function Hit({
     case "song": {
       const track = toTrackSummary(hit.song);
       return (
-        <TrackRow
+        <SwipeTrackRow
+          song={hit.song}
           track={top ? { ...track, artist: `Song · ${track.artist}` } : track}
           state={playing ? "playing" : undefined}
           leading="artwork"

@@ -13,6 +13,7 @@ import "@/settings/glass";
 import "@/settings/longPressDelay";
 import "@/settings/lyricsAndGenre";
 import "@/settings/shuffleKind";
+import "@/settings/swipeActions";
 import "@/settings/tabBar";
 import "@/settings/tapAnimation";
 import "@/settings/theme";

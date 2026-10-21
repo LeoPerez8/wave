@@ -18,7 +18,7 @@ import { SECTION_HEAD, SectionHead } from "@/catalog/CatalogLine";
 import { COVER_ROW_TILE, CoverRow } from "@/catalog/CoverRow";
 import { CELL, grid } from "@/catalog/grid";
 import { SKELETON_TILES, SkeletonGroup, TileSkeleton, TrackSkeletons } from "@/catalog/Skeletons";
-import { TrackRow } from "@/catalog/TrackRow";
+import { SwipeTrackRow } from "@/library/SwipeTrackRow";
 import { useChromeInset } from "@/chrome/chrome";
 import { playPage } from "@/playback/actions";
 import { useCurrentTrackId } from "@/playback/hooks";
@@ -43,7 +43,7 @@ import { useLoadedLibraryFinder, type FindInLibrary } from "@/ytmusic/libraryFin
 import { useHeldSongs, useSongsInPlace, type PlacedSongs } from "@/ytmusic/songsInPlace";
 import { YT_ARTIST_NOTE, YtReleaseTile } from "@/ytmusic/YtArtistSection";
 import { YtLookupFooter } from "@/ytmusic/YtLookupFooter";
-import { YtSongRow } from "@/ytmusic/YtSongRow";
+import { SwipeYtSongRow } from "@/ytmusic/YtSongRow";
 import { openYtSongActions } from "@/ytmusic/YtSongActions";
 
 /** A cover on one of the page's album shelves: a Library album, or a release only YouTube Music has. */
@@ -368,7 +368,7 @@ function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegr
           if (item.song.kind === "yt") {
             const song = item.song.song;
             return (
-              <YtSongRow
+              <SwipeYtSongRow
                 song={song}
                 playing={ytTrackId(song.videoId) === currentId}
                 {...selectableRow(
@@ -382,7 +382,8 @@ function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegr
           }
           const song = item.song.song;
           return (
-            <TrackRow
+            <SwipeTrackRow
+              song={song}
               track={toTrackSummary(song)}
               state={String(song.id) === currentId ? "playing" : undefined}
               favorite={favorites.has(song.id)}

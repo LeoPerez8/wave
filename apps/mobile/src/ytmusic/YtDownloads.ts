@@ -1446,6 +1446,10 @@ export const cancelYtDownload = (videoId: string): void => {
 export const useYtDownloadStatus = (videoId: string): YtDownloadStatus | null =>
   useSyncExternalStore(downloads.subscribe, () => ytDownloadStatus(downloads.get(), videoId));
 
+/** Where a YT Music song's download stands now, unfollowed: for a row's swipe. */
+export const ytDownloadStatusNow = (videoId: string): YtDownloadStatus | null =>
+  ytDownloadStatus(downloads.get(), videoId);
+
 /** Whether the Library already has a song (Core's `libraryFinder`). */
 type InLibrary = (song: NativeYtSong) => boolean;
 
@@ -1691,6 +1695,10 @@ export const useMissingSongDownloadStatus = (trackId: number | null): YtDownload
   useSyncExternalStore(downloads.subscribe, () =>
     trackId === null ? null : ytDownloadStatus(downloads.get(), missingSongJobId(trackId)),
   );
+
+/** Where missing song [trackId]'s download stands now, unfollowed: for a row's swipe. */
+export const missingSongDownloadStatusNow = (trackId: number): YtDownloadStatus | null =>
+  ytDownloadStatus(downloads.get(), missingSongJobId(trackId));
 
 /**
  * Where the downloads of missing songs [trackIds] stand, each null when not asked for,

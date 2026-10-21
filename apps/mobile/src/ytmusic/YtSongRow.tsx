@@ -8,13 +8,14 @@ import {
 } from "@wave/core";
 import type { ComponentProps } from "react";
 
+import type { RowSwipe } from "@/catalog/SwipeableRow";
 import { TrackRow } from "@/catalog/TrackRow";
 import { useIsFavorite } from "@/library/favorites";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 import { useYtMusicEnabled } from "@/settings/ytMusic";
 
 import { useYtDownloadStatus } from "./YtDownloads";
-import { openYtSongActions } from "./YtSongActions";
+import { openYtSongActions, useYtSongSwipe } from "./YtSongActions";
 
 /**
  * A YT Music song as a Songs-list row: YouTube's cover, the artists and
@@ -34,6 +35,7 @@ export function YtSongRow({
   kind = "",
   accessibilityActions,
   onAccessibilityAction,
+  swipe,
 }: {
   song: NativeYtSong;
   playing: boolean;
@@ -47,6 +49,8 @@ export function YtSongRow({
   /** Screen-reader actions standing in for gestures (move, remove in a playlist). */
   accessibilityActions?: ComponentProps<typeof TrackRow>["accessibilityActions"];
   onAccessibilityAction?: ComponentProps<typeof TrackRow>["onAccessibilityAction"];
+  /** What swiping the row runs (`useYtSongSwipe`); undefined, it doesn't swipe. */
+  swipe?: RowSwipe | undefined;
 }) {
   const download = useYtDownloadStatus(song.videoId);
   const favorite = useIsFavorite(ytTrackId(song.videoId));
@@ -74,6 +78,16 @@ export function YtSongRow({
       onLongPress={onLongPress}
       accessibilityActions={accessibilityActions}
       onAccessibilityAction={onAccessibilityAction}
+      swipe={swipe}
     />
   );
+}
+
+/**
+ * A YT Music song's row in a list of songs: a `YtSongRow` that swipes to run
+ * its menu's entries (right Add to Queue; `useYtSongSwipe`).
+ */
+export function SwipeYtSongRow(props: Omit<ComponentProps<typeof YtSongRow>, "swipe">) {
+  const swipe = useYtSongSwipe(props.song);
+  return <YtSongRow {...props} swipe={swipe} />;
 }
