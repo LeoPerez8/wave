@@ -672,6 +672,7 @@ export function RecapStories({
       <StatusBar style="light" />
       <Animated.View
         accessibilityViewIsModal
+        importantForAccessibility={sharing ? "no-hide-descendants" : "auto"}
         className="flex-1 overflow-hidden"
         style={[{ paddingTop: insets.top + CELL, backgroundColor: backdrop }, dragStyle]}
         onLayout={(event) => {

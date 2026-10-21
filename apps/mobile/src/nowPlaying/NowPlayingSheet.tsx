@@ -20,6 +20,8 @@ import type { TrackDetails } from "@/library/LibraryStore";
 import { useCurrentTrackId } from "@/playback/hooks";
 import { playbackState, type PlaybackState } from "@/playback/Player";
 import { LyricCardLayer } from "@/share/LyricCardPreview";
+import { useLyricCardShown } from "@/share/lyricCard";
+import { useSongShareShown } from "@/share/songShare";
 import { shareNowPlaying } from "@/share/songShare";
 import { useThemeColor } from "@/theme/useThemeColor";
 
@@ -141,11 +143,12 @@ const PlayerPane = memo(function PlayerPane({
  */
 export function UnderNowPlaying({ children }: { children: ReactNode }) {
   const shown = useNowPlayingShown();
+  const sharing = useSongShareShown();
   return (
     <View
       collapsable={false}
       style={{ flex: 1 }}
-      importantForAccessibility={shown ? "no-hide-descendants" : "auto"}
+      importantForAccessibility={shown || sharing ? "no-hide-descendants" : "auto"}
     >
       <CoveredByNowPlaying.Provider value>{children}</CoveredByNowPlaying.Provider>
     </View>
@@ -167,6 +170,8 @@ export function NowPlayingSheet() {
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
   const shown = useNowPlayingShown();
+  const songSharing = useSongShareShown();
+  const lyricSharing = useLyricCardShown();
   const item = useSyncExternalStore(playbackState.subscribe, () => playbackState.get().item);
   const playing = useSyncExternalStore(
     playbackState.subscribe,
@@ -216,12 +221,13 @@ export function NowPlayingSheet() {
       style={[StyleSheet.absoluteFill, sheetStyle]}
       // Out of sight, it takes no touches and screen readers skip it.
       pointerEvents={shown ? "auto" : "none"}
-      importantForAccessibility={shown ? "auto" : "no-hide-descendants"}
-      accessibilityElementsHidden={!shown}
+      importantForAccessibility={shown && !songSharing ? "auto" : "no-hide-descendants"}
+      accessibilityElementsHidden={!shown || songSharing}
     >
       <Background gradient={gradient} animate={shown} />
       <View
         className="flex-1"
+        importantForAccessibility={lyricSharing ? "no-hide-descendants" : "auto"}
         style={{
           paddingTop: insets.top,
           paddingBottom: insets.bottom + CELL * 2,
