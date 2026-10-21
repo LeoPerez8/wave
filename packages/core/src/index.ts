@@ -1971,3 +1971,4 @@ export type {
   PlaylistRecommendationSources,
   PlaylistRecommendationFeedback,
 } from "./playlistRecommendations.ts";
+export * from "./playlistRecommendationSession.ts";

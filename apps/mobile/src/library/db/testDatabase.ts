@@ -53,6 +53,21 @@ export const openTestDatabase = async (options: { readonly through?: string } = 
   return db;
 };
 
+/** Closes and reopens the persisted SQLite image, dropping all connection-local state. */
+export const reopenTestDatabase = async (db: TestDatabase): Promise<TestDatabase> => {
+  const client = clients.get(db);
+  if (client === undefined) throw new Error("not a test database");
+  const image = client.export();
+  client.close();
+  const SQL = await initSqlJs();
+  const reopened = new SQL.Database(image);
+  reopened.exec("PRAGMA foreign_keys = ON;");
+  const next = drizzle(reopened, { schema });
+  clients.set(next, reopened);
+  await migrate(next as unknown as Migrator, migrations);
+  return next;
+};
+
 /**
  * Applies the migrations a database opened `through` an older one is missing,
  * then what the store does after migrating (`relinkCreditsIfUnlinked`,

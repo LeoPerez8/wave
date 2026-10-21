@@ -1,7 +1,11 @@
 import { eq } from "drizzle-orm";
 import { selectPendingFavorites } from "./pendingFavorites.ts";
 /** The editable playlist's recommendation inputs, read through the Library store. */
-import { showsExplicitBadge, type PlaylistRecommendationTrack } from "@wave/core";
+import {
+  showsExplicitBadge,
+  type PlaylistRecommendationTrack,
+  type PlaylistRecommendationSlot,
+} from "@wave/core";
 import type { SongRow } from "../LibraryStore.ts";
 import type { LibraryDatabase } from "./database.ts";
 import { selectCandidateCatalog } from "./candidateCatalog.ts";
@@ -50,7 +54,7 @@ export const selectPlaylistRecommendationInput = (db: LibraryDatabase, playlistI
     artworkUrl: song.thumbPath === null ? null : `file://${song.thumbPath}`,
     explicit: showsExplicitBadge(song.explicit),
     genre: song.genre,
-    genres: genres.get(song.id),
+    ...(genres.has(song.id) ? { genres: genres.get(song.id)! } : {}),
     available: song.path !== null,
   });
   const library = trackQuery(db).all().map(local);
@@ -68,6 +72,32 @@ export const selectPlaylistRecommendationInput = (db: LibraryDatabase, playlistI
             available: entry.source === "stream",
           },
   );
-  return { playlist, library, catalog: selectCandidateCatalog(db), favoriteVideos };
+  const feedback = db
+    .select({
+      track: schema.playlistRecommendationFeedback.track,
+      value: schema.playlistRecommendationFeedback.value,
+    })
+    .from(schema.playlistRecommendationFeedback)
+    .where(eq(schema.playlistRecommendationFeedback.playlistId, playlistId))
+    .all();
+  return { playlist, library, catalog: selectCandidateCatalog(db), favoriteVideos, feedback };
 };
 export type PlaylistRecommendationInput = ReturnType<typeof selectPlaylistRecommendationInput>;
+
+/** A key belongs to one visible offer; retries cannot count its signal twice. */
+export const dismissPlaylistRecommendation = (
+  db: LibraryDatabase,
+  playlistId: number,
+  offer: PlaylistRecommendationSlot,
+  now: number,
+): boolean => {
+  if (selectPlaylist(db, playlistId) === null) throw new Error("The playlist no longer exists");
+  return (
+    db
+      .insert(schema.playlistRecommendationFeedback)
+      .values({ playlistId, offerKey: offer.key, track: offer.track, value: -1, createdAt: now })
+      .onConflictDoNothing()
+      .returning({ key: schema.playlistRecommendationFeedback.offerKey })
+      .all().length === 1
+  );
+};

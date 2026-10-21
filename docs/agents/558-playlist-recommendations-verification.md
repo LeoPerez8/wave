@@ -17,3 +17,11 @@ Evidence: Core public API tests exercise ranking through the Artist graph and re
 Eligibility is decided before status. Among eligible recordings, every favorite or download ranks ahead of ordinary songs; compatibility orders each group. Thus all qualifying priority songs fit when there are at most five, and the most compatible five win when there are more. Duplicate recordings still count once. Library favorites, pending YT Music favorites and completed downloads are read afresh on renewal; unrelated favorites/downloads cannot qualify by status. Explicit favorite/download behavior is unchanged.
 
 Evidence: Core selection checks include matching favorites/downloads, an unrelated favorite/download, seven priority songs and changed status. Real-SQLite reads verify favorites, unstar, downloaded-file status and catalog pending favorites reach visible selection.
+
+## #561 — playlist dismissal
+
+Each visible recommendation has Dismiss. The controller saves the playlist-scoped signal before removing the offer, replaces only that slot, and preserves the other offer objects and keys. Recording equivalents consumed during this visit are excluded before the five-song limit, so dismissals can reach beyond the initial five. A failed save leaves the offer available for retry. A saved choice whose refill fails leaves a truthful hole and offers Try again without repeating the write. Controls are disabled during pending work and stale offer keys are ignored.
+
+Feedback is local SQLite data keyed by playlist identity and offer key, with an upgrade migration and duplicate-write protection. Exact recordings, credited artists, nearby artists from the baseline graph, and genre families receive a bounded, mild adjustment; eligibility remains unchanged. A dismissal is not an artist/genre ban, and reopening can offer a dismissed recording again with the adjustment. No feedback goes into the global taste history or Artist graph inputs.
+
+Evidence: Core tests cover held saves, repeated/stale taps, failed saves, stable refill and refill recovery. Real-SQLite tests cover upgrading an existing Library, closing/reopening the database image, playlist isolation, actual failed writes, retry, refill and unchanged global taste inputs. The Taylor Swift fixture preserves her global favorite and the original graph/ranking for unchanged inputs.

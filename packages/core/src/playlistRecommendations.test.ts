@@ -117,17 +117,35 @@ test("more than five priority recordings are ordered by compatibility and renewe
 });
 
 test("dismissing Taylor Swift mildly lowers only this playlist while keeping her favorite and baseline graph", () => {
-  const seed = track("seed", {artists: ["Lorde"], genre: "Pop", album: "Melodrama"});
-  const taylor = track("taylor", {artists: ["Taylor Swift"], genre: "Pop", favorite: true});
-  const related = track("related", {artists: ["Taylor Swift"], genre: "Pop", favorite: true});
-  const other = track("other", {artists: ["Carly Rae Jepsen"], genre: "Pop", favorite: true});
-  const graph = artistGraph({catalog: [], plays: [], pages: [{name: "Lorde", similar: [{name: "Taylor Swift", browseId: "UCtaylor", audience: null}, {name: "Carly Rae Jepsen", browseId: "UCcarly", audience: null}]}]});
+  const seed = track("seed", { artists: ["Lorde"], genre: "Pop", album: "Melodrama" });
+  const taylor = track("taylor", { artists: ["Taylor Swift"], genre: "Pop", favorite: true });
+  const related = track("related", { artists: ["Taylor Swift"], genre: "Pop", favorite: true });
+  const other = track("other", { artists: ["Carly Rae Jepsen"], genre: "Pop", favorite: true });
+  const graph = artistGraph({
+    catalog: [],
+    plays: [],
+    pages: [
+      {
+        name: "Lorde",
+        similar: [
+          { name: "Taylor Swift", browseId: "UCtaylor", audience: null },
+          { name: "Carly Rae Jepsen", browseId: "UCcarly", audience: null },
+        ],
+      },
+    ],
+  });
   const beforeGraph = structuredClone(graph);
-  const sources = {library: [seed, taylor, related, other], catalog: [], graph, now: 0};
+  const sources = { library: [seed, taylor, related, other], catalog: [], graph, now: 0 };
   const before = playlistRecommendations([seed], sources);
-  const after = playlistRecommendations([seed], {...sources, feedback: [{track: taylor, value: -1}]});
-  assert.ok(after.find(x => x.track.id === "related")!.score < before.find(x => x.track.id === "related")!.score);
-  assert.ok(after.some(x => x.track.id === "taylor")); // mild, never an artist/genre ban
+  const after = playlistRecommendations([seed], {
+    ...sources,
+    feedback: [{ track: taylor, value: -1 }],
+  });
+  assert.ok(
+    after.find((x) => x.track.id === "related")!.score <
+      before.find((x) => x.track.id === "related")!.score,
+  );
+  assert.ok(after.some((x) => x.track.id === "taylor")); // mild, never an artist/genre ban
   assert.equal(after[0]?.track.id, "other");
   assert.equal(taylor.favorite, true);
   assert.deepEqual(playlistRecommendations([seed], sources), before);

@@ -1,4 +1,5 @@
 import {
+  dismissPlaylistRecommendation,
   selectPlaylistRecommendationInput,
   type PlaylistRecommendationInput,
 } from "./db/playlistRecommendations";
@@ -39,6 +40,7 @@ import {
   type CatalogPage,
   type CatalogSong,
   type PlaylistFindText,
+  type PlaylistRecommendationSlot,
 } from "@wave/core";
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { drizzle, type ExpoSQLiteDatabase } from "drizzle-orm/expo-sqlite";
@@ -533,6 +535,10 @@ export class LibraryStore extends Context.Service<
     readonly playlistRecommendationInput: (
       id: number,
     ) => Effect.Effect<PlaylistRecommendationInput, LibraryStoreError>;
+    readonly dismissPlaylistRecommendation: (
+      id: number,
+      offer: PlaylistRecommendationSlot,
+    ) => Effect.Effect<boolean, LibraryStoreError>;
     readonly listSongs: Effect.Effect<readonly SongRow[], LibraryStoreError>;
     /**
      * Library › Songs in [sort] as Track ids, with its A–Z spine and its
@@ -1226,6 +1232,10 @@ const make = Effect.gen(function* () {
 
     playlistRecommendationInput: (id) =>
       attempt("read playlist recommendations", () => selectPlaylistRecommendationInput(db, id)),
+    dismissPlaylistRecommendation: (id, offer) =>
+      attempt("save playlist dismissal", () =>
+        dismissPlaylistRecommendation(db, id, offer, Date.now()),
+      ),
     listSongs: attempt("list songs", () =>
       trackQuery(db)
         .orderBy(...BY_TITLE)

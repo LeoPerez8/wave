@@ -1,4 +1,4 @@
-import {artistNeighbourhood} from "./artistGraph.ts";
+import { artistNeighbourhood } from "./artistGraph.ts";
 /** Playlist selection uses the shared recommendation engine; it never reads or writes global taste. */
 import { catalogSeedKey, type CatalogSong } from "./candidateCatalog.ts";
 import { genreProfile, type GenreProfileOf } from "./genreAffinity.ts";
@@ -29,6 +29,8 @@ export interface PlaylistRecommendationSources extends Pick<RecommendSources, "g
   readonly catalog: readonly CatalogSong[];
   readonly profileOf?: GenreProfileOf;
   readonly feedback?: readonly PlaylistRecommendationFeedback[];
+  /** Recordings consumed or still visible in this recommendation session. */
+  readonly exclude?: readonly PlaylistRecommendationTrack[];
   readonly favoriteVideos?: ReadonlySet<string>;
   readonly online?: boolean;
   readonly ytMusicEnabled?: boolean;
@@ -44,7 +46,8 @@ export const playlistRecordingMatch = (tracks: readonly PlaylistRecommendationTr
     })),
   );
 
-export const playlistRecommendations = (
+/** Full eligible order, shared with the visible-slot controller. */
+export const rankedPlaylistRecommendations = (
   playlist: readonly PlaylistRecommendationTrack[],
   sources: PlaylistRecommendationSources,
 ): PlaylistRecommendation[] => {
@@ -74,27 +77,42 @@ export const playlistRecommendations = (
   const artistSignals = new Map<string, number>();
   const genreSignals = new Map<string, number>();
   const signals = sources.feedback ?? [];
-  const exact = libraryFinder(signals.map(signal => ({...signal, title: signal.track.title,
-    artist: signal.track.artists.join(" & "), durationMs: signal.track.durationMs ?? 0})));
+  const exact = libraryFinder(
+    signals.map((signal) => ({
+      ...signal,
+      title: signal.track.title,
+      artist: signal.track.artists.join(" & "),
+      durationMs: signal.track.durationMs ?? 0,
+    })),
+  );
   for (const signal of signals) {
     for (const name of signal.track.artists) {
       const key = catalogSeedKey(name);
       if (key !== null) artistSignals.set(key, (artistSignals.get(key) ?? 0) + signal.value * 0.18);
     }
-    if (graph !== null) for (const near of artistNeighbourhood(graph, signal.track.artists))
-      artistSignals.set(near.key, (artistSignals.get(near.key) ?? 0) + signal.value * near.closeness * 0.08);
+    if (graph !== null)
+      for (const near of artistNeighbourhood(graph, signal.track.artists))
+        artistSignals.set(
+          near.key,
+          (artistSignals.get(near.key) ?? 0) + signal.value * near.closeness * 0.08,
+        );
     const genres = genreProfile([signal.track]) ?? profileOf(signal.track.artists[0] ?? "");
     for (const [family, share] of genres ?? [])
       genreSignals.set(family, (genreSignals.get(family) ?? 0) + signal.value * share * 0.06);
   }
   const adjustment = (track: PlaylistRecommendationTrack) => {
-    const artist = track.artists.reduce((sum, name) => sum + (artistSignals.get(catalogSeedKey(name) ?? "") ?? 0), 0) / Math.max(1, track.artists.length);
+    const artist =
+      track.artists.reduce(
+        (sum, name) => sum + (artistSignals.get(catalogSeedKey(name) ?? "") ?? 0),
+        0,
+      ) / Math.max(1, track.artists.length);
     const genres = genreProfile([track]) ?? profileOf(track.artists[0] ?? "");
     let genre = 0;
     for (const [family, share] of genres ?? []) genre += (genreSignals.get(family) ?? 0) * share;
     return Math.max(-0.35, Math.min(0.35, artist + genre + (exact(track)?.value ?? 0) * 0.1));
   };
   const present = playlistRecordingMatch(playlist);
+  const excluded = playlistRecordingMatch(sources.exclude ?? []);
   const local = library.filter((track) => track.available !== false);
   const localRecording = playlistRecordingMatch(local);
   const tracks: PlaylistRecommendationTrack[] = [
@@ -142,6 +160,7 @@ export const playlistRecommendations = (
       track === undefined ||
       candidate.affinity !== "match" ||
       present(track) !== null ||
+      excluded(track) !== null ||
       playlist.some(
         (seed) => seed.id === track.id || (seed.videoId !== "" && seed.videoId === track.videoId),
       )
@@ -168,8 +187,15 @@ export const playlistRecommendations = (
       b.score - a.score ||
       a.track.id.localeCompare(b.track.id),
   );
+  return result;
+};
+
+export const playlistRecommendations = (
+  playlist: readonly PlaylistRecommendationTrack[],
+  sources: PlaylistRecommendationSources,
+): PlaylistRecommendation[] => {
   const picked: PlaylistRecommendation[] = [];
-  for (const candidate of result) {
+  for (const candidate of rankedPlaylistRecommendations(playlist, sources)) {
     if (playlistRecordingMatch(picked.map((item) => item.track))(candidate.track) !== null)
       continue;
     picked.push(candidate);
