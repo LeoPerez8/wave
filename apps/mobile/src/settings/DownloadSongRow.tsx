@@ -79,7 +79,7 @@ export function DownloadSongRow({
           </Text>
           <Text className="font-sans text-footnote text-secondary">{line}</Text>
           {detail !== null && (
-            <Text numberOfLines={3} className="font-sans text-footnote text-tertiary">
+            <Text numberOfLines={3} className="font-sans text-footnote text-secondary">
               {detail}
             </Text>
           )}

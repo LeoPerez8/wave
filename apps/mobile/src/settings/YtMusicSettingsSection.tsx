@@ -32,7 +32,7 @@ function AccountRow({ account, onSignOut }: { account: YtAccount; onSignOut: () 
     <>
       <View
         accessible
-        accessibilityLabel={`Signed in as ${account.name}`}
+        accessibilityLabel={`Signed in as ${account.name}${account.email === null ? "" : `, ${account.email}`}`}
         className="flex-row items-center"
         style={{ minHeight: grid.row, gap: CELL * 1.5 }}
       >
