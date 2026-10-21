@@ -38,24 +38,35 @@ export function ScanProgressBanner() {
   const incremental = scan.kind === "incremental";
   if (incremental && (!reading || toRead === 0)) return null;
   const fraction = reading && toRead > 0 ? scan.filesRead / toRead : 0;
+  const title = incremental
+    ? "Updating your library"
+    : reading
+      ? "Adding songs to your library"
+      : "Looking for music";
+  const detail = incremental
+    ? `${count(scan.filesRead)} of ${count(toRead)} new or changed files read`
+    : reading
+      ? `${count(scan.filesRead)} of ${count(toRead)} files indexed`
+      : `${count(scan.filesFound)} files found`;
   return (
-    <View accessibilityRole="progressbar" style={{ gap: CELL, paddingBottom: CELL * 3 }}>
-      <CatalogLine tone="accent">
-        {incremental
-          ? "Updating your library"
-          : reading
-            ? "Adding songs to your library"
-            : "Looking for music"}
-      </CatalogLine>
+    <View
+      accessible
+      accessibilityRole="progressbar"
+      accessibilityLabel={title}
+      accessibilityState={{ busy: true }}
+      accessibilityValue={
+        reading && toRead > 0
+          ? { min: 0, max: toRead, now: Math.min(scan.filesRead, toRead), text: detail }
+          : { text: detail }
+      }
+      style={{ gap: CELL, paddingBottom: CELL * 3 }}
+    >
+      <CatalogLine tone="accent">{title}</CatalogLine>
       <Text
         className="font-sans text-footnote text-secondary"
         style={{ fontVariant: ["tabular-nums"] }}
       >
-        {incremental
-          ? `${count(scan.filesRead)} of ${count(toRead)} new or changed files read`
-          : reading
-            ? `${count(scan.filesRead)} of ${count(toRead)} files indexed`
-            : `${count(scan.filesFound)} files found`}
+        {detail}
       </Text>
       <View className="bg-separator" style={{ height: CELL / 4 }}>
         <View
