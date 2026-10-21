@@ -19,6 +19,8 @@ export function AndroidBack(): null {
   const entries = useOverlayEntries();
   const selecting = useIsSelecting();
   const [confirmation] = useState(createBackExitConfirmation);
+  // Opening/closing a card or selection cancels an earlier root exit attempt.
+  // oxlint-disable-next-line react/exhaustive-effect-dependencies -- these state changes deliberately reset the window
   useEffect(() => confirmation.reset(), [confirmation, entries, selecting]);
   useEffect(() => {
     if (Platform.OS !== "android") return;
