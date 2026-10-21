@@ -503,6 +503,8 @@ export function YtSongList({
     <View className="flex-1 bg-background">
       <ScreenHeader />
       <LegendList
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
         scrollEnabled={scrollable}
         ref={list}
         className="flex-1"
