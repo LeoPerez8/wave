@@ -56,3 +56,25 @@ duration, recommended accessibility timeout and TalkBack announcement/action
 handling are reused unchanged; on-device TalkBack/expiry checks remain pending.
 Proposed spec addition: removing playlist entries offers the normal action-toast
 Undo, restoring that operation's original entries and relative positions.
+
+## #540 — Discover suggestion grid
+
+Discover's Magic Queue seed suggestions now pick nine songs and lay out as
+three columns at default phone text size, with two-line titles inside artwork.
+The caption uses white text on an 80% black plate: even over pure white art,
+the plate is at most #333 (calculated contrast with white is about 12.6:1).
+The same plate covers missing artwork. Full title, artist, album and seed
+purpose are read by the button; decorative image/text children are hidden from
+accessibility. Tap starts the same seed, long-press opens the same actions,
+and pull refresh, its accessibility action, and crossfades are retained.
+
+At font scale 1.3 the layout becomes two columns; at 2.0, one. Narrow widths
+also reduce columns to retain 48dp targets. Caption height grows with font
+scale rather than disabling scaling. Older saved ten-song suggestions shrink
+immediately to their first nine seeds. Public picker tests cover nine unique
+songs, refresh/Undo and that persisted transition. Active Queue batch size and
+ordering are unchanged. No screenshots, real artwork comparison, TalkBack or
+large-text device validation were performed by this child. Parent should
+capture default/1.3x and light/dark, including long titles and missing art.
+Proposed spec update: Discover's Magic Queue suggestions use this adaptive
+grid; replace its earlier ten-song carousel description.

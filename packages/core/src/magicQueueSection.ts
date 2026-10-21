@@ -1,5 +1,5 @@
 /**
- * Home's Magic Queue section (docs/spec.md, Magic Queue): 10 of the
+ * Home's Magic Queue section (docs/spec.md, Magic Queue): nine of the
  * Library's songs to start a Magic Queue from with one tap, picked at random
  * but leaning on the taste profile (favorites and most played likelier,
  * songs the owner skips less likely). A new list each day; pulling the
@@ -14,7 +14,7 @@ import { tasteWeight, type TasteProfile } from "./tasteProfile.ts";
 import { pickWeighted, type RandomSource } from "./weightedPick.ts";
 
 /** How many songs the section shows. */
-export const MAGIC_QUEUE_PICKS = 10;
+export const MAGIC_QUEUE_PICKS = 9;
 
 /** What the section shows, as it's kept on the phone. */
 export interface MagicQueuePicks {
@@ -76,7 +76,7 @@ const pickAvoiding = (
  * Whether what the section shows ([saved], null for nothing yet) needs
  * picking at [now] with the Library's playable [songs]: nothing picked yet,
  * picked on another day, a song of it gone from the Library, or fewer than
- * 10 songs while the Library has more. Asks nothing of the taste profile.
+ * nine songs while the Library has more. Asks nothing of the taste profile.
  */
 export const magicQueuePicksDue = (
   saved: MagicQueuePicks | null,
@@ -86,6 +86,7 @@ export const magicQueuePicksDue = (
   if (saved === null || saved.day !== localDay(now)) return true;
   const there = new Set(songs.map((candidate) => candidate.trackId));
   return (
+    saved.trackIds.length > MAGIC_QUEUE_PICKS ||
     saved.trackIds.some((id) => !there.has(id)) ||
     saved.trackIds.length < Math.min(MAGIC_QUEUE_PICKS, there.size)
   );
@@ -96,7 +97,7 @@ export const magicQueuePicksDue = (
  * for nothing yet) and the Library's playable [songs]: [saved] itself unless
  * it's due (`magicQueuePicksDue`); a new list on a new day. A song gone from
  * the Library since is replaced in its place (by one not shown today where
- * others are left), and a list short of 10 songs fills up as the Library
+ * others are left), and a list short of nine songs fills up as the Library
  * grows.
  */
 export const magicQueuePicks = (
@@ -111,7 +112,8 @@ export const magicQueuePicks = (
     return { day, trackIds, shownToday: trackIds };
   }
   const there = new Set(songs.map((candidate) => candidate.trackId));
-  const kept = saved.trackIds.filter((id) => there.has(id));
+  const previous = saved.trackIds.slice(0, MAGIC_QUEUE_PICKS);
+  const kept = previous.filter((id) => there.has(id));
   const added = pickAvoiding(
     songs,
     Math.min(MAGIC_QUEUE_PICKS, there.size) - kept.length,
@@ -120,7 +122,7 @@ export const magicQueuePicks = (
   );
   // Each gone song's place takes the next one picked; the rest join at the end.
   let next = 0;
-  const trackIds = saved.trackIds.flatMap((id) =>
+  const trackIds = previous.flatMap((id) =>
     there.has(id) ? [id] : next < added.length ? [added[next++]!] : [],
   );
   trackIds.push(...added.slice(next));
