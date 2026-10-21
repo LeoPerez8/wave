@@ -138,13 +138,7 @@ export const pinchFraming = (
 
 /** A semantic alternative to dragging and pinching, named for how the photo moves. */
 export type FramingAdjustment =
-  | "moveLeft"
-  | "moveRight"
-  | "moveUp"
-  | "moveDown"
-  | "zoomIn"
-  | "zoomOut"
-  | "reset";
+  "moveLeft" | "moveRight" | "moveUp" | "moveDown" | "zoomIn" | "zoomOut" | "reset";
 
 /** Moves the photo by a tenth of the crop width or zooms one step around its centre. */
 export const adjustFraming = (
