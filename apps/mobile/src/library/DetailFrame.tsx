@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { View } from "react-native";
 
 import { grid } from "@/catalog/grid";
+import { TrackSkeletons } from "@/catalog/Skeletons";
 import { EmptyState } from "@/components/EmptyState";
 import { ScreenHeader } from "@/components/ScreenHeader";
 
@@ -30,7 +31,11 @@ export function DetailFrame<A>({ detail, noun, title, goneMessage, children }: P
             message={goneMessage ?? "Its files are no longer in your music folders."}
           />
         </View>
-      ) : detail === undefined ? null : (
+      ) : detail === undefined ? (
+        <View style={{ paddingHorizontal: grid.margin }}>
+          <TrackSkeletons label={`Loading ${noun}`} />
+        </View>
+      ) : (
         children(detail)
       )}
     </View>
