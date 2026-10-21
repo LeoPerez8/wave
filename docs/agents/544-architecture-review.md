@@ -87,7 +87,17 @@ or second hypothetical adapter is introduced.
 
 ## Final review
 
-Pending independent architecture exploration/confirmation and combined-branch
-Standards/Spec review. The HTML before/after report is generated in the OS temp
-directory and shown through T3's HTML renderer. This review does not establish
-phone performance or device accessibility evidence; those remain in #545/#534.
+Independent exploration of the combined implementation is recorded in
+[544-independent-confirmation.md](544-independent-confirmation.md), and the two
+review axes in [534-code-review.md](534-code-review.md). The independent deletion
+tests confirm preserving route literals, deferring a universal preparation module,
+and rejecting a LibraryStore split by size. They qualify the shared-read claim:
+playlist input reads the catalog directly, and Add validation currently reads
+recommendation-only data it does not need. That is an observed redundant read,
+not a measured phone-performance regression; the review-fix slice will record
+a bounded correction or explicit deferral.
+
+The HTML before/after report is generated in the OS temp directory. The resumed
+HTML preview reports an AppArmor sandbox restriction on this host; this does not
+establish a visual browser pass. No phone-performance or native accessibility
+evidence is inferred from source review; those remain in #545/#534.

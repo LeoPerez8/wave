@@ -1,0 +1,157 @@
+# Integrated ticket review
+
+Fixed point: `61b0eaea...c1e18c18`. Independent Standards and Spec axes, run before final fixes. Both read the originating tickets and repository requirements; the parent owns tests and device evidence.
+
+## Standards
+
+# Standards review supporting notes
+
+Fixed reviewed source: `c1e18c18`; base: `61b0eaeacc2e980cb00b2bc1d4f1f85d634cd485`. Scope #534-562 except released #536, plus #564. Read repository instructions, product/spec/design rules, original ticket files and supplied verification reports. No repository edits/commits, remote writes or device access. Parent is performing full tests and emulator work.
+
+## P2 — Renewal does not enforce changed favorite/download priority (high confidence)
+
+- Changed hunk: `packages/core/src/playlistRecommendationSession.ts:98-114`, especially 100-110.
+- Requirement: #560 says every eligible favorite/download that fits in five is included, and changes are reflected on next recommendation renewal; `docs/spec.md:224` documents that policy.
+- `renew()` derives the new ranked order but keeps every previous track that is still eligible, regardless of its rank, then fills only null slots. With five eligible ordinary tracks already visible, no new favorite/download outside the five can displace one. `PlaylistRecommendations.tsx:83-87` invokes this method for external membership/YT availability changes.
+- Public API reproduction run with `node --input-type=module` importing `packages/core/src/index.ts`: seed and a-h are matching Library tracks (Radiohead, Rock, same album; unique titles). Initial `renew()` => a,b,c,d,e. Set h.favorite=true, add another seed member and await `renew()` => a,b,c,d,e. The public `playlistRecommendations` selector with identical updated inputs => h,a,b,c,d. Download status exercises the same retained-slot branch.
+- Existing `playlistRecommendationSession.test.ts:19` verifies changed status when a dismissal creates a hole, not a full renewal. The real-store status test at `db/playlistRecommendations.test.ts:381` calls the stateless selector, so it does not cover this controller defect.
+- Correction should distinguish a full renewal from Add/Dismiss single-slot refill. Keep unaffected offers stable for the latter, as #561/#562 require, while satisfying priority during an actual renewal.
+
+## P2 — Recommendation rows cannot display their playing state (high confidence)
+
+- Changed hunk: `apps/mobile/src/library/PlaylistRecommendations.tsx:127-139`; playback is initiated at 88-91.
+- Hard documented rule: `apps/mobile/DESIGN.md:169,239` marks the playing track's title in ember with a wavy underline; #538 requires correct current identity wherever its rows appear.
+- The new footer renders `TrackRow` without `state`, subscribes to no current-playing state, and supplies no equivalent indicator. `catalog/TrackRow.tsx:118` computes playing solely from `state === "playing"`. Tapping a recommendation plays it, but its visible recommendation row remains in the ordinary style and never exposes the existing "now playing" accessibility annotation. All existing major list adapters changed in #538 use `useCurrentPlayingIds`; this new consumer was omitted.
+- Use the shared identity hook and pass TrackRow's playing state for both Library and yt IDs. This finding follows the explicit props/renderer contract; no hardware behavior is inferred.
+
+## P3 — Recommendation action glyphs bypass the documented icon-button standard (high confidence)
+
+- Changed hunk: `apps/mobile/src/library/PlaylistRecommendations.tsx:142-166`, glyphs specifically at 153 and 166.
+- Hard rule: `apps/mobile/DESIGN.md:285` requires 24dp, 1.5-stroke teal icon buttons, disabled pewter; the shared `components/IconButton.tsx` implements that shape, tone, depth and haptic.
+- Both newly active actions render 20dp icons using `secondary` and omit strokeWidth; disabled retains that color with opacity. Add/Dismiss therefore present different active/disabled glyph treatment from the documented shared control. Their 48dp target sizes are correct. Reuse the standard visual treatment while retaining per-offer busy semantics.
+
+## Architecture and evidence boundary
+
+See `architecture-confirmation.md` for independent hotspot exploration, deletion-test conclusions, query-level qualification and all twelve mandatory smells. No additional mandatory smell is promoted to a confirmed violation. No findings based on missing phone evidence: #537/#541/#542 gesture/source reproduction and #545/#546 release measurements retain their documented real limitations. The parent advanced HEAD after the review began; later documentation/menu-typing changes are outside the pinned diff, and do not change the recommendation findings.
+
+## Spec
+
+# Spec review of the saved open-ticket implementation
+
+Reviewed `61b0eaea...c1e18c18`, with the requested `git log 61b0eaea..HEAD --oneline` read at review start (39 commits, HEAD was c1e18c18). The parent subsequently advanced HEAD with f3994587 and 985aad5a while this review was running; none changes the three implementation files cited below. No repository edits, commits, remote mutations, device access, or full test run were performed. Two minimal Core API scenarios were executed with Node to verify the findings. GitHub reads for #558, #560 and #564 confirmed the original requirements and no comments.
+
+Read CLAUDE.md, CONTEXT.md, docs/agents/issue-tracker.md, the applicable product-spec sections, original tickets, and the five supplied implementation/evidence documents. This is a Spec-axis review, not the separate Standards audit.
+
+## P2 / (c) Wrong genre fallback changes eligibility
+
+Code: `packages/core/src/playlistRecommendations.ts:82-90`, especially line 87.
+
+Requirement: `docs/spec.md:350`: "An artist's genre profile is the share of each genre family"; `docs/spec.md:222`: "Playlist similarity leads: compatible songs, artists and genres." Original #559 line 14: "Playlist similarity is the primary ranking factor: track similarity, artist similarity and genre similarity."
+
+When none of the playlist entries has a genre tag (the normal case for streamed playlist entries), fallback calls `profileOf(name)?.keys()` and converts every key to one equally weighted synthetic genre-tagged song. This discards the cached artist profile's shares. A valid cached profile of Pop 90%, Metal 10% becomes Pop 50%, Metal 50%, so a pure Metal candidate passes the shared 0.5 cosine gate even with no artist/radio relation. The actual weighted affinity is only 0.11043152607484655; the implementation offers the candidate with a score of 0.7071067811865475. This is an eligibility defect, not a limitation of unavailable/coarse metadata: the correct shares were supplied and thrown away.
+
+Minimal public-API reproduction (from repository root):
+
+```js
+import { playlistRecommendations } from "./packages/core/src/playlistRecommendations.ts";
+import { genreAffinity } from "./packages/core/src/genreAffinity.ts";
+const song = (id, fields = {}) => ({
+  id,
+  source: "library",
+  videoId: "",
+  title: id,
+  artists: ["Seed Artist"],
+  album: null,
+  albumId: null,
+  durationMs: 180000,
+  artworkUrl: null,
+  explicit: false,
+  ...fields,
+});
+const seed = song("yt:seed", { source: "stream", videoId: "seed" });
+const metal = song("metal", { artists: ["Metal Artist"], genre: "Metal" });
+const profile = new Map([
+  ["pop", 0.9],
+  ["metal", 0.1],
+]);
+console.log(genreAffinity(profile, new Map([["metal", 1]])));
+console.log(
+  playlistRecommendations([seed], {
+    library: [metal],
+    catalog: [],
+    graph: null,
+    now: 0,
+    profileOf: (name) => (name === "Seed Artist" ? profile : undefined),
+  }),
+);
+```
+
+Confirmed output: actual weighted affinity 0.11043152607484655, yet a recommendation for `metal` with score 0.7071067811865475.
+
+## P2 / (c) Full renewal does not enforce renewed favorite/download priority
+
+Code: `packages/core/src/playlistRecommendationSession.ts:99-110`.
+
+Requirement: original #560 line 16: "Favorite/download status changes are reflected on the next recommendation renewal." `docs/spec.md:224`: "If five slots can hold all qualifying favorites/downloads, all are included" and "The next renewal reflects changes to those statuses."
+
+`renew()` computes the updated ranked order but uses it only as a map of eligibility for every existing slot, then fills only null slots. With five eligible ordinary offers already visible, a newly favorited/downloaded eligible candidate outside the five never gets a slot on renewal. This is distinct from the explicitly required Add/Dismiss behavior of preserving four other slots. A _full_ renewal also preserves all five, defeating the priority guarantee.
+
+Minimal public-API reproduction:
+
+```js
+import { playlistRecommendationSession } from "./packages/core/src/playlistRecommendationSession.ts";
+const track = (id) => ({
+  id,
+  source: "library",
+  videoId: "",
+  title: id,
+  artists: ["Radiohead"],
+  album: "OK Computer",
+  albumId: null,
+  durationMs: 180000,
+  artworkUrl: null,
+  explicit: false,
+  genre: "Rock",
+});
+const seed = track("seed");
+let library = [seed, ..."abcdefgh".split("").map(track)],
+  id = 0;
+const session = playlistRecommendationSession({
+  newId: () => String(++id),
+  read: async () => ({ playlist: [seed], sources: { library, catalog: [], graph: null, now: 0 } }),
+  dismiss: async () => {},
+});
+await session.renew();
+console.log(session.get().slots.map((x) => x?.track.id));
+library = library.map((x) => ({ ...x, favorite: x.id === "h" }));
+await session.renew();
+console.log(session.get().slots.map((x) => x?.track.id));
+```
+
+Confirmed output: `[a,b,c,d,e]` before and `[a,b,c,d,e]` after. The initial ranking tests correctly prioritize h, but the actual controller does not apply that selection to occupied slots. The existing session test covers refill after Dismiss, not full renewal.
+
+## P2 / (a) New recommendation rows omit shared song actions
+
+Code: `apps/mobile/src/library/PlaylistRecommendations.tsx:127-140`.
+
+Requirement: `docs/spec.md:232`: "one shared gesture for every list of song rows"; `docs/spec.md:332`: a streaming song's "long-press menu has Play Next, Add to Queue, Add to Playlist, Go to Album" and Go to Artist/Download.
+
+Unlike `DiscoverSongRow` and the surrounding playlist entries, the footer renders a bare `TrackRow` with only `onPress`. It supplies neither `onLongPress` nor `swipe` nor accessibility actions. `TrackRow` does not install them by default. Consequently the footer has no song menu or swipe actions; the visible Add/Dismiss controls are its only non-play actions. This is confirmed by source wiring and does not depend on hardware timing.
+
+## P2 / (a) New recommendation rows never show the playing indicator
+
+Code: `apps/mobile/src/library/PlaylistRecommendations.tsx:127-140` (same integration point, separate missing state).
+
+Requirement: original #538 line 15: "The correct row remains marked across Library, playlist and online representations where the song appears."
+
+The footer permits playback on tap but does not subscribe to `useCurrentPlayingIds` or pass `state` to `TrackRow`. `TrackRow` marks the title, wavy underline and selected accessibility state only when `state === 'playing'`. A playing suggestion therefore never gets a playing indicator, including after its stream is downloaded. The rest of the patch deliberately upgrades the existing Library/playlist/Search/Discover rows to the shared identity hook, but omits this newly integrated list.
+
+## Other axes and evidence
+
+No additional concrete unrequested behavior was established. Source review did not establish an actionable defect in the recommendation acceptance transaction or isolation, playlist Undo, the Magic Queue overlap gate, or the long-press cancellation gate. Existing tests and evidence docs describe those seams; this review does not claim a new full-suite pass or device validation.
+
+Known hardware/device evidence is one outstanding acceptance gap, not repeated code findings: physical S24+ / SM-G985F runs, 120 Hz/performance comparisons, long-press/scroll timing, swipe rebound, TalkBack and final combined-build UI interactions remain subject to the documented parent-owned validation. The parent was running tests and emulator validation concurrently.
+
+## Resolution status
+
+Standards: 3 findings, worst P2 renewal priority and playing state. Spec: 4 findings, worst P2 eligibility, renewal and row integration. Duplicate findings remain under their original axes. Five distinct corrections are being implemented together; final commit and verification will be recorded after review.

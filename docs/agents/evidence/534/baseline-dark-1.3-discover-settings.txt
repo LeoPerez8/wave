@@ -1,0 +1,28 @@
+Page: dev.leoperez.wave
+App: dev.leoperez.wave
+Snapshot: 23 visible nodes (50 total)
+Collapsed 27 Android helper nodes from the agent-facing text snapshot; use --raw or --json for the full hierarchy.
+@e1 [button] "Close"
+@e2 [scroll-area] [scrollable]
+@e3 [scroll-area] "DISCOVER, Magic Queue, Artist mixes, UGO LINDQVIST, Love Running, Shadow Young, ABBEY MARLOW, Home Dance, Young Broken, ADA PRADO, Echo, Slow Heavy, Your Recap is ready, September 2026, Tap to watch, Home" [scrollable]
+  [content below scroll-area hidden]
+@e4 [group] "Home"
+@e6 [button] "Settings"
+@e7 [button] "Your Recap is ready: September 2026"
+@e12 [button] "Discover settings" [selected]
+@e14 [horizontalscrollview] [scrollable]
+@e15 [button] "Echo by Ada Prado, Slow Heavy"
+@e19 [button] "Home Dance by Abbey Marlow, Young Broken"
+@e23 [button] "Love Running by Ugo Lindqvist, Shadow Young"
+@e28 [group] "Building your mixes, busy"
+@e29 [horizontalscrollview] [scrollable]
+@e30 [button] "Now playing: Blue, Ada Duarte"
+@e33 [button] "Play Blue"
+@e34 [button] "Next track"
+@e35 [group] "Home" [selected]
+@e37 [group] "Library"
+@e39 [group] "Playlists"
+@e41 [group] "Search"
+@e42 [seekbar] "New music, Balanced · 60% new"
+@e45 [seekbar] "Genre faithfulness, Balanced"
+@e48 [seekbar] "Popularity, Balanced"
