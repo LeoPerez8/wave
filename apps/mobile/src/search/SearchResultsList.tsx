@@ -117,7 +117,8 @@ const ytAlbumHead = (album: YtArtistAlbum) => ({
 
 const keyExtractor = (row: ResultRow): string => row.key;
 const itemType = (row: ResultRow): ResultRow["type"] => row.type;
-const itemSize = (row: ResultRow): number => HEIGHT[row.type];
+const itemSize = (row: ResultRow): number | undefined =>
+  row.type === "note" || row.type === "capped" ? undefined : HEIGHT[row.type];
 
 type Props = {
   rows: readonly ResultRow[];
@@ -278,7 +279,10 @@ export function SearchResultsList({ rows, onOpen, onShowAll, integrated, selecti
           );
         case "capped":
           return (
-            <View className="justify-center" style={{ height: HEIGHT.capped }}>
+            <View
+              className="justify-center"
+              style={{ minHeight: HEIGHT.capped, paddingVertical: CELL }}
+            >
               <Text className="font-sans text-footnote text-secondary">
                 {`The best ${item.shown.toLocaleString("en")} of ${item.total.toLocaleString("en")}. Keep typing to narrow them down.`}
               </Text>
@@ -341,8 +345,14 @@ export function SearchResultsList({ rows, onOpen, onShowAll, integrated, selecti
         }
         case "note":
           return (
-            <View className="justify-center" style={{ height: HEIGHT.note }}>
-              <Text numberOfLines={2} className="font-sans text-footnote text-secondary">
+            <View
+              className="justify-center"
+              style={{ minHeight: HEIGHT.note, paddingVertical: CELL }}
+            >
+              <Text
+                accessibilityLiveRegion="polite"
+                className="font-sans text-footnote text-secondary"
+              >
                 {item.text}
               </Text>
             </View>
