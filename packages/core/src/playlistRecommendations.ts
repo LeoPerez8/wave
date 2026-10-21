@@ -1,3 +1,4 @@
+import {artistNeighbourhood} from "./artistGraph.ts";
 /** Playlist selection uses the shared recommendation engine; it never reads or writes global taste. */
 import { catalogSeedKey, type CatalogSong } from "./candidateCatalog.ts";
 import { genreProfile, type GenreProfileOf } from "./genreAffinity.ts";
@@ -15,6 +16,10 @@ export interface PlaylistRecommendationTrack extends YtAlbumSong {
   readonly favorite?: boolean;
   readonly downloaded?: boolean;
 }
+export interface PlaylistRecommendationFeedback {
+  readonly track: PlaylistRecommendationTrack;
+  readonly value: -1 | 1;
+}
 export interface PlaylistRecommendation {
   readonly track: PlaylistRecommendationTrack;
   readonly score: number;
@@ -23,6 +28,7 @@ export interface PlaylistRecommendationSources extends Pick<RecommendSources, "g
   readonly library: readonly PlaylistRecommendationTrack[];
   readonly catalog: readonly CatalogSong[];
   readonly profileOf?: GenreProfileOf;
+  readonly feedback?: readonly PlaylistRecommendationFeedback[];
   readonly favoriteVideos?: ReadonlySet<string>;
   readonly online?: boolean;
   readonly ytMusicEnabled?: boolean;
@@ -65,6 +71,29 @@ export const playlistRecommendations = (
         ),
       ),
     );
+  const artistSignals = new Map<string, number>();
+  const genreSignals = new Map<string, number>();
+  const signals = sources.feedback ?? [];
+  const exact = libraryFinder(signals.map(signal => ({...signal, title: signal.track.title,
+    artist: signal.track.artists.join(" & "), durationMs: signal.track.durationMs ?? 0})));
+  for (const signal of signals) {
+    for (const name of signal.track.artists) {
+      const key = catalogSeedKey(name);
+      if (key !== null) artistSignals.set(key, (artistSignals.get(key) ?? 0) + signal.value * 0.18);
+    }
+    if (graph !== null) for (const near of artistNeighbourhood(graph, signal.track.artists))
+      artistSignals.set(near.key, (artistSignals.get(near.key) ?? 0) + signal.value * near.closeness * 0.08);
+    const genres = genreProfile([signal.track]) ?? profileOf(signal.track.artists[0] ?? "");
+    for (const [family, share] of genres ?? [])
+      genreSignals.set(family, (genreSignals.get(family) ?? 0) + signal.value * share * 0.06);
+  }
+  const adjustment = (track: PlaylistRecommendationTrack) => {
+    const artist = track.artists.reduce((sum, name) => sum + (artistSignals.get(catalogSeedKey(name) ?? "") ?? 0), 0) / Math.max(1, track.artists.length);
+    const genres = genreProfile([track]) ?? profileOf(track.artists[0] ?? "");
+    let genre = 0;
+    for (const [family, share] of genres ?? []) genre += (genreSignals.get(family) ?? 0) * share;
+    return Math.max(-0.35, Math.min(0.35, artist + genre + (exact(track)?.value ?? 0) * 0.1));
+  };
   const present = playlistRecordingMatch(playlist);
   const local = library.filter((track) => track.available !== false);
   const localRecording = playlistRecordingMatch(local);
@@ -128,7 +157,7 @@ export const playlistRecommendations = (
             track.artists.some((b) => catalogSeedKey(a) === catalogSeedKey(b)),
           ),
       );
-    result.push({ track, score: candidate.score + (sameAlbum ? 0.25 : 0) });
+    result.push({ track, score: candidate.score + (sameAlbum ? 0.25 : 0) + adjustment(track) });
   }
   // oxlint-disable-next-line unicorn/no-array-sort -- fresh results, Hermes lacks toSorted
   const priority = (track: PlaylistRecommendationTrack) =>

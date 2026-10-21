@@ -1969,4 +1969,5 @@ export type {
   PlaylistRecommendation,
   PlaylistRecommendationTrack,
   PlaylistRecommendationSources,
+  PlaylistRecommendationFeedback,
 } from "./playlistRecommendations.ts";
