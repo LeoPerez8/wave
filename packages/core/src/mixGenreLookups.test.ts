@@ -274,7 +274,7 @@ describe("The genres a Magic Queue's Library songs look up", () => {
     ]);
   });
 
-  test("are none while the seed has no genre known: every song passes", () => {
+  test("are none while the seed has no genre known: resolve the seed first", () => {
     const unknown = { ...session, seedProfile: null, radioArtists: ["U9"] };
     assert.deepEqual(magicLibraryLookups(unknown, { artists, songs }, { profileOf }), []);
   });

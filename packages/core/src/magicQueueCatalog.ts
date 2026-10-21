@@ -14,6 +14,7 @@ import { mixRecordingOf } from "./discoverMixes.ts";
 import { catalogRadiosReadAt, harvestNext, type HarvestRun } from "./harvest.ts";
 import {
   magicArtistKey,
+  magicGenreMatches,
   magicSeedProfile,
   magicSessionWeight,
   magicYtSong,
@@ -21,6 +22,7 @@ import {
   type MagicYtCandidate,
 } from "./magicQueue.ts";
 import { recommend, type RecommendOptions, type RecommendSources } from "./recommend.ts";
+import { GENRE_AFFINITY_THRESHOLD } from "./genreAffinity.ts";
 import { ytTrackId, type YtSong } from "./ytMusic.ts";
 
 /**
@@ -77,17 +79,25 @@ export const magicCatalogCandidates = (
   sources: RecommendSources,
   { inLibrary, playable, engine = {} }: MagicCatalogOptions,
 ): MagicCatalogPick => {
-  const ranked = recommend(
-    { artists: session.radioArtists, profile: magicSeedProfile(session, sources.profileOf) },
-    sources,
-    engine,
-  );
+  const profile = magicSeedProfile(session, sources.profileOf);
+  if (profile === null || profile.size === 0) return { candidates: [], left: 0 };
+  const ranked = recommend({ artists: session.radioArtists, profile }, sources, engine);
   const used = new Set(session.used);
   const excluded = new Set(session.excludedArtists);
   const seen = new Set<string>();
   const scored: { readonly candidate: MagicCatalogCandidate; readonly score: number }[] = [];
   for (const { song, affinity, score } of ranked) {
     if (affinity !== "match") continue;
+    if (
+      !song.artists.some((artist) =>
+        magicGenreMatches(
+          profile,
+          sources.profileOf(artist),
+          engine.threshold ?? GENRE_AFFINITY_THRESHOLD,
+        ),
+      )
+    )
+      continue;
     const recording = mixRecordingOf(song);
     if (seen.has(recording)) continue;
     seen.add(recording);

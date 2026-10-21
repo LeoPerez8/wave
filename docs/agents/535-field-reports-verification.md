@@ -1,7 +1,10 @@
 # Owner field reports #535: implementation and verification
 
-Work branch: `feat/535-field-reports-fixes`, based on integration
-`feat/534-resolve-open-tickets` at `61b0eaea`. Ticket bodies and live comments
+Original work branch: `feat/535-field-reports-fixes`, based on integration
+`feat/534-resolve-open-tickets` at `61b0eaea`. Resumed in the bound worktree on
+`fix/535-field-report-fixes`, starting at integration `7535e59e`, by merging
+the original four issue commits through `b9d7d9cd`; the old worktree was not edited.
+Ticket bodies and live comments
 read on 2026-10-21, including #528 and PR #533. No physical device validation
 has been performed here; the parent owns the emulator. No build/device is
 inferred for reports other than the Android Back report explicitly identified
@@ -78,3 +81,47 @@ large-text device validation were performed by this child. Parent should
 capture default/1.3x and light/dark, including long titles and missing art.
 Proposed spec update: Discover's Magic Queue suggestions use this adaptive
 grid; replace its earlier ten-song carousel description.
+
+## #541 — Balanced genre safety
+
+Live #541 has no further comments. Reported: a Jack Johnson seed, Balanced,
+with Rage Against the Machine and Bring Me the Horizon recommendations.
+**Unknown original evidence:** seed song/title; which slider "Balanced"
+referred to (New music, Genre faithfulness, or both); each candidate's title
+and Library/YouTube Music source; seed and candidate file tags/artist profiles;
+APK version/build/SHA, device and date. Do not reuse #535's Back-report metadata.
+The current integration contains #528's #533 merge `39ed6239`; whether the
+original APK did is unknown. These regressions use representative explicit
+acoustic/folk/soft-rock/pop versus rap-rock/metal profiles, not recovered
+metadata or a reproduction of those actual recordings.
+
+The existing cosine rule could admit a mostly incompatible profile through a
+minor shared family. Magic Queue now also requires shared genre mass: sum of
+the minimum shares for each family. Balanced requires 0.5 overlap; the other
+steps use their existing thresholds (0.8, 0.65, 0.35, 0.2). This is a general
+profile rule with no artist-name special cases. Both Library and catalog gates
+run for every batch, before learned taste/weights pick songs; refill metadata
+lookups use the same gate and slider threshold. Mixes retain their cosine rule.
+
+An untagged seed still resolves its radio artists' Library/Deezer profiles.
+When nothing can resolve its genre, non-Wander recommendations are withheld
+instead of silently accepting everything. Unknown candidate metadata also stays
+out. Library Wander alone permits any genre (including unknown); YouTube Music
+Wander retains a 0.2 overlap/affinity requirement, a known seed and known artist
+profile, plus its existing catalog/radio, exclusion, cache and network rules.
+This can produce shorter/empty batches when metadata is unavailable or lookups
+are disabled; it does not substitute unrelated songs to fill the queue.
+
+Public regression evidence: first 9 then three 10-song batches with both
+sources; incompatible candidates rejected before picking; compatible neighbours
+retained; unknown/null/empty seed profiles; all five settings and online Wander
+restrictions; artist fallback and missing candidate metadata in existing #528
+tests; refill looks beyond cosine-only matches. New behavior tests were seen
+failing before each fix. Existing public mix tests remain unchanged.
+
+Proposed spec addition: Magic Queue uses shared genre mass at the existing
+Genre faithfulness thresholds, and an unknown seed cannot establish a safe
+match. Coarse or inaccurate tags cannot distinguish styles they label
+identically; the reported songs need their real metadata collected on the
+owner's APK to judge this case. Physical playback/recommendation validation
+remains pending with the parent.

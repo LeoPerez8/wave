@@ -74,7 +74,12 @@ const inLibraryOf = (library: MagicLibrary) => {
  * artists that decide its next 20 candidates (`magicRadioLookups`, a round
  * at a time). Gives how many songs the radios brought.
  */
-const readRadios = (session: MagicSession, library: MagicLibrary, profileOf: GenreProfileOf) =>
+const readRadios = (
+  session: MagicSession,
+  library: MagicLibrary,
+  profileOf: GenreProfileOf,
+  threshold?: number,
+) =>
   Effect.gen(function* () {
     const radios = yield* Effect.all(
       session.radioArtists.map((name) =>
@@ -86,9 +91,9 @@ const readRadios = (session: MagicSession, library: MagicLibrary, profileOf: Gen
     const inLibrary = inLibraryOf(library);
     const asked: string[] = [];
     for (
-      let names = magicRadioLookups(session, radio, { profileOf, inLibrary, asked });
+      let names = magicRadioLookups(session, radio, { profileOf, inLibrary, asked, threshold });
       names.length > 0;
-      names = magicRadioLookups(session, radio, { profileOf, inLibrary, asked })
+      names = magicRadioLookups(session, radio, { profileOf, inLibrary, asked, threshold })
     ) {
       asked.push(...names);
       yield* lookUpArtistProfiles(names);
@@ -103,12 +108,17 @@ const readRadios = (session: MagicSession, library: MagicLibrary, profileOf: Gen
  * bytes it used, and whether YouTube Music answered (any of its bytes came,
  * even for an artist it doesn't have). Never fails.
  */
-const refill = (session: MagicSession, library: MagicLibrary, profileOf: GenreProfileOf) =>
+const refill = (
+  session: MagicSession,
+  library: MagicLibrary,
+  profileOf: GenreProfileOf,
+  threshold?: number,
+) =>
   Effect.gen(function* () {
     let used: MagicRefill = { bytes: 0, reached: false };
     yield* withNetworkLog(
       "Magic Queue radio",
-      readRadios(session, library, profileOf).pipe(Effect.timeout(RADIO_TIMEOUT)),
+      readRadios(session, library, profileOf, threshold).pipe(Effect.timeout(RADIO_TIMEOUT)),
       (songs) => (songs === 0 ? "no radio" : `${songs} songs`),
       (use) => {
         used = { bytes: networkUseBytes(use), reached: use.ytMusic.bytes > 0 };
@@ -172,7 +182,7 @@ export const magicQueueYtCandidates = (
       taste,
       inLibrary: inLibraryOf(library),
       cached: cachedVideos,
-      refill: refill(session, library, profileOf),
+      refill: refill(session, library, profileOf, engine?.threshold),
       usedOnMobile: noteHarvestMobileUse,
       tried: refillsTried,
       ...(engine === undefined ? {} : { engine }),
