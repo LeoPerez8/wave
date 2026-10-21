@@ -12,6 +12,8 @@ export interface PlaylistRecommendationTrack extends YtAlbumSong {
   readonly genre?: string | null;
   readonly genres?: readonly string[];
   readonly available?: boolean;
+  readonly favorite?: boolean;
+  readonly downloaded?: boolean;
 }
 export interface PlaylistRecommendation {
   readonly track: PlaylistRecommendationTrack;
@@ -21,6 +23,7 @@ export interface PlaylistRecommendationSources extends Pick<RecommendSources, "g
   readonly library: readonly PlaylistRecommendationTrack[];
   readonly catalog: readonly CatalogSong[];
   readonly profileOf?: GenreProfileOf;
+  readonly favoriteVideos?: ReadonlySet<string>;
   readonly online?: boolean;
   readonly ytMusicEnabled?: boolean;
 }
@@ -72,7 +75,14 @@ export const playlistRecommendations = (
       : catalog.flatMap(({ song }) =>
           localRecording(song) !== null
             ? []
-            : [{ ...song, id: `yt:${song.videoId}`, source: "stream" as const }],
+            : [
+                {
+                  ...song,
+                  id: `yt:${song.videoId}`,
+                  favorite: sources.favoriteVideos?.has(song.videoId) === true,
+                  source: "stream" as const,
+                },
+              ],
         )),
   ];
   const byId = new Map(tracks.map((track) => [track.id, track]));
@@ -121,7 +131,14 @@ export const playlistRecommendations = (
     result.push({ track, score: candidate.score + (sameAlbum ? 0.25 : 0) });
   }
   // oxlint-disable-next-line unicorn/no-array-sort -- fresh results, Hermes lacks toSorted
-  result.sort((a, b) => b.score - a.score || a.track.id.localeCompare(b.track.id));
+  const priority = (track: PlaylistRecommendationTrack) =>
+    Number(track.favorite === true || track.downloaded === true);
+  result.sort(
+    (a, b) =>
+      priority(b.track) - priority(a.track) ||
+      b.score - a.score ||
+      a.track.id.localeCompare(b.track.id),
+  );
   const picked: PlaylistRecommendation[] = [];
   for (const candidate of result) {
     if (playlistRecordingMatch(picked.map((item) => item.track))(candidate.track) !== null)

@@ -92,6 +92,8 @@ export function PlaylistRecommendations({
           <TrackRow
             key={song.track.id}
             leading="artwork"
+            favorite={song.track.favorite}
+            downloaded={song.track.downloaded}
             onPress={() => play(song)}
             track={{
               id: song.track.id,

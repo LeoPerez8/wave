@@ -1,3 +1,5 @@
+import { eq } from "drizzle-orm";
+import { selectPendingFavorites } from "./pendingFavorites.ts";
 /** The editable playlist's recommendation inputs, read through the Library store. */
 import { showsExplicitBadge, type PlaylistRecommendationTrack } from "@wave/core";
 import type { SongRow } from "../LibraryStore.ts";
@@ -17,7 +19,26 @@ export const selectPlaylistRecommendationInput = (db: LibraryDatabase, playlistI
       .map((a) => [a.id, a.name]),
   );
   const genres = new Map(selectSongGenres(db).map((track) => [track.id, track.genres]));
+  const favorites = new Set(
+    db
+      .select({ id: schema.favorites.trackId })
+      .from(schema.favorites)
+      .where(eq(schema.favorites.deleted, false))
+      .all()
+      .map((row) => row.id),
+  );
+  const downloads = new Set(
+    db
+      .select({ id: schema.tracks.id, videoId: schema.tracks.videoId })
+      .from(schema.tracks)
+      .all()
+      .filter((row) => row.videoId !== null)
+      .map((row) => row.id),
+  );
+  const favoriteVideos = new Set(selectPendingFavorites(db).map((song) => song.videoId));
   const local = (song: SongRow): PlaylistRecommendationTrack => ({
+    favorite: favorites.has(song.id),
+    downloaded: downloads.has(song.id) && song.path !== null,
     id: String(song.id),
     source: "library",
     videoId: "",
@@ -47,6 +68,6 @@ export const selectPlaylistRecommendationInput = (db: LibraryDatabase, playlistI
             available: entry.source === "stream",
           },
   );
-  return { playlist, library, catalog: selectCandidateCatalog(db) };
+  return { playlist, library, catalog: selectCandidateCatalog(db), favoriteVideos };
 };
 export type PlaylistRecommendationInput = ReturnType<typeof selectPlaylistRecommendationInput>;

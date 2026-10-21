@@ -71,3 +71,47 @@ test("cross-source recordings and catalog duplicates never occupy two slots or r
   );
   assert.deepEqual(playlistRecommendations([], sources), []);
 });
+
+test("every qualifying favorite or download gets a slot before ordinary songs, but unrelated favorites stay out", () => {
+  const seed = track("seed");
+  const library = [
+    seed,
+    track("ordinary"),
+    track("favorite", { artists: ["Slowdive"], favorite: true }),
+    track("download", { artists: ["Blur"], downloaded: true }),
+    track("unrelated", {
+      artists: ["Metal Band"],
+      genre: "Heavy Metal",
+      favorite: true,
+      downloaded: true,
+    }),
+  ];
+  const picks = playlistRecommendations([seed], { library, catalog: [], graph: null, now: 0 });
+  assert.deepEqual(
+    picks.map((x) => x.track.id),
+    ["download", "favorite", "ordinary"],
+  );
+});
+
+test("more than five priority recordings are ordered by compatibility and renewed status is respected", () => {
+  const seed = track("seed");
+  const library = [
+    seed,
+    track("ordinary"),
+    track("favorite-near", { favorite: true, album: "Kid A" }),
+    track("favorite-album", { favorite: true }),
+    ...["a", "b", "c", "d", "e"].map((id) =>
+      track(id, { downloaded: true, artists: ["Slowdive"] }),
+    ),
+  ];
+  const sources = { library, catalog: [], graph: null, now: 0 };
+  assert.deepEqual(
+    playlistRecommendations([seed], sources).map((x) => x.track.id),
+    ["favorite-album", "favorite-near", "a", "b", "c"],
+  );
+  const updated = library.map((t) => ({ ...t, favorite: t.id === "ordinary", downloaded: false }));
+  assert.equal(
+    playlistRecommendations([seed], { ...sources, library: updated })[0]?.track.id,
+    "ordinary",
+  );
+});
