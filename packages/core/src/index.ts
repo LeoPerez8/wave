@@ -1973,3 +1973,5 @@ export type {
   PlaylistRecommendationFeedback,
 } from "./playlistRecommendations.ts";
 export * from "./playlistRecommendationSession.ts";
+export { playingTrackIds } from "./playingIdentity.ts";
+export { createLongPressIntent } from "./longPressIntent.ts";

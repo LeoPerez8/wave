@@ -27,7 +27,7 @@ import type { ArtistRow } from "@/library/LibraryStore";
 import { openAddToPlaylist } from "@/library/PlaylistSheets";
 import { removePlaylistItems } from "@/library/playlists";
 import { currentPath, useCurrentPath } from "@/library/routes";
-import { pressedRect } from "@/motion/pressedRect";
+import { pressedMenuAllowed, pressedRect } from "@/motion/pressedRect";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 import { NO_SWIPE, type RowSwipe } from "@/catalog/SwipeableRow";
 import { CardHeading } from "@/overlay/CardHeading";
@@ -77,9 +77,11 @@ export interface YtSongMenuOptions extends MenuOptions {
  */
 export const openYtSongActions = (song: NativeYtSong, options: YtSongMenuOptions = {}): void => {
   const anchor = pressedRect();
+  const allowed = pressedMenuAllowed();
   // The row stays highlighted meanwhile: the card opens inside the follow-up.
   void followUp(() =>
     libraryArtistsRead().then(() => {
+      if (!allowed()) return;
       openOverlay({
         label: song.title,
         anchor,

@@ -24,7 +24,7 @@ import type {
   SongRow,
 } from "@/library/LibraryStore";
 import { playlistEntries, songsWithIds } from "@/library/sectionSongs";
-import { pressedRect } from "@/motion/pressedRect";
+import { pressedMenuAllowed, pressedRect } from "@/motion/pressedRect";
 import { CardHeading } from "@/overlay/CardHeading";
 import { MenuChoices, type MenuChoice, type PlayCardChoice } from "@/overlay/MenuChoices";
 import { followUp, openOverlay } from "@/overlay/overlay";
@@ -92,8 +92,10 @@ const openActions = (
  */
 const openCollectionActions = (target: ActionItems, options?: MenuOptions): void => {
   const anchor = pressedRect();
+  const allowed = pressedMenuAllowed();
   void followUp(async () => {
     const songs = await readMenuSongs(target);
+    if (!allowed()) return;
     openActions(target, options, anchor, NO_ENTRIES, songs);
   });
 };
@@ -125,8 +127,10 @@ export const openUnsearchedActions = (
  */
 export const openTrackActionsById = (id: number, options: MenuOptions = {}): void => {
   const anchor = pressedRect();
+  const allowed = pressedMenuAllowed();
   void followUp(async () => {
     const [song] = await songsWithIds([id]).catch(() => NO_SONGS);
+    if (!allowed()) return;
     if (song !== undefined) openActions({ kind: "track", items: [{ song }] }, options, anchor);
   });
 };
@@ -138,12 +142,14 @@ export const openTrackActionsById = (id: number, options: MenuOptions = {}): voi
  */
 export const openPlaylistActions = (playlist: PlaylistRow, options?: MenuOptions): void => {
   const anchor = pressedRect();
+  const allowed = pressedMenuAllowed();
   const target: ActionItems = { kind: "playlist", items: [playlist] };
   void followUp(async () => {
     const [entries, songs] = await Promise.all([
       playlistEntries(playlist.id).catch(() => NO_ENTRIES),
       readMenuSongs(target),
     ]);
+    if (!allowed()) return;
     openActions(target, options, anchor, entries, songs);
   });
 };

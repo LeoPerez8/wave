@@ -1,7 +1,8 @@
 import type { SlidePoint } from "@wave/core";
-import { useSyncExternalStore } from "react";
+import { useEffect, useRef, useSyncExternalStore } from "react";
 
 import { makeExternalStore } from "@/lib/externalStore";
+import { traceLongPress } from "./longPressTrace";
 
 /**
  * The finger that long-pressed a `Press` and is still down. Opening a menu
@@ -53,5 +54,13 @@ export const cancelHeldTouch = (): void => {
  * `scrollEnabled`, so sliding onto a menu entry doesn't scroll the list
  * underneath (and take the touch away from the menu).
  */
-export const useListScrollable = (): boolean =>
-  useSyncExternalStore(held.subscribe, () => held.get() === null);
+export const useListScrollable = (): boolean => {
+  const scrollable = useSyncExternalStore(held.subscribe, () => held.get() === null);
+  const previous = useRef(scrollable);
+  useEffect(() => {
+    if (previous.current !== scrollable)
+      traceLongPress(0, "list-scroll-prop-committed", `enabled=${scrollable}`);
+    previous.current = scrollable;
+  }, [scrollable]);
+  return scrollable;
+};

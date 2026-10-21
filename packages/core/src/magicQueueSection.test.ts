@@ -38,16 +38,16 @@ const DAY = 24 * 60 * 60 * 1000;
 const NOON = new Date(2026, 9, 19, 12).getTime();
 
 describe("Home's Magic Queue section", () => {
-  test("shows 10 of the Library's songs, each once", () => {
+  test("shows nine of the Library's songs, each once", () => {
     const songs = library(30);
     const picks = magicQueuePicks(null, songs, { now: NOON, taste: null, random: seeded(1) });
-    assert.equal(picks.trackIds.length, 10);
-    assert.equal(new Set(picks.trackIds).size, 10);
+    assert.equal(picks.trackIds.length, 9);
+    assert.equal(new Set(picks.trackIds).size, 9);
     const ids = new Set(songs.map((candidate) => candidate.trackId));
     assert.ok(picks.trackIds.every((id) => ids.has(id)));
   });
 
-  test("shows the whole Library when it has fewer than 10 songs", () => {
+  test("shows the whole Library when it has fewer than nine songs", () => {
     const picks = magicQueuePicks(null, library(4), { now: NOON, taste: null, random: seeded(1) });
     assert.deepEqual([...picks.trackIds].sort(), ["s1", "s2", "s3", "s4"]);
   });
@@ -83,7 +83,7 @@ describe("Home's Magic Queue section", () => {
       const { trackIds } = magicQueuePicks(null, songs, { now: NOON, taste, random });
       for (const id of trackIds) if (id in shown) shown[id as keyof typeof shown] += 1;
     }
-    // Unweighted, each song shows on a quarter of the days (10 of 40).
+    // Unweighted, each song shows on 9 of every 40 days.
     assert.ok(shown.s1 > shown.s4 * 1.5, JSON.stringify(shown));
     assert.ok(shown.s2 > shown.s4 * 1.5, JSON.stringify(shown));
     assert.ok(shown.s3 < shown.s4 / 1.5, JSON.stringify(shown));
@@ -113,7 +113,7 @@ describe("Home's Magic Queue section", () => {
       random: seeded(2),
     });
     assert.notEqual(tomorrow.day, today.day);
-    assert.equal(tomorrow.trackIds.length, 10);
+    assert.equal(tomorrow.trackIds.length, 9);
     assert.notDeepEqual(tomorrow.trackIds, today.trackIds);
     assert.deepEqual(tomorrow.shownToday, tomorrow.trackIds);
   });
@@ -128,7 +128,7 @@ describe("Home's Magic Queue section", () => {
       taste: null,
       random: seeded(2),
     });
-    assert.equal(later.trackIds.length, 10);
+    assert.equal(later.trackIds.length, 9);
     assert.ok(!later.trackIds.includes(gone));
     assert.deepEqual(
       later.trackIds.filter((_, place) => place !== 3),
@@ -152,7 +152,7 @@ describe("Home's Magic Queue section", () => {
       taste: null,
       random: seeded(2),
     });
-    assert.equal(pulled.trackIds.length, 10);
+    assert.equal(pulled.trackIds.length, 9);
     assert.ok(pulled.trackIds.every((id) => !today.trackIds.includes(id)));
     const again = refreshedMagicQueuePicks(pulled, songs, {
       now: NOON,
@@ -162,7 +162,7 @@ describe("Home's Magic Queue section", () => {
     assert.ok(
       again.trackIds.every((id) => !today.trackIds.includes(id) && !pulled.trackIds.includes(id)),
     );
-    assert.equal(new Set(again.shownToday).size, 30);
+    assert.equal(new Set(again.shownToday).size, 27);
   });
 
   test("once every song was shown today, a pull brings back songs from earlier lists", () => {
@@ -173,12 +173,12 @@ describe("Home's Magic Queue section", () => {
       taste: null,
       random: seeded(2),
     });
-    assert.equal(pulled.trackIds.length, 10);
-    assert.equal(new Set(pulled.trackIds).size, 10);
+    assert.equal(pulled.trackIds.length, 9);
+    assert.equal(new Set(pulled.trackIds).size, 9);
     const fresh = pulled.trackIds.filter((id) => !today.trackIds.includes(id));
-    assert.equal(fresh.length, 5);
+    assert.equal(fresh.length, 6);
     // The fresh songs first.
-    assert.deepEqual(pulled.trackIds.slice(0, 5), fresh);
+    assert.deepEqual(pulled.trackIds.slice(0, 6), fresh);
   });
 
   test("a pull on a new day avoids only that day's songs", () => {
@@ -247,4 +247,19 @@ describe("Home's Magic Queue section", () => {
     assert.equal(magicQueuePicksDue(few, library(4), NOON), false);
     assert.equal(magicQueuePicksDue(few, library(6), NOON), true);
   });
+});
+
+test("a saved ten-song section adapts immediately to nine while retaining its first nine seeds", () => {
+  const saved = {
+    day: "",
+    trackIds: library(10).map((s) => s.trackId),
+    shownToday: library(10).map((s) => s.trackId),
+  };
+  // Use the public picker for the persisted local day format.
+  saved.day = magicQueuePicks(null, library(30), { now: NOON, taste: null, random: seeded(1) }).day;
+  assert.equal(magicQueuePicksDue(saved, library(30), NOON), true);
+  assert.deepEqual(
+    magicQueuePicks(saved, library(30), { now: NOON, taste: null, random: seeded(1) }).trackIds,
+    ["s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9"],
+  );
 });
