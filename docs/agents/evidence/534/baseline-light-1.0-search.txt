@@ -1,0 +1,15 @@
+Page: dev.leoperez.wave
+App: dev.leoperez.wave
+Snapshot: 11 visible nodes (16 total)
+Collapsed 5 Android helper nodes from the agent-facing text snapshot; use --raw or --json for the full hierarchy.
+@e1 [scroll-area] [scrollable]
+@e2 [text-field] "Songs, albums, artists, genres" [editable]
+@e3 [radiobutton] "Library" [selected] [checked]
+@e4 [radiobutton] "Online" [unchecked]
+@e5 [button] "Now playing: Blue, Ada Duarte"
+@e8 [button] "Play Blue"
+@e9 [button] "Next track"
+@e10 [group] "Home"
+@e12 [group] "Library"
+@e14 [group] "Playlists"
+@e16 [group] "Search" [selected]
