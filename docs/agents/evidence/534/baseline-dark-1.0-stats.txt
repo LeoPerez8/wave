@@ -1,0 +1,15 @@
+Page: dev.leoperez.wave
+App: dev.leoperez.wave
+Snapshot: 11 visible nodes (17 total)
+Collapsed 6 Android helper nodes from the agent-facing text snapshot; use --raw or --json for the full hierarchy.
+@e1 [scroll-area] [scrollable]
+@e2 [scroll-area] [scrollable]
+@e3 [button] "Back"
+@e4 [scroll-area] "All time, 12 months, 30 days, 7 days" [scrollable]
+@e5 [group] "Last 7 days"
+@e7 [group] "Last 30 days" [selected]
+@e9 [group] "Last 12 months"
+@e11 [group] "All time"
+@e13 [button] "Now playing: Blue, Ada Duarte"
+@e16 [button] "Play Blue"
+@e17 [button] "Next track"
