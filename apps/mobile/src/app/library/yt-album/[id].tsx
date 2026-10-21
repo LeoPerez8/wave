@@ -13,7 +13,16 @@ export default function YtAlbumScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const browseId = id ?? "";
   const known = useYtListHead("yt-album", browseId);
-  const load = useYtListPage("yt-album", browseId);
+  const { load, retry } = useYtListPage("yt-album", browseId);
   const context = useMemo(() => ({ kind: "ytAlbum", id: browseId }) as const, [browseId]);
-  return <YtSongList known={known} load={load} context={context} numbered albumDownload="album" />;
+  return (
+    <YtSongList
+      known={known}
+      load={load}
+      onRetry={retry}
+      context={context}
+      numbered
+      albumDownload="album"
+    />
+  );
 }

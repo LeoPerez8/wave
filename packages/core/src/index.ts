@@ -95,6 +95,7 @@ export { extrapolatePosition, scrubPosition } from "./position.ts";
 export type { PositionReport, ScrubTouch } from "./position.ts";
 export {
   CENTRE_FRAMING,
+  adjustFraming,
   framingSquare,
   framingText,
   framingView,

@@ -60,7 +60,11 @@ describe("the crop screen", () => {
     const up = adjustFraming(LANDSCAPE, zoomed, "moveUp");
     assert.deepEqual(framingSquare(LANDSCAPE, up), { left: 160, top: 108, side: 480 });
     assert.deepEqual(adjustFraming(LANDSCAPE, up, "reset"), CENTRE_FRAMING);
-    assert.deepEqual(adjustFraming(LANDSCAPE, zoomed, "zoomOut"), CENTRE_FRAMING);
+    assert.deepEqual(framingSquare(LANDSCAPE, adjustFraming(LANDSCAPE, zoomed, "zoomOut")), {
+      left: 100,
+      top: 0,
+      side: 600,
+    });
   });
   test("draws the photo so the framing's square fills the crop square", () => {
     assert.deepEqual(framingView(LANDSCAPE, 300, CENTRE_FRAMING), {

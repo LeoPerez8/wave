@@ -43,6 +43,7 @@ import {
 import { useChromeInset } from "@/chrome/chrome";
 import { EmptyState } from "@/components/EmptyState";
 import { ScreenHeader } from "@/components/ScreenHeader";
+import { TextButton } from "@/components/TextButton";
 import {
   entryText,
   FIND_FIELD_HEIGHT,
@@ -140,8 +141,10 @@ const readPage =
  * playlist shows from its first page on; when a later page fails, the songs
  * already shown stay and `rest` says why the others didn't come.
  */
-export const useYtListPage = (screen: YtListScreen, id: string): YtListLoad => {
-  const key = `${screen}/${id}`;
+export const useYtListPage = (screen: YtListScreen, id: string) => {
+  const [attempt, setAttempt] = useState(0);
+  const retry = useCallback(() => setAttempt((value) => value + 1), []);
+  const key = `${screen}/${id}/${attempt}`;
   const [answer, setAnswer] = useState<{ readonly key: string; readonly load: YtListLoad } | null>(
     null,
   );
@@ -149,7 +152,7 @@ export const useYtListPage = (screen: YtListScreen, id: string): YtListLoad => {
     let current = true;
     const cancel = new AbortController();
     const show = (load: YtListLoad) => {
-      if (current) setAnswer({ key: `${screen}/${id}`, load });
+      if (current) setAnswer({ key, load });
     };
     let shown: YtListPage | null = null;
     const onPage = (page: YtListPage, done: boolean) => {
@@ -173,8 +176,8 @@ export const useYtListPage = (screen: YtListScreen, id: string): YtListLoad => {
       current = false;
       cancel.abort();
     };
-  }, [screen, id]);
-  return answer?.key === key ? answer.load : LOADING;
+  }, [screen, id, key]);
+  return { load: answer?.key === key ? answer.load : LOADING, retry };
 };
 
 type Song = MixedSong<NativeYtSong, SongRow>;
@@ -396,6 +399,7 @@ export function YtSongList({
   numbered,
   albumDownload,
   findable = false,
+  onRetry,
 }: {
   /** What the tapped cover knew, shown until the page arrives. */
   known: YtListHead | undefined;
@@ -414,6 +418,8 @@ export function YtSongList({
    * more pages come, their skeleton rows stay and "No songs match" waits for them.
    */
   findable?: boolean;
+  /** Repeat the existing online page read after a failure. */
+  onRetry?: () => void;
 }) {
   const scrollable = useListScrollable();
   const bottomInset = useChromeInset();
@@ -486,15 +492,18 @@ export function YtSongList({
         />
       )}
       {load.status === "quiet" && (
-        <EmptyState
-          icon={load.reason === "offline" ? IconWifiOff : IconCloudOff}
-          title={load.reason === "offline" ? "You're offline" : "No answer online"}
-          message={
-            load.reason === "offline"
-              ? "These songs need the network."
-              : "Go back and open it again to try once more."
-          }
-        />
+        <>
+          <EmptyState
+            icon={load.reason === "offline" ? IconWifiOff : IconCloudOff}
+            title={load.reason === "offline" ? "You're offline" : "No answer online"}
+            message={
+              load.reason === "offline"
+                ? "These songs need the network."
+                : "The songs couldn't be loaded. Try again."
+            }
+          />
+          {onRetry !== undefined && <TextButton label="Try Again" onPress={onRetry} />}
+        </>
       )}
     </>
   );
