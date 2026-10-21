@@ -266,3 +266,7 @@ Resumed on `chore/resume-polish-audit-551-557` from actual parent baseline `7535
 - Parent reports baseline captures for twelve canonical surfaces in all four theme/font combinations under `/var/www/html/wave/docs/agents/evidence/534/baseline-*.png`; only the Stats dark/1.3 image has been inspected by this agent so far. These supersede the earlier statement that no baseline captures exist. They do not establish correction, TalkBack or performance acceptance.
 
 #554-D source confirmation: mobile TypeScript passes; shared tile width responds to `fontScale`, full month/year has no truncation cap, and the accessible name keeps the unmodified full period label. Candidate render confirmation is still P; parent must capture September on the same API36/font1.3 setup before marking this defect verified.
+
+#### #553 independent critique follow-up
+
+- **553-D / P2 / Accessibility (assessment A):** synced lyric lines also lack a 48dp floor: instrumental dots are 24dp plus 16dp padding (40dp), and a single 28dp text line totals 44dp. Add the same 48dp minimum used for plain lyric selection without altering the gesture/seek handlers. Source confirmation: minimum height applies to every synced lyric target; actual touch/TalkBack remains P.

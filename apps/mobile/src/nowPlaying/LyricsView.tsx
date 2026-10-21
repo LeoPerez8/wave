@@ -217,7 +217,7 @@ const SyncedLine = memo(function SyncedLine({
         depth={0.015}
         style={[
           LINE_INSET,
-          { paddingVertical: CELL },
+          { paddingVertical: CELL, minHeight: CELL * 6 },
           picking && selected && { backgroundColor: selectedFill },
         ]}
       >
