@@ -112,6 +112,8 @@ import {
   linkPlaylistEntries,
   movePlaylistItem,
   removePlaylistItems,
+  restorePlaylistItems,
+  type PlaylistRemoval,
   renamePlaylist,
   replacePlaylistSongs,
   selectPlaylist,
@@ -723,6 +725,10 @@ export class LibraryStore extends Context.Service<
     readonly removePlaylistItems: (
       playlistId: number,
       itemIds: readonly number[],
+    ) => Effect.Effect<PlaylistRemoval, LibraryStoreError>;
+    /** Undo a removal, keeping the original entries and their order. */
+    readonly restorePlaylistItems: (
+      removal: PlaylistRemoval,
     ) => Effect.Effect<void, LibraryStoreError>;
     /**
      * Settles what Try Again found of the playlist's unavailable entries: each
@@ -1438,6 +1444,9 @@ const make = Effect.gen(function* () {
       attempt("remove from the playlist", () =>
         removePlaylistItems(db, playlistId, itemIds, Date.now()),
       ),
+
+    restorePlaylistItems: (removal) =>
+      attempt("restore the playlist entries", () => restorePlaylistItems(db, removal, Date.now())),
 
     settleTryAgain: (playlistId, answered) =>
       attempt("save what Try Again found", () =>

@@ -22,7 +22,7 @@ import type { NativeYtSong } from "@/native/waveYtMusic";
 import { openAlbum, openArtist, openGenre, openPlaylist } from "@/library/routes";
 import { toTrackSummary } from "@/library/TrackList";
 import { playPage } from "@/playback/actions";
-import { useCurrentTrackId } from "@/playback/hooks";
+import { useCurrentPlayingIds } from "@/playback/hooks";
 import {
   openAlbumActions,
   openArtistActions,
@@ -238,10 +238,10 @@ function Hit({
 export function SearchResultsList({ rows, onOpen, onShowAll, integrated, selection }: Props) {
   const scrollable = useListScrollable();
   const bottomInset = useChromeInset();
-  const currentId = useCurrentTrackId();
+  const currentIds = useCurrentPlayingIds();
   const rowState = useMemo(
-    () => ({ currentId, selection: selection.selection, integrated }),
-    [currentId, selection.selection, integrated],
+    () => ({ currentIds, selection: selection.selection, integrated }),
+    [currentIds, selection.selection, integrated],
   );
 
   const renderItem = useCallback(
@@ -262,7 +262,7 @@ export function SearchResultsList({ rows, onOpen, onShowAll, integrated, selecti
               downloaded={item.downloaded}
               artistSongs={item.artistSongs}
               integrated={integrated}
-              playing={item.hit.kind === "song" && String(item.hit.song.id) === currentId}
+              playing={item.hit.kind === "song" && currentIds.has(String(item.hit.song.id))}
               onOpen={onOpen}
               selection={selection}
             />
@@ -291,7 +291,7 @@ export function SearchResultsList({ rows, onOpen, onShowAll, integrated, selecti
               songs={item.songs}
               index={item.index}
               top={item.top}
-              playing={ytTrackId(item.song.videoId) === currentId}
+              playing={currentIds.has(ytTrackId(item.song.videoId))}
               onOpen={onOpen}
               selection={selection}
             />
@@ -351,7 +351,7 @@ export function SearchResultsList({ rows, onOpen, onShowAll, integrated, selecti
           return <TrackSkeletons label="Loading online results" />;
       }
     },
-    [currentId, onOpen, onShowAll, integrated, selection],
+    [currentIds, onOpen, onShowAll, integrated, selection],
   );
 
   return (

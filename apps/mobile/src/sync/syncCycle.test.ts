@@ -25,6 +25,7 @@ import {
   deletePlaylist,
   movePlaylistItem,
   removePlaylistItems,
+  restorePlaylistItems,
   renamePlaylist,
   selectPlaylist,
   selectPlaylists,
@@ -894,4 +895,62 @@ describe("syncCycle", () => {
     assert.deepEqual(selectFavoriteTrackIds(b.db), [b.track("Airbag")]);
     assert.deepEqual(playCounts(b.db), playCounts(a.db));
   });
+});
+
+test("playlist removal and Undo sync the same entries and order to another phone", async () => {
+  const service = testSyncService();
+  const a = await phone(service);
+  const b = await phone(service);
+  const { playlistId } = createPlaylist(
+    a.db,
+    "Undo",
+    [
+      { source: "library", trackId: a.track("Airbag") },
+      {
+        source: "stream",
+        song: {
+          videoId: "stream",
+          title: "Stream",
+          artists: ["Guest"],
+          album: null,
+          durationMs: 180000,
+          artworkUrl: null,
+          explicit: false,
+        },
+      },
+      {
+        source: "unsearched",
+        song: {
+          title: "Pending",
+          artists: ["Guest"],
+          album: null,
+          durationMs: null,
+          artworkUrl: null,
+        },
+      },
+      { source: "library", trackId: a.track("Lucky") },
+    ],
+    a.now(),
+  );
+  await a.sync();
+  await b.sync();
+  const onB = selectPlaylists(b.db)[0]!.id;
+  const original = selectPlaylist(b.db, onB)!.items;
+  const removed = selectPlaylist(a.db, playlistId)!.items.slice(1, 3);
+  const removal = removePlaylistItems(
+    a.db,
+    playlistId,
+    removed.map((e) => e.itemId),
+    a.now(),
+  );
+  await a.sync();
+  await b.sync();
+  assert.deepEqual(
+    selectPlaylist(b.db, onB)!.items.map((e) => e.source),
+    ["library", "library"],
+  );
+  restorePlaylistItems(a.db, removal, a.now());
+  await a.sync();
+  await b.sync();
+  assert.deepEqual(selectPlaylist(b.db, onB)!.items, original);
 });
