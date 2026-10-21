@@ -76,6 +76,8 @@ export interface ScenarioConfig {
    * first screen; null when the fixture names none.
    */
   readonly artist: string | null;
+  /** The playlist push-playlist opens, visible on Library › Playlists without scrolling. */
+  readonly playlist: string | null;
 }
 
 export interface Scenario {
@@ -95,6 +97,8 @@ export interface Scenario {
   readonly needsImportLink?: boolean;
   /** Needs the fixture's artist. */
   readonly needsArtist?: boolean;
+  /** Needs the fixture's playlist name. */
+  readonly needsPlaylist?: boolean;
   /** Part of the glass comparison (#316), run with `--scenario glass`, not with `all`. */
   readonly glass?: boolean;
   /** Not part of `all` (it takes minutes): run it by name. */
@@ -317,6 +321,18 @@ export const SCENARIOS: readonly Scenario[] = [
     iterations: 10,
     warmup: 1,
     needsArtist: true,
+  },
+  {
+    name: "push-playlist",
+    summary: "Library › Playlists › the named playlist and back, including while an import fills.",
+    setup: [
+      { kind: "tap", target: tab("Library") },
+      { kind: "tap", target: { text: "Playlists" } },
+    ],
+    steps: ({ playlist }) => pushPop({ text: playlist ?? "" }),
+    iterations: 10,
+    warmup: 1,
+    needsPlaylist: true,
   },
   {
     name: "push-empty",

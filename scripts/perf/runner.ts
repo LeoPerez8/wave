@@ -530,6 +530,10 @@ export const runPerf = async (
         throw new ScenarioError(
           "The fixture has no artist (scripts/perf/fixture.json or --artist).",
         );
+      if (scenario.needsPlaylist === true && !options.config.playlist?.trim())
+        throw new ScenarioError(
+          "The fixture has no playlist (scripts/perf/fixture.json or --playlist).",
+        );
       if (scenario.coldEachIteration !== true) await start();
       const iterations = options.iterations ?? scenario.iterations;
       const sampled = memorySampleIterations(scenario.memorySamples, iterations);
@@ -615,6 +619,7 @@ export const runPerf = async (
       perfetto: options.perfetto !== null,
       tabs: options.config.tabs,
       artist: options.config.artist,
+      playlist: options.config.playlist,
     },
     ...meta,
     ...(options.compile === "baseline" ? { artProfile } : {}),

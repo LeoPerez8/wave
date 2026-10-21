@@ -3,6 +3,7 @@
   "tabs": ["Home", "Library", "Playlists"],
   "importLink": null,
   "artist": null,
+  "playlist": null,
   "settleMs": 1200,
   "windowMs": 2500,
   "launchSettleMs": 6000,

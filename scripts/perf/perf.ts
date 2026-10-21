@@ -3,7 +3,7 @@
 //   node scripts/perf/perf.ts doctor [--serial <s>] [--dry-run]
 //   node scripts/perf/perf.ts run [--scenario all|<a,b>] [--variant idle|import|idle,import]
 //        [--label <l>] [--iterations <n>] [--commit <sha>] [--apk <file>] [--import-link <url>]
-//        [--artist <name>] [--compile <filter>] [--glass <probe>] [--perfetto] [--meta key=value]...
+//        [--artist <name>] [--playlist <name>] [--compile <filter>] [--glass <probe>] [--perfetto] [--meta key=value]...
 //        [--out <file>] [--serial <s>] [--dry-run]
 //        (--scenario glass runs the glass comparison's scenarios; --glass needs a perf build)
 //   node scripts/perf/perf.ts summary <results.jsonl>
@@ -59,6 +59,8 @@ interface Fixture {
   readonly importLink: string | null;
   /** The artist push-artist opens (`ScenarioConfig.artist`). */
   readonly artist: string | null;
+  /** The playlist push-playlist opens (`ScenarioConfig.playlist`). */
+  readonly playlist: string | null;
   readonly settleMs: number;
   readonly windowMs: number;
   readonly launchSettleMs: number;
@@ -80,6 +82,7 @@ const { values, positionals } = parseArgs({
     apk: { type: "string" },
     "import-link": { type: "string" },
     artist: { type: "string" },
+    playlist: { type: "string" },
     compile: { type: "string" },
     glass: { type: "string" },
     perfetto: { type: "boolean", default: false },
@@ -95,6 +98,10 @@ const { values, positionals } = parseArgs({
 /** The artist push-artist opens: --artist, the fixture's, or on the simulated phone its own. */
 const artist = (): string | null =>
   values.artist ?? fixture.artist ?? (values["dry-run"] ? "Radiohead" : null);
+
+/** The playlist to open; dry runs use the simulated phone's named playlist. */
+const playlist = (): string | null =>
+  values.playlist ?? fixture.playlist ?? (values["dry-run"] ? "Favorites" : null);
 
 const fail = (message: string): never => {
   console.error(message);
@@ -115,7 +122,11 @@ const gitCommit = (): string | null => {
 /** The phone to use: --serial, or the only one attached. */
 const pickDevice = async (): Promise<Device> => {
   if (values["dry-run"])
-    return new FakeDevice({ tabs: [...fixture.tabs, "Search"], artist: artist() ?? "Radiohead" });
+    return new FakeDevice({
+      tabs: [...fixture.tabs, "Search"],
+      artist: artist() ?? "Radiohead",
+      playlist: playlist() ?? "Favorites",
+    });
   const devices = await listDevices();
   const ready = devices.filter((device) => device.state === "device");
   const serial = values.serial ?? (ready.length === 1 ? ready[0]?.serial : undefined);
@@ -412,6 +423,10 @@ const commands: Record<string, () => Promise<void>> = {
       fixture.artist !== null,
       `fixture artist ${fixture.artist ?? "not set (push-artist can't run)"}`,
     );
+    check(
+      playlist() !== null,
+      `fixture playlist ${playlist() ?? "not set (push-playlist can't run; use --playlist)"}`,
+    );
     console.log(
       "\nWhether the APK is a perf build shows in the run's first line (it waits for the app's first flush).",
     );
@@ -463,7 +478,7 @@ const commands: Record<string, () => Promise<void>> = {
       scenarios,
       variants,
       ...(values.iterations === undefined ? {} : { iterations: Number(values.iterations) }),
-      config: { tabs: fixture.tabs, artist: artist() },
+      config: { tabs: fixture.tabs, artist: artist(), playlist: playlist() },
       importLink: values["import-link"] ?? fixture.importLink,
       settleMs: fixture.settleMs,
       windowMs: fixture.windowMs,
