@@ -200,3 +200,8 @@ Source confirmation will use TypeScript and diff review. No new constants-only t
 
 - **549-A / P1 / Adaptivity:** `home/DiscoverSettings.tsx` renders a heading and three slider rows as a non-scrolling fragment inside OverlayHost's capped/hidden card. At large font or a short window the later sliders have no overflow path. Correction: scroll the complete form inside its existing card, preserving order and values. Native adapt/harden. Scenario: open Discover settings beside a mix → 1.3x/short window → reach all three sliders; TB/NAV/M P.
 - Home editing also relies on shared `TitlePress`'s long-press-only hint; record the shared semantic action fix under #556 and verify Home as a consumer. Magic Queue tiles/identity/gesture work stays under #537–542. No redesign or recommendation edits.
+
+### #550 baseline findings → source corrections
+
+- **550-A / P2 / Keyboard:** the findable `SongsList`, artist `NameList` in `BrowseLists`, and Favorites' `TrackList` omit `keyboardShouldPersistTaps`; React Native's default consumes the first tap on a result to dismiss the keyboard. Correction: handled result taps and on-drag keyboard dismissal, matching Search's existing behavior. Scenario: pull down Find in Songs/Artists/Favorites, type a match, tap once → play/open/check the result; drag → dismiss keyboard. Native harden; device IME/selection/playback P. Local finder/order/play-context logic stays unchanged and is already covered at Core's public seam.
+- Fixed virtualized 56dp rows and tile captions are a **render-verification risk**, not asserted clipping evidence. Check long content at 1.3x in every consumer; do not change indexing or font metrics speculatively.
