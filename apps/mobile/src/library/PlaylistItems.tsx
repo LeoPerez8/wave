@@ -10,7 +10,7 @@ import { SwipeableRow, swipeAccessibility, type RowSwipe } from "@/catalog/Swipe
 import { TrackRow } from "@/catalog/TrackRow";
 import { useChromeInset } from "@/chrome/chrome";
 import { playPlaylist } from "@/playback/actions";
-import { useCurrentTrackId } from "@/playback/hooks";
+import { useCurrentPlayingIds } from "@/playback/hooks";
 import { openTrackActions, openUnsearchedActions } from "@/playback/ActionsMenu";
 import type { ActionItems, TrackItem } from "@/playback/actionTargets";
 import { useSongSwipe, useUnsearchedSwipe } from "@/playback/rowSwipe";
@@ -290,7 +290,7 @@ export function PlaylistItems({ playlistId, items, header, empty }: Props) {
   const scrollable = useListScrollable();
   const read = items ?? NO_ITEMS;
   const bottomInset = useChromeInset();
-  const currentId = useCurrentTrackId();
+  const currentIds = useCurrentPlayingIds();
   const favorites = useFavoriteIds();
   const placeOf = useCallback(
     (item: PlaylistEntryRow) => ({ playlistId, itemId: item.itemId }),
@@ -393,7 +393,7 @@ export function PlaylistItems({ playlistId, items, header, empty }: Props) {
         index={index}
         count={shown.length}
         drag={listDrag.drag}
-        playing={queueId(item) !== null && queueId(item) === currentId}
+        playing={queueId(item) !== null && currentIds.has(queueId(item) ?? "")}
         favorite={item.source === "library" && favorites.has(item.track.id)}
         downloaded={mixed}
         selecting={listSelection.selecting}

@@ -6,7 +6,7 @@ import type { SongRow } from "@/library/LibraryStore";
 import { toTrackSummary } from "@/library/TrackList";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 import { openTrackActions } from "@/playback/ActionsMenu";
-import { useCurrentTrackId } from "@/playback/hooks";
+import { useCurrentPlayingIds } from "@/playback/hooks";
 import { listedTrackItem, type TrackItem } from "@/playback/actionTargets";
 import { selectableRow } from "@/selection/selectableRow";
 import type { ListSelection } from "@/selection/useListSelection";
@@ -33,9 +33,9 @@ export function DiscoverSongRow({
   trackNumber?: number | undefined;
   selection?: ListSelection<TrackItem> | undefined;
 }) {
-  const currentId = useCurrentTrackId();
+  const currentIds = useCurrentPlayingIds();
   const favorites = useFavoriteIds();
-  const playing = discoverTrackId(song) === currentId;
+  const playing = currentIds.has(discoverTrackId(song));
   const row = selectableRow(listedTrackItem(song), selection, onPress, (options) =>
     song.source === "library"
       ? openTrackActions(song.track, options)
