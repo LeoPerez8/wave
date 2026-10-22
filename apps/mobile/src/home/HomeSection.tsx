@@ -233,7 +233,7 @@ function DiscoverMixRow({
 }
 
 /**
- * Discover's Magic Queue row: 10 Library songs as covers, a tap on one
+ * Discover's Magic Queue row: nine Library songs in an adaptive grid, a tap on one
  * starting a Magic Queue from it, its long-press the song's menu. A new list
  * each day; pulled right past its start, the row brings other songs, with
  * Undo. Each place crossfades its tile when its song changes. With YT Music
@@ -243,10 +243,11 @@ function MagicQueueRow({ section }: { section: MagicQueueSection }) {
   const { width, fontScale } = useWindowDimensions();
   const [available, setAvailable] = useState(width - grid.margin * 2);
   // Keep text scaling enabled. Larger type gets wider tiles instead of overlapping targets.
+  // Android widens a Float to JS, so 1.3 arrives just below the decimal breakpoint.
   const columns = Math.max(
     1,
     Math.min(
-      fontScale >= 2 ? 1 : fontScale >= 1.3 ? 2 : 3,
+      fontScale >= 2 ? 1 : fontScale >= Math.fround(1.3) ? 2 : 3,
       Math.floor((available + CELL) / (CELL * 7)),
     ),
   );
