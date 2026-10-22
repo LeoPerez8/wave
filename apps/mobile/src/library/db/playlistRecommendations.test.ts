@@ -17,7 +17,7 @@ import {
   reopenTestDatabase,
   migrateTestDatabase,
 } from "./testDatabase.ts";
-import { createPlaylist, selectPlaylistEntries } from "./playlists.ts";
+import { addToPlaylist, createPlaylist, selectPlaylistEntries } from "./playlists.ts";
 import { addCandidates, selectCandidateCatalog } from "./candidateCatalog.ts";
 import {
   acceptPlaylistRecommendation,
@@ -369,6 +369,87 @@ test("real-store dismissal failure is retryable and refill preserves the other o
   for (const index of [0, 1, 3, 4]) assert.equal(session.get().slots[index], before[index]);
   assert.deepEqual(tasteHistory(db), baseline);
 });
+
+for (const timing of [
+  "own Add",
+  "during save",
+  "before refill snapshot",
+  "after refill snapshot",
+]) {
+  test(`real-store Add preserves held offers and processes external membership changes: ${timing}`, async () => {
+    const db = await openTestDatabase();
+    const seed = addTrack(db, { title: "Seed", artist: "Radiohead", genre: "Rock" });
+    for (const title of "ABCDEFGH") addTrack(db, { title, artist: "Radiohead", genre: "Rock" });
+    const { playlistId } = createPlaylist(
+      db,
+      "Alternative",
+      [{ source: "library", trackId: seed }],
+      1,
+    );
+    let id = 0;
+    let pause = false;
+    const blocked = Promise.withResolvers<void>();
+    const resumed = Promise.withResolvers<void>();
+    const session = playlistRecommendationSession({
+      newId: () => String(++id),
+      read: async () => {
+        if (pause && timing === "before refill snapshot") {
+          pause = false;
+          blocked.resolve();
+          await resumed.promise;
+        }
+        const input = selectPlaylistRecommendationInput(db, playlistId);
+        if (pause && timing === "after refill snapshot") {
+          pause = false;
+          blocked.resolve();
+          await resumed.promise;
+        }
+        return { playlist: input.playlist, sources: { ...input, graph: null, now: 10 } };
+      },
+      dismiss: async (offer) => dismissPlaylistRecommendation(db, playlistId, offer, 10),
+      accept: async (offer) => {
+        if (timing === "during save") {
+          blocked.resolve();
+          await resumed.promise;
+        }
+        return acceptPlaylistRecommendation(db, playlistId, offer, 10);
+      },
+    });
+    await session.renew();
+    const before = session.get().slots;
+    assert.deepEqual(
+      before.map((offer) => offer?.track.title),
+      ["A", "B", "C", "D", "E"],
+    );
+    pause = true;
+    const accepting = session.accept(before[2]!.key);
+    if (timing !== "own Add") {
+      await blocked.promise;
+      addToPlaylist(
+        db,
+        playlistId,
+        [{ source: "library", trackId: Number(before[0]!.track.id) }],
+        10,
+      );
+      await session.renew();
+      resumed.resolve();
+    }
+    assert.equal(await accepting, true);
+    assert.deepEqual(
+      session.get().slots.map((offer) => offer?.track.title),
+      [timing === "own Add" ? "A" : "G", "B", "F", "D", "E"],
+    );
+    if (timing === "own Add") {
+      for (const index of [0, 1, 3, 4]) assert.equal(session.get().slots[index], before[index]);
+    }
+    for (const index of [1, 3, 4])
+      assert.equal(session.get().slots[index]?.key, before[index]!.key);
+    assert.equal(selectPlaylistRecommendationInput(db, playlistId).feedback.length, 1);
+    assert.equal(session.get().pending, null);
+    assert.equal(session.get().loading, false);
+    assert.equal(session.get().error, null);
+  });
+}
 
 test("the stored playlist seeds ranked Library/catalog suggestions with recording exclusions and offline fallback", async () => {
   const db = await openTestDatabase();

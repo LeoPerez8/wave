@@ -30,7 +30,6 @@ export const playlistRecommendationSession = (options: {
   let state: PlaylistRecommendationState = { slots: [], loading: true, pending: null, error: null };
   const listeners = new Set<() => void>();
   const consumed: PlaylistRecommendationTrack[] = [];
-  let acceptedPlaylist: readonly PlaylistRecommendationTrack[] | undefined;
   let working = false;
   let renewalPending = false;
   const publish = (patch: Partial<PlaylistRecommendationState>) => {
@@ -48,7 +47,6 @@ export const playlistRecommendationSession = (options: {
   const act = async (
     key: string,
     save: ((offer: PlaylistRecommendationSlot) => Promise<unknown>) | undefined,
-    accepting = false,
   ): Promise<boolean> => {
     const index = state.slots.findIndex((x) => x?.key === key);
     const offer = state.slots[index];
@@ -69,7 +67,6 @@ export const playlistRecommendationSession = (options: {
     publish({ slots });
     try {
       const input = await read();
-      if (accepting) acceptedPlaylist = input.playlist;
       const held = slots.flatMap((x) => (x === null ? [] : [x.track]));
       const next = playlistRecommendations(input.playlist, {
         ...input.sources,
@@ -94,14 +91,10 @@ export const playlistRecommendationSession = (options: {
         listeners.delete(listener);
       };
     },
-    /** A delayed Add notification acknowledges its refill; source changes request full renewal. */
-    renew: async (
-      request: { readonly ifPlaylistChanged?: boolean; readonly refillOnly?: boolean } = {},
-    ): Promise<void> => {
+    /** Retains external invalidations until the current save/read has finished. */
+    renew: async (request: { readonly refillOnly?: boolean } = {}): Promise<void> => {
       if (working) {
-        // Source changes must survive an in-flight save/refill; Add's notification need not rerank.
-        if (request.ifPlaylistChanged !== true && request.refillOnly !== true)
-          renewalPending = true;
+        if (request.refillOnly !== true) renewalPending = true;
         return;
       }
       renewalPending = false;
@@ -109,15 +102,6 @@ export const playlistRecommendationSession = (options: {
       publish({ loading: true, error: null });
       try {
         const input = await read();
-        const previousPlaylist = acceptedPlaylist;
-        acceptedPlaylist = undefined;
-        if (
-          request.ifPlaylistChanged === true &&
-          previousPlaylist !== undefined &&
-          input.playlist.length === previousPlaylist.length &&
-          input.playlist.every((track, index) => track.id === previousPlaylist[index]!.id)
-        )
-          return;
         // Recovery excludes held offers before the limit and only fills holes, like the action.
         const preserved = request.refillOnly
           ? state.slots.flatMap((offer) => (offer === null ? [] : [offer.track]))
@@ -155,7 +139,7 @@ export const playlistRecommendationSession = (options: {
       }
     },
     dismiss: (key: string) => act(key, options.dismiss),
-    accept: (key: string) => act(key, options.accept, true),
+    accept: (key: string) => act(key, options.accept),
   };
   return session;
 };

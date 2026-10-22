@@ -83,7 +83,7 @@ test("unchanged playlist membership does not keep removed Library candidates off
   await session.renew();
   assert.equal(session.get().slots.filter((offer) => offer !== null).length, 5);
   library = [seed];
-  await session.renew({ ifPlaylistChanged: true });
+  await session.renew();
   assert.deepEqual(
     session.get().slots.flatMap((offer) => offer ?? []),
     [],
@@ -91,7 +91,48 @@ test("unchanged playlist membership does not keep removed Library candidates off
   assert.equal(session.get().error, null);
 });
 
-test("an acceptance membership notification preserves the four held offers; a later external edit renews priority", async () => {
+for (const timing of ["before snapshot", "after snapshot"]) {
+  test(`an external playlist addition during a full read removes the newly present offer: ${timing}`, async () => {
+    const seed = track("seed");
+    const library = [seed, ..."abcdefgh".split("").map(track)];
+    let playlist = [seed];
+    let id = 0;
+    let pause = true;
+    let release!: () => void;
+    const session = playlistRecommendationSession({
+      newId: () => String(++id),
+      read: async () => {
+        const snapshot = timing === "after snapshot" ? playlist : undefined;
+        if (pause) {
+          pause = false;
+          await new Promise<void>((resolve) => {
+            release = resolve;
+          });
+        }
+        return {
+          playlist: snapshot ?? playlist,
+          sources: { library, catalog: [], graph: null, now: 0 },
+        };
+      },
+      dismiss: async () => {},
+    });
+    const reading = session.renew();
+    playlist = [...playlist, library[1]!];
+    await session.renew();
+    release();
+    await reading;
+    assert.deepEqual(
+      session
+        .get()
+        .slots.flatMap((offer) => offer?.track.id ?? [])
+        .toSorted(),
+      ["b", "c", "d", "e", "f"],
+    );
+    assert.equal(session.get().loading, false);
+  });
+}
+
+test("acceptance preserves the four held offers and keys; a later external edit renews priority", async () => {
   const seed = track("seed");
   let playlist = [seed];
   let library = [seed, ..."abcdefgh".split("").map(track)];
@@ -109,19 +150,40 @@ test("an acceptance membership notification preserves the four held offers; a la
   library = library.map((song) => ({ ...song, favorite: song.id === "g" || song.id === "h" }));
   assert.equal(await session.accept(before[2]!.key), true);
   assert.equal(session.get().slots[2]?.track.id, "g");
-  const refilled = session.get().slots;
-  // The screen receives the membership notification after the action's fresh read.
-  await session.renew({ ifPlaylistChanged: true });
+  // The adapter announces its own Add synchronously without requesting a full renewal.
   for (const index of [0, 1, 3, 4]) assert.equal(session.get().slots[index], before[index]);
-  assert.equal(session.get().slots[2], refilled[2]);
   playlist = [...playlist, track("external")];
-  await session.renew({ ifPlaylistChanged: true });
+  await session.renew();
   assert.deepEqual(
     session
       .get()
       .slots.flatMap((offer) => offer?.track.id ?? [])
       .toSorted(),
     ["a", "b", "d", "g", "h"],
+  );
+});
+
+test("an external addition of a held offer is not acknowledged as Add's own notification", async () => {
+  const seed = track("seed");
+  const library = [seed, ..."abcdefgh".split("").map(track)];
+  let playlist = [seed];
+  let id = 0;
+  const session = playlistRecommendationSession({
+    newId: () => String(++id),
+    read: async () => ({ playlist, sources: { library, catalog: [], graph: null, now: 0 } }),
+    dismiss: async () => {},
+    accept: async (offer) => {
+      // Another writer adds a held offer before Add's refill snapshots membership.
+      playlist = [...playlist, offer.track, library[1]!];
+    },
+  });
+  await session.renew();
+  assert.equal(await session.accept(session.get().slots[2]!.key), true);
+  // The external writer's notification arrives after that same snapshot was read.
+  await session.renew();
+  assert.deepEqual(
+    session.get().slots.map((offer) => offer?.track.id),
+    ["g", "b", "f", "d", "e"],
   );
 });
 

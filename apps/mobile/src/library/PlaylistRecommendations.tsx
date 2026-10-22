@@ -36,6 +36,7 @@ export function PlaylistRecommendations({
   items: readonly PlaylistEntryRow[];
 }) {
   const enabled = useYtMusicEnabled();
+  const [announcingAcceptance] = useState(() => makeExternalStore(false));
   const [enabledNow] = useState(() => makeExternalStore(enabled));
   // Keep held offers readable if another offer's refill no longer finds their Library row.
   const [libraryRows] = useState(() => makeExternalStore<ReadonlyMap<string, SongRow>>(new Map()));
@@ -84,7 +85,15 @@ export function PlaylistRecommendations({
             }),
           )
           .then((added) => {
-            if (added) playlistsChanged([playlistId]);
+            if (added) {
+              // Both notification functions are synchronous; this Add already refills its slot.
+              announcingAcceptance.set(true);
+              try {
+                playlistsChanged([playlistId]);
+              } finally {
+                announcingAcceptance.set(false);
+              }
+            }
             return added;
           }),
     }),
@@ -94,12 +103,13 @@ export function PlaylistRecommendations({
   useEffect(
     () =>
       onLibraryChange((change) => {
+        if (change.kind === "playlists" && announcingAcceptance.get()) return;
         if (
           libraryChangeAffects({ tracks: true, favorites: true, playlists: [playlistId] }, change)
         )
-          void session.renew({ ifPlaylistChanged: change.kind === "playlists" });
+          void session.renew();
       }),
-    [session, playlistId],
+    [session, playlistId, announcingAcceptance],
   );
   useEffect(() => {
     enabledNow.set(enabled);
