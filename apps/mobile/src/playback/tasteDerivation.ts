@@ -1,7 +1,7 @@
 import { magicLibraryMapperSteps, tasteProfileSteps, type MagicSong } from "@wave/core";
 import * as Effect from "effect/Effect";
 
-import { steppedWork } from "../lib/steppedWork.ts";
+import { runSteps } from "../lib/stepped.ts";
 import type { LibraryStore, SongRow } from "../library/LibraryStore.ts";
 
 /** One input snapshot shared by the live profile and Home's due pick. Not an Artist graph. */
@@ -35,8 +35,8 @@ export const readTasteLibrary = (store: LibraryStore["Service"], turn: Effect.Ef
     const songs = yield* store.listSongs;
     yield* turn;
     const artists = yield* store.listArtists;
-    const convert = yield* steppedWork(magicLibraryMapperSteps(artists), turn);
-    return yield* steppedWork(mapSongs(songs, convert), turn);
+    const convert = yield* runSteps(magicLibraryMapperSteps(artists), turn);
+    return yield* runSteps(mapSongs(songs, convert), turn);
   });
 
 /** The same scores as ti, using an optional already-read Library snapshot. */
@@ -52,7 +52,7 @@ export const deriveTaste = (
     const history = yield* store.tasteHistory;
     snapshotTaken();
     const input = library ?? (yield* readTasteLibrary(store, turn));
-    return yield* steppedWork(
+    return yield* runSteps(
       tasteProfileSteps(history, (id) => input.byId.get(id), now),
       turn,
     );

@@ -7,7 +7,7 @@ import {
   type RandomSource,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
-import { steppedWork } from "../lib/steppedWork.ts";
+import { runSteps } from "../lib/stepped.ts";
 import type { LibraryStore } from "../library/LibraryStore.ts";
 import { readTasteLibrary, type TasteLibrary } from "../playback/tasteDerivation.ts";
 
@@ -41,7 +41,7 @@ export const buildHomeMagicQueue = <R, E>(
   Effect.gen(function* () {
     const library = yield* readTasteLibrary(store, options.turn);
     const taste = yield* options.taste(library);
-    return yield* steppedWork(
+    return yield* runSteps(
       magicQueuePicksSteps(
         saved,
         library.playable,

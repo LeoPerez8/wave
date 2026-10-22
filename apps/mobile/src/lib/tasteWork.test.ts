@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import * as Effect from "effect/Effect";
-import { steppedWork } from "./steppedWork.ts";
+import { runSteps } from "./stepped.ts";
 
 test("CPU work yields with scheduler headroom and interruption releases its iterator and pending turn", async () => {
   let time = 0;
@@ -34,7 +34,7 @@ test("CPU work yields with scheduler headroom and interruption releases its iter
   }
   const controller = new AbortController();
   const result = Effect.runPromise(
-    steppedWork(job(), turn, () => time),
+    runSteps(job(), turn, () => time),
     { signal: controller.signal },
   );
   assert.equal(items, 0);

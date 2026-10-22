@@ -35,9 +35,9 @@ export const bench: FastAgainBench = {
     if (existsSync(resolve(context.root, path))) {
       const { deriveTaste } =
         await context.loadModule<typeof import("../../../src/playback/tasteDerivation.ts")>(path);
-      const { steppedWork } = await context.loadModule<
-        typeof import("../../../src/lib/steppedWork.ts")
-      >("apps/mobile/src/lib/steppedWork.ts");
+      const { runSteps } = await context.loadModule<typeof import("../../../src/lib/stepped.ts")>(
+        "apps/mobile/src/lib/stepped.ts",
+      );
       return [
         await measureCooperative(
           context.fixture.db,
@@ -51,7 +51,7 @@ export const bench: FastAgainBench = {
           "scoreCpuOnly",
           context.runs,
           (turn) =>
-            steppedWork(
+            runSteps(
               core.tasteProfileSteps(history, (id) => byId.get(id), context.fixture.now),
               turn,
             ),

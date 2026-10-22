@@ -2021,5 +2021,3 @@ export type { LostLinkTap, LostTapReason } from "./lostTap.ts";
 
 export * from "./ytAlbumOpening.ts";
 export { ytArtistPageOpening } from "./ytArtistPageOpening.ts";
-
-export { advanceWork, WORK_SLICE_MS } from "./workSlice.ts";
