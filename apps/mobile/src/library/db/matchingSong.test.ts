@@ -12,6 +12,8 @@ const song: YtSong = {
   title: "Déjà Vu",
   artists: ["Beyoncé"],
   durationMs: 180000,
+  album: null,
+  explicit: false,
   artworkUrl: null,
 };
 const track = (
