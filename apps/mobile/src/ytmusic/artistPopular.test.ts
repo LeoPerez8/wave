@@ -23,6 +23,7 @@ const found: YtArtistSaved<import("../native/waveYtMusic.ts").NativeYtSong> = {
 };
 
 test("the app's Popular/Online reader sends zero requests before settlement, offline or with Online off, then once", async () => {
+  const fresh = { ...found, checkedAt: Date.now() };
   let connected = true;
   let requests = 0;
   const reader = createArtistOpeningRead({
@@ -30,7 +31,7 @@ test("the app's Popular/Online reader sends zero requests before settlement, off
     request: async (_name, _key, _saved, _signal, allowed) => {
       if (!allowed()) throw { reason: "offline" };
       requests++;
-      return found;
+      return fresh;
     },
     online: () => connected,
     allowance: () => NO_SEARCHES,
@@ -56,7 +57,7 @@ test("the app's Popular/Online reader sends zero requests before settlement, off
   reader.update({ ...context, settled: true });
   await flush();
   assert.equal(requests, 1);
-  assert.deepEqual(reader.snapshot().state, { status: "ready", saved: found, failure: null });
+  assert.deepEqual(reader.snapshot().state, { status: "ready", saved: fresh, failure: null });
   reader.close();
 });
 
@@ -713,4 +714,35 @@ test("a request waiting to execute rechecks live visibility even before React de
     "a pending native call must not follow the screen into the background",
   );
   reader.close();
+});
+
+test("standing full and unmatched saved answers skip Online transport; partial and expired Online answers refresh once", async () => {
+  const fresh = { ...found, checkedAt: Date.now() };
+  const partial = { ...fresh, page: { name: "Justice", songs: [], albums: [], singles: [] } };
+  const unmatched = { outcome: "unmatched" as const, checkedAt: Date.now() };
+  for (const [saved, expectedRequests] of [
+    [fresh, 0],
+    [unmatched, 0],
+    [partial, 1],
+    [found, 1],
+  ] as const) {
+    let requests = 0;
+    const reader = createArtistOpeningRead({
+      restore: async () => saved,
+      request: async () => {
+        requests++;
+        return fresh;
+      },
+      online: () => true,
+      allowance: () => NO_SEARCHES,
+      always: () => true,
+    });
+    reader.open("Justice");
+    reader.update({ ...context, settled: true });
+    await flush();
+    reader.update({ ...context, settled: true });
+    await flush();
+    assert.equal(requests, expectedRequests);
+    reader.close();
+  }
 });
