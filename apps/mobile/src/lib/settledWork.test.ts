@@ -40,3 +40,58 @@ test("cold playlist and mix/Magic Queue readers share work only after settlement
   assert.equal(await Effect.runPromise(shared.get), 1);
   assert.equal(reads, 1);
 });
+
+test("a new transition postpones a queued turn; cancellation removes the settlement observer and task", async () => {
+  let settled = true;
+  const listeners = new Set<() => void>(),
+    queue = new Set<() => void>();
+  const gate = settledTurn({
+    settled: () => settled,
+    subscribe: (listener) => {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+    schedule: (run) => {
+      queue.add(run);
+      return () => {
+        queue.delete(run);
+      };
+    },
+  });
+  let work = 0;
+  const first = Effect.runPromise(
+    gate.pipe(
+      Effect.andThen(
+        Effect.sync(() => {
+          work++;
+        }),
+      ),
+    ),
+  );
+  settled = false;
+  for (const run of queue) {
+    queue.delete(run);
+    run();
+  }
+  assert.equal(work, 0);
+  assert.equal(listeners.size, 1);
+  settled = true;
+  for (const listener of listeners) listener();
+  for (const run of queue) {
+    queue.delete(run);
+    run();
+  }
+  await first;
+  assert.equal(work, 1);
+  assert.equal(listeners.size, 0);
+  const abort = new AbortController();
+  const pending = Effect.runPromise(gate, { signal: abort.signal }),
+    rejected = assert.rejects(pending);
+  assert.equal(queue.size, 1);
+  abort.abort();
+  await rejected;
+  assert.equal(queue.size, 0);
+  assert.equal(listeners.size, 0);
+});

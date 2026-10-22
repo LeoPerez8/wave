@@ -61,6 +61,9 @@ import * as Result from "effect/Result";
 import { useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
 
+import { createBuildSource } from "@/lib/buildSource";
+import { onLibraryChange } from "@/library/libraryChanges";
+import { onArtistGraphSourcesChanged } from "./graphSources";
 import { runSteps } from "@/lib/stepped";
 import { createSerialWork } from "@/lib/serialWork";
 import { freeTurnEffect, settledTurnEffect } from "@/lib/backgroundWork";
@@ -340,10 +343,13 @@ const builtOutcome = (built: DiscoverMixes | null | "nothing-to-build-from"): st
  * network use to the app log as it ends (`withNetworkLog`).
  */
 const buildPermit = Semaphore.makeUnsafe(1);
+const buildSource = createBuildSource();
+onLibraryChange(change => {if (change.kind !== "folders") buildSource.changed();});
+onArtistGraphSourcesChanged(buildSource.changed);
 const loggedBuild = (id: MixSectionId, pulled: boolean, avoid?: MixRefreshAvoid) =>
   withNetworkLog(
     `${discoverRowTitle(id)} ${pulled ? "refresh" : "build"}`,
-    settledTurnEffect.pipe(Effect.andThen(SECTIONS[id].build(avoid)), buildPermit.withPermits(1)),
+    settledTurnEffect.pipe(Effect.andThen(buildSource.run(SECTIONS[id].build(avoid), freeTurnEffect)), buildPermit.withPermits(1)),
     builtOutcome,
   );
 
