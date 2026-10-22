@@ -31,6 +31,7 @@ import {
   discoverRowTitle,
   mixesShown,
   mixRefreshAvoid,
+  libraryStyleOf,
   mixSlidersEngine,
   mixSectionOfId,
   parseDiscoverMixes,
@@ -195,7 +196,14 @@ const readerOf = (id: MixSectionId, library: MixIndexes, variety: number | undef
       memo.library === library
     )
       return memo.reader;
-    const sources = { catalog, graph, profileOf: mixProfileOf(library), taste, now: Date.now() };
+    const sources = {
+      catalog,
+      graph,
+      profileOf: mixProfileOf(library),
+      styleOf: libraryStyleOf(library),
+      taste,
+      now: Date.now(),
+    };
     const reader = catalogMixReader(
       { ...sources, library },
       variety === undefined ? {} : { variety },

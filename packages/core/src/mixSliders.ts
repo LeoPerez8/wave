@@ -9,6 +9,7 @@
 
 import type { DiscoverMixLevel } from "./discoverMixLevels.ts";
 import { GENRE_AFFINITY_THRESHOLD } from "./genreAffinity.ts";
+import type { StyleLevel } from "./genreMixes.ts";
 import { RECOMMEND_WEIGHTS, type RecommendOptions } from "./recommend.ts";
 import { readStoredRecord } from "./storedJson.ts";
 
@@ -30,15 +31,17 @@ export const DEFAULT_MIX_SLIDERS: MixSliders = { faithfulness: 3, popularity: 3 
  * Genre faithfulness's steps: the genre affinity a song's artist needs to
  * the seed's profile to match (`GENRE_AFFINITY_THRESHOLD` in the middle).
  * Staying close leaves out songs whose genres only half match; wandering
- * lets in those that share a minor genre.
+ * lets in those that share a minor genre. Same genres and Close compare the
+ * styles instead (`styles`, `styleAffinity`): their threshold is then unused.
  */
 export const GENRE_FAITHFULNESS_STEPS: readonly {
   readonly step: MixSliderStep;
   readonly label: string;
   readonly threshold: number;
+  readonly styles?: StyleLevel;
 }[] = [
-  { step: 1, label: "Same genres", threshold: 0.8 },
-  { step: 2, label: "Close", threshold: 0.65 },
+  { step: 1, label: "Same genres", threshold: 0.8, styles: "same" },
+  { step: 2, label: "Close", threshold: 0.65, styles: "close" },
   { step: 3, label: "Balanced", threshold: GENRE_AFFINITY_THRESHOLD },
   { step: 4, label: "Neighbours", threshold: 0.35 },
   { step: 5, label: "Wander", threshold: 0.2 },
@@ -64,22 +67,39 @@ export const POPULARITY_STEPS: readonly {
 const stepOf = <T extends { readonly step: MixSliderStep }>(steps: readonly T[], step: number): T =>
   steps.find((entry) => entry.step === step) ?? steps[2]!;
 
-/** What [sliders] tune in the engine: its affinity threshold and its popularity weight. */
+/**
+ * What [sliders] tune in the engine: its affinity threshold, the style level
+ * Same genres and Close compare at (`styles`), and its popularity weight.
+ */
 export const mixSlidersEngine = (
   sliders: MixSliders,
-): Required<Pick<RecommendOptions, "threshold">> & {
-  readonly weights: { readonly popularity: number };
-} => ({
-  threshold: stepOf(GENRE_FAITHFULNESS_STEPS, sliders.faithfulness).threshold,
-  weights: { popularity: stepOf(POPULARITY_STEPS, sliders.popularity).weight },
-});
+): Required<Pick<RecommendOptions, "threshold">> &
+  Pick<RecommendOptions, "styles"> & {
+    readonly weights: { readonly popularity: number };
+  } => {
+  const faithful = stepOf(GENRE_FAITHFULNESS_STEPS, sliders.faithfulness);
+  return {
+    threshold: faithful.threshold,
+    ...(faithful.styles === undefined ? {} : { styles: faithful.styles }),
+    weights: { popularity: stepOf(POPULARITY_STEPS, sliders.popularity).weight },
+  };
+};
+
+/**
+ * The style level Genre faithfulness compares at (`styleAffinity`): Same
+ * genres and Close compare styles, the other steps compare families by
+ * their threshold; null for those.
+ */
+export const faithfulnessStyles = (sliders: MixSliders): StyleLevel | null =>
+  stepOf(GENRE_FAITHFULNESS_STEPS, sliders.faithfulness).styles ?? null;
 
 /**
  * The genre affinity a Magic Queue's Library songs need to the seed's
  * profile at [sliders]' Genre faithfulness (`magicLibraryCandidates`): its
- * step's threshold, as for YouTube Music's candidates; null (any genre) at
- * the loosest step, Wander, where the Library keeps every genre as it did
- * before Library songs were held to the seed's genres.
+ * step's threshold, as for YouTube Music's candidates (not used at Same
+ * genres and Close, which compare styles: `faithfulnessStyles`); null (any
+ * genre) at the loosest step, Wander, where the Library keeps every genre as
+ * it did before Library songs were held to the seed's genres.
  */
 export const magicLibraryThreshold = (sliders: MixSliders): number | null => {
   const loosest = GENRE_FAITHFULNESS_STEPS[GENRE_FAITHFULNESS_STEPS.length - 1]!;

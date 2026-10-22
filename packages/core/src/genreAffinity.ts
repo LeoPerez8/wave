@@ -10,7 +10,7 @@
 
 import { artistPhotoName } from "./artistPhoto.ts";
 import type { DiscoverLibrarySong, DiscoverMixSeed, DiscoverSeedArtist } from "./discoverMixes.ts";
-import { songFamilies } from "./genreMixes.ts";
+import { commonStyle, songFamilies, songStyle } from "./genreMixes.ts";
 import { isRecord, readStoredRecord } from "./storedJson.ts";
 import { libraryArtistFinder, ytArtistQuery } from "./ytArtist.ts";
 
@@ -70,6 +70,13 @@ export interface GenreProfileLibrary {
  */
 export type GenreProfileOf = (artist: string) => GenreProfile | null | undefined;
 
+/**
+ * An artist's style, by name (`libraryStyleOf`): the style of most of their
+ * Library songs, null when those have none, undefined for an artist the
+ * Library doesn't have (Deezer's profiles are family-level, so they have none).
+ */
+export type StyleOf = (artist: string) => string | null | undefined;
+
 /** Each Library artist's songs' genre tags, by artist id. */
 const songsByArtist = (library: GenreProfileLibrary): Map<number, GenreTagged[]> => {
   const songs = new Map<number, GenreTagged[]>();
@@ -80,6 +87,35 @@ const songsByArtist = (library: GenreProfileLibrary): Map<number, GenreTagged[]>
       songs.set(id, of);
     }
   return songs;
+};
+
+/**
+ * The Library artists' styles (`commonStyle` of the songs that credit them),
+ * by name as `libraryGenreProfiles` finds them.
+ */
+export const libraryStyleOf = (library: GenreProfileLibrary): StyleOf => {
+  const songs = songsByArtist(library);
+  const find = libraryArtistFinder(library.artists);
+  const styles = new Map<number, string | null>();
+  return (name) => {
+    const artist = find(name);
+    if (artist === null) return undefined;
+    if (!styles.has(artist.id))
+      styles.set(artist.id, commonStyle((songs.get(artist.id) ?? []).map(songStyle)));
+    return styles.get(artist.id) ?? null;
+  };
+};
+
+/** The style of the first of [artists] with one known ([styleOf]); null when none has. */
+export const styleOfArtists = (
+  artists: readonly string[],
+  styleOf: StyleOf | undefined,
+): string | null => {
+  for (const artist of artists) {
+    const style = styleOf?.(artist);
+    if (style) return style;
+  }
+  return null;
 };
 
 /**
@@ -116,6 +152,23 @@ export const mixSeedProfile = (
     return genreProfile(seed.artists.flatMap((artist) => songs.get(artist.id) ?? []));
   }
   return profileOf(seed.name) ?? null;
+};
+
+/**
+ * The style a mix's seed is held to (`styleAffinity`): a genre mix's seed
+ * artists' Library songs' most common style, an artist mix's artist's
+ * ([styleOf]: the Library's, none for an outside artist). Null when unknown.
+ */
+export const mixSeedStyle = (
+  seed: DiscoverMixSeed,
+  library: GenreProfileLibrary,
+  styleOf: StyleOf,
+): string | null => {
+  if (seed.kind === "genre" && seed.artists !== undefined) {
+    const songs = songsByArtist(library);
+    return commonStyle(seed.artists.flatMap((artist) => songs.get(artist.id) ?? []).map(songStyle));
+  }
+  return styleOf(seed.name) ?? null;
 };
 
 /** Whether a radio song's artist suits a mix: alike enough, not alike, or no genre known. */

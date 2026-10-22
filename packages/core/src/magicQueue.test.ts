@@ -45,6 +45,7 @@ const song = (trackId: string, artist: string, genre: string | null = "Rock"): M
   trackId,
   artists: [magicArtistKey(artist)],
   genre,
+  style: null,
 });
 
 const SONG_SEED: MagicSeed = { kind: "track", id: "s1", title: "Seed Song" };
@@ -279,6 +280,7 @@ describe("A Magic Queue's songs from both sources", () => {
       genre: genreProfile([{ genre: "Alt Rock" }])!
         .keys()
         .next().value,
+      style: null,
     });
   });
 
