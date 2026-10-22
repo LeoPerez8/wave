@@ -162,3 +162,36 @@ test("rapid track changes discard old lookups and unchanged queue metadata never
   await tick();
   assert.equal(pending.length, 2, "no subscriber means no source work");
 });
+
+test("a download during an in-flight lookup discards its older answer", async () => {
+  const { createPlayingIds } = await import("./playingIds.ts");
+  const { makeExternalStore } = await import("../lib/externalStore.ts");
+  const bus = await import("../library/libraryChanges.ts");
+  const target = makeExternalStore({ id: "yt:playing", song });
+  const answers: ((row: { id: number } | null) => void)[] = [];
+  const ids = createPlayingIds({
+    target,
+    read: () =>
+      new Promise((resolve) => {
+        answers.push(resolve);
+      }),
+    onDownload: bus.onDownloadedRecording,
+    onLibraryChange: bus.onLibraryChange,
+  });
+  const seen: string[][] = [];
+  const stop = ids.subscribe(() => seen.push([...ids.get()]));
+  try {
+    await tick();
+    bus.publishDownloadedRecording(track());
+    answers[0]!({ id: 7 });
+    await tick();
+    assert.deepEqual([...ids.get()], ["yt:playing"]);
+    assert.ok(seen.every((snapshot) => !snapshot.includes("7")));
+    assert.equal(answers.length, 2);
+    answers[1]!({ id: 8 });
+    await tick();
+    assert.deepEqual([...ids.get()], ["yt:playing", "8"]);
+  } finally {
+    stop();
+  }
+});
