@@ -309,3 +309,69 @@ screen/card acknowledgment. Actual Android touch, animation overlap, TalkBack,
 reduced motion and exported `WaveTiming` log acceptance remain outstanding: this
 environment has no Android SDK or device. No device acceptance or phone speedup
 is claimed by these desktop results.
+
+## artistOpening evidence (#589)
+
+The Library artist route reads its own detail and saved artist answer before its
+local rows. Saved Popular ranks are derived from those songs alone. Its section
+now acquires the shared finder only after the local content and screen settle,
+with Online selected and a standing full answer. This includes saved answers and
+integrated openings. Pending requests and Library mode need no finder. Online,
+Always and integrated section requests, including queued retries, share that
+settlement gate and check Android connectivity immediately before execution.
+Popular's separate quiet request remains #590's work; the common playing-ids
+follower remains #588's, and other online detail routes remain #591's.
+
+The saved [JSONL](results/579-artistOpening-desktop.jsonl) compares the actual
+`v0.19.0-ti` store/Core (`460e39ff`) with the implementation using the shared
+fixture at 1,000, 12,000 and 50,000 songs, eleven timed runs after warm-up.
+These are **desktop Node/sql.js measurements, not Hermes/phone SQLite timings
+or phone frame measurements**.
+
+`artistOpeningReplay.ts` faithfully replays the artist-owned opening reads and
+Core derivations, because the React Native route cannot run in Node. Every
+opening starts with a cold shared query/finder; the database and modules are
+warm. The first-row interval ends when the local page data/items are ready,
+including saved Popular ranking; it excludes module loading, fixture setup,
+React rendering/layout, navigation and common player subscriptions. Before reads
+the whole songs query and builds its finder when online rows need it, alongside
+the own-songs finder. After reads only the artist detail and saved answer. The
+SQL and individual row counts are included in each measurement's `details`.
+
+The fixture also includes an Appears on album, the artist's Library albums,
+missing/downloaded songs, a reversed saved Popular list, a song already in the
+Library under another artist and one remote-only song/release. Setup writes are
+restored before another bench runs. Both the local first-row projection and the
+complete settled page (artist, albums, appearances, full song rows/ranks, counts,
+Online view/shelves and page items) must match ti: all 24 comparison keys match.
+Integrated first-row equality compares the local rows; online additions are
+compared after settlement, when the fixed page is allowed to show them.
+
+The table reports before → after for the interval to local first-row data. Total
+SQL rows include artist/album/saved-answer rows; song rows count only decoded
+song records. Each first-row replay runs five → four statements. The JSONL also
+records p90, CPU, longest synchronous task and read-only notification count.
+Times are benchmark evidence; the tests assert deterministic work, not time.
+
+| Library songs | Artist songs | Mode       | Song rows before → after | All SQL rows before → after | Median ms before → after |
+| ------------: | -----------: | ---------- | -----------------------: | --------------------------: | -----------------------: |
+|         1,000 |           20 | library    |               1,020 → 20 |                  1,024 → 24 |           21.477 → 2.677 |
+|         1,000 |           20 | integrated |               1,020 → 20 |                  1,024 → 24 |           22.186 → 2.782 |
+|         1,000 |          300 | library    |              1,300 → 300 |                 1,332 → 332 |          29.360 → 11.327 |
+|         1,000 |          300 | integrated |              1,300 → 300 |                 1,332 → 332 |           31.236 → 9.411 |
+|        12,000 |           20 | library    |              12,020 → 20 |                 12,024 → 24 |          224.520 → 2.435 |
+|        12,000 |           20 | integrated |              12,020 → 20 |                 12,024 → 24 |          222.290 → 2.171 |
+|        12,000 |          300 | library    |             12,300 → 300 |                12,332 → 332 |         230.751 → 10.324 |
+|        12,000 |          300 | integrated |             12,300 → 300 |                12,332 → 332 |          235.106 → 9.111 |
+|        50,000 |           20 | library    |              50,020 → 20 |                 50,024 → 24 |         1004.735 → 2.356 |
+|        50,000 |           20 | integrated |              50,020 → 20 |                 50,024 → 24 |         1004.448 → 2.025 |
+|        50,000 |          300 | library    |             50,300 → 300 |                50,332 → 332 |         1005.143 → 9.062 |
+|        50,000 |          300 | integrated |             50,300 → 300 |                50,332 → 332 |         1095.813 → 8.537 |
+
+The shared whole-Library read is deferred, not eliminated: in integrated mode its
+settled-page measurement still returns the whole Library's song rows. This
+change removes that work from the artist-owned first-row path and keeps it out
+of Library mode. It does not claim the deferred read fits the background step
+budget or that the mounted app has no remaining common followers. Verification
+on the owner's ti build, offline/online and with exported WaveTiming logs, remains
+outstanding.
