@@ -117,6 +117,71 @@ test("catalog acceptance saves a stream without favoriting or downloading, and r
   );
 });
 
+test("acceptance follows a downloaded video's identity despite edited tags, and rejects a file lost since display", async () => {
+  const db = await openTestDatabase();
+  const seed = addTrack(db, { title: "Seed", artist: "Radiohead", genre: "Rock" });
+  const missing = addTrack(db, { title: "Missing", artist: "Radiohead", genre: "Rock" });
+  const playlistId = createPlaylist(
+    db,
+    "Alternative",
+    [{ source: "library", trackId: seed }],
+    1,
+  ).playlistId;
+  const missingOffer = {
+    key: "file-lost",
+    track: selectPlaylistRecommendationInput(db, playlistId).library.find(
+      (song) => song.id === String(missing),
+    )!,
+  };
+  const song = {
+    videoId: "download-arrived",
+    title: "Lucky",
+    artists: ["Radiohead"],
+    album: "OK Computer",
+    durationMs: 180000,
+    artworkUrl: null,
+    explicit: false,
+  };
+  addCandidates(db, { seed: "Radiohead", songs: [song] }, 1);
+  const input = selectPlaylistRecommendationInput(db, playlistId);
+  const streamOffer = {
+    key: "edited-download",
+    track: playlistRecommendations(input.playlist, { ...input, graph: null, now: 1 }).find(
+      (offer) => offer.track.videoId === song.videoId,
+    )!.track,
+  };
+  const download = addTrack(db, {
+    title: "Edited title",
+    artist: "Edited artist",
+    durationMs: 220000,
+  });
+  db.update(schema.tracks)
+    .set({ videoId: song.videoId })
+    .where(eq(schema.tracks.id, download))
+    .run();
+  db.update(schema.tracks).set({ path: null }).where(eq(schema.tracks.id, missing)).run();
+  assert.throws(() => acceptPlaylistRecommendation(db, playlistId, missingOffer, 2));
+  assert.deepEqual(selectPlaylistRecommendationInput(db, playlistId).feedback, []);
+  assert.equal(acceptPlaylistRecommendation(db, playlistId, streamOffer, 3), true);
+  assert.equal(
+    acceptPlaylistRecommendation(db, playlistId, { ...streamOffer, key: "stale-stream" }, 4),
+    false,
+  );
+  assert.deepEqual(
+    selectPlaylistEntries(db, playlistId).map((entry) =>
+      entry.source === "library" ? entry.track.id : null,
+    ),
+    [seed, download],
+  );
+  assert.deepEqual(
+    selectPlaylistRecommendationInput(db, playlistId).feedback.map(({ track, value }) => ({
+      id: track.id,
+      value,
+    })),
+    [{ id: String(download), value: 1 }],
+  );
+});
+
 test("dismiss then accept refills from updated contents, persists scoped learning, and exhausts truthfully without global changes", async () => {
   let db = await openTestDatabase();
   const seed = addTrack(db, { title: "Seed", artist: "Radiohead", genre: "Rock" });

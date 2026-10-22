@@ -14,7 +14,8 @@ import { addToPlaylist, selectPlaylist, selectPlaylistEntries } from "./playlist
 import { selectSongGenres, trackQuery } from "./tracks.ts";
 import * as schema from "./schema.ts";
 
-export const selectPlaylistRecommendationInput = (db: LibraryDatabase, playlistId: number) => {
+/** Current membership and Library recordings; shared with Add's transactional validation. */
+const selectPlaylistRecommendationTracks = (db: LibraryDatabase, playlistId: number) => {
   if (selectPlaylist(db, playlistId) === null) throw new Error("The playlist no longer exists");
   const names = new Map(
     db
@@ -40,7 +41,6 @@ export const selectPlaylistRecommendationInput = (db: LibraryDatabase, playlistI
       .filter((row) => row.videoId !== null)
       .map((row) => [row.id, row.videoId!]),
   );
-  const favoriteVideos = new Set(selectPendingFavorites(db).map((song) => song.videoId));
   const local = (song: SongRow): PlaylistRecommendationTrack => ({
     favorite: favorites.has(song.id),
     downloaded: videos.has(song.id) && song.path !== null,
@@ -74,6 +74,12 @@ export const selectPlaylistRecommendationInput = (db: LibraryDatabase, playlistI
             available: entry.source === "stream",
           },
   );
+  return { playlist, library, librarySongs };
+};
+
+export const selectPlaylistRecommendationInput = (db: LibraryDatabase, playlistId: number) => {
+  const tracks = selectPlaylistRecommendationTracks(db, playlistId);
+  const favoriteVideos = new Set(selectPendingFavorites(db).map((song) => song.videoId));
   const feedback = db
     .select({
       track: schema.playlistRecommendationFeedback.track,
@@ -83,9 +89,7 @@ export const selectPlaylistRecommendationInput = (db: LibraryDatabase, playlistI
     .where(eq(schema.playlistRecommendationFeedback.playlistId, playlistId))
     .all();
   return {
-    playlist,
-    library,
-    librarySongs,
+    ...tracks,
     catalog: selectCandidateCatalog(db),
     favoriteVideos,
     feedback,
@@ -119,7 +123,7 @@ export const acceptPlaylistRecommendation = (
   now: number,
 ): boolean =>
   db.transaction((tx) => {
-    const input = selectPlaylistRecommendationInput(tx, playlistId);
+    const input = selectPlaylistRecommendationTracks(tx, playlistId);
     const feedback = schema.playlistRecommendationFeedback;
     if (
       tx

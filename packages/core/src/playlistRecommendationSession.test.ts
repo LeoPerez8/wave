@@ -49,7 +49,11 @@ test("full renewal includes newly favorited and downloaded matches even when all
     }),
     dismiss: async () => {},
   });
-  const selectedIds = () => session.get().slots.flatMap((offer) => offer?.track.id ?? []).sort();
+  const selectedIds = () =>
+    session
+      .get()
+      .slots.flatMap((offer) => offer?.track.id ?? [])
+      .toSorted();
   await session.renew();
   assert.deepEqual(selectedIds(), ["a", "b", "c", "d", "e"]);
   library = library.map((song) => ({ ...song, favorite: song.id === "h" }));
@@ -58,6 +62,40 @@ test("full renewal includes newly favorited and downloaded matches even when all
   library = library.map((song) => ({ ...song, favorite: false, downloaded: song.id === "g" }));
   await session.renew();
   assert.deepEqual(selectedIds(), ["a", "b", "c", "d", "g"]);
+});
+
+test("an acceptance membership notification preserves the four held offers; a later external edit renews priority", async () => {
+  const seed = track("seed");
+  let playlist = [seed];
+  let library = [seed, ..."abcdefgh".split("").map(track)];
+  let id = 0;
+  const session = playlistRecommendationSession({
+    newId: () => String(++id),
+    read: async () => ({ playlist, sources: { library, catalog: [], graph: null, now: 0 } }),
+    dismiss: async () => {},
+    accept: async (offer) => {
+      playlist = [...playlist, offer.track];
+    },
+  });
+  await session.renew();
+  const before = session.get().slots;
+  library = library.map((song) => ({ ...song, favorite: song.id === "g" || song.id === "h" }));
+  assert.equal(await session.accept(before[2]!.key), true);
+  assert.equal(session.get().slots[2]?.track.id, "g");
+  const refilled = session.get().slots;
+  // The screen receives the membership notification after the action's fresh read.
+  await session.renew({ ifPlaylistChanged: true });
+  for (const index of [0, 1, 3, 4]) assert.equal(session.get().slots[index], before[index]);
+  assert.equal(session.get().slots[2], refilled[2]);
+  playlist = [...playlist, track("external")];
+  await session.renew({ ifPlaylistChanged: true });
+  assert.deepEqual(
+    session
+      .get()
+      .slots.flatMap((offer) => offer?.track.id ?? [])
+      .toSorted(),
+    ["a", "b", "d", "g", "h"],
+  );
 });
 
 test("initial read failure stays retryable and an empty or exhausted playlist has no invented offers", async () => {

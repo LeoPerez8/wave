@@ -1,7 +1,7 @@
 import { IconPlus, IconX } from "@tabler/icons-react-native";
 import { playlistRecommendationSession, type PlaylistRecommendationSlot } from "@wave/core";
 import * as Effect from "effect/Effect";
-import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { Text, View } from "react-native";
 
 import { grid } from "@/catalog/grid";
@@ -32,13 +32,9 @@ export function PlaylistRecommendations({
 }) {
   const enabled = useYtMusicEnabled();
   const [enabledNow] = useState(() => makeExternalStore(enabled));
-  // Reuse the rows already read for ranking, including the shared Library song actions.
-  const [libraryRows] = useState(() => makeExternalStore<readonly SongRow[]>([]));
-  const librarySongs = useSyncExternalStore(libraryRows.subscribe, libraryRows.get);
-  const libraryById = useMemo(
-    () => new Map(librarySongs.map((song) => [String(song.id), song])),
-    [librarySongs],
-  );
+  // Keep held offers readable if another offer's refill no longer finds their Library row.
+  const [libraryRows] = useState(() => makeExternalStore<ReadonlyMap<string, SongRow>>(new Map()));
+  const libraryById = useSyncExternalStore(libraryRows.subscribe, libraryRows.get);
   const [session] = useState(() =>
     playlistRecommendationSession({
       newId: () =>
@@ -49,7 +45,11 @@ export function PlaylistRecommendations({
             const store = yield* LibraryStore;
             const input = yield* store.playlistRecommendationInput(playlistId);
             const graph = yield* artistGraphNow;
-            libraryRows.set(input.librarySongs);
+            libraryRows.update((previous) => {
+              const rows = new Map(previous);
+              for (const song of input.librarySongs) rows.set(String(song.id), song);
+              return rows;
+            });
             return {
               playlist: input.playlist,
               sources: {
@@ -85,10 +85,11 @@ export function PlaylistRecommendations({
     }),
   );
   const state = useSyncExternalStore(session.subscribe, session.get);
-  // Membership and YT Music availability trigger a full selection renewal.
+  // An Add already renewed its inputs for refill; its membership notification keeps held offers.
   useEffect(() => {
+    const availabilityChanged = enabledNow.get() !== enabled;
     enabledNow.set(enabled);
-    void session.renew();
+    void session.renew({ ifPlaylistChanged: !availabilityChanged });
     // oxlint-disable-next-line react/exhaustive-effect-dependencies -- items is an explicit renewal trigger
   }, [session, items, enabled, enabledNow]);
   const play = ({ track }: PlaylistRecommendationSlot) => {
@@ -136,29 +137,29 @@ export function PlaylistRecommendations({
                 ? null
                 : { source: "library" as const, track: local };
           return (
-          <View key={song.key} className="flex-row items-center">
-            <View className="flex-1">
-              {row !== null && <DiscoverSongRow song={row} onPress={() => play(song)} />}
+            <View key={song.key} className="flex-row items-center">
+              <View className="flex-1">
+                {row !== null && <DiscoverSongRow song={row} onPress={() => play(song)} />}
+              </View>
+              <IconButton
+                icon={IconPlus}
+                label={`Add ${song.track.title} to playlist`}
+                busy={state.pending === song.key}
+                disabled={busy}
+                onPress={() => {
+                  void session.accept(song.key);
+                }}
+              />
+              <IconButton
+                icon={IconX}
+                label={`Dismiss ${song.track.title} recommendation`}
+                busy={state.pending === song.key}
+                disabled={busy}
+                onPress={() => {
+                  void session.dismiss(song.key);
+                }}
+              />
             </View>
-            <IconButton
-              icon={IconPlus}
-              label={`Add ${song.track.title} to playlist`}
-              busy={state.pending === song.key}
-              disabled={busy}
-              onPress={() => {
-                void session.accept(song.key);
-              }}
-            />
-            <IconButton
-              icon={IconX}
-              label={`Dismiss ${song.track.title} recommendation`}
-              busy={state.pending === song.key}
-              disabled={busy}
-              onPress={() => {
-                void session.dismiss(song.key);
-              }}
-            />
-          </View>
           );
         })
       )}
