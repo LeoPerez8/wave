@@ -10,6 +10,7 @@ type Props = {
   label: string;
   onPress: () => void;
   disabled?: boolean;
+  busy?: boolean;
   /** It opens a card (a menu floats next to it), and stays highlighted while the card is open. */
   opensMenu?: boolean;
 };
@@ -20,6 +21,7 @@ export function IconButton({
   label,
   onPress,
   disabled = false,
+  busy,
   opensMenu = false,
 }: Props) {
   const accent = useThemeColor("accent");
@@ -28,7 +30,7 @@ export function IconButton({
     <Press
       accessibilityRole="button"
       accessibilityLabel={label}
-      accessibilityState={{ disabled }}
+      accessibilityState={{ disabled, busy }}
       disabled={disabled}
       onPress={onPress}
       opensMenu={opensMenu}

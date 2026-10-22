@@ -37,6 +37,29 @@ test("the next refill reads newly favorited or downloaded candidates ahead of or
   assert.equal(session.get().slots[3]?.track.id, "g");
 });
 
+test("full renewal includes newly favorited and downloaded matches even when all five slots are occupied", async () => {
+  const seed = track("seed");
+  let library = [seed, ..."abcdefgh".split("").map(track)];
+  let id = 0;
+  const session = playlistRecommendationSession({
+    newId: () => String(++id),
+    read: async () => ({
+      playlist: [seed],
+      sources: { library, catalog: [], graph: null, now: 0 },
+    }),
+    dismiss: async () => {},
+  });
+  const selectedIds = () => session.get().slots.flatMap((offer) => offer?.track.id ?? []).sort();
+  await session.renew();
+  assert.deepEqual(selectedIds(), ["a", "b", "c", "d", "e"]);
+  library = library.map((song) => ({ ...song, favorite: song.id === "h" }));
+  await session.renew();
+  assert.deepEqual(selectedIds(), ["a", "b", "c", "d", "h"]);
+  library = library.map((song) => ({ ...song, favorite: false, downloaded: song.id === "g" }));
+  await session.renew();
+  assert.deepEqual(selectedIds(), ["a", "b", "c", "d", "g"]);
+});
+
 test("initial read failure stays retryable and an empty or exhausted playlist has no invented offers", async () => {
   let fail = true;
   let id = 0;
