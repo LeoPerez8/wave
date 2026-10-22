@@ -1,4 +1,10 @@
-import { activeTiming, continueTiming, timingSurfaceCommitted } from "@/lib/timing";
+import {
+  activeTiming,
+  continueTiming,
+  noteTimingLinkFailure,
+  timingSurfaceCommitted,
+  timingLinkNavigated,
+} from "@/lib/timing";
 import {
   counted,
   type ArtistLink,
@@ -44,7 +50,11 @@ export const followArtistLink = (link: ArtistLink, known?: ArtistRow | null): vo
     link.kind === "open" ? "Artist" : "artist choice",
   );
   if (link.kind === "open") openArtist(link.artistId, known);
-  else openArtistChoice(link.artistIds);
+  else {
+    const id = activeTiming()?.id;
+    if (id !== undefined) noteTimingLinkFailure(id, "link not ready");
+    openArtistChoice(link.artistIds, id);
+  }
 };
 
 /** Opens [target]'s page integrated: the Library artist's, or the YouTube Music artist page. */
@@ -91,7 +101,8 @@ export const followStreamedArtistLink = (link: StreamedArtistLink<ArtistRow>): v
       link.kind === "open" ? "Artist" : "artist choice",
     );
   if (link.kind === "open") openStreamedArtist(link.target);
-  else if (link.kind === "choose") openChoiceCard(link.targets.map(streamedChoice));
+  else if (link.kind === "choose")
+    openChoiceCard(link.targets.map(streamedChoice), activeTiming()?.id);
 };
 
 /** Each artist's row, in [ids]' order; one cheap read per artist, gone ones left out. */
@@ -105,11 +116,12 @@ const artistRows = (ids: readonly number[]): Promise<readonly ArtistRow[]> =>
     ),
   );
 
-const openChoiceCard = (choices: readonly ArtistChoice[]): void => {
+const openChoiceCard = (choices: readonly ArtistChoice[], timingId?: number): void => {
   openOverlay({
     label: "Go to Artist",
     render: (close) => <ArtistChoiceCard choices={choices} close={close} />,
   });
+  timingLinkNavigated(timingId);
 };
 
 /**
@@ -117,10 +129,19 @@ const openChoiceCard = (choices: readonly ArtistChoice[]): void => {
  * read (so it never grows once shown); what it was opened from stays
  * highlighted meanwhile.
  */
-const openArtistChoice = (artistIds: readonly number[]): void => {
+const openArtistChoice = (artistIds: readonly number[], timingId?: number): void => {
   void followUp(() =>
     artistRows(artistIds).then(
-      (artists) => openChoiceCard(artists.map((artist) => libraryChoice(artist))),
+      (artists) => {
+        if (artists.length === 0) {
+          if (timingId !== undefined) noteTimingLinkFailure(timingId, "target gone");
+          return;
+        }
+        openChoiceCard(
+          artists.map((artist) => libraryChoice(artist)),
+          timingId,
+        );
+      },
       (error: unknown) => showError("Couldn't read the artists", error),
     ),
   );

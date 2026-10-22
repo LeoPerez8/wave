@@ -1,12 +1,19 @@
 import {
   activeTiming,
+  noteTimingLinkClose,
   beginTiming,
   timingResponse,
   timingTransitionEnd,
   timingSurfaceCommitted,
   setTimingSurface,
 } from "@/lib/timing";
-import { settleSheet, stepNowPlayingSheet, type SheetEvent, type SheetPhase } from "@wave/core";
+import {
+  settleSheet,
+  stepNowPlayingSheet,
+  type SheetEvent,
+  type SheetPhase,
+  type SheetStep,
+} from "@wave/core";
 import { useSyncExternalStore } from "react";
 import { Dimensions } from "react-native";
 import { makeMutable, withSpring } from "react-native-reanimated";
@@ -15,6 +22,8 @@ import { scheduleOnRN } from "react-native-worklets";
 import { makeExternalStore } from "@/lib/externalStore";
 import { dismissAllOverlays } from "@/overlay/overlay";
 import { perfMark } from "@/perf/perf";
+
+import { followNowPlayingLink } from "./linkClose";
 
 /**
  * Now Playing is a sheet that stays mounted over the app (src/nowPlaying/
@@ -48,6 +57,7 @@ const updateSettled = (): void =>
   sheetSettled.set(motionDone && contentDrawn && phase.get() === "open");
 const springOpened = (id: number | undefined, generation: number): void => {
   if (generation !== motionGeneration || id !== sheetTimingId) return;
+  step({ type: "opened" });
   motionDone = true;
   if (id !== undefined) timingTransitionEnd(id);
   updateSettled();
@@ -111,7 +121,7 @@ const springDone = (id: number | undefined, generation: number): void => {
  * the chrome, pause the screens under it): however long they take, the sheet
  * is already moving.
  */
-const step = (event: SheetEvent, velocity = 0): void => {
+const step = (event: SheetEvent, velocity = 0): SheetStep => {
   const next = stepNowPlayingSheet(phase.get(), event);
   perfMark("nowPlaying.step", event.type);
   const timingId = sheetTimingId;
@@ -152,7 +162,8 @@ const step = (event: SheetEvent, velocity = 0): void => {
     if (timingId !== undefined) timingResponse(timingId);
   }
   // A card opened in Now Playing leaves with it rather than float over the app.
-  if (phase.get() === "open" && next.phase === "closing") dismissAllOverlays();
+  if ((phase.get() === "open" || phase.get() === "opening") && next.phase === "closing")
+    dismissAllOverlays();
   phase.set(next.phase);
   setTimingSurface(next.phase === "hidden" ? undefined : "Now Playing");
   if (next.spring === "rise" || next.spring === "open")
@@ -162,6 +173,7 @@ const step = (event: SheetEvent, velocity = 0): void => {
     for (const listener of hiddenListeners) listener();
     runAfterClose();
   }
+  return next;
 };
 
 /** Opens Now Playing from a tap: the sheet starts rising on the next frame. */
@@ -175,7 +187,9 @@ export const openNowPlaying = (): void => {
 };
 
 /** A swipe up on the mini player has started: the sheet follows the finger. */
-export const beginNowPlayingDrag = (): void => step({ type: "dragBegin" });
+export const beginNowPlayingDrag = (): void => {
+  step({ type: "dragBegin" });
+};
 
 /**
  * The swipe up ended `translationY` dp from where it started (negative is up):
@@ -196,10 +210,11 @@ export const releaseNowPlaying = (offset: number, velocity: number): void => {
 };
 
 /**
- * Dismisses Now Playing with its spring, then runs `then` (e.g. opening the
- * album); straight away when it is already out of sight.
+ * Dismisses Now Playing with its spring, then runs any completion work;
+ * straight away when it is already out of sight. Links use link-close instead.
  */
-export const closeNowPlaying = (then?: () => void): void => {
+export const closeNowPlaying = (then?: () => void, source?: "Back" | "chevron" | "card"): void => {
+  if (source !== undefined) noteTimingLinkClose(source);
   afterClose = then ?? null;
   if (
     isNowPlayingShown() &&
@@ -212,6 +227,14 @@ export const closeNowPlaying = (then?: () => void): void => {
   sheetSettled.set(false);
   step({ type: "close" });
   if (phase.get() === "hidden") runAfterClose();
+};
+
+/** A link owns its navigation now, independently of the closing spring or later closes. */
+export const closeNowPlayingForLink = (navigate: () => void): void => {
+  sheetSettled.set(false);
+  // The sheet's spring must not end the pushed screen's timing window.
+  sheetTimingId = undefined;
+  followNowPlayingLink({ step, navigate });
 };
 
 /** The window changed size: keep a closed sheet just out of sight. */

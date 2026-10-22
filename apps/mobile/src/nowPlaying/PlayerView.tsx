@@ -31,7 +31,7 @@ import { useStreamedArtistLink } from "@/ytmusic/streamedArtist";
 
 import { CoverPress } from "./CoverPress";
 import { usePlayingYtSong } from "./hooks";
-import { closeNowPlaying, useNowPlayingShown } from "./sheet";
+import { closeNowPlaying, closeNowPlayingForLink, useNowPlayingShown } from "./sheet";
 
 /** How far the artwork steps back while paused. */
 const PAUSED_SCALE = 0.84;
@@ -159,12 +159,12 @@ function MetaLink({ label, open, hint, className, timingKind, revealsCurrentScre
       accessibilityRole="link"
       accessibilityLabel={label}
       accessibilityHint={hint}
-      // Now Playing slides away first, then the screen opens over the tabs.
+      // The screen opens under Now Playing on this tap, while the sheet slides away.
       onPress={() => {
         if (revealsCurrentScreen) closeNowPlaying();
         else {
           beginTiming(timingKind, label);
-          closeNowPlaying(open);
+          closeNowPlayingForLink(open);
         }
       }}
       haptic="selection"
