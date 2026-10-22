@@ -4,7 +4,7 @@ import "../../global.css";
 import "@/settings/theme";
 
 import { Stack } from "expo-router";
-import { timingTouch, timingStackListeners } from "@/lib/timing";
+import { timingTouch, timingStackListeners, startTimingFrameCollection } from "@/lib/timing";
 import { StatusBar } from "expo-status-bar";
 import { useEffect } from "react";
 import type { GestureResponderEvent } from "react-native";
@@ -47,6 +47,7 @@ export { ErrorScreen as ErrorBoundary };
 
 export default function RootLayout() {
   useRenderCount("RootLayout");
+  useEffect(startTimingFrameCollection, []);
   const background = useThemeColor("background");
   // The status bar follows `useColorScheme` (style "auto"); the navigation bar follows here.
   useNavigationBarScheme();

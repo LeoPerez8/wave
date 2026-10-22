@@ -18,7 +18,7 @@ class FreezeWatchdog(private val repeat: (Runnable) -> () -> Unit) {
   /** Watches [watch] until the returned function is called. */
   fun watch(watch: FreezeWatch): () -> Unit {
     watches.add(watch)
-    return { watches.remove(watch) }
+    return { synchronized(this) { watches.remove(watch); watch.reset() } }
   }
 
   /** One of Wave's activities started: Wave is on screen. */
@@ -39,9 +39,12 @@ class FreezeWatchdog(private val repeat: (Runnable) -> () -> Unit) {
   private fun halt() {
     stop?.invoke()
     stop = null
+    for (watch in watches) watch.reset()
   }
 
+  @Synchronized
   private fun tick() {
+    if (startedActivities == 0) return
     try {
       for (watch in watches) watch.tick()
     } catch (error: Exception) {

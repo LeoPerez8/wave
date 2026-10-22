@@ -1999,6 +1999,10 @@ export { playingTrackIds } from "./playingIdentity.ts";
 export { createLongPressIntent } from "./longPressIntent.ts";
 export {
   TIMING_BUDGETS,
+  lateFrame,
+  hitchLine,
+  missedFramesLine,
+  type TimingFrames,
   timingDuration,
   timingBudgetExceeded,
   slowTapLine,
