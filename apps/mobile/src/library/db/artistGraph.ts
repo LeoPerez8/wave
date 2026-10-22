@@ -83,7 +83,7 @@ export const mixCatalogPage = (
 
 export const graphSimilarPage = (
   db: LibraryDatabase,
-  after: string,
+  after: string | null,
 ): GraphPage<YtArtistSimilar, string> => selectYtArtistSimilar(db, after, GRAPH_PAGE_SIZE);
 
 export const graphRadioPage = (

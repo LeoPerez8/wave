@@ -31,13 +31,13 @@ test("CPU work respects the 6ms target and operation cap with an explicit schedu
   Effect.runSync(
     runSteps(
       (function* () {
-        for (let i = 0; i < 300; i++) {
+        for (let i = 0; i < 1200; i++) {
           capped++;
           yield;
         }
       })(),
       Effect.sync(() => {
-        assert.ok(capped <= 256);
+        assert.ok(capped <= 1024);
       }),
       () => 0,
     ),

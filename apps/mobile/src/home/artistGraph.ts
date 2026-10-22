@@ -23,10 +23,11 @@ export const readArtistGraph = (
       (entry) => entry.videoId,
     );
     yield* runSteps(build.catalog(catalog), between);
-    let similar = "";
+    let similar: string | null = null;
     for (;;) {
       yield* between;
-      const page = yield* store.graphSimilarPage(similar);
+      const page: Effect.Success<ReturnType<ArtistGraphReads["graphSimilarPage"]>> =
+        yield* store.graphSimilarPage(similar);
       yield* between;
       yield* runSteps(build.pages(page.rows), between);
       if (page.next === null) break;

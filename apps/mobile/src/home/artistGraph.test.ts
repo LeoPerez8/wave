@@ -58,7 +58,7 @@ const store = (counts: { reads: number }, catalog: CatalogSong[] = []): ArtistGr
   graphSimilarPage: (after) =>
     Effect.succeed({
       rows:
-        after === ""
+        after === null
           ? [
               {
                 name: "Portishead",

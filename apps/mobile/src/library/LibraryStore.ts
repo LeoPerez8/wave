@@ -1078,7 +1078,7 @@ export class LibraryStore extends Context.Service<
       after: number,
     ) => Effect.Effect<ReturnType<typeof mixCatalogPage>, LibraryStoreError>;
     readonly graphSimilarPage: (
-      after: string,
+      after: string | null,
     ) => Effect.Effect<GraphPage<YtArtistSimilar, string>, LibraryStoreError>;
     readonly graphPlayPage: (
       after: GraphPlayCursor,

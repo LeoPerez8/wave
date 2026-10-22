@@ -59,6 +59,10 @@ test("graph pages bound returned work, seek an index, and preserve the complete 
         },
       )})`,
     );
+    for (let n = 0; n < 150; n++)
+      fixture.db.run(
+        sql`INSERT INTO yt_artists (artist_key,outcome,checked_at) VALUES (${`empty-${n}`},'unmatched',0)`,
+      );
     const names = new Map(Effect.runSync(store.listArtists).map((a) => [a.id, a.name]));
     const songs = new Map(
       Effect.runSync(store.listSongs).map((s) => [
