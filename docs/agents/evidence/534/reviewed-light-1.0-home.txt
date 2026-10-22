@@ -1,0 +1,31 @@
+Page: dev.leoperez.wave
+App: dev.leoperez.wave
+Snapshot: 26 visible nodes (47 total)
+Collapsed 21 Android helper nodes from the agent-facing text snapshot; use --raw or --json for the full hierarchy.
+@e1 [scroll-area] [scrollable]
+@e2 [scroll-area] "DISCOVER, Magic Queue, Artist mixes, Electric Dance Heavy, Broken Morning, Ocean, Summer Gold, City, Summer Electric, Love Running, Home Dance, Echo, Your Recap is ready, September 2026, Tap to watch, Home" [scrollable]
+  [content below scroll-area hidden]
+@e3 [group] "Home"
+@e5 [button] "Settings"
+@e6 [button] "Your Recap is ready: September 2026"
+@e11 [button] "Discover settings"
+@e13 [horizontalscrollview] [scrollable]
+@e14 [button] "Echo by Ada Prado, Slow Heavy, start Magic Queue"
+@e16 [button] "Home Dance by Abbey Marlow, Young Broken, start Magic Queue"
+@e18 [button] "Love Running by Ugo Lindqvist, Shadow Young, start Magic Queue"
+@e20 [button] "Summer Electric by Abbey Marlow, Young Fade, start Magic Queue"
+@e22 [button] "City by Wren Okafor, Running Young, start Magic Queue"
+@e24 [button] "Summer Gold by Kai Lindqvist, River, start Magic Queue"
+@e26 [button] "Ocean by Milo Nyx, Dream, start Magic Queue"
+@e28 [button] "Broken Morning by Yara Byrne, Silver, start Magic Queue"
+@e30 [button] "Electric Dance Heavy by Hana Lindqvist, Stars Slow Ghost, start Magic Queue"
+@e33 [horizontalscrollview] [scrollable]
+@e34 [button] "Abbey Marlow mix by KATSEYE, Sia, Abbey Marlow, 26 songs"
+@e35 [button] "Kai Duarte mix by Bielzin, The Weeknd, Kai Duarte, 12 songs"
+@e36 [button] "Now playing: Blue, Ada Duarte"
+@e39 [button] "Play Blue"
+@e40 [button] "Next track"
+@e41 [group] "Home" [selected]
+@e43 [group] "Library"
+@e45 [group] "Playlists"
+@e47 [group] "Search"
