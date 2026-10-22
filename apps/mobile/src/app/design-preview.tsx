@@ -29,6 +29,7 @@ import { PlaylistsButtons, PlaylistsHeader } from "@/library/PlaylistsList";
 import { SortButton } from "@/library/SongSortButton";
 import { ListIntroLayout, songCount } from "@/library/TrackList";
 import { Press } from "@/motion/Press";
+import { KindCards } from "@/preview/KindCards";
 import { SearchFieldStates } from "@/preview/SearchFieldStates";
 import {
   type Control,
@@ -61,6 +62,7 @@ const SHELVES: readonly { readonly shelf: Shelf; readonly label: string }[] = [
   { shelf: "songs", label: "Songs" },
   { shelf: "playlists", label: "Playlists" },
   { shelf: "search", label: "Search" },
+  { shelf: "kinds", label: "Kinds" },
 ];
 
 /**
@@ -152,7 +154,7 @@ function DesignPreview({ opening }: { opening: PreviewState | undefined }) {
       <ScreenHeader title="Design preview" />
       <View style={{ paddingHorizontal: grid.margin, gap: CELL * 2, paddingBottom: CELL * 2 }}>
         <CatalogLine>Synthetic data · not your library</CatalogLine>
-        <View accessibilityRole="tablist" className="flex-row" style={{ gap: CELL * 3 }}>
+        <View accessibilityRole="tablist" className="flex-row" style={{ gap: CELL * 2 }}>
           {SHELVES.map(({ shelf, label }) => (
             <Press
               key={shelf}
@@ -183,7 +185,9 @@ function DesignPreview({ opening }: { opening: PreviewState | undefined }) {
         </View>
       </View>
 
-      {view === "search" ? (
+      {view === "kinds" ? (
+        <KindCards />
+      ) : view === "search" ? (
         <SearchFieldStates />
       ) : view === "playlists" ? (
         // Library › Playlists: its count, Import Playlists and New Playlist, then the playlists.
