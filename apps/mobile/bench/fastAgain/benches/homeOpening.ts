@@ -45,7 +45,7 @@ export const bench: FastAgainBench = {
       mixes: Array.from({ length: 4 }, (_, mix) => ({
         id: `${kind}:${mix}`,
         seed: { kind: kind as "artist" | "genre", name: `Seed ${mix}` },
-        songs: Array.from({ length: 50 }, (_, song) => ({
+        songs: Array.from({ length: 50 }, (_entry, song) => ({
           videoId: `mix-${kind}-${mix}-${song}`,
           title: `New song ${song}`,
           artists: [`Seed ${mix}`],
