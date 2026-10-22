@@ -341,7 +341,7 @@ export const WHOLE_LIBRARY: Record<string, Exception> = {
   },
   "ytmusic/YtSongList.tsx#useYtAlbumDownloadButton": {
     reason:
-      "Visible online lists and their download buttons resolve local files; they are not the hidden Now Playing subtree.",
+      "Only nonempty online album songs after screen settlement activate this finder. Library album openings with no online answer start no cold follower.",
     capabilities: [
       "ytmusic/libraryFinder.ts#useLoadedInLibrary",
       "ytmusic/libraryFinder.ts#useLoadedLibraryFinder",
@@ -357,7 +357,7 @@ export const WHOLE_LIBRARY: Record<string, Exception> = {
   },
   "ytmusic/YtSongList.tsx#YtSongList": {
     reason:
-      "Visible online lists and their download buttons resolve local files; they are not the hidden Now Playing subtree.",
+      "Only a loaded remote list after screen settlement follows the finder; offline/loading pages render without acquiring it.",
     capabilities: ["ytmusic/libraryFinder.ts#useLibraryFinder"],
   },
 };

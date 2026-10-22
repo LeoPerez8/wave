@@ -5,7 +5,7 @@ import type { TestDatabase } from "../../src/library/db/testDatabase.ts";
 import type { SongRow } from "../../src/library/LibraryStore.ts";
 import type { NativeYtSong } from "../../src/native/waveYtMusic.ts";
 import { artistOpeningRequest } from "../../src/ytmusic/artistOpeningRequest.ts";
-import { albumRowsInPlace } from "../../src/ytmusic/albumOpening.ts";
+import { albumOpening } from "../../src/ytmusic/albumOpening.ts";
 import { loadLibraryStore, loadWorktreeModule } from "./store.ts";
 
 export const loadDetailOpening = async (root: string, db: TestDatabase) => {
@@ -20,13 +20,13 @@ export const loadDetailOpening = async (root: string, db: TestDatabase) => {
         )
       ).artistOpeningRequest
     : <A, E, R>(_online: () => boolean, effect: Effect.Effect<A, E, R>) => effect;
-  const place = fixed
+  const appOpening = fixed
     ? (
-        await loadWorktreeModule<{ albumRowsInPlace: typeof albumRowsInPlace }>(
+        await loadWorktreeModule<{ albumOpening: typeof albumOpening }>(
           root,
           "apps/mobile/src/ytmusic/albumOpening.ts",
         )
-      ).albumRowsInPlace
+      ).albumOpening
     : null;
   const album = (id: number, now: number, online = true) => {
     const detail = Effect.runSync(store.getAlbum(id));
@@ -57,16 +57,18 @@ export const loadDetailOpening = async (root: string, db: TestDatabase) => {
       online,
       releasePage: () => undefined,
     };
-    const view = fixed
-      ? core.ytAlbumOpening(state, context).view
-      : core.ytLibraryAlbumView(state, context);
+    const work = appOpening?.(state, context);
+    const view = work?.view ?? core.ytLibraryAlbumView(state, context);
     return {
       detail,
       artist,
       state,
       context,
       view,
-      requests: fixed ? 0 : Number(view?.askArtist === true || view?.release != null),
+      requests:
+        work === undefined
+          ? Number(view?.askArtist === true || view?.release != null)
+          : Number(work.askArtist || work.readRelease !== null),
     };
   };
   const answer = (opening: ReturnType<typeof album>, songs: readonly NativeYtSong[]) => {
@@ -79,17 +81,16 @@ export const loadDetailOpening = async (root: string, db: TestDatabase) => {
     const work = fixed ? core.ytAlbumOpening(opening.state, context) : null;
     const find =
       !fixed || work?.finder ? core.libraryFinder(Effect.runSync(store.listSongs)) : () => null;
-    const view = fixed
-      ? core.ytAlbumOpening(opening.state, { ...context, elsewhere: find }).view
-      : core.ytLibraryAlbumView(opening.state, { ...context, elsewhere: find });
+    const view =
+      appOpening !== null
+        ? appOpening(opening.state, context, find).view
+        : core.ytLibraryAlbumView(opening.state, { ...context, elsewhere: find });
     const local = opening.detail.tracks.map((track) => ({
       source: "library" as const,
       track,
       number: track.trackNumber,
     }));
-    return place === null || view?.tracks == null
-      ? (view?.tracks ?? local)
-      : place(local, view.tracks, find);
+    return view?.tracks ?? local;
   };
   const offlineView = (
     kind: "artist" | "album" | "ytArtist",

@@ -446,7 +446,8 @@ export function YtSongList({
 }) {
   const scrollable = useListScrollable();
   const bottomInset = useChromeInset();
-  const find = useLibraryFinder();
+  const settled = useScreenSettled();
+  const find = useLibraryFinder(settled && load.status === "loaded");
   const page = load.status === "loaded" ? load.page : null;
   const origin = useMemo(
     (): DownloadOrigin | null =>

@@ -168,6 +168,6 @@ export const useYtArtistPage = (
     retry: useCallback(() => {
       setOfflineHint(false);
       setRetry((count) => count + 1);
-    }, []),
+    }, [setOfflineHint, setRetry]),
   };
 };

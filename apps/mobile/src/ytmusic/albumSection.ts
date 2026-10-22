@@ -1,6 +1,5 @@
 import {
   ytAlbumSongs,
-  ytAlbumOpening,
   type YtAlbumEntry,
   type LibraryAlbumKey,
   type YtArtistAlbum,
@@ -21,7 +20,7 @@ import type { NativeYtSong } from "@/native/waveYtMusic";
 import { useSearchOnlineAlways } from "@/settings/searchOnline";
 
 import { useYtArtistAnswer } from "./artistSection";
-import { albumRowsInPlace } from "./albumOpening";
+import { albumOpening } from "./albumOpening";
 import { artistOpeningRequest } from "./artistOpeningRequest";
 import { askYtMusic } from "./askYtMusic";
 import { useLoadedLibraryFinder } from "./libraryFinder";
@@ -110,22 +109,17 @@ export const useYtAlbumSection = (
     online: connected,
     retryArtist: retryArtist > 0,
   };
-  const work = ytAlbumOpening(state, context);
+  const work = albumOpening(state, context);
   const find = useLoadedLibraryFinder(work.finder);
-  const baseView = ytAlbumOpening(state, { ...context, elsewhere: find ?? context.elsewhere }).view;
   const [held, hold] = useVisitState<readonly YtAlbumEntry<NativeYtSong, SongRow>[] | null>(
     null,
     `${artistId}/${album.title}`,
   );
-  const previous =
-    held ??
-    tracks.map((track) => ({ source: "library" as const, track, number: track.trackNumber }));
-  const joined = baseView?.tracks;
-  const entries = joined == null || find === null ? null : albumRowsInPlace(previous, joined, find);
+  const view = albumOpening(state, context, find, held).view;
+  const entries = view?.tracks ?? null;
   useEffect(() => {
     if (entries !== null && entries !== held) hold(entries);
   }, [entries, held, hold]);
-  const view = baseView === null ? null : { ...baseView, tracks: entries };
 
   // The artist is asked for on its own once; after a failure it waits for Online again.
   const askedOnItsOwn = useRef(false);
@@ -178,7 +172,7 @@ export const useYtAlbumSection = (
         setRetryArtist((count) => count + 1);
       }
     },
-    [retry],
+    [retry, setPick, setAttempt, setRetryArtist],
   );
   const toggle = useLineToggle(view?.toggle, onPick);
   return { view, toggle };

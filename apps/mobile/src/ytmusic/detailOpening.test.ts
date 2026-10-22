@@ -4,10 +4,10 @@ import * as Effect from "effect/Effect";
 import {
   ytAlbumOpening,
   ytArtistOpeningState,
-  ytArtistPageOpening,
   ytArtistSectionView,
   YT_ARTIST_SECTION_START,
 } from "@wave/core";
+import { artistPageOpening } from "./artistPageOpening.ts";
 import { artistOpeningRequest } from "./artistOpeningRequest.ts";
 
 for (const page of ["artist", "album", "named YT artist"] as const) {
@@ -39,11 +39,7 @@ for (const page of ["artist", "album", "named YT artist"] as const) {
               contentReady: false,
               releasePage: () => undefined,
             }).view?.note
-          : ytArtistPageOpening(state, {
-              ...context,
-              librarySong: () => null,
-              libraryAlbum: () => null,
-            }).view.note;
+          : artistPageOpening({ online: false, enabled: true }).view?.note;
     assert.equal(note, "offline", "rendering the note waits for no saved-answer read or finder");
     // The production execution boundary also handles a network loss after scheduling.
     let connected = true;

@@ -82,7 +82,7 @@ export const bench: FastAgainBench = {
             source:
               "faithful replay of selected-worktree source; real LibraryStore/Core; cold shared query each run",
             songRows: queries
-              .filter((q) => /(?:\"tracks\"|tracks)\.(?:\"title\"|title)/.test(q.sql))
+              .filter((q) => /(?:"tracks"|tracks)\.(?:"title"|title)/.test(q.sql))
               .reduce((n, q) => n + q.rows, 0),
             requestsStartedBeforeSettlement: result.requests,
             deferred: opening.fixed

@@ -1,3 +1,11 @@
+import {
+  ytAlbumOpening,
+  type LibraryAlbumTrack,
+  type YtArtistSection,
+  type YtLibraryAlbumContext,
+  type YtSong,
+} from "@wave/core";
+
 /** Keep the local rows, then append online additions; downloads replace their streamed row. */
 type Entry<S, L> =
   | { readonly source: "library"; readonly track: L; readonly number: number | null }
@@ -38,4 +46,32 @@ export const albumRowsInPlace = <
     })
     ? previous
     : result;
+};
+
+/** The app's album data boundary: local rows draw while optional work is deferred. */
+export const albumOpening = <
+  S extends YtSong,
+  L extends LibraryAlbumTrack & { readonly id: number },
+>(
+  state: YtArtistSection<S>,
+  context: YtLibraryAlbumContext<S, L> & {
+    readonly contentReady: boolean;
+    readonly settled: boolean;
+    readonly online: boolean;
+    readonly retryArtist?: boolean;
+  },
+  find: ((song: S) => L | null) | null = null,
+  held: readonly Entry<S, L>[] | null = null,
+) => {
+  const work = ytAlbumOpening(state, { ...context, elsewhere: find ?? (() => null) });
+  const previous =
+    held ??
+    context.tracks.map((track) => ({
+      source: "library" as const,
+      track,
+      number: track.trackNumber,
+    }));
+  const joined = work.view?.tracks;
+  const entries = joined == null || find === null ? null : albumRowsInPlace(previous, joined, find);
+  return { ...work, view: work.view === null ? null : { ...work.view, tracks: entries } };
 };

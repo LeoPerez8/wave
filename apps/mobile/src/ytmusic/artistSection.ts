@@ -272,6 +272,7 @@ export const useYtPopularSongs = (
   const artistKey = identityKey(name);
   const saved = state.status === "ready" ? state.saved : undefined;
   const settled = useScreenSettled();
+  // Online's section owns the full-list ask; Popular must not auto-retry a failed opening.
   const wanted =
     settled &&
     onlineSelected &&
@@ -279,6 +280,7 @@ export const useYtPopularSongs = (
     enabled &&
     !asks &&
     state.status === "ready" &&
+    state.failure === null &&
     ytArtistQuery(name) !== null &&
     (saved === null || (saved?.outcome === "found" && saved.page.allSongs === undefined));
   const [read, setRead] = useState<{ readonly key: string; readonly answer: Saved } | null>(null);
