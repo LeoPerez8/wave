@@ -309,3 +309,240 @@ screen/card acknowledgment. Actual Android touch, animation overlap, TalkBack,
 reduced motion and exported `WaveTiming` log acceptance remain outstanding: this
 environment has no Android SDK or device. No device acceptance or phone speedup
 is claimed by these desktop results.
+
+## Regression sweep: v0.7.0-ti to ti (#596)
+
+This sweep compares the reference above with `origin/ti` / `v0.19.0-ti`
+(`460e39ff0cba6f50e7a456a77d6e99813295ebaa`) and the local integration
+snapshot `ee9610b633ea1f963d06ec39b95c7dbdfd521b4e` containing #580, #581 and
+#583. Here **current/after means the research harness, with unchanged production
+reads**, not an optimized application. Differences between ti and current are
+run variability and instrumentation, not claimed speedups. Historical source is
+loaded from the read-only `/tmp/wave-596-before` and `/tmp/wave-596-reference`
+worktrees. The five preserved partial files and their quick-run logs were
+inspected before recovery; the evidence below comes from fresh full runs.
+
+The research harness and characterization are committed in `c28955b4`.
+The raw metadata records the pre-research base because the harness files were
+uncommitted during capture. Before handoff this branch also merged local
+integration `d1bb8feb9385a7d6c8bac1e0dc471e3b8d8f9ff7` (#584 guards and #585
+immediate Now Playing links). Those changes do not alter the measured LibraryStore,
+Stats, playlist ranking or graph algorithms; the tables retain their recorded
+snapshot. #585 has its own measured section above.
+
+These remain **desktop Node + sql.js numbers, not Hermes, Android SQLite, or
+measured tap-to-first-frame times**. Each scenario warms once, traces separately,
+and times eleven runs at 1,000, 12,000 and 50,000 songs, using #583's identical
+fixtures. The replay and stepped probes record their semantics in each JSONL
+`details` field. Process CPU, p90, SQL work, notifications, and longest task are
+retained in the raw files. An unavailable reference feature is not a zero-time
+implementation. No exported phone log was supplied for this sweep.
+
+### What happens on the tab and push paths
+
+A tab tap goes through `chrome/TabBar.tsx`, `tabSwitches.ts`, expo-router, the
+retained `TabSlot`, and the screen's render/effects. A detail tap goes through
+`library/routes.ts` (or the Now Playing/menu link), router dispatch, the detail
+screen and its read subscriptions. The shared query registry starts its SQLite
+read in a later timer task. That avoids running it inside the handler, but it
+can still overlap transition frames: a single synchronous query cannot yield.
+A resolved Promise around synchronous SQLite does not move that query off JS.
+These are source-established scheduling paths; the desktop benches cannot
+establish whether an effect/task preceded a particular Android first frame.
+
+The tab layout's only change between the release tags is a TypeScript type for
+`Object.entries`. `chrome/tabScreens.tsx`, `library/sharedQueries.ts` and
+`lib/useFocusedVersion.ts` are unchanged. Both versions retain visited tabs and
+have shared queries that pause hidden screens. The evidence supports additional
+readers bypassing that lifecycle, rather than a new tab retention policy.
+
+| Surface / trigger                                            | v0.7.0-ti                                                                   | ti / integration                                                                                                                                                               | Disposition                                                                      |
+| ------------------------------------------------------------ | --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------- |
+| Home first visit and every focus                             | Shared Home shelves and focused totals; no Recap card                       | Adds `useRecapToAnnounce → useStatsRead → Stats.recaps → countedListening`; every focus runs it even with an unchanged play version                                            | New Recap-availability ticket draft                                              |
+| Editable playlist push / mount                               | Own playlist data; no recommendation section                                | `PlaylistItems` mounts recommendations below its rows without viewport gating; input read, cold shared graph if needed, then synchronous Core ranking                          | New playlist-recommendation ticket draft                                         |
+| Download / scan / favorite with playlist screen retained     | Shared queries suppress hidden work                                         | Recommendations directly follow `onLibraryChange`, with `tracks: true`, `favorites: true`; no visibility check or burst coalescing; each retained session renews independently | Same playlist ticket; replay measures one and two sessions                       |
+| First shared Artist graph consumer after launch/invalidation | Graph absent                                                                | Two free-turn boundaries, but history, all artists, all songs and their conversion occupy one middle segment; final graph derivation occupies another                          | Covered by #594 (explicit #584 guard ownership); extend its measured graph scope |
+| Home/Stats winning artists; paged artist consumers           | Global credited-song UNION, even for two requested artists or a 50-row page | Same global aggregation; a small returned row count conceals whole-Library SQL work                                                                                            | New bounded artist-count ticket draft; inherited cost                            |
+| Genre push                                                   | Whole genre decoded, then sorted in JS despite virtualized rows             | Same full genre hydration                                                                                                                                                      | New genre-first-page ticket draft; inherited cost                                |
+| Now Playing / Queue / streamed playing-row subscriptions     | Existing bounded warm player/Queue; no new streamed identity follower       | Sheet song buttons/download lookup and list playing ids follow full songs/finder                                                                                               | Already #587/#588; no duplicate ticket                                           |
+| Artist / integrated album push                               | Artist/album's own data; no current finder/Popular extras                   | Finder, Popular read, integrated online ask added to opening path                                                                                                              | Already #589–#591; link sequencing/readiness #585/#586                           |
+| Home picks, taste, daily mixes, known videos, startup        | Earlier Home/startup implementations                                        | Additional full-Library/history work and focus/startup scheduling                                                                                                              | Already #592–#595; graph and Recap are separate call paths                       |
+
+The always-mounted/retained inventory also includes floating chrome (mini player,
+tab bar, selection), root overlay/toast hosts, Now Playing's shell and visited
+Queue content. Playback selectors and shared Library queries are already scoped;
+retention alone is not evidence of new database work. `Activity` tears down
+hidden Queue effects. In contrast the playlist recommendation component has a
+raw change-bus subscription and no screen-sight API. The replay uses actual Core
+sessions, LibraryStore inputs and the selected worktree's change bus, with a
+faithful replay of that component subscription. It does **not** mount React,
+measure native retained views or claim a total render notification count.
+
+### Measurements and saved runs
+
+Run from this checkout, with the baseline worktrees already present:
+
+```sh
+pnpm --silent --filter @wave/mobile bench:fast-again --bench regressionSweep --before /tmp/wave-596-before --reference /tmp/wave-596-reference
+pnpm --silent --filter @wave/mobile bench:fast-again --bench playlistRenewal --before /tmp/wave-596-before --reference /tmp/wave-596-reference
+pnpm --silent --filter @wave/mobile bench:fast-again --bench graphSlices --before /tmp/wave-596-before --reference /tmp/wave-596-reference
+pnpm --silent --filter @wave/mobile bench:fast-again --bench boundedReads --before /tmp/wave-596-before --reference /tmp/wave-596-reference
+pnpm --silent --filter @wave/mobile bench:fast-again --bench songReadSlices --before /tmp/wave-596-before --reference /tmp/wave-596-reference
+```
+
+The existing [libraryReads inventory](results/579-libraryReads-desktop.jsonl)
+provides the complete read ranking and twenty slowest reads per size; the new
+sweep tests the additional callers and controls, rather than reinterpreting
+warm read times as screen-opening latency. Its over-budget rows reproduce the
+inventory's main costs. The shared graph's unsliced probe reports total
+synchronous CPU work; `graphSlices` separately measures the actual three
+segments around its production yield hooks, using real Node task yields in
+place of the app scheduler's waits. Only the latter is a segment measurement.
+
+<!-- #596 measured tables follow -->
+
+The full sweep was recorded on 2026-10-22T11:08:07.494Z with v26.8.2 on linux-x64. This is a shared desktop host: independent integration checks overlapped portions of the bounded-read, graph and renewal passes. The first bounded-read pass remains in the handoff directory as a contention diagnostic and was replaced by a repeat below. Use repeated work counts and query plans for attribution; p90/max include host scheduling and GC. No cross-run timing delta is treated as an application improvement.
+
+#### Newly added work on Home and playlist paths
+
+Raw evidence: [regressionSweep](results/596-regressionSweep-desktop.jsonl). All values are **desktop Node + sql.js milliseconds**; SQL rows include intermediate results.
+
+| Songs  | Operation                     | Rows    | SQL | ti median | Current median | v0.7 median | Current p90 |
+| ------ | ----------------------------- | ------- | --- | --------- | -------------- | ----------- | ----------- |
+| 1,000  | `homeRecapAvailability`       | 7,200   | 1   | 14.223    | 15.039         | —           | 17.102      |
+| 1,000  | `playlistRecommendationInput` | 2,343   | 15  | 15.586    | 16.717         | —           | 18.911      |
+| 1,000  | `playlistRankWarmInput`       | 0       | 0   | 58.355    | 59.997         | —           | 60.795      |
+| 1,000  | `playlistGraphCold`           | 11,190  | 8   | 48.745    | 48.839         | —           | 51.714      |
+| 12,000 | `homeRecapAvailability`       | 8,640   | 1   | 29.609    | 29.260         | —           | 31.219      |
+| 12,000 | `playlistRecommendationInput` | 25,883  | 15  | 155.205   | 156.357        | —           | 166.832     |
+| 12,000 | `playlistRankWarmInput`       | 0       | 0   | 376.794   | 402.509        | —           | 578.008     |
+| 12,000 | `playlistGraphCold`           | 68,280  | 8   | 401.400   | 414.273        | —           | 548.112     |
+| 50,000 | `homeRecapAvailability`       | 8,640   | 1   | 93.727    | 91.603         | —           | 97.229      |
+| 50,000 | `playlistRecommendationInput` | 107,203 | 15  | 655.794   | 664.397        | —           | 755.429     |
+| 50,000 | `playlistRankWarmInput`       | 0       | 0   | 4,072.051 | 3,833.316      | —           | 3,976.528   |
+| 50,000 | `playlistGraphCold`           | 259,500 | 8   | 1,708.757 | 1,686.146      | —           | 1,730.473   |
+
+Recap reads return quarter-hour aggregates, not one row per play. At 12,000 and 50,000 songs both return 8,640 time buckets, but aggregating the underlying 54,000 versus 200,000 play events still grows. Five recommendation slots do not bound the input or ranking work. `playlistGraphCold` is the explicitly unsliced graph CPU probe; its longest task must not be confused with the production segments below.
+
+The preserved three-run quick sweep independently reported 12,000-song medians of 31.061 ms for Recap, 159.417 ms for input, 390.219 ms for ranking and 413.211 ms for unsliced graph work, with the same SQL work counts. The full-run medians above reproduce the causes; this is repeatability evidence, not an application before/after improvement. The quick logs remain in the research handoff directory.
+
+#### Repeated retained playlist sessions
+
+Raw evidence: [playlistRenewal](results/596-playlistRenewal-desktop.jsonl). One unrelated burst track change is sent through the real change bus after the sessions are warm. Graph is null/warm, YT Music disabled and no network is used. The shared fixture has no saved candidate catalog or similar-artist pages; these costs are already present for local recommendations, not a worst-case online catalog. Times cover input + Core renewal/ranking and the resolved-Promise microtask batch; there is no intervening task yield. React rendering, graph derivation, and the component's Library-row-map publication are excluded. Notifications count the Core session subscriber only. The replay validates offered track identities across ti/current; v0.7 has no sessions.
+
+| Songs  | Retained sessions | Input reads | Rows    | SQL | Notifications | ti median ms | Current median ms | Current p90 ms |
+| ------ | ----------------- | ----------- | ------- | --- | ------------- | ------------ | ----------------- | -------------- |
+| 1,000  | 1                 | 1           | 2,343   | 15  | 3             | 206.078      | 211.319           | 421.020        |
+| 1,000  | 2                 | 2           | 4,686   | 30  | 6             | 439.755      | 425.448           | 554.945        |
+| 12,000 | 1                 | 1           | 25,883  | 15  | 3             | 2,078.528    | 629.400           | 948.375        |
+| 12,000 | 2                 | 2           | 51,766  | 30  | 6             | 1,304.255    | 1,108.180         | 1,132.428      |
+| 50,000 | 1                 | 1           | 107,203 | 15  | 3             | 4,392.071    | 4,446.388         | 4,581.121      |
+| 50,000 | 2                 | 2           | 214,406 | 30  | 6             | 8,826.617    | 8,727.665         | 9,746.985      |
+
+The second session represents another retained playlist component, not a claim that five playlist pages are always mounted. The behavior test proves the work grows from one read/15 statements/3 session notifications to two reads/30 statements/6 notifications for one unchanged result, and stops after unsubscribe. It characterizes current wiring; the follow-up must replace these bad-work counts with visibility/coalescing bounds.
+
+#### Shared Artist graph: actual yield boundaries
+
+Raw evidence: [graphSlices](results/596-graphSlices-desktop.jsonl). `readArtistGraph` runs unchanged with a real `setImmediate` at each of its two `between` hooks. These substitute for free-turn waits; waiting on the app scheduler is excluded. The fixture has empty candidate-catalog/similar-page inputs, so the first segment returns zero rows and is not a bound for a populated online cache. Segments are (1) catalog + saved pages, (2) history + all artists + all songs + conversion, (3) play-to-artist mapping + Core graph derivation.
+
+| Songs  | Segment | Rows    | SQL | Segment median ms | Segment p90 ms |
+| ------ | ------- | ------- | --- | ----------------- | -------------- |
+| 1,000  | 1       | 0       | 3   | 1.064             | 1.652          |
+| 1,000  | 2       | 11,190  | 5   | 118.664           | 175.658        |
+| 1,000  | 3       | 0       | 0   | 49.527            | 88.401         |
+| 12,000 | 1       | 0       | 3   | 0.589             | 0.903          |
+| 12,000 | 2       | 68,280  | 5   | 355.510           | 433.239        |
+| 12,000 | 3       | 0       | 0   | 110.993           | 135.216        |
+| 50,000 | 1       | 0       | 3   | 0.652             | 0.878          |
+| 50,000 | 2       | 259,500 | 5   | 1,614.370         | 1,847.922      |
+| 50,000 | 3       | 0       | 0   | 471.784           | 544.774        |
+
+Caching prevents repeat warm builds, but does not bound either of the two expensive cold segments. This graph has independent inputs and construction from TasteProfile; splitting the taste profile in #593 or sequencing mix builds in #594 does not by itself slice `readArtistGraph`.
+
+#### Controls: own rows versus broad inherited work
+
+Raw evidence is in [regressionSweep](results/596-regressionSweep-desktop.jsonl). The first two controls show the artist/album's own SQL remains small. Artist rows and genre hydration were expensive in the reference too; they are residual scaling costs, not evidence of a newly introduced regression.
+
+| Songs  | Control           | SQL rows | ti median ms | Current median ms | v0.7 median ms |
+| ------ | ----------------- | -------- | ------------ | ----------------- | -------------- |
+| 1,000  | `artistOwnRows20` | 23       | 1.493        | 2.006             | 1.505          |
+| 1,000  | `albumOwnRows10`  | 12       | 1.065        | 1.165             | 1.067          |
+| 1,000  | `artistRows2`     | 2        | 1.184        | 1.254             | 1.206          |
+| 1,000  | `artistPage50`    | 40       | 1.946        | 2.074             | 2.056          |
+| 1,000  | `genreOwnRows`    | 335      | 4.510        | 4.702             | 4.288          |
+| 1,000  | `fullSongs`       | 1,000    | 12.364       | 12.806            | 12.552         |
+| 1,000  | `songRows50`      | 50       | 0.984        | 1.093             | 1.069          |
+| 12,000 | `artistOwnRows20` | 23       | 1.573        | 1.564             | 1.577          |
+| 12,000 | `albumOwnRows10`  | 12       | 1.234        | 1.143             | 1.113          |
+| 12,000 | `artistRows2`     | 2        | 17.922       | 18.158            | 17.461         |
+| 12,000 | `artistPage50`    | 50       | 28.786       | 28.585            | 28.311         |
+| 12,000 | `genreOwnRows`    | 4,001    | 52.825       | 52.924            | 48.917         |
+| 12,000 | `fullSongs`       | 12,000   | 173.215      | 170.577           | 173.586        |
+| 12,000 | `songRows50`      | 50       | 1.027        | 1.031             | 1.162          |
+| 50,000 | `artistOwnRows20` | 23       | 1.426        | 1.432             | 1.619          |
+| 50,000 | `albumOwnRows10`  | 12       | 1.025        | 1.074             | 1.143          |
+| 50,000 | `artistRows2`     | 2        | 79.167       | 80.384            | 78.596         |
+| 50,000 | `artistPage50`    | 50       | 125.786      | 129.373           | 125.877        |
+| 50,000 | `genreOwnRows`    | 16,668   | 225.986      | 227.305           | 217.788        |
+| 50,000 | `fullSongs`       | 50,000   | 778.568      | 779.325           | 749.678        |
+| 50,000 | `songRows50`      | 50       | 0.997        | 1.003             | 1.045          |
+
+#### Bounded SQL probes, without changing production
+
+Raw evidence: [boundedReads](results/596-boundedReads-desktop.jsonl), including artist query plans. The scoped artist experiment places the requested IDs inside both credited-song UNION branches and checks complete artist rows/counts against the actual store. The genre experiment uses the selected worktree's actual `trackQuery` and `BY_TITLE` with its genre predicate and `LIMIT 50`; it checks the complete first 50 rows against the full result. It is only a prefix experiment: sort/selection/Play/Shuffle and invalidation are not implemented here. A genre page can still scan/sort matching data internally even when just 50 rows cross to JS.
+
+| Songs  | Probe                            | SQL rows | SQL | Current median ms | Current p90 ms | Longest ms |
+| ------ | -------------------------------- | -------- | --- | ----------------- | -------------- | ---------- |
+| 1,000  | `artistRows2/globalCredits`      | 2        | 1   | 1.340             | 1.562          | 2.921      |
+| 1,000  | `artistRows2/scopedCreditsProbe` | 2        | 1   | 0.547             | 0.566          | 0.573      |
+| 1,000  | `genre/allRows`                  | 335      | 2   | 5.260             | 7.424          | 7.946      |
+| 1,000  | `genre/first50Probe`             | 50       | 1   | 1.887             | 2.385          | 2.478      |
+| 12,000 | `artistRows2/globalCredits`      | 2        | 1   | 21.244            | 23.583         | 24.522     |
+| 12,000 | `artistRows2/scopedCreditsProbe` | 2        | 1   | 0.505             | 0.560          | 0.562      |
+| 12,000 | `genre/allRows`                  | 4,001    | 2   | 65.003            | 97.087         | 98.892     |
+| 12,000 | `genre/first50Probe`             | 50       | 1   | 7.392             | 8.140          | 8.209      |
+| 50,000 | `artistRows2/globalCredits`      | 2        | 1   | 87.638            | 92.436         | 101.150    |
+| 50,000 | `artistRows2/scopedCreditsProbe` | 2        | 1   | 0.494             | 0.676          | 0.690      |
+| 50,000 | `genre/allRows`                  | 16,668   | 2   | 263.960           | 271.017        | 284.113    |
+| 50,000 | `genre/first50Probe`             | 50       | 1   | 26.552            | 26.935         | 27.362     |
+
+The global artist plan scans `track_artists` and materializes the credit UNION before the outer artist filter. The scoped probe searches the artist index instead. Returning only two rows is therefore insufficient as a performance guard: the follow-up needs access-plan and unrelated-Library-growth evidence too. Existing #311 already scoped artist _play history_; this is the separate artist _metadata/count_ query.
+
+#### Complete song reads in task-sized slices
+
+Raw evidence: [songReadSlices](results/596-songReadSlices-desktop.jsonl). A real task yield separates keyset pages (`id > cursor`, `ORDER BY id`, `LIMIT`). All SongRow fields are decoded using each worktree's actual projection. Every run checks the complete identity set against `listSongs`, without claiming title-order or snapshot-under-write equivalence. The final empty read accounts for the extra statement at these exact-multiple sizes.
+
+| Songs  | Traversal            | SQL  | Total median ms | Total p90 ms | Step p90 ms | Longest task ms |
+| ------ | -------------------- | ---- | --------------- | ------------ | ----------- | --------------- |
+| 1,000  | `fullSongRows`       | 1    | 16.379          | 18.935       | —           | 19.712          |
+| 1,000  | `keysetSongRows/50`  | 21   | 27.889          | 29.910       | 1.625       | 3.356           |
+| 1,000  | `keysetSongRows/100` | 11   | 19.270          | 20.450       | 2.226       | 3.296           |
+| 1,000  | `keysetSongRows/250` | 5    | 15.235          | 16.711       | 3.901       | 4.980           |
+| 12,000 | `fullSongRows`       | 1    | 185.144         | 187.723      | —           | 204.858         |
+| 12,000 | `keysetSongRows/50`  | 241  | 260.026         | 262.964      | 1.226       | 2.795           |
+| 12,000 | `keysetSongRows/100` | 121  | 200.681         | 201.892      | 1.826       | 3.207           |
+| 12,000 | `keysetSongRows/250` | 49   | 165.245         | 167.710      | 3.872       | 4.942           |
+| 50,000 | `fullSongRows`       | 1    | 856.911         | 1,309.574    | —           | 1,572.758       |
+| 50,000 | `keysetSongRows/50`  | 1001 | 1,068.625       | 1,088.379    | 1.184       | 3.050           |
+| 50,000 | `keysetSongRows/100` | 501  | 829.031         | 885.191      | 1.918       | 3.774           |
+| 50,000 | `keysetSongRows/250` | 201  | 681.665         | 686.315      | 3.819       | 5.171           |
+
+### Async SQLite decision
+
+**Keep the synchronous driver and remove/target/slice the measured work first. No production read is selected for an async-driver conversion by #596.** This is a decision about the next implementation, not proof that synchronous SQLite meets phone budgets.
+
+At 12,000 songs the whole-song traversal takes 185.144 ms in one task; 50-row slices take 260.026 ms total with 1.226 ms step p90 and 2.795 ms maximum observed task. The targeted 50-song read is 1.031 ms, and the scoped two-artist metadata probe is 0.505 ms. These support bounded reads rather than returning an entire Library to JS on a tap. A larger page is a measured throughput/responsiveness tradeoff, not a fixed 6 ms guarantee. GC and host scheduling can exceed the step budget even for small pages; use adaptive sizing/cancellation and validate on Hermes.
+
+An async database call also leaves Core playlist ranking (402.509 ms at 12,000 songs, zero SQL) and graph derivation on JavaScript. Those require stepped computation and fewer invocations. Recap availability should cache by history version/calendar boundary, and compute its small answer after settled, rather than repeatedly scanning history on every unchanged focus. Likewise, hidden playlist subscriptions need pausing/coalescing, independent of the SQLite API.
+
+The installed expo-sqlite 58.0.11 source exposes `SQLiteDatabase.getAllAsync`, asynchronous statement execution and native off-thread database work. This sweep does **not** benchmark that Android API: sql.js plus a Promise or `setImmediate` is not an emulator of native SQLite, and a Promise wrapper around `.all()` remains synchronous. Migrating the current synchronous Drizzle store would change transaction/read contracts and would still require bounded result decoding and Core transforms. A whole-store rewrite is unsupported by these numbers.
+
+The largest unavoidable history/catalog reads remain candidates for a **separate measured native experiment** only if targeting and smaller indexed slices still exceed the 6 ms step / 16 ms read budgets on the owner's phone. Compare the exact same projection and data on sync pages versus native async pages, including marshal/decode time, JS transform steps, transaction visibility, cancellation and frame gaps. Preserve local calendar Recap semantics and cross-version results. The current genre LIMIT probe and global artist-page query show why a small output alone cannot establish a bounded query; fix or measure the SQL plan before treating async as the remedy. Pending #546/#318 hardware work is not marked passed by this decision.
+
+### Findings, ticket handoff, and log correlation
+
+Four complete unpublished ticket drafts and a blocker/dependency manifest are saved for the parent under `/tmp/wave-open-tickets-83613fc6/596-new-tickets/`: Recap availability, playlist recommendation work/retained renewals, bounded artist credit counts, and genre first rows. Shared Artist graph measurements are handed to existing #594, which the latest #584 guard explicitly names as owner of `home/artistGraph.ts#readArtistGraph`. Live open/closed issue bodies were searched before drafting. #592–#595 do not cover the Recap reader or recommendation session; #558/#559 specify recommendation behavior without visibility/step bounds. Closed #309/#310/#311/#312 are prior implementations with different seams, documented in the deduplication evidence. The two inherited findings are explicitly labeled. Publication and native #579 parent/blocker links remain the parent's responsibility; drafts are not GitHub issues.
+
+The #580 every-build read timing boundary is now present in this integration. Expected `WaveTiming` operation names are `sum up counted listening` (Home), `read playlist recommendations` (playlist or a hidden session), `read the taste history`, `list songs`, `list artists` (graph segment), `read ranked artists` (targeted metadata) and `open the genre`. The log's operation row count describes the public result, while benchmark `rowsRead` includes intermediate SQL rows: for example playlist logging counts its 50 membership rows plus Library rows, not all 15 statements' returned rows. Hidden work is logged with the _currently visible_ route, which may differ from the owning playlist. CPU-only ranking/graph work has no slow-SQL line; use the transition/hitch evidence from #582. These are expected correlations from code, not fabricated phone log lines.
+
+The five public-seam characterization tests in `src/library/db/regressionSweep.test.ts` use the shared 1,000-song fixture: repeat Recap work for an unchanged result; one/two retained recommendation sessions and unsubscribe; global-versus-scoped artist plan/count equivalence; full genre hydration versus its exact first page; and all graph history/Library rows occupying the same middle segment. They assert work/results, never elapsed time. They document the current failure modes; each implementation ticket must replace them with improved work bounds and add its own behavioral cases. No production behavior changed in this research commit.
