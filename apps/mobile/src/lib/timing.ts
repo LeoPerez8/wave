@@ -3,6 +3,7 @@ import type { TimingKind } from "@wave/core";
 import { AppState, type GestureResponderEvent } from "react-native";
 
 import { appLog, timingBuild } from "@/log/appLog";
+import { onSlowLibraryRead } from "@/log/slowLibraryReads";
 import { online } from "@/native/waveNative";
 
 import { createTimingSession } from "./timingSession";
@@ -74,6 +75,8 @@ export const onTimingTransition = session.onTransition;
 export const onScreenSettled = session.onSettled;
 export const isScreenSettled = session.isSettled;
 export const noteTimingRead = session.read;
+// Only slow reads call the subscriber; #581's two-timestamp fast path stays unchanged.
+onSlowLibraryRead((read) => noteTimingRead(read.operation, read.durationMs));
 export const noteTimingJsBlock = session.jsBlock;
 export const noteTimingFrames = session.frames;
 export const noteTimingHitch = session.hitch;

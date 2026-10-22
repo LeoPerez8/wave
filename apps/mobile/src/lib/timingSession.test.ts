@@ -247,3 +247,42 @@ test("work that started and ended within the tap window and offline state are re
     /meanwhile: scan, import, 3 downloads, mix harvest, Magic Queue batch; offline; longest JS block 0 ms$/,
   );
 });
+
+test("the real slow-read boundary contributes its operation to the opening screen", async (t) => {
+  const { connectLibraryReadLog, onSlowLibraryRead, timeLibraryRead } =
+    await import("../log/slowLibraryReads.ts");
+  let now = 0;
+  t.mock.method(performance, "now", () => now);
+  const lines: string[] = [];
+  const session = createTimingSession({
+    now: () => now,
+    wallNow: () => 0,
+    write: (line) => lines.push(line),
+    context: () => ({ background: [], offline: false }),
+    build: () => ({ version: "test", commit: "abc1234" }),
+  });
+  const flush = connectLibraryReadLog({ route: session.route, write: (line) => lines.push(line) });
+  const stop = onSlowLibraryRead((read) => session.read(read.operation, read.durationMs));
+  t.after(() => {
+    stop();
+    flush();
+  });
+  const id = session.begin("push", "/artist/12");
+  session.routeCommitted("/artist/12");
+  session.frame(id);
+  assert.deepEqual(
+    timeLibraryRead("artist songs", () => {
+      now = 450;
+      return [1, 2];
+    }),
+    [1, 2],
+  );
+  session.content(id);
+  session.end(id);
+  assert.match(
+    lines.find((line) => line.startsWith("Slow screen"))!,
+    /reads: artist songs 450 ms$/,
+  );
+  flush();
+  assert.match(lines.at(-1)!, /Read "artist songs" held JS 450 ms \(2 rows\) on \/artist\/12$/);
+});

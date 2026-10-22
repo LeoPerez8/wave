@@ -2003,3 +2003,5 @@ export {
   type TimingScreen,
   type TimingWindow,
 } from "./timing.ts";
+
+export { SLOW_READ_BUDGET_MS, slowReadLine, slowReadsLine, type SlowRead } from "./slowRead.ts";
