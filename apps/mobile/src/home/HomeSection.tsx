@@ -10,12 +10,11 @@ import { router } from "expo-router";
 import { useState, type ComponentType, type ReactNode } from "react";
 import { Text, View, useWindowDimensions } from "react-native";
 
-import { AlbumTile } from "@/catalog/AlbumTile";
 import { COVER_ROW_TILE } from "@/catalog/CoverRow";
-import { Artwork } from "@/catalog/Artwork";
 import { EntryRow } from "@/catalog/EntryRow";
+import { PlaylistCard } from "@/catalog/cards/PlaylistCard";
+import { SongCard } from "@/catalog/cards/SongCard";
 import { CELL, grid } from "@/catalog/grid";
-import { Press } from "@/motion/Press";
 import { Hairline } from "@/catalog/Hairline";
 import { PullRefreshRow } from "@/catalog/PullRefreshRow";
 import { TitledSection } from "@/catalog/TitledSection";
@@ -157,7 +156,7 @@ function DiscoverRow({
 }
 
 /**
- * A mix row of Discover (Artist mixes or Genre mixes) as covers, each
+ * A mix row of Discover (Artist mixes or Genre mixes) as playlist cards, each
  * opening its mix's page; placeholder tiles while the first ones build;
  * nothing while [section] is hidden (YT Music off). Its label says
  * "Updating…" while a rebuild runs.
@@ -185,7 +184,7 @@ function MixRow({ id, section }: { id: MixSectionId; section: DiscoverMixesSecti
 }
 
 /**
- * A mix row's covers (Artist mixes, Genre mixes). Each place in
+ * A mix row's cards (Artist mixes, Genre mixes). Each place in
  * the row crossfades its tile when what it shows changes: the level
  * re-blending the mix, or a rebuild saving new mixes (a plain swap with
  * reduce motion). Keyed by place, not by mix, so a new set fades over the
@@ -211,17 +210,11 @@ function DiscoverMixRow({
         return (
           // oxlint-disable-next-line react/no-array-index-key -- a place crossfades from the mix it had to the one it has now
           <Crossfade key={place} swapKey={shows.join("\n")}>
-            <AlbumTile
-              album={{
-                id: mix.id,
-                title: caption.title,
-                albumArtist: caption.artists,
-                trackCount: mix.songs.length,
-                durationMs: 0,
-                artworkUri: caption.artworkUrl ?? undefined,
-              }}
-              size={COVER_ROW_TILE}
+            <PlaylistCard
+              name={caption.title}
               detail={caption.line}
+              paths={caption.artworkUrl === null ? [] : [caption.artworkUrl]}
+              size={COVER_ROW_TILE}
               onPress={() => openDiscoverMix(mix.id)}
               onLongPress={() => openDiscoverMixActions(mix)}
             />
@@ -264,7 +257,7 @@ function MagicQueueRow({ section }: { section: MagicQueueSection }) {
             {section.songs.map((song, place) => (
               // oxlint-disable-next-line react/no-array-index-key -- a place crossfades between its previous and next seed
               <Crossfade key={place} swapKey={String(song.id)}>
-                <MagicQueueTile song={song} size={size} fontScale={fontScale} />
+                <MagicQueueTile song={song} size={size} />
               </Crossfade>
             ))}
           </View>
@@ -274,56 +267,30 @@ function MagicQueueRow({ section }: { section: MagicQueueSection }) {
   );
 }
 
-/** Title on art; the dark caption plate keeps white text legible over any artwork or placeholder. */
-function MagicQueueTile({
-  song,
-  size,
-  fontScale,
-}: {
-  song: PlayableSongRow;
-  size: number;
-  fontScale: number;
-}) {
+/** A Magic Queue's song as a song card in its grid column; a tap starts the Magic Queue from it. */
+function MagicQueueTile({ song, size }: { song: PlayableSongRow; size: number }) {
   return (
-    <Press
-      accessibilityRole="button"
-      accessibilityLabel={`${song.title} by ${song.artist}, ${song.album}, start Magic Queue`}
+    <SongCard
+      title={song.title}
+      artist={song.artist}
+      artworkUri={fileUri(song.artworkPath ?? song.thumbPath)}
+      size={size}
+      label={`${song.title} by ${song.artist}, ${song.album}, start Magic Queue`}
       onPress={() => startMagicQueueFrom(song)}
       onLongPress={() => openTrackActions(song)}
-      depth={0.02}
-      style={{ width: size, minHeight: Math.max(size, 44 * fontScale + CELL * 2) }}
-    >
-      <View
-        pointerEvents="none"
-        accessible={false}
-        importantForAccessibility="no-hide-descendants"
-        style={{ flex: 1, minHeight: Math.max(size, 44 * fontScale + CELL * 2) }}
-      >
-        <View className="absolute inset-0 overflow-hidden bg-fill">
-          <Artwork
-            uri={fileUri(song.artworkPath ?? song.thumbPath)}
-            size={Math.max(size, 44 * fontScale + CELL * 2)}
-          />
-        </View>
-        <View className="mt-auto bg-black/80" style={{ padding: CELL }}>
-          <Text numberOfLines={2} className="font-sans text-body font-medium text-white">
-            {song.title}
-          </Text>
-        </View>
-      </View>
-    </Press>
+    />
   );
 }
 
 function MostPlayedArtists({ title }: SectionProps) {
-  const artists = withPlays(useMostPlayedOfAllTime()?.artists);
+  const artists = (useMostPlayedOfAllTime()?.artists ?? []).map((entry) => entry.item);
   if (artists.length === 0) return null;
   return (
     <TitledSection
       title={title}
       action={{ label: "See all", onPress: () => openStatsSeeAll("artists", "all") }}
     >
-      <ArtistShelf artists={artists} detail={countedPlays} />
+      <ArtistShelf artists={artists} />
     </TitledSection>
   );
 }
