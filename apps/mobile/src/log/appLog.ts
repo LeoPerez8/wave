@@ -67,7 +67,7 @@ const consoleError = console.error.bind(console);
 const flushListeners = new Set<() => void>();
 
 /** Collectors hand over their waiting lines before export, backgrounding or a fatal flush. */
-export const onAppLogFlush = (collect: () => void): (() => void) => {
+const onAppLogFlush = (collect: () => void): (() => void) => {
   flushListeners.add(collect);
   return () => {
     flushListeners.delete(collect);
@@ -147,7 +147,7 @@ export const exportAppLog = async (): Promise<void> => {
 let screen = "/";
 
 /** The existing route observer's last screen, read without subscribing or rendering. */
-export const currentLogScreen = (): string => screen;
+const currentLogScreen = (): string => screen;
 
 onAppLogFlush(
   connectLibraryReadLog({
