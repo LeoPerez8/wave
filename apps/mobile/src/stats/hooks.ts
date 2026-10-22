@@ -1,10 +1,4 @@
-import {
-  STATS_TOP,
-  parseRecapId,
-  recapToAnnounce,
-  type RecapPeriod,
-  type StatsPeriod,
-} from "@wave/core";
+import { STATS_TOP, parseRecapId, type RecapPeriod, type StatsPeriod } from "@wave/core";
 import * as Effect from "effect/Effect";
 import { useFocusEffect } from "expo-router";
 import { useCallback, useState } from "react";
@@ -15,6 +9,7 @@ import { appRuntime } from "@/library/runtime";
 import { playHistoryVersion } from "@/playback/PlayHistory";
 
 import { useOpenedRecaps } from "./openedRecaps";
+import { recapAnnouncement } from "./recapAnnouncement";
 import { Stats, type ArtistStats, type LoadedRecap, type Ranked } from "./Stats";
 
 /**
@@ -110,11 +105,11 @@ const readRecaps = (stats: Stats["Service"]) => stats.recaps;
 /** Every period with a Recap, newest first, or undefined while it first loads. */
 export const useRecaps = (): readonly RecapPeriod[] | undefined => useStatsRead(readRecaps);
 
-/** The new Recap Home's card announces until it's opened (Core's `recapToAnnounce`), or null. */
-export const useRecapToAnnounce = (): RecapPeriod | null => {
+/** The new Recap Home announces; undefined while reading, null once there is none to announce. */
+export const useRecapToAnnounce = (): RecapPeriod | null | undefined => {
   const recaps = useRecaps();
   const opened = useOpenedRecaps();
-  return recaps === undefined ? null : recapToAnnounce(recaps, opened);
+  return recapAnnouncement(recaps, opened);
 };
 
 /**
