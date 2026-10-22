@@ -7,6 +7,7 @@
  */
 import {
   CENTRE_FRAMING,
+  adjustFraming,
   framingView,
   panFraming,
   pinchFraming,
@@ -23,6 +24,7 @@ import {
 } from "react-native-gesture-handler";
 import Animated, { useAnimatedStyle, useSharedValue } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { scheduleOnRN } from "react-native-worklets";
 
 import { CELL, grid } from "@/catalog/grid";
 import { TextButton } from "@/components/TextButton";
@@ -74,11 +76,16 @@ function CropScreen({ request: { photo, framing: start, done } }: { request: Cro
 
   const size = { width: photo.width, height: photo.height };
   const framing = useSharedValue<ImageFraming>(start);
+  const [spokenFraming, setSpokenFraming] = useState(start);
 
   const pan = usePanGesture({
     onUpdate: (event) => {
       "worklet";
       framing.set(panFraming(size, side, framing.get(), event.changeX, event.changeY));
+    },
+    onFinalize: () => {
+      "worklet";
+      scheduleOnRN(setSpokenFraming, framing.get());
     },
   });
   const pinch = usePinchGesture({
@@ -94,6 +101,10 @@ function CropScreen({ request: { photo, framing: start, done } }: { request: Cro
           event.focalY - squareTop,
         ),
       );
+    },
+    onFinalize: () => {
+      "worklet";
+      scheduleOnRN(setSpokenFraming, framing.get());
     },
   });
   const gestures = useSimultaneousGestures(pan, pinch);
@@ -146,7 +157,35 @@ function CropScreen({ request: { photo, framing: start, done } }: { request: Cro
             <View
               className="flex-1 overflow-hidden"
               accessible
-              accessibilityLabel="Photo. Drag to move it, pinch to zoom."
+              accessibilityLabel="Photo framing"
+              accessibilityHint="Drag to move or pinch to zoom. Actions also move, zoom and reset the photo."
+              accessibilityValue={{
+                text: `${spokenFraming.zoom.toFixed(2)} times zoom, centre ${Math.round(spokenFraming.centerX * 100)} percent across, ${Math.round(spokenFraming.centerY * 100)} percent down`,
+              }}
+              accessibilityActions={[
+                { name: "moveLeft", label: "Move photo left" },
+                { name: "moveRight", label: "Move photo right" },
+                { name: "moveUp", label: "Move photo up" },
+                { name: "moveDown", label: "Move photo down" },
+                { name: "zoomIn", label: "Zoom in" },
+                { name: "zoomOut", label: "Zoom out" },
+                { name: "reset", label: "Reset framing" },
+              ]}
+              onAccessibilityAction={({ nativeEvent: { actionName } }) => {
+                switch (actionName) {
+                  case "moveLeft":
+                  case "moveRight":
+                  case "moveUp":
+                  case "moveDown":
+                  case "zoomIn":
+                  case "zoomOut":
+                  case "reset": {
+                    const next = adjustFraming(size, framing.get(), actionName);
+                    framing.set(next);
+                    setSpokenFraming(next);
+                  }
+                }
+              }}
               onLayout={(event) => {
                 const { width, height } = event.nativeEvent.layout;
                 setStage({ width, height });

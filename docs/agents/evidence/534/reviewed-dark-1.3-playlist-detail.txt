@@ -1,0 +1,21 @@
+Page: dev.leoperez.wave
+App: dev.leoperez.wave
+Snapshot: 15 visible nodes (36 total)
+Collapsed 21 Android helper nodes from the agent-facing text snapshot; use --raw or --json for the full hierarchy.
+@e1 [scroll-area] [scrollable]
+@e2 [scroll-area] [scrollable]
+@e3 [button] "Back"
+@e4 [scroll-area] "Everything I Love, 2,000 songs · 1002 min, Glass Slow, Juno Moreau, 0:30, Heavy Home Summer, Zeno Nyx, Rain City, Zeno Okafor, Glass, Paper Moons, Young, Wren Tanaka, Shuffle, Play" [scrollable]
+  [content above scroll-area hidden]
+  [content below scroll-area hidden]
+@e7 [button] "Play"
+@e9 [button] "Shuffle"
+@e11 [button] "Playlist actions"
+@e12 [button] "Young, Wren Tanaka"
+@e16 [button] "Glass, Paper Moons"
+@e20 [button] "Rain City, Zeno Okafor"
+@e24 [button] "Heavy Home Summer, Zeno Nyx"
+@e28 [button] "Glass Slow, Juno Moreau"
+@e32 [button] "Now playing: Blue, Ada Duarte"
+@e35 [button] "Play Blue"
+@e36 [button] "Next track"

@@ -1,0 +1,24 @@
+Page: dev.leoperez.wave
+App: dev.leoperez.wave
+Snapshot: 19 visible nodes (37 total)
+Collapsed 18 Android helper nodes from the agent-facing text snapshot; use --raw or --json for the full hierarchy.
+@e1 [scroll-area] [scrollable]
+@e2 [scroll-area] "DISCOVER, Artist mixes, Genre mixes, BIELZIN, THE WEEKND, KAI DUARTE, Kai Duarte mix, 12 songs, KATSEYE, SIA, ABBEY MARLOW, Abbey Marlow mix, 26 songs, Your Recap is ready, September 2026, Tap to watch, Home" [scrollable]
+  [content below scroll-area hidden]
+@e3 [group] "Home"
+@e5 [button] "Settings"
+@e6 [button] "Your Recap is ready: September 2026"
+@e11 [button] "Discover settings"
+@e13 [horizontalscrollview] [scrollable]
+@e14 [button] "Abbey Marlow mix by KATSEYE, Sia, Abbey Marlow, 26 songs"
+@e18 [button] "Kai Duarte mix by Bielzin, The Weeknd, Kai Duarte, 12 songs"
+@e23 [horizontalscrollview] [scrollable]
+@e24 [button] "Electronic mix by Finn Marlow, Sam Smith, KATSEYE, 47 songs"
+@e25 [button] "R&B mix by Vera Silva, SZA, Kendrick Lamar, 15 songs"
+@e26 [button] "Now playing: Blue, Ada Duarte"
+@e29 [button] "Play Blue"
+@e30 [button] "Next track"
+@e31 [group] "Home" [selected]
+@e33 [group] "Library"
+@e35 [group] "Playlists"
+@e37 [group] "Search"

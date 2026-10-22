@@ -19,7 +19,7 @@ import { useTabBar } from "@/settings/tabBar";
 import { useThemeColor } from "@/theme/useThemeColor";
 
 /** Every tab the bar can hold; the bar shows those the owner picked. */
-const TABS = Object.entries(TAB_PATH) as [TabBarTab, string][];
+const TABS = Object.entries(TAB_PATH) as [TabBarTab, (typeof TAB_PATH)[TabBarTab]][];
 
 /**
  * The tabs the owner arranged (Home, then any of Library, the Library's

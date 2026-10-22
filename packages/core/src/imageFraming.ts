@@ -136,6 +136,34 @@ export const pinchFraming = (
   });
 };
 
+/** A semantic alternative to dragging and pinching, named for how the photo moves. */
+export type FramingAdjustment =
+  "moveLeft" | "moveRight" | "moveUp" | "moveDown" | "zoomIn" | "zoomOut" | "reset";
+
+/** Moves the photo by a tenth of the crop width or zooms one step around its centre. */
+export const adjustFraming = (
+  size: ImageSize,
+  framing: ImageFraming,
+  action: FramingAdjustment,
+): ImageFraming => {
+  switch (action) {
+    case "moveLeft":
+      return panFraming(size, 100, framing, -10, 0);
+    case "moveRight":
+      return panFraming(size, 100, framing, 10, 0);
+    case "moveUp":
+      return panFraming(size, 100, framing, 0, -10);
+    case "moveDown":
+      return panFraming(size, 100, framing, 0, 10);
+    case "zoomIn":
+      return pinchFraming(size, 100, framing, 1.25, 50, 50);
+    case "zoomOut":
+      return pinchFraming(size, 100, framing, 1 / 1.25, 50, 50);
+    case "reset":
+      return CENTRE_FRAMING;
+  }
+};
+
 /** [framing] of a photo of [size], as kept beside the original. */
 export const framingText = (size: ImageSize, framing: ImageFraming): string =>
   JSON.stringify({

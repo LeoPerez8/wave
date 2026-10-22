@@ -11,6 +11,7 @@ import { View } from "react-native";
 
 import { CatalogLine } from "@/catalog/CatalogLine";
 import { CELL, grid } from "@/catalog/grid";
+import { TrackSkeletons } from "@/catalog/Skeletons";
 import { EmptyState } from "@/components/EmptyState";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { useTopAlbums, useTopArtists, useTopSongs } from "@/stats/hooks";
@@ -39,9 +40,17 @@ function NothingPlayedHere({ period }: { period: StatsPeriod }) {
   );
 }
 
+function LoadingRanking() {
+  return (
+    <View style={{ paddingHorizontal: grid.margin }}>
+      <TrackSkeletons label="Loading ranking" />
+    </View>
+  );
+}
+
 function AllTopSongs({ period }: { period: StatsPeriod }) {
   const ranking = useTopSongs(period, STATS_SEE_ALL);
-  if (ranking === undefined) return null;
+  if (ranking === undefined) return <LoadingRanking />;
   if (ranking.length === 0) return <NothingPlayedHere period={period} />;
   return (
     <RankedSongList ranking={ranking} period={period} header={<PeriodLine period={period} />} />
@@ -50,14 +59,14 @@ function AllTopSongs({ period }: { period: StatsPeriod }) {
 
 function AllTopAlbums({ period }: { period: StatsPeriod }) {
   const ranking = useTopAlbums(period, STATS_SEE_ALL);
-  if (ranking === undefined) return null;
+  if (ranking === undefined) return <LoadingRanking />;
   if (ranking.length === 0) return <NothingPlayedHere period={period} />;
   return <RankedAlbumList ranking={ranking} header={<PeriodLine period={period} />} />;
 }
 
 function AllTopArtists({ period }: { period: StatsPeriod }) {
   const ranking = useTopArtists(period, STATS_SEE_ALL);
-  if (ranking === undefined) return null;
+  if (ranking === undefined) return <LoadingRanking />;
   if (ranking.length === 0) return <NothingPlayedHere period={period} />;
   return <RankedArtistList ranking={ranking} header={<PeriodLine period={period} />} />;
 }

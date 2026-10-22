@@ -23,7 +23,7 @@ import { perfMark, useRenderCount } from "@/perf/perf";
 import { playTrackIds } from "@/playback/actions";
 import { openTrackActionsById } from "@/playback/ActionsMenu";
 import type { ActionItems } from "@/playback/actionTargets";
-import { useCurrentTrackId } from "@/playback/hooks";
+import { useCurrentPlayingIds } from "@/playback/hooks";
 import { selectableRow } from "@/selection/selectableRow";
 import { useListSelection } from "@/selection/useListSelection";
 
@@ -140,7 +140,7 @@ function PagedSongList({ order }: { order: SongOrder }) {
   const list = useRef<LegendListRef>(null);
   useScrollToTop(list);
   const bottomInset = useChromeInset();
-  const currentId = useCurrentTrackId();
+  const currentIds = useCurrentPlayingIds();
   const favorites = useFavoriteIds();
   // Find in Songs: what finds each song is read once a query is first typed.
   const [findWanted, setFindWanted] = useState(false);
@@ -235,8 +235,8 @@ function PagedSongList({ order }: { order: SongOrder }) {
   }, [ready]);
 
   const rowState = useMemo(
-    () => ({ currentId, favorites, selection, version }),
-    [currentId, favorites, selection, version],
+    () => ({ currentIds, favorites, selection, version }),
+    [currentIds, favorites, selection, version],
   );
 
   const renderItem = useCallback(
@@ -247,7 +247,7 @@ function PagedSongList({ order }: { order: SongOrder }) {
         <SwipeSummaryRow
           summary={song}
           track={toTrackSummary(song)}
-          state={String(item) === currentId ? "playing" : undefined}
+          state={currentIds.has(String(item)) ? "playing" : undefined}
           favorite={favorites.has(item)}
           leading="artwork"
           {...selectableRow(
@@ -262,7 +262,7 @@ function PagedSongList({ order }: { order: SongOrder }) {
     },
     // `version` re-renders the rows as their pages arrive.
     // oxlint-disable-next-line react-hooks/exhaustive-deps
-    [pages, version, currentId, favorites, listSelection, order, missing, placeOf],
+    [pages, version, currentIds, favorites, listSelection, order, missing, placeOf],
   );
 
   const header: ReactElement = (
@@ -282,6 +282,8 @@ function PagedSongList({ order }: { order: SongOrder }) {
   return (
     <View className="flex-1">
       <LegendList
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
         scrollEnabled={scrollable}
         ref={list}
         className="flex-1"

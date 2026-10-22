@@ -1,0 +1,41 @@
+Page: dev.leoperez.wave
+App: dev.leoperez.wave
+Snapshot: 36 visible nodes (57 total)
+Collapsed 21 Android helper nodes from the agent-facing text snapshot; use --raw or --json for the full hierarchy.
+@e1 [button] "Close Now Playing"
+@e2 [button] "Share Song"
+@e3 [button] "Cover"
+@e4 [group] "Ada Duarte"
+@e5 [text] "Ada Duarte"
+@e6 [group] "Gold"
+@e7 [text] "Gold"
+@e8 [button] "Favorite Blue"
+@e9 [seekbar] "Playback position, 0:00 of 0:29"
+@e10 [button] "Previous track"
+@e11 [button] "Play"
+@e12 [button] "Next track"
+@e13 [switch] "Lyrics" [unchecked]
+@e14 [button] "Sleep timer, Off"
+@e15 [button] "Add to Playlist"
+@e16 [button] "Downloaded"
+@e17 [switch] "Queue" [unchecked]
+@e18 [scroll-area] [scrollable]
+@e19 [scroll-area] "DISCOVER, Magic Queue, Artist mixes, UGO LINDQVIST, Love Running, Shadow Young, ABBEY MARLOW, Home Dance, Young Broken, ADA PRADO, Echo, Slow Heavy, Your Recap is ready, September 2026, Tap to watch, Home" [scrollable]
+  [content below scroll-area hidden]
+@e20 [group] "Home"
+@e22 [button] "Settings"
+@e23 [button] "Your Recap is ready: September 2026"
+@e28 [button] "Discover settings"
+@e30 [horizontalscrollview] [scrollable]
+@e31 [button] "Echo by Ada Prado, Slow Heavy"
+@e35 [button] "Home Dance by Abbey Marlow, Young Broken"
+@e39 [button] "Love Running by Ugo Lindqvist, Shadow Young"
+@e44 [group] "Building your mixes, busy"
+@e45 [horizontalscrollview] [scrollable]
+@e46 [button] "Now playing: Blue, Ada Duarte"
+@e49 [button] "Play Blue"
+@e50 [button] "Next track"
+@e51 [group] "Home" [selected]
+@e53 [group] "Library"
+@e55 [group] "Playlists"
+@e57 [group] "Search"

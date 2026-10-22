@@ -7,14 +7,15 @@ import {
   type HomeSectionId,
 } from "@wave/core";
 import { router } from "expo-router";
-import type { ComponentType, ReactNode } from "react";
-import { Text, View } from "react-native";
+import { useState, type ComponentType, type ReactNode } from "react";
+import { Text, View, useWindowDimensions } from "react-native";
 
 import { AlbumTile } from "@/catalog/AlbumTile";
 import { COVER_ROW_TILE } from "@/catalog/CoverRow";
-import { CoverTile } from "@/catalog/CoverTile";
+import { Artwork } from "@/catalog/Artwork";
 import { EntryRow } from "@/catalog/EntryRow";
-import { CELL } from "@/catalog/grid";
+import { CELL, grid } from "@/catalog/grid";
+import { Press } from "@/motion/Press";
 import { Hairline } from "@/catalog/Hairline";
 import { PullRefreshRow } from "@/catalog/PullRefreshRow";
 import { TitledSection } from "@/catalog/TitledSection";
@@ -232,43 +233,85 @@ function DiscoverMixRow({
 }
 
 /**
- * Discover's Magic Queue row: 10 Library songs as covers, a tap on one
+ * Discover's Magic Queue row: nine Library songs in an adaptive grid, a tap on one
  * starting a Magic Queue from it, its long-press the song's menu. A new list
  * each day; pulled right past its start, the row brings other songs, with
  * Undo. Each place crossfades its tile when its song changes. With YT Music
  * off it stays, and its queues play from the Library alone.
  */
 function MagicQueueRow({ section }: { section: MagicQueueSection }) {
+  const { width, fontScale } = useWindowDimensions();
+  const [available, setAvailable] = useState(width - grid.margin * 2);
+  // Keep text scaling enabled. Larger type gets wider tiles instead of overlapping targets.
+  // Android widens a Float to JS, so 1.3 arrives just below the decimal breakpoint.
+  const columns = Math.max(
+    1,
+    Math.min(
+      fontScale >= 2 ? 1 : fontScale >= Math.fround(1.3) ? 2 : 3,
+      Math.floor((available + CELL) / (CELL * 7)),
+    ),
+  );
+  const size = Math.max(CELL * 6, (available - CELL * (columns - 1)) / columns);
   return (
     <DiscoverRow label={discoverRowTitle("magic-queue")}>
-      <PullRefreshRow
-        onRefresh={section.refresh}
-        enabled={!section.picking}
-        refreshLabel="Get other songs"
-      >
-        {section.songs.map((song, place) => (
-          // oxlint-disable-next-line react/no-array-index-key -- a place crossfades from the song it had to the one it has now
-          <Crossfade key={place} swapKey={String(song.id)}>
-            <MagicQueueTile song={song} />
-          </Crossfade>
-        ))}
-      </PullRefreshRow>
+      <View onLayout={(event) => setAvailable(event.nativeEvent.layout.width)}>
+        <PullRefreshRow
+          onRefresh={section.refresh}
+          enabled={!section.picking}
+          refreshLabel="Get other songs"
+        >
+          <View style={{ width: available, flexDirection: "row", flexWrap: "wrap", gap: CELL }}>
+            {section.songs.map((song, place) => (
+              // oxlint-disable-next-line react/no-array-index-key -- a place crossfades between its previous and next seed
+              <Crossfade key={place} swapKey={String(song.id)}>
+                <MagicQueueTile song={song} size={size} fontScale={fontScale} />
+              </Crossfade>
+            ))}
+          </View>
+        </PullRefreshRow>
+      </View>
     </DiscoverRow>
   );
 }
 
-/** A song of Discover's Magic Queue row: its cover (its album's), title, artist and album. */
-function MagicQueueTile({ song }: { song: PlayableSongRow }) {
+/** Title on art; the dark caption plate keeps white text legible over any artwork or placeholder. */
+function MagicQueueTile({
+  song,
+  size,
+  fontScale,
+}: {
+  song: PlayableSongRow;
+  size: number;
+  fontScale: number;
+}) {
   return (
-    <CoverTile
-      title={song.title}
-      byline={song.artist}
-      detail={song.album}
-      artworkUri={fileUri(song.artworkPath ?? song.thumbPath)}
-      size={COVER_ROW_TILE}
+    <Press
+      accessibilityRole="button"
+      accessibilityLabel={`${song.title} by ${song.artist}, ${song.album}, start Magic Queue`}
       onPress={() => startMagicQueueFrom(song)}
       onLongPress={() => openTrackActions(song)}
-    />
+      depth={0.02}
+      style={{ width: size, minHeight: Math.max(size, 44 * fontScale + CELL * 2) }}
+    >
+      <View
+        pointerEvents="none"
+        accessible={false}
+        importantForAccessibility="no-hide-descendants"
+        style={{ flex: 1, minHeight: Math.max(size, 44 * fontScale + CELL * 2) }}
+      >
+        <View className="absolute inset-0 overflow-hidden bg-fill">
+          <Artwork
+            uri={fileUri(song.artworkPath ?? song.thumbPath)}
+            size={Math.max(size, 44 * fontScale + CELL * 2)}
+          />
+        </View>
+        <View className="mt-auto bg-black/80" style={{ padding: CELL }}>
+          <Text numberOfLines={2} className="font-sans text-body font-medium text-white">
+            {song.title}
+          </Text>
+        </View>
+      </View>
+    </Press>
   );
 }
 

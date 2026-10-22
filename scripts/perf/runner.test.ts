@@ -19,7 +19,7 @@ const options = (name: string, overrides: Partial<RunOptions> = {}): RunOptions 
   scenarios: ALL_SCENARIOS,
   variants: ["idle"],
   iterations: 2,
-  config: { tabs: ["Home", "Library", "Playlists"], artist: "Radiohead" },
+  config: { tabs: ["Home", "Library", "Playlists"], artist: "Radiohead", playlist: "Favorites" },
   importLink: "https://music.youtube.com/playlist?list=PLdryrun",
   settleMs: 1_200,
   windowMs: 2_500,
@@ -82,6 +82,8 @@ describe("runPerf on the simulated phone", () => {
       "push-tracklist/idle/pop",
       "push-artist/idle/push",
       "push-artist/idle/pop",
+      "push-playlist/idle/push",
+      "push-playlist/idle/pop",
       "push-empty/idle/push",
       "push-empty/idle/pop",
       "now-playing/idle/open",
@@ -355,7 +357,7 @@ describe("runPerf on the simulated phone", () => {
     const { out } = await runPerf(
       new FakeDevice(),
       options("no-artist", {
-        config: { tabs: ["Home", "Library", "Playlists"], artist: null },
+        config: { tabs: ["Home", "Library", "Playlists"], artist: null, playlist: null },
         scenarios: ["push-artist", "push-settings"],
       }),
     );
@@ -363,6 +365,47 @@ describe("runPerf on the simulated phone", () => {
     assert.equal(errors[0]?.scenario, "push-artist");
     assert.match(errors[0]?.message ?? "", /artist/);
     assert.ok(steps.some((step) => step.scenario === "push-settings"));
+  });
+
+  it("measures opening the named playlist and returning, including during an import", async () => {
+    const { out } = await runPerf(
+      new FakeDevice(),
+      options("playlist", {
+        config: { tabs: ["Home", "Library", "Playlists"], artist: null, playlist: "Favorites" },
+        scenarios: ["push-playlist"],
+        variants: ["idle", "import"],
+      }),
+    );
+    const { run, steps, errors } = readResults(readFileSync(out, "utf8"));
+    assert.deepEqual(errors, []);
+    assert.equal(run?.runner.playlist, "Favorites");
+    for (const variant of ["idle", "import"]) {
+      const measured = steps.filter(
+        (step) => step.scenario === "push-playlist" && step.variant === variant,
+      );
+      assert.deepEqual(
+        measured.map((step) => step.measure),
+        ["push", "pop", "push", "pop"],
+      );
+      assert.ok(
+        measured.every((step) => step.expectMissing === false && (step.responseMs ?? 0) > 0),
+      );
+    }
+  });
+
+  it("records a missing playlist fixture without preventing the other scenarios", async () => {
+    const { out } = await runPerf(
+      new FakeDevice(),
+      options("no-playlist", {
+        config: { tabs: ["Home", "Library", "Playlists"], artist: null, playlist: null },
+        scenarios: ["push-playlist", "push-settings"],
+      }),
+    );
+    const { errors, steps } = readResults(readFileSync(out, "utf8"));
+    assert.equal(errors[0]?.scenario, "push-playlist");
+    assert.match(errors[0]?.message ?? "", /--playlist/);
+    assert.ok(steps.some((step) => step.scenario === "push-settings"));
+    assert.ok(!steps.some((step) => step.scenario === "push-playlist"));
   });
 
   it("still measures frames, startup and memory without a perf build", async () => {

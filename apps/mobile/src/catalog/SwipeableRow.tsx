@@ -152,7 +152,7 @@ export function SwipeableRow({
   const leftStyle = useAnimatedStyle(() => ({ opacity: strength(-offsetX.get()) }));
 
   const settle = () => {
-    offsetX.set(reduceMotion ? 0 : withSpring(0, { damping: 20, stiffness: 240 }));
+    offsetX.set(reduceMotion ? 0 : withSpring(0, { damping: 23, stiffness: 240 }));
   };
 
   const finish = (translationX: number, velocityX: number, canceled: boolean) => {

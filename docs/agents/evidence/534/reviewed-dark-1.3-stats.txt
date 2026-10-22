@@ -1,0 +1,25 @@
+Page: dev.leoperez.wave
+App: dev.leoperez.wave
+Snapshot: 20 visible nodes (53 total)
+Collapsed 33 Android helper nodes from the agent-facing text snapshot; use --raw or --json for the full hierarchy.
+@e1 [scroll-area] [scrollable]
+@e2 [scroll-area] [scrollable]
+@e3 [button] "Back"
+@e4 [scroll-area] "RECAPS, TOP SONGS, Heart, Milo Orsi, 42 plays, Ghost Heavy Glass, Kai Ibsen, 51 plays, Echo Heavy, Nora Holm, 74 plays, Gold, Lena Duarte, 96 plays, Light Blue, Zeno Orsi, 164 plays, See all, All time, 12 months, 30 days, 7 days, Recap, August 2026, September 2026" [scrollable]
+  [content below scroll-area hidden]
+@e6 [horizontalscrollview] [scrollable]
+@e7 [button] "September 2026 Recap"
+@e10 [button] "August 2026 Recap"
+@e13 [group] "Last 7 days"
+@e15 [group] "Last 30 days" [selected]
+@e17 [group] "Last 12 months"
+@e19 [group] "All time"
+@e22 [button] "See all"
+@e24 [button] "Light Blue, Zeno Orsi, 164 plays"
+@e29 [button] "Gold, Lena Duarte, 96 plays"
+@e34 [button] "Echo Heavy, Nora Holm, 74 plays"
+@e39 [button] "Ghost Heavy Glass, Kai Ibsen, 51 plays"
+@e44 [button] "Heart, Milo Orsi, 42 plays"
+@e49 [button] "Now playing: Blue, Ada Duarte"
+@e52 [button] "Play Blue"
+@e53 [button] "Next track"

@@ -35,6 +35,10 @@ export function TitlePress({
     <Press
       accessibilityRole="header"
       accessibilityHint={`Long press to ${titleLongPress.label.toLowerCase()}`}
+      accessibilityActions={[{ name: "activate", label: titleLongPress.label }]}
+      onAccessibilityAction={({ nativeEvent: { actionName } }) => {
+        if (actionName === "activate") titleLongPress.open();
+      }}
       onLongPress={() => {
         void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         titleLongPress.open();

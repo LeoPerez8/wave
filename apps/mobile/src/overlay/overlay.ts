@@ -5,6 +5,7 @@ import { useSyncExternalStore } from "react";
 
 import { makeExternalStore } from "@/lib/externalStore";
 import { pressedElement, type PressedElement } from "@/motion/pressedRect";
+import { traceLongPress } from "@/motion/longPressTrace";
 
 /**
  * Wave's dialogs and menus: floating glass cards drawn by `OverlayHost` at the
@@ -66,6 +67,7 @@ export const closeOverlay = (id: number): void =>
 export const openOverlay = (request: OverlayRequest): OverlayHandle => {
   const id = nextId++;
   const origin = originNow();
+  if (origin?.menuAllowed !== undefined) traceLongPress(origin.key, "overlay-opened", `id=${id}`);
   entries.update((list) => [...list, { id, request, closing: false, origin }]);
   return { close: () => closeOverlay(id) };
 };

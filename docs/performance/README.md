@@ -27,6 +27,7 @@ node scripts/perf/perf.ts doctor                    # phone settings the runs de
 node scripts/perf/perf.ts run --label baseline      # every scenario, idle variant
 node scripts/perf/perf.ts run --label baseline --variant idle,import
 node scripts/perf/perf.ts run --scenario now-playing,queue --label 304-after
+node scripts/perf/perf.ts run --scenario push-playlist --playlist "Alternative pop" --label playlist
 node scripts/perf/perf.ts run --scenario soak-routes,soak-player --label 318-soak
 node scripts/perf/perf.ts summary perf-results/<file>.jsonl
 node scripts/perf/perf.ts compare <before.jsonl> <after.jsonl>
@@ -51,6 +52,9 @@ node scripts/perf/perf.ts run --dry-run             # the whole pipeline on a si
   profiles (#317).
 - `--import-link <url>`: overrides the fixture's playlist link.
 - `--artist <name>`: overrides the fixture's artist (`push-artist`).
+- `--playlist <name>`: overrides the fixture's playlist (`push-playlist`). Use a playlist visible
+  on Library › Playlists without scrolling, and the same playlist for comparable runs. The run
+  header records its name; `compare` warns when the names differ.
 - `--meta key=value`: records a value as given. On a plain APK, pass the Library's size this way
   (`--meta library.tracks=12000 --meta library.playEvents=54000`).
 - `--glass <probe>`: launches Wave with a glass probe (perf builds only; #316): `live`,
@@ -104,6 +108,10 @@ version, package and signature as the release it's built from, so it installs ov
 - `artist`: the artist `push-artist` opens, by name as Library › Artists shows it. **Not set
   yet.** Pick an artist with a long play history that shows on the list's first screen without
   scrolling, and commit the name here. `push-artist` can't run without it. `--artist` overrides it.
+- `playlist`: the playlist `push-playlist` opens by its visible name on Library › Playlists.
+  **Not set yet.** Set it from the actual test Library, or pass `--playlist`. A missing or blank
+  name records a scenario error and allows the other scenarios to continue. Keep its contents,
+  layout and sort order comparable; the name alone does not establish equal workloads.
 - `settleMs`, `windowMs`, `launchSettleMs`, `memoryIdleMs`, `flushTimeoutMs`: timing (below).
 
 The phone, for runs that compare:
@@ -143,6 +151,7 @@ JavaScript saw that key, not when it was pressed.
 | `push-library`      | Library › Albums (`push`), Back (`pop`)                                                      | `route`                   |         10 |
 | `push-tracklist`    | Library › Songs, the whole Library as a Track list, to its first rows (`push`), Back (`pop`) | `songs.rows`, `route`     |         10 |
 | `push-artist`       | Library › Artists › the fixture's artist, to its stats block (`push`), Back (`pop`)          | `artist.stats`, `route`   |         10 |
+| `push-playlist`     | Library › Playlists › the named playlist (`push`), Back (`pop`)                              | `route`                   |         10 |
 | `push-empty`        | Settings › Developer, one row: the empty-screen control (`push`, `pop`)                      | `route`                   |         10 |
 | `now-playing`       | mini player (`open`), Close Now Playing (`close`)                                            | `nowPlaying.shown/hidden` |         10 |
 | `now-playing-first` | the first mini player tap after a fresh launch (`open`)                                      | `nowPlaying.shown`        |          5 |

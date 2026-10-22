@@ -46,7 +46,8 @@ const catalogSong = (videoId: string, artists: string[], seeds: string[]): Catal
   })),
 });
 
-const noProfiles: GenreProfileOf = () => undefined;
+// Ranking/deduplication fixtures have known matching genres; missing metadata is tested separately.
+const matchingProfiles: GenreProfileOf = () => new Map([["rock", 1]]);
 
 const sources = (
   catalog: CatalogSong[],
@@ -54,12 +55,12 @@ const sources = (
 ): RecommendSources => ({
   catalog,
   graph: artistGraph({ catalog, pages: [], plays: [] }),
-  profileOf: noProfiles,
+  profileOf: matchingProfiles,
   now: NOW,
   ...more,
 });
 
-/** A Magic Queue started from a Library song by [artist], its radio grown from them, any genre. */
+/** A Magic Queue started from an untagged Library song by [artist], its profile resolved at pick time. */
 const sessionOf = (artist: string): MagicSession => {
   const started = startMagicQueue(
     { kind: "track", id: "1", title: "Seed" },

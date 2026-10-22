@@ -1,0 +1,8 @@
+Page: dev.leoperez.wave
+App: dev.leoperez.wave
+Snapshot: 4 visible nodes (6 total)
+Collapsed 2 Android helper nodes from the agent-facing text snapshot; use --raw or --json for the full hierarchy.
+@e1 [scroll-area] [scrollable]
+@e2 [button] "Back"
+@e3 [scroll-area] "Download in best quality, Best quality is MP3 320 kbps from other people's shared music. It's slower than YouTube Music, and a song it can't find comes from YouTube Music instead. Off, downloads come from YouTube Music while YT Music is on." [scrollable]
+@e5 [switch] "Download in best quality" [unchecked]

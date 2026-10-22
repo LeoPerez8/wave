@@ -1,0 +1,99 @@
+# Playlist recommendations — #558
+
+Product-spec addition for integration into `docs/spec.md` by the parent (kept here to avoid concurrent spec edits).
+
+## #559 — visible recommendations
+
+Editable Wave playlists show Recommended songs after their entries, up to five distinct eligible recordings. An empty playlist asks for songs first. A short or exhausted catalog shows the actual count; loading and retryable failure leave the playlist usable. Find and selection hide the footer.
+
+Core derives the playlist's genres and credited artists and ranks the Library plus the existing candidate catalog through `recommend`, using the existing Artist graph. Track genre tags take precedence over artist-wide genres. Graph/radio proximity and genre compatibility lead; compatible same-artist and same-album songs rank strongly. A known genre mismatch cannot qualify from artist/album alone. With no genre evidence, artist/radio proximity still works. No global taste signal is read. Library files remain available offline or with YT Music off; streaming candidates require online and YT Music enabled. This view makes no network requests to fill its catalog.
+
+Recording identity follows the shared integrated Library/YT Music matcher: title, credited artist and length, including remaster normalization and distinct live/edit versions. Playlist recordings and cross-source duplicate representations are excluded, preferring the playable Library file.
+
+Evidence: Core public API tests exercise ranking through the Artist graph and recording exclusion. Real-SQLite store tests exercise playlist → stored catalog/Library → ranked suggestions and offline/disabled fallback. Device appearance and interaction remain for the parent's emulator run; no physical-device evidence is claimed.
+
+## #560 — matching favorites and downloads
+
+Eligibility is decided before status. Among eligible recordings, every favorite or download ranks ahead of ordinary songs; compatibility orders each group. Thus all qualifying priority songs fit when there are at most five, and the most compatible five win when there are more. Duplicate recordings still count once. Library favorites, pending YT Music favorites and completed downloads are read afresh on renewal; unrelated favorites/downloads cannot qualify by status. Explicit favorite/download behavior is unchanged.
+
+Evidence: Core selection checks include matching favorites/downloads, an unrelated favorite/download, seven priority songs and changed status. Real-SQLite reads verify favorites, unstar, downloaded-file status and catalog pending favorites reach visible selection.
+
+## #561 — playlist dismissal
+
+Each visible recommendation has Dismiss. The controller saves the playlist-scoped signal before removing the offer, replaces only that slot, and preserves the other offer objects and keys. Recording equivalents consumed during this visit are excluded before the five-song limit, so dismissals can reach beyond the initial five. A failed save leaves the offer available for retry. A saved choice whose refill fails leaves a truthful hole and offers Try again without repeating the write. Controls are disabled during pending work and stale offer keys are ignored.
+
+Feedback is local SQLite data keyed by playlist identity and offer key, with an upgrade migration and duplicate-write protection. Exact recordings, credited artists, nearby artists from the baseline graph, and genre families receive a bounded, mild adjustment; eligibility remains unchanged. A dismissal is not an artist/genre ban, and reopening can offer a dismissed recording again with the adjustment. No feedback goes into the global taste history or Artist graph inputs.
+
+Evidence: Core tests cover held saves, repeated/stale taps, failed saves, stable refill and refill recovery. Real-SQLite tests cover upgrading an existing Library, closing/reopening the database image, playlist isolation, actual failed writes, retry, refill and unchanged global taste inputs. The Taylor Swift fixture preserves her global favorite and the original graph/ranking for unchanged inputs.
+
+## #562 — playlist acceptance
+
+Each suggestion has a separate Add button beside Dismiss; tapping the row still plays it. Add rechecks current playlist membership and available Library recordings, then commits one playlist entry and one positive signal in the same SQLite transaction. A feedback-save error rolls the entry back. A stale offer whose recording is already present adds neither another entry nor another signal. A stream downloaded since it appeared resolves to its Library recording, and saved video IDs prevent duplicate representations after tag edits.
+
+After a successful addition, the playlist is notified and only the vacated recommendation slot is refilled, using freshly read contents, feedback, favorite/download status, candidate catalog and baseline Artist graph. Pending actions block rapid repeated/cross-action taps; old offer keys cannot act again. Candidate exhaustion leaves fewer songs, and loading/save/refill failures have distinct recovery copy. No action favors, downloads, records playback, rewrites global taste/graph inputs, or learns for another playlist. The independent row-play, favorite, download and playback mechanisms retain their existing semantics.
+
+A positive signal can follow a prior dismissal, including for the same recording after reopening. Positive and negative recording signals aggregate, rather than retaining the first negative match forever. Artist, graph-neighbor and genre-family adjustments remain bounded to ±0.35 and apply only after compatibility eligibility, within the favorite/download priority policy. Feedback is kept on this phone across restarts, without being synced as global preference data.
+
+Evidence: Core controller tests cover acceptance only on save success, repeated/cross-action/stale taps, updated membership, stable refill, read failure/retry, truthful empty/exhausted state and changed favorite/download status on the next refill. Core ranking tests cover positive related-track learning and acceptance cancelling a prior recording dismissal. Real-SQLite tests exercise transaction rollback after an actual feedback write failure, duplicate/preexisting additions, stream acceptance without implicit favorite/download, downloads arriving between display and Add, dismissal → acceptance → database restart, isolated same-input ranking for another playlist, unchanged global taste/catalog/recommendation ranking, and complete exhaustion. The preexisting #559/#560 ranking and store integration tests remain enabled.
+
+## 2026-10-21 review correction verification
+
+Completed the saved review-fix WIP `b9fe401e` in `b6614a43` on `fix/open-tickets-review-fixes`, based on integration `a01d7360`. The five findings and their resolution are recorded in [the integrated review](534-code-review.md#resolution-status).
+
+- Tagless playlist seeds preserve weighted artist genre shares. The supplied 90% Pop / 10% Metal profile now excludes an unrelated pure-Metal recommendation; playlist tags still lead when present.
+- Full renewal selects the current top five eligible distinct recordings, reflecting changed favorite/download priority even when all five slots were occupied. Add/Dismiss refill keeps the other four offer objects and keys. The third-review correction below replaces matching-snapshot acknowledgement with a guard around the controller's synchronous successful-Add notification; external membership edits renew the selection after any in-flight work.
+- Footer rows reuse `DiscoverSongRow`, including Library/stream long-press menus, configured swipes, swipe accessibility actions and the shared current-playing identities. Existing Library rows from the recommendation snapshot supply the local actions, without another query. Add/Dismiss reuse the shared 48dp `IconButton` with 24dp/1.5-stroke accent glyphs, disabled tertiary tone and per-offer busy accessibility state.
+- Add's transaction uses a bounded membership/Library read instead of the complete recommendation snapshot. A small real-SQLite probe observed 19 SELECTs before and 15 after: candidate songs, candidate radios, pending favorites and the full playlist feedback read are gone from validation. Offer-key duplicate checking remains; feedback and membership still commit or roll back together. Library-wide metadata reads and the fresh refill snapshot remain. No device timing or scaling improvement is inferred.
+
+TDD evidence: the weighted-profile and full-renewal WIP tests both fail against the original `a01d7360` Core modules and pass after correction. A new session regression failed before correcting the delayed acceptance notification and passes afterward. A store characterization test passes before/after narrowing the read: a newly downloaded video with edited title/artist/duration resolves to its Library ID once, while an offered Library file lost since display is rejected without feedback.
+
+Actual checks in this worktree:
+
+- `node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test packages/core/src/playlistRecommendations.test.ts packages/core/src/playlistRecommendationSession.test.ts apps/mobile/src/library/db/playlistRecommendations.test.ts`: **23 passed**.
+- `pnpm --filter @wave/core test`: **3,315 passed**.
+- `pnpm --filter @wave/mobile test`: **502 passed**.
+- `pnpm --filter @wave/core --filter @wave/mobile typecheck`: passed, with the final affected Core/mobile checks repeated after cleanup.
+- `pnpm fmt:check`, changed-file lint and `git diff --check`: passed. Full repository lint exits successfully with warnings outside the changed files.
+
+Logs and before/after query traces are under `/tmp/wave-open-tickets-20261021/reviewfix-dc52eeb6/`. These are source, Core and SQLite checks. No automated UI test seam was introduced and no device evidence is claimed.
+
+## 2026-10-21 second review corrections
+
+The second Standards review (`/tmp/wave-open-tickets-20261021/standards-review-round2.md`) found that the membership-only renewal guard also suppressed Library deletions and source/status changes. The second Spec review (`/tmp/wave-open-tickets-20261021/spec-review-round2.md`) found that recovery from a failed refill could replace held offers when saved feedback changed the top five. Both are corrected in the same slice on `fix/playlist-recommendation-renewal`, starting at parent integration `de3266f6` and merging its later `52a0dfbd` tip before completion.
+
+- The footer follows existing Library change notifications and their causes. Track changes (including removal and completed downloads) and saved Library favorite changes request full renewal even if playlist membership is unchanged. Playlist notifications are scoped to this playlist. Updating the `items` query result no longer independently reranks Add's held offers. The Core guard acknowledges only one matching Add refill snapshot, rather than every unchanged playlist read. A source renewal requested during a save/read is retained and processed afterward, so it can select the current priority five.
+- Try again after a saved action's failed refill requests `renew({ refillOnly: true })`. Recovery excludes held recordings before selecting replacements and fills only holes, preserving the held offer objects and keys. A repeated failed recovery retains the refill error and does not repeat the saved choice. Full source renewal continues to select today's top five.
+
+Public Core regressions were observed red, then green: removing all candidates with unchanged membership previously retained five stale offers; a favorite/download source change during Add previously lost one qualifying priority song; saved dismissal feedback plus failed refill/retry previously replaced untouched d/e with g/h. The corrected feedback scenario produces `[a,b,f,d,e]` and asserts the four held objects are identical. The existing delayed Add notification regression remains enabled, as do weighted-profile, full-priority, stable Add/Dismiss, transaction/identity and isolation checks. Shared row and button adapters remain unchanged by this slice.
+
+Actual checks for this correction slice:
+
+- `node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test packages/core/src/playlistRecommendations.test.ts packages/core/src/playlistRecommendationSession.test.ts apps/mobile/src/library/db/playlistRecommendations.test.ts`: **26 passed**.
+- `pnpm --filter @wave/core --filter @wave/mobile typecheck`: passed.
+- Changed-file Oxlint, changed-file Prettier checks and `git diff --check`: passed. `pnpm lint` passed with existing warnings outside the changed files.
+
+Red/green and final check logs are under `/tmp/wave-open-tickets-20261021/renewalfix-7c5d48a3/`. Dependencies were reused through worktree-local links; no dependencies, versions or lockfiles changed. The prior full-suite results above were not rerun. These tests validate public Core behavior and real SQLite behavior; the Library notification/retry wiring was source-reviewed and typechecked, without a new UI test boundary. No device, remote, APK, gesture, TalkBack or performance verification was performed in this worktree. Parent-owned final APK/controller/footer verification remains required.
+
+## 2026-10-21 third Spec review correction
+
+The third Spec report (`/tmp/wave-open-tickets-20261021/spec-review-round3.md`) identified an external membership invalidation dropped during the input/graph read. This correction is on `fix/retain-external-library-invalidation`, based on parent integration `41b78255` and updated with parent `954abe0d` (including `56de03dd`'s separate Home font-grid fix and #535 evidence, then surface-inventory documentation).
+
+- Every external playlist or source invalidation requests full renewal. The existing pending flag retains it through saves, full reads and refills, then rereads current membership. Failed-refill recovery still requests `refillOnly` and keeps held objects/keys.
+- Only this controller's own successful Add announcement is suppressed, for the synchronous `playlistsChanged` → `publishLibraryChange` call. The adapter clears that guard in `finally` before the refill read. Equal playlist IDs are no longer used as evidence that a notification belongs to Add, and Core's `ifPlaylistChanged`/accepted-snapshot bookkeeping is removed. This supersedes historical matching-snapshot/delayed-notification claims above.
+- The original five corrections and both round-two corrections remain. The previous 26-test coverage stays enabled; its former delayed-ID-acknowledgement test now follows the causal contract. Seven additional cases bring the targeted suite to **33 passing**. Public Core cases cover external additions before/after a full-read snapshot and a held offer added externally before Add's snapshot with notification afterward. Real-SQLite cases cover an ordinary Add preserving four held offer objects/keys and external additions during its save or before/after its refill snapshot, with exactly one acceptance feedback entry.
+
+Red/green evidence: the original busy-read reproduction kept `[a,b,c,d,e]` after a was externally added; the corrected follow-up replaces a with f. The equal-snapshot Add reproduction kept held a; correction replaces it with g. Both failed before their respective corrections. A separate replay uses the parent's `41b78255` session and its actual `{ ifPlaylistChanged: true }` listener request: the ordinary SQLite Add passes, while all three concurrent-edit cases fail by retaining A. Restoring the corrected session/listener contract makes them pass. Gates pause only the existing storage/input boundary; no UI or internal-controller test seam was added.
+
+Actual checks after incorporating the parent's font-grid fix (its subsequent documentation-only update adds no code):
+
+- `node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test packages/core/src/playlistRecommendations.test.ts packages/core/src/playlistRecommendationSession.test.ts apps/mobile/src/library/db/playlistRecommendations.test.ts`: **33 passed**.
+- `pnpm --filter @wave/core --filter @wave/mobile typecheck`: passed.
+- Changed-file Oxlint and Prettier, repository `pnpm lint`, and `git diff --check`: passed. Repository lint retains existing warnings outside the changed files.
+
+Logs: `/tmp/wave-open-tickets-20261021/invalidationfix-e0dd4576/`. Parent-reported full results at `41b78255` are **3,318 Core / 502 mobile**, plus typecheck; those full suites were not repeated. Dependencies are reused through worktree-local links resolving `@wave/core` to this worktree. No dependency/version/lockfile changes, root-checkout edits, remote actions, subagents or devices. The adapter's synchronous notification wiring was source-reviewed and typechecked, not exercised through a rendered footer. Parent owns the final APK and footer/device acceptance.
+
+## Manual acceptance still required
+
+The parent owns the device. This implementation has not installed or driven an emulator or physical phone. On the parent's final APK, verify the actual editable-playlist footer (including an empty playlist), visible five/short counts, row playback and cross-source playing indicator, Library/stream long-press menus, configured swipes and swipe-off behavior, Add and Dismiss, pending disabled controls, unchanged surrounding scroll/playlist behavior, save/refill error copy, YT Music off/offline Library fallback, leaving/reopening, and process restart. Confirm four held offers stay in place after Add's playlist update and that a full renewal includes newly favored/downloaded matches. Check light/dark appearance, long song titles and larger system text, and TalkBack labels/actions/focus after replacement. Physical S24+ interaction, performance and TalkBack evidence remain unavailable here; automated Core/store evidence is not a device claim.
+
+Impeccable context reported preexisting design-sidecar drift (`DESIGN.md` newer than `.impeccable/design.json`) and an unset visual build path. Neither is changed in this implementation; `document` can refresh the sidecar in a separate design task.

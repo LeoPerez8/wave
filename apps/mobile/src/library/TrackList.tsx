@@ -21,7 +21,7 @@ import { useChromeInset } from "@/chrome/chrome";
 import { fileUri } from "@/lib/fileUri";
 import { useRenderCount } from "@/perf/perf";
 import { playSongs } from "@/playback/actions";
-import { useCurrentTrackId, usePlayPage } from "@/playback/hooks";
+import { useCurrentPlayingIds, usePlayPage } from "@/playback/hooks";
 import { openTrackActions } from "@/playback/ActionsMenu";
 import type { ActionItems } from "@/playback/actionTargets";
 import { selectableRow } from "@/selection/selectableRow";
@@ -169,7 +169,7 @@ export function TrackList({ songs, context, header, sort, findable = false }: Pr
   const list = useRef<LegendListRef>(null);
   useScrollToTop(list);
   const bottomInset = useChromeInset();
-  const currentId = useCurrentTrackId();
+  const currentIds = useCurrentPlayingIds();
   const favorites = useFavoriteIds();
   const listSelection = useListSelection({
     items: songs,
@@ -177,8 +177,8 @@ export function TrackList({ songs, context, header, sort, findable = false }: Pr
     target: tracksOf,
   });
   const rowState = useMemo(
-    () => ({ currentId, favorites, selection: listSelection.selection }),
-    [currentId, favorites, listSelection.selection],
+    () => ({ currentIds, favorites, selection: listSelection.selection }),
+    [currentIds, favorites, listSelection.selection],
   );
   const sortKeys = useMemo(
     () => (sort === undefined ? NO_KEYS : (songSpineKeys(songs, sort) ?? NO_KEYS)),
@@ -193,7 +193,7 @@ export function TrackList({ songs, context, header, sort, findable = false }: Pr
       <SwipeTrackRow
         song={item}
         track={toTrackSummary(item)}
-        state={String(item.id) === currentId ? "playing" : undefined}
+        state={currentIds.has(String(item.id)) ? "playing" : undefined}
         favorite={favorites.has(item.id)}
         leading="artwork"
         {...selectableRow(
@@ -205,12 +205,14 @@ export function TrackList({ songs, context, header, sort, findable = false }: Pr
         )}
       />
     ),
-    [context, currentId, favorites, songs, placeOf, listSelection],
+    [context, currentIds, favorites, songs, placeOf, listSelection],
   );
 
   return (
     <View className="flex-1">
       <LegendList
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
         scrollEnabled={scrollable}
         ref={list}
         className="flex-1"

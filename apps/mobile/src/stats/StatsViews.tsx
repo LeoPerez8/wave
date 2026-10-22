@@ -10,7 +10,7 @@ import {
   type StatsPeriod,
 } from "@wave/core";
 import { useCallback, useMemo, type ReactElement } from "react";
-import { ScrollView, Text, View } from "react-native";
+import { ScrollView, Text, useWindowDimensions, View } from "react-native";
 
 import { CELL, grid } from "@/catalog/grid";
 import { NameRow } from "@/catalog/NameRow";
@@ -23,7 +23,7 @@ import { openAlbum, openArtist, openRecap } from "@/library/routes";
 import { toTrackSummary } from "@/library/TrackList";
 import { Press } from "@/motion/Press";
 import { playSongs } from "@/playback/actions";
-import { useCurrentTrackId } from "@/playback/hooks";
+import { useCurrentPlayingIds } from "@/playback/hooks";
 import { openAlbumActions, openArtistActions, openTrackActions } from "@/playback/ActionsMenu";
 import { ArtworkRow } from "@/search/ArtworkRow";
 
@@ -91,7 +91,7 @@ function RankedSongRow({
   index,
   songs,
   context,
-  currentId,
+  currentIds,
   favorites,
 }: {
   entry: Ranked<SongRow>;
@@ -99,7 +99,7 @@ function RankedSongRow({
   /** The whole ranking's songs: tapping a row plays them from it. */
   songs: readonly SongRow[];
   context: QueueContext;
-  currentId: string | null;
+  currentIds: ReadonlySet<string>;
   favorites: ReadonlySet<number>;
 }) {
   return (
@@ -107,7 +107,7 @@ function RankedSongRow({
       song={song}
       track={{ ...toTrackSummary(song), trackNumber: index + 1 }}
       plays={countedPlays}
-      state={String(song.id) === currentId ? "playing" : undefined}
+      state={currentIds.has(String(song.id)) ? "playing" : undefined}
       favorite={favorites.has(song.id)}
       leading="number"
       topNumber={index === 0}
@@ -130,7 +130,7 @@ export function RankedSongs({
   /** What tapping a song plays: the ranking, from the song (see `statsSongsContext`). */
   context: QueueContext;
 }) {
-  const currentId = useCurrentTrackId();
+  const currentIds = useCurrentPlayingIds();
   const favorites = useFavoriteIds();
   const songs = ranking.map((entry) => entry.item);
   return (
@@ -142,7 +142,7 @@ export function RankedSongs({
           index={index}
           songs={songs}
           context={context}
-          currentId={currentId}
+          currentIds={currentIds}
           favorites={favorites}
         />
       ))}
@@ -275,9 +275,9 @@ export function RankedSongList({
 }) {
   const scrollable = useListScrollable();
   const bottomInset = useChromeInset();
-  const currentId = useCurrentTrackId();
+  const currentIds = useCurrentPlayingIds();
   const favorites = useFavoriteIds();
-  const rowState = useMemo(() => ({ currentId, favorites }), [currentId, favorites]);
+  const rowState = useMemo(() => ({ currentIds, favorites }), [currentIds, favorites]);
   const songs = useMemo(() => ranking.map((entry) => entry.item), [ranking]);
   const context = useMemo(() => statsSongsContext(period), [period]);
   const renderItem = useCallback(
@@ -287,11 +287,11 @@ export function RankedSongList({
         index={index}
         songs={songs}
         context={context}
-        currentId={currentId}
+        currentIds={currentIds}
         favorites={favorites}
       />
     ),
-    [songs, context, currentId, favorites],
+    [songs, context, currentIds, favorites],
   );
   return (
     <LegendList
@@ -361,6 +361,9 @@ export function RecapCard({ period }: { period: RecapPeriod }) {
  * plays its stories.
  */
 export function RecapsRow({ recaps }: { recaps: readonly RecapPeriod[] }) {
+  const { fontScale } = useWindowDimensions();
+  // Keep full month names readable as system type grows, on the catalog's cell grid.
+  const tileWidth = Math.ceil((RECAP_TILE.width * Math.max(1, fontScale)) / CELL) * CELL;
   return (
     <ScrollView
       horizontal
@@ -376,13 +379,13 @@ export function RecapsRow({ recaps }: { recaps: readonly RecapPeriod[] }) {
           onPress={() => openRecap(period)}
           haptic="selection"
           className={`justify-end rounded-2xl ${RECAP_LOOK[period.kind].colour}`}
-          style={{ ...RECAP_TILE, padding: CELL * 1.5 }}
+          style={{ width: tileWidth, minHeight: RECAP_TILE.height, padding: CELL * 1.5 }}
         >
           <Text className="font-sans text-footnote font-semibold text-on-recap opacity-80">
             {RECAP_LOOK[period.kind].label}
           </Text>
-          <Text numberOfLines={2} className="font-sans text-title3 font-bold text-on-recap">
-            {recapTitle(period)}
+          <Text className="font-sans text-title3 font-bold text-on-recap">
+            {recapTitle(period).replace(" ", "\n")}
           </Text>
         </Press>
       ))}

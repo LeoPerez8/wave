@@ -176,6 +176,7 @@ export const comparability = (before: RunRecord, after: RunRecord): string[] => 
   ...grew("Library songs", before.library.tracks, after.library.tracks),
   ...grew("Playlist entries", before.library.playlistItems, after.library.playlistItems),
   ...grew("Play history", before.library.playEvents, after.library.playEvents),
+  ...differs("Playlist fixture", before.runner.playlist ?? null, after.runner.playlist ?? null),
   ...differs("Perf build", before.perfBuild ? "yes" : "no", after.perfBuild ? "yes" : "no"),
   ...differs("Glass probe", glassOf(before).probe, glassOf(after).probe),
   ...differs("Glass settings", glassOf(before).settings, glassOf(after).settings),

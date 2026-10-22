@@ -213,6 +213,7 @@ export function Scrubber() {
         <View
           accessible
           accessibilityRole="adjustable"
+          accessibilityState={{ disabled: !enabled }}
           accessibilityLabel="Playback position"
           accessibilityValue={{
             text: `${formatDuration(shownMs)} of ${formatDuration(duration)}`,
@@ -223,7 +224,7 @@ export function Scrubber() {
             if (enabled) seekTo(Math.min(duration, Math.max(0, positionMs + step)), "scrubber");
           }}
           className="justify-center"
-          style={{ height: CELL * 4 }}
+          style={{ height: CELL * 6 }}
           onLayout={(event) => setWidth(event.nativeEvent.layout.width)}
         >
           {width > 0 && (

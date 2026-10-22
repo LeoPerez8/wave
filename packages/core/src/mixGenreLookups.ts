@@ -13,10 +13,11 @@ import {
   type DiscoverMixFilter,
   type DiscoverRadioSong,
 } from "./discoverMixes.ts";
-import { mixAffinity, type GenreProfileOf } from "./genreAffinity.ts";
+import { GENRE_AFFINITY_THRESHOLD, type GenreProfileOf } from "./genreAffinity.ts";
 import { songFamilies } from "./genreMixes.ts";
 import {
   magicArtistKey,
+  magicGenreMatches,
   magicSeedProfile,
   type MagicLibrarySong,
   type MagicSession,
@@ -157,8 +158,8 @@ const MAGIC_LIBRARY_LOOKUPS = 10;
  * (`magicLibraryCandidates` leaves out a song with no genre known): the
  * primary artists, with nothing known of them yet ([profileOf] undefined),
  * of the Library's songs without a genre tag, those with the most such
- * songs first, [most] (10) at most. None while the seed has no genre known,
- * when every song passes.
+ * songs first, [most] (10) at most. None while the seed has no genre known:
+ * its own profile must be resolved first.
  */
 export const magicLibraryLookups = (
   session: MagicSession,
@@ -204,14 +205,18 @@ export const magicRadioLookups = <S extends DiscoverRadioSong>(
     profileOf,
     inLibrary,
     asked = [],
+    threshold = GENRE_AFFINITY_THRESHOLD,
   }: {
     readonly profileOf: GenreProfileOf;
     readonly inLibrary: (song: S) => boolean;
     readonly asked?: readonly string[];
+    readonly threshold?: number;
   },
 ): string[] => {
   const seed = magicSeedLookups(session, profileOf).filter((name) => !asked.includes(name));
   if (seed.length > 0) return seed;
+  const profile = magicSeedProfile(session, profileOf);
+  if (profile === null || profile.size === 0) return [];
   const used = new Set(session.used);
   const excluded = new Set(session.excludedArtists);
   // Songs no batch picks: the Library's, those queued already and those by excluded artists.
@@ -223,7 +228,10 @@ export const magicRadioLookups = <S extends DiscoverRadioSong>(
     filter: {
       known,
       taken: new Set(),
-      affinity: mixAffinity(magicSeedProfile(session, profileOf), profileOf),
+      affinity: (song) =>
+        song.artists.some((artist) => magicGenreMatches(profile, profileOf(artist), threshold))
+          ? "match"
+          : "unknown",
     },
     profileOf,
     asked,

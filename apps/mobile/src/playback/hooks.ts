@@ -1,17 +1,20 @@
 import {
   currentEntry,
+  playingTrackIds,
   type MixedSong,
   type QueueContext,
   type QueueState,
   type YtSong,
 } from "@wave/core";
-import { useEffect, useRef, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useRef, useSyncExternalStore } from "react";
 
 import type { SongRow } from "@/library/LibraryStore";
 
 import { playPage } from "./actions";
 import { playbackState, type PlaybackState } from "./Player";
 import { queueState } from "./Queue";
+import { queuedYtSong, queueTracks } from "./queueTracks";
+import { useLoadedLibraryFinder } from "@/ytmusic/libraryFinder";
 
 export const usePlayback = (): PlaybackState =>
   useSyncExternalStore(playbackState.subscribe, playbackState.get);
@@ -26,6 +29,20 @@ export const useQueue = (): QueueState =>
 /** The track id of the current queue entry, if any (for highlighting the playing row). */
 export const useCurrentTrackId = (): string | null =>
   useSyncExternalStore(queueState.subscribe, () => currentEntry(queueState.get())?.trackId ?? null);
+
+/** All row identities of the playing recording, followed across a download. */
+export const useCurrentPlayingIds = (): ReadonlySet<string> => {
+  const currentId = useCurrentTrackId();
+  const track = useSyncExternalStore(queueTracks.subscribe, () =>
+    currentId === null ? null : (queueTracks.get().get(currentId) ?? null),
+  );
+  const song = useMemo(() => (track === null ? null : queuedYtSong(track)), [track]);
+  const find = useLoadedLibraryFinder(song !== null);
+  return useMemo(
+    () => new Set(playingTrackIds(currentId, song, find ?? (() => null))),
+    [currentId, song, find],
+  );
+};
 
 /**
  * Play / Shuffle for a screen's songs, which may still be loading (a screen

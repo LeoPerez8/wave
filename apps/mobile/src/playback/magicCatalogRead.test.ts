@@ -82,7 +82,7 @@ const read = (
     now: NOW,
     catalog: Effect.sync(() => (refills === 0 ? catalog : refilled)),
     graph: null,
-    profileOf: () => undefined,
+    profileOf: () => new Map([["rock", 1]]),
     taste: null,
     inLibrary: () => false,
     cached: Effect.sync(() => {

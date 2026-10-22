@@ -1,3 +1,4 @@
+import { PlaylistRecommendations } from "./PlaylistRecommendations";
 import { IconGripVertical } from "@tabler/icons-react-native";
 import { moveItem, queueSongTrackId, type PlaylistPlace, type QueueContext } from "@wave/core";
 import { useCallback, useLayoutEffect, useMemo, useRef, useState, type ReactElement } from "react";
@@ -10,7 +11,7 @@ import { SwipeableRow, swipeAccessibility, type RowSwipe } from "@/catalog/Swipe
 import { TrackRow } from "@/catalog/TrackRow";
 import { useChromeInset } from "@/chrome/chrome";
 import { playPlaylist } from "@/playback/actions";
-import { useCurrentTrackId } from "@/playback/hooks";
+import { useCurrentPlayingIds } from "@/playback/hooks";
 import { openTrackActions, openUnsearchedActions } from "@/playback/ActionsMenu";
 import type { ActionItems, TrackItem } from "@/playback/actionTargets";
 import { useSongSwipe, useUnsearchedSwipe } from "@/playback/rowSwipe";
@@ -290,7 +291,7 @@ export function PlaylistItems({ playlistId, items, header, empty }: Props) {
   const scrollable = useListScrollable();
   const read = items ?? NO_ITEMS;
   const bottomInset = useChromeInset();
-  const currentId = useCurrentTrackId();
+  const currentIds = useCurrentPlayingIds();
   const favorites = useFavoriteIds();
   const placeOf = useCallback(
     (item: PlaylistEntryRow) => ({ playlistId, itemId: item.itemId }),
@@ -393,7 +394,7 @@ export function PlaylistItems({ playlistId, items, header, empty }: Props) {
         index={index}
         count={shown.length}
         drag={listDrag.drag}
-        playing={queueId(item) !== null && queueId(item) === currentId}
+        playing={queueId(item) !== null && currentIds.has(queueId(item) ?? "")}
         favorite={item.source === "library" && favorites.has(item.track.id)}
         downloaded={mixed}
         selecting={listSelection.selecting}
@@ -408,6 +409,8 @@ export function PlaylistItems({ playlistId, items, header, empty }: Props) {
 
   return (
     <Animated.ScrollView
+      keyboardShouldPersistTaps="handled"
+      keyboardDismissMode="on-drag"
       scrollEnabled={scrollable}
       ref={scrollRef}
       className="flex-1"
@@ -430,6 +433,9 @@ export function PlaylistItems({ playlistId, items, header, empty }: Props) {
           {/* The dragged row stays mounted however far auto-scroll takes the list. */}
           {listDrag.indices.map(renderRow)}
         </View>
+      )}
+      {items !== undefined && found === null && !listSelection.selecting && (
+        <PlaylistRecommendations key={playlistId} playlistId={playlistId} items={items} />
       )}
     </Animated.ScrollView>
   );

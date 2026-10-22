@@ -1,0 +1,36 @@
+Page: dev.leoperez.wave
+App: dev.leoperez.wave
+Snapshot: 30 visible nodes (71 total)
+Collapsed 41 Android helper nodes from the agent-facing text snapshot; use --raw or --json for the full hierarchy.
+@e1 [scroll-area] [scrollable]
+@e2 [scroll-area] [scrollable]
+@e3 [button] "Back"
+@e4 [scroll-area] "10,000 SONGS, Blue, Dax Lindqvist, Dax Mendes, 0:30, Copper Kites, Ben Prado, Ben Novak, Ben Kowalski, Ben Haddad, Ben Duarte, Ada Lindqvist, Nora Laine, Ada Duarte, Shuffle, Play" [scrollable]
+  [content above scroll-area hidden]
+  [content below scroll-area hidden]
+@e7 [button] "Play"
+@e9 [button] "Shuffle"
+@e11 [button] "Sort, Song name, A to Z"
+@e12 [button] "Blue, Ada Duarte, now playing" [selected]
+@e16 [button] "Blue, Ada Lindqvist, Nora Laine"
+@e20 [button] "Blue, Ben Duarte"
+@e24 [button] "Blue, Ben Haddad"
+@e28 [button] "Blue, Ben Kowalski"
+@e32 [button] "Blue, Ben Novak"
+@e36 [button] "Blue, Ben Novak"
+@e40 [button] "Blue, Ben Prado"
+@e44 [button] "Blue, Ben Prado"
+@e48 [button] "Blue, Copper Kites"
+@e52 [button] "Blue, Dax Lindqvist, Dax Mendes"
+@e56 [button] "Blue, Dax Mendes, Milo Holm"
+@e58 [seekbar] "Alphabet index, B"
+@e59 [text] "C"
+@e61 [text] "G"
+@e62 [text] "M"
+@e63 [text] "O"
+@e64 [text] "S"
+@e65 [text] "W"
+@e66 [text] "Y"
+@e67 [button] "Now playing: Blue, Ada Duarte"
+@e70 [button] "Play Blue"
+@e71 [button] "Next track"

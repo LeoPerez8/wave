@@ -44,6 +44,8 @@ export interface FakeDeviceOptions {
   readonly installResult?: number;
   /** The artist on the simulated Library › Artists list. */
   readonly artist?: string;
+  /** The named playlist on the simulated Library › Playlists list. */
+  readonly playlist?: string;
   /** Draws its glass as shipped whatever probe the launch asks for (a build without #316). */
   readonly ignoresGlassProbe?: boolean;
 }
@@ -80,6 +82,7 @@ export class FakeDevice implements Device {
   private readonly perfBuild: boolean;
   private readonly tabs: readonly string[];
   private readonly artist: string;
+  private readonly playlist: string;
   private readonly ignoresGlassProbe: boolean;
   private glassProbe = "live";
   private running = false;
@@ -113,6 +116,7 @@ export class FakeDevice implements Device {
     this.installResult = options.installResult ?? 1;
     this.savedRules = new Set(options.savedProfile ?? []);
     this.artist = options.artist ?? "Radiohead";
+    this.playlist = options.playlist ?? "Favorites";
     this.ignoresGlassProbe = options.ignoresGlassProbe ?? false;
   }
 
@@ -320,6 +324,9 @@ export class FakeDevice implements Device {
       this.render(this.clock, 6);
       this.advance(30);
       this.respond("artist.stats", "played");
+    } else if (label === "Playlists") this.navigate("/library/playlists");
+    else if (label === this.playlist && this.route === "/library/playlists") {
+      this.navigate("/library/playlist/1");
     } else if (label === "Back") this.navigate(null);
     else if (label.startsWith("Now playing:")) {
       this.ran(NOW_PLAYING_RULES);
@@ -429,6 +436,9 @@ export class FakeDevice implements Device {
         ...(route === "/library/artists"
           ? [{ text: this.artist, bounds: [80, 700, 900, 800] } as Node]
           : []),
+        ...(route === "/library/playlists"
+          ? [{ text: this.playlist, bounds: [80, 700, 900, 800] } as Node]
+          : []),
       ];
     const tabs = this.tabs.map((label, i): Node => ({
       desc: label,
@@ -448,6 +458,7 @@ export class FakeDevice implements Device {
         { text: "Albums", bounds: [80, 700, 600, 800] },
         { text: "Songs", bounds: [80, 900, 600, 1000] },
         { text: "Artists", bounds: [80, 1100, 600, 1200] },
+        { text: "Playlists", bounds: [80, 1300, 600, 1400] },
         mini,
         ...tabs,
       ];

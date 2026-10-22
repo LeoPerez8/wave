@@ -947,6 +947,17 @@ CREATE INDEX \`candidate_radios_seed_idx\` ON \`candidate_radios\` (\`seed_key\`
 CREATE INDEX \`candidate_radios_last_seen_idx\` ON \`candidate_radios\` (\`last_seen_at\`);
 `;
 
+const mPlaylistRecommendationFeedback = `
+CREATE TABLE \`playlist_recommendation_feedback\` (
+  \`playlist_id\` integer NOT NULL REFERENCES \`playlists\`(\`id\`) ON DELETE CASCADE,
+  \`offer_key\` text NOT NULL,
+  \`track\` text NOT NULL,
+  \`value\` integer NOT NULL CHECK (\`value\` IN (-1, 1)),
+  \`created_at\` integer NOT NULL,
+  PRIMARY KEY (\`playlist_id\`, \`offer_key\`)
+);
+`;
+
 export default {
   journal: {
     entries: [
@@ -991,6 +1002,12 @@ export default {
         breakpoints: true,
       },
       { idx: 35, when: 1_794_830_400_000, tag: "0035_candidate_catalog", breakpoints: true },
+      {
+        idx: 36,
+        when: 1_794_916_800_000,
+        tag: "0036_playlist_recommendation_feedback",
+        breakpoints: true,
+      },
     ],
   },
   migrations: {
@@ -1030,5 +1047,6 @@ export default {
     m0033: mFileDeletions,
     m0034: mPlaylistImageOriginals,
     m0035: mCandidateCatalog,
+    m0036: mPlaylistRecommendationFeedback,
   },
 };

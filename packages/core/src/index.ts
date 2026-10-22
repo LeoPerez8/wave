@@ -95,6 +95,7 @@ export { extrapolatePosition, scrubPosition } from "./position.ts";
 export type { PositionReport, ScrubTouch } from "./position.ts";
 export {
   CENTRE_FRAMING,
+  adjustFraming,
   framingSquare,
   framingText,
   framingView,
@@ -1963,3 +1964,14 @@ export {
 } from "./swipeActions.ts";
 export type { RowMenuAction, RowSwipeActions, SwipeChoice, SwipeSettings } from "./swipeActions.ts";
 export { BACK_EXIT_WINDOW_MS, createBackExitConfirmation } from "./backExit.ts";
+
+export { playlistRecommendations, playlistRecordingMatch } from "./playlistRecommendations.ts";
+export type {
+  PlaylistRecommendation,
+  PlaylistRecommendationTrack,
+  PlaylistRecommendationSources,
+  PlaylistRecommendationFeedback,
+} from "./playlistRecommendations.ts";
+export * from "./playlistRecommendationSession.ts";
+export { playingTrackIds } from "./playingIdentity.ts";
+export { createLongPressIntent } from "./longPressIntent.ts";

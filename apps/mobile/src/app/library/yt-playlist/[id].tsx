@@ -13,7 +13,16 @@ export default function YtPlaylistScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const playlistId = id ?? "";
   const known = useYtListHead("yt-playlist", playlistId);
-  const load = useYtListPage("yt-playlist", playlistId);
+  const { load, retry } = useYtListPage("yt-playlist", playlistId);
   const context = useMemo(() => ({ kind: "ytPlaylist", id: playlistId }) as const, [playlistId]);
-  return <YtSongList known={known} load={load} context={context} numbered={false} findable />;
+  return (
+    <YtSongList
+      known={known}
+      load={load}
+      onRetry={retry}
+      context={context}
+      numbered={false}
+      findable
+    />
+  );
 }

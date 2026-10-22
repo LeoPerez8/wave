@@ -119,6 +119,10 @@ export const closeSongShare = (): void => {
 export const useSongShare = (): SongShareContent | null =>
   useSyncExternalStore(shared.subscribe, shared.get);
 
+/** Visibility only: covered screens do not render again as links or artwork arrive. */
+export const useSongShareShown = (): boolean =>
+  useSyncExternalStore(shared.subscribe, () => shared.get() !== null);
+
 /**
  * The links lookup of the Library song [id]: by the video id it was
  * downloaded from, else a search for its title and artist (Core's

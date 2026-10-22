@@ -26,6 +26,7 @@ import {
   linkPlaylistEntries,
   movePlaylistItem,
   removePlaylistItems,
+  restorePlaylistItems,
   renamePlaylist,
   replacePlaylistSongs,
   selectPlaylist,
@@ -1170,4 +1171,79 @@ const indexedTrack = (title: string, artist: string, durationMs: number): Indexe
   artworkHash: null,
   hasLyrics: false,
   explicit: "unknown",
+});
+
+describe("playlist removal Undo", () => {
+  test("restores the original removed entries in their previous order without undoing later additions", () => {
+    const original = selectPlaylistEntries(db, playlistId);
+    const removal = removePlaylistItems(
+      db,
+      playlistId,
+      [original[0]!.itemId, original[2]!.itemId],
+      1000,
+    );
+    addToPlaylist(db, playlistId, [library("Bloom")], 1001);
+    restorePlaylistItems(db, removal, 1002);
+    assert.deepEqual(
+      selectPlaylistEntries(db, playlistId)
+        .map(({ itemId }) => itemId)
+        .slice(0, 4),
+      original.map(({ itemId }) => itemId),
+    );
+    assert.deepEqual(titles(), ["Daydreaming", "Airbag", "Creep", "Airbag", "Bloom"]);
+    restorePlaylistItems(db, removal, 1003);
+    assert.equal(selectPlaylistEntries(db, playlistId).length, 5);
+  });
+});
+
+test("Undo restores distinct original entries of a repeated song without creating new copies", () => {
+  const original = selectPlaylistEntries(db, playlistId);
+  const removal = removePlaylistItems(
+    db,
+    playlistId,
+    original
+      .filter((e) => e.source === "library" && e.track.title === "Airbag")
+      .map((e) => e.itemId),
+    1000,
+  );
+  restorePlaylistItems(db, removal, 1001);
+  assert.deepEqual(
+    selectPlaylistEntries(db, playlistId).map((e) => e.itemId),
+    original.map((e) => e.itemId),
+  );
+});
+
+test("Undo does not duplicate a song re-added while the toast shows or resurrect a deleted playlist", () => {
+  const item = selectPlaylistEntries(db, playlistId)[0]!;
+  const removal = removePlaylistItems(db, playlistId, [item.itemId], 1000);
+  addToPlaylist(db, playlistId, [library("Daydreaming")], 1001);
+  restorePlaylistItems(db, removal, 1002);
+  assert.deepEqual(titles(), ["Airbag", "Creep", "Airbag", "Daydreaming"]);
+  deletePlaylist(db, playlistId, 1003);
+  restorePlaylistItems(db, removal, 1004);
+  assert.equal(selectPlaylist(db, playlistId), null);
+});
+
+test("Undo persists streamed and unsearched entries with their original entry identities", () => {
+  const pending: PlaylistSong = {
+    source: "unsearched",
+    song: {
+      title: "Pending",
+      artists: ["Radiohead"],
+      album: null,
+      durationMs: null,
+      artworkUrl: null,
+    },
+  };
+  addToPlaylist(db, playlistId, [stream(yt("radio")), pending], 900);
+  const original = selectPlaylistEntries(db, playlistId).slice(-2);
+  const removal = removePlaylistItems(
+    db,
+    playlistId,
+    original.map((e) => e.itemId),
+    1000,
+  );
+  assert.equal(selectPlaylist(db, playlistId)?.items.length, 4);
+  restorePlaylistItems(db, removal, 1001);
+  assert.deepEqual(selectPlaylist(db, playlistId)?.items.slice(-2), original);
 });

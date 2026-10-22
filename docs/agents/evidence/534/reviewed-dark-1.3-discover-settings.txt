@@ -1,0 +1,36 @@
+Page: dev.leoperez.wave
+App: dev.leoperez.wave
+Snapshot: 31 visible nodes (59 total)
+Collapsed 28 Android helper nodes from the agent-facing text snapshot; use --raw or --json for the full hierarchy.
+@e1 [button] "Close"
+@e2 [scroll-area] [scrollable]
+@e3 [scroll-area] "DISCOVER, Magic Queue, Artist mixes, Electric Dance Heavy, Broken Morning, Ocean, Summer Gold, City, Summer Electric, Love Running, Home Dance, Echo, Your Recap is ready, September 2026, Tap to watch, Home" [scrollable]
+  [content below scroll-area hidden]
+@e4 [group] "Home"
+@e6 [button] "Settings"
+@e7 [button] "Your Recap is ready: September 2026"
+@e12 [button] "Discover settings" [selected]
+@e14 [horizontalscrollview] [scrollable]
+@e15 [button] "Echo by Ada Prado, Slow Heavy, start Magic Queue"
+@e17 [button] "Home Dance by Abbey Marlow, Young Broken, start Magic Queue"
+@e19 [button] "Love Running by Ugo Lindqvist, Shadow Young, start Magic Queue"
+@e21 [button] "Summer Electric by Abbey Marlow, Young Fade, start Magic Queue"
+@e23 [button] "City by Wren Okafor, Running Young, start Magic Queue"
+@e25 [button] "Summer Gold by Kai Lindqvist, River, start Magic Queue"
+@e27 [button] "Ocean by Milo Nyx, Dream, start Magic Queue"
+@e29 [button] "Broken Morning by Yara Byrne, Silver, start Magic Queue"
+@e31 [button] "Electric Dance Heavy by Hana Lindqvist, Stars Slow Ghost, start Magic Queue"
+@e34 [horizontalscrollview] [scrollable]
+@e35 [button] "Abbey Marlow mix by KATSEYE, Sia, Abbey Marlow, 26 songs"
+@e36 [button] "Kai Duarte mix by Bielzin, The Weeknd, Kai Duarte, 12 songs"
+@e37 [button] "Now playing: Blue, Ada Duarte"
+@e40 [button] "Play Blue"
+@e41 [button] "Next track"
+@e42 [group] "Home" [selected]
+@e44 [group] "Library"
+@e46 [group] "Playlists"
+@e48 [group] "Search"
+@e49 [scroll-area] "Discover, Popularity, Balanced, Genre faithfulness, New music, Balanced · 60% new" [scrollable]
+@e51 [seekbar] "New music, Balanced · 60% new"
+@e54 [seekbar] "Genre faithfulness, Balanced"
+@e57 [seekbar] "Popularity, Balanced"

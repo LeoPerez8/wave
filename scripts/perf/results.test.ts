@@ -82,6 +82,14 @@ describe("comparability", () => {
       "A dry run's numbers are simulated: don't compare them.",
     ]);
   });
+
+  it("warns when playlist-opening runs used different playlists", () => {
+    const before = { ...RUN, runner: { playlist: "Alternative pop" } };
+    const after = { ...RUN, runner: { playlist: "Long import" } };
+    assert.deepEqual(comparability(before, after), [
+      "Playlist fixture: Alternative pop, then Long import.",
+    ]);
+  });
 });
 
 /** A perf build's run that drew its glass with [probe] and a blur of [blur]. */

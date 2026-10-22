@@ -12,7 +12,6 @@ import { DISCOVER_MIX_LEVELS, type DiscoverMixLevel } from "./discoverMixLevels.
 import type { DiscoverRadioSong } from "./discoverMixes.ts";
 import {
   GENRE_AFFINITY_THRESHOLD,
-  genreAffinity as profileAffinity,
   genreProfile,
   type GenreProfile,
   type GenreProfileOf,
@@ -71,14 +70,31 @@ export const magicLibrarySongs = (
 };
 
 /**
+ * A Magic Queue needs shared genre mass, not just aligned vectors: a minor
+ * Rock share in an acoustic seed mustn't admit a mostly rap/metal artist.
+ * At Balanced at least half of the two profiles must overlap. Mixes keep
+ * their existing cosine rule. Missing profiles cannot establish a match.
+ */
+export const magicGenreMatches = (
+  seed: GenreProfile | null,
+  candidate: GenreProfile | null | undefined,
+  threshold: number,
+): boolean => {
+  if (seed === null || candidate == null || seed.size === 0 || candidate.size === 0) return false;
+  let shared = 0;
+  for (const [family, share] of seed) shared += Math.min(share, candidate.get(family) ?? 0);
+  return shared + 1e-9 >= threshold;
+};
+
+/**
  * The Library's songs a Magic Queue's batch may pick from (as
  * `magicLibrarySongs` weighs them): those that pass the genre affinity check
  * against [session]'s seed profile (`magicSeedProfile`) at [threshold] (the
  * Magic Queue section's Genre faithfulness, `magicLibraryThreshold`), as its
  * YouTube Music candidates do. A song's genre is its genre tag's profile;
  * without a tag, its primary artist's ([profileOf]: the Library's, else
- * Deezer's); with no genre known anywhere it stays out. Every song passes
- * for a seed with no genre known, and at a null [threshold] (Wander).
+ * Deezer's); with no genre known anywhere it stays out. An unknown seed
+ * admits no recommendations. A null [threshold] (Wander) admits every song.
  */
 export const magicLibraryCandidates = (
   session: MagicSession,
@@ -93,7 +109,8 @@ export const magicLibraryCandidates = (
 ): MagicSong[] => {
   const toMagicSong = magicLibrarySongs(library.artists);
   const seed = threshold === null ? null : magicSeedProfile(session, profileOf);
-  if (seed === null || threshold === null) return library.songs.map(toMagicSong);
+  if (threshold === null) return library.songs.map(toMagicSong);
+  if (seed === null) return [];
   const names = new Map(library.artists.map((artist) => [artist.id, artist.name]));
   const profileOfSong = (song: MagicLibrarySong): GenreProfile | null => {
     const own = genreProfile([song]);
@@ -104,9 +121,7 @@ export const magicLibraryCandidates = (
   };
   return library.songs.flatMap((song) => {
     const profile = profileOfSong(song);
-    return profile !== null && profileAffinity(seed, profile) >= threshold
-      ? [toMagicSong(song)]
-      : [];
+    return magicGenreMatches(seed, profile, threshold) ? [toMagicSong(song)] : [];
   });
 };
 
@@ -188,8 +203,8 @@ export interface MagicRadioSeed {
  * The genre profile [session]'s candidates, from both sources, are held to:
  * the seed songs' (`seedProfile`); when none of them has a genre tag, its
  * radio artists' profiles together ([profileOf]: the Library's, else
- * Deezer's), each counting alike. Null keeps any genre: nothing is known
- * anywhere (or no [profileOf] to ask).
+ * Deezer's), each counting alike. Null means no safe genre match can be
+ * established: nothing is known anywhere (or no [profileOf] to ask).
  */
 export const magicSeedProfile = (
   session: MagicSession,
