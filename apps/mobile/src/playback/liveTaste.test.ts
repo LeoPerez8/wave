@@ -19,6 +19,7 @@ const songOf = (trackId: string): MagicSong => ({
   trackId,
   artists: [magicArtistKey(`artist of ${trackId}`)],
   genre: "rock",
+  style: null,
 });
 
 const NO_HISTORY: TasteHistory = { plays: [], favorites: [], downloads: [] };

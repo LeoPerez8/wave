@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
+  faithfulnessStyles,
   genreProfile,
+  genreStyle,
   magicBatch,
   magicCatalogCandidates,
   magicLibraryCandidates,
@@ -14,6 +16,7 @@ import {
   type CatalogSong,
   type GenreProfileOf,
   type MagicLibrarySong,
+  type StyleOf,
 } from "./index.ts";
 
 // Representative metadata, not the unknown tags in the owner's APK. Names have no say in affinity.
@@ -41,6 +44,14 @@ const profiles: GenreProfileOf = (name) =>
         : name === artists[3]!.name
           ? metal
           : undefined;
+
+// The styles Same genres and Close hold to: the neighbour's soft as the seed's, the metalcore band's metalcore.
+const styleOf: StyleOf = (name) =>
+  name === artists[1]!.name
+    ? genreStyle("Soft Rock")?.key
+    : name === artists[3]!.name
+      ? genreStyle("Metalcore")?.key
+      : undefined;
 
 const start = (profile = genreProfile([seed])) =>
   startMagicQueue(
@@ -171,6 +182,7 @@ test("only Wander admits unrelated Library genres; online Wander still needs a k
       {
         profileOf: profiles,
         threshold: magicLibraryThreshold(sliders),
+        styles: faithfulnessStyles(sliders),
       },
     );
     assert.ok(
@@ -183,10 +195,16 @@ test("only Wander admits unrelated Library genres; online Wander still needs a k
       );
     const online = magicCatalogCandidates(
       session,
-      { catalog, graph: null, profileOf: profiles, now: 2 },
+      { catalog, graph: null, profileOf: profiles, styleOf, now: 2 },
       { inLibrary: () => false, engine: mixSlidersEngine(sliders) },
     ).candidates;
-    assert.ok(online.every((song) => song.trackId === "yt:close"));
+    if (faithfulness <= 2) {
+      // By style: the close one's (soft, as the seed's) stays; the metalcore one's doesn't. The unknown one is on the seed's radio, so it comes too.
+      assert.ok(online.some((song) => song.trackId === "yt:close"));
+      assert.ok(online.every((song) => song.trackId !== "yt:unrelated"));
+    } else {
+      assert.ok(online.every((song) => song.trackId === "yt:close"));
+    }
     if (faithfulness >= 3) assert.equal(online.length, 1);
   }
 });

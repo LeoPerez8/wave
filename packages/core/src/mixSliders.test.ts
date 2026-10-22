@@ -6,6 +6,7 @@ import {
   GENRE_FAITHFULNESS_STEPS,
   POPULARITY_STEPS,
   artistGraph,
+  genreStyle,
   mixSlidersEngine,
   readMixSliders,
   recommend,
@@ -16,6 +17,7 @@ import {
   type GenreProfile,
   type GenreProfileOf,
   type RecommendSources,
+  type StyleOf,
 } from "./index.ts";
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -77,13 +79,26 @@ const catalog = [
   catalogSong("other", "Placebo", ["Placebo"], NOW - 20 * DAY),
 ];
 
+// Styles for Same genres and Close: Muse's heavy, Mostly Rock's hard rock (a neighbour of heavy), the pop ones' soft.
+const heavy = genreStyle("Nu Metal")!.key;
+const hardRock = genreStyle("Hard Rock")!.key;
+const soft = genreStyle("Soft Rock")!.key;
+const styleOf: StyleOf = (artist) =>
+  (
+    ({ Muse: heavy, "Mostly Rock": hardRock, "Rock Pop": soft, "Pop Rock": soft }) as Record<
+      string,
+      string
+    >
+  )[artist];
+
 const sources: RecommendSources = {
   catalog,
   graph: artistGraph({ catalog, pages: [], plays: [] }),
   profileOf,
+  styleOf,
   now: NOW,
 };
-const seed = { artists: ["Muse"], profile: rock };
+const seed = { artists: ["Muse"], profile: rock, style: heavy };
 
 const ranking = (options = {}) =>
   recommend(seed, sources, options).map((entry) => [entry.song.videoId, entry.affinity]);
@@ -98,11 +113,14 @@ describe("A section's sliders", () => {
     assert.deepEqual(ranking(mixSlidersEngine(DEFAULT_MIX_SLIDERS)), ranking());
   });
 
-  test("Genre faithfulness: staying close leaves out what half-matches; wandering lets in neighbours", () => {
-    // Today's threshold (0.5): the half-rock songs match, the pop one with a little rock doesn't.
+  test("Genre faithfulness: Same genres keeps the seed's style; Close its neighbours; wandering lets in more", () => {
+    // Balanced (today's threshold, 0.5): the half-rock songs match, the pop one with a little rock doesn't.
     assert.deepEqual(new Set(matches()), new Set(["muse1", "hit", "cut", "close"]));
+    // Same genres: only the seed's style; Close: its neighbours too (hard rock sounds near heavy, soft doesn't).
     const strictest = mixSlidersEngine({ ...DEFAULT_MIX_SLIDERS, faithfulness: 1 });
-    assert.deepEqual(new Set(matches(strictest)), new Set(["muse1", "close"]));
+    assert.deepEqual(new Set(matches(strictest)), new Set(["muse1"]));
+    const close = mixSlidersEngine({ ...DEFAULT_MIX_SLIDERS, faithfulness: 2 });
+    assert.deepEqual(new Set(matches(close)), new Set(["muse1", "close"]));
     const wanders = mixSlidersEngine({ ...DEFAULT_MIX_SLIDERS, faithfulness: 5 });
     assert.deepEqual(new Set(matches(wanders)), new Set(["muse1", "hit", "cut", "close", "far"]));
   });

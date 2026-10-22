@@ -21,6 +21,7 @@ import {
   type MagicSession,
   type MagicSong,
   type RecommendOptions,
+  type StyleOf,
   type TasteProfile,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
@@ -161,10 +162,12 @@ export const magicQueueYtCandidates = (
     taste,
     engine,
     profileOf,
+    styleOf,
   }: {
     readonly taste: TasteProfile | null;
     readonly engine?: Omit<RecommendOptions, "avoid">;
     readonly profileOf: GenreProfileOf;
+    readonly styleOf: StyleOf;
   },
 ) =>
   Effect.gen(function* () {
@@ -179,6 +182,7 @@ export const magicQueueYtCandidates = (
       catalog: mixCatalog.pipe(Effect.orElseSucceed(() => [])),
       graph,
       profileOf,
+      styleOf,
       taste,
       inLibrary: inLibraryOf(library),
       cached: cachedVideos,
