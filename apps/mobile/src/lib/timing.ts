@@ -1,11 +1,18 @@
 /** Every-build timing adapter. No render counters, row observers or idle frame loop. */
-import type { LostTapReason, TimingKind } from "@wave/core";
+import {
+  missedFramesLine,
+  type TimingFrames,
+  type LostTapReason,
+  type TimingKind,
+} from "@wave/core";
 import { AppState, type GestureResponderEvent } from "react-native";
 
 import { appLog, timingBuild } from "@/log/appLog";
 import { onSlowLibraryRead } from "@/log/slowLibraryReads";
+import { WaveAppLog } from "@/native/waveAppLog";
 import { online } from "@/native/waveNative";
 
+import { createTransitionFrames } from "./transitionFrames";
 import { createLinkTapMonitor } from "./linkTapMonitor";
 import { createTimingSession } from "./timingSession";
 
@@ -160,8 +167,11 @@ export const timingStackListeners = {
 let appState = AppState.currentState ?? "active";
 AppState.addEventListener("change", (state) => {
   if (state !== "active" && appState === "active") {
-    session.leave();
+    for (const hitch of WaveAppLog?.takeTimingHitches?.() ?? []) session.hitch(hitch);
     session.cancel();
+    // A settled UI result may still be crossing the bridge. Include it before resetting the window.
+    if (frameCollection === null) session.leave();
+    else void frameCollection.flush().then(() => session.leave());
     nativeTransitions.clear();
     touchAt = undefined;
   }
@@ -180,7 +190,8 @@ const Observer = (
     };
   }
 ).PerformanceObserver;
-if (Observer?.supportedEntryTypes?.includes("longtask")) {
+const observeTransitionTasks = (): (() => void) => {
+  if (!Observer?.supportedEntryTypes?.includes("longtask")) return () => {};
   const observer = new Observer((list) => {
     for (const entry of list.getEntries()) session.jsBlock(entry.startTime, entry.duration);
   });
@@ -189,4 +200,64 @@ if (Observer?.supportedEntryTypes?.includes("longtask")) {
   } catch {
     observer.disconnect();
   }
-}
+  return () => observer.disconnect();
+};
+
+let frameCollection: ReturnType<typeof createTransitionFrames> | null = null;
+/** Root lifetime only. The subscription is idle; callbacks and long-task observation are tap-scoped. */
+export const startTimingFrameCollection = (): (() => void) => {
+  const frames = createTransitionFrames({
+    now: () => performance.now(),
+    request: (callback) => requestAnimationFrame(callback),
+    cancel: cancelAnimationFrame,
+    // Refresh rate can change during a transition. Unknown support is not measured as 60 Hz.
+    intervalMs: () => {
+      try {
+        return WaveAppLog?.timingFrameIntervalMs?.() ?? 0;
+      } catch {
+        return 0;
+      }
+    },
+    uiStart: (id, age) => {
+      try {
+        WaveAppLog?.startTimingFrames?.(id, age);
+      } catch {
+        /* Runtime teardown. */
+      }
+    },
+    uiStop: (id) => {
+      const native = WaveAppLog;
+      if (native?.stopTimingFrames === undefined) return Promise.resolve(null);
+      return new Promise<TimingFrames | null>((resolve) => {
+        const stop = (totals: TimingFrames | null) => {
+          clearTimeout(timeout);
+          listener.remove();
+          resolve(totals);
+        };
+        const listener = native.addListener("timingFrames", (event) => {
+          if (event.id === id) stop(event.measured ? event : null);
+        });
+        // Runtime teardown may prevent a native answer. This timer exists only during handoff.
+        const timeout = setTimeout(() => stop(null), 5000);
+        try {
+          native.stopTimingFrames!(id);
+        } catch {
+          stop(null);
+        }
+      });
+    },
+    observe: observeTransitionTasks,
+    report: (event, lane, totals) => {
+      session.frames(event.id, totals.count);
+      const line = missedFramesLine(event, lane, totals);
+      if (line !== null) appLog("info", "WaveTiming", line);
+    },
+  });
+  frameCollection = frames;
+  const unsubscribe = session.onTransition(frames.transition);
+  return () => {
+    unsubscribe();
+    frames.dispose();
+    if (frameCollection === frames) frameCollection = null;
+  };
+};

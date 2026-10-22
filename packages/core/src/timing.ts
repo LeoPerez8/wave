@@ -13,6 +13,8 @@ export const TIMING_BUDGETS = {
   screen: { firstFrameMs: 150, contentMs: 400 },
   readMs: 16,
   lateFrameFactor: 1.5,
+  hitchMs: 500,
+  freezeMs: 3000,
   summaryIntervalMs: 5 * 60_000,
 } as const;
 
@@ -171,4 +173,42 @@ export const speedSummaryLine = (window: TimingWindow): string | null => {
     `slow ${measurements.filter(timingBudgetExceeded).length}, lost ${window.lostTaps ?? 0}, hitches ${hitches.length} (longest ${timingDuration(hitches.reduce((max, ms) => Math.max(max, ms), 0))})`,
   );
   return parts.join("; ");
+};
+
+/** Count late callbacks, not inferred display slots. The interval comes from the display. */
+export const lateFrame = (gapMs: number, intervalMs: number): boolean =>
+  Number.isFinite(gapMs) &&
+  Number.isFinite(intervalMs) &&
+  intervalMs > 0 &&
+  gapMs > TIMING_BUDGETS.lateFrameFactor * intervalMs;
+
+/** Native FreezeWatch keeps this shape and these thresholds in step. */
+export const hitchLine = (
+  thread: "JS" | "main",
+  durationMs: number,
+  route?: string,
+  stack?: string,
+): string | null => {
+  if (
+    !Number.isFinite(durationMs) ||
+    durationMs < TIMING_BUDGETS.hitchMs ||
+    durationMs >= TIMING_BUDGETS.freezeMs
+  )
+    return null;
+  return `${thread} thread busy ${(Math.round(durationMs / 100) / 10).toFixed(1)} s${route ? ` on ${route}` : ""}${stack ? `\n${stack}` : ""}`;
+};
+
+export interface TimingFrames {
+  readonly count: number;
+  readonly longestGapMs: number;
+}
+
+export const missedFramesLine = (
+  transition: { readonly kind: TimingKind; readonly to: string },
+  lane: "JS" | "UI",
+  frames: TimingFrames,
+): string | null => {
+  if (frames.count <= 0) return null;
+  const name = KIND_NAMES[transition.kind];
+  return `${name[0]!.toUpperCase()}${name.slice(1)} to ${transition.to} missed ${frames.count} frames (longest gap ${timingDuration(frames.longestGapMs)}; ${lane})`;
 };

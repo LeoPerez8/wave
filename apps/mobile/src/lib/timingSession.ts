@@ -11,6 +11,7 @@ import {
 
 export interface TimingTransition {
   readonly id: number;
+  readonly at: number;
   readonly kind: TimingKind;
   readonly from: string;
   readonly to: string;
@@ -64,7 +65,7 @@ export const createTimingSession = (ports: Ports) => {
   const emit = (p: Pending, phase: TimingTransition["phase"]) => {
     if (!p.tap) return;
     for (const listener of transitions)
-      listener({ id: p.id, kind: p.kind, from: p.from, to: p.to, phase });
+      listener({ id: p.id, at: p.at, kind: p.kind, from: p.from, to: p.to, phase });
   };
   const write = (line: string | null) => {
     if (line !== null) ports.write(line);

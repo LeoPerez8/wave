@@ -94,4 +94,26 @@ class FreezeWatchdogTest {
 
     assertEquals(1 + 100 + 1, pings)
   }
+  @Test
+  fun backgroundingDiscardsQueuedAnswersEvenBeforeTheNextTick() {
+    val queue = ArrayDeque<Runnable>()
+    var hitches = 0
+    val unwatch = watchdog.watch(FreezeWatch("JS", 3_000, { now }, { queue.addLast(it); true }, hitch = { hitches++ }))
+    watchdog.activityStarted()
+    seconds(1)
+    watchdog.activityStopped()
+    now += 800
+    queue.removeFirst().run()
+    assertEquals(0, hitches)
+    watchdog.activityStarted()
+    seconds(1)
+    assertEquals(1, queue.size)
+    unwatch()
+    now += 800
+    queue.removeFirst().run()
+    assertEquals(0, hitches)
+    watchdog.activityStopped()
+    assertNull(ticking)
+  }
+
 }

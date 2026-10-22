@@ -22,6 +22,7 @@ import java.io.File
 class AppLogModule : Module() {
   private val context: Context get() = appContext.reactContext ?: throw Exceptions.ReactContextLost()
   private val log: AppLogFile get() = AppLogFile.of(context)
+  private val timingFrames = AndroidTransitionFrames { context }
   private var unwatchJs: (() -> Unit)? = null
   private var stopListening: List<() -> Unit> = emptyList()
 
@@ -29,7 +30,7 @@ class AppLogModule : Module() {
     Name("WaveAppLog")
 
     // Asking this runtime for the Hermes heap (JsHeap), and to write what it holds at a memory warning.
-    Events("hermesHeapWanted", "memoryWarning")
+    Events("hermesHeapWanted", "memoryWarning", "timingFrames")
 
     // The JS thread is watched for freezes while this runtime lives (NativeLog).
     OnCreate {
@@ -43,12 +44,26 @@ class AppLogModule : Module() {
       )
     }
 
+    OnActivityEntersForeground { timingFrames.foreground() }
+    OnActivityEntersBackground { timingFrames.background() }
+
     OnDestroy {
+      Handler(Looper.getMainLooper()).post { timingFrames.background() }
       unwatchJs?.invoke()
       unwatchJs = null
       stopListening.forEach { it() }
       stopListening = emptyList()
     }
+
+    Function("timingFrameIntervalMs") { timingFrames.intervalMs() }
+    Function("startTimingFrames") { id: Int, ageMs: Double -> timingFrames.start(id, ageMs) }
+    Function("stopTimingFrames") { id: Int ->
+      timingFrames.stop(id) { result ->
+        sendEvent("timingFrames", mapOf("id" to id, "measured" to (result != null),
+          "count" to (result?.count ?: 0), "longestGapMs" to (result?.longestGapMs ?: 0.0)))
+      }
+    }
+    Function("takeTimingHitches") { NativeLog.takeTimingHitches() }
 
     /** JS's answer to hermesHeapWanted: the Hermes heap in bytes. */
     Function("reportHermesHeap") { bytes: Double -> JsHeap.app.reported(bytes.toLong()) }
