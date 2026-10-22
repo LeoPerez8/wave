@@ -1,5 +1,9 @@
 import { IconPlus, IconX } from "@tabler/icons-react-native";
-import { playlistRecommendationSession, type PlaylistRecommendationSlot } from "@wave/core";
+import {
+  libraryChangeAffects,
+  playlistRecommendationSession,
+  type PlaylistRecommendationSlot,
+} from "@wave/core";
 import * as Effect from "effect/Effect";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { Text, View } from "react-native";
@@ -17,6 +21,7 @@ import { useYtMusicEnabled } from "@/settings/ytMusic";
 import { DiscoverSongRow } from "@/ytmusic/DiscoverSongRow";
 
 import { LibraryStore, type PlaylistEntryRow, type SongRow } from "./LibraryStore";
+import { onLibraryChange } from "./libraryChanges";
 import { appRuntime } from "./runtime";
 import { playlistsChanged } from "./playlists";
 
@@ -85,13 +90,21 @@ export function PlaylistRecommendations({
     }),
   );
   const state = useSyncExternalStore(session.subscribe, session.get);
-  // An Add already renewed its inputs for refill; its membership notification keeps held offers.
+  // Follow the write's cause: source changes revalidate even when playlist IDs stay the same.
+  useEffect(
+    () =>
+      onLibraryChange((change) => {
+        if (
+          libraryChangeAffects({ tracks: true, favorites: true, playlists: [playlistId] }, change)
+        )
+          void session.renew({ ifPlaylistChanged: change.kind === "playlists" });
+      }),
+    [session, playlistId],
+  );
   useEffect(() => {
-    const availabilityChanged = enabledNow.get() !== enabled;
     enabledNow.set(enabled);
-    void session.renew({ ifPlaylistChanged: !availabilityChanged });
-    // oxlint-disable-next-line react/exhaustive-effect-dependencies -- items is an explicit renewal trigger
-  }, [session, items, enabled, enabledNow]);
+    void session.renew();
+  }, [session, enabled, enabledNow]);
   const play = ({ track }: PlaylistRecommendationSlot) => {
     const context = { kind: "playlist", id: String(playlistId) } as const;
     if (track.source === "library") void playTrackIds([Number(track.id)], new Set(), 0, context);
@@ -108,7 +121,7 @@ export function PlaylistRecommendations({
           ? {
               label: "Try again",
               onPress: () => {
-                void session.renew();
+                void session.renew({ refillOnly: state.error === "refill" });
               },
             }
           : undefined

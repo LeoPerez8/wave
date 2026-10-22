@@ -57,6 +57,23 @@ Actual checks in this worktree:
 
 Logs and before/after query traces are under `/tmp/wave-open-tickets-20261021/reviewfix-dc52eeb6/`. These are source, Core and SQLite checks. No automated UI test seam was introduced and no device evidence is claimed.
 
+## 2026-10-21 second review corrections
+
+The second Standards review (`/tmp/wave-open-tickets-20261021/standards-review-round2.md`) found that the membership-only renewal guard also suppressed Library deletions and source/status changes. The second Spec review (`/tmp/wave-open-tickets-20261021/spec-review-round2.md`) found that recovery from a failed refill could replace held offers when saved feedback changed the top five. Both are corrected in the same slice on `fix/playlist-recommendation-renewal`, starting at parent integration `de3266f6` and merging its later `52a0dfbd` tip before completion.
+
+- The footer follows existing Library change notifications and their causes. Track changes (including removal and completed downloads) and saved Library favorite changes request full renewal even if playlist membership is unchanged. Playlist notifications are scoped to this playlist. Updating the `items` query result no longer independently reranks Add's held offers. The Core guard acknowledges only one matching Add refill snapshot, rather than every unchanged playlist read. A source renewal requested during a save/read is retained and processed afterward, so it can select the current priority five.
+- Try again after a saved action's failed refill requests `renew({ refillOnly: true })`. Recovery excludes held recordings before selecting replacements and fills only holes, preserving the held offer objects and keys. A repeated failed recovery retains the refill error and does not repeat the saved choice. Full source renewal continues to select today's top five.
+
+Public Core regressions were observed red, then green: removing all candidates with unchanged membership previously retained five stale offers; a favorite/download source change during Add previously lost one qualifying priority song; saved dismissal feedback plus failed refill/retry previously replaced untouched d/e with g/h. The corrected feedback scenario produces `[a,b,f,d,e]` and asserts the four held objects are identical. The existing delayed Add notification regression remains enabled, as do weighted-profile, full-priority, stable Add/Dismiss, transaction/identity and isolation checks. Shared row and button adapters remain unchanged by this slice.
+
+Actual checks for this correction slice:
+
+- `node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test packages/core/src/playlistRecommendations.test.ts packages/core/src/playlistRecommendationSession.test.ts apps/mobile/src/library/db/playlistRecommendations.test.ts`: **26 passed**.
+- `pnpm --filter @wave/core --filter @wave/mobile typecheck`: passed.
+- Changed-file Oxlint, changed-file Prettier checks and `git diff --check`: passed. `pnpm lint` passed with existing warnings outside the changed files.
+
+Red/green and final check logs are under `/tmp/wave-open-tickets-20261021/renewalfix-7c5d48a3/`. Dependencies were reused through worktree-local links; no dependencies, versions or lockfiles changed. The prior full-suite results above were not rerun. These tests validate public Core behavior and real SQLite behavior; the Library notification/retry wiring was source-reviewed and typechecked, without a new UI test boundary. No device, remote, APK, gesture, TalkBack or performance verification was performed in this worktree. Parent-owned final APK/controller/footer verification remains required.
+
 ## Manual acceptance still required
 
 The parent owns the device. This implementation has not installed or driven an emulator or physical phone. On the parent's final APK, verify the actual editable-playlist footer (including an empty playlist), visible five/short counts, row playback and cross-source playing indicator, Library/stream long-press menus, configured swipes and swipe-off behavior, Add and Dismiss, pending disabled controls, unchanged surrounding scroll/playlist behavior, save/refill error copy, YT Music off/offline Library fallback, leaving/reopening, and process restart. Confirm four held offers stay in place after Add's playlist update and that a full renewal includes newly favored/downloaded matches. Check light/dark appearance, long song titles and larger system text, and TalkBack labels/actions/focus after replacement. Physical S24+ interaction, performance and TalkBack evidence remain unavailable here; automated Core/store evidence is not a device claim.
