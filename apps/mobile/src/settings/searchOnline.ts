@@ -42,6 +42,10 @@ export const useSearchOnlineAlways = (visit: unknown = null): boolean => {
   );
 };
 
+/** Current eligibility for an automatic artist read, including a network change since opening. */
+export const searchOnlineAlwaysNow = (): boolean =>
+  searchOnlineAlways(searchOnline.get(), { onMobileData: onMobileData() });
+
 /** Search online's choices, as Settings and the toggle's long-press card both label them. */
 const CHOICES: ChoiceSetting<SearchOnline>["choices"] = [
   { value: "always", label: "Always search online" },

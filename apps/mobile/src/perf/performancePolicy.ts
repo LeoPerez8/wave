@@ -425,22 +425,18 @@ export const OPENING_REQUESTS: Record<string, Exception> = {
     reason:
       "The empty Library Add folder button opens a folder picker; choosing a folder starts the scan and background photo downloads.",
   },
-  "ytmusic/artistSection.ts#useYtPopularSongs": {
-    kind: "opening",
-    reason:
-      "Popular now requires Online, local content, settlement and usable Android connectivity so #591 cannot send an offline opening request. #590 still owns the full once-per-opening due rule, allowance and Wi-Fi decision and its behavioral tests.",
-    removeIn: 590,
-  },
   "ytmusic/artistSection.ts#useDeferredArtistSection": {
     kind: "opening",
     reason:
-      "The local artist rows and screen must settle before Online/Always/integrated asks or retries. Android online() is checked immediately before fetchArtist; offline fails through the existing section state without a request.",
+      "Popular and Online share one artist reader: local content and screen settlement, Online selection, execution-time Android connectivity, the shared search allowance and current automatic Wi-Fi eligibility gate every opening/retry. Library selection, artist changes and leaving abort it; stale answers cannot publish. Saved Popular is local.",
     deferred: {
       settlement: "screen",
       connectivity: "android",
       tests: [
         "packages/core/src/ytArtistOpening.test.ts",
         "apps/mobile/src/ytmusic/artistOpening.test.ts",
+        "packages/core/src/ytPopularRead.test.ts",
+        "apps/mobile/src/ytmusic/artistPopular.test.ts",
       ],
     },
   },

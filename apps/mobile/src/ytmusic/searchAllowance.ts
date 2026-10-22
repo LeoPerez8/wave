@@ -45,6 +45,9 @@ const kept = persistedSetting<SearchAllowance>({
 let allowance: SearchAllowance | null = null;
 const current = (): SearchAllowance => (allowance ??= kept.get());
 
+/** Unsubscribed execution-time allowance snapshot for deferred artist reads. */
+export const searchAllowanceSnapshot = current;
+
 let lastId = 0;
 /** The searches waiting, by id: each resolves true once its turn comes. */
 const turns = new Map<number, (granted: boolean) => void>();
