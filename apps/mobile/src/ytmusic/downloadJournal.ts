@@ -10,16 +10,13 @@ import type { NativeDownloadJob } from "@/native/waveSoulseek";
  * (`downloadRun`).
  */
 export const journal = makeExternalStore<readonly NativeDownloadJob[]>([]);
-let activeDownloads = 0;
-registerTimingBackground("downloads", () =>
-  activeDownloads > 0 ? `${activeDownloads} downloads` : null,
-);
-journal.subscribe(() => {
-  activeDownloads = journal
-    .get()
-    .filter((job) => !["queued", "completed", "failed", "cancelled"].includes(job.phase)).length;
-  timingBackgroundChanged();
+// Reuse the journal's existing memoized counts, and sample only while a transition is active.
+registerTimingBackground("downloads", () => {
+  const counts = queuedCountsNow();
+  const active = counts.downloading + counts.saving;
+  return active > 0 ? `${active} downloads` : null;
 });
+journal.subscribe(timingBackgroundChanged);
 
 /**
  * A reading of the journal, for `useSyncExternalStore`: [compute]d again only once the journal
