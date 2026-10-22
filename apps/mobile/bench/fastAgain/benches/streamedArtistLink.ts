@@ -218,7 +218,11 @@ export const bench: FastAgainBench = {
             )
               assert.equal(key, `unread:${name}`);
             else if (current && read.startsWith("tapLookup/") && key !== expected) {
-              assert.equal(outcome, "deadline", "a completed lookup must keep destination equality");
+              assert.equal(
+                outcome,
+                "deadline",
+                "a completed lookup must keep destination equality",
+              );
               assert.equal(
                 key,
                 `yt:${name}`,
