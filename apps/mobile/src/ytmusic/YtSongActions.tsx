@@ -90,6 +90,7 @@ export const openYtSongActions = (song: NativeYtSong, options: YtSongMenuOptions
             song={song}
             playlistItem={options.playlistItem}
             onSelect={options.onSelect}
+            playing={options.playing}
             close={close}
           />
         ),
@@ -276,11 +277,14 @@ function YtSongActionsMenu({
   song,
   playlistItem,
   onSelect,
+  playing,
   close,
 }: {
   song: NativeYtSong;
   playlistItem: PlaylistPlace | undefined;
   onSelect: (() => void) | undefined;
+  /** The song is the one playing: no Play Next or Add to Queue. */
+  playing: boolean | undefined;
   close: () => void;
 }) {
   const status = useYtDownloadStatus(song.videoId);
@@ -307,6 +311,7 @@ function YtSongActionsMenu({
       ytAlbumHere,
       ytMusic,
       selectable: onSelect !== undefined,
+      playing,
     }),
     ...ytDownloadActions(status, { inLibrary }).map((action): Entry => ({
       kind: "download",

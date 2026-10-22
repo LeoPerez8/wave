@@ -1131,6 +1131,33 @@ describe("ytSongActions", () => {
   });
 });
 
+describe("the playing song's menu", () => {
+  test("a Library song that's playing has no Play Next or Add to Queue, and keeps the rest", () => {
+    const menu = names(itemActions(tracks([song({ favorite: false })])));
+    assert.ok(menu.includes("playNext") && menu.includes("addToQueue"));
+    const playing = names(itemActions(tracks([song({ favorite: false })], { playing: true })));
+    assert.deepEqual(
+      playing,
+      menu.filter((action) => action !== "playNext" && action !== "addToQueue"),
+    );
+    for (const action of ["addToPlaylist", "favorite", "goToAlbum", "goToArtist", "share"])
+      assert.ok(playing.includes(action), action);
+  });
+
+  test("a YT Music song that's playing has no Play Next or Add to Queue, and keeps the rest", () => {
+    const artists = { kind: "open", target: { kind: "yt", name: "Justice" } } as const;
+    const options = { album: "MPREb_cross", ytMusic: true, favorite: false } as const;
+    assert.deepEqual(
+      ytSongActions(artists, { ...options, playing: true }).map((entry) => entry.action),
+      ["addToPlaylist", "favorite", "goToAlbum", "goToArtist", "share"],
+    );
+    assert.deepEqual(
+      ytSongActions(artists, { ...options, playing: false }).map((entry) => entry.action),
+      ["playNext", "addToQueue", "addToPlaylist", "favorite", "goToAlbum", "goToArtist", "share"],
+    );
+  });
+});
+
 describe("isCollectionKind", () => {
   test("albums, artists, playlists and genres hold songs; tracks, Library entries and mixed checks don't", () => {
     // A playlist's menu shares it as a playlist (below).

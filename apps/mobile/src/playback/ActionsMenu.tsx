@@ -1,7 +1,9 @@
 import {
   PLAY_ACTION_LABELS,
   YT_PLAYLIST_DOWNLOAD_ACTION_LABELS,
+  currentEntry,
   menuLayout,
+  parseTrackId,
   type DownloadOrigin,
   type UnsearchedSong,
   playlistDownloadOrigin,
@@ -28,12 +30,15 @@ import { pressedMenuAllowed, pressedRect } from "@/motion/pressedRect";
 import { CardHeading } from "@/overlay/CardHeading";
 import { MenuChoices, type MenuChoice, type PlayCardChoice } from "@/overlay/MenuChoices";
 import { followUp, openOverlay } from "@/overlay/overlay";
+import { openYtSongActions } from "@/ytmusic/YtSongActions";
 import { useLoadedInLibrary } from "@/ytmusic/libraryFinder";
 import { runYtPlaylistDownloadAction, useYtPlaylistDownload } from "@/ytmusic/YtDownloads";
 
 import { targetHeading, type ActionItems, type Heading, type PlaylistPlace } from "./actionTargets";
 import { readMenuSongs, useItemActions, type ActionEntry } from "./itemActions";
+import { queueState } from "./Queue";
 import { playTarget } from "./playTarget";
+import { queuedYtSong, queueTracks } from "./queueTracks";
 
 const NO_ENTRIES: readonly PlaylistEntryRow[] = [];
 const NO_SONGS: readonly SongRow[] = [];
@@ -43,6 +48,8 @@ const NO_DOWNLOADS: readonly MenuChoice[] = [];
 export interface MenuOptions {
   /** The list it was opened from can select: the menu offers Select, which calls this. */
   readonly onSelect?: (() => void) | undefined;
+  /** The song is the one playing (the mini player's long press): no Play Next or Add to Queue. */
+  readonly playing?: boolean | undefined;
 }
 
 /**
@@ -79,6 +86,7 @@ const openActions = (
           target={target}
           close={close}
           onSelect={options.onSelect}
+          playing={options.playing}
           playlistEntries={entries}
           collectionSongs={songs}
         />
@@ -133,6 +141,22 @@ export const openTrackActionsById = (id: number, options: MenuOptions = {}): voi
     if (!allowed()) return;
     if (song !== undefined) openActions({ kind: "track", items: [{ song }] }, options, anchor);
   });
+};
+
+/**
+ * Opens the long-press menu for the song playing (the mini player's long
+ * press): its own menu as a song's row offers it, without Play Next and Add to
+ * Queue (Core's `itemActions`, `ytSongActions`). Nothing opens with no song on.
+ */
+export const openPlayingActions = (): void => {
+  const trackId = currentEntry(queueState.get())?.trackId ?? null;
+  const ref = trackId === null ? null : parseTrackId(trackId);
+  if (ref?.kind === "library") openTrackActionsById(ref.id, { playing: true });
+  else if (trackId !== null && ref?.kind === "yt") {
+    const track = queueTracks.get().get(trackId);
+    const song = track === undefined ? null : queuedYtSong(track);
+    if (song !== null) openYtSongActions(song, { playing: true });
+  }
 };
 
 /**
@@ -223,10 +247,13 @@ function ActionsMenu({
   sectionSongs,
   playlistEntries: listed,
   collectionSongs,
+  playing,
 }: {
   target: ActionItems;
   close: () => void;
   onSelect: (() => void) | undefined;
+  /** The song is the one playing: no Play Next or Add to Queue. */
+  playing?: boolean | undefined;
   /** Each Library entry's song count, for a Library entry's heading (`SectionActionsMenu`). */
   sectionSongs?: LibraryCounts | undefined;
   /** A playlist's entries, for its download entries; none for other targets. */
@@ -239,6 +266,7 @@ function ActionsMenu({
     finish: close,
     onSelect,
     collectionSongs,
+    playing,
   });
   const playlist = target.kind === "playlist" ? target.items[0] : undefined;
   const downloads = usePlaylistDownloadEntries(
