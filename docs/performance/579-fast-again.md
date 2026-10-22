@@ -310,6 +310,78 @@ reduced motion and exported `WaveTiming` log acceptance remain outstanding: this
 environment has no Android SDK or device. No device acceptance or phone speedup
 is claimed by these desktop results.
 
+## artistOpening evidence (#589)
+
+The Library artist route reads its own detail and saved artist answer before its
+local rows. Saved Popular ranks are derived from those songs alone. Its section
+now acquires the shared finder only after the local content and screen settle,
+with Online selected and a standing full answer. This includes saved answers and
+integrated openings. Pending requests and Library mode need no finder. Online,
+Always and integrated section requests, including queued retries, share that
+settlement gate and check Android connectivity immediately before execution.
+Popular's separate quiet request remains #590's work; the common playing-ids
+follower remains #588's, and other online detail routes remain #591's.
+
+The saved [JSONL](results/579-artistOpening-desktop.jsonl) compares the actual
+`v0.19.0-ti` store/Core (`460e39ff`) with the implementation using the shared
+fixture at 1,000, 12,000 and 50,000 songs, eleven timed runs after warm-up.
+These are **desktop Node/sql.js measurements, not Hermes/phone SQLite timings
+or phone frame measurements**.
+
+`artistOpeningReplay.ts` faithfully replays the artist-owned opening reads and
+Core derivations, because the React Native route cannot run in Node. Every
+opening starts with a cold shared query/finder; the database and modules are
+warm. The first-row interval ends when the local page data/items are ready,
+including saved Popular ranking; it excludes module loading, fixture setup,
+React rendering/layout, navigation and common player subscriptions. Before reads
+the whole songs query; its shared finder index stays lazy and builds only when
+online rows need a lookup. The own-songs finder is built in either mode. After
+reads only the artist detail and saved answer. The SQL and individual row counts
+are included in each measurement's `details`.
+
+The historical `v0.7.0-ti` artist route (`add761ed`) already followed this finder
+from both the route and its online section. This removes inherited opening work;
+it does not attribute that follower to the later Popular feature. Popular's new
+quiet request remains separately assigned to #590.
+
+The fixture also includes an Appears on album, the artist's Library albums,
+missing/downloaded songs, a reversed saved Popular list, a song already in the
+Library under another artist and one remote-only song/release. Setup writes are
+restored before another bench runs. Both the local first-row projection and the
+complete settled page (artist, albums, appearances, full song rows/ranks, counts,
+Online view/shelves and page items) must match ti: all 24 comparison keys match.
+Integrated first-row equality compares the local rows; online additions are
+compared after settlement, when the fixed page is allowed to show them.
+
+The table reports before → after for the interval to local first-row data. Total
+SQL rows include artist/album/saved-answer rows; song rows count only decoded
+song records. Each first-row replay runs five → four statements. The JSONL also
+records p90, CPU, longest synchronous task and read-only notification count.
+Times are benchmark evidence; the tests assert deterministic work, not time.
+
+| Library songs | Artist songs | Mode       | Song rows before → after | All SQL rows before → after | Median ms before → after |
+| ------------: | -----------: | ---------- | -----------------------: | --------------------------: | -----------------------: |
+|         1,000 |           20 | library    |               1,020 → 20 |                  1,024 → 24 |           15.011 → 2.438 |
+|         1,000 |           20 | integrated |               1,020 → 20 |                  1,024 → 24 |           20.214 → 2.233 |
+|         1,000 |          300 | library    |              1,300 → 300 |                 1,332 → 332 |           22.707 → 9.259 |
+|         1,000 |          300 | integrated |              1,300 → 300 |                 1,332 → 332 |           28.150 → 8.595 |
+|        12,000 |           20 | library    |              12,020 → 20 |                 12,024 → 24 |          182.369 → 2.003 |
+|        12,000 |           20 | integrated |              12,020 → 20 |                 12,024 → 24 |          230.271 → 1.904 |
+|        12,000 |          300 | library    |             12,300 → 300 |                12,332 → 332 |          189.536 → 9.314 |
+|        12,000 |          300 | integrated |             12,300 → 300 |                12,332 → 332 |          241.692 → 9.102 |
+|        50,000 |           20 | library    |              50,020 → 20 |                 50,024 → 24 |          809.880 → 1.818 |
+|        50,000 |           20 | integrated |              50,020 → 20 |                 50,024 → 24 |         1028.847 → 2.000 |
+|        50,000 |          300 | library    |             50,300 → 300 |                50,332 → 332 |          832.658 → 9.307 |
+|        50,000 |          300 | integrated |             50,300 → 300 |                50,332 → 332 |         1052.574 → 8.899 |
+
+The shared whole-Library read is deferred, not eliminated: in integrated mode its
+settled-page measurement still returns the whole Library's song rows. This
+change removes that work from the artist-owned first-row path and keeps it out
+of Library mode. It does not claim the deferred read fits the background step
+budget or that the mounted app has no remaining common followers. Verification
+on the owner's ti build, offline/online and with exported WaveTiming logs, remains
+outstanding.
+
 ## Regression sweep: v0.7.0-ti to ti (#596)
 
 This sweep compares the reference above with `origin/ti` / `v0.19.0-ti`
@@ -356,17 +428,17 @@ The tab layout's only change between the release tags is a TypeScript type for
 have shared queries that pause hidden screens. The evidence supports additional
 readers bypassing that lifecycle, rather than a new tab retention policy.
 
-| Surface / trigger                                            | v0.7.0-ti                                                                   | ti / integration                                                                                                                                                               | Disposition                                                                      |
-| ------------------------------------------------------------ | --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------- |
-| Home first visit and every focus                             | Shared Home shelves and focused totals; no Recap card                       | Adds `useRecapToAnnounce → useStatsRead → Stats.recaps → countedListening`; every focus runs it even with an unchanged play version                                            | New Recap-availability ticket draft                                              |
-| Editable playlist push / mount                               | Own playlist data; no recommendation section                                | `PlaylistItems` mounts recommendations below its rows without viewport gating; input read, cold shared graph if needed, then synchronous Core ranking                          | New playlist-recommendation ticket draft                                         |
-| Download / scan / favorite with playlist screen retained     | Shared queries suppress hidden work                                         | Recommendations directly follow `onLibraryChange`, with `tracks: true`, `favorites: true`; no visibility check or burst coalescing; each retained session renews independently | Same playlist ticket; replay measures one and two sessions                       |
-| First shared Artist graph consumer after launch/invalidation | Graph absent                                                                | Two free-turn boundaries, but history, all artists, all songs and their conversion occupy one middle segment; final graph derivation occupies another                          | Covered by #594 (explicit #584 guard ownership); extend its measured graph scope |
-| Home/Stats winning artists; paged artist consumers           | Global credited-song UNION, even for two requested artists or a 50-row page | Same global aggregation; a small returned row count conceals whole-Library SQL work                                                                                            | New bounded artist-count ticket draft; inherited cost                            |
-| Genre push                                                   | Whole genre decoded, then sorted in JS despite virtualized rows             | Same full genre hydration                                                                                                                                                      | New genre-first-page ticket draft; inherited cost                                |
-| Now Playing / Queue / streamed playing-row subscriptions     | Existing bounded warm player/Queue; no new streamed identity follower       | Sheet song buttons/download lookup and list playing ids follow full songs/finder                                                                                               | Already #587/#588; no duplicate ticket                                           |
-| Artist / integrated album push                               | Artist/album's own data; no current finder/Popular extras                   | Finder, Popular read, integrated online ask added to opening path                                                                                                              | Already #589–#591; link sequencing/readiness #585/#586                           |
-| Home picks, taste, daily mixes, known videos, startup        | Earlier Home/startup implementations                                        | Additional full-Library/history work and focus/startup scheduling                                                                                                              | Already #592–#595; graph and Recap are separate call paths                       |
+| Surface / trigger                                            | v0.7.0-ti                                                                                               | ti / integration                                                                                                                                                               | Disposition                                                                      |
+| ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------- |
+| Home first visit and every focus                             | Shared Home shelves and focused totals; no Recap card                                                   | Adds `useRecapToAnnounce → useStatsRead → Stats.recaps → countedListening`; every focus runs it even with an unchanged play version                                            | New Recap-availability ticket draft                                              |
+| Editable playlist push / mount                               | Own playlist data; no recommendation section                                                            | `PlaylistItems` mounts recommendations below its rows without viewport gating; input read, cold shared graph if needed, then synchronous Core ranking                          | New playlist-recommendation ticket draft                                         |
+| Download / scan / favorite with playlist screen retained     | Shared queries suppress hidden work                                                                     | Recommendations directly follow `onLibraryChange`, with `tracks: true`, `favorites: true`; no visibility check or burst coalescing; each retained session renews independently | Same playlist ticket; replay measures one and two sessions                       |
+| First shared Artist graph consumer after launch/invalidation | Graph absent                                                                                            | Two free-turn boundaries, but history, all artists, all songs and their conversion occupy one middle segment; final graph derivation occupies another                          | Covered by #594 (explicit #584 guard ownership); extend its measured graph scope |
+| Home/Stats winning artists; paged artist consumers           | Global credited-song UNION, even for two requested artists or a 50-row page                             | Same global aggregation; a small returned row count conceals whole-Library SQL work                                                                                            | New bounded artist-count ticket draft; inherited cost                            |
+| Genre push                                                   | Whole genre decoded, then sorted in JS despite virtualized rows                                         | Same full genre hydration                                                                                                                                                      | New genre-first-page ticket draft; inherited cost                                |
+| Now Playing / Queue / streamed playing-row subscriptions     | Existing bounded warm player/Queue; no new streamed identity follower                                   | Sheet song buttons/download lookup and list playing ids follow full songs/finder                                                                                               | Already #587/#588; no duplicate ticket                                           |
+| Artist / integrated album push                               | Artist route and online section already follow the whole-Library finder; no later quiet Popular request | Whole-Library finder is inherited; Popular background read and integrated online opening behavior need their own boundaries                                                    | Already #589–#591; link sequencing/readiness #585/#586                           |
+| Home picks, taste, daily mixes, known videos, startup        | Earlier Home/startup implementations                                                                    | Additional full-Library/history work and focus/startup scheduling                                                                                                              | Already #592–#595; graph and Recap are separate call paths                       |
 
 The always-mounted/retained inventory also includes floating chrome (mini player,
 tab bar, selection), root overlay/toast hosts, Now Playing's shell and visited
@@ -541,7 +613,7 @@ The largest unavoidable history/catalog reads remain candidates for a **separate
 
 ### Findings, ticket handoff, and log correlation
 
-Four complete unpublished ticket drafts and a blocker/dependency manifest are saved for the parent under `/tmp/wave-open-tickets-83613fc6/596-new-tickets/`: Recap availability, playlist recommendation work/retained renewals, bounded artist credit counts, and genre first rows. Shared Artist graph measurements are handed to existing #594, which the latest #584 guard explicitly names as owner of `home/artistGraph.ts#readArtistGraph`. Live open/closed issue bodies were searched before drafting. #592–#595 do not cover the Recap reader or recommendation session; #558/#559 specify recommendation behavior without visibility/step bounds. Closed #309/#310/#311/#312 are prior implementations with different seams, documented in the deduplication evidence. The two inherited findings are explicitly labeled. Publication and native #579 parent/blocker links remain the parent's responsibility; drafts are not GitHub issues.
+Four measured follow-ups are published under #579: #598 (Recap availability), #599 (playlist recommendation work and retained renewals), #600 (bounded artist credit counts), and #601 (genre first rows). Exact ticket bodies, a blocker manifest and the publication audit are preserved under `/tmp/wave-open-tickets-83613fc6/596-new-tickets/` and `596-published-tickets.json`. Shared Artist graph measurements are handed to existing #594, which the latest #584 guard explicitly names as owner of `home/artistGraph.ts#readArtistGraph`. Live open/closed issue bodies were searched before drafting. #592–#595 do not cover the Recap reader or recommendation session; #558/#559 specify recommendation behavior without visibility/step bounds. Closed #309/#310/#311/#312 are prior implementations with different seams, documented in the deduplication evidence. The two inherited findings are explicitly labeled. The published bodies, labels and native #579 parent/blocker links were verified. Existing #594 received the shared Artist graph scope and measurements while retaining its original #592 blocker; no duplicate graph ticket was created. These tickets track implementation; the research does not claim their fixes are complete.
 
 The #580 every-build read timing boundary is now present in this integration. Expected `WaveTiming` operation names are `sum up counted listening` (Home), `read playlist recommendations` (playlist or a hidden session), `read the taste history`, `list songs`, `list artists` (graph segment), `read ranked artists` (targeted metadata) and `open the genre`. The log's operation row count describes the public result, while benchmark `rowsRead` includes intermediate SQL rows: for example playlist logging counts its 50 membership rows plus Library rows, not all 15 statements' returned rows. Hidden work is logged with the _currently visible_ route, which may differ from the owning playlist. CPU-only ranking/graph work has no slow-SQL line; use the transition/hitch evidence from #582. These are expected correlations from code, not fabricated phone log lines.
 
