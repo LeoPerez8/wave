@@ -44,6 +44,7 @@ import {
 } from "@/playback/actionTargets";
 import { selectableRow } from "@/selection/selectableRow";
 import { useListSelection, type ListSelection } from "@/selection/useListSelection";
+import { albumJoinedItems } from "@/ytmusic/albumOpening";
 import { useYtAlbumSection } from "@/ytmusic/albumSection";
 import { YtLookupFooter } from "@/ytmusic/YtLookupFooter";
 import { listDownloadAction, useYtAlbumDownloadButton } from "@/ytmusic/YtSongList";
@@ -264,6 +265,13 @@ function AlbumTracks({ shown, openedIntegrated }: { shown: Shown; openedIntegrat
   // Once the page shows the tracklist with YouTube Music's songs, it keeps it for the visit:
   // the last download finishing leaves every row where it was.
   const [keepTracklist, keep] = useVisitState(false);
+  const [layoutTracks, keepLayout] = useVisitState<readonly AlbumTrackRow[] | null>(
+    null,
+    String(shown.album.id),
+  );
+  useEffect(() => {
+    if (layoutTracks === null && shown.tracks !== undefined) keepLayout(shown.tracks);
+  }, [layoutTracks, shown.tracks, keepLayout]);
   const yt = useYtAlbumSection(
     artist?.name ?? "",
     artist?.id ?? 0,
@@ -300,12 +308,10 @@ function AlbumTracks({ shown, openedIntegrated }: { shown: Shown; openedIntegrat
     () => ({ currentIds, favorites, selection: listSelection.selection }),
     [currentIds, favorites, listSelection.selection],
   );
-  const items = useMemo(
+  const items = useMemo<readonly Item[]>(
     () =>
-      entries === null
-        ? albumItems(tracks)
-        : entries.map((entry, index): Item => ({ type: "entry", entry, index })),
-    [entries, tracks],
+      entries === null ? albumItems(tracks) : albumJoinedItems(layoutTracks ?? tracks, entries),
+    [entries, tracks, layoutTracks],
   );
   const context = useMemo(
     () => ({ kind: "album", id: String(shown.album.id) }) as const,

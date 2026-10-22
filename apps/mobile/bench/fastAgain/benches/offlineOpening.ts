@@ -11,6 +11,8 @@ import type { FastAgainBench, ReadMeasurement } from "../types.ts";
 
 // The API never answers. A deterministic transport fixture reports offline at
 // 20 ms rather than burning the native client's 20,000 ms on every sample.
+// Android advertises INTERNET but not VALIDATED: old native hasNetwork() allows
+// the attempt, while the new opening online() check rejects it immediately.
 const TRANSPORT_TIMEOUT_MS = 20;
 const round = (n: number) => Number(n.toFixed(3));
 export const bench: FastAgainBench = {
@@ -142,6 +144,7 @@ export const bench: FastAgainBench = {
             .digest("hex"),
           requestsPerOpening: requests / context.runs,
           fixtureTransportTimeoutMs: TRANSPORT_TIMEOUT_MS,
+          connectivityFixture: { internetCapability: true, validated: false },
           nativeRequestTimeoutMs: 20000,
           timeoutSource:
             "apps/mobile/modules/wave-native/android/src/main/java/expo/modules/wavenative/yt/YtClient.kt",

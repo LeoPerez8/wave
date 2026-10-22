@@ -120,7 +120,7 @@ artist/release/list effect and discards late answers.
 
 `ytAlbumOpening.test.ts` and `ytArtistPageOpening.test.ts` test the public Core
 policies. `albumOpening.test.ts` exercises the production album data boundary,
-real LibraryStore/sql.js queries, late online joining and a controlled pending
+real LibraryStore/sql.js queries, late online joining, retained multi-disc headers and a controlled pending
 release. `detailOpening.test.ts` exercises immediate offline views and the
 production execution boundary with an API that never answers; its request
 counter stays zero. These are desktop data/effect tests, not mounted RN frames.

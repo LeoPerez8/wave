@@ -75,3 +75,31 @@ export const albumOpening = <
   const entries = joined == null || find === null ? null : albumRowsInPlace(previous, joined, find);
   return { ...work, view: work.view === null ? null : { ...work.view, tracks: entries } };
 };
+
+/** Retain the initial local disc furniture when the list becomes integrated. */
+export const albumJoinedItems = <
+  S,
+  L extends { readonly id: number; readonly discNumber?: number | null },
+>(
+  localLayout: readonly L[],
+  entries: readonly Entry<S, L>[],
+): readonly (
+  | { readonly type: "disc"; readonly disc: number }
+  | { readonly type: "entry"; readonly entry: Entry<S, L>; readonly index: number }
+)[] => {
+  const discs = new Set(localLayout.map((track) => track.discNumber ?? 1));
+  const localDisc = new Map(localLayout.map((track) => [track.id, track.discNumber ?? 1]));
+  const items: (
+    { type: "disc"; disc: number } | { type: "entry"; entry: Entry<S, L>; index: number }
+  )[] = [];
+  let disc: number | null = null;
+  entries.forEach((entry, index) => {
+    const current = entry.source === "library" ? localDisc.get(entry.track.id) : undefined;
+    if (discs.size > 1 && current !== undefined && current !== disc) {
+      items.push({ type: "disc", disc: current });
+      disc = current;
+    }
+    items.push({ type: "entry", entry, index });
+  });
+  return items;
+};

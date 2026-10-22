@@ -117,3 +117,26 @@ test("a real-store album stays usable while its deferred YouTube release never a
     fixture.close();
   }
 });
+
+test("joining online rows keeps the disc headers that already separate local tracks", async () => {
+  const { albumJoinedItems } = await import("./albumOpening.ts");
+  const tracks = [
+    { id: 1, discNumber: 1 },
+    { id: 2, discNumber: 2 },
+  ];
+  const entries = tracks.map((track) => ({ source: "library" as const, track, number: 1 }));
+  const items = albumJoinedItems(tracks, [
+    ...entries,
+    { source: "stream" as const, song: { videoId: "extra" }, number: 3 },
+  ]);
+  assert.deepEqual(
+    items.map((item) => (item.type === "disc" ? `disc-${item.disc}` : item.index)),
+    ["disc-1", 0, "disc-2", 1, 2],
+  );
+  // A newly downloaded online track cannot introduce disc headers ahead of existing rows.
+  const oneDisc = [tracks[0]!];
+  assert.deepEqual(
+    albumJoinedItems(oneDisc, entries).map((item) => item.type),
+    ["entry", "entry"],
+  );
+});

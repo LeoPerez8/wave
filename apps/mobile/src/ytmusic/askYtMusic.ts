@@ -11,7 +11,8 @@ import { YtMusic } from "./YtMusic";
 
 /**
  * Runs a YT Music request ([use] on the `YtMusic` service) on the app runtime,
- * resolving its answer or why there wasn't one; it never rejects. The one way
+ * resolving its answer or why there wasn't one; interruption rejects so the
+ * caller can discard a page that was left. The one way
  * screens and hooks ask YT Music. (Kept apart from `YtMusic.ts`, which the
  * runtime itself imports.)
  */
@@ -39,6 +40,7 @@ export const searchSongsInTurn = async (
   query: string,
   signal?: AbortSignal,
 ): Promise<YtSongSearch<YtAlbumSong> | null> => {
+  if (signal?.aborted) return null;
   if (!online()) return { ok: false, reason: "offline" };
   if (!(await searchTurn(asker, signal))) return null;
   let answer: YtSongSearch<YtAlbumSong>;
@@ -51,6 +53,7 @@ export const searchSongsInTurn = async (
       ? { ok: false, reason: result.failure.reason }
       : { ok: true, songs: result.success.songs };
   } catch {
+    if (signal?.aborted) return null;
     answer = { ok: false, reason: "failed" };
   }
   if (!answer.ok) logSearchFailure(asker, query, answer.reason);
