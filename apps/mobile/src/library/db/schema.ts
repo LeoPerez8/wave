@@ -127,6 +127,8 @@ export const tracks = sqliteTable(
     modifiedAt: integer("modified_at").notNull(),
     title: text("title").notNull(),
     titleSort: text("title_sort").notNull(),
+    /** Core recording-title key; null only until the upgrade backfill. */
+    matchTitle: text("match_title"),
     /** The primary artist: the first one [artistCredit] names (see `trackArtists`). */
     artistId: integer("artist_id")
       .notNull()
@@ -178,6 +180,7 @@ export const tracks = sqliteTable(
   },
   (t) => [
     index("tracks_title_sort_idx").on(t.titleSort),
+    index("tracks_match_title_idx").on(t.matchTitle),
     index("tracks_artist_idx").on(t.artistId),
     index("tracks_album_idx").on(t.albumId),
     index("tracks_genre_idx").on(t.genreId),

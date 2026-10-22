@@ -6,6 +6,7 @@
 import {
   fillMissingSongs,
   recordingKey,
+  recordingMatchTitle,
   storedGenres,
   type LibraryTrack,
   type MissingSongSave,
@@ -191,6 +192,7 @@ const linkFiled = (
 const tagColumns = (filing: Filing, track: FiledTrack) => ({
   title: track.title,
   titleSort: track.titleSort,
+  matchTitle: recordingMatchTitle(track.title),
   artistId: primary(filing.artists(track.artistCredits)),
   artistCredit: track.artist,
   artistCredits: storedCredits(track.artistCredits),
@@ -385,6 +387,7 @@ export const saveBatch = (
             modifiedAt: excluded(t.modifiedAt),
             title: excluded(t.title),
             titleSort: excluded(t.titleSort),
+            matchTitle: excluded(t.matchTitle),
             artistId: excluded(t.artistId),
             artistCredit: excluded(t.artistCredit),
             artistCredits: excluded(t.artistCredits),

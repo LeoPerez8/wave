@@ -958,6 +958,10 @@ CREATE TABLE \`playlist_recommendation_feedback\` (
 );
 `;
 
+const mRecordingTitles = `ALTER TABLE tracks ADD COLUMN match_title text;
+--> statement-breakpoint
+CREATE INDEX tracks_match_title_idx ON tracks(match_title);`;
+
 export default {
   journal: {
     entries: [
@@ -1008,6 +1012,7 @@ export default {
         tag: "0036_playlist_recommendation_feedback",
         breakpoints: true,
       },
+      { idx: 37, when: 1_795_003_200_000, tag: "0037_recording_titles", breakpoints: true },
     ],
   },
   migrations: {
@@ -1048,5 +1053,6 @@ export default {
     m0034: mPlaylistImageOriginals,
     m0035: mCandidateCatalog,
     m0036: mPlaylistRecommendationFeedback,
+    m0037: mRecordingTitles,
   },
 };

@@ -76,7 +76,7 @@ const withoutRemasterNotes = (title: string): string => {
 };
 
 /** A title without its featured-artist credit and remaster notes, as matching compares it. */
-const matchTitle = (title: string): string =>
+export const recordingMatchTitle = (title: string): string =>
   normalizeSearchText(
     withoutRemasterNotes(title.replace(BRACKETED_FEATURE, "").replace(TRAILING_FEATURE, "")),
   );
@@ -129,7 +129,7 @@ export const libraryMatches = <L extends LibrarySongKey>(
 ): ((song: Pick<YtSong, "title" | "artists" | "durationMs">) => L[]) => {
   const byTitle = new Map<string, Candidate<L>[]>();
   for (const song of library) {
-    const title = matchTitle(song.title);
+    const title = recordingMatchTitle(song.title);
     if (title === "") continue;
     const candidates = byTitle.get(title) ?? [];
     candidates.push({
@@ -140,7 +140,7 @@ export const libraryMatches = <L extends LibrarySongKey>(
     byTitle.set(title, candidates);
   }
   return (song) => {
-    const candidates = byTitle.get(matchTitle(song.title));
+    const candidates = byTitle.get(recordingMatchTitle(song.title));
     if (candidates === undefined) return [];
     const artists = song.artists.flatMap(artistNames);
     const length = knownLength(song.durationMs);
