@@ -100,3 +100,20 @@ export const onYtSongSignal = (
     ytSignalListeners.delete(listener);
   };
 };
+
+/** Saved recording metadata, announced after the download transaction commits. */
+const downloadedRecordingListeners = new Set<(song: import("@wave/core").LibrarySongKey) => void>();
+
+export const publishDownloadedRecording = (song: import("@wave/core").LibrarySongKey): void => {
+  for (const listener of downloadedRecordingListeners) listener(song);
+};
+
+/** One shared playing-song subscriber, independent of how many list consumers are mounted. */
+export const onDownloadedRecording = (
+  listener: (song: import("@wave/core").LibrarySongKey) => void,
+): (() => void) => {
+  downloadedRecordingListeners.add(listener);
+  return () => {
+    downloadedRecordingListeners.delete(listener);
+  };
+};
