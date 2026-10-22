@@ -2,15 +2,20 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { albumRowsInPlace } from "./albumOpening.ts";
 
+const localRow = (id: number) => ({ source: "library" as const, track: { id }, number: id });
+const streamRow = (videoId: string) => ({
+  source: "stream" as const,
+  song: { videoId },
+  number: 1,
+});
+
 test("an online answer and a download leave the rows already shown in place", () => {
-  const local = (id: number) => ({ source: "library" as const, track: { id }, number: id });
-  const stream = (videoId: string) => ({ source: "stream" as const, song: { videoId }, number: 1 });
-  const shown = [local(2), local(3)];
-  const joined = albumRowsInPlace(shown, [stream("first"), local(3), local(2)]);
-  assert.deepEqual(joined, [local(2), local(3), stream("first")]);
+  const shown = [localRow(2), localRow(3)];
+  const joined = albumRowsInPlace(shown, [streamRow("first"), localRow(3), localRow(2)]);
+  assert.deepEqual(joined, [localRow(2), localRow(3), streamRow("first")]);
   assert.deepEqual(
-    albumRowsInPlace(joined, [local(1), local(2), local(3)], () => ({ id: 1 })),
-    [local(2), local(3), local(1)],
+    albumRowsInPlace(joined, [localRow(1), localRow(2), localRow(3)], () => ({ id: 1 })),
+    [localRow(2), localRow(3), localRow(1)],
   );
 });
 
