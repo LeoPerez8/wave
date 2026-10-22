@@ -638,6 +638,8 @@ export { magicPickEnded } from "./magicQueue.ts";
 export type { MagicPickEnd } from "./magicQueue.ts";
 export { artistRanking } from "./moreFromArtist.ts";
 export type { ArtistRankingInput, ArtistRankingSong } from "./moreFromArtist.ts";
+export { ytPopularReadDue } from "./ytPopularRead.ts";
+export type { YtPopularReadContext } from "./ytPopularRead.ts";
 export { rankPopular } from "./popularSongs.ts";
 export { ytArtistOpening, ytArtistOpeningState } from "./ytArtistOpening.ts";
 export { artistPageItems } from "./artistPage.ts";

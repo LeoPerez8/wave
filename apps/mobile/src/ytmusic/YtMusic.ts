@@ -1,10 +1,8 @@
 import {
-  readYtPlaylist,
   type YtArtistAlbum,
   type YtArtistCandidate,
   type YtLibraryFailure,
   type YtLibraryPlaylist,
-  type YtPlaylistReadOptions,
   type YtQuietReason,
   type YtRadioStart,
   type YtSession,
@@ -32,6 +30,7 @@ import {
 } from "@/native/waveYtMusic";
 
 import { readYtAlbum } from "./albumPages";
+import { readYtPlaylistGuarded, type PlaylistReadOptions } from "./playlistRead";
 
 /**
  * A YT Music request that didn't get an answer: no network, YouTube failed
@@ -91,7 +90,7 @@ export class YtMusic extends Context.Service<
      */
     readonly playlist: (
       playlistId: string,
-      options?: YtPlaylistReadOptions<NativeYtSong>,
+      options?: PlaylistReadOptions<NativeYtSong>,
     ) => Effect.Effect<NativeYtPlaylist, YtMusicError>;
     /**
      * The playlists in the signed-in account's library, in YouTube Music's
@@ -172,7 +171,7 @@ export const layer = Layer.succeed(YtMusic, {
   playlist: (playlistId, options = {}) =>
     Effect.tryPromise({
       try: (signal) =>
-        readYtPlaylist(
+        readYtPlaylistGuarded(
           () => WaveYtMusic.playlist(playlistId),
           (continuation) => WaveYtMusic.playlistMore(continuation),
           { ...options, signal: options.signal ?? signal },

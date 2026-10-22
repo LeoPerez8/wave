@@ -75,9 +75,18 @@ test files must be present. The scanner still inventories the exact declaration
 and rejects unlisted or stale uses; this record does not prove control flow.
 `ytArtistOpening.test.ts` exercises the production policy and
 `artistOpening.test.ts` runs its opening/settlement replay against the actual
-store and sql.js, checking song rows and the saved page. Popular's separate quiet
-request remains #590's explicitly inventoried debt; the common playing-ids
-follower remains #588's. Issue #591 replaces the remaining detail-opening debt as described below.
+store and sql.js, checking song rows and the saved page.
+
+#590 removes the exact `useYtPopularSongs` opening exception: Popular now uses the saved answer from the single `useDeferredArtistSection` boundary.
+`artistPopular.test.ts` exercises the production reader and fetch/save workflow
+with fake YouTube transport and the real 1,000-song store: zero requests before
+settlement, offline or with Online off, one request per artist/opening, shared
+Popular/Online answers, immediate local order, saved ranks offline, allowance
+expiry, Wi-Fi eligibility, retries, cancellation and stale-answer rejection.
+Core's public `ytPopularReadDue` edge cases live in `ytPopularRead.test.ts`.
+The fixed boundary's review record names those tests; no scanner capability or
+route guard was weakened. The common playing-ids follower remains #588's.
+Issue #591 replaces the remaining detail-opening debt as described below.
 #586 removed the exact `ytmusic/streamedArtist.ts#listArtists` and `#sharedArtists`
 exceptions: rendering a link no longer lists artists or builds `libraryArtistFinder`.
 An unread Core target is available immediately. Explicit taps resolve requested
@@ -127,11 +136,9 @@ counter stays zero. These are desktop data/effect tests, not mounted RN frames.
 The historical-store red replay reads 1,010 song rows at a 1,000-song Library;
 the fixed opening reads its ten album tracks and starts no request.
 
-Popular remains `removeIn: 590`: #591 only prevents that existing path from
-escaping the owner's Online + local-content + settled + usable-network rule,
-and checks connectivity at execution. #590 still owns the full due/once rule,
-allowance and Wi-Fi policy and their dedicated tests. The #584 route observer
-restriction and #585 dispatch/watchdog are unchanged.
+#590 completes Popular's due/once, allowance and Wi-Fi policy at the single
+artist opening boundary described above; no `removeIn: 590` entry remains.
+The #584 route observer restriction and #585 dispatch/watchdog are unchanged.
 
 ## Home Magic Queue after #593
 
