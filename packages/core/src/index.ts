@@ -638,7 +638,7 @@ export type { MagicPickEnd } from "./magicQueue.ts";
 export { artistRanking } from "./moreFromArtist.ts";
 export type { ArtistRankingInput, ArtistRankingSong } from "./moreFromArtist.ts";
 export { rankPopular } from "./popularSongs.ts";
-export { ytArtistOpening } from "./ytArtistOpening.ts";
+export { ytArtistOpening, ytArtistOpeningState } from "./ytArtistOpening.ts";
 export { artistPageItems } from "./artistPage.ts";
 export type { ArtistPageItem, ArtistPageShelf } from "./artistPage.ts";
 export type { SheetEvent, SheetPhase, SheetStep } from "./sheetLifecycle.ts";
@@ -2012,3 +2012,6 @@ export {
 export { SLOW_READ_BUDGET_MS, slowReadLine, slowReadsLine, type SlowRead } from "./slowRead.ts";
 export { lostTapLine } from "./lostTap.ts";
 export type { LostLinkTap, LostTapReason } from "./lostTap.ts";
+
+export * from "./ytAlbumOpening.ts";
+export { ytArtistPageOpening } from "./ytArtistPageOpening.ts";

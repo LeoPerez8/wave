@@ -174,7 +174,8 @@ const kick = (): void => {
  * The playlist [playlistId] was opened: the fill goes on with its songs.
  * One the fill hasn't read yet (imported since) is read now.
  */
-export const playlistOpened = (playlistId: number): void => {
+export const playlistOpened = (playlistId: number, settled: boolean): void => {
+  if (!settled) return;
   opened.set(playlistId, Date.now());
   if (!(known?.playlists.some((playlist) => playlist.playlistId === playlistId) ?? false))
     readAt = 0;

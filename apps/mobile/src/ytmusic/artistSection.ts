@@ -13,7 +13,9 @@ import {
   ytArtistLookup,
   ytArtistQuery,
   ytArtistSectionAsks,
+  ytArtistToggle,
   ytArtistOpening,
+  ytArtistOpeningState,
   ytArtistSectionView,
   ytArtistShelves,
   type HeldSongs,
@@ -242,7 +244,10 @@ export const useYtArtistAnswer = (name: string, reads: ArtistReads): YtArtistAns
   const artistKey = identityKey(name);
   const { allSongs } = reads;
   const ask = useCallback(
-    (saved: Saved | null) => fetchArtist(name, artistKey, saved, { allSongs }),
+    (saved: Saved | null) =>
+      artistOpeningRequest(online, fetchArtist(name, artistKey, saved, { allSongs })).pipe(
+        Effect.mapError((error) => new YtMusicError({ reason: error.reason })),
+      ),
     [name, artistKey, allSongs],
   );
   return useSavedYtArtist(artistKey, ask);
@@ -250,11 +255,11 @@ export const useYtArtistAnswer = (name: string, reads: ArtistReads): YtArtistAns
 
 /**
  * The artist's YouTube Music song list, for Popular to rank the Library's songs
- * by, read quietly: with YT Music on and no saved answer that holds that list
+ * by, read quietly only with Online selected after local content and settlement,
+ * and usable Android connectivity. With no saved answer that holds that list
  * (none, or a match saved without it), the artist's page is read and saved in
- * the background, as the Online toggle reads it (`fetchArtist`, with the same
- * Wi-Fi limit and allowance). Nothing else changes: the toggle stays on Library
- * and no streamed song shows. Asked once per artist, and not when [asks], the
+ * after the opening boundary, as the Online toggle reads it (`fetchArtist`, with the same
+ * Wi-Fi limit and allowance). The full due rule remains #590's work. Asked once per artist, and not when [asks], the
  * Online toggle's own ask. Null while there's no list to rank by.
  */
 export const useYtPopularSongs = (
@@ -262,13 +267,20 @@ export const useYtPopularSongs = (
   state: YtArtistSection<NativeYtSong>,
   enabled: boolean,
   asks: boolean,
+  onlineSelected: boolean,
 ): readonly NativeYtSong[] | null => {
   const artistKey = identityKey(name);
   const saved = state.status === "ready" ? state.saved : undefined;
+  const settled = useScreenSettled();
+  // Online's section owns the full-list ask; Popular must not auto-retry a failed opening.
   const wanted =
+    settled &&
+    onlineSelected &&
+    online() &&
     enabled &&
     !asks &&
     state.status === "ready" &&
+    state.failure === null &&
     ytArtistQuery(name) !== null &&
     (saved === null || (saved?.outcome === "found" && saved.page.allSongs === undefined));
   const [read, setRead] = useState<{ readonly key: string; readonly answer: Saved } | null>(null);
@@ -284,9 +296,17 @@ export const useYtPopularSongs = (
     if (!wanted || asked.current === artistKey) return;
     asked.current = artistKey;
     void appRuntime
-      .runPromise(Effect.result(fetchArtist(name, artistKey, saved ?? null, { allSongs: true })), {
-        signal: leaving.current?.signal,
-      })
+      .runPromise(
+        Effect.result(
+          artistOpeningRequest(
+            online,
+            fetchArtist(name, artistKey, saved ?? null, { allSongs: true }),
+          ),
+        ),
+        {
+          signal: leaving.current?.signal,
+        },
+      )
       .then(
         (result) => {
           if (Result.isSuccess(result)) setRead({ key: artistKey, answer: result.success });
@@ -355,20 +375,22 @@ export const useYtArtistSection = (
   const always = useSearchOnlineAlways();
   // The toggle's segment picked while the page is open; null until one is.
   const [pick, setPick] = useState<YtPick | null>(null);
-  const { state, enabled, openedAt, show, find, asks } = useDeferredArtistSection(
+  const { state, enabled, openedAt, show, find, asks, onlineSelected } = useDeferredArtistSection(
     name,
     contentReady,
     openedIntegrated,
     always,
     pick,
   );
-  const popular = useYtPopularSongs(name, state, enabled, asks);
+  const popular = useYtPopularSongs(name, state, enabled, asks, onlineSelected);
   const findAlbum = useMemo(() => libraryAlbumFinder(artistId, albums), [artistId, albums]);
 
+  const connected = online();
   // The Library toggle needs no finder; online additions wait for its deferred read.
   // Memoized: it filters every song of the artist, and the page's memos key on it.
   const view = useMemo(() => {
-    const section = ytArtistSectionView(state, {
+    const shownState: YtArtistSection<NativeYtSong> = ytArtistOpeningState(state, connected);
+    const section = ytArtistSectionView(shownState, {
       name,
       enabled,
       now: openedAt,
@@ -383,7 +405,7 @@ export const useYtArtistSection = (
       (section.note === null || section.note === "allInLibrary" || section.note === "noSongs")
       ? { ...section, songs: [], note: "loading" as const }
       : section;
-  }, [find, state, name, enabled, openedAt, openedIntegrated, always, pick, held]);
+  }, [find, state, name, enabled, openedAt, openedIntegrated, always, pick, held, connected]);
   const shelves = useMemo(
     () =>
       find === null
@@ -469,12 +491,14 @@ const useDeferredArtistSection = (
     setRetry(null);
     show();
   }, [work.ask, state, show]);
-  const loadedFind = useLoadedLibraryFinder(work.finder);
+  const needsFinder = work.finder && online();
+  const loadedFind = useLoadedLibraryFinder(needsFinder);
   return {
     ...answer,
     asks,
+    onlineSelected: contentReady && ytArtistToggle(state, context) === "online",
     show: useCallback(() => setRetry(artistKey), [artistKey]),
-    find: work.finder ? loadedFind : null,
+    find: needsFinder ? loadedFind : null,
   };
 };
 

@@ -229,8 +229,10 @@ const NO_ALBUMS: readonly AlbumRow[] = [];
 const NO_ARTISTS: readonly ArtistRow[] = [];
 const NO_GENRES: readonly GenreRow[] = [];
 
-export const useAlbums = (): readonly AlbumRow[] => useLibraryQuery(listAlbums, NO_ALBUMS);
-export const useArtists = (): readonly ArtistRow[] => useLibraryQuery(listArtists, NO_ARTISTS);
+export const useAlbums = (active = true): readonly AlbumRow[] =>
+  useLibraryQuery(active ? listAlbums : null, NO_ALBUMS);
+export const useArtists = (active = true): readonly ArtistRow[] =>
+  useLibraryQuery(active ? listArtists : null, NO_ARTISTS);
 export const useGenres = (): readonly GenreRow[] => useLibraryQuery(listGenres, NO_GENRES);
 
 /**
