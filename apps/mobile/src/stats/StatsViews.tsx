@@ -28,6 +28,7 @@ import { openAlbumActions, openArtistActions, openTrackActions } from "@/playbac
 import { ArtworkRow } from "@/search/ArtworkRow";
 
 import type { Ranked } from "./Stats";
+import { recapCardHeight } from "./recapAnnouncement";
 import { useListScrollable } from "@/motion/heldTouch";
 
 /** "3 plays", "1 play". */
@@ -334,6 +335,7 @@ const RECAP_LOOK: {
  * opened. Tapping it plays its stories.
  */
 export function RecapCard({ period }: { period: RecapPeriod }) {
+  const { fontScale } = useWindowDimensions();
   const { ready, colour } = RECAP_LOOK[period.kind];
   return (
     <Press
@@ -342,7 +344,7 @@ export function RecapCard({ period }: { period: RecapPeriod }) {
       onPress={() => openRecap(period)}
       haptic="selection"
       className={`rounded-2xl ${colour}`}
-      style={{ padding: CELL * 2, gap: CELL / 2 }}
+      style={{ padding: CELL * 2, gap: CELL / 2, minHeight: recapCardHeight(fontScale) }}
     >
       <Text className="font-sans text-footnote font-semibold text-on-recap opacity-80">
         {ready}

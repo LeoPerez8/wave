@@ -600,7 +600,10 @@ export const useLibraryTracks = (): ReadonlyMap<number, SongRow> | null => {
  * focus once [played] turns true (the first counted plays) if the last build
  * had no seeds from plays.
  */
-export const useDiscoverMixes = (id: MixSectionId, played: boolean): DiscoverMixesSection => {
+export const useDiscoverMixes = (
+  id: MixSectionId,
+  played: boolean | undefined,
+): DiscoverMixesSection => {
   const { saved, nothingToBuildFrom, building } = SECTIONS[id];
   const enabled = useYtMusicEnabled();
   const mixes = saved.useValue();
@@ -609,7 +612,8 @@ export const useDiscoverMixes = (id: MixSectionId, played: boolean): DiscoverMix
   const rebuilding = useSyncExternalStore(building.subscribe, building.get);
   useFocusEffect(
     useCallback(() => {
-      if (!enabled) return;
+      // Saved rows can draw before Home's plays answer; run focus work once that input is known.
+      if (!enabled || played === undefined) return;
       refreshKnownVideos();
       refresh(id, played);
     }, [enabled, id, played]),

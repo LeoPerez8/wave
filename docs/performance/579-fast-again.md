@@ -723,3 +723,102 @@ have not been exercised.
 pnpm --silent --filter @wave/mobile bench:fast-again --bench streamedArtistLink \
   --before /path/to/v0.19.0-ti --reference /path/to/v0.7.0-ti
 ```
+
+## homeOpening cold-launch evidence (#592)
+
+Home now mounts a section-shaped shell before mounting any read-backed child, including
+Recap and Discover focus effects. Recently added, plays and Favorites publish independently;
+their loading state is distinct from an answered empty array. Rankings and Listening overview
+keep their own queries. Nonempty placeholders/content share bounded body reservations;
+Discover uses song/playlist shapes and the existing adaptive grid. Recap availability also
+reserves its card's place until its answer. Empty sections/absent Recaps still disappear,
+an empty Library keeps its empty state, and the first-play hint waits for plays.
+
+The Home content timing marker follows the first answered slice. Discover's saved mix rows
+can draw with plays unread, but its focus due checks wait for that input rather than running
+first with a fictitious false and again with true. No #584 policy exception or route observer
+was added; #589 and the merged #586 behavior are preserved.
+
+### Baseline and replay scope
+
+This is **desktop Node + sql.js evidence, not Hermes, native SQLite or measured phone paint**.
+The command was run sequentially, with eleven measured repetitions per size:
+
+```sh
+pnpm --silent --filter @wave/mobile bench:fast-again --bench homeOpening --before /home/servidor-azul/.t3/scratch/wave-implement-spec-3781dabb/592-before > docs/performance/results/579-homeOpening-desktop.jsonl
+```
+
+- Before: `460e39ff0cba6f50e7a456a77d6e99813295ebaa` (`v0.19.0-ti`).
+- After: `959f628290878be622b31167719655b46df29d23`, including integration
+  `74a50f50dfa5cef60e0d13e958a2606f5f21662b`.
+- Reference source check: `add761ed787061db6a6c2799687d421301b6182b` (`v0.7.0-ti`)
+  already had the same all-three-slices `useHome` barrier and conditional section mount.
+  This ticket removes that inherited barrier; it claims no new regression attribution or
+  reference timing result.
+
+The replay loads each selected revision's actual LibraryStore, Stats and Core. It includes
+all three local slices, Recap availability, the shared album/artist ranking, counts and
+listening sums, the Magic Queue's whole-Library map/due check, and both mixes' known-video
+reads, due checks, saved blends and captions. Hash equality covers every local payload,
+Recap periods, ranking, overview inputs, nine pick ids, both known-video answers and all
+eight blended mixes/captions. All three before/after hashes match; the JSONL runner fails
+on a mismatch. The recorded file has sixteen valid desktop-labelled JSONL records,
+including six measurements and the three-row comparison.
+
+Cold means a fresh screen query cache with today's picks and both mix sets already saved,
+YT Music on, the default arrangement and offline harvest. The selected modules and SQLite
+are warmed; migrations, fixture seeding and saving choices are outside measurement. Actual
+due checks confirm no taste derivation or mix build is due in this case. These costs are
+omitted because the app does not start them, rather than being silently excluded from a
+due build. First-of-day, targeted picks, versioned known videos, stepped taste/mix work and
+return-to-Home belong to #593/#594.
+
+“First frame” in this comparison means the first frame bearing section bodies. ti can draw
+a title-only frame earlier, but its section tree waits for all three slices. The new shell
+has no Library-read dependency: the first rAF callback still starts no read; only the second
+allows read-backed children to mount. This is a dependency/work count, not a claim about
+native display timing. Cached preferences still use the existing KV-setting adapter.
+
+### Cold-launch work
+
+All numbers are before → after. SQL rows count results returned to JavaScript, not SQLite
+VM visits. All listed cold-Home readers are included through the replay's conservative
+settlement horizon, even readers that may finish after the first local content is visible.
+That horizon is not a replay of the WaveTiming settlement timer. With standing choices and
+offline harvest, this scenario schedules no further reads after that horizon.
+
+| Library songs | Play events | First-frame statements | First-frame SQL rows | All replay SQL rows | All replay statements |
+| ------------: | ----------: | ---------------------: | -------------------: | ------------------: | --------------------: |
+|         1,000 |      10,000 |                  6 → 0 |              104 → 0 |       8,541 → 8,541 |               16 → 16 |
+|        12,000 |      54,000 |                  6 → 0 |              104 → 0 |     23,401 → 23,401 |               16 → 16 |
+|        50,000 |     200,000 |                  6 → 0 |              104 → 0 |     69,761 → 69,761 |               16 → 16 |
+
+At 1,000 songs, Recently added answers with 24 SQL rows/two statements, plays with 70/three,
+and Favorites with 10/one. The production query descriptors, real store and shared query
+registry are exercised in the work-count test with Favorites and plays answering while
+Recently added remains pending. A Favorites change schedules no new plays/added read.
+Independent content does not wait for the unrelated slices. Cancellation, answered-empty
+versus unread state, first-play hint, Recap availability and bounded dimensions are covered too.
+
+### Cold-launch synchronous work (desktop ms)
+
+The median/p90 below are the sum of each run's timed synchronous operations. CPU is mean
+process CPU per run; the maximum is the longest observed individual operation across the
+eleven runs. Elapsed replay time and every step's work/timing are in the JSONL. Scheduled
+steps yield between operations as the app's query timer adapter does; this is not an
+async-SQLite simulation. React/render/layout, native paint, KV-setting reads, network,
+startup jobs and animation/scheduler waits are outside these times.
+
+| Library songs |  Sum sync median ms |     Sum sync p90 ms |         Mean CPU ms | Maximum sync task ms |
+| ------------: | ------------------: | ------------------: | ------------------: | -------------------: |
+|         1,000 |     41.592 → 43.674 |     42.750 → 49.816 |     46.136 → 53.759 |      16.717 → 18.932 |
+|        12,000 |   352.504 → 353.989 |   361.954 → 376.745 |   402.730 → 412.063 |    231.150 → 241.331 |
+|        50,000 | 1653.809 → 1580.776 | 1741.588 → 2454.886 | 1874.536 → 1966.439 |  1194.339 → 1897.877 |
+
+This change removes the drawing barrier; it does not reduce aggregate reads or claim a
+CPU/longest-task speed-up. The whole-Library Magic Queue read/map remains the longest step
+and is retained in both paths. Timing tails, especially 50,000 songs, vary substantially on
+this shared desktop; another checkout's benchmark was detected around the end of capture.
+No own test/typecheck was run alongside the timing command, and capture started after
+waiting for the earlier CPU-heavy validation to finish. Keep the raw tail samples instead
+of inferring a timing win from this run. Phone performance and TalkBack remain unverified.
