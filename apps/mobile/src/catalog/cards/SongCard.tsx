@@ -70,25 +70,39 @@ type Props = {
   artist: string;
   artworkUri?: string | undefined;
   tint?: string | undefined;
+  /** The tile's width, a grid's column; the 104dp shelf tile by default. The disc and inset scale with it. */
+  size?: number | undefined;
+  /** Read out instead of "<title>, song by <artist>" (a tile whose tap does something more particular). */
+  label?: string | undefined;
   onPress: () => void;
   onLongPress?: (() => void) | undefined;
 };
 
 /** A song on a shelf or in a grid: its play-disc cover, the title and artist under it. */
-export function SongCard({ title, artist, artworkUri, tint, onPress, onLongPress }: Props) {
+export function SongCard({
+  title,
+  artist,
+  artworkUri,
+  tint,
+  size = TILE.size,
+  label,
+  onPress,
+  onLongPress,
+}: Props) {
+  const scale = size / TILE.size;
   return (
     <CardTile
-      width={TILE.size}
-      label={`${title}, song by ${artist}`}
+      width={size}
+      label={label ?? `${title}, song by ${artist}`}
       onPress={onPress}
       onLongPress={onLongPress}
     >
       <SongCover
         uri={artworkUri}
         tint={tint}
-        size={TILE.size}
-        disc={TILE.disc}
-        inset={TILE.inset}
+        size={size}
+        disc={TILE.disc * scale}
+        inset={TILE.inset * scale}
       />
       <View style={{ paddingTop: CELL }}>
         <CardTitle>{title}</CardTitle>

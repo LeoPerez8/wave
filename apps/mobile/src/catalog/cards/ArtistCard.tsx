@@ -21,7 +21,7 @@ type Props = {
 export function ArtistCard({ name, artist, size, onPress, onLongPress }: Props & { size: number }) {
   return (
     <CardTile width={size} label={`${name}, artist`} onPress={onPress} onLongPress={onLongPress}>
-      <ArtistImage artist={artist} size={size} />
+      <ArtistImage artist={artist} size={size} large />
       <View style={{ paddingTop: CELL }}>
         <CardTitle centred>{name}</CardTitle>
       </View>
