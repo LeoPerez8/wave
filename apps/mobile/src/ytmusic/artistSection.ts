@@ -3,6 +3,7 @@ import {
   identityKey,
   inLibraryUnlessHeld,
   libraryAlbumFinder,
+  libraryFinder,
   pickYtArtist,
   stepYtArtistSection,
   ytArtistAnswerKept,
@@ -12,6 +13,7 @@ import {
   ytArtistLookup,
   ytArtistQuery,
   ytArtistSectionAsks,
+  ytArtistOpening,
   ytArtistSectionView,
   ytArtistShelves,
   type HeldSongs,
@@ -29,14 +31,16 @@ import * as Result from "effect/Result";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 
 import type { LineToggle } from "@/catalog/PlayShuffle";
-import { LibraryStore, type AlbumRow } from "@/library/LibraryStore";
+import { LibraryStore, type AlbumRow, type SongRow } from "@/library/LibraryStore";
+import { useScreenSettled } from "@/lib/screenTiming";
 import { appRuntime } from "@/library/runtime";
 import type { NativeYtSong } from "@/native/waveYtMusic";
+import { online } from "@/native/waveNative";
 import { useSearchOnlineAlways } from "@/settings/searchOnline";
 import { useYtMusicEnabled } from "@/settings/ytMusic";
 
 import { readArtistPage } from "./candidateCatalog";
-import { useLoadedLibraryFinder } from "./libraryFinder";
+import { useLoadedLibraryFinder, type FindInLibrary } from "./libraryFinder";
 import { useLineToggle } from "./OnlineToggle";
 import { YtMusic, YtMusicError } from "./YtMusic";
 
@@ -296,6 +300,8 @@ export const useYtPopularSongs = (
 };
 
 export interface YtArtistSectionShown {
+  /** Shared only while online additions are shown, after the local page settles. */
+  readonly find: FindInLibrary | null;
   /** What the section shows, or null when it's hidden (Core's `ytArtistSectionView`). */
   readonly view: YtArtistSectionView<NativeYtSong> | null;
   /**
@@ -343,50 +349,46 @@ export const useYtArtistSection = (
   albums: readonly AlbumRow[],
   openedIntegrated: boolean,
   held: HeldSongs<NativeYtSong>,
+  contentReady: boolean,
 ): YtArtistSectionShown => {
-  const { state, enabled, openedAt, show } = useYtArtistAnswer(name, { allSongs: true });
   const always = useSearchOnlineAlways();
   // The toggle's segment picked while the page is open; null until one is.
   const [pick, setPick] = useState<YtPick | null>(null);
-  const asks = ytArtistSectionAsks(state, {
+  const { state, enabled, openedAt, show, find, asks } = useDeferredArtistSection(
     name,
-    enabled,
-    now: openedAt,
-    integrated: openedIntegrated,
+    contentReady,
+    openedIntegrated,
     always,
     pick,
-  });
-  // Once per state: a remounted effect doesn't send the request twice.
-  const askedFor = useRef<unknown>(null);
-  useEffect(() => {
-    if (!asks || askedFor.current === state) return;
-    askedFor.current = state;
-    show();
-  }, [asks, state, show]);
+  );
   const popular = useYtPopularSongs(name, state, enabled, asks);
-  const find = useLoadedLibraryFinder();
   const findAlbum = useMemo(() => libraryAlbumFinder(artistId, albums), [artistId, albums]);
 
-  // Until the Library has been read, which songs it lacks isn't known: nothing shows.
+  // The Library toggle needs no finder; online additions wait for its deferred read.
   // Memoized: it filters every song of the artist, and the page's memos key on it.
-  const view = useMemo(
+  const view = useMemo(() => {
+    const section = ytArtistSectionView(state, {
+      name,
+      enabled,
+      now: openedAt,
+      integrated: openedIntegrated,
+      always,
+      pick,
+      inLibrary: inLibraryUnlessHeld(held, (song) => find === null || find(song) !== null),
+    });
+    // The toggle and local rows never wait for the finder. Online rows and counts do.
+    return find === null &&
+      section?.toggle === "online" &&
+      (section.note === null || section.note === "allInLibrary" || section.note === "noSongs")
+      ? { ...section, songs: [], note: "loading" as const }
+      : section;
+  }, [find, state, name, enabled, openedAt, openedIntegrated, always, pick, held]);
+  const shelves = useMemo(
     () =>
       find === null
-        ? null
-        : ytArtistSectionView(state, {
-            name,
-            enabled,
-            now: openedAt,
-            integrated: openedIntegrated,
-            always,
-            pick,
-            inLibrary: inLibraryUnlessHeld(held, (song) => find(song) !== null),
-          }),
-    [find, state, name, enabled, openedAt, openedIntegrated, always, pick, held],
-  );
-  const shelves = useMemo(
-    () => ytArtistShelves(state, { name, enabled, now: openedAt, libraryAlbum: findAlbum, pick }),
-    [state, name, enabled, openedAt, findAlbum, pick],
+        ? []
+        : ytArtistShelves(state, { name, enabled, now: openedAt, libraryAlbum: findAlbum, pick }),
+    [find, state, name, enabled, openedAt, findAlbum, pick],
   );
   const integrated = ytArtistIntegrated(state, { name, enabled, now: openedAt, pick });
   const retry = view?.retry === true;
@@ -417,5 +419,62 @@ export const useYtArtistSection = (
           }),
     [find, state, name, enabled, openedAt, openedIntegrated, always, pick, findAlbum],
   );
-  return { view, shelves, popular, integrated, toggle, counts };
+  return { view, shelves, popular, integrated, toggle, counts, find };
 };
+
+/**
+ * Reviewed online boundary: wait for local content and screen settlement even
+ * for Always/integrated openings and retries. A standing saved online page
+ * needs the shared finder, but Library mode and a pending/failed ask do not.
+ */
+const useDeferredArtistSection = (
+  name: string,
+  contentReady: boolean,
+  integrated: boolean,
+  always: boolean,
+  pick: YtPick | null,
+) => {
+  const settled = useScreenSettled();
+  const ask = useCallback(
+    (saved: Saved | null) =>
+      Effect.suspend(() =>
+        online()
+          ? fetchArtist(name, identityKey(name), saved, { allSongs: true })
+          : Effect.fail(new YtMusicError({ reason: "offline" })),
+      ),
+    [name],
+  );
+  const answer = useSavedYtArtist(identityKey(name), ask);
+  const { state, enabled, openedAt, show } = answer;
+  const context = { name, enabled, now: openedAt, integrated, always, pick, settled, contentReady };
+  const work = ytArtistOpening(state, context);
+  // Popular's quiet request remains #590's boundary; do not let it duplicate an integrated ask.
+  const asks = ytArtistSectionAsks(state, context);
+  const askedFor = useRef<unknown>(null);
+  const [retry, setRetry] = useState(false);
+  useEffect(() => {
+    if (!settled || !contentReady || pick === "library" || !enabled) return;
+    if (!(work.ask || retry) || askedFor.current === state) return;
+    askedFor.current = state;
+    setRetry(false);
+    show();
+  }, [settled, contentReady, pick, enabled, work.ask, retry, state, show]);
+  const loadedFind = useLoadedLibraryFinder(work.finder);
+  return {
+    ...answer,
+    asks,
+    show: useCallback(() => setRetry(true), []),
+    find: work.finder ? loadedFind : null,
+  };
+};
+
+/** A downloaded row prefers this artist's sorted songs over the shared online snapshot. */
+export const useArtistSongsFinder = (
+  songs: readonly SongRow[],
+  shared: FindInLibrary | null,
+): FindInLibrary | null =>
+  useMemo(() => {
+    if (shared === null) return null;
+    const own = libraryFinder(songs);
+    return (song) => own(song) ?? shared(song);
+  }, [songs, shared]);
