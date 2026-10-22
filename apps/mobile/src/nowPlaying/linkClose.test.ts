@@ -8,8 +8,8 @@ test("a Now Playing link starts closing and pushes before the tap handler return
   let phase: SheetPhase = "open";
   const events: string[] = [];
   followNowPlayingLink({
-    close: () => {
-      const next = stepNowPlayingSheet(phase, { type: "linkClose" });
+    step: (event) => {
+      const next = stepNowPlayingSheet(phase, event);
       phase = next.phase;
       events.push(next.spring!);
       return next;
@@ -18,4 +18,21 @@ test("a Now Playing link starts closing and pushes before the tap handler return
   });
   assert.deepEqual(events, ["closed", "push"]);
   assert.equal(phase, "closing");
+});
+
+test("the app link action chooses immediate navigation itself from every sheet phase", () => {
+  for (const initial of ["hidden", "opening", "open", "drag", "closing"] as const) {
+    let phase: SheetPhase = initial;
+    let pushes = 0;
+    followNowPlayingLink({
+      step: (event) => {
+        const next = stepNowPlayingSheet(phase, event);
+        phase = next.phase;
+        return next;
+      },
+      navigate: () => pushes++,
+    });
+    assert.equal(pushes, 1, initial);
+    assert.equal(phase, initial === "hidden" ? "hidden" : "closing");
+  }
 });

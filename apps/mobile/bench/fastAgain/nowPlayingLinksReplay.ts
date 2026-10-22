@@ -60,7 +60,7 @@ export const replayLinks = (
       const tap = ++taps;
       const at = now;
       const navigate = () => pushes.push({ tap, waitMs: now - at });
-      if (follow !== undefined) follow({ close: () => advance({ type: "linkClose" }), navigate });
+      if (follow !== undefined) follow({ step: advance, navigate });
       else legacyClose(navigate);
     } else if (action === "drag") {
       advance({ type: "release", to: "open" });

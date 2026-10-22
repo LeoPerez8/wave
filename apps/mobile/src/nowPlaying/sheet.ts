@@ -234,7 +234,7 @@ export const closeNowPlayingForLink = (navigate: () => void): void => {
   sheetSettled.set(false);
   // The sheet's spring must not end the pushed screen's timing window.
   sheetTimingId = undefined;
-  followNowPlayingLink({ close: () => step({ type: "linkClose" }), navigate });
+  followNowPlayingLink({ step, navigate });
 };
 
 /** The window changed size: keep a closed sheet just out of sight. */
