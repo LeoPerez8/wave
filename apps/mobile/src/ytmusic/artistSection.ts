@@ -4,15 +4,10 @@ import {
   inLibraryUnlessHeld,
   libraryAlbumFinder,
   libraryFinder,
-  pickYtArtist,
   stepYtArtistSection,
-  ytArtistAnswerKept,
   ytArtistCounts,
   ytArtistFullPage,
   ytArtistIntegrated,
-  ytArtistLookup,
-  ytArtistQuery,
-  ytArtistSectionAsks,
   ytArtistOpening,
   ytArtistSectionView,
   ytArtistShelves,
@@ -28,7 +23,15 @@ import {
 } from "@wave/core";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 
 import type { LineToggle } from "@/catalog/PlayShuffle";
 import { LibraryStore, type AlbumRow, type SongRow } from "@/library/LibraryStore";
@@ -36,10 +39,13 @@ import { useScreenSettled } from "@/lib/screenTiming";
 import { appRuntime } from "@/library/runtime";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 import { online } from "@/native/waveNative";
-import { useSearchOnlineAlways } from "@/settings/searchOnline";
+import { searchOnlineAlwaysNow, useSearchOnlineAlways } from "@/settings/searchOnline";
 import { useYtMusicEnabled } from "@/settings/ytMusic";
 
+import { fetchArtistAnswer } from "./artistFetch";
 import { readArtistPage } from "./candidateCatalog";
+import { artistPopularSongs, createArtistOpeningRead } from "./artistOpeningRead";
+import { searchAllowanceSnapshot, withSearchTurn } from "./searchAllowance";
 import { artistOpeningRequest } from "./artistOpeningRequest";
 import { useLoadedLibraryFinder, type FindInLibrary } from "./libraryFinder";
 import { useLineToggle } from "./OnlineToggle";
@@ -91,6 +97,8 @@ export interface ArtistReads {
    * Library album's page only needs their releases, so it reads the page only.
    */
   readonly allSongs: boolean;
+  /** The deferred artist boundary shares the search allowance and rechecks consent after a wait. */
+  readonly canSend?: () => boolean;
 }
 
 /**
@@ -112,27 +120,21 @@ export const fetchArtist = (
   Effect.gen(function* () {
     const ytMusic = yield* YtMusic;
     const store = yield* LibraryStore;
-    const lookup = ytArtistLookup(name, saved);
-    if (lookup === null) return yield* new YtMusicError({ reason: "failed" });
-    const browseId =
-      lookup.kind === "page"
-        ? lookup.browseId
-        : pickYtArtist(name, yield* ytMusic.searchArtists(lookup.query));
-    const checkedAt = Date.now();
-    const answer: Saved =
-      browseId === null
-        ? { outcome: "unmatched", checkedAt }
-        : {
-            outcome: "found",
-            checkedAt,
-            browseId,
-            page: reads.allSongs ? yield* readArtist(browseId) : yield* readArtistPage(browseId),
-          };
-    const kept = ytArtistAnswerKept(yield* readSaved(artistKey), answer, checkedAt);
-    if (kept !== answer) return kept;
-    // Not saved, it's still shown; the next opening asks again.
-    yield* store.saveYtArtist(artistKey, answer).pipe(Effect.ignore);
-    return answer;
+    return yield* fetchArtistAnswer(name, saved, {
+      search: (query) =>
+        reads.canSend === undefined
+          ? ytMusic.searchArtists(query)
+          : withSearchTurn(
+              "search",
+              query,
+              artistOpeningRequest(reads.canSend, ytMusic.searchArtists(query)).pipe(
+                Effect.mapError((error) => new YtMusicError({ reason: error.reason })),
+              ),
+            ),
+      page: (browseId) => (reads.allSongs ? readArtist(browseId) : readArtistPage(browseId)),
+      saved: readSaved(artistKey),
+      save: (answer) => store.saveYtArtist(artistKey, answer).pipe(Effect.ignore),
+    }).pipe(Effect.mapError((error) => new YtMusicError({ reason: error.reason })));
   });
 
 /** The section's state for the artist [key]: what was read and asked for them. */
@@ -248,58 +250,6 @@ export const useYtArtistAnswer = (name: string, reads: ArtistReads): YtArtistAns
   return useSavedYtArtist(artistKey, ask);
 };
 
-/**
- * The artist's YouTube Music song list, for Popular to rank the Library's songs
- * by, read quietly: with YT Music on and no saved answer that holds that list
- * (none, or a match saved without it), the artist's page is read and saved in
- * the background, as the Online toggle reads it (`fetchArtist`, with the same
- * Wi-Fi limit and allowance). Nothing else changes: the toggle stays on Library
- * and no streamed song shows. Asked once per artist, and not when [asks], the
- * Online toggle's own ask. Null while there's no list to rank by.
- */
-export const useYtPopularSongs = (
-  name: string,
-  state: YtArtistSection<NativeYtSong>,
-  enabled: boolean,
-  asks: boolean,
-): readonly NativeYtSong[] | null => {
-  const artistKey = identityKey(name);
-  const saved = state.status === "ready" ? state.saved : undefined;
-  const wanted =
-    enabled &&
-    !asks &&
-    state.status === "ready" &&
-    ytArtistQuery(name) !== null &&
-    (saved === null || (saved?.outcome === "found" && saved.page.allSongs === undefined));
-  const [read, setRead] = useState<{ readonly key: string; readonly answer: Saved } | null>(null);
-  const asked = useRef<string | null>(null);
-  // Aborted once the page is gone: a request that's still going saves nothing then.
-  const leaving = useRef<AbortController | null>(null);
-  useEffect(() => {
-    const controller = new AbortController();
-    leaving.current = controller;
-    return () => controller.abort();
-  }, []);
-  useEffect(() => {
-    if (!wanted || asked.current === artistKey) return;
-    asked.current = artistKey;
-    void appRuntime
-      .runPromise(Effect.result(fetchArtist(name, artistKey, saved ?? null, { allSongs: true })), {
-        signal: leaving.current?.signal,
-      })
-      .then(
-        (result) => {
-          if (Result.isSuccess(result)) setRead({ key: artistKey, answer: result.success });
-        },
-        () => undefined,
-      );
-  }, [wanted, artistKey, name, saved]);
-  const answer = read !== null && read.key === artistKey ? read.answer : (saved ?? null);
-  return answer?.outcome === "found" && answer.page.allSongs !== undefined
-    ? answer.page.allSongs
-    : null;
-};
-
 export interface YtArtistSectionShown {
   /** Shared only while online additions are shown, after the local page settles. */
   readonly find: FindInLibrary | null;
@@ -338,8 +288,8 @@ export interface YtArtistSectionShown {
  * set to Always (Core's `ytArtistSectionAsks`); after a failure, picking
  * Online asks again. A long press on the toggle opens the Search online
  * card (`openSearchOnlineChoices`). Library
- * hides what YouTube Music added, with no request. Its song list is read
- * quietly for Popular's ranking alone (`useYtPopularSongs`). [artistId] and the page's
+ * hides what YouTube Music added, with no request. Popular uses that same saved
+ * answer and never starts a separate request. [artistId] and the page's
  * Library [albums] tell which of the artist's releases the Library already
  * has. The songs the page [held] in place this visit stay among the
  * section's, downloaded or not (Core's `inLibraryUnlessHeld`).
@@ -355,14 +305,14 @@ export const useYtArtistSection = (
   const always = useSearchOnlineAlways();
   // The toggle's segment picked while the page is open; null until one is.
   const [pick, setPick] = useState<YtPick | null>(null);
-  const { state, enabled, openedAt, show, find, asks } = useDeferredArtistSection(
+  const { state, enabled, openedAt, show, find, select } = useDeferredArtistSection(
     name,
     contentReady,
     openedIntegrated,
     always,
     pick,
   );
-  const popular = useYtPopularSongs(name, state, enabled, asks);
+  const popular = artistPopularSongs(state);
   const findAlbum = useMemo(() => libraryAlbumFinder(artistId, albums), [artistId, albums]);
 
   // The Library toggle needs no finder; online additions wait for its deferred read.
@@ -395,11 +345,12 @@ export const useYtArtistSection = (
   const retry = view?.retry === true;
   const onPick = useCallback(
     (next: YtPick) => {
+      select(next);
       setPick(next);
       // Online after an ask that got no answer asks again.
       if (next === "online" && retry) show();
     },
-    [retry, show],
+    [retry, show, select],
   );
   const toggle = useLineToggle(view?.toggle, onPick);
   // The Library's files of songs held in place count as the Library's, as the page draws them once.
@@ -436,44 +387,50 @@ const useDeferredArtistSection = (
   pick: YtPick | null,
 ) => {
   const settled = useScreenSettled();
-  const ask = useCallback(
-    (saved: Saved | null) =>
-      artistOpeningRequest(
-        online,
-        fetchArtist(name, identityKey(name), saved, { allSongs: true }),
-      ).pipe(Effect.mapError((error) => new YtMusicError({ reason: error.reason }))),
-    [name],
+  const enabled = useYtMusicEnabled();
+  const [reader] = useState(() =>
+    createArtistOpeningRead<NativeYtSong>({
+      restore: (key, signal) => appRuntime.runPromise(readSaved(key), { signal }),
+      request: (artistName, key, saved, signal, canSend) =>
+        appRuntime
+          .runPromise(
+            Effect.result(
+              artistOpeningRequest(
+                canSend,
+                fetchArtist(artistName, key, saved, { allSongs: true, canSend }),
+              ),
+            ),
+            { signal },
+          )
+          .then((result) => {
+            if (Result.isFailure(result)) throw result.failure;
+            return result.success;
+          }),
+      online,
+      allowance: searchAllowanceSnapshot,
+      always: searchOnlineAlwaysNow,
+    }),
   );
-  const answer = useSavedYtArtist(identityKey(name), ask);
-  const { state, enabled, openedAt, show } = answer;
+  const snapshot = useSyncExternalStore(reader.subscribe, reader.snapshot);
   const artistKey = identityKey(name);
-  const [retry, setRetry] = useState<string | null>(null);
-  const context = {
-    name,
-    enabled,
-    now: openedAt,
-    integrated,
-    always,
-    pick,
-    settled,
-    contentReady,
-    retry: retry === artistKey,
-  };
-  const work = ytArtistOpening(state, context);
-  // Popular's quiet request remains #590's boundary; do not let it duplicate an integrated ask.
-  const asks = ytArtistSectionAsks(state, context);
-  const askedFor = useRef<unknown>(null);
+  const state = snapshot.key === artistKey ? snapshot.state : YT_ARTIST_SECTION_START;
+  const openedAt = snapshot.openedAt;
   useEffect(() => {
-    if (!work.ask || askedFor.current === state) return;
-    askedFor.current = state;
-    setRetry(null);
-    show();
-  }, [work.ask, state, show]);
+    reader.open(name);
+    return reader.close;
+  }, [reader, name]);
+  const context = { enabled, integrated, always, pick, settled, contentReady };
+  useEffect(() => {
+    reader.update(context);
+  });
+  const work = ytArtistOpening(state, { ...context, name, now: openedAt });
   const loadedFind = useLoadedLibraryFinder(work.finder);
   return {
-    ...answer,
-    asks,
-    show: useCallback(() => setRetry(artistKey), [artistKey]),
+    state,
+    enabled,
+    openedAt,
+    show: reader.retry,
+    select: reader.pick,
     find: work.finder ? loadedFind : null,
   };
 };

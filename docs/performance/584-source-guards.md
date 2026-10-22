@@ -75,9 +75,18 @@ test files must be present. The scanner still inventories the exact declaration
 and rejects unlisted or stale uses; this record does not prove control flow.
 `ytArtistOpening.test.ts` exercises the production policy and
 `artistOpening.test.ts` runs its opening/settlement replay against the actual
-store and sql.js, checking song rows and the saved page. Popular's separate quiet
-request remains #590's explicitly inventoried debt; the common playing-ids
-follower remains #588's, and other online detail pages remain #591's.
+store and sql.js, checking song rows and the saved page.
+
+#590 removes the exact `useYtPopularSongs` opening exception: Popular now uses the saved answer from the single `useDeferredArtistSection` boundary.
+`artistPopular.test.ts` exercises the production reader and fetch/save workflow
+with fake YouTube transport and the real 1,000-song store: zero requests before
+settlement, offline or with Online off, one request per artist/opening, shared
+Popular/Online answers, immediate local order, saved ranks offline, allowance
+expiry, Wi-Fi eligibility, retries, cancellation and stale-answer rejection.
+Core's public `ytPopularReadDue` edge cases live in `ytPopularRead.test.ts`.
+The fixed boundary's review record names those tests; no scanner capability or
+route guard was weakened. The common playing-ids follower remains #588's, and
+other online detail pages remain #591's.
 #586 removed the exact `ytmusic/streamedArtist.ts#listArtists` and `#sharedArtists`
 exceptions: rendering a link no longer lists artists or builds `libraryArtistFinder`.
 An unread Core target is available immediately. Explicit taps resolve requested
