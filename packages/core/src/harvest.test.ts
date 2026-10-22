@@ -9,6 +9,7 @@ import {
   harvestMobileUsedToday,
   harvestNext,
   harvestSeedPool,
+  genreStyle,
   harvestWants,
   mixKnownSongs,
   mixSlidersEngine,
@@ -134,6 +135,11 @@ describe("What the harvest wants, at a section's sliders", () => {
       ["pop", 0.5],
     ]);
     const profiles: Record<string, GenreProfile> = { Tricky: rock, Pixies: rockPop };
+    // Tricky's style is heavy, Pixies' soft: Same genres leaves Pixies out, as it does by family at Balanced.
+    const styles: Record<string, string | undefined> = {
+      Tricky: genreStyle("Nu Metal")?.key,
+      Pixies: genreStyle("Soft Rock")?.key,
+    };
     const at = NOW - DAY;
     const catalog = [
       ...Array.from({ length: 6 }, (_, n) => catalogSong(`t${n}`, "Tricky", "Tricky", at)),
@@ -143,6 +149,7 @@ describe("What the harvest wants, at a section's sliders", () => {
       catalog,
       graph: artistGraph({ catalog, pages: [], plays: [] }),
       profileOf: (artist: string) => profiles[artist],
+      styleOf: (artist: string) => styles[artist],
       now: NOW,
       library,
       known,

@@ -21,11 +21,13 @@ import { catalogSeedKey, type CatalogSong } from "./candidateCatalog.ts";
 import {
   GENRE_AFFINITY_THRESHOLD,
   genreAffinity,
+  styleOfArtists,
   type GenreProfile,
   type GenreProfileOf,
   type MixAffinity,
+  type StyleOf,
 } from "./genreAffinity.ts";
-import { genreFamily } from "./genreMixes.ts";
+import { genreFamily, styleAffinity, type StyleLevel } from "./genreMixes.ts";
 import { magicYtSong } from "./magicQueue.ts";
 import { tasteWeight, type TasteProfile } from "./tasteProfile.ts";
 import type { RandomSource } from "./weightedPick.ts";
@@ -81,6 +83,11 @@ export interface RecommendSeed {
   /** The genre profile songs are held to (`mixSeedProfile`); null or absent: any genre. */
   readonly profile?: GenreProfile | null;
   /**
+   * The seed's style (`mixSeedStyle`, a Magic Queue's `seedStyle`), which
+   * [RecommendOptions.styles] holds the songs to; null or absent: unknown.
+   */
+  readonly style?: string | null;
+  /**
    * A genre mix's family (a `genreFamily` name or key): any catalog song
    * whose artist's profile has a share of it is a candidate too, whoever's
    * radio brought it.
@@ -98,6 +105,8 @@ export interface RecommendSources {
   readonly graph: ArtistGraph | null;
   /** Every artist's genre profile, by name (the Library's, else Deezer's). */
   readonly profileOf: GenreProfileOf;
+  /** Every artist's style, by name (the Library's; Deezer has none); absent: no style known. */
+  readonly styleOf?: StyleOf;
   /** The owner's taste profile; null or absent weighs every song alike. */
   readonly taste?: TasteProfile | null;
   /** Now (ms since the epoch), for newness. */
@@ -112,6 +121,12 @@ export interface RecommendOptions {
   readonly weights?: Partial<RecommendWeights>;
   /** The affinity a song's artist needs to match (`GENRE_AFFINITY_THRESHOLD`). */
   readonly threshold?: number;
+  /**
+   * At Same genres or Close, the songs' styles are held to the seed's
+   * (`styleAffinity`) instead of the threshold: a song of an unknown style
+   * stays only when it's close to the seed (`rankRecommended`).
+   */
+  readonly styles?: StyleLevel;
   /** How far out the seeds' neighbourhood goes (`artistNeighbourhood`). */
   readonly neighbourhood?: ArtistNeighbourhoodOptions;
   /** Songs, by video id, that go after every other (what the section showed today). */
@@ -125,7 +140,10 @@ export interface RecommendedSong {
   readonly song: YtAlbumSong;
   /** Its score: the weighed signals added up. Higher ranks first. */
   readonly score: number;
-  /** Whether its artists suit the seed's genres, as `mixAffinity` says it at the threshold. */
+  /**
+   * Whether its artists suit the seed's genres: as `mixAffinity` says it at
+   * the threshold, or by style at [RecommendOptions.styles] (`rankRecommended`).
+   */
   readonly affinity: MixAffinity;
   /** Whether one of the seed artists' radios brought it. */
   readonly onSeedRadio: boolean;
@@ -160,6 +178,16 @@ const affinityOf = (
 const affinityAt = (affinity: number | null, threshold: number): MixAffinity =>
   affinity === null ? "unknown" : affinity >= threshold ? "match" : "miss";
 
+/**
+ * How a candidate's style holds at [level] (`styleAffinity`): a song of an
+ * unknown style is a miss unless it's close to the seed (a closeness above
+ * 0: its radio, its seed artists or their neighbourhood).
+ */
+const styleAt = (candidate: RecommendCandidate, level: StyleLevel): MixAffinity => {
+  const affinity = styleAffinity(candidate.seedStyle, candidate.style, level);
+  return affinity === "unknown" && candidate.closeness === 0 ? "miss" : affinity;
+};
+
 /** Whether one of [artists]' profiles has a share of the family [key]. */
 const inFamily = (artists: readonly string[], key: string, profileOf: GenreProfileOf): boolean =>
   artists.some((artist) => (profileOf(artist)?.get(key) ?? 0) > 0);
@@ -176,6 +204,9 @@ export interface RecommendCandidate {
   readonly closeness: number;
   /** Its closest artist's genre affinity to the seed; null when none of its artists has a genre known. */
   readonly affinity: number | null;
+  /** Its style (`styleOfArtists`) and the seed's (`RecommendSeed.style`), for `styles`. */
+  readonly style: string | null;
+  readonly seedStyle: string | null;
   readonly taste: number;
   readonly newness: number;
   readonly popularity: number;
@@ -242,6 +273,8 @@ export const recommendCandidates = (
       onSeedRadio,
       closeness,
       affinity,
+      style: styleOfArtists(song.artists, sources.styleOf),
+      seedStyle: seed.style ?? null,
       taste: liked,
       newness: 0.5 ** (Math.max(0, now - entry.firstSeenAt) / RECOMMEND_NEWNESS_HALF_LIFE_MS),
       popularity: 1 - 0.5 ** entry.radios.length,
@@ -261,7 +294,7 @@ const byVideoId = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0)
  */
 export const rankRecommended = (
   candidates: readonly RecommendCandidate[],
-  options: Pick<RecommendOptions, "weights" | "threshold" | "avoid"> = {},
+  options: Pick<RecommendOptions, "weights" | "threshold" | "styles" | "avoid"> = {},
 ): RecommendedSong[] => {
   const weights = { ...RECOMMEND_WEIGHTS, ...options.weights };
   const threshold = options.threshold ?? GENRE_AFFINITY_THRESHOLD;
@@ -287,7 +320,10 @@ export const rankRecommended = (
   return ranked.map(({ candidate, score }) => ({
     song: candidate.entry.song,
     score,
-    affinity: affinityAt(candidate.affinity, threshold),
+    affinity:
+      options.styles === undefined
+        ? affinityAt(candidate.affinity, threshold)
+        : styleAt(candidate, options.styles),
     onSeedRadio: candidate.onSeedRadio,
     closeness: candidate.closeness,
   }));

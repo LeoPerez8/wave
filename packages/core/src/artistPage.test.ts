@@ -26,6 +26,14 @@ describe("artistPageItems", () => {
     ]);
   });
 
+  test("the songs' heading reads as given: Popular when they're in YouTube Music's order", () => {
+    const items = artistPageItems([], ["t1"], "Popular");
+    assert.deepEqual(items, [
+      { type: "section", label: "Popular" },
+      { type: "song", song: "t1", index: 0 },
+    ]);
+  });
+
   test("a shelf with nothing in it is left out, heading and all", () => {
     const items = artistPageItems(
       [

@@ -17,7 +17,12 @@ import {
   type DiscoverMixSeed,
   type DiscoverRadioSong,
 } from "./discoverMixes.ts";
-import { mixSeedProfile, type GenreProfileLibrary, type MixAffinity } from "./genreAffinity.ts";
+import {
+  mixSeedProfile,
+  mixSeedStyle,
+  type GenreProfileLibrary,
+  type MixAffinity,
+} from "./genreAffinity.ts";
 import {
   rankRecommended,
   recommend,
@@ -39,13 +44,14 @@ export interface CatalogMixSources extends RecommendSources {
   readonly library: GenreProfileLibrary;
 }
 
-/** The engine's seed for a mix's [seed]: its artists, its genre profile and a genre mix's family. */
+/** The engine's seed for a mix's [seed]: its artists, its genre profile and style, and a genre mix's family. */
 export const catalogMixSeed = (
   seed: DiscoverMixSeed,
-  { library, profileOf }: Pick<CatalogMixSources, "library" | "profileOf">,
+  { library, profileOf, styleOf }: Pick<CatalogMixSources, "library" | "profileOf" | "styleOf">,
 ): RecommendSeed => ({
   artists: mixSeedArtists(seed).map((artist) => artist.name),
   profile: mixSeedProfile(seed, library, profileOf),
+  style: mixSeedStyle(seed, library, styleOf ?? (() => undefined)),
   ...(seed.genre === undefined ? {} : { family: seed.genre }),
 });
 

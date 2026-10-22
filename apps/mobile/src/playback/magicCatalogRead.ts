@@ -15,6 +15,7 @@ import {
   type ArtistGraph,
   type CatalogSong,
   type GenreProfileOf,
+  type StyleOf,
   type MagicCatalogPick,
   type MagicSession,
   type RecommendOptions,
@@ -42,6 +43,8 @@ export interface MagicCatalogReadDeps<R> {
   readonly catalog: Effect.Effect<readonly CatalogSong[], never, R>;
   readonly graph: ArtistGraph | null;
   readonly profileOf: GenreProfileOf;
+  /** Every artist's style (the Library's): what Same genres and Close hold the candidates to. */
+  readonly styleOf?: StyleOf;
   readonly taste: TasteProfile | null;
   /** Whether the Library has [song]. */
   readonly inLibrary: (song: YtSong) => boolean;
@@ -73,12 +76,12 @@ export const magicCatalogRead = <R>(
   deps: MagicCatalogReadDeps<R>,
 ): Effect.Effect<MagicCatalogPick, never, R> =>
   Effect.gen(function* () {
-    const { graph, profileOf, taste, now, inLibrary } = deps;
+    const { graph, profileOf, styleOf, taste, now, inLibrary } = deps;
     const engine = deps.engine === undefined ? {} : { engine: deps.engine };
     const pickFrom = (catalog: readonly CatalogSong[], playable?: (videoId: string) => boolean) =>
       magicCatalogCandidates(
         session,
-        { catalog, graph, profileOf, taste, now },
+        { catalog, graph, profileOf, styleOf, taste, now },
         { inLibrary, ...engine, ...(playable === undefined ? {} : { playable }) },
       );
     if (!deps.online) {

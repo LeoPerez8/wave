@@ -64,7 +64,7 @@ const sources = (
 const sessionOf = (artist: string): MagicSession => {
   const started = startMagicQueue(
     { kind: "track", id: "1", title: "Seed" },
-    [{ trackId: "1", artists: [], genre: null }],
+    [{ trackId: "1", artists: [], genre: null, style: null }],
     { id: "s1", random: () => 0, radio: { artists: [artist], profile: null } },
   );
   assert.ok(started !== null);
@@ -116,7 +116,12 @@ describe("A Magic Queue's catalog candidates", () => {
       { ...started, used: [...started.used, ytTrackId("queued")] },
       {
         kind: "skip",
-        song: { trackId: ytTrackId("skipped"), artists: [magicArtistKey("Placebo")], genre: null },
+        song: {
+          trackId: ytTrackId("skipped"),
+          artists: [magicArtistKey("Placebo")],
+          genre: null,
+          style: null,
+        },
       },
     );
     const { candidates, left } = magicCatalogCandidates(session, sources(catalog), {
@@ -191,7 +196,12 @@ describe("A Magic Queue's catalog candidates", () => {
     assert.ok(!ids(before.candidates).includes("zliked"));
     const liked = magicSignal(started, {
       kind: "favorite",
-      song: { trackId: ytTrackId("other"), artists: [magicArtistKey("Liked")], genre: null },
+      song: {
+        trackId: ytTrackId("other"),
+        artists: [magicArtistKey("Liked")],
+        genre: null,
+        style: null,
+      },
     });
     const { candidates } = magicCatalogCandidates(liked, sources(catalog), {
       inLibrary: notInLibrary,

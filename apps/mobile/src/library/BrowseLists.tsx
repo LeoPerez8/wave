@@ -3,9 +3,10 @@ import { useScrollToTop } from "expo-router";
 import { IconStack2 } from "@tabler/icons-react-native";
 import { artistFindText, counted, type PlaylistFindText } from "@wave/core";
 import { useCallback, useMemo, useRef, type ReactElement } from "react";
-import { View } from "react-native";
+import { useWindowDimensions, View } from "react-native";
 
 import { AlphabetSpine } from "@/catalog/AlphabetSpine";
+import { ArtistCardRow } from "@/catalog/cards/ArtistCard";
 import { CatalogLine } from "@/catalog/CatalogLine";
 import { CELL, grid } from "@/catalog/grid";
 import { NameRow } from "@/catalog/NameRow";
@@ -18,8 +19,8 @@ import { selectableRow } from "@/selection/selectableRow";
 import { useListSelection, type ListSelection } from "@/selection/useListSelection";
 
 import {
+  albumCardRowHeight,
   albumPairs,
-  albumRowHeight,
   AlbumPair,
   useAlbumSelection,
   useAlbumTileSize,
@@ -134,20 +135,15 @@ function NameList<A>({
 
 const artistSort = (artist: ArtistRow) => artist.sort;
 const artistKey = (artist: ArtistRow) => String(artist.id);
-const artistDetail = (artist: ArtistRow): string =>
-  artist.albumCount > 0
-    ? `${counted(artist.albumCount, "album")} · ${counted(artist.trackCount, "song")}`
-    : counted(artist.trackCount, "song");
 const artistFind = (artist: ArtistRow): PlaylistFindText => artistFindText(artist.name);
 const artistsOf = (artists: readonly ArtistRow[]): ActionItems => ({
   kind: "artist",
   items: artists,
 });
 const renderArtist = (artist: ArtistRow, selection: ListSelection<ArtistRow>) => (
-  <NameRow
+  <ArtistCardRow
     name={artist.name}
     artist={artist}
-    detail={artistDetail(artist)}
     {...selectableRow(
       artist,
       selection,
@@ -216,6 +212,8 @@ export function AlbumsList({ empty }: { empty: string }) {
   const sortKeys = useMemo(() => albums.map((album) => album.titleSort), [albums]);
   const spine = useSpine(sortKeys, list, pairRow);
   const tile = useAlbumTileSize(spine.paddingRight);
+  const { fontScale } = useWindowDimensions();
+  const rowHeight = albumCardRowHeight(tile, fontScale);
   const rows = useMemo(() => albumPairs(albums), [albums]);
   const selection = useAlbumSelection(albums);
   const rowState = useMemo(() => ({ tile, selection }), [tile, selection]);
@@ -237,8 +235,8 @@ export function AlbumsList({ empty }: { empty: string }) {
         keyExtractor={pairKey}
         renderItem={renderItem}
         extraData={rowState}
-        estimatedItemSize={albumRowHeight(tile)}
-        getFixedItemSize={() => albumRowHeight(tile)}
+        estimatedItemSize={rowHeight}
+        getFixedItemSize={() => rowHeight}
         recycleItems
         contentContainerStyle={{
           paddingLeft: grid.margin,

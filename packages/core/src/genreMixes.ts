@@ -13,6 +13,7 @@ import type {
   DiscoverSongPlays,
 } from "./discoverMixes.ts";
 import { genreMixId } from "./discoverMixes.ts";
+import type { MixAffinity } from "./genreAffinity.ts";
 import { identityKey } from "./library.ts";
 import { freshFirst, type MixRefreshAvoid } from "./mixRefresh.ts";
 import { pickWeighted, playsWeight, type RandomSource } from "./weightedPick.ts";
@@ -41,6 +42,8 @@ const FAMILIES: readonly (readonly [name: string, tags: readonly string[]])[] = 
       "Hardcore",
       "Alternative Metal",
       "Nu Metal",
+      "Rap Metal",
+      "Funk Metal",
       "Heavy Metal",
       "Death Metal",
       "Melodic Death Metal",
@@ -67,6 +70,7 @@ const FAMILIES: readonly (readonly [name: string, tags: readonly string[]])[] = 
       "Indie",
       "Indie Rock",
       "Hard Rock",
+      "Rap Rock",
       "Classic Rock",
       "Progressive Rock",
       "Prog Rock",
@@ -185,6 +189,109 @@ const BY_TAG: ReadonlyMap<string, GenreFamily> = new Map(
   }),
 );
 
+/** A genre style: the tags of a family that sound alike, under one name. */
+export interface GenreStyle {
+  /** Tells the style apart from the others (the compacted name). */
+  readonly key: string;
+  /** Its name, as the level card and the docs say it ("Heavy"). */
+  readonly name: string;
+}
+
+/**
+ * The styles of the families that split (docs/spec.md, Glossary: style):
+ * each with its tags, and the styles that sound near it, which Close admits
+ * as well as its own. Near is symmetric: a style lists the ones it sounds
+ * near, and they list it back. A family not split here keeps one style of
+ * its own (`genreStyle`); Rock's and Metal's generic tags have none.
+ */
+const STYLES: readonly (readonly [
+  name: string,
+  tags: readonly string[],
+  near: readonly string[],
+])[] = [
+  [
+    "Heavy",
+    [
+      "Heavy Metal",
+      "Nu Metal",
+      "Alternative Metal",
+      "Rap Metal",
+      "Rap Rock",
+      "Funk Metal",
+      "Groove Metal",
+      "Industrial Metal",
+    ],
+    ["Extreme metal", "Metalcore / post-hardcore", "Hard rock / grunge"],
+  ],
+  [
+    "Extreme metal",
+    [
+      "Death Metal",
+      "Melodic Death Metal",
+      "Black Metal",
+      "Thrash Metal",
+      "Doom Metal",
+      "Sludge Metal",
+      "Post-Metal",
+      "Power Metal",
+      "Symphonic Metal",
+      "Progressive Metal",
+      "Djent",
+    ],
+    ["Heavy", "Metalcore / post-hardcore"],
+  ],
+  [
+    "Metalcore / post-hardcore",
+    ["Metalcore", "Deathcore", "Mathcore", "Post-Hardcore", "Hardcore", "Screamo", "Emo"],
+    ["Heavy", "Extreme metal"],
+  ],
+  [
+    "Hard rock / grunge",
+    ["Hard Rock", "Grunge", "Stoner Rock", "Garage Rock"],
+    ["Heavy", "Alternative / indie", "Classic / prog / psych"],
+  ],
+  [
+    "Alternative / indie",
+    ["Alternative Rock", "Indie Rock", "Britpop", "Post-Rock"],
+    ["Hard rock / grunge", "Soft / acoustic"],
+  ],
+  [
+    "Soft / acoustic",
+    ["Soft Rock", "Pop Rock", "Acoustic", "Folk Rock", "Singer-Songwriter", "Indie Folk"],
+    ["Alternative / indie"],
+  ],
+  [
+    "Classic / prog / psych",
+    ["Classic Rock", "Progressive Rock", "Prog Rock", "Art Rock", "Psychedelic Rock"],
+    ["Hard rock / grunge"],
+  ],
+];
+
+const BY_STYLE: ReadonlyMap<string, GenreStyle> = new Map(
+  STYLES.flatMap(([name, tags]) => {
+    const style = { key: compact(name), name };
+    return tags.map((tag) => [compact(tag), style] as const);
+  }),
+);
+
+const NEAR: ReadonlyMap<string, ReadonlySet<string>> = (() => {
+  const near = new Map<string, Set<string>>();
+  const link = (a: string, b: string) => {
+    near.set(a, (near.get(a) ?? new Set()).add(b));
+  };
+  for (const [name, , neighbours] of STYLES)
+    for (const other of neighbours) {
+      link(compact(name), compact(other));
+      link(compact(other), compact(name));
+    }
+  return near;
+})();
+
+/** The families with a style split of their own (`STYLES`'s tags). */
+const SPLIT_FAMILIES: ReadonlySet<string> = new Set(
+  [...BY_STYLE.keys()].flatMap((key) => BY_TAG.get(key)?.key ?? []),
+);
+
 /**
  * The family a genre [tag] belongs to (matched without case, spaces or
  * punctuation), from Core's curated table; an unknown tag is its own family,
@@ -195,6 +302,72 @@ export const genreFamily = (tag: string): GenreFamily | null => {
   if (key === "") return null;
   return BY_TAG.get(key) ?? { key, name: tag.trim().replace(/\s+/g, " ") };
 };
+
+/**
+ * The style a genre [tag] belongs to, or null when it has none: a generic
+ * tag (a family's own name, "Rock", "Alternative", "Pop") or an unknown one.
+ * A tag of a split family is in its listed style (`STYLES`), or none; a tag
+ * of a family not split keeps one style of its own, the family's.
+ */
+export const genreStyle = (tag: string): GenreStyle | null => {
+  const key = compact(tag);
+  const style = BY_STYLE.get(key);
+  if (style !== undefined) return style;
+  const family = BY_TAG.get(key);
+  if (family === undefined || family.key === key || SPLIT_FAMILIES.has(family.key)) return null;
+  return family;
+};
+
+/**
+ * A song's style (`genreStyle`): the first of its genre values' styles, a
+ * value joined as `songFamilies` splits it; null when none has one.
+ */
+export const songStyle = (song: Pick<DiscoverLibrarySong, "genre" | "genres">): string | null => {
+  const values = song.genres?.length ? song.genres : [song.genre ?? ""];
+  for (const value of values) {
+    const parts = BY_TAG.has(compact(value)) ? [value] : value.split(/[;/]/);
+    for (const part of parts) {
+      const style = genreStyle(part);
+      if (style !== null) return style.key;
+    }
+  }
+  return null;
+};
+
+/** The style most of [styles] are (the first met on a tie), ignoring the null ones; null when none is. */
+export const commonStyle = (styles: readonly (string | null)[]): string | null => {
+  const counts = new Map<string, number>();
+  for (const style of styles) if (style) counts.set(style, (counts.get(style) ?? 0) + 1);
+  let common: string | null = null;
+  let most = 0;
+  for (const [style, count] of counts)
+    if (count > most) {
+      common = style;
+      most = count;
+    }
+  return common;
+};
+
+/**
+ * How a song's [style] suits a seed's at [level]: the same style, or at Close
+ * a neighbouring one, matches; another style misses. Either style unknown is
+ * unknown: the song is then admitted only when its artist is close.
+ */
+export const styleAffinity = (
+  seed: string | null,
+  style: string | null,
+  level: StyleLevel,
+): MixAffinity => {
+  if (seed === null || style === null) return "unknown";
+  if (seed === style) return "match";
+  return level === "close" && (NEAR.get(seed)?.has(style) ?? false) ? "match" : "miss";
+};
+
+/**
+ * How strictly a genre step compares styles (`styleAffinity`): the same
+ * style (Same genres), or the same or a neighbouring one (Close).
+ */
+export type StyleLevel = "same" | "close";
 
 /**
  * A genre mix's [radios] (one per seed artist, in the seeds' order) as one

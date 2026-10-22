@@ -125,6 +125,11 @@ export interface ActionSubject<A extends LibraryArtistRef = LibraryArtistRef> {
   readonly selectable?: boolean | undefined;
   /** Settings allows looking songs up online: songs missing something offer Fix Song. */
   readonly onlineLookups?: boolean | undefined;
+  /**
+   * The song is the one playing (the mini player's long press): Play Next and
+   * Add to Queue don't apply to it, so its menu leaves them out.
+   */
+  readonly playing?: boolean | undefined;
   /** The current route, so Go to doesn't lead to the page you're on. */
   readonly here: string;
   /**
@@ -364,7 +369,7 @@ export const itemActions = <A extends LibraryArtistRef = LibraryArtistRef>(
       : [];
   const entries: ItemActionEntry<A>[] = [
     ...download.map((action) => ({ action })),
-    ...(missing < items.length
+    ...(missing < items.length && subject.playing !== true
       ? [{ action: "playNext" } as const, { action: "addToQueue" } as const]
       : []),
     ...(offersMagicQueue(kind, items, surface) ? [{ action: "magicQueue" } as const] : []),
@@ -475,6 +480,8 @@ export interface YtSongActionOptions {
   readonly ytMusic?: boolean | undefined;
   /** The menu was opened from a list that can select: it offers Select. */
   readonly selectable?: boolean | undefined;
+  /** The song is the one playing (the mini player's long press): no Play Next or Add to Queue. */
+  readonly playing?: boolean | undefined;
 }
 
 /**
@@ -486,8 +493,9 @@ export interface YtSongActionOptions {
  * album); and, given where its [artists] link leads (Core's
  * `streamedArtistLink`), Go to Artist opens them integrated (none when its
  * only artist is the page you're on); last, Select, opened from a list that
- * can select ([selectable]). The Library's other entries (Fix Song, Delete)
- * are about its files, which a streamed song isn't.
+ * can select ([selectable]). Playing ([playing]), it's the song already on,
+ * so it has no Play Next or Add to Queue. The Library's other entries (Fix
+ * Song, Delete) are about its files, which a streamed song isn't.
  */
 export const ytSongActions = <A>(
   artists?: StreamedArtistLink<A>,
@@ -498,10 +506,10 @@ export const ytSongActions = <A>(
     ytAlbumHere,
     ytMusic = false,
     selectable = false,
+    playing = false,
   }: YtSongActionOptions = {},
 ): YtSongActionEntry<A>[] => [
-  { action: "playNext" },
-  { action: "addToQueue" },
+  ...(playing ? [] : [{ action: "playNext" } as const, { action: "addToQueue" } as const]),
   { action: "addToPlaylist" },
   ...(favorite === undefined ? [] : [{ action: favorite ? "unfavorite" : "favorite" } as const]),
   ...(inPlaylist ? [{ action: "removeFromPlaylist" } as const] : []),

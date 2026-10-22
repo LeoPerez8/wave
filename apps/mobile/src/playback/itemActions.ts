@@ -101,6 +101,8 @@ export interface ActionOptions {
   readonly onSelect?: (() => void) | undefined;
   /** The songs of the collection the menu is about, read before it opened (`readMenuSongs`). */
   readonly collectionSongs?: readonly SongRow[] | undefined;
+  /** The song is the one playing: Core's `itemActions` leaves out Play Next and Add to Queue. */
+  readonly playing?: boolean | undefined;
 }
 
 /** What a Magic Queue started from [target]'s menu grows from: its one song, album, artist or playlist. */
@@ -185,6 +187,7 @@ interface PlanOptions {
   readonly selectable: boolean;
   /** The collection's songs, read before the menu opened. */
   readonly collectionSongs?: readonly SongRow[] | undefined;
+  readonly playing?: boolean | undefined;
 }
 
 /**
@@ -195,7 +198,7 @@ interface PlanOptions {
 function usePlan(
   target: ActionItems,
   favorites: ReadonlySet<number>,
-  { surface, selectable, collectionSongs: readFirst }: PlanOptions,
+  { surface, selectable, collectionSongs: readFirst, playing }: PlanOptions,
 ): {
   readonly planned: readonly ItemActionEntry<ArtistRow>[];
   readonly missingSongs: readonly number[];
@@ -244,6 +247,7 @@ function usePlan(
     onlineLookups,
     here,
     streamedArtists,
+    playing,
   });
   return { planned, missingSongs, perAlbum, collectionSongs };
 }
@@ -284,7 +288,7 @@ export const actionEntries = <A extends { readonly id: number; readonly name: st
  */
 export function useItemActions(
   target: ActionItems,
-  { surface, finish, onSelect, collectionSongs: readFirst }: ActionOptions,
+  { surface, finish, onSelect, collectionSongs: readFirst, playing }: ActionOptions,
 ): readonly ActionEntry[] {
   const here = usePathname();
   const favorites = useFavoriteIds();
@@ -295,6 +299,7 @@ export function useItemActions(
     surface,
     selectable: onSelect !== undefined,
     collectionSongs: readFirst,
+    playing,
   });
 
   // Read ahead, so Go to Album / Go to Artist open header-first.

@@ -5,7 +5,7 @@ import {
 } from "@tabler/icons-react-native";
 import { concentricRadius, resolveSkipSwipe, type SkipDirection } from "@wave/core";
 import * as Haptics from "expo-haptics";
-import { memo, useRef, useSyncExternalStore } from "react";
+import { memo, useRef, useSyncExternalStore, type ComponentRef } from "react";
 import { Text, View } from "react-native";
 import { GestureDetector, usePanGesture } from "react-native-gesture-handler";
 import Animated, {
@@ -35,6 +35,7 @@ import {
 
 import { skipToNext, skipToPrevious, togglePlayPause } from "./actions";
 import { playbackState } from "./Player";
+import { openPlayingActions } from "./ActionsMenu";
 import { useRenderCount } from "@/perf/perf";
 
 const RADIUS = chrome.miniPlayer / 2;
@@ -72,8 +73,9 @@ type Props = {
 /**
  * The floating glass mini player: artwork, title and artist, play/pause and
  * next. Swipe it left for the next track and right for the previous one; tap
- * it for Now Playing. It floats above the tab bar, or above the system inset
- * on screens without one. Memoized: the layouts holding it render on
+ * it for Now Playing, swipe it up for Now Playing too. A long press opens the
+ * playing song's action card, floating beside the pill. It floats above the tab
+ * bar, or above the system inset on screens without one. Memoized: the layouts holding it render on
  * navigation, and it needn't (pass a stable `onOpen`).
  */
 export const MiniPlayer = memo(function MiniPlayer({ backdropId, onOpen }: Props) {
@@ -84,6 +86,8 @@ export const MiniPlayer = memo(function MiniPlayer({ backdropId, onOpen }: Props
   const notice = usePlaybackField("notice");
   const bottom = useTabBarTop();
   const reduceMotion = useReducedMotion();
+  // The pill, which the song's card (on a long press) floats beside and highlights.
+  const pill = useRef<ComponentRef<typeof View>>(null);
 
   const width = useSharedValue(1);
   const widthRef = useRef(1);
@@ -162,6 +166,7 @@ export const MiniPlayer = memo(function MiniPlayer({ backdropId, onOpen }: Props
         <View
           pointerEvents="box-none"
           className="absolute"
+          ref={pill}
           style={{ left: grid.margin, right: grid.margin, bottom, height: chrome.miniPlayer }}
           onLayout={(event) => {
             const measured = Math.max(1, event.nativeEvent.layout.width);
@@ -185,6 +190,8 @@ export const MiniPlayer = memo(function MiniPlayer({ backdropId, onOpen }: Props
                     skip(event.nativeEvent.actionName === "next" ? "next" : "previous")
                   }
                   onPress={onOpen}
+                  onLongPress={openPlayingActions}
+                  highlightAs={{ view: pill, radius: RADIUS }}
                   haptic="selection"
                   depth={0.015}
                   className="flex-1 flex-row items-center self-stretch"

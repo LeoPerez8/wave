@@ -17,10 +17,15 @@ export type ArtistPageItem<C, S> =
   | { readonly type: "shelf"; readonly label: string; readonly covers: readonly C[] }
   | { readonly type: "song"; readonly song: S; readonly index: number };
 
-/** The page's list: [shelves] in order, each heading over one row of covers, then [songs]. */
+/**
+ * The page's list: [shelves] in order, each heading over one row of covers,
+ * then [songs] under [songsLabel] ("Songs", or "Popular" when they're in
+ * YouTube Music's order).
+ */
 export const artistPageItems = <C, S>(
   shelves: readonly ArtistPageShelf<C>[],
   songs: readonly S[],
+  songsLabel = "Songs",
 ): ArtistPageItem<C, S>[] => {
   const items: ArtistPageItem<C, S>[] = [];
   for (const { label, covers } of shelves) {
@@ -28,7 +33,7 @@ export const artistPageItems = <C, S>(
     items.push({ type: "section", label });
     items.push({ type: "shelf", label, covers });
   }
-  if (songs.length > 0) items.push({ type: "section", label: "Songs" });
+  if (songs.length > 0) items.push({ type: "section", label: songsLabel });
   songs.forEach((song, index) => items.push({ type: "song", song, index }));
   return items;
 };

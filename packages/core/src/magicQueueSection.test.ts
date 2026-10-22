@@ -17,6 +17,7 @@ import {
 const song = (trackId: string, artist = `Artist ${trackId}`, genre = "Pop"): MagicSong => ({
   trackId,
   artists: [magicArtistKey(artist)],
+  style: null,
   genre,
 });
 

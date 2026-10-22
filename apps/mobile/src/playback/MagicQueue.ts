@@ -14,6 +14,8 @@ import {
   magicQueueLabel,
   magicQueueShare,
   magicSeedLookups,
+  faithfulnessStyles,
+  libraryStyleOf,
   magicSignal,
   mixSlidersEngine,
   parseMagicSession,
@@ -32,6 +34,7 @@ import { Storage } from "expo-sqlite/kv-store";
 import { useSyncExternalStore } from "react";
 
 import { lookUpArtistProfiles, magicProfileOf } from "@/home/artistGenres";
+import { artistGraphNow } from "@/home/artistGraphNow";
 import { discoverLevel, discoverSliders } from "@/lib/discoverSettings";
 import { makeExternalStore, subscribeAll } from "@/lib/externalStore";
 import { oneAtATime } from "@/lib/oneAtATime";
@@ -269,6 +272,7 @@ export const layer = Layer.effectDiscard(
         const engine = mixSlidersEngine(sliders);
         // Both sources are held to the seed's genres: an untagged seed's are its artists' (Deezer's).
         const profileOf = magicProfileOf(library);
+        const styleOf = libraryStyleOf(library);
         yield* lookUpArtistProfiles(magicSeedLookups(wanted, profileOf)).pipe(
           Effect.timeout(SEED_LOOKUP_WAIT),
           Effect.ignore,
@@ -277,6 +281,7 @@ export const layer = Layer.effectDiscard(
           taste,
           engine,
           profileOf,
+          styleOf,
         }).pipe(
           Effect.provideService(LibraryStore, store),
           Effect.provideService(YtMusic, ytMusic),
@@ -289,9 +294,13 @@ export const layer = Layer.effectDiscard(
         const ofLibrary = { artists: library.artists, songs: playable };
         // At Wander the Library keeps every genre (null).
         const threshold = magicLibraryThreshold(sliders);
+        // Same genres and Close hold Library songs to the seed's style, and its artists' neighbourhood.
+        const graph = yield* Effect.provideService(artistGraphNow, LibraryStore, store);
         const libraryCandidates = magicLibraryCandidates(session, ofLibrary, {
           profileOf,
           threshold,
+          styles: faithfulnessStyles(sliders),
+          graph,
         });
         const batch = magicBatch(session, libraryCandidates, Math.random, yt, taste);
         // Library songs with no genre known stay out: their artists' genres are looked up for later batches.

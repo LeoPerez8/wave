@@ -41,6 +41,12 @@ const ROW_GAP = CELL * 1.5;
 type SkeletonTrailing = "length" | "queue";
 
 /**
+ * A track row's leading: a square cover, a song card's cover (Search's and the artist page's
+ * songs), or a number.
+ */
+type TrackLeading = "artwork" | "card" | "number";
+
+/**
  * A track row's stand-in, laid out as `TrackRow` is: the leading cover square
  * (or a numbered list's number), two lines (body), the favorite cell and the
  * length; or as an Up Next row is, ending in the space of its two cells.
@@ -49,13 +55,17 @@ function TrackRowSkeleton({
   leading = "artwork",
   trailing = "length",
 }: {
-  leading?: "artwork" | "number";
+  leading?: TrackLeading;
   trailing?: SkeletonTrailing;
 }) {
   const start = (
     <>
-      {leading === "artwork" ? (
-        <View className="bg-fill" style={{ width: THUMB, height: THUMB }} />
+      {leading !== "number" ? (
+        // A song card's cover has 4dp corners; the others are square.
+        <View
+          className="bg-fill"
+          style={{ width: THUMB, height: THUMB, borderRadius: leading === "card" ? CELL / 2 : 0 }}
+        />
       ) : (
         <View style={{ width: grid.stateCell }}>
           <Line lineHeight={22} width="50%" />
@@ -100,7 +110,7 @@ export function TrackSkeletons({
 }: {
   label?: string;
   count?: number;
-  leading?: "artwork" | "number";
+  leading?: TrackLeading;
   trailing?: SkeletonTrailing;
 }) {
   return (
@@ -127,6 +137,22 @@ export function TileSkeleton({ size }: { size: number }) {
           <Line lineHeight={22} width="85%" />
         </View>
         <Line lineHeight={18} width="35%" />
+      </View>
+    </View>
+  );
+}
+
+/**
+ * An album card's stand-in, laid out as `AlbumCard` is at [size]: the square
+ * cover with 6dp corners, then the title line and the artist line under it.
+ */
+export function AlbumCardSkeleton({ size }: { size: number }) {
+  return (
+    <View style={{ width: size }}>
+      <View className="bg-fill" style={{ width: size, height: size, borderRadius: CELL * 0.75 }} />
+      <View style={{ paddingTop: CELL }}>
+        <Line lineHeight={22} width="85%" />
+        <Line lineHeight={18} width="50%" />
       </View>
     </View>
   );

@@ -3,11 +3,10 @@ import { counted, type PlaylistLayout } from "@wave/core";
 import { useCallback, useMemo, type ReactNode } from "react";
 import { useWindowDimensions, View, type AccessibilityActionEvent } from "react-native";
 
+import { PlaylistCard, PlaylistCardRow } from "@/catalog/cards/PlaylistCard";
 import { CatalogLine } from "@/catalog/CatalogLine";
 import { CELL, grid } from "@/catalog/grid";
-import { PlaylistEntry } from "@/catalog/PlaylistEntry";
-import { PlaylistTile } from "@/catalog/PlaylistTile";
-import { playlistTileRowHeight } from "@/catalog/playlistTileSize";
+import { playlistCardRowHeight } from "@/catalog/playlistTileSize";
 import { EmptyState } from "@/components/EmptyState";
 import { TextButton } from "@/components/TextButton";
 import { openPlaylistActions } from "@/playback/ActionsMenu";
@@ -102,7 +101,7 @@ function PlaylistView({
   const moves = moveActions(index, ids, selection.selecting);
   if (layout === "list") {
     return (
-      <PlaylistEntry
+      <PlaylistCardRow
         name={playlist.name}
         detail={songCount(playlist.trackCount)}
         paths={playlist.thumbPaths}
@@ -112,10 +111,9 @@ function PlaylistView({
     );
   }
   return (
-    <PlaylistTile
+    <PlaylistCard
       name={playlist.name}
-      detail={layout === "grid" ? songCount(playlist.trackCount) : undefined}
-      accessibilityDetail={songCount(playlist.trackCount)}
+      detail={songCount(playlist.trackCount)}
       paths={playlist.thumbPaths}
       size={tile}
       nameInset={TILE_GRIP_INSET}
@@ -132,9 +130,9 @@ const useTileSize = (layout: PlaylistLayout): number => {
   return layout === "grid" ? Math.floor((across - grid.gutter) / 2) : Math.floor(across);
 };
 
-/** A row's height in [layout] with [tile] covers. */
-const rowHeight = (layout: PlaylistLayout, tile: number): number =>
-  layout === "list" ? grid.row : playlistTileRowHeight(tile, layout === "grid");
+/** A row's height in [layout] with [tile] covers, at the font scale. */
+const rowHeight = (layout: PlaylistLayout, tile: number, fontScale: number): number =>
+  layout === "list" ? grid.row : playlistCardRowHeight(tile, fontScale);
 
 /**
  * The Playlists list (Library › Playlists and the Playlists tab): every
@@ -148,6 +146,7 @@ export function PlaylistsList({ empty }: { empty: string }) {
   const playlists = useSortedPlaylists();
   const layout = usePlaylistLayout();
   const tile = useTileSize(layout);
+  const { fontScale } = useWindowDimensions();
   const selection = useListSelection({ items: playlists, keyOf, target: playlistsOf });
   const ids = useMemo(() => playlists.map((playlist) => playlist.id), [playlists]);
   const renderPlaylist = useCallback(
@@ -184,7 +183,7 @@ export function PlaylistsList({ empty }: { empty: string }) {
       playlists={playlists}
       layout={layout}
       tile={tile}
-      rowHeight={rowHeight(layout, tile)}
+      rowHeight={rowHeight(layout, tile, fontScale)}
       selecting={selection.selecting}
       header={
         <PlaylistsHeader count={playlists.length}>

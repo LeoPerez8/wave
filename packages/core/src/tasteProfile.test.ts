@@ -16,6 +16,7 @@ const song = (trackId: string, artist: string, genre: string | null = "rock"): M
   trackId,
   artists: [magicArtistKey(artist)],
   genre,
+  style: null,
 });
 
 const NONE: TasteHistory = { plays: [], favorites: [], downloads: [] };
@@ -88,6 +89,7 @@ describe("A taste profile", () => {
           trackId: "duet",
           artists: [magicArtistKey("Daft Punk"), magicArtistKey("Pharrell")],
           genre: "Pop",
+          style: null,
         },
       ],
       ["untagged", song("untagged", "Pharrell", null)],
