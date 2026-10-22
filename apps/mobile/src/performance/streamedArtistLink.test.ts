@@ -12,6 +12,7 @@ import { loadLibraryStore } from "../../bench/fastAgain/store.ts";
 import { createFastAgainFixture } from "../library/db/fastAgainFixture.ts";
 import { traceQueries, type TracedQuery } from "../library/db/testDatabase.ts";
 import { readLinkArtists } from "../library/artistLookup.ts";
+import { followStreamedArtistTap } from "../ytmusic/streamedArtistTap.ts";
 import { nowPlayingLibraryArtistLink } from "../nowPlaying/artistLink.ts";
 import { followNowPlayingLink } from "../nowPlaying/linkClose.ts";
 import { stepNowPlayingSheet } from "@wave/core";
@@ -42,24 +43,34 @@ test("at 1,000 songs first-frame artist links read nothing; tap work is bounded 
       items: [{ artistNames: [name], streamed: true }],
     });
     assert.ok(menu.some((entry) => entry.action === "goToArtist"));
-    const link = await resolveStreamedArtistLink(opening.result!, context, {
-      online: false,
-      read: async (names, signal) => {
-        const rows = await readLinkArtists(names, {
-          signal,
-          readPage: async (after) => read(store.artistNamesForLink(after)),
-          readArtist: async (id) => read(store.linkRows({ artistId: id })).artist,
-        });
-        return (name) => rows.get(artistPhotoName(name)) ?? null;
-      },
+    const artistAction = menu.find((entry) => entry.action === "goToArtist");
+    assert.ok(artistAction && "streamedArtists" in artistAction);
+    const delivered: unknown[] = [];
+    await followStreamedArtistTap(artistAction.streamedArtists, {
+      deliver: (destination) => delivered.push(destination),
+      resolve: (unread) =>
+        resolveStreamedArtistLink(unread, context, {
+          online: false,
+          read: async (names, signal) => {
+            const rows = await readLinkArtists(names, {
+              signal,
+              readPage: async (after) => read(store.artistNamesForLink(after)),
+              readArtist: async (id) => read(store.linkRows({ artistId: id })).artist,
+            });
+            return (credit) => rows.get(artistPhotoName(credit)) ?? null;
+          },
+        }),
     });
-    assert.deepEqual(link, {
-      kind: "open",
-      target: {
-        kind: "library",
-        artist: Effect.runSync(store.linkRows({ artistId: fixture.targets.small.artistId })).artist,
+    assert.deepEqual(delivered, [
+      {
+        kind: "open",
+        target: {
+          kind: "library",
+          artist: Effect.runSync(store.linkRows({ artistId: fixture.targets.small.artistId }))
+            .artist,
+        },
       },
-    });
+    ]);
     assert.equal(queries.length, 2);
     assert.ok(queries[0]!.rows <= 128);
     assert.equal(queries[1]!.rows, 1);
@@ -72,7 +83,7 @@ test("at 1,000 songs first-frame artist links read nothing; tap work is bounded 
       details: null,
       here: context.here,
       read: async (id) => read(store.trackDetails(id)),
-      follow: (link) => events.push(link.kind),
+      follow: (destination) => events.push(destination.kind),
       reveal: () => events.push("here"),
       unavailable: () => assert.fail("local credits"),
     });
@@ -87,7 +98,7 @@ test("at 1,000 songs first-frame artist links read nothing; tap work is bounded 
       },
     });
     assert.equal(events[0], "close");
-    await new Promise<void>((resolve) => setImmediate(resolve));
+    await new Promise<void>((done) => setImmediate(done));
     assert.deepEqual(events, ["close", "open"]);
     assert.equal(queries.length, 1);
     assert.equal(queries[0]!.rows, 1);

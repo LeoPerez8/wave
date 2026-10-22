@@ -78,11 +78,13 @@ export const bench: FastAgainBench = {
       const scenarios = [
         "lineAvailability/cold",
         "lineAvailability/warm",
+        "lineAvailability/offline",
         "tapLookup/first",
         "tapLookup/middle",
         "tapLookup/last",
         "tapLookup/missing",
         "tapLookup/warm",
+        "tapLookup/offline",
         "completeLookup/last",
         "completeLookup/missing",
       ];
@@ -92,12 +94,15 @@ export const bench: FastAgainBench = {
           : read.endsWith("/middle")
             ? fixture.middle
             : fixture.last;
-        const name = read.endsWith("/missing") ? "Absent from the Library" : person.name;
-        const expected = read.endsWith("/missing") ? `yt:${name}` : `library:${person.id}`;
+        const offline = read.endsWith("/offline");
+        const missing = read.endsWith("/missing") || (offline && read.startsWith("tapLookup/"));
+        const name = missing ? "Absent from the Library" : person.name;
+        const expected = missing ? `yt:${name}` : `library:${person.id}`;
         const run = async (trace: boolean) => {
           let rowsRead = 0;
           let statements = 0;
           let notifications = 0;
+          let outcome = "not-needed";
           const steps: number[] = [];
           const sync = <A>(work: () => A): A => {
             const start = performance.now();
@@ -120,9 +125,23 @@ export const bench: FastAgainBench = {
             notifications++;
           });
           const here = { enabled: true, here: "/library/songs" };
+          const boundedRead = async (names: readonly string[], signal: AbortSignal) => {
+            outcome = "reading";
+            const abort = () => {
+              if (outcome === "reading") outcome = "deadline";
+            };
+            signal.addEventListener("abort", abort, { once: true });
+            try {
+              const find = await lookup!.read(names, signal);
+              if (outcome === "reading") outcome = "completed";
+              return find;
+            } finally {
+              signal.removeEventListener("abort", abort);
+            }
+          };
           let link: StreamedArtistLink<ArtistRow> | undefined;
           try {
-            if (read === "lineAvailability/cold") {
+            if (read === "lineAvailability/cold" || read === "lineAvailability/offline") {
               if (current)
                 link = sync(() =>
                   core.streamedArtistLink([name], { ...here, libraryArtist: lookup!.find }),
@@ -156,6 +175,7 @@ export const bench: FastAgainBench = {
             } else if (read.startsWith("completeLookup/")) {
               if (current) {
                 await lookup!.read([name], new AbortController().signal);
+                outcome = "completed";
                 link = sync(() =>
                   core.streamedArtistLink([name], { ...here, libraryArtist: lookup!.find }),
                 );
@@ -163,7 +183,7 @@ export const bench: FastAgainBench = {
                   link!,
                   { ...here, libraryArtist: lookup!.find },
                   {
-                    online: false,
+                    online: !offline,
                     read: async () => assert.fail("complete lookup already cached"),
                   },
                 );
@@ -181,19 +201,24 @@ export const bench: FastAgainBench = {
                 link = await core.resolveStreamedArtistLink(
                   link!,
                   { ...here, libraryArtist },
-                  { online: false, read: async () => assert.fail("warm link read") },
+                  { online: !offline, read: async () => assert.fail("warm link read") },
                 );
             } else {
               const tapContext = { ...here, libraryArtist: lookup!.find };
               link = sync(() => core.streamedArtistLink([name], tapContext));
               link = await core.resolveStreamedArtistLink(link!, tapContext, {
-                online: false,
-                read: lookup!.read,
+                online: !offline,
+                read: boundedRead,
               });
             }
             const key = destination(link);
-            if (read === "lineAvailability/cold" && current) assert.equal(key, `unread:${name}`);
+            if (
+              (read === "lineAvailability/cold" || read === "lineAvailability/offline") &&
+              current
+            )
+              assert.equal(key, `unread:${name}`);
             else if (current && read.startsWith("tapLookup/") && key !== expected) {
+              assert.equal(outcome, "deadline", "a completed lookup must keep destination equality");
               assert.equal(
                 key,
                 `yt:${name}`,
@@ -205,13 +230,14 @@ export const bench: FastAgainBench = {
                 "a known Library destination must never fall back",
               );
             } else assert.equal(key, expected, `${artists} artists: ${read} wrong destination`);
-            if (current && key.startsWith("yt:"))
+            if (current && offline && key.startsWith("yt:"))
               assert.ok(
                 link?.kind === "open" && link.target.kind === "yt" && link.target.offline === true,
               );
             return {
               resultKey: read.startsWith("lineAvailability/") ? String(link !== undefined) : key,
               destination: key,
+              outcome,
               link,
               rowsRead,
               statements,
@@ -227,6 +253,7 @@ export const bench: FastAgainBench = {
         const wall: number[] = [];
         const steps: number[] = [];
         const destinations: string[] = [];
+        const outcomes: string[] = [];
         let cpuMicros = 0;
         for (let i = 0; i < context.runs; i++) {
           const cpu = process.cpuUsage();
@@ -237,6 +264,7 @@ export const bench: FastAgainBench = {
           cpuMicros += used.user + used.system;
           steps.push(...result.steps);
           destinations.push(result.destination);
+          outcomes.push(result.outcome);
           if (!read.startsWith("tapLookup/")) assert.equal(result.resultKey, traced.resultKey);
         }
         measurements.push({
@@ -251,13 +279,17 @@ export const bench: FastAgainBench = {
           details: {
             artists,
             songs: fixture.songs,
-            firstFrameLink: current || read !== "lineAvailability/cold",
+            firstFrameLink:
+              current || !["lineAvailability/cold", "lineAvailability/offline"].includes(read),
+            online: !offline,
+            tracedOutcome: traced.outcome,
+            timedOutcomes: outcomes,
             tracedActualLink: traced.link,
             timedDestinations: destinations,
             expectedDestination: expected,
-            deadlineFallbacks: read.startsWith("tapLookup/")
-              ? destinations.filter((key) => key !== expected).length
-              : 0,
+            deadlineFallbacks: outcomes.filter((outcome) => outcome === "deadline").length,
+            destinationMismatches: destinations.filter((key) => key !== expected).length,
+            completedLookups: outcomes.filter((outcome) => outcome === "completed").length,
             deadlineMs:
               current && read.startsWith("tapLookup/") ? core.STREAMED_ARTIST_WAIT_MS : null,
             source: current
@@ -270,7 +302,7 @@ export const bench: FastAgainBench = {
             notifications:
               "one real lookup/versioned-cache subscriber; no SQL store writes; React render not replayed",
             equivalence:
-              "completeLookup compares exact destination keys across revisions; bounded tap allows only a YT deadline fallback (reported per timed sample), never an unread or missing link",
+              "completeLookup compares exact destination keys across revisions; bounded tap reports completed/deadline outcomes separately from destination equality (a missing artist may reach the expected YT target by timeout), never an unread or missing link",
             trace:
               "SQL tracing is outside timed samples; its deadline can expire earlier because EXPLAIN adds overhead. Traced work/target may differ from timed bounded taps; completeLookup work is deterministic",
           },

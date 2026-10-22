@@ -24,6 +24,7 @@ import { showError } from "@/overlay/alert";
 import { CardEntries } from "@/overlay/CardEntries";
 import { followUp, openOverlay } from "@/overlay/overlay";
 import { resolveStreamedArtistTap } from "@/ytmusic/streamedArtist";
+import { followStreamedArtistTap } from "@/ytmusic/streamedArtistTap";
 import { openYtArtistNamed } from "@/ytmusic/routes";
 
 import { LibraryStore, type ArtistRow } from "./LibraryStore";
@@ -112,12 +113,9 @@ export const followStreamedArtistLink = (link: StreamedArtistLink<ArtistRow>): v
     }
     if (resolved !== undefined) timingLinkNavigated(timingId);
   };
-  const targets = link.kind === "open" ? [link.target] : link.targets;
-  if (targets.some((target) => target.kind === "unread"))
-    void resolveStreamedArtistTap(link)
-      .then(deliver)
-      .catch((error: unknown) => showError("Couldn't open the artist", error));
-  else deliver(link);
+  void followStreamedArtistTap(link, { resolve: resolveStreamedArtistTap, deliver }).catch(
+    (error: unknown) => showError("Couldn't open the artist", error),
+  );
 };
 
 /** Each artist's row, in [ids]' order; one cheap read per artist, gone ones left out. */
