@@ -63,6 +63,7 @@ import {
   selectArtistDetail,
   selectArtistSongs,
   selectArtists,
+  selectArtistNamesForLink,
 } from "./db/artists";
 import {
   clearArtistPhotos,
@@ -586,6 +587,10 @@ export class LibraryStore extends Context.Service<
     readonly listAlbumsPage: (
       page: RowPage,
     ) => Effect.Effect<readonly AlbumRow[], LibraryStoreError>;
+    /** Bounded name page, used only by an artist-link gesture. */
+    readonly artistNamesForLink: (
+      after: { readonly sort: string; readonly id: number } | null,
+    ) => Effect.Effect<readonly { id: number; name: string; sort: string }[], LibraryStoreError>;
     /** Every artist with songs, by name, for Library › Artists. */
     readonly listArtists: Effect.Effect<readonly ArtistRow[], LibraryStoreError>;
     /** [page] of the artists with a file in the same order, for lists that page (Auto). */
@@ -1324,6 +1329,9 @@ const make = Effect.gen(function* () {
 
     listAlbumsPage: (page) =>
       attempt("list albums", () => selectAlbums(db, undefined, page, "files")),
+
+    artistNamesForLink: (after) =>
+      attempt("read artist link names", () => selectArtistNamesForLink(db, after)),
 
     listArtists: attempt("list artists", () => listArtistsSync(db)),
 

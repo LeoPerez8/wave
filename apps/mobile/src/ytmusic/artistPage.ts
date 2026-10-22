@@ -18,6 +18,7 @@ import { useScreenSettled } from "@/lib/screenTiming";
 import { online } from "@/native/waveNative";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 
+import { artistPageOpening } from "./artistPageOpening";
 import { artistOpeningRequest } from "./artistOpeningRequest";
 import { fetchArtist, readArtist, useSavedYtArtist } from "./artistSection";
 import { YtMusicError } from "./YtMusic";
@@ -91,8 +92,8 @@ const useLibraryReleases = (
 
 export interface YtArtistPageShown {
   /**
-   * What the page shows (Core's `ytArtistPageView`), or null until the
-   * Library has been read, so its songs never show streamed first.
+   * Offline/failure/loading renders independently of the Library. A found
+   * online page waits for settled matching so local songs never show streamed first.
    */
   readonly view: YtArtistPageView<NativeYtSong, SongRow, AlbumRow> | null;
   /** Try Again: asks YouTube Music once more. */
@@ -111,6 +112,7 @@ export interface YtArtistPageShown {
 export const useYtArtistPage = (
   browseId: string | null,
   knownName: string | null,
+  initiallyOffline = false,
 ): YtArtistPageShown => {
   const byName = browseId === null ? (knownName ?? "") : null;
   const key = byName === null ? savedKey(browseId ?? "") : identityKey(byName);
@@ -127,7 +129,9 @@ export const useYtArtistPage = (
   const { state, enabled, openedAt, show } = useSavedYtArtist(key, ask);
 
   const settled = useScreenSettled();
-  const connected = online();
+  const [offlineHint, setOfflineHint] = useState(initiallyOffline);
+  const connected = !offlineHint && online();
+  const opening = artistPageOpening({ online: connected, enabled });
   const [retry, setRetry] = useState(0);
   const context = {
     enabled,
@@ -154,9 +158,16 @@ export const useYtArtistPage = (
   const view = useMemo(() => {
     // Offline/failure/loading needs neither songs nor release identities. A found
     // page waits for matching so a downloaded song never first appears streamed.
+    if (opening.view !== null) return opening.view;
     if (!work.finder) return work.view;
     if (find === null) return { ...work.view, songs: [], shelves: [], note: "loading" as const };
     return ytArtistPageView(state, { enabled, now: openedAt, librarySong: find, libraryAlbum });
-  }, [work.finder, work.view, find, state, enabled, openedAt, libraryAlbum]);
-  return { view, retry: useCallback(() => setRetry((count) => count + 1), []) };
+  }, [opening.view, work.finder, work.view, find, state, enabled, openedAt, libraryAlbum]);
+  return {
+    view,
+    retry: useCallback(() => {
+      setOfflineHint(false);
+      setRetry((count) => count + 1);
+    }, []),
+  };
 };

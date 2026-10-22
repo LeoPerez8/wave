@@ -71,6 +71,7 @@ import {
   targetHeading,
   toPlaylistSongs,
   hasStreamedSongs,
+  targetStreamedArtistNames,
   isLibraryTrack,
   isUnsearchedTrack,
   type ActionItems,
@@ -215,7 +216,12 @@ function usePlan(
   // YT Music songs among the items: whether each is a file by now, and who their artists are.
   const streams = hasStreamedSongs(target);
   const find = useStreamedSongFinder(streams);
-  const streamedArtists = useStreamedArtistContext(streams);
+  const streamedArtists = useStreamedArtistContext(
+    streams,
+    target.kind === "mixed" || (target.kind === "track" && target.items.length > 1)
+      ? targetStreamedArtistNames(target)
+      : undefined,
+  );
   const perAlbum = useAlbumsMissingSongs(
     target.kind === "album" ? target.items.map((album) => album.id) : [],
   );
