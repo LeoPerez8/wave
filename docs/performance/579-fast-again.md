@@ -724,6 +724,153 @@ pnpm --silent --filter @wave/mobile bench:fast-again --bench streamedArtistLink 
   --before /path/to/v0.19.0-ti --reference /path/to/v0.7.0-ti
 ```
 
+## Detail opening evidence (#591)
+
+The production album data boundary now leaves its local rows independent of
+YouTube, defers the integrated artist/release requests and shared finder until
+local content and screen settlement, and checks validated Android connectivity
+when a request executes. Artist, Library album, named/browse-id YT artist and
+remote album/playlist openings can render offline immediately. A late album
+answer appends additions after the local rows; downloads replace their streamed
+row, and the original multi-disc headers remain in place. #586's offline route
+hint and retry, #585's dispatch/watchdog and #584's route observer restriction
+are preserved. Popular's full policy remains #590's work; its existing path
+cannot ask with Online off, before local content/settlement, or while offline.
+
+The [album JSONL](results/579-albumFromArtist-desktop.jsonl) and
+[offline JSONL](results/579-offlineOpening-desktop.jsonl) use 11 measured runs at
+1,000, 12,000 and 50,000 songs on Node v26.8.2/linux-x64 with sql.js. The measured
+after revision is `0ad5d2ef5e375cc334bad4aaa40c827531857d35`, ti is
+`460e39ff0cba6f50e7a456a77d6e99813295ebaa` (v0.19.0-ti), and reference is
+`add761ed787061db6a6c2799687d421301b6182b` (v0.7.0-ti). Baseline worktrees are
+under the stable #591 scratch directory, without source edits. Each result
+records the selected root/commit and source hashes; modules use the actual
+selected-worktree LibraryStore and Core. No native or RN source is rewritten
+for these replays.
+
+### Album: local tracklist and companion opening work
+
+Reading the historical `app/library/album/[id].tsx` disproves a stronger latency
+claim: **both historical screens already fall back to local tracks while
+YouTube is pending** (`entries === null ? albumItems(tracks) : ...`). What is
+eager is the whole-Library finder subscription in `albumSection.ts` and the
+empty album download helper in `YtSongList.tsx`; they share one cold songs query.
+The finder is lazy and is not built while an empty/unanswered section makes no
+lookup. The joined online list waits for the answer. This was already present
+in v0.7.0-ti, rather than introduced between these two historical tags.
+
+`detailOpeningReplay.ts` faithfully replays those source-owned reads and the
+selected Core view. The fixed replay calls the same app `albumOpening` used by
+the hook, with the real album/link/saved-answer reads. Native transport, React
+commit/effect order and layout are not measured. `localTracklist` times only the
+actual album query. `openingWithColdFollowers` includes synchronous companion
+opening work and must not be presented as a measured RN paint time or as a wait
+for a YouTube answer. Its request field is the replayed opening policy, not a
+wire counter. `joinedTracklist` measures matching after a controlled answer,
+including a cold finder; it excludes network latency. Each opens the target
+artist's ten-track album; the integrated saved artist answer is seeded outside
+timing.
+
+Desktop median / p90 milliseconds:
+
+| Library songs | Work                     |          v0.7.0-ti |           ti before |              after |
+| ------------: | ------------------------ | -----------------: | ------------------: | -----------------: |
+|         1,000 | Local tracklist query    |      1.119 / 1.160 |       1.167 / 1.244 |      1.335 / 1.368 |
+|         1,000 | Opening + cold followers |    13.650 / 14.145 |     14.260 / 15.088 |      1.845 / 2.038 |
+|         1,000 | Later joined tracklist   |    16.378 / 16.925 |     18.064 / 18.587 |    17.905 / 21.350 |
+|        12,000 | Local tracklist query    |      1.096 / 1.142 |       1.057 / 1.133 |      1.155 / 1.203 |
+|        12,000 | Opening + cold followers |  167.594 / 173.933 |   170.920 / 176.228 |      1.533 / 1.673 |
+|        12,000 | Later joined tracklist   |  216.338 / 231.094 |   321.052 / 480.152 |  221.829 / 236.757 |
+|        50,000 | Local tracklist query    |      1.146 / 1.978 |       1.046 / 1.134 |      1.173 / 1.208 |
+|        50,000 | Opening + cold followers | 767.987 / 1091.076 |   791.101 / 867.112 |      1.469 / 1.619 |
+|        50,000 | Later joined tracklist   |  980.285 / 998.386 | 1001.309 / 1062.174 | 982.893 / 1013.490 |
+
+The local query returns 12 SQL rows in three statements (ten song rows plus
+album/genre metadata) in every variant. With the seeded answer, companion
+opening work falls from N + 14 returned SQL rows / six statements to 14 rows /
+five statements: **ten song rows, not the Library's N + ten**. Both old routes
+schedule the integrated request while opening; the fixed policy schedules none
+until local content and settlement. Complete local and joined entry payloads
+are checked for equality between revisions; the reference's absent explicit
+flag is normalized to the current `unknown`, with other fields preserved.
+The independent row-placement test deliberately puts an online song ahead of
+local songs in the response and verifies that the fixed page keeps its already
+drawn local prefix, including disc furniture.
+
+The cold joined phase still returns all N songs in one deferred statement;
+#591 moves that work off the opening boundary and does not claim to page or
+speed up the shared finder. Its 50,000-song cost remains visible above.
+
+### Offline: no transport response needed
+
+The offline fixture models `NET_CAPABILITY_INTERNET` without
+`NET_CAPABILITY_VALIDATED` (for example a captive portal or an unvalidated
+handover). Historical native `YtClient.request` checks `hasNetwork()` and may
+therefore attempt a request; current page openings use validated `online()`.
+This distinction matters: on airplane mode, old native code can already reject
+immediately. These numbers must not be described as an observed airplane-mode
+network timeout.
+
+The fake API never answers. A fixture transport deadline reports offline after
+20 ms for the before/reference replay; the native request timeout is 20,000 ms
+in `YtClient.kt`, **not the measured fixture delay**. After uses the production
+execution guard and receives offline without invoking that API. The artist
+and album replay includes their local opening reads; the named YT artist's
+note requires no Library finder, artist list or saved-answer restoration. This
+is a desktop data/effect experiment, not Android connectivity or frame timing.
+
+Desktop median / p90 milliseconds to offline note:
+
+| Library songs | Page            |         v0.7.0-ti |          ti before |         after |
+| ------------: | --------------- | ----------------: | -----------------: | ------------: |
+|         1,000 | Artist          |   34.092 / 34.830 |    36.107 / 37.468 | 2.932 / 4.116 |
+|         1,000 | Album           |   33.909 / 34.256 |    35.238 / 35.965 | 2.349 / 2.464 |
+|         1,000 | Named YT artist |   35.516 / 35.949 |    36.243 / 36.736 | 0.009 / 0.018 |
+|        12,000 | Artist          | 193.562 / 216.736 |  201.473 / 206.334 | 2.301 / 2.398 |
+|        12,000 | Album           | 198.403 / 205.165 |  201.960 / 204.811 | 2.026 / 2.068 |
+|        12,000 | Named YT artist | 232.681 / 239.187 |  244.799 / 250.120 | 0.005 / 0.006 |
+|        50,000 | Artist          | 796.726 / 822.135 |  819.481 / 843.857 | 2.227 / 2.291 |
+|        50,000 | Album           | 794.380 / 812.452 |  819.450 / 854.193 | 1.930 / 1.989 |
+|        50,000 | Named YT artist | 960.715 / 996.185 | 984.990 / 1046.377 | 0.005 / 0.006 |
+
+The fake transport is invoked once in each historical replay and zero times
+after. The fixed named YT artist note reads zero Library rows/statements; the
+artist case returns 23 local SQL rows/four statements and the album returns
+13/five at every size (including their own metadata/restoration reads, not
+whole-Library rows). JSONL records CPU, SQL counts, longest synchronous phase,
+zero read-only subscriber notifications, source hashes and the injected
+connectivity/deadline conditions. All variants reach the same `offline` note.
+Neither the injected 20 ms deadline nor these Node/sql.js numbers promise
+Android/Hermes latency or a measured phone improvement.
+
+### Behavioral checks and reproduction
+
+`albumOpening.test.ts` traces the actual store and calls the production app
+album boundary: a 1,000-song Library returns ten song rows for its ten-track
+album, with no request due before settlement. The historical-store replay
+fails that assertion at 1,010 song rows. A controlled pending release leaves
+the local list usable; resolving it appends the missing online track without
+moving local rows. Separate cases preserve row positions across download and
+keep the initial multi-disc furniture. `detailOpening.test.ts` gives the
+production execution guard an API that never resolves, changes connectivity
+after scheduling, and observes an immediate offline result with zero calls.
+Core public tests cover initial restoration, Settings off, Library/Online,
+readiness, settlement, offline and retries. The existing #586 offline helper,
+link dispatch and #585 independent watchdog tests remain passing.
+
+```sh
+pnpm --filter @wave/mobile bench:fast-again --bench albumFromArtist \
+  --before /home/servidor-azul/.t3/scratch/wave-implement-spec-3781dabb/591-before \
+  --reference /home/servidor-azul/.t3/scratch/wave-implement-spec-3781dabb/591-reference
+pnpm --filter @wave/mobile bench:fast-again --bench offlineOpening \
+  --before /home/servidor-azul/.t3/scratch/wave-implement-spec-3781dabb/591-before \
+  --reference /home/servidor-azul/.t3/scratch/wave-implement-spec-3781dabb/591-reference
+```
+
+These are desktop app-data/store and effect-boundary tests, not mounted React
+Native interaction or accessibility tests. Device, animation/frame and TalkBack
+behavior remains unverified. No Android performance percentage is inferred.
+
 ## homeOpening cold-launch evidence (#592)
 
 Home now mounts a section-shaped shell before mounting any read-backed child, including

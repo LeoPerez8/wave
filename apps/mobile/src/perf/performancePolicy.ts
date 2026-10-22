@@ -245,14 +245,12 @@ export const WHOLE_LIBRARY: Record<string, Exception> = {
   },
   "ytmusic/albumSection.ts#useYtAlbumSection": {
     reason:
-      "Library album integration follows the whole finder as it opens; defer integrated work and use local rows first.",
-    removeIn: 591,
+      "The album opening policy enables the shared finder only after local content and screen settlement, with a loaded online release. Its local rows and offline note draw independently. albumOpening.test.ts checks real-store work and row placement.",
     capabilities: ["ytmusic/libraryFinder.ts#useLoadedLibraryFinder"],
   },
   "ytmusic/artistPage.ts#useLibraryReleases": {
     reason:
-      "YT artist page resolves local releases using all artists and the shared song finder; opening work belongs in the page deferral fix.",
-    removeIn: 591,
+      "Only a settled, usable-network YT artist page with a standing full answer activates the shared artist/album identities and song finder. Offline/loading/failure render without those reads. See ytArtistPageOpening.test.ts and detailOpening.test.ts.",
     capabilities: [
       "../../../packages/core/src/ytArtist.ts#libraryArtistFinder",
       "library/hooks.ts#useArtists",
@@ -260,8 +258,7 @@ export const WHOLE_LIBRARY: Record<string, Exception> = {
   },
   "ytmusic/artistPage.ts#useYtArtistPage": {
     reason:
-      "YT artist page resolves local releases using all artists and the shared song finder; opening work belongs in the page deferral fix.",
-    removeIn: 591,
+      "Only a settled, usable-network YT artist page with a standing full answer activates the shared artist/album identities and song finder. Offline/loading/failure render without those reads. See ytArtistPageOpening.test.ts and detailOpening.test.ts.",
     capabilities: ["ytmusic/libraryFinder.ts#useLoadedLibraryFinder"],
   },
   "ytmusic/artistSection.ts#useDeferredArtistSection": {
@@ -344,7 +341,7 @@ export const WHOLE_LIBRARY: Record<string, Exception> = {
   },
   "ytmusic/YtSongList.tsx#useYtAlbumDownloadButton": {
     reason:
-      "Visible online lists and their download buttons resolve local files; they are not the hidden Now Playing subtree.",
+      "Only nonempty online album songs after screen settlement activate this finder. Library album openings with no online answer start no cold follower.",
     capabilities: [
       "ytmusic/libraryFinder.ts#useLoadedInLibrary",
       "ytmusic/libraryFinder.ts#useLoadedLibraryFinder",
@@ -360,7 +357,7 @@ export const WHOLE_LIBRARY: Record<string, Exception> = {
   },
   "ytmusic/YtSongList.tsx#YtSongList": {
     reason:
-      "Visible online lists and their download buttons resolve local files; they are not the hidden Now Playing subtree.",
+      "Only a loaded remote list after screen settlement follows the finder; offline/loading pages render without acquiring it.",
     capabilities: ["ytmusic/libraryFinder.ts#useLibraryFinder"],
   },
 };
@@ -376,9 +373,13 @@ export const OPENING_REQUESTS: Record<string, Exception> = {
   },
   "library/backgroundFill.ts#playlistOpened": {
     kind: "opening",
-    removeIn: 591,
     reason:
-      "To remove: opening a playlist kicks its unsearched-entry background fill, which may search YouTube immediately; #591 owns the rule that every page-opening ask waits for settled and checks connectivity.",
+      "The playlist screen passes its settlement boundary; playlistOpened ignores an unsettled call. Fill searches check Android before the allowance and again when their turn executes, through artistOpeningRequest.",
+    deferred: {
+      settlement: "screen",
+      connectivity: "android",
+      tests: ["apps/mobile/src/ytmusic/detailOpening.test.ts"],
+    },
   },
   "playback/actions.ts#playPage": {
     kind: "gesture",
@@ -442,20 +443,47 @@ export const OPENING_REQUESTS: Record<string, Exception> = {
   "ytmusic/albumSection.ts#useYtAlbumSection": {
     kind: "opening",
     reason:
-      "To remove: integrated album asks for artist/releases on mount; #591 keeps local rows first and defers/checks connectivity.",
-    removeIn: 591,
+      "The album opening policy gates artist/release asks and retries on local content and screen settlement. Each request checks Android at execution; local rows and offline notes need no finder or remote answer.",
+    deferred: {
+      settlement: "screen",
+      connectivity: "android",
+      tests: [
+        "packages/core/src/ytAlbumOpening.test.ts",
+        "packages/core/src/ytArtistPageOpening.test.ts",
+        "apps/mobile/src/ytmusic/albumOpening.test.ts",
+        "apps/mobile/src/ytmusic/detailOpening.test.ts",
+      ],
+    },
   },
   "ytmusic/artistPage.ts#useYtArtistPage": {
     kind: "opening",
     reason:
-      "To remove: direct YT artist page asks as it opens; #591 adds settled/connectivity gating and immediate offline state.",
-    removeIn: 591,
+      "A remote artist waits for screen settlement before asking and checks Android at execution. Its offline note renders immediately, including by-name openings with no saved answer or finder.",
+    deferred: {
+      settlement: "screen",
+      connectivity: "android",
+      tests: [
+        "packages/core/src/ytAlbumOpening.test.ts",
+        "packages/core/src/ytArtistPageOpening.test.ts",
+        "apps/mobile/src/ytmusic/albumOpening.test.ts",
+        "apps/mobile/src/ytmusic/detailOpening.test.ts",
+      ],
+    },
   },
   "ytmusic/YtSongList.tsx#useYtListPage": {
     kind: "opening",
     reason:
-      "To remove: YT album/playlist page starts its remote read on mount; #591 owns offline opening-path checks and deferral.",
-    removeIn: 591,
+      "Remote album/playlist reads and retries wait for screen settlement; artistOpeningRequest checks Android at execution. Offline is rendered synchronously and unmount aborts the waiting effect.",
+    deferred: {
+      settlement: "screen",
+      connectivity: "android",
+      tests: [
+        "packages/core/src/ytAlbumOpening.test.ts",
+        "packages/core/src/ytArtistPageOpening.test.ts",
+        "apps/mobile/src/ytmusic/albumOpening.test.ts",
+        "apps/mobile/src/ytmusic/detailOpening.test.ts",
+      ],
+    },
   },
   "nowPlaying/useLyricsSearch.ts#useLyricsSearch": {
     kind: "gesture",

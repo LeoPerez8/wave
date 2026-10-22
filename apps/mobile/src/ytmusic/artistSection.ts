@@ -9,6 +9,7 @@ import {
   ytArtistFullPage,
   ytArtistIntegrated,
   ytArtistOpening,
+  ytArtistOpeningState,
   ytArtistSectionView,
   ytArtistShelves,
   type HeldSongs,
@@ -244,7 +245,10 @@ export const useYtArtistAnswer = (name: string, reads: ArtistReads): YtArtistAns
   const artistKey = identityKey(name);
   const { allSongs } = reads;
   const ask = useCallback(
-    (saved: Saved | null) => fetchArtist(name, artistKey, saved, { allSongs }),
+    (saved: Saved | null) =>
+      artistOpeningRequest(online, fetchArtist(name, artistKey, saved, { allSongs })).pipe(
+        Effect.mapError((error) => new YtMusicError({ reason: error.reason })),
+      ),
     [name, artistKey, allSongs],
   );
   return useSavedYtArtist(artistKey, ask);
@@ -315,10 +319,12 @@ export const useYtArtistSection = (
   const popular = artistPopularSongs(state);
   const findAlbum = useMemo(() => libraryAlbumFinder(artistId, albums), [artistId, albums]);
 
+  const connected = online();
   // The Library toggle needs no finder; online additions wait for its deferred read.
   // Memoized: it filters every song of the artist, and the page's memos key on it.
   const view = useMemo(() => {
-    const section = ytArtistSectionView(state, {
+    const shownState: YtArtistSection<NativeYtSong> = ytArtistOpeningState(state, connected);
+    const section = ytArtistSectionView(shownState, {
       name,
       enabled,
       now: openedAt,
@@ -333,7 +339,7 @@ export const useYtArtistSection = (
       (section.note === null || section.note === "allInLibrary" || section.note === "noSongs")
       ? { ...section, songs: [], note: "loading" as const }
       : section;
-  }, [find, state, name, enabled, openedAt, openedIntegrated, always, pick, held]);
+  }, [find, state, name, enabled, openedAt, openedIntegrated, always, pick, held, connected]);
   const shelves = useMemo(
     () =>
       find === null
@@ -424,14 +430,15 @@ const useDeferredArtistSection = (
     reader.update(context);
   });
   const work = ytArtistOpening(state, { ...context, name, now: openedAt });
-  const loadedFind = useLoadedLibraryFinder(work.finder);
+  const needsFinder = work.finder && online();
+  const loadedFind = useLoadedLibraryFinder(needsFinder);
   return {
     state,
     enabled,
     openedAt,
     show: reader.retry,
     select: reader.pick,
-    find: work.finder ? loadedFind : null,
+    find: needsFinder ? loadedFind : null,
   };
 };
 
