@@ -2018,6 +2018,15 @@ export {
 export { SLOW_READ_BUDGET_MS, slowReadLine, slowReadsLine, type SlowRead } from "./slowRead.ts";
 export { lostTapLine } from "./lostTap.ts";
 export type { LostLinkTap, LostTapReason } from "./lostTap.ts";
+export { createArtistGraphBuild, type ArtistGraphCatalogEntry } from "./artistGraphBuild.ts";
+export { discoverMixesOfCatalogSteps } from "./catalogMixes.ts";
+export { mixKnownSongsSteps } from "./mixKnownSongs.ts";
+export { genreMixSeedsSteps } from "./genreMixes.ts";
+export { mapSteps, sortSteps } from "./buildSteps.ts";
+
+export { libraryMixProfilesSteps } from "./genreAffinity.ts";
+
+export { rankPlaysSteps } from "./stats.ts";
 
 export * from "./ytAlbumOpening.ts";
 export { ytArtistPageOpening } from "./ytArtistPageOpening.ts";

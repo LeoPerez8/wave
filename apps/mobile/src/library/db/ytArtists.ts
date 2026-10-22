@@ -7,7 +7,7 @@
  * of Expo so the store tests run it against a real SQLite.
  */
 import type { YtArtistPage, YtArtistSaved, YtSong } from "@wave/core";
-import { eq, sql } from "drizzle-orm";
+import { eq, gt, sql } from "drizzle-orm";
 
 import type { LibraryDatabase } from "./database.ts";
 import * as schema from "./schema.ts";
@@ -96,11 +96,22 @@ const readSimilar = (json: string | null): SimilarArtist[] => {
  * those two are read out of each page, not its songs; a page that can't be
  * read is left out.
  */
-export const selectYtArtistSimilar = (db: LibraryDatabase): YtArtistSimilar[] => {
+export function selectYtArtistSimilar(db: LibraryDatabase): YtArtistSimilar[];
+export function selectYtArtistSimilar(
+  db: LibraryDatabase,
+  after: string | null,
+  limit: number,
+): { rows: YtArtistSimilar[]; next: string | null };
+export function selectYtArtistSimilar(
+  db: LibraryDatabase,
+  after?: string | null,
+  limit?: number,
+): YtArtistSimilar[] | { rows: YtArtistSimilar[]; next: string | null } {
   const { ytArtists } = schema;
-  const valid = sql`json_valid(${ytArtists.page})`;
-  return db
+  const valid = sql`${ytArtists.outcome} = 'found' AND json_valid(${ytArtists.page})`;
+  const rows = db
     .select({
+      artistKey: ytArtists.artistKey,
       name: sql<
         string | null
       >`CASE WHEN ${valid} THEN json_extract(${ytArtists.page}, '$.name') END`,
@@ -109,10 +120,18 @@ export const selectYtArtistSimilar = (db: LibraryDatabase): YtArtistSimilar[] =>
       >`CASE WHEN ${valid} THEN json_extract(${ytArtists.page}, '$.similar') END`,
     })
     .from(ytArtists)
-    .where(eq(ytArtists.outcome, "found"))
+    .where(
+      after === undefined
+        ? eq(ytArtists.outcome, "found")
+        : after === null
+          ? undefined
+          : gt(ytArtists.artistKey, after),
+    )
     .orderBy(ytArtists.artistKey)
-    .all()
-    .flatMap(({ name, similar }) =>
-      typeof name === "string" ? [{ name, similar: readSimilar(similar) }] : [],
-    );
-};
+    .limit(limit ?? 2147483647)
+    .all();
+  const result = rows.flatMap(({ name, similar }) =>
+    typeof name === "string" ? [{ name, similar: readSimilar(similar) }] : [],
+  );
+  return after === undefined ? result : { rows: result, next: rows.at(-1)?.artistKey ?? null };
+}

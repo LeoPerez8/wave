@@ -1,3 +1,4 @@
+import { indexSteps, finishSteps, sortSteps } from "./buildSteps.ts";
 /**
  * How much of each mix is new music (docs/spec.md, "Artist mixes"): a level
  * from 1 (20% new songs, the rest familiar) to 5 (all new). A build stores
@@ -225,10 +226,17 @@ export interface DiscoverMixPoolSources<L extends DiscoverLibrarySong> {
  */
 export const discoverMixFamiliarPool = <L extends DiscoverLibrarySong>(
   seed: DiscoverMixSeed,
+  sources: DiscoverMixPoolSources<L>,
+): DiscoverMixFamiliarSong[] => finishSteps(discoverMixFamiliarPoolSteps(seed, sources));
+export function* discoverMixFamiliarPoolSteps<L extends DiscoverLibrarySong>(
+  seed: DiscoverMixSeed,
   { radio, known, library, taken, length }: DiscoverMixPoolSources<L>,
-): DiscoverMixFamiliarSong[] => {
+): Generator<void, DiscoverMixFamiliarSong[]> {
   const most = length - Math.round(length / LEVELS);
-  const plays = new Map((library.plays ?? []).map((entry) => [entry.id, entry.countedPlays]));
+  const plays = yield* indexSteps(
+    library.plays ?? [],
+    (entry) => [entry.id, entry.countedPlays] as const,
+  );
   const playsOf = (song: DiscoverSeedSong): number => plays.get(song.id) ?? 0;
   const tracks = new Set(taken.tracks);
   const videos = new Set(taken.videos);
@@ -247,24 +255,34 @@ export const discoverMixFamiliarPool = <L extends DiscoverLibrarySong>(
     pool.push({ source: "stream", song });
   };
   for (const { video, ...song } of radio) {
+    yield;
     if (video) continue;
     const track = known.inLibrary(song);
     if (track !== null) addTrack(track);
     else if (known.known(song)) addStream(song);
   }
-  const rest = library.songs
-    .filter(mixSongFilter(seed, library.artists))
-    // oxlint-disable-next-line unicorn/no-array-sort -- sorts the fresh array filter made; Hermes lacks toSorted
-    .sort((a, b) => playsOf(b) - playsOf(a) || b.addedAt - a.addedAt);
-  for (const song of rest) addTrack(song);
+  const restSongs: DiscoverLibrarySong[] = [];
+  const accepts = mixSongFilter(seed, library.artists);
+  for (const song of library.songs) {
+    if (accepts(song)) restSongs.push(song);
+    yield;
+  }
+  const rest = yield* sortSteps(
+    restSongs,
+    (a, b) => playsOf(b) - playsOf(a) || b.addedAt - a.addedAt,
+  );
+  for (const song of rest) {
+    addTrack(song);
+    yield;
+  }
   const seedArtists = new Set(mixSeedArtists(seed).map((artist) => identityKey(artist.name)));
   for (const { song } of known.nonD) {
+    yield;
     const artists = song.artists.flatMap((artist) => splitCredit(artist)).map(identityKey);
     if (artists.some((artist) => seedArtists.has(artist))) addStream(song);
   }
   return pool;
-};
-
+}
 /** Whether a Library song is of [seed]'s mix: of its genre family (`ofGenreFamily`), else by one of its seed's artists. */
 const mixSongFilter = (
   seed: DiscoverMixSeed,

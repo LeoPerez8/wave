@@ -24,14 +24,14 @@ import {
   discoverMixKeep,
   discoverMixesBuilt,
   discoverMixesDue,
-  discoverMixesOfCatalog,
+  discoverMixesOfCatalogSteps,
   discoverMixesRerun,
   discoverMixesSection,
-  genreMixSeeds,
+  genreMixSeedsSteps,
   discoverRowTitle,
   mixesShown,
   mixRefreshAvoid,
-  libraryStyleOf,
+  libraryMixProfilesSteps,
   mixSlidersEngine,
   mixSectionOfId,
   parseDiscoverMixes,
@@ -56,11 +56,17 @@ import {
   type YtAlbumSong,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
+import * as Semaphore from "effect/Semaphore";
 import * as Result from "effect/Result";
 import { useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
 
-import { freeTurnEffect } from "@/lib/backgroundWork";
+import { createBuildSource } from "@/lib/buildSource";
+import { onLibraryChange } from "@/library/libraryChanges";
+import { onArtistGraphSourcesChanged } from "./graphSources";
+import { runSteps } from "@/lib/stepped";
+import { createSerialWork } from "@/lib/serialWork";
+import { freeTurnEffect, settledTurnEffect } from "@/lib/backgroundWork";
 import { makeExternalStore, type ExternalStore } from "@/lib/externalStore";
 import { withNetworkLog } from "@/lib/networkMeter";
 import { persistedSetting, type PersistedSetting } from "@/lib/persistedSetting";
@@ -73,7 +79,7 @@ import { tasteProfileNow } from "@/playback/TasteProfile";
 import { useDontPlayExplicit } from "@/settings/dontPlayExplicit";
 import { useYtMusicEnabled } from "@/settings/ytMusic";
 
-import { mixProfileOf } from "./artistGenres";
+import { lookedUpProfileOf } from "./artistGenres";
 import { artistGraphNow } from "./artistGraphNow";
 import { artistMixPools } from "./artistMixPools";
 import {
@@ -152,16 +158,20 @@ const rankedMixes = (
 ) =>
   Effect.gen(function* () {
     for (const seed of seeds) {
-      reader.read(seed);
+      if (reader.readSteps !== undefined) yield* runSteps(reader.readSteps(seed), freeTurnEffect);
+      else reader.read(seed);
       yield* freeTurnEffect;
     }
     const sliders = discoverSlidersNow();
-    const mixes = discoverMixesOfCatalog(seeds, reader, {
-      known: library.known,
-      library,
-      ...mixSlidersEngine(sliders),
-      ...(avoid === undefined ? {} : { avoid }),
-    });
+    const mixes = yield* runSteps(
+      discoverMixesOfCatalogSteps(seeds, reader, {
+        known: library.known,
+        library,
+        ...mixSlidersEngine(sliders),
+        ...(avoid === undefined ? {} : { avoid }),
+      }),
+      freeTurnEffect,
+    );
     return { mixes, sliders };
   });
 
@@ -196,11 +206,15 @@ const readerOf = (id: MixSectionId, library: MixIndexes, variety: number | undef
       memo.library === library
     )
       return memo.reader;
+    const profiles = yield* runSteps(libraryMixProfilesSteps(library), freeTurnEffect);
     const sources = {
       catalog,
       graph,
-      profileOf: mixProfileOf(library),
-      styleOf: libraryStyleOf(library),
+      profileOf: (name: string) => {
+        const own = profiles.profileOf(name);
+        return own === undefined ? lookedUpProfileOf(name) : own;
+      },
+      styleOf: profiles.styleOf,
       taste,
       now: Date.now(),
     };
@@ -249,7 +263,7 @@ const rerank = (id: MixSectionId): void => {
   if (saved === null || sameSliders(mixSection.rankedWith, discoverSlidersNow())) return;
   mixSection.reranking = true;
   void appRuntime
-    .runPromise(Effect.result(rerankedOf(id, saved)))
+    .runPromise(settledTurnEffect.pipe(Effect.andThen(Effect.result(rerankedOf(id, saved)))))
     .then((result) => {
       if (!Result.isSuccess(result)) return;
       // A build, a refresh or an Undo saved others meanwhile: they say what they're ranked at.
@@ -312,7 +326,7 @@ const buildArtistMixes = (avoid?: MixRefreshAvoid) =>
 const buildGenreMixes = (avoid?: MixRefreshAvoid) =>
   Effect.gen(function* () {
     const library = yield* mixIndexes;
-    const seeds = genreMixSeeds(library, Math.random, avoid);
+    const seeds = yield* runSteps(genreMixSeedsSteps(library, Math.random, avoid), freeTurnEffect);
     if (seeds.length === 0) return "nothing-to-build-from" as const;
     return yield* mixesOf("genre-mixes", seeds, library, avoid);
   });
@@ -328,10 +342,14 @@ const builtOutcome = (built: DiscoverMixes | null | "nothing-to-build-from"): st
  * [id]'s build ([pulled]: a refresh the owner pulled for), writing its
  * network use to the app log as it ends (`withNetworkLog`).
  */
+const buildPermit = Semaphore.makeUnsafe(1);
+const buildSource = createBuildSource();
+onLibraryChange(change => {if (change.kind !== "folders") buildSource.changed();});
+onArtistGraphSourcesChanged(buildSource.changed);
 const loggedBuild = (id: MixSectionId, pulled: boolean, avoid?: MixRefreshAvoid) =>
   withNetworkLog(
     `${discoverRowTitle(id)} ${pulled ? "refresh" : "build"}`,
-    SECTIONS[id].build(avoid),
+    settledTurnEffect.pipe(Effect.andThen(buildSource.run(SECTIONS[id].build(avoid), freeTurnEffect)), buildPermit.withPermits(1)),
     builtOutcome,
   );
 
@@ -439,44 +457,52 @@ setPickedSeeds(() =>
  * has counted plays), then lets the harvest refill the catalog
  * (`harvestSoon`); when no build is due, the harvest goes at once.
  */
-const refresh = (id: MixSectionId, played: boolean): void => {
+const dailyBuilds = createSerialWork();
+const refresh = (id: MixSectionId, played: boolean): (() => void) => {
   const mixSection = SECTIONS[id];
   const now = Date.now();
   if (
-    mixSection.building.get() ||
     !discoverMixesDue(mixSection.saved.get(), { now, played }) ||
     (mixSection.retryAt !== null && now < mixSection.retryAt)
   ) {
     harvestSoon();
-    return;
+    return () => {};
   }
-  mixSection.building.set(true);
-  void appRuntime
-    .runPromise(Effect.result(loggedBuild(id, false)))
-    .then((result) => {
-      const built = Result.isSuccess(result) ? result.success : null;
-      if (built !== null && built !== "nothing-to-build-from") {
-        mixSection.retryAt = null;
-        mixSection.nothingToBuildFrom.set(false);
-        saveBuilt(id, built);
-        // The day's build: what refreshes avoid starts again from it.
-        mixSection.shown.set(mixesShown([], built, Date.now()));
-        return;
-      }
-      if (built === "nothing-to-build-from") {
-        const wait = mixSection.nothingRetryMs;
-        mixSection.retryAt = wait === 0 ? null : Date.now() + wait;
-        mixSection.nothingToBuildFrom.set(true);
-        return;
-      }
-      mixSection.retryAt = Date.now() + RETRY_MS;
-      if (Result.isSuccess(result)) mixSection.nothingToBuildFrom.set(false);
-    })
-    .finally(() => {
-      mixSection.building.set(false);
-      rerankAfterward(id);
-      harvestSoon();
-    });
+  return dailyBuilds.add(id, async (signal) => {
+    if (!discoverMixesDue(mixSection.saved.get(), { now: Date.now(), played })) return;
+    mixSection.building.set(true);
+    await appRuntime
+      .runPromise(settledTurnEffect.pipe(Effect.andThen(Effect.result(loggedBuild(id, false)))), {
+        signal,
+      })
+      .then((result) => {
+        if (signal.aborted) return;
+        const built = Result.isSuccess(result) ? result.success : null;
+        if (built !== null && built !== "nothing-to-build-from") {
+          mixSection.retryAt = null;
+          mixSection.nothingToBuildFrom.set(false);
+          saveBuilt(id, built);
+          // The day's build: what refreshes avoid starts again from it.
+          mixSection.shown.set(mixesShown([], built, Date.now()));
+          return;
+        }
+        if (built === "nothing-to-build-from") {
+          const wait = mixSection.nothingRetryMs;
+          mixSection.retryAt = wait === 0 ? null : Date.now() + wait;
+          mixSection.nothingToBuildFrom.set(true);
+          return;
+        }
+        mixSection.retryAt = Date.now() + RETRY_MS;
+        if (Result.isSuccess(result)) mixSection.nothingToBuildFrom.set(false);
+      })
+      .finally(() => {
+        mixSection.building.set(false);
+        if (!signal.aborted) {
+          rerankAfterward(id);
+          harvestSoon();
+        }
+      });
+  });
 };
 
 // A harvest that refilled the catalog builds a section that has no mixes yet
@@ -615,7 +641,7 @@ export const useDiscoverMixes = (
       // Saved rows can draw before Home's plays answer; run focus work once that input is known.
       if (!enabled || played === undefined) return;
       refreshKnownVideos();
-      refresh(id, played);
+      return refresh(id, played);
     }, [enabled, id, played]),
   );
   const shown = useMemo(

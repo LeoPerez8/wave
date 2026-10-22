@@ -63,6 +63,12 @@ export const bench: FastAgainBench = {
         ],
       })),
     }));
+    const knownModule = existsSync(resolve(context.root, "apps/mobile/src/home/knownVideosRead.ts"))
+      ? await context.loadModule<typeof import("../../../src/home/knownVideosRead.ts")>(
+          "apps/mobile/src/home/knownVideosRead.ts",
+        )
+      : null;
+    let knownRead = knownModule?.createKnownVideosRead(store.knownVideos);
     const shownMixes = (saved: DiscoverMixes, videos: readonly string[]) => {
       const section = core.discoverMixesSection(saved, {
         ytMusic: true,
@@ -124,12 +130,16 @@ export const bench: FastAgainBench = {
       [
         "mixFocusKnownVideosAndDueChecks",
         () => {
-          // Both useDiscoverMixes focus callbacks read knownVideos in ti/current source.
-          return savedMixes.map((saved) => {
-            const videos = Effect.runSync(store.knownVideos);
-            assert.equal(core.discoverMixesDue(saved, { now: fixture.now, played: true }), false);
-            return { videos, mixes: shownMixes(saved, videos) };
-          });
+          return Promise.all(
+            savedMixes.map(async (saved) => {
+              const videos =
+                knownRead === undefined
+                  ? Effect.runSync(store.knownVideos)
+                  : await Effect.runPromise(knownRead.get);
+              assert.equal(core.discoverMixesDue(saved, { now: fixture.now, played: true }), false);
+              return { videos, mixes: shownMixes(saved, videos) };
+            }),
+          );
         },
       ],
     ];
@@ -137,6 +147,8 @@ export const bench: FastAgainBench = {
     Date.now = () => fixture.now;
     try {
       const replay = async (trace: boolean) => {
+        knownRead?.dispose();
+        knownRead = knownModule?.createKnownVideosRead(store.knownVideos);
         const results: unknown[] = [];
         const durations: number[] = [];
         const work: { read: string; rowsRead: number; statements: number }[] = [];
@@ -146,13 +158,13 @@ export const bench: FastAgainBench = {
           const start = performance.now();
           if (trace) {
             const measured = traceQueries(fixture.db, run);
-            results.push(measured.result);
+            results.push(await measured.result);
             work.push({
               read,
               rowsRead: measured.queries.reduce((sum, q) => sum + q.rows, 0),
               statements: measured.queries.length,
             });
-          } else results.push(run());
+          } else results.push(await run());
           durations.push(performance.now() - start);
         }
         return { results, durations, work };
@@ -192,7 +204,48 @@ export const bench: FastAgainBench = {
         frames.shift()!();
         assert.equal(started, true);
       }
+      // Mounted local payloads and mix controllers survive a tab round trip.
+      const returnRuns: number[] = [];
+      let returnWork = { rowsRead: 0, statements: 0 },
+        returnKey = "",
+        returnCpu = 0;
+      const focus = steps.at(-1)![1];
+      for (let i = -1; i < context.runs; i++) {
+        const cpu = process.cpuUsage(),
+          start = performance.now();
+        const measured = traceQueries(fixture.db, focus);
+        const result = await measured.result;
+        const duration = performance.now() - start,
+          used = process.cpuUsage(cpu);
+        if (i === -1) {
+          returnWork = {
+            rowsRead: measured.queries.reduce((sum, q) => sum + q.rows, 0),
+            statements: measured.queries.length,
+          };
+          returnKey = hash(result);
+        } else {
+          returnRuns.push(duration);
+          returnCpu += used.user + used.system;
+          assert.equal(hash(result), returnKey);
+        }
+      }
       return [
+        {
+          read: "returnToHome/mixes",
+          ...percentiles(returnRuns),
+          cpuMs: round(returnCpu / 1000 / context.runs),
+          ...returnWork,
+          longestSyncTaskMs: round(Math.max(...returnRuns)),
+          notifications: 0,
+          resultKey: returnKey,
+          details: {
+            source:
+              "production source-versioned known-video controller + actual store, saved due checks and complete blends; historical focus callbacks before",
+            unchangedInputs: true,
+            scope:
+              "both mix sections on a warm Home tab return; local query payloads retained; other feature-owned focus readers excluded",
+          },
+        },
         {
           read: "coldLaunch",
           ...percentiles(totals),

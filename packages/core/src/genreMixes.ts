@@ -1,3 +1,5 @@
+import { finishSteps } from "./buildSteps.ts";
+import { indexSteps, sortSteps } from "./buildSteps.ts";
 /**
  * Genre mixes (docs/spec.md, "Genre mixes"): Home's mixes that each sound
  * like a genre family rather than one band. Core maps the Library's genre
@@ -454,11 +456,16 @@ interface RankedFamily {
  * plays, its song count and its artists' plays and songs in it. A song in
  * several families adds an equal share of itself and its plays to each.
  */
-const libraryFamilies = (library: GenreMixLibrary): RankedFamily[] => {
-  const plays = new Map((library.plays ?? []).map((entry) => [entry.id, entry.countedPlays]));
-  const artists = new Map(library.artists.map((artist) => [artist.id, artist]));
+
+function* libraryFamiliesSteps(library: GenreMixLibrary): Generator<void, RankedFamily[]> {
+  const plays = yield* indexSteps(
+    library.plays ?? [],
+    (entry) => [entry.id, entry.countedPlays] as const,
+  );
+  const artists = yield* indexSteps(library.artists, (artist) => [artist.id, artist] as const);
   const families = new Map<string, RankedFamily>();
   for (const song of library.songs) {
+    yield;
     const ofSong = songFamilies(song);
     const share = 1 / ofSong.length;
     const songPlays = plays.get(song.id) ?? 0;
@@ -478,7 +485,7 @@ const libraryFamilies = (library: GenreMixLibrary): RankedFamily[] => {
     }
   }
   return [...families.values()];
-};
+}
 
 /**
  * Up to three of [family]'s artists to grow its mix from, picked by
@@ -530,15 +537,21 @@ export const genreMixSeeds = (
   library: GenreMixLibrary,
   random: RandomSource,
   avoid?: MixRefreshAvoid,
-): DiscoverMixSeed[] => {
+): DiscoverMixSeed[] => finishSteps(genreMixSeedsSteps(library, random, avoid));
+
+export function* genreMixSeedsSteps(
+  library: GenreMixLibrary,
+  random: RandomSource,
+  avoid?: MixRefreshAvoid,
+): Generator<void, DiscoverMixSeed[]> {
   const seeds: DiscoverMixSeed[] = [];
-  const ranked = libraryFamilies(library)
-    .filter(
-      (family) =>
-        family.songs >= FAMILY_FEWEST - SHARES_ROUNDING && seedableArtists(family).length > 0,
-    )
-    // oxlint-disable-next-line unicorn/no-array-sort -- sorts the fresh array filter made; Hermes lacks toSorted
-    .sort((a, b) => b.plays - a.plays || b.songs - a.songs);
+  const eligible: RankedFamily[] = [];
+  for (const family of yield* libraryFamiliesSteps(library)) {
+    if (family.songs >= FAMILY_FEWEST - SHARES_ROUNDING && seedableArtists(family).length > 0)
+      eligible.push(family);
+    yield;
+  }
+  const ranked = yield* sortSteps(eligible, (a, b) => b.plays - a.plays || b.songs - a.songs);
   const { fresh, shown } = freshFirst(
     ranked,
     avoid === undefined ? null : ({ family }) => avoid.mixes.get(genreMixId(family.key)),
@@ -562,4 +575,22 @@ export const genreMixSeeds = (
     });
   }
   return seeds;
-};
+}
+
+export function* commonStyleSteps(styles: Iterable<string | null>): Generator<void, string | null> {
+  const counts = new Map<string, number>();
+  for (const style of styles) {
+    if (style) counts.set(style, (counts.get(style) ?? 0) + 1);
+    yield;
+  }
+  let common: string | null = null,
+    most = 0;
+  for (const [style, count] of counts) {
+    if (count > most) {
+      common = style;
+      most = count;
+    }
+    yield;
+  }
+  return common;
+}

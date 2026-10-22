@@ -12,7 +12,12 @@ import type { FastAgainBench } from "../types.ts";
 
 const key = (graph: ArtistGraph) =>
   createHash("sha256")
-    .update(JSON.stringify([...graph.edges].map(([k, v]) => [k, [...v]])))
+    .update(
+      JSON.stringify({
+        edges: [...graph.edges].map(([k, v]) => [k, [...v]]),
+        names: [...graph.names],
+      }),
+    )
     .digest("hex");
 
 export const bench: FastAgainBench = {
@@ -34,26 +39,33 @@ export const bench: FastAgainBench = {
       let start = 0;
       let segment = 0;
       const steps: number[] = [];
-      const rows = [0, 0, 0];
-      const statements = [0, 0, 0];
+      const rows: number[] = [];
+      const statements: number[] = [];
       const reads = { ...store } as { -readonly [K in keyof typeof store]: (typeof store)[K] };
-      if (trace)
-        for (const name of [
-          "candidateCatalog",
-          "ytArtistSimilar",
-          "tasteHistory",
-          "listSongs",
-          "listArtists",
-        ] as const) {
-          reads[name] = Effect.sync(() => {
-            const traced = traceQueries(context.fixture.db, () =>
-              Effect.runSync(store[name] as Effect.Effect<unknown, unknown>),
-            );
-            rows[segment]! += traced.queries.reduce((sum, query) => sum + query.rows, 0);
-            statements[segment]! += traced.queries.length;
+      if (trace) {
+        const note = <A>(read: Effect.Effect<A, unknown>) =>
+          Effect.sync(() => {
+            const traced = traceQueries(context.fixture.db, () => Effect.runSync(read));
+            rows[segment] =
+              (rows[segment] ?? 0) + traced.queries.reduce((sum, query) => sum + query.rows, 0);
+            statements[segment] = (statements[segment] ?? 0) + traced.queries.length;
             return traced.result;
-          }) as never;
-        }
+          });
+        if (store.graphPlayPage !== undefined) {
+          reads.graphPlayPage = (after) => note(store.graphPlayPage(after)) as never;
+          reads.graphCatalogPage = (after) => note(store.graphCatalogPage(after)) as never;
+          reads.graphSimilarPage = (after) => note(store.graphSimilarPage(after)) as never;
+          reads.graphRadioPage = (after) => note(store.graphRadioPage(after)) as never;
+        } else
+          for (const name of [
+            "candidateCatalog",
+            "ytArtistSimilar",
+            "tasteHistory",
+            "listSongs",
+            "listArtists",
+          ] as const)
+            reads[name] = note(store[name] as Effect.Effect<unknown, unknown>) as never;
+      }
       const between = Effect.gen(function* () {
         steps.push(performance.now() - start);
         segment++;
@@ -68,13 +80,15 @@ export const bench: FastAgainBench = {
           return graph;
         }),
       );
-      assert.equal(steps.length, 3);
+      assert.ok(steps.length >= 3);
       return { result, steps, rows, statements };
     };
     const expected = key((await run(false)).result);
     const traced = await run(true);
     const wall: number[] = [];
-    const segments: number[][] = [[], [], []];
+    const longest: number[] = [];
+    const totals: number[] = [];
+    const segmentCounts: number[] = [];
     let cpuMicros = 0;
     for (let i = 0; i < context.runs; i++) {
       const cpu = process.cpuUsage();
@@ -83,7 +97,9 @@ export const bench: FastAgainBench = {
       wall.push(performance.now() - start);
       const used = process.cpuUsage(cpu);
       cpuMicros += used.user + used.system;
-      result.steps.forEach((ms, index) => segments[index]!.push(ms));
+      longest.push(Math.max(...result.steps));
+      totals.push(result.steps.reduce((a, b) => a + b, 0));
+      segmentCounts.push(result.steps.length);
       assert.equal(key(result.result), expected);
     }
     return [
@@ -94,18 +110,20 @@ export const bench: FastAgainBench = {
         rowsRead: traced.rows.reduce((a, b) => a + b, 0),
         statements: traced.statements.reduce((a, b) => a + b, 0),
         notifications: 0,
-        longestSyncTaskMs: Number(Math.max(...segments.flat()).toFixed(3)),
+        longestSyncTaskMs: Number(Math.max(...longest).toFixed(3)),
         resultKey: expected,
         details: {
           source:
-            "actual readArtistGraph with real setImmediate at its two production between hooks",
+            "actual selected-worktree readArtistGraph; historical two hooks or new page/CPU yields",
           caveat:
-            "Node task yields substitute for freeTurnEffect's waits; excludes scheduler waiting and React",
-          segments: segments.map((times, index) => ({
-            ...percentiles(times),
-            rowsRead: traced.rows[index],
-            statements: traced.statements[index],
-          })),
+            "Node setImmediate substitutes for freeTurnEffect; excludes scheduler waits, React and native frames",
+          synchronousTotalMs: percentiles(totals),
+          longestTaskMs: percentiles(longest),
+          steps: segmentCounts,
+          maxRowsInStep: Math.max(0, ...traced.rows),
+          maxStatementsInStep: Math.max(0, ...traced.statements),
+          semanticEquality:
+            "complete ordered edge maps, weights and names; cross-revision resultKey asserted by runner",
         },
       },
     ];
