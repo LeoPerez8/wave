@@ -4,6 +4,7 @@ import "../../global.css";
 import "@/settings/theme";
 
 import { Stack } from "expo-router";
+import { timingTouch, timingStackListeners } from "@/lib/timing";
 import { StatusBar } from "expo-status-bar";
 import { useEffect } from "react";
 import type { GestureResponderEvent } from "react-native";
@@ -35,12 +36,11 @@ import { startSync } from "@/sync/startSync";
 import { useThemeColor } from "@/theme/useThemeColor";
 
 /** Every touch holds background work; a perf build also notes its native timestamp. */
-const onRootTouchStart = PERF_ENABLED
-  ? (event: GestureResponderEvent): void => {
-      touchStarted();
-      perfTouch(event);
-    }
-  : touchStarted;
+const onRootTouchStart = (event: GestureResponderEvent): void => {
+  timingTouch(event);
+  touchStarted();
+  if (PERF_ENABLED) perfTouch(event);
+};
 
 /** A render error shows a screen to try again or export the logs from, instead of closing Wave. */
 export { ErrorScreen as ErrorBoundary };
@@ -101,6 +101,7 @@ export default function RootLayout() {
         <OverlayHost>
           <UnderNowPlaying>
             <Stack
+              screenListeners={timingStackListeners}
               screenOptions={{ headerShown: false, contentStyle: { backgroundColor: background } }}
             >
               <Stack.Protected guard={granted}>

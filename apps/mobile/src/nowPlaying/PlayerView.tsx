@@ -1,3 +1,4 @@
+import { beginTiming } from "@/lib/timing";
 import { IconMusic, IconStar, IconStarFilled } from "@tabler/icons-react-native";
 import { artistLink, parseTrackId } from "@wave/core";
 import { Image } from "expo-image";
@@ -140,11 +141,13 @@ type LinkProps = {
   /** Opens the screen; plain text until the library has answered. */
   open: (() => void) | null;
   hint: string;
+  timingKind: "artistLink" | "albumLink";
+  revealsCurrentScreen?: boolean;
   className: string;
 };
 
 /** A line of metadata that opens its album or artist screen. */
-function MetaLink({ label, open, hint, className }: LinkProps) {
+function MetaLink({ label, open, hint, className, timingKind, revealsCurrentScreen }: LinkProps) {
   const text = (
     <Text numberOfLines={1} className={className}>
       {label}
@@ -157,7 +160,13 @@ function MetaLink({ label, open, hint, className }: LinkProps) {
       accessibilityLabel={label}
       accessibilityHint={hint}
       // Now Playing slides away first, then the screen opens over the tabs.
-      onPress={() => closeNowPlaying(open)}
+      onPress={() => {
+        if (revealsCurrentScreen) closeNowPlaying();
+        else {
+          beginTiming(timingKind, label);
+          closeNowPlaying(open);
+        }
+      }}
       haptic="selection"
       depth={0.015}
       hitSlop={{ top: CELL, bottom: CELL }}
@@ -321,6 +330,10 @@ export function PlayerView({ item, details, playing }: Props) {
                   : null
             }
             hint="Opens the artist"
+            timingKind="artistLink"
+            revealsCurrentScreen={
+              details !== null ? artistTo === undefined : streamedTo?.kind === "here"
+            }
             className="font-sans text-body text-secondary"
           />
           {notice === null ? (
@@ -328,6 +341,7 @@ export function PlayerView({ item, details, playing }: Props) {
               label={album}
               open={details === null ? null : () => openAlbum(details.albumId, links.album)}
               hint="Opens the album"
+              timingKind="albumLink"
               className="font-sans text-body text-secondary"
             />
           ) : (

@@ -1,3 +1,4 @@
+import { beginTiming } from "@/lib/timing";
 import {
   confirmsFirst,
   isDestructiveAction,
@@ -14,7 +15,8 @@ import {
   albumDownloadOrigin,
 } from "@wave/core";
 import * as Haptics from "expo-haptics";
-import { router, usePathname } from "expo-router";
+import { usePathname } from "expo-router";
+import { router } from "@/lib/timingRouter";
 import { useMemo } from "react";
 
 import { followArtistLink, followStreamedArtistLink } from "@/library/ArtistChoice";
@@ -478,6 +480,7 @@ export const itemActionPress = ({
         return run(() => openAlbum(albumId, links.album));
       }
       case "goToArtist": {
+        beginTiming("goToArtist", "Artist");
         // Several credited artists: a card to pick one from (`ArtistChoice`).
         if ("streamedArtists" in entry)
           return run(() => followStreamedArtistLink(entry.streamedArtists));

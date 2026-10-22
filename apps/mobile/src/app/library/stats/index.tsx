@@ -1,3 +1,4 @@
+import { useScreenContent } from "@/lib/screenTiming";
 import type { StatsPeriod } from "@wave/core";
 import { useState } from "react";
 import { ScrollView, View } from "react-native";
@@ -24,6 +25,7 @@ import {
 export default function StatsScreen() {
   const [period, setPeriod] = useState<StatsPeriod>("month");
   const topSongs = useTopSongs(period);
+  useScreenContent(topSongs !== undefined);
   const topAlbums = useTopAlbums(period);
   const topArtists = useTopArtists(period);
   const recaps = useRecaps();

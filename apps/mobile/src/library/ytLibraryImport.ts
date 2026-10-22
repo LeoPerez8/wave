@@ -1,3 +1,4 @@
+import { registerTimingBackground, timingBackgroundChanged } from "@/lib/timing";
 /**
  * From YT Music's and From Spotify's Import (docs/spec.md, "Importing
  * playlists from a link"; one batch and one set of origins for both, a
@@ -125,6 +126,10 @@ export const useReadingAgain = (playlistId: number): boolean =>
 
 /** Whether the batch is reading its playlists now. */
 let reading = false;
+registerTimingBackground("libraryImport", () =>
+  reading || readingAgain.get().size > 0 ? "import" : null,
+);
+readingAgain.subscribe(timingBackgroundChanged);
 
 /**
  * Import & Download, once [playlistId] is filled: its downloads join the
@@ -267,6 +272,7 @@ const readBatch = async (): Promise<void> => {
   if (reading) return;
   if (nextYtLibraryRead(left) === undefined && ytLibraryDownloadsToQueue(left).length === 0) return;
   reading = true;
+  timingBackgroundChanged();
   try {
     await prune();
     // Filled before Wave stopped, their downloads not queued yet: once their import is done.

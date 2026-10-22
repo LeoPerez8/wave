@@ -1,3 +1,5 @@
+import { scheduleOnRN } from "react-native-worklets";
+import { activeTiming, timingTransitionEnd } from "@/lib/timing";
 import type { TabBarTab } from "@wave/core";
 import { useCallback } from "react";
 import {
@@ -26,13 +28,20 @@ export function useTabEntry() {
 
   const enter = useCallback(
     (from: TabBarTab, to: TabBarTab) => {
+      const timingId = activeTiming()?.id;
       side.set(reduceMotion ? 0 : Math.sign(bar.indexOf(to) - bar.indexOf(from)));
       progress.set(0);
       progress.set(
-        withTiming(1, {
-          duration: reduceMotion ? ENTRY.fadeMs : ENTRY.slideMs,
-          easing: ENTRY.ease,
-        }),
+        withTiming(
+          1,
+          {
+            duration: reduceMotion ? ENTRY.fadeMs : ENTRY.slideMs,
+            easing: ENTRY.ease,
+          },
+          (finished) => {
+            if (finished && timingId !== undefined) scheduleOnRN(timingTransitionEnd, timingId);
+          },
+        ),
       );
     },
     [bar, reduceMotion, progress, side],

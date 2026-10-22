@@ -1,4 +1,4 @@
-import { router } from "expo-router";
+import { router } from "@/lib/timingRouter";
 import { useState } from "react";
 import { Text, View } from "react-native";
 

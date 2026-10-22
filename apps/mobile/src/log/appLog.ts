@@ -42,6 +42,17 @@ const logDevice = (log: NonNullable<typeof WaveAppLog>): LogDevice => ({
   buildLabel: BUILD_LABEL,
 });
 
+/** Same bundle/native build identity as the log's started line, including JS-only repacks. */
+export const timingBuild = (): { version: string; commit: string } => {
+  const device = WaveAppLog === null ? null : logDevice(WaveAppLog);
+  const label = device?.buildLabel ?? "";
+  return {
+    version: device?.appVersion ?? "unknown",
+    commit:
+      label.match(/@\s*([a-f0-9]{7,40})/i)?.[1] ?? process.env.EXPO_PUBLIC_WAVE_COMMIT ?? "unknown",
+  };
+};
+
 /** How long entries wait to be written together. */
 const FLUSH_DELAY_MS = 2_000;
 

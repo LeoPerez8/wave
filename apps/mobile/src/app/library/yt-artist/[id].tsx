@@ -1,3 +1,4 @@
+import { useScreenContent } from "@/lib/screenTiming";
 import { LegendList } from "@legendapp/list/react-native";
 import { IconUser } from "@tabler/icons-react-native";
 import {
@@ -248,6 +249,7 @@ function QuietLine({
  * failing, a quiet line with Try Again; with YT Music off, it says so.
  */
 export default function YtArtistScreen() {
+  useScreenContent(true);
   const params = useLocalSearchParams<{ id: string; name?: string }>();
   const browseId = params.id === YT_ARTIST_BY_NAME ? null : (params.id ?? "");
   const knownName = params.name === undefined || params.name === "" ? null : params.name;

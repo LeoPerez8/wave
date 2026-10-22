@@ -1,4 +1,5 @@
-import { router, type Href } from "expo-router";
+import { type Href } from "expo-router";
+import { router } from "@/lib/timingRouter";
 import { useState } from "react";
 
 /** What the opener knew about the album or playlist it opens, for that screen's first frame. */

@@ -1,5 +1,7 @@
+import { TIMING_BUDGETS, timingDuration } from "./timing.ts";
+
 /** Maximum synchronous Library read time before it is named in the app log. */
-export const SLOW_READ_BUDGET_MS = 16;
+export const SLOW_READ_BUDGET_MS = TIMING_BUDGETS.readMs;
 
 /** A synchronous Library read, with the screen that was showing when it ran. */
 export interface SlowRead {
@@ -12,10 +14,7 @@ export interface SlowRead {
 /** No line at or under budget. Kept independent of perf-build instrumentation. */
 export const slowReadLine = (read: SlowRead): string | null => {
   if (!(read.durationMs > SLOW_READ_BUDGET_MS)) return null;
-  const duration =
-    read.durationMs < 1_000
-      ? `${Math.round(read.durationMs)} ms`
-      : `${(read.durationMs / 1_000).toFixed(1)} s`;
+  const duration = timingDuration(read.durationMs);
   return `Read ${JSON.stringify(read.operation)} held JS ${duration} (${read.rows.toLocaleString("en-US")} ${read.rows === 1 ? "row" : "rows"}) on ${read.route}`;
 };
 

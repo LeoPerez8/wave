@@ -1,3 +1,4 @@
+import { useScreenContent } from "@/lib/screenTiming";
 import { IconFolderOpen } from "@tabler/icons-react-native";
 import { ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -12,6 +13,7 @@ import { useThemeColor } from "@/theme/useThemeColor";
  * swaps to the tabs as soon as access is granted and the app is active again.
  */
 export default function AccessScreen() {
+  useScreenContent(true);
   const insets = useSafeAreaInsets();
   const tertiary = useThemeColor("tertiary");
   const { denied, request } = useAllFilesAccess();

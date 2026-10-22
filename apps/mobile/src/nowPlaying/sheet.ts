@@ -1,3 +1,11 @@
+import {
+  activeTiming,
+  beginTiming,
+  timingResponse,
+  timingTransitionEnd,
+  timingSurfaceCommitted,
+  setTimingSurface,
+} from "@/lib/timing";
 import { settleSheet, stepNowPlayingSheet, type SheetEvent, type SheetPhase } from "@wave/core";
 import { useSyncExternalStore } from "react";
 import { Dimensions } from "react-native";
@@ -26,6 +34,39 @@ export const sheetHeight = makeMutable(Dimensions.get("window").height);
 const SPRING = { damping: 30, stiffness: 300, mass: 1 } as const;
 
 const phase = makeExternalStore<SheetPhase>("hidden");
+const sheetSettled = makeExternalStore(false);
+let motionDone = false;
+let motionGeneration = 0;
+let contentDrawn = false;
+let sheetTimingId: number | undefined;
+/** True only once the opening spring finished and the player content drew. */
+export const useNowPlayingSettled = (): boolean =>
+  useSyncExternalStore(sheetSettled.subscribe, sheetSettled.get);
+export const isNowPlayingSettled = sheetSettled.get;
+export const onNowPlayingSettledChange = sheetSettled.subscribe;
+const updateSettled = (): void =>
+  sheetSettled.set(motionDone && contentDrawn && phase.get() === "open");
+const springOpened = (id: number | undefined, generation: number): void => {
+  if (generation !== motionGeneration || id !== sheetTimingId) return;
+  motionDone = true;
+  if (id !== undefined) timingTransitionEnd(id);
+  updateSettled();
+};
+/** Called after the player commit; a frame passes before its content is reported drawn. */
+export const nowPlayingContentCommitted = (): void => {
+  const id = sheetTimingId;
+  const generation = motionGeneration;
+  requestAnimationFrame(() => {
+    if (generation !== motionGeneration || id !== sheetTimingId || !isNowPlayingShown()) return;
+    if (id !== undefined) timingSurfaceCommitted(id, false);
+    requestAnimationFrame(() => {
+      if (generation !== motionGeneration || id !== sheetTimingId) return;
+      contentDrawn = true;
+      updateSettled();
+    });
+  });
+};
+
 let afterClose: (() => void) | null = null;
 
 /** Whether Now Playing is on screen at all (open, opening, dragged or leaving). */
@@ -58,7 +99,11 @@ const runAfterClose = (): void => {
   then?.();
 };
 
-const springDone = (): void => step({ type: "closed" });
+const springDone = (id: number | undefined, generation: number): void => {
+  if (generation !== motionGeneration) return;
+  if (id !== undefined) timingTransitionEnd(id);
+  step({ type: "closed" });
+};
 
 /**
  * Takes the sheet through [event]. The spring is handed to the UI thread
@@ -69,28 +114,49 @@ const springDone = (): void => step({ type: "closed" });
 const step = (event: SheetEvent, velocity = 0): void => {
   const next = stepNowPlayingSheet(phase.get(), event);
   perfMark("nowPlaying.step", event.type);
+  const timingId = sheetTimingId;
+  if (next.spring !== null) {
+    motionGeneration++;
+    motionDone = false;
+    sheetSettled.set(false);
+  }
+  const generation = motionGeneration;
   switch (next.spring) {
     case "rise":
       sheetOffset.set(sheetHeight.get());
-      sheetOffset.set(withSpring(0, SPRING));
+      sheetOffset.set(
+        withSpring(0, SPRING, (finished) => {
+          if (finished) scheduleOnRN(springOpened, timingId, generation);
+        }),
+      );
       break;
     case "open":
-      sheetOffset.set(withSpring(0, { ...SPRING, velocity }));
+      sheetOffset.set(
+        withSpring(0, { ...SPRING, velocity }, (finished) => {
+          if (finished) scheduleOnRN(springOpened, timingId, generation);
+        }),
+      );
       break;
     case "closed":
       sheetOffset.set(
         withSpring(sheetHeight.get(), { ...SPRING, velocity }, (finished) => {
-          if (finished === true) scheduleOnRN(springDone);
+          if (finished === true) scheduleOnRN(springDone, timingId, generation);
         }),
       );
       break;
     case null:
       break;
   }
-  if (next.spring !== null) perfMark("nowPlaying.spring", next.spring);
+  if (next.spring !== null) {
+    perfMark("nowPlaying.spring", next.spring);
+    if (timingId !== undefined) timingResponse(timingId);
+  }
   // A card opened in Now Playing leaves with it rather than float over the app.
   if (phase.get() === "open" && next.phase === "closing") dismissAllOverlays();
   phase.set(next.phase);
+  setTimingSurface(next.phase === "hidden" ? undefined : "Now Playing");
+  if (next.spring === "rise" || next.spring === "open")
+    requestAnimationFrame(nowPlayingContentCommitted);
   perfMark("nowPlaying.notified");
   if (next.hidden) {
     for (const listener of hiddenListeners) listener();
@@ -99,7 +165,14 @@ const step = (event: SheetEvent, velocity = 0): void => {
 };
 
 /** Opens Now Playing from a tap: the sheet starts rising on the next frame. */
-export const openNowPlaying = (): void => step({ type: "tap" });
+export const openNowPlaying = (): void => {
+  if (phase.get() === "hidden" || phase.get() === "closing") {
+    sheetTimingId = beginTiming("nowPlayingOpen", "Now Playing");
+    contentDrawn = false;
+    sheetSettled.set(false);
+  }
+  step({ type: "tap" });
+};
 
 /** A swipe up on the mini player has started: the sheet follows the finger. */
 export const beginNowPlayingDrag = (): void => step({ type: "dragBegin" });
@@ -128,6 +201,15 @@ export const releaseNowPlaying = (offset: number, velocity: number): void => {
  */
 export const closeNowPlaying = (then?: () => void): void => {
   afterClose = then ?? null;
+  if (
+    isNowPlayingShown() &&
+    then === undefined &&
+    !["artistLink", "albumLink", "goToArtist"].includes(activeTiming()?.kind ?? "")
+  ) {
+    sheetTimingId = beginTiming("nowPlayingClose", "Now Playing closed");
+    timingSurfaceCommitted(sheetTimingId, false);
+  }
+  sheetSettled.set(false);
   step({ type: "close" });
   if (phase.get() === "hidden") runAfterClose();
 };

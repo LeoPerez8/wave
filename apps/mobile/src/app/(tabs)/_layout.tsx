@@ -1,5 +1,6 @@
 import { TAB_PATH, tabOfPath, type TabBarTab } from "@wave/core";
-import { router, usePathname } from "expo-router";
+import { usePathname } from "expo-router";
+import { router } from "@/lib/timingRouter";
 import { TabList, TabSlot, TabTrigger, Tabs } from "expo-router/ui";
 import { useEffect, useMemo } from "react";
 import { View } from "react-native";

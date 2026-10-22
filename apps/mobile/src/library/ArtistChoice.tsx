@@ -1,3 +1,4 @@
+import { activeTiming, continueTiming, timingSurfaceCommitted } from "@/lib/timing";
 import {
   counted,
   type ArtistLink,
@@ -5,7 +6,7 @@ import {
   type StreamedArtistTarget,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
-import { Fragment } from "react";
+import { Fragment, useLayoutEffect } from "react";
 import { View } from "react-native";
 
 import type { ArtistImageSource } from "@/catalog/ArtistImage";
@@ -38,6 +39,10 @@ interface ArtistChoice {
  * open a card to pick one from.
  */
 export const followArtistLink = (link: ArtistLink, known?: ArtistRow | null): void => {
+  continueTiming(
+    link.kind === "open" ? "artistLink" : "choiceCard",
+    link.kind === "open" ? "Artist" : "artist choice",
+  );
   if (link.kind === "open") openArtist(link.artistId, known);
   else openArtistChoice(link.artistIds);
 };
@@ -80,6 +85,11 @@ const streamedChoice = (target: StreamedArtistTarget<ArtistRow>): ArtistChoice =
  * The page you're on opens nothing: Now Playing closing reveals it.
  */
 export const followStreamedArtistLink = (link: StreamedArtistLink<ArtistRow>): void => {
+  if (link.kind !== "here")
+    continueTiming(
+      link.kind === "open" ? "artistLink" : "choiceCard",
+      link.kind === "open" ? "Artist" : "artist choice",
+    );
   if (link.kind === "open") openStreamedArtist(link.target);
   else if (link.kind === "choose") openChoiceCard(link.targets.map(streamedChoice));
 };
@@ -128,6 +138,10 @@ function ArtistChoiceCard({
   choices: readonly ArtistChoice[];
   close: () => void;
 }) {
+  useLayoutEffect(() => {
+    const active = activeTiming();
+    if (active?.kind === "choiceCard") timingSurfaceCommitted(active.id);
+  }, []);
   return (
     <>
       <View style={{ paddingBottom: CELL * 2 }}>
@@ -144,6 +158,7 @@ function ArtistChoiceCard({
               artist={choice.image}
               onPress={() => {
                 close();
+                continueTiming("artistLink", choice.name);
                 choice.open();
               }}
             />

@@ -1,6 +1,7 @@
+import { useScreenContent } from "@/lib/screenTiming";
 import { IconStack2 } from "@tabler/icons-react-native";
 import type { HomeSectionId } from "@wave/core";
-import { router } from "expo-router";
+import { router } from "@/lib/timingRouter";
 
 import { EntryRow } from "@/catalog/EntryRow";
 import { Hairline } from "@/catalog/Hairline";
@@ -31,6 +32,7 @@ function LibraryShelfSection({ id }: { id: HomeSectionId }) {
 }
 
 export default function LibraryScreen() {
+  useScreenContent(true);
   useRenderCount("LibraryScreen");
   const scan = useScanState();
   const trackCount = useTrackCount();

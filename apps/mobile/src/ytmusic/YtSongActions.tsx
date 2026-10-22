@@ -1,3 +1,4 @@
+import { beginTiming } from "@/lib/timing";
 import {
   ITEM_ACTION_LABELS,
   YT_DOWNLOAD_ACTION_LABELS,
@@ -162,6 +163,7 @@ const run = (
     return;
   }
   if (entry.kind === "artist") {
+    beginTiming("goToArtist", "Artist");
     followStreamedArtistLink(entry.artists);
     return;
   }

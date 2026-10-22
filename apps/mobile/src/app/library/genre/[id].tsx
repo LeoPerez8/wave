@@ -1,3 +1,4 @@
+import { useScreenContent } from "@/lib/screenTiming";
 import { useLocalSearchParams } from "expo-router";
 import { useMemo } from "react";
 
@@ -50,6 +51,7 @@ export default function GenreScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const genreId = parseId(id);
   const detail = useGenre(genreId);
+  useScreenContent(detail !== undefined);
   const known = useKnownRow("genre", genreId);
   const shown: Shown | null | undefined =
     detail === undefined && known !== undefined ? { genre: known, songs: undefined } : detail;

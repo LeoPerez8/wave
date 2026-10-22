@@ -1,6 +1,8 @@
+import { useScreenContent } from "@/lib/screenTiming";
 import { IconMusic, IconSettings } from "@tabler/icons-react-native";
 import { homeItems } from "@wave/core";
-import { Link, router } from "expo-router";
+import { Link } from "expo-router";
+import { router } from "@/lib/timingRouter";
 import { Pressable, Text, View } from "react-native";
 
 import { CELL } from "@/catalog/grid";
@@ -32,6 +34,7 @@ function HomeLine({ children, top }: { children: string; top: number }) {
 export default function HomeScreen() {
   useRenderCount("HomeScreen");
   const home = useHome();
+  useScreenContent(home !== undefined);
   const arrangement = useHomeArrangement();
   const newRecap = useRecapToAnnounce();
   const empty = home !== undefined && home.recentlyAdded.length === 0;

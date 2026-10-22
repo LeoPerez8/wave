@@ -1,3 +1,5 @@
+import { libraryQueryHasContent } from "@/library/sharedQueries";
+import { useScreenContent } from "@/lib/screenTiming";
 import { counted, describeFolder } from "@wave/core";
 import { IconMinus } from "@tabler/icons-react-native";
 import { ScrollView, Text, View } from "react-native";
@@ -82,6 +84,7 @@ function FolderRow({ path, detail, removeLabel, removable, onRemove }: FolderRow
 export default function MusicFoldersScreen() {
   const insets = useSafeAreaInsets();
   const roots = useScanRoots();
+  useScreenContent(libraryQueryHasContent("roots"));
   const excluded = useExcludedFolders();
   const scanning = useScanState().status === "scanning";
   return (

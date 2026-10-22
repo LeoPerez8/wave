@@ -1,3 +1,4 @@
+import { timingStackListeners } from "@/lib/timing";
 import { Stack } from "expo-router";
 import { View } from "react-native";
 
@@ -18,6 +19,7 @@ export default function LibraryLayout() {
     <View className="flex-1 bg-background">
       <View nativeID={BACKDROP.library} collapsable={false} className="flex-1">
         <Stack
+          screenListeners={timingStackListeners}
           screenOptions={{ headerShown: false, contentStyle: { backgroundColor: background } }}
         />
       </View>

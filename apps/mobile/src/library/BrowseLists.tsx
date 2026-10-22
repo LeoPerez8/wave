@@ -1,3 +1,5 @@
+import { useScreenContent } from "@/lib/screenTiming";
+import { libraryQueryHasContent } from "./sharedQueries";
 import { LegendList, type LegendListRef } from "@legendapp/list/react-native";
 import { useScrollToTop } from "expo-router";
 import { IconStack2 } from "@tabler/icons-react-native";
@@ -155,9 +157,11 @@ const renderArtist = (artist: ArtistRow, selection: ListSelection<ArtistRow>) =>
 
 /** Library › Artists: track and album artists, sorted ignoring The/A/An and accents. */
 export function ArtistsList({ empty }: { empty: string }) {
+  const artists = useArtists();
+  useScreenContent(libraryQueryHasContent("artists"));
   return (
     <NameList
-      items={useArtists()}
+      items={artists}
       noun="artist"
       empty={empty}
       sortKey={artistSort}
@@ -186,9 +190,11 @@ const renderGenre = (genre: GenreRow, selection: ListSelection<GenreRow>) => (
 );
 
 export function GenresList({ empty }: { empty: string }) {
+  const genres = useGenres();
+  useScreenContent(libraryQueryHasContent("genres"));
   return (
     <NameList
-      items={useGenres()}
+      items={genres}
       noun="genre"
       empty={empty}
       sortKey={genreSort}
@@ -206,6 +212,7 @@ const pairRow = (index: number): number => Math.floor(index / 2);
 export function AlbumsList({ empty }: { empty: string }) {
   const scrollable = useListScrollable();
   const albums = useAlbums();
+  useScreenContent(libraryQueryHasContent("albums"));
   const list = useRef<LegendListRef>(null);
   useScrollToTop(list);
   const bottomInset = useChromeInset();

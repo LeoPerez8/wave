@@ -1,3 +1,4 @@
+import { useScreenContent } from "@/lib/screenTiming";
 import {
   defaultSongSort,
   designPreviewState,
@@ -70,6 +71,7 @@ const SHELVES: readonly { readonly shelf: Shelf; readonly label: string }[] = [
  * `wave://design-preview?state=<name>` opens it at one of `PREVIEW_STATES`.
  */
 export default function DesignPreviewScreen() {
+  useScreenContent(true);
   const { state } = useLocalSearchParams<{ state?: string | string[] }>();
   const opening = designPreviewState(PREVIEW_STATES, state);
   // A link that comes in while the preview is showing (the same one again,
