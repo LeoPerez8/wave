@@ -618,3 +618,108 @@ Four measured follow-ups are published under #579: #598 (Recap availability), #5
 The #580 every-build read timing boundary is now present in this integration. Expected `WaveTiming` operation names are `sum up counted listening` (Home), `read playlist recommendations` (playlist or a hidden session), `read the taste history`, `list songs`, `list artists` (graph segment), `read ranked artists` (targeted metadata) and `open the genre`. The log's operation row count describes the public result, while benchmark `rowsRead` includes intermediate SQL rows: for example playlist logging counts its 50 membership rows plus Library rows, not all 15 statements' returned rows. Hidden work is logged with the _currently visible_ route, which may differ from the owning playlist. CPU-only ranking/graph work has no slow-SQL line; use the transition/hitch evidence from #582. These are expected correlations from code, not fabricated phone log lines.
 
 The five public-seam characterization tests in `src/library/db/regressionSweep.test.ts` use the shared 1,000-song fixture: repeat Recap work for an unchanged result; one/two retained recommendation sessions and unsubscribe; global-versus-scoped artist plan/count equivalence; full genre hydration versus its exact first page; and all graph history/Library rows occupying the same middle segment. They assert work/results, never elapsed time. They document the current failure modes; each implementation ticket must replace them with improved work bounds and add its own behavioral cases. No production behavior changed in this research commit.
+
+## Streamed artist links (#586)
+
+[Recorded JSONL](results/579-streamedArtistLink-desktop.jsonl) contains eleven timed
+runs after a warm-up plus a separate traced work-count run, at exactly 500, 5,000
+and 20,000 active artists (one song and album per artist). Credits and album-artist
+links are complete before store startup; the bench asserts that startup preserves
+the artist count and checks exact fixture artist ids for complete lookups.
+
+These are desktop Node v26.8.2 + sql.js numbers. The measured implementation is
+`fe09d574ad48d7b1fcb679e7065c994a3143f335`, before is v0.19.0-ti
+`460e39ff0cba6f50e7a456a77d6e99813295ebaa`, and reference is v0.7.0-ti
+`add761ed787061db6a6c2799687d421301b6182b`. The two baselines load their
+actual versioned cache, LibraryStore, finder and Core decision. The native/React
+hook is replayed because it cannot mount in Node; its source gate is checked
+before replay. Both historical revisions already had the unread-artist gate.
+This fixes that inherited wait; it does not attribute its introduction to the
+post-v0.7.0 changes.
+
+Cold and offline availability time is work until a link can exist, excluding DB
+opening and React/native frame scheduling. Before, that means the whole artist
+read and finder build. After, the immediate target is `unread`, with zero SQL and
+zero cache notifications. Warm availability uses a standing requested-name cache.
+Historical tap costs use the already-built finder: a tap was possible only after
+the historical availability wait. After, a cold tap resolves its names using
+128-row keyset pages with real task yields and a 500 ms deadline. Thus this moves
+lookup work to the gesture and bounds it; it does not remove all lookup work.
+
+| Artists | v0.7.0 cold line ms | ti cold line ms | After cold line ms (p90) | After warm line ms | After offline line ms | Artist rows before → after |
+| ------: | ------------------: | --------------: | -----------------------: | -----------------: | --------------------: | -------------------------: |
+|     500 |               4.134 |           3.733 |            0.023 (0.030) |              0.008 |                 0.006 |                    500 → 0 |
+|   5,000 |              35.172 |          35.730 |            0.005 (0.006) |              0.006 |                 0.005 |                  5,000 → 0 |
+|  20,000 |             142.448 |         146.343 |            0.004 (0.005) |              0.006 |                 0.005 |                 20,000 → 0 |
+
+After tap costs below include real yields. “Offline miss” resolves an absent
+artist to an offline YT target; the separate app opening policy test asserts the
+note is immediately drawable and starts no request. Warm taps read nothing.
+Complete lookup has no deadline and is a semantic comparison measurement, not
+the app's tap behavior.
+
+| Artists | Tap case      | Median ms |  p90 ms | Returned rows | SQL statements | Notifications | Timed deadline outcomes / 11 |
+| ------: | ------------- | --------: | ------: | ------------: | -------------: | ------------: | ---------------------------: |
+|     500 | First         |     1.009 |   1.146 |           129 |              2 |             1 |                            0 |
+|     500 | Middle        |     3.104 |   3.208 |           257 |              3 |             1 |                            0 |
+|     500 | Last          |     6.830 |   7.639 |           501 |              5 |             1 |                            0 |
+|     500 | Missing       |     6.717 |   6.802 |           500 |              4 |             1 |                            0 |
+|     500 | Warm          |     0.006 |   0.007 |             0 |              0 |             0 |                            0 |
+|     500 | Offline miss  |     6.783 |   7.069 |           500 |              4 |             1 |                            0 |
+|     500 | Complete last |     6.891 |   7.076 |           501 |              5 |             1 |                            0 |
+|     500 | Complete miss |     5.983 |   6.118 |           500 |              4 |             1 |                            0 |
+|   5,000 | First         |     0.773 |   0.795 |           129 |              2 |             1 |                            0 |
+|   5,000 | Middle        |    36.846 |  38.374 |         2,561 |             21 |             1 |                            0 |
+|   5,000 | Last          |    71.332 |  79.479 |         5,001 |             41 |             1 |                            0 |
+|   5,000 | Missing       |    71.441 |  72.582 |         5,000 |             40 |             1 |                            0 |
+|   5,000 | Warm          |     0.006 |   0.006 |             0 |              0 |             0 |                            0 |
+|   5,000 | Offline miss  |    72.628 |  73.676 |         5,000 |             40 |             1 |                            0 |
+|   5,000 | Complete last |    72.295 |  74.681 |         5,001 |             41 |             1 |                            0 |
+|   5,000 | Complete miss |    72.576 |  74.283 |         5,000 |             40 |             1 |                            0 |
+|  20,000 | First         |     0.703 |   0.737 |           129 |              2 |             1 |                            0 |
+|  20,000 | Middle        |   145.085 | 147.625 |        10,113 |             80 |             1 |                            0 |
+|  20,000 | Last          |   287.210 | 292.441 |        20,001 |            158 |             1 |                            0 |
+|  20,000 | Missing       |   286.654 | 288.936 |        20,000 |            157 |             1 |                            0 |
+|  20,000 | Warm          |     0.006 |   0.006 |             0 |              0 |             0 |                            0 |
+|  20,000 | Offline miss  |   287.158 | 289.698 |        20,000 |            157 |             1 |                            0 |
+|  20,000 | Complete last |   285.113 | 287.089 |        20,001 |            158 |             1 |                            0 |
+|  20,000 | Complete miss |   286.008 | 288.305 |        20,000 |            157 |             1 |                            0 |
+
+All eleven timed cold samples for every first/middle/last/missing/offline case
+completed in this recording; each had zero destination mismatches. Warm samples
+needed no lookup. The 20,000-artist last-page median was 287.210 ms, p90 292.441 ms.
+The recovery brief reports a prior busy-host last-page lookup reaching 500 ms;
+its raw evidence was lost, so it is not substituted for this recording. A busier
+host may still hit the bound and open YT even when the Library has that artist.
+
+The JSONL reports `timedOutcomes`, `completedLookups`, `deadlineFallbacks`, actual
+`timedDestinations` and `destinationMismatches` independently. In particular, a
+missing artist can time out to the expected YT page: destination equality alone
+would not prove lookup completion. A mismatched bounded tap is accepted only
+when its outcome is explicitly `deadline` and its destination is YT. The separate
+`completeLookup/last` and `/missing` keys must match exact destinations across all
+three revisions or the command fails. Availability compares link existence,
+not a still-unread destination. No destination-equivalence assertion is made
+for a bounded sample that falls back.
+
+Rows/statements/notifications come from the separate traced run. Tracing adds
+EXPLAIN overhead and may itself hit the deadline sooner; its actual target and
+outcome are retained separately. CPU and maximum timed synchronous read/Core
+segments are in the JSONL. That maximum excludes page-normalization and microtask
+bookkeeping; it is not a complete event-loop stall measurement. Yield wall time,
+GC and host load remain desktop effects, not phone latency.
+
+Focused tests use Core's public exports and the actual app gesture/LibraryStore
+seams with sql.js: an unread menu entry dispatches a Library destination, local
+Now Playing reads credits on its tap, cold first/middle/last/missing lookups have
+fixed SQL work, warm taps read nothing, and cancellation/version changes do not
+publish stale cache entries. Core's mock-clock test exercises the deadline,
+abort and late completion deterministically. Existing #584 guard/route, #585
+immediate-link and #589 scoped opening/deferred finder tests remain passing.
+React/native navigation, Android first-frame rendering, S24+ latency and TalkBack
+have not been exercised.
+
+```sh
+pnpm --silent --filter @wave/mobile bench:fast-again --bench streamedArtistLink \
+  --before /path/to/v0.19.0-ti --reference /path/to/v0.7.0-ti
+```

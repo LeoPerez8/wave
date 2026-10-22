@@ -294,18 +294,6 @@ export const WHOLE_LIBRARY: Record<string, Exception> = {
       "One shared finder implementation; following/building callers are inventoried separately.",
     capabilities: ["ytmusic/libraryFinder.ts#useLoadedLibraryFinder"],
   },
-  "ytmusic/streamedArtist.ts#listArtists": {
-    reason:
-      "Streamed artist links currently wait for every artist and its finder; replace with a first-frame link and tap-time targeted resolution.",
-    removeIn: 586,
-    capabilities: ["library/LibraryStore.ts#listArtists"],
-  },
-  "ytmusic/streamedArtist.ts#sharedArtists": {
-    reason:
-      "Streamed artist links currently wait for every artist and its finder; replace with a first-frame link and tap-time targeted resolution.",
-    removeIn: 586,
-    capabilities: ["../../../packages/core/src/ytArtist.ts#libraryArtistFinder"],
-  },
   "ytmusic/YtAlbumActions.tsx#YtAlbumActionsMenu": {
     reason: "Explicit album menu resolves downloaded songs while the card is shown.",
     capabilities: [

@@ -78,3 +78,12 @@ and rejects unlisted or stale uses; this record does not prove control flow.
 store and sql.js, checking song rows and the saved page. Popular's separate quiet
 request remains #590's explicitly inventoried debt; the common playing-ids
 follower remains #588's, and other online detail pages remain #591's.
+#586 removed the exact `ytmusic/streamedArtist.ts#listArtists` and `#sharedArtists`
+exceptions: rendering a link no longer lists artists or builds `libraryArtistFinder`.
+An unread Core target is available immediately. Explicit taps resolve requested
+credits using `artistNamesForLink` keyset pages of at most 128 names, yielding
+between pages, then `linkRows` only for matches. The 500 ms deadline aborts the
+lookup and falls back to YouTube Music, with an immediate offline page. Mixed
+selection prepares only its requested names while its explicit card is shown.
+The inventory still rejects new whole-Library followers; no capability or
+scanner boundary was weakened to accommodate the replacement.

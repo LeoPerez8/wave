@@ -10,12 +10,14 @@ import {
   type YtArtistSaved,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useAlbums, useArtists } from "@/library/hooks";
 import { LibraryStore, type AlbumRow, type SongRow } from "@/library/LibraryStore";
+import { online } from "@/native/waveNative";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 
+import { artistPageOpening } from "./artistPageOpening";
 import { fetchArtist, readArtist, useSavedYtArtist } from "./artistSection";
 import { useLoadedLibraryFinder, type FindInLibrary } from "./libraryFinder";
 
@@ -104,6 +106,7 @@ export interface YtArtistPageShown {
 export const useYtArtistPage = (
   browseId: string | null,
   knownName: string | null,
+  initiallyOffline = false,
 ): YtArtistPageShown => {
   const byName = browseId === null ? (knownName ?? "") : null;
   const key = byName === null ? savedKey(browseId ?? "") : identityKey(byName);
@@ -116,7 +119,12 @@ export const useYtArtistPage = (
   );
   const { state, enabled, openedAt, show } = useSavedYtArtist(key, ask);
 
-  const asks = ytArtistPageAsks(state, { enabled, now: openedAt });
+  const [connected, setConnected] = useState(() => !initiallyOffline && online());
+  const opening = useMemo(
+    () => artistPageOpening({ online: connected, enabled }),
+    [connected, enabled],
+  );
+  const asks = opening.request && ytArtistPageAsks(state, { enabled, now: openedAt });
   // Once per state: a remounted effect doesn't send the request twice.
   const askedFor = useRef<unknown>(null);
   useEffect(() => {
@@ -127,14 +135,23 @@ export const useYtArtistPage = (
 
   const saved = state.status === "reading" ? null : state.saved;
   const name = (saved?.outcome === "found" ? saved.page.name : null) ?? knownName;
-  const find = useLoadedLibraryFinder();
+  const find = useLoadedLibraryFinder(opening.request);
   const libraryAlbum = useLibraryReleases(name);
   const view = useMemo(
     () =>
-      find === null
-        ? null
-        : ytArtistPageView(state, { enabled, now: openedAt, librarySong: find, libraryAlbum }),
-    [find, state, enabled, openedAt, libraryAlbum],
+      opening.view !== null
+        ? opening.view
+        : find === null
+          ? null
+          : ytArtistPageView(state, { enabled, now: openedAt, librarySong: find, libraryAlbum }),
+    [opening.view, find, state, enabled, openedAt, libraryAlbum],
   );
-  return { view, retry: show };
+  return {
+    view,
+    retry: () => {
+      const connectedNow = online();
+      setConnected(connectedNow);
+      if (connectedNow) show();
+    },
+  };
 };
