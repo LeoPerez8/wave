@@ -95,6 +95,14 @@ median milliseconds, with current p90. Historical APIs that did not exist are
 marked `—`.
 
 Recorded 2026-10-22T06:21:19.567Z on linux-x64, Intel Core i5-10300H (8 logical CPUs), Node v26.8.2, sql.js 1.14.2.
+The exact recorded command (from the repository root) was:
+
+```sh
+git worktree add --detach /tmp/wave-583-before v0.19.0-ti
+git worktree add --detach /tmp/wave-583-reference v0.7.0-ti
+pnpm --silent --filter @wave/mobile bench:fast-again --before /tmp/wave-583-before --reference /tmp/wave-583-reference > docs/performance/results/579-libraryReads-desktop.jsonl
+```
+
 The snapshot commits are:
 
 - **after**: `a2a7661410c741c1ec00fd1af579b8ea3c63aa6c` (the #583 harness snapshot; store reads unchanged from main/ti).
@@ -225,12 +233,15 @@ than a simple fifty-row page. No query is optimized by this inventory ticket.
 
 ## Verification
 
-- `pnpm --filter @wave/mobile test`: 514 tests passed before integration.
+- `pnpm --filter @wave/mobile test`: 523 tests passed after merging integration #581.
+- `pnpm --filter @wave/core test`: 3,358 tests passed after integration.
 - `pnpm --filter @wave/mobile typecheck`: passed.
 - Scoped oxlint and Prettier checks: passed.
 - Full current/ti/reference suite: 743 valid desktop-labelled JSONL records;
   81 scenarios × three sizes × three variants, with matching comparable results.
-- Quick current/ti/reference suite: 497 JSONL records, only 1,000 and 12,000 songs.
+- Quick current/ti/reference suite: 497 JSONL records, only 1,000 and 12,000 songs;
+  repeated successfully after merging #581. The saved full inventory retains
+  its explicit pre-merge snapshot commit above.
 - The package command was also verified with `--quick --bench libraryReads`.
 - No phone measurements are claimed. Other #579 tickets add their benches to
   the registry and append their evidence here.
