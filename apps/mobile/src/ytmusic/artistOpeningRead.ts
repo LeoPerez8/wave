@@ -40,6 +40,8 @@ export const createArtistOpeningRead = <S extends YtSong>(ports: {
     canSend: () => boolean,
   ) => Promise<YtArtistSaved<S>>;
   readonly online: () => boolean;
+  /** Live screen state closes the gap before React delivers its next effect. */
+  readonly settled?: () => boolean;
   readonly allowance: () => SearchAllowance;
   /** Recheck Always on Wi-Fi at execution; explicit Online/integrated consent still stands. */
   readonly always: () => boolean;
@@ -55,6 +57,7 @@ export const createArtistOpeningRead = <S extends YtSong>(ports: {
     openedAt: Date.now(),
   };
   let context: ArtistOpeningContext | null = null;
+  let active = false;
   const asked = new Set<string>();
   const listeners = new Set<() => void>();
   const publish = (state: YtArtistSection<S>) => {
@@ -66,6 +69,7 @@ export const createArtistOpeningRead = <S extends YtSong>(ports: {
     context.enabled &&
     context.contentReady &&
     context.settled &&
+    (ports.settled?.() ?? true) &&
     ytArtistToggle(snapshot.state, { ...context, now: snapshot.openedAt }) === "online" &&
     (context.pick !== null || context.integrated || !context.always || ports.always());
   let retry = false;
@@ -89,7 +93,10 @@ export const createArtistOpeningRead = <S extends YtSong>(ports: {
       publish({ status: "ready", saved: snapshot.state.saved, failure: "offline" });
       return;
     }
-    if (!retry && asked.has(snapshot.key)) return;
+    if (!retry && asked.has(snapshot.key)) {
+      publish({ status: "ready", saved: snapshot.state.saved, failure: "failed" });
+      return;
+    }
     const freeAt = searchRoomAt(ports.allowance(), "search", Date.now());
     if (freeAt !== null) {
       timer = setTimeout(drive, Math.max(1, freeAt - Date.now()));
@@ -144,6 +151,7 @@ export const createArtistOpeningRead = <S extends YtSong>(ports: {
       );
   };
   const update = (next: ArtistOpeningContext) => {
+    if (!active) return;
     context = next;
     if (!eligible() && snapshot.state.status === "loading") {
       cancel();
@@ -161,6 +169,8 @@ export const createArtistOpeningRead = <S extends YtSong>(ports: {
     },
     open: (nextName: string) => {
       cancel();
+      if (!active) asked.clear();
+      active = true;
       retry = false;
       name = nextName;
       snapshot = { key: identityKey(name), state: { status: "reading" }, openedAt: Date.now() };
@@ -178,9 +188,15 @@ export const createArtistOpeningRead = <S extends YtSong>(ports: {
       if (context !== null) update({ ...context, pick });
     },
     retry: () => {
+      if (!active || snapshot.state.status === "loading") return;
       retry = true;
       drive();
     },
-    close: cancel,
+    close: () => {
+      active = false;
+      context = null;
+      retry = false;
+      cancel();
+    },
   };
 };

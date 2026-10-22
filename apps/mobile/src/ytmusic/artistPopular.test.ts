@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { NO_SEARCHES, type YtArtistSaved } from "@wave/core";
 import { createArtistOpeningRead } from "./artistOpeningRead.ts";
+import type { NativeYtSong } from "../native/waveYtMusic.ts";
 
 const flush = async () => {
   for (let i = 0; i < 5; i++) await new Promise<void>((r) => setImmediate(r));
@@ -482,6 +483,11 @@ test("a failed read is not repeated by rerenders, toggles or artist reuse; anoth
   reader.open("Justice");
   await flush();
   assert.equal(requests, 2);
+  assert.deepEqual(
+    reader.snapshot().state,
+    { status: "ready", saved: null, failure: "failed" },
+    "revisiting an attempted artist offers retry instead of an endless loading state",
+  );
   reader.close();
   const next = create();
   next.open("Justice");
@@ -555,4 +561,156 @@ test("canceling a fake-YT page interrupts the actual fetch/save workflow before 
   } finally {
     fixture.close();
   }
+});
+
+test("closing the page prevents later context updates or retry presses from reviving its work", async () => {
+  let requests = 0;
+  const reader = createArtistOpeningRead({
+    restore: async () => null,
+    request: async () => {
+      requests++;
+      return found;
+    },
+    online: () => true,
+    allowance: () => NO_SEARCHES,
+    always: () => true,
+  });
+  reader.open("Justice");
+  reader.update(context);
+  await flush();
+  reader.close();
+  reader.update({ ...context, settled: true });
+  reader.retry();
+  await flush();
+  assert.equal(requests, 0);
+});
+
+test("retry presses during a pending request cannot queue a second ask after success", async () => {
+  let requests = 0;
+  let answer!: (saved: YtArtistSaved) => void;
+  const reader = createArtistOpeningRead({
+    restore: async () => null,
+    request: () => {
+      requests++;
+      return new Promise<YtArtistSaved>((resolve) => {
+        answer = resolve;
+      });
+    },
+    online: () => true,
+    allowance: () => NO_SEARCHES,
+    always: () => true,
+  });
+  reader.open("Justice");
+  reader.update({ ...context, settled: true });
+  await flush();
+  reader.retry();
+  reader.retry();
+  answer({ ...found, checkedAt: Date.now() });
+  await flush();
+  reader.update({ ...context, settled: true });
+  await flush();
+  assert.equal(requests, 1);
+  reader.close();
+});
+
+test("losing screen visibility or YT consent aborts one attempt and cannot auto-retry on return", async () => {
+  for (const blocked of [{ settled: false }, { contentReady: false }, { enabled: false }]) {
+    let requests = 0;
+    let signal!: AbortSignal;
+    let allowed!: () => boolean;
+    let answer!: (saved: YtArtistSaved) => void;
+    const reader = createArtistOpeningRead({
+      restore: async () => null,
+      request: (_name, _key, _saved, current, canSend) => {
+        requests++;
+        signal = current;
+        allowed = canSend;
+        return new Promise<YtArtistSaved>((resolve) => {
+          answer = resolve;
+        });
+      },
+      online: () => true,
+      allowance: () => NO_SEARCHES,
+      always: () => true,
+    });
+    reader.open("Justice");
+    reader.update({ ...context, settled: true });
+    await flush();
+    assert.equal(requests, 1);
+    reader.update({ ...context, settled: true, ...blocked });
+    assert.equal(signal.aborted, true);
+    assert.equal(allowed(), false);
+    answer(found);
+    await flush();
+    reader.update({ ...context, settled: true });
+    await flush();
+    assert.equal(requests, 1);
+    assert.deepEqual(reader.snapshot().state, { status: "ready", saved: null, failure: "failed" });
+    reader.retry();
+    await flush();
+    assert.equal(requests, 2, "a new explicit Online press is allowed");
+    reader.close();
+  }
+});
+
+test("the fetch workflow rechecks connectivity after search before browsing or saving an unmatched answer", async () => {
+  const { fetchArtistAnswer } = await import("./artistFetch.ts");
+  const Effect = await import("effect/Effect");
+  const Result = await import("effect/Result");
+  for (const matched of [true, false]) {
+    let connected = true;
+    const calls: string[] = [];
+    const result = await Effect.runPromise(
+      Effect.result(
+        fetchArtistAnswer<NativeYtSong, never, never>("Justice", null, {
+          canSend: () => connected,
+          search: () =>
+            Effect.sync(() => {
+              calls.push("search");
+              connected = false;
+              return matched ? [{ name: "Justice", browseId: "justice", audience: 100 }] : [];
+            }),
+          page: () =>
+            Effect.sync((): import("@wave/core").YtArtistPage<NativeYtSong> => {
+              calls.push("page");
+              return found.page;
+            }),
+          saved: Effect.succeed(null),
+          save: () =>
+            Effect.sync(() => {
+              calls.push("save");
+            }),
+        }),
+      ),
+    );
+    assert.deepEqual(calls, ["search"]);
+    assert.equal(Result.isFailure(result), true);
+  }
+});
+
+test("a request waiting to execute rechecks live visibility even before React delivers the context update", async () => {
+  let visible = true;
+  let allowed!: () => boolean;
+  const reader = createArtistOpeningRead({
+    restore: async () => null,
+    request: (_name, _key, _saved, _signal, canSend) => {
+      allowed = canSend;
+      return new Promise<YtArtistSaved>(() => {});
+    },
+    online: () => true,
+    allowance: () => NO_SEARCHES,
+    always: () => true,
+    settled: () => visible,
+  });
+  reader.open("Justice");
+  reader.update({ ...context, settled: true });
+  await flush();
+  assert.equal(allowed(), true);
+  visible = false;
+  assert.equal(
+    allowed(),
+    false,
+    "a pending native call must not follow the screen into the background",
+  );
+  reader.close();
 });

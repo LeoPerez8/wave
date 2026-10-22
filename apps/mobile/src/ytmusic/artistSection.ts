@@ -37,6 +37,8 @@ import {
 import type { LineToggle } from "@/catalog/PlayShuffle";
 import { LibraryStore, type AlbumRow, type SongRow } from "@/library/LibraryStore";
 import { useScreenSettled } from "@/lib/screenTiming";
+import { useScreenSight } from "@/lib/screenSight";
+import { isScreenSettled } from "@/lib/timing";
 import { appRuntime } from "@/library/runtime";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 import { online } from "@/native/waveNative";
@@ -70,10 +72,12 @@ export const readSaved = (artistKey: string) =>
  * no further page. A Library artist's section and a YouTube Music artist page
  * both read it so.
  */
-export const readArtist = (browseId: string) =>
+export const readArtist = (browseId: string, canSend: () => boolean = online) =>
   Effect.gen(function* () {
     const ytMusic = yield* YtMusic;
-    const page = yield* readArtistPage(browseId);
+    const page = yield* artistOpeningRequest(canSend, readArtistPage(browseId)).pipe(
+      Effect.mapError((error) => new YtMusicError({ reason: error.reason })),
+    );
     const playlistId = page.songsPlaylistId ?? null;
     let read: YtArtistSongsRead<NativeYtSong> | null = null;
     if (playlistId !== null) {
@@ -81,7 +85,7 @@ export const readArtist = (browseId: string) =>
       const onPage = () => {
         pagesRead += 1;
       };
-      const result = yield* Effect.result(ytMusic.playlist(playlistId, { onPage }));
+      const result = yield* Effect.result(ytMusic.playlist(playlistId, { onPage, canSend }));
       read = Result.isSuccess(result)
         ? { status: "read", songs: result.success.songs, truncated: result.success.truncated }
         : { status: "failed", reason: result.failure.reason, pagesRead };
@@ -121,7 +125,9 @@ export const fetchArtist = (
   Effect.gen(function* () {
     const ytMusic = yield* YtMusic;
     const store = yield* LibraryStore;
+    const canSend = reads.canSend ?? online;
     return yield* fetchArtistAnswer(name, saved, {
+      canSend,
       search: (query) =>
         reads.canSend === undefined
           ? ytMusic.searchArtists(query)
@@ -132,7 +138,8 @@ export const fetchArtist = (
                 Effect.mapError((error) => new YtMusicError({ reason: error.reason })),
               ),
             ),
-      page: (browseId) => (reads.allSongs ? readArtist(browseId) : readArtistPage(browseId)),
+      page: (browseId) =>
+        reads.allSongs ? readArtist(browseId, canSend) : readArtistPage(browseId),
       saved: readSaved(artistKey),
       save: (answer) => store.saveYtArtist(artistKey, answer).pipe(Effect.ignore),
     }).pipe(Effect.mapError((error) => new YtMusicError({ reason: error.reason })));
@@ -393,6 +400,7 @@ const useDeferredArtistSection = (
   pick: YtPick | null,
 ) => {
   const settled = useScreenSettled();
+  const sight = useScreenSight();
   const enabled = useYtMusicEnabled();
   const [reader] = useState(() =>
     createArtistOpeningRead<NativeYtSong>({
@@ -413,6 +421,7 @@ const useDeferredArtistSection = (
             return result.success;
           }),
       online,
+      settled: () => sight.visible() && isScreenSettled(),
       allowance: searchAllowanceSnapshot,
       always: searchOnlineAlwaysNow,
     }),
