@@ -17,6 +17,7 @@ interface Entry {
   readonly target: PlayingSongTarget;
   answer: PlayingSongAnswer | undefined;
   version: number;
+  stale: boolean;
   actions: number;
   job: { controller: AbortController; promise: Promise<PlayingSongAnswer> } | undefined;
 }
@@ -39,7 +40,7 @@ export const createNowPlayingSongLookup = (ports: {
     const key = playingSongKey(target);
     let found = entries.get(key);
     if (found === undefined) {
-      found = { target, answer: undefined, version: 0, actions: 0, job: undefined };
+      found = { target, answer: undefined, version: 0, stale: true, actions: 0, job: undefined };
       entries.set(key, found);
     }
     return found;
@@ -57,7 +58,7 @@ export const createNowPlayingSongLookup = (ports: {
     }
   };
   const ensure = (e: Entry): Promise<PlayingSongAnswer> => {
-    if (e.answer !== undefined) return Promise.resolve(e.answer);
+    if (e.answer !== undefined && !e.stale) return Promise.resolve(e.answer);
     if (e.job !== undefined) return e.job.promise;
     const controller = new AbortController();
     const { signal } = controller;
@@ -70,6 +71,7 @@ export const createNowPlayingSongLookup = (ports: {
           signal.throwIfAborted();
           if (version !== e.version) continue;
           e.answer = answer;
+          e.stale = false;
           emit();
           return answer;
         }
@@ -122,7 +124,7 @@ export const createNowPlayingSongLookup = (ports: {
         )
           continue;
         e.version++;
-        e.answer = undefined;
+        e.stale = true;
       }
       emit();
       prepare();

@@ -61,3 +61,51 @@ test("early actions share the captured song: a missing entry downloads into its 
   assert.deepEqual(downloads, [{ kind: "missing", id: 7 }]);
   assert.deepEqual(stars, [["yt:one", 7, false]]);
 });
+
+test("rapid early toggles stay ordered and a separate artwork double tap only adds a star", async () => {
+  const lookup = createNowPlayingSongLookup({
+    read: async () => ({ track: null, favorite: false, pendingFavorite: true }),
+  });
+  lookup.update(target, true, false);
+  let starred = true;
+  const shown: boolean[] = [];
+  const actions = createNowPlayingSongActions(lookup, {
+    download: () => {},
+    starred: () => starred,
+    star: (_target, _answer, on) => {
+      starred = on;
+      shown.push(on);
+    },
+  });
+  await Promise.all([actions.star(target), actions.star(target), actions.star(target, true)]);
+  assert.deepEqual(shown, [false, true, true]);
+});
+
+test("downloaded and absent streamed songs keep their own action identities", async () => {
+  const file = { ...missing, path: "/Music/one.m4a" };
+  const lookup = createNowPlayingSongLookup({
+    read: async (captured) => ({
+      track: captured.trackId === target.trackId ? file : null,
+      favorite: false,
+      pendingFavorite: false,
+    }),
+  });
+  const downloads: unknown[] = [];
+  const actions = createNowPlayingSongActions(lookup, {
+    download: (command) => {
+      downloads.push(command);
+    },
+    starred: () => false,
+    star: () => {},
+  });
+  lookup.update(target, true, false);
+  await actions.download(target);
+  const absent = {
+    trackId: "yt:absent",
+    song: { ...target.song!, videoId: "absent", title: "Absent" },
+  };
+  lookup.update(absent, true, false);
+  assert.deepEqual(await actions.playlist(absent), [{ source: "stream", song: absent.song }]);
+  await actions.download(absent);
+  assert.deepEqual(downloads, [{ kind: "downloaded" }, { kind: "stream", song: absent.song }]);
+});

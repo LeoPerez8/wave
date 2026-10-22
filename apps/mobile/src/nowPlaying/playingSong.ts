@@ -16,7 +16,10 @@ export const nowPlayingSongLookup = createNowPlayingSongLookup({
   read: (target, signal) => {
     signal.throwIfAborted();
     // oxlint-disable-next-line react/rules-of-hooks -- Effect service access.
-    return appRuntime.runPromise(LibraryStore.use((store) => store.nowPlayingSong(target)));
+    return appRuntime.runPromise(
+      LibraryStore.use((store) => store.nowPlayingSong(target)),
+      { signal },
+    );
   },
 });
 onLibraryChange(nowPlayingSongLookup.change);

@@ -103,3 +103,20 @@ test("a relevant edit during acquisition discards its stale answer and unrelated
   await lookup.acquire(local);
   assert.equal(reads, 3);
 });
+
+test("a refresh keeps the drawn file/star while actions acquire the new version", async () => {
+  let reads = 0;
+  const refresh = deferred<typeof answer>();
+  const lookup = createNowPlayingSongLookup({
+    read: async () => (++reads === 1 ? answer : refresh.promise),
+  });
+  const local = { trackId: "7", song: null };
+  lookup.update(local, true, true);
+  await lookup.acquire(local);
+  lookup.change({ kind: "tracks", ids: [7] });
+  assert.equal(lookup.get(local), answer);
+  const action = lookup.acquire(local);
+  refresh.resolve({ ...answer, favorite: true });
+  assert.equal((await action).favorite, true);
+  assert.equal(reads, 2);
+});
