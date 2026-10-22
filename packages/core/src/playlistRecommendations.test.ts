@@ -79,6 +79,33 @@ test("a playlist ranks five compatible distinct recordings through the shared en
   );
 });
 
+test("an untagged playlist preserves its artists' genre shares when deciding compatibility", () => {
+  const seed = track("yt:seed", {
+    source: "stream",
+    videoId: "seed",
+    artists: ["Seed Artist"],
+    genre: null,
+  });
+  const library = [
+    track("metal", { artists: ["Metal Artist"], genre: "Metal" }),
+    track("pop", { artists: ["Pop Artist"], genre: "Pop" }),
+  ];
+  const profile = new Map([
+    ["pop", 0.9],
+    ["metal", 0.1],
+  ]);
+  assert.deepEqual(
+    playlistRecommendations([seed], {
+      library,
+      catalog: [],
+      graph: null,
+      now: 0,
+      profileOf: (name) => (name === "Seed Artist" ? profile : undefined),
+    }).map((offer) => offer.track.id),
+    ["pop"],
+  );
+});
+
 test("cross-source recordings and catalog duplicates never occupy two slots or repeat playlist membership", () => {
   const seed = track("seed");
   const local = track("local", { title: "Let Down" });

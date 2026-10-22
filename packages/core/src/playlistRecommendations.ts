@@ -79,15 +79,21 @@ export const rankedPlaylistRecommendations = (
   const taggedProfiles = new Map([...profiles].map(([name, songs]) => [name, genreProfile(songs)]));
   const profileOf: GenreProfileOf = (name) =>
     taggedProfiles.get(catalogSeedKey(name) ?? "") ?? sources.profileOf?.(name);
-  const profile =
-    genreProfile(playlist) ??
-    genreProfile(
-      playlist.flatMap((track) =>
-        track.artists.flatMap((name) =>
-          [...(profileOf(name)?.keys() ?? [])].map((genre) => ({ genre })),
-        ),
-      ),
-    );
+  let profile = genreProfile(playlist);
+  if (profile === null) {
+    const weights = new Map<string, number>();
+    let known = 0;
+    for (const track of playlist)
+      for (const artist of track.artists) {
+        const artistProfile = profileOf(artist);
+        if (artistProfile == null || artistProfile.size === 0) continue;
+        known += 1;
+        for (const [family, share] of artistProfile)
+          weights.set(family, (weights.get(family) ?? 0) + share);
+      }
+    if (known > 0)
+      profile = new Map([...weights].map(([family, weight]) => [family, weight / known]));
+  }
   const artistSignals = new Map<string, number>();
   const genreSignals = new Map<string, number>();
   const signals = sources.feedback ?? [];

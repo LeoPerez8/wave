@@ -58,7 +58,8 @@ export const selectPlaylistRecommendationInput = (db: LibraryDatabase, playlistI
     ...(genres.has(song.id) ? { genres: genres.get(song.id)! } : {}),
     available: song.path !== null,
   });
-  const library = trackQuery(db).all().map(local);
+  const librarySongs = trackQuery(db).all();
+  const library = librarySongs.map(local);
   const playlist = selectPlaylistEntries(db, playlistId).map(
     (entry): PlaylistRecommendationTrack =>
       entry.source === "library"
@@ -81,7 +82,14 @@ export const selectPlaylistRecommendationInput = (db: LibraryDatabase, playlistI
     .from(schema.playlistRecommendationFeedback)
     .where(eq(schema.playlistRecommendationFeedback.playlistId, playlistId))
     .all();
-  return { playlist, library, catalog: selectCandidateCatalog(db), favoriteVideos, feedback };
+  return {
+    playlist,
+    library,
+    librarySongs,
+    catalog: selectCandidateCatalog(db),
+    favoriteVideos,
+    feedback,
+  };
 };
 export type PlaylistRecommendationInput = ReturnType<typeof selectPlaylistRecommendationInput>;
 

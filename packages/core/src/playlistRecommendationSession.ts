@@ -1,7 +1,6 @@
 import {
   playlistRecommendations,
   playlistRecordingMatch,
-  rankedPlaylistRecommendations,
   type PlaylistRecommendationSources,
   type PlaylistRecommendationTrack,
 } from "./playlistRecommendations.ts";
@@ -95,7 +94,8 @@ export const playlistRecommendationSession = (options: {
       publish({ loading: true, error: null });
       try {
         const input = await read();
-        const ranked = rankedPlaylistRecommendations(input.playlist, input.sources);
+        // A full renewal selects today's best five; Add/Dismiss only refill their own slot.
+        const ranked = playlistRecommendations(input.playlist, input.sources);
         const eligible = new Map(ranked.map((x) => [x.track.id, x.track]));
         const slots = Array.from({ length: 5 }, (_, index) => {
           const previous = state.slots[index];
