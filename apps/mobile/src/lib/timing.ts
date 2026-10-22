@@ -1,11 +1,12 @@
 /** Every-build timing adapter. No render counters, row observers or idle frame loop. */
-import type { TimingKind } from "@wave/core";
+import type { LostTapReason, TimingKind } from "@wave/core";
 import { AppState, type GestureResponderEvent } from "react-native";
 
 import { appLog, timingBuild } from "@/log/appLog";
 import { onSlowLibraryRead } from "@/log/slowLibraryReads";
 import { online } from "@/native/waveNative";
 
+import { createLinkTapMonitor } from "./linkTapMonitor";
 import { createTimingSession } from "./timingSession";
 
 export type { TimingTransition } from "./timingSession";
@@ -21,6 +22,21 @@ const session = createTimingSession({
   }),
   build: timingBuild,
 });
+
+const linkTaps = createLinkTapMonitor({
+  later: (callback, ms) => setTimeout(callback, ms),
+  cancel: (timer) => clearTimeout(timer),
+  lost: (line) => {
+    session.lost();
+    appLog("warn", "WaveTiming", line);
+  },
+});
+export const timingLinkNavigated = (id: number | undefined): void => {
+  if (id !== undefined) linkTaps.navigated(id);
+};
+export const noteTimingLinkFailure = (id: number, reason: LostTapReason): void =>
+  linkTaps.reason(id, reason);
+export const noteTimingLinkClose = linkTaps.closeTakenOver;
 
 /** Register cheap existing state; never read the database to explain a slow tap. */
 export const registerTimingBackground = (name: string, read: () => string | null): void => {
@@ -49,8 +65,12 @@ let surface: string | undefined;
 export const setTimingSurface = (name: string | undefined): void => {
   surface = name;
 };
-export const beginTiming = (kind: TimingKind, to: string): number =>
-  session.begin(kind, to, takeTouch(), true, surface);
+export const beginTiming = (kind: TimingKind, to: string): number => {
+  const id = session.begin(kind, to, takeTouch(), true, surface);
+  if (surface === "Now Playing" && (kind === "artistLink" || kind === "albumLink"))
+    linkTaps.begin(id, { kind, from: surface, to });
+  return id;
+};
 /** A resolved link/choice continues its original touch window. */
 export const continueTiming = (
   kind: "artistLink" | "albumLink" | "goToArtist" | "choiceCard",
