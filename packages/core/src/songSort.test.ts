@@ -5,6 +5,7 @@ import {
   alphabetIndex,
   DEFAULT_SONG_SORT,
   defaultSongSort,
+  librarySongSort,
   readSongSort,
   sameSongSort,
   SONG_SORTS,
@@ -295,6 +296,40 @@ describe("sortSongs by date starred", () => {
   });
 });
 
+describe("sortSongs by popularity", () => {
+  const ranked = (name: string, popularRank: number | undefined) => ({
+    ...song(name),
+    popularRank,
+  });
+  const songs = [
+    ranked("Unlisted B", undefined),
+    ranked("Second", 2),
+    ranked("Unlisted A", undefined),
+    ranked("First", 1),
+  ];
+
+  test("the list's order first, the songs it doesn't hold after them in song name order", () => {
+    assert.deepEqual(names(sortSongs(songs, { key: "popular", descending: false })), [
+      "First",
+      "Second",
+      "Unlisted A",
+      "Unlisted B",
+    ]);
+  });
+
+  test("has no spine", () => {
+    assert.equal(songSpineKeys(songs, { key: "popular", descending: false }), undefined);
+  });
+
+  test("its label reads the name alone", () => {
+    assert.equal(songSortLabel({ key: "popular", descending: false }), "Popular");
+  });
+
+  test("the Library's tables can't order by it: song name A to Z stands in", () => {
+    assert.deepEqual(librarySongSort({ key: "popular", descending: false }), DEFAULT_SONG_SORT);
+  });
+});
+
 const labels = (kind: SongListKind) => songSortsFor(kind).map(songSortLabel);
 
 const KINDS: readonly SongListKind[] = ["songs", "artist", "genre", "favorites"];
@@ -302,11 +337,16 @@ const KINDS: readonly SongListKind[] = ["songs", "artist", "genre", "favorites"]
 describe("sorts per kind of song list", () => {
   const shared = SONG_SORTS.map(songSortLabel);
 
-  test("Songs, artist and genre lists offer the shared sorts, song name A to Z first", () => {
-    for (const kind of ["songs", "artist", "genre"] as const) {
+  test("Songs and genre lists offer the shared sorts, song name A to Z first", () => {
+    for (const kind of ["songs", "genre"] as const) {
       assert.deepEqual(labels(kind), shared);
       assert.deepEqual(defaultSongSort(kind), { key: "title", descending: false });
     }
+  });
+
+  test("an artist's songs lead with Popular, the default, then the shared sorts", () => {
+    assert.deepEqual(labels("artist"), ["Popular", ...shared]);
+    assert.deepEqual(defaultSongSort("artist"), { key: "popular", descending: false });
   });
 
   test("Favorites leads with date starred, and defaults to most recently starred", () => {
@@ -331,7 +371,15 @@ describe("sorts per kind of song list", () => {
   test("a sort the kind doesn't offer reads as its default", () => {
     assert.deepEqual(
       readSongSort(writeSongSort({ key: "starred", descending: false }), "artist"),
+      defaultSongSort("artist"),
+    );
+    assert.deepEqual(
+      readSongSort(writeSongSort({ key: "popular", descending: false }), "songs"),
       DEFAULT_SONG_SORT,
+    );
+    assert.deepEqual(
+      readSongSort(writeSongSort({ key: "popular", descending: false }), "favorites"),
+      defaultSongSort("favorites"),
     );
     // The file-name order Library › Folders had, saved before Folders went.
     assert.deepEqual(readSongSort('{"key":"file","descending":false}', "songs"), DEFAULT_SONG_SORT);

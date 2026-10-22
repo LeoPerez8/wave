@@ -2,6 +2,7 @@ import { LegendList } from "@legendapp/list/react-native";
 import {
   artistPageItems,
   libraryFinder,
+  rankPopular,
   ytTrackId,
   type ArtistPageItem,
   type MixedSong,
@@ -55,9 +56,12 @@ type AlbumCell =
 
 const SKELETON_CELL: AlbumCell = { kind: "skeleton" };
 
+/** A Library song of the artist, with its place in YouTube Music's list once it's known (Popular). */
+type RankedSong = SongRow & { readonly popularRank?: number | undefined };
+
 /** A row of the Songs section: the Library's song, or a song of the artist YouTube Music adds. */
 type PageSong =
-  | { readonly kind: "library"; readonly song: SongRow }
+  | { readonly kind: "library"; readonly song: RankedSong }
   | { readonly kind: "yt"; readonly song: NativeYtSong };
 
 type Item = ArtistPageItem<AlbumCell, PageSong>;
@@ -92,14 +96,16 @@ const placedSong = (row: PlacedSongs["songs"][number]): PageSong =>
   row.source === "library" ? { kind: "library", song: row.track } : { kind: "yt", song: row.song };
 
 /**
- * The page's shelves and songs. While YouTube Music is asked ([loading]),
- * skeleton tiles follow the Library's albums where its releases will go.
+ * The page's shelves and songs, the songs under [songsLabel]. While YouTube
+ * Music is asked ([loading]), skeleton tiles follow the Library's albums where
+ * its releases will go.
  */
 const artistItems = (
   detail: ArtistDetail,
   songs: readonly PageSong[],
   yt: YtAdditions,
   loading: boolean,
+  songsLabel: string,
 ): Item[] =>
   artistPageItems(
     [
@@ -119,6 +125,7 @@ const artistItems = (
       { label: "Appears on", covers: detail.appearsOn.map(libraryCell) },
     ],
     songs,
+    songsLabel,
   );
 
 const itemKey = (item: Item): string => {
@@ -265,8 +272,6 @@ function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegr
   const bottomInset = useChromeInset();
   const currentIds = useCurrentPlayingIds();
   const favorites = useFavoriteIds();
-  // In the sort chosen for artists; Play, Shuffle and rows all play this displayed order.
-  const { songs } = useSortedSongs("artist", detail.songs);
   // The releases among these the Library has aren't YouTube Music's to add.
   const libraryAlbums = useMemo(
     () => [...detail.albums, ...detail.appearsOn],
@@ -286,6 +291,16 @@ function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegr
   const ytView = loaded ? yt.view : null;
   const ytShelves = loaded ? yt.shelves : null;
   const integrated = loaded && yt.integrated;
+  // The artist's songs in the sort chosen for artists (Popular by default), ranked by YouTube
+  // Music's list of them once it's known. Play, Shuffle and rows all play this displayed order.
+  const ranked = useMemo(
+    (): readonly RankedSong[] =>
+      yt.popular === null ? detail.songs : rankPopular(detail.songs, yt.popular),
+    [detail.songs, yt.popular],
+  );
+  const { sort, songs } = useSortedSongs("artist", ranked);
+  // Under Popular with the list known: the songs read "Popular" and carry their ranks.
+  const byPopularity = sort.key === "popular" && yt.popular !== null;
   const additions = useMemo((): YtAdditions => {
     if (ytView === null || ytShelves === null) return NO_ADDITIONS;
     const missing = (kind: "albums" | "singles") =>
@@ -332,8 +347,8 @@ function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegr
   // While YouTube Music is asked, skeletons stand where its releases and songs will go.
   const ytLoading = ytView?.note === "loading";
   const items = useMemo(
-    () => artistItems(detail, pageSongs, additions, ytLoading),
-    [detail, pageSongs, additions, ytLoading],
+    () => artistItems(detail, pageSongs, additions, ytLoading, byPopularity ? "Popular" : "Songs"),
+    [detail, pageSongs, additions, ytLoading, byPopularity],
   );
   // Albums and songs select together; the bar acts on them in page order.
   const selectable = useMemo(() => selectableItems(detail, pageSongs), [detail, pageSongs]);
@@ -381,13 +396,20 @@ function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegr
             );
           }
           const song = item.song.song;
+          // Under Popular the rank leads the row in place of the artwork, numbered as a ranking
+          // is; a song the list doesn't hold leads with nothing.
           return (
             <SwipeTrackRow
               song={song}
-              track={toTrackSummary(song)}
+              track={
+                byPopularity
+                  ? { ...toTrackSummary(song), trackNumber: song.popularRank }
+                  : toTrackSummary(song)
+              }
               state={currentIds.has(String(song.id)) ? "playing" : undefined}
               favorite={favorites.has(song.id)}
-              leading="artwork"
+              leading={byPopularity ? "number" : "artwork"}
+              topNumber={song.popularRank === 1}
               downloaded={downloaded}
               {...selectableRow(
                 trackItem(song),
@@ -400,7 +422,17 @@ function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegr
         }
       }
     },
-    [context, currentIds, favorites, mixed, downloaded, albumSelection, page, integrated],
+    [
+      context,
+      currentIds,
+      favorites,
+      mixed,
+      downloaded,
+      albumSelection,
+      page,
+      integrated,
+      byPopularity,
+    ],
   );
 
   // With Online and an answer found, the counts take in what YouTube Music adds to the page.
