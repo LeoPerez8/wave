@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import * as Effect from "effect/Effect";
+import { createLibraryQueries } from "@wave/core";
 import { fileURLToPath } from "node:url";
 
 import { loadLibraryStore } from "../../bench/fastAgain/store.ts";
@@ -19,8 +20,96 @@ import {
   homeBodyHeight,
   magicQueueGrid,
 } from "./homeOpening.ts";
+import type { HomeContent } from "./homeOpening.ts";
+import type { HomePlays, HomeSections } from "../library/db/playHistory.ts";
 
 const root = fileURLToPath(new URL("../../../../", import.meta.url));
+
+test("Home keeps a Recap placeholder until availability answers, then distinguishes a card from no card", async () => {
+  const { recapAnnouncement } = await import("../stats/recapAnnouncement.ts");
+  assert.equal(recapAnnouncement(undefined, []), undefined);
+  assert.equal(recapAnnouncement([], []), null);
+  assert.deepEqual(recapAnnouncement([{ kind: "month", year: 2026, month: 9 }], []), {
+    kind: "month",
+    year: 2026,
+    month: 9,
+  });
+  assert.equal(recapAnnouncement([{ kind: "month", year: 2026, month: 9 }], ["2026-09"]), null);
+});
+
+test("Home's shared queries publish each real slice without waiting for its neighbours", async () => {
+  const { homeReads } = await import("../library/homeReads.ts");
+  const fixture = await createFastAgainFixture();
+  try {
+    const store = await loadLibraryStore(root, fixture.db);
+    const pending = new Map<string, () => void>();
+    const definitions = Object.values(homeReads);
+    const registry = createLibraryQueries<HomeContent>({
+      now: () => fixture.now,
+      schedule: () => () => {},
+      read: (key, settle) => {
+        pending.set(key, () => {
+          pending.delete(key);
+          const definition = definitions.find((query) => query.key === key)!;
+          settle({ ok: true, value: Effect.runSync<HomeContent, unknown>(definition.read(store)) });
+        });
+      },
+    });
+    const snapshot = () =>
+      homeContent(
+        registry.current(homeReads.added.key)?.value as
+          Pick<HomeSections, "recentlyAdded"> | undefined,
+        registry.current(homeReads.plays.key)?.value as HomePlays | undefined,
+        registry.current(homeReads.favorites.key)?.value as
+          Pick<HomeSections, "favorites"> | undefined,
+      );
+    const shown: HomeContent[] = [];
+    const frames: (() => void)[] = [];
+    const initial = traceQueries(fixture.db, () => {
+      afterHomeFrame(
+        () => {
+          for (const { key, reads } of definitions)
+            registry.attach(key, reads, { visible: true, onChange: () => shown.push(snapshot()) });
+        },
+        { request: (run) => frames.push(run), cancel: () => {} },
+      );
+      frames.shift()!();
+    });
+    assert.equal(initial.queries.length, 0);
+    assert.equal(pending.size, 0);
+    assert.equal(traceQueries(fixture.db, () => frames.shift()!()).queries.length, 0);
+    const favorites = traceQueries(fixture.db, () => pending.get(homeReads.favorites.key)!());
+    assert.deepEqual(
+      favorites.queries.map((query) => query.rows),
+      [10],
+    );
+    assert.equal(shown.at(-1)?.favorites?.length, 10);
+    assert.equal(shown.at(-1)?.recentlyAdded, undefined);
+    assert.equal(shown.at(-1)?.mostPlayed, undefined);
+    assert.equal(homeOpeningState(snapshot()).played, undefined);
+    const plays = traceQueries(fixture.db, () => pending.get(homeReads.plays.key)!());
+    assert.equal(plays.queries.length, 3);
+    assert.equal(
+      plays.queries.reduce((sum, query) => sum + query.rows, 0),
+      70,
+    );
+    assert.equal(shown.at(-1)?.mostPlayed?.length, 10);
+    // Discover must distinguish an unanswered plays query from a genuinely unplayed Library.
+    assert.equal(homeOpeningState(snapshot()).played, true);
+    assert.equal(shown.at(-1)?.recentlyAdded, undefined);
+    registry.change({ kind: "favorites" });
+    assert.deepEqual([...pending.keys()].sort(), ["home:added", "home:favorites"]);
+    const added = traceQueries(fixture.db, () => pending.get(homeReads.added.key)!());
+    assert.equal(added.queries.length, 2);
+    assert.equal(
+      added.queries.reduce((sum, query) => sum + query.rows, 0),
+      24,
+    );
+    assert.equal(shown.at(-1)?.recentlyAdded?.length, 12);
+  } finally {
+    fixture.close();
+  }
+});
 
 test("Home paints its skeleton frame before starting any of its real section reads", async () => {
   const fixture = await createFastAgainFixture();
@@ -132,6 +221,7 @@ test("unanswered plays never show the first-play hint; an empty Library and unpl
     );
     assert.equal(homeOpeningState(unplayed).empty, false);
     assert.equal(homeOpeningState(unplayed).nothingPlayed, true);
+    assert.equal(homeOpeningState(unplayed).played, false);
     assert.equal(homeSectionWaiting("favorites", unplayed), false);
     assert.deepEqual(unplayed.favorites, []);
   } finally {

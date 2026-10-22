@@ -14,6 +14,8 @@ export const homeContent = (
 export const homeOpeningState = (home: HomeContent) => ({
   empty: home.recentlyAdded?.length === 0,
   nothingPlayed: home.recentlyPlayed?.length === 0 && home.mostPlayed?.length === 0,
+  // Discover's due checks must not treat an unanswered query as "nothing played".
+  played: home.mostPlayed === undefined ? undefined : home.mostPlayed.length > 0,
   ready:
     home.recentlyAdded !== undefined ||
     home.mostPlayed !== undefined ||

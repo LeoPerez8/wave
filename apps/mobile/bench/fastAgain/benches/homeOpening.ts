@@ -6,6 +6,7 @@ import { resolve } from "node:path";
 import { performance } from "node:perf_hooks";
 import { setImmediate } from "node:timers/promises";
 import * as Effect from "effect/Effect";
+import type { DiscoverMixes } from "@wave/core";
 
 import { traceQueries } from "../../../src/library/db/testDatabase.ts";
 import { percentiles } from "../measure.ts";
@@ -38,7 +39,48 @@ export const bench: FastAgainBench = {
     const opening = existsSync(resolve(context.root, modulePath))
       ? await context.loadModule<typeof import("../../../src/home/homeOpening.ts")>(modulePath)
       : null;
-    const savedMix = { builtAt: fixture.now, playSeeds: true };
+    const savedMixes: DiscoverMixes[] = ["artist", "genre"].map((kind) => ({
+      builtAt: fixture.now,
+      playSeeds: true,
+      mixes: Array.from({ length: 4 }, (_, mix) => ({
+        id: `${kind}:${mix}`,
+        seed: { kind: kind as "artist" | "genre", name: `Seed ${mix}` },
+        songs: Array.from({ length: 50 }, (_, song) => ({
+          videoId: `mix-${kind}-${mix}-${song}`,
+          title: `New song ${song}`,
+          artists: [`Seed ${mix}`],
+          album: null,
+          albumId: null,
+          durationMs: 180_000,
+          artworkUrl: null,
+          explicit: false,
+        })),
+        familiar: [
+          {
+            source: "library",
+            track: { id: fixture.songIds[1]!, title: "Known song", artist: `Seed ${mix}` },
+          },
+        ],
+      })),
+    }));
+    const shownMixes = (saved: DiscoverMixes, videos: readonly string[]) => {
+      const section = core.discoverMixesSection(saved, {
+        ytMusic: true,
+        nothingToBuildFrom: false,
+        blend: {
+          level: 3,
+          keep: core.discoverMixKeep({
+            dontPlayExplicit: false,
+            library: null,
+            knownVideos: new Set(videos),
+          }),
+        },
+      });
+      assert.equal(section.kind, "mixes");
+      return section.kind === "mixes"
+        ? section.mixes.map((mix) => ({ ...mix, caption: core.discoverMixCaption(mix) }))
+        : [];
+    };
     // Saved choices are setup, outside measurement. No day's build is due in this case.
     const toMagic = core.magicLibrarySongs(Effect.runSync(store.listArtists));
     const magic = Effect.runSync(store.listSongs)
@@ -83,11 +125,11 @@ export const bench: FastAgainBench = {
         "mixFocusKnownVideosAndDueChecks",
         () => {
           // Both useDiscoverMixes focus callbacks read knownVideos in ti/current source.
-          const artist = Effect.runSync(store.knownVideos);
-          assert.equal(core.discoverMixesDue(savedMix, { now: fixture.now, played: true }), false);
-          const genre = Effect.runSync(store.knownVideos);
-          assert.equal(core.discoverMixesDue(savedMix, { now: fixture.now, played: true }), false);
-          return [artist, genre];
+          return savedMixes.map((saved) => {
+            const videos = Effect.runSync(store.knownVideos);
+            assert.equal(core.discoverMixesDue(saved, { now: fixture.now, played: true }), false);
+            return { videos, mixes: shownMixes(saved, videos) };
+          });
         },
       ],
     ];
@@ -163,7 +205,17 @@ export const bench: FastAgainBench = {
           details: {
             source:
               "faithful replay of selected-worktree LibraryStore + Stats + Core; saved picks/mixes standing; YT Music enabled, offline harvest",
+            semanticEquality:
+              "complete local slice payloads, recap availability, album/artist rankings, overview inputs, nine pick ids, both known-video answers and eight blended mix payloads/captions",
             firstFrameWaitsFor: opening === null ? ["homeAdded", "homePlays", "homeFavorites"] : [],
+            firstFrameRowsRead:
+              opening === null
+                ? traced.work.slice(0, 3).reduce((sum, step) => sum + step.rowsRead, 0)
+                : 0,
+            firstFrameStatements:
+              opening === null
+                ? traced.work.slice(0, 3).reduce((sum, step) => sum + step.statements, 0)
+                : 0,
             firstContentWaitsFor:
               opening === null ? "all three local slices" : "only the section's own slice",
             firstFrameBoundary:
@@ -179,7 +231,7 @@ export const bench: FastAgainBench = {
             })),
             readsAfterSettled: [],
             omitted:
-              "React/layout/native paint, network, startup jobs; taste derivation and mix builds are correctly not due with standing saved choices",
+              "React/render/layout/native paint, KV-setting reads, network and startup jobs; taste derivation and mix builds are not due with standing saved choices; selected-worktree modules/SQLite are warmed, cold refers to screen query/pick caches",
             notificationsScope:
               "read-only replay has no subscribed store writes; not a React commit counter",
             followups:

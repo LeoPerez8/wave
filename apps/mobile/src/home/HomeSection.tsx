@@ -19,7 +19,7 @@ import { Hairline } from "@/catalog/Hairline";
 import { PullRefreshRow } from "@/catalog/PullRefreshRow";
 import { TitledSection } from "@/catalog/TitledSection";
 import { fileUri } from "@/lib/fileUri";
-import type { HomeSections, MostPlayedRow } from "@/library/db/playHistory";
+import type { MostPlayedRow } from "@/library/db/playHistory";
 import { openStats, openStatsSeeAll } from "@/library/routes";
 import type { PlayableSongRow } from "@/library/LibraryStore";
 import { Crossfade } from "@/motion/Crossfade";
@@ -43,7 +43,12 @@ import { useMostPlayedOfAllTime } from "./mostPlayedOfAllTime";
 import { AlbumShelf, ArtistShelf, SongRows } from "./HomeSections";
 import { ListeningOverview } from "./ListeningOverview";
 import { HomeSectionBody, HomeSectionSkeleton, MagicQueueSkeleton } from "./HomeSectionSkeleton";
-import { homeSectionWaiting, magicQueueGrid, type HomeContent } from "./homeOpening";
+import {
+  homeOpeningState,
+  homeSectionWaiting,
+  magicQueueGrid,
+  type HomeContent,
+} from "./homeOpening";
 
 /** Songs played from Home's lists are queued from the section they were in. */
 const MOST_PLAYED_CONTEXT = { kind: "home", id: "most-played" } as const;
@@ -61,7 +66,7 @@ const plays = (song: MostPlayedRow): number => song.playCount;
 
 type SectionProps = {
   /** Home's lists (`useHome`), read once for every section that shows them. */
-  home: HomeSections;
+  home: HomeContent;
   /** The section's title in Core's catalogue. */
   title: string;
 };
@@ -97,7 +102,7 @@ const MIXES_UPDATING = "Updating…";
  */
 function Discover({ home, title }: SectionProps) {
   const ytMusic = useYtMusicEnabled();
-  const played = home.mostPlayed.length > 0;
+  const { played } = homeOpeningState(home);
   const magicQueue = useMagicQueueSection();
   const artistMixes = useDiscoverMixes("artist-mixes", played);
   const genreMixes = useDiscoverMixes("genre-mixes", played);
@@ -323,6 +328,7 @@ function MostPlayedArtists({ title }: SectionProps) {
 const SECTIONS: Record<HomeSectionId, ComponentType<SectionProps>> = {
   discover: Discover,
   "recently-added": ({ home, title }) =>
+    home.recentlyAdded !== undefined &&
     home.recentlyAdded.length > 0 && (
       <TitledSection title={title}>
         <HomeSectionBody id="recently-added">
@@ -331,6 +337,7 @@ const SECTIONS: Record<HomeSectionId, ComponentType<SectionProps>> = {
       </TitledSection>
     ),
   "recently-played": ({ home, title }) =>
+    home.recentlyPlayed !== undefined &&
     home.recentlyPlayed.length > 0 && (
       <TitledSection title={title}>
         <HomeSectionBody id="recently-played">
@@ -339,6 +346,7 @@ const SECTIONS: Record<HomeSectionId, ComponentType<SectionProps>> = {
       </TitledSection>
     ),
   "most-played": ({ home, title }) =>
+    home.mostPlayed !== undefined &&
     home.mostPlayed.length > 0 && (
       <TitledSection title={title}>
         <HomeSectionBody id="most-played">
@@ -349,6 +357,7 @@ const SECTIONS: Record<HomeSectionId, ComponentType<SectionProps>> = {
   "most-played-albums": MostPlayedAlbums,
   "most-played-artists": MostPlayedArtists,
   favorites: ({ home, title }) =>
+    home.favorites !== undefined &&
     home.favorites.length > 0 && (
       <TitledSection
         title={title}
@@ -380,10 +389,5 @@ export const SECTION_GAP = CELL * 5;
 export function HomeSection({ id, home }: { id: HomeSectionId; home: HomeContent }) {
   if (homeSectionWaiting(id, home)) return <HomeSectionSkeleton id={id} />;
   const Section = SECTIONS[id];
-  return (
-    <Section
-      home={{ recentlyAdded: [], recentlyPlayed: [], mostPlayed: [], favorites: [], ...home }}
-      title={homeSectionTitle(id)}
-    />
-  );
+  return <Section home={home} title={homeSectionTitle(id)} />;
 }

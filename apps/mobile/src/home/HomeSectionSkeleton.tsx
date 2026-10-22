@@ -7,7 +7,12 @@ import { EntryRow } from "@/catalog/EntryRow";
 import { CELL } from "@/catalog/grid";
 import { Hairline } from "@/catalog/Hairline";
 import { SkeletonLine } from "@/catalog/SkeletonLine";
-import { AlbumCardSkeleton, SkeletonGroup, TrackSkeletons } from "@/catalog/Skeletons";
+import {
+  AlbumCardSkeleton,
+  SongCardSkeleton,
+  SkeletonGroup,
+  TrackSkeletons,
+} from "@/catalog/Skeletons";
 import { TitledSection } from "@/catalog/TitledSection";
 import { openStats } from "@/library/routes";
 import { useYtMusicEnabled } from "@/settings/ytMusic";
@@ -37,7 +42,7 @@ export function MagicQueueSkeleton() {
         }}
       >
         {Array.from({ length: 9 }, (_, index) => (
-          <AlbumCardSkeleton key={index} size={size} fontScale={fontScale} />
+          <SongCardSkeleton key={index} size={size} fontScale={fontScale} />
         ))}
       </View>
     </SkeletonGroup>
@@ -81,7 +86,7 @@ export function HomeSectionSkeleton({ id }: { id: HomeSectionId }) {
         {id === "discover" ? (
           <DiscoverSkeleton />
         ) : songs ? (
-          <TrackSkeletons count={10} />
+          <TrackSkeletons count={10} leading="card" />
         ) : id === "listening-overview" ? (
           <SkeletonGroup label="Loading listening overview">
             <View style={{ gap: CELL / 2 }}>

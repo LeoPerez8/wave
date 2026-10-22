@@ -13,6 +13,7 @@ import { LargeTitleScreen } from "@/components/LargeTitleScreen";
 import { useHomeArrangement, homeTitleLongPress } from "@/home/homeArrangement";
 import { HomeSection, SECTION_GAP } from "@/home/HomeSection";
 import { HomeSectionSkeleton } from "@/home/HomeSectionSkeleton";
+import { HomeRecapSkeleton } from "@/home/HomeRecapSkeleton";
 import { afterHomeFrame, homeOpeningState } from "@/home/homeOpening";
 import { useHomeContent } from "@/library/hooks";
 import { useRenderCount } from "@/perf/perf";
@@ -63,11 +64,16 @@ function HomePlaceholders() {
   useScreenContent(false);
   const arrangement = useHomeArrangement();
   return (
-    <View style={FIRST_SECTION}>
-      {arrangement.map((id) => (
-        <HomeSectionSkeleton key={id} id={id} />
-      ))}
-    </View>
+    <>
+      <View style={RECAP_CARD}>
+        <HomeRecapSkeleton />
+      </View>
+      <View>
+        {arrangement.map((id) => (
+          <HomeSectionSkeleton key={id} id={id} />
+        ))}
+      </View>
+    </>
   );
 }
 
@@ -91,7 +97,7 @@ function HomeContent() {
         <>
           {newRecap !== null && (
             <View style={RECAP_CARD}>
-              <RecapCard period={newRecap} />
+              {newRecap === undefined ? <HomeRecapSkeleton /> : <RecapCard period={newRecap} />}
             </View>
           )}
           {/* Sections with nothing to show draw nothing, so whichever shows first is pulled up. */}

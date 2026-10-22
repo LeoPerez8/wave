@@ -18,6 +18,7 @@ import type { LibraryCounts } from "./db/counts";
 import type { LinkRows } from "./db/links";
 import type { HomePlays, HomeSections } from "./db/playHistory";
 import { scanState, type ScanState } from "./LibraryScan";
+import { homeReads } from "./homeReads";
 import {
   LibraryStore,
   type AlbumDetail,
@@ -345,16 +346,16 @@ export const useFavoriteSongs = (): readonly FavoriteRow[] | undefined =>
 
 // Home's sections by what they read, so a play doesn't re-read Recently Added
 // or Favorites, and a star doesn't re-read what plays change.
-const readHomeAdded = storeQuery("home:added", TRACKS, (store) => store.homeAdded);
+const readHomeAdded = storeQuery(homeReads.added.key, homeReads.added.reads, homeReads.added.read);
 const readHomePlays = storeQuery<HomePlays | undefined>(
-  "home:plays",
-  { tracks: true, plays: true },
-  (store) => store.homePlays,
+  homeReads.plays.key,
+  homeReads.plays.reads,
+  homeReads.plays.read,
 );
 const readHomeFavorites = storeQuery(
-  "home:favorites",
-  { tracks: true, favorites: true },
-  (store) => store.homeFavorites,
+  homeReads.favorites.key,
+  homeReads.favorites.reads,
+  homeReads.favorites.read,
 );
 
 /**
