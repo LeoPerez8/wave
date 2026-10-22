@@ -23,6 +23,10 @@
   // Android loads this WebView asset through Kotlin rather than a JS import.
   "dynamicallyLoaded": [
     "apps/mobile/modules/wave-native/android/src/main/assets/wave_po_token.html",
+    // The desktop store loader substitutes these exports for platform imports.
+    "apps/mobile/bench/fastAgain/platformDatabase.ts",
+    // runner.ts discovers each module and reads its bench export at runtime.
+    "apps/mobile/bench/fastAgain/benches/*.ts",
   ],
   "ignorePatterns": [
     "**/node_modules/**",
