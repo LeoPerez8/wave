@@ -8,6 +8,7 @@ import { useMissingSongDownloadStatus } from "@/ytmusic/YtDownloads";
 
 import { Artwork } from "./Artwork";
 import { CheckCell } from "./CheckCell";
+import { SONG_ROW_COVER, SongCover } from "./cards/SongCard";
 import { ExplicitBadge } from "./ExplicitBadge";
 import { CELL, grid } from "./grid";
 import { RankNumber } from "./RankNumber";
@@ -43,6 +44,11 @@ type Props = {
   favorite?: boolean;
   /** Songs lists show a thumbnail; album track lists show the track number. */
   leading: "artwork" | "number";
+  /**
+   * With artwork leading: the cover is a song card's, 4dp corners with a play
+   * disc on its corner (Search's song results). Undefined or false: the square cover.
+   */
+  playDisc?: boolean;
   /** Sets the number in ember: the top entry of a ranking, whose number is its rank. */
   topNumber?: boolean;
   /**
@@ -99,6 +105,7 @@ export function TrackRow({
   state,
   favorite = false,
   leading,
+  playDisc = false,
   topNumber = false,
   plays,
   checked,
@@ -159,7 +166,11 @@ export function TrackRow({
       >
         {selecting && <CheckCell checked={checked} />}
         {leading === "artwork" ? (
-          <Artwork uri={track.artworkUri} tint={track.tint} size={THUMB} />
+          playDisc ? (
+            <SongCover uri={track.artworkUri} tint={track.tint} size={THUMB} {...SONG_ROW_COVER} />
+          ) : (
+            <Artwork uri={track.artworkUri} tint={track.tint} size={THUMB} />
+          )
         ) : !fileNotFound && track.trackNumber !== undefined ? (
           <RankNumber rank={track.trackNumber} top={topNumber} />
         ) : (
