@@ -20,7 +20,7 @@ export const homeOpeningState = (home: HomeContent) => ({
     home.recentlyAdded !== undefined ||
     home.mostPlayed !== undefined ||
     home.favorites !== undefined,
-  // Drawing is independent; optional background work still waits for the opening's local content.
+  // All three local payloads have answered; ancillary sections keep their own read boundaries.
   settled:
     home.recentlyAdded !== undefined &&
     home.mostPlayed !== undefined &&
