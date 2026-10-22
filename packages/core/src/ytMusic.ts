@@ -1,4 +1,3 @@
-import { finishSteps } from "./buildSteps.ts";
 /**
  * YT Music songs: songs found on YouTube Music rather than in the Library.
  * A YT Music song is identified by its YouTube video id and becomes a Track
@@ -6,6 +5,7 @@ import { finishSteps } from "./buildSteps.ts";
  * native module; Core decides how the songs sit beside the Library.
  */
 
+import { finishSteps } from "./buildSteps.ts";
 import { splitCredit } from "./credits.ts";
 import { UNKNOWN_ARTIST } from "./library.ts";
 import { normalizeSearchText } from "./search.ts";
@@ -162,6 +162,7 @@ export function* libraryMatchesSteps<L extends LibrarySongKey>(
       .map((candidate) => candidate.song);
   };
 }
+
 /**
  * Whether a YT Music song is already in the Library (see [libraryFinder]),
  * so a live take or an edit of the same song still shows.

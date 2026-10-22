@@ -338,18 +338,25 @@ const builtOutcome = (built: DiscoverMixes | null | "nothing-to-build-from"): st
   return count === 0 ? "no mix" : count === 1 ? "1 mix" : `${count} mixes`;
 };
 
-/**
- * [id]'s build ([pulled]: a refresh the owner pulled for), writing its
- * network use to the app log as it ends (`withNetworkLog`).
- */
+/** One build at a time, manual or daily: the permit keeps two builds from reading the same sources at once. */
 const buildPermit = Semaphore.makeUnsafe(1);
+/** A library or graph source change restarts a build that reads a version it no longer has. */
 const buildSource = createBuildSource();
-onLibraryChange(change => {if (change.kind !== "folders") buildSource.changed();});
+onLibraryChange((change) => {
+  if (change.kind !== "folders") buildSource.changed();
+});
 onArtistGraphSourcesChanged(buildSource.changed);
+/**
+ * [id]'s build ([pulled]: a refresh the owner pulled for), after Home settled,
+ * writing its network use to the app log as it ends (`withNetworkLog`).
+ */
 const loggedBuild = (id: MixSectionId, pulled: boolean, avoid?: MixRefreshAvoid) =>
   withNetworkLog(
     `${discoverRowTitle(id)} ${pulled ? "refresh" : "build"}`,
-    settledTurnEffect.pipe(Effect.andThen(buildSource.run(SECTIONS[id].build(avoid), freeTurnEffect)), buildPermit.withPermits(1)),
+    settledTurnEffect.pipe(
+      Effect.andThen(buildSource.run(SECTIONS[id].build(avoid), freeTurnEffect)),
+      buildPermit.withPermits(1),
+    ),
     builtOutcome,
   );
 

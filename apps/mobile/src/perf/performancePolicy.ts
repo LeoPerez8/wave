@@ -93,7 +93,7 @@ export const WHOLE_LIBRARY: Record<string, Exception> = {
   },
   "home/discoverMixes.ts#useLibraryTracks": {
     reason:
-      "Visible mix pages resolve Library tracks; Home blends saved mixes without this hook. Known videos are source-versioned and daily inputs run serially after settlement in bounded pages/CPU steps (knownVideosRead, mixInputs, settledWork and serialWork behavioral tests).",
+      "Visible mix page and menu resolve Library tracks; Home's saved mixes blend without this hook.",
     capabilities: ["library/hooks.ts#songs"],
   },
   "home/magicQueueSection.ts#MAGIC_QUEUE_LIBRARY": {

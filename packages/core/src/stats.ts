@@ -1,9 +1,9 @@
-import { sortSteps } from "./buildSteps.ts";
 /**
  * Listening stats: rankings of the songs, albums and artists played most over
  * a stats period, a rolling window ending now. Only counted plays (see
  * `isCountedPlay`) enter a ranking, and artists are credited by track artist.
  */
+import { sortSteps } from "./buildSteps.ts";
 
 /** A stats period: a rolling window ending now. */
 export type StatsPeriod = "week" | "month" | "year" | "all";

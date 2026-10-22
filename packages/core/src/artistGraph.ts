@@ -1,4 +1,3 @@
-import { finishSteps, mapSteps, sortSteps } from "./buildSteps.ts";
 /**
  * The artist graph (docs/spec.md, "Artist graph"): which artists are close
  * to which, derived from what Wave already keeps, with no request of its
@@ -9,6 +8,7 @@ import { finishSteps, mapSteps, sortSteps } from "./buildSteps.ts";
  * Closeness goes both ways. The app derives the graph once per session; the
  * mix engine reads a seed's neighbourhood from it.
  */
+import { finishSteps, mapSteps, sortSteps } from "./buildSteps.ts";
 
 import { catalogSeedKey, type CatalogSong } from "./candidateCatalog.ts";
 import type { PlayEvent } from "./playEvents.ts";

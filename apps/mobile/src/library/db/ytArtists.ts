@@ -7,7 +7,7 @@
  * of Expo so the store tests run it against a real SQLite.
  */
 import type { YtArtistPage, YtArtistSaved, YtSong } from "@wave/core";
-import { eq, gt, sql } from "drizzle-orm";
+import { and, eq, gt, sql } from "drizzle-orm";
 
 import type { LibraryDatabase } from "./database.ts";
 import * as schema from "./schema.ts";
@@ -108,7 +108,8 @@ export function selectYtArtistSimilar(
   limit?: number,
 ): YtArtistSimilar[] | { rows: YtArtistSimilar[]; next: string | null } {
   const { ytArtists } = schema;
-  const valid = sql`${ytArtists.outcome} = 'found' AND json_valid(${ytArtists.page})`;
+  const valid = sql`json_valid(${ytArtists.page})`;
+  // A page's last key is the cursor, so a page of unreadable rows still moves the walk on.
   const rows = db
     .select({
       artistKey: ytArtists.artistKey,
@@ -121,11 +122,10 @@ export function selectYtArtistSimilar(
     })
     .from(ytArtists)
     .where(
-      after === undefined
-        ? eq(ytArtists.outcome, "found")
-        : after === null
-          ? undefined
-          : gt(ytArtists.artistKey, after),
+      and(
+        eq(ytArtists.outcome, "found"),
+        typeof after === "string" ? gt(ytArtists.artistKey, after) : undefined,
+      ),
     )
     .orderBy(ytArtists.artistKey)
     .limit(limit ?? 2147483647)

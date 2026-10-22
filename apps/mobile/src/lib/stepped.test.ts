@@ -27,6 +27,8 @@ test("CPU work respects the 6ms target and operation cap with an explicit schedu
   );
   assert.equal(result, "done");
   assert.ok(turns > 60);
+  // A clock that never runs out leaves only the operation cap: 512 operations per task.
+  const cappedTurns: number[] = [];
   let capped = 0;
   Effect.runSync(
     runSteps(
@@ -37,9 +39,10 @@ test("CPU work respects the 6ms target and operation cap with an explicit schedu
         }
       })(),
       Effect.sync(() => {
-        assert.ok(capped <= 1024);
+        cappedTurns.push(capped);
       }),
       () => 0,
     ),
   );
+  assert.deepEqual(cappedTurns, [0, 512, 1024]);
 });
