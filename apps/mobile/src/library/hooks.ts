@@ -12,11 +12,13 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { AppState } from "react-native";
 
 import { WaveNative } from "@/native/waveNative";
+import { homeContent, type HomeContent } from "@/home/homeOpening";
 
 import type { LibraryCounts } from "./db/counts";
 import type { LinkRows } from "./db/links";
 import type { HomePlays, HomeSections } from "./db/playHistory";
 import { scanState, type ScanState } from "./LibraryScan";
+import { homeReads } from "./homeReads";
 import {
   LibraryStore,
   type AlbumDetail,
@@ -344,25 +346,25 @@ export const useFavoriteSongs = (): readonly FavoriteRow[] | undefined =>
 
 // Home's sections by what they read, so a play doesn't re-read Recently Added
 // or Favorites, and a star doesn't re-read what plays change.
-const readHomeAdded = storeQuery("home:added", TRACKS, (store) => store.homeAdded);
+const readHomeAdded = storeQuery(homeReads.added.key, homeReads.added.reads, homeReads.added.read);
 const readHomePlays = storeQuery<HomePlays | undefined>(
-  "home:plays",
-  { tracks: true, plays: true },
-  (store) => store.homePlays,
+  homeReads.plays.key,
+  homeReads.plays.reads,
+  homeReads.plays.read,
 );
 const readHomeFavorites = storeQuery(
-  "home:favorites",
-  { tracks: true, favorites: true },
-  (store) => store.homeFavorites,
+  homeReads.favorites.key,
+  homeReads.favorites.reads,
+  homeReads.favorites.read,
 );
 
 /**
- * The Home tab's sections, or undefined while loading. Each part is re-read
+ * Home's independently answered slices; missing properties are still loading. Each part is re-read
  * only for what changes it: songs added or removed, stars (at once), plays
  * (at most every 1.5 s while Home is in sight; plays while it's hidden are
  * read once when it comes back). Home and Library's shelf share the reads.
  */
-export const useHome = (): HomeSections | undefined => {
+export const useHomeContent = (): HomeContent => {
   const added = useLibraryQuery<Pick<HomeSections, "recentlyAdded"> | undefined>(
     readHomeAdded,
     undefined,
@@ -372,13 +374,18 @@ export const useHome = (): HomeSections | undefined => {
     readHomeFavorites,
     undefined,
   );
-  return useMemo(
-    () =>
-      added === undefined || plays === undefined || favorites === undefined
-        ? undefined
-        : { ...added, ...plays, ...favorites },
-    [added, plays, favorites],
-  );
+  return useMemo(() => homeContent(added, plays, favorites), [added, plays, favorites]);
+};
+
+/** Complete snapshot for callers that need all lists (the Library's shelf). */
+export const useHome = (): HomeSections | undefined => {
+  const home = useHomeContent();
+  return home.recentlyAdded === undefined ||
+    home.recentlyPlayed === undefined ||
+    home.mostPlayed === undefined ||
+    home.favorites === undefined
+    ? undefined
+    : (home as HomeSections);
 };
 
 const readListeningSums = storeQuery(
