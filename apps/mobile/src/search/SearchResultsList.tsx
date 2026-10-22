@@ -10,6 +10,9 @@ import {
 import { useCallback, useMemo } from "react";
 import { Text, View } from "react-native";
 
+import { AlbumCardRow } from "@/catalog/cards/AlbumCard";
+import { ArtistCardRow } from "@/catalog/cards/ArtistCard";
+import { PlaylistCardRow } from "@/catalog/cards/PlaylistCard";
 import { CatalogLine } from "@/catalog/CatalogLine";
 import { CELL, grid } from "@/catalog/grid";
 import { NameRow } from "@/catalog/NameRow";
@@ -31,7 +34,6 @@ import {
   openTrackActions,
 } from "@/playback/ActionsMenu";
 
-import { ArtworkRow } from "./ArtworkRow";
 import type { ResultRow, ResultSong } from "./rows";
 import type { SearchHit } from "./searchIndex";
 import { useListScrollable } from "@/motion/heldTouch";
@@ -76,7 +78,6 @@ function SearchYtSongRow({
   song,
   songs,
   index,
-  top,
   playing,
   onOpen,
   selection,
@@ -84,7 +85,6 @@ function SearchYtSongRow({
   song: NativeYtSong;
   songs: readonly ResultSong[];
   index: number;
-  top: boolean;
   playing: boolean;
   onOpen: () => void;
   selection: ListSelection<TrackItem>;
@@ -92,7 +92,8 @@ function SearchYtSongRow({
   return (
     <SwipeYtSongRow
       song={song}
-      kind={top ? "Song · " : ""}
+      kind="Song · "
+      playDisc
       playing={playing}
       {...selectableRow(
         { ytSong: song },
@@ -136,19 +137,17 @@ function Hit({
   top,
   songs,
   downloaded,
-  artistSongs,
   integrated,
   playing,
   onOpen,
   selection,
 }: {
   hit: SearchHit;
+  /** The top result says what type it is (genres, which have no card). */
   top: boolean;
   songs: readonly ResultSong[];
   /** A song among YT Music's: marked downloaded. */
   downloaded: boolean;
-  /** An artist's song count with what Online adds; null: the Library's. */
-  artistSongs: number | null;
   /** An album opens integrated. */
   integrated: boolean;
   playing: boolean;
@@ -167,19 +166,18 @@ function Hit({
   switch (hit.kind) {
     case "artist":
       return (
-        <NameRow
+        <ArtistCardRow
           name={hit.name}
           artist={hit.artist}
-          detail={top ? "Artist" : counted(artistSongs ?? hit.artist.trackCount, "song")}
           onPress={open(() => openArtist(hit.artist.id, hit.artist))}
           onLongPress={menu(() => openArtistActions(hit.artist))}
         />
       );
     case "album":
       return (
-        <ArtworkRow
+        <AlbumCardRow
           title={hit.name}
-          detail={top ? `Album · ${hit.album.albumArtist}` : hit.album.albumArtist}
+          artist={hit.album.albumArtist}
           artworkUri={hit.album.thumbPath === null ? undefined : `file://${hit.album.thumbPath}`}
           onPress={open(() => openAlbum(hit.album.id, hit.album, { integrated }))}
           onLongPress={menu(() => openAlbumActions(hit.album))}
@@ -190,9 +188,10 @@ function Hit({
       return (
         <SwipeTrackRow
           song={hit.song}
-          track={top ? { ...track, artist: `Song · ${track.artist}` } : track}
+          track={{ ...track, artist: `Song · ${track.artist}` }}
           state={playing ? "playing" : undefined}
           leading="artwork"
+          playDisc
           downloaded={downloaded}
           {...selectableRow(
             { song: hit.song },
@@ -213,9 +212,10 @@ function Hit({
     }
     case "playlist":
       return (
-        <NameRow
+        <PlaylistCardRow
           name={hit.name}
-          detail={`${top ? "Playlist · " : ""}${counted(hit.playlist.trackCount, "song")}`}
+          detail={counted(hit.playlist.trackCount, "song")}
+          paths={hit.playlist.thumbPaths}
           onPress={open(() => openPlaylist(hit.playlist.id, hit.playlist))}
           onLongPress={menu(() => openPlaylistActions(hit.playlist))}
         />
@@ -261,7 +261,6 @@ export function SearchResultsList({ rows, onOpen, onShowAll, integrated, selecti
               top={item.top}
               songs={item.songs}
               downloaded={item.downloaded}
-              artistSongs={item.artistSongs}
               integrated={integrated}
               playing={item.hit.kind === "song" && currentIds.has(String(item.hit.song.id))}
               onOpen={onOpen}
@@ -294,7 +293,6 @@ export function SearchResultsList({ rows, onOpen, onShowAll, integrated, selecti
               song={item.song}
               songs={item.songs}
               index={item.index}
-              top={item.top}
               playing={currentIds.has(ytTrackId(item.song.videoId))}
               onOpen={onOpen}
               selection={selection}
@@ -303,7 +301,7 @@ export function SearchResultsList({ rows, onOpen, onShowAll, integrated, selecti
         case "ytArtist": {
           const { artist } = item;
           return (
-            <NameRow
+            <ArtistCardRow
               name={artist.name}
               artist={{
                 name: artist.name,
@@ -311,7 +309,7 @@ export function SearchResultsList({ rows, onOpen, onShowAll, integrated, selecti
                 artworkPath: null,
                 imageUrl: artist.artworkUrl,
               }}
-              detail={item.top ? "Artist · YouTube Music" : "YouTube Music"}
+              detail="Artist · YouTube Music"
               onPress={
                 selection.selecting
                   ? ignore
@@ -327,9 +325,9 @@ export function SearchResultsList({ rows, onOpen, onShowAll, integrated, selecti
         case "ytAlbum": {
           const head = ytAlbumHead(item.album);
           return (
-            <ArtworkRow
+            <AlbumCardRow
               title={head.title}
-              detail={item.top ? `Album · ${head.line}` : head.line}
+              artist={head.line}
               artworkUri={head.artworkUrl ?? undefined}
               onPress={
                 selection.selecting
@@ -358,7 +356,7 @@ export function SearchResultsList({ rows, onOpen, onShowAll, integrated, selecti
             </View>
           );
         case "skeleton":
-          return <TrackSkeletons label="Loading online results" />;
+          return <TrackSkeletons label="Loading online results" leading="card" />;
       }
     },
     [currentIds, onOpen, onShowAll, integrated, selection],
