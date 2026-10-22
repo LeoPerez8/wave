@@ -292,7 +292,9 @@ export const bench: FastAgainBench = {
             timedDestinations: destinations,
             expectedDestination: expected,
             deadlineFallbacks: outcomes.filter((outcome) => outcome === "deadline").length,
-            destinationMismatches: destinations.filter((key) => key !== expected).length,
+            destinationMismatches: read.startsWith("lineAvailability/")
+              ? null
+              : destinations.filter((key) => key !== expected).length,
             completedLookups: outcomes.filter((outcome) => outcome === "completed").length,
             deadlineMs:
               current && read.startsWith("tapLookup/") ? core.STREAMED_ARTIST_WAIT_MS : null,
