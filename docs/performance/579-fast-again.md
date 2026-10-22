@@ -246,6 +246,70 @@ than a simple fifty-row page. No query is optimized by this inventory ticket.
 - No phone measurements are claimed. Other #579 tickets add their benches to
   the registry and append their evidence here.
 
+## nowPlayingLinks evidence (#585)
+
+The saved [JSONL](results/579-nowPlayingLinks-desktop.jsonl) records the actual
+selected revision's Core sheet lifecycle, at all three fixture sizes, with eleven
+measured synchronous replays per sequence. The current path also loads that
+revision's actual `followNowPlayingLink` action. The historical native sheet cannot
+run in Node: its adapter faithfully replays the selected sheet's single
+`afterClose` slot, callback replacement and spring-end delivery. The bench checks
+that the historical source has that rule before using it. The six required
+sequences are link, link then Back, link then a drag, link then a card dismissed,
+link while closing and two links; an additional chevron sequence exercises the
+other close button. Each size therefore attempts eight link taps across seven
+sequences. A drag springs back open, interrupting the closing spring; Back,
+chevron and the card scenario request another callback-free close. Events are
+16 ms apart. Successful pushes retain their tap identities and order, without
+repeat delivery. The fixed path must deliver every tap before its handler returns.
+Missing historical deliveries are the bug being measured, so the bench prints
+that difference explicitly instead of giving unequal results a shared result key.
+
+These are **desktop replay results, not device timings**. The parameters are read
+from each selected sheet's actual closing spring: damping 30, stiffness 300,
+mass 1. Spring settlement is computed from the analytic damped oscillator's
+kinetic plus potential energy, with zero initial velocity and unit displacement,
+using Reanimated 4's default relative energy threshold of `6e-9`, sampled at a
+modeled 60 Hz. The first frame below that threshold is **650 ms**. This is a model
+of the animation wait, independent of sheet height; it is not a stopwatch delay,
+a hardcoded spring duration or a measured phone animation. `waitBeforePushMs`
+reports this modeled delay separately from the synchronous replay's measured
+wall/CPU/longest-task times. Empty wait arrays mean no push happened. No database
+reads or store notifications occur on this lifecycle path; fixture setup is
+outside the timed replay.
+
+| Library size | ti taps lost / attempted | Fixed taps lost / attempted | ti wait before successful push (modeled ms) | Fixed wait before push (modeled ms) |
+| -----------: | -----------------------: | --------------------------: | ------------------------------------------: | ----------------------------------: |
+|        1,000 |                    5 / 8 |                       0 / 8 |                                         650 |                                   0 |
+|       12,000 |                    5 / 8 |                       0 / 8 |                                         650 |                                   0 |
+|       50,000 |                    5 / 8 |                       0 / 8 |                                         650 |                                   0 |
+
+The v0.7.0-ti reference has the same losses and modeled wait as ti. Without the
+extra chevron sequence, ti loses four of the seven taps in the six required
+sequences. These counts describe adversarial event replays, not a real-world
+loss rate. A successful ti link, including a link while closing, waits for the
+spring. Back, the interrupted drag and the card close lose their link; two links
+keep only the last. After the fix both links dispatch on their own tap, and no
+later close, drag or spring callback owns or repeats their navigation.
+
+Recorded 2026-10-22T11:18:44.673Z on linux-x64, Node v26.8.2, sql.js 1.14.2.
+Current implementation `80d9e538`, including integration `2b74bac7`; before
+`v0.19.0-ti` (`460e39ff`), reference `v0.7.0-ti` (`add761ed`). Exact command:
+
+```sh
+pnpm --silent --filter @wave/mobile bench:fast-again --bench nowPlayingLinks --before /tmp/wave-596-before --reference /tmp/wave-596-reference > docs/performance/results/579-nowPlayingLinks-desktop.jsonl
+```
+
+The 1,000-song work-count test exercises the same production link action and Core
+reducer. Separate public-API Core tests cover links from hidden, opening, open,
+drag and closing; native screen hiding and the player-view reset still occur
+only on spring completion. Fake-clock monitor tests check the one-second warning
+boundary, independent rapid-tap deadlines, all diagnostic reasons and successful
+screen/card acknowledgment. Actual Android touch, animation overlap, TalkBack,
+reduced motion and exported `WaveTiming` log acceptance remain outstanding: this
+environment has no Android SDK or device. No device acceptance or phone speedup
+is claimed by these desktop results.
+
 ## Regression sweep: v0.7.0-ti to ti (#596)
 
 This sweep compares the reference above with `origin/ti` / `v0.19.0-ti`
@@ -257,6 +321,14 @@ run variability and instrumentation, not claimed speedups. Historical source is
 loaded from the read-only `/tmp/wave-596-before` and `/tmp/wave-596-reference`
 worktrees. The five preserved partial files and their quick-run logs were
 inspected before recovery; the evidence below comes from fresh full runs.
+
+The research harness and characterization are committed in `c28955b4`.
+The raw metadata records the pre-research base because the harness files were
+uncommitted during capture. Before handoff this branch also merged local
+integration `d1bb8feb9385a7d6c8bac1e0dc471e3b8d8f9ff7` (#584 guards and #585
+immediate Now Playing links). Those changes do not alter the measured LibraryStore,
+Stats, playlist ranking or graph algorithms; the tables retain their recorded
+snapshot. #585 has its own measured section above.
 
 These remain **desktop Node + sql.js numbers, not Hermes, Android SQLite, or
 measured tap-to-first-frame times**. Each scenario warms once, traces separately,

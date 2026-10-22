@@ -1,6 +1,6 @@
 import { router as expoRouter } from "expo-router";
 
-import { activeTiming, beginTiming, hasTimingTouch } from "./timing";
+import { activeTiming, beginTiming, hasTimingTouch, timingLinkNavigated } from "./timing";
 
 const destination = (href: Parameters<typeof expoRouter.push>[0]): string =>
   typeof href === "string" ? href : href.pathname;
@@ -21,7 +21,9 @@ export const router: typeof expoRouter = {
   ...expoRouter,
   push: (...args) => {
     start("push", destination(args[0]));
+    const id = activeTiming()?.id;
     expoRouter.push(...args);
+    timingLinkNavigated(id);
   },
   navigate: (...args) => {
     start("tab", destination(args[0]));

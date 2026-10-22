@@ -36,7 +36,7 @@ export function AndroidBack(): null {
       }
       if (isNowPlayingShown()) {
         reset();
-        closeNowPlaying();
+        closeNowPlaying(undefined, "Back");
         return true;
       }
       // The navigator may be registered before or after this fallback.
