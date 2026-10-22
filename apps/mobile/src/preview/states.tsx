@@ -32,7 +32,7 @@ import {
 } from "./syntheticLibrary";
 
 /** The Design preview's shelves. */
-export type Shelf = "albums" | "songs" | "playlists" | "search";
+export type Shelf = "albums" | "songs" | "playlists" | "search" | "kinds";
 
 /** A control on a shelf that opens a card: the Songs' Sort, the Playlists' Import and New. */
 export type Control = "sort" | PlaylistsControl;
@@ -117,6 +117,12 @@ export const PREVIEW_STATES: readonly PreviewState[] = [
     shows:
       "Search's field empty, filled, and focused with a query too long for it: the keyboard up.",
     shelf: "search",
+  },
+  {
+    name: "kind-cards",
+    shows:
+      "The card shapes on trial for each kind (album, artist, song, playlist), alone and mixed (#570).",
+    shelf: "kinds",
   },
 ];
 
