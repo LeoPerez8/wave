@@ -2005,3 +2005,5 @@ export {
 } from "./timing.ts";
 
 export { SLOW_READ_BUDGET_MS, slowReadLine, slowReadsLine, type SlowRead } from "./slowRead.ts";
+export { lostTapLine } from "./lostTap.ts";
+export type { LostLinkTap, LostTapReason } from "./lostTap.ts";

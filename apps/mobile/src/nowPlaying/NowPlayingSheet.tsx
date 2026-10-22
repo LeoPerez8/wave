@@ -87,7 +87,7 @@ function ViewToggle({
   );
 }
 
-const close = (): void => closeNowPlaying();
+const close = (): void => closeNowPlaying(undefined, "chevron");
 
 type Item = NonNullable<PlaybackState["item"]>;
 
@@ -211,7 +211,7 @@ export function NowPlayingSheet() {
   useEffect(() => {
     if (!shown) return undefined;
     return addScreenBackHandler(() => {
-      closeNowPlaying();
+      closeNowPlaying(undefined, "Back");
       return true;
     });
   }, [shown]);

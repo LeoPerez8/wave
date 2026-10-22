@@ -10,11 +10,12 @@ import type { SheetState } from "./sheet.ts";
 
 /**
  * - `hidden`: out of sight below the screen.
- * - `open`: resting open or springing there.
+ * - `opening`: springing open.
+ * - `open`: resting open.
  * - `drag`: following a swipe up from the mini player.
  * - `closing`: springing away.
  */
-export type SheetPhase = "hidden" | "open" | "drag" | "closing";
+export type SheetPhase = "hidden" | "opening" | "open" | "drag" | "closing";
 
 export type SheetEvent =
   /** The mini player was tapped. */
@@ -23,8 +24,12 @@ export type SheetEvent =
   | { readonly type: "dragBegin" }
   /** A finger let go of the sheet (from the mini player or a drag down); it settles here. */
   | { readonly type: "release"; readonly to: SheetState }
-  /** The chevron, Back, or a link asked the sheet to go away. */
+  /** A link opens its destination immediately, while the sheet closes. */
+  | { readonly type: "linkClose" }
+  /** The chevron, Back, or a card asked the sheet to go away. */
   | { readonly type: "close" }
+  /** The opening spring reached the top. */
+  | { readonly type: "opened" }
   /** The closing spring reached the bottom. */
   | { readonly type: "closed" };
 
@@ -37,6 +42,8 @@ export interface SheetStep {
   readonly spring: "rise" | "open" | "closed" | null;
   /** The sheet has just gone out of sight. */
   readonly hidden: boolean;
+  /** Only this event owns navigation; spring completion never replays it. */
+  readonly navigateNow?: true;
 }
 
 const stay = (phase: SheetPhase): SheetStep => ({ phase, spring: null, hidden: false });
@@ -44,20 +51,29 @@ const stay = (phase: SheetPhase): SheetStep => ({ phase, spring: null, hidden: f
 export const stepNowPlayingSheet = (phase: SheetPhase, event: SheetEvent): SheetStep => {
   switch (event.type) {
     case "tap":
-      if (phase === "hidden") return { phase: "open", spring: "rise", hidden: false };
-      if (phase === "closing") return { phase: "open", spring: "open", hidden: false };
+      if (phase === "hidden") return { phase: "opening", spring: "rise", hidden: false };
+      if (phase === "closing") return { phase: "opening", spring: "open", hidden: false };
       return stay(phase);
     case "dragBegin":
       // The sheet covers the mini player while it is open.
-      return phase === "open" ? stay(phase) : stay("drag");
+      return phase === "open" || phase === "opening" ? stay(phase) : stay("drag");
     case "release":
       if (phase === "hidden") return stay(phase);
       return event.to === "open"
-        ? { phase: "open", spring: "open", hidden: false }
+        ? { phase: "opening", spring: "open", hidden: false }
         : { phase: "closing", spring: "closed", hidden: false };
+    case "linkClose":
+      return {
+        phase: phase === "hidden" ? "hidden" : "closing",
+        spring: phase === "hidden" ? null : "closed",
+        hidden: false,
+        navigateNow: true,
+      };
     case "close":
       if (phase === "hidden") return stay(phase);
       return { phase: "closing", spring: "closed", hidden: false };
+    case "opened":
+      return phase === "opening" ? stay("open") : stay(phase);
     case "closed":
       if (phase !== "closing") return stay(phase);
       return { phase: "hidden", spring: null, hidden: true };
