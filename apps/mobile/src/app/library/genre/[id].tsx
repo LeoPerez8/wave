@@ -28,6 +28,7 @@ function GenreSongs({ shown }: { shown: Shown }) {
       songs={songs}
       context={context}
       sort={sort}
+      songCards
       header={
         <ListIntro
           line={songCount(loaded ? songs.length : genre.trackCount)}

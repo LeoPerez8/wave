@@ -2,12 +2,13 @@ import { IconGripVertical } from "@tabler/icons-react-native";
 import type { PlaylistLayout } from "@wave/core";
 import { useScrollToTop } from "expo-router";
 import { useLayoutEffect, useRef, type ReactElement, type ReactNode, type RefObject } from "react";
-import { View, type ScrollViewInstance } from "react-native";
+import { useWindowDimensions, View, type ScrollViewInstance } from "react-native";
 import { GestureDetector } from "react-native-gesture-handler";
 import Animated from "react-native-reanimated";
 
+import { CAPTION_TOP, titleLineHeight } from "@/catalog/cards/CardParts";
+import { SLEEVE_ROOM } from "@/catalog/cards/PlaylistCard";
 import { CELL, grid } from "@/catalog/grid";
-import { PLAYLIST_CAPTION } from "@/catalog/playlistTileSize";
 import { useChromeInset } from "@/chrome/chrome";
 import { useListScrollable } from "@/motion/heldTouch";
 import { useThemeColor } from "@/theme/useThemeColor";
@@ -52,6 +53,7 @@ type CellProps = {
 function ArrangeableCell({ index, cells, layout, drag, selecting, children, handlers }: CellProps) {
   const fill = useThemeColor("fill");
   const secondary = useThemeColor("secondary");
+  const { fontScale } = useWindowDimensions();
   const { columns, width, height } = cells;
   const list = layout === "list";
   const { style: cellStyle, grip } = useDragCell({
@@ -75,9 +77,10 @@ function ArrangeableCell({ index, cells, layout, drag, selecting, children, hand
             : {
                 position: "absolute",
                 right: 0,
-                top: (cells.tile ?? 0) + PLAYLIST_CAPTION.top - CELL,
+                // Centred on the name's line, which sits under the sleeves and the cover.
+                top: (cells.tile ?? 0) + SLEEVE_ROOM + CAPTION_TOP - CELL,
                 width: GRIP_TARGET,
-                height: PLAYLIST_CAPTION.line + CELL * 2,
+                height: titleLineHeight(fontScale) + CELL * 2,
               }
         }
       >
