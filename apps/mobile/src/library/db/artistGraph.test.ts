@@ -153,3 +153,24 @@ test("cold playlist and Magic Queue share real paged graph work; warm reads are 
     fixture.close();
   }
 });
+
+test("equal-timestamp history pages seek beyond the prior id instead of rescanning its timestamp prefix", async () => {
+  const fixture = await createFastAgainFixture();
+  try {
+    fixture.db.run(sql`UPDATE play_events SET started_at = 100`);
+    const store = await loadLibraryStore(root, fixture.db);
+    const first = Effect.runSync(store.graphPlayPage([100, 0]));
+    const next = traceQueries(fixture.db, () => Effect.runSync(store.graphPlayPage(first.next!)));
+    assert.equal(first.rows.length, 128);
+    assert.equal(next.result.rows.length, 128);
+    assert.ok(
+      next.queries.some((query) =>
+        query.plan.some((step) => /started_at=\? AND rowid>\?/.test(step)),
+      ),
+      JSON.stringify(next.queries.map((q) => q.plan)),
+    );
+    assert.ok(next.queries.every((query) => query.rows <= 128));
+  } finally {
+    fixture.close();
+  }
+});

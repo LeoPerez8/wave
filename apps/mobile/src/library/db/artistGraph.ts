@@ -1,6 +1,6 @@
 /** Indexed graph-only projections. No favorites, downloads or SongRow payloads. */
 import type { ArtistGraphCatalogEntry, ArtistGraphPlay, CatalogSong } from "@wave/core";
-import { sql } from "drizzle-orm";
+import { sql, type SQL } from "drizzle-orm";
 import type { LibraryDatabase } from "./database.ts";
 import { readPlaylistYtSong } from "@wave/core";
 import { selectYtArtistSimilar, type YtArtistSimilar } from "./ytArtists.ts";
@@ -15,13 +15,14 @@ export const graphPlayPage = (
   db: LibraryDatabase,
   after: GraphPlayCursor,
 ): GraphPage<ArtistGraphPlay, GraphPlayCursor> => {
-  const rows = db.all<{
-    id: number;
-    startedAt: number;
-    listenedMs: number;
-    endReason: ArtistGraphPlay["endReason"];
-    artists: string | null;
-  }>(sql`
+  const read = (where: SQL, limit: number) =>
+    db.all<{
+      id: number;
+      startedAt: number;
+      listenedMs: number;
+      endReason: ArtistGraphPlay["endReason"];
+      artists: string | null;
+    }>(sql`
     SELECT pe.id, pe.started_at AS startedAt, pe.listened_ms AS listenedMs, pe.end_reason AS endReason,
       CASE WHEN t.id IS NOT NULL AND a.id IS NOT NULL AND al.id IS NOT NULL THEN (
         SELECT json_group_array(name) FROM (
@@ -33,8 +34,13 @@ export const graphPlayPage = (
       LEFT JOIN tracks t ON t.id = pe.track_id
       LEFT JOIN artists a ON a.id = t.artist_id
       LEFT JOIN albums al ON al.id = t.album_id
-    WHERE (pe.started_at, pe.id) > (${after[0]}, ${after[1]})
-    ORDER BY pe.started_at, pe.id LIMIT ${GRAPH_PAGE_SIZE}`);
+    WHERE ${where}
+    ORDER BY pe.started_at, pe.id LIMIT ${limit}`);
+  // A row-value predicate only seeks started_at in SQLite, rescanning equal-time prefixes.
+  // Equality on the first key makes the implicit rowid a real second seek key.
+  const rows = read(sql`pe.started_at = ${after[0]} AND pe.id > ${after[1]}`, GRAPH_PAGE_SIZE);
+  if (rows.length < GRAPH_PAGE_SIZE)
+    rows.push(...read(sql`pe.started_at > ${after[0]}`, GRAPH_PAGE_SIZE - rows.length));
   const last = rows.at(-1);
   return {
     rows: rows.flatMap((row) =>
