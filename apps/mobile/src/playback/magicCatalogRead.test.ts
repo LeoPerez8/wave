@@ -39,7 +39,7 @@ const songs = (count: number, prefix = "song"): CatalogSong[] =>
 const session: MagicSession = (() => {
   const started = startMagicQueue(
     { kind: "artist", id: "1", title: "Muse" },
-    [{ trackId: "1", artists: [], genre: null }],
+    [{ trackId: "1", artists: [], genre: null, style: null }],
     { id: "s1", random: () => 0, radio: { artists: ["Muse"], profile: null } },
   );
   assert.ok(started !== null);

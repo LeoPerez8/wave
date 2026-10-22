@@ -79,16 +79,24 @@ export const magicCatalogCandidates = (
   sources: RecommendSources,
   { inLibrary, playable, engine = {} }: MagicCatalogOptions,
 ): MagicCatalogPick => {
+  // At Same genres and Close the seed's style is held to (`styleAffinity`), so a seed of no known genre still has candidates: its radio's.
+  const styles = engine.styles !== undefined;
   const profile = magicSeedProfile(session, sources.profileOf);
-  if (profile === null || profile.size === 0) return { candidates: [], left: 0 };
-  const ranked = recommend({ artists: session.radioArtists, profile }, sources, engine);
+  if (!styles && (profile === null || profile.size === 0)) return { candidates: [], left: 0 };
+  const ranked = recommend(
+    { artists: session.radioArtists, profile, style: session.seedStyle },
+    sources,
+    engine,
+  );
   const used = new Set(session.used);
   const excluded = new Set(session.excludedArtists);
   const seen = new Set<string>();
   const scored: { readonly candidate: MagicCatalogCandidate; readonly score: number }[] = [];
   for (const { song, affinity, score } of ranked) {
-    if (affinity !== "match") continue;
+    // A song of an unknown style is already close to the seed (`rankRecommended`): it stays as "unknown".
+    if (styles ? affinity === "miss" : affinity !== "match") continue;
     if (
+      !styles &&
       !song.artists.some((artist) =>
         magicGenreMatches(
           profile,
@@ -106,7 +114,7 @@ export const magicCatalogCandidates = (
     if (playable !== undefined && !playable(song.videoId)) continue;
     if (song.artists.some((artist) => excluded.has(magicArtistKey(artist)))) continue;
     const candidate: MagicCatalogCandidate = {
-      ...magicYtSong({ trackId, artists: song.artists }, sources.profileOf),
+      ...magicYtSong({ trackId, artists: song.artists }, sources.profileOf, sources.styleOf),
       song: { ...song, video: false },
     };
     const learned = SESSION_SIGNAL * Math.log2(magicSessionWeight(session, candidate));

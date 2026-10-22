@@ -11,6 +11,7 @@ import { View } from "react-native";
 
 import { Artwork } from "@/catalog/Artwork";
 import { AlphabetSpine } from "@/catalog/AlphabetSpine";
+import { songRowLine } from "@/catalog/cards/SongCard";
 import { CELL, grid } from "@/catalog/grid";
 import type { TrackSummary } from "@/catalog/TrackRow";
 import { useChromeInset } from "@/chrome/chrome";
@@ -116,7 +117,7 @@ function LoadingRow() {
       className="flex-row items-center"
       style={{ height: grid.row }}
     >
-      <Artwork uri={undefined} size={CELL * 5} />
+      <Artwork uri={undefined} size={CELL * 5} radius={CELL / 2} />
     </View>
   );
 }
@@ -246,10 +247,11 @@ function PagedSongList({ order }: { order: SongOrder }) {
       return (
         <SwipeSummaryRow
           summary={song}
-          track={toTrackSummary(song)}
+          track={{ ...toTrackSummary(song), artist: songRowLine(song.artist) }}
           state={currentIds.has(String(item)) ? "playing" : undefined}
           favorite={favorites.has(item)}
           leading="artwork"
+          playDisc
           {...selectableRow(
             item,
             listSelection,

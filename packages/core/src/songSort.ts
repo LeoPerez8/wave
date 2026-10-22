@@ -1,15 +1,15 @@
 /**
  * The orders a song list can be sorted in (Library › Songs, an artist's or
  * genre's songs, Favorites): by song name, artist, album or date added, each
- * ascending or descending, plus a list's own order where it has one (when
- * Favorites were starred).
+ * ascending or descending, plus a list's own order where it has one (Favorites'
+ * date starred, an artist's Popular: YouTube Music's order of their songs).
  */
 
 import { readStoredRecord } from "./storedJson.ts";
 import { compareAlbumTracks, compareByTitle, compareStrings } from "./library.ts";
 
 /** What a song list can be sorted by. */
-export type SongSortKey = "title" | "artist" | "album" | "added" | "starred";
+export type SongSortKey = "title" | "artist" | "album" | "added" | "starred" | "popular";
 
 /** A song list's sort: what it's sorted by, and which way. */
 export interface SongSort {
@@ -17,8 +17,13 @@ export interface SongSort {
   readonly descending: boolean;
 }
 
-/** A sort the Library's own tables can order by: every one but date starred (Favorites'). */
-export type LibrarySongSort = SongSort & { readonly key: Exclude<SongSortKey, "starred"> };
+/**
+ * A sort the Library's own tables can order by: every one but the two that need
+ * what the Library's tables don't hold (date starred, Popular).
+ */
+export type LibrarySongSort = SongSort & {
+  readonly key: Exclude<SongSortKey, "starred" | "popular">;
+};
 
 /** What `sortSongs` needs to know about a song. */
 export interface SortableSong {
@@ -34,6 +39,12 @@ export interface SortableSong {
   readonly path: string | null;
   /** When the song was starred (epoch ms); only Favorites sort by it. */
   readonly starredAt?: number | undefined;
+  /**
+   * The song's place in its artist's YouTube Music list (1 is the most
+   * popular), or undefined when the list doesn't hold it; only Popular sorts by
+   * it (`rankPopular` gives it).
+   */
+  readonly popularRank?: number | undefined;
 }
 
 type Compare = (a: SortableSong, b: SortableSong) => number;
@@ -62,6 +73,9 @@ interface Order {
 }
 
 const ALPHABETICAL = ["A to Z", "Z to A"] as const;
+
+/** Where an unranked song sorts under Popular: after every ranked one. */
+const UNRANKED = Number.MAX_SAFE_INTEGER;
 
 const ORDERS: Record<SongSortKey, Order> = {
   title: {
@@ -98,6 +112,14 @@ const ORDERS: Record<SongSortKey, Order> = {
     primary: (a, b) => (a.starredAt ?? 0) - (b.starredAt ?? 0),
     ties: compareByTitle,
   },
+  popular: {
+    name: "Popular",
+    // Offered one way only: its label reads the name alone (`songSortLabel`).
+    directions: ["most popular first", "most popular first"],
+    primary: (a, b) => (a.popularRank ?? UNRANKED) - (b.popularRank ?? UNRANKED),
+    // Songs the list doesn't hold come after the ranked ones, in song name order.
+    ties: compareByTitle,
+  },
 };
 
 /** Song name A to Z: how song lists are sorted until you choose otherwise. */
@@ -125,16 +147,18 @@ export type SongListKind = "songs" | "artist" | "genre" | "favorites";
 export const sameSongSort = (a: SongSort, b: SongSort): boolean =>
   a.key === b.key && a.descending === b.descending;
 
-/** A list's own order, offered first (and its default) where it isn't song name A to Z. */
-const OWN_ORDER: Partial<Record<SongListKind, readonly [SongSort, SongSort]>> = {
+/** A list's own orders, offered first (the first is its default) where it isn't song name A to Z. */
+const OWN_ORDER: Partial<Record<SongListKind, readonly SongSort[]>> = {
   // Most recently starred first, as Favorites has always been.
   favorites: [
     { key: "starred", descending: true },
     { key: "starred", descending: false },
   ],
+  // An artist's songs in YouTube Music's order, unless the owner chose another sort.
+  artist: [{ key: "popular", descending: false }],
 };
 
-/** The sorts a [kind] list offers, in the control's order: its own order leads. */
+/** The sorts a [kind] list offers, in the control's order: its own orders lead. */
 export const songSortsFor = (kind: SongListKind): readonly SongSort[] => {
   const own = OWN_ORDER[kind];
   return own === undefined ? SONG_SORTS : [...own, ...SONG_SORTS];
@@ -147,7 +171,9 @@ export const defaultSongSort = (kind: SongListKind): SongSort =>
 /** How a sort reads in the control and to screen readers, e.g. "Artist, Z to A". */
 export const songSortLabel = (sort: SongSort): string => {
   const order = ORDERS[sort.key];
-  return `${order.name}, ${order.directions[sort.descending ? 1 : 0]}`;
+  return sort.key === "popular"
+    ? order.name
+    : `${order.name}, ${order.directions[sort.descending ? 1 : 0]}`;
 };
 
 /**
@@ -193,9 +219,14 @@ export interface SongOrderTerm {
   readonly nullAs?: number | string;
 }
 
-/** [sort], or song name A to Z for date starred, which only Favorites can order by. */
+/**
+ * [sort], or song name A to Z for date starred and Popular, which the Library's
+ * tables can't order by.
+ */
 export const librarySongSort = (sort: SongSort): LibrarySongSort =>
-  sort.key === "starred" ? (DEFAULT_SONG_SORT as LibrarySongSort) : (sort as LibrarySongSort);
+  sort.key === "starred" || sort.key === "popular"
+    ? (DEFAULT_SONG_SORT as LibrarySongSort)
+    : (sort as LibrarySongSort);
 
 const ascending = (field: SongOrderField, nullAs?: number | string): SongOrderTerm =>
   nullAs === undefined ? { field, descending: false } : { field, descending: false, nullAs };

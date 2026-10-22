@@ -1,10 +1,9 @@
 import type { QueueContext } from "@wave/core";
-import { Text, View } from "react-native";
+import { View } from "react-native";
 
-import { AlbumTile } from "@/catalog/AlbumTile";
-import { ArtistImage } from "@/catalog/ArtistImage";
 import { COVER_ROW_TILE, CoverRow } from "@/catalog/CoverRow";
-import { CELL } from "@/catalog/grid";
+import { AlbumCard } from "@/catalog/cards/AlbumCard";
+import { ArtistCard } from "@/catalog/cards/ArtistCard";
 import { SwipeTrackRow } from "@/library/SwipeTrackRow";
 import { toAlbumSummary } from "@/library/AlbumGrid";
 import { useFavoriteIds } from "@/library/favorites";
@@ -14,11 +13,10 @@ import { toTrackSummary } from "@/library/TrackList";
 import { playSongs } from "@/playback/actions";
 import { useCurrentPlayingIds } from "@/playback/hooks";
 import { openAlbumActions, openArtistActions, openTrackActions } from "@/playback/ActionsMenu";
-import { Press } from "@/motion/Press";
 
 /**
- * A row of album covers that scrolls sideways, edge to edge. `detail`
- * replaces an album's furniture line (its play count on Most played albums).
+ * A row of album cards that scrolls sideways, edge to edge. `detail` follows
+ * an album's artist on its caption (its play count on Most played albums).
  */
 export function AlbumShelf<A extends AlbumRow>({
   albums,
@@ -29,23 +27,31 @@ export function AlbumShelf<A extends AlbumRow>({
 }) {
   return (
     <CoverRow>
-      {albums.map((album) => (
-        <AlbumTile
-          key={album.id}
-          album={toAlbumSummary(album)}
-          size={COVER_ROW_TILE}
-          detail={detail?.(album)}
-          onPress={() => openAlbum(album.id, album)}
-          onLongPress={() => openAlbumActions(album)}
-        />
-      ))}
+      {albums.map((album) => {
+        const summary = toAlbumSummary(album);
+        const caption = [summary.albumArtist, detail?.(album)]
+          .filter((part) => part !== undefined && part !== "")
+          .join(" · ");
+        return (
+          <AlbumCard
+            key={album.id}
+            title={summary.title}
+            artist={caption}
+            artworkUri={summary.artworkUri}
+            size={COVER_ROW_TILE}
+            onPress={() => openAlbum(album.id, album)}
+            onLongPress={() => openAlbumActions(album)}
+          />
+        );
+      })}
     </CoverRow>
   );
 }
 
 /**
- * A short list of songs (Most Played, Favorites). Tapping one plays the list
- * from it; long-press opens the track's menu.
+ * A short list of songs (Most Played, Favorites) as song rows: each a song
+ * card's row, "Song · <artist>" under its title, the cover with its play disc.
+ * Tapping one plays the list from it; long-press opens the track's menu.
  */
 export function SongRows<A extends SongRow>({
   songs,
@@ -65,7 +71,8 @@ export function SongRows<A extends SongRow>({
         <SwipeTrackRow
           song={song}
           key={song.id}
-          track={toTrackSummary(song)}
+          track={{ ...toTrackSummary(song), artist: `Song · ${song.artist}` }}
+          playDisc
           plays={plays?.(song)}
           state={currentIds.has(String(song.id)) ? "playing" : undefined}
           favorite={favorites.has(song.id)}
@@ -78,53 +85,23 @@ export function SongRows<A extends SongRow>({
   );
 }
 
-/** Artist tiles are narrower than covers, so more of the row shows at once. */
-const ARTIST_TILE = CELL * 15;
-
 /**
- * A row of artists that scrolls sideways, edge to edge, like the album
- * shelves: each artist's circle, then the name (two lines reserved) over a detail line (its play count
- * on Most played artists). Tapping one opens it; long-press opens its menu.
+ * A row of artist cards that scrolls sideways, edge to edge, like the album
+ * shelves: each artist's circle as wide as an album cover, the name centred
+ * under it. Tapping one opens it; long-press opens its menu.
  */
-export function ArtistShelf<A extends ArtistRow>({
-  artists,
-  detail,
-}: {
-  artists: readonly A[];
-  detail: (artist: A) => string;
-}) {
+export function ArtistShelf<A extends ArtistRow>({ artists }: { artists: readonly A[] }) {
   return (
     <CoverRow>
       {artists.map((artist) => (
-        <Press
+        <ArtistCard
           key={artist.id}
-          accessibilityRole="button"
-          accessibilityLabel={`${artist.name}, ${detail(artist)}`}
+          name={artist.name}
+          artist={artist}
+          size={COVER_ROW_TILE}
           onPress={() => openArtist(artist.id, artist)}
           onLongPress={() => openArtistActions(artist)}
-          depth={0.02}
-          className="gap-0.5"
-          style={{ width: ARTIST_TILE }}
-        >
-          <View style={{ marginBottom: CELL * 1.5 }}>
-            <ArtistImage artist={artist} size={ARTIST_TILE} large />
-          </View>
-          {/* Two lines reserved, so the detail lines align along the row. */}
-          <Text
-            numberOfLines={2}
-            className="font-sans text-body font-medium text-foreground"
-            style={{ minHeight: CELL * 5.5 }}
-          >
-            {artist.name}
-          </Text>
-          <Text
-            numberOfLines={1}
-            className="font-sans text-footnote text-secondary"
-            style={{ fontVariant: ["tabular-nums"] }}
-          >
-            {detail(artist)}
-          </Text>
-        </Press>
+        />
       ))}
     </CoverRow>
   );

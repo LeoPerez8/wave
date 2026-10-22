@@ -23,6 +23,7 @@ import {
   mixProfileLookups,
   mixProfileLookupsNext,
   mixSeedArtists,
+  libraryStyleOf,
   mixSlidersEngine,
   mixSeedProfile,
   discoverMixReadsMore,
@@ -222,11 +223,13 @@ const harvest = Effect.gen(function* () {
   const graph = yield* artistGraphNow;
   const taste = yield* tasteProfileNow;
   const profileOf = mixProfileOf(library);
+  const styleOf = libraryStyleOf(library);
   yield* freeTurnEffect;
   const sources = {
     catalog,
     graph,
     profileOf,
+    styleOf,
     taste,
     now: Date.now(),
     library,

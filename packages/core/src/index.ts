@@ -637,6 +637,7 @@ export { magicPickEnded } from "./magicQueue.ts";
 export type { MagicPickEnd } from "./magicQueue.ts";
 export { artistRanking } from "./moreFromArtist.ts";
 export type { ArtistRankingInput, ArtistRankingSong } from "./moreFromArtist.ts";
+export { rankPopular } from "./popularSongs.ts";
 export { artistPageItems } from "./artistPage.ts";
 export type { ArtistPageItem, ArtistPageShelf } from "./artistPage.ts";
 export type { SheetEvent, SheetPhase, SheetStep } from "./sheetLifecycle.ts";
@@ -1600,8 +1601,17 @@ export {
   artistMixSimilarSource,
 } from "./artistMixes.ts";
 export type { ArtistMixPools, PlayedSeedArtist } from "./artistMixes.ts";
-export { GENRE_MIX_COUNT, genreFamily, genreMixSeeds, interleaveRadios } from "./genreMixes.ts";
-export type { GenreFamily, GenreMixLibrary } from "./genreMixes.ts";
+export {
+  GENRE_MIX_COUNT,
+  commonStyle,
+  genreFamily,
+  genreMixSeeds,
+  genreStyle,
+  interleaveRadios,
+  songStyle,
+  styleAffinity,
+} from "./genreMixes.ts";
+export type { GenreFamily, GenreMixLibrary, GenreStyle, StyleLevel } from "./genreMixes.ts";
 export {
   DEEZER_GENRES_URL,
   GENRE_AFFINITY_THRESHOLD,
@@ -1616,9 +1626,12 @@ export {
   genreAffinity,
   genreProfile,
   libraryGenreProfiles,
+  libraryStyleOf,
   mixAffinity,
   mixProfileLookups,
   mixSeedProfile,
+  mixSeedStyle,
+  styleOfArtists,
 } from "./genreAffinity.ts";
 export type {
   ArtistProfiles,
@@ -1627,6 +1640,7 @@ export type {
   GenreProfileOf,
   GenreTagged,
   MixAffinity,
+  StyleOf,
 } from "./genreAffinity.ts";
 export type { SearchOnline, YtPick } from "./onlineToggle.ts";
 export { readSearchOnline, searchOnlineAlways, writeSearchOnline } from "./onlineToggle.ts";
@@ -1918,6 +1932,7 @@ export {
   DEFAULT_MIX_SLIDERS,
   GENRE_FAITHFULNESS_STEPS,
   POPULARITY_STEPS,
+  faithfulnessStyles,
   mixSlidersEngine,
   readMixSliders,
   storedMixSliders,
@@ -1949,7 +1964,7 @@ export {
   storedLyricsTranslation,
 } from "./lyricsTranslation.ts";
 export type { LyricsTranslation, LyricsTranslationRequest } from "./lyricsTranslation.ts";
-export { magicLibraryCandidates } from "./magicQueue.ts";
+export { magicCloseArtists, magicLibraryCandidates } from "./magicQueue.ts";
 export { magicLibraryLookups, magicSeedLookups } from "./mixGenreLookups.ts";
 export { magicLibraryThreshold } from "./mixSliders.ts";
 export {

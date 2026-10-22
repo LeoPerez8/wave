@@ -10,6 +10,7 @@ import {
   ytArtistFullPage,
   ytArtistIntegrated,
   ytArtistLookup,
+  ytArtistQuery,
   ytArtistSectionAsks,
   ytArtistSectionView,
   ytArtistShelves,
@@ -242,6 +243,58 @@ export const useYtArtistAnswer = (name: string, reads: ArtistReads): YtArtistAns
   return useSavedYtArtist(artistKey, ask);
 };
 
+/**
+ * The artist's YouTube Music song list, for Popular to rank the Library's songs
+ * by, read quietly: with YT Music on and no saved answer that holds that list
+ * (none, or a match saved without it), the artist's page is read and saved in
+ * the background, as the Online toggle reads it (`fetchArtist`, with the same
+ * Wi-Fi limit and allowance). Nothing else changes: the toggle stays on Library
+ * and no streamed song shows. Asked once per artist, and not when [asks], the
+ * Online toggle's own ask. Null while there's no list to rank by.
+ */
+export const useYtPopularSongs = (
+  name: string,
+  state: YtArtistSection<NativeYtSong>,
+  enabled: boolean,
+  asks: boolean,
+): readonly NativeYtSong[] | null => {
+  const artistKey = identityKey(name);
+  const saved = state.status === "ready" ? state.saved : undefined;
+  const wanted =
+    enabled &&
+    !asks &&
+    state.status === "ready" &&
+    ytArtistQuery(name) !== null &&
+    (saved === null || (saved?.outcome === "found" && saved.page.allSongs === undefined));
+  const [read, setRead] = useState<{ readonly key: string; readonly answer: Saved } | null>(null);
+  const asked = useRef<string | null>(null);
+  // Aborted once the page is gone: a request that's still going saves nothing then.
+  const leaving = useRef<AbortController | null>(null);
+  useEffect(() => {
+    const controller = new AbortController();
+    leaving.current = controller;
+    return () => controller.abort();
+  }, []);
+  useEffect(() => {
+    if (!wanted || asked.current === artistKey) return;
+    asked.current = artistKey;
+    void appRuntime
+      .runPromise(Effect.result(fetchArtist(name, artistKey, saved ?? null, { allSongs: true })), {
+        signal: leaving.current?.signal,
+      })
+      .then(
+        (result) => {
+          if (Result.isSuccess(result)) setRead({ key: artistKey, answer: result.success });
+        },
+        () => undefined,
+      );
+  }, [wanted, artistKey, name, saved]);
+  const answer = read !== null && read.key === artistKey ? read.answer : (saved ?? null);
+  return answer?.outcome === "found" && answer.page.allSongs !== undefined
+    ? answer.page.allSongs
+    : null;
+};
+
 export interface YtArtistSectionShown {
   /** What the section shows, or null when it's hidden (Core's `ytArtistSectionView`). */
   readonly view: YtArtistSectionView<NativeYtSong> | null;
@@ -250,6 +303,11 @@ export interface YtArtistSectionShown {
    * album it already is (Core's `ytArtistShelves`, `libraryAlbumFinder`).
    */
   readonly shelves: readonly YtArtistShelf<AlbumRow>[];
+  /**
+   * The artist's YouTube Music song list, in its order, once it's known: what
+   * Popular ranks the Library's songs by (`rankPopular`). Null until then.
+   */
+  readonly popular: readonly NativeYtSong[] | null;
   /**
    * Whether the page is an integrated view (Core's `ytArtistIntegrated`): its
    * Library albums open integrated too.
@@ -273,7 +331,8 @@ export interface YtArtistSectionShown {
  * set to Always (Core's `ytArtistSectionAsks`); after a failure, picking
  * Online asks again. A long press on the toggle opens the Search online
  * card (`openSearchOnlineChoices`). Library
- * hides what YouTube Music added, with no request. [artistId] and the page's
+ * hides what YouTube Music added, with no request. Its song list is read
+ * quietly for Popular's ranking alone (`useYtPopularSongs`). [artistId] and the page's
  * Library [albums] tell which of the artist's releases the Library already
  * has. The songs the page [held] in place this visit stay among the
  * section's, downloaded or not (Core's `inLibraryUnlessHeld`).
@@ -304,6 +363,7 @@ export const useYtArtistSection = (
     askedFor.current = state;
     show();
   }, [asks, state, show]);
+  const popular = useYtPopularSongs(name, state, enabled, asks);
   const find = useLoadedLibraryFinder();
   const findAlbum = useMemo(() => libraryAlbumFinder(artistId, albums), [artistId, albums]);
 
@@ -357,5 +417,5 @@ export const useYtArtistSection = (
           }),
     [find, state, name, enabled, openedAt, openedIntegrated, always, pick, findAlbum],
   );
-  return { view, shelves, integrated, toggle, counts };
+  return { view, shelves, popular, integrated, toggle, counts };
 };

@@ -13,6 +13,7 @@ import { useCallback, useMemo, useRef, type ReactElement, type ReactNode } from 
 import { View } from "react-native";
 
 import { AlphabetSpine } from "@/catalog/AlphabetSpine";
+import { songRowLine } from "@/catalog/cards/SongCard";
 import { CatalogLine } from "@/catalog/CatalogLine";
 import { CELL, grid } from "@/catalog/grid";
 import { PlayShuffle, type LineToggle } from "@/catalog/PlayShuffle";
@@ -155,6 +156,11 @@ type Props = {
    * list is pulled down, and narrows the list as you type.
    */
   findable?: boolean;
+  /**
+   * The rows are song cards (Favorites, a genre's songs): a play disc on each
+   * cover, and "Song · " before each artist.
+   */
+  songCards?: boolean;
 };
 
 /**
@@ -163,7 +169,14 @@ type Props = {
  * long-press opens the track's menu, whose Select starts selection mode: then
  * every row shows a check cell and taps check and uncheck.
  */
-export function TrackList({ songs, context, header, sort, findable = false }: Props) {
+export function TrackList({
+  songs,
+  context,
+  header,
+  sort,
+  findable = false,
+  songCards = false,
+}: Props) {
   useRenderCount("TrackList");
   const scrollable = useListScrollable();
   const list = useRef<LegendListRef>(null);
@@ -189,23 +202,27 @@ export function TrackList({ songs, context, header, sort, findable = false }: Pr
   const { found, shown, placeOf } = find;
 
   const renderItem = useCallback(
-    ({ item, index }: { item: SongRow; index: number }) => (
-      <SwipeTrackRow
-        song={item}
-        track={toTrackSummary(item)}
-        state={currentIds.has(String(item.id)) ? "playing" : undefined}
-        favorite={favorites.has(item.id)}
-        leading="artwork"
-        {...selectableRow(
-          item,
-          listSelection,
-          // A found song plays the whole list from its own place in it.
-          () => playSongs(songs, placeOf(index), context),
-          (options) => openTrackActions(item, options),
-        )}
-      />
-    ),
-    [context, currentIds, favorites, songs, placeOf, listSelection],
+    ({ item, index }: { item: SongRow; index: number }) => {
+      const track = toTrackSummary(item);
+      return (
+        <SwipeTrackRow
+          song={item}
+          track={songCards ? { ...track, artist: songRowLine(track.artist) } : track}
+          state={currentIds.has(String(item.id)) ? "playing" : undefined}
+          favorite={favorites.has(item.id)}
+          leading="artwork"
+          playDisc={songCards}
+          {...selectableRow(
+            item,
+            listSelection,
+            // A found song plays the whole list from its own place in it.
+            () => playSongs(songs, placeOf(index), context),
+            (options) => openTrackActions(item, options),
+          )}
+        />
+      );
+    },
+    [context, currentIds, favorites, songs, placeOf, listSelection, songCards],
   );
 
   return (

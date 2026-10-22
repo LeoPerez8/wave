@@ -1,6 +1,8 @@
 import { useWindowDimensions, View } from "react-native";
 
-import { type AlbumSummary, AlbumTile } from "@/catalog/AlbumTile";
+import type { AlbumSummary } from "@/catalog/AlbumTile";
+import { AlbumCard } from "@/catalog/cards/AlbumCard";
+import { captionHeight } from "@/catalog/cards/CardParts";
 import { CELL, grid } from "@/catalog/grid";
 import { openAlbumActions } from "@/playback/ActionsMenu";
 import type { ActionItems } from "@/playback/actionTargets";
@@ -23,6 +25,13 @@ export const useAlbumTileSize = (rightInset: number): number => {
 
 /** Height of a row of tiles, gap included, so grids lay out by index. */
 export const albumRowHeight = (tile: number): number => tile + CAPTION + ROW_GAP;
+
+/**
+ * Height of a row of album cards (`AlbumCard`) at [fontScale], gap included, so
+ * the Library's grid lays out by index: the cover, then the card's caption.
+ */
+export const albumCardRowHeight = (tile: number, fontScale: number): number =>
+  tile + captionHeight(fontScale) + ROW_GAP;
 
 /** Groups albums two to a row. */
 export const albumPairs = (albums: readonly AlbumRow[]): (readonly AlbumRow[])[] => {
@@ -65,21 +74,30 @@ export function AlbumPair({
   size: number;
   selection?: ListSelection<AlbumRow> | undefined;
 }) {
+  const { fontScale } = useWindowDimensions();
   return (
-    <View className="flex-row" style={{ gap: grid.gutter, height: albumRowHeight(size) }}>
-      {albums.map((album) => (
-        <AlbumTile
-          key={album.id}
-          album={toAlbumSummary(album)}
-          size={size}
-          {...selectableRow(
-            album,
-            selection,
-            () => openAlbum(album.id, album),
-            (options) => openAlbumActions(album, options),
-          )}
-        />
-      ))}
+    <View
+      className="flex-row"
+      style={{ gap: grid.gutter, height: albumCardRowHeight(size, fontScale) }}
+    >
+      {albums.map((album) => {
+        const { title, albumArtist, artworkUri } = toAlbumSummary(album);
+        return (
+          <AlbumCard
+            key={album.id}
+            title={title}
+            artist={albumArtist}
+            artworkUri={artworkUri}
+            size={size}
+            {...selectableRow(
+              album,
+              selection,
+              () => openAlbum(album.id, album),
+              (options) => openAlbumActions(album, options),
+            )}
+          />
+        );
+      })}
     </View>
   );
 }

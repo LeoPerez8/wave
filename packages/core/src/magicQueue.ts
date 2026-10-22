@@ -7,17 +7,26 @@
  * and what happens in the queue.
  */
 
+import { artistNeighbourhood, type ArtistGraph } from "./artistGraph.ts";
 import { artistPhotoName } from "./artistPhoto.ts";
 import { DISCOVER_MIX_LEVELS, type DiscoverMixLevel } from "./discoverMixLevels.ts";
 import type { DiscoverRadioSong } from "./discoverMixes.ts";
 import {
   GENRE_AFFINITY_THRESHOLD,
   genreProfile,
+  styleOfArtists,
   type GenreProfile,
   type GenreProfileOf,
   type GenreTagged,
+  type StyleOf,
 } from "./genreAffinity.ts";
-import { songFamilies } from "./genreMixes.ts";
+import {
+  commonStyle,
+  songFamilies,
+  songStyle,
+  styleAffinity,
+  type StyleLevel,
+} from "./genreMixes.ts";
 import type { PlayEnd } from "./playEvents.ts";
 import type { QueueState } from "./queue.ts";
 import { isRecord } from "./storedJson.ts";
@@ -44,6 +53,11 @@ export interface MagicSong {
   readonly artists: readonly MagicArtistKey[];
   /** Its genre family's key (`genreFamily`), or null without a genre known. */
   readonly genre: string | null;
+  /**
+   * Its style's key (`songStyle`), or null without one known: a Library song's
+   * own tags, a YouTube Music song's first artist's (`styleOfArtists`).
+   */
+  readonly style: string | null;
 }
 
 /** A Library song as `magicLibrarySongs` reads it. */
@@ -66,6 +80,7 @@ export const magicLibrarySongs = (
     trackId: String(song.id),
     artists: song.artistIds.flatMap((id) => keys.get(id) ?? []),
     genre: songFamilies(song)[0]?.key ?? null,
+    style: songStyle(song),
   });
 };
 
@@ -105,11 +120,31 @@ export const magicLibraryCandidates = (
   {
     profileOf,
     threshold = GENRE_AFFINITY_THRESHOLD,
-  }: { readonly profileOf: GenreProfileOf; readonly threshold?: number | null },
+    styles,
+    graph = null,
+  }: {
+    readonly profileOf: GenreProfileOf;
+    readonly threshold?: number | null;
+    /** At Same genres or Close the songs' styles are compared instead (`styleAffinity`); null: the families. */
+    readonly styles?: StyleLevel | null;
+    /** The artist graph, for the neighbourhood a song of an unknown style may be close by (`magicCloseArtists`). */
+    readonly graph?: ArtistGraph | null;
+  },
 ): MagicSong[] => {
   const toMagicSong = magicLibrarySongs(library.artists);
-  const seed = threshold === null ? null : magicSeedProfile(session, profileOf);
+  if (styles) {
+    const close = magicCloseArtists(session, graph);
+    return library.songs.flatMap((song) => {
+      const candidate = toMagicSong(song);
+      const affinity = styleAffinity(session.seedStyle, candidate.style, styles);
+      const admitted =
+        affinity === "match" ||
+        (affinity === "unknown" && candidate.artists.some((artist) => close.has(artist)));
+      return admitted ? [candidate] : [];
+    });
+  }
   if (threshold === null) return library.songs.map(toMagicSong);
+  const seed = magicSeedProfile(session, profileOf);
   if (seed === null) return [];
   const names = new Map(library.artists.map((artist) => [artist.id, artist.name]));
   const profileOfSong = (song: MagicLibrarySong): GenreProfile | null => {
@@ -123,6 +158,23 @@ export const magicLibraryCandidates = (
     const profile = profileOfSong(song);
     return magicGenreMatches(seed, profile, threshold) ? [toMagicSong(song)] : [];
   });
+};
+
+/**
+ * The artists a Magic Queue holds its candidates of an unknown style to at
+ * Same genres and Close (`magicLibraryCandidates`, `magicCatalogCandidates`):
+ * its seed artists (its radio artists) and, with the artist [graph], their
+ * neighbourhood in it.
+ */
+export const magicCloseArtists = (
+  session: MagicSession,
+  graph: ArtistGraph | null,
+): ReadonlySet<string> => {
+  const close = new Set<string>(session.radioArtists.map(magicArtistKey));
+  if (graph !== null)
+    for (const neighbour of artistNeighbourhood(graph, session.radioArtists))
+      close.add(neighbour.key);
+  return close;
 };
 
 /** The family that has the largest share of [profile] (the first on a tie), or null. */
@@ -145,13 +197,19 @@ const dominantFamily = (profile: GenreProfile | null | undefined): string | null
 export const magicYtSong = (
   song: { readonly trackId: string; readonly artists: readonly string[] },
   profileOf: GenreProfileOf,
+  styleOf?: StyleOf,
 ): MagicSong => {
   let genre: string | null = null;
   for (const artist of song.artists) {
     genre = dominantFamily(profileOf(artist));
     if (genre !== null) break;
   }
-  return { trackId: song.trackId, artists: song.artists.map(magicArtistKey), genre };
+  return {
+    trackId: song.trackId,
+    artists: song.artists.map(magicArtistKey),
+    genre,
+    style: styleOfArtists(song.artists, styleOf),
+  };
 };
 
 /** What a Magic Queue was started from. */
@@ -189,6 +247,12 @@ export interface MagicSession {
    * candidates are held to (`magicSeedProfile`); null when none has a genre.
    */
   readonly seedProfile: Readonly<Record<string, number>> | null;
+  /**
+   * The seed songs' style (`commonStyle` of theirs), which Same genres and
+   * Close hold the candidates to (`styleAffinity`); null when none has one,
+   * and then only the seed's own artists, their neighbourhood and radio are close.
+   */
+  readonly seedStyle: string | null;
 }
 
 /** What a Magic Queue's YouTube Music radio grows from, as `startMagicQueue` takes it. */
@@ -299,6 +363,7 @@ export const startMagicQueue = (
       radioArtists: radio === undefined ? [] : magicRadioArtists(seed, radio.artists),
       seedProfile:
         radio === undefined || radio.profile === null ? null : Object.fromEntries(radio.profile),
+      seedStyle: commonStyle(seedSongs.map((candidate) => candidate.style)),
     },
     first: pick.trackId,
   };
@@ -653,6 +718,7 @@ export const parseMagicSession = (value: unknown): MagicSession | null => {
     ytShare,
     radioArtists,
     seedProfile,
+    seedStyle,
   } = value;
   if (typeof id !== "string" || !isRecord(seed)) return null;
   if (!SEED_KINDS.has(seed["kind"])) return null;
@@ -675,5 +741,7 @@ export const parseMagicSession = (value: unknown): MagicSession | null => {
         : YT_SHARE_START,
     radioArtists: isStrings(radioArtists) ? radioArtists : [],
     seedProfile: isWeights(seedProfile) ? seedProfile : null,
+    // A session saved before styles had none; its candidates are held to closeness.
+    seedStyle: typeof seedStyle === "string" ? seedStyle : null,
   };
 };
