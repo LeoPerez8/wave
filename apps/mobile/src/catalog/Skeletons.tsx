@@ -40,6 +40,9 @@ const ROW_GAP = CELL * 1.5;
  */
 type SkeletonTrailing = "length" | "queue";
 
+/** A track row's leading: a square cover, a song card's cover (Search's songs), or a number. */
+type TrackLeading = "artwork" | "card" | "number";
+
 /**
  * A track row's stand-in, laid out as `TrackRow` is: the leading cover square
  * (or a numbered list's number), two lines (body), the favorite cell and the
@@ -49,13 +52,17 @@ function TrackRowSkeleton({
   leading = "artwork",
   trailing = "length",
 }: {
-  leading?: "artwork" | "number";
+  leading?: TrackLeading;
   trailing?: SkeletonTrailing;
 }) {
   const start = (
     <>
-      {leading === "artwork" ? (
-        <View className="bg-fill" style={{ width: THUMB, height: THUMB }} />
+      {leading !== "number" ? (
+        // A song card's cover has 4dp corners; the others are square.
+        <View
+          className="bg-fill"
+          style={{ width: THUMB, height: THUMB, borderRadius: leading === "card" ? CELL / 2 : 0 }}
+        />
       ) : (
         <View style={{ width: grid.stateCell }}>
           <Line lineHeight={22} width="50%" />
@@ -100,7 +107,7 @@ export function TrackSkeletons({
 }: {
   label?: string;
   count?: number;
-  leading?: "artwork" | "number";
+  leading?: TrackLeading;
   trailing?: SkeletonTrailing;
 }) {
   return (

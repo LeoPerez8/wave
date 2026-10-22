@@ -33,6 +33,7 @@ export function YtSongRow({
   onLongPress = () => openYtSongActions(song),
   trackNumber,
   kind = "",
+  playDisc,
   accessibilityActions,
   onAccessibilityAction,
   swipe,
@@ -44,8 +45,10 @@ export function YtSongRow({
   onLongPress?: (() => void) | undefined;
   /** Leads with this number instead of the cover (an album's tracklist). */
   trackNumber?: number | undefined;
-  /** Says what the row is before its artists ("Song · ", Search's top result). */
+  /** Says what the row is before its artists ("Song · ", Search's song results). */
   kind?: string | undefined;
+  /** The cover is a song card's, with a play disc on its corner (`TrackRow`'s `playDisc`). */
+  playDisc?: boolean | undefined;
   /** Screen-reader actions standing in for gestures (move, remove in a playlist). */
   accessibilityActions?: ComponentProps<typeof TrackRow>["accessibilityActions"];
   onAccessibilityAction?: ComponentProps<typeof TrackRow>["onAccessibilityAction"];
@@ -73,6 +76,7 @@ export function YtSongRow({
       favorite={favorite}
       checked={checked}
       leading={trackNumber === undefined ? "artwork" : "number"}
+      playDisc={playDisc}
       progress={ytDownloadProgress(download)}
       onPress={onPress}
       onLongPress={onLongPress}
