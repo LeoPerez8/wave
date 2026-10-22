@@ -93,11 +93,18 @@ review axes in [534-code-review.md](534-code-review.md). The independent deletio
 tests confirm preserving route literals, deferring a universal preparation module,
 and rejecting a LibraryStore split by size. They qualify the shared-read claim:
 playlist input reads the catalog directly, and Add validation currently reads
-recommendation-only data it does not need. That is an observed redundant read,
-not a measured phone-performance regression; the review-fix slice will record
-a bounded correction or explicit deferral.
+recommendation-only data it does not need. The bounded correction in `b6614a43`
+removes those reads from acceptance validation while retaining the transaction,
+Library availability/identity checks and fresh refill snapshot. A real-SQLite
+query probe records 19 SELECTs before and 15 after; candidate songs/radios,
+pending favorites and full feedback reads are absent from validation. Identity,
+duplicate and rollback regressions pass. Library-wide reads remain, and no phone
+latency or scaling improvement is inferred. This resolves the observed redundant
+read without introducing the deferred universal reader.
 
-The HTML before/after report is generated in the OS temp directory. The resumed
-HTML preview reports an AppArmor sandbox restriction on this host; this does not
-establish a visual browser pass. No phone-performance or native accessibility
+The HTML before/after report was generated in the OS temp directory and rendered
+in the parent thread. The app-owned preview failed with an AppArmor restriction
+and repeated snapshot timeouts; a headless Chrome fallback produced the report
+capture at `/tmp/wave-open-tickets-20261021/architecture-report.png`. This report
+preview is separate from native app validation. No phone-performance or native accessibility
 evidence is inferred from source review; those remain in #545/#534.
