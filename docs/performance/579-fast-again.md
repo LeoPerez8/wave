@@ -969,3 +969,63 @@ this shared desktop; another checkout's benchmark was detected around the end of
 No own test/typecheck was run alongside the timing command, and capture started after
 waiting for the earlier CPU-heavy validation to finish. Keep the raw tail samples instead
 of inferring a timing win from this run. Phone performance and TalkBack remain unverified.
+
+
+## Standing Home picks and stepped taste (#593)
+
+Measured source: `92c46f52cfed8593837aadf4ed47d4601a6d0a67`, including local
+integration `1f37f0742050bda51a6841f1f0707a55e80877f3`. Before is the actual
+`v0.19.0-ti` source, `460e39ff0cba6f50e7a456a77d6e99813295ebaa`, loaded from
+the stable `592-before` detached worktree. Captured on Linux x64, Node v26.8.2
+and sql.js, eleven runs at each size. These are warmed desktop data/effect
+replays, not phone/Hermes latency or native frame measurements. No v0.7.0-ti
+timing is claimed; the Magic Queue row/profile were added after that reference.
+
+The row's production read descriptor resolves only saved IDs, caps the read at
+nine, restores saved order and follows picked track/favorite changes. Native
+scan batches now carry their actual saved track IDs; unrelated scan saves and
+landings do not reread the row. Unknown global edits remain conservative. A
+short list alone follows a one-ID growth probe. Removed songs disappear in
+place; surviving IDs keep their order and refill after settlement. Pull/Undo
+and the shared live profile remain intact.
+
+Automatic due jobs use the actual screen-settled signal, then the existing
+free-turn scheduler. A cancelled job releases its pending turn and iterator,
+and never saves partial choices. One song/artist snapshot feeds both the
+shared live taste profile and the due pick. Artist-key mapping, song mapping,
+scoring, weighted sums/draws and shown-today accumulation yield. The iterator
+consumer allows four ms of work with two ms headroom toward a six-ms JS target.
+The same signal order, IEEE additions and random draw order are preserved.
+
+### Taste derivation
+
+Run `pnpm --silent --filter @wave/mobile bench:fast-again --bench tasteProfile
+--before <v0.19.0-ti worktree>`. Raw evidence:
+[593-tasteProfile-desktop.jsonl](results/593-tasteProfile-desktop.jsonl).
+`firstDerivation` includes all source SQL, conversion and scoring. Each variant
+reads every song and artist once: five statements (three history projections,
+one song query, one artist query). `scoreCpuOnly` holds identical inputs outside
+timing and isolates the public Core scorer, through the production stepped
+Effect adapter after the fix. Its zero SQL rows do not describe a cold derive.
+
+| Songs / plays | Scope | SQL rows before → after | Total median / p90 ms before → after | Mean CPU ms before → after | Longest task ms before → after |
+| --- | --- | --- | --- | --- | --- |
+| 1,000 / 10,000 | firstDerivation | 11,190 → 11,190 | 36.294 / 37.096 → 39.055 / 42.472 | 41.092 → 56.381 | 37.759 → 20.939 |
+| 1,000 / 10,000 | scoreCpuOnly | 0 → 0 | 2.141 / 3.215 → 3.527 / 3.693 | 4.190 → 4.111 | 3.852 → 3.702 |
+| 12,000 / 54,000 | firstDerivation | 68,280 → 68,280 | 360.281 / 376.127 → 363.937 / 378.676 | 461.388 → 478.549 | 381.901 → 189.448 |
+| 12,000 / 54,000 | scoreCpuOnly | 0 → 0 | 19.810 / 22.188 → 27.018 / 27.102 | 20.552 → 28.756 | 22.291 → 4.079 |
+| 50,000 / 200,000 | firstDerivation | 259,500 → 259,500 | 1617.527 / 2288.946 → 1599.582 / 2210.051 | 2169.609 → 2194.300 | 2338.781 → 1262.824 |
+| 50,000 / 200,000 | scoreCpuOnly | 0 → 0 | 98.217 / 108.605 → 120.579 / 122.984 | 121.331 → 132.977 | 144.614 → 4.996 |
+
+All six before/after pairs match the complete profile: every song, artist and
+genre score, exact numeric values and map insertion order, not only a summary
+statistic. The CPU-only after maxima are below six ms at all sizes in this
+capture. Total scoring CPU/work increases: this fix buys scheduling points,
+not a cheaper scoring algorithm. The full derivation still has indivisible
+synchronous SQLite source reads (including row decoding), so its longest task
+is **not** capped at six ms. At 50,000 songs it is 1,262.824 ms after. Source
+reads are permitted only at the explicit background boundary; no whole-source
+latency win or hard hardware-wide six-ms guarantee is claimed. #594 owns the
+shared paged-history/source projections and graph; this change does not
+duplicate or replace that graph. No `594-api.md` was available during capture.
+

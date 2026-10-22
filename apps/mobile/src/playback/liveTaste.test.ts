@@ -118,3 +118,37 @@ describe("The live taste profile", () => {
     assert.equal(await songScore(live, streamed), 5);
   });
 });
+
+test("due Home and mixes keep one live profile; a delayed snapshot counts pre-read signals exactly once", async () => {
+  let history: TasteHistory = NO_HISTORY;
+  let takeSnapshot: (() => void) | undefined;
+  let reads = 0;
+  const read = (snapshotTaken: () => void) =>
+    Effect.callback<ReturnType<typeof tasteProfile>>((resume) => {
+      reads++;
+      takeSnapshot = () => {
+        const profile = tasteProfile(history, songOf, NOW);
+        snapshotTaken();
+        resume(Effect.succeed(profile));
+      };
+    });
+  const live = makeLiveTaste({
+    derive: read(() => {}),
+    deriveWithSnapshot: read,
+    songsOf: (ids) => Effect.succeed(ids.map(songOf)),
+  });
+  const first = Effect.runPromise(live.profileUsing(read));
+  history = { ...NO_HISTORY, favorites: [{ trackId: "7", changedAt: NOW }] };
+  await Effect.runPromise(live.marked("favorite", ["7"], NOW));
+  await Effect.runPromise(live.marked("favorite", [ytTrackId("streamed")], NOW));
+  takeSnapshot!();
+  const firstProfile = await first;
+  assert.equal(firstProfile?.songs.get(ytTrackId("streamed")), 3);
+  assert.equal(firstProfile?.songs.get("7"), 3);
+  const second = await Effect.runPromise(live.profile);
+  assert.equal(second?.songs.get("7"), 3);
+  assert.equal(reads, 1);
+  await Effect.runPromise(live.marked("download", ["7"], NOW));
+  assert.equal((await Effect.runPromise(live.profileUsing(read)))?.songs.get("7"), 5);
+  assert.equal(reads, 1);
+});
