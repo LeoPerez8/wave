@@ -1,3 +1,22 @@
+import { artistGraphSourcesChanged } from "@/home/graphSources";
+import {
+  mixCreditPage,
+  mixPlaylistedPage,
+  mixStreamedPage,
+  mixSongsPage,
+  mixArtistsPage,
+  mixHistoryPage,
+} from "./db/mixInputs";
+import {
+  mixCatalogPage,
+  graphRadioPage,
+  graphCatalogPage,
+  graphSimilarPage,
+  graphPlayPage,
+  type GraphPage,
+  type GraphPlayCursor,
+} from "./db/artistGraph";
+import type { ArtistGraphPlay } from "@wave/core";
 import {
   acceptPlaylistRecommendation,
   dismissPlaylistRecommendation,
@@ -1031,6 +1050,39 @@ export class LibraryStore extends Context.Service<
       at: number,
     ) => Effect.Effect<void, LibraryStoreError>;
     /** The candidate catalog: every song with the radios that brought it. */
+    readonly mixStreamedPage: (
+      after: number,
+    ) => Effect.Effect<ReturnType<typeof mixStreamedPage>, LibraryStoreError>;
+    readonly mixPlaylistedPage: (
+      after: number,
+    ) => Effect.Effect<ReturnType<typeof mixPlaylistedPage>, LibraryStoreError>;
+    readonly mixCreditPage: (
+      after: number,
+    ) => Effect.Effect<ReturnType<typeof mixCreditPage>, LibraryStoreError>;
+    readonly mixSongsPage: (
+      after: number,
+    ) => Effect.Effect<ReturnType<typeof mixSongsPage>, LibraryStoreError>;
+    readonly mixArtistsPage: (
+      after: number,
+    ) => Effect.Effect<ReturnType<typeof mixArtistsPage>, LibraryStoreError>;
+    readonly mixHistoryPage: (
+      after: number,
+    ) => Effect.Effect<ReturnType<typeof mixHistoryPage>, LibraryStoreError>;
+    readonly graphRadioPage: (
+      after: number,
+    ) => Effect.Effect<ReturnType<typeof graphRadioPage>, LibraryStoreError>;
+    readonly graphCatalogPage: (
+      after: number,
+    ) => Effect.Effect<ReturnType<typeof graphCatalogPage>, LibraryStoreError>;
+    readonly mixCatalogPage: (
+      after: number,
+    ) => Effect.Effect<ReturnType<typeof mixCatalogPage>, LibraryStoreError>;
+    readonly graphSimilarPage: (
+      after: string,
+    ) => Effect.Effect<GraphPage<YtArtistSimilar, string>, LibraryStoreError>;
+    readonly graphPlayPage: (
+      after: GraphPlayCursor,
+    ) => Effect.Effect<GraphPage<ArtistGraphPlay, GraphPlayCursor>, LibraryStoreError>;
     readonly candidateCatalog: Effect.Effect<readonly CatalogSong[], LibraryStoreError>;
     /**
      * Every saved YT Music artist page's artist with who "Fans might also
@@ -1702,7 +1754,10 @@ const make = Effect.gen(function* () {
       ),
 
     saveYtArtist: (artistKey, saved) =>
-      writeAttempt("save an artist's YT Music section", () => saveYtArtist(db, artistKey, saved)),
+      writeAttempt("save an artist's YT Music section", () => {
+        saveYtArtist(db, artistKey, saved);
+        artistGraphSourcesChanged("similar");
+      }),
 
     stampPreference: (key) =>
       writeAttempt("record a preference change", () => stampPreference(db, key, Date.now())),
@@ -1739,8 +1794,26 @@ const make = Effect.gen(function* () {
     knownVideos: attempt("read the videos the owner knows", () => selectKnownVideos(db)),
 
     addCandidates: (page, at) =>
-      writeAttempt("add to the candidate catalog", () => addCandidates(db, page, at)),
+      writeAttempt("add to the candidate catalog", () => {
+        addCandidates(db, page, at);
+        artistGraphSourcesChanged("catalog");
+      }),
 
+    mixStreamedPage: (after) =>
+      attempt("read a mix streamed page", () => mixStreamedPage(db, after)),
+    mixPlaylistedPage: (after) =>
+      attempt("read a mix playlist page", () => mixPlaylistedPage(db, after)),
+    mixCreditPage: (after) => attempt("read a mix credit page", () => mixCreditPage(db, after)),
+    mixSongsPage: (after) => attempt("read a mix song page", () => mixSongsPage(db, after)),
+    mixArtistsPage: (after) => attempt("read a mix artist page", () => mixArtistsPage(db, after)),
+    mixHistoryPage: (after) => attempt("read a mix history page", () => mixHistoryPage(db, after)),
+    mixCatalogPage: (after) => attempt("read a mix catalog page", () => mixCatalogPage(db, after)),
+    graphRadioPage: (after) => attempt("read a graph radio page", () => graphRadioPage(db, after)),
+    graphCatalogPage: (after) =>
+      attempt("read a graph catalog page", () => graphCatalogPage(db, after)),
+    graphSimilarPage: (after) =>
+      attempt("read a graph similar page", () => graphSimilarPage(db, after)),
+    graphPlayPage: (after) => attempt("read a graph play page", () => graphPlayPage(db, after)),
     candidateCatalog: attempt("read the candidate catalog", () => selectCandidateCatalog(db)),
 
     ytArtistSimilar: attempt("read the saved artist pages' similar artists", () =>

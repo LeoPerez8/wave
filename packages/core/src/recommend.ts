@@ -1,3 +1,4 @@
+import { finishSteps, mapSteps, sortSteps } from "./buildSteps.ts";
 /**
  * Wave's own recommendation engine (docs/spec.md, "Discover", "Recommendation
  * engine"): it ranks the candidate catalog's songs for a seed (an artist, a
@@ -13,7 +14,7 @@
 import {
   ARTIST_HOP_DECAY,
   ARTIST_NEIGHBOURHOOD_HOPS,
-  artistNeighbourhood,
+  artistNeighbourhoodSteps,
   type ArtistGraph,
   type ArtistNeighbourhoodOptions,
 } from "./artistGraph.ts";
@@ -223,20 +224,28 @@ export const recommendCandidates = (
   seed: RecommendSeed,
   sources: RecommendSources,
   options: Pick<RecommendOptions, "neighbourhood" | "random"> = {},
-): RecommendCandidate[] => {
+): RecommendCandidate[] => finishSteps(recommendCandidatesSteps(seed, sources, options));
+export function* recommendCandidatesSteps(
+  seed: RecommendSeed,
+  sources: RecommendSources,
+  options: Pick<RecommendOptions, "neighbourhood" | "random"> = {},
+): Generator<void, RecommendCandidate[]> {
   const { catalog, graph, profileOf, taste, now } = sources;
   const profile = seed.profile ?? null;
   const seeds = new Set(keysOf(seed.artists));
   const near = new Map<string, number>();
   if (graph !== null)
-    for (const neighbour of artistNeighbourhood(graph, seed.artists, {
+    for (const neighbour of yield* artistNeighbourhoodSteps(graph, seed.artists, {
       hops: options.neighbourhood?.hops ?? ARTIST_NEIGHBOURHOOD_HOPS,
       decay: options.neighbourhood?.decay ?? ARTIST_HOP_DECAY,
-    }))
+    })) {
       near.set(neighbour.key, neighbour.closeness);
+      yield;
+    }
   const family = seed.family === undefined ? null : (genreFamily(seed.family)?.key ?? null);
   const candidates: RecommendCandidate[] = [];
   for (const entry of catalog) {
+    yield;
     const { song } = entry;
     const artists = keysOf(song.artists);
     const onSeedRadio = entry.radios.some((radio) => seeds.has(radio.seed));
@@ -282,7 +291,7 @@ export const recommendCandidates = (
     });
   }
   return candidates;
-};
+}
 
 const byVideoId = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 
@@ -295,10 +304,14 @@ const byVideoId = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0)
 export const rankRecommended = (
   candidates: readonly RecommendCandidate[],
   options: Pick<RecommendOptions, "weights" | "threshold" | "styles" | "avoid"> = {},
-): RecommendedSong[] => {
+): RecommendedSong[] => finishSteps(rankRecommendedSteps(candidates, options));
+export function* rankRecommendedSteps(
+  candidates: readonly RecommendCandidate[],
+  options: Pick<RecommendOptions, "weights" | "threshold" | "styles" | "avoid"> = {},
+): Generator<void, RecommendedSong[]> {
   const weights = { ...RECOMMEND_WEIGHTS, ...options.weights };
   const threshold = options.threshold ?? GENRE_AFFINITY_THRESHOLD;
-  const ranked = candidates.map((candidate) => ({
+  const ranked = yield* mapSteps(candidates, (candidate) => ({
     candidate,
     score:
       weights.closeness * candidate.closeness +
@@ -310,14 +323,15 @@ export const rankRecommended = (
     avoided: options.avoid?.has(candidate.entry.song.videoId) === true,
   }));
   // oxlint-disable-next-line unicorn/no-array-sort -- sorts the fresh array map made; Hermes lacks toSorted
-  ranked.sort(
+  const sorted = yield* sortSteps(
+    ranked,
     (a, b) =>
       Number(a.avoided) - Number(b.avoided) ||
       b.score - a.score ||
       a.candidate.entry.firstSeenAt - b.candidate.entry.firstSeenAt ||
       byVideoId(a.candidate.entry.song.videoId, b.candidate.entry.song.videoId),
   );
-  return ranked.map(({ candidate, score }) => ({
+  return yield* mapSteps(sorted, ({ candidate, score }) => ({
     song: candidate.entry.song,
     score,
     affinity:
@@ -327,7 +341,7 @@ export const rankRecommended = (
     onSeedRadio: candidate.onSeedRadio,
     closeness: candidate.closeness,
   }));
-};
+}
 
 /**
  * [seed]'s candidates in [sources]' catalog, best first: the songs one of

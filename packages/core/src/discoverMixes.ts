@@ -1,3 +1,4 @@
+import { finishSteps } from "./buildSteps.ts";
 /**
  * Home's mixes (docs/spec.md, "Artist mixes"): mixes made of songs the owner
  * doesn't know yet. Each mix starts from a seed (an artist, picked by
@@ -158,9 +159,15 @@ interface PlayedRecording {
  */
 export const playedFinder = (
   recordingKeys: readonly string[],
-): ((song: Pick<YtSong, "title" | "artists" | "album">) => boolean) => {
+): ((song: Pick<YtSong, "title" | "artists" | "album">) => boolean) =>
+  finishSteps(playedFinderSteps(recordingKeys));
+
+export function* playedFinderSteps(
+  recordingKeys: readonly string[],
+): Generator<void, (song: Pick<YtSong, "title" | "artists" | "album">) => boolean> {
   const byTitle = new Map<string, PlayedRecording[]>();
   for (const recording of recordingKeys) {
+    yield;
     const [album = "", albumArtist = "", title = ""] = recording.split(FIELD);
     if (title === "") continue;
     const key = playedTitle(title);
@@ -179,7 +186,7 @@ export const playedFinder = (
         (album !== "" && recording.album === album),
     );
   };
-};
+}
 
 /** A song of YouTube Music's radio, which plays music videos too. */
 export interface DiscoverRadioSong extends YtSong {
@@ -232,7 +239,13 @@ export const discoverMixSongs = <S extends DiscoverRadioSong>(
   pages: readonly (readonly S[])[],
   filter: DiscoverMixFilter<S>,
   before: readonly S[] = [],
-): S[] => {
+): S[] => finishSteps(discoverMixSongsSteps(pages, filter, before));
+
+export function* discoverMixSongsSteps<S extends DiscoverRadioSong>(
+  pages: readonly (readonly S[])[],
+  filter: DiscoverMixFilter<S>,
+  before: readonly S[] = [],
+): Generator<void, S[]> {
   const videos = new Set(filter.taken);
   for (const song of before) videos.add(song.videoId);
   const recordings = new Set(before.map(mixRecordingOf));
@@ -243,8 +256,14 @@ export const discoverMixSongs = <S extends DiscoverRadioSong>(
   const held: S[] = [];
   const unsure: S[] = [];
   const unsureHeld: S[] = [];
-  const radio = pages.flat();
+  const radio: S[] = [];
+  for (const page of pages)
+    for (const song of page) {
+      radio.push(song);
+      yield;
+    }
   for (const song of radio) {
+    yield;
     if (kept.length >= MIX_MOST) break;
     const recording = mixRecordingOf(song);
     if (song.video || videos.has(song.videoId) || recordings.has(recording)) continue;
@@ -262,8 +281,13 @@ export const discoverMixSongs = <S extends DiscoverRadioSong>(
   if (kept.length >= MIX_FEWEST || spare.length === 0) return kept;
   const back = new Set(spare.slice(0, MIX_FEWEST - kept.length));
   const fromPages = new Set(kept.slice(before.length));
-  return [...before, ...radio.filter((song) => fromPages.has(song) || back.has(song))];
-};
+  const result = [...before];
+  for (const song of radio) {
+    if (fromPages.has(song) || back.has(song)) result.push(song);
+    yield;
+  }
+  return result;
+}
 
 /**
  * Whether to read another page of a seed's radio: after [pages] pages, the

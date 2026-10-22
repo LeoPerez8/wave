@@ -1,3 +1,4 @@
+import { onArtistGraphSourcesChanged } from "./graphSources";
 /**
  * The app's artist graph (docs/spec.md, "Artist graph"), derived from the
  * library database once per session (`readArtistGraph`), the first time a
@@ -7,17 +8,14 @@
 import type { ArtistGraph } from "@wave/core";
 import * as Effect from "effect/Effect";
 
-import { freeTurnEffect } from "@/lib/backgroundWork";
-import { sharedRead } from "@/lib/sharedRead";
+import { freeTurnEffect, settledTurnEffect } from "@/lib/backgroundWork";
+
+import { onLibraryChange } from "@/library/libraryChanges";
 import { LibraryStore } from "@/library/LibraryStore";
 
-import { readArtistGraph } from "./artistGraph";
+import { shareArtistGraph } from "./sharedArtistGraph";
 
-const shared = sharedRead(
-  Effect.gen(function* () {
-    return yield* readArtistGraph(yield* LibraryStore, freeTurnEffect);
-  }),
-);
+const shared = shareArtistGraph(Effect.service(LibraryStore), settledTurnEffect, freeTurnEffect);
 
 /** The artist graph, derived once per session; null while it can't be read (derived again next time). */
 export const artistGraphNow: Effect.Effect<ArtistGraph | null, never, LibraryStore> =
@@ -25,3 +23,10 @@ export const artistGraphNow: Effect.Effect<ArtistGraph | null, never, LibrarySto
 
 /** Forgets the artist graph: the next ask derives it again (after a harvest grew the catalog). */
 export const forgetArtistGraph = (): void => shared.forget();
+
+// The graph has no favorite/playlist input. Harvests and saved-page writers invalidate explicitly.
+onLibraryChange((change) => {
+  if (change.kind === "tracks" || change.kind === "plays") shared.forget();
+});
+
+onArtistGraphSourcesChanged(shared.forget);

@@ -78,16 +78,6 @@ export const WHOLE_LIBRARY: Record<string, Exception> = {
     reason: "Visible mix page resolves streamed entries against Library files.",
     capabilities: ["ytmusic/libraryFinder.ts#useLibraryFinder"],
   },
-  "home/artistGraph.ts#readArtistGraph": {
-    reason:
-      "Artist graph derives from whole taste history and Library credits for background recommendations; step the daily build.",
-    removeIn: 594,
-    capabilities: [
-      "library/LibraryStore.ts#listArtists",
-      "library/LibraryStore.ts#listSongs",
-      "library/LibraryStore.ts#tasteHistory",
-    ],
-  },
   "home/DiscoverMixActions.tsx#DiscoverMixActionsMenu": {
     reason:
       "Explicitly opened mix menu resolves downloads and playlist entries; not an always-mounted control.",
@@ -103,20 +93,13 @@ export const WHOLE_LIBRARY: Record<string, Exception> = {
   },
   "home/discoverMixes.ts#useLibraryTracks": {
     reason:
-      "Mix blending currently follows all songs; replace Home opening/focus work with saved, versioned inputs.",
-    removeIn: 594,
+      "Visible mix pages resolve Library tracks; Home blends saved mixes without this hook. Known videos are source-versioned and daily inputs run serially after settlement in bounded pages/CPU steps (knownVideosRead, mixInputs, settledWork and serialWork behavioral tests).",
     capabilities: ["library/hooks.ts#songs"],
   },
   "home/magicQueueSection.ts#MAGIC_QUEUE_LIBRARY": {
     reason:
       "Home Magic Queue row reads every song and artist for nine covers; replace with standing picks by id.",
     removeIn: 593,
-    capabilities: ["library/LibraryStore.ts#listArtists", "library/LibraryStore.ts#listSongs"],
-  },
-  "home/mixKnown.ts#readIndexes": {
-    reason:
-      "Recommendation index derives whole Library identities for daily mix builds; move that work after settled in steps.",
-    removeIn: 594,
     capabilities: ["library/LibraryStore.ts#listArtists", "library/LibraryStore.ts#listSongs"],
   },
   "library/BrowseLists.tsx#ArtistsList": {

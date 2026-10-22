@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { artistNeighbourhood, type CatalogSong, type TasteHistory } from "@wave/core";
+import { artistNeighbourhood, type CatalogSong } from "@wave/core";
 import * as Effect from "effect/Effect";
 
 import { readArtistGraph, type ArtistGraphReads } from "./artistGraph.ts";
@@ -33,33 +33,50 @@ const play = (trackId: string, startedAt: number) => ({
 });
 
 /** A store with [catalog], one saved page and two Library songs played one after the other. */
-const store = (counts: { reads: number }, catalog: CatalogSong[] = []): ArtistGraphReads =>
-  ({
-    candidateCatalog: Effect.sync(() => {
+const store = (counts: { reads: number }, catalog: CatalogSong[] = []): ArtistGraphReads => ({
+  graphCatalogPage: (after) =>
+    Effect.sync(() => {
       counts.reads++;
-      return catalog;
+      return {
+        rows:
+          after === 0
+            ? catalog.map((entry) => ({ ...entry, videoId: entry.song.videoId, radios: [] }))
+            : [],
+        next: after === 0 && catalog.length > 0 ? 1 : null,
+      };
     }),
-    ytArtistSimilar: Effect.succeed([
-      {
-        name: "Portishead",
-        similar: [{ name: "Beth Gibbons", browseId: "UCbeth", audience: null }],
-      },
-    ]),
-    tasteHistory: Effect.succeed({
-      plays: [play("2", 4 * MINUTE), play("1", 0), play("3", 8 * MINUTE)],
-      favorites: [],
-      downloads: [],
-    } satisfies TasteHistory),
-    listSongs: Effect.succeed([
-      { id: 1, artistIds: [10] },
-      { id: 2, artistIds: [11, 12] },
-    ]),
-    listArtists: Effect.succeed([
-      { id: 10, name: "Massive Attack" },
-      { id: 11, name: "Burial" },
-      { id: 12, name: "Kode9" },
-    ]),
-  }) as unknown as ArtistGraphReads;
+  graphRadioPage: (after) =>
+    Effect.succeed({
+      rows:
+        after === 0
+          ? catalog.flatMap((entry) =>
+              entry.radios.map((radio) => ({ ...radio, videoId: entry.song.videoId })),
+            )
+          : [],
+      next: null,
+    }),
+  graphSimilarPage: (after) =>
+    Effect.succeed({
+      rows:
+        after === ""
+          ? [
+              {
+                name: "Portishead",
+                similar: [{ name: "Beth Gibbons", browseId: "UCbeth", audience: null }],
+              },
+            ]
+          : [],
+      next: null,
+    }),
+  graphPlayPage: () =>
+    Effect.succeed({
+      rows: [
+        { ...play("1", 0), artists: ["Massive Attack"] },
+        { ...play("2", 4 * MINUTE), artists: ["Burial", "Kode9"] },
+      ],
+      next: null,
+    }),
+});
 
 describe("the artist graph the app derives", () => {
   test("joins the catalog's radios, the saved pages and the Library's play history", () => {
