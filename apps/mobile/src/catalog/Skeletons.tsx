@@ -146,13 +146,13 @@ export function TileSkeleton({ size }: { size: number }) {
  * An album card's stand-in, laid out as `AlbumCard` is at [size]: the square
  * cover with 6dp corners, then the title line and the artist line under it.
  */
-export function AlbumCardSkeleton({ size }: { size: number }) {
+export function AlbumCardSkeleton({ size, fontScale = 1 }: { size: number; fontScale?: number }) {
   return (
     <View style={{ width: size }}>
       <View className="bg-fill" style={{ width: size, height: size, borderRadius: CELL * 0.75 }} />
       <View style={{ paddingTop: CELL }}>
-        <Line lineHeight={22} width="85%" />
-        <Line lineHeight={18} width="50%" />
+        <Line lineHeight={22 * Math.max(1, fontScale)} width="85%" />
+        <Line lineHeight={18 * Math.max(1, fontScale)} width="50%" />
       </View>
     </View>
   );

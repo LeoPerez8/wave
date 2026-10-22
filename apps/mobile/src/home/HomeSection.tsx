@@ -42,6 +42,8 @@ import { useMostPlayedOfAllTime } from "./mostPlayedOfAllTime";
 
 import { AlbumShelf, ArtistShelf, SongRows } from "./HomeSections";
 import { ListeningOverview } from "./ListeningOverview";
+import { HomeSectionBody, HomeSectionSkeleton, MagicQueueSkeleton } from "./HomeSectionSkeleton";
+import { homeSectionWaiting, magicQueueGrid, type HomeContent } from "./homeOpening";
 
 /** Songs played from Home's lists are queued from the section they were in. */
 const MOST_PLAYED_CONTEXT = { kind: "home", id: "most-played" } as const;
@@ -65,14 +67,18 @@ type SectionProps = {
 };
 
 function MostPlayedAlbums({ title }: SectionProps) {
-  const albums = withPlays(useMostPlayedOfAllTime()?.albums);
+  const ranking = useMostPlayedOfAllTime();
+  if (ranking === undefined) return <HomeSectionSkeleton id="most-played-albums" />;
+  const albums = withPlays(ranking.albums);
   if (albums.length === 0) return null;
   return (
     <TitledSection
       title={title}
       action={{ label: "See all", onPress: () => openStatsSeeAll("albums", "all") }}
     >
-      <AlbumShelf albums={albums} detail={countedPlays} />
+      <HomeSectionBody id="most-played-albums">
+        <AlbumShelf albums={albums} detail={countedPlays} />
+      </HomeSectionBody>
     </TitledSection>
   );
 }
@@ -96,12 +102,23 @@ function Discover({ home, title }: SectionProps) {
   const artistMixes = useDiscoverMixes("artist-mixes", played);
   const genreMixes = useDiscoverMixes("genre-mixes", played);
   const showsMagicQueue = magicQueue !== null && magicQueue.songs.length > 0;
-  if (!showsMagicQueue && artistMixes.kind === "hidden" && genreMixes.kind === "hidden")
+  if (
+    magicQueue !== null &&
+    !showsMagicQueue &&
+    artistMixes.kind === "hidden" &&
+    genreMixes.kind === "hidden"
+  )
     return null;
   return (
     <TitledSection title={title} control={<DiscoverSettingsButton ytMusic={ytMusic} />}>
       <View style={{ gap: CELL * 3 }}>
-        {showsMagicQueue && <MagicQueueRow section={magicQueue} />}
+        {magicQueue === null ? (
+          <DiscoverRow label={discoverRowTitle("magic-queue")}>
+            <MagicQueueSkeleton />
+          </DiscoverRow>
+        ) : (
+          showsMagicQueue && <MagicQueueRow section={magicQueue} />
+        )}
         <MixRow id="artist-mixes" section={artistMixes} />
         <MixRow id="genre-mixes" section={genreMixes} />
       </View>
@@ -235,16 +252,7 @@ function DiscoverMixRow({
 function MagicQueueRow({ section }: { section: MagicQueueSection }) {
   const { width, fontScale } = useWindowDimensions();
   const [available, setAvailable] = useState(width - grid.margin * 2);
-  // Keep text scaling enabled. Larger type gets wider tiles instead of overlapping targets.
-  // Android widens a Float to JS, so 1.3 arrives just below the decimal breakpoint.
-  const columns = Math.max(
-    1,
-    Math.min(
-      fontScale >= 2 ? 1 : fontScale >= Math.fround(1.3) ? 2 : 3,
-      Math.floor((available + CELL) / (CELL * 7)),
-    ),
-  );
-  const size = Math.max(CELL * 6, (available - CELL * (columns - 1)) / columns);
+  const { size, height } = magicQueueGrid(available, fontScale);
   return (
     <DiscoverRow label={discoverRowTitle("magic-queue")}>
       <View onLayout={(event) => setAvailable(event.nativeEvent.layout.width)}>
@@ -253,7 +261,15 @@ function MagicQueueRow({ section }: { section: MagicQueueSection }) {
           enabled={!section.picking}
           refreshLabel="Get other songs"
         >
-          <View style={{ width: available, flexDirection: "row", flexWrap: "wrap", gap: CELL }}>
+          <View
+            style={{
+              width: available,
+              minHeight: height,
+              flexDirection: "row",
+              flexWrap: "wrap",
+              gap: CELL,
+            }}
+          >
             {section.songs.map((song, place) => (
               // oxlint-disable-next-line react/no-array-index-key -- a place crossfades between its previous and next seed
               <Crossfade key={place} swapKey={String(song.id)}>
@@ -283,14 +299,18 @@ function MagicQueueTile({ song, size }: { song: PlayableSongRow; size: number })
 }
 
 function MostPlayedArtists({ title }: SectionProps) {
-  const artists = (useMostPlayedOfAllTime()?.artists ?? []).map((entry) => entry.item);
+  const ranking = useMostPlayedOfAllTime();
+  if (ranking === undefined) return <HomeSectionSkeleton id="most-played-artists" />;
+  const artists = ranking.artists.map((entry) => entry.item);
   if (artists.length === 0) return null;
   return (
     <TitledSection
       title={title}
       action={{ label: "See all", onPress: () => openStatsSeeAll("artists", "all") }}
     >
-      <ArtistShelf artists={artists} />
+      <HomeSectionBody id="most-played-artists">
+        <ArtistShelf artists={artists} />
+      </HomeSectionBody>
     </TitledSection>
   );
 }
@@ -305,19 +325,25 @@ const SECTIONS: Record<HomeSectionId, ComponentType<SectionProps>> = {
   "recently-added": ({ home, title }) =>
     home.recentlyAdded.length > 0 && (
       <TitledSection title={title}>
-        <AlbumShelf albums={home.recentlyAdded} />
+        <HomeSectionBody id="recently-added">
+          <AlbumShelf albums={home.recentlyAdded} />
+        </HomeSectionBody>
       </TitledSection>
     ),
   "recently-played": ({ home, title }) =>
     home.recentlyPlayed.length > 0 && (
       <TitledSection title={title}>
-        <AlbumShelf albums={home.recentlyPlayed} />
+        <HomeSectionBody id="recently-played">
+          <AlbumShelf albums={home.recentlyPlayed} />
+        </HomeSectionBody>
       </TitledSection>
     ),
   "most-played": ({ home, title }) =>
     home.mostPlayed.length > 0 && (
       <TitledSection title={title}>
-        <SongRows songs={home.mostPlayed} context={MOST_PLAYED_CONTEXT} plays={plays} />
+        <HomeSectionBody id="most-played">
+          <SongRows songs={home.mostPlayed} context={MOST_PLAYED_CONTEXT} plays={plays} />
+        </HomeSectionBody>
       </TitledSection>
     ),
   "most-played-albums": MostPlayedAlbums,
@@ -328,7 +354,9 @@ const SECTIONS: Record<HomeSectionId, ComponentType<SectionProps>> = {
         title={title}
         action={{ label: "See all", onPress: () => router.push("/library/favorites") }}
       >
-        <SongRows songs={home.favorites} context={FAVORITES_CONTEXT} />
+        <HomeSectionBody id="favorites">
+          <SongRows songs={home.favorites} context={FAVORITES_CONTEXT} />
+        </HomeSectionBody>
       </TitledSection>
     ),
   stats: ({ title }) => (
@@ -349,7 +377,13 @@ export const SECTION_GAP = CELL * 5;
  * sit under any screen's content (Home, or the Library under its rows).
  * [home] is `useHome`'s answer.
  */
-export function HomeSection({ id, home }: { id: HomeSectionId; home: HomeSections }) {
+export function HomeSection({ id, home }: { id: HomeSectionId; home: HomeContent }) {
+  if (homeSectionWaiting(id, home)) return <HomeSectionSkeleton id={id} />;
   const Section = SECTIONS[id];
-  return <Section home={home} title={homeSectionTitle(id)} />;
+  return (
+    <Section
+      home={{ recentlyAdded: [], recentlyPlayed: [], mostPlayed: [], favorites: [], ...home }}
+      title={homeSectionTitle(id)}
+    />
+  );
 }
