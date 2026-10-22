@@ -98,16 +98,21 @@ grid; replace its earlier ten-song carousel description.
 
 ## #541 — Balanced genre safety
 
-Live #541 has no further comments. Reported: a Jack Johnson seed, Balanced,
-with Rage Against the Machine and Bring Me the Horizon recommendations.
-**Unknown original evidence:** seed song/title; which slider "Balanced"
-referred to (New music, Genre faithfulness, or both); each candidate's title
-and Library/YouTube Music source; seed and candidate file tags/artist profiles;
-APK version/build/SHA, device and date. Do not reuse #535's Back-report metadata.
-The current integration contains #528's #533 merge `39ed6239`; whether the
-original APK did is unknown. These regressions use representative explicit
-acoustic/folk/soft-rock/pop versus rap-rock/metal profiles, not recovered
-metadata or a reproduction of those actual recordings.
+Live #541 has no further comments. Reported: a Jack Johnson seed, Balanced.
+The owner later confirmed one candidate exactly: "Vietnow" by Rage Against the
+Machine, alongside a Bring Me the Horizon recommendation whose title was not
+recalled. The owner does not recall whether each candidate came from the
+Library or YouTube Music. The APK was `0.16.0-ti` (tag `23f3e4c2`), whose
+history contains #528's #533 merge `39ed6239`: the tested build did include the
+previous fix, so this divergence survived it.
+**Still unknown:** seed song/title; which slider "Balanced" referred to (New
+music, Genre faithfulness, or both); the Bring Me the Horizon track title; each
+candidate's source; seed and candidate file tags/artist profiles; device and
+date. Do not reuse #535's Back-report metadata. These regressions use
+representative explicit acoustic/folk/soft-rock/pop versus rap-rock/metal
+profiles, not recovered metadata or a reproduction of those actual recordings;
+"Vietnow" is a rap-rock recording, so the confirmed pairing supports the
+shared-genre-mass gap rather than establishing the tag values involved.
 
 The existing cosine rule could admit a mostly incompatible profile through a
 minor shared family. Magic Queue now also requires shared genre mass: sum of
