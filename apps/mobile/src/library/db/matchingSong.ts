@@ -1,5 +1,5 @@
 /** Targeted recording candidates, preserving Core's finder and Library ordering. */
-import { libraryFinder, recordingMatchTitle, type YtSong } from "@wave/core";
+import { recordingMatches, recordingMatchTitle, type YtSong } from "@wave/core";
 import { eq, isNull, type SQL } from "drizzle-orm";
 import type { LibraryDatabase } from "./database.ts";
 import { tracks } from "./schema.ts";
@@ -10,12 +10,11 @@ export const matchingSongWhere = (song: Pick<YtSong, "title">): SQL =>
   eq(tracks.matchTitle, recordingMatchTitle(song.title));
 
 export const selectMatchingSong = (db: LibraryDatabase, song: YtSong) =>
-  libraryFinder(
-    trackQuery(db)
-      .where(matchingSongWhere(song))
-      .orderBy(...BY_TITLE)
-      .all(),
-  )(song);
+  trackQuery(db)
+    .where(matchingSongWhere(song))
+    .orderBy(...BY_TITLE)
+    .all()
+    .find((candidate) => recordingMatches(candidate, song)) ?? null;
 
 /** One-time upgrade, bounded reads and writes with a task yield between pages. */
 export const backfillRecordingTitles = async (db: LibraryDatabase): Promise<void> => {

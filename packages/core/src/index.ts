@@ -648,7 +648,7 @@ export type { SheetEvent, SheetPhase, SheetStep } from "./sheetLifecycle.ts";
 export {
   joinArtists,
   libraryFinder,
-  libraryMatches,
+  recordingMatches,
   recordingMatchTitle,
   libraryMatcher,
   parseTrackId,
