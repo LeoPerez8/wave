@@ -32,6 +32,7 @@ const found: YtArtistSection = {
     checkedAt: 1000,
     browseId: "artist",
     page: {
+      name: "Justice",
       songs: [],
       allSongs: [],
       albums: [],
@@ -71,4 +72,17 @@ test("ordinary Library opening starts no section work; Online and Always wait fo
     ask: false,
     finder: false,
   });
+});
+
+test("an Online retry waits for content and settlement and cannot escape to another mode", () => {
+  const failed: YtArtistSection = { status: "ready", saved: null, failure: "offline" };
+  const retry = { ...context, pick: "online" as const, retry: true };
+  assert.equal(ytArtistOpening(failed, retry).ask, false);
+  assert.equal(ytArtistOpening(failed, { ...retry, settled: true }).ask, true);
+  assert.equal(
+    ytArtistOpening(failed, { ...retry, settled: true, contentReady: false }).ask,
+    false,
+  );
+  assert.equal(ytArtistOpening(failed, { ...retry, settled: true, pick: "library" }).ask, false);
+  assert.equal(ytArtistOpening(failed, { ...retry, settled: true, enabled: false }).ask, false);
 });

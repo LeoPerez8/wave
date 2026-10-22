@@ -90,3 +90,20 @@ test("saved Popular stays local before settlement; integrated additions wait, th
     fixture.close();
   }
 });
+
+test("the artist section checks Android connectivity when its deferred request actually runs", async () => {
+  const { artistOpeningRequest } = await import("./artistOpeningRequest.ts");
+  let online = true;
+  let requests = 0;
+  // Network and Android connectivity are system boundaries; Library reads above stay real.
+  const request = artistOpeningRequest(
+    () => online,
+    Effect.sync(() => ++requests),
+  );
+  online = false;
+  assert.deepEqual(Effect.runSync(Effect.flip(request)), { reason: "offline" });
+  assert.equal(requests, 0);
+  online = true;
+  assert.equal(Effect.runSync(request), 1);
+  assert.equal(requests, 1);
+});

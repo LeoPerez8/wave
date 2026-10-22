@@ -266,7 +266,7 @@ export const WHOLE_LIBRARY: Record<string, Exception> = {
   },
   "ytmusic/artistSection.ts#useDeferredArtistSection": {
     reason:
-      "Online additions only: the artist opening policy gates this shared finder on local content, screen settlement, Online and a standing full answer. Library mode, pending asks and failures do not subscribe. See ytArtistOpening.test.ts and artistOpening.test.ts.",
+      "Online additions only: the artist opening policy gates this shared finder on local content, screen settlement, Online and a standing full answer. Library mode and missing, pending, partial or expired answers do not subscribe. See ytArtistOpening.test.ts and artistOpening.test.ts.",
     capabilities: ["ytmusic/libraryFinder.ts#useLoadedLibraryFinder"],
   },
   "ytmusic/artistSection.ts#useArtistSongsFinder": {

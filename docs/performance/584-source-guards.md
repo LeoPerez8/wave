@@ -58,3 +58,23 @@ references and unrelated same-named helpers do not count. The scanner and its
 compiler dependency are desktop-only; the application imports none of them, and
 Core gains no dependency. New transport APIs or dynamically constructed code
 require an explicit scanner/policy update during review.
+
+Issue #589 removes the Library artist route's opening exception. Its optional
+online work has two exact reviewed boundaries in `artistSection.ts`:
+`useDeferredArtistSection` acquires the shared finder only for Online with a
+standing full answer, after the local query's content and `useScreenSettled`;
+its section request and queued retries wait for that same settlement and check
+Android `online()` immediately before `fetchArtist`. `useArtistSongsFinder`
+builds only over the artist's already-read sorted songs once the deferred shared
+finder exists. Library mode needs neither. Saved Popular ranking still uses
+only the artist's saved answer and own songs.
+
+Fixed automatic request entries use a `deferred` review record instead of
+`removeIn`: settlement scope, Android connectivity and the exact behavioral
+test files must be present. The scanner still inventories the exact declaration
+and rejects unlisted or stale uses; this record does not prove control flow.
+`ytArtistOpening.test.ts` exercises the production policy and
+`artistOpening.test.ts` runs its opening/settlement replay against the actual
+store and sql.js, checking song rows and the saved page. Popular's separate quiet
+request remains #590's explicitly inventoried debt; the common playing-ids
+follower remains #588's, and other online detail pages remain #591's.

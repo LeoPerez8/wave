@@ -40,6 +40,7 @@ import { useSearchOnlineAlways } from "@/settings/searchOnline";
 import { useYtMusicEnabled } from "@/settings/ytMusic";
 
 import { readArtistPage } from "./candidateCatalog";
+import { artistOpeningRequest } from "./artistOpeningRequest";
 import { useLoadedLibraryFinder, type FindInLibrary } from "./libraryFinder";
 import { useLineToggle } from "./OnlineToggle";
 import { YtMusic, YtMusicError } from "./YtMusic";
@@ -425,7 +426,7 @@ export const useYtArtistSection = (
 /**
  * Reviewed online boundary: wait for local content and screen settlement even
  * for Always/integrated openings and retries. A standing saved online page
- * needs the shared finder, but Library mode and a pending/failed ask do not.
+ * needs the shared finder; Library mode and missing/partial/expired answers do not.
  */
 const useDeferredArtistSection = (
   name: string,
@@ -437,33 +438,42 @@ const useDeferredArtistSection = (
   const settled = useScreenSettled();
   const ask = useCallback(
     (saved: Saved | null) =>
-      Effect.suspend(() =>
-        online()
-          ? fetchArtist(name, identityKey(name), saved, { allSongs: true })
-          : Effect.fail(new YtMusicError({ reason: "offline" })),
-      ),
+      artistOpeningRequest(
+        online,
+        fetchArtist(name, identityKey(name), saved, { allSongs: true }),
+      ).pipe(Effect.mapError((error) => new YtMusicError({ reason: error.reason }))),
     [name],
   );
   const answer = useSavedYtArtist(identityKey(name), ask);
   const { state, enabled, openedAt, show } = answer;
-  const context = { name, enabled, now: openedAt, integrated, always, pick, settled, contentReady };
+  const artistKey = identityKey(name);
+  const [retry, setRetry] = useState<string | null>(null);
+  const context = {
+    name,
+    enabled,
+    now: openedAt,
+    integrated,
+    always,
+    pick,
+    settled,
+    contentReady,
+    retry: retry === artistKey,
+  };
   const work = ytArtistOpening(state, context);
   // Popular's quiet request remains #590's boundary; do not let it duplicate an integrated ask.
   const asks = ytArtistSectionAsks(state, context);
   const askedFor = useRef<unknown>(null);
-  const [retry, setRetry] = useState(false);
   useEffect(() => {
-    if (!settled || !contentReady || pick === "library" || !enabled) return;
-    if (!(work.ask || retry) || askedFor.current === state) return;
+    if (!work.ask || askedFor.current === state) return;
     askedFor.current = state;
-    setRetry(false);
+    setRetry(null);
     show();
-  }, [settled, contentReady, pick, enabled, work.ask, retry, state, show]);
+  }, [work.ask, state, show]);
   const loadedFind = useLoadedLibraryFinder(work.finder);
   return {
     ...answer,
     asks,
-    show: useCallback(() => setRetry(true), []),
+    show: useCallback(() => setRetry(artistKey), [artistKey]),
     find: work.finder ? loadedFind : null,
   };
 };
