@@ -80,6 +80,7 @@ export const bench: FastAgainBench = {
           notifications = 0,
           sourceNotifications = 0;
         const steps: number[] = [];
+        let readStarted: number | null = null;
         const sync = <A>(work: () => A): A => {
           const at = performance.now();
           try {
@@ -90,6 +91,7 @@ export const bench: FastAgainBench = {
         };
         const read = <A>(effect: Effect.Effect<A, unknown>): A =>
           sync(() => {
+            readStarted = performance.now();
             rereads++;
             if (!trace) return Effect.runSync(effect);
             const measured = traceQueries(context.fixture.db, () => Effect.runSync(effect));
@@ -130,7 +132,10 @@ export const bench: FastAgainBench = {
               playing.subscribe(() => {
                 notifications++;
                 ids = [...playing.get()];
-                if (notifications === 8) complete();
+                if (notifications === 8) {
+                  if (readStarted !== null) steps.push(performance.now() - readStarted);
+                  complete();
+                }
               }),
             );
           // The initial null lookup has no snapshot change: wait for its one actual read.
@@ -186,6 +191,7 @@ export const bench: FastAgainBench = {
                     const rows = registry.current("songs")!.value;
                     ids = core.playingTrackIds(`yt:${song.videoId}`, song, finders.over(rows));
                   });
+                  if (readStarted !== null) steps.push(performance.now() - readStarted);
                   if (notifications === 8 || (measuring && notifications === 1)) complete();
                 },
               },
@@ -258,7 +264,7 @@ export const bench: FastAgainBench = {
               ? "production createPlayingIds + LibraryStore.matchingSong + download bus + Core registry"
               : "faithful ti hook replay: actual shared songs registry + makeFinderCache/finderOver + LibraryStore.listSongs + playingTrackIds + Library change bus",
             scope:
-              "completion only; setup, SQL writes, cold reads excluded; ti burst throttle matured by virtual clock; longest task = max synchronous read/finder/event segment; asynchronous registry settle and snapshot notification bookkeeping excluded; React commits/native frames not measured",
+              "completion only; setup, SQL writes, cold reads excluded; ti burst throttle matured by virtual clock; longest task = max source event or read-through-last-notification segment, including registry settlement and snapshot processing; React commits/native frames not measured",
             semantics:
               "same streamed and local row identities after download; legacy hidden consumers catch up on show, current consumers receive changed snapshot immediately",
           },
