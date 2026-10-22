@@ -154,9 +154,9 @@ const planTrack = (
 
 /**
  * Runs what swiping towards [side] does on [target] now, as its menu would:
- * the entry planned for it, pressed through `itemActionPress`. Streamed
- * songs among it are first looked up in the Library (and their artists read
- * when a direction is set to Go to Artist).
+ * the entry planned for it, pressed through `itemActionPress`. Go to Artist
+ * resolves only its requested artist names; song actions acquire the Library
+ * song finder when they need it.
  */
 const runTrackSwipe = (target: ActionItems, side: RowSwipeSide): void => {
   const here = currentPath();
