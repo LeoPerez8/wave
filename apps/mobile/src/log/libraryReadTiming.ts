@@ -1,7 +1,7 @@
 import { SLOW_READ_BUDGET_MS, slowReadsLine, type SlowRead } from "@wave/core";
 
 /** Read results are lists, single rows/scalars, or named bundles with an explicit counter. */
-export const libraryReadRows = (result: unknown): number => {
+const libraryReadRows = (result: unknown): number => {
   if (result === null || result === undefined) return 0;
   if (Array.isArray(result)) return result.length;
   if (result instanceof Map || result instanceof Set) return result.size;

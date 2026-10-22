@@ -16,7 +16,7 @@ import { registerBench, registeredBenches } from "./registry.ts";
 import { loadWorktreeModule } from "./store.ts";
 import type { BenchMeasurement, BenchVariant, FastAgainBench, ReadMeasurement } from "./types.ts";
 
-export const CURRENT_ROOT = fileURLToPath(new URL("../../../../", import.meta.url));
+const CURRENT_ROOT = fileURLToPath(new URL("../../../../", import.meta.url));
 
 export const parseArgs = (args: readonly string[]) => {
   let quick = false;
@@ -176,7 +176,7 @@ export const runBenchmarks = async (options: RunOptions): Promise<void> => {
   }
 };
 
-export const discoverBenches = async (): Promise<readonly FastAgainBench[]> => {
+const discoverBenches = async (): Promise<readonly FastAgainBench[]> => {
   const directory = new URL("./benches/", import.meta.url);
   for (const name of (await readdir(directory)).filter((n) => n.endsWith(".ts")).toSorted()) {
     const module = (await import(new URL(name, directory).href)) as { bench: FastAgainBench };
