@@ -79,8 +79,8 @@ function HomePlaceholders() {
 
 function HomeContent() {
   const home = useHomeContent();
-  const { empty, nothingPlayed, settled } = homeOpeningState(home);
-  useScreenContent(settled);
+  const { empty, nothingPlayed, ready } = homeOpeningState(home);
+  useScreenContent(ready);
   const arrangement = useHomeArrangement();
   const newRecap = useRecapToAnnounce();
 
