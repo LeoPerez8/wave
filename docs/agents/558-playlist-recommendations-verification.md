@@ -36,8 +36,29 @@ A positive signal can follow a prior dismissal, including for the same recording
 
 Evidence: Core controller tests cover acceptance only on save success, repeated/cross-action/stale taps, updated membership, stable refill, read failure/retry, truthful empty/exhausted state and changed favorite/download status on the next refill. Core ranking tests cover positive related-track learning and acceptance cancelling a prior recording dismissal. Real-SQLite tests exercise transaction rollback after an actual feedback write failure, duplicate/preexisting additions, stream acceptance without implicit favorite/download, downloads arriving between display and Add, dismissal → acceptance → database restart, isolated same-input ranking for another playlist, unchanged global taste/catalog/recommendation ranking, and complete exhaustion. The preexisting #559/#560 ranking and store integration tests remain enabled.
 
+## 2026-10-21 review correction verification
+
+Completed the saved review-fix WIP `b9fe401e` in `b6614a43` on `fix/open-tickets-review-fixes`, based on integration `a01d7360`. The five findings and their resolution are recorded in [the integrated review](534-code-review.md#resolution-status).
+
+- Tagless playlist seeds preserve weighted artist genre shares. The supplied 90% Pop / 10% Metal profile now excludes an unrelated pure-Metal recommendation; playlist tags still lead when present.
+- Full renewal selects the current top five eligible distinct recordings, reflecting changed favorite/download priority even when all five slots were occupied. Add/Dismiss refill keeps the other four offer objects and keys. A membership notification matching the action's freshly read playlist does not rerank those held offers; a later external membership edit still renews priority.
+- Footer rows reuse `DiscoverSongRow`, including Library/stream long-press menus, configured swipes, swipe accessibility actions and the shared current-playing identities. Existing Library rows from the recommendation snapshot supply the local actions, without another query. Add/Dismiss reuse the shared 48dp `IconButton` with 24dp/1.5-stroke accent glyphs, disabled tertiary tone and per-offer busy accessibility state.
+- Add's transaction uses a bounded membership/Library read instead of the complete recommendation snapshot. A small real-SQLite probe observed 19 SELECTs before and 15 after: candidate songs, candidate radios, pending favorites and the full playlist feedback read are gone from validation. Offer-key duplicate checking remains; feedback and membership still commit or roll back together. Library-wide metadata reads and the fresh refill snapshot remain. No device timing or scaling improvement is inferred.
+
+TDD evidence: the weighted-profile and full-renewal WIP tests both fail against the original `a01d7360` Core modules and pass after correction. A new session regression failed before correcting the delayed acceptance notification and passes afterward. A store characterization test passes before/after narrowing the read: a newly downloaded video with edited title/artist/duration resolves to its Library ID once, while an offered Library file lost since display is rejected without feedback.
+
+Actual checks in this worktree:
+
+- `node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test packages/core/src/playlistRecommendations.test.ts packages/core/src/playlistRecommendationSession.test.ts apps/mobile/src/library/db/playlistRecommendations.test.ts`: **23 passed**.
+- `pnpm --filter @wave/core test`: **3,315 passed**.
+- `pnpm --filter @wave/mobile test`: **502 passed**.
+- `pnpm --filter @wave/core --filter @wave/mobile typecheck`: passed, with the final affected Core/mobile checks repeated after cleanup.
+- `pnpm fmt:check`, changed-file lint and `git diff --check`: passed. Full repository lint exits successfully with warnings outside the changed files.
+
+Logs and before/after query traces are under `/tmp/wave-open-tickets-20261021/reviewfix-dc52eeb6/`. These are source, Core and SQLite checks. No automated UI test seam was introduced and no device evidence is claimed.
+
 ## Manual acceptance still required
 
-The parent owns the device. This implementation has not installed or driven an emulator or physical phone. On the parent's final APK, verify the actual editable-playlist footer (including an empty playlist), visible five/short counts, row playback, Add and Dismiss, pending disabled controls, unchanged surrounding scroll/playlist behavior, save/refill error copy, YT Music off/offline Library fallback, leaving/reopening, and process restart. Check light/dark appearance, long song titles and larger system text, and TalkBack labels/focus after replacement. Physical S24+ interaction, performance and TalkBack evidence remain unavailable here; automated Core/store evidence is not a device claim.
+The parent owns the device. This implementation has not installed or driven an emulator or physical phone. On the parent's final APK, verify the actual editable-playlist footer (including an empty playlist), visible five/short counts, row playback and cross-source playing indicator, Library/stream long-press menus, configured swipes and swipe-off behavior, Add and Dismiss, pending disabled controls, unchanged surrounding scroll/playlist behavior, save/refill error copy, YT Music off/offline Library fallback, leaving/reopening, and process restart. Confirm four held offers stay in place after Add's playlist update and that a full renewal includes newly favored/downloaded matches. Check light/dark appearance, long song titles and larger system text, and TalkBack labels/actions/focus after replacement. Physical S24+ interaction, performance and TalkBack evidence remain unavailable here; automated Core/store evidence is not a device claim.
 
 Impeccable context reported preexisting design-sidecar drift (`DESIGN.md` newer than `.impeccable/design.json`) and an unset visual build path. Neither is changed in this implementation; `document` can refresh the sidecar in a separate design task.

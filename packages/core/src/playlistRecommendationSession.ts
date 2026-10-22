@@ -1,7 +1,6 @@
 import {
   playlistRecommendations,
   playlistRecordingMatch,
-  rankedPlaylistRecommendations,
   type PlaylistRecommendationSources,
   type PlaylistRecommendationTrack,
 } from "./playlistRecommendations.ts";
@@ -31,6 +30,7 @@ export const playlistRecommendationSession = (options: {
   let state: PlaylistRecommendationState = { slots: [], loading: true, pending: null, error: null };
   const listeners = new Set<() => void>();
   const consumed: PlaylistRecommendationTrack[] = [];
+  let lastPlaylist: readonly PlaylistRecommendationTrack[] | undefined;
   let working = false;
   const publish = (patch: Partial<PlaylistRecommendationState>) => {
     state = { ...state, ...patch };
@@ -66,6 +66,7 @@ export const playlistRecommendationSession = (options: {
     publish({ slots });
     try {
       const input = await read();
+      lastPlaylist = input.playlist;
       const held = slots.flatMap((x) => (x === null ? [] : [x.track]));
       const next = playlistRecommendations(input.playlist, {
         ...input.sources,
@@ -89,13 +90,24 @@ export const playlistRecommendationSession = (options: {
         listeners.delete(listener);
       };
     },
-    renew: async () => {
+    /** Membership notifications can arrive after Add has already read the updated playlist. */
+    renew: async (request: { readonly ifPlaylistChanged?: boolean } = {}) => {
       if (working) return;
       working = true;
       publish({ loading: true, error: null });
       try {
         const input = await read();
-        const ranked = rankedPlaylistRecommendations(input.playlist, input.sources);
+        const previousPlaylist = lastPlaylist;
+        if (
+          request.ifPlaylistChanged === true &&
+          previousPlaylist !== undefined &&
+          input.playlist.length === previousPlaylist.length &&
+          input.playlist.every((track, index) => track.id === previousPlaylist[index]!.id)
+        )
+          return;
+        lastPlaylist = input.playlist;
+        // A full renewal selects today's best five; Add/Dismiss only refill their own slot.
+        const ranked = playlistRecommendations(input.playlist, input.sources);
         const eligible = new Map(ranked.map((x) => [x.track.id, x.track]));
         const slots = Array.from({ length: 5 }, (_, index) => {
           const previous = state.slots[index];

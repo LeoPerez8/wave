@@ -7,17 +7,16 @@ import { Text, View } from "react-native";
 import { grid } from "@/catalog/grid";
 import { SkeletonLine } from "@/catalog/SkeletonLine";
 import { TitledSection } from "@/catalog/TitledSection";
-import { TrackRow } from "@/catalog/TrackRow";
+import { IconButton } from "@/components/IconButton";
 import { artistGraphNow } from "@/home/artistGraphNow";
 import { lookedUpProfileOf } from "@/home/artistGenres";
-import { Press } from "@/motion/Press";
 import { makeExternalStore } from "@/lib/externalStore";
 import { WaveNative } from "@/native/waveNative";
 import { playTrackIds, playYtSongs } from "@/playback/actions";
 import { useYtMusicEnabled } from "@/settings/ytMusic";
-import { useThemeColor } from "@/theme/useThemeColor";
+import { DiscoverSongRow } from "@/ytmusic/DiscoverSongRow";
 
-import { LibraryStore, type PlaylistEntryRow } from "./LibraryStore";
+import { LibraryStore, type PlaylistEntryRow, type SongRow } from "./LibraryStore";
 import { appRuntime } from "./runtime";
 import { playlistsChanged } from "./playlists";
 
@@ -33,7 +32,9 @@ export function PlaylistRecommendations({
 }) {
   const enabled = useYtMusicEnabled();
   const [enabledNow] = useState(() => makeExternalStore(enabled));
-  const secondary = useThemeColor("secondary");
+  // Keep held offers readable if another offer's refill no longer finds their Library row.
+  const [libraryRows] = useState(() => makeExternalStore<ReadonlyMap<string, SongRow>>(new Map()));
+  const libraryById = useSyncExternalStore(libraryRows.subscribe, libraryRows.get);
   const [session] = useState(() =>
     playlistRecommendationSession({
       newId: () =>
@@ -44,6 +45,11 @@ export function PlaylistRecommendations({
             const store = yield* LibraryStore;
             const input = yield* store.playlistRecommendationInput(playlistId);
             const graph = yield* artistGraphNow;
+            libraryRows.update((previous) => {
+              const rows = new Map(previous);
+              for (const song of input.librarySongs) rows.set(String(song.id), song);
+              return rows;
+            });
             return {
               playlist: input.playlist,
               sources: {
@@ -79,10 +85,11 @@ export function PlaylistRecommendations({
     }),
   );
   const state = useSyncExternalStore(session.subscribe, session.get);
-  // Membership and YT Music availability renew inputs, retaining unaffected slots.
+  // An Add already renewed its inputs for refill; its membership notification keeps held offers.
   useEffect(() => {
+    const availabilityChanged = enabledNow.get() !== enabled;
     enabledNow.set(enabled);
-    void session.renew();
+    void session.renew({ ifPlaylistChanged: !availabilityChanged });
     // oxlint-disable-next-line react/exhaustive-effect-dependencies -- items is an explicit renewal trigger
   }, [session, items, enabled, enabledNow]);
   const play = ({ track }: PlaylistRecommendationSlot) => {
@@ -121,52 +128,40 @@ export function PlaylistRecommendations({
           ))}
         </View>
       ) : (
-        songs.map((song) => (
-          <View key={song.key} className="flex-row items-center">
-            <View className="flex-1">
-              <TrackRow
-                leading="artwork"
-                favorite={song.track.favorite}
-                downloaded={song.track.downloaded}
-                onPress={() => play(song)}
-                track={{
-                  id: song.track.id,
-                  title: song.track.title,
-                  artist: song.track.artists.join(" & "),
-                  durationMs: song.track.durationMs,
-                  artworkUri: song.track.artworkUrl ?? undefined,
-                  explicit: song.track.explicit,
+        songs.map((song) => {
+          const local = libraryById.get(song.track.id);
+          const row =
+            song.track.source === "stream"
+              ? { source: "stream" as const, song: song.track }
+              : local === undefined
+                ? null
+                : { source: "library" as const, track: local };
+          return (
+            <View key={song.key} className="flex-row items-center">
+              <View className="flex-1">
+                {row !== null && <DiscoverSongRow song={row} onPress={() => play(song)} />}
+              </View>
+              <IconButton
+                icon={IconPlus}
+                label={`Add ${song.track.title} to playlist`}
+                busy={state.pending === song.key}
+                disabled={busy}
+                onPress={() => {
+                  void session.accept(song.key);
+                }}
+              />
+              <IconButton
+                icon={IconX}
+                label={`Dismiss ${song.track.title} recommendation`}
+                busy={state.pending === song.key}
+                disabled={busy}
+                onPress={() => {
+                  void session.dismiss(song.key);
                 }}
               />
             </View>
-            <Press
-              accessibilityRole="button"
-              accessibilityLabel={`Add ${song.track.title} to playlist`}
-              accessibilityState={{ disabled: busy, busy: state.pending === song.key }}
-              disabled={busy}
-              onPress={() => {
-                void session.accept(song.key);
-              }}
-              className="items-center justify-center"
-              style={{ width: 48, minHeight: 48, opacity: busy ? 0.45 : 1 }}
-            >
-              <IconPlus size={20} color={secondary} />
-            </Press>
-            <Press
-              accessibilityRole="button"
-              accessibilityLabel={`Dismiss ${song.track.title} recommendation`}
-              accessibilityState={{ disabled: busy, busy: state.pending === song.key }}
-              disabled={busy}
-              onPress={() => {
-                void session.dismiss(song.key);
-              }}
-              className="items-center justify-center"
-              style={{ width: 48, minHeight: 48, opacity: busy ? 0.45 : 1 }}
-            >
-              <IconX size={20} color={secondary} />
-            </Press>
-          </View>
-        ))
+          );
+        })
       )}
       {state.error !== null && (
         <Text
