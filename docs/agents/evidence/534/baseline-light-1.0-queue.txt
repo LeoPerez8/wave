@@ -1,0 +1,53 @@
+Page: dev.leoperez.wave
+App: dev.leoperez.wave
+Snapshot: 47 visible nodes (80 total)
+Collapsed 33 Android helper nodes from the agent-facing text snapshot; use --raw or --json for the full hierarchy.
+@e1 [button] "Close Now Playing"
+@e2 [button] "Share Song"
+@e3 [switch] "Shuffle" [unchecked]
+@e4 [text] "Shuffle"
+@e5 [switch] "Repeat" [unchecked]
+@e6 [text] "Repeat"
+@e7 [scroll-area] "Blue, Ben Novak, Ben Kowalski, Ben Haddad, Ben Duarte, Ada Lindqvist, Nora Laine" [scrollable]
+  [content below scroll-area hidden]
+@e8 [button] "Blue, Ada Lindqvist, Nora Laine"
+@e11 [button] "Remove Blue from Up Next"
+@e12 [button] "Blue, Ben Duarte"
+@e15 [button] "Remove Blue from Up Next"
+@e16 [button] "Blue, Ben Haddad"
+@e19 [button] "Remove Blue from Up Next"
+@e20 [button] "Blue, Ben Kowalski"
+@e23 [button] "Remove Blue from Up Next"
+@e24 [button] "Blue, Ben Novak"
+@e27 [button] "Remove Blue from Up Next"
+@e28 [button] "Blue, Ben Novak"
+@e31 [button] "Remove Blue from Up Next"
+@e32 [seekbar] "Playback position, 0:00 of 0:29"
+@e33 [button] "Previous track"
+@e34 [button] "Play"
+@e35 [button] "Next track"
+@e36 [switch] "Lyrics" [unchecked]
+@e37 [button] "Sleep timer, Off"
+@e38 [button] "Add to Playlist"
+@e39 [button] "Downloaded"
+@e40 [switch] "Queue" [checked]
+@e41 [scroll-area] [scrollable]
+@e42 [scroll-area] "DISCOVER, Magic Queue, Artist mixes, UGO LINDQVIST, Love Running, Shadow Young, ABBEY MARLOW, Home Dance, Young Broken, ADA PRADO, Echo, Slow Heavy, Your Recap is ready, September 2026, Tap to watch, Home" [scrollable]
+  [content below scroll-area hidden]
+@e43 [group] "Home"
+@e45 [button] "Settings"
+@e46 [button] "Your Recap is ready: September 2026"
+@e51 [button] "Discover settings"
+@e53 [horizontalscrollview] [scrollable]
+@e54 [button] "Echo by Ada Prado, Slow Heavy"
+@e58 [button] "Home Dance by Abbey Marlow, Young Broken"
+@e62 [button] "Love Running by Ugo Lindqvist, Shadow Young"
+@e67 [group] "Building your mixes, busy"
+@e68 [horizontalscrollview] [scrollable]
+@e69 [button] "Now playing: Blue, Ada Duarte"
+@e72 [button] "Play Blue"
+@e73 [button] "Next track"
+@e74 [group] "Home" [selected]
+@e76 [group] "Library"
+@e78 [group] "Playlists"
+@e80 [group] "Search"

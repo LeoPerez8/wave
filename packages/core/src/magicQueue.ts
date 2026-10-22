@@ -10,7 +10,13 @@
 import { artistPhotoName } from "./artistPhoto.ts";
 import { DISCOVER_MIX_LEVELS, type DiscoverMixLevel } from "./discoverMixLevels.ts";
 import type { DiscoverRadioSong } from "./discoverMixes.ts";
-import { type GenreProfile, type GenreProfileOf, type GenreTagged } from "./genreAffinity.ts";
+import {
+  GENRE_AFFINITY_THRESHOLD,
+  genreProfile,
+  type GenreProfile,
+  type GenreProfileOf,
+  type GenreTagged,
+} from "./genreAffinity.ts";
 import { songFamilies } from "./genreMixes.ts";
 import type { PlayEnd } from "./playEvents.ts";
 import type { QueueState } from "./queue.ts";
@@ -60,6 +66,62 @@ export const magicLibrarySongs = (
     trackId: String(song.id),
     artists: song.artistIds.flatMap((id) => keys.get(id) ?? []),
     genre: songFamilies(song)[0]?.key ?? null,
+  });
+};
+
+/**
+ * A Magic Queue needs shared genre mass, not just aligned vectors: a minor
+ * Rock share in an acoustic seed mustn't admit a mostly rap/metal artist.
+ * At Balanced at least half of the two profiles must overlap. Mixes keep
+ * their existing cosine rule. Missing profiles cannot establish a match.
+ */
+export const magicGenreMatches = (
+  seed: GenreProfile | null,
+  candidate: GenreProfile | null | undefined,
+  threshold: number,
+): boolean => {
+  if (seed === null || candidate == null || seed.size === 0 || candidate.size === 0) return false;
+  let shared = 0;
+  for (const [family, share] of seed) shared += Math.min(share, candidate.get(family) ?? 0);
+  return shared + 1e-9 >= threshold;
+};
+
+/**
+ * The Library's songs a Magic Queue's batch may pick from (as
+ * `magicLibrarySongs` weighs them): those that pass the genre affinity check
+ * against [session]'s seed profile (`magicSeedProfile`) at [threshold] (the
+ * Magic Queue section's Genre faithfulness, `magicLibraryThreshold`), as its
+ * YouTube Music candidates do. A song's genre is its genre tag's profile;
+ * without a tag, its primary artist's ([profileOf]: the Library's, else
+ * Deezer's); with no genre known anywhere it stays out. An unknown seed
+ * admits no recommendations. A null [threshold] (Wander) admits every song.
+ */
+export const magicLibraryCandidates = (
+  session: MagicSession,
+  library: {
+    readonly artists: readonly { readonly id: number; readonly name: string }[];
+    readonly songs: readonly MagicLibrarySong[];
+  },
+  {
+    profileOf,
+    threshold = GENRE_AFFINITY_THRESHOLD,
+  }: { readonly profileOf: GenreProfileOf; readonly threshold?: number | null },
+): MagicSong[] => {
+  const toMagicSong = magicLibrarySongs(library.artists);
+  const seed = threshold === null ? null : magicSeedProfile(session, profileOf);
+  if (threshold === null) return library.songs.map(toMagicSong);
+  if (seed === null) return [];
+  const names = new Map(library.artists.map((artist) => [artist.id, artist.name]));
+  const profileOfSong = (song: MagicLibrarySong): GenreProfile | null => {
+    const own = genreProfile([song]);
+    if (own !== null) return own;
+    const primary = song.artistIds[0];
+    const name = primary === undefined ? undefined : names.get(primary);
+    return name === undefined ? null : (profileOf(name) ?? null);
+  };
+  return library.songs.flatMap((song) => {
+    const profile = profileOfSong(song);
+    return magicGenreMatches(seed, profile, threshold) ? [toMagicSong(song)] : [];
   });
 };
 
@@ -117,7 +179,7 @@ export interface MagicSession {
   readonly excludedArtists: readonly string[];
   /**
    * The share of each batch YouTube Music's candidates get (the Library's is
-   * the rest): 0.5 at the start, always between 0.2 and 0.8.
+   * the rest): its level's (`magicQueueShare`) at the start, always between 0.2 and 1.
    */
   readonly ytShare: number;
   /** The artists whose YouTube Music radios it draws on (`magicRadioArtists`); none without. */
@@ -137,9 +199,30 @@ export interface MagicRadioSeed {
   readonly profile: GenreProfile | null;
 }
 
-/** The genre profile [session]'s YouTube Music candidates are held to; null keeps any genre. */
-export const magicSeedProfile = (session: MagicSession): GenreProfile | null =>
-  session.seedProfile === null ? null : new Map(Object.entries(session.seedProfile));
+/**
+ * The genre profile [session]'s candidates, from both sources, are held to:
+ * the seed songs' (`seedProfile`); when none of them has a genre tag, its
+ * radio artists' profiles together ([profileOf]: the Library's, else
+ * Deezer's), each counting alike. Null means no safe genre match can be
+ * established: nothing is known anywhere (or no [profileOf] to ask).
+ */
+export const magicSeedProfile = (
+  session: MagicSession,
+  profileOf?: GenreProfileOf,
+): GenreProfile | null => {
+  if (session.seedProfile !== null) return new Map(Object.entries(session.seedProfile));
+  if (profileOf === undefined) return null;
+  const weights = new Map<string, number>();
+  let known = 0;
+  for (const artist of session.radioArtists) {
+    const profile = profileOf(artist);
+    if (profile === null || profile === undefined || profile.size === 0) continue;
+    known += 1;
+    for (const [family, share] of profile) weights.set(family, (weights.get(family) ?? 0) + share);
+  }
+  if (known === 0) return null;
+  return new Map([...weights].map(([family, weight]) => [family, weight / known]));
+};
 
 /** The context kind of a Magic Queue's queue; its id is the session's. */
 export const MAGIC_QUEUE_CONTEXT = "magic";
@@ -152,39 +235,28 @@ const BATCH = 10;
 const SEED_ARTIST = 3;
 const SEED_GENRE = 3;
 
-/** YouTube Music's share of a batch: where it starts, and how far it can go either way. */
+/** YouTube Music's share of a batch: where it starts without a level, and how far it can go either way. */
 const YT_SHARE_START = 0.5;
 const YT_SHARE_MIN = 0.2;
-const YT_SHARE_MAX = 0.8;
+const YT_SHARE_MAX = 1;
 
 const clampShare = (share: number): number => Math.min(YT_SHARE_MAX, Math.max(YT_SHARE_MIN, share));
 
 /**
- * The YouTube Music share a Magic Queue starts at for the new-music [level]
- * of Home's Magic Queue section: from 20% at level 1 to 80% at level 5, half
- * at level 3 (the default). Signals then move it within those bounds.
+ * The YouTube Music share a Magic Queue starts at for Discover's new-music
+ * [level], on the mixes' scale (`DISCOVER_MIX_LEVELS`): from 20% at level 1
+ * to 100% at level 5 (All new), 60% at level 3 (the default). Signals then
+ * move it within those bounds.
  */
 export const magicQueueShare = (level: DiscoverMixLevel): number =>
-  YT_SHARE_MIN + ((level - 1) * (YT_SHARE_MAX - YT_SHARE_MIN)) / 4;
-
-/** The levels the Magic Queue section's level card offers, each with the share it starts at. */
-export const MAGIC_QUEUE_LEVELS: readonly {
-  readonly level: DiscoverMixLevel;
-  readonly label: string;
-  /** "35% new": the header control's own label. */
-  readonly share: string;
-}[] = DISCOVER_MIX_LEVELS.map(({ level, label }) => ({
-  level,
-  label,
-  share: `${Math.round(magicQueueShare(level) * 100)}% new`,
-}));
+  (level * YT_SHARE_MAX) / DISCOVER_MIX_LEVELS.length;
 
 /**
  * Starts a Magic Queue from [seed], whose songs are [seedSongs] (the song
  * itself for a song seed): it plays that song, or a random one of the
  * seed's otherwise. Its YouTube Music radio grows from [radio] (none
  * without). YouTube Music's share of a batch starts at [ytShare]
- * (`magicQueueShare`, kept within 20-80%), half without. Null when the seed
+ * (`magicQueueShare`, kept within 20-100%), half without. Null when the seed
  * has no songs.
  */
 export const startMagicQueue = (
@@ -383,7 +455,7 @@ const YT_SHARE_MOVE: { readonly [K in MagicSignalKind]?: number } = {
  * most, then a download, then a song played to the end or added. Either way
  * the song itself never comes back. A YouTube Music song's favorite or
  * download moves YouTube Music's share of a batch up, its skip down, within
- * 20–80%.
+ * 20–100%.
  */
 export const magicSignal = (learning: MagicSession, { kind, song }: MagicSignal): MagicSession => {
   const move = parseTrackId(song.trackId)?.kind === "yt" ? (YT_SHARE_MOVE[kind] ?? 0) : 0;

@@ -36,6 +36,9 @@ const finders = makeFinderCache<SongRow, FindInLibrary>({
 /** A finder current with the Library: at once when one was read at this Library version, else after a read. */
 export const currentLibraryFinder = (): Promise<FindInLibrary> => finders.current();
 
+/** The last finder built, unfollowed, or null before the Library was first read: for a row's render. */
+export const knownLibraryFinder = (): FindInLibrary | null => finders.known();
+
 /**
  * The shared finder, or null until the Library is first read. It follows the
  * Library (the shared `songs` query) only while [active]; inactive, or until

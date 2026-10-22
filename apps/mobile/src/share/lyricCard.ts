@@ -25,3 +25,6 @@ export const closeLyricCard = (): void => previewed.set(null);
 
 export const useLyricCard = (): LyricCardContent | null =>
   useSyncExternalStore(previewed.subscribe, previewed.get);
+
+export const useLyricCardShown = (): boolean =>
+  useSyncExternalStore(previewed.subscribe, () => previewed.get() !== null);

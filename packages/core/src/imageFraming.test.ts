@@ -3,6 +3,7 @@ import { describe, test } from "node:test";
 
 import {
   CENTRE_FRAMING,
+  adjustFraming,
   framingSquare,
   framingText,
   framingView,
@@ -51,6 +52,20 @@ describe("the square a framing saves", () => {
 });
 
 describe("the crop screen", () => {
+  test("accessible photo adjustments can move, zoom and reset the saved square", () => {
+    const left = adjustFraming(LANDSCAPE, CENTRE_FRAMING, "moveLeft");
+    assert.deepEqual(framingSquare(LANDSCAPE, left), { left: 160, top: 0, side: 600 });
+    const zoomed = adjustFraming(LANDSCAPE, CENTRE_FRAMING, "zoomIn");
+    assert.deepEqual(framingSquare(LANDSCAPE, zoomed), { left: 160, top: 60, side: 480 });
+    const up = adjustFraming(LANDSCAPE, zoomed, "moveUp");
+    assert.deepEqual(framingSquare(LANDSCAPE, up), { left: 160, top: 108, side: 480 });
+    assert.deepEqual(adjustFraming(LANDSCAPE, up, "reset"), CENTRE_FRAMING);
+    assert.deepEqual(framingSquare(LANDSCAPE, adjustFraming(LANDSCAPE, zoomed, "zoomOut")), {
+      left: 100,
+      top: 0,
+      side: 600,
+    });
+  });
   test("draws the photo so the framing's square fills the crop square", () => {
     assert.deepEqual(framingView(LANDSCAPE, 300, CENTRE_FRAMING), {
       scale: 0.5,

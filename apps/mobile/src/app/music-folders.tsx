@@ -1,6 +1,7 @@
 import { counted, describeFolder } from "@wave/core";
 import { IconMinus } from "@tabler/icons-react-native";
 import { ScrollView, Text, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { CatalogLine } from "@/catalog/CatalogLine";
 import { CELL, grid } from "@/catalog/grid";
@@ -43,7 +44,7 @@ function FolderRow({ path, detail, removeLabel, removable, onRemove }: FolderRow
   const where = [label.storage, parent].filter((part) => part !== null).join(" · ");
   return (
     <View>
-      <View className="flex-row items-center" style={{ height: grid.row, gap: CELL * 1.5 }}>
+      <View className="flex-row items-center" style={{ minHeight: grid.row, gap: CELL * 1.5 }}>
         <View className="flex-1">
           <Text numberOfLines={1} className="font-sans text-body font-medium text-foreground">
             {label.name}
@@ -79,13 +80,19 @@ function FolderRow({ path, detail, removeLabel, removable, onRemove }: FolderRow
  * rescans the library.
  */
 export default function MusicFoldersScreen() {
+  const insets = useSafeAreaInsets();
   const roots = useScanRoots();
   const excluded = useExcludedFolders();
   const scanning = useScanState().status === "scanning";
   return (
     <View className="flex-1 bg-background">
       <ScreenHeader title="Music folders" />
-      <ScrollView contentContainerStyle={{ paddingHorizontal: grid.margin, paddingBottom: 48 }}>
+      <ScrollView
+        contentContainerStyle={{
+          paddingHorizontal: grid.margin,
+          paddingBottom: insets.bottom + 48,
+        }}
+      >
         <ScanProgressBanner />
         <CatalogLine className="mb-2">Wave shows songs from</CatalogLine>
         <Hairline />

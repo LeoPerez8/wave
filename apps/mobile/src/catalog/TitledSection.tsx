@@ -17,7 +17,7 @@ export function TitledSection({
 }: {
   title: string;
   action?: { label: string; onPress: () => void };
-  /** A control of its own in the action's place (Discover mixes' level), when it has no action. */
+  /** A control of its own in the action's place (Discover's settings icon), when it has no action. */
   control?: ReactNode;
   /**
    * A quiet line after the title for what the section is doing ("Updating…"

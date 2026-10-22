@@ -4,7 +4,7 @@ import {
   type OnViewableItemsChangedInfo,
 } from "@legendapp/list/react-native";
 import { IconMusic } from "@tabler/icons-react-native";
-import { librarySongSort, PAGED_ROWS_LIMITS, showsExplicitBadge } from "@wave/core";
+import { hasFindQuery, librarySongSort, PAGED_ROWS_LIMITS, showsExplicitBadge } from "@wave/core";
 import { useScrollToTop } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import { View } from "react-native";
@@ -12,7 +12,7 @@ import { View } from "react-native";
 import { Artwork } from "@/catalog/Artwork";
 import { AlphabetSpine } from "@/catalog/AlphabetSpine";
 import { CELL, grid } from "@/catalog/grid";
-import { type TrackSummary, TrackRow } from "@/catalog/TrackRow";
+import type { TrackSummary } from "@/catalog/TrackRow";
 import { useChromeInset } from "@/chrome/chrome";
 import { EmptyState } from "@/components/EmptyState";
 import { ScanProgressBanner } from "@/components/ScanProgressBanner";
@@ -23,18 +23,20 @@ import { perfMark, useRenderCount } from "@/perf/perf";
 import { playTrackIds } from "@/playback/actions";
 import { openTrackActionsById } from "@/playback/ActionsMenu";
 import type { ActionItems } from "@/playback/actionTargets";
-import { useCurrentTrackId } from "@/playback/hooks";
+import { useCurrentPlayingIds } from "@/playback/hooks";
 import { selectableRow } from "@/selection/selectableRow";
 import { useListSelection } from "@/selection/useListSelection";
 
 import { useFavoriteIds } from "./favorites";
+import { FIND_FIELD_HEIGHT, FindHead, useFindInLegendList } from "./FindInPlaylist";
 import { folderPhrase } from "./folderPhrase";
 import { useScanRoots, useScanState } from "./hooks";
 import type { SongOrder, SongRow, SongSummary } from "./LibraryStore";
-import { usePagedSongs, useSongOrder } from "./pagedSongs";
+import { usePagedSongs, useSongFindTexts, useSongOrder } from "./pagedSongs";
 import { promptForMusicFolder } from "./promptForMusicFolder";
 import { songsWithIds } from "./sectionSongs";
 import { SongSortButton } from "./SongSortButton";
+import { SwipeSummaryRow } from "./SwipeTrackRow";
 import { useSongSort } from "./songSort";
 import { ListIntroLayout, songCount } from "./TrackList";
 import { useSpineEntries } from "./useSpine";
@@ -128,7 +130,9 @@ const SELECTING_AHEAD = PAGED_ROWS_LIMITS.pageSize;
 
 /**
  * The Songs list over [order]: rows read a page at a time, the spine from the
- * order's letters, and every action on the whole order.
+ * order's letters, and every action on the whole order. Find in Songs waits
+ * above the head until the list is pulled down; a query narrows the rows to
+ * the songs found, in the order's order, and hides the spine.
  */
 function PagedSongList({ order }: { order: SongOrder }) {
   useRenderCount("PagedSongList");
@@ -136,9 +140,16 @@ function PagedSongList({ order }: { order: SongOrder }) {
   const list = useRef<LegendListRef>(null);
   useScrollToTop(list);
   const bottomInset = useChromeInset();
-  const currentId = useCurrentTrackId();
+  const currentIds = useCurrentPlayingIds();
   const favorites = useFavoriteIds();
-  const { pages, version } = usePagedSongs(order);
+  // Find in Songs: what finds each song is read once a query is first typed.
+  const [findWanted, setFindWanted] = useState(false);
+  const findTexts = useSongFindTexts(findWanted);
+  const describe = useCallback((id: number) => findTexts?.get(id) ?? null, [findTexts]);
+  const find = useFindInLegendList(list, order.ids, describe, true);
+  if (!findWanted && hasFindQuery(find.query)) setFindWanted(true);
+  const { found, shown: shownIds, placeOf } = find;
+  const { pages, version } = usePagedSongs(shownIds);
   const missing = useMemo(() => new Set(order.missing), [order]);
   const spine = useSpineEntries(order.spine, list);
 
@@ -182,11 +193,11 @@ function PagedSongList({ order }: { order: SongOrder }) {
   const { selection } = listSelection;
   const nearScreen = useCallback(
     () =>
-      order.ids.slice(
+      shownIds.slice(
         Math.max(0, shown.current.start - SELECTING_AHEAD),
         shown.current.end + SELECTING_AHEAD,
       ),
-    [order],
+    [shownIds],
   );
   useEffect(() => {
     if (selection === null) {
@@ -224,8 +235,8 @@ function PagedSongList({ order }: { order: SongOrder }) {
   }, [ready]);
 
   const rowState = useMemo(
-    () => ({ currentId, favorites, selection, version }),
-    [currentId, favorites, selection, version],
+    () => ({ currentIds, favorites, selection, version }),
+    [currentIds, favorites, selection, version],
   );
 
   const renderItem = useCallback(
@@ -233,15 +244,17 @@ function PagedSongList({ order }: { order: SongOrder }) {
       const song = pages.rowOf(item);
       if (song === undefined) return <LoadingRow />;
       return (
-        <TrackRow
+        <SwipeSummaryRow
+          summary={song}
           track={toTrackSummary(song)}
-          state={String(item) === currentId ? "playing" : undefined}
+          state={currentIds.has(String(item)) ? "playing" : undefined}
           favorite={favorites.has(item)}
           leading="artwork"
           {...selectableRow(
             item,
             listSelection,
-            () => void playTrackIds(order.ids, missing, index, SONGS_CONTEXT),
+            // A found song plays the whole list from its own place in it.
+            () => void playTrackIds(order.ids, missing, placeOf(index), SONGS_CONTEXT),
             (options) => openTrackActionsById(item, options),
           )}
         />
@@ -249,7 +262,7 @@ function PagedSongList({ order }: { order: SongOrder }) {
     },
     // `version` re-renders the rows as their pages arrive.
     // oxlint-disable-next-line react-hooks/exhaustive-deps
-    [pages, version, currentId, favorites, listSelection, order, missing],
+    [pages, version, currentIds, favorites, listSelection, order, missing, placeOf],
   );
 
   const header: ReactElement = (
@@ -269,10 +282,12 @@ function PagedSongList({ order }: { order: SongOrder }) {
   return (
     <View className="flex-1">
       <LegendList
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
         scrollEnabled={scrollable}
         ref={list}
         className="flex-1"
-        data={order.ids}
+        data={shownIds}
         keyExtractor={keyExtractor}
         renderItem={renderItem}
         extraData={rowState}
@@ -285,10 +300,14 @@ function PagedSongList({ order }: { order: SongOrder }) {
           paddingRight: spine.paddingRight,
           // Lets the last row scroll out from under the floating mini player (or selection bar).
           paddingBottom: bottomInset,
+          minHeight: find.minHeight,
         }}
-        ListHeaderComponent={header}
+        initialScrollOffset={FIND_FIELD_HEIGHT}
+        ListHeaderComponent={
+          <FindHead find={find} header={header} of="songs" allRead={findTexts !== null} />
+        }
       />
-      {spine.show && (
+      {spine.show && found === null && (
         <AlphabetSpine entries={spine.entries} onJump={spine.onJump} topRow={spine.topRow} />
       )}
     </View>

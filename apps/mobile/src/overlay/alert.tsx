@@ -5,6 +5,7 @@ import { CELL } from "@/catalog/grid";
 import { TextButton } from "@/components/TextButton";
 
 import { presentOverlay } from "./overlay";
+import { CardEntries } from "./CardEntries";
 
 /** A title, a message and its buttons (right-aligned, the action last). */
 function AlertCard({
@@ -18,11 +19,18 @@ function AlertCard({
 }) {
   return (
     <>
-      <View style={{ gap: CELL, paddingTop: CELL, paddingBottom: CELL * 2 }}>
-        <Text className="font-sans text-title3 font-normal text-foreground">{spec.title}</Text>
-        <Text className="font-sans text-subheadline text-secondary">{spec.message}</Text>
-      </View>
-      <View className="flex-row items-center justify-end" style={{ gap: CELL * 3 }}>
+      <CardEntries>
+        <View style={{ gap: CELL, paddingTop: CELL, paddingBottom: CELL * 2 }}>
+          <Text
+            accessibilityRole="header"
+            className="font-sans text-title3 font-normal text-foreground"
+          >
+            {spec.title}
+          </Text>
+          <Text className="font-sans text-subheadline text-secondary">{spec.message}</Text>
+        </View>
+      </CardEntries>
+      <View className="flex-row flex-wrap items-center justify-end" style={{ columnGap: CELL * 3 }}>
         {plan.buttons.map((button) => (
           <TextButton
             key={button.label}

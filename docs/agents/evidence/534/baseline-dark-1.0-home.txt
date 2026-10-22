@@ -1,0 +1,4 @@
+Page: dev.leoperez.wave
+App: dev.leoperez.wave
+Snapshot: 0 nodes
+Interactive snapshot is empty after filtering 35 raw Android nodes. Likely causes: the app content is not accessibility-visible yet, a transient route change, or depth/filter options hid the target.

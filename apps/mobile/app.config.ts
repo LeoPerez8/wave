@@ -36,7 +36,9 @@ const config: ExpoConfig = {
       monochromeImage: "./assets/adaptive-icon-monochrome.png",
       backgroundColor: "#000000",
     },
-    predictiveBackGestureEnabled: true,
+    // Keep Android 13+ Back on React Native's hardwareBackPress path, so
+    // sheets and the root exit confirmation can consume it before the activity leaves.
+    predictiveBackGestureEnabled: false,
     // All-files access lets the scanner read every audio file in the scan roots.
     // Acceptable because Wave is sideloaded, not distributed on the Play Store.
     permissions: ["android.permission.MANAGE_EXTERNAL_STORAGE"],

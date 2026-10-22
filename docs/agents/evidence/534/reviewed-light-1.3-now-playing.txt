@@ -1,0 +1,48 @@
+Page: dev.leoperez.wave
+App: dev.leoperez.wave
+Snapshot: 43 visible nodes (64 total)
+Collapsed 21 Android helper nodes from the agent-facing text snapshot; use --raw or --json for the full hierarchy.
+@e1 [button] "Close Now Playing"
+@e2 [button] "Share Song"
+@e3 [button] "Cover"
+@e4 [group] "Ada Duarte"
+@e5 [text] "Ada Duarte"
+@e6 [group] "Gold"
+@e7 [text] "Gold"
+@e8 [button] "Favorite Blue"
+@e9 [seekbar] "Playback position, 0:00 of 0:29"
+@e10 [button] "Previous track"
+@e11 [button] "Play"
+@e12 [button] "Next track"
+@e13 [switch] "Lyrics" [unchecked]
+@e14 [button] "Sleep timer, Off"
+@e15 [button] "Add to Playlist"
+@e16 [button] "Downloaded"
+@e17 [switch] "Queue" [unchecked]
+@e18 [scroll-area] [scrollable]
+@e19 [scroll-area] "DISCOVER, Magic Queue, Artist mixes, Electric Dance Heavy, Broken Morning, Ocean, Summer Gold, City, Summer Electric, Love Running, Home Dance, Echo, Your Recap is ready, September 2026, Tap to watch, Home" [scrollable]
+  [content below scroll-area hidden]
+@e20 [group] "Home"
+@e22 [button] "Settings"
+@e23 [button] "Your Recap is ready: September 2026"
+@e28 [button] "Discover settings"
+@e30 [horizontalscrollview] [scrollable]
+@e31 [button] "Echo by Ada Prado, Slow Heavy, start Magic Queue"
+@e33 [button] "Home Dance by Abbey Marlow, Young Broken, start Magic Queue"
+@e35 [button] "Love Running by Ugo Lindqvist, Shadow Young, start Magic Queue"
+@e37 [button] "Summer Electric by Abbey Marlow, Young Fade, start Magic Queue"
+@e39 [button] "City by Wren Okafor, Running Young, start Magic Queue"
+@e41 [button] "Summer Gold by Kai Lindqvist, River, start Magic Queue"
+@e43 [button] "Ocean by Milo Nyx, Dream, start Magic Queue"
+@e45 [button] "Broken Morning by Yara Byrne, Silver, start Magic Queue"
+@e47 [button] "Electric Dance Heavy by Hana Lindqvist, Stars Slow Ghost, start Magic Queue"
+@e50 [horizontalscrollview] [scrollable]
+@e51 [button] "Abbey Marlow mix by KATSEYE, Sia, Abbey Marlow, 26 songs"
+@e52 [button] "Kai Duarte mix by Bielzin, The Weeknd, Kai Duarte, 12 songs"
+@e53 [button] "Now playing: Blue, Ada Duarte"
+@e56 [button] "Play Blue"
+@e57 [button] "Next track"
+@e58 [group] "Home" [selected]
+@e60 [group] "Library"
+@e62 [group] "Playlists"
+@e64 [group] "Search"

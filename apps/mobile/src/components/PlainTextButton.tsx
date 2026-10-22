@@ -15,6 +15,7 @@ const TONE = { accent: "text-accent", destructive: "text-destructive" } as const
 /** Dims while pressed: a plain style, no animated one. */
 const pressedStyle = ({ pressed }: PressableStateCallbackType) => ({
   minHeight: 48,
+  minWidth: 48,
   justifyContent: "center" as const,
   opacity: pressed ? 0.4 : 1,
 });

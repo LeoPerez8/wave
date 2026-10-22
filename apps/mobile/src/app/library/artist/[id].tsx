@@ -18,10 +18,10 @@ import { SECTION_HEAD, SectionHead } from "@/catalog/CatalogLine";
 import { COVER_ROW_TILE, CoverRow } from "@/catalog/CoverRow";
 import { CELL, grid } from "@/catalog/grid";
 import { SKELETON_TILES, SkeletonGroup, TileSkeleton, TrackSkeletons } from "@/catalog/Skeletons";
-import { TrackRow } from "@/catalog/TrackRow";
+import { SwipeTrackRow } from "@/library/SwipeTrackRow";
 import { useChromeInset } from "@/chrome/chrome";
 import { playPage } from "@/playback/actions";
-import { useCurrentTrackId } from "@/playback/hooks";
+import { useCurrentPlayingIds } from "@/playback/hooks";
 import { openAlbumActions, openTrackActions } from "@/playback/ActionsMenu";
 import { mixedTarget, trackItemKey, type MixedItem } from "@/playback/actionTargets";
 import { albumRowHeight, toAlbumSummary } from "@/library/AlbumGrid";
@@ -43,7 +43,7 @@ import { useLoadedLibraryFinder, type FindInLibrary } from "@/ytmusic/libraryFin
 import { useHeldSongs, useSongsInPlace, type PlacedSongs } from "@/ytmusic/songsInPlace";
 import { YT_ARTIST_NOTE, YtReleaseTile } from "@/ytmusic/YtArtistSection";
 import { YtLookupFooter } from "@/ytmusic/YtLookupFooter";
-import { YtSongRow } from "@/ytmusic/YtSongRow";
+import { SwipeYtSongRow } from "@/ytmusic/YtSongRow";
 import { openYtSongActions } from "@/ytmusic/YtSongActions";
 
 /** A cover on one of the page's album shelves: a Library album, or a release only YouTube Music has. */
@@ -263,7 +263,7 @@ function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegr
   const detail = useMemo(() => shown.detail ?? unread(shown.artist), [shown.detail, shown.artist]);
   const scrollable = useListScrollable();
   const bottomInset = useChromeInset();
-  const currentId = useCurrentTrackId();
+  const currentIds = useCurrentPlayingIds();
   const favorites = useFavoriteIds();
   // In the sort chosen for artists; Play, Shuffle and rows all play this displayed order.
   const { songs } = useSortedSongs("artist", detail.songs);
@@ -341,8 +341,8 @@ function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegr
   const albumSelection = useMemo(() => albumSelectionOf(page), [page]);
   const { selection } = page;
   const rowState = useMemo(
-    () => ({ currentId, favorites, selection, downloaded, integrated }),
-    [currentId, favorites, selection, downloaded, integrated],
+    () => ({ currentIds, favorites, selection, downloaded, integrated }),
+    [currentIds, favorites, selection, downloaded, integrated],
   );
   const context = useMemo(
     () => ({ kind: "artist", id: String(detail.artist.id) }) as const,
@@ -368,9 +368,9 @@ function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegr
           if (item.song.kind === "yt") {
             const song = item.song.song;
             return (
-              <YtSongRow
+              <SwipeYtSongRow
                 song={song}
-                playing={ytTrackId(song.videoId) === currentId}
+                playing={currentIds.has(ytTrackId(song.videoId))}
                 {...selectableRow(
                   ytTrackItem(song),
                   page,
@@ -382,9 +382,10 @@ function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegr
           }
           const song = item.song.song;
           return (
-            <TrackRow
+            <SwipeTrackRow
+              song={song}
               track={toTrackSummary(song)}
-              state={String(song.id) === currentId ? "playing" : undefined}
+              state={currentIds.has(String(song.id)) ? "playing" : undefined}
               favorite={favorites.has(song.id)}
               leading="artwork"
               downloaded={downloaded}
@@ -399,7 +400,7 @@ function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegr
         }
       }
     },
-    [context, currentId, favorites, mixed, downloaded, albumSelection, page, integrated],
+    [context, currentIds, favorites, mixed, downloaded, albumSelection, page, integrated],
   );
 
   // With Online and an answer found, the counts take in what YouTube Music adds to the page.

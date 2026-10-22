@@ -1,7 +1,7 @@
 import { LegendList, type LegendListRef } from "@legendapp/list/react-native";
 import { useScrollToTop } from "expo-router";
 import { IconStack2 } from "@tabler/icons-react-native";
-import { counted } from "@wave/core";
+import { artistFindText, counted, type PlaylistFindText } from "@wave/core";
 import { useCallback, useMemo, useRef, type ReactElement } from "react";
 import { View } from "react-native";
 
@@ -24,6 +24,7 @@ import {
   useAlbumSelection,
   useAlbumTileSize,
 } from "./AlbumGrid";
+import { FIND_FIELD_HEIGHT, FindHead, useFindInLegendList } from "./FindInPlaylist";
 import { useAlbums, useArtists, useGenres, useScanState } from "./hooks";
 import type { AlbumRow, ArtistRow, GenreRow } from "./LibraryStore";
 import { openArtist, openGenre } from "./routes";
@@ -64,10 +65,26 @@ type NameListProps<A> = {
   target: (selected: readonly A[]) => ActionItems;
   /** A row; [selection] tells it whether the list is selecting and what's checked. */
   renderRow: (item: A, selection: ListSelection<A>) => ReactElement;
+  /**
+   * Find in Artists: what finds each item. Its field waits above the head
+   * until the list is pulled down, and narrows the list as you type.
+   */
+  findBy?: (item: A) => PlaylistFindText | null;
 };
 
+const unfindable = (): null => null;
+
 /** A virtualised, selectable list of names (artists, genres) with the A–Z spine. */
-function NameList<A>({ items, noun, empty, sortKey, keyOf, target, renderRow }: NameListProps<A>) {
+function NameList<A>({
+  items,
+  noun,
+  empty,
+  sortKey,
+  keyOf,
+  target,
+  renderRow,
+  findBy,
+}: NameListProps<A>) {
   const scrollable = useListScrollable();
   const list = useRef<LegendListRef>(null);
   useScrollToTop(list);
@@ -75,19 +92,24 @@ function NameList<A>({ items, noun, empty, sortKey, keyOf, target, renderRow }: 
   const sortKeys = useMemo(() => items.map(sortKey), [items, sortKey]);
   const spine = useSpine(sortKeys, list);
   const selection = useListSelection({ items, keyOf, target });
+  const findable = findBy !== undefined;
+  const find = useFindInLegendList(list, items, findBy ?? unfindable, findable);
   const renderItem = useCallback(
     ({ item }: { item: A }) => renderRow(item, selection),
     [renderRow, selection],
   );
 
   if (items.length === 0) return <NothingYet message={empty} />;
+  const head = <ListHead line={counted(items.length, noun)} />;
   return (
     <View className="flex-1">
       <LegendList
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
         scrollEnabled={scrollable}
         ref={list}
         className="flex-1"
-        data={items}
+        data={find.shown}
         keyExtractor={keyOf}
         renderItem={renderItem}
         extraData={selection}
@@ -98,10 +120,12 @@ function NameList<A>({ items, noun, empty, sortKey, keyOf, target, renderRow }: 
           paddingLeft: grid.margin,
           paddingRight: spine.paddingRight,
           paddingBottom: bottomInset,
+          minHeight: findable ? find.minHeight : undefined,
         }}
-        ListHeaderComponent={<ListHead line={counted(items.length, noun)} />}
+        initialScrollOffset={findable ? FIND_FIELD_HEIGHT : undefined}
+        ListHeaderComponent={findable ? <FindHead find={find} header={head} of="artists" /> : head}
       />
-      {spine.show && (
+      {spine.show && find.found === null && (
         <AlphabetSpine entries={spine.entries} onJump={spine.onJump} topRow={spine.topRow} />
       )}
     </View>
@@ -114,6 +138,7 @@ const artistDetail = (artist: ArtistRow): string =>
   artist.albumCount > 0
     ? `${counted(artist.albumCount, "album")} · ${counted(artist.trackCount, "song")}`
     : counted(artist.trackCount, "song");
+const artistFind = (artist: ArtistRow): PlaylistFindText => artistFindText(artist.name);
 const artistsOf = (artists: readonly ArtistRow[]): ActionItems => ({
   kind: "artist",
   items: artists,
@@ -143,6 +168,7 @@ export function ArtistsList({ empty }: { empty: string }) {
       keyOf={artistKey}
       target={artistsOf}
       renderRow={renderArtist}
+      findBy={artistFind}
     />
   );
 }

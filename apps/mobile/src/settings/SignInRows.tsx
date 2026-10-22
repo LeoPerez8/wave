@@ -33,7 +33,12 @@ export function SignInRows({
         />
       </View>
       <Hairline />
-      <Text className="mt-2 font-sans text-footnote text-secondary">{note}</Text>
+      <Text
+        accessibilityLiveRegion="polite"
+        className="mt-2 font-sans text-footnote text-secondary"
+      >
+        {note}
+      </Text>
     </>
   );
 }

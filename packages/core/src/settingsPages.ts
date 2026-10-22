@@ -17,6 +17,7 @@ export type SettingsPage =
   | "library"
   | "appearance"
   | "layout"
+  | "swipeActions"
   | "playback"
   | "lyricsAndTags"
   | "downloads"
@@ -28,14 +29,14 @@ export type SettingsPage =
  * Tabler line icon (`settings/SettingsTile.tsx`).
  */
 export type SettingsIcon =
-  "books" | "palette" | "layout" | "play" | "quote" | "download" | "user" | "code";
+  "books" | "palette" | "layout" | "swipe" | "play" | "quote" | "download" | "user" | "code";
 
 /**
  * The colour of a Settings row's tile, by name: the theme token
  * `--color-tile-<name>` (Core's `SETTINGS_TILE_COLOURS`).
  */
 export type SettingsTileColour =
-  "red" | "orange" | "green" | "blue" | "indigo" | "purple" | "pink" | "grey";
+  "red" | "orange" | "green" | "cyan" | "blue" | "indigo" | "purple" | "pink" | "grey";
 
 export interface SettingsPageEntry {
   readonly page: SettingsPage;
@@ -50,7 +51,7 @@ export interface SettingsPageEntry {
 }
 
 /** The pages, in the order Settings lists them. */
-export const SETTINGS_PAGES: readonly SettingsPageEntry[] = [
+export const SETTINGS_PAGES = [
   { page: "library", title: "Library", route: "/settings/library", icon: "books", colour: "red" },
   {
     page: "appearance",
@@ -60,6 +61,13 @@ export const SETTINGS_PAGES: readonly SettingsPageEntry[] = [
     colour: "purple",
   },
   { page: "layout", title: "Layout", route: "/settings/layout", icon: "layout", colour: "indigo" },
+  {
+    page: "swipeActions",
+    title: "Swipe actions",
+    route: "/settings/swipe-actions",
+    icon: "swipe",
+    colour: "cyan",
+  },
   {
     page: "playback",
     title: "Playback",
@@ -95,7 +103,7 @@ export const SETTINGS_PAGES: readonly SettingsPageEntry[] = [
     icon: "code",
     colour: "grey",
   },
-];
+] as const satisfies readonly SettingsPageEntry[];
 
 /**
  * What Settings › Layout opens, by id: the options a long press opens on a
@@ -113,12 +121,12 @@ export interface LayoutPageEntry {
 }
 
 /** Layout's pages, in the order its page lists them. */
-export const LAYOUT_PAGES: readonly LayoutPageEntry[] = [
+export const LAYOUT_PAGES = [
   { page: "home", title: "Home", route: "/settings/layout/home" },
   { page: "library", title: "Library", route: "/settings/layout/library" },
   { page: "playlists", title: "Playlists", route: "/settings/layout/playlists" },
   { page: "tabBar", title: "Tab bar", route: "/settings/layout/tab-bar" },
-];
+] as const satisfies readonly LayoutPageEntry[];
 
 /**
  * The Accounts row's line: the YT Music, Spotify and Wave accounts this phone

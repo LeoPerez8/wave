@@ -147,6 +147,13 @@ export const forgetFavorites = (trackIds: readonly number[]): void => {
 export const isFavorite = (trackId: number | string): boolean =>
   favorites.get().ids.has(Number(trackId));
 
+/**
+ * The ids of every starred track as the store holds them now, unfollowed: for
+ * what a row works out as it renders or as a swipe runs, without every row
+ * following the stars (`useFavoriteIds` follows them).
+ */
+export const favoriteIdsNow = (): ReadonlySet<number> => favorites.get().ids;
+
 /** Flips a track's star. */
 export const toggleFavorite = (trackId: number | string): Promise<void> =>
   setFavorite(trackId, !isFavorite(trackId));
@@ -317,6 +324,10 @@ export const useYtSongStarred = (videoId: string | null, track: { id: number } |
   const pending = usePendingFavoriteVideos();
   return videoId !== null && ytSongStarred(videoId, track, favoriteIds, pending);
 };
+
+/** `useYtSongStarred` as the stores hold it now, unfollowed (`favoriteIdsNow`). */
+export const ytSongStarredNow = (videoId: string, track: { id: number } | null): boolean =>
+  ytSongStarred(videoId, track, favorites.get().ids, pendingFavorites.get().videos);
 
 // A download or scan that brought in a pending favorite starred it as it saved the song.
 onSavedStars(() => {

@@ -1,0 +1,21 @@
+Page: dev.leoperez.wave
+App: dev.leoperez.wave
+Snapshot: 16 visible nodes (39 total)
+Collapsed 23 Android helper nodes from the agent-facing text snapshot; use --raw or --json for the full hierarchy.
+@e1 [scroll-area] [scrollable]
+@e2 [scroll-area] [scrollable]
+@e3 [button] "Back"
+@e4 [scroll-area] "Blue Echo, R&B · 2000 · 13 songs · 7 min, Summer Running, Abbey Marlow, 0:30, Ghost Shadow, Summer, Glass Love Morning, Shuffle, Play" [scrollable]
+  [content below scroll-area hidden]
+@e6 [group] "Go to Abbey Marlow"
+@e9 [button] "Play"
+@e11 [button] "Shuffle"
+@e13 [radiobutton] "Library" [selected] [checked]
+@e14 [radiobutton] "Online" [unchecked]
+@e15 [button] "Glass Love Morning, Abbey Marlow"
+@e20 [button] "Summer, Abbey Marlow"
+@e25 [button] "Ghost Shadow, Abbey Marlow"
+@e30 [button] "Summer Running, Abbey Marlow"
+@e35 [button] "Now playing: Blue, Ada Duarte"
+@e38 [button] "Play Blue"
+@e39 [button] "Next track"

@@ -5,14 +5,14 @@ import { AlbumTile } from "@/catalog/AlbumTile";
 import { ArtistImage } from "@/catalog/ArtistImage";
 import { COVER_ROW_TILE, CoverRow } from "@/catalog/CoverRow";
 import { CELL } from "@/catalog/grid";
-import { TrackRow } from "@/catalog/TrackRow";
+import { SwipeTrackRow } from "@/library/SwipeTrackRow";
 import { toAlbumSummary } from "@/library/AlbumGrid";
 import { useFavoriteIds } from "@/library/favorites";
 import type { AlbumRow, ArtistRow, SongRow } from "@/library/LibraryStore";
 import { openAlbum, openArtist } from "@/library/routes";
 import { toTrackSummary } from "@/library/TrackList";
 import { playSongs } from "@/playback/actions";
-import { useCurrentTrackId } from "@/playback/hooks";
+import { useCurrentPlayingIds } from "@/playback/hooks";
 import { openAlbumActions, openArtistActions, openTrackActions } from "@/playback/ActionsMenu";
 import { Press } from "@/motion/Press";
 
@@ -57,16 +57,17 @@ export function SongRows<A extends SongRow>({
   /** On a ranking by plays (Most Played), each song's counted plays, shown in place of its length. */
   plays?: (song: A) => number;
 }) {
-  const currentId = useCurrentTrackId();
+  const currentIds = useCurrentPlayingIds();
   const favorites = useFavoriteIds();
   return (
     <View>
       {songs.map((song, index) => (
-        <TrackRow
+        <SwipeTrackRow
+          song={song}
           key={song.id}
           track={toTrackSummary(song)}
           plays={plays?.(song)}
-          state={String(song.id) === currentId ? "playing" : undefined}
+          state={currentIds.has(String(song.id)) ? "playing" : undefined}
           favorite={favorites.has(song.id)}
           leading="artwork"
           onPress={() => playSongs(songs, index, context)}

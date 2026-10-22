@@ -39,7 +39,7 @@ export function TextButton({
       opensMenu={opensMenu}
       haptic="selection"
       className="justify-center"
-      style={[{ minHeight: 48 }, opensMenu && MENU_INSET]}
+      style={[{ minHeight: 48, minWidth: 48 }, opensMenu && MENU_INSET]}
     >
       <Text
         className={`font-sans text-body font-medium ${disabled ? "text-secondary" : TONE[tone]}`}

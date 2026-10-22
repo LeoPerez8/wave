@@ -479,17 +479,103 @@ export const replacePlaylistSongs = (
  * so another copy of the same song stays), leaving tombstones; ids from other
  * playlists are ignored.
  */
+/** An operation's exact tombstones, kept only for its action toast's lifetime. */
+export interface PlaylistRemoval {
+  readonly playlistId: number;
+  /** Entries left in place: existing repeats must remain distinguishable from later additions. */
+  readonly retainedItemIds: readonly number[];
+  readonly entries: readonly { readonly itemId: number; readonly changedAt: number }[];
+}
+
 export const removePlaylistItems = (
   db: LibraryDatabase,
   playlistId: number,
   itemIds: readonly number[],
   now: number,
-): void => {
-  if (itemIds.length === 0) return;
+): PlaylistRemoval =>
   db.transaction((tx) => {
-    const { playlists } = schema;
-    tombstoneEntries(tx, playlistId, itemIds, now);
-    tx.update(playlists).set({ updatedAt: now }).where(eq(playlists.id, playlistId)).run();
+    const { playlists, playlistItems } = schema;
+    const entries: { itemId: number; changedAt: number }[] = [];
+    for (let i = 0; i < itemIds.length; i += INSERT_CHUNK) {
+      entries.push(
+        ...tx
+          .update(playlistItems)
+          .set({ deleted: true, ...stamped(playlistItems, now) })
+          .where(
+            and(
+              eq(playlistItems.playlistId, playlistId),
+              live,
+              inArray(playlistItems.id, itemIds.slice(i, i + INSERT_CHUNK)),
+            ),
+          )
+          .returning({ itemId: playlistItems.id, changedAt: playlistItems.changedAt })
+          .all(),
+      );
+    }
+    if (entries.length > 0)
+      tx.update(playlists).set({ updatedAt: now }).where(eq(playlists.id, playlistId)).run();
+    const retainedItemIds = tx
+      .select({ id: playlistItems.id })
+      .from(playlistItems)
+      .where(and(eq(playlistItems.playlistId, playlistId), live))
+      .all()
+      .map((row) => row.id);
+    return { playlistId, entries, retainedItemIds };
+  });
+
+/** Restores only this operation's still-unchanged tombstones, at their retained order keys. */
+export const restorePlaylistItems = (
+  db: LibraryDatabase,
+  removal: PlaylistRemoval,
+  now: number,
+): void => {
+  db.transaction((tx) => {
+    const { playlistItems } = schema;
+    const { playlistId } = removal;
+    const playlist = tx
+      .select({ id: schema.playlists.id })
+      .from(schema.playlists)
+      .where(and(eq(schema.playlists.id, playlistId), eq(schema.playlists.deleted, false)))
+      .get();
+    if (playlist === undefined) return;
+    const retained = new Set(removal.retainedItemIds);
+    const held: PlaylistSong[] = selectPlaylistEntries(tx, playlistId)
+      .filter((entry) => !retained.has(entry.itemId))
+      .map((entry) =>
+        entry.source === "library" ? { source: "library", trackId: entry.track.id } : entry,
+      );
+    for (const { itemId, changedAt } of removal.entries) {
+      const row = tx
+        .select()
+        .from(playlistItems)
+        .where(
+          and(
+            eq(playlistItems.id, itemId),
+            eq(playlistItems.playlistId, playlistId),
+            eq(playlistItems.deleted, true),
+            eq(playlistItems.changedAt, changedAt),
+          ),
+        )
+        .get();
+      if (row === undefined) continue;
+      const song: PlaylistSong | null =
+        row.trackId !== null
+          ? { source: "library", trackId: row.trackId }
+          : row.ytSong === null
+            ? null
+            : decode(playlistId, row.ytSong);
+      if (song === null || planPlaylistSongs(held, [song]).add.length === 0) continue;
+      tx.update(playlistItems)
+        .set({ deleted: false, ...stamped(playlistItems, now) })
+        .where(eq(playlistItems.id, itemId))
+        .run();
+    }
+    // A streamed entry may have downloaded while the toast was showing.
+    linkPlaylistEntries(tx, now);
+    tx.update(schema.playlists)
+      .set({ updatedAt: now })
+      .where(eq(schema.playlists.id, playlistId))
+      .run();
   });
 };
 

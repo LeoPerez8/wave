@@ -14,7 +14,7 @@ import { CatalogLine } from "@/catalog/CatalogLine";
 import { CELL, grid } from "@/catalog/grid";
 import { NameRow } from "@/catalog/NameRow";
 import { SKELETON_ROWS, TrackSkeletons } from "@/catalog/Skeletons";
-import { TrackRow } from "@/catalog/TrackRow";
+import { SwipeTrackRow } from "@/library/SwipeTrackRow";
 import { useChromeInset } from "@/chrome/chrome";
 import { TextButton } from "@/components/TextButton";
 import type { TrackItem } from "@/playback/actionTargets";
@@ -22,7 +22,7 @@ import type { NativeYtSong } from "@/native/waveYtMusic";
 import { openAlbum, openArtist, openGenre, openPlaylist } from "@/library/routes";
 import { toTrackSummary } from "@/library/TrackList";
 import { playPage } from "@/playback/actions";
-import { useCurrentTrackId } from "@/playback/hooks";
+import { useCurrentPlayingIds } from "@/playback/hooks";
 import {
   openAlbumActions,
   openArtistActions,
@@ -40,7 +40,7 @@ import type { ListSelection } from "@/selection/useListSelection";
 import { openYtAlbum, openYtArtist } from "@/ytmusic/routes";
 import { openYtAlbumActions } from "@/ytmusic/YtAlbumActions";
 import { openYtArtistActions } from "@/ytmusic/YtArtistActions";
-import { YtSongRow } from "@/ytmusic/YtSongRow";
+import { SwipeYtSongRow } from "@/ytmusic/YtSongRow";
 import { openYtSongActions } from "@/ytmusic/YtSongActions";
 
 /** Tapping a song plays the song results from it. */
@@ -90,7 +90,7 @@ function SearchYtSongRow({
   selection: ListSelection<TrackItem>;
 }) {
   return (
-    <YtSongRow
+    <SwipeYtSongRow
       song={song}
       kind={top ? "Song · " : ""}
       playing={playing}
@@ -117,7 +117,8 @@ const ytAlbumHead = (album: YtArtistAlbum) => ({
 
 const keyExtractor = (row: ResultRow): string => row.key;
 const itemType = (row: ResultRow): ResultRow["type"] => row.type;
-const itemSize = (row: ResultRow): number => HEIGHT[row.type];
+const itemSize = (row: ResultRow): number | undefined =>
+  row.type === "note" || row.type === "capped" ? undefined : HEIGHT[row.type];
 
 type Props = {
   rows: readonly ResultRow[];
@@ -187,7 +188,8 @@ function Hit({
     case "song": {
       const track = toTrackSummary(hit.song);
       return (
-        <TrackRow
+        <SwipeTrackRow
+          song={hit.song}
           track={top ? { ...track, artist: `Song · ${track.artist}` } : track}
           state={playing ? "playing" : undefined}
           leading="artwork"
@@ -237,10 +239,10 @@ function Hit({
 export function SearchResultsList({ rows, onOpen, onShowAll, integrated, selection }: Props) {
   const scrollable = useListScrollable();
   const bottomInset = useChromeInset();
-  const currentId = useCurrentTrackId();
+  const currentIds = useCurrentPlayingIds();
   const rowState = useMemo(
-    () => ({ currentId, selection: selection.selection, integrated }),
-    [currentId, selection.selection, integrated],
+    () => ({ currentIds, selection: selection.selection, integrated }),
+    [currentIds, selection.selection, integrated],
   );
 
   const renderItem = useCallback(
@@ -261,7 +263,7 @@ export function SearchResultsList({ rows, onOpen, onShowAll, integrated, selecti
               downloaded={item.downloaded}
               artistSongs={item.artistSongs}
               integrated={integrated}
-              playing={item.hit.kind === "song" && String(item.hit.song.id) === currentId}
+              playing={item.hit.kind === "song" && currentIds.has(String(item.hit.song.id))}
               onOpen={onOpen}
               selection={selection}
             />
@@ -277,7 +279,10 @@ export function SearchResultsList({ rows, onOpen, onShowAll, integrated, selecti
           );
         case "capped":
           return (
-            <View className="justify-center" style={{ height: HEIGHT.capped }}>
+            <View
+              className="justify-center"
+              style={{ minHeight: HEIGHT.capped, paddingVertical: CELL }}
+            >
               <Text className="font-sans text-footnote text-secondary">
                 {`The best ${item.shown.toLocaleString("en")} of ${item.total.toLocaleString("en")}. Keep typing to narrow them down.`}
               </Text>
@@ -290,7 +295,7 @@ export function SearchResultsList({ rows, onOpen, onShowAll, integrated, selecti
               songs={item.songs}
               index={item.index}
               top={item.top}
-              playing={ytTrackId(item.song.videoId) === currentId}
+              playing={currentIds.has(ytTrackId(item.song.videoId))}
               onOpen={onOpen}
               selection={selection}
             />
@@ -340,8 +345,14 @@ export function SearchResultsList({ rows, onOpen, onShowAll, integrated, selecti
         }
         case "note":
           return (
-            <View className="justify-center" style={{ height: HEIGHT.note }}>
-              <Text numberOfLines={2} className="font-sans text-footnote text-secondary">
+            <View
+              className="justify-center"
+              style={{ minHeight: HEIGHT.note, paddingVertical: CELL }}
+            >
+              <Text
+                accessibilityLiveRegion="polite"
+                className="font-sans text-footnote text-secondary"
+              >
                 {item.text}
               </Text>
             </View>
@@ -350,7 +361,7 @@ export function SearchResultsList({ rows, onOpen, onShowAll, integrated, selecti
           return <TrackSkeletons label="Loading online results" />;
       }
     },
-    [currentId, onOpen, onShowAll, integrated, selection],
+    [currentIds, onOpen, onShowAll, integrated, selection],
   );
 
   return (

@@ -1,0 +1,24 @@
+{
+  "capturedAt": "2026-10-21T19:38:40.790374+00:00",
+  "kind": "emulator-preflight-only",
+  "runnerCommit": "61b0eaeacc2e980cb00b2bc1d4f1f85d634cd485",
+  "serial": "emulator-5554",
+  "hardwareAcceptance": "pending: no physical Galaxy S24+ or SM-G985F is attached",
+  "device": {
+    "model": "sdk_gphone64_x86_64",
+    "manufacturer": "Google",
+    "android": "16",
+    "sdk": "36",
+    "fingerprint": "google/sdk_gphone64_x86_64/emu64xa:16/BE2A.250530.026.F3/13894323:userdebug/dev-keys",
+    "emulator": "1"
+  },
+  "displaySize": "Physical size: 1080x2340",
+  "density": "Physical density: 450",
+  "fontScale": "1.0",
+  "thermal": "IsStatusOverride: false\nThermalStatusListeners:\nThermal Status: 0\nTemperature{mValue=30.2, mType=2, mName=battery, mStatus=0}\nTemperature{mValue=30.1, mType=3, mName=skin, mStatus=0}\nTemperature{mValue=30.1, mType=3, mName=skin, mStatus=0}\nTemperature{mValue=30.2, mType=2, mName=battery, mStatus=0}",
+  "package": "versionCode=1500 minSdk=31 targetSdk=36\nversionName=0.15.0-ti\nlastUpdateTime=2026-10-21 12:42:57\npkgFlags=[ DEBUGGABLE HAS_CODE ALLOW_CLEAR_USER_DATA ALLOW_BACKUP ]",
+  "installedApk": {
+    "sha256": "2734d18006e3e3976955c20c870d943e813dcd571fff7750c04805e129349167",
+    "commit": "unknown: installed before this task; not a comparison baseline"
+  }
+}

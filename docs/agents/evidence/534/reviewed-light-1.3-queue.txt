@@ -1,0 +1,59 @@
+Page: dev.leoperez.wave
+App: dev.leoperez.wave
+Snapshot: 53 visible nodes (86 total)
+Collapsed 33 Android helper nodes from the agent-facing text snapshot; use --raw or --json for the full hierarchy.
+@e1 [button] "Close Now Playing"
+@e2 [button] "Share Song"
+@e3 [switch] "Shuffle" [unchecked]
+@e4 [text] "Shuffle"
+@e5 [switch] "Repeat" [unchecked]
+@e6 [text] "Repeat"
+@e7 [scroll-area] "Blue, Ben Novak, Ben Kowalski, Ben Haddad, Ben Duarte, Ada Lindqvist, Nora Laine" [scrollable]
+  [content below scroll-area hidden]
+@e8 [button] "Blue, Ada Lindqvist, Nora Laine"
+@e11 [button] "Remove Blue from Up Next"
+@e12 [button] "Blue, Ben Duarte"
+@e15 [button] "Remove Blue from Up Next"
+@e16 [button] "Blue, Ben Haddad"
+@e19 [button] "Remove Blue from Up Next"
+@e20 [button] "Blue, Ben Kowalski"
+@e23 [button] "Remove Blue from Up Next"
+@e24 [button] "Blue, Ben Novak"
+@e27 [button] "Remove Blue from Up Next"
+@e28 [button] "Blue, Ben Novak"
+@e31 [seekbar] "Playback position, 0:00 of 0:29"
+@e32 [button] "Previous track"
+@e33 [button] "Play"
+@e34 [button] "Next track"
+@e35 [switch] "Lyrics" [unchecked]
+@e36 [button] "Sleep timer, Off"
+@e37 [button] "Add to Playlist"
+@e38 [button] "Downloaded"
+@e39 [switch] "Queue" [checked]
+@e40 [scroll-area] [scrollable]
+@e41 [scroll-area] "DISCOVER, Magic Queue, Artist mixes, Electric Dance Heavy, Broken Morning, Ocean, Summer Gold, City, Summer Electric, Love Running, Home Dance, Echo, Your Recap is ready, September 2026, Tap to watch, Home" [scrollable]
+  [content below scroll-area hidden]
+@e42 [group] "Home"
+@e44 [button] "Settings"
+@e45 [button] "Your Recap is ready: September 2026"
+@e50 [button] "Discover settings"
+@e52 [horizontalscrollview] [scrollable]
+@e53 [button] "Echo by Ada Prado, Slow Heavy, start Magic Queue"
+@e55 [button] "Home Dance by Abbey Marlow, Young Broken, start Magic Queue"
+@e57 [button] "Love Running by Ugo Lindqvist, Shadow Young, start Magic Queue"
+@e59 [button] "Summer Electric by Abbey Marlow, Young Fade, start Magic Queue"
+@e61 [button] "City by Wren Okafor, Running Young, start Magic Queue"
+@e63 [button] "Summer Gold by Kai Lindqvist, River, start Magic Queue"
+@e65 [button] "Ocean by Milo Nyx, Dream, start Magic Queue"
+@e67 [button] "Broken Morning by Yara Byrne, Silver, start Magic Queue"
+@e69 [button] "Electric Dance Heavy by Hana Lindqvist, Stars Slow Ghost, start Magic Queue"
+@e72 [horizontalscrollview] [scrollable]
+@e73 [button] "Abbey Marlow mix by KATSEYE, Sia, Abbey Marlow, 26 songs"
+@e74 [button] "Kai Duarte mix by Bielzin, The Weeknd, Kai Duarte, 12 songs"
+@e75 [button] "Now playing: Blue, Ada Duarte"
+@e78 [button] "Play Blue"
+@e79 [button] "Next track"
+@e80 [group] "Home" [selected]
+@e82 [group] "Library"
+@e84 [group] "Playlists"
+@e86 [group] "Search"

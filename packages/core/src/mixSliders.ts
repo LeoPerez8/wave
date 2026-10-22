@@ -74,6 +74,19 @@ export const mixSlidersEngine = (
   weights: { popularity: stepOf(POPULARITY_STEPS, sliders.popularity).weight },
 });
 
+/**
+ * The genre affinity a Magic Queue's Library songs need to the seed's
+ * profile at [sliders]' Genre faithfulness (`magicLibraryCandidates`): its
+ * step's threshold, as for YouTube Music's candidates; null (any genre) at
+ * the loosest step, Wander, where the Library keeps every genre as it did
+ * before Library songs were held to the seed's genres.
+ */
+export const magicLibraryThreshold = (sliders: MixSliders): number | null => {
+  const loosest = GENRE_FAITHFULNESS_STEPS[GENRE_FAITHFULNESS_STEPS.length - 1]!;
+  const { step, threshold } = stepOf(GENRE_FAITHFULNESS_STEPS, sliders.faithfulness);
+  return step === loosest.step ? null : threshold;
+};
+
 const readStep = (value: unknown): MixSliderStep | null =>
   value === 1 || value === 2 || value === 3 || value === 4 || value === 5 ? value : null;
 

@@ -19,6 +19,7 @@ import { useMemo } from "react";
 
 import { followArtistLink, followStreamedArtistLink } from "@/library/ArtistChoice";
 import { confirmDeleteSongs, confirmRemoveSongs } from "@/library/deleteSongs";
+import type { LinkRows } from "@/library/db/links";
 import { songHasFile, type ArtistRow, type SongRow } from "@/library/LibraryStore";
 import { useFavoriteIds, usePendingFavoriteVideos } from "@/library/favorites";
 import { starSongs } from "@/library/starSongs";
@@ -287,9 +288,83 @@ export function useItemActions(
 ): readonly ActionEntry[] {
   const here = usePathname();
   const favorites = useFavoriteIds();
+  const find = useStreamedSongFinder(hasStreamedSongs(target));
+
+  // [missingSongs]: the albums' missing songs, which their download entries act on.
+  const { planned, missingSongs, perAlbum, collectionSongs } = usePlan(target, favorites, {
+    surface,
+    selectable: onSelect !== undefined,
+    collectionSongs: readFirst,
+  });
+
+  // Read ahead, so Go to Album / Go to Artist open header-first.
+  let goAlbumId: number | undefined;
+  let goArtistId: number | undefined;
+  for (const entry of planned) {
+    if (entry.action === "goToAlbum") goAlbumId = entry.albumId;
+    if (entry.action === "goToArtist" && "artists" in entry && entry.artists.kind === "open")
+      goArtistId = entry.artists.artistId;
+  }
+  const links = useLinkRows(goAlbumId, goArtistId);
+
+  return actionEntries(
+    planned,
+    itemActionPress({
+      target,
+      surface,
+      finish,
+      onSelect,
+      here,
+      find,
+      links,
+      missingSongs,
+      perAlbum,
+      collectionSongs,
+    }),
+  );
+}
+
+/** Where an entry runs: what `useItemActions` read for it, or what a row's swipe has at hand. */
+export interface PressContext {
+  readonly target: ActionItems;
+  readonly surface: ActionSurface;
+  /** Runs before an entry's action: the menu closes, the selection ends. */
+  readonly finish: () => void;
+  readonly onSelect?: (() => void) | undefined;
+  /** The current route. */
+  readonly here: string;
+  /** The Library song a YT Music song is by now, if any. */
+  readonly find: FindInLibrary;
+  /** The album and artist Go to opens, read ahead so their pages open header-first. */
+  readonly links?: LinkRows | undefined;
+  /** The albums' missing songs, all albums' in one list, and each album's. */
+  readonly missingSongs?: readonly number[] | undefined;
+  readonly perAlbum?: readonly (readonly number[])[] | undefined;
+  /** The Library songs of the collection the menu is about: what Fix Songs runs on. */
+  readonly collectionSongs?: readonly SongRow[] | undefined;
+}
+
+const NO_LINKS: LinkRows = { album: null, artist: null };
+const NO_IDS: readonly number[] = [];
+
+/**
+ * What each of [context]'s target's entries does, as the menu and the
+ * selection bar run it; a song row's swipe runs its entry the same way.
+ */
+export const itemActionPress = ({
+  target,
+  surface,
+  finish,
+  onSelect,
+  here,
+  find,
+  links = NO_LINKS,
+  missingSongs = NO_IDS,
+  perAlbum = [],
+  collectionSongs = NO_SONGS,
+}: PressContext): ((entry: ItemActionEntry<ArtistRow>) => () => void) => {
   const allTracks = target.kind === "track" ? target.items : [];
   const tracks = allTracks.filter(isLibraryTrack);
-  const find = useStreamedSongFinder(hasStreamedSongs(target));
   // What acts on files (Delete, Fix Song) shows only when every song has one.
   const withFiles = tracks.flatMap(({ song }) => (songHasFile(song) ? [song] : []));
   // A YT Music song downloaded since it was checked is the Library's file now.
@@ -352,24 +427,7 @@ export function useItemActions(
       ? (targetHeading(target, undefined)?.title ?? targetCount(target))
       : targetCount(target);
 
-  // [missingSongs]: the albums' missing songs, which their download entries act on.
-  const { planned, missingSongs, perAlbum, collectionSongs } = usePlan(target, favorites, {
-    surface,
-    selectable: onSelect !== undefined,
-    collectionSongs: readFirst,
-  });
-
-  // Read ahead, so Go to Album / Go to Artist open header-first.
-  let goAlbumId: number | undefined;
-  let goArtistId: number | undefined;
-  for (const entry of planned) {
-    if (entry.action === "goToAlbum") goAlbumId = entry.albumId;
-    if (entry.action === "goToArtist" && "artists" in entry && entry.artists.kind === "open")
-      goArtistId = entry.artists.artistId;
-  }
-  const links = useLinkRows(goAlbumId, goArtistId);
-
-  return actionEntries(planned, (entry): (() => void) => {
+  return (entry) => {
     switch (entry.action) {
       case "playNext":
         return queue("playNext");
@@ -511,5 +569,5 @@ export function useItemActions(
         });
       }
     }
-  });
-}
+  };
+};

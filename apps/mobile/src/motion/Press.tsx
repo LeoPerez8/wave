@@ -1,3 +1,4 @@
+import { createLongPressIntent } from "@wave/core";
 import * as Haptics from "expo-haptics";
 import {
   useContext,
@@ -27,7 +28,7 @@ import {
 import { withUniwind } from "uniwind";
 
 import { OnFloatingChrome } from "@/chrome/onFloatingChrome";
-import { useIsOverlayOrigin } from "@/overlay/overlay";
+import { dismissOverlaysFrom, useIsOverlayOrigin } from "@/overlay/overlay";
 import { useLongPressDelayMs } from "@/settings/longPressDelay";
 import { useTapAnimationMs } from "@/settings/tapAnimation";
 
@@ -35,6 +36,7 @@ import { cancelHeldTouch, holdTouch, moveHeldTouch, releaseHeldTouch } from "./h
 import { measurePressed, type Measurable } from "./measureRect";
 import { runPressedAt } from "./pressedRect";
 import { HandOverPress } from "./pressHandle";
+import { traceLongPress } from "./longPressTrace";
 
 const AnimatedPressable = withUniwind(createAnimatedComponent(Pressable));
 
@@ -91,6 +93,7 @@ export function Press({
   opensMenu = false,
   highlighted = false,
   highlightAs,
+  onTouchStart,
   onTouchMove,
   onTouchEnd,
   onTouchCancel,
@@ -106,6 +109,8 @@ export function Press({
   const view = useRef<ComponentRef<typeof View>>(null);
   // This press's finger long-pressed and is still down: it reports where it goes (`heldTouch`).
   const holding = useRef(false);
+  const [intent] = useState(createLongPressIntent);
+  const touchAt = useRef(0);
   const [key] = useState(() => ++lastKey);
   // Opened the card on screen: screen readers call it selected until the card closes.
   const origin = useIsOverlayOrigin(key);
@@ -115,23 +120,32 @@ export function Press({
   // A row that unmounts mid-hold can't report the finger lifting.
   useEffect(
     () => () => {
+      intent.cancel();
+      traceLongPress(key, "unmount");
       if (holding.current) cancelHeldTouch();
     },
-    [],
+    [intent, key],
   );
 
   // Runs a handler that may open a menu, measuring where this sits first (or the
   // view it highlights as) so the menu can float next to it. It measures sunk by its
   // press feedback, so the rect is grown back to its resting size. Resolves with
   // whether it opened one.
-  const runAnchored = (handler: () => void): Promise<boolean> =>
+  const runAnchored = (
+    handler: () => void,
+    admit = () => true,
+    menuAllowed?: () => boolean,
+  ): Promise<boolean> =>
     measurePressed(view.current, {
       scale: reduceMotion ? 1 : 1 - Math.max(pressed.get(), lit.get()) * depth,
       highlight:
         highlightAs === undefined
           ? undefined
           : { view: highlightAs.view.current, radius: highlightAs.radius },
-    }).then(({ rect, radius }) => runPressedAt(rect, handler, { key, onChrome, radius }));
+    }).then(
+      ({ rect, radius }) =>
+        admit() && runPressedAt(rect, handler, { key, onChrome, radius, menuAllowed }),
+    );
 
   // Hands itself to the view around it that asked (a Design preview state), as it is now.
   const latestRunAnchored = useRef(runAnchored);
@@ -147,13 +161,43 @@ export function Press({
   // (slide to choose). A long-press that opens no menu (a tab's) lets it go again.
   const longPress = (event: GestureResponderEvent): void => {
     if (onLongPress == null) return;
+    const request = intent.request();
+    traceLongPress(
+      key,
+      "threshold",
+      `request=${request} elapsed=${(performance.now() - touchAt.current).toFixed(1)}`,
+    );
+    if (request === null) return;
+    // The handler runs after a native measurement; retain the event across that await.
+    event.persist();
     const point = pointOf(event);
     if (point !== undefined) {
       holding.current = true;
       holdTouch(point);
     }
-    void runAnchored(() => onLongPress(event)).then((opened) => {
-      if (!opened && holding.current) {
+    void runAnchored(
+      () => onLongPress(event),
+      () => {
+        const admitted = intent.open(request);
+        traceLongPress(
+          key,
+          admitted ? "measurement-admitted" : "measurement-discarded",
+          `request=${request}`,
+        );
+        return admitted;
+      },
+      () => {
+        const allowed = intent.allows(request);
+        traceLongPress(
+          key,
+          allowed ? "async-menu-admitted" : "async-menu-discarded",
+          `request=${request}`,
+        );
+        return allowed;
+      },
+    ).then((opened) => {
+      traceLongPress(key, "handler-ended", `request=${request} cardRequested=${opened}`);
+      if (!opened && intent.cancel(request) && holding.current) {
         holding.current = false;
         cancelHeldTouch();
       }
@@ -188,12 +232,20 @@ export function Press({
       }
       onLongPress={onLongPress == null ? undefined : longPress}
       delayLongPress={delayLongPress ?? longPressDelay}
+      onTouchStart={(event) => {
+        intent.begin();
+        touchAt.current = performance.now();
+        traceLongPress(key, "touch-start", `delay=${delayLongPress ?? longPressDelay}`);
+        onTouchStart?.(event);
+      }}
       onTouchMove={(event) => {
         const point = pointOf(event);
         if (holding.current && point !== undefined) moveHeldTouch(point);
         onTouchMove?.(event);
       }}
       onTouchEnd={(event) => {
+        intent.release();
+        traceLongPress(key, "touch-end", `held=${holding.current}`);
         if (holding.current) {
           holding.current = false;
           const point = pointOf(event);
@@ -203,9 +255,12 @@ export function Press({
         onTouchEnd?.(event);
       }}
       onTouchCancel={(event) => {
+        intent.cancel();
+        traceLongPress(key, "touch-cancel", `held=${holding.current}`);
         if (holding.current) {
           holding.current = false;
           cancelHeldTouch();
+          dismissOverlaysFrom(key);
         }
         onTouchCancel?.(event);
       }}
@@ -217,6 +272,21 @@ export function Press({
         onPressIn?.(event);
       }}
       onPressOut={(event) => {
+        // Pressability forwards the responder event here. A native scroll can
+        // terminate the press before React's scrollEnabled=false reaches it.
+        // An ordinary slide out of the row after opening must keep the menu.
+        const terminated = event.dispatchConfig?.registrationName === "onResponderTerminate";
+        const cancelled = terminated ? intent.cancel() : intent.leave();
+        traceLongPress(
+          key,
+          "press-out",
+          `terminated=${terminated} cancelled=${cancelled} held=${holding.current}`,
+        );
+        if (cancelled && holding.current) {
+          holding.current = false;
+          cancelHeldTouch();
+          if (terminated) dismissOverlaysFrom(key);
+        }
         animateTo(0);
         onPressOut?.(event);
       }}

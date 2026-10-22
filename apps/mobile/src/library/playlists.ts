@@ -14,6 +14,9 @@ import { Image } from "react-native";
 import { makeExternalStore } from "@/lib/externalStore";
 import { WaveNative, type PlaylistPhoto } from "@/native/waveNative";
 
+import { showError } from "@/overlay/alert";
+import { showToast } from "@/overlay/toast";
+
 import { countNotified } from "./db/playlistWork";
 import {
   LibraryStore,
@@ -274,4 +277,22 @@ export const replacePlaylistSongs = (
 export const removePlaylistItems = (
   playlistId: number,
   itemIds: readonly number[],
-): Promise<void> => edit((store) => store.removePlaylistItems(playlistId, itemIds), playlistId);
+): Promise<void> => {
+  return edit((store) => store.removePlaylistItems(playlistId, itemIds), playlistId).then(
+    (removal) => {
+      const count = removal.entries.length;
+      if (count === 0) return;
+      void showToast(
+        count === 1 ? "Song removed from playlist" : `${count} songs removed from playlist`,
+        {
+          label: "Undo",
+          run: () => {
+            void edit((store) => store.restorePlaylistItems(removal), playlistId).catch(
+              (error: unknown) => showError("Couldn't restore the songs", error),
+            );
+          },
+        },
+      );
+    },
+  );
+};

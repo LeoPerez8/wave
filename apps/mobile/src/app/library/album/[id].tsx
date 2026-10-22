@@ -19,11 +19,11 @@ import { CatalogLine } from "@/catalog/CatalogLine";
 import { CELL, grid } from "@/catalog/grid";
 import { PlayShuffle, type LineToggle } from "@/catalog/PlayShuffle";
 import { TrackSkeletons } from "@/catalog/Skeletons";
-import { TrackRow } from "@/catalog/TrackRow";
+import { SwipeTrackRow } from "@/library/SwipeTrackRow";
 import { useChromeInset } from "@/chrome/chrome";
 import { Press } from "@/motion/Press";
 import { playPage, playSongs } from "@/playback/actions";
-import { useCurrentTrackId, usePlayPage } from "@/playback/hooks";
+import { useCurrentPlayingIds, usePlayPage } from "@/playback/hooks";
 import { openTrackActions } from "@/playback/ActionsMenu";
 import { followArtistLink } from "@/library/ArtistChoice";
 import { DetailFrame } from "@/library/DetailFrame";
@@ -46,7 +46,7 @@ import { useListSelection, type ListSelection } from "@/selection/useListSelecti
 import { useYtAlbumSection } from "@/ytmusic/albumSection";
 import { YtLookupFooter } from "@/ytmusic/YtLookupFooter";
 import { listDownloadAction, useYtAlbumDownloadButton } from "@/ytmusic/YtSongList";
-import { YtSongRow } from "@/ytmusic/YtSongRow";
+import { SwipeYtSongRow } from "@/ytmusic/YtSongRow";
 import { openYtSongActions } from "@/ytmusic/YtSongActions";
 
 type Entry = YtAlbumEntry<NativeYtSong, SongRow>;
@@ -229,7 +229,7 @@ function EntryRow({
 }) {
   if (entry.source === "stream")
     return (
-      <YtSongRow
+      <SwipeYtSongRow
         song={entry.song}
         trackNumber={entry.number}
         playing={playing}
@@ -239,7 +239,8 @@ function EntryRow({
       />
     );
   return (
-    <TrackRow
+    <SwipeTrackRow
+      song={entry.track}
       track={{ ...toTrackSummary(entry.track), trackNumber: entry.number ?? undefined }}
       state={playing ? "playing" : undefined}
       favorite={favorite}
@@ -280,7 +281,7 @@ function AlbumTracks({ shown, openedIntegrated }: { shown: Shown; openedIntegrat
   const mixed = useMemo(() => (entries === null ? null : mixedSongs(entries)), [entries]);
   const scrollable = useListScrollable();
   const bottomInset = useChromeInset();
-  const currentId = useCurrentTrackId();
+  const currentIds = useCurrentPlayingIds();
   const favorites = useFavoriteIds();
   // Selection keys the tracks themselves (every disc), not the disc heads.
   const selectable = useMemo(
@@ -294,8 +295,8 @@ function AlbumTracks({ shown, openedIntegrated }: { shown: Shown; openedIntegrat
     target: tracksTarget,
   });
   const rowState = useMemo(
-    () => ({ currentId, favorites, selection: listSelection.selection }),
-    [currentId, favorites, listSelection.selection],
+    () => ({ currentIds, favorites, selection: listSelection.selection }),
+    [currentIds, favorites, listSelection.selection],
   );
   const items = useMemo(
     () =>
@@ -323,7 +324,7 @@ function AlbumTracks({ shown, openedIntegrated }: { shown: Shown; openedIntegrat
           return (
             <EntryRow
               entry={item.entry}
-              playing={song !== undefined && discoverTrackId(song) === currentId}
+              playing={song !== undefined && currentIds.has(discoverTrackId(song))}
               favorite={item.entry.source === "library" && favorites.has(item.entry.track.id)}
               listSelection={listSelection}
               onPress={() => mixed !== null && void playPage(mixed, item.index, context)}
@@ -332,12 +333,13 @@ function AlbumTracks({ shown, openedIntegrated }: { shown: Shown; openedIntegrat
         }
         case "track":
           return (
-            <TrackRow
+            <SwipeTrackRow
+              song={item.track}
               track={{
                 ...toTrackSummary(item.track),
                 trackNumber: item.track.trackNumber ?? undefined,
               }}
-              state={String(item.track.id) === currentId ? "playing" : undefined}
+              state={currentIds.has(String(item.track.id)) ? "playing" : undefined}
               favorite={favorites.has(item.track.id)}
               leading="number"
               {...selectableRow(
@@ -350,7 +352,7 @@ function AlbumTracks({ shown, openedIntegrated }: { shown: Shown; openedIntegrat
           );
       }
     },
-    [context, currentId, tracks, favorites, listSelection, mixed],
+    [context, currentIds, tracks, favorites, listSelection, mixed],
   );
 
   return (

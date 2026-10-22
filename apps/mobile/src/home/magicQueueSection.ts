@@ -1,5 +1,5 @@
 /**
- * Home's Magic Queue section (docs/spec.md, Magic Queue): 10 of the
+ * Home's Magic Queue section (docs/spec.md, Magic Queue): nine of the
  * Library's songs to start a Magic Queue from with one tap. Which songs,
  * when they change and what a pull brings are Core's (`magicQueuePicks`,
  * `refreshedMagicQueuePicks`, `undoneMagicQueueRefresh`), weighed by the

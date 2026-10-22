@@ -86,6 +86,8 @@ export interface RecommendSeed {
    * radio brought it.
    */
   readonly family?: string;
+  /** Include genre-compatible songs beyond the graph (playlist recommendations). */
+  readonly matchGenres?: boolean;
 }
 
 /** What the engine ranks, all of it on the phone. */
@@ -100,6 +102,8 @@ export interface RecommendSources {
   readonly taste?: TasteProfile | null;
   /** Now (ms since the epoch), for newness. */
   readonly now: number;
+  /** Optional track tags; they take precedence over artist-wide genres. */
+  readonly songProfileOf?: (song: YtAlbumSong) => GenreProfile | null | undefined;
 }
 
 /** How the engine ranks: what the sliders tune. */
@@ -208,7 +212,21 @@ export const recommendCandidates = (
     let closeness = onSeedRadio ? 1 : 0;
     for (const artist of artists)
       closeness = Math.max(closeness, seeds.has(artist) ? 1 : (near.get(artist) ?? 0));
-    if (closeness === 0 && (family === null || !inFamily(song.artists, family, profileOf)))
+    const songProfile = sources.songProfileOf?.(song);
+    const affinity =
+      profile !== null && songProfile != null
+        ? genreAffinity(profile, songProfile)
+        : affinityOf(song.artists, profile, profileOf);
+    if (
+      closeness === 0 &&
+      !(
+        seed.matchGenres === true &&
+        profile !== null &&
+        affinity !== null &&
+        affinity >= GENRE_AFFINITY_THRESHOLD
+      ) &&
+      (family === null || !inFamily(song.artists, family, profileOf))
+    )
       continue;
     const liked =
       taste === null || taste === undefined
@@ -223,7 +241,7 @@ export const recommendCandidates = (
       entry,
       onSeedRadio,
       closeness,
-      affinity: affinityOf(song.artists, profile, profileOf),
+      affinity,
       taste: liked,
       newness: 0.5 ** (Math.max(0, now - entry.firstSeenAt) / RECOMMEND_NEWNESS_HALF_LIFE_MS),
       popularity: 1 - 0.5 ** entry.radios.length,

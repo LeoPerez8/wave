@@ -13,6 +13,8 @@ import {
   placeDiscoverMixSongs,
   storedDiscoverMixes,
   readDiscoverMixLevel,
+  discoverLevelLabel,
+  magicQueueShare,
   mixKnownSongs,
   type DiscoverMixSong,
 } from "./index.ts";
@@ -402,6 +404,24 @@ describe("The mixes' level setting", () => {
       { level: 4, label: "Mostly new", share: "80% new" },
       { level: 5, label: "All new", share: "100% new" },
     ]);
+  });
+});
+
+describe("Discover's new-music scale", () => {
+  test("names each step with its share, one scale for the Magic Queue and the mixes", () => {
+    assert.deepEqual(
+      ([1, 2, 3, 4, 5] as const).map((level) => [
+        discoverLevelLabel(level),
+        magicQueueShare(level),
+      ]),
+      [
+        ["Mostly familiar · 20% new", 0.2],
+        ["More familiar · 40% new", 0.4],
+        ["Balanced · 60% new", 0.6],
+        ["Mostly new · 80% new", 0.8],
+        ["All new · 100% new", 1],
+      ],
+    );
   });
 });
 

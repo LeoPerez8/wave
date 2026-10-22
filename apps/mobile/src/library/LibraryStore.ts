@@ -1,4 +1,10 @@
 import {
+  acceptPlaylistRecommendation,
+  dismissPlaylistRecommendation,
+  selectPlaylistRecommendationInput,
+  type PlaylistRecommendationInput,
+} from "./db/playlistRecommendations";
+import {
   filesLeavingWithRoot,
   rememberSearch,
   type ArtistFirstPlay,
@@ -34,6 +40,8 @@ import {
   type DuplicateCheckFile,
   type CatalogPage,
   type CatalogSong,
+  type PlaylistFindText,
+  type PlaylistRecommendationSlot,
 } from "@wave/core";
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { drizzle, type ExpoSQLiteDatabase } from "drizzle-orm/expo-sqlite";
@@ -111,6 +119,8 @@ import {
   linkPlaylistEntries,
   movePlaylistItem,
   removePlaylistItems,
+  restorePlaylistItems,
+  type PlaylistRemoval,
   renamePlaylist,
   replacePlaylistSongs,
   selectPlaylist,
@@ -196,6 +206,7 @@ import {
   type YtArtistSimilar,
 } from "./db/ytArtists";
 import {
+  selectSongFindTexts,
   selectSongOrder,
   selectSongSummaries,
   selectSongsWithIds,
@@ -524,6 +535,17 @@ export class LibraryStore extends Context.Service<
     /** How big the Library is, for a perf build's run metadata (docs/performance/README.md). */
     readonly measureScale: Effect.Effect<LibraryScale, LibraryStoreError>;
     /** Every track ordered by title, for Library › Songs. */
+    readonly playlistRecommendationInput: (
+      id: number,
+    ) => Effect.Effect<PlaylistRecommendationInput, LibraryStoreError>;
+    readonly dismissPlaylistRecommendation: (
+      id: number,
+      offer: PlaylistRecommendationSlot,
+    ) => Effect.Effect<boolean, LibraryStoreError>;
+    readonly acceptPlaylistRecommendation: (
+      id: number,
+      offer: PlaylistRecommendationSlot,
+    ) => Effect.Effect<boolean, LibraryStoreError>;
     readonly listSongs: Effect.Effect<readonly SongRow[], LibraryStoreError>;
     /**
      * Library › Songs in [sort] as Track ids, with its A–Z spine and its
@@ -531,6 +553,8 @@ export class LibraryStore extends Context.Service<
      * for the rows on screen).
      */
     readonly listSongOrder: (sort: LibrarySongSort) => Effect.Effect<SongOrder, LibraryStoreError>;
+    /** What finds each Library song by id (its title, artist and album), for Find in Songs. */
+    readonly songFindTexts: Effect.Effect<ReadonlyMap<number, PlaylistFindText>, LibraryStoreError>;
     /** What the Songs list's rows of [ids] show, in that order; ids gone are left out. */
     readonly songSummaries: (
       ids: readonly number[],
@@ -719,6 +743,10 @@ export class LibraryStore extends Context.Service<
     readonly removePlaylistItems: (
       playlistId: number,
       itemIds: readonly number[],
+    ) => Effect.Effect<PlaylistRemoval, LibraryStoreError>;
+    /** Undo a removal, keeping the original entries and their order. */
+    readonly restorePlaylistItems: (
+      removal: PlaylistRemoval,
     ) => Effect.Effect<void, LibraryStoreError>;
     /**
      * Settles what Try Again found of the playlist's unavailable entries: each
@@ -1213,6 +1241,16 @@ const make = Effect.gen(function* () {
     countSectionSongs: attempt("count the library's songs", () => sectionSongCounts(db)),
     measureScale: attempt("measure the library", () => libraryScale(db)),
 
+    playlistRecommendationInput: (id) =>
+      attempt("read playlist recommendations", () => selectPlaylistRecommendationInput(db, id)),
+    dismissPlaylistRecommendation: (id, offer) =>
+      attempt("save playlist dismissal", () =>
+        dismissPlaylistRecommendation(db, id, offer, Date.now()),
+      ),
+    acceptPlaylistRecommendation: (id, offer) =>
+      attempt("add playlist recommendation", () =>
+        acceptPlaylistRecommendation(db, id, offer, Date.now()),
+      ),
     listSongs: attempt("list songs", () =>
       trackQuery(db)
         .orderBy(...BY_TITLE)
@@ -1220,6 +1258,8 @@ const make = Effect.gen(function* () {
     ),
 
     listSongOrder: (sort) => attempt("order songs", () => selectSongOrder(db, sort)),
+
+    songFindTexts: attempt("read songs to find", () => selectSongFindTexts(db)),
 
     songSummaries: (ids) => attempt("read songs", () => selectSongSummaries(db, ids)),
 
@@ -1432,6 +1472,9 @@ const make = Effect.gen(function* () {
       attempt("remove from the playlist", () =>
         removePlaylistItems(db, playlistId, itemIds, Date.now()),
       ),
+
+    restorePlaylistItems: (removal) =>
+      attempt("restore the playlist entries", () => restorePlaylistItems(db, removal, Date.now())),
 
     settleTryAgain: (playlistId, answered) =>
       attempt("save what Try Again found", () =>

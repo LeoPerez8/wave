@@ -1,4 +1,5 @@
 import { sql, type SQL } from "drizzle-orm";
+import type { PlaylistRecommendationTrack } from "@wave/core";
 import {
   type AnySQLiteColumn,
   check,
@@ -454,6 +455,24 @@ export const playlistRevisions = sqliteTable("playlist_revisions", {
   playlistId: integer("playlist_id").primaryKey(),
   revision: integer("revision").notNull().default(0),
 });
+
+/** Local recommendation adjustments. Never a source of global taste or graph learning. */
+export const playlistRecommendationFeedback = sqliteTable(
+  "playlist_recommendation_feedback",
+  {
+    playlistId: integer("playlist_id")
+      .notNull()
+      .references(() => playlists.id, { onDelete: "cascade" }),
+    offerKey: text("offer_key").notNull(),
+    track: text("track", { mode: "json" }).$type<PlaylistRecommendationTrack>().notNull(),
+    value: integer("value").$type<-1 | 1>().notNull(),
+    createdAt: integer("created_at").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.playlistId, t.offerKey] }),
+    check("playlist_feedback_value", sql`${t.value} IN (-1, 1)`),
+  ],
+);
 
 /**
  * Starred tracks; an unstarred one is a tombstone (`deleted`). A star goes
