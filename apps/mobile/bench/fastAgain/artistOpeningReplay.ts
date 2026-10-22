@@ -47,7 +47,12 @@ export const makeArtistOpening = (store: LibraryStore["Service"], core: typeof C
     // ti always follows the cold songs query, even on Library/integrated openings.
     const wanted =
       !fixed || core.ytArtistOpening(state(saved), context(detail, now, integrated, false)).finder;
-    const find = wanted ? core.libraryFinder(Effect.runSync(store.listSongs)) : null;
+    // The shared query reads all rows when followed, but finderOver builds
+    // its index only on lookup. Library mode never looks up online songs.
+    const rows = wanted ? Effect.runSync(store.listSongs) : null;
+    let built: Finder | null = null;
+    const find: Finder | null =
+      rows === null ? null : (song) => (built ??= core.libraryFinder(rows))(song);
     const popular = saved?.outcome === "found" ? (saved.page.allSongs ?? null) : null;
     const songs = core.sortSongs(
       popular === null ? detail.songs : core.rankPopular(detail.songs, popular),

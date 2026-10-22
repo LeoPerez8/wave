@@ -334,9 +334,15 @@ opening starts with a cold shared query/finder; the database and modules are
 warm. The first-row interval ends when the local page data/items are ready,
 including saved Popular ranking; it excludes module loading, fixture setup,
 React rendering/layout, navigation and common player subscriptions. Before reads
-the whole songs query and builds its finder when online rows need it, alongside
-the own-songs finder. After reads only the artist detail and saved answer. The
-SQL and individual row counts are included in each measurement's `details`.
+the whole songs query; its shared finder index stays lazy and builds only when
+online rows need a lookup. The own-songs finder is built in either mode. After
+reads only the artist detail and saved answer. The SQL and individual row counts
+are included in each measurement's `details`.
+
+The historical `v0.7.0-ti` artist route (`add761ed`) already followed this finder
+from both the route and its online section. This removes inherited opening work;
+it does not attribute that follower to the later Popular feature. Popular's new
+quiet request remains separately assigned to #590.
 
 The fixture also includes an Appears on album, the artist's Library albums,
 missing/downloaded songs, a reversed saved Popular list, a song already in the
@@ -355,18 +361,18 @@ Times are benchmark evidence; the tests assert deterministic work, not time.
 
 | Library songs | Artist songs | Mode       | Song rows before → after | All SQL rows before → after | Median ms before → after |
 | ------------: | -----------: | ---------- | -----------------------: | --------------------------: | -----------------------: |
-|         1,000 |           20 | library    |               1,020 → 20 |                  1,024 → 24 |           21.477 → 2.677 |
-|         1,000 |           20 | integrated |               1,020 → 20 |                  1,024 → 24 |           22.186 → 2.782 |
-|         1,000 |          300 | library    |              1,300 → 300 |                 1,332 → 332 |          29.360 → 11.327 |
-|         1,000 |          300 | integrated |              1,300 → 300 |                 1,332 → 332 |           31.236 → 9.411 |
-|        12,000 |           20 | library    |              12,020 → 20 |                 12,024 → 24 |          224.520 → 2.435 |
-|        12,000 |           20 | integrated |              12,020 → 20 |                 12,024 → 24 |          222.290 → 2.171 |
-|        12,000 |          300 | library    |             12,300 → 300 |                12,332 → 332 |         230.751 → 10.324 |
-|        12,000 |          300 | integrated |             12,300 → 300 |                12,332 → 332 |          235.106 → 9.111 |
-|        50,000 |           20 | library    |              50,020 → 20 |                 50,024 → 24 |         1004.735 → 2.356 |
-|        50,000 |           20 | integrated |              50,020 → 20 |                 50,024 → 24 |         1004.448 → 2.025 |
-|        50,000 |          300 | library    |             50,300 → 300 |                50,332 → 332 |         1005.143 → 9.062 |
-|        50,000 |          300 | integrated |             50,300 → 300 |                50,332 → 332 |         1095.813 → 8.537 |
+|         1,000 |           20 | library    |               1,020 → 20 |                  1,024 → 24 |           15.011 → 2.438 |
+|         1,000 |           20 | integrated |               1,020 → 20 |                  1,024 → 24 |           20.214 → 2.233 |
+|         1,000 |          300 | library    |              1,300 → 300 |                 1,332 → 332 |           22.707 → 9.259 |
+|         1,000 |          300 | integrated |              1,300 → 300 |                 1,332 → 332 |           28.150 → 8.595 |
+|        12,000 |           20 | library    |              12,020 → 20 |                 12,024 → 24 |          182.369 → 2.003 |
+|        12,000 |           20 | integrated |              12,020 → 20 |                 12,024 → 24 |          230.271 → 1.904 |
+|        12,000 |          300 | library    |             12,300 → 300 |                12,332 → 332 |          189.536 → 9.314 |
+|        12,000 |          300 | integrated |             12,300 → 300 |                12,332 → 332 |          241.692 → 9.102 |
+|        50,000 |           20 | library    |              50,020 → 20 |                 50,024 → 24 |          809.880 → 1.818 |
+|        50,000 |           20 | integrated |              50,020 → 20 |                 50,024 → 24 |         1028.847 → 2.000 |
+|        50,000 |          300 | library    |             50,300 → 300 |                50,332 → 332 |          832.658 → 9.307 |
+|        50,000 |          300 | integrated |             50,300 → 300 |                50,332 → 332 |         1052.574 → 8.899 |
 
 The shared whole-Library read is deferred, not eliminated: in integrated mode its
 settled-page measurement still returns the whole Library's song rows. This
