@@ -1,6 +1,7 @@
 import {
   ytAlbumSongs,
-  ytLibraryAlbumView,
+  ytAlbumOpening,
+  type YtAlbumEntry,
   type LibraryAlbumKey,
   type YtArtistAlbum,
   type YtLibraryAlbumView,
@@ -13,10 +14,15 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { LineToggle } from "@/catalog/PlayShuffle";
 import type { SongRow } from "@/library/LibraryStore";
+import { useScreenSettled } from "@/lib/screenTiming";
+import { useVisitState } from "@/lib/useVisitState";
+import { online } from "@/native/waveNative";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 import { useSearchOnlineAlways } from "@/settings/searchOnline";
 
 import { useYtArtistAnswer } from "./artistSection";
+import { albumRowsInPlace } from "./albumOpening";
+import { artistOpeningRequest } from "./artistOpeningRequest";
 import { askYtMusic } from "./askYtMusic";
 import { useLoadedLibraryFinder } from "./libraryFinder";
 import { useLineToggle } from "./OnlineToggle";
@@ -24,9 +30,13 @@ import { useLineToggle } from "./OnlineToggle";
 type Load = YtReleaseLoad<NativeYtSong>;
 
 /** The songs of the release [browseId], read once a session (`readYtAlbum`). */
-const readRelease = (browseId: string) =>
-  askYtMusic((ytMusic) =>
-    ytMusic.album(browseId).pipe(Effect.map((album) => ytAlbumSongs(browseId, album))),
+const readRelease = (browseId: string, signal: AbortSignal) =>
+  askYtMusic(
+    (ytMusic) =>
+      artistOpeningRequest(online, ytMusic.album(browseId)).pipe(
+        Effect.map((album) => ytAlbumSongs(browseId, album)),
+      ),
+    signal,
   );
 
 const pageKey = (browseId: string, attempt: number): string => `${browseId}#${attempt}`;
@@ -63,9 +73,12 @@ export const useYtAlbumSection = (
   tracks: readonly SongRow[],
   openedIntegrated: boolean,
   keepTracklist: boolean,
+  contentReady: boolean,
 ): YtAlbumSection => {
   const { state, enabled, openedAt, show: askArtist } = useYtArtistAnswer(name, RELEASES_ONLY);
-  const find = useLoadedLibraryFinder();
+  const settled = useScreenSettled();
+  const connected = online();
+  const [retryArtist, setRetryArtist] = useState(0);
   const always = useSearchOnlineAlways();
   // The toggle's segment picked while the page is open; null until one is.
   const [pick, setPick] = useState<YtPick | null>(null);
@@ -79,49 +92,77 @@ export const useYtAlbumSection = (
       page?.key === pageKey(release.browseId, attempt) ? page.load : undefined,
     [page, attempt],
   );
-  // Until the Library has been read, which songs it lacks isn't known: nothing shows.
-  const view =
-    find === null
-      ? null
-      : ytLibraryAlbumView(state, {
-          name,
-          artistId,
-          album,
-          tracks,
-          elsewhere: find,
-          enabled,
-          now: openedAt,
-          integrated: openedIntegrated,
-          always,
-          pick,
-          releasePage,
-          keepTracklist,
-        });
+  const context = {
+    name,
+    artistId,
+    album,
+    tracks,
+    elsewhere: () => null,
+    enabled,
+    now: openedAt,
+    integrated: openedIntegrated,
+    always,
+    pick,
+    releasePage,
+    keepTracklist,
+    contentReady,
+    settled,
+    online: connected,
+    retryArtist: retryArtist > 0,
+  };
+  const work = ytAlbumOpening(state, context);
+  const find = useLoadedLibraryFinder(work.finder);
+  const baseView = ytAlbumOpening(state, { ...context, elsewhere: find ?? context.elsewhere }).view;
+  const [held, hold] = useVisitState<readonly YtAlbumEntry<NativeYtSong, SongRow>[] | null>(
+    null,
+    `${artistId}/${album.title}`,
+  );
+  const previous =
+    held ??
+    tracks.map((track) => ({ source: "library" as const, track, number: track.trackNumber }));
+  const joined = baseView?.tracks;
+  const entries = joined == null || find === null ? null : albumRowsInPlace(previous, joined, find);
+  useEffect(() => {
+    if (entries !== null && entries !== held) hold(entries);
+  }, [entries, held, hold]);
+  const view = baseView === null ? null : { ...baseView, tracks: entries };
 
   // The artist is asked for on its own once; after a failure it waits for Online again.
   const askedOnItsOwn = useRef(false);
-  const askNow = view?.askArtist === true;
+  const askNow = work.askArtist;
   useEffect(() => {
     if (!askNow || askedOnItsOwn.current) return;
     askedOnItsOwn.current = true;
+    setRetryArtist(0);
     askArtist();
   }, [askNow, askArtist]);
 
-  const browseId = view?.release?.browseId;
+  const browseId = work.readRelease;
   useEffect(() => {
-    if (browseId === undefined) return;
+    if (browseId === null) return;
     let current = true;
-    void readRelease(browseId).then((result) => {
-      if (!current) return;
-      setPage({
-        key: pageKey(browseId, attempt),
-        load: Result.isSuccess(result)
-          ? { status: "loaded", songs: result.success }
-          : { status: "quiet", reason: result.failure.reason === "offline" ? "offline" : "failed" },
-      });
-    });
+    const cancel = new AbortController();
+    void readRelease(browseId, cancel.signal).then(
+      (result) => {
+        if (!current) return;
+        setPage({
+          key: pageKey(browseId, attempt),
+          load: Result.isSuccess(result)
+            ? { status: "loaded", songs: result.success }
+            : {
+                status: "quiet",
+                reason: result.failure.reason === "offline" ? "offline" : "failed",
+              },
+        });
+      },
+      () => {
+        if (current)
+          setPage({ key: pageKey(browseId, attempt), load: { status: "quiet", reason: "failed" } });
+      },
+    );
     return () => {
       current = false;
+      cancel.abort();
     };
   }, [browseId, attempt]);
 
@@ -132,9 +173,12 @@ export const useYtAlbumSection = (
       if (next !== "online") return;
       // Online after an ask that got no answer asks again: the release's page, or the artist.
       if (retry === "release") setAttempt((count) => count + 1);
-      else if (retry === "artist") askArtist();
+      else if (retry === "artist") {
+        askedOnItsOwn.current = false;
+        setRetryArtist((count) => count + 1);
+      }
     },
-    [retry, askArtist],
+    [retry],
   );
   const toggle = useLineToggle(view?.toggle, onPick);
   return { view, toggle };

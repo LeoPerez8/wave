@@ -271,6 +271,7 @@ function AlbumTracks({ shown, openedIntegrated }: { shown: Shown; openedIntegrat
     tracks,
     openedIntegrated,
     keepTracklist,
+    shown.tracks !== undefined && artist !== null,
   );
   // Nothing is joined until the tracks and the artist are read.
   const ytView = shown.tracks === undefined || artist === null ? null : yt.view;

@@ -2,6 +2,8 @@ import type { SearchAsker, YtAlbumSong, YtSongSearch } from "@wave/core";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 
+import { online } from "@/native/waveNative";
+import { artistOpeningRequest } from "./artistOpeningRequest";
 import { appRuntime } from "@/library/runtime";
 
 import { logSearchFailure, searchTurn } from "./searchAllowance";
@@ -15,6 +17,7 @@ import { YtMusic } from "./YtMusic";
  */
 export const askYtMusic = <A, E>(
   use: (ytMusic: YtMusic["Service"]) => Effect.Effect<A, E>,
+  signal?: AbortSignal,
 ): Promise<Result.Result<A, E>> =>
   appRuntime.runPromise(
     Effect.result(
@@ -23,6 +26,7 @@ export const askYtMusic = <A, E>(
         return yield* use(ytMusic);
       }),
     ),
+    { signal },
   );
 
 /**
@@ -35,10 +39,14 @@ export const searchSongsInTurn = async (
   query: string,
   signal?: AbortSignal,
 ): Promise<YtSongSearch<YtAlbumSong> | null> => {
+  if (!online()) return { ok: false, reason: "offline" };
   if (!(await searchTurn(asker, signal))) return null;
   let answer: YtSongSearch<YtAlbumSong>;
   try {
-    const result = await askYtMusic((ytMusic) => ytMusic.searchSongs(query));
+    const result = await askYtMusic(
+      (ytMusic) => artistOpeningRequest(online, ytMusic.searchSongs(query)),
+      signal,
+    );
     answer = Result.isFailure(result)
       ? { ok: false, reason: result.failure.reason }
       : { ok: true, songs: result.success.songs };

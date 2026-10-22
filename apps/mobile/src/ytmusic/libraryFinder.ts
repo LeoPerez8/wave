@@ -68,7 +68,7 @@ const everything: InLibrary = () => true;
  * song taken as in the Library until the Library has been read, so Download
  * never shows only to go away.
  */
-export const useLoadedInLibrary = (): InLibrary => {
-  const find = useLoadedLibraryFinder();
+export const useLoadedInLibrary = (active = true): InLibrary => {
+  const find = useLoadedLibraryFinder(active);
   return useMemo(() => (find === null ? everything : (song) => find(song) !== null), [find]);
 };

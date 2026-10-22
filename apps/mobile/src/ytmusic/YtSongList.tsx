@@ -53,12 +53,15 @@ import {
 import type { SongRow } from "@/library/LibraryStore";
 import { songCount } from "@/library/TrackList";
 import { useListScrollable } from "@/motion/heldTouch";
+import { useScreenSettled } from "@/lib/screenTiming";
+import { online } from "@/native/waveNative";
 import type { NativeYtPlaylist, NativeYtSong } from "@/native/waveYtMusic";
 import { showToast } from "@/overlay/toast";
 import { playDiscoverSongs } from "@/playback/actions";
 import { listedTrackItem, trackItemKey, tracksTarget } from "@/playback/actionTargets";
 import { useListSelection } from "@/selection/useListSelection";
 
+import { artistOpeningRequest } from "./artistOpeningRequest";
 import { askYtMusic } from "./askYtMusic";
 import { DiscoverSongRow } from "./DiscoverSongRow";
 import { useLibraryFinder, useLoadedInLibrary, useLoadedLibraryFinder } from "./libraryFinder";
@@ -142,6 +145,8 @@ const readPage =
  * already shown stay and `rest` says why the others didn't come.
  */
 export const useYtListPage = (screen: YtListScreen, id: string) => {
+  const settled = useScreenSettled();
+  const connected = online();
   const [attempt, setAttempt] = useState(0);
   const retry = useCallback(() => setAttempt((value) => value + 1), []);
   const key = `${screen}/${id}/${attempt}`;
@@ -149,6 +154,7 @@ export const useYtListPage = (screen: YtListScreen, id: string) => {
     null,
   );
   useEffect(() => {
+    if (!settled || !connected) return;
     let current = true;
     const cancel = new AbortController();
     const show = (load: YtListLoad) => {
@@ -159,25 +165,40 @@ export const useYtListPage = (screen: YtListScreen, id: string) => {
       shown = page;
       show({ status: "loaded", page, rest: done ? "read" : "reading" });
     };
-    void askYtMusic(readPage(screen, id, onPage, cancel.signal)).then((result) => {
-      if (Result.isSuccess(result)) {
-        // A playlist's last page has been shown already.
-        if (shown === null) show({ status: "loaded", page: result.success, rest: "read" });
-        return;
-      }
-      const reason = result.failure.reason === "offline" ? "offline" : "failed";
-      show(
-        shown === null
-          ? { status: "quiet", reason }
-          : { status: "loaded", page: shown, rest: reason },
-      );
-    });
+    void askYtMusic(
+      (ytMusic) =>
+        artistOpeningRequest(online, readPage(screen, id, onPage, cancel.signal)(ytMusic)),
+      cancel.signal,
+    ).then(
+      (result) => {
+        if (Result.isSuccess(result)) {
+          // A playlist's last page has been shown already.
+          if (shown === null) show({ status: "loaded", page: result.success, rest: "read" });
+          return;
+        }
+        const reason = result.failure.reason === "offline" ? "offline" : "failed";
+        show(
+          shown === null
+            ? { status: "quiet", reason }
+            : { status: "loaded", page: shown, rest: reason },
+        );
+      },
+      () => {
+        if (current) show({ status: "quiet", reason: "failed" });
+      },
+    );
     return () => {
       current = false;
       cancel.abort();
     };
-  }, [screen, id, key]);
-  return { load: answer?.key === key ? answer.load : LOADING, retry };
+  }, [screen, id, key, settled, connected]);
+  const load: YtListLoad =
+    answer?.key === key
+      ? answer.load
+      : connected
+        ? LOADING
+        : { status: "quiet", reason: "offline" };
+  return { load, retry };
 };
 
 type Song = MixedSong<NativeYtSong, SongRow>;
@@ -262,8 +283,10 @@ export const useYtAlbumDownloadButton = (
   songs: readonly NativeYtSong[],
   origin: DownloadOrigin | null,
 ): { readonly progress: string | null; readonly button: YtListDownloadButton | null } => {
-  const inLibrary = useLoadedInLibrary();
-  const loaded = useLoadedLibraryFinder() !== null;
+  const settled = useScreenSettled();
+  const active = settled && songs.length > 0;
+  const inLibrary = useLoadedInLibrary(active);
+  const loaded = useLoadedLibraryFinder(active) !== null;
   const download = useYtAlbumDownload(songs, inLibrary);
   const button = ytAlbumDownloadButton(download);
   return {
