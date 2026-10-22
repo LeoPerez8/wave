@@ -119,16 +119,16 @@ describe("The live taste profile", () => {
   });
 });
 
-test("due Home and mixes keep one live profile; a delayed snapshot counts pre-read signals exactly once", async () => {
+test("due Home and mixes keep one live profile; a later history snapshot counts each signal once", async () => {
   let history: TasteHistory = NO_HISTORY;
   let takeSnapshot: (() => void) | undefined;
   let reads = 0;
-  const read = (snapshotTaken: () => void) =>
+  const read = (snapshotTaken: (history: TasteHistory) => void) =>
     Effect.callback<ReturnType<typeof tasteProfile>>((resume) => {
       reads++;
       takeSnapshot = () => {
         const profile = tasteProfile(history, songOf, NOW);
-        snapshotTaken();
+        snapshotTaken(history);
         resume(Effect.succeed(profile));
       };
     });
@@ -138,13 +138,24 @@ test("due Home and mixes keep one live profile; a delayed snapshot counts pre-re
     songsOf: (ids) => Effect.succeed(ids.map(songOf)),
   });
   const first = Effect.runPromise(live.profileUsing(read));
-  history = { ...NO_HISTORY, favorites: [{ trackId: "7", changedAt: NOW }] };
+  // Came while the derivation waited for its turn, and are in the history it then reads.
+  history = {
+    ...NO_HISTORY,
+    plays: [playedThrough("8")],
+    favorites: [{ trackId: "7", changedAt: NOW }],
+  };
   await Effect.runPromise(live.marked("favorite", ["7"], NOW));
+  await Effect.runPromise(live.played(playedThrough("8")));
+  // A star announced before its write landed: not in the history read.
+  await Effect.runPromise(live.marked("favorite", ["9"], NOW));
   await Effect.runPromise(live.marked("favorite", [ytTrackId("streamed")], NOW));
   takeSnapshot!();
   const firstProfile = await first;
-  assert.equal(firstProfile?.songs.get(ytTrackId("streamed")), 3);
   assert.equal(firstProfile?.songs.get("7"), 3);
+  assert.equal(firstProfile?.songs.get("8"), 1);
+  assert.equal(firstProfile?.songs.get("9"), 3);
+  assert.equal(firstProfile?.songs.get(ytTrackId("streamed")), 3);
+  // After the snapshot, a signal is learned on top of it.
   const second = await Effect.runPromise(live.profile);
   assert.equal(second?.songs.get("7"), 3);
   assert.equal(reads, 1);

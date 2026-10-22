@@ -2,9 +2,10 @@
  * Home's Magic Queue section (docs/spec.md, Magic Queue): nine of the
  * Library's songs to start a Magic Queue from with one tap. Which songs,
  * when they change and what a pull brings are Core's (`magicQueuePicks`,
- * `refreshedMagicQueuePicks`, `undoneMagicQueueRefresh`), weighed by the
- * taste profile (`tasteProfileNow`); this keeps what the section shows on
- * the phone and picks again when it's due (a new day, a song gone).
+ * `magicQueuePicksSteps`, `undoneMagicQueueRefresh`), weighed by the taste
+ * profile (`tasteProfileForLibrary`); this keeps what the section shows on
+ * the phone, reads only those songs, and picks again when it's due (a new
+ * day, a song gone) once Home has settled.
  */
 import {
   MAGIC_QUEUE_PICKS,
@@ -14,7 +15,7 @@ import {
   type MagicQueuePicks,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
-import { useEffect, useMemo, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 
 import { freeTurnEffect } from "@/lib/backgroundWork";
 import { makeExternalStore } from "@/lib/externalStore";
@@ -38,21 +39,27 @@ const saved = persistedSetting<MagicQueuePicks | null>({
   write: (picks) => (picks === null ? null : storedMagicQueuePicks(picks)),
 });
 
-/** A pick under way is shared across consumers; the existing scheduler owns its turns. */
+/** A pick under way: a pull, or Home's due pick, meanwhile starts no other. */
 const picking = makeExternalStore(false);
-let active: AbortController | null = null;
-let cancelActive: (() => void) | undefined;
+let active = false;
+/** Stops Home's due pick under way (Home left, or not settled): a pull's goes on. */
+let cancelDue: (() => void) | undefined;
 
-const pick = (refresh: boolean): (() => void) | undefined => {
-  if (active !== null) return;
+/**
+ * Picks the section's songs as background work on free turns: what it shows
+ * stays until the new list is saved. A pull ([refresh]) brings other songs,
+ * with a "New songs" toast whose Undo puts the previous ones back.
+ */
+const pick = (refresh: boolean): void => {
+  if (active) return;
   const previous = saved.get();
   const controller = new AbortController();
-  active = controller;
+  active = true;
   picking.set(true);
   const finish = () => {
-    if (active !== controller) return;
-    active = null;
-    cancelActive = undefined;
+    if (!active) return;
+    active = false;
+    cancelDue = undefined;
     picking.set(false);
   };
   const job = Effect.gen(function* () {
@@ -67,6 +74,7 @@ const pick = (refresh: boolean): (() => void) | undefined => {
   void appRuntime
     .runPromise(job, { signal: controller.signal })
     .then((picks) => {
+      // Another pick saved since: this one would throw its songs away.
       if (controller.signal.aborted || saved.get() !== previous) return;
       saved.set(picks);
       if (!refresh || previous === null) return;
@@ -78,15 +86,16 @@ const pick = (refresh: boolean): (() => void) | undefined => {
       });
     })
     .catch(() => {
-      // Best effort: previous choices remain until a later successful build.
+      // Best effort: what the section shows stays until the next try.
     })
-    .finally(finish);
-  const cancel = () => {
-    finish();
-    controller.abort();
-  };
-  cancelActive = cancel;
-  return cancel;
+    .finally(() => {
+      if (!controller.signal.aborted) finish();
+    });
+  if (!refresh)
+    cancelDue = () => {
+      finish();
+      controller.abort();
+    };
 };
 
 /** What the section shows, and what it can do. */
@@ -100,9 +109,11 @@ export interface MagicQueueSection {
 }
 
 /**
- * What Home's Magic Queue section shows, or null until the Library is read.
- * Each time Home comes into focus, and as the Library changes, it picks its
- * songs again when they're due: a new list each day, a song gone replaced.
+ * What Home's Magic Queue section shows, or null until its songs are read:
+ * only the songs picked, by id, following changes to those songs alone. Once
+ * Home has settled it picks them again when they're due (a new list each day,
+ * a song gone replaced, a short list as the Library grows), as background
+ * work; the previous songs show meanwhile.
  */
 export const useMagicQueueSection = (): MagicQueueSection | null => {
   const picks = saved.useValue();
@@ -110,33 +121,37 @@ export const useMagicQueueSection = (): MagicQueueSection | null => {
     const read = magicQueueRead(picks?.trackIds ?? []);
     return libraryQuery(read.key, read.reads, Effect.flatMap(LibraryStore, read.read));
   }, [picks]);
-  const songs = useLibraryQuery<readonly PlayableSongRow[] | null>(query, null);
+  const read = useLibraryQuery<readonly PlayableSongRow[] | null>(query, null);
+  // New picks keep the songs shown until theirs are read: no placeholder in between.
+  const [shown, setShown] = useState(read);
+  if (read !== null && read !== shown) setShown(read);
+  const songs = read ?? shown;
   const growth = useMemo(() => {
     if (picks === null || picks.trackIds.length >= MAGIC_QUEUE_PICKS) return null;
-    const read = magicQueueGrowthRead(picks.trackIds);
-    return libraryQuery(read.key, read.reads, Effect.flatMap(LibraryStore, read.read));
+    const probe = magicQueueGrowthRead(picks.trackIds);
+    return libraryQuery(probe.key, probe.reads, Effect.flatMap(LibraryStore, probe.read));
   }, [picks]);
   const grows = useLibraryQuery<boolean>(growth, false);
   const settled = useScreenSettled();
   const busy = useSyncExternalStore(picking.subscribe, picking.get);
   useEffect(() => {
-    if (!settled) cancelActive?.();
-    return () => cancelActive?.();
+    if (!settled) return;
+    // Leaving Home, or a route over it unsettling it, stops the due pick; it starts again once due.
+    return () => cancelDue?.();
   }, [settled]);
   useEffect(() => {
     if (
-      songs === null ||
-      !homeMagicQueueDue(
+      read !== null &&
+      homeMagicQueueDue(
         settled,
         picks,
-        songs.map((song) => String(song.id)),
+        read.map((song) => String(song.id)),
         grows,
         Date.now(),
       )
     )
-      return;
-    return pick(false);
-  }, [picks, songs, grows, settled]);
+      pick(false);
+  }, [picks, read, grows, settled]);
   return useMemo(
     () =>
       songs === null

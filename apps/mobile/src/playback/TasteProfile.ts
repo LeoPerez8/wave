@@ -1,4 +1,4 @@
-import { ytTrackId, type TasteProfile } from "@wave/core";
+import { ytTrackId, type TasteHistory, type TasteProfile } from "@wave/core";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
@@ -21,7 +21,7 @@ import { onPlayEnded } from "./PlayHistory";
  * playback anywhere in the app (`makeLiveTaste`): Library plays ending,
  * stars and unstars, YT Music stars and downloads.
  */
-const derive = (snapshotTaken: () => void, library?: TasteLibrary) =>
+const derive = (snapshotTaken: (history: TasteHistory) => void, library?: TasteLibrary) =>
   Effect.gen(function* () {
     return yield* deriveTaste(
       yield* LibraryStore,

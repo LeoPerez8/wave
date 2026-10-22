@@ -4,6 +4,7 @@ import {
   tastePlaySignal,
   type MagicSong,
   type PlayEvent,
+  type TasteHistory,
   type TasteProfile,
   type TasteSignal,
   type TasteSignalKind,
@@ -15,9 +16,13 @@ import * as Semaphore from "effect/Semaphore";
 export interface LiveTasteDeps<R> {
   /** Derives the profile from the history, favorites and downloads (Core's `tasteProfile`). */
   readonly derive: Effect.Effect<TasteProfile, unknown, R>;
-  /** Deferred readers reset held signals exactly when their history snapshot is taken. */
+  /**
+   * Derives as [derive] does, from a history read later than its start (after
+   * free turns): tells [snapshotTaken] the history it read, so signals that
+   * came meanwhile and are in it count once.
+   */
   readonly deriveWithSnapshot?: (
-    snapshotTaken: () => void,
+    snapshotTaken: (history: TasteHistory) => void,
   ) => Effect.Effect<TasteProfile, unknown, R>;
   /** The songs [trackIds] are, as the profile weighs them; those it can't tell left out. */
   readonly songsOf: (
@@ -28,6 +33,27 @@ export interface LiveTasteDeps<R> {
 /** [profile] having learned each of [signals] (`tasteLearned`). */
 const learned = (profile: TasteProfile, signals: readonly TasteSignal[]): TasteProfile =>
   signals.reduce(tasteLearned, profile);
+
+/**
+ * The signals of [held] that [history] doesn't have yet. A play is on record
+ * by its song and start; a star once its write landed (it's announced before);
+ * a streamed song's signals are never on record.
+ */
+const notIn = (held: readonly TasteSignal[], history: TasteHistory | null): TasteSignal[] => {
+  if (history === null) return [...held];
+  const plays = new Set(history.plays.map((play) => `${play.trackId}@${play.startedAt}`));
+  const favorites = new Set(history.favorites.map((star) => star.trackId));
+  const downloads = new Set(history.downloads.map((download) => download.trackId));
+  return held.filter(({ kind, song, at }) =>
+    parseTrackId(song.trackId)?.kind === "yt"
+      ? true
+      : kind === "favorite"
+        ? !favorites.has(song.trackId)
+        : kind === "download"
+          ? !downloads.has(song.trackId)
+          : !plays.has(`${song.trackId}@${at}`),
+  );
+};
 
 /**
  * The taste profile as the app keeps it (docs/spec.md, Taste profile):
@@ -62,14 +88,13 @@ export const makeLiveTaste = <R>({ derive, deriveWithSnapshot, songsOf }: LiveTa
   const derived = (read = deriveWithSnapshot ?? (() => derive)) =>
     Effect.suspend(() => {
       held = [];
+      let snapshot: TasteHistory | null = null;
       const started = generation;
-      return read(() => {
-        // Deferred history includes Library signals already received. Streamed signals
-        // never enter that history and must survive the snapshot boundary.
-        held = (held ?? []).filter((signal) => parseTrackId(signal.song.trackId)?.kind === "yt");
+      return read((history) => {
+        snapshot = history;
       }).pipe(
         Effect.map((profile) => {
-          const kept = learned(profile, held ?? []);
+          const kept = learned(profile, notIn(held ?? [], snapshot));
           if (started === generation) known = kept;
           return kept;
         }),

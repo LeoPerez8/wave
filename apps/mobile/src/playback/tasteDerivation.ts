@@ -1,4 +1,9 @@
-import { magicLibraryMapperSteps, tasteProfileSteps, type MagicSong } from "@wave/core";
+import {
+  magicLibraryMapperSteps,
+  tasteProfileSteps,
+  type MagicSong,
+  type TasteHistory,
+} from "@wave/core";
 import * as Effect from "effect/Effect";
 
 import { runSteps } from "../lib/stepped.ts";
@@ -45,12 +50,12 @@ export const deriveTaste = (
   turn: Effect.Effect<void>,
   now: number,
   library?: TasteLibrary,
-  snapshotTaken: () => void = () => {},
+  snapshotTaken: (history: TasteHistory) => void = () => {},
 ) =>
   Effect.gen(function* () {
     yield* turn;
     const history = yield* store.tasteHistory;
-    snapshotTaken();
+    snapshotTaken(history);
     const input = library ?? (yield* readTasteLibrary(store, turn));
     return yield* runSteps(
       tasteProfileSteps(history, (id) => input.byId.get(id), now),

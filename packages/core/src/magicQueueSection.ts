@@ -217,7 +217,8 @@ export function* magicQueuePicksSteps(
     return { day, trackIds, shownToday: trackIds };
   }
   const previous = refresh ? [] : saved.trackIds.slice(0, MAGIC_QUEUE_PICKS);
-  const kept = new Set(previous.filter((id) => there.has(id)));
+  const keptIds = previous.filter((id) => there.has(id));
+  const kept = new Set(keptIds);
   const shown = new Set<string>();
   if (sameDay || !refresh)
     for (const id of saved.shownToday) {
@@ -230,7 +231,10 @@ export function* magicQueuePicksSteps(
     if (!kept.has(song.trackId)) (shown.has(song.trackId) ? again : fresh).push(song);
     yield;
   }
-  const count = Math.min(MAGIC_QUEUE_PICKS, there.size) - kept.size;
+  // As ti: a pull asks for nine; a fill for what the Library still has room for.
+  const count = refresh
+    ? MAGIC_QUEUE_PICKS
+    : Math.min(MAGIC_QUEUE_PICKS, there.size) - keptIds.length;
   const added = yield* draw(fresh, count);
   added.push(...(yield* draw(again, count - added.length)));
   let next = 0;

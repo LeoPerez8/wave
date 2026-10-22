@@ -970,7 +970,6 @@ No own test/typecheck was run alongside the timing command, and capture started 
 waiting for the earlier CPU-heavy validation to finish. Keep the raw tail samples instead
 of inferring a timing win from this run. Phone performance and TalkBack remain unverified.
 
-
 ## Standing Home picks and stepped taste (#593)
 
 Measured source: `92c46f52cfed8593837aadf4ed47d4601a6d0a67`, including local
@@ -1008,14 +1007,14 @@ one song query, one artist query). `scoreCpuOnly` holds identical inputs outside
 timing and isolates the public Core scorer, through the production stepped
 Effect adapter after the fix. Its zero SQL rows do not describe a cold derive.
 
-| Songs / plays | Scope | SQL rows before → after | Total median / p90 ms before → after | Mean CPU ms before → after | Longest task ms before → after |
-| --- | --- | --- | --- | --- | --- |
-| 1,000 / 10,000 | firstDerivation | 11,190 → 11,190 | 36.294 / 37.096 → 39.055 / 42.472 | 41.092 → 56.381 | 37.759 → 20.939 |
-| 1,000 / 10,000 | scoreCpuOnly | 0 → 0 | 2.141 / 3.215 → 3.527 / 3.693 | 4.190 → 4.111 | 3.852 → 3.702 |
-| 12,000 / 54,000 | firstDerivation | 68,280 → 68,280 | 360.281 / 376.127 → 363.937 / 378.676 | 461.388 → 478.549 | 381.901 → 189.448 |
-| 12,000 / 54,000 | scoreCpuOnly | 0 → 0 | 19.810 / 22.188 → 27.018 / 27.102 | 20.552 → 28.756 | 22.291 → 4.079 |
-| 50,000 / 200,000 | firstDerivation | 259,500 → 259,500 | 1617.527 / 2288.946 → 1599.582 / 2210.051 | 2169.609 → 2194.300 | 2338.781 → 1262.824 |
-| 50,000 / 200,000 | scoreCpuOnly | 0 → 0 | 98.217 / 108.605 → 120.579 / 122.984 | 121.331 → 132.977 | 144.614 → 4.996 |
+| Songs / plays    | Scope           | SQL rows before → after | Total median / p90 ms before → after      | Mean CPU ms before → after | Longest task ms before → after |
+| ---------------- | --------------- | ----------------------- | ----------------------------------------- | -------------------------- | ------------------------------ |
+| 1,000 / 10,000   | firstDerivation | 11,190 → 11,190         | 36.294 / 37.096 → 39.055 / 42.472         | 41.092 → 56.381            | 37.759 → 20.939                |
+| 1,000 / 10,000   | scoreCpuOnly    | 0 → 0                   | 2.141 / 3.215 → 3.527 / 3.693             | 4.190 → 4.111              | 3.852 → 3.702                  |
+| 12,000 / 54,000  | firstDerivation | 68,280 → 68,280         | 360.281 / 376.127 → 363.937 / 378.676     | 461.388 → 478.549          | 381.901 → 189.448              |
+| 12,000 / 54,000  | scoreCpuOnly    | 0 → 0                   | 19.810 / 22.188 → 27.018 / 27.102         | 20.552 → 28.756            | 22.291 → 4.079                 |
+| 50,000 / 200,000 | firstDerivation | 259,500 → 259,500       | 1617.527 / 2288.946 → 1599.582 / 2210.051 | 2169.609 → 2194.300        | 2338.781 → 1262.824            |
+| 50,000 / 200,000 | scoreCpuOnly    | 0 → 0                   | 98.217 / 108.605 → 120.579 / 122.984      | 121.331 → 132.977          | 144.614 → 4.996                |
 
 All six before/after pairs match the complete profile: every song, artist and
 genre score, exact numeric values and map insertion order, not only a summary
@@ -1028,4 +1027,3 @@ reads are permitted only at the explicit background boundary; no whole-source
 latency win or hard hardware-wide six-ms guarantee is claimed. #594 owns the
 shared paged-history/source projections and graph; this change does not
 duplicate or replace that graph. No `594-api.md` was available during capture.
-

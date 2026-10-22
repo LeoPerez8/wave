@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { tasteProfileSteps, magicArtistKey, type MagicSong } from "./index.ts";
+import {
+  magicArtistKey,
+  seededRandom,
+  tasteProfile,
+  tasteProfileSteps,
+  type MagicSong,
+  type TasteHistory,
+} from "./index.ts";
 
 test("taste derivation pauses between signals and keeps ti's full scores and insertion order", () => {
   const song: MagicSong = {
@@ -45,4 +52,41 @@ test("taste derivation pauses between signals and keeps ti's full scores and ins
     ]),
     genres: new Map([["rock", 4]]),
   });
+});
+
+test("stepped taste equals ti's tasteProfile, decay and map order included, over a mixed history", () => {
+  const random = seededRandom("history");
+  const day = 86_400_000;
+  const now = 400 * day;
+  const songs = new Map<string, MagicSong>(
+    Array.from({ length: 60 }, (_, i) => [
+      String(i),
+      {
+        trackId: String(i),
+        artists: [magicArtistKey("a" + (i % 7)), magicArtistKey("b" + (i % 3))],
+        genre: i % 5 === 0 ? null : ["Rock", " pop", "Jazz "][i % 3]!,
+        style: null,
+      },
+    ]),
+  );
+  const id = () => String(Math.floor(random() * 70));
+  const history: TasteHistory = {
+    plays: Array.from({ length: 500 }, () => ({
+      trackId: id(),
+      startedAt: Math.floor(random() * now),
+      listenedMs: Math.floor(random() * 300_000),
+      endReason: (["completed", "skipped", "interrupted", "stopped"] as const)[
+        Math.floor(random() * 4)
+      ]!,
+    })),
+    favorites: Array.from({ length: 20 }, () => ({ trackId: id(), changedAt: random() * now })),
+    downloads: Array.from({ length: 20 }, () => ({ trackId: id(), downloadedAt: random() * now })),
+  };
+  const steps = tasteProfileSteps(history, (trackId) => songs.get(trackId), now);
+  let result = steps.next();
+  while (!result.done) result = steps.next();
+  const expected = tasteProfile(history, (trackId) => songs.get(trackId), now);
+  assert.deepEqual(result.value, expected);
+  for (const key of ["songs", "artists", "genres"] as const)
+    assert.deepEqual([...result.value[key].keys()], [...expected[key].keys()]);
 });
