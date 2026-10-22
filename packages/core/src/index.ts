@@ -1990,3 +1990,5 @@ export type {
 export * from "./playlistRecommendationSession.ts";
 export { playingTrackIds } from "./playingIdentity.ts";
 export { createLongPressIntent } from "./longPressIntent.ts";
+
+export { SLOW_READ_BUDGET_MS, slowReadLine, slowReadsLine, type SlowRead } from "./slowRead.ts";
