@@ -61,7 +61,7 @@ export const playlistRecordingMatch = (tracks: readonly PlaylistRecommendationTr
 };
 
 /** Full eligible order, shared with the visible-slot controller. */
-export const rankedPlaylistRecommendations = (
+const rankedPlaylistRecommendations = (
   playlist: readonly PlaylistRecommendationTrack[],
   sources: PlaylistRecommendationSources,
 ): PlaylistRecommendation[] => {
