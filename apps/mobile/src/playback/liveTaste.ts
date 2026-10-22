@@ -15,6 +15,10 @@ import * as Semaphore from "effect/Semaphore";
 export interface LiveTasteDeps<R> {
   /** Derives the profile from the history, favorites and downloads (Core's `tasteProfile`). */
   readonly derive: Effect.Effect<TasteProfile, unknown, R>;
+  /** Deferred readers reset held signals exactly when their history snapshot is taken. */
+  readonly deriveWithSnapshot?: (
+    snapshotTaken: () => void,
+  ) => Effect.Effect<TasteProfile, unknown, R>;
   /** The songs [trackIds] are, as the profile weighs them; those it can't tell left out. */
   readonly songsOf: (
     trackIds: readonly string[],
@@ -31,7 +35,7 @@ const learned = (profile: TasteProfile, signals: readonly TasteSignal[]): TasteP
  * to date as signals come, as if each were in the history. Kept free of Expo
  * so it runs under plain Node tests; the app's is `TasteProfile.ts`.
  */
-export const makeLiveTaste = <R>({ derive, songsOf }: LiveTasteDeps<R>) => {
+export const makeLiveTaste = <R>({ derive, deriveWithSnapshot, songsOf }: LiveTasteDeps<R>) => {
   let known: TasteProfile | null = null;
   /**
    * While a derivation runs, the signals that came since it started: not in
@@ -55,32 +59,42 @@ export const makeLiveTaste = <R>({ derive, songsOf }: LiveTasteDeps<R>) => {
   /** Bumped when the profile is forgotten: a derivation started before it isn't kept. */
   let generation = 0;
 
-  const derived = Effect.suspend(() => {
-    held = [];
-    const started = generation;
-    return derive.pipe(
-      Effect.map((profile) => {
-        const kept = learned(profile, held ?? []);
-        if (started === generation) known = kept;
-        return kept;
-      }),
-      Effect.ensuring(
-        Effect.sync(() => {
-          held = null;
+  const derived = (read = deriveWithSnapshot ?? (() => derive)) =>
+    Effect.suspend(() => {
+      held = [];
+      const started = generation;
+      return read(() => {
+        // Deferred history includes Library signals already received. Streamed signals
+        // never enter that history and must survive the snapshot boundary.
+        held = (held ?? []).filter((signal) => parseTrackId(signal.song.trackId)?.kind === "yt");
+      }).pipe(
+        Effect.map((profile) => {
+          const kept = learned(profile, held ?? []);
+          if (started === generation) known = kept;
+          return kept;
         }),
-      ),
-    );
-  });
+        Effect.ensuring(
+          Effect.sync(() => {
+            held = null;
+          }),
+        ),
+      );
+    });
+
+  const profileUsing = (read = deriveWithSnapshot ?? (() => derive)) =>
+    Semaphore.withPermit(
+      deriving,
+      Effect.suspend(() => (known === null ? derived(read) : Effect.succeed(known))),
+    ).pipe(Effect.orElseSucceed((): TasteProfile | null => null));
 
   return {
+    /** Same cache and derivation lock, with a caller-supplied shared Library input. */
+    profileUsing,
     /**
      * The profile, derived the first time it's asked for, then as signals
      * have kept it; null when the history can't be read.
      */
-    profile: Semaphore.withPermit(
-      deriving,
-      Effect.suspend(() => (known === null ? derived : Effect.succeed(known))),
-    ).pipe(Effect.orElseSucceed((): TasteProfile | null => null)),
+    profile: profileUsing(),
 
     /**
      * A play ended: one played to the end, or skipped within its first 30 s

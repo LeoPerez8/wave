@@ -56,3 +56,40 @@ export const seededRandom = (key: string): RandomSource => {
     return ((mixed ^ (mixed >>> 14)) >>> 0) / 4_294_967_296;
   };
 };
+
+/** Same draws and floating point accumulation as pickWeighted, without an unbounded scan. */
+export function* pickWeightedSteps<T>(
+  items: readonly T[],
+  count: number,
+  weight: (item: T) => number,
+  random: RandomSource,
+): Generator<void, T[]> {
+  const left: { item: T; weight: number; picked: boolean }[] = [];
+  for (const item of items) {
+    left.push({ item, weight: weight(item), picked: false });
+    yield;
+  }
+  const picked: T[] = [];
+  while (picked.length < count && picked.length < left.length) {
+    let total = 0;
+    for (const entry of left) {
+      if (!entry.picked) total += entry.weight;
+      yield;
+    }
+    let at = random() * total;
+    let selected: (typeof left)[number] | undefined;
+    for (const entry of left) {
+      if (!entry.picked) {
+        selected = entry;
+        at -= entry.weight;
+        if (at < 0) break;
+      }
+      yield;
+    }
+    if (selected === undefined) break;
+    selected.picked = true;
+    picked.push(selected.item);
+    yield;
+  }
+  return picked;
+}

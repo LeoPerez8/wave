@@ -107,11 +107,16 @@ export const WHOLE_LIBRARY: Record<string, Exception> = {
     removeIn: 594,
     capabilities: ["library/hooks.ts#songs"],
   },
-  "home/magicQueueSection.ts#MAGIC_QUEUE_LIBRARY": {
+
+  "playback/tasteDerivation.ts#readTasteLibrary": {
     reason:
-      "Home Magic Queue row reads every song and artist for nine covers; replace with standing picks by id.",
-    removeIn: 593,
+      "Due Home picks and the shared live taste profile read one Library snapshot on cancellable background turns, after Home settlement for automatic picks; mapping is stepped.",
     capabilities: ["library/LibraryStore.ts#listArtists", "library/LibraryStore.ts#listSongs"],
+  },
+  "playback/tasteDerivation.ts#deriveTaste": {
+    reason:
+      "Shared live taste derivation reads history on a background turn and scores in cooperative six-ms slices, reusing Home's snapshot when supplied.",
+    capabilities: ["library/LibraryStore.ts#tasteHistory"],
   },
   "home/mixKnown.ts#readIndexes": {
     reason:
@@ -208,27 +213,13 @@ export const WHOLE_LIBRARY: Record<string, Exception> = {
       "Background radio batch resolves its candidates against an already supplied Library snapshot.",
     capabilities: ["../../../packages/core/src/ytMusic.ts#libraryFinder"],
   },
-  "playback/magicSongs.ts#magicSongsOf": {
-    reason:
-      "Live taste signals map changed songs to their artist credits; share and step the taste derivation.",
-    removeIn: 593,
-    capabilities: ["library/LibraryStore.ts#listArtists"],
-  },
+
   "playback/rowSwipe.ts#runTrackSwipe": {
     reason:
       "A completed swipe resolves its one requested action; it does not subscribe while rows render.",
     capabilities: ["ytmusic/libraryFinder.ts#currentLibraryFinder"],
   },
-  "playback/TasteProfile.ts#live": {
-    reason:
-      "First live taste derivation reads whole history, songs and artists; reuse one input and derive in steps after settled.",
-    removeIn: 593,
-    capabilities: [
-      "library/LibraryStore.ts#listArtists",
-      "library/LibraryStore.ts#listSongs",
-      "library/LibraryStore.ts#tasteHistory",
-    ],
-  },
+
   "search/searchIndex.ts#releasesOf": {
     reason:
       "Search deliberately shares the lists and lazily builds lookups; its index is built in yielding background steps.",

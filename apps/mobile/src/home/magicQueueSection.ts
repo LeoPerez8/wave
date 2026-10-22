@@ -7,30 +7,29 @@
  * the phone and picks again when it's due (a new day, a song gone).
  */
 import {
-  magicLibrarySongs,
-  magicQueuePicks,
-  magicQueuePicksDue,
+  MAGIC_QUEUE_PICKS,
   parseMagicQueuePicks,
-  refreshedMagicQueuePicks,
   storedMagicQueuePicks,
   undoneMagicQueueRefresh,
   type MagicQueuePicks,
-  type MagicSong,
-  type TasteProfile,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
-import { useFocusEffect } from "expo-router";
-import { useCallback, useMemo, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useSyncExternalStore } from "react";
 
+import { freeTurnEffect } from "@/lib/backgroundWork";
 import { makeExternalStore } from "@/lib/externalStore";
 import { persistedSetting } from "@/lib/persistedSetting";
-import { LibraryStore, songHasFile, type PlayableSongRow } from "@/library/LibraryStore";
+import { useScreenSettled } from "@/lib/screenTiming";
+import { LibraryStore, type PlayableSongRow } from "@/library/LibraryStore";
 import { appRuntime } from "@/library/runtime";
 import { libraryQuery, useLibraryQuery } from "@/library/sharedQueries";
 import { showError } from "@/overlay/alert";
 import { showToast } from "@/overlay/toast";
 import { startMagicQueue } from "@/playback/MagicQueue";
-import { tasteProfileNow } from "@/playback/TasteProfile";
+import { tasteProfileForLibrary } from "@/playback/TasteProfile";
+
+import { buildHomeMagicQueue, homeMagicQueueDue } from "./magicQueueJob";
+import { magicQueueRead, magicQueueGrowthRead } from "./magicQueueRead";
 
 /** What the section shows, kept on this phone (not synced). */
 const saved = persistedSetting<MagicQueuePicks | null>({
@@ -39,81 +38,55 @@ const saved = persistedSetting<MagicQueuePicks | null>({
   write: (picks) => (picks === null ? null : storedMagicQueuePicks(picks)),
 });
 
-/** The Library's songs that can play: what the section picks from, and shows. */
-interface MagicQueueLibrary {
-  /** By queue track id. */
-  readonly songs: ReadonlyMap<string, PlayableSongRow>;
-  /** As the Magic Queue and the taste profile weigh them. */
-  readonly magic: readonly MagicSong[];
-}
-
-const MAGIC_QUEUE_LIBRARY = libraryQuery<MagicQueueLibrary>(
-  "magicQueueSection",
-  { tracks: true },
-  Effect.gen(function* () {
-    const store = yield* LibraryStore;
-    const songs = (yield* store.listSongs).filter(songHasFile);
-    const toMagicSong = magicLibrarySongs(yield* store.listArtists);
-    return {
-      songs: new Map(songs.map((song) => [String(song.id), song])),
-      magic: songs.map(toMagicSong),
-    };
-  }),
-);
-
-/** A pick under way: Home coming back into focus, or a pull, meanwhile starts no other. */
+/** A pick under way is shared across consumers; the existing scheduler owns its turns. */
 const picking = makeExternalStore(false);
+let active: AbortController | null = null;
+let cancelActive: (() => void) | undefined;
 
-/** Runs [pick] with the taste profile, once no other pick is under way. */
-const pickWithTaste = (pick: (taste: TasteProfile | null, now: number) => void): void => {
-  if (picking.get()) return;
+const pick = (refresh: boolean): (() => void) | undefined => {
+  if (active !== null) return;
+  const previous = saved.get();
+  const controller = new AbortController();
+  active = controller;
   picking.set(true);
+  const finish = () => {
+    if (active !== controller) return;
+    active = null;
+    cancelActive = undefined;
+    picking.set(false);
+  };
+  const job = Effect.gen(function* () {
+    return yield* buildHomeMagicQueue(yield* LibraryStore, previous, {
+      now: Date.now(),
+      random: Math.random,
+      turn: freeTurnEffect,
+      taste: tasteProfileForLibrary,
+      refresh,
+    });
+  });
   void appRuntime
-    .runPromise(tasteProfileNow)
-    .then((taste) => pick(taste, Date.now()))
-    .catch(() => {
-      // Best effort: what the section shows stays until the next try.
+    .runPromise(job, { signal: controller.signal })
+    .then((picks) => {
+      if (controller.signal.aborted || saved.get() !== previous) return;
+      saved.set(picks);
+      if (!refresh || previous === null) return;
+      void showToast("New songs", {
+        label: "Undo",
+        run: () => {
+          if (saved.get() === picks) saved.set(undoneMagicQueueRefresh(previous, picks));
+        },
+      });
     })
-    .finally(() => {
-      picking.set(false);
-    });
-};
-
-/** Picks what the section shows when it's due (Core's `magicQueuePicksDue`). */
-const update = (library: MagicQueueLibrary): void => {
-  if (!magicQueuePicksDue(saved.get(), library.magic, Date.now())) return;
-  pickWithTaste((taste, now) => {
-    saved.set(magicQueuePicks(saved.get(), library.magic, { now, taste, random: Math.random }));
-  });
-};
-
-/** The toast after a pull brought other songs; its Undo puts the previous ones back. */
-const NEW_SONGS = "New songs";
-
-/**
- * Other songs for the section, now (the owner pulled its carousel past its
- * start): ones it didn't show today where others are left, with a "New
- * songs" toast whose Undo puts the previous ones back while it shows.
- */
-const refresh = (library: MagicQueueLibrary): void => {
-  pickWithTaste((taste, now) => {
-    const previous = saved.get();
-    const picked = { now, taste, random: Math.random };
-    const refreshed =
-      previous === null
-        ? magicQueuePicks(null, library.magic, picked)
-        : refreshedMagicQueuePicks(previous, library.magic, picked);
-    saved.set(refreshed);
-    if (previous === null) return;
-    void showToast(NEW_SONGS, {
-      label: "Undo",
-      run: () => {
-        // Another pick saved since: Undo would throw its songs away.
-        if (saved.get() !== refreshed) return;
-        saved.set(undoneMagicQueueRefresh(previous, refreshed));
-      },
-    });
-  });
+    .catch(() => {
+      // Best effort: previous choices remain until a later successful build.
+    })
+    .finally(finish);
+  const cancel = () => {
+    finish();
+    controller.abort();
+  };
+  cancelActive = cancel;
+  return cancel;
 };
 
 /** What the section shows, and what it can do. */
@@ -132,24 +105,50 @@ export interface MagicQueueSection {
  * songs again when they're due: a new list each day, a song gone replaced.
  */
 export const useMagicQueueSection = (): MagicQueueSection | null => {
-  const library = useLibraryQuery<MagicQueueLibrary | null>(MAGIC_QUEUE_LIBRARY, null);
   const picks = saved.useValue();
+  const query = useMemo(() => {
+    const read = magicQueueRead(picks?.trackIds ?? []);
+    return libraryQuery(read.key, read.reads, Effect.flatMap(LibraryStore, read.read));
+  }, [picks]);
+  const songs = useLibraryQuery<readonly PlayableSongRow[] | null>(query, null);
+  const growth = useMemo(() => {
+    if (picks === null || picks.trackIds.length >= MAGIC_QUEUE_PICKS) return null;
+    const read = magicQueueGrowthRead(picks.trackIds);
+    return libraryQuery(read.key, read.reads, Effect.flatMap(LibraryStore, read.read));
+  }, [picks]);
+  const grows = useLibraryQuery<boolean>(growth, false);
+  const settled = useScreenSettled();
   const busy = useSyncExternalStore(picking.subscribe, picking.get);
-  useFocusEffect(
-    useCallback(() => {
-      if (library !== null) update(library);
-    }, [library]),
-  );
+  useEffect(() => {
+    if (!settled) cancelActive?.();
+    return () => cancelActive?.();
+  }, [settled]);
+  useEffect(() => {
+    if (
+      songs === null ||
+      !homeMagicQueueDue(
+        settled,
+        picks,
+        songs.map((song) => String(song.id)),
+        grows,
+        Date.now(),
+      )
+    )
+      return;
+    return pick(false);
+  }, [picks, songs, grows, settled]);
   return useMemo(
     () =>
-      library === null
+      songs === null
         ? null
         : {
-            songs: (picks?.trackIds ?? []).flatMap((id) => library.songs.get(id) ?? []),
+            songs,
             picking: busy,
-            refresh: () => refresh(library),
+            refresh: () => {
+              pick(true);
+            },
           },
-    [library, picks, busy],
+    [songs, busy],
   );
 };
 

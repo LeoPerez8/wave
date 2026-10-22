@@ -609,6 +609,7 @@ export {
   magicArtistKey,
   magicBatch,
   magicLibrarySongs,
+  magicLibraryMapperSteps,
   magicRadioArtists,
   magicSeedProfile,
   magicYtSong,
@@ -1370,6 +1371,7 @@ export {
   discoverMixSongs,
   discoverMixesBuilt,
   discoverMixesDue,
+  localDay,
   parseDiscoverMixes,
   playedFinder,
   storedDiscoverMixes,
@@ -1821,6 +1823,7 @@ export {
   tasteLearned,
   tastePlaySignal,
   tasteProfile,
+  tasteProfileSteps,
   tasteWeight,
 } from "./tasteProfile.ts";
 export type { TasteHistory, TasteProfile, TasteSignal, TasteSignalKind } from "./tasteProfile.ts";
@@ -1835,6 +1838,7 @@ export type { HostNetworkUse, NetworkHost, NetworkUse, NetworkUseRun } from "./n
 export {
   MAGIC_QUEUE_PICKS,
   magicQueuePicks,
+  magicQueuePicksSteps,
   magicQueuePicksDue,
   parseMagicQueuePicks,
   refreshedMagicQueuePicks,
@@ -2015,3 +2019,5 @@ export type { LostLinkTap, LostTapReason } from "./lostTap.ts";
 
 export * from "./ytAlbumOpening.ts";
 export { ytArtistPageOpening } from "./ytArtistPageOpening.ts";
+
+export { advanceWork, WORK_SLICE_MS } from "./workSlice.ts";

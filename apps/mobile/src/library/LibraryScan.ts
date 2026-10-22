@@ -25,6 +25,7 @@ import type { ArtworkPalette } from "./db/schema";
 import { publishLibraryChange, publishSavedStars } from "./libraryChanges";
 import { LibraryStore, type IndexedArtwork, type IndexedTrack } from "./LibraryStore";
 import { NativeScanner, type ScanEvent } from "./NativeScanner";
+import { scanBatchChange } from "./scanChanges";
 
 export type ScanState =
   | { readonly status: "idle" }
@@ -59,8 +60,6 @@ const bumpLibraryVersion = (...changes: readonly LibraryChange[]): void => {
   for (const change of changes) publishLibraryChange(change);
 };
 
-/** A scan batch (or the end of a scan that dropped nothing): readers take several at once (Core's `burst`). */
-const SCAN_BATCH: LibraryChange = { kind: "tracks", burst: true };
 const FOLDERS: LibraryChange = { kind: "folders" };
 /** A scan's link turned playlists' streamed entries into Library songs. */
 const ENTRIES_LINKED: LibraryChange = { kind: "playlists" };
@@ -174,6 +173,7 @@ const scanFolders = (roots: readonly string[]) =>
     let missing: readonly IndexedFile[] = [];
     /** Files this scan saved (new, changed, moved). */
     let saved = 0;
+    const savedTrackIds: number[] = [];
     const startedAt = Date.now();
     scanState.set({
       status: "scanning",
@@ -216,9 +216,10 @@ const scanFolders = (roots: readonly string[]) =>
             const parts =
               slices.length > 0 ? slices : artwork.length > 0 ? [{ tracks: [], moves: [] }] : [];
             // Up to 500 files a batch: saved a slice per free turn, so a tap never waits on it.
+            const batchTrackIds: number[] = [];
             for (const [index, slice] of parts.entries()) {
               yield* freeTurnEffect;
-              const { starred } = yield* store.saveBatch(
+              const { starred, trackIds } = yield* store.saveBatch(
                 slice.tracks,
                 // Before any file that shows it.
                 index === 0 ? artwork : [],
@@ -228,6 +229,8 @@ const scanFolders = (roots: readonly string[]) =>
               );
               // A file a pending favorite was waiting for has its star.
               publishSavedStars(starred);
+              batchTrackIds.push(...trackIds);
+              savedTrackIds.push(...trackIds);
               saved += slice.tracks.length;
             }
             for (const track of changes.added) indexed.add(track.path);
@@ -235,7 +238,7 @@ const scanFolders = (roots: readonly string[]) =>
               indexed.delete(move.from);
               indexed.add(move.to.path);
             }
-            if (slices.length > 0) bumpLibraryVersion(SCAN_BATCH);
+            if (slices.length > 0) bumpLibraryVersion(scanBatchChange(batchTrackIds));
             return;
           }
           case "Complete":
@@ -280,7 +283,7 @@ const scanFolders = (roots: readonly string[]) =>
     // A folder's first scan that found nothing has Music folders show it scanned ("0 songs").
     // A rescan that changed nothing (the usual return to Wave) has nobody re-read anything.
     if (end.announce === "removed") bumpLibraryVersion({ kind: "tracks" });
-    else if (end.announce === "added") bumpLibraryVersion(SCAN_BATCH);
+    else if (end.announce === "added") bumpLibraryVersion(scanBatchChange(savedTrackIds));
     else if (end.announce === "scanned" || linked > 0) {
       bumpLibraryVersion(
         ...(end.announce === "scanned" ? [FOLDERS] : []),

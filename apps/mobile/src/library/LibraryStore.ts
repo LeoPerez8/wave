@@ -176,6 +176,7 @@ import {
   selectLibraryLookupSongs,
   trackArtistIds,
   selectPlayableSongs,
+  hasPlayableSongOutside,
   selectSongGenres,
   selectVideoIds,
   trackQuery,
@@ -672,6 +673,10 @@ export class LibraryStore extends Context.Service<
      * The songs with these ids that can play, for the queue, in no particular
      * order; ids no longer indexed, and missing songs, are left out.
      */
+    /** Whether a short Home row has another playable song to fill it (one id at most). */
+    readonly hasPlayableSongOutside: (
+      ids: readonly number[],
+    ) => Effect.Effect<boolean, LibraryStoreError>;
     readonly songsByIds: (
       ids: readonly number[],
     ) => Effect.Effect<readonly PlayableSongRow[], LibraryStoreError>;
@@ -1437,6 +1442,9 @@ const make = Effect.gen(function* () {
       writeAttempt("include a folder again", () => {
         db.delete(schema.excludedFolders).where(eq(schema.excludedFolders.path, path)).run();
       }),
+
+    hasPlayableSongOutside: (ids) =>
+      attempt("probe Home pick growth", () => hasPlayableSongOutside(db, ids)),
 
     songsByIds: (ids) =>
       attempt("read queued songs", () => selectPlayableSongs(db, ids).filter(songHasFile)),
