@@ -126,7 +126,8 @@ export const slowScreenLine = (screen: TimingScreen): string | null => {
 
 /** Median averages the two middle values; p90 uses nearest rank (including one sample). */
 const distribution = (values: readonly number[]): string => {
-  const sorted = values.toSorted((a, b) => a - b);
+  // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh copy; Hermes lacks toSorted
+  const sorted = [...values].sort((a, b) => a - b);
   const middle = Math.floor(sorted.length / 2);
   const median =
     sorted.length % 2 === 0 ? (sorted[middle - 1]! + sorted[middle]!) / 2 : sorted[middle]!;
