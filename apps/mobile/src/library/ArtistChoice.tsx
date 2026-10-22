@@ -23,6 +23,8 @@ import { NameRow } from "@/catalog/NameRow";
 import { showError } from "@/overlay/alert";
 import { CardEntries } from "@/overlay/CardEntries";
 import { followUp, openOverlay } from "@/overlay/overlay";
+import { resolveStreamedArtistTap } from "@/ytmusic/streamedArtist";
+import { followStreamedArtistTap } from "@/ytmusic/streamedArtistTap";
 import { openYtArtistNamed } from "@/ytmusic/routes";
 
 import { LibraryStore, type ArtistRow } from "./LibraryStore";
@@ -60,7 +62,7 @@ export const followArtistLink = (link: ArtistLink, known?: ArtistRow | null): vo
 /** Opens [target]'s page integrated: the Library artist's, or the YouTube Music artist page. */
 const openStreamedArtist = (target: StreamedArtistTarget<ArtistRow>): void => {
   if (target.kind === "library") openArtist(target.artist.id, target.artist, { integrated: true });
-  else openYtArtistNamed(target.name);
+  else if (target.kind === "yt") openYtArtistNamed(target.name, target.offline);
 };
 
 /** A YouTube Music artist has no Library image: the row shows their initial. */
@@ -95,14 +97,25 @@ const streamedChoice = (target: StreamedArtistTarget<ArtistRow>): ArtistChoice =
  * The page you're on opens nothing: Now Playing closing reveals it.
  */
 export const followStreamedArtistLink = (link: StreamedArtistLink<ArtistRow>): void => {
-  if (link.kind !== "here")
-    continueTiming(
-      link.kind === "open" ? "artistLink" : "choiceCard",
-      link.kind === "open" ? "Artist" : "artist choice",
-    );
-  if (link.kind === "open") openStreamedArtist(link.target);
-  else if (link.kind === "choose")
-    openChoiceCard(link.targets.map(streamedChoice), activeTiming()?.id);
+  if (link.kind === "here") return;
+  continueTiming("artistLink", "Artist");
+  const timingId = activeTiming()?.id;
+  if (timingId !== undefined) noteTimingLinkFailure(timingId, "link not ready");
+  const deliver = (resolved: StreamedArtistLink<ArtistRow> | undefined) => {
+    if (resolved === undefined) {
+      showError("Couldn't open the artist", "YouTube Music is turned off.");
+      return;
+    }
+    if (resolved?.kind === "open") openStreamedArtist(resolved.target);
+    else if (resolved?.kind === "choose") {
+      continueTiming("choiceCard", "artist choice");
+      openChoiceCard(resolved.targets.map(streamedChoice), timingId);
+    }
+    if (resolved !== undefined) timingLinkNavigated(timingId);
+  };
+  void followStreamedArtistTap(link, { resolve: resolveStreamedArtistTap, deliver }).catch(
+    (error: unknown) => showError("Couldn't open the artist", error),
+  );
 };
 
 /** Each artist's row, in [ids]' order; one cheap read per artist, gone ones left out. */

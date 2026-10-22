@@ -250,12 +250,12 @@ function QuietLine({
  */
 export default function YtArtistScreen() {
   useScreenContent(true);
-  const params = useLocalSearchParams<{ id: string; name?: string }>();
+  const params = useLocalSearchParams<{ id: string; name?: string; offline?: string }>();
   const browseId = params.id === YT_ARTIST_BY_NAME ? null : (params.id ?? "");
   const knownName = params.name === undefined || params.name === "" ? null : params.name;
   const scrollable = useListScrollable();
   const bottomInset = useChromeInset();
-  const { view, retry } = useYtArtistPage(browseId, knownName);
+  const { view, retry } = useYtArtistPage(browseId, knownName, params.offline === "1");
   const songs = view?.songs ?? NO_SONGS;
   const selectable = useMemo(() => songs.map(listedTrackItem), [songs]);
   const selection = useListSelection({
