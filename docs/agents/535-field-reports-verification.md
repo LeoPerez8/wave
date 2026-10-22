@@ -71,14 +71,28 @@ purpose are read by the button; decorative image/text children are hidden from
 accessibility. Tap starts the same seed, long-press opens the same actions,
 and pull refresh, its accessibility action, and crossfades are retained.
 
-At font scale 1.3 the layout becomes two columns; at 2.0, one. Narrow widths
-also reduce columns to retain 48dp targets. Caption height grows with font
-scale rather than disabling scaling. Older saved ten-song suggestions shrink
-immediately to their first nine seeds. Public picker tests cover nine unique
-songs, refresh/Undo and that persisted transition. Active Queue batch size and
-ordering are unchanged. No screenshots, real artwork comparison, TalkBack or
-large-text device validation were performed by this child. Parent should
-capture default/1.3x and light/dark, including long titles and missing art.
+The intended font-scale breakpoints are two columns at 1.3 and one at 2.0.
+Parent's actual emulator red capture,
+`docs/agents/evidence/534/reviewed-light-1.3-home.png`, instead showed three
+columns with Android system `font_scale` set to 1.3. The installed React Native
+`ReactAndroid/src/main/java/com/facebook/react/modules/deviceinfo/DeviceInfoModule.kt`
+keeps `configuration.fontScale` as a Kotlin `Float` and exports
+`fontScale.toDouble()`: 1.3 reaches JS as `1.2999999523162842`, so the original
+`>= 1.3` comparison fails. The row now compares against `Math.fround(1.3)`,
+matching that native Float boundary without rounding the font scale itself.
+Default text still allows three columns, 2.0 still selects one, and narrow
+widths still reduce columns to retain 48dp targets. Caption height and text
+continue to scale. This is a narrow breakpoint correction, not a font-scaling
+override.
+
+Older saved ten-song suggestions shrink immediately to their first nine seeds.
+Existing public picker tests cover nine unique songs, refresh/Undo and that
+persisted transition; they do not render or validate the native column count.
+Active Queue batch size and ordering are unchanged. The parent owns the native
+before/after check and must confirm two columns at system font scale 1.3 on the
+final APK. This child ran no build or device checks. Final default/2.0,
+light/dark, long-title, missing-artwork and TalkBack checks remain with the
+parent; no passing native after capture is claimed here.
 Proposed spec update: Discover's Magic Queue suggestions use this adaptive
 grid; replace its earlier ten-song carousel description.
 
