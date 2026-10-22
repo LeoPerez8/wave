@@ -69,24 +69,31 @@ export function CardRow({
   );
 }
 
-/** A card on a shelf or in a grid: its content at [width], pressable as a whole. */
+/**
+ * A card on a shelf or in a grid: its content at [width], pressable as a whole.
+ * [checked] is set only in selection mode: the card then reads as a checkbox.
+ */
 export function CardTile({
   width,
   label,
   onPress,
   onLongPress,
+  checked,
   children,
 }: {
   width: number;
   label: string;
   onPress: () => void;
   onLongPress?: (() => void) | undefined;
+  checked?: boolean | undefined;
   children: ReactNode;
 }) {
+  const selecting = checked !== undefined;
   return (
     <Press
-      accessibilityRole="button"
+      accessibilityRole={selecting ? "checkbox" : "button"}
       accessibilityLabel={label}
+      accessibilityState={selecting ? { checked } : undefined}
       onPress={onPress}
       onLongPress={onLongPress}
       depth={0.02}

@@ -40,7 +40,10 @@ const ROW_GAP = CELL * 1.5;
  */
 type SkeletonTrailing = "length" | "queue";
 
-/** A track row's leading: a square cover, a song card's cover (Search's songs), or a number. */
+/**
+ * A track row's leading: a square cover, a song card's cover (Search's and the artist page's
+ * songs), or a number.
+ */
 type TrackLeading = "artwork" | "card" | "number";
 
 /**
@@ -134,6 +137,22 @@ export function TileSkeleton({ size }: { size: number }) {
           <Line lineHeight={22} width="85%" />
         </View>
         <Line lineHeight={18} width="35%" />
+      </View>
+    </View>
+  );
+}
+
+/**
+ * An album card's stand-in, laid out as `AlbumCard` is at [size]: the square
+ * cover with 6dp corners, then the title line and the artist line under it.
+ */
+export function AlbumCardSkeleton({ size }: { size: number }) {
+  return (
+    <View style={{ width: size }}>
+      <View className="bg-fill" style={{ width: size, height: size, borderRadius: CELL * 0.75 }} />
+      <View style={{ paddingTop: CELL }}>
+        <Line lineHeight={22} width="85%" />
+        <Line lineHeight={18} width="50%" />
       </View>
     </View>
   );

@@ -1,6 +1,7 @@
 import { joinArtists, type YtArtistAlbum, type YtArtistSectionNote } from "@wave/core";
 
 import { AlbumTile } from "@/catalog/AlbumTile";
+import { AlbumCard } from "@/catalog/cards/AlbumCard";
 
 import { openYtAlbum } from "./routes";
 import { openYtAlbumActions } from "./YtAlbumActions";
@@ -53,6 +54,38 @@ export function YtReleaseTile({
       }}
       size={size}
       detail={album.year === null ? UNDATED[kind] : String(album.year)}
+      onPress={selecting ? ignore : () => openYtAlbum(album.browseId, head)}
+      onLongPress={
+        selecting ? ignore : () => openYtAlbumActions({ browseId: album.browseId, ...head })
+      }
+    />
+  );
+}
+
+/**
+ * An artist's release on YouTube Music that the Library doesn't have, as an
+ * album card on the artist page's shelves: its cover and title, the artists
+ * under it, opening the YT Music album page, with the album menu (Download
+ * Album) on long-press. While the page's albums and songs are being selected,
+ * it does nothing.
+ */
+export function YtReleaseCard({
+  album,
+  size,
+  selecting,
+}: {
+  album: YtArtistAlbum;
+  size: number;
+  selecting: boolean;
+}) {
+  const line = joinArtists(album.artists);
+  const head = { title: album.title, line, artworkUrl: album.artworkUrl };
+  return (
+    <AlbumCard
+      title={album.title}
+      artist={line}
+      artworkUri={album.artworkUrl ?? undefined}
+      size={size}
       onPress={selecting ? ignore : () => openYtAlbum(album.browseId, head)}
       onLongPress={
         selecting ? ignore : () => openYtAlbumActions({ browseId: album.browseId, ...head })

@@ -1,6 +1,7 @@
 import { View } from "react-native";
 
 import { Artwork } from "../Artwork";
+import { TileCheck } from "../CheckCell";
 import { CELL } from "../grid";
 
 import { CardDetail, CardRow, CardTile, CardTitle } from "./CardParts";
@@ -19,7 +20,11 @@ type Props = {
   onLongPress?: (() => void) | undefined;
 };
 
-/** An album on a shelf or in a grid: a square cover at [size], 6dp corners, the title and artist under it. */
+/**
+ * An album on a shelf or in a grid: a square cover at [size], 6dp corners, the title and artist
+ * under it. In selection mode [checked] is set: the cover shows a check and the card reads as a
+ * checkbox.
+ */
 export function AlbumCard({
   title,
   artist,
@@ -28,15 +33,20 @@ export function AlbumCard({
   size,
   onPress,
   onLongPress,
-}: Props & { size: number }) {
+  checked,
+}: Props & { size: number; checked?: boolean | undefined }) {
   return (
     <CardTile
       width={size}
       label={`${title}, album by ${artist}`}
       onPress={onPress}
       onLongPress={onLongPress}
+      checked={checked}
     >
-      <Artwork uri={artworkUri} tint={tint} size={size} radius={CELL * 0.75} />
+      <View>
+        <Artwork uri={artworkUri} tint={tint} size={size} radius={CELL * 0.75} />
+        {checked !== undefined && <TileCheck checked={checked} />}
+      </View>
       <View style={{ paddingTop: CELL }}>
         <CardTitle>{title}</CardTitle>
         <CardDetail size="footnote">{artist}</CardDetail>

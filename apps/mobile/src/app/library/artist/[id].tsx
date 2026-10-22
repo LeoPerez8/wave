@@ -14,18 +14,23 @@ import { useCallback, useMemo } from "react";
 import { Text, useWindowDimensions, View } from "react-native";
 
 import { ArtistImage } from "@/catalog/ArtistImage";
-import { AlbumTile } from "@/catalog/AlbumTile";
+import { AlbumCard } from "@/catalog/cards/AlbumCard";
 import { SECTION_HEAD, SectionHead } from "@/catalog/CatalogLine";
 import { COVER_ROW_TILE, CoverRow } from "@/catalog/CoverRow";
 import { CELL, grid } from "@/catalog/grid";
-import { SKELETON_TILES, SkeletonGroup, TileSkeleton, TrackSkeletons } from "@/catalog/Skeletons";
+import {
+  AlbumCardSkeleton,
+  SKELETON_TILES,
+  SkeletonGroup,
+  TrackSkeletons,
+} from "@/catalog/Skeletons";
 import { SwipeTrackRow } from "@/library/SwipeTrackRow";
 import { useChromeInset } from "@/chrome/chrome";
 import { playPage } from "@/playback/actions";
 import { useCurrentPlayingIds } from "@/playback/hooks";
 import { openAlbumActions, openTrackActions } from "@/playback/ActionsMenu";
 import { mixedTarget, trackItemKey, type MixedItem } from "@/playback/actionTargets";
-import { albumRowHeight, toAlbumSummary } from "@/library/AlbumGrid";
+import { toAlbumSummary } from "@/library/AlbumGrid";
 import { DetailFrame } from "@/library/DetailFrame";
 import { useFavoriteIds } from "@/library/favorites";
 import { useArtist } from "@/library/hooks";
@@ -42,7 +47,7 @@ import type { NativeYtSong } from "@/native/waveYtMusic";
 import { useYtArtistSection } from "@/ytmusic/artistSection";
 import { useLoadedLibraryFinder, type FindInLibrary } from "@/ytmusic/libraryFinder";
 import { useHeldSongs, useSongsInPlace, type PlacedSongs } from "@/ytmusic/songsInPlace";
-import { YT_ARTIST_NOTE, YtReleaseTile } from "@/ytmusic/YtArtistSection";
+import { YT_ARTIST_NOTE, YtReleaseCard } from "@/ytmusic/YtArtistSection";
 import { YtLookupFooter } from "@/ytmusic/YtLookupFooter";
 import { SwipeYtSongRow } from "@/ytmusic/YtSongRow";
 import { openYtSongActions } from "@/ytmusic/YtSongActions";
@@ -50,7 +55,7 @@ import { openYtSongActions } from "@/ytmusic/YtSongActions";
 /** A cover on one of the page's album shelves: a Library album, or a release only YouTube Music has. */
 type AlbumCell =
   | { readonly kind: "library"; readonly album: AlbumRow }
-  | { readonly kind: "yt"; readonly album: YtArtistAlbum; readonly shelf: "albums" | "singles" }
+  | { readonly kind: "yt"; readonly album: YtArtistAlbum }
   /** Skeleton tiles where YouTube Music's releases will go, while it's asked. */
   | { readonly kind: "skeleton" };
 
@@ -66,8 +71,15 @@ type PageSong =
 
 type Item = ArtistPageItem<AlbumCell, PageSong>;
 
-/** Height of an album shelf's row, the gap under it included. */
-const SHELF_ROW = albumRowHeight(COVER_ROW_TILE);
+/** Space under an album shelf's row, before the next heading. */
+const SHELF_GAP = CELL * 3;
+
+/**
+ * Height of an album shelf's row: the cover, the card's caption under it (a title line and an artist
+ * line, global.css's body and footnote line heights, grown with the font) and the gap below.
+ */
+const shelfRowHeight = (fontScale: number): number =>
+  COVER_ROW_TILE + CELL + Math.ceil(((22 + 18) * Math.max(1, fontScale)) / CELL) * CELL + SHELF_GAP;
 
 /** What YouTube Music adds to the page once asked: the artist's releases and songs the Library lacks. */
 interface YtAdditions {
@@ -114,13 +126,13 @@ const artistItems = (
         label: "Albums",
         covers: [
           ...detail.albums.map(libraryCell),
-          ...yt.albums.map((album): AlbumCell => ({ kind: "yt", album, shelf: "albums" })),
+          ...yt.albums.map((album): AlbumCell => ({ kind: "yt", album })),
           ...(loading ? [SKELETON_CELL] : []),
         ],
       },
       {
         label: "Singles & EPs",
-        covers: yt.singles.map((album): AlbumCell => ({ kind: "yt", album, shelf: "singles" })),
+        covers: yt.singles.map((album): AlbumCell => ({ kind: "yt", album })),
       },
       { label: "Appears on", covers: detail.appearsOn.map(libraryCell) },
     ],
@@ -176,22 +188,27 @@ function AlbumShelfRow({
   cells,
   selection,
   integrated,
+  height,
 }: {
   cells: readonly AlbumCell[];
   selection: ListSelection<AlbumRow>;
   /** Whether the page is an integrated view: the albums open integrated. */
   integrated: boolean;
+  height: number;
 }) {
   return (
-    <View style={{ height: SHELF_ROW }}>
+    <View style={{ height }}>
       <CoverRow>
         {cells.map((cell) => {
           switch (cell.kind) {
-            case "library":
+            case "library": {
+              const album = toAlbumSummary(cell.album);
               return (
-                <AlbumTile
+                <AlbumCard
                   key={cellKey(cell)}
-                  album={toAlbumSummary(cell.album)}
+                  title={album.title}
+                  artist={album.albumArtist}
+                  artworkUri={album.artworkUri}
                   size={COVER_ROW_TILE}
                   {...selectableRow(
                     cell.album,
@@ -201,12 +218,12 @@ function AlbumShelfRow({
                   )}
                 />
               );
+            }
             case "yt":
               return (
-                <YtReleaseTile
+                <YtReleaseCard
                   key={cellKey(cell)}
                   album={cell.album}
-                  kind={cell.shelf}
                   size={COVER_ROW_TILE}
                   selecting={selection.selecting}
                 />
@@ -216,7 +233,7 @@ function AlbumShelfRow({
                 <SkeletonGroup key={cellKey(cell)} label="Loading albums">
                   <View className="flex-row" style={{ gap: grid.gutter }}>
                     {Array.from({ length: SKELETON_TILES }, (_, index) => (
-                      <TileSkeleton key={index} size={COVER_ROW_TILE} />
+                      <AlbumCardSkeleton key={index} size={COVER_ROW_TILE} />
                     ))}
                   </View>
                 </SkeletonGroup>
@@ -269,6 +286,8 @@ function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegr
   const loaded = shown.detail !== undefined;
   const detail = useMemo(() => shown.detail ?? unread(shown.artist), [shown.detail, shown.artist]);
   const scrollable = useListScrollable();
+  const { fontScale } = useWindowDimensions();
+  const shelfHeight = shelfRowHeight(fontScale);
   const bottomInset = useChromeInset();
   const currentIds = useCurrentPlayingIds();
   const favorites = useFavoriteIds();
@@ -377,8 +396,10 @@ function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegr
               cells={item.covers}
               selection={albumSelection}
               integrated={integrated}
+              height={shelfHeight}
             />
           );
+        // A song reads as a song card's row: its cover with the play disc, then "Song · <artist>".
         case "song": {
           if (item.song.kind === "yt") {
             const song = item.song.song;
@@ -386,6 +407,8 @@ function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegr
               <SwipeYtSongRow
                 song={song}
                 playing={currentIds.has(ytTrackId(song.videoId))}
+                kind="Song · "
+                playDisc
                 {...selectableRow(
                   ytTrackItem(song),
                   page,
@@ -396,19 +419,17 @@ function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegr
             );
           }
           const song = item.song.song;
+          const card = { ...toTrackSummary(song), artist: `Song · ${song.artist}` };
           // Under Popular the rank leads the row in place of the artwork, numbered as a ranking
           // is; a song the list doesn't hold leads with nothing.
           return (
             <SwipeTrackRow
               song={song}
-              track={
-                byPopularity
-                  ? { ...toTrackSummary(song), trackNumber: song.popularRank }
-                  : toTrackSummary(song)
-              }
+              track={byPopularity ? { ...card, trackNumber: song.popularRank } : card}
               state={currentIds.has(String(song.id)) ? "playing" : undefined}
               favorite={favorites.has(song.id)}
               leading={byPopularity ? "number" : "artwork"}
+              playDisc
               topNumber={song.popularRank === 1}
               downloaded={downloaded}
               {...selectableRow(
@@ -432,6 +453,7 @@ function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegr
       page,
       integrated,
       byPopularity,
+      shelfHeight,
     ],
   );
 
@@ -455,7 +477,7 @@ function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegr
       extraData={rowState}
       getItemType={(item) => (item.type === "song" ? `${item.song.kind}-song` : item.type)}
       getFixedItemSize={(item) =>
-        item.type === "section" ? SECTION_HEAD : item.type === "shelf" ? SHELF_ROW : grid.row
+        item.type === "section" ? SECTION_HEAD : item.type === "shelf" ? shelfHeight : grid.row
       }
       estimatedItemSize={grid.row}
       recycleItems
@@ -476,7 +498,7 @@ function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegr
       }
       ListFooterComponent={
         ytView === null ? null : ytView.note === "loading" ? (
-          <TrackSkeletons />
+          <TrackSkeletons leading="card" />
         ) : (
           <YtLookupFooter note={ytView.note === null ? null : YT_ARTIST_NOTE[ytView.note]} />
         )
