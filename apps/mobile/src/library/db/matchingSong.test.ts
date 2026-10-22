@@ -61,3 +61,59 @@ test("targeted playing-song lookup preserves the Library finder's recording iden
     closeTestDatabase(db);
   }
 });
+
+test("an upgraded missing recording keeps its row and star when downloaded, and retags update its lookup key", async () => {
+  const { addMissingSong, migrateTestDatabase } = await import("./testDatabase.ts");
+  const db = await openTestDatabase({ through: "0036_playlist_recommendation_feedback" });
+  try {
+    const id = addMissingSong(db, {
+      title: "Deja Vu (Remastered 2011)",
+      artist: "Beyoncé",
+      album: "Record",
+      durationMs: 180000,
+    });
+    await migrateTestDatabase(db);
+    const store = await loadLibraryStore(root, db);
+    Effect.runSync(store.setFavorites([id], true));
+    const missing = Effect.runSync(store.matchingSong(song));
+    assert.equal(missing?.id, id);
+    assert.equal(missing?.path, null);
+    Effect.runSync(store.saveBatch([{ ...track(), fills: id }], []));
+    const local = Effect.runSync(store.matchingSong(song));
+    assert.equal(local?.id, id);
+    assert.equal(local?.path, "/Music/playing.m4a");
+    assert.ok(Effect.runSync(store.favoriteTrackIds).includes(id));
+    Effect.runSync(store.saveBatch([track("New title")], []));
+    assert.equal(Effect.runSync(store.matchingSong(song)), null);
+    assert.equal(Effect.runSync(store.matchingSong({ ...song, title: "New title" }))?.id, id);
+  } finally {
+    closeTestDatabase(db);
+  }
+});
+
+test("duplicates keep the same Library ordering and video ids never override recording versions", async () => {
+  const db = await openTestDatabase();
+  try {
+    const store = await loadLibraryStore(root, db);
+    Effect.runSync(
+      store.saveBatch(
+        [
+          {
+            ...track("Deja Vu (Live)", "Beyoncé", 180000, "/Music/live.m4a"),
+            videoId: song.videoId,
+          },
+          track("Déjà Vu", "Beyoncé", 180000, "/Music/z.m4a"),
+          track("Déjà Vu", "Beyoncé", 180000, "/Music/a.m4a"),
+        ],
+        [],
+      ),
+    );
+    const expected = libraryFinder(Effect.runSync(store.listSongs))(song);
+    const found = Effect.runSync(store.matchingSong(song));
+    assert.equal(found?.id, expected?.id);
+    assert.equal(found?.path, "/Music/a.m4a");
+    assert.equal(Effect.runSync(store.matchingSong({ ...song, durationMs: 230000 })), null);
+  } finally {
+    closeTestDatabase(db);
+  }
+});
