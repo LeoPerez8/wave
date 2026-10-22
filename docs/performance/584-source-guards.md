@@ -139,3 +139,22 @@ the fixed opening reads its ten album tracks and starts no request.
 #590 completes Popular's due/once, allowance and Wi-Fi policy at the single
 artist opening boundary described above; no `removeIn: 590` entry remains.
 The #584 route observer restriction and #585 dispatch/watchdog are unchanged.
+
+## Home Magic Queue after #593
+
+The exact `home/magicQueueSection.ts#MAGIC_QUEUE_LIBRARY`,
+`playback/TasteProfile.ts#live` and `playback/magicSongs.ts#magicSongsOf` debt
+entries are retired. Standing picks use `songsByIds` (nine at most), with picked
+track/favorite invalidations. Live signals resolve only their credited artist
+IDs. Short lists alone use a one-ID growth probe, so adding a file can fill them.
+
+The allowed source reads are now the exact background functions
+`playback/tasteDerivation.ts#readTasteLibrary` and `#deriveTaste`. Home gates its
+job on `useScreenSettled`; these functions wait on existing cancellable free
+turns and reuse one Library input for the shared live profile and the pick.
+Mapping, scoring and ordered weighted draws consume cooperative iterator steps.
+`magicQueueRead.test.ts`, `magicQueueJob.test.ts`, `tasteDerivation.test.ts` and
+`liveTaste.test.ts` exercise the real store/registry, timing session, scheduler
+cancellation and shared profile semantics. The route-observer policy is unchanged.
+Source SQL reads remain separately visible in the desktop evidence; allowing a
+background source read does not claim that synchronous SQLite has a six-ms cap.

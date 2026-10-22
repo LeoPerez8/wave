@@ -2,35 +2,35 @@
  * Home's Magic Queue section (docs/spec.md, Magic Queue): nine of the
  * Library's songs to start a Magic Queue from with one tap. Which songs,
  * when they change and what a pull brings are Core's (`magicQueuePicks`,
- * `refreshedMagicQueuePicks`, `undoneMagicQueueRefresh`), weighed by the
- * taste profile (`tasteProfileNow`); this keeps what the section shows on
- * the phone and picks again when it's due (a new day, a song gone).
+ * `magicQueuePicksSteps`, `undoneMagicQueueRefresh`), weighed by the taste
+ * profile (`tasteProfileForLibrary`); this keeps what the section shows on
+ * the phone, reads only those songs, and picks again when it's due (a new
+ * day, a song gone) once Home has settled.
  */
 import {
-  magicLibrarySongs,
-  magicQueuePicks,
-  magicQueuePicksDue,
+  MAGIC_QUEUE_PICKS,
   parseMagicQueuePicks,
-  refreshedMagicQueuePicks,
   storedMagicQueuePicks,
   undoneMagicQueueRefresh,
   type MagicQueuePicks,
-  type MagicSong,
-  type TasteProfile,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
-import { useFocusEffect } from "expo-router";
-import { useCallback, useMemo, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 
+import { freeTurnEffect } from "@/lib/backgroundWork";
 import { makeExternalStore } from "@/lib/externalStore";
 import { persistedSetting } from "@/lib/persistedSetting";
-import { LibraryStore, songHasFile, type PlayableSongRow } from "@/library/LibraryStore";
+import { useScreenSettled } from "@/lib/screenTiming";
+import { LibraryStore, type PlayableSongRow } from "@/library/LibraryStore";
 import { appRuntime } from "@/library/runtime";
 import { libraryQuery, useLibraryQuery } from "@/library/sharedQueries";
 import { showError } from "@/overlay/alert";
 import { showToast } from "@/overlay/toast";
 import { startMagicQueue } from "@/playback/MagicQueue";
-import { tasteProfileNow } from "@/playback/TasteProfile";
+import { tasteProfileForLibrary } from "@/playback/TasteProfile";
+
+import { buildHomeMagicQueue, homeMagicQueueDue } from "./magicQueueJob";
+import { magicQueueRead, magicQueueGrowthRead } from "./magicQueueRead";
 
 /** What the section shows, kept on this phone (not synced). */
 const saved = persistedSetting<MagicQueuePicks | null>({
@@ -39,81 +39,63 @@ const saved = persistedSetting<MagicQueuePicks | null>({
   write: (picks) => (picks === null ? null : storedMagicQueuePicks(picks)),
 });
 
-/** The Library's songs that can play: what the section picks from, and shows. */
-interface MagicQueueLibrary {
-  /** By queue track id. */
-  readonly songs: ReadonlyMap<string, PlayableSongRow>;
-  /** As the Magic Queue and the taste profile weigh them. */
-  readonly magic: readonly MagicSong[];
-}
-
-const MAGIC_QUEUE_LIBRARY = libraryQuery<MagicQueueLibrary>(
-  "magicQueueSection",
-  { tracks: true },
-  Effect.gen(function* () {
-    const store = yield* LibraryStore;
-    const songs = (yield* store.listSongs).filter(songHasFile);
-    const toMagicSong = magicLibrarySongs(yield* store.listArtists);
-    return {
-      songs: new Map(songs.map((song) => [String(song.id), song])),
-      magic: songs.map(toMagicSong),
-    };
-  }),
-);
-
-/** A pick under way: Home coming back into focus, or a pull, meanwhile starts no other. */
+/** A pick under way: a pull, or Home's due pick, meanwhile starts no other. */
 const picking = makeExternalStore(false);
+let active = false;
+/** Stops Home's due pick under way (Home left, or not settled): a pull's goes on. */
+let cancelDue: (() => void) | undefined;
 
-/** Runs [pick] with the taste profile, once no other pick is under way. */
-const pickWithTaste = (pick: (taste: TasteProfile | null, now: number) => void): void => {
-  if (picking.get()) return;
+/**
+ * Picks the section's songs as background work on free turns: what it shows
+ * stays until the new list is saved. A pull ([refresh]) brings other songs,
+ * with a "New songs" toast whose Undo puts the previous ones back.
+ */
+const pick = (refresh: boolean): void => {
+  if (active) return;
+  const previous = saved.get();
+  const controller = new AbortController();
+  active = true;
   picking.set(true);
+  const finish = () => {
+    if (!active) return;
+    active = false;
+    cancelDue = undefined;
+    picking.set(false);
+  };
+  const job = Effect.gen(function* () {
+    return yield* buildHomeMagicQueue(yield* LibraryStore, previous, {
+      now: Date.now(),
+      random: Math.random,
+      turn: freeTurnEffect,
+      taste: tasteProfileForLibrary,
+      refresh,
+    });
+  });
   void appRuntime
-    .runPromise(tasteProfileNow)
-    .then((taste) => pick(taste, Date.now()))
+    .runPromise(job, { signal: controller.signal })
+    .then((picks) => {
+      // Another pick saved since: this one would throw its songs away.
+      if (controller.signal.aborted || saved.get() !== previous) return;
+      saved.set(picks);
+      if (!refresh || previous === null) return;
+      void showToast("New songs", {
+        label: "Undo",
+        run: () => {
+          if (saved.get() === picks) saved.set(undoneMagicQueueRefresh(previous, picks));
+        },
+      });
+    })
     .catch(() => {
       // Best effort: what the section shows stays until the next try.
     })
     .finally(() => {
-      picking.set(false);
+      if (!controller.signal.aborted) finish();
     });
-};
-
-/** Picks what the section shows when it's due (Core's `magicQueuePicksDue`). */
-const update = (library: MagicQueueLibrary): void => {
-  if (!magicQueuePicksDue(saved.get(), library.magic, Date.now())) return;
-  pickWithTaste((taste, now) => {
-    saved.set(magicQueuePicks(saved.get(), library.magic, { now, taste, random: Math.random }));
-  });
-};
-
-/** The toast after a pull brought other songs; its Undo puts the previous ones back. */
-const NEW_SONGS = "New songs";
-
-/**
- * Other songs for the section, now (the owner pulled its carousel past its
- * start): ones it didn't show today where others are left, with a "New
- * songs" toast whose Undo puts the previous ones back while it shows.
- */
-const refresh = (library: MagicQueueLibrary): void => {
-  pickWithTaste((taste, now) => {
-    const previous = saved.get();
-    const picked = { now, taste, random: Math.random };
-    const refreshed =
-      previous === null
-        ? magicQueuePicks(null, library.magic, picked)
-        : refreshedMagicQueuePicks(previous, library.magic, picked);
-    saved.set(refreshed);
-    if (previous === null) return;
-    void showToast(NEW_SONGS, {
-      label: "Undo",
-      run: () => {
-        // Another pick saved since: Undo would throw its songs away.
-        if (saved.get() !== refreshed) return;
-        saved.set(undoneMagicQueueRefresh(previous, refreshed));
-      },
-    });
-  });
+  if (!refresh)
+    cancelDue = () => {
+      finish();
+      controller.abort();
+    };
 };
 
 /** What the section shows, and what it can do. */
@@ -127,29 +109,61 @@ export interface MagicQueueSection {
 }
 
 /**
- * What Home's Magic Queue section shows, or null until the Library is read.
- * Each time Home comes into focus, and as the Library changes, it picks its
- * songs again when they're due: a new list each day, a song gone replaced.
+ * What Home's Magic Queue section shows, or null until its songs are read:
+ * only the songs picked, by id, following changes to those songs alone. Once
+ * Home has settled it picks them again when they're due (a new list each day,
+ * a song gone replaced, a short list as the Library grows), as background
+ * work; the previous songs show meanwhile.
  */
 export const useMagicQueueSection = (): MagicQueueSection | null => {
-  const library = useLibraryQuery<MagicQueueLibrary | null>(MAGIC_QUEUE_LIBRARY, null);
   const picks = saved.useValue();
+  const query = useMemo(() => {
+    const read = magicQueueRead(picks?.trackIds ?? []);
+    return libraryQuery(read.key, read.reads, Effect.flatMap(LibraryStore, read.read));
+  }, [picks]);
+  const read = useLibraryQuery<readonly PlayableSongRow[] | null>(query, null);
+  // New picks keep the songs shown until theirs are read: no placeholder in between.
+  const [shown, setShown] = useState(read);
+  if (read !== null && read !== shown) setShown(read);
+  const songs = read ?? shown;
+  const growth = useMemo(() => {
+    if (picks === null || picks.trackIds.length >= MAGIC_QUEUE_PICKS) return null;
+    const probe = magicQueueGrowthRead(picks.trackIds);
+    return libraryQuery(probe.key, probe.reads, Effect.flatMap(LibraryStore, probe.read));
+  }, [picks]);
+  const grows = useLibraryQuery<boolean>(growth, false);
+  const settled = useScreenSettled();
   const busy = useSyncExternalStore(picking.subscribe, picking.get);
-  useFocusEffect(
-    useCallback(() => {
-      if (library !== null) update(library);
-    }, [library]),
-  );
+  useEffect(() => {
+    if (!settled) return;
+    // Leaving Home, or a route over it unsettling it, stops the due pick; it starts again once due.
+    return () => cancelDue?.();
+  }, [settled]);
+  useEffect(() => {
+    if (
+      read !== null &&
+      homeMagicQueueDue(
+        settled,
+        picks,
+        read.map((song) => String(song.id)),
+        grows,
+        Date.now(),
+      )
+    )
+      pick(false);
+  }, [picks, read, grows, settled]);
   return useMemo(
     () =>
-      library === null
+      songs === null
         ? null
         : {
-            songs: (picks?.trackIds ?? []).flatMap((id) => library.songs.get(id) ?? []),
+            songs,
             picking: busy,
-            refresh: () => refresh(library),
+            refresh: () => {
+              pick(true);
+            },
           },
-    [library, picks, busy],
+    [songs, busy],
   );
 };
 

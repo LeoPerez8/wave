@@ -6,9 +6,11 @@ import { resolve } from "node:path";
 import { performance } from "node:perf_hooks";
 import { setImmediate } from "node:timers/promises";
 import * as Effect from "effect/Effect";
-import type { DiscoverMixes } from "@wave/core";
+import type { DiscoverMixes, MagicSong, TasteProfile } from "@wave/core";
 
 import { traceQueries } from "../../../src/library/db/testDatabase.ts";
+import { measureCooperative } from "../cooperative.ts";
+import { profileKey } from "./tasteProfile.ts";
 import { percentiles } from "../measure.ts";
 import { loadLibraryStore } from "../store.ts";
 import type { FastAgainBench } from "../types.ts";
@@ -39,6 +41,20 @@ export const bench: FastAgainBench = {
     const opening = existsSync(resolve(context.root, modulePath))
       ? await context.loadModule<typeof import("../../../src/home/homeOpening.ts")>(modulePath)
       : null;
+    const readsPath = "apps/mobile/src/home/magicQueueRead.ts";
+    const reads = existsSync(resolve(context.root, readsPath))
+      ? await context.loadModule<typeof import("../../../src/home/magicQueueRead.ts")>(readsPath)
+      : null;
+    const jobPath = "apps/mobile/src/home/magicQueueJob.ts";
+    const job = existsSync(resolve(context.root, jobPath))
+      ? await context.loadModule<typeof import("../../../src/home/magicQueueJob.ts")>(jobPath)
+      : null;
+    const derivation =
+      job === null
+        ? null
+        : await context.loadModule<typeof import("../../../src/playback/tasteDerivation.ts")>(
+            "apps/mobile/src/playback/tasteDerivation.ts",
+          );
     const savedMixes: DiscoverMixes[] = ["artist", "genre"].map((kind) => ({
       builtAt: fixture.now,
       playSeeds: true,
@@ -93,6 +109,8 @@ export const bench: FastAgainBench = {
     });
     assert.equal(core.magicQueuePicksDue(picks, magic, fixture.now), false);
 
+    let displayedPicks = picks;
+    let dueLibrary: readonly MagicSong[] = [];
     const steps: readonly [string, () => unknown][] = [
       ["homeAdded", () => Effect.runSync(store.homeAdded)],
       ["homePlays", () => Effect.runSync(store.homePlays)],
@@ -111,14 +129,23 @@ export const bench: FastAgainBench = {
       [
         "magicQueueLibraryAndDueCheck",
         () => {
+          if (reads !== null) {
+            return Effect.runSync(reads.magicQueueRead(displayedPicks.trackIds).read(store)).map(
+              (song) => song.id,
+            );
+          }
           const songs = Effect.runSync(store.listSongs).filter((song) => song.path !== null);
           const convert = core.magicLibrarySongs(Effect.runSync(store.listArtists));
           const library = {
             songs: new Map(songs.map((song) => [String(song.id), song])),
             magic: songs.map(convert),
           };
-          assert.equal(core.magicQueuePicksDue(picks, library.magic, fixture.now), false);
-          return picks.trackIds.map((id) => library.songs.get(id)?.id);
+          dueLibrary = library.magic;
+          assert.equal(
+            core.magicQueuePicksDue(displayedPicks, library.magic, fixture.now),
+            displayedPicks !== picks,
+          );
+          return displayedPicks.trackIds.map((id) => library.songs.get(id)?.id);
         },
       ],
       [
@@ -192,53 +219,118 @@ export const bench: FastAgainBench = {
         frames.shift()!();
         assert.equal(started, true);
       }
-      return [
-        {
-          read: "coldLaunch",
-          ...percentiles(totals),
-          cpuMs: round(cpuMicros / 1000 / context.runs),
-          rowsRead: traced.work.reduce((sum, step) => sum + step.rowsRead, 0),
-          statements: traced.work.reduce((sum, step) => sum + step.statements, 0),
-          longestSyncTaskMs: round(Math.max(...tasks.flat())),
-          notifications: 0,
-          resultKey: expected,
-          details: {
-            source:
-              "faithful replay of selected-worktree LibraryStore + Stats + Core; saved picks/mixes standing; YT Music enabled, offline harvest",
-            semanticEquality:
-              "complete local slice payloads, recap availability, album/artist rankings, overview inputs, nine pick ids, both known-video answers and eight blended mix payloads/captions",
-            firstFrameWaitsFor: opening === null ? ["homeAdded", "homePlays", "homeFavorites"] : [],
-            firstFrameRowsRead:
-              opening === null
-                ? traced.work.slice(0, 3).reduce((sum, step) => sum + step.rowsRead, 0)
-                : 0,
-            firstFrameStatements:
-              opening === null
-                ? traced.work.slice(0, 3).reduce((sum, step) => sum + step.statements, 0)
-                : 0,
-            firstContentWaitsFor:
-              opening === null ? "all three local slices" : "only the section's own slice",
-            firstFrameBoundary:
-              "first section-bearing frame's data dependencies, not the earlier title-only frame; no native paint measurement",
-            totalSynchronousJsMs: percentiles(totals),
-            elapsedReplayMs: percentiles(elapsed),
-            untilSettled:
-              "all mounted cold-Home readers replayed conservatively, including ancillary readers; excludes scheduler/animation waits",
-            steps: traced.work.map((work, index) => ({
-              ...work,
-              ...percentiles(tasks[index]!),
-              longestSyncTaskMs: round(Math.max(...tasks[index]!)),
-            })),
-            readsAfterSettled: [],
-            omitted:
-              "React/render/layout/native paint, KV-setting reads, network and startup jobs; taste derivation and mix builds are not due with standing saved choices; selected-worktree modules/SQLite are warmed, cold refers to screen query/pick caches",
-            notificationsScope:
-              "read-only replay has no subscribed store writes; not a React commit counter",
-            followups:
-              "#593/#594 own targeted picks, versioned knownVideos, first-of-day/return and stepped builds",
-          },
+      const coldLaunch = {
+        read: "coldLaunch",
+        ...percentiles(totals),
+        cpuMs: round(cpuMicros / 1000 / context.runs),
+        rowsRead: traced.work.reduce((sum, step) => sum + step.rowsRead, 0),
+        statements: traced.work.reduce((sum, step) => sum + step.statements, 0),
+        longestSyncTaskMs: round(Math.max(...tasks.flat())),
+        notifications: 0,
+        resultKey: expected,
+        details: {
+          source:
+            "faithful replay of selected-worktree LibraryStore + Stats + Core + targeted pick descriptor when present; saved picks/mixes standing; YT Music enabled, offline harvest",
+          semanticEquality:
+            "complete local slice payloads, recap availability, album/artist rankings, overview inputs, nine pick ids, both known-video answers and eight blended mix payloads/captions",
+          firstFrameWaitsFor: opening === null ? ["homeAdded", "homePlays", "homeFavorites"] : [],
+          firstFrameRowsRead:
+            opening === null
+              ? traced.work.slice(0, 3).reduce((sum, step) => sum + step.rowsRead, 0)
+              : 0,
+          firstFrameStatements:
+            opening === null
+              ? traced.work.slice(0, 3).reduce((sum, step) => sum + step.statements, 0)
+              : 0,
+          firstContentWaitsFor:
+            opening === null ? "all three local slices" : "only the section's own slice",
+          firstFrameBoundary:
+            "first section-bearing frame's data dependencies, not the earlier title-only frame; no native paint measurement",
+          totalSynchronousJsMs: percentiles(totals),
+          elapsedReplayMs: percentiles(elapsed),
+          untilSettled:
+            "all mounted cold-Home readers replayed conservatively, including ancillary readers; excludes scheduler/animation waits",
+          steps: traced.work.map((work, index) => ({
+            ...work,
+            ...percentiles(tasks[index]!),
+            longestSyncTaskMs: round(Math.max(...tasks[index]!)),
+          })),
+          readsAfterSettled: [],
+          omitted:
+            "React/render/layout/native paint, KV-setting reads, network and startup jobs; taste derivation and mix builds are not due with standing saved choices; selected-worktree modules/SQLite are warmed, cold refers to screen query/pick caches",
+          notificationsScope:
+            "read-only replay has no subscribed store writes; not a React commit counter",
+          followups:
+            "#594 owns versioned knownVideos, return and stepped mix builds; #598 owns Recap availability",
         },
-      ];
+      };
+      displayedPicks = { ...picks, day: "yesterday" };
+      const firstDay = await measureCooperative(
+        fixture.db,
+        "firstHomeOfDay",
+        context.runs,
+        (turn) =>
+          Effect.gen(function* () {
+            const visible: unknown[] = [];
+            for (const [, run] of steps) {
+              yield* turn;
+              visible.push(yield* Effect.sync(run));
+            }
+            let profile: TasteProfile | null = null;
+            if (job !== null && derivation !== null && reads !== null) {
+              const picked = yield* job.buildHomeMagicQueue(store, displayedPicks, {
+                now: fixture.now,
+                random: core.seededRandom("home-first-day"),
+                turn,
+                taste: (library) =>
+                  derivation.deriveTaste(store, turn, fixture.now, library).pipe(
+                    Effect.tap((value) =>
+                      Effect.sync(() => {
+                        profile = value;
+                      }),
+                    ),
+                  ),
+              });
+              yield* turn;
+              const updated = yield* reads.magicQueueRead(picked.trackIds).read(store);
+              return {
+                visible,
+                profile: profileKey(profile!),
+                picks: picked,
+                updated: updated.map((song) => song.id),
+              };
+            }
+            // ti's focus update reuses the row's full map, then rereads Library for TasteProfile.live.
+            yield* turn;
+            const history = yield* store.tasteHistory;
+            const songs = yield* store.listSongs;
+            const convert = core.magicLibrarySongs(yield* store.listArtists);
+            const byId = new Map(songs.map((song) => [String(song.id), convert(song)]));
+            profile = core.tasteProfile(history, (id) => byId.get(id), fixture.now);
+            const picked = core.magicQueuePicks(displayedPicks, dueLibrary, {
+              now: fixture.now,
+              taste: profile,
+              random: core.seededRandom("home-first-day"),
+            });
+            return {
+              visible,
+              profile: profileKey(profile),
+              picks: picked,
+              updated: picked.trackIds.map(Number),
+            };
+          }),
+        hash,
+      );
+      const firstDayDetails = {
+        ...firstDay.details,
+        scenario:
+          "first Home of day, yesterday's nine picks remain through all opening reads and due work; first live profile request; saved mixes still standing (mix build is #594)",
+        settlement:
+          "all opening reads finish before due work starts; conservative desktop replay, not native WaveTiming/frame measurement",
+        semanticEquality:
+          "all cold-Home payloads plus exact complete taste scores, all pick metadata and ordered replacement rows",
+      };
+      return [coldLaunch, { ...firstDay, details: firstDayDetails }];
     } finally {
       Date.now = oldNow;
     }

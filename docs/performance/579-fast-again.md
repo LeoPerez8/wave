@@ -969,3 +969,97 @@ this shared desktop; another checkout's benchmark was detected around the end of
 No own test/typecheck was run alongside the timing command, and capture started after
 waiting for the earlier CPU-heavy validation to finish. Keep the raw tail samples instead
 of inferring a timing win from this run. Phone performance and TalkBack remain unverified.
+
+## Standing Home picks and stepped taste (#593)
+
+Measured code: `0582d00945f1e1ef9194ab5e1a7d70f2c1b06426` (#593 on local
+integration `f7a77992`). Before is the actual `v0.19.0-ti` source,
+`460e39ff0cba6f50e7a456a77d6e99813295ebaa`, from a detached worktree. Captured
+on Linux x64 (8 cores, shared with other sessions), Node v26.8.2 and sql.js,
+eleven runs at each size. These are warmed **desktop replays** of the data and
+effect work, not phone/Hermes latency or native frame measurements. No
+v0.7.0-ti timing is claimed: the Magic Queue row and profile came after it.
+
+The row's read resolves only its saved ids, at most nine, in saved order, and
+follows only those songs' track and favorite changes. Native scan batches now
+carry the ids they saved, so an unrelated scan save doesn't reread the row;
+unknown global edits stay conservative (the bounded nine-song read). A short
+list alone follows a one-id growth probe. A removed song drops out in place and
+its replacement waits for settlement. Pull, Undo and the shared live profile
+are kept; a pull isn't cancelled by leaving Home, a due pick is.
+
+A due pick waits for Home's settled signal, then the existing free-turn
+scheduler. Cancelled, it releases its pending turn and iterator and saves
+nothing; the previous picks show meanwhile. One song/artist read feeds both the
+shared live taste profile and the pick. Artist-key and song mapping, scoring,
+weighted sums and draws and shown-today accumulation are generator steps; the
+consumer (`src/lib/stepped.ts#runSteps`) stops a task after four ms of work or
+512 steps, two ms short of the six-ms target. Signal order, IEEE additions and
+random draw order are ti's. A deferred derivation drops only the signals that
+came meanwhile and that its history snapshot holds, so each counts once.
+
+### Taste derivation
+
+Run `pnpm --silent --filter @wave/mobile bench:fast-again --bench tasteProfile
+--before <v0.19.0-ti worktree>`. Raw evidence:
+[593-tasteProfile-desktop.jsonl](results/593-tasteProfile-desktop.jsonl).
+`firstDerivation` is the first live profile: all source SQL, mapping and
+scoring. Both variants read songs and artists once each: five statements
+(three history projections, one song query, one artist query). `scoreCpuOnly`
+holds identical inputs outside the timing and isolates the Core scorer (ti's
+`tasteProfile`; after, `tasteProfileSteps` through `runSteps`).
+
+| Songs / plays    | Scope           | SQL rows before → after | Total median / p90 ms before → after      | Mean CPU ms before → after | Longest task ms before → after |
+| ---------------- | --------------- | ----------------------- | ----------------------------------------- | -------------------------- | ------------------------------ |
+| 1,000 / 10,000   | firstDerivation | 11,190 → 11,190         | 36.145 / 36.718 → 39.110 / 42.628         | 40.998 → 55.728            | 37.298 → 20.890                |
+| 1,000 / 10,000   | scoreCpuOnly    | 0 → 0                   | 2.465 / 3.026 → 3.745 / 3.860             | 4.300 → 5.093              | 3.520 → 0.254                  |
+| 12,000 / 54,000  | firstDerivation | 68,280 → 68,280         | 350.217 / 380.999 → 356.332 / 362.122     | 470.442 → 472.054          | 381.764 → 186.158              |
+| 12,000 / 54,000  | scoreCpuOnly    | 0 → 0                   | 22.296 / 23.888 → 25.973 / 27.317         | 26.425 → 28.882            | 29.667 → 0.557                 |
+| 50,000 / 200,000 | firstDerivation | 259,500 → 259,500       | 1551.041 / 1599.158 → 1502.189 / 1555.741 | 2009.678 → 1932.586        | 1646.834 → 870.524             |
+| 50,000 / 200,000 | scoreCpuOnly    | 0 → 0                   | 117.507 / 132.431 → 155.546 / 310.188     | 164.150 → 203.388          | 139.983 → 6.438                |
+
+Every before/after pair has the same result key: the complete profile, every
+song, artist and genre score, exact numbers and map insertion order. The
+scoring steps' longest task is 0.2 to 1.6 ms in all runs but the last two at
+50,000, which reached 5.2 and 6.4 ms while the run's total time doubled: the
+target is cooperative, and a GC pause or the OS taking the core can't be cut
+short from JavaScript. An earlier capture under heavier load from other
+sessions (kept in the notes, not here) had one 9.7 ms scoring task at 12,000.
+Stepping costs total time; it buys scheduling points, not a cheaper scorer.
+The full derivation still has indivisible synchronous SQLite reads (with row
+decoding), so its longest task is **not** six ms: 870 ms at 50,000 songs, down
+from ti's single 1,647 ms task. Those reads run only in the explicit
+background work, after settlement; paging them is #594's shared source-paging
+work, not done here.
+
+### First Home of a day
+
+Run `pnpm --silent --filter @wave/mobile bench:fast-again --bench homeOpening
+--before <v0.19.0-ti worktree>`. Raw evidence:
+[593-homeOpening-desktop.jsonl](results/593-homeOpening-desktop.jsonl).
+`coldLaunch` is the existing cold Home with standing picks; its Magic Queue
+step is the row's read. `firstHomeOfDay` is new: yesterday's nine picks show
+through every opening read, then the due work runs on free turns (the first
+live profile, the pick, the new row's read). ti's replay is its focus update:
+the row's whole-Library map, then `TasteProfile.live` reading history, songs
+and artists again, in one task.
+
+| Songs  | Scope                | SQL rows before → after | Statements before → after | Total median / p90 ms before → after      | Longest task ms before → after |
+| ------ | -------------------- | ----------------------- | ------------------------- | ----------------------------------------- | ------------------------------ |
+| 1,000  | Magic Queue row read | 1,040 → 9               | 2 → 1                     | 16.656 → 0.766 (median)                   | 17.265 → 1.123                 |
+| 12,000 | Magic Queue row read | 12,480 → 9              | 2 → 1                     | 225.029 → 0.776 (median)                  | 230.068 → 0.851                |
+| 50,000 | Magic Queue row read | 52,000 → 9              | 2 → 1                     | 1005.993 → 0.787 (median)                 | 1070.939 → 0.974               |
+| 1,000  | coldLaunch           | 8,541 → 7,510           | 16 → 15                   | 42.936 / 43.123 → 28.132 / 31.663         | 17.265 → 18.065                |
+| 12,000 | coldLaunch           | 23,401 → 10,930         | 16 → 15                   | 361.386 / 368.718 → 135.671 / 144.507     | 230.068 → 77.183               |
+| 50,000 | coldLaunch           | 69,761 → 17,770         | 16 → 15                   | 1552.403 / 1607.660 → 540.615 / 550.481   | 1070.939 → 326.909             |
+| 1,000  | firstHomeOfDay       | 19,731 → 18,709         | 21 → 21                   | 78.994 / 81.035 → 68.392 / 71.607         | 55.704 → 20.053                |
+| 12,000 | firstHomeOfDay       | 91,681 → 79,219         | 21 → 21                   | 723.146 / 743.365 → 517.227 / 533.082     | 415.133 → 207.725              |
+| 50,000 | firstHomeOfDay       | 329,261 → 277,279       | 21 → 21                   | 3913.976 / 8736.542 → 2175.493 / 2248.536 | 4863.051 → 829.010             |
+
+Each pair has the same result key: every cold-Home payload and, for the first
+Home of a day, the complete profile, all pick fields and the new row's ordered
+songs. The first Home of a day reads songs once (ti twice: the row's map and
+the profile's). The remaining longest tasks are other Home readers and the
+whole-source SQL reads named above. ti's 50,000 p90 and longest task were taken
+while another session's work shared the machine; treat that row's tail as
+noise. Phone performance and TalkBack are unverified.

@@ -11,7 +11,7 @@ import { localDay } from "./discoverMixes.ts";
 import type { MagicSong } from "./magicQueue.ts";
 import { readStoredRecord } from "./storedJson.ts";
 import { tasteWeight, type TasteProfile } from "./tasteProfile.ts";
-import { pickWeighted, type RandomSource } from "./weightedPick.ts";
+import { pickWeightedSteps, pickWeighted, type RandomSource } from "./weightedPick.ts";
 
 /** How many songs the section shows. */
 export const MAGIC_QUEUE_PICKS = 9;
@@ -178,3 +178,75 @@ export const parseMagicQueuePicks = (stored: string | null): MagicQueuePicks | n
     ? { day, trackIds: shows, shownToday: shown }
     : null;
 };
+
+/** A due build or pull in small resumable steps, preserving ti's order and random draws. */
+export function* magicQueuePicksSteps(
+  saved: MagicQueuePicks | null,
+  songs: readonly MagicSong[],
+  picking: MagicQueuePicking,
+  refresh = false,
+): Generator<void, MagicQueuePicks> {
+  const day = localDay(picking.now);
+  const there = new Set<string>();
+  for (const song of songs) {
+    there.add(song.trackId);
+    yield;
+  }
+  const sameDay = saved !== null && saved.day === day;
+  if (
+    !refresh &&
+    sameDay &&
+    saved.trackIds.length <= MAGIC_QUEUE_PICKS &&
+    saved.trackIds.every((id) => there.has(id)) &&
+    saved.trackIds.length >= Math.min(MAGIC_QUEUE_PICKS, there.size)
+  )
+    return saved;
+  const draw = function* (
+    candidates: readonly MagicSong[],
+    count: number,
+  ): Generator<void, string[]> {
+    return (yield* pickWeightedSteps(
+      candidates,
+      count,
+      (song) => (picking.taste === null ? 1 : tasteWeight(picking.taste, song)),
+      picking.random,
+    )).map((song) => song.trackId);
+  };
+  if (saved === null || (!sameDay && !refresh)) {
+    const trackIds = yield* draw(songs, MAGIC_QUEUE_PICKS);
+    return { day, trackIds, shownToday: trackIds };
+  }
+  const previous = refresh ? [] : saved.trackIds.slice(0, MAGIC_QUEUE_PICKS);
+  const keptIds = previous.filter((id) => there.has(id));
+  const kept = new Set(keptIds);
+  const shown = new Set<string>();
+  if (sameDay || !refresh)
+    for (const id of saved.shownToday) {
+      shown.add(id);
+      yield;
+    }
+  const fresh: MagicSong[] = [];
+  const again: MagicSong[] = [];
+  for (const song of songs) {
+    if (!kept.has(song.trackId)) (shown.has(song.trackId) ? again : fresh).push(song);
+    yield;
+  }
+  // As ti: a pull asks for nine; a fill for what the Library still has room for.
+  const count = refresh
+    ? MAGIC_QUEUE_PICKS
+    : Math.min(MAGIC_QUEUE_PICKS, there.size) - keptIds.length;
+  const added = yield* draw(fresh, count);
+  added.push(...(yield* draw(again, count - added.length)));
+  let next = 0;
+  const trackIds = previous.flatMap((id) =>
+    there.has(id) ? [id] : next < added.length ? [added[next++]!] : [],
+  );
+  trackIds.push(...added.slice(next));
+  for (const id of trackIds) shown.add(id);
+  const shownToday: string[] = [];
+  for (const id of shown) {
+    shownToday.push(id);
+    yield;
+  }
+  return { day, trackIds, shownToday };
+}
