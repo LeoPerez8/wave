@@ -1,3 +1,5 @@
+import type { YtSong } from "@wave/core";
+import { backfillRecordingTitles, selectMatchingSong } from "./db/matchingSong";
 import {
   acceptPlaylistRecommendation,
   dismissPlaylistRecommendation,
@@ -549,6 +551,8 @@ export class LibraryStore extends Context.Service<
       id: number,
       offer: PlaylistRecommendationSlot,
     ) => Effect.Effect<boolean, LibraryStoreError>;
+    /** The streamed recording's Library row, including missing songs, without a Library read. */
+    readonly matchingSong: (song: YtSong) => Effect.Effect<SongRow | null, LibraryStoreError>;
     readonly listSongs: Effect.Effect<readonly SongRow[], LibraryStoreError>;
     /**
      * Library › Songs in [sort] as Track ids, with its A–Z spine and its
@@ -1179,6 +1183,11 @@ const make = Effect.gen(function* () {
     catch: (cause) => new LibraryStoreError({ operation: "key the Library's songs", cause }),
   });
 
+  yield* Effect.tryPromise({
+    try: () => backfillRecordingTitles(db),
+    catch: (cause) => new LibraryStoreError({ operation: "key recording titles", cause }),
+  });
+
   return LibraryStore.of({
     ensureDefaultRoot: (path) =>
       writeAttempt("set up scan roots", () => {
@@ -1284,6 +1293,7 @@ const make = Effect.gen(function* () {
       writeAttempt("add playlist recommendation", () =>
         acceptPlaylistRecommendation(db, id, offer, Date.now()),
       ),
+    matchingSong: (song) => attempt("read matching song", () => selectMatchingSong(db, song)),
     listSongs: attempt("list songs", () =>
       trackQuery(db)
         .orderBy(...BY_TITLE)
