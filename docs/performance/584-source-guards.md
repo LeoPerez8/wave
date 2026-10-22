@@ -75,9 +75,18 @@ test files must be present. The scanner still inventories the exact declaration
 and rejects unlisted or stale uses; this record does not prove control flow.
 `ytArtistOpening.test.ts` exercises the production policy and
 `artistOpening.test.ts` runs its opening/settlement replay against the actual
-store and sql.js, checking song rows and the saved page. Popular's separate quiet
-request remains #590's explicitly inventoried debt; the common playing-ids
-follower remains #588's, and other online detail pages remain #591's.
+store and sql.js, checking song rows and the saved page.
+
+#590 removes the exact `useYtPopularSongs` opening exception: Popular now uses the saved answer from the single `useDeferredArtistSection` boundary.
+`artistPopular.test.ts` exercises the production reader and fetch/save workflow
+with fake YouTube transport and the real 1,000-song store: zero requests before
+settlement, offline or with Online off, one request per artist/opening, shared
+Popular/Online answers, immediate local order, saved ranks offline, allowance
+expiry, Wi-Fi eligibility, retries, cancellation and stale-answer rejection.
+Core's public `ytPopularReadDue` edge cases live in `ytPopularRead.test.ts`.
+The fixed boundary's review record names those tests; no scanner capability or
+route guard was weakened. The common playing-ids follower remains #588's.
+Issue #591 replaces the remaining detail-opening debt as described below.
 #586 removed the exact `ytmusic/streamedArtist.ts#listArtists` and `#sharedArtists`
 exceptions: rendering a link no longer lists artists or builds `libraryArtistFinder`.
 An unread Core target is available immediately. Explicit taps resolve requested
@@ -87,3 +96,46 @@ lookup and falls back to YouTube Music, with an immediate offline page. Mixed
 selection prepares only its requested names while its explicit card is shown.
 The inventory still rejects new whole-Library followers; no capability or
 scanner boundary was weakened to accommodate the replacement.
+
+## Detail openings after #591
+
+No `removeIn: 591` exception remains. The existing declarations stay exact:
+
+- `albumSection.ts#useYtAlbumSection` waits for its own local tracks and
+  `useScreenSettled` before artist/release requests or retries. `albumOpening`
+  is the production data boundary used by the hook and store replay. Its
+  shared finder is activated only for an answered release after that boundary;
+  local rows and the offline note need neither the finder nor YouTube.
+- `artistPage.ts#useYtArtistPage` waits for settlement before asking and renders
+  offline/loading/failure independently of the finder. The finder and
+  `useLibraryReleases`' shared artist/album lists are active only for a standing
+  full online answer after settlement. #586's offline route hint and explicit
+  retry remain effective.
+- `YtSongList.tsx#useYtListPage` defers remote album/playlist reads and retries
+  until settlement and checks Android at execution. Offline is immediately
+  drawable. The visible list's finder waits for a loaded page; the album
+  download helper also waits for nonempty online songs and settlement, so an
+  empty helper cannot acquire the cold shared query behind a Library album.
+- `backgroundFill.ts#playlistOpened` requires the playlist screen's settled
+  flag. A fill search checks connectivity before waiting for the allowance and
+  again when its request executes. Existing global fill scheduling stays under
+  its existing ownership.
+
+These request paths use `artistOpeningRequest`, whose Effect checks Android's
+`online()` when run, including loss of connectivity after scheduling. Page
+notes use the synchronous connectivity result without waiting for restoration,
+settlement, a whole-Library query or a remote failure. Unmount aborts the
+artist/release/list effect and discards late answers.
+
+`ytAlbumOpening.test.ts` and `ytArtistPageOpening.test.ts` test the public Core
+policies. `albumOpening.test.ts` exercises the production album data boundary,
+real LibraryStore/sql.js queries, late online joining, retained multi-disc headers and a controlled pending
+release. `detailOpening.test.ts` exercises immediate offline views and the
+production execution boundary with an API that never answers; its request
+counter stays zero. These are desktop data/effect tests, not mounted RN frames.
+The historical-store red replay reads 1,010 song rows at a 1,000-song Library;
+the fixed opening reads its ten album tracks and starts no request.
+
+#590 completes Popular's due/once, allowance and Wi-Fi policy at the single
+artist opening boundary described above; no `removeIn: 590` entry remains.
+The #584 route observer restriction and #585 dispatch/watchdog are unchanged.

@@ -11,6 +11,7 @@ import { PlayShuffle } from "@/catalog/PlayShuffle";
 import { IconButton } from "@/components/IconButton";
 import { useRenderCount } from "@/perf/perf";
 import { openPlaylistActions } from "@/playback/ActionsMenu";
+import { useScreenSettled } from "@/lib/screenTiming";
 import { playlistOpened } from "@/library/backgroundFill";
 import { DetailFrame } from "@/library/DetailFrame";
 import { usePlaylist } from "@/library/hooks";
@@ -142,10 +143,11 @@ export default function PlaylistScreen() {
   const detail = usePlaylist(playlistId);
   useScreenContent(detail !== undefined);
   const known = useKnownRow("playlist", playlistId);
-  // The background fill goes on with the playlist opened last.
+  const settled = useScreenSettled();
+  // The background fill goes on with the playlist opened last, after its content settles.
   useEffect(() => {
-    if (playlistId >= 0) playlistOpened(playlistId);
-  }, [playlistId]);
+    if (playlistId >= 0) playlistOpened(playlistId, settled);
+  }, [playlistId, settled]);
   const shown: Shown | null | undefined =
     detail === undefined && known !== undefined ? { playlist: known, items: undefined } : detail;
   return (

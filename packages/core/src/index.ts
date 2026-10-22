@@ -637,8 +637,10 @@ export { magicPickEnded } from "./magicQueue.ts";
 export type { MagicPickEnd } from "./magicQueue.ts";
 export { artistRanking } from "./moreFromArtist.ts";
 export type { ArtistRankingInput, ArtistRankingSong } from "./moreFromArtist.ts";
+export { ytPopularReadDue } from "./ytPopularRead.ts";
+export type { YtPopularReadContext } from "./ytPopularRead.ts";
 export { rankPopular } from "./popularSongs.ts";
-export { ytArtistOpening } from "./ytArtistOpening.ts";
+export { ytArtistOpening, ytArtistOpeningState } from "./ytArtistOpening.ts";
 export { artistPageItems } from "./artistPage.ts";
 export type { ArtistPageItem, ArtistPageShelf } from "./artistPage.ts";
 export type { SheetEvent, SheetPhase, SheetStep } from "./sheetLifecycle.ts";
@@ -2021,3 +2023,6 @@ export { mapSteps, sortSteps } from "./buildSteps.ts";
 export { libraryMixProfilesSteps } from "./genreAffinity.ts";
 
 export { rankPlaysSteps } from "./stats.ts";
+
+export * from "./ytAlbumOpening.ts";
+export { ytArtistPageOpening } from "./ytArtistPageOpening.ts";

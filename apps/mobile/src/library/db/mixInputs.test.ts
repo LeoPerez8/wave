@@ -68,6 +68,8 @@ test("daily mix pages preserve complete Library order/credits/genres and all-tim
     for (const song of expected.songs) {
       const online = {
         videoId: `v${song.id}`,
+        artworkUrl: null,
+        explicit: false,
         title: song.title,
         artists: [song.artist],
         durationMs: song.durationMs,

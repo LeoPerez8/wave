@@ -35,3 +35,9 @@ export const ytArtistOpening = (
       ytArtistToggle(state, context) === "online",
   };
 };
+
+/** Connectivity is known independently of restoring the saved answer or building a finder. */
+export const ytArtistOpeningState = <S extends import("./ytMusic.ts").YtSong>(
+  state: YtArtistSection<S>,
+  online: boolean,
+): YtArtistSection<S> => (online ? state : { status: "ready", saved: null, failure: "offline" });
