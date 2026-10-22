@@ -1,3 +1,4 @@
+import { finishSteps } from "./buildSteps.ts";
 /**
  * YT Music songs: songs found on YouTube Music rather than in the Library.
  * A YT Music song is identified by its YouTube video id and becomes a Track
@@ -126,9 +127,15 @@ export const libraryFinder = <L extends LibrarySongKey>(
  */
 export const libraryMatches = <L extends LibrarySongKey>(
   library: readonly L[],
-): ((song: Pick<YtSong, "title" | "artists" | "durationMs">) => L[]) => {
+): ((song: Pick<YtSong, "title" | "artists" | "durationMs">) => L[]) =>
+  finishSteps(libraryMatchesSteps(library));
+
+export function* libraryMatchesSteps<L extends LibrarySongKey>(
+  library: readonly L[],
+): Generator<void, (song: Pick<YtSong, "title" | "artists" | "durationMs">) => L[]> {
   const byTitle = new Map<string, Candidate<L>[]>();
   for (const song of library) {
+    yield;
     const title = matchTitle(song.title);
     if (title === "") continue;
     const candidates = byTitle.get(title) ?? [];
@@ -154,8 +161,7 @@ export const libraryMatches = <L extends LibrarySongKey>(
       )
       .map((candidate) => candidate.song);
   };
-};
-
+}
 /**
  * Whether a YT Music song is already in the Library (see [libraryFinder]),
  * so a live take or an edit of the same song still shows.
@@ -186,3 +192,10 @@ export const parseTrackId = (id: string): TrackRef | null => {
   }
   return /^\d+$/.test(id) ? { kind: "library", id: Number(id) } : null;
 };
+
+export function* libraryFinderSteps<L extends LibrarySongKey>(
+  library: readonly L[],
+): Generator<void, (song: Pick<YtSong, "title" | "artists" | "durationMs">) => L | null> {
+  const matches = yield* libraryMatchesSteps(library);
+  return (song) => matches(song)[0] ?? null;
+}

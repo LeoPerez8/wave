@@ -10,6 +10,9 @@ import { createBackgroundWork } from "@wave/core";
 import * as Effect from "effect/Effect";
 import { AppState, type GestureResponderEvent } from "react-native";
 
+import { isScreenSettled, onScreenSettled } from "./timing";
+import { settledTurn } from "./settledWork";
+
 import { perfMark, registerPerfMeta } from "@/perf/perf";
 
 const work = createBackgroundWork({
@@ -88,4 +91,11 @@ registerPerfMeta("startup", () => {
 registerPerfMeta("backgroundWork", () => {
   const { slices, longestWaitMs, forcedSlices } = work.stats();
   return { slices, longestWaitMs: Math.round(longestWaitMs), forcedSlices };
+});
+
+/** Optional CPU work starts only after the active transition settled. */
+export const settledTurnEffect = settledTurn({
+  settled: isScreenSettled,
+  subscribe: onScreenSettled,
+  schedule: whenFree,
 });

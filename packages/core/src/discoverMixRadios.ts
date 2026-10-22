@@ -1,3 +1,4 @@
+import { finishSteps } from "./buildSteps.ts";
 /**
  * A mix section's mixes out of its seeds' radios read at the same time
  * (docs/spec.md, "Artist mixes", "Genre mixes"): the app reads every seed's
@@ -6,10 +7,10 @@
  * in the earlier seed's share, as when the seeds were read one after another.
  */
 
-import { discoverMixFamiliarPool, type DiscoverMixPoolSources } from "./discoverMixLevels.ts";
+import { discoverMixFamiliarPoolSteps, type DiscoverMixPoolSources } from "./discoverMixLevels.ts";
 import {
   discoverMix,
-  discoverMixSongs,
+  discoverMixSongsSteps,
   type DiscoverLibrarySong,
   type DiscoverMix,
   type DiscoverMixSeed,
@@ -44,6 +45,13 @@ export interface DiscoverMixRead<S extends MixRadioSong> {
  */
 export const discoverMixesOfRadios = <S extends MixRadioSong, L extends DiscoverLibrarySong>(
   reads: readonly DiscoverMixRead<S>[],
+  options: Pick<DiscoverMixPoolSources<L>, "known" | "library"> & {
+    readonly avoid?: ReadonlySet<string>;
+  },
+): DiscoverMix[] => finishSteps(discoverMixesOfRadiosSteps(reads, options));
+
+export function* discoverMixesOfRadiosSteps<S extends MixRadioSong, L extends DiscoverLibrarySong>(
+  reads: readonly DiscoverMixRead<S>[],
   {
     known,
     library,
@@ -51,18 +59,18 @@ export const discoverMixesOfRadios = <S extends MixRadioSong, L extends Discover
   }: Pick<DiscoverMixPoolSources<L>, "known" | "library"> & {
     readonly avoid?: ReadonlySet<string>;
   },
-): DiscoverMix[] => {
+): Generator<void, DiscoverMix[]> {
   const taken = new Set<string>();
   const takenFamiliar = { tracks: new Set<number>(), videos: new Set<string>() };
   const mixes: DiscoverMix[] = [];
   for (const { seed, radio, affinity, familiar: played = radio } of reads) {
-    const kept = discoverMixSongs([radio], {
+    const kept = yield* discoverMixSongsSteps([radio], {
       known: known.known,
       taken,
       ...(avoid === undefined ? {} : { avoid }),
       ...(affinity === undefined ? {} : { affinity }),
     });
-    const familiar = discoverMixFamiliarPool(seed, {
+    const familiar = yield* discoverMixFamiliarPoolSteps(seed, {
       radio: played,
       known,
       library,
@@ -79,4 +87,4 @@ export const discoverMixesOfRadios = <S extends MixRadioSong, L extends Discover
     }
   }
   return mixes;
-};
+}

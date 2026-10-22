@@ -1,3 +1,4 @@
+import { sortSteps } from "./buildSteps.ts";
 /**
  * Listening stats: rankings of the songs, albums and artists played most over
  * a stats period, a rolling window ending now. Only counted plays (see
@@ -154,3 +155,16 @@ export const statsWindow = (period: StatsPeriod, now: number): StatsWindow => {
       return { from: null, to: now };
   }
 };
+
+/** The same total ranking, in scheduler-independent bounded work steps. */
+export function* rankPlaysSteps<A extends PlayTotals>(
+  totals: Iterable<A>,
+  limit: number,
+): Generator<void, A[]> {
+  const eligible: A[] = [];
+  for (const entry of totals) {
+    if (entry.countedPlays > 0) eligible.push(entry);
+    yield;
+  }
+  return (yield* sortSteps(eligible, compareRanked)).slice(0, limit);
+}

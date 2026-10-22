@@ -1,3 +1,6 @@
+import { onArtistGraphSourcesChanged } from "./graphSources";
+import { readMixCatalog } from "./readMixCatalog";
+import { freeTurnEffect } from "@/lib/backgroundWork";
 /**
  * The candidate catalog as Home's mix builds read it (docs/spec.md,
  * "Candidate catalog"): read once from the library database and shared by
@@ -13,7 +16,7 @@ import { LibraryStore } from "@/library/LibraryStore";
 /** The catalog, read once, then shared for a minute. */
 const shared = sharedRead(
   Effect.gen(function* () {
-    return yield* (yield* LibraryStore).candidateCatalog;
+    return yield* readMixCatalog(yield* LibraryStore, freeTurnEffect);
   }),
   { keepMs: 60_000 },
 );
@@ -23,3 +26,7 @@ export const mixCatalog: Effect.Effect<readonly CatalogSong[], unknown, LibraryS
 
 /** Forgets the shared catalog: the next build reads it again (after a harvest grew it). */
 export const forgetMixCatalog = (): void => shared.forget();
+
+onArtistGraphSourcesChanged((kind) => {
+  if (kind === "catalog") shared.forget();
+});
