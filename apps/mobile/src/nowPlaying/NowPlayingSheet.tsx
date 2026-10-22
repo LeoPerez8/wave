@@ -1,3 +1,4 @@
+import { activeTiming, beginTiming, timingSurfaceCommitted } from "@/lib/timing";
 import {
   IconChevronDown,
   IconListNumbers,
@@ -5,7 +6,7 @@ import {
   IconShare3,
 } from "@tabler/icons-react-native";
 import type { ComponentType, ReactNode } from "react";
-import { Activity, memo, useEffect, useState, useSyncExternalStore } from "react";
+import { Activity, memo, useEffect, useLayoutEffect, useState, useSyncExternalStore } from "react";
 import { StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import Animated, { useAnimatedStyle } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -41,6 +42,7 @@ import { QueueHeader, UpNextList } from "./QueueView";
 import { Scrubber } from "./Scrubber";
 import {
   closeNowPlaying,
+  nowPlayingContentCommitted,
   onNowPlayingHidden,
   resizeNowPlaying,
   sheetOffset,
@@ -185,6 +187,14 @@ export function NowPlayingSheet() {
   const [view, setView] = useState<NowPlayingView>("player");
   // The Queue, once shown, stays mounted while another view shows (`QueuePane`).
   const [queueWarm, setQueueWarm] = useState(false);
+  useLayoutEffect(() => {
+    if (shown) nowPlayingContentCommitted();
+  }, [shown]);
+  useLayoutEffect(() => {
+    if (view !== "queue") return;
+    const active = activeTiming();
+    if (active?.kind === "queue") timingSurfaceCommitted(active.id);
+  }, [view]);
   // A streamed song downloaded since it was queued: Lyrics reads its file, as for a Library song.
   const downloaded = useDownloadedFile(ytSong, shown && view === "lyrics");
   const lyricsFile: LibraryFile | null =
@@ -211,6 +221,7 @@ export function NowPlayingSheet() {
   }));
 
   const toggleQueue = () => {
+    if (view !== "queue") beginTiming("queue", "Queue");
     setQueueWarm(true);
     setView((current) => (current === "queue" ? "player" : "queue"));
   };

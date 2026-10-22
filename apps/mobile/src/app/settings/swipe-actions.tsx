@@ -1,3 +1,4 @@
+import { useScreenContent } from "@/lib/screenTiming";
 import { SWIPE_CHOICES, swipeChoiceLabel, type RowSwipeSide, type SwipeChoice } from "@wave/core";
 import { Text, View } from "react-native";
 
@@ -42,6 +43,7 @@ function SwipeChoiceSection({
  * at once and shows on the lists' rows straight away.
  */
 export default function SwipeActionsSettingsScreen() {
+  useScreenContent(true);
   const { enabled, right, left } = useSwipeSettings();
   return (
     <SettingsPageScreen page="swipeActions">

@@ -1990,3 +1990,16 @@ export type {
 export * from "./playlistRecommendationSession.ts";
 export { playingTrackIds } from "./playingIdentity.ts";
 export { createLongPressIntent } from "./longPressIntent.ts";
+export {
+  TIMING_BUDGETS,
+  timingDuration,
+  timingBudgetExceeded,
+  slowTapLine,
+  slowScreenLine,
+  speedSummaryLine,
+  type TimingKind,
+  type TimingMeasurements,
+  type TimingTap,
+  type TimingScreen,
+  type TimingWindow,
+} from "./timing.ts";

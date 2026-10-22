@@ -1,5 +1,6 @@
+import { useScreenContent } from "@/lib/screenTiming";
 import { SETTINGS_PAGES, type SettingsPage } from "@wave/core";
-import { router } from "expo-router";
+import { router } from "@/lib/timingRouter";
 import { ScrollView, View } from "react-native";
 
 import { grid } from "@/catalog/grid";
@@ -24,6 +25,7 @@ function SettingsPageRows({ summaries }: { summaries: Record<SettingsPage, strin
 
 /** Settings: a row for each of its pages (Core's `SETTINGS_PAGES`), with a line on some. */
 export default function SettingsScreen() {
+  useScreenContent(true);
   useRenderCount("SettingsScreen");
   const summaries = useSettingsSummaries();
   return (

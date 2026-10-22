@@ -1,3 +1,4 @@
+import { registerTimingBackground, timingBackgroundChanged } from "@/lib/timing";
 import { failedJobs, queuedDownloadCounts, type QueuedDownloadCounts } from "@wave/core";
 
 import { makeExternalStore } from "@/lib/externalStore";
@@ -9,6 +10,16 @@ import type { NativeDownloadJob } from "@/native/waveSoulseek";
  * (`downloadRun`).
  */
 export const journal = makeExternalStore<readonly NativeDownloadJob[]>([]);
+let activeDownloads = 0;
+registerTimingBackground("downloads", () =>
+  activeDownloads > 0 ? `${activeDownloads} downloads` : null,
+);
+journal.subscribe(() => {
+  activeDownloads = journal
+    .get()
+    .filter((job) => !["queued", "completed", "failed", "cancelled"].includes(job.phase)).length;
+  timingBackgroundChanged();
+});
 
 /**
  * A reading of the journal, for `useSyncExternalStore`: [compute]d again only once the journal

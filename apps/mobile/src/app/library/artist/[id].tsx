@@ -1,3 +1,4 @@
+import { useScreenContent } from "@/lib/screenTiming";
 import { LegendList } from "@legendapp/list/react-native";
 import {
   artistPageItems,
@@ -523,6 +524,7 @@ export default function ArtistScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const artistId = parseId(id);
   const detail = useArtist(artistId);
+  useScreenContent(detail !== undefined);
   const known = useKnownRow("artist", artistId);
   const openedIntegrated = useOpenedIntegrated();
   const shown: Shown | null | undefined =

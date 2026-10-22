@@ -1,5 +1,6 @@
+import { useScreenContent } from "@/lib/screenTiming";
 import { LAYOUT_PAGES } from "@wave/core";
-import { router } from "expo-router";
+import { router } from "@/lib/timingRouter";
 import { View } from "react-native";
 
 import { Hairline } from "@/catalog/Hairline";
@@ -11,6 +12,7 @@ import { SettingsPageRow, SettingsPageScreen } from "@/settings/SettingsPage";
  * `LAYOUT_PAGES`), for whoever doesn't know the long press.
  */
 export default function LayoutSettingsScreen() {
+  useScreenContent(true);
   return (
     <SettingsPageScreen page="layout">
       <View>

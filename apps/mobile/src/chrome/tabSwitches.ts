@@ -1,6 +1,8 @@
 import { startTabSwitch, stepTabSwitch, type TabBarTab } from "@wave/core";
 import { useCallback, useLayoutEffect, useRef } from "react";
 
+import { TAB_PATH } from "@wave/core";
+import { activeTiming, beginTiming, timingResponse, timingTransitionEnd } from "@/lib/timing";
 import { perfMark } from "@/perf/perf";
 
 import { tabLook } from "./tabs";
@@ -49,10 +51,18 @@ export function useTabSwitches(
     switches.current = step.state;
     if (step.enter !== null) enter(step.enter.from, step.enter.to);
     if (step.send !== null) switchTab.current?.(step.send, {});
-    if (tab !== null && step.state.sent === null) perfMark("tab.settled", tabLook(tab).label);
+    if (tab !== null && step.state.sent === null) {
+      perfMark("tab.settled", tabLook(tab).label);
+      const active = activeTiming();
+      if (active?.kind === "tab") {
+        timingResponse(active.id);
+        if (step.enter === null) timingTransitionEnd(active.id);
+      }
+    }
   }, [tab, enter]);
 
   return useCallback((to: TabBarTab, trigger: TappedTrigger) => {
+    if (to !== switches.current.shown) beginTiming("tab", TAB_PATH[to]);
     switchTab.current = trigger.switchTab;
     const step = stepTabSwitch<TabBarTab>(switches.current, {
       type: "tap",

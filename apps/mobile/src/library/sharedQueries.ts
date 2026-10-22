@@ -120,3 +120,6 @@ export const useLibraryQuery = <A>(query: LibraryQuery<A> | null, initial: A): A
 
   return current === undefined ? initial : (current.value as A);
 };
+
+/** Readiness of a main screen query that initially returns an empty-list placeholder. */
+export const libraryQueryHasContent = (key: string): boolean => registry.current(key) !== undefined;

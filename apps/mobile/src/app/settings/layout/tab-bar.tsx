@@ -1,3 +1,4 @@
+import { useScreenContent } from "@/lib/screenTiming";
 import { TabBarEditor } from "@/chrome/TabBarEditor";
 import { editSavedTabBar, useTabBar } from "@/settings/tabBar";
 import { SettingsEditorScreen } from "@/settings/SettingsPage";
@@ -8,6 +9,7 @@ import { SettingsEditorScreen } from "@/settings/SettingsPage";
  * it at once.
  */
 export default function TabBarLayoutSettingsScreen() {
+  useScreenContent(true);
   return (
     <SettingsEditorScreen layoutPage="tabBar">
       <TabBarEditor bar={useTabBar()} edit={editSavedTabBar} />

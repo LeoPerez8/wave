@@ -1,3 +1,4 @@
+import { useScreenContent } from "@/lib/screenTiming";
 import { playlistLayoutChoice, usePlaylistLayout } from "@/library/playlistLayout";
 import { playlistSortChoice, usePlaylistSort } from "@/library/playlistSort";
 import { ChoiceSection } from "@/settings/ChoiceRow";
@@ -9,6 +10,7 @@ import { SettingsPageScreen } from "@/settings/SettingsPage";
  * section of its own.
  */
 export default function PlaylistsLayoutSettingsScreen() {
+  useScreenContent(true);
   return (
     <SettingsPageScreen layoutPage="playlists">
       <ChoiceSection choice={playlistLayoutChoice} current={usePlaylistLayout()} />

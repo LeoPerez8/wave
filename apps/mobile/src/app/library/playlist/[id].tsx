@@ -1,3 +1,4 @@
+import { useScreenContent } from "@/lib/screenTiming";
 import { IconDots } from "@tabler/icons-react-native";
 import { playlistDownloadOrigin, playlistSongsLine } from "@wave/core";
 import { useLocalSearchParams } from "expo-router";
@@ -139,6 +140,7 @@ export default function PlaylistScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const playlistId = parseId(id);
   const detail = usePlaylist(playlistId);
+  useScreenContent(detail !== undefined);
   const known = useKnownRow("playlist", playlistId);
   // The background fill goes on with the playlist opened last.
   useEffect(() => {

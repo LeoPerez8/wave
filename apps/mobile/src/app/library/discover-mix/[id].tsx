@@ -1,3 +1,4 @@
+import { useScreenContent } from "@/lib/screenTiming";
 import { IconCompass } from "@tabler/icons-react-native";
 import { discoverMixCaption, placeDiscoverMixSongs } from "@wave/core";
 import { useLocalSearchParams } from "expo-router";
@@ -18,6 +19,7 @@ import { YtSongList, type YtListLoad } from "@/ytmusic/YtSongList";
  * Songs downloaded since play their files.
  */
 export default function DiscoverMixScreen() {
+  useScreenContent(true);
   const { id } = useLocalSearchParams<{ id: string }>();
   const mixId = id ?? "";
   const tracks = useLibraryTracks();

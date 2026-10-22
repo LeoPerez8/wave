@@ -1,3 +1,4 @@
+import { useScreenContent } from "@/lib/screenTiming";
 import {
   LegendList,
   type LegendListRef,
@@ -60,6 +61,7 @@ export function SongsList() {
   const [last, setLast] = useState<SongOrder | null>(null);
   if (read !== null && read !== last) setLast(read);
   const order = read ?? last;
+  useScreenContent(order !== null && order.ids.length === 0);
   const scan = useScanState();
   const roots = useScanRoots();
 
@@ -151,6 +153,7 @@ function PagedSongList({ order }: { order: SongOrder }) {
   if (!findWanted && hasFindQuery(find.query)) setFindWanted(true);
   const { found, shown: shownIds, placeOf } = find;
   const { pages, version } = usePagedSongs(shownIds);
+  useScreenContent(shownIds.length === 0 || pages.row(0) !== undefined || version > 0);
   const missing = useMemo(() => new Set(order.missing), [order]);
   const spine = useSpineEntries(order.spine, list);
 

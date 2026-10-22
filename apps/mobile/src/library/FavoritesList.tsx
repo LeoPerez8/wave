@@ -1,3 +1,4 @@
+import { useScreenContent } from "@/lib/screenTiming";
 import { IconStar } from "@tabler/icons-react-native";
 import { View } from "react-native";
 
@@ -16,6 +17,7 @@ const FAVORITES_CONTEXT = { kind: "favorites", id: null } as const;
 export function FavoritesList({ empty }: { empty: string }) {
   const starred = useFavoriteSongs();
   const { sort, songs } = useSortedSongs("favorites", starred);
+  useScreenContent(songs !== undefined);
   if (songs === undefined) return null;
 
   if (songs.length === 0) {

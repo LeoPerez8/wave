@@ -6,15 +6,11 @@ import {
   type StatsPeriod,
   type StatsRanking,
 } from "@wave/core";
-import {
-  router,
-  useGlobalSearchParams,
-  useLocalSearchParams,
-  usePathname,
-  type Href,
-} from "expo-router";
+import { useGlobalSearchParams, useLocalSearchParams, usePathname, type Href } from "expo-router";
+import { router } from "@/lib/timingRouter";
 import { useLayoutEffect, useState, useSyncExternalStore } from "react";
 
+import { continueTiming, timingRouteCommitted } from "@/lib/timing";
 import { makeExternalStore } from "@/lib/externalStore";
 import { noteScreen } from "@/log/appLog";
 
@@ -45,7 +41,10 @@ export function FollowCurrentRoute(): null {
   const params = useGlobalSearchParams();
   useLayoutEffect(() => currentRoute.set({ pathname, params }), [pathname, params]);
   // The app log's freezes say which screen was showing.
-  useLayoutEffect(() => noteScreen(pathname), [pathname]);
+  useLayoutEffect(() => {
+    noteScreen(pathname);
+    timingRouteCommitted(pathname);
+  }, [pathname]);
   return null;
 }
 
@@ -94,6 +93,9 @@ const open = <S extends DetailScreen>(
   known?: DetailRows[S] | null,
   query = "",
 ): void => {
+  if (screen === "album" && /\/artist\//.test(currentRoute.get().pathname)) {
+    continueTiming("albumLink", detailPath(currentRoute.get().pathname, screen, id));
+  }
   opening = known === undefined || known === null ? undefined : { screen, row: known };
   router.push(`${detailPath(currentRoute.get().pathname, screen, id)}${query}` as Href);
 };

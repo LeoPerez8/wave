@@ -1,3 +1,4 @@
+import { useScreenContent } from "@/lib/screenTiming";
 import { counted, describeFolder } from "@wave/core";
 import { IconMinus } from "@tabler/icons-react-native";
 import { ScrollView, Text, View } from "react-native";
@@ -80,6 +81,7 @@ function FolderRow({ path, detail, removeLabel, removable, onRemove }: FolderRow
  * rescans the library.
  */
 export default function MusicFoldersScreen() {
+  useScreenContent(true);
   const insets = useSafeAreaInsets();
   const roots = useScanRoots();
   const excluded = useExcludedFolders();

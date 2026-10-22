@@ -1,3 +1,5 @@
+import { useScreenContent } from "@/lib/screenTiming";
+import { libraryQueryHasContent } from "./sharedQueries";
 import { IconPlaylist } from "@tabler/icons-react-native";
 import { counted, type PlaylistLayout } from "@wave/core";
 import { useCallback, useMemo, type ReactNode } from "react";
@@ -144,6 +146,7 @@ const rowHeight = (layout: PlaylistLayout, tile: number, fontScale: number): num
 export function PlaylistsList({ empty }: { empty: string }) {
   useRenderCount("PlaylistsList");
   const playlists = useSortedPlaylists();
+  useScreenContent(libraryQueryHasContent("playlists"));
   const layout = usePlaylistLayout();
   const tile = useTileSize(layout);
   const { fontScale } = useWindowDimensions();

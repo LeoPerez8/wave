@@ -1,3 +1,4 @@
+import { registerTimingBackground, timingBackgroundChanged } from "@/lib/timing";
 import {
   createLandings,
   explicitFromAdvisory,
@@ -46,6 +47,8 @@ export type ScanState =
 
 /** Progress of the current or last scan, for the Library banner. */
 export const scanState = makeExternalStore<ScanState>({ status: "idle" });
+registerTimingBackground("scan", () => (scanState.get().status === "scanning" ? "scan" : null));
+scanState.subscribe(timingBackgroundChanged);
 
 /** Bumped after every batch is committed, so lists know to re-query. */
 export const libraryVersion = makeExternalStore(0);

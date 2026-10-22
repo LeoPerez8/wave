@@ -1,3 +1,4 @@
+import { registerTimingBackground, timingBackgroundChanged } from "@/lib/timing";
 /**
  * Link imports (docs/spec.md, "Importing playlists from a link"): Import
  * makes the playlist, and this gives it every song at once (Core's
@@ -51,6 +52,7 @@ const imports = persistedSetting<PlaylistImports<YtAlbumSong>>({
 
 /** The playlists whose import is giving them their songs now, so none is given twice. */
 const finishing = new Map<number, Promise<void>>();
+registerTimingBackground("linkImport", () => (finishing.size > 0 ? "import" : null));
 
 /** The imports, for the playlist page's line. */
 export const usePlaylistImports = (): PlaylistImports<YtAlbumSong> => imports.useValue();
@@ -67,6 +69,7 @@ const finish = (job: Job, resumed: boolean): Promise<void> => {
   if (going !== undefined) return going;
   const giving = give(job, resumed).finally(() => finishing.delete(job.playlistId));
   finishing.set(job.playlistId, giving);
+  timingBackgroundChanged();
   return giving;
 };
 
