@@ -67,8 +67,10 @@ export const YT_ARTIST_BY_NAME = "by-name";
  * song's): the page finds them with an Artists search, as the Library artist
  * page does (Core's `pickYtArtist`).
  */
-export const openYtArtistNamed = (name: string): void =>
-  router.push(`/library/yt-artist/${YT_ARTIST_BY_NAME}?name=${encodeURIComponent(name)}` as Href);
+export const openYtArtistNamed = (name: string, offline = false): void =>
+  router.push(
+    `/library/yt-artist/${YT_ARTIST_BY_NAME}?name=${encodeURIComponent(name)}${offline ? "&offline=1" : ""}` as Href,
+  );
 
 /**
  * The name of the YouTube Music artist page at [pathname] (its `name`

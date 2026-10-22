@@ -199,3 +199,16 @@ export const selectArtistDetail = (
     songs,
   };
 };
+
+/** Small keyset pages for an explicit artist-link tap; no song/album list decoded. */
+export const selectArtistNamesForLink = (
+  db: LibraryDatabase,
+  after: { readonly sort: string; readonly id: number } | null,
+): { id: number; name: string; sort: string }[] =>
+  db.all(sql`
+  SELECT id, name, sort FROM artists
+  WHERE ${after === null ? sql`1` : sql`(sort, id) > (${after.sort}, ${after.id})`}
+  AND (EXISTS (SELECT 1 FROM track_artists WHERE artist_id = artists.id)
+    OR EXISTS (SELECT 1 FROM album_artists JOIN tracks ON tracks.album_id = album_artists.album_id
+      WHERE album_artists.artist_id = artists.id))
+  ORDER BY sort, id LIMIT 128`);

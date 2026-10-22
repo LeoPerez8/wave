@@ -1,4 +1,9 @@
-import { beginTiming } from "@/lib/timing";
+import {
+  beginTiming,
+  activeTiming,
+  noteTimingLinkFailure,
+  timingLinkNavigated,
+} from "@/lib/timing";
 import { IconMusic, IconStar, IconStarFilled } from "@tabler/icons-react-native";
 import { artistLink, parseTrackId } from "@wave/core";
 import { Image } from "expo-image";
@@ -16,7 +21,9 @@ import { subscribeAll } from "@/lib/externalStore";
 import { followArtistLink, followStreamedArtistLink } from "@/library/ArtistChoice";
 import { setFavorite, useIsFavorite, useYtSongStarred } from "@/library/favorites";
 import { useLinkRows } from "@/library/hooks";
-import type { TrackDetails } from "@/library/LibraryStore";
+import { LibraryStore, type TrackDetails } from "@/library/LibraryStore";
+import { appRuntime } from "@/library/runtime";
+import { showError } from "@/overlay/alert";
 import { openAlbum, useCurrentPath } from "@/library/routes";
 import { starSongs } from "@/library/starSongs";
 import { Press } from "@/motion/Press";
@@ -29,6 +36,7 @@ import { useThemeColor } from "@/theme/useThemeColor";
 import { useLoadedLibraryFinder } from "@/ytmusic/libraryFinder";
 import { useStreamedArtistLink } from "@/ytmusic/streamedArtist";
 
+import { nowPlayingLibraryArtistLink } from "./artistLink";
 import { CoverPress } from "./CoverPress";
 import { usePlayingYtSong } from "./hooks";
 import { closeNowPlaying, closeNowPlayingForLink, useNowPlayingShown } from "./sheet";
@@ -138,7 +146,7 @@ function NowPlayingArtwork({ uri, playing, streamed }: ArtworkProps) {
 
 type LinkProps = {
   label: string;
-  /** Opens the screen; plain text until the library has answered. */
+  /** Opens the screen; artist credits can be read on the tap. */
   open: (() => void) | null;
   hint: string;
   timingKind: "artistLink" | "albumLink";
@@ -290,6 +298,8 @@ export function PlayerView({ item, details, playing }: Props) {
   // offers; on an artist's page, they're left out (Core's `artistLink`).
   // Followed only while shown: navigation under a closed Now Playing doesn't render it.
   const here = useCurrentPath(shown);
+  const currentTrackId = useCurrentTrackId();
+  const parsedTrack = currentTrackId === null ? null : parseTrackId(currentTrackId);
   const artistTo = details === null ? undefined : artistLink(details.artistIds, here);
   const links = useLinkRows(
     shown ? details?.albumId : undefined,
@@ -299,11 +309,41 @@ export function PlayerView({ item, details, playing }: Props) {
   // were kept, its credit stands for them.
   const streamed = useStreamedTrack();
   const streamedArtists = useMemo(
-    () => (streamed === null ? null : (streamed.artists ?? [streamed.artist])),
-    [streamed],
+    () =>
+      parsedTrack?.kind === "yt"
+        ? streamed?.artists?.length
+          ? streamed.artists
+          : [streamed?.artist || artist]
+        : null,
+    [streamed, parsedTrack?.kind, artist],
   );
   const streamedTo = useStreamedArtistLink(streamedArtists, shown);
   const streamedCover = useStreamedCover(item.id);
+  const openLocalArtist =
+    parsedTrack?.kind !== "library"
+      ? null
+      : () => {
+          const timingId = activeTiming()?.id;
+          void nowPlayingLibraryArtistLink({
+            trackId: parsedTrack.id,
+            details,
+            here,
+            read: (id) =>
+              appRuntime.runPromise(
+                // oxlint-disable-next-line react/rules-of-hooks -- Effect service access.
+                LibraryStore.use((store) => store.trackDetails(id)),
+              ),
+            follow: (link) => followArtistLink(link, links.artist),
+            reveal: () => timingLinkNavigated(timingId),
+            unavailable: (error) => {
+              if (timingId !== undefined) noteTimingLinkFailure(timingId, "target gone");
+              showError(
+                "Couldn't open the artist",
+                error ?? "The song is no longer in the Library.",
+              );
+            },
+          }).open();
+        };
   return (
     <View className="flex-1" style={{ gap: CELL * 4 }}>
       <NowPlayingArtwork uri={item.artworkUri} playing={playing} streamed={streamedCover} />
@@ -319,20 +359,18 @@ export function PlayerView({ item, details, playing }: Props) {
           <MetaLink
             label={artist}
             open={
-              details !== null
-                ? () => {
-                    // The only artist is the page under Now Playing: closing shows it.
-                    if (artistTo !== undefined) followArtistLink(artistTo, links.artist);
-                  }
+              openLocalArtist !== null
+                ? openLocalArtist
                 : streamedTo !== undefined
-                  ? // Its only artist being the page under Now Playing, closing shows it.
-                    () => followStreamedArtistLink(streamedTo)
+                  ? () => followStreamedArtistLink(streamedTo)
                   : null
             }
             hint="Opens the artist"
             timingKind="artistLink"
             revealsCurrentScreen={
-              details !== null ? artistTo === undefined : streamedTo?.kind === "here"
+              openLocalArtist !== null
+                ? details !== null && details.artistIds.length > 0 && artistTo === undefined
+                : streamedTo?.kind === "here"
             }
             className="font-sans text-body text-secondary"
           />

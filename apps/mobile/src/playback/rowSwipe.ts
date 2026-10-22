@@ -26,7 +26,7 @@ import { showError } from "@/overlay/alert";
 import { lyricsAndGenreLookupsEnabled } from "@/settings/lyricsAndGenre";
 import { swipeSettingsNow, useSwipeSettings } from "@/settings/swipeActions";
 import { currentLibraryFinder, type FindInLibrary } from "@/ytmusic/libraryFinder";
-import { libraryArtistsRead, streamedArtistContextNow } from "@/ytmusic/streamedArtist";
+import { streamedArtistContextNow } from "@/ytmusic/streamedArtist";
 import { missingSongDownloadStatusNow } from "@/ytmusic/YtDownloads";
 
 import { hasStreamedSongs, isLibraryTrack, targetFacts, type ActionItems } from "./actionTargets";
@@ -166,27 +166,12 @@ const runTrackSwipe = (target: ActionItems, side: RowSwipeSide): void => {
     if (entry !== undefined)
       itemActionPress({ target, surface: "menu", finish: nothing, here, find })(entry)();
   };
-  if (!hasStreamedSongs(target)) press(findNothing);
+  const chosen = swipeEntryNow(planTrack(target, here, findNothing, settings), side);
+  if (!hasStreamedSongs(target) || chosen?.action === "goToArtist") press(findNothing);
   else
-    Promise.all([
-      currentLibraryFinder(),
-      swipesChoose(settings, "goToArtist") ? libraryArtistsRead() : undefined,
-    ])
-      .then(([find]) => press(find))
+    currentLibraryFinder()
+      .then(press)
       .catch((error: unknown) => showError("Couldn't load the song", error));
-};
-
-/**
- * Starts reading the Library's artists for a streamed row set to Go to
- * Artist, so the row offers it once they're read (as its list renders it again).
- */
-const readArtistsFor = (target: ActionItems, settings: SwipeSettings): void => {
-  if (
-    swipesChoose(settings, "goToArtist") &&
-    hasStreamedSongs(target) &&
-    streamedArtistContextNow() === undefined
-  )
-    void libraryArtistsRead();
 };
 
 /** A Library song's or unsearched entry's swipe, from the menu `openTrackActions` opens. */
@@ -194,7 +179,6 @@ const useTrackItemSwipe = (target: ActionItems, options: RowSwipeOptions): RowSw
   const settings = useSwipeSettings();
   const here = useCurrentPath(false);
   if (!settings.enabled || target.items.length === 0) return NO_SWIPE;
-  readArtistsFor(target, settings);
   return rowSwipe(
     planTrack(target, here, findNothing, settings).map((entry) => entry.action),
     (_, side) => runTrackSwipe(target, side),

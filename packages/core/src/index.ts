@@ -1047,7 +1047,11 @@ export type {
   YtArtistCountsContext,
   YtArtistCountsLibrary,
 } from "./ytArtist.ts";
-export { streamedArtistLink } from "./streamedArtist.ts";
+export {
+  streamedArtistLink,
+  resolveStreamedArtistLink,
+  STREAMED_ARTIST_WAIT_MS,
+} from "./streamedArtist.ts";
 export type {
   StreamedArtistContext,
   StreamedArtistLink,
