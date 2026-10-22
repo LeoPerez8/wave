@@ -29,14 +29,18 @@ export function ArtistCard({ name, artist, size, onPress, onLongPress }: Props &
   );
 }
 
-/** An artist in a list: a 40dp circle, the name over "Artist" (or [detail] when given). */
+/**
+ * An artist in a list: a 40dp circle, the name over "Artist" (or [detail] when
+ * given). In selection mode ([checked] given) it leads with a check cell.
+ */
 export function ArtistCardRow({
   name,
   artist,
   detail = "Artist",
   onPress,
   onLongPress,
-}: Props & { detail?: string | undefined }) {
+  checked,
+}: Props & { detail?: string | undefined; checked?: boolean | undefined }) {
   return (
     <CardRow
       lead={<ArtistImage artist={artist} size={THUMB} />}
@@ -44,6 +48,7 @@ export function ArtistCardRow({
       detail={detail}
       onPress={onPress}
       onLongPress={onLongPress}
+      checked={checked}
     />
   );
 }
