@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
+import { existsSync } from "node:fs";
 import { test } from "node:test";
 
 import { auditSources, mobileSources } from "./sourceAudit.mjs";
@@ -65,11 +66,25 @@ test("detail screens and Now Playing reach network only through reviewed opening
   explain(OPENING_REQUESTS);
   for (const [owner, entry] of Object.entries(OPENING_REQUESTS)) {
     assert.ok(entry.kind === "opening" || entry.kind === "gesture");
-    if (entry.kind === "opening")
-      assert.ok(
-        entry.removeIn,
-        `${owner}: an automatic ask must defer to settled and check connectivity, or name its removal ticket`,
-      );
+    if (entry.kind === "opening") {
+      if (entry.deferred !== undefined) {
+        assert.equal(entry.removeIn, undefined, `${owner}: fixed boundaries carry no removal debt`);
+        assert.ok(["screen", "nowPlaying"].includes(entry.deferred.settlement));
+        assert.equal(entry.deferred.connectivity, "android");
+        assert.ok(entry.deferred.tests.length > 0);
+        for (const path of entry.deferred.tests) {
+          assert.match(path, /\.test\.ts$/);
+          assert.ok(
+            existsSync(resolve(import.meta.dirname, "../../../../", path)),
+            `${owner}: missing behavioral evidence ${path}`,
+          );
+        }
+      } else
+        assert.ok(
+          entry.removeIn,
+          `${owner}: an automatic ask must defer to settled and check connectivity, or name its removal ticket`,
+        );
+    }
   }
   assert.deepEqual(
     audit.network,

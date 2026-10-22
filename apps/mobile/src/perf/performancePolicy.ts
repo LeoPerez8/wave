@@ -5,6 +5,12 @@ export interface Exception {
   readonly removeIn?: number;
   readonly capabilities?: readonly string[];
   readonly kind?: "opening" | "gesture";
+  /** Reviewed fixed opening boundary, backed by behavioral settlement tests. */
+  readonly deferred?: {
+    readonly settlement: "screen" | "nowPlaying";
+    readonly connectivity: "android";
+    readonly tests: readonly string[];
+  };
 }
 export const LIBRARY_SEEDS = [
   "library/LibraryStore.ts#listSongs",
@@ -68,15 +74,6 @@ export const NETWORK_SEEDS = [
 ];
 
 export const WHOLE_LIBRARY: Record<string, Exception> = {
-  "app/library/artist/[id].tsx#ArtistContent": {
-    reason:
-      "Artist page builds its own finder and follows the shared finder on opening; replace with artist-scoped work after settled.",
-    removeIn: 589,
-    capabilities: [
-      "../../../packages/core/src/ytMusic.ts#libraryFinder",
-      "ytmusic/libraryFinder.ts#useLoadedLibraryFinder",
-    ],
-  },
   "app/library/discover-mix/[id].tsx#DiscoverMixScreen": {
     reason: "Visible mix page resolves streamed entries against Library files.",
     capabilities: ["ytmusic/libraryFinder.ts#useLibraryFinder"],
@@ -267,11 +264,15 @@ export const WHOLE_LIBRARY: Record<string, Exception> = {
     removeIn: 591,
     capabilities: ["ytmusic/libraryFinder.ts#useLoadedLibraryFinder"],
   },
-  "ytmusic/artistSection.ts#useYtArtistSection": {
+  "ytmusic/artistSection.ts#useDeferredArtistSection": {
     reason:
-      "Library artist online section follows the shared whole finder on opening; defer it after the local artist rows settle.",
-    removeIn: 589,
+      "Online additions only: the artist opening policy gates this shared finder on local content, screen settlement, Online and a standing full answer. Library mode and missing, pending, partial or expired answers do not subscribe. See ytArtistOpening.test.ts and artistOpening.test.ts.",
     capabilities: ["ytmusic/libraryFinder.ts#useLoadedLibraryFinder"],
+  },
+  "ytmusic/artistSection.ts#useArtistSongsFinder": {
+    reason:
+      "Targeted finder over this artist's already read sorted songs, only when the deferred online finder exists; prefers a just-downloaded artist row without another read.",
+    capabilities: ["../../../packages/core/src/ytMusic.ts#libraryFinder"],
   },
   "ytmusic/libraryFinder.ts#finderOver": {
     reason:
@@ -441,11 +442,18 @@ export const OPENING_REQUESTS: Record<string, Exception> = {
       "To remove: Popular quietly reads the full artist before settled/connectivity/allowance checks; #590 owns the due rule and guarded request.",
     removeIn: 590,
   },
-  "ytmusic/artistSection.ts#useYtArtistSection": {
+  "ytmusic/artistSection.ts#useDeferredArtistSection": {
     kind: "opening",
     reason:
-      "To remove: Search online Always can ask on artist mount; #589 defers the section until settled and checks connectivity.",
-    removeIn: 589,
+      "The local artist rows and screen must settle before Online/Always/integrated asks or retries. Android online() is checked immediately before fetchArtist; offline fails through the existing section state without a request.",
+    deferred: {
+      settlement: "screen",
+      connectivity: "android",
+      tests: [
+        "packages/core/src/ytArtistOpening.test.ts",
+        "apps/mobile/src/ytmusic/artistOpening.test.ts",
+      ],
+    },
   },
   "ytmusic/albumSection.ts#useYtAlbumSection": {
     kind: "opening",
