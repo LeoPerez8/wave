@@ -23,6 +23,14 @@ type SqlJsClient = InstanceType<Awaited<ReturnType<typeof initSqlJs>>["Database"
 /** Each test database's sql.js client, for `traceQueries`. */
 const clients = new WeakMap<object, SqlJsClient>();
 
+/** Releases the WebAssembly database after a scale test or benchmark. */
+export const closeTestDatabase = (db: TestDatabase): void => {
+  const client = clients.get(db);
+  if (client === undefined) throw new Error("not an open test database");
+  client.close();
+  clients.delete(db);
+};
+
 type Migrator = Parameters<typeof migrate>[0];
 
 /** The migrations up to and including the one tagged `through`. */
