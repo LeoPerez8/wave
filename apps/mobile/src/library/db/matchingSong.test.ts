@@ -13,6 +13,8 @@ const song: YtSong = {
   artists: ["Beyoncé"],
   durationMs: 180000,
   artworkUrl: null,
+  album: null,
+  explicit: false,
 };
 const track = (
   title = song.title,

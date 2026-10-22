@@ -106,6 +106,36 @@ interface Candidate<L> {
   readonly durationMs: number | null;
 }
 
+const candidateMatches = (
+  candidate: { readonly artists: ReadonlySet<string>; readonly durationMs: number | null },
+  artists: readonly string[],
+  length: number | null,
+): boolean =>
+  artists.some((artist) => candidate.artists.has(artist)) &&
+  (length === null ||
+    candidate.durationMs === null ||
+    Math.abs(candidate.durationMs - length) <= SAME_LENGTH_MS);
+
+/** Compare one Library candidate with one streamed song, without building a Library finder. */
+export const recordingMatches = (
+  library: LibrarySongKey,
+  song: Pick<YtSong, "title" | "artists" | "durationMs">,
+): boolean => {
+  const title = recordingMatchTitle(library.title);
+  return (
+    title !== "" &&
+    title === recordingMatchTitle(song.title) &&
+    candidateMatches(
+      {
+        artists: new Set(artistNames(library.artist)),
+        durationMs: knownLength(library.durationMs),
+      },
+      song.artists.flatMap(artistNames),
+      knownLength(song.durationMs),
+    )
+  );
+};
+
 /**
  * The Library song a YT Music song already is, or null: one with its title
  * (case, accents, punctuation, featured credits and remaster notes aside) that shares an
@@ -145,13 +175,7 @@ export const libraryMatches = <L extends LibrarySongKey>(
     const artists = song.artists.flatMap(artistNames);
     const length = knownLength(song.durationMs);
     return candidates
-      .filter(
-        (candidate) =>
-          artists.some((artist) => candidate.artists.has(artist)) &&
-          (length === null ||
-            candidate.durationMs === null ||
-            Math.abs(candidate.durationMs - length) <= SAME_LENGTH_MS),
-      )
+      .filter((candidate) => candidateMatches(candidate, artists, length))
       .map((candidate) => candidate.song);
   };
 };
