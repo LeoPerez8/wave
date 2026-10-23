@@ -70,13 +70,14 @@ export const startupReplay = async (context: FastAgainContext, store: LibrarySto
         let knownCount = 0,
           indexedCount = 0;
         let firstScan: boolean;
+        let columns: { paths: string[]; sizes: number[]; modified: number[] };
         if (jobs !== null) {
           const index = yield* jobs.readScanIndex(store, scanRoots, turn);
           knownCount = index.known.length;
           indexedCount = index.indexed.size;
           yield* turn;
           firstScan = yield* store.hasUnscannedRoot(scanRoots);
-          yield* jobs.scanInputColumns(index.known, turn);
+          columns = yield* jobs.scanInputColumns(index.known, turn);
         } else {
           // ti performs these source reads, membership map and three bridge columns in one
           // JS task, with no Promise-wrapper turns inserted between synchronous effects.
@@ -84,9 +85,11 @@ export const startupReplay = async (context: FastAgainContext, store: LibrarySto
           knownCount = known.length;
           firstScan = yield* store.hasUnscannedRoot(scanRoots);
           indexedCount = new Set(known.map((file) => file.path)).size;
-          known.map((file) => file.path);
-          known.map((file) => file.sizeBytes);
-          known.map((file) => file.modifiedAt);
+          columns = {
+            paths: known.map((file) => file.path),
+            sizes: known.map((file) => file.sizeBytes),
+            modified: known.map((file) => file.modifiedAt),
+          };
         }
         yield* turn; // The native unchanged scan completes on a later event-loop task.
         const revision = yield* store.playlistEntriesRevision;
@@ -138,6 +141,7 @@ export const startupReplay = async (context: FastAgainContext, store: LibrarySto
         return {
           knownCount,
           indexedCount,
+          columns, // Keep and verify the actual native inputs, rather than discard map results.
           excluded,
           firstScan,
           revisionRead: revision !== undefined,
