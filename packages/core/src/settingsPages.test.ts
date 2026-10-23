@@ -6,6 +6,7 @@ import {
   SETTINGS_PAGES,
   accountsSummary,
   downloadsSummary,
+  visibleSettingsPages,
   queuedDownloadCounts,
   type SpotifySession,
   type WaveSession,
@@ -24,6 +25,24 @@ const YT_SIGNED_OUT: YtSession = { status: "signedOut" };
 const WAVE_SIGNED_OUT: WaveSession = { status: "signedOut" };
 
 describe("Settings pages", () => {
+  test("a fresh install hides Developer and revealing it adds only its row at the end", () => {
+    assert.deepEqual(
+      visibleSettingsPages().map(({ page }) => page),
+      [
+        "library",
+        "appearance",
+        "layout",
+        "swipeActions",
+        "playback",
+        "lyricsAndTags",
+        "downloads",
+        "accounts",
+      ],
+    );
+    assert.deepEqual(visibleSettingsPages(true), SETTINGS_PAGES);
+    assert.deepEqual(visibleSettingsPages(false), visibleSettingsPages());
+  });
+
   test("Settings lists its pages in this order, each opening its own route", () => {
     assert.deepEqual(
       SETTINGS_PAGES.map(({ title, route }) => [title, route]),

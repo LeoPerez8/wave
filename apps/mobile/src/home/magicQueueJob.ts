@@ -8,6 +8,7 @@ import {
 } from "@wave/core";
 import * as Effect from "effect/Effect";
 import { runSteps } from "../lib/stepped.ts";
+import { RECOMMENDATION_TIMEOUT } from "../lib/recommendationTimeout.ts";
 import type { LibraryStore } from "../library/LibraryStore.ts";
 import {
   readTasteLibrary,
@@ -17,13 +18,13 @@ import {
 
 /** Standing picks need no whole-Library due check. The growth probe is only for short lists. */
 export const homeMagicQueueDue = (
-  settled: boolean,
+  visible: boolean,
   saved: MagicQueuePicks | null,
   shownIds: readonly string[],
   grows: boolean,
   now: number,
 ): boolean =>
-  settled &&
+  visible &&
   (saved === null ||
     saved.day !== localDay(now) ||
     saved.trackIds.length > MAGIC_QUEUE_PICKS ||
@@ -58,4 +59,16 @@ export const buildHomeMagicQueue = <R, E>(
         options.turn,
       );
     }),
+  );
+
+/** The visible pick includes scheduler and derivation waits in its deadline. */
+export const pickHomeMagicQueue = <R, E>(
+  store: LibraryStore["Service"],
+  saved: MagicQueuePicks | null,
+  options: Parameters<typeof buildHomeMagicQueue<R, E>>[2],
+  start: Effect.Effect<void> = Effect.void,
+) =>
+  start.pipe(
+    Effect.andThen(buildHomeMagicQueue(store, saved, options)),
+    Effect.timeout(RECOMMENDATION_TIMEOUT),
   );

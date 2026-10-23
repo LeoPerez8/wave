@@ -29,6 +29,8 @@ declare class WaveAppLogModule extends NativeModule<WaveAppLogEvents> {
   device(): LogDevice;
   /** Writes `header` and the log to a `.txt` named `fileName` and opens the share sheet with it. */
   share(header: string, fileName: string): Promise<void>;
+  /** Writes the same export to a new file in Downloads/Wave, without a storage prompt. */
+  saveToDownloads(header: string, fileName: string): Promise<void>;
   /** The route showing, which a freeze's entry names (`log/NativeLog.kt`). */
   setScreen(path: string): void;
   /** Answers `hermesHeapWanted` with the Hermes heap in bytes (`log/JsHeap.kt`). Missing in older builds. */
