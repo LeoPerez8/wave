@@ -33,6 +33,7 @@ import { refreshMixes, useDiscoverMixes, type MixSectionId } from "./discoverMix
 import { openDiscoverMixActions } from "./DiscoverMixActions";
 import { DiscoverMixesSkeleton } from "./DiscoverMixesSkeleton";
 import { DiscoverSettingsButton } from "./DiscoverSettings";
+import { discoverRefreshAccessibility, type DiscoverRefresh } from "./discoverRefresh";
 import {
   startMagicQueueFrom,
   useMagicQueueSection,
@@ -136,21 +137,32 @@ function Discover({ home, title }: SectionProps) {
  * with a quiet [status] after it ("Updating…" while mixes rebuild), read
  * out as it changes.
  */
-function DiscoverRowLabel({ children, status }: { children: string; status?: string | undefined }) {
+function DiscoverRowLabel({
+  children,
+  status,
+  refresh,
+  busy,
+}: {
+  children: string;
+  status?: string | undefined;
+  refresh?: DiscoverRefresh | undefined;
+  busy?: boolean | undefined;
+}) {
   return (
-    <View className="flex-row items-baseline" style={{ gap: CELL }}>
+    <View className="flex-row flex-wrap items-baseline" style={{ gap: CELL }}>
       <Text
+        accessible
         accessibilityRole="header"
-        numberOfLines={1}
-        className="shrink font-sans text-footnote font-medium text-secondary"
+        accessibilityState={{ busy }}
+        {...discoverRefreshAccessibility(refresh)}
+        className="max-w-full font-sans text-footnote font-medium text-secondary"
       >
         {children}
       </Text>
       {status !== undefined && (
         <Text
-          numberOfLines={1}
           accessibilityLiveRegion="polite"
-          className="font-sans text-footnote text-secondary"
+          className="max-w-full font-sans text-footnote text-secondary"
         >
           {status}
         </Text>
@@ -163,15 +175,21 @@ function DiscoverRowLabel({ children, status }: { children: string; status?: str
 function DiscoverRow({
   label,
   status,
+  refresh,
+  busy,
   children,
 }: {
   label: string;
   status?: string | undefined;
+  refresh?: DiscoverRefresh | undefined;
+  busy?: boolean | undefined;
   children: ReactNode;
 }) {
   return (
     <View style={{ gap: CELL }}>
-      <DiscoverRowLabel status={status}>{label}</DiscoverRowLabel>
+      <DiscoverRowLabel status={status} refresh={refresh} busy={busy}>
+        {label}
+      </DiscoverRowLabel>
       {children}
     </View>
   );
@@ -186,20 +204,19 @@ function DiscoverRow({
 function MixRow({ id, section }: { id: MixSectionId; section: DiscoverMixesSection }) {
   if (section.kind === "hidden") return null;
   const label = discoverRowTitle(id);
+  const refresh = () => refreshMixes(id);
+  const updating = section.kind === "skeleton" || section.updating;
   return (
     <DiscoverRow
       label={label}
       status={section.kind === "mixes" && section.updating ? MIXES_UPDATING : undefined}
+      busy={updating}
+      refresh={{ label: `Get new ${label.toLowerCase()}`, run: refresh, enabled: !updating }}
     >
       {section.kind === "skeleton" ? (
         <DiscoverMixesSkeleton />
       ) : (
-        <DiscoverMixRow
-          mixes={section.mixes}
-          onRefresh={() => refreshMixes(id)}
-          refreshing={section.updating}
-          refreshLabel={`Get new ${label.toLowerCase()}`}
-        />
+        <DiscoverMixRow mixes={section.mixes} onRefresh={refresh} refreshing={section.updating} />
       )}
     </DiscoverRow>
   );
@@ -217,15 +234,13 @@ function DiscoverMixRow({
   mixes,
   onRefresh,
   refreshing,
-  refreshLabel,
 }: {
   mixes: readonly BlendedDiscoverMix[];
   onRefresh: () => void;
   refreshing: boolean;
-  refreshLabel: string;
 }) {
   return (
-    <PullRefreshRow onRefresh={onRefresh} enabled={!refreshing} refreshLabel={refreshLabel}>
+    <PullRefreshRow onRefresh={onRefresh} enabled={!refreshing}>
       {mixes.map((mix, place) => {
         const caption = discoverMixCaption(mix);
         const shows = [mix.id, caption.artworkUrl, caption.title, caption.artists, caption.line];
@@ -234,6 +249,7 @@ function DiscoverMixRow({
           <Crossfade key={place} swapKey={shows.join("\n")}>
             <PlaylistCard
               name={caption.title}
+              label={[caption.title, caption.artists, caption.line].filter(Boolean).join(", ")}
               detail={caption.line}
               paths={caption.artworkUrl === null ? [] : [caption.artworkUrl]}
               size={COVER_ROW_TILE}
@@ -259,13 +275,13 @@ function MagicQueueRow({ section }: { section: MagicQueueSection }) {
   const [available, setAvailable] = useState(width - grid.margin * 2);
   const { size, height } = magicQueueGrid(available, fontScale);
   return (
-    <DiscoverRow label={discoverRowTitle("magic-queue")}>
+    <DiscoverRow
+      label={discoverRowTitle("magic-queue")}
+      busy={section.picking}
+      refresh={{ label: "Get other songs", run: section.refresh, enabled: !section.picking }}
+    >
       <View onLayout={(event) => setAvailable(event.nativeEvent.layout.width)}>
-        <PullRefreshRow
-          onRefresh={section.refresh}
-          enabled={!section.picking}
-          refreshLabel="Get other songs"
-        >
+        <PullRefreshRow onRefresh={section.refresh} enabled={!section.picking}>
           <View
             style={{
               width: available,
