@@ -346,6 +346,10 @@ export const bench: FastAgainBench = {
         returnKey = "",
         returnCpu = 0;
       const focus = steps.at(-1)![1];
+      // Startup changed playlists. Deliver that production invalidation and refresh outside
+      // this separate unchanged-return case, rather than silently keep a pre-startup version.
+      knownRead?.change({ kind: "playlists" });
+      await focus();
       const warmReturn = traceQueries(fixture.db, focus);
       const visibleReturn = await warmReturn.result;
       returnWork = {
