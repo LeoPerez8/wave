@@ -21,7 +21,6 @@ import { YtSongList, type YtListLoad } from "@/ytmusic/YtSongList";
  */
 export default function DiscoverMixScreen() {
   useScreenContent(true);
-  const bottomInset = useChromeInset();
   const { id } = useLocalSearchParams<{ id: string }>();
   const mixId = id ?? "";
   const tracks = useLibraryTracks();
@@ -46,20 +45,7 @@ export default function DiscoverMixScreen() {
   }, [mix, find, tracks]);
   const context = useMemo(() => ({ kind: "discoverMix", id: mixId }) as const, [mixId]);
 
-  if (load === null) {
-    return (
-      <View className="flex-1 bg-background">
-        <ScreenHeader />
-        <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: bottomInset }}>
-          <EmptyState
-            icon={IconCompass}
-            title="This mix is gone"
-            message="Home has today's mixes while YT Music is on."
-          />
-        </ScrollView>
-      </View>
-    );
-  }
+  if (load === null) return <GoneMix />;
   return (
     <YtSongList
       known={undefined}
@@ -68,5 +54,22 @@ export default function DiscoverMixScreen() {
       numbered={false}
       albumDownload="mix"
     />
+  );
+}
+
+/** Keep the message reachable in a short window and above the floating player. */
+function GoneMix() {
+  const bottomInset = useChromeInset();
+  return (
+    <View className="flex-1 bg-background">
+      <ScreenHeader />
+      <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: bottomInset }}>
+        <EmptyState
+          icon={IconCompass}
+          title="This mix is gone"
+          message="Home has today's mixes while YT Music is on."
+        />
+      </ScrollView>
+    </View>
   );
 }
