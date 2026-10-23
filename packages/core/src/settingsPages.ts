@@ -105,6 +105,10 @@ export const SETTINGS_PAGES = [
   },
 ] as const satisfies readonly SettingsPageEntry[];
 
+/** Settings lists Developer only after this phone's title-tap toggle is on. */
+export const visibleSettingsPages = (developerVisible = false): readonly SettingsPageEntry[] =>
+  SETTINGS_PAGES.filter(({ page }) => page !== "developer" || developerVisible);
+
 /**
  * What Settings › Layout opens, by id: the options a long press opens on a
  * screen's title (Home, the Library, Playlists) or on the tab bar, each as a
