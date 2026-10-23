@@ -32,7 +32,8 @@ export const DEFAULT_MIX_SLIDERS: MixSliders = { faithfulness: 3, popularity: 3 
  * the seed's profile to match (`GENRE_AFFINITY_THRESHOLD` in the middle).
  * Staying close leaves out songs whose genres only half match; wandering
  * lets in those that share a minor genre. Same genres and Close compare the
- * styles instead (`styles`, `styleAffinity`): their threshold is then unused.
+ * styles instead (`styles`, `styleAffinity`); Magic Queue also uses their
+ * threshold when either style is unknown and family evidence is required.
  */
 export const GENRE_FAITHFULNESS_STEPS: readonly {
   readonly step: MixSliderStep;
@@ -96,8 +97,8 @@ export const faithfulnessStyles = (sliders: MixSliders): StyleLevel | null =>
 /**
  * The genre affinity a Magic Queue's Library songs need to the seed's
  * profile at [sliders]' Genre faithfulness (`magicLibraryCandidates`): its
- * step's threshold, as for YouTube Music's candidates (not used at Same
- * genres and Close, which compare styles: `faithfulnessStyles`); null (any
+ * step's threshold, as for YouTube Music's candidates (at Same genres and
+ * Close, the family fallback when a style is unknown: `faithfulnessStyles`); null (any
  * genre) at the loosest step, Wander, where the Library keeps every genre as
  * it did before Library songs were held to the seed's genres.
  */

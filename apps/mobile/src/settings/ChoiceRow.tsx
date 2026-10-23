@@ -9,21 +9,27 @@ import { Press } from "@/motion/Press";
 import type { TitleChoice } from "@/overlay/titleChoices";
 import { useThemeColor } from "@/theme/useThemeColor";
 
-/** One choice of a Settings radio list; the current one carries a check. */
+/**
+ * One choice of a Settings radio list; the current one carries a check.
+ * [accessibilityLabel] names it for a screen reader where the label alone
+ * doesn't say what it's chosen for (a swipe direction's action).
+ */
 export function ChoiceRow({
   label,
   chosen,
   onPress,
+  accessibilityLabel = label,
 }: {
   label: string;
   chosen: boolean;
   onPress: () => void;
+  accessibilityLabel?: string;
 }) {
   const accent = useThemeColor("accent");
   return (
     <Press
       accessibilityRole="radio"
-      accessibilityLabel={label}
+      accessibilityLabel={accessibilityLabel}
       accessibilityState={{ checked: chosen }}
       onPress={onPress}
       haptic="selection"

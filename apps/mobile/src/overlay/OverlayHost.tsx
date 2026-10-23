@@ -37,6 +37,7 @@ import { useThemeColor } from "@/theme/useThemeColor";
 
 import {
   closeOverlay,
+  OverlayId,
   dismissOverlay,
   dismissTopOverlay,
   removeOverlay,
@@ -304,7 +305,9 @@ function OverlayCard({ entry, frontmost }: { entry: OverlayEntry; frontmost: boo
         <OnOverlayCard value>
           <OverlayFlowContext value={frame.flow}>
             <CardHeadingContext value={showsHeading}>
-              {entry.request.render(() => closeOverlay(entry.id))}
+              <OverlayId value={entry.id}>
+                {entry.request.render(() => closeOverlay(entry.id))}
+              </OverlayId>
             </CardHeadingContext>
           </OverlayFlowContext>
         </OnOverlayCard>

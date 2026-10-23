@@ -1,10 +1,17 @@
 import { ImageFormat, makeImageFromView } from "@shopify/react-native-skia";
-import { instagramStoriesAppId, type LyricShareApps, type LyricStoryBackground } from "@wave/core";
+import {
+  instagramStoriesAppId,
+  type LyricShareApps,
+  type LyricStoryBackground,
+  type LyricStoryFrame,
+} from "@wave/core";
 import Constants from "expo-constants";
 import type { ComponentRef, RefObject } from "react";
 import type { View } from "react-native";
 
 import { WaveShare } from "@/native/waveShare";
+
+import { deliverInstagramStory } from "./instagramStory";
 
 /** The view to draw: laid out, `collapsable={false}`, with no transform of its own. */
 export type ImageSource = RefObject<ComponentRef<typeof View> | null>;
@@ -72,9 +79,10 @@ export const imageShareApps = async (): Promise<LyricShareApps> => {
 export const shareImageToInstagramStory = async (
   path: string,
   background: LyricStoryBackground,
+  frame?: LyricStoryFrame,
 ): Promise<void> => {
   if (INSTAGRAM_APP_ID === null) throw new Error("This build has no Facebook App ID for Instagram");
-  await share().shareToInstagramStory(path, background.top, background.bottom, INSTAGRAM_APP_ID);
+  await deliverInstagramStory(share(), path, background, INSTAGRAM_APP_ID, frame);
 };
 
 /** Sends a shared image ([writeViewPng]) straight to WhatsApp's share flow. */
