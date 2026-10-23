@@ -35,7 +35,7 @@ import { CELL, grid } from "@/catalog/grid";
 import { Hairline } from "@/catalog/Hairline";
 import { TrackSkeletons } from "@/catalog/Skeletons";
 import { DownloadedIcon } from "@/catalog/TrackRow";
-import { TextButton } from "@/components/TextButton";
+import { RecommendationsFailed } from "@/components/RecommendationsFailed";
 import { useMissingSongs } from "@/library/hooks";
 import { Press } from "@/motion/Press";
 import { usePerfVisible, useRenderCount } from "@/perf/perf";
@@ -355,15 +355,7 @@ export function UpNextList({ bottomInset }: { bottomInset: number }) {
   }
 
   const failure = batchFailed ? (
-    <View className="flex-row items-center" style={{ gap: CELL, paddingTop: CELL * 2 }}>
-      <Text
-        accessibilityLiveRegion="polite"
-        className="flex-1 font-sans text-subheadline text-secondary"
-      >
-        Couldn't load recommendations.
-      </Text>
-      <TextButton label="Try Again" onPress={retryMagicBatch} />
-    </View>
+    <RecommendationsFailed onRetry={retryMagicBatch} style={{ paddingTop: CELL * 2 }} />
   ) : null;
 
   if (entries.length === 0) {
