@@ -12,6 +12,7 @@ import {
   learnQueueTracks,
   learnUnknownQueueTracks,
   lookupFailed,
+  queueTrackDownloaded,
   queueTracks,
   toQueueTrack,
   toUnsearchedQueueTrack,
@@ -501,4 +502,13 @@ describe("learnUnknownQueueTracks", () => {
     await Effect.runPromise(learnUnknownQueueTracks([entry("6")], found));
     assert.equal(queueTracks.get().get("6")?.title, "Song 6");
   });
+});
+
+test("a queued song carries the downloaded icon only while its Library file is there", () => {
+  const filed = toQueueTrack(song(7));
+  assert.equal(queueTrackDownloaded(filed, new Set()), true);
+  // A scan that no longer finds the file keeps the song as a missing song.
+  assert.equal(queueTrackDownloaded(filed, new Set(["7"])), false);
+  assert.equal(queueTrackDownloaded(toYtQueueTrack(ytSong("v1"), null), new Set()), false);
+  assert.equal(queueTrackDownloaded(undefined, new Set()), false);
 });

@@ -1,7 +1,8 @@
 /**
  * Background work's turns (Core's `createBackgroundWork`, #315): startup
  * work (the scan, resumed imports, sync, priming playlists, resumed
- * downloads) waits until the first screen shows its content, and work in
+ * downloads) waits until the first screen has globally settled and quiet frames have passed
+ * (or, with Wave in the background, for free turns alone), and work in
  * slices (a scan's saves, a sync's database steps, a rescan on return) takes
  * each slice on a free turn, after the owner's touch and the motion it
  * started, never holding the JavaScript thread for a tap.
@@ -9,6 +10,12 @@
 import { createBackgroundWork } from "@wave/core";
 import * as Effect from "effect/Effect";
 import { AppState, type GestureResponderEvent } from "react-native";
+
+import { isScreenSettled, onScreenSettled } from "./timing";
+import { createStartupWork } from "./startupWork";
+
+import { WaveAppLog } from "@/native/waveAppLog";
+import { openWhileBackgrounded, settledTurn } from "./settledWork";
 
 import { perfMark, registerPerfMeta } from "@/perf/perf";
 
@@ -28,19 +35,48 @@ AppState.addEventListener("change", (state) => {
   else work.touchEnded();
 });
 
-/**
- * Runs [start] once the first screen showed its content, on a free turn,
- * after the startup work asked before it. [name] names it in a perf build.
- */
-export const afterFirstContent = (name: string, start: () => void): void =>
-  work.afterContent(() => {
+// Headless starts (Android Auto with no activity) report "background" too.
+const backgrounded = () => AppState.currentState === "background";
+const settledOrAway = openWhileBackgrounded(
+  { settled: isScreenSettled, subscribe: onScreenSettled },
+  {
+    backgrounded,
+    subscribe: (listener) => {
+      const subscription = AppState.addEventListener("change", listener);
+      return () => subscription.remove();
+    },
+  },
+);
+
+const startupWork = createStartupWork({
+  now: () => performance.now(),
+  intervalMs: () => {
+    try {
+      return WaveAppLog?.timingFrameIntervalMs?.() ?? 0;
+    } catch {
+      return 0;
+    }
+  },
+  isSettled: isScreenSettled,
+  backgrounded,
+  subscribe: settledOrAway.subscribe,
+  request: (run) => requestAnimationFrame(run),
+  cancel: cancelAnimationFrame,
+  whenFree: work.whenFree,
+});
+let startupStarted = 0;
+
+/** Startup starts keep their registration order, after global settlement and quiet frames. */
+export const afterFirstSettled = (name: string, start: () => void): (() => void) =>
+  startupWork.whenFree(() => {
+    startupStarted++;
     perfMark("startup.started", name);
     start();
   });
 
 let contentSeen = false;
 
-/** A screen in sight showed its first Library content: startup work goes once it's drawn. */
+/** First-content perf milestone only. It never releases startup work. */
 export const firstContentShown = (): void => {
   if (contentSeen) return;
   contentSeen = true;
@@ -59,6 +95,14 @@ export const freeTurn = (): Promise<void> => new Promise((resolve) => work.whenF
 /** Waits for the next free turn; interrupted, it gives the turn up. */
 export const freeTurnEffect: Effect.Effect<void> = Effect.callback<void>((resume) => {
   const cancel = work.whenFree(() => resume(Effect.void));
+  return Effect.sync(cancel);
+});
+
+/** Startup jobs recheck global settlement/quietness at every resumable boundary. */
+export const startupTurn = (): Promise<void> =>
+  new Promise((resolve) => startupWork.whenFree(resolve));
+export const startupTurnEffect: Effect.Effect<void> = Effect.callback<void>((resume) => {
+  const cancel = startupWork.whenFree(() => resume(Effect.void));
   return Effect.sync(cancel);
 });
 
@@ -82,10 +126,13 @@ registerPerfMeta("startup", () => {
   return {
     contentAt: stats.contentAt === null ? null : Math.round(stats.contentAt),
     contentCapped: stats.contentCapped,
-    startedPieces: stats.startupStarted,
+    startedPieces: startupStarted,
   };
 });
 registerPerfMeta("backgroundWork", () => {
   const { slices, longestWaitMs, forcedSlices } = work.stats();
   return { slices, longestWaitMs: Math.round(longestWaitMs), forcedSlices };
 });
+
+/** Optional work waits for settlement (at most 3 s), then a free turn; backgrounding opens it early. */
+export const settledTurnEffect = settledTurn({ ...settledOrAway, schedule: whenFree });

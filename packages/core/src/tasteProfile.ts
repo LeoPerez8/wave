@@ -6,6 +6,7 @@
  * days. It scores songs, artists and genre families.
  */
 
+import { indexSteps } from "./buildSteps.ts";
 import type { MagicSong } from "./magicQueue.ts";
 import type { PlayEvent } from "./playEvents.ts";
 
@@ -134,6 +135,33 @@ export const tasteProfile = (
   return { at: now, ...scores };
 };
 
+/** Resumable derivation, one history item per step, in ti's exact signal order. */
+export function* tasteProfileSteps(
+  history: TasteHistory,
+  songOf: (trackId: string) => MagicSong | undefined,
+  now: number,
+): Generator<void, TasteProfile> {
+  const scores: Scores = { songs: new Map(), artists: new Map(), genres: new Map() };
+  const apply = (signal: HistorySignal): void => {
+    const song = songOf(signal.trackId);
+    if (song !== undefined) score(scores, song, weightAt(signal, now));
+  };
+  for (const play of history.plays) {
+    const kind = tastePlaySignal(play);
+    if (kind !== null) apply({ kind, trackId: play.trackId, at: play.startedAt });
+    yield;
+  }
+  for (const { trackId, changedAt } of history.favorites) {
+    apply({ kind: "favorite", trackId, at: changedAt });
+    yield;
+  }
+  for (const { trackId, downloadedAt } of history.downloads) {
+    apply({ kind: "download", trackId, at: downloadedAt });
+    yield;
+  }
+  return { at: now, ...scores };
+}
+
 /** A signal as it comes: what the owner did ([kind]) to [song], at [at] (epoch ms). */
 export interface TasteSignal {
   readonly kind: TasteSignalKind;
@@ -157,6 +185,25 @@ export const tasteLearned = (
   score(scores, song, weightAt({ kind, at }, profile.at));
   return { at: profile.at, ...scores };
 };
+
+/** Same additions as tasteLearned, with yielding copies of the existing maps.
+ * Undefined signals still expose a step, so filtering held signals is bounded too.
+ */
+export function* tasteLearnedSteps(
+  profile: TasteProfile,
+  signals: Iterable<TasteSignal | undefined>,
+): Generator<void, TasteProfile> {
+  const scores: Scores = {
+    songs: yield* indexSteps(profile.songs, (entry) => entry),
+    artists: yield* indexSteps(profile.artists, (entry) => entry),
+    genres: yield* indexSteps(profile.genres, (entry) => entry),
+  };
+  for (const signal of signals) {
+    if (signal !== undefined) score(scores, signal.song, weightAt(signal, profile.at));
+    yield;
+  }
+  return { at: profile.at, ...scores };
+}
 
 /**
  * How far each score moves a song's weight, and how big a score it takes:

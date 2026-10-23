@@ -39,7 +39,7 @@ const cardFileName = (title: string): string => lyricCardFileName(title, new Dat
 /**
  * The solid card as a smaller rounded sticker over its complementary Story.
  * The card view itself stays square for standalone exports; native Stories
- * export applies the same [frame]'s padding and corners to a separate PNG.
+ * export crops a separate PNG to the same [frame]'s card size and corners.
  */
 function FittedCard({
   content,

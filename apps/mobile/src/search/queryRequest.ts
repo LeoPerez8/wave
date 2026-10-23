@@ -1,5 +1,5 @@
 import { TAB_PATH } from "@wave/core";
-import { router } from "expo-router";
+import { router } from "@/lib/timingRouter";
 import { useEffect } from "react";
 
 /**

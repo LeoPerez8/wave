@@ -231,3 +231,61 @@ test("accepting a previously dismissed recording offsets its negative signal and
       baseline.find((x) => x.track.id === "related")!.score,
   );
 });
+
+test("stepped ranking preserves complete offers and bounds visits even for one prolific artist", async () => {
+  const { playlistRecommendationsSteps } = await import("./playlistRecommendations.ts");
+  let visits = 0;
+  const library = Array.from({ length: 1400 }, (_, i) => {
+    const song = track(String(i));
+    return {
+      ...song,
+      get genre() {
+        visits++;
+        return song.genre ?? null;
+      },
+    };
+  });
+  const sources = { library, catalog: [], graph: null, now: 0 };
+  const expected = playlistRecommendations([track("seed")], sources);
+  const steps = playlistRecommendationsSteps([track("seed")], sources);
+  let max = 0;
+  for (;;) {
+    visits = 0;
+    const next = steps.next();
+    max = Math.max(max, visits);
+    if (next.done) {
+      assert.deepEqual(next.value, expected);
+      break;
+    }
+  }
+  assert.ok(max <= 16, `one generator operation visited ${max} tags`);
+});
+
+test("untagged playlist fallback yields across every seed instead of one large artist walk", async () => {
+  const { playlistRecommendationsSteps } = await import("./playlistRecommendations.ts");
+  let visits = 0;
+  const seeds = Array.from({ length: 1400 }, (_, i) => ({
+    ...track(`seed-${i}`, { genre: null }),
+    get artists() {
+      visits++;
+      return ["Radiohead"];
+    },
+  }));
+  const steps = playlistRecommendationsSteps(seeds, {
+    library: [track("next")],
+    catalog: [],
+    graph: null,
+    now: 0,
+  });
+  let max = 0;
+  for (;;) {
+    visits = 0;
+    const next = steps.next();
+    max = Math.max(max, visits);
+    if (next.done) {
+      assert.equal(next.value[0]?.track.id, "next");
+      break;
+    }
+  }
+  assert.ok(max < 32, `one operation inspected ${max} seed credits`);
+});

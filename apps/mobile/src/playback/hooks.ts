@@ -1,12 +1,11 @@
 import {
   currentEntry,
-  playingTrackIds,
   type MixedSong,
   type QueueContext,
   type QueueState,
   type YtSong,
 } from "@wave/core";
-import { useEffect, useMemo, useRef, useSyncExternalStore } from "react";
+import { useEffect, useRef, useSyncExternalStore } from "react";
 
 import type { SongRow } from "@/library/LibraryStore";
 
@@ -14,7 +13,16 @@ import { playPage } from "./actions";
 import { playbackState, type PlaybackState } from "./Player";
 import { queueState } from "./Queue";
 import { queuedYtSong, queueTracks } from "./queueTracks";
-import { useLoadedLibraryFinder } from "@/ytmusic/libraryFinder";
+import * as Effect from "effect/Effect";
+import { subscribeAll } from "@/lib/externalStore";
+import { LibraryStore } from "@/library/LibraryStore";
+import { appRuntime } from "@/library/runtime";
+import {
+  onDownloadedRecording,
+  onSavedRecordings,
+  onLibraryChange,
+} from "@/library/libraryChanges";
+import { createPlayingIds } from "./playingIds";
 
 export const usePlayback = (): PlaybackState =>
   useSyncExternalStore(playbackState.subscribe, playbackState.get);
@@ -30,19 +38,25 @@ export const useQueue = (): QueueState =>
 export const useCurrentTrackId = (): string | null =>
   useSyncExternalStore(queueState.subscribe, () => currentEntry(queueState.get())?.trackId ?? null);
 
-/** All row identities of the playing recording, followed across a download. */
-export const useCurrentPlayingIds = (): ReadonlySet<string> => {
-  const currentId = useCurrentTrackId();
-  const track = useSyncExternalStore(queueTracks.subscribe, () =>
-    currentId === null ? null : (queueTracks.get().get(currentId) ?? null),
-  );
-  const song = useMemo(() => (track === null ? null : queuedYtSong(track)), [track]);
-  const find = useLoadedLibraryFinder(song !== null);
-  return useMemo(
-    () => new Set(playingTrackIds(currentId, song, find ?? (() => null))),
-    [currentId, song, find],
-  );
-};
+const playingIds = createPlayingIds({
+  target: {
+    get: () => {
+      const id = currentEntry(queueState.get())?.trackId ?? null;
+      const track = id === null ? undefined : queueTracks.get().get(id);
+      return { id, song: track === undefined ? null : queuedYtSong(track) };
+    },
+    subscribe: subscribeAll(queueState, queueTracks),
+  },
+  read: (song) =>
+    appRuntime.runPromise(Effect.flatMap(LibraryStore, (store) => store.matchingSong(song))),
+  onDownload: onDownloadedRecording,
+  onSavedRecordings,
+  onLibraryChange,
+});
+
+/** All row identities of the playing recording, shared across retained list screens. */
+export const useCurrentPlayingIds = (): ReadonlySet<string> =>
+  useSyncExternalStore(playingIds.subscribe, playingIds.get);
 
 /**
  * Play / Shuffle for a screen's songs, which may still be loading (a screen

@@ -14,6 +14,8 @@ import { AppState } from "react-native";
 
 import { WaveAppLog } from "@/native/waveAppLog";
 
+import { connectLibraryReadLog } from "./slowLibraryReads";
+
 /**
  * Wave's app log (docs/spec.md, "App log"): unhandled errors and rejections, the
  * errors React reports, and every `console.warn` / `console.error`, in a file in
@@ -40,6 +42,17 @@ const logDevice = (log: NonNullable<typeof WaveAppLog>): LogDevice => ({
   buildLabel: BUILD_LABEL,
 });
 
+/** Same bundle/native build identity as the log's started line, including JS-only repacks. */
+export const timingBuild = (): { version: string; commit: string } => {
+  const device = WaveAppLog === null ? null : logDevice(WaveAppLog);
+  const label = device?.buildLabel ?? "";
+  return {
+    version: device?.appVersion ?? "unknown",
+    commit:
+      label.match(/@\s*([a-f0-9]{7,40})/i)?.[1] ?? process.env.EXPO_PUBLIC_WAVE_COMMIT ?? "unknown",
+  };
+};
+
 /** How long entries wait to be written together. */
 const FLUSH_DELAY_MS = 2_000;
 
@@ -51,11 +64,22 @@ const FLUSH_SOON_ENTRIES = 100;
 const consoleWarn = console.warn.bind(console);
 const consoleError = console.error.bind(console);
 
+const flushListeners = new Set<() => void>();
+
+/** Collectors hand over their waiting lines before export, backgrounding or a fatal flush. */
+const onAppLogFlush = (collect: () => void): (() => void) => {
+  flushListeners.add(collect);
+  return () => {
+    flushListeners.delete(collect);
+  };
+};
+
 let pending: LogEntry[] = [];
 let timer: ReturnType<typeof setTimeout> | null = null;
 let writing: Promise<void> = Promise.resolve();
 
-const takePending = (): string | null => {
+const takePending = (collect = false): string | null => {
+  if (collect) for (const listener of flushListeners) listener();
   if (timer !== null) {
     clearTimeout(timer);
     timer = null;
@@ -66,8 +90,8 @@ const takePending = (): string | null => {
   return entries.map(formatLogEntry).join("");
 };
 
-const writePending = async (): Promise<void> => {
-  const text = takePending();
+const writePending = async (collect: boolean): Promise<void> => {
+  const text = takePending(collect);
   if (text === null || WaveAppLog === null) return;
   const size = await WaveAppLog.append(text);
   if (size <= APP_LOG_LIMITS.maxBytes) return;
@@ -76,16 +100,16 @@ const writePending = async (): Promise<void> => {
 };
 
 /** Writes the waiting entries; one write at a time, so a trim never races another. */
-const flushAppLog = (): Promise<void> => {
+const flushAppLog = (collect = false): Promise<void> => {
   writing = writing
-    .then(writePending)
+    .then(() => writePending(collect))
     .catch((error: unknown) => consoleWarn("[wave] Couldn't write the app log", error));
   return writing;
 };
 
 /** Writes the waiting entries at once, on the JS thread: for an error that may end the process. */
 const flushAppLogNow = (): void => {
-  const text = takePending();
+  const text = takePending(true);
   if (text === null || WaveAppLog === null) return;
   try {
     WaveAppLog.appendNow(text);
@@ -114,17 +138,30 @@ export const appLog = (level: LogLevel, tag: string, message: string): void => {
 /** Writes what's waiting, then opens the share sheet with the log and its header. */
 export const exportAppLog = async (): Promise<void> => {
   if (WaveAppLog === null) throw new Error("This build of Wave has no app log");
-  await flushAppLog();
+  await flushAppLog(true);
   const now = Date.now();
   const build = logDevice(WaveAppLog);
   await WaveAppLog.share(logHeader(build, now), logFileName(build.appVersion, now));
 };
+
+let screen = "/";
+
+/** The existing route observer's last screen, read without subscribing or rendering. */
+const currentLogScreen = (): string => screen;
+
+onAppLogFlush(
+  connectLibraryReadLog({
+    route: currentLogScreen,
+    write: (line) => appLog("info", "WaveTiming", line),
+  }),
+);
 
 /**
  * Tells native code the route showing, so a freeze of the main or JS thread
  * says what was on screen (modules/wave-native, `log/NativeLog.kt`).
  */
 export const noteScreen = (path: string): void => {
+  screen = path;
   try {
     WaveAppLog?.setScreen(path);
   } catch {
@@ -225,7 +262,7 @@ const answerMemoryEvents = (log: NonNullable<typeof WaveAppLog>): void => {
     if (typeof heap === "number") log.reportHermesHeap?.(heap);
   });
   log.addListener("memoryWarning", () => {
-    void flushAppLog();
+    void flushAppLog(true);
   });
 };
 
@@ -246,7 +283,7 @@ export const installAppLog = (): void => {
   captureUnhandledRejections();
   answerMemoryEvents(WaveAppLog);
   AppState.addEventListener("change", (state) => {
-    if (state !== "active") void flushAppLog();
+    if (state !== "active") void flushAppLog(true);
   });
   try {
     appLog("info", "app", `${appBuildName(logDevice(WaveAppLog))} started`);

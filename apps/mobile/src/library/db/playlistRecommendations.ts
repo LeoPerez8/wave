@@ -1,51 +1,106 @@
-import { and, eq, isNotNull } from "drizzle-orm";
+import { and, eq, or, sql, type SQL } from "drizzle-orm";
+import { matchingSongWhere } from "./matchingSong.ts";
 import { selectPendingFavorites } from "./pendingFavorites.ts";
 /** The editable playlist's recommendation inputs, read through the Library store. */
 import {
-  showsExplicitBadge,
   playlistRecordingMatch,
   type PlaylistRecommendationTrack,
   type PlaylistRecommendationSlot,
 } from "@wave/core";
 import type { SongRow } from "../LibraryStore.ts";
+import {
+  libraryRecommendationTrack,
+  storedRecommendationTrack,
+} from "../playlistRecommendationTracks.ts";
 import type { LibraryDatabase } from "./database.ts";
 import { selectCandidateCatalog } from "./candidateCatalog.ts";
-import { addToPlaylist, selectPlaylistEntries } from "./playlists.ts";
-import { selectSongGenres, trackQuery } from "./tracks.ts";
+import { addToPlaylist, selectPlaylist, selectPlaylistEntries } from "./playlists.ts";
+import { selectSongGenres, songGenresOf, trackQuery } from "./tracks.ts";
 import * as schema from "./schema.ts";
 
-/**
- * Fails unless the playlist is live. One indexed row: `selectPlaylist` would
- * also read every entry and the mosaic covers only to check existence.
- */
-const requirePlaylist = (db: LibraryDatabase, playlistId: number): void => {
-  const row = db
-    .select({ id: schema.playlists.id })
-    .from(schema.playlists)
-    .where(and(eq(schema.playlists.id, playlistId), eq(schema.playlists.deleted, false)))
-    .get();
-  if (row === undefined) throw new Error("The playlist no longer exists");
-};
-
-/**
- * How a Library song reads as a recommendation track. The lookups are small
- * per-song tables (artists, multi-genre tags, favorites, video ids), so Add
- * can project the one song it saves without reading the whole Library.
- */
-const libraryProjection = (db: LibraryDatabase) => {
+/** Current membership and Library recordings; shared with Add's transactional validation. */
+const selectPlaylistRecommendationTracks = (
+  db: LibraryDatabase,
+  playlistId: number,
+  offer?: PlaylistRecommendationSlot,
+) => {
+  if (
+    offer === undefined
+      ? selectPlaylist(db, playlistId) === null
+      : db.get(sql`SELECT 1 FROM playlists WHERE id = ${playlistId} AND NOT deleted`) === undefined
+  )
+    throw new Error("The playlist no longer exists");
+  const entries = selectPlaylistEntries(db, playlistId);
+  const candidates =
+    offer === undefined
+      ? undefined
+      : db
+          .select({ id: schema.tracks.id })
+          .from(schema.tracks)
+          .where(
+            offer.track.source === "library"
+              ? eq(schema.tracks.id, Number(offer.track.id))
+              : or(
+                  offer.track.videoId === ""
+                    ? undefined
+                    : eq(schema.tracks.videoId, offer.track.videoId),
+                  matchingSongWhere(offer.track),
+                ),
+          )
+          .all()
+          .map((row) => row.id);
+  const librarySongs = trackQuery(db)
+    .where(
+      candidates === undefined
+        ? undefined
+        : sql`${schema.tracks.id} IN (SELECT value FROM json_each(${JSON.stringify(candidates)}))`,
+    )
+    .all();
+  const projected =
+    candidates === undefined
+      ? undefined
+      : [
+          ...candidates,
+          ...entries.flatMap((entry) => (entry.source === "library" ? [entry.track.id] : [])),
+        ];
+  const scoped = (column: SQL | typeof schema.tracks.id | typeof schema.favorites.trackId) =>
+    projected === undefined
+      ? undefined
+      : sql`${column} IN (SELECT value FROM json_each(${JSON.stringify(projected)}))`;
+  const artistIds =
+    candidates === undefined
+      ? undefined
+      : [
+          ...librarySongs.flatMap((song) => song.artistIds),
+          ...entries.flatMap((entry) => (entry.source === "library" ? entry.track.artistIds : [])),
+        ];
   const names = new Map(
     db
       .select({ id: schema.artists.id, name: schema.artists.name })
       .from(schema.artists)
+      .where(
+        artistIds === undefined
+          ? undefined
+          : sql`${schema.artists.id} IN (SELECT value FROM json_each(${JSON.stringify(artistIds)}))`,
+      )
       .all()
       .map((a) => [a.id, a.name]),
   );
-  const genres = new Map(selectSongGenres(db).map((track) => [track.id, track.genres]));
+  const tagged =
+    projected === undefined
+      ? selectSongGenres(db)
+      : db
+          .select({ id: schema.tracks.id, genres: schema.tracks.genres })
+          .from(schema.tracks)
+          .where(scoped(schema.tracks.id))
+          .all()
+          .flatMap(songGenresOf);
+  const genres = new Map(tagged.map((track) => [track.id, track.genres]));
   const favorites = new Set(
     db
       .select({ id: schema.favorites.trackId })
       .from(schema.favorites)
-      .where(eq(schema.favorites.deleted, false))
+      .where(and(eq(schema.favorites.deleted, false), scoped(schema.favorites.trackId)))
       .all()
       .map((row) => row.id),
   );
@@ -53,56 +108,24 @@ const libraryProjection = (db: LibraryDatabase) => {
     db
       .select({ id: schema.tracks.id, videoId: schema.tracks.videoId })
       .from(schema.tracks)
-      .where(isNotNull(schema.tracks.videoId))
+      .where(scoped(schema.tracks.id))
       .all()
+      .filter((row) => row.videoId !== null)
       .map((row) => [row.id, row.videoId!]),
   );
-  return (song: SongRow): PlaylistRecommendationTrack => ({
-    favorite: favorites.has(song.id),
-    downloaded: videos.has(song.id) && song.path !== null,
-    id: String(song.id),
-    source: "library",
-    videoId: videos.get(song.id) ?? "",
-    title: song.title,
-    artists: song.artistIds.flatMap((id) => names.get(id) ?? []),
-    album: song.album,
-    albumId: null,
-    durationMs: song.durationMs,
-    artworkUrl: song.thumbPath === null ? null : `file://${song.thumbPath}`,
-    explicit: showsExplicitBadge(song.explicit),
-    genre: song.genre,
-    ...(genres.has(song.id) ? { genres: genres.get(song.id)! } : {}),
-    available: song.path !== null,
-  });
-};
-
-/** The playlist's current entries as recommendation tracks: what is already present. */
-const selectPlaylistTracks = (
-  db: LibraryDatabase,
-  playlistId: number,
-  local: (song: SongRow) => PlaylistRecommendationTrack,
-): PlaylistRecommendationTrack[] =>
-  selectPlaylistEntries(db, playlistId).map((entry): PlaylistRecommendationTrack =>
+  const local = (song: SongRow): PlaylistRecommendationTrack =>
+    libraryRecommendationTrack(song, names, {
+      favorite: favorites.has(song.id),
+      downloaded: videos.has(song.id) && song.path !== null,
+      videoId: videos.get(song.id) ?? "",
+      genres: genres.get(song.id),
+    });
+  const library = librarySongs.map(local);
+  const playlist = entries.map((entry): PlaylistRecommendationTrack =>
     entry.source === "library"
       ? local(entry.track)
-      : {
-          ...entry.song,
-          albumId: "albumId" in entry.song ? entry.song.albumId : null,
-          explicit: "explicit" in entry.song ? entry.song.explicit : false,
-          videoId: entry.source === "stream" ? entry.song.videoId : "",
-          id: entry.source === "stream" ? `yt:${entry.song.videoId}` : `entry:${entry.itemId}`,
-          source: "stream",
-          available: entry.source === "stream",
-        },
+      : storedRecommendationTrack(entry, entry.itemId),
   );
-
-/** Current membership and Library recordings: what ranking reads. */
-const selectPlaylistRecommendationTracks = (db: LibraryDatabase, playlistId: number) => {
-  requirePlaylist(db, playlistId);
-  const local = libraryProjection(db);
-  const librarySongs = trackQuery(db).all();
-  const library = librarySongs.map(local);
-  const playlist = selectPlaylistTracks(db, playlistId, local);
   return { playlist, library, librarySongs };
 };
 
@@ -133,7 +156,9 @@ export const dismissPlaylistRecommendation = (
   offer: PlaylistRecommendationSlot,
   now: number,
 ): boolean => {
-  requirePlaylist(db, playlistId);
+  // One indexed row: `selectPlaylist` would also read every entry and the mosaic covers.
+  if (db.get(sql`SELECT 1 FROM playlists WHERE id = ${playlistId} AND NOT deleted`) === undefined)
+    throw new Error("The playlist no longer exists");
   return (
     db
       .insert(schema.playlistRecommendationFeedback)
@@ -144,13 +169,7 @@ export const dismissPlaylistRecommendation = (
   );
 };
 
-/**
- * Membership and its positive signal commit together; a failed write rolls
- * both back. A Library offer reads only its own song: re-reading and
- * projecting the whole Library here was most of Add's blocking time (#608).
- * A catalog offer still matches against every available Library recording,
- * since a download may have arrived under edited tags.
- */
+/** Membership and its positive signal commit together; a failed write rolls both back. */
 export const acceptPlaylistRecommendation = (
   db: LibraryDatabase,
   playlistId: number,
@@ -158,7 +177,7 @@ export const acceptPlaylistRecommendation = (
   now: number,
 ): boolean =>
   db.transaction((tx) => {
-    requirePlaylist(tx, playlistId);
+    const input = selectPlaylistRecommendationTracks(tx, playlistId, offer);
     const feedback = schema.playlistRecommendationFeedback;
     if (
       tx
@@ -168,27 +187,18 @@ export const acceptPlaylistRecommendation = (
         .get() !== undefined
     )
       return false;
-    const project = libraryProjection(tx);
+    const available = input.library.filter((track) => track.available !== false);
     // A download may have completed since the offer appeared; prefer its Library recording.
-    let local: PlaylistRecommendationTrack | null;
-    if (offer.track.source === "library") {
-      const song = trackQuery(tx)
-        .where(eq(schema.tracks.id, Number(offer.track.id)))
-        .get();
-      local = song === undefined || song.path === null ? null : project(song);
-      if (local === null) throw new Error("This song is no longer available");
-    } else {
-      const available = trackQuery(tx)
-        .all()
-        .map(project)
-        .filter((track) => track.available !== false);
-      local = playlistRecordingMatch(available)(offer.track);
-    }
+    const local =
+      offer.track.source === "library"
+        ? available.find((track) => track.id === offer.track.id)
+        : playlistRecordingMatch(available)(offer.track);
+    if (offer.track.source === "library" && local == null)
+      throw new Error("This song is no longer available");
     const track = local ?? offer.track;
-    const playlist = selectPlaylistTracks(tx, playlistId, project);
     if (
-      playlistRecordingMatch(playlist)(track) !== null ||
-      playlist.some((song) => song.id === track.id)
+      playlistRecordingMatch(input.playlist)(track) !== null ||
+      input.playlist.some((song) => song.id === track.id)
     )
       return false;
     const result = addToPlaylist(

@@ -41,18 +41,31 @@ const saved: DiscoverMixes = {
 };
 
 describe("Home's Discover mixes section", () => {
+  test("a failed build offers recovery instead of a skeleton and keeps saved mixes visible", () => {
+    const options = { ytMusic: true, nothingToBuildFrom: false, blend, failed: true };
+    assert.deepEqual(discoverMixesSection(null, options), { kind: "empty", failed: true });
+    const shown = discoverMixesSection(saved, options);
+    assert.equal(shown.kind, "mixes");
+    assert.equal(shown.failed, true);
+    assert.equal(shown.kind === "mixes" && shown.updating, false);
+    assert.deepEqual(discoverMixesSection(null, { ...options, building: true }), {
+      kind: "skeleton",
+      failed: false,
+    });
+    assert.deepEqual(discoverMixesSection(saved, { ...options, ytMusic: false }), {
+      kind: "hidden",
+      failed: false,
+    });
+  });
+
   test("is hidden while YT Music is off, even with mixes saved", () => {
     assert.deepEqual(
       discoverMixesSection(saved, { ytMusic: false, nothingToBuildFrom: false, blend }),
-      {
-        kind: "hidden",
-      },
+      { kind: "hidden", failed: false },
     );
     assert.deepEqual(
       discoverMixesSection(null, { ytMusic: false, nothingToBuildFrom: false, blend }),
-      {
-        kind: "hidden",
-      },
+      { kind: "hidden", failed: false },
     );
   });
 
@@ -105,16 +118,14 @@ describe("Home's Discover mixes section", () => {
         blend,
         building: true,
       }),
-      { kind: "skeleton" },
+      { kind: "skeleton", failed: false },
     );
   });
 
-  test("shows a skeleton while no mixes are saved: the first build, or after a failed one", () => {
+  test("shows a skeleton before the first build answers", () => {
     assert.deepEqual(
       discoverMixesSection(null, { ytMusic: true, nothingToBuildFrom: false, blend }),
-      {
-        kind: "skeleton",
-      },
+      { kind: "skeleton", failed: false },
     );
   });
 
@@ -124,16 +135,14 @@ describe("Home's Discover mixes section", () => {
     );
     assert.deepEqual(
       discoverMixesSection(unreadable, { ytMusic: true, nothingToBuildFrom: false, blend }),
-      { kind: "skeleton" },
+      { kind: "skeleton", failed: false },
     );
   });
 
   test("is hidden when the last build had nothing to build from (no plays, an empty Library)", () => {
     assert.deepEqual(
       discoverMixesSection(null, { ytMusic: true, nothingToBuildFrom: true, blend }),
-      {
-        kind: "hidden",
-      },
+      { kind: "hidden", failed: false },
     );
   });
 
@@ -152,7 +161,7 @@ describe("Home's Discover mixes section", () => {
         nothingToBuildFrom: false,
         blend: { level: 3, keep },
       }),
-      { kind: "hidden" },
+      { kind: "hidden", failed: false },
     );
   });
 });

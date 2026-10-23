@@ -2,7 +2,7 @@ import {
   identityKey,
   libraryAlbumFinder,
   libraryArtistFinder,
-  ytArtistPageAsks,
+  ytArtistPageOpening,
   ytArtistSavedStands,
   ytArtistPageView,
   type YtArtistAlbum,
@@ -10,13 +10,18 @@ import {
   type YtArtistSaved,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useAlbums, useArtists } from "@/library/hooks";
 import { LibraryStore, type AlbumRow, type SongRow } from "@/library/LibraryStore";
+import { useScreenSettled } from "@/lib/screenTiming";
+import { online } from "@/native/waveNative";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 
+import { artistPageOpening } from "./artistPageOpening";
+import { artistOpeningRequest } from "./artistOpeningRequest";
 import { fetchArtist, readArtist, useSavedYtArtist } from "./artistSection";
+import { YtMusicError } from "./YtMusic";
 import { useLoadedLibraryFinder, type FindInLibrary } from "./libraryFinder";
 
 type Saved = YtArtistSaved<NativeYtSong>;
@@ -70,9 +75,12 @@ export const ytArtistPageSongs = (browseId: string, find: FindInLibrary) =>
  * Library artist that name is (Core's `libraryArtistFinder`,
  * `libraryAlbumFinder`). Without one, none.
  */
-const useLibraryReleases = (name: string | null): ((album: YtArtistAlbum) => AlbumRow | null) => {
-  const artists = useArtists();
-  const albums = useAlbums();
+const useLibraryReleases = (
+  name: string | null,
+  active: boolean,
+): ((album: YtArtistAlbum) => AlbumRow | null) => {
+  const artists = useArtists(active);
+  const albums = useAlbums(active);
   const artistNamed = useMemo(() => libraryArtistFinder(artists), [artists]);
   const artist = name === null ? null : artistNamed(name);
   const artistId = artist?.id ?? null;
@@ -84,8 +92,8 @@ const useLibraryReleases = (name: string | null): ((album: YtArtistAlbum) => Alb
 
 export interface YtArtistPageShown {
   /**
-   * What the page shows (Core's `ytArtistPageView`), or null until the
-   * Library has been read, so its songs never show streamed first.
+   * Offline/failure/loading renders independently of the Library. A found
+   * online page waits for settled matching so local songs never show streamed first.
    */
   readonly view: YtArtistPageView<NativeYtSong, SongRow, AlbumRow> | null;
   /** Try Again: asks YouTube Music once more. */
@@ -104,37 +112,62 @@ export interface YtArtistPageShown {
 export const useYtArtistPage = (
   browseId: string | null,
   knownName: string | null,
+  initiallyOffline = false,
 ): YtArtistPageShown => {
   const byName = browseId === null ? (knownName ?? "") : null;
   const key = byName === null ? savedKey(browseId ?? "") : identityKey(byName);
   const ask = useCallback(
     (saved: Saved | null) =>
-      byName === null
-        ? fetchPage(browseId ?? "")
-        : fetchArtist(byName, key, saved, { allSongs: true }),
+      artistOpeningRequest(
+        online,
+        byName === null
+          ? fetchPage(browseId ?? "")
+          : fetchArtist(byName, key, saved, { allSongs: true }),
+      ).pipe(Effect.mapError((error) => new YtMusicError({ reason: error.reason }))),
     [browseId, byName, key],
   );
   const { state, enabled, openedAt, show } = useSavedYtArtist(key, ask);
 
-  const asks = ytArtistPageAsks(state, { enabled, now: openedAt });
-  // Once per state: a remounted effect doesn't send the request twice.
+  const settled = useScreenSettled();
+  const [offlineHint, setOfflineHint] = useState(initiallyOffline);
+  const connected = !offlineHint && online();
+  const opening = artistPageOpening({ online: connected, enabled });
+  const [retry, setRetry] = useState(0);
+  const context = {
+    enabled,
+    now: openedAt,
+    settled,
+    online: connected,
+    retry: retry > 0,
+    librarySong: nowhere,
+    libraryAlbum: nowhere,
+  };
+  const work = ytArtistPageOpening<NativeYtSong, SongRow, AlbumRow>(state, context);
   const askedFor = useRef<unknown>(null);
   useEffect(() => {
-    if (!asks || askedFor.current === state) return;
+    if (!work.ask || (!retry && askedFor.current === state)) return;
     askedFor.current = state;
+    setRetry(0);
     show();
-  }, [asks, state, show]);
+  }, [work.ask, retry, state, show]);
 
   const saved = state.status === "reading" ? null : state.saved;
   const name = (saved?.outcome === "found" ? saved.page.name : null) ?? knownName;
-  const find = useLoadedLibraryFinder();
-  const libraryAlbum = useLibraryReleases(name);
-  const view = useMemo(
-    () =>
-      find === null
-        ? null
-        : ytArtistPageView(state, { enabled, now: openedAt, librarySong: find, libraryAlbum }),
-    [find, state, enabled, openedAt, libraryAlbum],
-  );
-  return { view, retry: show };
+  const find = useLoadedLibraryFinder(work.finder);
+  const libraryAlbum = useLibraryReleases(name, work.finder);
+  const view = useMemo(() => {
+    // Offline/failure/loading needs neither songs nor release identities. A found
+    // page waits for matching so a downloaded song never first appears streamed.
+    if (opening.view !== null) return opening.view;
+    if (!work.finder) return work.view;
+    if (find === null) return { ...work.view, songs: [], shelves: [], note: "loading" as const };
+    return ytArtistPageView(state, { enabled, now: openedAt, librarySong: find, libraryAlbum });
+  }, [opening.view, work.finder, work.view, find, state, enabled, openedAt, libraryAlbum]);
+  return {
+    view,
+    retry: useCallback(() => {
+      setOfflineHint(false);
+      setRetry((count) => count + 1);
+    }, [setOfflineHint, setRetry]),
+  };
 };

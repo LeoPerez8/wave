@@ -1,3 +1,4 @@
+import { registerTimingBackground, timingBackgroundChanged } from "./timing";
 /**
  * The network a run uses, for the app log (docs/spec.md, App log): a mix
  * build or a Magic Queue batch runs inside `withNetworkLog`, which writes one
@@ -22,6 +23,16 @@ import * as Exit from "effect/Exit";
 
 import { appLog } from "@/log/appLog";
 import { WaveYtMusic } from "@/native/waveYtMusic";
+
+const timingRuns = new Map<string, number>();
+registerTimingBackground("mixHarvest", () =>
+  [...timingRuns.keys()].some((what) => what.startsWith("Mix harvest")) ? "mix harvest" : null,
+);
+registerTimingBackground("magicQueue", () =>
+  [...timingRuns.keys()].some((what) => what.startsWith("Magic Queue"))
+    ? "Magic Queue batch"
+    : null,
+);
 
 const TAG = "WaveNetwork";
 
@@ -82,10 +93,15 @@ export const withNetworkLog = <A, E, R>(
   Effect.suspend(() => {
     const startedAt = Date.now();
     const meter: Meter = { yt: WaveYtMusic.startNetworkMeter(), use: NO_NETWORK_USE };
+    timingRuns.set(what, (timingRuns.get(what) ?? 0) + 1);
+    timingBackgroundChanged();
     return effect.pipe(
       Effect.provideService(CurrentMeter, meter),
       Effect.onExit((exit) =>
         Effect.sync(() => {
+          const count = (timingRuns.get(what) ?? 1) - 1;
+          if (count === 0) timingRuns.delete(what);
+          else timingRuns.set(what, count);
           const ended = Exit.isSuccess(exit) ? outcome?.(exit.value) : endedBy(exit.cause);
           const use = { ...meter.use, ytMusic: WaveYtMusic.takeNetworkUse(meter.yt) };
           const durationMs = Date.now() - startedAt;

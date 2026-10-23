@@ -70,6 +70,8 @@ function StackedMosaic({
 
 type Props = {
   name: string;
+  /** A mix shares this tile's artwork treatment, with its own accessible identity. */
+  label?: string | undefined;
   /** The song count: under the name in a tile, after "Playlist · " in a row. */
   detail: string;
   /** Covers from Core's `playlistMosaic` (none, one or four). */
@@ -92,6 +94,7 @@ type Props = {
  */
 export function PlaylistCard({
   name,
+  label,
   detail,
   paths,
   tints,
@@ -106,7 +109,7 @@ export function PlaylistCard({
   return (
     <CardTile
       width={size}
-      label={`${name}, playlist, ${detail}`}
+      label={label ?? `${name}, playlist, ${detail}`}
       onPress={onPress}
       onLongPress={onLongPress}
       checked={checked}

@@ -1,10 +1,13 @@
-import { magicLibrarySongs, tasteProfile, ytTrackId, type TasteProfile } from "@wave/core";
+import { ytTrackId, type TasteHistory, type TasteProfile } from "@wave/core";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
-import { onStarred, onUnstarred, onYtSongSignal } from "@/library/libraryChanges";
+import { freeTurnEffect } from "@/lib/backgroundWork";
+
+import { onLibraryChange, onStarred, onUnstarred, onYtSongSignal } from "@/library/libraryChanges";
 import { LibraryStore } from "@/library/LibraryStore";
 
+import { deriveTaste, type TasteLibrary } from "./tasteDerivation";
 import { makeLiveTaste } from "./liveTaste";
 import { magicSongsOf } from "./magicSongs";
 import { onPlayEnded } from "./PlayHistory";
@@ -18,17 +21,26 @@ import { onPlayEnded } from "./PlayHistory";
  * playback anywhere in the app (`makeLiveTaste`): Library plays ending,
  * stars and unstars, YT Music stars and downloads.
  */
+const derive = (snapshotTaken: (history: TasteHistory) => void, library?: TasteLibrary) =>
+  Effect.gen(function* () {
+    return yield* deriveTaste(
+      yield* LibraryStore,
+      freeTurnEffect,
+      Date.now(),
+      library,
+      snapshotTaken,
+    );
+  });
 const live = makeLiveTaste({
-  derive: Effect.gen(function* () {
-    const store = yield* LibraryStore;
-    const history = yield* store.tasteHistory;
-    const songs = yield* store.listSongs;
-    const toMagicSong = magicLibrarySongs(yield* store.listArtists);
-    const byId = new Map(songs.map((song) => [String(song.id), toMagicSong(song)]));
-    return tasteProfile(history, (trackId) => byId.get(trackId), Date.now());
-  }),
+  derive: derive(() => {}),
+  deriveWithSnapshot: (snapshotTaken) => derive(snapshotTaken),
   songsOf: magicSongsOf,
+  between: freeTurnEffect,
 });
+
+/** Home reuses its due-build input without creating another live profile or rereading songs. */
+export const tasteProfileForLibrary = (library: TasteLibrary) =>
+  live.profileUsing((snapshotTaken) => derive(snapshotTaken, library));
 
 /**
  * The owner's taste profile, derived from the history the first time it's
@@ -50,7 +62,10 @@ export const layer = Layer.effectDiscard(
       Effect.sync(() => [
         onPlayEnded(({ play }) => run(live.played(play))),
         onStarred((trackIds) => run(live.marked("favorite", trackIds.map(String), Date.now()))),
-        onUnstarred(() => live.unstarred()),
+        onUnstarred((ids) => live.unstarred(ids)),
+        onLibraryChange((change) => {
+          if (change.kind === "tracks") live.invalidate();
+        }),
         onYtSongSignal((kind, videoIds) =>
           run(live.marked(kind, videoIds.map(ytTrackId), Date.now())),
         ),

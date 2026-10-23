@@ -17,12 +17,18 @@
     "scripts/ci/merged-prs.ts",
     "scripts/music-folder/organize.ts",
     "scripts/music-folder/replace.ts",
+    // #608's tap bench runs by path (docs/verification/602-608.md).
+    "apps/mobile/bench/playlistRecommendationTap.ts",
     "scripts/**/*.test.ts",
   ],
   // Core's exports map preserves its public API; internal modules remain checked.
   // Android loads this WebView asset through Kotlin rather than a JS import.
   "dynamicallyLoaded": [
     "apps/mobile/modules/wave-native/android/src/main/assets/wave_po_token.html",
+    // The desktop store loader substitutes these exports for platform imports.
+    "apps/mobile/bench/fastAgain/platformDatabase.ts",
+    // runner.ts discovers each module and reads its bench export at runtime.
+    "apps/mobile/bench/fastAgain/benches/*.ts",
   ],
   "ignorePatterns": [
     "**/node_modules/**",

@@ -56,9 +56,71 @@ class FreezeWatchTest {
   }
 
   @Test
+  fun recoveredHitchesHaveTheCoreShapeAndThresholds() {
+    val js = watch("JS")
+    for (delay in listOf(499L, 500L, 800L)) {
+      js.tick()
+      now += delay
+      threadRuns()
+      js.reset()
+    }
+    val messages = logged().lines().filter { it.isNotEmpty() }.map { it.substringAfter("WaveTiming: ") }
+    assertEquals(listOf("JS thread busy 0.5 s on /library/artists", "JS thread busy 0.8 s on /library/artists"), messages)
+  }
+
+  @Test
+  fun recoveringBeforeTheWatchdogAfterAProcessPauseIsNotAHitch() {
+    val js = watch("JS")
+    js.tick()
+    now += 2_000
+    threadRuns()
+    assertEquals("", logged())
+  }
+
+  @Test
+  fun backgroundResetDiscardsAnOutstandingPingAndItsLateAnswer() {
+    val js = watch("JS")
+    js.tick()
+    now += 800
+    js.reset()
+    threadRuns()
+    assertEquals("", logged())
+  }
+
+  @Test
+  fun mainRecoveryUsesTheStackSampledWhileItWasBusyAndReportsTheHitch() {
+    var sample: Runnable? = null
+    var frames = "at scan"
+    val hitches = mutableListOf<Long>()
+    val main = FreezeWatch("main", 3_000, { now }, { queue.addLast(it); true }, { screen }, { frames },
+      { task, _ -> sample = task; ({ sample = null }) }, { hitches.add(it) })
+    main.tick()
+    now += 500
+    sample!!.run()
+    frames = "at idle"
+    now += 300
+    screen = "/next"
+    threadRuns()
+    assertEquals(listOf(800L), hitches)
+    assertEquals("2026-10-16T14:03:22.800Z I WaveTiming: main thread busy 0.8 s on /library/artists\n  at scan\n", logged())
+  }
+
+  @Test
+  fun aLongHitchWithAHealthyWatchdogIsCountedOnceUnderTheFreezeBoundary() {
+    val js = watch("JS")
+    js.tick()
+    ticks(js, until = 2_000, responsive = false)
+    now += 999
+    threadRuns()
+    threadRuns()
+    assertEquals("2026-10-16T14:03:24.999Z I WaveTiming: JS thread busy 3.0 s on /library/artists\n", logged())
+  }
+
+  @Test
   fun aThreadThatKeepsAnsweringIsNotAFreeze() {
     val js = watch("JS")
     js.tick()
+    threadRuns()
     ticks(js, until = 20_000, responsive = true)
 
     assertEquals("", logged())

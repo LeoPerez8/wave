@@ -1,3 +1,4 @@
+import { useScreenContent } from "@/lib/screenTiming";
 import { useLocalSearchParams } from "expo-router";
 import { useMemo } from "react";
 
@@ -13,6 +14,7 @@ export default function YtPlaylistScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const playlistId = id ?? "";
   const known = useYtListHead("yt-playlist", playlistId);
+  useScreenContent(true);
   const { load, retry } = useYtListPage("yt-playlist", playlistId);
   const context = useMemo(() => ({ kind: "ytPlaylist", id: playlistId }) as const, [playlistId]);
   return (

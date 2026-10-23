@@ -1,3 +1,4 @@
+import { useScreenContent } from "@/lib/screenTiming";
 import { HomeEditor } from "@/home/HomeEditor";
 import { editSavedHomeArrangement, useHomeArrangement } from "@/home/homeArrangement";
 import { SettingsEditorScreen } from "@/settings/SettingsPage";
@@ -8,6 +9,7 @@ import { SettingsEditorScreen } from "@/settings/SettingsPage";
  * once.
  */
 export default function HomeLayoutSettingsScreen() {
+  useScreenContent(true);
   return (
     <SettingsEditorScreen layoutPage="home">
       <HomeEditor arrangement={useHomeArrangement()} edit={editSavedHomeArrangement} />

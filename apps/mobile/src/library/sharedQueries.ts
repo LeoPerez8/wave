@@ -94,6 +94,7 @@ export const useLibraryQuery = <A>(query: LibraryQuery<A> | null, initial: A): A
       const attached = registry.attach(key, definition.reads, {
         visible: sight.visible(),
         onChange,
+        onStateChange: onChange,
       });
       const stopWatching = sight.subscribe((visible) =>
         visible ? attached.show() : attached.hide(),
@@ -106,10 +107,11 @@ export const useLibraryQuery = <A>(query: LibraryQuery<A> | null, initial: A): A
     [definition, sight],
   );
   const key = definition?.key;
-  const current = useSyncExternalStore(
+  const snapshot = useSyncExternalStore(
     subscribe,
-    key === undefined ? NONE : () => registry.current(key),
+    key === undefined ? NONE : () => registry.current(key) ?? registry.state(key),
   );
+  const current = typeof snapshot === "string" ? undefined : snapshot;
 
   // The first result an app screen in sight shows lets startup work go (src/lib/backgroundWork.ts).
   const coverable = useContext(CoveredByNowPlaying);
@@ -120,3 +122,12 @@ export const useLibraryQuery = <A>(query: LibraryQuery<A> | null, initial: A): A
 
   return current === undefined ? initial : (current.value as A);
 };
+
+/** Readiness of a main screen query that initially returns an empty-list placeholder. */
+export const libraryQueryHasContent = (key: string): boolean => registry.current(key) !== undefined;
+
+/** First-read feedback, read alongside the owning useLibraryQuery subscription. */
+export const libraryQueryState = (key: string) => registry.state(key);
+
+/** Explicit recovery for just this failed first read. Existing content stays on screen. */
+export const retryLibraryQuery = (key: string): void => registry.retry(key);

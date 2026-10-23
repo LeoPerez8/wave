@@ -1,3 +1,4 @@
+import { timingStackListeners } from "@/lib/timing";
 import type { LibrarySectionSlug } from "@wave/core";
 import { Stack } from "expo-router";
 import { View } from "react-native";
@@ -17,7 +18,10 @@ import { sectionTitleLongPress } from "./sectionTitleLongPress";
 export function SectionTabStack() {
   const background = useThemeColor("background");
   return (
-    <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: background } }} />
+    <Stack
+      screenListeners={timingStackListeners}
+      screenOptions={{ headerShown: false, contentStyle: { backgroundColor: background } }}
+    />
   );
 }
 

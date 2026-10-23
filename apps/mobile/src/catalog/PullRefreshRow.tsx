@@ -2,7 +2,7 @@ import { IconRefresh } from "@tabler/icons-react-native";
 import { MIX_PULL_SLOP, mixPull, mixPullCanStart, RETURN_SPRINGS } from "@wave/core";
 import * as Haptics from "expo-haptics";
 import { useState, type ReactNode } from "react";
-import { ActivityIndicator, View, type AccessibilityActionEvent } from "react-native";
+import { ActivityIndicator, View } from "react-native";
 import { GestureDetector, usePanGesture } from "react-native-gesture-handler";
 import Animated, {
   useAnimatedScrollHandler,
@@ -35,7 +35,8 @@ const ICON = CELL * 3;
  * threshold is the finger's travel at every amount). Under reduce motion the
  * row holds still, the arrow doesn't turn and the spinner is a still arrow.
  * With [enabled] off (a refresh already running) it's a plain row.
- * Screen readers get the refresh as the row's action, named [refreshLabel].
+ * The caller exposes refresh on its row heading so screen readers can reach
+ * it without grouping the row's individually focusable tiles.
  *
  * The row scrolls as a plain `CoverRow` does, with no gesture of its own on
  * its scroll view: Home's scroll view is React Native's, which Gesture
@@ -50,12 +51,10 @@ export function PullRefreshRow({
   children,
   onRefresh,
   enabled,
-  refreshLabel,
 }: {
   children: ReactNode;
   onRefresh: () => void;
   enabled: boolean;
-  refreshLabel: string;
 }) {
   const scrollable = useListScrollable();
   const reduceMotion = useReducedMotion();
@@ -123,16 +122,8 @@ export function PullRefreshRow({
     ],
   }));
 
-  const onAccessibilityAction = (event: AccessibilityActionEvent) => {
-    if (event.nativeEvent.actionName === "refresh" && enabled) onRefresh();
-  };
-
   return (
-    <View
-      style={{ marginHorizontal: -grid.margin }}
-      accessibilityActions={enabled ? [{ name: "refresh", label: refreshLabel }] : []}
-      onAccessibilityAction={onAccessibilityAction}
-    >
+    <View style={{ marginHorizontal: -grid.margin }}>
       <Animated.View
         pointerEvents="none"
         importantForAccessibility="no-hide-descendants"

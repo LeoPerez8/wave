@@ -1,3 +1,4 @@
+import { useScreenContent } from "@/lib/screenTiming";
 import { IconSearch } from "@tabler/icons-react-native";
 import {
   heldTracks,
@@ -104,6 +105,7 @@ function RecentSearches({ onPick }: { onPick: (query: string) => void }) {
  * Switching between recents and results rises the new content in.
  */
 export default function SearchScreen() {
+  useScreenContent(true);
   useRenderCount("SearchScreen");
   const insets = useSafeAreaInsets();
   const [query, setQuery] = useState("");

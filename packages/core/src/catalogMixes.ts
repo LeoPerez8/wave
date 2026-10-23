@@ -1,3 +1,4 @@
+import { finishSteps } from "./buildSteps.ts";
 /**
  * Home's mixes built from the candidate catalog (docs/spec.md, "Artist
  * mixes", "Genre mixes"): each seed's songs are the engine's ranking of the
@@ -8,7 +9,11 @@
  * (`harvest.ts`).
  */
 
-import { discoverMixesOfRadios, type DiscoverMixRead } from "./discoverMixRadios.ts";
+import {
+  discoverMixesOfRadiosSteps,
+  discoverMixesOfRadios,
+  type DiscoverMixRead,
+} from "./discoverMixRadios.ts";
 import type { DiscoverMixPoolSources } from "./discoverMixLevels.ts";
 import {
   mixSeedArtists,
@@ -18,15 +23,17 @@ import {
   type DiscoverRadioSong,
 } from "./discoverMixes.ts";
 import {
+  mixSeedProfileSteps,
+  mixSeedStyleSteps,
   mixSeedProfile,
   mixSeedStyle,
   type GenreProfileLibrary,
   type MixAffinity,
 } from "./genreAffinity.ts";
 import {
-  rankRecommended,
+  rankRecommendedSteps,
+  recommendCandidatesSteps,
   recommend,
-  recommendCandidates,
   type RecommendCandidate,
   type RecommendedSong,
   type RecommendOptions,
@@ -70,15 +77,18 @@ export const catalogMixRead = (
   readOfRanked(seed, recommend(catalogMixSeed(seed, sources), sources, options));
 
 /** [seed]'s read out of the engine's [ranked] songs (`catalogMixRead`). */
-const readOfRanked = (
+const readOfRanked = (seed: DiscoverMixSeed, ranked: readonly RecommendedSong[]) =>
+  finishSteps(readOfRankedSteps(seed, ranked));
+function* readOfRankedSteps(
   seed: DiscoverMixSeed,
   ranked: readonly RecommendedSong[],
-): DiscoverMixRead<CatalogMixSong> | null => {
+): Generator<void, DiscoverMixRead<CatalogMixSong> | null> {
   if (ranked.length === 0) return null;
   const affinities = new Map<string, MixAffinity>();
   const radio: CatalogMixSong[] = [];
   const familiar: CatalogMixSong[] = [];
   for (const { song, affinity, onSeedRadio } of ranked) {
+    yield;
     const entry = { ...song, video: false };
     affinities.set(song.videoId, affinity);
     radio.push(entry);
@@ -90,10 +100,13 @@ const readOfRanked = (
     affinity: (song) => affinities.get(song.videoId) ?? "unknown",
     familiar,
   };
-};
-
+}
 /** Seeds' catalog reads that re-rank at once: what a section's sliders move. */
 export interface CatalogMixReader {
+  readonly readSteps?: (
+    seed: DiscoverMixSeed,
+    options?: Omit<RecommendOptions, "random" | "neighbourhood">,
+  ) => Generator<void, DiscoverMixRead<CatalogMixSong> | null>;
   /**
    * [seed]'s catalog read (`catalogMixRead`) ranked by [options] (the
    * sliders' weights and threshold, a refresh's avoided songs). The engine
@@ -124,19 +137,25 @@ export const catalogMixReader = (
   } = {},
 ): CatalogMixReader => {
   const walks = new Map<string, readonly RecommendCandidate[]>();
-  return {
-    read: (seed, options = {}) => {
-      let candidates = walks.get(seed.id);
-      if (candidates === undefined) {
-        candidates = recommendCandidates(catalogMixSeed(seed, sources), sources, {
+  const readSteps = function* (
+    seed: DiscoverMixSeed,
+    options: Omit<RecommendOptions, "random" | "neighbourhood"> = {},
+  ): Generator<void, DiscoverMixRead<CatalogMixSong> | null> {
+    let candidates = walks.get(seed.id);
+    if (candidates === undefined) {
+      candidates = yield* recommendCandidatesSteps(
+        yield* catalogMixSeedSteps(seed, sources),
+        sources,
+        {
           ...(neighbourhood === undefined ? {} : { neighbourhood }),
           ...(variety === undefined ? {} : { random: seededRandom(`${variety}:${seed.id}`) }),
-        });
-        walks.set(seed.id, candidates);
-      }
-      return readOfRanked(seed, rankRecommended(candidates, options));
-    },
+        },
+      );
+      walks.set(seed.id, candidates);
+    }
+    return yield* readOfRankedSteps(seed, yield* rankRecommendedSteps(candidates, options));
   };
+  return { readSteps, read: (seed, options) => finishSteps(readSteps(seed, options)) };
 };
 
 /** What the section's mixes leave out and blend in: the songs the owner knows, the Library, a refresh's avoided songs. */
@@ -170,3 +189,37 @@ export const discoverMixesOfCatalog = <L extends DiscoverLibrarySong>(
     ...(avoid === undefined ? {} : { avoid }),
   });
 };
+
+export function* discoverMixesOfCatalogSteps<L extends DiscoverLibrarySong>(
+  seeds: readonly DiscoverMixSeed[],
+  reader: CatalogMixReader,
+  { known, library, avoid, ...engine }: CatalogMixesOptions<L>,
+): Generator<void, DiscoverMix[]> {
+  const options = { ...engine, ...(avoid === undefined ? {} : { avoid }) };
+  const reads: DiscoverMixRead<CatalogMixSong>[] = [];
+  for (const seed of seeds) {
+    const read =
+      reader.readSteps === undefined
+        ? reader.read(seed, options)
+        : yield* reader.readSteps(seed, options);
+    if (read !== null) reads.push(read);
+    yield;
+  }
+  return yield* discoverMixesOfRadiosSteps(reads, {
+    known,
+    library,
+    ...(avoid === undefined ? {} : { avoid }),
+  });
+}
+
+function* catalogMixSeedSteps(
+  seed: DiscoverMixSeed,
+  { library, profileOf, styleOf }: Pick<CatalogMixSources, "library" | "profileOf" | "styleOf">,
+): Generator<void, RecommendSeed> {
+  return {
+    artists: mixSeedArtists(seed).map((artist) => artist.name),
+    profile: yield* mixSeedProfileSteps(seed, library, profileOf),
+    style: yield* mixSeedStyleSteps(seed, library, styleOf ?? (() => undefined)),
+    ...(seed.genre === undefined ? {} : { family: seed.genre }),
+  };
+}

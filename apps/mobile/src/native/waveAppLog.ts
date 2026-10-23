@@ -1,4 +1,4 @@
-import type { LogDevice } from "@wave/core";
+import type { LogDevice, TimingFrames } from "@wave/core";
 import { NativeModule, requireOptionalNativeModule } from "expo";
 
 /**
@@ -6,6 +6,7 @@ import { NativeModule, requireOptionalNativeModule } from "expo";
  * which native code writes to as well. Core's `appLog.ts` decides what goes in it.
  */
 type WaveAppLogEvents = {
+  timingFrames: (event: TimingFrames & { id: number; measured: boolean }) => void;
   /** Native code wants the Hermes heap for a memory line: answer with `reportHermesHeap`. */
   hermesHeapWanted: () => void;
   /** Android warned that memory is short: write the waiting log entries now. */
@@ -14,6 +15,10 @@ type WaveAppLogEvents = {
 
 declare class WaveAppLogModule extends NativeModule<WaveAppLogEvents> {
   /** Appends formatted entries off the JS thread; resolves the log's size in bytes. */
+  timingFrameIntervalMs?(): number;
+  startTimingFrames?(id: number, ageMs: number): void;
+  stopTimingFrames?(id: number): void;
+  takeTimingHitches?(): number[];
   append(text: string): Promise<number>;
   /** Appends at once, on the JS thread, for a fatal error; returns the log's size in bytes. */
   appendNow(text: string): number;

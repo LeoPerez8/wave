@@ -195,6 +195,12 @@ Pending: final integration SHA/APK identity; parent screenshots before/after per
 - **548-A / P1 / Adaptivity:** `app/access.tsx` uses a non-scrollable root with a 96dp top offset plus heading, recovery copy and action. A short available window or enlarged multiline heading has no path to scroll the grant/retry action into reach. Correction: safe-area-aware scroll container, preserving the incumbent layout at full height. Scenario: denied → enlarged font → short window → reach Try again. Native adapt/harden; screenshot/interaction P.
 - **548-B / P1 / Accessibility:** `components/ScanProgressBanner.tsx` declares a progressbar without `accessible`, a name or value, so scan phase and indexed counts are not exposed as one progress control. Correction: named/valued indeterminate enumeration and determinate indexing; keep retry independently reachable. Scenario: first scan enumeration → read N of M → failure → retry. TalkBack P.
 - **548-C / P2 / Adaptivity:** `app/music-folders.tsx` constrains the folder name/path to a fixed 56dp row while system text scales; nonvirtualized rows can grow without affecting list indexing. Correction: minimum-height rows; pad the scroll end by the navigation inset. Long paths/counts at 1.3x and button Back P.
+- **548-D / P1 / Recovery:** a failed all-files settings launch was unhandled and silent. Corrected: retryable failure copy, no denial on return, single launch while Android answers (`library/allFilesAccess.ts`, tested). **548-D2 / P2 / Performance:** the corrected store notifies only on change, so a foreground return doesn't re-render the root layout (tested).
+- **548-E / P2 / Status:** Music folders waited for a nonexistent `roots` query key and drew both sections empty before the read. Corrected: loaded roots and exclusions render together, content readiness follows them, busy element for TalkBack.
+- **548-F / P2 / Adaptivity:** folder name/location were truncated to one line beside the count. Corrected: both wrap, count under them.
+- **548-G / P2 / Recovery/Accessibility:** scan failure cause was capped at three lines and not announced. Corrected: full cause in a polite live region; Try again separate.
+
+Full #548 surface/alias/state table, cross-references and pending evidence: [548 verification](548-first-run-verification.md). Every device, TalkBack, Back and performance item remains P.
 
 Source confirmation will use TypeScript and diff review. No new constants-only test is appropriate for native scroll/semantics/layout props; device evidence remains required.
 
@@ -333,3 +339,96 @@ The parent captured all 12 canonical surfaces in four theme/font pairs on integr
 Directly inspected candidate evidence includes Home at light 1.0/1.3 and Stats at light 1.3. September 2026 now renders fully in the Recap tile. The first 1.3 Home capture exposed three columns because Android widens its native float below the decimal 1.3 breakpoint. `945060ea` corrects the comparison; final APK confirmation is recorded separately. The initial Home capture remains evidence of that found defect. Other route snapshots establish capture identity; inventory does not assert every screen state has passed inspection.
 
 The inventory, state applicability, baseline fixtures, actual build/device records and severity register required by #547 are established. Flow acceptance under #548–557 and the overall #534 matrix remain pending wherever the register says P. Canonical snapshots do not cover all aliases, loading/failure states, theme customization, TalkBack integration, native motion or performance. The Android16/API36 emulator is not a physical S24+ 120Hz or SM-G985F/API33; no release-performance claim follows from it.
+
+### #549 fresh Home/Discover audit (2026-10-23)
+
+Baseline `e7a2b8d98f4da22eaec2151f5d229130970abf90`, branch
+`feat/549-home-discover-polish`. See [the #549 flow report](549-home-discover-verification.md)
+for findings 549-A–F, source provenance and pending evidence. Earlier 549-A's
+scrollable Discover card is already integrated. Findings were recorded before edits. Source corrections 549-B–F now cover
+slider wrapping, reachable refresh actions on row headings, full mix identity,
+gone-mix scrolling/inset and row-label wrapping; 549-A is preserved. All new rendered/device acceptance
+remains PENDING; the historical parent captures do not validate this build.
+
+The #549 flow report supplies the complete state/NA reasons and confirmation
+recipe for this inventory. Evidence for all rows is S with L/D/L1.3/D1.3 and
+TB/NAV/M **PENDING**. The old initial inventory's “Home sections/mix seed/artist
+controls” description of 549-S01 is superseded: the editor controls Home section
+order/visibility only; mix seeds and sliders live in Discover.
+
+| #549 surface / contextual alias                                        | Findings and applicable states                                                 | Verification / owner                                                            |
+| ---------------------------------------------------------------------- | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------- |
+| Home; legacy `/library/discover` redirect to Home                      | L/E/C/O/F/S/A; navigation alias checked separately                             | Source only; #592/#595/#598 preserved                                           |
+| Home sections; selectable Library shelf (including Discover)           | L/E/C/O/A; F action dialogs; list selection NA                                 | 549-C/D/F; #550/#554 shared patterns                                            |
+| 549-S01 Home editor card; `settings/layout/home.tsx` page              | C/E/S; local-only, no fetch/playback. Card Done/cancel vs page immediate-save  | #555/#556 integration; no additional correction                                 |
+| 549-S02 Discover headers, Magic Queue seeds, Artist/Genre rows         | L/E/C/O/F/D/A; S menu origin; checkbox selection NA                            | 549-C/D/F                                                                       |
+| Shared Magic Queue local song/album/artist/playlist menu entries       | C/O/F/A; S origin; absent for genre/missing/streamed/unsearched/bulk selection | Core itemActions tests; #551/#553/#556 presentation, native integration PENDING |
+| 549-S03 settings trigger/card, three sliders                           | C/S/O; D YT Music off; L/E/F/A NA                                              | 549-A preserved; 549-B; #555 shared slider confirmation                         |
+| 549-S04 mix menu, save/collision, refresh/Undo toast                   | L/C/O/F/D/S/A as detailed in flow report                                       | 549-C; #551/#556 follow-up surfaces                                             |
+| 549-S05 mix skeletons; 549-S06 shell/section/seed/Recap skeletons      | L only; still busy groups; other states NA                                     | #592/#598 source behavior preserved                                             |
+| 549-S07 pull/crossfade/heading refresh integration on Home and Library | C/O/F/D; repeat/Undo; reduced motion + zero/default tap                        | 549-C; event-adapter tests, actual TalkBack/gestures PENDING                    |
+| Mix detail, selected rows, active playback/download; gone-mix state    | C/O/F/S/A; L Library/finder resolution; gone E, other states NA                | 549-D/E; #551/#553/#555/#556 shared integration                                 |
+| Stats/See all/Favorites/Recap/local tile menu entries and return       | Applicable shared route states, not a duplicate flow audit                     | #550/#551/#554/#556                                                             |
+
+Real release-runner doctor and startup/tab/scroll/settings scenario attempts fail
+before measurement because adb is unavailable (`spawn adb ENOENT`). The flow
+report defines a repeatable supplemental Discover-card slider scenario; execution
+and automation are PENDING. Phone before/after evidence, performance variability
+and APK/device identity are PENDING. No desktop/simulated number substitutes.
+
+### #550 fresh Library browsing audit (2026-10-23)
+
+Baseline `c0a837f605d80288e278c5f9765434237d70e757`, branch
+`feat/550-library-browsing-polish`. Findings 550-B–D recorded before edits in
+[the #550 flow report](550-library-browsing-verification.md): distinguish first
+read/loading/failure from empty, allow playlist header actions to wrap, and
+keep alphabet stepping reachable when two album letters share a row. Existing
+550-A handled finder taps remain integrated. Rendered/device acceptance remains
+PENDING; historical captures do not validate this slice.
+
+The final #550 source slice corrects 550-B/C/D plus **550-E**, the 38dp-high
+playlist tile drag target (now at least 48dp, centred on the same caption).
+B also covers a failed new Songs sort and demanded Find metadata, retaining
+existing content/input during explicit retry. B/D have public Core behavior
+regressions; C/E are native layout props, with rendered confirmation PENDING.
+No confirmed in-scope finding is intentionally deferred. The inherited 56dp
+rows/tile captions are still a pending rendered risk, not asserted clipping.
+
+Every row below has source evidence only. L/D/L1.3/D1.3 and TB/NAV/M/IME
+remain PENDING wherever applicable. State and NA reasons, the 24 detail-tab
+return aliases and the exact confirmation recipe are in the linked #550 report.
+No route was added. The earlier complete file-route inventory stays in force.
+
+| #550 surface / contextual alias                                                  | Applicable states and findings                                                                     | Verification / owner                                                     |
+| -------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| Library tab, all six entry rows, scan/empty/folder action                        | L/E/C/O/F/D/A; no checkbox selection                                                               | #548 scan/access; #549 shelf render; #550 destination lists              |
+| Songs pushed list and configurable Songs tab                                     | L/E/C/O/F/D/S/A; ID order, summary paging, all eight sorts                                         | 550-A/B/D; #310 bounds; #588 identity                                    |
+| Albums pushed list and Albums tab                                                | L/E/C/O/F/S; menu disabled actions; no own playing/download progress                               | 550-B/D; two-column grid, no alternate dedicated list layout             |
+| Artists pushed list and Artists tab                                              | L/E/C/O/F/S; menu disabled actions; no own playing/download progress                               | 550-A/B/D; alphabetical circles/rows, #600 scoped counts                 |
+| Genres pushed list and Genres tab                                                | L/E/C/O/F/S; menu disabled actions; no own playing/download progress                               | 550-B/D; #551/#601 bounded genre destination                             |
+| Favorites pushed list and Favorites tab                                          | L/E/C/O/F/D/S/A; date-starred plus eight sorts                                                     | 550-A/B/D; #587 stars/#588 identity                                      |
+| Playlists pushed list and Playlists tab; List/Grid/Large Cards                   | L/E/C/O/F/D/S; progress in detail/menu; custom order/drag + semantic moves                         | 550-B/C/E; #539 Undo in detail, #537/#542 gestures                       |
+| Sort/layout cards and contextual Library/Playlists title choices                 | C/O/S; Songs order L/F, choice controls have no own empty/play state                               | 550-B; #555 settings aliases/#556 card/focus                             |
+| Find in Songs, Artists and Favorites; typed/cleared/no-match                     | C/E/O/S; Songs metadata L/F; playback in Songs/Favorites; no async Artists/Favorites finder        | 550-A/B; input/query/order/context retained                              |
+| Alphabet rail/plate across lists, reverse Songs/Favorites and paired Albums      | C/O/S; hidden for short/single-letter/date sorts or active Find; no independent fetch/play/failure | 550-D; native touch/TB/value, motion and font matrix PENDING             |
+| Library shelf Recently added/played, Most played albums/artists, Favorites; None | L/E/C/O/F/D/A; menu origin selected, checkbox selection NA; None mounts no shelf                   | #549 source renderer; #592/#595/#598 scheduling; #550 See all navigation |
+| Library shelf Discover, Magic Queue seeds and Artist/Genre mixes                 | L/E/C/O/F/D/A; no checkbox selection; slider/menu selection                                        | #549 flow report and findings 549-A–F; no duplicate implementation       |
+| Shared row/tile selection, menus, swipe, skeletons, scan banner                  | Applicable L/E/C/O/F/D/S/A by consumer                                                             | #551/#553/#555/#556; #538/#588 identity; #537/#542 gestures              |
+| Unknown Library section; each of six tab stacks × four detail aliases            | Unknown slug E/O/Back only; each real detail alias keeps owning route states                       | #551 rendering; #550 NAV/retained tab scroll/query/selection PENDING     |
+
+The required release runner was attempted for tab-switch, push-tracklist,
+push-playlist and scroll-songs. It fails before measurements with
+`Couldn't run adb: spawn adb ENOENT`; T3 device discovery confirms no Android
+SDK/device. Scratch `550-perf-{doctor,run}.log` and
+`550-device-availability.json` preserve this limit. Comparable phone baseline/
+candidate traces, variability, latency median/p90, jank, long tasks and memory
+remain PENDING. Core/store tests and unchanged source guards do not replace
+those measurements or theme/font/TalkBack screenshots.
+
+#550 local confirmation: 3,433 Core tests and 722 mobile tests pass; both
+typechecks and changed-file Prettier/oxlint (`--no-ignore`) pass. Final focused
+checks after the integration re-merge check pass 125 Core and 33 mobile tests,
+including source/route guards and bounded genre/store behavior. Implementation
+SHA `ef3525d400092903cff07f8315503d3122923c84`; final documentation/build
+provenance is in the scratch `550-handoff.md`. These are desktop/source results
+only; all native evidence requirements above remain PENDING.

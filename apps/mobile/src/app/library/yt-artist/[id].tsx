@@ -1,3 +1,4 @@
+import { useScreenContent } from "@/lib/screenTiming";
 import { LegendList } from "@legendapp/list/react-native";
 import { IconUser } from "@tabler/icons-react-native";
 import {
@@ -248,12 +249,13 @@ function QuietLine({
  * failing, a quiet line with Try Again; with YT Music off, it says so.
  */
 export default function YtArtistScreen() {
-  const params = useLocalSearchParams<{ id: string; name?: string }>();
+  useScreenContent(true);
+  const params = useLocalSearchParams<{ id: string; name?: string; offline?: string }>();
   const browseId = params.id === YT_ARTIST_BY_NAME ? null : (params.id ?? "");
   const knownName = params.name === undefined || params.name === "" ? null : params.name;
   const scrollable = useListScrollable();
   const bottomInset = useChromeInset();
-  const { view, retry } = useYtArtistPage(browseId, knownName);
+  const { view, retry } = useYtArtistPage(browseId, knownName, params.offline === "1");
   const songs = view?.songs ?? NO_SONGS;
   const selectable = useMemo(() => songs.map(listedTrackItem), [songs]);
   const selection = useListSelection({

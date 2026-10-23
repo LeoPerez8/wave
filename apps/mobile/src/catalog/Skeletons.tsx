@@ -65,7 +65,21 @@ function TrackRowSkeleton({
         <View
           className="bg-fill"
           style={{ width: THUMB, height: THUMB, borderRadius: leading === "card" ? CELL / 2 : 0 }}
-        />
+        >
+          {leading === "card" && (
+            <View
+              className="bg-background"
+              style={{
+                position: "absolute",
+                width: 20,
+                height: 20,
+                borderRadius: 10,
+                right: -4,
+                bottom: -4,
+              }}
+            />
+          )}
+        </View>
       ) : (
         <View style={{ width: grid.stateCell }}>
           <Line lineHeight={22} width="50%" />
@@ -152,36 +166,43 @@ export function TrackSkeletons({
 }
 
 /**
- * An album tile's stand-in, laid out as `AlbumTile` is at [size]: the
- * artwork's square, the caption line, two title lines and the furniture line
- * (their line heights are global.css's catalog, body and footnote).
+ * An album card's stand-in, laid out as `AlbumCard` is at [size]: the square
+ * cover with 6dp corners, then the title line and the artist line under it.
  */
-export function TileSkeleton({ size }: { size: number }) {
+export function AlbumCardSkeleton({ size, fontScale = 1 }: { size: number; fontScale?: number }) {
   return (
     <View style={{ width: size }}>
-      <View className="bg-fill" style={{ width: size, height: size }} />
-      <View style={{ paddingTop: CELL * 1.5, gap: CELL / 4 }}>
-        <Line lineHeight={16} width="60%" />
-        <View style={{ minHeight: CELL * 5.5 }}>
-          <Line lineHeight={22} width="85%" />
-        </View>
-        <Line lineHeight={18} width="35%" />
+      <View className="bg-fill" style={{ width: size, height: size, borderRadius: CELL * 0.75 }} />
+      <View style={{ paddingTop: CELL }}>
+        <Line lineHeight={22 * Math.max(1, fontScale)} width="85%" />
+        <Line lineHeight={18 * Math.max(1, fontScale)} width="50%" />
       </View>
     </View>
   );
 }
 
-/**
- * An album card's stand-in, laid out as `AlbumCard` is at [size]: the square
- * cover with 6dp corners, then the title line and the artist line under it.
- */
-export function AlbumCardSkeleton({ size }: { size: number }) {
+/** A song tile's cover, play-disc space and two caption lines, as `SongCard` draws them. */
+export function SongCardSkeleton({ size, fontScale }: { size: number; fontScale: number }) {
+  const disc = size * (28 / 104);
+  const inset = size * (8 / 104);
   return (
     <View style={{ width: size }}>
-      <View className="bg-fill" style={{ width: size, height: size, borderRadius: CELL * 0.75 }} />
+      <View className="bg-fill" style={{ width: size, height: size, borderRadius: CELL / 2 }}>
+        <View
+          className="bg-background"
+          style={{
+            position: "absolute",
+            width: disc,
+            height: disc,
+            borderRadius: disc / 2,
+            right: inset,
+            bottom: inset,
+          }}
+        />
+      </View>
       <View style={{ paddingTop: CELL }}>
-        <Line lineHeight={22} width="85%" />
-        <Line lineHeight={18} width="50%" />
+        <Line lineHeight={22 * Math.max(1, fontScale)} width="85%" />
+        <Line lineHeight={18 * Math.max(1, fontScale)} width="50%" />
       </View>
     </View>
   );

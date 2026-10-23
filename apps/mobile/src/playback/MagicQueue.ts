@@ -3,6 +3,7 @@ import {
   genreProfile,
   isMagicQueue,
   magicBatch,
+  magicBatchFailed,
   magicBatchLoading,
   magicPickEnded,
   magicLibraryCandidates,
@@ -29,6 +30,7 @@ import {
   ytTrackId,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
+import * as Cause from "effect/Cause";
 import * as Layer from "effect/Layer";
 import { Storage } from "expo-sqlite/kv-store";
 import { useSyncExternalStore } from "react";
@@ -38,6 +40,7 @@ import { artistGraphNow } from "@/home/artistGraphNow";
 import { discoverLevel, discoverSliders } from "@/lib/discoverSettings";
 import { makeExternalStore, subscribeAll } from "@/lib/externalStore";
 import { oneAtATime } from "@/lib/oneAtATime";
+import { RECOMMENDATION_TIMEOUT } from "@/lib/recommendationTimeout";
 import { onStarred, onYtSongSignal } from "@/library/libraryChanges";
 import { LibraryStore, songHasFile, type SongRow } from "@/library/LibraryStore";
 import { YtMusic } from "@/ytmusic/YtMusic";
@@ -111,6 +114,18 @@ export const useMagicQueueLabel = (): string | null =>
  * null while none is.
  */
 const picking = makeExternalStore<MagicSession["id"] | null>(null);
+const failedBatch = makeExternalStore<MagicSession["id"] | null>(null);
+const retryBatch = makeExternalStore(0);
+
+/** Try Again only asks the active Magic Queue for its missing batch. */
+export const retryMagicBatch = (): void => retryBatch.update((attempt) => attempt + 1);
+
+const batchFailedNow = (): boolean =>
+  magicBatchFailed(activeMagicSession(), failedBatch.get(), queueState.get());
+const subscribeBatchFailed = subscribeAll(queueState, magicSession, failedBatch);
+
+export const useMagicBatchFailed = (): boolean =>
+  useSyncExternalStore(subscribeBatchFailed, batchFailedNow);
 
 const batchLoadingNow = (): boolean =>
   magicBatchLoading(activeMagicSession(), picking.get(), queueState.get());
@@ -162,6 +177,7 @@ export const startMagicQueue = (seed: MagicSeed, seedSongs: readonly SongRow[]) 
     save(started.session);
     // The first batch is on its way as the seed starts: Up Next shows it loading from the first frame.
     picking.set(started.session.id);
+    failedBatch.set(null);
     const queue = yield* Queue;
     yield* queue.dispatch(
       {
@@ -333,9 +349,16 @@ export const layer = Layer.effectDiscard(
       if (wanted === null || !wantsMagicBatch(wanted, queueState.get()))
         return Effect.succeed(false);
       picking.set(wanted.id);
+      failedBatch.set(null);
       let again = false;
       return pick(wanted).pipe(
-        Effect.ignore,
+        Effect.timeout(RECOMMENDATION_TIMEOUT),
+        Effect.catchCause((cause) =>
+          Effect.sync(() => {
+            if (!Cause.hasInterruptsOnly(cause) && activeMagicSession()?.id === wanted.id)
+              failedBatch.set(wanted.id);
+          }),
+        ),
         // However the picking ends: added, failed, timed out or no longer wanted.
         Effect.ensuring(
           Effect.sync(() => {
@@ -382,6 +405,7 @@ export const layer = Layer.effectDiscard(
       Effect.sync(() => {
         const stops = [
           queueState.subscribe(onQueue),
+          retryBatch.subscribe(() => fork(fill)),
           onPlayEnded((end) => {
             const kind = magicPlaySignal(end);
             if (kind !== null) teach(kind, [end.play.trackId]);

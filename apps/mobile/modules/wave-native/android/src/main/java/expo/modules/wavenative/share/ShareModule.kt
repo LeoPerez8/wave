@@ -23,7 +23,8 @@ import java.io.File
  */
 class ShareModule : Module() {
   private val context: Context get() = appContext.reactContext ?: throw Exceptions.ReactContextLost()
-  private val images: SharedImages get() = SharedImages(File(context.cacheDir, SharedImages.DIRECTORY))
+  private val directory: File get() = File(context.cacheDir, SharedImages.DIRECTORY)
+  private val images: SharedImages get() = SharedImages(directory)
 
   override fun definition() = ModuleDefinition {
     Name("WaveShare")
@@ -31,12 +32,18 @@ class ShareModule : Module() {
     /** Writes the base64 PNG to the shared images as [fileName]; resolves its path. */
     AsyncFunction("writeImage") { base64: String, fileName: String -> images.write(base64, fileName).absolutePath }
 
-    /** Creates a separate transparent padded rounded sticker; the original card stays intact. */
-    AsyncFunction("writeStorySticker") { path: String, frame: Map<String, Double> ->
+    /** Creates a tight rounded sticker and the separate full Story gradient. */
+    AsyncFunction("writeStoryImages") { path: String, frame: Map<String, Double>, colours: StoryBackgroundRecord ->
       val source = File(path)
       // The same cache-only boundary as delivery, before reading or creating a sibling PNG.
       contentUri(source)
-      StorySticker.write(source, frame).absolutePath
+      val sticker = StorySticker.write(source, frame)
+      val background = sticker.deletingOnFailure {
+        StoryBackground.write(
+          directory, frame.getValue("width").toInt(), frame.getValue("height").toInt(), colours,
+        )
+      }
+      mapOf("sticker" to sticker.absolutePath, "background" to background.absolutePath)
     }
 
     /** Copies the image at [path] into the gallery, in Pictures/Wave. */
@@ -62,21 +69,38 @@ class ShareModule : Module() {
 
     /**
      * Opens Instagram's Stories editor with the image at [path] as a sticker the
-     * user can move and resize, over a [top] to [bottom] background (`#rrggbb`),
+     * user can move and resize, over [colours]' top to bottom background (`#rrggbb`),
      * as Meta's "Sharing to Stories" has it. [appId] is the build's Facebook App
      * ID, which Instagram requires as the source application. Only Instagram is
-     * granted to read the image. Lyrics padding is already in this PNG; the
-     * intent exposes no documented sticker size or position extras. Instagram
-     * controls placement and scaling, so never flatten the card into a background.
+     * granted to read the image. Song and Recap retain this colour-extra path;
+     * lyrics use [shareStoryImages] with an actual background image.
      */
-    AsyncFunction("shareToInstagramStory") { path: String, top: String, bottom: String, appId: String ->
+    AsyncFunction("shareToInstagramStory") { path: String, colours: StoryBackgroundRecord, appId: String ->
       val uri = contentUri(File(path))
       context.grantUriPermission(INSTAGRAM, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
       val story = storyIntent().apply {
         putExtra("source_application", appId)
         putExtra("interactive_asset_uri", uri)
-        putExtra("top_background_color", top)
-        putExtra("bottom_background_color", bottom)
+        putExtra("top_background_color", colours.top)
+        putExtra("bottom_background_color", colours.bottom)
+      }
+      startActivity(story)
+    }.runOnQueue(Queues.MAIN)
+
+    /** Keeps the lyrics movable over Wave's gradient, with read access to both PNGs. */
+    AsyncFunction("shareStoryImages") { sticker: String, background: String, appId: String ->
+      val stickerUri = contentUri(File(sticker))
+      val backgroundUri = contentUri(File(background))
+      context.grantUriPermission(INSTAGRAM, stickerUri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+      context.grantUriPermission(INSTAGRAM, backgroundUri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+      val story = storyIntent().apply {
+        setDataAndType(backgroundUri, PNG)
+        putExtra("source_application", appId)
+        putExtra("interactive_asset_uri", stickerUri)
+        clipData = ClipData.newRawUri("Story background", backgroundUri).apply {
+          addItem(ClipData.Item(stickerUri))
+        }
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
       }
       startActivity(story)
     }.runOnQueue(Queues.MAIN)
@@ -95,7 +119,7 @@ class ShareModule : Module() {
 
   /** A content URI for a shared image, readable by whoever the intent carrying it reaches. */
   private fun contentUri(image: File): Uri {
-    require(image.parentFile?.canonicalFile == File(context.cacheDir, SharedImages.DIRECTORY).canonicalFile) {
+    require(image.parentFile?.canonicalFile == directory.canonicalFile) {
       "Only Wave's shared images can be shared"
     }
     return FileProvider.getUriForFile(context, context.packageName + ShareImageProvider.AUTHORITY_SUFFIX, image)

@@ -1,11 +1,18 @@
 import {
+  activeTiming,
+  continueTiming,
+  noteTimingLinkFailure,
+  timingSurfaceCommitted,
+  timingLinkNavigated,
+} from "@/lib/timing";
+import {
   counted,
   type ArtistLink,
   type StreamedArtistLink,
   type StreamedArtistTarget,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
-import { Fragment } from "react";
+import { Fragment, useLayoutEffect } from "react";
 import { View } from "react-native";
 
 import type { ArtistImageSource } from "@/catalog/ArtistImage";
@@ -13,9 +20,12 @@ import { CatalogLine } from "@/catalog/CatalogLine";
 import { CELL } from "@/catalog/grid";
 import { Hairline } from "@/catalog/Hairline";
 import { NameRow } from "@/catalog/NameRow";
+import { failNowPlayingLink, revealNowPlayingLink } from "@/nowPlaying/sheet";
 import { showError } from "@/overlay/alert";
 import { CardEntries } from "@/overlay/CardEntries";
 import { followUp, openOverlay } from "@/overlay/overlay";
+import { resolveStreamedArtistTap } from "@/ytmusic/streamedArtist";
+import { followStreamedArtistTap } from "@/ytmusic/streamedArtistTap";
 import { openYtArtistNamed } from "@/ytmusic/routes";
 
 import { LibraryStore, type ArtistRow } from "./LibraryStore";
@@ -38,14 +48,22 @@ interface ArtistChoice {
  * open a card to pick one from.
  */
 export const followArtistLink = (link: ArtistLink, known?: ArtistRow | null): void => {
+  continueTiming(
+    link.kind === "open" ? "artistLink" : "choiceCard",
+    link.kind === "open" ? "Artist" : "artist choice",
+  );
   if (link.kind === "open") openArtist(link.artistId, known);
-  else openArtistChoice(link.artistIds);
+  else {
+    const id = activeTiming()?.id;
+    if (id !== undefined) noteTimingLinkFailure(id, "link not ready");
+    openArtistChoice(link.artistIds, id);
+  }
 };
 
 /** Opens [target]'s page integrated: the Library artist's, or the YouTube Music artist page. */
 const openStreamedArtist = (target: StreamedArtistTarget<ArtistRow>): void => {
   if (target.kind === "library") openArtist(target.artist.id, target.artist, { integrated: true });
-  else openYtArtistNamed(target.name);
+  else if (target.kind === "yt") openYtArtistNamed(target.name, target.offline);
 };
 
 /** A YouTube Music artist has no Library image: the row shows their initial. */
@@ -77,11 +95,33 @@ const streamedChoice = (target: StreamedArtistTarget<ArtistRow>): ArtistChoice =
  * Where a streamed song's Go to Artist and Now Playing's artist line lead
  * (Core's `streamedArtistLink`): one artist opens integrated, their Library
  * page or the YouTube Music artist page; several open the card to pick one.
- * The page you're on opens nothing: Now Playing closing reveals it.
+ * The page you're on opens nothing: Now Playing closing reveals it. Every
+ * outcome ends the tap's timing, so the screen settles again.
  */
 export const followStreamedArtistLink = (link: StreamedArtistLink<ArtistRow>): void => {
-  if (link.kind === "open") openStreamedArtist(link.target);
-  else if (link.kind === "choose") openChoiceCard(link.targets.map(streamedChoice));
+  if (link.kind === "here") return;
+  continueTiming("artistLink", "Artist");
+  const timingId = activeTiming()?.id;
+  if (timingId !== undefined) noteTimingLinkFailure(timingId, "link not ready");
+  const deliver = (resolved: StreamedArtistLink<ArtistRow> | undefined) => {
+    if (resolved === undefined) {
+      failNowPlayingLink(timingId);
+      showError("Couldn't open the artist", "YouTube Music is turned off.");
+      return;
+    }
+    if (resolved?.kind === "open") openStreamedArtist(resolved.target);
+    else if (resolved?.kind === "choose") {
+      continueTiming("choiceCard", "artist choice");
+      openChoiceCard(resolved.targets.map(streamedChoice), timingId);
+    } else if (resolved.kind === "here") revealNowPlayingLink(timingId);
+    if (resolved !== undefined) timingLinkNavigated(timingId);
+  };
+  void followStreamedArtistTap(link, { resolve: resolveStreamedArtistTap, deliver }).catch(
+    (error: unknown) => {
+      failNowPlayingLink(timingId);
+      showError("Couldn't open the artist", error);
+    },
+  );
 };
 
 /** Each artist's row, in [ids]' order; one cheap read per artist, gone ones left out. */
@@ -95,11 +135,12 @@ const artistRows = (ids: readonly number[]): Promise<readonly ArtistRow[]> =>
     ),
   );
 
-const openChoiceCard = (choices: readonly ArtistChoice[]): void => {
+const openChoiceCard = (choices: readonly ArtistChoice[], timingId?: number): void => {
   openOverlay({
     label: "Go to Artist",
     render: (close) => <ArtistChoiceCard choices={choices} close={close} />,
   });
+  timingLinkNavigated(timingId);
 };
 
 /**
@@ -107,11 +148,24 @@ const openChoiceCard = (choices: readonly ArtistChoice[]): void => {
  * read (so it never grows once shown); what it was opened from stays
  * highlighted meanwhile.
  */
-const openArtistChoice = (artistIds: readonly number[]): void => {
+const openArtistChoice = (artistIds: readonly number[], timingId?: number): void => {
   void followUp(() =>
     artistRows(artistIds).then(
-      (artists) => openChoiceCard(artists.map((artist) => libraryChoice(artist))),
-      (error: unknown) => showError("Couldn't read the artists", error),
+      (artists) => {
+        if (artists.length === 0) {
+          if (timingId !== undefined) noteTimingLinkFailure(timingId, "target gone");
+          failNowPlayingLink(timingId);
+          return;
+        }
+        openChoiceCard(
+          artists.map((artist) => libraryChoice(artist)),
+          timingId,
+        );
+      },
+      (error: unknown) => {
+        failNowPlayingLink(timingId);
+        showError("Couldn't read the artists", error);
+      },
     ),
   );
 };
@@ -128,6 +182,10 @@ function ArtistChoiceCard({
   choices: readonly ArtistChoice[];
   close: () => void;
 }) {
+  useLayoutEffect(() => {
+    const active = activeTiming();
+    if (active?.kind === "choiceCard") timingSurfaceCommitted(active.id);
+  }, []);
   return (
     <>
       <View style={{ paddingBottom: CELL * 2 }}>
@@ -144,6 +202,7 @@ function ArtistChoiceCard({
               artist={choice.image}
               onPress={() => {
                 close();
+                continueTiming("artistLink", choice.name);
                 choice.open();
               }}
             />

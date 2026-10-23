@@ -120,7 +120,11 @@ import {
   toIndexedArtwork,
   toIndexedTrack,
 } from "@/library/LibraryScan";
-import { publishSavedStars, publishYtSongSignal } from "@/library/libraryChanges";
+import {
+  publishDownloadedRecording,
+  publishSavedStars,
+  publishYtSongSignal,
+} from "@/library/libraryChanges";
 import { LibraryStore, type SongRow } from "@/library/LibraryStore";
 import { useLoadedMissingSongs, useMissingSongs } from "@/library/hooks";
 import { refreshDownloadPolicy } from "@/library/downloadPolicy";
@@ -811,6 +815,7 @@ export const importDownload = (
       )
       .pipe(Effect.mapError(libraryFailure));
     countAndLand(saved.path, trackIds, last);
+    publishDownloadedRecording(toIndexedTrack(saved.track));
     // A liked song a pending favorite was waiting for has its star.
     publishSavedStars(starred);
     return saved.path;
@@ -851,7 +856,10 @@ export const importQualityReplacement = (
       own: replaced.kind === "replaced" ? replaced.oldPath : saved.path,
     });
     countAndLand(saved.path, replaced.kind === "gone" ? [] : [trackId], last);
-    if (replaced.kind === "replaced") publishSavedStars(replaced.starred);
+    if (replaced.kind === "replaced") {
+      publishSavedStars(replaced.starred);
+      publishDownloadedRecording(toIndexedTrack(saved.track));
+    }
     return saved.path;
   });
 

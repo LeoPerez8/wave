@@ -1,5 +1,11 @@
-import type { LyricStoryFrame } from "@wave/core";
+import type { LyricStoryBackground, LyricStoryFrame } from "@wave/core";
 import { NativeModule, requireOptionalNativeModule } from "expo";
+
+/** The two PNGs a lyrics Story is sent as (`writeStoryImages`), by path. */
+export interface StoryImages {
+  readonly sticker: string;
+  readonly background: string;
+}
 
 /**
  * Sharing images Wave draws (`modules/wave-native`, `share/ShareModule.kt`):
@@ -9,8 +15,14 @@ import { NativeModule, requireOptionalNativeModule } from "expo";
 declare class WaveShareModule extends NativeModule {
   /** Writes a base64 PNG as `fileName` among the shared images; resolves its path. */
   writeImage(base64: string, fileName: string): Promise<string>;
-  /** Writes a separate transparent, padded rounded sticker; leaves the source card intact. */
-  writeStorySticker(path: string, frame: LyricStoryFrame): Promise<string>;
+  /** Writes a tight rounded sticker and a full Story gradient; leaves the source card intact. */
+  writeStoryImages(
+    path: string,
+    frame: LyricStoryFrame,
+    background: LyricStoryBackground,
+  ): Promise<StoryImages>;
+  /** Sends the separate sticker and background images to Instagram's Stories editor. */
+  shareStoryImages(sticker: string, background: string, appId: string): Promise<void>;
   /** Copies the shared image at `path` into the gallery (Pictures/Wave). */
   saveToGallery(path: string): Promise<void>;
   /** Opens the share sheet with the shared image at `path`, titled `title`. */
@@ -18,10 +30,14 @@ declare class WaveShareModule extends NativeModule {
   /** Which apps a shared image can go straight to (installed and taking it). */
   shareApps(): Promise<{ instagramStories: boolean; whatsapp: boolean }>;
   /**
-   * Opens Instagram's Stories editor with the shared image at `path` as a sticker over a
-   * `top` to `bottom` background (`#rrggbb`); `appId` is the build's Facebook App ID.
+   * Opens Instagram's Stories editor with the shared image at `path` as a sticker over
+   * `background`'s gradient; `appId` is the build's Facebook App ID.
    */
-  shareToInstagramStory(path: string, top: string, bottom: string, appId: string): Promise<void>;
+  shareToInstagramStory(
+    path: string,
+    background: LyricStoryBackground,
+    appId: string,
+  ): Promise<void>;
   /** Sends the shared image at `path` straight to WhatsApp's share flow. */
   shareToWhatsApp(path: string): Promise<void>;
 }

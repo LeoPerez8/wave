@@ -77,13 +77,29 @@ export const magicLibrarySongs = (
   artists: readonly { readonly id: number; readonly name: string }[],
 ): ((song: MagicLibrarySong) => MagicSong) => {
   const keys = new Map(artists.map((artist) => [artist.id, magicArtistKey(artist.name)]));
-  return (song) => ({
+  return magicSongMapper(keys);
+};
+
+const magicSongMapper =
+  (keys: ReadonlyMap<number, MagicArtistKey>) =>
+  (song: MagicLibrarySong): MagicSong => ({
     trackId: String(song.id),
     artists: song.artistIds.flatMap((id) => keys.get(id) ?? []),
     genre: songFamilies(song)[0]?.key ?? null,
     style: songStyle(song),
   });
-};
+
+/** Builds the shared Library-to-MagicSong mapper without one unbounded artist pass. */
+export function* magicLibraryMapperSteps(
+  artists: readonly { readonly id: number; readonly name: string }[],
+): Generator<void, (song: MagicLibrarySong) => MagicSong> {
+  const keys = new Map<number, MagicArtistKey>();
+  for (const artist of artists) {
+    keys.set(artist.id, magicArtistKey(artist.name));
+    yield;
+  }
+  return magicSongMapper(keys);
+}
 
 /**
  * A Magic Queue needs shared genre mass, not just aligned vectors: a minor
@@ -638,6 +654,19 @@ export const magicBatchLoading = (
   picking: MagicSession["id"] | null,
   state: QueueState,
 ): boolean => session !== null && picking === session.id && wantsMagicBatch(session, state);
+
+/**
+ * Whether Up Next shows that [session]'s next batch couldn't be picked (a
+ * quiet line with Try Again): its last pick failed ([failed] is the id of
+ * the session whose pick failed, null while none has) and [state] still
+ * wants the batch. So the line goes once a batch lands, and once something
+ * else plays.
+ */
+export const magicBatchFailed = (
+  session: MagicSession | null,
+  failed: MagicSession["id"] | null,
+  state: QueueState,
+): boolean => session !== null && failed === session.id && wantsMagicBatch(session, state);
 
 /** What follows a batch's picking once it ends (`magicPickEnded`). */
 export interface MagicPickEnd {

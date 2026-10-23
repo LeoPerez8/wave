@@ -6,7 +6,7 @@ import {
   type DiscoverMixesSection,
   type HomeSectionId,
 } from "@wave/core";
-import { router } from "expo-router";
+import { router } from "@/lib/timingRouter";
 import { useState, type ComponentType, type ReactNode } from "react";
 import { Text, View, useWindowDimensions } from "react-native";
 
@@ -18,8 +18,9 @@ import { CELL, grid } from "@/catalog/grid";
 import { Hairline } from "@/catalog/Hairline";
 import { PullRefreshRow } from "@/catalog/PullRefreshRow";
 import { TitledSection } from "@/catalog/TitledSection";
+import { RecommendationsFailed } from "@/components/RecommendationsFailed";
 import { fileUri } from "@/lib/fileUri";
-import type { HomeSections, MostPlayedRow } from "@/library/db/playHistory";
+import type { MostPlayedRow } from "@/library/db/playHistory";
 import { openStats, openStatsSeeAll } from "@/library/routes";
 import type { PlayableSongRow } from "@/library/LibraryStore";
 import { Crossfade } from "@/motion/Crossfade";
@@ -33,6 +34,7 @@ import { refreshMixes, useDiscoverMixes, type MixSectionId } from "./discoverMix
 import { openDiscoverMixActions } from "./DiscoverMixActions";
 import { DiscoverMixesSkeleton } from "./DiscoverMixesSkeleton";
 import { DiscoverSettingsButton } from "./DiscoverSettings";
+import { discoverRefreshAccessibility, type DiscoverRefresh } from "./discoverRefresh";
 import {
   startMagicQueueFrom,
   useMagicQueueSection,
@@ -42,6 +44,13 @@ import { useMostPlayedOfAllTime } from "./mostPlayedOfAllTime";
 
 import { AlbumShelf, ArtistShelf, SongRows } from "./HomeSections";
 import { ListeningOverview } from "./ListeningOverview";
+import { HomeSectionBody, HomeSectionSkeleton, MagicQueueSkeleton } from "./HomeSectionSkeleton";
+import {
+  homeOpeningState,
+  homeSectionWaiting,
+  magicQueueGrid,
+  type HomeContent,
+} from "./homeOpening";
 
 /** Songs played from Home's lists are queued from the section they were in. */
 const MOST_PLAYED_CONTEXT = { kind: "home", id: "most-played" } as const;
@@ -59,20 +68,24 @@ const plays = (song: MostPlayedRow): number => song.playCount;
 
 type SectionProps = {
   /** Home's lists (`useHome`), read once for every section that shows them. */
-  home: HomeSections;
+  home: HomeContent;
   /** The section's title in Core's catalogue. */
   title: string;
 };
 
 function MostPlayedAlbums({ title }: SectionProps) {
-  const albums = withPlays(useMostPlayedOfAllTime()?.albums);
+  const ranking = useMostPlayedOfAllTime();
+  if (ranking === undefined) return <HomeSectionSkeleton id="most-played-albums" />;
+  const albums = withPlays(ranking.albums);
   if (albums.length === 0) return null;
   return (
     <TitledSection
       title={title}
       action={{ label: "See all", onPress: () => openStatsSeeAll("albums", "all") }}
     >
-      <AlbumShelf albums={albums} detail={countedPlays} />
+      <HomeSectionBody id="most-played-albums">
+        <AlbumShelf albums={albums} detail={countedPlays} />
+      </HomeSectionBody>
     </TitledSection>
   );
 }
@@ -91,17 +104,28 @@ const MIXES_UPDATING = "Updating…";
  */
 function Discover({ home, title }: SectionProps) {
   const ytMusic = useYtMusicEnabled();
-  const played = home.mostPlayed.length > 0;
+  const { played } = homeOpeningState(home);
   const magicQueue = useMagicQueueSection();
   const artistMixes = useDiscoverMixes("artist-mixes", played);
   const genreMixes = useDiscoverMixes("genre-mixes", played);
   const showsMagicQueue = magicQueue !== null && magicQueue.songs.length > 0;
-  if (!showsMagicQueue && artistMixes.kind === "hidden" && genreMixes.kind === "hidden")
+  if (
+    magicQueue !== null &&
+    !showsMagicQueue &&
+    artistMixes.kind === "hidden" &&
+    genreMixes.kind === "hidden"
+  )
     return null;
   return (
     <TitledSection title={title} control={<DiscoverSettingsButton ytMusic={ytMusic} />}>
       <View style={{ gap: CELL * 3 }}>
-        {showsMagicQueue && <MagicQueueRow section={magicQueue} />}
+        {magicQueue === null ? (
+          <DiscoverRow label={discoverRowTitle("magic-queue")}>
+            <MagicQueueSkeleton />
+          </DiscoverRow>
+        ) : (
+          showsMagicQueue && <MagicQueueRow section={magicQueue} />
+        )}
         <MixRow id="artist-mixes" section={artistMixes} />
         <MixRow id="genre-mixes" section={genreMixes} />
       </View>
@@ -114,21 +138,32 @@ function Discover({ home, title }: SectionProps) {
  * with a quiet [status] after it ("Updating…" while mixes rebuild), read
  * out as it changes.
  */
-function DiscoverRowLabel({ children, status }: { children: string; status?: string | undefined }) {
+function DiscoverRowLabel({
+  children,
+  status,
+  refresh,
+  busy,
+}: {
+  children: string;
+  status?: string | undefined;
+  refresh?: DiscoverRefresh | undefined;
+  busy?: boolean | undefined;
+}) {
   return (
-    <View className="flex-row items-baseline" style={{ gap: CELL }}>
+    <View className="flex-row flex-wrap items-baseline" style={{ gap: CELL }}>
       <Text
+        accessible
         accessibilityRole="header"
-        numberOfLines={1}
-        className="shrink font-sans text-footnote font-medium text-secondary"
+        accessibilityState={{ busy }}
+        {...discoverRefreshAccessibility(refresh)}
+        className="max-w-full font-sans text-footnote font-medium text-secondary"
       >
         {children}
       </Text>
       {status !== undefined && (
         <Text
-          numberOfLines={1}
           accessibilityLiveRegion="polite"
-          className="font-sans text-footnote text-secondary"
+          className="max-w-full font-sans text-footnote text-secondary"
         >
           {status}
         </Text>
@@ -141,15 +176,21 @@ function DiscoverRowLabel({ children, status }: { children: string; status?: str
 function DiscoverRow({
   label,
   status,
+  refresh,
+  busy,
   children,
 }: {
   label: string;
   status?: string | undefined;
+  refresh?: DiscoverRefresh | undefined;
+  busy?: boolean | undefined;
   children: ReactNode;
 }) {
   return (
     <View style={{ gap: CELL }}>
-      <DiscoverRowLabel status={status}>{label}</DiscoverRowLabel>
+      <DiscoverRowLabel status={status} refresh={refresh} busy={busy}>
+        {label}
+      </DiscoverRowLabel>
       {children}
     </View>
   );
@@ -164,21 +205,21 @@ function DiscoverRow({
 function MixRow({ id, section }: { id: MixSectionId; section: DiscoverMixesSection }) {
   if (section.kind === "hidden") return null;
   const label = discoverRowTitle(id);
+  const refresh = () => refreshMixes(id);
+  const updating = section.kind === "skeleton" || (section.kind === "mixes" && section.updating);
   return (
     <DiscoverRow
       label={label}
       status={section.kind === "mixes" && section.updating ? MIXES_UPDATING : undefined}
+      busy={updating}
+      refresh={{ label: `Get new ${label.toLowerCase()}`, run: refresh, enabled: !updating }}
     >
       {section.kind === "skeleton" ? (
         <DiscoverMixesSkeleton />
-      ) : (
-        <DiscoverMixRow
-          mixes={section.mixes}
-          onRefresh={() => refreshMixes(id)}
-          refreshing={section.updating}
-          refreshLabel={`Get new ${label.toLowerCase()}`}
-        />
-      )}
+      ) : section.kind === "mixes" ? (
+        <DiscoverMixRow mixes={section.mixes} onRefresh={refresh} refreshing={section.updating} />
+      ) : null}
+      {section.failed && <RecommendationsFailed onRetry={refresh} />}
     </DiscoverRow>
   );
 }
@@ -195,15 +236,13 @@ function DiscoverMixRow({
   mixes,
   onRefresh,
   refreshing,
-  refreshLabel,
 }: {
   mixes: readonly BlendedDiscoverMix[];
   onRefresh: () => void;
   refreshing: boolean;
-  refreshLabel: string;
 }) {
   return (
-    <PullRefreshRow onRefresh={onRefresh} enabled={!refreshing} refreshLabel={refreshLabel}>
+    <PullRefreshRow onRefresh={onRefresh} enabled={!refreshing}>
       {mixes.map((mix, place) => {
         const caption = discoverMixCaption(mix);
         const shows = [mix.id, caption.artworkUrl, caption.title, caption.artists, caption.line];
@@ -212,6 +251,7 @@ function DiscoverMixRow({
           <Crossfade key={place} swapKey={shows.join("\n")}>
             <PlaylistCard
               name={caption.title}
+              label={[caption.title, caption.artists, caption.line].filter(Boolean).join(", ")}
               detail={caption.line}
               paths={caption.artworkUrl === null ? [] : [caption.artworkUrl]}
               size={COVER_ROW_TILE}
@@ -235,25 +275,24 @@ function DiscoverMixRow({
 function MagicQueueRow({ section }: { section: MagicQueueSection }) {
   const { width, fontScale } = useWindowDimensions();
   const [available, setAvailable] = useState(width - grid.margin * 2);
-  // Keep text scaling enabled. Larger type gets wider tiles instead of overlapping targets.
-  // Android widens a Float to JS, so 1.3 arrives just below the decimal breakpoint.
-  const columns = Math.max(
-    1,
-    Math.min(
-      fontScale >= 2 ? 1 : fontScale >= Math.fround(1.3) ? 2 : 3,
-      Math.floor((available + CELL) / (CELL * 7)),
-    ),
-  );
-  const size = Math.max(CELL * 6, (available - CELL * (columns - 1)) / columns);
+  const { size, height } = magicQueueGrid(available, fontScale);
   return (
-    <DiscoverRow label={discoverRowTitle("magic-queue")}>
+    <DiscoverRow
+      label={discoverRowTitle("magic-queue")}
+      busy={section.picking}
+      refresh={{ label: "Get other songs", run: section.refresh, enabled: !section.picking }}
+    >
       <View onLayout={(event) => setAvailable(event.nativeEvent.layout.width)}>
-        <PullRefreshRow
-          onRefresh={section.refresh}
-          enabled={!section.picking}
-          refreshLabel="Get other songs"
-        >
-          <View style={{ width: available, flexDirection: "row", flexWrap: "wrap", gap: CELL }}>
+        <PullRefreshRow onRefresh={section.refresh} enabled={!section.picking}>
+          <View
+            style={{
+              width: available,
+              minHeight: height,
+              flexDirection: "row",
+              flexWrap: "wrap",
+              gap: CELL,
+            }}
+          >
             {section.songs.map((song, place) => (
               // oxlint-disable-next-line react/no-array-index-key -- a place crossfades between its previous and next seed
               <Crossfade key={place} swapKey={String(song.id)}>
@@ -283,14 +322,18 @@ function MagicQueueTile({ song, size }: { song: PlayableSongRow; size: number })
 }
 
 function MostPlayedArtists({ title }: SectionProps) {
-  const artists = (useMostPlayedOfAllTime()?.artists ?? []).map((entry) => entry.item);
+  const ranking = useMostPlayedOfAllTime();
+  if (ranking === undefined) return <HomeSectionSkeleton id="most-played-artists" />;
+  const artists = ranking.artists.map((entry) => entry.item);
   if (artists.length === 0) return null;
   return (
     <TitledSection
       title={title}
       action={{ label: "See all", onPress: () => openStatsSeeAll("artists", "all") }}
     >
-      <ArtistShelf artists={artists} />
+      <HomeSectionBody id="most-played-artists">
+        <ArtistShelf artists={artists} />
+      </HomeSectionBody>
     </TitledSection>
   );
 }
@@ -303,32 +346,44 @@ function MostPlayedArtists({ title }: SectionProps) {
 const SECTIONS: Record<HomeSectionId, ComponentType<SectionProps>> = {
   discover: Discover,
   "recently-added": ({ home, title }) =>
+    home.recentlyAdded !== undefined &&
     home.recentlyAdded.length > 0 && (
       <TitledSection title={title}>
-        <AlbumShelf albums={home.recentlyAdded} />
+        <HomeSectionBody id="recently-added">
+          <AlbumShelf albums={home.recentlyAdded} />
+        </HomeSectionBody>
       </TitledSection>
     ),
   "recently-played": ({ home, title }) =>
+    home.recentlyPlayed !== undefined &&
     home.recentlyPlayed.length > 0 && (
       <TitledSection title={title}>
-        <AlbumShelf albums={home.recentlyPlayed} />
+        <HomeSectionBody id="recently-played">
+          <AlbumShelf albums={home.recentlyPlayed} />
+        </HomeSectionBody>
       </TitledSection>
     ),
   "most-played": ({ home, title }) =>
+    home.mostPlayed !== undefined &&
     home.mostPlayed.length > 0 && (
       <TitledSection title={title}>
-        <SongRows songs={home.mostPlayed} context={MOST_PLAYED_CONTEXT} plays={plays} />
+        <HomeSectionBody id="most-played">
+          <SongRows songs={home.mostPlayed} context={MOST_PLAYED_CONTEXT} plays={plays} />
+        </HomeSectionBody>
       </TitledSection>
     ),
   "most-played-albums": MostPlayedAlbums,
   "most-played-artists": MostPlayedArtists,
   favorites: ({ home, title }) =>
+    home.favorites !== undefined &&
     home.favorites.length > 0 && (
       <TitledSection
         title={title}
         action={{ label: "See all", onPress: () => router.push("/library/favorites") }}
       >
-        <SongRows songs={home.favorites} context={FAVORITES_CONTEXT} />
+        <HomeSectionBody id="favorites">
+          <SongRows songs={home.favorites} context={FAVORITES_CONTEXT} />
+        </HomeSectionBody>
       </TitledSection>
     ),
   stats: ({ title }) => (
@@ -349,7 +404,8 @@ export const SECTION_GAP = CELL * 5;
  * sit under any screen's content (Home, or the Library under its rows).
  * [home] is `useHome`'s answer.
  */
-export function HomeSection({ id, home }: { id: HomeSectionId; home: HomeSections }) {
+export function HomeSection({ id, home }: { id: HomeSectionId; home: HomeContent }) {
+  if (homeSectionWaiting(id, home)) return <HomeSectionSkeleton id={id} />;
   const Section = SECTIONS[id];
   return <Section home={home} title={homeSectionTitle(id)} />;
 }

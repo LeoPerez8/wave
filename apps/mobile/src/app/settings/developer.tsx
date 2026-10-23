@@ -1,4 +1,5 @@
-import { router } from "expo-router";
+import { useScreenContent } from "@/lib/screenTiming";
+import { router } from "@/lib/timingRouter";
 import { Text, View } from "react-native";
 
 import { EntryRow } from "@/catalog/EntryRow";
@@ -27,6 +28,7 @@ const stallJsThread = (): void => {
 
 /** Settings › Developer: Export Logs, the Design preview and, in a debug build, the log's triggers. */
 export default function DeveloperSettingsScreen() {
+  useScreenContent(true);
   return (
     <SettingsPageScreen page="developer">
       <View>

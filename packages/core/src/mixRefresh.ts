@@ -1,3 +1,4 @@
+import { sortSteps } from "./buildSteps.ts";
 /**
  * Pulling a mixes carousel sideways for new mixes (docs/spec.md, "Artist
  * mixes", "Genre mixes"): a refresh rebuilds the pulled section at once, and
@@ -80,24 +81,6 @@ export const mixRefreshAvoid = (memory: readonly ShownMixes[], now: number): Mix
     for (const videoId of set.songs) songs.add(videoId);
   }
   return { mixes, artists, songs };
-};
-
-/**
- * [items] that [shownAt] doesn't name first, in their order, then those it
- * names, the least recently shown first (in their order on a tie). No
- * [shownAt]: [items] as they are.
- */
-export const freshFirst = <T>(
-  items: readonly T[],
-  shownAt: ((item: T) => number | undefined) | null,
-): { readonly fresh: T[]; readonly shown: T[] } => {
-  if (shownAt === null) return { fresh: [...items], shown: [] };
-  const fresh = items.filter((item) => shownAt(item) === undefined);
-  const shown = items
-    .filter((item) => shownAt(item) !== undefined)
-    // oxlint-disable-next-line unicorn/no-array-sort -- sorts the fresh array filter made; Hermes lacks toSorted
-    .sort((a, b) => (shownAt(a) ?? 0) - (shownAt(b) ?? 0));
-  return { fresh, shown };
 };
 
 /**
@@ -199,3 +182,24 @@ export const mixPullCanStart = (scrollX: number): boolean => {
  */
 export const mixRefreshWaitNotice = (waitMs: number): string =>
   `Search limit reached · new mixes in about ${Math.max(1, Math.ceil(waitMs / 60_000))} min`;
+
+/** Source-order partition and stable shown-time ordering on bounded CPU steps. */
+export function* freshFirstSteps<T>(
+  items: readonly T[],
+  shownAt: ((item: T) => number | undefined) | null,
+): Generator<void, { fresh: T[]; shown: T[] }> {
+  const fresh: T[] = [],
+    shown: T[] = [];
+  for (const item of items) {
+    if (shownAt?.(item) === undefined) fresh.push(item);
+    else shown.push(item);
+    yield;
+  }
+  return {
+    fresh,
+    shown:
+      shownAt === null
+        ? shown
+        : yield* sortSteps(shown, (a, b) => (shownAt(a) ?? 0) - (shownAt(b) ?? 0)),
+  };
+}

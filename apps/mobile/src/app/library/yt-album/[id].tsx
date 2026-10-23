@@ -1,3 +1,4 @@
+import { useScreenContent } from "@/lib/screenTiming";
 import { useLocalSearchParams } from "expo-router";
 import { useMemo } from "react";
 
@@ -13,6 +14,7 @@ export default function YtAlbumScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const browseId = id ?? "";
   const known = useYtListHead("yt-album", browseId);
+  useScreenContent(true);
   const { load, retry } = useYtListPage("yt-album", browseId);
   const context = useMemo(() => ({ kind: "ytAlbum", id: browseId }) as const, [browseId]);
   return (

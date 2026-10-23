@@ -15,6 +15,7 @@ import {
   parseTrackId,
   streamedCoverUrl,
   streamedCoverUrls,
+  trackRowDownloaded,
   unsearchedTrackId,
   ytSongArtist,
   ytTrackId,
@@ -70,6 +71,18 @@ export interface QueueTrack {
  * list it was played from had one (a native list's `NativeYtSong`).
  */
 export type QueuedYtSong = YtSong & { readonly albumId?: string | null };
+
+/**
+ * Whether a queue row carries the downloaded icon: a Library song whose file
+ * is still there, not one a scan has since left a missing song ([missingIds],
+ * Track ids as the queue writes them).
+ */
+export const queueTrackDownloaded = (
+  track: QueueTrack | undefined,
+  missingIds: ReadonlySet<string>,
+): boolean =>
+  track !== undefined &&
+  trackRowDownloaded({ trackId: track.id, missing: missingIds.has(track.id) });
 
 /** A library song as the queue needs it. */
 export const toQueueTrack = (song: PlayableSongRow): QueueTrack => ({

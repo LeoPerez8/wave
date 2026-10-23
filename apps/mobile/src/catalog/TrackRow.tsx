@@ -1,5 +1,10 @@
 import { IconCircleArrowDownFilled, IconFileOff, IconStarFilled } from "@tabler/icons-react-native";
-import { trackRowTrailing, ytDownloadLine, ytDownloadProgress } from "@wave/core";
+import {
+  trackRowDownloaded,
+  trackRowTrailing,
+  ytDownloadLine,
+  ytDownloadProgress,
+} from "@wave/core";
 import { Text, View, type PressableProps as PressProps } from "react-native";
 
 import { Press } from "@/motion/Press";
@@ -67,11 +72,6 @@ type Props = {
    */
   progress?: number | null | undefined;
   /**
-   * In a list that mixes the Library's songs with YT Music's, marks a Library
-   * song: a small downloaded icon leads its second line.
-   */
-  downloaded?: boolean;
-  /**
    * A song that can't play (a playlist's unavailable entry): dimmed as a
    * missing song is, with its menu still open.
    */
@@ -90,6 +90,12 @@ type Props = {
 };
 
 const THUMB = CELL * 5;
+
+/** The small downloaded icon before a song's artist: it has a Library file. */
+export function DownloadedIcon() {
+  const accent = useThemeColor("accent");
+  return <IconCircleArrowDownFilled size={14} color={accent} />;
+}
 
 /**
  * A track: leading thumbnail or track number, title over artist, then the
@@ -110,7 +116,6 @@ export function TrackRow({
   plays,
   checked,
   progress,
-  downloaded = false,
   unavailable = false,
   onPress,
   onLongPress,
@@ -119,11 +124,11 @@ export function TrackRow({
   swipe,
 }: Props) {
   const highlight = useThemeColor("highlight");
-  const accent = useThemeColor("accent");
   const tertiary = useThemeColor("tertiary");
   const fileNotFound = state === "fileNotFound";
   const playing = state === "playing";
   const missingSong = track.missingTrackId !== undefined;
+  const downloaded = trackRowDownloaded({ trackId: track.id, missing: missingSong, fileNotFound });
   const download = useMissingSongDownloadStatus(track.missingTrackId ?? null);
   const downloadLine = ytDownloadLine(download);
   const shownProgress = progress ?? ytDownloadProgress(download);
@@ -143,7 +148,7 @@ export function TrackRow({
         track.artist,
         ...(track.explicit === true ? ["explicit"] : []),
         ...(plays === undefined ? [] : [trailing]),
-        ...(downloaded && !missingSong ? ["downloaded"] : []),
+        ...(downloaded ? ["downloaded"] : []),
         ...(missingSong ? [downloadLine ?? "not downloaded"] : []),
         ...(unavailable ? ["unavailable"] : []),
         ...(playing ? ["now playing"] : []),
@@ -195,9 +200,7 @@ export function TrackRow({
             {track.explicit === true && <ExplicitBadge />}
           </View>
           <View className="flex-row items-center" style={{ gap: CELL / 2 }}>
-            {downloaded && !fileNotFound && !missingSong && (
-              <IconCircleArrowDownFilled size={14} color={accent} />
-            )}
+            {downloaded && <DownloadedIcon />}
             <Text numberOfLines={1} className="flex-1 font-sans text-body text-secondary">
               {fileNotFound ? "File not found" : (downloadLine ?? track.artist)}
             </Text>

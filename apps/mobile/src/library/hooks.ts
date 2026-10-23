@@ -8,15 +8,18 @@ import {
   type MissingTrack,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { AppState } from "react-native";
 
 import { WaveNative } from "@/native/waveNative";
+import { homeContent, type HomeContent } from "@/home/homeOpening";
+import { createAllFilesAccess, type AllFilesAccessState } from "./allFilesAccess";
 
 import type { LibraryCounts } from "./db/counts";
 import type { LinkRows } from "./db/links";
 import type { HomePlays, HomeSections } from "./db/playHistory";
 import { scanState, type ScanState } from "./LibraryScan";
+import { homeReads } from "./homeReads";
 import {
   LibraryStore,
   type AlbumDetail,
@@ -24,7 +27,6 @@ import {
   type ArtistDetail,
   type ArtistRow,
   type FavoriteRow,
-  type GenreDetail,
   type GenreRow,
   type LibraryStoreError,
   type PlaylistDetail,
@@ -45,33 +47,27 @@ export const useScanState = (): ScanState =>
  * Whether Wave holds all-files access. Re-checked whenever the app comes back
  * to the foreground, which is how a grant from system settings is noticed.
  */
-export const useAllFilesAccess = (): {
-  readonly granted: boolean;
-  /** True once the user went to settings and came back without granting access. */
-  readonly denied: boolean;
-  readonly request: () => void;
+export const useAllFilesAccess = (): AllFilesAccessState & {
+  readonly request: () => Promise<void>;
 } => {
-  const [granted, setGranted] = useState(() => WaveNative.hasAllFilesAccess());
-  const [denied, setDenied] = useState(false);
-  const requested = useRef(false);
+  const [access] = useState(() =>
+    createAllFilesAccess({
+      hasAccess: () => WaveNative.hasAllFilesAccess(),
+      openSettings: () => WaveNative.requestAllFilesAccess(),
+    }),
+  );
+  const state = useSyncExternalStore(access.subscribe, access.get);
 
   useEffect(() => {
-    const subscription = AppState.addEventListener("change", (state) => {
-      if (state !== "active") return;
-      const now = WaveNative.hasAllFilesAccess();
-      setGranted(now);
-      if (requested.current && !now) setDenied(true);
-      requested.current = false;
+    const subscription = AppState.addEventListener("change", (appState) => {
+      if (appState === "active") access.recheck();
     });
+    // Also cover a grant between initial render and listener attachment.
+    access.recheck();
     return () => subscription.remove();
-  }, []);
+  }, [access]);
 
-  const request = useCallback(() => {
-    requested.current = true;
-    void WaveNative.requestAllFilesAccess();
-  }, []);
-
-  return { granted, denied, request };
+  return { ...state, request: access.request };
 };
 
 /** A query over the tracks and what derives from them (albums, artists, genres, counts). */
@@ -219,6 +215,10 @@ const NO_ROOTS: readonly ScanRootSummary[] = [];
 /** The music folders Wave indexes, with their song counts. */
 export const useScanRoots = (): readonly ScanRootSummary[] => useLibraryQuery(listRoots, NO_ROOTS);
 
+/** Null while the roots load; an empty answer must not stand in for pending content. */
+export const useLoadedScanRoots = (): readonly ScanRootSummary[] | null =>
+  useLibraryQuery<readonly ScanRootSummary[] | null>(listRoots, null);
+
 const listAlbums = storeQuery("albums", TRACKS, (store) => store.listAlbums);
 const listArtists = storeQuery("artists", TRACKS, (store) => store.listArtists);
 const listGenres = storeQuery("genres", TRACKS, (store) => store.listGenres);
@@ -227,8 +227,10 @@ const NO_ALBUMS: readonly AlbumRow[] = [];
 const NO_ARTISTS: readonly ArtistRow[] = [];
 const NO_GENRES: readonly GenreRow[] = [];
 
-export const useAlbums = (): readonly AlbumRow[] => useLibraryQuery(listAlbums, NO_ALBUMS);
-export const useArtists = (): readonly ArtistRow[] => useLibraryQuery(listArtists, NO_ARTISTS);
+export const useAlbums = (active = true): readonly AlbumRow[] =>
+  useLibraryQuery(active ? listAlbums : null, NO_ALBUMS);
+export const useArtists = (active = true): readonly ArtistRow[] =>
+  useLibraryQuery(active ? listArtists : null, NO_ARTISTS);
 export const useGenres = (): readonly GenreRow[] => useLibraryQuery(listGenres, NO_GENRES);
 
 /**
@@ -249,7 +251,6 @@ const useDetail = <A>(
 
 const getAlbum = (store: LibraryStore["Service"], id: number) => store.getAlbum(id);
 const getArtist = (store: LibraryStore["Service"], id: number) => store.getArtist(id);
-const getGenre = (store: LibraryStore["Service"], id: number) => store.getGenre(id);
 
 const NO_LINKS: LinkRows = { album: null, artist: null };
 
@@ -278,8 +279,6 @@ export const useAlbum = (id: number): AlbumDetail | null | undefined =>
   useDetail("album", id, getAlbum);
 export const useArtist = (id: number): ArtistDetail | null | undefined =>
   useDetail("artist", id, getArtist);
-export const useGenre = (id: number): GenreDetail | null | undefined =>
-  useDetail("genre", id, getGenre);
 
 const listExcludedFolders = storeQuery(
   "excludedFolders",
@@ -287,11 +286,9 @@ const listExcludedFolders = storeQuery(
   (store) => store.excludedFolders,
 );
 
-const NO_EXCLUDED_FOLDERS: readonly string[] = [];
-
-/** The folders inside the music folders that Wave ignores. */
-export const useExcludedFolders = (): readonly string[] =>
-  useLibraryQuery(listExcludedFolders, NO_EXCLUDED_FOLDERS);
+/** Null until the exclusions load, distinct from a library with nothing excluded. */
+export const useLoadedExcludedFolders = (): readonly string[] | null =>
+  useLibraryQuery<readonly string[] | null>(listExcludedFolders, null);
 
 /** Playlists show their songs' titles, lengths and covers, and link YT Music entries on scans. */
 const PLAYLISTS: LibraryReads = { playlists: true, tracks: true };
@@ -344,25 +341,25 @@ export const useFavoriteSongs = (): readonly FavoriteRow[] | undefined =>
 
 // Home's sections by what they read, so a play doesn't re-read Recently Added
 // or Favorites, and a star doesn't re-read what plays change.
-const readHomeAdded = storeQuery("home:added", TRACKS, (store) => store.homeAdded);
+const readHomeAdded = storeQuery(homeReads.added.key, homeReads.added.reads, homeReads.added.read);
 const readHomePlays = storeQuery<HomePlays | undefined>(
-  "home:plays",
-  { tracks: true, plays: true },
-  (store) => store.homePlays,
+  homeReads.plays.key,
+  homeReads.plays.reads,
+  homeReads.plays.read,
 );
 const readHomeFavorites = storeQuery(
-  "home:favorites",
-  { tracks: true, favorites: true },
-  (store) => store.homeFavorites,
+  homeReads.favorites.key,
+  homeReads.favorites.reads,
+  homeReads.favorites.read,
 );
 
 /**
- * The Home tab's sections, or undefined while loading. Each part is re-read
+ * Home's independently answered slices; missing properties are still loading. Each part is re-read
  * only for what changes it: songs added or removed, stars (at once), plays
  * (at most every 1.5 s while Home is in sight; plays while it's hidden are
  * read once when it comes back). Home and Library's shelf share the reads.
  */
-export const useHome = (): HomeSections | undefined => {
+export const useHomeContent = (): HomeContent => {
   const added = useLibraryQuery<Pick<HomeSections, "recentlyAdded"> | undefined>(
     readHomeAdded,
     undefined,
@@ -372,13 +369,18 @@ export const useHome = (): HomeSections | undefined => {
     readHomeFavorites,
     undefined,
   );
-  return useMemo(
-    () =>
-      added === undefined || plays === undefined || favorites === undefined
-        ? undefined
-        : { ...added, ...plays, ...favorites },
-    [added, plays, favorites],
-  );
+  return useMemo(() => homeContent(added, plays, favorites), [added, plays, favorites]);
+};
+
+/** Complete snapshot for callers that need all lists (the Library's shelf). */
+export const useHome = (): HomeSections | undefined => {
+  const home = useHomeContent();
+  return home.recentlyAdded === undefined ||
+    home.recentlyPlayed === undefined ||
+    home.mostPlayed === undefined ||
+    home.favorites === undefined
+    ? undefined
+    : (home as HomeSections);
 };
 
 const readListeningSums = storeQuery(

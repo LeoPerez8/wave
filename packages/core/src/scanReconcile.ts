@@ -11,6 +11,7 @@
  * the scan completes is removed.
  */
 
+import { finishSteps } from "./buildSteps.ts";
 import { identityKey } from "./library.ts";
 
 /** What a file is recognised by when its path changes. */
@@ -57,32 +58,7 @@ const signature = (file: IndexedFile): string =>
 /** Reconciles one batch of a scan; see the module comment. */
 export const reconcileScan = <T extends IndexedFile>(
   input: ScanReconcileInput<T>,
-): ScanChanges<T> => {
-  const candidates = new Map<string, IndexedFile[]>();
-  for (const file of input.missing) {
-    const key = signature(file);
-    candidates.set(key, [...(candidates.get(key) ?? []), file]);
-  }
-  const added: T[] = [];
-  const updated: T[] = [];
-  const moved: TrackMove<T>[] = [];
-  for (const file of input.read) {
-    if (input.isIndexed(file.path)) {
-      updated.push(file);
-      continue;
-    }
-    const match = candidates.get(signature(file))?.shift();
-    if (match === undefined) added.push(file);
-    else moved.push({ from: match.path, to: file });
-  }
-  const matched = new Set(moved.map((move) => move.from));
-  return {
-    added,
-    updated,
-    moved,
-    unmatched: input.missing.filter((file) => !matched.has(file.path)),
-  };
-};
+): ScanChanges<T> => finishSteps(reconcileScanSteps(input));
 
 /**
  * What a scan does last, from the files it [saved], the indexed files
@@ -161,3 +137,48 @@ export const scanSaveSlices = <T extends IndexedFile>(
   }
   return slices;
 };
+
+/** Same reconciliation, with a resumable boundary per input file. */
+export function* reconcileScanSteps<T extends IndexedFile>(
+  input: ScanReconcileInput<T>,
+): Generator<void, ScanChanges<T>> {
+  const candidates = new Map<string, { files: IndexedFile[]; next: number }>();
+  for (const file of input.missing) {
+    const key = signature(file);
+    const group = candidates.get(key) ?? { files: [], next: 0 };
+    group.files.push(file);
+    candidates.set(key, group);
+    yield;
+  }
+  const added: T[] = [];
+  const updated: T[] = [];
+  const moved: TrackMove<T>[] = [];
+  for (const file of input.read) {
+    if (input.isIndexed(file.path)) {
+      updated.push(file);
+      yield;
+      continue;
+    }
+    const group = candidates.get(signature(file));
+    const match = group?.files[group.next++];
+    if (match === undefined) added.push(file);
+    else moved.push({ from: match.path, to: file });
+    yield;
+  }
+  const matched = new Set<string>();
+  for (const move of moved) {
+    matched.add(move.from);
+    yield;
+  }
+  const unmatched: IndexedFile[] = [];
+  for (const file of input.missing) {
+    if (!matched.has(file.path)) unmatched.push(file);
+    yield;
+  }
+  return {
+    added,
+    updated,
+    moved,
+    unmatched,
+  };
+}

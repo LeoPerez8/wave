@@ -10,25 +10,31 @@ import {
 
 import { deliverInstagramStory, type InstagramStoryNative } from "./instagramStory.ts";
 
-test("lyrics deliver the native padded rounded sticker and selected colour's gradient", async () => {
+test("lyrics deliver separate rounded sticker and gradient background images", async () => {
   const frame = lyricStoryFrame(["Face to face"]);
   const background = lyricStoryBackground("#dc2828");
   const calls: unknown[] = [];
   const native: InstagramStoryNative = {
-    writeStorySticker: async (...args) => {
+    writeStoryImages: async (...args) => {
       calls.push(args);
-      return "/cache/shared-images/story.png";
+      return {
+        sticker: "/cache/shared-images/sticker.png",
+        background: "/cache/shared-images/background.png",
+      };
     },
-    shareToInstagramStory: async (...args) => {
+    shareStoryImages: async (...args) => {
       calls.push(args);
+    },
+    shareToInstagramStory: async () => {
+      throw new Error("Lyrics must send a background image instead of colour extras");
     },
   };
 
   await deliverInstagramStory(native, "/cache/shared-images/card.png", background, "1234", frame);
 
   assert.deepEqual(calls, [
-    ["/cache/shared-images/card.png", frame],
-    ["/cache/shared-images/story.png", background.top, background.bottom, "1234"],
+    ["/cache/shared-images/card.png", frame, background],
+    ["/cache/shared-images/sticker.png", "/cache/shared-images/background.png", "1234"],
   ]);
   assert.notEqual(background.top, background.bottom);
 });
@@ -36,8 +42,11 @@ test("lyrics deliver the native padded rounded sticker and selected colour's gra
 test("song and Recap shares keep their existing image and background without lyrics framing", async () => {
   const sent: unknown[] = [];
   const native: InstagramStoryNative = {
-    writeStorySticker: async () => {
+    writeStoryImages: async () => {
       throw new Error("Must not frame a song or Recap");
+    },
+    shareStoryImages: async () => {
+      throw new Error("Must not change a song or Recap's delivery");
     },
     shareToInstagramStory: async (...args) => {
       sent.push(args);
@@ -51,16 +60,19 @@ test("song and Recap shares keep their existing image and background without lyr
   );
   await deliverInstagramStory(native, "recap.png", recapStoryBackground("#345678"), "1234");
   assert.deepEqual(sent, [
-    ["song.png", "#123456", "#345678", "1234"],
-    ["recap.png", "#345678", "#345678", "1234"],
+    ["song.png", { top: "#123456", bottom: "#345678" }, "1234"],
+    ["recap.png", { top: "#345678", bottom: "#345678" }, "1234"],
   ]);
 });
 
-test("a failed native sticker export never sends the original unframed card", async () => {
+test("a failed native Story export never sends the original unframed card", async () => {
   let sent = false;
   const native: InstagramStoryNative = {
-    writeStorySticker: async () => {
+    writeStoryImages: async () => {
       throw new Error("PNG write failed");
+    },
+    shareStoryImages: async () => {
+      sent = true;
     },
     shareToInstagramStory: async () => {
       sent = true;

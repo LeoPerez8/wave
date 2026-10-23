@@ -56,6 +56,8 @@ function ArrangeableCell({ index, cells, layout, drag, selecting, children, hand
   const { fontScale } = useWindowDimensions();
   const { columns, width, height } = cells;
   const list = layout === "list";
+  const titleHeight = titleLineHeight(fontScale);
+  const gripHeight = Math.max(GRIP_TARGET, titleHeight + CELL * 2);
   const { style: cellStyle, grip } = useDragCell({
     drag,
     index,
@@ -78,9 +80,9 @@ function ArrangeableCell({ index, cells, layout, drag, selecting, children, hand
                 position: "absolute",
                 right: 0,
                 // Centred on the name's line, which sits under the sleeves and the cover.
-                top: (cells.tile ?? 0) + SLEEVE_ROOM + CAPTION_TOP - CELL,
+                top: (cells.tile ?? 0) + SLEEVE_ROOM + CAPTION_TOP + (titleHeight - gripHeight) / 2,
                 width: GRIP_TARGET,
-                height: titleLineHeight(fontScale) + CELL * 2,
+                height: gripHeight,
               }
         }
       >

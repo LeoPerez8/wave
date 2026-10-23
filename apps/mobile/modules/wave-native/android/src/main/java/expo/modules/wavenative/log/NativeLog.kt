@@ -58,6 +58,18 @@ object NativeLog {
   }
 
   private var started = false
+  private val timingHitches = mutableListOf<Long>()
+  private fun hitch(ms: Long) = synchronized(timingHitches) { timingHitches.add(ms); Unit }
+  fun takeTimingHitches(): List<Double> = synchronized(timingHitches) {
+    val result = timingHitches.map { it.toDouble() }
+    timingHitches.clear()
+    result
+  }
+
+  private val snapshotLater: (Runnable, Long) -> (() -> Unit) = { task, delay ->
+    val future = ticker.schedule(task, delay, TimeUnit.MILLISECONDS)
+    ({ future.cancel(false); Unit })
+  }
 
   /** Each JS runtime's way to write the log entries it holds at once (`WaveAppLog`'s memoryWarning event). */
   private val memoryWarningListeners = CopyOnWriteArrayList<() -> Unit>()
@@ -91,7 +103,7 @@ object NativeLog {
     // Read before the journal is opened, as a rule: what the service does next changes its counts.
     Thread({ record.reportPrevious(exits(app)) { savedDownloadCounts(AndroidDownloads.journal(app)) } }, "WaveLogLaunch").start()
     val main = Handler(Looper.getMainLooper())
-    watchdog.watch(FreezeWatch("main", FREEZE_MS, SystemClock::uptimeMillis, main::post, { screen }, ::mainThreadStack))
+    watchdog.watch(FreezeWatch("main", FREEZE_MS, SystemClock::uptimeMillis, main::post, { screen }, ::mainThreadStack, snapshotLater, ::hitch))
     (app as? Application)?.registerActivityLifecycleCallbacks(OnScreen)
     app.registerComponentCallbacks(OnTrimMemory)
     // Started late, by the JS module (a host that didn't dispatch Application.onCreate): Wave's activity already started.
@@ -102,7 +114,7 @@ object NativeLog {
   fun watchJs(react: ReactContext): () -> Unit {
     // Until React Native has set up its JS queue, a ping isn't posted and the next tick tries again.
     val post = { ping: Runnable -> runCatching { react.runOnJSQueueThread(ping) }.getOrDefault(false) }
-    return watchdog.watch(FreezeWatch("JS", FREEZE_MS, SystemClock::uptimeMillis, post, { screen }))
+    return watchdog.watch(FreezeWatch("JS", FREEZE_MS, SystemClock::uptimeMillis, post, { screen }, hitch = ::hitch))
   }
 
   /** Tells the watchdog when Wave's activities start and stop, so it runs only while Wave is on screen. */

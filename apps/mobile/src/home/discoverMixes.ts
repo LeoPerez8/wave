@@ -19,19 +19,19 @@
  * artist mix and a genre mix.
  */
 import {
-  artistMixSeeds,
+  artistMixSeedsSteps,
   catalogMixReader,
   discoverMixKeep,
   discoverMixesBuilt,
   discoverMixesDue,
-  discoverMixesOfCatalog,
+  discoverMixesOfCatalogSteps,
   discoverMixesRerun,
   discoverMixesSection,
-  genreMixSeeds,
+  genreMixSeedsSteps,
   discoverRowTitle,
   mixesShown,
   mixRefreshAvoid,
-  libraryStyleOf,
+  libraryMixProfilesSteps,
   mixSlidersEngine,
   mixSectionOfId,
   parseDiscoverMixes,
@@ -56,13 +56,20 @@ import {
   type YtAlbumSong,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
+import * as Semaphore from "effect/Semaphore";
 import * as Result from "effect/Result";
 import { useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
 
-import { freeTurnEffect } from "@/lib/backgroundWork";
+import { createBuildSource } from "@/lib/buildSource";
+import { onLibraryChange } from "@/library/libraryChanges";
+import { onArtistGraphSourcesChanged } from "./graphSources";
+import { runSteps } from "@/lib/stepped";
+import { createSerialWork } from "@/lib/serialWork";
+import { freeTurnEffect, settledTurnEffect } from "@/lib/backgroundWork";
 import { makeExternalStore, type ExternalStore } from "@/lib/externalStore";
 import { withNetworkLog } from "@/lib/networkMeter";
+import { RECOMMENDATION_TIMEOUT } from "@/lib/recommendationTimeout";
 import { persistedSetting, type PersistedSetting } from "@/lib/persistedSetting";
 import { libraryListQueries } from "@/library/hooks";
 import type { SongRow } from "@/library/LibraryStore";
@@ -73,7 +80,7 @@ import { tasteProfileNow } from "@/playback/TasteProfile";
 import { useDontPlayExplicit } from "@/settings/dontPlayExplicit";
 import { useYtMusicEnabled } from "@/settings/ytMusic";
 
-import { mixProfileOf } from "./artistGenres";
+import { lookedUpProfileOf } from "./artistGenres";
 import { artistGraphNow } from "./artistGraphNow";
 import { artistMixPools } from "./artistMixPools";
 import {
@@ -152,16 +159,20 @@ const rankedMixes = (
 ) =>
   Effect.gen(function* () {
     for (const seed of seeds) {
-      reader.read(seed);
+      if (reader.readSteps !== undefined) yield* runSteps(reader.readSteps(seed), freeTurnEffect);
+      else reader.read(seed);
       yield* freeTurnEffect;
     }
     const sliders = discoverSlidersNow();
-    const mixes = discoverMixesOfCatalog(seeds, reader, {
-      known: library.known,
-      library,
-      ...mixSlidersEngine(sliders),
-      ...(avoid === undefined ? {} : { avoid }),
-    });
+    const mixes = yield* runSteps(
+      discoverMixesOfCatalogSteps(seeds, reader, {
+        known: library.known,
+        library,
+        ...mixSlidersEngine(sliders),
+        ...(avoid === undefined ? {} : { avoid }),
+      }),
+      freeTurnEffect,
+    );
     return { mixes, sliders };
   });
 
@@ -196,11 +207,15 @@ const readerOf = (id: MixSectionId, library: MixIndexes, variety: number | undef
       memo.library === library
     )
       return memo.reader;
+    const profiles = yield* runSteps(libraryMixProfilesSteps(library), freeTurnEffect);
     const sources = {
       catalog,
       graph,
-      profileOf: mixProfileOf(library),
-      styleOf: libraryStyleOf(library),
+      profileOf: (name: string) => {
+        const own = profiles.profileOf(name);
+        return own === undefined ? lookedUpProfileOf(name) : own;
+      },
+      styleOf: profiles.styleOf,
       taste,
       now: Date.now(),
     };
@@ -249,7 +264,7 @@ const rerank = (id: MixSectionId): void => {
   if (saved === null || sameSliders(mixSection.rankedWith, discoverSlidersNow())) return;
   mixSection.reranking = true;
   void appRuntime
-    .runPromise(Effect.result(rerankedOf(id, saved)))
+    .runPromise(settledTurnEffect.pipe(Effect.andThen(Effect.result(rerankedOf(id, saved)))))
     .then((result) => {
       if (!Result.isSuccess(result)) return;
       // A build, a refresh or an Undo saved others meanwhile: they say what they're ranked at.
@@ -293,9 +308,12 @@ setMixSlidersListener(rerank);
 const buildArtistMixes = (avoid?: MixRefreshAvoid) =>
   Effect.gen(function* () {
     const library = yield* mixIndexes;
-    const seeds = artistMixSeeds(
-      yield* withSimilar(yield* artistMixPools(library, avoid), similarOffline),
-      Math.random,
+    const seeds = yield* runSteps(
+      artistMixSeedsSteps(
+        yield* withSimilar(yield* artistMixPools(library, avoid), similarOffline),
+        Math.random,
+      ),
+      freeTurnEffect,
     );
     if (seeds.length === 0) return "nothing-to-build-from" as const;
     return yield* mixesOf("artist-mixes", seeds, library, avoid);
@@ -312,7 +330,7 @@ const buildArtistMixes = (avoid?: MixRefreshAvoid) =>
 const buildGenreMixes = (avoid?: MixRefreshAvoid) =>
   Effect.gen(function* () {
     const library = yield* mixIndexes;
-    const seeds = genreMixSeeds(library, Math.random, avoid);
+    const seeds = yield* runSteps(genreMixSeedsSteps(library, Math.random, avoid), freeTurnEffect);
     if (seeds.length === 0) return "nothing-to-build-from" as const;
     return yield* mixesOf("genre-mixes", seeds, library, avoid);
   });
@@ -324,14 +342,26 @@ const builtOutcome = (built: DiscoverMixes | null | "nothing-to-build-from"): st
   return count === 0 ? "no mix" : count === 1 ? "1 mix" : `${count} mixes`;
 };
 
+/** One build at a time, manual or daily: the permit keeps two builds from reading the same sources at once. */
+const buildPermit = Semaphore.makeUnsafe(1);
+/** A library or graph source change restarts a build that reads a version it no longer has. */
+const buildSource = createBuildSource();
+onLibraryChange((change) => {
+  if (change.kind !== "folders") buildSource.changed();
+});
+onArtistGraphSourcesChanged(buildSource.changed);
 /**
- * [id]'s build ([pulled]: a refresh the owner pulled for), writing its
- * network use to the app log as it ends (`withNetworkLog`).
+ * [id]'s build ([pulled]: a refresh the owner pulled for), after Home settled,
+ * writing its network use to the app log as it ends (`withNetworkLog`).
  */
 const loggedBuild = (id: MixSectionId, pulled: boolean, avoid?: MixRefreshAvoid) =>
   withNetworkLog(
     `${discoverRowTitle(id)} ${pulled ? "refresh" : "build"}`,
-    SECTIONS[id].build(avoid),
+    settledTurnEffect.pipe(
+      Effect.andThen(buildSource.run(SECTIONS[id].build(avoid), freeTurnEffect)),
+      buildPermit.withPermits(1),
+      Effect.timeout(RECOMMENDATION_TIMEOUT),
+    ),
     builtOutcome,
   );
 
@@ -370,6 +400,7 @@ interface MixSection {
    * another, and the section says it's updating over the saved mixes.
    */
   readonly building: ExternalStore<boolean>;
+  readonly failed: ExternalStore<boolean>;
   /** After a build that made no mixes: no build before then (ms since the epoch). */
   retryAt: number | null;
   /** The seeds this session's last build picked, those it made no mix of too; null before one. */
@@ -410,6 +441,7 @@ const section = (
   build,
   nothingRetryMs,
   building: makeExternalStore(false),
+  failed: makeExternalStore(false),
   retryAt: null,
   picked: null,
   reader: null,
@@ -439,44 +471,57 @@ setPickedSeeds(() =>
  * has counted plays), then lets the harvest refill the catalog
  * (`harvestSoon`); when no build is due, the harvest goes at once.
  */
-const refresh = (id: MixSectionId, played: boolean): void => {
+const dailyBuilds = createSerialWork();
+const refresh = (id: MixSectionId, played: boolean): (() => void) => {
   const mixSection = SECTIONS[id];
   const now = Date.now();
   if (
-    mixSection.building.get() ||
     !discoverMixesDue(mixSection.saved.get(), { now, played }) ||
     (mixSection.retryAt !== null && now < mixSection.retryAt)
   ) {
     harvestSoon();
-    return;
+    return () => {};
   }
-  mixSection.building.set(true);
-  void appRuntime
-    .runPromise(Effect.result(loggedBuild(id, false)))
-    .then((result) => {
-      const built = Result.isSuccess(result) ? result.success : null;
-      if (built !== null && built !== "nothing-to-build-from") {
-        mixSection.retryAt = null;
-        mixSection.nothingToBuildFrom.set(false);
-        saveBuilt(id, built);
-        // The day's build: what refreshes avoid starts again from it.
-        mixSection.shown.set(mixesShown([], built, Date.now()));
-        return;
-      }
-      if (built === "nothing-to-build-from") {
-        const wait = mixSection.nothingRetryMs;
-        mixSection.retryAt = wait === 0 ? null : Date.now() + wait;
-        mixSection.nothingToBuildFrom.set(true);
-        return;
-      }
-      mixSection.retryAt = Date.now() + RETRY_MS;
-      if (Result.isSuccess(result)) mixSection.nothingToBuildFrom.set(false);
-    })
-    .finally(() => {
-      mixSection.building.set(false);
-      rerankAfterward(id);
-      harvestSoon();
-    });
+  return dailyBuilds.add(id, async (signal) => {
+    if (!discoverMixesDue(mixSection.saved.get(), { now: Date.now(), played })) return;
+    mixSection.building.set(true);
+    mixSection.failed.set(false);
+    await appRuntime
+      .runPromise(settledTurnEffect.pipe(Effect.andThen(Effect.result(loggedBuild(id, false)))), {
+        signal,
+      })
+      .then((result) => {
+        if (signal.aborted) return;
+        const built = Result.isSuccess(result) ? result.success : null;
+        mixSection.failed.set(built === null);
+        if (built !== null && built !== "nothing-to-build-from") {
+          mixSection.retryAt = null;
+          mixSection.nothingToBuildFrom.set(false);
+          saveBuilt(id, built);
+          // The day's build: what refreshes avoid starts again from it.
+          mixSection.shown.set(mixesShown([], built, Date.now()));
+          return;
+        }
+        if (built === "nothing-to-build-from") {
+          const wait = mixSection.nothingRetryMs;
+          mixSection.retryAt = wait === 0 ? null : Date.now() + wait;
+          mixSection.nothingToBuildFrom.set(true);
+          return;
+        }
+        mixSection.retryAt = Date.now() + RETRY_MS;
+        if (Result.isSuccess(result)) mixSection.nothingToBuildFrom.set(false);
+      })
+      .catch(() => {
+        if (!signal.aborted) mixSection.failed.set(true);
+      })
+      .finally(() => {
+        mixSection.building.set(false);
+        if (!signal.aborted) {
+          rerankAfterward(id);
+          harvestSoon();
+        }
+      });
+  });
 };
 
 // A harvest that refilled the catalog builds a section that has no mixes yet
@@ -513,12 +558,13 @@ export const refreshMixes = (id: MixSectionId): void => {
   const previous = saved.get();
   const memory = previous === null ? shown.get() : mixesShown(shown.get(), previous, now);
   building.set(true);
+  mixSection.failed.set(false);
   void appRuntime
     .runPromise(Effect.result(loggedBuild(id, true, mixRefreshAvoid(memory, now))))
     .then((result) => {
       const built = Result.isSuccess(result) ? result.success : null;
       if (built === null || built === "nothing-to-build-from") {
-        void showToast(`Couldn't refresh ${discoverRowTitle(id)}`);
+        mixSection.failed.set(true);
         return;
       }
       mixSection.retryAt = null;
@@ -539,6 +585,7 @@ export const refreshMixes = (id: MixSectionId): void => {
         },
       });
     })
+    .catch(() => mixSection.failed.set(true))
     .finally(() => {
       building.set(false);
       rerankAfterward(id);
@@ -600,18 +647,23 @@ export const useLibraryTracks = (): ReadonlyMap<number, SongRow> | null => {
  * focus once [played] turns true (the first counted plays) if the last build
  * had no seeds from plays.
  */
-export const useDiscoverMixes = (id: MixSectionId, played: boolean): DiscoverMixesSection => {
-  const { saved, nothingToBuildFrom, building } = SECTIONS[id];
+export const useDiscoverMixes = (
+  id: MixSectionId,
+  played: boolean | undefined,
+): DiscoverMixesSection => {
+  const { saved, nothingToBuildFrom, building, failed } = SECTIONS[id];
   const enabled = useYtMusicEnabled();
   const mixes = saved.useValue();
   const blend = useBlend(id, null);
   const nothing = nothingToBuildFrom.useValue();
   const rebuilding = useSyncExternalStore(building.subscribe, building.get);
+  const buildFailed = useSyncExternalStore(failed.subscribe, failed.get);
   useFocusEffect(
     useCallback(() => {
-      if (!enabled) return;
+      // Saved rows can draw before Home's plays answer; run focus work once that input is known.
+      if (!enabled || played === undefined) return;
       refreshKnownVideos();
-      refresh(id, played);
+      return refresh(id, played);
     }, [enabled, id, played]),
   );
   const shown = useMemo(
@@ -621,8 +673,9 @@ export const useDiscoverMixes = (id: MixSectionId, played: boolean): DiscoverMix
         nothingToBuildFrom: nothing,
         blend,
         building: rebuilding,
+        failed: buildFailed,
       }),
-    [mixes, enabled, nothing, blend, rebuilding],
+    [mixes, enabled, nothing, blend, rebuilding, buildFailed],
   );
   // The start of what Home shows is fetched ahead on Wi-Fi.
   useEffect(() => noteMixesShown(id, shown), [id, shown]);

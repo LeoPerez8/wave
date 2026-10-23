@@ -153,7 +153,7 @@ let found: {
  * read first only when
  * the session runs low and the network policy allows it. The engine ranks
  * with [engine]'s weights (the Magic Queue section's sliders; absent: its
- * defaults). None with the YT Music switch off. Never fails.
+ * defaults). None with the YT Music switch off. A graph read failure reaches the batch's retry line.
  */
 export const magicQueueYtCandidates = (
   session: MagicSession,
