@@ -1,6 +1,9 @@
 /** Short-lived settlement observer, then a cancellable free turn. No polling. */
 import * as Effect from "effect/Effect";
 
+/** How long work waits for the screen to settle before it takes a free turn anyway. */
+const SETTLED_WAIT_CAP_MS = 3000;
+
 export interface SettledScheduler {
   readonly settled: () => boolean;
   readonly subscribe: (listener: () => void) => () => void;
@@ -31,7 +34,7 @@ export const settledTurn = ({
     const timer = setTimeout(() => {
       capped = true;
       check();
-    }, 3000);
+    }, SETTLED_WAIT_CAP_MS);
     stop = subscribe(check);
     check();
     return Effect.sync(() => {
