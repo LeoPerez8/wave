@@ -2,12 +2,11 @@ import { useScreenContent } from "@/lib/screenTiming";
 import { LegendList } from "@legendapp/list/react-native";
 import {
   artistPageItems,
+  artistSongOrder,
   rankPopular,
   ytTrackId,
   type ArtistPageItem,
-  type MixedSong,
   type YtArtistAlbum,
-  type YtSong,
 } from "@wave/core";
 import { useLocalSearchParams } from "expo-router";
 import { useCallback, useMemo } from "react";
@@ -45,7 +44,7 @@ import { useListSelection, type ListSelection } from "@/selection/useListSelecti
 import { ArtistStatsBlock } from "@/stats/ArtistStatsBlock";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 import { useArtistSongsFinder, useYtArtistSection } from "@/ytmusic/artistSection";
-import { useHeldSongs, useSongsInPlace, type PlacedSongs } from "@/ytmusic/songsInPlace";
+import { useHeldSongs, useSongsInPlace } from "@/ytmusic/songsInPlace";
 import { YT_ARTIST_NOTE, YtReleaseCard } from "@/ytmusic/YtArtistSection";
 import { YtLookupFooter } from "@/ytmusic/YtLookupFooter";
 import { SwipeYtSongRow } from "@/ytmusic/YtSongRow";
@@ -65,8 +64,8 @@ type RankedSong = SongRow & { readonly popularRank?: number | undefined };
 
 /** A row of the Songs section: the Library's song, or a song of the artist YouTube Music adds. */
 type PageSong =
-  | { readonly kind: "library"; readonly song: RankedSong }
-  | { readonly kind: "yt"; readonly song: NativeYtSong };
+  | { readonly kind: "library"; readonly song: SongRow; readonly popularRank: number | undefined }
+  | { readonly kind: "yt"; readonly song: NativeYtSong; readonly popularRank: number | undefined };
 
 type Item = ArtistPageItem<AlbumCell, PageSong>;
 
@@ -101,10 +100,6 @@ const cellKey = (cell: AlbumCell): string => {
       return "skeleton";
   }
 };
-
-/** A song YouTube Music added: streamed, or the Library's file once its download finished. */
-const placedSong = (row: PlacedSongs["songs"][number]): PageSong =>
-  row.source === "library" ? { kind: "library", song: row.track } : { kind: "yt", song: row.song };
 
 /**
  * The page's shelves and songs, the songs under [songsLabel]. While YouTube
@@ -338,21 +333,26 @@ function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegr
     () => (placed.tracks.size === 0 ? songs : songs.filter((song) => !placed.tracks.has(song.id))),
     [songs, placed.tracks],
   );
-  // The page's songs in page order: the Library's, then every song of the artist YouTube Music
-  // adds, in its order.
+  // Popular merges the visible online list into the ranking. Other sorts and Library keep
+  // their existing order. Playback and displayed rows use this same Core result.
+  const onlineSongsShown = integrated && yt.find !== null && ytView?.toggle === "online";
   const mixed = useMemo(
-    (): MixedSong<YtSong, SongRow>[] => [
-      ...librarySongs.map((track) => ({ source: "library" as const, track })),
-      ...placed.songs,
-    ],
-    [librarySongs, placed.songs],
+    () =>
+      artistSongOrder(
+        [...librarySongs.map((track) => ({ source: "library" as const, track })), ...placed.songs],
+        yt.popular,
+        { sort: sort.key, online: onlineSongsShown },
+      ),
+    [librarySongs, placed.songs, yt.popular, sort.key, onlineSongsShown],
   );
   const pageSongs = useMemo(
-    (): PageSong[] => [
-      ...librarySongs.map((song): PageSong => ({ kind: "library", song })),
-      ...placed.songs.map(placedSong),
-    ],
-    [librarySongs, placed.songs],
+    (): PageSong[] =>
+      mixed.map((row) =>
+        row.source === "library"
+          ? { kind: "library", song: row.track, popularRank: row.popularRank }
+          : { kind: "yt", song: row.song, popularRank: row.popularRank },
+      ),
+    [mixed],
   );
   // Play, Shuffle and rows play this list by one rule (`playPage`): with YouTube Music's songs
   // on the page (an integrated view) the mixed list, the Library's files and the artist's songs
@@ -403,6 +403,7 @@ function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegr
                 playing={currentIds.has(ytTrackId(song.videoId))}
                 kind="Song · "
                 playDisc
+                popularRank={item.song.popularRank}
                 {...selectableRow(
                   ytTrackItem(song),
                   page,
@@ -419,12 +420,12 @@ function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegr
           return (
             <SwipeTrackRow
               song={song}
-              track={byPopularity ? { ...card, trackNumber: song.popularRank } : card}
+              track={byPopularity ? { ...card, trackNumber: item.song.popularRank } : card}
               state={currentIds.has(String(song.id)) ? "playing" : undefined}
               favorite={favorites.has(song.id)}
               leading={byPopularity ? "number" : "artwork"}
               playDisc
-              topNumber={song.popularRank === 1}
+              topNumber={item.song.popularRank === 1}
               {...selectableRow(
                 trackItem(song),
                 page,
