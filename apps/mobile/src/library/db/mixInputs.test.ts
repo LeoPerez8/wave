@@ -22,6 +22,79 @@ const collect = <A>(
   }
 };
 const root = fileURLToPath(new URL("../../../../../", import.meta.url));
+test("mix, graph and taste pages seek past a cursor with indexed projection lookups", async () => {
+  const fixture = await createFastAgainFixture();
+  try {
+    const store = await loadLibraryStore(root, fixture.db);
+    const pages = [
+      ["mixSongsPage", 128, "tracks"],
+      ["mixArtistsPage", 128, "a"],
+      ["mixCreditPage", 128, "pt"],
+      ["mixHistoryPage", 128, "play_events"],
+      ["mixStreamedPage", 128, "streamed_songs"],
+      ["mixPlaylistedPage", 128, "pi"],
+      ["mixCatalogPage", 128, "candidate_songs"],
+      ["graphCatalogPage", 128, "candidate_songs"],
+      ["graphRadioPage", 128, "candidate_radios"],
+      ["tasteFavoritesPage", 128, "favorites"],
+      ["tasteDownloadsPage", 128, "tracks"],
+    ] as const;
+    for (const [name, cursor, table] of pages) {
+      const page: Effect.Effect<unknown, unknown> = store[name](cursor);
+      const { queries } = traceQueries(fixture.db, () => Effect.runSync(page));
+      assert.ok(queries.length > 0, `${name} ran no SQL`);
+      for (const query of queries) {
+        assert.ok(query.rows <= 128, `${name} returned ${query.rows} rows`);
+        assert.match(
+          query.plan[0]!,
+          new RegExp(`^SEARCH ${table} USING INTEGER PRIMARY KEY \\(rowid>\\?`),
+          `${name} must seek the driving source, including the genres range query`,
+        );
+        assert.doesNotMatch(query.sql, /OFFSET/i);
+        // Aggregate co-routines and json_each may scan their local input; joined tables must seek.
+        assert.ok(
+          query.plan.every(
+            (step) =>
+              !/^SCAN (?:tracks|artists|albums|track_artists|album_artists|deleted_track_artists|play_events|play_totals|streamed_songs|playlist_items|playlists)\b/.test(
+                step,
+              ),
+          ),
+          `${name}: ${query.plan.join("; ")}`,
+        );
+      }
+      if (name === "mixSongsPage") {
+        assert.equal(queries.length, 2);
+        assert.match(queries[1]!.plan[0]!, /\(rowid>\? AND rowid<\?\)/);
+      }
+      if (name === "mixArtistsPage") {
+        const plan = queries[0]!.plan.join("; ");
+        assert.match(plan, /track_artists.*INDEX track_artists_artist_idx \(artist_id=\?\)/);
+        assert.match(plan, /albums.*INDEX albums_album_artist_idx \(album_artist_id=\?\)/);
+        assert.match(plan, /aa.*INDEX album_artists_artist_idx \(artist_id=\?\)/);
+        assert.match(plan, /t.*INDEX tracks_album_idx \(album_id=\?\)/);
+      }
+    }
+    const similar = traceQueries(fixture.db, () => Effect.runSync(store.graphSimilarPage("a")));
+    assert.equal(similar.queries.length, 1);
+    assert.ok(similar.queries[0]!.rows <= 128);
+    assert.match(similar.queries[0]!.plan[0]!, /^SEARCH yt_artists.*\(artist_key>\?\)/);
+    for (const name of ["graphPlayPage", "tastePlaysPage"] as const) {
+      const page: Effect.Effect<unknown, unknown> = store[name]([100, 128]);
+      const { queries } = traceQueries(fixture.db, () => Effect.runSync(page));
+      assert.equal(queries.length, 2);
+      assert.ok(queries.reduce((rows, query) => rows + query.rows, 0) <= 128);
+      assert.match(
+        queries[0]!.plan[0]!,
+        /play_events_started_at_idx \(started_at=\? AND rowid>\?\)/,
+      );
+      assert.match(queries[1]!.plan[0]!, /play_events_started_at_idx \(started_at>\?\)/);
+      assert.ok(queries.every((query) => !/OFFSET/i.test(query.sql)));
+    }
+  } finally {
+    fixture.close();
+  }
+});
+
 test("daily mix pages preserve complete Library order/credits/genres and all-time play totals", async () => {
   const fixture = await createFastAgainFixture();
   try {
