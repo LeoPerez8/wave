@@ -15,20 +15,28 @@ export const settledTurn = ({
     let stop: (() => void) | undefined;
     let cancel: (() => void) | undefined;
     let ended = false;
+    let capped = false;
     const check = () => {
-      if (ended || cancel !== undefined || !settled()) return;
+      if (ended || cancel !== undefined || (!capped && !settled())) return;
       cancel = schedule(() => {
         cancel = undefined;
-        if (!settled()) return;
+        if (!capped && !settled()) return;
         ended = true;
+        clearTimeout(timer);
         stop?.();
         resume(Effect.void);
       });
     };
+    // A lost timing mark must not leave optional work waiting forever.
+    const timer = setTimeout(() => {
+      capped = true;
+      check();
+    }, 3000);
     stop = subscribe(check);
     check();
     return Effect.sync(() => {
       ended = true;
+      clearTimeout(timer);
       stop?.();
       cancel?.();
     });

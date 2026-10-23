@@ -11,5 +11,5 @@ export const shareArtistGraph = <R>(
     Effect.gen(function* () {
       yield* start;
       return yield* readArtistGraph(yield* store, between);
-    }),
+    }).pipe(Effect.timeout("15 seconds")),
   );

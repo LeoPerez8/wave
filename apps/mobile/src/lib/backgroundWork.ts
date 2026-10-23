@@ -134,5 +134,5 @@ registerPerfMeta("backgroundWork", () => {
   return { slices, longestWaitMs: Math.round(longestWaitMs), forcedSlices };
 });
 
-/** Optional CPU work starts only after the active transition settled, or with Wave in the background. */
+/** Optional work waits for settlement (at most 3 s), then a free turn; backgrounding opens it early. */
 export const settledTurnEffect = settledTurn({ ...settledOrAway, schedule: whenFree });
