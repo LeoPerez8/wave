@@ -94,25 +94,28 @@ test("retained playlist sessions renew independently for an unrelated burst trac
   }
 });
 
-test("two requested artist rows materialize global credits; a scoped probe preserves counts", async () => {
-  const { scopedArtistProbe } = await import("../../../bench/fastAgain/boundedReadProbes.ts");
+test("two requested artist rows seek only their indexed credits with complete metadata preserved", async () => {
+  const { selectArtistsBefore600 } =
+    await import("../../../bench/fastAgain/artistCountReference.ts");
   const fixture = await createFastAgainFixture();
   try {
     const store = await loadLibraryStore(CURRENT_ROOT, fixture.db);
     const ids = [fixture.targets.small.artistId, fixture.targets.large.artistId];
-    const global = traceQueries(fixture.db, () => Effect.runSync(store.artistsByIds(ids)));
-    const scoped = traceQueries(fixture.db, () => scopedArtistProbe(fixture.db, ids));
-    assert.deepEqual(scoped.result, global.result);
+    const scoped = traceQueries(fixture.db, () => Effect.runSync(store.artistsByIds(ids)));
+    assert.deepEqual(scoped.result, selectArtistsBefore600(fixture.db, { ids }));
     assert.deepEqual(
-      global.result.map((row) => row.trackCount).toSorted((a, b) => a - b),
+      scoped.result.map((row) => row.trackCount).toSorted((a, b) => a - b),
       [20, 300],
     );
     assert.equal(
-      global.queries.reduce((sum, query) => sum + query.rows, 0),
+      scoped.queries.reduce((sum, query) => sum + query.rows, 0),
       2,
     );
-    assert.ok(global.queries[0]!.plan.some((step) => /SCAN track_artists/.test(step)));
-    assert.ok(scoped.queries[0]!.plan.some((step) => /SEARCH track_artists/.test(step)));
+    assert.ok(
+      scoped.queries[0]!.plan.some((step) =>
+        /SEARCH track_artists.*track_artists_artist_idx/.test(step),
+      ),
+    );
     assert.ok(!scoped.queries[0]!.plan.some((step) => /SCAN track_artists/.test(step)));
   } finally {
     fixture.close();

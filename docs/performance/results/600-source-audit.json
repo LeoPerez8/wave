@@ -1,0 +1,30 @@
+{
+  "issue": 600,
+  "measuredRevision": "cd3beb1a2324cb263e64d59ca512b1f25946143f",
+  "baseline": "2aae3bb887effdc56b8cec9ffb05091fde29a4f0",
+  "reference": "add761ed787061db6a6c2799687d421301b6182b",
+  "fileSha256": {
+    "apps/mobile/src/library/db/artists.ts": "a3d033363a41ed3547a6766e12969b3e61d233bc15a3ab3745f1d7360965a5df",
+    "apps/mobile/src/library/db/testDatabase.ts": "fdf2606df1fb7e7e388f8455846bb85a13567a228c172adac89d2a7773a1c091",
+    "apps/mobile/bench/fastAgain/benches/boundedReads.ts": "686cf69bf110594caacbe7a8f16ce99a3ae9a43c154f51d0f3fe34566f97fb71",
+    "apps/mobile/bench/fastAgain/artistCountReference.ts": "9bb685379d4d5cef4e76693664645dcdc42ea1242aab4a9fd4f1706b73b327bc"
+  },
+  "resultSha256": "6c58077ef817e27247d1c4912cc5579b6a045d159fce8561627f73d723309a9d",
+  "runs": 11,
+  "measurements": 72,
+  "fidelity": "Actual selected-revision store APIs. Full rows also compared with faithful pre-600 selectArtists frozen from 2aae3bb8, preserving UNION, scope, projection, grouping and sort/page semantics.",
+  "timingLimit": "Shared desktop host. Other ticket benchmark/test processes and a focused artist test overlapped this capture. No rerun or timing threshold selection. Counts, equality and uninstrumented plans are deterministic evidence; no isolated-host, Hermes or phone frame claim.",
+  "workObservation": "Temporary identity-function views preserve indexed artist_id predicates, wrapping only credit track/album keys. Evaluations count keys fed to joins/UNION and file membership probes, not all VM visits. Functions can affect join planning: observe outside timing and separately check uninstrumented plans/results.",
+  "validation": "72 finite measurements, three sizes, three actual revisions, eight reads. Complete cross-revision keys equal; current fixed ID/page credit evaluations unchanged after unrelated growth.",
+  "postMergeVerification": {
+    "mergeRevision": "7446f046b55cb3925480184ca55544d32cac602e",
+    "integrationRevision": "0b9eadb33b81d62486eb671e13180d628b2e5693",
+    "unchangedMeasuredFiles": [
+      "db/artists.ts",
+      "bench/fastAgain/benches/boundedReads.ts",
+      "bench/fastAgain/artistCountReference.ts"
+    ],
+    "sharedHelperDelta": "#593 adds observeSqlTasks only. The existing helper bodies and #600 traceArtistCreditVisits are unchanged; the file hash above identifies the measured pre-merge blob.",
+    "storeDelta": "#593 adds taste APIs. artistsByIds/listArtistsPage implementations and diagnostic operation labels remain byte-identical to the measured revision."
+  }
+}
