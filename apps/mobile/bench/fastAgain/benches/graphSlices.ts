@@ -161,8 +161,11 @@ export const bench: FastAgainBench = {
           synchronousTotalMs: percentiles(totals),
           longestTaskMs: percentiles(longest),
           steps: segmentCounts,
-          maxRowsInStep: Math.max(0, ...traced.rows),
-          maxStatementsInStep: Math.max(0, ...traced.statements),
+          maxRowsInStep: traced.rows.reduce((max, rows) => Math.max(max, rows), 0),
+          maxStatementsInStep: traced.statements.reduce(
+            (max, statements) => Math.max(max, statements),
+            0,
+          ),
           semanticEquality:
             "complete ordered edge maps, weights and names; cross-revision resultKey asserted by runner",
         },

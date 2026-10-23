@@ -362,13 +362,15 @@ function* songsByArtistSteps(
   library: GenreProfileLibrary,
 ): Generator<void, Map<number, GenreTagged[]>> {
   const songs = new Map<number, GenreTagged[]>();
-  for (const song of library.songs)
+  for (const song of library.songs) {
     for (const id of song.artistIds) {
       const of = songs.get(id) ?? [];
       of.push(song);
       songs.set(id, of);
       yield;
     }
+    yield;
+  }
   return songs;
 }
 export function* libraryMixProfilesSteps(

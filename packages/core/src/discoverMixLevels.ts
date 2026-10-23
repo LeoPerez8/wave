@@ -262,7 +262,7 @@ export function* discoverMixFamiliarPoolSteps<L extends DiscoverLibrarySong>(
     else if (known.known(song)) addStream(song);
   }
   const restSongs: DiscoverLibrarySong[] = [];
-  const accepts = mixSongFilter(seed, library.artists);
+  const accepts = yield* mixSongFilterSteps(seed, library.artists);
   for (const song of library.songs) {
     if (accepts(song)) restSongs.push(song);
     yield;
@@ -284,17 +284,19 @@ export function* discoverMixFamiliarPoolSteps<L extends DiscoverLibrarySong>(
   return pool;
 }
 /** Whether a Library song is of [seed]'s mix: of its genre family (`ofGenreFamily`), else by one of its seed's artists. */
-const mixSongFilter = (
+function* mixSongFilterSteps(
   seed: DiscoverMixSeed,
   artists: readonly DiscoverSeedArtist[],
-): ((song: DiscoverLibrarySong) => boolean) => {
+): Generator<void, (song: DiscoverLibrarySong) => boolean> {
   if (seed.genre !== undefined) return ofGenreFamily(seed.genre);
   const name = identityKey(seed.name);
-  const ids = new Set(
-    artists.filter((artist) => identityKey(artist.name) === name).map((artist) => artist.id),
-  );
+  const ids = new Set<number>();
+  for (const artist of artists) {
+    if (identityKey(artist.name) === name) ids.add(artist.id);
+    yield;
+  }
   return (song) => song.artistIds.some((id) => ids.has(id));
-};
+}
 
 /**
  * [mix]'s songs as its list shows them and they play: its Library songs as

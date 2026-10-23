@@ -138,3 +138,69 @@ test("Artist seed derivation yields through Library sorting and preserves a know
     }
   }
 });
+
+test("a mix's familiar share yields while finding its Library artist", () => {
+  let visits = 0;
+  const artists = Array.from({ length: 1400 }, (_, id) => ({
+    id,
+    get name() {
+      visits++;
+      return `Artist ${id}`;
+    },
+  }));
+  const seed = { kind: "artist" as const, id: "artist:artist 1399", name: "Artist 1399" };
+  const songs = [{ id: 1, title: "Known", artist: "Artist 1399", artistIds: [1399], addedAt: 0 }];
+  const radio = Array.from({ length: 10 }, (_, i) => ({
+    videoId: `fresh-${i}`,
+    title: `Fresh ${i}`,
+    artists: [seed.name],
+    album: null,
+    albumId: null,
+    durationMs: 180000,
+    artworkUrl: null,
+    explicit: false,
+    video: false,
+  }));
+  const steps = discoverMixesOfCatalogSteps(
+    [seed],
+    { read: () => ({ seed, radio }) },
+    {
+      library: { artists, songs },
+      known: mixKnownSongs({ library: [], playedRecordingKeys: [], streamed: [], playlisted: [] }),
+    },
+  );
+  for (;;) {
+    visits = 0;
+    const next = steps.next();
+    assert.ok(visits <= 4, `${visits} artist names visited in one operation`);
+    if (next.done) {
+      assert.deepEqual(
+        next.value[0]!.familiar?.map((song) => (song.source === "library" ? song.track.id : null)),
+        [1],
+      );
+      break;
+    }
+  }
+});
+
+test("genre profile derivation yields through songs with no credited artist", async () => {
+  const { libraryMixProfilesSteps } = await import("./index.ts");
+  let visits = 0;
+  const songs = Array.from({ length: 1400 }, () => ({
+    genre: null,
+    get artistIds(): number[] {
+      visits++;
+      return [];
+    },
+  }));
+  const steps = libraryMixProfilesSteps({ artists: [], songs });
+  for (;;) {
+    visits = 0;
+    const next = steps.next();
+    assert.ok(visits <= 1, `${visits} uncredited songs visited in one operation`);
+    if (next.done) {
+      assert.equal(next.value.profileOf("Unknown"), undefined);
+      break;
+    }
+  }
+});

@@ -175,6 +175,7 @@ change. Race coverage discards prior-track and pre-download lookup answers. The
 source scanner and route-observer policy are unchanged; there is no candidate-finder
 exception. The index's one-time upgrade backfill uses pages of 128 titles, yielding
 between transactions before the LibraryStore becomes available.
+
 ## #594 graph and daily mix boundaries
 
 `readArtistGraph` no longer reaches the whole-history/song/artist capabilities,
