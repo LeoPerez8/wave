@@ -22,6 +22,28 @@ const collect = <A>(
   }
 };
 const root = fileURLToPath(new URL("../../../../../", import.meta.url));
+test("mix artist pages split count work while retaining every artist", async () => {
+  const fixture = await createFastAgainFixture();
+  try {
+    const store = await loadLibraryStore(root, fixture.db);
+    const artists: import("../LibraryStore.ts").ArtistRow[] = [];
+    let after = 0;
+    for (;;) {
+      const page = Effect.runSync(store.mixArtistsPage(after));
+      assert.ok(page.length <= 32, `one artist count task returned ${page.length} rows`);
+      if (page.length === 0) break;
+      artists.push(...page);
+      after = page.at(-1)!.id;
+    }
+    assert.ok(artists.length > 32);
+    assert.deepEqual(
+      artists,
+      [...Effect.runSync(store.listArtists)].sort((a, b) => a.id - b.id),
+    );
+  } finally {
+    fixture.close();
+  }
+});
 test("mix, graph and taste pages seek past a cursor with indexed projection lookups", async () => {
   const fixture = await createFastAgainFixture();
   try {
@@ -38,6 +60,7 @@ test("mix, graph and taste pages seek past a cursor with indexed projection look
       ["graphRadioPage", 128, "candidate_radios"],
       ["tasteFavoritesPage", 128, "favorites"],
       ["tasteDownloadsPage", 128, "tracks"],
+      ["tasteArtistsPage", 128, "a"],
     ] as const;
     for (const [name, cursor, table] of pages) {
       const page: Effect.Effect<unknown, unknown> = store[name](cursor);
@@ -72,6 +95,12 @@ test("mix, graph and taste pages seek past a cursor with indexed projection look
         assert.match(plan, /albums.*INDEX albums_album_artist_idx \(album_artist_id=\?\)/);
         assert.match(plan, /aa.*INDEX album_artists_artist_idx \(artist_id=\?\)/);
         assert.match(plan, /t.*INDEX tracks_album_idx \(album_id=\?\)/);
+      }
+      if (name === "tasteArtistsPage") {
+        assert.equal(queries.length, 1);
+        assert.doesNotMatch(queries[0]!.sql, /count\(|JOIN|EXISTS|artwork/i);
+        for (const artist of Effect.runSync(store.tasteArtistsPage(0)))
+          assert.deepEqual(Object.keys(artist), ["id", "name"]);
       }
     }
     const similar = traceQueries(fixture.db, () => Effect.runSync(store.graphSimilarPage("a")));

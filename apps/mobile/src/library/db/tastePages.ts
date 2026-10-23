@@ -1,4 +1,4 @@
-/** Compatible bounded sources for a later #593 migration; no taste consumer changes here. */
+/** Bounded, historical taste inputs. Raw cursors advance even when no row decodes. */
 import type { TasteHistory } from "@wave/core";
 import { sql, type SQL } from "drizzle-orm";
 import type { LibraryDatabase } from "./database.ts";
@@ -63,3 +63,8 @@ export const tasteDownloadsPage = (
     next: rows.at(-1)?.id ?? null,
   };
 };
+
+/** Taste needs artist identity only; no per-artist Library counts or artwork. */
+export const tasteArtistsPage = (db: LibraryDatabase, after: number) =>
+  db.all<{ id: number; name: string }>(sql`
+    SELECT a.id, a.name FROM artists a WHERE a.id > ${after} ORDER BY a.id LIMIT ${GRAPH_PAGE_SIZE}`);
