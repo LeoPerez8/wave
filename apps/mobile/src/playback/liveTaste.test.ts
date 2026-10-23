@@ -244,3 +244,24 @@ test("due Home and mixes keep one live profile; a later history snapshot counts 
   assert.equal((await Effect.runPromise(live.profileUsing(read)))?.songs.get("7"), 5);
   assert.equal(reads, 1);
 });
+
+test("metadata changing during every derivation can't keep the profile from coming: the third answers, unkept", async () => {
+  let derivations = 0;
+  let invalidating = 3;
+  const live = makeLiveTaste({
+    derive: Effect.suspend(() => {
+      derivations++;
+      // A scan batch landing while each derivation runs.
+      if (invalidating-- > 0) live.invalidate();
+      return Effect.succeed(tasteProfile(NO_HISTORY, songOf, NOW));
+    }),
+    songsOf: (ids) => Effect.succeed(ids.map(songOf)),
+  });
+  assert.notEqual(await Effect.runPromise(live.profile), null);
+  assert.equal(derivations, 3, "bounded, not one more per change");
+  // An answer changed meanwhile isn't the shared one: the next ask derives again.
+  await Effect.runPromise(live.profile);
+  assert.equal(derivations, 4);
+  await Effect.runPromise(live.profile);
+  assert.equal(derivations, 4);
+});

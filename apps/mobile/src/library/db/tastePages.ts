@@ -64,6 +64,64 @@ export const tasteDownloadsPage = (
   };
 };
 
+/**
+ * A play neither played through nor skipped says nothing to the taste, whatever its listened
+ * time (Core's `tastePlaySignal`; pinned by tasteSnapshot.test.ts): an unfinished play's.
+ */
+const SAYS_NOTHING = (row: "OLD" | "NEW") => `${row}.end_reason NOT IN ('completed', 'skipped')`;
+
+/**
+ * What moves the taste revision: a write to what the taste pages and the songs page read
+ * (songs, their credits, artists, albums, genres, plays, stars). Playback's own saves (the
+ * position, the queue, an unfinished play's progress) and sync's pushed flags don't, so a
+ * derivation that walks pages on free turns isn't restarted by music playing.
+ */
+const TASTE_WRITES: readonly string[] = [
+  ...["tracks", "track_artists", "genres"].flatMap((table) =>
+    ["INSERT", "UPDATE", "DELETE"].map((write) => `${write} ON ${table}`),
+  ),
+  "INSERT ON artists",
+  "DELETE ON artists",
+  "UPDATE OF id, name, sort ON artists",
+  "INSERT ON albums",
+  "DELETE ON albums",
+  "UPDATE OF id ON albums",
+  "INSERT ON favorites",
+  "DELETE ON favorites",
+  "UPDATE OF track_id, changed_at, deleted ON favorites",
+  "INSERT ON play_events",
+  "DELETE ON play_events",
+  // Progress of a play that says nothing either side reads the same profile, whichever
+  // listened time a page saw: the row keeps its place in the (started_at, id) walk.
+  `UPDATE OF track_id, started_at, listened_ms, end_reason ON play_events WHEN NOT (
+    OLD.track_id = NEW.track_id AND OLD.started_at = NEW.started_at
+    AND ${SAYS_NOTHING("OLD")} AND ${SAYS_NOTHING("NEW")})`,
+];
+
+/**
+ * Counts taste writes on this connection, in TEMP objects: nothing in the Library's schema
+ * changes, and they go with the connection. Idempotent.
+ */
+export const watchTasteSources = (db: LibraryDatabase): void => {
+  db.run(sql`CREATE TEMP TABLE IF NOT EXISTS taste_writes (n INTEGER NOT NULL)`);
+  db.run(sql`INSERT INTO temp.taste_writes (n)
+    SELECT 0 WHERE NOT EXISTS (SELECT 1 FROM temp.taste_writes)`);
+  TASTE_WRITES.forEach((write, i) => {
+    db.run(
+      sql.raw(`CREATE TEMP TRIGGER IF NOT EXISTS taste_write_${i} AFTER ${write}
+        BEGIN UPDATE taste_writes SET n = n + 1; END`),
+    );
+  });
+};
+
+/** A constant-size stamp: taste writes on this connection, and commits by any other. */
+export const tasteRevision = (db: LibraryDatabase): string => {
+  const row = db.get<{ writes: number; external: number }>(sql`
+    SELECT (SELECT n FROM temp.taste_writes) AS writes, data_version AS external
+    FROM pragma_data_version`)!;
+  return `${row.writes}:${row.external}`;
+};
+
 /** Taste needs artist identity only; no per-artist Library counts or artwork. */
 export const tasteArtistsPage = (db: LibraryDatabase, after: number) =>
   db.all<{ id: number; name: string }>(sql`

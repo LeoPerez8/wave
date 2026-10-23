@@ -14,6 +14,8 @@ import {
   tasteFavoritesPage,
   tasteDownloadsPage,
   tasteArtistsPage,
+  tasteRevision,
+  watchTasteSources,
 } from "./db/tastePages";
 import { artistGraphSourcesChanged } from "@/home/graphSources";
 import {
@@ -886,7 +888,7 @@ export class LibraryStore extends Context.Service<
     readonly playedRecordingKeys: Effect.Effect<readonly string[], LibraryStoreError>;
     /** The plays, stars and downloads Core's taste profile is derived from (`db/taste.ts`). */
     readonly tasteHistory: Effect.Effect<TasteHistory, LibraryStoreError>;
-    /** Constant-size connection/external write stamp for a yielding taste snapshot. */
+    /** Constant-size stamp of writes to what the taste reads (`db/tastePages.ts#watchTasteSources`). */
     readonly tasteRevision: Effect.Effect<string, LibraryStoreError>;
     /** The ids of every starred track. */
     readonly favoriteTrackIds: Effect.Effect<readonly number[], LibraryStoreError>;
@@ -1333,6 +1335,11 @@ const make = Effect.gen(function* () {
     catch: (cause) => new LibraryStoreError({ operation: "key recording titles", cause }),
   });
 
+  yield* Effect.try({
+    try: () => watchTasteSources(db),
+    catch: (cause) => new LibraryStoreError({ operation: "watch the taste sources", cause }),
+  });
+
   const listeningHistoryVersion = makeExternalStore(0);
   const historyChanged = () => listeningHistoryVersion.update((value) => value + 1);
   const historyWrite = <A>(operation: string, run: () => A) =>
@@ -1772,11 +1779,7 @@ const make = Effect.gen(function* () {
       (result) => result.plays.length + result.favorites.length + result.downloads.length,
     ),
 
-    tasteRevision: attempt("read the taste source revision", () => {
-      const row = db.get<{ writes: number; external: number }>(sql`
-        SELECT total_changes() AS writes, data_version AS external FROM pragma_data_version`)!;
-      return `${row.writes}:${row.external}`;
-    }),
+    tasteRevision: attempt("read the taste source revision", () => tasteRevision(db)),
 
     favoriteTrackIds: attempt("read favorites", () => selectFavoriteTrackIds(db)),
 

@@ -255,9 +255,10 @@ and complete-graph assertions; the other #596 characterizations are preserved.
 
 The former `readTasteLibrary` and `deriveTaste` whole-source allowances are
 retired. `TASTE_SOURCE_SEEDS` and `TASTE_SOURCES` retain exact bounded owners:
-`readTasteLibrary` reads songs without mix genres and identity-only artists;
+`tasteLibraryRows` reads songs without mix genres and identity-only artists;
 `readTasteHistory` walks chronological plays and raw favorite/download cursors;
-`stableTasteSnapshot` reads constant-size SQLite write stamps. The shared songs
+`tasteSnapshot` and `stableTasteSnapshot` read constant-size stamps of writes to
+the taste's own sources. The shared songs
 page also permits the exact `readMixInputs` and
 `sharePlaylistRecommendationInputs` declarations for deferred mix and playlist
 work. New callers of these capabilities fail the inventory check, even through
@@ -266,8 +267,11 @@ aliases. Existing whole-source, route and opening-request protections remain in 
 Each source page returns at most 128 raw rows; empty decoded history pages still
 advance. Canonical `runSteps` separates page accumulation, Library order sorting,
 mapping, scoring and pending-signal reconciliation. Automatic Home work keeps its
-existing screen-settled boundary and previous picks. Writes discard a yielding
-snapshot before publication; cancellation retains signals absent from SQLite.
+existing screen-settled boundary and previous picks. Taste-source writes discard a
+yielding source walk; playback's position, queue and unfinished-play progress saves
+don't. After three discarded walks the last runs in one task, as ti's synchronous
+read did, so a write storm can't livelock the profile. Cancellation retains signals
+absent from SQLite.
 Real-store plan/work-count/equivalence tests live in `db/mixInputs.test.ts`,
 `playback/tasteDerivation.test.ts`, `home/magicQueueJob.test.ts` and
 `playback/liveTaste.test.ts`. This bounded deferred seam promises neither a

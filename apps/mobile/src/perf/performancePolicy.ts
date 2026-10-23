@@ -530,9 +530,9 @@ export const TASTE_SOURCE_SEEDS = [
   "tasteRevision",
 ].map((name) => `library/LibraryStore.ts#${name}`);
 export const TASTE_SOURCES: Record<string, Exception> = {
-  "playback/tasteDerivation.ts#readTasteLibrary": {
+  "playback/tasteDerivation.ts#tasteLibraryRows": {
     reason:
-      "Due picks/shared taste seek at most 128 songs and identity-only artists per turn; sorting/mapping uses canonical runSteps. Due Home is screen-settled; source stamps discard writes. Covered by tasteDerivation.test.ts and magicQueueJob.test.ts.",
+      "Due picks/shared taste seek at most 128 songs and identity-only artists per turn; sorting/mapping of the copy uses canonical runSteps. Due Home is screen-settled; taste-source stamps discard writes. Covered by tasteDerivation.test.ts and magicQueueJob.test.ts.",
     capabilities: [
       "library/LibraryStore.ts#mixSongsPage",
       "library/LibraryStore.ts#tasteArtistsPage",
@@ -547,9 +547,14 @@ export const TASTE_SOURCES: Record<string, Exception> = {
       "library/LibraryStore.ts#tasteDownloadsPage",
     ],
   },
+  "playback/tasteDerivation.ts#tasteSnapshot": {
+    reason:
+      "Constant-size before/after stamps of taste-source writes protect yielding source walks without holding a transaction across scheduler turns; after three discarded walks the last runs in one task (ti's synchronous read), so a write storm can't livelock it. Covered by tasteSnapshot.test.ts and tasteDerivation.test.ts.",
+    capabilities: ["library/LibraryStore.ts#tasteRevision"],
+  },
   "playback/tasteDerivation.ts#stableTasteSnapshot": {
     reason:
-      "Constant-size before/after SQLite write stamps protect yielding taste snapshots and due picks without holding a transaction across scheduler turns. Covered by tasteDerivation.test.ts and magicQueueJob.test.ts.",
+      "The same constant-size stamps keep due picks current at publication, at most three attempts. Covered by tasteSnapshot.test.ts and magicQueueJob.test.ts.",
     capabilities: ["library/LibraryStore.ts#tasteRevision"],
   },
   "home/mixInputs.ts#readMixInputs": {

@@ -33,6 +33,9 @@ export interface LiveTasteDeps<R> {
   ) => Effect.Effect<readonly MagicSong[], unknown, R>;
 }
 
+/** Derivations a forgotten profile restarts before the last answers anyway (`invalidate`). */
+const DERIVATION_ATTEMPTS = 3;
+
 /** [profile] having learned each of [signals] (`tasteLearned`). */
 const learned = (profile: TasteProfile, signals: readonly TasteSignal[]): TasteProfile =>
   signals.reduce(tasteLearned, profile);
@@ -122,13 +125,16 @@ export const makeLiveTaste = <R>({
       // Keep signals on failure/interruption: streamed signals cannot be recovered
       // from SQLite on the next ask. Only a successful publication consumes them.
       held ??= [];
-      for (;;) {
+      for (let attempt = 1; ; attempt++) {
+        // The last answers its caller even when forgotten meanwhile, unkept: a scan's
+        // batches mustn't keep a Magic Queue or a mix waiting for as long as they land.
+        const last = attempt === DERIVATION_ATTEMPTS;
         let snapshot: TasteHistory | null = null;
         const started = generation;
         const profile = yield* read((history) => {
           snapshot = history;
         });
-        if (started !== generation) continue;
+        if (started !== generation && !last) continue;
         let kept = profile;
         if (held.length > 0 || streamed.length > 0) {
           const includes = yield* runSteps(historyMembership(snapshot), between);
@@ -154,7 +160,10 @@ export const makeLiveTaste = <R>({
             between,
           );
         }
-        if (started !== generation) continue;
+        if (started !== generation) {
+          if (last) return kept;
+          continue;
+        }
         known = kept;
         held = null;
         return kept;
