@@ -82,15 +82,6 @@ test("link imports append ti's songs in 100-song transactions, one per turn, kee
 
 test("Liked Songs' stars and pending favorites go in 100-row writes per turn, and the downloads in one request, as on ti", async () => {
   const { dispatchLibraryFavorites } = await import("./startupJobs.ts");
-  const song = (i: number) => ({
-    title: `Liked ${i}`,
-    videoId: `v${i}`,
-    artists: ["A"],
-    album: null,
-    durationMs: 1000,
-    artworkUrl: null,
-    explicit: false,
-  });
   const favorites = {
     star: Array.from({ length: 250 }, (_, i) => i + 1),
     pending: Array.from({ length: 230 }, (_, i) => ({
@@ -99,7 +90,15 @@ test("Liked Songs' stars and pending favorites go in 100-row writes per turn, an
       artists: ["A"],
       durationMs: 1000,
     })),
-    download: Array.from({ length: 230 }, (_, i) => song(i)),
+    download: Array.from({ length: 230 }, (_, i) => ({
+      title: `Liked ${i}`,
+      videoId: `v${i}`,
+      artists: ["A"],
+      album: null,
+      durationMs: 1000,
+      artworkUrl: null,
+      explicit: false,
+    })),
   };
   const run = async (stopAfter: number) => {
     const events: string[] = [];
@@ -399,7 +398,11 @@ test("a completed scan that saved nothing still prunes what other saves left, sk
     const ariana = () =>
       Effect.runSync(store.listArtists)
         .filter((artist) => /Ariana|Social House/.test(artist.name))
-        .map((artist) => ({ name: artist.name, songs: artist.trackCount, image: artist.thumbPath }));
+        .map((artist) => ({
+          name: artist.name,
+          songs: artist.trackCount,
+          image: artist.thumbPath,
+        }));
     const file = (path: string, title: string, artist: string, artworkHash: string | null) =>
       scanned(path, title, { artist, album: title }, artworkHash);
     let turns = 0;
@@ -425,7 +428,7 @@ test("a completed scan that saved nothing still prunes what other saves left, sk
         { linkEntries: false },
       ),
     );
-    const roots = Effect.runSync(store.ensureDefaultRoot("/Startup")).map((root) => root.path);
+    const roots = Effect.runSync(store.ensureDefaultRoot("/Startup")).map((row) => row.path);
     // The next rescan finds nothing new or gone; as on ti, its end re-files credits and images.
     turns = 0;
     Effect.runSync(finishScanIndex(store, [], turn));
@@ -436,11 +439,11 @@ test("a completed scan that saved nothing still prunes what other saves left, sk
     ]);
     // Then it records the scan. Nothing else wrote since that prune: the next unchanged scan
     // has nothing to clean up.
-    const recorded = traceQueries(fixture.db, () =>
-      Effect.runSync(store.markScanned(roots, 1)),
-    );
+    const recorded = traceQueries(fixture.db, () => Effect.runSync(store.markScanned(roots, 1)));
     assert.ok(recorded.queries.some((query) => /^\s*update/i.test(query.sql)));
-    const unchanged = traceQueries(fixture.db, () => Effect.runSync(finishScanIndex(store, [], turn)));
+    const unchanged = traceQueries(fixture.db, () =>
+      Effect.runSync(finishScanIndex(store, [], turn)),
+    );
     assert.ok(unchanged.queries.every((query) => /^\s*select/i.test(query.sql)));
     assert.ok(unchanged.queries.length <= 1);
     // A changed scan prunes on its own turn.

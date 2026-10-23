@@ -99,7 +99,7 @@ export const startupReplay = async (context: FastAgainContext, store: LibrarySto
           yield* turn; // ti's one cleanup freeTurnEffect, then markScanned in the same task.
           yield* store.filesGone([]);
         } else {
-          yield* jobs.finishScanIndex(store, [], 0, turn);
+          yield* jobs.finishScanIndex(store, [], turn);
           yield* turn;
         }
         yield* store.markScanned(scanRoots, context.fixture.now);

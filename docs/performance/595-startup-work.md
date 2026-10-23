@@ -26,17 +26,24 @@ CPU iterators use the existing `runSteps`: four ms of work plus two ms headroom
 toward the six-ms JS target, with a 512-operation cap and iterator closure on
 interruption. Scan normalization, reconciliation, membership/native-column
 construction, import Library indexing/matching/completion, favorite selection,
-duplicate pairing/history membership, and recorded-deletion classification yield per input. Scan saves split to one track/artwork
-per atomic transaction; link imports append one song per transaction. Each successful append publishes a scoped burst, including a partial import stopped before completion. A restart
+duplicate pairing/history membership, and recorded-deletion classification yield per input. Writes go
+a bounded slice per turn, not an item per turn (review r1-F, F-5 to F-7): a scan saves ti's 100-file
+slices (`scanSaveSlices`, the batch's artwork with the first), a link import appends 100 songs per
+transaction, and Liked Songs' stars and pending favorites go 100 per write, with their downloads
+queued in one request as on ti. One item per turn cost about 35x ti's wall time for a scan batch
+and a startup turn per appended song. Each successful append publishes a scoped burst, including a partial import stopped before completion. A restart
 can repeat appends without duplicating entries. Replaced/dismissed imports
 stop at the next turn and cannot overwrite a replacement's kept state. A YT
 batch retains its offline pause, ordered sources, failed rows, and filled
 Import & Download resumption. Filled imports build their download membership with the same stepped matcher, checking that their kept batch token is still current before dispatch. The downstream download service retains its own queue/journal lifecycle. Native read/merge errors retain the duplicate
 check's existing next-launch retry policy.
 
-An unchanged scan now skips `filesGone([])`: its whole-Library credit pruning
-is unnecessary when no file changed or went missing. Changed scans retain
-atomic pruning. Saved batch IDs still drive #593's targeted invalidations.
+Every completed scan ends with `filesGone`, as on ti, so a download's credit
+re-split and artist images still land at the next scan, even one that found
+nothing (review r1-F, F-4). The store skips it only when nothing was written
+on the database since its last cleanup in this process (SQLite's
+`total_changes()` and `data_version`, with the scan's own `markScanned`
+exempt). A new process's first scan therefore cleans up in full, as ti's did. Saved batch IDs still drive #593's targeted invalidations.
 The first-content perf milestone, timing content/transition milestones and
 #582's counters are unchanged. #592 still performs zero Home reads for its
 first frame. #584 adds only the exact stepped import-index capability.
@@ -48,13 +55,15 @@ These are named exceptions, not six-ms promises:
 - Synchronous Expo SQLite/drizzle source statements and row decoding:
   `knownFiles`, `indexedFiles`, `duplicateCheckFiles`, import `listSongs`,
   playlist/source/journal-setting reads. CPU indexing after these reads yields.
-- Atomic store transactions: one track/artwork `saveBatch`, one entry
-  `addToPlaylist` (including its held-entry source read), one favorite/pending
-  favorite write, one duplicate's history merge and deletion record. Their
-  SQL may still be expensive even with a one-item input.
-- A changed scan's `filesGone` credit/orphan-pruning transaction and the scan's
+- Atomic store transactions: one 100-file scan slice `saveBatch`, one
+  100-song `addToPlaylist` (including its held-entry source read), one
+  100-row favorite/pending favorite write, one duplicate's history merge and
+  deletion record. A slice's transaction is ti's, and runs well past six ms on
+  a large batch; it is bounded by its row count, not by time.
+- A completed scan's `filesGone` credit/orphan-pruning transaction (a full
+  credit re-split on a process's first scan, as on ti) and the scan's
   `linkPlaylistEntries` transaction. The latter matches and links a consistent
-  source snapshot atomically. The unchanged cleanup is omitted entirely.
+  source snapshot atomically.
 - Native `startScan` bridge marshalling/dispatch (the three JS input arrays
   now build in steps), one pair's `readAudioLengths`, individual recorded file
   deletion and the replacement journal's `jobsSnapshot`. Native scanning and
