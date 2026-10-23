@@ -30,6 +30,8 @@ export type {
 } from "./designPreview.ts";
 export { trackRowTrailing } from "./trackRowTrailing.ts";
 export type { TrackRowTrailingInput } from "./trackRowTrailing.ts";
+export { trackRowDownloaded } from "./trackRowDownloaded.ts";
+export type { TrackRowDownloadedInput } from "./trackRowDownloaded.ts";
 export { lastListActionForm, listActionsForms } from "./listActions.ts";
 export type {
   ListActionForm,

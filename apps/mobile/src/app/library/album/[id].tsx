@@ -247,7 +247,6 @@ function EntryRow({
       state={playing ? "playing" : undefined}
       favorite={favorite}
       leading="number"
-      downloaded
       {...selectableRow({ song: entry.track }, listSelection, onPress, (options) =>
         openTrackActions(entry.track, options),
       )}
@@ -404,8 +403,7 @@ function AlbumTracks({ shown, openedIntegrated }: { shown: Shown; openedIntegrat
  * YT Music is on a Library | Online toggle ends the Play and Shuffle line;
  * opened from an integrated view (`openAlbum`'s `integrated`) it opens with
  * Online selected. With Online, the album's songs on YouTube Music that the
- * Library lacks join the tracks, streamed, and the Library's are marked
- * downloaded; Library shows the album as it is again.
+ * Library lacks join the tracks, streamed; Library shows the album as it is again.
  */
 export default function AlbumScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
