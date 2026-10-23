@@ -127,6 +127,8 @@ export const tracks = sqliteTable(
     modifiedAt: integer("modified_at").notNull(),
     title: text("title").notNull(),
     titleSort: text("title_sort").notNull(),
+    /** Core recording-title key; null only until the upgrade backfill. */
+    matchTitle: text("match_title"),
     /** The primary artist: the first one [artistCredit] names (see `trackArtists`). */
     artistId: integer("artist_id")
       .notNull()
@@ -178,6 +180,7 @@ export const tracks = sqliteTable(
   },
   (t) => [
     index("tracks_title_sort_idx").on(t.titleSort),
+    index("tracks_match_title_idx").on(t.matchTitle),
     index("tracks_artist_idx").on(t.artistId),
     index("tracks_album_idx").on(t.albumId),
     index("tracks_genre_idx").on(t.genreId),
@@ -817,4 +820,107 @@ export const fileDeletions = sqliteTable("file_deletions", {
   path: text("path").primaryKey(),
   /** When the deletion was recorded (ms since the epoch). */
   recordedAt: integer("recorded_at").notNull(),
+});
+
+/**
+ * Each genre song's sort keys (#601), so a genre's pages are index seeks in
+ * every sort: one row per Track with a genre, its nulls as Core's
+ * `songOrderTerms` read them (no disc is disc 1, no track number sorts last).
+ * Path (null as empty text) and id finish every index, including large runs
+ * of identical names. Triggers in migration
+ * 0038 keep it, whoever writes the tracks, artists or albums.
+ */
+export const genreOrder = sqliteTable(
+  "genre_order",
+  {
+    /** The Track's id. */
+    id: integer("id").primaryKey(),
+    genreId: integer("genre_id").notNull(),
+    titleSort: text("title_sort").notNull(),
+    artistSort: text("artist_sort").notNull(),
+    albumSort: text("album_sort").notNull(),
+    albumId: integer("album_id").notNull(),
+    discNumber: integer("disc_number").notNull(),
+    trackNumber: integer("track_number").notNull(),
+    addedAt: integer("added_at").notNull(),
+    path: text("path").notNull(),
+  },
+  (t) => [
+    index("genre_order_title_asc").on(t.genreId, t.titleSort, t.artistSort, t.path, t.id),
+    index("genre_order_title_desc").on(
+      t.genreId,
+      sql`${t.titleSort} desc`,
+      t.artistSort,
+      t.path,
+      t.id,
+    ),
+    index("genre_order_artist_asc").on(
+      t.genreId,
+      t.artistSort,
+      t.albumSort,
+      t.albumId,
+      t.discNumber,
+      t.trackNumber,
+      t.titleSort,
+      t.path,
+      t.id,
+    ),
+    index("genre_order_artist_desc").on(
+      t.genreId,
+      sql`${t.artistSort} desc`,
+      t.albumSort,
+      t.albumId,
+      t.discNumber,
+      t.trackNumber,
+      t.titleSort,
+      t.path,
+      t.id,
+    ),
+    index("genre_order_album_asc").on(
+      t.genreId,
+      t.albumSort,
+      t.albumId,
+      t.discNumber,
+      t.trackNumber,
+      t.titleSort,
+      t.path,
+      t.id,
+    ),
+    index("genre_order_album_desc").on(
+      t.genreId,
+      sql`${t.albumSort} desc`,
+      t.albumId,
+      t.discNumber,
+      t.trackNumber,
+      t.titleSort,
+      t.path,
+      t.id,
+    ),
+    index("genre_order_added_asc").on(
+      t.genreId,
+      t.addedAt,
+      t.titleSort,
+      t.artistSort,
+      t.path,
+      t.id,
+    ),
+    index("genre_order_added_desc").on(
+      t.genreId,
+      sql`${t.addedAt} desc`,
+      t.titleSort,
+      t.artistSort,
+      t.path,
+      t.id,
+    ),
+  ],
+);
+
+/**
+ * How many times each genre's order has changed (#601): a paged read of it
+ * started at one revision stops once another is written. Never reset, so a
+ * page of a removed genre can't match a later one with its id.
+ */
+export const genreOrderRevisions = sqliteTable("genre_order_revisions", {
+  genreId: integer("genre_id").primaryKey(),
+  revision: integer("revision").notNull(),
 });

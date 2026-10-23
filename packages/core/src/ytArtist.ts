@@ -1000,3 +1000,16 @@ export const ytArtistPageView = <S extends YtSong, L, A>(
   // Nothing standing: it asks on its own (`ytArtistPageAsks`) unless the last ask failed.
   return state.failure === null ? quiet("loading") : quiet(state.failure, true);
 };
+
+export function* libraryArtistFinderSteps<A extends { readonly name: string }>(
+  artists: readonly A[],
+): Generator<void, (name: string) => A | null> {
+  const byName = new Map<string, A>();
+  for (const artist of artists) {
+    const name = artistPhotoName(artist.name);
+    if (!byName.has(name)) byName.set(name, artist);
+    yield;
+  }
+  return (name) =>
+    ytArtistQuery(name) === null ? null : (byName.get(artistPhotoName(name)) ?? null);
+}

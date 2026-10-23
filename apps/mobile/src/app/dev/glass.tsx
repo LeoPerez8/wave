@@ -1,6 +1,7 @@
+import { useScreenContent } from "@/lib/screenTiming";
 import { makeImageFromView, type SkImage } from "@shopify/react-native-skia";
 import { IconHome, IconSearch, IconStack2 } from "@tabler/icons-react-native";
-import { router } from "expo-router";
+import { router } from "@/lib/timingRouter";
 import { useCallback, useEffect, useRef, useState, type ComponentRef } from "react";
 import {
   Pressable,
@@ -74,6 +75,7 @@ function SpikeContent() {
 }
 
 export default function GlassSpikeScreen() {
+  useScreenContent(true);
   const insets = useSafeAreaInsets();
   const window = useWindowDimensions();
   const scheme = useColorScheme();

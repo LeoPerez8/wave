@@ -5,6 +5,7 @@
  * native module; Core decides how the songs sit beside the Library.
  */
 
+import { finishSteps } from "./buildSteps.ts";
 import { splitCredit } from "./credits.ts";
 import { UNKNOWN_ARTIST } from "./library.ts";
 import { normalizeSearchText } from "./search.ts";
@@ -76,7 +77,7 @@ const withoutRemasterNotes = (title: string): string => {
 };
 
 /** A title without its featured-artist credit and remaster notes, as matching compares it. */
-const matchTitle = (title: string): string =>
+export const recordingMatchTitle = (title: string): string =>
   normalizeSearchText(
     withoutRemasterNotes(title.replace(BRACKETED_FEATURE, "").replace(TRAILING_FEATURE, "")),
   );
@@ -106,6 +107,36 @@ interface Candidate<L> {
   readonly durationMs: number | null;
 }
 
+const candidateMatches = (
+  candidate: { readonly artists: ReadonlySet<string>; readonly durationMs: number | null },
+  artists: readonly string[],
+  length: number | null,
+): boolean =>
+  artists.some((artist) => candidate.artists.has(artist)) &&
+  (length === null ||
+    candidate.durationMs === null ||
+    Math.abs(candidate.durationMs - length) <= SAME_LENGTH_MS);
+
+/** Compare one Library candidate with one streamed song, without building a Library finder. */
+export const recordingMatches = (
+  library: LibrarySongKey,
+  song: Pick<YtSong, "title" | "artists" | "durationMs">,
+): boolean => {
+  const title = recordingMatchTitle(library.title);
+  return (
+    title !== "" &&
+    title === recordingMatchTitle(song.title) &&
+    candidateMatches(
+      {
+        artists: new Set(artistNames(library.artist)),
+        durationMs: knownLength(library.durationMs),
+      },
+      song.artists.flatMap(artistNames),
+      knownLength(song.durationMs),
+    )
+  );
+};
+
 /**
  * The Library song a YT Music song already is, or null: one with its title
  * (case, accents, punctuation, featured credits and remaster notes aside) that shares an
@@ -126,10 +157,16 @@ export const libraryFinder = <L extends LibrarySongKey>(
  */
 export const libraryMatches = <L extends LibrarySongKey>(
   library: readonly L[],
-): ((song: Pick<YtSong, "title" | "artists" | "durationMs">) => L[]) => {
+): ((song: Pick<YtSong, "title" | "artists" | "durationMs">) => L[]) =>
+  finishSteps(libraryMatchesSteps(library));
+
+export function* libraryMatchesSteps<L extends LibrarySongKey>(
+  library: readonly L[],
+): Generator<void, (song: Pick<YtSong, "title" | "artists" | "durationMs">) => L[]> {
   const byTitle = new Map<string, Candidate<L>[]>();
   for (const song of library) {
-    const title = matchTitle(song.title);
+    yield;
+    const title = recordingMatchTitle(song.title);
     if (title === "") continue;
     const candidates = byTitle.get(title) ?? [];
     candidates.push({
@@ -140,21 +177,15 @@ export const libraryMatches = <L extends LibrarySongKey>(
     byTitle.set(title, candidates);
   }
   return (song) => {
-    const candidates = byTitle.get(matchTitle(song.title));
+    const candidates = byTitle.get(recordingMatchTitle(song.title));
     if (candidates === undefined) return [];
     const artists = song.artists.flatMap(artistNames);
     const length = knownLength(song.durationMs);
     return candidates
-      .filter(
-        (candidate) =>
-          artists.some((artist) => candidate.artists.has(artist)) &&
-          (length === null ||
-            candidate.durationMs === null ||
-            Math.abs(candidate.durationMs - length) <= SAME_LENGTH_MS),
-      )
+      .filter((candidate) => candidateMatches(candidate, artists, length))
       .map((candidate) => candidate.song);
   };
-};
+}
 
 /**
  * Whether a YT Music song is already in the Library (see [libraryFinder]),
@@ -186,3 +217,52 @@ export const parseTrackId = (id: string): TrackRef | null => {
   }
   return /^\d+$/.test(id) ? { kind: "library", id: Number(id) } : null;
 };
+
+/** Incremental index construction for a background import; matching semantics stay identical. */
+export function* libraryImportFinderSteps<L extends LibrarySongKey>(
+  library: readonly L[],
+): Generator<
+  void,
+  (song: Pick<YtSong, "title" | "artists" | "durationMs">) => Generator<void, L | null>
+> {
+  const byTitle = new Map<string, Candidate<L>[]>();
+  for (const song of library) {
+    const title = recordingMatchTitle(song.title);
+    if (title === "") {
+      yield;
+      continue;
+    }
+    const candidates = byTitle.get(title) ?? [];
+    candidates.push({
+      song,
+      artists: new Set(artistNames(song.artist)),
+      durationMs: knownLength(song.durationMs),
+    });
+    byTitle.set(title, candidates);
+    yield;
+  }
+  return function* (song) {
+    const candidates = byTitle.get(recordingMatchTitle(song.title));
+    if (candidates === undefined) return null;
+    const artists = song.artists.flatMap(artistNames);
+    const length = knownLength(song.durationMs);
+    for (const candidate of candidates) {
+      yield;
+      if (
+        artists.some((artist) => candidate.artists.has(artist)) &&
+        (length === null ||
+          candidate.durationMs === null ||
+          Math.abs(candidate.durationMs - length) <= SAME_LENGTH_MS)
+      )
+        return candidate.song;
+    }
+    return null;
+  };
+}
+
+export function* libraryFinderSteps<L extends LibrarySongKey>(
+  library: readonly L[],
+): Generator<void, (song: Pick<YtSong, "title" | "artists" | "durationMs">) => L | null> {
+  const matches = yield* libraryMatchesSteps(library);
+  return (song) => matches(song)[0] ?? null;
+}

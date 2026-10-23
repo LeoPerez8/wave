@@ -97,6 +97,16 @@ const targetTracks = (target: ActionItems): readonly TrackItem[] =>
 export const hasStreamedSongs = (target: ActionItems): boolean =>
   targetTracks(target).some((item) => !isLibraryTrack(item));
 
+/** Only the streamed credits an explicit menu/selection/swipe needs to resolve. */
+export const targetStreamedArtistNames = (target: ActionItems): readonly string[] =>
+  targetTracks(target).flatMap((item) =>
+    isLibraryTrack(item)
+      ? []
+      : isUnsearchedTrack(item)
+        ? item.unsearched.artists
+        : (item.ytSong.artists ?? []),
+  );
+
 /** An item of a page that shows several kinds together (an artist's albums and songs). */
 export type MixedItem =
   | { readonly kind: "track"; readonly item: TrackItem }

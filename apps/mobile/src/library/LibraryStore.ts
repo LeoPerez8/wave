@@ -1,4 +1,44 @@
 import {
+  type RecommendationEntryCursor,
+  recommendationFlagsPage,
+  recommendationPendingPage,
+  recommendationEntriesPage,
+  recommendationFeedbackPage,
+} from "./db/recommendationPages";
+import type { YtSong } from "@wave/core";
+import { makeExternalStore, type ExternalStore } from "@/lib/externalStore";
+import { publishSavedRecordings } from "./libraryChanges";
+import { backfillRecordingTitles, selectMatchingSong } from "./db/matchingSong";
+import {
+  tastePlaysPage,
+  tasteFavoritesPage,
+  tasteDownloadsPage,
+  tasteArtistsPage,
+  tasteRevision,
+  watchTasteSources,
+} from "./db/tastePages";
+import { artistGraphSourcesChanged } from "@/home/graphSources";
+import {
+  mixCreditPage,
+  mixPlaylistedPage,
+  mixStreamedPage,
+  mixSongsPage,
+  mixArtistsPage,
+  mixHistoryPage,
+} from "./db/mixInputs";
+import {
+  mixCatalogPage,
+  graphRadioPage,
+  graphCatalogPage,
+  graphSimilarPage,
+  graphPlayPage,
+  type GraphPage,
+  type GraphPlayCursor,
+} from "./db/artistGraph";
+import type { ArtistGraphPlay } from "@wave/core";
+import { selectNowPlayingSong } from "./db/nowPlayingSong";
+import type { PlayingSongAnswer, PlayingSongTarget } from "../nowPlaying/songLookup";
+import {
   acceptPlaylistRecommendation,
   dismissPlaylistRecommendation,
   selectPlaylistRecommendationInput,
@@ -52,6 +92,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { openDatabaseSync } from "expo-sqlite";
 
+import { timeLibraryRead } from "@/log/slowLibraryReads";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 import { syncCycle, type SyncCycleInput, type SyncCycleResult } from "@/sync/syncCycle";
 
@@ -62,6 +103,7 @@ import {
   selectArtistDetail,
   selectArtistSongs,
   selectArtists,
+  selectArtistNamesForLink,
 } from "./db/artists";
 import {
   clearArtistPhotos,
@@ -80,6 +122,13 @@ import {
   type LibraryScale,
 } from "./db/counts";
 import { creditSplits, relinkCreditsIfUnlinked, type CreditSplits } from "./db/credits";
+import {
+  selectGenreOpening,
+  selectGenreOrderSlice,
+  type GenreCursor,
+  type GenreOpening,
+  type GenreOrderSlice,
+} from "./db/genrePages";
 import { selectGenreSongs } from "./db/genres";
 import type { RowPage } from "./db/database";
 import migrations from "./db/migrations";
@@ -174,6 +223,7 @@ import {
   selectLibraryLookupSongs,
   trackArtistIds,
   selectPlayableSongs,
+  hasPlayableSongOutside,
   selectSongGenres,
   selectVideoIds,
   trackQuery,
@@ -185,6 +235,8 @@ import {
   artistFirstPlays,
   artistPlays,
   countedListening,
+  countedListeningPage,
+  type CountedListeningPage,
   creditedPlayTotals,
   songGenres,
   trackPlayTotals,
@@ -332,7 +384,7 @@ export const songHasFile = <S extends SongRow>(song: S): song is S & { readonly 
 /** A track on an album screen, with what orders it there. */
 export type AlbumTrackRow = SongRow;
 
-export type { FavoriteRow, SongOrder, SongSummary };
+export type { FavoriteRow, GenreCursor, GenreOpening, GenreOrderSlice, SongOrder, SongSummary };
 
 /** One album of the Albums grid (and of an artist's albums). */
 export interface AlbumRow {
@@ -534,10 +586,24 @@ export class LibraryStore extends Context.Service<
     readonly countSectionSongs: Effect.Effect<LibraryCounts, LibraryStoreError>;
     /** How big the Library is, for a perf build's run metadata (docs/performance/README.md). */
     readonly measureScale: Effect.Effect<LibraryScale, LibraryStoreError>;
-    /** Every track ordered by title, for Library › Songs. */
+    /** Legacy complete input, retained for explicit desktop probes; production uses deferred pages. */
     readonly playlistRecommendationInput: (
       id: number,
     ) => Effect.Effect<PlaylistRecommendationInput, LibraryStoreError>;
+    readonly recommendationFlagsPage: (
+      after: number,
+    ) => Effect.Effect<ReturnType<typeof recommendationFlagsPage>, LibraryStoreError>;
+    readonly recommendationPendingPage: (
+      after: number,
+    ) => Effect.Effect<ReturnType<typeof recommendationPendingPage>, LibraryStoreError>;
+    readonly recommendationEntriesPage: (
+      id: number,
+      after: RecommendationEntryCursor,
+    ) => Effect.Effect<ReturnType<typeof recommendationEntriesPage>, LibraryStoreError>;
+    readonly recommendationFeedbackPage: (
+      id: number,
+      after: string | null,
+    ) => Effect.Effect<ReturnType<typeof recommendationFeedbackPage>, LibraryStoreError>;
     readonly dismissPlaylistRecommendation: (
       id: number,
       offer: PlaylistRecommendationSlot,
@@ -546,6 +612,8 @@ export class LibraryStore extends Context.Service<
       id: number,
       offer: PlaylistRecommendationSlot,
     ) => Effect.Effect<boolean, LibraryStoreError>;
+    /** The streamed recording's Library row, including missing songs, without a Library read. */
+    readonly matchingSong: (song: YtSong) => Effect.Effect<SongRow | null, LibraryStoreError>;
     readonly listSongs: Effect.Effect<readonly SongRow[], LibraryStoreError>;
     /**
      * Library › Songs in [sort] as Track ids, with its A–Z spine and its
@@ -585,6 +653,10 @@ export class LibraryStore extends Context.Service<
     readonly listAlbumsPage: (
       page: RowPage,
     ) => Effect.Effect<readonly AlbumRow[], LibraryStoreError>;
+    /** Bounded name page, used only by an artist-link gesture. */
+    readonly artistNamesForLink: (
+      after: { readonly sort: string; readonly id: number } | null,
+    ) => Effect.Effect<readonly { id: number; name: string; sort: string }[], LibraryStoreError>;
     /** Every artist with songs, by name, for Library › Artists. */
     readonly listArtists: Effect.Effect<readonly ArtistRow[], LibraryStoreError>;
     /** [page] of the artists with a file in the same order, for lists that page (Auto). */
@@ -623,7 +695,27 @@ export class LibraryStore extends Context.Service<
       id: number,
       scope?: TrackScope,
     ) => Effect.Effect<ArtistDetail | null, LibraryStoreError>;
+    /** Every song of a genre, as full rows: what its menu acts on (its screen opens on `openGenre`). */
     readonly getGenre: (id: number) => Effect.Effect<GenreDetail | null, LibraryStoreError>;
+    /**
+     * What a genre's screen opens on (#601): its header and count, and the
+     * first page of its songs in [sort], read by an index seek; null once
+     * the genre is gone. `genreOrderSlice` reads the rest of its order.
+     */
+    readonly openGenre: (
+      id: number,
+      sort: LibrarySongSort,
+    ) => Effect.Effect<GenreOpening | null, LibraryStoreError>;
+    /**
+     * The next stretch of a genre's order in [sort] from [cursor] (from the
+     * start without one), as Track ids; null once the genre's order has
+     * changed since the cursor's read, or the cursor isn't this genre's and sort's.
+     */
+    readonly genreOrderSlice: (
+      id: number,
+      sort: LibrarySongSort,
+      cursor: GenreCursor | null,
+    ) => Effect.Effect<GenreOrderSlice | null, LibraryStoreError>;
 
     /** The indexed files under [roots], for an incremental scan to skip the unchanged ones. */
     readonly knownFiles: (
@@ -638,6 +730,7 @@ export class LibraryStore extends Context.Service<
      * to a Wave account their songs stay as missing songs, signed out they
      * leave the Library. Then the albums, artists, genres and folders left
      * without tracks go (also after tag changes, so call it once per scan).
+     * With no files, it does nothing when nothing was written since it last ran.
      */
     readonly filesGone: (paths: readonly string[]) => Effect.Effect<void, LibraryStoreError>;
     /**
@@ -666,6 +759,10 @@ export class LibraryStore extends Context.Service<
      * The songs with these ids that can play, for the queue, in no particular
      * order; ids no longer indexed, and missing songs, are left out.
      */
+    /** Whether a short Home row has another playable song to fill it (one id at most). */
+    readonly hasPlayableSongOutside: (
+      ids: readonly number[],
+    ) => Effect.Effect<boolean, LibraryStoreError>;
     readonly songsByIds: (
       ids: readonly number[],
     ) => Effect.Effect<readonly PlayableSongRow[], LibraryStoreError>;
@@ -681,6 +778,9 @@ export class LibraryStore extends Context.Service<
     ) => Effect.Effect<void, LibraryStoreError>;
     readonly savePosition: (positionMs: number) => Effect.Effect<void, LibraryStoreError>;
     /** The playing track's links and artwork palette, for Now Playing; null once it's gone. */
+    readonly nowPlayingSong: (
+      target: PlayingSongTarget,
+    ) => Effect.Effect<PlayingSongAnswer, LibraryStoreError>;
     readonly trackDetails: (id: number) => Effect.Effect<TrackDetails | null, LibraryStoreError>;
     /** The recent searches, newest first. */
     readonly listRecentSearches: Effect.Effect<readonly string[], LibraryStoreError>;
@@ -788,6 +888,8 @@ export class LibraryStore extends Context.Service<
     readonly playedRecordingKeys: Effect.Effect<readonly string[], LibraryStoreError>;
     /** The plays, stars and downloads Core's taste profile is derived from (`db/taste.ts`). */
     readonly tasteHistory: Effect.Effect<TasteHistory, LibraryStoreError>;
+    /** Constant-size stamp of writes to what the taste reads (`db/tastePages.ts#watchTasteSources`). */
+    readonly tasteRevision: Effect.Effect<string, LibraryStoreError>;
     /** The ids of every starred track. */
     readonly favoriteTrackIds: Effect.Effect<readonly number[], LibraryStoreError>;
     /** Stars (or unstars) the tracks; those starred already keep when they were starred. */
@@ -910,11 +1012,14 @@ export class LibraryStore extends Context.Service<
      * totals (`play_totals`); Core's `summedListeningTotals` reads it.
      */
     readonly listeningSums: Effect.Effect<ListeningSums, LibraryStoreError>;
-    /**
-     * The whole history's counted listening, summed per quarter hour (deleted
-     * songs included): what Core's `availableRecaps` and `recap` read.
-     */
+    /** Changes after every committed listening write, including progress and each sync page. */
+    readonly listeningHistoryVersion: Pick<ExternalStore<number>, "get" | "subscribe">;
+    /** Legacy whole-history quarter sums, retained as a semantic control; UI uses bounded pages. */
     readonly countedListening: Effect.Effect<readonly CountedListening[], LibraryStoreError>;
+    /** At most 512 raw events per indexed read, with Core's historical quarter-hour projection. */
+    readonly countedListeningPage: (
+      after: number,
+    ) => Effect.Effect<CountedListeningPage, LibraryStoreError>;
     /** The genre tags of these songs still in the library, in no order (Core's `recap` reads them). */
     readonly songGenres: (
       ids: readonly number[],
@@ -964,7 +1069,7 @@ export class LibraryStore extends Context.Service<
      * request failed; what was done by then stays done.
      */
     readonly syncWithAccount: (
-      input: Omit<SyncCycleInput, "db" | "splits">,
+      input: Omit<SyncCycleInput, "db" | "splits" | "historyChanged">,
     ) => Effect.Effect<SyncCycleResult, LibraryStoreError>;
     /**
      * Signed out: the Library leaves the account (the next sign-in joins
@@ -1025,6 +1130,54 @@ export class LibraryStore extends Context.Service<
       at: number,
     ) => Effect.Effect<void, LibraryStoreError>;
     /** The candidate catalog: every song with the radios that brought it. */
+    /** ti-compatible taste projections for the subsequent #593 source migration. */
+    /** Artist identity only; unused orphan identities cannot affect the song mapper. */
+    readonly tasteArtistsPage: (
+      after: number,
+    ) => Effect.Effect<ReturnType<typeof tasteArtistsPage>, LibraryStoreError>;
+    readonly tastePlaysPage: (
+      after: GraphPlayCursor,
+    ) => Effect.Effect<ReturnType<typeof tastePlaysPage>, LibraryStoreError>;
+    readonly tasteFavoritesPage: (
+      after: number,
+    ) => Effect.Effect<ReturnType<typeof tasteFavoritesPage>, LibraryStoreError>;
+    readonly tasteDownloadsPage: (
+      after: number,
+    ) => Effect.Effect<ReturnType<typeof tasteDownloadsPage>, LibraryStoreError>;
+    readonly mixStreamedPage: (
+      after: number,
+    ) => Effect.Effect<ReturnType<typeof mixStreamedPage>, LibraryStoreError>;
+    readonly mixPlaylistedPage: (
+      after: number,
+    ) => Effect.Effect<ReturnType<typeof mixPlaylistedPage>, LibraryStoreError>;
+    readonly mixCreditPage: (
+      after: number,
+    ) => Effect.Effect<ReturnType<typeof mixCreditPage>, LibraryStoreError>;
+    readonly mixSongsPage: (
+      after: number,
+      options?: { readonly genres?: boolean },
+    ) => Effect.Effect<ReturnType<typeof mixSongsPage>, LibraryStoreError>;
+    readonly mixArtistsPage: (
+      after: number,
+    ) => Effect.Effect<ReturnType<typeof mixArtistsPage>, LibraryStoreError>;
+    readonly mixHistoryPage: (
+      after: number,
+    ) => Effect.Effect<ReturnType<typeof mixHistoryPage>, LibraryStoreError>;
+    readonly graphRadioPage: (
+      after: number,
+    ) => Effect.Effect<ReturnType<typeof graphRadioPage>, LibraryStoreError>;
+    readonly graphCatalogPage: (
+      after: number,
+    ) => Effect.Effect<ReturnType<typeof graphCatalogPage>, LibraryStoreError>;
+    readonly mixCatalogPage: (
+      after: number,
+    ) => Effect.Effect<ReturnType<typeof mixCatalogPage>, LibraryStoreError>;
+    readonly graphSimilarPage: (
+      after: string | null,
+    ) => Effect.Effect<GraphPage<YtArtistSimilar, string>, LibraryStoreError>;
+    readonly graphPlayPage: (
+      after: GraphPlayCursor,
+    ) => Effect.Effect<GraphPage<ArtistGraphPlay, GraphPlayCursor>, LibraryStoreError>;
     readonly candidateCatalog: Effect.Effect<readonly CatalogSong[], LibraryStoreError>;
     /**
      * Every saved YT Music artist page's artist with who "Fans might also
@@ -1125,6 +1278,21 @@ const rememberSearchSync = (db: Database, query: string, now: number): readonly 
     return next;
   });
 
+const writeAttempt = <A>(operation: string, run: () => A): Effect.Effect<A, LibraryStoreError> =>
+  Effect.try({ try: run, catch: (cause) => new LibraryStoreError({ operation, cause }) });
+
+// All synchronous reads share this boundary. Row counts are inspected only
+// on the slow path; named bundles count the rows they actually returned.
+const attempt = <A>(
+  operation: string,
+  run: () => A,
+  rows?: (result: A) => number,
+): Effect.Effect<A, LibraryStoreError> =>
+  Effect.try({
+    try: () => timeLibraryRead(operation, run, rows),
+    catch: (cause) => new LibraryStoreError({ operation, cause }),
+  });
+
 const make = Effect.gen(function* () {
   const db: Database = yield* Effect.try({
     try: () => {
@@ -1140,6 +1308,15 @@ const make = Effect.gen(function* () {
   });
   // The Library's credits and their splitter, kept between saves.
   const splits = creditSplits();
+  // Every write on this connection and others, as SQLite counts them: a scan's cleanup
+  // (`filesGone`) with nothing written since the last one has nothing left to do.
+  const writes = (): string => {
+    const row = db.get<{ writes: number; external: number }>(sql`
+      SELECT total_changes() AS writes, data_version AS external FROM pragma_data_version`)!;
+    return `${row.writes}:${row.external}`;
+  };
+  // Null until this process cleans up: a save before it started may have left something.
+  let prunedAt: string | null = null;
   // After the upgrade that brought credits in, the Library is re-filed under
   // each credited artist from the tags already stored (no rescan).
   yield* Effect.try({
@@ -1153,12 +1330,25 @@ const make = Effect.gen(function* () {
     catch: (cause) => new LibraryStoreError({ operation: "key the Library's songs", cause }),
   });
 
-  const attempt = <A>(operation: string, run: () => A): Effect.Effect<A, LibraryStoreError> =>
-    Effect.try({ try: run, catch: (cause) => new LibraryStoreError({ operation, cause }) });
+  yield* Effect.tryPromise({
+    try: () => backfillRecordingTitles(db),
+    catch: (cause) => new LibraryStoreError({ operation: "key recording titles", cause }),
+  });
+
+  yield* Effect.try({
+    try: () => watchTasteSources(db),
+    catch: (cause) => new LibraryStoreError({ operation: "watch the taste sources", cause }),
+  });
+
+  const listeningHistoryVersion = makeExternalStore(0);
+  const historyChanged = () => listeningHistoryVersion.update((value) => value + 1);
+  const historyWrite = <A>(operation: string, run: () => A) =>
+    writeAttempt(operation, run).pipe(Effect.tap(() => Effect.sync(historyChanged)));
 
   return LibraryStore.of({
+    listeningHistoryVersion,
     ensureDefaultRoot: (path) =>
-      attempt("set up scan roots", () => {
+      writeAttempt("set up scan roots", () => {
         const existing = db.select().from(schema.scanRoots).all();
         if (existing.length > 0) return existing;
         db.insert(schema.scanRoots).values({ path, addedAt: Date.now(), isDefault: true }).run();
@@ -1181,7 +1371,7 @@ const make = Effect.gen(function* () {
     }),
 
     addRoot: (path, drop) =>
-      attempt("add a music folder", () =>
+      writeAttempt("add a music folder", () =>
         db.transaction((tx) => {
           const { scanRoots } = schema;
           if (drop.length > 0)
@@ -1193,7 +1383,8 @@ const make = Effect.gen(function* () {
         }),
       ),
 
-    removeRoot: (path) => attempt("remove a music folder", () => removeRootSync(db, splits, path)),
+    removeRoot: (path) =>
+      writeAttempt("remove a music folder", () => removeRootSync(db, splits, path)),
 
     excludedFolders: attempt("read excluded folders", () =>
       db
@@ -1204,11 +1395,11 @@ const make = Effect.gen(function* () {
     ),
 
     saveBatch: (tracks, artworkRows, moves = [], options) =>
-      attempt("save scanned tracks", () =>
+      writeAttempt("save scanned tracks", () =>
         saveBatch(db, splits, tracks, artworkRows, moves, Date.now(), options),
-      ),
+      ).pipe(Effect.tap(() => Effect.sync(() => publishSavedRecordings(tracks)))),
 
-    linkPlaylistEntries: attempt("link playlist entries", () =>
+    linkPlaylistEntries: writeAttempt("link playlist entries", () =>
       db.transaction((tx) => linkPlaylistEntries(tx, Date.now())),
     ),
 
@@ -1220,12 +1411,15 @@ const make = Effect.gen(function* () {
       attempt("read which folders were scanned", () => hasUnscannedRoot(db, roots)),
 
     markScanned: (roots, at) =>
-      attempt("record the scan", () => {
+      writeAttempt("record the scan", () => {
         if (roots.length === 0) return;
+        const pruned = prunedAt !== null && prunedAt === writes();
         db.update(schema.scanRoots)
           .set({ lastScannedAt: at })
           .where(inArray(schema.scanRoots.path, [...roots]))
           .run();
+        // When a scan ends: nothing the cleanup reads, so the Library stays cleaned up.
+        if (pruned) prunedAt = writes();
       }),
 
     countTracks: attempt(
@@ -1242,22 +1436,45 @@ const make = Effect.gen(function* () {
     measureScale: attempt("measure the library", () => libraryScale(db)),
 
     playlistRecommendationInput: (id) =>
-      attempt("read playlist recommendations", () => selectPlaylistRecommendationInput(db, id)),
+      attempt(
+        "read playlist recommendations",
+        () => selectPlaylistRecommendationInput(db, id),
+        (result) =>
+          result.playlist.length +
+          result.librarySongs.length +
+          result.catalog.length +
+          result.favoriteVideos.size +
+          result.feedback.length,
+      ),
+    recommendationFlagsPage: (after) =>
+      attempt("read recommendation page", () => recommendationFlagsPage(db, after)),
+    recommendationPendingPage: (after) =>
+      attempt("read recommendation page", () => recommendationPendingPage(db, after)),
+    recommendationEntriesPage: (id, after) =>
+      attempt("read recommendation page", () => recommendationEntriesPage(db, id, after)),
+    recommendationFeedbackPage: (id, after) =>
+      attempt("read recommendation page", () => recommendationFeedbackPage(db, id, after)),
     dismissPlaylistRecommendation: (id, offer) =>
-      attempt("save playlist dismissal", () =>
+      writeAttempt("save playlist dismissal", () =>
         dismissPlaylistRecommendation(db, id, offer, Date.now()),
       ),
     acceptPlaylistRecommendation: (id, offer) =>
-      attempt("add playlist recommendation", () =>
+      writeAttempt("add playlist recommendation", () =>
         acceptPlaylistRecommendation(db, id, offer, Date.now()),
       ),
+    matchingSong: (song) => attempt("read matching song", () => selectMatchingSong(db, song)),
     listSongs: attempt("list songs", () =>
       trackQuery(db)
         .orderBy(...BY_TITLE)
         .all(),
     ),
 
-    listSongOrder: (sort) => attempt("order songs", () => selectSongOrder(db, sort)),
+    listSongOrder: (sort) =>
+      attempt(
+        "order songs",
+        () => selectSongOrder(db, sort),
+        (result) => result.ids.length,
+      ),
 
     songFindTexts: attempt("read songs to find", () => selectSongFindTexts(db)),
 
@@ -1268,6 +1485,9 @@ const make = Effect.gen(function* () {
     listLibraryLookupSongs: attempt("list songs to look up", () => selectLibraryLookupSongs(db)),
 
     listSongGenres: attempt("list song genres", () => selectSongGenres(db)),
+
+    nowPlayingSong: (target) =>
+      attempt("read the Now Playing song", () => selectNowPlayingSong(db, target)),
 
     trackDetails: (id) =>
       attempt(
@@ -1296,6 +1516,9 @@ const make = Effect.gen(function* () {
 
     listAlbumsPage: (page) =>
       attempt("list albums", () => selectAlbums(db, undefined, page, "files")),
+
+    artistNamesForLink: (after) =>
+      attempt("read artist link names", () => selectArtistNamesForLink(db, after)),
 
     listArtists: attempt("list artists", () => listArtistsSync(db)),
 
@@ -1326,11 +1549,43 @@ const make = Effect.gen(function* () {
         .all();
     }),
 
-    getAlbum: (id, scope) => attempt("open the album", () => selectAlbumDetail(db, id, scope)),
+    getAlbum: (id, scope) =>
+      attempt(
+        "open the album",
+        () => selectAlbumDetail(db, id, scope),
+        (result) => (result === null ? 0 : 1 + result.tracks.length),
+      ),
 
-    getArtist: (id, scope) => attempt("open the artist", () => selectArtistDetail(db, id, scope)),
+    getArtist: (id, scope) =>
+      attempt(
+        "open the artist",
+        () => selectArtistDetail(db, id, scope),
+        (result) =>
+          result === null
+            ? 0
+            : 1 + result.albums.length + result.appearsOn.length + result.songs.length,
+      ),
 
-    getGenre: (id) => attempt("open the genre", () => getGenreSync(db, id)),
+    openGenre: (id, sort) =>
+      attempt(
+        "open the genre",
+        () => selectGenreOpening(db, id, sort),
+        (result) => (result === null ? 0 : 1 + result.songs.length),
+      ),
+
+    genreOrderSlice: (id, sort, cursor) =>
+      attempt(
+        "order the genre",
+        () => selectGenreOrderSlice(db, id, sort, cursor),
+        (result) => result?.ids.length ?? 0,
+      ),
+
+    getGenre: (id) =>
+      attempt(
+        "read the genre's songs",
+        () => getGenreSync(db, id),
+        (result) => (result === null ? 0 : 1 + result.songs.length),
+      ),
 
     knownFiles: (roots) => attempt("read the library index", () => selectKnownFiles(db, roots)),
 
@@ -1353,17 +1608,23 @@ const make = Effect.gen(function* () {
       ),
 
     filesGone: (paths) =>
-      attempt("update songs whose files are gone", () => filesGone(db, splits, paths)),
+      writeAttempt("update songs whose files are gone", () => {
+        if (paths.length === 0 && prunedAt === writes()) return;
+        filesGone(db, splits, paths);
+        prunedAt = writes();
+      }),
 
     removeSongs: (trackIds) =>
-      attempt("remove songs from the library", () => removeSongs(db, splits, trackIds, Date.now())),
+      writeAttempt("remove songs from the library", () =>
+        removeSongs(db, splits, trackIds, Date.now()),
+      ),
     missingSongs: (trackIds) =>
       attempt("read missing songs", () => selectMissingSongs(db, trackIds)),
     albumsMissingSongs: (albumIds) =>
       attempt("read albums' missing songs", () => selectAlbumsMissingSongs(db, albumIds)),
 
     addExcludedFolder: (path, drop) =>
-      attempt("exclude a folder", () =>
+      writeAttempt("exclude a folder", () =>
         db.transaction((tx) => {
           const { excludedFolders } = schema;
           if (drop.length > 0)
@@ -1378,9 +1639,12 @@ const make = Effect.gen(function* () {
       ),
 
     removeExcludedFolder: (path) =>
-      attempt("include a folder again", () => {
+      writeAttempt("include a folder again", () => {
         db.delete(schema.excludedFolders).where(eq(schema.excludedFolders.path, path)).run();
       }),
+
+    hasPlayableSongOutside: (ids) =>
+      attempt("probe Home pick growth", () => hasPlayableSongOutside(db, ids)),
 
     songsByIds: (ids) =>
       attempt("read queued songs", () => selectPlayableSongs(db, ids).filter(songHasFile)),
@@ -1401,7 +1665,7 @@ const make = Effect.gen(function* () {
     ),
 
     saveQueue: (queue, positionMs) =>
-      attempt("save the queue", () => {
+      writeAttempt("save the queue", () => {
         const row = { queue, positionMs: Math.round(positionMs), updatedAt: Date.now() };
         db.insert(schema.savedPlayback)
           .values({ id: SAVED_PLAYBACK_ID, ...row })
@@ -1410,7 +1674,7 @@ const make = Effect.gen(function* () {
       }),
 
     savePosition: (positionMs) =>
-      attempt("save the playback position", () => {
+      writeAttempt("save the playback position", () => {
         db.update(schema.savedPlayback)
           .set({ positionMs: Math.round(positionMs), updatedAt: Date.now() })
           .where(eq(schema.savedPlayback.id, SAVED_PLAYBACK_ID))
@@ -1420,9 +1684,9 @@ const make = Effect.gen(function* () {
     listRecentSearches: attempt("read recent searches", () => listRecentSearchesSync(db)),
 
     rememberSearch: (query) =>
-      attempt("save the search", () => rememberSearchSync(db, query, Date.now())),
+      writeAttempt("save the search", () => rememberSearchSync(db, query, Date.now())),
 
-    clearRecentSearches: attempt("clear recent searches", () => {
+    clearRecentSearches: writeAttempt("clear recent searches", () => {
       db.delete(schema.recentSearches).run();
     }),
 
@@ -1436,58 +1700,65 @@ const make = Effect.gen(function* () {
       selectUnsearchedEntries(db),
     ),
 
-    getPlaylist: (id, scope) => attempt("open the playlist", () => selectPlaylist(db, id, scope)),
+    getPlaylist: (id, scope) =>
+      attempt(
+        "open the playlist",
+        () => selectPlaylist(db, id, scope),
+        (result) => (result === null ? 0 : 1 + result.items.length),
+      ),
 
     createPlaylist: (name, songs) =>
-      attempt("create the playlist", () => createPlaylist(db, name, songs, Date.now())),
+      writeAttempt("create the playlist", () => createPlaylist(db, name, songs, Date.now())),
 
     renamePlaylist: (id, name) =>
-      attempt("rename the playlist", () => renamePlaylist(db, id, name, Date.now())),
+      writeAttempt("rename the playlist", () => renamePlaylist(db, id, name, Date.now())),
 
     deletePlaylist: (id) =>
-      attempt("delete the playlist", () => deletePlaylist(db, id, Date.now())),
+      writeAttempt("delete the playlist", () => deletePlaylist(db, id, Date.now())),
 
     setPlaylistImage: (id, files) =>
-      attempt("change the playlist's image", () => setPlaylistImage(db, id, files)),
+      writeAttempt("change the playlist's image", () => setPlaylistImage(db, id, files)),
 
     playlistImageOriginal: (id) =>
       attempt("read the playlist's image", () => selectPlaylistImageOriginal(db, id)),
 
     removePlaylistImage: (id) =>
-      attempt("remove the playlist's image", () => removePlaylistImage(db, id)),
+      writeAttempt("remove the playlist's image", () => removePlaylistImage(db, id)),
 
-    takeDeletedPlaylistImages: attempt("tidy deleted playlists' images", () =>
+    takeDeletedPlaylistImages: writeAttempt("tidy deleted playlists' images", () =>
       takeDeletedPlaylistImages(db),
     ),
 
     addToPlaylist: (id, songs) =>
-      attempt("add to the playlist", () => addToPlaylist(db, id, songs, Date.now())),
+      writeAttempt("add to the playlist", () => addToPlaylist(db, id, songs, Date.now())),
 
     movePlaylistItem: (playlistId, itemId, toIndex) =>
-      attempt("reorder the playlist", () =>
+      writeAttempt("reorder the playlist", () =>
         movePlaylistItem(db, playlistId, itemId, toIndex, Date.now()),
       ),
 
     removePlaylistItems: (playlistId, itemIds) =>
-      attempt("remove from the playlist", () =>
+      writeAttempt("remove from the playlist", () =>
         removePlaylistItems(db, playlistId, itemIds, Date.now()),
       ),
 
     restorePlaylistItems: (removal) =>
-      attempt("restore the playlist entries", () => restorePlaylistItems(db, removal, Date.now())),
+      writeAttempt("restore the playlist entries", () =>
+        restorePlaylistItems(db, removal, Date.now()),
+      ),
 
     settleTryAgain: (playlistId, answered) =>
-      attempt("save what Try Again found", () =>
+      writeAttempt("save what Try Again found", () =>
         settleTryAgain(db, playlistId, answered, Date.now()),
       ),
 
     settleUnsearched: (song, becomes) =>
-      attempt("save what the search found", () =>
+      writeAttempt("save what the search found", () =>
         settleUnsearchedEntries(db, song, becomes, Date.now()),
       ),
 
     replacePlaylistSongs: (playlistId, songs) =>
-      attempt("replace the playlist's songs", () =>
+      writeAttempt("replace the playlist's songs", () =>
         replacePlaylistSongs(db, playlistId, songs, Date.now()),
       ),
 
@@ -1498,63 +1769,92 @@ const make = Effect.gen(function* () {
     importedPlays: attempt("read the imported plays", () => importedPlays(db)),
 
     saveImportedPlays: (plays) =>
-      attempt("save the imported plays", () => saveImportedPlays(db, plays)),
+      historyWrite("save the imported plays", () => saveImportedPlays(db, plays)),
 
     playedRecordingKeys: attempt("read the songs played", () => playedRecordingKeys(db)),
 
-    tasteHistory: attempt("read the taste history", () => tasteHistory(db)),
+    tasteHistory: attempt(
+      "read the taste history",
+      () => tasteHistory(db),
+      (result) => result.plays.length + result.favorites.length + result.downloads.length,
+    ),
+
+    tasteRevision: attempt("read the taste source revision", () => tasteRevision(db)),
 
     favoriteTrackIds: attempt("read favorites", () => selectFavoriteTrackIds(db)),
 
     setFavorites: (trackIds, on) =>
-      attempt(on ? "add favorites" : "remove favorites", () =>
+      writeAttempt(on ? "add favorites" : "remove favorites", () =>
         setFavorites(db, trackIds, on, Date.now()),
       ),
 
     listFavorites: attempt("list favorites", () => listFavorites(db)),
 
     addPendingFavorites: (songs) =>
-      attempt("keep pending favorites", () => addPendingFavorites(db, songs, Date.now())),
+      writeAttempt("keep pending favorites", () => addPendingFavorites(db, songs, Date.now())),
 
     listPendingFavorites: attempt("read pending favorites", () => selectPendingFavorites(db)),
 
     removePendingFavorites: (videoIds) =>
-      attempt("forget pending favorites", () => removePendingFavorites(db, videoIds)),
+      writeAttempt("forget pending favorites", () => removePendingFavorites(db, videoIds)),
 
     qualityFiles: attempt("read the files' quality", () => selectQualityFiles(db)),
     noBetterCopies: (direction) =>
       attempt("read the songs with no better copy", () => selectNoBetterCopies(db, direction)),
     rememberNoBetterCopies: (songs) =>
-      attempt("remember the songs with no better copy", () => rememberNoBetterCopies(db, songs)),
+      writeAttempt("remember the songs with no better copy", () =>
+        rememberNoBetterCopies(db, songs),
+      ),
     replacedTrack: (trackId) =>
       attempt("read a song to replace", () => selectReplacedTrack(db, trackId)),
     replaceTrackFile: (trackId, track, artworkRows) =>
-      attempt("replace a song's file", () =>
+      writeAttempt("replace a song's file", () =>
         replaceTrackFile(db, splits, trackId, track, artworkRows, Date.now()),
       ),
     recordFileDeletions: (paths) =>
-      attempt("record files to delete", () => recordFileDeletions(db, paths, Date.now())),
+      writeAttempt("record files to delete", () => recordFileDeletions(db, paths, Date.now())),
     pendingFileDeletions: attempt("read the files to delete", () => pendingFileDeletions(db)),
     forgetFileDeletions: (paths) =>
-      attempt("forget deleted files", () => forgetFileDeletions(db, paths)),
+      writeAttempt("forget deleted files", () => forgetFileDeletions(db, paths)),
     duplicateCheckFiles: attempt("read the files a replacement may have left twice", () =>
       selectDuplicateCheckFiles(db),
     ),
     fixReplacementDuplicate: (fix) =>
-      attempt("put a song left twice back to one", () =>
+      writeAttempt("put a song left twice back to one", () =>
         fixReplacementDuplicate(db, splits, fix, Date.now()),
       ),
 
     recordPlay: (play, overlapping) =>
-      attempt("record the play", () => recordPlay(db, play, overlapping)),
+      historyWrite("record the play", () => recordPlay(db, play, overlapping)),
 
-    updatePlay: (id, play) => attempt("update the play", () => updatePlay(db, id, play)),
-    endPlay: (id, play) => attempt("end the play", () => endPlay(db, id, play)),
+    updatePlay: (id, play) => historyWrite("update the play", () => updatePlay(db, id, play)),
+    endPlay: (id, play) => historyWrite("end the play", () => endPlay(db, id, play)),
 
-    home: (scope) => attempt("read Home", () => homeSections(db, scope)),
-    homeAdded: attempt("read Recently Added", () => homeAdded(db)),
-    homePlays: attempt("read Home's plays", () => homePlays(db)),
-    homeFavorites: attempt("read Home's favorites", () => homeFavorites(db)),
+    home: (scope) =>
+      attempt(
+        "read Home",
+        () => homeSections(db, scope),
+        (result) =>
+          result.recentlyAdded.length +
+          result.recentlyPlayed.length +
+          result.mostPlayed.length +
+          result.favorites.length,
+      ),
+    homeAdded: attempt(
+      "read Recently Added",
+      () => homeAdded(db),
+      (result) => result.recentlyAdded.length,
+    ),
+    homePlays: attempt(
+      "read Home's plays",
+      () => homePlays(db),
+      (result) => result.recentlyPlayed.length + result.mostPlayed.length,
+    ),
+    homeFavorites: attempt(
+      "read Home's favorites",
+      () => homeFavorites(db),
+      (result) => result.favorites.length,
+    ),
 
     latestPlay: attempt("read the latest play", () => latestPlay(db)),
 
@@ -1572,10 +1872,21 @@ const make = Effect.gen(function* () {
     artistsByIds: (ids) =>
       attempt("read ranked artists", () => (ids.length === 0 ? [] : listArtistsSync(db, ids))),
 
-    linkRows: (ids) => attempt("read linked rows", () => selectLinkRows(db, ids)),
+    linkRows: (ids) =>
+      attempt(
+        "read linked rows",
+        () => selectLinkRows(db, ids),
+        (result) => Number(result.album !== null) + Number(result.artist !== null),
+      ),
 
     listeningSums: attempt("sum up listening", () => listeningSums(db)),
 
+    countedListeningPage: (after) =>
+      attempt(
+        "read counted listening page",
+        () => countedListeningPage(db, after),
+        (page) => page.rows.length,
+      ),
     countedListening: attempt("sum up counted listening", () => countedListening(db)),
 
     songGenres: (ids) => attempt("read the songs' genres", () => songGenres(db, ids)),
@@ -1584,18 +1895,22 @@ const make = Effect.gen(function* () {
       attempt("read the artists' first plays", () => artistFirstPlays(db, ids)),
 
     artistPlays: (artistId, now) =>
-      attempt("sum up the artist's plays", () => artistPlays(db, artistId, now)),
+      attempt(
+        "sum up the artist's plays",
+        () => artistPlays(db, artistId, now),
+        (result) => result.songIds.length + result.listening.length + result.songPlays.length,
+      ),
 
     artistPhotoLookups: attempt("list artist photo lookups", () =>
       selectArtistPhotoLookups(db, Date.now()),
     ),
 
     recordArtistPhoto: (artistKey, record) =>
-      attempt("record an artist photo", () => recordArtistPhoto(db, artistKey, record)),
+      writeAttempt("record an artist photo", () => recordArtistPhoto(db, artistKey, record)),
 
     listArtistPhotos: attempt("list artist photos", () => selectArtistPhotos(db)),
 
-    clearArtistPhotos: attempt("clear artist photos", () => clearArtistPhotos(db)),
+    clearArtistPhotos: writeAttempt("clear artist photos", () => clearArtistPhotos(db)),
 
     ytArtist: (artistKey) =>
       attempt("read an artist's YT Music section", () =>
@@ -1603,35 +1918,38 @@ const make = Effect.gen(function* () {
       ),
 
     saveYtArtist: (artistKey, saved) =>
-      attempt("save an artist's YT Music section", () => saveYtArtist(db, artistKey, saved)),
+      writeAttempt("save an artist's YT Music section", () => {
+        saveYtArtist(db, artistKey, saved);
+        artistGraphSourcesChanged("similar");
+      }),
 
     stampPreference: (key) =>
-      attempt("record a preference change", () => stampPreference(db, key, Date.now())),
+      writeAttempt("record a preference change", () => stampPreference(db, key, Date.now())),
 
     syncWithAccount: (input) =>
       Effect.tryPromise({
-        try: () => syncCycle({ ...input, db, splits }),
+        try: () => syncCycle({ ...input, db, splits, historyChanged }),
         catch: (cause) => new LibraryStoreError({ operation: "sync with the Wave account", cause }),
       }),
 
-    leaveAccount: attempt("leave the Wave account", () => signOut(db, splits)),
+    leaveAccount: writeAttempt("leave the Wave account", () => signOut(db, splits)),
 
     savedLyrics: (videoId) => attempt("read saved lyrics", () => selectSavedLyrics(db, videoId)),
 
     keepSavedLyrics: (videoId, saved) =>
-      attempt("save lyrics", () => keepSavedLyrics(db, videoId, saved, Date.now())),
+      writeAttempt("save lyrics", () => keepSavedLyrics(db, videoId, saved, Date.now())),
 
     forgetSavedLyrics: (videoIds) =>
-      attempt("forget saved lyrics", () => forgetSavedLyrics(db, videoIds)),
+      writeAttempt("forget saved lyrics", () => forgetSavedLyrics(db, videoIds)),
 
     lyricsSearchTrack: (trackId) =>
       attempt("read the song's lyrics search", () => selectLyricsSearchTrack(db, trackId)),
 
     keepLyricsMiss: (trackId, checkedAt) =>
-      attempt("remember the lyrics search", () => keepLyricsMiss(db, trackId, checkedAt)),
+      writeAttempt("remember the lyrics search", () => keepLyricsMiss(db, trackId, checkedAt)),
 
     noteStreamedSong: (song, at) =>
-      attempt("note a streamed song", () => noteStreamedSong(db, song, at)),
+      writeAttempt("note a streamed song", () => noteStreamedSong(db, song, at)),
 
     streamedSongs: attempt("read the songs streamed", () => selectStreamedSongs(db)),
 
@@ -1640,8 +1958,34 @@ const make = Effect.gen(function* () {
     knownVideos: attempt("read the videos the owner knows", () => selectKnownVideos(db)),
 
     addCandidates: (page, at) =>
-      attempt("add to the candidate catalog", () => addCandidates(db, page, at)),
+      writeAttempt("add to the candidate catalog", () => {
+        addCandidates(db, page, at);
+        artistGraphSourcesChanged("catalog");
+      }),
 
+    mixStreamedPage: (after) =>
+      attempt("read a mix streamed page", () => mixStreamedPage(db, after)),
+    mixPlaylistedPage: (after) =>
+      attempt("read a mix playlist page", () => mixPlaylistedPage(db, after)),
+    mixCreditPage: (after) => attempt("read a mix credit page", () => mixCreditPage(db, after)),
+    tasteArtistsPage: (after) =>
+      attempt("read a taste artist page", () => tasteArtistsPage(db, after)),
+    tastePlaysPage: (after) => attempt("read a taste play page", () => tastePlaysPage(db, after)),
+    tasteFavoritesPage: (after) =>
+      attempt("read a taste favorite page", () => tasteFavoritesPage(db, after)),
+    tasteDownloadsPage: (after) =>
+      attempt("read a taste download page", () => tasteDownloadsPage(db, after)),
+    mixSongsPage: (after, options) =>
+      attempt("read a mix song page", () => mixSongsPage(db, after, options)),
+    mixArtistsPage: (after) => attempt("read a mix artist page", () => mixArtistsPage(db, after)),
+    mixHistoryPage: (after) => attempt("read a mix history page", () => mixHistoryPage(db, after)),
+    mixCatalogPage: (after) => attempt("read a mix catalog page", () => mixCatalogPage(db, after)),
+    graphRadioPage: (after) => attempt("read a graph radio page", () => graphRadioPage(db, after)),
+    graphCatalogPage: (after) =>
+      attempt("read a graph catalog page", () => graphCatalogPage(db, after)),
+    graphSimilarPage: (after) =>
+      attempt("read a graph similar page", () => graphSimilarPage(db, after)),
+    graphPlayPage: (after) => attempt("read a graph play page", () => graphPlayPage(db, after)),
     candidateCatalog: attempt("read the candidate catalog", () => selectCandidateCatalog(db)),
 
     ytArtistSimilar: attempt("read the saved artist pages' similar artists", () =>

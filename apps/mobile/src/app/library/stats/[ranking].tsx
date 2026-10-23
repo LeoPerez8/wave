@@ -1,3 +1,4 @@
+import { useScreenContent } from "@/lib/screenTiming";
 import { IconChartBar } from "@tabler/icons-react-native";
 import {
   STATS_RANKINGS,
@@ -50,6 +51,7 @@ function LoadingRanking() {
 
 function AllTopSongs({ period }: { period: StatsPeriod }) {
   const ranking = useTopSongs(period, STATS_SEE_ALL);
+  useScreenContent(ranking !== undefined);
   if (ranking === undefined) return <LoadingRanking />;
   if (ranking.length === 0) return <NothingPlayedHere period={period} />;
   return (
@@ -59,6 +61,7 @@ function AllTopSongs({ period }: { period: StatsPeriod }) {
 
 function AllTopAlbums({ period }: { period: StatsPeriod }) {
   const ranking = useTopAlbums(period, STATS_SEE_ALL);
+  useScreenContent(ranking !== undefined);
   if (ranking === undefined) return <LoadingRanking />;
   if (ranking.length === 0) return <NothingPlayedHere period={period} />;
   return <RankedAlbumList ranking={ranking} header={<PeriodLine period={period} />} />;
@@ -66,6 +69,7 @@ function AllTopAlbums({ period }: { period: StatsPeriod }) {
 
 function AllTopArtists({ period }: { period: StatsPeriod }) {
   const ranking = useTopArtists(period, STATS_SEE_ALL);
+  useScreenContent(ranking !== undefined);
   if (ranking === undefined) return <LoadingRanking />;
   if (ranking.length === 0) return <NothingPlayedHere period={period} />;
   return <RankedArtistList ranking={ranking} header={<PeriodLine period={period} />} />;

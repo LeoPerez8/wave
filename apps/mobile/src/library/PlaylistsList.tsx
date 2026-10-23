@@ -1,3 +1,5 @@
+import { useScreenContent } from "@/lib/screenTiming";
+import { libraryQueryHasContent } from "./sharedQueries";
 import { IconPlaylist } from "@tabler/icons-react-native";
 import { counted, type PlaylistLayout } from "@wave/core";
 import { useCallback, useMemo, type ReactNode } from "react";
@@ -14,6 +16,7 @@ import type { ActionItems } from "@/playback/actionTargets";
 import { selectableRow } from "@/selection/selectableRow";
 import { useListSelection, type ListSelection } from "@/selection/useListSelection";
 
+import { LibraryReadFeedback } from "./LibraryReadFeedback";
 import { ArrangeablePlaylists, TILE_GRIP_INSET } from "./ArrangeablePlaylists";
 import { openPlaylistImport } from "./importPlaylistLink";
 import type { PlaylistRow } from "./LibraryStore";
@@ -144,6 +147,7 @@ const rowHeight = (layout: PlaylistLayout, tile: number, fontScale: number): num
 export function PlaylistsList({ empty }: { empty: string }) {
   useRenderCount("PlaylistsList");
   const playlists = useSortedPlaylists();
+  useScreenContent(libraryQueryHasContent("playlists"));
   const layout = usePlaylistLayout();
   const tile = useTileSize(layout);
   const { fontScale } = useWindowDimensions();
@@ -162,6 +166,9 @@ export function PlaylistsList({ empty }: { empty: string }) {
     ),
     [ids, layout, tile, selection],
   );
+
+  if (playlists.length === 0 && !libraryQueryHasContent("playlists"))
+    return <LibraryReadFeedback queryKey="playlists" label="playlists" />;
 
   if (playlists.length === 0) {
     return (
@@ -201,8 +208,11 @@ export function PlaylistsList({ empty }: { empty: string }) {
  */
 export function PlaylistsHeader({ count, children }: { count: number; children: ReactNode }) {
   return (
-    <View className="flex-row items-center" style={{ paddingBottom: CELL }}>
-      <View className="flex-1">
+    <View
+      className="flex-row flex-wrap items-center"
+      style={{ paddingBottom: CELL, columnGap: CELL * 3 }}
+    >
+      <View style={{ flexGrow: 1 }}>
         <CatalogLine>{counted(count, "playlist")}</CatalogLine>
       </View>
       {children}
@@ -247,7 +257,10 @@ export function PlaylistsButtons({
   wrap?: (control: PlaylistsControl, button: ReactNode) => ReactNode;
 }) {
   return (
-    <View className="flex-row items-center" style={{ gap: CELL * 3 }}>
+    <View
+      className="flex-row flex-wrap items-center"
+      style={{ columnGap: CELL * 3, flexShrink: 1, maxWidth: "100%" }}
+    >
       {wrap(
         "importPlaylists",
         <TextButton label="Import Playlists" opensMenu={importOpensMenu} onPress={onImport} />,

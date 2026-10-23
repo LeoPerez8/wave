@@ -1,0 +1,81 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import * as Effect from "effect/Effect";
+import { runSteps } from "./stepped.ts";
+test("CPU work respects the 6ms target and operation cap with an explicit scheduler", () => {
+  let clock = 0,
+    work = 0,
+    previous = 0,
+    turns = 0;
+  const tasks = (function* () {
+    for (let i = 0; i < 400; i++) {
+      work++;
+      yield;
+    }
+    return "done";
+  })();
+  const result = Effect.runSync(
+    runSteps(
+      tasks,
+      Effect.sync(() => {
+        assert.ok(work - previous <= 6);
+        previous = work;
+        turns++;
+      }),
+      () => clock++,
+    ),
+  );
+  assert.equal(result, "done");
+  assert.ok(turns > 60);
+  // A clock that never runs out leaves only the operation cap: 512 operations per task.
+  const cappedTurns: number[] = [];
+  let capped = 0;
+  Effect.runSync(
+    runSteps(
+      (function* () {
+        for (let i = 0; i < 1200; i++) {
+          capped++;
+          yield;
+        }
+      })(),
+      Effect.sync(() => {
+        cappedTurns.push(capped);
+      }),
+      () => 0,
+    ),
+  );
+  assert.deepEqual(cappedTurns, [0, 512, 1024]);
+});
+
+test("cancelling stepped work closes its iterator and releases the scheduled turn", async () => {
+  let closed = false,
+    turns = 0,
+    cancelled = 0;
+  const steps = (function* () {
+    try {
+      for (;;) yield;
+    } finally {
+      closed = true;
+    }
+  })();
+  const between = Effect.suspend(() => {
+    turns++;
+    return turns === 1
+      ? Effect.void
+      : Effect.callback<void>(() =>
+          Effect.sync(() => {
+            cancelled++;
+          }),
+        );
+  });
+  const abort = new AbortController();
+  const pending = Effect.runPromise(
+    runSteps(steps, between, () => 0),
+    { signal: abort.signal },
+  );
+  const rejected = assert.rejects(pending);
+  abort.abort();
+  await rejected;
+  assert.equal(closed, true);
+  assert.equal(cancelled, 1);
+});

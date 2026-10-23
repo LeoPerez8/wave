@@ -17,7 +17,11 @@ export const magicSongsOf = (trackIds: readonly string[]) =>
     const store = yield* LibraryStore;
     const ids = libraryTrackIds(trackIds);
     const library = ids.length === 0 ? [] : yield* store.songsByIds(ids);
-    const toMagicSong = magicLibrarySongs(library.length === 0 ? [] : yield* store.listArtists);
+    const toMagicSong = magicLibrarySongs(
+      library.length === 0
+        ? []
+        : yield* store.artistsByIds([...new Set(library.flatMap((song) => song.artistIds))]),
+    );
     const known = queueTracks.get();
     const streamed = trackIds.flatMap((id) => {
       const track = known.get(id);

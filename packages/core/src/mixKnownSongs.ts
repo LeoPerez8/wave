@@ -1,3 +1,5 @@
+import { finishSteps } from "./buildSteps.ts";
+import { sortSteps } from "./buildSteps.ts";
 /**
  * The songs the owner knows, as Home's mixes see them (docs/spec.md, "Artist
  * mixes", "Genre mixes"): a mix's new songs are radio songs the owner doesn't
@@ -8,10 +10,10 @@
  * section's mixes.
  */
 
-import { playedFinder } from "./discoverMixes.ts";
+import { playedFinderSteps } from "./discoverMixes.ts";
 import type { PlaylistSong } from "./playlistEntries.ts";
 import type { YtAlbumSong } from "./ytDiscover.ts";
-import { libraryFinder, type LibrarySongKey, type YtSong } from "./ytMusic.ts";
+import { libraryFinderSteps, type LibrarySongKey, type YtSong } from "./ytMusic.ts";
 
 /** A YT Music song the owner streamed (streamed plays aren't play history). */
 export interface StreamedSong {
@@ -84,9 +86,13 @@ const asLibraryKey = (song: {
  */
 export const mixKnownSongs = <L extends LibrarySongKey>(
   sources: MixKnownSources<L>,
-): MixKnownSongs<L> => {
-  const inLibrary = libraryFinder(sources.library);
-  const played = playedFinder(sources.playedRecordingKeys);
+): MixKnownSongs<L> => finishSteps(mixKnownSongsSteps(sources));
+
+export function* mixKnownSongsSteps<L extends LibrarySongKey>(
+  sources: MixKnownSources<L>,
+): Generator<void, MixKnownSongs<L>> {
+  const inLibrary = yield* libraryFinderSteps(sources.library);
+  const played = yield* playedFinderSteps(sources.playedRecordingKeys);
   const byVideo = new Map<string, { song: YtAlbumSong; plays: number; addedAt: number }>();
   const keys: LibrarySongKey[] = [];
   const note = (song: YtAlbumSong, plays: number, addedAt: number): void => {
@@ -97,18 +103,26 @@ export const mixKnownSongs = <L extends LibrarySongKey>(
       addedAt: Math.max(before?.addedAt ?? addedAt, addedAt),
     });
   };
-  for (const streamed of sources.streamed)
+  for (const streamed of sources.streamed) {
     note(streamed.song, streamed.plays, streamed.firstPlayedAt);
+    yield;
+  }
   for (const entry of sources.playlisted) {
+    yield;
     if (entry.song.source === "stream") note(entry.song.song, 0, entry.addedAt);
     else keys.push(asLibraryKey(entry.song.song));
   }
-  for (const { song } of byVideo.values()) keys.push(asLibraryKey(song));
-  const nonDFinder = libraryFinder(keys);
-  const nonD = [...byVideo.values()]
-    .filter(({ song }) => inLibrary(song) === null)
-    // oxlint-disable-next-line unicorn/no-array-sort -- sorts the fresh array filter made; Hermes lacks toSorted
-    .sort((a, b) => b.plays - a.plays || b.addedAt - a.addedAt);
+  for (const { song } of byVideo.values()) {
+    keys.push(asLibraryKey(song));
+    yield;
+  }
+  const nonDFinder = yield* libraryFinderSteps(keys);
+  const candidates: KnownNonDSong[] = [];
+  for (const entry of byVideo.values()) {
+    if (inLibrary(entry.song) === null) candidates.push(entry);
+    yield;
+  }
+  const nonD = yield* sortSteps(candidates, (a, b) => b.plays - a.plays || b.addedAt - a.addedAt);
   return {
     inLibrary,
     known: (song) =>
@@ -118,4 +132,4 @@ export const mixKnownSongs = <L extends LibrarySongKey>(
       nonDFinder(song) !== null,
     nonD,
   };
-};
+}

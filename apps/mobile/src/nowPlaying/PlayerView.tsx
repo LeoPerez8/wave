@@ -1,3 +1,4 @@
+import { beginTiming, activeTiming, noteTimingLinkFailure } from "@/lib/timing";
 import { IconMusic, IconStar, IconStarFilled } from "@tabler/icons-react-native";
 import { artistLink, parseTrackId } from "@wave/core";
 import { Image } from "expo-image";
@@ -13,11 +14,12 @@ import Animated, {
 import { CELL } from "@/catalog/grid";
 import { subscribeAll } from "@/lib/externalStore";
 import { followArtistLink, followStreamedArtistLink } from "@/library/ArtistChoice";
-import { setFavorite, useIsFavorite, useYtSongStarred } from "@/library/favorites";
+import { useScopedSongStarred } from "@/library/favorites";
 import { useLinkRows } from "@/library/hooks";
-import type { TrackDetails } from "@/library/LibraryStore";
+import { LibraryStore, type TrackDetails } from "@/library/LibraryStore";
+import { appRuntime } from "@/library/runtime";
+import { showError } from "@/overlay/alert";
 import { openAlbum, useCurrentPath } from "@/library/routes";
-import { starSongs } from "@/library/starSongs";
 import { Press } from "@/motion/Press";
 import { useRenderCount } from "@/perf/perf";
 import { useCurrentTrackId } from "@/playback/hooks";
@@ -25,12 +27,24 @@ import { playbackState, type PlaybackState } from "@/playback/Player";
 import { queueState } from "@/playback/Queue";
 import { queueTracks, type QueueTrack } from "@/playback/queueTracks";
 import { useThemeColor } from "@/theme/useThemeColor";
-import { useLoadedLibraryFinder } from "@/ytmusic/libraryFinder";
 import { useStreamedArtistLink } from "@/ytmusic/streamedArtist";
 
+import { nowPlayingLibraryArtistLink } from "./artistLink";
 import { CoverPress } from "./CoverPress";
 import { usePlayingYtSong } from "./hooks";
-import { closeNowPlaying, useNowPlayingShown } from "./sheet";
+import {
+  nowPlayingSongActions,
+  songActionFailed,
+  usePlayingSongAnswer,
+  usePlayingSongTarget,
+} from "./playingSong";
+import {
+  closeNowPlaying,
+  closeNowPlayingForLink,
+  failNowPlayingLink,
+  revealNowPlayingLink,
+  useNowPlayingShown,
+} from "./sheet";
 
 /** How far the artwork steps back while paused. */
 const PAUSED_SCALE = 0.84;
@@ -137,14 +151,16 @@ function NowPlayingArtwork({ uri, playing, streamed }: ArtworkProps) {
 
 type LinkProps = {
   label: string;
-  /** Opens the screen; plain text until the library has answered. */
+  /** Opens the screen; artist credits can be read on the tap. */
   open: (() => void) | null;
   hint: string;
+  timingKind: "artistLink" | "albumLink";
+  revealsCurrentScreen?: boolean;
   className: string;
 };
 
 /** A line of metadata that opens its album or artist screen. */
-function MetaLink({ label, open, hint, className }: LinkProps) {
+function MetaLink({ label, open, hint, className, timingKind, revealsCurrentScreen }: LinkProps) {
   const text = (
     <Text numberOfLines={1} className={className}>
       {label}
@@ -156,8 +172,14 @@ function MetaLink({ label, open, hint, className }: LinkProps) {
       accessibilityRole="link"
       accessibilityLabel={label}
       accessibilityHint={hint}
-      // Now Playing slides away first, then the screen opens over the tabs.
-      onPress={() => closeNowPlaying(open)}
+      // The screen opens under Now Playing on this tap, while the sheet slides away.
+      onPress={() => {
+        if (revealsCurrentScreen) closeNowPlaying();
+        else {
+          beginTiming(timingKind, label);
+          closeNowPlayingForLink(open);
+        }
+      }}
       haptic="selection"
       depth={0.015}
       hitSlop={{ top: CELL, bottom: CELL }}
@@ -168,35 +190,25 @@ function MetaLink({ label, open, hint, className }: LinkProps) {
   );
 }
 
-/**
- * The current track's star; in sync with every other star (rows, menus). A
- * YT Music song's star is the Library song's once the Library has it, else
- * its pending favorite (`useYtSongStarred`); starring it downloads it
- * (`starSongs`: a star means downloaded), as its menu's Favorite does. A
- * YT Music song's star waits for the Library's first read: until then a
- * song the Library has would be taken for one it lacks, and downloaded again.
- */
+/** The star observes the shared answer; an early toggle acquires the actual saved state. */
 function useNowPlayingStar(): {
   favorite: boolean;
   disabled: boolean;
-  star: (on: boolean) => void;
+  star: (addOnly?: boolean) => void;
 } {
   const trackId = useCurrentTrackId();
-  const streamed = trackId !== null && parseTrackId(trackId)?.kind === "yt";
   const ytSong = usePlayingYtSong(trackId);
-  const find = useLoadedLibraryFinder(ytSong !== null);
-  const track = ytSong === null || find === null ? null : find(ytSong);
-  const libraryStar = useIsFavorite(streamed ? null : trackId);
-  const ytStar = useYtSongStarred(streamed ? (ytSong?.videoId ?? null) : null, track);
-  const favorite = streamed ? ytStar : libraryStar;
-  const disabled = trackId === null || (streamed && (ytSong === null || find === null));
-  const star = (on: boolean): void => {
-    if (streamed) {
-      if (ytSong !== null && find !== null)
-        void starSongs({ tracks: [], ytSongs: [ytSong] }, on, find);
-    } else if (trackId !== null) void setFavorite(trackId, on);
+  const target = usePlayingSongTarget(trackId, ytSong);
+  const answer = usePlayingSongAnswer(target);
+  const favorite = useScopedSongStarred(
+    answer?.track?.id ?? null,
+    ytSong?.videoId ?? null,
+    answer ?? { favorite: false, pendingFavorite: false },
+  );
+  const star = (addOnly = false): void => {
+    if (target !== null) void nowPlayingSongActions.star(target, addOnly).catch(songActionFailed);
   };
-  return { favorite, disabled, star };
+  return { favorite, disabled: target === null, star };
 }
 
 /** Stars or unstars the current track (`useNowPlayingStar`). */
@@ -210,7 +222,7 @@ function FavoriteStar({ title }: { title: string }) {
       accessibilityLabel={favorite ? `Remove ${title} from Favorites` : `Favorite ${title}`}
       accessibilityState={{ selected: favorite, disabled }}
       disabled={disabled}
-      onPress={() => star(!favorite)}
+      onPress={() => star()}
       haptic="impact"
       depth={0.1}
       className="items-center justify-center"
@@ -281,6 +293,8 @@ export function PlayerView({ item, details, playing }: Props) {
   // offers; on an artist's page, they're left out (Core's `artistLink`).
   // Followed only while shown: navigation under a closed Now Playing doesn't render it.
   const here = useCurrentPath(shown);
+  const currentTrackId = useCurrentTrackId();
+  const parsedTrack = currentTrackId === null ? null : parseTrackId(currentTrackId);
   const artistTo = details === null ? undefined : artistLink(details.artistIds, here);
   const links = useLinkRows(
     shown ? details?.albumId : undefined,
@@ -290,11 +304,42 @@ export function PlayerView({ item, details, playing }: Props) {
   // were kept, its credit stands for them.
   const streamed = useStreamedTrack();
   const streamedArtists = useMemo(
-    () => (streamed === null ? null : (streamed.artists ?? [streamed.artist])),
-    [streamed],
+    () =>
+      parsedTrack?.kind === "yt"
+        ? streamed?.artists?.length
+          ? streamed.artists
+          : [streamed?.artist || artist]
+        : null,
+    [streamed, parsedTrack?.kind, artist],
   );
   const streamedTo = useStreamedArtistLink(streamedArtists, shown);
   const streamedCover = useStreamedCover(item.id);
+  const openLocalArtist =
+    parsedTrack?.kind !== "library"
+      ? null
+      : () => {
+          const timingId = activeTiming()?.id;
+          void nowPlayingLibraryArtistLink({
+            trackId: parsedTrack.id,
+            details,
+            here,
+            read: (id) =>
+              appRuntime.runPromise(
+                // oxlint-disable-next-line react/rules-of-hooks -- Effect service access.
+                LibraryStore.use((store) => store.trackDetails(id)),
+              ),
+            follow: (link) => followArtistLink(link, links.artist),
+            reveal: () => revealNowPlayingLink(timingId),
+            unavailable: (error) => {
+              if (timingId !== undefined) noteTimingLinkFailure(timingId, "target gone");
+              failNowPlayingLink(timingId);
+              showError(
+                "Couldn't open the artist",
+                error ?? "The song is no longer in the Library.",
+              );
+            },
+          }).open();
+        };
   return (
     <View className="flex-1" style={{ gap: CELL * 4 }}>
       <NowPlayingArtwork uri={item.artworkUri} playing={playing} streamed={streamedCover} />
@@ -310,17 +355,19 @@ export function PlayerView({ item, details, playing }: Props) {
           <MetaLink
             label={artist}
             open={
-              details !== null
-                ? () => {
-                    // The only artist is the page under Now Playing: closing shows it.
-                    if (artistTo !== undefined) followArtistLink(artistTo, links.artist);
-                  }
+              openLocalArtist !== null
+                ? openLocalArtist
                 : streamedTo !== undefined
-                  ? // Its only artist being the page under Now Playing, closing shows it.
-                    () => followStreamedArtistLink(streamedTo)
+                  ? () => followStreamedArtistLink(streamedTo)
                   : null
             }
             hint="Opens the artist"
+            timingKind="artistLink"
+            revealsCurrentScreen={
+              openLocalArtist !== null
+                ? details !== null && details.artistIds.length > 0 && artistTo === undefined
+                : streamedTo?.kind === "here"
+            }
             className="font-sans text-body text-secondary"
           />
           {notice === null ? (
@@ -328,6 +375,7 @@ export function PlayerView({ item, details, playing }: Props) {
               label={album}
               open={details === null ? null : () => openAlbum(details.albumId, links.album)}
               hint="Opens the album"
+              timingKind="albumLink"
               className="font-sans text-body text-secondary"
             />
           ) : (

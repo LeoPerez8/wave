@@ -1,4 +1,4 @@
-import type { LibraryChange } from "@wave/core";
+import type { LibraryChange, LibrarySongKey } from "@wave/core";
 
 /**
  * What changed in the Library, as every write announces it (Core's
@@ -98,5 +98,39 @@ export const onYtSongSignal = (
   ytSignalListeners.add(listener);
   return () => {
     ytSignalListeners.delete(listener);
+  };
+};
+
+/** Saved recording metadata, announced after the download transaction commits. */
+const downloadedRecordingListeners = new Set<(song: import("@wave/core").LibrarySongKey) => void>();
+
+export const publishDownloadedRecording = (song: import("@wave/core").LibrarySongKey): void => {
+  for (const listener of downloadedRecordingListeners) listener(song);
+};
+
+/** One shared playing-song subscriber, independent of how many list consumers are mounted. */
+export const onDownloadedRecording = (
+  listener: (song: import("@wave/core").LibrarySongKey) => void,
+): (() => void) => {
+  downloadedRecordingListeners.add(listener);
+  return () => {
+    downloadedRecordingListeners.delete(listener);
+  };
+};
+
+/** Committed scan/tag saves carry matching metadata without a Library read. */
+const savedRecordingListeners = new Set<(songs: readonly LibrarySongKey[]) => void>();
+
+export const publishSavedRecordings = (songs: readonly LibrarySongKey[]): void => {
+  if (songs.length === 0) return;
+  for (const listener of savedRecordingListeners) listener(songs);
+};
+
+export const onSavedRecordings = (
+  listener: (songs: readonly LibrarySongKey[]) => void,
+): (() => void) => {
+  savedRecordingListeners.add(listener);
+  return () => {
+    savedRecordingListeners.delete(listener);
   };
 };

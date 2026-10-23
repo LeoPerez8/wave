@@ -12,11 +12,15 @@ import { LibraryStore, type SongOrder, type SongSummary } from "./LibraryStore";
 import { appRuntime } from "./runtime";
 import { libraryQuery, useLibraryQuery, type LibraryQuery } from "./sharedQueries";
 
+/** Stable query identity for first-read feedback and explicit recovery. */
+export const songOrderQueryKey = (sort: LibrarySongSort): string =>
+  `songOrder:${sort.key}:${sort.descending ? "desc" : "asc"}`;
+
 /** One shared query per sort: every screen showing Songs in it shares one read. */
 const orderQueries = new Map<string, LibraryQuery<SongOrder>>();
 
 const orderQuery = (sort: LibrarySongSort): LibraryQuery<SongOrder> => {
-  const key = `songOrder:${sort.key}:${sort.descending ? "desc" : "asc"}`;
+  const key = songOrderQueryKey(sort);
   let query = orderQueries.get(key);
   if (query === undefined) {
     query = libraryQuery(
@@ -79,18 +83,16 @@ const keyOf = (row: SongSummary): number => row.id;
  * read a page at a time around the rows on screen (Core's
  * `createPagedRows`). Tell it what is on screen with `view`; `version`
  * changes whenever rows arrive. New ids (a scan, an edit, another sort, a
- * query) keep the rows read so far showing while those on screen are read again.
+ * query) keep the rows read so far showing while those on screen are read
+ * again, except [known]: rows read along with the ids (a genre's first page).
  */
 export const usePagedSongs = (
   ids: readonly number[] | null,
+  known?: readonly SongSummary[],
 ): { readonly pages: PagedRows<number, SongSummary>; readonly version: number } => {
   const [pages] = useState(() => createPagedRows({ read: readSummaries, keyOf }));
   /** How many times rows have arrived: what re-renders the list. */
   const arrived = useRef(0);
-
-  useEffect(() => {
-    if (ids !== null) pages.setOrder(ids);
-  }, [pages, ids]);
 
   useEffect(() => {
     shownPages = pages;
@@ -108,5 +110,10 @@ export const usePagedSongs = (
     [pages],
   );
   const version = useSyncExternalStore(subscribe, () => arrived.current);
+  // Subscribe before seeding: a known first page may need no asynchronous read
+  // whose answer would otherwise trigger the first redraw.
+  useEffect(() => {
+    if (ids !== null) pages.setOrder(ids, known);
+  }, [pages, ids, known]);
   return { pages, version };
 };

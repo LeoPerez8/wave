@@ -3,7 +3,7 @@ import * as Effect from "effect/Effect";
 import { Auto } from "@/auto/Auto";
 import { startAutoLyrics } from "@/auto/autoLyrics";
 import { startAutoResponder } from "@/auto/autoResponder";
-import { afterFirstContent } from "@/lib/backgroundWork";
+import { afterFirstSettled } from "@/lib/backgroundWork";
 import { onSyncedSettingChange } from "@/lib/persistedSetting";
 import { startBackgroundFill } from "@/library/backgroundFill";
 import { LibraryStore } from "@/library/LibraryStore";
@@ -63,7 +63,7 @@ const stampPreference = (key: string): void => {
  */
 export const startServices = (by: ServicesStarter): void => {
   // The app's resume reads the journal and may read the whole Library: after the first screen.
-  if (by === "app") afterFirstContent("downloads", () => startDownloads(true));
+  if (by === "app") afterFirstSettled("downloads", () => startDownloads(true));
   else startDownloads(false);
   if (startedBy !== null) {
     console.log(`[wave] services already started by the ${startedBy}; the ${by} reuses them`);
@@ -74,7 +74,7 @@ export const startServices = (by: ServicesStarter): void => {
   connectPlayer();
   startPlayingSearches();
   // It reads every playlist's unsearched songs: in the app, after the first screen.
-  if (by === "app") afterFirstContent("backgroundFill", startBackgroundFill);
+  if (by === "app") afterFirstSettled("backgroundFill", startBackgroundFill);
   else startBackgroundFill();
   applyCrossfade();
   applyStreamBuffer();

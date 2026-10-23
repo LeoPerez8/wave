@@ -23,6 +23,14 @@ type SqlJsClient = InstanceType<Awaited<ReturnType<typeof initSqlJs>>["Database"
 /** Each test database's sql.js client, for `traceQueries`. */
 const clients = new WeakMap<object, SqlJsClient>();
 
+/** Releases the WebAssembly database after a scale test or benchmark. */
+export const closeTestDatabase = (db: TestDatabase): void => {
+  const client = clients.get(db);
+  if (client === undefined) throw new Error("not an open test database");
+  client.close();
+  clients.delete(db);
+};
+
 type Migrator = Parameters<typeof migrate>[0];
 
 /** The migrations up to and including the one tagged `through`. */
@@ -139,6 +147,72 @@ export const traceQueries = <A>(
     ];
   });
   return { result, queries };
+};
+
+/** Desktop bench only: statement prepare/bind/step/decode/free time, without
+ * EXPLAIN in timed samples. The callback fires only for statements that ran.
+ * Call the returned cleanup even when an asynchronous replay is interrupted.
+ */
+export const observeSqlTasks = (
+  db: TestDatabase,
+  completed: (sql: string, ms: number) => void,
+): (() => void) => {
+  const client = clients.get(db);
+  if (client === undefined) throw new Error("not an open test database");
+  const prepare = client.prepare;
+  client.prepare = (text, params) => {
+    const started = performance.now();
+    const statement = prepare.call(client, text, params);
+    let ran = false;
+    const step = statement.step;
+    statement.step = () => {
+      ran = true;
+      return step.call(statement);
+    };
+    const free = statement.free;
+    statement.free = () => {
+      const result = free.call(statement);
+      if (ran) completed(text, performance.now() - started);
+      return result;
+    };
+    return statement;
+  };
+  return () => {
+    client.prepare = prepare;
+  };
+};
+
+/**
+ * Count credit-key evaluations in a read, separately from timing/EXPLAIN.
+ * Temporary views preserve the indexed artist_id columns and wrap only their
+ * referenced track/album keys with identity functions. This observes credits
+ * fed to joins/UNION (including file-membership probes), not every SQLite VM
+ * instruction or B-tree page. The functions can affect join planning: always
+ * check the uninstrumented plan and result too. No production DB is changed.
+ */
+export const traceArtistCreditVisits = <A>(db: TestDatabase, read: () => A) => {
+  const client = clients.get(db);
+  if (client === undefined) throw new Error("not a test database");
+  const visits = { trackCredits: 0, albumCredits: 0 };
+  client.create_function("wave_track_credit", (id: number) => {
+    visits.trackCredits++;
+    return id;
+  });
+  client.create_function("wave_album_credit", (id: number) => {
+    visits.albumCredits++;
+    return id;
+  });
+  client.exec(`
+    CREATE TEMP VIEW track_artists AS
+      SELECT wave_track_credit(track_id) AS track_id, artist_id, position FROM main.track_artists;
+    CREATE TEMP VIEW album_artists AS
+      SELECT wave_album_credit(album_id) AS album_id, artist_id, position FROM main.album_artists;
+  `);
+  try {
+    return { result: read(), visits };
+  } finally {
+    client.exec("DROP VIEW temp.track_artists; DROP VIEW temp.album_artists;");
+  }
 };
 
 /**

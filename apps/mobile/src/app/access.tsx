@@ -1,3 +1,4 @@
+import { useScreenContent } from "@/lib/screenTiming";
 import { IconFolderOpen } from "@tabler/icons-react-native";
 import { ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -12,9 +13,10 @@ import { useThemeColor } from "@/theme/useThemeColor";
  * swaps to the tabs as soon as access is granted and the app is active again.
  */
 export default function AccessScreen() {
+  useScreenContent(true);
   const insets = useSafeAreaInsets();
   const tertiary = useThemeColor("tertiary");
-  const { denied, request } = useAllFilesAccess();
+  const { denied, failed, request } = useAllFilesAccess();
 
   return (
     <ScrollView
@@ -35,13 +37,23 @@ export default function AccessScreen() {
       >
         {denied ? "Wave can't see your music yet" : "Allow access to your music"}
       </Text>
-      <Text className="font-sans text-body text-secondary">
+      <Text accessibilityLiveRegion="polite" className="font-sans text-body text-secondary">
         {denied
           ? "All files access is still off. Turn on “Allow access to manage all files” for Wave, then come back."
           : "Wave plays the audio files on this phone. To find them, it needs “All files access”, which you turn on in Android settings."}
       </Text>
+      {failed && (
+        <Text accessibilityLiveRegion="polite" className="font-sans text-body text-secondary">
+          Couldn't open Android settings. Try again, or find Wave under “All files access” in
+          Android settings.
+        </Text>
+      )}
       <View className="items-start">
-        <TextButton label={denied ? "Try again" : "Open settings"} onPress={request} />
+        {/* Not disabled while Android opens settings: that lasts a frame, and taps then ask nothing. */}
+        <TextButton
+          label={denied || failed ? "Try again" : "Open settings"}
+          onPress={() => void request()}
+        />
       </View>
     </ScrollView>
   );

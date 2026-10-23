@@ -1,3 +1,4 @@
+import { useScreenContent } from "@/lib/screenTiming";
 import { Text, View } from "react-native";
 
 import { Hairline } from "@/catalog/Hairline";
@@ -11,6 +12,7 @@ import { streamBufferChoice } from "@/settings/streamBuffer";
 
 /** Settings › Playback: how one song gives way to the next, which songs play, and how much streamed audio is loaded ahead. */
 export default function PlaybackSettingsScreen() {
+  useScreenContent(true);
   const seconds = useCrossfadeSeconds();
   const skipExplicit = useDontPlayExplicit();
   const bufferMinutes = streamBufferChoice.setting.useValue();

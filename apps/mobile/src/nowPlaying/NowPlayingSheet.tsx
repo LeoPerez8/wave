@@ -1,3 +1,4 @@
+import { activeTiming, beginTiming, timingSurfaceCommitted } from "@/lib/timing";
 import {
   IconChevronDown,
   IconListNumbers,
@@ -5,7 +6,7 @@ import {
   IconShare3,
 } from "@tabler/icons-react-native";
 import type { ComponentType, ReactNode } from "react";
-import { Activity, memo, useEffect, useState, useSyncExternalStore } from "react";
+import { Activity, memo, useEffect, useLayoutEffect, useState, useSyncExternalStore } from "react";
 import { StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import Animated, { useAnimatedStyle } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -41,14 +42,22 @@ import { QueueHeader, UpNextList } from "./QueueView";
 import { Scrubber } from "./Scrubber";
 import {
   closeNowPlaying,
+  nowPlayingContentCommitted,
   onNowPlayingHidden,
   resizeNowPlaying,
   sheetOffset,
   useNowPlayingShown,
+  useNowPlayingSettled,
 } from "./sheet";
 import { SleepTimerButton } from "./SleepTimer";
 import { AddToPlaylistButton, DownloadButton } from "./SongButtons";
 import { Transport } from "./Transport";
+import {
+  nowPlayingSongLookup,
+  songActionFailed,
+  usePlayingSongTarget,
+  usePreparePlayingSong,
+} from "./playingSong";
 
 /** What fills the space above the controls. */
 export type NowPlayingView = "player" | "queue" | "lyrics";
@@ -85,7 +94,7 @@ function ViewToggle({
   );
 }
 
-const close = (): void => closeNowPlaying();
+const close = (): void => closeNowPlaying(undefined, "chevron");
 
 type Item = NonNullable<PlaybackState["item"]>;
 
@@ -180,13 +189,24 @@ export function NowPlayingSheet() {
   const trackId = useCurrentTrackId();
   const details = useTrackDetails(trackId);
   const ytSong = usePlayingYtSong(trackId);
+  const songTarget = usePlayingSongTarget(trackId, ytSong);
+  const settled = useNowPlayingSettled();
+  usePreparePlayingSong(songTarget, shown, settled);
   const palette = useNowPlayingPalette(trackId, details);
   const gradient = useNowPlayingGradient(palette);
   const [view, setView] = useState<NowPlayingView>("player");
   // The Queue, once shown, stays mounted while another view shows (`QueuePane`).
   const [queueWarm, setQueueWarm] = useState(false);
+  useLayoutEffect(() => {
+    if (shown) nowPlayingContentCommitted();
+  }, [shown]);
+  useLayoutEffect(() => {
+    if (view !== "queue") return;
+    const active = activeTiming();
+    if (active?.kind === "queue") timingSurfaceCommitted(active.id);
+  }, [view]);
   // A streamed song downloaded since it was queued: Lyrics reads its file, as for a Library song.
-  const downloaded = useDownloadedFile(ytSong, shown && view === "lyrics");
+  const downloaded = useDownloadedFile(ytSong);
   const lyricsFile: LibraryFile | null =
     details === null ? (downloaded ?? null) : { id: details.id, path: details.path };
   // A non-D song's search waits until the Library is read: a song with a file reads it instead.
@@ -201,7 +221,7 @@ export function NowPlayingSheet() {
   useEffect(() => {
     if (!shown) return undefined;
     return addScreenBackHandler(() => {
-      closeNowPlaying();
+      closeNowPlaying(undefined, "Back");
       return true;
     });
   }, [shown]);
@@ -211,10 +231,15 @@ export function NowPlayingSheet() {
   }));
 
   const toggleQueue = () => {
+    if (view !== "queue") beginTiming("queue", "Queue");
     setQueueWarm(true);
     setView((current) => (current === "queue" ? "player" : "queue"));
   };
-  const toggleLyrics = () => setView((current) => (current === "lyrics" ? "player" : "lyrics"));
+  const toggleLyrics = () => {
+    if (view !== "lyrics" && songTarget !== null)
+      void nowPlayingSongLookup.acquire(songTarget).catch(songActionFailed);
+    setView((current) => (current === "lyrics" ? "player" : "lyrics"));
+  };
 
   return (
     <Animated.View
@@ -290,7 +315,7 @@ export function NowPlayingSheet() {
         <DismissArea style={{ paddingTop: CELL * 3, gap: CELL * 2 }}>
           <Scrubber />
           <Transport />
-          {/* Evenly spaced, with or without Download (absent until the Library is first read). */}
+          {/* The song controls share one lookup after settlement or their own early tap. */}
           <View className="flex-row items-center justify-between">
             <ViewToggle
               icon={IconQuote}

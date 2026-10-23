@@ -1,3 +1,4 @@
+import { useScreenContent } from "@/lib/screenTiming";
 import { Text, View } from "react-native";
 
 import { Hairline } from "@/catalog/Hairline";
@@ -13,6 +14,7 @@ import { SWIPE_SIDES, SwipeDirectionRow } from "@/settings/SwipeDirections";
  * at once and shows on the lists' rows straight away.
  */
 export default function SwipeActionsSettingsScreen() {
+  useScreenContent(true);
   const settings = useSwipeSettings();
   const { enabled } = settings;
   return (

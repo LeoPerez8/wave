@@ -1,3 +1,4 @@
+import { useScreenContent } from "@/lib/screenTiming";
 import { AppearanceSettingsSection } from "@/settings/AppearanceSettingsSection";
 import { GlassSettingsSection } from "@/settings/GlassSettingsSection";
 import { MotionSettingsSection } from "@/settings/MotionSettingsSection";
@@ -7,6 +8,7 @@ import { TouchSettingsSection } from "@/settings/TouchSettingsSection";
 
 /** Settings › Appearance: how Wave looks and responds. */
 export default function AppearanceSettingsScreen() {
+  useScreenContent(true);
   return (
     <SettingsPageScreen page="appearance">
       <AppearanceSettingsSection />

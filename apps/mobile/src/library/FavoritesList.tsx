@@ -1,9 +1,11 @@
+import { useScreenContent } from "@/lib/screenTiming";
 import { IconStar } from "@tabler/icons-react-native";
 import { View } from "react-native";
 
 import { grid } from "@/catalog/grid";
 import { EmptyState } from "@/components/EmptyState";
 
+import { LibraryReadFeedback } from "./LibraryReadFeedback";
 import { useFavoriteSongs } from "./hooks";
 import { SongSortButton } from "./SongSortButton";
 import { useSortedSongs } from "./songSort";
@@ -16,7 +18,8 @@ const FAVORITES_CONTEXT = { kind: "favorites", id: null } as const;
 export function FavoritesList({ empty }: { empty: string }) {
   const starred = useFavoriteSongs();
   const { sort, songs } = useSortedSongs("favorites", starred);
-  if (songs === undefined) return null;
+  useScreenContent(songs !== undefined);
+  if (songs === undefined) return <LibraryReadFeedback queryKey="favorites" label="favorites" />;
 
   if (songs.length === 0) {
     return (

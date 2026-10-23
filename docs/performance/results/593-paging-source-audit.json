@@ -1,0 +1,193 @@
+{
+  "tasteCapture": {
+    "measuredCommit": "5877b8c9daba42da2f1f5efa70ef6c58998f75e3",
+    "measuredTree": "d0e4f3355ea9846d46d20b8648ed3df119092ef9",
+    "before": "460e39ff0cba6f50e7a456a77d6e99813295ebaa",
+    "initialIntegration": "494e26dbb15d9bf427a5e42c79ec5e730342af99",
+    "files": {
+      "apps/mobile/bench/fastAgain/benches/tasteProfile.ts": "16f53db1ae2694ff0f0489f1a9d9b660c00d19740ea8ce03d6cf363833f9f102",
+      "apps/mobile/bench/fastAgain/cooperative.ts": "a5d33d7d30d385a2348e6e3e6e4c3cf5bcc5d2008a977aa275136154eec0ab26",
+      "apps/mobile/src/home/magicQueueJob.ts": "316f82aef68806ef0e038567aef590cc25ffa36dc0a348e1d13f801cf20e002c",
+      "apps/mobile/src/library/LibraryStore.ts": "27bc7d9f22e4dccb0e69183ff70e9ea3f8c7c02ffea3a9afe372b9a981325a2d",
+      "apps/mobile/src/library/db/tastePages.ts": "97429f9dd98626faed4f099c9aea8e74c2ed5f01bbafae350dffb5f37be70fb7",
+      "apps/mobile/src/library/db/testDatabase.ts": "0bd04e39a7cc9c0b2e6cf76b4b4f33ded522cae1ead79bb367e3f9697d05147c",
+      "apps/mobile/src/perf/performancePolicy.ts": "0a4dac92bae4af909c1e93a9545cf82ea4a45f45d67cc9e7bcf8358c6302bce7",
+      "apps/mobile/src/playback/TasteProfile.ts": "62d3ea65de2c7c75ed2860a381fb696d67e4507f14c38d58c8bbc68480976004",
+      "apps/mobile/src/playback/liveTaste.ts": "df2c06e622f3ec0b72542d23354ac855c185d26d22e9b928033713c3bee79c0a",
+      "apps/mobile/src/playback/tasteDerivation.ts": "9f31fe77984920add9b0e2ef18c26dc92fb3b8dcb7e00f6b0612a9d5e17f9da1",
+      "docs/performance/584-source-guards.md": "890e42f5ca5309f4cc0e638fd26d4bcf3079d27a49fe975086ded7ed09fb271a",
+      "packages/core/src/index.ts": "ee0cd47096913722af787a7077eca523020b0dc7cc4d7994f025e95b99b8a191",
+      "packages/core/src/tasteProfile.ts": "64e14db9c6eb51571ae26ab707cbe112641c1177f6d888f785330536b5711091",
+      "apps/mobile/src/lib/stepped.ts": "5e9fb13593087715230df7a4e742a892e34e49793619aeb54daa11b24bd64863",
+      "apps/mobile/bench/fastAgain/benches/homeOpening.ts": "08dffed1493046b3258fcb010a50e6c8a98b0a29503e64ae7d173a027ff276ec",
+      "apps/mobile/bench/fastAgain/store.ts": "9146352d63a160ecb1d212ac644b1c25130d6c67c197a2ba3ee05f87a3430fda",
+      "apps/mobile/bench/fastAgain/runner.ts": "77123658766cb5548c43fff8c8b572b6508966c57ac4d43d18e4f734fdedb8a6",
+      "apps/mobile/src/library/db/fastAgainFixture.ts": "11350b5c172c36bbab331ae98ad5c67c3ec941f5048c07fa9a55064c3d03502b"
+    },
+    "method": "11 timed runs per size and variant, sequential benches; one untimed synchronous trace per read. No repeat-until-green. Unchanged canonical 4ms/512/cancel adapter. Desktop Node/sql.js only. Test-only lint rename occurred during capture; all runtime/harness sources remain identical to measuredCommit."
+  },
+  "homeMeasuredCommit": "5055528f305ebac313661ad4b2da30fe0dcbe6f1",
+  "homeMeasuredTree": "5b369642a911a8ce207a3a41948dbd7b7b8b6470",
+  "latestIntegrationMerged": "2aae3bb887effdc56b8cec9ffb05091fde29a4f0",
+  "semanticHashFixCommit": "03aad301c17b29ea04d42dc7bee1dccc9d23f2c4",
+  "correction": "Taste inputSnapshot originally hashed raw JSON property order and failed comparison, after all timed samples completed. The only harness change computes explicit field tuples outside timing. Untimed real-store comparison at every size proves every ordered input field, full ordered profile and both normal/refreshed picks equal actual ti source. Raw failed capture is retained; no timed rerun occurred. Summary retains originalResultKey and every timing/work value. Repeated query traces only are compacted to complete per-SQL row histograms.",
+  "strictSixMsAcceptance": false,
+  "rawArtifacts": {
+    "tasteProfile.jsonl": {
+      "path": "/home/servidor-azul/.t3/scratch/wave-implement-spec-3781dabb/593-paging-final/tasteProfile.jsonl",
+      "sha256": "afaf0ed91b5e7d28c6402384c779adc4812cfb83c6b989bcd79f52375eb70962"
+    },
+    "tasteProfile.stderr": {
+      "path": "/home/servidor-azul/.t3/scratch/wave-implement-spec-3781dabb/593-paging-final/tasteProfile.stderr",
+      "sha256": "50c8ad79f3dac22985ad4944adb2e0bfb290bbdbd7559fe3af522e72545a21c0"
+    },
+    "homeOpening.jsonl": {
+      "path": "/home/servidor-azul/.t3/scratch/wave-implement-spec-3781dabb/593-paging-final/homeOpening.jsonl",
+      "sha256": "c082363f59c72d56ba2d36a686827e07bbe4ed88b21439ad6fb17b727aa7494e"
+    },
+    "homeOpening.stderr": {
+      "path": "/home/servidor-azul/.t3/scratch/wave-implement-spec-3781dabb/593-paging-final/homeOpening.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "historical-equivalence-final.mjs": {
+      "path": "/home/servidor-azul/.t3/scratch/wave-implement-spec-3781dabb/593-paging-final/historical-equivalence-final.mjs",
+      "sha256": "642520b7d963a37743bf78fa2ddc1cf7bcee5e735584728e2f9618d2ee06a54d"
+    },
+    "historical-equivalence-final.jsonl": {
+      "path": "/home/servidor-azul/.t3/scratch/wave-implement-spec-3781dabb/593-paging-final/historical-equivalence-final.jsonl",
+      "sha256": "4e2315c442f25887e9c9523ceba0168ec659002e640942658a43d5c51dbf3e5c"
+    },
+    "build-evidence.py": {
+      "path": "/home/servidor-azul/.t3/scratch/wave-implement-spec-3781dabb/593-paging-final/build-evidence.py",
+      "sha256": "b8a8ff1b39a174889b703a42536a3a4b3ddaff35c612a9bebc35d7642de7108b"
+    },
+    "document-evidence.py": {
+      "path": "/home/servidor-azul/.t3/scratch/wave-implement-spec-3781dabb/593-paging-final/document-evidence.py",
+      "sha256": "0c6a7eebcc4dd1fe87903dc7e4be18997b9b41dde756d5f5f104c1670e335348"
+    },
+    "validate-evidence.py": {
+      "path": "/home/servidor-azul/.t3/scratch/wave-implement-spec-3781dabb/593-paging-final/validate-evidence.py",
+      "sha256": "9dba84ed7119fd07b6396be1585006a7b65a37bbbfa1cf026485b535b880def8"
+    },
+    "initial-core.log": {
+      "path": "/home/servidor-azul/.t3/scratch/wave-implement-spec-3781dabb/593-paging-final/initial-core.log",
+      "sha256": "e30f1651925e5ccb349e1efe210df70a1c207800f0c65ea4361fae4287f913a7"
+    },
+    "initial-mobile.log": {
+      "path": "/home/servidor-azul/.t3/scratch/wave-implement-spec-3781dabb/593-paging-final/initial-mobile.log",
+      "sha256": "530283d7a07afed3b261484d9d2f2aafff63f0a12c40bbe026f0e79677aa9a5c"
+    },
+    "final-mobile.log": {
+      "path": "/home/servidor-azul/.t3/scratch/wave-implement-spec-3781dabb/593-paging-final/final-mobile.log",
+      "sha256": "8b14008fab7ed6ed4831e105632849c3108a66652bfccff1e448653a08a46c9b"
+    },
+    "postmerge-focused.log": {
+      "path": "/home/servidor-azul/.t3/scratch/wave-implement-spec-3781dabb/593-paging-final/postmerge-focused.log",
+      "sha256": "dd72ef73f88c3aa2503a1b25091c04e135b7abeee67e960d7b7cc13af11ae145"
+    },
+    "postmerge-core-focused.log": {
+      "path": "/home/servidor-azul/.t3/scratch/wave-implement-spec-3781dabb/593-paging-final/postmerge-core-focused.log",
+      "sha256": "ba5139e81f9b27d1a119742f08499f15e1f0204355f77b3bf5f0e9310b3569ea"
+    },
+    "postmerge-core-typecheck.log": {
+      "path": "/home/servidor-azul/.t3/scratch/wave-implement-spec-3781dabb/593-paging-final/postmerge-core-typecheck.log",
+      "sha256": "0732a811a70813566f233dff72204b2bb6920d0e6ad7b05f2e8dede4b9711e46"
+    },
+    "postmerge-mobile-typecheck.log": {
+      "path": "/home/servidor-azul/.t3/scratch/wave-implement-spec-3781dabb/593-paging-final/postmerge-mobile-typecheck.log",
+      "sha256": "da0751e9ab58214a12d800c392894ab5327d27e62bd047ffd1607047080cfd75"
+    },
+    "signal-order-red.log": {
+      "path": "/home/servidor-azul/.t3/scratch/wave-implement-spec-3781dabb/593-paging-final/signal-order-red.log",
+      "sha256": "e8c922614289c018701cab34fcd04b7d4693f88aa98b4cffaa19b8e027904ba0"
+    },
+    "signal-order-green.log": {
+      "path": "/home/servidor-azul/.t3/scratch/wave-implement-spec-3781dabb/593-paging-final/signal-order-green.log",
+      "sha256": "4f21ac093e554624506c339f0929c747280f53cf67b0e29a3156aea80a0c884f"
+    },
+    "input-key-red.log": {
+      "path": "/home/servidor-azul/.t3/scratch/wave-implement-spec-3781dabb/593-paging-final/input-key-red.log",
+      "sha256": "dc066e383cccad625917d7eb9f07dc8e46e2d24ec2d1d2f631baf16b8e549e93"
+    },
+    "input-key-final.log": {
+      "path": "/home/servidor-azul/.t3/scratch/wave-implement-spec-3781dabb/593-paging-final/input-key-final.log",
+      "sha256": "901b87859a63246b0df47fec914e93900ea9aeb2ec5df931b447bf8614e00725"
+    }
+  },
+  "committedEvidence": {
+    "593-paging-tasteProfile-desktop.jsonl": "6b9675c5007e4c6136451599e90a15be66e0767f395a3990de134c28ef7b9269",
+    "593-paging-homeOpening-desktop.jsonl": "34891a385f756646bf7c8ce6a3b9f61c6113a7f558bc201d0f59febd4609b417",
+    "593-paging-equivalence.jsonl": "4e2315c442f25887e9c9523ceba0168ec659002e640942658a43d5c51dbf3e5c"
+  },
+  "protectedFiles": {
+    "apps/mobile/src/lib/stepped.ts": {
+      "sha256": "5e9fb13593087715230df7a4e742a892e34e49793619aeb54daa11b24bd64863",
+      "byteIdenticalTo": "494e26dbb15d9bf427a5e42c79ec5e730342af99"
+    },
+    "apps/mobile/src/lib/startupWork.ts": {
+      "sha256": "ff0b81c90786bdc779783fe2e72d556dbb5bf185dcb24e3e1873c5ca40d1c89b",
+      "byteIdenticalTo": "494e26dbb15d9bf427a5e42c79ec5e730342af99"
+    },
+    "apps/mobile/src/lib/backgroundWork.ts": {
+      "sha256": "fe8807f763a0bb9000fab2bab60effe2efa08541bae07ebc65b54d1abd6f238a",
+      "byteIdenticalTo": "494e26dbb15d9bf427a5e42c79ec5e730342af99"
+    },
+    "apps/mobile/src/home/artistGraph.ts": {
+      "sha256": "dd2141774dfbf9d0fbd56bb3fd8d2de91086007e007ebd9d740fe75e48ea40da",
+      "byteIdenticalTo": "494e26dbb15d9bf427a5e42c79ec5e730342af99"
+    },
+    "apps/mobile/src/home/mixInputs.ts": {
+      "sha256": "7bc76ec44c984af35a19df53f81bc2b0387b4dcbc99d9e42b762f8857c3fe507",
+      "byteIdenticalTo": "494e26dbb15d9bf427a5e42c79ec5e730342af99"
+    },
+    "apps/mobile/src/library/db/mixInputs.ts": {
+      "sha256": "0759fc6466b7a8a34334ffea89d203d14616dd175354525c24b88e0ff1f49ff6",
+      "byteIdenticalTo": "494e26dbb15d9bf427a5e42c79ec5e730342af99"
+    },
+    "apps/mobile/src/perf/routeObservers.test.ts": {
+      "sha256": "918d8eb645844eb7248657f497ab067c9630499b71bc2a6990e5cfa5a77dd2cb",
+      "byteIdenticalTo": "494e26dbb15d9bf427a5e42c79ec5e730342af99"
+    }
+  },
+  "finalSourceHashes": {
+    "apps/mobile/bench/fastAgain/benches/homeOpening.ts": "08dffed1493046b3258fcb010a50e6c8a98b0a29503e64ae7d173a027ff276ec",
+    "apps/mobile/bench/fastAgain/benches/tasteProfile.ts": "2ffbfe9bbe836781638d3dd6d6ebd143c4de4b72d5a5a21409669453310b507c",
+    "apps/mobile/bench/fastAgain/cooperative.ts": "a5d33d7d30d385a2348e6e3e6e4c3cf5bcc5d2008a977aa275136154eec0ab26",
+    "apps/mobile/bench/fastAgain/runner.ts": "77123658766cb5548c43fff8c8b572b6508966c57ac4d43d18e4f734fdedb8a6",
+    "apps/mobile/bench/fastAgain/store.ts": "9146352d63a160ecb1d212ac644b1c25130d6c67c197a2ba3ee05f87a3430fda",
+    "apps/mobile/src/home/magicQueueJob.ts": "316f82aef68806ef0e038567aef590cc25ffa36dc0a348e1d13f801cf20e002c",
+    "apps/mobile/src/lib/stepped.ts": "5e9fb13593087715230df7a4e742a892e34e49793619aeb54daa11b24bd64863",
+    "apps/mobile/src/library/LibraryStore.ts": "ee42353a02a2b2ca8dd8a24d22ee496c27e00f8c79ba2f3b1557e3a0b25755f4",
+    "apps/mobile/src/library/db/fastAgainFixture.ts": "11350b5c172c36bbab331ae98ad5c67c3ec941f5048c07fa9a55064c3d03502b",
+    "apps/mobile/src/library/db/tastePages.ts": "97429f9dd98626faed4f099c9aea8e74c2ed5f01bbafae350dffb5f37be70fb7",
+    "apps/mobile/src/library/db/testDatabase.ts": "0bd04e39a7cc9c0b2e6cf76b4b4f33ded522cae1ead79bb367e3f9697d05147c",
+    "apps/mobile/src/perf/performancePolicy.ts": "f3b9996759e3808d987490a4639b02080dc6b9f2dde809963fd16f9658b29727",
+    "apps/mobile/src/playback/TasteProfile.ts": "62d3ea65de2c7c75ed2860a381fb696d67e4507f14c38d58c8bbc68480976004",
+    "apps/mobile/src/playback/liveTaste.ts": "df2c06e622f3ec0b72542d23354ac855c185d26d22e9b928033713c3bee79c0a",
+    "apps/mobile/src/playback/tasteDerivation.ts": "9f31fe77984920add9b0e2ef18c26dc92fb3b8dcb7e00f6b0612a9d5e17f9da1",
+    "docs/performance/584-source-guards.md": "da591733e3e0cb50716844f9e66945613bfb94a136d97e61ba00e4b8eab8d6e5",
+    "packages/core/src/index.ts": "253fa73d2e02e3f429b00ec2b6188370a11d6659ba0dd20523f6e788227f463a",
+    "packages/core/src/tasteProfile.ts": "64e14db9c6eb51571ae26ab707cbe112641c1177f6d888f785330536b5711091"
+  },
+  "validation": {
+    "coreFull": {
+      "pass": 3422,
+      "testConcurrency": 1,
+      "beforeFinalIntegrationMerge": true
+    },
+    "mobileFull": {
+      "pass": 686,
+      "beforeHashRegressionAndFinalIntegrationMerge": true
+    },
+    "postmergeMobileFocused": {
+      "pass": 35,
+      "includesHashRegression": true
+    },
+    "postmergeCoreFocused": {
+      "pass": 3
+    },
+    "postmergeTypechecks": ["core", "mobile"],
+    "timingAcceptance": "open",
+    "deviceAndTalkBack": "unverified"
+  }
+}

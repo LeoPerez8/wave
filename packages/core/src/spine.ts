@@ -114,14 +114,19 @@ export const spineSection = (entries: readonly IndexEntry[], row: number): Index
 /**
  * A screen reader's step on the spine: the letter after (1) or before (-1)
  * the one row `row` (the top of the list on screen) is filed under, staying on
- * the first or last letter past either end.
+ * the first or last letter past either end. A grid may start two letters on
+ * the same row: keep the explicitly chosen letter while that row is current,
+ * so a second step can leave it in either direction.
  */
 export const spineStep = (
   entries: readonly IndexEntry[],
   row: number,
   direction: 1 | -1,
+  chosenLetter?: string | null,
 ): IndexEntry | undefined => {
-  const place = sectionPlace(entries, row);
+  let place = sectionPlace(entries, row);
   if (place < 0) return undefined;
+  const chosen = entries.findIndex((entry) => entry.letter === chosenLetter);
+  if (chosen >= 0 && entries[chosen]!.index === entries[place]!.index) place = chosen;
   return entries[Math.min(entries.length - 1, Math.max(0, place + direction))];
 };

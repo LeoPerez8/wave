@@ -1,7 +1,7 @@
+import { useScreenContent } from "@/lib/screenTiming";
 import { LegendList } from "@legendapp/list/react-native";
 import {
   artistPageItems,
-  libraryFinder,
   rankPopular,
   ytTrackId,
   type ArtistPageItem,
@@ -44,8 +44,7 @@ import { selectableRow } from "@/selection/selectableRow";
 import { useListSelection, type ListSelection } from "@/selection/useListSelection";
 import { ArtistStatsBlock } from "@/stats/ArtistStatsBlock";
 import type { NativeYtSong } from "@/native/waveYtMusic";
-import { useYtArtistSection } from "@/ytmusic/artistSection";
-import { useLoadedLibraryFinder, type FindInLibrary } from "@/ytmusic/libraryFinder";
+import { useArtistSongsFinder, useYtArtistSection } from "@/ytmusic/artistSection";
 import { useHeldSongs, useSongsInPlace, type PlacedSongs } from "@/ytmusic/songsInPlace";
 import { YT_ARTIST_NOTE, YtReleaseCard } from "@/ytmusic/YtArtistSection";
 import { YtLookupFooter } from "@/ytmusic/YtLookupFooter";
@@ -306,6 +305,7 @@ function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegr
     libraryAlbums,
     openedIntegrated,
     holding.held,
+    loaded,
   );
   const ytView = loaded ? yt.view : null;
   const ytShelves = loaded ? yt.shelves : null;
@@ -332,12 +332,7 @@ function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegr
   // A finished download keeps its row, now the Library's file, until the page is opened again,
   // and the Library's songs above leave that file out. The page's own songs are looked in
   // first, so whichever of them and the shared finder follows the download first, it shows once.
-  const sharedFind = useLoadedLibraryFinder();
-  const find = useMemo((): FindInLibrary | null => {
-    if (sharedFind === null) return null;
-    const own = libraryFinder(songs);
-    return (song) => own(song) ?? sharedFind(song);
-  }, [songs, sharedFind]);
+  const find = useArtistSongsFinder(songs, yt.find);
   const placed = useSongsInPlace(holding, additions.songs, find);
   const librarySongs = useMemo(
     () => (placed.tracks.size === 0 ? songs : songs.filter((song) => !placed.tracks.has(song.id))),
@@ -523,6 +518,7 @@ export default function ArtistScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const artistId = parseId(id);
   const detail = useArtist(artistId);
+  useScreenContent(detail !== undefined);
   const known = useKnownRow("artist", artistId);
   const openedIntegrated = useOpenedIntegrated();
   const shown: Shown | null | undefined =

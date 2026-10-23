@@ -3,6 +3,7 @@ import { test } from "node:test";
 import {
   playlistRecommendationSession,
   type PlaylistRecommendationFeedback,
+  type PlaylistRecommendationSessionInput,
   type PlaylistRecommendationTrack,
 } from "./index.ts";
 
@@ -402,6 +403,70 @@ test("refill recovery preserves held offer objects and keys when saved dismissal
   );
   for (const index of [0, 1, 3, 4]) assert.equal(session.get().slots[index], before[index]);
   assert.equal(session.get().error, null);
+});
+
+test("cancelled renewal and disposal cannot publish stale offers or keep listeners", async () => {
+  const read = Promise.withResolvers<PlaylistRecommendationSessionInput>();
+  let notifications = 0;
+  const session = playlistRecommendationSession({
+    newId: () => "offer",
+    read: () => read.promise,
+    dismiss: async () => {},
+  });
+  session.subscribe(() => notifications++);
+  const controller = new AbortController();
+  const renewing = session.renew({ signal: controller.signal });
+  const before = notifications;
+  controller.abort();
+  read.resolve({
+    playlist: [track("seed")],
+    sources: { library: [track("next")], catalog: [], graph: null, now: 0 },
+  });
+  await renewing;
+  assert.equal(notifications, before);
+  assert.deepEqual(session.get().slots, []);
+  session.dispose();
+  await session.renew();
+  assert.equal(notifications, before);
+});
+
+test("hiding during Add commits once, cancels its refill and retains held offers for return", async () => {
+  const saved = Promise.withResolvers<void>();
+  let reads = 0,
+    writes = 0,
+    notifications = 0;
+  const session = playlistRecommendationSession({
+    newId: () => String(reads) + Math.random(),
+    read: async (signal) => {
+      signal?.throwIfAborted();
+      reads++;
+      return {
+        playlist: [track("seed")],
+        sources: { library: "abcdefg".split("").map(track), catalog: [], graph: null, now: 0 },
+      };
+    },
+    dismiss: async () => {},
+    accept: async () => {
+      writes++;
+      await saved.promise;
+    },
+  });
+  session.subscribe(() => notifications++);
+  await session.renew();
+  const before = session.get().slots;
+  const adding = session.accept(before[2]!.key);
+  session.pause();
+  const heard = notifications;
+  saved.resolve();
+  assert.equal(await adding, true);
+  assert.deepEqual([writes, reads, notifications], [1, 1, heard]);
+  session.resume();
+  await session.renew();
+  assert.equal(
+    session.get().slots.some((x) => x?.track.id === before[2]!.track.id),
+    false,
+  );
+  for (const i of [0, 1, 3, 4]) assert.equal(session.get().slots[i]?.key, before[i]!.key);
 });
 
 /** A host whose turns ("paint", "free") wait until the test lets each go, in order. */

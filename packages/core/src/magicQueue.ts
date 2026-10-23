@@ -77,13 +77,29 @@ export const magicLibrarySongs = (
   artists: readonly { readonly id: number; readonly name: string }[],
 ): ((song: MagicLibrarySong) => MagicSong) => {
   const keys = new Map(artists.map((artist) => [artist.id, magicArtistKey(artist.name)]));
-  return (song) => ({
+  return magicSongMapper(keys);
+};
+
+const magicSongMapper =
+  (keys: ReadonlyMap<number, MagicArtistKey>) =>
+  (song: MagicLibrarySong): MagicSong => ({
     trackId: String(song.id),
     artists: song.artistIds.flatMap((id) => keys.get(id) ?? []),
     genre: songFamilies(song)[0]?.key ?? null,
     style: songStyle(song),
   });
-};
+
+/** Builds the shared Library-to-MagicSong mapper without one unbounded artist pass. */
+export function* magicLibraryMapperSteps(
+  artists: readonly { readonly id: number; readonly name: string }[],
+): Generator<void, (song: MagicLibrarySong) => MagicSong> {
+  const keys = new Map<number, MagicArtistKey>();
+  for (const artist of artists) {
+    keys.set(artist.id, magicArtistKey(artist.name));
+    yield;
+  }
+  return magicSongMapper(keys);
+}
 
 /**
  * A Magic Queue needs shared genre mass, not just aligned vectors: a minor

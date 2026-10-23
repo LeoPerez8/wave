@@ -1,11 +1,11 @@
 import { IconPlus, IconX } from "@tabler/icons-react-native";
 import {
-  libraryChangeAffects,
+  playlistRecommendationsSteps,
   playlistRecommendationSession,
   type PlaylistRecommendationSlot,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { AccessibilityInfo, Text, View } from "react-native";
 import Animated, {
   FadeIn,
@@ -21,8 +21,13 @@ import { IconButton } from "@/components/IconButton";
 import { TextButton } from "@/components/TextButton";
 import { artistGraphNow } from "@/home/artistGraphNow";
 import { lookedUpProfileOf } from "@/home/artistGenres";
+import { useScreenSight } from "@/lib/screenSight";
+import { freeTurn, freeTurnEffect, settledTurnEffect } from "@/lib/backgroundWork";
+import { runSteps } from "@/lib/stepped";
+import { onArtistGraphSourcesChanged } from "@/home/graphSources";
 import { afterPaint } from "@/lib/afterPaint";
-import { freeTurn } from "@/lib/backgroundWork";
+import { followPlaylistRecommendations } from "./playlistRecommendationVisit";
+import { playlistRecommendationInput } from "./playlistRecommendationSource";
 import { makeExternalStore } from "@/lib/externalStore";
 import { CROSSFADE_MS } from "@/motion/Crossfade";
 import { WaveNative } from "@/native/waveNative";
@@ -55,26 +60,24 @@ export function PlaylistRecommendations({
   items: readonly PlaylistEntryRow[];
 }) {
   const enabled = useYtMusicEnabled();
+  const sight = useScreenSight();
   const [announcingAcceptance] = useState(() => makeExternalStore(false));
   const [enabledNow] = useState(() => makeExternalStore(enabled));
   // Keep held offers readable if another offer's refill no longer finds their Library row.
   const [libraryRows] = useState(() => makeExternalStore<ReadonlyMap<string, SongRow>>(new Map()));
   const libraryById = useSyncExternalStore(libraryRows.subscribe, libraryRows.get);
+  const [latestRows] = useState(() => makeExternalStore<ReadonlyMap<string, SongRow>>(new Map()));
   const [session] = useState(() =>
     playlistRecommendationSession({
       newId: () =>
         `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${++nextOffer}`,
-      read: () =>
+      read: (signal) =>
         appRuntime.runPromise(
           Effect.gen(function* () {
-            const store = yield* LibraryStore;
-            const input = yield* store.playlistRecommendationInput(playlistId);
+            const input = yield* playlistRecommendationInput(playlistId);
             const graph = yield* artistGraphNow;
-            libraryRows.update((previous) => {
-              const rows = new Map(previous);
-              for (const song of input.librarySongs) rows.set(String(song.id), song);
-              return rows;
-            });
+            // Source rows are retained for the five visible offers only, never a copy of the Library.
+            latestRows.set(input.songById);
             return {
               playlist: input.playlist,
               sources: {
@@ -87,7 +90,27 @@ export function PlaylistRecommendations({
               },
             };
           }),
+          { signal },
         ),
+      rank: async (input, signal) => {
+        const ranked = await appRuntime
+          .runPromise(
+            runSteps(playlistRecommendationsSteps(input.playlist, input.sources), freeTurnEffect),
+            { signal },
+          )
+          .catch((error: unknown) => {
+            // A cancelled rank must not keep the whole Library index reachable from this visit.
+            latestRows.set(new Map());
+            throw error;
+          });
+        const held = new Map<string, SongRow>();
+        for (const offer of ranked) {
+          const row = latestRows.get().get(offer.track.id);
+          if (row !== undefined) held.set(offer.track.id, row);
+        }
+        latestRows.set(held);
+        return ranked;
+      },
       dismiss: (offer) =>
         appRuntime.runPromise(
           Effect.gen(function* () {
@@ -124,22 +147,42 @@ export function PlaylistRecommendations({
   const reduceMotion = useReducedMotion();
   // What the busy slot says while its placeholder shows ("Adding Song").
   const [busyLabel, setBusyLabel] = useState("Loading another recommendation");
-  // Follow the write's cause: source changes revalidate even when playlist IDs stay the same.
-  useEffect(
-    () =>
-      onLibraryChange((change) => {
-        if (change.kind === "playlists" && announcingAcceptance.get()) return;
-        if (
-          libraryChangeAffects({ tracks: true, favorites: true, playlists: [playlistId] }, change)
-        )
-          void session.renew();
-      }),
-    [session, playlistId, announcingAcceptance],
-  );
+  // The visit follows the write's cause (#599): source changes revalidate even when playlist
+  // IDs stay the same, once the playlist is in sight and settled.
+  const visit = useRef<ReturnType<typeof followPlaylistRecommendations> | null>(null);
+  useEffect(() => {
+    const following = followPlaylistRecommendations(session, {
+      playlistId,
+      sight,
+      start: (signal) => appRuntime.runPromise(settledTurnEffect, { signal }),
+      subscribe: onLibraryChange,
+      graphSources: onArtistGraphSourcesChanged,
+      ignore: (change) => change.kind === "playlists" && announcingAcceptance.get(),
+    });
+    visit.current = following;
+    return () => {
+      following.dispose();
+      visit.current = null;
+    };
+  }, [session, playlistId, sight, announcingAcceptance, visit]);
   useEffect(() => {
     enabledNow.set(enabled);
-    void session.renew();
-  }, [session, enabled, enabledNow]);
+    visit.current?.invalidate();
+  }, [enabled, enabledNow, visit]);
+  useEffect(() => {
+    libraryRows.update((previous) => {
+      const held = new Map<string, SongRow>();
+      const wanted = new Set(
+        state.slots.flatMap((offer) => (offer?.track.source === "library" ? [offer.track.id] : [])),
+      );
+      // At most five lookups; don't synchronously index/copy the complete source on publication.
+      for (const id of wanted) {
+        const row = latestRows.get().get(id) ?? previous.get(id);
+        if (row !== undefined) held.set(id, row);
+      }
+      return held;
+    });
+  }, [state.slots, libraryRows, latestRows]);
   const play = ({ track }: PlaylistRecommendationSlot) => {
     const context = { kind: "playlist", id: String(playlistId) } as const;
     if (track.source === "library") void playTrackIds([Number(track.id)], new Set(), 0, context);

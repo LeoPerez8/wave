@@ -7,7 +7,7 @@
  * (Core's `similarArtistsKept.ts`; on this phone, not synced).
  */
 import {
-  artistMixSimilarSource,
+  artistMixSimilarSourceSteps,
   parseSimilarArtistsKept,
   similarArtistsKeptOf,
   storedSimilarArtistsKept,
@@ -18,6 +18,8 @@ import {
   type SimilarArtistsKept,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
+import { runSteps } from "@/lib/stepped";
+import { freeTurnEffect } from "@/lib/backgroundWork";
 
 import { persistedSetting } from "@/lib/persistedSetting";
 import type { LibraryStore } from "@/library/LibraryStore";
@@ -79,9 +81,9 @@ export const withSimilar = <R>(pools: ArtistMixPools, read: SimilarReader<R>) =>
   Effect.gen(function* () {
     const similar: DiscoverSimilarArtists[] = [];
     for (
-      let source = artistMixSimilarSource(pools);
+      let source = yield* runSteps(artistMixSimilarSourceSteps(pools), freeTurnEffect);
       source !== null;
-      source = artistMixSimilarSource({ ...pools, similar })
+      source = yield* runSteps(artistMixSimilarSourceSteps({ ...pools, similar }), freeTurnEffect)
     ) {
       const artists = yield* read(source.name).pipe(Effect.orElseSucceed(() => []));
       similar.push({ of: source.name, artists });

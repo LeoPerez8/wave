@@ -1,6 +1,9 @@
+import { useScreenContent } from "@/lib/screenTiming";
 import { IconMusic, IconSettings } from "@tabler/icons-react-native";
 import { homeItems } from "@wave/core";
-import { Link, router } from "expo-router";
+import { Link } from "expo-router";
+import { useEffect, useState } from "react";
+import { router } from "@/lib/timingRouter";
 import { Pressable, Text, View } from "react-native";
 
 import { CELL } from "@/catalog/grid";
@@ -9,7 +12,10 @@ import { IconButton } from "@/components/IconButton";
 import { LargeTitleScreen } from "@/components/LargeTitleScreen";
 import { useHomeArrangement, homeTitleLongPress } from "@/home/homeArrangement";
 import { HomeSection, SECTION_GAP } from "@/home/HomeSection";
-import { useHome } from "@/library/hooks";
+import { HomeSectionSkeleton } from "@/home/HomeSectionSkeleton";
+import { HomeRecapSkeleton } from "@/home/HomeRecapSkeleton";
+import { afterHomeFrame, homeOpeningState } from "@/home/homeOpening";
+import { useHomeContent } from "@/library/hooks";
 import { useRenderCount } from "@/perf/perf";
 import { useRecapToAnnounce } from "@/stats/hooks";
 import { RecapCard } from "@/stats/StatsViews";
@@ -31,13 +37,16 @@ function HomeLine({ children, top }: { children: string; top: number }) {
 
 export default function HomeScreen() {
   useRenderCount("HomeScreen");
-  const home = useHome();
-  const arrangement = useHomeArrangement();
-  const newRecap = useRecapToAnnounce();
-  const empty = home !== undefined && home.recentlyAdded.length === 0;
-  const nothingPlayed =
-    home !== undefined && home.recentlyPlayed.length === 0 && home.mostPlayed.length === 0;
-
+  const [painted, setPainted] = useState(false);
+  useEffect(
+    () =>
+      afterHomeFrame(() => setPainted(true), {
+        request: requestAnimationFrame,
+        cancel: cancelAnimationFrame,
+      }),
+    [],
+  );
+  // Even focus effects in Discover or Recap cannot read before the shell has painted.
   return (
     <LargeTitleScreen
       title="Home"
@@ -46,6 +55,37 @@ export default function HomeScreen() {
         <IconButton icon={IconSettings} label="Settings" onPress={() => router.push("/settings")} />
       }
     >
+      {painted ? <HomeContent /> : <HomePlaceholders />}
+    </LargeTitleScreen>
+  );
+}
+
+function HomePlaceholders() {
+  useScreenContent(false);
+  const arrangement = useHomeArrangement();
+  return (
+    <>
+      <View style={RECAP_CARD}>
+        <HomeRecapSkeleton />
+      </View>
+      <View>
+        {arrangement.map((id) => (
+          <HomeSectionSkeleton key={id} id={id} />
+        ))}
+      </View>
+    </>
+  );
+}
+
+function HomeContent() {
+  const home = useHomeContent();
+  const { empty, nothingPlayed, ready } = homeOpeningState(home);
+  useScreenContent(ready);
+  const arrangement = useHomeArrangement();
+  const newRecap = useRecapToAnnounce();
+
+  return (
+    <>
       {empty && (
         <EmptyState
           icon={IconMusic}
@@ -53,11 +93,11 @@ export default function HomeScreen() {
           message="Your recently added, recently played and most played music will show up here."
         />
       )}
-      {home !== undefined && !empty && (
+      {!empty && (
         <>
           {newRecap !== null && (
             <View style={RECAP_CARD}>
-              <RecapCard period={newRecap} />
+              {newRecap === undefined ? <HomeRecapSkeleton /> : <RecapCard period={newRecap} />}
             </View>
           )}
           {/* Sections with nothing to show draw nothing, so whichever shows first is pulled up. */}
@@ -88,6 +128,6 @@ export default function HomeScreen() {
           )}
         </>
       )}
-    </LargeTitleScreen>
+    </>
   );
 }

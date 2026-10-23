@@ -579,6 +579,36 @@ test("renewals read changed favorites and download status, including a catalog p
   assert.ok(read().some((x) => x.track.id === String(ordinary)));
 });
 
+test("Add validates its held recording without reading the entire Library", async () => {
+  const { createFastAgainFixture } = await import("./fastAgainFixture.ts");
+  const { traceQueries } = await import("./testDatabase.ts");
+  const fixture = await createFastAgainFixture();
+  try {
+    const input = selectPlaylistRecommendationInput(fixture.db, fixture.playlistId);
+    const track = playlistRecommendations(input.playlist, {
+      ...input,
+      graph: null,
+      now: fixture.now,
+      online: false,
+    })[0]!.track;
+    const result = traceQueries(fixture.db, () =>
+      acceptPlaylistRecommendation(
+        fixture.db,
+        fixture.playlistId,
+        { key: "bounded-add", track },
+        fixture.now,
+      ),
+    );
+    assert.equal(result.result, true);
+    assert.ok(
+      result.queries.reduce((sum, q) => sum + q.rows, 0) < 300,
+      "transaction reads only playlist membership and matching recording metadata",
+    );
+  } finally {
+    fixture.close();
+  }
+});
+
 const rowsOf = (queries: readonly { readonly rows: number }[]) =>
   queries.reduce((n, query) => n + query.rows, 0);
 

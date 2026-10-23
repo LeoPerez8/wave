@@ -1,3 +1,4 @@
+import { registerTimingBackground, timingBackgroundChanged } from "@/lib/timing";
 /**
  * From YT Music's and From Spotify's Import (docs/spec.md, "Importing
  * playlists from a link"; one batch and one set of origins for both, a
@@ -34,7 +35,7 @@ import {
   isYtLibraryReadQueued,
   liveYtLibraryOrigins,
   nextYtLibraryRead,
-  planLinkImport,
+  planLinkImportSteps,
   planYtLibraryImport,
   pruneYtLibraryBatch,
   readSpotifyAccountPlaylist,
@@ -43,7 +44,7 @@ import {
   readYtLibraryOrigins,
   writeYtLibraryBatch,
   writeYtLibraryOrigins,
-  ytLibraryFavorites,
+  ytLibraryFavoritesSteps,
   ytLibraryPauseLogLine,
   ytLibraryDownloadsQueued,
   ytLibraryDownloadsToQueue,
@@ -58,6 +59,11 @@ import {
   type YtLibraryRead,
   playlistDownloadOrigin,
 } from "@wave/core";
+import { startupTurn, startupTurnEffect } from "@/lib/backgroundWork";
+import { runSteps } from "@/lib/stepped";
+import { resumeLibraryReads } from "./libraryImportResume";
+import { dispatchLibraryFavorites, readImportDownloadInput } from "./startupJobs";
+
 import * as Result from "effect/Result";
 import { useSyncExternalStore } from "react";
 import { AppState } from "react-native";
@@ -68,7 +74,6 @@ import { appLog } from "@/log/appLog";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 import { askSpotifyAccount } from "@/spotify/askSpotify";
 import { askYtMusic } from "@/ytmusic/askYtMusic";
-import { currentLibraryFinder } from "@/ytmusic/libraryFinder";
 import { downloadStarredSongs, runYtPlaylistDownloadAction } from "@/ytmusic/YtDownloads";
 
 import { setFavorites, setPendingFavorites } from "./favorites";
@@ -125,25 +130,31 @@ export const useReadingAgain = (playlistId: number): boolean =>
 
 /** Whether the batch is reading its playlists now. */
 let reading = false;
+registerTimingBackground("libraryImport", () =>
+  reading || readingAgain.get().size > 0 ? "import" : null,
+);
+readingAgain.subscribe(timingBackgroundChanged);
 
 /**
  * Import & Download, once [playlistId] is filled: its downloads join the
  * queue as its Download Playlist would queue them, the songs the Library
  * doesn't have, in playlist order. A playlist deleted meanwhile queues nothing.
  */
-const downloadPlaylist = async (playlistId: number): Promise<void> => {
-  const [detail, find] = await Promise.all([
-    // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
-    appRuntime.runPromise(LibraryStore.use((store) => store.getPlaylist(playlistId))),
-    currentLibraryFinder(),
-  ]);
-  if (detail === null || detail.items.length === 0) return;
-  const { playlist } = detail;
+const downloadPlaylist = async (read: YtLibraryRead): Promise<void> => {
+  // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
+  const preparing = LibraryStore.use((store) =>
+    readImportDownloadInput(store, read.playlistId, startupTurnEffect, () =>
+      isYtLibraryReadQueued(batch.get(), read),
+    ),
+  );
+  const prepared = await appRuntime.runPromise(preparing);
+  if (prepared === null) return;
+  const { detail, inLibrary } = prepared;
   runYtPlaylistDownloadAction(
     "downloadPlaylist",
     detail.items,
-    (song) => find(song) !== null,
-    playlistDownloadOrigin(playlist),
+    inLibrary,
+    playlistDownloadOrigin(detail.playlist),
   );
 };
 
@@ -153,7 +164,7 @@ const downloadPlaylist = async (playlistId: number): Promise<void> => {
  * them as the batch resumes (Core's `ytLibraryDownloadsToQueue`).
  */
 const queueDownloads = async (read: YtLibraryRead): Promise<void> => {
-  await downloadPlaylist(read.playlistId).catch((error: unknown) => {
+  await downloadPlaylist(read).catch((error: unknown) => {
     const why = error instanceof Error ? error.message : String(error);
     appLog("warn", LOG_TAG, `Import of "${read.name}" couldn't queue its downloads: ${why}`);
   });
@@ -171,13 +182,14 @@ type SourceRead =
  */
 const readSource = async (read: YtLibraryRead): Promise<SourceRead> => {
   if (isSpotifyLibrarySource(read.source)) {
-    const answer = await readSpotifyAccountPlaylist(read.source, (request) =>
-      askSpotifyAccount((spotify) =>
+    const answer = await readSpotifyAccountPlaylist(read.source, async (request) => {
+      await startupTurn();
+      return askSpotifyAccount((spotify) =>
         request.kind === "likedSongs"
           ? spotify.likedSongs(request.offset)
           : spotify.playlist(request.uri, request.offset),
-      ),
-    );
+      );
+    });
     if (!answer.ok) return answer;
     // Typed whole, not narrowed to Spotify's side, so the plan's songs are YT Music's as the app reads them.
     const source: LinkedSource<NativeYtSong> = { service: "spotify", playlist: answer.playlist };
@@ -203,19 +215,35 @@ const readSource = async (read: YtLibraryRead): Promise<SourceRead> => {
 const fill = async (read: YtLibraryRead): Promise<string | null> => {
   let reason: string;
   try {
+    await startupTurn();
+    // A deletion/refresh while waiting for a turn must not send the stale source request.
+    if (!isYtLibraryReadQueued(batch.get(), read)) return null;
     const answer = await readSource(read);
     if (answer.ok) {
       if (!isYtLibraryReadQueued(batch.get(), read)) return null;
-      const plan = planLinkImport(answer.source, await listLibrary());
+      await startupTurn();
+      const library = await listLibrary();
+      const plan = await appRuntime.runPromise(
+        runSteps(planLinkImportSteps(answer.source, library), startupTurnEffect),
+      );
+      if (!isYtLibraryReadQueued(batch.get(), read)) return null;
       // Before it leaves the batch: Wave stopped in between stars again, which changes nothing.
-      const favorites = ytLibraryFavorites(read, plan);
-      await setFavorites(favorites.star, true);
-      // A liked song the Library has only as a missing song downloads, as any new star does.
-      void downloadSyncedStars();
-      // Before any download is queued, so each one's landing finds its pending favorite; the
-      // stars then ask for their downloads, under Favorites (a star means downloaded).
-      await setPendingFavorites(favorites.pending, true);
-      downloadStarredSongs(favorites.download);
+      const favorites = await appRuntime.runPromise(
+        runSteps(ytLibraryFavoritesSteps(read, plan), startupTurnEffect),
+      );
+      await startupTurn();
+      if (!isYtLibraryReadQueued(batch.get(), read)) return null;
+      // The pending favorites' stars then ask for their downloads, under Favorites (a star
+      // means downloaded).
+      const dispatched = await dispatchLibraryFavorites(favorites, {
+        turn: startupTurn,
+        current: () => isYtLibraryReadQueued(batch.get(), read),
+        star: (ids) => setFavorites(ids, true),
+        syncedStars: () => void downloadSyncedStars(),
+        pend: (pending) => setPendingFavorites(pending, true),
+        download: (songs) => downloadStarredSongs(songs),
+      });
+      if (!dispatched) return null;
       // Checked again with no wait before the link import starts: a refresh from here on
       // empties the playlist and ends that import.
       if (!isYtLibraryReadQueued(batch.get(), read)) return null;
@@ -267,22 +295,17 @@ const readBatch = async (): Promise<void> => {
   if (reading) return;
   if (nextYtLibraryRead(left) === undefined && ytLibraryDownloadsToQueue(left).length === 0) return;
   reading = true;
+  timingBackgroundChanged();
   try {
-    await prune();
-    // Filled before Wave stopped, their downloads not queued yet: once their import is done.
-    for (const read of ytLibraryDownloadsToQueue(batch.get())) {
-      await settlePlaylistImport(read.playlistId);
-      await queueDownloads(read);
-    }
-    for (;;) {
-      const next = nextYtLibraryRead(batch.get());
-      if (next === undefined) return;
-      const pausedBy = await fill(next);
-      if (pausedBy !== null) {
-        appLog("info", LOG_TAG, ytLibraryPauseLogLine(next, pausedBy));
-        return;
-      }
-    }
+    await resumeLibraryReads({
+      turn: startupTurn,
+      batch: batch.get,
+      prune,
+      settle: settlePlaylistImport,
+      download: queueDownloads,
+      fill,
+      paused: (read, reason) => appLog("info", LOG_TAG, ytLibraryPauseLogLine(read, reason)),
+    });
   } catch (error) {
     const why = error instanceof Error ? error.message : String(error);
     appLog("warn", LOG_TAG, `The YouTube Music import's batch stopped: ${why}`);

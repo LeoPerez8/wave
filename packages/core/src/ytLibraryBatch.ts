@@ -329,3 +329,23 @@ export const readYtLibraryBatch = (stored: string | null): YtLibraryBatch => {
     .filter((read): read is YtLibraryRead => read !== null);
   return { reads, lastToken: batch.length };
 };
+
+/** Per-song favorite preparation for a resumed background library import. */
+export function* ytLibraryFavoritesSteps<S extends YtSong>(
+  read: YtLibraryRead,
+  plan: Pick<LinkImportPlan<S>, "finds">,
+): Generator<void, YtLibraryFavorites<S>> {
+  const star: number[] = [];
+  const pending: PendingFavorite[] = [];
+  const download: S[] = [];
+  if (!read.favorites) return { star, pending, download };
+  for (const found of plan.finds) {
+    if (found.kind === "library") star.push(found.trackId);
+    else if (found.kind === "ytMusic") {
+      pending.push(pendingFavorite(found.song));
+      if (!read.download) download.push(found.song);
+    }
+    yield;
+  }
+  return { star, pending, download };
+}

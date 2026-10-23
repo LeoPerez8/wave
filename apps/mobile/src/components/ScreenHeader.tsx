@@ -1,5 +1,5 @@
 import { IconArrowLeft } from "@tabler/icons-react-native";
-import { router } from "expo-router";
+import { router } from "@/lib/timingRouter";
 import { Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 

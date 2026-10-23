@@ -240,6 +240,7 @@ export {
   RECAP_TOP_SONGS,
   RECAP_YEAR_MINIMUM_MS,
   availableRecaps,
+  createRecapAvailability,
   parseOpenedRecaps,
   parseRecapId,
   recap,
@@ -588,6 +589,7 @@ export type {
   LibraryQueryLimits,
   LibraryQueryOutcome,
   LibraryQueryResult,
+  LibraryQueryState,
   LibraryQueryStats,
   LibraryReads,
 } from "./libraryQueries.ts";
@@ -619,6 +621,7 @@ export {
   magicArtistKey,
   magicBatch,
   magicLibrarySongs,
+  magicLibraryMapperSteps,
   magicRadioArtists,
   magicSeedProfile,
   magicYtSong,
@@ -647,13 +650,20 @@ export { magicPickEnded } from "./magicQueue.ts";
 export type { MagicPickEnd } from "./magicQueue.ts";
 export { artistRanking } from "./moreFromArtist.ts";
 export type { ArtistRankingInput, ArtistRankingSong } from "./moreFromArtist.ts";
+export { ytPopularReadDue } from "./ytPopularRead.ts";
+export type { YtPopularReadContext } from "./ytPopularRead.ts";
 export { rankPopular } from "./popularSongs.ts";
+export { ytArtistOpening, ytArtistOpeningState } from "./ytArtistOpening.ts";
 export { artistPageItems } from "./artistPage.ts";
 export type { ArtistPageItem, ArtistPageShelf } from "./artistPage.ts";
 export type { SheetEvent, SheetPhase, SheetStep } from "./sheetLifecycle.ts";
 export {
   joinArtists,
   libraryFinder,
+  libraryFinderSteps,
+  libraryImportFinderSteps,
+  recordingMatches,
+  recordingMatchTitle,
   libraryMatcher,
   parseTrackId,
   ytSongArtist,
@@ -1056,7 +1066,11 @@ export type {
   YtArtistCountsContext,
   YtArtistCountsLibrary,
 } from "./ytArtist.ts";
-export { streamedArtistLink } from "./streamedArtist.ts";
+export {
+  streamedArtistLink,
+  resolveStreamedArtistLink,
+  STREAMED_ARTIST_WAIT_MS,
+} from "./streamedArtist.ts";
 export type {
   StreamedArtistContext,
   StreamedArtistLink,
@@ -1375,6 +1389,7 @@ export {
   discoverMixSongs,
   discoverMixesBuilt,
   discoverMixesDue,
+  localDay,
   parseDiscoverMixes,
   playedFinder,
   storedDiscoverMixes,
@@ -1610,7 +1625,9 @@ export {
   ARTIST_MIX_COUNT,
   artistMixSeedPool,
   artistMixSeeds,
+  artistMixSeedsSteps,
   artistMixSimilarSource,
+  artistMixSimilarSourceSteps,
 } from "./artistMixes.ts";
 export type { ArtistMixPools, PlayedSeedArtist } from "./artistMixes.ts";
 export {
@@ -1753,7 +1770,9 @@ export type {
 export {
   duplicateCheckDue,
   replacementDuplicateFix,
+  replacementDuplicateFixSteps,
   replacementDuplicateLines,
+  replacementDuplicateLinesSteps,
   replacementDuplicates,
   replacementsUnderway,
   storedDuplicateCheck,
@@ -1826,8 +1845,10 @@ export type { SeekSource, SongChangeCause } from "./songChangeCause.ts";
 export {
   TASTE_HALF_LIFE_MS,
   tasteLearned,
+  tasteLearnedSteps,
   tastePlaySignal,
   tasteProfile,
+  tasteProfileSteps,
   tasteWeight,
 } from "./tasteProfile.ts";
 export type { TasteHistory, TasteProfile, TasteSignal, TasteSignalKind } from "./tasteProfile.ts";
@@ -1842,6 +1863,7 @@ export type { HostNetworkUse, NetworkHost, NetworkUse, NetworkUseRun } from "./n
 export {
   MAGIC_QUEUE_PICKS,
   magicQueuePicks,
+  magicQueuePicksSteps,
   magicQueuePicksDue,
   parseMagicQueuePicks,
   refreshedMagicQueuePicks,
@@ -2002,5 +2024,47 @@ export type {
 export * from "./playlistRecommendationSession.ts";
 export { playingTrackIds } from "./playingIdentity.ts";
 export { createLongPressIntent } from "./longPressIntent.ts";
+export {
+  TIMING_BUDGETS,
+  lateFrame,
+  hitchLine,
+  missedFramesLine,
+  type TimingFrames,
+  timingDuration,
+  timingBudgetExceeded,
+  slowTapLine,
+  slowScreenLine,
+  speedSummaryLine,
+  type TimingKind,
+  type TimingMeasurements,
+  type TimingTap,
+  type TimingScreen,
+  type TimingWindow,
+} from "./timing.ts";
+
+export { SLOW_READ_BUDGET_MS, slowReadLine, slowReadsLine, type SlowRead } from "./slowRead.ts";
+export { lostTapLine } from "./lostTap.ts";
+export type { LostLinkTap, LostTapReason } from "./lostTap.ts";
+export { createArtistGraphBuild, type ArtistGraphCatalogEntry } from "./artistGraphBuild.ts";
+export { discoverMixesOfCatalogSteps } from "./catalogMixes.ts";
+export { mixKnownSongsSteps } from "./mixKnownSongs.ts";
+export { genreMixSeedsSteps } from "./genreMixes.ts";
+export { mapSteps, sortSteps } from "./buildSteps.ts";
+export { libraryMixProfilesSteps } from "./genreAffinity.ts";
+export { rankPlaysSteps } from "./stats.ts";
+
+export * from "./ytAlbumOpening.ts";
+export { ytArtistPageOpening } from "./ytArtistPageOpening.ts";
+
+export { reconcileScanSteps } from "./scanReconcile.ts";
+export { replacementDuplicatesSteps } from "./replacementDuplicates.ts";
+export { planLinkImportSteps, finishPlaylistImportSteps } from "./playlistImport.ts";
+
+export { playlistImportCompletionSteps } from "./playlistImport.ts";
+
+export { ytLibraryFavoritesSteps } from "./ytLibraryBatch.ts";
+
+export { playlistRecommendationsSteps } from "./playlistRecommendations.ts";
+
 export { createMenuTouchOwnership, playerTouchAllowed } from "./menuTouchOwnership.ts";
 export type { MenuTouchOwnership } from "./menuTouchOwnership.ts";

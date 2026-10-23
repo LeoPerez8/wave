@@ -4,7 +4,7 @@ import {
   IconPlaylistAdd,
   IconRefreshAlert,
 } from "@tabler/icons-react-native";
-import { nowPlayingDownload, parseTrackId, type PlaylistSong } from "@wave/core";
+import { nowPlayingDownload } from "@wave/core";
 import { View } from "react-native";
 import Svg, { Circle } from "react-native-svg";
 
@@ -12,18 +12,16 @@ import { CELL } from "@/catalog/grid";
 import { openAddToPlaylist } from "@/library/PlaylistSheets";
 import { songHasFile } from "@/library/LibraryStore";
 import { Press } from "@/motion/Press";
-import { showToast } from "@/overlay/toast";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 import { useThemeColor } from "@/theme/useThemeColor";
-import { currentLibraryFinder, useLoadedLibraryFinder } from "@/ytmusic/libraryFinder";
-import {
-  downloadMissingSongs,
-  downloadYtSong,
-  useMissingSongDownloadStatus,
-  useYtDownloadStatus,
-} from "@/ytmusic/YtDownloads";
+import { useMissingSongDownloadStatus, useYtDownloadStatus } from "@/ytmusic/YtDownloads";
 
-import { useNowPlayingShown } from "./sheet";
+import {
+  nowPlayingSongActions,
+  songActionFailed,
+  usePlayingSongAnswer,
+  usePlayingSongTarget,
+} from "./playingSong";
 
 const BOX = { width: CELL * 6, height: CELL * 6 } as const;
 const ICON = 24;
@@ -43,20 +41,10 @@ export function AddToPlaylistButton({
   title: string;
 }) {
   const secondary = useThemeColor("secondary");
-  const ref = trackId === null ? null : parseTrackId(trackId);
-  const songs = (): Promise<readonly PlaylistSong[]> => {
-    if (ref?.kind === "library") return Promise.resolve([{ source: "library", trackId: ref.id }]);
-    if (ytSong === null) return Promise.resolve([]);
-    return currentLibraryFinder().then((find) => {
-      const track = find(ytSong);
-      return [
-        track === null
-          ? { source: "stream", song: ytSong }
-          : { source: "library", trackId: track.id },
-      ];
-    });
-  };
-  const disabled = ref?.kind !== "library" && ytSong === null;
+  const target = usePlayingSongTarget(trackId, ytSong);
+  const disabled = target === null;
+  const songs = () =>
+    target === null ? Promise.resolve([]) : nowPlayingSongActions.playlist(target);
   return (
     <Press
       accessibilityRole="button"
@@ -127,20 +115,20 @@ export function DownloadButton({
 }) {
   const secondary = useThemeColor("secondary");
   const accent = useThemeColor("accent");
-  const shown = useNowPlayingShown();
-  // Null until the Library is first read: no button that would only change.
-  const find = useLoadedLibraryFinder(shown);
-  // A Library song in the queue plays its file.
-  const librarySong = trackId !== null && parseTrackId(trackId)?.kind === "library";
-  const track = ytSong === null || find === null ? null : find(ytSong);
+  const target = usePlayingSongTarget(trackId, ytSong);
+  const answer = usePlayingSongAnswer(target);
+  const track = answer?.track ?? null;
   const missingId = track !== null && !songHasFile(track) ? track.id : null;
   const ytStatus = useYtDownloadStatus(ytSong?.videoId ?? "");
   const missingStatus = useMissingSongDownloadStatus(missingId);
-  const hasFile = librarySong || (track !== null && missingId === null);
-  const state = nowPlayingDownload(missingId === null ? ytStatus : missingStatus, { hasFile });
-  if (!librarySong && (ytSong === null || find === null)) return null;
-  if (state.kind === "downloaded") return <DownloadedButton color={accent} />;
-  if (ytSong === null) return null;
+  const state = nowPlayingDownload(missingId === null ? ytStatus : missingStatus, {
+    hasFile: track !== null && missingId === null,
+  });
+  if (target === null) return null;
+  const download = (): void => {
+    void nowPlayingSongActions.download(target).catch(songActionFailed);
+  };
+  if (state.kind === "downloaded") return <DownloadedButton color={accent} onPress={download} />;
 
   if (state.kind === "waiting" || state.kind === "progress") {
     const percent = state.kind === "progress" ? Math.round(state.fraction * 100) : null;
@@ -162,10 +150,6 @@ export function DownloadButton({
     );
   }
 
-  const download = (): void => {
-    if (missingId === null) downloadYtSong(ytSong);
-    else downloadMissingSongs([missingId]);
-  };
   const failed = state.kind === "failed";
   const Icon = failed ? IconRefreshAlert : IconDownload;
   return (
@@ -185,12 +169,12 @@ export function DownloadButton({
 }
 
 /** Download, tinted, for a song this phone has the file of: a tap only says so. */
-function DownloadedButton({ color }: { color: string }) {
+function DownloadedButton({ color, onPress }: { color: string; onPress: () => void }) {
   return (
     <Press
       accessibilityRole="button"
       accessibilityLabel="Downloaded"
-      onPress={() => void showToast("Downloaded")}
+      onPress={onPress}
       haptic="selection"
       depth={0.1}
       className="items-center justify-center"

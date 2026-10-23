@@ -4,7 +4,7 @@
  * real SQLite (`testDatabase.ts`).
  */
 import { artistAlbums, artistArtwork, type ArtistAlbumLink } from "@wave/core";
-import { eq, inArray, or, sql } from "drizzle-orm";
+import { eq, inArray, or, sql, type SQL } from "drizzle-orm";
 
 import type { ArtistDetail, ArtistRow } from "../LibraryStore.ts";
 import { selectAlbums } from "./albums.ts";
@@ -26,16 +26,17 @@ export interface ArtistsQuery {
  * names, and each album artist its album's credit names (so Watch the Throne
  * counts for Kanye West as well). A song shows once per artist.
  */
-const creditedSongs = (scope: TrackScope = "library") =>
-  scope === "files"
-    ? sql`
-  SELECT track_artists.track_id, track_artists.artist_id FROM track_artists
-  JOIN tracks ON tracks.id = track_artists.track_id WHERE tracks.path IS NOT NULL
-  UNION
-  SELECT tracks.id, album_artists.artist_id
-  FROM tracks JOIN album_artists ON album_artists.album_id = tracks.album_id
-  WHERE tracks.path IS NOT NULL`
-    : CREDITED_SONGS;
+const creditedSongs = (scope: TrackScope = "library", only?: SQL) => {
+  const files = scope === "files" ? sql`AND tracks.path IS NOT NULL` : sql``;
+  return sql`
+    SELECT track_artists.track_id, track_artists.artist_id FROM track_artists
+    ${scope === "files" ? sql`JOIN tracks ON tracks.id = track_artists.track_id` : sql``}
+    WHERE ${only === undefined ? sql`1` : sql`track_artists.artist_id IN (${only})`} ${files}
+    UNION
+    SELECT tracks.id, album_artists.artist_id FROM album_artists
+    JOIN tracks ON tracks.album_id = album_artists.album_id
+    WHERE ${only === undefined ? sql`1` : sql`album_artists.artist_id IN (${only})`} ${files}`;
+};
 
 /** Every song an artist is credited on, missing songs included (`creditedSongs`). */
 export const CREDITED_SONGS = sql`
@@ -52,26 +53,47 @@ export const CREDITED_SONGS = sql`
 export const selectArtists = (
   db: LibraryDatabase,
   { ids, page, scope = "library" }: ArtistsQuery,
-): ArtistRow[] =>
-  db.all<ArtistRow>(sql`
-    WITH links AS (${creditedSongs(scope)})
+): ArtistRow[] => {
+  if (ids?.length === 0) return [];
+  // One JSON parameter, however many artists: the credit UNION names the set
+  // twice, and a placeholder per id would pass SQLite's variable limit.
+  const requested =
+    ids === undefined ? undefined : sql`SELECT value FROM json_each(${JSON.stringify(ids)})`;
+  // Membership is cheaper than counting. OFFSET still walks preceding eligible
+  // artists (and file checks may visit missing credits), but only this page's
+  // credits enter the UNION/count and only its artwork is read.
+  const selected =
+    page === undefined
+      ? sql``
+      : sql`
+    selected AS MATERIALIZED (
+      SELECT artists.* FROM artists
+      WHERE ${requested === undefined ? sql`1` : sql`artists.id IN (${requested})`}
+        AND (EXISTS (
+          SELECT 1 FROM track_artists
+          ${scope === "files" ? sql`JOIN tracks ON tracks.id = track_artists.track_id` : sql``}
+          WHERE track_artists.artist_id = artists.id
+          ${scope === "files" ? sql`AND tracks.path IS NOT NULL` : sql``}
+        ) OR EXISTS (
+          SELECT 1 FROM album_artists JOIN tracks ON tracks.album_id = album_artists.album_id
+          WHERE album_artists.artist_id = artists.id
+          ${scope === "files" ? sql`AND tracks.path IS NOT NULL` : sql``}
+        ))
+      ORDER BY artists.sort, artists.id LIMIT ${page.limit} OFFSET ${page.offset}
+    ),`;
+  const only = page === undefined ? requested : sql`SELECT id FROM selected`;
+  return db.all<ArtistRow>(sql`
+    WITH ${selected} links AS (${creditedSongs(scope, only)})
     SELECT artists.id AS "id", artists.name AS "name", artists.sort AS "sort",
       (SELECT count(*) FROM albums WHERE albums.album_artist_id = artists.id) AS "albumCount",
       count(links.track_id) AS "trackCount",
       artwork.thumb_path AS "thumbPath", artwork.path AS "artworkPath"
-    FROM artists JOIN links ON links.artist_id = artists.id
+    FROM ${page === undefined ? sql`artists` : sql`selected AS artists`}
+    JOIN links ON links.artist_id = artists.id
     LEFT JOIN artwork ON artwork.hash = artists.artwork_hash
-    ${
-      ids === undefined
-        ? sql``
-        : sql`WHERE artists.id IN (${sql.join(
-            ids.map((id) => sql`${id}`),
-            sql`, `,
-          )})`
-    }
     GROUP BY artists.id
-    ORDER BY artists.sort, artists.id
-    ${page === undefined ? sql`` : sql`LIMIT ${page.limit} OFFSET ${page.offset}`}`);
+    ORDER BY artists.sort, artists.id`);
+};
 
 /**
  * Re-picks every artist's image (Core's `artistArtwork`) from the albums
@@ -199,3 +221,16 @@ export const selectArtistDetail = (
     songs,
   };
 };
+
+/** Small keyset pages for an explicit artist-link tap; no song/album list decoded. */
+export const selectArtistNamesForLink = (
+  db: LibraryDatabase,
+  after: { readonly sort: string; readonly id: number } | null,
+): { id: number; name: string; sort: string }[] =>
+  db.all(sql`
+  SELECT id, name, sort FROM artists
+  WHERE ${after === null ? sql`1` : sql`(sort, id) > (${after.sort}, ${after.id})`}
+  AND (EXISTS (SELECT 1 FROM track_artists WHERE artist_id = artists.id)
+    OR EXISTS (SELECT 1 FROM album_artists JOIN tracks ON tracks.album_id = album_artists.album_id
+      WHERE album_artists.artist_id = artists.id))
+  ORDER BY sort, id LIMIT 128`);
