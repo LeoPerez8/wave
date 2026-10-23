@@ -1,46 +1,36 @@
 import { useScreenContent } from "@/lib/screenTiming";
-import {
-  LegendList,
-  type LegendListRef,
-  type OnViewableItemsChangedInfo,
-} from "@legendapp/list/react-native";
+import { LegendList, type LegendListRef } from "@legendapp/list/react-native";
 import { IconMusic } from "@tabler/icons-react-native";
-import { hasFindQuery, librarySongSort, PAGED_ROWS_LIMITS, showsExplicitBadge } from "@wave/core";
+import { hasFindQuery, librarySongSort } from "@wave/core";
 import { useScrollToTop } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import { View } from "react-native";
 
-import { Artwork } from "@/catalog/Artwork";
 import { AlphabetSpine } from "@/catalog/AlphabetSpine";
-import { songRowLine } from "@/catalog/cards/SongCard";
-import { CELL, grid } from "@/catalog/grid";
-import type { TrackSummary } from "@/catalog/TrackRow";
+import { grid } from "@/catalog/grid";
 import { useChromeInset } from "@/chrome/chrome";
 import { EmptyState } from "@/components/EmptyState";
 import { ScanProgressBanner } from "@/components/ScanProgressBanner";
 import { TextButton } from "@/components/TextButton";
-import { fileUri } from "@/lib/fileUri";
 import { useListScrollable } from "@/motion/heldTouch";
 import { perfMark, useRenderCount } from "@/perf/perf";
 import { playTrackIds } from "@/playback/actions";
-import { openTrackActionsById } from "@/playback/ActionsMenu";
 import type { ActionItems } from "@/playback/actionTargets";
 import { useCurrentPlayingIds } from "@/playback/hooks";
-import { selectableRow } from "@/selection/selectableRow";
 import { useListSelection } from "@/selection/useListSelection";
 
 import { useFavoriteIds } from "./favorites";
 import { FIND_FIELD_HEIGHT, FindHead, useFindInLegendList } from "./FindInPlaylist";
 import { folderPhrase } from "./folderPhrase";
 import { useScanRoots, useScanState } from "./hooks";
-import type { SongOrder, SongRow, SongSummary } from "./LibraryStore";
+import type { SongOrder, SongRow } from "./LibraryStore";
 import { LibraryReadFeedback, LibraryReadNote } from "./LibraryReadFeedback";
 import { songOrderQueryKey, usePagedSongs, useSongFindTexts, useSongOrder } from "./pagedSongs";
+import { pagedSongRow, songIdKey, useRowsNearScreen } from "./pagedSongRows";
 import { promptForMusicFolder } from "./promptForMusicFolder";
 import { songsWithIds } from "./sectionSongs";
 import { SongSortButton } from "./SongSortButton";
 import { libraryQueryState } from "./sharedQueries";
-import { SwipeSummaryRow } from "./SwipeTrackRow";
 import { useSongSort } from "./songSort";
 import { ListIntroLayout, songCount } from "./TrackList";
 import { useSpineEntries } from "./useSpine";
@@ -101,38 +91,7 @@ export function SongsList() {
   );
 }
 
-/** A row of the Songs list as `TrackRow` draws it. */
-const toTrackSummary = (song: SongSummary): TrackSummary => ({
-  id: String(song.id),
-  title: song.title,
-  artist: song.artist,
-  durationMs: song.durationMs,
-  artworkUri: fileUri(song.thumbPath),
-  // A missing song: dimmed, as a YT Music song not downloaded is.
-  missingTrackId: song.hasFile ? undefined : song.id,
-  explicit: showsExplicitBadge(song.explicit),
-});
-
-/** A row whose page is still being read: its thumbnail's place, and nothing to press. */
-function LoadingRow() {
-  return (
-    <View
-      accessible
-      accessibilityLabel="Loading song"
-      className="flex-row items-center"
-      style={{ height: grid.row }}
-    >
-      <Artwork uri={undefined} size={CELL * 5} radius={CELL / 2} />
-    </View>
-  );
-}
-
-const keyExtractor = (id: number): string => String(id);
-
 const NO_ROWS: ReadonlyMap<number, SongRow> = new Map();
-
-/** Rows read past the screen each way while selecting, so checking one acts at once. */
-const SELECTING_AHEAD = PAGED_ROWS_LIMITS.pageSize;
 
 /**
  * The Songs list over [order]: rows read a page at a time, the spine from the
@@ -170,7 +129,6 @@ function PagedSongList({
   // near the screen, read as they're needed and dropped when selecting ends.
   const [full, setFull] = useState(NO_ROWS);
   const asked = useRef(new Set<number>());
-  const shown = useRef({ start: 0, end: PAGED_ROWS_LIMITS.pageSize });
   const want = useCallback((ids: readonly number[]) => {
     const wanted = ids.filter((id) => !asked.current.has(id));
     if (wanted.length === 0) return;
@@ -202,15 +160,13 @@ function PagedSongList({
     },
     [full],
   );
-  const listSelection = useListSelection({ items: order.ids, keyOf: keyExtractor, target });
+  const listSelection = useListSelection({ items: order.ids, keyOf: songIdKey, target });
   const { selection } = listSelection;
-  const nearScreen = useCallback(
-    () =>
-      shownIds.slice(
-        Math.max(0, shown.current.start - SELECTING_AHEAD),
-        shown.current.end + SELECTING_AHEAD,
-      ),
-    [shownIds],
+  const { nearScreen, onViewableItemsChanged } = useRowsNearScreen(
+    shownIds,
+    pages,
+    selection,
+    want,
   );
   useEffect(() => {
     if (selection === null) {
@@ -221,17 +177,6 @@ function PagedSongList({
     want([...selection.keys].map(Number));
     want(nearScreen());
   }, [selection, want, nearScreen]);
-
-  const onViewableItemsChanged = useCallback(
-    ({ startBuffered, endBuffered }: OnViewableItemsChangedInfo<number>) => {
-      const start = Math.max(0, startBuffered);
-      const end = Math.max(start, endBuffered + 1);
-      shown.current = { start, end };
-      pages.view(start, end);
-      if (selection !== null) want(nearScreen());
-    },
-    [pages, selection, want, nearScreen],
-  );
 
   // The response in the release runner's push-tracklist scenario: the first rows on screen.
   const first = order.ids[0];
@@ -253,27 +198,14 @@ function PagedSongList({
   );
 
   const renderItem = useCallback(
-    ({ item, index }: { item: number; index: number }) => {
-      const song = pages.rowOf(item);
-      if (song === undefined) return <LoadingRow />;
-      return (
-        <SwipeSummaryRow
-          summary={song}
-          track={{ ...toTrackSummary(song), artist: songRowLine(song.artist) }}
-          state={currentIds.has(String(item)) ? "playing" : undefined}
-          favorite={favorites.has(item)}
-          leading="artwork"
-          playDisc
-          {...selectableRow(
-            item,
-            listSelection,
-            // A found song plays the whole list from its own place in it.
-            () => void playTrackIds(order.ids, missing, placeOf(index), SONGS_CONTEXT),
-            (options) => openTrackActionsById(item, options),
-          )}
-        />
-      );
-    },
+    ({ item, index }: { item: number; index: number }) =>
+      pagedSongRow(item, pages.rowOf(item), {
+        currentIds,
+        favorites,
+        selection: listSelection,
+        // A found song plays the whole list from its own place in it.
+        play: () => void playTrackIds(order.ids, missing, placeOf(index), SONGS_CONTEXT),
+      }),
     // `version` re-renders the rows as their pages arrive.
     // oxlint-disable-next-line react-hooks/exhaustive-deps
     [pages, version, currentIds, favorites, listSelection, order, missing, placeOf],
@@ -303,7 +235,7 @@ function PagedSongList({
         ref={list}
         className="flex-1"
         data={shownIds}
-        keyExtractor={keyExtractor}
+        keyExtractor={songIdKey}
         renderItem={renderItem}
         extraData={rowState}
         estimatedItemSize={grid.row}

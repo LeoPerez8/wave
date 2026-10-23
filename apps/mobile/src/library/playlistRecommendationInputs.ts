@@ -2,12 +2,15 @@
 import {
   mapSteps,
   readPlaylistEntrySong,
-  showsExplicitBadge,
   type PlaylistRecommendationTrack,
   type LibraryChange,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
 import type { LibraryStore, SongRow } from "./LibraryStore.ts";
+import {
+  libraryRecommendationTrack,
+  storedRecommendationTrack,
+} from "./playlistRecommendationTracks.ts";
 import { readMixCatalog } from "../home/readMixCatalog.ts";
 import { sharedRead } from "../lib/sharedRead.ts";
 import { runSteps } from "../lib/stepped.ts";
@@ -76,23 +79,12 @@ export const sharePlaylistRecommendationInputs = (
         song: SongRow & { readonly genres?: readonly string[] },
       ): PlaylistRecommendationTrack => {
         const flag = byFlags.get(song.id);
-        return {
+        return libraryRecommendationTrack(song, names, {
           favorite: flag?.favorite === 1,
           downloaded: flag?.videoId != null && song.path !== null,
-          id: String(song.id),
-          source: "library",
           videoId: flag?.videoId ?? "",
-          title: song.title,
-          artists: song.artistIds.flatMap((id) => names.get(id) ?? []),
-          album: song.album,
-          albumId: null,
-          durationMs: song.durationMs,
-          artworkUrl: song.thumbPath === null ? null : `file://${song.thumbPath}`,
-          explicit: showsExplicitBadge(song.explicit),
-          genre: song.genre,
-          ...(song.genres === undefined ? {} : { genres: song.genres }),
-          available: song.path !== null,
-        };
+          genres: song.genres,
+        });
       };
       const library = yield* runSteps(mapSteps(librarySongs, local), between);
       const byId = new Map<number, PlaylistRecommendationTrack>();
@@ -150,15 +142,7 @@ export const sharePlaylistRecommendationInputs = (
             }
             const entry = readPlaylistEntrySong(row.song);
             if (entry === null) return;
-            playlist.push({
-              ...entry.song,
-              albumId: "albumId" in entry.song ? entry.song.albumId : null,
-              explicit: "explicit" in entry.song ? entry.song.explicit : false,
-              videoId: entry.source === "stream" ? entry.song.videoId : "",
-              id: entry.source === "stream" ? `yt:${entry.song.videoId}` : `entry:${row.id}`,
-              source: "stream",
-              available: entry.source === "stream",
-            });
+            playlist.push(storedRecommendationTrack(entry, row.id));
           }),
           between,
         );

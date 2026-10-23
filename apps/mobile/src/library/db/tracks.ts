@@ -128,6 +128,15 @@ export interface SongGenres {
   readonly genres: readonly string[];
 }
 
+/** [row]'s genre values, or nothing when its stored values can't be read (`readStoredGenres`). */
+export const songGenresOf = (row: {
+  readonly id: number;
+  readonly genres: string | null;
+}): SongGenres[] => {
+  const genres = readStoredGenres(row.genres);
+  return genres.length === 0 ? [] : [{ id: row.id, genres }];
+};
+
 /**
  * The songs whose genre tag has several values, with every value (the first
  * is the genre the Library files them under): what Genre mixes count. A
@@ -140,10 +149,7 @@ export const selectSongGenres = (db: LibraryDatabase): SongGenres[] =>
     .where(isNotNull(schema.tracks.genres))
     .orderBy(asc(schema.tracks.id))
     .all()
-    .flatMap((row) => {
-      const genres = readStoredGenres(row.genres);
-      return genres.length === 0 ? [] : [{ id: row.id, genres }];
-    });
+    .flatMap(songGenresOf);
 
 /** The order of song lists (Songs, an artist's or a genre's songs): by title, then artist. */
 export const BY_TITLE = [

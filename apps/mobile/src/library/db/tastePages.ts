@@ -1,35 +1,37 @@
 /** Bounded, historical taste inputs. Raw cursors advance even when no row decodes. */
 import type { TasteHistory } from "@wave/core";
-import { sql, type SQL } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import type { LibraryDatabase } from "./database.ts";
-import { GRAPH_PAGE_SIZE, type GraphPage, type GraphPlayCursor } from "./artistGraph.ts";
+import {
+  GRAPH_PAGE_SIZE,
+  playEventsPage,
+  type GraphPage,
+  type GraphPlayCursor,
+} from "./artistGraph.ts";
 
 export const tastePlaysPage = (
   db: LibraryDatabase,
   after: GraphPlayCursor,
 ): GraphPage<TasteHistory["plays"][number], GraphPlayCursor> => {
-  const read = (where: SQL, limit: number) =>
-    db.all<{
-      id: number;
-      trackId: number;
-      present: number | null;
-      startedAt: number;
-      listenedMs: number;
-      endReason: TasteHistory["plays"][number]["endReason"];
-    }>(sql`SELECT pe.id, pe.track_id AS trackId, t.id AS present,
-      pe.started_at AS startedAt, pe.listened_ms AS listenedMs, pe.end_reason AS endReason
-    FROM play_events pe INDEXED BY play_events_started_at_idx
-    LEFT JOIN tracks t ON t.id = pe.track_id
-    WHERE ${where} ORDER BY pe.started_at, pe.id LIMIT ${limit}`);
-  const rows = read(sql`pe.started_at = ${after[0]} AND pe.id > ${after[1]}`, GRAPH_PAGE_SIZE);
-  if (rows.length < GRAPH_PAGE_SIZE)
-    rows.push(...read(sql`pe.started_at > ${after[0]}`, GRAPH_PAGE_SIZE - rows.length));
-  const last = rows.at(-1);
+  const { rows, next } = playEventsPage<{
+    id: number;
+    trackId: number;
+    present: number | null;
+    startedAt: number;
+    listenedMs: number;
+    endReason: TasteHistory["plays"][number]["endReason"];
+  }>(
+    db,
+    after,
+    sql`pe.id, pe.track_id AS trackId, t.id AS present,
+      pe.started_at AS startedAt, pe.listened_ms AS listenedMs, pe.end_reason AS endReason`,
+    sql`LEFT JOIN tracks t ON t.id = pe.track_id`,
+  );
   return {
     rows: rows.flatMap(({ present, id: _id, trackId, ...play }) =>
       present === null ? [] : [{ ...play, trackId: String(trackId) }],
     ),
-    next: last === undefined ? null : [last.startedAt, last.id],
+    next,
   };
 };
 

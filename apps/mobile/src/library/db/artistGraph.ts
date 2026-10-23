@@ -11,37 +11,54 @@ export interface GraphPage<A, C> {
   readonly next: C | null;
 }
 export type GraphPlayCursor = readonly [number, number];
-export const graphPlayPage = (
+
+/**
+ * The plays after [after] in (started_at, id) order, at most a page: [columns] read from
+ * `play_events pe` and what [joins] adds, each row with its id and start for the next cursor.
+ */
+export const playEventsPage = <R extends { readonly id: number; readonly startedAt: number }>(
   db: LibraryDatabase,
   after: GraphPlayCursor,
-): GraphPage<ArtistGraphPlay, GraphPlayCursor> => {
+  columns: SQL,
+  joins: SQL,
+): GraphPage<R, GraphPlayCursor> => {
   const read = (where: SQL, limit: number) =>
-    db.all<{
-      id: number;
-      startedAt: number;
-      listenedMs: number;
-      endReason: ArtistGraphPlay["endReason"];
-      artists: string | null;
-    }>(sql`
-    SELECT pe.id, pe.started_at AS startedAt, pe.listened_ms AS listenedMs, pe.end_reason AS endReason,
-      CASE WHEN t.id IS NOT NULL AND a.id IS NOT NULL AND al.id IS NOT NULL THEN (
-        SELECT json_group_array(name) FROM (
-          SELECT ar.name FROM track_artists ta JOIN artists ar ON ar.id = ta.artist_id
-          WHERE ta.track_id = t.id ORDER BY ta.position
-        )
-      ) END AS artists
-    FROM play_events pe INDEXED BY play_events_started_at_idx
-      LEFT JOIN tracks t ON t.id = pe.track_id
-      LEFT JOIN artists a ON a.id = t.artist_id
-      LEFT JOIN albums al ON al.id = t.album_id
-    WHERE ${where}
-    ORDER BY pe.started_at, pe.id LIMIT ${limit}`);
+    db.all<R>(sql`SELECT ${columns}
+    FROM play_events pe INDEXED BY play_events_started_at_idx ${joins}
+    WHERE ${where} ORDER BY pe.started_at, pe.id LIMIT ${limit}`);
   // A row-value predicate only seeks started_at in SQLite, rescanning equal-time prefixes.
   // Equality on the first key makes the implicit rowid a real second seek key.
   const rows = read(sql`pe.started_at = ${after[0]} AND pe.id > ${after[1]}`, GRAPH_PAGE_SIZE);
   if (rows.length < GRAPH_PAGE_SIZE)
     rows.push(...read(sql`pe.started_at > ${after[0]}`, GRAPH_PAGE_SIZE - rows.length));
   const last = rows.at(-1);
+  return { rows, next: last === undefined ? null : [last.startedAt, last.id] };
+};
+
+export const graphPlayPage = (
+  db: LibraryDatabase,
+  after: GraphPlayCursor,
+): GraphPage<ArtistGraphPlay, GraphPlayCursor> => {
+  const { rows, next } = playEventsPage<{
+    id: number;
+    startedAt: number;
+    listenedMs: number;
+    endReason: ArtistGraphPlay["endReason"];
+    artists: string | null;
+  }>(
+    db,
+    after,
+    sql`pe.id, pe.started_at AS startedAt, pe.listened_ms AS listenedMs, pe.end_reason AS endReason,
+      CASE WHEN t.id IS NOT NULL AND a.id IS NOT NULL AND al.id IS NOT NULL THEN (
+        SELECT json_group_array(name) FROM (
+          SELECT ar.name FROM track_artists ta JOIN artists ar ON ar.id = ta.artist_id
+          WHERE ta.track_id = t.id ORDER BY ta.position
+        )
+      ) END AS artists`,
+    sql`LEFT JOIN tracks t ON t.id = pe.track_id
+      LEFT JOIN artists a ON a.id = t.artist_id
+      LEFT JOIN albums al ON al.id = t.album_id`,
+  );
   return {
     rows: rows.flatMap((row) =>
       row.artists === null
@@ -55,7 +72,7 @@ export const graphPlayPage = (
             },
           ],
     ),
-    next: last === undefined ? null : [last.startedAt, last.id],
+    next,
   };
 };
 
