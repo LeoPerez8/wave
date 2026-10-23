@@ -9,6 +9,46 @@ import { onLibraryChange, publishLibraryChange } from "./libraryChanges.ts";
 const tick = async () => {
   for (let i = 0; i < 20; i++) await Promise.resolve();
 };
+
+test("background writes let a running recommendation read finish, then coalesce into one catch-up", async () => {
+  const release = Promise.withResolvers<void>();
+  let signal: AbortSignal | undefined;
+  let reads = 0;
+  const session = playlistRecommendationSession({
+    newId: () => "id",
+    read: async (current) => {
+      if (++reads === 1) {
+        signal = current;
+        await release.promise;
+      }
+      current?.throwIfAborted();
+      return { playlist: [], sources: { library: [], catalog: [], graph: null, now: 0 } };
+    },
+    dismiss: async () => {},
+  });
+  const visit = followPlaylistRecommendations(session, {
+    playlistId: 7,
+    sight: { visible: () => true, subscribe: () => () => {} },
+    start: async () => {},
+    subscribe: onLibraryChange,
+    wait: async () => {},
+  });
+  try {
+    await tick();
+    assert.ok(signal);
+    for (let i = 0; i < 20; i++) publishLibraryChange({ kind: "tracks", burst: true });
+    assert.equal(signal.aborted, false, "bursts must not restart the recommendation deadline");
+    release.resolve();
+    await tick();
+    await tick();
+    assert.equal(reads, 2, "one completed read and one catch-up after all writes");
+    assert.equal(session.get().loading, false);
+    assert.equal(session.get().error, null);
+  } finally {
+    release.resolve();
+    visit.dispose();
+  }
+});
 const setup = () => {
   let visible = true,
     settled = false;

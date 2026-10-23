@@ -1,7 +1,9 @@
 package expo.modules.wavenative.log
 
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.nio.file.Files
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -46,5 +48,20 @@ class AppLogFileTest {
     log.exportTo(export, "Wave 0.5.3 (build 503)\n\n")
 
     assertEquals("Wave 0.5.3 (build 503)\n\n2026-10-16T14:03:22.415Z W console: hello\n", export.readText())
+  }
+
+  @Test
+  fun savedAndSharedCopiesHaveIdenticalUtf8Bytes() {
+    val header = "Wave 0.22.1 (build 2201)\nAndroid 15 (API 35)\nPhone: samsung SM-S926B\n\n"
+    val entry = "2026-10-23T14:03:22.415Z W console: Beyoncé 🎵\n  at play (index.bundle:1:2)\n"
+    log.append(entry)
+    val shared = File(folder, "export/wave-log-2026-10-23-0.22.1.txt")
+    val saved = ByteArrayOutputStream()
+
+    log.exportTo(shared, header)
+    log.exportTo(saved, header)
+
+    assertArrayEquals((header + entry).toByteArray(Charsets.UTF_8), saved.toByteArray())
+    assertArrayEquals(shared.readBytes(), saved.toByteArray())
   }
 }

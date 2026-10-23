@@ -25,18 +25,6 @@ import type { HomePlays, HomeSections } from "../library/db/playHistory.ts";
 
 const root = fileURLToPath(new URL("../../../../", import.meta.url));
 
-test("Home keeps a Recap placeholder until availability answers, then distinguishes a card from no card", async () => {
-  const { recapAnnouncement } = await import("../stats/recapAnnouncement.ts");
-  assert.equal(recapAnnouncement(undefined, []), undefined);
-  assert.equal(recapAnnouncement([], []), null);
-  assert.deepEqual(recapAnnouncement([{ kind: "month", year: 2026, month: 9 }], []), {
-    kind: "month",
-    year: 2026,
-    month: 9,
-  });
-  assert.equal(recapAnnouncement([{ kind: "month", year: 2026, month: 9 }], ["2026-09"]), null);
-});
-
 test("Home's shared queries publish each real slice without waiting for its neighbours", async () => {
   const { homeReads } = await import("../library/homeReads.ts");
   const fixture = await createFastAgainFixture();

@@ -13,8 +13,15 @@ import {
   type RecapAvailability,
 } from "./recapAvailability";
 import { Stats } from "./Stats";
+import { knownRecapSetting } from "./knownRecaps";
 
 let shared: Promise<RecapAvailability> | undefined;
+let retained: RecapAvailability | undefined;
+
+/** The latest answer, including the previous session's; never starts a history read. */
+export const knownRecaps = (): readonly RecapPeriod[] | undefined =>
+  retained?.get() ?? knownRecapSetting.get();
+
 const getRecapAvailability = (): Promise<RecapAvailability> => {
   shared ??= appRuntime
     .runPromise(
@@ -23,6 +30,7 @@ const getRecapAvailability = (): Promise<RecapAvailability> => {
         Effect.sync(() =>
           shareRecapAvailability({
             version: stats.recapHistoryVersion,
+            retained: knownRecapSetting,
             read: (now, signal) =>
               appRuntime.runPromise(stats.recaps(now, freeTurnEffect), { signal }),
             schedule: (ms, run) => {
@@ -33,6 +41,10 @@ const getRecapAvailability = (): Promise<RecapAvailability> => {
         ),
       ),
     )
+    .then((cache) => {
+      retained = cache;
+      return cache;
+    })
     .catch((error: unknown) => {
       shared = undefined;
       throw error;
@@ -41,10 +53,11 @@ const getRecapAvailability = (): Promise<RecapAvailability> => {
 };
 
 /** Home and the Recap list share one answer; sight, sheet coverage and settlement gate refreshes. */
-export const useRecapAvailability = (): readonly RecapPeriod[] | undefined => {
+export const useRecapAvailability = (enabled = true): readonly RecapPeriod[] | undefined => {
   const sight = useScreenSight();
-  const [value, setValue] = useState<readonly RecapPeriod[]>();
+  const [value, setValue] = useState(knownRecaps);
   useEffect(() => {
+    if (!enabled) return;
     let current = true;
     let stop: (() => void) | undefined;
     getRecapAvailability()
@@ -74,6 +87,6 @@ export const useRecapAvailability = (): readonly RecapPeriod[] | undefined => {
       current = false;
       stop?.();
     };
-  }, [sight]);
+  }, [sight, enabled]);
   return value;
 };

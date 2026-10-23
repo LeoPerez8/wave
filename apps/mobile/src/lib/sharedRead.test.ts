@@ -10,6 +10,49 @@ import { SHARED_READ_ATTEMPTS, sharedRead } from "./sharedRead.ts";
 class Store extends Context.Service<Store, { readonly value: number }>()("test/Store") {}
 
 describe("A shared read", () => {
+  test("a stalled recommendation source times out for all waiters, cancels paging, and can be retried", async (t) => {
+    t.mock.timers.enable({ apis: ["setTimeout"] });
+    let blocked = true;
+    let turns = 0;
+    const shared = sharedRead(
+      Effect.suspend(() =>
+        blocked
+          ? Effect.callback<number>(() => {
+              turns++;
+              return Effect.sync(() => {
+                turns--;
+              });
+            })
+          : Effect.succeed(42),
+      ),
+    );
+    const controllers = [new AbortController(), new AbortController()];
+    const outcomes: string[] = [];
+    const waiting = controllers.map((controller) =>
+      Effect.runPromise(shared.get, { signal: controller.signal }).then(
+        () => {
+          outcomes.push("read");
+        },
+        () => {
+          outcomes.push("failed");
+        },
+      ),
+    );
+    try {
+      assert.equal(turns, 1, "the consumers wait on the same source");
+      t.mock.timers.tick(60_000);
+      await new Promise((resolve) => setImmediate(resolve));
+      assert.deepEqual(outcomes, ["failed", "failed"]);
+      assert.equal(turns, 0, "no paging remains after its last waiter timed out");
+      blocked = false;
+      assert.equal(await Effect.runPromise(shared.get), 42);
+    } finally {
+      controllers.forEach((controller) => controller.abort());
+      shared.dispose();
+      await Promise.all(waiting);
+    }
+  });
+
   test("reads once for every ask, again once forgotten", async () => {
     let reads = 0;
     const shared = sharedRead(

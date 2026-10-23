@@ -12,14 +12,16 @@ import { TitlePress, type TitleLongPress } from "./TitleLongPress";
  * The header of a pushed screen: back, then the title in the same quiet voice.
  * Screens that set their title in their content (an album under its cover) omit it.
  * Given [titleLongPress], a long press on the title opens the screen's options
- * next to it, as on a large title.
+ * next to it, as on a large title. [onTitlePress] handles taps and accessibility activation.
  */
 export function ScreenHeader({
   title,
   titleLongPress,
+  onTitlePress,
 }: {
   title?: string;
   titleLongPress?: TitleLongPress | undefined;
+  onTitlePress?: () => void;
 }) {
   const insets = useSafeAreaInsets();
   return (
@@ -36,6 +38,15 @@ export function ScreenHeader({
           <TitlePress titleLongPress={titleLongPress}>
             <Text
               accessibilityRole="header"
+              onPress={onTitlePress}
+              accessibilityActions={onTitlePress === undefined ? undefined : [{ name: "activate" }]}
+              onAccessibilityAction={
+                onTitlePress === undefined
+                  ? undefined
+                  : ({ nativeEvent: { actionName } }) => {
+                      if (actionName === "activate") onTitlePress();
+                    }
+              }
               numberOfLines={2}
               className="font-sans text-title1 font-light text-foreground"
               style={{ letterSpacing: -0.4 }}

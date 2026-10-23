@@ -2,6 +2,9 @@
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 
+/** A changing Library must finish with a retry line, even before the wall-clock deadline. */
+const BUILD_ATTEMPTS = 4;
+
 /**
  * Runs derived builds against a source version: a change while a build reads
  * cancels it, and the build starts again from the new version. Its output is
@@ -19,9 +22,9 @@ export const createBuildSource = () => {
     run: <A, E, R>(
       read: Effect.Effect<A, E, R>,
       between: Effect.Effect<void>,
-    ): Effect.Effect<A, E, R> =>
+    ): Effect.Effect<A, E | Error, R> =>
       Effect.gen(function* () {
-        for (;;) {
+        for (let attempt = 1; ; attempt++) {
           const started = version;
           const changed = Effect.callback<never, Changed>((resume) => {
             const listener = () => resume(Effect.fail(new Changed()));
@@ -32,6 +35,8 @@ export const createBuildSource = () => {
           });
           const result = yield* Effect.result(Effect.raceFirst(read, changed));
           if (version !== started) {
+            if (attempt >= BUILD_ATTEMPTS)
+              return yield* Effect.fail(new Error("Recommendation sources kept changing"));
             yield* between;
             continue;
           }

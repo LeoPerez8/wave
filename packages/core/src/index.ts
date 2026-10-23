@@ -278,6 +278,13 @@ export type {
 export { RECAP_PLAY_CONTEXT, recapSong } from "./recapMusic.ts";
 export type { RecapMusicSlide } from "./recapMusic.ts";
 export {
+  homeRecapVisibility,
+  parseKnownRecaps,
+  startHomeRecap,
+  storedKnownRecaps,
+} from "./homeRecap.ts";
+export type { HomeRecap, HomeRecapInput } from "./homeRecap.ts";
+export {
   AUTO_ROOT,
   AUTO_TABS,
   autoAlbumItem,
@@ -333,11 +340,13 @@ export {
   tabsOffBar,
 } from "./tabBar.ts";
 export type { TabBar, TabBarEdit, TabBarTab } from "./tabBar.ts";
+export { createDeveloperTitleTaps } from "./developerSettings.ts";
 export {
   LAYOUT_PAGES,
   SETTINGS_PAGES,
   accountsSummary,
   downloadsSummary,
+  visibleSettingsPages,
 } from "./settingsPages.ts";
 export type {
   LayoutPage,

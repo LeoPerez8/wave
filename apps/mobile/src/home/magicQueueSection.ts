@@ -17,10 +17,10 @@ import {
 import * as Effect from "effect/Effect";
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 
-import { freeTurnEffect } from "@/lib/backgroundWork";
+import { freeTurnEffect, settledTurnEffect } from "@/lib/backgroundWork";
 import { makeExternalStore } from "@/lib/externalStore";
 import { persistedSetting } from "@/lib/persistedSetting";
-import { useScreenSettled } from "@/lib/screenTiming";
+import { useScreenSight } from "@/lib/screenSight";
 import { LibraryStore, type PlayableSongRow } from "@/library/LibraryStore";
 import { appRuntime } from "@/library/runtime";
 import { libraryQuery, useLibraryQuery } from "@/library/sharedQueries";
@@ -29,7 +29,7 @@ import { showToast } from "@/overlay/toast";
 import { startMagicQueue } from "@/playback/MagicQueue";
 import { tasteProfileForLibrary } from "@/playback/TasteProfile";
 
-import { buildHomeMagicQueue, homeMagicQueueDue } from "./magicQueueJob";
+import { pickHomeMagicQueue, homeMagicQueueDue } from "./magicQueueJob";
 import { magicQueueRead, magicQueueGrowthRead } from "./magicQueueRead";
 
 /** What the section shows, kept on this phone (not synced). */
@@ -41,20 +41,22 @@ const saved = persistedSetting<MagicQueuePicks | null>({
 
 /** A pick under way: a pull, or Home's due pick, meanwhile starts no other. */
 const picking = makeExternalStore(false);
+const failed = makeExternalStore(false);
 let active = false;
-/** Stops Home's due pick under way (Home left, or not settled): a pull's goes on. */
-let cancelDue: (() => void) | undefined;
+/** Stops Home's due pick under way when Home leaves sight; a pull's goes on. */
+let cancelDue: ((owner: object) => void) | undefined;
 
 /**
  * Picks the section's songs as background work on free turns: what it shows
  * stays until the new list is saved. A pull ([refresh]) brings other songs,
  * with a "New songs" toast whose Undo puts the previous ones back.
  */
-const pick = (refresh: boolean): void => {
+const pick = (refresh: boolean, owner?: object): void => {
   if (active) return;
   const previous = saved.get();
   const controller = new AbortController();
   active = true;
+  failed.set(false);
   picking.set(true);
   const finish = () => {
     if (!active) return;
@@ -63,13 +65,18 @@ const pick = (refresh: boolean): void => {
     picking.set(false);
   };
   const job = Effect.gen(function* () {
-    return yield* buildHomeMagicQueue(yield* LibraryStore, previous, {
-      now: Date.now(),
-      random: Math.random,
-      turn: freeTurnEffect,
-      taste: tasteProfileForLibrary,
-      refresh,
-    });
+    return yield* pickHomeMagicQueue(
+      yield* LibraryStore,
+      previous,
+      {
+        now: Date.now(),
+        random: Math.random,
+        turn: freeTurnEffect,
+        taste: tasteProfileForLibrary,
+        refresh,
+      },
+      settledTurnEffect,
+    );
   });
   void appRuntime
     .runPromise(job, { signal: controller.signal })
@@ -86,13 +93,14 @@ const pick = (refresh: boolean): void => {
       });
     })
     .catch(() => {
-      // Best effort: what the section shows stays until the next try.
+      if (!controller.signal.aborted) failed.set(true);
     })
     .finally(() => {
       if (!controller.signal.aborted) finish();
     });
   if (!refresh)
-    cancelDue = () => {
+    cancelDue = (caller) => {
+      if (caller !== owner) return;
       finish();
       controller.abort();
     };
@@ -104,6 +112,7 @@ export interface MagicQueueSection {
   readonly songs: readonly PlayableSongRow[];
   /** A pick is under way: a pull does nothing meanwhile. */
   readonly picking: boolean;
+  readonly failed: boolean;
   /** Brings other songs (a pull past the carousel's start), with Undo. */
   readonly refresh: () => void;
 }
@@ -116,6 +125,7 @@ export interface MagicQueueSection {
  * work; the previous songs show meanwhile.
  */
 export const useMagicQueueSection = (): MagicQueueSection | null => {
+  const [owner] = useState(() => ({}));
   const picks = saved.useValue();
   const query = useMemo(() => {
     const read = magicQueueRead(picks?.trackIds ?? []);
@@ -132,38 +142,50 @@ export const useMagicQueueSection = (): MagicQueueSection | null => {
     return libraryQuery(probe.key, probe.reads, Effect.flatMap(LibraryStore, probe.read));
   }, [picks]);
   const grows = useLibraryQuery<boolean>(growth, false);
-  const settled = useScreenSettled();
+  const sight = useScreenSight();
   const busy = useSyncExternalStore(picking.subscribe, picking.get);
+  const didFail = useSyncExternalStore(failed.subscribe, failed.get);
   useEffect(() => {
-    if (!settled) return;
-    // Leaving Home, or a route over it unsettling it, stops the due pick; it starts again once due.
-    return () => cancelDue?.();
-  }, [settled]);
+    const stop = sight.subscribe(() => {
+      if (!sight.visible()) cancelDue?.(owner);
+    });
+    return () => {
+      stop();
+      cancelDue?.(owner);
+    };
+  }, [sight, owner]);
   useEffect(() => {
-    if (
-      read !== null &&
-      homeMagicQueueDue(
-        settled,
-        picks,
-        read.map((song) => String(song.id)),
-        grows,
-        Date.now(),
+    if (didFail || read === null || busy) return;
+    const check = () => {
+      if (
+        homeMagicQueueDue(
+          sight.visible(),
+          picks,
+          read.map((song) => String(song.id)),
+          grows,
+          Date.now(),
+        )
       )
-    )
-      pick(false);
-  }, [picks, read, grows, settled]);
+        pick(false, owner);
+    };
+    // The job owns the capped settlement wait. Waiting for a timing flag here
+    // would leave a lost settlement mark outside both the fallback and deadline.
+    check();
+    return sight.subscribe(check);
+  }, [picks, read, grows, sight, didFail, busy, owner]);
   return useMemo(
     () =>
-      songs === null
+      songs === null && !didFail
         ? null
         : {
-            songs,
+            songs: songs ?? [],
             picking: busy,
+            failed: didFail,
             refresh: () => {
               pick(true);
             },
           },
-    [songs, busy],
+    [songs, busy, didFail],
   );
 };
 
