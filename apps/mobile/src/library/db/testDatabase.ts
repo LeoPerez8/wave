@@ -150,6 +150,39 @@ export const traceQueries = <A>(
 };
 
 /**
+ * Count credit-key evaluations in a read, separately from timing/EXPLAIN.
+ * Temporary views preserve the indexed artist_id columns and wrap only their
+ * referenced track/album keys with identity functions. This observes credits
+ * fed to joins/UNION (including file-membership probes), not every SQLite VM
+ * instruction or B-tree page. The functions can affect join planning: always
+ * check the uninstrumented plan and result too. No production DB is changed.
+ */
+export const traceArtistCreditVisits = <A>(db: TestDatabase, read: () => A) => {
+  const client = clients.get(db);
+  if (client === undefined) throw new Error("not a test database");
+  const visits = { trackCredits: 0, albumCredits: 0 };
+  client.create_function("wave_track_credit", (id: number) => {
+    visits.trackCredits++;
+    return id;
+  });
+  client.create_function("wave_album_credit", (id: number) => {
+    visits.albumCredits++;
+    return id;
+  });
+  client.exec(`
+    CREATE TEMP VIEW track_artists AS
+      SELECT wave_track_credit(track_id) AS track_id, artist_id, position FROM main.track_artists;
+    CREATE TEMP VIEW album_artists AS
+      SELECT wave_album_credit(album_id) AS album_id, artist_id, position FROM main.album_artists;
+  `);
+  try {
+    return { result: read(), visits };
+  } finally {
+    client.exec("DROP VIEW temp.track_artists; DROP VIEW temp.album_artists;");
+  }
+};
+
+/**
  * Copies the track [seed] once per row `x` of [rows] (a `WITH RECURSIVE n(x)`
  * clause): each column is its SQL in [overrides] (over `x` and `seed`), or
  * the seed's own value.

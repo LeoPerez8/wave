@@ -1,9 +1,13 @@
-/** Additional inherited costs, measured separately from new regression paths. */
+/** Inherited small-read costs; actual selected-revision APIs and full-row equivalence. */
 import assert from "node:assert/strict";
 import { eq } from "drizzle-orm";
 import * as Effect from "effect/Effect";
-import { traceQueries } from "../../../src/library/db/testDatabase.ts";
-import { scopedArtistProbe } from "../boundedReadProbes.ts";
+import {
+  addHistory,
+  traceArtistCreditVisits,
+  traceQueries,
+} from "../../../src/library/db/testDatabase.ts";
+import { selectArtistsBefore600 } from "../artistCountReference.ts";
 import { loadLibraryStore } from "../store.ts";
 import type { FastAgainBench } from "../types.ts";
 
@@ -19,9 +23,70 @@ export const bench: FastAgainBench = {
       "apps/mobile/src/library/db/schema.ts",
     );
     const ids = [fixture.targets.small.artistId, fixture.targets.large.artistId];
-    const actual = () => Effect.runSync(store.artistsByIds(ids));
-    const scoped = () => scopedArtistProbe(fixture.db, ids);
-    assert.deepEqual(scoped(), actual(), "scoping changed artist rows or counts");
+    const page10 = { offset: 3, limit: 10 };
+    const page50 = { offset: 0, limit: 50 };
+    const deepPage = { offset: Math.floor(fixture.size / 25) - 10, limit: 10 };
+    const ranked = () => Effect.runSync(store.artistsByIds(ids));
+    const paged = () => Effect.runSync(store.listArtistsPage(page10));
+    const expectedRanked = selectArtistsBefore600(fixture.db, { ids });
+    const expectedPage = selectArtistsBefore600(fixture.db, { page: page10, scope: "files" });
+    const artistRead = (
+      read: string,
+      run: typeof ranked,
+      expected: ReturnType<typeof ranked>,
+      timingName: string,
+      growth = 0,
+    ) => {
+      assert.deepEqual(run(), expected, `${read}: complete rows/counts differ from pre-#600`);
+      const observed = traceArtistCreditVisits(fixture.db, run);
+      assert.deepEqual(observed.result, expected, `${read}: observation changed results`);
+      return measure(read, run, {
+        resultKey: JSON.stringify,
+        details: {
+          source: "actual selected-revision LibraryStore API; reference SQL frozen at 2aae3bb8",
+          readTimingName: timingName,
+          unrelatedTracksAdded: growth,
+          creditKeyEvaluations: observed.visits,
+          workCaveat:
+            "identity-function views observe credit keys fed to joins/UNION, not VM instructions; plans and timings are uninstrumented",
+          queryPlans: traceQueries(fixture.db, run).queries.map((query) => query.plan),
+        },
+      });
+    };
+    const results = [
+      artistRead("artistsByIds/2", ranked, expectedRanked, "read ranked artists"),
+      artistRead(
+        "listArtistsPage/50",
+        () => Effect.runSync(store.listArtistsPage(page50)),
+        selectArtistsBefore600(fixture.db, { page: page50, scope: "files" }),
+        "list artists",
+      ),
+      artistRead("listArtistsPage/10", paged, expectedPage, "list artists"),
+      artistRead(
+        "listArtistsPage/deep10",
+        () => Effect.runSync(store.listArtistsPage(deepPage)),
+        selectArtistsBefore600(fixture.db, { page: deepPage, scope: "files" }),
+        "list artists",
+      ),
+    ];
+    // New artists sort after the fixed page, leaving target/page membership and counts unchanged.
+    // Grow both unrelated tracks and credits, with no timing of seeding or trace instrumentation.
+    addHistory(fixture.db, { artist: "zzzz unrelated growth", tracks: fixture.size, plays: 1 });
+    assert.deepEqual(selectArtistsBefore600(fixture.db, { ids }), expectedRanked);
+    assert.deepEqual(
+      selectArtistsBefore600(fixture.db, { page: page10, scope: "files" }),
+      expectedPage,
+    );
+    results.push(
+      artistRead(
+        "artistsByIds/2+unrelated",
+        ranked,
+        expectedRanked,
+        "read ranked artists",
+        fixture.size,
+      ),
+      artistRead("listArtistsPage/10+unrelated", paged, expectedPage, "list artists", fixture.size),
+    );
     const genre = Effect.runSync(store.getGenre(fixture.genreId))!;
     const page = () =>
       tracks
@@ -31,24 +96,12 @@ export const bench: FastAgainBench = {
         .limit(50)
         .all();
     assert.deepEqual(page(), genre.songs.slice(0, 50), "genre prefix differs");
-    return [
-      measure("artistRows2/globalCredits", actual, {
-        resultKey: JSON.stringify,
-        details: {
-          source: "actual LibraryStore.artistsByIds; global credited-song UNION",
-          queryPlans: traceQueries(fixture.db, actual).queries.map((query) => query.plan),
-        },
-      }),
-      measure("artistRows2/scopedCreditsProbe", scoped, {
-        resultKey: JSON.stringify,
-        details: {
-          source: "experimental SQL; same projection, ids inside both UNION branches",
-          queryPlans: traceQueries(fixture.db, scoped).queries.map((query) => query.plan),
-        },
-      }),
+    results.push(
       measure("genre/allRows", () => Effect.runSync(store.getGenre(fixture.genreId)), {
         resultKey: (value) => JSON.stringify(value!.songs.map((song) => song.id)),
-        details: { source: "actual LibraryStore.getGenre; whole genre read" },
+        details: {
+          source: "actual LibraryStore.getGenre; whole genre read; after unrelated growth",
+        },
       }),
       measure("genre/first50Probe", page, {
         resultKey: (value) => JSON.stringify(value.map((song) => song.id)),
@@ -58,6 +111,7 @@ export const bench: FastAgainBench = {
             "prefix equivalence only; not a production paging/selection/playback implementation",
         },
       }),
-    ];
+    );
+    return results;
   },
 };
