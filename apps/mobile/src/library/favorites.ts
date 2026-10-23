@@ -9,7 +9,7 @@ import {
 } from "@wave/core";
 import { useEffect, useSyncExternalStore } from "react";
 
-import { makeExternalStore } from "@/lib/externalStore";
+import { makeExternalStore, subscribeAll } from "@/lib/externalStore";
 
 import {
   onSavedStars,
@@ -64,10 +64,14 @@ const loadFavorites = (): void => {
 
 /** Stars with writes in flight; a star with none shows what `favorites` holds. */
 const writing = new Map<number, FavoriteStar>();
+/** Individually known stars do not mark the whole favorites list loaded. */
+const knownStars = new Map<number, boolean>();
+const knownPending = new Map<string, boolean>();
 
 /** Records the stars' new states and shows them, in one update however many there are. */
 const showStars = (stars: ReadonlyMap<number, FavoriteStar>, saved: boolean): void => {
   for (const [trackId, star] of stars) {
+    knownStars.set(trackId, star.shown);
     if (star.pending === 0) writing.delete(trackId);
     else writing.set(trackId, star);
   }
@@ -134,7 +138,10 @@ export const setFavorite = (trackId: number | string, on: boolean): Promise<void
  */
 export const forgetFavorites = (trackIds: readonly number[]): void => {
   const gone = new Set(trackIds);
-  for (const id of trackIds) writing.delete(id);
+  for (const id of trackIds) {
+    writing.delete(id);
+    knownStars.set(id, false);
+  }
   favorites.update((state) => ({
     ...state,
     ids: new Set([...state.ids].filter((id) => !gone.has(id))),
@@ -287,6 +294,7 @@ export const setPendingFavorites = (
 ): Promise<void> => {
   if (songs.length === 0) return Promise.resolve();
   const videoIds = songs.map((song) => song.videoId);
+  for (const id of videoIds) knownPending.set(id, on);
   pendingFavorites.update((state) => {
     const videos = new Set(state.videos);
     for (const id of videoIds) {
@@ -343,4 +351,41 @@ export const onFavoritesSaved = (listener: () => void): (() => void) => {
     saved = favorites.get().saved;
     listener();
   });
+};
+
+/** The scoped Now Playing star follows optimistic edits without loading global lists. */
+const subscribeSongStars = subscribeAll(favorites, pendingFavorites);
+export const scopedSongStarredNow = (
+  id: number | null,
+  video: string | null,
+  saved: { readonly favorite: boolean; readonly pendingFavorite: boolean },
+): boolean => {
+  const favorite =
+    id === null
+      ? false
+      : (writing.get(id)?.shown ??
+        (favorites.get().loaded ? favorites.get().ids.has(id) : knownStars.get(id)) ??
+        saved.favorite);
+  const pending =
+    video === null
+      ? false
+      : ((pendingFavorites.get().loaded
+          ? pendingFavorites.get().videos.has(video)
+          : knownPending.get(video)) ?? saved.pendingFavorite);
+  return favorite || pending;
+};
+export const useScopedSongStarred = (
+  id: number | null,
+  video: string | null,
+  saved: { readonly favorite: boolean; readonly pendingFavorite: boolean },
+): boolean =>
+  useSyncExternalStore(subscribeSongStars, () => scopedSongStarredNow(id, video, saved));
+
+/** Seed just this track before a cold gesture, so a failed write restores its true star. */
+export const rememberSongFavorite = (id: number, favorite: boolean): void => {
+  if (favorites.get().loaded || knownStars.has(id) || writing.has(id)) return;
+  const ids = new Set(favorites.get().ids);
+  if (favorite) ids.add(id);
+  else ids.delete(id);
+  favorites.set({ ...favorites.get(), ids });
 };

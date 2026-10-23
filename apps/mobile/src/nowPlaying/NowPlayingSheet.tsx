@@ -47,10 +47,17 @@ import {
   resizeNowPlaying,
   sheetOffset,
   useNowPlayingShown,
+  useNowPlayingSettled,
 } from "./sheet";
 import { SleepTimerButton } from "./SleepTimer";
 import { AddToPlaylistButton, DownloadButton } from "./SongButtons";
 import { Transport } from "./Transport";
+import {
+  nowPlayingSongLookup,
+  songActionFailed,
+  usePlayingSongTarget,
+  usePreparePlayingSong,
+} from "./playingSong";
 
 /** What fills the space above the controls. */
 export type NowPlayingView = "player" | "queue" | "lyrics";
@@ -182,6 +189,9 @@ export function NowPlayingSheet() {
   const trackId = useCurrentTrackId();
   const details = useTrackDetails(trackId);
   const ytSong = usePlayingYtSong(trackId);
+  const songTarget = usePlayingSongTarget(trackId, ytSong);
+  const settled = useNowPlayingSettled();
+  usePreparePlayingSong(songTarget, shown, settled);
   const palette = useNowPlayingPalette(trackId, details);
   const gradient = useNowPlayingGradient(palette);
   const [view, setView] = useState<NowPlayingView>("player");
@@ -196,7 +206,7 @@ export function NowPlayingSheet() {
     if (active?.kind === "queue") timingSurfaceCommitted(active.id);
   }, [view]);
   // A streamed song downloaded since it was queued: Lyrics reads its file, as for a Library song.
-  const downloaded = useDownloadedFile(ytSong, shown && view === "lyrics");
+  const downloaded = useDownloadedFile(ytSong);
   const lyricsFile: LibraryFile | null =
     details === null ? (downloaded ?? null) : { id: details.id, path: details.path };
   // A non-D song's search waits until the Library is read: a song with a file reads it instead.
@@ -225,7 +235,11 @@ export function NowPlayingSheet() {
     setQueueWarm(true);
     setView((current) => (current === "queue" ? "player" : "queue"));
   };
-  const toggleLyrics = () => setView((current) => (current === "lyrics" ? "player" : "lyrics"));
+  const toggleLyrics = () => {
+    if (view !== "lyrics" && songTarget !== null)
+      void nowPlayingSongLookup.acquire(songTarget).catch(songActionFailed);
+    setView((current) => (current === "lyrics" ? "player" : "lyrics"));
+  };
 
   return (
     <Animated.View
@@ -301,7 +315,7 @@ export function NowPlayingSheet() {
         <DismissArea style={{ paddingTop: CELL * 3, gap: CELL * 2 }}>
           <Scrubber />
           <Transport />
-          {/* Evenly spaced, with or without Download (absent until the Library is first read). */}
+          {/* The song controls share one lookup after settlement or their own early tap. */}
           <View className="flex-row items-center justify-between">
             <ViewToggle
               icon={IconQuote}

@@ -1123,3 +1123,77 @@ work/latency measurements, with no native scheduling, React commit, frame or
 TalkBack verification. The one-time upgrade backfill of the persisted title index
 is also outside completion measurements: it reads/writes at most 128 rows per
 transaction and yields between pages before exposing LibraryStore.
+
+## #587 — Now Playing song followers
+
+Desktop: Node 26.8.2 + sql.js, Linux x64; **not Hermes or phone SQLite**.
+The full shared harness ran 11 samples per measure at 1,000, 12,000 and
+50,000 songs (the shared 20/300-song target artists and 10,000/54,000/200,000
+play events). Run:
+
+```sh
+pnpm --filter @wave/mobile bench:fast-again --bench nowPlayingOpen \
+  --before <v0.19.0-ti worktree> --reference <v0.7.0-ti worktree>
+```
+
+Evidence: [579-nowPlayingOpen-desktop.jsonl](results/579-nowPlayingOpen-desktop.jsonl).
+Before is `460e39ff0cba6f50e7a456a77d6e99813295ebaa` (`v0.19.0-ti`);
+after is `6ac48b40eb45204dedd25fd043d26303a3d419f4`, based on integration
+`1ec7108ef9daf9339196cdceb60feb60c63bff9a`. The selected worktrees' actual
+LibraryStore and Core run on the same shared fixture shape; the JSONL includes
+source hashes and SQL/query plans. This is a faithful read/lifecycle replay,
+not mounted React or native animation. The `v0.7.0-ti` reference
+`add761ed787061db6a6c2799687d421301b6182b` predates these streamed controls:
+its measures explicitly report unavailable.
+
+The cold ti replay reads songs, favorite ids and pending favorites, then builds
+the lazy finder on its first song lookup. Its star may also start this work
+while the sheet is hidden; the cold scenario resets all three shared queries
+and the finder at opening to expose that cost. The fixed controls select a
+target while opening, then share one statement for its identity, file and
+library/pending stars after settlement or their own early gesture.
+
+| Songs  | Cold opening rows / statements before → after | Opening median / p90 ms before → after | Targeted lookup after settlement median / p90 ms | Longest opening task ms before → after |
+| ------ | --------------------------------------------- | -------------------------------------- | ------------------------------------------------ | -------------------------------------- |
+| 1,000  | 1,100 / 3 → 0 / 0                             | 17.589 / 18.662 → 0.002 / 0.003        | 0.670 / 0.712                                    | 19.002 → 0.005                         |
+| 12,000 | 13,200 / 3 → 0 / 0                            | 209.242 / 211.769 → 0.000 / 0.000      | 0.755 / 1.143                                    | 224.530 → 0.000                        |
+| 50,000 | 55,000 / 3 → 0 / 0                            | 1752.574 / 3022.081 → 0.000 / 0.000    | 0.594 / 0.615                                    | 3684.358 → 0.000                       |
+
+After settlement the fixed path reads **one candidate row in one statement**
+at every size; ti's already acquired answer reads nothing at that stage.
+Rows mean SQL rows returned to JS, including the stars' rows; they do not count
+SQLite VM visits. The 50,000-song tail varies on this shared host: it is
+desktop scheduling/GC noise as well as the synchronous read, not a phone budget.
+
+Warm means the shared songs query, finder, favorite ids and pending stars were
+already acquired before opening; the fixed sheet's independent targeted answer
+is initially unread. Both warm openings read **zero rows/statements**; the
+fixed sheet still acquires its single targeted statement after settlement.
+
+| Songs  | Warm opening median / p90 ms before → after | Targeted lookup after settlement median / p90 ms |
+| ------ | ------------------------------------------- | ------------------------------------------------ |
+| 1,000  | 0.000 / 0.000 → 0.000 / 0.000               | 0.614 / 0.706                                    |
+| 12,000 | 0.000 / 0.000 → 0.001 / 0.001               | 1.188 / 1.318                                    |
+| 50,000 | 0.001 / 0.001 → 0.000 / 0.000               | 0.594 / 0.606                                    |
+
+`springStartCold` and `springStartWarm` separately time the actual Core opening
+decision at the spring-handoff boundary. **Both revisions hand off the spring
+before notifying followers**: these measures read nothing and round to
+0.000–0.001 ms median. Zero is rounding to three decimals, not zero CPU work.
+No removed read is falsely charged before the spring starts. The first visible
+state compares title/artist/album and the rising spring; ti's internal `open`
+phase and #585's newer `opening` phase both mean shown here. The gain is removing
+cold follower work during the spring, not changing the ordering of that handoff.
+
+Every comparable before/after result key is equal, including the **complete**
+matched SongRow (identity/path, all metadata; legacy absent explicit means
+unknown) and saved library/pending star flags. CPU, p90, longest task, statement
+and notification counts remain in the raw JSONL. Metadata/artwork come from the
+playing item; native paint, Reanimated scheduling and animation waits are omitted.
+
+Deterministic app/store tests assert zero reads before settlement and one indexed
+statement after, shared across consumers; early playlist/download/star actions
+retain their captured song, resolve missing-file and pending-star state, and
+ignore canceled or superseded lookup results. Four exact #587 guard exceptions
+were retired without changing the scanner or route guard. Device behavior,
+phone latency and TalkBack remain unverified.

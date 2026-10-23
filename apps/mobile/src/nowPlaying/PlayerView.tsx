@@ -19,13 +19,12 @@ import Animated, {
 import { CELL } from "@/catalog/grid";
 import { subscribeAll } from "@/lib/externalStore";
 import { followArtistLink, followStreamedArtistLink } from "@/library/ArtistChoice";
-import { setFavorite, useIsFavorite, useYtSongStarred } from "@/library/favorites";
+import { useScopedSongStarred } from "@/library/favorites";
 import { useLinkRows } from "@/library/hooks";
 import { LibraryStore, type TrackDetails } from "@/library/LibraryStore";
 import { appRuntime } from "@/library/runtime";
 import { showError } from "@/overlay/alert";
 import { openAlbum, useCurrentPath } from "@/library/routes";
-import { starSongs } from "@/library/starSongs";
 import { Press } from "@/motion/Press";
 import { useRenderCount } from "@/perf/perf";
 import { useCurrentTrackId } from "@/playback/hooks";
@@ -33,12 +32,17 @@ import { playbackState, type PlaybackState } from "@/playback/Player";
 import { queueState } from "@/playback/Queue";
 import { queueTracks, type QueueTrack } from "@/playback/queueTracks";
 import { useThemeColor } from "@/theme/useThemeColor";
-import { useLoadedLibraryFinder } from "@/ytmusic/libraryFinder";
 import { useStreamedArtistLink } from "@/ytmusic/streamedArtist";
 
 import { nowPlayingLibraryArtistLink } from "./artistLink";
 import { CoverPress } from "./CoverPress";
 import { usePlayingYtSong } from "./hooks";
+import {
+  nowPlayingSongActions,
+  songActionFailed,
+  usePlayingSongAnswer,
+  usePlayingSongTarget,
+} from "./playingSong";
 import { closeNowPlaying, closeNowPlayingForLink, useNowPlayingShown } from "./sheet";
 
 /** How far the artwork steps back while paused. */
@@ -185,35 +189,25 @@ function MetaLink({ label, open, hint, className, timingKind, revealsCurrentScre
   );
 }
 
-/**
- * The current track's star; in sync with every other star (rows, menus). A
- * YT Music song's star is the Library song's once the Library has it, else
- * its pending favorite (`useYtSongStarred`); starring it downloads it
- * (`starSongs`: a star means downloaded), as its menu's Favorite does. A
- * YT Music song's star waits for the Library's first read: until then a
- * song the Library has would be taken for one it lacks, and downloaded again.
- */
+/** The star observes the shared answer; an early toggle acquires the actual saved state. */
 function useNowPlayingStar(): {
   favorite: boolean;
   disabled: boolean;
-  star: (on: boolean) => void;
+  star: (addOnly?: boolean) => void;
 } {
   const trackId = useCurrentTrackId();
-  const streamed = trackId !== null && parseTrackId(trackId)?.kind === "yt";
   const ytSong = usePlayingYtSong(trackId);
-  const find = useLoadedLibraryFinder(ytSong !== null);
-  const track = ytSong === null || find === null ? null : find(ytSong);
-  const libraryStar = useIsFavorite(streamed ? null : trackId);
-  const ytStar = useYtSongStarred(streamed ? (ytSong?.videoId ?? null) : null, track);
-  const favorite = streamed ? ytStar : libraryStar;
-  const disabled = trackId === null || (streamed && (ytSong === null || find === null));
-  const star = (on: boolean): void => {
-    if (streamed) {
-      if (ytSong !== null && find !== null)
-        void starSongs({ tracks: [], ytSongs: [ytSong] }, on, find);
-    } else if (trackId !== null) void setFavorite(trackId, on);
+  const target = usePlayingSongTarget(trackId, ytSong);
+  const answer = usePlayingSongAnswer(target);
+  const favorite = useScopedSongStarred(
+    answer?.track?.id ?? null,
+    ytSong?.videoId ?? null,
+    answer ?? { favorite: false, pendingFavorite: false },
+  );
+  const star = (addOnly = false): void => {
+    if (target !== null) void nowPlayingSongActions.star(target, addOnly).catch(songActionFailed);
   };
-  return { favorite, disabled, star };
+  return { favorite, disabled: target === null, star };
 }
 
 /** Stars or unstars the current track (`useNowPlayingStar`). */
@@ -227,7 +221,7 @@ function FavoriteStar({ title }: { title: string }) {
       accessibilityLabel={favorite ? `Remove ${title} from Favorites` : `Favorite ${title}`}
       accessibilityState={{ selected: favorite, disabled }}
       disabled={disabled}
-      onPress={() => star(!favorite)}
+      onPress={() => star()}
       haptic="impact"
       depth={0.1}
       className="items-center justify-center"
