@@ -1517,6 +1517,7 @@ export {
   lyricCardLayout,
   lyricShareDestinations,
   lyricStoryBackground,
+  lyricStoryFrame,
   nextLyricCardColour,
   shareableLyricLines,
   sharedLyricLines,
@@ -1529,6 +1530,7 @@ export type {
   LyricShareApps,
   LyricShareDestination,
   LyricStoryBackground,
+  LyricStoryFrame,
 } from "./lyricsShare.ts";
 export { songCardColours, songCardFileName, songShareDestinations } from "./songShare.ts";
 export type { SongCardColours, SongLinkOption, SongShareDestination } from "./songShare.ts";

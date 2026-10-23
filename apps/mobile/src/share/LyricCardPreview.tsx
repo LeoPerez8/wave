@@ -1,12 +1,15 @@
+import { Canvas, LinearGradient, Rect, vec } from "@shopify/react-native-skia";
 import {
   LYRIC_CARD_FALLBACK,
   lyricCardFileName,
-  lyricCardLayout,
+  lyricStoryFrame,
   lyricStoryBackground,
   nextLyricCardColour,
+  type LyricStoryFrame,
+  type LyricStoryBackground,
 } from "@wave/core";
 import { useEffect, useRef, useState } from "react";
-import { PixelRatio, Text, View } from "react-native";
+import { PixelRatio, StyleSheet, Text, View } from "react-native";
 
 import { CELL } from "@/catalog/grid";
 import { Press } from "@/motion/Press";
@@ -17,7 +20,7 @@ import { closeLyricCard, useLyricCard, type LyricCardContent } from "./lyricCard
 import { ShareDestinations } from "./ShareDestinations";
 import { SharePreviewFrame } from "./SharePreviewFrame";
 import type { ImageSource } from "./shareImage";
-import { useDrawingCorners, useImageShare } from "./useImageShare";
+import { useImageShare } from "./useImageShare";
 
 const LOG_TAG = "LyricsShare";
 
@@ -27,71 +30,98 @@ const LOG_TAG = "LyricsShare";
  */
 const EXPORT_PX = 1080;
 
-/**
- * The preview's rounded corners. Save image and More export the card square;
- * Instagram's sticker is exported with these same corners, as it's previewed.
- */
+/** The preview Story's corners; the card's radius comes from the exported framing. */
 const PREVIEW_RADIUS = CELL * 2;
 
 /** The card's file name, stamped now. */
 const cardFileName = (title: string): string => lyricCardFileName(title, new Date());
 
 /**
- * The card, fitted into [area] in its own shape and drawn at the export's size
- * scaled down, so what's previewed is the very view that becomes the image.
+ * The solid card as a smaller rounded sticker over its complementary Story.
+ * The card view itself stays square for standalone exports; native Stories
+ * export applies the same [frame]'s padding and corners to a separate PNG.
  */
 function FittedCard({
   content,
   colour,
+  background,
+  frame,
   area,
   cardRef,
-  rounded,
   onReady,
   onPress,
 }: {
   content: LyricCardContent;
   colour: string;
+  background: LyricStoryBackground;
+  frame: LyricStoryFrame;
   area: { width: number; height: number };
   cardRef: ImageSource;
-  /** Whether the card itself takes the preview's corners (drawing Instagram's sticker). */
-  rounded: boolean;
   onReady: () => void;
   onPress: () => void;
 }) {
-  const { aspect } = lyricCardLayout(content.lines);
+  const storyScale = Math.min(area.width / frame.width, area.height / frame.height);
+  const storyWidth = frame.width * storyScale;
+  const storyHeight = frame.height * storyScale;
+  const width = frame.cardWidth * storyScale;
+  const height = frame.cardHeight * storyScale;
+  const radius = frame.cornerRadius * storyScale;
   const exportWidth = EXPORT_PX / PixelRatio.get();
-  const exportHeight = exportWidth * aspect;
-  const width = Math.min(area.width, area.height / aspect);
-  const height = width * aspect;
+  const exportHeight = exportWidth * (frame.cardHeight / frame.cardWidth);
   const scale = width / exportWidth;
   return (
-    <Press
-      accessibilityRole="button"
-      accessibilityLabel="Lyrics card"
-      accessibilityHint="Changes the card's colour"
-      onPress={onPress}
-      haptic="selection"
-      depth={0.02}
-      style={{ width, height, borderRadius: PREVIEW_RADIUS, overflow: "hidden" }}
+    <View
+      style={{
+        width: storyWidth,
+        height: storyHeight,
+        borderRadius: PREVIEW_RADIUS,
+        overflow: "hidden",
+      }}
     >
-      <View
+      <Canvas style={StyleSheet.absoluteFill}>
+        <Rect x={0} y={0} width={storyWidth} height={storyHeight}>
+          <LinearGradient
+            start={vec(0, 0)}
+            end={vec(0, storyHeight)}
+            colors={[background.top, background.bottom]}
+          />
+        </Rect>
+      </Canvas>
+      <Press
+        accessibilityRole="button"
+        accessibilityLabel="Lyrics card"
+        accessibilityHint="Changes the card's colour"
+        onPress={onPress}
+        haptic="selection"
+        depth={0.02}
         style={{
           position: "absolute",
-          left: (width - exportWidth) / 2,
-          top: (height - exportHeight) / 2,
-          transform: [{ scale }],
+          left: frame.left * storyScale,
+          top: frame.top * storyScale,
+          width,
+          height,
+          borderRadius: radius,
+          overflow: "hidden",
         }}
       >
-        <LyricCard
-          ref={cardRef}
-          content={content}
-          colour={colour}
-          width={exportWidth}
-          cornerRadius={rounded ? PREVIEW_RADIUS / scale : 0}
-          onReady={onReady}
-        />
-      </View>
-    </Press>
+        <View
+          style={{
+            position: "absolute",
+            left: (width - exportWidth) / 2,
+            top: (height - exportHeight) / 2,
+            transform: [{ scale }],
+          }}
+        >
+          <LyricCard
+            ref={cardRef}
+            content={content}
+            colour={colour}
+            width={exportWidth}
+            onReady={onReady}
+          />
+        </View>
+      </Press>
+    </View>
   );
 }
 
@@ -105,8 +135,8 @@ function LyricCardPreview({ content }: { content: LyricCardContent }) {
   // A cover still loading would be missing from the image.
   const [ready, setReady] = useState(content.artworkUri === undefined);
   const card: ImageSource = useRef(null);
-  // Instagram's sticker is drawn from the card with the preview's corners, then squared again.
-  const corners = useDrawingCorners();
+  const background = lyricStoryBackground(colour);
+  const frame = lyricStoryFrame(content.lines);
 
   useEffect(
     () =>
@@ -123,10 +153,8 @@ function LyricCardPreview({ content }: { content: LyricCardContent }) {
     what: "the lyrics card",
     sheetTitle: "Share Lyrics",
     logTag: LOG_TAG,
-    storyBackground: lyricStoryBackground(colour),
-    prepare: (destination) =>
-      destination === "instagramStories" ? corners.startDrawing() : Promise.resolve(),
-    afterDraw: corners.endDrawing,
+    storyBackground: background,
+    storyFrame: frame,
   });
 
   return (
@@ -136,9 +164,10 @@ function LyricCardPreview({ content }: { content: LyricCardContent }) {
         <FittedCard
           content={content}
           colour={colour}
+          background={background}
+          frame={frame}
           area={area}
           cardRef={card}
-          rounded={corners.drawing}
           onReady={() => setReady(true)}
           onPress={() => setColour((current) => nextLyricCardColour(content.colours, current))}
         />
