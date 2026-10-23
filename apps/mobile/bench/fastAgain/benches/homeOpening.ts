@@ -10,7 +10,7 @@ import type { DiscoverMixes, MagicSong, TasteProfile } from "@wave/core";
 
 import { traceQueries } from "../../../src/library/db/testDatabase.ts";
 import { startupReplay } from "../startupReplay.ts";
-import { measureCooperative } from "../cooperative.ts";
+import { freeTurnTasks, measureCooperative } from "../cooperative.ts";
 import { profileKey } from "./tasteProfile.ts";
 import { percentiles } from "../measure.ts";
 import { loadLibraryStore } from "../store.ts";
@@ -197,21 +197,7 @@ export const bench: FastAgainBench = {
         }
         // Measure complete JS tasks between actual injected free turns, including the last task.
         const startupTasks: number[] = [];
-        let started: number | undefined;
-        const end = () => {
-          if (started !== undefined) startupTasks.push(performance.now() - started);
-          started = undefined;
-        };
-        const turn = Effect.suspend(() => {
-          end();
-          return Effect.promise(() => setImmediate()).pipe(
-            Effect.tap(() =>
-              Effect.sync(() => {
-                started = performance.now();
-              }),
-            ),
-          );
-        });
+        const { turn, end } = freeTurnTasks((ms) => startupTasks.push(ms));
         if (trace) {
           const measured = traceQueries(fixture.db, () => Effect.runSync(startup.run(Effect.void)));
           results.push(measured.result);

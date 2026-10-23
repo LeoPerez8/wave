@@ -8,7 +8,7 @@ import { performance } from "node:perf_hooks";
 import { setImmediate } from "node:timers/promises";
 import { traceQueries } from "../../../src/library/db/testDatabase.ts";
 import { loadLibraryStore } from "../store.ts";
-import { percentiles } from "../measure.ts";
+import { percentiles, timeRuns } from "../measure.ts";
 import type { FastAgainBench } from "../types.ts";
 
 const key = (graph: ArtistGraph) =>
@@ -120,23 +120,19 @@ export const bench: FastAgainBench = {
     };
     const expected = key((await run(false)).result);
     const traced = await run(true);
-    const wall: number[] = [];
     const longest: number[] = [];
     const totals: number[] = [];
     const segmentCounts: number[] = [];
-    let cpuMicros = 0;
-    for (let i = 0; i < context.runs; i++) {
-      const cpu = process.cpuUsage();
-      const start = performance.now();
-      const result = await run(false);
-      wall.push(performance.now() - start);
-      const used = process.cpuUsage(cpu);
-      cpuMicros += used.user + used.system;
-      longest.push(Math.max(...result.steps));
-      totals.push(result.steps.reduce((a, b) => a + b, 0));
-      segmentCounts.push(result.steps.length);
-      assert.equal(key(result.result), expected);
-    }
+    const { wall, cpuMicros } = await timeRuns(
+      context.runs,
+      () => run(false),
+      (result) => {
+        longest.push(Math.max(...result.steps));
+        totals.push(result.steps.reduce((a, b) => a + b, 0));
+        segmentCounts.push(result.steps.length);
+        assert.equal(key(result.result), expected);
+      },
+    );
     return [
       {
         read: "coldGraph/productionBoundaries",
