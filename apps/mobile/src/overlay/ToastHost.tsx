@@ -1,4 +1,4 @@
-import { toastDuration, toastSwipeDismisses } from "@wave/core";
+import { RETURN_SPRINGS, toastDuration, toastSwipeDismisses } from "@wave/core";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { AccessibilityInfo, Text, View } from "react-native";
 import {
@@ -20,6 +20,7 @@ import { scheduleOnRN } from "react-native-worklets";
 import { CELL, grid } from "@/catalog/grid";
 import { BACKDROP, chrome } from "@/chrome/chrome";
 import { Glass } from "@/glass/Glass";
+import { useBounceSpring } from "@/motion/bounce";
 import { useTapAnimationMs } from "@/settings/tapAnimation";
 
 import { currentToast, dismissToast, removeToast, runToastAction, type Toast } from "./toast";
@@ -68,6 +69,8 @@ function ToastPill({ toast }: { toast: Toast }) {
   const insets = useSafeAreaInsets();
   const ms = useTapAnimationMs();
   const reduceMotion = useReducedMotion();
+  // A swipe up let go short springs back as far past rest as the Bounce amount says.
+  const spring = useBounceSpring(RETURN_SPRINGS.toast);
   const [height, setHeight] = useState<number | null>(null);
   const size = useRef({ height: 1 });
   // The same height, for the animated style on the UI thread.
@@ -110,7 +113,7 @@ function ToastPill({ toast }: { toast: Toast }) {
 
   const settle = () => {
     dragging.current = false;
-    offsetY.set(withSpring(0, { damping: 20, stiffness: 240 }));
+    offsetY.set(withSpring(0, spring));
     if (expired.current) dismissToast(id);
   };
 

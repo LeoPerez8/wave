@@ -7,6 +7,7 @@ import {
   concentricRadius,
   playerTouchAllowed,
   resolveSkipSwipe,
+  RETURN_SPRINGS,
   type SkipDirection,
 } from "@wave/core";
 import * as Haptics from "expo-haptics";
@@ -30,6 +31,7 @@ import { chrome, useTabBarTop } from "@/chrome/chrome";
 import { OnFloatingChrome } from "@/chrome/onFloatingChrome";
 import { IconButton } from "@/components/IconButton";
 import { Glass } from "@/glass/Glass";
+import { useBounceSpring } from "@/motion/bounce";
 import { Press } from "@/motion/Press";
 import { menuTouchOwnership, observeMenuTouchOwnership } from "@/motion/heldTouch";
 import {
@@ -106,6 +108,8 @@ export const MiniPlayer = memo(function MiniPlayer({ backdropId, onOpen }: Props
   const notice = usePlaybackField("notice");
   const bottom = useTabBarTop();
   const reduceMotion = useReducedMotion();
+  // A swipe let go short springs back as far past rest as the Bounce amount says.
+  const spring = useBounceSpring(RETURN_SPRINGS.miniPlayer);
   // The pill, which the song's card (on a long press) floats beside and highlights.
   const pill = useRef<ComponentRef<typeof View>>(null);
 
@@ -138,7 +142,7 @@ export const MiniPlayer = memo(function MiniPlayer({ backdropId, onOpen }: Props
       ? null
       : resolveSkipSwipe({ translationX, velocityX, width: widthRef.current });
     if (direction === null) {
-      offset.set(withSpring(0, { damping: 20, stiffness: 240 }));
+      offset.set(withSpring(0, spring));
       return;
     }
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
