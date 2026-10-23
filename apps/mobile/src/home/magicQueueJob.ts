@@ -9,7 +9,11 @@ import {
 import * as Effect from "effect/Effect";
 import { runSteps } from "../lib/stepped.ts";
 import type { LibraryStore } from "../library/LibraryStore.ts";
-import { readTasteLibrary, type TasteLibrary } from "../playback/tasteDerivation.ts";
+import {
+  readTasteLibrary,
+  stableTasteSnapshot,
+  type TasteLibrary,
+} from "../playback/tasteDerivation.ts";
 
 /** Standing picks need no whole-Library due check. The growth probe is only for short lists. */
 export const homeMagicQueueDue = (
@@ -38,16 +42,18 @@ export const buildHomeMagicQueue = <R, E>(
     readonly refresh?: boolean;
   },
 ) =>
-  Effect.gen(function* () {
-    const library = yield* readTasteLibrary(store, options.turn);
-    const taste = yield* options.taste(library);
-    return yield* runSteps(
-      magicQueuePicksSteps(
-        saved,
-        library.playable,
-        { now: options.now, taste, random: options.random },
-        options.refresh,
-      ),
-      options.turn,
-    );
-  });
+  stableTasteSnapshot(store, options.turn, () =>
+    Effect.gen(function* () {
+      const library = yield* readTasteLibrary(store, options.turn);
+      const taste = yield* options.taste(library);
+      return yield* runSteps(
+        magicQueuePicksSteps(
+          saved,
+          library.playable,
+          { now: options.now, taste, random: options.random },
+          options.refresh,
+        ),
+        options.turn,
+      );
+    }),
+  );

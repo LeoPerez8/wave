@@ -5,9 +5,35 @@ import {
   seededRandom,
   tasteProfile,
   tasteProfileSteps,
+  tasteLearned,
+  tasteLearnedSteps,
   type MagicSong,
   type TasteHistory,
 } from "./index.ts";
+
+test("learning pending signals pauses while copying a large profile and preserves exact scores/order", () => {
+  const profile = {
+    at: 0,
+    songs: new Map(Array.from({ length: 2000 }, (_, i) => [String(i), 1])),
+    artists: new Map<string, number>(),
+    genres: new Map<string, number>(),
+  };
+  const signal = {
+    kind: "favorite" as const,
+    at: 0,
+    song: { trackId: "3", artists: [magicArtistKey("a")], genre: "rock", style: null },
+  };
+  const steps = tasteLearnedSteps(profile, [signal]);
+  let work = 0,
+    result = steps.next();
+  while (!result.done) {
+    work++;
+    result = steps.next();
+  }
+  assert.ok(work >= 2000, "copying profile maps is resumable, not one Map constructor");
+  assert.deepEqual(result.value, tasteLearned(profile, signal));
+  assert.equal(profile.songs.get("3"), 1);
+});
 
 test("taste derivation pauses between signals and keeps ti's full scores and insertion order", () => {
   const song: MagicSong = {

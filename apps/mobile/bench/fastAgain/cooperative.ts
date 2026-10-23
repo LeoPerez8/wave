@@ -3,7 +3,11 @@ import * as Effect from "effect/Effect";
 import { performance } from "node:perf_hooks";
 import { setImmediate } from "node:timers/promises";
 import { percentiles } from "./measure.ts";
-import { traceQueries, type TestDatabase } from "../../src/library/db/testDatabase.ts";
+import {
+  traceQueries,
+  observeSqlTasks,
+  type TestDatabase,
+} from "../../src/library/db/testDatabase.ts";
 
 const round = (value: number) => Number(value.toFixed(3));
 export const measureCooperative = async <A>(
@@ -19,13 +23,24 @@ export const measureCooperative = async <A>(
   const elapsed: number[] = [];
   const longest: number[] = [];
   const sliceCounts: number[] = [];
+  const sqlTotals: number[] = [],
+    sqlLongest: number[] = [],
+    cpuLongest: number[] = [];
+  const sqlByStatement = new Map<string, { count: number; totalMs: number; longestMs: number }>();
   let cpuMicros = 0;
   for (let i = 0; i < runs; i++) {
     const tasks: number[] = [];
+    const cpuTasks: number[] = [];
+    let taskSql = 0,
+      sqlTotal = 0,
+      maxSql = 0;
     let started: number | undefined;
     const end = () => {
       if (started !== undefined) {
-        tasks.push(performance.now() - started);
+        const ms = performance.now() - started;
+        tasks.push(ms);
+        if (taskSql === 0) cpuTasks.push(ms);
+        taskSql = 0;
         started = undefined;
       }
     };
@@ -41,7 +56,22 @@ export const measureCooperative = async <A>(
     });
     const cpu = process.cpuUsage();
     const start = performance.now();
-    const result = await Effect.runPromise(run(turn));
+    const stopSql = observeSqlTasks(db, (sql, ms) => {
+      taskSql++;
+      sqlTotal += ms;
+      maxSql = Math.max(maxSql, ms);
+      const entry = sqlByStatement.get(sql) ?? { count: 0, totalMs: 0, longestMs: 0 };
+      entry.count++;
+      entry.totalMs += ms;
+      entry.longestMs = Math.max(entry.longestMs, ms);
+      sqlByStatement.set(sql, entry);
+    });
+    let result: A;
+    try {
+      result = await Effect.runPromise(run(turn));
+    } finally {
+      stopSql();
+    }
     end();
     const used = process.cpuUsage(cpu);
     cpuMicros += used.user + used.system;
@@ -49,6 +79,9 @@ export const measureCooperative = async <A>(
     totals.push(tasks.reduce((sum, ms) => sum + ms, 0));
     longest.push(Math.max(0, ...tasks));
     sliceCounts.push(tasks.length);
+    sqlTotals.push(sqlTotal);
+    sqlLongest.push(maxSql);
+    cpuLongest.push(Math.max(0, ...cpuTasks));
     if (resultKey(result) !== expected) throw new Error(`${read}: nondeterministic result`);
   }
   return {
@@ -65,6 +98,20 @@ export const measureCooperative = async <A>(
       elapsedReplayMs: percentiles(elapsed),
       longestTaskSamplesMs: longest.map(round),
       taskCounts: sliceCounts,
+      sql: {
+        totalMs: percentiles(sqlTotals),
+        longestStatementMs: round(Math.max(...sqlLongest)),
+        longestStatementSamplesMs: sqlLongest.map(round),
+        statements: [...sqlByStatement].map(([sql, value]) => ({
+          sql,
+          count: value.count,
+          totalMs: round(value.totalMs),
+          longestMs: round(value.longestMs),
+        })),
+        boundary:
+          "sql.js prepare through free, including row delivery; excludes Drizzle mapping after free; observer overhead included",
+      },
+      longestTaskWithoutSqlSamplesMs: cpuLongest.map(round),
       source:
         "actual selected-worktree app effects; setImmediate represents the injected free-turn scheduler; SQL reads are indivisible tasks",
       omitted: "native paint, React, scheduler quiet waits and animation; no phone/Hermes claim",

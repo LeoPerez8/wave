@@ -127,16 +127,6 @@ export const WHOLE_LIBRARY: Record<string, Exception> = {
     capabilities: ["library/hooks.ts#songs"],
   },
 
-  "playback/tasteDerivation.ts#readTasteLibrary": {
-    reason:
-      "Due Home picks and the shared live taste profile read one Library snapshot on cancellable background turns, after Home settlement for automatic picks; mapping is stepped.",
-    capabilities: ["library/LibraryStore.ts#listArtists", "library/LibraryStore.ts#listSongs"],
-  },
-  "playback/tasteDerivation.ts#deriveTaste": {
-    reason:
-      "Shared live taste derivation reads history on a background turn and scores in cooperative six-ms slices, reusing Home's snapshot when supplied.",
-    capabilities: ["library/LibraryStore.ts#tasteHistory"],
-  },
   "library/BrowseLists.tsx#ArtistsList": {
     reason: "Visible Library Artists list displays all artists.",
     capabilities: ["library/hooks.ts#useArtists"],
@@ -506,5 +496,46 @@ export const OPENING_REQUESTS: Record<string, Exception> = {
     kind: "gesture",
     reason:
       "Import playlist opens an explicit link-entry flow; importing starts only after a URL is submitted.",
+  },
+};
+
+/** Bounded source walks still belong on cancellable background turns. Keep these
+ * separate from whole-source debts so paging cannot silently return to an opening.
+ */
+export const TASTE_SOURCE_SEEDS = [
+  "mixSongsPage",
+  "tasteArtistsPage",
+  "tastePlaysPage",
+  "tasteFavoritesPage",
+  "tasteDownloadsPage",
+  "tasteRevision",
+].map((name) => `library/LibraryStore.ts#${name}`);
+export const TASTE_SOURCES: Record<string, Exception> = {
+  "playback/tasteDerivation.ts#readTasteLibrary": {
+    reason:
+      "Due picks/shared taste seek at most 128 songs and identity-only artists per turn; sorting/mapping uses canonical runSteps. Due Home is screen-settled; source stamps discard writes. Covered by tasteDerivation.test.ts and magicQueueJob.test.ts.",
+    capabilities: [
+      "library/LibraryStore.ts#mixSongsPage",
+      "library/LibraryStore.ts#tasteArtistsPage",
+    ],
+  },
+  "playback/tasteDerivation.ts#readTasteHistory": {
+    reason:
+      "Shared background taste walks chronological plays and raw favorite/download cursors, including empty decoded pages, at most 128 rows per turn. Covered by tasteDerivation.test.ts and db/mixInputs.test.ts.",
+    capabilities: [
+      "library/LibraryStore.ts#tastePlaysPage",
+      "library/LibraryStore.ts#tasteFavoritesPage",
+      "library/LibraryStore.ts#tasteDownloadsPage",
+    ],
+  },
+  "playback/tasteDerivation.ts#stableTasteSnapshot": {
+    reason:
+      "Constant-size before/after SQLite write stamps protect yielding taste snapshots and due picks without holding a transaction across scheduler turns. Covered by tasteDerivation.test.ts and magicQueueJob.test.ts.",
+    capabilities: ["library/LibraryStore.ts#tasteRevision"],
+  },
+  "home/mixInputs.ts#readMixInputs": {
+    reason:
+      "Existing #594 daily mix background reader shares the bounded songs page; its multi-genre projection and cancellation remain owned by the mix build. Covered by db/mixInputs.test.ts.",
+    capabilities: ["library/LibraryStore.ts#mixSongsPage"],
   },
 };
