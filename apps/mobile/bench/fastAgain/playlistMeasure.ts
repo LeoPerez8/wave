@@ -39,9 +39,10 @@ export const measurePlaylistOperation = async (
     const value = await action();
     await replay.end();
     const used = process.cpuUsage(cpu);
+    const elapsed = performance.now() - start;
     return {
       key: playlistKey(value),
-      elapsed: performance.now() - start,
+      elapsed,
       cpu: (used.user + used.system) / 1000,
       work: { ...replay.work },
       tasks: [...replay.tasks],
