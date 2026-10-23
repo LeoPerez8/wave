@@ -1,8 +1,13 @@
-/** Background turns require global settlement, then three uninterrupted quiet frame intervals. */
+/**
+ * Background turns require global settlement, then three uninterrupted quiet frame intervals.
+ * Backgrounded, there's no screen to protect (and frames may not run): free turns alone pace them.
+ */
 interface Ports {
   readonly now: () => number;
   readonly intervalMs?: () => number;
   readonly isSettled: () => boolean;
+  /** Wave isn't in the foreground; [subscribe] also fires when that changes. */
+  readonly backgrounded?: () => boolean;
   readonly subscribe: (listener: () => void) => () => void;
   readonly request: (run: () => void) => number;
   readonly cancel: (id: number) => void;
@@ -14,6 +19,7 @@ export const createStartupWork = (ports: Ports) => {
     const interval = ports.intervalMs?.() ?? 0;
     return 1.5 * (interval > 0 ? interval : 1000 / 60);
   };
+  const away = () => ports.backgrounded?.() === true;
   const waiting: { run: () => void }[] = [];
   let frame: number | undefined;
   let cancelTurn: (() => void) | undefined;
@@ -31,15 +37,18 @@ export const createStartupWork = (ports: Ports) => {
     quiet = false;
   };
   const arm = (): void => {
-    if (disposed || waiting.length === 0 || !ports.isSettled()) return;
-    if (!quiet) {
+    if (disposed || waiting.length === 0 || (!away() && !ports.isSettled())) return;
+    if (!quiet && !away()) {
       frame ??= ports.request(sample);
       return;
     }
     cancelTurn ??= ports.whenFree(() => {
       cancelTurn = undefined;
       // Navigation may have begun after the free turn was requested.
-      if (!ports.isSettled() || previous === undefined || ports.now() - previous > quietGap()) {
+      if (
+        !away() &&
+        (!ports.isSettled() || previous === undefined || ports.now() - previous > quietGap())
+      ) {
         reset();
         arm();
         return;

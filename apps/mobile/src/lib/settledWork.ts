@@ -33,3 +33,25 @@ export const settledTurn = ({
       cancel?.();
     });
   });
+
+type SettledGate = Pick<SettledScheduler, "settled" | "subscribe">;
+
+/**
+ * Settlement protects what's on screen. Backgrounded (a locked phone, Android
+ * Auto), nothing is, so the gate stands open: a Magic Queue batch or an
+ * import doesn't wait for the owner to come back.
+ */
+export const openWhileBackgrounded = (
+  gate: SettledGate,
+  app: { readonly backgrounded: () => boolean; readonly subscribe: SettledGate["subscribe"] },
+): SettledGate => ({
+  settled: () => app.backgrounded() || gate.settled(),
+  subscribe: (listener) => {
+    const stopGate = gate.subscribe(listener);
+    const stopApp = app.subscribe(listener);
+    return () => {
+      stopGate();
+      stopApp();
+    };
+  },
+});

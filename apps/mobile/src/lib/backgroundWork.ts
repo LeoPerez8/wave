@@ -1,7 +1,8 @@
 /**
  * Background work's turns (Core's `createBackgroundWork`, #315): startup
  * work (the scan, resumed imports, sync, priming playlists, resumed
- * downloads) waits until the first screen has globally settled and quiet frames have passed, and work in
+ * downloads) waits until the first screen has globally settled and quiet frames have passed
+ * (or, with Wave in the background, for free turns alone), and work in
  * slices (a scan's saves, a sync's database steps, a rescan on return) takes
  * each slice on a free turn, after the owner's touch and the motion it
  * started, never holding the JavaScript thread for a tap.
@@ -14,7 +15,7 @@ import { isScreenSettled, onScreenSettled } from "./timing";
 import { createStartupWork } from "./startupWork";
 
 import { WaveAppLog } from "@/native/waveAppLog";
-import { settledTurn } from "./settledWork";
+import { openWhileBackgrounded, settledTurn } from "./settledWork";
 
 import { perfMark, registerPerfMeta } from "@/perf/perf";
 
@@ -34,6 +35,19 @@ AppState.addEventListener("change", (state) => {
   else work.touchEnded();
 });
 
+// Headless starts (Android Auto with no activity) report "background" too.
+const backgrounded = () => AppState.currentState === "background";
+const settledOrAway = openWhileBackgrounded(
+  { settled: isScreenSettled, subscribe: onScreenSettled },
+  {
+    backgrounded,
+    subscribe: (listener) => {
+      const subscription = AppState.addEventListener("change", listener);
+      return () => subscription.remove();
+    },
+  },
+);
+
 const startupWork = createStartupWork({
   now: () => performance.now(),
   intervalMs: () => {
@@ -44,7 +58,8 @@ const startupWork = createStartupWork({
     }
   },
   isSettled: isScreenSettled,
-  subscribe: onScreenSettled,
+  backgrounded,
+  subscribe: settledOrAway.subscribe,
   request: (run) => requestAnimationFrame(run),
   cancel: cancelAnimationFrame,
   whenFree: work.whenFree,
@@ -119,9 +134,5 @@ registerPerfMeta("backgroundWork", () => {
   return { slices, longestWaitMs: Math.round(longestWaitMs), forcedSlices };
 });
 
-/** Optional CPU work starts only after the active transition settled. */
-export const settledTurnEffect = settledTurn({
-  settled: isScreenSettled,
-  subscribe: onScreenSettled,
-  schedule: whenFree,
-});
+/** Optional CPU work starts only after the active transition settled, or with Wave in the background. */
+export const settledTurnEffect = settledTurn({ ...settledOrAway, schedule: whenFree });
