@@ -648,6 +648,7 @@ export type { SheetEvent, SheetPhase, SheetStep } from "./sheetLifecycle.ts";
 export {
   joinArtists,
   libraryFinder,
+  libraryFinderSteps,
   recordingMatches,
   recordingMatchTitle,
   libraryMatcher,
@@ -1752,7 +1753,9 @@ export type {
 export {
   duplicateCheckDue,
   replacementDuplicateFix,
+  replacementDuplicateFixSteps,
   replacementDuplicateLines,
+  replacementDuplicateLinesSteps,
   replacementDuplicates,
   replacementsUnderway,
   storedDuplicateCheck,
@@ -2027,3 +2030,11 @@ export type { LostLinkTap, LostTapReason } from "./lostTap.ts";
 
 export * from "./ytAlbumOpening.ts";
 export { ytArtistPageOpening } from "./ytArtistPageOpening.ts";
+
+export { reconcileScanSteps } from "./scanReconcile.ts";
+export { replacementDuplicatesSteps } from "./replacementDuplicates.ts";
+export { planLinkImportSteps, finishPlaylistImportSteps } from "./playlistImport.ts";
+
+export { playlistImportCompletionSteps } from "./playlistImport.ts";
+
+export { ytLibraryFavoritesSteps } from "./ytLibraryBatch.ts";

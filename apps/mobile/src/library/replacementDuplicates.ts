@@ -1,19 +1,19 @@
 import {
   duplicateCheckOpened,
   duplicateCheckStep,
-  replacementDuplicateFix,
-  replacementDuplicateLines,
-  replacementDuplicates,
+  replacementDuplicateLinesSteps,
   replacementsUnderway,
   type DuplicateCheck,
   type DuplicateCheckEvent,
   type DuplicateCheckWhen,
-  type DuplicateOutcome,
-  type ReplacementDuplicate,
   type YtDownloadJournalJob,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
 import { Storage } from "expo-sqlite/kv-store";
+
+import { startupTurn, startupTurnEffect } from "@/lib/backgroundWork";
+import { runSteps } from "@/lib/stepped";
+import { checkDuplicateFiles } from "./startupJobs";
 
 import { appLog } from "@/log/appLog";
 import { WaveNative } from "@/native/waveNative";
@@ -45,36 +45,25 @@ const TAG = "WaveDownloads";
 const checkReplacementDuplicates = (when: DuplicateCheckWhen) =>
   Effect.gen(function* () {
     const store = yield* LibraryStore;
-    const pairs = replacementDuplicates(yield* store.duplicateCheckFiles);
-    const lengths =
-      pairs.length === 0
-        ? []
-        : yield* Effect.tryPromise(() =>
-            WaveNative.readAudioLengths(pairs.flatMap((pair) => [pair.old.path, pair.new.path])),
-          );
-    const outcomes: { pair: ReplacementDuplicate; outcome: DuplicateOutcome }[] = [];
-    const changed: number[] = [];
-    for (const [i, pair] of pairs.entries()) {
-      const fix = replacementDuplicateFix(pair, {
-        old: lengths[2 * i] ?? null,
-        new: lengths[2 * i + 1] ?? null,
-      });
-      if (fix.kind === "leave") {
-        outcomes.push({ pair, outcome: fix });
-        continue;
-      }
-      const fixed = yield* store.fixReplacementDuplicate(fix);
-      outcomes.push({ pair, outcome: fixed ? fix : { kind: "leave", reason: "changed" } });
-      if (fixed) changed.push(fix.keep.id, fix.drop.id);
-    }
+    const { outcomes, changed } = yield* checkDuplicateFiles(store, startupTurnEffect, (paths) =>
+      Effect.tryPromise(() => WaveNative.readAudioLengths(paths)),
+    );
     if (changed.length > 0) {
-      yield* finishFileDeletions("duplicateCheck");
+      yield* finishFileDeletions("duplicateCheck", { between: startupTurnEffect });
       libraryEdited(changed);
     }
-    const [summary, ...songs] = replacementDuplicateLines(when, outcomes);
+    yield* startupTurnEffect;
+    const lines = yield* runSteps(
+      replacementDuplicateLinesSteps(when, outcomes),
+      startupTurnEffect,
+    );
+    const summary = lines[0];
     if (summary !== undefined) appLog("info", TAG, summary);
-    for (const [i, line] of songs.entries())
+    for (let i = 0; i < outcomes.length; i++) {
+      const line = lines[i + 1]!;
+      yield* startupTurnEffect;
       appLog(outcomes[i]?.outcome.kind === "fix" ? "info" : "warn", TAG, line);
+    }
   });
 
 let check: DuplicateCheck | undefined;
@@ -88,7 +77,8 @@ const tell = (event: DuplicateCheckEvent): void => {
   check = step.check;
   if (step.store !== null) Storage.setItemSync(KEY, step.store);
   if (step.readJournal)
-    void WaveSoulseek.jobsSnapshot()
+    void startupTurn()
+      .then(() => WaveSoulseek.jobsSnapshot())
       .then(replacementJournalRead)
       .catch(() => undefined);
   if (step.run !== null) void run(step.run);

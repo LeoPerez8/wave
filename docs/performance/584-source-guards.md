@@ -175,3 +175,21 @@ change. Race coverage discards prior-track and pre-download lookup answers. The
 source scanner and route-observer policy are unchanged; there is no candidate-finder
 exception. The index's one-time upgrade backfill uses pages of 128 titles, yielding
 between transactions before the LibraryStore becomes available.
+
+## Startup import indexing after #595
+
+The exact Core `playlistImport.ts#planLinkImportSteps` capability is protected
+alongside the existing synchronous finder. Only `library/ytLibraryImport.ts#fill`
+may use that index: a queued resume or explicit import retry waits on the
+startup settlement/quiet-frame turn and maps the Library/source rows in bounded
+CPU steps. The source `playlistImports.ts#listLibrary` allowance is unchanged.
+`startupJobs.test.ts` and `libraryImportResume.test.ts` exercise real store
+writes, ordering, pause/retry and cancellation. No directory exception or route
+observer was added.
+
+`ytMusic.ts#libraryFinderSteps` is also a protected whole-Library capability.
+Its exact `startupJobs.ts#readImportDownloadInput` allowance prepares a filled
+import's downloads with the same matching semantics in steps, after the startup
+turn; replacement/deletion is checked again before dispatch. Its actual-store
+regression lives in `startupJobs.test.ts`. This replaces that path's lazy,
+synchronous `currentLibraryFinder` construction.

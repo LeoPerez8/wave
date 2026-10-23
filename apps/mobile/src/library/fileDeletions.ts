@@ -1,4 +1,5 @@
 import * as Effect from "effect/Effect";
+import { runSteps } from "@/lib/stepped";
 
 import { appLog } from "@/log/appLog";
 import { WaveNative, type FileDeleteOutcome } from "@/native/waveNative";
@@ -42,21 +43,55 @@ const WHEN: Record<FileDeletionsWhen, string> = {
  */
 export const finishFileDeletions = (
   when: FileDeletionsWhen,
-  { scanWith = null, own = null }: { scanWith?: string | null; own?: string | null } = {},
+  {
+    scanWith = null,
+    own = null,
+    between,
+  }: { scanWith?: string | null; own?: string | null; between?: Effect.Effect<void> } = {},
 ) =>
   Effect.gen(function* () {
     const store = yield* LibraryStore;
+    const turn = between ?? Effect.void;
+    yield* turn;
     const pending = yield* store.pendingFileDeletions;
     if (pending.length === 0) return pending;
-    const outcomes = yield* deleteFilesOrFailed(pending, scanWith);
-    const outcomeOf = (path: string) => outcomes[pending.indexOf(path)] ?? "failed";
-    const deleted = pending.filter((path) => outcomeOf(path) === "deleted" && path !== own);
-    const done = pending.filter((path) => {
-      const outcome = outcomeOf(path);
-      return outcome === "deleted" || outcome === "missing";
-    });
-    const left = pending.filter((path) => !done.includes(path));
-    yield* store.forgetFileDeletions(done);
+    const outcomes = new Map<string, FileDeleteOutcome>();
+    if (between === undefined) {
+      const read = yield* deleteFilesOrFailed(pending, scanWith);
+      pending.forEach((path, i) => outcomes.set(path, read[i] ?? "failed"));
+    } else
+      for (const path of pending) {
+        yield* turn;
+        const [outcome = "failed"] = yield* deleteFilesOrFailed([path], scanWith);
+        outcomes.set(path, outcome);
+      }
+    const outcomeOf = (path: string) => outcomes.get(path) ?? "failed";
+    const { deleted, done, left, failedLines } = yield* runSteps(
+      (function* () {
+        const removed: string[] = [],
+          completed: string[] = [],
+          remaining: string[] = [],
+          failures: string[] = [];
+        for (const path of pending) {
+          const outcome = outcomeOf(path);
+          if (outcome === "deleted" && path !== own) removed.push(path);
+          if (outcome === "deleted" || outcome === "missing") completed.push(path);
+          else {
+            remaining.push(path);
+            failures.push(`${path} (${outcome})`);
+          }
+          yield;
+        }
+        return { deleted: removed, done: completed, left: remaining, failedLines: failures };
+      })(),
+      turn,
+    );
+    if (between === undefined) yield* store.forgetFileDeletions(done);
+    else
+      for (const path of done) {
+        yield* turn;
+        yield* store.forgetFileDeletions([path]);
+      }
     if (deleted.length > 0)
       appLog(
         "info",
@@ -67,9 +102,7 @@ export const finishFileDeletions = (
       appLog(
         "warn",
         "downloads",
-        `Couldn't delete ${left.length} recorded file${left.length === 1 ? "" : "s"} ${WHEN[when]}; tried again later: ${left
-          .map((path) => `${path} (${outcomeOf(path)})`)
-          .join(", ")}`,
+        `Couldn't delete ${left.length} recorded file${left.length === 1 ? "" : "s"} ${WHEN[when]}; tried again later: ${failedLines.join(", ")}`,
       );
     return left;
   }).pipe(

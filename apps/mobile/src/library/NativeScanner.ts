@@ -6,6 +6,9 @@ import * as Layer from "effect/Layer";
 import * as Queue from "effect/Queue";
 import * as Stream from "effect/Stream";
 
+import { scanInputColumns } from "./startupJobs";
+import { startupTurnEffect } from "@/lib/backgroundWork";
+
 import {
   WaveNative,
   type FolderPick,
@@ -67,7 +70,9 @@ const scan = (
 ): Stream.Stream<ScanEvent, ScanFailed> =>
   Stream.callback<ScanEvent, ScanFailed>((queue) =>
     Effect.acquireRelease(
-      Effect.sync(() => {
+      Effect.gen(function* () {
+        const columns = yield* scanInputColumns(known, startupTurnEffect);
+        yield* startupTurnEffect;
         // Native events reach JS after this synchronous block, so the id is known before any arrive.
         let scanId = -1;
         let finished = false;
@@ -96,9 +101,9 @@ const scan = (
         scanId = WaveNative.startScan(
           roots,
           excluded,
-          known.map((file) => file.path),
-          known.map((file) => file.sizeBytes),
-          known.map((file) => file.modifiedAt),
+          columns.paths,
+          columns.sizes,
+          columns.modified,
         );
         return {
           release: () => {

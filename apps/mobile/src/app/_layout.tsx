@@ -11,7 +11,7 @@ import type { GestureResponderEvent } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
-import { afterFirstContent, touchEnded, touchStarted, touchTakenOver } from "@/lib/backgroundWork";
+import { afterFirstSettled, touchEnded, touchStarted, touchTakenOver } from "@/lib/backgroundWork";
 import { followLibraryLookupSummary } from "@/library/findLyricsAndGenre";
 import { useAllFilesAccess } from "@/library/hooks";
 import { resumePlaylistImports } from "@/library/playlistImports";
@@ -60,30 +60,38 @@ export default function RootLayout() {
   // Auto's responder. A no-op when Android Auto already started them headless (src/services.ts).
   useEffect(() => startServices("app"), []);
 
-  // The rest waits until the first screen shows its content, then goes one piece per free turn
+  // The rest waits until the first screen has globally settled and quiet frames have passed, then goes one piece per free turn
   // (src/lib/backgroundWork.ts), in this order.
   useEffect(() => {
     if (granted) {
       // The scan, incremental after the first: new files show up, gone ones leave. Then, when
       // it's due, the check for songs a replacement left twice (src/library/replacementDuplicates.ts).
-      afterFirstContent("scan", () => void startInitialScan().then(launchScanDone));
+      const stopScan = afterFirstSettled(
+        "scan",
+        () => void startInitialScan().then(launchScanDone),
+      );
       // Link imports kept when Wave last closed go on filling their playlists.
-      afterFirstContent("imports", resumePlaylistImports);
+      const stopImports = afterFirstSettled("imports", resumePlaylistImports);
       // A From YT Music batch Android stopped reads the playlists it hadn't, in order.
-      afterFirstContent("ytLibraryImport", resumeYtLibraryImport);
+      const stopYtImport = afterFirstSettled("ytLibraryImport", resumeYtLibraryImport);
+      return () => {
+        stopScan();
+        stopImports();
+        stopYtImport();
+      };
     }
   }, [granted]);
 
   // While signed in to a Wave account, the Library syncs with it (src/sync/WaveSync.ts).
-  useEffect(() => afterFirstContent("sync", startSync), []);
+  useEffect(() => afterFirstSettled("sync", startSync), []);
 
   useEffect(() => {
     // Playlists live in the database already: read ahead for the first Add to Playlist card.
-    if (granted) afterFirstContent("playlists", primePlaylists);
+    if (granted) return afterFirstSettled("playlists", primePlaylists);
   }, [granted]);
 
   // A whole-Library lyrics and genre run that ended in the background says how it went.
-  useEffect(() => afterFirstContent("lookupSummary", followLibraryLookupSummary), []);
+  useEffect(() => afterFirstSettled("lookupSummary", followLibraryLookupSummary), []);
 
   return (
     <GestureHandlerRootView
