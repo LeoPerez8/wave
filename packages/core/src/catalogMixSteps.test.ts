@@ -148,7 +148,12 @@ test("a mix's familiar share yields while finding its Library artist", () => {
       return `Artist ${id}`;
     },
   }));
-  const seed = { kind: "artist" as const, id: "artist:artist 1399", name: "Artist 1399" };
+  const seed = {
+    kind: "artist" as const,
+    id: "artist:artist 1399",
+    name: "Artist 1399",
+    from: "library" as const,
+  };
   const songs = [{ id: 1, title: "Known", artist: "Artist 1399", artistIds: [1399], addedAt: 0 }];
   const radio = Array.from({ length: 10 }, (_, i) => ({
     videoId: `fresh-${i}`,

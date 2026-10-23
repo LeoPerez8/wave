@@ -292,3 +292,49 @@ test("empty decoded pages advance every source cursor and attach radios by their
     fixture.close();
   }
 });
+
+test("pages of deleted plays advance without skipping the surviving graph and taste history", async () => {
+  const fixture = await createFastAgainFixture();
+  try {
+    const store = await loadLibraryStore(root, fixture.db);
+    fixture.db.run(sql`UPDATE play_events SET track_id = -1, started_at = 100 WHERE id <= 256`);
+    const first = Effect.runSync(store.graphPlayPage([-Number.MAX_VALUE, 0]));
+    assert.deepEqual(first, { rows: [], next: [100, 128] });
+    const second = Effect.runSync(store.graphPlayPage(first.next!));
+    assert.deepEqual(second, { rows: [], next: [100, 256] });
+    const resumed = traceQueries(fixture.db, () =>
+      Effect.runSync(store.graphPlayPage(second.next!)),
+    );
+    assert.equal(resumed.result.rows.length, 128);
+    assert.ok(resumed.queries.every((query) => query.rows <= 128));
+    const tasteFirst = Effect.runSync(store.tastePlaysPage([-Number.MAX_VALUE, 0]));
+    assert.deepEqual(tasteFirst, first);
+    const tasteSecond = Effect.runSync(store.tastePlaysPage(tasteFirst.next!));
+    assert.deepEqual(tasteSecond, second);
+    const names = new Map(
+      Effect.runSync(store.listArtists).map((artist) => [artist.id, artist.name]),
+    );
+    const artists = new Map(
+      Effect.runSync(store.listSongs).map((song) => [
+        String(song.id),
+        song.artistIds.map((id) => names.get(id)!),
+      ]),
+    );
+    const expected = artistGraph({
+      catalog: [],
+      pages: [],
+      plays: Effect.runSync(store.tasteHistory).plays.map((play) => ({
+        ...play,
+        artists: artists.get(play.trackId)!,
+      })),
+    });
+    const graph = Effect.runSync(readArtistGraph(store));
+    assert.deepEqual([...graph.names], [...expected.names]);
+    assert.deepEqual(
+      [...graph.edges].map(([key, edges]) => [key, [...edges]]),
+      [...expected.edges].map(([key, edges]) => [key, [...edges]]),
+    );
+  } finally {
+    fixture.close();
+  }
+});
