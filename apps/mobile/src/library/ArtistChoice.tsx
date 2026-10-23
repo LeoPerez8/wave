@@ -20,7 +20,7 @@ import { CatalogLine } from "@/catalog/CatalogLine";
 import { CELL } from "@/catalog/grid";
 import { Hairline } from "@/catalog/Hairline";
 import { NameRow } from "@/catalog/NameRow";
-import { revealNowPlayingLink } from "@/nowPlaying/sheet";
+import { failNowPlayingLink, revealNowPlayingLink } from "@/nowPlaying/sheet";
 import { showError } from "@/overlay/alert";
 import { CardEntries } from "@/overlay/CardEntries";
 import { followUp, openOverlay } from "@/overlay/overlay";
@@ -95,7 +95,8 @@ const streamedChoice = (target: StreamedArtistTarget<ArtistRow>): ArtistChoice =
  * Where a streamed song's Go to Artist and Now Playing's artist line lead
  * (Core's `streamedArtistLink`): one artist opens integrated, their Library
  * page or the YouTube Music artist page; several open the card to pick one.
- * The page you're on opens nothing: Now Playing closing reveals it.
+ * The page you're on opens nothing: Now Playing closing reveals it. Every
+ * outcome ends the tap's timing, so the screen settles again.
  */
 export const followStreamedArtistLink = (link: StreamedArtistLink<ArtistRow>): void => {
   if (link.kind === "here") return;
@@ -104,6 +105,7 @@ export const followStreamedArtistLink = (link: StreamedArtistLink<ArtistRow>): v
   if (timingId !== undefined) noteTimingLinkFailure(timingId, "link not ready");
   const deliver = (resolved: StreamedArtistLink<ArtistRow> | undefined) => {
     if (resolved === undefined) {
+      failNowPlayingLink(timingId);
       showError("Couldn't open the artist", "YouTube Music is turned off.");
       return;
     }
@@ -115,7 +117,10 @@ export const followStreamedArtistLink = (link: StreamedArtistLink<ArtistRow>): v
     if (resolved !== undefined) timingLinkNavigated(timingId);
   };
   void followStreamedArtistTap(link, { resolve: resolveStreamedArtistTap, deliver }).catch(
-    (error: unknown) => showError("Couldn't open the artist", error),
+    (error: unknown) => {
+      failNowPlayingLink(timingId);
+      showError("Couldn't open the artist", error);
+    },
   );
 };
 
@@ -149,6 +154,7 @@ const openArtistChoice = (artistIds: readonly number[], timingId?: number): void
       (artists) => {
         if (artists.length === 0) {
           if (timingId !== undefined) noteTimingLinkFailure(timingId, "target gone");
+          failNowPlayingLink(timingId);
           return;
         }
         openChoiceCard(
@@ -156,7 +162,10 @@ const openArtistChoice = (artistIds: readonly number[], timingId?: number): void
           timingId,
         );
       },
-      (error: unknown) => showError("Couldn't read the artists", error),
+      (error: unknown) => {
+        failNowPlayingLink(timingId);
+        showError("Couldn't read the artists", error);
+      },
     ),
   );
 };

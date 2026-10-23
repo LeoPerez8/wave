@@ -76,6 +76,31 @@ test("superseding a transition cancels its counters and ignores stale draw/end c
   assert.deepEqual(lines, []);
 });
 
+test("a tap that opened nothing ends unmeasured and the screen under it is settled again", () => {
+  const { session, events, lines } = setup();
+  const page = session.routeCommitted("/library/artist/3")!;
+  session.frame(page);
+  session.content(page);
+  session.end(page);
+  let released = 0;
+  session.onSettled(() => {
+    if (session.isSettled()) released++;
+  });
+  const tap = session.begin("goToArtist", "Artist");
+  assert.equal(session.isSettled(), false);
+  session.dismiss(tap + 1);
+  assert.equal(session.active()?.id, tap, "another id cannot end it");
+  session.dismiss(tap);
+  assert.equal(session.active(), null);
+  assert.equal(session.isSettled(), true);
+  assert.equal(released, 1);
+  assert.deepEqual(events, [`${tap}:start`, `${tap}:cancelled`]);
+  session.dismiss(tap);
+  session.response(tap);
+  assert.equal(released, 1);
+  assert.deepEqual(lines, []);
+});
+
 test("slow tap and screen record different milestones and summary retains throttled samples", () => {
   const { session, at, wallAt, wall, lines } = setup();
   session.routeCommitted("/albums");

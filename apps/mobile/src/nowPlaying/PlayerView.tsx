@@ -41,6 +41,7 @@ import {
 import {
   closeNowPlaying,
   closeNowPlayingForLink,
+  failNowPlayingLink,
   revealNowPlayingLink,
   useNowPlayingShown,
 } from "./sheet";
@@ -331,6 +332,7 @@ export function PlayerView({ item, details, playing }: Props) {
             reveal: () => revealNowPlayingLink(timingId),
             unavailable: (error) => {
               if (timingId !== undefined) noteTimingLinkFailure(timingId, "target gone");
+              failNowPlayingLink(timingId);
               showError(
                 "Couldn't open the artist",
                 error ?? "The song is no longer in the Library.",

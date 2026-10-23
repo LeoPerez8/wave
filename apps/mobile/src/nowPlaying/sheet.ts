@@ -1,5 +1,6 @@
 import {
   activeTiming,
+  dismissTiming,
   noteTimingLinkClose,
   beginTiming,
   timingResponse,
@@ -52,13 +53,21 @@ let sheetTimingId: number | undefined;
 const linkReveal = createLinkRevealCompletion({
   committed: (id) => timingSurfaceCommitted(id, false),
   end: timingTransitionEnd,
+  current: () => activeTiming()?.id,
+  dismiss: dismissTiming,
 });
 
-/** A cold artist lookup found the loaded page underneath this link's sheet close. */
+/**
+ * A cold artist lookup found its destination is the page already showing:
+ * under this link's sheet close, or under the menu or swipe it was tapped in.
+ */
 export const revealNowPlayingLink = (id: number | undefined): void => {
   timingLinkNavigated(id);
   linkReveal.reveal(id);
 };
+
+/** A cold artist link opened nothing (an error shows instead): its timing ends unmeasured. */
+export const failNowPlayingLink = (id: number | undefined): void => linkReveal.fail(id);
 /** True only once the opening spring finished and the player content drew. */
 export const useNowPlayingSettled = (): boolean =>
   useSyncExternalStore(sheetSettled.subscribe, sheetSettled.get);
