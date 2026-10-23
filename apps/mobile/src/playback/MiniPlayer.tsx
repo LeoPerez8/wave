@@ -3,9 +3,14 @@ import {
   IconPlayerPlayFilled,
   IconPlayerTrackNextFilled,
 } from "@tabler/icons-react-native";
-import { concentricRadius, resolveSkipSwipe, type SkipDirection } from "@wave/core";
+import {
+  concentricRadius,
+  playerTouchAllowed,
+  resolveSkipSwipe,
+  type SkipDirection,
+} from "@wave/core";
 import * as Haptics from "expo-haptics";
-import { memo, useRef, useSyncExternalStore, type ComponentRef } from "react";
+import { memo, useEffect, useRef, useSyncExternalStore, type ComponentRef } from "react";
 import { Text, View } from "react-native";
 import { GestureDetector, usePanGesture } from "react-native-gesture-handler";
 import Animated, {
@@ -26,6 +31,7 @@ import { OnFloatingChrome } from "@/chrome/onFloatingChrome";
 import { IconButton } from "@/components/IconButton";
 import { Glass } from "@/glass/Glass";
 import { Press } from "@/motion/Press";
+import { menuTouchOwnership, observeMenuTouchOwnership } from "@/motion/heldTouch";
 import {
   beginNowPlayingDrag,
   endNowPlayingDrag,
@@ -58,6 +64,20 @@ const EASE_OUT = Easing.out(Easing.exp);
 
 const skip = (direction: SkipDirection): Promise<void> =>
   direction === "next" ? skipToNext() : skipToPrevious();
+
+const beginOpen = (revision: number) => {
+  if (menuTouchOwnership.allows(revision)) beginNowPlayingDrag();
+};
+
+const finishOpen = (
+  revision: number,
+  translationY: number,
+  velocityY: number,
+  canceled: boolean,
+) => {
+  if (!menuTouchOwnership.allows(revision)) return;
+  endNowPlayingDrag(canceled ? 0 : translationY, canceled ? 0 : velocityY);
+};
 
 // Separate selectors, so position ticks don't re-render the mini player.
 const usePlaybackField = <K extends "item" | "playWhenReady" | "error" | "notice">(key: K) =>
@@ -92,8 +112,28 @@ export const MiniPlayer = memo(function MiniPlayer({ backdropId, onOpen }: Props
   const width = useSharedValue(1);
   const widthRef = useRef(1);
   const offset = useSharedValue(0);
+  const ownership = useSharedValue(menuTouchOwnership.get());
+  const pansEnabled = useSharedValue(!menuTouchOwnership.get().held);
+  const skipRevision = useSharedValue(-1);
+  const openRevision = useSharedValue(-1);
 
-  const finish = (translationX: number, velocityX: number, canceled: boolean) => {
+  useEffect(
+    () =>
+      observeMenuTouchOwnership((owner) => {
+        // Disable the native recognizers before an anchor/song read can finish.
+        // Revision checks also reject UI/RN callbacks already in flight.
+        ownership.set(owner);
+        pansEnabled.set(!owner.held);
+        if (owner.held) {
+          offset.set(0);
+          endNowPlayingDrag(0, 0);
+        }
+      }),
+    [ownership, pansEnabled, offset],
+  );
+
+  const finish = (revision: number, translationX: number, velocityX: number, canceled: boolean) => {
+    if (!menuTouchOwnership.allows(revision)) return;
     const direction = canceled
       ? null
       : resolveSkipSwipe({ translationX, velocityX, width: widthRef.current });
@@ -119,34 +159,54 @@ export const MiniPlayer = memo(function MiniPlayer({ backdropId, onOpen }: Props
   };
 
   const pan = usePanGesture({
+    enabled: pansEnabled,
     activeOffsetX: [-DRAG_SLOP, DRAG_SLOP],
     failOffsetY: [-DRAG_SLOP, DRAG_SLOP],
+    onBegin: () => {
+      "worklet";
+      const owner = ownership.get();
+      skipRevision.set(owner.held ? -1 : owner.revision);
+    },
     onUpdate: (event) => {
       "worklet";
+      if (!playerTouchAllowed(ownership.get(), skipRevision.get())) return;
       offset.set(event.translationX);
     },
     onDeactivate: (event) => {
       "worklet";
-      scheduleOnRN(finish, event.translationX, event.velocityX, event.canceled);
+      const revision = skipRevision.get();
+      if (!playerTouchAllowed(ownership.get(), revision)) return;
+      scheduleOnRN(finish, revision, event.translationX, event.velocityX, event.canceled);
     },
   });
 
   // Swiping up pulls Now Playing out of the mini player, following the finger.
   const openPan = usePanGesture({
+    enabled: pansEnabled,
     activeOffsetY: [-DRAG_SLOP, 1_000_000],
     failOffsetX: [-DRAG_SLOP, DRAG_SLOP],
+    onBegin: () => {
+      "worklet";
+      const owner = ownership.get();
+      openRevision.set(owner.held ? -1 : owner.revision);
+    },
     onActivate: () => {
       "worklet";
-      scheduleOnRN(beginNowPlayingDrag);
+      const revision = openRevision.get();
+      if (!playerTouchAllowed(ownership.get(), revision)) return;
+      scheduleOnRN(beginOpen, revision);
     },
     onUpdate: (event) => {
       "worklet";
+      if (!playerTouchAllowed(ownership.get(), openRevision.get())) return;
       const height = sheetHeight.get();
       sheetOffset.set(Math.min(height, Math.max(0, height + event.translationY)));
     },
     onDeactivate: (event) => {
       "worklet";
-      scheduleOnRN(endNowPlayingDrag, event.translationY, event.velocityY);
+      const revision = openRevision.get();
+      if (!playerTouchAllowed(ownership.get(), revision)) return;
+      scheduleOnRN(finishOpen, revision, event.translationY, event.velocityY, event.canceled);
     },
   });
 

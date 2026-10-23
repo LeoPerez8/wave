@@ -1,10 +1,11 @@
-import { moveSlide, slideEntry, slideTicks, startSlide, type SlidePoint } from "@wave/core";
 import * as Haptics from "expo-haptics";
-import { useEffect, useEffectEvent, useState } from "react";
+import { useContext, useEffect, useEffectEvent, useState } from "react";
 
 import { CELL } from "@/catalog/grid";
 import { heldTouchStart, onHeldTouch } from "@/motion/heldTouch";
 import { measureRect, type Measurable } from "@/motion/measureRect";
+import { captureOverlayTouch, OverlayId } from "./overlay";
+import { createSlideToChoose } from "./slideToChoose";
 
 /** How far the held finger must slide before it chooses anything (Android's touch slop). */
 const SLOP = CELL;
@@ -29,6 +30,7 @@ export interface SlideToChoose {
  * screen reader) see no held finger and work as before.
  */
 export function useSlideToChoose(choose: (index: number) => void): SlideToChoose {
+  const overlayId = useContext(OverlayId);
   const [underFinger, setUnderFinger] = useState<number | undefined>(undefined);
   const onChoose = useEffectEvent(choose);
   // The laid-out entries and their list, filled in by the ref callbacks.
@@ -60,49 +62,33 @@ export function useSlideToChoose(choose: (index: number) => void): SlideToChoose
   useEffect(() => {
     const start = heldTouchStart();
     if (start === null) return undefined;
-    let slide = startSlide(start);
-    let live = true;
-    // Moves resolve in order; one that lands after the finger lifted is dropped.
-    let latest = 0;
-    // The entry under the finger as of the last move, for the haptic tick onto a new one.
-    let under: number | undefined;
-
-    const entryAt = async (point: SlidePoint): Promise<number | undefined> => {
+    const measure = async () => {
       const count = Math.max(-1, ...nodes.entries.keys()) + 1;
       const [viewport, ...rects] = await Promise.all([
         measureRect(nodes.list),
         ...Array.from({ length: count }, (_, index) => measureRect(nodes.entries.get(index))),
       ]);
-      return slideEntry(slide, point, rects, viewport);
+      return { entries: rects, viewport };
     };
-
+    const slide = createSlideToChoose({
+      start,
+      slop: SLOP,
+      measure,
+      active: overlayId === undefined ? () => true : captureOverlayTouch(overlayId),
+      highlight: setUnderFinger,
+      tick: () => void Haptics.selectionAsync(),
+      choose: onChoose,
+    });
     const unsubscribe = onHeldTouch((event) => {
-      const ticket = ++latest;
-      if (event.type === "cancel") {
-        unsubscribe();
-        setUnderFinger(undefined);
-        return;
-      }
-      slide = moveSlide(slide, event.point, SLOP);
-      if (event.type === "release") unsubscribe();
-      void entryAt(event.point).then((index) => {
-        if (!live || ticket !== latest) return;
-        if (event.type === "move") {
-          if (slideTicks(under, index)) void Haptics.selectionAsync();
-          under = index;
-          setUnderFinger(index);
-          return;
-        }
-        setUnderFinger(undefined);
-        if (index !== undefined) onChoose(index);
-      });
+      slide.handle(event);
+      if (event.type !== "move") unsubscribe();
     });
 
     return () => {
-      live = false;
       unsubscribe();
+      slide.cancel();
     };
-  }, [nodes]);
+  }, [nodes, overlayId]);
 
   return { underFinger, ...refs };
 }
