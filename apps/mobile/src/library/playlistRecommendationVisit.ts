@@ -37,9 +37,13 @@ export const followPlaylistRecommendations = (
   let disposed = false;
   let running = false;
   let cancel: (() => void) | undefined;
+  // `cancel` already keeps one request at a time. Each gets its own key, so one
+  // made while the previous job is still leaving the queue waits behind it
+  // instead of being dropped as a duplicate (which left `cancel` a no-op).
+  let requests = 0;
   const request = () => {
     if (disposed || !stale || !options.sight.visible() || cancel !== undefined) return;
-    cancel = serial.add("recommendations", async (signal) => {
+    cancel = serial.add(`recommendations ${++requests}`, async (signal) => {
       try {
         if (burst)
           await wait(Math.max(0, lastStarted + LIBRARY_QUERY_LIMITS.throttleMs - now()), signal);
