@@ -13,12 +13,14 @@ import {
   type RecapAvailability,
 } from "./recapAvailability";
 import { Stats } from "./Stats";
+import { knownRecapSetting } from "./knownRecaps";
 
 let shared: Promise<RecapAvailability> | undefined;
 let retained: RecapAvailability | undefined;
 
-/** The shared answer already in memory; never starts a read. */
-export const knownRecaps = (): readonly RecapPeriod[] | undefined => retained?.get();
+/** The latest answer, including the previous session's; never starts a history read. */
+export const knownRecaps = (): readonly RecapPeriod[] | undefined =>
+  retained?.get() ?? knownRecapSetting.get();
 
 const getRecapAvailability = (): Promise<RecapAvailability> => {
   shared ??= appRuntime
@@ -28,6 +30,7 @@ const getRecapAvailability = (): Promise<RecapAvailability> => {
         Effect.sync(() =>
           shareRecapAvailability({
             version: stats.recapHistoryVersion,
+            retained: knownRecapSetting,
             read: (now, signal) =>
               appRuntime.runPromise(stats.recaps(now, freeTurnEffect), { signal }),
             schedule: (ms, run) => {

@@ -20,7 +20,7 @@ const at = (month: number, day = 1, h = 0, minute = 0) =>
 const announcementOnOpening = (
   available: readonly RecapPeriod[] | undefined,
   opened: readonly string[],
-) => startHomeRecap(available, opened, true).period;
+) => startHomeRecap({ available, opened, visible: true }).period;
 
 test("bounded listening pages preserve all Core availability without a whole-history statement", async () => {
   const fixture = await createFastAgainFixture();
@@ -176,17 +176,17 @@ test("shared availability and announcements follow actual threshold, opened, Dec
     const id = Effect.runSync(replay.store.recordPlay(history));
     replay.at(at(10));
     const client = replay.attach(true);
-    let home = startHomeRecap(replay.get(), [], true);
+    let home = startHomeRecap({ available: replay.get(), opened: [], visible: true });
     assert.equal(home.period, null, "the pending check reserves no card");
     await replay.drain();
     assert.deepEqual(replay.get(), []);
     replay.reset(true);
     Effect.runSync(replay.store.updatePlay(id, { ...history, listenedMs: 3 * hour }));
     await replay.drain();
-    home = homeRecapVisibility(home, true, replay.get(), []);
+    home = homeRecapVisibility(home, { visible: true, available: replay.get(), opened: [] });
     assert.equal(home.period, null, "reaching the threshold cannot insert a card during a visit");
-    home = homeRecapVisibility(home, false, replay.get(), []);
-    home = homeRecapVisibility(home, true, replay.get(), []);
+    home = homeRecapVisibility(home, { visible: false, available: replay.get(), opened: [] });
+    home = homeRecapVisibility(home, { visible: true, available: replay.get(), opened: [] });
     assert.deepEqual(home.period, { kind: "month", year: 2026, month: 9 });
     assert.deepEqual(announcementOnOpening(replay.get(), []), {
       kind: "month",

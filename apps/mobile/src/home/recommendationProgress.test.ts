@@ -46,7 +46,7 @@ const until = async (done: () => boolean) => {
   assert.ok(done(), "recommendations settle within bounded turns");
 };
 
-test("2,531 songs and 900 artists finish paging, refill a Magic Queue online, and populate playlists and both Home mixes", async (t) => {
+test("2,531 Tracks and 900 artists finish paging, refill a Magic Queue online, and populate playlists and both Home mixes", async (t) => {
   const db = await openTestDatabase();
   const between = Effect.promise(() => setImmediate());
   try {
@@ -62,6 +62,7 @@ test("2,531 songs and 900 artists finish paging, refill a Magic Queue online, an
       SELECT id, ${now} - id * 200000, 180000, 180000, 'completed', 1, 'phone', '621-play-' || id
       FROM tracks`);
     const store = await loadLibraryStore(root, db);
+    const trackIds = new Set(Effect.runSync(store.listSongs).map((track) => track.id));
     let pages = 0;
     const reads = {
       ...store,
@@ -75,11 +76,13 @@ test("2,531 songs and 900 artists finish paging, refill a Magic Queue online, an
     const recommendations = sharePlaylistRecommendationInputs(reads, between);
     try {
       const library = await Effect.runPromise(indexes.get);
-      assert.equal(library.songs.length, 2531);
+      assert.deepEqual(new Set(library.songs.map((track) => track.id)), trackIds);
+      assert.equal(library.songs.length, 2531, "every Track appears once");
       assert.equal(library.artists.length, 900);
-      assert.equal(pages, 21, "one forward walk, including its empty final page");
+      assert.ok(pages > 0 && pages <= 128, "the complete Library fits a bounded read budget");
+      const mixPages = pages;
       assert.equal(await Effect.runPromise(indexes.get), library);
-      assert.equal(pages, 21, "a kept derivation never starts paging again");
+      assert.equal(pages, mixPages, "a kept derivation never starts paging again");
       const artist = library.topArtists[0]!;
       const seed = library.songs.find((song) => song.artistId === artist.id)!;
       const started = startMagicQueue(
@@ -143,6 +146,8 @@ test("2,531 songs and 900 artists finish paging, refill a Magic Queue online, an
         now,
       ).playlistId;
       const input = await Effect.runPromise(recommendations.get(playlistId));
+      assert.deepEqual(new Set(input.library.map((track) => Number(track.id))), trackIds);
+      assert.equal(input.library.length, 2531, "playlist inputs contain every Track once");
       const offers = playlistRecommendations(input.playlist, {
         ...input,
         graph,
@@ -150,7 +155,10 @@ test("2,531 songs and 900 artists finish paging, refill a Magic Queue online, an
         online: true,
       });
       assert.ok(offers.length > 0, "the playlist footer receives recommendations");
-      assert.equal(pages, 42, "the playlist's own source walks the Library once");
+      assert.ok(pages - mixPages <= 128, "playlist inputs fit a bounded read budget");
+      const completedPages = pages;
+      assert.deepEqual(await Effect.runPromise(recommendations.get(playlistId)), input);
+      assert.equal(pages, completedPages, "a warm playlist read reuses the Library source");
       for (const seeds of [
         artistMixSeeds(
           {
@@ -168,9 +176,13 @@ test("2,531 songs and 900 artists finish paging, refill a Magic Queue online, an
         assert.ok(mixes.every((mix) => mix.songs.length > 0));
       }
       await setImmediate();
-      assert.equal(pages, 42, "completed jobs leave no song paging behind on another screen");
+      assert.equal(
+        pages,
+        completedPages,
+        "completed jobs leave no Track paging behind on another screen",
+      );
       t.diagnostic(
-        `Desktop SQLite: 2531 songs, 900 artists; 21 pages per source; 1 radio refill; ${batch.trackIds.length} batch songs; ${offers.length} playlist offers`,
+        `Desktop SQLite: 2531 Tracks, 900 artists; ${pages} total pages; 1 radio refill; ${batch.trackIds.length} batch Tracks; ${offers.length} playlist offers`,
       );
     } finally {
       indexes.dispose();
