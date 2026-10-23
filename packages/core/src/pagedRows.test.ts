@@ -153,6 +153,22 @@ describe("createPagedRows", () => {
     assert.deepEqual(reads[1]!.keys, range(1, 10));
   });
 
+  test("rows a screen already read with the order (a genre's first page) aren't read again", () => {
+    const { rows, reads, answer, shown } = setUp();
+    const firstPage = range(1, 10).map((id) => ({ id, title: `opening ${id}` }));
+    rows.setOrder(range(1, 10), firstPage);
+    assert.deepEqual(reads, []);
+    assert.deepEqual(shown(0, 2), ["opening 1", "opening 2"]);
+    // The whole order: only the rows past the first page are read.
+    rows.setOrder(range(1, 1_000), firstPage);
+    assert.deepEqual(
+      reads.map((read) => read.keys),
+      [range(11, 10)],
+    );
+    answer(0);
+    assert.deepEqual(shown(9, 2), ["opening 10", "v1 11"]);
+  });
+
   test("an empty list reads nothing", () => {
     const { rows, reads } = setUp();
     rows.setOrder([]);

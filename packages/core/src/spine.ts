@@ -16,12 +16,10 @@ const SPINE_MIN_ROWS = 24;
  * first row; none for a short list or one filed under a single letter.
  */
 export const spineEntries = (sortKeys: readonly string[]): readonly IndexEntry[] => {
-  return spineFromIndex(alphabetIndex(sortKeys), sortKeys.length);
+  if (sortKeys.length < SPINE_MIN_ROWS) return [];
+  const entries = alphabetIndex(sortKeys);
+  return entries.length > 1 ? entries : [];
 };
-
-/** The same spine rules for an index accumulated one bounded page at a time. */
-export const spineFromIndex = (entries: readonly IndexEntry[], count: number): readonly IndexEntry[] =>
-  count >= SPINE_MIN_ROWS && entries.length > 1 ? entries : [];
 
 /** One fixed place on the spine. */
 export interface SpineSlot {

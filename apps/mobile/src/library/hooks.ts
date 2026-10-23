@@ -26,7 +26,6 @@ import {
   type ArtistDetail,
   type ArtistRow,
   type FavoriteRow,
-  type GenreDetail,
   type GenreRow,
   type LibraryStoreError,
   type PlaylistDetail,
@@ -253,7 +252,6 @@ const useDetail = <A>(
 
 const getAlbum = (store: LibraryStore["Service"], id: number) => store.getAlbum(id);
 const getArtist = (store: LibraryStore["Service"], id: number) => store.getArtist(id);
-const getGenre = (store: LibraryStore["Service"], id: number) => store.getGenre(id);
 
 const NO_LINKS: LinkRows = { album: null, artist: null };
 
@@ -282,8 +280,6 @@ export const useAlbum = (id: number): AlbumDetail | null | undefined =>
   useDetail("album", id, getAlbum);
 export const useArtist = (id: number): ArtistDetail | null | undefined =>
   useDetail("artist", id, getArtist);
-export const useGenre = (id: number): GenreDetail | null | undefined =>
-  useDetail("genre", id, getGenre);
 
 const listExcludedFolders = storeQuery(
   "excludedFolders",

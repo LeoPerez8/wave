@@ -1,5 +1,3 @@
-import { genreOrderMigration } from "./genreOrderMigration.ts";
-
 /**
  * Hand-written migrations in the shape drizzle-kit generates for Expo
  * (`{ journal, migrations: { m0000 } }`), consumed by
@@ -964,6 +962,116 @@ const mRecordingTitles = `ALTER TABLE tracks ADD COLUMN match_title text;
 --> statement-breakpoint
 CREATE INDEX tracks_match_title_idx ON tracks(match_title);`;
 
+/**
+ * #601: each genre song's sort keys, kept beside the Track so a genre opens
+ * on an indexed first page in every sort (Core's `songOrderTerms`, with its
+ * nulls as the terms read them). Path and id, the last ties, stay out of the
+ * indexes: only duplicates reach them, and paths would triple the indexes'
+ * size. Triggers keep the keys for every writer, and count each genre's
+ * order changes (a song added, removed, moved, retagged or gone missing) so a
+ * paged read never stitches two orders together.
+ */
+const mGenreOrder = `CREATE TABLE genre_order (
+  id integer PRIMARY KEY NOT NULL,
+  genre_id integer NOT NULL,
+  title_sort text NOT NULL,
+  artist_sort text NOT NULL,
+  album_sort text NOT NULL,
+  album_id integer NOT NULL,
+  disc_number integer NOT NULL,
+  track_number integer NOT NULL,
+  added_at integer NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE genre_order_revisions (
+  genre_id integer PRIMARY KEY NOT NULL,
+  revision integer NOT NULL
+);
+--> statement-breakpoint
+INSERT INTO genre_order
+  SELECT t.id, t.genre_id, t.title_sort, a.sort, b.title_sort, t.album_id,
+    coalesce(t.disc_number, 1), coalesce(t.track_number, 9007199254740991), t.added_at
+  FROM tracks t JOIN artists a ON a.id = t.artist_id JOIN albums b ON b.id = t.album_id
+  WHERE t.genre_id IS NOT NULL;
+--> statement-breakpoint
+CREATE INDEX genre_order_title_asc ON genre_order (genre_id, title_sort, artist_sort);
+--> statement-breakpoint
+CREATE INDEX genre_order_title_desc ON genre_order (genre_id, title_sort DESC, artist_sort);
+--> statement-breakpoint
+CREATE INDEX genre_order_artist_asc ON genre_order
+  (genre_id, artist_sort, album_sort, album_id, disc_number, track_number, title_sort);
+--> statement-breakpoint
+CREATE INDEX genre_order_artist_desc ON genre_order
+  (genre_id, artist_sort DESC, album_sort, album_id, disc_number, track_number, title_sort);
+--> statement-breakpoint
+CREATE INDEX genre_order_album_asc ON genre_order
+  (genre_id, album_sort, album_id, disc_number, track_number, title_sort);
+--> statement-breakpoint
+CREATE INDEX genre_order_album_desc ON genre_order
+  (genre_id, album_sort DESC, album_id, disc_number, track_number, title_sort);
+--> statement-breakpoint
+CREATE INDEX genre_order_added_asc ON genre_order (genre_id, added_at, title_sort, artist_sort);
+--> statement-breakpoint
+CREATE INDEX genre_order_added_desc ON genre_order
+  (genre_id, added_at DESC, title_sort, artist_sort);
+--> statement-breakpoint
+CREATE TRIGGER genre_order_track_insert AFTER INSERT ON tracks WHEN NEW.genre_id IS NOT NULL
+BEGIN
+  INSERT OR REPLACE INTO genre_order
+    SELECT NEW.id, NEW.genre_id, NEW.title_sort, a.sort, b.title_sort, NEW.album_id,
+      coalesce(NEW.disc_number, 1), coalesce(NEW.track_number, 9007199254740991), NEW.added_at
+    FROM artists a, albums b WHERE a.id = NEW.artist_id AND b.id = NEW.album_id;
+  INSERT INTO genre_order_revisions VALUES (NEW.genre_id, 1)
+    ON CONFLICT (genre_id) DO UPDATE SET revision = revision + 1;
+END;
+--> statement-breakpoint
+CREATE TRIGGER genre_order_track_update
+AFTER UPDATE OF genre_id, title_sort, artist_id, album_id, disc_number, track_number, added_at, path
+ON tracks
+WHEN OLD.genre_id IS NOT NEW.genre_id OR OLD.title_sort IS NOT NEW.title_sort
+  OR OLD.artist_id IS NOT NEW.artist_id OR OLD.album_id IS NOT NEW.album_id
+  OR OLD.disc_number IS NOT NEW.disc_number OR OLD.track_number IS NOT NEW.track_number
+  OR OLD.added_at IS NOT NEW.added_at OR OLD.path IS NOT NEW.path
+BEGIN
+  DELETE FROM genre_order WHERE id = OLD.id;
+  INSERT OR REPLACE INTO genre_order
+    SELECT NEW.id, NEW.genre_id, NEW.title_sort, a.sort, b.title_sort, NEW.album_id,
+      coalesce(NEW.disc_number, 1), coalesce(NEW.track_number, 9007199254740991), NEW.added_at
+    FROM artists a, albums b
+    WHERE NEW.genre_id IS NOT NULL AND a.id = NEW.artist_id AND b.id = NEW.album_id;
+  INSERT INTO genre_order_revisions
+    SELECT genre_id, 1 FROM (SELECT OLD.genre_id AS genre_id UNION SELECT NEW.genre_id)
+    WHERE genre_id IS NOT NULL
+    ON CONFLICT (genre_id) DO UPDATE SET revision = revision + 1;
+END;
+--> statement-breakpoint
+CREATE TRIGGER genre_order_track_delete AFTER DELETE ON tracks WHEN OLD.genre_id IS NOT NULL
+BEGIN
+  DELETE FROM genre_order WHERE id = OLD.id;
+  INSERT INTO genre_order_revisions VALUES (OLD.genre_id, 1)
+    ON CONFLICT (genre_id) DO UPDATE SET revision = revision + 1;
+END;
+--> statement-breakpoint
+CREATE TRIGGER genre_order_artist_sort AFTER UPDATE OF sort ON artists
+WHEN OLD.sort IS NOT NEW.sort
+BEGIN
+  UPDATE genre_order SET artist_sort = NEW.sort
+    WHERE id IN (SELECT id FROM tracks WHERE artist_id = NEW.id);
+  INSERT INTO genre_order_revisions
+    SELECT DISTINCT genre_id, 1 FROM tracks WHERE artist_id = NEW.id AND genre_id IS NOT NULL
+    ON CONFLICT (genre_id) DO UPDATE SET revision = revision + 1;
+END;
+--> statement-breakpoint
+CREATE TRIGGER genre_order_album_sort AFTER UPDATE OF title_sort ON albums
+WHEN OLD.title_sort IS NOT NEW.title_sort
+BEGIN
+  UPDATE genre_order SET album_sort = NEW.title_sort
+    WHERE id IN (SELECT id FROM tracks WHERE album_id = NEW.id);
+  INSERT INTO genre_order_revisions
+    SELECT DISTINCT genre_id, 1 FROM tracks WHERE album_id = NEW.id AND genre_id IS NOT NULL
+    ON CONFLICT (genre_id) DO UPDATE SET revision = revision + 1;
+END;`;
+
 export default {
   journal: {
     entries: [
@@ -1057,6 +1165,6 @@ export default {
     m0035: mCandidateCatalog,
     m0036: mPlaylistRecommendationFeedback,
     m0037: mRecordingTitles,
-    m0038: genreOrderMigration,
+    m0038: mGenreOrder,
   },
 };

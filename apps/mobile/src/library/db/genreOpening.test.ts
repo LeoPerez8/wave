@@ -1,85 +1,294 @@
+/** #601: a genre opens on a bounded, indexed first page; its order follows in index seeks. */
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
+import {
+  SONG_SORTS,
+  songSpineKeys,
+  sortSongs,
+  spineEntries,
+  type LibrarySongSort,
+} from "@wave/core";
+import { sql } from "drizzle-orm";
 import * as Effect from "effect/Effect";
+
 import { loadLibraryStore } from "../../../bench/fastAgain/store.ts";
 import { createFastAgainFixture } from "./fastAgainFixture.ts";
-import { traceQueries } from "./testDatabase.ts";
+import { selectGenreOrderSlice, type GenreCursor, type GenreOrderSlice } from "./genrePages.ts";
+import { selectSongSummaries } from "./songOrder.ts";
+import {
+  addLibrary,
+  addTrack,
+  migrateTestDatabase,
+  openTestDatabase,
+  traceQueries,
+  type TestDatabase,
+  type TracedQuery,
+} from "./testDatabase.ts";
 
 const root = fileURLToPath(new URL("../../../../../", import.meta.url));
+const TITLE: LibrarySongSort = { key: "title", descending: false };
 
-test("a 1,000-song Library opens a genre with a narrow header and at most 50 lightweight rows", async () => {
+/** Each statement seeks its sort's genre index and sorts nothing but duplicates' file ties. */
+const assertSeeks = (
+  queries: readonly TracedQuery[],
+  sort: LibrarySongSort,
+  continued = false,
+): void => {
+  const index = `genre_order_${sort.key}_${sort.descending ? "desc" : "asc"}`;
+  // Going on from a cursor seeks past it: a range on the index, not a filter.
+  const seek = new RegExp(
+    `^SEARCH o USING (COVERING )?INDEX ${index} \\(genre_id=\\?${continued ? " AND " : "\\)"}`,
+  );
+  for (const query of queries.filter((q) => q.sql.includes("FROM genre_order o"))) {
+    assert.ok(
+      query.plan.some((step) => seek.test(step)),
+      `${index}: ${query.plan.join(" | ")}`,
+    );
+    assert.ok(
+      query.plan.every((step) => !/TEMP B-TREE FOR ORDER BY/.test(step)),
+      `${index} sorts the genre: ${query.plan.join(" | ")}`,
+    );
+    assert.ok(!/OFFSET/i.test(query.sql));
+  }
+};
+
+/** The whole order from [first] on, [limit] ids a read. */
+const readAll = (
+  db: TestDatabase,
+  genreId: number,
+  sort: LibrarySongSort,
+  first: GenreOrderSlice,
+  limit: number,
+) => {
+  const ids = [...first.ids];
+  const missing = [...first.missing];
+  const letters = [...first.letters];
+  const queries: TracedQuery[] = [];
+  let next: GenreCursor | null = first.next;
+  while (next !== null) {
+    const cursor: GenreCursor = next;
+    const read = traceQueries(db, () => selectGenreOrderSlice(db, genreId, sort, cursor, limit));
+    assert.ok(read.result !== null, "the order didn't change");
+    queries.push(...read.queries);
+    ids.push(...read.result.ids);
+    missing.push(...read.result.missing);
+    letters.push(...read.result.letters);
+    next = read.result.next;
+  }
+  return { ids, missing, letters, queries };
+};
+
+test("a 1,000-song Library opens a 334-song genre on its header and 50 rows from one index seek", async () => {
   const fixture = await createFastAgainFixture();
   try {
     const store = await loadLibraryStore(root, fixture.db);
-    const opening = traceQueries(fixture.db, () => Effect.runSync(store.openGenre(fixture.genreId, { key: "title", descending: false })));
-    assert.equal(opening.result!.genre.trackCount, 334);
-    assert.equal(opening.result!.page.rows.length, 50);
-    assert.equal(opening.queries.reduce((n, q) => n + q.rows, 0), 51);
-    assert.ok(opening.queries.some(q => q.plan.some(p => /USING.*genre_order_title_asc/.test(p))));
-    assert.ok(opening.queries.every(q => q.plan.every(p => !/TEMP B-TREE/.test(p))));
-    assert.ok(!("artistIds" in opening.result!.page.rows[0]!.summary));
     const full = Effect.runSync(store.getGenre(fixture.genreId))!;
-    assert.deepEqual(opening.result!.page.rows.map(r => r.id), full.songs.slice(0, 50).map(s => s.id));
-  } finally { fixture.close(); }
+    assert.equal(full.songs.length, 334);
+    const opening = traceQueries(fixture.db, () =>
+      Effect.runSync(store.openGenre(fixture.genreId, TITLE)),
+    );
+    const { genre, songs, order } = opening.result!;
+    assert.deepEqual(genre, full.genre);
+    assert.equal(genre.trackCount, 334);
+    // The header's row and the first page: no other SQL row, no full SongRow.
+    assert.equal(opening.queries.length, 2);
+    assert.equal(
+      opening.queries.reduce((sum, query) => sum + query.rows, 0),
+      51,
+    );
+    assertSeeks(opening.queries, TITLE);
+    const expected = sortSongs(full.songs, TITLE).slice(0, 50);
+    assert.deepEqual(
+      songs,
+      selectSongSummaries(
+        fixture.db,
+        expected.map((song) => song.id),
+      ),
+    );
+    assert.deepEqual(
+      order.ids,
+      expected.map((song) => song.id),
+    );
+    assert.deepEqual(
+      order.missing,
+      expected.filter((song) => song.path === null).map((song) => song.id),
+    );
+    assert.ok(order.next !== null);
+    assert.equal(Effect.runSync(store.openGenre(fixture.genreId + 1000, TITLE)), null);
+  } finally {
+    fixture.close();
+  }
 });
 
-test("every genre sort pages through ties with exact full-list equality and indexed seeks", async () => {
-  const { SONG_SORTS, sortSongs, songSpineKeys, spineEntries } = await import("@wave/core");
-  const { sql } = await import("drizzle-orm");
+test("every genre sort pages through runs of ties larger than a page, equal to sortSongs", async () => {
   const fixture = await createFastAgainFixture();
   try {
-    // Force tie groups larger than a page, including null disc/track/path fallbacks.
-    fixture.db.run(sql`UPDATE tracks SET title_sort = 'same', added_at = 7,
-      disc_number = CASE WHEN id % 2 = 0 THEN NULL ELSE 1 END,
+    const { db, genreId } = fixture;
+    // Runs of ties past any page: one title, one added time, missing discs and
+    // track numbers; duplicates told apart only by their file, missing ones by their id.
+    db.run(sql`UPDATE tracks SET added_at = 7 WHERE id % 2 = 0`);
+    db.run(sql`UPDATE tracks SET title_sort = 'same' WHERE id % 5 < 3`);
+    db.run(sql`UPDATE tracks SET disc_number = CASE WHEN id % 4 = 0 THEN NULL ELSE 1 END,
       track_number = CASE WHEN id % 3 = 0 THEN NULL ELSE 2 END`);
-    const store = await loadLibraryStore(root, fixture.db);
-    const full = Effect.runSync(store.getGenre(fixture.genreId))!.songs;
+    db.run(sql`UPDATE tracks SET path = NULL WHERE id % 7 = 0`);
+    const store = await loadLibraryStore(root, db);
+    const full = Effect.runSync(store.getGenre(genreId))!.songs;
     for (const sort of SONG_SORTS) {
-      const opening = Effect.runSync(store.openGenre(fixture.genreId, sort))!;
-      const rows = [...opening.page.rows];
-      let cursor = opening.page.next;
-      while (cursor !== null) {
-        const page = traceQueries(fixture.db, () => Effect.runSync(store.genrePage(fixture.genreId, sort, cursor)));
-        assert.equal(page.result.stale, false);
-        assert.ok(page.queries.every(q => q.rows <= 50 && !/OFFSET/.test(q.sql)));
-        assert.ok(page.queries.filter(q => /FROM genre_order o/.test(q.sql)).every(q => q.plan.some(p => /SEARCH o USING (?:COVERING )?INDEX genre_order_/.test(p)) && q.plan.every(p => !/TEMP B-TREE/.test(p))));
-        rows.push(...page.result.rows); cursor = page.result.next;
-      }
       const expected = sortSongs(full, sort);
-      assert.deepEqual(rows.map(r => r.id), expected.map(r => r.id), JSON.stringify(sort));
-      assert.equal(new Set(rows.map(r => r.id)).size, 334);
-      assert.deepEqual(spineEntries(rows.map(r => r.letter)), spineEntries(songSpineKeys(expected, sort) ?? expected.map(() => "")));
+      const opening = traceQueries(db, () => Effect.runSync(store.openGenre(genreId, sort)));
+      assertSeeks(opening.queries, sort);
+      for (const limit of [7, 500]) {
+        const all = readAll(db, genreId, sort, opening.result!.order, limit);
+        const label = `${JSON.stringify(sort)} in reads of ${limit}`;
+        assert.deepEqual(
+          all.ids,
+          expected.map((song) => song.id),
+          label,
+        );
+        assert.deepEqual(
+          all.missing,
+          expected.filter((song) => song.path === null).map((song) => song.id),
+          label,
+        );
+        assert.deepEqual(
+          spineEntries(all.letters),
+          spineEntries(songSpineKeys(expected, sort) ?? []),
+          label,
+        );
+        assertSeeks(all.queries, sort, true);
+        assert.ok(all.queries.every((query) => query.rows <= limit));
+      }
+      // From the start, through the store's own slices.
+      const slices = [];
+      let cursor: GenreCursor | null = null;
+      do {
+        const slice: GenreOrderSlice = Effect.runSync(store.genreOrderSlice(genreId, sort, cursor))!;
+        slices.push(...slice.ids);
+        cursor = slice.next;
+      } while (cursor !== null);
+      assert.deepEqual(
+        slices,
+        expected.map((song) => song.id),
+      );
     }
-  } finally { fixture.close(); }
+  } finally {
+    fixture.close();
+  }
 });
 
-test("scan edits and deletions invalidate cursors; artist/album edits update indexed order, and cross-genre/sort cursors are rejected", async () => {
-  const { sql } = await import("drizzle-orm");
+test("a change to a genre's order stops its cursors; other genres' changes and other reads don't", async () => {
   const fixture = await createFastAgainFixture();
   try {
-    const store = await loadLibraryStore(root, fixture.db);
-    const sort = { key: "title", descending: false } as const;
-    const opening = Effect.runSync(store.openGenre(fixture.genreId, sort))!;
-    const cursor = opening.page.next!;
-    assert.equal(Effect.runSync(store.genrePage(fixture.genreId + 1, sort, cursor)).stale, true);
-    assert.equal(Effect.runSync(store.genrePage(fixture.genreId, { key: "album", descending: false }, cursor)).stale, true);
-    fixture.db.run(sql`UPDATE tracks SET title_sort = 'aaa' WHERE id = ${opening.page.rows[49]!.id}`);
-    assert.equal(Effect.runSync(store.genrePage(fixture.genreId, sort, cursor)).stale, true);
-    const changed = Effect.runSync(store.openGenre(fixture.genreId, sort))!;
-    assert.equal(changed.page.rows[0]!.id, opening.page.rows[49]!.id);
-    // Move a song to another genre: counts and subsequent snapshots follow the persisted data.
-    fixture.db.run(sql`UPDATE tracks SET genre_id = NULL WHERE id = ${changed.page.rows[0]!.id}`);
-    assert.equal(Effect.runSync(store.openGenre(fixture.genreId, sort))!.genre.trackCount, 333);
-    fixture.db.run(sql`UPDATE artists SET sort = 'aaa' WHERE id = ${fixture.targets.large.artistId}`);
-    fixture.db.run(sql`UPDATE albums SET title_sort = 'aaa' WHERE id = ${fixture.albumId}`);
-    for (const key of ["artist", "album"] as const) {
-      const { sortSongs } = await import("@wave/core");
-      const order = { key, descending: false };
-      assert.deepEqual(Effect.runSync(store.openGenre(fixture.genreId, order))!.page.rows.map(r => r.id), sortSongs(Effect.runSync(store.getGenre(fixture.genreId))!.songs, order).slice(0, 50).map(s => s.id));
+    const { db, genreId } = fixture;
+    const store = await loadLibraryStore(root, db);
+    const open = (sort: LibrarySongSort = TITLE) => Effect.runSync(store.openGenre(genreId, sort))!;
+    const slice = (cursor: GenreCursor, sort: LibrarySongSort = TITLE) =>
+      Effect.runSync(store.genreOrderSlice(genreId, sort, cursor));
+    const expectedIds = (sort: LibrarySongSort) =>
+      sortSongs(Effect.runSync(store.getGenre(genreId))!.songs, sort).map((song) => song.id);
+
+    let opening = open();
+    const cursor = opening.order.next!;
+    // Another genre's or another sort's cursor never reads into this one.
+    assert.equal(Effect.runSync(store.genreOrderSlice(genreId + 1, TITLE, cursor)), null);
+    assert.equal(slice(cursor, { key: "title", descending: true }), null);
+    // A song outside the genre, and a change no order reads, leave the cursor good.
+    db.run(sql`UPDATE tracks SET title_sort = 'aaa' WHERE genre_id IS NULL AND id = (
+      SELECT min(id) FROM tracks WHERE genre_id IS NULL)`);
+    db.run(sql`UPDATE tracks SET duration_ms = duration_ms + 1, scanned_at = 5`);
+    db.run(sql`UPDATE tracks SET title_sort = title_sort, path = path`);
+    assert.notEqual(slice(cursor), null);
+
+    // Retitled: the cursor stops; reopened, the song leads.
+    const moved = opening.songs[49]!.id;
+    db.run(sql`UPDATE tracks SET title_sort = '' WHERE id = ${moved}`);
+    assert.equal(slice(cursor), null);
+    opening = open();
+    assert.equal(opening.songs[0]!.id, moved);
+
+    // Gone missing: it stops, and the order reads it as missing.
+    const lost = opening.songs[1]!.id;
+    db.run(sql`UPDATE tracks SET path = NULL WHERE id = ${lost}`);
+    assert.equal(slice(opening.order.next!), null);
+    opening = open();
+    assert.ok(opening.order.missing.includes(lost));
+    assert.equal(opening.songs[1]!.hasFile, false);
+
+    // Moved to no genre, then deleted: counts and orders follow.
+    db.run(sql`UPDATE tracks SET genre_id = NULL WHERE id = ${moved}`);
+    assert.equal(slice(opening.order.next!), null);
+    opening = open();
+    assert.equal(opening.genre.trackCount, 333);
+    assert.ok(!opening.order.ids.includes(moved));
+    const deleted = opening.songs[2]!.id;
+    db.run(sql`DELETE FROM track_artists WHERE track_id = ${deleted}`);
+    db.run(sql`DELETE FROM tracks WHERE id = ${deleted}`);
+    opening = open();
+    assert.equal(opening.genre.trackCount, 332);
+    assert.ok(!opening.order.ids.includes(deleted));
+
+    // An artist's or an album's sort key moves its songs in those sorts.
+    for (const [key, change] of [
+      ["artist", sql`UPDATE artists SET sort = '' WHERE id = ${fixture.targets.large.artistId}`],
+      ["album", sql`UPDATE albums SET title_sort = '' WHERE id = ${fixture.targets.large.albumIds[3]!}`],
+    ] as const) {
+      const sort = { key, descending: false } as const;
+      const before = open(sort).order.next!;
+      db.run(change);
+      assert.equal(slice(before, sort), null, key);
+      const after = open(sort);
+      assert.deepEqual(after.order.ids, expectedIds(sort).slice(0, 50), key);
     }
-    fixture.db.run(sql`DELETE FROM track_artists WHERE track_id = ${changed.page.rows[1]!.id}`);
-    fixture.db.run(sql`DELETE FROM tracks WHERE id = ${changed.page.rows[1]!.id}`);
-    assert.equal(Effect.runSync(store.openGenre(fixture.genreId, sort))!.genre.trackCount, 332);
-  } finally { fixture.close(); }
+  } finally {
+    fixture.close();
+  }
+});
+
+test("migration 0038 fills the genre order of a Library that shipped without it, and a new one keeps it", async () => {
+  const read = (db: TestDatabase) =>
+    db.all<Record<string, unknown>>(sql`SELECT * FROM genre_order ORDER BY id`);
+  const expected = (db: TestDatabase) =>
+    db.all<Record<string, unknown>>(sql`SELECT t.id, t.genre_id, t.title_sort,
+        a.sort AS artist_sort, b.title_sort AS album_sort, t.album_id,
+        coalesce(t.disc_number, 1) AS disc_number,
+        coalesce(t.track_number, 9007199254740991) AS track_number, t.added_at
+      FROM tracks t JOIN artists a ON a.id = t.artist_id JOIN albums b ON b.id = t.album_id
+      WHERE t.genre_id IS NOT NULL ORDER BY t.id`);
+
+  // An existing Library: the upgrade fills the order, and the triggers keep it after.
+  const old = await openTestDatabase({ through: "0037_recording_titles" });
+  addLibrary(old, { tracks: 300, artists: 12, albums: 30 });
+  old.run(sql`UPDATE tracks SET disc_number = NULL, track_number = NULL WHERE id % 4 = 0`);
+  await migrateTestDatabase(old);
+  assert.equal(read(old).length, 100);
+  assert.deepEqual(read(old), expected(old));
+  const genreId = old.get<{ id: number }>(sql`SELECT id FROM genres LIMIT 1`).id;
+  const store = await loadLibraryStore(root, old);
+  const all = (db: TestDatabase) => {
+    const first = Effect.runSync(store.openGenre(genreId, TITLE))!;
+    return readAll(db, genreId, TITLE, first.order, 500).ids;
+  };
+  assert.deepEqual(
+    all(old),
+    sortSongs(Effect.runSync(store.getGenre(genreId))!.songs, TITLE).map((song) => song.id),
+  );
+  old.run(sql`UPDATE tracks SET title_sort = 'zz' || title_sort WHERE id % 5 = 0`);
+  addTrack(old, { title: "Upgraded", artist: "Someone", genre: "Library genre" });
+  assert.deepEqual(read(old), expected(old));
+
+  // A new Library: empty, filled by every write from the first scan on.
+  const fresh = await openTestDatabase();
+  assert.deepEqual(read(fresh), []);
+  assert.deepEqual(fresh.all(sql`SELECT * FROM genre_order_revisions`), []);
+  addLibrary(fresh, { tracks: 300, artists: 12, albums: 30 });
+  addTrack(fresh, { title: "No genre", artist: "Someone" });
+  assert.equal(read(fresh).length, 100);
+  assert.deepEqual(read(fresh), expected(fresh));
+  fresh.run(sql`UPDATE artists SET sort = 'a' || sort WHERE id % 2 = 0`);
+  fresh.run(sql`UPDATE albums SET title_sort = 'b' || title_sort WHERE id % 3 = 0`);
+  fresh.run(sql`UPDATE tracks SET genre_id = NULL WHERE id % 9 = 0`);
+  fresh.run(sql`DELETE FROM track_artists WHERE track_id % 11 = 0`);
+  fresh.run(sql`DELETE FROM tracks WHERE id % 11 = 0`);
+  assert.deepEqual(read(fresh), expected(fresh));
 });

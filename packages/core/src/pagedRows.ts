@@ -37,9 +37,10 @@ export interface PagedRowsStats {
 export interface PagedRows<K, R> {
   /**
    * The list's keys, in order (each new read of it). Rows already read keep
-   * showing in their keys' new places, and those near the screen are read again.
+   * showing in their keys' new places, and those near the screen are read again,
+   * except [known]: rows read along with this order (a genre's first page, #601).
    */
-  readonly setOrder: (keys: readonly K[]) => void;
+  readonly setOrder: (keys: readonly K[], known?: readonly R[]) => void;
   /** Rows [start, end) of the list are on screen. */
   readonly view: (start: number, end: number) => void;
   /** The row at [index], or undefined while it loads. */
@@ -135,9 +136,10 @@ export const createPagedRows = <K, R>(options: {
   };
 
   return {
-    setOrder: (next) => {
+    setOrder: (next, known = []) => {
       keys = next;
       order += 1;
+      for (const row of known) held.set(keyOf(row), { row, order });
       drop();
       load();
     },

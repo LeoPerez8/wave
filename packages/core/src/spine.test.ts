@@ -160,11 +160,3 @@ describe("spineStep", () => {
     assert.equal(spineStep([], 0, 1), undefined);
   });
 });
-
-test("an incrementally read alphabet index keeps the same spine rules as a full list", async () => {
-  const { spineFromIndex } = await import("./index.ts");
-  const entries = [{ letter: "A", index: 0 }, { letter: "Z", index: 49 }];
-  assert.deepEqual(spineFromIndex(entries, 50), entries);
-  assert.deepEqual(spineFromIndex(entries, 12), []);
-  assert.deepEqual(spineFromIndex(entries.slice(0, 1), 50), []);
-});
