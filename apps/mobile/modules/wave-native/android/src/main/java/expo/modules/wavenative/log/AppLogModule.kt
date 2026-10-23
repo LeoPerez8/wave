@@ -1,12 +1,15 @@
 package expo.modules.wavenative.log
 
 import android.content.ClipData
+import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
+import android.os.Environment
 import android.os.Handler
 import android.os.Looper
+import android.provider.MediaStore
 import androidx.core.content.FileProvider
 import com.facebook.react.bridge.ReactContext
 import expo.modules.kotlin.exception.Exceptions
@@ -16,8 +19,8 @@ import java.io.File
 
 /**
  * The app log's file for JS ([AppLogFile]): appending batches, reading and
- * trimming it, the phone's details for the exported file's header, and sharing
- * it from Settings › Developer › Export Logs. Core decides what goes in it.
+ * trimming it, the phone's details for the exported file's header, and saving
+ * or sharing it from Settings › Developer. Core decides what goes in it.
  */
 class AppLogModule : Module() {
   private val context: Context get() = appContext.reactContext ?: throw Exceptions.ReactContextLost()
@@ -132,6 +135,34 @@ class AppLogModule : Module() {
         activity.runOnUiThread { activity.startActivity(chooser) }
       } else {
         context.startActivity(chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+      }
+    }
+
+    /** Saves a new copy to Download/Wave without asking for storage access (Android 12+). */
+    AsyncFunction("saveToDownloads") { header: String, fileName: String ->
+      WaveLog.flush()
+      val resolver = context.contentResolver
+      val values = ContentValues().apply {
+        put(MediaStore.Downloads.DISPLAY_NAME, File(fileName).name)
+        put(MediaStore.Downloads.MIME_TYPE, "text/plain")
+        put(MediaStore.Downloads.RELATIVE_PATH, "${Environment.DIRECTORY_DOWNLOADS}/Wave")
+        put(MediaStore.Downloads.IS_PENDING, 1)
+      }
+      val collection = MediaStore.Downloads.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+      // Each insert creates a new file; MediaStore adds a suffix when the name already exists.
+      val uri = resolver.insert(collection, values)
+        ?: throw IllegalStateException("Downloads couldn't create the log file")
+      try {
+        val output = resolver.openOutputStream(uri, "w")
+          ?: throw IllegalStateException("Couldn't open the Downloads log file")
+        output.use { log.exportTo(it, header) }
+        val published = resolver.update(uri, ContentValues().apply {
+          put(MediaStore.Downloads.IS_PENDING, 0)
+        }, null, null)
+        check(published == 1) { "Downloads couldn't publish the log file" }
+      } catch (error: Exception) {
+        runCatching { resolver.delete(uri, null, null) }.onFailure { error.addSuppressed(it) }
+        throw error
       }
     }
   }

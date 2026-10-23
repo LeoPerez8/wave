@@ -135,14 +135,20 @@ export const appLog = (level: LogLevel, tag: string, message: string): void => {
   schedule(pending.length >= FLUSH_SOON_ENTRIES ? 0 : FLUSH_DELAY_MS);
 };
 
-/** Writes what's waiting, then opens the share sheet with the log and its header. */
-export const exportAppLog = async (): Promise<void> => {
+/** Both destinations flush pending entries and use Core's same header and file name. */
+const copyAppLog = async (destination: "share" | "saveToDownloads"): Promise<void> => {
   if (WaveAppLog === null) throw new Error("This build of Wave has no app log");
   await flushAppLog(true);
   const now = Date.now();
   const build = logDevice(WaveAppLog);
-  await WaveAppLog.share(logHeader(build, now), logFileName(build.appVersion, now));
+  await WaveAppLog[destination](logHeader(build, now), logFileName(build.appVersion, now));
 };
+
+/** Writes what's waiting, then opens the share sheet with the log and its header. */
+export const exportAppLog = (): Promise<void> => copyAppLog("share");
+
+/** Writes what's waiting, then saves the same export to Downloads/Wave. */
+export const saveAppLog = (): Promise<void> => copyAppLog("saveToDownloads");
 
 let screen = "/";
 

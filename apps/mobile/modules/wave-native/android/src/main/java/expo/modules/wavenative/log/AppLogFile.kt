@@ -3,6 +3,7 @@ package expo.modules.wavenative.log
 import android.content.Context
 import java.io.File
 import java.io.FileOutputStream
+import java.io.OutputStream
 import java.io.RandomAccessFile
 
 /**
@@ -61,10 +62,13 @@ class AppLogFile(val file: File) {
   /** Writes [header] then the log to [destination], replacing it. */
   fun exportTo(destination: File, header: String) = synchronized(LOCK) {
     destination.parentFile?.mkdirs()
-    FileOutputStream(destination).use { out ->
-      out.write(header.toByteArray(Charsets.UTF_8))
-      if (file.exists()) file.inputStream().use { it.copyTo(out) }
-    }
+    FileOutputStream(destination).use { exportTo(it, header) }
+  }
+
+  /** Writes the same bytes to a Downloads stream; the caller closes [destination]. */
+  fun exportTo(destination: OutputStream, header: String) = synchronized(LOCK) {
+    destination.write(header.toByteArray(Charsets.UTF_8))
+    if (file.exists()) file.inputStream().use { it.copyTo(destination) }
   }
 
   companion object {
