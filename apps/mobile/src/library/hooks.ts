@@ -8,11 +8,12 @@ import {
   type MissingTrack,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { AppState } from "react-native";
 
 import { WaveNative } from "@/native/waveNative";
 import { homeContent, type HomeContent } from "@/home/homeOpening";
+import { createAllFilesAccess, type AllFilesAccessState } from "./allFilesAccess";
 
 import type { LibraryCounts } from "./db/counts";
 import type { LinkRows } from "./db/links";
@@ -47,33 +48,27 @@ export const useScanState = (): ScanState =>
  * Whether Wave holds all-files access. Re-checked whenever the app comes back
  * to the foreground, which is how a grant from system settings is noticed.
  */
-export const useAllFilesAccess = (): {
-  readonly granted: boolean;
-  /** True once the user went to settings and came back without granting access. */
-  readonly denied: boolean;
-  readonly request: () => void;
+export const useAllFilesAccess = (): AllFilesAccessState & {
+  readonly request: () => Promise<void>;
 } => {
-  const [granted, setGranted] = useState(() => WaveNative.hasAllFilesAccess());
-  const [denied, setDenied] = useState(false);
-  const requested = useRef(false);
+  const [access] = useState(() =>
+    createAllFilesAccess({
+      hasAccess: () => WaveNative.hasAllFilesAccess(),
+      openSettings: () => WaveNative.requestAllFilesAccess(),
+    }),
+  );
+  const state = useSyncExternalStore(access.subscribe, access.get);
 
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (state) => {
-      if (state !== "active") return;
-      const now = WaveNative.hasAllFilesAccess();
-      setGranted(now);
-      if (requested.current && !now) setDenied(true);
-      requested.current = false;
+      if (state === "active") access.recheck();
     });
+    // Also cover a grant between initial render and listener attachment.
+    access.recheck();
     return () => subscription.remove();
-  }, []);
+  }, [access]);
 
-  const request = useCallback(() => {
-    requested.current = true;
-    void WaveNative.requestAllFilesAccess();
-  }, []);
-
-  return { granted, denied, request };
+  return { ...state, request: access.request };
 };
 
 /** A query over the tracks and what derives from them (albums, artists, genres, counts). */
@@ -221,6 +216,10 @@ const NO_ROOTS: readonly ScanRootSummary[] = [];
 /** The music folders Wave indexes, with their song counts. */
 export const useScanRoots = (): readonly ScanRootSummary[] => useLibraryQuery(listRoots, NO_ROOTS);
 
+/** Null while the roots load; an empty answer must not stand in for pending content. */
+export const useLoadedScanRoots = (): readonly ScanRootSummary[] | null =>
+  useLibraryQuery<readonly ScanRootSummary[] | null>(listRoots, null);
+
 const listAlbums = storeQuery("albums", TRACKS, (store) => store.listAlbums);
 const listArtists = storeQuery("artists", TRACKS, (store) => store.listArtists);
 const listGenres = storeQuery("genres", TRACKS, (store) => store.listGenres);
@@ -296,6 +295,10 @@ const NO_EXCLUDED_FOLDERS: readonly string[] = [];
 /** The folders inside the music folders that Wave ignores. */
 export const useExcludedFolders = (): readonly string[] =>
   useLibraryQuery(listExcludedFolders, NO_EXCLUDED_FOLDERS);
+
+/** Null until the exclusions load, distinct from a library with nothing excluded. */
+export const useLoadedExcludedFolders = (): readonly string[] | null =>
+  useLibraryQuery<readonly string[] | null>(listExcludedFolders, null);
 
 /** Playlists show their songs' titles, lengths and covers, and link YT Music entries on scans. */
 const PLAYLISTS: LibraryReads = { playlists: true, tracks: true };
