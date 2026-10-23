@@ -247,8 +247,8 @@ export const lyricStoryBackground = (colour: string): LyricStoryBackground => {
 };
 
 /**
- * The transparent Instagram sticker's pixel canvas and its visible rounded
- * card. Padding belongs to the sticker, never to a flattened Story background.
+ * The Story background canvas and the visible rounded card in its preview.
+ * Native export crops the sticker tight to cardWidth × cardHeight, with no padding.
  * Instagram controls the initial scale/position of this asset in its editor.
  */
 export interface LyricStoryFrame {
@@ -262,15 +262,15 @@ export interface LyricStoryFrame {
 }
 
 /**
- * Centre the adaptive card in a 1080 × 1920 transparent sticker, fitting inside
- * 80% of its width and 75% of its height. Shared by the preview and native PNG
+ * Centre the adaptive card on a 1080 × 1920 Story, fitting inside
+ * 60% of its width and 75% of its height. Shared by the preview and native PNG
  * export; palette changes never affect its shape, text layout or framing.
  */
 export const lyricStoryFrame = (lines: readonly string[]): LyricStoryFrame => {
   const width = 1080;
   const height = 1920;
   const { aspect } = lyricCardLayout(lines);
-  const cardWidth = Math.min(width * 0.8, (height * 0.75) / aspect);
+  const cardWidth = Math.min(width * 0.6, (height * 0.75) / aspect);
   const cardHeight = cardWidth * aspect;
   return {
     width,

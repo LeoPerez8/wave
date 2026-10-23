@@ -368,26 +368,26 @@ describe("lyricStoryBackground", () => {
 });
 
 describe("lyricStoryFrame", () => {
-  test("centres a short square card inside 80% of the Story width", () => {
+  test("centres a short square card inside 60% of the Story width", () => {
     const frame = lyricStoryFrame(["One short line"]);
     assert.equal(frame.width, 1080);
     assert.equal(frame.height, 1920);
-    assert.equal(frame.cardWidth, 864);
-    assert.equal(frame.cardHeight, 864);
-    assert.equal(frame.left, 108);
-    assert.equal(frame.top, 528);
+    assert.equal(frame.cardWidth, 648);
+    assert.equal(frame.cardHeight, 648);
+    assert.equal(frame.left, 216);
+    assert.equal(frame.top, 636);
     assert.ok(frame.cornerRadius > 0);
   });
 
-  test("shrinks a full-height card to 75% of the Story height with its shape intact", () => {
+  test("keeps a full-height card at 60% width below the height limit with its shape intact", () => {
     const pickedLines = Array.from({ length: 5 }, () => "A very long lyric line ".repeat(15));
     const shape = lyricCardLayout(pickedLines);
     const frame = lyricStoryFrame(pickedLines);
     assert.equal(shape.aspect, 16 / 9);
-    assert.equal(frame.cardHeight, 1440);
-    assert.equal(frame.cardWidth, 810);
-    assert.equal(frame.top, 240);
-    assert.equal(frame.left, 135);
+    assert.equal(frame.cardHeight, 1152);
+    assert.equal(frame.cardWidth, 648);
+    assert.equal(frame.top, 384);
+    assert.equal(frame.left, 216);
     assert.equal(frame.cardHeight / frame.cardWidth, shape.aspect);
   });
 
@@ -397,7 +397,7 @@ describe("lyricStoryFrame", () => {
         const pickedLines = Array.from({ length: count }, () => "Words ".repeat(length));
         const shape = lyricCardLayout(pickedLines);
         const frame = lyricStoryFrame(pickedLines);
-        assert.ok(frame.cardWidth <= frame.width * 0.8);
+        assert.ok(frame.cardWidth <= frame.width * 0.6);
         assert.ok(frame.cardHeight <= frame.height * 0.75);
         assert.equal(frame.left * 2 + frame.cardWidth, frame.width);
         assert.equal(frame.top * 2 + frame.cardHeight, frame.height);
