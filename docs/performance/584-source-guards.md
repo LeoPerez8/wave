@@ -42,7 +42,10 @@ Deezer and LRCLIB wrappers. The YouTube Music Effect service and native methods
 are protected separately, since their requests do not use JavaScript `fetch`.
 
 When a follow-up fixes an offender, remove its obsolete capability or exception
-in that same change. A necessary automatic request belongs in a reviewed hook
+in that same change. #587 removed the four exact Now Playing button, star and
+downloaded-file exceptions; its controls now share one targeted song/file/star
+statement after sheet settlement or their own early gesture. The scanner and
+route-observer guard are unchanged. A necessary automatic request belongs in a reviewed hook
 that waits for `useScreenSettled` / `useNowPlayingSettled` (or the corresponding
 subscription) and checks Android connectivity before asking. Replace the debt
 entry with that explicitly documented deferred boundary and update the opening
