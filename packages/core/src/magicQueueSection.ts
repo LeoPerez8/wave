@@ -93,6 +93,23 @@ export const magicQueuePicksDue = (
 };
 
 /**
+ * [previous] with each song gone from the Library ([there]) replaced in its
+ * place by the next one picked ([added]); the rest of [added] join at the end.
+ */
+const replacingGone = (
+  previous: readonly string[],
+  there: ReadonlySet<string>,
+  added: readonly string[],
+): string[] => {
+  let next = 0;
+  const trackIds = previous.flatMap((id) =>
+    there.has(id) ? [id] : next < added.length ? [added[next++]!] : [],
+  );
+  trackIds.push(...added.slice(next));
+  return trackIds;
+};
+
+/**
  * What the section shows at [now], given what it showed last ([saved], null
  * for nothing yet) and the Library's playable [songs]: [saved] itself unless
  * it's due (`magicQueuePicksDue`); a new list on a new day. A song gone from
@@ -120,12 +137,7 @@ export const magicQueuePicks = (
     { avoid: new Set(saved.shownToday), keep: new Set(kept) },
     picking,
   );
-  // Each gone song's place takes the next one picked; the rest join at the end.
-  let next = 0;
-  const trackIds = previous.flatMap((id) =>
-    there.has(id) ? [id] : next < added.length ? [added[next++]!] : [],
-  );
-  trackIds.push(...added.slice(next));
+  const trackIds = replacingGone(previous, there, added);
   return { day, trackIds, shownToday: [...new Set([...saved.shownToday, ...trackIds])] };
 };
 
@@ -237,11 +249,7 @@ export function* magicQueuePicksSteps(
     : Math.min(MAGIC_QUEUE_PICKS, there.size) - keptIds.length;
   const added = yield* draw(fresh, count);
   added.push(...(yield* draw(again, count - added.length)));
-  let next = 0;
-  const trackIds = previous.flatMap((id) =>
-    there.has(id) ? [id] : next < added.length ? [added[next++]!] : [],
-  );
-  trackIds.push(...added.slice(next));
+  const trackIds = replacingGone(previous, there, added);
   for (const id of trackIds) shown.add(id);
   const shownToday: string[] = [];
   for (const id of shown) {
