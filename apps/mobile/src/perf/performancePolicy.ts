@@ -27,6 +27,8 @@ export const LIBRARY_SEEDS = [
     "useLoadedInLibrary",
   ].map((name) => `ytmusic/libraryFinder.ts#${name}`),
   "../../../packages/core/src/ytMusic.ts#libraryFinder",
+  "../../../packages/core/src/ytMusic.ts#libraryImportFinderSteps",
+  "../../../packages/core/src/playlistImport.ts#planLinkImportSteps",
   "../../../packages/core/src/ytArtist.ts#libraryArtistFinder",
 ];
 
@@ -74,6 +76,19 @@ export const NETWORK_SEEDS = [
 ];
 
 export const WHOLE_LIBRARY: Record<string, Exception> = {
+  "library/startupJobs.ts#readImportDownloadInput": {
+    reason:
+      "A kept filled import prepares download membership after settlement; source SQL is indivisible, indexing and per-entry matching yield. Actual store coverage: startupJobs.test.ts.",
+    capabilities: [
+      "../../../packages/core/src/ytMusic.ts#libraryImportFinderSteps",
+      "library/LibraryStore.ts#listSongs",
+    ],
+  },
+  "library/ytLibraryImport.ts#fill": {
+    reason:
+      "A queued or explicitly retried library import builds its matching index on settled startup turns, in budgeted steps; never an opening read. Source order and pause/retry semantics have behavioral coverage in startupJobs.test.ts and libraryImportResume.test.ts.",
+    capabilities: ["../../../packages/core/src/playlistImport.ts#planLinkImportSteps"],
+  },
   "app/library/discover-mix/[id].tsx#DiscoverMixScreen": {
     reason: "Visible mix page resolves streamed entries against Library files.",
     capabilities: ["ytmusic/libraryFinder.ts#useLibraryFinder"],
@@ -140,11 +155,7 @@ export const WHOLE_LIBRARY: Record<string, Exception> = {
       "Explicit section actions read the selected section songs/artists for playback and menus.",
     capabilities: ["library/LibraryStore.ts#listSongs"],
   },
-  "library/ytLibraryImport.ts#downloadPlaylist": {
-    reason:
-      "An explicit or resumed account import resolves playlist downloads against local files.",
-    capabilities: ["ytmusic/libraryFinder.ts#currentLibraryFinder"],
-  },
+
   "playback/ActionsMenu.tsx#usePlaylistDownloadEntries": {
     reason: "Visible playlist menu checks which entries are downloaded; created for a user action.",
     capabilities: ["ytmusic/libraryFinder.ts#useLoadedInLibrary"],

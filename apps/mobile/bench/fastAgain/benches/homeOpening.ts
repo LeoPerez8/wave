@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import type { DiscoverMixes, MagicSong, TasteProfile } from "@wave/core";
 
 import { traceQueries } from "../../../src/library/db/testDatabase.ts";
+import { startupReplay } from "../startupReplay.ts";
 import { measureCooperative } from "../cooperative.ts";
 import { profileKey } from "./tasteProfile.ts";
 import { percentiles } from "../measure.ts";
@@ -169,6 +170,7 @@ export const bench: FastAgainBench = {
         },
       ],
     ];
+    const startup = await startupReplay(context, store);
     const oldNow = Date.now;
     Date.now = () => fixture.now;
     try {
@@ -193,15 +195,49 @@ export const bench: FastAgainBench = {
           } else results.push(await run());
           durations.push(performance.now() - start);
         }
-        return { results, durations, work };
+        // Measure complete JS tasks between actual injected free turns, including the last task.
+        const startupTasks: number[] = [];
+        let started: number | undefined;
+        const end = () => {
+          if (started !== undefined) startupTasks.push(performance.now() - started);
+          started = undefined;
+        };
+        const turn = Effect.suspend(() => {
+          end();
+          return Effect.promise(() => setImmediate()).pipe(
+            Effect.tap(() =>
+              Effect.sync(() => {
+                started = performance.now();
+              }),
+            ),
+          );
+        });
+        if (trace) {
+          const measured = traceQueries(fixture.db, () => Effect.runSync(startup.run(Effect.void)));
+          results.push(measured.result);
+          work.push({
+            read: "startupScanImportsYtResumeDuplicates",
+            rowsRead: measured.queries.reduce((sum, query) => sum + query.rows, 0),
+            statements: measured.queries.length,
+          });
+        } else {
+          results.push(await Effect.runPromise(startup.run(turn)));
+          end();
+        }
+        durations.push(startupTasks.reduce((sum, ms) => sum + ms, 0));
+        return { results, durations, work, startupTasks };
       };
+      startup.reset();
       const traced = await replay(true);
       const expected = hash(traced.results);
       const totals: number[] = [];
       const elapsed: number[] = [];
-      const tasks: number[][] = steps.map(() => []);
+      const tasks: number[][] = [...steps.map(() => [] as number[]), [] as number[]];
+      const startupLongest: number[] = [];
+      const startupCounts: number[] = [];
       let cpuMicros = 0;
       for (let i = 0; i < context.runs; i++) {
+        startup.reset();
         const cpu = process.cpuUsage();
         const start = performance.now();
         const run = await replay(false);
@@ -210,6 +246,9 @@ export const bench: FastAgainBench = {
         cpuMicros += used.user + used.system;
         totals.push(run.durations.reduce((sum, ms) => sum + ms, 0));
         run.durations.forEach((ms, index) => tasks[index]!.push(ms));
+        startupLongest.push(Math.max(0, ...run.startupTasks));
+        startupCounts.push(run.startupTasks.length);
+        assert.deepEqual(run.results, traced.results);
         assert.equal(hash(run.results), expected);
       }
       // Exercise the production time boundary as well: even its first rAF starts no read.
@@ -236,14 +275,16 @@ export const bench: FastAgainBench = {
         cpuMs: round(cpuMicros / 1000 / context.runs),
         rowsRead: traced.work.reduce((sum, step) => sum + step.rowsRead, 0),
         statements: traced.work.reduce((sum, step) => sum + step.statements, 0),
-        longestSyncTaskMs: round(Math.max(...tasks.flat())),
+        longestSyncTaskMs: round(
+          Math.max(...tasks.slice(0, steps.length).flat(), ...startupLongest),
+        ),
         notifications: 0,
         resultKey: expected,
         details: {
           source:
             "faithful replay of selected-worktree LibraryStore + Stats + Core + targeted pick descriptor when present; saved picks/mixes standing; YT Music enabled, offline harvest",
           semanticEquality:
-            "complete local slice payloads, recap availability, album/artist rankings, overview inputs, nine pick ids, both known-video answers and eight blended mix payloads/captions",
+            "complete local slice payloads, recap availability, album/artist rankings, overview inputs, nine pick ids, both known-video answers, eight blended mix payloads/captions and startup read/import/pause/duplicate results",
           firstFrameWaitsFor: opening === null ? ["homeAdded", "homePlays", "homeFavorites"] : [],
           firstFrameRowsRead:
             opening === null
@@ -258,19 +299,44 @@ export const bench: FastAgainBench = {
           firstFrameBoundary:
             "first section-bearing frame's data dependencies, not the earlier title-only frame; no native paint measurement",
           totalSynchronousJsMs: percentiles(totals),
+          openingReaderSynchronousJsMs: percentiles(
+            totals.map((total, i) => total - tasks[steps.length]![i]!),
+          ),
           elapsedReplayMs: percentiles(elapsed),
           untilSettled:
-            "all mounted cold-Home readers replayed conservatively, including ancillary readers; excludes scheduler/animation waits",
+            "all mounted cold-Home readers conservatively define the opening horizon; startup follows settlement only in production after variant; full total includes startup completion; scheduler/animation waits excluded",
           steps: traced.work.map((work, index) => ({
             ...work,
             ...percentiles(tasks[index]!),
-            longestSyncTaskMs: round(Math.max(...tasks[index]!)),
+            longestSyncTaskMs: round(
+              Math.max(...(index === steps.length ? startupLongest : tasks[index]!)),
+            ),
           })),
-          readsAfterSettled: [],
+          readsAfterSettled: startup.stepped ? ["startupScanImportsYtResumeDuplicates"] : [],
+          startup: {
+            release: startup.stepped
+              ? "after global WaveTiming settlement and three quiet frame intervals"
+              : "after first content; no settlement gate (ti)",
+            order: [
+              "scan",
+              "link imports",
+              "YT library import resume",
+              "replacement check after scan",
+            ],
+            tasks: startupCounts,
+            longestTaskSamplesMs: startupLongest.map(round),
+            totalSynchronousJsMs: percentiles(tasks[steps.length]!),
+            source:
+              "selected-worktree startupJobs when present, otherwise faithful replay of ti LibraryScan/playlistImports/ytLibraryImport/replacementDuplicates using selected store/Core",
+            scenario:
+              "unchanged incremental scan, one retained 20-song Spotify link import, one kept YT library source paused offline, due replacement check with zero pairs; source reads and pairing still scale with the Library",
+            omissions:
+              "native filesystem discovery/audio decoding, KV JSON load/save, UI notifications and Android services; native scanner emits no changed/missing files; no network request; modules warmed",
+          },
           omitted:
-            "React/render/layout/native paint, KV-setting reads, network and startup jobs; taste derivation and mix builds are not due with standing saved choices; selected-worktree modules/SQLite are warmed, cold refers to screen query/pick caches",
+            "React/render/layout/native paint, KV-setting reads, network; taste derivation and mix builds are not due with standing saved choices; selected-worktree modules/SQLite are warmed, cold refers to screen query/pick caches",
           notificationsScope:
-            "read-only replay has no subscribed store writes; not a React commit counter",
+            "replay includes startup store writes but no subscribed UI observers; not a React commit counter",
           followups:
             "#594 owns versioned knownVideos, return and stepped mix builds; #598 owns Recap availability",
         },
@@ -280,6 +346,10 @@ export const bench: FastAgainBench = {
         returnKey = "",
         returnCpu = 0;
       const focus = steps.at(-1)![1];
+      // Startup changed playlists. Deliver that production invalidation and refresh outside
+      // this separate unchanged-return case, rather than silently keep a pre-startup version.
+      knownRead?.change({ kind: "playlists" });
+      await focus();
       const warmReturn = traceQueries(fixture.db, focus);
       const visibleReturn = await warmReturn.result;
       returnWork = {

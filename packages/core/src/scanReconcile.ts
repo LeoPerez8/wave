@@ -161,3 +161,48 @@ export const scanSaveSlices = <T extends IndexedFile>(
   }
   return slices;
 };
+
+/** Same reconciliation, with a resumable boundary per input file. */
+export function* reconcileScanSteps<T extends IndexedFile>(
+  input: ScanReconcileInput<T>,
+): Generator<void, ScanChanges<T>> {
+  const candidates = new Map<string, { files: IndexedFile[]; next: number }>();
+  for (const file of input.missing) {
+    const key = signature(file);
+    const group = candidates.get(key) ?? { files: [], next: 0 };
+    group.files.push(file);
+    candidates.set(key, group);
+    yield;
+  }
+  const added: T[] = [];
+  const updated: T[] = [];
+  const moved: TrackMove<T>[] = [];
+  for (const file of input.read) {
+    if (input.isIndexed(file.path)) {
+      updated.push(file);
+      yield;
+      continue;
+    }
+    const group = candidates.get(signature(file));
+    const match = group?.files[group.next++];
+    if (match === undefined) added.push(file);
+    else moved.push({ from: match.path, to: file });
+    yield;
+  }
+  const matched = new Set<string>();
+  for (const move of moved) {
+    matched.add(move.from);
+    yield;
+  }
+  const unmatched: IndexedFile[] = [];
+  for (const file of input.missing) {
+    if (!matched.has(file.path)) unmatched.push(file);
+    yield;
+  }
+  return {
+    added,
+    updated,
+    moved,
+    unmatched,
+  };
+}

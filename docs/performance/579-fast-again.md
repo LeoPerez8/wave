@@ -1198,6 +1198,47 @@ ignore canceled or superseded lookup results. Four exact #587 guard exceptions
 were retired without changing the scanner or route guard. Device behavior,
 phone latency and TalkBack remain unverified.
 
+## Startup after settlement and quiet frames (#595)
+
+Final integrated capture: [`results/595-homeOpening-desktop.jsonl`](results/595-homeOpening-desktop.jsonl).
+Real ti `460e39ff0cba6f50e7a456a77d6e99813295ebaa` is compared with
+`ae990c2c2dd341a658f0f7763099c2848cdb3cb9`, including #592/#593/#588/#587/#594.
+All three sizes have eleven samples. See [`595-startup-work.md`](595-startup-work.md)
+for production boundaries, exact startup scenario and native exclusions. This is
+Node/sql.js, not phone/Hermes latency or an owner-exported tap log. Earlier #595
+captures from before #594 and the interrupted/smoke runs are excluded here.
+
+At 1,000 / 12,000 / 50,000 songs, complete cold replay maximum synchronous tasks
+are **17.813 → 17.312 / 282.011 → 83.652 / 1451.040 → 421.332 ms**. Median total
+synchronous JS is 58.039 → 55.779 / 568.683 → 251.161 / 2545.397 → 1118.638 ms.
+These whole-Home differences include earlier integrated work, especially #592,
+#593 and #594, and must not be attributed entirely to #595.
+
+Startup maximum tasks are **7.767 → 8.072 / 116.736 → 83.652 / 536.397 → 421.332 ms**.
+Median startup synchronous JS is 17.354 → 30.140 / 164.535 → 130.150 /
+786.069 → 593.216 ms. Startup uses nine timed tasks before, versus 43 / 127 / 419
+after. The smaller case pays extra transaction/scheduling overhead; neither a
+universal speedup nor a six-ms complete-task maximum is claimed.
+
+Complete cold SQL returns 10,772 / 49,172 / 176,852 rows before and
+9,548 / 33,978 / 113,398 after, in 57 versus 178 statements. Startup returns
+2,231 / 25,771 / 107,091 rows before and 2,088 / 23,648 / 98,128 after, in 41
+versus 164 statements. Extra statements come from the retained 20-song import's
+one-song append transactions and their atomic held-entry reads. Rows are returned
+rows, not SQLite VM visits. All nine cross-variant result keys agree: complete
+cold payloads/scanner inputs/startup outcomes, first-of-day and unchanged return.
+The return case delivers startup's playlist invalidation and refreshes that source
+outside its independent warm-return measurement; after that unchanged returns
+perform zero known-video SQL, preserving #594's contract.
+
+The source SQL/row decoding, linking/pruning and one-record atomic writes remain
+visible in task totals. No per-source cost is invented or subtracted, and the
+individual cause of each maximum is not isolated. CPU iterators target four ms
+with headroom, while named indivisible source/native operations, metadata, GC
+and OS pauses can exceed six ms. The final **421.332-ms** startup maximum stays
+visible. The owner's exported cold-launch first-tap log and native/device
+acceptance remain **unverified**.
+
 ## #594: versioned Home mixes and bounded shared graph
 
 Measured production/harness commit: `ae61f2b2e4a4f994ca088696bb8eed4c53d2d478`;

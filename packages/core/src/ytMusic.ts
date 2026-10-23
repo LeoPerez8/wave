@@ -218,6 +218,48 @@ export const parseTrackId = (id: string): TrackRef | null => {
   return /^\d+$/.test(id) ? { kind: "library", id: Number(id) } : null;
 };
 
+/** Incremental index construction for a background import; matching semantics stay identical. */
+export function* libraryImportFinderSteps<L extends LibrarySongKey>(
+  library: readonly L[],
+): Generator<
+  void,
+  (song: Pick<YtSong, "title" | "artists" | "durationMs">) => Generator<void, L | null>
+> {
+  const byTitle = new Map<string, Candidate<L>[]>();
+  for (const song of library) {
+    const title = recordingMatchTitle(song.title);
+    if (title === "") {
+      yield;
+      continue;
+    }
+    const candidates = byTitle.get(title) ?? [];
+    candidates.push({
+      song,
+      artists: new Set(artistNames(song.artist)),
+      durationMs: knownLength(song.durationMs),
+    });
+    byTitle.set(title, candidates);
+    yield;
+  }
+  return function* (song) {
+    const candidates = byTitle.get(recordingMatchTitle(song.title));
+    if (candidates === undefined) return null;
+    const artists = song.artists.flatMap(artistNames);
+    const length = knownLength(song.durationMs);
+    for (const candidate of candidates) {
+      yield;
+      if (
+        artists.some((artist) => candidate.artists.has(artist)) &&
+        (length === null ||
+          candidate.durationMs === null ||
+          Math.abs(candidate.durationMs - length) <= SAME_LENGTH_MS)
+      )
+        return candidate.song;
+    }
+    return null;
+  };
+}
+
 export function* libraryFinderSteps<L extends LibrarySongKey>(
   library: readonly L[],
 ): Generator<void, (song: Pick<YtSong, "title" | "artists" | "durationMs">) => L | null> {

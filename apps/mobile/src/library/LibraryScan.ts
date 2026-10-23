@@ -5,9 +5,7 @@ import {
   normalizeTrack,
   planAddRoot,
   planExclusion,
-  reconcileScan,
   scanEnd,
-  scanSaveSlices,
   type IndexedFile,
   type LibraryChange,
 } from "@wave/core";
@@ -17,7 +15,10 @@ import { refreshDownloadPolicy } from "./downloadPolicy";
 import { finishFileDeletions } from "./fileDeletions";
 import * as Stream from "effect/Stream";
 
-import { freeTurnEffect } from "@/lib/backgroundWork";
+import { runSteps } from "@/lib/stepped";
+import { readScanIndex, saveScanBatch, finishScanIndex } from "./startupJobs";
+
+import { startupTurnEffect } from "@/lib/backgroundWork";
 import { makeExternalStore } from "@/lib/externalStore";
 import { argbToHex, type NativeArtwork, type NativeScannedTrack } from "@/native/waveNative";
 
@@ -162,13 +163,29 @@ const scanFolders = (roots: readonly string[]) =>
     if (!(yield* scanner.hasAllFilesAccess)) return;
     // Files recorded for deletion (a replaced song's old file) go first, at launch included;
     // one that couldn't be deleted is left out, so it never comes back as a second song.
-    const undeletedRecordedFiles = new Set(yield* finishFileDeletions("scan"));
+    const undeleted = yield* finishFileDeletions("scan", { between: startupTurnEffect });
+    const undeletedRecordedFiles =
+      undeleted.length === 0
+        ? new Set<string>()
+        : yield* runSteps(
+            (function* () {
+              const files = new Set<string>();
+              for (const path of undeleted) {
+                files.add(path);
+                yield;
+              }
+              return files;
+            })(),
+            startupTurnEffect,
+          );
+    yield* startupTurnEffect;
     const excluded = yield* store.excludedFolders;
-    const known = yield* store.knownFiles(roots);
+    const { known, indexed } = yield* readScanIndex(store, roots, startupTurnEffect);
     const kind = known.length === 0 ? "full" : "incremental";
     // Music folders shows a folder no scan finished yet without its song count.
+    yield* startupTurnEffect;
     const firstScan = yield* store.hasUnscannedRoot(roots);
-    const indexed = new Set(known.map((file) => file.path));
+
     // Indexed files the scan didn't find that no batch has matched yet.
     let missing: readonly IndexedFile[] = [];
     /** Files this scan saved (new, changed, moved). */
@@ -198,47 +215,61 @@ const scanFolders = (roots: readonly string[]) =>
             });
             return;
           case "Missing":
+            yield* startupTurnEffect;
             missing = yield* store.indexedFiles(event.paths);
             return;
           case "Batch": {
-            const changes = reconcileScan({
-              missing,
-              read: (undeletedRecordedFiles.size === 0
-                ? event.tracks
-                : event.tracks.filter((track) => !undeletedRecordedFiles.has(track.path))
-              ).map(toIndexedTrack),
-              isIndexed: (path) => indexed.has(path),
-            });
+            const read = yield* runSteps(
+              (function* () {
+                const tracks: IndexedTrack[] = [];
+                for (const track of event.tracks) {
+                  if (!undeletedRecordedFiles.has(track.path)) tracks.push(toIndexedTrack(track));
+                  yield;
+                }
+                return tracks;
+              })(),
+              startupTurnEffect,
+            );
+            const artwork = yield* runSteps(
+              (function* () {
+                const rows: IndexedArtwork[] = [];
+                for (const row of event.artwork) {
+                  rows.push(toIndexedArtwork(row));
+                  yield;
+                }
+                return rows;
+              })(),
+              startupTurnEffect,
+            );
+            const {
+              changes,
+              count,
+              ids: batchTrackIds,
+            } = yield* saveScanBatch(
+              store,
+              { missing, read, isIndexed: (path) => indexed.has(path) },
+              artwork,
+              startupTurnEffect,
+              ({ starred }) => publishSavedStars(starred),
+            );
             missing = changes.unmatched;
-            const artwork = event.artwork.map(toIndexedArtwork);
-            const slices = scanSaveSlices(changes);
-            // New artwork alone (files that were read but saved nothing) still gets saved.
-            const parts =
-              slices.length > 0 ? slices : artwork.length > 0 ? [{ tracks: [], moves: [] }] : [];
-            // Up to 500 files a batch: saved a slice per free turn, so a tap never waits on it.
-            const batchTrackIds: number[] = [];
-            for (const [index, slice] of parts.entries()) {
-              yield* freeTurnEffect;
-              const { starred, trackIds } = yield* store.saveBatch(
-                slice.tracks,
-                // Before any file that shows it.
-                index === 0 ? artwork : [],
-                slice.moves,
-                // Linked once, against the whole Library, when the scan ends.
-                { linkEntries: false },
-              );
-              // A file a pending favorite was waiting for has its star.
-              publishSavedStars(starred);
-              batchTrackIds.push(...trackIds);
-              savedTrackIds.push(...trackIds);
-              saved += slice.tracks.length;
-            }
-            for (const track of changes.added) indexed.add(track.path);
-            for (const move of changes.moved) {
-              indexed.delete(move.from);
-              indexed.add(move.to.path);
-            }
-            if (slices.length > 0) bumpLibraryVersion(scanBatchChange(batchTrackIds));
+            saved += count;
+            savedTrackIds.push(...batchTrackIds);
+            yield* runSteps(
+              (function* () {
+                for (const track of changes.added) {
+                  indexed.add(track.path);
+                  yield;
+                }
+                for (const move of changes.moved) {
+                  indexed.delete(move.from);
+                  indexed.add(move.to.path);
+                  yield;
+                }
+              })(),
+              startupTurnEffect,
+            );
+            if (count > 0) bumpLibraryVersion(scanBatchChange(batchTrackIds));
             return;
           }
           case "Complete":
@@ -248,6 +279,7 @@ const scanFolders = (roots: readonly string[]) =>
 
     // Assigned from the stream callback; the cast keeps TypeScript from narrowing it to undefined.
     let completed = undefined as Extract<ScanEvent, { _tag: "Complete" }> | undefined;
+    yield* startupTurnEffect;
     yield* scanner.scan(roots, excluded, known).pipe(
       Stream.runForEach((event) => {
         if (event._tag === "Complete") completed = event;
@@ -266,7 +298,7 @@ const scanFolders = (roots: readonly string[]) =>
     // or the Library songs entries that came meanwhile (a sync, an import) are.
     let linked = 0;
     if (end.linkEntries) {
-      yield* freeTurnEffect;
+      yield* startupTurnEffect;
       linked = yield* store.linkPlaylistEntries;
       linkedAtRevision = yield* store.playlistEntriesRevision;
     }
@@ -275,9 +307,23 @@ const scanFolders = (roots: readonly string[]) =>
       scanState.set({ status: "idle" });
       return;
     }
-    yield* freeTurnEffect;
     // Also prunes albums and artists that changed tags left empty.
-    yield* store.filesGone(missing.map((file) => file.path));
+    const missingPaths =
+      missing.length === 0
+        ? []
+        : yield* runSteps(
+            (function* () {
+              const paths: string[] = [];
+              for (const file of missing) {
+                paths.push(file.path);
+                yield;
+              }
+              return paths;
+            })(),
+            startupTurnEffect,
+          );
+    yield* finishScanIndex(store, missingPaths, saved, startupTurnEffect);
+    yield* startupTurnEffect;
     yield* store.markScanned(roots, startedAt);
     // Songs whose files are gone left the Library: every screen drops them now, hidden ones too.
     // A folder's first scan that found nothing has Music folders show it scanned ("0 songs").
@@ -297,7 +343,10 @@ const scanFolders = (roots: readonly string[]) =>
 export const runRescan = Effect.gen(function* () {
   const store = yield* LibraryStore;
   const scanner = yield* NativeScanner;
-  const roots = yield* store.ensureDefaultRoot(yield* scanner.defaultMusicFolder);
+  yield* startupTurnEffect;
+  const folder = yield* scanner.defaultMusicFolder;
+  yield* startupTurnEffect;
+  const roots = yield* store.ensureDefaultRoot(folder);
   yield* scanFolders(roots.map((root) => root.path));
 }).pipe(reportFailures);
 

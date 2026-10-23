@@ -326,3 +326,89 @@ export const replacementDuplicateLines = (
     ...outcomes.map(({ pair, outcome }) => outcomeLine(pair, outcome)),
   ];
 };
+
+/** Pair indexing and detection can give up the thread between every file. */
+export function* replacementDuplicatesSteps<F extends DuplicateCheckFile>(
+  files: readonly F[],
+): Generator<void, ReplacementDuplicate<F>[]> {
+  const byPath = new Map<string, F>();
+  for (const file of files) {
+    byPath.set(file.path, file);
+    yield;
+  }
+  const pairs: ReplacementDuplicate<F>[] = [];
+  for (const older of files) {
+    for (const source of ["soulseek", "youtube"] as const) {
+      const { targetPath } = qualityReplacementTarget(older.path, source);
+      const newer = targetPath === older.path ? undefined : byPath.get(targetPath);
+      if (newer !== undefined && newer.id > older.id && sameRecording(older, newer))
+        pairs.push({ old: newer, new: older });
+    }
+    yield;
+  }
+  return pairs;
+}
+
+/** History membership can be large; index and classify one playlist per step. */
+export function* replacementDuplicateFixSteps<F extends DuplicateCheckFile>(
+  pair: ReplacementDuplicate<F>,
+  lengths: DuplicateLengths,
+): Generator<void, DuplicateFix<F>> {
+  const oldComplete = complete(pair.old, lengths.old);
+  const songLength = oldComplete ? (lengths.old ?? 0) : pair.old.durationMs;
+  const onNew =
+    complete(pair.new, lengths.new) && (songLength <= 0 || within(lengths.new ?? 0, songLength));
+  if (!onNew && !oldComplete)
+    return { kind: "leave", reason: "incomplete", incomplete: [pair.old.path, pair.new.path] };
+  let merge: DuplicateMerge | null = null;
+  if (hasHistory(pair.old)) {
+    const kept = new Set<number>();
+    for (const id of pair.new.playlists) {
+      kept.add(id);
+      yield;
+    }
+    const repoint: number[] = [],
+      remove: number[] = [];
+    for (const id of pair.old.playlists) {
+      (kept.has(id) ? remove : repoint).push(id);
+      yield;
+    }
+    merge = {
+      star: pair.old.favorite && !pair.new.favorite,
+      movePlays: pair.old.plays > 0,
+      repoint,
+      remove,
+    };
+  }
+  return {
+    kind: "fix",
+    keep: pair.new,
+    drop: pair.old,
+    path: onNew ? pair.new.path : pair.old.path,
+    deleted: onNew ? pair.old.path : pair.new.path,
+    merge,
+  };
+}
+
+/** Count and format one outcome per step, retaining summary and song order. */
+export function* replacementDuplicateLinesSteps(
+  when: DuplicateCheckWhen,
+  outcomes: readonly { readonly pair: ReplacementDuplicate; readonly outcome: DuplicateOutcome }[],
+): Generator<void, string[]> {
+  let fixed = 0;
+  const lines: string[] = [];
+  for (const { pair, outcome } of outcomes) {
+    if (outcome.kind === "fix") fixed++;
+    lines.push(outcomeLine(pair, outcome));
+    yield;
+  }
+  const pairs = `${outcomes.length} ${outcomes.length === 1 ? "pair" : "pairs"}`;
+  const result = [
+    `Songs a replacement left twice, checked ${WHEN[when]}: ${pairs} found, ${fixed} fixed, ${outcomes.length - fixed} left alone`,
+  ];
+  for (const line of lines) {
+    result.push(line);
+    yield;
+  }
+  return result;
+}

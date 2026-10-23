@@ -19,7 +19,13 @@ import type { LinkedPlaylist } from "./playlistLinks.ts";
 import { artistNames } from "./spotifyImport.ts";
 import type { SpotifyPlaylist, SpotifySong } from "./spotifyPlaylist.ts";
 import type { YtAlbumSong } from "./ytDiscover.ts";
-import { joinArtists, libraryFinder, type LibrarySongKey, type YtSong } from "./ytMusic.ts";
+import {
+  joinArtists,
+  libraryFinder,
+  libraryImportFinderSteps,
+  type LibrarySongKey,
+  type YtSong,
+} from "./ytMusic.ts";
 
 /** Where an import's songs come from: a YouTube Music playlist's stream as they are, a Spotify playlist's are searched when needed. */
 export type ImportService = "ytMusic" | "spotify";
@@ -628,6 +634,15 @@ export const importLogLine = <S extends YtSong>(
   const counts = { library: 0, ytMusic: 0, unsearched: 0, notFound: 0 };
   for (const found of job.finds) counts[found.kind] += 1;
   const twice = listedTwice(job).length;
+  return importLine(job, counts, twice, resumed);
+};
+
+const importLine = <S extends YtSong>(
+  job: PlaylistImport<S>,
+  counts: Record<ImportFind<S>["kind"], number>,
+  twice: number,
+  resumed: boolean,
+): string => {
   const parts = [
     `${counts.library.toLocaleString("en")} from the Library`,
     ...(job.service === "ytMusic" || counts.ytMusic > 0
@@ -643,3 +658,117 @@ export const importLogLine = <S extends YtSong>(
     ? `${name}, kept from before the update, ended as Wave started: ${what}`
     : `${name} done at once: ${what}`;
 };
+
+/** Background import planning yields during Library indexing and per source row. */
+export function* planLinkImportSteps<
+  S extends YtSong,
+  L extends LibrarySongKey & { readonly id: number },
+>(source: LinkedSource<S>, library: readonly L[]): Generator<void, LinkImportPlan<S>> {
+  const find = yield* libraryImportFinderSteps(library);
+  // Visit both arrays without an unbounded synchronous concatenation for Liked Songs.
+  const streams = source.service === "ytMusic" ? source.playlist : null;
+  const listedLength = source.playlist.songs.length + (streams?.repeats.length ?? 0);
+  const seen = new Set<string>();
+  const songs: SpotifySong[] = [];
+  const finds: ImportFind<S>[] = [];
+  const leftOut: LeftOutSong[] = [];
+  let inLibrary = 0;
+  for (let index = 0; index < listedLength; index++) {
+    const stream =
+      streams === null
+        ? undefined
+        : (streams.songs[index] ?? streams.repeats[index - streams.songs.length]);
+    const song = stream ?? source.playlist.songs[index]!;
+    const track = yield* find(song);
+    const key =
+      track !== null
+        ? `library:${track.id}`
+        : stream !== undefined
+          ? `yt:${stream.videoId}`
+          : JSON.stringify([song.title, song.artists, song.album, song.durationMs]);
+    if (seen.has(key)) {
+      leftOut.push({ song: listedSong(song), reason: "listedTwice" });
+      yield;
+      continue;
+    }
+    seen.add(key);
+    songs.push(song);
+    if (track !== null) {
+      finds.push({ kind: "library", trackId: track.id });
+      inLibrary++;
+    } else if (stream !== undefined) finds.push({ kind: "ytMusic", song: stream });
+    else if (source.service === "ytMusic" || artistNames(song.artists).length === 0)
+      finds.push(NOT_FOUND);
+    else finds.push(UNSEARCHED);
+    yield;
+  }
+  // Of a playlist only partly read, Spotify's count includes songs never read.
+  const notSongs =
+    source.service === "spotify" && !source.playlist.truncated
+      ? Math.max(0, source.playlist.total - listedLength)
+      : 0;
+  return {
+    name: importedPlaylistName(source.playlist.title),
+    service: source.service,
+    songs,
+    finds,
+    inLibrary,
+    sourceTotal: listedLength + notSongs,
+    leftOut,
+    notSongs,
+    cut: source.playlist.truncated ? source.playlist.songs.length : null,
+  };
+}
+
+/** Resuming keeps duplicate detection over the entire job, including already added rows. */
+export function* finishPlaylistImportSteps<S extends YtSong>(
+  job: PlaylistImport<S>,
+): Generator<void, FinishedImport<S>> {
+  const seen = new Set<string>();
+  const songs: PlaylistSong<S>[] = [];
+  for (let index = 0; index < job.finds.length; index++) {
+    const song = playlistSong(job.finds[index]!, job.songs[index]);
+    if (song !== null) {
+      const key = playlistSongKey(song);
+      if (!seen.has(key) && index >= job.added) songs.push(song);
+      seen.add(key);
+    }
+    yield;
+  }
+  return { songs, job: { ...job, added: job.songs.length, state: { kind: "done" } } };
+}
+
+/** Prepare the kept notice and log without another synchronous whole-job placed()/count pass. */
+export function* playlistImportCompletionSteps<S extends YtSong>(
+  job: PlaylistImport<S>,
+  resumed: boolean,
+): Generator<void, { kept: PlaylistImport<S>; line: string }> {
+  const counts = { library: 0, ytMusic: 0, unsearched: 0, notFound: 0 };
+  let twice = 0;
+  const leftOut: LeftOutSong[] = [];
+  for (const left of job.leftOut) {
+    leftOut.push(left);
+    if (left.reason === "listedTwice") twice++;
+    yield;
+  }
+  const seen = new Set<string>();
+  for (let index = 0; index < job.finds.length; index++) {
+    const found = job.finds[index]!;
+    counts[found.kind]++;
+    const song = playlistSong(found, job.songs[index]);
+    if (song !== null) {
+      const key = playlistSongKey(song);
+      const listed = job.songs[index];
+      if (seen.has(key) && listed !== undefined) {
+        leftOut.push({ song: listed, reason: "listedTwice" });
+        twice++;
+      }
+      seen.add(key);
+    }
+    yield;
+  }
+  return {
+    kept: { ...job, songs: [], finds: [], added: 0, leftOut },
+    line: importLine(job, counts, twice, resumed),
+  };
+}
