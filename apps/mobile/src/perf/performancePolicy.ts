@@ -20,6 +20,11 @@ export const LIBRARY_SEEDS = [
   "library/LibraryStore.ts#listSongs",
   "library/LibraryStore.ts#listArtists",
   "library/LibraryStore.ts#tasteHistory",
+  "library/LibraryStore.ts#countedListening",
+  "library/LibraryStore.ts#countedListeningPage",
+  "library/db/stats.ts#countedListening",
+  "library/db/stats.ts#countedListeningPage",
+  "stats/Stats.ts#recaps",
   "library/db/taste.ts#tasteHistory",
   "library/hooks.ts#songs",
   "library/hooks.ts#artists",
@@ -108,6 +113,16 @@ export const WHOLE_LIBRARY: Record<string, Exception> = {
       "A queued or explicitly retried library import builds its matching index on settled startup turns, in budgeted steps; never an opening read. Source order and pause/retry semantics have behavioral coverage in startupJobs.test.ts and libraryImportResume.test.ts.",
     capabilities: ["../../../packages/core/src/playlistImport.ts#planLinkImportSteps"],
   },
+  "stats/Stats.ts#readListeningPages": {
+    reason:
+      "The sole listening source seam reads at most 512 raw events by indexed keyset per cancellable free turn, shared by availability and explicit Recap stories. Core retains all local calendar policy. recapAvailability.test.ts verifies real SQL bounds and semantic equality.",
+    capabilities: ["library/LibraryStore.ts#countedListeningPage"],
+  },
+  "stats/recapAvailabilityLive.ts#getRecapAvailability": {
+    reason:
+      "One retained availability cache calls bounded Stats.recaps only for visible settled Home/Stats, sharing in-flight work and retaining the last usable answer. Real store/cache tests verify zero return SQL, hidden coalescing, cancellation and stale-result rejection.",
+    capabilities: ["stats/Stats.ts#recaps"],
+  },
   "app/library/discover-mix/[id].tsx#DiscoverMixScreen": {
     reason: "Visible mix page resolves streamed entries against Library files.",
     capabilities: ["ytmusic/libraryFinder.ts#useLibraryFinder"],
@@ -157,8 +172,12 @@ export const WHOLE_LIBRARY: Record<string, Exception> = {
   },
   "library/LibraryStore.ts#make": {
     reason:
-      "The store implements the whole taste-history read; callers, rather than the driver, own scheduling.",
-    capabilities: ["library/db/taste.ts#tasteHistory"],
+      "The store implements taste history and bounded counted-listening pages. Its legacy whole-history driver remains a compatibility/control capability only; production Stats callers must use the separately inventoried bounded seam.",
+    capabilities: [
+      "library/db/taste.ts#tasteHistory",
+      "library/db/stats.ts#countedListening",
+      "library/db/stats.ts#countedListeningPage",
+    ],
   },
   "library/playlistImports.ts#listLibrary": {
     reason: "An explicit playlist import matches entries against the Library before saving.",

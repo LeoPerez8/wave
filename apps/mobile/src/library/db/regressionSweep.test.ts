@@ -11,39 +11,63 @@ import { traceQueries } from "./testDatabase.ts";
 
 const CURRENT_ROOT = fileURLToPath(new URL("../../../../../", import.meta.url));
 
-test("Recap availability re-reads counted history for an unchanged focus result", async () => {
+test("shared Recap availability reads bounded pages once and no SQL on unchanged Home/Now Playing returns", async () => {
+  const { createRecapReplay } = await import("../../../bench/fastAgain/recapReplay.ts");
   const fixture = await createFastAgainFixture();
-  const now = Date.now;
+  const replay = await createRecapReplay(CURRENT_ROOT, fixture);
+  assert.ok(replay);
   try {
-    Date.now = () => fixture.now;
-    const store = await loadLibraryStore(CURRENT_ROOT, fixture.db);
-    const module = await loadWorktreeModule<typeof import("../../stats/Stats.ts")>(
-      CURRENT_ROOT,
-      "apps/mobile/src/stats/Stats.ts",
+    replay.reset(true);
+    const home = replay.attach(false);
+    const peer = replay.attach(false);
+    await replay.drain();
+    assert.equal(replay.work.statements, 0);
+    home.setActive(true);
+    peer.setActive(true);
+    await replay.drain();
+    assert.ok(replay.get()!.length > 0);
+    assert.equal(replay.work.reads, 1);
+    assert.equal(replay.work.statements, Math.ceil(fixture.playEvents / 512));
+    assert.ok(
+      replay.work.rowsRead < 7300,
+      "only quarter sums and bounded page cursors cross the SQL boundary",
     );
-    const storeModule = await loadWorktreeModule<typeof import("../LibraryStore.ts")>(
-      CURRENT_ROOT,
-      "apps/mobile/src/library/LibraryStore.ts",
-    );
-    const stats = await Effect.runPromise(
-      Effect.gen(function* () {
-        return yield* module.Stats;
-      }).pipe(Effect.provide(module.layer), Effect.provideService(storeModule.LibraryStore, store)),
-    );
-    const first = traceQueries(fixture.db, () => Effect.runSync(stats.recaps));
-    const again = traceQueries(fixture.db, () => Effect.runSync(stats.recaps));
-    assert.deepEqual(again.result, first.result);
-    assert.ok(first.result.length > 0);
-    for (const read of [first, again]) {
-      assert.equal(read.queries.length, 1);
-      assert.equal(
-        read.queries.reduce((sum, query) => sum + query.rows, 0),
-        7200,
-      );
-      assert.ok(read.queries.some((query) => query.plan.some((step) => step.includes("SCAN"))));
+    assert.ok(replay.work.maxRows <= 513);
+    assert.equal(replay.work.notifications, 2);
+    const first = replay.get();
+    replay.reset(true);
+    for (let i = 0; i < 3; i++) {
+      home.setActive(false);
+      peer.setActive(false);
+      home.setActive(true);
+      peer.setActive(true);
+      await replay.drain();
     }
+    assert.equal(replay.get(), first);
+    assert.deepEqual(replay.work, {
+      reads: 0,
+      rowsRead: 0,
+      statements: 0,
+      notifications: 0,
+      maxRows: 0,
+    });
+    home.setActive(false);
+    peer.setActive(false);
+    for (let i = 0; i < 3; i++)
+      Effect.runSync(
+        replay.store.saveImportedPlays([
+          { trackId: fixture.songIds[0]!, startedAt: fixture.now - i },
+        ]),
+      );
+    await replay.drain();
+    assert.equal(replay.work.reads, 0);
+    home.setActive(true);
+    peer.setActive(true);
+    await replay.drain();
+    assert.equal(replay.work.reads, 1);
+    assert.equal(replay.work.notifications, 0, "unchanged periods keep their snapshot");
   } finally {
-    Date.now = now;
+    replay.close();
     fixture.close();
   }
 });
