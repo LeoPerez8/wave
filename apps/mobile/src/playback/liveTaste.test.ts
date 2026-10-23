@@ -5,6 +5,7 @@ import { describe, test } from "node:test";
 import {
   magicArtistKey,
   tasteProfile,
+  tasteLearned,
   ytTrackId,
   type MagicSong,
   type TasteHistory,
@@ -105,7 +106,7 @@ describe("The live taste profile", () => {
     history = NO_HISTORY;
     live.unstarred();
     release();
-    await first;
+    assert.equal((await first)?.songs.get("7") ?? 0, 0);
     assert.equal(await songScore(live, "7"), 0);
   });
 
@@ -117,6 +118,86 @@ describe("The live taste profile", () => {
     await Effect.runPromise(live.marked("download", [streamed], NOW));
     assert.equal(await songScore(live, streamed), 5);
   });
+});
+
+test("cancelling a cold profile preserves streamed signals for the next shared request", async () => {
+  let finish: (() => void) | undefined;
+  const read = Effect.callback<ReturnType<typeof tasteProfile>>((resume) => {
+    finish = () => resume(Effect.succeed(tasteProfile(NO_HISTORY, songOf, NOW)));
+  });
+  const live = makeLiveTaste({ derive: read, songsOf: (ids) => Effect.succeed(ids.map(songOf)) });
+  const controller = new AbortController();
+  const first = Effect.runPromise(live.profile, { signal: controller.signal });
+  await Effect.runPromise(live.marked("favorite", [ytTrackId("held")], NOW));
+  controller.abort();
+  await assert.rejects(first);
+  const second = Effect.runPromise(live.profile);
+  finish!();
+  assert.equal((await second)?.songs.get(ytTrackId("held")), 3);
+});
+
+test("pending streamed and Library signals retain their arrival order in the complete profile", async () => {
+  let finish: (() => void) | undefined;
+  const base = tasteProfile(NO_HISTORY, songOf, NOW);
+  const live = makeLiveTaste({
+    derive: Effect.callback<typeof base>((resume) => {
+      finish = () => resume(Effect.succeed(base));
+    }),
+    songsOf: (ids) => Effect.succeed(ids.map(songOf)),
+  });
+  const request = Effect.runPromise(live.profile);
+  const ids = [ytTrackId("first"), "7", ytTrackId("last")];
+  for (const id of ids) await Effect.runPromise(live.marked("favorite", [id], NOW));
+  finish!();
+  const expected = ids.reduce(
+    (profile, id) => tasteLearned(profile, { kind: "favorite", song: songOf(id), at: NOW }),
+    base,
+  );
+  const actual = await request;
+  assert.deepEqual([...actual!.songs], [...expected.songs]);
+  assert.deepEqual([...actual!.artists], [...expected.artists]);
+  assert.deepEqual([...actual!.genres], [...expected.genres]);
+});
+
+test("cold live-profile snapshot reconciliation yields over history even with pending signals", async () => {
+  const history: TasteHistory = {
+    ...NO_HISTORY,
+    plays: Array.from({ length: 2000 }, () => playedThrough("7")),
+  };
+  let finish: (() => void) | undefined;
+  let turns = 0;
+  const read = (snapshot: (history: TasteHistory) => void) =>
+    Effect.callback<ReturnType<typeof tasteProfile>>((resume) => {
+      finish = () => {
+        snapshot(history);
+        resume(Effect.succeed(tasteProfile(history, songOf, NOW)));
+      };
+    });
+  const live = makeLiveTaste({
+    derive: read(() => {}),
+    deriveWithSnapshot: read,
+    songsOf: (ids) => Effect.succeed(ids.map(songOf)),
+    between: Effect.sync(() => {
+      turns++;
+    }),
+  });
+  const first = Effect.runPromise(live.profile);
+  await Effect.runPromise(live.played(playedThrough("7")));
+  await Effect.runPromise(live.marked("favorite", [ytTrackId("new")], NOW));
+  finish!();
+  assert.equal((await first)?.songs.get("7"), 2000);
+  assert.ok(turns >= 4, "history membership work must pause at the canonical operation cap");
+});
+
+test("streamed signals during Home's Library walk and across metadata invalidation remain learned", async () => {
+  const { live } = liveTaste();
+  const id = ytTrackId("during-library-mapping");
+  await Effect.runPromise(live.marked("favorite", [id], NOW));
+  assert.equal(await songScore(live, id), 3);
+  live.invalidate();
+  assert.equal(await songScore(live, id), 3);
+  live.unstarred([id]);
+  assert.equal(await songScore(live, id), 0);
 });
 
 test("due Home and mixes keep one live profile; a later history snapshot counts each signal once", async () => {

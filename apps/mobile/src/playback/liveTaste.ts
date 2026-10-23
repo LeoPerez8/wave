@@ -1,6 +1,7 @@
 import {
   parseTrackId,
   tasteLearned,
+  tasteLearnedSteps,
   tastePlaySignal,
   type MagicSong,
   type PlayEvent,
@@ -11,9 +12,11 @@ import {
 } from "@wave/core";
 import * as Effect from "effect/Effect";
 import * as Semaphore from "effect/Semaphore";
+import { runSteps } from "../lib/stepped.ts";
 
 /** How a live taste profile reads what it's derived from and the songs its signals are. */
 export interface LiveTasteDeps<R> {
+  readonly between?: Effect.Effect<void>;
   /** Derives the profile from the history, favorites and downloads (Core's `tasteProfile`). */
   readonly derive: Effect.Effect<TasteProfile, unknown, R>;
   /**
@@ -39,21 +42,33 @@ const learned = (profile: TasteProfile, signals: readonly TasteSignal[]): TasteP
  * by its song and start; a star once its write landed (it's announced before);
  * a streamed song's signals are never on record.
  */
-const notIn = (held: readonly TasteSignal[], history: TasteHistory | null): TasteSignal[] => {
-  if (history === null) return [...held];
-  const plays = new Set(history.plays.map((play) => `${play.trackId}@${play.startedAt}`));
-  const favorites = new Set(history.favorites.map((star) => star.trackId));
-  const downloads = new Set(history.downloads.map((download) => download.trackId));
-  return held.filter(({ kind, song, at }) =>
-    parseTrackId(song.trackId)?.kind === "yt"
-      ? true
-      : kind === "favorite"
-        ? !favorites.has(song.trackId)
-        : kind === "download"
-          ? !downloads.has(song.trackId)
-          : !plays.has(`${song.trackId}@${at}`),
-  );
-};
+function* historyMembership(
+  history: TasteHistory | null,
+): Generator<void, (signal: TasteSignal) => boolean> {
+  if (history === null) return () => false;
+  const plays = new Set<string>(),
+    favorites = new Set<string>(),
+    downloads = new Set<string>();
+  for (const play of history.plays) {
+    plays.add(`${play.trackId}@${play.startedAt}`);
+    yield;
+  }
+  for (const star of history.favorites) {
+    favorites.add(star.trackId);
+    yield;
+  }
+  for (const download of history.downloads) {
+    downloads.add(download.trackId);
+    yield;
+  }
+  return ({ kind, song, at }) =>
+    parseTrackId(song.trackId)?.kind !== "yt" &&
+    (kind === "favorite"
+      ? favorites.has(song.trackId)
+      : kind === "download"
+        ? downloads.has(song.trackId)
+        : plays.has(`${song.trackId}@${at}`));
+}
 
 /**
  * The taste profile as the app keeps it (docs/spec.md, Taste profile):
@@ -61,13 +76,22 @@ const notIn = (held: readonly TasteSignal[], history: TasteHistory | null): Tast
  * to date as signals come, as if each were in the history. Kept free of Expo
  * so it runs under plain Node tests; the app's is `TasteProfile.ts`.
  */
-export const makeLiveTaste = <R>({ derive, deriveWithSnapshot, songsOf }: LiveTasteDeps<R>) => {
+export const makeLiveTaste = <R>({
+  derive,
+  deriveWithSnapshot,
+  songsOf,
+  between = Effect.void,
+}: LiveTasteDeps<R>) => {
+  type OrderedSignal = { readonly order: number; readonly signal: TasteSignal };
+  let signalOrder = 0;
   let known: TasteProfile | null = null;
   /**
    * While a derivation runs, the signals that came since it started: not in
    * the history it read (that read starts it), so learned once it's done.
    */
-  let held: TasteSignal[] | null = null;
+  let held: OrderedSignal[] | null = null;
+  // Streamed signals have no SQLite source; replay them after invalidation too.
+  let streamed: OrderedSignal[] = [];
   /** Only one derivation at a time: a second ask waits for the first's profile. */
   const deriving = Semaphore.makeUnsafe(1);
 
@@ -75,35 +99,66 @@ export const makeLiveTaste = <R>({ derive, deriveWithSnapshot, songsOf }: LiveTa
   const learn = (kind: TasteSignalKind, trackIds: readonly string[], at: number) =>
     Effect.gen(function* () {
       // Before the first ask, the history the profile will be derived from has it.
-      if (trackIds.length === 0 || (known === null && held === null)) return;
+      if (
+        trackIds.length === 0 ||
+        (known === null && held === null && trackIds.every((id) => parseTrackId(id)?.kind !== "yt"))
+      )
+        return;
       const songs = yield* songsOf(trackIds);
       const signals = songs.map((song) => ({ kind, song, at }));
+      for (const signal of signals) {
+        const entry = { order: signalOrder++, signal };
+        if (parseTrackId(signal.song.trackId)?.kind === "yt") streamed.push(entry);
+        else held?.push(entry);
+      }
       if (known !== null) known = learned(known, signals);
-      else held?.push(...signals);
     }).pipe(Effect.ignore);
 
   /** Bumped when the profile is forgotten: a derivation started before it isn't kept. */
   let generation = 0;
 
   const derived = (read = deriveWithSnapshot ?? (() => derive)) =>
-    Effect.suspend(() => {
-      held = [];
-      let snapshot: TasteHistory | null = null;
-      const started = generation;
-      return read((history) => {
-        snapshot = history;
-      }).pipe(
-        Effect.map((profile) => {
-          const kept = learned(profile, notIn(held ?? [], snapshot));
-          if (started === generation) known = kept;
-          return kept;
-        }),
-        Effect.ensuring(
-          Effect.sync(() => {
-            held = null;
-          }),
-        ),
-      );
+    Effect.gen(function* () {
+      // Keep signals on failure/interruption: streamed signals cannot be recovered
+      // from SQLite on the next ask. Only a successful publication consumes them.
+      held ??= [];
+      for (;;) {
+        let snapshot: TasteHistory | null = null;
+        const started = generation;
+        const profile = yield* read((history) => {
+          snapshot = history;
+        });
+        if (started !== generation) continue;
+        let kept = profile;
+        if (held.length > 0 || streamed.length > 0) {
+          const includes = yield* runSteps(historyMembership(snapshot), between);
+          const pending = held;
+          kept = yield* runSteps(
+            tasteLearnedSteps(
+              profile,
+              (function* () {
+                // Drain both live arrays, including signals arriving while map copies yield.
+                let libraryAt = 0,
+                  streamedAt = 0;
+                while (libraryAt < pending.length || streamedAt < streamed.length) {
+                  const local = pending[libraryAt];
+                  const remote = streamed[streamedAt];
+                  const { signal } =
+                    local !== undefined && (remote === undefined || local.order < remote.order)
+                      ? pending[libraryAt++]!
+                      : streamed[streamedAt++]!;
+                  yield includes(signal) ? undefined : signal;
+                }
+              })(),
+            ),
+            between,
+          );
+        }
+        if (started !== generation) continue;
+        known = kept;
+        held = null;
+        return kept;
+      }
     });
 
   const profileUsing = (read = deriveWithSnapshot ?? (() => derive)) =>
@@ -144,7 +199,23 @@ export const makeLiveTaste = <R>({ derive, deriveWithSnapshot, songsOf }: LiveTa
      * known here, so what it added can't be taken back alone). A derivation
      * going on isn't kept.
      */
-    unstarred: (): void => {
+    unstarred: (trackIds?: readonly string[]): void => {
+      generation += 1;
+      known = null;
+      streamed = streamed.filter(
+        ({ signal }) =>
+          signal.kind !== "favorite" ||
+          (trackIds !== undefined && !trackIds.includes(signal.song.trackId)),
+      );
+      if (held !== null)
+        held = held.filter(
+          ({ signal }) =>
+            signal.kind !== "favorite" ||
+            (trackIds !== undefined && !trackIds.includes(signal.song.trackId)),
+        );
+    },
+    /** Metadata changed: an in-flight snapshot must not become the shared answer. */
+    invalidate: (): void => {
       generation += 1;
       known = null;
     },

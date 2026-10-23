@@ -1832,6 +1832,7 @@ export type { SeekSource, SongChangeCause } from "./songChangeCause.ts";
 export {
   TASTE_HALF_LIFE_MS,
   tasteLearned,
+  tasteLearnedSteps,
   tastePlaySignal,
   tasteProfile,
   tasteProfileSteps,
