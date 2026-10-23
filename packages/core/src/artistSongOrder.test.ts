@@ -97,17 +97,22 @@ test("every other sort keeps the Library-first list and shows no ranks", () => {
   }
 });
 
-test("Library Popular keeps its existing order and gaps in the saved ranking", () => {
+test("Library Popular ranks the Library's songs by place, with gaps, unranked ones after in given order", () => {
   const ghost = library(track(1, "Ghost"));
-  const demo = library(track(2, "Demo"));
+  const zero = library(track(2, "Zero"));
+  const demo = library(track(3, "Demo"));
+  const amber = library(track(4, "Amber"));
   assert.deepEqual(
-    artistSongOrder([ghost, demo], [yt("a", "Bad Decisions"), yt("b", "Ghost")], {
-      sort: "popular",
-      online: false,
-    }),
+    artistSongOrder(
+      [demo, zero, amber, ghost],
+      [yt("a", "Bad Decisions"), yt("b", "Ghost"), yt("c", "Bad Omens"), yt("z", "Zero")],
+      { sort: "popular", online: false },
+    ),
     [
       { ...ghost, popularRank: 2 },
+      { ...zero, popularRank: 4 },
       { ...demo, popularRank: undefined },
+      { ...amber, popularRank: undefined },
     ],
   );
 });
