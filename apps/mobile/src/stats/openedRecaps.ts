@@ -18,8 +18,8 @@ const openedRecaps = persistedSetting<readonly string[]>({
   equals: sameIds,
 });
 
-/** The `recapId`s opened so far; re-renders when one is opened. */
-export const useOpenedRecaps = openedRecaps.useValue;
+/** The opened ids for a new Home visit. */
+export const getOpenedRecaps = openedRecaps.get;
 
 /** Keeps that `period`'s Recap was opened, so Home stops announcing it. */
 export const markRecapOpened = (period: RecapPeriod): void =>

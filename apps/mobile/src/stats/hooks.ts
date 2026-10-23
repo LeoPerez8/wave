@@ -1,16 +1,24 @@
-import { STATS_TOP, parseRecapId, type RecapPeriod, type StatsPeriod } from "@wave/core";
+import {
+  STATS_TOP,
+  homeRecapVisibility,
+  startHomeRecap,
+  parseRecapId,
+  type RecapPeriod,
+  type StatsPeriod,
+} from "@wave/core";
 import * as Effect from "effect/Effect";
 import { useFocusEffect } from "expo-router";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { AppState } from "react-native";
 
 import type { AlbumRow, ArtistRow, LibraryStoreError, SongRow } from "@/library/LibraryStore";
 import { useFocusedVersion } from "@/lib/useFocusedVersion";
 import { appRuntime } from "@/library/runtime";
 import { playHistoryVersion } from "@/playback/PlayHistory";
+import { useScreenSight } from "@/lib/screenSight";
 
-import { useOpenedRecaps } from "./openedRecaps";
-import { useRecapAvailability } from "./recapAvailabilityLive";
-import { recapAnnouncement } from "./recapAnnouncement";
+import { getOpenedRecaps } from "./openedRecaps";
+import { knownRecaps, useRecapAvailability } from "./recapAvailabilityLive";
 import { Stats, type ArtistStats, type LoadedRecap, type Ranked } from "./Stats";
 
 /**
@@ -104,11 +112,33 @@ export const useTopArtists = (
 /** Every period with a Recap, newest first, or undefined while it first loads. */
 export const useRecaps = useRecapAvailability;
 
-/** The new Recap Home announces; undefined while reading, null once there is none to announce. */
-export const useRecapToAnnounce = (): RecapPeriod | null | undefined => {
-  const recaps = useRecaps();
-  const opened = useOpenedRecaps();
-  return recapAnnouncement(recaps, opened);
+/** Home adopts new availability only when it becomes visible, keeping this visit's layout. */
+export const useRecapToAnnounce = (painted: boolean): RecapPeriod | null => {
+  const sight = useScreenSight();
+  useRecapAvailability(painted);
+  const [announcement, setAnnouncement] = useState(() =>
+    startHomeRecap(
+      knownRecaps(),
+      getOpenedRecaps(),
+      sight.visible() && AppState.currentState === "active",
+    ),
+  );
+  useEffect(() => {
+    const update = () => {
+      const visible = sight.visible() && AppState.currentState === "active";
+      const available = knownRecaps();
+      const opened = getOpenedRecaps();
+      setAnnouncement((current) => homeRecapVisibility(current, visible, available, opened));
+    };
+    const stop = sight.subscribe(update);
+    const activity = AppState.addEventListener("change", update);
+    update();
+    return () => {
+      stop();
+      activity.remove();
+    };
+  }, [sight]);
+  return announcement.period;
 };
 
 /**

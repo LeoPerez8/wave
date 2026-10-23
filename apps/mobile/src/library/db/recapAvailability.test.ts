@@ -2,7 +2,13 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import * as Effect from "effect/Effect";
-import { availableRecaps, createRecapAvailability } from "@wave/core";
+import {
+  availableRecaps,
+  createRecapAvailability,
+  homeRecapVisibility,
+  startHomeRecap,
+  type RecapPeriod,
+} from "@wave/core";
 import { loadLibraryStore } from "../../../bench/fastAgain/store.ts";
 import { createFastAgainFixture } from "./fastAgainFixture.ts";
 import { traceQueries } from "./testDatabase.ts";
@@ -10,6 +16,11 @@ import { traceQueries } from "./testDatabase.ts";
 const root = fileURLToPath(new URL("../../../../../", import.meta.url));
 const at = (month: number, day = 1, h = 0, minute = 0) =>
   new Date(2026, month - 1, day, h, minute).getTime();
+
+const announcementOnOpening = (
+  available: readonly RecapPeriod[] | undefined,
+  opened: readonly string[],
+) => startHomeRecap(available, opened, true).period;
 
 test("bounded listening pages preserve all Core availability without a whole-history statement", async () => {
   const fixture = await createFastAgainFixture();
@@ -144,7 +155,6 @@ test("a sync page invalidates persisted listening even when the next request fai
 
 test("shared availability and announcements follow actual threshold, opened, December/January and timezone changes", async () => {
   const { sql } = await import("drizzle-orm");
-  const { recapAnnouncement } = await import("../../stats/recapAnnouncement.ts");
   const { createRecapReplay } = await import("../../../bench/fastAgain/recapReplay.ts");
   const previousZone = process.env.TZ;
   process.env.TZ = "America/Sao_Paulo";
@@ -166,15 +176,26 @@ test("shared availability and announcements follow actual threshold, opened, Dec
     const id = Effect.runSync(replay.store.recordPlay(history));
     replay.at(at(10));
     const client = replay.attach(true);
+    let home = startHomeRecap(replay.get(), [], true);
+    assert.equal(home.period, null, "the pending check reserves no card");
     await replay.drain();
     assert.deepEqual(replay.get(), []);
     replay.reset(true);
     Effect.runSync(replay.store.updatePlay(id, { ...history, listenedMs: 3 * hour }));
     await replay.drain();
-    assert.deepEqual(recapAnnouncement(replay.get(), []), { kind: "month", year: 2026, month: 9 });
+    home = homeRecapVisibility(home, true, replay.get(), []);
+    assert.equal(home.period, null, "reaching the threshold cannot insert a card during a visit");
+    home = homeRecapVisibility(home, false, replay.get(), []);
+    home = homeRecapVisibility(home, true, replay.get(), []);
+    assert.deepEqual(home.period, { kind: "month", year: 2026, month: 9 });
+    assert.deepEqual(announcementOnOpening(replay.get(), []), {
+      kind: "month",
+      year: 2026,
+      month: 9,
+    });
     const result = replay.get();
     replay.reset(true);
-    assert.equal(recapAnnouncement(result, ["2026-09"]), null);
+    assert.equal(announcementOnOpening(result, ["2026-09"]), null);
     assert.equal(replay.work.statements, 0, "opened state never queries history");
     Effect.runSync(
       replay.store.recordPlay({ ...history, startedAt: at(11, 30, 23, 45), listenedMs: 17 * hour }),
@@ -186,19 +207,19 @@ test("shared availability and announcements follow actual threshold, opened, Dec
       { kind: "month", year: 2026, month: 11 },
       { kind: "month", year: 2026, month: 9 },
     ]);
-    assert.deepEqual(recapAnnouncement(replay.get(), []), { kind: "year", year: 2026 });
-    assert.deepEqual(recapAnnouncement(replay.get(), ["2026"]), {
+    assert.deepEqual(announcementOnOpening(replay.get(), []), { kind: "year", year: 2026 });
+    assert.deepEqual(announcementOnOpening(replay.get(), ["2026"]), {
       kind: "month",
       year: 2026,
       month: 11,
     });
-    assert.equal(recapAnnouncement(replay.get(), ["2026", "2026-11"]), null);
+    assert.equal(announcementOnOpening(replay.get(), ["2026", "2026-11"]), null);
     Effect.runSync(
       replay.store.recordPlay({ ...history, startedAt: at(12, 31, 23, 45), listenedMs: 3 * hour }),
     );
     replay.at(new Date(2027, 0, 1).getTime());
     await replay.drain();
-    assert.deepEqual(recapAnnouncement(replay.get(), ["2026", "2026-11"]), {
+    assert.deepEqual(announcementOnOpening(replay.get(), ["2026", "2026-11"]), {
       kind: "month",
       year: 2026,
       month: 12,

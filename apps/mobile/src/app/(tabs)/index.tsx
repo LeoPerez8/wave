@@ -1,6 +1,6 @@
 import { useScreenContent } from "@/lib/screenTiming";
 import { IconMusic, IconSettings } from "@tabler/icons-react-native";
-import { homeItems } from "@wave/core";
+import { homeItems, type RecapPeriod } from "@wave/core";
 import { Link } from "expo-router";
 import { useEffect, useState } from "react";
 import { router } from "@/lib/timingRouter";
@@ -13,7 +13,6 @@ import { LargeTitleScreen } from "@/components/LargeTitleScreen";
 import { useHomeArrangement, homeTitleLongPress } from "@/home/homeArrangement";
 import { HomeSection, SECTION_GAP } from "@/home/HomeSection";
 import { HomeSectionSkeleton } from "@/home/HomeSectionSkeleton";
-import { HomeRecapSkeleton } from "@/home/HomeRecapSkeleton";
 import { afterHomeFrame, homeOpeningState } from "@/home/homeOpening";
 import { useHomeContent } from "@/library/hooks";
 import { useRenderCount } from "@/perf/perf";
@@ -25,6 +24,14 @@ const FIRST_SECTION = { marginTop: CELL - SECTION_GAP } as const;
 
 /** A new Recap's card sits a cell under the large title, a section's gap above the sections. */
 const RECAP_CARD = { marginTop: CELL } as const;
+
+function HomeRecap({ period }: { period: RecapPeriod | null }) {
+  return period === null ? null : (
+    <View style={RECAP_CARD}>
+      <RecapCard period={period} />
+    </View>
+  );
+}
 
 /** A quiet line in Home's flow (no sections, nothing played yet). */
 function HomeLine({ children, top }: { children: string; top: number }) {
@@ -38,6 +45,7 @@ function HomeLine({ children, top }: { children: string; top: number }) {
 export default function HomeScreen() {
   useRenderCount("HomeScreen");
   const [painted, setPainted] = useState(false);
+  const newRecap = useRecapToAnnounce(painted);
   useEffect(
     () =>
       afterHomeFrame(() => setPainted(true), {
@@ -55,20 +63,18 @@ export default function HomeScreen() {
         <IconButton icon={IconSettings} label="Settings" onPress={() => router.push("/settings")} />
       }
     >
-      {painted ? <HomeContent /> : <HomePlaceholders />}
+      {painted ? <HomeContent newRecap={newRecap} /> : <HomePlaceholders newRecap={newRecap} />}
     </LargeTitleScreen>
   );
 }
 
-function HomePlaceholders() {
+function HomePlaceholders({ newRecap }: { newRecap: RecapPeriod | null }) {
   useScreenContent(false);
   const arrangement = useHomeArrangement();
   return (
     <>
-      <View style={RECAP_CARD}>
-        <HomeRecapSkeleton />
-      </View>
-      <View>
+      <HomeRecap period={newRecap} />
+      <View style={newRecap === null ? FIRST_SECTION : undefined}>
         {arrangement.map((id) => (
           <HomeSectionSkeleton key={id} id={id} />
         ))}
@@ -77,12 +83,11 @@ function HomePlaceholders() {
   );
 }
 
-function HomeContent() {
+function HomeContent({ newRecap }: { newRecap: RecapPeriod | null }) {
   const home = useHomeContent();
   const { empty, nothingPlayed, ready } = homeOpeningState(home);
   useScreenContent(ready);
   const arrangement = useHomeArrangement();
-  const newRecap = useRecapToAnnounce();
 
   return (
     <>
@@ -95,11 +100,7 @@ function HomeContent() {
       )}
       {!empty && (
         <>
-          {newRecap !== null && (
-            <View style={RECAP_CARD}>
-              {newRecap === undefined ? <HomeRecapSkeleton /> : <RecapCard period={newRecap} />}
-            </View>
-          )}
+          <HomeRecap period={newRecap} />
           {/* Sections with nothing to show draw nothing, so whichever shows first is pulled up. */}
           <View style={newRecap === null ? FIRST_SECTION : undefined}>
             {homeItems(arrangement, { nothingPlayed }).map((item, index) =>
