@@ -31,12 +31,21 @@ class ShareModule : Module() {
     /** Writes the base64 PNG to the shared images as [fileName]; resolves its path. */
     AsyncFunction("writeImage") { base64: String, fileName: String -> images.write(base64, fileName).absolutePath }
 
-    /** Creates a separate transparent padded rounded sticker; the original card stays intact. */
-    AsyncFunction("writeStorySticker") { path: String, frame: Map<String, Double> ->
+    /** Creates a tight rounded sticker and the separate full Story gradient. */
+    AsyncFunction("writeStoryImages") { path: String, frame: Map<String, Double>, top: String, bottom: String ->
       val source = File(path)
       // The same cache-only boundary as delivery, before reading or creating a sibling PNG.
       contentUri(source)
-      StorySticker.write(source, frame).absolutePath
+      val sticker = StorySticker.write(source, frame)
+      try {
+        val background = StoryBackground.write(
+          source.parentFile!!, frame.getValue("width").toInt(), frame.getValue("height").toInt(), top, bottom,
+        )
+        mapOf("sticker" to sticker.absolutePath, "background" to background.absolutePath)
+      } catch (error: Exception) {
+        sticker.delete()
+        throw error
+      }
     }
 
     /** Copies the image at [path] into the gallery, in Pictures/Wave. */
@@ -65,9 +74,8 @@ class ShareModule : Module() {
      * user can move and resize, over a [top] to [bottom] background (`#rrggbb`),
      * as Meta's "Sharing to Stories" has it. [appId] is the build's Facebook App
      * ID, which Instagram requires as the source application. Only Instagram is
-     * granted to read the image. Lyrics padding is already in this PNG; the
-     * intent exposes no documented sticker size or position extras. Instagram
-     * controls placement and scaling, so never flatten the card into a background.
+     * granted to read the image. Song and Recap retain this colour-extra path;
+     * lyrics use [shareStoryImages] with an actual background image.
      */
     AsyncFunction("shareToInstagramStory") { path: String, top: String, bottom: String, appId: String ->
       val uri = contentUri(File(path))
@@ -77,6 +85,24 @@ class ShareModule : Module() {
         putExtra("interactive_asset_uri", uri)
         putExtra("top_background_color", top)
         putExtra("bottom_background_color", bottom)
+      }
+      startActivity(story)
+    }.runOnQueue(Queues.MAIN)
+
+    /** Keeps the lyrics movable over Wave's gradient, with read access to both PNGs. */
+    AsyncFunction("shareStoryImages") { sticker: String, background: String, appId: String ->
+      val stickerUri = contentUri(File(sticker))
+      val backgroundUri = contentUri(File(background))
+      context.grantUriPermission(INSTAGRAM, stickerUri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+      context.grantUriPermission(INSTAGRAM, backgroundUri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+      val story = storyIntent().apply {
+        setDataAndType(backgroundUri, PNG)
+        putExtra("source_application", appId)
+        putExtra("interactive_asset_uri", stickerUri)
+        clipData = ClipData.newRawUri("Story background", backgroundUri).apply {
+          addItem(ClipData.Item(stickerUri))
+        }
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
       }
       startActivity(story)
     }.runOnQueue(Queues.MAIN)
