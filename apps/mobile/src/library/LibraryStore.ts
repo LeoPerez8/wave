@@ -1,5 +1,7 @@
 import type { YtSong } from "@wave/core";
 import { backfillRecordingTitles, selectMatchingSong } from "./db/matchingSong";
+import { selectNowPlayingSong } from "./db/nowPlayingSong";
+import type { PlayingSongAnswer, PlayingSongTarget } from "../nowPlaying/songLookup";
 import {
   acceptPlaylistRecommendation,
   dismissPlaylistRecommendation,
@@ -696,6 +698,9 @@ export class LibraryStore extends Context.Service<
     ) => Effect.Effect<void, LibraryStoreError>;
     readonly savePosition: (positionMs: number) => Effect.Effect<void, LibraryStoreError>;
     /** The playing track's links and artwork palette, for Now Playing; null once it's gone. */
+    readonly nowPlayingSong: (
+      target: PlayingSongTarget,
+    ) => Effect.Effect<PlayingSongAnswer, LibraryStoreError>;
     readonly trackDetails: (id: number) => Effect.Effect<TrackDetails | null, LibraryStoreError>;
     /** The recent searches, newest first. */
     readonly listRecentSearches: Effect.Effect<readonly string[], LibraryStoreError>;
@@ -1316,6 +1321,9 @@ const make = Effect.gen(function* () {
     listLibraryLookupSongs: attempt("list songs to look up", () => selectLibraryLookupSongs(db)),
 
     listSongGenres: attempt("list song genres", () => selectSongGenres(db)),
+
+    nowPlayingSong: (target) =>
+      attempt("read the Now Playing song", () => selectNowPlayingSong(db, target)),
 
     trackDetails: (id) =>
       attempt(

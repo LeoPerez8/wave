@@ -22,7 +22,7 @@ import {
 } from "@/playback/queueTracks";
 import { savedYtQueueTracks } from "@/playback/ytQueueTracks";
 import { useThemeColor } from "@/theme/useThemeColor";
-import { useLoadedLibraryFinder } from "@/ytmusic/libraryFinder";
+import { usePlayingSongAnswer, usePlayingSongTarget } from "./playingSong";
 
 import { useNowPlayingShown } from "./sheet";
 
@@ -74,19 +74,13 @@ export interface LibraryFile {
   readonly path: string;
 }
 
-/**
- * The Library track and file streamed song [ytSong] is, once it's downloaded
- * (the shared finder, followed while [active]); null for none (or no
- * streamed song), undefined until the Library is first read.
- */
-export const useDownloadedFile = (
-  ytSong: NativeYtSong | null,
-  active: boolean,
-): LibraryFile | null | undefined => {
-  const find = useLoadedLibraryFinder(active);
+/** The shared playing-song answer's file; unread until settlement or an early gesture. */
+export const useDownloadedFile = (ytSong: NativeYtSong | null): LibraryFile | null | undefined => {
+  const target = usePlayingSongTarget(ytSong === null ? null : `yt:${ytSong.videoId}`, ytSong);
+  const answer = usePlayingSongAnswer(target);
   if (ytSong === null) return null;
-  if (find === null) return undefined;
-  const track = find(ytSong);
+  if (answer === undefined) return undefined;
+  const track = answer.track;
   return track?.path == null ? null : { id: track.id, path: track.path };
 };
 
