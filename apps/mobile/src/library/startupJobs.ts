@@ -6,17 +6,38 @@ import {
   reconcileScanSteps,
   replacementDuplicatesSteps,
   replacementDuplicateFixSteps,
+  scanSaveSlices,
+  SCAN_SAVE_SLICE,
   type ScanReconcileInput,
   type DuplicateOutcome,
+  type PendingFavorite,
   type ReplacementDuplicate,
   type PlaylistImport,
   type YtAlbumSong,
+  type YtLibraryFavorites,
+  type YtSong,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
 import { runSteps } from "../lib/stepped.ts";
 import type { IndexedArtwork, IndexedTrack, LibraryStore } from "./LibraryStore.ts";
 
-/** One append transaction is indivisible; every song has its own cancellable turn. */
+/**
+ * Rows one startup write takes: ti's scan save slice. A turn holds one such
+ * transaction, so a long list costs a turn per hundred rows, not per row.
+ */
+export const STARTUP_WRITE_ROWS = SCAN_SAVE_SLICE;
+
+const slices = <A>(rows: readonly A[]): A[][] => {
+  const parts: A[][] = [];
+  for (let start = 0; start < rows.length; start += STARTUP_WRITE_ROWS)
+    parts.push(rows.slice(start, start + STARTUP_WRITE_ROWS));
+  return parts;
+};
+
+/**
+ * Appends the import's songs a 100-song transaction per turn (ti appended them in one);
+ * a resumed import's held songs are skipped by the append itself.
+ */
 export const finishLinkImport = (
   store: LibraryStore["Service"],
   job: PlaylistImport<YtAlbumSong>,
@@ -26,14 +47,52 @@ export const finishLinkImport = (
 ) =>
   Effect.gen(function* () {
     const finished = yield* runSteps(finishPlaylistImportSteps(job), turn);
-    for (const song of finished.songs) {
+    for (const songs of slices(finished.songs)) {
       yield* turn;
       if (!current()) return null;
-      yield* store.addToPlaylist(job.playlistId, [song]);
+      yield* store.addToPlaylist(job.playlistId, songs);
       saved();
     }
     return current() ? finished.job : null;
   });
+
+/**
+ * Liked Songs' stars, then (after the synced stars' downloads) its pending
+ * favorites, a 100-row write per turn, then its downloads in one request, in
+ * ti's order. False when [current] says the read left the batch meanwhile.
+ */
+export const dispatchLibraryFavorites = async <S extends YtSong>(
+  favorites: YtLibraryFavorites<S>,
+  ports: {
+    readonly turn: () => Promise<void>;
+    readonly current: () => boolean;
+    readonly star: (trackIds: readonly number[]) => Promise<void>;
+    readonly syncedStars: () => void;
+    readonly pend: (favorites: readonly PendingFavorite[]) => Promise<void>;
+    readonly download: (songs: readonly S[]) => void;
+  },
+): Promise<boolean> => {
+  for (const ids of slices(favorites.star)) {
+    await ports.turn();
+    if (!ports.current()) return false;
+    await ports.star(ids);
+  }
+  // A liked song the Library has only as a missing song downloads, as any new star does.
+  ports.syncedStars();
+  // Before any download is queued, so each one's landing finds its pending favorite.
+  for (const pending of slices(favorites.pending)) {
+    await ports.turn();
+    if (!ports.current()) return false;
+    await ports.pend(pending);
+  }
+  if (favorites.download.length > 0) {
+    await ports.turn();
+    if (!ports.current()) return false;
+    // One request: the download service reads its journal once for the whole list.
+    ports.download(favorites.download);
+  }
+  return true;
+};
 
 /** Source SQLite read is indivisible; building the membership index yields per file. */
 export const readScanIndex = (
@@ -58,7 +117,10 @@ export const readScanIndex = (
     return { known, indexed };
   });
 
-/** Reconciliation and one-track save transactions keep cancellation/restart semantics. */
+/**
+ * Reconciliation in steps, then ti's save slices (100 files, the batch's
+ * artwork with the first) as one transaction per turn.
+ */
 export const saveScanBatch = (
   store: LibraryStore["Service"],
   input: ScanReconcileInput<IndexedTrack>,
@@ -71,25 +133,23 @@ export const saveScanBatch = (
 ) =>
   Effect.gen(function* () {
     const changes = yield* runSteps(reconcileScanSteps(input), turn);
-    // Artwork may be larger than the tracks saved. Each artwork transaction gets its own turn.
-    for (const row of artwork) {
-      yield* turn;
-      yield* store.saveBatch([], [row], [], { linkEntries: false });
-    }
+    const parts = scanSaveSlices(changes);
+    // New artwork alone (files that were read but saved nothing) still gets saved.
+    if (parts.length === 0 && artwork.length > 0) parts.push({ tracks: [], moves: [] });
     let count = 0;
     const ids: number[] = [];
-    function* writes() {
-      for (const track of changes.added) yield { track, moves: [] };
-      for (const track of changes.updated) yield { track, moves: [] };
-      for (const move of changes.moved)
-        yield { track: move.to, moves: [{ from: move.from, to: move.to.path }] };
-    }
-    for (const { track, moves } of writes()) {
+    for (const [index, slice] of parts.entries()) {
       yield* turn;
-      const result = yield* store.saveBatch([track], [], moves, { linkEntries: false });
+      const result = yield* store.saveBatch(
+        slice.tracks,
+        // Before any file that shows it.
+        index === 0 ? artwork : [],
+        slice.moves,
+        { linkEntries: false },
+      );
       saved(result);
       ids.push(...result.trackIds);
-      count++;
+      count += slice.tracks.length;
     }
     return { changes, count, ids };
   });
@@ -147,15 +207,17 @@ export const scanInputColumns = (
     turn,
   );
 
-/** An unchanged incremental scan has nothing to prune. Changed scans retain atomic cleanup. */
+/**
+ * A completed scan's cleanup, as on ti: the files gone, then the albums, credits and
+ * artist images that saves left (a download's included). The store skips it when
+ * nothing was written since its last one.
+ */
 export const finishScanIndex = (
   store: LibraryStore["Service"],
   missing: readonly string[],
-  saved: number,
   turn: Effect.Effect<void>,
 ) =>
   Effect.gen(function* () {
-    if (missing.length === 0 && saved === 0) return;
     yield* turn;
     yield* store.filesGone(missing);
   });

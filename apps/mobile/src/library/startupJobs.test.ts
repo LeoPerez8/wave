@@ -9,20 +9,21 @@ import { traceQueries } from "./db/testDatabase.ts";
 import { finishLinkImport } from "./startupJobs.ts";
 const root = fileURLToPath(new URL("../../../../", import.meta.url));
 
-test("resumed link imports yield before reads/writes, keep exact order, stop on replacement and resume idempotently", async () => {
+test("link imports append ti's songs in 100-song transactions, one per turn, keeping order, stopping on replacement and resuming idempotently", async () => {
   const fixture = await createFastAgainFixture();
   try {
     const store = await loadLibraryStore(root, fixture.db);
     const made = Effect.runSync(store.createPlaylist("Resume", []));
+    const titles = Array.from({ length: 250 }, (_, i) => `Song ${i}`);
     const plan = planLinkImport<YtAlbumSong, never>(
       {
         service: "spotify",
         playlist: {
           title: "Resume",
           artworkUrl: null,
-          total: 3,
+          total: titles.length,
           truncated: false,
-          songs: ["First", "Second", "Third"].map((title) => ({
+          songs: titles.map((title) => ({
             title,
             artists: ["A"],
             album: null,
@@ -33,17 +34,24 @@ test("resumed link imports yield before reads/writes, keep exact order, stop on 
       [],
     );
     const job = startPlaylistImport(plan, { playlistId: made.playlistId, name: made.name });
+    const appends: number[] = [];
+    const counted: typeof store = {
+      ...store,
+      addToPlaylist: (id, songs) => {
+        appends.push(songs.length);
+        return store.addToPlaylist(id, songs);
+      },
+    };
     let active = true;
-    let turns = 0;
+    // Replaced once the first transaction landed.
     const turn = Effect.sync(() => {
-      turns++;
-      if (turns === 3) active = false;
+      if (appends.length === 1) active = false;
     });
     let published = 0;
     const stopped = traceQueries(fixture.db, () =>
       Effect.runSync(
         finishLinkImport(
-          store,
+          counted,
           job,
           turn,
           () => active,
@@ -52,21 +60,88 @@ test("resumed link imports yield before reads/writes, keep exact order, stop on 
       ),
     );
     assert.equal(stopped.result, null);
+    assert.deepEqual(appends, [100]);
     assert.equal(published, 1); // A partial import is visible even when cancellation prevents completion.
-    assert.equal(Effect.runSync(store.getPlaylist(made.playlistId))!.items.length, 1);
+    assert.equal(Effect.runSync(store.getPlaylist(made.playlistId))!.items.length, 100);
     active = true;
-    const done = Effect.runSync(finishLinkImport(store, job, Effect.void, () => active));
+    appends.length = 0;
+    const done = Effect.runSync(finishLinkImport(counted, job, Effect.void, () => active));
     assert.equal(done?.state.kind, "done");
+    assert.deepEqual(appends, [100, 100, 50]);
     const songs = Effect.runSync(store.getPlaylist(made.playlistId))!.items;
     assert.deepEqual(
       songs.map((item) => (item.source === "library" ? "library" : item.song.title)),
-      ["First", "Second", "Third"],
+      titles,
     );
     Effect.runSync(finishLinkImport(store, job, Effect.void, () => active));
-    assert.equal(Effect.runSync(store.getPlaylist(made.playlistId))!.items.length, 3);
+    assert.equal(Effect.runSync(store.getPlaylist(made.playlistId))!.items.length, 250);
   } finally {
     fixture.close();
   }
+});
+
+test("Liked Songs' stars and pending favorites go in 100-row writes per turn, and the downloads in one request, as on ti", async () => {
+  const { dispatchLibraryFavorites } = await import("./startupJobs.ts");
+  const song = (i: number) => ({
+    title: `Liked ${i}`,
+    videoId: `v${i}`,
+    artists: ["A"],
+    album: null,
+    durationMs: 1000,
+    artworkUrl: null,
+    explicit: false,
+  });
+  const favorites = {
+    star: Array.from({ length: 250 }, (_, i) => i + 1),
+    pending: Array.from({ length: 230 }, (_, i) => ({
+      videoId: `v${i}`,
+      title: `Liked ${i}`,
+      artists: ["A"],
+      durationMs: 1000,
+    })),
+    download: Array.from({ length: 230 }, (_, i) => song(i)),
+  };
+  const run = async (stopAfter: number) => {
+    const events: string[] = [];
+    let turns = 0;
+    const done = await dispatchLibraryFavorites(favorites, {
+      turn: async () => {
+        turns++;
+      },
+      current: () => turns <= stopAfter,
+      star: async (ids) => {
+        events.push(`star ${ids.length} from ${ids[0]}`);
+      },
+      syncedStars: () => {
+        events.push("synced stars");
+      },
+      pend: async (list) => {
+        events.push(`pend ${list.length} from ${list[0]!.videoId}`);
+      },
+      download: (songs) => {
+        events.push(`download ${songs.length}`);
+      },
+    });
+    return { done, events, turns };
+  };
+  const whole = await run(Infinity);
+  assert.equal(whole.done, true);
+  assert.deepEqual(whole.events, [
+    "star 100 from 1",
+    "star 100 from 101",
+    "star 50 from 201",
+    "synced stars",
+    "pend 100 from v0",
+    "pend 100 from v100",
+    "pend 30 from v200",
+    "download 230",
+  ]);
+  // Every write waits for its own turn.
+  assert.equal(whole.turns, 7);
+  // A read refreshed or deleted meanwhile stops at the next turn.
+  const stopped = await run(2);
+  assert.equal(stopped.done, false);
+  assert.deepEqual(stopped.events, ["star 100 from 1", "star 100 from 101"]);
 });
 
 test("actual startup jobs cannot read before global settlement; navigation pauses scan steps and abort gives up pending turns", async () => {
@@ -176,21 +251,26 @@ test("actual startup jobs cannot read before global settlement; navigation pause
   }
 });
 
-const scanned = async (path: string, title: string) => {
+const scanned = async (
+  path: string,
+  title: string,
+  tags: { readonly artist?: string; readonly album?: string } = {},
+  artworkHash: string | null = null,
+) => {
   const { normalizeTrack } = await import("@wave/core");
   return {
-    ...normalizeTrack({ path, title, artist: "A", album: "Album", durationMs: 180000 }),
+    ...normalizeTrack({ path, title, artist: "A", album: "Album", durationMs: 180000, ...tags }),
     sizeBytes: 1000,
     modifiedAt: 1,
     sampleRate: 44100,
     bitrateKbps: 320,
-    artworkHash: null,
+    artworkHash,
     hasLyrics: false,
     explicit: "clean" as const,
   };
 };
 
-test("scan saves one track per free turn, preserving moved identity and a retry after interruption", async () => {
+test("scan saves ti's 100-file slices, one transaction per turn with artwork first, keeping moved identity and a retry after interruption", async () => {
   const { saveScanBatch } = await import("./startupJobs.ts");
   const fixture = await createFastAgainFixture();
   try {
@@ -200,9 +280,20 @@ test("scan saves one track per free turn, preserving moved identity and a retry 
       store.saveBatch([old], [], [], { linkEntries: false }),
     ).trackIds;
     const read = [
-      await scanned("/Startup/added.mp3", "Added"),
+      ...(await Promise.all(
+        Array.from({ length: 249 }, (_, i) => scanned(`/Startup/added-${i}.mp3`, `Added ${i}`)),
+      )),
       { ...old, path: "/Startup/moved.mp3" },
     ];
+    const art = { hash: "cover", path: "/covers/c.jpg", thumbPath: "/covers/c.t.jpg", palette: {} };
+    const saves: { tracks: number; artwork: number; moves: number }[] = [];
+    const counted: typeof store = {
+      ...store,
+      saveBatch: (tracks, artwork, moves = [], options) => {
+        saves.push({ tracks: tracks.length, artwork: artwork.length, moves: moves.length });
+        return store.saveBatch(tracks, artwork, moves, options);
+      },
+    };
     const turns: (() => void)[] = [];
     const turn = Effect.callback<void>((resume) => {
       const run = () => resume(Effect.void);
@@ -214,35 +305,47 @@ test("scan saves one track per free turn, preserving moved identity and a retry 
     });
     const controller = new AbortController();
     const saving = Effect.runPromise(
-      saveScanBatch(store, { missing: [old], read, isIndexed: () => false }, [], turn),
+      saveScanBatch(counted, { missing: [old], read, isIndexed: () => false }, [art], turn),
       { signal: controller.signal },
     );
-    turns.shift()!();
-    await new Promise((resolve) => setImmediate(resolve)); // Reconciliation, no write.
-    assert.equal(Effect.runSync(store.knownFiles(["/Startup"])).length, 1);
-    turns.shift()!();
-    await new Promise((resolve) => setImmediate(resolve)); // First transaction only.
-    assert.deepEqual(
-      Effect.runSync(store.knownFiles(["/Startup"])).map((f) => f.path),
-      ["/Startup/old.mp3", "/Startup/added.mp3"],
-    );
+    // Reconciliation's CPU steps take their own turns before any write.
+    for (let i = 0; i < 20 && saves.length === 0; i++) {
+      turns.shift()!();
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+    // One transaction per turn: ti's first slice, with the batch's artwork.
+    assert.deepEqual(saves, [{ tracks: 100, artwork: 1, moves: 0 }]);
+    assert.equal(Effect.runSync(store.knownFiles(["/Startup"])).length, 101);
     controller.abort();
     await assert.rejects(saving);
     assert.equal(turns.length, 0);
+    saves.length = 0;
     const retried = Effect.runSync(
       saveScanBatch(
-        store,
-        { missing: [old], read, isIndexed: (p) => p === "/Startup/added.mp3" },
+        counted,
+        {
+          missing: [old],
+          read,
+          isIndexed: (p) => /^\/Startup\/added-(\d|[1-9]\d)\.mp3$/.test(p),
+        },
         [],
         Effect.void,
       ),
     );
-    assert.equal(retried.count, 2);
+    assert.equal(retried.count, 250);
+    assert.deepEqual(saves, [
+      { tracks: 100, artwork: 0, moves: 0 },
+      { tracks: 100, artwork: 0, moves: 0 },
+      { tracks: 50, artwork: 0, moves: 1 },
+    ]);
     assert.equal(Effect.runSync(store.songsByIds([movedId!]))[0]!.path, "/Startup/moved.mp3");
-    assert.equal(Effect.runSync(store.knownFiles(["/Startup"])).length, 2);
-    const count = traceQueries(fixture.db, () => Effect.runSync(store.knownFiles(["/Startup"])));
-    assert.equal(count.queries.length, 1);
-    assert.equal(count.queries[0]!.rows, 2);
+    assert.equal(Effect.runSync(store.knownFiles(["/Startup"])).length, 250);
+    // Artwork alone (read files that saved nothing) still gets its transaction, as on ti.
+    saves.length = 0;
+    Effect.runSync(
+      saveScanBatch(counted, { missing: [], read: [], isIndexed: () => true }, [art], Effect.void),
+    );
+    assert.deepEqual(saves, [{ tracks: 0, artwork: 1, moves: 0 }]);
   } finally {
     fixture.close();
   }
@@ -288,30 +391,97 @@ test("duplicate jobs read audio pair by pair, retain the older track and recover
   }
 });
 
-test("an unchanged scan performs no cleanup read/write, while a changed scan prunes on its own turn", async () => {
+test("a completed scan that saved nothing still prunes what other saves left, skipping only when nothing wrote since", async () => {
   const { finishScanIndex } = await import("./startupJobs.ts");
   const fixture = await createFastAgainFixture();
   try {
     const store = await loadLibraryStore(root, fixture.db);
-    const unchanged = traceQueries(fixture.db, () =>
-      Effect.runSync(finishScanIndex(store, [], 0, Effect.void)),
-    );
-    assert.equal(unchanged.queries.length, 0);
+    const ariana = () =>
+      Effect.runSync(store.listArtists)
+        .filter((artist) => /Ariana|Social House/.test(artist.name))
+        .map((artist) => ({ name: artist.name, songs: artist.trackCount, image: artist.thumbPath }));
+    const file = (path: string, title: string, artist: string, artworkHash: string | null) =>
+      scanned(path, title, { artist, album: title }, artworkHash);
     let turns = 0;
-    const file = await scanned("/Startup/gone.mp3", "Gone");
-    const saved = Effect.runSync(store.saveBatch([file], [], [], { linkEntries: false }));
+    const turn = Effect.sync(() => {
+      turns++;
+    });
+    // A scan brings in a collaboration and completes (a changed scan prunes).
     Effect.runSync(
-      finishScanIndex(
-        store,
-        [file.path],
-        0,
-        Effect.sync(() => {
-          turns++;
-        }),
+      store.saveBatch(
+        [await file("/Startup/boyfriend.mp3", "boyfriend", "Ariana Grande & Social House", null)],
+        [],
+        [],
+        { linkEntries: false },
       ),
     );
+    Effect.runSync(finishScanIndex(store, [], turn));
+    // A download lands outside any scan (saveBatch, no prune).
+    Effect.runSync(
+      store.saveBatch(
+        [await file("/Startup/7 rings.mp3", "7 rings", "Ariana Grande", "cover")],
+        [{ hash: "cover", path: "/covers/1.jpg", thumbPath: "/covers/1.t.jpg", palette: {} }],
+        [],
+        { linkEntries: false },
+      ),
+    );
+    const roots = Effect.runSync(store.ensureDefaultRoot("/Startup")).map((root) => root.path);
+    // The next rescan finds nothing new or gone; as on ti, its end re-files credits and images.
+    turns = 0;
+    Effect.runSync(finishScanIndex(store, [], turn));
+    assert.equal(turns, 1);
+    assert.deepEqual(ariana(), [
+      { name: "Ariana Grande", songs: 2, image: "/covers/1.t.jpg" },
+      { name: "Social House", songs: 1, image: null },
+    ]);
+    // Then it records the scan. Nothing else wrote since that prune: the next unchanged scan
+    // has nothing to clean up.
+    const recorded = traceQueries(fixture.db, () =>
+      Effect.runSync(store.markScanned(roots, 1)),
+    );
+    assert.ok(recorded.queries.some((query) => /^\s*update/i.test(query.sql)));
+    const unchanged = traceQueries(fixture.db, () => Effect.runSync(finishScanIndex(store, [], turn)));
+    assert.ok(unchanged.queries.every((query) => /^\s*select/i.test(query.sql)));
+    assert.ok(unchanged.queries.length <= 1);
+    // A changed scan prunes on its own turn.
+    turns = 0;
+    const gone = await scanned("/Startup/gone.mp3", "Gone");
+    const saved = Effect.runSync(store.saveBatch([gone], [], [], { linkEntries: false }));
+    Effect.runSync(finishScanIndex(store, [gone.path], turn));
     assert.equal(turns, 1);
     assert.equal(Effect.runSync(store.songsByIds(saved.trackIds)).length, 0);
+  } finally {
+    fixture.close();
+  }
+});
+
+test("a new process's first completed scan prunes even when it saved nothing, as on ti", async () => {
+  const { finishScanIndex } = await import("./startupJobs.ts");
+  const fixture = await createFastAgainFixture();
+  try {
+    const before = await loadLibraryStore(root, fixture.db);
+    const save = async (title: string, artist: string) =>
+      Effect.runSync(
+        before.saveBatch([await scanned(`/Startup/${title}.mp3`, title, { artist })], [], [], {
+          linkEntries: false,
+        }),
+      );
+    await save("boyfriend", "Ariana Grande & Social House");
+    Effect.runSync(finishScanIndex(before, [], Effect.void));
+    // A download lands, then Wave stops before any scan.
+    await save("7 rings", "Ariana Grande");
+    // The next launch's scan finds nothing changed; its end still re-files the credits.
+    const after = await loadLibraryStore(root, fixture.db);
+    Effect.runSync(finishScanIndex(after, [], Effect.void));
+    assert.deepEqual(
+      Effect.runSync(after.listArtists)
+        .filter((artist) => /Ariana|Social House/.test(artist.name))
+        .map((artist) => [artist.name, artist.trackCount]),
+      [
+        ["Ariana Grande", 2],
+        ["Social House", 1],
+      ],
+    );
   } finally {
     fixture.close();
   }
