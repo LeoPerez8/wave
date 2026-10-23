@@ -108,7 +108,7 @@ function Discover({ home, title }: SectionProps) {
   const magicQueue = useMagicQueueSection();
   const artistMixes = useDiscoverMixes("artist-mixes", played);
   const genreMixes = useDiscoverMixes("genre-mixes", played);
-  const showsMagicQueue = magicQueue !== null && magicQueue.songs.length > 0;
+  const showsMagicQueue = magicQueue !== null && (magicQueue.songs.length > 0 || magicQueue.failed);
   if (
     magicQueue !== null &&
     !showsMagicQueue &&
@@ -282,26 +282,29 @@ function MagicQueueRow({ section }: { section: MagicQueueSection }) {
       busy={section.picking}
       refresh={{ label: "Get other songs", run: section.refresh, enabled: !section.picking }}
     >
-      <View onLayout={(event) => setAvailable(event.nativeEvent.layout.width)}>
-        <PullRefreshRow onRefresh={section.refresh} enabled={!section.picking}>
-          <View
-            style={{
-              width: available,
-              minHeight: height,
-              flexDirection: "row",
-              flexWrap: "wrap",
-              gap: CELL,
-            }}
-          >
-            {section.songs.map((song, place) => (
-              // oxlint-disable-next-line react/no-array-index-key -- a place crossfades between its previous and next seed
-              <Crossfade key={place} swapKey={String(song.id)}>
-                <MagicQueueTile song={song} size={size} />
-              </Crossfade>
-            ))}
-          </View>
-        </PullRefreshRow>
-      </View>
+      {section.failed && <RecommendationsFailed onRetry={section.refresh} />}
+      {section.songs.length > 0 && (
+        <View onLayout={(event) => setAvailable(event.nativeEvent.layout.width)}>
+          <PullRefreshRow onRefresh={section.refresh} enabled={!section.picking}>
+            <View
+              style={{
+                width: available,
+                minHeight: height,
+                flexDirection: "row",
+                flexWrap: "wrap",
+                gap: CELL,
+              }}
+            >
+              {section.songs.map((song, place) => (
+                // oxlint-disable-next-line react/no-array-index-key -- a place crossfades between its previous and next seed
+                <Crossfade key={place} swapKey={String(song.id)}>
+                  <MagicQueueTile song={song} size={size} />
+                </Crossfade>
+              ))}
+            </View>
+          </PullRefreshRow>
+        </View>
+      )}
     </DiscoverRow>
   );
 }

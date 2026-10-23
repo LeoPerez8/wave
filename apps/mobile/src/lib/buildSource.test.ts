@@ -48,3 +48,19 @@ test("a build that reads one version publishes it once, and a failure is not ret
   );
   assert.equal(reads, 2);
 });
+
+test("continuous source writes end a recommendation build instead of restarting its pages forever", async () => {
+  const source = createBuildSource();
+  let reads = 0;
+  const read = Effect.gen(function* () {
+    // A scan or catalog write lands after the paged input was read, before publication.
+    yield* Effect.yieldNow;
+    if (++reads > 4) return yield* Effect.fail(new Error("paged inputs restarted forever"));
+    source.changed();
+    return "mixes";
+  });
+  await assert.rejects(
+    Effect.runPromise(source.run(read, Effect.void)),
+    /Recommendation sources kept changing/,
+  );
+});

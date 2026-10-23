@@ -35,7 +35,6 @@ export const followPlaylistRecommendations = (
   let burst = false;
   let stale = true;
   let disposed = false;
-  let running = false;
   let cancel: (() => void) | undefined;
   // `cancel` already keeps one request at a time. Each gets its own key, so one
   // made while the previous job is still leaving the queue waits behind it
@@ -43,7 +42,11 @@ export const followPlaylistRecommendations = (
   let requests = 0;
   const request = () => {
     if (disposed || !stale || !options.sight.visible() || cancel !== undefined) return;
+    // A failed read keeps its retry line through background writes. An explicit edit,
+    // return to the page or Try Again can retry it; a harvest mustn't hide the failure.
+    if (burst && session.get().error === "load") return;
     cancel = serial.add(`recommendations ${++requests}`, async (signal) => {
+      let renewed = false;
       try {
         if (burst)
           await wait(Math.max(0, lastStarted + LIBRARY_QUERY_LIMITS.throttleMs - now()), signal);
@@ -52,19 +55,24 @@ export const followPlaylistRecommendations = (
         stale = false;
         burst = false;
         lastStarted = now();
-        running = true;
         await session.renew({ signal });
+        renewed = true;
       } finally {
-        running = false;
         // An aborted job may already have a replacement queued; it owns the new cancel.
-        if (!signal.aborted) cancel = undefined;
+        if (!signal.aborted) {
+          cancel = undefined;
+          if (renewed) request();
+        }
       }
     });
   };
   const invalidate = (inBurst = false) => {
     burst = inBurst;
     stale = true;
-    if (running || !inBurst) {
+    // Repeated scan/catalog writes used to cancel every read before its timeout,
+    // restarting both its song pages and its deadline. Finish the bounded read and
+    // catch up once; urgent edits still discard it immediately.
+    if (!inBurst) {
       cancel?.();
       cancel = undefined;
     }
