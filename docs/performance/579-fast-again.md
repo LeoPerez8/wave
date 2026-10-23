@@ -1471,3 +1471,50 @@ are not revised or attributed to this fix. **Actual phone evidence that the
 `sum up counted listening` lines disappear remains unverified**, as do Android/
 Hermes latency, native frames and TalkBack. These desktop results do not establish
 phone frame times or a strict six-ms maximum.
+
+## #600: scope artist metadata counts before deduplication
+
+Raw evidence: [boundedReads](results/600-boundedReads-desktop.jsonl), with source hashes and methodology in [source audit](results/600-source-audit.json). Measured production/harness commit: `cd3beb1a2324cb263e64d59ca512b1f25946143f`. Baseline: integration tip `2aae3bb887effdc56b8cec9ffb05091fde29a4f0`; regression reference: v0.7.0-ti `add761ed787061db6a6c2799687d421301b6182b`. Each variant runs its actual `LibraryStore.artistsByIds` / `listArtistsPage`, on an identical migrated synthetic database. Complete artist rows also match faithful pre-#600 SQL frozen from `2aae3bb8`; the runner compares full semantic keys across all three revisions.
+
+```sh
+pnpm --silent --filter @wave/mobile bench:fast-again --bench boundedReads \
+  --before /home/servidor-azul/.t3/scratch/wave-implement-spec-3781dabb/600-before \
+  --reference /home/servidor-azul/.t3/scratch/wave-implement-spec-3781dabb/586-reference
+```
+
+Desktop Node/sql.js only, eleven timed runs after warm-up. CPU is mean process CPU per run; longest is the maximum complete synchronous read. Plans, credit observation, setup and result hashing stay outside timings. This is a shared-host capture: other ticket benchmarks/tests and a focused artist test overlapped it. Results are retained without rerunning to select faster numbers. They do not establish isolated-host latency, Android/Hermes latency or phone frame gains.
+
+`artistsByIds` now applies requested IDs in both credit branches, before UNION deduplication. Page reads first materialize eligible artists in `(sort, id)` order with LIMIT/OFFSET and scope-correct EXISTS membership; both count branches seek only those selected IDs. Artwork and albumCount lookup stay on the resulting artists. UNION keeps each collaboration once per artist; album-only credits, compilation/Appears on, file/missing membership and the existing primary-album count (including empty retained albums) are unchanged. No migration or cache was added. Unpaged whole-list reads still count the whole list.
+
+The uninstrumented plans use `track_artists_artist_idx`, `album_artists_artist_idx`, `tracks_album_idx` and `albums_album_artist_idx`. Pages walk `artists_sort_idx` before counting. UNION, GROUP BY and final ORDER BY can still use temporary B-trees, scoped to selected credits/rows. Tests assert intended index access rather than an exact plan dump.
+
+The real store diagnostic operations remain **`read ranked artists`** and **`list artists`**, included as `readTimingName` in the raw evidence. A controlled-clock public store test verifies those labels and row counts; that test makes no latency assertion. Physical-device exported read timing remains unexercised.
+
+|  Songs | Read                           | Rows | Statements | Before median ms | After median ms | After p90 ms | After CPU ms | After longest ms |
+| -----: | ------------------------------ | ---: | ---------: | ---------------: | --------------: | -----------: | -----------: | ---------------: |
+|  1,000 | `artistsByIds/2`               |    2 |          1 |            1.377 |           0.750 |        1.135 |        1.604 |            1.140 |
+|  1,000 | `listArtistsPage/50`           |   40 |          1 |            2.176 |           3.211 |        3.468 |        4.009 |            3.486 |
+|  1,000 | `listArtistsPage/10`           |   10 |          1 |            2.039 |           1.557 |        1.641 |        1.911 |            1.789 |
+|  1,000 | `listArtistsPage/deep10`       |   10 |          1 |            2.054 |           1.085 |        1.289 |        1.399 |            1.321 |
+|  1,000 | `artistsByIds/2+unrelated`     |    2 |          1 |            2.212 |           0.553 |        0.578 |        0.711 |            0.650 |
+|  1,000 | `listArtistsPage/10+unrelated` |   10 |          1 |            3.251 |           1.520 |        1.739 |        1.953 |            2.504 |
+| 12,000 | `artistsByIds/2`               |    2 |          1 |           18.967 |           0.492 |        0.504 |        0.492 |            0.508 |
+| 12,000 | `listArtistsPage/50`           |   50 |          1 |           29.786 |           5.072 |        5.322 |        5.380 |            5.428 |
+| 12,000 | `listArtistsPage/10`           |   10 |          1 |           29.803 |           1.201 |        1.257 |        1.382 |            1.280 |
+| 12,000 | `listArtistsPage/deep10`       |   10 |          1 |           30.433 |           1.711 |        1.871 |        1.737 |            1.965 |
+| 12,000 | `artistsByIds/2+unrelated`     |    2 |          1 |           31.183 |           0.493 |        0.516 |        0.511 |            0.563 |
+| 12,000 | `listArtistsPage/10+unrelated` |   10 |          1 |           45.211 |           1.266 |        1.609 |        1.469 |            1.641 |
+| 50,000 | `artistsByIds/2`               |    2 |          1 |           99.178 |           0.744 |        0.960 |        0.768 |            0.992 |
+| 50,000 | `listArtistsPage/50`           |   50 |          1 |          153.895 |          11.054 |       13.010 |       11.298 |           13.240 |
+| 50,000 | `listArtistsPage/10`           |   10 |          1 |          159.817 |           1.858 |        2.595 |        2.016 |            2.602 |
+| 50,000 | `listArtistsPage/deep10`       |    0 |          1 |          166.983 |           9.757 |       10.222 |        8.435 |           10.694 |
+| 50,000 | `artistsByIds/2+unrelated`     |    2 |          1 |          202.725 |           0.499 |        0.518 |        0.506 |            0.533 |
+| 50,000 | `listArtistsPage/10+unrelated` |   10 |          1 |          249.030 |           1.299 |        1.337 |        1.331 |            1.357 |
+
+The growth case adds another 1k/12k/50k unrelated tracks and their credits to each corresponding base Library, with a new artist sorting after the fixed ten-row page (`offset: 3`). Complete target/page results remain identical. The two IDs evaluate 320 track-credit keys and 32 album-credit keys at every size, before and after growth. The fixed page evaluates respectively 903/45, 553/27 and 613/30 track/album keys, also unchanged by growth. Baseline/reference credit work grows. These are identity-function observations via temporary views, not VM instruction counts; functions can affect join planning, so tests also check raw plans and uninstrumented result equality. All observed values and raw plans are published.
+
+Paging is not a constant-work guarantee. OFFSET must check preceding eligible artists; nonmembers must also be rejected. In file scope, an artist with only missing tracks may require visiting every relevant missing credit before exclusion. The deep probe uses `offset = floor(size / 25) - 10`: at 50k it returns zero rows after examining memberships, and still takes 9.757 ms median (10.694 ms longest). It observes 2,960 track-key and 100 album-key evaluations despite returning no rows. Count work for an empty selected page is empty, but membership/order work remains with this API and current indexes. For a page covering all 40 artists at 1k, there is no count reduction and membership adds overhead: 2.176 ms baseline versus 3.211 ms after. Both negative results are retained.
+
+Public real-SQLite tests cover full legacy equivalence over IDs/pages in both scopes, duplicate track/album credits, album-only artists, compilations/Appears on, missing-only and removed artists, retained empty albums, null/present artwork and tied sort keys. A deterministic growth guard adds 1k, then 12k, then 50k unrelated tracks and asserts unchanged full results and credit evaluations; the same observer detects the old global traversal. #596's global-UNION characterization is replaced with indexed bounded-read acceptance.
+
+`mixArtistsPage` from #594 has separate correlated SQL in `db/mixInputs.ts`; this change does not touch it or improve its SQL budget, including the previously reported 6.299 ms diagnostic. #593's narrow IDs/names projection is independent. No claim is made that #600 resolves those timing limits.

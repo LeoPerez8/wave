@@ -241,3 +241,34 @@ test("complete metadata preserves collaboration, album-only, compilation, missin
     closeTestDatabase(db);
   }
 });
+
+test("the real store keeps ranked/page reads identifiable in read timing", async (t) => {
+  const { loadWorktreeModule } = await import("../../../bench/fastAgain/store.ts");
+  const timing = await loadWorktreeModule<typeof import("../../log/slowLibraryReads.ts")>(
+    ROOT,
+    "apps/mobile/src/log/slowLibraryReads.ts",
+  );
+  const fixture = await createFastAgainFixture();
+  const observed: { operation: string; rows: number }[] = [];
+  let detach: (() => void) | undefined;
+  try {
+    const store = await loadLibraryStore(ROOT, fixture.db);
+    detach = timing.onSlowLibraryRead((read) =>
+      observed.push({ operation: read.operation, rows: read.rows }),
+    );
+    // Force the diagnostic threshold at the clock boundary; this is no latency assertion.
+    let at = 0;
+    t.mock.method(performance, "now", () => (at += 20));
+    Effect.runSync(
+      store.artistsByIds([fixture.targets.small.artistId, fixture.targets.large.artistId]),
+    );
+    Effect.runSync(store.listArtistsPage({ offset: 0, limit: 3 }));
+    assert.deepEqual(observed, [
+      { operation: "read ranked artists", rows: 2 },
+      { operation: "list artists", rows: 3 },
+    ]);
+  } finally {
+    detach?.();
+    fixture.close();
+  }
+});
