@@ -41,8 +41,6 @@ export type ResultRow =
       readonly top: boolean;
       /** For songs: the song results, which tapping plays from this one. */
       readonly songs: readonly ResultSong[];
-      /** For songs: YT Music's songs are among the results, so the Library's show as downloaded. */
-      readonly downloaded: boolean;
       /**
        * For the top-hit Library artist with Online: their song count with the
        * online songs the Library lacks (`useTopArtistSongs`); null: the Library's.
@@ -182,7 +180,6 @@ export const resultRows = (
     ...library.map((track) => ({ source: "library" as const, track })),
     ...placed,
   ];
-  const downloaded = placed.length > 0;
   const ytSongRow = (song: NativeYtSong, index: number, top: boolean): ResultRow => ({
     type: "ytSong",
     key: `${top ? "top:" : ""}yt:${song.videoId}`,
@@ -197,7 +194,6 @@ export const resultRows = (
     hit,
     top,
     songs,
-    downloaded,
     artistSongs:
       hit.kind === "artist" && topArtist?.artistId === hit.artist.id ? topArtist.songs : null,
   });

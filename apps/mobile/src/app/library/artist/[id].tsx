@@ -356,8 +356,7 @@ function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegr
   );
   // Play, Shuffle and rows play this list by one rule (`playPage`): with YouTube Music's songs
   // on the page (an integrated view) the mixed list, the Library's files and the artist's songs
-  // streamed, and the Library's rows are marked downloaded; otherwise the Library's songs alone.
-  const downloaded = additions.songs.length > 0;
+  // streamed; otherwise the Library's songs alone.
   // While YouTube Music is asked, skeletons stand where its releases and songs will go.
   const ytLoading = ytView?.note === "loading";
   const items = useMemo(
@@ -370,8 +369,8 @@ function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegr
   const albumSelection = useMemo(() => albumSelectionOf(page), [page]);
   const { selection } = page;
   const rowState = useMemo(
-    () => ({ currentIds, favorites, selection, downloaded, integrated }),
-    [currentIds, favorites, selection, downloaded, integrated],
+    () => ({ currentIds, favorites, selection, integrated }),
+    [currentIds, favorites, selection, integrated],
   );
   const context = useMemo(
     () => ({ kind: "artist", id: String(detail.artist.id) }) as const,
@@ -427,7 +426,6 @@ function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegr
               leading={byPopularity ? "number" : "artwork"}
               playDisc
               topNumber={item.song.popularRank === 1}
-              downloaded={downloaded}
               {...selectableRow(
                 trackItem(song),
                 page,
@@ -444,7 +442,6 @@ function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegr
       currentIds,
       favorites,
       mixed,
-      downloaded,
       albumSelection,
       page,
       integrated,
@@ -508,10 +505,10 @@ function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegr
  * covers that scrolls sideways), their songs and, while YT Music is on, a
  * Library | Online toggle after Play and Shuffle (asked only once Online is
  * picked): then the releases and every song YouTube Music has of theirs that
- * the Library lacks join the albums and songs, the Library's songs are marked
- * downloaded, and Play, Shuffle and taps play the mixed list; Library hides
- * them again. Opened integrated (`openArtist`'s `integrated`, from a streamed
- * song's artist), it opens with Online selected and asks on its own. Opened
+ * the Library lacks join the albums and songs, and Play, Shuffle and taps
+ * play the mixed list; Library hides them again. Opened integrated
+ * (`openArtist`'s `integrated`, from a streamed song's artist), it opens with
+ * Online selected and asks on its own. Opened
  * from a list that knows the artist, the head is there on the first frame and
  * the rest follows once read.
  */
