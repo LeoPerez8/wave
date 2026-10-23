@@ -1,0 +1,105 @@
+{
+  "measuredCommit": "5c87f2c3023ee68124cd9f681446e8048efb3b06",
+  "measuredTree": "fa9c2d64b1d80c7478adc5358dee7a19d889f97c",
+  "initialIntegration": "494e26dbb15d9bf427a5e42c79ec5e730342af99",
+  "mergedIntegration": "c0a837f605d80288e278c5f9765434237d70e757",
+  "beforeCommit": "460e39ff0cba6f50e7a456a77d6e99813295ebaa",
+  "desktop": "Node + sql.js, no Android/Hermes/native frame/TalkBack evidence",
+  "runtimeAndHarnessSha256": {
+    "apps/mobile/bench/fastAgain/benches/playlistInputs.ts": "2d5e624dd26217f152028fa43e805a6fa6703a873194655900e6e563de5a6dc3",
+    "apps/mobile/bench/fastAgain/benches/playlistRenewal.ts": "feee0aebc942829b62fc1ccb0b66cf6db218759b33bf65d4b49c30953da1a005",
+    "apps/mobile/bench/fastAgain/playlistMeasure.ts": "d654748722efb1d11549912c7da1857c39971aeeb1ffc81a85167aa53d4f7c79",
+    "apps/mobile/bench/fastAgain/playlistReplay.test.ts": "60e540663b259400301f9a8685991202721ed7782a350e399d0814a5aa7e35f8",
+    "apps/mobile/bench/fastAgain/playlistReplay.ts": "b2d4c11f6da2242a0fc01776214f4ad67e21a2d0568c709a8964bb25fb6bb2e1",
+    "apps/mobile/bench/fastAgain/runner.ts": "77123658766cb5548c43fff8c8b572b6508966c57ac4d43d18e4f734fdedb8a6",
+    "apps/mobile/bench/fastAgain/store.ts": "9146352d63a160ecb1d212ac644b1c25130d6c67c197a2ba3ee05f87a3430fda",
+    "apps/mobile/src/home/artistGraph.ts": "dd2141774dfbf9d0fbd56bb3fd8d2de91086007e007ebd9d740fe75e48ea40da",
+    "apps/mobile/src/home/graphSources.ts": "462c8c601694230315f844f7fcc5ff72b32a0cde9f418f01f620a8be61b9f85a",
+    "apps/mobile/src/home/readMixCatalog.ts": "b057ccaed7a8dbe305ace3cab4a886088deef56faa5824dd39435aac984641d2",
+    "apps/mobile/src/home/sharedArtistGraph.ts": "b0c6e073e4c8ab49ef582bf2f9d4994cf8b54a0e9f0324ba74df4b459e427238",
+    "apps/mobile/src/lib/serialWork.ts": "4f8704ce3f5ff056cb5665a78e241d654cc9f9b1bbdd5ba44434c92653d2f9dc",
+    "apps/mobile/src/lib/sharedRead.ts": "a6d997c8a634ad0750d1a27dad8c49f4007282f0c3f3afda22a9228b600f4d47",
+    "apps/mobile/src/lib/stepped.ts": "5e9fb13593087715230df7a4e742a892e34e49793619aeb54daa11b24bd64863",
+    "apps/mobile/src/library/LibraryStore.ts": "de9bc567e11eb1fe0d83ff39a6d55dee5de188b1966c83c485971079e9c7ab80",
+    "apps/mobile/src/library/PlaylistItems.tsx": "178954e16da54e52cc114cd359c5a2b8c28a1164ea07b5a23ab06613e3c0fc10",
+    "apps/mobile/src/library/PlaylistRecommendations.tsx": "5cab989aa2d90500aa6901a50812150c2a0954d9333ef227f69fdf6b891b3d0e",
+    "apps/mobile/src/library/db/fastAgainFixture.ts": "11350b5c172c36bbab331ae98ad5c67c3ec941f5048c07fa9a55064c3d03502b",
+    "apps/mobile/src/library/db/migrations.ts": "00a8922b422c61da9f55abecbb3a4aed65575040c680457bda79a476c1e18fd0",
+    "apps/mobile/src/library/db/mixInputs.ts": "0759fc6466b7a8a34334ffea89d203d14616dd175354525c24b88e0ff1f49ff6",
+    "apps/mobile/src/library/db/playlistRecommendations.test.ts": "5e8c1c16e9d80b70697d1084ba293964ef8c793f76b6cbeb5b426584bbf14b86",
+    "apps/mobile/src/library/db/playlistRecommendations.ts": "91aa423d91485a1299298b20dafe29a4a26821e6ccabc0d05da0119e2a0e779d",
+    "apps/mobile/src/library/db/recommendationPages.ts": "44b77239ba8ee420fb07801416a29fd652395fa5a3e8ed1cfe797b978ef60112",
+    "apps/mobile/src/library/db/regressionSweep.test.ts": "84ec04ee39011c1fb3ba19862a5242254f24e32d609b86d36de5e552c091794e",
+    "apps/mobile/src/library/db/schema.ts": "ab8e1a95d756f14433d5d88a010458402b3cc98463a9951c920512fe3538b68f",
+    "apps/mobile/src/library/db/testDatabase.ts": "bb488af38814e9d3c644636d66a3fbdac3411e6f4b266609256d0a78ed09293a",
+    "apps/mobile/src/library/playlistRecommendationInputs.test.ts": "e333560a77402b561052cc0bb4a73a15016963040ee2eded8113c62ac23dcb53",
+    "apps/mobile/src/library/playlistRecommendationInputs.ts": "7d5bddf30ccfc47b4c75259a7cf85db3319309ef5310fa8f5da5e16f1b752862",
+    "apps/mobile/src/library/playlistRecommendationSource.ts": "933a103a9b90a87e734a59979f22ad41e672ade7e2ec48f512c36393902d80eb",
+    "apps/mobile/src/library/playlistRecommendationVisit.test.ts": "b8eea369beb82c7b17ad33ea54e5dcdf920012c12de71f62182779963e3b9e61",
+    "apps/mobile/src/library/playlistRecommendationVisit.ts": "ecc5a653755365283ab743276b6e9e92cbb1140f0f99be00fa8e2bc12dd95a23",
+    "apps/mobile/src/perf/performanceGuards.test.ts": "615f1b78b0fef1b8ae6c33b4c4243e7c83b3b1644f32cf1cbe87f21a1cd561dd",
+    "apps/mobile/src/perf/performancePolicy.ts": "4abc2833caa08543765a6aae50bec2ec51b8c846376c4a15317567df9df1955b",
+    "packages/core/src/index.ts": "0e0d525d1dc9f227db0fef9a9ba02ec5d6242e4fa3aa56b6c27a8ede5260bdf4",
+    "packages/core/src/playlistRecommendationSession.test.ts": "8e8788d6cbcb1dd9b367a9aaeb381d88ae1a543be726364f80afb82ea6c542e1",
+    "packages/core/src/playlistRecommendationSession.ts": "441f87da505b3645e1ad536376c3ded64896a2bb575adc0b2550b52153ef45aa",
+    "packages/core/src/playlistRecommendations.test.ts": "c54b647c584471d75b9815a23095fdea2b9b6529e87e51cb6a84e9c8069d6d80",
+    "packages/core/src/playlistRecommendations.ts": "cce2318f055c255bb14c8d568bd81206bf597361130c12aeaab1e2ee1ef211d1"
+  },
+  "fidelity": "Before loads actual 460e39ff modules and replays the component subscription; graph input uses the selected revision readArtistGraph with its actual between boundaries. After loads production source/visit/stepped modules. Whole source projections, complete offer tracks/order and rank scores are compared across revisions. Slot keys are ephemeral and excluded. Opening key compares actual own playlist rows; recommendation work is intentionally deferred.",
+  "discardedCapture": "r0 retained only in scratch as 599-r0-invalid-wall-*.jsonl; wall elapsed was evaluated after canonical result hashing. CPU/steps were separate but r0 is not final evidence. Fixed elapsed before semantic verification, then recaptured all cells.",
+  "captureStatus": "COMPLETE: original full R4 controls plus fresh final-current cells after #549/#601. Both current recaptures exited 0. 84 composed measurement cells / 42 equal semantic comparisons / 11 timed runs per cell. Historical control cells verified verbatim; final runtime/harness/schema hashes verified against measured commit.",
+  "baselineRoot": "/home/servidor-azul/.t3/scratch/wave-implement-spec-3781dabb/592-before",
+  "environment": "Shared Linux host. Own focused suite finished before capture; input and renewal benches run sequentially, with no own concurrent CPU-heavy suites. Independent worktrees may remain active. No timing rerun to improve maxima.",
+  "fixtureLimits": "Identical #583 synthetic Library/history fixture, empty saved candidate catalog/similar pages. Online/catalog, malformed entries, feedback, missing-file and multi-genre semantics have separate real-store tests; no worst-case online catalog timing claim.",
+  "recoveryDiscardedCapture": "R1 files retained in scratch as 599-recovery-r1-counter-*. Input grid completed; renewal interrupted. Historical ranks counted 25 renewal requests instead of two executed ranks in a 24-event burst. New real-ti/current test fails 25 != 2 before fix, then passes. R1 observed a 7.143 ms after task (warm-graph rank, 50k) and 6.426 ms cold input; these observations remain recorded and were not grounds for rerunning.",
+  "previousMeasuredCommit": "bb83679374e4dc229459f2fcf5962b8e2ce9b140",
+  "priorRoundEvidence": "R0 invalid wall-time capture, R1 rank-counter capture/interruption and R2 recovery evidence remain in scratch. R1 observed 7.143 ms warm-graph rank and 6.426 ms cold input at 50k. R3 inherited modified input capture is preserved as 599-r4-inherited-playlistInputs-incomplete.jsonl, without a complete-process exit record; no inherited capture is used as R4 evidence. The complete initial R4 grid is retained, including cold-input 141.316 ms and cold-graph renewal 193.204 ms. Final recapture is required by the post-capture #601 store/schema integration, not by these overshoots.",
+  "controlCaptureCommit": "d8bcede89b366d240709a2550e5b79585f181839",
+  "controlCaptures": {
+    "playlistInputs": {
+      "sha256": "45be48a8e624dcfd6f0230f67f884726ffa81f10646ffd8323b07bc0af8c286b",
+      "file": "/home/servidor-azul/.t3/scratch/wave-implement-spec-3781dabb/599-r4-playlistInputs-desktop.jsonl"
+    },
+    "playlistRenewal": {
+      "sha256": "744b072296c8c0532270fd9639f66f8fcfb937143960a2be381898b81ceec33a",
+      "file": "/home/servidor-azul/.t3/scratch/wave-implement-spec-3781dabb/599-r4-playlistRenewal-desktop.jsonl"
+    }
+  },
+  "captureComposition": "Historical before cells are verbatim from the complete first R4 capture at ti 460e39ff, with the pre-601 fixture schema. Current cells are freshly captured at the post-601 merged code/schema. Synthetic Library/history data and all result hashes must match. #601 adds genre-only projections/indexes; no before playlist query source changed. Cohorts run sequentially on the shared host; no same-physical-schema or simultaneous-host-state claim.",
+  "strictSixMsAcceptance": "OPEN",
+  "baselineWorkingTree": "Clean at 460e39ff, verified after the complete initial R4 capture.",
+  "resultSha256": {
+    "599-playlistInputs-desktop.jsonl": "80c9ec2af1757aca1b5a8f189296ecabcd0418873139f48939b2b6bf405d38e0",
+    "599-playlistRenewal-desktop.jsonl": "8ddd6d9316cd392e712af36f46929a794ccb77ca0e2d3ae2d1a67bb4d8df76c6"
+  },
+  "finalCurrentCaptures": {
+    "playlistInputs": {
+      "file": "/home/servidor-azul/.t3/scratch/wave-implement-spec-3781dabb/599-r4-final-playlistInputs-after.jsonl",
+      "sha256": "5fdd8639c3f50d1749adeb4a8e1f4dbc3912bfcdb16b3f40f6bc1790dda72c3c",
+      "exitCode": 0
+    },
+    "playlistRenewal": {
+      "file": "/home/servidor-azul/.t3/scratch/wave-implement-spec-3781dabb/599-r4-final-playlistRenewal-after.jsonl",
+      "sha256": "1f4afaad6848bb3b713b1fe4926a2ec72df908cc077868a7f5cd3d4d75309f26",
+      "exitCode": 0
+    }
+  },
+  "finalIntegration": "d8a9a12942750f5fd7e122d0148d001a7fd28830",
+  "finalIntegrationMerge": "5daaf0da148c708566c8ee0b5f9c603e8ac1ec1c",
+  "postCaptureNonBehavioralChanges": {
+    "packages/core/src/index.ts": {
+      "finalSha256": "50844e00b51352345ac2db40f699a8fb8f2fc221994ab3032e0931e34410f62b",
+      "capturedSha256": "0e0d525d1dc9f227db0fef9a9ba02ec5d6242e4fa3aa56b6c27a8ede5260bdf4",
+      "emittedJavaScriptSha256": "657c09b86aa25392074048be2a8bb15558a31e0aa7fc9562958fbc3358480b8c",
+      "reason": "#550 adds only LibraryQueryState to an erased export type list. Normalized emitted runtime index JavaScript is identical."
+    }
+  },
+  "playlistMatcherProof": {
+    "path": "packages/core/src/libraryQueries.ts",
+    "capturedSha256": "7fd90829cf642a2182a9d37ce7f1e70b719eaadbf71a180f10d401d591de711c",
+    "finalSha256": "10091a245a1bc8fd46c33ca431e4cd8d3a114afeafd91317743a07ff9bc94fc0",
+    "emittedPrefixSha256": "b2d20572c38b355b71d1f38bb6b92a9254dc98557245c5e4cf1e908dd109a51c",
+    "scope": "Runtime declarations before createLibraryQueries, including libraryChangeAffects and LIBRARY_QUERY_LIMITS, emit identical normalized JavaScript. #550 changes the separate query registry; #599 visits do not call that registry.",
+    "normalization": "Node stripTypeScriptTypes strip, block comments removed and empty lines ignored; executable lines retained verbatim."
+  }
+}

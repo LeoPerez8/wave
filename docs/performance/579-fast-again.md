@@ -1560,3 +1560,136 @@ The #596 full-genre-hydration characterization is replaced with the public 1,000
 | 50,000 | `title/asc/first50/afterScan`   |             16,667 → 51 |                     2 → 2 |          800.482 |          15.524 |       36.067 |        5.378 |           36.098 |        533.920 |
 
 All eight first-page sort choices keep the same 51-row/two-statement bound. Their cold-header median ranges are 1,000: 2.625–5.777 ms, 12,000: 2.895–3.541 ms, 50,000: 4.347–24.653 ms. All per-sort p90, CPU, longest tasks, plans and comparison keys remain in the raw JSONL.
+
+## Deferred playlist recommendations (#599)
+
+Raw captures: [playlistInputs](results/599-playlistInputs-desktop.jsonl) and
+[playlistRenewal](results/599-playlistRenewal-desktop.jsonl). Measured runtime and
+harness: `5c87f2c3023ee68124cd9f681446e8048efb3b06`; before is actual ti
+`460e39ff0cba6f50e7a456a77d6e99813295ebaa`. Exact source and result hashes, capture history and
+limits are in [599-source-audit.json](results/599-source-audit.json).
+The first complete R4 capture was followed by integration changes for #549/#601.
+#601 adds genre projections/indexes and changes the store/schema files. Current
+cells were therefore recaptured at the final merged code/schema; the complete
+actual-ti control cells from the first capture are retained verbatim. The raw meta
+records each cohort and the composition method. The synthetic Library/history
+and every result hash match, but these are different physical schema/host-time
+cohorts, not a simultaneous controlled latency comparison. Final composition and
+control-cell immutability are checked by the evidence validator.
+A later #550 integration adds an erased Core type export; all other captured file
+hashes match. Normalized emitted index JavaScript and the playlist matcher/budgets
+are unchanged, as recorded in the source audit; focused/full checks include #550.
+The original complete R4 grid remains in scratch, including the **141.316 ms**
+cold-input and **193.204 ms** cold-graph renewal observations. The integration-driven
+recapture does not erase those negative observations. Earlier discarded R1
+observations of **7.143 ms** warm-graph ranking and **6.426 ms** cold input also remain.
+
+These are **desktop Node + sql.js replays**, not Hermes, phone SQLite or measured
+first frames. All three sizes use the identical synthetic Library/history fixture,
+one warmup, one separately traced pass and eleven timed runs per case. This is a
+shared Linux host: our focused acceptance suites finished before each capture and the current-only
+recaptures ran sequentially; independent worktrees remained active. No replay was repeated to improve its maximum; the final recapture was
+required by the integration store/schema change.
+
+Reproduce from the repository root with a clean source checkout of v0.19.0-ti:
+
+```sh
+pnpm --silent --filter @wave/mobile bench:fast-again --bench playlistInputs --before <ti-worktree>
+pnpm --silent --filter @wave/mobile bench:fast-again --bench playlistRenewal --before <ti-worktree>
+WAVE_BENCH_BEFORE=<ti-worktree> pnpm --filter @wave/mobile exec node --test bench/fastAgain/playlistReplay.test.ts
+```
+
+The loader executes the selected revision's actual Core, session, store and graph
+modules. Current visits use the production scheduler/source adapters; ti faithfully
+replays its eager component subscription. Free turns use `setImmediate`; settlement
+and burst-throttle waits are driven explicitly. Graph cold work uses the existing
+#594 paged/stepped implementation; #599 adds visit cancellation around that reader.
+Warm graph setup is outside measurement. Before-settled opening includes the
+playlist's actual own content query while recommendations are deferred.
+
+Elapsed time and process CPU stop before canonicalization/hashing. Setup, module
+loading, fixture creation, warmup and per-case preparation are excluded. Task
+boundaries include synchronous read/projection/ranking and session publication,
+split by actual injected free turns. Synchronous totals, task counts, longest-task
+samples, CPU, p90 and SQL step maxima are retained in each raw cell. SQL rows count
+returned rows, not SQLite VM visits; notifications count Core session subscribers,
+not React commits.
+
+Complete historical source payloads, five offered track objects/order and rank
+scores match across revisions at every size. Ephemeral slot keys are excluded.
+Opening compares own playlist content because recommendations intentionally wait.
+The fixture has no saved catalog/similar pages and ranking is offline/YT-off;
+separate real-store tests cover catalog/stream deduplication, multi-genres, malformed
+entries, missing files, priority and playlist-scoped feedback. This does not measure
+a full online catalog or React/map publication. v0.7 predates recommendations and
+is not a comparable timing baseline.
+
+Values are before → after; milliseconds. Total is median elapsed replay, longest
+is the maximum synchronous task across all eleven timed samples. Full mean CPU
+and p90 values for every cell remain in the JSONL.
+
+### Input and ranking replay
+
+| Songs | Case                       | SQL rows        | Statements | Total ms          | Longest task ms  | Notifications |
+| ----- | -------------------------- | --------------- | ---------- | ----------------- | ---------------- | ------------- |
+| 1000  | `input/cold`               | 2343 → 3092     | 15 → 36    | 16.829 → 26.552   | 19.197 → 3.057   | 0 → 0         |
+| 1000  | `input/warm`               | 2343 → 52       | 15 → 5     | 16.291 → 0.754    | 16.978 → 0.359   | 0 → 0         |
+| 1000  | `rank/warmInput/nullGraph` | 0 → 0           | 0 → 0      | 57.906 → 29.043   | 58.95 → 4.009    | 0 → 0         |
+| 1000  | `rank/warmInput/warmGraph` | 0 → 0           | 0 → 0      | 57.968 → 26.349   | 68.789 → 3.865   | 0 → 0         |
+| 12000 | `input/cold`               | 25883 → 36532   | 15 → 297   | 155.73 → 261.203  | 170.25 → 5.245   | 0 → 0         |
+| 12000 | `input/warm`               | 25883 → 52      | 15 → 5     | 155.421 → 2.19    | 189.19 → 0.804   | 0 → 0         |
+| 12000 | `rank/warmInput/nullGraph` | 0 → 0           | 0 → 0      | 361.585 → 459.417 | 385.734 → 26.303 | 0 → 0         |
+| 12000 | `rank/warmInput/warmGraph` | 0 → 0           | 0 → 0      | 362.598 → 342.982 | 390.319 → 7.598  | 0 → 0         |
+| 50000 | `input/cold`               | 107203 → 152052 | 15 → 1200  | 663.237 → 1085.9  | 1163.14 → 5.601  | 0 → 0         |
+| 50000 | `input/warm`               | 107203 → 52     | 15 → 5     | 710.63 → 0.75     | 734.118 → 1.866  | 0 → 0         |
+| 50000 | `rank/warmInput/nullGraph` | 0 → 0           | 0 → 0      | 3837.36 → 1489.33 | 5083.28 → 13.584 | 0 → 0         |
+| 50000 | `rank/warmInput/warmGraph` | 0 → 0           | 0 → 0      | 3961.07 → 1864.72 | 9456.11 → 7.582  | 0 → 0         |
+
+### Opening and retained visit replay
+
+| Songs | Case                             | SQL rows        | Statements | Total ms          | Longest task ms  | Notifications |
+| ----- | -------------------------------- | --------------- | ---------- | ----------------- | ---------------- | ------------- |
+| 1000  | `opening/beforeSettled/1Mounted` | 2446 → 103      | 19 → 4     | 79.655 → 2.663    | 87.75 → 3.716    | 3 → 0         |
+| 1000  | `hiddenBurst/1Mounted`           | 4686 → 0        | 30 → 0     | 153.022 → 0.057   | 179.171 → 0.037  | 6 → 0         |
+| 1000  | `visibleCatchUp/1Mounted`        | 0 → 3092        | 0 → 36     | 0.024 → 85.441    | 0.032 → 11.875   | 0 → 3         |
+| 1000  | `visibleBurst/1Mounted`          | 4686 → 3092     | 30 → 36    | 150.585 → 66.012  | 164.472 → 11.231 | 6 → 3         |
+| 1000  | `opening/beforeSettled/2Mounted` | 4892 → 206      | 38 → 8     | 197.582 → 4.234   | 224.766 → 3.671  | 6 → 0         |
+| 1000  | `hiddenBurst/2Mounted`           | 9372 → 0        | 60 → 0     | 334.787 → 0.035   | 600.531 → 0.031  | 12 → 0        |
+| 1000  | `visibleCatchUp/2Mounted`        | 0 → 3144        | 0 → 41     | 0.025 → 126.021   | 0.024 → 5.42     | 0 → 6         |
+| 1000  | `visibleBurst/2Mounted`          | 9372 → 3144     | 60 → 41    | 311.656 → 122.17  | 343.968 → 4.85   | 12 → 6        |
+| 1000  | `opening/settled/warmGraph`      | 2343 → 3092     | 15 → 36    | 81.632 → 90.118   | 100.374 → 10.842 | 3 → 3         |
+| 1000  | `opening/settled/coldGraph`      | 13533 → 13092   | 23 → 199   | 125.414 → 265.609 | 88.823 → 12.246  | 3 → 3         |
+| 12000 | `opening/beforeSettled/1Mounted` | 25986 → 103     | 19 → 4     | 605.868 → 3.407   | 646.594 → 3.699  | 3 → 0         |
+| 12000 | `hiddenBurst/1Mounted`           | 51766 → 0       | 30 → 0     | 1223.82 → 0.047   | 1440.31 → 0.061  | 6 → 0         |
+| 12000 | `visibleCatchUp/1Mounted`        | 0 → 36532       | 0 → 297    | 0.274 → 608.044   | 0.016 → 13.009   | 0 → 3         |
+| 12000 | `visibleBurst/1Mounted`          | 51766 → 36532   | 30 → 297   | 1247.53 → 547.925 | 1626.39 → 4.576  | 6 → 3         |
+| 12000 | `opening/beforeSettled/2Mounted` | 51972 → 206     | 38 → 8     | 1345.79 → 3.144   | 900.549 → 1.638  | 6 → 0         |
+| 12000 | `hiddenBurst/2Mounted`           | 103532 → 0      | 60 → 0     | 2139.02 → 0.031   | 2322.8 → 0.018   | 12 → 0        |
+| 12000 | `visibleCatchUp/2Mounted`        | 0 → 36584       | 0 → 302    | 0.027 → 969.02    | 0.022 → 15.843   | 0 → 6         |
+| 12000 | `visibleBurst/2Mounted`          | 103532 → 36584  | 60 → 302   | 2143.63 → 1347.51 | 3235.47 → 25.684 | 12 → 6        |
+| 12000 | `opening/settled/warmGraph`      | 25883 → 36532   | 15 → 297   | 625.495 → 629.413 | 1594.4 → 7.525   | 3 → 3         |
+| 12000 | `opening/settled/coldGraph`      | 94163 → 90532   | 23 → 1146  | 2926.51 → 1196.55 | 1951.28 → 7.903  | 3 → 3         |
+| 50000 | `opening/beforeSettled/1Mounted` | 107306 → 103    | 19 → 4     | 10640.6 → 1.8     | 19436.7 → 3.887  | 3 → 0         |
+| 50000 | `hiddenBurst/1Mounted`           | 214406 → 0      | 30 → 0     | 15492.6 → 0.022   | 28156.8 → 0.011  | 6 → 0         |
+| 50000 | `visibleCatchUp/1Mounted`        | 0 → 152052      | 0 → 1200   | 0.042 → 3747.93   | 0.019 → 17.04    | 0 → 3         |
+| 50000 | `visibleBurst/1Mounted`          | 214406 → 152052 | 30 → 1200  | 11660.1 → 3249.44 | 13086.7 → 18.303 | 6 → 3         |
+| 50000 | `opening/beforeSettled/2Mounted` | 214612 → 206    | 38 → 8     | 9606.71 → 3.64    | 5282.15 → 3.799  | 6 → 0         |
+| 50000 | `hiddenBurst/2Mounted`           | 428812 → 0      | 60 → 0     | 23021.2 → 0.028   | 28852.6 → 0.027  | 12 → 0        |
+| 50000 | `visibleCatchUp/2Mounted`        | 0 → 152104      | 0 → 1205   | 0.043 → 6755.1    | 0.038 → 29.461   | 0 → 6         |
+| 50000 | `visibleBurst/2Mounted`          | 428812 → 152104 | 60 → 1205  | 19377.3 → 4184.2  | 19680.4 → 9.276  | 12 → 6        |
+| 50000 | `opening/settled/warmGraph`      | 107203 → 152052 | 15 → 1200  | 4269.54 → 3533.09 | 4419.65 → 54.902 | 3 → 3         |
+| 50000 | `opening/settled/coldGraph`      | 366703 → 352052 | 23 → 4331  | 5858.28 → 6429.19 | 4068.02 → 17.864 | 3 → 3         |
+
+Cold input total elapsed time increases in this capture: 1,000 songs: 16.829 → 26.552 ms; 12,000 songs: 155.73 → 261.203 ms; 50,000 songs: 663.237 → 1085.9 ms. Paging, bounded projection and extra returned fields add work; warm reuse avoids rereading that source. This does not establish lower cold total latency.
+
+### Acceptance and evidence limits
+
+Hidden track/favorite bursts do **zero input reads, ranks, SQL rows, statements and notifications**, for one and two retained visits at every size. Opening before settlement also does no recommendation work. Visible catch-up and visible bursts perform one input/rank per visit and share one source snapshot. A warm input reads only 52 membership/existence rows, and rank probes issue zero SQL. The shared source retains one completed/in-flight version with explicit track/favorite/catalog invalidation, lazy 60-second eviction and disposal; membership and feedback are read afresh per playlist.
+
+Public Core/session/scheduler and actual sql.js tests cover in-flight changes, cancellation/disposal, visible coalescing, unrelated playlists, Add/Dismiss exactly once, held offers and refill/retry behavior. Exact #584 capabilities protect legacy/deferred inputs and source factories; only the deferred component chain is allowed.
+
+The six-ms target was exceeded in this capture: `playlistInputs/12000/rank/warmInput/nullGraph`: **26.303 ms**; `playlistInputs/12000/rank/warmInput/warmGraph`: **7.598 ms**; `playlistInputs/50000/rank/warmInput/nullGraph`: **13.584 ms**; `playlistInputs/50000/rank/warmInput/warmGraph`: **7.582 ms**; `playlistRenewal/1000/visibleCatchUp/1Mounted`: **11.875 ms**; `playlistRenewal/1000/visibleBurst/1Mounted`: **11.231 ms**; `playlistRenewal/1000/opening/settled/warmGraph`: **10.842 ms**; `playlistRenewal/1000/opening/settled/coldGraph`: **12.246 ms**; `playlistRenewal/12000/visibleCatchUp/1Mounted`: **13.009 ms**; `playlistRenewal/12000/visibleCatchUp/2Mounted`: **15.843 ms**; `playlistRenewal/12000/visibleBurst/2Mounted`: **25.684 ms**; `playlistRenewal/12000/opening/settled/warmGraph`: **7.525 ms**; `playlistRenewal/12000/opening/settled/coldGraph`: **7.903 ms**; `playlistRenewal/50000/visibleCatchUp/1Mounted`: **17.04 ms**; `playlistRenewal/50000/visibleBurst/1Mounted`: **18.303 ms**; `playlistRenewal/50000/visibleCatchUp/2Mounted`: **29.461 ms**; `playlistRenewal/50000/visibleBurst/2Mounted`: **9.276 ms**; `playlistRenewal/50000/opening/settled/warmGraph`: **54.902 ms**; `playlistRenewal/50000/opening/settled/coldGraph`: **17.864 ms**. These negative observations are retained.
+
+The unchanged shared adapter budgets 4 ms or 512 generator operations before yielding. SQL pages cap 128 raw rows per statement (a song-page turn can return 256 rows in two statements). This bounds returned work, not every SQLite VM visit or a long stored field. An individual operation, SQL call, GC or OS pause is not preemptible. Smaller blocking tasks can add CPU/elapsed overhead; no lower total-cost claim or universal six-ms guarantee follows. **Strict six-ms acceptance remains OPEN.** The capture does not attribute individual overshoots to SQL, GC or OS scheduling.
+
+Android/Hermes, physical-device first rows/transitions, exported phone-log confirmation and TalkBack were not exercised. Desktop scheduling and source wiring support the implemented behavior; they do not establish native frame or accessibility evidence.

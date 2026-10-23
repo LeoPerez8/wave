@@ -2051,3 +2051,5 @@ export { planLinkImportSteps, finishPlaylistImportSteps } from "./playlistImport
 export { playlistImportCompletionSteps } from "./playlistImport.ts";
 
 export { ytLibraryFavoritesSteps } from "./ytLibraryBatch.ts";
+
+export { playlistRecommendationsSteps } from "./playlistRecommendations.ts";

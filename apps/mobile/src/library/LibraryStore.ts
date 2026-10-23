@@ -1,3 +1,10 @@
+import {
+  type RecommendationEntryCursor,
+  recommendationFlagsPage,
+  recommendationPendingPage,
+  recommendationEntriesPage,
+  recommendationFeedbackPage,
+} from "./db/recommendationPages";
 import type { YtSong } from "@wave/core";
 import { makeExternalStore, type ExternalStore } from "@/lib/externalStore";
 import { backfillRecordingTitles, selectMatchingSong } from "./db/matchingSong";
@@ -576,10 +583,24 @@ export class LibraryStore extends Context.Service<
     readonly countSectionSongs: Effect.Effect<LibraryCounts, LibraryStoreError>;
     /** How big the Library is, for a perf build's run metadata (docs/performance/README.md). */
     readonly measureScale: Effect.Effect<LibraryScale, LibraryStoreError>;
-    /** Every track ordered by title, for Library › Songs. */
+    /** Legacy complete input, retained for explicit desktop probes; production uses deferred pages. */
     readonly playlistRecommendationInput: (
       id: number,
     ) => Effect.Effect<PlaylistRecommendationInput, LibraryStoreError>;
+    readonly recommendationFlagsPage: (
+      after: number,
+    ) => Effect.Effect<ReturnType<typeof recommendationFlagsPage>, LibraryStoreError>;
+    readonly recommendationPendingPage: (
+      after: number,
+    ) => Effect.Effect<ReturnType<typeof recommendationPendingPage>, LibraryStoreError>;
+    readonly recommendationEntriesPage: (
+      id: number,
+      after: RecommendationEntryCursor,
+    ) => Effect.Effect<ReturnType<typeof recommendationEntriesPage>, LibraryStoreError>;
+    readonly recommendationFeedbackPage: (
+      id: number,
+      after: string | null,
+    ) => Effect.Effect<ReturnType<typeof recommendationFeedbackPage>, LibraryStoreError>;
     readonly dismissPlaylistRecommendation: (
       id: number,
       offer: PlaylistRecommendationSlot,
@@ -1404,6 +1425,14 @@ const make = Effect.gen(function* () {
           result.favoriteVideos.size +
           result.feedback.length,
       ),
+    recommendationFlagsPage: (after) =>
+      attempt("read recommendation page", () => recommendationFlagsPage(db, after)),
+    recommendationPendingPage: (after) =>
+      attempt("read recommendation page", () => recommendationPendingPage(db, after)),
+    recommendationEntriesPage: (id, after) =>
+      attempt("read recommendation page", () => recommendationEntriesPage(db, id, after)),
+    recommendationFeedbackPage: (id, after) =>
+      attempt("read recommendation page", () => recommendationFeedbackPage(db, id, after)),
     dismissPlaylistRecommendation: (id, offer) =>
       writeAttempt("save playlist dismissal", () =>
         dismissPlaylistRecommendation(db, id, offer, Date.now()),
