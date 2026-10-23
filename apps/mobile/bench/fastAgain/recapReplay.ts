@@ -2,11 +2,10 @@
 import * as Effect from "effect/Effect";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
-import { performance } from "node:perf_hooks";
-import { setImmediate } from "node:timers/promises";
 import type { RecapPeriod } from "@wave/core";
 import type { FastAgainFixture } from "../../src/library/db/fastAgainFixture.ts";
 import { traceQueries, type TracedQuery } from "../../src/library/db/testDatabase.ts";
+import { freeTurnTasks } from "./cooperative.ts";
 import { loadLibraryStore, loadWorktreeModule } from "./store.ts";
 
 export const createRecapReplay = async (root: string, fixture: FastAgainFixture) => {
@@ -23,21 +22,7 @@ export const createRecapReplay = async (root: string, fixture: FastAgainFixture)
   const work = { reads: 0, rowsRead: 0, statements: 0, notifications: 0, maxRows: 0 };
   let queries: TracedQuery[] = [];
   let tasks: number[] = [];
-  let started: number | undefined;
-  const end = () => {
-    if (started !== undefined) tasks.push(performance.now() - started);
-    started = undefined;
-  };
-  const turn = Effect.suspend(() => {
-    end();
-    return Effect.promise(() => setImmediate()).pipe(
-      Effect.tap(() =>
-        Effect.sync(() => {
-          started = performance.now();
-        }),
-      ),
-    );
-  });
+  const { turn, end, start, open } = freeTurnTasks((ms) => tasks.push(ms));
   const traced = <A, E>(read: Effect.Effect<A, E>) =>
     Effect.sync(() => {
       if (!tracing) return Effect.runSync(read);
@@ -70,7 +55,7 @@ export const createRecapReplay = async (root: string, fixture: FastAgainFixture)
   let failure: unknown;
   const read = (now: number, signal?: AbortSignal) => {
     work.reads++;
-    started ??= performance.now();
+    open();
     const effect = typeof source === "function" ? source(now, turn) : source;
     pending = Effect.runPromise(effect as Effect.Effect<readonly RecapPeriod[], unknown>, {
       signal,
@@ -122,7 +107,7 @@ export const createRecapReplay = async (root: string, fixture: FastAgainFixture)
     work,
     bounded: cache !== undefined,
     activate: (client: { setActive: (active: boolean) => void }) => {
-      started = performance.now();
+      start();
       client.setActive(true);
       // Historical reads run inside activation; count that task once, through publication.
       if (cache !== undefined) end();
@@ -169,7 +154,7 @@ export const createRecapReplay = async (root: string, fixture: FastAgainFixture)
         for (const [key, job] of jobs)
           if (job.ms === 0) {
             jobs.delete(key);
-            started ??= performance.now();
+            open();
             job.run();
           }
         await Promise.resolve();

@@ -7,7 +7,7 @@ import { asc, gt } from "drizzle-orm";
 import * as Effect from "effect/Effect";
 
 import { traceQueries } from "../../../src/library/db/testDatabase.ts";
-import { percentiles } from "../measure.ts";
+import { percentiles, timeRuns } from "../measure.ts";
 import { loadLibraryStore } from "../store.ts";
 import type { FastAgainBench, ReadMeasurement } from "../types.ts";
 
@@ -68,19 +68,15 @@ export const bench: FastAgainBench = {
       await run(false);
       const traced = await run(true);
       assert.equal(key(traced.ids), expected, "keyset projection lost or duplicated songs");
-      const wall: number[] = [];
       const steps: number[] = [];
-      let cpuMicros = 0;
-      for (let i = 0; i < context.runs; i++) {
-        const cpu = process.cpuUsage();
-        const start = performance.now();
-        const result = await run(false);
-        wall.push(performance.now() - start);
-        const used = process.cpuUsage(cpu);
-        cpuMicros += used.user + used.system;
-        steps.push(...result.steps);
-        assert.equal(key(result.ids), expected);
-      }
+      const { wall, cpuMicros } = await timeRuns(
+        context.runs,
+        () => run(false),
+        (result) => {
+          steps.push(...result.steps);
+          assert.equal(key(result.ids), expected);
+        },
+      );
       results.push({
         read: `keysetSongRows/${limit}`,
         ...percentiles(wall),

@@ -14,6 +14,25 @@ export const percentiles = (samples: readonly number[]) => {
     p90Ms: round(sorted[Math.ceil(sorted.length * 0.9) - 1]!),
   };
 };
+/** Time sequential async runs one by one; `check` sees each result outside the timing. */
+export const timeRuns = async <A>(
+  runs: number,
+  run: () => Promise<A>,
+  check: (result: A) => void,
+) => {
+  const wall: number[] = [];
+  let cpuMicros = 0;
+  for (let i = 0; i < runs; i++) {
+    const cpu = process.cpuUsage();
+    const start = performance.now();
+    const result = await run();
+    wall.push(performance.now() - start);
+    const used = process.cpuUsage(cpu);
+    cpuMicros += used.user + used.system;
+    check(result);
+  }
+  return { wall, cpuMicros };
+};
 export interface MeasureOptions<A = unknown> {
   readonly runs?: number;
   /** Cumulative subscriber notification counter; delta for one traced operation. */
