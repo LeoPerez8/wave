@@ -34,7 +34,8 @@ import { FIND_FIELD_HEIGHT, FindHead, useFindInLegendList } from "./FindInPlayli
 import { folderPhrase } from "./folderPhrase";
 import { useScanRoots, useScanState } from "./hooks";
 import type { SongOrder, SongRow, SongSummary } from "./LibraryStore";
-import { usePagedSongs, useSongFindTexts, useSongOrder } from "./pagedSongs";
+import { LibraryReadFeedback, LibraryReadNote } from "./LibraryReadFeedback";
+import { songOrderQueryKey, usePagedSongs, useSongFindTexts, useSongOrder } from "./pagedSongs";
 import { promptForMusicFolder } from "./promptForMusicFolder";
 import { songsWithIds } from "./sectionSongs";
 import { SongSortButton } from "./SongSortButton";
@@ -65,13 +66,8 @@ export function SongsList() {
   const scan = useScanState();
   const roots = useScanRoots();
 
-  // Nothing read yet: a blank screen for the moment it takes, not "No songs".
   if (order === null)
-    return (
-      <View style={{ paddingHorizontal: grid.margin }}>
-        <ScanProgressBanner />
-      </View>
-    );
+    return <LibraryReadFeedback queryKey={songOrderQueryKey(sort)} label="songs" scan />;
 
   if (order.ids.length === 0) {
     return (
@@ -309,7 +305,12 @@ function PagedSongList({ order }: { order: SongOrder }) {
         }}
         initialScrollOffset={FIND_FIELD_HEIGHT}
         ListHeaderComponent={
-          <FindHead find={find} header={header} of="songs" allRead={findTexts !== null} />
+          <View>
+            <FindHead find={find} header={header} of="songs" allRead={findTexts !== null} />
+            {found !== null && findTexts === null && (
+              <LibraryReadNote queryKey="songFindTexts" label="song matches" />
+            )}
+          </View>
         }
       />
       {spine.show && found === null && (
