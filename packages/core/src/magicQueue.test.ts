@@ -8,6 +8,7 @@ import {
   genreProfile,
   magicArtistKey,
   magicBatch,
+  magicBatchFailed,
   magicBatchLoading,
   magicPickEnded,
   magicLibraryCandidates,
@@ -431,6 +432,22 @@ describe("A Magic Queue in the queue", () => {
     assert.equal(magicBatchLoading(session, "m1", other), false);
     assert.equal(magicBatchLoading(session, "m0", last), false);
     assert.equal(magicBatchLoading(null, "m1", last), false);
+  });
+
+  test("shows its batch failed until the batch lands or something else plays", () => {
+    const seedOnly = run(EMPTY_QUEUE, { type: "play", trackIds: ["s1"], startIndex: 0, context });
+    assert.equal(magicBatchFailed(session, "m1", seedOnly), true);
+    assert.equal(magicBatchFailed(session, null, seedOnly), false);
+    assert.equal(magicBatchFailed(session, "m0", seedOnly), false);
+    const landed = run(seedOnly, { type: "append", trackIds: ["a", "b"] });
+    assert.equal(magicBatchFailed(session, "m1", landed), false);
+    const other = run(seedOnly, {
+      type: "play",
+      trackIds: ["x"],
+      startIndex: 0,
+      context: { kind: "album", id: "4" },
+    });
+    assert.equal(magicBatchFailed(session, "m1", other), false);
   });
 
   test("a pick that ends clears only its own session's loading", () => {

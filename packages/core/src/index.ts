@@ -647,7 +647,7 @@ export type {
   MagicSong,
   MagicYtCandidate,
 } from "./magicQueue.ts";
-export { magicBatchLoading } from "./magicQueue.ts";
+export { magicBatchFailed, magicBatchLoading } from "./magicQueue.ts";
 export { magicPickEnded } from "./magicQueue.ts";
 export type { MagicPickEnd } from "./magicQueue.ts";
 export { artistRanking } from "./moreFromArtist.ts";

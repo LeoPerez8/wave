@@ -3,6 +3,7 @@ import {
   genreProfile,
   isMagicQueue,
   magicBatch,
+  magicBatchFailed,
   magicBatchLoading,
   magicPickEnded,
   magicLibraryCandidates,
@@ -119,7 +120,7 @@ const retryBatch = makeExternalStore(0);
 export const retryMagicBatch = (): void => retryBatch.update((attempt) => attempt + 1);
 
 const batchFailedNow = (): boolean =>
-  magicBatchLoading(activeMagicSession(), failedBatch.get(), queueState.get());
+  magicBatchFailed(activeMagicSession(), failedBatch.get(), queueState.get());
 const subscribeBatchFailed = subscribeAll(queueState, magicSession, failedBatch);
 
 export const useMagicBatchFailed = (): boolean =>
