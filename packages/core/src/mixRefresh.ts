@@ -157,13 +157,19 @@ export interface MixPull {
 
 /**
  * A pull of a mixes carousel by [drag] dp past its start (rightwards, the
- * "wrong" way). Runs on the UI thread while the finger moves.
+ * "wrong" way), the row giving [give] times as far as Wave's own rubber band
+ * (the bounce amount's `bounceScale`: 0 holds the row still, 1.2 gives a
+ * little more). How near it is to refreshing, and whether a release does, go
+ * by the finger's travel alone, so the threshold is the same at every amount.
+ * Runs on the UI thread while the finger moves.
  */
-export const mixPull = (drag: number): MixPull => {
+export const mixPull = (drag: number, give = 1): MixPull => {
   "worklet";
   const pulled = Math.max(0, drag);
+  const scale = give > 0 ? give : 0;
   return {
-    offset: pulled / (1 + pulled / PULL_GIVE),
+    // Never further than the finger: more give tracks it for longer before resisting.
+    offset: Math.min(pulled, (scale * pulled) / (1 + pulled / PULL_GIVE)),
     progress: Math.min(1, pulled / MIX_PULL_THRESHOLD),
     armed: pulled >= MIX_PULL_THRESHOLD,
   };

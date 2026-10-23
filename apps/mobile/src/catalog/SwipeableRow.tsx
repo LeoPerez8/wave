@@ -1,4 +1,4 @@
-import { resolveRowSwipe, rowSwipeArmed, type RowSwipeSide } from "@wave/core";
+import { resolveRowSwipe, RETURN_SPRINGS, rowSwipeArmed, type RowSwipeSide } from "@wave/core";
 import * as Haptics from "expo-haptics";
 import { useLayoutEffect, useRef, type ReactNode } from "react";
 import {
@@ -17,6 +17,7 @@ import Animated, {
 } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
 
+import { useBounceSpring } from "@/motion/bounce";
 import { useListScrollable } from "@/motion/heldTouch";
 import { ACTION_ICONS, type MenuAction } from "@/playback/actionIcons";
 import { useThemeColor } from "@/theme/useThemeColor";
@@ -109,8 +110,9 @@ function Uncovered({ action, edge }: { action: SwipeSide; edge: "start" | "end" 
 /**
  * A song row that swipes sideways to run an action of its menu ([swipe]):
  * past a third of its width it arms with a light tick, letting go runs the
- * action, letting go sooner springs back (with reduce motion, it goes back
- * at once). A direction without an action doesn't move. Vertical drags stay
+ * action, letting go sooner springs back, swinging past its rest as far as
+ * the Bounce amount says (none at 0%; with reduce motion, it goes back at
+ * once). The threshold is the finger's travel at every amount. A direction without an action doesn't move. Vertical drags stay
  * the list's; taps and long-presses stay the row's. No swipe while
  * [enabled] is false (selection mode) or while a long-pressed finger slides
  * to choose in a menu.
@@ -126,6 +128,7 @@ export function SwipeableRow({
 }) {
   const scrollable = useListScrollable();
   const reduceMotion = useReducedMotion();
+  const spring = useBounceSpring(RETURN_SPRINGS.swipeRow);
   const canRight = swipe.right !== null;
   const canLeft = swipe.left !== null;
   const active = enabled && scrollable && (canRight || canLeft);
@@ -152,7 +155,7 @@ export function SwipeableRow({
   const leftStyle = useAnimatedStyle(() => ({ opacity: strength(-offsetX.get()) }));
 
   const settle = () => {
-    offsetX.set(reduceMotion ? 0 : withSpring(0, { damping: 23, stiffness: 240 }));
+    offsetX.set(reduceMotion ? 0 : withSpring(0, spring));
   };
 
   const finish = (translationX: number, velocityX: number, canceled: boolean) => {

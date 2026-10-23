@@ -428,6 +428,16 @@ export type {
   LaunchLogoWave,
 } from "./launchLogo.ts";
 export { sliderFraction, sliderValueAt, snapSliderValue, stepSlider } from "./slider.ts";
+export {
+  BOUNCE_AMOUNT,
+  bounceOvershoot,
+  bounceScale,
+  bounceSpring,
+  readBounceAmount,
+  RETURN_SPRINGS,
+  storedBounceAmount,
+} from "./bounce.ts";
+export type { BounceSpring, SpringShape } from "./bounce.ts";
 export type { SliderRange } from "./slider.ts";
 export { LONG_PRESS_DELAY, readLongPressDelay, snapLongPressDelay } from "./longPress.ts";
 export {
