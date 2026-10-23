@@ -4,13 +4,30 @@
  * slice of ids a turn, never on the opening's path. Kept free of Expo and
  * React so it runs under plain Node tests.
  */
-import { spineEntries, type LibrarySongSort } from "@wave/core";
+import { PAGED_ROWS_LIMITS, spineEntries, type LibrarySongSort } from "@wave/core";
 import * as Effect from "effect/Effect";
 
 import type { GenreOrderSlice } from "./db/genrePages.ts";
-import type { LibraryStore, LibraryStoreError, SongOrder } from "./LibraryStore.ts";
+import type { LibraryStore, LibraryStoreError, SongOrder, SongRow } from "./LibraryStore.ts";
 
 type Slices = Pick<LibraryStore["Service"], "genreOrderSlice">;
+
+/** Full rows for selection actions, a page per free turn, in the checked order. */
+export const readGenreSongs = (
+  store: Pick<LibraryStore["Service"], "songsWithIds">,
+  ids: readonly number[],
+  turn: Effect.Effect<void>,
+): Effect.Effect<readonly SongRow[], LibraryStoreError> =>
+  Effect.gen(function* () {
+    const rows: SongRow[] = [];
+    for (let start = 0; start < ids.length; start += PAGED_ROWS_LIMITS.pageSize) {
+      yield* turn;
+      rows.push(
+        ...(yield* store.songsWithIds(ids.slice(start, start + PAGED_ROWS_LIMITS.pageSize))),
+      );
+    }
+    return rows;
+  });
 
 /**
  * [genreId]'s whole order in [sort], going on from [first] (the opening's
@@ -77,8 +94,10 @@ export const createGenreOrderLoad = <R>(options: {
   ) => Promise<SongOrder>;
 }): GenreOrderLoad => {
   let order: SongOrder | null = null;
-  let reading: { readonly answer: Promise<SongOrder>; readonly controller: AbortController } | null =
-    null;
+  let reading: {
+    readonly answer: Promise<SongOrder>;
+    readonly controller: AbortController;
+  } | null = null;
   /** Whether the read under way still waits for the screen to settle. */
   let waiting = false;
   let disposed = false;
@@ -113,11 +132,14 @@ export const createGenreOrderLoad = <R>(options: {
       if (!disposed && order === null && reading === null) void start(true).catch(() => {});
     },
     whole: () => {
-      if (order !== null) return Promise.resolve(order);
       if (disposed) return Promise.resolve(null);
+      if (order !== null) return Promise.resolve(order);
       if (reading !== null && waiting) reading.controller.abort();
       const answer = reading !== null && !waiting ? reading.answer : start(false);
-      return answer.catch(() => null);
+      return answer.then(
+        (value) => (disposed ? null : value),
+        () => null,
+      );
     },
     subscribe: (listener) => {
       listeners.add(listener);
@@ -127,6 +149,7 @@ export const createGenreOrderLoad = <R>(options: {
     },
     dispose: () => {
       disposed = true;
+      order = null;
       reading?.controller.abort();
       reading = null;
     },

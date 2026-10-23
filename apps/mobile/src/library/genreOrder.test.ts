@@ -30,15 +30,24 @@ test("a genre's whole order arrives a slice a turn, with every song for Play, Sh
     const full = Effect.runSync(store.getGenre(genreId))!.songs;
     // Slices of 40 rather than the store's 500, so 334 songs take several.
     const slices = {
-      genreOrderSlice: (id: number, sort: Parameters<typeof selectGenreOrderSlice>[2], cursor: Parameters<typeof selectGenreOrderSlice>[3]) =>
-        Effect.sync(() => selectGenreOrderSlice(db, id, sort, cursor, 40)),
+      genreOrderSlice: (
+        id: number,
+        sort: Parameters<typeof selectGenreOrderSlice>[2],
+        cursor: Parameters<typeof selectGenreOrderSlice>[3],
+      ) => Effect.sync(() => selectGenreOrderSlice(db, id, sort, cursor, 40)),
     };
     for (const sort of SONG_SORTS) {
       const opening = Effect.runSync(store.openGenre(genreId, sort))!;
       let turns = 0;
       const read = traceQueries(db, () =>
         Effect.runSync(
-          readGenreOrder(slices, genreId, sort, opening.order, Effect.sync(() => void turns++)),
+          readGenreOrder(
+            slices,
+            genreId,
+            sort,
+            opening.order,
+            Effect.sync(() => void turns++),
+          ),
         ),
       );
       const order = read.result;
@@ -163,4 +172,42 @@ test("the whole order waits for the screen to settle, unless an action needs it 
   never.dispose();
   assert.equal(await waiting, null);
   assert.equal(await never.whole(), null);
+});
+
+test("leaving a genre invalidates even an already cached order", async () => {
+  const load = createGenreOrderLoad({
+    read: Effect.succeed({ ids: [1], missing: [], spine: [] }),
+    settled: Effect.void,
+    run: (effect, signal) => Effect.runPromise(effect, { signal }),
+  });
+  assert.deepEqual((await load.whole())?.ids, [1]);
+  load.dispose();
+  assert.equal(load.current(), null);
+  assert.equal(await load.whole(), null);
+});
+
+test("Select All reads complete action rows a page a turn, skipping deleted songs", async () => {
+  const fixture = await createFastAgainFixture();
+  try {
+    const store = await loadLibraryStore(root, fixture.db);
+    const detail = Effect.runSync(store.getGenre(fixture.genreId))!;
+    const ids = detail.songs.map((song) => song.id);
+    let turns = 0;
+    const { readGenreSongs } = await import("./genreOrder.ts");
+    const read = traceQueries(fixture.db, () =>
+      Effect.runSync(
+        readGenreSongs(
+          store,
+          ids,
+          Effect.sync(() => void turns++),
+        ),
+      ),
+    );
+    assert.deepEqual(read.result, detail.songs);
+    assert.equal(turns, Math.ceil(ids.length / 50));
+    assert.ok(read.queries.every((query) => query.rows <= 50));
+    assert.deepEqual(Effect.runSync(readGenreSongs(store, [-1], Effect.void)), []);
+  } finally {
+    fixture.close();
+  }
 });

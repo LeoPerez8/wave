@@ -177,3 +177,14 @@ describe("createPagedRows", () => {
     assert.equal(rows.row(0), undefined);
   });
 });
+
+test("a known first page becomes visible without waiting for another read", () => {
+  const pages = createPagedRows<number, { id: number }>({
+    keyOf: (row) => row.id,
+    read: () => assert.fail("the opening already read these rows"),
+  });
+  const drawn: (number | undefined)[] = [];
+  pages.subscribe(() => drawn.push(pages.row(0)?.id));
+  pages.setOrder([1, 2], [{ id: 1 }, { id: 2 }]);
+  assert.deepEqual(drawn, [1]);
+});

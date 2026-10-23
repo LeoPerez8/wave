@@ -142,6 +142,7 @@ export const createPagedRows = <K, R>(options: {
       for (const row of known) held.set(keyOf(row), { row, order });
       drop();
       load();
+      if (known.length > 0) for (const listener of listeners) listener();
     },
     view: (start, end) => {
       view = { start, end };

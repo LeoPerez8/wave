@@ -26,17 +26,27 @@ interface Shown {
 export default function GenreScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const genreId = parseId(id);
+  return <GenreContent key={genreId} genreId={genreId} />;
+}
+
+function GenreContent({ genreId }: { readonly genreId: number }) {
   const sort = librarySongSort(useSongSort("genre"));
   const read = useGenreOpening(genreId, sort);
   // Another sort's songs show until this one's first page is read, rather than skeletons.
   const [last, setLast] = useState<Shown | null>(null);
   if (read != null && read !== last?.opening) setLast({ genre: read.genre, opening: read, sort });
   const opened: Shown | null | undefined =
-    read != null ? { genre: read.genre, opening: read, sort } : read === null ? null : last ?? undefined;
+    read != null
+      ? { genre: read.genre, opening: read, sort }
+      : read === null
+        ? null
+        : (last ?? undefined);
   useScreenContent(opened !== undefined);
   const known = useKnownRow("genre", genreId);
   const shown: Shown | null | undefined =
-    opened === undefined && known !== undefined ? { genre: known, opening: undefined, sort } : opened;
+    opened === undefined && known !== undefined
+      ? { genre: known, opening: undefined, sort }
+      : opened;
   return (
     <DetailFrame detail={shown} noun="genre" title={({ genre }) => genre.name}>
       {({ genre, opening, sort: openedSort }) => (

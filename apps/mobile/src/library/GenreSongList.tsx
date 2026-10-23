@@ -32,7 +32,12 @@ import { selectableRow } from "@/selection/selectableRow";
 import { useListSelection } from "@/selection/useListSelection";
 
 import { useFavoriteIds } from "./favorites";
-import { createGenreOrderLoad, readGenreOrder, type GenreOrderLoad } from "./genreOrder";
+import {
+  createGenreOrderLoad,
+  readGenreOrder,
+  readGenreSongs,
+  type GenreOrderLoad,
+} from "./genreOrder";
 import {
   LibraryStore,
   type GenreOpening,
@@ -43,7 +48,6 @@ import {
 } from "./LibraryStore";
 import { usePagedSongs } from "./pagedSongs";
 import { appRuntime } from "./runtime";
-import { songsWithIds } from "./sectionSongs";
 import { libraryQuery, useLibraryQuery, type LibraryQuery } from "./sharedQueries";
 import { SongSortButton } from "./SongSortButton";
 import { SwipeSummaryRow } from "./SwipeTrackRow";
@@ -196,7 +200,15 @@ export function GenreSongList({
   // Play, Shuffle and taps wait for the opening (a press on the known header)
   // and then for the whole order, which they read at once if it hasn't arrived.
   const loadRef = useRef(load);
-  const waiters = useRef<((load: GenreOrderLoad) => void)[]>([]);
+  const active = useRef(true);
+  const waiters = useRef<((load: GenreOrderLoad | null) => void)[]>([]);
+  useEffect(() => {
+    active.current = true;
+    return () => {
+      active.current = false;
+      for (const waiter of waiters.current.splice(0)) waiter(null);
+    };
+  }, []);
   useEffect(() => {
     loadRef.current = load;
     if (load === null) return;
@@ -208,11 +220,11 @@ export function GenreSongList({
       const ready =
         loaded !== null
           ? Promise.resolve(loaded)
-          : new Promise<GenreOrderLoad>((resolve) => waiters.current.push(resolve));
+          : new Promise<GenreOrderLoad | null>((resolve) => waiters.current.push(resolve));
       void ready
-        .then((orderLoad) => orderLoad.whole())
+        .then((orderLoad) => orderLoad?.whole() ?? null)
         .then((order) => {
-          if (order === null) return;
+          if (order === null || !active.current) return;
           // By id: the whole order may have been read again since the row was drawn.
           const start = from === undefined ? undefined : order.ids.indexOf(from);
           if (start === -1) return;
@@ -226,14 +238,34 @@ export function GenreSongList({
   // the checked songs' full rows and those near the screen, as they're needed.
   const [full, setFull] = useState(NO_ROWS);
   const asked = useRef(new Set<number>());
+  const rowReads = useRef(new Set<AbortController>());
+  const generation = useRef(0);
+  useEffect(() => {
+    generation.current++;
+    asked.current.clear();
+    setFull(NO_ROWS);
+    return () => {
+      for (const controller of rowReads.current) controller.abort();
+      rowReads.current.clear();
+      generation.current++;
+    };
+  }, [opening]);
   const shown = useRef({ start: 0, end: PAGED_ROWS_LIMITS.pageSize });
   const want = useCallback((wantedIds: readonly number[]) => {
     const wanted = wantedIds.filter((id) => !asked.current.has(id));
     if (wanted.length === 0) return;
     for (const id of wanted) asked.current.add(id);
-    songsWithIds(wanted).then(
+    const requested = generation.current;
+    const controller = new AbortController();
+    rowReads.current.add(controller);
+    runAborting(
+      // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use is not a React Hook.
+      LibraryStore.use((store) => readGenreSongs(store, wanted, freeTurnEffect)),
+      controller.signal,
+    ).then(
       (rows) => {
-        if (rows.length === 0) return;
+        rowReads.current.delete(controller);
+        if (rows.length === 0 || requested !== generation.current) return;
         setFull((before) => {
           const next = new Map(before);
           for (const row of rows) next.set(row.id, row);
@@ -241,6 +273,8 @@ export function GenreSongList({
         });
       },
       () => {
+        rowReads.current.delete(controller);
+        if (requested !== generation.current) return;
         for (const id of wanted) asked.current.delete(id);
       },
     );
@@ -263,6 +297,30 @@ export function GenreSongList({
     [full, load, whole],
   );
   const listSelection = useListSelection({ items: ids, keyOf: keyExtractor, target });
+  // Do not expose a partial selection source: Select All must see the complete genre.
+  const [pendingSelect, setPendingSelect] = useState<number | null>(null);
+  useEffect(() => {
+    if (pendingSelect === null) return;
+    if (load?.current() == null) {
+      void load?.whole();
+      return;
+    }
+    listSelection.start(pendingSelect);
+    setPendingSelect(null);
+  }, [pendingSelect, load, whole, listSelection]);
+  const selectable = useMemo(
+    () => ({
+      ...listSelection,
+      start: (id: number) => {
+        if (load?.current() != null) listSelection.start(id);
+        else {
+          setPendingSelect(id);
+          void load?.whole();
+        }
+      },
+    }),
+    [listSelection, load],
+  );
   const { selection } = listSelection;
   const nearScreen = useCallback(
     () =>
@@ -281,7 +339,7 @@ export function GenreSongList({
     void load?.whole();
     want([...selection.keys].map(Number));
     want(nearScreen());
-  }, [selection, load, want, nearScreen]);
+  }, [selection, load, want, nearScreen, opening]);
 
   const onViewableItemsChanged = useCallback(
     ({ startBuffered, endBuffered }: OnViewableItemsChangedInfo<number>) => {
@@ -313,7 +371,7 @@ export function GenreSongList({
           playDisc
           {...selectableRow(
             item,
-            listSelection,
+            selectable,
             () => play(item),
             (options) => openTrackActionsById(item, options),
           )}
@@ -322,7 +380,7 @@ export function GenreSongList({
     },
     // `version` re-renders the rows as their pages arrive.
     // oxlint-disable-next-line react-hooks/exhaustive-deps
-    [pages, version, currentIds, favorites, listSelection, play],
+    [pages, version, currentIds, favorites, selectable, play],
   );
 
   return (
