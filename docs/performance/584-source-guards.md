@@ -271,3 +271,26 @@ Real-store plan/work-count/equivalence tests live in `db/mixInputs.test.ts`,
 `playback/tasteDerivation.test.ts`, `home/magicQueueJob.test.ts` and
 `playback/liveTaste.test.ts`. This bounded deferred seam promises neither a
 preemptible native SQL call nor a strict six-ms hardware deadline.
+
+## Playlist recommendation lifetime after #599
+
+The encapsulated legacy `LibraryStore.playlistRecommendationInput` is now a
+protected whole-Library capability. Production uses the separately protected
+`playlistRecommendationSource.ts#playlistRecommendationInput`: the only component
+allowance is `PlaylistRecommendations`, whose visit waits for screen sight and
+settlement and cancels on coverage, navigation or cleanup. The source facade
+waits for settlement before calling the guarded background source factory; that
+factory's only allowance creates one paged, versioned snapshot. Exact declaration
+allowances cover those three boundaries, with no directory or route exception.
+Direct calls from a newly introduced opening path fail the guard.
+
+`playlistRecommendationVisit.test.ts`, `playlistRecommendationInputs.test.ts` and
+`db/regressionSweep.test.ts` exercise actual session/scheduler/store work, including
+zero hidden reads/ranks/notifications, one catch-up, shared source invalidation,
+TTL/disposal, in-flight edits and Add/Dismiss. SQL pages return at most 128 raw
+rows (a song page may issue two separate 128-row statements), and CPU stages use
+the unchanged canonical `runSteps`. This retires only #599's raw input/renewal
+work. The cold playlist graph caller stays within #594's shared graph scope;
+#599 propagates the visit's cancellation through it. Other ticket allowances
+and the route-observer restriction remain unchanged. Measured desktop slices
+are evidence toward the six-ms target, never a universal native/GC/OS bound.

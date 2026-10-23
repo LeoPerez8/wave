@@ -13,6 +13,10 @@ export interface Exception {
   };
 }
 export const LIBRARY_SEEDS = [
+  "library/LibraryStore.ts#playlistRecommendationInput",
+  "library/playlistRecommendationSource.ts#playlistRecommendationInput",
+  "library/playlistRecommendationInputs.ts#sharePlaylistRecommendationInputs",
+  "library/playlistRecommendationInputs.ts#observePlaylistRecommendationInputs",
   "library/LibraryStore.ts#listSongs",
   "library/LibraryStore.ts#listArtists",
   "library/LibraryStore.ts#tasteHistory",
@@ -81,6 +85,21 @@ export const NETWORK_SEEDS = [
 ];
 
 export const WHOLE_LIBRARY: Record<string, Exception> = {
+  "library/PlaylistRecommendations.tsx#PlaylistRecommendations": {
+    reason:
+      "The visit's read/refill waits for screen settlement, is aborted on loss of screen sight (including Now Playing), and uses one versioned paged source plus stepped Core ranking. Public behavior/work counts: playlistRecommendationVisit.test.ts and db/regressionSweep.test.ts.",
+    capabilities: ["library/playlistRecommendationSource.ts#playlistRecommendationInput"],
+  },
+  "library/playlistRecommendationSource.ts#playlistRecommendationInput": {
+    reason:
+      "Deferred background input seam: requires settlement before creating or reading the single shared paged source. Membership/feedback are scoped to the requesting playlist; source invalidation and eviction have real SQLite tests.",
+    capabilities: ["library/playlistRecommendationInputs.ts#observePlaylistRecommendationInputs"],
+  },
+  "library/playlistRecommendationInputs.ts#observePlaylistRecommendationInputs": {
+    reason:
+      "Background source lifetime installs explicit track/favorite/catalog invalidation and releases both listeners on disposal. The shared snapshot is paged and retains one version for at most a lazy sixty-second TTL.",
+    capabilities: ["library/playlistRecommendationInputs.ts#sharePlaylistRecommendationInputs"],
+  },
   "library/startupJobs.ts#readImportDownloadInput": {
     reason:
       "A kept filled import prepares download membership after settlement; source SQL is indivisible, indexing and per-entry matching yield. Actual store coverage: startupJobs.test.ts.",
