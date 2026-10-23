@@ -55,9 +55,11 @@ export const useScreenSettled = (): boolean => {
   const sight = useScreenSight();
   const subscribe = useCallback(
     (listener: () => void) => {
-      const stops = [onScreenSettled(listener), sight.subscribe(listener)];
+      const stopSettled = onScreenSettled(listener);
+      const stopSight = sight.subscribe(listener);
       return () => {
-        for (const stop of stops) stop();
+        stopSettled();
+        stopSight();
       };
     },
     [sight],
