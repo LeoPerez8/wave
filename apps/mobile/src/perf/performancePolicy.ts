@@ -153,7 +153,7 @@ export const WHOLE_LIBRARY: Record<string, Exception> = {
   },
   "library/LibraryStore.ts#make": {
     reason:
-      "The store implements the whole taste-history read; callers, rather than the driver, own scheduling.",
+      "The store implements taste history and bounded counted-listening pages. Its legacy whole-history driver remains a compatibility/control capability only; production Stats callers must use the separately inventoried bounded seam.",
     capabilities: [
       "library/db/taste.ts#tasteHistory",
       "library/db/stats.ts#countedListening",

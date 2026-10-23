@@ -8,6 +8,8 @@ import { createFastAgainFixture } from "./fastAgainFixture.ts";
 import { traceQueries } from "./testDatabase.ts";
 
 const root = fileURLToPath(new URL("../../../../../", import.meta.url));
+const at = (month: number, day = 1, h = 0, minute = 0) =>
+  new Date(2026, month - 1, day, h, minute).getTime();
 
 test("bounded listening pages preserve all Core availability without a whole-history statement", async () => {
   const fixture = await createFastAgainFixture();
@@ -151,8 +153,6 @@ test("shared availability and announcements follow actual threshold, opened, Dec
   const replay = (await createRecapReplay(root, fixture))!;
   try {
     const hour = 3_600_000;
-    const at = (month: number, day = 1, h = 0, minute = 0) =>
-      new Date(2026, month - 1, day, h, minute).getTime();
     const history = {
       trackId: String(fixture.songIds[0]),
       context: null,

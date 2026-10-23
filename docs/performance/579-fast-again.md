@@ -1384,7 +1384,7 @@ native frames and TalkBack remain unverified.
 ## Home Recap availability (#598)
 
 Raw capture: [`598-recapAvailability-desktop.jsonl`](results/598-recapAvailability-desktop.jsonl).
-Measured source/harness: `a069889ce4420270497609c21d5e170ce40769ab`, including
+Measured source/harness: `5e72ccd4a8c668c3362c5bd8b0cf2c123820b116`, including
 integration `494e26dbb15d9bf427a5e42c79ec5e730342af99` and #595's startup gate.
 Before is actual ti `460e39ff0cba6f50e7a456a77d6e99813295ebaa`;
 reference is `add761ed787061db6a6c2799687d421301b6182b`. The reference predates
@@ -1392,6 +1392,11 @@ Home Recaps, so all four cases explicitly remain unavailable. The original
 #596 research JSONL is unchanged; this fix-specific successor measures the shared
 availability lifecycle. Node v26.8.2 + sql.js 1.14.2, Linux x64, eleven timed runs
 after warmup at 1,000 / 12,000 / 50,000 songs and 10,000 / 54,000 / 200,000 plays.
+This fresh recovery capture supersedes the WIP capture. The shared host had other
+active validation processes; these are this run's observed wall/task times,
+including host scheduling and GC variation, rather than an isolated hardware limit.
+The recovery changes outside the measured source are a test-helper scoping cleanup
+and a clarification of the store's source-inventory reason; runtime code is unchanged.
 
 Reproduce from the repository root with source-only historical checkouts:
 
@@ -1419,14 +1424,14 @@ once. Fixture setup, database/store initialization, warmup and the change write
 are outside measurement. CPU, p90, synchronous totals and per-run maxima/task
 counts are retained in the JSONL.
 
-- **Cold:** total 13.878 → 28.888 / 30.706 → 65.365 / 99.492 → 172.010;
-  longest 14.998 → 1.720 / 39.358 → 1.148 / 108.415 → 0.778.
-- **Unchanged return:** total 13.435 → 0.064 / 28.610 → 0.066 / 105.331 → 0.071;
-  longest 14.138 → 0.086 / 29.305 → 0.072 / 122.347 → 0.083.
-- **Changed history:** total 13.796 → 27.453 / 28.473 → 64.876 / 106.851 → 182.134;
-  longest 14.489 → 1.515 / 29.108 → 1.293 / 109.831 → 1.037.
-- **Calendar boundary:** total 13.828 → 27.342 / 28.781 → 63.669 / 99.372 → 208.788;
-  longest 14.670 → 1.656 / 29.033 → 0.814 / 124.373 → 1.360.
+- **Cold:** total 34.836 → 79.890 / 70.612 → 179.457 / 151.382 → 471.463;
+  longest 48.058 → 9.928 / 109.620 → 11.641 / 187.677 → 7.257.
+- **Unchanged return:** total 38.797 → 0.142 / 76.972 → 0.136 / 129.877 → 0.139;
+  longest 47.953 → 0.146 / 112.007 → 0.184 / 172.511 → 0.145.
+- **Changed history:** total 35.076 → 80.964 / 76.284 → 166.406 / 127.623 → 371.327;
+  longest 52.777 → 11.440 / 111.308 → 4.768 / 193.537 → 4.949.
+- **Calendar boundary:** total 34.589 → 84.805 / 66.940 → 193.321 / 156.320 → 349.738;
+  longest 49.883 → 13.620 / 140.329 → 10.735 / 176.965 → 2.019.
 
 Every ti case returns 7,200 / 8,640 / 8,640 SQL rows in one statement and notifies
 one consumer. Current **unchanged returns execute zero reads, rows, statements
