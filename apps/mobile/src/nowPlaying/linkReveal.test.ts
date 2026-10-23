@@ -12,7 +12,7 @@ import { followStreamedArtistTap } from "../ytmusic/streamedArtistTap.ts";
 import { nowPlayingLibraryArtistLink } from "./artistLink.ts";
 import { createLinkRevealCompletion, followNowPlayingLink } from "./linkClose.ts";
 
-const setup = () => {
+const setup = (from: "Now Playing" | "menu" = "Now Playing") => {
   const session = createTimingSession({
     now: () => 0,
     wallNow: () => 0,
@@ -41,6 +41,8 @@ const setup = () => {
     report: () => {},
   });
   session.onTransition(frames.transition);
+  const phases: string[] = [];
+  session.onTransition((event) => phases.push(event.phase));
   const draws: (() => void)[] = [];
   const completion = createLinkRevealCompletion({
     committed: (id) => {
@@ -51,11 +53,132 @@ const setup = () => {
       });
     },
     end: session.end,
+    current: () => session.active()?.id,
+    dismiss: session.dismiss,
   });
-  const id = session.begin("artistLink", "Justice");
-  completion.begin(id);
-  return { session, completion, id, draws, callbacks, frames, uiStops: () => uiStops };
+  let released = 0;
+  session.onSettled(() => {
+    if (session.isSettled()) released++;
+  });
+  let id: number;
+  if (from === "Now Playing") {
+    id = session.begin("artistLink", "Justice");
+    completion.begin(id);
+  } else {
+    // Artist 3's page is showing and settled; a song row on it is long-pressed or swiped.
+    const page = session.routeCommitted("/library/artist/3")!;
+    session.frame(page);
+    session.content(page);
+    session.end(page);
+    assert.equal(session.isSettled(), true);
+    released = 0;
+    phases.length = 0;
+    // YtSongActions / itemActions: `beginTiming("goToArtist", "Artist")`.
+    id = session.begin("goToArtist", "Artist");
+  }
+  return {
+    session,
+    completion,
+    id,
+    draws,
+    callbacks,
+    frames,
+    phases,
+    released: () => released,
+    uiStops: () => uiStops,
+  };
 };
+
+/** Core's link for a streamed song credited to "Justice", before the link cache was read. */
+const coldLink = () => {
+  const context = { enabled: true, here: "/library/artist/3", libraryArtist: null };
+  const link = streamedArtistLink(["Justice"], context)!;
+  assert.equal(link.kind, "open");
+  return { context, link };
+};
+
+/** `followStreamedArtistLink`'s terminal outcomes, wired as ArtistChoice wires them. */
+const followCold = (
+  h: ReturnType<typeof setup>,
+  outcome: "here" | "YouTube Music off" | "lookup failed",
+) => {
+  const { context, link } = coldLink();
+  return followStreamedArtistTap(link, {
+    resolve: async (target) => {
+      // `resolveStreamedArtistTap` answers undefined when YouTube Music was turned off.
+      if (outcome === "YouTube Music off") return undefined;
+      if (outcome === "lookup failed") throw new Error("runtime gone");
+      return resolveStreamedArtistLink(target, context, {
+        online: true,
+        read: async () => (name) => (name === "Justice" ? { id: 3, name } : null),
+      });
+    },
+    deliver: (resolved) => {
+      if (resolved === undefined) h.completion.fail(h.id);
+      else if (resolved.kind === "here") h.completion.reveal(h.id);
+      else assert.fail(`expected here, got ${resolved.kind}`);
+    },
+  }).catch(() => h.completion.fail(h.id));
+};
+
+test("Go to Artist from a menu or swipe that resolves to the page you're on settles that page", async () => {
+  const h = setup("menu");
+  await followCold(h, "here");
+  assert.equal(h.session.isSettled(), false, "the reveal still needs its frame");
+  h.draws.shift()?.();
+  assert.equal(h.session.active(), null);
+  assert.equal(h.session.isSettled(), true);
+  assert.equal(h.released(), 1, "settled-gated work runs again");
+  assert.deepEqual(h.phases, ["start", "settled"]);
+  assert.equal(h.callbacks.size, 0, "JS collector stops");
+  assert.equal(h.uiStops(), 1, "UI collector stops");
+  h.frames.dispose();
+});
+
+for (const outcome of ["YouTube Music off", "lookup failed"] as const) {
+  test(`Go to Artist from a menu that opens nothing (${outcome}) lets the screen settle again`, async () => {
+    const h = setup("menu");
+    await followCold(h, outcome);
+    assert.equal(h.session.active(), null);
+    assert.equal(h.session.isSettled(), true);
+    assert.equal(h.released(), 1);
+    assert.deepEqual(h.phases, ["start", "cancelled"], "nothing opened, nothing measured");
+    assert.equal(h.callbacks.size, 0);
+    assert.equal(h.uiStops(), 1);
+    assert.equal(h.draws.length, 0);
+    h.frames.dispose();
+  });
+}
+
+test("a Now Playing link that opens nothing settles once the sheet has hidden", () => {
+  for (const hiddenFirst of [false, true]) {
+    const h = setup();
+    if (hiddenFirst) h.completion.hidden();
+    h.completion.fail(h.id);
+    assert.equal(h.session.isSettled(), hiddenFirst, "the closing sheet still moves");
+    if (!hiddenFirst) h.completion.hidden();
+    assert.equal(h.session.active(), null);
+    assert.equal(h.session.isSettled(), true);
+    assert.equal(h.released(), 1);
+    assert.equal(h.callbacks.size, 0);
+    assert.equal(h.uiStops(), 1);
+    h.completion.fail(h.id);
+    h.completion.hidden();
+    assert.equal(h.released(), 1);
+    h.frames.dispose();
+  }
+});
+
+test("a late reveal or failure from a menu tap cannot end a newer tap", () => {
+  const h = setup("menu");
+  const next = h.session.begin("push", "/library/album/4");
+  h.completion.reveal(h.id);
+  h.completion.fail(h.id);
+  assert.equal(h.session.active()?.id, next);
+  assert.equal(h.session.isSettled(), false);
+  assert.equal(h.draws.length, 0);
+  h.frames.dispose();
+});
 
 for (const source of ["streamed", "local"] as const) {
   for (const closeFirst of [false, true]) {

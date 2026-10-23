@@ -166,6 +166,8 @@ export const createTimingSession = (ports: Ports) => {
   const session = {
     begin,
     cancel,
+    /** [id]'s tap opened nothing: it ends unmeasured, and the screen it was made on is settled. */
+    dismiss: (_id: number): void => {},
     reclassify: (kind: TimingKind, to: string): number | null => {
       if (pending === null) return null;
       pending.measurement.kind = kind;

@@ -78,7 +78,46 @@ export interface GenreOrderLoad {
   readonly subscribe: (listener: () => void) => () => void;
   /** Stops a read under way; what waits for it gets null. */
   readonly dispose: () => void;
+  /** Whether `dispose` let it go (a null from `whole` then isn't a failed read). */
+  readonly disposed: () => boolean;
 }
+
+/**
+ * Where a genre screen's Play, Shuffle and taps find the whole order: the
+ * screen's load when they're pressed, or, when that load is let go before it
+ * answers (the genre's order or its sort changed), the load after it.
+ */
+export interface GenreOrderActions {
+  /** The screen's load now; null while its opening is read. */
+  readonly show: (load: GenreOrderLoad | null) => void;
+  /** Whether the screen is open; closing it answers what waits with null. */
+  readonly open: (open: boolean) => void;
+  /** The whole order to play; null once the screen closed or the read failed. */
+  readonly whole: () => Promise<SongOrder | null>;
+}
+
+export const createGenreOrderActions = (): GenreOrderActions => {
+  let load: GenreOrderLoad | null = null;
+  let open = true;
+  const waiters: ((load: GenreOrderLoad | null) => void)[] = [];
+  return {
+    show: (next) => {
+      load = next;
+      if (next !== null) for (const waiter of waiters.splice(0)) waiter(next);
+    },
+    open: (next) => {
+      open = next;
+      if (!next) for (const waiter of waiters.splice(0)) waiter(null);
+    },
+    whole: () =>
+      (load !== null
+        ? Promise.resolve(load)
+        : new Promise<GenreOrderLoad | null>((resolve) => waiters.push(resolve))
+      )
+        .then((orderLoad) => orderLoad?.whole() ?? null)
+        .then((order) => (open ? order : null)),
+  };
+};
 
 /**
  * Reads [read] (`readGenreOrder`'s slices) once for one opening: in the
@@ -153,5 +192,6 @@ export const createGenreOrderLoad = <R>(options: {
       reading?.controller.abort();
       reading = null;
     },
+    disposed: () => disposed,
   };
 };
