@@ -557,4 +557,9 @@ export const TASTE_SOURCES: Record<string, Exception> = {
       "Existing #594 daily mix background reader shares the bounded songs page; its multi-genre projection and cancellation remain owned by the mix build. Covered by db/mixInputs.test.ts.",
     capabilities: ["library/LibraryStore.ts#mixSongsPage"],
   },
+  "library/playlistRecommendationInputs.ts#sharePlaylistRecommendationInputs": {
+    reason:
+      "#599's single shared playlist recommendation source walks the bounded songs page with multi-genres after settlement; its own seed chain is guarded in WHOLE_LIBRARY. Covered by playlistRecommendationInputs.test.ts and db/regressionSweep.test.ts.",
+    capabilities: ["library/LibraryStore.ts#mixSongsPage"],
+  },
 };
