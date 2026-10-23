@@ -55,13 +55,10 @@ export const selectArtists = (
   { ids, page, scope = "library" }: ArtistsQuery,
 ): ArtistRow[] => {
   if (ids?.length === 0) return [];
+  // One JSON parameter, however many artists: the credit UNION names the set
+  // twice, and a placeholder per id would pass SQLite's variable limit.
   const requested =
-    ids === undefined
-      ? undefined
-      : sql.join(
-          ids.map((id) => sql`${id}`),
-          sql`, `,
-        );
+    ids === undefined ? undefined : sql`SELECT value FROM json_each(${JSON.stringify(ids)})`;
   // Membership is cheaper than counting. OFFSET still walks preceding eligible
   // artists (and file checks may visit missing credits), but only this page's
   // credits enter the UNION/count and only its artwork is read.

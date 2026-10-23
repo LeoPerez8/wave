@@ -68,6 +68,23 @@ describe("selectArtists", () => {
       ["Daft Punk", "Radiohead"],
     );
   });
+
+  test("takes more artists than SQLite has variables", () => {
+    // A Magic Queue batch can name every playable song's artists at once.
+    const ids = [
+      ...Array.from({ length: 20_000 }, (_, i) => 1_000_000 + i),
+      idOf("Radiohead"),
+      idOf("Daft Punk"),
+    ];
+    assert.deepEqual(
+      selectArtists(db, { ids }).map((artist) => artist.name),
+      ["Daft Punk", "Radiohead"],
+    );
+    assert.deepEqual(
+      selectArtists(db, { ids, page: { offset: 1, limit: 5 } }).map((artist) => artist.name),
+      ["Radiohead"],
+    );
+  });
 });
 
 const idOf = (name: string) =>
