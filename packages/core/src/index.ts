@@ -1992,3 +1992,5 @@ export type {
 export * from "./playlistRecommendationSession.ts";
 export { playingTrackIds } from "./playingIdentity.ts";
 export { createLongPressIntent } from "./longPressIntent.ts";
+export { createMenuTouchOwnership, playerTouchAllowed } from "./menuTouchOwnership.ts";
+export type { MenuTouchOwnership } from "./menuTouchOwnership.ts";
