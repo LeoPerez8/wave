@@ -138,7 +138,7 @@ test("a genre opening replaces full hydration with a header and 50 indexed summa
     assert.ok(
       opening.queries
         .flatMap((query) => query.plan)
-        .some((step) => step.includes("SEARCH o USING INDEX genre_order_title_asc")),
+        .some((step) => /SEARCH o USING (COVERING )?INDEX genre_order_title_asc/.test(step)),
     );
   } finally {
     fixture.close();

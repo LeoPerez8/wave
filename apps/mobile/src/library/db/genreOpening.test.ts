@@ -163,7 +163,9 @@ test("every genre sort pages through runs of ties larger than a page, equal to s
       const slices = [];
       let cursor: GenreCursor | null = null;
       do {
-        const slice: GenreOrderSlice = Effect.runSync(store.genreOrderSlice(genreId, sort, cursor))!;
+        const slice: GenreOrderSlice = Effect.runSync(
+          store.genreOrderSlice(genreId, sort, cursor),
+        )!;
         slices.push(...slice.ids);
         cursor = slice.next;
       } while (cursor !== null);
@@ -231,7 +233,10 @@ test("a change to a genre's order stops its cursors; other genres' changes and o
     // An artist's or an album's sort key moves its songs in those sorts.
     for (const [key, change] of [
       ["artist", sql`UPDATE artists SET sort = '' WHERE id = ${fixture.targets.large.artistId}`],
-      ["album", sql`UPDATE albums SET title_sort = '' WHERE id = ${fixture.targets.large.albumIds[3]!}`],
+      [
+        "album",
+        sql`UPDATE albums SET title_sort = '' WHERE id = ${fixture.targets.large.albumIds[3]!}`,
+      ],
     ] as const) {
       const sort = { key, descending: false } as const;
       const before = open(sort).order.next!;

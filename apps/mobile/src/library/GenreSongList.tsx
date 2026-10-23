@@ -203,10 +203,11 @@ export function GenreSongList({
   const active = useRef(true);
   const waiters = useRef<((load: GenreOrderLoad | null) => void)[]>([]);
   useEffect(() => {
+    const pending = waiters.current;
     active.current = true;
     return () => {
       active.current = false;
-      for (const waiter of waiters.current.splice(0)) waiter(null);
+      for (const waiter of pending.splice(0)) waiter(null);
     };
   }, []);
   useEffect(() => {
@@ -241,13 +242,13 @@ export function GenreSongList({
   const rowReads = useRef(new Set<AbortController>());
   const generation = useRef(0);
   useEffect(() => {
+    const controllers = rowReads.current;
     generation.current++;
     asked.current.clear();
     setFull(NO_ROWS);
     return () => {
-      for (const controller of rowReads.current) controller.abort();
-      rowReads.current.clear();
-      generation.current++;
+      for (const controller of controllers) controller.abort();
+      controllers.clear();
     };
   }, [opening]);
   const shown = useRef({ start: 0, end: PAGED_ROWS_LIMITS.pageSize });
@@ -265,7 +266,8 @@ export function GenreSongList({
     ).then(
       (rows) => {
         rowReads.current.delete(controller);
-        if (rows.length === 0 || requested !== generation.current) return;
+        if (rows.length === 0 || controller.signal.aborted || requested !== generation.current)
+          return;
         setFull((before) => {
           const next = new Map(before);
           for (const row of rows) next.set(row.id, row);
@@ -274,7 +276,7 @@ export function GenreSongList({
       },
       () => {
         rowReads.current.delete(controller);
-        if (requested !== generation.current) return;
+        if (controller.signal.aborted || requested !== generation.current) return;
         for (const id of wanted) asked.current.delete(id);
       },
     );

@@ -211,3 +211,24 @@ test("Select All reads complete action rows a page a turn, skipping deleted song
     fixture.close();
   }
 });
+
+test("a late order from a closed genre never publishes, even if its runner ignores abort", async () => {
+  const oldOrder: SongOrder = { ids: [99], missing: [], spine: [] };
+  let resolve!: (order: SongOrder) => void;
+  const load = createGenreOrderLoad({
+    read: Effect.succeed(oldOrder),
+    settled: Effect.void,
+    run: () =>
+      new Promise<SongOrder>((answer) => {
+        resolve = answer;
+      }),
+  });
+  let published = 0;
+  load.subscribe(() => published++);
+  const action = load.whole();
+  load.dispose();
+  resolve(oldOrder);
+  assert.equal(await action, null);
+  assert.equal(load.current(), null);
+  assert.equal(published, 0);
+});

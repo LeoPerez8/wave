@@ -91,10 +91,6 @@ export const usePagedSongs = (
   const arrived = useRef(0);
 
   useEffect(() => {
-    if (ids !== null) pages.setOrder(ids, known);
-  }, [pages, ids, known]);
-
-  useEffect(() => {
     shownPages = pages;
     return () => {
       if (shownPages === pages) shownPages = null;
@@ -110,5 +106,10 @@ export const usePagedSongs = (
     [pages],
   );
   const version = useSyncExternalStore(subscribe, () => arrived.current);
+  // Subscribe before seeding: a known first page may need no asynchronous read
+  // whose answer would otherwise trigger the first redraw.
+  useEffect(() => {
+    if (ids !== null) pages.setOrder(ids, known);
+  }, [pages, ids, known]);
   return { pages, version };
 };
