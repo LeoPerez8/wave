@@ -3,10 +3,11 @@ import { IconCompass } from "@tabler/icons-react-native";
 import { discoverMixCaption, placeDiscoverMixSongs } from "@wave/core";
 import { useLocalSearchParams } from "expo-router";
 import { useMemo } from "react";
-import { View } from "react-native";
+import { ScrollView, View } from "react-native";
 
 import { EmptyState } from "@/components/EmptyState";
 import { ScreenHeader } from "@/components/ScreenHeader";
+import { useChromeInset } from "@/chrome/chrome";
 import { newSongsOf, useDiscoverMix, useLibraryTracks } from "@/home/discoverMixes";
 import { useLibraryFinder } from "@/ytmusic/libraryFinder";
 import { YtSongList, type YtListLoad } from "@/ytmusic/YtSongList";
@@ -20,6 +21,7 @@ import { YtSongList, type YtListLoad } from "@/ytmusic/YtSongList";
  */
 export default function DiscoverMixScreen() {
   useScreenContent(true);
+  const bottomInset = useChromeInset();
   const { id } = useLocalSearchParams<{ id: string }>();
   const mixId = id ?? "";
   const tracks = useLibraryTracks();
@@ -48,11 +50,13 @@ export default function DiscoverMixScreen() {
     return (
       <View className="flex-1 bg-background">
         <ScreenHeader />
-        <EmptyState
-          icon={IconCompass}
-          title="This mix is gone"
-          message="Home has today's mixes while YT Music is on."
-        />
+        <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: bottomInset }}>
+          <EmptyState
+            icon={IconCompass}
+            title="This mix is gone"
+            message="Home has today's mixes while YT Music is on."
+          />
+        </ScrollView>
       </View>
     );
   }

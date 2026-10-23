@@ -77,15 +77,14 @@ export function SettingsSlider({ label, value, range, format, onChange, compact 
       }
       className={compact ? "pt-2" : "pb-1 pt-3"}
     >
-      <View className="flex-row items-baseline">
+      <View className="flex-row flex-wrap items-baseline justify-between gap-x-2">
         <Text
-          className={`flex-1 font-sans font-normal text-foreground ${compact ? "text-body" : "text-title3"}`}
+          className={`max-w-full font-sans font-normal text-foreground ${compact ? "text-body" : "text-title3"}`}
         >
           {label}
         </Text>
         <Text
-          className="font-sans text-body font-medium text-secondary"
-          numberOfLines={1}
+          className="max-w-full font-sans text-body font-medium text-secondary"
           style={{ fontVariant: ["tabular-nums"] }}
         >
           {text}
