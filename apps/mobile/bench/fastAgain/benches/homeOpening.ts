@@ -55,6 +55,11 @@ export const bench: FastAgainBench = {
         : await context.loadModule<typeof import("../../../src/playback/tasteDerivation.ts")>(
             "apps/mobile/src/playback/tasteDerivation.ts",
           );
+    const knownPath = "apps/mobile/src/home/knownVideosRead.ts";
+    const knownModule = existsSync(resolve(context.root, knownPath))
+      ? await context.loadModule<typeof import("../../../src/home/knownVideosRead.ts")>(knownPath)
+      : null;
+    let knownRead = knownModule?.createKnownVideosRead(store.knownVideos);
     const savedMixes: DiscoverMixes[] = ["artist", "genre"].map((kind) => ({
       builtAt: fixture.now,
       playSeeds: true,
@@ -151,12 +156,16 @@ export const bench: FastAgainBench = {
       [
         "mixFocusKnownVideosAndDueChecks",
         () => {
-          // Both useDiscoverMixes focus callbacks read knownVideos in ti/current source.
-          return savedMixes.map((saved) => {
-            const videos = Effect.runSync(store.knownVideos);
-            assert.equal(core.discoverMixesDue(saved, { now: fixture.now, played: true }), false);
-            return { videos, mixes: shownMixes(saved, videos) };
-          });
+          return Promise.all(
+            savedMixes.map(async (saved) => {
+              const videos =
+                knownRead === undefined
+                  ? Effect.runSync(store.knownVideos)
+                  : await Effect.runPromise(knownRead.get);
+              assert.equal(core.discoverMixesDue(saved, { now: fixture.now, played: true }), false);
+              return { videos, mixes: shownMixes(saved, videos) };
+            }),
+          );
         },
       ],
     ];
@@ -164,6 +173,8 @@ export const bench: FastAgainBench = {
     Date.now = () => fixture.now;
     try {
       const replay = async (trace: boolean) => {
+        knownRead?.dispose();
+        knownRead = knownModule?.createKnownVideosRead(store.knownVideos);
         const results: unknown[] = [];
         const durations: number[] = [];
         const work: { read: string; rowsRead: number; statements: number }[] = [];
@@ -173,13 +184,13 @@ export const bench: FastAgainBench = {
           const start = performance.now();
           if (trace) {
             const measured = traceQueries(fixture.db, run);
-            results.push(measured.result);
+            results.push(await measured.result);
             work.push({
               read,
               rowsRead: measured.queries.reduce((sum, q) => sum + q.rows, 0),
               statements: measured.queries.length,
             });
-          } else results.push(run());
+          } else results.push(await run());
           durations.push(performance.now() - start);
         }
         return { results, durations, work };
@@ -264,6 +275,44 @@ export const bench: FastAgainBench = {
             "#594 owns versioned knownVideos, return and stepped mix builds; #598 owns Recap availability",
         },
       };
+      const returnRuns: number[] = [];
+      let returnWork = { rowsRead: 0, statements: 0 },
+        returnKey = "",
+        returnCpu = 0;
+      const focus = steps.at(-1)![1];
+      const warmReturn = traceQueries(fixture.db, focus);
+      const visibleReturn = await warmReturn.result;
+      returnWork = {
+        rowsRead: warmReturn.queries.reduce((sum, query) => sum + query.rows, 0),
+        statements: warmReturn.queries.length,
+      };
+      returnKey = hash(visibleReturn);
+      if (knownRead !== undefined) assert.equal(returnWork.statements, 0);
+      for (let i = 0; i < context.runs; i++) {
+        const cpu = process.cpuUsage(),
+          start = performance.now();
+        const result = await focus();
+        returnRuns.push(performance.now() - start);
+        const used = process.cpuUsage(cpu);
+        returnCpu += used.user + used.system;
+        assert.equal(hash(result), returnKey);
+      }
+      const returnHome = {
+        read: "returnToHome/mixes",
+        ...percentiles(returnRuns),
+        cpuMs: round(returnCpu / 1000 / context.runs),
+        ...returnWork,
+        longestSyncTaskMs: round(Math.max(...returnRuns)),
+        notifications: 0,
+        resultKey: returnKey,
+        details: {
+          source:
+            "actual source-versioned known-video reader + store, saved due checks and complete blends; historical focus reads before",
+          unchangedInputs: true,
+          scope:
+            "both mix sections on a warm tab return; mounted local/pick payloads retained; other feature-owned focus readers excluded",
+        },
+      };
       displayedPicks = { ...picks, day: "yesterday" };
       const firstDay = await measureCooperative(
         fixture.db,
@@ -272,9 +321,19 @@ export const bench: FastAgainBench = {
         (turn) =>
           Effect.gen(function* () {
             const visible: unknown[] = [];
-            for (const [, run] of steps) {
+            for (const [read, run] of steps) {
               yield* turn;
-              visible.push(yield* Effect.sync(run));
+              if (read === "mixFocusKnownVideosAndDueChecks") {
+                // The shared reader is already warm. ti's focus callbacks still query twice.
+                visible.push(
+                  knownRead === undefined
+                    ? savedMixes.map((saved) => {
+                        const videos = Effect.runSync(store.knownVideos);
+                        return { videos, mixes: shownMixes(saved, videos) };
+                      })
+                    : visibleReturn,
+                );
+              } else visible.push(yield* Effect.sync(run));
             }
             let profile: TasteProfile | null = null;
             if (job !== null && derivation !== null && reads !== null) {
@@ -330,8 +389,9 @@ export const bench: FastAgainBench = {
         semanticEquality:
           "all cold-Home payloads plus exact complete taste scores, all pick metadata and ordered replacement rows",
       };
-      return [coldLaunch, { ...firstDay, details: firstDayDetails }];
+      return [coldLaunch, { ...firstDay, details: firstDayDetails }, returnHome];
     } finally {
+      knownRead?.dispose();
       Date.now = oldNow;
     }
   },

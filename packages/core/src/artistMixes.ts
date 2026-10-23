@@ -1,3 +1,4 @@
+import { finishSteps, sortSteps } from "./buildSteps.ts";
 /**
  * Artist mixes (docs/spec.md, "Artist mixes"): Home's mixes that each grow
  * from one artist's YouTube Music radio. Core picks the artists: the owner's
@@ -17,9 +18,9 @@ import type {
   DiscoverSimilarArtists,
 } from "./discoverMixes.ts";
 import { identityKey } from "./library.ts";
-import { freshFirst, type MixRefreshAvoid } from "./mixRefresh.ts";
-import { pickWeighted, playsWeight, type RandomSource } from "./weightedPick.ts";
-import { libraryArtistFinder, ytArtistQuery } from "./ytArtist.ts";
+import { freshFirstSteps, type MixRefreshAvoid } from "./mixRefresh.ts";
+import { pickWeightedSteps, playsWeight, type RandomSource } from "./weightedPick.ts";
+import { libraryArtistFinderSteps, ytArtistQuery } from "./ytArtist.ts";
 
 /** How many Artist mixes Home shows at most. */
 export const ARTIST_MIX_COUNT = 4;
@@ -52,12 +53,22 @@ export interface ArtistMixPools {
  * isn't an artist's ("Various Artists") or that [seen] has already.
  */
 const seedable = <A extends DiscoverSeedArtist>(artists: readonly A[], seen: Set<string>): A[] =>
-  artists.filter((artist) => {
+  finishSteps(seedableSteps(artists, seen));
+function* seedableSteps<A extends DiscoverSeedArtist>(
+  artists: readonly A[],
+  seen: Set<string>,
+): Generator<void, A[]> {
+  const kept: A[] = [];
+  for (const artist of artists) {
     const key = identityKey(artist.name);
-    if (ytArtistQuery(artist.name) === null || seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
+    if (ytArtistQuery(artist.name) !== null && !seen.has(key)) {
+      seen.add(key);
+      kept.push(artist);
+    }
+    yield;
+  }
+  return kept;
+}
 
 const artistSeed = (
   artist: { readonly name: string },
@@ -77,57 +88,60 @@ interface SeedPick {
   readonly comeback: DiscoverMixSeed[];
 }
 
-const pickSeeds = (pools: ArtistMixPools, random: RandomSource): SeedPick => {
+function* pickSeedsSteps(pools: ArtistMixPools, random: RandomSource): Generator<void, SeedPick> {
   const { avoid } = pools;
   const shownAt =
     avoid === undefined
       ? null
       : (artist: { readonly name: string }) => avoid.artists.get(identityKey(artist.name));
-  const played = freshFirst(seedable(pools.played, new Set()), shownAt);
+  const played = yield* freshFirstSteps(yield* seedableSteps(pools.played, new Set()), shownAt);
   const picked = new Set(
-    pickWeighted(
+    yield* pickWeightedSteps(
       played.fresh,
       ARTIST_MIX_COUNT,
       (artist) => playsWeight(artist.countedPlays),
       random,
     ),
   );
-  const seeds = played.fresh
-    .filter((artist) => picked.has(artist))
-    .map((artist) => artistSeed(artist, "plays"));
+  const seeds: DiscoverMixSeed[] = [];
+  for (const artist of played.fresh) {
+    if (picked.has(artist)) seeds.push(artistSeed(artist, "plays"));
+    yield;
+  }
   const chosen = new Set([...picked].map((artist) => identityKey(artist.name)));
-  const library = freshFirst(
-    seedable(
-      [...(pools.library ?? [])]
-        // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh copy; Hermes lacks toSorted
-        .sort((a, b) => b.songCount - a.songCount)
-        .slice(0, LIBRARY_ARTISTS),
-      chosen,
-    ),
+  const bySongs = yield* sortSteps(pools.library ?? [], (a, b) => b.songCount - a.songCount);
+  const library = yield* freshFirstSteps(
+    yield* seedableSteps(bySongs.slice(0, LIBRARY_ARTISTS), chosen),
     shownAt,
   );
   for (const artist of library.fresh.slice(0, ARTIST_MIX_COUNT - seeds.length))
     seeds.push(artistSeed(artist, "library"));
-  const similar = freshFirst(similarOf(pools), shownAt);
+  const similar = yield* freshFirstSteps(yield* similarOfSteps(pools), shownAt);
   for (const artist of similar.fresh.slice(0, ARTIST_MIX_COUNT - seeds.length))
     seeds.push({ ...artistSeed(artist, "similar"), browseId: artist.browseId });
   const ids = new Set<string>();
-  const comeback = [
-    ...played.shown.map((artist) => artistSeed(artist, "plays")),
-    ...library.shown.map((artist) => artistSeed(artist, "library")),
-    ...similar.shown.map((artist) => ({
-      ...artistSeed(artist, "similar"),
-      browseId: artist.browseId,
-    })),
-  ].filter((seed) => {
-    if (ids.has(seed.id)) return false;
-    ids.add(seed.id);
-    return true;
-  });
-  // oxlint-disable-next-line unicorn/no-array-sort -- sorts the fresh array filter made; Hermes lacks toSorted
-  comeback.sort((a, b) => (shownAt?.(a) ?? 0) - (shownAt?.(b) ?? 0));
-  return { seeds, comeback };
-};
+  const comeback: DiscoverMixSeed[] = [];
+  for (const [artists, from] of [
+    [played.shown, "plays"],
+    [library.shown, "library"],
+    [similar.shown, "similar"],
+  ] as const)
+    for (const artist of artists) {
+      const seed = {
+        ...artistSeed(artist, from),
+        ...("browseId" in artist ? { browseId: artist.browseId as string } : {}),
+      };
+      if (!ids.has(seed.id)) {
+        ids.add(seed.id);
+        comeback.push(seed);
+      }
+      yield;
+    }
+  return {
+    seeds,
+    comeback: yield* sortSteps(comeback, (a, b) => (shownAt?.(a) ?? 0) - (shownAt?.(b) ?? 0)),
+  };
+}
 
 /**
  * The Artist mixes' seeds, four at most. First the owner's most played
@@ -140,9 +154,15 @@ const pickSeeds = (pools: ArtistMixPools, random: RandomSource): SeedPick => {
  * least recently shown first.
  */
 export const artistMixSeeds = (pools: ArtistMixPools, random: RandomSource): DiscoverMixSeed[] => {
-  const { seeds, comeback } = pickSeeds(pools, random);
-  return [...seeds, ...comeback.slice(0, ARTIST_MIX_COUNT - seeds.length)];
+  return finishSteps(artistMixSeedsSteps(pools, random));
 };
+export function* artistMixSeedsSteps(
+  pools: ArtistMixPools,
+  random: RandomSource,
+): Generator<void, DiscoverMixSeed[]> {
+  const { seeds, comeback } = yield* pickSeedsSteps(pools, random);
+  return [...seeds, ...comeback.slice(0, ARTIST_MIX_COUNT - seeds.length)];
+}
 
 /**
  * Every artist Artist mixes' seeds may be picked from, in their order: the
@@ -181,23 +201,44 @@ const SIMILAR_PAGES = 3;
  * doesn't matter here: plays leave room only when every played artist seeds.
  */
 export const artistMixSimilarSource = (pools: ArtistMixPools): DiscoverSeedArtist | null => {
+  return finishSteps(artistMixSimilarSourceSteps(pools));
+};
+export function* artistMixSimilarSourceSteps(
+  pools: ArtistMixPools,
+): Generator<void, DiscoverSeedArtist | null> {
   const { played, library, similar = [] } = pools;
   if (library === undefined || similar.length >= SIMILAR_PAGES) return null;
   // A refresh's avoided artists leave room: pages are read for others first.
-  if (pickSeeds(pools, () => 0).seeds.length >= ARTIST_MIX_COUNT) return null;
+  if ((yield* pickSeedsSteps(pools, () => 0)).seeds.length >= ARTIST_MIX_COUNT) return null;
   const read = new Set(similar.map((page) => identityKey(page.of)));
   // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh copy; Hermes lacks toSorted
-  const byMostSongs = [...library].sort((a, b) => b.songCount - a.songCount);
-  for (const { id, name } of [...played, ...byMostSongs]) {
-    if (ytArtistQuery(name) === null || read.has(identityKey(name))) continue;
-    return { id, name };
-  }
+  const byMostSongs = yield* sortSteps(library, (a, b) => b.songCount - a.songCount);
+  for (const source of [played, byMostSongs])
+    for (const { id, name } of source) {
+      yield;
+      if (ytArtistQuery(name) === null || read.has(identityKey(name))) continue;
+      return { id, name };
+    }
   return null;
-};
+}
 
 /** The similar artists of [pools] that may seed (`similarPool`), none without the Library. */
-const similarOf = ({ played, library, similar = [] }: ArtistMixPools): DiscoverSimilarArtist[] =>
-  library === undefined ? [] : similarPool(similar, [...played, ...library]);
+const similarOf = (pools: ArtistMixPools): DiscoverSimilarArtist[] =>
+  finishSteps(similarOfSteps(pools));
+function* similarOfSteps({
+  played,
+  library,
+  similar = [],
+}: ArtistMixPools): Generator<void, DiscoverSimilarArtist[]> {
+  if (library === undefined) return [];
+  const known: DiscoverSeedArtist[] = [];
+  for (const source of [played, library])
+    for (const artist of source) {
+      known.push(artist);
+      yield;
+    }
+  return yield* similarPoolSteps(similar, known);
+}
 
 /**
  * The similar artists of [similar] that may seed, in order: the pages take
@@ -205,11 +246,11 @@ const similarOf = ({ played, library, similar = [] }: ArtistMixPools): DiscoverS
  * have, whose name is an artist's and that no page gave before (by name or
  * by page).
  */
-const similarPool = (
+function* similarPoolSteps(
   similar: readonly DiscoverSimilarArtists[],
   known: readonly DiscoverSeedArtist[],
-): DiscoverSimilarArtist[] => {
-  const inLibrary = libraryArtistFinder(known);
+): Generator<void, DiscoverSimilarArtist[]> {
+  const inLibrary = yield* libraryArtistFinderSteps(known);
   const names = new Set<string>();
   const pages = new Set<string>();
   const usable = ({ name, browseId }: DiscoverSimilarArtist): boolean => {
@@ -224,17 +265,21 @@ const similarPool = (
   const pool: DiscoverSimilarArtist[] = [];
   for (let more = true; more;) {
     more = false;
-    similar.forEach(({ artists }, page) => {
+    for (let page = 0; page < similar.length; page++) {
+      const { artists } = similar[page]!;
+      let added = false;
       for (let at = next[page] ?? artists.length; at < artists.length; at++) {
         const artist = artists[at];
+        yield;
         if (artist === undefined || !usable(artist)) continue;
         next[page] = at + 1;
         pool.push(artist);
+        added = true;
         more = true;
-        return;
+        break;
       }
-      next[page] = artists.length;
-    });
+      if (!added) next[page] = artists.length;
+    }
   }
   return pool;
-};
+}
