@@ -42,10 +42,12 @@ export const buildHomeMagicQueue = <R, E>(
     readonly refresh?: boolean;
   },
 ) =>
-  stableTasteSnapshot(store, options.turn, () =>
+  stableTasteSnapshot(store, options.turn, (unchanged, discard) =>
     Effect.gen(function* () {
       const library = yield* readTasteLibrary(store, options.turn);
       const taste = yield* options.taste(library);
+      // A profile read with a newer Library: pick again from that one, before drawing.
+      if (!(yield* unchanged(library.revision))) return yield* discard();
       return yield* runSteps(
         magicQueuePicksSteps(
           saved,

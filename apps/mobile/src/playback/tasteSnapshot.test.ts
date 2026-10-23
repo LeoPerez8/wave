@@ -64,8 +64,9 @@ const tiProfile = (store: Store, now: number, history?: TasteHistory) => {
 };
 
 /** A tenth of the fixture's plays: shorter attempts, so a writer outlasts several of them. */
-const fewerPlays = (fixture: { readonly db: { run: (query: ReturnType<typeof sql>) => unknown } }) =>
-  fixture.db.run(sql`DELETE FROM play_events WHERE id % 10 <> 0`);
+const fewerPlays = (fixture: {
+  readonly db: { run: (query: ReturnType<typeof sql>) => unknown };
+}) => fixture.db.run(sql`DELETE FROM play_events WHERE id % 10 <> 0`);
 
 const ongoing = (trackId: number, startedAt: number, listenedMs: number): PlayEvent => ({
   trackId: String(trackId),
@@ -103,7 +104,9 @@ test("playback's own saves don't restart a taste derivation: it finishes in one 
             }),
           );
           fixture.db.run(sql`UPDATE play_events SET pushed = 1 WHERE id = ${playId}`);
-          fixture.db.run(sql`UPDATE artists SET artwork_hash = NULL WHERE id = (SELECT min(id) FROM artists)`);
+          fixture.db.run(
+            sql`UPDATE artists SET artwork_hash = NULL WHERE id = (SELECT min(id) FROM artists)`,
+          );
         }),
         fixture.now,
       ),
@@ -212,7 +215,9 @@ test("Home's due pick under a write storm still saves picks after the checked at
           Effect.gen(function* () {
             // A write that changes nothing the pick sees, yet moves the taste revision.
             if (++reads <= 10)
-              fixture.db.run(sql`UPDATE tracks SET title = title WHERE id = ${fixture.songIds[0]!}`);
+              fixture.db.run(
+                sql`UPDATE tracks SET title = title WHERE id = ${fixture.songIds[0]!}`,
+              );
             return yield* deriveTaste(store, Effect.void, fixture.now, library);
           }),
       }),
@@ -255,7 +260,9 @@ test("the taste revision moves only for what the taste reads", async () => {
         fixture.db.run(sql`UPDATE favorites SET pushed = 1`);
       },
       "an artist image": () =>
-        fixture.db.run(sql`UPDATE artists SET artwork_hash = NULL WHERE id = (SELECT min(id) FROM artists)`),
+        fixture.db.run(
+          sql`UPDATE artists SET artwork_hash = NULL WHERE id = (SELECT min(id) FROM artists)`,
+        ),
     };
     for (const [name, write] of Object.entries(unrelated)) {
       const before = revision();
@@ -278,7 +285,9 @@ test("the taste revision moves only for what the taste reads", async () => {
       "a song's credits": () =>
         fixture.db.run(sql`DELETE FROM track_artists WHERE track_id = ${track}`),
       "an artist's name": () =>
-        fixture.db.run(sql`UPDATE artists SET name = name || '!' WHERE id = (SELECT min(id) FROM artists)`),
+        fixture.db.run(
+          sql`UPDATE artists SET name = name || '!' WHERE id = (SELECT min(id) FROM artists)`,
+        ),
       "a genre": () => fixture.db.run(sql`UPDATE genres SET name = name || '!'`),
     };
     for (const [name, write] of Object.entries(taste)) {
