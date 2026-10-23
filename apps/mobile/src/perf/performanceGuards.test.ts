@@ -111,6 +111,7 @@ test("new Library followers and network asks in a tab's detail route are rejecte
   import { useLibraryQuery } from '@/library/sharedQueries';
   import { useLoadedLibraryFinder as useFinder } from '@/ytmusic/libraryFinder';
   import { YtMusic } from '@/ytmusic/YtMusic';
+  import { Stats } from '@/stats/Stats';
   export default function Screen() {
     useLibraryQuery(queries.songs, []);
     useFinder();
@@ -118,6 +119,9 @@ test("new Library followers and network asks in a tab's detail route are rejecte
     LibraryStore.use(store => store.listSongs);
     LibraryStore.use(store => store.listArtists);
     LibraryStore.use(store => store.tasteHistory);
+    LibraryStore.use(store => store.countedListening);
+    LibraryStore.use(store => store.countedListeningPage(0));
+    Stats.use(stats => stats.recaps(Date.now(), null));
     YtMusic.use(api => api.artist('Muse'));
     fetch('https://api.deezer.com/search?q=Muse');
     fetch('https://lrclib.net/api/get');
@@ -138,9 +142,12 @@ test("new Library followers and network asks in a tab's detail route are rejecte
       "library/LibraryStore.ts#listArtists",
       "library/LibraryStore.ts#listSongs",
       "library/LibraryStore.ts#tasteHistory",
+      "library/LibraryStore.ts#countedListening",
+      "library/LibraryStore.ts#countedListeningPage",
       "library/hooks.ts#songs",
+      "stats/Stats.ts#recaps",
       "ytmusic/libraryFinder.ts#useLoadedLibraryFinder",
-    ],
+    ].toSorted(),
   );
 });
 
