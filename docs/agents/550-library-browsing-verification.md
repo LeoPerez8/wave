@@ -15,3 +15,5 @@ Fixed-height 56dp rows/tile captions remain a render-verification risk inherited
 ## Evidence status
 
 All screenshots, native interactions, light/dark × 1.0/1.3 font, TalkBack, target/inset measurements, keyboard, motion, gesture/button Back and release phone performance are **PENDING**. No APK/device has been tested for this slice. Historical parent captures do not validate this build. The required surface/state inventory and final check results will be completed below.
+
+Additional source finding before its correction (the handle is unchanged at implementation commit `fca7d6e0`): **550-E / P2 / touch target** — playlist grid/large drag handles have a 48dp width but only `22 × fontScale + 16` dp height: 38dp at 1.0 and 44.6dp at 1.3. Keep the same caption centre and enlarge the absolute hit area to at least 48dp; preserve drag recognition, list cell sizes and the existing semantic Move up/down alternatives. Actual gesture/target measurement remains PENDING.

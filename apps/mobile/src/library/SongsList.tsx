@@ -39,6 +39,7 @@ import { songOrderQueryKey, usePagedSongs, useSongFindTexts, useSongOrder } from
 import { promptForMusicFolder } from "./promptForMusicFolder";
 import { songsWithIds } from "./sectionSongs";
 import { SongSortButton } from "./SongSortButton";
+import { libraryQueryState } from "./sharedQueries";
 import { SwipeSummaryRow } from "./SwipeTrackRow";
 import { useSongSort } from "./songSort";
 import { ListIntroLayout, songCount } from "./TrackList";
@@ -91,7 +92,13 @@ export function SongsList() {
     );
   }
 
-  return <PagedSongList order={order} />;
+  const queryKey = songOrderQueryKey(sort);
+  return (
+    <PagedSongList
+      order={order}
+      orderError={read === null && libraryQueryState(queryKey) === "error" ? queryKey : undefined}
+    />
+  );
 }
 
 /** A row of the Songs list as `TrackRow` draws it. */
@@ -133,7 +140,13 @@ const SELECTING_AHEAD = PAGED_ROWS_LIMITS.pageSize;
  * above the head until the list is pulled down; a query narrows the rows to
  * the songs found, in the order's order, and hides the spine.
  */
-function PagedSongList({ order }: { order: SongOrder }) {
+function PagedSongList({
+  order,
+  orderError,
+}: {
+  order: SongOrder;
+  orderError: string | undefined;
+}) {
   useRenderCount("PagedSongList");
   const scrollable = useListScrollable();
   const list = useRef<LegendListRef>(null);
@@ -269,6 +282,7 @@ function PagedSongList({ order }: { order: SongOrder }) {
   const header: ReactElement = (
     <View>
       <ScanProgressBanner />
+      {orderError !== undefined && <LibraryReadNote queryKey={orderError} label="song order" />}
       <ListIntroLayout
         line={songCount(order.ids.length)}
         onPlay={() => void playTrackIds(order.ids, missing, undefined, SONGS_CONTEXT)}

@@ -69,6 +69,8 @@ export function LibraryReadFeedback({
   return (
     <ScrollView
       className="flex-1"
+      keyboardShouldPersistTaps="handled"
+      keyboardDismissMode="on-drag"
       contentContainerStyle={{ paddingHorizontal: grid.margin, paddingBottom: bottomInset }}
     >
       {scan && <ScanProgressBanner />}
