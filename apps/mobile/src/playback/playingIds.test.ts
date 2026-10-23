@@ -3,6 +3,7 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import * as Effect from "effect/Effect";
 import { normalizeTrack, type YtSong } from "@wave/core";
+import { scanBatchChange } from "../library/scanChanges.ts";
 import { loadLibraryStore } from "../../bench/fastAgain/store.ts";
 import {
   addLibrary,
@@ -36,6 +37,101 @@ const track = (
   artworkHash: null,
   hasLyrics: false,
   explicit: "unknown" as const,
+});
+
+test("committed scan additions and edits acquire a match without changing playback", async () => {
+  const { createPlayingIds } = await import("./playingIds.ts");
+  const { makeExternalStore } = await import("../lib/externalStore.ts");
+  const bus = await import("../library/libraryChanges.ts");
+  const db = await openTestDatabase();
+  let stop = () => {};
+  try {
+    const store = await loadLibraryStore(root, db);
+    const target = makeExternalStore({ id: "yt:playing", song });
+    const queries: ReturnType<typeof traceQueries>[] = [];
+    const ids = createPlayingIds({
+      target,
+      read: async (playingSong) => {
+        const measured = traceQueries(db, () => Effect.runSync(store.matchingSong(playingSong)));
+        queries.push(measured);
+        return measured.result;
+      },
+      onDownload: bus.onDownloadedRecording,
+      onSavedRecordings: bus.onSavedRecordings,
+      onLibraryChange: bus.onLibraryChange,
+    });
+    const stops = Array.from({ length: 8 }, () => ids.subscribe(() => {}));
+    stop = () => stops.forEach((detach) => detach());
+    await tick();
+    assert.deepEqual([...ids.get()], ["yt:playing"]);
+    queries.length = 0;
+    const saved = Effect.runSync(store.saveBatch([track()], []));
+    bus.publishLibraryChange(scanBatchChange(saved.trackIds));
+    // Scan invalidations retain the shared registry's 1.5 s burst coalescing.
+    await new Promise((resolve) => setTimeout(resolve, 1600));
+    const local = saved.trackIds[0]!;
+    assert.deepEqual([...ids.get()], ["yt:playing", String(local)]);
+    assert.equal(queries.length, 1, "eight consumers share one targeted scan lookup");
+    assert.equal(queries[0]!.queries.reduce((sum, query) => sum + query.rows, 0), 1);
+
+    Effect.runSync(store.removeSongs([local]));
+    bus.publishLibraryChange({ kind: "tracks", ids: [local] });
+    await tick();
+    assert.deepEqual([...ids.get()], ["yt:playing"]);
+    const different = Effect.runSync(store.saveBatch([track("Another song")], []));
+    bus.publishLibraryChange(scanBatchChange(different.trackIds));
+    queries.length = 0;
+    Effect.runSync(store.saveBatch([track()], []));
+    bus.publishLibraryChange({ kind: "tracks", ids: different.trackIds });
+    await new Promise((resolve) => setTimeout(resolve, 1600));
+    assert.deepEqual([...ids.get()], ["yt:playing", String(different.trackIds[0])]);
+    assert.equal(queries.length, 1, "a committed edit can create a previously unknown match");
+  } finally {
+    stop();
+    closeTestDatabase(db);
+  }
+});
+
+test("scan bursts retag the matched row while unrelated saves do no playing lookup", async () => {
+  const { createPlayingIds } = await import("./playingIds.ts");
+  const { makeExternalStore } = await import("../lib/externalStore.ts");
+  const bus = await import("../library/libraryChanges.ts");
+  const db = await openTestDatabase();
+  let stop = () => {};
+  try {
+    const store = await loadLibraryStore(root, db);
+    const saved = Effect.runSync(store.saveBatch([track()], []));
+    const ids = createPlayingIds({
+      target: makeExternalStore({ id: "yt:playing", song }),
+      read: async (playingSong) => Effect.runSync(store.matchingSong(playingSong)),
+      onDownload: bus.onDownloadedRecording,
+      onSavedRecordings: bus.onSavedRecordings,
+      onLibraryChange: bus.onLibraryChange,
+    });
+    stop = ids.subscribe(() => {});
+    await tick();
+    assert.deepEqual([...ids.get()], ["yt:playing", String(saved.trackIds[0])]);
+    const before = ids.stats().reads;
+    for (let index = 0; index < 10; index++) {
+      const unrelated = Effect.runSync(
+        store.saveBatch([track("Another song", "Beyoncé", 180000, `/Music/other${index}.m4a`)], []),
+      );
+      bus.publishLibraryChange(scanBatchChange(unrelated.trackIds));
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1600));
+    assert.equal(ids.stats().reads, before, "unrelated scan batches never refresh the match");
+
+    Effect.runSync(store.saveBatch([track("Another song")], []));
+    for (let index = 0; index < 10; index++)
+      bus.publishLibraryChange(scanBatchChange(saved.trackIds));
+    await new Promise((resolve) => setTimeout(resolve, 1600));
+    assert.deepEqual([...ids.get()], ["yt:playing"]);
+    assert.equal(ids.stats().reads, before + 1, "matched-row bursts coalesce into one lookup");
+    assert.equal(Effect.runSync(store.matchingSong(song)), null);
+  } finally {
+    stop();
+    closeTestDatabase(db);
+  }
 });
 
 test("eight mounted lists share one source refresh and row read across the playing download", async () => {
