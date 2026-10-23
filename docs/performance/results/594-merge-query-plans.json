@@ -1,0 +1,247 @@
+[
+  {
+    "name": "mixSongsPage",
+    "after": 128,
+    "queries": [
+      {
+        "sql": "select \"tracks\".\"id\", \"tracks\".\"path\", \"tracks\".\"title\", \"tracks\".\"artist_credit\", \"albums\".\"title\", \"tracks\".\"duration_ms\", \"artwork\".\"thumb_path\", \"artwork\".\"path\", \"tracks\".\"title_sort\", \"artists\".\"sort\", \"albums\".\"title_sort\", \"tracks\".\"added_at\", \"tracks\".\"album_id\", \"tracks\".\"artist_id\", (\n  SELECT group_concat(artist_id) FROM (\n    SELECT artist_id FROM track_artists\n    WHERE track_artists.track_id = \"tracks\".\"id\" ORDER BY position)), \"tracks\".\"disc_number\", \"tracks\".\"track_number\", \"tracks\".\"year\", (\n  SELECT name FROM genres WHERE genres.id = \"tracks\".\"genre_id\"), \"tracks\".\"has_lyrics\", \"tracks\".\"explicit\" from \"tracks\" inner join \"artists\" on \"tracks\".\"artist_id\" = \"artists\".\"id\" inner join \"albums\" on \"tracks\".\"album_id\" = \"albums\".\"id\" left join \"artwork\" on \"tracks\".\"artwork_hash\" = \"artwork\".\"hash\" where \"tracks\".\"id\" > ? order by \"tracks\".\"id\" limit ?",
+        "rows": 128,
+        "plan": [
+          "SEARCH tracks USING INTEGER PRIMARY KEY (rowid>?)",
+          "SEARCH artists USING INTEGER PRIMARY KEY (rowid=?)",
+          "SEARCH albums USING INTEGER PRIMARY KEY (rowid=?)",
+          "SEARCH artwork USING INDEX sqlite_autoindex_artwork_1 (hash=?) LEFT-JOIN",
+          "CORRELATED SCALAR SUBQUERY 2",
+          "CO-ROUTINE (subquery-1)",
+          "SEARCH track_artists USING INDEX sqlite_autoindex_track_artists_1 (track_id=?)",
+          "SCAN (subquery-1)",
+          "CORRELATED SCALAR SUBQUERY 3",
+          "SEARCH genres USING INTEGER PRIMARY KEY (rowid=?)"
+        ]
+      },
+      {
+        "sql": "SELECT id, genres FROM tracks WHERE id > ? AND id <= ? ORDER BY id",
+        "rows": 128,
+        "plan": ["SEARCH tracks USING INTEGER PRIMARY KEY (rowid>? AND rowid<?)"]
+      }
+    ]
+  },
+  {
+    "name": "mixArtistsPage",
+    "after": 128,
+    "queries": [
+      {
+        "sql": "\n  SELECT a.id, a.name, a.sort,\n    (SELECT count(*) FROM albums WHERE album_artist_id = a.id) AS albumCount,\n    (SELECT count(*) FROM (\n      SELECT track_id FROM track_artists WHERE artist_id = a.id\n      UNION\n      SELECT t.id FROM album_artists aa JOIN tracks t ON t.album_id = aa.album_id WHERE aa.artist_id = a.id\n    )) AS trackCount,\n    art.thumb_path AS thumbPath, art.path AS artworkPath\n  FROM artists a LEFT JOIN artwork art ON art.hash = a.artwork_hash\n  WHERE a.id > ? AND (\n    EXISTS(SELECT 1 FROM track_artists WHERE artist_id = a.id)\n    OR EXISTS(SELECT 1 FROM album_artists aa JOIN tracks t ON t.album_id = aa.album_id WHERE aa.artist_id = a.id)\n  ) ORDER BY a.id LIMIT 128",
+        "rows": 0,
+        "plan": [
+          "SEARCH a USING INTEGER PRIMARY KEY (rowid>?)",
+          "CORRELATED SCALAR SUBQUERY 5",
+          "SEARCH track_artists USING COVERING INDEX track_artists_artist_idx (artist_id=?)",
+          "CORRELATED SCALAR SUBQUERY 6",
+          "SEARCH aa USING INDEX album_artists_artist_idx (artist_id=?)",
+          "SEARCH t USING COVERING INDEX tracks_album_idx (album_id=?)",
+          "SEARCH art USING INDEX sqlite_autoindex_artwork_1 (hash=?) LEFT-JOIN",
+          "CORRELATED SCALAR SUBQUERY 1",
+          "SEARCH albums USING COVERING INDEX albums_album_artist_idx (album_artist_id=?)",
+          "CORRELATED SCALAR SUBQUERY 4",
+          "CO-ROUTINE (subquery-3)",
+          "COMPOUND QUERY",
+          "LEFT-MOST SUBQUERY",
+          "SEARCH track_artists USING INDEX track_artists_artist_idx (artist_id=?)",
+          "UNION USING TEMP B-TREE",
+          "SEARCH aa USING INDEX album_artists_artist_idx (artist_id=?)",
+          "SEARCH t USING COVERING INDEX tracks_album_idx (album_id=?)",
+          "SCAN (subquery-3)"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "mixCreditPage",
+    "after": 128,
+    "queries": [
+      {
+        "sql": "\n  SELECT pt.track_id AS id, coalesce((SELECT json_group_array(json_array(ar.id, ar.sort)) FROM (\n    SELECT artist_id FROM track_artists WHERE track_id = pt.track_id\n    UNION ALL SELECT artist_id FROM deleted_track_artists WHERE track_id = pt.track_id\n  ) c JOIN artists ar ON ar.id = c.artist_id), '[]') AS credits\n  FROM play_totals pt LEFT JOIN tracks t ON t.id = pt.track_id\n  JOIN albums al ON al.id = coalesce(t.album_id, pt.album_id)\n  WHERE pt.track_id > ? ORDER BY pt.track_id LIMIT 128",
+        "rows": 128,
+        "plan": [
+          "SEARCH pt USING INTEGER PRIMARY KEY (rowid>?)",
+          "SEARCH t USING INTEGER PRIMARY KEY (rowid=?) LEFT-JOIN",
+          "SEARCH al USING INTEGER PRIMARY KEY (rowid=?)",
+          "CORRELATED SCALAR SUBQUERY 3",
+          "CO-ROUTINE c",
+          "COMPOUND QUERY",
+          "LEFT-MOST SUBQUERY",
+          "SEARCH track_artists USING INDEX sqlite_autoindex_track_artists_1 (track_id=?)",
+          "UNION ALL",
+          "SEARCH deleted_track_artists USING INDEX sqlite_autoindex_deleted_track_artists_1 (track_id=?)",
+          "SCAN c",
+          "SEARCH ar USING INTEGER PRIMARY KEY (rowid=?)"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "mixHistoryPage",
+    "after": 128,
+    "queries": [
+      {
+        "sql": "\n  SELECT id, track_id AS trackId, recording_key AS recordingKey, counted, started_at AS startedAt, listened_ms AS listenedMs\n  FROM play_events WHERE id > ? ORDER BY id LIMIT 128",
+        "rows": 128,
+        "plan": ["SEARCH play_events USING INTEGER PRIMARY KEY (rowid>?)"]
+      }
+    ]
+  },
+  {
+    "name": "mixStreamedPage",
+    "after": 128,
+    "queries": [
+      {
+        "sql": "\n    SELECT rowid AS cursor, song, plays, first_played_at AS firstPlayedAt\n    FROM streamed_songs WHERE rowid > ? ORDER BY rowid LIMIT 128",
+        "rows": 0,
+        "plan": ["SEARCH streamed_songs USING INTEGER PRIMARY KEY (rowid>?)"]
+      }
+    ]
+  },
+  {
+    "name": "mixPlaylistedPage",
+    "after": 128,
+    "queries": [
+      {
+        "sql": "\n    SELECT pi.id, pi.yt_song AS song, pi.added_at AS addedAt\n    FROM playlist_items pi JOIN playlists p ON p.id = pi.playlist_id\n    WHERE pi.id > ? AND pi.yt_song IS NOT NULL AND NOT pi.deleted AND NOT p.deleted\n    ORDER BY pi.id LIMIT 128",
+        "rows": 0,
+        "plan": [
+          "SEARCH pi USING INTEGER PRIMARY KEY (rowid>?)",
+          "SEARCH p USING INTEGER PRIMARY KEY (rowid=?)"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "mixCatalogPage",
+    "after": 128,
+    "queries": [
+      {
+        "sql": "\n    SELECT rowid AS cursor, video_id AS videoId, song, first_seen_at AS firstSeenAt, last_seen_at AS lastSeenAt\n    FROM candidate_songs WHERE rowid > ? ORDER BY rowid LIMIT ?",
+        "rows": 0,
+        "plan": ["SEARCH candidate_songs USING INTEGER PRIMARY KEY (rowid>?)"]
+      }
+    ]
+  },
+  {
+    "name": "graphCatalogPage",
+    "after": 128,
+    "queries": [
+      {
+        "sql": "\n    SELECT rowid AS cursor,\n      video_id AS videoId,\n      CASE WHEN json_valid(song) THEN CASE WHEN\n        json_type(song) = 'object' AND json_type(song, '$.videoId') = 'text' AND json_extract(song, '$.videoId') <> ''\n        AND json_type(song, '$.title') = 'text' AND json_type(song, '$.artists') = 'array'\n        AND NOT EXISTS(SELECT 1 FROM json_each(song, '$.artists') WHERE type <> 'text')\n        AND json_type(song, '$.album') IN ('text','null')\n        AND json_type(song, '$.artworkUrl') IN ('text','null')\n        AND json_type(song, '$.durationMs') IN ('integer','real','null')\n      THEN json_extract(song, '$.artists') END END AS artists\n    FROM candidate_songs WHERE rowid > ? ORDER BY rowid LIMIT ?",
+        "rows": 0,
+        "plan": [
+          "SEARCH candidate_songs USING INTEGER PRIMARY KEY (rowid>?)",
+          "CORRELATED SCALAR SUBQUERY 1",
+          "SCAN json_each VIRTUAL TABLE INDEX 3:"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "graphRadioPage",
+    "after": 128,
+    "queries": [
+      {
+        "sql": "\n    SELECT rowid AS cursor, video_id AS videoId, seed_key AS seed, seed_name AS seedName, last_seen_at AS lastSeenAt\n    FROM candidate_radios WHERE rowid > ? ORDER BY rowid LIMIT ?",
+        "rows": 0,
+        "plan": ["SEARCH candidate_radios USING INTEGER PRIMARY KEY (rowid>?)"]
+      }
+    ]
+  },
+  {
+    "name": "graphSimilarPage",
+    "after": "a",
+    "queries": [
+      {
+        "sql": "select \"artist_key\", \"outcome\", CASE WHEN json_valid(\"yt_artists\".\"page\") THEN json_extract(\"page\", '$.name') END, CASE WHEN json_valid(\"yt_artists\".\"page\") THEN json_extract(\"page\", '$.similar') END from \"yt_artists\" where \"yt_artists\".\"artist_key\" > ? order by \"yt_artists\".\"artist_key\" limit ?",
+        "rows": 0,
+        "plan": ["SEARCH yt_artists USING INDEX sqlite_autoindex_yt_artists_1 (artist_key>?)"]
+      }
+    ]
+  },
+  {
+    "name": "graphPlayPage",
+    "after": [100, 128],
+    "queries": [
+      {
+        "sql": "\n    SELECT pe.id, pe.started_at AS startedAt, pe.listened_ms AS listenedMs, pe.end_reason AS endReason,\n      CASE WHEN t.id IS NOT NULL AND a.id IS NOT NULL AND al.id IS NOT NULL THEN (\n        SELECT json_group_array(name) FROM (\n          SELECT ar.name FROM track_artists ta JOIN artists ar ON ar.id = ta.artist_id\n          WHERE ta.track_id = t.id ORDER BY ta.position\n        )\n      ) END AS artists\n    FROM play_events pe INDEXED BY play_events_started_at_idx\n      LEFT JOIN tracks t ON t.id = pe.track_id\n      LEFT JOIN artists a ON a.id = t.artist_id\n      LEFT JOIN albums al ON al.id = t.album_id\n    WHERE pe.started_at = ? AND pe.id > ?\n    ORDER BY pe.started_at, pe.id LIMIT ?",
+        "rows": 0,
+        "plan": [
+          "SEARCH pe USING INDEX play_events_started_at_idx (started_at=? AND rowid>?)",
+          "SEARCH t USING INTEGER PRIMARY KEY (rowid=?) LEFT-JOIN",
+          "SEARCH a USING INTEGER PRIMARY KEY (rowid=?) LEFT-JOIN",
+          "SEARCH al USING INTEGER PRIMARY KEY (rowid=?) LEFT-JOIN",
+          "CORRELATED SCALAR SUBQUERY 2",
+          "CO-ROUTINE (subquery-1)",
+          "SEARCH ta USING INDEX sqlite_autoindex_track_artists_1 (track_id=?)",
+          "SEARCH ar USING INTEGER PRIMARY KEY (rowid=?)",
+          "SCAN (subquery-1)"
+        ]
+      },
+      {
+        "sql": "\n    SELECT pe.id, pe.started_at AS startedAt, pe.listened_ms AS listenedMs, pe.end_reason AS endReason,\n      CASE WHEN t.id IS NOT NULL AND a.id IS NOT NULL AND al.id IS NOT NULL THEN (\n        SELECT json_group_array(name) FROM (\n          SELECT ar.name FROM track_artists ta JOIN artists ar ON ar.id = ta.artist_id\n          WHERE ta.track_id = t.id ORDER BY ta.position\n        )\n      ) END AS artists\n    FROM play_events pe INDEXED BY play_events_started_at_idx\n      LEFT JOIN tracks t ON t.id = pe.track_id\n      LEFT JOIN artists a ON a.id = t.artist_id\n      LEFT JOIN albums al ON al.id = t.album_id\n    WHERE pe.started_at > ?\n    ORDER BY pe.started_at, pe.id LIMIT ?",
+        "rows": 128,
+        "plan": [
+          "SEARCH pe USING INDEX play_events_started_at_idx (started_at>?)",
+          "SEARCH t USING INTEGER PRIMARY KEY (rowid=?) LEFT-JOIN",
+          "SEARCH a USING INTEGER PRIMARY KEY (rowid=?) LEFT-JOIN",
+          "SEARCH al USING INTEGER PRIMARY KEY (rowid=?) LEFT-JOIN",
+          "CORRELATED SCALAR SUBQUERY 2",
+          "CO-ROUTINE (subquery-1)",
+          "SEARCH ta USING INDEX sqlite_autoindex_track_artists_1 (track_id=?)",
+          "SEARCH ar USING INTEGER PRIMARY KEY (rowid=?)",
+          "SCAN (subquery-1)"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "tastePlaysPage",
+    "after": [100, 128],
+    "queries": [
+      {
+        "sql": "SELECT pe.id, pe.track_id AS trackId, t.id AS present,\n      pe.started_at AS startedAt, pe.listened_ms AS listenedMs, pe.end_reason AS endReason\n    FROM play_events pe INDEXED BY play_events_started_at_idx\n    LEFT JOIN tracks t ON t.id = pe.track_id\n    WHERE pe.started_at = ? AND pe.id > ? ORDER BY pe.started_at, pe.id LIMIT ?",
+        "rows": 0,
+        "plan": [
+          "SEARCH pe USING INDEX play_events_started_at_idx (started_at=? AND rowid>?)",
+          "SEARCH t USING INTEGER PRIMARY KEY (rowid=?) LEFT-JOIN"
+        ]
+      },
+      {
+        "sql": "SELECT pe.id, pe.track_id AS trackId, t.id AS present,\n      pe.started_at AS startedAt, pe.listened_ms AS listenedMs, pe.end_reason AS endReason\n    FROM play_events pe INDEXED BY play_events_started_at_idx\n    LEFT JOIN tracks t ON t.id = pe.track_id\n    WHERE pe.started_at > ? ORDER BY pe.started_at, pe.id LIMIT ?",
+        "rows": 128,
+        "plan": [
+          "SEARCH pe USING INDEX play_events_started_at_idx (started_at>?)",
+          "SEARCH t USING INTEGER PRIMARY KEY (rowid=?) LEFT-JOIN"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "tasteFavoritesPage",
+    "after": 128,
+    "queries": [
+      {
+        "sql": "\n    SELECT rowid AS cursor, track_id AS trackId, changed_at AS changedAt, deleted\n    FROM favorites WHERE rowid > ? ORDER BY rowid LIMIT ?",
+        "rows": 88,
+        "plan": ["SEARCH favorites USING INTEGER PRIMARY KEY (rowid>?)"]
+      }
+    ]
+  },
+  {
+    "name": "tasteDownloadsPage",
+    "after": 128,
+    "queries": [
+      {
+        "sql": "\n    SELECT id, CASE WHEN video_id IS NOT NULL AND path IS NOT NULL THEN min(added_at, modified_at) END AS downloadedAt\n    FROM tracks WHERE id > ? ORDER BY id LIMIT ?",
+        "rows": 128,
+        "plan": ["SEARCH tracks USING INTEGER PRIMARY KEY (rowid>?)"]
+      }
+    ]
+  }
+]
