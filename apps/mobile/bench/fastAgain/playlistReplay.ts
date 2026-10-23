@@ -195,11 +195,14 @@ export const createPlaylistReplay = async (
             source === undefined
               ? await Effect.runPromise(store.playlistRecommendationInput(playlistId))
               : await Effect.runPromise(source.get(playlistId), { signal });
+          const inputGraph = await graphRead(signal);
+          // Ti ranks once after each successful read, not once per renewal request.
+          if (!modern && measuring) work.ranks++;
           return {
             playlist: input.playlist,
             sources: {
               ...input,
-              graph: await graphRead(signal),
+              graph: inputGraph,
               now: fixture.now,
               online: false,
               ytMusicEnabled: false,
@@ -227,8 +230,6 @@ export const createPlaylistReplay = async (
       });
       const renew = session.renew;
       session.renew = (request) => {
-        // Historical session owns its synchronous rank, one for every successful input read.
-        if (!modern && measuring) work.ranks++;
         const promise = renew(request);
         pending.add(promise);
         void promise.finally(() => pending.delete(promise));
