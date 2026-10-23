@@ -29,6 +29,7 @@ import { afterPaint } from "@/lib/afterPaint";
 import { followPlaylistRecommendations } from "./playlistRecommendationVisit";
 import { playlistRecommendationInput } from "./playlistRecommendationSource";
 import { makeExternalStore } from "@/lib/externalStore";
+import { RECOMMENDATION_TIMEOUT } from "@/lib/recommendationTimeout";
 import { CROSSFADE_MS } from "@/motion/Crossfade";
 import { WaveNative } from "@/native/waveNative";
 import { playTrackIds, playYtSongs } from "@/playback/actions";
@@ -89,7 +90,7 @@ export function PlaylistRecommendations({
                 ytMusicEnabled: enabledNow.get(),
               },
             };
-          }).pipe(Effect.timeout("60 seconds")),
+          }).pipe(Effect.timeout(RECOMMENDATION_TIMEOUT)),
           { signal },
         ),
       rank: async (input, signal) => {
@@ -98,7 +99,7 @@ export function PlaylistRecommendations({
             runSteps(
               playlistRecommendationsSteps(input.playlist, input.sources),
               freeTurnEffect,
-            ).pipe(Effect.timeout("60 seconds")),
+            ).pipe(Effect.timeout(RECOMMENDATION_TIMEOUT)),
             { signal },
           )
           .catch((error: unknown) => {

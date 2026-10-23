@@ -33,7 +33,7 @@ test("lyrics deliver separate rounded sticker and gradient background images", a
   await deliverInstagramStory(native, "/cache/shared-images/card.png", background, "1234", frame);
 
   assert.deepEqual(calls, [
-    ["/cache/shared-images/card.png", frame, background.top, background.bottom],
+    ["/cache/shared-images/card.png", frame, background],
     ["/cache/shared-images/sticker.png", "/cache/shared-images/background.png", "1234"],
   ]);
   assert.notEqual(background.top, background.bottom);
@@ -60,8 +60,8 @@ test("song and Recap shares keep their existing image and background without lyr
   );
   await deliverInstagramStory(native, "recap.png", recapStoryBackground("#345678"), "1234");
   assert.deepEqual(sent, [
-    ["song.png", "#123456", "#345678", "1234"],
-    ["recap.png", "#345678", "#345678", "1234"],
+    ["song.png", { top: "#123456", bottom: "#345678" }, "1234"],
+    ["recap.png", { top: "#345678", bottom: "#345678" }, "1234"],
   ]);
 });
 

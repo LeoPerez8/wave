@@ -69,6 +69,7 @@ import { createSerialWork } from "@/lib/serialWork";
 import { freeTurnEffect, settledTurnEffect } from "@/lib/backgroundWork";
 import { makeExternalStore, type ExternalStore } from "@/lib/externalStore";
 import { withNetworkLog } from "@/lib/networkMeter";
+import { RECOMMENDATION_TIMEOUT } from "@/lib/recommendationTimeout";
 import { persistedSetting, type PersistedSetting } from "@/lib/persistedSetting";
 import { libraryListQueries } from "@/library/hooks";
 import type { SongRow } from "@/library/LibraryStore";
@@ -359,7 +360,7 @@ const loggedBuild = (id: MixSectionId, pulled: boolean, avoid?: MixRefreshAvoid)
     settledTurnEffect.pipe(
       Effect.andThen(buildSource.run(SECTIONS[id].build(avoid), freeTurnEffect)),
       buildPermit.withPermits(1),
-      Effect.timeout("60 seconds"),
+      Effect.timeout(RECOMMENDATION_TIMEOUT),
     ),
     builtOutcome,
   );

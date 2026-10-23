@@ -1,15 +1,8 @@
 import { LegendList, type LegendListRef } from "@legendapp/list/react-native";
-import {
-  IconCircleArrowDownFilled,
-  IconMenu2,
-  IconRepeat,
-  IconRepeatOnce,
-  IconX,
-} from "@tabler/icons-react-native";
+import { IconMenu2, IconRepeat, IconRepeatOnce, IconX } from "@tabler/icons-react-native";
 import {
   currentEntry,
   counted,
-  trackRowDownloaded,
   upNext,
   upNextMove,
   withPendingMoves,
@@ -36,7 +29,9 @@ import { CatalogLine } from "@/catalog/CatalogLine";
 import { CELL, grid } from "@/catalog/grid";
 import { Hairline } from "@/catalog/Hairline";
 import { TrackSkeletons } from "@/catalog/Skeletons";
-import { TextButton } from "@/components/TextButton";
+import { DownloadedIcon } from "@/catalog/TrackRow";
+import { RecommendationsFailed } from "@/components/RecommendationsFailed";
+import { useMissingSongs } from "@/library/hooks";
 import { Press } from "@/motion/Press";
 import { usePerfVisible, useRenderCount } from "@/perf/perf";
 import {
@@ -55,7 +50,7 @@ import {
 } from "@/playback/MagicQueue";
 import { queueState } from "@/playback/Queue";
 import type { PlaybackState } from "@/playback/Player";
-import type { QueueTrack } from "@/playback/queueTracks";
+import { queueTrackDownloaded, type QueueTrack } from "@/playback/queueTracks";
 import { useThemeColor } from "@/theme/useThemeColor";
 
 import { useQueueTracks } from "./hooks";
@@ -159,12 +154,12 @@ export function QueueHeader({ item }: { item: NonNullable<PlaybackState["item"]>
 
 type RowContentProps = {
   track: QueueTrack | undefined;
+  /** It has a Library file (`queueTrackDownloaded`). */
+  downloaded: boolean;
 };
 
 /** Thumbnail, title and artist: the part of an Up Next row that a drag lifts. */
-function RowText({ track }: RowContentProps) {
-  const accent = useThemeColor("accent");
-  const downloaded = trackRowDownloaded({ trackId: track?.id ?? "" });
+function RowText({ track, downloaded }: RowContentProps) {
   return (
     <>
       <Artwork uri={thumbUri(track)} size={THUMB} />
@@ -173,7 +168,7 @@ function RowText({ track }: RowContentProps) {
           {track?.title ?? " "}
         </Text>
         <View className="flex-row items-center" style={{ gap: CELL / 2 }}>
-          {downloaded && <IconCircleArrowDownFilled size={14} color={accent} />}
+          {downloaded && <DownloadedIcon />}
           <Text numberOfLines={1} className="flex-1 font-sans text-body text-secondary">
             {track?.artist ?? " "}
           </Text>
@@ -187,6 +182,7 @@ type RowProps = {
   entry: QueueEntry;
   index: number;
   track: QueueTrack | undefined;
+  downloaded: boolean;
   /** The row being dragged leaves a gap; its lifted copy follows the finger. */
   lifted: boolean;
   drag: UpNextDragRows;
@@ -198,14 +194,21 @@ type RowProps = {
  * tracks change (a batch of covers landing), and only the rows whose track
  * changed need to.
  */
-const UpNextRow = memo(function UpNextRow({ entry, index, track, lifted, drag, count }: RowProps) {
+const UpNextRow = memo(function UpNextRow({
+  entry,
+  index,
+  track,
+  downloaded,
+  lifted,
+  drag,
+  count,
+}: RowProps) {
   useRenderCount("UpNextRow");
   const secondary = useThemeColor("secondary");
   const key = entry.key;
   const { pan, style } = useUpNextRowDrag(drag, key, index);
 
   const title = track?.title ?? "Song";
-  const downloaded = trackRowDownloaded({ trackId: track?.id ?? "" });
   return (
     <Animated.View style={[{ height: ROW, opacity: lifted ? 0 : 1 }, style]}>
       <View className="flex-1 flex-row items-center">
@@ -231,7 +234,7 @@ const UpNextRow = memo(function UpNextRow({ entry, index, track, lifted, drag, c
           className="flex-1 flex-row items-center self-stretch"
           style={{ gap: CELL * 1.5 }}
         >
-          <RowText track={track} />
+          <RowText track={track} downloaded={downloaded} />
         </Press>
         <Press
           accessibilityRole="button"
@@ -286,6 +289,11 @@ export function UpNextList({ bottomInset }: { bottomInset: number }) {
   const shown = useMemo(() => withPendingMoves(queue, pending), [queue, pending]);
   const entries = useMemo(() => upNext(shown), [shown]);
   const tracks = useQueueTracks(queue.entries);
+  const missingSongs = useMissingSongs();
+  const missingIds = useMemo(
+    () => new Set(missingSongs.map((song) => String(song.id))),
+    [missingSongs],
+  );
   const playingKey = currentEntry(queue)?.key ?? null;
   const batchLoading = useMagicBatchLoading();
   const batchFailed = useMagicBatchFailed();
@@ -313,21 +321,25 @@ export function UpNextList({ bottomInset }: { bottomInset: number }) {
   }, [placeUpNext, queue.context]);
 
   const renderItem = useCallback(
-    ({ item, index }: { item: QueueEntry; index: number }) => (
-      <UpNextRow
-        entry={item}
-        index={index}
-        track={tracks.get(item.trackId)}
-        lifted={drag?.key === item.key}
-        drag={rowDrag}
-        count={entries.length}
-      />
-    ),
-    [tracks, drag, rowDrag, entries.length],
+    ({ item, index }: { item: QueueEntry; index: number }) => {
+      const track = tracks.get(item.trackId);
+      return (
+        <UpNextRow
+          entry={item}
+          index={index}
+          track={track}
+          downloaded={queueTrackDownloaded(track, missingIds)}
+          lifted={drag?.key === item.key}
+          drag={rowDrag}
+          count={entries.length}
+        />
+      );
+    },
+    [tracks, missingIds, drag, rowDrag, entries.length],
   );
   // Legend List re-renders a row only when its item or extraData changes, and a
   // queue picked back up after JS restarted learns its tracks after the first render.
-  const rowState = useMemo(() => ({ tracks, drag }), [tracks, drag]);
+  const rowState = useMemo(() => ({ tracks, missingIds, drag }), [tracks, missingIds, drag]);
 
   if (entries.length === 0 && batchLoading) {
     return (
@@ -338,15 +350,7 @@ export function UpNextList({ bottomInset }: { bottomInset: number }) {
   }
 
   const failure = batchFailed ? (
-    <View className="flex-row items-center" style={{ gap: CELL, paddingTop: CELL * 2 }}>
-      <Text
-        accessibilityLiveRegion="polite"
-        className="flex-1 font-sans text-subheadline text-secondary"
-      >
-        Couldn't load recommendations.
-      </Text>
-      <TextButton label="Try Again" onPress={retryMagicBatch} />
-    </View>
+    <RecommendationsFailed onRetry={retryMagicBatch} style={{ paddingTop: CELL * 2 }} />
   ) : null;
 
   if (entries.length === 0) {
@@ -397,7 +401,10 @@ export function UpNextList({ bottomInset }: { bottomInset: number }) {
           style={[{ height: ROW }, liftedStyle]}
         >
           <View className="flex-1 flex-row items-center" style={{ gap: CELL * 1.5 }}>
-            <RowText track={liftedTrack} />
+            <RowText
+              track={liftedTrack}
+              downloaded={queueTrackDownloaded(liftedTrack, missingIds)}
+            />
           </View>
           <View style={{ width: grid.upNextTrailing }} />
         </Animated.View>

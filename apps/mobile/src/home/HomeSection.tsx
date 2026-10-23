@@ -18,7 +18,7 @@ import { CELL, grid } from "@/catalog/grid";
 import { Hairline } from "@/catalog/Hairline";
 import { PullRefreshRow } from "@/catalog/PullRefreshRow";
 import { TitledSection } from "@/catalog/TitledSection";
-import { TextButton } from "@/components/TextButton";
+import { RecommendationsFailed } from "@/components/RecommendationsFailed";
 import { fileUri } from "@/lib/fileUri";
 import type { MostPlayedRow } from "@/library/db/playHistory";
 import { openStats, openStatsSeeAll } from "@/library/routes";
@@ -207,7 +207,6 @@ function MixRow({ id, section }: { id: MixSectionId; section: DiscoverMixesSecti
   const label = discoverRowTitle(id);
   const refresh = () => refreshMixes(id);
   const updating = section.kind === "skeleton" || (section.kind === "mixes" && section.updating);
-  const failed = section.kind === "failed" || (section.kind === "mixes" && section.failed);
   return (
     <DiscoverRow
       label={label}
@@ -220,17 +219,7 @@ function MixRow({ id, section }: { id: MixSectionId; section: DiscoverMixesSecti
       ) : section.kind === "mixes" ? (
         <DiscoverMixRow mixes={section.mixes} onRefresh={refresh} refreshing={section.updating} />
       ) : null}
-      {failed && (
-        <View className="flex-row items-center" style={{ gap: CELL }}>
-          <Text
-            accessibilityLiveRegion="polite"
-            className="flex-1 font-sans text-subheadline text-secondary"
-          >
-            Couldn't load recommendations.
-          </Text>
-          <TextButton label="Try Again" onPress={refresh} />
-        </View>
-      )}
+      {section.failed && <RecommendationsFailed onRetry={refresh} />}
     </DiscoverRow>
   );
 }

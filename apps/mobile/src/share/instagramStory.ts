@@ -1,18 +1,18 @@
 import type { LyricStoryBackground, LyricStoryFrame } from "@wave/core";
 
-/** The native image export and Stories delivery boundary. */
+import type { StoryImages } from "../native/waveShare.ts";
+
+/** The native image export and Stories delivery boundary (`WaveShare`). */
 export interface InstagramStoryNative {
   readonly writeStoryImages: (
     path: string,
     frame: LyricStoryFrame,
-    top: string,
-    bottom: string,
-  ) => Promise<{ sticker: string; background: string }>;
+    background: LyricStoryBackground,
+  ) => Promise<StoryImages>;
   readonly shareStoryImages: (sticker: string, background: string, appId: string) => Promise<void>;
   readonly shareToInstagramStory: (
     path: string,
-    top: string,
-    bottom: string,
+    background: LyricStoryBackground,
     appId: string,
   ) => Promise<void>;
 }
@@ -30,9 +30,9 @@ export const deliverInstagramStory = async (
   frame?: LyricStoryFrame,
 ): Promise<void> => {
   if (frame === undefined) {
-    await native.shareToInstagramStory(path, background.top, background.bottom, appId);
+    await native.shareToInstagramStory(path, background, appId);
     return;
   }
-  const images = await native.writeStoryImages(path, frame, background.top, background.bottom);
+  const images = await native.writeStoryImages(path, frame, background);
   await native.shareStoryImages(images.sticker, images.background, appId);
 };

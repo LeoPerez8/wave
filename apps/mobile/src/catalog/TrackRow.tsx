@@ -91,6 +91,12 @@ type Props = {
 
 const THUMB = CELL * 5;
 
+/** The small downloaded icon before a song's artist: it has a Library file. */
+export function DownloadedIcon() {
+  const accent = useThemeColor("accent");
+  return <IconCircleArrowDownFilled size={14} color={accent} />;
+}
+
 /**
  * A track: leading thumbnail or track number, title over artist, then the
  * favorite cell and the duration (the counted plays on a ranking by plays). The playing track's title is in ember with a
@@ -118,7 +124,6 @@ export function TrackRow({
   swipe,
 }: Props) {
   const highlight = useThemeColor("highlight");
-  const accent = useThemeColor("accent");
   const tertiary = useThemeColor("tertiary");
   const fileNotFound = state === "fileNotFound";
   const playing = state === "playing";
@@ -195,7 +200,7 @@ export function TrackRow({
             {track.explicit === true && <ExplicitBadge />}
           </View>
           <View className="flex-row items-center" style={{ gap: CELL / 2 }}>
-            {downloaded && <IconCircleArrowDownFilled size={14} color={accent} />}
+            {downloaded && <DownloadedIcon />}
             <Text numberOfLines={1} className="flex-1 font-sans text-body text-secondary">
               {fileNotFound ? "File not found" : (downloadLine ?? track.artist)}
             </Text>

@@ -1,5 +1,11 @@
-import type { LyricStoryFrame } from "@wave/core";
+import type { LyricStoryBackground, LyricStoryFrame } from "@wave/core";
 import { NativeModule, requireOptionalNativeModule } from "expo";
+
+/** The two PNGs a lyrics Story is sent as (`writeStoryImages`), by path. */
+export interface StoryImages {
+  readonly sticker: string;
+  readonly background: string;
+}
 
 /**
  * Sharing images Wave draws (`modules/wave-native`, `share/ShareModule.kt`):
@@ -13,9 +19,8 @@ declare class WaveShareModule extends NativeModule {
   writeStoryImages(
     path: string,
     frame: LyricStoryFrame,
-    top: string,
-    bottom: string,
-  ): Promise<{ sticker: string; background: string }>;
+    background: LyricStoryBackground,
+  ): Promise<StoryImages>;
   /** Sends the separate sticker and background images to Instagram's Stories editor. */
   shareStoryImages(sticker: string, background: string, appId: string): Promise<void>;
   /** Copies the shared image at `path` into the gallery (Pictures/Wave). */
@@ -25,10 +30,14 @@ declare class WaveShareModule extends NativeModule {
   /** Which apps a shared image can go straight to (installed and taking it). */
   shareApps(): Promise<{ instagramStories: boolean; whatsapp: boolean }>;
   /**
-   * Opens Instagram's Stories editor with the shared image at `path` as a sticker over a
-   * `top` to `bottom` background (`#rrggbb`); `appId` is the build's Facebook App ID.
+   * Opens Instagram's Stories editor with the shared image at `path` as a sticker over
+   * `background`'s gradient; `appId` is the build's Facebook App ID.
    */
-  shareToInstagramStory(path: string, top: string, bottom: string, appId: string): Promise<void>;
+  shareToInstagramStory(
+    path: string,
+    background: LyricStoryBackground,
+    appId: string,
+  ): Promise<void>;
   /** Sends the shared image at `path` straight to WhatsApp's share flow. */
   shareToWhatsApp(path: string): Promise<void>;
 }
