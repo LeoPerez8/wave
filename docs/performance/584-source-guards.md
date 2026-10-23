@@ -257,10 +257,11 @@ The former `readTasteLibrary` and `deriveTaste` whole-source allowances are
 retired. `TASTE_SOURCE_SEEDS` and `TASTE_SOURCES` retain exact bounded owners:
 `readTasteLibrary` reads songs without mix genres and identity-only artists;
 `readTasteHistory` walks chronological plays and raw favorite/download cursors;
-`stableTasteSnapshot` reads constant-size SQLite write stamps. The existing
-`readMixInputs` remains the only other owner of the shared songs page. New callers
-of these capabilities fail the inventory check, even through aliases. Existing
-whole-source, route and opening-request protections remain in force.
+`stableTasteSnapshot` reads constant-size SQLite write stamps. The shared songs
+page also permits the exact `readMixInputs` and
+`sharePlaylistRecommendationInputs` declarations for deferred mix and playlist
+work. New callers of these capabilities fail the inventory check, even through
+aliases. Existing whole-source, route and opening-request protections remain in force.
 
 Each source page returns at most 128 raw rows; empty decoded history pages still
 advance. Canonical `runSteps` separates page accumulation, Library order sorting,
