@@ -141,3 +141,28 @@ test("new Library followers and network asks in a tab's detail route are rejecte
     ],
   );
 });
+
+test("encapsulated playlist recommendation inputs are guarded on opening paths", () => {
+  const path = "app/(tabs)/songs/playlist/[id].tsx";
+  const changed = scan({
+    ...sources,
+    [path]: `
+    import { playlistRecommendationInput } from '@/library/playlistRecommendationSource';
+    import { LibraryStore } from '@/library/LibraryStore';
+    export default function Screen() {
+      playlistRecommendationInput(7);
+      LibraryStore.use(store => store.playlistRecommendationInput(7));
+      return null;
+    }`,
+  });
+  assert.deepEqual(
+    changed.library
+      .filter((use) => use.owner === `${path}#Screen`)
+      .map((use) => use.capability)
+      .toSorted(),
+    [
+      "library/LibraryStore.ts#playlistRecommendationInput",
+      "library/playlistRecommendationSource.ts#playlistRecommendationInput",
+    ],
+  );
+});

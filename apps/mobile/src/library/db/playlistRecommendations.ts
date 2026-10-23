@@ -1,8 +1,10 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, or, sql, type SQL } from "drizzle-orm";
+import { matchingSongWhere } from "./matchingSong.ts";
 import { selectPendingFavorites } from "./pendingFavorites.ts";
 /** The editable playlist's recommendation inputs, read through the Library store. */
 import {
   showsExplicitBadge,
+  readStoredGenres,
   playlistRecordingMatch,
   type PlaylistRecommendationTrack,
   type PlaylistRecommendationSlot,
@@ -15,21 +17,91 @@ import { selectSongGenres, trackQuery } from "./tracks.ts";
 import * as schema from "./schema.ts";
 
 /** Current membership and Library recordings; shared with Add's transactional validation. */
-const selectPlaylistRecommendationTracks = (db: LibraryDatabase, playlistId: number) => {
-  if (selectPlaylist(db, playlistId) === null) throw new Error("The playlist no longer exists");
+const selectPlaylistRecommendationTracks = (
+  db: LibraryDatabase,
+  playlistId: number,
+  offer?: PlaylistRecommendationSlot,
+) => {
+  if (
+    offer === undefined
+      ? selectPlaylist(db, playlistId) === null
+      : db.get(sql`SELECT 1 FROM playlists WHERE id = ${playlistId} AND NOT deleted`) === undefined
+  )
+    throw new Error("The playlist no longer exists");
+  const entries = selectPlaylistEntries(db, playlistId);
+  const candidates =
+    offer === undefined
+      ? undefined
+      : db
+          .select({ id: schema.tracks.id })
+          .from(schema.tracks)
+          .where(
+            offer.track.source === "library"
+              ? eq(schema.tracks.id, Number(offer.track.id))
+              : or(
+                  offer.track.videoId === ""
+                    ? undefined
+                    : eq(schema.tracks.videoId, offer.track.videoId),
+                  matchingSongWhere(offer.track),
+                ),
+          )
+          .all()
+          .map((row) => row.id);
+  const librarySongs = trackQuery(db)
+    .where(
+      candidates === undefined
+        ? undefined
+        : sql`${schema.tracks.id} IN (SELECT value FROM json_each(${JSON.stringify(candidates)}))`,
+    )
+    .all();
+  const projected =
+    candidates === undefined
+      ? undefined
+      : [
+          ...candidates,
+          ...entries.flatMap((entry) => (entry.source === "library" ? [entry.track.id] : [])),
+        ];
+  const scoped = (column: SQL | typeof schema.tracks.id | typeof schema.favorites.trackId) =>
+    projected === undefined
+      ? undefined
+      : sql`${column} IN (SELECT value FROM json_each(${JSON.stringify(projected)}))`;
+  const artistIds =
+    candidates === undefined
+      ? undefined
+      : [
+          ...librarySongs.flatMap((song) => song.artistIds),
+          ...entries.flatMap((entry) => (entry.source === "library" ? entry.track.artistIds : [])),
+        ];
   const names = new Map(
     db
       .select({ id: schema.artists.id, name: schema.artists.name })
       .from(schema.artists)
+      .where(
+        artistIds === undefined
+          ? undefined
+          : sql`${schema.artists.id} IN (SELECT value FROM json_each(${JSON.stringify(artistIds)}))`,
+      )
       .all()
       .map((a) => [a.id, a.name]),
   );
-  const genres = new Map(selectSongGenres(db).map((track) => [track.id, track.genres]));
+  const tagged =
+    projected === undefined
+      ? selectSongGenres(db)
+      : db
+          .select({ id: schema.tracks.id, genres: schema.tracks.genres })
+          .from(schema.tracks)
+          .where(scoped(schema.tracks.id))
+          .all()
+          .flatMap((row) => {
+            const genres = readStoredGenres(row.genres);
+            return genres.length === 0 ? [] : [{ id: row.id, genres }];
+          });
+  const genres = new Map(tagged.map((track) => [track.id, track.genres]));
   const favorites = new Set(
     db
       .select({ id: schema.favorites.trackId })
       .from(schema.favorites)
-      .where(eq(schema.favorites.deleted, false))
+      .where(and(eq(schema.favorites.deleted, false), scoped(schema.favorites.trackId)))
       .all()
       .map((row) => row.id),
   );
@@ -37,6 +109,7 @@ const selectPlaylistRecommendationTracks = (db: LibraryDatabase, playlistId: num
     db
       .select({ id: schema.tracks.id, videoId: schema.tracks.videoId })
       .from(schema.tracks)
+      .where(scoped(schema.tracks.id))
       .all()
       .filter((row) => row.videoId !== null)
       .map((row) => [row.id, row.videoId!]),
@@ -58,21 +131,19 @@ const selectPlaylistRecommendationTracks = (db: LibraryDatabase, playlistId: num
     ...(genres.has(song.id) ? { genres: genres.get(song.id)! } : {}),
     available: song.path !== null,
   });
-  const librarySongs = trackQuery(db).all();
   const library = librarySongs.map(local);
-  const playlist = selectPlaylistEntries(db, playlistId).map(
-    (entry): PlaylistRecommendationTrack =>
-      entry.source === "library"
-        ? local(entry.track)
-        : {
-            ...entry.song,
-            albumId: "albumId" in entry.song ? entry.song.albumId : null,
-            explicit: "explicit" in entry.song ? entry.song.explicit : false,
-            videoId: entry.source === "stream" ? entry.song.videoId : "",
-            id: entry.source === "stream" ? `yt:${entry.song.videoId}` : `entry:${entry.itemId}`,
-            source: "stream",
-            available: entry.source === "stream",
-          },
+  const playlist = entries.map((entry): PlaylistRecommendationTrack =>
+    entry.source === "library"
+      ? local(entry.track)
+      : {
+          ...entry.song,
+          albumId: "albumId" in entry.song ? entry.song.albumId : null,
+          explicit: "explicit" in entry.song ? entry.song.explicit : false,
+          videoId: entry.source === "stream" ? entry.song.videoId : "",
+          id: entry.source === "stream" ? `yt:${entry.song.videoId}` : `entry:${entry.itemId}`,
+          source: "stream",
+          available: entry.source === "stream",
+        },
   );
   return { playlist, library, librarySongs };
 };
@@ -123,7 +194,7 @@ export const acceptPlaylistRecommendation = (
   now: number,
 ): boolean =>
   db.transaction((tx) => {
-    const input = selectPlaylistRecommendationTracks(tx, playlistId);
+    const input = selectPlaylistRecommendationTracks(tx, playlistId, offer);
     const feedback = schema.playlistRecommendationFeedback;
     if (
       tx

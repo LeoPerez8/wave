@@ -1,6 +1,6 @@
-import { performance } from "node:perf_hooks";
-import { percentiles } from "../measure.ts";
+import * as Effect from "effect/Effect";
 import { createPlaylistReplay } from "../playlistReplay.ts";
+import { measurePlaylistOperation } from "../playlistMeasure.ts";
 import type { BenchMeasurement, FastAgainBench } from "../types.ts";
 
 export const bench: FastAgainBench = {
@@ -8,49 +8,122 @@ export const bench: FastAgainBench = {
   async run(context) {
     const results: BenchMeasurement[] = [];
     for (const mounted of [1, 2]) {
-      const read = `trackChange/${mounted}Mounted`;
-      const replay = await createPlaylistReplay(context.root, context.fixture);
-      if (replay === null) {
-        results.push({
-          read,
-          status: "unavailable",
-          reason: "Playlist recommendations did not exist",
-        });
-        continue;
-      }
-      try {
-        for (let i = 0; i < mounted; i++) await replay.mount();
-        const identities = await replay.change(true);
-        const work = { ...replay.work };
-        const wall: number[] = [];
-        const cpu = process.cpuUsage();
-        for (let i = 0; i < context.runs; i++) {
-          const start = performance.now();
-          await replay.change(false);
-          wall.push(performance.now() - start);
-        }
-        const used = process.cpuUsage(cpu);
-        results.push({
-          read,
-          ...percentiles(wall),
-          cpuMs: Number(((used.user + used.system) / 1000 / context.runs).toFixed(3)),
-          rowsRead: work.rowsRead,
-          statements: work.statements,
-          notifications: work.notifications,
-          longestSyncTaskMs: Number(Math.max(...wall).toFixed(3)),
-          resultKey: JSON.stringify(identities),
-          details: {
-            source:
-              "actual Core session, LibraryStore input and change bus; replay of component's subscription",
-            mounted,
-            inputReads: work.reads,
-            phase: "one unrelated burst track change; sessions retained; warm/null graph",
-            caveat:
-              "no React/frame measurement; no visibility API in this wiring; excludes graph/cache UI publish",
-            longestSyncTask:
-              "microtask batch: resolved input Promises and synchronous ranking, no task yield",
+      let replay = await createPlaylistReplay(context.root, context.fixture);
+      if (replay === null)
+        return [
+          {
+            read: "hiddenBurst/1Mounted",
+            status: "unavailable",
+            reason: "Playlist recommendations did not exist",
           },
-        });
+        ];
+      const reset = async () => {
+        replay!.close();
+        replay = (await createPlaylistReplay(context.root, context.fixture))!;
+      };
+      // Each opening sample is a fresh visit/source. Module loading and fixture creation are outside timing.
+      const initial = replay;
+      const prepare = async () => {
+        await reset();
+      };
+      // Measurement takes a stable forwarding proxy while the sample's visit/source gets replaced.
+      const proxy = new Proxy(initial, { get: (_target, key) => Reflect.get(replay!, key) });
+      try {
+        results.push(
+          await measurePlaylistOperation(
+            `opening/beforeSettled/${mounted}Mounted`,
+            context.runs,
+            proxy,
+            async () => {
+              const content = [];
+              for (let i = 0; i < mounted; i++) {
+                content.push(
+                  (await Effect.runPromise(replay!.store.getPlaylist(context.fixture.playlistId)))!
+                    .items,
+                );
+                await replay!.mount({ settled: false });
+              }
+              return content;
+            },
+            prepare,
+          ),
+        );
+        await reset();
+        for (let i = 0; i < mounted; i++) await replay.mount();
+        results.push(
+          await measurePlaylistOperation(
+            `hiddenBurst/${mounted}Mounted`,
+            context.runs,
+            proxy,
+            async () => {
+              for (let i = 0; i < 12; i++) {
+                replay!.publish("tracks");
+                replay!.publish("favorites");
+              }
+              await replay!.drain();
+              return replay!.identities();
+            },
+            async () => {
+              for (let i = 0; i < mounted; i++) replay!.show(i, false);
+            },
+          ),
+        );
+        results.push(
+          await measurePlaylistOperation(
+            `visibleCatchUp/${mounted}Mounted`,
+            context.runs,
+            proxy,
+            async () => {
+              for (let i = 0; i < mounted; i++) replay!.show(i, true);
+              await replay!.drain();
+              return replay!.identities();
+            },
+            async () => {
+              for (let i = 0; i < mounted; i++) replay!.show(i, false);
+              replay!.publish("tracks");
+              await replay!.drain();
+            },
+          ),
+        );
+        results.push(
+          await measurePlaylistOperation(
+            `visibleBurst/${mounted}Mounted`,
+            context.runs,
+            proxy,
+            async () => {
+              for (let i = 0; i < 12; i++) {
+                replay!.publish("tracks");
+                replay!.publish("favorites");
+              }
+              await replay!.drain();
+              return replay!.identities();
+            },
+          ),
+        );
+      } finally {
+        replay.close();
+      }
+    }
+    for (const graph of ["warm", "cold"] as const) {
+      let replay = (await createPlaylistReplay(context.root, context.fixture, graph))!;
+      if (replay === null) continue;
+      const proxy = new Proxy(replay, { get: (_target, key) => Reflect.get(replay, key) });
+      try {
+        results.push(
+          await measurePlaylistOperation(
+            `opening/settled/${graph}Graph`,
+            context.runs,
+            proxy,
+            async () => {
+              await replay.mount();
+              return replay.identities();
+            },
+            async () => {
+              replay.close();
+              replay = (await createPlaylistReplay(context.root, context.fixture, graph))!;
+            },
+          ),
+        );
       } finally {
         replay.close();
       }
