@@ -267,3 +267,77 @@ test("return renews an action interrupted after an external invalidation was que
   assert.equal(session.get().loading, false);
   visit.dispose();
 });
+
+test("counted plays alone renew nothing, as before #599", async () => {
+  const gate = setup();
+  gate.settle();
+  let reads = 0;
+  const session = playlistRecommendationSession({
+    newId: () => "id",
+    read: async () => {
+      reads++;
+      return { playlist: [], sources: { library: [], catalog: [], graph: null, now: 0 } };
+    },
+    dismiss: async () => {},
+  });
+  const visit = followPlaylistRecommendations(session, {
+    playlistId: 7,
+    sight: gate.sight,
+    start: (signal) => Effect.runPromise(gate.start, { signal }),
+    subscribe: onLibraryChange,
+    wait: async () => {},
+  });
+  await gate.flush();
+  assert.equal(reads, 1);
+  publishLibraryChange({ kind: "plays", ids: [1], burst: true });
+  publishLibraryChange({ kind: "plays" });
+  await gate.flush();
+  assert.equal(reads, 1);
+  visit.dispose();
+});
+
+test("graph source writes coalesce under the burst throttle and are released on dispose", async () => {
+  const gate = setup();
+  gate.settle();
+  let reads = 0,
+    clock = 0;
+  const graphListeners = new Set<() => void>();
+  const waits: { ms: number; release: () => void }[] = [];
+  const session = playlistRecommendationSession({
+    newId: () => "id",
+    read: async () => {
+      reads++;
+      return { playlist: [], sources: { library: [], catalog: [], graph: null, now: 0 } };
+    },
+    dismiss: async () => {},
+  });
+  const visit = followPlaylistRecommendations(session, {
+    playlistId: 7,
+    sight: gate.sight,
+    start: (signal) => Effect.runPromise(gate.start, { signal }),
+    subscribe: onLibraryChange,
+    graphSources: (listener) => {
+      graphListeners.add(listener);
+      return () => {
+        graphListeners.delete(listener);
+      };
+    },
+    now: () => clock,
+    wait: (ms) => new Promise<void>((resolve) => waits.push({ ms, release: resolve })),
+  });
+  await gate.flush();
+  assert.equal(reads, 1);
+  clock = 500;
+  // A harvest saves several catalog/similar pages in a row.
+  for (let i = 0; i < 6; i++) for (const f of graphListeners) f();
+  await gate.flush();
+  assert.equal(waits.length, 1);
+  assert.equal(waits[0]!.ms, 1000);
+  assert.equal(reads, 1);
+  clock = 1500;
+  waits[0]!.release();
+  await gate.flush();
+  assert.equal(reads, 2);
+  visit.dispose();
+  assert.equal(graphListeners.size, 0);
+});

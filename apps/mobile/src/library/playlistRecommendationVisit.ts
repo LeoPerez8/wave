@@ -19,6 +19,8 @@ export const followPlaylistRecommendations = (
     };
     readonly start: (signal: AbortSignal) => Promise<void>;
     readonly subscribe: (listener: (change: LibraryChange) => void) => () => void;
+    /** Catalog/similar-artist writes arrive in harvest runs; they share the burst throttle. */
+    readonly graphSources?: (listener: () => void) => () => void;
     readonly now?: () => number;
     readonly wait?: (ms: number, signal: AbortSignal) => Promise<void>;
     readonly ignore?: (change: LibraryChange) => boolean;
@@ -68,12 +70,13 @@ export const followPlaylistRecommendations = (
     if (options.ignore?.(change)) return;
     if (
       libraryChangeAffects(
-        { tracks: true, favorites: true, plays: true, playlists: [options.playlistId] },
+        { tracks: true, favorites: true, playlists: [options.playlistId] },
         change,
       )
     )
       invalidate(change.burst === true);
   });
+  const stopGraphSources = options.graphSources?.(() => invalidate(true));
   const stopSight = options.sight.subscribe(() => {
     if (!options.sight.visible()) {
       if (session.get().pending !== null || session.get().loading) stale = true;
@@ -95,6 +98,7 @@ export const followPlaylistRecommendations = (
     dispose: () => {
       disposed = true;
       stopChange();
+      stopGraphSources?.();
       stopSight();
       cancel?.();
       serial.dispose();

@@ -75,10 +75,16 @@ export function PlaylistRecommendations({
           { signal },
         ),
       rank: async (input, signal) => {
-        const ranked = await appRuntime.runPromise(
-          runSteps(playlistRecommendationsSteps(input.playlist, input.sources), freeTurnEffect),
-          { signal },
-        );
+        const ranked = await appRuntime
+          .runPromise(
+            runSteps(playlistRecommendationsSteps(input.playlist, input.sources), freeTurnEffect),
+            { signal },
+          )
+          .catch((error: unknown) => {
+            // A cancelled rank must not keep the whole Library index reachable from this visit.
+            latestRows.set(new Map());
+            throw error;
+          });
         const held = new Map<string, SongRow>();
         for (const offer of ranked) {
           const row = latestRows.get().get(offer.track.id);
@@ -124,12 +130,11 @@ export function PlaylistRecommendations({
       sight,
       start: (signal) => appRuntime.runPromise(settledTurnEffect, { signal }),
       subscribe: onLibraryChange,
+      graphSources: onArtistGraphSourcesChanged,
       ignore: (change) => change.kind === "playlists" && announcingAcceptance.get(),
     });
     visit.current = following;
-    const stopCatalog = onArtistGraphSourcesChanged(() => following.invalidate());
     return () => {
-      stopCatalog();
       following.dispose();
       visit.current = null;
     };
