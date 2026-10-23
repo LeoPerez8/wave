@@ -151,9 +151,9 @@ entries are retired. Standing picks use `songsByIds` (nine at most), with picked
 track/favorite invalidations. Live signals resolve only their credited artist
 IDs. Short lists alone use a one-ID growth probe, so adding a file can fill them.
 
-The allowed source reads are now the exact background functions
-`playback/tasteDerivation.ts#readTasteLibrary` and `#deriveTaste`. Home gates its
-job on `useScreenSettled`; these functions wait on existing cancellable free
+The original whole-source allowances for `readTasteLibrary` and `deriveTaste`
+have moved to the exact bounded-source inventory described below. Home gates its
+job on `useScreenSettled`; these readers wait on existing cancellable free
 turns and reuse one Library input for the shared live profile and the pick.
 Mapping, scoring and ordered weighted draws consume cooperative iterator steps.
 `magicQueueRead.test.ts`, `magicQueueJob.test.ts`, `tasteDerivation.test.ts` and
@@ -222,3 +222,24 @@ settlement/cancellation in `lib/settledWork.test.ts`, shared lifetime tests in
 query across unchanged returns and relevant/unrelated source changes. The old
 #596 assertion of 11,190 graph rows in one segment is replaced by bounded-page
 and complete-graph assertions; the other #596 characterizations are preserved.
+
+## #593 taste source paging
+
+The former `readTasteLibrary` and `deriveTaste` whole-source allowances are
+retired. `TASTE_SOURCE_SEEDS` and `TASTE_SOURCES` retain exact bounded owners:
+`readTasteLibrary` reads songs without mix genres and identity-only artists;
+`readTasteHistory` walks chronological plays and raw favorite/download cursors;
+`stableTasteSnapshot` reads constant-size SQLite write stamps. The existing
+`readMixInputs` remains the only other owner of the shared songs page. New callers
+of these capabilities fail the inventory check, even through aliases. Existing
+whole-source, route and opening-request protections remain in force.
+
+Each source page returns at most 128 raw rows; empty decoded history pages still
+advance. Canonical `runSteps` separates page accumulation, Library order sorting,
+mapping, scoring and pending-signal reconciliation. Automatic Home work keeps its
+existing screen-settled boundary and previous picks. Writes discard a yielding
+snapshot before publication; cancellation retains signals absent from SQLite.
+Real-store plan/work-count/equivalence tests live in `db/mixInputs.test.ts`,
+`playback/tasteDerivation.test.ts`, `home/magicQueueJob.test.ts` and
+`playback/liveTaste.test.ts`. This bounded deferred seam promises neither a
+preemptible native SQL call nor a strict six-ms hardware deadline.

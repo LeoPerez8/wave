@@ -149,6 +149,39 @@ export const traceQueries = <A>(
   return { result, queries };
 };
 
+/** Desktop bench only: statement prepare/bind/step/decode/free time, without
+ * EXPLAIN in timed samples. The callback fires only for statements that ran.
+ * Call the returned cleanup even when an asynchronous replay is interrupted.
+ */
+export const observeSqlTasks = (
+  db: TestDatabase,
+  completed: (sql: string, ms: number) => void,
+): (() => void) => {
+  const client = clients.get(db);
+  if (client === undefined) throw new Error("not an open test database");
+  const prepare = client.prepare;
+  client.prepare = (text, params) => {
+    const started = performance.now();
+    const statement = prepare.call(client, text, params);
+    let ran = false;
+    const step = statement.step;
+    statement.step = () => {
+      ran = true;
+      return step.call(statement);
+    };
+    const free = statement.free;
+    statement.free = () => {
+      const result = free.call(statement);
+      if (ran) completed(text, performance.now() - started);
+      return result;
+    };
+    return statement;
+  };
+  return () => {
+    client.prepare = prepare;
+  };
+};
+
 /**
  * Copies the track [seed] once per row `x` of [rows] (a `WITH RECURSIVE n(x)`
  * clause): each column is its SQL in [overrides] (over `x` and `seed`), or
