@@ -5,7 +5,7 @@ import { describe, test } from "node:test";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 
-import { sharedRead } from "./sharedRead.ts";
+import { SHARED_READ_ATTEMPTS, sharedRead } from "./sharedRead.ts";
 
 class Store extends Context.Service<Store, { readonly value: number }>()("test/Store") {}
 
@@ -63,7 +63,7 @@ describe("A shared read", () => {
   });
 });
 
-test("invalidation interrupts a suspended shared build and releases all waiters", async () => {
+test("a forget mid-read interrupts the read and hands every waiter one fresh read", async () => {
   let starts = 0;
   let released = 0;
   const shared = sharedRead(
@@ -80,19 +80,73 @@ test("invalidation interrupts a suspended shared build and releases all waiters"
   );
   const a = Effect.runPromise(shared.get);
   const b = Effect.runPromise(shared.get);
-  // Register rejection handlers before invalidation.
-  const done = Promise.allSettled([a, b]);
+  const done = Promise.all([a, b]);
   shared.forget();
-  assert.equal(await Effect.runPromise(shared.get), 9);
   const results = await Promise.race([
     done,
     new Promise<never>((_, reject) => setTimeout(() => reject(new Error("waiters hung")), 300)),
   ]);
-  assert.deepEqual(
-    results.map((r) => r.status),
-    ["rejected", "rejected"],
-  );
+  assert.deepEqual(results, [9, 9]);
   assert.equal(released, 1);
+  assert.equal(starts, 2, "the waiters share the one read after the forget");
+  assert.equal(await Effect.runPromise(shared.get), 9);
+  assert.equal(starts, 2);
+});
+
+test("an answer read before a forget is never handed out, even when its read can't be interrupted", async () => {
+  let starts = 0;
+  const finish: (() => void)[] = [];
+  const shared = sharedRead(
+    Effect.uninterruptible(
+      Effect.callback<number>((resume) => {
+        const version = ++starts;
+        finish.push(() => resume(Effect.succeed(version)));
+      }),
+    ),
+  );
+  const waiting = Effect.runPromise(shared.get);
+  await Promise.resolve();
+  shared.forget();
+  finish[0]!();
+  await new Promise((r) => setTimeout(r, 0));
+  assert.equal(starts, 2, "the waiter reads again once the old read settles");
+  finish[1]!();
+  assert.equal(await waiting, 2);
+});
+
+test("a read forgotten every time it starts fails its waiters after a bounded number of reads", async () => {
+  let starts = 0;
+  const shared = sharedRead(
+    Effect.callback<number>(() => {
+      starts++;
+      queueMicrotask(() => shared.forget());
+    }),
+  );
+  await assert.rejects(Effect.runPromise(shared.get), /Shared read invalidated/);
+  assert.equal(starts, SHARED_READ_ATTEMPTS);
+  // The bound is per ask: a later ask reads again.
+  const later = assert.rejects(Effect.runPromise(shared.get), /Shared read invalidated/);
+  await later;
+  assert.equal(starts, 2 * SHARED_READ_ATTEMPTS);
+});
+
+test("dispose while waiters read again releases them permanently", async () => {
+  let starts = 0;
+  const shared = sharedRead(
+    Effect.callback<number>(() => {
+      starts++;
+    }),
+  );
+  const waiting = Effect.runPromise(shared.get);
+  const rejected = assert.rejects(waiting, /Shared read disposed/);
+  await Promise.resolve();
+  shared.forget();
+  await new Promise((r) => setTimeout(r, 0));
+  assert.equal(starts, 2);
+  shared.dispose();
+  await rejected;
+  await assert.rejects(Effect.runPromise(shared.get), /Shared read disposed/);
+  assert.equal(starts, 2);
 });
 
 test("one cancelled reader leaves its peer's build running; last cancellation gives up the task", async () => {

@@ -203,6 +203,47 @@ test("cold playlist and Magic Queue share real paged graph work; warm reads are 
   }
 });
 
+test("a play or scan change mid-build hands the graph's waiters the rebuilt graph, not null", async () => {
+  const { shareArtistGraph } = await import("../../home/sharedArtistGraph.ts");
+  const fixture = await createFastAgainFixture();
+  try {
+    const store = await loadLibraryStore(root, fixture.db);
+    let builds = 0,
+      pages = 0;
+    const changed = Promise.withResolvers<void>();
+    const shared = shareArtistGraph(
+      Effect.sync(() => {
+        builds++;
+        return {
+          ...store,
+          graphPlayPage: (after: Parameters<typeof store.graphPlayPage>[0]) =>
+            Effect.suspend(() => {
+              if (++pages === 2) changed.resolve();
+              return store.graphPlayPage(after);
+            }),
+        };
+      }),
+      Effect.void,
+      Effect.promise(() => new Promise<void>((r) => setTimeout(r, 0))),
+    );
+    // artistGraphNow: playlist recommendations, the Magic Queue batch and the harvest read this way.
+    const graphNow = shared.get.pipe(Effect.orElseSucceed(() => null));
+    const magicQueue = Effect.runPromise(graphNow),
+      playlist = Effect.runPromise(graphNow);
+    await changed.promise;
+    shared.forget(); // onLibraryChange({ kind: "plays" }): a song ended while the cold graph builds
+    const [a, b] = await Promise.all([magicQueue, playlist]);
+    assert.notEqual(a, null);
+    assert.equal(a, b);
+    assert.equal(builds, 2, "both waiters share the one rebuild");
+    assert.deepEqual(a, Effect.runSync(readArtistGraph(store, Effect.void)));
+    assert.equal(await Effect.runPromise(graphNow), a);
+    shared.dispose();
+  } finally {
+    fixture.close();
+  }
+});
+
 test("equal-timestamp history pages seek beyond the prior id instead of rescanning its timestamp prefix", async () => {
   const fixture = await createFastAgainFixture();
   try {

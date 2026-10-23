@@ -108,17 +108,85 @@ test("source versions invalidate, evict by age, share in-flight reads and never 
       }),
     );
     const old = Effect.runPromise(interrupted.get(fixture.playlistId));
-    const rejected = assert.rejects(old);
     await entered.promise;
     interrupted.forget();
     release.resolve();
-    await rejected;
+    // The waiter of the forgotten snapshot gets the one read after the forget.
+    const reread = await old;
     const current = await Effect.runPromise(interrupted.get(fixture.playlistId));
+    assert.equal(reread.library, current.library);
     assert.equal(current.library.find((track) => track.id === String(id))!.favorite, !oldStar);
     interrupted.dispose();
   } finally {
     fixture.close();
   }
+});
+
+test("a Dismiss whose refill is reading when a tracks, favorites or catalog change lands still refills", async () => {
+  const { playlistRecommendationSession } = await import("@wave/core");
+  let clock = 0,
+    snapshots = 0;
+  const page = () => Effect.promise(() => new Promise<never[]>((r) => setTimeout(() => r([]), 5)));
+  const empty = () => Effect.succeed({ rows: [], next: null });
+  const store = {
+    mixArtistsPage: () => {
+      snapshots++;
+      return page();
+    },
+    recommendationFlagsPage: page,
+    mixSongsPage: page,
+    recommendationPendingPage: page,
+    mixCatalogPage: empty,
+    graphRadioPage: empty,
+    recommendationEntriesPage: () => Effect.succeed([]),
+    recommendationFeedbackPage: () => Effect.succeed([]),
+  } as unknown as Parameters<typeof sharePlaylistRecommendationInputs>[0];
+  const source = sharePlaylistRecommendationInputs(store, Effect.void, () => clock);
+  const track = (id: string) => ({
+    id,
+    source: "stream" as const,
+    videoId: id,
+    title: id,
+    artists: ["a"],
+    album: null,
+    albumId: null,
+    durationMs: 1,
+    artworkUrl: null,
+    explicit: false,
+    genre: null,
+    available: true,
+  });
+  let n = 0;
+  const session = playlistRecommendationSession({
+    newId: () => `k${++n}`,
+    read: (signal) =>
+      Effect.runPromise(
+        source
+          .get(1)
+          .pipe(
+            Effect.map((input) => ({ playlist: [], sources: { ...input, graph: null, now: 0 } })),
+          ),
+        { signal },
+      ),
+    rank: async (input) =>
+      ["a", "b", "c", "d", "e", "f"]
+        .filter((id) => !input.sources.exclude.some((x) => x.id === id))
+        .map((id) => ({ track: track(id) })),
+    dismiss: async () => {},
+  });
+  await session.renew();
+  const before = session.get();
+  clock = 61_000; // the snapshot aged out while the owner looked at the offers
+  const acting = session.dismiss(before.slots[0]!.key);
+  await new Promise((r) => setTimeout(r, 7)); // the refill's snapshot is being read
+  source.forget(); // observePlaylistRecommendationInputs on a tracks/favorites/catalog change
+  await acting;
+  const after = session.get();
+  assert.equal(after.error, null);
+  assert.notEqual(after.slots[0], null);
+  assert.notEqual(after.slots[0]!.key, before.slots[0]!.key);
+  assert.equal(snapshots, 3, "the first visit, the forgotten refill read, and its re-read");
+  source.dispose();
 });
 
 test("paged input preserves stream/missing membership, multi-genres and playlist feedback order", async () => {
