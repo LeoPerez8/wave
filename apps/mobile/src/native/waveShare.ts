@@ -9,8 +9,15 @@ import { NativeModule, requireOptionalNativeModule } from "expo";
 declare class WaveShareModule extends NativeModule {
   /** Writes a base64 PNG as `fileName` among the shared images; resolves its path. */
   writeImage(base64: string, fileName: string): Promise<string>;
-  /** Writes a separate transparent, padded rounded sticker; leaves the source card intact. */
-  writeStorySticker(path: string, frame: LyricStoryFrame): Promise<string>;
+  /** Writes a tight rounded sticker and a full Story gradient; leaves the source card intact. */
+  writeStoryImages(
+    path: string,
+    frame: LyricStoryFrame,
+    top: string,
+    bottom: string,
+  ): Promise<{ sticker: string; background: string }>;
+  /** Sends the separate sticker and background images to Instagram's Stories editor. */
+  shareStoryImages(sticker: string, background: string, appId: string): Promise<void>;
   /** Copies the shared image at `path` into the gallery (Pictures/Wave). */
   saveToGallery(path: string): Promise<void>;
   /** Opens the share sheet with the shared image at `path`, titled `title`. */

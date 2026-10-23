@@ -9,13 +9,13 @@ import android.graphics.Paint
 import android.graphics.RectF
 import android.graphics.Shader
 import java.io.File
+import kotlin.math.roundToInt
 
 /**
- * The lyrics sticker's visible card inside a transparent 9:16 PNG. The frame
- * comes from Core's lyricStoryFrame, shared with the preview. Instagram receives
- * this PNG as interactive_asset_uri, keeping the card movable; the gradient is
- * sent separately as the intent's background colours. Never changes the source
- * image that Save image, WhatsApp and More share on its own.
+ * A tight lyrics sticker with transparent rounded corners, without surrounding
+ * padding that Instagram could crop. Core's lyricStoryFrame supplies its size
+ * and radius, shared with the preview. The gradient is a separate background
+ * image; the source for Save image, WhatsApp and More stays intact.
  */
 object StorySticker {
   fun write(source: File, frame: Map<String, Double>): File {
@@ -34,26 +34,27 @@ object StorySticker {
     val cardWidth = value("cardWidth")
     val cardHeight = value("cardHeight")
     val radius = value("cornerRadius")
-    require(left >= 0 && top >= 0 && cardWidth > 0 && cardHeight > 0 &&
+    require(left >= 0 && top >= 0 && cardWidth >= 1 && cardHeight >= 1 &&
       left + cardWidth <= width && top + cardHeight <= height &&
       radius > 0 && radius <= minOf(cardWidth, cardHeight) / 2) { "Invalid sticker bounds" }
     val card = BitmapFactory.decodeFile(source.absolutePath)
       ?: throw IllegalArgumentException("Couldn't read the sticker's card")
     try {
-      val sticker = Bitmap.createBitmap(width.toInt(), height.toInt(), Bitmap.Config.ARGB_8888)
+      val sticker = Bitmap.createBitmap(cardWidth.roundToInt(), cardHeight.roundToInt(), Bitmap.Config.ARGB_8888)
       try {
         // A shader on an anti-aliased round rect keeps the corners transparent,
         // including their edge pixels; clipping a path can leave a jagged rim.
+        val bounds = RectF(0f, 0f, sticker.width.toFloat(), sticker.height.toFloat())
         val shader = BitmapShader(card, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP)
         shader.setLocalMatrix(Matrix().apply {
           setRectToRect(
             RectF(0f, 0f, card.width.toFloat(), card.height.toFloat()),
-            RectF(left, top, left + cardWidth, top + cardHeight),
+            bounds,
             Matrix.ScaleToFit.FILL,
           )
         })
         val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply { this.shader = shader }
-        Canvas(sticker).drawRoundRect(RectF(left, top, left + cardWidth, top + cardHeight), radius, radius, paint)
+        Canvas(sticker).drawRoundRect(bounds, radius, radius, paint)
         val output = File.createTempFile("story-", ".png", source.parentFile)
         try {
           output.outputStream().use {
