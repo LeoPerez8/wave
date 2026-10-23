@@ -32,7 +32,7 @@ test("taste input evidence preserves every field and array order while ignoring 
       },
     }),
   );
-  assert.notEqual(inputKey(input), inputKey({ ...input, magic: [...input.magic].reverse() }));
+  assert.notEqual(inputKey(input), inputKey({ ...input, magic: input.magic.toReversed() }));
   assert.notEqual(inputKey(input), inputKey({ ...input, playable: [] }));
   for (const history of [
     { ...input.history, plays: [{ ...input.history.plays[0]!, listenedMs: 21 }] },
