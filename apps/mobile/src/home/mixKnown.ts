@@ -11,10 +11,10 @@ import { useSyncExternalStore } from "react";
 
 import { freeTurnEffect, settledTurnEffect } from "@/lib/backgroundWork";
 import { makeExternalStore } from "@/lib/externalStore";
-import { sharedRead } from "@/lib/sharedRead";
 import { LibraryStore, type ArtistRow, type SongRow } from "@/library/LibraryStore";
 import { onLibraryChange } from "@/library/libraryChanges";
 import { createKnownVideosRead } from "./knownVideosRead";
+import { createMixIndexesRead } from "./mixIndexesRead";
 import { appRuntime } from "@/library/runtime";
 
 /** A Library song as a mix build reads it: with every value of its genre tag when it has several. */
@@ -46,10 +46,8 @@ const readIndexes = Effect.gen(function* () {
  * start within a minute (Home's sections build on the same visit). A failed
  * read isn't kept.
  */
-const sharedIndexes = sharedRead(readIndexes, { keepMs: 60_000 });
-onLibraryChange((change) => {
-  if (["tracks", "plays", "playlists", "streamed"].includes(change.kind)) sharedIndexes.forget();
-});
+const sharedIndexes = createMixIndexesRead(readIndexes);
+onLibraryChange(sharedIndexes.change);
 export const mixIndexes: Effect.Effect<MixIndexes, unknown, LibraryStore> = sharedIndexes.get;
 
 /**

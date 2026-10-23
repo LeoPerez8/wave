@@ -1257,8 +1257,9 @@ The graph reader uses indexed keyset projection pages, including cursor advance
 through unreadable catalog/pages and deleted events. Core derives names, session
 pairs and weighted edges in cancellable generator steps. Every cold graph consumer
 enters the shared settlement/free-turn gate; warm and concurrent readers reuse the
-same source version. Invalidation and last-consumer cancellation abort old work;
-disposal releases all waiters. The actual store, explicit schedulers and shared
+same source version. Invalidation and last-consumer cancellation abort old work.
+A waiter of an invalidated read waits on the read after it, never the old answer,
+for at most four reads in all; disposal releases all waiters. The actual store, explicit schedulers and shared
 fixture are tested, including a cold playlist and mix/Magic Queue graph request.
 The playlist input/ranking/session lifecycle remains #599's work.
 
