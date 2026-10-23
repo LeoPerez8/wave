@@ -19,11 +19,37 @@ export const profileKey = (profile: TasteProfile) =>
       }),
     )
     .digest("hex");
-const inputKey = (input: {
+export const inputKey = (input: {
   magic: readonly MagicSong[];
   playable: readonly MagicSong[];
   history: TasteHistory;
-}) => createHash("sha256").update(JSON.stringify(input)).digest("hex");
+}) =>
+  createHash("sha256")
+    .update(
+      JSON.stringify({
+        magic: input.magic.map((song) => [song.trackId, song.artists, song.genre, song.style]),
+        playable: input.playable.map((song) => [
+          song.trackId,
+          song.artists,
+          song.genre,
+          song.style,
+        ]),
+        history: {
+          plays: input.history.plays.map((play) => [
+            play.trackId,
+            play.startedAt,
+            play.listenedMs,
+            play.endReason,
+          ]),
+          favorites: input.history.favorites.map((star) => [star.trackId, star.changedAt]),
+          downloads: input.history.downloads.map((download) => [
+            download.trackId,
+            download.downloadedAt,
+          ]),
+        },
+      }),
+    )
+    .digest("hex");
 export const bench: FastAgainBench = {
   name: "tasteProfile",
   async run(context) {

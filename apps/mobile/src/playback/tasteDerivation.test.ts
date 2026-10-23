@@ -133,7 +133,11 @@ test("cancelling a paged shared profile retains pending signals and releases the
       ),
     );
     const expected = tasteLearned(
-      tasteProfile(Effect.runSync(store.tasteHistory), (id) => songs.get(id), fixture.now),
+      tasteProfile(
+        Effect.runSync(store.tasteHistory),
+        (trackId) => songs.get(trackId),
+        fixture.now,
+      ),
       { kind: "favorite", song: remote, at: fixture.now },
     );
     assert.deepEqual(actual, expected);

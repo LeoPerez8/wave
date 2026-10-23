@@ -22,7 +22,7 @@ test("due picks retry their shared Library after a write before profile scoring"
         turn: Effect.void,
         taste: (library) =>
           Effect.gen(function* () {
-            if (++reads === 1) fixture.db.run(sql`UPDATE tracks SET genres = '["Jazz"]'`);
+            if (++reads === 1) fixture.db.run(sql`UPDATE tracks SET path = NULL WHERE id % 2 = 0`);
             return yield* deriveTaste(store, Effect.void, fixture.now, library);
           }),
       }),
