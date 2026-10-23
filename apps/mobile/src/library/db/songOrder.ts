@@ -128,6 +128,29 @@ const byIds = <R extends { readonly id: number }>(
   });
 };
 
+/** What a row's summary is read from: its columns, and what Fix Song looks at. */
+export interface SongSummaryColumns extends Omit<SongSummary, "hasFile" | "fixable"> {
+  readonly path: string | null;
+  readonly hasLyrics: boolean;
+  readonly genre: string | null;
+  readonly trackNumber: number | null;
+  readonly year: number | null;
+}
+
+/** A row's summary from its columns (a genre's first page reads them too, #601). */
+export const toSongSummary = ({
+  path,
+  hasLyrics,
+  genre,
+  trackNumber,
+  year,
+  ...row
+}: SongSummaryColumns): SongSummary => ({
+  ...row,
+  hasFile: path !== null,
+  fixable: canFixSong({ path, hasLyrics, genre, trackNumber, year, explicit: row.explicit }),
+});
+
 /** What the rows of [ids] show, in that order; ids no longer in the Library are left out. */
 export const selectSongSummaries = (
   db: LibraryDatabase,
@@ -155,11 +178,7 @@ export const selectSongSummaries = (
       .leftJoin(artwork, eq(tracks.artworkHash, artwork.hash))
       .where(inArray(tracks.id, some))
       .all()
-      .map(({ path, hasLyrics, genre, trackNumber, year, ...row }): SongSummary => ({
-        ...row,
-        hasFile: path !== null,
-        fixable: canFixSong({ path, hasLyrics, genre, trackNumber, year, explicit: row.explicit }),
-      })),
+      .map(toSongSummary),
   );
 };
 

@@ -339,3 +339,39 @@ The parent captured all 12 canonical surfaces in four theme/font pairs on integr
 Directly inspected candidate evidence includes Home at light 1.0/1.3 and Stats at light 1.3. September 2026 now renders fully in the Recap tile. The first 1.3 Home capture exposed three columns because Android widens its native float below the decimal 1.3 breakpoint. `945060ea` corrects the comparison; final APK confirmation is recorded separately. The initial Home capture remains evidence of that found defect. Other route snapshots establish capture identity; inventory does not assert every screen state has passed inspection.
 
 The inventory, state applicability, baseline fixtures, actual build/device records and severity register required by #547 are established. Flow acceptance under #548–557 and the overall #534 matrix remain pending wherever the register says P. Canonical snapshots do not cover all aliases, loading/failure states, theme customization, TalkBack integration, native motion or performance. The Android16/API36 emulator is not a physical S24+ 120Hz or SM-G985F/API33; no release-performance claim follows from it.
+
+### #549 fresh Home/Discover audit (2026-10-23)
+
+Baseline `e7a2b8d98f4da22eaec2151f5d229130970abf90`, branch
+`feat/549-home-discover-polish`. See [the #549 flow report](549-home-discover-verification.md)
+for findings 549-A–F, source provenance and pending evidence. Earlier 549-A's
+scrollable Discover card is already integrated. Findings were recorded before edits. Source corrections 549-B–F now cover
+slider wrapping, reachable refresh actions on row headings, full mix identity,
+gone-mix scrolling/inset and row-label wrapping; 549-A is preserved. All new rendered/device acceptance
+remains PENDING; the historical parent captures do not validate this build.
+
+The #549 flow report supplies the complete state/NA reasons and confirmation
+recipe for this inventory. Evidence for all rows is S with L/D/L1.3/D1.3 and
+TB/NAV/M **PENDING**. The old initial inventory's “Home sections/mix seed/artist
+controls” description of 549-S01 is superseded: the editor controls Home section
+order/visibility only; mix seeds and sliders live in Discover.
+
+| #549 surface / contextual alias                                        | Findings and applicable states                                                 | Verification / owner                                                            |
+| ---------------------------------------------------------------------- | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------- |
+| Home; legacy `/library/discover` redirect to Home                      | L/E/C/O/F/S/A; navigation alias checked separately                             | Source only; #592/#595/#598 preserved                                           |
+| Home sections; selectable Library shelf (including Discover)           | L/E/C/O/A; F action dialogs; list selection NA                                 | 549-C/D/F; #550/#554 shared patterns                                            |
+| 549-S01 Home editor card; `settings/layout/home.tsx` page              | C/E/S; local-only, no fetch/playback. Card Done/cancel vs page immediate-save  | #555/#556 integration; no additional correction                                 |
+| 549-S02 Discover headers, Magic Queue seeds, Artist/Genre rows         | L/E/C/O/F/D/A; S menu origin; checkbox selection NA                            | 549-C/D/F                                                                       |
+| Shared Magic Queue local song/album/artist/playlist menu entries       | C/O/F/A; S origin; absent for genre/missing/streamed/unsearched/bulk selection | Core itemActions tests; #551/#553/#556 presentation, native integration PENDING |
+| 549-S03 settings trigger/card, three sliders                           | C/S/O; D YT Music off; L/E/F/A NA                                              | 549-A preserved; 549-B; #555 shared slider confirmation                         |
+| 549-S04 mix menu, save/collision, refresh/Undo toast                   | L/C/O/F/D/S/A as detailed in flow report                                       | 549-C; #551/#556 follow-up surfaces                                             |
+| 549-S05 mix skeletons; 549-S06 shell/section/seed/Recap skeletons      | L only; still busy groups; other states NA                                     | #592/#598 source behavior preserved                                             |
+| 549-S07 pull/crossfade/heading refresh integration on Home and Library | C/O/F/D; repeat/Undo; reduced motion + zero/default tap                        | 549-C; event-adapter tests, actual TalkBack/gestures PENDING                    |
+| Mix detail, selected rows, active playback/download; gone-mix state    | C/O/F/S/A; L Library/finder resolution; gone E, other states NA                | 549-D/E; #551/#553/#555/#556 shared integration                                 |
+| Stats/See all/Favorites/Recap/local tile menu entries and return       | Applicable shared route states, not a duplicate flow audit                     | #550/#551/#554/#556                                                             |
+
+Real release-runner doctor and startup/tab/scroll/settings scenario attempts fail
+before measurement because adb is unavailable (`spawn adb ENOENT`). The flow
+report defines a repeatable supplemental Discover-card slider scenario; execution
+and automation are PENDING. Phone before/after evidence, performance variability
+and APK/device identity are PENDING. No desktop/simulated number substitutes.

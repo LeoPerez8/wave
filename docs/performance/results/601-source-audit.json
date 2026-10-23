@@ -1,0 +1,36 @@
+{
+  "productionCommit": "1701ced2620414464da25c325b0083a7ae40463d",
+  "integrationCommit": "e7a2b8d98f4da22eaec2151f5d229130970abf90",
+  "baseline": "460e39ff0cba6f50e7a456a77d6e99813295ebaa",
+  "reference": "add761ed787061db6a6c2799687d421301b6182b",
+  "historicalNormalization": "v0.7 getGenre predates explicit; project its absent flag as migration default unknown. All other summary fields/counts/order are compared in full. No historical source rewriting.",
+  "filesAtMeasuredCommit": {
+    "apps/mobile/src/library/db/genrePages.ts": "ee5978a658392ebd8cd3459d02de9b482d386206c2ec978146870cc97c5e9be2",
+    "apps/mobile/src/library/db/migrations.ts": "00a8922b422c61da9f55abecbb3a4aed65575040c680457bda79a476c1e18fd0",
+    "apps/mobile/src/library/db/schema.ts": "ab8e1a95d756f14433d5d88a010458402b3cc98463a9951c920512fe3538b68f",
+    "apps/mobile/src/library/db/songOrder.ts": "3dee859ed3101a07cac7445fa5882e9c68b361e309e520d72fa195608913f5f8",
+    "apps/mobile/src/library/genreOrder.ts": "565d3621c5dbe0d72b665af7774f2835e659e8ada1ce5e34d1d1f366cbba414b",
+    "apps/mobile/src/library/GenreSongList.tsx": "c31120b87d851398d881595615d67f2303941f8aa30273a9bd50193dfb96794d",
+    "apps/mobile/src/app/library/genre/[id].tsx": "cfd7504951f17e4e4650ef6817fed11a9567c5d540a6d754cf293e39f9036a9b",
+    "apps/mobile/src/library/pagedSongs.ts": "d35a12e95ad5f65fbde5f11ce24f8d897101aed5c7167d2cb3edf332aa2fe8c5",
+    "apps/mobile/src/library/LibraryStore.ts": "601ada88f264d7f7f8a695f0bcf02d728ee4f96af66bbcb4b85ada1dcd55ffc5",
+    "packages/core/src/pagedRows.ts": "1c8a48029df1eaa4e139538b57c994b8e071b89dee4e95c6ea04455b1d7485fc",
+    "apps/mobile/bench/fastAgain/benches/genreOpening.ts": "d5fbd695818efd067e8dcf7045ebd522e2fea1b7f35212c9ece71b2744c4062b"
+  },
+  "finalSourceHashes": {
+    "apps/mobile/src/library/db/genrePages.ts": "ee5978a658392ebd8cd3459d02de9b482d386206c2ec978146870cc97c5e9be2",
+    "apps/mobile/src/library/db/migrations.ts": "00a8922b422c61da9f55abecbb3a4aed65575040c680457bda79a476c1e18fd0",
+    "apps/mobile/src/library/db/schema.ts": "ab8e1a95d756f14433d5d88a010458402b3cc98463a9951c920512fe3538b68f",
+    "apps/mobile/src/library/db/songOrder.ts": "3dee859ed3101a07cac7445fa5882e9c68b361e309e520d72fa195608913f5f8",
+    "apps/mobile/src/library/genreOrder.ts": "565d3621c5dbe0d72b665af7774f2835e659e8ada1ce5e34d1d1f366cbba414b",
+    "apps/mobile/src/library/GenreSongList.tsx": "c31120b87d851398d881595615d67f2303941f8aa30273a9bd50193dfb96794d",
+    "apps/mobile/src/app/library/genre/[id].tsx": "cfd7504951f17e4e4650ef6817fed11a9567c5d540a6d754cf293e39f9036a9b",
+    "apps/mobile/src/library/pagedSongs.ts": "d35a12e95ad5f65fbde5f11ce24f8d897101aed5c7167d2cb3edf332aa2fe8c5",
+    "apps/mobile/src/library/LibraryStore.ts": "601ada88f264d7f7f8a695f0bcf02d728ee4f96af66bbcb4b85ada1dcd55ffc5",
+    "packages/core/src/pagedRows.ts": "1c8a48029df1eaa4e139538b57c994b8e071b89dee4e95c6ea04455b1d7485fc",
+    "apps/mobile/bench/fastAgain/benches/genreOpening.ts": "d5fbd695818efd067e8dcf7045ebd522e2fea1b7f35212c9ece71b2744c4062b"
+  },
+  "readSourcesUnchangedAfterCapture": true,
+  "indexProof": "WITHOUT ROWID makes id a normal indexed column: composite cursor plans include the final id and contain no temporary sorting, even for a wholly missing identical-name genre.",
+  "finalIntegrationCommit": "c1b227cda1e0123cde0073ae9d9e4d61cfe0c055"
+}
