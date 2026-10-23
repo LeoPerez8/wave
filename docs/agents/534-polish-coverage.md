@@ -385,3 +385,50 @@ read/loading/failure from empty, allow playlist header actions to wrap, and
 keep alphabet stepping reachable when two album letters share a row. Existing
 550-A handled finder taps remain integrated. Rendered/device acceptance remains
 PENDING; historical captures do not validate this slice.
+
+The final #550 source slice corrects 550-B/C/D plus **550-E**, the 38dp-high
+playlist tile drag target (now at least 48dp, centred on the same caption).
+B also covers a failed new Songs sort and demanded Find metadata, retaining
+existing content/input during explicit retry. B/D have public Core behavior
+regressions; C/E are native layout props, with rendered confirmation PENDING.
+No confirmed in-scope finding is intentionally deferred. The inherited 56dp
+rows/tile captions are still a pending rendered risk, not asserted clipping.
+
+Every row below has source evidence only. L/D/L1.3/D1.3 and TB/NAV/M/IME
+remain PENDING wherever applicable. State and NA reasons, the 24 detail-tab
+return aliases and the exact confirmation recipe are in the linked #550 report.
+No route was added. The earlier complete file-route inventory stays in force.
+
+| #550 surface / contextual alias                                                  | Applicable states and findings                                                                     | Verification / owner                                                     |
+| -------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| Library tab, all six entry rows, scan/empty/folder action                        | L/E/C/O/F/D/A; no checkbox selection                                                               | #548 scan/access; #549 shelf render; #550 destination lists              |
+| Songs pushed list and configurable Songs tab                                     | L/E/C/O/F/D/S/A; ID order, summary paging, all eight sorts                                         | 550-A/B/D; #310 bounds; #588 identity                                    |
+| Albums pushed list and Albums tab                                                | L/E/C/O/F/S; menu disabled actions; no own playing/download progress                               | 550-B/D; two-column grid, no alternate dedicated list layout             |
+| Artists pushed list and Artists tab                                              | L/E/C/O/F/S; menu disabled actions; no own playing/download progress                               | 550-A/B/D; alphabetical circles/rows, #600 scoped counts                 |
+| Genres pushed list and Genres tab                                                | L/E/C/O/F/S; menu disabled actions; no own playing/download progress                               | 550-B/D; #551/#601 bounded genre destination                             |
+| Favorites pushed list and Favorites tab                                          | L/E/C/O/F/D/S/A; date-starred plus eight sorts                                                     | 550-A/B/D; #587 stars/#588 identity                                      |
+| Playlists pushed list and Playlists tab; List/Grid/Large Cards                   | L/E/C/O/F/D/S; progress in detail/menu; custom order/drag + semantic moves                         | 550-B/C/E; #539 Undo in detail, #537/#542 gestures                       |
+| Sort/layout cards and contextual Library/Playlists title choices                 | C/O/S; Songs order L/F, choice controls have no own empty/play state                               | 550-B; #555 settings aliases/#556 card/focus                             |
+| Find in Songs, Artists and Favorites; typed/cleared/no-match                     | C/E/O/S; Songs metadata L/F; playback in Songs/Favorites; no async Artists/Favorites finder        | 550-A/B; input/query/order/context retained                              |
+| Alphabet rail/plate across lists, reverse Songs/Favorites and paired Albums      | C/O/S; hidden for short/single-letter/date sorts or active Find; no independent fetch/play/failure | 550-D; native touch/TB/value, motion and font matrix PENDING             |
+| Library shelf Recently added/played, Most played albums/artists, Favorites; None | L/E/C/O/F/D/A; menu origin selected, checkbox selection NA; None mounts no shelf                   | #549 source renderer; #592/#595/#598 scheduling; #550 See all navigation |
+| Library shelf Discover, Magic Queue seeds and Artist/Genre mixes                 | L/E/C/O/F/D/A; no checkbox selection; slider/menu selection                                        | #549 flow report and findings 549-A–F; no duplicate implementation       |
+| Shared row/tile selection, menus, swipe, skeletons, scan banner                  | Applicable L/E/C/O/F/D/S/A by consumer                                                             | #551/#553/#555/#556; #538/#588 identity; #537/#542 gestures              |
+| Unknown Library section; each of six tab stacks × four detail aliases            | Unknown slug E/O/Back only; each real detail alias keeps owning route states                       | #551 rendering; #550 NAV/retained tab scroll/query/selection PENDING     |
+
+The required release runner was attempted for tab-switch, push-tracklist,
+push-playlist and scroll-songs. It fails before measurements with
+`Couldn't run adb: spawn adb ENOENT`; T3 device discovery confirms no Android
+SDK/device. Scratch `550-perf-{doctor,run}.log` and
+`550-device-availability.json` preserve this limit. Comparable phone baseline/
+candidate traces, variability, latency median/p90, jank, long tasks and memory
+remain PENDING. Core/store tests and unchanged source guards do not replace
+those measurements or theme/font/TalkBack screenshots.
+
+#550 local confirmation: 3,433 Core tests and 722 mobile tests pass; both
+typechecks and changed-file Prettier/oxlint (`--no-ignore`) pass. Final focused
+checks after the integration re-merge check pass 125 Core and 33 mobile tests,
+including source/route guards and bounded genre/store behavior. Implementation
+SHA `ef3525d400092903cff07f8315503d3122923c84`; final documentation/build
+provenance is in the scratch `550-handoff.md`. These are desktop/source results
+only; all native evidence requirements above remain PENDING.
