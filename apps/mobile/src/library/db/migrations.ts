@@ -1,3 +1,5 @@
+import { genreOrderMigration } from "./genreOrderMigration.ts";
+
 /**
  * Hand-written migrations in the shape drizzle-kit generates for Expo
  * (`{ journal, migrations: { m0000 } }`), consumed by
@@ -1013,6 +1015,7 @@ export default {
         breakpoints: true,
       },
       { idx: 37, when: 1_795_003_200_000, tag: "0037_recording_titles", breakpoints: true },
+      { idx: 38, when: 1_795_089_600_000, tag: "0038_genre_order", breakpoints: true },
     ],
   },
   migrations: {
@@ -1054,5 +1057,6 @@ export default {
     m0035: mCandidateCatalog,
     m0036: mPlaylistRecommendationFeedback,
     m0037: mRecordingTitles,
+    m0038: genreOrderMigration,
   },
 };

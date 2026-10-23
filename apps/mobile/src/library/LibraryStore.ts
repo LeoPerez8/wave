@@ -1,3 +1,4 @@
+import { selectGenreOpening, selectGenrePage, type GenreOpening, type GenreCursor, type GenrePage, type GenreOrderRow } from "./db/genrePages.ts";
 import type { YtSong } from "@wave/core";
 import { makeExternalStore, type ExternalStore } from "@/lib/externalStore";
 import { backfillRecordingTitles, selectMatchingSong } from "./db/matchingSong";
@@ -665,6 +666,11 @@ export class LibraryStore extends Context.Service<
       scope?: TrackScope,
     ) => Effect.Effect<ArtistDetail | null, LibraryStoreError>;
     readonly getGenre: (id: number) => Effect.Effect<GenreDetail | null, LibraryStoreError>;
+    /** Bounded opening: one header/count and the first 50 lightweight rows. */
+    readonly openGenre: (id: number, sort: LibrarySongSort) => Effect.Effect<GenreOpening | null, LibraryStoreError>;
+    readonly genrePage: (id: number, sort: LibrarySongSort, cursor: GenreCursor | null) => Effect.Effect<GenrePage, LibraryStoreError>;
+    /** Narrow order pages for complete actions and the settled A–Z spine. */
+    readonly genreOrderPage: (id: number, sort: LibrarySongSort, cursor: GenreCursor | null) => Effect.Effect<GenrePage<GenreOrderRow>, LibraryStoreError>;
 
     /** The indexed files under [roots], for an incremental scan to skip the unchanged ones. */
     readonly knownFiles: (
@@ -1489,6 +1495,9 @@ const make = Effect.gen(function* () {
             : 1 + result.albums.length + result.appearsOn.length + result.songs.length,
       ),
 
+    openGenre: (id, sort) => attempt("open the genre", () => selectGenreOpening(db, id, sort), result => result === null ? 0 : result.page.rows.length + 1),
+    genrePage: (id, sort, cursor) => attempt("read genre page", () => selectGenrePage(db, id, sort, cursor)),
+    genreOrderPage: (id, sort, cursor) => attempt("read genre order page", () => selectGenrePage(db, id, sort, cursor, false)),
     getGenre: (id) =>
       attempt(
         "open the genre",
