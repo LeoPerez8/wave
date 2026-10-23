@@ -23,6 +23,14 @@ export type GenreProfile = ReadonlyMap<string, number>;
 /** Something tagged with a genre: a song, or an album on Deezer. */
 export type GenreTagged = Pick<DiscoverLibrarySong, "genre" | "genres">;
 
+/** Adds [song]'s families to [weights], 1/n to each of its n; whether it has any. */
+const weighFamilies = (weights: Map<string, number>, song: GenreTagged): boolean => {
+  const families = songFamilies(song);
+  for (const family of families)
+    weights.set(family.key, (weights.get(family.key) ?? 0) + 1 / families.length);
+  return families.length > 0;
+};
+
 /**
  * The genre profile of [songs]: every value of each one's genre tag mapped
  * to its family, a song in n families adding 1/n to each (as Genre mixes
@@ -31,12 +39,7 @@ export type GenreTagged = Pick<DiscoverLibrarySong, "genre" | "genres">;
 export const genreProfile = (songs: readonly GenreTagged[]): GenreProfile | null => {
   const weights = new Map<string, number>();
   let total = 0;
-  for (const song of songs) {
-    const families = songFamilies(song);
-    for (const family of families)
-      weights.set(family.key, (weights.get(family.key) ?? 0) + 1 / families.length);
-    if (families.length > 0) total += 1;
-  }
+  for (const song of songs) if (weighFamilies(weights, song)) total += 1;
   if (total === 0) return null;
   return new Map([...weights].map(([key, weight]) => [key, weight / total]));
 };
@@ -344,10 +347,7 @@ export function* genreProfileSteps(
   const weights = new Map<string, number>();
   let total = 0;
   for (const song of songs) {
-    const families = songFamilies(song);
-    for (const family of families)
-      weights.set(family.key, (weights.get(family.key) ?? 0) + 1 / families.length);
-    if (families.length > 0) total++;
+    if (weighFamilies(weights, song)) total++;
     yield;
   }
   if (total === 0) return null;

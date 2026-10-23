@@ -6,6 +6,7 @@
  * go in as unsearched entries, searched when they're needed.
  */
 
+import { finishSteps } from "./buildSteps.ts";
 import { UNKNOWN_ARTIST } from "./library.ts";
 import { counted } from "./listening.ts";
 import { importedPlaylistName } from "./m3u.ts";
@@ -21,7 +22,6 @@ import type { SpotifyPlaylist, SpotifySong } from "./spotifyPlaylist.ts";
 import type { YtAlbumSong } from "./ytDiscover.ts";
 import {
   joinArtists,
-  libraryFinder,
   libraryImportFinderSteps,
   type LibrarySongKey,
   type YtSong,
@@ -107,54 +107,7 @@ export const planLinkImport = <
 >(
   source: LinkedSource<S>,
   library: readonly L[],
-): LinkImportPlan<S> => {
-  const find = libraryFinder(library);
-  // A YouTube Music playlist's rows listing a video again come after the rest: each is left out.
-  const streams =
-    source.service === "ytMusic" ? [...source.playlist.songs, ...source.playlist.repeats] : null;
-  const listed: readonly SpotifySong[] = streams ?? source.playlist.songs;
-  const seen = new Set<string>();
-  const songs: SpotifySong[] = [];
-  const finds: ImportFind<S>[] = [];
-  const leftOut: LeftOutSong[] = [];
-  listed.forEach((song, index) => {
-    const track = find(song);
-    const stream = streams?.[index];
-    const key =
-      track !== null
-        ? `library:${track.id}`
-        : stream !== undefined
-          ? `yt:${stream.videoId}`
-          : JSON.stringify([song.title, song.artists, song.album, song.durationMs]);
-    if (seen.has(key)) {
-      leftOut.push({ song: listedSong(song), reason: "listedTwice" });
-      return;
-    }
-    seen.add(key);
-    songs.push(song);
-    if (track !== null) finds.push({ kind: "library", trackId: track.id });
-    else if (stream !== undefined) finds.push({ kind: "ytMusic", song: stream });
-    else if (source.service === "ytMusic" || artistNames(song.artists).length === 0)
-      finds.push(NOT_FOUND);
-    else finds.push(UNSEARCHED);
-  });
-  // Of a playlist only partly read, Spotify's count includes songs never read.
-  const notSongs =
-    source.service === "spotify" && !source.playlist.truncated
-      ? Math.max(0, source.playlist.total - listed.length)
-      : 0;
-  return {
-    name: importedPlaylistName(source.playlist.title),
-    service: source.service,
-    songs,
-    finds,
-    inLibrary: finds.filter((found) => found.kind === "library").length,
-    sourceTotal: listed.length + notSongs,
-    leftOut,
-    notSongs,
-    cut: source.playlist.truncated ? source.playlist.songs.length : null,
-  };
-};
+): LinkImportPlan<S> => finishSteps(planLinkImportSteps(source, library));
 
 /** [song] as the source lists it (its cover when it has one): a YouTube Music song's own fields left behind. */
 const listedSong = ({ title, artists, album, durationMs, artworkUrl }: SpotifySong): SpotifySong =>

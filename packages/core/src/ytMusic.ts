@@ -107,6 +107,22 @@ interface Candidate<L> {
   readonly durationMs: number | null;
 }
 
+/** Files [song] under its matching title in [byTitle]; a song with no title to match is left out. */
+const addCandidate = <L extends LibrarySongKey>(
+  byTitle: Map<string, Candidate<L>[]>,
+  song: L,
+): void => {
+  const title = recordingMatchTitle(song.title);
+  if (title === "") return;
+  const candidates = byTitle.get(title) ?? [];
+  candidates.push({
+    song,
+    artists: new Set(artistNames(song.artist)),
+    durationMs: knownLength(song.durationMs),
+  });
+  byTitle.set(title, candidates);
+};
+
 const candidateMatches = (
   candidate: { readonly artists: ReadonlySet<string>; readonly durationMs: number | null },
   artists: readonly string[],
@@ -166,15 +182,7 @@ export function* libraryMatchesSteps<L extends LibrarySongKey>(
   const byTitle = new Map<string, Candidate<L>[]>();
   for (const song of library) {
     yield;
-    const title = recordingMatchTitle(song.title);
-    if (title === "") continue;
-    const candidates = byTitle.get(title) ?? [];
-    candidates.push({
-      song,
-      artists: new Set(artistNames(song.artist)),
-      durationMs: knownLength(song.durationMs),
-    });
-    byTitle.set(title, candidates);
+    addCandidate(byTitle, song);
   }
   return (song) => {
     const candidates = byTitle.get(recordingMatchTitle(song.title));
@@ -227,18 +235,7 @@ export function* libraryImportFinderSteps<L extends LibrarySongKey>(
 > {
   const byTitle = new Map<string, Candidate<L>[]>();
   for (const song of library) {
-    const title = recordingMatchTitle(song.title);
-    if (title === "") {
-      yield;
-      continue;
-    }
-    const candidates = byTitle.get(title) ?? [];
-    candidates.push({
-      song,
-      artists: new Set(artistNames(song.artist)),
-      durationMs: knownLength(song.durationMs),
-    });
-    byTitle.set(title, candidates);
+    addCandidate(byTitle, song);
     yield;
   }
   return function* (song) {
@@ -248,13 +245,7 @@ export function* libraryImportFinderSteps<L extends LibrarySongKey>(
     const length = knownLength(song.durationMs);
     for (const candidate of candidates) {
       yield;
-      if (
-        artists.some((artist) => candidate.artists.has(artist)) &&
-        (length === null ||
-          candidate.durationMs === null ||
-          Math.abs(candidate.durationMs - length) <= SAME_LENGTH_MS)
-      )
-        return candidate.song;
+      if (candidateMatches(candidate, artists, length)) return candidate.song;
     }
     return null;
   };
