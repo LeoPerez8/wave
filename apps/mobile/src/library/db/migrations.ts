@@ -971,6 +971,8 @@ CREATE INDEX tracks_match_title_idx ON tracks(match_title);`;
  * order changes (a song added, removed, moved, retagged or gone missing) so a
  * paged read never stitches two orders together.
  */
+// WITHOUT ROWID keeps id an ordinary indexed value, so composite cursor seeks
+// include it even when every preceding key (including a missing path) is tied.
 const mGenreOrder = `CREATE TABLE genre_order (
   id integer PRIMARY KEY NOT NULL,
   genre_id integer NOT NULL,
@@ -982,7 +984,7 @@ const mGenreOrder = `CREATE TABLE genre_order (
   track_number integer NOT NULL,
   added_at integer NOT NULL,
   path text NOT NULL
-);
+) WITHOUT ROWID;
 --> statement-breakpoint
 CREATE TABLE genre_order_revisions (
   genre_id integer PRIMARY KEY NOT NULL,

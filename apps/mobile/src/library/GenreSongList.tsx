@@ -334,6 +334,9 @@ export function GenreSongList({
   );
   useEffect(() => {
     if (selection === null) {
+      for (const controller of rowReads.current) controller.abort();
+      rowReads.current.clear();
+      generation.current++;
       asked.current.clear();
       setFull(NO_ROWS);
       return;

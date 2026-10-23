@@ -49,6 +49,12 @@ const assertSeeks = (
       query.plan.every((step) => !step.includes("TEMP B-TREE")),
       `${index} sorts the genre: ${query.plan.join(" | ")}`,
     );
+    if (continued && query.sql.includes(") > (")) {
+      assert.ok(
+        query.plan.some((step) => /,id\)>/.test(step)),
+        `the index must seek through the final ID tie: ${query.plan.join(" | ")}`,
+      );
+    }
     assert.ok(!/OFFSET/i.test(query.sql));
   }
 };
@@ -250,11 +256,10 @@ test("a change to a genre's order stops its cursors; other genres' changes and o
   }
 });
 
-test("migration 0038 fills the genre order of a Library that shipped without it, and a new one keeps it", async () => {
-  const read = (db: TestDatabase) =>
-    db.all<Record<string, unknown>>(sql`SELECT * FROM genre_order ORDER BY id`);
-  const expected = (db: TestDatabase) =>
-    db.all<Record<string, unknown>>(sql`SELECT t.id, t.genre_id, t.title_sort,
+const readStoredGenreOrder = (db: TestDatabase) =>
+  db.all<Record<string, unknown>>(sql`SELECT * FROM genre_order ORDER BY id`);
+const expectedStoredGenreOrder = (db: TestDatabase) =>
+  db.all<Record<string, unknown>>(sql`SELECT t.id, t.genre_id, t.title_sort,
         a.sort AS artist_sort, b.title_sort AS album_sort, t.album_id,
         coalesce(t.disc_number, 1) AS disc_number,
         coalesce(t.track_number, 9007199254740991) AS track_number, t.added_at,
@@ -262,13 +267,14 @@ test("migration 0038 fills the genre order of a Library that shipped without it,
       FROM tracks t JOIN artists a ON a.id = t.artist_id JOIN albums b ON b.id = t.album_id
       WHERE t.genre_id IS NOT NULL ORDER BY t.id`);
 
+test("migration 0038 fills the genre order of a Library that shipped without it, and a new one keeps it", async () => {
   // An existing Library: the upgrade fills the order, and the triggers keep it after.
   const old = await openTestDatabase({ through: "0037_recording_titles" });
   addLibrary(old, { tracks: 300, artists: 12, albums: 30 });
   old.run(sql`UPDATE tracks SET disc_number = NULL, track_number = NULL WHERE id % 4 = 0`);
   await migrateTestDatabase(old);
-  assert.equal(read(old).length, 100);
-  assert.deepEqual(read(old), expected(old));
+  assert.equal(readStoredGenreOrder(old).length, 100);
+  assert.deepEqual(readStoredGenreOrder(old), expectedStoredGenreOrder(old));
   const genreId = old.get<{ id: number }>(sql`SELECT id FROM genres LIMIT 1`).id;
   const store = await loadLibraryStore(root, old);
   const all = (db: TestDatabase) => {
@@ -281,22 +287,22 @@ test("migration 0038 fills the genre order of a Library that shipped without it,
   );
   old.run(sql`UPDATE tracks SET title_sort = 'zz' || title_sort WHERE id % 5 = 0`);
   addTrack(old, { title: "Upgraded", artist: "Someone", genre: "Library genre" });
-  assert.deepEqual(read(old), expected(old));
+  assert.deepEqual(readStoredGenreOrder(old), expectedStoredGenreOrder(old));
 
   // A new Library: empty, filled by every write from the first scan on.
   const fresh = await openTestDatabase();
-  assert.deepEqual(read(fresh), []);
+  assert.deepEqual(readStoredGenreOrder(fresh), []);
   assert.deepEqual(fresh.all(sql`SELECT * FROM genre_order_revisions`), []);
   addLibrary(fresh, { tracks: 300, artists: 12, albums: 30 });
   addTrack(fresh, { title: "No genre", artist: "Someone" });
-  assert.equal(read(fresh).length, 100);
-  assert.deepEqual(read(fresh), expected(fresh));
+  assert.equal(readStoredGenreOrder(fresh).length, 100);
+  assert.deepEqual(readStoredGenreOrder(fresh), expectedStoredGenreOrder(fresh));
   fresh.run(sql`UPDATE artists SET sort = 'a' || sort WHERE id % 2 = 0`);
   fresh.run(sql`UPDATE albums SET title_sort = 'b' || title_sort WHERE id % 3 = 0`);
   fresh.run(sql`UPDATE tracks SET genre_id = NULL WHERE id % 9 = 0`);
   fresh.run(sql`DELETE FROM track_artists WHERE track_id % 11 = 0`);
   fresh.run(sql`DELETE FROM tracks WHERE id % 11 = 0`);
-  assert.deepEqual(read(fresh), expected(fresh));
+  assert.deepEqual(readStoredGenreOrder(fresh), expectedStoredGenreOrder(fresh));
 });
 
 test("even a whole genre of identical names pages by indexed file and id ties without a temporary sort", async () => {
