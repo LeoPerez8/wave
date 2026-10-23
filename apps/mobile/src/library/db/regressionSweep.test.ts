@@ -122,31 +122,24 @@ test("two requested artist rows seek only their indexed credits with complete me
   }
 });
 
-test("a genre opening decodes every genre song; a bounded projection preserves the first page", async () => {
-  const { eq } = await import("drizzle-orm");
-  const { trackQuery, BY_TITLE } = await import("./tracks.ts");
-  const schema = await import("./schema.ts");
+test("a genre opening replaces full hydration with a header and 50 indexed summaries", async () => {
   const fixture = await createFastAgainFixture();
   try {
     const store = await loadLibraryStore(CURRENT_ROOT, fixture.db);
-    const full = traceQueries(fixture.db, () => Effect.runSync(store.getGenre(fixture.genreId)));
-    const page = traceQueries(fixture.db, () =>
-      trackQuery(fixture.db)
-        .where(eq(schema.tracks.genreId, fixture.genreId))
-        .orderBy(...BY_TITLE)
-        .limit(50)
-        .all(),
+    const opening = traceQueries(fixture.db, () =>
+      Effect.runSync(store.openGenre(fixture.genreId, { key: "title", descending: false })),
     );
-    assert.equal(full.result!.songs.length, 334);
+    assert.equal(opening.result!.genre.trackCount, 334);
+    assert.equal(opening.result!.songs.length, 50);
     assert.equal(
-      full.queries.reduce((sum, query) => sum + query.rows, 0),
-      335,
+      opening.queries.reduce((sum, query) => sum + query.rows, 0),
+      51,
     );
-    assert.equal(
-      page.queries.reduce((sum, query) => sum + query.rows, 0),
-      50,
+    assert.ok(
+      opening.queries
+        .flatMap((query) => query.plan)
+        .some((step) => /SEARCH o USING (COVERING )?INDEX genre_order_title_asc/.test(step)),
     );
-    assert.deepEqual(page.result, full.result!.songs.slice(0, 50));
   } finally {
     fixture.close();
   }

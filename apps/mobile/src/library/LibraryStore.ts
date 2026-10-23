@@ -112,6 +112,13 @@ import {
   type LibraryScale,
 } from "./db/counts";
 import { creditSplits, relinkCreditsIfUnlinked, type CreditSplits } from "./db/credits";
+import {
+  selectGenreOpening,
+  selectGenreOrderSlice,
+  type GenreCursor,
+  type GenreOpening,
+  type GenreOrderSlice,
+} from "./db/genrePages";
 import { selectGenreSongs } from "./db/genres";
 import type { RowPage } from "./db/database";
 import migrations from "./db/migrations";
@@ -367,7 +374,7 @@ export const songHasFile = <S extends SongRow>(song: S): song is S & { readonly 
 /** A track on an album screen, with what orders it there. */
 export type AlbumTrackRow = SongRow;
 
-export type { FavoriteRow, SongOrder, SongSummary };
+export type { FavoriteRow, GenreCursor, GenreOpening, GenreOrderSlice, SongOrder, SongSummary };
 
 /** One album of the Albums grid (and of an artist's albums). */
 export interface AlbumRow {
@@ -664,7 +671,27 @@ export class LibraryStore extends Context.Service<
       id: number,
       scope?: TrackScope,
     ) => Effect.Effect<ArtistDetail | null, LibraryStoreError>;
+    /** Every song of a genre, as full rows: what its menu acts on (its screen opens on `openGenre`). */
     readonly getGenre: (id: number) => Effect.Effect<GenreDetail | null, LibraryStoreError>;
+    /**
+     * What a genre's screen opens on (#601): its header and count, and the
+     * first page of its songs in [sort], read by an index seek; null once
+     * the genre is gone. `genreOrderSlice` reads the rest of its order.
+     */
+    readonly openGenre: (
+      id: number,
+      sort: LibrarySongSort,
+    ) => Effect.Effect<GenreOpening | null, LibraryStoreError>;
+    /**
+     * The next stretch of a genre's order in [sort] from [cursor] (from the
+     * start without one), as Track ids; null once the genre's order has
+     * changed since the cursor's read, or the cursor isn't this genre's and sort's.
+     */
+    readonly genreOrderSlice: (
+      id: number,
+      sort: LibrarySongSort,
+      cursor: GenreCursor | null,
+    ) => Effect.Effect<GenreOrderSlice | null, LibraryStoreError>;
 
     /** The indexed files under [roots], for an incremental scan to skip the unchanged ones. */
     readonly knownFiles: (
@@ -1489,9 +1516,23 @@ const make = Effect.gen(function* () {
             : 1 + result.albums.length + result.appearsOn.length + result.songs.length,
       ),
 
-    getGenre: (id) =>
+    openGenre: (id, sort) =>
       attempt(
         "open the genre",
+        () => selectGenreOpening(db, id, sort),
+        (result) => (result === null ? 0 : 1 + result.songs.length),
+      ),
+
+    genreOrderSlice: (id, sort, cursor) =>
+      attempt(
+        "order the genre",
+        () => selectGenreOrderSlice(db, id, sort, cursor),
+        (result) => result?.ids.length ?? 0,
+      ),
+
+    getGenre: (id) =>
+      attempt(
+        "read the genre's songs",
         () => getGenreSync(db, id),
         (result) => (result === null ? 0 : 1 + result.songs.length),
       ),
