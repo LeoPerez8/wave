@@ -821,3 +821,28 @@ export const fileDeletions = sqliteTable("file_deletions", {
   /** When the deletion was recorded (ms since the epoch). */
   recordedAt: integer("recorded_at").notNull(),
 });
+
+/** Persisted genre ordering; normalized nulls match Core songOrderTerms. SQLite triggers
+ * maintain these keys when tracks, artist sort keys or album sort keys change. */
+export const genreOrder = sqliteTable("genre_order", {
+  id: integer("id").primaryKey(),
+  genreId: integer("genre_id").notNull(),
+  titleSort: text("title_sort").notNull(),
+  artistSort: text("artist_sort").notNull(),
+  albumSort: text("album_sort").notNull(),
+  albumId: integer("album_id").notNull(),
+  discNumber: integer("disc_number").notNull(),
+  trackNumber: integer("track_number").notNull(),
+  addedAt: integer("added_at").notNull(),
+  path: text("path").notNull(),
+}, (t) => [
+  index("genre_order_title_asc").on(t.genreId, sql`${t.titleSort} ASC`, t.artistSort, t.path, t.id),
+  index("genre_order_title_desc").on(t.genreId, sql`${t.titleSort} DESC`, t.artistSort, t.path, t.id),
+  index("genre_order_artist_asc").on(t.genreId, sql`${t.artistSort} ASC`, t.albumSort, t.albumId, t.discNumber, t.trackNumber, t.titleSort, t.path, t.id),
+  index("genre_order_artist_desc").on(t.genreId, sql`${t.artistSort} DESC`, t.albumSort, t.albumId, t.discNumber, t.trackNumber, t.titleSort, t.path, t.id),
+  index("genre_order_album_asc").on(t.genreId, sql`${t.albumSort} ASC`, t.albumId, t.discNumber, t.trackNumber, t.titleSort, t.path, t.id),
+  index("genre_order_album_desc").on(t.genreId, sql`${t.albumSort} DESC`, t.albumId, t.discNumber, t.trackNumber, t.titleSort, t.path, t.id),
+  index("genre_order_added_asc").on(t.genreId, sql`${t.addedAt} ASC`, t.titleSort, t.artistSort, t.path, t.id),
+  index("genre_order_added_desc").on(t.genreId, sql`${t.addedAt} DESC`, t.titleSort, t.artistSort, t.path, t.id),
+]);
+export const genreOrderState = sqliteTable("genre_order_state", { id: integer("id").primaryKey(), revision: integer("revision").notNull() });
