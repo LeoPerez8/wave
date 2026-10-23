@@ -1,8 +1,15 @@
 import { LegendList, type LegendListRef } from "@legendapp/list/react-native";
-import { IconMenu2, IconRepeat, IconRepeatOnce, IconX } from "@tabler/icons-react-native";
+import {
+  IconCircleArrowDownFilled,
+  IconMenu2,
+  IconRepeat,
+  IconRepeatOnce,
+  IconX,
+} from "@tabler/icons-react-native";
 import {
   currentEntry,
   counted,
+  trackRowDownloaded,
   upNext,
   upNextMove,
   withPendingMoves,
@@ -150,6 +157,8 @@ type RowContentProps = {
 
 /** Thumbnail, title and artist: the part of an Up Next row that a drag lifts. */
 function RowText({ track }: RowContentProps) {
+  const accent = useThemeColor("accent");
+  const downloaded = trackRowDownloaded({ trackId: track?.id ?? "" });
   return (
     <>
       <Artwork uri={thumbUri(track)} size={THUMB} />
@@ -157,9 +166,12 @@ function RowText({ track }: RowContentProps) {
         <Text numberOfLines={1} className="font-sans text-body font-medium text-foreground">
           {track?.title ?? " "}
         </Text>
-        <Text numberOfLines={1} className="font-sans text-body text-secondary">
-          {track?.artist ?? " "}
-        </Text>
+        <View className="flex-row items-center" style={{ gap: CELL / 2 }}>
+          {downloaded && <IconCircleArrowDownFilled size={14} color={accent} />}
+          <Text numberOfLines={1} className="flex-1 font-sans text-body text-secondary">
+            {track?.artist ?? " "}
+          </Text>
+        </View>
       </View>
     </>
   );
@@ -187,12 +199,13 @@ const UpNextRow = memo(function UpNextRow({ entry, index, track, lifted, drag, c
   const { pan, style } = useUpNextRowDrag(drag, key, index);
 
   const title = track?.title ?? "Song";
+  const downloaded = trackRowDownloaded({ trackId: track?.id ?? "" });
   return (
     <Animated.View style={[{ height: ROW, opacity: lifted ? 0 : 1 }, style]}>
       <View className="flex-1 flex-row items-center">
         <Press
           accessibilityRole="button"
-          accessibilityLabel={`${title}, ${track?.artist ?? ""}`}
+          accessibilityLabel={`${title}, ${track?.artist ?? ""}${downloaded ? ", downloaded" : ""}`}
           accessibilityHint="Plays this song now"
           accessibilityActions={[
             { name: "remove", label: "Remove from Up Next" },

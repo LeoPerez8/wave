@@ -136,7 +136,6 @@ function Hit({
   hit,
   top,
   songs,
-  downloaded,
   integrated,
   playing,
   onOpen,
@@ -146,8 +145,6 @@ function Hit({
   /** The top result says what type it is (genres, which have no card). */
   top: boolean;
   songs: readonly ResultSong[];
-  /** A song among YT Music's: marked downloaded. */
-  downloaded: boolean;
   /** An album opens integrated. */
   integrated: boolean;
   playing: boolean;
@@ -192,7 +189,6 @@ function Hit({
           state={playing ? "playing" : undefined}
           leading="artwork"
           playDisc
-          downloaded={downloaded}
           {...selectableRow(
             { song: hit.song },
             selection,
@@ -260,7 +256,6 @@ export function SearchResultsList({ rows, onOpen, onShowAll, integrated, selecti
               hit={item.hit}
               top={item.top}
               songs={item.songs}
-              downloaded={item.downloaded}
               integrated={integrated}
               playing={item.hit.kind === "song" && currentIds.has(String(item.hit.song.id))}
               onOpen={onOpen}
