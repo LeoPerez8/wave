@@ -1343,3 +1343,39 @@ Android/Hermes, native frame behavior and TalkBack have not been exercised for t
 change. No device responsiveness or strict 6 ms guarantee is inferred from this
 shared-host desktop capture. The implementation and source/work-count checks are
 reviewable independently of that remaining device evidence.
+
+### #594 integration audit: bounded mix diagnostics
+
+The integration merge preserves the original eleven-run JSONL files byte for byte,
+including the **25.773 ms at 12k** and **6.510 ms at 50k** mix maxima. Source hashes
+and every comparison cell, complete semantic key and size/read grid were validated
+against the committed files. Measured runtime/harness files remain unchanged.
+
+A separate, bounded diagnostic ran one warmup, one traced and three timed builds
+sequentially at 12k and 50k. It adds task labels, process CPU, generator-operation
+wall times, GC intervals and a 500-us inspector profile. This instrumentation adds
+overhead; its timings do not replace the original capture. The full saved-mix and
+random-draw keys still match the original evidence at both sizes. See
+[`594-merge-mix-diagnostic.jsonl`](results/594-merge-mix-diagnostic.jsonl), which
+records per-run limits, every task over 6 ms and hashes of the stable scratch
+scripts, complete task records and CPU profiles.
+
+Timed maxima were **4.720 ms at 12k** and **6.299 ms at 50k**. The 50k overshoot
+was labeled `mixArtistsPage`, used 6.665 ms of process CPU and had no overlapping
+observed GC. Approximately aligned CPU samples were in sql.js/SQLite beneath that
+read; profiler-start RPC overhead was not measured. A separate 50k warmup task of
+15.372 ms overlapped an 11.236 ms major-GC interval. These observations establish
+neither the cause of the original overshoots nor a hardware deadline. No repeatable
+divisible generator operation over 6 ms was observed; production code was unchanged.
+**Strict 6 ms acceptance remains open.**
+
+The added real-store regression checks all mix/graph/taste page APIs at nonzero
+cursors: actual driving rowid/key seeks, equal-time history's second seek key,
+combined history-page row bounds, the genres query's upper bound, and indexed
+artist-count/credit lookups. Actual plans are retained in
+[`594-merge-query-plans.json`](results/594-merge-query-plans.json). Aggregate
+co-routines still scan one artist's indexed track/album matches, and stored JSON
+processing scales with one payload; a 128-row output bound does not bound every
+SQLite VM visit or make a native call preemptible. #593 whole-source paging,
+#595 startup and #598 Recap retain their existing ownership. Device, Hermes,
+native frames and TalkBack remain unverified.
