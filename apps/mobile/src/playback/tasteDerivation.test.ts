@@ -1,11 +1,13 @@
+import { sql } from "drizzle-orm";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import * as Effect from "effect/Effect";
-import { magicLibrarySongs, tasteProfile } from "@wave/core";
+import { magicLibrarySongs, tasteProfile, magicQueuePicks } from "@wave/core";
 import { loadLibraryStore } from "../../bench/fastAgain/store.ts";
 import { createFastAgainFixture } from "../library/db/fastAgainFixture.ts";
 import { traceQueries } from "../library/db/testDatabase.ts";
+import { buildHomeMagicQueue } from "../home/magicQueueJob.ts";
 import { readTasteLibrary, deriveTaste } from "./tasteDerivation.ts";
 
 const root = fileURLToPath(new URL("../../../../", import.meta.url));
@@ -37,8 +39,16 @@ test("due Home's real store snapshot is read once and reused for the same full t
     assert.deepEqual(result.profile, expected);
     assert.deepEqual(result.library.magic, expectedSongs);
     const songs = queries.filter((query) => query.sql.includes('"tracks"."title"'));
-    assert.equal(songs.length, 1);
-    assert.equal(songs[0]!.rows, 1000);
+    assert.ok(songs.length > 1);
+    assert.equal(songs.reduce((n, q) => n + q.rows, 0), 1000);
+    assert.ok(queries.every((query) => query.rows <= 128));
+    assert.ok(queries.every((query) => !/OFFSET/i.test(query.sql)));
+    assert.equal(queries.filter((q) => /FROM artists a/.test(q.sql)).reduce((n, q) => n + q.rows, 0), fixture.db.all<{id:number}>(sql`SELECT id FROM artists`).length);
+    const picks = Effect.runSync(buildHomeMagicQueue(store, null, {
+      now: fixture.now, random: () => 0.5, turn,
+      taste: (library) => deriveTaste(store, turn, fixture.now, library),
+    }));
+    assert.deepEqual(picks, magicQueuePicks(null, expectedSongs.filter((song) => result.library.playable.some((s) => s.trackId === song.trackId)), {now: fixture.now, taste: expected, random: () => 0.5}));
     assert.ok(turns >= 5);
   } finally {
     fixture.close();

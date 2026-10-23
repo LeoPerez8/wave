@@ -1,6 +1,6 @@
 import type { YtSong } from "@wave/core";
 import { backfillRecordingTitles, selectMatchingSong } from "./db/matchingSong";
-import { tastePlaysPage, tasteFavoritesPage, tasteDownloadsPage } from "./db/tastePages";
+import { tastePlaysPage, tasteFavoritesPage, tasteDownloadsPage, tasteArtistsPage } from "./db/tastePages";
 import { artistGraphSourcesChanged } from "@/home/graphSources";
 import {
   mixCreditPage,
@@ -1066,6 +1066,8 @@ export class LibraryStore extends Context.Service<
     ) => Effect.Effect<void, LibraryStoreError>;
     /** The candidate catalog: every song with the radios that brought it. */
     /** ti-compatible taste projections for the subsequent #593 source migration. */
+    /** Artist identity only; unused orphan identities cannot affect the song mapper. */
+    readonly tasteArtistsPage: (after: number) => Effect.Effect<ReturnType<typeof tasteArtistsPage>, LibraryStoreError>;
     readonly tastePlaysPage: (
       after: GraphPlayCursor,
     ) => Effect.Effect<ReturnType<typeof tastePlaysPage>, LibraryStoreError>;
@@ -1842,6 +1844,7 @@ const make = Effect.gen(function* () {
     mixPlaylistedPage: (after) =>
       attempt("read a mix playlist page", () => mixPlaylistedPage(db, after)),
     mixCreditPage: (after) => attempt("read a mix credit page", () => mixCreditPage(db, after)),
+    tasteArtistsPage: (after) => attempt("read a taste artist page", () => tasteArtistsPage(db, after)),
     tastePlaysPage: (after) => attempt("read a taste play page", () => tastePlaysPage(db, after)),
     tasteFavoritesPage: (after) =>
       attempt("read a taste favorite page", () => tasteFavoritesPage(db, after)),
