@@ -1,10 +1,5 @@
 import { LegendList, type LegendListRef } from "@legendapp/list/react-native";
-import {
-  IconMenu2,
-  IconRepeat,
-  IconRepeatOnce,
-  IconX,
-} from "@tabler/icons-react-native";
+import { IconMenu2, IconRepeat, IconRepeatOnce, IconX } from "@tabler/icons-react-native";
 import {
   currentEntry,
   counted,
