@@ -17,7 +17,11 @@ import * as Effect from "effect/Effect";
 import { subscribeAll } from "@/lib/externalStore";
 import { LibraryStore } from "@/library/LibraryStore";
 import { appRuntime } from "@/library/runtime";
-import { onDownloadedRecording, onLibraryChange } from "@/library/libraryChanges";
+import {
+  onDownloadedRecording,
+  onSavedRecordings,
+  onLibraryChange,
+} from "@/library/libraryChanges";
 import { createPlayingIds } from "./playingIds";
 
 export const usePlayback = (): PlaybackState =>
@@ -46,6 +50,7 @@ const playingIds = createPlayingIds({
   read: (song) =>
     appRuntime.runPromise(Effect.flatMap(LibraryStore, (store) => store.matchingSong(song))),
   onDownload: onDownloadedRecording,
+  onSavedRecordings,
   onLibraryChange,
 });
 
