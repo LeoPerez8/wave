@@ -325,7 +325,7 @@ export const bench: FastAgainBench = {
           omitted:
             "React/render/layout/native paint, KV-setting reads, network; taste derivation and mix builds are not due with standing saved choices; selected-worktree modules/SQLite are warmed, cold refers to screen query/pick caches",
           notificationsScope:
-            "read-only replay has no subscribed store writes; not a React commit counter",
+            "replay includes startup store writes but no subscribed UI observers; not a React commit counter",
           followups:
             "#594 owns versioned knownVideos, return and stepped mix builds; #598 owns Recap availability",
         },
