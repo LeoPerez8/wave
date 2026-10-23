@@ -158,3 +158,20 @@ Mapping, scoring and ordered weighted draws consume cooperative iterator steps.
 cancellation and shared profile semantics. The route-observer policy is unchanged.
 Source SQL reads remain separately visible in the desktop evidence; allowing a
 background source read does not claim that synchronous SQLite has a six-ms cap.
+
+## Playing row identities after #588
+
+The exact `playback/hooks.ts#useCurrentPlayingIds` debt entry is retired.
+`createPlayingIds` owns one current-recording registry attachment and one download
+completion subscriber, shared by every mounted list. Its query reads indexed
+normalized-title candidates and applies Core's `recordingMatches`; no whole-Library
+query or finder is followed or built. Saved download metadata filters unrelated
+completions before any read. Known matched-row edits/removals can refresh the same
+targeted query. Identical identity sets retain their snapshot and notify nobody.
+
+The SQL/store/bus tests mount eight consumers and distinguish the single source
+refresh and row returned from the eight consumers receiving an actual identity
+change. Race coverage discards prior-track and pre-download lookup answers. The
+source scanner and route-observer policy are unchanged; there is no candidate-finder
+exception. The index's one-time upgrade backfill uses pages of 128 titles, yielding
+between transactions before the LibraryStore becomes available.
