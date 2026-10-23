@@ -1,0 +1,74 @@
+package expo.modules.wavenative.share
+
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.BitmapShader
+import android.graphics.Canvas
+import android.graphics.Matrix
+import android.graphics.Paint
+import android.graphics.RectF
+import android.graphics.Shader
+import java.io.File
+
+/**
+ * The lyrics sticker's visible card inside a transparent 9:16 PNG. The frame
+ * comes from Core's lyricStoryFrame, shared with the preview. Instagram receives
+ * this PNG as interactive_asset_uri, keeping the card movable; the gradient is
+ * sent separately as the intent's background colours. Never changes the source
+ * image that Save image, WhatsApp and More share on its own.
+ */
+object StorySticker {
+  fun write(source: File, frame: Map<String, Double>): File {
+    fun value(key: String): Float {
+      val value = frame[key] ?: throw IllegalArgumentException("Missing sticker $key")
+      require(value.isFinite()) { "Invalid sticker $key" }
+      return value.toFloat()
+    }
+    val width = value("width")
+    val height = value("height")
+    require(width in 1f..4096f && height in 1f..4096f && width % 1f == 0f && height % 1f == 0f) {
+      "Invalid sticker canvas"
+    }
+    val left = value("left")
+    val top = value("top")
+    val cardWidth = value("cardWidth")
+    val cardHeight = value("cardHeight")
+    val radius = value("cornerRadius")
+    require(left >= 0 && top >= 0 && cardWidth > 0 && cardHeight > 0 &&
+      left + cardWidth <= width && top + cardHeight <= height &&
+      radius > 0 && radius <= minOf(cardWidth, cardHeight) / 2) { "Invalid sticker bounds" }
+    val card = BitmapFactory.decodeFile(source.absolutePath)
+      ?: throw IllegalArgumentException("Couldn't read the sticker's card")
+    try {
+      val sticker = Bitmap.createBitmap(width.toInt(), height.toInt(), Bitmap.Config.ARGB_8888)
+      try {
+        // A shader on an anti-aliased round rect keeps the corners transparent,
+        // including their edge pixels; clipping a path can leave a jagged rim.
+        val shader = BitmapShader(card, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP)
+        shader.setLocalMatrix(Matrix().apply {
+          setRectToRect(
+            RectF(0f, 0f, card.width.toFloat(), card.height.toFloat()),
+            RectF(left, top, left + cardWidth, top + cardHeight),
+            Matrix.ScaleToFit.FILL,
+          )
+        })
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply { this.shader = shader }
+        Canvas(sticker).drawRoundRect(RectF(left, top, left + cardWidth, top + cardHeight), radius, radius, paint)
+        val output = File.createTempFile("story-", ".png", source.parentFile)
+        try {
+          output.outputStream().use {
+            check(sticker.compress(Bitmap.CompressFormat.PNG, 100, it)) { "Couldn't write the sticker" }
+          }
+        } catch (error: Exception) {
+          output.delete()
+          throw error
+        }
+        return output
+      } finally {
+        sticker.recycle()
+      }
+    } finally {
+      card.recycle()
+    }
+  }
+}

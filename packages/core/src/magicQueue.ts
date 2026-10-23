@@ -22,6 +22,7 @@ import {
 } from "./genreAffinity.ts";
 import {
   commonStyle,
+  genreStyleFamilies,
   songFamilies,
   songStyle,
   styleAffinity,
@@ -117,6 +118,43 @@ export const magicGenreMatches = (
   return shared + 1e-9 >= threshold;
 };
 
+/** Whether the known family evidence supports the style beyond a minor tag. */
+const styleSupported = (
+  profile: GenreProfile | null | undefined,
+  style: string | null,
+): boolean => {
+  // Known styles alone remain evidence when no family profile is available.
+  if (profile == null || profile.size === 0) return true;
+  if (style === null) return false;
+  const families = genreStyleFamilies(style);
+  let share = 0;
+  for (const [family, weight] of profile) if (families.has(family)) share += weight;
+  return share + 1e-9 >= GENRE_AFFINITY_THRESHOLD;
+};
+
+/**
+ * Strict Magic Queue eligibility, before ranking/learning. Missing styles
+ * need both family overlap and closeness; association cannot override known
+ * incompatible genres. Known matching styles are direct evidence, including
+ * cross-family styles/neighbours. Any known profile must support its style
+ * with at least half its mass, so one minor tag cannot override the rest.
+ */
+export const magicStyleMatches = (
+  seed: { readonly profile: GenreProfile | null; readonly style: string | null },
+  candidate: { readonly profile: GenreProfile | null | undefined; readonly style: string | null },
+  level: StyleLevel,
+  close: boolean,
+  threshold: number,
+): boolean => {
+  const affinity = styleAffinity(seed.style, candidate.style, level);
+  if (affinity === "miss") return false;
+  if (affinity === "unknown")
+    return close && magicGenreMatches(seed.profile, candidate.profile, threshold);
+  return (
+    styleSupported(seed.profile, seed.style) && styleSupported(candidate.profile, candidate.style)
+  );
+};
+
 /**
  * The Library's songs a Magic Queue's batch may pick from (as
  * `magicLibrarySongs` weighs them): those that pass the genre affinity check
@@ -124,8 +162,10 @@ export const magicGenreMatches = (
  * Magic Queue section's Genre faithfulness, `magicLibraryThreshold`), as its
  * YouTube Music candidates do. A song's genre is its genre tag's profile;
  * without a tag, its primary artist's ([profileOf]: the Library's, else
- * Deezer's); with no genre known anywhere it stays out. An unknown seed
- * admits no recommendations. A null [threshold] (Wander) admits every song.
+ * Deezer's). Strict steps use `magicStyleMatches`: either direct style
+ * evidence, supported by known profiles, or family overlap and closeness.
+ * Without either proof it stays out. A null [threshold] without [styles]
+ * (Wander) admits every song.
  */
 export const magicLibraryCandidates = (
   session: MagicSession,
@@ -141,27 +181,16 @@ export const magicLibraryCandidates = (
   }: {
     readonly profileOf: GenreProfileOf;
     readonly threshold?: number | null;
-    /** At Same genres or Close the songs' styles are compared instead (`styleAffinity`); null: the families. */
+    /** At Same genres or Close the styles and supporting evidence are checked (`magicStyleMatches`); null: families only. */
     readonly styles?: StyleLevel | null;
     /** The artist graph, for the neighbourhood a song of an unknown style may be close by (`magicCloseArtists`). */
     readonly graph?: ArtistGraph | null;
   },
 ): MagicSong[] => {
   const toMagicSong = magicLibrarySongs(library.artists);
-  if (styles) {
-    const close = magicCloseArtists(session, graph);
-    return library.songs.flatMap((song) => {
-      const candidate = toMagicSong(song);
-      const affinity = styleAffinity(session.seedStyle, candidate.style, styles);
-      const admitted =
-        affinity === "match" ||
-        (affinity === "unknown" && candidate.artists.some((artist) => close.has(artist)));
-      return admitted ? [candidate] : [];
-    });
-  }
-  if (threshold === null) return library.songs.map(toMagicSong);
+  if (!styles && threshold === null) return library.songs.map(toMagicSong);
   const seed = magicSeedProfile(session, profileOf);
-  if (seed === null) return [];
+  const close = styles ? magicCloseArtists(session, graph) : new Set<string>();
   const names = new Map(library.artists.map((artist) => [artist.id, artist.name]));
   const profileOfSong = (song: MagicLibrarySong): GenreProfile | null => {
     const own = genreProfile([song]);
@@ -172,7 +201,17 @@ export const magicLibraryCandidates = (
   };
   return library.songs.flatMap((song) => {
     const profile = profileOfSong(song);
-    return magicGenreMatches(seed, profile, threshold) ? [toMagicSong(song)] : [];
+    const candidate = toMagicSong(song);
+    const admitted = styles
+      ? magicStyleMatches(
+          { profile: seed, style: session.seedStyle },
+          { profile, style: candidate.style },
+          styles,
+          candidate.artists.some((artist) => close.has(artist)),
+          threshold ?? GENRE_AFFINITY_THRESHOLD,
+        )
+      : magicGenreMatches(seed, profile, threshold ?? GENRE_AFFINITY_THRESHOLD);
+    return admitted ? [candidate] : [];
   });
 };
 
@@ -266,7 +305,7 @@ export interface MagicSession {
   /**
    * The seed songs' style (`commonStyle` of theirs), which Same genres and
    * Close hold the candidates to (`styleAffinity`); null when none has one,
-   * and then only the seed's own artists, their neighbourhood and radio are close.
+   * and then only candidates with family overlap and closeness can join.
    */
   readonly seedStyle: string | null;
 }
@@ -757,7 +796,7 @@ export const parseMagicSession = (value: unknown): MagicSession | null => {
         : YT_SHARE_START,
     radioArtists: isStrings(radioArtists) ? radioArtists : [],
     seedProfile: isWeights(seedProfile) ? seedProfile : null,
-    // A session saved before styles had none; its candidates are held to closeness.
+    // Before styles were saved, family overlap and closeness are both required.
     seedStyle: typeof seedStyle === "string" ? seedStyle : null,
   };
 };

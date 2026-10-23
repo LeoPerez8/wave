@@ -1,11 +1,12 @@
 import { highlightedOrigin, originOfNewCard } from "@wave/core";
 import type { OverlayAlign, OverlayRect } from "@wave/core";
 import type { ReactNode } from "react";
-import { useSyncExternalStore } from "react";
+import { createContext, useSyncExternalStore } from "react";
 
 import { makeExternalStore } from "@/lib/externalStore";
 import { pressedElement, type PressedElement } from "@/motion/pressedRect";
 import { traceLongPress } from "@/motion/longPressTrace";
+import { cancelHeldTouch } from "@/motion/heldTouchState";
 
 /**
  * Wave's dialogs and menus: floating glass cards drawn by `OverlayHost` at the
@@ -50,21 +51,44 @@ const entries = makeExternalStore<readonly OverlayEntry[]>([]);
 let nextId = 1;
 /** Origins kept by `followUp` across async work, innermost last. */
 let held: readonly { readonly origin: PressedElement | undefined }[] = [];
+let interactionRevision = 0;
+
+/** Identifies the card consuming a held touch, including while it fades out. */
+export const OverlayId = createContext<number | undefined>(undefined);
+
+/** Async measurements must not run choices on dismissed or covered cards. */
+export const isOverlayInteractive = (id: number): boolean =>
+  entries.get().findLast((entry) => !entry.closing)?.id === id;
+
+/** Covering a card invalidates its old finger, even if the card becomes frontmost again. */
+export const captureOverlayTouch = (id: number): (() => boolean) => {
+  const revision = interactionRevision;
+  return () => revision === interactionRevision && isOverlayInteractive(id);
+};
 
 /** What a card opening now is about (see Core `originOfNewCard`). */
 const originNow = (): PressedElement | undefined =>
   originOfNewCard({ pressed: pressedElement(), held: held.at(-1)?.origin, cards: entries.get() });
 
 /** Fades a card out (the host passes this to `render`). */
-export const closeOverlay = (id: number): void =>
+export const closeOverlay = (id: number): void => {
+  if (isOverlayInteractive(id)) {
+    interactionRevision += 1;
+    cancelHeldTouch();
+  }
   entries.update((list) =>
     list.some((entry) => entry.id === id && !entry.closing)
       ? list.map((entry) => (entry.id === id ? { ...entry, closing: true } : entry))
       : list,
   );
+};
 
 /** Shows a card over everything; it stays until closed or dismissed. */
 export const openOverlay = (request: OverlayRequest): OverlayHandle => {
+  interactionRevision += 1;
+  // A follow-up card starts with no inherited finger. The original native
+  // player callbacks remain invalid even though the held touch is cleared.
+  if (entries.get().some((entry) => !entry.closing)) cancelHeldTouch();
   const id = nextId++;
   const origin = originNow();
   if (origin?.menuAllowed !== undefined) traceLongPress(origin.key, "overlay-opened", `id=${id}`);

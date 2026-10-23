@@ -19,14 +19,23 @@ import { SettingsTile } from "./SettingsTile";
 /** Room between a page's sections. */
 export const SECTION_GAP = 48;
 
-/** A page of Settings, or one of Settings › Layout's. */
-type PageId = { readonly page: SettingsPage } | { readonly layoutPage: LayoutPage };
+/**
+ * A page of Settings, one of Settings › Layout's, or a page one of them opens
+ * for a single setting (a swipe direction's picker), by its title.
+ */
+type PageId =
+  | { readonly page: SettingsPage }
+  | { readonly layoutPage: LayoutPage }
+  | { readonly title: string };
 
-const pageTitle = (id: PageId): string =>
-  ("page" in id
-    ? SETTINGS_PAGES.find((entry) => entry.page === id.page)
-    : LAYOUT_PAGES.find((entry) => entry.page === id.layoutPage)
-  )?.title ?? "";
+const pageTitle = (id: PageId): string => {
+  if ("title" in id) return id.title;
+  const entry =
+    "page" in id
+      ? SETTINGS_PAGES.find(({ page }) => page === id.page)
+      : LAYOUT_PAGES.find(({ page }) => page === id.layoutPage);
+  return entry?.title ?? "";
+};
 
 /**
  * A Settings page: back, its title, then its sections (each one element) with

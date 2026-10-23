@@ -1,3 +1,4 @@
+import type { LyricStoryFrame } from "@wave/core";
 import { NativeModule, requireOptionalNativeModule } from "expo";
 
 /**
@@ -8,6 +9,8 @@ import { NativeModule, requireOptionalNativeModule } from "expo";
 declare class WaveShareModule extends NativeModule {
   /** Writes a base64 PNG as `fileName` among the shared images; resolves its path. */
   writeImage(base64: string, fileName: string): Promise<string>;
+  /** Writes a separate transparent, padded rounded sticker; leaves the source card intact. */
+  writeStorySticker(path: string, frame: LyricStoryFrame): Promise<string>;
   /** Copies the shared image at `path` into the gallery (Pictures/Wave). */
   saveToGallery(path: string): Promise<void>;
   /** Opens the share sheet with the shared image at `path`, titled `title`. */

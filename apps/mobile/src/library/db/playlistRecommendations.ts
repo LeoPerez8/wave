@@ -175,7 +175,9 @@ export const dismissPlaylistRecommendation = (
   offer: PlaylistRecommendationSlot,
   now: number,
 ): boolean => {
-  if (selectPlaylist(db, playlistId) === null) throw new Error("The playlist no longer exists");
+  // One indexed row: `selectPlaylist` would also read every entry and the mosaic covers.
+  if (db.get(sql`SELECT 1 FROM playlists WHERE id = ${playlistId} AND NOT deleted`) === undefined)
+    throw new Error("The playlist no longer exists");
   return (
     db
       .insert(schema.playlistRecommendationFeedback)

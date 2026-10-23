@@ -9,6 +9,7 @@ import {
   type LyricShareApps,
   type LyricShareDestination,
   type LyricStoryBackground,
+  type LyricStoryFrame,
 } from "@wave/core";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -32,10 +33,10 @@ const NO_APPS: LyricShareApps = { instagramStories: false, whatsapp: false };
 let lastApps: LyricShareApps | null = null;
 
 /**
- * The preview's corners, switched only while its image is drawn (the lyrics
- * card rounds them for Instagram's sticker, the song card squares them for
- * the others): [drawing] while switched; [startDrawing] switches them and
- * resolves a frame later, once they've reached the native view the image is
+ * The preview's corners, switched only while its image is drawn (the song
+ * card squares them for standalone exports): [drawing] while switched;
+ * [startDrawing] switches them and resolves a frame later, once they've
+ * reached the native view the image is
  * drawn from; [endDrawing] switches them back.
  */
 export const useDrawingCorners = (): {
@@ -75,6 +76,8 @@ export interface ImageShareOptions {
   readonly logTag: string;
   /** The Instagram story's background behind the image. */
   readonly storyBackground: LyricStoryBackground;
+  /** Lyrics-only transparent sticker framing, applied by the native export before delivery. */
+  readonly storyFrame?: LyricStoryFrame;
   /** Readies the view before it's drawn for [destination] (`useDrawingCorners`). */
   readonly prepare?: (destination: LyricShareDestination) => Promise<void>;
   /** Undoes `prepare` once the image is drawn, whichever destination it was for. */
@@ -97,6 +100,7 @@ export function useImageShare({
   sheetTitle,
   logTag,
   storyBackground,
+  storyFrame,
   prepare,
   afterDraw,
 }: ImageShareOptions): {
@@ -156,7 +160,7 @@ export function useImageShare({
         void sendImage(
           "instagramStories",
           `share ${what} to Instagram Stories`,
-          (path) => shareImageToInstagramStory(path, storyBackground),
+          (path) => shareImageToInstagramStory(path, storyBackground, storyFrame),
           "Couldn't open Instagram",
         ),
     },

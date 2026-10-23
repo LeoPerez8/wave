@@ -1,5 +1,5 @@
 import { IconRefresh } from "@tabler/icons-react-native";
-import { MIX_PULL_SLOP, mixPull, mixPullCanStart } from "@wave/core";
+import { MIX_PULL_SLOP, mixPull, mixPullCanStart, RETURN_SPRINGS } from "@wave/core";
 import * as Haptics from "expo-haptics";
 import { useState, type ReactNode } from "react";
 import { ActivityIndicator, View } from "react-native";
@@ -14,6 +14,7 @@ import Animated, {
 } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
 
+import { useBounceScale, useBounceSpring } from "@/motion/bounce";
 import { useListScrollable } from "@/motion/heldTouch";
 import { useThemeColor } from "@/theme/useThemeColor";
 
@@ -23,16 +24,17 @@ import { CELL, grid } from "./grid";
 /** The refresh arrow's size, in dp. */
 const ICON = CELL * 3;
 
-const SPRING = { damping: 20, stiffness: 240 };
-
 /**
  * A `CoverRow` (a row of covers that scrolls sideways, edge to edge) that
  * refreshes when pulled the "wrong" way: dragged right past its start, the
  * row gives, showing a refresh arrow at the left edge. Past Core's threshold
  * (`mixPull`) the arrow turns into a spinner with a light haptic tick, and
  * letting go calls [onRefresh]; letting go before springs back with nothing
- * done. Under reduce motion the arrow stays still and the spinner is a still
- * arrow. With [enabled] off (a refresh already running) it's a plain row.
+ * done. How far the row gives and how far it springs past its rest follow
+ * the Bounce amount (at 0% the row holds still and only the arrow shows; the
+ * threshold is the finger's travel at every amount). Under reduce motion the
+ * row holds still, the arrow doesn't turn and the spinner is a still arrow.
+ * With [enabled] off (a refresh already running) it's a plain row.
  * The caller exposes refresh on its row heading so screen readers can reach
  * it without grouping the row's individually focusable tiles.
  *
@@ -64,6 +66,11 @@ export function PullRefreshRow({
     scrollX.set(event.contentOffset.x);
   });
   const pullable = useDerivedValue(() => enabled && mixPullCanStart(scrollX.get()), [enabled]);
+  // The Bounce amount, for the worklets: how far the row gives and how it springs back.
+  const bounce = useBounceScale();
+  const returnSpring = useBounceSpring(RETURN_SPRINGS.pullRow);
+  const give = useDerivedValue(() => bounce, [bounce]);
+  const spring = useDerivedValue(() => returnSpring, [returnSpring]);
   // How far the row has given to the pull, in dp, and how near it is to refreshing (0–1).
   const offset = useSharedValue(0);
   const progress = useSharedValue(0);
@@ -87,7 +94,7 @@ export function PullRefreshRow({
     failOffsetY: [-MIX_PULL_SLOP, MIX_PULL_SLOP],
     onUpdate: (event) => {
       "worklet";
-      const now = mixPull(event.translationX);
+      const now = mixPull(event.translationX, give.get());
       offset.set(now.offset);
       progress.set(now.progress);
       if (now.armed !== armedNow.get()) {
@@ -99,8 +106,8 @@ export function PullRefreshRow({
       "worklet";
       const refresh = !event.canceled && mixPull(event.translationX).armed;
       armedNow.set(false);
-      offset.set(withSpring(0, SPRING));
-      progress.set(withSpring(0, SPRING));
+      offset.set(withSpring(0, spring.get()));
+      progress.set(withSpring(0, spring.get()));
       scheduleOnRN(release, refresh);
     },
   });

@@ -276,6 +276,23 @@ const BY_STYLE: ReadonlyMap<string, GenreStyle> = new Map(
   }),
 );
 
+/**
+ * The families represented by each style's tags. Styles can span families:
+ * Heavy includes Metal and Rock; Soft / acoustic includes Rock and Folk.
+ * A family without a style split is its own style.
+ */
+const STYLE_FAMILIES: ReadonlyMap<string, ReadonlySet<string>> = new Map([
+  ...FAMILIES.map(([name]) => [compact(name), new Set([compact(name)])] as const),
+  ...STYLES.map(
+    ([name, tags]) =>
+      [compact(name), new Set(tags.flatMap((tag) => BY_TAG.get(compact(tag))?.key ?? []))] as const,
+  ),
+]);
+
+/** The known families whose tags can express [style]; none for an unknown style key. */
+export const genreStyleFamilies = (style: string): ReadonlySet<string> =>
+  STYLE_FAMILIES.get(style) ?? new Set();
+
 const NEAR: ReadonlyMap<string, ReadonlySet<string>> = (() => {
   const near = new Map<string, Set<string>>();
   const link = (a: string, b: string) => {

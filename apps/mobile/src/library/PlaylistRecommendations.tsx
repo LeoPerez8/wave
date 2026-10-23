@@ -5,22 +5,31 @@ import {
   type PlaylistRecommendationSlot,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
-import { useEffect, useState, useSyncExternalStore, useRef } from "react";
-import { Text, View } from "react-native";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { AccessibilityInfo, Text, View } from "react-native";
+import Animated, {
+  FadeIn,
+  LayoutAnimationConfig,
+  ReduceMotion,
+  useReducedMotion,
+} from "react-native-reanimated";
 
-import { grid } from "@/catalog/grid";
-import { SkeletonLine } from "@/catalog/SkeletonLine";
+import { CELL, grid } from "@/catalog/grid";
+import { ControlledTrackRowSkeleton, SkeletonGroup } from "@/catalog/Skeletons";
 import { TitledSection } from "@/catalog/TitledSection";
 import { IconButton } from "@/components/IconButton";
+import { TextButton } from "@/components/TextButton";
 import { artistGraphNow } from "@/home/artistGraphNow";
 import { lookedUpProfileOf } from "@/home/artistGenres";
 import { useScreenSight } from "@/lib/screenSight";
-import { settledTurnEffect, freeTurnEffect } from "@/lib/backgroundWork";
+import { freeTurn, freeTurnEffect, settledTurnEffect } from "@/lib/backgroundWork";
 import { runSteps } from "@/lib/stepped";
 import { onArtistGraphSourcesChanged } from "@/home/graphSources";
+import { afterPaint } from "@/lib/afterPaint";
 import { followPlaylistRecommendations } from "./playlistRecommendationVisit";
 import { playlistRecommendationInput } from "./playlistRecommendationSource";
 import { makeExternalStore } from "@/lib/externalStore";
+import { CROSSFADE_MS } from "@/motion/Crossfade";
 import { WaveNative } from "@/native/waveNative";
 import { playTrackIds, playYtSongs } from "@/playback/actions";
 import { useYtMusicEnabled } from "@/settings/ytMusic";
@@ -32,6 +41,15 @@ import { appRuntime } from "./runtime";
 import { playlistsChanged } from "./playlists";
 
 let nextOffer = 0;
+
+/** A replacement fades into its slot; with reduce motion on it just appears. */
+const arrive = FadeIn.duration(CROSSFADE_MS).reduceMotion(ReduceMotion.Never);
+
+/** Add and Dismiss: the controls each offer row ends with. */
+const CONTROLS = 2;
+
+/** Heard by TalkBack without moving its focus. */
+const announce = (message: string): void => AccessibilityInfo.announceForAccessibility(message);
 
 /** One controller per playlist visit; offer keys protect against stale/repeated actions. */
 export function PlaylistRecommendations({
@@ -120,9 +138,17 @@ export function PlaylistRecommendations({
             }
             return added;
           }),
+      // The tap's placeholder paints before the write; the replacement's read waits out
+      // touches and scrolls (Core's `PlaylistRecommendationTurn`).
+      yieldTurn: (kind) => (kind === "paint" ? afterPaint() : freeTurn()),
     }),
   );
   const state = useSyncExternalStore(session.subscribe, session.get);
+  const reduceMotion = useReducedMotion();
+  // What the busy slot says while its placeholder shows ("Adding Song").
+  const [busyLabel, setBusyLabel] = useState("Loading another recommendation");
+  // The visit follows the write's cause (#599): source changes revalidate even when playlist
+  // IDs stay the same, once the playlist is in sight and settled.
   const visit = useRef<ReturnType<typeof followPlaylistRecommendations> | null>(null);
   useEffect(() => {
     const following = followPlaylistRecommendations(session, {
@@ -163,84 +189,158 @@ export function PlaylistRecommendations({
     else void playYtSongs([track], 0, context);
   };
   const songs = state.slots.filter((song) => song !== null);
-  const busy = state.pending !== null || state.loading;
+  // While one slot is replaced the others keep their look (no section-wide dimming); the
+  // session ignores their taps until it is done, so nothing is written twice.
+  const act = async (song: PlaylistRecommendationSlot, kind: "add" | "dismiss") => {
+    const { title } = song.track;
+    const index = state.slots.indexOf(song);
+    const acting = kind === "add" ? session.accept(song.key) : session.dismiss(song.key);
+    // The session publishes the slot's placeholder synchronously when it takes the tap.
+    if (session.get().pending !== song.key) return;
+    const label = kind === "add" ? `Adding ${title}` : `Dismissing ${title}`;
+    setBusyLabel(label);
+    announce(label);
+    const saved = await acting;
+    const after = session.get();
+    if (!saved) {
+      if (after.error === "save")
+        announce(`Couldn’t ${kind === "add" ? "add" : "dismiss"} ${title}. Try again.`);
+      return;
+    }
+    const done = kind === "add" ? `Added ${title} to the playlist.` : `Dismissed ${title}.`;
+    const next = after.slots[index];
+    announce(
+      after.error === "refill"
+        ? `${done} Couldn’t load another recommendation.`
+        : next == null
+          ? `${done} No more matching songs right now.`
+          : `${done} Next recommendation: ${next.track.title}.`,
+    );
+  };
+  const retryRefill = () => {
+    setBusyLabel("Loading another recommendation");
+    void session.renew({ refillOnly: true }).then(() => {
+      const after = session.get();
+      announce(
+        after.error === "refill"
+          ? "Couldn’t load another recommendation."
+          : "Recommendations updated.",
+      );
+    });
+  };
+  const offerRow = (song: PlaylistRecommendationSlot) => {
+    const local = libraryById.get(song.track.id);
+    const row =
+      song.track.source === "stream"
+        ? { source: "stream" as const, song: song.track }
+        : local === undefined
+          ? null
+          : { source: "library" as const, track: local };
+    return (
+      <View className="flex-row items-center" style={{ minHeight: grid.row }}>
+        <View className="flex-1">
+          {row !== null && <DiscoverSongRow song={row} onPress={() => play(song)} />}
+        </View>
+        <IconButton
+          icon={IconPlus}
+          label={`Add ${song.track.title} to playlist`}
+          disabled={state.loading}
+          onPress={() => {
+            void act(song, "add");
+          }}
+        />
+        <IconButton
+          icon={IconX}
+          label={`Dismiss ${song.track.title} recommendation`}
+          disabled={state.loading}
+          onPress={() => {
+            void act(song, "dismiss");
+          }}
+        />
+      </View>
+    );
+  };
+  // Each slot keeps its place: an offer, its same-size placeholder while it is replaced, or
+  // (its replacement failed) a retry of the same height. An exhausted slot leaves the list.
+  const slotContent = (song: PlaylistRecommendationSlot | null, index: number) => {
+    if (state.pendingSlots.includes(index))
+      return {
+        key: `pending-${index}`,
+        placeholder: true,
+        node: (
+          <View accessible accessibilityLabel={busyLabel} accessibilityState={{ busy: true }}>
+            <ControlledTrackRowSkeleton controls={CONTROLS} />
+          </View>
+        ),
+      };
+    if (song === null && state.unfilled.includes(index))
+      return {
+        key: `unfilled-${index}`,
+        placeholder: true,
+        node: (
+          <View
+            className="flex-row items-center justify-between"
+            style={{ height: grid.row, gap: CELL * 2 }}
+          >
+            <Text
+              accessibilityLiveRegion="polite"
+              className="flex-1 font-sans text-subheadline text-secondary"
+            >
+              Your choice was saved. Couldn’t load another recommendation.
+            </Text>
+            <TextButton label="Try again" onPress={retryRefill} />
+          </View>
+        ),
+      };
+    if (song === null) return null;
+    return { key: song.key, placeholder: false, node: offerRow(song) };
+  };
+  const shownSlots = state.slots.flatMap((song, index) => {
+    const content = slotContent(song, index);
+    return content === null ? [] : [content];
+  });
   return (
     <TitledSection
       title="Recommended songs"
       status={state.loading ? "Loading…" : undefined}
       action={
-        state.error !== null && state.error !== "save"
+        state.error === "load"
           ? {
               label: "Try again",
               onPress: () => {
-                void session.renew({ refillOnly: state.error === "refill" });
+                void session.renew();
               },
             }
           : undefined
       }
     >
       {state.loading && songs.length === 0 ? (
-        <View
-          accessible
-          accessibilityLabel="Loading recommended songs"
-          accessibilityState={{ busy: true }}
-        >
+        <SkeletonGroup label="Loading recommended songs">
           {Array.from({ length: 5 }, (_, i) => (
-            <View key={i} style={{ height: grid.row, justifyContent: "center" }}>
-              <SkeletonLine lineHeight={22} width="60%" />
-              <SkeletonLine lineHeight={18} width="40%" />
-            </View>
+            <ControlledTrackRowSkeleton key={i} controls={CONTROLS} />
           ))}
-        </View>
+        </SkeletonGroup>
       ) : (
-        songs.map((song) => {
-          const local = libraryById.get(song.track.id);
-          const row =
-            song.track.source === "stream"
-              ? { source: "stream" as const, song: song.track }
-              : local === undefined
-                ? null
-                : { source: "library" as const, track: local };
-          return (
-            <View key={song.key} className="flex-row items-center">
-              <View className="flex-1">
-                {row !== null && <DiscoverSongRow song={row} onPress={() => play(song)} />}
-              </View>
-              <IconButton
-                icon={IconPlus}
-                label={`Add ${song.track.title} to playlist`}
-                busy={state.pending === song.key}
-                disabled={busy}
-                onPress={() => {
-                  void session.accept(song.key);
-                }}
-              />
-              <IconButton
-                icon={IconX}
-                label={`Dismiss ${song.track.title} recommendation`}
-                busy={state.pending === song.key}
-                disabled={busy}
-                onPress={() => {
-                  void session.dismiss(song.key);
-                }}
-              />
-            </View>
-          );
-        })
+        <LayoutAnimationConfig skipEntering>
+          {shownSlots.map(({ key, placeholder, node }) => (
+            // A tap swaps to the placeholder at once; what replaces it fades in, in place.
+            <Animated.View key={key} entering={placeholder || reduceMotion ? undefined : arrive}>
+              {node}
+            </Animated.View>
+          ))}
+        </LayoutAnimationConfig>
       )}
-      {state.error !== null && (
+      {(state.error === "save" || state.error === "load") && (
         <Text
           accessibilityLiveRegion="polite"
           className="font-sans text-subheadline text-secondary"
         >
           {state.error === "save"
             ? "Couldn’t save your choice. Try the song’s action again."
-            : state.error === "refill"
-              ? "Your choice was saved. Couldn’t load a replacement. Try again."
-              : "Couldn’t load recommendations. Try again."}
+            : "Couldn’t load recommendations. Try again."}
         </Text>
       )}
-      {!state.loading && !state.error && songs.length === 0 && (
+      {!state.loading && state.error === null && shownSlots.length === 0 && (
         <Text className="font-sans text-subheadline text-secondary">
           {items.length === 0
             ? "Add songs to get recommendations for this playlist."

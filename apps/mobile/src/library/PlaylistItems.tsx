@@ -4,7 +4,8 @@ import { moveItem, queueSongTrackId, type PlaylistPlace, type QueueContext } fro
 import { useCallback, useLayoutEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import { View, type AccessibilityActionEvent } from "react-native";
 import { GestureDetector } from "react-native-gesture-handler";
-import Animated from "react-native-reanimated";
+import Animated, { useAnimatedReaction, useSharedValue } from "react-native-reanimated";
+import { scheduleOnRN } from "react-native-worklets";
 
 import { CELL, grid } from "@/catalog/grid";
 import { SwipeableRow, swipeAccessibility, type RowSwipe } from "@/catalog/SwipeableRow";
@@ -243,6 +244,14 @@ type Props = {
 
 const NO_ITEMS: readonly PlaylistEntryRow[] = [];
 
+/**
+ * The scroll view's content is the head (0), the rows or the empty note (1),
+ * then the recommendations (2), each one native view (`collapsable={false}`).
+ * Anchoring from index 2 keeps the recommendations where they are on screen
+ * as rows are added or removed above them (#608).
+ */
+const RECOMMENDATIONS_ANCHOR = { minIndexForVisible: 2 } as const;
+
 /** Each entry is its own selection item, so a song in the playlist twice is checked per copy. */
 const entryKey = (item: PlaylistEntryRow): string => String(item.itemId);
 
@@ -360,6 +369,22 @@ export function PlaylistItems({ playlistId, items, header, empty }: Props) {
   };
   const listDrag = useListDrag({ count: shown.length, cells: CELLS, bottomInset, move: reorder });
   const { scrollRef } = listDrag;
+
+  // Recommendations hold their screen position only while some of them are in sight: an Add
+  // grows the list above them without pushing them down, and someone reading the rows above
+  // (the footer out of sight) sees nothing move.
+  const recommendationsTop = useSharedValue(Number.POSITIVE_INFINITY);
+  const viewportHeight = useSharedValue(0);
+  const [anchored, setAnchored] = useState(false);
+  useAnimatedReaction(
+    () =>
+      recommendationsTop.get() < listDrag.drag.scroll.get() + viewportHeight.get() - bottomInset,
+    (inSight, previous) => {
+      if (inSight !== previous) scheduleOnRN(setAnchored, inSight);
+    },
+    [bottomInset],
+  );
+  const recommending = items !== undefined && found === null && !listSelection.selecting;
   useLayoutEffect(() => {
     dragRef.current = listDrag;
   });
@@ -414,7 +439,11 @@ export function PlaylistItems({ playlistId, items, header, empty }: Props) {
       scrollEnabled={scrollable}
       ref={scrollRef}
       className="flex-1"
-      onLayout={listDrag.onLayout}
+      maintainVisibleContentPosition={anchored && recommending ? RECOMMENDATIONS_ANCHOR : undefined}
+      onLayout={(event) => {
+        listDrag.onLayout(event);
+        viewportHeight.set(event.nativeEvent.layout.height);
+      }}
       onContentSizeChange={listDrag.onContentSizeChange}
       // Find in Playlist waits above the head until the list is pulled down.
       contentOffset={{ x: 0, y: FIND_FIELD_HEIGHT }}
@@ -427,15 +456,22 @@ export function PlaylistItems({ playlistId, items, header, empty }: Props) {
       <View onLayout={listDrag.onHeaderLayout}>
         <FindHead find={find} header={header} />
       </View>
-      {items !== undefined && found === null && order.length === 0 && empty}
+      {items !== undefined && found === null && order.length === 0 && (
+        <View collapsable={false}>{empty}</View>
+      )}
       {items !== undefined && shown.length > 0 && (
-        <View style={{ height: shown.length * ROW }}>
+        <View collapsable={false} style={{ height: shown.length * ROW }}>
           {/* The dragged row stays mounted however far auto-scroll takes the list. */}
           {listDrag.indices.map(renderRow)}
         </View>
       )}
-      {items !== undefined && found === null && !listSelection.selecting && (
-        <PlaylistRecommendations key={playlistId} playlistId={playlistId} items={items} />
+      {recommending && items !== undefined && (
+        <View
+          collapsable={false}
+          onLayout={(event) => recommendationsTop.set(event.nativeEvent.layout.y)}
+        >
+          <PlaylistRecommendations key={playlistId} playlistId={playlistId} items={items} />
+        </View>
       )}
     </Animated.ScrollView>
   );
