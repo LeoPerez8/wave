@@ -178,3 +178,31 @@ change. Race coverage discards prior-track and pre-download lookup answers. The
 source scanner and route-observer policy are unchanged; there is no candidate-finder
 exception. The index's one-time upgrade backfill uses pages of 128 titles, yielding
 between transactions before the LibraryStore becomes available.
+
+## Recap availability after #598
+
+The inventory also protects the encapsulated `LibraryStore.countedListening`,
+its database implementation, the bounded `countedListeningPage` driver and
+`Stats.recaps`. The whole-history capability has no production Stats consumer;
+only its exact store implementation remains inventoried. Recap stories now
+collect their requested period through the bounded source as well.
+
+The only source consumer is `stats/Stats.ts#readListeningPages`: an indexed
+keyset statement aggregates at most 512 raw events (at most 513 returned SQL
+rows including its cursor), then yields to the supplied
+cancellable free turn. Empty/all-skipped pages still advance. Core accumulates
+local calendar periods and finishes ordering in cooperative steps. The exact
+`recapAvailabilityLive.ts#getRecapAvailability` boundary shares this calculation
+between Home and Stats only while visible and settled, using the existing free
+turn scheduler. The cache keeps its previous answer, cancels hidden/outdated
+work, and rejects stale publication. History versions come from committed store
+writes, including progress, imports and each sync page; calendar/timezone/clock
+checks run only while a consumer is active and on foreground/return.
+
+`library/db/recapAvailability.test.ts`, `library/db/regressionSweep.test.ts` and
+`stats/recapAvailability.test.ts` verify the actual store/Stats/cache seam with
+the shared fixture and controlled clock/scheduler. The injected real-API scanner
+regression now also rejects new whole-history, paged-history or `Stats.recaps`
+callers. No scanner algorithm, route protection or another ticket's debt entry
+was relaxed. Desktop timing and remaining device checks are recorded with #598's
+benchmark evidence in `579-fast-again.md`.

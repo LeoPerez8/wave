@@ -1,4 +1,5 @@
 import type { YtSong } from "@wave/core";
+import { makeExternalStore, type ExternalStore } from "@/lib/externalStore";
 import { backfillRecordingTitles, selectMatchingSong } from "./db/matchingSong";
 import { selectNowPlayingSong } from "./db/nowPlayingSong";
 import type { PlayingSongAnswer, PlayingSongTarget } from "../nowPlaying/songLookup";
@@ -192,6 +193,8 @@ import {
   artistFirstPlays,
   artistPlays,
   countedListening,
+  countedListeningPage,
+  type CountedListeningPage,
   creditedPlayTotals,
   songGenres,
   trackPlayTotals,
@@ -930,11 +933,14 @@ export class LibraryStore extends Context.Service<
      * totals (`play_totals`); Core's `summedListeningTotals` reads it.
      */
     readonly listeningSums: Effect.Effect<ListeningSums, LibraryStoreError>;
-    /**
-     * The whole history's counted listening, summed per quarter hour (deleted
-     * songs included): what Core's `availableRecaps` and `recap` read.
-     */
+    /** Changes after every committed listening write, including progress and each sync page. */
+    readonly listeningHistoryVersion: Pick<ExternalStore<number>, "get" | "subscribe">;
+    /** Legacy whole-history quarter sums, retained as a semantic control; UI uses bounded pages. */
     readonly countedListening: Effect.Effect<readonly CountedListening[], LibraryStoreError>;
+    /** At most 512 raw events per indexed read, with Core's historical quarter-hour projection. */
+    readonly countedListeningPage: (
+      after: number,
+    ) => Effect.Effect<CountedListeningPage, LibraryStoreError>;
     /** The genre tags of these songs still in the library, in no order (Core's `recap` reads them). */
     readonly songGenres: (
       ids: readonly number[],
@@ -984,7 +990,7 @@ export class LibraryStore extends Context.Service<
      * request failed; what was done by then stays done.
      */
     readonly syncWithAccount: (
-      input: Omit<SyncCycleInput, "db" | "splits">,
+      input: Omit<SyncCycleInput, "db" | "splits" | "historyChanged">,
     ) => Effect.Effect<SyncCycleResult, LibraryStoreError>;
     /**
      * Signed out: the Library leaves the account (the next sign-in joins
@@ -1193,7 +1199,13 @@ const make = Effect.gen(function* () {
     catch: (cause) => new LibraryStoreError({ operation: "key recording titles", cause }),
   });
 
+  const listeningHistoryVersion = makeExternalStore(0);
+  const historyChanged = () => listeningHistoryVersion.update((value) => value + 1);
+  const historyWrite = <A>(operation: string, run: () => A) =>
+    writeAttempt(operation, run).pipe(Effect.tap(() => Effect.sync(historyChanged)));
+
   return LibraryStore.of({
+    listeningHistoryVersion,
     ensureDefaultRoot: (path) =>
       writeAttempt("set up scan roots", () => {
         const existing = db.select().from(schema.scanRoots).all();
@@ -1587,7 +1599,7 @@ const make = Effect.gen(function* () {
     importedPlays: attempt("read the imported plays", () => importedPlays(db)),
 
     saveImportedPlays: (plays) =>
-      writeAttempt("save the imported plays", () => saveImportedPlays(db, plays)),
+      historyWrite("save the imported plays", () => saveImportedPlays(db, plays)),
 
     playedRecordingKeys: attempt("read the songs played", () => playedRecordingKeys(db)),
 
@@ -1641,10 +1653,10 @@ const make = Effect.gen(function* () {
       ),
 
     recordPlay: (play, overlapping) =>
-      writeAttempt("record the play", () => recordPlay(db, play, overlapping)),
+      historyWrite("record the play", () => recordPlay(db, play, overlapping)),
 
-    updatePlay: (id, play) => writeAttempt("update the play", () => updatePlay(db, id, play)),
-    endPlay: (id, play) => writeAttempt("end the play", () => endPlay(db, id, play)),
+    updatePlay: (id, play) => historyWrite("update the play", () => updatePlay(db, id, play)),
+    endPlay: (id, play) => historyWrite("end the play", () => endPlay(db, id, play)),
 
     home: (scope) =>
       attempt(
@@ -1697,6 +1709,12 @@ const make = Effect.gen(function* () {
 
     listeningSums: attempt("sum up listening", () => listeningSums(db)),
 
+    countedListeningPage: (after) =>
+      attempt(
+        "read counted listening page",
+        () => countedListeningPage(db, after),
+        (page) => page.rows.length,
+      ),
     countedListening: attempt("sum up counted listening", () => countedListening(db)),
 
     songGenres: (ids) => attempt("read the songs' genres", () => songGenres(db, ids)),
@@ -1735,7 +1753,7 @@ const make = Effect.gen(function* () {
 
     syncWithAccount: (input) =>
       Effect.tryPromise({
-        try: () => syncCycle({ ...input, db, splits }),
+        try: () => syncCycle({ ...input, db, splits, historyChanged }),
         catch: (cause) => new LibraryStoreError({ operation: "sync with the Wave account", cause }),
       }),
 
