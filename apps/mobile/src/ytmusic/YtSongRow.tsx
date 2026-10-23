@@ -32,6 +32,7 @@ export function YtSongRow({
   onPress,
   onLongPress = () => openYtSongActions(song),
   trackNumber,
+  popularRank,
   kind = "",
   playDisc,
   accessibilityActions,
@@ -45,6 +46,8 @@ export function YtSongRow({
   onLongPress?: (() => void) | undefined;
   /** Leads with this number instead of the cover (an album's tracklist). */
   trackNumber?: number | undefined;
+  /** Leads with a Popular rank, with the first in ember, keeping the song's usual credit. */
+  popularRank?: number | undefined;
   /** Says what the row is before its artists ("Song · ", Search's song results). */
   kind?: string | undefined;
   /** The cover is a song card's, with a play disc on its corner (`TrackRow`'s `playDisc`). */
@@ -68,14 +71,15 @@ export function YtSongRow({
           ytDownloadLine(download) ??
           kind + (trackNumber === undefined ? ytSongCredit(song) : ytSongArtist(song)),
         durationMs: song.durationMs,
-        trackNumber,
+        trackNumber: popularRank ?? trackNumber,
         artworkUri: ytMusic ? (song.artworkUrl ?? undefined) : undefined,
         explicit: showsExplicitBadge(song.explicit),
       }}
       state={playing ? "playing" : undefined}
       favorite={favorite}
       checked={checked}
-      leading={trackNumber === undefined ? "artwork" : "number"}
+      leading={popularRank === undefined && trackNumber === undefined ? "artwork" : "number"}
+      topNumber={popularRank === 1}
       playDisc={playDisc}
       progress={ytDownloadProgress(download)}
       onPress={onPress}
