@@ -18,13 +18,13 @@ import {
 
 /** Standing picks need no whole-Library due check. The growth probe is only for short lists. */
 export const homeMagicQueueDue = (
-  settled: boolean,
+  visible: boolean,
   saved: MagicQueuePicks | null,
   shownIds: readonly string[],
   grows: boolean,
   now: number,
 ): boolean =>
-  settled &&
+  visible &&
   (saved === null ||
     saved.day !== localDay(now) ||
     saved.trackIds.length > MAGIC_QUEUE_PICKS ||
@@ -62,5 +62,13 @@ export const buildHomeMagicQueue = <R, E>(
   );
 
 /** The visible pick includes scheduler and derivation waits in its deadline. */
-export const pickHomeMagicQueue = <R, E>(...args: Parameters<typeof buildHomeMagicQueue<R, E>>) =>
-  buildHomeMagicQueue(...args).pipe(Effect.timeout(RECOMMENDATION_TIMEOUT));
+export const pickHomeMagicQueue = <R, E>(
+  store: LibraryStore["Service"],
+  saved: MagicQueuePicks | null,
+  options: Parameters<typeof buildHomeMagicQueue<R, E>>[2],
+  start: Effect.Effect<void> = Effect.void,
+) =>
+  start.pipe(
+    Effect.andThen(buildHomeMagicQueue(store, saved, options)),
+    Effect.timeout(RECOMMENDATION_TIMEOUT),
+  );

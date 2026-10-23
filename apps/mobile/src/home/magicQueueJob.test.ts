@@ -22,12 +22,17 @@ test("a Home Magic Queue pick whose derivation never gets a turn times out and c
   });
   let outcome = "waiting";
   const pending = Effect.runPromise(
-    pickHomeMagicQueue({} as never, null, {
-      now: 0,
-      random: () => 0.5,
+    pickHomeMagicQueue(
+      {} as never,
+      null,
+      {
+        now: 0,
+        random: () => 0.5,
+        turn: Effect.void,
+        taste: () => Effect.succeed(null),
+      },
       turn,
-      taste: () => Effect.succeed(null),
-    }),
+    ),
     { signal: controller.signal },
   ).then(
     () => {
