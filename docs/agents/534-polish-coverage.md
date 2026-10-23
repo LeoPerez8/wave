@@ -339,3 +339,13 @@ The parent captured all 12 canonical surfaces in four theme/font pairs on integr
 Directly inspected candidate evidence includes Home at light 1.0/1.3 and Stats at light 1.3. September 2026 now renders fully in the Recap tile. The first 1.3 Home capture exposed three columns because Android widens its native float below the decimal 1.3 breakpoint. `945060ea` corrects the comparison; final APK confirmation is recorded separately. The initial Home capture remains evidence of that found defect. Other route snapshots establish capture identity; inventory does not assert every screen state has passed inspection.
 
 The inventory, state applicability, baseline fixtures, actual build/device records and severity register required by #547 are established. Flow acceptance under #548–557 and the overall #534 matrix remain pending wherever the register says P. Canonical snapshots do not cover all aliases, loading/failure states, theme customization, TalkBack integration, native motion or performance. The Android16/API36 emulator is not a physical S24+ 120Hz or SM-G985F/API33; no release-performance claim follows from it.
+
+### #549 fresh Home/Discover audit (2026-10-23)
+
+Baseline `e7a2b8d98f4da22eaec2151f5d229130970abf90`, branch
+`feat/549-home-discover-polish`. See [the #549 flow report](549-home-discover-verification.md)
+for findings 549-A–F, source provenance and pending evidence. Earlier 549-A's
+scrollable Discover card is already integrated. This pass records the remaining
+slider wrapping, reachable refresh action, mix naming, gone-mix scrolling and
+row-label wrapping findings before edits. All new rendered/device acceptance
+remains PENDING; the historical parent captures do not validate this build.
