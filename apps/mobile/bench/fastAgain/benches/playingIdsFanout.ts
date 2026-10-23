@@ -126,6 +126,7 @@ export const bench: FastAgainBench = {
                 listener(recording);
               }),
             onLibraryChange: bus.onLibraryChange,
+            onSavedRecordings: bus.onSavedRecordings,
           });
           for (let i = 0; i < 8; i++)
             stops.push(

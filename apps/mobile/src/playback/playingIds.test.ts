@@ -72,7 +72,10 @@ test("committed scan additions and edits acquire a match without changing playba
     const local = saved.trackIds[0]!;
     assert.deepEqual([...ids.get()], ["yt:playing", String(local)]);
     assert.equal(queries.length, 1, "eight consumers share one targeted scan lookup");
-    assert.equal(queries[0]!.queries.reduce((sum, query) => sum + query.rows, 0), 1);
+    assert.equal(
+      queries[0]!.queries.reduce((sum, query) => sum + query.rows, 0),
+      1,
+    );
 
     Effect.runSync(store.removeSongs([local]));
     bus.publishLibraryChange({ kind: "tracks", ids: [local] });
@@ -92,7 +95,7 @@ test("committed scan additions and edits acquire a match without changing playba
   }
 });
 
-test("scan bursts retag the matched row while unrelated saves do no playing lookup", async () => {
+test("scan bursts retag the matched row with one throttled lookup", async () => {
   const { createPlayingIds } = await import("./playingIds.ts");
   const { makeExternalStore } = await import("../lib/externalStore.ts");
   const bus = await import("../library/libraryChanges.ts");
@@ -112,15 +115,6 @@ test("scan bursts retag the matched row while unrelated saves do no playing look
     await tick();
     assert.deepEqual([...ids.get()], ["yt:playing", String(saved.trackIds[0])]);
     const before = ids.stats().reads;
-    for (let index = 0; index < 10; index++) {
-      const unrelated = Effect.runSync(
-        store.saveBatch([track("Another song", "Beyoncé", 180000, `/Music/other${index}.m4a`)], []),
-      );
-      bus.publishLibraryChange(scanBatchChange(unrelated.trackIds));
-    }
-    await new Promise((resolve) => setTimeout(resolve, 1600));
-    assert.equal(ids.stats().reads, before, "unrelated scan batches never refresh the match");
-
     Effect.runSync(store.saveBatch([track("Another song")], []));
     for (let index = 0; index < 10; index++)
       bus.publishLibraryChange(scanBatchChange(saved.trackIds));
@@ -128,6 +122,66 @@ test("scan bursts retag the matched row while unrelated saves do no playing look
     assert.deepEqual([...ids.get()], ["yt:playing"]);
     assert.equal(ids.stats().reads, before + 1, "matched-row bursts coalesce into one lookup");
     assert.equal(Effect.runSync(store.matchingSong(song)), null);
+  } finally {
+    stop();
+    closeTestDatabase(db);
+  }
+});
+
+test("unrelated and rolled-back saves do no lookup, and saved-recording sources detach", async () => {
+  const { createPlayingIds } = await import("./playingIds.ts");
+  const { makeExternalStore } = await import("../lib/externalStore.ts");
+  const bus = await import("../library/libraryChanges.ts");
+  const db = await openTestDatabase();
+  let stop = () => {};
+  try {
+    const store = await loadLibraryStore(root, db);
+    Effect.runSync(store.saveBatch([track()], []));
+    let subscribers = 0;
+    let deliveries = 0;
+    const ids = createPlayingIds({
+      target: makeExternalStore({ id: "yt:playing", song }),
+      read: async (playingSong) => Effect.runSync(store.matchingSong(playingSong)),
+      onDownload: bus.onDownloadedRecording,
+      onSavedRecordings: (listener) => {
+        subscribers++;
+        const detach = bus.onSavedRecordings((recordings) => {
+          deliveries++;
+          listener(recordings);
+        });
+        return () => {
+          subscribers--;
+          detach();
+        };
+      },
+      onLibraryChange: bus.onLibraryChange,
+    });
+    const stops = Array.from({ length: 8 }, () => ids.subscribe(() => {}));
+    stop = () => stops.forEach((detach) => detach());
+    await tick();
+    const before = ids.stats().reads;
+    const snapshot = ids.get();
+    assert.equal(subscribers, 1);
+    for (let index = 0; index < 10; index++) {
+      for (const unrelated of [
+        track("Another song", "Beyoncé", 180000, `/Music/title${index}.m4a`),
+        track(song.title, "Another artist", 180000, `/Music/artist${index}.m4a`),
+        track(song.title, "Beyoncé", 220000, `/Music/length${index}.m4a`),
+      ]) {
+        const saved = Effect.runSync(store.saveBatch([unrelated], []));
+        bus.publishLibraryChange(scanBatchChange(saved.trackIds));
+      }
+    }
+    assert.equal(deliveries, 30, "each committed batch has one source delivery for eight lists");
+    assert.throws(() => Effect.runSync(store.saveBatch([{ ...track(), sizeBytes: null! }], [])));
+    assert.equal(deliveries, 30, "a failed transaction announces no saved recording");
+    await new Promise((resolve) => setTimeout(resolve, 1600));
+    assert.equal(ids.stats().reads, before, "unrelated saves never schedule a targeted lookup");
+    assert.equal(ids.get(), snapshot);
+    stop();
+    assert.equal(subscribers, 0);
+    Effect.runSync(store.saveBatch([track()], []));
+    assert.equal(deliveries, 30, "detached lists follow no saved recordings");
   } finally {
     stop();
     closeTestDatabase(db);
@@ -164,6 +218,7 @@ test("eight mounted lists share one source refresh and row read across the playi
         };
       },
       onLibraryChange: bus.onLibraryChange,
+      onSavedRecordings: bus.onSavedRecordings,
     });
     let notifications = 0;
     const stops = Array.from({ length: 8 }, () =>
@@ -230,6 +285,7 @@ test("rapid track changes discard old lookups and unchanged queue metadata never
         pending.push({ resolve, song: playingSong });
       }),
     onDownload: bus.onDownloadedRecording,
+    onSavedRecordings: bus.onSavedRecordings,
     onLibraryChange: bus.onLibraryChange,
   });
   const seen: string[][] = [];
@@ -272,6 +328,7 @@ test("a download during an in-flight lookup discards its older answer", async ()
         answers.push(resolve);
       }),
     onDownload: bus.onDownloadedRecording,
+    onSavedRecordings: bus.onSavedRecordings,
     onLibraryChange: bus.onLibraryChange,
   });
   const seen: string[][] = [];

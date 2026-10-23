@@ -7,6 +7,7 @@ import {
 } from "./db/recommendationPages";
 import type { YtSong } from "@wave/core";
 import { makeExternalStore, type ExternalStore } from "@/lib/externalStore";
+import { publishSavedRecordings } from "./libraryChanges";
 import { backfillRecordingTitles, selectMatchingSong } from "./db/matchingSong";
 import {
   tastePlaysPage,
@@ -1379,7 +1380,7 @@ const make = Effect.gen(function* () {
     saveBatch: (tracks, artworkRows, moves = [], options) =>
       writeAttempt("save scanned tracks", () =>
         saveBatch(db, splits, tracks, artworkRows, moves, Date.now(), options),
-      ),
+      ).pipe(Effect.tap(() => Effect.sync(() => publishSavedRecordings(tracks)))),
 
     linkPlaylistEntries: writeAttempt("link playlist entries", () =>
       db.transaction((tx) => linkPlaylistEntries(tx, Date.now())),

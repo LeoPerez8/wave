@@ -21,6 +21,7 @@ export const createPlayingIds = (options: {
   readonly target: Pick<ExternalStore<PlayingTarget>, "get" | "subscribe">;
   readonly read: (song: YtSong) => Promise<{ readonly id: number } | null>;
   readonly onDownload: (listener: (song: LibrarySongKey) => void) => () => void;
+  readonly onSavedRecordings: (listener: (songs: readonly LibrarySongKey[]) => void) => () => void;
   readonly onLibraryChange: (listener: (change: LibraryChange) => void) => () => void;
 }) => {
   const listeners = new Set<() => void>();
@@ -105,19 +106,27 @@ export const createPlayingIds = (options: {
       sourceRefreshes++;
       registry.change({ kind: "tracks" });
     });
+    const stopSaved = options.onSavedRecordings((recordings) => {
+      const song = selected.song;
+      if (song === null || selected.id !== `yt:${song.videoId}`) return;
+      if (!recordings.some((recording) => recordingMatches(recording, song))) return;
+      // New matches have no known id yet. Filter committed metadata before any SQL;
+      // multiple matching saves share the registry's scan throttle.
+      registry.change({ kind: "tracks", burst: true });
+    });
     const stopChanges = options.onLibraryChange((change) => {
-      // A known matched row can be edited or removed. Scan bursts and unrelated rows do no work.
+      // A scan can retag the matched row. Ignore unrelated ids and unnamed bursts.
       if (
         localId !== null &&
         change.kind === "tracks" &&
-        !change.burst &&
-        (change.ids === undefined || change.ids.includes(localId))
+        (change.ids === undefined ? !change.burst : change.ids.includes(localId))
       )
         registry.change(change);
     });
     return () => {
       stopTarget();
       stopDownload();
+      stopSaved();
       stopChanges();
       attached?.detach();
       key = "";
