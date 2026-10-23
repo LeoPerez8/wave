@@ -375,3 +375,13 @@ before measurement because adb is unavailable (`spawn adb ENOENT`). The flow
 report defines a repeatable supplemental Discover-card slider scenario; execution
 and automation are PENDING. Phone before/after evidence, performance variability
 and APK/device identity are PENDING. No desktop/simulated number substitutes.
+
+### #550 fresh Library browsing audit (2026-10-23)
+
+Baseline `c0a837f605d80288e278c5f9765434237d70e757`, branch
+`feat/550-library-browsing-polish`. Findings 550-B–D recorded before edits in
+[the #550 flow report](550-library-browsing-verification.md): distinguish first
+read/loading/failure from empty, allow playlist header actions to wrap, and
+keep alphabet stepping reachable when two album letters share a row. Existing
+550-A handled finder taps remain integrated. Rendered/device acceptance remains
+PENDING; historical captures do not validate this slice.
