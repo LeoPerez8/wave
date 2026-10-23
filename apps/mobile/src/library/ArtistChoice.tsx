@@ -20,6 +20,7 @@ import { CatalogLine } from "@/catalog/CatalogLine";
 import { CELL } from "@/catalog/grid";
 import { Hairline } from "@/catalog/Hairline";
 import { NameRow } from "@/catalog/NameRow";
+import { revealNowPlayingLink } from "@/nowPlaying/sheet";
 import { showError } from "@/overlay/alert";
 import { CardEntries } from "@/overlay/CardEntries";
 import { followUp, openOverlay } from "@/overlay/overlay";
@@ -110,7 +111,7 @@ export const followStreamedArtistLink = (link: StreamedArtistLink<ArtistRow>): v
     else if (resolved?.kind === "choose") {
       continueTiming("choiceCard", "artist choice");
       openChoiceCard(resolved.targets.map(streamedChoice), timingId);
-    }
+    } else if (resolved.kind === "here") revealNowPlayingLink(timingId);
     if (resolved !== undefined) timingLinkNavigated(timingId);
   };
   void followStreamedArtistTap(link, { resolve: resolveStreamedArtistTap, deliver }).catch(

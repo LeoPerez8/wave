@@ -5,6 +5,7 @@ import {
   timingResponse,
   timingTransitionEnd,
   timingSurfaceCommitted,
+  timingLinkNavigated,
   setTimingSurface,
 } from "@/lib/timing";
 import {
@@ -23,7 +24,7 @@ import { makeExternalStore } from "@/lib/externalStore";
 import { dismissAllOverlays } from "@/overlay/overlay";
 import { perfMark } from "@/perf/perf";
 
-import { followNowPlayingLink } from "./linkClose";
+import { createLinkRevealCompletion, followNowPlayingLink } from "./linkClose";
 
 /**
  * Now Playing is a sheet that stays mounted over the app (src/nowPlaying/
@@ -48,6 +49,16 @@ let motionDone = false;
 let motionGeneration = 0;
 let contentDrawn = false;
 let sheetTimingId: number | undefined;
+const linkReveal = createLinkRevealCompletion({
+  committed: (id) => timingSurfaceCommitted(id, false),
+  end: timingTransitionEnd,
+});
+
+/** A cold artist lookup found the loaded page underneath this link's sheet close. */
+export const revealNowPlayingLink = (id: number | undefined): void => {
+  timingLinkNavigated(id);
+  linkReveal.reveal(id);
+};
 /** True only once the opening spring finished and the player content drew. */
 export const useNowPlayingSettled = (): boolean =>
   useSyncExternalStore(sheetSettled.subscribe, sheetSettled.get);
@@ -170,6 +181,7 @@ const step = (event: SheetEvent, velocity = 0): SheetStep => {
     requestAnimationFrame(nowPlayingContentCommitted);
   perfMark("nowPlaying.notified");
   if (next.hidden) {
+    linkReveal.hidden();
     for (const listener of hiddenListeners) listener();
     runAfterClose();
   }
@@ -232,9 +244,11 @@ export const closeNowPlaying = (then?: () => void, source?: "Back" | "chevron" |
 /** A link owns its navigation now, independently of the closing spring or later closes. */
 export const closeNowPlayingForLink = (navigate: () => void): void => {
   sheetSettled.set(false);
+  linkReveal.begin(activeTiming()?.id);
   // The sheet's spring must not end the pushed screen's timing window.
   sheetTimingId = undefined;
   followNowPlayingLink({ step, navigate });
+  if (!isNowPlayingShown()) linkReveal.hidden();
 };
 
 /** The window changed size: keep a closed sheet just out of sight. */
