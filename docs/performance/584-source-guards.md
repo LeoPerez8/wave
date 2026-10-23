@@ -178,3 +178,29 @@ change. Race coverage discards prior-track and pre-download lookup answers. The
 source scanner and route-observer policy are unchanged; there is no candidate-finder
 exception. The index's one-time upgrade backfill uses pages of 128 titles, yielding
 between transactions before the LibraryStore becomes available.
+
+## #594 graph and daily mix boundaries
+
+`readArtistGraph` no longer reaches the whole-history/song/artist capabilities,
+and `readIndexes` now uses bounded mix-input pages. Their #594 debt entries are
+removed. `useLibraryTracks` remains an exact visible mix-page allowance: Home
+blends its saved payload without that hook, and known videos share a source
+version. Other tickets' exceptions remain owned by those tickets.
+
+Every graph consumer (cold playlist recommendations, daily mixes, harvest and
+Magic Queue) enters `shareArtistGraph` through the app's `artistGraphNow` value.
+Its cold build waits for WaveTiming settlement and a cancellable free turn;
+warm reads reuse the answer. Page reads and CPU generators yield thereafter.
+Daily Home sections also use a serial cancellable job queue, and a build permit
+excludes overlapping manual builds. No connectivity exception is needed for
+these offline reads. #599 still owns the playlist input/ranking/renewal work
+before and after the graph request.
+
+These boundaries are exercised with actual SQLite projections and the shared
+fixture in `library/db/artistGraph.test.ts` and `mixInputs.test.ts`, manual
+settlement/cancellation in `lib/settledWork.test.ts`, shared lifetime tests in
+`lib/sharedRead.test.ts`, and job ordering/rapid-return tests in
+`lib/serialWork.test.ts`. `home/knownVideosRead.test.ts` counts the real known-video
+query across unchanged returns and relevant/unrelated source changes. The old
+#596 assertion of 11,190 graph rows in one segment is replaced by bounded-page
+and complete-graph assertions; the other #596 characterizations are preserved.

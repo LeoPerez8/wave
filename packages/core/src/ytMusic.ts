@@ -5,6 +5,7 @@
  * native module; Core decides how the songs sit beside the Library.
  */
 
+import { finishSteps } from "./buildSteps.ts";
 import { splitCredit } from "./credits.ts";
 import { UNKNOWN_ARTIST } from "./library.ts";
 import { normalizeSearchText } from "./search.ts";
@@ -156,9 +157,15 @@ export const libraryFinder = <L extends LibrarySongKey>(
  */
 export const libraryMatches = <L extends LibrarySongKey>(
   library: readonly L[],
-): ((song: Pick<YtSong, "title" | "artists" | "durationMs">) => L[]) => {
+): ((song: Pick<YtSong, "title" | "artists" | "durationMs">) => L[]) =>
+  finishSteps(libraryMatchesSteps(library));
+
+export function* libraryMatchesSteps<L extends LibrarySongKey>(
+  library: readonly L[],
+): Generator<void, (song: Pick<YtSong, "title" | "artists" | "durationMs">) => L[]> {
   const byTitle = new Map<string, Candidate<L>[]>();
   for (const song of library) {
+    yield;
     const title = recordingMatchTitle(song.title);
     if (title === "") continue;
     const candidates = byTitle.get(title) ?? [];
@@ -178,7 +185,7 @@ export const libraryMatches = <L extends LibrarySongKey>(
       .filter((candidate) => candidateMatches(candidate, artists, length))
       .map((candidate) => candidate.song);
   };
-};
+}
 
 /**
  * Whether a YT Music song is already in the Library (see [libraryFinder]),
@@ -210,3 +217,10 @@ export const parseTrackId = (id: string): TrackRef | null => {
   }
   return /^\d+$/.test(id) ? { kind: "library", id: Number(id) } : null;
 };
+
+export function* libraryFinderSteps<L extends LibrarySongKey>(
+  library: readonly L[],
+): Generator<void, (song: Pick<YtSong, "title" | "artists" | "durationMs">) => L | null> {
+  const matches = yield* libraryMatchesSteps(library);
+  return (song) => matches(song)[0] ?? null;
+}

@@ -125,38 +125,32 @@ test("a genre opening decodes every genre song; a bounded projection preserves t
   }
 });
 
-test("the shared Artist graph puts all history and Library rows between the same two yields", async () => {
+test("the shared Artist graph bounds every graph input segment instead of materializing history/Library", async () => {
   const fixture = await createFastAgainFixture();
   try {
     const store = await loadLibraryStore(CURRENT_ROOT, fixture.db);
     const { readArtistGraph } = await loadWorktreeModule<
       typeof import("../../home/artistGraph.ts")
     >(CURRENT_ROOT, "apps/mobile/src/home/artistGraph.ts");
-    let segment = 0;
-    const rows = [0, 0, 0];
-    const reads = { ...store } as { -readonly [K in keyof typeof store]: (typeof store)[K] };
-    for (const name of [
-      "candidateCatalog",
-      "ytArtistSimilar",
-      "tasteHistory",
-      "listSongs",
-      "listArtists",
-    ] as const) {
-      reads[name] = Effect.sync(() => {
-        const traced = traceQueries(fixture.db, () =>
-          Effect.runSync(store[name] as Effect.Effect<unknown, unknown>),
-        );
-        rows[segment]! += traced.queries.reduce((sum, query) => sum + query.rows, 0);
-        return traced.result;
-      }) as never;
-    }
-    const between = Effect.sync(() => {
-      segment++;
-    });
-    const actual = Effect.runSync(readArtistGraph(reads, between));
-    assert.deepEqual(actual, Effect.runSync(readArtistGraph(store)));
-    assert.equal(segment, 2);
-    assert.deepEqual(rows, [0, 11190, 0]);
+    let yields = 0;
+    const traced = traceQueries(fixture.db, () =>
+      Effect.runSync(
+        readArtistGraph(
+          store,
+          Effect.sync(() => {
+            yields++;
+          }),
+        ),
+      ),
+    );
+    assert.deepEqual(traced.result, Effect.runSync(readArtistGraph(store)));
+    assert.ok(yields > 100);
+    assert.ok(traced.queries.every((query) => query.rows <= 128));
+    assert.ok(traced.queries.every((query) => !/OFFSET/.test(query.sql)));
+    assert.equal(
+      traced.queries.reduce((sum, query) => sum + query.rows, 0),
+      fixture.playEvents,
+    );
   } finally {
     fixture.close();
   }
