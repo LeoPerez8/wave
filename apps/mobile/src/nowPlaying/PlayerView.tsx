@@ -1,9 +1,4 @@
-import {
-  beginTiming,
-  activeTiming,
-  noteTimingLinkFailure,
-  timingLinkNavigated,
-} from "@/lib/timing";
+import { beginTiming, activeTiming, noteTimingLinkFailure } from "@/lib/timing";
 import { IconMusic, IconStar, IconStarFilled } from "@tabler/icons-react-native";
 import { artistLink, parseTrackId } from "@wave/core";
 import { Image } from "expo-image";
@@ -43,7 +38,12 @@ import {
   usePlayingSongAnswer,
   usePlayingSongTarget,
 } from "./playingSong";
-import { closeNowPlaying, closeNowPlayingForLink, useNowPlayingShown } from "./sheet";
+import {
+  closeNowPlaying,
+  closeNowPlayingForLink,
+  revealNowPlayingLink,
+  useNowPlayingShown,
+} from "./sheet";
 
 /** How far the artwork steps back while paused. */
 const PAUSED_SCALE = 0.84;
@@ -328,7 +328,7 @@ export function PlayerView({ item, details, playing }: Props) {
                 LibraryStore.use((store) => store.trackDetails(id)),
               ),
             follow: (link) => followArtistLink(link, links.artist),
-            reveal: () => timingLinkNavigated(timingId),
+            reveal: () => revealNowPlayingLink(timingId),
             unavailable: (error) => {
               if (timingId !== undefined) noteTimingLinkFailure(timingId, "target gone");
               showError(
