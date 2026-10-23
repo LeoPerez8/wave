@@ -129,7 +129,7 @@ export const setFavorites = (
 };
 
 /** Stars or unstars a track. Accepts a queue track id (a string) as well. */
-export const setFavorite = (trackId: number | string, on: boolean): Promise<void> =>
+const setFavorite = (trackId: number | string, on: boolean): Promise<void> =>
   setFavorites([trackId], on);
 
 /**

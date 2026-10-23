@@ -166,26 +166,6 @@ export function TrackSkeletons({
 }
 
 /**
- * An album tile's stand-in, laid out as `AlbumTile` is at [size]: the
- * artwork's square, the caption line, two title lines and the furniture line
- * (their line heights are global.css's catalog, body and footnote).
- */
-export function TileSkeleton({ size }: { size: number }) {
-  return (
-    <View style={{ width: size }}>
-      <View className="bg-fill" style={{ width: size, height: size }} />
-      <View style={{ paddingTop: CELL * 1.5, gap: CELL / 4 }}>
-        <Line lineHeight={16} width="60%" />
-        <View style={{ minHeight: CELL * 5.5 }}>
-          <Line lineHeight={22} width="85%" />
-        </View>
-        <Line lineHeight={18} width="35%" />
-      </View>
-    </View>
-  );
-}
-
-/**
  * An album card's stand-in, laid out as `AlbumCard` is at [size]: the square
  * cover with 6dp corners, then the title line and the artist line under it.
  */

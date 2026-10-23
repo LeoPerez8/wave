@@ -26,7 +26,7 @@ export const loadArtistOpening = async (root: string, db: TestDatabase) => {
   return makeArtistOpening(store, core);
 };
 
-export const makeArtistOpening = (store: LibraryStore["Service"], core: typeof Core) => {
+const makeArtistOpening = (store: LibraryStore["Service"], core: typeof Core) => {
   const fixed = typeof core.ytArtistOpening === "function";
   type Finder = (song: NativeYtSong) => SongRow | null;
   interface Opening {

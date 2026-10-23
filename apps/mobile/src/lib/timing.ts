@@ -16,8 +16,6 @@ import { createTransitionFrames } from "./transitionFrames";
 import { createLinkTapMonitor } from "./linkTapMonitor";
 import { createTimingSession } from "./timingSession";
 
-export type { TimingTransition } from "./timingSession";
-
 const background = new Map<string, () => string | null>();
 const session = createTimingSession({
   now: () => performance.now(),
@@ -94,22 +92,16 @@ export const continueTiming = (
   return beginTiming(kind, to);
 };
 export const activeTiming = session.active;
-export const timingRoute = session.route;
 export const timingResponse = session.response;
 export const timingContent = session.content;
 export const timingTransitionEnd = session.end;
 /** A tap that opened nothing (an error instead): ends unmeasured, and the screen settles again. */
 export const dismissTiming = session.dismiss;
-export const onTimingTransition = session.onTransition;
 export const onScreenSettled = session.onSettled;
 export const isScreenSettled = session.isSettled;
-export const noteTimingRead = session.read;
+const noteTimingRead = session.read;
 // Only slow reads call the subscriber; #581's two-timestamp fast path stays unchanged.
 onSlowLibraryRead((read) => noteTimingRead(read.operation, read.durationMs));
-export const noteTimingJsBlock = session.jsBlock;
-export const noteTimingFrames = session.frames;
-export const noteTimingHitch = session.hitch;
-export const noteTimingLostTap = session.lost;
 
 /** The commit is timestamped in a layout effect; its first frame is a single rAF. */
 export const timingRouteCommitted = (path: string): void => {

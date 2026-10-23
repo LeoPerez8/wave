@@ -286,12 +286,6 @@ const listExcludedFolders = storeQuery(
   (store) => store.excludedFolders,
 );
 
-const NO_EXCLUDED_FOLDERS: readonly string[] = [];
-
-/** The folders inside the music folders that Wave ignores. */
-export const useExcludedFolders = (): readonly string[] =>
-  useLibraryQuery(listExcludedFolders, NO_EXCLUDED_FOLDERS);
-
 /** Null until the exclusions load, distinct from a library with nothing excluded. */
 export const useLoadedExcludedFolders = (): readonly string[] | null =>
   useLibraryQuery<readonly string[] | null>(listExcludedFolders, null);

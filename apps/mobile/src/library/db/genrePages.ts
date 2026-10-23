@@ -17,10 +17,10 @@ import type { LibraryDatabase } from "./database.ts";
 import { toSongSummary, type SongSummary } from "./songOrder.ts";
 
 /** Rows the genre screen opens on: a screen and a half (Core's `PAGED_ROWS_LIMITS`). */
-export const GENRE_FIRST_PAGE = 50;
+const GENRE_FIRST_PAGE = 50;
 
 /** Ids each later read of the order takes: a few milliseconds of SQLite, then a turn back. */
-export const GENRE_ORDER_SLICE = 500;
+const GENRE_ORDER_SLICE = 500;
 
 /** A genre, as its list and its header show it. */
 export interface GenreHeader {

@@ -212,7 +212,7 @@ export function* discoverMixesOfCatalogSteps<L extends DiscoverLibrarySong>(
   });
 }
 
-export function* catalogMixSeedSteps(
+function* catalogMixSeedSteps(
   seed: DiscoverMixSeed,
   { library, profileOf, styleOf }: Pick<CatalogMixSources, "library" | "profileOf" | "styleOf">,
 ): Generator<void, RecommendSeed> {

@@ -49,7 +49,7 @@ export function MagicQueueSkeleton() {
   );
 }
 
-export function DiscoverSkeleton() {
+function DiscoverSkeleton() {
   const enabled = useYtMusicEnabled();
   return (
     <View style={{ gap: CELL * 3 }}>

@@ -51,7 +51,7 @@ export const resolveStreamedArtistTap = (link: StreamedArtistLink<ArtistRow>) =>
   });
 
 /** Explicit menu/swipe preparation; no render starts a whole-Library read. */
-export const libraryArtistsRead = async (
+const libraryArtistsRead = async (
   names: readonly string[],
   version = libraryVersion.get(),
 ): Promise<void> => {

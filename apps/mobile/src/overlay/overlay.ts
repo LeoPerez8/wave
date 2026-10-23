@@ -57,7 +57,7 @@ let interactionRevision = 0;
 export const OverlayId = createContext<number | undefined>(undefined);
 
 /** Async measurements must not run choices on dismissed or covered cards. */
-export const isOverlayInteractive = (id: number): boolean =>
+const isOverlayInteractive = (id: number): boolean =>
   entries.get().findLast((entry) => !entry.closing)?.id === id;
 
 /** Covering a card invalidates its old finger, even if the card becomes frontmost again. */

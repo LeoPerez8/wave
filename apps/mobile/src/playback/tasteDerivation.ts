@@ -39,7 +39,7 @@ function* mapSongs(
 }
 
 /** Checked attempts before the last one, which walks its sources in a single task. */
-export const TASTE_SNAPSHOT_ATTEMPTS = 3;
+const TASTE_SNAPSHOT_ATTEMPTS = 3;
 
 /** An effect run to its end in the current task: nothing else on this thread runs meanwhile. */
 const inOneTask = <A, E>(effect: Effect.Effect<A, E>): Effect.Effect<A, E> =>
@@ -54,7 +54,7 @@ const inOneTask = <A, E>(effect: Effect.Effect<A, E>): Effect.Effect<A, E> =>
  * write on this connection (the app's only one) can land: one long read, as ti's synchronous
  * read always was, instead of restarting for as long as the writes go on.
  */
-export const tasteSnapshot = <S>(
+const tasteSnapshot = <S>(
   store: LibraryStore["Service"],
   turn: Effect.Effect<void>,
   walk: (revision: string, pace: Effect.Effect<void>) => Effect.Effect<S, LibraryStoreError>,

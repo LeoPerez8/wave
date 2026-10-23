@@ -84,24 +84,6 @@ export const mixRefreshAvoid = (memory: readonly ShownMixes[], now: number): Mix
 };
 
 /**
- * [items] that [shownAt] doesn't name first, in their order, then those it
- * names, the least recently shown first (in their order on a tie). No
- * [shownAt]: [items] as they are.
- */
-export const freshFirst = <T>(
-  items: readonly T[],
-  shownAt: ((item: T) => number | undefined) | null,
-): { readonly fresh: T[]; readonly shown: T[] } => {
-  if (shownAt === null) return { fresh: [...items], shown: [] };
-  const fresh = items.filter((item) => shownAt(item) === undefined);
-  const shown = items
-    .filter((item) => shownAt(item) !== undefined)
-    // oxlint-disable-next-line unicorn/no-array-sort -- sorts the fresh array filter made; Hermes lacks toSorted
-    .sort((a, b) => (shownAt(a) ?? 0) - (shownAt(b) ?? 0));
-  return { fresh, shown };
-};
-
-/**
  * What Undo on "New mixes" saves at [now]: the [previous] set back, as the
  * section's build for the day as the [refreshed] one was, so the automatic
  * build doesn't replace it today. It blends at the level as it did. Its

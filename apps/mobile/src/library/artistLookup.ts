@@ -6,7 +6,7 @@ export interface LinkArtistName {
   readonly name: string;
   readonly sort: string;
 }
-export const ARTIST_NAME_PAGE_SIZE = 128;
+const ARTIST_NAME_PAGE_SIZE = 128;
 
 /** No whole-artist query or finder: inspect small name pages only after a gesture. */
 export const findLinkArtists = async (

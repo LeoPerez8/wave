@@ -98,7 +98,7 @@ test("cold scoped stars follow optimistic gestures and restore the saved star af
     );
     const saved = { favorite: true, pendingFavorite: false };
     favorites.rememberSongFavorite(track.id, saved.favorite);
-    const unstar = favorites.setFavorite(track.id, false);
+    const unstar = favorites.setFavorites([track.id], false);
     assert.equal(favorites.scopedSongStarredNow(track.id, null, saved), false);
     release();
     await unstar;
@@ -110,7 +110,7 @@ test("cold scoped stars follow optimistic gestures and restore the saved star af
 
     fail = false;
     gate = Promise.resolve();
-    await favorites.setFavorite(track.id, false);
+    await favorites.setFavorites([track.id], false);
     assert.equal(favorites.scopedSongStarredNow(track.id, null, saved), false);
     assert.equal(
       Effect.runSync(store.nowPlayingSong({ trackId: String(track.id), song: null })).favorite,

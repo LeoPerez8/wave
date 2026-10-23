@@ -71,8 +71,6 @@ export const failNowPlayingLink = (id: number | undefined): void => linkReveal.f
 /** True only once the opening spring finished and the player content drew. */
 export const useNowPlayingSettled = (): boolean =>
   useSyncExternalStore(sheetSettled.subscribe, sheetSettled.get);
-export const isNowPlayingSettled = sheetSettled.get;
-export const onNowPlayingSettledChange = sheetSettled.subscribe;
 const updateSettled = (): void =>
   sheetSettled.set(motionDone && contentDrawn && phase.get() === "open");
 const springOpened = (id: number | undefined, generation: number): void => {

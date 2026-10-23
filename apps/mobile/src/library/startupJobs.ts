@@ -25,7 +25,7 @@ import type { IndexedArtwork, IndexedTrack, LibraryStore } from "./LibraryStore.
  * Rows one startup write takes: ti's scan save slice. A turn holds one such
  * transaction, so a long list costs a turn per hundred rows, not per row.
  */
-export const STARTUP_WRITE_ROWS = SCAN_SAVE_SLICE;
+const STARTUP_WRITE_ROWS = SCAN_SAVE_SLICE;
 
 const slices = <A>(rows: readonly A[]): A[][] => {
   const parts: A[][] = [];
