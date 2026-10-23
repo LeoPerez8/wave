@@ -70,11 +70,11 @@ export const createRecapReplay = async (root: string, fixture: FastAgainFixture)
   let failure: unknown;
   const read = (now: number, signal?: AbortSignal) => {
     work.reads++;
-    started = performance.now();
+    started ??= performance.now();
     const effect = typeof source === "function" ? source(now, turn) : source;
     pending = Effect.runPromise(effect as Effect.Effect<readonly RecapPeriod[], unknown>, {
       signal,
-    }).finally(end);
+    });
     return pending as Promise<readonly RecapPeriod[]>;
   };
   const path = "apps/mobile/src/stats/recapAvailability.ts";
@@ -163,6 +163,7 @@ export const createRecapReplay = async (root: string, fixture: FastAgainFixture)
         for (const [key, job] of jobs)
           if (job.ms === 0) {
             jobs.delete(key);
+            started ??= performance.now();
             job.run();
           }
         await Promise.resolve();
@@ -170,6 +171,7 @@ export const createRecapReplay = async (root: string, fixture: FastAgainFixture)
         pending = undefined;
         await reading;
         for (let i = 0; i < 8; i++) await Promise.resolve();
+        end(); // Include publication and cache bookkeeping in the final synchronous task.
         if (failure !== undefined) throw failure;
         if (pending === undefined && ![...jobs.values()].some((job) => job.ms === 0)) return;
       }

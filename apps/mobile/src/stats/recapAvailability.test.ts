@@ -244,3 +244,76 @@ test("the production visibility binding waits for real timing settlement and can
   stop();
   assert.equal(jobs.size, 0);
 });
+
+test("covering Home before the queued reader enters performs no read", async () => {
+  const jobs = new Map<number, { ms: number; run: () => void }>();
+  let id = 0;
+  let reads = 0;
+  const cache = shareRecapAvailability({
+    version: makeExternalStore(0),
+    now: () => 0,
+    monotonic: () => 0,
+    zone: () => "test",
+    schedule: (ms, run) => {
+      const key = ++id;
+      jobs.set(key, { ms, run });
+      return () => {
+        jobs.delete(key);
+      };
+    },
+    read: async () => {
+      reads++;
+      return [];
+    },
+  });
+  const home = cache.attach(true, () => {});
+  for (const [key, job] of jobs)
+    if (job.ms === 0) {
+      jobs.delete(key);
+      job.run();
+    }
+  home.setActive(false);
+  await flush();
+  assert.equal(reads, 0, "sheet coverage cancels before entering the reader microtask");
+  assert.equal(cache.get(), undefined);
+  home.detach();
+  assert.equal(jobs.size, 0);
+});
+
+test("a calendar boundary crossed before the deferred start needs only one current refresh", async () => {
+  let wall = new Date(2026, 9, 31, 23, 59).getTime();
+  const jobs = new Map<number, { ms: number; run: () => void }>();
+  let id = 0;
+  let reads = 0;
+  const cache = shareRecapAvailability({
+    version: makeExternalStore(0),
+    now: () => wall,
+    monotonic: () => wall,
+    zone: () => "test",
+    schedule: (ms, run) => {
+      const key = ++id;
+      jobs.set(key, { ms, run });
+      return () => {
+        jobs.delete(key);
+      };
+    },
+    read: async (at) => {
+      reads++;
+      assert.equal(at, wall);
+      return [];
+    },
+  });
+  const home = cache.attach(true, () => {});
+  wall += 60_000;
+  for (let turn = 0; turn < 3; turn++) {
+    for (const [key, job] of jobs)
+      if (job.ms === 0) {
+        jobs.delete(key);
+        job.run();
+      }
+    await flush();
+  }
+  assert.deepEqual(cache.get(), []);
+  assert.equal(reads, 1, "the queued refresh captures the key at its actual start");
+  home.detach();
+});

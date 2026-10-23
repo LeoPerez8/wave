@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { performance } from "node:perf_hooks";
 import * as Effect from "effect/Effect";
-import { recapToAnnounce } from "@wave/core";
 import { createRecapReplay } from "../recapReplay.ts";
 import { percentiles } from "../measure.ts";
 import type { FastAgainBench, BenchMeasurement } from "../types.ts";
@@ -21,6 +20,9 @@ export const bench: FastAgainBench = {
         reason: "This revision predates Home Recaps and Stats.recaps",
       }));
     probe.close();
+    const { recapToAnnounce } = await context.loadModule<typeof import("@wave/core")>(
+      "packages/core/src/index.ts",
+    );
     const measurements: BenchMeasurement[] = [];
     let historyChanges = 0;
     const { fixture } = context;
@@ -134,7 +136,7 @@ export const bench: FastAgainBench = {
           clock:
             "fixture October 1, next local month for calendarBoundary; controlled wall/monotonic clocks; mutation and warmup excluded",
           tasksScope:
-            "activation and actual SQL/derivation segments split by injected setImmediate free turns; elapsed/CPU include cache publication and promise bookkeeping",
+            "activation plus deferred refresh tasks split by injected setImmediate free turns, through final cache publication and promise bookkeeping; scheduler wait time excluded from synchronous totals",
           omissions:
             "React/native frames, phone SQLite/Hermes, animation/quiet waits and TalkBack; no native timing is inferred",
         },

@@ -96,10 +96,14 @@ export const shareRecapAvailability = (options: {
       running = entry;
       // The reader waits for a cancellable free turn before every bounded SQL/CPU stage.
       Promise.resolve()
-        .then(() => options.read(now(), entry.abort.signal))
+        .then(() => {
+          if (entry.abort.signal.aborted || !active()) return undefined;
+          entry.key = wanted = key();
+          return options.read(now(), entry.abort.signal);
+        })
         .then(
           (next) => {
-            if (entry.abort.signal.aborted || !active()) return;
+            if (next === undefined || entry.abort.signal.aborted || !active()) return;
             wanted = key();
             if (entry.key !== wanted) return;
             cachedFor = entry.key;
