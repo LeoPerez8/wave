@@ -1197,3 +1197,43 @@ retain their captured song, resolve missing-file and pending-star state, and
 ignore canceled or superseded lookup results. Four exact #587 guard exceptions
 were retired without changing the scanner or route guard. Device behavior,
 phone latency and TalkBack remain unverified.
+
+## Startup after settlement and quiet frames (#595)
+
+The final capture is [`results/595-homeOpening-desktop.jsonl`](results/595-homeOpening-desktop.jsonl).
+It compares real ti `460e39ff0cba6f50e7a456a77d6e99813295ebaa` with
+`4855852aa5d32d6f1f323eb7bf2f33bfc030fd7b` (includes #592/#593/#588/#587).
+Each size has eleven samples. See [`595-startup-work.md`](595-startup-work.md)
+for the production boundaries, exact startup scenario and native exclusions.
+This is Node/sql.js; it is not phone/Hermes latency or an owner-exported tap log.
+
+At 1,000 / 12,000 / 50,000 songs, the complete cold replay's maximum synchronous
+task goes from **76.566 / 239.786 / 1511.894 ms** to **73.255 / 98.326 / 341.351 ms**.
+Its median total synchronous JS goes from 204.453 / 514.796 / 2125.739 ms to
+152.291 / 300.657 / 1020.687 ms. These whole-Home differences include already
+integrated work, especially #592/#593; they are not an isolated #595 speedup.
+
+For startup alone, the maximum task goes from **44.372 / 104.519 / 405.275 ms**
+to **25.222 / 98.326 / 341.351 ms**. Its median total synchronous JS goes from
+64.076 / 151.627 / 623.298 ms to 83.692 / 158.647 / 518.615 ms. Startup uses
+9 timed tasks before, versus 43 / 127 / 419–420 after. Per-item transactions
+and scheduling add work at smaller sizes; this is a responsiveness tradeoff,
+not a claim that aggregate work always shrinks.
+
+Complete cold SQL returns 10,772 / 49,172 / 176,852 rows before and
+9,598 / 34,578 / 115,898 after, in 57 versus 179 statements. Startup alone
+returns 2,231 / 25,771 / 107,091 rows before and 2,088 / 23,648 / 98,128 after,
+in 41 versus 164 statements. More statements come from the retained 20-song
+import's one-song append transactions, including their atomic held-entry reads.
+Rows are returned rows, not SQLite VM visits. All Home payloads, scan native
+input columns, import results, offline pause and duplicate results have equal
+SHA-256 result keys at every size. The unchanged first-of-day companion case
+also agrees; it does not run startup a second time.
+
+Source SQLite/row decoding, linking/pruning and one-record atomic writes still
+appear in the complete task maxima. No per-source timing has been invented or
+subtracted. The 341.351-ms maximum does not establish a six-ms overall cap:
+CPU iterators target four ms plus operation headroom, while the named indivisible
+source/native operations remain exceptions. The final capture excludes the
+interrupted preliminary run and the semantic smoke run. The owner's exported
+cold-launch first-tap log and native/device acceptance remain **unverified**.
