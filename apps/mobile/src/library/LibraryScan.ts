@@ -322,7 +322,7 @@ const scanFolders = (roots: readonly string[]) =>
             })(),
             startupTurnEffect,
           );
-    yield* finishScanIndex(store, missingPaths, saved, startupTurnEffect);
+    yield* finishScanIndex(store, missingPaths, startupTurnEffect);
     yield* startupTurnEffect;
     yield* store.markScanned(roots, startedAt);
     // Songs whose files are gone left the Library: every screen drops them now, hidden ones too.

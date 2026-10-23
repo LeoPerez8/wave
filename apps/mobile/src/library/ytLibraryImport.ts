@@ -62,7 +62,7 @@ import {
 import { startupTurn, startupTurnEffect } from "@/lib/backgroundWork";
 import { runSteps } from "@/lib/stepped";
 import { resumeLibraryReads } from "./libraryImportResume";
-import { readImportDownloadInput } from "./startupJobs";
+import { dispatchLibraryFavorites, readImportDownloadInput } from "./startupJobs";
 
 import * as Result from "effect/Result";
 import { useSyncExternalStore } from "react";
@@ -233,26 +233,17 @@ const fill = async (read: YtLibraryRead): Promise<string | null> => {
       );
       await startupTurn();
       if (!isYtLibraryReadQueued(batch.get(), read)) return null;
-      for (const id of favorites.star) {
-        await startupTurn();
-        if (!isYtLibraryReadQueued(batch.get(), read)) return null;
-        await setFavorites([id], true);
-      }
-      // A liked song the Library has only as a missing song downloads, as any new star does.
-      void downloadSyncedStars();
-      // Before any download is queued, so each one's landing finds its pending favorite; the
-      // stars then ask for their downloads, under Favorites (a star means downloaded).
-      await startupTurn();
-      for (const favorite of favorites.pending) {
-        await startupTurn();
-        if (!isYtLibraryReadQueued(batch.get(), read)) return null;
-        await setPendingFavorites([favorite], true);
-      }
-      for (const song of favorites.download) {
-        await startupTurn();
-        if (!isYtLibraryReadQueued(batch.get(), read)) return null;
-        downloadStarredSongs([song]);
-      }
+      // The pending favorites' stars then ask for their downloads, under Favorites (a star
+      // means downloaded).
+      const dispatched = await dispatchLibraryFavorites(favorites, {
+        turn: startupTurn,
+        current: () => isYtLibraryReadQueued(batch.get(), read),
+        star: (ids) => setFavorites(ids, true),
+        syncedStars: () => void downloadSyncedStars(),
+        pend: (pending) => setPendingFavorites(pending, true),
+        download: (songs) => downloadStarredSongs(songs),
+      });
+      if (!dispatched) return null;
       // Checked again with no wait before the link import starts: a refresh from here on
       // empties the playlist and ends that import.
       if (!isYtLibraryReadQueued(batch.get(), read)) return null;

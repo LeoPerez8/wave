@@ -728,6 +728,7 @@ export class LibraryStore extends Context.Service<
      * to a Wave account their songs stay as missing songs, signed out they
      * leave the Library. Then the albums, artists, genres and folders left
      * without tracks go (also after tag changes, so call it once per scan).
+     * With no files, it does nothing when nothing was written since it last ran.
      */
     readonly filesGone: (paths: readonly string[]) => Effect.Effect<void, LibraryStoreError>;
     /**
@@ -1305,6 +1306,15 @@ const make = Effect.gen(function* () {
   });
   // The Library's credits and their splitter, kept between saves.
   const splits = creditSplits();
+  // Every write on this connection and others, as SQLite counts them: a scan's cleanup
+  // (`filesGone`) with nothing written since the last one has nothing left to do.
+  const writes = (): string => {
+    const row = db.get<{ writes: number; external: number }>(sql`
+      SELECT total_changes() AS writes, data_version AS external FROM pragma_data_version`)!;
+    return `${row.writes}:${row.external}`;
+  };
+  // Null until this process cleans up: a save before it started may have left something.
+  let prunedAt: string | null = null;
   // After the upgrade that brought credits in, the Library is re-filed under
   // each credited artist from the tags already stored (no rescan).
   yield* Effect.try({
@@ -1396,10 +1406,13 @@ const make = Effect.gen(function* () {
     markScanned: (roots, at) =>
       writeAttempt("record the scan", () => {
         if (roots.length === 0) return;
+        const pruned = prunedAt !== null && prunedAt === writes();
         db.update(schema.scanRoots)
           .set({ lastScannedAt: at })
           .where(inArray(schema.scanRoots.path, [...roots]))
           .run();
+        // When a scan ends: nothing the cleanup reads, so the Library stays cleaned up.
+        if (pruned) prunedAt = writes();
       }),
 
     countTracks: attempt(
@@ -1588,7 +1601,11 @@ const make = Effect.gen(function* () {
       ),
 
     filesGone: (paths) =>
-      writeAttempt("update songs whose files are gone", () => filesGone(db, splits, paths)),
+      writeAttempt("update songs whose files are gone", () => {
+        if (paths.length === 0 && prunedAt === writes()) return;
+        filesGone(db, splits, paths);
+        prunedAt = writes();
+      }),
 
     removeSongs: (trackIds) =>
       writeAttempt("remove songs from the library", () =>
