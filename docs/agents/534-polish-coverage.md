@@ -356,18 +356,19 @@ TB/NAV/M **PENDING**. The old initial inventory's “Home sections/mix seed/arti
 controls” description of 549-S01 is superseded: the editor controls Home section
 order/visibility only; mix seeds and sliders live in Discover.
 
-| #549 surface / contextual alias                                        | Findings and applicable states                                                | Verification / owner                                         |
-| ---------------------------------------------------------------------- | ----------------------------------------------------------------------------- | ------------------------------------------------------------ |
-| Home; legacy `/library/discover` redirect to Home                      | L/E/C/O/F/S/A; navigation alias checked separately                            | Source only; #592/#595/#598 preserved                        |
-| Home sections; selectable Library shelf (including Discover)           | L/E/C/O/A; F action dialogs; list selection NA                                | 549-C/D/F; #550/#554 shared patterns                         |
-| 549-S01 Home editor card; `settings/layout/home.tsx` page              | C/E/S; local-only, no fetch/playback. Card Done/cancel vs page immediate-save | #555/#556 integration; no additional correction              |
-| 549-S02 Discover headers, Magic Queue seeds, Artist/Genre rows         | L/E/C/O/F/D/A; S menu origin; checkbox selection NA                           | 549-C/D/F                                                    |
-| 549-S03 settings trigger/card, three sliders                           | C/S/O; D YT Music off; L/E/F/A NA                                             | 549-A preserved; 549-B; #555 shared slider confirmation      |
-| 549-S04 mix menu, save/collision, refresh/Undo toast                   | L/C/O/F/D/S/A as detailed in flow report                                      | 549-C; #551/#556 follow-up surfaces                          |
-| 549-S05 mix skeletons; 549-S06 shell/section/seed/Recap skeletons      | L only; still busy groups; other states NA                                    | #592/#598 source behavior preserved                          |
-| 549-S07 pull/crossfade/heading refresh integration on Home and Library | C/O/F/D; repeat/Undo; reduced motion + zero/default tap                       | 549-C; event-adapter tests, actual TalkBack/gestures PENDING |
-| Mix detail, selected rows, active playback/download; gone-mix state    | C/O/F/S/A; L Library/finder resolution; gone E, other states NA               | 549-D/E; #551/#553/#555/#556 shared integration              |
-| Stats/See all/Favorites/Recap/local tile menu entries and return       | Applicable shared route states, not a duplicate flow audit                    | #550/#551/#554/#556                                          |
+| #549 surface / contextual alias                                        | Findings and applicable states                                                 | Verification / owner                                                            |
+| ---------------------------------------------------------------------- | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------- |
+| Home; legacy `/library/discover` redirect to Home                      | L/E/C/O/F/S/A; navigation alias checked separately                             | Source only; #592/#595/#598 preserved                                           |
+| Home sections; selectable Library shelf (including Discover)           | L/E/C/O/A; F action dialogs; list selection NA                                 | 549-C/D/F; #550/#554 shared patterns                                            |
+| 549-S01 Home editor card; `settings/layout/home.tsx` page              | C/E/S; local-only, no fetch/playback. Card Done/cancel vs page immediate-save  | #555/#556 integration; no additional correction                                 |
+| 549-S02 Discover headers, Magic Queue seeds, Artist/Genre rows         | L/E/C/O/F/D/A; S menu origin; checkbox selection NA                            | 549-C/D/F                                                                       |
+| Shared Magic Queue local song/album/artist/playlist menu entries       | C/O/F/A; S origin; absent for genre/missing/streamed/unsearched/bulk selection | Core itemActions tests; #551/#553/#556 presentation, native integration PENDING |
+| 549-S03 settings trigger/card, three sliders                           | C/S/O; D YT Music off; L/E/F/A NA                                              | 549-A preserved; 549-B; #555 shared slider confirmation                         |
+| 549-S04 mix menu, save/collision, refresh/Undo toast                   | L/C/O/F/D/S/A as detailed in flow report                                       | 549-C; #551/#556 follow-up surfaces                                             |
+| 549-S05 mix skeletons; 549-S06 shell/section/seed/Recap skeletons      | L only; still busy groups; other states NA                                     | #592/#598 source behavior preserved                                             |
+| 549-S07 pull/crossfade/heading refresh integration on Home and Library | C/O/F/D; repeat/Undo; reduced motion + zero/default tap                        | 549-C; event-adapter tests, actual TalkBack/gestures PENDING                    |
+| Mix detail, selected rows, active playback/download; gone-mix state    | C/O/F/S/A; L Library/finder resolution; gone E, other states NA                | 549-D/E; #551/#553/#555/#556 shared integration                                 |
+| Stats/See all/Favorites/Recap/local tile menu entries and return       | Applicable shared route states, not a duplicate flow audit                     | #550/#551/#554/#556                                                             |
 
 Real release-runner doctor and startup/tab/scroll/settings scenario attempts fail
 before measurement because adb is unavailable (`spawn adb ENOENT`). The flow
