@@ -26,11 +26,21 @@ const setup = (intervalMs = 1000 / 60) => {
       };
     },
   });
+  let away = false;
+  const backgroundListeners = new Set<() => void>();
   const work = createStartupWork({
     now: () => now,
     intervalMs: () => intervalMs,
     isSettled: session.isSettled,
-    subscribe: session.onSettled,
+    backgrounded: () => away,
+    subscribe: (listener) => {
+      const stop = session.onSettled(listener);
+      backgroundListeners.add(listener);
+      return () => {
+        stop();
+        backgroundListeners.delete(listener);
+      };
+    },
     request: (run) => {
       const id = ++next;
       frames.set(id, run);
@@ -70,6 +80,10 @@ const setup = (intervalMs = 1000 / 60) => {
     tasks,
     advance: (ms: number) => {
       now += ms;
+    },
+    background: (value: boolean) => {
+      away = value;
+      for (const listener of backgroundListeners) listener();
     },
   };
 };
@@ -241,5 +255,40 @@ test("backgrounding cancels a queued start and requires actual foreground settle
   assert.equal(starts, 1);
   assert.equal(h.frames.size, 0);
   assert.equal(h.tasks.size, 0);
+  h.work.dispose();
+});
+
+test("in the background, with no screen to protect, startup work runs on free turns without settlement or frames", () => {
+  const h = setup();
+  const started: string[] = [];
+  h.settle(h.session.routeCommitted("/")!);
+  h.work.whenFree(() => started.push("import"));
+  h.work.whenFree(() => started.push("scan"));
+  h.session.cancel(); // timing.ts on AppState leaving active: never settled while away.
+  h.background(true);
+  assert.equal(h.frames.size, 0); // Frames may not run at all while backgrounded.
+  h.task();
+  assert.deepEqual(started, ["import"]);
+  h.task();
+  assert.deepEqual(started, ["import", "scan"]);
+  h.work.dispose();
+});
+
+test("coming back to the foreground pauses startup work until the screen settles again", () => {
+  const h = setup();
+  let starts = 0;
+  h.background(true);
+  h.work.whenFree(() => starts++);
+  h.work.whenFree(() => starts++);
+  h.task();
+  assert.equal(starts, 1);
+  h.background(false);
+  const resumed = h.session.routeCommitted("/")!;
+  h.task();
+  assert.equal(starts, 1);
+  h.settle(resumed);
+  for (let i = 0; i < 4; i++) h.frame();
+  h.task();
+  assert.equal(starts, 2);
   h.work.dispose();
 });
