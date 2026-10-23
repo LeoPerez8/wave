@@ -120,3 +120,35 @@ test("a refresh keeps the drawn file/star while actions acquire the new version"
   assert.equal((await action).favorite, true);
   assert.equal(reads, 2);
 });
+
+test("unrelated download recordings leave the playing answer alone; a matching saved file refreshes it once", async () => {
+  let reads = 0;
+  const lookup = createNowPlayingSongLookup({
+    read: async () => {
+      reads++;
+      return answer;
+    },
+  });
+  lookup.update(target, true, true);
+  await lookup.acquire(target);
+  lookup.downloaded({ title: "Another song", artist: "Artist", durationMs: 180000 });
+  await Promise.resolve();
+  assert.equal(reads, 1);
+  lookup.downloaded({ title: "One", artist: "Artist", durationMs: 181000 });
+  await lookup.acquire(target);
+  assert.equal(reads, 2);
+});
+
+test("an edit between a cached gesture and its continuation cannot deliver the old state", async () => {
+  let reads = 0;
+  const lookup = createNowPlayingSongLookup({
+    read: async () => ({ ...answer, favorite: ++reads > 1 }),
+  });
+  const local = { trackId: "7", song: null };
+  lookup.update(local, true, true);
+  await lookup.acquire(local);
+  const gesture = lookup.acquire(local);
+  lookup.change({ kind: "favorites", ids: [7] });
+  assert.equal((await gesture).favorite, true);
+  assert.equal(reads, 2);
+});

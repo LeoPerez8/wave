@@ -66,7 +66,7 @@ export const bench: FastAgainBench = {
       const find = core.libraryFinder(Effect.runSync(store.listSongs));
       const ids = new Set(Effect.runSync(store.favoriteTrackIds));
       const pending = new Set(
-        Effect.runSync(store.listPendingFavorites).map((song) => song.videoId),
+        Effect.runSync(store.listPendingFavorites).map((pendingSong) => pendingSong.videoId),
       );
       const track = find(song);
       return {

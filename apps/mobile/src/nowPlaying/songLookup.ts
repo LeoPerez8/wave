@@ -1,4 +1,10 @@
-import { parseTrackId, type LibraryChange, type YtSong } from "@wave/core";
+import {
+  parseTrackId,
+  recordingMatches,
+  type LibraryChange,
+  type LibrarySongKey,
+  type YtSong,
+} from "@wave/core";
 import type { SongRow } from "../library/LibraryStore.ts";
 
 /** The song captured by a render/gesture, even if playback moves on while it resolves. */
@@ -106,11 +112,24 @@ export const createNowPlayingSongLookup = (ports: {
       const e = entry(target);
       e.actions++;
       try {
-        return await ensure(e);
+        for (;;) {
+          const version = e.version;
+          const answer = await ensure(e);
+          // Even a cached Promise can race an edit before the gesture resumes.
+          if (version === e.version && !e.stale) return answer;
+        }
       } finally {
         e.actions--;
         prune();
       }
+    },
+    downloaded(recording: LibrarySongKey): void {
+      for (const e of entries.values()) {
+        if (e.target.song === null || !recordingMatches(recording, e.target.song)) continue;
+        e.version++;
+        e.stale = true;
+      }
+      prepare();
     },
     change(change: LibraryChange): void {
       for (const e of entries.values()) {

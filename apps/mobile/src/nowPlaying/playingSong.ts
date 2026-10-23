@@ -1,7 +1,7 @@
 import { parseTrackId } from "@wave/core";
 import { useEffect, useMemo, useSyncExternalStore } from "react";
 import { scopedSongStarredNow, rememberSongFavorite } from "@/library/favorites";
-import { onLibraryChange } from "@/library/libraryChanges";
+import { onDownloadedRecording, onLibraryChange } from "@/library/libraryChanges";
 import { LibraryStore } from "@/library/LibraryStore";
 import { appRuntime } from "@/library/runtime";
 import { starSongs } from "@/library/starSongs";
@@ -15,14 +15,15 @@ import { createNowPlayingSongActions } from "./songActions";
 export const nowPlayingSongLookup = createNowPlayingSongLookup({
   read: (target, signal) => {
     signal.throwIfAborted();
-    // oxlint-disable-next-line react/rules-of-hooks -- Effect service access.
     return appRuntime.runPromise(
+      // oxlint-disable-next-line react/rules-of-hooks -- Effect service access.
       LibraryStore.use((store) => store.nowPlayingSong(target)),
       { signal },
     );
   },
 });
 onLibraryChange(nowPlayingSongLookup.change);
+onDownloadedRecording(nowPlayingSongLookup.downloaded);
 
 export const nowPlayingSongActions = createNowPlayingSongActions(nowPlayingSongLookup, {
   download: (command) => {
