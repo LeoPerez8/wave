@@ -157,7 +157,7 @@ describe("createPagedRows", () => {
     const { rows, reads, answer, shown } = setUp();
     const firstPage = range(1, 10).map((id) => ({ id, title: `opening ${id}` }));
     rows.setOrder(range(1, 10), firstPage);
-    assert.deepEqual(reads, []);
+    assert.equal(reads.length, 0);
     assert.deepEqual(shown(0, 2), ["opening 1", "opening 2"]);
     // The whole order: only the rows past the first page are read.
     rows.setOrder(range(1, 1_000), firstPage);

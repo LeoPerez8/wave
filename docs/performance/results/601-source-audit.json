@@ -31,5 +31,6 @@
     "apps/mobile/bench/fastAgain/benches/genreOpening.ts": "d5fbd695818efd067e8dcf7045ebd522e2fea1b7f35212c9ece71b2744c4062b"
   },
   "readSourcesUnchangedAfterCapture": true,
-  "indexProof": "WITHOUT ROWID makes id a normal indexed column: composite cursor plans include the final id and contain no temporary sorting, even for a wholly missing identical-name genre."
+  "indexProof": "WITHOUT ROWID makes id a normal indexed column: composite cursor plans include the final id and contain no temporary sorting, even for a wholly missing identical-name genre.",
+  "finalIntegrationCommit": "c1b227cda1e0123cde0073ae9d9e4d61cfe0c055"
 }
