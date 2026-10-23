@@ -11,6 +11,8 @@ import {
   lyricCardLayout,
   lyricShareDestinations,
   lyricStoryBackground,
+  lyricStoryFrame,
+  contrastRatio,
   instagramStoriesAppId,
   nextLyricCardColour,
   parseLyrics,
@@ -329,15 +331,79 @@ describe("lyricShareDestinations", () => {
 });
 
 describe("lyricStoryBackground", () => {
-  test("the story's top and bottom are both the card's colour, so the sticker sits on it seamlessly", () => {
-    assert.deepEqual(lyricStoryBackground("#3a5f8c"), { top: "#3a5f8c", bottom: "#3a5f8c" });
+  test("keeps a visible tonal boundary around bright, dark and saturated solid cards", () => {
+    for (const colour of ["#ffdb9a", "#1c2628", "#dc2828", "#000000", "#ffffff", "#808080"]) {
+      const { top, bottom } = lyricStoryBackground(colour);
+      assert.match(top, /^#[a-f0-9]{6}$/);
+      assert.match(bottom, /^#[a-f0-9]{6}$/);
+      assert.ok(contrastRatio(top, bottom) >= 1.15, `visible gradient for ${colour}`);
+      assert.ok(contrastRatio(colour, top) >= 1.25, `top separates ${colour}`);
+      assert.ok(contrastRatio(colour, bottom) >= 1.25, `bottom separates ${colour}`);
+      // Both stops are on the same side of the solid, so the fade never crosses its colour.
+      for (const at of [1, 3, 5]) {
+        const channel = parseInt(colour.slice(at, at + 2), 16);
+        const topChannel = parseInt(top.slice(at, at + 2), 16);
+        const bottomChannel = parseInt(bottom.slice(at, at + 2), 16);
+        assert.ok((topChannel - channel) * (bottomChannel - channel) >= 0);
+      }
+    }
   });
 
-  test("a colour Instagram can't read becomes Wave's graphite", () => {
-    assert.deepEqual(lyricStoryBackground("blue"), {
-      top: LYRIC_CARD_FALLBACK,
-      bottom: LYRIC_CARD_FALLBACK,
-    });
+  test("cycling the palette preserves each selected solid and updates its surrounding gradient", () => {
+    const colours = lyricCardColours({ dominant: "#DC2828", darkVibrant: "#39131b" });
+    const selected = nextLyricCardColour(colours, colours[0]!);
+    assert.equal(selected, "#39131b");
+    assert.notDeepEqual(lyricStoryBackground(selected), lyricStoryBackground(colours[0]!));
+    assert.deepEqual(lyricStoryBackground("#DC2828"), lyricStoryBackground("#dc2828"));
+    assert.equal(nextLyricCardColour(colours, selected), "#dc2828");
+  });
+
+  test("missing artwork and invalid colours get an intentional graphite-derived gradient", () => {
+    const [fallback] = lyricCardColours(null);
+    const story = lyricStoryBackground(fallback!);
+    assert.deepEqual(lyricStoryBackground("blue"), story);
+    assert.deepEqual(lyricStoryBackground(LYRIC_CARD_FALLBACK), story);
+    assert.notEqual(story.top, story.bottom);
+  });
+});
+
+describe("lyricStoryFrame", () => {
+  test("centres a short square card inside 80% of the Story width", () => {
+    const frame = lyricStoryFrame(["One short line"]);
+    assert.equal(frame.width, 1080);
+    assert.equal(frame.height, 1920);
+    assert.equal(frame.cardWidth, 864);
+    assert.equal(frame.cardHeight, 864);
+    assert.equal(frame.left, 108);
+    assert.equal(frame.top, 528);
+    assert.ok(frame.cornerRadius > 0);
+  });
+
+  test("shrinks a full-height card to 75% of the Story height with its shape intact", () => {
+    const pickedLines = Array.from({ length: 5 }, () => "A very long lyric line ".repeat(15));
+    const shape = lyricCardLayout(pickedLines);
+    const frame = lyricStoryFrame(pickedLines);
+    assert.equal(shape.aspect, 16 / 9);
+    assert.equal(frame.cardHeight, 1440);
+    assert.equal(frame.cardWidth, 810);
+    assert.equal(frame.top, 240);
+    assert.equal(frame.left, 135);
+    assert.equal(frame.cardHeight / frame.cardWidth, shape.aspect);
+  });
+
+  test("all adaptive shapes fit both bounds while retaining the card's proportions", () => {
+    for (let count = 1; count <= 5; count++) {
+      for (const length of [1, 5, 20, 100]) {
+        const pickedLines = Array.from({ length: count }, () => "Words ".repeat(length));
+        const shape = lyricCardLayout(pickedLines);
+        const frame = lyricStoryFrame(pickedLines);
+        assert.ok(frame.cardWidth <= frame.width * 0.8);
+        assert.ok(frame.cardHeight <= frame.height * 0.75);
+        assert.equal(frame.left * 2 + frame.cardWidth, frame.width);
+        assert.equal(frame.top * 2 + frame.cardHeight, frame.height);
+        assert.ok(Math.abs(frame.cardHeight / frame.cardWidth - shape.aspect) < 1e-12);
+      }
+    }
   });
 });
 

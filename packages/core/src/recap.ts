@@ -7,7 +7,7 @@
 import { songFamilies, type GenreFamily } from "./genreMixes.ts";
 import {
   lyricCardFileName,
-  lyricStoryBackground,
+  LYRIC_CARD_FALLBACK,
   type LyricStoryBackground,
 } from "./lyricsShare.ts";
 import { rankPlays, type PlayTotals, type StatsWindow } from "./stats.ts";
@@ -130,8 +130,10 @@ export const recapCardFileName = (title: string, at: Date): string =>
  * The background of the Instagram story a shared slide goes to as a sticker:
  * the slide's [colour] top and bottom, so it sits on its own colour.
  */
-export const recapStoryBackground = (colour: string): LyricStoryBackground =>
-  lyricStoryBackground(colour);
+export const recapStoryBackground = (colour: string): LyricStoryBackground => {
+  const solid = /^#[\da-f]{6}$/i.test(colour) ? colour.toLowerCase() : LYRIC_CARD_FALLBACK;
+  return { top: solid, bottom: solid };
+};
 
 /** How many songs a Recap's top songs list. */
 export const RECAP_TOP_SONGS = 5;

@@ -224,13 +224,63 @@ export interface LyricStoryBackground {
 }
 
 /**
- * The background of the story the card goes to as a sticker: the card's
- * [colour] (the one picked in the preview) top and bottom, so the sticker sits
- * on its own colour. Wave's graphite when [colour] isn't a `#rrggbb`.
+ * A complementary fade around the selected solid card. Both stops move toward
+ * the same contrasting neutral, so the gradient never passes through the card's
+ * colour. Dark cards get a lighter surround; light cards a darker one. No
+ * artwork (or invalid input) uses the same treatment of Wave's graphite.
  */
 export const lyricStoryBackground = (colour: string): LyricStoryBackground => {
   const solid = HEX.test(colour) ? colour.toLowerCase() : LYRIC_CARD_FALLBACK;
-  return { top: solid, bottom: solid };
+  const target = contrastRatio(solid, "#ffffff") >= contrastRatio(solid, "#000000") ? 255 : 0;
+  const tone = (amount: number): string =>
+    `#${[1, 3, 5]
+      .map((at) => {
+        const channel = parseInt(solid.slice(at, at + 2), 16);
+        return Math.round(channel + (target - channel) * amount)
+          .toString(16)
+          .padStart(2, "0");
+      })
+      .join("")}`;
+  let amount = 0.18;
+  while (contrastRatio(solid, tone(amount)) < 1.3) amount += 0.02;
+  return { top: tone(amount), bottom: tone(amount + 0.12) };
+};
+
+/**
+ * The transparent Instagram sticker's pixel canvas and its visible rounded
+ * card. Padding belongs to the sticker, never to a flattened Story background.
+ * Instagram controls the initial scale/position of this asset in its editor.
+ */
+export interface LyricStoryFrame {
+  readonly width: number;
+  readonly height: number;
+  readonly left: number;
+  readonly top: number;
+  readonly cardWidth: number;
+  readonly cardHeight: number;
+  readonly cornerRadius: number;
+}
+
+/**
+ * Centre the adaptive card in a 1080 × 1920 transparent sticker, fitting inside
+ * 80% of its width and 75% of its height. Shared by the preview and native PNG
+ * export; palette changes never affect its shape, text layout or framing.
+ */
+export const lyricStoryFrame = (lines: readonly string[]): LyricStoryFrame => {
+  const width = 1080;
+  const height = 1920;
+  const { aspect } = lyricCardLayout(lines);
+  const cardWidth = Math.min(width * 0.8, (height * 0.75) / aspect);
+  const cardHeight = cardWidth * aspect;
+  return {
+    width,
+    height,
+    left: (width - cardWidth) / 2,
+    top: (height - cardHeight) / 2,
+    cardWidth,
+    cardHeight,
+    cornerRadius: cardWidth * 0.055,
+  };
 };
 
 /**

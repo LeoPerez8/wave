@@ -547,5 +547,6 @@ describe("sharing a Recap slide", () => {
 
   test("lays the image over the slide's colour, top and bottom, in an Instagram story", () => {
     assert.deepEqual(recapStoryBackground("#3F43B8"), { top: "#3f43b8", bottom: "#3f43b8" });
+    assert.deepEqual(recapStoryBackground("invalid"), { top: "#1c2628", bottom: "#1c2628" });
   });
 });

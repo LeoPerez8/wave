@@ -98,6 +98,35 @@ function TrackRowSkeleton({
   );
 }
 
+/** As `IconButton`: a 48dp target around a 24dp glyph. */
+const CONTROL = 48;
+
+/**
+ * A track row with icon controls after it (a playlist recommendation's Add
+ * and Dismiss) standing in for one that is on its way: `TrackRow`'s stand-in
+ * followed by [controls] 48dp cells, each with a 24dp glyph's square, so it
+ * is exactly as tall and wide as the row it replaces. Screen readers skip
+ * it; its container says what is busy.
+ */
+export function ControlledTrackRowSkeleton({ controls }: { controls: number }) {
+  return (
+    <View {...HIDDEN} className="flex-row items-center" style={{ height: grid.row }}>
+      <View className="flex-1">
+        <TrackRowSkeleton />
+      </View>
+      {Array.from({ length: controls }, (_, index) => (
+        <View
+          key={index}
+          className="items-center justify-center"
+          style={{ width: CONTROL, height: CONTROL }}
+        >
+          <View className="bg-fill" style={{ width: 24, height: 24, borderRadius: 12 }} />
+        </View>
+      ))}
+    </View>
+  );
+}
+
 /** How many skeleton rows stand for songs to come. */
 export const SKELETON_ROWS = 3;
 

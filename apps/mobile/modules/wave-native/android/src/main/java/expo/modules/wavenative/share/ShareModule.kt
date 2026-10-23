@@ -31,6 +31,14 @@ class ShareModule : Module() {
     /** Writes the base64 PNG to the shared images as [fileName]; resolves its path. */
     AsyncFunction("writeImage") { base64: String, fileName: String -> images.write(base64, fileName).absolutePath }
 
+    /** Creates a separate transparent padded rounded sticker; the original card stays intact. */
+    AsyncFunction("writeStorySticker") { path: String, frame: Map<String, Double> ->
+      val source = File(path)
+      // The same cache-only boundary as delivery, before reading or creating a sibling PNG.
+      contentUri(source)
+      StorySticker.write(source, frame).absolutePath
+    }
+
     /** Copies the image at [path] into the gallery, in Pictures/Wave. */
     AsyncFunction("saveToGallery") { path: String -> saveToGallery(File(path)) }
 
@@ -57,7 +65,9 @@ class ShareModule : Module() {
      * user can move and resize, over a [top] to [bottom] background (`#rrggbb`),
      * as Meta's "Sharing to Stories" has it. [appId] is the build's Facebook App
      * ID, which Instagram requires as the source application. Only Instagram is
-     * granted to read the image.
+     * granted to read the image. Lyrics padding is already in this PNG; the
+     * intent exposes no documented sticker size or position extras. Instagram
+     * controls placement and scaling, so never flatten the card into a background.
      */
     AsyncFunction("shareToInstagramStory") { path: String, top: String, bottom: String, appId: String ->
       val uri = contentUri(File(path))

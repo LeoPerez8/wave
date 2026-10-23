@@ -17,6 +17,7 @@ import {
   magicGenreMatches,
   magicSeedProfile,
   magicSessionWeight,
+  magicStyleMatches,
   magicYtSong,
   type MagicSession,
   type MagicYtCandidate,
@@ -79,7 +80,7 @@ export const magicCatalogCandidates = (
   sources: RecommendSources,
   { inLibrary, playable, engine = {} }: MagicCatalogOptions,
 ): MagicCatalogPick => {
-  // At Same genres and Close the seed's style is held to (`styleAffinity`), so a seed of no known genre still has candidates: its radio's.
+  // Known styles can establish a match; unknown styles also need family evidence.
   const styles = engine.styles !== undefined;
   const profile = magicSeedProfile(session, sources.profileOf);
   if (!styles && (profile === null || profile.size === 0)) return { candidates: [], left: 0 };
@@ -92,20 +93,20 @@ export const magicCatalogCandidates = (
   const excluded = new Set(session.excludedArtists);
   const seen = new Set<string>();
   const scored: { readonly candidate: MagicCatalogCandidate; readonly score: number }[] = [];
-  for (const { song, affinity, score } of ranked) {
-    // A song of an unknown style is already close to the seed (`rankRecommended`): it stays as "unknown".
-    if (styles ? affinity === "miss" : affinity !== "match") continue;
-    if (
-      !styles &&
-      !song.artists.some((artist) =>
-        magicGenreMatches(
-          profile,
-          sources.profileOf(artist),
-          engine.threshold ?? GENRE_AFFINITY_THRESHOLD,
-        ),
-      )
-    )
-      continue;
+  for (const { song, affinity, score, closeness } of ranked) {
+    const threshold = engine.threshold ?? GENRE_AFFINITY_THRESHOLD;
+    const eligible = song.artists.some((artist) =>
+      engine.styles !== undefined
+        ? magicStyleMatches(
+            { profile, style: session.seedStyle },
+            { profile: sources.profileOf(artist), style: sources.styleOf?.(artist) ?? null },
+            engine.styles,
+            closeness > 0,
+            threshold,
+          )
+        : affinity === "match" && magicGenreMatches(profile, sources.profileOf(artist), threshold),
+    );
+    if (!eligible) continue;
     const recording = mixRecordingOf(song);
     if (seen.has(recording)) continue;
     seen.add(recording);
