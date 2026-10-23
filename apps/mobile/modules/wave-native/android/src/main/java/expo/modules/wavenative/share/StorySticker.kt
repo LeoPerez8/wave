@@ -56,13 +56,10 @@ object StorySticker {
         val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply { this.shader = shader }
         Canvas(sticker).drawRoundRect(bounds, radius, radius, paint)
         val output = File.createTempFile("story-", ".png", source.parentFile)
-        try {
-          output.outputStream().use {
+        output.deletingOnFailure { file ->
+          file.outputStream().use {
             check(sticker.compress(Bitmap.CompressFormat.PNG, 100, it)) { "Couldn't write the sticker" }
           }
-        } catch (error: Exception) {
-          output.delete()
-          throw error
         }
         return output
       } finally {
