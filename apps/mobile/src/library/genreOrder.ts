@@ -101,7 +101,8 @@ export const createGenreOrderActions = (): GenreOrderActions => {
   let open = true;
   const waiters = new Set<() => void>();
   const changed = () => {
-    for (const waiter of [...waiters]) waiter();
+    // Each resolves a promise: no waiter runs, nor adds itself again, during this loop.
+    for (const waiter of waiters) waiter();
     waiters.clear();
   };
   const nextChange = () => new Promise<void>((resolve) => waiters.add(resolve));
@@ -127,7 +128,7 @@ export const createGenreOrderActions = (): GenreOrderActions => {
         // A failed read ends the press, as it would on any genre.
         if (!asked.disposed()) return null;
         // Let go for a newer order: ask the load that replaces it, once it shows.
-        while (open && load === asked) await nextChange();
+        if (load === asked) await nextChange();
       }
     },
   };

@@ -233,30 +233,34 @@ test("a late order from a closed genre never publishes, even if its runner ignor
   assert.equal(published, 0);
 });
 
+const run = <A, E>(effect: Effect.Effect<A, E>, signal: AbortSignal) =>
+  Effect.runPromise(effect, { signal });
+
+/** A large genre's order takes a few turns to read. */
+const slowLoad = (order: SongOrder) =>
+  createGenreOrderLoad({
+    read: Effect.promise(
+      () => new Promise<SongOrder>((resolve) => setTimeout(() => resolve(order), 20)),
+    ),
+    settled: Effect.void,
+    run,
+  });
+
 test("Play, Shuffle or a tap pressed before the whole order arrives plays the genre's order after a change", async () => {
   const oldOrder: SongOrder = { ids: [3, 2, 1], missing: [], spine: [] };
   const newOrder: SongOrder = { ids: [1, 2, 3], missing: [], spine: [] };
-  // A large genre's order takes a few turns to read.
-  const make = (order: SongOrder) =>
-    createGenreOrderLoad({
-      read: Effect.promise(
-        () => new Promise<SongOrder>((resolve) => setTimeout(() => resolve(order), 20)),
-      ),
-      settled: Effect.void,
-      run: (effect, signal) => Effect.runPromise(effect, { signal }),
-    });
   // The new load shows in the commit that lets the old one go, or after the opening
   // is read again (a sort change shows no load in between).
   for (const between of ["same commit", "opening read again"] as const) {
     const actions = createGenreOrderActions();
-    const revision1 = make(oldOrder);
+    const revision1 = slowLoad(oldOrder);
     actions.show(revision1);
     revision1.inBackground();
     const pressed = actions.whole();
     await new Promise((resolve) => setTimeout(resolve, 5));
     // A scan batch writes a song of the genre: useWholeOrder lets revision 1's load go.
     revision1.dispose();
-    const revision2 = make(newOrder);
+    const revision2 = slowLoad(newOrder);
     if (between === "opening read again") {
       actions.show(null);
       await new Promise((resolve) => setTimeout(resolve, 5));
@@ -268,8 +272,6 @@ test("Play, Shuffle or a tap pressed before the whole order arrives plays the ge
 });
 
 test("a press on a let-go order ends when the screen closes, and a failed read isn't retried later", async () => {
-  const run = <A, E>(effect: Effect.Effect<A, E>, signal: AbortSignal) =>
-    Effect.runPromise(effect, { signal });
   const actions = createGenreOrderActions();
   const first = createGenreOrderLoad({ read: Effect.never, settled: Effect.void, run });
   actions.show(first);
