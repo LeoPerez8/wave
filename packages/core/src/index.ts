@@ -333,11 +333,13 @@ export {
   tabsOffBar,
 } from "./tabBar.ts";
 export type { TabBar, TabBarEdit, TabBarTab } from "./tabBar.ts";
+export { createDeveloperTitleTaps } from "./developerSettings.ts";
 export {
   LAYOUT_PAGES,
   SETTINGS_PAGES,
   accountsSummary,
   downloadsSummary,
+  visibleSettingsPages,
 } from "./settingsPages.ts";
 export type {
   LayoutPage,
