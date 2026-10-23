@@ -44,8 +44,9 @@ spread over 90 days ending at a fixed 2026-10-01 noon UTC. They contain complete
 plays and early skips, with favorites, downloaded songs and missing files in the
 Library. Each fixture exposes its database, song ids, two targets (artist, song and
 album ids), an album, a genre, a playlist of fifty songs, `now` and `close()`.
-Every variant gets a fresh identical fixture. A bench that writes must restore
-those writes before the next bench runs; tests close their fixtures in `finally`.
+Every size/variant/bench combination gets a fresh identical fixture. The runner
+closes it in `finally`, including when a bench fails. Writes stay within that
+benchmark; fixture creation and cleanup remain outside its measurements.
 
 A synchronous read warms once, runs once under `traceQueries` to count SQL work,
 then runs independently eleven times for wall and CPU timing. Tracing and EXPLAIN
@@ -88,8 +89,9 @@ sequential; returned services retain their own database. Use
 
 The saved [JSONL](results/579-libraryReads-desktop.jsonl) contains the complete
 inventory, all work and timing metrics, all three variants, rankings and the
-comparison table. It was recorded with the full command, eleven runs per read,
-after a warm-up. The following tables show each size's twenty slowest current
+comparison table. It was recorded with the full command when `libraryReads` was
+the only registered benchmark, eleven runs per read, after a warm-up. The following
+tables show each size's twenty slowest current
 reads. Rows and statements are the current read's returned SQL work; times are
 median milliseconds, with current p90. Historical APIs that did not exist are
 marked `—`.
