@@ -122,12 +122,29 @@ test("source versions invalidate, evict by age, share in-flight reads and never 
   }
 });
 
+/** A page read that takes a few milliseconds, as a stepped read does. */
+const page = () => Effect.promise(() => new Promise<never[]>((r) => setTimeout(() => r([]), 5)));
+const empty = () => Effect.succeed({ rows: [], next: null });
+
+const streamTrack = (id: string) => ({
+  id,
+  source: "stream" as const,
+  videoId: id,
+  title: id,
+  artists: ["a"],
+  album: null,
+  albumId: null,
+  durationMs: 1,
+  artworkUrl: null,
+  explicit: false,
+  genre: null,
+  available: true,
+});
+
 test("a Dismiss whose refill is reading when a tracks, favorites or catalog change lands still refills", async () => {
   const { playlistRecommendationSession } = await import("@wave/core");
   let clock = 0,
     snapshots = 0;
-  const page = () => Effect.promise(() => new Promise<never[]>((r) => setTimeout(() => r([]), 5)));
-  const empty = () => Effect.succeed({ rows: [], next: null });
   const store = {
     mixArtistsPage: () => {
       snapshots++;
@@ -142,20 +159,6 @@ test("a Dismiss whose refill is reading when a tracks, favorites or catalog chan
     recommendationFeedbackPage: () => Effect.succeed([]),
   } as unknown as Parameters<typeof sharePlaylistRecommendationInputs>[0];
   const source = sharePlaylistRecommendationInputs(store, Effect.void, () => clock);
-  const track = (id: string) => ({
-    id,
-    source: "stream" as const,
-    videoId: id,
-    title: id,
-    artists: ["a"],
-    album: null,
-    albumId: null,
-    durationMs: 1,
-    artworkUrl: null,
-    explicit: false,
-    genre: null,
-    available: true,
-  });
   let n = 0;
   const session = playlistRecommendationSession({
     newId: () => `k${++n}`,
@@ -170,8 +173,8 @@ test("a Dismiss whose refill is reading when a tracks, favorites or catalog chan
       ),
     rank: async (input) =>
       ["a", "b", "c", "d", "e", "f"]
-        .filter((id) => !input.sources.exclude.some((x) => x.id === id))
-        .map((id) => ({ track: track(id) })),
+        .filter((id) => !(input.sources.exclude ?? []).some((x) => x.id === id))
+        .map((id) => ({ track: streamTrack(id), score: 1 })),
     dismiss: async () => {},
   });
   await session.renew();

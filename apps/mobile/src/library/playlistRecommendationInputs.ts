@@ -42,7 +42,7 @@ const collect = <A, E, C = number>(
     }
   });
 
-/** At most one completed or in-flight snapshot, lazily evicted after 60 seconds. Forget aborts old waiters. */
+/** At most one completed or in-flight snapshot, lazily evicted after 60 seconds. A forget aborts the old read; its waiters wait on the next. */
 export const sharePlaylistRecommendationInputs = (
   store: RecommendationReads,
   between: Effect.Effect<void>,
