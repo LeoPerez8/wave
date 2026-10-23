@@ -356,6 +356,50 @@ export const availableRecaps = (
   );
 };
 
+/** Incremental equivalent of availableRecaps; callers feed bounded listening pages. */
+export const createRecapAvailability = () => {
+  const sums = new Map<string, { period: RecapPeriod; listenedMs: number }>();
+  const addPeriod = (period: RecapPeriod, listenedMs: number): void => {
+    const id = recapId(period);
+    const held = sums.get(id);
+    sums.set(id, { period, listenedMs: (held?.listenedMs ?? 0) + listenedMs });
+  };
+  return {
+    add(entry: CountedListening): void {
+      const month = monthOf(entry.startedAt);
+      addPeriod(month, entry.listenedMs);
+      addPeriod({ kind: "year", year: month.year }, entry.listenedMs);
+    },
+    *finish(now: number): Generator<void, RecapPeriod[]> {
+      let periods: RecapPeriod[] = [];
+      for (const { period, listenedMs } of sums.values()) {
+        if (periodOut(period) <= now && listenedMs >= minimumMs(period)) periods.push(period);
+        yield;
+      }
+      // Stable merge sort yields per comparison/copy, even with many years of imported history.
+      for (let width = 1; width < periods.length; width *= 2) {
+        const sorted: RecapPeriod[] = [];
+        for (let start = 0; start < periods.length; start += 2 * width) {
+          const middle = Math.min(start + width, periods.length);
+          const end = Math.min(start + 2 * width, periods.length);
+          let left = start;
+          let right = middle;
+          while (left < middle || right < end) {
+            sorted.push(
+              right >= end || (left < middle && newestFirst(periods[left]!, periods[right]!) <= 0)
+                ? periods[left++]!
+                : periods[right++]!,
+            );
+            yield;
+          }
+        }
+        periods = sorted;
+      }
+      return periods;
+    },
+  };
+};
+
 /** The `recapId`s opened so far, from what's stored for them (null: none). */
 export const parseOpenedRecaps = (stored: string | null): string[] => {
   if (stored === null) return [];

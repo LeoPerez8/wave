@@ -1380,3 +1380,89 @@ processing scales with one payload; a 128-row output bound does not bound every
 SQLite VM visit or make a native call preemptible. #593 whole-source paging,
 #595 startup and #598 Recap retain their existing ownership. Device, Hermes,
 native frames and TalkBack remain unverified.
+
+## Home Recap availability (#598)
+
+Raw capture: [`598-recapAvailability-desktop.jsonl`](results/598-recapAvailability-desktop.jsonl).
+Measured source/harness: `a069889ce4420270497609c21d5e170ce40769ab`, including
+integration `494e26dbb15d9bf427a5e42c79ec5e730342af99` and #595's startup gate.
+Before is actual ti `460e39ff0cba6f50e7a456a77d6e99813295ebaa`;
+reference is `add761ed787061db6a6c2799687d421301b6182b`. The reference predates
+Home Recaps, so all four cases explicitly remain unavailable. The original
+#596 research JSONL is unchanged; this fix-specific successor measures the shared
+availability lifecycle. Node v26.8.2 + sql.js 1.14.2, Linux x64, eleven timed runs
+after warmup at 1,000 / 12,000 / 50,000 songs and 10,000 / 54,000 / 200,000 plays.
+
+Reproduce from the repository root with source-only historical checkouts:
+
+```sh
+pnpm --silent --filter @wave/mobile bench:fast-again --bench recapAvailability \
+  --before <v0.19.0-ti worktree> --reference <v0.7.0-ti worktree>
+```
+
+The selected revision's actual Stats, LibraryStore and Core execute on identical
+fixtures. The current path uses the production retained cache; ti replays its
+focus-triggered eager Effect. Visibility, clock and free turns are controlled.
+Each measured cold run uses a fresh cache. The other cases first acquire and hide
+the answer outside measurement, then return unchanged, persist one progress
+update, or advance to the next local month. The write is restored outside timing
+before the next run/scenario/registered bench. Every ordered available period and
+its announcements for no, each individual, and all opened ids match ti at every
+size, including the boundary and changed-history cases.
+
+Values below are milliseconds, before → after, in the size order above. Total is
+median elapsed replay; synchronous total excludes scheduler waits, while longest
+is the maximum task over all eleven samples. Task boundaries include activation,
+actual SQL/derivation segments and final cache publication, split by injected
+`setImmediate` free turns. Ti's synchronous read inside activation is counted
+once. Fixture setup, database/store initialization, warmup and the change write
+are outside measurement. CPU, p90, synchronous totals and per-run maxima/task
+counts are retained in the JSONL.
+
+- **Cold:** total 13.878 → 28.888 / 30.706 → 65.365 / 99.492 → 172.010;
+  longest 14.998 → 1.720 / 39.358 → 1.148 / 108.415 → 0.778.
+- **Unchanged return:** total 13.435 → 0.064 / 28.610 → 0.066 / 105.331 → 0.071;
+  longest 14.138 → 0.086 / 29.305 → 0.072 / 122.347 → 0.083.
+- **Changed history:** total 13.796 → 27.453 / 28.473 → 64.876 / 106.851 → 182.134;
+  longest 14.489 → 1.515 / 29.108 → 1.293 / 109.831 → 1.037.
+- **Calendar boundary:** total 13.828 → 27.342 / 28.781 → 63.669 / 99.372 → 208.788;
+  longest 14.670 → 1.656 / 29.033 → 0.814 / 124.373 → 1.360.
+
+Every ti case returns 7,200 / 8,640 / 8,640 SQL rows in one statement and notifies
+one consumer. Current **unchanged returns execute zero reads, rows, statements
+and notifications**. Cold, changed-history and boundary refreshes each return
+7,222 / 8,831 / 9,399 rows in 20 / 106 / 391 statements. Current notifications
+are 1/1/1 cold, 0/0/0 after the progress update (same periods), and 0/1/1 at the
+calendar boundary (only changed periods publish). Counts cover one availability
+subscriber, not React commits. Rows count SQL results, not SQLite VM visits.
+
+Each current statement seeks by event id and materializes at most **512 raw
+events**, returning at most 513 rows including its cursor. Observed statement
+maxima are 371 / 84 / 25 rows. Quarter sums crossing page boundaries and the
+cursor rows explain the slightly larger aggregate row totals. Calendar policy
+stays in Core; local month/year/December/January thresholds retain the existing
+rules. SQL/CPU paging adds total work; this capture claims smaller blocking tasks
+and no repeated unchanged read, not lower cold CPU or a hardware deadline.
+
+Public store/cache tests replace #596's repeated 7,200-row characterization with
+zero unchanged-return work and one shared refresh after invalidation. They cover
+actual timing settlement, immediate sheet coverage, hidden coalescing, bounded
+page cancellation, stale/error recovery, threshold crossings, imports/progress/
+replays/sync pages, opened ids, local month/year boundaries and timezone/clock
+changes. Two recovery regressions additionally cover hiding between deferred
+scheduling and reader entry, and crossing a month boundary before reader entry.
+#595's quiet-frame/startup job/import-resume tests still pass; its implementation
+and source invalidation are preserved. Exact #584 declarations protect the
+legacy history reader, paged source and Stats capability, permitting only the
+bounded deferred seam in production.
+
+Expected every-build log correlation: unchanged Home/Now Playing returns no
+longer invoke `sum up counted listening`; cold/stale refreshes use `read counted
+listening page` after settlement. The whole-history operation remains only as an
+inventoried compatibility/control driver, with no production Stats consumer.
+The existing broad `homeOpening` replay still includes its historical whole-history
+Recap control and is not the production #598 lifecycle; its saved measurements
+are not revised or attributed to this fix. **Actual phone evidence that the
+`sum up counted listening` lines disappear remains unverified**, as do Android/
+Hermes latency, native frames and TalkBack. These desktop results do not establish
+phone frame times or a strict six-ms maximum.

@@ -3,6 +3,7 @@ import {
   artistStats,
   artistPlayTotals,
   availableRecaps,
+  createRecapAvailability,
   rankPlays,
   recap,
   recapId,
@@ -11,6 +12,7 @@ import {
   statsWindow,
   type ArtistStats as ArtistStatsLines,
   type GenreFamily,
+  type CountedListening,
   type PlayTotals,
   type RecapPeriod,
   type RecapSlide,
@@ -19,6 +21,9 @@ import {
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+
+import { runSteps } from "@/lib/stepped";
+import type { RecapHistoryVersion } from "./recapAvailability";
 
 import {
   LibraryStore,
@@ -97,7 +102,11 @@ export class Stats extends Context.Service<
      */
     readonly artist: (artistId: number) => Effect.Effect<ArtistStats, LibraryStoreError>;
     /** Every period with a Recap now, newest first (Core's `availableRecaps`). */
-    readonly recaps: Effect.Effect<readonly RecapPeriod[], LibraryStoreError>;
+    readonly recaps: (
+      now: number,
+      between: Effect.Effect<void>,
+    ) => Effect.Effect<readonly RecapPeriod[], LibraryStoreError>;
+    readonly recapHistoryVersion: RecapHistoryVersion;
     /** `period`'s Recap, its slides' rows loaded; null when the period has no Recap now. */
     readonly recap: (period: RecapPeriod) => Effect.Effect<LoadedRecap | null, LibraryStoreError>;
   }
@@ -206,7 +215,7 @@ const loadRecap = (
   now: number,
 ): Effect.Effect<LoadedRecap | null, LibraryStoreError> =>
   Effect.gen(function* () {
-    const listening = yield* store.countedListening;
+    const listening = yield* readRecapListening(store, period, Effect.yieldNow);
     const id = recapId(period);
     if (!availableRecaps(listening, now).some((available) => recapId(available) === id)) {
       return null;
@@ -230,6 +239,59 @@ const loadRecap = (
     });
     const slides = yield* Effect.forEach(recapSlides(computed), (slide) => loadSlide(store, slide));
     return { period, title: computed.title, slides: slides.flat() };
+  });
+
+/** Stories retain only the requested period, quarter sums unchanged; source reads still yield. */
+const readRecapListening = (
+  store: LibraryStore["Service"],
+  period: RecapPeriod,
+  between: Effect.Effect<void>,
+): Effect.Effect<readonly CountedListening[], LibraryStoreError> =>
+  Effect.gen(function* () {
+    const window = recapWindow(period);
+    const quarters = new Map<number, number>();
+    yield* readListeningPages(store, between, (entry) => {
+      if (entry.startedAt >= window.from! && entry.startedAt <= window.to)
+        quarters.set(entry.startedAt, (quarters.get(entry.startedAt) ?? 0) + entry.listenedMs);
+    });
+    function* collect(): Generator<void, CountedListening[]> {
+      const rows: CountedListening[] = [];
+      for (const [startedAt, listenedMs] of quarters) {
+        rows.push({ startedAt, listenedMs });
+        yield;
+      }
+      return rows;
+    }
+    return yield* runSteps(collect(), between);
+  });
+
+/** Sole bounded listening source seam; no calendar policy is passed to SQLite. */
+const readListeningPages = (
+  store: LibraryStore["Service"],
+  between: Effect.Effect<void>,
+  add: (entry: CountedListening) => void,
+): Effect.Effect<void, LibraryStoreError> =>
+  Effect.gen(function* () {
+    let after = 0;
+    for (;;) {
+      yield* between;
+      const page = yield* store.countedListeningPage(after);
+      for (const entry of page.rows) add(entry);
+      if (page.next === null) break;
+      after = page.next;
+    }
+  });
+
+/** Bounded source pages and stepped Core decisions; every source/CPU stage starts on a free turn. */
+const readRecapAvailability = (
+  store: LibraryStore["Service"],
+  now: number,
+  between: Effect.Effect<void>,
+): Effect.Effect<readonly RecapPeriod[], LibraryStoreError> =>
+  Effect.gen(function* () {
+    const build = createRecapAvailability();
+    yield* readListeningPages(store, between, build.add);
+    return yield* runSteps(build.finish(now), between);
   });
 
 export const layer = Layer.effect(
@@ -263,10 +325,8 @@ export const layer = Layer.effect(
           },
         );
       },
-      recaps: Effect.map(
-        Effect.suspend(() => store.countedListening),
-        (listening) => availableRecaps(listening, Date.now()),
-      ),
+      recaps: (now, between) => readRecapAvailability(store, now, between),
+      recapHistoryVersion: store.listeningHistoryVersion,
       recap: (period) => Effect.suspend(() => loadRecap(store, period, Date.now())),
     };
   }),
