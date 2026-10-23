@@ -160,3 +160,49 @@ describe("spineStep", () => {
     assert.equal(spineStep([], 0, 1), undefined);
   });
 });
+
+describe("alphabet steps in a two-column album grid", () => {
+  const letters = [
+    { letter: "A", index: 0 },
+    { letter: "B", index: 0 },
+    { letter: "C", index: 1 },
+    { letter: "D", index: 1 },
+    { letter: "E", index: 2 },
+  ];
+
+  test("every earlier letter is reachable when two letters start on one row", () => {
+    const previous = spineStep(letters, 1, -1, "C");
+    assert.deepEqual(previous, { letter: "B", index: 0 });
+    assert.deepEqual(spineStep(letters, 0, -1, previous?.letter), { letter: "A", index: 0 });
+    assert.deepEqual(spineStep(letters, 0, -1, "A"), { letter: "A", index: 0 });
+  });
+  test("forward steps visit both letters on each row and stop at the end", () => {
+    let row = 0;
+    let chosen = "A";
+    const heard: string[] = [];
+    for (let i = 0; i < 5; i++) {
+      const next = spineStep(letters, row, 1, chosen)!;
+      heard.push(next.letter);
+      row = next.index;
+      chosen = next.letter;
+    }
+    assert.deepEqual(heard, ["B", "C", "D", "E", "E"]);
+  });
+
+  test("scrolling to another section discards the earlier explicit choice", () => {
+    assert.deepEqual(spineStep(letters, 2, -1, "A"), { letter: "D", index: 1 });
+    assert.deepEqual(spineStep(letters, 0, 1, "gone"), { letter: "C", index: 1 });
+  });
+
+  test("reverse sorts step in list order, including the non-Latin bucket", () => {
+    const reverse = [
+      { letter: "#", index: 0 },
+      { letter: "Z", index: 0 },
+      { letter: "M", index: 1 },
+      { letter: "A", index: 1 },
+    ];
+    assert.deepEqual(spineStep(reverse, 0, 1, "#"), { letter: "Z", index: 0 });
+    assert.deepEqual(spineStep(reverse, 1, -1, "M"), { letter: "Z", index: 0 });
+    assert.deepEqual(spineStep(reverse, 0, -1, "Z"), { letter: "#", index: 0 });
+  });
+});

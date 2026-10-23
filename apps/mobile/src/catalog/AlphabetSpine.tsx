@@ -138,7 +138,7 @@ export function AlphabetSpine({ entries, onJump, topRow }: Props) {
   });
 
   const step = (direction: 1 | -1) => {
-    const entry = spineStep(entries, topRow(), direction);
+    const entry = spineStep(entries, topRow(), direction, chosen.letter);
     if (entry === undefined) return;
     setChosen({ letter: entry.letter, held: false });
     onJump(entry);

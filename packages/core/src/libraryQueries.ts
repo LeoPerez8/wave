@@ -85,6 +85,9 @@ export interface LibraryQueryResult<V> {
   readonly value: V;
 }
 
+/** First-read feedback. A last good result stays ready during refresh or failure. */
+export type LibraryQueryState = "loading" | "error" | "ready";
+
 /** One screen (or component) showing a query. */
 export interface LibraryQueryConsumer {
   /** The screen came into sight: a result it missed while hidden reaches it now. */
@@ -123,10 +126,17 @@ export interface LibraryQueries<V> {
   readonly attach: (
     key: string,
     reads: LibraryReads,
-    options: { readonly visible: boolean; readonly onChange: () => void },
+    options: {
+      readonly visible: boolean;
+      readonly onChange: () => void;
+      readonly onStateChange?: () => void;
+    },
   ) => LibraryQueryConsumer;
   /** The query's current result, or undefined before its first read. The same box until it changes. */
   readonly current: (key: string) => LibraryQueryResult<V> | undefined;
+  readonly state: (key: string) => LibraryQueryState;
+  /** Retries only a failed first read, sharing an existing attempt and asking no other query. */
+  readonly retry: (key: string) => void;
   /** Something in the Library changed: the queries it reaches re-read, now or when shown. */
   readonly change: (change: LibraryChange) => void;
   readonly stats: () => LibraryQueryStats;
@@ -137,6 +147,8 @@ interface ConsumerState {
   /** The result this consumer was last told of. */
   seen: LibraryQueryResult<unknown> | undefined;
   readonly onChange: () => void;
+  seenState: LibraryQueryState;
+  readonly onStateChange: (() => void) | undefined;
 }
 
 interface Entry<V> {
@@ -144,6 +156,7 @@ interface Entry<V> {
   readonly reads: LibraryReads;
   readonly consumers: Set<ConsumerState>;
   result: LibraryQueryResult<V> | undefined;
+  failed: boolean;
   /** A change reached the query since its last read started. */
   stale: boolean;
   /** The pending re-read shouldn't wait for the throttle (an edit, a screen coming back). */
@@ -195,6 +208,18 @@ export const createLibraryQueries = <V>(options: {
   const entries = new Map<string, Entry<V>>();
   let nextRead = 0;
   const counts = { reads: 0, shared: 0, paused: 0, discarded: 0, evicted: 0 };
+
+  const stateOf = (entry: Entry<V>): LibraryQueryState =>
+    entry.result !== undefined ? "ready" : entry.failed ? "error" : "loading";
+
+  const tellState = (entry: Entry<V>): void => {
+    const state = stateOf(entry);
+    for (const consumer of entry.consumers) {
+      if (consumer.seenState === state) continue;
+      consumer.seenState = state;
+      consumer.onStateChange?.();
+    }
+  };
 
   /**
    * Tells [entry]'s consumers of its new result. A hidden one hears of its
@@ -271,6 +296,8 @@ export const createLibraryQueries = <V>(options: {
     entry.stale = false;
     entry.urgent = false;
     entry.readAt = now();
+    entry.failed = false;
+    tellState(entry);
     read(entry.key, (outcome) => settle(entry, number, outcome));
   };
 
@@ -279,9 +306,13 @@ export const createLibraryQueries = <V>(options: {
     entry.reading = null;
     if (entries.get(entry.key) !== entry) return;
     if (entry.outdated) counts.discarded++;
-    else if (outcome.ok) {
-      entry.result = { value: outcome.value };
-      tell(entry, entry.forEdit);
+    else {
+      entry.failed = !outcome.ok;
+      if (outcome.ok) {
+        entry.result = { value: outcome.value };
+        tell(entry, entry.forEdit);
+      }
+      tellState(entry);
     }
     plan(entry);
   };
@@ -307,7 +338,7 @@ export const createLibraryQueries = <V>(options: {
   };
 
   return {
-    attach: (key, reads, { visible, onChange }) => {
+    attach: (key, reads, { visible, onChange, onStateChange }) => {
       let entry = entries.get(key);
       if (entry === undefined) {
         entry = {
@@ -315,6 +346,7 @@ export const createLibraryQueries = <V>(options: {
           reads,
           consumers: new Set(),
           result: undefined,
+          failed: false,
           stale: true,
           urgent: true,
           reading: null,
@@ -334,7 +366,13 @@ export const createLibraryQueries = <V>(options: {
         entry.cancelExpiry = null;
       }
       const owner = entry;
-      const consumer: ConsumerState = { visible, seen: owner.result, onChange };
+      const consumer: ConsumerState = {
+        visible,
+        seen: owner.result,
+        onChange,
+        seenState: stateOf(owner),
+        onStateChange,
+      };
       owner.consumers.add(consumer);
       plan(owner);
       return {
@@ -356,6 +394,16 @@ export const createLibraryQueries = <V>(options: {
       };
     },
     current: (key) => entries.get(key)?.result,
+    state: (key) => {
+      const entry = entries.get(key);
+      return entry === undefined ? "loading" : stateOf(entry);
+    },
+    retry: (key) => {
+      const entry = entries.get(key);
+      if (entry === undefined || !entry.failed || entry.result !== undefined) return;
+      invalidate(entry, true);
+      plan(entry);
+    },
     change: (change) => {
       const edit = change.burst !== true;
       const hidden: Entry<V>[] = [];

@@ -579,6 +579,7 @@ export type {
   LibraryQueryLimits,
   LibraryQueryOutcome,
   LibraryQueryResult,
+  LibraryQueryState,
   LibraryQueryStats,
   LibraryReads,
 } from "./libraryQueries.ts";

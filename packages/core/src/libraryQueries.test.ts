@@ -403,3 +403,76 @@ describe("retention", () => {
     assert.equal(queries.current("songs")?.value, "s1");
   });
 });
+
+describe("Library first-read feedback", () => {
+  test("a failed first read is distinguishable from empty and can be retried without reopening", () => {
+    const { queries, reads, answer, readsOf, advance } = setup();
+    const states: string[] = [];
+    queries.attach("albums", SONGS, {
+      visible: true,
+      onChange: () => {},
+      onStateChange: () => states.push(queries.state("albums")),
+    });
+    assert.equal(queries.state("albums"), "loading");
+    reads.shift()!.settle({ ok: false });
+    assert.equal(queries.current("albums"), undefined);
+    assert.equal(queries.state("albums"), "error");
+    assert.deepEqual(states, ["error"]);
+    advance(60_000);
+    assert.equal(readsOf("albums"), 0, "no automatic retry loop");
+
+    queries.retry("albums");
+    assert.equal(queries.state("albums"), "loading");
+    assert.equal(readsOf("albums"), 1);
+    answer("albums", "empty");
+    assert.equal(queries.state("albums"), "ready");
+    assert.equal(queries.current("albums")?.value, "empty");
+    assert.deepEqual(states, ["error", "loading", "ready"]);
+  });
+  test("repeated Retry shares one attempt and leaves unrelated queries alone", () => {
+    const { queries, reads, answer, readsOf } = setup();
+    queries.attach("albums", SONGS, { visible: true, onChange: () => {} });
+    queries.attach("artists", SONGS, { visible: true, onChange: () => {} });
+    reads.shift()!.settle({ ok: false });
+    answer("artists", "artists");
+    queries.retry("albums");
+    queries.retry("albums");
+    queries.retry("artists");
+    queries.retry("absent");
+    assert.equal(readsOf("albums"), 1);
+    assert.equal(readsOf("artists"), 0);
+    assert.equal(readsOf("absent"), 0);
+    answer("albums", "albums");
+    assert.equal(queries.state("albums"), "ready");
+  });
+
+  test("refresh failure keeps the last good content and does not announce a false first-read error", () => {
+    const { queries, reads, answer } = setup();
+    const states: string[] = [];
+    queries.attach("albums", SONGS, {
+      visible: true,
+      onChange: () => {},
+      onStateChange: () => states.push(queries.state("albums")),
+    });
+    answer("albums", "saved albums");
+    queries.change({ kind: "tracks" });
+    reads.shift()!.settle({ ok: false });
+    assert.equal(queries.state("albums"), "ready");
+    assert.equal(queries.current("albums")?.value, "saved albums");
+    assert.deepEqual(states, ["ready"]);
+    queries.retry("albums");
+    assert.equal(reads.length, 0);
+  });
+
+  test("a disposed attempt cannot replace a new screen's first-read state", () => {
+    const { queries, reads, answer } = setup();
+    const screen = queries.attach("albums", SONGS, { visible: true, onChange: () => {} });
+    const old = reads.shift()!;
+    screen.detach();
+    queries.attach("albums", SONGS, { visible: true, onChange: () => {} });
+    old.settle({ ok: false });
+    assert.equal(queries.state("albums"), "loading");
+    answer("albums", "new albums");
+    assert.equal(queries.state("albums"), "ready");
+  });
+});

@@ -34,10 +34,12 @@ import { FIND_FIELD_HEIGHT, FindHead, useFindInLegendList } from "./FindInPlayli
 import { folderPhrase } from "./folderPhrase";
 import { useScanRoots, useScanState } from "./hooks";
 import type { SongOrder, SongRow, SongSummary } from "./LibraryStore";
-import { usePagedSongs, useSongFindTexts, useSongOrder } from "./pagedSongs";
+import { LibraryReadFeedback, LibraryReadNote } from "./LibraryReadFeedback";
+import { songOrderQueryKey, usePagedSongs, useSongFindTexts, useSongOrder } from "./pagedSongs";
 import { promptForMusicFolder } from "./promptForMusicFolder";
 import { songsWithIds } from "./sectionSongs";
 import { SongSortButton } from "./SongSortButton";
+import { libraryQueryState } from "./sharedQueries";
 import { SwipeSummaryRow } from "./SwipeTrackRow";
 import { useSongSort } from "./songSort";
 import { ListIntroLayout, songCount } from "./TrackList";
@@ -65,13 +67,8 @@ export function SongsList() {
   const scan = useScanState();
   const roots = useScanRoots();
 
-  // Nothing read yet: a blank screen for the moment it takes, not "No songs".
   if (order === null)
-    return (
-      <View style={{ paddingHorizontal: grid.margin }}>
-        <ScanProgressBanner />
-      </View>
-    );
+    return <LibraryReadFeedback queryKey={songOrderQueryKey(sort)} label="songs" scan />;
 
   if (order.ids.length === 0) {
     return (
@@ -95,7 +92,13 @@ export function SongsList() {
     );
   }
 
-  return <PagedSongList order={order} />;
+  const queryKey = songOrderQueryKey(sort);
+  return (
+    <PagedSongList
+      order={order}
+      orderError={read === null && libraryQueryState(queryKey) === "error" ? queryKey : undefined}
+    />
+  );
 }
 
 /** A row of the Songs list as `TrackRow` draws it. */
@@ -137,7 +140,13 @@ const SELECTING_AHEAD = PAGED_ROWS_LIMITS.pageSize;
  * above the head until the list is pulled down; a query narrows the rows to
  * the songs found, in the order's order, and hides the spine.
  */
-function PagedSongList({ order }: { order: SongOrder }) {
+function PagedSongList({
+  order,
+  orderError,
+}: {
+  order: SongOrder;
+  orderError: string | undefined;
+}) {
   useRenderCount("PagedSongList");
   const scrollable = useListScrollable();
   const list = useRef<LegendListRef>(null);
@@ -273,6 +282,7 @@ function PagedSongList({ order }: { order: SongOrder }) {
   const header: ReactElement = (
     <View>
       <ScanProgressBanner />
+      {orderError !== undefined && <LibraryReadNote queryKey={orderError} label="song order" />}
       <ListIntroLayout
         line={songCount(order.ids.length)}
         onPlay={() => void playTrackIds(order.ids, missing, undefined, SONGS_CONTEXT)}
@@ -309,7 +319,12 @@ function PagedSongList({ order }: { order: SongOrder }) {
         }}
         initialScrollOffset={FIND_FIELD_HEIGHT}
         ListHeaderComponent={
-          <FindHead find={find} header={header} of="songs" allRead={findTexts !== null} />
+          <View>
+            <FindHead find={find} header={header} of="songs" allRead={findTexts !== null} />
+            {found !== null && findTexts === null && (
+              <LibraryReadNote queryKey="songFindTexts" label="song matches" />
+            )}
+          </View>
         }
       />
       {spine.show && found === null && (

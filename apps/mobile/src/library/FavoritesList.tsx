@@ -5,6 +5,7 @@ import { View } from "react-native";
 import { grid } from "@/catalog/grid";
 import { EmptyState } from "@/components/EmptyState";
 
+import { LibraryReadFeedback } from "./LibraryReadFeedback";
 import { useFavoriteSongs } from "./hooks";
 import { SongSortButton } from "./SongSortButton";
 import { useSortedSongs } from "./songSort";
@@ -18,7 +19,7 @@ export function FavoritesList({ empty }: { empty: string }) {
   const starred = useFavoriteSongs();
   const { sort, songs } = useSortedSongs("favorites", starred);
   useScreenContent(songs !== undefined);
-  if (songs === undefined) return null;
+  if (songs === undefined) return <LibraryReadFeedback queryKey="favorites" label="favorites" />;
 
   if (songs.length === 0) {
     return (

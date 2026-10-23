@@ -12,11 +12,15 @@ import { LibraryStore, type SongOrder, type SongSummary } from "./LibraryStore";
 import { appRuntime } from "./runtime";
 import { libraryQuery, useLibraryQuery, type LibraryQuery } from "./sharedQueries";
 
+/** Stable query identity for first-read feedback and explicit recovery. */
+export const songOrderQueryKey = (sort: LibrarySongSort): string =>
+  `songOrder:${sort.key}:${sort.descending ? "desc" : "asc"}`;
+
 /** One shared query per sort: every screen showing Songs in it shares one read. */
 const orderQueries = new Map<string, LibraryQuery<SongOrder>>();
 
 const orderQuery = (sort: LibrarySongSort): LibraryQuery<SongOrder> => {
-  const key = `songOrder:${sort.key}:${sort.descending ? "desc" : "asc"}`;
+  const key = songOrderQueryKey(sort);
   let query = orderQueries.get(key);
   if (query === undefined) {
     query = libraryQuery(
