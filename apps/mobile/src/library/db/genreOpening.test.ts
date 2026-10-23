@@ -305,13 +305,13 @@ test("migration 0038 fills the genre order of a Library that shipped without it,
   assert.deepEqual(readStoredGenreOrder(fresh), expectedStoredGenreOrder(fresh));
 });
 
-test("even a whole genre of identical names pages by indexed file and id ties without a temporary sort", async () => {
+test("even a wholly missing genre of identical names seeks through ID ties without a temporary sort", async () => {
   const fixture = await createFastAgainFixture();
   try {
     const { db, genreId } = fixture;
     const store = await loadLibraryStore(root, db);
     db.run(sql`UPDATE tracks SET title_sort = 'same', artist_id = ${fixture.targets.large.artistId},
-      album_id = ${fixture.albumId}, disc_number = NULL, track_number = NULL, added_at = 1
+      album_id = ${fixture.albumId}, disc_number = NULL, track_number = NULL, added_at = 1, path = NULL
       WHERE genre_id = ${genreId}`);
     const full = Effect.runSync(store.getGenre(genreId))!.songs;
     for (const sort of SONG_SORTS) {
