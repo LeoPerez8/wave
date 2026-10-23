@@ -9,6 +9,8 @@ import {
   NETWORK_SEEDS,
   OPENING_REQUESTS,
   WHOLE_LIBRARY,
+  TASTE_SOURCE_SEEDS,
+  TASTE_SOURCES,
 } from "./performancePolicy.ts";
 
 const sources = mobileSources(join(import.meta.dirname, ".."));
@@ -139,5 +141,23 @@ test("new Library followers and network asks in a tab's detail route are rejecte
       "library/hooks.ts#songs",
       "ytmusic/libraryFinder.ts#useLoadedLibraryFinder",
     ],
+  );
+});
+
+test("bounded taste sources retain exact deferred owners without whole-source exceptions", () => {
+  const pagedAudit = auditSources(sources, {
+    librarySeeds: TASTE_SOURCE_SEEDS,
+    networkSeeds: [],
+    roots: [],
+  });
+  assert.deepEqual(pagedAudit.missingSeeds, []);
+  explain(TASTE_SOURCES);
+  assert.deepEqual(
+    pagedAudit.library.map((use) => `${use.owner} -> ${use.capability}`).toSorted(),
+    Object.entries(TASTE_SOURCES)
+      .flatMap(([owner, entry]) =>
+        entry.capabilities!.map((capability) => `${owner} -> ${capability}`),
+      )
+      .toSorted(),
   );
 });

@@ -67,4 +67,4 @@ export const tasteDownloadsPage = (
 /** Taste needs artist identity only; no per-artist Library counts or artwork. */
 export const tasteArtistsPage = (db: LibraryDatabase, after: number) =>
   db.all<{ id: number; name: string }>(sql`
-    SELECT a.id, a.name FROM artists a WHERE a.id > ${after} ORDER BY a.id LIMIT 128`);
+    SELECT a.id, a.name FROM artists a WHERE a.id > ${after} ORDER BY a.id LIMIT ${GRAPH_PAGE_SIZE}`);

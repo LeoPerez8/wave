@@ -1,6 +1,11 @@
 import type { YtSong } from "@wave/core";
 import { backfillRecordingTitles, selectMatchingSong } from "./db/matchingSong";
-import { tastePlaysPage, tasteFavoritesPage, tasteDownloadsPage, tasteArtistsPage } from "./db/tastePages";
+import {
+  tastePlaysPage,
+  tasteFavoritesPage,
+  tasteDownloadsPage,
+  tasteArtistsPage,
+} from "./db/tastePages";
 import { artistGraphSourcesChanged } from "@/home/graphSources";
 import {
   mixCreditPage,
@@ -828,6 +833,8 @@ export class LibraryStore extends Context.Service<
     readonly playedRecordingKeys: Effect.Effect<readonly string[], LibraryStoreError>;
     /** The plays, stars and downloads Core's taste profile is derived from (`db/taste.ts`). */
     readonly tasteHistory: Effect.Effect<TasteHistory, LibraryStoreError>;
+    /** Constant-size connection/external write stamp for a yielding taste snapshot. */
+    readonly tasteRevision: Effect.Effect<string, LibraryStoreError>;
     /** The ids of every starred track. */
     readonly favoriteTrackIds: Effect.Effect<readonly number[], LibraryStoreError>;
     /** Stars (or unstars) the tracks; those starred already keep when they were starred. */
@@ -1067,7 +1074,9 @@ export class LibraryStore extends Context.Service<
     /** The candidate catalog: every song with the radios that brought it. */
     /** ti-compatible taste projections for the subsequent #593 source migration. */
     /** Artist identity only; unused orphan identities cannot affect the song mapper. */
-    readonly tasteArtistsPage: (after: number) => Effect.Effect<ReturnType<typeof tasteArtistsPage>, LibraryStoreError>;
+    readonly tasteArtistsPage: (
+      after: number,
+    ) => Effect.Effect<ReturnType<typeof tasteArtistsPage>, LibraryStoreError>;
     readonly tastePlaysPage: (
       after: GraphPlayCursor,
     ) => Effect.Effect<ReturnType<typeof tastePlaysPage>, LibraryStoreError>;
@@ -1663,6 +1672,12 @@ const make = Effect.gen(function* () {
       (result) => result.plays.length + result.favorites.length + result.downloads.length,
     ),
 
+    tasteRevision: attempt("read the taste source revision", () => {
+      const row = db.get<{ writes: number; external: number }>(sql`
+        SELECT total_changes() AS writes, data_version AS external FROM pragma_data_version`)!;
+      return `${row.writes}:${row.external}`;
+    }),
+
     favoriteTrackIds: attempt("read favorites", () => selectFavoriteTrackIds(db)),
 
     setFavorites: (trackIds, on) =>
@@ -1844,7 +1859,8 @@ const make = Effect.gen(function* () {
     mixPlaylistedPage: (after) =>
       attempt("read a mix playlist page", () => mixPlaylistedPage(db, after)),
     mixCreditPage: (after) => attempt("read a mix credit page", () => mixCreditPage(db, after)),
-    tasteArtistsPage: (after) => attempt("read a taste artist page", () => tasteArtistsPage(db, after)),
+    tasteArtistsPage: (after) =>
+      attempt("read a taste artist page", () => tasteArtistsPage(db, after)),
     tastePlaysPage: (after) => attempt("read a taste play page", () => tastePlaysPage(db, after)),
     tasteFavoritesPage: (after) =>
       attempt("read a taste favorite page", () => tasteFavoritesPage(db, after)),

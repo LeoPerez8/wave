@@ -4,7 +4,7 @@ import * as Layer from "effect/Layer";
 
 import { freeTurnEffect } from "@/lib/backgroundWork";
 
-import { onStarred, onUnstarred, onYtSongSignal } from "@/library/libraryChanges";
+import { onLibraryChange, onStarred, onUnstarred, onYtSongSignal } from "@/library/libraryChanges";
 import { LibraryStore } from "@/library/LibraryStore";
 
 import { deriveTaste, type TasteLibrary } from "./tasteDerivation";
@@ -35,6 +35,7 @@ const live = makeLiveTaste({
   derive: derive(() => {}),
   deriveWithSnapshot: (snapshotTaken) => derive(snapshotTaken),
   songsOf: magicSongsOf,
+  between: freeTurnEffect,
 });
 
 /** Home reuses its due-build input without creating another live profile or rereading songs. */
@@ -61,7 +62,10 @@ export const layer = Layer.effectDiscard(
       Effect.sync(() => [
         onPlayEnded(({ play }) => run(live.played(play))),
         onStarred((trackIds) => run(live.marked("favorite", trackIds.map(String), Date.now()))),
-        onUnstarred(() => live.unstarred()),
+        onUnstarred((ids) => live.unstarred(ids)),
+        onLibraryChange((change) => {
+          if (change.kind === "tracks") live.invalidate();
+        }),
         onYtSongSignal((kind, videoIds) =>
           run(live.marked(kind, videoIds.map(ytTrackId), Date.now())),
         ),
