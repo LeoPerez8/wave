@@ -8,7 +8,7 @@ import {
   type MissingTrack,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
-import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { AppState } from "react-native";
 
 import { WaveNative } from "@/native/waveNative";
@@ -60,8 +60,8 @@ export const useAllFilesAccess = (): AllFilesAccessState & {
   const state = useSyncExternalStore(access.subscribe, access.get);
 
   useEffect(() => {
-    const subscription = AppState.addEventListener("change", (state) => {
-      if (state === "active") access.recheck();
+    const subscription = AppState.addEventListener("change", (appState) => {
+      if (appState === "active") access.recheck();
     });
     // Also cover a grant between initial render and listener attachment.
     access.recheck();

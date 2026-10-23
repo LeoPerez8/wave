@@ -195,6 +195,12 @@ Pending: final integration SHA/APK identity; parent screenshots before/after per
 - **548-A / P1 / Adaptivity:** `app/access.tsx` uses a non-scrollable root with a 96dp top offset plus heading, recovery copy and action. A short available window or enlarged multiline heading has no path to scroll the grant/retry action into reach. Correction: safe-area-aware scroll container, preserving the incumbent layout at full height. Scenario: denied → enlarged font → short window → reach Try again. Native adapt/harden; screenshot/interaction P.
 - **548-B / P1 / Accessibility:** `components/ScanProgressBanner.tsx` declares a progressbar without `accessible`, a name or value, so scan phase and indexed counts are not exposed as one progress control. Correction: named/valued indeterminate enumeration and determinate indexing; keep retry independently reachable. Scenario: first scan enumeration → read N of M → failure → retry. TalkBack P.
 - **548-C / P2 / Adaptivity:** `app/music-folders.tsx` constrains the folder name/path to a fixed 56dp row while system text scales; nonvirtualized rows can grow without affecting list indexing. Correction: minimum-height rows; pad the scroll end by the navigation inset. Long paths/counts at 1.3x and button Back P.
+- **548-D / P1 / Recovery:** a failed all-files settings launch was unhandled and silent. Corrected: retryable failure copy, no denial on return, single launch while Android answers (`library/allFilesAccess.ts`, tested). **548-D2 / P2 / Performance:** the corrected store notifies only on change, so a foreground return doesn't re-render the root layout (tested).
+- **548-E / P2 / Status:** Music folders waited for a nonexistent `roots` query key and drew both sections empty before the read. Corrected: loaded roots and exclusions render together, content readiness follows them, busy element for TalkBack.
+- **548-F / P2 / Adaptivity:** folder name/location were truncated to one line beside the count. Corrected: both wrap, count under them.
+- **548-G / P2 / Recovery/Accessibility:** scan failure cause was capped at three lines and not announced. Corrected: full cause in a polite live region; Try again separate.
+
+Full #548 surface/alias/state table, cross-references and pending evidence: [548 verification](548-first-run-verification.md). Every device, TalkBack, Back and performance item remains P.
 
 Source confirmation will use TypeScript and diff review. No new constants-only test is appropriate for native scroll/semantics/layout props; device evidence remains required.
 

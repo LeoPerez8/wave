@@ -16,7 +16,7 @@ export default function AccessScreen() {
   useScreenContent(true);
   const insets = useSafeAreaInsets();
   const tertiary = useThemeColor("tertiary");
-  const { denied, opening, failed, request } = useAllFilesAccess();
+  const { denied, failed, request } = useAllFilesAccess();
 
   return (
     <ScrollView
@@ -44,14 +44,14 @@ export default function AccessScreen() {
       </Text>
       {failed && (
         <Text accessibilityLiveRegion="polite" className="font-sans text-body text-secondary">
-          Couldn't open Android settings. Try again, or open Android settings and find Wave under
-          All files access.
+          Couldn't open Android settings. Try again, or find Wave under “All files access” in
+          Android settings.
         </Text>
       )}
       <View className="items-start">
+        {/* Not disabled while Android opens settings: that lasts a frame, and taps then ask nothing. */}
         <TextButton
-          label={opening ? "Opening settings…" : denied || failed ? "Try again" : "Open settings"}
-          disabled={opening}
+          label={denied || failed ? "Try again" : "Open settings"}
           onPress={() => void request()}
         />
       </View>

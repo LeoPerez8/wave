@@ -19,6 +19,9 @@ test("a failed settings launch stays recoverable and a retry can grant access", 
     opening: false,
     failed: true,
   });
+  access.recheck(); // Nothing opened, so coming back isn't a denial.
+  assert.equal(access.get().denied, false);
+  assert.equal(access.get().failed, true);
   await access.request();
   assert.equal(access.get().failed, false);
   granted = true;
