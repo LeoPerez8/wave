@@ -63,16 +63,16 @@ type Measured = {
 };
 const available = (row: BenchMeasurement): row is ReadMeasurement => row.status !== "unavailable";
 
-/** Sequential runs isolate databases and avoid measuring competing benchmark work. */
+/** Each bench gets a fresh fixture; sequential runs avoid competing benchmark work. */
 export const runBenchmarks = async (options: RunOptions): Promise<void> => {
   const emit = (line: Record<string, unknown>) =>
     options.emit({ ...line, note: FAST_AGAIN_DESKTOP });
   const measured: Measured[] = [];
   for (const size of options.sizes) {
     for (const { variant, root } of options.variants) {
-      const fixture = await createFastAgainFixture(size);
-      try {
-        for (const bench of options.benches) {
+      for (const bench of options.benches) {
+        const fixture = await createFastAgainFixture(size);
+        try {
           const measurements = await bench.run({
             fixture,
             variant,
@@ -119,9 +119,9 @@ export const runBenchmarks = async (options: RunOptions): Promise<void> => {
                 .filter((m) => m.medianMs > 16)
                 .map((m) => ({ read: m.read, medianMs: m.medianMs, rowsRead: m.rowsRead })),
             });
+        } finally {
+          fixture.close();
         }
-      } finally {
-        fixture.close();
       }
     }
   }
