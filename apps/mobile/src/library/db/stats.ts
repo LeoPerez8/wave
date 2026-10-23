@@ -299,6 +299,35 @@ export const countedListening = (db: LibraryDatabase): CountedListening[] => {
     .all();
 };
 
+/** Bounded raw-event keyset; even an all-skipped page advances its cursor. */
+export interface CountedListeningPage {
+  readonly rows: readonly CountedListening[];
+  readonly next: number | null;
+}
+
+export const countedListeningPage = (db: LibraryDatabase, after: number): CountedListeningPage => {
+  // Materialization bounds the aggregate itself: no grouped whole-history scan or OFFSET.
+  const rows = db.all<{
+    startedAt: number | null;
+    listenedMs: number;
+    next: number | null;
+    size: number;
+  }>(sql`
+    WITH page AS MATERIALIZED (
+      SELECT id, started_at, listened_ms, counted FROM play_events
+      WHERE id > ${after} ORDER BY id LIMIT 512
+    )
+    SELECT (started_at / ${QUARTER_HOUR_MS}) * ${QUARTER_HOUR_MS} AS "startedAt",
+      sum(listened_ms) AS "listenedMs", NULL AS next, 0 AS size
+    FROM page WHERE counted GROUP BY (started_at / ${QUARTER_HOUR_MS}) * ${QUARTER_HOUR_MS}
+    UNION ALL SELECT NULL, 0, max(id), count(*) FROM page`);
+  const cursor = rows.pop()!;
+  return {
+    rows: rows.map(({ startedAt, listenedMs }) => ({ startedAt: startedAt!, listenedMs })),
+    next: cursor.size < 512 ? null : cursor.next,
+  };
+};
+
 /**
  * What [artistId]'s page reads for its stats block, from that artist's songs
  * alone, however long the rest of the history: the songs in the library whose

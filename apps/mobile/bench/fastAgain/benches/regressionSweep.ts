@@ -2,6 +2,7 @@
 import * as Effect from "effect/Effect";
 import { createHash } from "node:crypto";
 
+import { measureCooperative } from "../cooperative.ts";
 import { loadLibraryStore } from "../store.ts";
 import type { BenchMeasurement, FastAgainBench } from "../types.ts";
 
@@ -39,14 +40,25 @@ export const bench: FastAgainBench = {
           status: "unavailable",
           reason: "Home's Recap announcement and Stats.recaps did not exist in this revision",
         });
-      } else {
+      } else if (typeof stats.recaps === "function") {
         measurements.push(
-          measure("homeRecapAvailability", () => Effect.runSync(stats.recaps), {
+          await measureCooperative(
+            fixture.db,
+            "homeRecapAvailability",
+            context.runs,
+            (turn) => stats.recaps(fixture.now, turn),
+            hash,
+          ),
+        );
+      } else {
+        const historical = stats.recaps as Effect.Effect<readonly unknown[], unknown>;
+        measurements.push(
+          measure("homeRecapAvailability", () => Effect.runSync(historical), {
             resultKey: hash,
             details: {
-              source: "actual Stats.recaps + LibraryStore.countedListening + availableRecaps",
-              trigger: "useRecapToAnnounce -> useStatsRead, every Home focus / focused play change",
-              phase: "focus read, independent of shared Home shelves and first-content scheduler",
+              source:
+                "actual historical Stats.recaps + LibraryStore.countedListening + availableRecaps",
+              trigger: "historical Home focus; see recapAvailability for retained lifecycle cases",
             },
           }),
         );

@@ -240,6 +240,7 @@ export {
   RECAP_TOP_SONGS,
   RECAP_YEAR_MINIMUM_MS,
   availableRecaps,
+  createRecapAvailability,
   parseOpenedRecaps,
   parseRecapId,
   recap,
