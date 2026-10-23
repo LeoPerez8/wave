@@ -27,7 +27,6 @@ export const mixSongsPage = (
     return values === undefined || values.length === 0 ? song : { ...song, genres: values };
   });
 };
-// Count subqueries run for each returned artist; use smaller turns than plain row projections.
 export const mixArtistsPage = (db: LibraryDatabase, after: number): ArtistRow[] =>
   db.all<ArtistRow>(sql`
   SELECT a.id, a.name, a.sort,
@@ -42,7 +41,7 @@ export const mixArtistsPage = (db: LibraryDatabase, after: number): ArtistRow[] 
   WHERE a.id > ${after} AND (
     EXISTS(SELECT 1 FROM track_artists WHERE artist_id = a.id)
     OR EXISTS(SELECT 1 FROM album_artists aa JOIN tracks t ON t.album_id = aa.album_id WHERE aa.artist_id = a.id)
-  ) ORDER BY a.id LIMIT 32`);
+  ) ORDER BY a.id LIMIT 128`);
 export interface MixHistoryRow {
   readonly id: number;
   readonly trackId: number;

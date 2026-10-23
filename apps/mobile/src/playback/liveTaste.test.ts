@@ -5,6 +5,7 @@ import { describe, test } from "node:test";
 import {
   magicArtistKey,
   tasteProfile,
+  tasteLearned,
   ytTrackId,
   type MagicSong,
   type TasteHistory,
@@ -133,6 +134,29 @@ test("cancelling a cold profile preserves streamed signals for the next shared r
   const second = Effect.runPromise(live.profile);
   finish!();
   assert.equal((await second)?.songs.get(ytTrackId("held")), 3);
+});
+
+test("pending streamed and Library signals retain their arrival order in the complete profile", async () => {
+  let finish: (() => void) | undefined;
+  const base = tasteProfile(NO_HISTORY, songOf, NOW);
+  const live = makeLiveTaste({
+    derive: Effect.callback<typeof base>((resume) => {
+      finish = () => resume(Effect.succeed(base));
+    }),
+    songsOf: (ids) => Effect.succeed(ids.map(songOf)),
+  });
+  const request = Effect.runPromise(live.profile);
+  const ids = [ytTrackId("first"), "7", ytTrackId("last")];
+  for (const id of ids) await Effect.runPromise(live.marked("favorite", [id], NOW));
+  finish!();
+  const expected = ids.reduce(
+    (profile, id) => tasteLearned(profile, { kind: "favorite", song: songOf(id), at: NOW }),
+    base,
+  );
+  const actual = await request;
+  assert.deepEqual([...actual!.songs], [...expected.songs]);
+  assert.deepEqual([...actual!.artists], [...expected.artists]);
+  assert.deepEqual([...actual!.genres], [...expected.genres]);
 });
 
 test("cold live-profile snapshot reconciliation yields over history even with pending signals", async () => {

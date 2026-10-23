@@ -82,14 +82,16 @@ export const makeLiveTaste = <R>({
   songsOf,
   between = Effect.void,
 }: LiveTasteDeps<R>) => {
+  type OrderedSignal = { readonly order: number; readonly signal: TasteSignal };
+  let signalOrder = 0;
   let known: TasteProfile | null = null;
   /**
    * While a derivation runs, the signals that came since it started: not in
    * the history it read (that read starts it), so learned once it's done.
    */
-  let held: TasteSignal[] | null = null;
+  let held: OrderedSignal[] | null = null;
   // Streamed signals have no SQLite source; replay them after invalidation too.
-  let streamed: TasteSignal[] = [];
+  let streamed: OrderedSignal[] = [];
   /** Only one derivation at a time: a second ask waits for the first's profile. */
   const deriving = Semaphore.makeUnsafe(1);
 
@@ -105,8 +107,9 @@ export const makeLiveTaste = <R>({
       const songs = yield* songsOf(trackIds);
       const signals = songs.map((song) => ({ kind, song, at }));
       for (const signal of signals) {
-        if (parseTrackId(signal.song.trackId)?.kind === "yt") streamed.push(signal);
-        else held?.push(signal);
+        const entry = { order: signalOrder++, signal };
+        if (parseTrackId(signal.song.trackId)?.kind === "yt") streamed.push(entry);
+        else held?.push(entry);
       }
       if (known !== null) known = learned(known, signals);
     }).pipe(Effect.ignore);
@@ -138,8 +141,12 @@ export const makeLiveTaste = <R>({
                 let libraryAt = 0,
                   streamedAt = 0;
                 while (libraryAt < pending.length || streamedAt < streamed.length) {
-                  const signal =
-                    libraryAt < pending.length ? pending[libraryAt++]! : streamed[streamedAt++]!;
+                  const local = pending[libraryAt];
+                  const remote = streamed[streamedAt];
+                  const { signal } =
+                    local !== undefined && (remote === undefined || local.order < remote.order)
+                      ? pending[libraryAt++]!
+                      : streamed[streamedAt++]!;
                   yield includes(signal) ? undefined : signal;
                 }
               })(),
@@ -196,13 +203,13 @@ export const makeLiveTaste = <R>({
       generation += 1;
       known = null;
       streamed = streamed.filter(
-        (signal) =>
+        ({ signal }) =>
           signal.kind !== "favorite" ||
           (trackIds !== undefined && !trackIds.includes(signal.song.trackId)),
       );
       if (held !== null)
         held = held.filter(
-          (signal) =>
+          ({ signal }) =>
             signal.kind !== "favorite" ||
             (trackIds !== undefined && !trackIds.includes(signal.song.trackId)),
         );
