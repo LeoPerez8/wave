@@ -1,6 +1,7 @@
 /** Platform-free collection seam. React/native adapters supply timestamps, never log text. */
 import {
   TIMING_BUDGETS,
+  tabOfPath,
   slowTapLine,
   slowScreenLine,
   speedSummaryLine,
@@ -198,7 +199,14 @@ export const createTimingSession = (ports: Ports) => {
             .split("?")[0]!
             .replace(/\/\([^/]+\)/g, "")
             .replace(/\/$/, "") || "/";
-        if (path !== target && !(target !== "/" && path.startsWith(`${target}/`))) return null;
+        // A restored stack can commit its pushed screen instead of the tab root.
+        // Only a commit belonging to a different tab is an intermediate switch.
+        if (
+          path !== target &&
+          !(target !== "/" && path.startsWith(`${target}/`)) &&
+          tabOfPath(path) !== null
+        )
+          return null;
       }
       p.to = path;
       p.response ??= ports.now();

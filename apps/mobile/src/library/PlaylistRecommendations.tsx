@@ -89,13 +89,16 @@ export function PlaylistRecommendations({
                 ytMusicEnabled: enabledNow.get(),
               },
             };
-          }),
+          }).pipe(Effect.timeout("60 seconds")),
           { signal },
         ),
       rank: async (input, signal) => {
         const ranked = await appRuntime
           .runPromise(
-            runSteps(playlistRecommendationsSteps(input.playlist, input.sources), freeTurnEffect),
+            runSteps(
+              playlistRecommendationsSteps(input.playlist, input.sources),
+              freeTurnEffect,
+            ).pipe(Effect.timeout("60 seconds")),
             { signal },
           )
           .catch((error: unknown) => {
@@ -288,7 +291,7 @@ export function PlaylistRecommendations({
             >
               Your choice was saved. Couldn’t load another recommendation.
             </Text>
-            <TextButton label="Try again" onPress={retryRefill} />
+            <TextButton label="Try Again" onPress={retryRefill} />
           </View>
         ),
       };
@@ -306,7 +309,7 @@ export function PlaylistRecommendations({
       action={
         state.error === "load"
           ? {
-              label: "Try again",
+              label: "Try Again",
               onPress: () => {
                 void session.renew();
               },

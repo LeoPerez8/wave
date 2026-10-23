@@ -4,6 +4,66 @@ import * as Effect from "effect/Effect";
 import { openWhileBackgrounded, settledTurn } from "./settledWork.ts";
 import { sharedRead } from "./sharedRead.ts";
 
+test("a screen that never settles releases work on a free turn after three seconds", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const listeners = new Set<() => void>();
+  const queue = new Set<() => void>();
+  const gate = settledTurn({
+    settled: () => false,
+    subscribe: (f) => {
+      listeners.add(f);
+      return () => {
+        listeners.delete(f);
+      };
+    },
+    schedule: (f) => {
+      queue.add(f);
+      return () => {
+        queue.delete(f);
+      };
+    },
+  });
+  const waiting = Effect.runPromise(gate);
+  t.mock.timers.tick(2999);
+  assert.equal(queue.size, 0);
+  t.mock.timers.tick(1);
+  assert.equal(queue.size, 1, "the cap requests a free turn even without settlement");
+  for (const f of queue) {
+    queue.delete(f);
+    f();
+  }
+  await waiting;
+  assert.equal(listeners.size, 0);
+});
+
+test("cancelling a never-settled wait removes its observer and prevents the fallback turn", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const listeners = new Set<() => void>();
+  const queue = new Set<() => void>();
+  const gate = settledTurn({
+    settled: () => false,
+    subscribe: (f) => {
+      listeners.add(f);
+      return () => {
+        listeners.delete(f);
+      };
+    },
+    schedule: (f) => {
+      queue.add(f);
+      return () => {
+        queue.delete(f);
+      };
+    },
+  });
+  const controller = new AbortController();
+  const rejected = assert.rejects(Effect.runPromise(gate, { signal: controller.signal }));
+  controller.abort();
+  await rejected;
+  t.mock.timers.tick(3000);
+  assert.equal(listeners.size, 0);
+  assert.equal(queue.size, 0);
+});
+
 test("cold playlist and mix/Magic Queue readers share work only after settlement and a free turn", async () => {
   let settled = false;
   let reads = 0;

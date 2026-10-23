@@ -36,6 +36,7 @@ import { CatalogLine } from "@/catalog/CatalogLine";
 import { CELL, grid } from "@/catalog/grid";
 import { Hairline } from "@/catalog/Hairline";
 import { TrackSkeletons } from "@/catalog/Skeletons";
+import { TextButton } from "@/components/TextButton";
 import { Press } from "@/motion/Press";
 import { usePerfVisible, useRenderCount } from "@/perf/perf";
 import {
@@ -46,7 +47,12 @@ import {
   toggleShuffle,
 } from "@/playback/actions";
 import { useQueue } from "@/playback/hooks";
-import { useMagicBatchLoading, useMagicQueueLabel } from "@/playback/MagicQueue";
+import {
+  retryMagicBatch,
+  useMagicBatchFailed,
+  useMagicBatchLoading,
+  useMagicQueueLabel,
+} from "@/playback/MagicQueue";
 import { queueState } from "@/playback/Queue";
 import type { PlaybackState } from "@/playback/Player";
 import type { QueueTrack } from "@/playback/queueTracks";
@@ -282,6 +288,7 @@ export function UpNextList({ bottomInset }: { bottomInset: number }) {
   const tracks = useQueueTracks(queue.entries);
   const playingKey = currentEntry(queue)?.key ?? null;
   const batchLoading = useMagicBatchLoading();
+  const batchFailed = useMagicBatchFailed();
 
   const onMove = useCallback((move: PendingMove, moved: Promise<void>) => {
     setPending((list) => [...list, move]);
@@ -330,12 +337,26 @@ export function UpNextList({ bottomInset }: { bottomInset: number }) {
     );
   }
 
+  const failure = batchFailed ? (
+    <View className="flex-row items-center" style={{ gap: CELL, paddingTop: CELL * 2 }}>
+      <Text
+        accessibilityLiveRegion="polite"
+        className="flex-1 font-sans text-subheadline text-secondary"
+      >
+        Couldn't load recommendations.
+      </Text>
+      <TextButton label="Try Again" onPress={retryMagicBatch} />
+    </View>
+  ) : null;
+
   if (entries.length === 0) {
     return (
       <View className="flex-1" style={{ paddingTop: CELL * 2 }}>
-        <Text className="font-sans text-subheadline text-secondary">
-          {playingKey === null ? "Nothing is playing." : "Nothing up next."}
-        </Text>
+        {failure ?? (
+          <Text className="font-sans text-subheadline text-secondary">
+            {playingKey === null ? "Nothing is playing." : "Nothing up next."}
+          </Text>
+        )}
       </View>
     );
   }
@@ -367,7 +388,7 @@ export function UpNextList({ bottomInset }: { bottomInset: number }) {
         scrollEnabled={drag === null}
         scrollEventThrottle={16}
         contentContainerStyle={{ paddingBottom: bottomInset }}
-        ListFooterComponent={batchLoading ? <UpNextSkeletons /> : null}
+        ListFooterComponent={batchLoading ? <UpNextSkeletons /> : failure}
       />
       {drag !== null && (
         <Animated.View

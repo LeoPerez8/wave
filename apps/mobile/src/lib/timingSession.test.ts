@@ -219,6 +219,21 @@ test("an intermediate tab commit cannot become the last tap's destination or fir
   assert.match(lines[0]!, /to \/songs from \/: response 130 ms, first frame 160 ms/);
 });
 
+test("switching to Home or Search with a pushed screen still settles the tab timing", () => {
+  for (const target of ["/", "/(tabs)/search"]) {
+    const { session, at, lines } = setup();
+    const id = session.begin("tab", target);
+    at(120);
+    assert.equal(session.routeCommitted("/library/album/12"), id);
+    at(180);
+    session.frame(id);
+    session.content(id);
+    session.end(id);
+    assert.equal(session.isSettled(), true);
+    assert.match(lines[0]!, /to \/library\/album\/12.*settled 180 ms/);
+  }
+});
+
 test("rapidly superseded taps still count without inventing response timestamps", () => {
   const { session, at, lines } = setup();
   session.begin("push", "/first");

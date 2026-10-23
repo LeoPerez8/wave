@@ -17,9 +17,8 @@ import { shareArtistGraph } from "./sharedArtistGraph";
 
 const shared = shareArtistGraph(Effect.service(LibraryStore), settledTurnEffect, freeTurnEffect);
 
-/** The artist graph, derived once per session; null while it can't be read (derived again next time). */
-export const artistGraphNow: Effect.Effect<ArtistGraph | null, never, LibraryStore> =
-  shared.get.pipe(Effect.orElseSucceed(() => null));
+/** The shared graph; failed or timed-out reads fail their callers and are retried on the next ask. */
+export const artistGraphNow: Effect.Effect<ArtistGraph, unknown, LibraryStore> = shared.get;
 
 /** Forgets the artist graph: the next ask derives it again (after a harvest grew the catalog). */
 export const forgetArtistGraph = (): void => shared.forget();
