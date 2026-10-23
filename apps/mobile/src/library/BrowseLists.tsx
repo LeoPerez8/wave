@@ -1,5 +1,6 @@
 import { useScreenContent } from "@/lib/screenTiming";
 import { libraryQueryHasContent } from "./sharedQueries";
+import { LibraryReadFeedback } from "./LibraryReadFeedback";
 import { LegendList, type LegendListRef } from "@legendapp/list/react-native";
 import { useScrollToTop } from "expo-router";
 import { IconStack2 } from "@tabler/icons-react-native";
@@ -159,6 +160,8 @@ const renderArtist = (artist: ArtistRow, selection: ListSelection<ArtistRow>) =>
 export function ArtistsList({ empty }: { empty: string }) {
   const artists = useArtists();
   useScreenContent(libraryQueryHasContent("artists"));
+  if (!libraryQueryHasContent("artists"))
+    return <LibraryReadFeedback queryKey="artists" label="artists" shape="artists" scan />;
   return (
     <NameList
       items={artists}
@@ -192,6 +195,8 @@ const renderGenre = (genre: GenreRow, selection: ListSelection<GenreRow>) => (
 export function GenresList({ empty }: { empty: string }) {
   const genres = useGenres();
   useScreenContent(libraryQueryHasContent("genres"));
+  if (!libraryQueryHasContent("genres"))
+    return <LibraryReadFeedback queryKey="genres" label="genres" shape="genres" scan />;
   return (
     <NameList
       items={genres}
@@ -231,6 +236,8 @@ export function AlbumsList({ empty }: { empty: string }) {
     [tile, selection],
   );
 
+  if (!libraryQueryHasContent("albums"))
+    return <LibraryReadFeedback queryKey="albums" label="albums" shape="albums" scan />;
   if (albums.length === 0) return <NothingYet message={empty} />;
   return (
     <View className="flex-1">
