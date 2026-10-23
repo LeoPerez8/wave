@@ -23,24 +23,44 @@ export const createLinkRevealCompletion = (ports: {
   /** Ends [id] unmeasured: the tap opened nothing. */
   readonly dismiss: (id: number) => void;
 }) => {
-  let pending: { id: number; hidden: boolean; revealed: boolean } | null = null;
+  let pending: {
+    id: number;
+    hidden: boolean;
+    outcome: "revealed" | "failed" | null;
+  } | null = null;
   const finish = () => {
-    if (pending === null || !pending.hidden || !pending.revealed) return;
-    const { id } = pending;
+    if (pending === null || !pending.hidden || pending.outcome === null) return;
+    const { id, outcome } = pending;
     pending = null;
-    ports.end(id);
+    if (outcome === "revealed") ports.end(id);
+    else ports.dismiss(id);
   };
+  /** [id]'s tap ended in [outcome]: false when no link close owns it. */
+  const settle = (id: number | undefined, outcome: "revealed" | "failed"): boolean => {
+    if (pending === null || pending.id !== id) return false;
+    if (pending.outcome === null) {
+      pending.outcome = outcome;
+      if (outcome === "revealed") ports.committed(pending.id);
+      finish();
+    }
+    return true;
+  };
+  /** A stale tap's answer never ends a newer one. */
+  const current = (id: number | undefined): id is number =>
+    id !== undefined && ports.current() === id;
   return {
     begin: (id: number | undefined): void => {
-      pending = id === undefined ? null : { id, hidden: false, revealed: false };
+      pending = id === undefined ? null : { id, hidden: false, outcome: null };
     },
     reveal: (id: number | undefined): void => {
-      if (pending === null || pending.id !== id || pending.revealed) return;
-      pending.revealed = true;
-      ports.committed(pending.id);
-      finish();
+      if (settle(id, "revealed") || !current(id)) return;
+      // The page on screen is the destination: it commits as a surface would.
+      ports.committed(id);
+      ports.end(id);
     },
-    fail: (_id: number | undefined): void => {},
+    fail: (id: number | undefined): void => {
+      if (!settle(id, "failed") && current(id)) ports.dismiss(id);
+    },
     hidden: (): void => {
       if (pending === null) return;
       pending.hidden = true;

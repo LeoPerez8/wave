@@ -99,23 +99,37 @@ export interface GenreOrderActions {
 export const createGenreOrderActions = (): GenreOrderActions => {
   let load: GenreOrderLoad | null = null;
   let open = true;
-  const waiters: ((load: GenreOrderLoad | null) => void)[] = [];
+  const waiters = new Set<() => void>();
+  const changed = () => {
+    for (const waiter of [...waiters]) waiter();
+    waiters.clear();
+  };
+  const nextChange = () => new Promise<void>((resolve) => waiters.add(resolve));
   return {
     show: (next) => {
       load = next;
-      if (next !== null) for (const waiter of waiters.splice(0)) waiter(next);
+      changed();
     },
     open: (next) => {
       open = next;
-      if (!next) for (const waiter of waiters.splice(0)) waiter(null);
+      changed();
     },
-    whole: () =>
-      (load !== null
-        ? Promise.resolve(load)
-        : new Promise<GenreOrderLoad | null>((resolve) => waiters.push(resolve))
-      )
-        .then((orderLoad) => orderLoad?.whole() ?? null)
-        .then((order) => (open ? order : null)),
+    whole: async () => {
+      for (;;) {
+        if (!open) return null;
+        const asked = load;
+        if (asked === null) {
+          await nextChange();
+          continue;
+        }
+        const order = await asked.whole();
+        if (order !== null) return open ? order : null;
+        // A failed read ends the press, as it would on any genre.
+        if (!asked.disposed()) return null;
+        // Let go for a newer order: ask the load that replaces it, once it shows.
+        while (open && load === asked) await nextChange();
+      }
+    },
   };
 };
 

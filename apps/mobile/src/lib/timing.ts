@@ -98,6 +98,8 @@ export const timingRoute = session.route;
 export const timingResponse = session.response;
 export const timingContent = session.content;
 export const timingTransitionEnd = session.end;
+/** A tap that opened nothing (an error instead): ends unmeasured, and the screen settles again. */
+export const dismissTiming = session.dismiss;
 export const onTimingTransition = session.onTransition;
 export const onScreenSettled = session.onSettled;
 export const isScreenSettled = session.isSettled;

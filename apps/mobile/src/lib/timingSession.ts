@@ -167,7 +167,15 @@ export const createTimingSession = (ports: Ports) => {
     begin,
     cancel,
     /** [id]'s tap opened nothing: it ends unmeasured, and the screen it was made on is settled. */
-    dismiss: (_id: number): void => {},
+    dismiss: (id: number): void => {
+      if (pending === null || pending.id !== id) return;
+      const p = pending;
+      pending = null;
+      // Unlike `cancel` (a newer tap or backgrounding), nothing else will settle this screen.
+      settled = true;
+      emit(p, "cancelled");
+      notify();
+    },
     reclassify: (kind: TimingKind, to: string): number | null => {
       if (pending === null) return null;
       pending.measurement.kind = kind;

@@ -33,6 +33,7 @@ import { useListSelection } from "@/selection/useListSelection";
 
 import { useFavoriteIds } from "./favorites";
 import {
+  createGenreOrderActions,
   createGenreOrderLoad,
   readGenreOrder,
   readGenreSongs,
@@ -198,41 +199,25 @@ export function GenreSongList({
   const spine = useSpineEntries(whole?.spine ?? NO_SPINE, list);
 
   // Play, Shuffle and taps wait for the opening (a press on the known header)
-  // and then for the whole order, which they read at once if it hasn't arrived.
-  const loadRef = useRef(load);
-  const active = useRef(true);
-  const waiters = useRef<((load: GenreOrderLoad | null) => void)[]>([]);
+  // and then for the whole order, which they read at once if it hasn't arrived;
+  // when the genre's order changes first, they play the new one.
+  const [orders] = useState(createGenreOrderActions);
   useEffect(() => {
-    const pending = waiters.current;
-    active.current = true;
-    return () => {
-      active.current = false;
-      for (const waiter of pending.splice(0)) waiter(null);
-    };
-  }, []);
-  useEffect(() => {
-    loadRef.current = load;
-    if (load === null) return;
-    for (const waiter of waiters.current.splice(0)) waiter(load);
-  }, [load]);
+    orders.open(true);
+    return () => orders.open(false);
+  }, [orders]);
+  useEffect(() => orders.show(load), [orders, load]);
   const play = useCallback(
     (from: number | undefined, options?: { readonly shuffle?: boolean }) => {
-      const loaded = loadRef.current;
-      const ready =
-        loaded !== null
-          ? Promise.resolve(loaded)
-          : new Promise<GenreOrderLoad | null>((resolve) => waiters.current.push(resolve));
-      void ready
-        .then((orderLoad) => orderLoad?.whole() ?? null)
-        .then((order) => {
-          if (order === null || !active.current) return;
-          // By id: the whole order may have been read again since the row was drawn.
-          const start = from === undefined ? undefined : order.ids.indexOf(from);
-          if (start === -1) return;
-          return playTrackIds(order.ids, new Set(order.missing), start, context, options);
-        });
+      void orders.whole().then((order) => {
+        if (order === null) return;
+        // By id: the whole order may have been read again since the row was drawn.
+        const start = from === undefined ? undefined : order.ids.indexOf(from);
+        if (start === -1) return;
+        return playTrackIds(order.ids, new Set(order.missing), start, context, options);
+      });
     },
-    [context],
+    [orders, context],
   );
 
   // Selecting: the whole order first (Select All checks the whole genre), then
