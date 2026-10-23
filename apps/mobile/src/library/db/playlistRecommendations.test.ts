@@ -12,10 +12,12 @@ import {
 } from "@wave/core";
 import { tasteHistory } from "./taste.ts";
 import {
+  addHistory,
   addTrack,
   openTestDatabase,
   reopenTestDatabase,
   migrateTestDatabase,
+  traceQueries,
 } from "./testDatabase.ts";
 import { addToPlaylist, createPlaylist, selectPlaylistEntries } from "./playlists.ts";
 import { addCandidates, selectCandidateCatalog } from "./candidateCatalog.ts";
@@ -575,4 +577,58 @@ test("renewals read changed favorites and download status, including a catalog p
   setFavorites(db, [favorite], false, 102);
   assert.equal(read().at(-1)?.track.id, String(favorite));
   assert.ok(read().some((x) => x.track.id === String(ordinary)));
+});
+
+const rowsOf = (queries: readonly { readonly rows: number }[]) =>
+  queries.reduce((n, query) => n + query.rows, 0);
+
+/** Rows read by one Add and one Dismiss of Library offers, in a Library of [librarySize] songs. */
+const addAndDismissRows = async (librarySize: number) => {
+  const db = await openTestDatabase();
+  const seed = addTrack(db, { title: "Seed", artist: "Radiohead", genre: "Rock" });
+  addHistory(db, { artist: "Radiohead", tracks: librarySize, plays: 1 });
+  const playlistId = createPlaylist(
+    db,
+    "Alternative",
+    [{ source: "library", trackId: seed }],
+    1,
+  ).playlistId;
+  const library = selectPlaylistRecommendationInput(db, playlistId).library;
+  const [added, dismissed] = library.filter((track) => track.id !== String(seed));
+  const accept = traceQueries(db, () =>
+    acceptPlaylistRecommendation(db, playlistId, { key: "add", track: added! }, 2),
+  );
+  const dismiss = traceQueries(db, () =>
+    dismissPlaylistRecommendation(db, playlistId, { key: "dismiss", track: dismissed! }, 3),
+  );
+  assert.equal(accept.result, true);
+  assert.equal(dismiss.result, true);
+  // Exactly once: the same offers again write nothing.
+  assert.equal(
+    acceptPlaylistRecommendation(db, playlistId, { key: "add", track: added! }, 4),
+    false,
+  );
+  assert.equal(
+    dismissPlaylistRecommendation(db, playlistId, { key: "dismiss", track: dismissed! }, 5),
+    false,
+  );
+  assert.deepEqual(
+    selectPlaylistEntries(db, playlistId).map((x) => (x.source === "library" ? x.track.id : null)),
+    [seed, Number(added!.id)],
+  );
+  assert.deepEqual(
+    selectPlaylistRecommendationInput(db, playlistId)
+      .feedback.map((x) => x.value)
+      .toSorted(),
+    [-1, 1],
+  );
+  return { accept: rowsOf(accept.queries), dismiss: rowsOf(dismiss.queries) };
+};
+
+test("Add and Dismiss of a Library offer read rows bounded by the playlist, not by the Library's size", async () => {
+  const small = await addAndDismissRows(20);
+  const large = await addAndDismissRows(400);
+  assert.deepEqual(large, small);
+  // Dismiss: the playlist's own row and the feedback row it wrote.
+  assert.equal(small.dismiss, 2);
 });
