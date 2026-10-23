@@ -29,7 +29,7 @@ import { showToast } from "@/overlay/toast";
 import { startMagicQueue } from "@/playback/MagicQueue";
 import { tasteProfileForLibrary } from "@/playback/TasteProfile";
 
-import { buildHomeMagicQueue, homeMagicQueueDue } from "./magicQueueJob";
+import { pickHomeMagicQueue, homeMagicQueueDue } from "./magicQueueJob";
 import { magicQueueRead, magicQueueGrowthRead } from "./magicQueueRead";
 
 /** What the section shows, kept on this phone (not synced). */
@@ -41,6 +41,7 @@ const saved = persistedSetting<MagicQueuePicks | null>({
 
 /** A pick under way: a pull, or Home's due pick, meanwhile starts no other. */
 const picking = makeExternalStore(false);
+const failed = makeExternalStore(false);
 let active = false;
 /** Stops Home's due pick under way (Home left, or not settled): a pull's goes on. */
 let cancelDue: (() => void) | undefined;
@@ -55,6 +56,7 @@ const pick = (refresh: boolean): void => {
   const previous = saved.get();
   const controller = new AbortController();
   active = true;
+  failed.set(false);
   picking.set(true);
   const finish = () => {
     if (!active) return;
@@ -63,7 +65,7 @@ const pick = (refresh: boolean): void => {
     picking.set(false);
   };
   const job = Effect.gen(function* () {
-    return yield* buildHomeMagicQueue(yield* LibraryStore, previous, {
+    return yield* pickHomeMagicQueue(yield* LibraryStore, previous, {
       now: Date.now(),
       random: Math.random,
       turn: freeTurnEffect,
@@ -86,7 +88,7 @@ const pick = (refresh: boolean): void => {
       });
     })
     .catch(() => {
-      // Best effort: what the section shows stays until the next try.
+      if (!controller.signal.aborted) failed.set(true);
     })
     .finally(() => {
       if (!controller.signal.aborted) finish();
@@ -104,6 +106,7 @@ export interface MagicQueueSection {
   readonly songs: readonly PlayableSongRow[];
   /** A pick is under way: a pull does nothing meanwhile. */
   readonly picking: boolean;
+  readonly failed: boolean;
   /** Brings other songs (a pull past the carousel's start), with Undo. */
   readonly refresh: () => void;
 }
@@ -134,6 +137,7 @@ export const useMagicQueueSection = (): MagicQueueSection | null => {
   const grows = useLibraryQuery<boolean>(growth, false);
   const settled = useScreenSettled();
   const busy = useSyncExternalStore(picking.subscribe, picking.get);
+  const didFail = useSyncExternalStore(failed.subscribe, failed.get);
   useEffect(() => {
     if (!settled) return;
     // Leaving Home, or a route over it unsettling it, stops the due pick; it starts again once due.
@@ -141,6 +145,7 @@ export const useMagicQueueSection = (): MagicQueueSection | null => {
   }, [settled]);
   useEffect(() => {
     if (
+      !didFail &&
       read !== null &&
       homeMagicQueueDue(
         settled,
@@ -151,19 +156,20 @@ export const useMagicQueueSection = (): MagicQueueSection | null => {
       )
     )
       pick(false);
-  }, [picks, read, grows, settled]);
+  }, [picks, read, grows, settled, didFail]);
   return useMemo(
     () =>
-      songs === null
+      songs === null && !didFail
         ? null
         : {
-            songs,
+            songs: songs ?? [],
             picking: busy,
+            failed: didFail,
             refresh: () => {
               pick(true);
             },
           },
-    [songs, busy],
+    [songs, busy, didFail],
   );
 };
 

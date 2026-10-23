@@ -8,6 +8,7 @@ import {
 } from "@wave/core";
 import * as Effect from "effect/Effect";
 import { runSteps } from "../lib/stepped.ts";
+import { RECOMMENDATION_TIMEOUT } from "../lib/recommendationTimeout.ts";
 import type { LibraryStore } from "../library/LibraryStore.ts";
 import {
   readTasteLibrary,
@@ -59,3 +60,7 @@ export const buildHomeMagicQueue = <R, E>(
       );
     }),
   );
+
+/** The visible pick includes scheduler and derivation waits in its deadline. */
+export const pickHomeMagicQueue = <R, E>(...args: Parameters<typeof buildHomeMagicQueue<R, E>>) =>
+  buildHomeMagicQueue(...args).pipe(Effect.timeout(RECOMMENDATION_TIMEOUT));
