@@ -44,6 +44,8 @@ export interface SyncPreferences {
 
 export interface SyncCycleInput {
   readonly db: LibraryDatabase;
+  /** Called after a committed page adds listening, even if a later network request fails. */
+  readonly historyChanged?: () => void;
   /** The store's credit splitter, which missing songs are filed with. */
   readonly splits: CreditSplits;
   readonly transport: SyncTransport;
@@ -166,6 +168,7 @@ const pullAll = async (input: SyncCycleInput, seen: Seen): Promise<boolean> => {
     await freeTurn(input);
     const changes = applyPulledPage(db, page, trackIds, input.now());
     take(seen, changes);
+    if (changes.plays) input.historyChanged?.();
     for (const { key, value } of changes.preferences) input.preferences.apply(key, value);
     pulledAny ||= Object.values(page).some((rows) => Array.isArray(rows) && rows.length > 0);
     if (!page.more) break;
@@ -189,7 +192,11 @@ const settle = (
     if (plan) planSongs(db, input.now());
     seen.library ||= syncMissingSongs(db, input.splits, input.now());
   }
-  if (pulled || songs) take(seen, applyPending(db, selectAccountTrackIds(db)));
+  if (pulled || songs) {
+    const changes = applyPending(db, selectAccountTrackIds(db));
+    take(seen, changes);
+    if (changes.plays) input.historyChanged?.();
+  }
 };
 
 const rowCount = (rows: SyncTables): number =>
