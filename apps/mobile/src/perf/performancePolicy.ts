@@ -173,30 +173,6 @@ export const WHOLE_LIBRARY: Record<string, Exception> = {
     capabilities: ["library/LibraryStore.ts#listSongs"],
   },
 
-  "nowPlaying/hooks.ts#useDownloadedFile": {
-    reason:
-      "Now Playing downloaded-file lookup currently follows all songs; replace with one targeted lookup after sheet settled.",
-    removeIn: 587,
-    capabilities: ["ytmusic/libraryFinder.ts#useLoadedLibraryFinder"],
-  },
-  "nowPlaying/PlayerView.tsx#useNowPlayingStar": {
-    reason:
-      "Now Playing star currently follows the whole finder; replace with targeted song identity after sheet settled.",
-    removeIn: 587,
-    capabilities: ["ytmusic/libraryFinder.ts#useLoadedLibraryFinder"],
-  },
-  "nowPlaying/SongButtons.tsx#AddToPlaylistButton": {
-    reason:
-      "Now Playing Download/Add to Playlist currently ask the shared finder; replace with the targeted settled lookup.",
-    removeIn: 587,
-    capabilities: ["ytmusic/libraryFinder.ts#currentLibraryFinder"],
-  },
-  "nowPlaying/SongButtons.tsx#DownloadButton": {
-    reason:
-      "Now Playing Download/Add to Playlist currently ask the shared finder; replace with the targeted settled lookup.",
-    removeIn: 587,
-    capabilities: ["ytmusic/libraryFinder.ts#useLoadedLibraryFinder"],
-  },
   "playback/ActionsMenu.tsx#usePlaylistDownloadEntries": {
     reason: "Visible playlist menu checks which entries are downloaded; created for a user action.",
     capabilities: ["ytmusic/libraryFinder.ts#useLoadedInLibrary"],
