@@ -19,10 +19,12 @@ export function ScanProgressBanner() {
   if (scan.status === "failed") {
     return (
       <View style={{ gap: CELL, paddingBottom: CELL * 2 }}>
-        <CatalogLine>Couldn't scan your music</CatalogLine>
-        <Text className="font-sans text-footnote text-secondary" numberOfLines={3}>
-          {scan.message}
-        </Text>
+        {/* Announced as it appears, and whole: the cause is what tells a retry from a fix.
+            Try again stays its own stop after it. */}
+        <View accessibilityLiveRegion="polite" style={{ gap: CELL }}>
+          <CatalogLine>Couldn't scan your music</CatalogLine>
+          <Text className="font-sans text-footnote text-secondary">{scan.message}</Text>
+        </View>
         <View className="items-start">
           <TextButton label="Try again" onPress={() => void startRescan()} />
         </View>
