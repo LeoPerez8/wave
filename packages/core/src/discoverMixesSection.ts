@@ -12,10 +12,12 @@ import {
 } from "./discoverMixLevels.ts";
 
 /** What the section draws. */
-export type DiscoverMixesSection =
+export type DiscoverMixesSection = (
   | { readonly kind: "hidden" }
   /** Placeholder tiles in the mixes' row: the first mixes are on their way. */
   | { readonly kind: "skeleton" }
+  /** No tiles: the row shows its retry line alone. */
+  | { readonly kind: "empty" }
   | {
       readonly kind: "mixes";
       readonly mixes: readonly BlendedDiscoverMix[];
@@ -24,7 +26,11 @@ export type DiscoverMixesSection =
        * mixes, which stay until the new ones are saved.
        */
       readonly updating: boolean;
-    };
+    }
+) & {
+  /** The last build failed and none runs now: the row ends in a retry line. */
+  readonly failed: boolean;
+};
 
 /**
  * What the section shows for the [saved] mixes (`parseDiscoverMixes`, null
@@ -32,11 +38,12 @@ export type DiscoverMixesSection =
  * saved, those, each blended by [blend] (`blendDiscoverMix`): a rebuild keeps
  * them until new ones are saved; a mix that blends to fewer than ten songs
  * (Don't play explicit leaving most out) isn't shown, and with none left,
- * nothing is. With none saved, a skeleton while a build can make them, a
- * failed build included (a later one may succeed); nothing when the last
+ * nothing is. With none saved, a skeleton while a build can make them;
+ * failure becomes a retry line. Nothing when the last
  * build found [nothingToBuildFrom] (no plays and an empty Library). While a
  * build is [building], saved mixes say they're updating (no skeleton over
- * them); with none saved, the skeleton stands for it.
+ * them); with none saved, the skeleton stands for it. A failure shows only
+ * while no build runs, on the mixes or alone (`failed`).
  */
 export const discoverMixesSection = (
   saved: DiscoverMixes | null,
@@ -45,20 +52,23 @@ export const discoverMixesSection = (
     nothingToBuildFrom,
     blend,
     building = false,
+    failed = false,
   }: {
     readonly ytMusic: boolean;
     readonly nothingToBuildFrom: boolean;
     readonly blend: DiscoverMixBlend;
     /** A build of the section's mixes is running; absent for none. */
     readonly building?: boolean;
+    readonly failed?: boolean;
   },
 ): DiscoverMixesSection => {
-  if (!ytMusic) return { kind: "hidden" };
+  if (!ytMusic) return { kind: "hidden", failed: false };
+  const shownFailed = !building && failed;
   if (saved !== null) {
     const mixes = saved.mixes.map((mix) => blendDiscoverMix(mix, blend)).filter(isMix);
-    return mixes.length === 0 ? { kind: "hidden" } : { kind: "mixes", mixes, updating: building };
-  }
-  return nothingToBuildFrom ? { kind: "hidden" } : { kind: "skeleton" };
+    if (mixes.length > 0) return { kind: "mixes", mixes, updating: building, failed: shownFailed };
+  } else if (!shownFailed && !nothingToBuildFrom) return { kind: "skeleton", failed: false };
+  return shownFailed ? { kind: "empty", failed: true } : { kind: "hidden", failed: false };
 };
 
 /** Whether a blended mix still has enough songs to be one. */

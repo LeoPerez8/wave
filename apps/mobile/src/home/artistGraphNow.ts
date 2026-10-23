@@ -6,6 +6,7 @@ import { onArtistGraphSourcesChanged } from "./graphSources";
  * harvest) calls `forgetArtistGraph` so the next build derives it again.
  */
 import type { ArtistGraph } from "@wave/core";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 
 import { freeTurnEffect, settledTurnEffect } from "@/lib/backgroundWork";
@@ -17,9 +18,14 @@ import { shareArtistGraph } from "./sharedArtistGraph";
 
 const shared = shareArtistGraph(Effect.service(LibraryStore), settledTurnEffect, freeTurnEffect);
 
-/** The artist graph, derived once per session; null while it can't be read (derived again next time). */
-export const artistGraphNow: Effect.Effect<ArtistGraph | null, never, LibraryStore> =
-  shared.get.pipe(Effect.orElseSucceed(() => null));
+/** The shared graph wasn't read: its read failed, timed out or kept being forgotten ([cause]). */
+export class ArtistGraphUnavailable extends Data.TaggedError("ArtistGraphUnavailable")<{
+  readonly cause: unknown;
+}> {}
+
+/** The shared graph; failed or timed-out reads fail their callers and are retried on the next ask. */
+export const artistGraphNow: Effect.Effect<ArtistGraph, ArtistGraphUnavailable, LibraryStore> =
+  shared.get.pipe(Effect.mapError((cause) => new ArtistGraphUnavailable({ cause })));
 
 /** Forgets the artist graph: the next ask derives it again (after a harvest grew the catalog). */
 export const forgetArtistGraph = (): void => shared.forget();

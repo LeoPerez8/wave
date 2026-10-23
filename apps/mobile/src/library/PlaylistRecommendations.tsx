@@ -29,6 +29,7 @@ import { afterPaint } from "@/lib/afterPaint";
 import { followPlaylistRecommendations } from "./playlistRecommendationVisit";
 import { playlistRecommendationInput } from "./playlistRecommendationSource";
 import { makeExternalStore } from "@/lib/externalStore";
+import { RECOMMENDATION_TIMEOUT } from "@/lib/recommendationTimeout";
 import { CROSSFADE_MS } from "@/motion/Crossfade";
 import { WaveNative } from "@/native/waveNative";
 import { playTrackIds, playYtSongs } from "@/playback/actions";
@@ -89,13 +90,16 @@ export function PlaylistRecommendations({
                 ytMusicEnabled: enabledNow.get(),
               },
             };
-          }),
+          }).pipe(Effect.timeout(RECOMMENDATION_TIMEOUT)),
           { signal },
         ),
       rank: async (input, signal) => {
         const ranked = await appRuntime
           .runPromise(
-            runSteps(playlistRecommendationsSteps(input.playlist, input.sources), freeTurnEffect),
+            runSteps(
+              playlistRecommendationsSteps(input.playlist, input.sources),
+              freeTurnEffect,
+            ).pipe(Effect.timeout(RECOMMENDATION_TIMEOUT)),
             { signal },
           )
           .catch((error: unknown) => {
@@ -288,7 +292,7 @@ export function PlaylistRecommendations({
             >
               Your choice was saved. Couldn’t load another recommendation.
             </Text>
-            <TextButton label="Try again" onPress={retryRefill} />
+            <TextButton label="Try Again" onPress={retryRefill} />
           </View>
         ),
       };
@@ -306,7 +310,7 @@ export function PlaylistRecommendations({
       action={
         state.error === "load"
           ? {
-              label: "Try again",
+              label: "Try Again",
               onPress: () => {
                 void session.renew();
               },

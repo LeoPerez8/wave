@@ -69,6 +69,7 @@ import { createSerialWork } from "@/lib/serialWork";
 import { freeTurnEffect, settledTurnEffect } from "@/lib/backgroundWork";
 import { makeExternalStore, type ExternalStore } from "@/lib/externalStore";
 import { withNetworkLog } from "@/lib/networkMeter";
+import { RECOMMENDATION_TIMEOUT } from "@/lib/recommendationTimeout";
 import { persistedSetting, type PersistedSetting } from "@/lib/persistedSetting";
 import { libraryListQueries } from "@/library/hooks";
 import type { SongRow } from "@/library/LibraryStore";
@@ -359,6 +360,7 @@ const loggedBuild = (id: MixSectionId, pulled: boolean, avoid?: MixRefreshAvoid)
     settledTurnEffect.pipe(
       Effect.andThen(buildSource.run(SECTIONS[id].build(avoid), freeTurnEffect)),
       buildPermit.withPermits(1),
+      Effect.timeout(RECOMMENDATION_TIMEOUT),
     ),
     builtOutcome,
   );
@@ -398,6 +400,7 @@ interface MixSection {
    * another, and the section says it's updating over the saved mixes.
    */
   readonly building: ExternalStore<boolean>;
+  readonly failed: ExternalStore<boolean>;
   /** After a build that made no mixes: no build before then (ms since the epoch). */
   retryAt: number | null;
   /** The seeds this session's last build picked, those it made no mix of too; null before one. */
@@ -438,6 +441,7 @@ const section = (
   build,
   nothingRetryMs,
   building: makeExternalStore(false),
+  failed: makeExternalStore(false),
   retryAt: null,
   picked: null,
   reader: null,
@@ -481,6 +485,7 @@ const refresh = (id: MixSectionId, played: boolean): (() => void) => {
   return dailyBuilds.add(id, async (signal) => {
     if (!discoverMixesDue(mixSection.saved.get(), { now: Date.now(), played })) return;
     mixSection.building.set(true);
+    mixSection.failed.set(false);
     await appRuntime
       .runPromise(settledTurnEffect.pipe(Effect.andThen(Effect.result(loggedBuild(id, false)))), {
         signal,
@@ -488,6 +493,7 @@ const refresh = (id: MixSectionId, played: boolean): (() => void) => {
       .then((result) => {
         if (signal.aborted) return;
         const built = Result.isSuccess(result) ? result.success : null;
+        mixSection.failed.set(built === null);
         if (built !== null && built !== "nothing-to-build-from") {
           mixSection.retryAt = null;
           mixSection.nothingToBuildFrom.set(false);
@@ -504,6 +510,9 @@ const refresh = (id: MixSectionId, played: boolean): (() => void) => {
         }
         mixSection.retryAt = Date.now() + RETRY_MS;
         if (Result.isSuccess(result)) mixSection.nothingToBuildFrom.set(false);
+      })
+      .catch(() => {
+        if (!signal.aborted) mixSection.failed.set(true);
       })
       .finally(() => {
         mixSection.building.set(false);
@@ -549,12 +558,13 @@ export const refreshMixes = (id: MixSectionId): void => {
   const previous = saved.get();
   const memory = previous === null ? shown.get() : mixesShown(shown.get(), previous, now);
   building.set(true);
+  mixSection.failed.set(false);
   void appRuntime
     .runPromise(Effect.result(loggedBuild(id, true, mixRefreshAvoid(memory, now))))
     .then((result) => {
       const built = Result.isSuccess(result) ? result.success : null;
       if (built === null || built === "nothing-to-build-from") {
-        void showToast(`Couldn't refresh ${discoverRowTitle(id)}`);
+        mixSection.failed.set(true);
         return;
       }
       mixSection.retryAt = null;
@@ -575,6 +585,7 @@ export const refreshMixes = (id: MixSectionId): void => {
         },
       });
     })
+    .catch(() => mixSection.failed.set(true))
     .finally(() => {
       building.set(false);
       rerankAfterward(id);
@@ -640,12 +651,13 @@ export const useDiscoverMixes = (
   id: MixSectionId,
   played: boolean | undefined,
 ): DiscoverMixesSection => {
-  const { saved, nothingToBuildFrom, building } = SECTIONS[id];
+  const { saved, nothingToBuildFrom, building, failed } = SECTIONS[id];
   const enabled = useYtMusicEnabled();
   const mixes = saved.useValue();
   const blend = useBlend(id, null);
   const nothing = nothingToBuildFrom.useValue();
   const rebuilding = useSyncExternalStore(building.subscribe, building.get);
+  const buildFailed = useSyncExternalStore(failed.subscribe, failed.get);
   useFocusEffect(
     useCallback(() => {
       // Saved rows can draw before Home's plays answer; run focus work once that input is known.
@@ -661,8 +673,9 @@ export const useDiscoverMixes = (
         nothingToBuildFrom: nothing,
         blend,
         building: rebuilding,
+        failed: buildFailed,
       }),
-    [mixes, enabled, nothing, blend, rebuilding],
+    [mixes, enabled, nothing, blend, rebuilding, buildFailed],
   );
   // The start of what Home shows is fetched ahead on Wi-Fi.
   useEffect(() => noteMixesShown(id, shown), [id, shown]);

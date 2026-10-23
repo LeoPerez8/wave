@@ -30,6 +30,8 @@ export type {
 } from "./designPreview.ts";
 export { trackRowTrailing } from "./trackRowTrailing.ts";
 export type { TrackRowTrailingInput } from "./trackRowTrailing.ts";
+export { trackRowDownloaded } from "./trackRowDownloaded.ts";
+export type { TrackRowDownloadedInput } from "./trackRowDownloaded.ts";
 export { lastListActionForm, listActionsForms } from "./listActions.ts";
 export type {
   ListActionForm,
@@ -645,7 +647,7 @@ export type {
   MagicSong,
   MagicYtCandidate,
 } from "./magicQueue.ts";
-export { magicBatchLoading } from "./magicQueue.ts";
+export { magicBatchFailed, magicBatchLoading } from "./magicQueue.ts";
 export { magicPickEnded } from "./magicQueue.ts";
 export type { MagicPickEnd } from "./magicQueue.ts";
 export { artistRanking } from "./moreFromArtist.ts";
@@ -653,6 +655,8 @@ export type { ArtistRankingInput, ArtistRankingSong } from "./moreFromArtist.ts"
 export { ytPopularReadDue } from "./ytPopularRead.ts";
 export type { YtPopularReadContext } from "./ytPopularRead.ts";
 export { rankPopular } from "./popularSongs.ts";
+export { artistSongOrder } from "./artistSongOrder.ts";
+export type { RankedArtistSong } from "./artistSongOrder.ts";
 export { ytArtistOpening, ytArtistOpeningState } from "./ytArtistOpening.ts";
 export { artistPageItems } from "./artistPage.ts";
 export type { ArtistPageItem, ArtistPageShelf } from "./artistPage.ts";

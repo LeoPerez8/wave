@@ -38,3 +38,12 @@ class SharedImages(private val directory: File, private val now: () -> Long = Sy
     const val KEEP_MS = 10 * 60_000L
   }
 }
+
+/** Runs [write] for this newly made file and returns its result; the file is deleted when it fails. */
+internal inline fun <T> File.deletingOnFailure(write: (File) -> T): T =
+  try {
+    write(this)
+  } catch (error: Exception) {
+    delete()
+    throw error
+  }

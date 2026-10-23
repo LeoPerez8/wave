@@ -1,19 +1,25 @@
 import type { LyricStoryBackground, LyricStoryFrame } from "@wave/core";
 
-/** The native image export and Stories delivery boundary. */
+import type { StoryImages } from "../native/waveShare.ts";
+
+/** The native image export and Stories delivery boundary (`WaveShare`). */
 export interface InstagramStoryNative {
-  readonly writeStorySticker: (path: string, frame: LyricStoryFrame) => Promise<string>;
+  readonly writeStoryImages: (
+    path: string,
+    frame: LyricStoryFrame,
+    background: LyricStoryBackground,
+  ) => Promise<StoryImages>;
+  readonly shareStoryImages: (sticker: string, background: string, appId: string) => Promise<void>;
   readonly shareToInstagramStory: (
     path: string,
-    top: string,
-    bottom: string,
+    background: LyricStoryBackground,
     appId: string,
   ) => Promise<void>;
 }
 
 /**
- * Lyrics get a separate transparent, padded and rounded PNG before the native
- * intent is opened. The source stays a standalone card for other destinations.
+ * Lyrics get a tight rounded sticker and a separate gradient background PNG
+ * before delivery. The source stays a standalone card for other destinations.
  * Song and Recap shares omit [frame], retaining their existing exports.
  */
 export const deliverInstagramStory = async (
@@ -23,6 +29,10 @@ export const deliverInstagramStory = async (
   appId: string,
   frame?: LyricStoryFrame,
 ): Promise<void> => {
-  const sticker = frame === undefined ? path : await native.writeStorySticker(path, frame);
-  await native.shareToInstagramStory(sticker, background.top, background.bottom, appId);
+  if (frame === undefined) {
+    await native.shareToInstagramStory(path, background, appId);
+    return;
+  }
+  const images = await native.writeStoryImages(path, frame, background);
+  await native.shareStoryImages(images.sticker, images.background, appId);
 };

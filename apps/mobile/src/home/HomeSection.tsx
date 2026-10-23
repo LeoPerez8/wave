@@ -18,6 +18,7 @@ import { CELL, grid } from "@/catalog/grid";
 import { Hairline } from "@/catalog/Hairline";
 import { PullRefreshRow } from "@/catalog/PullRefreshRow";
 import { TitledSection } from "@/catalog/TitledSection";
+import { RecommendationsFailed } from "@/components/RecommendationsFailed";
 import { fileUri } from "@/lib/fileUri";
 import type { MostPlayedRow } from "@/library/db/playHistory";
 import { openStats, openStatsSeeAll } from "@/library/routes";
@@ -205,7 +206,7 @@ function MixRow({ id, section }: { id: MixSectionId; section: DiscoverMixesSecti
   if (section.kind === "hidden") return null;
   const label = discoverRowTitle(id);
   const refresh = () => refreshMixes(id);
-  const updating = section.kind === "skeleton" || section.updating;
+  const updating = section.kind === "skeleton" || (section.kind === "mixes" && section.updating);
   return (
     <DiscoverRow
       label={label}
@@ -215,9 +216,10 @@ function MixRow({ id, section }: { id: MixSectionId; section: DiscoverMixesSecti
     >
       {section.kind === "skeleton" ? (
         <DiscoverMixesSkeleton />
-      ) : (
+      ) : section.kind === "mixes" ? (
         <DiscoverMixRow mixes={section.mixes} onRefresh={refresh} refreshing={section.updating} />
-      )}
+      ) : null}
+      {section.failed && <RecommendationsFailed onRetry={refresh} />}
     </DiscoverRow>
   );
 }

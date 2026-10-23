@@ -1,6 +1,9 @@
 /** Short-lived settlement observer, then a cancellable free turn. No polling. */
 import * as Effect from "effect/Effect";
 
+/** How long work waits for the screen to settle before it takes a free turn anyway. */
+const SETTLED_WAIT_CAP_MS = 3000;
+
 export interface SettledScheduler {
   readonly settled: () => boolean;
   readonly subscribe: (listener: () => void) => () => void;
@@ -15,20 +18,28 @@ export const settledTurn = ({
     let stop: (() => void) | undefined;
     let cancel: (() => void) | undefined;
     let ended = false;
+    let capped = false;
     const check = () => {
-      if (ended || cancel !== undefined || !settled()) return;
+      if (ended || cancel !== undefined || (!capped && !settled())) return;
       cancel = schedule(() => {
         cancel = undefined;
-        if (!settled()) return;
+        if (!capped && !settled()) return;
         ended = true;
+        clearTimeout(timer);
         stop?.();
         resume(Effect.void);
       });
     };
+    // A lost timing mark must not leave optional work waiting forever.
+    const timer = setTimeout(() => {
+      capped = true;
+      check();
+    }, SETTLED_WAIT_CAP_MS);
     stop = subscribe(check);
     check();
     return Effect.sync(() => {
       ended = true;
+      clearTimeout(timer);
       stop?.();
       cancel?.();
     });

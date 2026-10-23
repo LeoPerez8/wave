@@ -59,11 +59,6 @@ type RowProps = {
   drag: DragState;
   playing: boolean;
   favorite: boolean;
-  /**
-   * A Library song in a list with YT Music entries: it carries the downloaded
-   * icon, as on integrated pages.
-   */
-  downloaded: boolean;
   /** Whether the list is in selection mode: no dragging or swiping then. */
   selecting: boolean;
   /** Whether the row can be dragged to a new place: not while Find in Playlist narrows the list. */
@@ -123,7 +118,6 @@ function PlaylistItem({
   drag,
   playing,
   favorite,
-  downloaded,
   selecting,
   reorderable,
   checked,
@@ -175,7 +169,6 @@ function PlaylistItem({
                 favorite={favorite}
                 leading="artwork"
                 checked={checked}
-                downloaded={downloaded}
                 onPress={onPress}
                 onLongPress={onLongPress}
                 accessibilityActions={accessibilityActions}
@@ -318,8 +311,6 @@ export function PlaylistItems({ playlistId, items, header, empty }: Props) {
       base: read,
       order: next(previous !== null && previous.base === read ? previous.order : read),
     }));
-  // While YT Music entries are among them, the Library's songs carry the downloaded icon.
-  const mixed = order.some((item) => item.source === "stream" || item.source === "unsearched");
   const tracksOf = useCallback(
     (selected: readonly PlaylistEntryRow[]): ActionItems => ({
       kind: "track",
@@ -421,7 +412,6 @@ export function PlaylistItems({ playlistId, items, header, empty }: Props) {
         drag={listDrag.drag}
         playing={queueId(item) !== null && currentIds.has(queueId(item) ?? "")}
         favorite={item.source === "library" && favorites.has(item.track.id)}
-        downloaded={mixed}
         selecting={listSelection.selecting}
         reorderable={found === null}
         {...row}
