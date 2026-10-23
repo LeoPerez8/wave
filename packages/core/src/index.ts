@@ -277,6 +277,8 @@ export type {
 } from "./recap.ts";
 export { RECAP_PLAY_CONTEXT, recapSong } from "./recapMusic.ts";
 export type { RecapMusicSlide } from "./recapMusic.ts";
+export { homeRecapVisibility, startHomeRecap } from "./homeRecap.ts";
+export type { HomeRecap } from "./homeRecap.ts";
 export {
   AUTO_ROOT,
   AUTO_TABS,

@@ -15,6 +15,11 @@ import {
 import { Stats } from "./Stats";
 
 let shared: Promise<RecapAvailability> | undefined;
+let retained: RecapAvailability | undefined;
+
+/** The shared answer already in memory; never starts a read. */
+export const knownRecaps = (): readonly RecapPeriod[] | undefined => retained?.get();
+
 const getRecapAvailability = (): Promise<RecapAvailability> => {
   shared ??= appRuntime
     .runPromise(
@@ -33,6 +38,10 @@ const getRecapAvailability = (): Promise<RecapAvailability> => {
         ),
       ),
     )
+    .then((cache) => {
+      retained = cache;
+      return cache;
+    })
     .catch((error: unknown) => {
       shared = undefined;
       throw error;
@@ -41,10 +50,11 @@ const getRecapAvailability = (): Promise<RecapAvailability> => {
 };
 
 /** Home and the Recap list share one answer; sight, sheet coverage and settlement gate refreshes. */
-export const useRecapAvailability = (): readonly RecapPeriod[] | undefined => {
+export const useRecapAvailability = (enabled = true): readonly RecapPeriod[] | undefined => {
   const sight = useScreenSight();
-  const [value, setValue] = useState<readonly RecapPeriod[]>();
+  const [value, setValue] = useState(knownRecaps);
   useEffect(() => {
+    if (!enabled) return;
     let current = true;
     let stop: (() => void) | undefined;
     getRecapAvailability()
@@ -74,6 +84,6 @@ export const useRecapAvailability = (): readonly RecapPeriod[] | undefined => {
       current = false;
       stop?.();
     };
-  }, [sight]);
+  }, [sight, enabled]);
   return value;
 };
