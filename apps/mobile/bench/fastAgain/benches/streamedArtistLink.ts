@@ -8,7 +8,7 @@ import type { StreamedArtistLink } from "@wave/core";
 import type { ArtistRow } from "../../../src/library/LibraryStore.ts";
 import { traceQueries } from "../../../src/library/db/testDatabase.ts";
 import { createArtistLinkFixture } from "../artistLinkFixture.ts";
-import { percentiles } from "../measure.ts";
+import { percentiles, timeRuns } from "../measure.ts";
 import { loadLibraryStore } from "../store.ts";
 import type { BenchMeasurement, FastAgainBench } from "../types.ts";
 
@@ -254,23 +254,19 @@ export const bench: FastAgainBench = {
         };
         await run(false);
         const traced = await run(true);
-        const wall: number[] = [];
         const steps: number[] = [];
         const destinations: string[] = [];
         const outcomes: string[] = [];
-        let cpuMicros = 0;
-        for (let i = 0; i < context.runs; i++) {
-          const cpu = process.cpuUsage();
-          const start = performance.now();
-          const result = await run(false);
-          wall.push(performance.now() - start);
-          const used = process.cpuUsage(cpu);
-          cpuMicros += used.user + used.system;
-          steps.push(...result.steps);
-          destinations.push(result.destination);
-          outcomes.push(result.outcome);
-          if (!read.startsWith("tapLookup/")) assert.equal(result.resultKey, traced.resultKey);
-        }
+        const { wall, cpuMicros } = await timeRuns(
+          context.runs,
+          () => run(false),
+          (result) => {
+            steps.push(...result.steps);
+            destinations.push(result.destination);
+            outcomes.push(result.outcome);
+            if (!read.startsWith("tapLookup/")) assert.equal(result.resultKey, traced.resultKey);
+          },
+        );
         measurements.push({
           read,
           ...percentiles(wall),

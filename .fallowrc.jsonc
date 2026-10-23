@@ -17,6 +17,8 @@
     "scripts/ci/merged-prs.ts",
     "scripts/music-folder/organize.ts",
     "scripts/music-folder/replace.ts",
+    // #608's tap bench runs by path (docs/verification/602-608.md).
+    "apps/mobile/bench/playlistRecommendationTap.ts",
     "scripts/**/*.test.ts",
   ],
   // Core's exports map preserves its public API; internal modules remain checked.

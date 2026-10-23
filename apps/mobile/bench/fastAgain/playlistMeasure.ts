@@ -19,7 +19,7 @@ const canonical = (value: unknown): unknown =>
               .map(([k, v]) => [k, canonical(v)]),
           )
         : value;
-export const playlistKey = (value: unknown) =>
+const playlistKey = (value: unknown) =>
   createHash("sha256")
     .update(JSON.stringify(canonical(value)))
     .digest("hex");

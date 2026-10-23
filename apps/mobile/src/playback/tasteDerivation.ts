@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 
 import { runSteps } from "../lib/stepped.ts";
+import { byTitleArtistPath } from "../library/binaryOrder.ts";
 import type { LibraryStore, LibraryStoreError, SongRow } from "../library/LibraryStore.ts";
 
 /** One input snapshot shared by the live profile and Home's due pick. Not an Artist graph. */
@@ -39,7 +40,7 @@ function* mapSongs(
 }
 
 /** Checked attempts before the last one, which walks its sources in a single task. */
-export const TASTE_SNAPSHOT_ATTEMPTS = 3;
+const TASTE_SNAPSHOT_ATTEMPTS = 3;
 
 /** An effect run to its end in the current task: nothing else on this thread runs meanwhile. */
 const inOneTask = <A, E>(effect: Effect.Effect<A, E>): Effect.Effect<A, E> =>
@@ -54,7 +55,7 @@ const inOneTask = <A, E>(effect: Effect.Effect<A, E>): Effect.Effect<A, E> =>
  * write on this connection (the app's only one) can land: one long read, as ti's synchronous
  * read always was, instead of restarting for as long as the writes go on.
  */
-export const tasteSnapshot = <S>(
+const tasteSnapshot = <S>(
   store: LibraryStore["Service"],
   turn: Effect.Effect<void>,
   walk: (revision: string, pace: Effect.Effect<void>) => Effect.Effect<S, LibraryStoreError>,
@@ -110,20 +111,6 @@ export const stableTasteSnapshot = <A, E, R>(
     }
   });
 
-// SQLite BINARY uses Unicode code points (not UTF-16 or locale order).
-const binary = (a: string, b: string): number => {
-  for (let i = 0, j = 0; i < a.length || j < b.length;) {
-    if (i === a.length) return -1;
-    if (j === b.length) return 1;
-    const left = a.codePointAt(i)!,
-      right = b.codePointAt(j)!;
-    if (left !== right) return left - right;
-    i += left > 0xffff ? 2 : 1;
-    j += right > 0xffff ? 2 : 1;
-  }
-  return 0;
-};
-
 interface TasteLibraryRows {
   readonly songs: readonly SongRow[];
   readonly artists: readonly { readonly id: number; readonly name: string }[];
@@ -173,22 +160,7 @@ const tasteLibraryOf = (
   turn: Effect.Effect<void>,
 ) =>
   Effect.gen(function* () {
-    const sorted = yield* runSteps(
-      sortSteps(
-        songs,
-        (a, b) =>
-          binary(a.titleSort, b.titleSort) ||
-          binary(a.artistSort, b.artistSort) ||
-          (a.path === null
-            ? b.path === null
-              ? 0
-              : -1
-            : b.path === null
-              ? 1
-              : binary(a.path, b.path)),
-      ),
-      turn,
-    );
+    const sorted = yield* runSteps(sortSteps(songs, byTitleArtistPath), turn);
     // The mapper indexes unique artist ids; their insertion order is unobservable.
     const convert = yield* runSteps(magicLibraryMapperSteps(artists), turn);
     return yield* runSteps(mapSongs(sorted, convert, revision), turn);

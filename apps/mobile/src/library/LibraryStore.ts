@@ -384,7 +384,7 @@ export const songHasFile = <S extends SongRow>(song: S): song is S & { readonly 
 /** A track on an album screen, with what orders it there. */
 export type AlbumTrackRow = SongRow;
 
-export type { FavoriteRow, GenreCursor, GenreOpening, GenreOrderSlice, SongOrder, SongSummary };
+export type { FavoriteRow, GenreOpening, SongOrder, SongSummary };
 
 /** One album of the Albums grid (and of an artist's albums). */
 export interface AlbumRow {
@@ -446,7 +446,7 @@ export interface ArtistDetail {
   readonly songs: readonly SongRow[];
 }
 
-export interface GenreDetail {
+interface GenreDetail {
   readonly genre: GenreRow;
   /** By title. */
   readonly songs: readonly SongRow[];

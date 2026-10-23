@@ -13,7 +13,6 @@ export {
   onHeldTouch,
   releaseHeldTouch,
 } from "./heldTouchState";
-export type { HeldTouchEvent } from "./heldTouchState";
 
 /**
  * False while a long-pressed finger is held: pass it as a list's

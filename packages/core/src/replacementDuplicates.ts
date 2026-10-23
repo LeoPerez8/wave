@@ -7,6 +7,7 @@
  * the check runs, and what it writes to the log.
  */
 
+import { finishSteps } from "./buildSteps.ts";
 import { qualityJobOf, qualityReplacementTarget } from "./qualityReplacement.ts";
 import { normalizeSearchText } from "./search.ts";
 import { RECORDING_LENGTH_TOLERANCE_MS } from "./sync.ts";
@@ -134,17 +135,6 @@ const complete = (file: DuplicateCheckFile, lengthMs: number | null): boolean =>
 const hasHistory = (file: DuplicateCheckFile): boolean =>
   file.favorite || file.plays > 0 || file.playlists.length > 0;
 
-/** What [drop] hands to [keep] ([DuplicateMerge]); null when it has nothing. */
-const mergeOf = (keep: DuplicateCheckFile, drop: DuplicateCheckFile): DuplicateMerge | null =>
-  hasHistory(drop)
-    ? {
-        star: drop.favorite && !keep.favorite,
-        movePlays: drop.plays > 0,
-        repoint: drop.playlists.filter((id) => !keep.playlists.includes(id)),
-        remove: drop.playlists.filter((id) => keep.playlists.includes(id)),
-      }
-    : null;
-
 /**
  * How [pair] goes back to one song, given how long each file plays
  * ([lengths]). The older Track (the replacement's, [pair.new]) stays and takes
@@ -156,22 +146,7 @@ const mergeOf = (keep: DuplicateCheckFile, drop: DuplicateCheckFile): DuplicateM
 export const replacementDuplicateFix = <F extends DuplicateCheckFile>(
   pair: ReplacementDuplicate<F>,
   lengths: DuplicateLengths,
-): DuplicateFix<F> => {
-  const oldComplete = complete(pair.old, lengths.old);
-  const songLength = oldComplete ? (lengths.old ?? 0) : pair.old.durationMs;
-  const onNew =
-    complete(pair.new, lengths.new) && (songLength <= 0 || within(lengths.new ?? 0, songLength));
-  if (!onNew && !oldComplete)
-    return { kind: "leave", reason: "incomplete", incomplete: [pair.old.path, pair.new.path] };
-  return {
-    kind: "fix",
-    keep: pair.new,
-    drop: pair.old,
-    path: onNew ? pair.new.path : pair.old.path,
-    deleted: onNew ? pair.old.path : pair.new.path,
-    merge: mergeOf(pair.new, pair.old),
-  };
-};
+): DuplicateFix<F> => finishSteps(replacementDuplicateFixSteps(pair, lengths));
 
 /** Why the check ran: once after the update that brought it, or after an interrupted run. */
 export type DuplicateCheckWhen = "update" | "interruptedRun";

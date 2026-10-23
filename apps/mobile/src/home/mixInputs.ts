@@ -10,22 +10,10 @@ import {
 } from "@wave/core";
 import * as Effect from "effect/Effect";
 import type { LibraryStore, SongRow, ArtistRow } from "../library/LibraryStore.ts";
+import { binary, byTitleArtistPath } from "../library/binaryOrder.ts";
 import { runSteps } from "../lib/stepped.ts";
 
 type MixSong = SongRow & { readonly genres?: readonly string[] };
-// SQLite BINARY compares Unicode code points, NULL before text. Sorting happens in yielding JS steps.
-const binary = (a: string, b: string): number => {
-  for (let i = 0, j = 0; i < a.length || j < b.length;) {
-    if (i === a.length) return -1;
-    if (j === b.length) return 1;
-    const left = a.codePointAt(i)!,
-      right = b.codePointAt(j)!;
-    if (left !== right) return left - right;
-    i += left > 0xffff ? 2 : 1;
-    j += right > 0xffff ? 2 : 1;
-  }
-  return 0;
-};
 export const readMixInputs = (
   store: Pick<
     LibraryStore["Service"],
@@ -49,22 +37,8 @@ export const readMixInputs = (
       for (const song of page) allSongs.push(song);
       after = page.at(-1)!.id;
     }
-    const songs = yield* runSteps(
-      sortSteps(
-        allSongs,
-        (a, b) =>
-          binary(a.titleSort, b.titleSort) ||
-          binary(a.artistSort, b.artistSort) ||
-          (a.path === null
-            ? b.path === null
-              ? 0
-              : -1
-            : b.path === null
-              ? 1
-              : binary(a.path, b.path)),
-      ),
-      between,
-    );
+    // SQLite's order, restored in yielding JS steps.
+    const songs = yield* runSteps(sortSteps(allSongs, byTitleArtistPath), between);
     const allArtists: ArtistRow[] = [];
     after = 0;
     for (;;) {

@@ -17,7 +17,7 @@ export interface PlayingSongAnswer {
   readonly favorite: boolean;
   readonly pendingFavorite: boolean;
 }
-export const playingSongKey = (target: PlayingSongTarget): string => JSON.stringify(target);
+const playingSongKey = (target: PlayingSongTarget): string => JSON.stringify(target);
 
 interface Entry {
   readonly target: PlayingSongTarget;

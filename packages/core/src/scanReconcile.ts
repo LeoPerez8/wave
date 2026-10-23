@@ -11,6 +11,7 @@
  * the scan completes is removed.
  */
 
+import { finishSteps } from "./buildSteps.ts";
 import { identityKey } from "./library.ts";
 
 /** What a file is recognised by when its path changes. */
@@ -57,32 +58,7 @@ const signature = (file: IndexedFile): string =>
 /** Reconciles one batch of a scan; see the module comment. */
 export const reconcileScan = <T extends IndexedFile>(
   input: ScanReconcileInput<T>,
-): ScanChanges<T> => {
-  const candidates = new Map<string, IndexedFile[]>();
-  for (const file of input.missing) {
-    const key = signature(file);
-    candidates.set(key, [...(candidates.get(key) ?? []), file]);
-  }
-  const added: T[] = [];
-  const updated: T[] = [];
-  const moved: TrackMove<T>[] = [];
-  for (const file of input.read) {
-    if (input.isIndexed(file.path)) {
-      updated.push(file);
-      continue;
-    }
-    const match = candidates.get(signature(file))?.shift();
-    if (match === undefined) added.push(file);
-    else moved.push({ from: match.path, to: file });
-  }
-  const matched = new Set(moved.map((move) => move.from));
-  return {
-    added,
-    updated,
-    moved,
-    unmatched: input.missing.filter((file) => !matched.has(file.path)),
-  };
-};
+): ScanChanges<T> => finishSteps(reconcileScanSteps(input));
 
 /**
  * What a scan does last, from the files it [saved], the indexed files

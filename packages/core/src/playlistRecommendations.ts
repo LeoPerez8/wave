@@ -45,7 +45,7 @@ export interface PlaylistRecommendationSources extends Pick<RecommendSources, "g
 export const playlistRecordingMatch = (tracks: readonly PlaylistRecommendationTrack[]) =>
   finishSteps(playlistRecordingMatchSteps(tracks));
 
-export function* playlistRecordingMatchSteps(tracks: readonly PlaylistRecommendationTrack[]) {
+function* playlistRecordingMatchSteps(tracks: readonly PlaylistRecommendationTrack[]) {
   const byId = yield* indexSteps(tracks, (track) => [track.id, track]);
   const byVideo = new Map<string, PlaylistRecommendationTrack>();
   for (const track of tracks) {

@@ -10,6 +10,36 @@ import {
 } from "../../src/library/db/testDatabase.ts";
 
 const round = (value: number) => Number(value.toFixed(3));
+/** Times complete JS tasks between injected free turns; `turn` ends the open task, then yields. */
+export const freeTurnTasks = (onTask: (ms: number) => void) => {
+  let started: number | undefined;
+  const end = () => {
+    if (started !== undefined) onTask(performance.now() - started);
+    started = undefined;
+  };
+  const turn = Effect.suspend(() => {
+    end();
+    return Effect.promise(() => setImmediate()).pipe(
+      Effect.tap(() =>
+        Effect.sync(() => {
+          started = performance.now();
+        }),
+      ),
+    );
+  });
+  return {
+    turn,
+    end,
+    /** Opens a task now, replacing any open one. */
+    start: () => {
+      started = performance.now();
+    },
+    /** Opens a task unless one is already open. */
+    open: () => {
+      started ??= performance.now();
+    },
+  };
+};
 export const measureCooperative = async <A>(
   db: TestDatabase,
   read: string,
@@ -34,25 +64,10 @@ export const measureCooperative = async <A>(
     let taskSql = 0,
       sqlTotal = 0,
       maxSql = 0;
-    let started: number | undefined;
-    const end = () => {
-      if (started !== undefined) {
-        const ms = performance.now() - started;
-        tasks.push(ms);
-        if (taskSql === 0) cpuTasks.push(ms);
-        taskSql = 0;
-        started = undefined;
-      }
-    };
-    const turn = Effect.suspend(() => {
-      end();
-      return Effect.promise(() => setImmediate()).pipe(
-        Effect.tap(() =>
-          Effect.sync(() => {
-            started = performance.now();
-          }),
-        ),
-      );
+    const { turn, end } = freeTurnTasks((ms) => {
+      tasks.push(ms);
+      if (taskSql === 0) cpuTasks.push(ms);
+      taskSql = 0;
     });
     const cpu = process.cpuUsage();
     const start = performance.now();

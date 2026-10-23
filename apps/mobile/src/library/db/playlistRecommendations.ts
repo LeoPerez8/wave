@@ -3,17 +3,19 @@ import { matchingSongWhere } from "./matchingSong.ts";
 import { selectPendingFavorites } from "./pendingFavorites.ts";
 /** The editable playlist's recommendation inputs, read through the Library store. */
 import {
-  showsExplicitBadge,
-  readStoredGenres,
   playlistRecordingMatch,
   type PlaylistRecommendationTrack,
   type PlaylistRecommendationSlot,
 } from "@wave/core";
 import type { SongRow } from "../LibraryStore.ts";
+import {
+  libraryRecommendationTrack,
+  storedRecommendationTrack,
+} from "../playlistRecommendationTracks.ts";
 import type { LibraryDatabase } from "./database.ts";
 import { selectCandidateCatalog } from "./candidateCatalog.ts";
 import { addToPlaylist, selectPlaylist, selectPlaylistEntries } from "./playlists.ts";
-import { selectSongGenres, trackQuery } from "./tracks.ts";
+import { selectSongGenres, songGenresOf, trackQuery } from "./tracks.ts";
 import * as schema from "./schema.ts";
 
 /** Current membership and Library recordings; shared with Add's transactional validation. */
@@ -92,10 +94,7 @@ const selectPlaylistRecommendationTracks = (
           .from(schema.tracks)
           .where(scoped(schema.tracks.id))
           .all()
-          .flatMap((row) => {
-            const genres = readStoredGenres(row.genres);
-            return genres.length === 0 ? [] : [{ id: row.id, genres }];
-          });
+          .flatMap(songGenresOf);
   const genres = new Map(tagged.map((track) => [track.id, track.genres]));
   const favorites = new Set(
     db
@@ -114,36 +113,18 @@ const selectPlaylistRecommendationTracks = (
       .filter((row) => row.videoId !== null)
       .map((row) => [row.id, row.videoId!]),
   );
-  const local = (song: SongRow): PlaylistRecommendationTrack => ({
-    favorite: favorites.has(song.id),
-    downloaded: videos.has(song.id) && song.path !== null,
-    id: String(song.id),
-    source: "library",
-    videoId: videos.get(song.id) ?? "",
-    title: song.title,
-    artists: song.artistIds.flatMap((id) => names.get(id) ?? []),
-    album: song.album,
-    albumId: null,
-    durationMs: song.durationMs,
-    artworkUrl: song.thumbPath === null ? null : `file://${song.thumbPath}`,
-    explicit: showsExplicitBadge(song.explicit),
-    genre: song.genre,
-    ...(genres.has(song.id) ? { genres: genres.get(song.id)! } : {}),
-    available: song.path !== null,
-  });
+  const local = (song: SongRow): PlaylistRecommendationTrack =>
+    libraryRecommendationTrack(song, names, {
+      favorite: favorites.has(song.id),
+      downloaded: videos.has(song.id) && song.path !== null,
+      videoId: videos.get(song.id) ?? "",
+      genres: genres.get(song.id),
+    });
   const library = librarySongs.map(local);
   const playlist = entries.map((entry): PlaylistRecommendationTrack =>
     entry.source === "library"
       ? local(entry.track)
-      : {
-          ...entry.song,
-          albumId: "albumId" in entry.song ? entry.song.albumId : null,
-          explicit: "explicit" in entry.song ? entry.song.explicit : false,
-          videoId: entry.source === "stream" ? entry.song.videoId : "",
-          id: entry.source === "stream" ? `yt:${entry.song.videoId}` : `entry:${entry.itemId}`,
-          source: "stream",
-          available: entry.source === "stream",
-        },
+      : storedRecommendationTrack(entry, entry.itemId),
   );
   return { playlist, library, librarySongs };
 };
