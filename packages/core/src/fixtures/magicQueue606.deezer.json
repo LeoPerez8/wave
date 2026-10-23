@@ -1,0 +1,350 @@
+{
+  "capturedAt": "2026-10-23T08:39:01.063797+00:00",
+  "provenance": "Live Deezer API responses projected to the album and genre fields used by Core. Not owner Library tags, radio evidence, seed identity or APK evidence. Album titles and IDs are retained to identify the sampled first page.",
+  "genres": {
+    "url": "https://api.deezer.com/genre",
+    "response": {
+      "data": [
+        {
+          "id": 132,
+          "name": "Pop"
+        },
+        {
+          "id": 152,
+          "name": "Rock"
+        },
+        {
+          "id": 144,
+          "name": "Reggae"
+        }
+      ]
+    }
+  },
+  "artists": [
+    {
+      "id": 719,
+      "name": "Bob Marley & The Wailers",
+      "url": "https://api.deezer.com/artist/719/albums?limit=50",
+      "response": {
+        "data": [
+          {
+            "id": 1059353762,
+            "title": "Roots, Rock, Reggae (Live At The Hammersmith Odeon, London, UK - June 1976)",
+            "genre_id": 144
+          },
+          {
+            "id": 542665382,
+            "title": "One Love (Original Motion Picture Soundtrack)",
+            "genre_id": 144
+          },
+          {
+            "id": 469646025,
+            "title": "Africa Unite",
+            "genre_id": 144
+          },
+          {
+            "id": 336067167,
+            "title": "Bob Marley with the Chineke! Orchestra",
+            "genre_id": 144
+          },
+          {
+            "id": 328176677,
+            "title": "Exodus (Deluxe Edition)",
+            "genre_id": 144
+          },
+          {
+            "id": 254638012,
+            "title": "The Capitol Session '73 (Live)",
+            "genre_id": 144
+          },
+          {
+            "id": 190810082,
+            "title": "Bob Marley Legacy: Punky Reggae Party",
+            "genre_id": 144
+          },
+          {
+            "id": 184396972,
+            "title": "Bob Marley Legacy: Freedom Fighter",
+            "genre_id": 144
+          },
+          {
+            "id": 174174112,
+            "title": "I Know A Place: The Remixes (Pt. 1)",
+            "genre_id": 144
+          },
+          {
+            "id": 174177872,
+            "title": "I Know A Place: The Remixes (Pt. 2)",
+            "genre_id": 144
+          },
+          {
+            "id": 9594152,
+            "title": "Easy Skanking In Boston '78",
+            "genre_id": 144
+          },
+          {
+            "id": 208495192,
+            "title": "Legend Remixed",
+            "genre_id": 144
+          },
+          {
+            "id": 152283152,
+            "title": "Marley (The Original Soundtrack)",
+            "genre_id": 144
+          },
+          {
+            "id": 6108671,
+            "title": "Live Forever: The Stanley Theatre, Pittsburgh, PA, 9/23/1980",
+            "genre_id": 144
+          },
+          {
+            "id": 5953210,
+            "title": "In Dub Vol. 1",
+            "genre_id": 144
+          },
+          {
+            "id": 82084892,
+            "title": "B Is For Bob",
+            "genre_id": 144
+          },
+          {
+            "id": 72542,
+            "title": "Collections",
+            "genre_id": 132
+          },
+          {
+            "id": 82085562,
+            "title": "Gold",
+            "genre_id": 144
+          },
+          {
+            "id": 151578082,
+            "title": "Live At The Rainbow, 4th June 1977 (Remastered 2020)",
+            "genre_id": 144
+          },
+          {
+            "id": 322427407,
+            "title": "Live At The Rainbow, 1st June 1977",
+            "genre_id": 144
+          },
+          {
+            "id": 324269707,
+            "title": "Live At The Rainbow, 2nd June 1977",
+            "genre_id": 144
+          },
+          {
+            "id": 326316787,
+            "title": "Live At The Rainbow, 3rd June 1977",
+            "genre_id": 144
+          },
+          {
+            "id": 123474,
+            "title": "Live At The Roxy - The Complete Concert",
+            "genre_id": -1
+          },
+          {
+            "id": 223393,
+            "title": "Chant Down Babylon",
+            "genre_id": -1
+          },
+          {
+            "id": 120834,
+            "title": "Dreams Of Freedom (Ambient Translations Of Bob Marley In Dub)",
+            "genre_id": 144
+          },
+          {
+            "id": 8740481,
+            "title": "Natural Mystic",
+            "genre_id": 144
+          },
+          {
+            "id": 156009702,
+            "title": "Why Should I/Exodus",
+            "genre_id": 144
+          },
+          {
+            "id": 164591122,
+            "title": "Songs Of Freedom Rarities",
+            "genre_id": 144
+          },
+          {
+            "id": 246348,
+            "title": "Talkin' Blues",
+            "genre_id": -1
+          },
+          {
+            "id": 287827,
+            "title": "Rebel Music",
+            "genre_id": -1
+          },
+          {
+            "id": 68685711,
+            "title": "Legend - The Best Of Bob Marley And The Wailers",
+            "genre_id": -1
+          },
+          {
+            "id": 129798982,
+            "title": "Legend (Deluxe Edition)",
+            "genre_id": 144
+          },
+          {
+            "id": 223761,
+            "title": "Confrontation",
+            "genre_id": 144
+          },
+          {
+            "id": 249141,
+            "title": "Uprising",
+            "genre_id": 144
+          },
+          {
+            "id": 245955,
+            "title": "Survival",
+            "genre_id": 144
+          },
+          {
+            "id": 228718,
+            "title": "Kaya",
+            "genre_id": 144
+          },
+          {
+            "id": 6487920,
+            "title": "Kaya - Deluxe Edition",
+            "genre_id": 144
+          },
+          {
+            "id": 71058662,
+            "title": "Kaya (40th Anniversary Edition)",
+            "genre_id": 144
+          },
+          {
+            "id": 217953,
+            "title": "Babylon By Bus",
+            "genre_id": -1
+          },
+          {
+            "id": 68349141,
+            "title": "Exodus 30th Anniversary Edition",
+            "genre_id": 144
+          },
+          {
+            "id": 70199552,
+            "title": "Exodus 40",
+            "genre_id": 144
+          },
+          {
+            "id": 322427657,
+            "title": "Exodus",
+            "genre_id": 144
+          },
+          {
+            "id": 162223,
+            "title": "Rastaman Vibration",
+            "genre_id": 144
+          },
+          {
+            "id": 671791,
+            "title": "Rastaman Vibration",
+            "genre_id": -1
+          },
+          {
+            "id": 14830621,
+            "title": "Live! (Deluxe Edition)",
+            "genre_id": 144
+          },
+          {
+            "id": 239716,
+            "title": "Live!",
+            "genre_id": -1
+          },
+          {
+            "id": 162222,
+            "title": "Natty Dread",
+            "genre_id": -1
+          },
+          {
+            "id": 162221,
+            "title": "Burnin'",
+            "genre_id": -1
+          },
+          {
+            "id": 430669,
+            "title": "Catch A Fire",
+            "genre_id": -1
+          },
+          {
+            "id": 505337231,
+            "title": "Catch A Fire (50th Anniversary)",
+            "genre_id": 144
+          }
+        ],
+        "total": 86
+      }
+    },
+    {
+      "id": 113,
+      "name": "Rage Against the Machine",
+      "url": "https://api.deezer.com/artist/113/albums?limit=50",
+      "response": {
+        "data": [
+          {
+            "id": 823995561,
+            "title": "Live On Tour 1993",
+            "genre_id": 152
+          },
+          {
+            "id": 655207711,
+            "title": "Democratic National Convention 2000 (Live)",
+            "genre_id": 152
+          },
+          {
+            "id": 77267,
+            "title": "Live at the Grand Olympic Auditorium",
+            "genre_id": 152
+          },
+          {
+            "id": 180441282,
+            "title": "The Battle Of Mexico City (Live)",
+            "genre_id": 152
+          },
+          {
+            "id": 1401684,
+            "title": "Renegades",
+            "genre_id": 152
+          },
+          {
+            "id": 1398819,
+            "title": "The Battle Of Los Angeles",
+            "genre_id": 152
+          },
+          {
+            "id": 333506277,
+            "title": "Live & Rare",
+            "genre_id": 152
+          },
+          {
+            "id": 708679,
+            "title": "Evil Empire",
+            "genre_id": 152
+          },
+          {
+            "id": 6088193,
+            "title": "Rage Against The Machine - XX (20th Anniversary Special Edition)",
+            "genre_id": 152
+          },
+          {
+            "id": 1398967,
+            "title": "Rage Against The Machine",
+            "genre_id": 132
+          },
+          {
+            "id": 813188661,
+            "title": "Live in Washington 1980",
+            "genre_id": 152
+          }
+        ],
+        "total": 11
+      }
+    }
+  ]
+}

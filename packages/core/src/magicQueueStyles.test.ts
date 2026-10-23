@@ -173,7 +173,9 @@ describe("A song of no known style at Same genres and Close", () => {
     {
       id: "unknown",
       random: RANDOM,
-      radio: { artists: ["Seed Artist"], profile: null },
+      // Preserve the tagged seed's family, as the app does; closeness alone
+      // is no longer enough when neither style nor family is known.
+      radio: { artists: ["Seed Artist"], profile: genreProfile([seed]) },
     },
   )!.session;
 
