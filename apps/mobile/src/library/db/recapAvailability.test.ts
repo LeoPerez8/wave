@@ -283,3 +283,34 @@ test("Stats waits for every controlled free turn and cancellation prevents the n
     fixture.close();
   }
 });
+
+test("the availability benchmark restores listening for the next registered benchmark", async () => {
+  const { bench } = await import("../../../bench/fastAgain/benches/recapAvailability.ts");
+  const { runBenchmarks } = await import("../../../bench/fastAgain/runner.ts");
+  let before: unknown;
+  await runBenchmarks({
+    sizes: [1000],
+    variants: [{ variant: "after", root }],
+    runs: 1,
+    benches: [
+      {
+        name: "beforeRecap",
+        run: async ({ fixture }) => {
+          const store = await loadLibraryStore(root, fixture.db);
+          before = Effect.runSync(store.countedListening);
+          return [];
+        },
+      },
+      bench,
+      {
+        name: "afterRecap",
+        run: async ({ fixture }) => {
+          const store = await loadLibraryStore(root, fixture.db);
+          assert.deepEqual(Effect.runSync(store.countedListening), before);
+          return [];
+        },
+      },
+    ],
+    emit: () => {},
+  });
+});

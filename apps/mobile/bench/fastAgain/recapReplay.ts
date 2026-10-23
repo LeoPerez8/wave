@@ -121,6 +121,12 @@ export const createRecapReplay = async (root: string, fixture: FastAgainFixture)
     stats,
     work,
     bounded: cache !== undefined,
+    activate: (client: { setActive: (active: boolean) => void }) => {
+      started = performance.now();
+      client.setActive(true);
+      // Historical reads run inside activation; count that task once, through publication.
+      if (cache !== undefined) end();
+    },
     get: () => cache?.get() ?? value,
     queries: () => queries,
     tasks: () => tasks,

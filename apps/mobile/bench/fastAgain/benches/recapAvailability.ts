@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { performance } from "node:perf_hooks";
 import * as Effect from "effect/Effect";
+import { eq } from "drizzle-orm";
+import { playEvents } from "../../../src/library/db/schema.ts";
 import { createRecapReplay } from "../recapReplay.ts";
 import { percentiles } from "../measure.ts";
 import type { FastAgainBench, BenchMeasurement } from "../types.ts";
@@ -26,6 +28,7 @@ export const bench: FastAgainBench = {
     const measurements: BenchMeasurement[] = [];
     let historyChanges = 0;
     const { fixture } = context;
+    const original = fixture.db.select().from(playEvents).where(eq(playEvents.id, 1)).get()!;
     const prepare = async (scenario: (typeof scenarios)[number]) => {
       const replay = (await createRecapReplay(context.root, fixture))!;
       const client = replay.attach(false);
@@ -59,47 +62,52 @@ export const bench: FastAgainBench = {
     for (const scenario of scenarios) {
       const run = async (trace: boolean) => {
         const { replay, client } = await prepare(scenario);
-        replay.reset(trace);
-        const cpu = process.cpuUsage();
-        const start = performance.now();
-        client.setActive(true);
-        const activationMs = performance.now() - start;
-        await replay.drain();
-        const elapsedMs = performance.now() - start;
-        const used = process.cpuUsage(cpu);
-        const recaps = replay.get()!;
-        assert.ok(recaps);
-        // Compare every available period and all opened-state announcements, not only a count/id.
-        const key = hash({
-          recaps,
-          announcements: [
-            [],
-            ...recaps.map((period) => [
-              period.kind === "year"
-                ? String(period.year)
-                : `${period.year}-${String(period.month).padStart(2, "0")}`,
-            ]),
-            recaps.map((period) =>
-              period.kind === "year"
-                ? String(period.year)
-                : `${period.year}-${String(period.month).padStart(2, "0")}`,
-            ),
-          ].map((opened) => recapToAnnounce(recaps, opened)),
-        });
-        const tasks = [activationMs, ...replay.tasks()];
-        const result = {
-          key,
-          elapsedMs,
-          cpuMs: (used.user + used.system) / 1000,
-          totalMs: tasks.reduce((sum, ms) => sum + ms, 0),
-          longestMs: Math.max(...tasks),
-          tasks: tasks.length,
-          work: { ...replay.work },
-          queries: replay.queries(),
-          bounded: replay.bounded,
-        };
-        replay.close();
-        return result;
+        try {
+          replay.reset(trace);
+          const cpu = process.cpuUsage();
+          const start = performance.now();
+          replay.activate(client);
+          await replay.drain();
+          const elapsedMs = performance.now() - start;
+          const used = process.cpuUsage(cpu);
+          const recaps = replay.get()!;
+          assert.ok(recaps);
+          // Compare every available period and all opened-state announcements, not only a count/id.
+          const key = hash({
+            recaps,
+            announcements: [
+              [],
+              ...recaps.map((period) => [
+                period.kind === "year"
+                  ? String(period.year)
+                  : `${period.year}-${String(period.month).padStart(2, "0")}`,
+              ]),
+              recaps.map((period) =>
+                period.kind === "year"
+                  ? String(period.year)
+                  : `${period.year}-${String(period.month).padStart(2, "0")}`,
+              ),
+            ].map((opened) => recapToAnnounce(recaps, opened)),
+          });
+          const tasks = replay.tasks();
+          const result = {
+            key,
+            elapsedMs,
+            cpuMs: (used.user + used.system) / 1000,
+            totalMs: tasks.reduce((sum, ms) => sum + ms, 0),
+            longestMs: Math.max(...tasks),
+            tasks: tasks.length,
+            work: { ...replay.work },
+            queries: replay.queries(),
+            bounded: replay.bounded,
+          };
+          return result;
+        } finally {
+          replay.close();
+          // Restore outside measurement so subsequent runs/scenarios/registered benches share the fixture.
+          if (scenario === "historyChanged")
+            fixture.db.update(playEvents).set(original).where(eq(playEvents.id, 1)).run();
+        }
       };
       await run(false); // Warm selected modules and SQLite; each measured cold case still uses a fresh cache.
       const traced = await run(true);
