@@ -341,3 +341,43 @@ test("graph source writes coalesce under the burst throttle and are released on 
   visit.dispose();
   assert.equal(graphListeners.size, 0);
 });
+
+test("a burst landing while a finished renewal leaves the queue still renews, and so do later ones", async () => {
+  // The visit drops its job handle a few microtasks before the serial queue
+  // releases the job; an invalidation in that gap must not wedge renewal.
+  for (let gap = 0; gap <= 6; gap++) {
+    let renews = 0;
+    let emit: ((change: { kind: "tracks"; burst: true }) => void) | undefined;
+    const session = {
+      resume: () => {},
+      pause: () => {},
+      get: () => ({ pending: null, loading: false }),
+      renew: async () => {
+        renews++;
+        if (renews === 1)
+          void (async () => {
+            for (let i = 0; i < gap; i++) await Promise.resolve();
+            emit?.({ kind: "tracks", burst: true });
+          })();
+      },
+    } as unknown as Parameters<typeof followPlaylistRecommendations>[0];
+    const visit = followPlaylistRecommendations(session, {
+      playlistId: 1,
+      sight: { visible: () => true, subscribe: () => () => {} },
+      start: async () => {},
+      subscribe: (listener) => {
+        emit = listener;
+        return () => {};
+      },
+      now: () => 1e9,
+      wait: async () => {},
+    });
+    await tick();
+    await tick();
+    emit?.({ kind: "tracks", burst: true });
+    await tick();
+    await tick();
+    assert.equal(renews, 3, `gap of ${gap} microtasks`);
+    visit.dispose();
+  }
+});
