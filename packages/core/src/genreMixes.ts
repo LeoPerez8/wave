@@ -1,3 +1,5 @@
+import { finishSteps } from "./buildSteps.ts";
+import { indexSteps, mapSteps, sortSteps } from "./buildSteps.ts";
 /**
  * Genre mixes (docs/spec.md, "Genre mixes"): Home's mixes that each sound
  * like a genre family rather than one band. Core maps the Library's genre
@@ -15,8 +17,8 @@ import type {
 import { genreMixId } from "./discoverMixes.ts";
 import type { MixAffinity } from "./genreAffinity.ts";
 import { identityKey } from "./library.ts";
-import { freshFirst, type MixRefreshAvoid } from "./mixRefresh.ts";
-import { pickWeighted, playsWeight, type RandomSource } from "./weightedPick.ts";
+import { freshFirstSteps, type MixRefreshAvoid } from "./mixRefresh.ts";
+import { pickWeightedSteps, playsWeight, type RandomSource } from "./weightedPick.ts";
 import { ytArtistQuery } from "./ytArtist.ts";
 
 /** A genre family: the tags that sound alike, under one name. */
@@ -454,11 +456,16 @@ interface RankedFamily {
  * plays, its song count and its artists' plays and songs in it. A song in
  * several families adds an equal share of itself and its plays to each.
  */
-const libraryFamilies = (library: GenreMixLibrary): RankedFamily[] => {
-  const plays = new Map((library.plays ?? []).map((entry) => [entry.id, entry.countedPlays]));
-  const artists = new Map(library.artists.map((artist) => [artist.id, artist]));
+
+function* libraryFamiliesSteps(library: GenreMixLibrary): Generator<void, RankedFamily[]> {
+  const plays = yield* indexSteps(
+    library.plays ?? [],
+    (entry) => [entry.id, entry.countedPlays] as const,
+  );
+  const artists = yield* indexSteps(library.artists, (artist) => [artist.id, artist] as const);
   const families = new Map<string, RankedFamily>();
   for (const song of library.songs) {
+    yield;
     const ofSong = songFamilies(song);
     const share = 1 / ofSong.length;
     const songPlays = plays.get(song.id) ?? 0;
@@ -468,6 +475,7 @@ const libraryFamilies = (library: GenreMixLibrary): RankedFamily[] => {
       entry.plays += songPlays * share;
       entry.songs += share;
       for (const id of song.artistIds) {
+        yield;
         const artist = artists.get(id);
         if (artist === undefined) continue;
         const inFamily = entry.artists.get(id) ?? { artist, plays: 0, songs: 0 };
@@ -477,8 +485,8 @@ const libraryFamilies = (library: GenreMixLibrary): RankedFamily[] => {
       }
     }
   }
-  return [...families.values()];
-};
+  return yield* mapSteps(families.values(), (family) => family);
+}
 
 /**
  * Up to three of [family]'s artists to grow its mix from, picked by
@@ -488,30 +496,38 @@ const libraryFamilies = (library: GenreMixLibrary): RankedFamily[] => {
  * refresh ([avoid]) picks from the artists the section didn't show today,
  * then fills up with those it did, the least recently shown first.
  */
-const seedArtists = (
+function* seedArtistsSteps(
   family: RankedFamily,
   random: RandomSource,
   avoid: MixRefreshAvoid | undefined,
-): DiscoverSeedArtist[] => {
-  const { fresh, shown } = freshFirst(
-    seedableArtists(family),
+): Generator<void, DiscoverSeedArtist[]> {
+  const { fresh, shown } = yield* freshFirstSteps(
+    yield* seedableArtistsSteps(family),
     avoid === undefined ? null : ({ artist }) => avoid.artists.get(identityKey(artist.name)),
   );
   const picked = new Set(
-    pickWeighted(fresh, SEED_ARTISTS, (artist) => playsWeight(artist.plays), random),
+    yield* pickWeightedSteps(fresh, SEED_ARTISTS, (artist) => playsWeight(artist.plays), random),
   );
+  const selected: FamilyArtist[] = [];
+  for (const artist of fresh) {
+    if (picked.has(artist)) selected.push(artist);
+    yield;
+  }
   return [
-    ...fresh
-      .filter((artist) => picked.has(artist))
-      // oxlint-disable-next-line unicorn/no-array-sort -- sorts the fresh array filter made; Hermes lacks toSorted
-      .sort((a, b) => b.plays - a.plays || b.songs - a.songs),
+    ...(yield* sortSteps(selected, (a, b) => b.plays - a.plays || b.songs - a.songs)),
     ...shown.slice(0, SEED_ARTISTS - picked.size),
   ].map(({ artist }) => ({ id: artist.id, name: artist.name }));
-};
+}
 
 /** [family]'s artists whose names are an artist's. */
-const seedableArtists = (family: RankedFamily): FamilyArtist[] =>
-  [...family.artists.values()].filter(({ artist }) => ytArtistQuery(artist.name) !== null);
+function* seedableArtistsSteps(family: RankedFamily): Generator<void, FamilyArtist[]> {
+  const eligible: FamilyArtist[] = [];
+  for (const entry of family.artists.values()) {
+    if (ytArtistQuery(entry.artist.name) !== null) eligible.push(entry);
+    yield;
+  }
+  return eligible;
+}
 
 /**
  * Genre mixes' seeds, four at most, one per genre family: the families with
@@ -530,16 +546,25 @@ export const genreMixSeeds = (
   library: GenreMixLibrary,
   random: RandomSource,
   avoid?: MixRefreshAvoid,
-): DiscoverMixSeed[] => {
+): DiscoverMixSeed[] => finishSteps(genreMixSeedsSteps(library, random, avoid));
+
+export function* genreMixSeedsSteps(
+  library: GenreMixLibrary,
+  random: RandomSource,
+  avoid?: MixRefreshAvoid,
+): Generator<void, DiscoverMixSeed[]> {
   const seeds: DiscoverMixSeed[] = [];
-  const ranked = libraryFamilies(library)
-    .filter(
-      (family) =>
-        family.songs >= FAMILY_FEWEST - SHARES_ROUNDING && seedableArtists(family).length > 0,
+  const eligible: RankedFamily[] = [];
+  for (const family of yield* libraryFamiliesSteps(library)) {
+    if (
+      family.songs >= FAMILY_FEWEST - SHARES_ROUNDING &&
+      (yield* seedableArtistsSteps(family)).length > 0
     )
-    // oxlint-disable-next-line unicorn/no-array-sort -- sorts the fresh array filter made; Hermes lacks toSorted
-    .sort((a, b) => b.plays - a.plays || b.songs - a.songs);
-  const { fresh, shown } = freshFirst(
+      eligible.push(family);
+    yield;
+  }
+  const ranked = yield* sortSteps(eligible, (a, b) => b.plays - a.plays || b.songs - a.songs);
+  const { fresh, shown } = yield* freshFirstSteps(
     ranked,
     avoid === undefined ? null : ({ family }) => avoid.mixes.get(genreMixId(family.key)),
   );
@@ -547,10 +572,17 @@ export const genreMixSeeds = (
   // The families are ranked by plays once there are any, whichever families
   // they fell in: a build then counts as from plays, so the first plays
   // (`discoverMixesDue`) bring one rebuild, not one on every visit.
-  const played = (library.plays ?? []).some((entry) => entry.countedPlays > 0);
+  let played = false;
+  for (const entry of library.plays ?? []) {
+    if (entry.countedPlays > 0) {
+      played = true;
+      break;
+    }
+    yield;
+  }
   for (const family of ranked) {
     if (!chosen.has(family)) continue;
-    const artists = seedArtists(family, random, avoid);
+    const artists = yield* seedArtistsSteps(family, random, avoid);
     const { key, name } = family.family;
     seeds.push({
       kind: "genre",
@@ -562,4 +594,22 @@ export const genreMixSeeds = (
     });
   }
   return seeds;
-};
+}
+
+export function* commonStyleSteps(styles: Iterable<string | null>): Generator<void, string | null> {
+  const counts = new Map<string, number>();
+  for (const style of styles) {
+    if (style) counts.set(style, (counts.get(style) ?? 0) + 1);
+    yield;
+  }
+  let common: string | null = null,
+    most = 0;
+  for (const [style, count] of counts) {
+    if (count > most) {
+      common = style;
+      most = count;
+    }
+    yield;
+  }
+  return common;
+}

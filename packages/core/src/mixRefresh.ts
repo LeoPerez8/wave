@@ -1,3 +1,4 @@
+import { sortSteps } from "./buildSteps.ts";
 /**
  * Pulling a mixes carousel sideways for new mixes (docs/spec.md, "Artist
  * mixes", "Genre mixes"): a refresh rebuilds the pulled section at once, and
@@ -193,3 +194,24 @@ export const mixPullCanStart = (scrollX: number): boolean => {
  */
 export const mixRefreshWaitNotice = (waitMs: number): string =>
   `Search limit reached · new mixes in about ${Math.max(1, Math.ceil(waitMs / 60_000))} min`;
+
+/** Source-order partition and stable shown-time ordering on bounded CPU steps. */
+export function* freshFirstSteps<T>(
+  items: readonly T[],
+  shownAt: ((item: T) => number | undefined) | null,
+): Generator<void, { fresh: T[]; shown: T[] }> {
+  const fresh: T[] = [],
+    shown: T[] = [];
+  for (const item of items) {
+    if (shownAt?.(item) === undefined) fresh.push(item);
+    else shown.push(item);
+    yield;
+  }
+  return {
+    fresh,
+    shown:
+      shownAt === null
+        ? shown
+        : yield* sortSteps(shown, (a, b) => (shownAt(a) ?? 0) - (shownAt(b) ?? 0)),
+  };
+}
