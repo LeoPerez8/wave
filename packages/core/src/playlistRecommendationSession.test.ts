@@ -403,3 +403,218 @@ test("refill recovery preserves held offer objects and keys when saved dismissal
   for (const index of [0, 1, 3, 4]) assert.equal(session.get().slots[index], before[index]);
   assert.equal(session.get().error, null);
 });
+
+/** A host whose turns ("paint", "free") wait until the test lets each go, in order. */
+const heldTurns = (events: string[]) => {
+  const waiting: (() => void)[] = [];
+  return {
+    yieldTurn: (kind: "paint" | "free") =>
+      new Promise<void>((resolve) => {
+        events.push(kind);
+        waiting.push(resolve);
+      }),
+    /** Lets the oldest waiting turn go, once the session got to it. */
+    next: async () => {
+      await new Promise((resolve) => setImmediate(resolve));
+      waiting.shift()!();
+      await new Promise((resolve) => setImmediate(resolve));
+    },
+  };
+};
+
+test("a tap's slot holds a placeholder from the tap on; saving, reading and ranking each wait for the host's turn", async () => {
+  const seed = track("seed");
+  const library = [seed, ..."abcdefgh".split("").map(track)];
+  let playlist = [seed];
+  const events: string[] = [];
+  const host = heldTurns(events);
+  let id = 0;
+  let saves = 0;
+  const session = playlistRecommendationSession({
+    newId: () => String(++id),
+    read: async () => {
+      events.push("read");
+      return { playlist, sources: { library, catalog: [], graph: null, now: 0 } };
+    },
+    dismiss: async () => {},
+    accept: async (offer) => {
+      events.push("save");
+      saves++;
+      playlist = [...playlist, offer.track];
+    },
+    yieldTurn: host.yieldTurn,
+  });
+  const renewing = session.renew();
+  await host.next(); // a full renewal ranks on its own turn after reading
+  await renewing;
+  events.length = 0;
+  const before = session.get().slots;
+  const adding = session.accept(before[2]!.key);
+  // Synchronously: the tap is acknowledged before any storage work runs.
+  assert.equal(session.get().pending, before[2]!.key);
+  assert.deepEqual(session.get().pendingSlots, [2]);
+  assert.equal(saves, 0);
+  // Repeated taps on any offer meanwhile change nothing.
+  assert.equal(await session.accept(before[2]!.key), false);
+  assert.equal(await session.dismiss(before[0]!.key), false);
+  await host.next(); // paint
+  assert.equal(saves, 1);
+  assert.equal(session.get().slots[2], null);
+  assert.deepEqual(session.get().pendingSlots, [2]);
+  for (const index of [0, 1, 3, 4]) assert.equal(session.get().slots[index], before[index]);
+  assert.equal(await session.accept(before[3]!.key), false);
+  await host.next(); // free
+  await host.next(); // paint, then rank
+  assert.equal(await adding, true);
+  assert.deepEqual(events, ["paint", "save", "free", "read", "paint"]);
+  assert.equal(saves, 1);
+  assert.equal(session.get().slots[2]?.track.id, "f");
+  assert.deepEqual(session.get().pendingSlots, []);
+  assert.equal(session.get().pending, null);
+  for (const index of [0, 1, 3, 4]) assert.equal(session.get().slots[index], before[index]);
+});
+
+test("an exhausted pool leaves the freed slot empty, without an error or a placeholder", async () => {
+  const seed = track("seed");
+  const library = [seed, ..."abcde".split("").map(track)];
+  let saves = 0;
+  let id = 0;
+  const session = playlistRecommendationSession({
+    newId: () => String(++id),
+    read: async () => ({
+      playlist: [seed],
+      sources: { library, catalog: [], graph: null, now: 0 },
+    }),
+    dismiss: async () => {
+      saves++;
+    },
+  });
+  await session.renew();
+  const before = session.get().slots;
+  assert.equal(await session.dismiss(before[1]!.key), true);
+  assert.equal(saves, 1);
+  assert.deepEqual(
+    session.get().slots.map((offer) => offer?.track.id ?? null),
+    ["a", null, "c", "d", "e"],
+  );
+  for (const index of [0, 2, 3, 4]) assert.equal(session.get().slots[index], before[index]);
+  assert.equal(session.get().error, null);
+  assert.deepEqual(session.get().pendingSlots, []);
+  assert.deepEqual(session.get().unfilled, []);
+});
+
+test("a failed save restores its offer in place and retries with one more write", async () => {
+  const seed = track("seed");
+  const library = [seed, ..."abcdefg".split("").map(track)];
+  let fail = true;
+  const written: string[] = [];
+  let id = 0;
+  const session = playlistRecommendationSession({
+    newId: () => String(++id),
+    read: async () => ({
+      playlist: [seed],
+      sources: { library, catalog: [], graph: null, now: 0 },
+    }),
+    dismiss: async () => {},
+    accept: async (offer) => {
+      if (fail) throw new Error("disk full");
+      written.push(offer.key);
+    },
+  });
+  await session.renew();
+  const before = session.get().slots;
+  assert.equal(await session.accept(before[3]!.key), false);
+  assert.deepEqual(session.get().slots, before);
+  assert.equal(session.get().slots[3], before[3]);
+  assert.equal(session.get().error, "save");
+  assert.deepEqual(session.get().pendingSlots, []);
+  fail = false;
+  assert.equal(await session.accept(before[3]!.key), true);
+  assert.equal(await session.accept(before[3]!.key), false);
+  assert.deepEqual(written, [before[3]!.key]);
+  assert.equal(session.get().error, null);
+  assert.deepEqual(session.get().unfilled, []);
+});
+
+test("a failed replacement keeps its slot's place; the retry holds a placeholder there and never saves again", async () => {
+  const seed = track("seed");
+  const library = [seed, ..."abcdefgh".split("").map(track)];
+  let unavailable = false;
+  let saves = 0;
+  const events: string[] = [];
+  const host = heldTurns(events);
+  let id = 0;
+  const session = playlistRecommendationSession({
+    newId: () => String(++id),
+    read: async () => {
+      if (unavailable) throw new Error("read failed");
+      return { playlist: [seed], sources: { library, catalog: [], graph: null, now: 0 } };
+    },
+    dismiss: async () => {
+      saves++;
+      unavailable = true;
+    },
+    yieldTurn: host.yieldTurn,
+  });
+  const renewing = session.renew();
+  await host.next();
+  await renewing;
+  const before = session.get().slots;
+  const dismissing = session.dismiss(before[2]!.key);
+  await host.next(); // paint, then save
+  await host.next(); // free, then the read fails
+  assert.equal(await dismissing, true);
+  assert.equal(session.get().slots[2], null);
+  assert.equal(session.get().error, "refill");
+  assert.deepEqual(session.get().unfilled, [2]);
+  assert.deepEqual(session.get().pendingSlots, []);
+  unavailable = false;
+  const retry = session.renew({ refillOnly: true });
+  assert.deepEqual(session.get().pendingSlots, [2]);
+  assert.equal(session.get().error, null);
+  assert.equal(session.get().loading, false);
+  await host.next(); // paint, then read
+  await host.next(); // paint, then rank
+  await retry;
+  assert.equal(saves, 1);
+  assert.equal(session.get().slots[2]?.track.id, "f");
+  assert.deepEqual(session.get().pendingSlots, []);
+  assert.deepEqual(session.get().unfilled, []);
+  for (const index of [0, 1, 3, 4]) assert.equal(session.get().slots[index], before[index]);
+});
+
+test("the next action's refill also fills a slot whose replacement failed before", async () => {
+  const seed = track("seed");
+  const library = [seed, ..."abcdefgh".split("").map(track)];
+  let unavailable = false;
+  let saves = 0;
+  let id = 0;
+  const session = playlistRecommendationSession({
+    newId: () => String(++id),
+    read: async () => {
+      if (unavailable) throw new Error("read failed");
+      return { playlist: [seed], sources: { library, catalog: [], graph: null, now: 0 } };
+    },
+    dismiss: async () => {
+      saves++;
+    },
+  });
+  await session.renew();
+  const before = session.get().slots;
+  unavailable = true;
+  assert.equal(await session.dismiss(before[2]!.key), true);
+  assert.deepEqual(session.get().unfilled, [2]);
+  unavailable = false;
+  const next = session.dismiss(before[0]!.key);
+  // Both freed slots hold a placeholder while the one refill fills them.
+  assert.deepEqual(session.get().pendingSlots, [0, 2]);
+  assert.equal(await next, true);
+  assert.equal(saves, 2);
+  assert.deepEqual(
+    session.get().slots.map((offer) => offer?.track.id ?? null),
+    ["f", "b", "g", "d", "e"],
+  );
+  for (const index of [1, 3, 4]) assert.equal(session.get().slots[index], before[index]);
+  assert.equal(session.get().error, null);
+  assert.deepEqual(session.get().unfilled, []);
+});
