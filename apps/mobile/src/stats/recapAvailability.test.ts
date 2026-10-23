@@ -1,4 +1,10 @@
-import type { RecapPeriod } from "@wave/core";
+import {
+  homeRecapVisibility,
+  parseKnownRecaps,
+  startHomeRecap,
+  storedKnownRecaps,
+  type RecapPeriod,
+} from "@wave/core";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { makeExternalStore } from "../lib/externalStore.ts";
@@ -7,6 +13,62 @@ import { shareRecapAvailability } from "./recapAvailability.ts";
 const flush = async () => {
   for (let i = 0; i < 12; i++) await Promise.resolve();
 };
+
+test("a Recap discovered during a visit is shown on the first render after restarting", async () => {
+  // The key-value boundary survives; every cache and visit below is a new session.
+  let stored: string | null = null;
+  const retained = {
+    get: () => parseKnownRecaps(stored),
+    set: (value: readonly RecapPeriod[] | undefined) => {
+      stored = storedKnownRecaps(value);
+    },
+  };
+  let answer: readonly RecapPeriod[] = [{ kind: "month", year: 2026, month: 9 }];
+  const jobs: (() => void)[] = [];
+  const session = () =>
+    shareRecapAvailability({
+      version: makeExternalStore(0),
+      retained,
+      read: async () => answer,
+      schedule: (ms, run) => {
+        if (ms === 0) jobs.push(run);
+        return () => {};
+      },
+    });
+  const refresh = async (cache: ReturnType<typeof session>) => {
+    const client = cache.attach(true, () => {});
+    for (const run of jobs.splice(0)) run();
+    await flush();
+    client.detach();
+  };
+  const first = session();
+  const visit = startHomeRecap({ available: first.get(), opened: [], visible: true });
+  await refresh(first);
+  assert.equal(
+    homeRecapVisibility(visit, { visible: true, available: first.get(), opened: [] }).period,
+    null,
+  );
+  const restarted = session();
+  assert.deepEqual(
+    startHomeRecap({ available: restarted.get(), opened: [], visible: true }).period,
+    {
+      kind: "month",
+      year: 2026,
+      month: 9,
+    },
+  );
+  assert.equal(
+    startHomeRecap({ available: restarted.get(), opened: ["2026-09"], visible: true }).period,
+    null,
+  );
+  answer = [];
+  await refresh(restarted);
+  assert.equal(
+    startHomeRecap({ available: session().get(), opened: [], visible: true }).period,
+    null,
+    "an empty refresh replaces previously discovered availability for the next launch",
+  );
+});
 
 test("hidden invalidations coalesce; shared settled clients retain good data through cancellation, stale answers and errors", async () => {
   const version = makeExternalStore(0);

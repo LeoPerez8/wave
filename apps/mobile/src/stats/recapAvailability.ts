@@ -22,6 +22,10 @@ export const shareRecapAvailability = (options: {
   readonly version: RecapHistoryVersion;
   readonly read: (now: number, signal: AbortSignal) => Promise<readonly RecapPeriod[]>;
   readonly schedule: (ms: number, run: () => void) => () => void;
+  readonly retained?: {
+    readonly get: () => readonly RecapPeriod[] | undefined;
+    readonly set: (value: readonly RecapPeriod[] | undefined) => void;
+  };
   readonly now?: () => number;
   readonly monotonic?: () => number;
   readonly zone?: () => string;
@@ -30,7 +34,7 @@ export const shareRecapAvailability = (options: {
   const monotonic = options.monotonic ?? (() => performance.now());
   const zone = options.zone ?? (() => Intl.DateTimeFormat().resolvedOptions().timeZone);
   const clients = new Set<{ active: boolean; changed: () => void }>();
-  let value: readonly RecapPeriod[] | undefined;
+  let value: readonly RecapPeriod[] | undefined = options.retained?.get();
   let cachedFor: string | undefined;
   let wanted: string;
   let clockVersion = 0;
@@ -110,6 +114,7 @@ export const shareRecapAvailability = (options: {
             failedFor = undefined;
             if (!same(next)) {
               value = next;
+              options.retained?.set(next);
               for (const client of clients) client.changed();
             }
           },

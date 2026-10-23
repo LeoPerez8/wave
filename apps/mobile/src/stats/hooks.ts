@@ -116,19 +116,25 @@ export const useRecaps = useRecapAvailability;
 export const useRecapToAnnounce = (painted: boolean): RecapPeriod | null => {
   const sight = useScreenSight();
   useRecapAvailability(painted);
+  const readVisible = useCallback(
+    () => sight.visible() && AppState.currentState === "active",
+    [sight],
+  );
   const [announcement, setAnnouncement] = useState(() =>
-    startHomeRecap(
-      knownRecaps(),
-      getOpenedRecaps(),
-      sight.visible() && AppState.currentState === "active",
-    ),
+    startHomeRecap({
+      available: knownRecaps(),
+      opened: getOpenedRecaps(),
+      visible: readVisible(),
+    }),
   );
   useEffect(() => {
     const update = () => {
-      const visible = sight.visible() && AppState.currentState === "active";
-      const available = knownRecaps();
-      const opened = getOpenedRecaps();
-      setAnnouncement((current) => homeRecapVisibility(current, visible, available, opened));
+      const input = {
+        visible: readVisible(),
+        available: knownRecaps(),
+        opened: getOpenedRecaps(),
+      };
+      setAnnouncement((current) => homeRecapVisibility(current, input));
     };
     const stop = sight.subscribe(update);
     const activity = AppState.addEventListener("change", update);
@@ -137,7 +143,7 @@ export const useRecapToAnnounce = (painted: boolean): RecapPeriod | null => {
       stop();
       activity.remove();
     };
-  }, [sight]);
+  }, [sight, readVisible]);
   return announcement.period;
 };
 
