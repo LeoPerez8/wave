@@ -1,5 +1,6 @@
 /** Platform-free collection seam. React/native adapters supply timestamps, never log text. */
 import {
+  TAB_PATH,
   TIMING_BUDGETS,
   tabOfPath,
   slowTapLine,
@@ -30,6 +31,8 @@ interface Pending {
   kind: TimingKind;
   from: string;
   to: string;
+  /** Where the tap asked to go: `to` follows the commits, this stays. */
+  requested: string;
   at: number;
   tap: boolean;
   measurement: { kind: TimingKind; responseMs?: number; firstFrameMs?: number };
@@ -142,6 +145,7 @@ export const createTimingSession = (ports: Ports) => {
       kind,
       from,
       to,
+      requested: to,
       at,
       tap,
       measurement,
@@ -182,6 +186,7 @@ export const createTimingSession = (ports: Ports) => {
       pending.measurement.kind = kind;
       pending.kind = kind;
       pending.to = to;
+      pending.requested = to;
       pending.screen = kind !== "choiceCard";
       return pending.id;
     },
@@ -195,18 +200,17 @@ export const createTimingSession = (ports: Ports) => {
       if (!p.screen) return null;
       if (p.kind === "tab") {
         const target =
-          p.to
+          p.requested
             .split("?")[0]!
             .replace(/\/\([^/]+\)/g, "")
             .replace(/\/$/, "") || "/";
-        // A restored stack can commit its pushed screen instead of the tab root.
-        // Only a commit belonging to a different tab is an intermediate switch.
-        if (
-          path !== target &&
-          !(target !== "/" && path.startsWith(`${target}/`)) &&
-          tabOfPath(path) !== null
-        )
-          return null;
+        // A restored stack can commit its pushed screen instead of the tab root. Home and
+        // Search show screens pushed over the tabs; every other tab keeps its own under its
+        // path, so any other commit is an intermediate one on the way there.
+        const inTarget = path === target || (target !== "/" && path.startsWith(`${target}/`));
+        const showsPushed =
+          (target === TAB_PATH.index || target === TAB_PATH.search) && tabOfPath(path) === null;
+        if (!inTarget && !showsPushed) return null;
       }
       p.to = path;
       p.response ??= ports.now();

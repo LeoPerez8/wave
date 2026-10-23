@@ -219,6 +219,21 @@ test("an intermediate tab commit cannot become the last tap's destination or fir
   assert.match(lines[0]!, /to \/songs from \/: response 130 ms, first frame 160 ms/);
 });
 
+test("a pushed screen committed on the way to a section tab is intermediate", () => {
+  const { session, at, lines } = setup();
+  const id = session.begin("tab", "/(tabs)/songs");
+  at(10);
+  assert.equal(session.routeCommitted("/library/album/12"), null);
+  assert.equal(session.active()?.to, "/(tabs)/songs");
+  at(130);
+  assert.equal(session.routeCommitted("/songs"), id);
+  at(160);
+  session.frame(id);
+  session.content(id);
+  session.end(id);
+  assert.match(lines[0]!, /to \/songs from \/: response 130 ms, first frame 160 ms/);
+});
+
 test("switching to Home or Search with a pushed screen still settles the tab timing", () => {
   for (const target of ["/", "/(tabs)/search"]) {
     const { session, at, lines } = setup();
