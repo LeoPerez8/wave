@@ -1,7 +1,7 @@
 /** Production startup work, with injectable free turns for desktop work-count/clock tests. */
 import {
   finishPlaylistImportSteps,
-  libraryFinderSteps,
+  libraryImportFinderSteps,
   unsearchedSongJob,
   reconcileScanSteps,
   replacementDuplicatesSteps,
@@ -175,7 +175,7 @@ export const readImportDownloadInput = (
     yield* turn;
     if (!current()) return null;
     const library = yield* store.listSongs;
-    const find = yield* runSteps(libraryFinderSteps(library), turn);
+    const find = yield* runSteps(libraryImportFinderSteps(library), turn);
     const matched = yield* runSteps(
       (function* () {
         const ids = new Set<string>();

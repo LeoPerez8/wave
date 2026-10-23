@@ -17,6 +17,8 @@ export interface SharedRead<A, R> {
   readonly get: Effect.Effect<A, unknown, R>;
   /** Forgets the answer: the next ask reads again. */
   readonly forget: () => void;
+  /** Cancels work and releases waiters permanently. */
+  readonly dispose: () => void;
 }
 
 /**
@@ -27,24 +29,71 @@ export const sharedRead = <A, E, R>(
   read: Effect.Effect<A, E, R>,
   { keepMs, now = Date.now }: { readonly keepMs?: number; readonly now?: () => number } = {},
 ): SharedRead<A, R> => {
-  let shared: { readonly at: number; readonly answer: Promise<A> } | null = null;
+  type Entry = {
+    readonly at: number;
+    readonly answer: Promise<A>;
+    readonly controller: AbortController;
+    users: number;
+    done: boolean;
+  };
+  let shared: Entry | null = null;
+  let disposed = false;
+  const forget = () => {
+    const entry = shared;
+    shared = null;
+    if (entry !== null && !entry.done) entry.controller.abort();
+  };
   const get = Effect.gen(function* () {
+    if (disposed) return yield* Effect.fail(new Error("Shared read disposed"));
     const at = now();
-    if (shared === null || (keepMs !== undefined && at - shared.at > keepMs)) {
+    if (shared !== null && shared.done && keepMs !== undefined && at - shared.at > keepMs) forget();
+    if (shared === null) {
       const context = yield* Effect.context<R>();
-      const entry = { at, answer: Effect.runPromiseWith(context)(read) };
+      const controller = new AbortController();
+      const entry: Entry = {
+        at,
+        answer: Effect.runPromiseWith(context)(read, { signal: controller.signal }),
+        controller,
+        users: 0,
+        done: false,
+      };
       shared = entry;
-      entry.answer.catch(() => {
-        if (shared === entry) shared = null;
-      });
+      void entry.answer.then(
+        () => {
+          entry.done = true;
+        },
+        () => {
+          entry.done = true;
+          if (shared === entry) shared = null;
+        },
+      );
     }
-    const { answer } = shared;
-    return yield* Effect.tryPromise({ try: () => answer, catch: (cause) => cause });
+    const entry = shared;
+    entry.users++;
+    const answer = yield* Effect.tryPromise({
+      try: () => entry.answer,
+      catch: (cause) => cause,
+    }).pipe(
+      Effect.ensuring(
+        Effect.sync(() => {
+          entry.users--;
+          if (entry.users === 0 && !entry.done) {
+            if (shared === entry) shared = null;
+            entry.controller.abort();
+          }
+        }),
+      ),
+    );
+    if (disposed || shared !== entry)
+      return yield* Effect.fail(new Error("Shared read invalidated"));
+    return answer;
   });
   return {
     get,
-    forget: () => {
-      shared = null;
+    forget,
+    dispose: () => {
+      disposed = true;
+      forget();
     },
   };
 };

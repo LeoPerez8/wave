@@ -1,0 +1,44 @@
+{
+  "measuredAfterCommit": "ae61f2b2e4a4f994ca088696bb8eed4c53d2d478",
+  "measuredAfterTree": "78e32d5f5a2fde379a0f99e5cbff2e2e5c2f4e9c",
+  "beforeCommit": "460e39ff0cba6f50e7a456a77d6e99813295ebaa",
+  "beforeWorktree": "/home/servidor-azul/.t3/scratch/wave-implement-spec-3781dabb/592-before",
+  "r6Commit": "9b9d1ff6a31bcef6e8821621dde81c99aa466679",
+  "r6Reuse": false,
+  "reason": "R6 graph tracing serialized absent task slots as null. Integrated #588/#587 dependencies and two corrected mix CPU boundaries also change the measured source; all three benches are recaptured. R6 remains scratch-only.",
+  "historicalFidelity": [
+    "Actual selected-revision modules imported through loadWorktreeModule; no source rewriting.",
+    "LibraryStore read Effects remain lazy. Instrumentation wraps each read inside Effect.sync and invokes it only when yielded.",
+    "Platform substitution is restricted to LibraryStore database bootstrap; selected-revision Core and SQL modules are retained.",
+    "Graph hash includes ordered names and every ordered edge/weight. Fixture populates all three evidence sources identically.",
+    "Mix hash includes complete saved Artist/Genre sections, seeds, familiar shares, metadata and every seed/variety draw. Identical null taste isolates #594 from open #593 source work.",
+    "Home return compares complete known-video answers and saved mix blends/captions; scope is both mix sections, ancillary feature focus work excluded.",
+    "Every timed run is checked within revision; runner asserts resultKey equality across revisions and all three sizes.",
+    "Read-only replays report zero notifications; no mounted subscriber writes or React commit count is claimed."
+  ],
+  "sha256": {
+    "apps/mobile/bench/fastAgain/store.ts": "9146352d63a160ecb1d212ac644b1c25130d6c67c197a2ba3ee05f87a3430fda",
+    "apps/mobile/bench/fastAgain/runner.ts": "77123658766cb5548c43fff8c8b572b6508966c57ac4d43d18e4f734fdedb8a6",
+    "apps/mobile/bench/fastAgain/benches/graphSlices.ts": "567182934e24af0e693bfd1b88db699d02de440f88c8e1da2246f88032788f8f",
+    "apps/mobile/bench/fastAgain/benches/mixBuild.ts": "715bf5e015d415ee3a3fc2a07ba50deb115fd281b4567c2afecdea99b1203a8e",
+    "apps/mobile/bench/fastAgain/benches/homeOpening.ts": "a7360812b68c7b5e7a59cd9550348df3d5c40b3b4ab7fdfc7648f6a80467cdba",
+    "apps/mobile/src/home/artistGraph.ts": "dd2141774dfbf9d0fbd56bb3fd8d2de91086007e007ebd9d740fe75e48ea40da",
+    "apps/mobile/src/library/db/artistGraph.ts": "7b716a8cf3b64bc43e732a8d16d30a3592c01d4c1cc4a49e2c1ed98b3bdf13f4",
+    "apps/mobile/src/library/db/ytArtists.ts": "5579e673c4978fd576b2a528e5c1d0ac5e56112da533b2da2b2ecce7643c3eba",
+    "apps/mobile/src/home/mixInputs.ts": "7bc76ec44c984af35a19df53f81bc2b0387b4dcbc99d9e42b762f8857c3fe507",
+    "apps/mobile/src/library/db/mixInputs.ts": "0759fc6466b7a8a34334ffea89d203d14616dd175354525c24b88e0ff1f49ff6",
+    "apps/mobile/src/library/db/tastePages.ts": "5f25116152509e72cad5f8dae7883c66827b233a9c3c54b0f75c7f5c258f25b5",
+    "apps/mobile/src/lib/stepped.ts": "5e9fb13593087715230df7a4e742a892e34e49793619aeb54daa11b24bd64863",
+    "packages/core/src/artistGraphBuild.ts": "5181ef54b37d9451a313e620453d01a9d5c9394eb0c53a474a59bb24c43b2b6d",
+    "packages/core/src/discoverMixLevels.ts": "8ea4e8826c195060aa13d6ef76ff8619fa67e710e1231bee73cf338b1856c1f6",
+    "packages/core/src/genreAffinity.ts": "b1473cf2962e0b02db773157efbb276f6c96591d85c7c2f82842147b932cceef",
+    "apps/mobile/src/library/LibraryStore.ts": "ccfe043f2f35b115b49ea295ea7846370feef94d52da3e6917753733c8c0bbfe"
+  },
+  "steppedMatches593": true,
+  "evidenceSha256": {
+    "594-graphSlices-desktop.jsonl": "9f21994d0148ea75cf0643bfa639a637ee910ae36b283c1ad646bd49387ab746",
+    "594-mixBuild-desktop.jsonl": "31a0cff32c8aebfc9b0309995a3cfdf0bfc0698e29c60078a8b29dc0ccc20563",
+    "594-homeOpening-desktop.jsonl": "0c919f9669e242c20bd67e33f04adefafbcd8f7ea91367c057abdab4266dabfa"
+  },
+  "postMeasurementChanges": "Only tests and evidence/docs after ae61f2b2; no measured production or harness runtime file changed."
+}

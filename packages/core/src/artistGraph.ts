@@ -8,6 +8,7 @@
  * Closeness goes both ways. The app derives the graph once per session; the
  * mix engine reads a seed's neighbourhood from it.
  */
+import { finishSteps, mapSteps, sortSteps } from "./buildSteps.ts";
 
 import { catalogSeedKey, type CatalogSong } from "./candidateCatalog.ts";
 import type { PlayEvent } from "./playEvents.ts";
@@ -231,15 +232,19 @@ export interface ArtistNeighbourhoodOptions {
 }
 
 /** [closeness]'s artists as neighbours [hops] out, closest first (by key on a tie). */
-const ranked = (
+function* rankedSteps(
   graph: ArtistGraph,
   closeness: ReadonlyMap<string, number>,
   hops: number,
-): ArtistNeighbour[] =>
-  [...closeness]
-    .map(([key, value]) => ({ key, name: graph.names.get(key) ?? key, closeness: value, hops }))
-    // oxlint-disable-next-line unicorn/no-array-sort -- sorts the fresh array map made; Hermes lacks toSorted
-    .sort((a, b) => b.closeness - a.closeness || (a.key < b.key ? -1 : 1));
+): Generator<void, ArtistNeighbour[]> {
+  const values = yield* mapSteps(closeness, ([key, value]) => ({
+    key,
+    name: graph.names.get(key) ?? key,
+    closeness: value,
+    hops,
+  }));
+  return yield* sortSteps(values, (a, b) => b.closeness - a.closeness || (a.key < b.key ? -1 : 1));
+}
 
 /**
  * The artists around [seeds] in [graph], closest first, the seeds left out:
@@ -254,11 +259,17 @@ const ranked = (
 export const artistNeighbourhood = (
   graph: ArtistGraph,
   seeds: readonly string[],
+  options: ArtistNeighbourhoodOptions = {},
+): ArtistNeighbour[] => finishSteps(artistNeighbourhoodSteps(graph, seeds, options));
+export function* artistNeighbourhoodSteps(
+  graph: ArtistGraph,
+  seeds: readonly string[],
   { hops = ARTIST_NEIGHBOURHOOD_HOPS, decay = ARTIST_HOP_DECAY }: ArtistNeighbourhoodOptions = {},
-): ArtistNeighbour[] => {
+): Generator<void, ArtistNeighbour[]> {
   const reached = new Set<string>();
   let frontier = new Map<string, number>();
   for (const seed of seeds) {
+    yield;
     const key = catalogSeedKey(seed);
     if (key === null) continue;
     reached.add(key);
@@ -271,23 +282,29 @@ export const artistNeighbourhood = (
     const next = new Map<string, number>();
     for (const [artist, closeness] of frontier)
       for (const [other, edge] of graph.edges.get(artist) ?? []) {
+        yield;
         if (reached.has(other)) continue;
         next.set(other, Math.max(next.get(other) ?? 0, closeness * edge * kept));
       }
     let closest = 0;
     let least = 1;
     for (const closeness of next.values()) {
+      yield;
       closest = Math.max(closest, closeness);
       least = Math.min(least, closeness);
     }
     const scale = hop > 1 && closest >= leastBefore ? (decay * leastBefore) / closest : 1;
     for (const [other, closeness] of next) {
+      yield;
       reached.add(other);
       next.set(other, closeness * scale);
     }
-    around.push(...ranked(graph, next, hop));
+    for (const neighbour of yield* rankedSteps(graph, next, hop)) {
+      around.push(neighbour);
+      yield;
+    }
     leastBefore = least * scale;
     frontier = next;
   }
   return around;
-};
+}

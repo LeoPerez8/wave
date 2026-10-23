@@ -10,9 +10,9 @@
 
 import { artistPhotoName } from "./artistPhoto.ts";
 import type { DiscoverLibrarySong, DiscoverMixSeed, DiscoverSeedArtist } from "./discoverMixes.ts";
-import { commonStyle, songFamilies, songStyle } from "./genreMixes.ts";
+import { commonStyleSteps, commonStyle, songFamilies, songStyle } from "./genreMixes.ts";
 import { isRecord, readStoredRecord } from "./storedJson.ts";
-import { libraryArtistFinder, ytArtistQuery } from "./ytArtist.ts";
+import { libraryArtistFinderSteps, libraryArtistFinder, ytArtistQuery } from "./ytArtist.ts";
 
 /**
  * An artist's genre profile: each genre family's share of their songs (by
@@ -336,3 +336,98 @@ export const parseArtistProfiles = (stored: string | null): ArtistProfiles => {
     }),
   );
 };
+
+/** Eager profiles/styles avoid a first lookup doing a whole artist's work inside a candidate step. */
+export function* genreProfileSteps(
+  songs: Iterable<GenreTagged>,
+): Generator<void, GenreProfile | null> {
+  const weights = new Map<string, number>();
+  let total = 0;
+  for (const song of songs) {
+    const families = songFamilies(song);
+    for (const family of families)
+      weights.set(family.key, (weights.get(family.key) ?? 0) + 1 / families.length);
+    if (families.length > 0) total++;
+    yield;
+  }
+  if (total === 0) return null;
+  const result = new Map<string, number>();
+  for (const [key, weight] of weights) {
+    result.set(key, weight / total);
+    yield;
+  }
+  return result;
+}
+function* songsByArtistSteps(
+  library: GenreProfileLibrary,
+): Generator<void, Map<number, GenreTagged[]>> {
+  const songs = new Map<number, GenreTagged[]>();
+  for (const song of library.songs) {
+    for (const id of song.artistIds) {
+      const of = songs.get(id) ?? [];
+      of.push(song);
+      songs.set(id, of);
+      yield;
+    }
+    yield;
+  }
+  return songs;
+}
+export function* libraryMixProfilesSteps(
+  library: GenreProfileLibrary,
+): Generator<void, { profileOf: GenreProfileOf; styleOf: StyleOf }> {
+  const songs = yield* songsByArtistSteps(library);
+  const find = yield* libraryArtistFinderSteps(library.artists);
+  const profiles = new Map<number, GenreProfile | null>();
+  const styles = new Map<number, string | null>();
+  for (const artist of library.artists) {
+    const of = songs.get(artist.id) ?? [];
+    profiles.set(artist.id, yield* genreProfileSteps(of));
+    styles.set(
+      artist.id,
+      yield* commonStyleSteps(
+        (function* () {
+          for (const song of of) yield songStyle(song);
+        })(),
+      ),
+    );
+    yield;
+  }
+  return {
+    profileOf: (name) => {
+      const artist = find(name);
+      return artist === null ? undefined : (profiles.get(artist.id) ?? null);
+    },
+    styleOf: (name) => {
+      const artist = find(name);
+      return artist === null ? undefined : (styles.get(artist.id) ?? null);
+    },
+  };
+}
+export function* mixSeedProfileSteps(
+  seed: DiscoverMixSeed,
+  library: GenreProfileLibrary,
+  profileOf: GenreProfileOf,
+): Generator<void, GenreProfile | null> {
+  if (seed.kind !== "genre" || seed.artists === undefined) return profileOf(seed.name) ?? null;
+  const songs = yield* songsByArtistSteps(library);
+  return yield* genreProfileSteps(
+    (function* () {
+      for (const artist of seed.artists!) for (const song of songs.get(artist.id) ?? []) yield song;
+    })(),
+  );
+}
+export function* mixSeedStyleSteps(
+  seed: DiscoverMixSeed,
+  library: GenreProfileLibrary,
+  styleOf: StyleOf,
+): Generator<void, string | null> {
+  if (seed.kind !== "genre" || seed.artists === undefined) return styleOf(seed.name) ?? null;
+  const songs = yield* songsByArtistSteps(library);
+  return yield* commonStyleSteps(
+    (function* () {
+      for (const artist of seed.artists!)
+        for (const song of songs.get(artist.id) ?? []) yield songStyle(song);
+    })(),
+  );
+}

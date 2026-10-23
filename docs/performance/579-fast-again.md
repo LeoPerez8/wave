@@ -1237,3 +1237,109 @@ CPU iterators target four ms plus operation headroom, while the named indivisibl
 source/native operations remain exceptions. The final capture excludes the
 interrupted preliminary run and the semantic smoke run. The owner's exported
 cold-launch first-tap log and native/device acceptance remain **unverified**.
+
+## #594: versioned Home mixes and bounded shared graph
+
+Measured production/harness commit: `ae61f2b2e4a4f994ca088696bb8eed4c53d2d478`;
+before: actual v0.19.0-ti `460e39ff0cba6f50e7a456a77d6e99813295ebaa`.
+Node v26.8.2 + sql.js, Linux x64, shared eight-core host, 11 timed runs after
+warmup at 1,000 / 12,000 / 50,000 songs (10,000 / 54,000 / 200,000 plays).
+These are desktop task boundaries, not Hermes, native paint or phone frame times.
+R6 evidence was recaptured because its graph tracing emitted null maxima and
+integrated source/CPU boundaries changed. Exact source/tree and evidence hashes,
+loader fidelity, and scope are recorded in
+[`594-source-audit.json`](results/594-source-audit.json).
+
+The graph reader uses indexed keyset projection pages, including cursor advance
+through unreadable catalog/pages and deleted events. Core derives names, session
+pairs and weighted edges in cancellable generator steps. Every cold graph consumer
+enters the shared settlement/free-turn gate; warm and concurrent readers reuse the
+same source version. Invalidation and last-consumer cancellation abort old work;
+disposal releases all waiters. The actual store, explicit schedulers and shared
+fixture are tested, including a cold playlist and mix/Magic Queue graph request.
+The playlist input/ranking/session lifecycle remains #599's work.
+
+Home's automatic mix jobs run serially after settlement and keep saved mixes
+visible. A source change restarts an overtaken build. Known videos share a version
+until a track/download, play, playlist or streamed-song change; favorites/folders
+preserve it. An unchanged Home mix return executes zero SQL. Mix input/catalog
+reads and Core ranking/seeding/indexing/sorting yield. The final audit additionally
+fixed familiar-share artist lookup and the empty-credit profile walk, with public
+Core work-count tests that first failed at 1,400 visits in one operation.
+
+The historical loader remains lazy and loads the selected revision's Core and SQL
+modules without rewriting source. The graph fixture populates 1,200 catalog songs,
+2,400 radios and 80 saved similar pages alongside the Library/history. Complete
+ordered graph names and edge maps/weights match ti at all three sizes. Mix keys
+include complete saved Artist/Genre sections, familiar shares, seeds, metadata,
+variety and every seed/variety random draw. Home keys include complete visible
+payloads, not counts alone. Every run and cross-revision comparison passes.
+
+### Graph task work
+
+Raw evidence: [`594-graphSlices-desktop.jsonl`](results/594-graphSlices-desktop.jsonl).
+SQL rows are returned rows, not SQLite VM visits. Columns show before → after;
+longest is the maximum task across all 11 timed runs. Total is median elapsed replay.
+
+| Songs  | SQL rows        | Statements | Mean CPU ms         | Total ms            | Longest task ms  | Max SQL rows in one task |
+| ------ | --------------- | ---------- | ------------------- | ------------------- | ---------------- | ------------------------ |
+| 1,000  | 14870 → 13680   | 8 → 193    | 120.508 → 159.009   | 101.399 → 141.751   | 66.823 → 1.494   | 11190 → 128              |
+| 12,000 | 71960 → 57680   | 8 → 879    | 649.782 → 819.364   | 483.728 → 712.794   | 765.511 → 5.378  | 68280 → 128              |
+| 50,000 | 263180 → 203680 | 8 → 3161   | 2374.084 → 2375.836 | 1793.533 → 2155.249 | 1641.948 → 5.338 | 259500 → 128             |
+
+### Daily Artist then Genre builds
+
+Raw evidence: [`594-mixBuild-desktop.jsonl`](results/594-mixBuild-desktop.jsonl).
+This replay uses the actual store/Core and production stepped adapters. It isolates
+#594 with identical null taste, offline saved catalog inputs and enough played seeds
+that neither revision needs similar-page fallback. React/KV writes, network/harvest
+and scheduler wait time are excluded. Increased returned rows/statement count reflect
+paged sources and genre/credit projections; no reduction in total work is claimed.
+
+| Songs  | SQL rows        | Statements | Mean CPU ms         | Total ms            | Longest task ms   |
+| ------ | --------------- | ---------- | ------------------- | ------------------- | ----------------- |
+| 1,000  | 18930 → 27840   | 19 → 315   | 182.143 → 348.133   | 150.313 → 309.478   | 43.243 → 4.69     |
+| 12,000 | 108140 → 149280 | 19 → 1605  | 2362.654 → 2072.394 | 3027.94 → 1561.411  | 1489.436 → 25.773 |
+| 50,000 | 410320 → 556800 | 19 → 5931  | 7395.217 → 7136.573 | 6602.192 → 6377.353 | 4256.614 → 6.51   |
+
+### Unchanged Home mix return
+
+Raw evidence: [`594-homeOpening-desktop.jsonl`](results/594-homeOpening-desktop.jsonl).
+Both saved mix sections run their due checks and complete blends/captions with the
+shared known-video answer. Mounted local/pick payloads are retained; ancillary
+feature-owned focus work is outside this return case.
+
+| Songs  | SQL rows | Statements | Mean CPU ms   | Total ms      | Longest task ms |
+| ------ | -------- | ---------- | ------------- | ------------- | --------------- |
+| 1,000  | 100 → 0  | 2 → 0      | 0.792 → 0.234 | 0.729 → 0.228 | 0.786 → 0.248   |
+| 12,000 | 1200 → 0 | 2 → 0      | 5.221 → 0.525 | 4.305 → 0.34  | 6.861 → 0.519   |
+| 50,000 | 5000 → 0 | 2 → 0      | 17.937 → 0.47 | 17.48 → 0.451 | 18.853 → 0.565  |
+
+All replays above are read-only and report **zero notifications**; this is not a
+React commit counter. Raw files also retain synchronous-total and longest-task
+percentiles, task counts, page work and complete semantic keys.
+
+### Cooperative target and remaining acceptance
+
+`stepped.ts` is byte-identical to integrated #593: a 4 ms budget, 512-operation cap,
+fresh task before each CPU stage, and iterator closure on cancellation. The graph's
+longest tasks in this capture were 1.494 / 5.378 / 5.338 ms. Mix tasks reached
+4.690 / **25.773** / **6.510** ms. At 12k the per-run longest-task median/p90 was
+4.013 / 13.377 ms; at 50k it was 4.545 / 6.100 ms. These overshoots are retained.
+The capture does not identify their individual SQL/GC/OS cause, and the cooperative
+adapter cannot preempt an individual operation or promise a hardware 6 ms maximum.
+Paging and extra yields also have measurable total/CPU overhead.
+
+Home's separate `firstHomeOfDay` scenario still includes #593's unpaged songs,
+artists and history, as well as other feature-owned readers. Its after longest
+tasks were **20.075 / 186.368 / 867.441 ms**; cold-Home longest tasks were
+**17.890 / 88.293 / 309.581 ms**. These are not claimed fixed by #594.
+**#593 source paging and source/6 ms acceptance remain open.** #594 provides tested
+`tastePlaysPage` (including endReason), `tasteFavoritesPage`, `tasteDownloadsPage`
+and `mixSongsPage(..., { genres: false })` for that follow-up; its consumers were
+not migrated here. #598 still owns ancillary Recap reads.
+
+Android/Hermes, native frame behavior and TalkBack have not been exercised for this
+change. No device responsiveness or strict 6 ms guarantee is inferred from this
+shared-host desktop capture. The implementation and source/work-count checks are
+reviewable independently of that remaining device evidence.

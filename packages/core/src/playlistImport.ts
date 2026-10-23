@@ -22,7 +22,7 @@ import type { YtAlbumSong } from "./ytDiscover.ts";
 import {
   joinArtists,
   libraryFinder,
-  libraryFinderSteps,
+  libraryImportFinderSteps,
   type LibrarySongKey,
   type YtSong,
 } from "./ytMusic.ts";
@@ -664,7 +664,7 @@ export function* planLinkImportSteps<
   S extends YtSong,
   L extends LibrarySongKey & { readonly id: number },
 >(source: LinkedSource<S>, library: readonly L[]): Generator<void, LinkImportPlan<S>> {
-  const find = yield* libraryFinderSteps(library);
+  const find = yield* libraryImportFinderSteps(library);
   // Visit both arrays without an unbounded synchronous concatenation for Liked Songs.
   const streams = source.service === "ytMusic" ? source.playlist : null;
   const listedLength = source.playlist.songs.length + (streams?.repeats.length ?? 0);

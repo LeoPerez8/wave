@@ -1,36 +1,28 @@
+import { readMixInputs } from "./mixInputs";
 /**
  * What Home's mixes know of the owner's songs (docs/spec.md, "Artist mixes"):
  * a build's indexes (Core's `mixKnownSongs`), read once and shared by every
  * section's build, and the videos re-blends leave out of a mix's new songs
- * (`discoverMixKeep`'s `knownVideos`), read again at each re-blend.
+ * (`discoverMixKeep`'s `knownVideos`), shared until a relevant source changes.
  */
-import { mixKnownSongs, statsWindow, type MixKnownSongs, type PlayTotals } from "@wave/core";
+import type { MixKnownSongs, PlayedSeedArtist, PlayTotals } from "@wave/core";
 import * as Effect from "effect/Effect";
 import { useSyncExternalStore } from "react";
 
-import { freeTurnEffect } from "@/lib/backgroundWork";
+import { freeTurnEffect, settledTurnEffect } from "@/lib/backgroundWork";
 import { makeExternalStore } from "@/lib/externalStore";
 import { sharedRead } from "@/lib/sharedRead";
 import { LibraryStore, type ArtistRow, type SongRow } from "@/library/LibraryStore";
+import { onLibraryChange } from "@/library/libraryChanges";
+import { createKnownVideosRead } from "./knownVideosRead";
 import { appRuntime } from "@/library/runtime";
 
 /** A Library song as a mix build reads it: with every value of its genre tag when it has several. */
 export type MixSong = SongRow & { readonly genres?: readonly string[] };
 
-/** [songs] with every value of their multi-value genre tags ([genres], by song id). */
-const withGenres = (
-  songs: readonly SongRow[],
-  genres: ReadonlyMap<number, readonly string[]>,
-): readonly MixSong[] =>
-  genres.size === 0
-    ? songs
-    : songs.map((song) => {
-        const values = genres.get(song.id);
-        return values === undefined ? song : { ...song, genres: values };
-      });
-
 /** What a mix build reads of the Library and of what the owner knows. */
 export interface MixIndexes {
+  readonly topArtists: readonly PlayedSeedArtist[];
   /** The Library's songs, each with every value of a multi-value genre tag (Genre mixes count each). */
   readonly songs: readonly MixSong[];
   readonly artists: readonly ArtistRow[];
@@ -46,20 +38,7 @@ export interface MixIndexes {
  */
 const readIndexes = Effect.gen(function* () {
   const store = yield* LibraryStore;
-  const genres = new Map((yield* store.listSongGenres).map((song) => [song.id, song.genres]));
-  const songs = withGenres(yield* store.listSongs, genres);
-  yield* freeTurnEffect;
-  const artists = yield* store.listArtists;
-  const plays = yield* store.trackPlayTotals(statsWindow("all", Date.now()));
-  yield* freeTurnEffect;
-  const playedRecordingKeys = yield* store.playedRecordingKeys;
-  yield* freeTurnEffect;
-  const streamed = yield* store.streamedSongs;
-  const playlisted = yield* store.playlistedSongs;
-  yield* freeTurnEffect;
-  const known = mixKnownSongs({ library: songs, playedRecordingKeys, streamed, playlisted });
-  yield* freeTurnEffect;
-  return { songs, artists, plays, known } satisfies MixIndexes;
+  return yield* readMixInputs(store, freeTurnEffect, Date.now());
 });
 
 /**
@@ -67,10 +46,11 @@ const readIndexes = Effect.gen(function* () {
  * start within a minute (Home's sections build on the same visit). A failed
  * read isn't kept.
  */
-export const mixIndexes: Effect.Effect<MixIndexes, unknown, LibraryStore> = sharedRead(
-  readIndexes,
-  { keepMs: 60_000 },
-).get;
+const sharedIndexes = sharedRead(readIndexes, { keepMs: 60_000 });
+onLibraryChange((change) => {
+  if (["tracks", "plays", "playlists", "streamed"].includes(change.kind)) sharedIndexes.forget();
+});
+export const mixIndexes: Effect.Effect<MixIndexes, unknown, LibraryStore> = sharedIndexes.get;
 
 /**
  * The videos the owner knows now (`LibraryStore.knownVideos`), as of the
@@ -79,19 +59,31 @@ export const mixIndexes: Effect.Effect<MixIndexes, unknown, LibraryStore> = shar
 const knownVideos = makeExternalStore<ReadonlySet<string> | null>(null);
 
 /**
- * Reads the videos the owner knows again: a re-blend (a level change,
+ * Refreshes only a changed source version: a re-blend (a level change,
  * opening a mix's page or menu, Home coming into focus) leaves the new songs
  * played or added to a playlist since the build out. Offline; a failed read
  * keeps the last ones.
  */
+const videoRead = createKnownVideosRead(
+  Effect.gen(function* () {
+    yield* settledTurnEffect;
+    return yield* (yield* LibraryStore).knownVideos;
+  }),
+);
+onLibraryChange(videoRead.change);
 export const refreshKnownVideos = (): void => {
   void appRuntime
-    .runPromise(
-      Effect.gen(function* () {
-        return yield* (yield* LibraryStore).knownVideos;
-      }),
-    )
-    .then((videos) => knownVideos.set(new Set(videos)))
+    .runPromise(videoRead.get)
+    .then((videos) => {
+      const previous = knownVideos.get();
+      if (
+        previous !== null &&
+        previous.size === videos.length &&
+        videos.every((video) => previous.has(video))
+      )
+        return;
+      knownVideos.set(new Set(videos));
+    })
     .catch(() => {});
 };
 

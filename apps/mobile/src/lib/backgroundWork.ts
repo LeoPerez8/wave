@@ -14,6 +14,7 @@ import { isScreenSettled, onScreenSettled } from "./timing";
 import { createStartupWork } from "./startupWork";
 
 import { WaveAppLog } from "@/native/waveAppLog";
+import { settledTurn } from "./settledWork";
 
 import { perfMark, registerPerfMeta } from "@/perf/perf";
 
@@ -116,4 +117,11 @@ registerPerfMeta("startup", () => {
 registerPerfMeta("backgroundWork", () => {
   const { slices, longestWaitMs, forcedSlices } = work.stats();
   return { slices, longestWaitMs: Math.round(longestWaitMs), forcedSlices };
+});
+
+/** Optional CPU work starts only after the active transition settled. */
+export const settledTurnEffect = settledTurn({
+  settled: isScreenSettled,
+  subscribe: onScreenSettled,
+  schedule: whenFree,
 });

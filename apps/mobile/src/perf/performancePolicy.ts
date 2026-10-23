@@ -27,7 +27,7 @@ export const LIBRARY_SEEDS = [
     "useLoadedInLibrary",
   ].map((name) => `ytmusic/libraryFinder.ts#${name}`),
   "../../../packages/core/src/ytMusic.ts#libraryFinder",
-  "../../../packages/core/src/ytMusic.ts#libraryFinderSteps",
+  "../../../packages/core/src/ytMusic.ts#libraryImportFinderSteps",
   "../../../packages/core/src/playlistImport.ts#planLinkImportSteps",
   "../../../packages/core/src/ytArtist.ts#libraryArtistFinder",
 ];
@@ -80,7 +80,7 @@ export const WHOLE_LIBRARY: Record<string, Exception> = {
     reason:
       "A kept filled import prepares download membership after settlement; source SQL is indivisible, indexing and per-entry matching yield. Actual store coverage: startupJobs.test.ts.",
     capabilities: [
-      "../../../packages/core/src/ytMusic.ts#libraryFinderSteps",
+      "../../../packages/core/src/ytMusic.ts#libraryImportFinderSteps",
       "library/LibraryStore.ts#listSongs",
     ],
   },
@@ -92,16 +92,6 @@ export const WHOLE_LIBRARY: Record<string, Exception> = {
   "app/library/discover-mix/[id].tsx#DiscoverMixScreen": {
     reason: "Visible mix page resolves streamed entries against Library files.",
     capabilities: ["ytmusic/libraryFinder.ts#useLibraryFinder"],
-  },
-  "home/artistGraph.ts#readArtistGraph": {
-    reason:
-      "Artist graph derives from whole taste history and Library credits for background recommendations; step the daily build.",
-    removeIn: 594,
-    capabilities: [
-      "library/LibraryStore.ts#listArtists",
-      "library/LibraryStore.ts#listSongs",
-      "library/LibraryStore.ts#tasteHistory",
-    ],
   },
   "home/DiscoverMixActions.tsx#DiscoverMixActionsMenu": {
     reason:
@@ -118,8 +108,7 @@ export const WHOLE_LIBRARY: Record<string, Exception> = {
   },
   "home/discoverMixes.ts#useLibraryTracks": {
     reason:
-      "Mix blending currently follows all songs; replace Home opening/focus work with saved, versioned inputs.",
-    removeIn: 594,
+      "Visible mix page and menu resolve Library tracks; Home's saved mixes blend without this hook.",
     capabilities: ["library/hooks.ts#songs"],
   },
 
@@ -132,12 +121,6 @@ export const WHOLE_LIBRARY: Record<string, Exception> = {
     reason:
       "Shared live taste derivation reads history on a background turn and scores in cooperative six-ms slices, reusing Home's snapshot when supplied.",
     capabilities: ["library/LibraryStore.ts#tasteHistory"],
-  },
-  "home/mixKnown.ts#readIndexes": {
-    reason:
-      "Recommendation index derives whole Library identities for daily mix builds; move that work after settled in steps.",
-    removeIn: 594,
-    capabilities: ["library/LibraryStore.ts#listArtists", "library/LibraryStore.ts#listSongs"],
   },
   "library/BrowseLists.tsx#ArtistsList": {
     reason: "Visible Library Artists list displays all artists.",
