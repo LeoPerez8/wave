@@ -648,6 +648,8 @@ export type { SheetEvent, SheetPhase, SheetStep } from "./sheetLifecycle.ts";
 export {
   joinArtists,
   libraryFinder,
+  recordingMatches,
+  recordingMatchTitle,
   libraryMatcher,
   parseTrackId,
   ytSongArtist,

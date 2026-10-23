@@ -190,12 +190,6 @@ export const WHOLE_LIBRARY: Record<string, Exception> = {
     reason: "Visible playlist menu checks which entries are downloaded; created for a user action.",
     capabilities: ["ytmusic/libraryFinder.ts#useLoadedInLibrary"],
   },
-  "playback/hooks.ts#useCurrentPlayingIds": {
-    reason:
-      "Playing-ids hook fans whole-Library updates out to mounted lists; replace with one current-song lookup.",
-    removeIn: 588,
-    capabilities: ["ytmusic/libraryFinder.ts#useLoadedLibraryFinder"],
-  },
   "playback/itemActions.ts#useStreamedSongFinder": {
     reason: "A visible selection/menu resolves streamed items for user actions.",
     capabilities: ["ytmusic/libraryFinder.ts#useLibraryFinder"],

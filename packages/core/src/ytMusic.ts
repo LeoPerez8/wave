@@ -76,7 +76,7 @@ const withoutRemasterNotes = (title: string): string => {
 };
 
 /** A title without its featured-artist credit and remaster notes, as matching compares it. */
-const matchTitle = (title: string): string =>
+export const recordingMatchTitle = (title: string): string =>
   normalizeSearchText(
     withoutRemasterNotes(title.replace(BRACKETED_FEATURE, "").replace(TRAILING_FEATURE, "")),
   );
@@ -106,6 +106,36 @@ interface Candidate<L> {
   readonly durationMs: number | null;
 }
 
+const candidateMatches = (
+  candidate: { readonly artists: ReadonlySet<string>; readonly durationMs: number | null },
+  artists: readonly string[],
+  length: number | null,
+): boolean =>
+  artists.some((artist) => candidate.artists.has(artist)) &&
+  (length === null ||
+    candidate.durationMs === null ||
+    Math.abs(candidate.durationMs - length) <= SAME_LENGTH_MS);
+
+/** Compare one Library candidate with one streamed song, without building a Library finder. */
+export const recordingMatches = (
+  library: LibrarySongKey,
+  song: Pick<YtSong, "title" | "artists" | "durationMs">,
+): boolean => {
+  const title = recordingMatchTitle(library.title);
+  return (
+    title !== "" &&
+    title === recordingMatchTitle(song.title) &&
+    candidateMatches(
+      {
+        artists: new Set(artistNames(library.artist)),
+        durationMs: knownLength(library.durationMs),
+      },
+      song.artists.flatMap(artistNames),
+      knownLength(song.durationMs),
+    )
+  );
+};
+
 /**
  * The Library song a YT Music song already is, or null: one with its title
  * (case, accents, punctuation, featured credits and remaster notes aside) that shares an
@@ -129,7 +159,7 @@ export const libraryMatches = <L extends LibrarySongKey>(
 ): ((song: Pick<YtSong, "title" | "artists" | "durationMs">) => L[]) => {
   const byTitle = new Map<string, Candidate<L>[]>();
   for (const song of library) {
-    const title = matchTitle(song.title);
+    const title = recordingMatchTitle(song.title);
     if (title === "") continue;
     const candidates = byTitle.get(title) ?? [];
     candidates.push({
@@ -140,18 +170,12 @@ export const libraryMatches = <L extends LibrarySongKey>(
     byTitle.set(title, candidates);
   }
   return (song) => {
-    const candidates = byTitle.get(matchTitle(song.title));
+    const candidates = byTitle.get(recordingMatchTitle(song.title));
     if (candidates === undefined) return [];
     const artists = song.artists.flatMap(artistNames);
     const length = knownLength(song.durationMs);
     return candidates
-      .filter(
-        (candidate) =>
-          artists.some((artist) => candidate.artists.has(artist)) &&
-          (length === null ||
-            candidate.durationMs === null ||
-            Math.abs(candidate.durationMs - length) <= SAME_LENGTH_MS),
-      )
+      .filter((candidate) => candidateMatches(candidate, artists, length))
       .map((candidate) => candidate.song);
   };
 };

@@ -1063,3 +1063,63 @@ the profile's). The remaining longest tasks are other Home readers and the
 whole-source SQL reads named above. ti's 50,000 p90 and longest task were taken
 while another session's work shared the machine; treat that row's tail as
 noise. Phone performance and TalkBack are unverified.
+
+## Playing row identities after a download (#588)
+
+Desktop: Node v26.8.2 and sql.js on Linux x64, **not Hermes or the phone's
+SQLite**. The full harness uses 11 measured runs at each of 1,000, 12,000 and
+50,000 songs, with both the 20-song and 300-song target artists. Machine-readable
+results: [579-playingIdsFanout-desktop.jsonl](results/579-playingIdsFanout-desktop.jsonl).
+
+Before is `v0.19.0-ti`, `460e39ff0cba6f50e7a456a77d6e99813295ebaa`. Its
+native hook is faithfully replayed through that revision's actual Core query
+registry, finder cache, recording finder and LibraryStore songs read. After is
+`38f748dcaa4ed6b97f0714330812323573a832c4`, running production `createPlayingIds`,
+Core registry, download bus and `LibraryStore.matchingSong`. Both produce exactly
+the same streamed and local row identities for every case; the harness rejects
+a mismatch. The original #538 transition is `yt:<video>` alone, then that same
+stream id plus the matched Library id after download, without changing playback.
+
+```sh
+node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON apps/mobile/bench/fastAgain.ts \
+  --bench playingIdsFanout --before /path/to/v0.19.0-ti-worktree
+```
+
+Ti already shares its broad query and lazy finder, so this bench does not invent
+eight broad reads. Five warmed tabs and three pushed screens give eight mounted
+consumers, with one visible. A completion refreshes one source subscription in
+both paths. Ti reads the whole Library once, rebuilds its finder once and notifies
+the visible consumer; hidden ones catch up on show. After reads one matching row
+once and builds no finder. Its changed identity snapshot notifies all eight
+consumers immediately. The work-count test separately proves unchanged snapshots
+notify zero consumers and unrelated downloads start zero reads. These are actual
+callbacks and SQL rows returned, not React render counts or SQLite VM visits.
+
+| Library songs | Target artist songs | Rows before → after | Re-reads before → after | Whole-Library finder builds before → after | Source refreshes before → after | Consumer notifications before → after |
+| ------------: | ------------------: | ------------------: | ----------------------: | -----------------------------------------: | ------------------------------: | ------------------------------------: |
+|         1,000 |                  20 |           1,000 → 1 |                   1 → 1 |                                      1 → 0 |                           1 → 1 |                                 1 → 8 |
+|         1,000 |                 300 |           1,000 → 1 |                   1 → 1 |                                      1 → 0 |                           1 → 1 |                                 1 → 8 |
+|        12,000 |                  20 |          12,000 → 1 |                   1 → 1 |                                      1 → 0 |                           1 → 1 |                                 1 → 8 |
+|        12,000 |                 300 |          12,000 → 1 |                   1 → 1 |                                      1 → 0 |                           1 → 1 |                                 1 → 8 |
+|        50,000 |                  20 |          50,000 → 1 |                   1 → 1 |                                      1 → 0 |                           1 → 1 |                                 1 → 8 |
+|        50,000 |                 300 |          50,000 → 1 |                   1 → 1 |                                      1 → 0 |                           1 → 1 |                                 1 → 8 |
+
+| Library songs | Target artist songs | Median ms before → after | p90 ms before → after | CPU ms before → after | Longest measured task ms before → after |
+| ------------: | ------------------: | -----------------------: | --------------------: | --------------------: | --------------------------------------: |
+|         1,000 |                  20 |           21.115 → 2.140 |        24.257 → 2.351 |        27.680 → 1.675 |                          27.384 → 1.179 |
+|         1,000 |                 300 |           18.484 → 2.082 |        19.928 → 2.569 |        21.874 → 1.235 |                          19.337 → 1.185 |
+|        12,000 |                  20 |          277.886 → 2.525 |       437.383 → 2.777 |       364.240 → 1.591 |                         437.661 → 1.340 |
+|        12,000 |                 300 |          223.638 → 2.439 |       246.513 → 2.522 |       281.576 → 1.528 |                         254.276 → 1.323 |
+|        50,000 |                  20 |         1005.994 → 1.976 |      1036.367 → 2.096 |      1239.095 → 0.941 |                        1055.720 → 0.922 |
+|        50,000 |                 300 |         1037.580 → 1.901 |      1239.215 → 2.019 |      1382.495 → 0.949 |                        1949.373 → 0.919 |
+
+The timed scope is completion subscriber work. Database opening, initial reads,
+fixture changes and the SQL write representing completion are outside it. Ti's
+1.5-second query burst throttle is matured with a virtual clock, so it does not
+inflate wall time. Longest task is the maximum source-event or synchronous
+read-through-last-notification segment, including registry settlement and identity
+processing; SQL tracing runs separately from timed samples. These are desktop
+work/latency measurements, with no native scheduling, React commit, frame or
+TalkBack verification. The one-time upgrade backfill of the persisted title index
+is also outside completion measurements: it reads/writes at most 128 rows per
+transaction and yields between pages before exposing LibraryStore.
