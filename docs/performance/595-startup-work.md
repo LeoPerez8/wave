@@ -17,6 +17,11 @@ frame loop. The original Core touch-aware free-turn scheduler still supplies
 one turn per callback. Existing gesture/headless `freeTurnEffect` consumers,
 including #593's live taste and #594's work, retain their contracts.
 
+The final #594 merge retains its existing `libraryFinderSteps` contract and
+`settledTurnEffect`. Imports use the distinct `libraryImportFinderSteps`, which
+also yields while matching individual title candidates. Neither replaces the
+other owner's API.
+
 CPU iterators use the existing `runSteps`: four ms of work plus two ms headroom
 toward the six-ms JS target, with a 512-operation cap and iterator closure on
 interruption. Scan normalization, reconciliation, membership/native-column
