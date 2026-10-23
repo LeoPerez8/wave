@@ -29,7 +29,7 @@ import {
 const root = fileURLToPath(new URL("../../../../../", import.meta.url));
 const TITLE: LibrarySongSort = { key: "title", descending: false };
 
-/** Each statement seeks its sort's genre index and sorts nothing but duplicates' file ties. */
+/** Each statement seeks its full sort index, including the file and id ties. */
 const assertSeeks = (
   queries: readonly TracedQuery[],
   sort: LibrarySongSort,
@@ -46,7 +46,7 @@ const assertSeeks = (
       `${index}: ${query.plan.join(" | ")}`,
     );
     assert.ok(
-      query.plan.every((step) => !/TEMP B-TREE FOR ORDER BY/.test(step)),
+      query.plan.every((step) => !step.includes("TEMP B-TREE")),
       `${index} sorts the genre: ${query.plan.join(" | ")}`,
     );
     assert.ok(!/OFFSET/i.test(query.sql));
@@ -257,7 +257,8 @@ test("migration 0038 fills the genre order of a Library that shipped without it,
     db.all<Record<string, unknown>>(sql`SELECT t.id, t.genre_id, t.title_sort,
         a.sort AS artist_sort, b.title_sort AS album_sort, t.album_id,
         coalesce(t.disc_number, 1) AS disc_number,
-        coalesce(t.track_number, 9007199254740991) AS track_number, t.added_at
+        coalesce(t.track_number, 9007199254740991) AS track_number, t.added_at,
+        coalesce(t.path, '') AS path
       FROM tracks t JOIN artists a ON a.id = t.artist_id JOIN albums b ON b.id = t.album_id
       WHERE t.genre_id IS NOT NULL ORDER BY t.id`);
 
@@ -296,4 +297,32 @@ test("migration 0038 fills the genre order of a Library that shipped without it,
   fresh.run(sql`DELETE FROM track_artists WHERE track_id % 11 = 0`);
   fresh.run(sql`DELETE FROM tracks WHERE id % 11 = 0`);
   assert.deepEqual(read(fresh), expected(fresh));
+});
+
+test("even a whole genre of identical names pages by indexed file and id ties without a temporary sort", async () => {
+  const fixture = await createFastAgainFixture();
+  try {
+    const { db, genreId } = fixture;
+    const store = await loadLibraryStore(root, db);
+    db.run(sql`UPDATE tracks SET title_sort = 'same', artist_id = ${fixture.targets.large.artistId},
+      album_id = ${fixture.albumId}, disc_number = NULL, track_number = NULL, added_at = 1
+      WHERE genre_id = ${genreId}`);
+    const full = Effect.runSync(store.getGenre(genreId))!.songs;
+    for (const sort of SONG_SORTS) {
+      const first = traceQueries(db, () => Effect.runSync(store.openGenre(genreId, sort))!);
+      const all = readAll(db, genreId, sort, first.result.order, 7);
+      assert.deepEqual(
+        all.ids,
+        sortSongs(full, sort).map((song) => song.id),
+      );
+      for (const query of [...first.queries, ...all.queries]) {
+        assert.ok(
+          query.plan.every((step) => !step.includes("TEMP B-TREE")),
+          query.plan.join(" | "),
+        );
+      }
+    }
+  } finally {
+    fixture.close();
+  }
 });

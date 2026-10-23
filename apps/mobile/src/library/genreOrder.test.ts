@@ -122,7 +122,7 @@ test("a change to the genre mid-read starts its order again, never mixing two or
 test("the whole order waits for the screen to settle, unless an action needs it first", async () => {
   const whole: SongOrder = { ids: [1, 2], missing: [], spine: [] };
   let reads = 0;
-  let settle = (): void => {};
+  let settle!: () => void;
   const settled = Effect.callback<void>((resume) => {
     settle = () => resume(Effect.void);
   });

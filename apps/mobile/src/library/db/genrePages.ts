@@ -5,7 +5,12 @@
  * to what an action needs. Kept free of Expo so the store tests run it against
  * a real SQLite (`testDatabase.ts`).
  */
-import { songOrderTerms, songSpineField, type LibrarySongSort, type SongOrderField } from "@wave/core";
+import {
+  songOrderTerms,
+  songSpineField,
+  type LibrarySongSort,
+  type SongOrderField,
+} from "@wave/core";
 import { sql, type SQL } from "drizzle-orm";
 
 import type { LibraryDatabase } from "./database.ts";
@@ -58,7 +63,7 @@ export interface GenreOpening {
   readonly order: GenreOrderSlice;
 }
 
-/** Where each order field is read; path and id, the last ties, from the Track. */
+/** Every order term lives in the genre index, including the file and id ties. */
 const COLUMNS: Record<SongOrderField, string> = {
   titleSort: "o.title_sort",
   artistSort: "o.artist_sort",
@@ -67,12 +72,9 @@ const COLUMNS: Record<SongOrderField, string> = {
   discNumber: "o.disc_number",
   trackNumber: "o.track_number",
   addedAt: "o.added_at",
-  path: "coalesce(t.path, '')",
+  path: "o.path",
   id: "o.id",
 };
-
-/** The fields the indexes hold: every term before the file ties. */
-const isIndexed = (field: SongOrderField): boolean => field !== "path" && field !== "id";
 
 /** [sort]'s terms, each field once (song name's ties start by comparing the title again). */
 const termsOf = (sort: LibrarySongSort) => {
@@ -101,8 +103,8 @@ interface OrderRow extends Record<string, unknown> {
 
 /**
  * Up to [limit] songs of [genreId] in [sort]'s order where [after] holds,
- * with what each row shows when [summaries]. The genre's index orders all but
- * the file ties, which SQLite sorts within each run of duplicates.
+ * with what each row shows when [summaries]. Every term, including the file
+ * and id ties, is in the index, so even duplicate-name runs need no sort.
  */
 const readOrder = (
   db: LibraryDatabase,
@@ -135,7 +137,9 @@ const readOrder = (
     ${summaries ? sql`LEFT JOIN artwork w ON w.hash = t.artwork_hash` : sql``}
     WHERE o.genre_id = ${genreId}${after === undefined ? sql`` : sql` AND ${after}`}
     ORDER BY ${sql.join(
-      terms.map(({ field, descending }) => sql`${column(field)} ${sql.raw(descending ? "DESC" : "ASC")}`),
+      terms.map(
+        ({ field, descending }) => sql`${column(field)} ${sql.raw(descending ? "DESC" : "ASC")}`,
+      ),
       sql`, `,
     )}
     LIMIT ${limit}`);
@@ -155,13 +159,11 @@ const readAfter = (
   summaries: boolean,
 ): OrderRow[] => {
   const fields = termsOf(sort).map(({ field }) => field);
-  const indexed = fields.filter(isIndexed).length;
   const keys = fields.map(column);
   const lastValues = values(last);
-  /** Past [from]'s position in the keys: a seek on its indexed part, then the file ties. */
+  /** Seek past [from]'s position, including file and id ties. */
   const past = (from: number): SQL =>
-    sql`${tuple(keys.slice(from, indexed))} >= ${tuple(lastValues.slice(from, indexed))}
-      AND ${tuple(keys.slice(from))} > ${tuple(lastValues.slice(from))}`;
+    sql`${tuple(keys.slice(from))} > ${tuple(lastValues.slice(from))}`;
   if (!sort.descending) return readOrder(db, genreId, sort, past(0), limit, summaries);
   const run = readOrder(
     db,
@@ -174,7 +176,14 @@ const readAfter = (
   if (run.length >= limit) return run;
   return [
     ...run,
-    ...readOrder(db, genreId, sort, sql`${keys[0]!} < ${lastValues[0]!}`, limit - run.length, summaries),
+    ...readOrder(
+      db,
+      genreId,
+      sort,
+      sql`${keys[0]!} < ${lastValues[0]!}`,
+      limit - run.length,
+      summaries,
+    ),
   ];
 };
 
@@ -271,8 +280,20 @@ export const selectGenreOrderSlice = (
 ): GenreOrderSlice | null => {
   const revision = revisionOf(db, genreId);
   if (cursor === null)
-    return sliceOf(readOrder(db, genreId, sort, undefined, limit, false), limit, genreId, sort, revision);
+    return sliceOf(
+      readOrder(db, genreId, sort, undefined, limit, false),
+      limit,
+      genreId,
+      sort,
+      revision,
+    );
   if (cursor.genreId !== genreId || cursor.sort !== sortKey(sort) || cursor.revision !== revision)
     return null;
-  return sliceOf(readAfter(db, genreId, sort, cursor.last, limit, false), limit, genreId, sort, revision);
+  return sliceOf(
+    readAfter(db, genreId, sort, cursor.last, limit, false),
+    limit,
+    genreId,
+    sort,
+    revision,
+  );
 };

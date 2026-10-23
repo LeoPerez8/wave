@@ -826,7 +826,8 @@ export const fileDeletions = sqliteTable("file_deletions", {
  * Each genre song's sort keys (#601), so a genre's pages are index seeks in
  * every sort: one row per Track with a genre, its nulls as Core's
  * `songOrderTerms` read them (no disc is disc 1, no track number sorts last).
- * Path and id, the last ties, are read from the Track. Triggers in migration
+ * Path (null as empty text) and id finish every index, including large runs
+ * of identical names. Triggers in migration
  * 0038 keep it, whoever writes the tracks, artists or albums.
  */
 export const genreOrder = sqliteTable(
@@ -842,10 +843,17 @@ export const genreOrder = sqliteTable(
     discNumber: integer("disc_number").notNull(),
     trackNumber: integer("track_number").notNull(),
     addedAt: integer("added_at").notNull(),
+    path: text("path").notNull(),
   },
   (t) => [
-    index("genre_order_title_asc").on(t.genreId, t.titleSort, t.artistSort),
-    index("genre_order_title_desc").on(t.genreId, sql`${t.titleSort} desc`, t.artistSort),
+    index("genre_order_title_asc").on(t.genreId, t.titleSort, t.artistSort, t.path, t.id),
+    index("genre_order_title_desc").on(
+      t.genreId,
+      sql`${t.titleSort} desc`,
+      t.artistSort,
+      t.path,
+      t.id,
+    ),
     index("genre_order_artist_asc").on(
       t.genreId,
       t.artistSort,
@@ -854,6 +862,8 @@ export const genreOrder = sqliteTable(
       t.discNumber,
       t.trackNumber,
       t.titleSort,
+      t.path,
+      t.id,
     ),
     index("genre_order_artist_desc").on(
       t.genreId,
@@ -863,6 +873,8 @@ export const genreOrder = sqliteTable(
       t.discNumber,
       t.trackNumber,
       t.titleSort,
+      t.path,
+      t.id,
     ),
     index("genre_order_album_asc").on(
       t.genreId,
@@ -871,6 +883,8 @@ export const genreOrder = sqliteTable(
       t.discNumber,
       t.trackNumber,
       t.titleSort,
+      t.path,
+      t.id,
     ),
     index("genre_order_album_desc").on(
       t.genreId,
@@ -879,13 +893,24 @@ export const genreOrder = sqliteTable(
       t.discNumber,
       t.trackNumber,
       t.titleSort,
+      t.path,
+      t.id,
     ),
-    index("genre_order_added_asc").on(t.genreId, t.addedAt, t.titleSort, t.artistSort),
+    index("genre_order_added_asc").on(
+      t.genreId,
+      t.addedAt,
+      t.titleSort,
+      t.artistSort,
+      t.path,
+      t.id,
+    ),
     index("genre_order_added_desc").on(
       t.genreId,
       sql`${t.addedAt} desc`,
       t.titleSort,
       t.artistSort,
+      t.path,
+      t.id,
     ),
   ],
 );

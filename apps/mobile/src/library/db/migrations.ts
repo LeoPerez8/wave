@@ -980,7 +980,8 @@ const mGenreOrder = `CREATE TABLE genre_order (
   album_id integer NOT NULL,
   disc_number integer NOT NULL,
   track_number integer NOT NULL,
-  added_at integer NOT NULL
+  added_at integer NOT NULL,
+  path text NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE genre_order_revisions (
@@ -990,36 +991,36 @@ CREATE TABLE genre_order_revisions (
 --> statement-breakpoint
 INSERT INTO genre_order
   SELECT t.id, t.genre_id, t.title_sort, a.sort, b.title_sort, t.album_id,
-    coalesce(t.disc_number, 1), coalesce(t.track_number, 9007199254740991), t.added_at
+    coalesce(t.disc_number, 1), coalesce(t.track_number, 9007199254740991), t.added_at, coalesce(t.path, '')
   FROM tracks t JOIN artists a ON a.id = t.artist_id JOIN albums b ON b.id = t.album_id
   WHERE t.genre_id IS NOT NULL;
 --> statement-breakpoint
-CREATE INDEX genre_order_title_asc ON genre_order (genre_id, title_sort, artist_sort);
+CREATE INDEX genre_order_title_asc ON genre_order (genre_id, title_sort, artist_sort, path, id);
 --> statement-breakpoint
-CREATE INDEX genre_order_title_desc ON genre_order (genre_id, title_sort DESC, artist_sort);
+CREATE INDEX genre_order_title_desc ON genre_order (genre_id, title_sort DESC, artist_sort, path, id);
 --> statement-breakpoint
 CREATE INDEX genre_order_artist_asc ON genre_order
-  (genre_id, artist_sort, album_sort, album_id, disc_number, track_number, title_sort);
+  (genre_id, artist_sort, album_sort, album_id, disc_number, track_number, title_sort, path, id);
 --> statement-breakpoint
 CREATE INDEX genre_order_artist_desc ON genre_order
-  (genre_id, artist_sort DESC, album_sort, album_id, disc_number, track_number, title_sort);
+  (genre_id, artist_sort DESC, album_sort, album_id, disc_number, track_number, title_sort, path, id);
 --> statement-breakpoint
 CREATE INDEX genre_order_album_asc ON genre_order
-  (genre_id, album_sort, album_id, disc_number, track_number, title_sort);
+  (genre_id, album_sort, album_id, disc_number, track_number, title_sort, path, id);
 --> statement-breakpoint
 CREATE INDEX genre_order_album_desc ON genre_order
-  (genre_id, album_sort DESC, album_id, disc_number, track_number, title_sort);
+  (genre_id, album_sort DESC, album_id, disc_number, track_number, title_sort, path, id);
 --> statement-breakpoint
-CREATE INDEX genre_order_added_asc ON genre_order (genre_id, added_at, title_sort, artist_sort);
+CREATE INDEX genre_order_added_asc ON genre_order (genre_id, added_at, title_sort, artist_sort, path, id);
 --> statement-breakpoint
 CREATE INDEX genre_order_added_desc ON genre_order
-  (genre_id, added_at DESC, title_sort, artist_sort);
+  (genre_id, added_at DESC, title_sort, artist_sort, path, id);
 --> statement-breakpoint
 CREATE TRIGGER genre_order_track_insert AFTER INSERT ON tracks WHEN NEW.genre_id IS NOT NULL
 BEGIN
   INSERT OR REPLACE INTO genre_order
     SELECT NEW.id, NEW.genre_id, NEW.title_sort, a.sort, b.title_sort, NEW.album_id,
-      coalesce(NEW.disc_number, 1), coalesce(NEW.track_number, 9007199254740991), NEW.added_at
+      coalesce(NEW.disc_number, 1), coalesce(NEW.track_number, 9007199254740991), NEW.added_at, coalesce(NEW.path, '')
     FROM artists a, albums b WHERE a.id = NEW.artist_id AND b.id = NEW.album_id;
   INSERT INTO genre_order_revisions VALUES (NEW.genre_id, 1)
     ON CONFLICT (genre_id) DO UPDATE SET revision = revision + 1;
@@ -1036,7 +1037,7 @@ BEGIN
   DELETE FROM genre_order WHERE id = OLD.id;
   INSERT OR REPLACE INTO genre_order
     SELECT NEW.id, NEW.genre_id, NEW.title_sort, a.sort, b.title_sort, NEW.album_id,
-      coalesce(NEW.disc_number, 1), coalesce(NEW.track_number, 9007199254740991), NEW.added_at
+      coalesce(NEW.disc_number, 1), coalesce(NEW.track_number, 9007199254740991), NEW.added_at, coalesce(NEW.path, '')
     FROM artists a, albums b
     WHERE NEW.genre_id IS NOT NULL AND a.id = NEW.artist_id AND b.id = NEW.album_id;
   INSERT INTO genre_order_revisions
