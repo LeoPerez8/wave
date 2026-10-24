@@ -8,6 +8,7 @@ import {
   ytDownloadActions,
   ytSongActions,
   ytSongCredit,
+  type FavoriteSource,
   type PlaylistPlace,
   type PlaylistSong,
   type StreamedArtistLink,
@@ -150,6 +151,7 @@ const run = (
   entry: Entry,
   song: NativeYtSong,
   { find, playlistItem, onSelect }: MenuPlace,
+  source: FavoriteSource = "menu",
 ): void => {
   if (entry.kind === "album") {
     // The page heads with what the song knows of its album until the page is read.
@@ -164,7 +166,7 @@ const run = (
   if (entry.kind === "star") {
     // A star means downloaded: the song joins the download queue with it.
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    void starSongs({ tracks: [], ytSongs: [song] }, entry.action === "favorite", find);
+    void starSongs({ tracks: [], ytSongs: [song] }, entry.action === "favorite", find, source);
     return;
   }
   switch (entry.action) {
@@ -254,13 +256,14 @@ export const useYtSongSwipe = (
         side,
       );
       if (artistEntry?.action === "goToArtist") {
-        run(artistEntry, song, { find: () => null, playlistItem, onSelect: undefined });
+        run(artistEntry, song, { find: () => null, playlistItem, onSelect: undefined }, "swipe");
         return;
       }
       currentLibraryFinder()
         .then((find) => {
           const entry = swipeEntryNow(entriesWith(find, currentPath(), find(song) !== null), side);
-          if (entry !== undefined) run(entry, song, { find, playlistItem, onSelect: undefined });
+          if (entry !== undefined)
+            run(entry, song, { find, playlistItem, onSelect: undefined }, "swipe");
         })
         .catch((error: unknown) => showError("Couldn't load the song", error));
     },
