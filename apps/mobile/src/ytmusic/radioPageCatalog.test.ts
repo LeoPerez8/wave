@@ -50,3 +50,41 @@ test("the ordered radio index bounds its songs and ignores corrupt storage", () 
   assert.equal(cache.get("old")?.songs.length, CATALOG_MOST - 1);
   assert.equal(cache.get("new")?.songs.length, 1);
 });
+
+test("mix freshness uses the persisted radio timestamp and expires at seven days", () => {
+  let now = 100;
+  let saved: string | null = null;
+  const storage = {
+    read: () => saved,
+    write: (value: string) => {
+      saved = value;
+    },
+  };
+  const cache = createRadioPageCatalog(storage, () => now);
+  const page = { songs: [song], continuation: "next" };
+  cache.put("artist:a", page);
+  now += 7 * 86400000 - 1;
+  const restarted = createRadioPageCatalog(storage, () => now);
+  assert.deepEqual(restarted.getFresh("artist:a"), page);
+  now++;
+  assert.equal(restarted.getFresh("artist:a"), null);
+  assert.deepEqual(restarted.get("artist:a"), page, "older radios remain available offline");
+});
+
+test("cache readers see each other's radio writes without losing existing radios", () => {
+  let saved: string | null = null;
+  const storage = {
+    read: () => saved,
+    write: (value: string) => {
+      saved = value;
+    },
+  };
+  const a = createRadioPageCatalog(storage);
+  const b = createRadioPageCatalog(storage);
+  assert.equal(a.get("a"), null);
+  b.put("b", { songs: [song], continuation: null });
+  assert.equal(a.getFresh("b")?.songs.length, 1);
+  a.put("a", { songs: [song], continuation: null });
+  assert.equal(b.getFresh("a")?.songs.length, 1);
+  assert.equal(b.getFresh("b")?.songs.length, 1);
+});

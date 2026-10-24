@@ -1,5 +1,5 @@
 /** Ordered radio pages accompany the candidate catalog's artist evidence. Local, bounded, unsynced. */
-import { CATALOG_MOST, CATALOG_UNSEEN_MS, readPlaylistYtSong } from "@wave/core";
+import { CATALOG_MOST, CATALOG_UNSEEN_MS, radioCacheFresh, readPlaylistYtSong } from "@wave/core";
 import type { SongRadioPage } from "../playback/songRadioSession.ts";
 
 interface Entry {
@@ -15,11 +15,14 @@ export const createRadioPageCatalog = (
   now = Date.now,
 ) => {
   let entries: Entry[] | null = null;
+  let lastStored: string | null = null;
   const getEntries = (): Entry[] => {
-    if (entries !== null) return entries;
-    entries = [];
     try {
-      const stored: unknown = JSON.parse(storage.read() ?? "[]");
+      const raw = storage.read();
+      if (entries !== null && raw === lastStored) return entries;
+      lastStored = raw;
+      entries = [];
+      const stored: unknown = JSON.parse(raw ?? "[]");
       if (!Array.isArray(stored)) return entries;
       for (const item of stored) {
         if (
@@ -40,9 +43,14 @@ export const createRadioPageCatalog = (
     } catch {
       /* A corrupt cache is empty. */
     }
-    return entries;
+    return entries ?? [];
   };
   return {
+    /** Ordered radio read strictly less than seven days ago; other catalog writes don't renew it. */
+    getFresh: (id: string): SongRadioPage | null => {
+      const entry = getEntries().find((candidate) => candidate.id === id);
+      return entry !== undefined && radioCacheFresh(entry.at, now()) ? entry.page : null;
+    },
     get: (id: string): SongRadioPage | null =>
       getEntries().find((entry) => entry.id === id && entry.at > now() - CATALOG_UNSEEN_MS)?.page ??
       null,
@@ -62,7 +70,9 @@ export const createRadioPageCatalog = (
         return [{ ...entry, page: { ...entry.page, songs } }];
       });
       try {
-        storage.write(JSON.stringify(entries));
+        const stored = JSON.stringify(entries);
+        storage.write(stored);
+        lastStored = stored;
       } catch {
         /* Best effort cache. */
       }
