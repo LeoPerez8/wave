@@ -15,10 +15,18 @@ import { useYtMusicEnabled } from "@/settings/ytMusic";
 import { DiscoverMixesSkeleton } from "./DiscoverMixesSkeleton";
 import { homeBodyHeight } from "./homeOpening";
 
-/** The same reservation surrounds the placeholder and the answered section. */
-export function HomeSectionBody({ id, children }: { id: HomeSectionId; children: ReactNode }) {
+/** Loaded sections fit their content; only the placeholder keeps its reserved height. */
+export function HomeSectionBody({
+  id,
+  children,
+  loading = false,
+}: {
+  id: HomeSectionId;
+  children: ReactNode;
+  loading?: boolean;
+}) {
   const { fontScale } = useWindowDimensions();
-  return <View style={{ minHeight: homeBodyHeight(id, fontScale) }}>{children}</View>;
+  return <View style={{ minHeight: homeBodyHeight(id, fontScale, loading) }}>{children}</View>;
 }
 
 function DiscoverSkeleton() {
@@ -50,7 +58,7 @@ export function HomeSectionSkeleton({ id }: { id: HomeSectionId }) {
   const artists = id === "most-played-artists";
   return (
     <TitledSection title={homeSectionTitle(id)}>
-      <HomeSectionBody id={id}>
+      <HomeSectionBody id={id} loading>
         {id === "discover" ? (
           <DiscoverSkeleton />
         ) : songs ? (

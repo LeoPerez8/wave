@@ -56,8 +56,13 @@ export const homeSectionWaiting = (id: HomeSectionId, home: HomeContent): boolea
   }
 };
 
-/** Match Home's bounded ten-row lists and single-line card captions at system text size. */
-export const homeBodyHeight = (id: HomeSectionId, fontScale: number): number => {
+/** Only placeholders reserve space; answered sections use their content's height. */
+export const homeBodyHeight = (
+  id: HomeSectionId,
+  fontScale: number,
+  loading = true,
+): number | undefined => {
+  if (!loading) return undefined;
   switch (id) {
     case "most-played":
     case "favorites":

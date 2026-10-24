@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import * as Effect from "effect/Effect";
-import { createLibraryQueries } from "@wave/core";
+import { HOME_SECTIONS, createLibraryQueries } from "@wave/core";
 import { fileURLToPath } from "node:url";
 
 import { loadLibraryStore } from "../../bench/fastAgain/store.ts";
@@ -268,4 +268,12 @@ test("Home reserves matching shelf, list and adaptive Magic Queue dimensions at 
 test("the Magic Queue reserves all nine tile places before its saved picks answer", () => {
   assert.equal(Math.round(magicQueueGrid(312, 1).height), 456);
   assert.equal(Math.round(magicQueueGrid(312, Math.fround(1.3)).height), 1092);
+});
+
+test("loaded Home and Library sections have no reserved body height", () => {
+  for (const { id } of HOME_SECTIONS) {
+    for (const scale of [1, 1.3, 2]) {
+      assert.equal(homeBodyHeight(id, scale, false), undefined, `${id} at ${scale}`);
+    }
+  }
 });

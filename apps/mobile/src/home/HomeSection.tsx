@@ -264,7 +264,7 @@ function DiscoverMixRow({
 function MagicQueueRow({ section }: { section: MagicQueueSection }) {
   const { width, fontScale } = useWindowDimensions();
   const [available, setAvailable] = useState(width - grid.margin * 2);
-  const { size, height } = magicQueueGrid(available, fontScale);
+  const { size } = magicQueueGrid(available, fontScale);
   return (
     <DiscoverRow
       label={discoverRowTitle("magic-queue")}
@@ -276,7 +276,6 @@ function MagicQueueRow({ section }: { section: MagicQueueSection }) {
             <View
               style={{
                 width: available,
-                minHeight: height,
                 flexDirection: "row",
                 flexWrap: "wrap",
                 gap: CELL,
