@@ -38,7 +38,7 @@ export interface PlaylistRecommendationSessionInput {
  * Where the session hands the thread back to its host between steps.
  * "paint": the state just published (a tap's placeholder) gets a frame
  * before synchronous storage or ranking work starts. "free": a replacement's
- * read waits for the owner's free turn (a scroll or touch over first).
+ * read gives rendering a frame when its shared work budget is used up.
  */
 export type PlaylistRecommendationTurn = "paint" | "free";
 

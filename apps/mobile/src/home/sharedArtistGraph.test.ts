@@ -19,7 +19,7 @@ const emptyStore: ArtistGraphReads = {
 };
 
 test("a hung shared graph fails all its readers and a later ask can read again", async (t) => {
-  t.mock.timers.enable({ apis: ["setTimeout"] });
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"] });
   let hung = true;
   const shared = shareArtistGraph(
     Effect.succeed({
@@ -66,7 +66,7 @@ test("a failed graph read is an error, and Try Again can obtain a fresh graph", 
 });
 
 test("playlist suggestions stop loading on a graph timeout and a renewal retries the graph", async (t) => {
-  t.mock.timers.enable({ apis: ["setTimeout"] });
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"] });
   let hung = true;
   const shared = shareArtistGraph(
     Effect.succeed({

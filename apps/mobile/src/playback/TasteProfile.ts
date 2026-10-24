@@ -2,7 +2,7 @@ import { ytTrackId, type TasteHistory, type TasteProfile } from "@wave/core";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
-import { freeTurnEffect } from "@/lib/backgroundWork";
+import { recommendationTurnEffect } from "@/lib/recommendationWork";
 
 import { onLibraryChange, onStarred, onUnstarred, onYtSongSignal } from "@/library/libraryChanges";
 import { LibraryStore } from "@/library/LibraryStore";
@@ -25,7 +25,7 @@ const derive = (snapshotTaken: (history: TasteHistory) => void, library?: TasteL
   Effect.gen(function* () {
     return yield* deriveTaste(
       yield* LibraryStore,
-      freeTurnEffect,
+      recommendationTurnEffect,
       Date.now(),
       library,
       snapshotTaken,
@@ -35,7 +35,7 @@ const live = makeLiveTaste({
   derive: derive(() => {}),
   deriveWithSnapshot: (snapshotTaken) => derive(snapshotTaken),
   songsOf: magicSongsOf,
-  between: freeTurnEffect,
+  between: recommendationTurnEffect,
 });
 
 /** Home reuses its due-build input without creating another live profile or rereading songs. */

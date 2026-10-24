@@ -11,7 +11,7 @@ import { homeMagicQueueDue, buildHomeMagicQueue, pickHomeMagicQueue } from "./ma
 
 const root = fileURLToPath(new URL("../../../../", import.meta.url));
 test("a Home Magic Queue pick whose derivation never gets a turn times out and cancels that turn", async (t) => {
-  t.mock.timers.enable({ apis: ["setTimeout"] });
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"] });
   let turns = 0;
   const controller = new AbortController();
   const turn = Effect.callback<void>(() => {

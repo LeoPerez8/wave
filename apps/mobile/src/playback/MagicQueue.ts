@@ -40,7 +40,7 @@ import { artistGraphNow } from "@/home/artistGraphNow";
 import { discoverLevel, discoverSliders } from "@/lib/discoverSettings";
 import { makeExternalStore, subscribeAll } from "@/lib/externalStore";
 import { oneAtATime } from "@/lib/oneAtATime";
-import { RECOMMENDATION_TIMEOUT } from "@/lib/recommendationTimeout";
+import { withRecommendationDeadline } from "@/lib/recommendationTimeout";
 import { onStarred, onYtSongSignal } from "@/library/libraryChanges";
 import { LibraryStore, songHasFile, type SongRow } from "@/library/LibraryStore";
 import { YtMusic } from "@/ytmusic/YtMusic";
@@ -352,7 +352,7 @@ export const layer = Layer.effectDiscard(
       failedBatch.set(null);
       let again = false;
       return pick(wanted).pipe(
-        Effect.timeout(RECOMMENDATION_TIMEOUT),
+        withRecommendationDeadline,
         Effect.catchCause((cause) =>
           Effect.sync(() => {
             if (!Cause.hasInterruptsOnly(cause) && activeMagicSession()?.id === wanted.id)
