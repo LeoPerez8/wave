@@ -112,6 +112,8 @@ test("one/two retained hidden playlists do no recommendation work and catch up o
     await replay.end();
     assert.deepEqual([replay.work.reads, replay.work.ranks, replay.work.notifications], [1, 1, 3]);
     assert.equal(replay.sessions[0]!.get().slots.filter((x) => x !== null).length, 5);
+    // One snapshot version: the Library as Home's mixes index it, the catalog and the stars.
+    const versionRows = replay.work.rowsRead;
     assert.ok(Math.max(...replay.taskRows) <= 256);
     replay.begin();
     replay.show(1, true);
@@ -128,7 +130,7 @@ test("one/two retained hidden playlists do no recommendation work and catch up o
     for (let i = 0; i < 12; i++) replay.publish("tracks");
     await replay.end();
     assert.deepEqual([replay.work.reads, replay.work.ranks, replay.work.notifications], [2, 2, 6]);
-    assert.ok(replay.work.rowsRead < 5000, "one shared source version, not two");
+    assert.ok(replay.work.rowsRead < versionRows * 1.5, "one shared source version, not two");
     replay.begin();
     replay.publish("playlists", [fixture.playlistId + 1]);
     await replay.end();

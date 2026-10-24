@@ -7,18 +7,13 @@ import { EntryRow } from "@/catalog/EntryRow";
 import { CELL } from "@/catalog/grid";
 import { Hairline } from "@/catalog/Hairline";
 import { SkeletonLine } from "@/catalog/SkeletonLine";
-import {
-  AlbumCardSkeleton,
-  SongCardSkeleton,
-  SkeletonGroup,
-  TrackSkeletons,
-} from "@/catalog/Skeletons";
+import { AlbumCardSkeleton, SkeletonGroup, TrackSkeletons } from "@/catalog/Skeletons";
 import { TitledSection } from "@/catalog/TitledSection";
 import { openStats } from "@/library/routes";
 import { useYtMusicEnabled } from "@/settings/ytMusic";
 
 import { DiscoverMixesSkeleton } from "./DiscoverMixesSkeleton";
-import { homeBodyHeight, magicQueueGrid } from "./homeOpening";
+import { homeBodyHeight } from "./homeOpening";
 
 /** The same reservation surrounds the placeholder and the answered section. */
 export function HomeSectionBody({ id, children }: { id: HomeSectionId; children: ReactNode }) {
@@ -26,37 +21,10 @@ export function HomeSectionBody({ id, children }: { id: HomeSectionId; children:
   return <View style={{ minHeight: homeBodyHeight(id, fontScale) }}>{children}</View>;
 }
 
-/** Nine song tiles at the same responsive sizes as the Magic Queue's real grid. */
-export function MagicQueueSkeleton() {
-  const { width, fontScale } = useWindowDimensions();
-  const { available, size, height } = magicQueueGrid(width - CELL * 6, fontScale);
-  return (
-    <SkeletonGroup label="Loading songs">
-      <View
-        style={{
-          width: available,
-          minHeight: height,
-          flexDirection: "row",
-          flexWrap: "wrap",
-          gap: CELL,
-        }}
-      >
-        {Array.from({ length: 9 }, (_, index) => (
-          <SongCardSkeleton key={index} size={size} fontScale={fontScale} />
-        ))}
-      </View>
-    </SkeletonGroup>
-  );
-}
-
 function DiscoverSkeleton() {
   const enabled = useYtMusicEnabled();
   return (
     <View style={{ gap: CELL * 3 }}>
-      <View style={{ gap: CELL }}>
-        <Text className="font-sans text-footnote font-medium text-secondary">Magic Queue</Text>
-        <MagicQueueSkeleton />
-      </View>
       {enabled &&
         ["Artist mixes", "Genre mixes"].map((label) => (
           <View key={label} style={{ gap: CELL }}>

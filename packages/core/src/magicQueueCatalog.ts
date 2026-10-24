@@ -22,7 +22,13 @@ import {
   type MagicSession,
   type MagicYtCandidate,
 } from "./magicQueue.ts";
-import { recommend, type RecommendOptions, type RecommendSources } from "./recommend.ts";
+import {
+  recommendCandidatesSteps,
+  rankRecommendedSteps,
+  type RecommendOptions,
+  type RecommendSources,
+} from "./recommend.ts";
+import { finishSteps, mapSteps, sortSteps } from "./buildSteps.ts";
 import { GENRE_AFFINITY_THRESHOLD } from "./genreAffinity.ts";
 import { ytTrackId, type YtSong } from "./ytMusic.ts";
 
@@ -78,22 +84,35 @@ export interface MagicCatalogPick {
 export const magicCatalogCandidates = (
   session: MagicSession,
   sources: RecommendSources,
+  options: MagicCatalogOptions,
+): MagicCatalogPick => finishSteps(magicCatalogCandidatesSteps(session, sources, options));
+
+/** The same pick in bounded steps; callers choose when to hand the thread back. */
+export function* magicCatalogCandidatesSteps(
+  session: MagicSession,
+  sources: RecommendSources,
   { inLibrary, playable, engine = {} }: MagicCatalogOptions,
-): MagicCatalogPick => {
+): Generator<void, MagicCatalogPick> {
   // Known styles can establish a match; unknown styles also need family evidence.
   const styles = engine.styles !== undefined;
   const profile = magicSeedProfile(session, sources.profileOf);
   if (!styles && (profile === null || profile.size === 0)) return { candidates: [], left: 0 };
-  const ranked = recommend(
+  const candidates = yield* recommendCandidatesSteps(
     { artists: session.radioArtists, profile, style: session.seedStyle },
     sources,
     engine,
   );
-  const used = new Set(session.used);
+  const ranked = yield* rankRecommendedSteps(candidates, engine);
+  const used = new Set<string>();
+  for (const id of session.used) {
+    used.add(id);
+    yield;
+  }
   const excluded = new Set(session.excludedArtists);
   const seen = new Set<string>();
   const scored: { readonly candidate: MagicCatalogCandidate; readonly score: number }[] = [];
   for (const { song, affinity, score, closeness } of ranked) {
+    yield;
     const threshold = engine.threshold ?? GENRE_AFFINITY_THRESHOLD;
     const eligible = song.artists.some((artist) =>
       engine.styles !== undefined
@@ -122,13 +141,12 @@ export const magicCatalogCandidates = (
     scored.push({ candidate, score: score + learned });
   }
   // Stable: songs the session weighs alike keep the engine's order.
-  // oxlint-disable-next-line unicorn/no-array-sort -- sorts the fresh array the loop made; Hermes lacks toSorted
-  scored.sort((a, b) => b.score - a.score);
+  const sorted = yield* sortSteps(scored, (a, b) => b.score - a.score);
   return {
-    candidates: scored.slice(0, MAGIC_CATALOG_POOL).map((entry) => entry.candidate),
+    candidates: yield* mapSteps(sorted.slice(0, MAGIC_CATALOG_POOL), (entry) => entry.candidate),
     left: scored.length,
   };
-};
+}
 
 /**
  * A session with fewer catalog candidates left than this runs low: about

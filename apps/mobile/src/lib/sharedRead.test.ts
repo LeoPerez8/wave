@@ -11,7 +11,7 @@ class Store extends Context.Service<Store, { readonly value: number }>()("test/S
 
 describe("A shared read", () => {
   test("a stalled recommendation source times out for all waiters, cancels paging, and can be retried", async (t) => {
-    t.mock.timers.enable({ apis: ["setTimeout"] });
+    t.mock.timers.enable({ apis: ["setTimeout", "Date"] });
     let blocked = true;
     let turns = 0;
     const shared = sharedRead(

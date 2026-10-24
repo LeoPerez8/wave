@@ -16,6 +16,7 @@ export type { LibraryTrack, RawTrack } from "./library.ts";
 export { creditSplitter, respreadDeletedSongs, splitCredit } from "./credits.ts";
 export type { PrunedArtist } from "./credits.ts";
 export { formatDuration, formatRemaining } from "./time.ts";
+export { recommendationDeadline, recommendationFrameBudget } from "./recommendationWork.ts";
 export {
   ANCHOR_UNMEASURED,
   designPreviewState,
@@ -1884,6 +1885,7 @@ export {
   undoneMagicQueueRefresh,
 } from "./magicQueueSection.ts";
 export type { MagicQueuePicking, MagicQueuePicks } from "./magicQueueSection.ts";
+export { randomMagicQueuePicks } from "./randomMagicQueuePicks.ts";
 export { magicQueueShare } from "./magicQueue.ts";
 export { discoverMixesOfRadios } from "./discoverMixRadios.ts";
 export type { DiscoverMixRead } from "./discoverMixRadios.ts";
@@ -1967,6 +1969,7 @@ export {
   MAGIC_CATALOG_LOW,
   MAGIC_CATALOG_POOL,
   magicCatalogCandidates,
+  magicCatalogCandidatesSteps,
   magicRefillDue,
 } from "./magicQueueCatalog.ts";
 export { catalogRadiosReadAt } from "./harvest.ts";
@@ -2081,3 +2084,16 @@ export { playlistRecommendationsSteps } from "./playlistRecommendations.ts";
 
 export { createMenuTouchOwnership, playerTouchAllowed } from "./menuTouchOwnership.ts";
 export type { MenuTouchOwnership } from "./menuTouchOwnership.ts";
+
+export {
+  RECOMMENDATION_SNAPSHOT,
+  snapshotAsk,
+  snapshotVersionsAfter,
+  type SnapshotAnswer,
+  type SnapshotPart,
+  type SnapshotReadState,
+  type SnapshotSource,
+  type SnapshotVersions,
+} from "./recommendationSnapshot.ts";
+
+export { homeMixBuildsDue } from "./homeMixBuilds.ts";

@@ -10,7 +10,10 @@
  * it runs under plain Node tests; the app's is `magicQueueRadio.ts`.
  */
 import {
-  magicCatalogCandidates,
+  magicCatalogCandidatesSteps,
+  catalogSeen,
+  mapSteps,
+  type CatalogPage,
   magicRefillDue,
   type ArtistGraph,
   type CatalogSong,
@@ -23,11 +26,14 @@ import {
   type YtSong,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
+import { runSteps } from "../lib/stepped.ts";
 
 /** What a refill did: the bytes it used, and whether it reached YouTube Music. */
 export interface MagicRefill {
   readonly bytes: number;
   readonly reached: boolean;
+  /** Radio pages received, including any completed before a timeout. */
+  readonly pages: readonly CatalogPage[];
 }
 
 /** What a read ranks, and how it reaches the network and the audio cache. */
@@ -39,8 +45,9 @@ export interface MagicCatalogReadDeps<R> {
   /** The mobile data the harvest used today, in bytes: a refill counts in it. */
   readonly usedToday: number;
   readonly now: number;
-  /** The candidate catalog as it stands: read again after a refill. */
-  readonly catalog: Effect.Effect<readonly CatalogSong[], never, R>;
+  /** The catalog from this batch's one recommendation snapshot. */
+  readonly catalog: readonly CatalogSong[];
+  readonly between: Effect.Effect<void>;
   readonly graph: ArtistGraph | null;
   readonly profileOf: GenreProfileOf;
   /** Every artist's style (the Library's): what Same genres and Close hold the candidates to. */
@@ -79,22 +86,48 @@ export const magicCatalogRead = <R>(
     const { graph, profileOf, styleOf, taste, now, inLibrary } = deps;
     const engine = deps.engine === undefined ? {} : { engine: deps.engine };
     const pickFrom = (catalog: readonly CatalogSong[], playable?: (videoId: string) => boolean) =>
-      magicCatalogCandidates(
-        session,
-        { catalog, graph, profileOf, styleOf, taste, now },
-        { inLibrary, ...engine, ...(playable === undefined ? {} : { playable }) },
+      runSteps(
+        magicCatalogCandidatesSteps(
+          session,
+          { catalog, graph, profileOf, styleOf, taste, now },
+          { inLibrary, ...engine, ...(playable === undefined ? {} : { playable }) },
+        ),
+        deps.between,
       );
     if (!deps.online) {
       const cached = yield* deps.cached;
-      return pickFrom(yield* deps.catalog, (videoId) => cached.has(videoId));
+      return yield* pickFrom(deps.catalog, (videoId) => cached.has(videoId));
     }
-    const catalog = yield* deps.catalog;
-    const pick = pickFrom(catalog);
+    const catalog = deps.catalog;
+    const pick = yield* pickFrom(catalog);
     const { onMobileData, usedToday, tried } = deps;
     const run = { onMobileData, usedToday, now, tried };
     if (!magicRefillDue(session, { catalog, left: pick.left }, run)) return pick;
-    const { bytes, reached } = yield* deps.refill;
+    const { bytes, reached, pages } = yield* deps.refill;
     if (reached) tried.set(session.id, now);
     if (onMobileData) deps.usedOnMobile(bytes);
-    return pickFrom(yield* deps.catalog);
+    // Extend only this batch's copy. Writes belong to the next snapshot ask;
+    // no second Library, graph or catalog read can change this batch halfway through.
+    const grown = new Map<string, CatalogSong>();
+    yield* runSteps(
+      mapSteps(catalog, (entry) => {
+        grown.set(entry.song.videoId, entry);
+      }),
+      deps.between,
+    );
+    for (const page of pages) {
+      yield* deps.between;
+      const seen = catalogSeen(grown, page, now);
+      yield* runSteps(
+        mapSteps(seen, (entry) => {
+          grown.set(entry.song.videoId, entry);
+        }),
+        deps.between,
+      );
+    }
+    const entries = yield* runSteps(
+      mapSteps(grown.values(), (entry) => entry),
+      deps.between,
+    );
+    return yield* pickFrom(entries);
   });

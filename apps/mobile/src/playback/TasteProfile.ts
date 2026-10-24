@@ -1,13 +1,13 @@
-import { ytTrackId, type TasteHistory, type TasteProfile } from "@wave/core";
+import { ytTrackId, type TasteHistory } from "@wave/core";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
-import { freeTurnEffect } from "@/lib/backgroundWork";
+import { recommendationTurnEffect } from "@/lib/recommendationWork";
 
 import { onLibraryChange, onStarred, onUnstarred, onYtSongSignal } from "@/library/libraryChanges";
-import { LibraryStore } from "@/library/LibraryStore";
+import { LibraryStore, type SongRow, type ArtistRow } from "@/library/LibraryStore";
 
-import { deriveTaste, type TasteLibrary } from "./tasteDerivation";
+import { deriveTaste, deriveTasteFromLibrary, type TasteLibrary } from "./tasteDerivation";
 import { makeLiveTaste } from "./liveTaste";
 import { magicSongsOf } from "./magicSongs";
 import { onPlayEnded } from "./PlayHistory";
@@ -25,7 +25,7 @@ const derive = (snapshotTaken: (history: TasteHistory) => void, library?: TasteL
   Effect.gen(function* () {
     return yield* deriveTaste(
       yield* LibraryStore,
-      freeTurnEffect,
+      recommendationTurnEffect,
       Date.now(),
       library,
       snapshotTaken,
@@ -35,7 +35,7 @@ const live = makeLiveTaste({
   derive: derive(() => {}),
   deriveWithSnapshot: (snapshotTaken) => derive(snapshotTaken),
   songsOf: magicSongsOf,
-  between: freeTurnEffect,
+  between: recommendationTurnEffect,
 });
 
 /** Home reuses its due-build input without creating another live profile or rereading songs. */
@@ -45,10 +45,24 @@ export const tasteProfileForLibrary = (library: TasteLibrary) =>
 /**
  * The owner's taste profile, derived from the history the first time it's
  * asked for, then as signals have kept it; null when the history can't be
- * read (the Magic Queue then weighs by its session alone).
+ * read. A recommendation passes its snapshot's Library, which a cold profile
+ * maps instead of reading the songs again.
  */
-export const tasteProfileNow: Effect.Effect<TasteProfile | null, never, LibraryStore> =
-  live.profile;
+export const tasteProfileForRecommendation = (library: {
+  readonly songs: readonly SongRow[];
+  readonly artists: readonly ArtistRow[];
+}) =>
+  live.profileUsing((snapshotTaken) =>
+    Effect.gen(function* () {
+      return yield* deriveTasteFromLibrary(
+        yield* LibraryStore,
+        recommendationTurnEffect,
+        Date.now(),
+        library,
+        snapshotTaken,
+      );
+    }),
+  );
 
 /** Keeps the taste profile up to date as signals come (`makeLiveTaste`). */
 export const layer = Layer.effectDiscard(

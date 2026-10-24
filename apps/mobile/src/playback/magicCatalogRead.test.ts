@@ -75,12 +75,16 @@ const read = (
   let refills = 0;
   let cacheAsks = 0;
   let mobile = 0;
+  let turns = 0;
   const deps: MagicCatalogReadDeps<never> = {
     online,
     onMobileData,
     usedToday,
     now: NOW,
-    catalog: Effect.sync(() => (refills === 0 ? catalog : refilled)),
+    catalog,
+    between: Effect.sync(() => {
+      turns++;
+    }),
     graph: null,
     profileOf: () => new Map([["rock", 1]]),
     taste: null,
@@ -91,7 +95,11 @@ const read = (
     }),
     refill: Effect.sync(() => {
       refills += 1;
-      return { bytes, reached };
+      return {
+        bytes,
+        reached,
+        pages: [{ seed: "Muse", songs: refilled.map((entry) => entry.song) }],
+      };
     }),
     usedOnMobile: (used) => {
       mobile += used;
@@ -104,6 +112,7 @@ const read = (
     refills,
     cacheAsks,
     mobile,
+    turns,
   };
 };
 
@@ -152,4 +161,13 @@ describe("A Magic Queue batch's YT Music candidates", () => {
     assert.deepEqual(new Set(ids), new Set(["song3", "song7"]));
     assert.equal(refills, 0);
   });
+});
+
+test("a refill extends this batch's snapshot without replacing its original candidates", () => {
+  const { ids, turns } = read(songs(5, "original"), { refilled: songs(5, "fresh") });
+  assert.deepEqual(
+    new Set(ids),
+    new Set([...songs(5, "original"), ...songs(5, "fresh")].map((entry) => entry.song.videoId)),
+  );
+  assert.ok(turns > 0, "the catalog reader uses the injected frame checkpoint");
 });

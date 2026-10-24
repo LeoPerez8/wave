@@ -19,7 +19,7 @@ const emptyStore: ArtistGraphReads = {
 };
 
 test("a hung shared graph fails all its readers and a later ask can read again", async (t) => {
-  t.mock.timers.enable({ apis: ["setTimeout"] });
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"] });
   let hung = true;
   const shared = shareArtistGraph(
     Effect.succeed({
@@ -66,7 +66,7 @@ test("a failed graph read is an error, and Try Again can obtain a fresh graph", 
 });
 
 test("playlist suggestions stop loading on a graph timeout and a renewal retries the graph", async (t) => {
-  t.mock.timers.enable({ apis: ["setTimeout"] });
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"] });
   let hung = true;
   const shared = shareArtistGraph(
     Effect.succeed({
@@ -99,4 +99,20 @@ test("playlist suggestions stop loading on a graph timeout and a renewal retries
   await session.renew();
   assert.equal(session.get().loading, false);
   assert.equal(session.get().error, null);
+});
+
+test("a stalled catalog fails the graph at its fifteen-second deadline", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"] });
+  const shared = shareArtistGraph(Effect.succeed(emptyStore), Effect.void, Effect.void, {
+    catalog: Effect.never,
+  });
+  t.after(shared.dispose);
+  let outcome = "pending";
+  const failed = assert.rejects(Effect.runPromise(shared.get)).then(() => {
+    outcome = "failed";
+  });
+  t.mock.timers.tick(15_000);
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal(outcome, "failed", "the wait for the catalog counts towards the graph's deadline");
+  await failed;
 });

@@ -36,14 +36,15 @@ import { Storage } from "expo-sqlite/kv-store";
 import { useSyncExternalStore } from "react";
 
 import { lookUpArtistProfiles, magicProfileOf } from "@/home/artistGenres";
-import { artistGraphNow } from "@/home/artistGraphNow";
+import { recommendationSnapshot } from "@/home/recommendationSnapshot";
 import { discoverLevel, discoverSliders } from "@/lib/discoverSettings";
 import { makeExternalStore, subscribeAll } from "@/lib/externalStore";
 import { oneAtATime } from "@/lib/oneAtATime";
-import { RECOMMENDATION_TIMEOUT } from "@/lib/recommendationTimeout";
+import { withRecommendationDeadline } from "@/lib/recommendationTimeout";
 import { onStarred, onYtSongSignal } from "@/library/libraryChanges";
 import { LibraryStore, songHasFile, type SongRow } from "@/library/LibraryStore";
 import { YtMusic } from "@/ytmusic/YtMusic";
+import { appLog } from "@/log/appLog";
 
 import { magicQueueYtCandidates } from "./magicQueueRadio";
 import { magicSongsOf } from "./magicSongs";
@@ -51,7 +52,7 @@ import { Player } from "./Player";
 import { onPlayEnded, playTracker } from "./PlayHistory";
 import { Queue, queueState, toQueueTrack, type QueueTrack } from "./Queue";
 import { toYtQueueTrack } from "./queueTracks";
-import { tasteProfileNow } from "./TasteProfile";
+import { tasteProfileForRecommendation } from "./TasteProfile";
 import { cacheYtCoversInBackground } from "./ytQueueTracks";
 
 /**
@@ -140,13 +141,8 @@ const subscribeBatchLoading = subscribeAll(queueState, magicSession, picking);
 export const useMagicBatchLoading = (): boolean =>
   useSyncExternalStore(subscribeBatchLoading, batchLoadingNow);
 
-/** The Library's songs and artists: what a Magic Queue grows from, and names its songs' artists. */
-const libraryNow = Effect.gen(function* () {
-  const store = yield* LibraryStore;
-  const songs = yield* store.listSongs;
-  const artists = yield* store.listArtists;
-  return { songs, artists };
-});
+/** When the current batch first became wanted, including starting the seed's queue. */
+let batchStart: { readonly id: string; readonly at: number; readonly first: boolean } | null = null;
 
 /**
  * Starts a Magic Queue from [seed], whose songs are [seedSongs] (the song
@@ -160,6 +156,7 @@ const libraryNow = Effect.gen(function* () {
  */
 export const startMagicQueue = (seed: MagicSeed, seedSongs: readonly SongRow[]) =>
   Effect.gen(function* () {
+    const startedAt = Date.now();
     const playable = seedSongs.filter(songHasFile);
     const artists = yield* (yield* LibraryStore).listArtists;
     const names = new Map(artists.map((artist) => [artist.id, artist.name]));
@@ -174,6 +171,7 @@ export const startMagicQueue = (seed: MagicSeed, seedSongs: readonly SongRow[]) 
     });
     const first = playable.find((song) => String(song.id) === started?.first);
     if (started === null || first === undefined) return;
+    batchStart = { id: started.session.id, at: startedAt, first: true };
     save(started.session);
     // The first batch is on its way as the seed starts: Up Next shows it loading from the first frame.
     picking.set(started.session.id);
@@ -277,12 +275,20 @@ export const layer = Layer.effectDiscard(
     };
 
     /** Picks [wanted]'s next batch, weighing every signal so far, and adds it while still wanted. */
-    const pick = (wanted: MagicSession) =>
+    const pick = (wanted: MagicSession, appended: (count: number) => void) =>
       Effect.gen(function* () {
         yield* awaitSignals;
-        const library = yield* Effect.provideService(libraryNow, LibraryStore, store);
+        const { library, catalog, graph } = yield* Effect.provideService(
+          recommendationSnapshot.get,
+          LibraryStore,
+          store,
+        );
         // The owner's taste weighs from the session's first batch on.
-        const taste = yield* Effect.provideService(tasteProfileNow, LibraryStore, store);
+        const taste = yield* Effect.provideService(
+          tasteProfileForRecommendation(library),
+          LibraryStore,
+          store,
+        );
         // Discover's sliders as they are now: a move applies from the next batch.
         const sliders = discoverSliders.get();
         const engine = mixSlidersEngine(sliders);
@@ -294,6 +300,8 @@ export const layer = Layer.effectDiscard(
           Effect.ignore,
         );
         const yt = yield* magicQueueYtCandidates(wanted, library, {
+          catalog,
+          graph,
           taste,
           engine,
           profileOf,
@@ -311,7 +319,6 @@ export const layer = Layer.effectDiscard(
         // At Wander the Library keeps every genre (null).
         const threshold = magicLibraryThreshold(sliders);
         // Same genres and Close hold Library songs to the seed's style, and its artists' neighbourhood.
-        const graph = yield* Effect.provideService(artistGraphNow, LibraryStore, store);
         const libraryCandidates = magicLibraryCandidates(session, ofLibrary, {
           profileOf,
           threshold,
@@ -332,6 +339,7 @@ export const layer = Layer.effectDiscard(
         const songs = batch.trackIds.flatMap((id) => tracks.get(id) ?? []);
         yield* queue.dispatch({ type: "append", trackIds: songs.map((song) => song.id) }, songs);
         const picked = new Set(batch.trackIds);
+        appended(songs.length);
         yield* cacheYtCoversInBackground(
           yt
             .filter((candidate) => picked.has(candidate.trackId))
@@ -351,10 +359,28 @@ export const layer = Layer.effectDiscard(
       picking.set(wanted.id);
       failedBatch.set(null);
       let again = false;
-      return pick(wanted).pipe(
-        Effect.timeout(RECOMMENDATION_TIMEOUT),
+      const timing =
+        batchStart?.id === wanted.id
+          ? batchStart
+          : { id: wanted.id, at: Date.now(), first: wanted.used.length <= 1 };
+      let logged = false;
+      const log = (outcome: string) => {
+        if (logged) return;
+        logged = true;
+        if (batchStart === timing) batchStart = null;
+        appLog(
+          "info",
+          "WaveTiming",
+          `Magic Queue ${timing.first ? "first" : "next"} batch: ${Date.now() - timing.at}ms (${outcome})`,
+        );
+      };
+      return pick(wanted, (count) => log(`${count} songs appended`)).pipe(
+        withRecommendationDeadline,
         Effect.catchCause((cause) =>
           Effect.sync(() => {
+            log(
+              Cause.hasInterruptsOnly(cause) ? "stopped" : `failed: ${String(Cause.squash(cause))}`,
+            );
             if (!Cause.hasInterruptsOnly(cause) && activeMagicSession()?.id === wanted.id)
               failedBatch.set(wanted.id);
           }),
@@ -362,6 +388,7 @@ export const layer = Layer.effectDiscard(
         // However the picking ends: added, failed, timed out or no longer wanted.
         Effect.ensuring(
           Effect.sync(() => {
+            log("no batch appended");
             const ended = magicPickEnded(
               wanted.id,
               picking.get(),
@@ -395,6 +422,8 @@ export const layer = Layer.effectDiscard(
       previous = state;
       const session = activeMagicSession(state);
       if (session === null) return;
+      if (wantsMagicBatch(session, state) && batchStart?.id !== session.id)
+        batchStart = { id: session.id, at: Date.now(), first: session.used.length <= 1 };
       const { added, removed } = magicQueueEdits(session, before, state);
       teach("added", added);
       teach("removed", removed);

@@ -11,11 +11,14 @@
  * holds whole; none with the YT Music switch off.
  */
 import {
-  libraryFinder,
+  libraryFinderSteps,
   magicRadioLookups,
   magicYtSong,
   networkUseBytes,
   type GenreProfileLibrary,
+  type ArtistGraph,
+  type CatalogSong,
+  type CatalogPage,
   type GenreProfileOf,
   type MagicCatalogCandidate,
   type MagicSession,
@@ -27,11 +30,10 @@ import {
 import * as Effect from "effect/Effect";
 
 import { lookUpArtistProfiles, lookedUpProfileOf } from "@/home/artistGenres";
-import { artistGraphNow, forgetArtistGraph } from "@/home/artistGraphNow";
 import { harvestMobileUsed, noteHarvestMobileUse } from "@/home/harvestMobileUse";
-import { forgetMixCatalog, mixCatalog } from "@/home/mixCatalog";
 import { artistRadio } from "@/home/ytArtistPage";
-import { freeTurnEffect } from "@/lib/backgroundWork";
+import { recommendationTurnEffect } from "@/lib/recommendationWork";
+import { runSteps } from "@/lib/stepped";
 import { withNetworkLog } from "@/lib/networkMeter";
 import type { SongRow } from "@/library/LibraryStore";
 import { onMobileData, online } from "@/native/waveNative";
@@ -64,10 +66,11 @@ const artistRadioSongs = (name: string) =>
 type MagicLibrary = GenreProfileLibrary & { readonly songs: readonly SongRow[] };
 
 /** Whether the Library has a YouTube Music song, as [library]'s songs tell. */
-const inLibraryOf = (library: MagicLibrary) => {
-  const find = libraryFinder(library.songs);
-  return (song: Parameters<typeof find>[0]) => find(song) !== null;
-};
+const inLibraryOf = (library: MagicLibrary) =>
+  Effect.gen(function* () {
+    const find = yield* runSteps(libraryFinderSteps(library.songs), recommendationTurnEffect);
+    return (song: Parameters<typeof find>[0]) => find(song) !== null;
+  });
 
 /**
  * Reads [session]'s radio artists' radios at once, each into the catalog as
@@ -79,17 +82,25 @@ const readRadios = (
   session: MagicSession,
   library: MagicLibrary,
   profileOf: GenreProfileOf,
+  pages: CatalogPage[],
   threshold?: number,
 ) =>
   Effect.gen(function* () {
     const radios = yield* Effect.all(
       session.radioArtists.map((name) =>
-        artistRadioSongs(name).pipe(Effect.tap((songs) => noteRadioNow(name, songs))),
+        artistRadioSongs(name).pipe(
+          Effect.tap((songs) =>
+            Effect.sync(() => {
+              pages.push({ seed: name, songs });
+            }),
+          ),
+          Effect.tap((songs) => noteRadioNow(name, songs)),
+        ),
       ),
       { concurrency: "unbounded" },
     );
     const radio = radios.flat();
-    const inLibrary = inLibraryOf(library);
+    const inLibrary = yield* inLibraryOf(library);
     const asked: string[] = [];
     for (
       let names = magicRadioLookups(session, radio, { profileOf, inLibrary, asked, threshold });
@@ -105,7 +116,7 @@ const readRadios = (
 /**
  * [session]'s refill: its radios read into the catalog (`readRadios`), 15 s
  * at most, written to the app log as "Magic Queue radio" with its network
- * use; the catalog and the artist graph are read again after it. Gives the
+ * use. The received pages extend this batch's catalog without another snapshot read. Gives the
  * bytes it used, and whether YouTube Music answered (any of its bytes came,
  * even for an artist it doesn't have). Never fails.
  */
@@ -116,18 +127,17 @@ const refill = (
   threshold?: number,
 ) =>
   Effect.gen(function* () {
-    let used: MagicRefill = { bytes: 0, reached: false };
+    const pages: CatalogPage[] = [];
+    let used = { bytes: 0, reached: false };
     yield* withNetworkLog(
       "Magic Queue radio",
-      readRadios(session, library, profileOf, threshold).pipe(Effect.timeout(RADIO_TIMEOUT)),
+      readRadios(session, library, profileOf, pages, threshold).pipe(Effect.timeout(RADIO_TIMEOUT)),
       (songs) => (songs === 0 ? "no radio" : `${songs} songs`),
       (use) => {
         used = { bytes: networkUseBytes(use), reached: use.ytMusic.bytes > 0 };
       },
     ).pipe(Effect.ignore);
-    forgetMixCatalog();
-    forgetArtistGraph();
-    return used;
+    return { ...used, pages } satisfies MagicRefill;
   });
 
 /** The video ids the audio cache holds whole; none when it can't tell. */
@@ -163,7 +173,11 @@ export const magicQueueYtCandidates = (
     engine,
     profileOf,
     styleOf,
+    catalog,
+    graph,
   }: {
+    readonly catalog: readonly CatalogSong[];
+    readonly graph: ArtistGraph;
     readonly taste: TasteProfile | null;
     readonly engine?: Omit<RecommendOptions, "avoid">;
     readonly profileOf: GenreProfileOf;
@@ -172,19 +186,19 @@ export const magicQueueYtCandidates = (
 ) =>
   Effect.gen(function* () {
     if (!ytMusicEnabled()) return [];
-    const graph = yield* artistGraphNow;
-    yield* freeTurnEffect;
+    const inLibrary = yield* inLibraryOf(library);
     const pick = yield* magicCatalogRead(session, {
       online: online(),
       onMobileData: onMobileData(),
       usedToday: harvestMobileUsed(),
       now: Date.now(),
-      catalog: mixCatalog.pipe(Effect.orElseSucceed(() => [])),
+      catalog,
+      between: recommendationTurnEffect,
       graph,
       profileOf,
       styleOf,
       taste,
-      inLibrary: inLibraryOf(library),
+      inLibrary,
       cached: cachedVideos,
       refill: refill(session, library, profileOf, engine?.threshold),
       usedOnMobile: noteHarvestMobileUse,
