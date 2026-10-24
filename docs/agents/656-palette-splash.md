@@ -82,5 +82,23 @@ pnpm --filter @wave/mobile prebuild --no-install
 
 Formatting, lint for the implementation files, and `git diff --check` pass.
 
+Before handoff, merged the current integration tip `8ecc677e`, which includes
+#655. The only conflict was the Theme paragraph; both tickets' text is kept.
+Against that tip, this ticket still changes only the nine splash, test,
+measurement and documentation files.
+
+Verification after that merge passed all 3,474 Core tests and 842 mobile
+tests, with one mobile benchmark variant skipped, and both typechecks.
+Core used one test worker. The final mobile run used two workers through
+the same Node test entry points as the package script:
+
+```sh
+pnpm --filter @wave/mobile exec node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test --test-concurrency=2 'src/**/*.test.ts' 'plugins/**/*.test.ts'
+```
+
+The actual Android prebuild output was also parsed and checked: all 20,735
+named styles resolve to Core's expected colours in both modes and share
+`drawable/launch_logo.xml`.
+
 The Android 13+ phone cold-start check with cyan/red, animation and Remove
 animations remains manual. This environment has no Android SDK.
