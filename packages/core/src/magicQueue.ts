@@ -197,7 +197,7 @@ export const magicLibraryCandidates = (
   if (!styles && threshold === null) return library.songs.map(toMagicSong);
   const seed = seedProfile === undefined ? magicSeedProfile(session, profileOf) : seedProfile;
   // Nothing to hold songs to: the seed's own artists and their neighbourhood stand in (association alone).
-  const unknownSeed = (seed === null || seed.size === 0) && session.seedStyle === null;
+  const unknownSeed = magicSeedUnknown(session, seed);
   const close = styles || unknownSeed ? magicCloseArtists(session, graph) : new Set<string>();
   const names = new Map(library.artists.map((artist) => [artist.id, artist.name]));
   const profileOfSong = (song: MagicLibrarySong): GenreProfile | null => {
@@ -331,7 +331,7 @@ export interface MagicRadioSeed {
   readonly artists: readonly string[];
   /** The seed songs' genre profile (`genreProfile`), or null when none has a genre. */
   readonly profile: GenreProfile | null;
-  /** The seed songs' YouTube video ids, the song played first's first; none without. */
+  /** The seed songs' YouTube video ids, in the seed's order; none without. */
   readonly videoIds?: readonly string[];
 }
 
@@ -352,6 +352,19 @@ const averageProfile = (
   return new Map([...weights].map(([family, weight]) => [family, weight / known]));
 };
 
+/** The primary artists of [radio]'s songs, each once, in the radio's order. */
+export const radioPrimaryArtists = (
+  radio: readonly { readonly artists: readonly string[] }[],
+): string[] => [...new Set(radio.flatMap((song) => song.artists.slice(0, 1)))];
+
+/**
+ * Whether [session]'s seed has nothing to hold candidates to: no genre
+ * ([profile], `magicSeedProfile`) and no style known. Its candidates then
+ * come by association alone (#637): its artists, their neighbourhood, its radios.
+ */
+export const magicSeedUnknown = (session: MagicSession, profile: GenreProfile | null): boolean =>
+  (profile === null || profile.size === 0) && session.seedStyle === null;
+
 /**
  * The genre profile [session]'s candidates, from both sources, are held to:
  * the seed songs' (`seedProfile`); when none of them has a genre tag, its
@@ -371,7 +384,7 @@ export const magicSeedProfile = (
   if (profileOf === undefined) return null;
   return (
     averageProfile(session.radioArtists, profileOf) ??
-    averageProfile(new Set(radio.flatMap((song) => song.artists.slice(0, 1))), profileOf)
+    averageProfile(radioPrimaryArtists(radio), profileOf)
   );
 };
 

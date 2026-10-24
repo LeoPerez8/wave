@@ -16,6 +16,7 @@ import {
   magicArtistKey,
   magicGenreMatches,
   magicSeedProfile,
+  magicSeedUnknown,
   magicSessionWeight,
   magicStyleMatches,
   magicYtSong,
@@ -29,7 +30,11 @@ import {
   type RecommendSources,
 } from "./recommend.ts";
 import { finishSteps, mapSteps, sortSteps } from "./buildSteps.ts";
-import { GENRE_AFFINITY_THRESHOLD, type GenreProfile } from "./genreAffinity.ts";
+import {
+  GENRE_AFFINITY_THRESHOLD,
+  type GenreProfile,
+  type GenreProfileOf,
+} from "./genreAffinity.ts";
 import { ytTrackId, type YtSong } from "./ytMusic.ts";
 
 /**
@@ -80,7 +85,7 @@ export interface MagicCatalogPick {
  * artists' radios, its own song radio among them (a refill writes that as
  * its first radio artist's when theirs bring nothing).
  */
-export function* magicSeedRadioSteps(
+function* magicSeedRadioSteps(
   session: MagicSession,
   catalog: readonly CatalogSong[],
 ): Generator<void, YtSong[]> {
@@ -93,9 +98,20 @@ export function* magicSeedRadioSteps(
   return radio;
 }
 
-/** `magicSeedRadioSteps` at once. */
-export const magicSeedRadio = (session: MagicSession, catalog: readonly CatalogSong[]): YtSong[] =>
-  finishSteps(magicSeedRadioSteps(session, catalog));
+/**
+ * [session]'s seed profile (`magicSeedProfile`), the songs its radios
+ * brought in [catalog] read only when its tags and radio artists leave it unknown.
+ */
+export function* magicSeedProfileSteps(
+  session: MagicSession,
+  profileOf: GenreProfileOf,
+  catalog: readonly CatalogSong[],
+): Generator<void, GenreProfile | null> {
+  return (
+    magicSeedProfile(session, profileOf) ??
+    magicSeedProfile(session, profileOf, yield* magicSeedRadioSteps(session, catalog))
+  );
+}
 
 /**
  * [session]'s YouTube Music candidates in [sources]' catalog, the best 50
@@ -121,14 +137,10 @@ export function* magicCatalogCandidatesSteps(
 ): Generator<void, MagicCatalogPick> {
   // Known styles can establish a match; unknown styles also need family evidence.
   const styles = engine.styles !== undefined;
-  const profile = magicSeedProfile(
-    session,
-    sources.profileOf,
-    yield* magicSeedRadioSteps(session, sources.catalog),
-  );
+  const profile = yield* magicSeedProfileSteps(session, sources.profileOf, sources.catalog);
   const genreKnown = profile !== null && profile.size > 0;
   // Nothing to hold candidates to: the seed's radios and neighbourhood stand in (association alone).
-  const unknownSeed = !genreKnown && session.seedStyle === null;
+  const unknownSeed = magicSeedUnknown(session, profile);
   if (!styles && !genreKnown && !unknownSeed)
     return { candidates: [], left: 0, ranked: 0, profile };
   const candidates = yield* recommendCandidatesSteps(
@@ -208,13 +220,26 @@ export const MAGIC_CATALOG_LOW = 20;
  */
 export const magicRefillDue = (
   session: MagicSession,
-  { catalog, left }: { readonly catalog: readonly CatalogSong[]; readonly left: number },
+  {
+    catalog,
+    left,
+    genreKnown = true,
+  }: {
+    readonly catalog: readonly CatalogSong[];
+    readonly left: number;
+    /**
+     * Whether the seed's genre is known (`magicSeedUnknown`): one that isn't
+     * counts as having none left, so its song radio is read before
+     * association stands in for the genre.
+     */
+    readonly genreKnown?: boolean;
+  },
   run: Pick<HarvestRun, "onMobileData" | "usedToday" | "now" | "tried">,
 ): boolean => {
   if (session.radioArtists.length === 0) return false;
   const want = {
     id: session.id,
-    candidates: left,
+    candidates: genreKnown ? left : 0,
     readAt: catalogRadiosReadAt(catalog, session.radioArtists),
   };
   return harvestNext([want], { ...run, read: 0, low: MAGIC_CATALOG_LOW }) !== null;

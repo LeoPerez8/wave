@@ -1978,8 +1978,7 @@ export {
   magicCatalogCandidates,
   magicCatalogCandidatesSteps,
   magicRefillDue,
-  magicSeedRadio,
-  magicSeedRadioSteps,
+  magicSeedProfileSteps,
 } from "./magicQueueCatalog.ts";
 export { catalogRadiosReadAt } from "./harvest.ts";
 export type {
@@ -2023,7 +2022,7 @@ export {
   storedLyricsTranslation,
 } from "./lyricsTranslation.ts";
 export type { LyricsTranslation, LyricsTranslationRequest } from "./lyricsTranslation.ts";
-export { magicCloseArtists, magicLibraryCandidates } from "./magicQueue.ts";
+export { magicCloseArtists, magicLibraryCandidates, magicSeedUnknown } from "./magicQueue.ts";
 export { magicLibraryLookups, magicSeedLookups } from "./mixGenreLookups.ts";
 export { magicLibraryThreshold } from "./mixSliders.ts";
 export {

@@ -15,6 +15,7 @@ import {
   mapSteps,
   type CatalogPage,
   magicRefillDue,
+  magicSeedUnknown,
   type ArtistGraph,
   type CatalogSong,
   type GenreProfileOf,
@@ -106,7 +107,9 @@ export const magicCatalogRead = <R>(
     const pick = yield* pickFrom(catalog);
     const { onMobileData, usedToday, tried } = deps;
     const run = { onMobileData, usedToday, now, tried };
-    if (!magicRefillDue(session, { catalog, left: pick.left }, run))
+    // A seed with no genre known reads its (song) radio first, whatever association found.
+    const genreKnown = !magicSeedUnknown(session, pick.profile);
+    if (!magicRefillDue(session, { catalog, left: pick.left, genreKnown }, run))
       return { ...pick, refilled: null };
     const { bytes, reached, pages } = yield* deps.refill;
     if (reached) tried.set(session.id, now);

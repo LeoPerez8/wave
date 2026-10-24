@@ -271,6 +271,17 @@ describe("A Magic Queue's refill", () => {
     assert.equal(magicRefillDue(session, { catalog: never, left: 19 }, WIFI), true);
   });
 
+  test("a seed with no genre known counts as empty, however many associates it has (#637)", () => {
+    const session = sessionOf("Muse");
+    const unknown = { catalog: never, left: 40, genreKnown: false };
+    assert.equal(magicRefillDue(session, unknown, WIFI), true);
+    assert.equal(magicRefillDue(session, unknown, MOBILE), true);
+    assert.equal(
+      magicRefillDue(session, { ...unknown, catalog: readAgo(HARVEST_RETRY_MS - 1) }, WIFI),
+      false,
+    );
+  });
+
   test("on Wi-Fi, reads a radio running low unless it was read in the last 12 hours", () => {
     const session = sessionOf("Muse");
     const left = 5;

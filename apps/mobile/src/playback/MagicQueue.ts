@@ -19,8 +19,7 @@ import {
   magicQueueLabel,
   magicQueueShare,
   magicSeedLookups,
-  magicSeedProfile,
-  magicSeedRadio,
+  magicSeedProfileSteps,
   faithfulnessStyles,
   libraryStyleOf,
   magicSignal,
@@ -48,7 +47,9 @@ import { recommendationSnapshot } from "@/home/recommendationSnapshot";
 import { discoverLevel, discoverSliders } from "@/lib/discoverSettings";
 import { makeExternalStore, subscribeAll } from "@/lib/externalStore";
 import { oneAtATime } from "@/lib/oneAtATime";
+import { recommendationTurnEffect } from "@/lib/recommendationWork";
 import { withRecommendationDeadline } from "@/lib/recommendationTimeout";
+import { runSteps } from "@/lib/stepped";
 import { onStarred, onYtSongSignal } from "@/library/libraryChanges";
 import { LibraryStore, songHasFile, type SongRow } from "@/library/LibraryStore";
 import { YtMusic } from "@/ytmusic/YtMusic";
@@ -232,6 +233,18 @@ const fork = (effect: Effect.Effect<void, unknown>): void => {
   Effect.runFork(Effect.ignore(effect));
 };
 
+/**
+ * The signals that ask an empty pick again (`magicPickDue`): a play's end or a
+ * skip just moves through the queue, which the same inputs would answer alike.
+ */
+const ASKS_AGAIN: ReadonlySet<MagicSignalKind> = new Set(["favorite", "download", "added"]);
+
+/**
+ * Bumped by each ask for a batch again (a signal of `ASKS_AGAIN`, a slider
+ * move): an empty pick under way meanwhile doesn't mark its session, it picks again.
+ */
+let asked = 0;
+
 /** How many signals are being learned now: a batch waits for them. */
 const learning = makeExternalStore(0);
 
@@ -308,8 +321,8 @@ export const layer = Layer.effectDiscard(
       fork(
         learn(kind, trackIds).pipe(
           Effect.ensuring(Effect.sync(() => learning.update((count) => count - 1))),
-          // What it learned may find songs an empty pick didn't.
-          Effect.ensuring(Effect.sync(askAgain)),
+          // A star, a download or a song lined up by hand may find songs an empty pick didn't.
+          Effect.ensuring(Effect.sync(() => (ASKS_AGAIN.has(kind) ? askAgain() : undefined))),
         ),
       );
     };
@@ -365,7 +378,10 @@ export const layer = Layer.effectDiscard(
         // The seed's genre as the catalog pick found it (its song radio's artists' for an untagged seed).
         const seedProfile =
           yt.profile === undefined
-            ? magicSeedProfile(session, profileOf, magicSeedRadio(session, catalog))
+            ? yield* runSteps(
+                magicSeedProfileSteps(session, profileOf, catalog),
+                recommendationTurnEffect,
+              )
             : yt.profile;
         // Same genres and Close hold Library songs to the seed's style, and its artists' neighbourhood.
         const libraryCandidates = magicLibraryCandidates(session, ofLibrary, {
@@ -418,6 +434,9 @@ export const layer = Layer.effectDiscard(
       picking.set(wanted.id);
       failedBatch.set(null);
       let again = false;
+      // Asked again while this pick ran: an empty outcome doesn't stand, it picks again.
+      const askedBefore = asked;
+      let askedMeanwhile = false;
       const timing =
         batchStart?.id === wanted.id
           ? batchStart
@@ -438,8 +457,10 @@ export const layer = Layer.effectDiscard(
         Effect.tap((outcome) =>
           Effect.sync(() => {
             log(outcome);
-            if (outcome.kind === "empty") emptyBatch.set(wanted.id);
-            else if (outcome.kind === "appended") emptyBatch.set(null);
+            if (outcome.kind === "empty") {
+              if (asked === askedBefore) emptyBatch.set(wanted.id);
+              else askedMeanwhile = true;
+            } else if (outcome.kind === "appended") emptyBatch.set(null);
           }),
         ),
         Effect.asVoid,
@@ -457,6 +478,8 @@ export const layer = Layer.effectDiscard(
         // However the picking ends: added, failed, timed out or no longer wanted.
         Effect.ensuring(
           Effect.sync(() => {
+            // Interrupted from outside, past the catch above: its line still goes in.
+            log({ kind: "stopped" });
             const ended = magicPickEnded(
               wanted.id,
               picking.get(),
@@ -464,7 +487,7 @@ export const layer = Layer.effectDiscard(
               queueState.get(),
             );
             picking.set(ended.picking);
-            again = ended.again;
+            again = ended.again || askedMeanwhile;
           }),
         ),
         Effect.map(() => again),
@@ -484,11 +507,12 @@ export const layer = Layer.effectDiscard(
     );
 
     /** Clears an empty pick's mark and asks for the batch again: a new signal or a slider move. */
-    function askAgain(): void {
+    const askAgain = (): void => {
+      asked += 1;
       if (emptyBatch.get() === null) return;
       emptyBatch.set(null);
       fork(fill);
-    }
+    };
 
     let previous = queueState.get();
     const onQueue = (): void => {

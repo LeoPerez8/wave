@@ -19,6 +19,7 @@ import {
   magicArtistKey,
   magicGenreMatches,
   magicSeedProfile,
+  radioPrimaryArtists,
   type MagicLibrarySong,
   type MagicSession,
 } from "./magicQueue.ts";
@@ -221,17 +222,9 @@ export const magicRadioLookups = <S extends DiscoverRadioSong>(
   const profile = magicSeedProfile(session, profileOf, radio);
   // Its genre then comes from its radio's primary artists (`magicSeedProfile`): those not looked up yet.
   if (profile === null || profile.size === 0)
-    return [
-      ...new Set(
-        radio.flatMap((song) =>
-          song.artists
-            .slice(0, 1)
-            .filter(
-              (name) => anArtist(name) && profileOf(name) === undefined && !asked.includes(name),
-            ),
-        ),
-      ),
-    ].slice(0, MAGIC_RADIO_SEED_LOOKUPS);
+    return radioPrimaryArtists(radio)
+      .filter((name) => anArtist(name) && profileOf(name) === undefined && !asked.includes(name))
+      .slice(0, MAGIC_RADIO_SEED_LOOKUPS);
   const used = new Set(session.used);
   const excluded = new Set(session.excludedArtists);
   // Songs no batch picks: the Library's, those queued already and those by excluded artists.

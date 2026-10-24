@@ -45,7 +45,7 @@ const outcomeText = (outcome: MagicBatchOutcome): string => {
     case "appended":
       return `${songs(outcome.songs)} appended`;
     case "dropped":
-      return "no longer wanted";
+      return "dropped: no longer wanted";
     case "stopped":
       return "stopped";
     case "failed":
