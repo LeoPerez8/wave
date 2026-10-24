@@ -9,6 +9,7 @@ import {
   magicBatchLoading,
   magicPickDue,
   magicPickEnded,
+  magicBatchRadios,
   magicLibrarySongs,
   radioRankingBatch,
   magicPlaySignal,
@@ -22,6 +23,7 @@ import {
   wantsMagicBatch,
   type MagicBatchOutcome,
   type MagicSeed,
+  type MagicSeedSong,
   type MagicSession,
   type MagicSignalKind,
   type QueueState,
@@ -174,9 +176,11 @@ const SEED_VIDEO_IDS = 5;
  * Starts a Magic Queue from [seed], whose songs are [seedSongs] (the song
  * itself for a song seed): it replaces the queue (with Undo, as any play
  * does) with the seed's first song; the first 9 recommendations follow as
- * the session's first batch, at once when the candidate catalog has enough
- * of the seed's songs, else once its radio was read. Recommendations follow
- * the seed song's radio, with known genres used for ranking.
+ * the session's first batch, at once when the radios it reads were saved,
+ * else once they were read. Recommendations follow the song's radio for a
+ * song, the artist's for an artist, and for an album or a playlist the
+ * radios of a few of its songs, drawn again each batch by their counted
+ * plays (`magicBatchRadios`); known genres only rank them.
  * YouTube Music's share of a batch starts at Discover's New music level
  * (`discoverLevel`), from Home or any long-press menu.
  */
@@ -185,37 +189,55 @@ export const startMagicQueue = (seed: MagicSeed, seedSongs: readonly SongRow[]) 
     if (!ytMusicEnabled()) return;
     const startedAt = Date.now();
     const playable = seedSongs.filter(songHasFile);
+    // An album's or a playlist's songs are all radio seeds, with or without a file.
+    const list = seed.kind === "album" || seed.kind === "playlist";
+    const radioSongs = list ? seedSongs : playable;
     const store = yield* LibraryStore;
     const artists = yield* store.artistsByIds([
-      ...new Set(playable.flatMap((song) => song.artistIds)),
+      ...new Set(radioSongs.flatMap((song) => song.artistIds)),
     ]);
     // A seed whose artists YouTube Music doesn't know grows from its own song radio (`seedVideoIds`).
     const videoIds = yield* store
-      .videoIds(playable.map((song) => song.id))
+      .videoIds(radioSongs.map((song) => song.id))
       .pipe(Effect.orElseSucceed((): ReadonlyMap<number, string> => new Map()));
+    const plays = list
+      ? yield* store
+          .countedPlays(seedSongs.map((song) => song.id))
+          .pipe(Effect.orElseSucceed((): ReadonlyMap<number, number> => new Map()))
+      : new Map<number, number>();
     const names = new Map(artists.map((artist) => [artist.id, artist.name]));
+    const seedSong = (song: SongRow): MagicSeedSong => ({
+      id: `song:${song.id}`,
+      title: song.title,
+      artists: song.artistIds.flatMap((id) => names.get(id) ?? []),
+      durationMs: song.durationMs,
+      ...(videoIds.get(song.id) === undefined ? {} : { videoId: videoIds.get(song.id)! }),
+      plays: plays.get(song.id) ?? 0,
+    });
     const started = startSession(seed, playable.map(magicLibrarySongs(artists)), {
       id: String(Date.now()),
       random: Math.random,
       radio: {
         artists: playable.flatMap((song) => song.artistIds.flatMap((id) => names.get(id) ?? [])),
-        ...(playable[0] === undefined
-          ? {}
-          : {
-              song: {
-                id: seed.kind === "artist" ? `artist:${seed.id}` : `song:${seed.id}`,
-                title: seed.kind === "track" ? seed.title : playable[0].title,
-                artists:
-                  seed.kind === "artist"
-                    ? [seed.title]
-                    : playable[0].artistIds.flatMap((id) => names.get(id) ?? []),
-                durationMs: playable[0].durationMs,
-                ...(videoIds.get(playable[0].id) === undefined
-                  ? {}
-                  : { videoId: videoIds.get(playable[0].id)! }),
-                ...(seed.kind === "artist" ? { kind: "artist" as const } : {}),
-              },
-            }),
+        ...(list
+          ? { songs: seedSongs.map(seedSong) }
+          : playable[0] === undefined
+            ? {}
+            : {
+                song: {
+                  id: seed.kind === "artist" ? `artist:${seed.id}` : `song:${seed.id}`,
+                  title: seed.kind === "track" ? seed.title : playable[0].title,
+                  artists:
+                    seed.kind === "artist"
+                      ? [seed.title]
+                      : playable[0].artistIds.flatMap((id) => names.get(id) ?? []),
+                  durationMs: playable[0].durationMs,
+                  ...(videoIds.get(playable[0].id) === undefined
+                    ? {}
+                    : { videoId: videoIds.get(playable[0].id)! }),
+                  ...(seed.kind === "artist" ? { kind: "artist" as const } : {}),
+                },
+              }),
         profile: genreProfile(playable),
         videoIds: playable.flatMap((song) => videoIds.get(song.id) ?? []).slice(0, SEED_VIDEO_IDS),
       },
@@ -329,7 +351,11 @@ export const layer = Layer.effectDiscard(
         const taste = latestTasteProfile();
         const sliders = discoverSliders.get();
         const profileOf = magicProfileOf(library);
-        const yt = yield* magicQueueYtCandidates(wanted, library, {
+        // This batch's radios, drawn once for it and saved before they're read.
+        const live = activeMagicSession();
+        const drawn = magicBatchRadios(live?.id === wanted.id ? live : wanted, Math.random);
+        if (live?.id === wanted.id && drawn.session !== live) save(drawn.session);
+        const yt = yield* magicQueueYtCandidates(wanted, drawn.seeds, library, {
           catalog,
           graph,
           taste,

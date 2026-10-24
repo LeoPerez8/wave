@@ -15,7 +15,12 @@ import { beforeEach, describe, test } from "node:test";
 import { saveImportedPlays } from "./blackPlayer.ts";
 import { creditSplits, relinkCredits } from "./credits.ts";
 import { endPlay, homeSections, recordPlay, updatePlay } from "./playHistory.ts";
-import { listeningSums, playTotalsDrift, rebuildPlayTotals } from "./playTotals.ts";
+import {
+  listeningSums,
+  playTotalsDrift,
+  rebuildPlayTotals,
+  selectCountedPlays,
+} from "./playTotals.ts";
 import * as schema from "./schema.ts";
 import { creditedPlayTotals, songListening, trackPlayTotals } from "./stats.ts";
 import { applyPending, applyPulledPage } from "./syncRows.ts";
@@ -364,5 +369,17 @@ describe("Home's all-time reads", () => {
       );
       assert.doesNotMatch(plan, /TEMP B-TREE/);
     }
+  });
+});
+
+describe("selectCountedPlays", () => {
+  test("gives each song's counted plays, leaving out those never counted", () => {
+    const often = addTrack(db, { title: "Often" });
+    const skipped = addTrack(db, { title: "Skipped" });
+    const never = addTrack(db, { title: "Never" });
+    playThrough(db, play(often, 1_000));
+    playThrough(db, play(often, 2_000));
+    playThrough(db, play(skipped, 3_000, { counted: false, listenedMs: 4_000 }));
+    assert.deepEqual(selectCountedPlays(db, [often, skipped, never]), new Map([[often, 2]]));
   });
 });

@@ -633,6 +633,7 @@ export {
   magicArtistKey,
   magicBatch,
   magicLibrarySongs,
+  magicBatchRadios,
   magicLibraryMapperSteps,
   magicRadioArtists,
   magicSeedProfile,
@@ -651,6 +652,7 @@ export type {
   MagicQueueEdits,
   MagicRadioSeed,
   MagicSeed,
+  MagicSeedSong,
   MagicSession,
   MagicSongRadioSeed,
   MagicSignal,
@@ -1642,6 +1644,8 @@ export {
 } from "./starDownloads.ts";
 export type { StarredDownload, UnstarredDownload } from "./starDownloads.ts";
 export { pickWeighted, playsWeight } from "./weightedPick.ts";
+export { drawSeedSongs, SEED_SONG_DRAW } from "./seedSongDraw.ts";
+export type { SeedSong } from "./seedSongDraw.ts";
 export type { RandomSource } from "./weightedPick.ts";
 export {
   ARTIST_MIX_COUNT,
