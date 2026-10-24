@@ -55,6 +55,7 @@ import { queueTrackDownloaded, type QueueTrack } from "@/playback/queueTracks";
 import { useThemeColor } from "@/theme/useThemeColor";
 
 import { useQueueTracks } from "./hooks";
+import { openQueueSongActions } from "./QueueSongMenu";
 import { useShuffleControl } from "./ShuffleMenu";
 import { TrackHeader } from "./TrackHeader";
 import { ROW, useUpNextDrag, useUpNextRowDrag, type UpNextDragRows } from "./upNextDrag";
@@ -216,14 +217,16 @@ const UpNextRow = memo(function UpNextRow({
         <Press
           accessibilityRole="button"
           accessibilityLabel={`${title}, ${track?.artist ?? ""}${downloaded ? ", downloaded" : ""}`}
-          accessibilityHint="Plays this song now"
+          accessibilityHint="Plays this song now. Long press for song actions"
           accessibilityActions={[
+            { name: "longpress", label: "Song actions" },
             { name: "remove", label: "Remove from Up Next" },
             ...(index > 0 ? [{ name: "moveUp", label: "Move up" }] : []),
             ...(index < count - 1 ? [{ name: "moveDown", label: "Move down" }] : []),
           ]}
           onAccessibilityAction={(event) => {
             const action = event.nativeEvent.actionName;
+            if (action === "longpress") openQueueSongActions(entry.trackId);
             if (action === "remove") removeQueueEntry(key);
             if (action === "moveUp")
               void moveQueueEntry(upNextMove(queueState.get(), key, index - 1));
@@ -231,6 +234,7 @@ const UpNextRow = memo(function UpNextRow({
               void moveQueueEntry(upNextMove(queueState.get(), key, index + 1));
           }}
           onPress={() => playQueueEntry(key)}
+          onLongPress={() => openQueueSongActions(entry.trackId)}
           depth={0.015}
           className="flex-1 flex-row items-center self-stretch"
           style={{ gap: CELL * 1.5 }}
@@ -269,8 +273,8 @@ function UpNextSkeletons() {
 }
 
 /**
- * Up Next: tap a row to play it, X to remove it, and drag its handle to move
- * it. Near the list's top or bottom edge a drag scrolls the list.
+ * Up Next: tap a row to play it, long-press for its song menu, X to remove
+ * it, and drag its handle to move it. Near either edge a drag scrolls the list.
  *
  * A drag runs on the UI thread (`upNextDrag.ts`): the lifted row follows the
  * finger and the others step aside with no React render per movement or drop
