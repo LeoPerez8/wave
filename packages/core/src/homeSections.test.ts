@@ -22,7 +22,6 @@ const TODAYS_HOME = [
   "most-played-artists",
   "favorites",
   "stats",
-  "listening-overview",
 ];
 
 const sections = (...ids: HomeSectionId[]) => ids.map((id) => ({ section: id }));
@@ -40,7 +39,6 @@ describe("Home's section catalogue", () => {
         ["most-played-artists", "Most played artists"],
         ["favorites", "Favorites"],
         ["stats", "Stats"],
-        ["listening-overview", "Listening overview"],
       ],
     );
   });
@@ -58,7 +56,7 @@ describe("Home's arrangement", () => {
   test("an arrangement the owner saved reads back as itself: order, removals and all", () => {
     const arrangements: HomeArrangement[] = [
       ["favorites", "recently-added", "stats"],
-      ["listening-overview", "most-played"],
+      ["stats", "most-played"],
       TODAYS_HOME.toReversed() as HomeArrangement,
       [],
     ];
@@ -84,15 +82,15 @@ describe("Home's arrangement", () => {
   });
 
   test("a section new since the owner saved shows, after the section it follows in the catalogue", () => {
-    // Saved by a Wave whose catalogue had no Listening overview.
+    // Saved by a Wave whose catalogue had no Most played artists.
     const stored = JSON.stringify({
       shown: ["favorites", "most-played", "recently-added"],
-      hidden: ["recently-played", "most-played-albums", "most-played-artists", "discover", "stats"],
+      hidden: ["recently-played", "most-played-albums", "discover", "stats"],
     });
     assert.deepEqual(parseHomeArrangement(stored), [
       "favorites",
-      "listening-overview",
       "most-played",
+      "most-played-artists",
       "recently-added",
     ]);
   });
@@ -110,7 +108,6 @@ describe("Home's arrangement", () => {
       "genre-mixes",
       "favorites",
       "stats",
-      "listening-overview",
     ];
     const arranged = (shown: string[]) =>
       JSON.stringify({ shown, hidden: before.filter((id) => !shown.includes(id)) });
@@ -140,7 +137,6 @@ describe("Home's arrangement", () => {
         "most-played-albums",
         "most-played-artists",
         "stats",
-        "listening-overview",
       ],
     });
     assert.deepEqual(parseHomeArrangement(stored), ["discover", "favorites", "recently-added"]);
@@ -196,7 +192,6 @@ describe("what Home lists", () => {
         "most-played-artists",
         "favorites",
         "stats",
-        "listening-overview",
       ),
     ]);
     assert.deepEqual(homeItems(["most-played-artists", "favorites"], { nothingPlayed: true }), [
@@ -207,10 +202,10 @@ describe("what Home lists", () => {
 
   test("with nothing played and no section plays fill, there's no line asking for a play", () => {
     assert.deepEqual(
-      homeItems(["favorites", "recently-added", "stats", "listening-overview"], {
+      homeItems(["favorites", "recently-added", "stats"], {
         nothingPlayed: true,
       }),
-      sections("favorites", "recently-added", "stats", "listening-overview"),
+      sections("favorites", "recently-added", "stats"),
     );
   });
 
@@ -238,7 +233,6 @@ describe("Home's editor", () => {
       "recently-played",
       "most-played-albums",
       "most-played-artists",
-      "listening-overview",
     ]);
     assert.deepEqual(hiddenHomeSections(TODAYS_HOME as HomeArrangement), []);
   });
@@ -280,4 +274,46 @@ describe("Home's editor", () => {
       "stats",
     ]);
   });
+});
+
+describe("merging Home's Stats and Listening overview", () => {
+  test("Stats keeps the first shown section's place when both were shown", () => {
+    const hidden = [
+      "discover",
+      "recently-played",
+      "most-played",
+      "most-played-albums",
+      "most-played-artists",
+    ];
+    for (const pair of [
+      ["stats", "listening-overview"],
+      ["listening-overview", "stats"],
+    ]) {
+      const shown = ["favorites", pair[0], "recently-added", pair[1]];
+      assert.deepEqual(parseHomeArrangement(JSON.stringify({ shown, hidden })), [
+        "favorites",
+        "stats",
+        "recently-added",
+      ]);
+    }
+  });
+});
+
+test("merged Stats is visible if either old section was shown, and hidden if both were hidden", () => {
+  const legacy = [...HOME_SECTIONS.map(({ id }) => id), "listening-overview"];
+  for (const shown of [
+    ["favorites", "stats"],
+    ["favorites", "listening-overview"],
+    ["favorites"],
+    [],
+  ]) {
+    const arrangement = parseHomeArrangement(
+      JSON.stringify({
+        shown,
+        hidden: legacy.filter((id) => !shown.includes(id)),
+      }),
+    );
+    assert.deepEqual(arrangement, shown.length > 1 ? ["favorites", "stats"] : shown);
+    assert.deepEqual(parseHomeArrangement(storedHomeArrangement(arrangement)), arrangement);
+  }
 });
