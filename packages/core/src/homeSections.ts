@@ -17,8 +17,7 @@ export type HomeSectionId =
   | "most-played-albums"
   | "most-played-artists"
   | "favorites"
-  | "stats"
-  | "listening-overview";
+  | "stats";
 
 /** A catalogue entry. */
 export interface HomeSection {
@@ -45,7 +44,6 @@ export const HOME_SECTIONS: readonly HomeSection[] = [
   { id: "most-played-artists", title: "Most played artists", fromPlays: true },
   { id: "favorites", title: "Favorites", fromPlays: false },
   { id: "stats", title: "Stats", fromPlays: false },
-  { id: "listening-overview", title: "Listening overview", fromPlays: false },
 ];
 
 const sectionOf = (id: HomeSectionId): HomeSection | undefined =>
@@ -111,7 +109,8 @@ const sameOrder = (a: HomeArrangement, b: HomeArrangement): boolean =>
  * neither shows nor hides is newer than the arrangement. It shows after the
  * shown section it follows in the catalogue, on top when none does (so
  * Discover, first in the catalogue, is first on every Home arranged before
- * it). Nothing stored, or anything unreadable, is the default.
+ * it). Stats and Listening overview merge at the first shown one's place,
+ * visible if either was shown. Nothing stored, or anything unreadable, is the default.
  */
 export const parseHomeArrangement = (stored: string | null): HomeArrangement => {
   if (stored === null) return DEFAULT_HOME_ARRANGEMENT;
@@ -148,13 +147,18 @@ const DISCOVER_ONCE: ReadonlySet<string> = new Set([
  * so Discover joins it on top.
  */
 export const storedHomeSectionId = (value: unknown): HomeSectionId | null => {
-  const id = typeof value === "string" && DISCOVER_ONCE.has(value) ? "discover" : value;
+  const id =
+    value === "listening-overview"
+      ? "stats"
+      : typeof value === "string" && DISCOVER_ONCE.has(value)
+        ? "discover"
+        : value;
   return isSectionId(id) ? id : null;
 };
 
 /** The catalogue's sections [values] name, in their order, each once; anything else left out. */
 const knownSections = (values: readonly unknown[]): HomeSectionId[] => [
-  ...new Set(values.filter(isSectionId)),
+  ...new Set(values.map((id) => (id === "listening-overview" ? "stats" : id)).filter(isSectionId)),
 ];
 
 /**
