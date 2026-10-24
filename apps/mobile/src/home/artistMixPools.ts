@@ -8,7 +8,7 @@
 import { mapSteps, type ArtistMixPools, type MixRefreshAvoid } from "@wave/core";
 import * as Effect from "effect/Effect";
 import { runSteps } from "@/lib/stepped";
-import { freeTurnEffect } from "@/lib/backgroundWork";
+import { recommendationTurnEffect } from "@/lib/recommendationWork";
 
 import type { MixIndexes } from "./mixKnown";
 
@@ -23,7 +23,7 @@ export const artistMixPools = (
   Effect.gen(function* () {
     const artists = yield* runSteps(
       mapSteps(library.artists, (artist) => ({ ...artist, songCount: artist.trackCount })),
-      freeTurnEffect,
+      recommendationTurnEffect,
     );
     return {
       played: library.topArtists,

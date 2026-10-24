@@ -16,6 +16,7 @@ export type { LibraryTrack, RawTrack } from "./library.ts";
 export { creditSplitter, respreadDeletedSongs, splitCredit } from "./credits.ts";
 export type { PrunedArtist } from "./credits.ts";
 export { formatDuration, formatRemaining } from "./time.ts";
+export { recommendationDeadline, recommendationFrameBudget } from "./recommendationWork.ts";
 export {
   ANCHOR_UNMEASURED,
   designPreviewState,
@@ -656,8 +657,15 @@ export type {
   MagicSong,
   MagicYtCandidate,
 } from "./magicQueue.ts";
-export { magicBatchFailed, magicBatchLoading } from "./magicQueue.ts";
+export {
+  magicBatchEmpty,
+  magicBatchFailed,
+  magicBatchLoading,
+  magicPickDue,
+} from "./magicQueue.ts";
 export { magicPickEnded } from "./magicQueue.ts";
+export { magicBatchLine } from "./magicBatchReport.ts";
+export type { MagicBatchOutcome, MagicBatchReport, MagicSourceCount } from "./magicBatchReport.ts";
 export type { MagicPickEnd } from "./magicQueue.ts";
 export { artistRanking } from "./moreFromArtist.ts";
 export type { ArtistRankingInput, ArtistRankingSong } from "./moreFromArtist.ts";
@@ -1884,6 +1892,7 @@ export {
   undoneMagicQueueRefresh,
 } from "./magicQueueSection.ts";
 export type { MagicQueuePicking, MagicQueuePicks } from "./magicQueueSection.ts";
+export { randomMagicQueuePicks } from "./randomMagicQueuePicks.ts";
 export { magicQueueShare } from "./magicQueue.ts";
 export { discoverMixesOfRadios } from "./discoverMixRadios.ts";
 export type { DiscoverMixRead } from "./discoverMixRadios.ts";
@@ -1967,7 +1976,9 @@ export {
   MAGIC_CATALOG_LOW,
   MAGIC_CATALOG_POOL,
   magicCatalogCandidates,
+  magicCatalogCandidatesSteps,
   magicRefillDue,
+  magicSeedProfileSteps,
 } from "./magicQueueCatalog.ts";
 export { catalogRadiosReadAt } from "./harvest.ts";
 export type {
@@ -2011,7 +2022,7 @@ export {
   storedLyricsTranslation,
 } from "./lyricsTranslation.ts";
 export type { LyricsTranslation, LyricsTranslationRequest } from "./lyricsTranslation.ts";
-export { magicCloseArtists, magicLibraryCandidates } from "./magicQueue.ts";
+export { magicCloseArtists, magicLibraryCandidates, magicSeedUnknown } from "./magicQueue.ts";
 export { magicLibraryLookups, magicSeedLookups } from "./mixGenreLookups.ts";
 export { magicLibraryThreshold } from "./mixSliders.ts";
 export {
@@ -2081,3 +2092,16 @@ export { playlistRecommendationsSteps } from "./playlistRecommendations.ts";
 
 export { createMenuTouchOwnership, playerTouchAllowed } from "./menuTouchOwnership.ts";
 export type { MenuTouchOwnership } from "./menuTouchOwnership.ts";
+
+export {
+  RECOMMENDATION_SNAPSHOT,
+  snapshotAsk,
+  snapshotVersionsAfter,
+  type SnapshotAnswer,
+  type SnapshotPart,
+  type SnapshotReadState,
+  type SnapshotSource,
+  type SnapshotVersions,
+} from "./recommendationSnapshot.ts";
+
+export { homeMixBuildsDue } from "./homeMixBuilds.ts";

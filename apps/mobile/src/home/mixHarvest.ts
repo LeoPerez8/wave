@@ -40,21 +40,20 @@ import * as Result from "effect/Result";
 import { freeTurnEffect } from "@/lib/backgroundWork";
 import { withNetworkLog } from "@/lib/networkMeter";
 import { oneAtATime } from "@/lib/oneAtATime";
-import { LibraryStore } from "@/library/LibraryStore";
 import { appRuntime } from "@/library/runtime";
 import type { NativeYtRadioSong } from "@/native/waveYtMusic";
 import { onMobileData, online } from "@/native/waveNative";
-import { tasteProfileNow } from "@/playback/TasteProfile";
+import { tasteProfileForRecommendation } from "@/playback/TasteProfile";
 import { ytMusicEnabled } from "@/settings/ytMusic";
 import { noteRadioNow } from "@/ytmusic/candidateCatalog";
 import { YtMusic } from "@/ytmusic/YtMusic";
 
 import { lookUpArtistProfiles, mixProfileOf } from "./artistGenres";
-import { artistGraphNow, forgetArtistGraph } from "./artistGraphNow";
 import { artistMixPools } from "./artistMixPools";
 import { discoverSlidersNow } from "./discoverMixLevel";
 import { harvestMobileUsed, noteHarvestMobileUse } from "./harvestMobileUse";
-import { forgetMixCatalog } from "./mixCatalog";
+import { withSnapshotTaste } from "./homeMixBuild";
+import { recommendationSnapshot } from "./recommendationSnapshot";
 import { harvestRun } from "./mixHarvestRun";
 import { mixIndexes } from "./mixKnown";
 import { similarOnline, withSimilar } from "./similarArtists";
@@ -217,11 +216,11 @@ const harvest = Effect.gen(function* () {
   const mobile = onMobileData();
   const seeds = yield* harvestSeeds(mobile);
   if (seeds.length === 0) return 0;
-  const library = yield* mixIndexes;
-  const store = yield* LibraryStore;
-  const catalog = yield* store.candidateCatalog;
-  const graph = yield* artistGraphNow;
-  const taste = yield* tasteProfileNow;
+  // The recommendation snapshot Home's mixes just read: its own batches go into the next one.
+  const { library, catalog, graph, taste } = yield* withSnapshotTaste(
+    recommendationSnapshot.get,
+    tasteProfileForRecommendation,
+  );
   const profileOf = mixProfileOf(library);
   const styleOf = libraryStyleOf(library);
   yield* freeTurnEffect;
@@ -277,9 +276,8 @@ let lastRunAt: number | null = null;
 const once = oneAtATime(
   Effect.gen(function* () {
     const read = yield* harvest;
+    // Each batch it wrote reaches the snapshot's next read (`artistGraphSourcesChanged`).
     if (read === 0) return;
-    forgetArtistGraph();
-    forgetMixCatalog();
     for (const listener of harvested) listener();
   }).pipe(Effect.ignore),
 );

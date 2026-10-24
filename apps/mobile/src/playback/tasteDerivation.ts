@@ -248,3 +248,26 @@ export const deriveTaste = (
       turn,
     );
   });
+
+/**
+ * Derives cold taste against a recommendation's Library snapshot. Its songs
+ * stay fixed for this batch; only taste history needs a private paged read.
+ */
+export const deriveTasteFromLibrary = (
+  store: LibraryStore["Service"],
+  turn: Effect.Effect<void>,
+  now: number,
+  library: TasteLibraryRows,
+  snapshotTaken: (history: TasteHistory) => void = () => {},
+) =>
+  Effect.gen(function* () {
+    const input = yield* tasteLibraryOf(library, "recommendation", turn);
+    const { rows: history } = yield* tasteSnapshot(store, turn, (_, pace) =>
+      readTasteHistory(store, pace),
+    );
+    snapshotTaken(history);
+    return yield* runSteps(
+      tasteProfileSteps(history, (id) => input.byId.get(id), now),
+      turn,
+    );
+  });

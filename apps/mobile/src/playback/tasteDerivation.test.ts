@@ -17,7 +17,12 @@ import { createFastAgainFixture } from "../library/db/fastAgainFixture.ts";
 import { traceQueries, observeSqlTasks } from "../library/db/testDatabase.ts";
 import { deleteTracksById } from "../library/db/tracks.ts";
 import { buildHomeMagicQueue } from "../home/magicQueueJob.ts";
-import { readTasteLibrary, readTasteHistory, deriveTaste } from "./tasteDerivation.ts";
+import {
+  readTasteLibrary,
+  readTasteHistory,
+  deriveTaste,
+  deriveTasteFromLibrary,
+} from "./tasteDerivation.ts";
 import { makeLiveTaste } from "./liveTaste.ts";
 
 test("sparse/deleted/tied/collaborative/multi-genre sources retain ti's complete ordered profile and picks", async () => {
@@ -279,6 +284,31 @@ test("due Home's real store snapshot is read once and reused for the same full t
       ),
     );
     assert.ok(turns >= 5);
+  } finally {
+    fixture.close();
+  }
+});
+
+test("a Magic Queue's cold taste uses its recommendation Library without another song read", async () => {
+  const fixture = await createFastAgainFixture();
+  try {
+    const store = await loadLibraryStore(root, fixture.db);
+    const library = {
+      songs: Effect.runSync(store.listSongs),
+      artists: Effect.runSync(store.listArtists),
+    };
+    const convert = magicLibrarySongs(library.artists);
+    const byId = new Map(library.songs.map((song) => [String(song.id), convert(song)]));
+    const expected = tasteProfile(
+      Effect.runSync(store.tasteHistory),
+      (id) => byId.get(id),
+      fixture.now,
+    );
+    const { result, queries } = traceQueries(fixture.db, () =>
+      Effect.runSync(deriveTasteFromLibrary(store, Effect.void, fixture.now, library)),
+    );
+    assert.deepEqual(result, expected);
+    assert.equal(queries.filter((query) => query.sql.includes('"tracks"."title"')).length, 0);
   } finally {
     fixture.close();
   }

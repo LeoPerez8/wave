@@ -13,6 +13,7 @@ import {
   magicArtistKey,
   magicBatch,
   playlistRecommendations,
+  RECOMMENDATION_SNAPSHOT,
   seededRandom,
   startMagicQueue,
 } from "@wave/core";
@@ -20,11 +21,14 @@ import { loadLibraryStore } from "../../bench/fastAgain/store.ts";
 import { addLibrary, closeTestDatabase, openTestDatabase } from "../library/db/testDatabase.ts";
 import { addCandidates } from "../library/db/candidateCatalog.ts";
 import { createPlaylist } from "../library/db/playlists.ts";
-import { sharePlaylistRecommendationInputs } from "../library/playlistRecommendationInputs.ts";
+import {
+  readRecommendationFavorites,
+  sharePlaylistRecommendationInputs,
+} from "../library/playlistRecommendationInputs.ts";
 import { magicCatalogRead } from "../playback/magicCatalogRead.ts";
 import { readMixInputs } from "./mixInputs.ts";
 import { readMixCatalog } from "./readMixCatalog.ts";
-import { createMixIndexesRead } from "./mixIndexesRead.ts";
+import { snapshotRead } from "../lib/snapshotRead.ts";
 import { readArtistGraph } from "./artistGraph.ts";
 
 const root = fileURLToPath(new URL("../../../../", import.meta.url));
@@ -72,8 +76,27 @@ test("2,531 Tracks and 900 artists finish paging, refill a Magic Queue online, a
           return store.mixSongsPage(after);
         }),
     };
-    const indexes = createMixIndexesRead(readMixInputs(reads, between, now));
-    const recommendations = sharePlaylistRecommendationInputs(reads, between);
+    const indexes = snapshotRead(readMixInputs(reads, between, now), {
+      part: RECOMMENDATION_SNAPSHOT.library,
+      versions: () => ({}),
+    });
+    const catalogPart = snapshotRead(readMixCatalog(reads, between), {
+      part: RECOMMENDATION_SNAPSHOT.catalog,
+      versions: () => ({}),
+    });
+    const favoritesPart = snapshotRead(readRecommendationFavorites(reads, between), {
+      part: RECOMMENDATION_SNAPSHOT.favorites,
+      versions: () => ({}),
+    });
+    const recommendations = sharePlaylistRecommendationInputs(
+      {
+        library: indexes.get,
+        catalog: catalogPart.get,
+        favorites: favoritesPart.get,
+        store: Effect.succeed(reads),
+      },
+      between,
+    );
     try {
       const library = await Effect.runPromise(indexes.get);
       assert.deepEqual(new Set(library.songs.map((track) => track.id)), trackIds);
@@ -106,13 +129,15 @@ test("2,531 Tracks and 900 artists finish paging, refill a Magic Queue online, a
 
       let requests = 0;
       const profileOf = libraryGenreProfiles(library);
+      const initialCatalog = await Effect.runPromise(readMixCatalog(store, between));
       const pick = await Effect.runPromise(
         magicCatalogRead(started.session, {
           online: true,
           onMobileData: false,
           usedToday: 0,
           now,
-          catalog: readMixCatalog(store, between).pipe(Effect.orElseSucceed(() => [])),
+          catalog: initialCatalog,
+          between,
           graph: null,
           profileOf,
           taste: null,
@@ -123,7 +148,11 @@ test("2,531 Tracks and 900 artists finish paging, refill a Magic Queue online, a
           refill: Effect.sync(() => {
             requests++;
             addCandidates(db, { seed: artist.name, songs: radioSongs(artist.name, "radio") }, now);
-            return { bytes: 1000, reached: true };
+            return {
+              bytes: 1000,
+              reached: true,
+              pages: [{ seed: artist.name, songs: radioSongs(artist.name, "radio") }],
+            };
           }),
         }),
       );
@@ -155,7 +184,7 @@ test("2,531 Tracks and 900 artists finish paging, refill a Magic Queue online, a
         online: true,
       });
       assert.ok(offers.length > 0, "the playlist footer receives recommendations");
-      assert.ok(pages - mixPages <= 128, "playlist inputs fit a bounded read budget");
+      assert.equal(pages, mixPages, "playlist inputs share the mixes' Library read");
       const completedPages = pages;
       assert.deepEqual(await Effect.runPromise(recommendations.get(playlistId)), input);
       assert.equal(pages, completedPages, "a warm playlist read reuses the Library source");
@@ -186,14 +215,15 @@ test("2,531 Tracks and 900 artists finish paging, refill a Magic Queue online, a
       );
     } finally {
       indexes.dispose();
-      recommendations.dispose();
+      catalogPart.dispose();
+      favoritesPart.dispose();
     }
   } finally {
     closeTestDatabase(db);
   }
 });
 
-test("scan writes stop at the playlist retry line, stay failed through bursts, then recover after the scan", async () => {
+test("scan writes while a playlist reads neither fail nor restart its read; the visit catches up once", async () => {
   const { createFastAgainFixture } = await import("../library/db/fastAgainFixture.ts");
   const { observePlaylistRecommendationInputs } =
     await import("../library/playlistRecommendationInputs.ts");
@@ -204,14 +234,22 @@ test("scan writes stop at the playlist retry line, stay failed through bursts, t
   const fixture = await createFastAgainFixture();
   try {
     const store = await loadLibraryStore(root, fixture.db);
-    let storm = true;
     let reads = 0;
     let writes = 0;
+    let songPasses = 0;
+    const errors: string[] = [];
     const source = observePlaylistRecommendationInputs(
-      store,
+      {
+        ...store,
+        mixSongsPage: (after: number) => {
+          if (after === 0) songPasses++;
+          return store.mixSongsPage(after);
+        },
+      },
       Effect.promise(async () => {
         await setImmediate();
-        if (!storm) return;
+        // A scan's batches land while the first read pages the Library.
+        if (reads !== 1 || writes === 4) return;
         fixture.db.run(
           sql`UPDATE tracks SET title = ${`Changed ${++writes}`} WHERE id = ${fixture.songIds[0]!}`,
         );
@@ -233,6 +271,10 @@ test("scan writes stop at the playlist retry line, stay failed through bursts, t
       },
       dismiss: async () => {},
     });
+    const stop = session.subscribe(() => {
+      const { error } = session.get();
+      if (error !== null) errors.push(error);
+    });
     const visit = followPlaylistRecommendations(session, {
       playlistId: fixture.playlistId,
       sight: { visible: () => true, subscribe: () => () => {} },
@@ -242,20 +284,15 @@ test("scan writes stop at the playlist retry line, stay failed through bursts, t
     });
 
     try {
-      await until(() => session.get().error === "load" && !session.get().loading);
-      assert.equal(reads, 1, "the visit does not cancel and reset the bounded source read");
-      assert.equal(writes, 4, "the shared source stops after four invalidated attempts");
-      for (let i = 0; i < 20; i++) publishLibraryChange({ kind: "tracks", burst: true });
+      await until(() => reads === 2 && !session.get().loading);
+      assert.equal(writes, 4);
+      assert.deepEqual(errors, [], "the scan never reaches the retry line");
+      assert.ok(session.get().slots.some((slot) => slot !== null));
+      assert.equal(songPasses, 2, "the first read finished; the catch-up read the scan's songs");
       await setImmediate();
-      assert.equal(reads, 1, "background writes preserve the failure line");
-      storm = false;
-      visit.invalidate();
-      await until(
-        () => session.get().slots.some((slot) => slot !== null) && !session.get().loading,
-      );
-      assert.equal(session.get().error, null);
-      assert.equal(reads, 2);
+      assert.equal(reads, 2, "one catch-up for the whole burst");
     } finally {
+      stop();
       visit.dispose();
       source.dispose();
     }

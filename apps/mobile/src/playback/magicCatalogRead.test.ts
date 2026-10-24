@@ -75,12 +75,16 @@ const read = (
   let refills = 0;
   let cacheAsks = 0;
   let mobile = 0;
+  let turns = 0;
   const deps: MagicCatalogReadDeps<never> = {
     online,
     onMobileData,
     usedToday,
     now: NOW,
-    catalog: Effect.sync(() => (refills === 0 ? catalog : refilled)),
+    catalog,
+    between: Effect.sync(() => {
+      turns++;
+    }),
     graph: null,
     profileOf: () => new Map([["rock", 1]]),
     taste: null,
@@ -91,7 +95,11 @@ const read = (
     }),
     refill: Effect.sync(() => {
       refills += 1;
-      return { bytes, reached };
+      return {
+        bytes,
+        reached,
+        pages: [{ seed: "Muse", songs: refilled.map((entry) => entry.song) }],
+      };
     }),
     usedOnMobile: (used) => {
       mobile += used;
@@ -101,9 +109,11 @@ const read = (
   const pick = Effect.runSync(magicCatalogRead(session, deps));
   return {
     ids: pick.candidates.map((candidate) => candidate.song.videoId),
+    refilled: pick.refilled,
     refills,
     cacheAsks,
     mobile,
+    turns,
   };
 };
 
@@ -131,6 +141,11 @@ describe("A Magic Queue batch's YT Music candidates", () => {
     assert.equal(read([], { onMobileData: true, usedToday: HARVEST_MOBILE_BYTES }).refills, 0);
   });
 
+  test("say how many songs a refill brought, and that none ran when the catalog had enough", () => {
+    assert.equal(read(songs(30)).refilled, null);
+    assert.equal(read(songs(5), { refilled: songs(40) }).refilled, 40);
+  });
+
   test("a refill that brought nothing isn't tried again in the session within 12 hours", () => {
     const tried = new Map<string, number>();
     assert.equal(read([], { tried }).refills, 1);
@@ -152,4 +167,13 @@ describe("A Magic Queue batch's YT Music candidates", () => {
     assert.deepEqual(new Set(ids), new Set(["song3", "song7"]));
     assert.equal(refills, 0);
   });
+});
+
+test("a refill extends this batch's snapshot without replacing its original candidates", () => {
+  const { ids, turns } = read(songs(5, "original"), { refilled: songs(5, "fresh") });
+  assert.deepEqual(
+    new Set(ids),
+    new Set([...songs(5, "original"), ...songs(5, "fresh")].map((entry) => entry.song.videoId)),
+  );
+  assert.ok(turns > 0, "the catalog reader uses the injected frame checkpoint");
 });

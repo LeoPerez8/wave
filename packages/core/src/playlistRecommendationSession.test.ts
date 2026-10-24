@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   playlistRecommendationSession,
+  playlistSuggestionsLine,
+  type PlaylistRecommendationTiming,
   type PlaylistRecommendationFeedback,
   type PlaylistRecommendationSessionInput,
   type PlaylistRecommendationTrack,
@@ -682,4 +684,68 @@ test("the next action's refill also fills a slot whose replacement failed before
   for (const index of [1, 3, 4]) assert.equal(session.get().slots[index], before[index]);
   assert.equal(session.get().error, null);
   assert.deepEqual(session.get().unfilled, []);
+});
+
+test("each full renewal reports how long its read and ranking took and how many offers it showed", async () => {
+  const seed = track("seed");
+  let clock = 0;
+  let fail = false;
+  const timings: PlaylistRecommendationTiming[] = [];
+  let id = 0;
+  const session = playlistRecommendationSession({
+    newId: () => String(++id),
+    read: async () => {
+      clock += 1_200;
+      if (fail) throw new Error("timed out");
+      return {
+        playlist: [seed],
+        sources: {
+          library: [seed, ...["a", "b", "c"].map(track)],
+          catalog: [],
+          graph: null,
+          now: 0,
+        },
+      };
+    },
+    rank: async (input) => {
+      clock += 300;
+      return input.sources.library.slice(1).map((offer) => ({ track: offer, score: 1 }));
+    },
+    dismiss: async () => {},
+    timed: { now: () => clock, report: (timing) => timings.push(timing) },
+  });
+  await session.renew();
+  assert.deepEqual(timings, [{ ms: 1_500, readMs: 1_200, rankMs: 300, offers: 3, failed: false }]);
+  // A refill retry fills holes only; it isn't a renewal of the suggestions.
+  await session.renew({ refillOnly: true });
+  assert.equal(timings.length, 1);
+  fail = true;
+  await session.renew();
+  assert.deepEqual(timings[1], { ms: 1_200, readMs: 1_200, rankMs: 0, offers: 3, failed: true });
+  // A cancelled renewal took no time anyone waited for.
+  const controller = new AbortController();
+  fail = false;
+  const renewing = session.renew({ signal: controller.signal });
+  controller.abort();
+  await renewing;
+  assert.equal(timings.length, 2);
+});
+
+test("a renewal's timing reads as one log line, from the playlist's opening when it was the first", () => {
+  const shown = { ms: 1_534.4, readMs: 1_201, rankMs: 299.6, offers: 5, failed: false };
+  assert.equal(
+    playlistSuggestionsLine(shown, 2_410.2),
+    "Playlist suggestions: 5 offers 2410 ms after opening (read 1201 ms, rank 300 ms)",
+  );
+  assert.equal(
+    playlistSuggestionsLine({ ...shown, offers: 1 }),
+    "Playlist suggestions renewed: 1 offer in 1534 ms (read 1201 ms, rank 300 ms)",
+  );
+  assert.equal(
+    playlistSuggestionsLine(
+      { ms: 60_000, readMs: 60_000, rankMs: 0, offers: 0, failed: true },
+      60_400,
+    ),
+    "Playlist suggestions failed 60400 ms after opening (read 60000 ms, rank 0 ms)",
+  );
 });

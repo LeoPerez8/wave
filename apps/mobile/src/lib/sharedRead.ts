@@ -7,7 +7,7 @@
  */
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
-import { RECOMMENDATION_TIMEOUT } from "./recommendationTimeout.ts";
+import { withRecommendationDeadline } from "./recommendationTimeout.ts";
 
 /**
  * How many reads one ask waits through. A forget while the answer is read
@@ -117,7 +117,7 @@ export const sharedRead = <A, E, R>(
       if (attempt >= SHARED_READ_ATTEMPTS)
         return yield* Effect.fail(new Error("Shared read invalidated"));
     }
-  }).pipe(Effect.timeout(RECOMMENDATION_TIMEOUT));
+  }).pipe(withRecommendationDeadline);
   return {
     get,
     forget,
