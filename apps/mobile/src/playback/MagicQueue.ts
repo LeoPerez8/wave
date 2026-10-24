@@ -3,29 +3,20 @@ import {
   MAGIC_QUEUE_CONTEXT,
   genreProfile,
   isMagicQueue,
-  magicBatch,
   magicBatchEmpty,
   magicBatchFailed,
   magicBatchLine,
   magicBatchLoading,
   magicPickDue,
   magicPickEnded,
-  magicLibraryCandidates,
-  magicLibraryLookups,
   magicLibrarySongs,
-  magicLibraryThreshold,
+  radioRankingBatch,
   magicPlaySignal,
   magicQueueEdits,
   magicQueueLabel,
   magicQueueShare,
-  magicSeedLookups,
-  magicSeedProfileSteps,
-  faithfulnessStyles,
-  libraryStyleOf,
   magicSignal,
-  mixSlidersEngine,
   parseMagicSession,
-  playEndPending,
   sliderStepLabel,
   startMagicQueue as startSession,
   wantsMagicBatch,
@@ -42,26 +33,25 @@ import * as Layer from "effect/Layer";
 import { Storage } from "expo-sqlite/kv-store";
 import { useSyncExternalStore } from "react";
 
-import { lookUpArtistProfiles, magicProfileOf } from "@/home/artistGenres";
+import { magicProfileOf } from "@/home/artistGenres";
 import { recommendationSnapshot } from "@/home/recommendationSnapshot";
 import { discoverLevel, discoverSliders } from "@/lib/discoverSettings";
 import { makeExternalStore, subscribeAll } from "@/lib/externalStore";
 import { oneAtATime } from "@/lib/oneAtATime";
-import { recommendationTurnEffect } from "@/lib/recommendationWork";
 import { withRecommendationDeadline } from "@/lib/recommendationTimeout";
-import { runSteps } from "@/lib/stepped";
 import { onStarred, onYtSongSignal } from "@/library/libraryChanges";
-import { LibraryStore, songHasFile, type SongRow } from "@/library/LibraryStore";
+import { LibraryStore, songHasFile, type SongRow, type ArtistRow } from "@/library/LibraryStore";
 import { YtMusic } from "@/ytmusic/YtMusic";
 import { appLog } from "@/log/appLog";
+import { ytMusicEnabled } from "@/settings/ytMusic";
 
 import { magicQueueYtCandidates } from "./magicQueueRadio";
 import { magicSongsOf } from "./magicSongs";
 import { Player } from "./Player";
-import { onPlayEnded, playTracker } from "./PlayHistory";
+import { onPlayEnded } from "./PlayHistory";
 import { Queue, queueState, toQueueTrack, type QueueTrack } from "./Queue";
 import { toYtQueueTrack } from "./queueTracks";
-import { tasteProfileForRecommendation } from "./TasteProfile";
+import { latestTasteProfile, tasteProfileForRecommendation } from "./TasteProfile";
 import { cacheYtCoversInBackground } from "./ytQueueTracks";
 
 /**
@@ -75,6 +65,10 @@ import { cacheYtCoversInBackground } from "./ytQueueTracks";
  */
 
 const KEY = "playback.magicQueue";
+let startingLibrary: {
+  readonly songs: readonly SongRow[];
+  readonly artists: readonly ArtistRow[];
+} = { songs: [], artists: [] };
 
 const readSaved = (): MagicSession | null => {
   try {
@@ -181,17 +175,20 @@ const SEED_VIDEO_IDS = 5;
  * itself for a song seed): it replaces the queue (with Undo, as any play
  * does) with the seed's first song; the first 9 recommendations follow as
  * the session's first batch, at once when the candidate catalog has enough
- * of the seed's songs, else once its radio was read. Its YouTube Music
- * songs grow from the seed songs' primary artists, held to their genres.
+ * of the seed's songs, else once its radio was read. Recommendations follow
+ * the seed song's radio, with known genres used for ranking.
  * YouTube Music's share of a batch starts at Discover's New music level
  * (`discoverLevel`), from Home or any long-press menu.
  */
 export const startMagicQueue = (seed: MagicSeed, seedSongs: readonly SongRow[]) =>
   Effect.gen(function* () {
+    if (!ytMusicEnabled()) return;
     const startedAt = Date.now();
     const playable = seedSongs.filter(songHasFile);
     const store = yield* LibraryStore;
-    const artists = yield* store.listArtists;
+    const artists = yield* store.artistsByIds([
+      ...new Set(playable.flatMap((song) => song.artistIds)),
+    ]);
     // A seed whose artists YouTube Music doesn't know grows from its own song radio (`seedVideoIds`).
     const videoIds = yield* store
       .videoIds(playable.map((song) => song.id))
@@ -201,7 +198,24 @@ export const startMagicQueue = (seed: MagicSeed, seedSongs: readonly SongRow[]) 
       id: String(Date.now()),
       random: Math.random,
       radio: {
-        artists: playable.flatMap((song) => names.get(song.artistId) ?? []),
+        artists: playable.flatMap((song) => song.artistIds.flatMap((id) => names.get(id) ?? [])),
+        ...(playable[0] === undefined
+          ? {}
+          : {
+              song: {
+                id: seed.kind === "artist" ? `artist:${seed.id}` : `song:${seed.id}`,
+                title: seed.kind === "track" ? seed.title : playable[0].title,
+                artists:
+                  seed.kind === "artist"
+                    ? [seed.title]
+                    : playable[0].artistIds.flatMap((id) => names.get(id) ?? []),
+                durationMs: playable[0].durationMs,
+                ...(videoIds.get(playable[0].id) === undefined
+                  ? {}
+                  : { videoId: videoIds.get(playable[0].id)! }),
+                ...(seed.kind === "artist" ? { kind: "artist" as const } : {}),
+              },
+            }),
         profile: genreProfile(playable),
         videoIds: playable.flatMap((song) => videoIds.get(song.id) ?? []).slice(0, SEED_VIDEO_IDS),
       },
@@ -209,6 +223,15 @@ export const startMagicQueue = (seed: MagicSeed, seedSongs: readonly SongRow[]) 
     });
     const first = playable.find((song) => String(song.id) === started?.first);
     if (started === null || first === undefined) return;
+    startingLibrary = { songs: playable, artists };
+    // Warm future picks without joining their derivation to this first batch.
+    yield* Effect.forkDetach(
+      recommendationSnapshot.get.pipe(
+        Effect.flatMap(({ library }) => tasteProfileForRecommendation(library)),
+        Effect.provideService(LibraryStore, store),
+        Effect.ignore,
+      ),
+    );
     batchStart = { id: started.session.id, at: startedAt, first: true };
     save(started.session);
     // The first batch is on its way as the seed starts: Up Next shows it loading from the first frame.
@@ -245,44 +268,6 @@ const ASKS_AGAIN: ReadonlySet<MagicSignalKind> = new Set(["favorite", "download"
  */
 let asked = 0;
 
-/** How many signals are being learned now: a batch waits for them. */
-const learning = makeExternalStore(0);
-
-/** The queue's current entry. */
-const currentKey = (): string | null => {
-  const state = queueState.get();
-  return state.entries[state.index]?.key ?? null;
-};
-
-/** Whether every signal so far was learned: no play's end is still to come, none is being learned. */
-const signalsLearned = (): boolean =>
-  learning.get() === 0 && !playEndPending(playTracker.get(), currentKey());
-
-const subscribeSignals = subscribeAll(learning, playTracker, queueState);
-
-/** The longest a batch waits for signals, should the player go quiet (paused mid-crossfade). */
-const SIGNALS_WAIT = "15 seconds";
-
-/** The longest a batch waits for an untagged seed's artists' genres from Deezer. */
-const SEED_LOOKUP_WAIT = "10 seconds";
-
-/**
- * Waits until every signal so far was learned (`signalsLearned`): the play
- * that just ended, the 9th song of the batch say, has its say in the next.
- */
-const awaitSignals = Effect.callback<void>((resume) => {
-  if (signalsLearned()) {
-    resume(Effect.void);
-    return;
-  }
-  const stop = subscribeSignals(() => {
-    if (!signalsLearned()) return;
-    stop();
-    resume(Effect.void);
-  });
-  return Effect.sync(stop);
-}).pipe(Effect.timeout(SIGNALS_WAIT), Effect.ignore);
-
 /** Those of [trackIds] the queue holds now. */
 const held = (trackIds: readonly string[]): string[] => {
   const queued = new Set(queueState.get().entries.map((entry) => entry.trackId));
@@ -301,6 +286,11 @@ export const layer = Layer.effectDiscard(
     const queue = yield* Queue;
     const ytMusic = yield* YtMusic;
     const player = yield* Player;
+    const warmInputs = recommendationSnapshot.get.pipe(
+      Effect.flatMap(({ library }) => tasteProfileForRecommendation(library)),
+      Effect.provideService(LibraryStore, store),
+      Effect.asVoid,
+    );
 
     /** Teaches the session under way [kind] about each of [trackIds] it holds. */
     const learn = (kind: MagicSignalKind, trackIds: readonly string[]) =>
@@ -314,13 +304,11 @@ export const layer = Layer.effectDiscard(
         save(songs.reduce((learned, song) => magicSignal(learned, { kind, song }), session));
       });
 
-    /** Learns [kind] about [trackIds] on its own, counted (`learning`) until it's done. */
+    /** Learns [kind] about [trackIds] for the next available ranking. */
     const teach = (kind: MagicSignalKind, trackIds: readonly string[]): void => {
       if (trackIds.length === 0 || activeMagicSession() === null) return;
-      learning.update((count) => count + 1);
       fork(
         learn(kind, trackIds).pipe(
-          Effect.ensuring(Effect.sync(() => learning.update((count) => count - 1))),
           // A star, a download or a song lined up by hand may find songs an empty pick didn't.
           Effect.ensuring(Effect.sync(() => (ASKS_AGAIN.has(kind) ? askAgain() : undefined))),
         ),
@@ -333,74 +321,58 @@ export const layer = Layer.effectDiscard(
      */
     const pick = (wanted: MagicSession, appended: (count: number) => void) =>
       Effect.gen(function* () {
-        yield* awaitSignals;
-        const { library, catalog, graph } = yield* Effect.provideService(
-          recommendationSnapshot.get,
-          LibraryStore,
-          store,
-        );
-        // The owner's taste weighs from the session's first batch on.
-        const taste = yield* Effect.provideService(
-          tasteProfileForRecommendation(library),
-          LibraryStore,
-          store,
-        );
-        // Discover's sliders as they are now: a move applies from the next batch.
+        fork(warmInputs);
+        const latest = recommendationSnapshot.peek();
+        const library = latest.library ?? startingLibrary;
+        const catalog = latest.catalog ?? [];
+        const graph = latest.graph;
+        const taste = latestTasteProfile();
         const sliders = discoverSliders.get();
-        const engine = mixSlidersEngine(sliders);
-        // Both sources are held to the seed's genres: an untagged seed's are its artists' (Deezer's).
         const profileOf = magicProfileOf(library);
-        const styleOf = libraryStyleOf(library);
-        yield* lookUpArtistProfiles(magicSeedLookups(wanted, profileOf)).pipe(
-          Effect.timeout(SEED_LOOKUP_WAIT),
-          Effect.ignore,
-        );
         const yt = yield* magicQueueYtCandidates(wanted, library, {
           catalog,
           graph,
           taste,
-          engine,
+          sliders,
           profileOf,
-          styleOf,
+          sessionNow: () => activeMagicSession() ?? wanted,
         }).pipe(
           Effect.provideService(LibraryStore, store),
           Effect.provideService(YtMusic, ytMusic),
         );
-        // Signals may have come, and the queue moved on, while the catalog was ranked (or refilled).
-        yield* awaitSignals;
         const session = activeMagicSession();
         if (session?.id !== wanted.id || !wantsMagicBatch(session, queueState.get()))
           return { kind: "dropped" } satisfies MagicBatchOutcome;
         const playable = library.songs.filter(songHasFile);
-        const ofLibrary = { artists: library.artists, songs: playable };
-        // At Wander the Library keeps every genre (null).
-        const threshold = magicLibraryThreshold(sliders);
-        // The seed's genre as the catalog pick found it (its song radio's artists' for an untagged seed).
-        const seedProfile =
-          yt.profile === undefined
-            ? yield* runSteps(
-                magicSeedProfileSteps(session, profileOf, catalog),
-                recommendationTurnEffect,
-              )
-            : yt.profile;
-        // Same genres and Close hold Library songs to the seed's style, and its artists' neighbourhood.
-        const libraryCandidates = magicLibraryCandidates(session, ofLibrary, {
-          profileOf,
-          seedProfile,
-          threshold,
-          styles: faithfulnessStyles(sliders),
-          graph,
+        const candidates = yt.candidates.filter((song) => !session.used.includes(song.trackId));
+        const selected = radioRankingBatch(candidates, {
+          size: session.batches === 0 ? 9 : 10,
+          newMusicShare: session.ytShare,
         });
-        const batch = magicBatch(session, libraryCandidates, Math.random, yt.candidates, taste);
-        // Library songs with no genre known stay out: their artists' genres are looked up for later batches.
-        if (threshold !== null)
-          fork(lookUpArtistProfiles(magicLibraryLookups(session, ofLibrary, { profileOf })));
+        const trackIds = selected.map((song) => song.trackId);
+        const batch = {
+          trackIds,
+          session: {
+            ...session,
+            used: [
+              ...session.used,
+              ...trackIds,
+              ...selected.flatMap((song) =>
+                song.song === null ? [] : [ytTrackId(song.song.videoId)],
+              ),
+            ],
+            batches: session.batches + 1,
+          },
+        };
         if (batch.trackIds.length === 0)
           return {
             kind: "empty",
-            seedGenre: seedProfile !== null,
+            seedGenre: session.seedProfile !== null,
             step: sliderStepLabel(GENRE_FAITHFULNESS_STEPS, sliders.faithfulness),
-            library: { weighed: playable.length, admitted: libraryCandidates.length },
+            library: {
+              weighed: playable.length,
+              admitted: candidates.filter((song) => song.source === "library").length,
+            },
             yt: { ranked: yt.ranked, eligible: yt.eligible },
             refill: yt.refilled,
           } satisfies MagicBatchOutcome;
@@ -408,16 +380,21 @@ export const layer = Layer.effectDiscard(
         const tracks = new Map<string, QueueTrack>(
           playable.map((song) => [String(song.id), toQueueTrack(song)]),
         );
-        for (const candidate of yt.candidates)
-          tracks.set(candidate.trackId, toYtQueueTrack(candidate.song, null));
+        for (const candidate of candidates)
+          if (candidate.source === "stream" && candidate.song !== null)
+            tracks.set(candidate.trackId, toYtQueueTrack(candidate.song, null));
         const songs = batch.trackIds.flatMap((id) => tracks.get(id) ?? []);
         yield* queue.dispatch({ type: "append", trackIds: songs.map((song) => song.id) }, songs);
         const picked = new Set(batch.trackIds);
         appended(songs.length);
         yield* cacheYtCoversInBackground(
-          yt.candidates
-            .filter((candidate) => picked.has(candidate.trackId))
-            .map((candidate) => candidate.song),
+          candidates.flatMap((candidate) =>
+            picked.has(candidate.trackId) &&
+            candidate.source === "stream" &&
+            candidate.song !== null
+              ? [candidate.song]
+              : [],
+          ),
         ).pipe(Effect.provideService(YtMusic, ytMusic), Effect.provideService(Player, player));
         return { kind: "appended", songs: songs.length } satisfies MagicBatchOutcome;
       });

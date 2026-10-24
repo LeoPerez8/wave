@@ -652,6 +652,7 @@ export type {
   MagicRadioSeed,
   MagicSeed,
   MagicSession,
+  MagicSongRadioSeed,
   MagicSignal,
   MagicSignalKind,
   MagicSong,
@@ -2105,3 +2106,12 @@ export {
 } from "./recommendationSnapshot.ts";
 
 export { homeMixBuildsDue } from "./homeMixBuilds.ts";
+export {
+  rankRadioSongs,
+  radioRankingBatch,
+  type RadioRankingPage,
+  type RadioRankingSeed,
+  type RadioRankingSources,
+  type RadioRankingOptions,
+  type RankedRadioSong,
+} from "./radioRanking.ts";

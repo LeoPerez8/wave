@@ -64,6 +64,9 @@ export const tasteProfileForRecommendation = (library: {
     }),
   );
 
+/** Last derived taste, available while a refresh runs. */
+export const latestTasteProfile = live.peek;
+
 /** Keeps the taste profile up to date as signals come (`makeLiveTaste`). */
 export const layer = Layer.effectDiscard(
   Effect.gen(function* () {

@@ -26,6 +26,8 @@ export interface SnapshotRead<A, R> {
    * reads again. A read every waiter gave up on is cancelled.
    */
   readonly get: Effect.Effect<A, unknown, R>;
+  /** Last completed value, even while a newer read derives; never starts work. */
+  readonly peek: () => A | null;
   /** Cancels work and releases waiters permanently. */
   readonly dispose: () => void;
 }
@@ -55,6 +57,7 @@ export const snapshotRead = <A, E, R>(
     users: number;
   };
   let latest: Entry | null = null;
+  let completed: A | null = null;
   /** Every read not yet ended, the one under way and any queued after it, for `dispose`. */
   const outstanding = new Set<Entry>();
   let disposed = false;
@@ -77,7 +80,8 @@ export const snapshotRead = <A, E, R>(
     entry.answer = before === null ? start() : before.answer.then(start, start);
     outstanding.add(entry);
     void entry.answer.then(
-      () => {
+      (value) => {
+        if (!disposed) completed = value;
         outstanding.delete(entry);
         entry.done = true;
         entry.usedAt = Math.max(entry.usedAt, now());
@@ -119,8 +123,10 @@ export const snapshotRead = <A, E, R>(
   }).pipe(withRecommendationDeadline);
   return {
     get,
+    peek: () => completed,
     dispose: () => {
       disposed = true;
+      completed = null;
       latest = null;
       for (const entry of outstanding) entry.controller.abort();
       outstanding.clear();

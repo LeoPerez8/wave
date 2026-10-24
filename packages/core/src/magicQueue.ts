@@ -285,8 +285,21 @@ export interface MagicSeed {
   readonly title: string;
 }
 
-/** A Magic Queue under way: everything it learned so far. Plain JSON, saved with the queue. */
+/** The song whose radio starts the session; kept so an unmatched Library seed can be searched after restart. */
+export interface MagicSongRadioSeed {
+  readonly id: string;
+  readonly title: string;
+  readonly artists: readonly string[];
+  readonly durationMs: number | null;
+  readonly videoId?: string;
+  readonly kind?: "song" | "artist";
+}
+
+/** A Magic Queue under way: plain JSON saved with its queue. */
 export interface MagicSession {
+  readonly radioSeed?: MagicSongRadioSeed;
+  /** Signals consumed by the shared radio ranking. Old sessions have none. */
+  readonly radioSignals?: readonly MagicSignal[];
   /** Tells this session apart from the others: its queue's context id. */
   readonly id: string;
   readonly seed: MagicSeed;
@@ -298,7 +311,7 @@ export interface MagicSession {
   readonly artistAffinity: Readonly<Record<string, number>>;
   /** What each genre family (by key) multiplies its songs' weight by; absent is 1. */
   readonly genreAffinity: Readonly<Record<string, number>>;
-  /** Artists skipped within the first 30 s: none of their songs comes for the rest of the session. */
+  /** Legacy weighted-batch exclusions. Radio ranking uses radioSignals to lower their scores. */
   readonly excludedArtists: readonly string[];
   /**
    * The share of each batch YouTube Music's candidates get (the Library's is
@@ -327,6 +340,7 @@ export interface MagicSession {
 
 /** What a Magic Queue's YouTube Music radio grows from, as `startMagicQueue` takes it. */
 export interface MagicRadioSeed {
+  readonly song?: MagicSongRadioSeed;
   /** Each seed song's primary artist, by name, as YouTube Music is asked for them. */
   readonly artists: readonly string[];
   /** The seed songs' genre profile (`genreProfile`), or null when none has a genre. */
@@ -454,6 +468,7 @@ export const startMagicQueue = (
     session: {
       id,
       seed,
+      ...(radio?.song === undefined ? {} : { radioSeed: radio.song }),
       used: [pick.trackId],
       batches: 0,
       artistAffinity,
@@ -625,8 +640,11 @@ const YT_SHARE_MOVE: { readonly [K in MagicSignalKind]?: number } = {
  */
 export const magicSignal = (learning: MagicSession, { kind, song }: MagicSignal): MagicSession => {
   const move = parseTrackId(song.trackId)?.kind === "yt" ? (YT_SHARE_MOVE[kind] ?? 0) : 0;
-  const session =
-    move === 0 ? learning : { ...learning, ytShare: clampShare(learning.ytShare + move) };
+  const session = {
+    ...learning,
+    radioSignals: [...(learning.radioSignals ?? []), { kind, song }],
+    ytShare: move === 0 ? learning.ytShare : clampShare(learning.ytShare + move),
+  };
   const used = session.used.includes(song.trackId) ? session.used : [...session.used, song.trackId];
   const genre = genreKey(song.genre);
   const genreAffinity = { ...session.genreAffinity };
@@ -867,7 +885,35 @@ export const parseMagicSession = (value: unknown): MagicSession | null => {
   if (!isStrings(used) || !isStrings(excludedArtists)) return null;
   if (typeof batches !== "number" || !Number.isInteger(batches) || batches < 0) return null;
   if (!isWeights(artistAffinity) || !isWeights(genreAffinity)) return null;
+  const radioSeed = value["radioSeed"];
+  const radioSignals = value["radioSignals"];
+  const validSeed =
+    isRecord(radioSeed) &&
+    typeof radioSeed["id"] === "string" &&
+    typeof radioSeed["title"] === "string" &&
+    isStrings(radioSeed["artists"]) &&
+    (radioSeed["durationMs"] === null || typeof radioSeed["durationMs"] === "number") &&
+    (radioSeed["videoId"] === undefined || typeof radioSeed["videoId"] === "string") &&
+    (radioSeed["kind"] === undefined ||
+      radioSeed["kind"] === "song" ||
+      radioSeed["kind"] === "artist");
+  const validSignals =
+    Array.isArray(radioSignals) &&
+    radioSignals.every(
+      (signal) =>
+        isRecord(signal) &&
+        ["skip", "removed", "favorite", "download", "playedThrough", "added"].includes(
+          String(signal["kind"]),
+        ) &&
+        isRecord(signal["song"]) &&
+        typeof signal["song"]["trackId"] === "string" &&
+        isStrings(signal["song"]["artists"]) &&
+        (signal["song"]["genre"] === null || typeof signal["song"]["genre"] === "string") &&
+        (signal["song"]["style"] === null || typeof signal["song"]["style"] === "string"),
+    );
   return {
+    ...(validSeed ? { radioSeed: radioSeed as unknown as MagicSongRadioSeed } : {}),
+    ...(validSignals ? { radioSignals: radioSignals as unknown as readonly MagicSignal[] } : {}),
     id,
     seed: { kind: seed["kind"] as MagicSeed["kind"], id: seed["id"], title: seed["title"] },
     used,

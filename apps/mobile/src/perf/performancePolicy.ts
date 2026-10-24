@@ -193,17 +193,6 @@ export const WHOLE_LIBRARY: Record<string, Exception> = {
     reason: "A visible selection/menu resolves streamed items for user actions.",
     capabilities: ["ytmusic/libraryFinder.ts#useLibraryFinder"],
   },
-  "playback/MagicQueue.ts#startMagicQueue": {
-    reason: "Explicit Magic Queue start builds its candidate Library and artist map.",
-    capabilities: ["library/LibraryStore.ts#listArtists"],
-  },
-
-  "playback/magicQueueRadio.ts#inLibraryOf": {
-    reason:
-      "Background radio batch indexes its supplied recommendation Library snapshot in bounded steps using the shared frame checkpoint; it never reads the Library again.",
-    capabilities: ["../../../packages/core/src/ytMusic.ts#libraryFinderSteps"],
-  },
-
   "playback/rowSwipe.ts#runTrackSwipe": {
     reason:
       "A completed swipe resolves its one requested action; it does not subscribe while rows render.",

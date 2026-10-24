@@ -49,7 +49,7 @@ import {
   lyricsAndGenreLookupsEnabled,
   useLyricsAndGenreLookupsEnabled,
 } from "@/settings/lyricsAndGenre";
-import { ytMusicEnabled } from "@/settings/ytMusic";
+import { ytMusicEnabled, useYtMusicEnabled } from "@/settings/ytMusic";
 import { openSharePlaylist } from "@/share/sharePlaylist";
 import { shareLibrarySong, shareStreamedSong } from "@/share/songShare";
 import {
@@ -212,6 +212,7 @@ function usePlan(
 } {
   const here = usePathname();
   const onlineLookups = useLyricsAndGenreLookupsEnabled();
+  const ytMusic = useYtMusicEnabled();
   const download = useMissingSongDownloadStatus(onlyMissingSong(target));
   // YT Music songs among the items: whether each is a file by now, and who their artists are.
   const streams = hasStreamedSongs(target);
@@ -241,6 +242,7 @@ function usePlan(
   const facts = targetFacts(target, favorites, find, pending);
   const planned = itemActions({
     kind: target.kind,
+    ytMusic,
     items: facts.map((item, index) =>
       item.missing === true
         ? { ...item, download }

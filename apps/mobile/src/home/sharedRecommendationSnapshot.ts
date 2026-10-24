@@ -62,6 +62,12 @@ export const shareRecommendationSnapshot = <L, R>({
     versions,
   });
   return {
+    /** Last derived inputs; cold parts are null and no read is started. */
+    peek: () => ({
+      library: libraryPart.peek(),
+      catalog: catalogPart.peek(),
+      graph: graphPart.peek(),
+    }),
     /** The Library part: songs, artists and plays (Home's mix indexes). */
     library: libraryPart.get,
     /** The candidate catalog part. */

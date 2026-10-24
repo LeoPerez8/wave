@@ -189,3 +189,46 @@ describe("the shared recommendation snapshot", () => {
     snapshot.dispose();
   });
 });
+
+test("peek returns cold inputs immediately and retains the last completed values during derivation", async () => {
+  let finish!: (value: string) => void;
+  let reads = 0;
+  let versions: SnapshotVersions = {};
+  const snapshot = shareRecommendationSnapshot({
+    library: Effect.suspend(() => {
+      return Effect.promise(
+        () =>
+          new Promise<string>((resolve) => {
+            reads++;
+            finish = resolve;
+          }),
+      );
+    }),
+    catalog: Effect.succeed([]),
+    graph: {
+      store: Effect.succeed({
+        graphCatalogPage: () => Effect.succeed({ rows: [], next: null }),
+        graphRadioPage: () => Effect.succeed({ rows: [], next: null }),
+        graphSimilarPage: () => Effect.succeed({ rows: [], next: null }),
+        graphPlayPage: () => Effect.succeed({ rows: [], next: null }),
+      }),
+      start: Effect.void,
+      between: Effect.void,
+    },
+    versions: () => versions,
+  });
+  assert.deepEqual(snapshot.peek(), { library: null, catalog: null, graph: null });
+  assert.equal(reads, 0);
+  const reading = Effect.runPromise(snapshot.library);
+  assert.equal(snapshot.peek().library, null);
+  finish("last index");
+  await reading;
+  assert.equal(snapshot.peek().library, "last index");
+  versions = snapshotVersionsAfter(versions, "tracks");
+  const refreshed = Effect.runPromise(snapshot.library);
+  assert.equal(snapshot.peek().library, "last index");
+  finish("next index");
+  await refreshed;
+  assert.equal(snapshot.peek().library, "next index");
+  snapshot.dispose();
+});

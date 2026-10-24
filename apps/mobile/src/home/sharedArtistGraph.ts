@@ -47,6 +47,7 @@ export const shareArtistGraph = <R, C extends ArtistGraphCatalogEntry = never, R
   return {
     /** The graph. */
     get: Effect.map(part.get, ({ graph }) => graph),
+    peek: () => part.peek()?.graph ?? null,
     /** The graph with the catalog it was derived from (undefined when read from the pages). */
     derived: part.get,
     dispose: part.dispose,
