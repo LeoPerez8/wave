@@ -1,7 +1,7 @@
 /** Discover mixes rank only the songs their radios brought; familiar blending stays separate. */
 import { mixSeedArtists, type DiscoverMixSeed } from "./discoverMixes.ts";
 import type { DiscoverMixRead } from "./discoverMixRadios.ts";
-import type { GenreProfile } from "./genreAffinity.ts";
+import { genreProfile, type GenreProfile } from "./genreAffinity.ts";
 import {
   rankRadioSongs,
   type RadioRankingSources,
@@ -18,7 +18,10 @@ export const rankedDiscoverMixRead = (
   radio: rankRadioSongs(
     {
       artists: mixSeedArtists(seed).map((artist) => artist.name),
-      profile: options.profile ?? null,
+      profile:
+        seed.kind === "genre"
+          ? genreProfile([{ genre: seed.genre ?? seed.name }])
+          : (options.profile ?? null),
     },
     {
       pages: sources.pages.map((page) => ({
