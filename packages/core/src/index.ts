@@ -16,6 +16,7 @@ export type { LibraryTrack, RawTrack } from "./library.ts";
 export { creditSplitter, respreadDeletedSongs, splitCredit } from "./credits.ts";
 export type { PrunedArtist } from "./credits.ts";
 export { formatDuration, formatRemaining } from "./time.ts";
+export { recommendationDeadline, recommendationFrameBudget } from "./recommendationWork.ts";
 export {
   ANCHOR_UNMEASURED,
   designPreviewState,
@@ -1884,6 +1885,7 @@ export {
   undoneMagicQueueRefresh,
 } from "./magicQueueSection.ts";
 export type { MagicQueuePicking, MagicQueuePicks } from "./magicQueueSection.ts";
+export { randomMagicQueuePicks } from "./randomMagicQueuePicks.ts";
 export { magicQueueShare } from "./magicQueue.ts";
 export { discoverMixesOfRadios } from "./discoverMixRadios.ts";
 export type { DiscoverMixRead } from "./discoverMixRadios.ts";

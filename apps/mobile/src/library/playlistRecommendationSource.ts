@@ -1,6 +1,7 @@
 /** App lifetime source cache; no read starts until a settled, visible visit asks. */
 import * as Effect from "effect/Effect";
-import { freeTurnEffect, settledTurnEffect } from "@/lib/backgroundWork";
+import { settledTurnEffect } from "@/lib/backgroundWork";
+import { recommendationTurnEffect } from "@/lib/recommendationWork";
 import { onArtistGraphSourcesChanged } from "@/home/graphSources";
 import { LibraryStore } from "./LibraryStore";
 import { onLibraryChange } from "./libraryChanges";
@@ -25,7 +26,7 @@ export const playlistRecommendationInput = (id: number) =>
         store,
         source: observePlaylistRecommendationInputs(
           store,
-          freeTurnEffect,
+          recommendationTurnEffect,
           onLibraryChange,
           (listener) =>
             onArtistGraphSourcesChanged((kind) => {

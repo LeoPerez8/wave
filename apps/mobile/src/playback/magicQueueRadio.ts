@@ -31,7 +31,7 @@ import { artistGraphNow } from "@/home/artistGraphNow";
 import { harvestMobileUsed, noteHarvestMobileUse } from "@/home/harvestMobileUse";
 import { mixCatalog } from "@/home/mixCatalog";
 import { artistRadio } from "@/home/ytArtistPage";
-import { freeTurnEffect } from "@/lib/backgroundWork";
+import { recommendationTurnEffect } from "@/lib/recommendationWork";
 import { withNetworkLog } from "@/lib/networkMeter";
 import type { SongRow } from "@/library/LibraryStore";
 import { onMobileData, online } from "@/native/waveNative";
@@ -171,7 +171,7 @@ export const magicQueueYtCandidates = (
   Effect.gen(function* () {
     if (!ytMusicEnabled()) return [];
     const graph = yield* artistGraphNow;
-    yield* freeTurnEffect;
+    yield* recommendationTurnEffect;
     const pick = yield* magicCatalogRead(session, {
       online: online(),
       onMobileData: onMobileData(),

@@ -9,7 +9,8 @@
 import { snapshotVersionsAfter, type SnapshotSource, type SnapshotVersions } from "@wave/core";
 import * as Effect from "effect/Effect";
 
-import { freeTurnEffect, settledTurnEffect } from "@/lib/backgroundWork";
+import { settledTurnEffect } from "@/lib/backgroundWork";
+import { recommendationTurnEffect } from "@/lib/recommendationWork";
 import { onLibraryChange } from "@/library/libraryChanges";
 import { LibraryStore } from "@/library/LibraryStore";
 
@@ -28,21 +29,25 @@ onArtistGraphSourcesChanged(written);
 
 /**
  * The snapshot. Its reads give the JavaScript thread back between steps
- * (`freeTurnEffect`) so Home stays smooth; the graph waits for Home to
+ * (`recommendationTurnEffect`, when a frame is due) so Home stays smooth; the graph waits for Home to
  * settle first.
  */
 export const recommendationSnapshot = shareRecommendationSnapshot({
   library: Effect.gen(function* () {
     const indexes: MixIndexes = yield* readMixInputs(
       yield* LibraryStore,
-      freeTurnEffect,
+      recommendationTurnEffect,
       Date.now(),
     );
     return indexes;
   }),
   catalog: Effect.gen(function* () {
-    return yield* readMixCatalog(yield* LibraryStore, freeTurnEffect);
+    return yield* readMixCatalog(yield* LibraryStore, recommendationTurnEffect);
   }),
-  graph: { store: Effect.service(LibraryStore), start: settledTurnEffect, between: freeTurnEffect },
+  graph: {
+    store: Effect.service(LibraryStore),
+    start: settledTurnEffect,
+    between: recommendationTurnEffect,
+  },
   versions: () => versions,
 });

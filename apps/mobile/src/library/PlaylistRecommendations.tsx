@@ -22,14 +22,15 @@ import { TextButton } from "@/components/TextButton";
 import { artistGraphNow } from "@/home/artistGraphNow";
 import { lookedUpProfileOf } from "@/home/artistGenres";
 import { useScreenSight } from "@/lib/screenSight";
-import { freeTurn, freeTurnEffect, settledTurnEffect } from "@/lib/backgroundWork";
+import { settledTurnEffect } from "@/lib/backgroundWork";
+import { recommendationTurn, recommendationTurnEffect } from "@/lib/recommendationWork";
 import { runSteps } from "@/lib/stepped";
 import { onArtistGraphSourcesChanged } from "@/home/graphSources";
 import { afterPaint } from "@/lib/afterPaint";
 import { followPlaylistRecommendations } from "./playlistRecommendationVisit";
 import { playlistRecommendationInput } from "./playlistRecommendationSource";
 import { makeExternalStore } from "@/lib/externalStore";
-import { RECOMMENDATION_TIMEOUT } from "@/lib/recommendationTimeout";
+import { withRecommendationDeadline } from "@/lib/recommendationTimeout";
 import { CROSSFADE_MS } from "@/motion/Crossfade";
 import { WaveNative } from "@/native/waveNative";
 import { playTrackIds, playYtSongs } from "@/playback/actions";
@@ -90,7 +91,7 @@ export function PlaylistRecommendations({
                 ytMusicEnabled: enabledNow.get(),
               },
             };
-          }).pipe(Effect.timeout(RECOMMENDATION_TIMEOUT)),
+          }).pipe(withRecommendationDeadline),
           { signal },
         ),
       rank: async (input, signal) => {
@@ -98,8 +99,8 @@ export function PlaylistRecommendations({
           .runPromise(
             runSteps(
               playlistRecommendationsSteps(input.playlist, input.sources),
-              freeTurnEffect,
-            ).pipe(Effect.timeout(RECOMMENDATION_TIMEOUT)),
+              recommendationTurnEffect,
+            ).pipe(withRecommendationDeadline),
             { signal },
           )
           .catch((error: unknown) => {
@@ -142,9 +143,9 @@ export function PlaylistRecommendations({
             }
             return added;
           }),
-      // The tap's placeholder paints before the write; the replacement's read waits out
-      // touches and scrolls (Core's `PlaylistRecommendationTurn`).
-      yieldTurn: (kind) => (kind === "paint" ? afterPaint() : freeTurn()),
+      // The tap's placeholder paints before the write; the replacement's read
+      // gives rendering its frame when due (Core's `PlaylistRecommendationTurn`).
+      yieldTurn: (kind) => (kind === "paint" ? afterPaint() : recommendationTurn()),
     }),
   );
   const state = useSyncExternalStore(session.subscribe, session.get);

@@ -44,7 +44,7 @@ import { useMostPlayedOfAllTime } from "./mostPlayedOfAllTime";
 
 import { AlbumShelf, ArtistShelf, SongRows } from "./HomeSections";
 import { ListeningOverview } from "./ListeningOverview";
-import { HomeSectionBody, HomeSectionSkeleton, MagicQueueSkeleton } from "./HomeSectionSkeleton";
+import { HomeSectionBody, HomeSectionSkeleton } from "./HomeSectionSkeleton";
 import {
   homeOpeningState,
   homeSectionWaiting,
@@ -108,24 +108,13 @@ function Discover({ home, title }: SectionProps) {
   const magicQueue = useMagicQueueSection();
   const artistMixes = useDiscoverMixes("artist-mixes", played);
   const genreMixes = useDiscoverMixes("genre-mixes", played);
-  const showsMagicQueue = magicQueue !== null && (magicQueue.songs.length > 0 || magicQueue.failed);
-  if (
-    magicQueue !== null &&
-    !showsMagicQueue &&
-    artistMixes.kind === "hidden" &&
-    genreMixes.kind === "hidden"
-  )
+  const showsMagicQueue = magicQueue.songs.length > 0;
+  if (!showsMagicQueue && artistMixes.kind === "hidden" && genreMixes.kind === "hidden")
     return null;
   return (
     <TitledSection title={title} control={<DiscoverSettingsButton ytMusic={ytMusic} />}>
       <View style={{ gap: CELL * 3 }}>
-        {magicQueue === null ? (
-          <DiscoverRow label={discoverRowTitle("magic-queue")}>
-            <MagicQueueSkeleton />
-          </DiscoverRow>
-        ) : (
-          showsMagicQueue && <MagicQueueRow section={magicQueue} />
-        )}
+        {showsMagicQueue && <MagicQueueRow section={magicQueue} />}
         <MixRow id="artist-mixes" section={artistMixes} />
         <MixRow id="genre-mixes" section={genreMixes} />
       </View>
@@ -268,7 +257,7 @@ function DiscoverMixRow({
 /**
  * Discover's Magic Queue row: nine Library songs in an adaptive grid, a tap on one
  * starting a Magic Queue from it, its long-press the song's menu. A new list
- * each day; pulled right past its start, the row brings other songs, with
+ * each visit; pulled right past its start, the row brings other songs, with
  * Undo. Each place crossfades its tile when its song changes. With YT Music
  * off it stays, and its queues play from the Library alone.
  */
@@ -279,13 +268,11 @@ function MagicQueueRow({ section }: { section: MagicQueueSection }) {
   return (
     <DiscoverRow
       label={discoverRowTitle("magic-queue")}
-      busy={section.picking}
-      refresh={{ label: "Get other songs", run: section.refresh, enabled: !section.picking }}
+      refresh={{ label: "Get other songs", run: section.refresh, enabled: true }}
     >
-      {section.failed && <RecommendationsFailed onRetry={section.refresh} />}
       {section.songs.length > 0 && (
         <View onLayout={(event) => setAvailable(event.nativeEvent.layout.width)}>
-          <PullRefreshRow onRefresh={section.refresh} enabled={!section.picking}>
+          <PullRefreshRow onRefresh={section.refresh} enabled>
             <View
               style={{
                 width: available,

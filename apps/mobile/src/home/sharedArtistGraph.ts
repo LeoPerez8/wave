@@ -5,6 +5,7 @@ import {
   type SnapshotVersions,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
+import { withRecommendationDeadline } from "../lib/recommendationTimeout.ts";
 import { snapshotRead } from "../lib/snapshotRead.ts";
 import { readArtistGraph, type ArtistGraphReads } from "./artistGraph.ts";
 
@@ -13,7 +14,7 @@ import { readArtistGraph, type ArtistGraphReads } from "./artistGraph.ts";
  * it, its callers get an error and a later read tries again. The shared
  * catalog it's derived from has its own deadline.
  */
-const GRAPH_READ_TIMEOUT = "15 seconds";
+const GRAPH_READ_TIMEOUT = 15_000;
 
 /**
  * The artist graph, read as the recommendation snapshot's graph part: kept
@@ -39,7 +40,7 @@ export const shareArtistGraph = <R, RC = never>(
       return yield* Effect.gen(function* () {
         yield* start;
         return yield* readArtistGraph(yield* store, between, entries);
-      }).pipe(Effect.timeout(GRAPH_READ_TIMEOUT));
+      }).pipe((graph) => withRecommendationDeadline(graph, GRAPH_READ_TIMEOUT));
     }),
     { part: RECOMMENDATION_SNAPSHOT.graph, versions },
   );
