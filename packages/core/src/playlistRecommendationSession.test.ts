@@ -935,32 +935,61 @@ test("a failed save among concurrent actions restores only its own offer", async
   assert.equal(session.get().slots[1]?.track.id, "g");
 });
 
-test("a failed refill marks only its own slots; a slot freed meanwhile is still replaced", async () => {
+test("Try Again while another offer's replacement is read retries its slot alongside, without saving again", async () => {
   // The renewal reads first, then the first refill, which fails.
+  const written: string[] = [];
+  const { session, gate } = gatedSession({
+    fail: (n) => n === 2,
+    dismiss: async (offer) => {
+      written.push(offer.track.id);
+    },
+  });
+  await session.renew();
+  const before = session.get().slots;
+  assert.equal(await session.dismiss(before[0]!.key), true);
+  assert.deepEqual(session.get().unfilled, [0]);
+  assert.equal(session.get().error, "refill");
+  gate.hold = Promise.withResolvers();
+  const hold = gate.hold;
+  const dismissing = session.dismiss(before[2]!.key);
+  // The tap takes the failed slot into its own refill, which is reading.
+  assert.deepEqual(session.get().pendingSlots, [2, 0]);
+  await new Promise((resolve) => setImmediate(resolve));
+  // With nothing left to retry, Try Again does nothing more.
+  await session.renew({ refillOnly: true });
+  hold.resolve();
+  assert.equal(await dismissing, true);
+  assert.deepEqual(written, ["a", "c"]);
+  assert.deepEqual(
+    session.get().slots.map((offer) => offer?.track.id ?? null),
+    ["g", "b", "f", "d", "e"],
+  );
+  assert.deepEqual(session.get().unfilled, []);
+  assert.deepEqual(session.get().pendingSlots, []);
+  for (const index of [1, 3, 4]) assert.equal(session.get().slots[index], before[index]);
+});
+
+test("a tap during a Try Again is taken at once and its slot filled after the retried one", async () => {
   const { session, gate } = gatedSession({ fail: (n) => n === 2 });
   await session.renew();
   const before = session.get().slots;
+  assert.equal(await session.dismiss(before[0]!.key), true);
+  assert.deepEqual(session.get().unfilled, [0]);
   gate.hold = Promise.withResolvers();
   const hold = gate.hold;
-  const first = session.dismiss(before[0]!.key);
+  const retry = session.renew({ refillOnly: true });
   await new Promise((resolve) => setImmediate(resolve));
-  const second = session.dismiss(before[2]!.key);
-  await new Promise((resolve) => setImmediate(resolve));
+  const dismissing = session.dismiss(before[3]!.key);
+  assert.deepEqual(session.get().pendingSlots, [0, 3]);
   hold.resolve();
-  assert.equal(await first, true);
-  assert.deepEqual(session.get().unfilled, [0]);
-  assert.equal(session.get().error, "refill");
-  assert.equal(await second, true);
+  await retry;
+  assert.equal(await dismissing, true);
   assert.deepEqual(
     session.get().slots.map((offer) => offer?.track.id ?? null),
-    [null, "b", "f", "d", "e"],
+    ["f", "b", "c", "g", "e"],
   );
-  assert.deepEqual(session.get().unfilled, [0]);
-  // Try Again fills it without saving again.
-  await session.renew({ refillOnly: true });
-  assert.equal(session.get().slots[0]?.track.id, "g");
   assert.deepEqual(session.get().unfilled, []);
-  for (const index of [1, 3, 4]) assert.equal(session.get().slots[index], before[index]);
+  assert.equal(session.get().error, null);
 });
 
 test("hiding during concurrent actions keeps every save and leaves no slot as a placeholder", async () => {
@@ -1045,4 +1074,62 @@ test("Add and Dismiss wait for a full renewal's offers", async () => {
   hold.resolve();
   await renewing;
   assert.equal(await session.dismiss(before[0]!.key), true);
+});
+
+test("a slot whose replacement failed is filled by the refill already waiting, and a failed save keeps its message", async () => {
+  // The renewal reads first, then the first refill, which fails.
+  const { session, gate } = gatedSession({
+    fail: (n) => n === 2,
+    accept: async (offer) => {
+      if (offer.track.id === "b") throw new Error("disk full");
+      gate.playlist = [...gate.playlist, offer.track];
+    },
+  });
+  await session.renew();
+  const before = session.get().slots;
+  gate.hold = Promise.withResolvers();
+  const hold = gate.hold;
+  const first = session.dismiss(before[0]!.key);
+  await new Promise((resolve) => setImmediate(resolve));
+  const failing = session.accept(before[1]!.key);
+  const second = session.dismiss(before[2]!.key);
+  assert.equal(await failing, false);
+  assert.equal(session.get().error, "save");
+  hold.resolve();
+  assert.deepEqual(await Promise.all([first, second]), [true, true]);
+  assert.deepEqual(
+    session.get().slots.map((offer) => offer?.track.id ?? null),
+    ["g", "b", "f", "d", "e"],
+  );
+  assert.deepEqual(session.get().unfilled, []);
+  assert.deepEqual(session.get().pendingSlots, []);
+  // The refill's failure didn't hide that b's choice still needs another try.
+  assert.equal(session.get().error, "save");
+  assert.equal(session.get().slots[1], before[1]);
+});
+
+test("closing the playlist during concurrent actions still writes every tapped choice, and publishes nothing", async () => {
+  const saved = Promise.withResolvers<void>();
+  const written: string[] = [];
+  const { session, gate } = gatedSession({
+    accept: async (offer) => {
+      await saved.promise;
+      written.push(offer.track.id);
+    },
+    dismiss: async (offer) => {
+      written.push(offer.track.id);
+    },
+  });
+  await session.renew();
+  let notifications = 0;
+  session.subscribe(() => notifications++);
+  const before = session.get().slots;
+  const adding = session.accept(before[0]!.key);
+  const dismissing = session.dismiss(before[2]!.key);
+  const heard = notifications;
+  session.dispose();
+  saved.resolve();
+  assert.deepEqual(await Promise.all([adding, dismissing]), [true, true]);
+  assert.deepEqual(written, ["a", "c"]);
+  assert.deepEqual([gate.reads, notifications], [1, heard]);
 });

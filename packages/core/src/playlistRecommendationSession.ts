@@ -109,18 +109,19 @@ export const playlistRecommendationSession = (options: {
   /** A full renewal is reading or ranking: Add and Dismiss wait for its offers. */
   let renewing = false;
   // Saves run one at a time, in tap order, so no choice is written twice or out of turn.
-  let saving: Promise<unknown> = Promise.resolve();
-  let saves = 0;
-  /** Freed slots, their choice saved, that the next refill fills. */
+  let saveQueue: Promise<unknown> = Promise.resolve();
+  let savesRunning = 0;
+  // Freed slots, their choice saved, that the next refill fills.
   const waiting: number[] = [];
   let refilling = false;
-  const filled = new Map<number, (() => void)[]>();
+  // Who waits for each freed slot's refill to end.
+  const holeWaiters = new Map<number, (() => void)[]>();
   let disposed = false;
   let paused = false;
   let version = 0;
   let active: AbortController | undefined;
   let renewalPending = false;
-  const busy = () => renewing || refilling || saves > 0;
+  const busy = () => renewing || refilling || savesRunning > 0;
   const publish = (patch: Partial<PlaylistRecommendationState>) => {
     if (disposed) return;
     state = { ...state, ...patch };
@@ -138,24 +139,17 @@ export const playlistRecommendationSession = (options: {
     track,
   });
   const held = () => state.slots.flatMap((offer) => (offer === null ? [] : [offer.track]));
-  const without = (holes: readonly number[]) =>
+  const pendingSlotsBut = (holes: readonly number[]) =>
     state.pendingSlots.filter((pending) => !holes.includes(pending));
-  /** Resolves once a refill filled [holes], failed or stopped. */
-  const refilled = (holes: readonly number[]) =>
-    Promise.all(
-      holes.map(
-        (hole) =>
-          new Promise<void>((resolve) => {
-            filled.set(hole, [...(filled.get(hole) ?? []), resolve]);
-          }),
-      ),
-    );
-  const done = (holes: readonly number[]) => {
+  const releaseHoles = (holes: readonly number[]) => {
     for (const hole of holes) {
-      for (const resolve of filled.get(hole) ?? []) resolve();
-      filled.delete(hole);
+      for (const resolve of holeWaiters.get(hole) ?? []) resolve();
+      holeWaiters.delete(hole);
     }
   };
+  /** The freed slots' choices are saved: the slots leave no placeholder, waiting for a retry. */
+  const leaveUnfilled = (holes: readonly number[]) =>
+    publish({ pendingSlots: pendingSlotsBut(holes), unfilled: [...state.unfilled, ...holes] });
   /**
    * Fills the waiting slots, a batch at a time: slots freed while one batch is
    * read and ranked wait for the next. [turn] is the first batch's first step.
@@ -166,7 +160,11 @@ export const playlistRecommendationSession = (options: {
     while (waiting.length > 0) {
       // Hidden or gone mid-way (an earlier batch's turns): stop before reading again.
       if (disposed || paused) break;
-      const holes = waiting.splice(0);
+      // A slot whose replacement failed meanwhile is retried with this batch, after its own.
+      const retried = state.unfilled;
+      if (retried.length > 0)
+        publish({ pendingSlots: [...state.pendingSlots, ...retried], unfilled: [] });
+      const holes = [...waiting.splice(0), ...retried];
       const controller = new AbortController();
       active = controller;
       try {
@@ -194,25 +192,37 @@ export const playlistRecommendationSession = (options: {
           taken.push(next.track);
           slots[hole] = slot(next.track);
         }
-        publish({ slots, pendingSlots: without(holes) });
+        publish({ slots, pendingSlots: pendingSlotsBut(holes) });
       } catch {
         // Paused or disposed mid-refill: the choices are saved, so their holes wait unfilled, without an error.
-        publish({
-          pendingSlots: without(holes),
-          unfilled: [...state.unfilled, ...holes],
-          ...(controller.signal.aborted ? {} : { error: "refill" as const }),
-        });
+        leaveUnfilled(holes);
+        // A failed save's message stays: its offer still waits for another try.
+        if (!controller.signal.aborted && state.error !== "save") publish({ error: "refill" });
       } finally {
         if (active === controller) active = undefined;
-        done(holes);
+        releaseHoles(holes);
       }
     }
     // Hidden or gone: what's left waits for the next refill or renewal.
     const left = waiting.splice(0);
-    if (left.length > 0)
-      publish({ pendingSlots: without(left), unfilled: [...state.unfilled, ...left] });
-    done(left);
+    if (left.length > 0) leaveUnfilled(left);
+    releaseHoles(left);
     refilling = false;
+  };
+  /** Refills [holes] (their choices saved), then runs a renewal asked for meanwhile. */
+  const replace = async (holes: readonly number[], turn: PlaylistRecommendationTurn) => {
+    waiting.push(...holes);
+    const replaced = Promise.all(
+      holes.map(
+        (hole) =>
+          new Promise<void>((resolve) => {
+            holeWaiters.set(hole, [...(holeWaiters.get(hole) ?? []), resolve]);
+          }),
+      ),
+    );
+    void refill(turn);
+    await replaced;
+    await settle();
   };
   /** A renewal asked for while offers were being saved or replaced runs once they're done. */
   const settle = async () => {
@@ -240,32 +250,28 @@ export const playlistRecommendationSession = (options: {
       await save(offer);
     };
     // With no other save under way, this one starts at once.
-    const saved = saves > 0 ? saving.then(write) : write();
-    saving = saved.catch(() => {});
-    saves++;
+    const saved = savesRunning > 0 ? saveQueue.then(write) : write();
+    saveQueue = saved.catch(() => {});
+    savesRunning++;
     try {
       await saved;
     } catch {
-      saves--;
+      savesRunning--;
       publish({
         pending: state.pending.filter((pending) => pending !== key),
-        pendingSlots: without([index, ...earlier]),
+        pendingSlots: pendingSlotsBut([index, ...earlier]),
         unfilled: [...state.unfilled, ...earlier],
         error: "save",
       });
       await settle();
       return false;
     }
-    saves--;
+    savesRunning--;
     consumed.push(offer.track);
     const slots = [...state.slots];
     slots[index] = null;
     publish({ pending: state.pending.filter((pending) => pending !== key), slots });
-    waiting.push(index, ...earlier);
-    const replaced = refilled([index]);
-    void refill("free");
-    await replaced;
-    await settle();
+    await replace([index, ...earlier], "free");
     return true;
   };
   const session = {
@@ -301,16 +307,12 @@ export const playlistRecommendationSession = (options: {
         if (renewing || state.unfilled.length === 0) return;
         // A refill retry holds its slots' placeholders; only a full renewal reads as loading.
         const retrying = state.unfilled;
-        waiting.push(...retrying);
         publish({
           pendingSlots: [...state.pendingSlots, ...retrying],
           unfilled: [],
           error: null,
         });
-        const replaced = refilled(retrying);
-        void refill("paint");
-        await replaced;
-        await settle();
+        await replace(retrying, "paint");
         return;
       }
       const revision = ++version;

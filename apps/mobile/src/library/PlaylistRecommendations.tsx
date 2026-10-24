@@ -179,12 +179,16 @@ export function PlaylistRecommendations({
   });
   const state = useSyncExternalStore(session.subscribe, session.get);
   const reduceMotion = useReducedMotion();
-  // What each busy slot says while its placeholder shows ("Adding Song"), by slot.
+  // What a tapped slot's placeholder says until its action ends ("Adding Song"), by slot;
+  // any other placeholder is loading a replacement.
   const [busyLabels, setBusyLabels] = useState<ReadonlyMap<number, string>>(new Map());
-  const labelSlots = (slots: readonly number[], label: string) =>
-    setBusyLabels(
-      (previous) => new Map([...previous, ...slots.map((slot) => [slot, label] as const)]),
-    );
+  const labelSlot = (slot: number, label: string | undefined) =>
+    setBusyLabels((previous) => {
+      const next = new Map(previous);
+      if (label === undefined) next.delete(slot);
+      else next.set(slot, label);
+      return next;
+    });
   // The visit follows the write's cause (#599): source changes revalidate even when playlist
   // IDs stay the same, once the playlist is in sight and settled. Catalog writes (its own
   // radios' among them) don't: the suggestions read their radios, not the catalog.
@@ -228,9 +232,10 @@ export function PlaylistRecommendations({
     // The session publishes the slot's placeholder synchronously when it takes the tap.
     if (busy || !session.get().pending.includes(song.key)) return;
     const label = kind === "add" ? `Adding ${title}` : `Dismissing ${title}`;
-    labelSlots([index], label);
+    labelSlot(index, label);
     announce(label);
     const saved = await acting;
+    labelSlot(index, undefined);
     const after = session.get();
     if (!saved) {
       if (after.error === "save")
@@ -249,7 +254,6 @@ export function PlaylistRecommendations({
   };
   const retryRefill = () => {
     const retrying = state.unfilled;
-    labelSlots(retrying, LOADING_ANOTHER);
     void session.renew({ refillOnly: true }).then(() => {
       const after = session.get();
       announce(
