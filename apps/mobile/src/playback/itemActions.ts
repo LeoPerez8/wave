@@ -61,7 +61,11 @@ import {
   useMissingSongDownloadStatuses,
   downloadYtSong,
 } from "@/ytmusic/YtDownloads";
-import { useLibraryFinder, type FindInLibrary } from "@/ytmusic/libraryFinder";
+import {
+  currentLibraryFinder,
+  useLibraryFinder,
+  type FindInLibrary,
+} from "@/ytmusic/libraryFinder";
 import { useStreamedArtistContext } from "@/ytmusic/streamedArtist";
 
 import {
@@ -75,6 +79,7 @@ import {
   targetStreamedArtistNames,
   isLibraryTrack,
   isUnsearchedTrack,
+  tracksTarget,
   type ActionItems,
   type TargetEntry,
 } from "./actionTargets";
@@ -217,16 +222,18 @@ function usePlan(
   const ytMusic = useYtMusicEnabled();
   const download = useMissingSongDownloadStatus(onlyMissingSong(target));
   // YT Music songs among the items: whether each is a file by now, and who their artists are.
+  const deferred = target.readOnAction === true;
   const streams = hasStreamedSongs(target);
-  const find = useStreamedSongFinder(streams);
+  const loadedFind = useStreamedSongFinder(streams && !deferred);
+  const find = deferred ? noMatch : loadedFind;
   const streamedArtists = useStreamedArtistContext(
-    streams,
-    target.kind === "mixed" || (target.kind === "track" && target.items.length > 1)
+    streams && !deferred,
+    !deferred && (target.kind === "mixed" || (target.kind === "track" && target.items.length > 1))
       ? targetStreamedArtistNames(target)
       : undefined,
   );
   const perAlbum = useAlbumsMissingSongs(
-    target.kind === "album" ? target.items.map((album) => album.id) : [],
+    !deferred && target.kind === "album" ? target.items.map((album) => album.id) : [],
   );
   const missingSongs = useMemo(() => perAlbum.flat(), [perAlbum]);
   const statuses = useMissingSongDownloadStatuses(missingSongs);
@@ -240,7 +247,7 @@ function usePlan(
     return statuses.slice(start, start + (perAlbum[index]?.length ?? 0));
   };
   // Starred YT Music songs waiting for their files: their Favorite reads Remove from Favorites.
-  const pending = usePendingFavoriteVideos();
+  const pending = usePendingFavoriteVideos(!deferred);
   const facts = targetFacts(target, favorites, find, pending);
   const planned = itemActions({
     kind: target.kind,
@@ -303,8 +310,9 @@ export function useItemActions(
   { surface, finish, onSelect, collectionSongs: readFirst, playing }: ActionOptions,
 ): readonly ActionEntry[] {
   const here = usePathname();
-  const favorites = useFavoriteIds();
-  const find = useStreamedSongFinder(hasStreamedSongs(target));
+  const deferred = target.readOnAction === true;
+  const favorites = useFavoriteIds(!deferred);
+  const find = useStreamedSongFinder(hasStreamedSongs(target) && !deferred);
 
   // [missingSongs]: the albums' missing songs, which their download entries act on.
   const { planned, missingSongs, perAlbum, collectionSongs } = usePlan(target, favorites, {
@@ -322,24 +330,65 @@ export function useItemActions(
     if (entry.action === "goToArtist" && "artists" in entry && entry.artists.kind === "open")
       goArtistId = entry.artists.artistId;
   }
-  const links = useLinkRows(goAlbumId, goArtistId);
+  const links = useLinkRows(goAlbumId, goArtistId, !deferred);
 
-  return actionEntries(
-    planned,
-    itemActionPress({
-      target,
-      surface,
-      finish,
-      onSelect,
-      here,
-      find,
-      links,
-      missingSongs,
-      perAlbum,
-      collectionSongs,
-    }),
-  );
+  const context: PressContext = {
+    target,
+    surface,
+    finish,
+    onSelect,
+    here,
+    find,
+    links,
+    missingSongs,
+    perAlbum,
+    collectionSongs,
+  };
+  const press = itemActionPress(context);
+  return actionEntries(planned, (entry) => {
+    if (!deferred || !SONG_ACTIONS.has(entry.action)) return press(entry);
+    return () => {
+      finish();
+      void resolveSelectionTarget(target)
+        .then(({ target: resolved, find: currentFind }) => {
+          itemActionPress({ ...context, target: resolved, find: currentFind, finish: () => {} })(
+            entry,
+          )();
+        })
+        .catch((error: unknown) => showError("Couldn't load the songs", error));
+    };
+  });
 }
+
+const noMatch: FindInLibrary = () => null;
+const SONG_ACTIONS: ReadonlySet<ItemAction> = new Set([
+  "playNext",
+  "addToQueue",
+  "addToPlaylist",
+  "favorite",
+  "unfavorite",
+  "download",
+  "retryDownload",
+]);
+
+/** Acquire release tracks and current Library identities after the owner chooses an action. */
+const resolveSelectionTarget = async (target: ActionItems) => {
+  const entries = await targetEntries(target);
+  const find = entries.some((entry) => entry.source === "stream")
+    ? await currentLibraryFinder()
+    : noMatch;
+  return {
+    find,
+    target: tracksTarget(
+      entries.map((entry) => {
+        if (entry.source === "library") return { song: entry.track };
+        if (entry.source === "unsearched") return { unsearched: entry.song };
+        const track = find(entry.song);
+        return track?.path == null ? { ytSong: entry.song } : { song: track };
+      }),
+    ),
+  };
+};
 
 /** Where an entry runs: what `useItemActions` read for it, or what a row's swipe has at hand. */
 export interface PressContext {

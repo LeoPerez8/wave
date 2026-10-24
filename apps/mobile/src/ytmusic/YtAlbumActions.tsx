@@ -13,14 +13,15 @@ import { Artwork } from "@/catalog/Artwork";
 import { CELL } from "@/catalog/grid";
 import { pressedMenuAllowed, pressedRect } from "@/motion/pressedRect";
 import type { NativeYtSong } from "@/native/waveYtMusic";
-import { showMessage } from "@/overlay/alert";
+import { showError, showMessage } from "@/overlay/alert";
 import { CardHeading } from "@/overlay/CardHeading";
 import { MenuChoices, type MenuChoice } from "@/overlay/MenuChoices";
 import { followUp, openOverlay } from "@/overlay/overlay";
 import { playDiscoverSongs, queueDiscoverSongs } from "@/playback/actions";
+import type { MenuOptions } from "@/playback/ActionsMenu";
 
 import { askYtMusic } from "./askYtMusic";
-import { useLibraryFinder, useLoadedInLibrary } from "./libraryFinder";
+import { currentLibraryFinder, useLibraryFinder, useLoadedInLibrary } from "./libraryFinder";
 import type { YtListHead } from "./routes";
 import { runYtDownloadAction, useYtAlbumDownload } from "./YtDownloads";
 
@@ -36,8 +37,16 @@ export interface YtAlbumTarget extends YtListHead {
  * after (Core's `ytAlbumDownload`). The album's page is read first (once a
  * session, see `readYtAlbum`), so the card opens with every entry it will have.
  */
-export const openYtAlbumActions = (album: YtAlbumTarget): void => {
+export const openYtAlbumActions = (album: YtAlbumTarget, { onSelect }: MenuOptions = {}): void => {
   const anchor = pressedRect();
+  if (onSelect !== undefined) {
+    openOverlay({
+      label: album.title,
+      anchor,
+      render: (close) => <SelectableAlbumMenu album={album} close={close} onSelect={onSelect} />,
+    });
+    return;
+  }
   const allowed = pressedMenuAllowed();
   void followUp(async () => {
     const result = await askYtMusic((ytMusic) => ytMusic.album(album.browseId));
@@ -59,6 +68,83 @@ export const openYtAlbumActions = (album: YtAlbumTarget): void => {
     });
   });
 };
+
+type SelectableAlbumAction = "play" | "shuffle" | "playNext" | "addToQueue" | "downloadAlbum";
+
+/** Read and match only after the release menu's song action, never for Select. */
+const runSelectableAlbumAction = async (album: YtAlbumTarget, action: SelectableAlbumAction) => {
+  const result = await askYtMusic((ytMusic) => ytMusic.album(album.browseId));
+  if (Result.isFailure(result)) {
+    await showMessage(
+      album.title,
+      result.failure.reason === "offline"
+        ? "You're offline. YT Music albums need the network."
+        : "No answer online. Try again in a moment.",
+    );
+    return;
+  }
+  const songs = ytAlbumSongs(album.browseId, result.success);
+  const find = await currentLibraryFinder();
+  if (action === "downloadAlbum") {
+    runYtDownloadAction(action, songs, (song) => find(song) !== null, {
+      kind: "album",
+      id: album.browseId,
+      name: album.title,
+    });
+    return;
+  }
+  const listed = discoverSongs(songs, find);
+  if (action === "playNext" || action === "addToQueue") await queueDiscoverSongs(listed, action);
+  else
+    await playDiscoverSongs(
+      listed,
+      undefined,
+      { kind: "ytAlbum", id: album.browseId },
+      { shuffle: action === "shuffle" },
+    );
+};
+
+/** A selectable release needs no tracklist until a song action is chosen. */
+function SelectableAlbumMenu({
+  album,
+  close,
+  onSelect,
+}: {
+  album: YtAlbumTarget;
+  close: () => void;
+  onSelect: () => void;
+}) {
+  const run = (action: SelectableAlbumAction) => () => {
+    close();
+    void followUp(() => runSelectableAlbumAction(album, action)).catch((error: unknown) =>
+      showError("Couldn't load the songs", error),
+    );
+  };
+  return (
+    <MenuChoices
+      cards={(["play", "playNext", "addToQueue"] as const).map((action) => ({
+        action,
+        onPress: run(action),
+      }))}
+      entries={[
+        { action: "shuffle", label: PLAY_ACTION_LABELS.shuffle, onPress: run("shuffle") },
+        {
+          action: "downloadAlbum",
+          label: YT_ALBUM_DOWNLOAD_ACTION_LABELS.downloadAlbum,
+          onPress: run("downloadAlbum"),
+        },
+        {
+          action: "select",
+          label: "Select",
+          onPress: () => {
+            close();
+            onSelect();
+          },
+        },
+      ]}
+    />
+  );
+}
 
 /** The menu card: the album (unless its tile is highlighted), then its cards and entries. */
 function YtAlbumActionsMenu({

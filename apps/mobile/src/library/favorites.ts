@@ -165,13 +165,15 @@ export const favoriteIdsNow = (): ReadonlySet<number> => favorites.get().ids;
 export const toggleFavorite = (trackId: number | string): Promise<void> =>
   setFavorite(trackId, !isFavorite(trackId));
 
-const useFavoritesState = (): FavoritesState => {
-  useEffect(loadFavorites, []);
+const useFavoritesState = (active = true): FavoritesState => {
+  useEffect(() => {
+    if (active) loadFavorites();
+  }, [active]);
   return useSyncExternalStore(favorites.subscribe, favorites.get);
 };
 
 /** The ids of every starred track (for marking rows in a list). */
-export const useFavoriteIds = (): ReadonlySet<number> => useFavoritesState().ids;
+export const useFavoriteIds = (active = true): ReadonlySet<number> => useFavoritesState(active).ids;
 
 /**
  * Whether a track is starred; takes a SongRow id or a queue track id (Now
@@ -317,8 +319,10 @@ export const setPendingFavorites = (
 };
 
 /** The videos of every pending favorite (for marking YT Music songs starred). */
-export const usePendingFavoriteVideos = (): ReadonlySet<string> => {
-  useEffect(loadPendingFavorites, []);
+export const usePendingFavoriteVideos = (active = true): ReadonlySet<string> => {
+  useEffect(() => {
+    if (active) loadPendingFavorites();
+  }, [active]);
   return useSyncExternalStore(pendingFavorites.subscribe, () => pendingFavorites.get().videos);
 };
 

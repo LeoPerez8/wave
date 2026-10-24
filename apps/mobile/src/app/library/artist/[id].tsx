@@ -28,7 +28,15 @@ import { useChromeInset } from "@/chrome/chrome";
 import { playPage } from "@/playback/actions";
 import { useCurrentPlayingIds } from "@/playback/hooks";
 import { openAlbumActions, openTrackActions } from "@/playback/ActionsMenu";
-import { mixedTarget, trackItemKey, type MixedItem } from "@/playback/actionTargets";
+import { mixedTarget, type MixedItem } from "@/playback/actionTargets";
+import {
+  albumItem,
+  ytAlbumItem,
+  trackItem,
+  ytTrackItem,
+  mixedItemKey,
+} from "@/playback/mixedItems";
+import { albumSelectionOf, ytAlbumSelectionOf } from "@/selection/mixedSelection";
 import { toAlbumSummary } from "@/library/AlbumGrid";
 import { DetailFrame } from "@/library/DetailFrame";
 import { useFavoriteIds } from "@/library/favorites";
@@ -145,31 +153,21 @@ const itemKey = (item: Item): string => {
   }
 };
 
-const albumItem = (album: AlbumRow): MixedItem => ({ kind: "album", item: album });
-const trackItem = (song: SongRow): MixedItem => ({ kind: "track", item: { song } });
-const ytTrackItem = (ytSong: NativeYtSong): MixedItem => ({ kind: "track", item: { ytSong } });
-
 /**
  * What can be checked on the page, in page order: the albums (their shelf,
  * then Appears on), then the songs. Albums and songs check together.
  */
-const selectableItems = (detail: ArtistDetail, songs: readonly PageSong[]): MixedItem[] => [
+const selectableItems = (
+  detail: ArtistDetail,
+  songs: readonly PageSong[],
+  yt: YtAdditions,
+): MixedItem[] => [
   ...detail.albums.map(albumItem),
+  ...yt.albums.map(ytAlbumItem),
+  ...yt.singles.map(ytAlbumItem),
   ...detail.appearsOn.map(albumItem),
   ...songs.map((row) => (row.source === "library" ? trackItem(row.track) : ytTrackItem(row.song))),
 ];
-
-const selectableKey = (mixed: MixedItem): string =>
-  mixed.kind === "album" ? `album-${mixed.item.id}` : `track-${trackItemKey(mixed.item)}`;
-
-/** The page's selection as the album tiles see it. */
-const albumSelectionOf = (page: ListSelection<MixedItem>): ListSelection<AlbumRow> => ({
-  selecting: page.selecting,
-  selection: page.selection,
-  isChecked: (album) => page.isChecked(albumItem(album)),
-  start: (album) => page.start(albumItem(album)),
-  toggle: (album) => page.toggle(albumItem(album)),
-});
 
 /**
  * An album shelf as one row of covers that scrolls sideways: Library albums
@@ -179,11 +177,13 @@ const albumSelectionOf = (page: ListSelection<MixedItem>): ListSelection<AlbumRo
 function AlbumShelfRow({
   cells,
   selection,
+  releases,
   integrated,
   height,
 }: {
   cells: readonly AlbumCell[];
   selection: ListSelection<AlbumRow>;
+  releases: ListSelection<YtArtistAlbum>;
   /** Whether the page is an integrated view: the albums open integrated. */
   integrated: boolean;
   height: number;
@@ -217,7 +217,7 @@ function AlbumShelfRow({
                   key={cellKey(cell)}
                   album={cell.album}
                   size={COVER_ROW_TILE}
-                  selecting={selection.selecting}
+                  selection={releases}
                 />
               );
             case "skeleton":
@@ -348,9 +348,13 @@ function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegr
     [detail, pageSongs, additions, ytLoading, byPopularity],
   );
   // Albums and songs select together; the bar acts on them in page order.
-  const selectable = useMemo(() => selectableItems(detail, pageSongs), [detail, pageSongs]);
-  const page = useListSelection({ items: selectable, keyOf: selectableKey, target: mixedTarget });
+  const selectable = useMemo(
+    () => selectableItems(detail, pageSongs, additions),
+    [detail, pageSongs, additions],
+  );
+  const page = useListSelection({ items: selectable, keyOf: mixedItemKey, target: mixedTarget });
   const albumSelection = useMemo(() => albumSelectionOf(page), [page]);
+  const releaseSelection = useMemo(() => ytAlbumSelectionOf(page), [page]);
   const { selection } = page;
   const rowState = useMemo(
     () => ({ currentIds, favorites, selection, integrated }),
@@ -373,6 +377,7 @@ function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegr
               key={item.label}
               cells={item.covers}
               selection={albumSelection}
+              releases={releaseSelection}
               integrated={integrated}
               height={shelfHeight}
             />
@@ -427,6 +432,7 @@ function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegr
       favorites,
       pageSongs,
       albumSelection,
+      releaseSelection,
       page,
       integrated,
       byPopularity,

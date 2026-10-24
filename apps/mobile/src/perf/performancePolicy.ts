@@ -193,6 +193,21 @@ export const WHOLE_LIBRARY: Record<string, Exception> = {
     reason: "A visible selection/menu resolves streamed items for user actions.",
     capabilities: ["ytmusic/libraryFinder.ts#useLibraryFinder"],
   },
+  "playback/actionTargets.ts#targetEntries": {
+    reason:
+      "A chosen queue or playlist action expands checked releases and then acquires the current finder. Selection sources and metadata-only bar planning never call it; mixedItems.test.ts verifies lazy expansion and page order.",
+    capabilities: ["ytmusic/libraryFinder.ts#currentLibraryFinder"],
+  },
+  "playback/itemActions.ts#resolveSelectionTarget": {
+    reason:
+      "Only a selection bar's onPress acquires current Library matches before running its chosen song action. Entering selection uses the displayed metadata and disables finder, artist, link and missing-album reads.",
+    capabilities: ["ytmusic/libraryFinder.ts#currentLibraryFinder"],
+  },
+  "ytmusic/YtAlbumActions.tsx#runSelectableAlbumAction": {
+    reason:
+      "A selectable release menu reads its tracklist and finder only after Play, queue or Download is chosen. Opening that menu and choosing Select use release metadata without reading its songs.",
+    capabilities: ["ytmusic/libraryFinder.ts#currentLibraryFinder"],
+  },
   "playback/rowSwipe.ts#runTrackSwipe": {
     reason:
       "A completed swipe resolves its one requested action; it does not subscribe while rows render.",
@@ -332,6 +347,11 @@ export const WHOLE_LIBRARY: Record<string, Exception> = {
   },
 };
 export const OPENING_REQUESTS: Record<string, Exception> = {
+  "playback/actionTargets.ts#targetEntries": {
+    kind: "gesture",
+    reason:
+      "A chosen selection bar action reads the checked streamed releases. Rendering the page or bar never expands their tracklists; mixedItems.test.ts verifies deferred resolution, matching and failure behavior.",
+  },
   "playback/actions.ts#dispatchWithYt": {
     kind: "gesture",
     reason:

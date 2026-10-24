@@ -2,7 +2,6 @@ import {
   identityKey,
   libraryAlbumFinder,
   libraryArtistFinder,
-  ytArtistPageOpening,
   ytArtistSavedStands,
   ytArtistPageView,
   type YtArtistAlbum,
@@ -18,7 +17,7 @@ import { useScreenSettled } from "@/lib/screenTiming";
 import { online } from "@/native/waveNative";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 
-import { artistPageOpening } from "./artistPageOpening";
+import { useArtistPageOpening } from "./artistPageOpening";
 import { artistOpeningRequest } from "./artistOpeningRequest";
 import { fetchArtist, readArtist, useSavedYtArtist } from "./artistSection";
 import { YtMusicError } from "./YtMusic";
@@ -128,10 +127,13 @@ export const useYtArtistPage = (
   );
   const { state, enabled, openedAt, show } = useSavedYtArtist(key, ask);
 
-  const settled = useScreenSettled();
+  // Settled once is enough: a later menu, selection or pushed screen must not take the page back to loading.
+  const [settledOnce, setSettledOnce] = useState(false);
+  const settledNow = useScreenSettled();
+  if (settledNow && !settledOnce) setSettledOnce(true);
+  const settled = settledOnce || settledNow;
   const [offlineHint, setOfflineHint] = useState(initiallyOffline);
   const connected = !offlineHint && online();
-  const opening = artistPageOpening({ online: connected, enabled });
   const [retry, setRetry] = useState(0);
   const context = {
     enabled,
@@ -142,7 +144,7 @@ export const useYtArtistPage = (
     librarySong: nowhere,
     libraryAlbum: nowhere,
   };
-  const work = ytArtistPageOpening<NativeYtSong, SongRow, AlbumRow>(state, context);
+  const work = useArtistPageOpening<NativeYtSong, SongRow, AlbumRow>(state, context);
   const askedFor = useRef<unknown>(null);
   useEffect(() => {
     if (!work.ask || (!retry && askedFor.current === state)) return;
@@ -158,11 +160,10 @@ export const useYtArtistPage = (
   const view = useMemo(() => {
     // Offline/failure/loading needs neither songs nor release identities. A found
     // page waits for matching so a downloaded song never first appears streamed.
-    if (opening.view !== null) return opening.view;
     if (!work.finder) return work.view;
     if (find === null) return { ...work.view, songs: [], shelves: [], note: "loading" as const };
     return ytArtistPageView(state, { enabled, now: openedAt, librarySong: find, libraryAlbum });
-  }, [opening.view, work.finder, work.view, find, state, enabled, openedAt, libraryAlbum]);
+  }, [work.finder, work.view, find, state, enabled, openedAt, libraryAlbum]);
   return {
     view,
     retry: useCallback(() => {
