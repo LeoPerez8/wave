@@ -4,6 +4,7 @@ import {
   recordingMatches,
   type MixKnownSongs,
   magicLibrarySongs,
+  magicRadioExclusions,
   magicSeedProfile,
   magicYtSong,
   rankRadioSongs,
@@ -13,6 +14,7 @@ import {
   type MagicSession,
   type MagicSong,
   type MixSliders,
+  type RankedRadioSong,
   type TasteProfile,
 } from "@wave/core";
 import * as Context from "effect/Context";
@@ -74,7 +76,11 @@ const allReaders = createSongRadioReaders((seed: SongRadioSeed) => {
     save: (page) =>
       Effect.gen(function* () {
         pages.put(seed.id, page);
-        for (const artist of seed.artists)
+        const artists =
+          seed.artists.length > 0
+            ? seed.artists
+            : (page.songs.find((song) => song.videoId === seed.videoId)?.artists ?? []);
+        for (const artist of artists)
           yield* noteRadioNow(artist, page.songs).pipe(Effect.provide(context));
       }),
     fallback: (name) =>
@@ -136,9 +142,20 @@ export const magicQueueYtCandidates = (
 ) =>
   Effect.gen(function* () {
     const yt = yield* YtMusic;
-    if (!ytMusicEnabled()) return { candidates: [], ranked: 0, eligible: 0, refilled: null };
+    if (!ytMusicEnabled())
+      return { candidates: [], likedCandidates: [], ranked: 0, eligible: 0, refilled: null };
     const context = yield* Effect.context<LibraryStore>();
     const seeds = drawn.length > 0 ? drawn : [legacySeed(session)];
+    const liked = ((sessionNow?.() ?? session).likedRadios ?? []).filter(
+      (radio) =>
+        !seeds.some(
+          (seed) =>
+            seed.id === radio.id ||
+            (seed.kind !== "artist" &&
+              seed.videoId !== undefined &&
+              seed.videoId === radio.videoId),
+        ),
+    );
     const artists = [...new Set(seeds.flatMap((seed) => seed.artists))];
     const readers = radioReaders(yt, context);
     const playable = library.songs.filter(songHasFile);
@@ -157,9 +174,9 @@ export const magicQueueYtCandidates = (
           Effect.map((ids) => new Set(ids)),
           Effect.orElseSucceed(() => new Set<string>()),
         );
-    const rank = () => {
+    const rank = (group: readonly SongRadioSeed[], original: boolean) => {
       const current = sessionNow?.() ?? session;
-      const read = readers.current(session.id, seeds);
+      const read = readers.current(session.id, group);
       // Old artist radios still provide an offline fallback until an ordered page is saved.
       const fallback = catalog
         .filter((entry) =>
@@ -169,10 +186,12 @@ export const magicQueueYtCandidates = (
       const radios = read.flatMap(({ seed, page }) =>
         page === null ? [] : [{ id: seed.id, artists: seed.artists, songs: page.songs }],
       );
-      if (radios.length === 0 && !connected)
+      if (original && radios.length === 0 && !connected)
         radios.push({ id: seeds[0]!.id, artists, songs: fallback });
-      const exclude = new Set(current.used);
-      for (const videoId of session.seedVideoIds) exclude.add(`yt:${videoId}`);
+      const exclude = magicRadioExclusions(
+        current,
+        radios.flatMap((radio) => radio.songs),
+      );
       return rankRadioSongs(
         { artists, profile: magicSeedProfile(session, profileOf) },
         {
@@ -184,7 +203,7 @@ export const magicQueueYtCandidates = (
           graph,
           taste,
           profileOf,
-          library: playable.map(mapLibrary),
+          library: original ? playable.map(mapLibrary) : [],
           inLibrary: (song) => {
             const local = find(song);
             return local === null || !songHasFile(local) ? null : mapLibrary(local);
@@ -200,19 +219,36 @@ export const magicQueueYtCandidates = (
           (song.song !== null && cachedVideos.has(song.song.videoId)),
       );
     };
-    const before = rank();
     const size = session.batches === 0 ? 9 : 10;
-    const low =
-      before.length < size ||
-      before.filter((song) => song.source === "stream").length < Math.round(size * session.ytShare);
-    const read = yield* readers.read(session.id, seeds, { online: connected, low });
-    const candidates = ytMusicEnabled() ? rank() : [];
-    found = candidates;
+    const learnedShare = liked.length === 0 ? 0 : Math.round(size / 3);
+    const low = (ranked: readonly RankedRadioSong[], target: number) =>
+      ranked.length < target ||
+      ranked.filter((song) => song.source === "stream").length <
+        Math.round(target * session.ytShare);
+    const originalBefore = rank(seeds, true);
+    const likedBefore = rank(liked, false);
+    const read = (yield* Effect.all(
+      [
+        readers.read(session.id, seeds, {
+          online: connected,
+          low: low(originalBefore, size - Math.min(learnedShare, likedBefore.length)),
+        }),
+        readers.read(session.id, liked, {
+          online: connected,
+          low: low(likedBefore, Math.max(learnedShare, size - originalBefore.length)),
+        }),
+      ],
+      { concurrency: "unbounded" },
+    )).flat();
+    const candidates = ytMusicEnabled() ? rank(seeds, true) : [];
+    const likedCandidates = ytMusicEnabled() ? rank(liked, false) : [];
+    found = [...candidates, ...likedCandidates];
     const songs = read.reduce((sum, { page }) => sum + (page?.songs.length ?? 0), 0);
     return {
       candidates,
+      likedCandidates,
       ranked: songs,
-      eligible: candidates.length,
+      eligible: candidates.length + likedCandidates.length,
       refilled: read.every(({ page }) => page === null) ? null : songs,
     };
   });

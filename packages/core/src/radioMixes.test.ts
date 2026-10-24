@@ -100,3 +100,31 @@ test("Discover applies shared genre penalties and popularity without an old affi
   assert.equal(read(2).radio.at(-1)?.videoId, "v1");
   assert.equal(read(5, 1).radio[1]?.videoId, "v2");
 });
+
+test("a Genre mix pools all three radios and weighs known different families against its own", () => {
+  const genre = {
+    kind: "genre" as const,
+    id: "genre:metal",
+    name: "Metal",
+    genre: "Metal",
+    from: "plays" as const,
+    artists: [
+      { id: 1, name: "A" },
+      { id: 2, name: "B" },
+      { id: 3, name: "C" },
+    ],
+  };
+  const sources = {
+    pages: [
+      { id: "a", artists: ["A"], songs: [songs[0]!, songs[3]!] },
+      { id: "b", artists: ["B"], songs: [songs[1]!, songs[4]!] },
+      { id: "c", artists: ["C"], songs: [songs[2]!, songs[5]!] },
+    ],
+    profileOf: (name: string) => (name === "Artist 0" ? new Map([["pop", 1]]) : null),
+  };
+  const ids = (faithfulness: 1 | 3 | 5) =>
+    rankedDiscoverMixRead(genre, sources, { faithfulness }).radio.map((song) => song.videoId);
+  assert.deepEqual(ids(1), ["v1", "v2", "v3", "v4", "v5"]);
+  assert.deepEqual(ids(3), ["v1", "v2", "v3", "v4", "v5", "v0"]);
+  assert.deepEqual(ids(5), ["v0", "v1", "v2", "v3", "v4", "v5"]);
+});
