@@ -1,9 +1,9 @@
 import {
-  listeningOverview,
+  statsFacts,
   summedListeningTotals,
   type CollectionKind,
   type LibraryReads,
-  type ListeningOverview,
+  type StatsFacts,
   type ListeningSums,
   type MissingTrack,
 } from "@wave/core";
@@ -390,20 +390,20 @@ const readListeningSums = storeQuery(
 );
 
 /**
- * Home's listening overview (library and all-time listening totals), or
+ * Home's Stats facts (library and all-time listening totals), or
  * undefined while loading. The library totals are Library's counts; the
  * listening totals one row of the all-time play totals, re-read after plays
  * (at most every 1.5 s while Home is in sight, else when it comes back) and
  * scan batches.
  */
-export const useListeningOverview = (): ListeningOverview | undefined => {
+export const useStatsFacts = (): StatsFacts | undefined => {
   const counts = useLibraryCounts();
   const sums = useLibraryQuery<ListeningSums | undefined>(readListeningSums, undefined);
   return useMemo(
     () =>
       counts === undefined || sums === undefined
         ? undefined
-        : listeningOverview(counts, summedListeningTotals(sums)),
+        : statsFacts(counts, summedListeningTotals(sums)),
     [counts, sums],
   );
 };

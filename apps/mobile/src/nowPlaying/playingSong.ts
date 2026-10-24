@@ -55,6 +55,7 @@ export const nowPlayingSongActions = createNowPlayingSongActions(nowPlayingSongL
       },
       on,
       () => track,
+      "nowPlaying",
     ).catch(songActionFailed);
   },
 });

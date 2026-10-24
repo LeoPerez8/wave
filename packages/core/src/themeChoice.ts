@@ -163,39 +163,12 @@ export const isDefaultThemeChoice = (choice: ThemeChoice): boolean =>
 
 /**
  * How close two colours look, in OKLCH. Hue counts in full; lightness and
- * chroma count for half, so a colour deeper, paler or more vivid than every
- * preset still lands on the preset of its hue.
+ * chroma count for half. Used by the launcher and splash ink palette.
  */
-const distance = (a: string, b: string): number => {
+export const inkDistance = (a: string, b: string): number => {
   const [x, y] = [toOklch(a), toOklch(b)];
   const hue = 2 * Math.sqrt(x.c * y.c) * Math.sin((x.h - y.h) / 2);
   return Math.hypot(0.5 * (x.l - y.l), 0.5 * (x.c - y.c), hue);
-};
-
-/** The preset of `group` closest to `hex`, by either of its tones. */
-const nearestPreset = (group: InkGroup, hex: string): string => {
-  let best = DEFAULT_THEME_CHOICE[group];
-  let bestDistance = Number.POSITIVE_INFINITY;
-  for (const swatch of THEME_SWATCHES[group]) {
-    const d = Math.min(distance(hex, swatch.light), distance(hex, swatch.dark));
-    if (d < bestDistance) [best, bestDistance] = [swatch.id, d];
-  }
-  return best;
-};
-
-/**
- * `choice` with each chosen custom colour swapped for the preset closest to
- * it, for what Android can only ship per preset: the launcher icon and the
- * launch splash.
- */
-export const presetThemeChoice = (choice: ThemeChoice): ThemeChoice => {
-  const preset = (group: InkGroup): string => {
-    const custom = choice[CUSTOM_FIELD[group]];
-    return choice[group] === CUSTOM_INK && custom !== null
-      ? nearestPreset(group, custom)
-      : choice[group];
-  };
-  return { ...choice, primary: preset("primary"), secondary: preset("secondary") };
 };
 
 const background = (scheme: Scheme, id: string): string =>

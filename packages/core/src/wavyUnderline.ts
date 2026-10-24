@@ -21,7 +21,7 @@ export const UNDERLINE_WAVE = {
   wavelength: 8,
   amplitude: 1.25,
   stroke: 1.25,
-  rippleMs: 700,
+  rippleMs: 1050,
 } as const;
 
 /**

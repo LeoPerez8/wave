@@ -28,6 +28,10 @@ describe("wave_underline.xml", () => {
   const { wavelength, amplitude, stroke, rippleMs } = UNDERLINE_WAVE;
   const tile = Number(attribute("viewportWidth"));
 
+  test("takes 1.05 seconds to ripple one wavelength", () => {
+    assert.equal(Number(attribute("duration")), 1050);
+  });
+
   test("draws Core's wave across its tile, one wavelength past it", () => {
     assert.equal(attribute("pathData"), wavePath({ width: tile, wavelength, amplitude }));
     assert.equal(Number(attribute("strokeWidth")), stroke);

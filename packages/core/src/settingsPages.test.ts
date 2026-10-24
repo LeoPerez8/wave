@@ -43,43 +43,28 @@ describe("Settings pages", () => {
     assert.deepEqual(visibleSettingsPages(false), visibleSettingsPages());
   });
 
-  test("Settings lists its pages in this order, each opening its own route", () => {
-    assert.deepEqual(
-      SETTINGS_PAGES.map(({ title, route }) => [title, route]),
-      [
-        ["Library", "/settings/library"],
-        ["Appearance", "/settings/appearance"],
-        ["Layout", "/settings/layout"],
-        ["Swipe actions", "/settings/swipe-actions"],
-        ["Playback", "/settings/playback"],
-        ["Lyrics and tags", "/settings/lyrics-and-tags"],
-        ["Downloads", "/settings/downloads"],
-        ["Accounts", "/settings/accounts"],
-        ["Developer", "/settings/developer"],
-      ],
-    );
-  });
-
-  test("each page names its icon and its own colour, in the iOS Settings way", () => {
-    assert.deepEqual(
-      SETTINGS_PAGES.map(({ title, icon, colour }) => [title, icon, colour]),
-      [
-        ["Library", "books", "red"],
-        ["Appearance", "palette", "purple"],
-        ["Layout", "layout", "indigo"],
-        ["Swipe actions", "swipe", "cyan"],
-        ["Playback", "play", "pink"],
-        ["Lyrics and tags", "quote", "orange"],
-        ["Downloads", "download", "green"],
-        ["Accounts", "user", "blue"],
-        ["Developer", "code", "grey"],
-      ],
-    );
-  });
-
-  test("no two pages share a colour", () => {
-    const colours = SETTINGS_PAGES.map(({ colour }) => colour);
-    assert.equal(new Set(colours).size, colours.length);
+  test("Settings lists its pages in order with their routes and glyphs, without page colours", () => {
+    assert.deepEqual(SETTINGS_PAGES, [
+      { page: "library", title: "Library", route: "/settings/library", icon: "books" },
+      { page: "appearance", title: "Appearance", route: "/settings/appearance", icon: "palette" },
+      { page: "layout", title: "Layout", route: "/settings/layout", icon: "layout" },
+      {
+        page: "swipeActions",
+        title: "Swipe actions",
+        route: "/settings/swipe-actions",
+        icon: "swipe",
+      },
+      { page: "playback", title: "Playback", route: "/settings/playback", icon: "play" },
+      {
+        page: "lyricsAndTags",
+        title: "Lyrics and tags",
+        route: "/settings/lyrics-and-tags",
+        icon: "quote",
+      },
+      { page: "downloads", title: "Downloads", route: "/settings/downloads", icon: "download" },
+      { page: "accounts", title: "Accounts", route: "/settings/accounts", icon: "user" },
+      { page: "developer", title: "Developer", route: "/settings/developer", icon: "code" },
+    ]);
   });
 });
 

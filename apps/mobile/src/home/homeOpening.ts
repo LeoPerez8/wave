@@ -1,5 +1,5 @@
 import type { HomePlays, HomeSections } from "../library/db/playHistory.ts";
-import type { HomeSectionId } from "@wave/core";
+import { STATS_FACT_LABELS, type HomeSectionId } from "@wave/core";
 import { CELL, grid } from "../catalog/grid.ts";
 
 /** Unanswered slices stay undefined; an answered empty slice is content too. */
@@ -56,8 +56,8 @@ export const homeSectionWaiting = (id: HomeSectionId, home: HomeContent): boolea
   }
 };
 
-/** Match Home's bounded ten-row lists and single-line card captions at system text size. */
-export const homeBodyHeight = (id: HomeSectionId, fontScale: number): number => {
+/** Only placeholders reserve space; answered sections use their content's height. */
+export const homePlaceholderHeight = (id: HomeSectionId, fontScale: number): number => {
   switch (id) {
     case "most-played":
     case "favorites":
@@ -68,12 +68,21 @@ export const homeBodyHeight = (id: HomeSectionId, fontScale: number): number => 
       return CELL * 19 + CELL + 40 * Math.max(1, fontScale);
     case "most-played-artists":
       return CELL * 19 + CELL + 22 * Math.max(1, fontScale);
-    case "listening-overview":
-      // Each of its two totals groups can wrap to three lines on a narrow screen.
-      return 120 * Math.max(1, fontScale) + CELL / 2;
+    case "stats":
+      return homeStatsRowLayout(fontScale).minHeight * STATS_FACT_LABELS.length;
     default:
       return 0;
   }
+};
+
+/** Stats values move below their labels at large system text sizes. */
+export const homeStatsRowLayout = (fontScale: number) => {
+  // React Native reports Android fontScale as a 32-bit float (1.3 becomes 1.29999995).
+  const stacked = fontScale >= Math.fround(1.3);
+  return {
+    stacked,
+    minHeight: Math.max(CELL * 6, (stacked ? 44 : 22) * Math.max(1, fontScale) + CELL * 2),
+  };
 };
 
 /** Shared by the Magic Queue's tiles and placeholders, including large-text breakpoints. */
