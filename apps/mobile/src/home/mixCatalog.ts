@@ -1,6 +1,6 @@
 import { onArtistGraphSourcesChanged } from "./graphSources";
 import { readMixCatalog } from "./readMixCatalog";
-import { freeTurnEffect } from "@/lib/backgroundWork";
+import { recommendationTurnEffect } from "@/lib/recommendationWork";
 /**
  * The candidate catalog as Home's mix builds read it (docs/spec.md,
  * "Candidate catalog"): read once from the library database and shared by
@@ -16,7 +16,7 @@ import { LibraryStore } from "@/library/LibraryStore";
 /** The catalog, read once, then shared for a minute. */
 const shared = sharedRead(
   Effect.gen(function* () {
-    return yield* readMixCatalog(yield* LibraryStore, freeTurnEffect);
+    return yield* readMixCatalog(yield* LibraryStore, recommendationTurnEffect);
   }),
   { keepMs: 60_000 },
 );

@@ -66,10 +66,11 @@ import { onLibraryChange } from "@/library/libraryChanges";
 import { onArtistGraphSourcesChanged } from "./graphSources";
 import { runSteps } from "@/lib/stepped";
 import { createSerialWork } from "@/lib/serialWork";
-import { freeTurnEffect, settledTurnEffect } from "@/lib/backgroundWork";
+import { settledTurnEffect } from "@/lib/backgroundWork";
+import { recommendationTurnEffect } from "@/lib/recommendationWork";
 import { makeExternalStore, type ExternalStore } from "@/lib/externalStore";
 import { withNetworkLog } from "@/lib/networkMeter";
-import { RECOMMENDATION_TIMEOUT } from "@/lib/recommendationTimeout";
+import { withRecommendationDeadline } from "@/lib/recommendationTimeout";
 import { persistedSetting, type PersistedSetting } from "@/lib/persistedSetting";
 import { libraryListQueries } from "@/library/hooks";
 import type { SongRow } from "@/library/LibraryStore";
@@ -108,8 +109,8 @@ export type { MixSectionId } from "./discoverMixLevel";
  * so no new song is in two of the section's mixes (and no familiar song in
  * two of its shares). A seed the catalog has no songs for yet makes no mix:
  * the harvest refills it, and the section has what the others make. No
- * request; it gives the JavaScript thread back after each seed
- * (`freeTurnEffect`), so Home stays smooth.
+ * request; page and ranking boundaries give rendering a frame when due
+ * (`recommendationTurnEffect`).
  */
 const mixesOf = (
   id: MixSectionId,
@@ -122,7 +123,7 @@ const mixesOf = (
     // A build's variety, kept with its mixes so a slider move re-ranks them as they were.
     const variety = Math.floor(Math.random() * 2 ** 31);
     const reader = yield* readerOf(id, library, variety);
-    yield* freeTurnEffect;
+    yield* recommendationTurnEffect;
     // A refresh's new songs leave out those the section showed today, where it can.
     const avoidSongs = avoid === undefined ? undefined : avoid.songs;
     const ranked = yield* rankedMixes(id, reader, seeds, library, avoidSongs);
@@ -146,9 +147,8 @@ const saveBuilt = (id: MixSectionId, built: DiscoverMixes): void => {
 
 /**
  * The mixes [seeds] make by [reader] (Core's `discoverMixesOfCatalog`),
- * ranked at [id]'s sliders as they are once every seed's walk is done
- * (giving the JavaScript thread back before each, `freeTurnEffect`, which
- * waits out a finger on a slider), with the sliders they were ranked at.
+ * ranked at [id]'s sliders as they are once every seed's walk is done,
+ * yielding when a frame is due, with the sliders they were ranked at.
  */
 const rankedMixes = (
   id: MixSectionId,
@@ -159,9 +159,10 @@ const rankedMixes = (
 ) =>
   Effect.gen(function* () {
     for (const seed of seeds) {
-      if (reader.readSteps !== undefined) yield* runSteps(reader.readSteps(seed), freeTurnEffect);
+      if (reader.readSteps !== undefined)
+        yield* runSteps(reader.readSteps(seed), recommendationTurnEffect);
       else reader.read(seed);
-      yield* freeTurnEffect;
+      yield* recommendationTurnEffect;
     }
     const sliders = discoverSlidersNow();
     const mixes = yield* runSteps(
@@ -171,7 +172,7 @@ const rankedMixes = (
         ...mixSlidersEngine(sliders),
         ...(avoid === undefined ? {} : { avoid }),
       }),
-      freeTurnEffect,
+      recommendationTurnEffect,
     );
     return { mixes, sliders };
   });
@@ -207,7 +208,7 @@ const readerOf = (id: MixSectionId, library: MixIndexes, variety: number | undef
       memo.library === library
     )
       return memo.reader;
-    const profiles = yield* runSteps(libraryMixProfilesSteps(library), freeTurnEffect);
+    const profiles = yield* runSteps(libraryMixProfilesSteps(library), recommendationTurnEffect);
     const sources = {
       catalog,
       graph,
@@ -313,7 +314,7 @@ const buildArtistMixes = (avoid?: MixRefreshAvoid) =>
         yield* withSimilar(yield* artistMixPools(library, avoid), similarOffline),
         Math.random,
       ),
-      freeTurnEffect,
+      recommendationTurnEffect,
     );
     if (seeds.length === 0) return "nothing-to-build-from" as const;
     return yield* mixesOf("artist-mixes", seeds, library, avoid);
@@ -330,7 +331,10 @@ const buildArtistMixes = (avoid?: MixRefreshAvoid) =>
 const buildGenreMixes = (avoid?: MixRefreshAvoid) =>
   Effect.gen(function* () {
     const library = yield* mixIndexes;
-    const seeds = yield* runSteps(genreMixSeedsSteps(library, Math.random, avoid), freeTurnEffect);
+    const seeds = yield* runSteps(
+      genreMixSeedsSteps(library, Math.random, avoid),
+      recommendationTurnEffect,
+    );
     if (seeds.length === 0) return "nothing-to-build-from" as const;
     return yield* mixesOf("genre-mixes", seeds, library, avoid);
   });
@@ -358,9 +362,9 @@ const loggedBuild = (id: MixSectionId, pulled: boolean, avoid?: MixRefreshAvoid)
   withNetworkLog(
     `${discoverRowTitle(id)} ${pulled ? "refresh" : "build"}`,
     settledTurnEffect.pipe(
-      Effect.andThen(buildSource.run(SECTIONS[id].build(avoid), freeTurnEffect)),
+      Effect.andThen(buildSource.run(SECTIONS[id].build(avoid), recommendationTurnEffect)),
       buildPermit.withPermits(1),
-      Effect.timeout(RECOMMENDATION_TIMEOUT),
+      withRecommendationDeadline,
     ),
     builtOutcome,
   );

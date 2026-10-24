@@ -9,14 +9,19 @@ import type { ArtistGraph } from "@wave/core";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 
-import { freeTurnEffect, settledTurnEffect } from "@/lib/backgroundWork";
+import { settledTurnEffect } from "@/lib/backgroundWork";
+import { recommendationTurnEffect } from "@/lib/recommendationWork";
 
 import { onLibraryChange } from "@/library/libraryChanges";
 import { LibraryStore } from "@/library/LibraryStore";
 
 import { shareArtistGraph } from "./sharedArtistGraph";
 
-const shared = shareArtistGraph(Effect.service(LibraryStore), settledTurnEffect, freeTurnEffect);
+const shared = shareArtistGraph(
+  Effect.service(LibraryStore),
+  settledTurnEffect,
+  recommendationTurnEffect,
+);
 
 /** The shared graph wasn't read: its read failed, timed out or kept being forgotten ([cause]). */
 export class ArtistGraphUnavailable extends Data.TaggedError("ArtistGraphUnavailable")<{

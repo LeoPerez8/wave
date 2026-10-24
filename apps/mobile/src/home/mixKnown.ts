@@ -9,7 +9,8 @@ import type { MixKnownSongs, PlayedSeedArtist, PlayTotals } from "@wave/core";
 import * as Effect from "effect/Effect";
 import { useSyncExternalStore } from "react";
 
-import { freeTurnEffect, settledTurnEffect } from "@/lib/backgroundWork";
+import { settledTurnEffect } from "@/lib/backgroundWork";
+import { recommendationTurnEffect } from "@/lib/recommendationWork";
 import { makeExternalStore } from "@/lib/externalStore";
 import { LibraryStore, type ArtistRow, type SongRow } from "@/library/LibraryStore";
 import { onLibraryChange } from "@/library/libraryChanges";
@@ -34,11 +35,11 @@ export interface MixIndexes {
 /**
  * Reads the Library, the plays, the songs streamed and the playlists'
  * entries, and indexes what the owner knows, giving the JavaScript thread
- * back between steps (`freeTurnEffect`) so Home stays smooth.
+ * back between steps (`recommendationTurnEffect`) so Home stays smooth.
  */
 const readIndexes = Effect.gen(function* () {
   const store = yield* LibraryStore;
-  return yield* readMixInputs(store, freeTurnEffect, Date.now());
+  return yield* readMixInputs(store, recommendationTurnEffect, Date.now());
 });
 
 /**

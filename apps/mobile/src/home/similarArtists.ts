@@ -19,7 +19,7 @@ import {
 } from "@wave/core";
 import * as Effect from "effect/Effect";
 import { runSteps } from "@/lib/stepped";
-import { freeTurnEffect } from "@/lib/backgroundWork";
+import { recommendationTurnEffect } from "@/lib/recommendationWork";
 
 import { persistedSetting } from "@/lib/persistedSetting";
 import type { LibraryStore } from "@/library/LibraryStore";
@@ -81,9 +81,12 @@ export const withSimilar = <R>(pools: ArtistMixPools, read: SimilarReader<R>) =>
   Effect.gen(function* () {
     const similar: DiscoverSimilarArtists[] = [];
     for (
-      let source = yield* runSteps(artistMixSimilarSourceSteps(pools), freeTurnEffect);
+      let source = yield* runSteps(artistMixSimilarSourceSteps(pools), recommendationTurnEffect);
       source !== null;
-      source = yield* runSteps(artistMixSimilarSourceSteps({ ...pools, similar }), freeTurnEffect)
+      source = yield* runSteps(
+        artistMixSimilarSourceSteps({ ...pools, similar }),
+        recommendationTurnEffect,
+      )
     ) {
       const artists = yield* read(source.name).pipe(Effect.orElseSucceed(() => []));
       similar.push({ of: source.name, artists });
