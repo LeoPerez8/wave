@@ -531,6 +531,11 @@ export const TASTE_SOURCE_SEEDS = [
   "tasteRevision",
 ].map((name) => `library/LibraryStore.ts#${name}`);
 export const TASTE_SOURCES: Record<string, Exception> = {
+  "home/mixBuildLibrary.ts#readMixBuildLibrary": {
+    reason:
+      "Cold Discover builds seek song and artist seed metadata in 128-row pages after Home settlement, yielding between pages. Stored play totals supply weights; only returned radio songs need indexed SQL recording matches. No history walk or derived matcher is awaited. Covered by home/mixBuildLibrary.test.ts.",
+    capabilities: ["library/LibraryStore.ts#mixSongsPage"],
+  },
   "playback/tasteDerivation.ts#tasteLibraryRows": {
     reason:
       "Due picks/shared taste seek at most 128 songs and identity-only artists per turn; sorting/mapping of the copy uses canonical runSteps. Due Home is screen-settled; taste-source stamps discard writes. Covered by tasteDerivation.test.ts and magicQueueJob.test.ts.",

@@ -50,16 +50,35 @@ export const createSongRadioReaders = <R>(create: (seed: SongRadioSeed) => SongR
      */
     current: (sessionId: string, seeds: readonly SongRadioSeed[]): SongRadioRead[] =>
       readersOf(sessionId, seeds).map(({ seed, reader }) => ({ seed, page: reader.current() })),
-    /** Reads [seeds]' radios for session [sessionId] all at once (each its reader's way), then their pages. */
+    /** Reads concurrently; a partial cache answers immediately while missing pages load. */
     read: (
       sessionId: string,
       seeds: readonly SongRadioSeed[],
-      when: { readonly online: boolean; readonly low: boolean },
+      when: {
+        readonly online: boolean;
+        readonly low: boolean | ((seed: SongRadioSeed) => boolean);
+      },
     ): Effect.Effect<SongRadioRead[], never, R> =>
-      Effect.forEach(
-        readersOf(sessionId, seeds),
-        ({ seed, reader }) => Effect.map(reader.read(when), (page) => ({ seed, page })),
-        { concurrency: "unbounded" },
-      ),
+      Effect.gen(function* () {
+        const readers = readersOf(sessionId, seeds);
+        const cached = readers.map(({ seed, reader }) => ({ seed, page: reader.current() }));
+        const read = Effect.forEach(
+          readers,
+          ({ seed, reader }) =>
+            Effect.map(
+              reader.read({
+                online: when.online,
+                low: typeof when.low === "boolean" ? when.low : when.low(seed),
+              }),
+              (page) => ({ seed, page }),
+            ),
+          { concurrency: "unbounded" },
+        );
+        if (cached.some(({ page }) => page !== null) && cached.some(({ page }) => page === null)) {
+          yield* Effect.forkDetach(read);
+          return cached;
+        }
+        return yield* read;
+      }),
   };
 };

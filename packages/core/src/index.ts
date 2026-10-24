@@ -2047,7 +2047,12 @@ export {
 } from "./recommendationSnapshot.ts";
 
 export { homeMixBuildsDue } from "./homeMixBuilds.ts";
-export { magicRadioBatch, magicRadioExclusions } from "./magicRadioLearning.ts";
+export {
+  completeMagicRadioBatch,
+  magicRadioReadPlan,
+  magicRadioBatch,
+  magicRadioExclusions,
+} from "./magicRadioLearning.ts";
 export {
   rankRadioSongs,
   radioRankingBatch,

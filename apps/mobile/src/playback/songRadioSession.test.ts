@@ -124,6 +124,47 @@ test("offline uses the cached radio without any network read", async () => {
   });
   assert.equal(await Effect.runPromise(session.read({ online: false, low: true })), page);
 });
+test("a live refresh retains cached continuation songs without duplicating recordings", async () => {
+  const cached = { songs: [song, { ...song, videoId: "continued" }], continuation: "old-next" };
+  const saved: SongRadioPage[] = [];
+  const session = createSongRadioSession(seed, {
+    cached,
+    radio: () =>
+      Effect.succeed({ songs: [{ ...song, title: "Updated" }], continuation: "live-next" }),
+    search: () => Effect.succeed([]),
+    artist: () => Effect.succeed(null),
+    more: () =>
+      Effect.succeed({
+        songs: [
+          { ...song, videoId: "continued" },
+          { ...song, videoId: "new" },
+        ],
+        continuation: null,
+      }),
+    save: (p) =>
+      Effect.sync(() => {
+        saved.push(p);
+      }),
+    fallback: () => {},
+  });
+  await Effect.runPromise(session.read({ online: true, low: false }));
+  for (let i = 0; i < 20 && saved.length === 0; i++)
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.deepEqual(
+    session.current()?.songs.map((s) => s.videoId),
+    ["v", "continued"],
+  );
+  assert.equal(session.current()?.songs[0]?.title, "Updated");
+  assert.deepEqual(
+    saved[0]?.songs.map((s) => s.videoId),
+    ["v", "continued"],
+  );
+  const grown = await Effect.runPromise(session.read({ online: true, low: true }));
+  assert.deepEqual(
+    grown?.songs.map((s) => s.videoId),
+    ["v", "continued", "new"],
+  );
+});
 test("the network deadline cancels a stalled first read", async () => {
   let cancelled = false;
   const session = createSongRadioSession(seed, {

@@ -8,23 +8,20 @@ import { readMixRadios } from "./mixRadioReads.ts";
 
 test("four Genre mixes read at most twelve radios in parallel, reusing pages younger than seven days", async () => {
   const artists = Array.from({ length: 15 }, (_, i) => ({ id: i + 1, name: `Artist ${i}` }));
-  const seeds = genreMixSeeds(
-    {
-      artists,
-      songs: artists.flatMap((artist, i) =>
-        Array.from({ length: 5 }, (_, j) => ({
-          id: i * 5 + j,
-          artistIds: [artist.id],
-          title: `Song ${i}-${j}`,
-          artist: artist.name,
-          durationMs: 1000,
-          addedAt: 0,
-          genre: ["Metal", "Rock", "Pop", "Jazz", "Electronic"][Math.floor(i / 3)]!,
-        })),
-      ),
-    },
-    () => 0,
-  );
+  const seeds = genreMixSeeds({
+    artists,
+    songs: artists.flatMap((artist, i) =>
+      Array.from({ length: 5 }, (_, j) => ({
+        id: i * 5 + j,
+        artistIds: [artist.id],
+        title: `Song ${i}-${j}`,
+        artist: artist.name,
+        durationMs: 1000,
+        addedAt: 0,
+        genre: ["Metal", "Rock", "Pop", "Jazz", "Electronic"][Math.floor(i / 3)]!,
+      })),
+    ),
+  });
   let saved: string | null = null;
   let now = 1;
   const cache = createRadioPageCatalog(

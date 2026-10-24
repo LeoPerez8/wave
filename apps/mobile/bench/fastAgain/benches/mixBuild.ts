@@ -177,8 +177,8 @@ export const bench: FastAgainBench = {
               kind === "artist"
                 ? artistSeeds
                 : stepped
-                  ? yield* step(core.genreMixSeedsSteps(library, random))
-                  : core.genreMixSeeds(library, random);
+                  ? yield* step(core.genreMixSeedsSteps(library))
+                  : core.genreMixSeeds(library);
             const variety = Math.floor(random() * 2 ** 31);
             const profiles = stepped
               ? yield* step(core.libraryMixProfilesSteps(library))

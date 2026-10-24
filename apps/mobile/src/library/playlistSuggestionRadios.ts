@@ -1,6 +1,6 @@
 /**
  * The radios a playlist's suggestions read (docs/spec.md, Playlist
- * recommendations): those of 3 of its songs, drawn per visit and kept apart
+ * recommendations): those of 3 of its songs, drawn per renewal and kept apart
  * per playlist, each read as the Magic Queue reads a song's radio (#642).
  */
 import {
@@ -36,14 +36,12 @@ const radioSeed = (track: PlaylistRecommendationTrack): SongRadioSeed => ({
 });
 
 /**
- * Playlist [playlistId]'s seeds: [kept] while they're all still in
- * [playlist], else a new draw (`drawPlaylistSeeds`), saved in the playlist's
- * history so its next draws avoid it.
+ * Draws playlist [playlistId]'s next seeds and saves its recent history so
+ * subsequent renewals avoid them while other songs remain.
  */
 export const playlistSuggestionSeeds = (
   playlistId: number,
   playlist: readonly PlaylistRecommendationTrack[],
-  kept: readonly PlaylistRecommendationTrack[],
 ): PlaylistRecommendationTrack[] => {
   let history = parsePlaylistSeedHistory(null);
   try {
@@ -52,7 +50,7 @@ export const playlistSuggestionSeeds = (
     // Unreadable history: the draw just doesn't avoid earlier seeds.
   }
   const recent = history.get(playlistId) ?? [];
-  const draw = drawPlaylistSeeds(playlist, { recent, random: Math.random, kept });
+  const draw = drawPlaylistSeeds(playlist, { recent, random: Math.random });
   if (draw.recent !== recent)
     try {
       Storage.setItemSync(

@@ -31,9 +31,19 @@ export const createSongRadioSession = <E, R>(
   let reading = false;
   const remember = (received: SongRadioPage) =>
     Effect.gen(function* () {
-      page = received;
-      yield* Effect.forkDetach(deps.save(received));
-      return received;
+      const seen = new Set<string>();
+      page = {
+        ...received,
+        // Saved pages can already include continuations. A live first page refines
+        // its front while retaining those songs; overlapping pages keep one video.
+        songs: [...received.songs, ...(page?.songs ?? [])].filter((song) => {
+          if (seen.has(song.videoId)) return false;
+          seen.add(song.videoId);
+          return true;
+        }),
+      };
+      yield* Effect.forkDetach(deps.save(page));
+      return page;
     });
   const first = Effect.gen(function* () {
     if (seed.kind === "artist") return yield* deps.artist(seed.artists[0] ?? seed.title);

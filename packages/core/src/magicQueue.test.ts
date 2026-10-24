@@ -50,6 +50,36 @@ const songsBy = (prefix: string, artist: string, count: number, genre = "Rock"):
   Array.from({ length: count }, (_, i) => song(`${prefix}${i + 1}`, artist, genre));
 
 describe("Starting a Magic Queue", () => {
+  test("new sessions and signals omit retired weights while old sessions still load", () => {
+    const started = startMagicQueue(SONG_SEED, [song("s1", "Seed Artist")], {
+      id: "m1",
+      random: first,
+    })!.session;
+    assert.ok(!("artistAffinity" in started));
+    assert.ok(!("genreAffinity" in started));
+    assert.ok(!("excludedArtists" in started));
+    const old = parseMagicSession({
+      ...started,
+      artistAffinity: { old: 3 },
+      genreAffinity: { rock: 2 },
+      excludedArtists: ["old"],
+    })!;
+    for (const kind of [
+      "skip",
+      "removed",
+      "favorite",
+      "download",
+      "playedThrough",
+      "added",
+    ] as const) {
+      const learned = magicSignal(old, { kind, song: song("new", "New Artist") });
+      assert.ok(!("artistAffinity" in learned));
+      assert.ok(!("genreAffinity" in learned));
+      assert.ok(!("excludedArtists" in learned));
+      assert.equal(learned.radioSignals?.[0]?.kind, kind);
+      assert.ok(learned.used.includes("new"));
+    }
+  });
   test("plays the song itself for a song seed", () => {
     const seed = song("s1", "Seed Artist");
     const started = startMagicQueue(SONG_SEED, [seed], { id: "m1", random: first });

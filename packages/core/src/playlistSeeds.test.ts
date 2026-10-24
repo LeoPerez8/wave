@@ -85,24 +85,12 @@ test("a playlist's draws are kept apart from another's, the latest playlists fir
   assert.equal(many.get(0), undefined);
 });
 
-test("a re-rank keeps its seeds while they're all still in the playlist", () => {
+test("a renewal replaces the previous draw even while its songs remain in the playlist", () => {
   const first = drawPlaylistSeeds(playlist, { recent: [], random: seededRandom("keep") });
   const again = drawPlaylistSeeds(playlist, {
     recent: first.recent,
     random: seededRandom("other"),
-    kept: first.seeds,
   });
-  assert.deepEqual(
-    again.seeds.map((seed) => seed.id),
-    first.seeds.map((seed) => seed.id),
-  );
-  assert.deepEqual(again.recent, first.recent);
-  const removed = playlist.filter((song) => song.id !== first.seeds[0]!.id);
-  const redrawn = drawPlaylistSeeds(removed, {
-    recent: first.recent,
-    random: seededRandom("other"),
-    kept: first.seeds,
-  });
-  assert.ok(!redrawn.seeds.some((seed) => seed.id === first.seeds[0]!.id));
-  assert.notDeepEqual(redrawn.recent, first.recent);
+  assert.ok(again.seeds.every((seed) => !first.seeds.some((old) => old.id === seed.id)));
+  assert.notDeepEqual(again.recent, first.recent);
 });

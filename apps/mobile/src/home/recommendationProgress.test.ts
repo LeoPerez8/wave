@@ -164,7 +164,7 @@ test("2,531 Tracks and 900 artists finish paging, refill a Magic Queue online, a
           },
           seededRandom("621-artists"),
         ),
-        genreMixSeeds(library, seededRandom("621-genres")),
+        genreMixSeeds(library),
       ]) {
         assert.ok(seeds.length > 0);
         const radioReads = seeds.map((mixSeed) =>

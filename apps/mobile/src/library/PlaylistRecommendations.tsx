@@ -4,10 +4,9 @@ import {
   playlistRecommendationSession,
   playlistSuggestionsLine,
   type PlaylistRecommendationSlot,
-  type PlaylistRecommendationTrack,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { AccessibilityInfo, Text, View } from "react-native";
 import Animated, {
   FadeIn,
@@ -72,8 +71,6 @@ export function PlaylistRecommendations({
 }) {
   const sight = useScreenSight();
   const [announcingAcceptance] = useState(() => makeExternalStore(false));
-  // The visit's seed songs: drawn on its first read, kept while they stay in the playlist.
-  const seeds = useRef<readonly PlaylistRecommendationTrack[]>([]);
   // Keep held offers readable if another offer's refill no longer finds their Library row.
   const [libraryRows] = useState(() => makeExternalStore<ReadonlyMap<string, SongRow>>(new Map()));
   const libraryById = useSyncExternalStore(libraryRows.subscribe, libraryRows.get);
@@ -94,9 +91,9 @@ export function PlaylistRecommendations({
             const graph = yield* playlistRecommendationGraph;
             // Source rows are retained for the five visible offers only, never a copy of the Library.
             latestRows.set(input.songById);
-            seeds.current = playlistSuggestionSeeds(playlistId, input.playlist, seeds.current);
+            const seeds = playlistSuggestionSeeds(playlistId, input.playlist);
             const online = WaveNative.online();
-            const pages = yield* playlistSuggestionRadios(visitId, seeds.current, {
+            const pages = yield* playlistSuggestionRadios(visitId, seeds, {
               online,
               low: remaining < LOW,
             });
@@ -105,7 +102,7 @@ export function PlaylistRecommendations({
               sources: {
                 ...input,
                 pages,
-                seeds: seeds.current,
+                seeds,
                 graph,
                 profileOf: lookedUpProfileOf,
                 online,
@@ -334,7 +331,6 @@ export function PlaylistRecommendations({
               label: "Try Again",
               onPress: () => {
                 // Asking afresh draws other seed songs.
-                seeds.current = [];
                 void session.renew();
               },
             }

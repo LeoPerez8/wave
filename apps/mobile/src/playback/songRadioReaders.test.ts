@@ -61,6 +61,8 @@ test("a batch reads each of its radios, keeping one reader per session and radio
   await Effect.runPromise(
     readers.read("s1", [seed("song:2"), seed("song:3")], { online: true, low: false }),
   );
+  for (let i = 0; i < 20 && reads.length < 4; i++)
+    await new Promise((resolve) => setTimeout(resolve, 0));
   assert.deepEqual(created, ["song:1", "song:2", "song:3"]);
   assert.deepEqual(reads, ["song:1", "song:2", "song:2", "song:3"]);
   await Effect.runPromise(readers.read("s2", [seed("song:1")], { online: true, low: false }));
@@ -118,4 +120,39 @@ test("a radio not read yet already shows the page its new reader starts from", (
     readers.current("s", [seed("song:cached"), seed("song:new")]).map(({ page }) => page !== null),
     [true, false],
   );
+});
+test("one cached radio supplies the first batch while uncached radios finish in the background", async () => {
+  let finish!: (page: SongRadioPage) => void;
+  const pending = new Promise<SongRadioPage>((resolve) => {
+    finish = resolve;
+  });
+  const readers = createSongRadioReaders((radio: SongRadioSeed) => {
+    let page = radio.id === "cached" ? pageOf("cached song") : null;
+    return {
+      current: () => page,
+      read: () =>
+        radio.id === "cached"
+          ? Effect.succeed(page)
+          : Effect.promise(() => pending).pipe(
+              Effect.tap((received) =>
+                Effect.sync(() => {
+                  page = received;
+                }),
+              ),
+            ),
+    };
+  });
+  const seeds = [seed("cached"), seed("cold")];
+  const immediate = await Promise.race([
+    Effect.runPromise(readers.read("s", seeds, { online: true, low: false })),
+    new Promise<null>((resolve) => setTimeout(() => resolve(null), 50)),
+  ]);
+  finish(pageOf("live song"));
+  assert.deepEqual(
+    immediate?.map(({ page }) => page?.songs[0]?.videoId ?? null),
+    ["cached song", null],
+  );
+  for (let i = 0; i < 20 && readers.current("s", seeds)[1]?.page === null; i++)
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(readers.current("s", seeds)[1]?.page?.songs[0]?.videoId, "live song");
 });

@@ -6,7 +6,7 @@ import { commonStyle, songFamilies, songStyle } from "./genreMixes.ts";
 import type { PlayEnd } from "./playEvents.ts";
 import type { QueueState } from "./queue.ts";
 import { isRecord } from "./storedJson.ts";
-import { MAGIC_SKIP_MS, genreKey } from "./tasteProfile.ts";
+import { MAGIC_SKIP_MS } from "./tasteProfile.ts";
 import { drawSeedSongs } from "./seedSongDraw.ts";
 import { type RandomSource } from "./weightedPick.ts";
 import { parseTrackId, recordingMatches } from "./ytMusic.ts";
@@ -159,12 +159,6 @@ export interface MagicSession {
   readonly used: readonly string[];
   /** How many batches followed the first song so far. */
   readonly batches: number;
-  /** How much each artist (by `MagicArtistKey`) adds to its songs' weight; absent adds nothing. */
-  readonly artistAffinity: Readonly<Record<string, number>>;
-  /** What each genre family (by key) multiplies its songs' weight by; absent is 1. */
-  readonly genreAffinity: Readonly<Record<string, number>>;
-  /** Legacy weighted-batch exclusions. Radio ranking uses radioSignals to lower their scores. */
-  readonly excludedArtists: readonly string[];
   /**
    * The share of each batch YouTube Music's candidates get (the Library's is
    * the rest): its level's (`magicQueueShare`) at the start, always between 0.2 and 1.
@@ -236,10 +230,6 @@ export const magicSeedProfile = (
 /** The context kind of a Magic Queue's queue; its id is the session's. */
 export const MAGIC_QUEUE_CONTEXT = "magic";
 
-/** What the seed's artists add, and its genres multiply, from the start. */
-const SEED_ARTIST = 3;
-const SEED_GENRE = 3;
-
 /** YouTube Music's share of a batch: where it starts without a level, and how far it can go either way. */
 const YT_SHARE_START = 0.5;
 const YT_SHARE_MIN = 0.2;
@@ -284,13 +274,6 @@ export const startMagicQueue = (
       ? (seedSongs.find((candidate) => candidate.trackId === seed.id) ?? seedSongs[0])
       : seedSongs[Math.floor(random() * seedSongs.length)];
   if (pick === undefined) return null;
-  const artistAffinity: Record<string, number> = {};
-  const genreAffinity: Record<string, number> = {};
-  for (const candidate of seedSongs) {
-    for (const artist of candidate.artists) artistAffinity[artist] = SEED_ARTIST;
-    const genre = genreKey(candidate.genre);
-    if (genre !== null) genreAffinity[genre] = SEED_GENRE;
-  }
   return {
     session: {
       id,
@@ -301,9 +284,6 @@ export const startMagicQueue = (
         : { seedSongs: mostPlayed(radio.songs), seedDraws: [] }),
       used: [pick.trackId],
       batches: 0,
-      artistAffinity,
-      genreAffinity,
-      excludedArtists: [],
       ytShare: clampShare(ytShare),
       radioArtists: radio === undefined ? [] : magicRadioArtists(seed, radio.artists),
       seedProfile:
@@ -377,21 +357,6 @@ export interface MagicSignal {
   readonly radio?: MagicSongRadioSeed;
 }
 
-/** What each positive signal adds to the song's artists, strongest first. */
-const POSITIVE: { readonly [K in MagicSignalKind]?: number } = {
-  favorite: 3,
-  download: 2,
-  playedThrough: 1,
-  added: 1,
-};
-
-/** What a positive signal's weight adds to its genre's multiplier, per point. */
-const GENRE_GAIN = 0.5;
-
-/** What a skip multiplies its genre's multiplier by, and the least it gets to. */
-const GENRE_SKIP = 0.5;
-const GENRE_FLOOR = 0.05;
-
 /** How a YouTube Music song's signal moves YouTube Music's share of a batch; others leave it. */
 const YT_SHARE_MOVE: { readonly [K in MagicSignalKind]?: number } = {
   favorite: 0.1,
@@ -412,14 +377,9 @@ const sameRadio = (a: MagicSongRadioSeed, b: MagicSongRadioSeed): boolean =>
       )));
 
 /**
- * [session] having learned [signal]: a skip (or a removed recommendation)
- * excludes the song's primary artist for the rest of the session and lowers
- * its genre's weight, never to nothing, so a one-genre seed doesn't run dry;
- * a positive signal adds to its artists' weight and its genre's, a favorite
- * most, then a download, then a song played to the end or added. Either way
- * the song itself never comes back. A YouTube Music song's favorite or
- * download moves YouTube Music's share of a batch up, its skip down, within
- * 20–100%.
+ * Records a ranking signal and marks its song used. Positive actions can add
+ * a radio; streamed favorites, downloads and skips adjust New music's share.
+ * Legacy affinity and exclusion fields are ignored when old sessions load.
  */
 export const magicSignal = (
   learning: MagicSession,
@@ -440,23 +400,7 @@ export const magicSignal = (
     ytShare: move === 0 ? learning.ytShare : clampShare(learning.ytShare + move),
   };
   const used = session.used.includes(song.trackId) ? session.used : [...session.used, song.trackId];
-  const genre = genreKey(song.genre);
-  const genreAffinity = { ...session.genreAffinity };
-  if (kind === "skip" || kind === "removed") {
-    const [primary] = song.artists;
-    const excludedArtists =
-      primary === undefined || session.excludedArtists.includes(primary)
-        ? session.excludedArtists
-        : [...session.excludedArtists, primary];
-    if (genre !== null)
-      genreAffinity[genre] = Math.max(GENRE_FLOOR, (genreAffinity[genre] ?? 1) * GENRE_SKIP);
-    return { ...session, used, excludedArtists, genreAffinity };
-  }
-  const gain = POSITIVE[kind] ?? 0;
-  const artistAffinity = { ...session.artistAffinity };
-  for (const artist of song.artists) artistAffinity[artist] = (artistAffinity[artist] ?? 0) + gain;
-  if (genre !== null) genreAffinity[genre] = (genreAffinity[genre] ?? 1) + gain * GENRE_GAIN;
-  return { ...session, used, artistAffinity, genreAffinity };
+  return { ...session, used };
 };
 
 /** Tapping Next before this much of a song played is a skip; later, it's neutral. */
@@ -669,26 +613,13 @@ const isRadioSeed = (value: unknown): value is Record<string, unknown> =>
  */
 export const parseMagicSession = (value: unknown): MagicSession | null => {
   if (!isRecord(value)) return null;
-  const {
-    id,
-    seed,
-    used,
-    batches,
-    artistAffinity,
-    genreAffinity,
-    excludedArtists,
-    ytShare,
-    radioArtists,
-    seedProfile,
-    seedStyle,
-    seedVideoIds,
-  } = value;
+  const { id, seed, used, batches, ytShare, radioArtists, seedProfile, seedStyle, seedVideoIds } =
+    value;
   if (typeof id !== "string" || !isRecord(seed)) return null;
   if (!SEED_KINDS.has(seed["kind"])) return null;
   if (typeof seed["id"] !== "string" || typeof seed["title"] !== "string") return null;
-  if (!isStrings(used) || !isStrings(excludedArtists)) return null;
+  if (!isStrings(used)) return null;
   if (typeof batches !== "number" || !Number.isInteger(batches) || batches < 0) return null;
-  if (!isWeights(artistAffinity) || !isWeights(genreAffinity)) return null;
   const radioSeed = value["radioSeed"];
   const likedRadios = value["likedRadios"];
   const radioSignals = value["radioSignals"];
@@ -738,9 +669,6 @@ export const parseMagicSession = (value: unknown): MagicSession | null => {
     seed: { kind: seed["kind"] as MagicSeed["kind"], id: seed["id"], title: seed["title"] },
     used,
     batches,
-    artistAffinity,
-    genreAffinity,
-    excludedArtists,
     // A session saved before YouTube Music joined starts its share afresh.
     ytShare:
       typeof ytShare === "number" && Number.isFinite(ytShare)

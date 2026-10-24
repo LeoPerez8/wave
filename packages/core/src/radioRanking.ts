@@ -66,6 +66,22 @@ export const rankRadioSongs = (
       (candidate.song !== null && excluded.has(ytTrackId(candidate.song.videoId)))
     )
       return;
+    const profiles =
+      candidate.source === "library" && candidate.genre !== null
+        ? [new Map([[candidate.genre, 1]])]
+        : (candidate.song?.artists ?? candidate.artists).flatMap((artist) => {
+            const profile = profileOf(artist);
+            return profile == null || profile.size === 0 ? [] : [profile];
+          });
+    const incompatible =
+      seed.profile != null &&
+      seed.profile.size > 0 &&
+      profiles.length > 0 &&
+      Math.max(...profiles.map((profile) => genreAffinity(seed.profile!, profile))) <
+        GENRE_AFFINITY_THRESHOLD;
+    const step = options.faithfulness ?? 3;
+    if (candidate.source === "stream" && incompatible && step === 1) return;
+    const penalty = incompatible ? { 1: 8, 2: 8, 3: 5, 4: 2, 5: 0 }[step] : 0;
     let session = 0;
     for (const signal of sources.signals ?? []) {
       const same = signal.song.trackId === candidate.trackId;
@@ -81,7 +97,8 @@ export const rankRadioSongs = (
     candidate = {
       ...candidate,
       score:
-        candidate.score +
+        candidate.score -
+        penalty +
         Math.max(-4, Math.min(4, session)) +
         taste +
         ((3 - (options.popularity ?? 3)) * popularity) / 2,
@@ -94,25 +111,13 @@ export const rankRadioSongs = (
     for (const [position, song] of page.songs.entries()) {
       const local = sources.inLibrary?.(song) ?? null;
       if (local !== null && excluded.has(ytTrackId(song.videoId))) excluded.add(local.trackId);
-      const profiles = song.artists.flatMap((artist) => {
-        const profile = profileOf(artist);
-        return profile == null || profile.size === 0 ? [] : [profile];
-      });
-      const affinity =
-        seed.profile == null || seed.profile.size === 0 || profiles.length === 0
-          ? null
-          : Math.max(...profiles.map((profile) => genreAffinity(seed.profile!, profile)));
-      const incompatible = affinity !== null && affinity < GENRE_AFFINITY_THRESHOLD;
-      const step = options.faithfulness ?? 3;
-      if (local === null && incompatible && step === 1) continue;
-      const penalty = local === null && incompatible ? { 1: 0, 2: 8, 3: 5, 4: 2, 5: 0 }[step] : 0;
       add({
         ...(local ??
           magicYtSong({ trackId: ytTrackId(song.videoId), artists: song.artists }, profileOf)),
         source: local === null ? "stream" : "library",
         song,
         radio: { id: page.id, position },
-        score: 10 / (1 + position / 10) - penalty,
+        score: 10 / (1 + position / 10),
       });
     }
   }

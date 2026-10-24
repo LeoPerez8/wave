@@ -19,7 +19,6 @@ import { libraryMixProfilesSteps, type GenreProfileOf } from "./genreAffinity.ts
 import { artistNeighbourhoodSteps, type ArtistGraph } from "./artistGraph.ts";
 import { identityKey } from "./library.ts";
 import { freshFirstSteps, type MixRefreshAvoid } from "./mixRefresh.ts";
-import type { RandomSource } from "./weightedPick.ts";
 import { ytArtistQuery } from "./ytArtist.ts";
 
 /** A genre family: the tags that sound alike, under one name. */
@@ -526,13 +525,11 @@ function* seedableArtistsSteps(family: RankedFamily): Generator<void, FamilyArti
  */
 export const genreMixSeeds = (
   library: GenreMixLibrary,
-  random: RandomSource,
   avoid?: MixRefreshAvoid,
-): DiscoverMixSeed[] => finishSteps(genreMixSeedsSteps(library, random, avoid));
+): DiscoverMixSeed[] => finishSteps(genreMixSeedsSteps(library, avoid));
 
 export function* genreMixSeedsSteps(
   library: GenreMixLibrary,
-  _random: RandomSource,
   avoid?: MixRefreshAvoid,
 ): Generator<void, DiscoverMixSeed[]> {
   const seeds: DiscoverMixSeed[] = [];

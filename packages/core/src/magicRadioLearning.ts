@@ -94,3 +94,57 @@ export const magicRadioBatch = (
   }
   return result;
 };
+
+const batchSize = (session: MagicSession): number => (session.batches === 0 ? 9 : 10);
+
+/** Whether each radio pool needs continuations to fill its batch and New music share. */
+export const magicRadioReadPlan = (
+  session: MagicSession,
+  seed: readonly RankedRadioSong[],
+  liked: readonly RankedRadioSong[],
+  hasLikedRadios: boolean,
+): {
+  readonly size: number;
+  readonly likedQuota: number;
+  readonly seedLow: boolean;
+  readonly likedLow: boolean;
+} => {
+  const size = batchSize(session);
+  const likedQuota = hasLikedRadios ? Math.round(size / 3) : 0;
+  const low = (ranked: readonly RankedRadioSong[], target: number) =>
+    ranked.length < target ||
+    ranked.filter((song) => song.source === "stream").length < Math.round(target * session.ytShare);
+  return {
+    size,
+    likedQuota,
+    seedLow: low(seed, size - Math.min(likedQuota, liked.length)),
+    likedLow: hasLikedRadios && low(liked, Math.max(likedQuota, size - seed.length)),
+  };
+};
+
+/** Selects and commits a ranked batch against the latest session, including recording aliases. */
+export const completeMagicRadioBatch = (
+  session: MagicSession,
+  seed: readonly RankedRadioSong[],
+  liked: readonly RankedRadioSong[],
+): { readonly session: MagicSession; readonly trackIds: readonly string[] } => {
+  const exclude = magicRadioExclusions(
+    session,
+    [...seed, ...liked].flatMap((s) => s.song ?? []),
+  );
+  const eligible = (song: RankedRadioSong) =>
+    !exclude.has(song.trackId) &&
+    (song.song === null || !exclude.has(ytTrackId(song.song.videoId)));
+  const selected = magicRadioBatch(seed.filter(eligible), liked.filter(eligible), {
+    size: batchSize(session),
+    newMusicShare: session.ytShare,
+  });
+  const trackIds = selected.map((song) => song.trackId);
+  if (trackIds.length === 0) return { session, trackIds };
+  const used = new Set(session.used);
+  for (const song of selected) {
+    used.add(song.trackId);
+    if (song.song !== null) used.add(ytTrackId(song.song.videoId));
+  }
+  return { trackIds, session: { ...session, used: [...used], batches: session.batches + 1 } };
+};

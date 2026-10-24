@@ -11,7 +11,7 @@ import {
   magicPickEnded,
   magicBatchRadios,
   magicLibrarySongs,
-  magicRadioBatch,
+  completeMagicRadioBatch,
   magicPlaySignal,
   magicQueueEdits,
   magicQueueLabel,
@@ -377,29 +377,9 @@ export const layer = Layer.effectDiscard(
         if (session?.id !== wanted.id || !wantsMagicBatch(session, queueState.get()))
           return { kind: "dropped" } satisfies MagicBatchOutcome;
         const playable = library.songs.filter(songHasFile);
-        const candidates = yt.candidates.filter((song) => !session.used.includes(song.trackId));
-        const likedCandidates = yt.likedCandidates.filter(
-          (song) => !session.used.includes(song.trackId),
-        );
-        const selected = magicRadioBatch(candidates, likedCandidates, {
-          size: session.batches === 0 ? 9 : 10,
-          newMusicShare: session.ytShare,
-        });
-        const trackIds = selected.map((song) => song.trackId);
-        const batch = {
-          trackIds,
-          session: {
-            ...session,
-            used: [
-              ...session.used,
-              ...trackIds,
-              ...selected.flatMap((song) =>
-                song.song === null ? [] : [ytTrackId(song.song.videoId)],
-              ),
-            ],
-            batches: session.batches + 1,
-          },
-        };
+        const candidates = yt.candidates;
+        const likedCandidates = yt.likedCandidates;
+        const batch = completeMagicRadioBatch(session, candidates, likedCandidates);
         if (batch.trackIds.length === 0)
           return {
             kind: "empty",

@@ -20,25 +20,20 @@ export type PlaylistSeedHistory = ReadonlyMap<number, readonly string[]>;
  * A renewal's seeds from [playlist]: up to 3 songs by different primary
  * artists, weighted to the latest `addedAt` (`drawSeedSongs`, `weight:
  * "added"`), avoiding [recent] while other songs remain. [recent] after
- * the draw comes back with it, for the next renewal. [kept], the seeds
- * already drawn, stand (as the playlist holds them now) while every one of
- * them is still in [playlist], and nothing is drawn.
+ * the draw comes back with it, for the next renewal. Every renewal draws
+ * again, even when the previous seeds are still in the playlist.
  */
 export const drawPlaylistSeeds = (
   playlist: readonly PlaylistRecommendationTrack[],
   {
     recent,
     random,
-    kept = [],
   }: {
     readonly recent: readonly string[];
     readonly random: RandomSource;
-    readonly kept?: readonly PlaylistRecommendationTrack[];
   },
 ): { readonly seeds: PlaylistRecommendationTrack[]; readonly recent: readonly string[] } => {
   const byId = new Map(playlist.map((track) => [track.id, track]));
-  if (kept.length > 0 && kept.every((seed) => byId.has(seed.id)))
-    return { seeds: kept.map((seed) => byId.get(seed.id)!), recent };
   const drawn = drawSeedSongs(
     playlist.map((track) => ({
       id: track.id,

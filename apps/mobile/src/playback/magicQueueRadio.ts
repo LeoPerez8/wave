@@ -5,6 +5,7 @@ import {
   type MixKnownSongs,
   magicLibrarySongs,
   magicRadioExclusions,
+  magicRadioReadPlan,
   magicSeedProfile,
   magicYtSong,
   rankRadioSongs,
@@ -14,7 +15,6 @@ import {
   type MagicSession,
   type MagicSong,
   type MixSliders,
-  type RankedRadioSong,
   type TasteProfile,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
@@ -157,27 +157,19 @@ export const magicQueueYtCandidates = (
           (song.song !== null && cachedVideos.has(song.song.videoId)),
       );
     };
-    const size = session.batches === 0 ? 9 : 10;
-    const learnedShare = liked.length === 0 ? 0 : Math.round(size / 3);
-    const low = (ranked: readonly RankedRadioSong[], target: number) =>
-      ranked.length < target ||
-      ranked.filter((song) => song.source === "stream").length <
-        Math.round(target * session.ytShare);
     const originalBefore = rank(seeds, true);
     const likedBefore = rank(liked, false);
-    const read = (yield* Effect.all(
-      [
-        readers.read(session.id, seeds, {
-          online: connected,
-          low: low(originalBefore, size - Math.min(learnedShare, likedBefore.length)),
-        }),
-        readers.read(session.id, liked, {
-          online: connected,
-          low: low(likedBefore, Math.max(learnedShare, size - originalBefore.length)),
-        }),
-      ],
-      { concurrency: "unbounded" },
-    )).flat();
+    const plan = magicRadioReadPlan(
+      sessionNow?.() ?? session,
+      originalBefore,
+      likedBefore,
+      liked.length > 0,
+    );
+    const originalIds = new Set(seeds.map((seed) => seed.id));
+    const read = yield* readers.read(session.id, [...seeds, ...liked], {
+      online: connected,
+      low: (seed) => (originalIds.has(seed.id) ? plan.seedLow : plan.likedLow),
+    });
     const candidates = ytMusicEnabled() ? rank(seeds, true) : [];
     const likedCandidates = ytMusicEnabled() ? rank(liked, false) : [];
     found = [...candidates, ...likedCandidates];

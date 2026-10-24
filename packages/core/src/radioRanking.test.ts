@@ -62,6 +62,32 @@ const librarySong = (trackId: string, artist: string) => ({
   genre: null,
   style: null,
 });
+test("faithfulness weights incompatible Library tags in radios and additions without excluding files", () => {
+  const local = { ...librarySong("1", "Seed"), genre: "metal" };
+  const added = { ...local, trackId: "2" };
+  const unknown = librarySong("3", "Seed");
+  const sources = {
+    pages: [page],
+    library: [local, added, unknown],
+    inLibrary: (s: YtAlbumSong) => (s.videoId === "first" ? local : null),
+  };
+  const scores = [1, 2, 3, 4, 5].map((faithfulness) => {
+    const ranked = rankRadioSongs(
+      { artists: ["Seed"], profile: new Map([["reggae", 1]]) },
+      sources,
+      { faithfulness: faithfulness as 1 | 2 | 3 | 4 | 5 },
+    );
+    assert.equal(ranked.find((s) => s.trackId === "3")?.score, 5);
+    return ["1", "2"].map((id) => ranked.find((s) => s.trackId === id)?.score);
+  });
+  assert.deepEqual(scores, [
+    [2, -3],
+    [2, -3],
+    [5, 0],
+    [8, 3],
+    [10, 5],
+  ]);
+});
 test("Library songs join from the radio, seed artists or graph neighbours regardless of genre", () => {
   const radio = librarySong("1", "Unrelated");
   const neighbour = librarySong("2", "Neighbour");

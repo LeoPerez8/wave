@@ -43,7 +43,7 @@ import { makeExternalStore, type ExternalStore } from "@/lib/externalStore";
 import { withNetworkLog } from "@/lib/networkMeter";
 import { persistedSetting, type PersistedSetting } from "@/lib/persistedSetting";
 import { libraryListQueries } from "@/library/hooks";
-import type { SongRow } from "@/library/LibraryStore";
+import { LibraryStore, type SongRow } from "@/library/LibraryStore";
 import { appRuntime } from "@/library/runtime";
 import { useLibraryQuery } from "@/library/sharedQueries";
 import { showToast } from "@/overlay/toast";
@@ -67,6 +67,8 @@ import { similarOffline, withSimilar } from "./similarArtists";
 import { artistRadioCacheId } from "./cachedArtistRadio";
 import { mixRadioPages, readMixArtistRadio } from "./mixArtistRadio";
 import { readMixRadios } from "./mixRadioReads";
+import { readMixBuildLibrary } from "./mixBuildLibrary";
+import { knownLibraryFinder } from "@/ytmusic/libraryFinder";
 
 export type { MixSectionId } from "./discoverMixLevel";
 
@@ -83,6 +85,7 @@ const radioMixes = (
         ? readMixArtistRadio(artist)
         : Effect.succeed(mixRadioPages.get(artistRadioCacheId(artist.name))),
     );
+    yield* inputs.matchRadios(pages.flat().flatMap((page) => page.songs));
     const sliders = discoverSlidersNow();
     const popularity = new Map(
       inputs.catalog.map((entry) => [entry.song.videoId, 1 - 0.5 ** entry.radios.length]),
@@ -129,13 +132,16 @@ const saveBuilt = (id: MixSectionId, built: DiscoverMixes): void => {
 /** Builds use the last completed indexes; derivations warm separately on focus. */
 const mixBuildInputs = Effect.gen(function* () {
   const snapshot = recommendationSnapshot.peek();
-  if (snapshot.library === null) return yield* Effect.fail(new Error("Library index is warming"));
-  const profiles = yield* runSteps(
-    libraryMixProfilesSteps(snapshot.library),
+  const { library, matchRadios } = yield* readMixBuildLibrary(
+    snapshot.library,
+    yield* LibraryStore,
     recommendationTurnEffect,
+    knownLibraryFinder(),
   );
+  const profiles = yield* runSteps(libraryMixProfilesSteps(library), recommendationTurnEffect);
   return {
-    library: snapshot.library,
+    library,
+    matchRadios,
     catalog: snapshot.catalog ?? [],
     graph: snapshot.graph,
     taste: latestTasteProfile(),
@@ -265,7 +271,6 @@ const buildGenreMixes = (inputs: MixBuildInputs, avoid?: MixRefreshAvoid) =>
           graph: inputs.graph,
           profileOf: (name) => inputs.profiles.profileOf(name) ?? lookedUpProfileOf(name),
         },
-        Math.random,
         avoid,
       ),
       recommendationTurnEffect,
@@ -404,7 +409,6 @@ const refresh = (played: boolean, onlyEmpty = false): void => {
   const ids = homeMixBuildsDue(
     (Object.keys(SECTIONS) as MixSectionId[])
       .filter((id) => !onlyEmpty || SECTIONS[id].saved.get() === null)
-      .filter(() => recommendationSnapshot.peek().library !== null)
       .map((id) => ({
         id,
         saved: SECTIONS[id].saved.get(),
