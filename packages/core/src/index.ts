@@ -430,8 +430,10 @@ export {
   launcherIconFor,
   launcherIconSwitch,
 } from "./launcherIcon.ts";
+export { INK_PALETTE, INK_PAIRS, PASTEL_CHROMA_THRESHOLD, inkPairFor } from "./inkPalette.ts";
+export type { PaletteInk, InkPair } from "./inkPalette.ts";
 export type { LauncherBehaviour, LauncherIcon, LauncherIconSwitch } from "./launcherIcon.ts";
-export { LAUNCH_SPLASH_THEMES, launchTheme } from "./launchTheme.ts";
+export { LAUNCH_SPLASH_THEMES, launchTheme, paletteSplashThemeFor } from "./launchTheme.ts";
 export type { LaunchColors, LaunchSplashTheme, LaunchTheme } from "./launchTheme.ts";
 export { LAUNCH_LOGO, launchLogoExit, launchLogoWaves } from "./launchLogo.ts";
 export type {
