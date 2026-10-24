@@ -79,6 +79,7 @@ import {
   type TargetEntry,
 } from "./actionTargets";
 import { addToQueue, playNext, queueDiscoverSongs } from "./actions";
+import { goToArtistPress } from "./goToArtistPress";
 import { startMagicQueue } from "./MagicQueue";
 
 /**
@@ -492,14 +493,13 @@ export const itemActionPress = ({
         const { albumId } = entry;
         return run(() => openAlbum(albumId, links.album));
       }
-      case "goToArtist": {
-        beginTiming("goToArtist", "Artist");
-        // Several credited artists: a card to pick one from (`ArtistChoice`).
-        if ("streamedArtists" in entry)
-          return run(() => followStreamedArtistLink(entry.streamedArtists));
-        const { artists } = entry;
-        return run(() => followArtistLink(artists, links.artist));
-      }
+      case "goToArtist":
+        return goToArtistPress(entry, {
+          begin: () => beginTiming("goToArtist", "Artist"),
+          run,
+          follow: (artists) => followArtistLink(artists, links.artist),
+          followStreamed: followStreamedArtistLink,
+        });
       case "renamePlaylist":
         return run(() => playlist !== undefined && void renamePlaylistFlow(playlist));
       case "changeImage":
