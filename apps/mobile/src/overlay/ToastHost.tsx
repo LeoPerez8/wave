@@ -81,7 +81,7 @@ function ToastPill({ toast }: { toast: Toast }) {
   const offsetY = useSharedValue(0);
   // Where the action's tap area starts across the pill, in dp.
   const actionStart = useRef(Number.POSITIVE_INFINITY);
-  const { id, text, action, leaving } = toast;
+  const { id, text, action, icon, leaving } = toast;
 
   // Screen readers say the line as it shows.
   useEffect(() => AccessibilityInfo.announceForAccessibility(text), [text]);
@@ -203,6 +203,15 @@ function ToastPill({ toast }: { toast: Toast }) {
           ]}
         >
           <Glass backdropId={BACKDROP.root} cornerRadius={radius} />
+          {icon == null ? null : (
+            <View
+              accessible={false}
+              importantForAccessibility="no-hide-descendants"
+              style={{ marginRight: CELL * 1.5, flexShrink: 0 }}
+            >
+              {icon}
+            </View>
+          )}
           <Text
             numberOfLines={MAX_LINES}
             className="shrink text-center font-sans text-subheadline font-medium text-foreground"

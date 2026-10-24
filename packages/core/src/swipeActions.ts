@@ -7,12 +7,20 @@
  * inert: the row doesn't move that way. How a swipe ends is `resolveRowSwipe`.
  */
 
-import { ITEM_ACTION_LABELS, type ItemAction } from "./itemActions.ts";
+import { isDestructiveAction, ITEM_ACTION_LABELS, type ItemAction } from "./itemActions.ts";
 import type { UnavailableEntryAction } from "./playlistEntries.ts";
 import { readStoredRecord } from "./storedJson.ts";
 
 /** An entry of a song row's long-press menu: the Library's, a YT Music song's, an unavailable entry's. */
 export type RowMenuAction = ItemAction | UnavailableEntryAction;
+
+/** The theme ink of an uncovered swipe action, at any arming strength. */
+export const swipeActionTone = (action: RowMenuAction): "accent" | "highlight" | "destructive" => {
+  if (action === "favorite" || action === "unfavorite") return "highlight";
+  if (action === "removeFromPlaylist" || (action !== "search" && isDestructiveAction(action)))
+    return "destructive";
+  return "accent";
+};
 
 /**
  * What a swipe direction can be set to run, in the order Settings › Swipe

@@ -71,6 +71,10 @@ const close = (actual: number, expected: number, tolerance: number, message?: st
   );
 
 describe("launchLogoWaves", () => {
+  test("flows one wavelength every 1.5 seconds", () => {
+    assert.equal(LAUNCH_LOGO.cycleMs, 1500);
+  });
+
   const waves = launchLogoWaves();
   const centre = LAUNCH_LOGO.size / 2;
   // Logo units to dp: the still logo's furthest edge reaches LAUNCH_LOGO.radius.
@@ -152,44 +156,7 @@ describe("launchLogoWaves", () => {
 });
 
 describe("launchLogoExit", () => {
-  // The waves sweep one wavelength a second; the splash fades out over 400 ms.
-  test("a quick start holds the splash so the fade ends as the first sweep does", () => {
-    assert.deepEqual(launchLogoExit({ elapsedMs: 250, animationsOn: true }), {
-      delayMs: 350,
-      fadeMs: 400,
-    });
-    assert.deepEqual(launchLogoExit({ elapsedMs: 0, animationsOn: true }), {
-      delayMs: 600,
-      fadeMs: 400,
-    });
-  });
-
-  test("once the first sweep is far enough along, the splash fades out at once", () => {
-    for (const elapsedMs of [600, 1000, 2750, 12_000])
-      assert.deepEqual(launchLogoExit({ elapsedMs, animationsOn: true }), {
-        delayMs: 0,
-        fadeMs: 400,
-      });
-  });
-
-  test("with animations removed the splash goes as it always did", () => {
-    assert.deepEqual(launchLogoExit({ elapsedMs: 100, animationsOn: false }), {
-      delayMs: 0,
-      fadeMs: 400,
-    });
-  });
-
-  test("a logo that isn't moving (Android didn't animate it) isn't waited for", () => {
-    assert.deepEqual(launchLogoExit({ elapsedMs: null, animationsOn: true }), {
-      delayMs: 0,
-      fadeMs: 400,
-    });
-  });
-
-  test("a start time from the future never holds the splash past one sweep", () => {
-    assert.deepEqual(launchLogoExit({ elapsedMs: -5000, animationsOn: true }), {
-      delayMs: 600,
-      fadeMs: 400,
-    });
+  test("fades immediately when Wave is ready", () => {
+    assert.deepEqual(launchLogoExit(), { delayMs: 0, fadeMs: 400 });
   });
 });

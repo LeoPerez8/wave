@@ -7,12 +7,8 @@
 
 import type { AlertSpec } from "./alert.ts";
 import { LOGO_WAVES, logoIconPaths, logoWaveY } from "./logo.ts";
-import {
-  THEME_SWATCHES,
-  presetThemeChoice,
-  type InkSwatch,
-  type ThemeChoice,
-} from "./themeChoice.ts";
+import { INK_PAIRS, inkPairFor } from "./inkPalette.ts";
+import { DEFAULT_THEME_CHOICE, type ThemeChoice } from "./themeChoice.ts";
 
 /** One launcher icon: a primary × secondary pair and the colours its waves take on black. */
 export interface LauncherIcon {
@@ -26,28 +22,19 @@ export interface LauncherIcon {
   readonly bottom: string;
 }
 
-/**
- * The shipped teal and amber of the icon (#94), brighter than the dark theme's
- * accent and highlight. Other swatches take their dark-scheme tone, which is
- * made to read on dark grounds.
- */
-const SHIPPED_ICON_INK: Readonly<Record<string, string>> = {
-  teal: "#14b7a6",
-  ember: "#f5b83d",
-};
+const shippedPair = inkPairFor(DEFAULT_THEME_CHOICE);
 
-const iconInk = (swatch: InkSwatch): string => SHIPPED_ICON_INK[swatch.id] ?? swatch.dark;
-
-/** Every icon Wave ships, primary-major; the first is the shipped one. */
-export const LAUNCHER_ICONS: readonly LauncherIcon[] = THEME_SWATCHES.primary.flatMap((primary) =>
-  THEME_SWATCHES.secondary.map((secondary) => ({
-    id: `${primary.id}_${secondary.id}`,
-    primary: primary.id,
-    secondary: secondary.id,
-    top: iconInk(primary),
-    bottom: iconInk(secondary),
-  })),
-);
+/** Every palette pair; the plugin enables the first, so keep the shipped icon there. */
+export const LAUNCHER_ICONS: readonly LauncherIcon[] = [
+  shippedPair,
+  ...INK_PAIRS.filter((pair) => pair.id !== shippedPair.id),
+].map(({ id, primary, secondary }) => ({
+  id,
+  primary: primary.id,
+  secondary: secondary.id,
+  top: primary.dark,
+  bottom: secondary.dark,
+}));
 
 /** Furthest any stroke edge of the logo reaches from its centre, in the logo's units. */
 const LOGO_EXTENT = (() => {
@@ -88,15 +75,12 @@ export const LAUNCHER_ICON_ART: {
 })();
 
 /**
- * The icon a theme choice shows: a custom colour takes the preset closest to
- * it, and an unknown swatch counts as its group's default.
+ * The icon a theme choice shows: presets keep their own ink; custom colours
+ * take their shared palette match, with the pastel guard.
  */
 export const launcherIconFor = (choice: ThemeChoice): LauncherIcon => {
-  const { primary, secondary } = presetThemeChoice(choice);
-  return (
-    LAUNCHER_ICONS.find((icon) => icon.primary === primary && icon.secondary === secondary) ??
-    LAUNCHER_ICONS[0]!
-  );
+  const { id } = inkPairFor(choice);
+  return LAUNCHER_ICONS.find((icon) => icon.id === id)!;
 };
 
 /** What the launcher does when Wave switches icons. */

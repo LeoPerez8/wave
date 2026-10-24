@@ -1,10 +1,13 @@
 /**
  * Wave's toast: one line on a small glass pill at the top of the screen, just
  * under the status bar, drawn by `ToastHost` at the app root. It goes away on
- * its own (Core's `toastDuration`), or sooner on a tap or a swipe up. It can offer one action
- * (Undo) at its end. Show one from anywhere, React or not; a newer one takes
+ * its own (Core's `toastDuration`), or sooner on a tap or a swipe up. It can
+ * lead with an icon and offer one action (Undo) at its end. Show one from
+ * anywhere, React or not; a newer one takes
  * the place of the one showing.
  */
+import type { ReactNode } from "react";
+
 import { makeExternalStore } from "../lib/externalStore.ts";
 
 /** What a toast's action button says, and what tapping it does. */
@@ -17,6 +20,7 @@ export interface Toast {
   readonly id: number;
   readonly text: string;
   readonly action: ToastAction | null;
+  readonly icon: ReactNode;
   /** Sliding away; the host removes it once the animation ends. */
   readonly leaving: boolean;
 }
@@ -29,14 +33,18 @@ let nextId = 1;
 let gone: (() => void) | null = null;
 
 /**
- * Shows [text] on a toast, with [action] when given; resolves once it's
- * gone, or another took its place.
+ * Shows [text] with an optional [icon] before it and [action] after.
+ * Resolves once it's gone, or another took its place.
  */
-export const showToast = (text: string, action: ToastAction | null = null): Promise<void> => {
+export const showToast = (
+  text: string,
+  action: ToastAction | null = null,
+  icon: ReactNode = null,
+): Promise<void> => {
   gone?.();
   return new Promise((resolve) => {
     gone = resolve;
-    currentToast.set({ id: nextId++, text, action, leaving: false });
+    currentToast.set({ id: nextId++, text, action, icon, leaving: false });
   });
 };
 

@@ -1,6 +1,7 @@
 /// <reference types="node" />
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
+import { createElement } from "react";
 
 import { currentToast, dismissToast, removeToast, runToastAction, showToast } from "./toast.ts";
 
@@ -20,6 +21,20 @@ const shown = () => {
 };
 
 describe("showToast", () => {
+  test("keeps an optional leading icon until a newer plain toast replaces it", () => {
+    const icon = createElement("test-icon");
+    void showToast("Added to Favorites", null, icon);
+    const toast = shown();
+    assert.equal(toast.icon, icon);
+    assert.equal(toast.action, null);
+    dismissToast(toast.id);
+    assert.equal(shown().icon, icon);
+
+    void showToast("Saved Mix");
+    assert.equal(shown().icon, null);
+    removeToast(shown().id);
+  });
+
   test("shows the line until the toast has left", async () => {
     const left = showToast("Fixed 3 songs · 1 not found");
     const toast = shown();

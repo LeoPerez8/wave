@@ -1,4 +1,11 @@
-import { resolveRowSwipe, RETURN_SPRINGS, rowSwipeArmed, type RowSwipeSide } from "@wave/core";
+import {
+  resolveRowSwipe,
+  RETURN_SPRINGS,
+  rowSwipeArmed,
+  swipeActionTone,
+  type RowMenuAction,
+  type RowSwipeSide,
+} from "@wave/core";
 import * as Haptics from "expo-haptics";
 import { useLayoutEffect, useRef, type ReactNode } from "react";
 import {
@@ -19,20 +26,18 @@ import { scheduleOnRN } from "react-native-worklets";
 
 import { useBounceSpring } from "@/motion/bounce";
 import { useListScrollable } from "@/motion/heldTouch";
-import { ACTION_ICONS, type MenuAction } from "@/playback/actionIcons";
+import { ACTION_ICONS } from "@/playback/actionIcons";
 import { useThemeColor } from "@/theme/useThemeColor";
 
 import { CELL } from "./grid";
 
 /** What one swipe direction of a song row runs: an entry of the row's long-press menu. */
 export interface SwipeSide {
-  readonly action: MenuAction;
+  readonly action: RowMenuAction;
   /** The short label the row uncovers ("Add to Queue", "Remove"). */
   readonly label: string;
   /** The menu entry's full label, which screen readers offer as the row's action. */
   readonly accessibilityLabel: string;
-  /** Removes or deletes the song: uncovered in the destructive colour. */
-  readonly destructive: boolean;
   /** The row leaves the list as it runs (Remove from Playlist): it slides out first. */
   readonly leaves: boolean;
   readonly run: () => void;
@@ -84,23 +89,24 @@ export const swipeAccessibility = (
 
 /**
  * What a swipe uncovers on [side]'s edge: the action's icon and short label,
- * teal, or red for one that removes the song; full strength once armed.
+ * Primary, Secondary for a star, or red for a removal; full strength once armed.
  */
 function Uncovered({ action, edge }: { action: SwipeSide; edge: "start" | "end" }) {
-  const accent = useThemeColor("accent");
-  const destructive = useThemeColor("destructive");
+  const tone = swipeActionTone(action.action);
+  const colour = useThemeColor(tone);
   const Icon = ACTION_ICONS[action.action];
-  const colour = action.destructive ? destructive : accent;
+  const textClass = {
+    accent: "text-accent",
+    highlight: "text-highlight",
+    destructive: "text-destructive",
+  }[tone];
   return (
     <View
       className={`absolute inset-0 flex-row items-center bg-fill ${edge === "start" ? "justify-start" : "justify-end"}`}
       style={{ gap: CELL, paddingHorizontal: CELL * 2 }}
     >
       <Icon size={20} color={colour} strokeWidth={1.5} />
-      <Text
-        numberOfLines={1}
-        className={`font-sans text-body font-medium ${action.destructive ? "text-destructive" : "text-accent"}`}
-      >
+      <Text numberOfLines={1} className={`font-sans text-body font-medium ${textClass}`}>
         {action.label}
       </Text>
     </View>

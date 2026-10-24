@@ -3,9 +3,11 @@ import { describe, test } from "node:test";
 
 import {
   DEFAULT_THEME_CHOICE,
+  INK_PAIRS,
   LAUNCH_SPLASH_THEMES,
   THEME_SWATCHES,
   contrastRatio,
+  chooseCustomInk,
   launchTheme,
   themeFor,
   type ThemeChoice,
@@ -15,6 +17,9 @@ const choose = (change: Partial<ThemeChoice>): ThemeChoice => ({
   ...DEFAULT_THEME_CHOICE,
   ...change,
 });
+
+const choiceKey = (choice: ThemeChoice): string =>
+  `${choice.light}/${choice.dark}/${choice.primary}/${choice.secondary}`;
 
 /** The colours of the splash theme a choice opens with. */
 const splash = (choice: ThemeChoice) => {
@@ -73,21 +78,80 @@ describe("launchTheme", () => {
       const name = launchTheme(choice).splashTheme;
       if (name !== null) assert.ok(names.has(name), `${JSON.stringify(choice)}: ${name}`);
     }
-    assert.equal(names.size, choices.length - 1);
-    for (const name of names) assert.match(name, /^[A-Za-z][A-Za-z0-9_.]*$/);
+    assert.equal(LAUNCH_SPLASH_THEMES.length, 20735);
+    assert.equal(names.size, 20735);
+    for (const name of names) {
+      assert.match(name, /^[A-Za-z][A-Za-z0-9_.]*$/);
+      assert.ok(name.length <= 10, `compact Android style name: ${name}`);
+    }
   });
 
-  test("a splash theme carries the launch colours of the choice that names it", () => {
+  test("every background pair and palette ink pair ships exactly once, except the manifest default", () => {
+    const choices = new Set(LAUNCH_SPLASH_THEMES.map((theme) => choiceKey(theme.choice)));
+    assert.equal(choices.size, 20735);
+    for (const light of THEME_SWATCHES.light) {
+      for (const dark of THEME_SWATCHES.dark) {
+        for (const pair of INK_PAIRS) {
+          const choice = {
+            ...DEFAULT_THEME_CHOICE,
+            light: light.id,
+            dark: dark.id,
+            primary: pair.primary.id,
+            secondary: pair.secondary.id,
+          };
+          assert.equal(
+            choices.has(choiceKey(choice)),
+            choiceKey(choice) !== choiceKey(DEFAULT_THEME_CHOICE),
+            choiceKey(choice),
+          );
+        }
+      }
+    }
+  });
+
+  test("a splash theme carries its preset inks corrected for the chosen backgrounds", () => {
     for (const choice of [
       choose({ light: "paper", dark: "slate", primary: "lime", secondary: "lemon" }),
-      choose({ secondary: "sky" }),
+      choose({ primary: "blue", secondary: "sky" }),
     ]) {
       const { light, dark } = launchTheme(choice);
       assert.deepEqual(splash(choice), { light, dark });
     }
   });
 
-  test("a custom colour opens on the splash of the preset closest to it", () => {
+  test("a palette splash uses the icon's shipped teal and ember dark inks on other grounds", () => {
+    assert.deepEqual(splash(choose({ light: "sand", dark: "navy" }))?.dark, {
+      background: "#0a0f1f",
+      primary: "#14b7a6",
+      secondary: "#f5b83d",
+    });
+  });
+
+  test("custom cyan and red open on their vivid palette splash and keep the app's own inks", () => {
+    const choice = chooseCustomInk(
+      chooseCustomInk(DEFAULT_THEME_CHOICE, "primary", "#00e9ff"),
+      "secondary",
+      "#ff0d00",
+    );
+    const name = launchTheme(choice).splashTheme;
+    const selected = LAUNCH_SPLASH_THEMES.find((theme) => theme.name === name);
+    assert.equal(selected?.choice.primary, "vivid209");
+    assert.equal(selected?.choice.secondary, "vivid29");
+    assert.deepEqual(selected?.dark, {
+      background: "#000000",
+      primary: "#00e5ff",
+      secondary: "#ff1a1d",
+    });
+    assert.deepEqual(selected?.light, {
+      background: "#e0ecef",
+      primary: "#007380",
+      secondary: "#d20003",
+    });
+    assert.equal(launchTheme(choice).dark.primary, "#00e9ff");
+    assert.equal(launchTheme(choice).dark.secondary, "#ff1f13");
+  });
+
+  test("a custom colour can still match a preset ink", () => {
     const custom = choose({ light: "sand", primary: "custom", customPrimary: "#0d2350" });
     assert.equal(
       launchTheme(custom).splashTheme,

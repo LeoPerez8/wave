@@ -41,8 +41,13 @@ const colors = {
   dark: addLaunchSplashColors(existing(), "dark"),
 };
 
-const style = (name: string) =>
-  styles.resources.style?.find((candidate) => candidate.$.name === name);
+const stylesByName = new Map(styles.resources.style?.map((style) => [style.$.name, style]));
+const colorsByName = {
+  light: new Map(colors.light.resources.color?.map((color) => [color.$.name, color._])),
+  dark: new Map(colors.dark.resources.color?.map((color) => [color.$.name, color._])),
+};
+
+const style = (name: string) => stylesByName.get(name);
 
 /** A style's item, following its parent when it doesn't set it. */
 const item = (styleName: string, itemName: string): string | undefined => {
@@ -54,7 +59,7 @@ const item = (styleName: string, itemName: string): string | undefined => {
 /** A style's colour item resolved through one mode's colour resources. */
 const colour = (styleName: string, itemName: string, scheme: "light" | "dark") => {
   const name = /^@color\/(\w+)$/.exec(item(styleName, itemName) ?? "")?.[1];
-  return colors[scheme].resources.color?.find((candidate) => candidate.$.name === name)?._;
+  return name === undefined ? undefined : colorsByName[scheme].get(name);
 };
 
 /** The ground and the logo's colours a splash style shows in one mode. */
@@ -65,6 +70,20 @@ const shows = (styleName: string, scheme: "light" | "dark") => ({
 });
 
 describe("launch splash styles", () => {
+  test("palette styles share short colour names for identical light and dark tones", () => {
+    const pairs = new Set<string>();
+    for (const [name, light] of colorsByName.light) {
+      if (name === "splashscreen_background") continue;
+      const dark = colorsByName.dark.get(name);
+      assert.ok(dark, `${name} exists in both modes`);
+      const pair = `${light}/${dark}`;
+      assert.equal(pairs.has(pair), false, `duplicate tones ${pair}`);
+      pairs.add(pair);
+      assert.ok(name.length <= 6, name);
+    }
+    assert.deepEqual([...colorsByName.light.keys()], [...colorsByName.dark.keys()]);
+  });
+
   test("every splash theme Core picks shows its ground and logo colours in light and dark mode", () => {
     for (const theme of LAUNCH_SPLASH_THEMES) {
       assert.deepEqual(shows(theme.name, "light"), theme.light, `${theme.name} in light`);

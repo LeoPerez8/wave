@@ -6,7 +6,7 @@ import { withAndroidManifest, withDangerousMod, type ConfigPlugin } from "expo/c
 import { addLauncherAliases, launcherIconFiles } from "./launcherIcons.ts";
 
 /**
- * Prebuild: declares a launcher activity alias per primary × secondary and
+ * Prebuild: declares a launcher activity alias per pair of palette inks and
  * writes their adaptive icons into the generated Android project, so
  * Settings › Theme can switch Wave's home-screen icon (#101).
  */

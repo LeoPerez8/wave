@@ -68,7 +68,7 @@ describe("tapping the cover in Now Playing", () => {
     ]);
   });
 
-  test("taps going on quickly after a double-tap keep showing the heart, never pausing", () => {
+  test("taps going on quickly after a double-tap keep showing the star, never pausing", () => {
     const { taps, gestures, advance } = setup();
     taps.tap();
     advance(150);
@@ -110,12 +110,12 @@ describe("tapping the cover in Now Playing", () => {
 });
 
 describe("double-tapping the cover in Now Playing", () => {
-  test("a song not in Favorites is added, with the heart", () => {
+  test("a song not in Favorites is added, with the star", () => {
     assert.equal(coverDoubleTap({ starred: false, canStar: true }), "favorite");
   });
 
-  test("a song already in Favorites only shows the heart, and stays in Favorites", () => {
-    assert.equal(coverDoubleTap({ starred: true, canStar: true }), "heart");
+  test("a song already in Favorites only shows the star, and stays in Favorites", () => {
+    assert.equal(coverDoubleTap({ starred: true, canStar: true }), "star");
   });
 
   test("a song that can't be starred yet (a streamed song before the Library is read) does nothing", () => {

@@ -1,6 +1,6 @@
 {
   "name": "@wave/mobile",
-  "version": "0.26.2",
+  "version": "0.27.1-ti",
   "private": true,
   "main": "./index.ts",
   "scripts": {
@@ -16,7 +16,8 @@
     "bench:queue-covers": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON bench/queueCovers.ts",
     "bench:scan-batch": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON bench/scanBatch.ts",
     "bench:songs-list": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON bench/songsList.ts",
-    "bench:fast-again": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON bench/fastAgain.ts"
+    "bench:fast-again": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON bench/fastAgain.ts",
+    "measure:splash": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/measure-launch-splash.ts"
   },
   "dependencies": {
     "@expo-google-fonts/inter": "^0.4.2",

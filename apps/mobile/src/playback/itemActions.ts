@@ -9,6 +9,7 @@ import {
   playlistRemovals,
   unsearchedSongJob,
   type ActionSurface,
+  type FavoriteSource,
   type ItemAction,
   type ItemActionEntry,
   type MagicSeed,
@@ -78,6 +79,7 @@ import {
   type TargetEntry,
 } from "./actionTargets";
 import { addToQueue, playNext, queueDiscoverSongs } from "./actions";
+import { goToArtistPress } from "./goToArtistPress";
 import { startMagicQueue } from "./MagicQueue";
 
 /**
@@ -343,6 +345,8 @@ export function useItemActions(
 export interface PressContext {
   readonly target: ActionItems;
   readonly surface: ActionSurface;
+  /** A swipe runs a menu entry, but confirms its favorite as a swipe. */
+  readonly favoriteSource?: FavoriteSource | undefined;
   /** Runs before an entry's action: the menu closes, the selection ends. */
   readonly finish: () => void;
   readonly onSelect?: (() => void) | undefined;
@@ -369,6 +373,7 @@ const NO_IDS: readonly number[] = [];
 export const itemActionPress = ({
   target,
   surface,
+  favoriteSource = surface,
   finish,
   onSelect,
   here,
@@ -433,6 +438,7 @@ export const itemActionPress = ({
         },
         on,
         find,
+        favoriteSource,
       );
     });
 
@@ -487,14 +493,13 @@ export const itemActionPress = ({
         const { albumId } = entry;
         return run(() => openAlbum(albumId, links.album));
       }
-      case "goToArtist": {
-        beginTiming("goToArtist", "Artist");
-        // Several credited artists: a card to pick one from (`ArtistChoice`).
-        if ("streamedArtists" in entry)
-          return run(() => followStreamedArtistLink(entry.streamedArtists));
-        const { artists } = entry;
-        return run(() => followArtistLink(artists, links.artist));
-      }
+      case "goToArtist":
+        return goToArtistPress(entry, {
+          begin: () => beginTiming("goToArtist", "Artist"),
+          run,
+          follow: (artists) => followArtistLink(artists, links.artist),
+          followStreamed: followStreamedArtistLink,
+        });
       case "renamePlaylist":
         return run(() => playlist !== undefined && void renamePlaylistFlow(playlist));
       case "changeImage":

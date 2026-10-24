@@ -5,10 +5,12 @@ import {
   syncedStarDownloads,
   writeSyncedStars,
   ytTrackId,
+  type FavoriteSource,
 } from "@wave/core";
 
 import { persistedSetting } from "@/lib/persistedSetting";
 import type { NativeYtSong } from "@/native/waveYtMusic";
+import { showFavoriteToast } from "@/overlay/favoriteToast";
 import type { FindInLibrary } from "@/ytmusic/libraryFinder";
 import { cancelUnstarredDownloads, downloadStarredSongs } from "@/ytmusic/YtDownloads";
 
@@ -55,11 +57,15 @@ let syncing = Promise.resolve();
 /** The stars' downloads, asked for one star after another. */
 let downloads = Promise.resolve();
 
-/** Stars ([on]) or unstars [songs], the Library's and YT Music's, with their downloads. */
+/**
+ * Stars ([on]) or unstars [songs], the Library's and YT Music's, with their downloads.
+ * Menus, swipes and selection pass their source for a confirmation toast; Now Playing is silent.
+ */
 export const starSongs = (
   { tracks, ytSongs }: SongsToStar,
   on: boolean,
   find: FindInLibrary,
+  source: FavoriteSource,
 ): Promise<void> => {
   const library = new Map(tracks.map((song) => [song.id, song]));
   const streamed: NativeYtSong[] = [];
@@ -80,6 +86,7 @@ export const starSongs = (
   // Unstarring takes back the songs' pending favorites too, the ones the Library has by now
   // included, so none stars them later.
   const pending = setPendingFavorites((on ? streamed : ytSongs).map(pendingFavorite), on);
+  showFavoriteToast(source, on, library.size + new Set(streamed.map((song) => song.videoId)).size);
   // Downloads follow once the pending favorites are kept, so each download's landing finds its
   // own; in the order the stars were set, so a star taken straight back cancels what it asked.
   downloads = downloads
