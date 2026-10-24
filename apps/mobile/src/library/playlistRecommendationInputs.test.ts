@@ -15,26 +15,16 @@ type Store = Parameters<typeof observePlaylistRecommendationInputs>[0];
 /** Playlist inputs over a snapshot of [store], with [write] publishing a write as the app does. */
 const snapshotOf = (store: Store, between: Effect.Effect<void>) => {
   const changes = new Set<(change: LibraryChange) => void>();
-  const catalog = new Set<() => void>();
-  const source = observePlaylistRecommendationInputs(
-    store,
-    between,
-    (listener) => {
-      changes.add(listener);
-      return () => changes.delete(listener);
-    },
-    (listener) => {
-      catalog.add(listener);
-      return () => catalog.delete(listener);
-    },
-  );
+  const source = observePlaylistRecommendationInputs(store, between, (listener) => {
+    changes.add(listener);
+    return () => changes.delete(listener);
+  });
   return {
     ...source,
-    write: (kind: "catalog" | LibraryChange["kind"]) => {
-      if (kind === "catalog") for (const listener of catalog) listener();
-      else for (const listener of changes) listener({ kind });
+    write: (kind: LibraryChange["kind"]) => {
+      for (const listener of changes) listener({ kind });
     },
-    listeners: () => changes.size + catalog.size,
+    listeners: () => changes.size,
   };
 };
 
@@ -80,7 +70,7 @@ test("snapshot-backed input equals historical input, reads in bounded turns, and
       input.library,
       "the Library's tracks are derived once per snapshot",
     );
-    assert.equal(source.listeners(), 2);
+    assert.equal(source.listeners(), 1);
     source.dispose();
     assert.equal(source.listeners(), 0, "its write listeners are released with it");
   } finally {
@@ -88,60 +78,22 @@ test("snapshot-backed input equals historical input, reads in bounded turns, and
   }
 });
 
-test("a catalog write while suggestions read doesn't discard the read; the next ask reads it", async () => {
-  const { addCandidates } = await import("./db/candidateCatalog.ts");
+test("suggestion inputs never page the candidate catalog: the radios replace it", async () => {
   const fixture = await createFastAgainFixture();
   try {
     const store = await loadLibraryStore(root, fixture.db);
-    let catalogPasses = 0;
-    let songPasses = 0;
-    const entered = Promise.withResolvers<void>();
-    const release = Promise.withResolvers<void>();
-    let holding = false;
-    const counted: Store = {
+    let catalogPages = 0;
+    const counted = {
       ...store,
-      mixSongsPage: (after: number) => {
-        if (after === 0) songPasses++;
-        return store.mixSongsPage(after);
-      },
-      mixCatalogPage: (after) => {
-        if (after === 0) {
-          catalogPasses++;
-          holding = catalogPasses === 1;
-        }
+      mixCatalogPage: (after: number) => {
+        catalogPages++;
         return store.mixCatalogPage(after);
       },
     };
-    const between = Effect.promise(async () => {
-      if (!holding) return;
-      holding = false;
-      entered.resolve();
-      await release.promise;
-    });
-    const source = snapshotOf(counted, between);
-    const reading = Effect.runPromise(source.get(fixture.playlistId));
-    await entered.promise;
-    const song = {
-      videoId: "written-mid-read",
-      title: "Written mid-read",
-      artists: ["Someone"],
-      album: null,
-      albumId: null,
-      durationMs: 1,
-      artworkUrl: null,
-      explicit: false,
-    };
-    addCandidates(fixture.db, { seed: "Someone", songs: [song] }, 1);
-    source.write("catalog");
-    release.resolve();
-    const first = await reading;
-    assert.equal(catalogPasses, 1, "the read under way finished instead of starting over");
-    assert.ok(!first.catalog.some((entry) => entry.song.videoId === song.videoId));
-    const next = await Effect.runPromise(source.get(fixture.playlistId));
-    assert.equal(catalogPasses, 2);
-    assert.ok(next.catalog.some((entry) => entry.song.videoId === song.videoId));
-    assert.equal(songPasses, 1, "a catalog write leaves the Library as it was read");
-    assert.equal(next.library, first.library);
+    const source = snapshotOf(counted, Effect.void);
+    const input = await Effect.runPromise(source.get(fixture.playlistId));
+    assert.equal(catalogPages, 0);
+    assert.equal("catalog" in input, false);
     source.dispose();
   } finally {
     fixture.close();
@@ -180,95 +132,9 @@ test("a star reaches the next suggestions without paging the Library again", asy
   }
 });
 
-const streamTrack = (id: string) => ({
-  id,
-  source: "stream" as const,
-  videoId: id,
-  title: id,
-  artists: ["a"],
-  album: null,
-  albumId: null,
-  durationMs: 1,
-  artworkUrl: null,
-  explicit: false,
-  genre: null,
-  available: true,
-});
-
-test("a Dismiss whose refill is reading when a catalog write lands refills from that read", async () => {
-  const { playlistRecommendationSession } = await import("@wave/core");
-  const fixture = await createFastAgainFixture();
-  try {
-    const store = await loadLibraryStore(root, fixture.db);
-    let catalogPasses = 0;
-    let hold = false;
-    let holding = false;
-    const entered = Promise.withResolvers<void>();
-    const release = Promise.withResolvers<void>();
-    const counted: Store = {
-      ...store,
-      mixCatalogPage: (after) => {
-        if (after === 0) {
-          catalogPasses++;
-          holding = hold;
-        }
-        return store.mixCatalogPage(after);
-      },
-    };
-    const between = Effect.promise(async () => {
-      if (!holding) return;
-      holding = false;
-      entered.resolve();
-      await release.promise;
-    });
-    const source = snapshotOf(counted, between);
-    let n = 0;
-    const session = playlistRecommendationSession({
-      newId: () => `k${++n}`,
-      read: (signal) =>
-        Effect.runPromise(
-          source
-            .get(fixture.playlistId)
-            .pipe(
-              Effect.map((input) => ({ playlist: [], sources: { ...input, graph: null, now: 0 } })),
-            ),
-          { signal },
-        ),
-      rank: async (input) =>
-        ["a", "b", "c", "d", "e", "f"]
-          .filter((id) => !(input.sources.exclude ?? []).some((x) => x.id === id))
-          .map((id) => ({ track: streamTrack(id), score: 1 })),
-      dismiss: async () => {},
-    });
-    await session.renew();
-    const before = session.get();
-    // A harvest batch landed while the owner looked at the offers: the refill reads the catalog again.
-    source.write("catalog");
-    hold = true;
-    const acting = session.dismiss(before.slots[0]!.key);
-    await entered.promise;
-    source.write("catalog"); // another batch, while the refill's catalog is read
-    release.resolve();
-    await acting;
-    const after = session.get();
-    assert.equal(after.error, null);
-    assert.notEqual(after.slots[0], null);
-    assert.notEqual(after.slots[0]!.key, before.slots[0]!.key);
-    assert.equal(
-      catalogPasses,
-      2,
-      "the first visit and the refill; the batch mid-read restarted nothing",
-    );
-    source.dispose();
-  } finally {
-    fixture.close();
-  }
-});
-
 test("paged input preserves stream/missing membership, multi-genres and playlist feedback order", async () => {
   const { openTestDatabase, addTrack } = await import("./db/testDatabase.ts");
   const { createPlaylist, addToPlaylist } = await import("./db/playlists.ts");
-  const { addCandidates } = await import("./db/candidateCatalog.ts");
   const { dismissPlaylistRecommendation, selectPlaylistRecommendationInput } =
     await import("./db/playlistRecommendations.ts");
   const { eq, sql } = await import("drizzle-orm");
@@ -304,17 +170,16 @@ test("paged input preserves stream/missing membership, multi-genres and playlist
     1,
   ).playlistId;
   const other = createPlaylist(db, "Two", [{ source: "library", trackId: seed }], 1).playlistId;
-  addCandidates(
-    db,
+  const pages = [
     {
-      seed: "Radiohead",
+      id: `song:${seed}`,
+      artists: ["Radiohead"],
       songs: [
         { ...song, videoId: "local-video", title: "Edited download" },
         { ...song, videoId: "new", title: "New" },
       ],
     },
-    1,
-  );
+  ];
   const initial = selectPlaylistRecommendationInput(db, id);
   for (const key of ["z-last", "a-first"])
     dismissPlaylistRecommendation(
@@ -334,10 +199,15 @@ test("paged input preserves stream/missing membership, multi-genres and playlist
   const { songById: _rows, ...plain } = input;
   const historical = selectPlaylistRecommendationInput(db, id);
   assert.deepEqual(plain, historical);
+  // When each entry joined the playlist (the seed draw's weight), not when its song joined the Library.
+  assert.deepEqual(
+    input.playlist.map((track) => track.addedAt),
+    [1, 1, 1],
+  );
   for (const online of [true, false])
     assert.deepEqual(
-      playlistRecommendations(input.playlist, { ...input, graph: null, now: 0, online }),
-      playlistRecommendations(historical.playlist, { ...historical, graph: null, now: 0, online }),
+      playlistRecommendations(input.playlist, { ...input, pages, graph: null, online }),
+      playlistRecommendations(historical.playlist, { ...historical, pages, graph: null, online }),
     );
   const second = await Effect.runPromise(source.get(other));
   assert.equal(second.library, input.library);
@@ -392,4 +262,65 @@ test("playlists asking at once share one derivation of the Library's tracks", as
   } finally {
     fixture.close();
   }
+});
+
+test("cold suggestions use playlist seeds while Library and stars derive in the background", async (t) => {
+  const { sharePlaylistRecommendationInputs } = await import("./playlistRecommendationInputs.ts");
+  const fixture = await createFastAgainFixture();
+  t.after(() => fixture.close());
+  const store = await loadLibraryStore(root, fixture.db);
+  const source = sharePlaylistRecommendationInputs(
+    {
+      library: Effect.never,
+      favorites: Effect.never,
+      peek: () => ({ library: null, favorites: null }),
+      store: Effect.succeed(store),
+    },
+    Effect.void,
+  );
+  const input = await Effect.runPromise(
+    source.latest(fixture.playlistId).pipe(Effect.timeout(1000)),
+  );
+  const expected = Effect.runSync(store.playlistRecommendationInput(fixture.playlistId));
+  assert.deepEqual(input.playlist, expected.playlist);
+  assert.deepEqual(input.library, []);
+  assert.deepEqual(input.feedback, expected.feedback);
+});
+
+test("a cold visit warms reusable Library tracks as soon as its background inputs finish", async (t) => {
+  const { sharePlaylistRecommendationInputs, readRecommendationFavorites } =
+    await import("./playlistRecommendationInputs.ts");
+  const { readMixInputs } = await import("../home/mixInputs.ts");
+  const fixture = await createFastAgainFixture();
+  t.after(() => fixture.close());
+  const store = await loadLibraryStore(root, fixture.db);
+  const library = Effect.runSync(readMixInputs(store, Effect.void, fixture.now));
+  const favorites = Effect.runSync(readRecommendationFavorites(store, Effect.void));
+  let completed: typeof library | null = null;
+  let finish!: () => void;
+  const started = Promise.withResolvers<void>();
+  const source = sharePlaylistRecommendationInputs(
+    {
+      library: Effect.callback<typeof library>((resume) => {
+        finish = () => {
+          completed = library;
+          resume(Effect.succeed(library));
+        };
+        started.resolve();
+      }),
+      favorites: Effect.never,
+      peek: () => ({ library: completed, favorites }),
+      store: Effect.succeed(store),
+    },
+    Effect.void,
+  );
+  assert.deepEqual((await Effect.runPromise(source.latest(fixture.playlistId))).library, []);
+  await started.promise;
+  finish();
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  const next = await Effect.runPromise(source.latest(fixture.playlistId));
+  assert.deepEqual(
+    next.library,
+    Effect.runSync(store.playlistRecommendationInput(fixture.playlistId)).library,
+  );
 });

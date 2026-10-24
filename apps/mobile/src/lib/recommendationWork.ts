@@ -3,10 +3,10 @@ import * as Effect from "effect/Effect";
 import { AppState } from "react-native";
 import { WaveAppLog } from "../native/waveAppLog";
 import { createRecommendationTurn } from "./recommendationTurn.ts";
-import { checkRecommendationDeadlines } from "./recommendationTimeout.ts";
+import { checkRadioDeadlines } from "./radioDeadline.ts";
 
 AppState.addEventListener("change", (state) => {
-  if (state === "active") checkRecommendationDeadlines();
+  if (state === "active") checkRadioDeadlines();
 });
 
 /** Shared by all recommendation jobs; a cheap page or four-ms slice need not wait. */

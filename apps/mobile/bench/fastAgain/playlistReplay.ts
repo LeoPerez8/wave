@@ -75,15 +75,22 @@ export const createPlaylistReplay = async (
       )
     : null;
   const catalogWrites = new Set<() => void>();
-  const source = sourceModule?.observePlaylistRecommendationInputs(
-    store,
-    turn,
-    bus.onLibraryChange,
-    (listener) => {
-      catalogWrites.add(listener);
-      return () => catalogWrites.delete(listener);
-    },
-  );
+  const observe = sourceModule?.observePlaylistRecommendationInputs;
+  // Older trees also counted catalog writes, as a fourth argument; since #647 the inputs read no catalog.
+  const source =
+    observe === undefined
+      ? undefined
+      : observe.length >= 4
+        ? (observe as unknown as (...args: unknown[]) => ReturnType<NonNullable<typeof observe>>)(
+            store,
+            turn,
+            bus.onLibraryChange,
+            (listener: () => void) => {
+              catalogWrites.add(listener);
+              return () => catalogWrites.delete(listener);
+            },
+          )
+        : observe(store, turn, bus.onLibraryChange);
   const visitModule = modern
     ? await loadWorktreeModule<typeof import("../../src/library/playlistRecommendationVisit.ts")>(
         root,
@@ -158,7 +165,7 @@ export const createPlaylistReplay = async (
     rank: async (
       input: Pick<
         import("@wave/core").PlaylistRecommendationSources,
-        "library" | "catalog" | "favoriteVideos" | "feedback"
+        "library" | "favoriteVideos" | "feedback"
       > & { readonly playlist: readonly import("@wave/core").PlaylistRecommendationTrack[] },
     ) => {
       work.ranks++;

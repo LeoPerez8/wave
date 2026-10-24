@@ -179,6 +179,8 @@ export const makeLiveTaste = <R>({
   return {
     /** Same cache and derivation lock, with a caller-supplied shared Library input. */
     profileUsing,
+    /** Last derived profile; no derivation or waiting. */
+    peek: () => known,
     /**
      * The profile, derived the first time it's asked for, then as signals
      * have kept it; null when the history can't be read.

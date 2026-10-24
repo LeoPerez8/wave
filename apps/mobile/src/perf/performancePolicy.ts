@@ -193,17 +193,6 @@ export const WHOLE_LIBRARY: Record<string, Exception> = {
     reason: "A visible selection/menu resolves streamed items for user actions.",
     capabilities: ["ytmusic/libraryFinder.ts#useLibraryFinder"],
   },
-  "playback/MagicQueue.ts#startMagicQueue": {
-    reason: "Explicit Magic Queue start builds its candidate Library and artist map.",
-    capabilities: ["library/LibraryStore.ts#listArtists"],
-  },
-
-  "playback/magicQueueRadio.ts#inLibraryOf": {
-    reason:
-      "Background radio batch indexes its supplied recommendation Library snapshot in bounded steps using the shared frame checkpoint; it never reads the Library again.",
-    capabilities: ["../../../packages/core/src/ytMusic.ts#libraryFinderSteps"],
-  },
-
   "playback/rowSwipe.ts#runTrackSwipe": {
     reason:
       "A completed swipe resolves its one requested action; it does not subscribe while rows render.",
@@ -406,6 +395,20 @@ export const OPENING_REQUESTS: Record<string, Exception> = {
     reason:
       "The empty Library Add folder button opens a folder picker; choosing a folder starts the scan and background photo downloads.",
   },
+  "library/playlistSuggestionRadios.ts#playlistSuggestionRadios": {
+    kind: "opening",
+    reason:
+      "A visible settled playlist visit reads its drawn song radios. Execution-time Android connectivity is passed to the shared readers, so offline visits use cached pages. The shared setup does not read until this effect runs; each search and radio read has an eight-second limit.",
+    deferred: {
+      settlement: "screen",
+      connectivity: "android",
+      tests: [
+        "apps/mobile/src/library/playlistRecommendationVisit.test.ts",
+        "apps/mobile/src/playback/songRadioReaders.test.ts",
+        "apps/mobile/src/playback/songRadioSession.test.ts",
+      ],
+    },
+  },
   "ytmusic/artistSection.ts#useDeferredArtistSection": {
     kind: "opening",
     reason:
@@ -528,6 +531,11 @@ export const TASTE_SOURCE_SEEDS = [
   "tasteRevision",
 ].map((name) => `library/LibraryStore.ts#${name}`);
 export const TASTE_SOURCES: Record<string, Exception> = {
+  "home/mixBuildLibrary.ts#readMixBuildLibrary": {
+    reason:
+      "Cold Discover builds seek song and artist seed metadata in 128-row pages after Home settlement, yielding between pages. Stored play totals supply weights; only returned radio songs need indexed SQL recording matches. No history walk or derived matcher is awaited. Covered by home/mixBuildLibrary.test.ts.",
+    capabilities: ["library/LibraryStore.ts#mixSongsPage"],
+  },
   "playback/tasteDerivation.ts#tasteLibraryRows": {
     reason:
       "Due picks/shared taste seek at most 128 songs and identity-only artists per turn; sorting/mapping of the copy uses canonical runSteps. Due Home is screen-settled; taste-source stamps discard writes. Covered by tasteDerivation.test.ts and magicQueueJob.test.ts.",

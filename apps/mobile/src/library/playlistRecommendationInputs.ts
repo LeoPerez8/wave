@@ -1,7 +1,8 @@
 /**
  * A playlist's suggestion inputs (docs/spec.md, "Recommendation snapshot"):
- * the Library, the candidate catalog and the stars come from the shared
- * recommendation snapshot; only the playlist's own entries and feedback are
+ * the Library and the stars come from the shared recommendation snapshot;
+ * the radios come apart (`playlistSuggestionRadios.ts`). Only the
+ * playlist's own entries and feedback are
  * read per playlist. Membership and learning always belong to the requested
  * playlist.
  */
@@ -11,7 +12,6 @@ import {
   RECOMMENDATION_SNAPSHOT,
   snapshotVersionsAfter,
   sortSteps,
-  type CatalogSong,
   type LibraryChange,
   type PlaylistRecommendationTrack,
   type SnapshotVersions,
@@ -23,7 +23,6 @@ import {
   storedRecommendationTrack,
 } from "./playlistRecommendationTracks.ts";
 import { readMixInputs } from "../home/mixInputs.ts";
-import { readMixCatalog } from "../home/readMixCatalog.ts";
 import { sharedRead } from "../lib/sharedRead.ts";
 import { snapshotRead } from "../lib/snapshotRead.ts";
 import { runSteps } from "../lib/stepped.ts";
@@ -145,30 +144,36 @@ const libraryTracks = (
 
 /**
  * Suggestion inputs over the snapshot's parts: [library] (Home's mix
- * indexes), [catalog] and [favorites], and the [store] that reads a
+ * indexes) and [favorites], and the [store] that reads a
  * playlist's own rows. The Library's tracks are derived once per snapshot
  * read and shared by every playlist; a write never discards an ask under way.
  */
 export const sharePlaylistRecommendationInputs = <R>(
   {
     library,
-    catalog,
     favorites,
     store,
+    peek,
   }: {
     readonly library: Effect.Effect<
       { readonly songs: readonly RecommendationSong[]; readonly artists: readonly ArtistRow[] },
       unknown,
       R
     >;
-    readonly catalog: Effect.Effect<readonly CatalogSong[], unknown, R>;
     readonly favorites: Effect.Effect<RecommendationFavorites, unknown, R>;
     readonly store: Effect.Effect<RecommendationReads, never, R>;
+    readonly peek?: () => {
+      readonly library: {
+        readonly songs: readonly RecommendationSong[];
+        readonly artists: readonly ArtistRow[];
+      } | null;
+      readonly favorites: RecommendationFavorites | null;
+    };
   },
   between: Effect.Effect<void>,
 ) => {
   // The latest derivation, kept while the snapshot hands back the same parts;
-  // playlists asking while it's derived wait for it.
+  // background readers keep the last completed tracks while a new mapping runs.
   let derived:
     | {
         readonly library: object;
@@ -176,112 +181,145 @@ export const sharePlaylistRecommendationInputs = <R>(
         readonly tracks: Effect.Effect<Effect.Success<ReturnType<typeof libraryTracks>>, unknown>;
       }
     | undefined;
+  let completed: Effect.Success<ReturnType<typeof libraryTracks>> | null = null;
+  const emptyStars: RecommendationFavorites = { flags: [], pending: new Set() };
+  const emptyTracks = {
+    library: [],
+    librarySongs: [],
+    byId: new Map<number, PlaylistRecommendationTrack>(),
+    songById: new Map<string, SongRow>(),
+  };
+  const tracksFor = (
+    indexes: {
+      readonly songs: readonly RecommendationSong[];
+      readonly artists: readonly ArtistRow[];
+    },
+    stars: RecommendationFavorites,
+  ) => {
+    if (derived?.library !== indexes || derived.favorites !== stars) {
+      derived = {
+        library: indexes,
+        favorites: stars,
+        tracks: sharedRead(
+          libraryTracks(indexes, stars, between).pipe(
+            Effect.tap((tracks) =>
+              Effect.sync(() => {
+                if (derived?.library === indexes && derived.favorites === stars) completed = tracks;
+              }),
+            ),
+          ),
+        ).get,
+      };
+    }
+    return derived.tracks;
+  };
+  const warm = Effect.gen(function* () {
+    const last = peek?.();
+    if (last?.library != null) yield* tracksFor(last.library, last.favorites ?? emptyStars);
+    yield* Effect.all(
+      [
+        Effect.gen(function* () {
+          const indexes = yield* library;
+          yield* tracksFor(indexes, peek?.().favorites ?? emptyStars);
+        }),
+        Effect.gen(function* () {
+          const stars = yield* favorites;
+          const indexes = peek?.().library;
+          if (indexes != null) yield* tracksFor(indexes, stars);
+        }),
+      ],
+      { concurrency: "unbounded" },
+    );
+  });
+  const read = (id: number, background: boolean) =>
+    Effect.gen(function* () {
+      const indexes = background ? null : yield* library;
+      const stars = background ? (peek?.().favorites ?? emptyStars) : yield* favorites;
+      let selected = completed ?? emptyTracks;
+      if (indexes === null) yield* Effect.forkDetach(Effect.ignore(warm));
+      else selected = yield* tracksFor(indexes, stars);
+      const { byId, ...tracks } = selected;
+      const reads = yield* store;
+      const raw = yield* collect(
+        (after) => reads.recommendationEntriesPage(id, after, background),
+        (row) => [row.orderKey, row.syncId] as const,
+        between,
+        null as readonly [string, string] | null,
+      );
+      const ordered = raw;
+      const playlist: PlaylistRecommendationTrack[] = [];
+      // Each entry carries when it joined this playlist, which the seed draw leans to.
+      yield* runSteps(
+        mapSteps(ordered, (row) => {
+          if (row.song === null) {
+            const track =
+              row.local?.track ?? (row.trackId === null ? undefined : byId.get(row.trackId));
+            if (track !== undefined) playlist.push({ ...track, addedAt: row.addedAt });
+            return;
+          }
+          const entry = readPlaylistEntrySong(row.song);
+          if (entry === null) return;
+          playlist.push({ ...storedRecommendationTrack(entry, row.id), addedAt: row.addedAt });
+        }),
+        between,
+      );
+      const feedbackRows = yield* collect(
+        (after) => reads.recommendationFeedbackPage(id, after),
+        (row) => row.offerKey,
+        between,
+        null as string | null,
+      );
+      const feedbackOrdered = feedbackRows;
+      const feedback = yield* runSteps(
+        mapSteps(feedbackOrdered, ({ track, value }) => ({ track, value })),
+        between,
+      );
+      return { ...tracks, favoriteVideos: stars.pending, playlist, feedback };
+    });
   return {
-    get: (id: number) =>
-      Effect.gen(function* () {
-        const indexes = yield* library;
-        const stars = yield* favorites;
-        const songs = yield* catalog;
-        let latest = derived;
-        if (latest?.library !== indexes || latest.favorites !== stars) {
-          latest = {
-            library: indexes,
-            favorites: stars,
-            tracks: sharedRead(libraryTracks(indexes, stars, between)).get,
-          };
-          derived = latest;
-        }
-        const { byId, ...tracks } = yield* latest.tracks;
-        const reads = yield* store;
-        const raw = yield* collect(
-          (after) => reads.recommendationEntriesPage(id, after),
-          (row) => [row.orderKey, row.syncId] as const,
-          between,
-          null as readonly [string, string] | null,
-        );
-        const ordered = raw;
-        const playlist: PlaylistRecommendationTrack[] = [];
-        yield* runSteps(
-          mapSteps(ordered, (row) => {
-            if (row.song === null) {
-              const track = row.trackId === null ? undefined : byId.get(row.trackId);
-              if (track !== undefined) playlist.push(track);
-              return;
-            }
-            const entry = readPlaylistEntrySong(row.song);
-            if (entry === null) return;
-            playlist.push(storedRecommendationTrack(entry, row.id));
-          }),
-          between,
-        );
-        const feedbackRows = yield* collect(
-          (after) => reads.recommendationFeedbackPage(id, after),
-          (row) => row.offerKey,
-          between,
-          null as string | null,
-        );
-        const feedbackOrdered = feedbackRows;
-        const feedback = yield* runSteps(
-          mapSteps(feedbackOrdered, ({ track, value }) => ({ track, value })),
-          between,
-        );
-        return { ...tracks, favoriteVideos: stars.pending, catalog: songs, playlist, feedback };
-      }),
+    /** Explicit full reads for desktop replays; app recommendations use latest. */
+    get: (id: number) => read(id, false),
+    /** Recommendations take the last completed indexes, including on a cold start. */
+    latest: (id: number) => read(id, true),
   };
 };
 
 /**
  * The same inputs over a recommendation snapshot of their own, read from
- * [store] and counting [subscribe]'s Library changes and [catalog]'s writes
- * as the app's snapshot does (`home/recommendationSnapshot.ts`): for desktop
- * replays and tests, which can't load the app's. Released with dispose.
+ * [store] and counting [subscribe]'s Library changes as the app's snapshot
+ * does (`home/recommendationSnapshot.ts`): for desktop replays and tests,
+ * which can't load the app's. Released with dispose.
  */
 export const observePlaylistRecommendationInputs = (
   store: Parameters<typeof readMixInputs>[0] &
-    Parameters<typeof readMixCatalog>[0] &
     Parameters<typeof readRecommendationFavorites>[0] &
     RecommendationReads,
   between: Effect.Effect<void>,
   subscribe: (listener: (change: LibraryChange) => void) => () => void,
-  catalog: (listener: () => void) => () => void,
   now = Date.now,
 ) => {
   let versions: SnapshotVersions = {};
   const stop = subscribe((change) => {
     versions = snapshotVersionsAfter(versions, change.kind);
   });
-  const stopCatalog = catalog(() => {
-    versions = snapshotVersionsAfter(versions, "catalog");
-  });
   const options = { versions: () => versions, now };
   const library = snapshotRead(
     Effect.suspend(() => readMixInputs(store, between, now())),
     { ...options, part: RECOMMENDATION_SNAPSHOT.library },
   );
-  const songs = snapshotRead(readMixCatalog(store, between), {
-    ...options,
-    part: RECOMMENDATION_SNAPSHOT.catalog,
-  });
   const favorites = snapshotRead(readRecommendationFavorites(store, between), {
     ...options,
     part: RECOMMENDATION_SNAPSHOT.favorites,
   });
   const source = sharePlaylistRecommendationInputs(
-    {
-      library: library.get,
-      catalog: songs.get,
-      favorites: favorites.get,
-      store: Effect.succeed(store),
-    },
+    { library: library.get, favorites: favorites.get, store: Effect.succeed(store) },
     between,
   );
   return {
     ...source,
     dispose: () => {
       stop();
-      stopCatalog();
       library.dispose();
-      songs.dispose();
       favorites.dispose();
     },
   };

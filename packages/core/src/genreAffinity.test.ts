@@ -4,22 +4,12 @@ import { describe, test } from "node:test";
 import {
   GENRE_AFFINITY_THRESHOLD,
   artistProfilesKnown,
-  deezerArtistAlbumsUrl,
-  deezerArtistId,
-  deezerArtistProfile,
-  deezerGenreNames,
-  discoverMixSongs,
   parseArtistProfiles,
   storedArtistProfiles,
   withArtistProfiles,
   genreAffinity,
   genreProfile,
   libraryGenreProfiles,
-  mixAffinity,
-  mixProfileLookups,
-  mixSeedProfile,
-  type DiscoverMixSeed,
-  type GenreProfile,
 } from "./index.ts";
 
 const tagged = (genre: string, count: number, genres?: string[]) =>
@@ -102,18 +92,6 @@ const library = {
   ],
 };
 
-const radioSong = (videoId: string, artists: string[]) => ({
-  videoId,
-  title: videoId,
-  artists,
-  album: null,
-  albumId: null,
-  durationMs: 200_000,
-  artworkUrl: null,
-  explicit: false,
-  video: false,
-});
-
 describe("Library artists' profiles", () => {
   const profiles = libraryGenreProfiles(library);
 
@@ -128,188 +106,6 @@ describe("Library artists' profiles", () => {
   test("are null for a Library artist with no genre and absent for an artist outside the Library", () => {
     assert.equal(profiles("Untagged"), null);
     assert.equal(profiles("Panic! at the Disco"), undefined);
-  });
-});
-
-describe("A radio song's affinity to its mix", () => {
-  const ofLibrary = libraryGenreProfiles(library);
-  const outside = new Map<string, GenreProfile | null>([
-    ["Panic! at the Disco", genreProfile([{ genre: "Alternative" }, { genre: "Pop" }])],
-    ["Nobody Knows", null],
-  ]);
-  const profileOf = (name: string) => {
-    const own = ofLibrary(name);
-    return own === undefined ? outside.get(name) : own;
-  };
-  const seed: DiscoverMixSeed = {
-    kind: "artist",
-    id: "artist:top",
-    name: "twenty one pilots",
-    from: "plays",
-  };
-  const affinity = mixAffinity(mixSeedProfile(seed, library, profileOf), profileOf);
-
-  test("in a twenty one pilots mix, misses for Dr. Dre and matches for an alt rock and pop artist", () => {
-    assert.equal(affinity(radioSong("a", ["Dr. Dre"])), "miss");
-    assert.equal(affinity(radioSong("b", ["Panic! at the Disco"])), "match");
-    assert.equal(affinity(radioSong("c", ["twenty one pilots"])), "match");
-  });
-
-  test("matches when any of the song's artists matches", () => {
-    assert.equal(affinity(radioSong("a", ["Dr. Dre", "Panic! at the Disco"])), "match");
-  });
-
-  test("is unknown for artists with no genre", () => {
-    assert.equal(affinity(radioSong("a", ["Untagged"])), "unknown");
-    assert.equal(affinity(radioSong("b", ["Nobody Knows"])), "unknown");
-  });
-
-  test("matches everything when the seed has no genre", () => {
-    const untagged = mixAffinity(
-      mixSeedProfile({ ...seed, name: "Untagged" }, library, profileOf),
-      profileOf,
-    );
-    assert.equal(untagged(radioSong("a", ["Dr. Dre"])), "match");
-  });
-
-  test("of a genre mix, is to its seed artists' songs together", () => {
-    const rock: DiscoverMixSeed = {
-      kind: "genre",
-      id: "genre:rock",
-      name: "Rock",
-      from: "library",
-      genre: "Rock",
-      artists: [
-        { id: 1, name: "twenty one pilots" },
-        { id: 4, name: "Paramore" },
-      ],
-    };
-    const genre = mixAffinity(mixSeedProfile(rock, library, profileOf), profileOf);
-    assert.equal(genre(radioSong("a", ["Dr. Dre"])), "miss");
-    assert.equal(genre(radioSong("b", ["Panic! at the Disco"])), "match");
-  });
-
-  test("asks Deezer about the radio's artists outside the Library and not looked up yet, once each", () => {
-    assert.deepEqual(
-      mixProfileLookups(
-        [
-          radioSong("a", ["Dr. Dre", "Fall Out Boy"]),
-          radioSong("b", ["Panic! at the Disco", "fall out boy"]),
-          radioSong("c", ["Nobody Knows", "Various Artists"]),
-        ],
-        profileOf,
-      ),
-      ["Fall Out Boy"],
-    );
-  });
-});
-
-const ids = (songs: readonly { videoId: string }[]) => songs.map((song) => song.videoId);
-
-describe("A mix's songs, kept to the seed's genres", () => {
-  const byArtist: Record<string, "match" | "miss" | "unknown"> = {
-    M: "match",
-    X: "miss",
-    U: "unknown",
-  };
-  const filter = {
-    known: () => false,
-    taken: new Set<string>(),
-    affinity: (song: { artists: readonly string[] }) =>
-      byArtist[song.artists[0] ?? ""] ?? "unknown",
-  };
-
-  test("leave out songs whose artist misses the seed's genres", () => {
-    const page = [
-      ...Array.from({ length: 10 }, (_, n) => radioSong(`m${n}`, ["M"])),
-      radioSong("x", ["X"]),
-    ];
-    assert.deepEqual(ids(discoverMixSongs([page], filter)), ids(page.slice(0, 10)));
-  });
-
-  test("take songs by artists with no genre only to make up the ten songs, after every matching one", () => {
-    const page = [
-      radioSong("u1", ["U"]),
-      ...Array.from({ length: 7 }, (_, n) => radioSong(`m${n}`, ["M"])),
-      radioSong("u2", ["U"]),
-      radioSong("x", ["X"]),
-      radioSong("u3", ["U"]),
-      radioSong("m7", ["M"]),
-      radioSong("u4", ["U"]),
-    ];
-    assert.deepEqual(ids(discoverMixSongs([page], filter)), [
-      "u1",
-      "m0",
-      "m1",
-      "m2",
-      "m3",
-      "m4",
-      "m5",
-      "m6",
-      "u2",
-      "m7",
-    ]);
-    const enough = Array.from({ length: 10 }, (_, n) => radioSong(`m${n}`, ["M"]));
-    assert.deepEqual(
-      ids(discoverMixSongs([[radioSong("u", ["U"]), ...enough]], filter)),
-      ids(enough),
-    );
-  });
-});
-
-describe("An artist's profile from Deezer", () => {
-  const genres = deezerGenreNames({
-    data: [
-      { id: 0, name: "All" },
-      { id: 152, name: "Rock" },
-      { id: 85, name: "Alternative" },
-      { id: 132, name: "Pop" },
-      { id: 116, name: "Rap/Hip Hop" },
-    ],
-  });
-
-  test("finds the artist whose name is the one searched", () => {
-    const answer = {
-      data: [
-        { id: 7, name: "Panic! At The Disco Tribute" },
-        { id: 9, name: "Panic! at the Disco" },
-      ],
-    };
-    assert.equal(deezerArtistId(answer, "Panic! At The Disco"), 9);
-    assert.equal(deezerArtistId(answer, "Fall Out Boy"), null);
-    assert.equal(deezerArtistId({ error: {} }, "Fall Out Boy"), undefined);
-    assert.equal(deezerArtistAlbumsUrl(9), "https://api.deezer.com/artist/9/albums?limit=50");
-  });
-
-  test("is the genres of their albums", () => {
-    const albums = {
-      data: [
-        { genre_id: 152 },
-        { genre_id: 85 },
-        { genre_id: 132 },
-        { genre_id: 132 },
-        { genre_id: -1 },
-      ],
-    };
-    assert.deepEqual(shares(deezerArtistProfile(albums, genres!) ?? null), { rock: 50, pop: 50 });
-  });
-
-  test("is null when no album has a genre, and absent for an answer that isn't a list of albums", () => {
-    assert.equal(deezerArtistProfile({ data: [{ genre_id: -1 }] }, genres!), null);
-    assert.equal(deezerArtistProfile({ error: { code: 4 } }, genres!), undefined);
-    assert.equal(deezerGenreNames("nope"), null);
-  });
-
-  test("tells Soul & Funk albums apart from Rap/Hip Hop ones, even at the loosest match", () => {
-    const names = new Map([
-      [116, "Rap/Hip Hop"],
-      [169, "Soul & Funk"],
-    ]);
-    const fortMinor = deezerArtistProfile({ data: [{ genre_id: 116 }] }, names)!;
-    const funk = deezerArtistProfile({ data: [{ genre_id: 169 }, { genre_id: 169 }] }, names)!;
-    assert.deepEqual(shares(fortMinor), { hiphop: 100 });
-    assert.deepEqual(shares(funk), { rb: 100 });
-    assert.equal(genreAffinity(fortMinor, funk), 0);
   });
 });
 

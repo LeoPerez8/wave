@@ -7,27 +7,27 @@ import { recommendationTurnEffect } from "@/lib/recommendationWork";
 import { onLibraryChange, onStarred, onUnstarred, onYtSongSignal } from "@/library/libraryChanges";
 import { LibraryStore, type SongRow, type ArtistRow } from "@/library/LibraryStore";
 
-import { deriveTaste, deriveTasteFromLibrary, type TasteLibrary } from "./tasteDerivation";
+import { deriveTaste, deriveTasteFromLibrary } from "./tasteDerivation";
 import { makeLiveTaste } from "./liveTaste";
 import { magicSongsOf } from "./magicSongs";
 import { onPlayEnded } from "./PlayHistory";
 
 /**
  * The taste profile (docs/spec.md, Taste profile): what the owner likes,
- * which the Magic Queue and Home's Magic Queue section weigh. Core derives it
+ * which the radio recommendations weigh. Core derives it
  * from the play history, favorites and downloads (`tasteProfile`), so it
  * keeps no state of its own; this module derives it once per launch, the
  * first time it's asked for, and keeps it up to date as signals come from
  * playback anywhere in the app (`makeLiveTaste`): Library plays ending,
  * stars and unstars, YT Music stars and downloads.
  */
-const derive = (snapshotTaken: (history: TasteHistory) => void, library?: TasteLibrary) =>
+const derive = (snapshotTaken: (history: TasteHistory) => void) =>
   Effect.gen(function* () {
     return yield* deriveTaste(
       yield* LibraryStore,
       recommendationTurnEffect,
       Date.now(),
-      library,
+      undefined,
       snapshotTaken,
     );
   });
@@ -37,10 +37,6 @@ const live = makeLiveTaste({
   songsOf: magicSongsOf,
   between: recommendationTurnEffect,
 });
-
-/** Home reuses its due-build input without creating another live profile or rereading songs. */
-export const tasteProfileForLibrary = (library: TasteLibrary) =>
-  live.profileUsing((snapshotTaken) => derive(snapshotTaken, library));
 
 /**
  * The owner's taste profile, derived from the history the first time it's
@@ -63,6 +59,9 @@ export const tasteProfileForRecommendation = (library: {
       );
     }),
   );
+
+/** Last derived taste, available while a refresh runs. */
+export const latestTasteProfile = live.peek;
 
 /** Keeps the taste profile up to date as signals come (`makeLiveTaste`). */
 export const layer = Layer.effectDiscard(

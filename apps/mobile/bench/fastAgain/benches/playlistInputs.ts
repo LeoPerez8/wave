@@ -20,9 +20,9 @@ export const bench: FastAgainBench = {
         let input = await replay.input();
         if (graph === "null") {
           const project = async () => {
-            const { playlist, library, librarySongs, catalog, favoriteVideos, feedback } =
+            const { playlist, library, librarySongs, favoriteVideos, feedback } =
               await replay.input();
-            return { playlist, library, librarySongs, catalog, favoriteVideos, feedback };
+            return { playlist, library, librarySongs, favoriteVideos, feedback };
           };
           results.push(
             await measurePlaylistOperation(

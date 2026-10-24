@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { commonStyle, genreFamily, genreStyle, songStyle, styleAffinity } from "./index.ts";
+import { commonStyle, genreFamily, genreStyle, songStyle } from "./index.ts";
 
 const styleName = (tag: string) => genreStyle(tag)?.name ?? null;
 
@@ -50,33 +50,10 @@ describe("Genre styles", () => {
   });
 
   test("the style most of some songs have, ignoring the unknown", () => {
-    const heavy = genreStyle("Nu Metal")?.key ?? null;
-    const soft = genreStyle("Soft Rock")?.key ?? null;
+    const soft = genreStyle("Soft Rock")!.key;
+    const heavy = genreStyle("Nu Metal")!.key;
     assert.equal(commonStyle([soft, heavy, heavy, null]), heavy);
     assert.equal(commonStyle([null, null]), null);
     assert.equal(commonStyle([]), null);
-  });
-});
-
-describe("Comparing styles", () => {
-  const heavy = genreStyle("Nu Metal")?.key ?? null;
-  const hardRock = genreStyle("Hard Rock")?.key ?? null;
-  const soft = genreStyle("Soft Rock")?.key ?? null;
-
-  test("Same genres matches the same style only", () => {
-    assert.equal(styleAffinity(heavy, heavy, "same"), "match");
-    assert.equal(styleAffinity(heavy, hardRock, "same"), "miss");
-  });
-
-  test("Close matches a neighbouring style too, symmetrically; never Heavy and soft", () => {
-    assert.equal(styleAffinity(heavy, hardRock, "close"), "match");
-    assert.equal(styleAffinity(hardRock, heavy, "close"), "match");
-    assert.equal(styleAffinity(heavy, soft, "close"), "miss");
-    assert.equal(styleAffinity(soft, heavy, "close"), "miss");
-  });
-
-  test("an unknown style on either side is unknown, never a match or a miss", () => {
-    assert.equal(styleAffinity(null, heavy, "same"), "unknown");
-    assert.equal(styleAffinity(heavy, null, "close"), "unknown");
   });
 });

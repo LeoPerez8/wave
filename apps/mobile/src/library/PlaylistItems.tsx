@@ -18,6 +18,7 @@ import type { ActionItems, TrackItem } from "@/playback/actionTargets";
 import { useSongSwipe, useUnsearchedSwipe } from "@/playback/rowSwipe";
 import { selectableRow } from "@/selection/selectableRow";
 import { useListSelection } from "@/selection/useListSelection";
+import { useYtMusicEnabled } from "@/settings/ytMusic";
 import { useThemeColor } from "@/theme/useThemeColor";
 import { showToast } from "@/overlay/toast";
 import { YtSongRow } from "@/ytmusic/YtSongRow";
@@ -375,7 +376,9 @@ export function PlaylistItems({ playlistId, items, header, empty }: Props) {
     },
     [bottomInset],
   );
-  const recommending = items !== undefined && found === null && !listSelection.selecting;
+  // Suggestions come from YouTube Music radios: with YT Music off there are none.
+  const ytMusic = useYtMusicEnabled();
+  const recommending = ytMusic && items !== undefined && found === null && !listSelection.selecting;
   useLayoutEffect(() => {
     dragRef.current = listDrag;
   });

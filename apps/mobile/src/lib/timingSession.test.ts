@@ -287,7 +287,7 @@ test("work that started and ended within the tap window and offline state are re
   let offline = false;
   const { session, at, lines } = setup(() => ({ background, offline }));
   const id = session.begin("push", "/artist/12");
-  background = ["import", "3 downloads", "mix harvest", "Magic Queue batch"];
+  background = ["import", "3 downloads", "Magic Queue batch"];
   offline = true;
   session.backgroundChanged();
   background = [];
@@ -299,7 +299,7 @@ test("work that started and ended within the tap window and offline state are re
   session.end(id);
   assert.match(
     lines[0]!,
-    /meanwhile: scan, import, 3 downloads, mix harvest, Magic Queue batch; offline; longest JS block 0 ms$/,
+    /meanwhile: scan, import, 3 downloads, Magic Queue batch; offline; longest JS block 0 ms$/,
   );
 });
 

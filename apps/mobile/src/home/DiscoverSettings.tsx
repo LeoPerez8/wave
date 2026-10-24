@@ -34,8 +34,8 @@ const TITLE = homeSectionTitle("discover");
 /**
  * Discover's level card: three sliders for the Magic Queue, Artist mixes
  * and Genre mixes alike, applied as they move. New music (each step's name
- * and share, "Balanced · 60% new"), Genre faithfulness (from the seed's own
- * genres to neighbouring ones) and Popularity (from hits to deep cuts).
+ * and share, "Balanced · 60% new"), Genre faithfulness (the penalty for known
+ * unrelated genres) and Popularity (from hits to deep cuts).
  * Live: it reads the values as they change, so a screen reader's adjust
  * and a drag both show at once.
  */
@@ -71,6 +71,10 @@ function DiscoverCard() {
             setDiscoverSliders({ ...discoverSlidersNow(), faithfulness: sliderStep(value) })
           }
         />
+        <Text className="px-3 pb-2 font-sans text-footnote text-secondary">
+          Same genres excludes known unrelated genres. Close, Balanced and Neighbours lower them
+          less at each step. Wander ignores genre. Unknown genres always stay.
+        </Text>
         <SettingsSlider
           compact
           label="Popularity"

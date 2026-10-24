@@ -30,7 +30,7 @@ const noteCandidates = (page: CatalogPage): Effect.Effect<void, never, LibrarySt
 /**
  * Adds the songs a page of [seed]'s radio played to the catalog now, done
  * when it's written: for a read the catalog is read again right after (the
- * harvest, a Magic Queue's refill). Never fails: a write that can't be made
+ * mix build, a Magic Queue's refill). Never fails: a write that can't be made
  * is left out.
  */
 export const noteRadioNow = (
@@ -53,8 +53,7 @@ const noteArtistPage = (page: NativeYtArtistPage) =>
 
 /**
  * The artist page [browseId] alone, its top songs fed to the catalog
- * (`noteArtistPage`): how an artist section and the harvest's similar
- * artists read a page.
+ * (`noteArtistPage`): how artist sections read a page.
  */
 export const readArtistPage = (browseId: string) =>
   Effect.gen(function* () {

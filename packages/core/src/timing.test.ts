@@ -65,11 +65,11 @@ describe("all tap kinds", () => {
         ...tap,
         responseMs: 412,
         firstFrameMs: 655,
-        background: ["scan", "import", "3 downloads", "mix harvest", "Magic Queue batch"],
+        background: ["scan", "import", "3 downloads", "Magic Queue batch"],
         offline: true,
         longestJsBlockMs: 380,
       }),
-      "Slow push to /library/artist/12 from /library/albums: response 412 ms, first frame 655 ms, settled 1.3 s (budget 100 ms response / 150 ms first frame); meanwhile: scan, import, 3 downloads, mix harvest, Magic Queue batch; offline; longest JS block 380 ms",
+      "Slow push to /library/artist/12 from /library/albums: response 412 ms, first frame 655 ms, settled 1.3 s (budget 100 ms response / 150 ms first frame); meanwhile: scan, import, 3 downloads, Magic Queue batch; offline; longest JS block 380 ms",
     );
   });
 });

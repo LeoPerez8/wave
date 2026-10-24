@@ -19,7 +19,7 @@ export const followPlaylistRecommendations = (
     };
     readonly start: (signal: AbortSignal) => Promise<void>;
     readonly subscribe: (listener: (change: LibraryChange) => void) => () => void;
-    /** Catalog/similar-artist writes arrive in harvest runs; they share the burst throttle. */
+    /** Background Library writes share the burst throttle. */
     readonly graphSources?: (listener: () => void) => () => void;
     readonly now?: () => number;
     readonly wait?: (ms: number, signal: AbortSignal) => Promise<void>;
@@ -43,7 +43,7 @@ export const followPlaylistRecommendations = (
   const request = () => {
     if (disposed || !stale || !options.sight.visible() || cancel !== undefined) return;
     // A failed read keeps its retry line through background writes. An explicit edit,
-    // return to the page or Try Again can retry it; a harvest mustn't hide the failure.
+    // return to the page or Try Again can retry it; a background write mustn't hide the failure.
     if (burst && session.get().error === "load") return;
     cancel = serial.add(`recommendations ${++requests}`, async (signal) => {
       let renewed = false;

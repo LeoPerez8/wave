@@ -13,7 +13,6 @@ import {
   storedRecommendationTrack,
 } from "../playlistRecommendationTracks.ts";
 import type { LibraryDatabase } from "./database.ts";
-import { selectCandidateCatalog } from "./candidateCatalog.ts";
 import { addToPlaylist, selectPlaylist, selectPlaylistEntries } from "./playlists.ts";
 import { selectSongGenres, songGenresOf, trackQuery } from "./tracks.ts";
 import * as schema from "./schema.ts";
@@ -121,11 +120,20 @@ const selectPlaylistRecommendationTracks = (
       genres: genres.get(song.id),
     });
   const library = librarySongs.map(local);
-  const playlist = entries.map((entry): PlaylistRecommendationTrack =>
-    entry.source === "library"
-      ? local(entry.track)
-      : storedRecommendationTrack(entry, entry.itemId),
+  const added = new Map(
+    db
+      .select({ id: schema.playlistItems.id, addedAt: schema.playlistItems.addedAt })
+      .from(schema.playlistItems)
+      .where(eq(schema.playlistItems.playlistId, playlistId))
+      .all()
+      .map((row) => [row.id, row.addedAt]),
   );
+  const playlist = entries.map((entry): PlaylistRecommendationTrack => ({
+    ...(entry.source === "library"
+      ? local(entry.track)
+      : storedRecommendationTrack(entry, entry.itemId)),
+    ...(added.has(entry.itemId) ? { addedAt: added.get(entry.itemId)! } : {}),
+  }));
   return { playlist, library, librarySongs };
 };
 
@@ -142,7 +150,6 @@ export const selectPlaylistRecommendationInput = (db: LibraryDatabase, playlistI
     .all();
   return {
     ...tracks,
-    catalog: selectCandidateCatalog(db),
     favoriteVideos,
     feedback,
   };

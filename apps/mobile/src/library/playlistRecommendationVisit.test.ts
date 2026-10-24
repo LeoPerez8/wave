@@ -368,7 +368,7 @@ test("graph source writes coalesce under the burst throttle and are released on 
   await gate.flush();
   assert.equal(reads, 1);
   clock = 500;
-  // A harvest saves several catalog/similar pages in a row.
+  // Radio reads save several catalog pages in a row.
   for (let i = 0; i < 6; i++) for (const f of graphListeners) f();
   await gate.flush();
   assert.equal(waits.length, 1);

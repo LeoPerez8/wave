@@ -168,8 +168,7 @@ export function* artistMixSeedsSteps(
  * Every artist Artist mixes' seeds may be picked from, in their order: the
  * owner's played artists, then, while plays give fewer than four, the
  * Library's (of its 20 with the most songs, the most songs first), then,
- * while those still give fewer, the similar artists. What the harvest keeps
- * the candidate catalog full for, so any day's pick has songs.
+ * while those still give fewer, the similar artists.
  */
 export const artistMixSeedPool = (pools: ArtistMixPools): DiscoverMixSeed[] => {
   const seen = new Set<string>();

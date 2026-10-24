@@ -1,6 +1,6 @@
 import {
+  playlistOfferFits,
   playlistRecommendations,
-  playlistRecordingMatch,
   type PlaylistRecommendationSources,
   type PlaylistRecommendationTrack,
   type PlaylistRecommendation,
@@ -172,8 +172,9 @@ export const playlistRecommendationSession = (options: {
       const taken = new Set<PlaylistRecommendationTrack>();
       for (const hole of holes) {
         if (slots[hole] !== null) continue;
-        const occupied = playlistRecordingMatch([...taken]);
-        const next = ranked.find((candidate) => occupied(candidate.track) === null);
+        // The held offers count towards the artist cap, as do the replacements taken so far.
+        const fits = playlistOfferFits([...held, ...taken]);
+        const next = ranked.find((candidate) => fits(candidate.track));
         if (next === undefined) break;
         taken.add(next.track);
         slots[hole] = slot(next.track);
@@ -290,8 +291,8 @@ export const playlistRecommendationSession = (options: {
         for (let index = 0; index < slots.length; index++) {
           if (slots[index] !== null) continue;
           const held = slots.flatMap((x) => (x === null ? [] : [x.track]));
-          const occupied = playlistRecordingMatch(held);
-          const next = ranked.find((candidate) => occupied(candidate.track) === null);
+          const fits = playlistOfferFits(held);
+          const next = ranked.find((candidate) => fits(candidate.track));
           if (next !== undefined) slots[index] = slot(next.track);
         }
         publish({ slots });

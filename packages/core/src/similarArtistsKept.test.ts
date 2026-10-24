@@ -11,7 +11,7 @@ import {
 
 const similar = (name: string) => ({ name, browseId: `UC-${name}` });
 
-describe("The similar artists the harvest read, kept for offline builds", () => {
+describe("Stored similar artists for offline builds", () => {
   test("are found by the Library artist's name, case aside; unknown for one never read", () => {
     const kept = withSimilarArtistsKept(NO_SIMILAR_ARTISTS_KEPT, "Sleep Token", [
       similar("Bad Omens"),

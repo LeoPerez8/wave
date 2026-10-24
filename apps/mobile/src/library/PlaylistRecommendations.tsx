@@ -6,7 +6,7 @@ import {
   type PlaylistRecommendationSlot,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { AccessibilityInfo, Text, View } from "react-native";
 import Animated, {
   FadeIn,
@@ -20,23 +20,23 @@ import { ControlledTrackRowSkeleton, SkeletonGroup } from "@/catalog/Skeletons";
 import { TitledSection } from "@/catalog/TitledSection";
 import { IconButton } from "@/components/IconButton";
 import { TextButton } from "@/components/TextButton";
-import { artistGraphNow } from "@/home/artistGraphNow";
 import { lookedUpProfileOf } from "@/home/artistGenres";
 import { useScreenSight } from "@/lib/screenSight";
 import { settledTurnEffect } from "@/lib/backgroundWork";
 import { recommendationTurn, recommendationTurnEffect } from "@/lib/recommendationWork";
 import { runSteps } from "@/lib/stepped";
-import { onArtistGraphSourcesChanged } from "@/home/graphSources";
 import { afterPaint } from "@/lib/afterPaint";
 import { appLog } from "@/log/appLog";
 import { followPlaylistRecommendations } from "./playlistRecommendationVisit";
-import { playlistRecommendationInput } from "./playlistRecommendationSource";
+import {
+  playlistRecommendationGraph,
+  playlistRecommendationInput,
+} from "./playlistRecommendationSource";
+import { playlistSuggestionRadios, playlistSuggestionSeeds } from "./playlistSuggestionRadios";
 import { makeExternalStore } from "@/lib/externalStore";
-import { withRecommendationDeadline } from "@/lib/recommendationTimeout";
 import { CROSSFADE_MS } from "@/motion/Crossfade";
 import { WaveNative } from "@/native/waveNative";
 import { playTrackIds, playYtSongs } from "@/playback/actions";
-import { useYtMusicEnabled } from "@/settings/ytMusic";
 import { DiscoverSongRow } from "@/ytmusic/DiscoverSongRow";
 
 import { LibraryStore, type PlaylistEntryRow, type SongRow } from "./LibraryStore";
@@ -52,10 +52,16 @@ const arrive = FadeIn.duration(CROSSFADE_MS).reduceMotion(ReduceMotion.Never);
 /** Add and Dismiss: the controls each offer row ends with. */
 const CONTROLS = 2;
 
+/** Fewer eligible suggestions left than this, and a refill reads the radios' next pages. */
+const LOW = 10;
+
 /** Heard by TalkBack without moving its focus. */
 const announce = (message: string): void => AccessibilityInfo.announceForAccessibility(message);
 
-/** One controller per playlist visit; offer keys protect against stale/repeated actions. */
+/**
+ * One controller per playlist visit; offer keys protect against stale/repeated
+ * actions. Shown only with YT Music on: its suggestions come from radios.
+ */
 export function PlaylistRecommendations({
   playlistId,
   items,
@@ -63,10 +69,8 @@ export function PlaylistRecommendations({
   playlistId: number;
   items: readonly PlaylistEntryRow[];
 }) {
-  const enabled = useYtMusicEnabled();
   const sight = useScreenSight();
   const [announcingAcceptance] = useState(() => makeExternalStore(false));
-  const [enabledNow] = useState(() => makeExternalStore(enabled));
   // Keep held offers readable if another offer's refill no longer finds their Library row.
   const [libraryRows] = useState(() => makeExternalStore<ReadonlyMap<string, SongRow>>(new Map()));
   const libraryById = useSyncExternalStore(libraryRows.subscribe, libraryRows.get);
@@ -74,6 +78,9 @@ export function PlaylistRecommendations({
   const [session] = useState(() => {
     // The first renewal is the one opening the playlist asked for; its line counts from here.
     let openedAt: number | undefined = performance.now();
+    // This visit's radio readers: each radio's live first page is read once a visit.
+    const visitId = `playlist:${playlistId}:${Date.now().toString(36)}-${++nextOffer}`;
+    let remaining = Number.POSITIVE_INFINITY;
     return playlistRecommendationSession({
       newId: () =>
         `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${++nextOffer}`,
@@ -81,21 +88,27 @@ export function PlaylistRecommendations({
         appRuntime.runPromise(
           Effect.gen(function* () {
             const input = yield* playlistRecommendationInput(playlistId);
-            const graph = yield* artistGraphNow;
+            const graph = yield* playlistRecommendationGraph;
             // Source rows are retained for the five visible offers only, never a copy of the Library.
             latestRows.set(input.songById);
+            const seeds = playlistSuggestionSeeds(playlistId, input.playlist);
+            const online = WaveNative.online();
+            const pages = yield* playlistSuggestionRadios(visitId, seeds, {
+              online,
+              low: remaining < LOW,
+            });
             return {
               playlist: input.playlist,
               sources: {
                 ...input,
+                pages,
+                seeds,
                 graph,
-                now: Date.now(),
                 profileOf: lookedUpProfileOf,
-                online: WaveNative.online(),
-                ytMusicEnabled: enabledNow.get(),
+                online,
               },
             };
-          }).pipe(withRecommendationDeadline),
+          }),
           { signal },
         ),
       rank: async (input, signal) => {
@@ -104,7 +117,7 @@ export function PlaylistRecommendations({
             runSteps(
               playlistRecommendationsSteps(input.playlist, input.sources),
               recommendationTurnEffect,
-            ).pipe(withRecommendationDeadline),
+            ),
             { signal },
           )
           .catch((error: unknown) => {
@@ -112,6 +125,7 @@ export function PlaylistRecommendations({
             latestRows.set(new Map());
             throw error;
           });
+        remaining = ranked.length;
         const held = new Map<string, SongRow>();
         for (const offer of ranked) {
           const row = latestRows.get().get(offer.track.id);
@@ -165,27 +179,18 @@ export function PlaylistRecommendations({
   // What the busy slot says while its placeholder shows ("Adding Song").
   const [busyLabel, setBusyLabel] = useState("Loading another recommendation");
   // The visit follows the write's cause (#599): source changes revalidate even when playlist
-  // IDs stay the same, once the playlist is in sight and settled.
-  const visit = useRef<ReturnType<typeof followPlaylistRecommendations> | null>(null);
+  // IDs stay the same, once the playlist is in sight and settled. Catalog writes (its own
+  // radios' among them) don't: the suggestions read their radios, not the catalog.
   useEffect(() => {
     const following = followPlaylistRecommendations(session, {
       playlistId,
       sight,
       start: (signal) => appRuntime.runPromise(settledTurnEffect, { signal }),
       subscribe: onLibraryChange,
-      graphSources: onArtistGraphSourcesChanged,
       ignore: (change) => change.kind === "playlists" && announcingAcceptance.get(),
     });
-    visit.current = following;
-    return () => {
-      following.dispose();
-      visit.current = null;
-    };
-  }, [session, playlistId, sight, announcingAcceptance, visit]);
-  useEffect(() => {
-    enabledNow.set(enabled);
-    visit.current?.invalidate();
-  }, [enabled, enabledNow, visit]);
+    return () => following.dispose();
+  }, [session, playlistId, sight, announcingAcceptance]);
   useEffect(() => {
     libraryRows.update((previous) => {
       const held = new Map<string, SongRow>();
@@ -325,6 +330,7 @@ export function PlaylistRecommendations({
           ? {
               label: "Try Again",
               onPress: () => {
+                // Asking afresh draws other seed songs.
                 void session.renew();
               },
             }

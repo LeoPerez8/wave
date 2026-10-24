@@ -16,7 +16,6 @@ import {
   type DiscoverMixSeed,
   type DiscoverRadioSong,
 } from "./discoverMixes.ts";
-import type { MixAffinity } from "./genreAffinity.ts";
 
 /** A radio song as a mix keeps it. */
 type MixRadioSong = DiscoverRadioSong & { readonly albumId: string | null };
@@ -25,8 +24,6 @@ type MixRadioSong = DiscoverRadioSong & { readonly albumId: string | null };
 export interface DiscoverMixRead<S extends MixRadioSong> {
   readonly seed: DiscoverMixSeed;
   readonly radio: readonly S[];
-  /** Whether a song suits the seed's genres (`mixAffinity`); absent: every song does. */
-  readonly affinity?: (song: S) => MixAffinity;
   /**
    * The songs its familiar share looks at first, in order (the familiar
    * songs its radios played); absent: [radio]. A mix built from the catalog
@@ -63,12 +60,11 @@ export function* discoverMixesOfRadiosSteps<S extends MixRadioSong, L extends Di
   const taken = new Set<string>();
   const takenFamiliar = { tracks: new Set<number>(), videos: new Set<string>() };
   const mixes: DiscoverMix[] = [];
-  for (const { seed, radio, affinity, familiar: played = radio } of reads) {
+  for (const { seed, radio, familiar: played = radio } of reads) {
     const kept = yield* discoverMixSongsSteps([radio], {
       known: known.known,
       taken,
       ...(avoid === undefined ? {} : { avoid }),
-      ...(affinity === undefined ? {} : { affinity }),
     });
     const familiar = yield* discoverMixFamiliarPoolSteps(seed, {
       radio: played,

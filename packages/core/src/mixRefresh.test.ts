@@ -272,7 +272,7 @@ describe("A refresh of Genre mixes", () => {
       ["Rock", ["Nothing But Thieves", "Muse"]],
     ]);
     const avoid = mixRefreshAvoid(mixesShown([], shown, on(18, 9)), on(18, 10));
-    assert.deepEqual(seedArtists(genreMixSeeds(songs, always(0), avoid)), [
+    assert.deepEqual(seedArtists(genreMixSeeds(songs, avoid)), [
       "Metal: Architects, Loathe, Bad Omens",
       "Rock: Nothing But Thieves, Muse",
     ]);
@@ -289,13 +289,13 @@ describe("A refresh of Genre mixes", () => {
     ] as const;
     const songs = libraryOf(families);
     assert.deepEqual(
-      genreMixSeeds(songs, always(0)).map((seed) => seed.name),
+      genreMixSeeds(songs).map((seed) => seed.name),
       ["Metal", "Rock", "Hip-Hop", "Electronic"],
     );
     const shown = genreMixes(on(18, 9), families.slice(0, 4));
     const avoid = mixRefreshAvoid(mixesShown([], shown, on(18, 9)), on(18, 10));
     assert.deepEqual(
-      genreMixSeeds(songs, always(0), avoid).map((seed) => seed.name),
+      genreMixSeeds(songs, avoid).map((seed) => seed.name),
       ["Metal", "Rock", "Jazz", "Folk"],
     );
   });
