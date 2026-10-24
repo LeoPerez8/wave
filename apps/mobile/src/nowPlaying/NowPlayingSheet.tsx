@@ -6,7 +6,15 @@ import {
   IconShare3,
 } from "@tabler/icons-react-native";
 import type { ComponentType, ReactNode } from "react";
-import { Activity, memo, useEffect, useLayoutEffect, useState, useSyncExternalStore } from "react";
+import {
+  Activity,
+  memo,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import Animated, { useAnimatedStyle, type DerivedValue } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -113,16 +121,18 @@ type Item = NonNullable<PlaybackState["item"]>;
 const QueuePane = memo(function QueuePane({
   item,
   ground,
+  onShowPlayer,
 }: {
   item: Item;
   ground: DerivedValue<string[]>;
+  onShowPlayer: () => void;
 }) {
   // Where the pane sits on the sheet: the list's sticky bar draws the ground there.
   const [top, setTop] = useState(0);
   return (
     <View className="flex-1" onLayout={(event) => setTop(event.nativeEvent.layout.y)}>
       <DismissArea>
-        <QueueHeader item={item} />
+        <QueueHeader item={item} onShowPlayer={onShowPlayer} />
       </DismissArea>
       <UpNextList bottomInset={CELL * 2} ground={ground} paneTop={top} />
     </View>
@@ -204,6 +214,7 @@ export function NowPlayingSheet() {
   const gradient = useNowPlayingGradient(palette);
   const ground = useBackgroundColors(gradient, shown);
   const [view, setView] = useState<NowPlayingView>("player");
+  const showPlayer = useCallback(() => setView("player"), []);
   // The Queue, once shown, stays mounted while another view shows (`QueuePane`).
   const [queueWarm, setQueueWarm] = useState(false);
   useLayoutEffect(() => {
@@ -304,7 +315,7 @@ export function NowPlayingSheet() {
           <>
             {queueWarm && (
               <Activity mode={view === "queue" ? "visible" : "hidden"} name="Queue">
-                <QueuePane item={item} ground={ground} />
+                <QueuePane item={item} ground={ground} onShowPlayer={showPlayer} />
               </Activity>
             )}
             {view === "lyrics" && (
@@ -313,6 +324,7 @@ export function NowPlayingSheet() {
                 nonDTrackId={nonDTrackId}
                 item={item}
                 palette={palette}
+                onShowPlayer={showPlayer}
               />
             )}
             <Activity mode={view === "player" ? "visible" : "hidden"} name="Player">

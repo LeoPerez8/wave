@@ -4,7 +4,6 @@ import {
   currentEntry,
   menuLayout,
   parseTrackId,
-  readUnsearchedTrackId,
   type DownloadOrigin,
   type UnsearchedSong,
   playlistDownloadOrigin,
@@ -145,30 +144,19 @@ export const openTrackActionsById = (id: number, options: MenuOptions = {}): voi
 };
 
 /**
- * Opens the long-press menu for the queue's track [trackId] (a Library song,
- * a YT Music song or an unsearched one) as the song's row elsewhere offers it.
- */
-export const openQueueTrackActions = (trackId: string, options: MenuOptions = {}): void => {
-  const ref = parseTrackId(trackId);
-  if (ref?.kind === "library") openTrackActionsById(ref.id, options);
-  else if (ref?.kind === "yt") {
-    const track = queueTracks.get().get(trackId);
-    const song = track === undefined ? null : queuedYtSong(track);
-    if (song !== null) openYtSongActions(song, options);
-  } else {
-    const song = readUnsearchedTrackId(trackId);
-    if (song !== null) openUnsearchedActions(song, options);
-  }
-};
-
-/**
  * Opens the long-press menu for the song playing (the mini player's long
  * press): its own menu as a song's row offers it, without Play Next and Add to
  * Queue (Core's `itemActions`, `ytSongActions`). Nothing opens with no song on.
  */
 export const openPlayingActions = (): void => {
   const trackId = currentEntry(queueState.get())?.trackId ?? null;
-  if (trackId !== null) openQueueTrackActions(trackId, { playing: true });
+  const ref = trackId === null ? null : parseTrackId(trackId);
+  if (ref?.kind === "library") openTrackActionsById(ref.id, { playing: true });
+  else if (trackId !== null && ref?.kind === "yt") {
+    const track = queueTracks.get().get(trackId);
+    const song = track === undefined ? null : queuedYtSong(track);
+    if (song !== null) openYtSongActions(song, { playing: true });
+  }
 };
 
 /**

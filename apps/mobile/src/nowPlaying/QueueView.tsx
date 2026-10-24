@@ -47,7 +47,6 @@ import {
   removeQueueEntry,
   toggleShuffle,
 } from "@/playback/actions";
-import { openQueueTrackActions } from "@/playback/ActionsMenu";
 import { useQueue } from "@/playback/hooks";
 import {
   retryMagicBatch,
@@ -63,6 +62,7 @@ import { useThemeColor } from "@/theme/useThemeColor";
 
 import { Background } from "./Background";
 import { useQueueTracks } from "./hooks";
+import { openQueueSongActions } from "./QueueSongMenu";
 import { useShuffleControl } from "./ShuffleMenu";
 import { TrackHeader } from "./TrackHeader";
 import { ROW, useUpNextDrag, useUpNextRowDrag, type UpNextDragRows } from "./upNextDrag";
@@ -123,10 +123,16 @@ const REPEAT_LABEL: Record<RepeatMode, string> = {
  * The top of the Queue view, pinned over its list: what's playing (small).
  * Sits in the sheet's drag-to-dismiss area.
  */
-export function QueueHeader({ item }: { item: NonNullable<PlaybackState["item"]> }) {
+export function QueueHeader({
+  item,
+  onShowPlayer,
+}: {
+  item: NonNullable<PlaybackState["item"]>;
+  onShowPlayer: () => void;
+}) {
   return (
     <View>
-      <TrackHeader item={item} />
+      <TrackHeader item={item} onShowPlayer={onShowPlayer} />
       <Hairline />
     </View>
   );
@@ -277,14 +283,16 @@ const UpNextRow = memo(function UpNextRow({
         <Press
           accessibilityRole="button"
           accessibilityLabel={`${title}, ${track?.artist ?? ""}${downloaded ? ", downloaded" : ""}`}
-          accessibilityHint="Plays this song now"
+          accessibilityHint="Plays this song now. Long press for song actions"
           accessibilityActions={[
+            { name: "longpress", label: "Song actions" },
             { name: "remove", label: "Remove from Up Next" },
             ...(index > 0 ? [{ name: "moveUp", label: "Move up" }] : []),
             ...(index < count - 1 ? [{ name: "moveDown", label: "Move down" }] : []),
           ]}
           onAccessibilityAction={(event) => {
             const action = event.nativeEvent.actionName;
+            if (action === "longpress") openQueueSongActions(entry.trackId);
             if (action === "remove") removeQueueEntry(key);
             if (action === "moveUp")
               void moveQueueEntry(upNextMove(queueState.get(), key, index - 1));
@@ -292,6 +300,7 @@ const UpNextRow = memo(function UpNextRow({
               void moveQueueEntry(upNextMove(queueState.get(), key, index + 1));
           }}
           onPress={() => playQueueEntry(key)}
+          onLongPress={() => openQueueSongActions(entry.trackId)}
           depth={0.015}
           className="flex-1 flex-row items-center self-stretch"
           style={{ gap: CELL * 1.5 }}
@@ -341,9 +350,13 @@ const HistoryRow = memo(function HistoryRow({ entry, track, downloaded }: Histor
     <Press
       accessibilityRole="button"
       accessibilityLabel={`${title}, ${track?.artist ?? ""}${downloaded ? ", downloaded" : ""}`}
-      accessibilityHint="Plays this song again"
+      accessibilityHint="Plays this song again. Long press for song actions"
+      accessibilityActions={[{ name: "longpress", label: "Song actions" }]}
+      onAccessibilityAction={(event) => {
+        if (event.nativeEvent.actionName === "longpress") openQueueSongActions(entry.trackId);
+      }}
       onPress={() => playQueueEntry(entry.key)}
-      onLongPress={() => openQueueTrackActions(entry.trackId)}
+      onLongPress={() => openQueueSongActions(entry.trackId)}
       depth={0.015}
       className="flex-row items-center"
       style={{ height: ROW, gap: CELL * 1.5 }}
@@ -391,8 +404,8 @@ const barOffset = (history: number): number => (history === 0 ? 0 : SECTION_HEAD
  *
  * History rows play again on a tap, which gives the entries after them back
  * to Up Next. Up Next: tap a row to play it, X to remove it, and drag its
- * handle to move it. Near the list's top or bottom edge a drag scrolls the
- * list.
+ * handle to move it. Near either edge a drag scrolls the list. A long press
+ * on any row opens its song menu.
  *
  * A drag runs on the UI thread (`upNextDrag.ts`): the lifted row follows the
  * finger and the others step aside with no React render per movement or drop
