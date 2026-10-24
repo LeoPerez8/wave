@@ -128,4 +128,32 @@ describe("a snapshot read", () => {
     await assert.rejects(waiting);
     await assert.rejects(Effect.runPromise(catalog.get));
   });
+
+  test("dispose cancels a read under way and the one queued after it, releasing both of their waiters", async () => {
+    const gate = gatedRead();
+    const writes = sources();
+    const catalog = snapshotRead(gate.read, {
+      part: RECOMMENDATION_SNAPSHOT.catalog,
+      versions: writes.versions,
+    });
+    const mixes = Effect.runPromise(catalog.get);
+    await turn();
+    writes.write("catalog");
+    const radio = Effect.runPromise(catalog.get);
+    await turn();
+    catalog.dispose();
+    const settled = await Promise.race([
+      Promise.allSettled([mixes, radio]),
+      turn()
+        .then(turn)
+        .then(() => "still waiting" as const),
+    ]);
+    assert.notEqual(settled, "still waiting", "dispose releases every waiter");
+    assert.deepEqual(
+      (settled as PromiseSettledResult<number>[]).map(({ status }) => status),
+      ["rejected", "rejected"],
+    );
+    assert.deepEqual(gate.aborted, [1], "the read under way is cancelled");
+    assert.deepEqual(gate.started, [1], "the queued read never starts");
+  });
 });

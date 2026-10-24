@@ -71,7 +71,7 @@ import type { SongRow } from "@/library/LibraryStore";
 import { appRuntime } from "@/library/runtime";
 import { useLibraryQuery } from "@/library/sharedQueries";
 import { showToast } from "@/overlay/toast";
-import { tasteProfileNow } from "@/playback/TasteProfile";
+import { tasteProfileForRecommendation } from "@/playback/TasteProfile";
 import { useDontPlayExplicit } from "@/settings/dontPlayExplicit";
 import { useYtMusicEnabled } from "@/settings/ytMusic";
 
@@ -84,7 +84,7 @@ import {
   type MixSectionId,
 } from "./discoverMixLevel";
 import { recommendationSnapshot } from "./recommendationSnapshot";
-import { buildHomeMixes } from "./homeMixBuild";
+import { buildHomeMixes, withSnapshotTaste } from "./homeMixBuild";
 import { harvestSoon, onHarvested, setPickedSeeds } from "./mixHarvest";
 import { refreshKnownVideos, useKnownVideos, type MixIndexes } from "./mixKnown";
 import { noteMixesShown } from "./mixPreDownload";
@@ -183,13 +183,15 @@ interface ReaderMemo {
 
 /** Read once for both rows, including the taste and Library genre profiles. */
 const mixBuildInputs = Effect.gen(function* () {
-  const snapshot = yield* recommendationSnapshot.get;
-  const taste = yield* tasteProfileNow;
+  const snapshot = yield* withSnapshotTaste(
+    recommendationSnapshot.get,
+    tasteProfileForRecommendation,
+  );
   const profiles = yield* runSteps(
     libraryMixProfilesSteps(snapshot.library),
     recommendationTurnEffect,
   );
-  return { ...snapshot, taste, profiles, now: Date.now() };
+  return { ...snapshot, profiles, now: Date.now() };
 });
 type MixBuildInputs = Effect.Success<typeof mixBuildInputs>;
 

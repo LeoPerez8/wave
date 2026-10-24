@@ -70,10 +70,13 @@ export const shareRecommendationSnapshot = <L, R>({
     graph: graphPart.get,
     /** Every part, for a recommendation that reads them all once. */
     get: Effect.gen(function* () {
+      const indexes = yield* libraryPart.get;
+      // The catalog the graph was derived from, so a write between two catalog asks can't split them.
+      const derived = yield* graphPart.derived;
       const read: RecommendationSnapshot<L> = {
-        library: yield* libraryPart.get,
-        catalog: yield* catalogPart.get,
-        graph: yield* graphPart.get,
+        library: indexes,
+        catalog: derived.catalog ?? (yield* catalogPart.get),
+        graph: derived.graph,
       };
       return read;
     }),

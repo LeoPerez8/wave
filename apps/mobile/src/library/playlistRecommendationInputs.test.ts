@@ -372,3 +372,24 @@ test("recommendation pages use indexed seeks at nonzero cursors and stay bounded
     fixture.close();
   }
 });
+
+test("playlists asking at once share one derivation of the Library's tracks", async () => {
+  const fixture = await createFastAgainFixture();
+  try {
+    const store = await loadLibraryStore(root, fixture.db);
+    const between = Effect.promise(() => new Promise<void>((resolve) => setImmediate(resolve)));
+    const source = snapshotOf(store, between);
+    const [first, second] = await Promise.all([
+      Effect.runPromise(source.get(fixture.playlistId)),
+      Effect.runPromise(source.get(fixture.playlistId)),
+    ]);
+    assert.ok(
+      second.library === first.library,
+      "the second playlist waits for the first's derivation",
+    );
+    assert.ok(second.songById === first.songById);
+    source.dispose();
+  } finally {
+    fixture.close();
+  }
+});

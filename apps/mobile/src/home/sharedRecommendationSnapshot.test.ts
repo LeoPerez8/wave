@@ -155,4 +155,37 @@ describe("the shared recommendation snapshot", () => {
     assert.deepEqual(reads, { library: 1, catalog: 2, graphPlays: 2, graphCatalog: 0 });
     snapshot.dispose();
   });
+
+  test("a harvest batch written while the catalog is read leaves one get's catalog and graph from the same read", async () => {
+    let versions: SnapshotVersions = {};
+    let catalogReads = 0;
+    const store: ArtistGraphReads = {
+      graphCatalogPage: () => Effect.succeed({ rows: [], next: null }),
+      graphRadioPage: () => Effect.succeed({ rows: [], next: null }),
+      graphSimilarPage: () => Effect.succeed({ rows: [], next: null }),
+      graphPlayPage: () => Effect.succeed({ rows: [], next: null }),
+    };
+    const snapshot = shareRecommendationSnapshot({
+      library: Effect.succeed({}),
+      catalog: Effect.sync(() => {
+        catalogReads++;
+        if (catalogReads > 1) return [song("t1", "Tricky", "Massive Attack")];
+        versions = snapshotVersionsAfter(versions, "catalog");
+        return [song("p1", "Portishead", "Massive Attack")];
+      }),
+      graph: { store: Effect.succeed(store), start: Effect.void, between: Effect.void },
+      versions: () => versions,
+    });
+    const neighbours = (read: Effect.Success<typeof snapshot.get>) => ({
+      catalog: read.catalog.map((entry) => entry.song.artists[0]),
+      graph: artistNeighbourhood(read.graph, ["Massive Attack"]).map(({ name }) => name),
+    });
+    const mixes = await Effect.runPromise(snapshot.get);
+    assert.deepEqual(neighbours(mixes), { catalog: ["Portishead"], graph: ["Portishead"] });
+    assert.equal(catalogReads, 1, "the catalog is paged once for both");
+    const next = await Effect.runPromise(snapshot.get);
+    assert.deepEqual(neighbours(next), { catalog: ["Tricky"], graph: ["Tricky"] });
+    assert.equal(catalogReads, 2, "the ask after the batch reads it");
+    snapshot.dispose();
+  });
 });

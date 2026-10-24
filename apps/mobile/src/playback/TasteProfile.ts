@@ -1,4 +1,4 @@
-import { ytTrackId, type TasteHistory, type TasteProfile } from "@wave/core";
+import { ytTrackId, type TasteHistory } from "@wave/core";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
@@ -42,7 +42,12 @@ const live = makeLiveTaste({
 export const tasteProfileForLibrary = (library: TasteLibrary) =>
   live.profileUsing((snapshotTaken) => derive(snapshotTaken, library));
 
-/** The radio reuses its one recommendation snapshot, including on the first cold ask. */
+/**
+ * The owner's taste profile, derived from the history the first time it's
+ * asked for, then as signals have kept it; null when the history can't be
+ * read. A recommendation passes its snapshot's Library, which a cold profile
+ * maps instead of reading the songs again.
+ */
 export const tasteProfileForRecommendation = (library: {
   readonly songs: readonly SongRow[];
   readonly artists: readonly ArtistRow[];
@@ -58,14 +63,6 @@ export const tasteProfileForRecommendation = (library: {
       );
     }),
   );
-
-/**
- * The owner's taste profile, derived from the history the first time it's
- * asked for, then as signals have kept it; null when the history can't be
- * read (the Magic Queue then weighs by its session alone).
- */
-export const tasteProfileNow: Effect.Effect<TasteProfile | null, never, LibraryStore> =
-  live.profile;
 
 /** Keeps the taste profile up to date as signals come (`makeLiveTaste`). */
 export const layer = Layer.effectDiscard(

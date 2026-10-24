@@ -24,6 +24,7 @@ import {
 } from "./playlistRecommendationTracks.ts";
 import { readMixInputs } from "../home/mixInputs.ts";
 import { readMixCatalog } from "../home/readMixCatalog.ts";
+import { sharedRead } from "../lib/sharedRead.ts";
 import { snapshotRead } from "../lib/snapshotRead.ts";
 import { runSteps } from "../lib/stepped.ts";
 
@@ -166,12 +167,13 @@ export const sharePlaylistRecommendationInputs = <R>(
   },
   between: Effect.Effect<void>,
 ) => {
-  // The latest derivation, kept while the snapshot hands back the same parts.
+  // The latest derivation, kept while the snapshot hands back the same parts;
+  // playlists asking while it's derived wait for it.
   let derived:
     | {
         readonly library: object;
         readonly favorites: object;
-        readonly tracks: Effect.Success<ReturnType<typeof libraryTracks>>;
+        readonly tracks: Effect.Effect<Effect.Success<ReturnType<typeof libraryTracks>>, unknown>;
       }
     | undefined;
   return {
@@ -185,11 +187,11 @@ export const sharePlaylistRecommendationInputs = <R>(
           latest = {
             library: indexes,
             favorites: stars,
-            tracks: yield* libraryTracks(indexes, stars, between),
+            tracks: sharedRead(libraryTracks(indexes, stars, between)).get,
           };
           derived = latest;
         }
-        const { byId, ...tracks } = latest.tracks;
+        const { byId, ...tracks } = yield* latest.tracks;
         const reads = yield* store;
         const raw = yield* collect(
           (after) => reads.recommendationEntriesPage(id, after),
