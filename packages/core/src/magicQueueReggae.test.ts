@@ -253,7 +253,7 @@ test("a restored session from before style storage still checks families at stri
   }
 });
 
-test("coarse compatible genres require closeness at strict steps; totally missing genres stay out", () => {
+test("coarse compatible genres require closeness at strict steps; with no genre known anywhere only the seed's associates come", () => {
   const fixture = setup("Reggae");
   const strangers = {
     artists: [...artists, { id: 7, name: "Unrelated reggae fixture" }],
@@ -272,26 +272,34 @@ test("coarse compatible genres require closeness at strict steps; totally missin
       admitted.map((song) => song.trackId),
       ["200"],
     );
+    // The owner's call (#637): a seed whose genre nobody knows grows from what is associated with it.
     const unknownSeed = { ...fixture.session, seedProfile: null, seedStyle: null };
     assert.deepEqual(
       magicLibraryCandidates(unknownSeed, strangers, {
         profileOf: () => undefined,
         graph: fixture.sources.graph,
         styles,
-      }),
-      [],
+      }).map((song) => song.trackId),
+      ["200"],
     );
-    assert.deepEqual(
-      magicCatalogCandidates(
-        unknownSeed,
-        {
-          ...fixture.sources,
-          profileOf: () => undefined,
-          styleOf: () => undefined,
-        },
-        { inLibrary: () => false, engine: { styles } },
-      ).candidates,
-      [],
+    const online = magicCatalogCandidates(
+      unknownSeed,
+      {
+        ...fixture.sources,
+        profileOf: () => undefined,
+        styleOf: () => undefined,
+      },
+      { inLibrary: () => false, engine: { styles } },
+    ).candidates;
+    assert.ok(online.length > 0);
+    assert.ok(
+      online.every((candidate) =>
+        fixture.sources.catalog.some(
+          (entry) =>
+            entry.song.videoId === candidate.song.videoId &&
+            entry.radios.some((radio) => radio.seedName === marley),
+        ),
+      ),
     );
   }
 });

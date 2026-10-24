@@ -8,7 +8,7 @@
  * radio is read again, under the harvest's network policy.
  */
 
-import type { CatalogSong } from "./candidateCatalog.ts";
+import { catalogSeedKey, type CatalogSong } from "./candidateCatalog.ts";
 import type { CatalogMixSong } from "./catalogMixes.ts";
 import { mixRecordingOf } from "./discoverMixes.ts";
 import { catalogRadiosReadAt, harvestNext, type HarvestRun } from "./harvest.ts";
@@ -29,7 +29,7 @@ import {
   type RecommendSources,
 } from "./recommend.ts";
 import { finishSteps, mapSteps, sortSteps } from "./buildSteps.ts";
-import { GENRE_AFFINITY_THRESHOLD } from "./genreAffinity.ts";
+import { GENRE_AFFINITY_THRESHOLD, type GenreProfile } from "./genreAffinity.ts";
 import { ytTrackId, type YtSong } from "./ytMusic.ts";
 
 /**
@@ -71,7 +71,33 @@ export interface MagicCatalogPick {
   readonly left: number;
   /** How many catalog songs the engine ranked for the session, before its eligibility check (the app log's count). */
   readonly ranked: number;
+  /** The genre profile the candidates were held to (`magicSeedProfile`); null when none is known. */
+  readonly profile: GenreProfile | null;
 }
+
+/**
+ * The songs in [catalog] that [session]'s radios brought: its radio
+ * artists' radios, its own song radio among them (a refill writes that as
+ * its first radio artist's when theirs bring nothing).
+ */
+export function* magicSeedRadioSteps(
+  session: MagicSession,
+  catalog: readonly CatalogSong[],
+): Generator<void, YtSong[]> {
+  const seeds = new Set(session.radioArtists.flatMap((name) => catalogSeedKey(name) ?? []));
+  const radio: YtSong[] = [];
+  for (const entry of catalog) {
+    yield;
+    if (entry.radios.some((brought) => seeds.has(brought.seed))) radio.push(entry.song);
+  }
+  return radio;
+}
+
+/** `magicSeedRadioSteps` at once. */
+export const magicSeedRadio = (
+  session: MagicSession,
+  catalog: readonly CatalogSong[],
+): YtSong[] => finishSteps(magicSeedRadioSteps(session, catalog));
 
 /**
  * [session]'s YouTube Music candidates in [sources]' catalog, the best 50
@@ -97,9 +123,15 @@ export function* magicCatalogCandidatesSteps(
 ): Generator<void, MagicCatalogPick> {
   // Known styles can establish a match; unknown styles also need family evidence.
   const styles = engine.styles !== undefined;
-  const profile = magicSeedProfile(session, sources.profileOf);
-  if (!styles && (profile === null || profile.size === 0))
-    return { candidates: [], left: 0, ranked: 0 };
+  const profile = magicSeedProfile(
+    session,
+    sources.profileOf,
+    yield* magicSeedRadioSteps(session, sources.catalog),
+  );
+  const genreKnown = profile !== null && profile.size > 0;
+  // Nothing to hold candidates to: the seed's radios and neighbourhood stand in (association alone).
+  const unknownSeed = !genreKnown && session.seedStyle === null;
+  if (!styles && !genreKnown && !unknownSeed) return { candidates: [], left: 0, ranked: 0, profile };
   const candidates = yield* recommendCandidatesSteps(
     { artists: session.radioArtists, profile, style: session.seedStyle },
     sources,
@@ -118,7 +150,9 @@ export function* magicCatalogCandidatesSteps(
     yield;
     const threshold = engine.threshold ?? GENRE_AFFINITY_THRESHOLD;
     const eligible = song.artists.some((artist) =>
-      engine.styles !== undefined
+      unknownSeed
+        ? closeness > 0
+        : engine.styles !== undefined
         ? magicStyleMatches(
             { profile, style: session.seedStyle },
             { profile: sources.profileOf(artist), style: sources.styleOf?.(artist) ?? null },
@@ -149,6 +183,7 @@ export function* magicCatalogCandidatesSteps(
     candidates: yield* mapSteps(sorted.slice(0, MAGIC_CATALOG_POOL), (entry) => entry.candidate),
     left: scored.length,
     ranked: ranked.length,
+    profile,
   };
 }
 

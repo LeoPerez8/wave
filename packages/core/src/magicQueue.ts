@@ -178,8 +178,14 @@ export const magicLibraryCandidates = (
     threshold = GENRE_AFFINITY_THRESHOLD,
     styles,
     graph = null,
+    seedProfile,
   }: {
     readonly profileOf: GenreProfileOf;
+    /**
+     * The seed's profile when the batch knows it already (its catalog pick's,
+     * which counts its song radio's artists); absent: `magicSeedProfile` of the session.
+     */
+    readonly seedProfile?: GenreProfile | null;
     readonly threshold?: number | null;
     /** At Same genres or Close the styles and supporting evidence are checked (`magicStyleMatches`); null: families only. */
     readonly styles?: StyleLevel | null;
@@ -189,8 +195,11 @@ export const magicLibraryCandidates = (
 ): MagicSong[] => {
   const toMagicSong = magicLibrarySongs(library.artists);
   if (!styles && threshold === null) return library.songs.map(toMagicSong);
-  const seed = magicSeedProfile(session, profileOf);
-  const close = styles ? magicCloseArtists(session, graph) : new Set<string>();
+  const seed = seedProfile === undefined ? magicSeedProfile(session, profileOf) : seedProfile;
+  // Nothing to hold songs to: the seed's own artists and their neighbourhood stand in (association alone).
+  const unknownSeed = (seed === null || seed.size === 0) && session.seedStyle === null;
+  const close =
+    styles || unknownSeed ? magicCloseArtists(session, graph) : new Set<string>();
   const names = new Map(library.artists.map((artist) => [artist.id, artist.name]));
   const profileOfSong = (song: MagicLibrarySong): GenreProfile | null => {
     const own = genreProfile([song]);
@@ -202,7 +211,9 @@ export const magicLibraryCandidates = (
   return library.songs.flatMap((song) => {
     const profile = profileOfSong(song);
     const candidate = toMagicSong(song);
-    const admitted = styles
+    const admitted = unknownSeed
+      ? candidate.artists.some((artist) => close.has(artist))
+      : styles
       ? magicStyleMatches(
           { profile: seed, style: session.seedStyle },
           { profile, style: candidate.style },
@@ -308,6 +319,11 @@ export interface MagicSession {
    * and then only candidates with family overlap and closeness can join.
    */
   readonly seedStyle: string | null;
+  /**
+   * The seed songs' YouTube video ids (those downloaded from YouTube): whose
+   * own radio a refill reads when its radio artists' bring nothing; none without.
+   */
+  readonly seedVideoIds: readonly string[];
 }
 
 /** What a Magic Queue's YouTube Music radio grows from, as `startMagicQueue` takes it. */
@@ -316,24 +332,18 @@ export interface MagicRadioSeed {
   readonly artists: readonly string[];
   /** The seed songs' genre profile (`genreProfile`), or null when none has a genre. */
   readonly profile: GenreProfile | null;
+  /** The seed songs' YouTube video ids, the song played first's first; none without. */
+  readonly videoIds?: readonly string[];
 }
 
-/**
- * The genre profile [session]'s candidates, from both sources, are held to:
- * the seed songs' (`seedProfile`); when none of them has a genre tag, its
- * radio artists' profiles together ([profileOf]: the Library's, else
- * Deezer's), each counting alike. Null means no safe genre match can be
- * established: nothing is known anywhere (or no [profileOf] to ask).
- */
-export const magicSeedProfile = (
-  session: MagicSession,
-  profileOf?: GenreProfileOf,
+/** [artists]' profiles together ([profileOf]), each known one counting alike; null when none is known. */
+const averageProfile = (
+  artists: Iterable<string>,
+  profileOf: GenreProfileOf,
 ): GenreProfile | null => {
-  if (session.seedProfile !== null) return new Map(Object.entries(session.seedProfile));
-  if (profileOf === undefined) return null;
   const weights = new Map<string, number>();
   let known = 0;
-  for (const artist of session.radioArtists) {
+  for (const artist of artists) {
     const profile = profileOf(artist);
     if (profile === null || profile === undefined || profile.size === 0) continue;
     known += 1;
@@ -341,6 +351,29 @@ export const magicSeedProfile = (
   }
   if (known === 0) return null;
   return new Map([...weights].map(([family, weight]) => [family, weight / known]));
+};
+
+/**
+ * The genre profile [session]'s candidates, from both sources, are held to:
+ * the seed songs' (`seedProfile`); when none of them has a genre tag, its
+ * radio artists' profiles together ([profileOf]: the Library's, else
+ * Deezer's), each counting alike; when nothing is known of them either, the
+ * profiles of the primary artists of the songs the seed's radios brought
+ * ([radio], `magicSeedRadio`: its own song radio when its artists' brought
+ * nothing), each artist once. Null means no safe genre match can be
+ * established: nothing is known anywhere (or no [profileOf] to ask).
+ */
+export const magicSeedProfile = (
+  session: MagicSession,
+  profileOf?: GenreProfileOf,
+  radio: readonly { readonly artists: readonly string[] }[] = [],
+): GenreProfile | null => {
+  if (session.seedProfile !== null) return new Map(Object.entries(session.seedProfile));
+  if (profileOf === undefined) return null;
+  return (
+    averageProfile(session.radioArtists, profileOf) ??
+    averageProfile(new Set(radio.flatMap((song) => song.artists.slice(0, 1))), profileOf)
+  );
 };
 
 /** The context kind of a Magic Queue's queue; its id is the session's. */
@@ -419,6 +452,7 @@ export const startMagicQueue = (
       seedProfile:
         radio === undefined || radio.profile === null ? null : Object.fromEntries(radio.profile),
       seedStyle: commonStyle(seedSongs.map((candidate) => candidate.style)),
+      seedVideoIds: radio?.videoIds ?? [],
     },
     first: pick.trackId,
   };
@@ -787,6 +821,7 @@ export const parseMagicSession = (value: unknown): MagicSession | null => {
     radioArtists,
     seedProfile,
     seedStyle,
+    seedVideoIds,
   } = value;
   if (typeof id !== "string" || !isRecord(seed)) return null;
   if (!SEED_KINDS.has(seed["kind"])) return null;
@@ -811,5 +846,7 @@ export const parseMagicSession = (value: unknown): MagicSession | null => {
     seedProfile: isWeights(seedProfile) ? seedProfile : null,
     // Before styles were saved, family overlap and closeness are both required.
     seedStyle: typeof seedStyle === "string" ? seedStyle : null,
+    // Before the seed's video ids were saved, a refill reads only its artists' radios.
+    seedVideoIds: isStrings(seedVideoIds) ? seedVideoIds : [],
   };
 };

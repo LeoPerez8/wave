@@ -19,6 +19,7 @@ import {
   type ArtistGraph,
   type CatalogSong,
   type CatalogPage,
+  type GenreProfile,
   type GenreProfileOf,
   type MagicCatalogCandidate,
   type MagicSession,
@@ -63,6 +64,24 @@ const artistRadioSongs = (name: string) =>
     return next === null ? first.songs : [...first.songs, ...next.songs];
   }).pipe(Effect.orElseSucceed((): readonly NativeYtRadioSong[] => []));
 
+/**
+ * The first two pages of the seed song's own radio (its first video id's),
+ * for a seed whose artists' radios brought nothing; none without a video id
+ * or when YouTube Music can't be reached.
+ */
+const seedSongRadio = (session: MagicSession) =>
+  Effect.gen(function* () {
+    const videoId = session.seedVideoIds[0];
+    if (videoId === undefined) return [];
+    const ytMusic = yield* YtMusic;
+    const first = yield* ytMusic.radio({ videoId });
+    const next =
+      first.continuation === null
+        ? null
+        : yield* ytMusic.radioMore(first.continuation).pipe(Effect.orElseSucceed(() => null));
+    return next === null ? first.songs : [...first.songs, ...next.songs];
+  }).pipe(Effect.orElseSucceed((): readonly NativeYtRadioSong[] => []));
+
 type MagicLibrary = GenreProfileLibrary & { readonly songs: readonly SongRow[] };
 
 /** Whether the Library has a YouTube Music song, as [library]'s songs tell. */
@@ -74,9 +93,12 @@ const inLibraryOf = (library: MagicLibrary) =>
 
 /**
  * Reads [session]'s radio artists' radios at once, each into the catalog as
- * it comes (as that artist's radio), then looks up the genres of the
- * artists that decide its next 20 candidates (`magicRadioLookups`, a round
- * at a time). Gives how many songs the radios brought.
+ * it comes (as that artist's radio); when they bring nothing (YouTube Music
+ * doesn't know the artist by name), the seed song's own radio, written as
+ * its first radio artist's (`seedSongRadio`). Then looks up the genres of
+ * the artists that decide its next 20 candidates, or of the radio's artists
+ * while the seed's genre is unknown (`magicRadioLookups`, a round at a
+ * time). Gives how many songs the radios brought.
  */
 const readRadios = (
   session: MagicSession,
@@ -99,7 +121,15 @@ const readRadios = (
       ),
       { concurrency: "unbounded" },
     );
-    const radio = radios.flat();
+    let radio: readonly NativeYtRadioSong[] = radios.flat();
+    const standIn = session.radioArtists[0];
+    if (radio.length === 0 && standIn !== undefined) {
+      radio = yield* seedSongRadio(session);
+      if (radio.length > 0) {
+        pages.push({ seed: standIn, songs: radio });
+        yield* noteRadioNow(standIn, radio);
+      }
+    }
     const inLibrary = yield* inLibraryOf(library);
     const asked: string[] = [];
     for (
@@ -163,6 +193,8 @@ export interface MagicYtPick {
   readonly eligible: number;
   /** The songs a refill's radios brought; null when none ran. */
   readonly refilled: number | null;
+  /** The seed's profile the candidates were held to (`magicSeedProfile`); absent with YT Music off. */
+  readonly profile?: GenreProfile | null;
 }
 
 const NO_YT: MagicYtPick = { candidates: [], ranked: 0, eligible: 0, refilled: null };
@@ -223,6 +255,7 @@ export const magicQueueYtCandidates = (
       ranked: pick.ranked,
       eligible: pick.left,
       refilled: pick.refilled,
+      profile: pick.profile,
     } satisfies MagicYtPick;
   });
 

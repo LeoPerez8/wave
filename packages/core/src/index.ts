@@ -1973,6 +1973,8 @@ export {
   magicCatalogCandidates,
   magicCatalogCandidatesSteps,
   magicRefillDue,
+  magicSeedRadio,
+  magicSeedRadioSteps,
 } from "./magicQueueCatalog.ts";
 export { catalogRadiosReadAt } from "./harvest.ts";
 export type {

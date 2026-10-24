@@ -743,7 +743,7 @@ describe("A Magic Queue's Library songs and Genre faithfulness", () => {
     assert.deepEqual(magicBatch(session, library, first).trackIds, ["20"]);
   });
 
-  test("withholds recommendations with nothing known of the seed's genre anywhere", () => {
+  test("with nothing known of the seed's genre anywhere, keeps only its own artists' songs (#637)", () => {
     const untagged: MagicLibrarySong = { id: 10, artistIds: [1], genre: null };
     const songs: MagicLibrarySong[] = [
       untagged,
@@ -756,7 +756,7 @@ describe("A Magic Queue's Library songs and Genre faithfulness", () => {
     });
     assert.deepEqual(
       library.map((picked) => picked.trackId),
-      [],
+      ["10"],
     );
   });
 

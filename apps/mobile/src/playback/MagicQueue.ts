@@ -18,6 +18,7 @@ import {
   magicQueueShare,
   magicSeedLookups,
   magicSeedProfile,
+  magicSeedRadio,
   faithfulnessStyles,
   libraryStyleOf,
   magicSignal,
@@ -149,6 +150,9 @@ export const useMagicBatchLoading = (): boolean =>
 /** When the current batch first became wanted, including starting the seed's queue. */
 let batchStart: { readonly id: string; readonly at: number; readonly first: boolean } | null = null;
 
+/** How many of the seed songs' video ids a session keeps: its song radio reads the first. */
+const SEED_VIDEO_IDS = 5;
+
 /**
  * Starts a Magic Queue from [seed], whose songs are [seedSongs] (the song
  * itself for a song seed): it replaces the queue (with Undo, as any play
@@ -163,7 +167,12 @@ export const startMagicQueue = (seed: MagicSeed, seedSongs: readonly SongRow[]) 
   Effect.gen(function* () {
     const startedAt = Date.now();
     const playable = seedSongs.filter(songHasFile);
-    const artists = yield* (yield* LibraryStore).listArtists;
+    const store = yield* LibraryStore;
+    const artists = yield* store.listArtists;
+    // A seed whose artists YouTube Music doesn't know grows from its own song radio (`seedVideoIds`).
+    const videoIds = yield* store.videoIds(playable.map((song) => song.id)).pipe(
+      Effect.orElseSucceed((): ReadonlyMap<number, string> => new Map()),
+    );
     const names = new Map(artists.map((artist) => [artist.id, artist.name]));
     const started = startSession(seed, playable.map(magicLibrarySongs(artists)), {
       id: String(Date.now()),
@@ -171,6 +180,7 @@ export const startMagicQueue = (seed: MagicSeed, seedSongs: readonly SongRow[]) 
       radio: {
         artists: playable.flatMap((song) => names.get(song.artistId) ?? []),
         profile: genreProfile(playable),
+        videoIds: playable.flatMap((song) => videoIds.get(song.id) ?? []).slice(0, SEED_VIDEO_IDS),
       },
       ytShare: magicQueueShare(discoverLevel.get()),
     });
@@ -327,9 +337,15 @@ export const layer = Layer.effectDiscard(
         const ofLibrary = { artists: library.artists, songs: playable };
         // At Wander the Library keeps every genre (null).
         const threshold = magicLibraryThreshold(sliders);
+        // The seed's genre as the catalog pick found it (its song radio's artists' for an untagged seed).
+        const seedProfile =
+          yt.profile === undefined
+            ? magicSeedProfile(session, profileOf, magicSeedRadio(session, catalog))
+            : yt.profile;
         // Same genres and Close hold Library songs to the seed's style, and its artists' neighbourhood.
         const libraryCandidates = magicLibraryCandidates(session, ofLibrary, {
           profileOf,
+          seedProfile,
           threshold,
           styles: faithfulnessStyles(sliders),
           graph,
@@ -341,7 +357,7 @@ export const layer = Layer.effectDiscard(
         if (batch.trackIds.length === 0)
           return {
             kind: "empty",
-            seedGenre: magicSeedProfile(session, profileOf) !== null,
+            seedGenre: seedProfile !== null,
             step: sliderStepLabel(GENRE_FAITHFULNESS_STEPS, sliders.faithfulness),
             library: { weighed: playable.length, admitted: libraryCandidates.length },
             yt: { ranked: yt.ranked, eligible: yt.eligible },
