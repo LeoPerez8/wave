@@ -483,7 +483,7 @@ for (const timing of [
     for (const index of [1, 3, 4])
       assert.equal(session.get().slots[index]?.key, before[index]!.key);
     assert.equal(selectPlaylistRecommendationInput(db, playlistId).feedback.length, 1);
-    assert.equal(session.get().pending, null);
+    assert.deepEqual(session.get().pending, []);
     assert.equal(session.get().loading, false);
     assert.equal(session.get().error, null);
   });
