@@ -4,8 +4,8 @@ package expo.modules.wavenative.launcher
 data class AliasChange(val alias: String, val enabled: Boolean)
 
 /**
- * Wave's launcher icons are activity aliases of MainActivity, one per primary ×
- * secondary (the `launcherIcons` config plugin declares them). Exactly one is
+ * Wave's launcher icons are activity aliases of MainActivity, one per pair of
+ * palette inks (the `launcherIcons` config plugin declares them). Exactly one is
  * on at a time, so Wave shows once in the app drawer.
  */
 object LauncherAliases {

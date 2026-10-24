@@ -67,6 +67,26 @@ describe("addLauncherAliases", () => {
     }
   });
 
+  test("one alias per pair of the 24 inks, each with its own name", () => {
+    const names = (application(addLauncherAliases(prebuildManifest()))["activity-alias"] ?? []).map(
+      (alias) => alias.$?.["android:name"],
+    );
+    assert.equal(names.length, 576);
+    assert.equal(new Set(names).size, 576);
+    assert.ok(names.includes(".LauncherIcon_vivid209_vivid29"));
+  });
+
+  test("every preset pair keeps the alias it had, so nobody on presets switches icons", () => {
+    const names = new Set(
+      (application(addLauncherAliases(prebuildManifest()))["activity-alias"] ?? []).map(
+        (alias) => alias.$?.["android:name"],
+      ),
+    );
+    for (const primary of ["teal", "blue", "violet", "green", "rose", "lime"])
+      for (const secondary of ["ember", "gold", "coral", "magenta", "sky", "lemon"])
+        assert.ok(names.has(`.LauncherIcon_${primary}_${secondary}`), `${primary}_${secondary}`);
+  });
+
   test("only the teal-over-amber icon is on until Settings picks another, so Wave shows once", () => {
     const aliases = application(addLauncherAliases(prebuildManifest()))["activity-alias"] ?? [];
     const on = aliases.filter((alias) => alias.$?.["android:enabled"] === "true");
@@ -101,9 +121,18 @@ describe("launcherIconFiles", () => {
     }
   });
 
+  /** The `<path>`s a drawable draws, bottom layer first, following its layers' references. */
+  const drawablePaths = (drawable: string): string[] => {
+    const xml = files[`drawable/${drawable}.xml`];
+    assert.ok(xml, drawable);
+    const layers = [...xml.matchAll(/android:drawable="@drawable\/([^"]+)"/g)];
+    if (layers.length > 0) return layers.flatMap(([, name]) => drawablePaths(name!));
+    return [...xml.matchAll(/<path([^>]*)\/>/g)].map(([, attributes]) => attributes!);
+  };
+  const foregroundPaths = (id: string): string[] => drawablePaths(`ic_launcher_${id}_foreground`);
+
   test("a foreground strokes the top wave in the primary and the bottom wave in the secondary", () => {
-    const foreground = files["drawable/ic_launcher_blue_coral_foreground.xml"] ?? "";
-    const paths = [...foreground.matchAll(/<path([^>]*)\/>/g)].map(([, attributes]) => attributes!);
+    const paths = foregroundPaths("blue_coral");
     assert.equal(paths.length, 2);
     assert.match(paths[0]!, /android:strokeColor="#7aaef5"/);
     assert.ok(paths[0]!.includes(`android:pathData="${LAUNCHER_ICON_ART.top}"`));
@@ -113,7 +142,29 @@ describe("launcherIconFiles", () => {
       assert.match(path, /android:strokeLineCap="round"/);
       assert.match(path, new RegExp(`android:strokeWidth="${LAUNCHER_ICON_ART.strokeWidth}"`));
     }
-    assert.match(foreground, /android:viewportWidth="108"/);
+  });
+
+  test("a custom cyan over red shows a vivid cyan wave over a vivid red one", () => {
+    const [top, bottom] = foregroundPaths("vivid209_vivid29");
+    assert.match(top!, /android:strokeColor="#00e5ff"/);
+    assert.ok(top!.includes(`android:pathData="${LAUNCHER_ICON_ART.top}"`));
+    assert.match(bottom!, /android:strokeColor="#ff1a1d"/);
+    assert.ok(bottom!.includes(`android:pathData="${LAUNCHER_ICON_ART.bottom}"`));
+  });
+
+  test("every pair's waves take its own inks", () => {
+    for (const icon of LAUNCHER_ICONS) {
+      const [top, bottom] = foregroundPaths(icon.id);
+      assert.ok(top!.includes(`android:strokeColor="${icon.top}"`), icon.id);
+      assert.ok(bottom!.includes(`android:strokeColor="${icon.bottom}"`), icon.id);
+    }
+  });
+
+  test("the wave drawables grow with the inks, not the pairs", () => {
+    const vectors = Object.entries(files).filter(([, xml]) => xml.includes("<vector"));
+    // A top and a bottom wave per ink of the 24, plus the monochrome waves.
+    assert.equal(vectors.length, 24 * 2 + 1);
+    for (const [path, xml] of vectors) assert.match(xml, /android:viewportWidth="108"/, path);
   });
 
   test("the monochrome icon is the same two waves", () => {

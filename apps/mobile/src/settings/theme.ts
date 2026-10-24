@@ -47,7 +47,7 @@ const recolour = (theme: Theme): void => {
 /**
  * Lays the chosen colours over global.css's defaults (`recolour`), the media
  * notification takes the primary, and the launcher icon follows the primary
- * and secondary (the closest presets to custom colours). The choice is also
+ * and secondary (custom colours take their palette inks, Core's `inkPairFor`). The choice is also
  * saved natively for the launch splash, which Android draws before this code
  * runs; on every start too, so it never drifts.
  */
