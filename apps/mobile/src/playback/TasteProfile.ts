@@ -5,9 +5,9 @@ import * as Layer from "effect/Layer";
 import { recommendationTurnEffect } from "@/lib/recommendationWork";
 
 import { onLibraryChange, onStarred, onUnstarred, onYtSongSignal } from "@/library/libraryChanges";
-import { LibraryStore } from "@/library/LibraryStore";
+import { LibraryStore, type SongRow, type ArtistRow } from "@/library/LibraryStore";
 
-import { deriveTaste, type TasteLibrary } from "./tasteDerivation";
+import { deriveTaste, deriveTasteFromLibrary, type TasteLibrary } from "./tasteDerivation";
 import { makeLiveTaste } from "./liveTaste";
 import { magicSongsOf } from "./magicSongs";
 import { onPlayEnded } from "./PlayHistory";
@@ -41,6 +41,23 @@ const live = makeLiveTaste({
 /** Home reuses its due-build input without creating another live profile or rereading songs. */
 export const tasteProfileForLibrary = (library: TasteLibrary) =>
   live.profileUsing((snapshotTaken) => derive(snapshotTaken, library));
+
+/** The radio reuses its one recommendation snapshot, including on the first cold ask. */
+export const tasteProfileForRecommendation = (library: {
+  readonly songs: readonly SongRow[];
+  readonly artists: readonly ArtistRow[];
+}) =>
+  live.profileUsing((snapshotTaken) =>
+    Effect.gen(function* () {
+      return yield* deriveTasteFromLibrary(
+        yield* LibraryStore,
+        recommendationTurnEffect,
+        Date.now(),
+        library,
+        snapshotTaken,
+      );
+    }),
+  );
 
 /**
  * The owner's taste profile, derived from the history the first time it's

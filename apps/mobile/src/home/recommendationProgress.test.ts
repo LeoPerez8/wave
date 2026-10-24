@@ -110,13 +110,15 @@ test("2,531 Tracks and 900 artists finish paging, refill a Magic Queue online, a
 
       let requests = 0;
       const profileOf = libraryGenreProfiles(library);
+      const initialCatalog = await Effect.runPromise(readMixCatalog(store, between));
       const pick = await Effect.runPromise(
         magicCatalogRead(started.session, {
           online: true,
           onMobileData: false,
           usedToday: 0,
           now,
-          catalog: readMixCatalog(store, between).pipe(Effect.orElseSucceed(() => [])),
+          catalog: initialCatalog,
+          between,
           graph: null,
           profileOf,
           taste: null,
@@ -127,7 +129,11 @@ test("2,531 Tracks and 900 artists finish paging, refill a Magic Queue online, a
           refill: Effect.sync(() => {
             requests++;
             addCandidates(db, { seed: artist.name, songs: radioSongs(artist.name, "radio") }, now);
-            return { bytes: 1000, reached: true };
+            return {
+              bytes: 1000,
+              reached: true,
+              pages: [{ seed: artist.name, songs: radioSongs(artist.name, "radio") }],
+            };
           }),
         }),
       );

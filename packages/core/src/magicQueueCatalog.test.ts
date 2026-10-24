@@ -10,6 +10,7 @@ import {
   genreProfile,
   magicArtistKey,
   magicCatalogCandidates,
+  magicCatalogCandidatesSteps,
   magicRefillDue,
   magicSignal,
   startMagicQueue,
@@ -317,4 +318,39 @@ describe("A Magic Queue's refill", () => {
     const session = { ...sessionOf("Muse"), radioArtists: [] };
     assert.equal(magicRefillDue(session, { catalog: never, left: 0 }, WIFI), false);
   });
+});
+
+test("catalog ranking yields through a full catalog and keeps the best 50 compatible recordings", () => {
+  const catalog = [
+    ...Array.from({ length: 4_999 }, (_, at) =>
+      catalogSong(`song${String(at).padStart(4, "0")}`, ["Muse"], ["Muse"]),
+    ),
+    catalogSong("unrelated", ["Reggae artist"], ["Muse"]),
+  ];
+  let profilesRead = 0;
+  const steps = magicCatalogCandidatesSteps(
+    { ...sessionOf("Muse"), used: [ytTrackId("song0000")] },
+    sources(catalog, {
+      graph: null,
+      profileOf: (artist) => {
+        profilesRead++;
+        return new Map([[artist === "Reggae artist" ? "reggae" : "rock", 1]]);
+      },
+    }),
+    { inLibrary: (song) => song.videoId === "song0001" },
+  );
+  let turns = 0;
+  let next;
+  do {
+    const before = profilesRead;
+    next = steps.next();
+    assert.ok(profilesRead - before <= 3, "one step cannot walk the catalog");
+    turns++;
+  } while (!next.done);
+  assert.ok(turns > catalog.length, "scoring and sorting also expose work to the scheduler");
+  assert.equal(next.value.left, 4_997);
+  assert.deepEqual(
+    ids(next.value.candidates),
+    Array.from({ length: 50 }, (_, at) => `song${String(at + 2).padStart(4, "0")}`),
+  );
 });
