@@ -34,7 +34,7 @@ import { isRecord } from "./storedJson.ts";
 import { MAGIC_SKIP_MS, genreKey, tasteWeight, type TasteProfile } from "./tasteProfile.ts";
 import { drawSeedSongs } from "./seedSongDraw.ts";
 import { pickWeighted, type RandomSource } from "./weightedPick.ts";
-import { parseTrackId } from "./ytMusic.ts";
+import { parseTrackId, recordingMatches } from "./ytMusic.ts";
 
 /**
  * An artist as the Magic Queue tells them apart, the same for the Library's
@@ -305,6 +305,8 @@ export interface MagicSeedSong extends MagicSongRadioSeed {
 /** A Magic Queue under way: plain JSON saved with its queue. */
 export interface MagicSession {
   readonly radioSeed?: MagicSongRadioSeed;
+  /** Radios learned from favorites, downloads and hand-added songs, each once per recording. */
+  readonly likedRadios?: readonly MagicSongRadioSeed[];
   /**
    * An album's or a playlist's songs (up to `MAX_SEED_SONGS`, the most
    * played), a few of whose radios each batch reads; none for a song or an
@@ -670,6 +672,8 @@ export type MagicSignalKind =
 export interface MagicSignal {
   readonly kind: MagicSignalKind;
   readonly song: MagicSong;
+  /** Recording metadata for a favorite, download or hand addition's song radio. */
+  readonly radio?: MagicSongRadioSeed;
 }
 
 /** What each positive signal adds to the song's artists, strongest first. */
@@ -695,6 +699,17 @@ const YT_SHARE_MOVE: { readonly [K in MagicSignalKind]?: number } = {
   removed: -0.1,
 };
 
+/** A downloaded Library track and its streamed recording share one radio. */
+const sameRadio = (a: MagicSongRadioSeed, b: MagicSongRadioSeed): boolean =>
+  a.id === b.id ||
+  (a.kind !== "artist" &&
+    b.kind !== "artist" &&
+    ((a.videoId !== undefined && a.videoId === b.videoId) ||
+      recordingMatches(
+        { title: a.title, artist: a.artists.join(", "), durationMs: a.durationMs ?? 0 },
+        b,
+      )));
+
 /**
  * [session] having learned [signal]: a skip (or a removed recommendation)
  * excludes the song's primary artist for the rest of the session and lowers
@@ -705,10 +720,21 @@ const YT_SHARE_MOVE: { readonly [K in MagicSignalKind]?: number } = {
  * download moves YouTube Music's share of a batch up, its skip down, within
  * 20–100%.
  */
-export const magicSignal = (learning: MagicSession, { kind, song }: MagicSignal): MagicSession => {
+export const magicSignal = (
+  learning: MagicSession,
+  { kind, song, radio }: MagicSignal,
+): MagicSession => {
   const move = parseTrackId(song.trackId)?.kind === "yt" ? (YT_SHARE_MOVE[kind] ?? 0) : 0;
   const session = {
     ...learning,
+    ...(radio !== undefined &&
+    (kind === "favorite" || kind === "download" || kind === "added") &&
+    ![
+      ...(learning.likedRadios ?? []),
+      ...(learning.radioSeed === undefined ? [] : [learning.radioSeed]),
+    ].some((seed) => sameRadio(seed, radio))
+      ? { likedRadios: [...(learning.likedRadios ?? []), radio] }
+      : {}),
     radioSignals: [...(learning.radioSignals ?? []), { kind, song }],
     ytShare: move === 0 ? learning.ytShare : clampShare(learning.ytShare + move),
   };
@@ -963,6 +989,7 @@ export const parseMagicSession = (value: unknown): MagicSession | null => {
   if (typeof batches !== "number" || !Number.isInteger(batches) || batches < 0) return null;
   if (!isWeights(artistAffinity) || !isWeights(genreAffinity)) return null;
   const radioSeed = value["radioSeed"];
+  const likedRadios = value["likedRadios"];
   const radioSignals = value["radioSignals"];
   const validSeed = isRadioSeed(radioSeed);
   const seedSongs = value["seedSongs"];
@@ -992,6 +1019,9 @@ export const parseMagicSession = (value: unknown): MagicSession | null => {
     );
   return {
     ...(validSeed ? { radioSeed: radioSeed as unknown as MagicSongRadioSeed } : {}),
+    ...(Array.isArray(likedRadios) && likedRadios.every(isRadioSeed)
+      ? { likedRadios: likedRadios as unknown as readonly MagicSongRadioSeed[] }
+      : {}),
     ...(validSignals ? { radioSignals: radioSignals as unknown as readonly MagicSignal[] } : {}),
     // A list session saved before its seed songs were kept reads its old radio, if any.
     ...(validSeedSongs
