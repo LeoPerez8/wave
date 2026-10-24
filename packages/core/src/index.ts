@@ -1972,6 +1972,7 @@ export {
   storedSwipeSettings,
   swipeChoiceAction,
   swipeChoiceLabel,
+  swipeActionTone,
   swipesChoose,
 } from "./swipeActions.ts";
 export type { RowMenuAction, RowSwipeActions, SwipeChoice, SwipeSettings } from "./swipeActions.ts";

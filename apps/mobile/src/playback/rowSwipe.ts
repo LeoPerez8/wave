@@ -2,7 +2,6 @@ import {
   ITEM_ACTION_LABELS,
   UNAVAILABLE_ENTRY_ACTION_LABELS,
   actionBarLabel,
-  isDestructiveAction,
   itemActions,
   rowSwipeActions,
   swipesChoose,
@@ -90,8 +89,6 @@ export const rowSwipe = <A extends RowMenuAction>(
       action,
       label: shortLabel(action),
       accessibilityLabel: fullLabel(action),
-      destructive:
-        action === "removeFromPlaylist" || (action !== "search" && isDestructiveAction(action)),
       leaves: removes,
       run: removes ? onRemove : () => run(action, towards),
     };
