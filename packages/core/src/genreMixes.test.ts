@@ -10,6 +10,7 @@ import {
   discoverMixesBuilt,
   discoverMixesDue,
   genreFamily,
+  artistGraph,
   genreMixSeeds,
   interleaveRadios,
   mixKnownSongs,
@@ -144,7 +145,7 @@ describe("Genre mixes' families", () => {
     );
   });
 
-  test("grow from up to three of the family's artists, picked at random, most played in the family first", () => {
+  test("grow from the three most played artists in the family regardless of randomness", () => {
     const library = libraryOf([
       ...songsOf(2, "Metalcore", 1, 40),
       ...songsOf(2, "Post-Hardcore", 2, 30),
@@ -160,33 +161,44 @@ describe("Genre mixes' families", () => {
         .find((seed) => seed.name === "Metal")
         ?.artists?.map((artist) => artist.name);
     assert.deepEqual(metal(always(0)), ["Bad Omens", "Sleep Token", "Spiritbox"]);
-    assert.deepEqual(metal(always(0.999_999)), ["Spiritbox", "Daft Punk", "Nothing But Thieves"]);
+    assert.deepEqual(metal(always(0.999_999)), ["Bad Omens", "Sleep Token", "Spiritbox"]);
   });
 
-  test("pick the artists most played in the family more often", () => {
-    // A fixed pseudo-random sequence (a linear congruential generator), so the test is the same every run.
-    let state = 7;
-    const random = () => {
-      state = (state * 1_103_515_245 + 12_345) % 2_147_483_648;
-      return state / 2_147_483_648;
-    };
+  test("a pull draws the next three artists, then recycles the least recently shown", () => {
     const library = libraryOf([
-      ...songsOf(5, "Metal", 1, 400),
-      ...songsOf(1, "Metal", 2, 20),
-      ...songsOf(1, "Metal", 3, 5),
-      ...songsOf(1, "Metal", 4),
-      ...songsOf(1, "Metal", 7),
+      ...songsOf(1, "Metal", 1, 60),
+      ...songsOf(1, "Metal", 2, 50),
+      ...songsOf(1, "Metal", 3, 40),
+      ...songsOf(1, "Metal", 4, 30),
+      ...songsOf(1, "Metal", 7, 20),
+      ...songsOf(1, "Metal", 8, 10),
     ]);
-    const builds = Array.from(
-      { length: 400 },
-      () => genreMixSeeds(library, random)[0]?.artists?.map((artist) => artist.name) ?? [],
+    const artists = (shown: [string, number][]) =>
+      genreMixSeeds(library, always(0.999), {
+        mixes: new Map(),
+        artists: new Map(shown),
+        songs: new Set(),
+      })[0]?.artists?.map((artist) => artist.name);
+    assert.deepEqual(artists([]), ["Bad Omens", "Sleep Token", "Spiritbox"]);
+    assert.deepEqual(
+      artists([
+        ["bad omens", 1],
+        ["sleep token", 1],
+        ["spiritbox", 1],
+      ]),
+      ["Nothing But Thieves", "Slowdive", "Daft Punk"],
     );
-    assert.ok(builds.every((names) => names.length === 3));
-    const picks = (name: string) => builds.filter((names) => names.includes(name)).length;
-    assert.ok(picks("Bad Omens") > picks("Sleep Token"));
-    assert.ok(picks("Sleep Token") > picks("Slowdive"));
-    assert.ok(picks("Slowdive") > 0);
-    assert.ok(new Set(builds.map((names) => names.join("|"))).size > 3);
+    assert.deepEqual(
+      artists([
+        ["bad omens", 3],
+        ["sleep token", 1],
+        ["spiritbox", 2],
+        ["nothing but thieves", 4],
+        ["slowdive", 4],
+        ["daft punk", 4],
+      ]),
+      ["Sleep Token", "Spiritbox", "Bad Omens"],
+    );
   });
 
   test("leave out a family whose artists can't seed", () => {
@@ -201,6 +213,88 @@ describe("Genre mixes' families", () => {
     const library = libraryOf([...songsOf(5, "Rock", 4), ...songsOf(5, "Metal", 1)]);
     const ids = genreMixSeeds(library, always(0)).map((seed) => seed.id);
     assert.equal(new Set(ids).size, 2);
+  });
+});
+
+describe("Genre mixes for artists without a genre", () => {
+  const graph = artistGraph({
+    catalog: [],
+    plays: [],
+    pages: [
+      {
+        name: "Sleep Token",
+        similar: ["Kendrick Lamar", "Bad Omens", "Spiritbox"].map((name) => ({
+          name,
+          browseId: name,
+          audience: null,
+        })),
+      },
+    ],
+  });
+
+  test("inherit the family with most closeness-weighted known neighbour support", () => {
+    const library = {
+      ...libraryOf([
+        ...songsOf(5, null, 2, 10),
+        ...songsOf(1, "Hip-Hop", 5),
+        ...songsOf(1, "Metalcore", 1),
+        ...songsOf(1, "Metal", 3),
+      ]),
+      graph,
+    };
+    const [seed] = genreMixSeeds(library, always(0));
+    assert.equal(seed?.name, "Metal");
+    assert.deepEqual(
+      seed?.artists?.map((artist) => artist.name),
+      ["Sleep Token", "Bad Omens", "Spiritbox"],
+    );
+  });
+
+  test("stay out without any neighbour with a known family, including on a cold graph", () => {
+    const library = libraryOf(songsOf(5, null, 2, 10));
+    assert.deepEqual(genreMixSeeds({ ...library, graph }, always(0)), []);
+    assert.deepEqual(genreMixSeeds({ ...library, graph: null }, always(0)), []);
+  });
+
+  test("use closeness rather than neighbour counts and can read already-kept profiles", () => {
+    const library = {
+      ...libraryOf(songsOf(5, null, 2)),
+      graph: {
+        names: new Map([
+          ["kendrick lamar", "Kendrick Lamar"],
+          ["bad omens", "Bad Omens"],
+          ["spiritbox", "Spiritbox"],
+        ]),
+        edges: new Map([
+          [
+            "sleep token",
+            new Map([
+              ["kendrick lamar", 0.9],
+              ["bad omens", 0.2],
+              ["spiritbox", 0.2],
+            ]),
+          ],
+        ]),
+      },
+      profileOf: (name: string) =>
+        name === "Sleep Token"
+          ? null
+          : new Map([[name === "Kendrick Lamar" ? "hiphop" : "metal", 1]]),
+    };
+    assert.equal(genreMixSeeds(library, always(0))[0]?.name, "Hip-Hop");
+  });
+
+  test("an inherited custom family keeps the tagged family's spelling", () => {
+    const library = { ...libraryOf([...songsOf(5, null, 2), ...songsOf(1, "Shoegaze", 1)]), graph };
+    assert.equal(genreMixSeeds(library, always(0))[0]?.name, "Shoegaze");
+  });
+
+  test("keep an artist's tagged family instead of replacing it with neighbours'", () => {
+    const library = {
+      ...libraryOf([...songsOf(5, "Pop", 2), ...songsOf(1, "Metal", 1), ...songsOf(1, "Metal", 3)]),
+      graph,
+    };
+    assert.equal(genreMixSeeds(library, always(0))[0]?.name, "Pop");
   });
 });
 
