@@ -1,6 +1,6 @@
 /**
  * Listening totals over all time: minutes listened, songs listened and plays,
- * for the whole history (Home's listening overview) or one artist's songs
+ * for the whole history (Home's Stats) or one artist's songs
  * (the artist page): a song counts for every artist its credit names, as in
  * Stats, so a collaboration counts for each of them. Which plays count is the
  * play event's `counted` flag, set by `isCountedPlay`.
@@ -46,7 +46,7 @@ const MINUTE_MS = 60_000;
 
 /**
  * Listening summed over many songs: what the store keeps summed for the
- * whole history (Home's listening overview reads these rather than every
+ * whole history (Home's Stats reads these rather than every
  * song's listening), and what `listeningTotals` sums songs into.
  */
 export interface ListeningSums {
@@ -100,13 +100,11 @@ export interface LibraryTotals {
   readonly artists: number;
 }
 
-/** Home's listening overview: each total as it reads, e.g. "2,500 songs" or "1 play". */
-export interface ListeningOverview {
-  /** Songs, albums, artists. */
-  readonly library: readonly string[];
-  /** Minutes listened, songs listened, plays. */
-  readonly listening: readonly string[];
-}
+/** Home's Stats facts, with each label separate from its formatted value. */
+export type ListeningOverview = readonly {
+  readonly label: string;
+  readonly value: string;
+}[];
 
 /**
  * `count` with thousands separators, then the singular for one and the plural
@@ -115,19 +113,21 @@ export interface ListeningOverview {
 export const counted = (count: number, singular: string, plural = `${singular}s`): string =>
   `${count.toLocaleString("en")} ${count === 1 ? singular : plural}`;
 
-/** The overview's lines, in the order they read. */
+/** Home's facts, listening first and then the library. */
 export const listeningOverview = (
   library: LibraryTotals,
   listening: ListeningTotals,
-): ListeningOverview => ({
-  library: [
-    counted(library.songs, "song", "songs"),
-    counted(library.albums, "album", "albums"),
-    counted(library.artists, "artist", "artists"),
-  ],
-  listening: [
-    counted(listening.minutesListened, "minute listened", "minutes listened"),
-    counted(listening.songsListened, "song listened", "songs listened"),
-    counted(listening.plays, "play", "plays"),
-  ],
-});
+): ListeningOverview => [
+  {
+    label: "Time listened",
+    value:
+      listening.minutesListened < 60
+        ? `${listening.minutesListened} min`
+        : `${Math.floor(listening.minutesListened / 60).toLocaleString("en")} h`,
+  },
+  { label: "Plays", value: listening.plays.toLocaleString("en") },
+  { label: "Songs listened", value: listening.songsListened.toLocaleString("en") },
+  { label: "Songs", value: library.songs.toLocaleString("en") },
+  { label: "Albums", value: library.albums.toLocaleString("en") },
+  { label: "Artists", value: library.artists.toLocaleString("en") },
+];

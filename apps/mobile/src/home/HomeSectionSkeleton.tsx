@@ -1,9 +1,8 @@
 import { homeSectionTitle, type HomeSectionId } from "@wave/core";
-import type { ReactNode } from "react";
+import { Fragment, type ReactNode } from "react";
 import { Text, View, useWindowDimensions } from "react-native";
 
 import { COVER_ROW_TILE, CoverRow } from "@/catalog/CoverRow";
-import { EntryRow } from "@/catalog/EntryRow";
 import { CELL } from "@/catalog/grid";
 import { Hairline } from "@/catalog/Hairline";
 import { SkeletonLine } from "@/catalog/SkeletonLine";
@@ -12,13 +11,22 @@ import { TitledSection } from "@/catalog/TitledSection";
 import { openStats } from "@/library/routes";
 import { useYtMusicEnabled } from "@/settings/ytMusic";
 
+import { StatsFactRow } from "./StatsFactRow";
 import { DiscoverMixesSkeleton } from "./DiscoverMixesSkeleton";
 import { homeBodyHeight } from "./homeOpening";
 
-/** The same reservation surrounds the placeholder and the answered section. */
-export function HomeSectionBody({ id, children }: { id: HomeSectionId; children: ReactNode }) {
+/** Loaded sections fit their content; only the placeholder keeps its reserved height. */
+export function HomeSectionBody({
+  id,
+  children,
+  loading = false,
+}: {
+  id: HomeSectionId;
+  children: ReactNode;
+  loading?: boolean;
+}) {
   const { fontScale } = useWindowDimensions();
-  return <View style={{ minHeight: homeBodyHeight(id, fontScale) }}>{children}</View>;
+  return <View style={{ minHeight: homeBodyHeight(id, fontScale, loading) }}>{children}</View>;
 }
 
 function DiscoverSkeleton() {
@@ -39,28 +47,34 @@ function DiscoverSkeleton() {
 /** A still, labelled placeholder in the section's own shape, including its heading. */
 export function HomeSectionSkeleton({ id }: { id: HomeSectionId }) {
   const { fontScale } = useWindowDimensions();
-  if (id === "stats")
-    return (
-      <View style={{ marginTop: CELL * 5 }}>
-        <Hairline />
-        <EntryRow label="Stats" onPress={openStats} />
-      </View>
-    );
   const songs = id === "most-played" || id === "favorites";
   const artists = id === "most-played-artists";
   return (
-    <TitledSection title={homeSectionTitle(id)}>
-      <HomeSectionBody id={id}>
+    <TitledSection
+      title={homeSectionTitle(id)}
+      {...(id === "stats" ? { action: { label: "See all", onPress: openStats } } : {})}
+    >
+      <HomeSectionBody id={id} loading>
         {id === "discover" ? (
           <DiscoverSkeleton />
         ) : songs ? (
           <TrackSkeletons count={10} leading="card" />
-        ) : id === "listening-overview" ? (
-          <SkeletonGroup label="Loading listening overview">
-            <View style={{ gap: CELL / 2 }}>
-              <SkeletonLine lineHeight={20 * Math.max(1, fontScale)} width="85%" />
-              <SkeletonLine lineHeight={20 * Math.max(1, fontScale)} width="75%" />
-            </View>
+        ) : id === "stats" ? (
+          <SkeletonGroup label="Loading Stats">
+            {Array.from({ length: 6 }, (_, index) => (
+              // oxlint-disable-next-line react/no-array-index-key -- fixed placeholder rows
+              <Fragment key={index}>
+                {index > 0 && <Hairline />}
+                <StatsFactRow>
+                  <View style={{ width: "45%" }}>
+                    <SkeletonLine lineHeight={22 * Math.max(1, fontScale)} width="100%" />
+                  </View>
+                  <View style={{ width: "25%" }}>
+                    <SkeletonLine lineHeight={22 * Math.max(1, fontScale)} width="100%" />
+                  </View>
+                </StatsFactRow>
+              </Fragment>
+            ))}
           </SkeletonGroup>
         ) : (
           <SkeletonGroup label={artists ? "Loading artists" : "Loading albums"}>

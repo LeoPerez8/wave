@@ -21,7 +21,7 @@ export const LAUNCH_LOGO = {
   /** How far from the centre the still logo's furthest edge reaches, in dp (as the shipped splash). */
   radius: 80,
   /** One sweep: each wave flows one wavelength left, back to the logo's own shape. */
-  cycleMs: 1000,
+  cycleMs: 1500,
   /** The splash fades out over this once Wave is ready (expo-splash-screen's default). */
   fadeMs: 400,
   /**
@@ -45,19 +45,14 @@ export interface LaunchLogoExit {
 }
 
 /**
- * How the splash leaves once Wave's first screen is ready. A quick start
- * still lets the first sweep finish: the fade ends as it does, so the waves
- * never flick on and off. Later, the splash goes at once. With animations
- * removed (the logo stands still) it goes as it always did.
+ * How the splash leaves once Wave's first screen is ready: the fade starts
+ * at once, wherever the sweep is. With animations removed (the logo stands
+ * still) it goes as it always did.
  */
-export const launchLogoExit = ({
-  elapsedMs,
-  animationsOn,
-}: LaunchLogoExitInput): LaunchLogoExit => {
-  const { cycleMs, fadeMs } = LAUNCH_LOGO;
-  if (!animationsOn || elapsedMs === null) return { delayMs: 0, fadeMs };
-  return { delayMs: Math.max(0, cycleMs - fadeMs - Math.max(0, elapsedMs)), fadeMs };
-};
+export const launchLogoExit = (_input: LaunchLogoExitInput): LaunchLogoExit => ({
+  delayMs: 0,
+  fadeMs: LAUNCH_LOGO.fadeMs,
+});
 
 /** A trim of a wave's path over one sweep, as fractions of its length. */
 export interface LaunchLogoTrim {

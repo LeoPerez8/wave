@@ -11,6 +11,7 @@ import {
   swipesChoose,
   ytDownloadActions,
   swipeChoiceLabel,
+  swipeActionTone,
   unavailableEntryActions,
   ytSongActions,
   type ActionItem,
@@ -22,6 +23,32 @@ const songMenu = (song: ActionItem, here = "/library/songs") =>
   itemActions({ kind: "track", items: [song], here }).map((entry) => entry.action);
 
 const libraryFile: ActionItem = { albumId: 3, artistIds: [7], missing: false };
+
+describe("swipeActionTone", () => {
+  test("Favorite and Unfavorite use Secondary", () => {
+    assert.equal(swipeActionTone("favorite"), "highlight");
+    assert.equal(swipeActionTone("unfavorite"), "highlight");
+  });
+
+  test("removals keep destructive red and every other swipe action keeps Primary", () => {
+    for (const action of ["removeFromPlaylist", "delete", "removeFromLibrary"] as const)
+      assert.equal(swipeActionTone(action), "destructive");
+    for (const action of [
+      "playNext",
+      "addToQueue",
+      "magicQueue",
+      "addToPlaylist",
+      "download",
+      "retryDownload",
+      "goToAlbum",
+      "goToArtist",
+      "fixSong",
+      "share",
+      "search",
+    ] as const)
+      assert.equal(swipeActionTone(action), "accent");
+  });
+});
 
 /** A Library song's menu in Songs, with online lookups on or off (Fix Song). */
 const lookupsMenu = (song: ActionItem, onlineLookups: boolean) =>

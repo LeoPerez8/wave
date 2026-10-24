@@ -390,7 +390,7 @@ const readListeningSums = storeQuery(
 );
 
 /**
- * Home's listening overview (library and all-time listening totals), or
+ * Home's Stats facts (library and all-time listening totals), or
  * undefined while loading. The library totals are Library's counts; the
  * listening totals one row of the all-time play totals, re-read after plays
  * (at most every 1.5 s while Home is in sight, else when it comes back) and

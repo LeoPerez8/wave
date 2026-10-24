@@ -1,9 +1,8 @@
 /**
  * Settings is a short list of rows, each opening a page of its own with the
  * settings of one area. Add a page here (its id, the title its row and header
- * show, the route its screen lives at, and the glyph and colour of its row's
- * tile), then give it a screen under `app/settings/` and, if it helps, a
- * summary line.
+ * show, the route its screen lives at, and its row's glyph), then give it a
+ * screen under `app/settings/` and, if it helps, a summary line.
  */
 
 import { counted } from "./listening.ts";
@@ -25,18 +24,11 @@ export type SettingsPage =
   | "developer";
 
 /**
- * The glyph on a Settings row's tile, by name; the app draws each with a
- * Tabler line icon (`settings/SettingsTile.tsx`).
+ * A Settings row's glyph, by name; the app draws each with a Tabler line icon
+ * (`settings/SettingsGlyph.tsx`).
  */
 export type SettingsIcon =
   "books" | "palette" | "layout" | "swipe" | "play" | "quote" | "download" | "user" | "code";
-
-/**
- * The colour of a Settings row's tile, by name: the theme token
- * `--color-tile-<name>` (Core's `SETTINGS_TILE_COLOURS`).
- */
-export type SettingsTileColour =
-  "red" | "orange" | "green" | "cyan" | "blue" | "indigo" | "purple" | "pink" | "grey";
 
 export interface SettingsPageEntry {
   readonly page: SettingsPage;
@@ -44,64 +36,55 @@ export interface SettingsPageEntry {
   readonly title: string;
   /** Where its screen is (also `wave://settings/<…>`). */
   readonly route: `/settings/${string}`;
-  /** The white glyph on its row's tile. */
+  /** Its row's glyph, drawn in the secondary text tone. */
   readonly icon: SettingsIcon;
-  /** Its row's tile colour, its own: no two pages share one. */
-  readonly colour: SettingsTileColour;
 }
 
 /** The pages, in the order Settings lists them. */
 export const SETTINGS_PAGES = [
-  { page: "library", title: "Library", route: "/settings/library", icon: "books", colour: "red" },
+  { page: "library", title: "Library", route: "/settings/library", icon: "books" },
   {
     page: "appearance",
     title: "Appearance",
     route: "/settings/appearance",
     icon: "palette",
-    colour: "purple",
   },
-  { page: "layout", title: "Layout", route: "/settings/layout", icon: "layout", colour: "indigo" },
+  { page: "layout", title: "Layout", route: "/settings/layout", icon: "layout" },
   {
     page: "swipeActions",
     title: "Swipe actions",
     route: "/settings/swipe-actions",
     icon: "swipe",
-    colour: "cyan",
   },
   {
     page: "playback",
     title: "Playback",
     route: "/settings/playback",
     icon: "play",
-    colour: "pink",
   },
   {
     page: "lyricsAndTags",
     title: "Lyrics and tags",
     route: "/settings/lyrics-and-tags",
     icon: "quote",
-    colour: "orange",
   },
   {
     page: "downloads",
     title: "Downloads",
     route: "/settings/downloads",
     icon: "download",
-    colour: "green",
   },
   {
     page: "accounts",
     title: "Accounts",
     route: "/settings/accounts",
     icon: "user",
-    colour: "blue",
   },
   {
     page: "developer",
     title: "Developer",
     route: "/settings/developer",
     icon: "code",
-    colour: "grey",
   },
 ] as const satisfies readonly SettingsPageEntry[];
 

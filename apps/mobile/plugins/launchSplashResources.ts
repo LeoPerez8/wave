@@ -1,6 +1,6 @@
 // The Android resources behind the launch splash: the moving logo on every
 // splash, and the splash themes Core picks (`LAUNCH_SPLASH_THEMES`), one style
-// per choice in Settings › Theme. A style's ground and logo colours are colour
+// per background pair and palette ink pair. Its ground and logo colours use
 // resources with the light value in `values/` and the dark one in
 // `values-night/`; the logo (`launchLogoDrawable.ts`) reads its colours from
 // the style through two theme attributes. Pure, so the app tests can check it
@@ -10,8 +10,7 @@ import {
   LAUNCH_LOGO,
   LAUNCH_SPLASH_THEMES,
   launchTheme,
-  type LaunchColors,
-  type ThemeChoice,
+  type LaunchTheme,
 } from "@wave/core";
 
 /** An Android resources file as Expo's config plugins parse it (xml2js). */
@@ -45,17 +44,38 @@ export const LAUNCH_LOGO_ATTRS = {
 /** The animated logo every splash draws (`launchLogoDrawable.ts`). */
 export const LAUNCH_LOGO_DRAWABLE = "launch_logo";
 
-/** Colour resource names: grounds by background pair, inks by background pair and swatch. */
-const colorNames = ({ light, dark, primary, secondary }: ThemeChoice) => ({
-  background: `launch_background_${light}_${dark}`,
-  primary: `launch_primary_${light}_${dark}_${primary}`,
-  secondary: `launch_secondary_${light}_${dark}_${secondary}`,
-});
+/** One short resource name for each distinct pair of mode tones, shared by both waves. */
+const tones = new Map<string, { name: string; light: string; dark: string }>();
+const colorNames = (theme: Pick<LaunchTheme, "light" | "dark">) => {
+  const name = (key: "background" | "primary" | "secondary"): string => {
+    const light = theme.light[key];
+    const dark = theme.dark[key];
+    const pair = `${light}/${dark}`;
+    let color = tones.get(pair);
+    if (color === undefined) {
+      color = { name: `wlc${tones.size.toString(36)}`, light, dark };
+      tones.set(pair, color);
+    }
+    return color.name;
+  };
+  return { background: name("background"), primary: name("primary"), secondary: name("secondary") };
+};
 
-/** The shipped splash's ink colours (its ground is expo-splash-screen's). */
-const SHIPPED_COLORS = { primary: "launch_primary", secondary: "launch_secondary" } as const;
+const SHIPPED_COLORS = colorNames(launchTheme(DEFAULT_THEME_CHOICE));
 
 const value = (name: string, text: string): ResourceValue => ({ $: { name }, _: text });
+
+const splashStyles: readonly ResourceStyle[] = LAUNCH_SPLASH_THEMES.map((theme) => {
+  const names = colorNames(theme);
+  return {
+    $: { name: theme.name, parent: SHIPPED_SPLASH },
+    item: [
+      value("windowSplashScreenBackground", `@color/${names.background}`),
+      value(LAUNCH_LOGO_ATTRS.primary, `@color/${names.primary}`),
+      value(LAUNCH_LOGO_ATTRS.secondary, `@color/${names.secondary}`),
+    ],
+  };
+});
 
 /** Replaces the entries named like `added`, keeping everything else in place. */
 const merge = <A extends { readonly $: { readonly name: string } }>(
@@ -89,20 +109,7 @@ export const addLaunchSplashStyles = (styles: ResourcesXml): ResourcesXml => ({
   ...styles,
   resources: {
     ...styles.resources,
-    style: merge(
-      styles.resources.style?.map(withMovingLogo),
-      LAUNCH_SPLASH_THEMES.map((theme) => {
-        const names = colorNames(theme.choice);
-        return {
-          $: { name: theme.name, parent: SHIPPED_SPLASH },
-          item: [
-            value("windowSplashScreenBackground", `@color/${names.background}`),
-            value(LAUNCH_LOGO_ATTRS.primary, `@color/${names.primary}`),
-            value(LAUNCH_LOGO_ATTRS.secondary, `@color/${names.secondary}`),
-          ],
-        };
-      }),
-    ),
+    style: merge(styles.resources.style?.map(withMovingLogo), splashStyles),
   },
 });
 
@@ -111,22 +118,13 @@ export const addLaunchSplashColors = (
   colors: ResourcesXml,
   scheme: "light" | "dark",
 ): ResourcesXml => {
-  const added = new Map<string, string>();
-  const shipped: LaunchColors = launchTheme(DEFAULT_THEME_CHOICE)[scheme];
-  added.set(SHIPPED_COLORS.primary, shipped.primary);
-  added.set(SHIPPED_COLORS.secondary, shipped.secondary);
-  for (const theme of LAUNCH_SPLASH_THEMES) {
-    const names = colorNames(theme.choice);
-    for (const key of ["background", "primary", "secondary"] as const)
-      added.set(names[key], theme[scheme][key]);
-  }
   return {
     ...colors,
     resources: {
       ...colors.resources,
       color: merge(
         colors.resources.color,
-        [...added].map(([name, text]) => value(name, text)),
+        [...tones.values()].map((color) => value(color.name, color[scheme])),
       ),
     },
   };

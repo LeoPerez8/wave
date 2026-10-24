@@ -67,11 +67,11 @@ export const createCoverTaps = (options: {
 
 /**
  * What a double-tap on the cover does: `favorite` adds the song to Favorites
- * and shows the heart; `heart` only shows the heart (the song is in
+ * and shows the star; `star` only shows the star (the song is in
  * Favorites already: a double-tap never takes it out); `none` does nothing,
- * so the heart never shows for a favorite that wasn't made.
+ * so the star never shows for a favorite that wasn't made.
  */
-export type CoverDoubleTap = "favorite" | "heart" | "none";
+export type CoverDoubleTap = "favorite" | "star" | "none";
 
 /**
  * What a double-tap on the cover does for the song playing, given whether
@@ -83,6 +83,6 @@ export const coverDoubleTap = (song: {
   readonly starred: boolean;
   readonly canStar: boolean;
 }): CoverDoubleTap => {
-  if (song.starred) return "heart";
+  if (song.starred) return "star";
   return song.canStar ? "favorite" : "none";
 };
