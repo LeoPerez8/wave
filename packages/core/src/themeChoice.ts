@@ -163,10 +163,9 @@ export const isDefaultThemeChoice = (choice: ThemeChoice): boolean =>
 
 /**
  * How close two colours look, in OKLCH. Hue counts in full; lightness and
- * chroma count for half, so a colour deeper, paler or more vivid than every
- * preset still lands on the preset of its hue.
+ * chroma count for half. Shared by the palette and the legacy preset matcher.
  */
-const distance = (a: string, b: string): number => {
+export const inkDistance = (a: string, b: string): number => {
   const [x, y] = [toOklch(a), toOklch(b)];
   const hue = 2 * Math.sqrt(x.c * y.c) * Math.sin((x.h - y.h) / 2);
   return Math.hypot(0.5 * (x.l - y.l), 0.5 * (x.c - y.c), hue);
@@ -177,16 +176,15 @@ const nearestPreset = (group: InkGroup, hex: string): string => {
   let best = DEFAULT_THEME_CHOICE[group];
   let bestDistance = Number.POSITIVE_INFINITY;
   for (const swatch of THEME_SWATCHES[group]) {
-    const d = Math.min(distance(hex, swatch.light), distance(hex, swatch.dark));
+    const d = Math.min(inkDistance(hex, swatch.light), inkDistance(hex, swatch.dark));
     if (d < bestDistance) [best, bestDistance] = [swatch.id, d];
   }
   return best;
 };
 
 /**
- * `choice` with each chosen custom colour swapped for the preset closest to
- * it, for what Android can only ship per preset: the launcher icon and the
- * launch splash.
+ * The legacy preset-only splash choice. #656 replaces this with the shared
+ * palette when its native splash resources are ready.
  */
 export const presetThemeChoice = (choice: ThemeChoice): ThemeChoice => {
   const preset = (group: InkGroup): string => {

@@ -5,7 +5,9 @@
  */
 
 import type { ThemeColors } from "./theme.ts";
+import { inkPairFor, type InkPair } from "./inkPalette.ts";
 import {
+  CUSTOM_INK,
   DEFAULT_THEME_CHOICE,
   THEME_SWATCHES,
   isDefaultThemeChoice,
@@ -13,6 +15,7 @@ import {
   themeFor,
   type ThemeChoice,
   type ThemeGroup,
+  type Scheme,
 } from "./themeChoice.ts";
 
 /** One mode's launch colours, as the app draws them. */
@@ -53,6 +56,42 @@ const launchColors = (scheme: ThemeColors): LaunchColors => ({
   primary: scheme.accent,
   secondary: scheme.highlight,
 });
+
+/**
+ * A palette splash's native style and colours. #656 can pass a catalog pair
+ * to generate its resources, or omit it to match a user's choice. Until that
+ * ticket switches the plugin and runtime together, `launchTheme` and
+ * `LAUNCH_SPLASH_THEMES` keep naming the existing preset-only resources.
+ */
+export const paletteSplashThemeFor = (
+  choice: ThemeChoice,
+  pair: InkPair = inkPairFor(choice),
+): LaunchSplashTheme | null => {
+  const matched = {
+    ...choice,
+    primary: pair.primary.id,
+    secondary: pair.secondary.id,
+    customPrimary: null,
+    customSecondary: null,
+  };
+  if (isDefaultThemeChoice(matched)) return null;
+  const colours = (scheme: Scheme): LaunchColors =>
+    launchColors(
+      themeFor({
+        ...choice,
+        primary: CUSTOM_INK,
+        secondary: CUSTOM_INK,
+        customPrimary: pair.primary[scheme],
+        customSecondary: pair.secondary[scheme],
+      })[scheme],
+    );
+  return {
+    name: splashThemeName(matched),
+    choice: matched,
+    light: colours("light"),
+    dark: colours("dark"),
+  };
+};
 
 /** The style for a choice's splash, which ships per preset only. */
 const splashThemeFor = (choice: ThemeChoice): string | null => {

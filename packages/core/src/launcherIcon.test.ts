@@ -28,6 +28,7 @@ describe("launcherIconFor", () => {
     const icon = launcherIconFor(DEFAULT_THEME_CHOICE);
     assert.equal(icon.top, "#14b7a6");
     assert.equal(icon.bottom, "#f5b83d");
+    assert.equal(LAUNCHER_ICONS[0]?.id, "teal_ember");
   });
 
   test("the top wave takes the primary and the bottom wave the secondary, in their dark tones", () => {
@@ -53,17 +54,12 @@ describe("launcherIconFor", () => {
         ids.add(icon.id);
       }
     assert.equal(ids.size, THEME_SWATCHES.primary.length * THEME_SWATCHES.secondary.length);
-    assert.equal(LAUNCHER_ICONS.length, ids.size);
+    for (const id of ids) assert.ok(LAUNCHER_ICONS.some((icon) => icon.id === id));
   });
 
-  test("a custom colour shows the icon of the preset closest to it", () => {
-    // A preset's own tones, light or dark.
-    assert.equal(customIcon("#1f5fb8", "#e8c454"), "blue_gold");
-    assert.equal(customIcon("#a99af0", "#1b6a93"), "violet_sky");
-    // Deeper, paler or brighter than any preset, the hue decides.
-    assert.equal(customIcon("#0d2350", "#ff6a4d"), "blue_coral");
-    assert.equal(customIcon("#ffc4da", "#d400b4"), "rose_magenta");
-    assert.equal(customIcon("#00ff00", "#ffee00"), "green_lemon");
+  test("custom colours take palette inks across groups, with the pastel guard", () => {
+    assert.equal(customIcon("#00e9ff", "#ff0d00"), "vivid209_vivid29");
+    assert.equal(customIcon("#89cff0", "#f8c8dc"), "sky_rose");
   });
 
   test("a kept custom colour doesn't change the icon while a preset is chosen", () => {
