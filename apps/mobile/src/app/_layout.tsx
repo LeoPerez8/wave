@@ -42,7 +42,7 @@ const onRootTouchStart = (event: GestureResponderEvent): void => {
   if (PERF_ENABLED) perfTouch(event);
 };
 
-/** A render error shows a screen to try again or export the logs from, instead of closing Wave. */
+/** A render error shows a screen to try again or send the logs from, instead of closing Wave. */
 export { ErrorScreen as ErrorBoundary };
 
 export default function RootLayout() {

@@ -19,9 +19,9 @@ function Action({ label, onPress }: { label: string; onPress: () => void }) {
 
 /**
  * What Wave shows when the app fails to render, instead of closing: React has
- * reported the error, so it's in the app log (src/log/appLog.ts). Save Logs and
- * Export Logs work here too. Drawn outside the app's providers, so it uses
- * nothing but React Native's own views.
+ * reported the error, so it's in the app log (src/log/appLog.ts). Save Logs works
+ * here too, and Send to Leo shares the log as Developer's Export Logs does. Drawn
+ * outside the app's providers, so it uses nothing but React Native's own views.
  */
 export function ErrorScreen({ retry }: ErrorBoundaryProps) {
   const [exportFailed, setExportFailed] = useState(false);
@@ -34,14 +34,15 @@ export function ErrorScreen({ retry }: ErrorBoundaryProps) {
         Something went wrong
       </Text>
       <Text className="mt-2 font-sans text-subheadline text-secondary">
-        Wave noted what happened. Save Logs keeps it in Downloads/Wave. Export Logs shares it.
+        Wave noted what happened. Save Logs keeps it in Downloads/Wave. Send to Leo shares it with
+        him.
       </Text>
       {exportFailed && (
         <Text
           accessibilityLiveRegion="polite"
           className="mt-2 font-sans text-subheadline text-secondary"
         >
-          Couldn't export the logs. Try again.
+          Couldn't send the logs. Try again.
         </Text>
       )}
       <View className="mt-4 flex-row flex-wrap" style={{ columnGap: 24 }}>
@@ -59,11 +60,11 @@ export function ErrorScreen({ retry }: ErrorBoundaryProps) {
           }}
         />
         <Action
-          label="Export Logs"
+          label="Send to Leo"
           onPress={() => {
             setExportFailed(false);
             exportAppLog().catch((error: unknown) => {
-              console.warn("[wave] Couldn't export the logs", error);
+              console.warn("[wave] Couldn't send the logs", error);
               setExportFailed(true);
             });
           }}
