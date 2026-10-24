@@ -21,56 +21,69 @@ const album = { kind: "album" };
 
 describe("upNextScroll", () => {
   test("a list showing for the first time is left to lay itself out", () => {
-    const shown = upNextScroll();
+    const { place } = upNextScroll();
     const { scroller, asked } = list(0);
-    shown(scroller, songs);
+    place(scroller, songs, 300);
     assert.deepEqual(asked, []);
   });
 
-  test("showing after a new play starts Up Next from the top, through the list", () => {
-    const shown = upNextScroll();
+  test("each showing opens at the start of Up Next, through the list", () => {
+    const { place, hide } = upNextScroll();
     const { scroller, asked } = list(900);
-    shown(scroller, songs);
-    shown(scroller, album);
-    assert.deepEqual(asked, [{ offset: 0, animated: false }]);
-  });
-
-  test("showing again with the same play keeps its place, set again through the list", () => {
-    const shown = upNextScroll();
-    const { scroller, asked } = list(900);
-    shown(scroller, songs);
-    shown(scroller, songs);
-    assert.deepEqual(asked, [{ offset: 900, animated: false }]);
-  });
-
-  test("a play undone before Up Next shows again keeps its place", () => {
-    const shown = upNextScroll();
-    const { scroller, asked } = list(900);
-    shown(scroller, songs);
-    // Out of sight: album plays, then New queue playing's Undo brings songs back.
-    shown(scroller, songs);
-    assert.deepEqual(asked, [{ offset: 900, animated: false }]);
-  });
-
-  test("an Undo while Up Next shows starts the restored queue from the top", () => {
-    const shown = upNextScroll();
-    const { scroller, asked } = list(900);
-    shown(scroller, songs);
-    shown(scroller, album);
-    shown(scroller, songs);
+    place(scroller, songs, 300);
+    hide();
+    place(scroller, songs, 300);
+    hide();
+    place(scroller, songs, 356);
     assert.deepEqual(asked, [
-      { offset: 0, animated: false },
-      { offset: 0, animated: false },
+      { offset: 300, animated: false },
+      { offset: 356, animated: false },
     ]);
   });
 
-  test("a list mounted again (Up Next emptied, then refilled) is left to lay itself out", () => {
-    const shown = upNextScroll();
+  test("a new play while Up Next shows starts it at its start", () => {
+    const { place } = upNextScroll();
+    const { scroller, asked } = list(900);
+    place(scroller, songs, 300);
+    place(scroller, album, 0);
+    assert.deepEqual(asked, [{ offset: 0, animated: false }]);
+  });
+
+  test("sitting at the start of Up Next, it stays there as History grows or empties", () => {
+    const { place } = upNextScroll();
+    const { scroller, asked } = list(300);
+    place(scroller, songs, 300);
+    place(scroller, songs, 356);
+    assert.deepEqual(asked, [{ offset: 356, animated: false }]);
+
+    const emptied = upNextScroll();
+    const shuffled = list(300);
+    emptied.place(shuffled.scroller, songs, 300);
+    emptied.place(shuffled.scroller, songs, 0);
+    assert.deepEqual(shuffled.asked, [{ offset: 0, animated: false }]);
+  });
+
+  test("scrolled into History or down Up Next, the rows on screen hold still", () => {
+    const { place } = upNextScroll();
+    const history = list(120);
+    place(history.scroller, songs, 300);
+    place(history.scroller, songs, 356);
+    assert.deepEqual(history.asked, []);
+
+    const down = upNextScroll();
+    const deep = list(900);
+    down.place(deep.scroller, songs, 300);
+    down.place(deep.scroller, songs, 356);
+    assert.deepEqual(deep.asked, []);
+  });
+
+  test("a list mounted again is left to lay itself out", () => {
+    const { place } = upNextScroll();
     const first = list(900);
-    shown(first.scroller, songs);
-    shown(null, album);
+    place(first.scroller, songs, 300);
+    place(null, album, 0);
     const second = list(0);
-    shown(second.scroller, album);
+    place(second.scroller, album, 0);
     assert.deepEqual([...first.asked, ...second.asked], []);
   });
 });

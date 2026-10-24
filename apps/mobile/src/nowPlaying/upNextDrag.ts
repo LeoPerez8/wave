@@ -85,10 +85,13 @@ type Aside = { readonly from: number; readonly to: number; readonly live: boolea
 
 const AT_REST: Aside = { from: -1, to: -1, live: false };
 
-/** The lifted row's top on screen: under the finger, kept inside the list. */
-const liftedTop = (top: number, viewport: number): number => {
+/**
+ * The lifted row's top on screen: under the finger, kept inside the list
+ * below [floor] (the sticky bar, or the first Up Next row's slot under it).
+ */
+const liftedTop = (top: number, viewport: number, floor: number): number => {
   "worklet";
-  return Math.min(Math.max(0, viewport - ROW), Math.max(0, top));
+  return Math.min(Math.max(floor, viewport - ROW), Math.max(floor, top));
 };
 
 /** Marks a drop as landing: JavaScript places the rows for the new order from here. */
@@ -143,28 +146,47 @@ export type UpNextDragRows = {
 /**
  * The list's side of the drag. `shown` is the queue as Up Next shows it,
  * `entries` its Up Next; `onMove` records a dropped move until the queue has it.
+ * Up Next's first row starts [lead] into the list (History and the sticky
+ * bar above it), and the bar, [bar] tall, stays over the list's top while
+ * Up Next scrolls under it.
  */
 export function useUpNextDrag({
   shown,
   entries,
   bottomInset,
+  lead,
+  bar,
   onMove,
 }: {
   shown: QueueState;
   entries: readonly QueueEntry[];
   bottomInset: number;
+  lead: number;
+  bar: number;
   onMove: (move: PendingMove, moved: Promise<void>) => void;
 }) {
   const scrollRef = useAnimatedRef<ScrollView>();
-  // Only with the list on screen: an empty Up Next has no scroll view to follow.
-  const scroll = useScrollOffset(entries.length > 0 ? scrollRef : null);
+  // The list's scroll, and Up Next's (counted from its first row), which the drag works in.
+  // It starts where the list opens, at the start of Up Next, until the list scrolls.
+  const listScroll = useScrollOffset(scrollRef, useSharedValue(lead - bar));
+  const leadAt = useSharedValue(lead);
   const height = useSharedValue(0);
   const count = useSharedValue(entries.length);
   const extent = useSharedValue(entries.length * ROW + bottomInset);
   useLayoutEffect(() => {
     count.set(entries.length);
     extent.set(entries.length * ROW + bottomInset);
-  }, [count, extent, entries.length, bottomInset]);
+    leadAt.set(lead);
+  }, [count, extent, leadAt, entries.length, bottomInset, lead]);
+  const scrolled = useCallback(() => {
+    "worklet";
+    return listScroll.get() - leadAt.get();
+  }, [listScroll, leadAt]);
+  // The top of the list a lifted row stays under: the bar, or Up Next's first slot below it.
+  const floor = useCallback(() => {
+    "worklet";
+    return Math.max(bar, -scrolled());
+  }, [bar, scrolled]);
 
   const session = useSharedValue<Session | null>(null);
   const aside = useSharedValue<Aside>(AT_REST);
@@ -229,12 +251,12 @@ export function useUpNextDrag({
       const slot = to * ROW;
       liftedY.set(withTiming(slot, SETTLE));
       translation.set(
-        withTiming(slot - scroll.get() - anchor.get(), SETTLE, () => {
+        withTiming(slot - scrolled() - anchor.get(), SETTLE, () => {
           scheduleOnRN(onDrop, key, from, to);
         }),
       );
     },
-    [session, aside, liftedY, translation, scroll, anchor, onDrop],
+    [session, aside, liftedY, translation, scrolled, anchor, onDrop],
   );
 
   // The dragged entry left Up Next (it started playing, or was removed): its drag ends where it began.
@@ -263,8 +285,8 @@ export function useUpNextDrag({
 
   const follow = useCallback(() => {
     "worklet";
-    liftedY.set(liftedTop(anchor.get() + translation.get(), height.get()) + scroll.get());
-  }, [liftedY, anchor, translation, height, scroll]);
+    liftedY.set(liftedTop(anchor.get() + translation.get(), height.get(), floor()) + scrolled());
+  }, [liftedY, anchor, translation, height, scrolled, floor]);
 
   const retarget = useCallback(() => {
     "worklet";
@@ -272,7 +294,7 @@ export function useUpNextDrag({
     if (current === null) return;
     const to = reorderTarget({
       from: current.start,
-      distance: translation.get() + scroll.get() - current.startScroll,
+      distance: translation.get() + scrolled() - current.startScroll,
       rowHeight: ROW,
       count: count.get(),
     });
@@ -280,12 +302,12 @@ export function useUpNextDrag({
     session.set({ ...current, to });
     aside.set({ from: current.from, to, live: true });
     scheduleOnRN(onTarget);
-  }, [session, translation, scroll, count, aside, onTarget]);
+  }, [session, translation, scrolled, count, aside, onTarget]);
 
   const begin = useCallback(
     (key: string, index: number, base: number) => {
       "worklet";
-      const at = scroll.get();
+      const at = scrolled();
       session.set({ key, start: index, startScroll: at, base, from: index, to: index });
       aside.set({ from: index, to: index, live: true });
       translation.set(0);
@@ -295,7 +317,7 @@ export function useUpNextDrag({
       waiting.set(null);
       scheduleOnRN(onBegin, key);
     },
-    [scroll, session, aside, translation, anchor, lifted, liftedY, waiting, onBegin],
+    [scrolled, session, aside, translation, anchor, lifted, liftedY, waiting, onBegin],
   );
 
   const move = useCallback(
@@ -313,21 +335,23 @@ export function useUpNextDrag({
   // Near the list's top or bottom edge the lifted row scrolls it, faster the further in.
   const autoscroll = useFrameCallback((frame) => {
     if (session.get() === null) return;
+    // Counted below the sticky bar, which covers the list's top edge.
     const speed = reorderScrollSpeed({
-      top: anchor.get() + translation.get(),
+      top: anchor.get() + translation.get() - bar,
       rowHeight: ROW,
-      viewport: height.get(),
+      viewport: height.get() - bar,
       edge: AUTOSCROLL_EDGE,
       maxSpeed: AUTOSCROLL_SPEED,
     });
     if (speed === 0) return;
     const seconds = (frame.timeSincePreviousFrame ?? 0) / 1000;
     const max = Math.max(0, extent.get() - height.get());
-    const now = scroll.get();
-    const next = Math.min(max, Math.max(0, now + speed * seconds));
+    const now = scrolled();
+    // It scrolls no higher than the start of Up Next: History stays out of sight.
+    const next = Math.min(max, Math.max(Math.min(-bar, now), now + speed * seconds));
     if (next === now) return;
-    scrollTo(scrollRef, 0, next, false);
-    scroll.set(next);
+    scrollTo(scrollRef, 0, next + leadAt.get(), false);
+    listScroll.set(next + leadAt.get());
     follow();
     retarget();
   }, false);
@@ -408,7 +432,7 @@ export function useUpNextDrag({
 
   // The lifted copy, drawn over the list once JavaScript knows the drag.
   const liftedStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: liftedTop(anchor.get() + translation.get(), height.get()) }],
+    transform: [{ translateY: liftedTop(anchor.get() + translation.get(), height.get(), floor()) }],
   }));
 
   return {
@@ -416,6 +440,7 @@ export function useUpNextDrag({
     rowDrag,
     liftedStyle,
     height,
+    scroll: listScroll,
     scrollRef: scrollRef as AnimatedRef<ScrollView> & RefObject<ScrollView | null>,
   };
 }

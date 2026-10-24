@@ -3,9 +3,9 @@ import {
   YT_PLAYLIST_DOWNLOAD_ACTION_LABELS,
   currentEntry,
   menuLayout,
-  parseTrackId,
   type DownloadOrigin,
   type UnsearchedSong,
+  isUnsearchedTrackId,
   playlistDownloadOrigin,
 } from "@wave/core";
 import type { ReactNode } from "react";
@@ -38,7 +38,8 @@ import { targetHeading, type ActionItems, type Heading, type PlaylistPlace } fro
 import { readMenuSongs, useItemActions, type ActionEntry } from "./itemActions";
 import { queueState } from "./Queue";
 import { playTarget } from "./playTarget";
-import { queuedYtSong, queueTracks } from "./queueTracks";
+import { queueTracks } from "./queueTracks";
+import { songMenuTarget } from "./songMenuTarget";
 
 const NO_ENTRIES: readonly PlaylistEntryRow[] = [];
 const NO_SONGS: readonly SongRow[] = [];
@@ -144,19 +145,34 @@ export const openTrackActionsById = (id: number, options: MenuOptions = {}): voi
 };
 
 /**
+ * Opens the usual menu for the queued song [trackId] (an Up Next or History
+ * row's long press, `songMenuTarget`), as its row elsewhere offers it.
+ */
+export const openQueuedSongActions = (trackId: string, options: MenuOptions = {}): void => {
+  const target = songMenuTarget(trackId, queueTracks.get().get(trackId));
+  switch (target?.kind) {
+    case "library":
+      openTrackActionsById(target.id, options);
+      break;
+    case "stream":
+      openYtSongActions(target.song, options);
+      break;
+    case "unsearched":
+      openUnsearchedActions(target.song, options);
+      break;
+  }
+};
+
+/**
  * Opens the long-press menu for the song playing (the mini player's long
  * press): its own menu as a song's row offers it, without Play Next and Add to
- * Queue (Core's `itemActions`, `ytSongActions`). Nothing opens with no song on.
+ * Queue (Core's `itemActions`, `ytSongActions`). Nothing opens with no song on,
+ * nor for an unsearched song while its search runs.
  */
 export const openPlayingActions = (): void => {
-  const trackId = currentEntry(queueState.get())?.trackId ?? null;
-  const ref = trackId === null ? null : parseTrackId(trackId);
-  if (ref?.kind === "library") openTrackActionsById(ref.id, { playing: true });
-  else if (trackId !== null && ref?.kind === "yt") {
-    const track = queueTracks.get().get(trackId);
-    const song = track === undefined ? null : queuedYtSong(track);
-    if (song !== null) openYtSongActions(song, { playing: true });
-  }
+  const trackId = currentEntry(queueState.get())?.trackId;
+  if (trackId === undefined || isUnsearchedTrackId(trackId)) return;
+  openQueuedSongActions(trackId, { playing: true });
 };
 
 /**
