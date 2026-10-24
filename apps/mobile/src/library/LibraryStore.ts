@@ -151,7 +151,7 @@ import {
   type HomeSections,
   type RecordedPlay,
 } from "./db/playHistory";
-import { listeningSums } from "./db/playTotals";
+import { listeningSums, selectCountedPlays } from "./db/playTotals";
 import { tasteHistory } from "./db/taste";
 import {
   removePlaylistImage,
@@ -773,6 +773,10 @@ export class LibraryStore extends Context.Service<
     readonly videoIds: (
       ids: readonly number[],
     ) => Effect.Effect<ReadonlyMap<number, string>, LibraryStoreError>;
+    /** Each of the songs [ids]' counted plays, by song id (those with any). */
+    readonly countedPlays: (
+      ids: readonly number[],
+    ) => Effect.Effect<ReadonlyMap<number, number>, LibraryStoreError>;
     readonly loadPlayback: Effect.Effect<SavedPlayback | null, LibraryStoreError>;
     /** Saves the queue with where its current entry is. */
     readonly saveQueue: (
@@ -1655,6 +1659,8 @@ const make = Effect.gen(function* () {
       attempt("read queued songs", () => selectPlayableSongs(db, ids).filter(songHasFile)),
 
     videoIds: (ids) => attempt("read the songs' video ids", () => selectVideoIds(db, ids)),
+    countedPlays: (ids) =>
+      attempt("read the songs' counted plays", () => selectCountedPlays(db, ids)),
 
     loadPlayback: attempt(
       "read the saved queue",

@@ -32,6 +32,7 @@ import type { PlayEnd } from "./playEvents.ts";
 import type { QueueState } from "./queue.ts";
 import { isRecord } from "./storedJson.ts";
 import { MAGIC_SKIP_MS, genreKey, tasteWeight, type TasteProfile } from "./tasteProfile.ts";
+import { drawSeedSongs } from "./seedSongDraw.ts";
 import { pickWeighted, type RandomSource } from "./weightedPick.ts";
 import { parseTrackId } from "./ytMusic.ts";
 
@@ -295,9 +296,25 @@ export interface MagicSongRadioSeed {
   readonly kind?: "song" | "artist";
 }
 
+/** A song of an album or playlist seed, whose radio a batch may read (`magicBatchRadios`). */
+export interface MagicSeedSong extends MagicSongRadioSeed {
+  /** Its counted plays: the most played are drawn most often. */
+  readonly plays: number;
+}
+
 /** A Magic Queue under way: plain JSON saved with its queue. */
 export interface MagicSession {
   readonly radioSeed?: MagicSongRadioSeed;
+  /**
+   * An album's or a playlist's songs (up to `MAX_SEED_SONGS`, the most
+   * played), a few of whose radios each batch reads; none for a song or an
+   * artist seed, or a session saved before.
+   */
+  readonly seedSongs?: readonly MagicSeedSong[];
+  /** The ids of the seed songs drawn so far, each once, the least recently drawn first. */
+  readonly seedDraws?: readonly string[];
+  /** The seed songs whose radios batch [batch] reads, by id. */
+  readonly seedRadios?: { readonly batch: number; readonly ids: readonly string[] };
   /** Signals consumed by the shared radio ranking. Old sessions have none. */
   readonly radioSignals?: readonly MagicSignal[];
   /** Tells this session apart from the others: its queue's context id. */
@@ -341,6 +358,8 @@ export interface MagicSession {
 /** What a Magic Queue's YouTube Music radio grows from, as `startMagicQueue` takes it. */
 export interface MagicRadioSeed {
   readonly song?: MagicSongRadioSeed;
+  /** An album's or a playlist's songs, whose radios its batches read in turn. */
+  readonly songs?: readonly MagicSeedSong[];
   /** Each seed song's primary artist, by name, as YouTube Music is asked for them. */
   readonly artists: readonly string[];
   /** The seed songs' genre profile (`genreProfile`), or null when none has a genre. */
@@ -469,6 +488,9 @@ export const startMagicQueue = (
       id,
       seed,
       ...(radio?.song === undefined ? {} : { radioSeed: radio.song }),
+      ...(radio?.songs === undefined || radio.songs.length === 0
+        ? {}
+        : { seedSongs: mostPlayed(radio.songs), seedDraws: [] }),
       used: [pick.trackId],
       batches: 0,
       artistAffinity,
@@ -482,6 +504,50 @@ export const startMagicQueue = (
       seedVideoIds: radio?.videoIds ?? [],
     },
     first: pick.trackId,
+  };
+};
+
+/** How many of an album's or a playlist's songs a session keeps to draw its radios from. */
+const MAX_SEED_SONGS = 200;
+
+/** Up to `MAX_SEED_SONGS` of [songs], the most played, in their order. */
+const mostPlayed = (songs: readonly MagicSeedSong[]): readonly MagicSeedSong[] => {
+  if (songs.length <= MAX_SEED_SONGS) return songs;
+  const kept = new Set(songs.toSorted((a, b) => b.plays - a.plays).slice(0, MAX_SEED_SONGS));
+  return songs.filter((song) => kept.has(song));
+};
+
+/**
+ * The radios [session]'s next batch reads: an album's or a playlist's draws
+ * up to 3 of its songs by different artists, the most played most often,
+ * leaving out songs drawn for earlier batches while others remain
+ * (`drawSeedSongs`). The draw is made once a batch; [session] comes back
+ * with it, to save, and the same while that batch's draw stands. A song or
+ * an artist seed reads its own radio (`radioSeed`); none for an old session
+ * without one.
+ */
+export const magicBatchRadios = (
+  session: MagicSession,
+  random: RandomSource,
+): { readonly session: MagicSession; readonly seeds: readonly MagicSongRadioSeed[] } => {
+  const songs = session.seedSongs;
+  if (songs === undefined || songs.length === 0)
+    return { session, seeds: session.radioSeed === undefined ? [] : [session.radioSeed] };
+  const byId = new Map(songs.map((song) => [song.id, song]));
+  if (session.seedRadios?.batch === session.batches)
+    return { session, seeds: session.seedRadios.ids.flatMap((id) => byId.get(id) ?? []) };
+  const drawn = drawSeedSongs(
+    songs.map((song) => ({ id: song.id, artist: song.artists[0] ?? "", plays: song.plays })),
+    { weight: "plays", recent: session.seedDraws ?? [], random },
+  ).map((song) => song.id);
+  const again = new Set(drawn);
+  return {
+    session: {
+      ...session,
+      seedDraws: [...(session.seedDraws ?? []).filter((id) => !again.has(id)), ...drawn],
+      seedRadios: { batch: session.batches, ids: drawn },
+    },
+    seeds: drawn.flatMap((id) => byId.get(id) ?? []),
   };
 };
 
@@ -858,6 +924,16 @@ const isWeights = (value: unknown): value is Record<string, number> =>
 
 const SEED_KINDS: ReadonlySet<unknown> = new Set(["track", "album", "artist", "playlist"]);
 
+/** Whether [value] is a saved `MagicSongRadioSeed`. */
+const isRadioSeed = (value: unknown): value is Record<string, unknown> =>
+  isRecord(value) &&
+  typeof value["id"] === "string" &&
+  typeof value["title"] === "string" &&
+  isStrings(value["artists"]) &&
+  (value["durationMs"] === null || typeof value["durationMs"] === "number") &&
+  (value["videoId"] === undefined || typeof value["videoId"] === "string") &&
+  (value["kind"] === undefined || value["kind"] === "song" || value["kind"] === "artist");
+
 /**
  * Reads a saved session (`JSON.parse` of one), or null when it isn't a valid
  * one. A session saved before it kept its radio (or with an unreadable one)
@@ -887,16 +963,18 @@ export const parseMagicSession = (value: unknown): MagicSession | null => {
   if (!isWeights(artistAffinity) || !isWeights(genreAffinity)) return null;
   const radioSeed = value["radioSeed"];
   const radioSignals = value["radioSignals"];
-  const validSeed =
-    isRecord(radioSeed) &&
-    typeof radioSeed["id"] === "string" &&
-    typeof radioSeed["title"] === "string" &&
-    isStrings(radioSeed["artists"]) &&
-    (radioSeed["durationMs"] === null || typeof radioSeed["durationMs"] === "number") &&
-    (radioSeed["videoId"] === undefined || typeof radioSeed["videoId"] === "string") &&
-    (radioSeed["kind"] === undefined ||
-      radioSeed["kind"] === "song" ||
-      radioSeed["kind"] === "artist");
+  const validSeed = isRadioSeed(radioSeed);
+  const seedSongs = value["seedSongs"];
+  const seedDraws = value["seedDraws"];
+  const seedRadios = value["seedRadios"];
+  const validSeedSongs =
+    Array.isArray(seedSongs) &&
+    seedSongs.every((song) => isRadioSeed(song) && typeof song["plays"] === "number");
+  const validSeedRadios =
+    isRecord(seedRadios) &&
+    typeof seedRadios["batch"] === "number" &&
+    Number.isInteger(seedRadios["batch"]) &&
+    isStrings(seedRadios["ids"]);
   const validSignals =
     Array.isArray(radioSignals) &&
     radioSignals.every(
@@ -914,6 +992,16 @@ export const parseMagicSession = (value: unknown): MagicSession | null => {
   return {
     ...(validSeed ? { radioSeed: radioSeed as unknown as MagicSongRadioSeed } : {}),
     ...(validSignals ? { radioSignals: radioSignals as unknown as readonly MagicSignal[] } : {}),
+    // A list session saved before its seed songs were kept reads its old radio, if any.
+    ...(validSeedSongs
+      ? {
+          seedSongs: seedSongs as unknown as readonly MagicSeedSong[],
+          seedDraws: isStrings(seedDraws) ? seedDraws : [],
+          ...(validSeedRadios
+            ? { seedRadios: seedRadios as unknown as NonNullable<MagicSession["seedRadios"]> }
+            : {}),
+        }
+      : {}),
     id,
     seed: { kind: seed["kind"] as MagicSeed["kind"], id: seed["id"], title: seed["title"] },
     used,
