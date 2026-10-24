@@ -10,8 +10,8 @@ import {
   discoverMixesBuilt,
   discoverMixesDue,
   genreFamily,
+  artistGraph,
   genreMixSeeds,
-  interleaveRadios,
   mixKnownSongs,
   mixSectionOfId,
   mixSeedArtists,
@@ -103,7 +103,7 @@ describe("Genre mixes' families", () => {
       ...songsOf(2, "Post-Hardcore", 2),
       ...songsOf(2, "Alternative Metal", 3),
     ]);
-    const seeds = genreMixSeeds(library, always(0));
+    const seeds = genreMixSeeds(library);
     assert.deepEqual(
       seeds.map((seed) => seed.name),
       ["Metal"],
@@ -115,7 +115,7 @@ describe("Genre mixes' families", () => {
   test("need five Library songs", () => {
     const library = libraryOf([...songsOf(4, "Shoegaze", 7, 50), ...songsOf(5, "House", 8)]);
     assert.deepEqual(
-      genreMixSeeds(library, always(0)).map((seed) => seed.name),
+      genreMixSeeds(library).map((seed) => seed.name),
       ["Electronic"],
     );
   });
@@ -130,21 +130,21 @@ describe("Genre mixes' families", () => {
       ...songsOf(20, null, 2, 100),
     ]);
     assert.deepEqual(
-      genreMixSeeds(library, always(0)).map((seed) => seed.name),
+      genreMixSeeds(library).map((seed) => seed.name),
       ["Shoegaze", "Rock", "Metal", "Electronic"],
     );
   });
 
   test("read an unknown tag as typed, one family whatever its case", () => {
     const library = libraryOf([...songsOf(3, "Shoegaze", 7), ...songsOf(3, "shoegaze", 7)]);
-    const seeds = genreMixSeeds(library, always(0));
+    const seeds = genreMixSeeds(library);
     assert.deepEqual(
       seeds.map((seed) => seed.name),
       ["Shoegaze"],
     );
   });
 
-  test("grow from up to three of the family's artists, picked at random, most played in the family first", () => {
+  test("grow from the three most played artists in the family", () => {
     const library = libraryOf([
       ...songsOf(2, "Metalcore", 1, 40),
       ...songsOf(2, "Post-Hardcore", 2, 30),
@@ -155,52 +155,144 @@ describe("Genre mixes' families", () => {
       ...songsOf(5, "Rock", 4, 900),
       ...songsOf(1, "Metal", 4),
     ]);
-    const metal = (random: () => number) =>
-      genreMixSeeds(library, random)
+    const metal = () =>
+      genreMixSeeds(library)
         .find((seed) => seed.name === "Metal")
         ?.artists?.map((artist) => artist.name);
-    assert.deepEqual(metal(always(0)), ["Bad Omens", "Sleep Token", "Spiritbox"]);
-    assert.deepEqual(metal(always(0.999_999)), ["Spiritbox", "Daft Punk", "Nothing But Thieves"]);
+    assert.deepEqual(metal(), ["Bad Omens", "Sleep Token", "Spiritbox"]);
   });
 
-  test("pick the artists most played in the family more often", () => {
-    // A fixed pseudo-random sequence (a linear congruential generator), so the test is the same every run.
-    let state = 7;
-    const random = () => {
-      state = (state * 1_103_515_245 + 12_345) % 2_147_483_648;
-      return state / 2_147_483_648;
-    };
+  test("a pull draws the next three artists, then recycles the least recently shown", () => {
     const library = libraryOf([
-      ...songsOf(5, "Metal", 1, 400),
-      ...songsOf(1, "Metal", 2, 20),
-      ...songsOf(1, "Metal", 3, 5),
-      ...songsOf(1, "Metal", 4),
-      ...songsOf(1, "Metal", 7),
+      ...songsOf(1, "Metal", 1, 60),
+      ...songsOf(1, "Metal", 2, 50),
+      ...songsOf(1, "Metal", 3, 40),
+      ...songsOf(1, "Metal", 4, 30),
+      ...songsOf(1, "Metal", 7, 20),
+      ...songsOf(1, "Metal", 8, 10),
     ]);
-    const builds = Array.from(
-      { length: 400 },
-      () => genreMixSeeds(library, random)[0]?.artists?.map((artist) => artist.name) ?? [],
+    const artists = (shown: [string, number][]) =>
+      genreMixSeeds(library, {
+        mixes: new Map(),
+        artists: new Map(shown),
+        songs: new Set(),
+      })[0]?.artists?.map((artist) => artist.name);
+    assert.deepEqual(artists([]), ["Bad Omens", "Sleep Token", "Spiritbox"]);
+    assert.deepEqual(
+      artists([
+        ["bad omens", 1],
+        ["sleep token", 1],
+        ["spiritbox", 1],
+      ]),
+      ["Nothing But Thieves", "Slowdive", "Daft Punk"],
     );
-    assert.ok(builds.every((names) => names.length === 3));
-    const picks = (name: string) => builds.filter((names) => names.includes(name)).length;
-    assert.ok(picks("Bad Omens") > picks("Sleep Token"));
-    assert.ok(picks("Sleep Token") > picks("Slowdive"));
-    assert.ok(picks("Slowdive") > 0);
-    assert.ok(new Set(builds.map((names) => names.join("|"))).size > 3);
+    assert.deepEqual(
+      artists([
+        ["bad omens", 3],
+        ["sleep token", 1],
+        ["spiritbox", 2],
+        ["nothing but thieves", 4],
+        ["slowdive", 4],
+        ["daft punk", 4],
+      ]),
+      ["Sleep Token", "Spiritbox", "Bad Omens"],
+    );
   });
 
   test("leave out a family whose artists can't seed", () => {
     const library = libraryOf([...songsOf(9, "Soundtrack", 6, 90), ...songsOf(5, "Rock", 4)]);
     assert.deepEqual(
-      genreMixSeeds(library, always(0)).map((seed) => seed.name),
+      genreMixSeeds(library).map((seed) => seed.name),
       ["Rock"],
     );
   });
 
   test("have different ids", () => {
     const library = libraryOf([...songsOf(5, "Rock", 4), ...songsOf(5, "Metal", 1)]);
-    const ids = genreMixSeeds(library, always(0)).map((seed) => seed.id);
+    const ids = genreMixSeeds(library).map((seed) => seed.id);
     assert.equal(new Set(ids).size, 2);
+  });
+});
+
+describe("Genre mixes for artists without a genre", () => {
+  const graph = artistGraph({
+    catalog: [],
+    plays: [],
+    pages: [
+      {
+        name: "Sleep Token",
+        similar: ["Kendrick Lamar", "Bad Omens", "Spiritbox"].map((name) => ({
+          name,
+          browseId: name,
+          audience: null,
+        })),
+      },
+    ],
+  });
+
+  test("inherit the family with most closeness-weighted known neighbour support", () => {
+    const library = {
+      ...libraryOf([
+        ...songsOf(5, null, 2, 10),
+        ...songsOf(1, "Hip-Hop", 5),
+        ...songsOf(1, "Metalcore", 1),
+        ...songsOf(1, "Metal", 3),
+      ]),
+      graph,
+    };
+    const [seed] = genreMixSeeds(library);
+    assert.equal(seed?.name, "Metal");
+    assert.deepEqual(
+      seed?.artists?.map((artist) => artist.name),
+      ["Sleep Token", "Bad Omens", "Spiritbox"],
+    );
+  });
+
+  test("stay out without any neighbour with a known family, including on a cold graph", () => {
+    const library = libraryOf(songsOf(5, null, 2, 10));
+    assert.deepEqual(genreMixSeeds({ ...library, graph }), []);
+    assert.deepEqual(genreMixSeeds({ ...library, graph: null }), []);
+  });
+
+  test("use closeness rather than neighbour counts and can read already-kept profiles", () => {
+    const library = {
+      ...libraryOf(songsOf(5, null, 2)),
+      graph: {
+        names: new Map([
+          ["kendrick lamar", "Kendrick Lamar"],
+          ["bad omens", "Bad Omens"],
+          ["spiritbox", "Spiritbox"],
+        ]),
+        edges: new Map([
+          [
+            "sleep token",
+            new Map([
+              ["kendrick lamar", 0.9],
+              ["bad omens", 0.2],
+              ["spiritbox", 0.2],
+            ]),
+          ],
+        ]),
+      },
+      profileOf: (name: string) =>
+        name === "Sleep Token"
+          ? null
+          : new Map([[name === "Kendrick Lamar" ? "hiphop" : "metal", 1]]),
+    };
+    assert.equal(genreMixSeeds(library)[0]?.name, "Hip-Hop");
+  });
+
+  test("an inherited custom family keeps the tagged family's spelling", () => {
+    const library = { ...libraryOf([...songsOf(5, null, 2), ...songsOf(1, "Shoegaze", 1)]), graph };
+    assert.equal(genreMixSeeds(library)[0]?.name, "Shoegaze");
+  });
+
+  test("keep an artist's tagged family instead of replacing it with neighbours'", () => {
+    const library = {
+      ...libraryOf([...songsOf(5, "Pop", 2), ...songsOf(1, "Metal", 1), ...songsOf(1, "Metal", 3)]),
+      graph,
+    };
+    assert.equal(genreMixSeeds(library)[0]?.name, "Pop");
   });
 });
 
@@ -216,7 +308,7 @@ describe("A song with several genres", () => {
       ...songsOf(4, "House", 8),
     ]);
     assert.deepEqual(
-      genreMixSeeds(library, always(0)).map((seed) => seed.name),
+      genreMixSeeds(library).map((seed) => seed.name),
       ["Rock", "Metal", "Pop", "Electronic"],
     );
   });
@@ -227,7 +319,7 @@ describe("A song with several genres", () => {
       ...songsOf(5, "Metalcore / Deathcore", 1),
     ]);
     assert.deepEqual(
-      genreMixSeeds(library, always(0)).map((seed) => seed.name),
+      genreMixSeeds(library).map((seed) => seed.name),
       ["Hip-Hop", "Metal"],
     );
   });
@@ -235,7 +327,7 @@ describe("A song with several genres", () => {
   test('splits a tag joined with "/"', () => {
     const library = libraryOf([...songsOf(4, "Rock/Pop", 4), ...songsOf(3, "Rock", 4, 1)]);
     assert.deepEqual(
-      genreMixSeeds(library, always(0)).map((seed) => seed.name),
+      genreMixSeeds(library).map((seed) => seed.name),
       ["Rock"],
     );
   });
@@ -251,7 +343,7 @@ describe("A song with several genres", () => {
       ...songsOf(3, "Metal", 2),
     ]);
     assert.deepEqual(
-      genreMixSeeds(library, always(0)).map((seed) => seed.name),
+      genreMixSeeds(library).map((seed) => seed.name),
       ["Electronic", "Metal"],
     );
   });
@@ -268,7 +360,7 @@ describe("A song with several genres", () => {
       streamed: [],
       playlisted: [],
     });
-    const pools = genreMixSeeds(library, always(0)).map((seed) =>
+    const pools = genreMixSeeds(library).map((seed) =>
       discoverMixFamiliarPool(seed, {
         radio: [],
         known,
@@ -286,7 +378,7 @@ describe("A song with several genres", () => {
   test("make up a family's five songs in thirds", () => {
     const library = libraryOf(songsOf(15, "Metal; Rock; Pop", 1));
     assert.deepEqual(
-      genreMixSeeds(library, always(0)).map((seed) => seed.name),
+      genreMixSeeds(library).map((seed) => seed.name),
       ["Metal", "Rock", "Pop"],
     );
   });
@@ -298,49 +390,28 @@ describe("A song with several genres", () => {
       ...songsOf(4, "Pop; Metalcore", 5),
     ]);
     assert.deepEqual(
-      genreMixSeeds(library, always(0)).map((seed) => seed.name),
+      genreMixSeeds(library).map((seed) => seed.name),
       [],
     );
   });
 });
 
-describe("A genre mix's radios", () => {
-  test("take turns, in the seed artists' order, until each runs out", () => {
-    assert.deepEqual(interleaveRadios([["a1", "a2", "a3"], ["b1"], ["c1", "c2"]]), [
-      "a1",
-      "b1",
-      "c1",
-      "a2",
-      "c2",
-      "a3",
-    ]);
-  });
-
-  test("of one artist are that radio", () => {
-    assert.deepEqual(interleaveRadios([["a1", "a2"]]), ["a1", "a2"]);
-    assert.deepEqual(interleaveRadios([]), []);
-  });
-});
+const radioSongs = (count: number) =>
+  Array.from({ length: count }, (_, n) => ({
+    videoId: `v${n}`,
+    title: `Song ${n}`,
+    artists: [n % 2 === 0 ? "Architects" : "Spiritbox"],
+    album: null,
+    albumId: null,
+    durationMs: 200_000,
+    artworkUrl: null,
+    explicit: false,
+    video: false,
+  }));
+const seedOf = (genre: string) =>
+  genreMixSeeds(libraryOf([...songsOf(3, genre, 1, 10), ...songsOf(3, genre, 2, 5)]))[0]!;
 
 describe("A genre mix", () => {
-  const radioSongs = (count: number) =>
-    Array.from({ length: count }, (_, n) => ({
-      videoId: `v${n}`,
-      title: `Song ${n}`,
-      artists: [n % 2 === 0 ? "Architects" : "Spiritbox"],
-      album: null,
-      albumId: null,
-      durationMs: 200_000,
-      artworkUrl: null,
-      explicit: false,
-      video: false,
-    }));
-  const seedOf = (genre: string) =>
-    genreMixSeeds(
-      libraryOf([...songsOf(3, genre, 1, 10), ...songsOf(3, genre, 2, 5)]),
-      always(0),
-    )[0]!;
-
   test("is named after its family, keeps its seed artists, and is saved and read back as one", () => {
     const seed = seedOf("Metalcore");
     const mix = discoverMix(seed, radioSongs(12));
@@ -361,7 +432,7 @@ describe("A genre mix", () => {
   test("built once the owner has plays isn't due again that day, though none of its families was played", () => {
     const now = new Date(2026, 9, 18, 12).getTime();
     const library = libraryOf([...songsOf(5, "Metalcore", 1), ...songsOf(2, null, 4, 30)]);
-    const seeds = genreMixSeeds(library, always(0));
+    const seeds = genreMixSeeds(library);
     const mix = discoverMix(seeds[0]!, radioSongs(12));
     assert.ok(mix !== null);
     const built = discoverMixesBuilt([mix], now, seeds);
@@ -371,7 +442,7 @@ describe("A genre mix", () => {
   test("built before the owner had plays is due once plays arrive", () => {
     const now = new Date(2026, 9, 18, 12).getTime();
     const library = libraryOf(songsOf(5, "Metalcore", 1));
-    const seeds = genreMixSeeds(library, always(0));
+    const seeds = genreMixSeeds(library);
     const mix = discoverMix(seeds[0]!, radioSongs(12));
     assert.ok(mix !== null);
     const built = discoverMixesBuilt([mix], now, seeds);
@@ -388,7 +459,7 @@ describe("A genre mix", () => {
       ...songsOf(1, null, 1, 70),
       ...songsOf(1, "Deathcore", 2),
     ]);
-    const [seed] = genreMixSeeds(library, always(0));
+    const [seed] = genreMixSeeds(library);
     const pool = discoverMixFamiliarPool(seed!, {
       radio: [],
       known: mixKnownSongs({
@@ -418,7 +489,7 @@ describe("A genre mix", () => {
 
 describe("A mix's seed", () => {
   const library = libraryOf([...songsOf(3, "Metalcore", 1, 10), ...songsOf(3, "Metal", 2, 5)]);
-  const genre = genreMixSeeds(library, always(0))[0]!;
+  const genre = genreMixSeeds(library)[0]!;
   const artist = artistMixSeeds(
     { played: [{ id: 3, name: "Spiritbox", countedPlays: 4 }] },
     always(0),

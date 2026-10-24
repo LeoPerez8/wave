@@ -151,7 +151,7 @@ import {
   type HomeSections,
   type RecordedPlay,
 } from "./db/playHistory";
-import { listeningSums } from "./db/playTotals";
+import { listeningSums, selectCountedPlays } from "./db/playTotals";
 import { tasteHistory } from "./db/taste";
 import {
   removePlaylistImage,
@@ -600,6 +600,7 @@ export class LibraryStore extends Context.Service<
     readonly recommendationEntriesPage: (
       id: number,
       after: RecommendationEntryCursor,
+      includeTracks?: boolean,
     ) => Effect.Effect<ReturnType<typeof recommendationEntriesPage>, LibraryStoreError>;
     readonly recommendationFeedbackPage: (
       id: number,
@@ -773,6 +774,10 @@ export class LibraryStore extends Context.Service<
     readonly videoIds: (
       ids: readonly number[],
     ) => Effect.Effect<ReadonlyMap<number, string>, LibraryStoreError>;
+    /** Each of the songs [ids]' counted plays, by song id (those with any). */
+    readonly countedPlays: (
+      ids: readonly number[],
+    ) => Effect.Effect<ReadonlyMap<number, number>, LibraryStoreError>;
     readonly loadPlayback: Effect.Effect<SavedPlayback | null, LibraryStoreError>;
     /** Saves the queue with where its current entry is. */
     readonly saveQueue: (
@@ -1445,7 +1450,6 @@ const make = Effect.gen(function* () {
         (result) =>
           result.playlist.length +
           result.librarySongs.length +
-          result.catalog.length +
           result.favoriteVideos.size +
           result.feedback.length,
       ),
@@ -1453,8 +1457,10 @@ const make = Effect.gen(function* () {
       attempt("read recommendation page", () => recommendationFlagsPage(db, after)),
     recommendationPendingPage: (after) =>
       attempt("read recommendation page", () => recommendationPendingPage(db, after)),
-    recommendationEntriesPage: (id, after) =>
-      attempt("read recommendation page", () => recommendationEntriesPage(db, id, after)),
+    recommendationEntriesPage: (id, after, includeTracks) =>
+      attempt("read recommendation page", () =>
+        recommendationEntriesPage(db, id, after, includeTracks),
+      ),
     recommendationFeedbackPage: (id, after) =>
       attempt("read recommendation page", () => recommendationFeedbackPage(db, id, after)),
     dismissPlaylistRecommendation: (id, offer) =>
@@ -1655,6 +1661,8 @@ const make = Effect.gen(function* () {
       attempt("read queued songs", () => selectPlayableSongs(db, ids).filter(songHasFile)),
 
     videoIds: (ids) => attempt("read the songs' video ids", () => selectVideoIds(db, ids)),
+    countedPlays: (ids) =>
+      attempt("read the songs' counted plays", () => selectCountedPlays(db, ids)),
 
     loadPlayback: attempt(
       "read the saved queue",

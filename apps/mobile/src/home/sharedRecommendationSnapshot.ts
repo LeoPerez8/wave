@@ -1,8 +1,7 @@
 /**
  * The recommendation snapshot (docs/spec.md, "Recommendation snapshot"): the
  * Library, the candidate catalog and the artist graph, each read once and
- * shared by Home's mixes, the Magic Queue radio, playlist suggestions and the
- * harvest until one of its sources is written (Core's `snapshotAsk`). The
+ * shared by Home's mixes, the Magic Queue radio, playlist suggestions until one of its sources is written (Core's `snapshotAsk`). The
  * graph is derived from the catalog part, so the catalog is paged once for
  * both. Kept free of Expo so it runs under plain Node tests.
  */
@@ -62,6 +61,12 @@ export const shareRecommendationSnapshot = <L, R>({
     versions,
   });
   return {
+    /** Last derived inputs; cold parts are null and no read is started. */
+    peek: () => ({
+      library: libraryPart.peek(),
+      catalog: catalogPart.peek(),
+      graph: graphPart.peek(),
+    }),
     /** The Library part: songs, artists and plays (Home's mix indexes). */
     library: libraryPart.get,
     /** The candidate catalog part. */

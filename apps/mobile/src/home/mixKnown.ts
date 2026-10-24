@@ -13,7 +13,6 @@ import { makeExternalStore } from "@/lib/externalStore";
 import { LibraryStore, type ArtistRow, type SongRow } from "@/library/LibraryStore";
 import { onLibraryChange } from "@/library/libraryChanges";
 import { createKnownVideosRead } from "./knownVideosRead";
-import { recommendationSnapshot } from "./recommendationSnapshot";
 import { appRuntime } from "@/library/runtime";
 
 /** A Library song as a mix build reads it: with every value of its genre tag when it has several. */
@@ -29,14 +28,6 @@ export interface MixIndexes {
   readonly plays: readonly PlayTotals[];
   readonly known: MixKnownSongs<SongRow>;
 }
-
-/**
- * The indexes for a mix build: the recommendation snapshot's Library part,
- * read once and shared by every recommendation until the songs, plays,
- * playlists or streams change. A failed read isn't kept.
- */
-export const mixIndexes: Effect.Effect<MixIndexes, unknown, LibraryStore> =
-  recommendationSnapshot.library;
 
 /**
  * The videos the owner knows now (`LibraryStore.knownVideos`), as of the

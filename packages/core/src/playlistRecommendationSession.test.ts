@@ -14,7 +14,7 @@ const track = (id: string): PlaylistRecommendationTrack => ({
   source: "library",
   videoId: "",
   title: id,
-  artists: ["Radiohead"],
+  artists: [`Artist ${id}`],
   album: "OK Computer",
   albumId: null,
   durationMs: 180000,
@@ -22,6 +22,11 @@ const track = (id: string): PlaylistRecommendationTrack => ({
   explicit: false,
   genre: "Rock",
 });
+
+/** One radio bringing [library]'s songs in order, as a drawn seed's would. */
+const radioOf = (library: readonly PlaylistRecommendationTrack[]) => [
+  { id: "song:seed", artists: ["Artist seed"], songs: library },
+];
 
 test("the next refill reads newly favorited or downloaded candidates ahead of ordinary matches", async () => {
   const seed = track("seed");
@@ -31,7 +36,7 @@ test("the next refill reads newly favorited or downloaded candidates ahead of or
     newId: () => String(++id),
     read: async () => ({
       playlist: [seed],
-      sources: { library, catalog: [], graph: null, now: 0 },
+      sources: { library, pages: radioOf(library), graph: null },
     }),
     dismiss: async () => {},
   });
@@ -52,7 +57,7 @@ test("full renewal includes newly favorited and downloaded matches even when all
     newId: () => String(++id),
     read: async () => ({
       playlist: [seed],
-      sources: { library, catalog: [], graph: null, now: 0 },
+      sources: { library, pages: radioOf(library), graph: null },
     }),
     dismiss: async () => {},
   });
@@ -79,7 +84,7 @@ test("unchanged playlist membership does not keep removed Library candidates off
     newId: () => String(++id),
     read: async () => ({
       playlist: [seed],
-      sources: { library, catalog: [], graph: null, now: 0 },
+      sources: { library, pages: radioOf(library), graph: null },
     }),
     dismiss: async () => {},
   });
@@ -114,7 +119,7 @@ for (const timing of ["before snapshot", "after snapshot"]) {
         }
         return {
           playlist: snapshot ?? playlist,
-          sources: { library, catalog: [], graph: null, now: 0 },
+          sources: { library, pages: radioOf(library), graph: null },
         };
       },
       dismiss: async () => {},
@@ -142,7 +147,7 @@ test("acceptance preserves the four held offers and keys; a later external edit 
   let id = 0;
   const session = playlistRecommendationSession({
     newId: () => String(++id),
-    read: async () => ({ playlist, sources: { library, catalog: [], graph: null, now: 0 } }),
+    read: async () => ({ playlist, sources: { library, pages: radioOf(library), graph: null } }),
     dismiss: async () => {},
     accept: async (offer) => {
       playlist = [...playlist, offer.track];
@@ -173,7 +178,7 @@ test("an external addition of a held offer is not acknowledged as Add's own noti
   let id = 0;
   const session = playlistRecommendationSession({
     newId: () => String(++id),
-    read: async () => ({ playlist, sources: { library, catalog: [], graph: null, now: 0 } }),
+    read: async () => ({ playlist, sources: { library, pages: radioOf(library), graph: null } }),
     dismiss: async () => {},
     accept: async (offer) => {
       // Another writer adds a held offer before Add's refill snapshots membership.
@@ -199,7 +204,7 @@ test("initial read failure stays retryable and an empty or exhausted playlist ha
       if (fail) throw new Error("database unavailable");
       return {
         playlist: [],
-        sources: { library: [track("unused")], catalog: [], graph: null, now: 0 },
+        sources: { library: [track("unused")], pages: radioOf([track("unused")]), graph: null },
       };
     },
     dismiss: async () => {},
@@ -222,7 +227,7 @@ test("favorite and download source changes during Add renew priority after the s
   let release!: () => void;
   const session = playlistRecommendationSession({
     newId: () => String(++id),
-    read: async () => ({ playlist, sources: { library, catalog: [], graph: null, now: 0 } }),
+    read: async () => ({ playlist, sources: { library, pages: radioOf(library), graph: null } }),
     dismiss: async () => {},
     accept: async (offer) => {
       await new Promise<void>((resolve) => {
@@ -261,7 +266,7 @@ test("acceptance records only successful additions and uses updated contents for
   const accepted: string[] = [];
   const session = playlistRecommendationSession({
     newId: () => String(++id),
-    read: async () => ({ playlist, sources: { library, catalog: [], graph: null, now: 0 } }),
+    read: async () => ({ playlist, sources: { library, pages: radioOf(library), graph: null } }),
     dismiss: async () => {},
     accept: async (offer) => {
       await new Promise<void>((resolve) => {
@@ -276,7 +281,6 @@ test("acceptance records only successful additions and uses updated contents for
   const before = session.get().slots;
   const adding = session.accept(before[2]!.key);
   assert.equal(await session.accept(before[2]!.key), false);
-  assert.equal(await session.dismiss(before[0]!.key), false);
   release();
   assert.equal(await adding, false);
   assert.deepEqual(accepted, []);
@@ -302,7 +306,7 @@ test("dismissal saves once before replacing only its slot; failed saves keep the
     newId: () => String(++id),
     read: async () => ({
       playlist: [seed],
-      sources: { library, catalog: [], graph: null, now: 0 },
+      sources: { library, pages: radioOf(library), graph: null },
     }),
     dismiss: async () => {
       saves++;
@@ -345,7 +349,7 @@ test("a successful dismissal survives refill failure; retry fills its hole witho
     newId: () => String(++id),
     read: async () => {
       if (unavailable) throw new Error("read failed");
-      return { playlist: [seed], sources: { library, catalog: [], graph: null, now: 0 } };
+      return { playlist: [seed], sources: { library, pages: radioOf(library), graph: null } };
     },
     dismiss: async () => {
       unavailable = true;
@@ -368,7 +372,7 @@ test("refill recovery preserves held offer objects and keys when saved dismissal
     seed,
     ..."abcdefgh".split("").map((id) => ({
       ...track(id),
-      artists: [id <= "e" ? "Artist A" : "Artist B"],
+      artists: [id <= "e" ? `Artist ${id}` : "Artist B"],
       album: null,
     })),
   ];
@@ -379,7 +383,10 @@ test("refill recovery preserves held offer objects and keys when saved dismissal
     newId: () => String(++id),
     read: async () => {
       if (unavailable) throw new Error("read failed");
-      return { playlist: [seed], sources: { library, catalog: [], graph: null, now: 0, feedback } };
+      return {
+        playlist: [seed],
+        sources: { library, pages: radioOf(library), graph: null, feedback },
+      };
     },
     dismiss: async (offer) => {
       feedback.push({ track: offer.track, value: -1 });
@@ -422,7 +429,7 @@ test("cancelled renewal and disposal cannot publish stale offers or keep listene
   controller.abort();
   read.resolve({
     playlist: [track("seed")],
-    sources: { library: [track("next")], catalog: [], graph: null, now: 0 },
+    sources: { library: [track("next")], pages: radioOf([track("next")]), graph: null },
   });
   await renewing;
   assert.equal(notifications, before);
@@ -444,7 +451,11 @@ test("hiding during Add commits once, cancels its refill and retains held offers
       reads++;
       return {
         playlist: [track("seed")],
-        sources: { library: "abcdefg".split("").map(track), catalog: [], graph: null, now: 0 },
+        sources: {
+          library: "abcdefg".split("").map(track),
+          pages: radioOf("abcdefg".split("").map(track)),
+          graph: null,
+        },
       };
     },
     dismiss: async () => {},
@@ -501,7 +512,7 @@ test("a tap's slot holds a placeholder from the tap on; saving, reading and rank
     newId: () => String(++id),
     read: async () => {
       events.push("read");
-      return { playlist, sources: { library, catalog: [], graph: null, now: 0 } };
+      return { playlist, sources: { library, pages: radioOf(library), graph: null } };
     },
     dismiss: async () => {},
     accept: async (offer) => {
@@ -518,18 +529,16 @@ test("a tap's slot holds a placeholder from the tap on; saving, reading and rank
   const before = session.get().slots;
   const adding = session.accept(before[2]!.key);
   // Synchronously: the tap is acknowledged before any storage work runs.
-  assert.equal(session.get().pending, before[2]!.key);
+  assert.deepEqual(session.get().pending, [before[2]!.key]);
   assert.deepEqual(session.get().pendingSlots, [2]);
   assert.equal(saves, 0);
-  // Repeated taps on any offer meanwhile change nothing.
+  // Repeated taps on the same offer meanwhile change nothing.
   assert.equal(await session.accept(before[2]!.key), false);
-  assert.equal(await session.dismiss(before[0]!.key), false);
   await host.next(); // paint
   assert.equal(saves, 1);
   assert.equal(session.get().slots[2], null);
   assert.deepEqual(session.get().pendingSlots, [2]);
   for (const index of [0, 1, 3, 4]) assert.equal(session.get().slots[index], before[index]);
-  assert.equal(await session.accept(before[3]!.key), false);
   await host.next(); // free
   await host.next(); // paint, then rank
   assert.equal(await adding, true);
@@ -537,7 +546,7 @@ test("a tap's slot holds a placeholder from the tap on; saving, reading and rank
   assert.equal(saves, 1);
   assert.equal(session.get().slots[2]?.track.id, "f");
   assert.deepEqual(session.get().pendingSlots, []);
-  assert.equal(session.get().pending, null);
+  assert.deepEqual(session.get().pending, []);
   for (const index of [0, 1, 3, 4]) assert.equal(session.get().slots[index], before[index]);
 });
 
@@ -550,7 +559,7 @@ test("an exhausted pool leaves the freed slot empty, without an error or a place
     newId: () => String(++id),
     read: async () => ({
       playlist: [seed],
-      sources: { library, catalog: [], graph: null, now: 0 },
+      sources: { library, pages: radioOf(library), graph: null },
     }),
     dismiss: async () => {
       saves++;
@@ -580,7 +589,7 @@ test("a failed save restores its offer in place and retries with one more write"
     newId: () => String(++id),
     read: async () => ({
       playlist: [seed],
-      sources: { library, catalog: [], graph: null, now: 0 },
+      sources: { library, pages: radioOf(library), graph: null },
     }),
     dismiss: async () => {},
     accept: async (offer) => {
@@ -615,7 +624,7 @@ test("a failed replacement keeps its slot's place; the retry holds a placeholder
     newId: () => String(++id),
     read: async () => {
       if (unavailable) throw new Error("read failed");
-      return { playlist: [seed], sources: { library, catalog: [], graph: null, now: 0 } };
+      return { playlist: [seed], sources: { library, pages: radioOf(library), graph: null } };
     },
     dismiss: async () => {
       saves++;
@@ -660,7 +669,7 @@ test("the next action's refill also fills a slot whose replacement failed before
     newId: () => String(++id),
     read: async () => {
       if (unavailable) throw new Error("read failed");
-      return { playlist: [seed], sources: { library, catalog: [], graph: null, now: 0 } };
+      return { playlist: [seed], sources: { library, pages: radioOf(library), graph: null } };
     },
     dismiss: async () => {
       saves++;
@@ -701,9 +710,7 @@ test("each full renewal reports how long its read and ranking took and how many 
         playlist: [seed],
         sources: {
           library: [seed, ...["a", "b", "c"].map(track)],
-          catalog: [],
           graph: null,
-          now: 0,
         },
       };
     },
@@ -748,4 +755,381 @@ test("a renewal's timing reads as one log line, from the playlist's opening when
     ),
     "Playlist suggestions failed 60400 ms after opening (read 60000 ms, rank 0 ms)",
   );
+});
+
+test("a refill keeps the five offers to at most 2 songs by one artist, counting those held", async () => {
+  const seed = track("seed");
+  const by = (id: string, artist: string) => ({ ...track(id), artists: [artist] });
+  const library = [
+    seed,
+    by("a", "X"),
+    by("b", "X"),
+    by("c", "Y"),
+    by("d", "Z"),
+    by("e", "W"),
+    by("f", "X"),
+    by("g", "V"),
+  ];
+  let id = 0;
+  const session = playlistRecommendationSession({
+    newId: () => String(++id),
+    read: async () => ({
+      playlist: [seed],
+      sources: { library, pages: radioOf(library), graph: null },
+    }),
+    dismiss: async () => {},
+  });
+  await session.renew();
+  assert.deepEqual(
+    session.get().slots.map((offer) => offer?.track.id),
+    ["a", "b", "c", "d", "e"],
+  );
+  assert.equal(await session.dismiss(session.get().slots[2]!.key), true);
+  assert.equal(session.get().slots[2]?.track.id, "g");
+  await session.renew();
+  const artists = session.get().slots.flatMap((offer) => offer?.track.artists ?? []);
+  assert.ok(artists.filter((name) => name === "X").length <= 2);
+});
+
+test("a tap on another offer while the first one saves is taken at once and saved after it", async () => {
+  const seed = track("seed");
+  const library = [seed, ..."abcdefghij".split("").map(track)];
+  let playlist = [seed];
+  const first = Promise.withResolvers<void>();
+  const written: string[] = [];
+  let id = 0;
+  const session = playlistRecommendationSession({
+    newId: () => String(++id),
+    read: async () => ({ playlist, sources: { library, pages: radioOf(library), graph: null } }),
+    dismiss: async (offer) => {
+      written.push(`dismiss ${offer.track.id}`);
+    },
+    accept: async (offer) => {
+      if (written.length === 0) await first.promise;
+      written.push(`add ${offer.track.id}`);
+      playlist = [...playlist, offer.track];
+    },
+  });
+  await session.renew();
+  const before = session.get().slots;
+  const adding = session.accept(before[1]!.key);
+  const dismissing = session.dismiss(before[3]!.key);
+  // Both taps hold their slot's placeholder at once; the others keep theirs.
+  assert.deepEqual(session.get().pending, [before[1]!.key, before[3]!.key]);
+  assert.deepEqual(session.get().pendingSlots, [1, 3]);
+  // A repeated tap on an offer whose save is under way writes nothing more.
+  assert.equal(await session.accept(before[1]!.key), false);
+  first.resolve();
+  assert.deepEqual(await Promise.all([adding, dismissing]), [true, true]);
+  assert.deepEqual(written, ["add b", "dismiss d"]);
+  assert.deepEqual(
+    session.get().slots.map((offer) => offer?.track.id ?? null),
+    ["a", "f", "c", "g", "e"],
+  );
+  for (const index of [0, 2, 4]) assert.equal(session.get().slots[index], before[index]);
+  assert.deepEqual(session.get().pending, []);
+  assert.deepEqual(session.get().pendingSlots, []);
+  assert.equal(session.get().error, null);
+});
+
+/** A session over seed + a…j whose reads wait while [gate.hold] is set. */
+const gatedSession = (
+  options: {
+    readonly dismiss?: (offer: { readonly track: PlaylistRecommendationTrack }) => Promise<void>;
+    readonly accept?: (offer: { readonly track: PlaylistRecommendationTrack }) => Promise<void>;
+    /** Whether the [n]th read fails, counting from 1. */
+    readonly fail?: (n: number) => boolean;
+    readonly report?: (timing: PlaylistRecommendationTiming) => void;
+  } = {},
+) => {
+  const seed = track("seed");
+  const gate: {
+    hold: PromiseWithResolvers<void> | undefined;
+    reads: number;
+    playlist: PlaylistRecommendationTrack[];
+    library: PlaylistRecommendationTrack[];
+  } = {
+    hold: undefined,
+    reads: 0,
+    playlist: [seed],
+    library: [seed, ..."abcdefghij".split("").map(track)],
+  };
+  let id = 0;
+  const session = playlistRecommendationSession({
+    newId: () => String(++id),
+    read: async () => {
+      const n = ++gate.reads;
+      const hold = gate.hold;
+      gate.hold = undefined;
+      await hold?.promise;
+      if (options.fail?.(n) === true) throw new Error("read failed");
+      return {
+        playlist: gate.playlist,
+        sources: { library: gate.library, pages: radioOf(gate.library), graph: null },
+      };
+    },
+    dismiss: options.dismiss ?? (async () => {}),
+    accept:
+      options.accept ??
+      (async (offer) => {
+        gate.playlist = [...gate.playlist, offer.track];
+      }),
+    ...(options.report === undefined ? {} : { timed: { now: () => 0, report: options.report } }),
+  });
+  return { session, gate };
+};
+
+test("slots freed while a replacement is read wait for the next refill, which leaves the others in place", async () => {
+  const { session, gate } = gatedSession();
+  await session.renew();
+  const before = session.get().slots;
+  gate.hold = Promise.withResolvers();
+  const hold = gate.hold;
+  const first = session.dismiss(before[0]!.key);
+  await new Promise((resolve) => setImmediate(resolve));
+  // The first refill is reading; the second slot is freed meanwhile.
+  const second = session.accept(before[2]!.key);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(
+    session.get().slots.map((offer) => offer?.track.id ?? null),
+    [null, "b", null, "d", "e"],
+  );
+  assert.deepEqual(session.get().pendingSlots, [0, 2]);
+  assert.equal(gate.reads, 2);
+  hold.resolve();
+  assert.deepEqual(await Promise.all([first, second]), [true, true]);
+  assert.equal(gate.reads, 3);
+  assert.deepEqual(
+    session.get().slots.map((offer) => offer?.track.id ?? null),
+    ["f", "b", "g", "d", "e"],
+  );
+  for (const index of [1, 3, 4]) assert.equal(session.get().slots[index], before[index]);
+  assert.deepEqual(
+    gate.playlist.map((song) => song.id),
+    ["seed", "c"],
+  );
+  assert.deepEqual(session.get().pendingSlots, []);
+});
+
+test("a failed save among concurrent actions restores only its own offer", async () => {
+  const { session } = gatedSession({
+    accept: async () => {
+      throw new Error("disk full");
+    },
+  });
+  await session.renew();
+  const before = session.get().slots;
+  const adding = session.accept(before[1]!.key);
+  const dismissing = session.dismiss(before[3]!.key);
+  assert.deepEqual(await Promise.all([adding, dismissing]), [false, true]);
+  assert.deepEqual(
+    session.get().slots.map((offer) => offer?.track.id ?? null),
+    ["a", "b", "c", "f", "e"],
+  );
+  assert.equal(session.get().slots[1], before[1]);
+  assert.equal(session.get().error, "save");
+  assert.deepEqual(session.get().pending, []);
+  assert.deepEqual(session.get().pendingSlots, []);
+  // The restored offer's action works again.
+  assert.equal(await session.dismiss(before[1]!.key), true);
+  assert.equal(session.get().slots[1]?.track.id, "g");
+});
+
+test("Try Again while another offer's replacement is read retries its slot alongside, without saving again", async () => {
+  // The renewal reads first, then the first refill, which fails.
+  const written: string[] = [];
+  const { session, gate } = gatedSession({
+    fail: (n) => n === 2,
+    dismiss: async (offer) => {
+      written.push(offer.track.id);
+    },
+  });
+  await session.renew();
+  const before = session.get().slots;
+  assert.equal(await session.dismiss(before[0]!.key), true);
+  assert.deepEqual(session.get().unfilled, [0]);
+  assert.equal(session.get().error, "refill");
+  gate.hold = Promise.withResolvers();
+  const hold = gate.hold;
+  const dismissing = session.dismiss(before[2]!.key);
+  // The tap takes the failed slot into its own refill, which is reading.
+  assert.deepEqual(session.get().pendingSlots, [2, 0]);
+  await new Promise((resolve) => setImmediate(resolve));
+  // With nothing left to retry, Try Again does nothing more.
+  await session.renew({ refillOnly: true });
+  hold.resolve();
+  assert.equal(await dismissing, true);
+  assert.deepEqual(written, ["a", "c"]);
+  assert.deepEqual(
+    session.get().slots.map((offer) => offer?.track.id ?? null),
+    ["g", "b", "f", "d", "e"],
+  );
+  assert.deepEqual(session.get().unfilled, []);
+  assert.deepEqual(session.get().pendingSlots, []);
+  for (const index of [1, 3, 4]) assert.equal(session.get().slots[index], before[index]);
+});
+
+test("a tap during a Try Again is taken at once and its slot filled after the retried one", async () => {
+  const { session, gate } = gatedSession({ fail: (n) => n === 2 });
+  await session.renew();
+  const before = session.get().slots;
+  assert.equal(await session.dismiss(before[0]!.key), true);
+  assert.deepEqual(session.get().unfilled, [0]);
+  gate.hold = Promise.withResolvers();
+  const hold = gate.hold;
+  const retry = session.renew({ refillOnly: true });
+  await new Promise((resolve) => setImmediate(resolve));
+  const dismissing = session.dismiss(before[3]!.key);
+  assert.deepEqual(session.get().pendingSlots, [0, 3]);
+  hold.resolve();
+  await retry;
+  assert.equal(await dismissing, true);
+  assert.deepEqual(
+    session.get().slots.map((offer) => offer?.track.id ?? null),
+    ["f", "b", "c", "g", "e"],
+  );
+  assert.deepEqual(session.get().unfilled, []);
+  assert.equal(session.get().error, null);
+});
+
+test("hiding during concurrent actions keeps every save and leaves no slot as a placeholder", async () => {
+  const saved = Promise.withResolvers<void>();
+  const written: string[] = [];
+  const { session, gate } = gatedSession({
+    accept: async (offer) => {
+      await saved.promise;
+      written.push(offer.track.id);
+    },
+    dismiss: async (offer) => {
+      written.push(offer.track.id);
+    },
+  });
+  await session.renew();
+  let notifications = 0;
+  session.subscribe(() => notifications++);
+  const before = session.get().slots;
+  const adding = session.accept(before[0]!.key);
+  const dismissing = session.dismiss(before[2]!.key);
+  session.pause();
+  const heard = notifications;
+  saved.resolve();
+  assert.deepEqual(await Promise.all([adding, dismissing]), [true, true]);
+  assert.deepEqual(written, ["a", "c"]);
+  assert.deepEqual([gate.reads, notifications], [1, heard]);
+  assert.deepEqual(session.get().pending, []);
+  assert.deepEqual(session.get().pendingSlots, []);
+  assert.deepEqual(session.get().unfilled, [0, 2]);
+  assert.equal(session.get().error, null);
+  session.resume();
+  await session.renew();
+  assert.deepEqual(
+    session.get().slots.map((offer) => offer?.track.id ?? null),
+    ["f", "b", "g", "d", "e"],
+  );
+  assert.deepEqual(session.get().unfilled, []);
+});
+
+test("a renewal asked for during concurrent actions runs once, after the last replacement", async () => {
+  const timings: PlaylistRecommendationTiming[] = [];
+  const saved = Promise.withResolvers<void>();
+  const { session, gate } = gatedSession({
+    report: (timing) => timings.push(timing),
+    accept: async (offer) => {
+      await saved.promise;
+      gate.playlist = [...gate.playlist, offer.track];
+    },
+  });
+  await session.renew();
+  const before = session.get().slots;
+  const adding = session.accept(before[0]!.key);
+  const dismissing = session.dismiss(before[2]!.key);
+  gate.library = gate.library.map((song) => ({ ...song, favorite: song.id === "j" }));
+  await session.renew();
+  await session.renew();
+  assert.equal(timings.length, 1);
+  assert.equal(session.get().loading, false);
+  saved.resolve();
+  assert.deepEqual(await Promise.all([adding, dismissing]), [true, true]);
+  assert.equal(timings.length, 2);
+  assert.equal(
+    session.get().slots.some((offer) => offer?.track.id === "j"),
+    true,
+  );
+  assert.equal(
+    session.get().slots.some((offer) => offer?.track.id === "a" || offer?.track.id === "c"),
+    false,
+  );
+});
+
+test("Add and Dismiss wait for a full renewal's offers", async () => {
+  const { session, gate } = gatedSession();
+  await session.renew();
+  const before = session.get().slots;
+  gate.hold = Promise.withResolvers();
+  const hold = gate.hold;
+  const renewing = session.renew();
+  assert.equal(session.get().loading, true);
+  assert.equal(await session.dismiss(before[0]!.key), false);
+  assert.deepEqual(session.get().pending, []);
+  hold.resolve();
+  await renewing;
+  assert.equal(await session.dismiss(before[0]!.key), true);
+});
+
+test("a slot whose replacement failed is filled by the refill already waiting, and a failed save keeps its message", async () => {
+  // The renewal reads first, then the first refill, which fails.
+  const { session, gate } = gatedSession({
+    fail: (n) => n === 2,
+    accept: async (offer) => {
+      if (offer.track.id === "b") throw new Error("disk full");
+      gate.playlist = [...gate.playlist, offer.track];
+    },
+  });
+  await session.renew();
+  const before = session.get().slots;
+  gate.hold = Promise.withResolvers();
+  const hold = gate.hold;
+  const first = session.dismiss(before[0]!.key);
+  await new Promise((resolve) => setImmediate(resolve));
+  const failing = session.accept(before[1]!.key);
+  const second = session.dismiss(before[2]!.key);
+  assert.equal(await failing, false);
+  assert.equal(session.get().error, "save");
+  hold.resolve();
+  assert.deepEqual(await Promise.all([first, second]), [true, true]);
+  assert.deepEqual(
+    session.get().slots.map((offer) => offer?.track.id ?? null),
+    ["g", "b", "f", "d", "e"],
+  );
+  assert.deepEqual(session.get().unfilled, []);
+  assert.deepEqual(session.get().pendingSlots, []);
+  // The refill's failure didn't hide that b's choice still needs another try.
+  assert.equal(session.get().error, "save");
+  assert.equal(session.get().slots[1], before[1]);
+});
+
+test("closing the playlist during concurrent actions still writes every tapped choice, and publishes nothing", async () => {
+  const saved = Promise.withResolvers<void>();
+  const written: string[] = [];
+  const { session, gate } = gatedSession({
+    accept: async (offer) => {
+      await saved.promise;
+      written.push(offer.track.id);
+    },
+    dismiss: async (offer) => {
+      written.push(offer.track.id);
+    },
+  });
+  await session.renew();
+  let notifications = 0;
+  session.subscribe(() => notifications++);
+  const before = session.get().slots;
+  const adding = session.accept(before[0]!.key);
+  const dismissing = session.dismiss(before[2]!.key);
+  const heard = notifications;
+  session.dispose();
+  saved.resolve();
+  assert.deepEqual(await Promise.all([adding, dismissing]), [true, true]);
+  assert.deepEqual(written, ["a", "c"]);
+  assert.deepEqual([gate.reads, notifications], [1, heard]);
 });

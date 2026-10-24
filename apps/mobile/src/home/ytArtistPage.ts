@@ -34,7 +34,7 @@ export const savedYtArtist = (name: string) =>
  * artist page saved, or the one an Artists search finds. Null when YouTube
  * Music has no such artist; fails when the search can't be made.
  */
-export const ytArtistBrowseId = (name: string) =>
+const ytArtistBrowseId = (name: string) =>
   Effect.gen(function* () {
     const ytMusic = yield* YtMusic;
     const lookup = ytArtistLookup(name, yield* savedYtArtist(name));

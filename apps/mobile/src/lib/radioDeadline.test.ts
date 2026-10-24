@@ -2,10 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import * as Effect from "effect/Effect";
 import { playlistRecommendationSession } from "@wave/core";
-import {
-  checkRecommendationDeadlines,
-  withRecommendationDeadline,
-} from "./recommendationTimeout.ts";
+import { checkRadioDeadlines, withRadioDeadline } from "./radioDeadline.ts";
 
 test("resume fails suspended recommendation work even when its timeout timer never fired", async (t) => {
   t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 0 });
@@ -17,13 +14,13 @@ test("resume fails suspended recommendation work even when its timeout timer nev
           released = true;
         }),
       ),
-      withRecommendationDeadline,
+      (read) => withRadioDeadline(read, 8000),
     ),
   );
-  const failed = assert.rejects(pending, /Recommendation deadline elapsed/);
+  const failed = assert.rejects(pending, /Radio deadline elapsed/);
   // Jump wall time without delivering timers, as when Android suspends the app.
   t.mock.timers.setTime(892_000);
-  checkRecommendationDeadlines();
+  checkRadioDeadlines();
   await failed;
   assert.equal(released, true, "expiration interrupts the read and releases its pending work");
 });
@@ -34,10 +31,10 @@ test("a result delivered after the wall-clock deadline fails before its consumer
   const result = Effect.runPromise(
     Effect.callback<string>((resume) => {
       finish = () => resume(Effect.succeed("late recommendations"));
-    }).pipe(withRecommendationDeadline),
+    }).pipe((read) => withRadioDeadline(read, 8000)),
   );
-  const failed = assert.rejects(result, /Recommendation deadline elapsed/);
-  t.mock.timers.setTime(60_000);
+  const failed = assert.rejects(result, /Radio deadline elapsed/);
+  t.mock.timers.setTime(8000);
   finish();
   await failed;
 });
@@ -55,14 +52,14 @@ test("a suspended playlist read leaves loading in its failure state and can be r
               playlist: [],
               sources: { library: [], catalog: [], graph: null, now: Date.now() },
             })
-        ).pipe(withRecommendationDeadline),
+        ).pipe((read) => withRadioDeadline(read, 8000)),
       ),
     dismiss: async () => {},
   });
   t.after(session.dispose);
   const pending = session.renew();
   t.mock.timers.setTime(892_000);
-  checkRecommendationDeadlines();
+  checkRadioDeadlines();
   await pending;
   assert.equal(session.get().loading, false);
   assert.equal(session.get().error, "load");
@@ -75,24 +72,27 @@ test("a suspended playlist read leaves loading in its failure state and can be r
 test("normal completion and cancellation release the deadline, and later reads have their own limit", async (t) => {
   t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 0 });
   assert.equal(
-    await Effect.runPromise(Effect.succeed("saved").pipe(withRecommendationDeadline)),
+    await Effect.runPromise(Effect.succeed("saved").pipe((read) => withRadioDeadline(read, 8000))),
     "saved",
   );
   const controller = new AbortController();
-  const pending = Effect.runPromise(Effect.never.pipe(withRecommendationDeadline), {
-    signal: controller.signal,
-  });
+  const pending = Effect.runPromise(
+    Effect.never.pipe((read) => withRadioDeadline(read, 8000)),
+    {
+      signal: controller.signal,
+    },
+  );
   const stopped = assert.rejects(pending);
   controller.abort();
   await stopped;
-  t.mock.timers.tick(60_000);
-  checkRecommendationDeadlines();
+  t.mock.timers.tick(8000);
+  checkRadioDeadlines();
   assert.equal(
-    await Effect.runPromise(Effect.succeed("fresh").pipe(withRecommendationDeadline)),
+    await Effect.runPromise(Effect.succeed("fresh").pipe((read) => withRadioDeadline(read, 8000))),
     "fresh",
   );
-  const later = Effect.runPromise(Effect.never.pipe(withRecommendationDeadline));
-  const failed = assert.rejects(later, /Recommendation deadline elapsed/);
-  t.mock.timers.tick(60_000);
+  const later = Effect.runPromise(Effect.never.pipe((read) => withRadioDeadline(read, 8000)));
+  const failed = assert.rejects(later, /Radio deadline elapsed/);
+  t.mock.timers.tick(8000);
   await failed;
 });

@@ -21,7 +21,7 @@ describe("when a recommendation snapshot is read again", () => {
       assert.equal(snapshotAsk(catalog, { versions, done, usedAt: 0 }, versions, 1_000), "share");
   });
 
-  test("a harvest batch written while the catalog is read waits for the read under way, then reads again", () => {
+  test("a radio page written while the catalog is read waits for the read under way, then reads again", () => {
     const before = snapshotVersionsAfter({}, "catalog");
     const after = snapshotVersionsAfter(before, "catalog");
     const reading = { versions: before, done: false, usedAt: 0 };
@@ -47,7 +47,7 @@ describe("when a recommendation snapshot is read again", () => {
       [kept(library, "plays"), kept(catalog, "plays"), kept(graph, "plays")],
       [false, true, false],
     );
-    // A harvest batch grows the catalog, which the graph is derived from too.
+    // A radio page grows the catalog, which the graph is derived from too.
     assert.deepEqual(
       [kept(library, "catalog"), kept(catalog, "catalog"), kept(graph, "catalog")],
       [true, false, false],

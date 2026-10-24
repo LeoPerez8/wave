@@ -1169,3 +1169,17 @@ describe("isCollectionKind", () => {
     }
   });
 });
+
+test("YouTube Music off removes Magic Queue from every Library seed menu", () => {
+  for (const kind of ["track", "album", "artist", "playlist"] as const) {
+    assert.equal(
+      itemActions({
+        kind,
+        items: [{ favorite: false, albumId: 1, artistIds: [1] }],
+        here: "/",
+        ytMusic: false,
+      }).some((entry) => entry.action === "magicQueue"),
+      false,
+    );
+  }
+});

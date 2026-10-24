@@ -1,7 +1,7 @@
 /** Effect adapter; a single instance budgets all recommendation pages and CPU slices. */
 import { recommendationFrameBudget } from "@wave/core";
 import * as Effect from "effect/Effect";
-import { checkRecommendationDeadlines } from "./recommendationTimeout.ts";
+import { checkRadioDeadlines } from "./radioDeadline.ts";
 
 export const createRecommendationTurn = (host: {
   readonly now: () => number;
@@ -12,7 +12,7 @@ export const createRecommendationTurn = (host: {
   const waiters = new Set<() => void>();
   let cancel: (() => void) | undefined;
   const turn: Effect.Effect<void> = Effect.suspend(() => {
-    checkRecommendationDeadlines();
+    checkRadioDeadlines();
     if (!budget.due()) return Effect.void;
     return Effect.callback<void>((resume) => {
       // Recheck the shared budget: a peer may have used it before this reader resumes.

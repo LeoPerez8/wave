@@ -6,9 +6,11 @@
  * a real SQLite (`testDatabase.ts`).
  */
 import type { ListeningSums } from "@wave/core";
-import { sql } from "drizzle-orm";
+import { and, gt, inArray, sql } from "drizzle-orm";
 
+import { chunks } from "./chunks.ts";
 import type { LibraryDatabase } from "./database.ts";
+import * as schema from "./schema.ts";
 
 /** `play_totals`' columns, in the order `SUMMED` gives them. */
 const COLUMNS = sql`track_id, plays, counted_plays, listened_ms, counted_listened_ms,
@@ -58,3 +60,22 @@ export const listeningSums = (db: LibraryDatabase): ListeningSums =>
         WHERE play_totals.counted_plays > 0) AS "songsListened",
       max(last_played_at) AS "lastPlayedAt"
     FROM play_totals`);
+
+/**
+ * Each of the songs [ids]' counted plays, by song id; those never counted are
+ * left out. What a Magic Queue from an album or a playlist draws its radios by.
+ */
+export const selectCountedPlays = (
+  db: LibraryDatabase,
+  ids: readonly number[],
+): Map<number, number> =>
+  new Map(
+    chunks(ids).flatMap((some) =>
+      db
+        .select({ id: schema.playTotals.trackId, plays: schema.playTotals.countedPlays })
+        .from(schema.playTotals)
+        .where(and(inArray(schema.playTotals.trackId, some), gt(schema.playTotals.countedPlays, 0)))
+        .all()
+        .map(({ id, plays }) => [id, plays] as const),
+    ),
+  );

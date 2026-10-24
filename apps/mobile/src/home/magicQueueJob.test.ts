@@ -7,53 +7,9 @@ import { localDay, magicQueuePicks, seededRandom, type MagicQueuePicks } from "@
 import { loadLibraryStore } from "../../bench/fastAgain/store.ts";
 import { createFastAgainFixture } from "../library/db/fastAgainFixture.ts";
 import { readTasteLibrary, deriveTaste } from "../playback/tasteDerivation.ts";
-import { homeMagicQueueDue, buildHomeMagicQueue, pickHomeMagicQueue } from "./magicQueueJob.ts";
+import { homeMagicQueueDue, buildHomeMagicQueue } from "./magicQueueJob.ts";
 
 const root = fileURLToPath(new URL("../../../../", import.meta.url));
-test("a Home Magic Queue pick whose derivation never gets a turn times out and cancels that turn", async (t) => {
-  t.mock.timers.enable({ apis: ["setTimeout", "Date"] });
-  let turns = 0;
-  const controller = new AbortController();
-  const turn = Effect.callback<void>(() => {
-    turns++;
-    return Effect.sync(() => {
-      turns--;
-    });
-  });
-  let outcome = "waiting";
-  const pending = Effect.runPromise(
-    pickHomeMagicQueue(
-      {} as never,
-      null,
-      {
-        now: 0,
-        random: () => 0.5,
-        turn: Effect.void,
-        taste: () => Effect.succeed(null),
-      },
-      turn,
-    ),
-    { signal: controller.signal },
-  ).then(
-    () => {
-      outcome = "picked";
-    },
-    () => {
-      outcome = "failed";
-    },
-  );
-  try {
-    assert.equal(turns, 1);
-    t.mock.timers.tick(60_000);
-    await new Promise((resolve) => setImmediate(resolve));
-    assert.equal(outcome, "failed", "a stuck derivation reaches the retry state");
-    assert.equal(turns, 0, "the timed-out pick releases its queued work");
-  } finally {
-    controller.abort();
-    await pending;
-  }
-});
-
 test("due picks retry their shared Library after a write before profile scoring", async () => {
   const fixture = await createFastAgainFixture();
   try {

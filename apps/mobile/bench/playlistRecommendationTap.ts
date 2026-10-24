@@ -131,8 +131,13 @@ for (let run = 0; run <= runs; run++) {
   const start = performance.now();
   lastTick = start;
   const stop = session.subscribe(() => {
-    const state = session.get() as { pending: string | null; pendingSlots?: readonly number[] };
-    if (feedbackAt < 0 && state.pending !== null) feedbackAt = performance.now() - start;
+    // `pending` was one key (or null) before #650, and is every running action's key since.
+    const state = session.get() as {
+      pending: string | readonly string[] | null;
+      pendingSlots?: readonly number[];
+    };
+    const acting = Array.isArray(state.pending) ? state.pending.length > 0 : state.pending !== null;
+    if (feedbackAt < 0 && acting) feedbackAt = performance.now() - start;
     if (placeholderAt < 0 && state.pendingSlots?.includes(2) === true)
       placeholderAt = performance.now() - start;
   });
@@ -147,7 +152,7 @@ for (let run = 0; run <= runs; run++) {
   // The replacement's ranking alone, on the same input (the session runs it inside `replacementMs`).
   const input = lastInput!;
   const rankStart = performance.now();
-  playlistRecommendations(input.playlist, { ...input, graph: null, now: 1 });
+  playlistRecommendations(input.playlist, { ...input, graph: null });
   const rankMs = performance.now() - rankStart;
   if (session.get().slots[2] === null) throw new Error("the slot was not refilled");
   if (run > 0)

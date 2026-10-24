@@ -10,7 +10,7 @@ import { SHARED_READ_ATTEMPTS, sharedRead } from "./sharedRead.ts";
 class Store extends Context.Service<Store, { readonly value: number }>()("test/Store") {}
 
 describe("A shared read", () => {
-  test("a stalled recommendation source times out for all waiters, cancels paging, and can be retried", async (t) => {
+  test("a background derivation has no request deadline and cancellation releases its work", async (t) => {
     t.mock.timers.enable({ apis: ["setTimeout", "Date"] });
     let blocked = true;
     let turns = 0;
@@ -42,8 +42,11 @@ describe("A shared read", () => {
       assert.equal(turns, 1, "the consumers wait on the same source");
       t.mock.timers.tick(60_000);
       await new Promise((resolve) => setImmediate(resolve));
+      assert.deepEqual(outcomes, []);
+      controllers.forEach((controller) => controller.abort());
+      await Promise.all(waiting);
       assert.deepEqual(outcomes, ["failed", "failed"]);
-      assert.equal(turns, 0, "no paging remains after its last waiter timed out");
+      assert.equal(turns, 0, "no paging remains after its last waiter cancelled");
       blocked = false;
       assert.equal(await Effect.runPromise(shared.get), 42);
     } finally {

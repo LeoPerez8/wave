@@ -15,10 +15,10 @@ import type {
   DiscoverSongPlays,
 } from "./discoverMixes.ts";
 import { genreMixId } from "./discoverMixes.ts";
-import type { MixAffinity } from "./genreAffinity.ts";
+import { libraryMixProfilesSteps, type GenreProfileOf } from "./genreAffinity.ts";
+import { artistNeighbourhoodSteps, type ArtistGraph } from "./artistGraph.ts";
 import { identityKey } from "./library.ts";
 import { freshFirstSteps, type MixRefreshAvoid } from "./mixRefresh.ts";
-import { pickWeightedSteps, playsWeight, type RandomSource } from "./weightedPick.ts";
 import { ytArtistQuery } from "./ytArtist.ts";
 
 /** A genre family: the tags that sound alike, under one name. */
@@ -201,16 +201,10 @@ export interface GenreStyle {
 
 /**
  * The styles of the families that split (docs/spec.md, Glossary: style):
- * each with its tags, and the styles that sound near it, which Close admits
- * as well as its own. Near is symmetric: a style lists the ones it sounds
- * near, and they list it back. A family not split here keeps one style of
+ * each with its tags. A family not split here keeps one style of
  * its own (`genreStyle`); Rock's and Metal's generic tags have none.
  */
-const STYLES: readonly (readonly [
-  name: string,
-  tags: readonly string[],
-  near: readonly string[],
-])[] = [
+const STYLES: readonly (readonly [name: string, tags: readonly string[]])[] = [
   [
     "Heavy",
     [
@@ -223,7 +217,6 @@ const STYLES: readonly (readonly [
       "Groove Metal",
       "Industrial Metal",
     ],
-    ["Extreme metal", "Metalcore / post-hardcore", "Hard rock / grunge"],
   ],
   [
     "Extreme metal",
@@ -240,32 +233,20 @@ const STYLES: readonly (readonly [
       "Progressive Metal",
       "Djent",
     ],
-    ["Heavy", "Metalcore / post-hardcore"],
   ],
   [
     "Metalcore / post-hardcore",
     ["Metalcore", "Deathcore", "Mathcore", "Post-Hardcore", "Hardcore", "Screamo", "Emo"],
-    ["Heavy", "Extreme metal"],
   ],
-  [
-    "Hard rock / grunge",
-    ["Hard Rock", "Grunge", "Stoner Rock", "Garage Rock"],
-    ["Heavy", "Alternative / indie", "Classic / prog / psych"],
-  ],
-  [
-    "Alternative / indie",
-    ["Alternative Rock", "Indie Rock", "Britpop", "Post-Rock"],
-    ["Hard rock / grunge", "Soft / acoustic"],
-  ],
+  ["Hard rock / grunge", ["Hard Rock", "Grunge", "Stoner Rock", "Garage Rock"]],
+  ["Alternative / indie", ["Alternative Rock", "Indie Rock", "Britpop", "Post-Rock"]],
   [
     "Soft / acoustic",
     ["Soft Rock", "Pop Rock", "Acoustic", "Folk Rock", "Singer-Songwriter", "Indie Folk"],
-    ["Alternative / indie"],
   ],
   [
     "Classic / prog / psych",
     ["Classic Rock", "Progressive Rock", "Prog Rock", "Art Rock", "Psychedelic Rock"],
-    ["Hard rock / grunge"],
   ],
 ];
 
@@ -275,36 +256,6 @@ const BY_STYLE: ReadonlyMap<string, GenreStyle> = new Map(
     return tags.map((tag) => [compact(tag), style] as const);
   }),
 );
-
-/**
- * The families represented by each style's tags. Styles can span families:
- * Heavy includes Metal and Rock; Soft / acoustic includes Rock and Folk.
- * A family without a style split is its own style.
- */
-const STYLE_FAMILIES: ReadonlyMap<string, ReadonlySet<string>> = new Map([
-  ...FAMILIES.map(([name]) => [compact(name), new Set([compact(name)])] as const),
-  ...STYLES.map(
-    ([name, tags]) =>
-      [compact(name), new Set(tags.flatMap((tag) => BY_TAG.get(compact(tag))?.key ?? []))] as const,
-  ),
-]);
-
-/** The known families whose tags can express [style]; none for an unknown style key. */
-export const genreStyleFamilies = (style: string): ReadonlySet<string> =>
-  STYLE_FAMILIES.get(style) ?? new Set();
-
-const NEAR: ReadonlyMap<string, ReadonlySet<string>> = (() => {
-  const near = new Map<string, Set<string>>();
-  const link = (a: string, b: string) => {
-    near.set(a, (near.get(a) ?? new Set()).add(b));
-  };
-  for (const [name, , neighbours] of STYLES)
-    for (const other of neighbours) {
-      link(compact(name), compact(other));
-      link(compact(other), compact(name));
-    }
-  return near;
-})();
 
 /** The families with a style split of their own (`STYLES`'s tags). */
 const SPLIT_FAMILIES: ReadonlySet<string> = new Set(
@@ -367,40 +318,6 @@ export const commonStyle = (styles: readonly (string | null)[]): string | null =
   return common;
 };
 
-/**
- * How a song's [style] suits a seed's at [level]: the same style, or at Close
- * a neighbouring one, matches; another style misses. Either style unknown is
- * unknown: the song is then admitted only when its artist is close.
- */
-export const styleAffinity = (
-  seed: string | null,
-  style: string | null,
-  level: StyleLevel,
-): MixAffinity => {
-  if (seed === null || style === null) return "unknown";
-  if (seed === style) return "match";
-  return level === "close" && (NEAR.get(seed)?.has(style) ?? false) ? "match" : "miss";
-};
-
-/**
- * How strictly a genre step compares styles (`styleAffinity`): the same
- * style (Same genres), or the same or a neighbouring one (Close).
- */
-export type StyleLevel = "same" | "close";
-
-/**
- * A genre mix's [radios] (one per seed artist, in the seeds' order) as one
- * list: they take turns giving their next song, a radio that runs out
- * dropping out. What a mix keeps of it is `discoverMixSongs`'s.
- */
-export const interleaveRadios = <S>(radios: readonly (readonly S[])[]): S[] => {
-  const songs: S[] = [];
-  const longest = Math.max(0, ...radios.map((radio) => radio.length));
-  for (let at = 0; at < longest; at++)
-    for (const radio of radios) if (at < radio.length) songs.push(radio[at]!);
-  return songs;
-};
-
 /** How many Genre mixes Home shows at most. */
 export const GENRE_MIX_COUNT = 4;
 
@@ -423,6 +340,10 @@ export interface GenreMixLibrary {
   readonly songs: readonly DiscoverLibrarySong[];
   /** The Library songs' all-time counted plays (songs not listed have none). */
   readonly plays?: readonly DiscoverSongPlays[];
+  /** Last completed graph; absent while its first derivation warms. */
+  readonly graph?: ArtistGraph | null;
+  /** Already-known profiles only; never derives or requests data. */
+  readonly profileOf?: GenreProfileOf;
 }
 
 /**
@@ -468,6 +389,39 @@ interface RankedFamily {
   readonly artists: Map<number, FamilyArtist>;
 }
 
+/** Known profiles win; otherwise direct neighbours vote with closeness and family share. */
+function* artistFamilySteps(
+  artist: DiscoverSeedArtist,
+  library: GenreMixLibrary,
+  profileOf: GenreProfileOf,
+  names: ReadonlyMap<string, GenreFamily>,
+): Generator<void, GenreFamily | null> {
+  const own = profileOf(artist.name);
+  const weights = new Map<string, number>();
+  if (own?.size) {
+    for (const [key, share] of own) weights.set(key, share);
+  } else if (library.graph != null) {
+    for (const neighbour of yield* artistNeighbourhoodSteps(library.graph, [artist.name], {
+      hops: 1,
+    })) {
+      for (const [key, share] of profileOf(neighbour.name) ?? []) {
+        weights.set(key, (weights.get(key) ?? 0) + neighbour.closeness * share);
+        yield;
+      }
+    }
+  }
+  let best: string | null = null;
+  let most = 0;
+  for (const [key, weight] of weights) {
+    if (weight > most) {
+      best = key;
+      most = weight;
+    }
+    yield;
+  }
+  return best === null ? null : (names.get(best) ?? genreFamily(best));
+}
+
 /**
  * The Library's genre families (`genreFamily`), each with its songs' counted
  * plays, its song count and its artists' plays and songs in it. A song in
@@ -481,9 +435,32 @@ function* libraryFamiliesSteps(library: GenreMixLibrary): Generator<void, Ranked
   );
   const artists = yield* indexSteps(library.artists, (artist) => [artist.id, artist] as const);
   const families = new Map<string, RankedFamily>();
+  const names = new Map<string, GenreFamily>();
+  for (const song of library.songs) {
+    for (const family of songFamilies(song))
+      if (!names.has(family.key)) names.set(family.key, family);
+    yield;
+  }
+  const { profileOf: ownProfile } = yield* libraryMixProfilesSteps(library);
+  const profileOf: GenreProfileOf = (name) => ownProfile(name) ?? library.profileOf?.(name);
+  // Inherited families never become evidence for another unknown artist.
+  const assigned = new Map<number, GenreFamily | null>();
   for (const song of library.songs) {
     yield;
-    const ofSong = songFamilies(song);
+    let ofSong = songFamilies(song);
+    if (ofSong.length === 0) {
+      const inherited = new Map<string, GenreFamily>();
+      for (const id of song.artistIds) {
+        const artist = artists.get(id);
+        if (artist === undefined) continue;
+        if (!assigned.has(id))
+          assigned.set(id, yield* artistFamilySteps(artist, library, profileOf, names));
+        const family = assigned.get(id);
+        if (family != null) inherited.set(family.key, family);
+        yield;
+      }
+      ofSong = [...inherited.values()];
+    }
     const share = 1 / ofSong.length;
     const songPlays = plays.get(song.id) ?? 0;
     for (const family of ofSong) {
@@ -505,35 +482,22 @@ function* libraryFamiliesSteps(library: GenreMixLibrary): Generator<void, Ranked
   return yield* mapSteps(families.values(), (family) => family);
 }
 
-/**
- * Up to three of [family]'s artists to grow its mix from, picked by
- * [random] (`pickWeighted`), those most played in the family more likely
- * (`playsWeight`); most played in it first, then those with more songs in
- * it. Names that aren't an artist's ("Various Artists") seed nothing. A
- * refresh ([avoid]) picks from the artists the section didn't show today,
- * then fills up with those it did, the least recently shown first.
- */
+/** Top three artists; refreshes prefer unseen artists, then the least recently shown. */
 function* seedArtistsSteps(
   family: RankedFamily,
-  random: RandomSource,
   avoid: MixRefreshAvoid | undefined,
 ): Generator<void, DiscoverSeedArtist[]> {
-  const { fresh, shown } = yield* freshFirstSteps(
+  const ranked = yield* sortSteps(
     yield* seedableArtistsSteps(family),
+    (a, b) => b.plays - a.plays || b.songs - a.songs,
+  );
+  const { fresh, shown } = yield* freshFirstSteps(
+    ranked,
     avoid === undefined ? null : ({ artist }) => avoid.artists.get(identityKey(artist.name)),
   );
-  const picked = new Set(
-    yield* pickWeightedSteps(fresh, SEED_ARTISTS, (artist) => playsWeight(artist.plays), random),
-  );
-  const selected: FamilyArtist[] = [];
-  for (const artist of fresh) {
-    if (picked.has(artist)) selected.push(artist);
-    yield;
-  }
-  return [
-    ...(yield* sortSteps(selected, (a, b) => b.plays - a.plays || b.songs - a.songs)),
-    ...shown.slice(0, SEED_ARTISTS - picked.size),
-  ].map(({ artist }) => ({ id: artist.id, name: artist.name }));
+  return [...fresh, ...shown]
+    .slice(0, SEED_ARTISTS)
+    .map(({ artist }) => ({ id: artist.id, name: artist.name }));
 }
 
 /** [family]'s artists whose names are an artist's. */
@@ -549,7 +513,7 @@ function* seedableArtistsSteps(family: RankedFamily): Generator<void, FamilyArti
 /**
  * Genre mixes' seeds, four at most, one per genre family: the families with
  * five or more Library songs, most played first (their songs' counted
- * plays), then those with more songs. Each grows from up to three of its
+ * plays), then those with more songs. Each grows from its three most played
  * artists (`seedArtists`); a family with none that may seed has no mix.
  * Every seed is from "plays" once any Library song has counted plays (the
  * ranking used them), else from "library".
@@ -561,13 +525,11 @@ function* seedableArtistsSteps(family: RankedFamily): Generator<void, FamilyArti
  */
 export const genreMixSeeds = (
   library: GenreMixLibrary,
-  random: RandomSource,
   avoid?: MixRefreshAvoid,
-): DiscoverMixSeed[] => finishSteps(genreMixSeedsSteps(library, random, avoid));
+): DiscoverMixSeed[] => finishSteps(genreMixSeedsSteps(library, avoid));
 
 export function* genreMixSeedsSteps(
   library: GenreMixLibrary,
-  random: RandomSource,
   avoid?: MixRefreshAvoid,
 ): Generator<void, DiscoverMixSeed[]> {
   const seeds: DiscoverMixSeed[] = [];
@@ -599,7 +561,7 @@ export function* genreMixSeedsSteps(
   }
   for (const family of ranked) {
     if (!chosen.has(family)) continue;
-    const artists = yield* seedArtistsSteps(family, random, avoid);
+    const artists = yield* seedArtistsSteps(family, avoid);
     const { key, name } = family.family;
     seeds.push({
       kind: "genre",
@@ -611,22 +573,4 @@ export function* genreMixSeedsSteps(
     });
   }
   return seeds;
-}
-
-export function* commonStyleSteps(styles: Iterable<string | null>): Generator<void, string | null> {
-  const counts = new Map<string, number>();
-  for (const style of styles) {
-    if (style) counts.set(style, (counts.get(style) ?? 0) + 1);
-    yield;
-  }
-  let common: string | null = null,
-    most = 0;
-  for (const [style, count] of counts) {
-    if (count > most) {
-      common = style;
-      most = count;
-    }
-    yield;
-  }
-  return common;
 }

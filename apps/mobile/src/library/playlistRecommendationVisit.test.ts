@@ -303,7 +303,7 @@ test("return renews an action interrupted after an external invalidation was que
     session.get().slots.some((x) => x?.track.id === offered.track.id),
     false,
   );
-  assert.equal(session.get().pending, null);
+  assert.deepEqual(session.get().pending, []);
   assert.equal(session.get().loading, false);
   visit.dispose();
 });
@@ -368,7 +368,7 @@ test("graph source writes coalesce under the burst throttle and are released on 
   await gate.flush();
   assert.equal(reads, 1);
   clock = 500;
-  // A harvest saves several catalog/similar pages in a row.
+  // Radio reads save several catalog pages in a row.
   for (let i = 0; i < 6; i++) for (const f of graphListeners) f();
   await gate.flush();
   assert.equal(waits.length, 1);

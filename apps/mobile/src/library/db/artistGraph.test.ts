@@ -235,7 +235,7 @@ test("a song ending mid-build doesn't rebuild the graph for its waiters; the ask
       Effect.promise(() => new Promise<void>((r) => setTimeout(r, 0))),
       { versions: () => versions },
     );
-    // artistGraphNow: playlist recommendations, the Magic Queue batch and the harvest read this way.
+    // Background snapshot warming reads the graph this way.
     const graphNow = shared.get.pipe(Effect.orElseSucceed(() => null));
     const magicQueue = Effect.runPromise(graphNow),
       playlist = Effect.runPromise(graphNow);

@@ -116,6 +116,8 @@ export interface LibraryArtistRef {
 export type StreamedArtists<A extends LibraryArtistRef> = Omit<StreamedArtistContext<A>, "here">;
 
 export interface ActionSubject<A extends LibraryArtistRef = LibraryArtistRef> {
+  /** Explicitly false hides discovery actions. Omitted retains the caller's legacy behavior. */
+  readonly ytMusic?: boolean | undefined;
   readonly kind: ItemKind;
   /** The items acted on: one for a menu, the checked ones (in list order) for the bar. */
   readonly items: readonly ActionItem[];
@@ -372,7 +374,9 @@ export const itemActions = <A extends LibraryArtistRef = LibraryArtistRef>(
     ...(missing < items.length && subject.playing !== true
       ? [{ action: "playNext" } as const, { action: "addToQueue" } as const]
       : []),
-    ...(offersMagicQueue(kind, items, surface) ? [{ action: "magicQueue" } as const] : []),
+    ...(subject.ytMusic !== false && offersMagicQueue(kind, items, surface)
+      ? [{ action: "magicQueue" } as const]
+      : []),
     { action: "addToPlaylist" },
   ];
   // Albums' missing songs download as Settings' Download All does them, only theirs.

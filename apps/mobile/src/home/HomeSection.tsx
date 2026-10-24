@@ -108,7 +108,7 @@ function Discover({ home, title }: SectionProps) {
   const magicQueue = useMagicQueueSection();
   const artistMixes = useDiscoverMixes("artist-mixes", played);
   const genreMixes = useDiscoverMixes("genre-mixes", played);
-  const showsMagicQueue = magicQueue.songs.length > 0;
+  const showsMagicQueue = ytMusic && magicQueue.songs.length > 0;
   if (!showsMagicQueue && artistMixes.kind === "hidden" && genreMixes.kind === "hidden")
     return null;
   return (
