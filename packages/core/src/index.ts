@@ -1969,6 +1969,7 @@ export {
   MAGIC_CATALOG_LOW,
   MAGIC_CATALOG_POOL,
   magicCatalogCandidates,
+  magicCatalogCandidatesSteps,
   magicRefillDue,
 } from "./magicQueueCatalog.ts";
 export { catalogRadiosReadAt } from "./harvest.ts";
