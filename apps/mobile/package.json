@@ -1,6 +1,6 @@
 {
   "name": "@wave/mobile",
-  "version": "0.26.3-ti",
+  "version": "0.27.0-ti",
   "private": true,
   "main": "./index.ts",
   "scripts": {
