@@ -80,10 +80,6 @@ test("2,531 Tracks and 900 artists finish paging, refill a Magic Queue online, a
       part: RECOMMENDATION_SNAPSHOT.library,
       versions: () => ({}),
     });
-    const catalogPart = snapshotRead(readMixCatalog(reads, between), {
-      part: RECOMMENDATION_SNAPSHOT.catalog,
-      versions: () => ({}),
-    });
     const favoritesPart = snapshotRead(readRecommendationFavorites(reads, between), {
       part: RECOMMENDATION_SNAPSHOT.favorites,
       versions: () => ({}),
@@ -91,7 +87,6 @@ test("2,531 Tracks and 900 artists finish paging, refill a Magic Queue online, a
     const recommendations = sharePlaylistRecommendationInputs(
       {
         library: indexes.get,
-        catalog: catalogPart.get,
         favorites: favoritesPart.get,
         store: Effect.succeed(reads),
       },
@@ -180,7 +175,6 @@ test("2,531 Tracks and 900 artists finish paging, refill a Magic Queue online, a
       const offers = playlistRecommendations(input.playlist, {
         ...input,
         graph,
-        now,
         online: true,
       });
       assert.ok(offers.length > 0, "the playlist footer receives recommendations");
@@ -215,7 +209,6 @@ test("2,531 Tracks and 900 artists finish paging, refill a Magic Queue online, a
       );
     } finally {
       indexes.dispose();
-      catalogPart.dispose();
       favoritesPart.dispose();
     }
   } finally {
@@ -256,7 +249,6 @@ test("scan writes while a playlist reads neither fail nor restart its read; the 
         publishLibraryChange({ kind: "tracks", burst: true });
       }),
       onLibraryChange,
-      () => () => {},
     );
     let offered = 0;
     const session = playlistRecommendationSession({
@@ -266,7 +258,7 @@ test("scan writes while a playlist reads neither fail nor restart its read; the 
         const input = await Effect.runPromise(source.get(fixture.playlistId), { signal });
         return {
           playlist: input.playlist,
-          sources: { ...input, graph: null, now: fixture.now, online: false },
+          sources: { ...input, graph: null, online: false },
         };
       },
       dismiss: async () => {},

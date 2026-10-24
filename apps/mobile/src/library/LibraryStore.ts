@@ -1449,7 +1449,6 @@ const make = Effect.gen(function* () {
         (result) =>
           result.playlist.length +
           result.librarySongs.length +
-          result.catalog.length +
           result.favoriteVideos.size +
           result.feedback.length,
       ),

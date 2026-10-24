@@ -14,7 +14,7 @@ const track = (id: string): PlaylistRecommendationTrack => ({
   source: "library",
   videoId: "",
   title: id,
-  artists: ["Radiohead"],
+  artists: [`Artist ${id}`],
   album: "OK Computer",
   albumId: null,
   durationMs: 180000,
@@ -22,6 +22,11 @@ const track = (id: string): PlaylistRecommendationTrack => ({
   explicit: false,
   genre: "Rock",
 });
+
+/** One radio bringing [library]'s songs in order, as a drawn seed's would. */
+const radioOf = (library: readonly PlaylistRecommendationTrack[]) => [
+  { id: "song:seed", artists: ["Artist seed"], songs: library },
+];
 
 test("the next refill reads newly favorited or downloaded candidates ahead of ordinary matches", async () => {
   const seed = track("seed");
@@ -31,7 +36,7 @@ test("the next refill reads newly favorited or downloaded candidates ahead of or
     newId: () => String(++id),
     read: async () => ({
       playlist: [seed],
-      sources: { library, catalog: [], graph: null, now: 0 },
+      sources: { library, pages: radioOf(library), graph: null },
     }),
     dismiss: async () => {},
   });
@@ -52,7 +57,7 @@ test("full renewal includes newly favorited and downloaded matches even when all
     newId: () => String(++id),
     read: async () => ({
       playlist: [seed],
-      sources: { library, catalog: [], graph: null, now: 0 },
+      sources: { library, pages: radioOf(library), graph: null },
     }),
     dismiss: async () => {},
   });
@@ -79,7 +84,7 @@ test("unchanged playlist membership does not keep removed Library candidates off
     newId: () => String(++id),
     read: async () => ({
       playlist: [seed],
-      sources: { library, catalog: [], graph: null, now: 0 },
+      sources: { library, pages: radioOf(library), graph: null },
     }),
     dismiss: async () => {},
   });
@@ -114,7 +119,7 @@ for (const timing of ["before snapshot", "after snapshot"]) {
         }
         return {
           playlist: snapshot ?? playlist,
-          sources: { library, catalog: [], graph: null, now: 0 },
+          sources: { library, pages: radioOf(library), graph: null },
         };
       },
       dismiss: async () => {},
@@ -142,7 +147,7 @@ test("acceptance preserves the four held offers and keys; a later external edit 
   let id = 0;
   const session = playlistRecommendationSession({
     newId: () => String(++id),
-    read: async () => ({ playlist, sources: { library, catalog: [], graph: null, now: 0 } }),
+    read: async () => ({ playlist, sources: { library, pages: radioOf(library), graph: null } }),
     dismiss: async () => {},
     accept: async (offer) => {
       playlist = [...playlist, offer.track];
@@ -173,7 +178,7 @@ test("an external addition of a held offer is not acknowledged as Add's own noti
   let id = 0;
   const session = playlistRecommendationSession({
     newId: () => String(++id),
-    read: async () => ({ playlist, sources: { library, catalog: [], graph: null, now: 0 } }),
+    read: async () => ({ playlist, sources: { library, pages: radioOf(library), graph: null } }),
     dismiss: async () => {},
     accept: async (offer) => {
       // Another writer adds a held offer before Add's refill snapshots membership.
@@ -199,7 +204,7 @@ test("initial read failure stays retryable and an empty or exhausted playlist ha
       if (fail) throw new Error("database unavailable");
       return {
         playlist: [],
-        sources: { library: [track("unused")], catalog: [], graph: null, now: 0 },
+        sources: { library: [track("unused")], pages: radioOf([track("unused")]), graph: null },
       };
     },
     dismiss: async () => {},
@@ -222,7 +227,7 @@ test("favorite and download source changes during Add renew priority after the s
   let release!: () => void;
   const session = playlistRecommendationSession({
     newId: () => String(++id),
-    read: async () => ({ playlist, sources: { library, catalog: [], graph: null, now: 0 } }),
+    read: async () => ({ playlist, sources: { library, pages: radioOf(library), graph: null } }),
     dismiss: async () => {},
     accept: async (offer) => {
       await new Promise<void>((resolve) => {
@@ -261,7 +266,7 @@ test("acceptance records only successful additions and uses updated contents for
   const accepted: string[] = [];
   const session = playlistRecommendationSession({
     newId: () => String(++id),
-    read: async () => ({ playlist, sources: { library, catalog: [], graph: null, now: 0 } }),
+    read: async () => ({ playlist, sources: { library, pages: radioOf(library), graph: null } }),
     dismiss: async () => {},
     accept: async (offer) => {
       await new Promise<void>((resolve) => {
@@ -302,7 +307,7 @@ test("dismissal saves once before replacing only its slot; failed saves keep the
     newId: () => String(++id),
     read: async () => ({
       playlist: [seed],
-      sources: { library, catalog: [], graph: null, now: 0 },
+      sources: { library, pages: radioOf(library), graph: null },
     }),
     dismiss: async () => {
       saves++;
@@ -345,7 +350,7 @@ test("a successful dismissal survives refill failure; retry fills its hole witho
     newId: () => String(++id),
     read: async () => {
       if (unavailable) throw new Error("read failed");
-      return { playlist: [seed], sources: { library, catalog: [], graph: null, now: 0 } };
+      return { playlist: [seed], sources: { library, pages: radioOf(library), graph: null } };
     },
     dismiss: async () => {
       unavailable = true;
@@ -368,7 +373,7 @@ test("refill recovery preserves held offer objects and keys when saved dismissal
     seed,
     ..."abcdefgh".split("").map((id) => ({
       ...track(id),
-      artists: [id <= "e" ? "Artist A" : "Artist B"],
+      artists: [id <= "e" ? `Artist ${id}` : "Artist B"],
       album: null,
     })),
   ];
@@ -379,7 +384,10 @@ test("refill recovery preserves held offer objects and keys when saved dismissal
     newId: () => String(++id),
     read: async () => {
       if (unavailable) throw new Error("read failed");
-      return { playlist: [seed], sources: { library, catalog: [], graph: null, now: 0, feedback } };
+      return {
+        playlist: [seed],
+        sources: { library, pages: radioOf(library), graph: null, feedback },
+      };
     },
     dismiss: async (offer) => {
       feedback.push({ track: offer.track, value: -1 });
@@ -422,7 +430,7 @@ test("cancelled renewal and disposal cannot publish stale offers or keep listene
   controller.abort();
   read.resolve({
     playlist: [track("seed")],
-    sources: { library: [track("next")], catalog: [], graph: null, now: 0 },
+    sources: { library: [track("next")], pages: radioOf([track("next")]), graph: null },
   });
   await renewing;
   assert.equal(notifications, before);
@@ -444,7 +452,11 @@ test("hiding during Add commits once, cancels its refill and retains held offers
       reads++;
       return {
         playlist: [track("seed")],
-        sources: { library: "abcdefg".split("").map(track), catalog: [], graph: null, now: 0 },
+        sources: {
+          library: "abcdefg".split("").map(track),
+          pages: radioOf("abcdefg".split("").map(track)),
+          graph: null,
+        },
       };
     },
     dismiss: async () => {},
@@ -501,7 +513,7 @@ test("a tap's slot holds a placeholder from the tap on; saving, reading and rank
     newId: () => String(++id),
     read: async () => {
       events.push("read");
-      return { playlist, sources: { library, catalog: [], graph: null, now: 0 } };
+      return { playlist, sources: { library, pages: radioOf(library), graph: null } };
     },
     dismiss: async () => {},
     accept: async (offer) => {
@@ -550,7 +562,7 @@ test("an exhausted pool leaves the freed slot empty, without an error or a place
     newId: () => String(++id),
     read: async () => ({
       playlist: [seed],
-      sources: { library, catalog: [], graph: null, now: 0 },
+      sources: { library, pages: radioOf(library), graph: null },
     }),
     dismiss: async () => {
       saves++;
@@ -580,7 +592,7 @@ test("a failed save restores its offer in place and retries with one more write"
     newId: () => String(++id),
     read: async () => ({
       playlist: [seed],
-      sources: { library, catalog: [], graph: null, now: 0 },
+      sources: { library, pages: radioOf(library), graph: null },
     }),
     dismiss: async () => {},
     accept: async (offer) => {
@@ -615,7 +627,7 @@ test("a failed replacement keeps its slot's place; the retry holds a placeholder
     newId: () => String(++id),
     read: async () => {
       if (unavailable) throw new Error("read failed");
-      return { playlist: [seed], sources: { library, catalog: [], graph: null, now: 0 } };
+      return { playlist: [seed], sources: { library, pages: radioOf(library), graph: null } };
     },
     dismiss: async () => {
       saves++;
@@ -660,7 +672,7 @@ test("the next action's refill also fills a slot whose replacement failed before
     newId: () => String(++id),
     read: async () => {
       if (unavailable) throw new Error("read failed");
-      return { playlist: [seed], sources: { library, catalog: [], graph: null, now: 0 } };
+      return { playlist: [seed], sources: { library, pages: radioOf(library), graph: null } };
     },
     dismiss: async () => {
       saves++;
@@ -701,9 +713,7 @@ test("each full renewal reports how long its read and ranking took and how many 
         playlist: [seed],
         sources: {
           library: [seed, ...["a", "b", "c"].map(track)],
-          catalog: [],
           graph: null,
-          now: 0,
         },
       };
     },
@@ -748,4 +758,38 @@ test("a renewal's timing reads as one log line, from the playlist's opening when
     ),
     "Playlist suggestions failed 60400 ms after opening (read 60000 ms, rank 0 ms)",
   );
+});
+
+test("a refill keeps the five offers to at most 2 songs by one artist, counting those held", async () => {
+  const seed = track("seed");
+  const by = (id: string, artist: string) => ({ ...track(id), artists: [artist] });
+  const library = [
+    seed,
+    by("a", "X"),
+    by("b", "X"),
+    by("c", "Y"),
+    by("d", "Z"),
+    by("e", "W"),
+    by("f", "X"),
+    by("g", "V"),
+  ];
+  let id = 0;
+  const session = playlistRecommendationSession({
+    newId: () => String(++id),
+    read: async () => ({
+      playlist: [seed],
+      sources: { library, pages: radioOf(library), graph: null },
+    }),
+    dismiss: async () => {},
+  });
+  await session.renew();
+  assert.deepEqual(
+    session.get().slots.map((offer) => offer?.track.id),
+    ["a", "b", "c", "d", "e"],
+  );
+  assert.equal(await session.dismiss(session.get().slots[2]!.key), true);
+  assert.equal(session.get().slots[2]?.track.id, "g");
+  await session.renew();
+  const artists = session.get().slots.flatMap((offer) => offer?.track.artists ?? []);
+  assert.ok(artists.filter((name) => name === "X").length <= 2);
 });

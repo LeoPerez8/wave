@@ -2043,7 +2043,12 @@ export {
 export type { RowMenuAction, RowSwipeActions, SwipeChoice, SwipeSettings } from "./swipeActions.ts";
 export { BACK_EXIT_WINDOW_MS, createBackExitConfirmation } from "./backExit.ts";
 
-export { playlistRecommendations, playlistRecordingMatch } from "./playlistRecommendations.ts";
+export {
+  PLAYLIST_ARTIST_CAP,
+  playlistOfferFits,
+  playlistRecommendations,
+  playlistRecordingMatch,
+} from "./playlistRecommendations.ts";
 export type {
   PlaylistRecommendation,
   PlaylistRecommendationTrack,
@@ -2051,6 +2056,7 @@ export type {
   PlaylistRecommendationFeedback,
 } from "./playlistRecommendations.ts";
 export * from "./playlistRecommendationSession.ts";
+export * from "./playlistSeeds.ts";
 export { playingTrackIds } from "./playingIdentity.ts";
 export { createLongPressIntent } from "./longPressIntent.ts";
 export {
