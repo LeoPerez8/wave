@@ -1,10 +1,11 @@
 import { beginTiming, activeTiming, noteTimingLinkFailure } from "@/lib/timing";
 import { IconMusic, IconStar, IconStarFilled } from "@tabler/icons-react-native";
-import { artistLink, parseTrackId } from "@wave/core";
+import { artistLink, createStarPop, parseTrackId } from "@wave/core";
 import { Image } from "expo-image";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Text, View } from "react-native";
 import Animated, {
+  ReduceMotion,
   useAnimatedStyle,
   useReducedMotion,
   useSharedValue,
@@ -30,7 +31,7 @@ import { useThemeColor } from "@/theme/useThemeColor";
 import { useStreamedArtistLink } from "@/ytmusic/streamedArtist";
 
 import { nowPlayingLibraryArtistLink } from "./artistLink";
-import { CoverPress } from "./CoverPress";
+import { CoverPress, STAR_POP } from "./CoverPress";
 import { usePlayingYtSong } from "./hooks";
 import {
   nowPlayingSongActions,
@@ -190,8 +191,16 @@ function MetaLink({ label, open, hint, className, timingKind, revealsCurrentScre
   );
 }
 
-/** The star observes the shared answer; an early toggle acquires the actual saved state. */
+/** Whether the star beside the title pops as it fills (Core's `createStarPop`). */
+const starPop = createStarPop();
+
+/**
+ * The star observes the shared answer; an early toggle acquires the actual
+ * saved state. A star that fills here (a tap on the empty star, or the
+ * cover's double-tap adding the song) asks for the star's pop.
+ */
 function useNowPlayingStar(): {
+  song: string | null;
   favorite: boolean;
   disabled: boolean;
   star: (addOnly?: boolean) => void;
@@ -206,16 +215,33 @@ function useNowPlayingStar(): {
     answer ?? { favorite: false, pendingFavorite: false },
   );
   const star = (addOnly = false): void => {
-    if (target !== null) void nowPlayingSongActions.star(target, addOnly).catch(songActionFailed);
+    if (target === null) return;
+    if (addOnly || !favorite) starPop.ask(target.trackId);
+    void nowPlayingSongActions.star(target, addOnly).catch(songActionFailed);
   };
-  return { favorite, disabled: target === null, star };
+  return { song: target?.trackId ?? null, favorite, disabled: target === null, star };
 }
 
-/** Stars or unstars the current track (`useNowPlayingStar`). */
+/** How small the star starts its pop from as it fills. */
+const STAR_POP_FROM = 0.6;
+
+/**
+ * Stars or unstars the current track (`useNowPlayingStar`), in the secondary
+ * colour either way: only its fill changes. Filling from a tap or the cover's
+ * double-tap pops it; under reduce motion it just fills.
+ */
 function FavoriteStar({ title }: { title: string }) {
-  const accent = useThemeColor("accent");
   const highlight = useThemeColor("highlight");
-  const { favorite, disabled, star } = useNowPlayingStar();
+  const reduceMotion = useReducedMotion();
+  const { song, favorite, disabled, star } = useNowPlayingStar();
+  const scale = useSharedValue(1);
+  useEffect(() => {
+    // Told every song and fill the star shows, so a fill asked for is forgotten with its song.
+    if (!starPop.show(song, favorite) || reduceMotion) return;
+    scale.set(STAR_POP_FROM);
+    scale.set(withSpring(1, { ...STAR_POP, reduceMotion: ReduceMotion.Never }));
+  }, [song, favorite, reduceMotion, scale]);
+  const popStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.get() }] }));
   return (
     <Press
       accessibilityRole="button"
@@ -228,11 +254,13 @@ function FavoriteStar({ title }: { title: string }) {
       className="items-center justify-center"
       style={{ width: CELL * 6, height: CELL * 6 }}
     >
-      {favorite ? (
-        <IconStarFilled size={24} color={highlight} />
-      ) : (
-        <IconStar size={24} color={accent} strokeWidth={1.5} />
-      )}
+      <Animated.View style={popStyle}>
+        {favorite ? (
+          <IconStarFilled size={24} color={highlight} />
+        ) : (
+          <IconStar size={24} color={highlight} strokeWidth={1.5} />
+        )}
+      </Animated.View>
     </Press>
   );
 }
