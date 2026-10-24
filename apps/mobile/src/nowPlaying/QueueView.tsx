@@ -21,7 +21,7 @@ import {
   useState,
   type ComponentType,
 } from "react";
-import { Text, View, useWindowDimensions } from "react-native";
+import { Text, View, useWindowDimensions, type PressableProps } from "react-native";
 import { GestureDetector } from "react-native-gesture-handler";
 import Animated, {
   useAnimatedStyle,
@@ -47,6 +47,7 @@ import {
   removeQueueEntry,
   toggleShuffle,
 } from "@/playback/actions";
+import { openQueuedSongActions } from "@/playback/ActionsMenu";
 import { useQueue } from "@/playback/hooks";
 import {
   retryMagicBatch,
@@ -62,7 +63,6 @@ import { useThemeColor } from "@/theme/useThemeColor";
 
 import { Background } from "./Background";
 import { useQueueTracks } from "./hooks";
-import { openQueueSongActions } from "./QueueSongMenu";
 import { useShuffleControl } from "./ShuffleMenu";
 import { TrackHeader } from "./TrackHeader";
 import { ROW, useUpNextDrag, useUpNextRowDrag, type UpNextDragRows } from "./upNextDrag";
@@ -246,6 +246,34 @@ function RowText({ track, downloaded, dimmed = false }: RowContentProps) {
   );
 }
 
+/**
+ * What an Up Next and a History row's song share: what VoiceOver reads, and
+ * the song's menu on a long press or its "Song actions" action. A row's own
+ * further [actions] are run by [onAction].
+ */
+const songPressProps = (
+  entry: QueueEntry,
+  track: QueueTrack | undefined,
+  downloaded: boolean,
+  actions: NonNullable<PressableProps["accessibilityActions"]> = [],
+  onAction: (name: string) => void = () => {},
+): Pick<
+  PressableProps,
+  "accessibilityLabel" | "accessibilityActions" | "onAccessibilityAction" | "onLongPress"
+> => {
+  const openMenu = () => openQueuedSongActions(entry.trackId);
+  return {
+    accessibilityLabel: `${track?.title ?? "Song"}, ${track?.artist ?? ""}${downloaded ? ", downloaded" : ""}`,
+    accessibilityActions: [{ name: "longpress", label: "Song actions" }, ...actions],
+    onAccessibilityAction: (event) => {
+      const action = event.nativeEvent.actionName;
+      if (action === "longpress") openMenu();
+      else onAction(action);
+    },
+    onLongPress: openMenu,
+  };
+};
+
 type RowProps = {
   entry: QueueEntry;
   index: number;
@@ -282,25 +310,25 @@ const UpNextRow = memo(function UpNextRow({
       <View className="flex-1 flex-row items-center">
         <Press
           accessibilityRole="button"
-          accessibilityLabel={`${title}, ${track?.artist ?? ""}${downloaded ? ", downloaded" : ""}`}
           accessibilityHint="Plays this song now. Long press for song actions"
-          accessibilityActions={[
-            { name: "longpress", label: "Song actions" },
-            { name: "remove", label: "Remove from Up Next" },
-            ...(index > 0 ? [{ name: "moveUp", label: "Move up" }] : []),
-            ...(index < count - 1 ? [{ name: "moveDown", label: "Move down" }] : []),
-          ]}
-          onAccessibilityAction={(event) => {
-            const action = event.nativeEvent.actionName;
-            if (action === "longpress") openQueueSongActions(entry.trackId);
-            if (action === "remove") removeQueueEntry(key);
-            if (action === "moveUp")
-              void moveQueueEntry(upNextMove(queueState.get(), key, index - 1));
-            if (action === "moveDown")
-              void moveQueueEntry(upNextMove(queueState.get(), key, index + 1));
-          }}
+          {...songPressProps(
+            entry,
+            track,
+            downloaded,
+            [
+              { name: "remove", label: "Remove from Up Next" },
+              ...(index > 0 ? [{ name: "moveUp", label: "Move up" }] : []),
+              ...(index < count - 1 ? [{ name: "moveDown", label: "Move down" }] : []),
+            ],
+            (action) => {
+              if (action === "remove") removeQueueEntry(key);
+              if (action === "moveUp")
+                void moveQueueEntry(upNextMove(queueState.get(), key, index - 1));
+              if (action === "moveDown")
+                void moveQueueEntry(upNextMove(queueState.get(), key, index + 1));
+            },
+          )}
           onPress={() => playQueueEntry(key)}
-          onLongPress={() => openQueueSongActions(entry.trackId)}
           depth={0.015}
           className="flex-1 flex-row items-center self-stretch"
           style={{ gap: CELL * 1.5 }}
@@ -345,18 +373,12 @@ type HistoryRowProps = {
  */
 const HistoryRow = memo(function HistoryRow({ entry, track, downloaded }: HistoryRowProps) {
   useRenderCount("HistoryRow");
-  const title = track?.title ?? "Song";
   return (
     <Press
       accessibilityRole="button"
-      accessibilityLabel={`${title}, ${track?.artist ?? ""}${downloaded ? ", downloaded" : ""}`}
       accessibilityHint="Plays this song again. Long press for song actions"
-      accessibilityActions={[{ name: "longpress", label: "Song actions" }]}
-      onAccessibilityAction={(event) => {
-        if (event.nativeEvent.actionName === "longpress") openQueueSongActions(entry.trackId);
-      }}
+      {...songPressProps(entry, track, downloaded)}
       onPress={() => playQueueEntry(entry.key)}
-      onLongPress={() => openQueueSongActions(entry.trackId)}
       depth={0.015}
       className="flex-row items-center"
       style={{ height: ROW, gap: CELL * 1.5 }}
