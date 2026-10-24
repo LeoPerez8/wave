@@ -127,11 +127,11 @@ export const useYtArtistPage = (
   );
   const { state, enabled, openedAt, show } = useSavedYtArtist(key, ask);
 
-  // Settled once is enough: a later menu, selection or pushed screen must not take the page back to loading.
-  const [settledOnce, setSettledOnce] = useState(false);
+  // Settled once is enough for this artist: a later menu or selection must not take the page back to loading.
+  const [settledFor, setSettledFor] = useState<string | null>(null);
   const settledNow = useScreenSettled();
-  if (settledNow && !settledOnce) setSettledOnce(true);
-  const settled = settledOnce || settledNow;
+  if (settledNow && settledFor !== key) setSettledFor(key);
+  const settled = settledNow || settledFor === key;
   const [offlineHint, setOfflineHint] = useState(initiallyOffline);
   const connected = !offlineHint && online();
   const [retry, setRetry] = useState(0);

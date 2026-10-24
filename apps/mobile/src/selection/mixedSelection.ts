@@ -1,8 +1,8 @@
-import type { AlbumRow } from "../library/LibraryStore";
+import type { AlbumRow } from "../library/LibraryStore.ts";
 import type { YtArtistAlbum } from "@wave/core";
-import type { TrackItem } from "../playback/actionTargets";
+import type { TrackItem } from "../playback/actionTargets.ts";
 import { albumItem, ytAlbumItem, type MixedItem } from "../playback/mixedItems.ts";
-import type { ListSelection } from "./useListSelection";
+import type { ListSelection } from "./useListSelection.ts";
 
 const selectionOfItems = <T>(
   page: ListSelection<MixedItem>,

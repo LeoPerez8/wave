@@ -2,12 +2,13 @@ import {
   commonKind,
   unsearchedTrackId,
   type MixedSong,
+  type QueueSong,
   type YtArtistAlbum,
   type YtArtistShelf,
 } from "@wave/core";
-import type { AlbumRow, SongRow } from "../library/LibraryStore";
-import type { NativeYtSong } from "../native/waveYtMusic";
-import type { ActionItems, TrackItem } from "./actionTargets";
+import type { AlbumRow, SongRow } from "../library/LibraryStore.ts";
+import type { NativeYtSong } from "../native/waveYtMusic.ts";
+import type { ActionItems, TrackItem } from "./actionTargets.ts";
 
 /** Shelf releases and songs carry only the metadata already shown on the page. */
 export type MixedItem =
@@ -31,6 +32,14 @@ export const trackItemKey = (item: TrackItem): string =>
       ? unsearchedTrackId(item.unsearched)
       : `yt:${item.ytSong.videoId}`;
 
+/** A checked song as an action takes it: the Library's, an unsearched entry, or streamed. */
+export const trackEntry = (item: TrackItem): QueueSong<NativeYtSong, SongRow> =>
+  "song" in item
+    ? { source: "library", track: item.song }
+    : "unsearched" in item
+      ? { source: "unsearched", song: item.unsearched }
+      : { source: "stream", song: item.ytSong };
+
 export const mixedItemKey = (item: MixedItem): string =>
   item.kind === "album"
     ? `album-${item.item.id}`
@@ -42,7 +51,7 @@ export const mixedItemKey = (item: MixedItem): string =>
 export const mixedTarget = (items: readonly MixedItem[]): ActionItems => {
   if (items.some((item) => item.kind === "ytAlbum"))
     return { kind: "mixed", items, readOnAction: true };
-  const kind = commonKind(items.map((item) => (item.kind === "ytAlbum" ? "album" : item.kind)));
+  const kind = commonKind(items.map((item) => (item.kind === "track" ? "track" : "album")));
   if (kind === "track")
     return { kind, items: items.flatMap((item) => (item.kind === "track" ? [item.item] : [])) };
   if (kind === "album")

@@ -518,6 +518,7 @@ export {
 } from "./selection.ts";
 export type { Selection } from "./selection.ts";
 export { groupSongs } from "./groupSongs.ts";
+export { selectionEntries, type MatchedTrack } from "./selectionEntries.ts";
 export {
   commonKind,
   actionBarLabel,

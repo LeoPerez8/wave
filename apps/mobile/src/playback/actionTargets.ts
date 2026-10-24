@@ -27,7 +27,7 @@ import { itemSongs, librarySectionSongs, playlistEntries } from "@/library/secti
 import { currentLibraryFinder, type FindInLibrary } from "@/ytmusic/libraryFinder";
 import { askYtMusic } from "@/ytmusic/askYtMusic";
 import { resolveMixedEntries } from "./mixedEntries";
-import type { MixedItem } from "./mixedItems";
+import { trackEntry, type MixedItem } from "./mixedItems";
 
 export { mixedTarget, trackItemKey, type MixedItem } from "./mixedItems";
 
@@ -277,10 +277,11 @@ const KINDS: { readonly [K in ItemKind]: KindInfo<ItemOf[K]> } = {
   },
   // Albums and songs checked together: each acts as its own kind would.
   mixed: {
-    songs: async (mixed) =>
-      (await targetEntries({ kind: "mixed", items: [mixed] })).flatMap((entry) =>
-        entry.source === "library" ? [entry.track] : [],
-      ),
+    // `targetEntries` reads mixed targets itself (`resolveMixedEntries`); a release has no Library songs.
+    songs: (mixed) =>
+      mixed.kind === "ytAlbum"
+        ? Promise.resolve([])
+        : asOwnKind(mixed, (kind, item) => kind.songs(item)),
     heading: (mixed, sectionSongs) =>
       mixed.kind === "ytAlbum"
         ? {
@@ -336,14 +337,7 @@ export type TargetEntry = QueueSong<NativeYtSong, SongRow>;
  * target's songs as `targetSongs` gives them.
  */
 export const targetEntries = async (target: ActionItems): Promise<readonly TargetEntry[]> => {
-  if (target.kind === "track")
-    return target.items.map((item): TargetEntry =>
-      isLibraryTrack(item)
-        ? { source: "library", track: item.song }
-        : isUnsearchedTrack(item)
-          ? { source: "unsearched", song: item.unsearched }
-          : { source: "stream", song: item.ytSong },
-    );
+  if (target.kind === "track") return target.items.map(trackEntry);
   // Albums and songs checked together: each item's entries, a song two of them hold once.
   if (target.kind === "mixed")
     return resolveMixedEntries(target.items, {
