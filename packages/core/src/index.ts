@@ -2083,3 +2083,14 @@ export { playlistRecommendationsSteps } from "./playlistRecommendations.ts";
 
 export { createMenuTouchOwnership, playerTouchAllowed } from "./menuTouchOwnership.ts";
 export type { MenuTouchOwnership } from "./menuTouchOwnership.ts";
+
+export {
+  RECOMMENDATION_SNAPSHOT,
+  snapshotAsk,
+  snapshotVersionsAfter,
+  type SnapshotAnswer,
+  type SnapshotPart,
+  type SnapshotReadState,
+  type SnapshotSource,
+  type SnapshotVersions,
+} from "./recommendationSnapshot.ts";

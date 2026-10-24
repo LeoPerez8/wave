@@ -4,7 +4,12 @@ import * as Effect from "effect/Effect";
 import { fileURLToPath } from "node:url";
 import { sql } from "drizzle-orm";
 import { deleteTracksById } from "./tracks.ts";
-import { artistGraph, writePlaylistYtSong } from "@wave/core";
+import {
+  artistGraph,
+  snapshotVersionsAfter,
+  writePlaylistYtSong,
+  type SnapshotVersions,
+} from "@wave/core";
 import { loadLibraryStore } from "../../../bench/fastAgain/store.ts";
 import { createFastAgainFixture } from "./fastAgainFixture.ts";
 import { traceQueries } from "./testDatabase.ts";
@@ -163,6 +168,7 @@ test("cold playlist and Magic Queue share real paged graph work; warm reads are 
     let release: (() => void) | undefined;
     let cancelled = 0,
       pages = 0;
+    let versions: SnapshotVersions = {};
     const gate = Effect.callback<void>((resume) => {
       release = () => resume(Effect.void);
       return Effect.sync(() => {
@@ -180,6 +186,7 @@ test("cold playlist and Magic Queue share real paged graph work; warm reads are 
       }),
       gate,
       Effect.void,
+      { versions: () => versions },
     );
     const playlist = Effect.runPromise(shared.get),
       magicQueue = Effect.runPromise(shared.get);
@@ -191,7 +198,7 @@ test("cold playlist and Magic Queue share real paged graph work; warm reads are 
     const before = pages;
     assert.equal(await Effect.runPromise(shared.get), a);
     assert.equal(pages, before);
-    shared.forget();
+    versions = snapshotVersionsAfter(versions, "plays");
     const waiting = Effect.runPromise(shared.get);
     const rejected = assert.rejects(waiting);
     shared.dispose();
@@ -203,13 +210,14 @@ test("cold playlist and Magic Queue share real paged graph work; warm reads are 
   }
 });
 
-test("a play or scan change mid-build hands the graph's waiters the rebuilt graph, not null", async () => {
+test("a song ending mid-build doesn't rebuild the graph for its waiters; the ask after it gets the rebuilt graph", async () => {
   const { shareArtistGraph } = await import("../../home/sharedArtistGraph.ts");
   const fixture = await createFastAgainFixture();
   try {
     const store = await loadLibraryStore(root, fixture.db);
     let builds = 0,
       pages = 0;
+    let versions: SnapshotVersions = {};
     const changed = Promise.withResolvers<void>();
     const shared = shareArtistGraph(
       Effect.sync(() => {
@@ -225,19 +233,23 @@ test("a play or scan change mid-build hands the graph's waiters the rebuilt grap
       }),
       Effect.void,
       Effect.promise(() => new Promise<void>((r) => setTimeout(r, 0))),
+      { versions: () => versions },
     );
     // artistGraphNow: playlist recommendations, the Magic Queue batch and the harvest read this way.
     const graphNow = shared.get.pipe(Effect.orElseSucceed(() => null));
     const magicQueue = Effect.runPromise(graphNow),
       playlist = Effect.runPromise(graphNow);
     await changed.promise;
-    shared.forget(); // onLibraryChange({ kind: "plays" }): a song ended while the cold graph builds
+    versions = snapshotVersionsAfter(versions, "plays"); // a song ended while the cold graph builds
     const [a, b] = await Promise.all([magicQueue, playlist]);
     assert.notEqual(a, null);
     assert.equal(a, b);
-    assert.equal(builds, 2, "both waiters share the one rebuild");
-    assert.deepEqual(a, Effect.runSync(readArtistGraph(store, Effect.void)));
-    assert.equal(await Effect.runPromise(graphNow), a);
+    assert.equal(builds, 1, "the build under way isn't restarted");
+    const next = await Effect.runPromise(graphNow);
+    assert.notEqual(next, a);
+    assert.equal(builds, 2, "the ask after the song reads it");
+    assert.deepEqual(next, Effect.runSync(readArtistGraph(store, Effect.void)));
+    assert.equal(await Effect.runPromise(graphNow), next);
     shared.dispose();
   } finally {
     fixture.close();

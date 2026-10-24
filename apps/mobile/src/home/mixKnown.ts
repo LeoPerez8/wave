@@ -1,4 +1,3 @@
-import { readMixInputs } from "./mixInputs";
 /**
  * What Home's mixes know of the owner's songs (docs/spec.md, "Artist mixes"):
  * a build's indexes (Core's `mixKnownSongs`), read once and shared by every
@@ -10,12 +9,11 @@ import * as Effect from "effect/Effect";
 import { useSyncExternalStore } from "react";
 
 import { settledTurnEffect } from "@/lib/backgroundWork";
-import { recommendationTurnEffect } from "@/lib/recommendationWork";
 import { makeExternalStore } from "@/lib/externalStore";
 import { LibraryStore, type ArtistRow, type SongRow } from "@/library/LibraryStore";
 import { onLibraryChange } from "@/library/libraryChanges";
 import { createKnownVideosRead } from "./knownVideosRead";
-import { createMixIndexesRead } from "./mixIndexesRead";
+import { recommendationSnapshot } from "./recommendationSnapshot";
 import { appRuntime } from "@/library/runtime";
 
 /** A Library song as a mix build reads it: with every value of its genre tag when it has several. */
@@ -33,23 +31,12 @@ export interface MixIndexes {
 }
 
 /**
- * Reads the Library, the plays, the songs streamed and the playlists'
- * entries, and indexes what the owner knows, giving the JavaScript thread
- * back between steps (`recommendationTurnEffect`) so Home stays smooth.
+ * The indexes for a mix build: the recommendation snapshot's Library part,
+ * read once and shared by every recommendation until the songs, plays,
+ * playlists or streams change. A failed read isn't kept.
  */
-const readIndexes = Effect.gen(function* () {
-  const store = yield* LibraryStore;
-  return yield* readMixInputs(store, recommendationTurnEffect, Date.now());
-});
-
-/**
- * The indexes for a mix build: read once, then shared by the builds that
- * start within a minute (Home's sections build on the same visit). A failed
- * read isn't kept.
- */
-const sharedIndexes = createMixIndexesRead(readIndexes);
-onLibraryChange(sharedIndexes.change);
-export const mixIndexes: Effect.Effect<MixIndexes, unknown, LibraryStore> = sharedIndexes.get;
+export const mixIndexes: Effect.Effect<MixIndexes, unknown, LibraryStore> =
+  recommendationSnapshot.library;
 
 /**
  * The videos the owner knows now (`LibraryStore.knownVideos`), as of the

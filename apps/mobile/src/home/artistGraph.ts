@@ -1,5 +1,5 @@
 /** The graph's database adapter; every page and CPU slice yields through the supplied scheduler. */
-import { createArtistGraphBuild, type ArtistGraph } from "@wave/core";
+import { createArtistGraphBuild, type ArtistGraph, type ArtistGraphCatalogEntry } from "@wave/core";
 import * as Effect from "effect/Effect";
 import type { LibraryStore, LibraryStoreError } from "@/library/LibraryStore";
 import type { GraphPlayCursor } from "../library/db/artistGraph.ts";
@@ -10,18 +10,24 @@ export type ArtistGraphReads = Pick<
   LibraryStore["Service"],
   "graphRadioPage" | "graphCatalogPage" | "graphSimilarPage" | "graphPlayPage"
 >;
+/**
+ * The graph from [store]'s pages. Given the [catalog] already read (the
+ * recommendation snapshot's), it doesn't read the catalog's pages again.
+ */
 export const readArtistGraph = (
   store: ArtistGraphReads,
   between: Effect.Effect<void> = Effect.void,
+  catalog?: readonly ArtistGraphCatalogEntry[],
 ): Effect.Effect<ArtistGraph, LibraryStoreError> =>
   Effect.gen(function* () {
     const build = createArtistGraphBuild();
-    const catalog = yield* readCatalogInputs(
-      store.graphCatalogPage,
-      store.graphRadioPage,
-      between,
-      (entry) => entry.videoId,
-    );
+    if (catalog === undefined)
+      catalog = yield* readCatalogInputs(
+        store.graphCatalogPage,
+        store.graphRadioPage,
+        between,
+        (entry) => entry.videoId,
+      );
     yield* runSteps(build.catalog(catalog), between);
     let similar: string | null = null;
     for (;;) {
