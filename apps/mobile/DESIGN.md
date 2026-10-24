@@ -152,7 +152,7 @@ The world rejects the category default it was chosen against: bold large titles,
 - Artwork as photographs: square, unrounded, unframed (artists are circles; the mini player's thumbnail follows its pill).
 - Light large titles; one size per list, rank by weight and tint.
 - Small tracked-caps catalog lines for section heads and cover captions.
-- Teal for active, ember for favorite and now playing; nothing else is coloured, save the red on a Delete or Remove button, the tiles that lead Settings' rows (each page's own `tile-*` colour, a signpost rather than a state) and a Recap's own `recap-*` colours.
+- Teal for active, ember for favorite and now playing; nothing else is coloured, save the red on a Delete or Remove button and a Recap's own `recap-*` colours. Settings rows lead with grey glyphs in the secondary text tone.
 - Flat: no shadows, no gradients (the Now Playing ground is the one exception). Glass only on what floats: the chrome (tab bar, Search pill, mini player), dialog and menu cards, and the toast.
 - Every press sinks and dims for a duration the owner sets in Settings.
 
@@ -184,7 +184,7 @@ A cool, low-chroma tonal ramp carrying two small, saturated voices: teal and emb
 
 ### Recap
 
-- **Recap colours** (`recap-*`): a Recap's own fields, the stories' slides (one colour per slide kind), its 9:16 share image, Stats' Recap tiles (purple for a year, indigo for a month) and Home's Recap card. Eight fixed colours (Core's `RECAP_COLOURS`), the same in both schemes, as a story keeps its colour whatever the theme; the grey one, a ramp step (`tone-7`), is the viewer's while a Recap loads. Their ink is white (`on-recap`, Core's `RECAP_INK`), deep enough to read as text, the quieter lines laid at 80% too (Core's tests check both, and that none is a Settings tile's colour).
+- **Recap colours** (`recap-*`): a Recap's own fields, the stories' slides (one colour per slide kind), its 9:16 share image, Stats' Recap tiles (purple for a year, indigo for a month) and Home's Recap card. Eight fixed colours (Core's `RECAP_COLOURS`), the same in both schemes, as a story keeps its colour whatever the theme; the grey one, a ramp step (`tone-7`), is the viewer's while a Recap loads. Their ink is white (`on-recap`, Core's `RECAP_INK`), deep enough to read as text, the quieter lines laid at 80% too (Core's tests check both).
 
 The full ramp lives in `global.css` as `tone-0` (lightest, `#eff4f6`) to `tone-11` (darkest, `#0a1113`); each semantic token is a step on it, in both themes. Light mode uses `tone-0` to `tone-10` (its ink is `tone-10`); `tone-11` is used by dark mode only. On the black dark ground, grouped areas sit on `tone-11`, cards and fills on `tone-10` and hairlines on `tone-9`, so each stands off the ground and light mode never changes when dark mode gets darker. The ground dark mode shipped with before, Night Slate (`tone-11`, with grouped areas sharing it), is kept in Core as `NIGHT_SLATE` and offered as the Slate swatch. Core's `packages/core/src/theme.ts` holds the same values (`DEFAULT_THEME`, `TONES`) and checks WCAG AA for every pair the app draws (`themeContrastIssues`); an app test fails if `global.css` or the launch splash drift from it. `surface` is the tint laid over the glass of the floating chrome (at about 72%); `scrim` is the veil behind dialog and menu cards, laid at a quarter strength: the ink in light mode, the ground in dark. `grouped` and `on-accent` are also declared there but are not yet used by this world's components.
 
@@ -196,7 +196,7 @@ These are the shipped colours. In Settings › Theme the owner picks a backgroun
 
 **The Ground Rule.** The ground is fog in light and true black in dark. Never ship a screen on `#ffffff`, and never put a card, group or hairline on black without a ramp step between them.
 
-**The Two Voices Rule.** Teal means active, ember means favorite or playing. If a colour on screen means neither, it should be a neutral. The exceptions are the destructive red on a Delete or Remove button and Settings' page tiles: nine fixed `tile-*` colours (Core's `SETTINGS_TILE_COLOURS`, the grey one a ramp step) that tell the pages apart, as iOS Settings' do, under a white glyph (`on-tile`). They appear nowhere else and never mean a state. A Recap's colours (`recap-*`, above) are the other exception: they colour a Recap and nothing else, and never mean a state either.
+**The Two Voices Rule.** Teal means active, ember means favorite or playing. If a colour on screen means neither, it should be a neutral. The exceptions are the destructive red on a Delete or Remove button and a Recap's colours (`recap-*`, above), which colour a Recap and nothing else and never mean a state. Settings' page glyphs use the secondary text tone.
 
 **The Pewter Is Not Text Rule.** `tertiary` sits near 3:1 on the ground: enough for an icon, not for words. Text uses `foreground` or `secondary`.
 
@@ -303,7 +303,7 @@ What Go to Artist opens on a song or album credited to several artists, and what
 
 ### Entry Row
 
-The Library's entries (Playlists, Artists, Albums, Songs, Genres, Folders, Favorites) and settings links. One quiet line of Entry type, 56dp tall, with a right-aligned tabular count in Subheadline graphite whose column stays reserved when the count is unknown. A hairline below each; the list opens with a hairline above. No icon, no chevron, except that Settings' own rows lead with their page's tile: a 32dp square with 8dp continuous corners in the page's `tile-*` colour, a 20dp white line glyph (1.75 stroke) centred in it, 16dp before the title and summary, which keep one left edge (`src/settings/SettingsTile.tsx`).
+The Library's entries (Playlists, Artists, Albums, Songs, Genres, Folders, Favorites) and settings links. One quiet line of Entry type, 56dp tall, with a right-aligned tabular count in Subheadline graphite whose column stays reserved when the count is unknown. A hairline below each; the list opens with a hairline above. No icon, no chevron, except that Settings' own rows lead with their page's plain 20dp line glyph (1.75 stroke) in graphite (`secondary`), centred in a 32dp column, 16dp before the title and summary, which keep one left edge (`src/settings/SettingsGlyph.tsx`). The column and spacing keep titles and separators where they were.
 
 ### Track Row
 

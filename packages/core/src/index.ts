@@ -355,7 +355,6 @@ export type {
   SettingsPage,
   SettingsPageEntry,
   SettingsIcon,
-  SettingsTileColour,
 } from "./settingsPages.ts";
 export { PLAYLIST_LAYOUTS, parsePlaylistLayout, storedPlaylistLayout } from "./playlistLayout.ts";
 export type { PlaylistLayout } from "./playlistLayout.ts";
@@ -386,8 +385,6 @@ export {
   themeContrastIssues,
   RECAP_COLOURS,
   RECAP_INK,
-  SETTINGS_TILE_COLOURS,
-  SETTINGS_TILE_GLYPH,
 } from "./theme.ts";
 export { hexToHsv, hsvToHex, parseHexColour, withOpacity } from "./colour.ts";
 export type { Hsv } from "./colour.ts";

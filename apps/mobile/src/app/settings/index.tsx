@@ -26,12 +26,12 @@ function SettingsPageRows({
   summaries: Record<SettingsPage, string | null>;
   developerVisible: boolean;
 }) {
-  return visibleSettingsPages(developerVisible).map(({ page, title, route, icon, colour }) => (
+  return visibleSettingsPages(developerVisible).map(({ page, title, route, icon }) => (
     <SettingsPageRow
       key={page}
       title={title}
       summary={summaries[page]}
-      tile={{ icon, colour }}
+      icon={icon}
       onPress={() => router.push(route)}
     />
   ));
