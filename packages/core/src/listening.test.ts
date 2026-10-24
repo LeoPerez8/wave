@@ -165,33 +165,40 @@ describe("summedListeningTotals", () => {
 });
 
 describe("listeningOverview", () => {
-  test("spells each total out with thousands separators and plural wording", () => {
-    const overview = listeningOverview(
-      { songs: 2_500, albums: 600, artists: 800 },
-      { minutesListened: 12_340, songsListened: 1_100, plays: 4_200, lastPlayedAt: 1_000 },
-    );
-
-    assert.deepEqual(overview, {
-      library: ["2,500 songs", "600 albums", "800 artists"],
-      listening: ["12,340 minutes listened", "1,100 songs listened", "4,200 plays"],
-    });
-  });
-
-  test("uses the singular for one and the plural for none", () => {
+  test("Home's Stats facts show listening first, then the library, with grouped values", () => {
     assert.deepEqual(
       listeningOverview(
-        { songs: 1, albums: 1, artists: 1 },
-        { minutesListened: 1, songsListened: 1, plays: 1, lastPlayedAt: 1_000 },
+        { songs: 2_500, albums: 600, artists: 800 },
+        { minutesListened: 48_119, songsListened: 1_100, plays: 4_200, lastPlayedAt: 1_000 },
       ),
-      {
-        library: ["1 song", "1 album", "1 artist"],
-        listening: ["1 minute listened", "1 song listened", "1 play"],
-      },
+      [
+        { label: "Time listened", value: "801 h" },
+        { label: "Plays", value: "4,200" },
+        { label: "Songs listened", value: "1,100" },
+        { label: "Songs", value: "2,500" },
+        { label: "Albums", value: "600" },
+        { label: "Artists", value: "800" },
+      ],
     );
-    assert.deepEqual(
-      listeningOverview({ songs: 0, albums: 0, artists: 0 }, listeningTotals([])).listening,
-      ["0 minutes listened", "0 songs listened", "0 plays"],
-    );
+  });
+
+  test("listening time uses whole hours, or whole minutes below an hour", () => {
+    for (const [minutes, expected] of [
+      [0, "0 min"],
+      [1, "1 min"],
+      [59, "59 min"],
+      [60, "1 h"],
+      [119, "1 h"],
+      [120, "2 h"],
+      [48_119, "801 h"],
+      [60_000, "1,000 h"],
+    ] as const) {
+      const facts = listeningOverview(
+        { songs: 0, albums: 0, artists: 0 },
+        { ...listeningTotals([]), minutesListened: minutes },
+      );
+      assert.equal(facts[0]?.value, expected, `${minutes} minutes`);
+    }
   });
 });
 
