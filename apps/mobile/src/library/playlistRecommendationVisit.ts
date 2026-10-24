@@ -91,7 +91,7 @@ export const followPlaylistRecommendations = (
   const stopGraphSources = options.graphSources?.(() => invalidate(true));
   const stopSight = options.sight.subscribe(() => {
     if (!options.sight.visible()) {
-      if (session.get().pending !== null || session.get().loading) stale = true;
+      if (session.get().pendingSlots.length > 0 || session.get().loading) stale = true;
       session.pause();
       if (cancel !== undefined) {
         cancel();

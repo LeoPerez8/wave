@@ -303,7 +303,7 @@ test("return renews an action interrupted after an external invalidation was que
     session.get().slots.some((x) => x?.track.id === offered.track.id),
     false,
   );
-  assert.equal(session.get().pending, null);
+  assert.deepEqual(session.get().pending, []);
   assert.equal(session.get().loading, false);
   visit.dispose();
 });

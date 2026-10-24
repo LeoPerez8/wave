@@ -55,6 +55,9 @@ const CONTROLS = 2;
 /** Fewer eligible suggestions left than this, and a refill reads the radios' next pages. */
 const LOW = 10;
 
+/** What a slot's placeholder says while it waits for a replacement of its own. */
+const LOADING_ANOTHER = "Loading another recommendation";
+
 /** Heard by TalkBack without moving its focus. */
 const announce = (message: string): void => AccessibilityInfo.announceForAccessibility(message);
 
@@ -176,8 +179,16 @@ export function PlaylistRecommendations({
   });
   const state = useSyncExternalStore(session.subscribe, session.get);
   const reduceMotion = useReducedMotion();
-  // What the busy slot says while its placeholder shows ("Adding Song").
-  const [busyLabel, setBusyLabel] = useState("Loading another recommendation");
+  // What a tapped slot's placeholder says until its action ends ("Adding Song"), by slot;
+  // any other placeholder is loading a replacement.
+  const [busyLabels, setBusyLabels] = useState<ReadonlyMap<number, string>>(new Map());
+  const labelSlot = (slot: number, label: string | undefined) =>
+    setBusyLabels((previous) => {
+      const next = new Map(previous);
+      if (label === undefined) next.delete(slot);
+      else next.set(slot, label);
+      return next;
+    });
   // The visit follows the write's cause (#599): source changes revalidate even when playlist
   // IDs stay the same, once the playlist is in sight and settled. Catalog writes (its own
   // radios' among them) don't: the suggestions read their radios, not the catalog.
@@ -211,18 +222,20 @@ export function PlaylistRecommendations({
     else void playYtSongs([track], 0, context);
   };
   const songs = state.slots.filter((song) => song !== null);
-  // While one slot is replaced the others keep their look (no section-wide dimming); the
-  // session ignores their taps until it is done, so nothing is written twice.
+  // While one slot is replaced the others keep their look (no section-wide dimming) and take
+  // their own taps; the session saves them in turn and ignores a repeated tap on a busy offer.
   const act = async (song: PlaylistRecommendationSlot, kind: "add" | "dismiss") => {
     const { title } = song.track;
     const index = state.slots.indexOf(song);
+    const busy = session.get().pending.includes(song.key);
     const acting = kind === "add" ? session.accept(song.key) : session.dismiss(song.key);
     // The session publishes the slot's placeholder synchronously when it takes the tap.
-    if (session.get().pending !== song.key) return;
+    if (busy || !session.get().pending.includes(song.key)) return;
     const label = kind === "add" ? `Adding ${title}` : `Dismissing ${title}`;
-    setBusyLabel(label);
+    labelSlot(index, label);
     announce(label);
     const saved = await acting;
+    labelSlot(index, undefined);
     const after = session.get();
     if (!saved) {
       if (after.error === "save")
@@ -232,7 +245,7 @@ export function PlaylistRecommendations({
     const done = kind === "add" ? `Added ${title} to the playlist.` : `Dismissed ${title}.`;
     const next = after.slots[index];
     announce(
-      after.error === "refill"
+      after.unfilled.includes(index)
         ? `${done} Couldn’t load another recommendation.`
         : next == null
           ? `${done} No more matching songs right now.`
@@ -240,11 +253,11 @@ export function PlaylistRecommendations({
     );
   };
   const retryRefill = () => {
-    setBusyLabel("Loading another recommendation");
+    const retrying = state.unfilled;
     void session.renew({ refillOnly: true }).then(() => {
       const after = session.get();
       announce(
-        after.error === "refill"
+        retrying.some((slot) => after.unfilled.includes(slot))
           ? "Couldn’t load another recommendation."
           : "Recommendations updated.",
       );
@@ -290,7 +303,11 @@ export function PlaylistRecommendations({
         key: `pending-${index}`,
         placeholder: true,
         node: (
-          <View accessible accessibilityLabel={busyLabel} accessibilityState={{ busy: true }}>
+          <View
+            accessible
+            accessibilityLabel={busyLabels.get(index) ?? LOADING_ANOTHER}
+            accessibilityState={{ busy: true }}
+          >
             <ControlledTrackRowSkeleton controls={CONTROLS} />
           </View>
         ),
