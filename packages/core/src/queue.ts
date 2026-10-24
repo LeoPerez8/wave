@@ -684,3 +684,12 @@ export const currentEntry = (state: QueueState): QueueEntry | null =>
 /** The entries after the current one, in play order. */
 export const upNext = (state: QueueState): readonly QueueEntry[] =>
   state.entries.slice(state.index + 1);
+
+/**
+ * The entries behind the current one, oldest first: the queue's History,
+ * which Previous steps back through. Not the play log: shuffle on empties
+ * it, shuffle off gives back the context entries before the current one
+ * (played or not), and a Repeat All wrap empties it.
+ */
+export const queueHistory = (state: QueueState): readonly QueueEntry[] =>
+  state.entries.slice(0, Math.max(0, state.index));

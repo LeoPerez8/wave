@@ -3,6 +3,7 @@ import { IconMenu2, IconRepeat, IconRepeatOnce, IconX } from "@tabler/icons-reac
 import {
   currentEntry,
   counted,
+  queueHistory,
   upNext,
   upNextMove,
   withPendingMoves,
@@ -20,12 +21,17 @@ import {
   useState,
   type ComponentType,
 } from "react";
-import { Text, View } from "react-native";
+import { Text, View, useWindowDimensions } from "react-native";
 import { GestureDetector } from "react-native-gesture-handler";
-import Animated from "react-native-reanimated";
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  type DerivedValue,
+  type SharedValue,
+} from "react-native-reanimated";
 
 import { Artwork } from "@/catalog/Artwork";
-import { CatalogLine } from "@/catalog/CatalogLine";
+import { CatalogLine, SectionHead, SECTION_HEAD } from "@/catalog/CatalogLine";
 import { CELL, grid } from "@/catalog/grid";
 import { Hairline } from "@/catalog/Hairline";
 import { TrackSkeletons } from "@/catalog/Skeletons";
@@ -41,6 +47,7 @@ import {
   removeQueueEntry,
   toggleShuffle,
 } from "@/playback/actions";
+import { openQueueTrackActions } from "@/playback/ActionsMenu";
 import { useQueue } from "@/playback/hooks";
 import {
   retryMagicBatch,
@@ -54,6 +61,7 @@ import type { PlaybackState } from "@/playback/Player";
 import { queueTrackDownloaded, type QueueTrack } from "@/playback/queueTracks";
 import { useThemeColor } from "@/theme/useThemeColor";
 
+import { Background } from "./Background";
 import { useQueueTracks } from "./hooks";
 import { useShuffleControl } from "./ShuffleMenu";
 import { TrackHeader } from "./TrackHeader";
@@ -112,19 +120,68 @@ const REPEAT_LABEL: Record<RepeatMode, string> = {
 };
 
 /**
- * The top of the Queue view: what's playing (small), the shuffle and repeat
- * toggles (a long press on shuffle opens the shuffle card; it reads Smart
- * Shuffle, with its own icon, while that's chosen), then the Up Next heading ("Magic Queue · from <seed>" over a Magic Queue). Sits in the sheet's drag-to-dismiss area.
+ * The top of the Queue view, pinned over its list: what's playing (small).
+ * Sits in the sheet's drag-to-dismiss area.
  */
 export function QueueHeader({ item }: { item: NonNullable<PlaybackState["item"]> }) {
+  return (
+    <View>
+      <TrackHeader item={item} />
+      <Hairline />
+    </View>
+  );
+}
+
+/** The sticky bar's height: the toggles, a hairline and the Up Next heading. */
+const BAR = CELL * 11;
+
+/** What the sticky bar draws its slice of the Now Playing ground from. */
+type Ground = {
+  /** The ground's colours (`useBackgroundColors`). */
+  readonly colors: DerivedValue<string[]>;
+  /** The list's top on the sheet, where the bar sticks. */
+  readonly top: SharedValue<number>;
+  /** The list's scroll, and the bar's offset in it. */
+  readonly scroll: SharedValue<number>;
+  readonly start: SharedValue<number>;
+};
+
+/**
+ * The ground behind the sticky bar while it sticks: the sheet's gradient
+ * where the bar sits, so the rows scrolling under it don't show through.
+ * Elsewhere nothing passes under the bar, which shows the sheet's own.
+ */
+function BarGround({ colors, top, scroll, start }: Ground) {
+  const { height } = useWindowDimensions();
+  const style = useAnimatedStyle(() => ({
+    opacity: scroll.get() > start.get() ? 1 : 0,
+    transform: [{ translateY: -top.get() }],
+  }));
+  return (
+    <Animated.View
+      pointerEvents="none"
+      className="absolute left-0 right-0 top-0"
+      style={[{ height }, style]}
+    >
+      <Background colors={colors} />
+    </Animated.View>
+  );
+}
+
+/**
+ * The Queue list's sticky bar, between History and Up Next: the shuffle and
+ * repeat toggles (a long press on shuffle opens the shuffle card; it reads
+ * Smart Shuffle, with its own icon, while that's chosen), then the Up Next
+ * heading ("Magic Queue · from <seed>" over a Magic Queue).
+ */
+function UpNextBar({ ground }: { ground: Ground }) {
   const queue = useQueue();
   const shuffle = useShuffleControl();
   const count = queue.entries.length - queue.index - 1;
   const magic = useMagicQueueLabel();
   return (
-    <View>
-      <TrackHeader item={item} />
-      <Hairline />
+    <View className="overflow-hidden" style={{ height: BAR }}>
+      <BarGround {...ground} />
       <View className="flex-row" style={{ gap: CELL }}>
         <Toggle {...shuffle} on={queue.shuffle} onPress={toggleShuffle} />
         <Toggle
@@ -135,10 +192,7 @@ export function QueueHeader({ item }: { item: NonNullable<PlaybackState["item"]>
         />
       </View>
       <Hairline />
-      <View
-        className="flex-row items-center justify-between"
-        style={{ paddingTop: CELL * 2, paddingBottom: CELL }}
-      >
+      <View className="flex-1 flex-row items-end justify-between" style={{ paddingBottom: CELL }}>
         <CatalogLine className="shrink">{magic ?? "Up next"}</CatalogLine>
         {count > 0 && (
           <Text
@@ -157,15 +211,22 @@ type RowContentProps = {
   track: QueueTrack | undefined;
   /** It has a Library file (`queueTrackDownloaded`). */
   downloaded: boolean;
+  /** A History row: secondary title, faded artwork. */
+  dimmed?: boolean;
 };
 
 /** Thumbnail, title and artist: the part of an Up Next row that a drag lifts. */
-function RowText({ track, downloaded }: RowContentProps) {
+function RowText({ track, downloaded, dimmed = false }: RowContentProps) {
   return (
     <>
-      <Artwork uri={thumbUri(track)} size={THUMB} />
+      <View className={dimmed ? "opacity-45" : undefined}>
+        <Artwork uri={thumbUri(track)} size={THUMB} />
+      </View>
       <View className="flex-1">
-        <Text numberOfLines={1} className="font-sans text-body font-medium text-foreground">
+        <Text
+          numberOfLines={1}
+          className={`font-sans text-body font-medium ${dimmed ? "text-secondary" : "text-foreground"}`}
+        >
           {track?.title ?? " "}
         </Text>
         <View className="flex-row items-center" style={{ gap: CELL / 2 }}>
@@ -263,14 +324,75 @@ const UpNextRow = memo(function UpNextRow({
   );
 });
 
+type HistoryRowProps = {
+  entry: QueueEntry;
+  track: QueueTrack | undefined;
+  downloaded: boolean;
+};
+
+/**
+ * A History row: an Up Next row's shape, dimmed, with no X and no drag
+ * handle. A tap jumps back to it; a long press opens the song's menu.
+ */
+const HistoryRow = memo(function HistoryRow({ entry, track, downloaded }: HistoryRowProps) {
+  useRenderCount("HistoryRow");
+  const title = track?.title ?? "Song";
+  return (
+    <Press
+      accessibilityRole="button"
+      accessibilityLabel={`${title}, ${track?.artist ?? ""}${downloaded ? ", downloaded" : ""}`}
+      accessibilityHint="Plays this song again"
+      onPress={() => playQueueEntry(entry.key)}
+      onLongPress={() => openQueueTrackActions(entry.trackId)}
+      depth={0.015}
+      className="flex-row items-center"
+      style={{ height: ROW, gap: CELL * 1.5 }}
+    >
+      <RowText track={track} downloaded={downloaded} dimmed />
+    </Press>
+  );
+});
+
 /** Up Next rows' stand-ins while a Magic Queue batch is picked, heard as one busy group. */
 function UpNextSkeletons() {
   return <TrackSkeletons trailing="queue" />;
 }
 
+/** The Queue list's rows: History under its heading, the sticky bar, then Up Next. */
+type QueueRow =
+  | { readonly kind: "historyHead" }
+  | { readonly kind: "history"; readonly entry: QueueEntry }
+  | { readonly kind: "bar" }
+  | { readonly kind: "upNext"; readonly entry: QueueEntry; readonly index: number };
+
+const HISTORY_HEAD: QueueRow = { kind: "historyHead" };
+const BAR_ROW: QueueRow = { kind: "bar" };
+
+const rowKey = (row: QueueRow): string =>
+  row.kind === "history"
+    ? `history:${row.entry.key}`
+    : row.kind === "upNext"
+      ? row.entry.key
+      : row.kind;
+
+const rowType = (row: QueueRow): QueueRow["kind"] => row.kind;
+
+const rowSize = (row: QueueRow): number =>
+  row.kind === "historyHead" ? SECTION_HEAD : row.kind === "bar" ? BAR : ROW;
+
+/** The sticky bar's offset in the list: below History and its heading, when there's any. */
+const barOffset = (history: number): number => (history === 0 ? 0 : SECTION_HEAD + history * ROW);
+
 /**
- * Up Next: tap a row to play it, X to remove it, and drag its handle to move
- * it. Near the list's top or bottom edge a drag scrolls the list.
+ * The Queue's list. History (the entries behind the current one, which
+ * Previous steps back through) sits above a sticky bar with the toggles and
+ * the Up Next heading, then Up Next. Each showing opens at the start of Up
+ * Next, History out of sight above it (`upNextScroll`).
+ *
+ * History rows play again on a tap, which gives the entries after them back
+ * to Up Next. Up Next: tap a row to play it, X to remove it, and drag its
+ * handle to move it. Near the list's top or bottom edge a drag scrolls the
+ * list.
  *
  * A drag runs on the UI thread (`upNextDrag.ts`): the lifted row follows the
  * finger and the others step aside with no React render per movement or drop
@@ -281,14 +403,26 @@ function UpNextSkeletons() {
  * While a Magic Queue picks its next batch, skeleton rows stand where it will
  * land: in place of "Nothing up next.", or under the songs already in Up
  * Next, which stay put (docs/spec.md, Skeletons).
+ *
+ * [ground] is the sheet's ground, and [paneTop] where the Queue view sits on
+ * the sheet: the sticky bar draws its slice of the ground.
  */
-export function UpNextList({ bottomInset }: { bottomInset: number }) {
+export function UpNextList({
+  bottomInset,
+  ground,
+  paneTop,
+}: {
+  bottomInset: number;
+  ground: DerivedValue<string[]>;
+  paneTop: number;
+}) {
   useRenderCount("UpNextList");
   usePerfVisible("queue");
   const queue = useQueue();
   const [pending, setPending] = useState<readonly PendingMove[]>([]);
   const shown = useMemo(() => withPendingMoves(queue, pending), [queue, pending]);
   const entries = useMemo(() => upNext(shown), [shown]);
+  const history = useMemo(() => queueHistory(shown), [shown]);
   const tracks = useQueueTracks(queue.entries);
   const missingSongs = useMissingSongs();
   const missingIds = useMemo(
@@ -300,56 +434,86 @@ export function UpNextList({ bottomInset }: { bottomInset: number }) {
   const batchFailed = useMagicBatchFailed();
   const emptySeed = useMagicBatchEmptySeed();
 
+  const rows = useMemo(
+    (): QueueRow[] => [
+      ...(history.length > 0 ? [HISTORY_HEAD] : []),
+      ...history.map((entry): QueueRow => ({ kind: "history", entry })),
+      BAR_ROW,
+      ...entries.map((entry, index): QueueRow => ({ kind: "upNext", entry, index })),
+    ],
+    [history, entries],
+  );
+  const barIndex = history.length > 0 ? history.length + 1 : 0;
+  const sticky = useMemo(() => [barIndex], [barIndex]);
+  // Up Next's start can reach the top however short it is: History stays out of sight.
+  const endSpace = useMemo(() => ({ anchorIndex: barIndex }), [barIndex]);
+  const start = barOffset(history.length);
+
   const onMove = useCallback((move: PendingMove, moved: Promise<void>) => {
     setPending((list) => [...list, move]);
     void moved.finally(() => setPending((list) => list.filter((other) => other !== move)));
   }, []);
-  const { drag, rowDrag, liftedStyle, height, scrollRef } = useUpNextDrag({
+  const { drag, rowDrag, liftedStyle, height, scroll, scrollRef } = useUpNextDrag({
     shown,
     entries,
     bottomInset,
+    lead: start + BAR,
+    bar: BAR,
     onMove,
   });
 
-  // The Queue stays mounted between showings (NowPlayingSheet's `QueuePane`),
-  // hidden in an `Activity` that tears this effect down and sets it up again
-  // on each showing. Each showing places Up Next through Legend List: a new
-  // play's starts from the top, the same play's keeps its place, and the list
-  // draws the rows for that offset even if its queue changed out of sight.
-  const listRef = useRef<LegendListRef>(null);
-  const [placeUpNext] = useState(() => upNextScroll<QueueState["context"]>());
+  // The sticky bar's slice of the sheet's ground, placed where the bar sits.
+  const [listTop, setListTop] = useState(0);
+  const groundTop = useSharedValue(0);
+  const barStart = useSharedValue(start);
   useLayoutEffect(() => {
-    placeUpNext(listRef.current, queue.context);
-  }, [placeUpNext, queue.context]);
+    groundTop.set(paneTop + listTop);
+    barStart.set(start);
+  }, [groundTop, barStart, paneTop, listTop, start]);
+  const barGround = useMemo<Ground>(
+    () => ({ colors: ground, top: groundTop, scroll, start: barStart }),
+    [ground, groundTop, scroll, barStart],
+  );
+
+  // The Queue stays mounted between showings (NowPlayingSheet's `QueuePane`),
+  // hidden in an `Activity` that tears these effects down and sets them up
+  // again on each showing. Each showing places the list at the start of Up
+  // Next through Legend List, which draws the rows for that offset even if its
+  // queue changed out of sight; while it shows, the place follows History
+  // growing or emptying under it.
+  const listRef = useRef<LegendListRef>(null);
+  const [placement] = useState(() => upNextScroll<QueueState["context"]>());
+  useLayoutEffect(() => {
+    placement.place(listRef.current, queue.context, start);
+  }, [placement, queue.context, start]);
+  useLayoutEffect(() => placement.hide, [placement]);
 
   const renderItem = useCallback(
-    ({ item, index }: { item: QueueEntry; index: number }) => {
-      const track = tracks.get(item.trackId);
+    ({ item }: { item: QueueRow }) => {
+      if (item.kind === "historyHead") return <SectionHead label="History" />;
+      if (item.kind === "bar") return <UpNextBar ground={barGround} />;
+      const track = tracks.get(item.entry.trackId);
+      const downloaded = queueTrackDownloaded(track, missingIds);
+      if (item.kind === "history") {
+        return <HistoryRow entry={item.entry} track={track} downloaded={downloaded} />;
+      }
       return (
         <UpNextRow
-          entry={item}
-          index={index}
+          entry={item.entry}
+          index={item.index}
           track={track}
-          downloaded={queueTrackDownloaded(track, missingIds)}
-          lifted={drag?.key === item.key}
+          downloaded={downloaded}
+          lifted={drag?.key === item.entry.key}
           drag={rowDrag}
           count={entries.length}
         />
       );
     },
-    [tracks, missingIds, drag, rowDrag, entries.length],
+    [tracks, missingIds, drag, rowDrag, entries.length, barGround],
   );
   // Legend List re-renders a row only when its item or extraData changes, and a
   // queue picked back up after JS restarted learns its tracks after the first render.
   const rowState = useMemo(() => ({ tracks, missingIds, drag }), [tracks, missingIds, drag]);
-
-  if (entries.length === 0 && batchLoading) {
-    return (
-      <View className="flex-1">
-        <UpNextSkeletons />
-      </View>
-    );
-  }
 
   const failure = batchFailed ? (
     <RecommendationsFailed onRetry={retryMagicBatch} style={{ paddingTop: CELL * 2 }} />
@@ -361,17 +525,19 @@ export function UpNextList({ bottomInset }: { bottomInset: number }) {
     />
   ) : null;
 
-  if (entries.length === 0) {
-    return (
-      <View className="flex-1" style={{ paddingTop: CELL * 2 }}>
-        {failure ?? (
-          <Text className="font-sans text-subheadline text-secondary">
-            {playingKey === null ? "Nothing is playing." : "Nothing up next."}
-          </Text>
-        )}
-      </View>
-    );
-  }
+  const footer = batchLoading ? (
+    <UpNextSkeletons />
+  ) : entries.length > 0 ? (
+    failure
+  ) : (
+    <View style={{ paddingTop: CELL * 2 }}>
+      {failure ?? (
+        <Text className="font-sans text-subheadline text-secondary">
+          {playingKey === null ? "Nothing is playing." : "Nothing up next."}
+        </Text>
+      )}
+    </View>
+  );
 
   const liftedTrack =
     drag === null
@@ -382,8 +548,9 @@ export function UpNextList({ bottomInset }: { bottomInset: number }) {
     <View
       className="flex-1 overflow-hidden"
       onLayout={(event) => {
+        const { y, height: measured } = event.nativeEvent.layout;
+        setListTop(y);
         // Hidden behind another view, the list may be laid out empty: keep its last height.
-        const measured = event.nativeEvent.layout.height;
         if (measured > 0) height.set(measured);
       }}
     >
@@ -391,16 +558,21 @@ export function UpNextList({ bottomInset }: { bottomInset: number }) {
         ref={listRef}
         refScrollView={scrollRef}
         className="flex-1"
-        data={entries}
-        keyExtractor={(entry) => entry.key}
+        data={rows}
+        keyExtractor={rowKey}
+        getItemType={rowType}
+        getFixedItemSize={rowSize}
         renderItem={renderItem}
         extraData={rowState}
         estimatedItemSize={ROW}
+        initialScrollOffset={start}
+        stickyHeaderIndices={sticky}
+        anchoredEndSpace={endSpace}
         alwaysRender={drag === null ? undefined : { keys: [drag.key] }}
         scrollEnabled={drag === null}
         scrollEventThrottle={16}
         contentContainerStyle={{ paddingBottom: bottomInset }}
-        ListFooterComponent={batchLoading ? <UpNextSkeletons /> : failure}
+        ListFooterComponent={footer}
       />
       {drag !== null && (
         <Animated.View

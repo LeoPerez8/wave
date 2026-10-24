@@ -8,7 +8,7 @@ import {
 import type { ComponentType, ReactNode } from "react";
 import { Activity, memo, useEffect, useLayoutEffect, useState, useSyncExternalStore } from "react";
 import { StyleSheet, Text, View, useWindowDimensions } from "react-native";
-import Animated, { useAnimatedStyle } from "react-native-reanimated";
+import Animated, { useAnimatedStyle, type DerivedValue } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { CELL, grid } from "@/catalog/grid";
@@ -26,7 +26,7 @@ import { useSongShareShown } from "@/share/songShare";
 import { shareNowPlaying } from "@/share/songShare";
 import { useThemeColor } from "@/theme/useThemeColor";
 
-import { Background } from "./Background";
+import { Background, useBackgroundColors } from "./Background";
 import { DismissArea } from "./DismissArea";
 import {
   useDownloadedFile,
@@ -110,13 +110,21 @@ type Item = NonNullable<PlaybackState["item"]>;
  * of sight. Memoized, so the sheet's renders (the playing state) don't reach
  * it while it's hidden.
  */
-const QueuePane = memo(function QueuePane({ item }: { item: Item }) {
+const QueuePane = memo(function QueuePane({
+  item,
+  ground,
+}: {
+  item: Item;
+  ground: DerivedValue<string[]>;
+}) {
+  // Where the pane sits on the sheet: the list's sticky bar draws the ground there.
+  const [top, setTop] = useState(0);
   return (
-    <View className="flex-1">
+    <View className="flex-1" onLayout={(event) => setTop(event.nativeEvent.layout.y)}>
       <DismissArea>
         <QueueHeader item={item} />
       </DismissArea>
-      <UpNextList bottomInset={CELL * 2} />
+      <UpNextList bottomInset={CELL * 2} ground={ground} paneTop={top} />
     </View>
   );
 });
@@ -194,6 +202,7 @@ export function NowPlayingSheet() {
   usePreparePlayingSong(songTarget, shown, settled);
   const palette = useNowPlayingPalette(trackId, details);
   const gradient = useNowPlayingGradient(palette);
+  const ground = useBackgroundColors(gradient, shown);
   const [view, setView] = useState<NowPlayingView>("player");
   // The Queue, once shown, stays mounted while another view shows (`QueuePane`).
   const [queueWarm, setQueueWarm] = useState(false);
@@ -249,7 +258,7 @@ export function NowPlayingSheet() {
       importantForAccessibility={shown && !songSharing ? "auto" : "no-hide-descendants"}
       accessibilityElementsHidden={!shown || songSharing}
     >
-      <Background gradient={gradient} animate={shown} />
+      <Background colors={ground} />
       <View
         className="flex-1"
         importantForAccessibility={lyricSharing ? "no-hide-descendants" : "auto"}
@@ -295,7 +304,7 @@ export function NowPlayingSheet() {
           <>
             {queueWarm && (
               <Activity mode={view === "queue" ? "visible" : "hidden"} name="Queue">
-                <QueuePane item={item} />
+                <QueuePane item={item} ground={ground} />
               </Activity>
             )}
             {view === "lyrics" && (
