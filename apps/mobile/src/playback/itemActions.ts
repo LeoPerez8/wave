@@ -9,6 +9,7 @@ import {
   playlistRemovals,
   unsearchedSongJob,
   type ActionSurface,
+  type FavoriteSource,
   type ItemAction,
   type ItemActionEntry,
   type MagicSeed,
@@ -343,6 +344,8 @@ export function useItemActions(
 export interface PressContext {
   readonly target: ActionItems;
   readonly surface: ActionSurface;
+  /** A swipe runs a menu entry, but confirms its favorite as a swipe. */
+  readonly favoriteSource?: FavoriteSource | undefined;
   /** Runs before an entry's action: the menu closes, the selection ends. */
   readonly finish: () => void;
   readonly onSelect?: (() => void) | undefined;
@@ -369,6 +372,7 @@ const NO_IDS: readonly number[] = [];
 export const itemActionPress = ({
   target,
   surface,
+  favoriteSource = surface,
   finish,
   onSelect,
   here,
@@ -433,6 +437,7 @@ export const itemActionPress = ({
         },
         on,
         find,
+        favoriteSource,
       );
     });
 

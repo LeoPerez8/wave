@@ -161,7 +161,14 @@ const runTrackSwipe = (target: ActionItems, side: RowSwipeSide): void => {
   const press = (find: FindInLibrary) => {
     const entry = swipeEntryNow(planTrack(target, here, find, settings), side);
     if (entry !== undefined)
-      itemActionPress({ target, surface: "menu", finish: nothing, here, find })(entry)();
+      itemActionPress({
+        target,
+        surface: "menu",
+        favoriteSource: "swipe",
+        finish: nothing,
+        here,
+        find,
+      })(entry)();
   };
   const chosen = swipeEntryNow(planTrack(target, here, findNothing, settings), side);
   if (!hasStreamedSongs(target) || chosen?.action === "goToArtist") press(findNothing);

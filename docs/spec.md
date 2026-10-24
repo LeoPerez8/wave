@@ -46,7 +46,7 @@ v1 delivers the core player and library. v2 adds the advanced audio and library-
 - **Sidecar** — a `.lrc` lyrics file beside an audio file (`Song.lrc` or `Song.mp3.lrc`).
 - **Favorite** — a starred track (Apple Music's star).
 - **Artist image** — the circle an artist is shown with: their **artist photo** (downloaded online, see Artist photos) when there is one, else the cover of the album that represents them, else their initial.
-- **Now Playing** — the full-screen player; **Mini player** — the floating glass pill above the tab bar; **Toast** — a line on a small glass pill at the top of the screen, just under the status bar, that goes away on its own, or on a tap or a swipe up.
+- **Now Playing** — the full-screen player; **Mini player** — the floating glass pill above the tab bar; **Toast** — a line with an optional leading icon on a small glass pill at the top of the screen, just under the status bar, that goes away on its own, or on a tap or a swipe up.
 - **YT Music song** — a song found on YouTube Music rather than in the Library. It is identified by its YouTube video id (`yt:<videoId>` wherever a track id is expected, so it can't collide with a Library id), can be streamed or queued, and becomes a Track only once it's downloaded into the Library. A YT Music song the Library already has (see YT Music) is never offered as one. _Avoid_: online track, remote track, stream.
 
 ## User Stories
@@ -75,7 +75,7 @@ v1 delivers the core player and library. v2 adds the advanced audio and library-
 17. As a user, I want genre screens listing their tracks, so that I can browse by genre.
 18. As a user, I want long lists (tens of thousands of songs) to scroll smoothly at 120 Hz, so that the app feels native on my phone.
 19. As a user, I want a fast-scroll alphabet index on long lists, so that I can jump to a letter.
-20. As a user, I want long-press context menus on tracks, albums, artists and playlists (Play Next, Add to Queue, Add to Playlist, Favorite, Go to Album/Artist), so that I can act without opening screens. The finger that long-pressed can stay down and slide onto an entry: lifting it there runs that entry, so one gesture does it (lifting anywhere else, or without sliding, leaves the menu open to tap; the list underneath holds still meanwhile).
+20. As a user, I want long-press context menus on tracks, albums, artists and playlists (Play Next, Add to Queue, Add to Playlist, Favorite, Go to Album/Artist), so that I can act without opening screens. The finger that long-pressed can stay down and slide onto an entry: lifting it there runs that entry, so one gesture does it (lifting anywhere else, or without sliding, leaves the menu open to tap; the list underneath holds still meanwhile). Favoriting from a song row's swipe, a long-press menu or the selection bar confirms with an "Added to Favorites" toast, led by a filled star in Secondary; several selected songs say "Added N songs to Favorites" (Core's `favoriteToast`). This applies to Library and YT Music songs alike. Now Playing's star and cover double-tap show no toast, since the star and its pop confirm the change; Unfavorite never shows one.
 
 ### Playback
 
