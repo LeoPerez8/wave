@@ -165,7 +165,7 @@ test("the splash can use the same matched pair with its light and dark inks", ()
     "#ff0d00",
   );
   const splash = paletteSplashThemeFor(choice);
-  assert.equal(splash?.name, "Theme.Wave.Launch.fog.black.vivid209.vivid29");
+  assert.equal(splash?.name, "Wl.0.0.i.c");
   assert.equal(splash?.choice.primary, "vivid209");
   assert.equal(splash?.choice.secondary, "vivid29");
   assert.equal(splash?.choice.customPrimary, null);

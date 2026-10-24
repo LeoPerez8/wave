@@ -1,7 +1,7 @@
 // The launch splash: the moving logo (`launchLogoDrawable.ts`) on every
-// splash, and a splash style for every choice Settings › Theme offers, so
-// Android 13+ can open Wave on the chosen ground with the logo in the chosen
-// colours (the native module picks one with `SplashScreen.setSplashScreenTheme`).
+// splash, and 36 background pairs × 576 palette ink pairs, so Android 13+
+// opens Wave on the chosen ground with the logo in the icon's matched inks
+// (the native module picks one with `SplashScreen.setSplashScreenTheme`).
 // `android/` is generated, so the resources go in through prebuild. It edits
 // expo-splash-screen's splash style, so app.config.ts applies it before the
 // plugin list: Expo runs the last-registered mod first.
