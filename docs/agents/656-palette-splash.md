@@ -100,5 +100,23 @@ The actual Android prebuild output was also parsed and checked: all 20,735
 named styles resolve to Core's expected colours in both modes and share
 `drawable/launch_logo.xml`.
 
+The integration branch subsequently advanced to `38c2a4a4` with unrelated
+#660/#661 favorite feedback changes. That tip was also merged. After this
+last merge, all 51 focused Core tests (splash, palette, favorite toast and
+swipe actions), all 61 mobile plugin/theme/toast tests, and both typechecks
+pass. The complete-suite results above predate this last unrelated merge.
+
+## Files changed against the merged integration
+
+- `packages/core/src/launchTheme.ts`
+- `packages/core/src/launchTheme.test.ts`
+- `packages/core/src/inkPalette.test.ts`
+- `apps/mobile/plugins/launchSplashResources.ts`
+- `apps/mobile/plugins/withLaunchSplash.ts`
+- `apps/mobile/src/theme/launchSplash.test.ts`
+- `apps/mobile/scripts/measure-launch-splash.ts`
+- `docs/spec.md`
+- `docs/agents/656-palette-splash.md`
+
 The Android 13+ phone cold-start check with cyan/red, animation and Remove
 animations remains manual. This environment has no Android SDK.
