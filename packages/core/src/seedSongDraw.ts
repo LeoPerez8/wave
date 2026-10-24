@@ -58,7 +58,8 @@ export const drawSeedSongs = <S extends SeedSong>(
   }
   const stale = unique
     .filter((song) => lastDrawn.has(song.id))
-    .toSorted((a, b) => lastDrawn.get(a.id)! - lastDrawn.get(b.id)!);
+    // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh array; Hermes lacks toSorted
+    .sort((a, b) => lastDrawn.get(a.id)! - lastDrawn.get(b.id)!);
   for (const song of stale) {
     if (drawn.length >= count) break;
     if (taken.has(artistOf(song))) continue;
@@ -76,9 +77,8 @@ export const drawSeedSongs = <S extends SeedSong>(
 const weigh = (songs: readonly SeedSong[], weight: "plays" | "added"): Map<string, number> => {
   if (weight === "plays")
     return new Map(songs.map((song) => [song.id, playsWeight(song.plays ?? 0)]));
-  const dates = [...new Set(songs.map((song) => song.addedAt ?? -Infinity))].toSorted(
-    (a, b) => b - a,
-  );
+  // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh array; Hermes lacks toSorted
+  const dates = [...new Set(songs.map((song) => song.addedAt ?? -Infinity))].sort((a, b) => b - a);
   const rank = new Map(dates.map((date, index) => [date, index]));
   return new Map(
     songs.map((song) => [song.id, 1 / ((rank.get(song.addedAt ?? -Infinity) ?? 0) + 1)]),

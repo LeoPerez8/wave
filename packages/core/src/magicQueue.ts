@@ -513,7 +513,8 @@ const MAX_SEED_SONGS = 200;
 /** Up to `MAX_SEED_SONGS` of [songs], the most played, in their order. */
 const mostPlayed = (songs: readonly MagicSeedSong[]): readonly MagicSeedSong[] => {
   if (songs.length <= MAX_SEED_SONGS) return songs;
-  const kept = new Set(songs.toSorted((a, b) => b.plays - a.plays).slice(0, MAX_SEED_SONGS));
+  // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh array; Hermes lacks toSorted
+  const kept = new Set([...songs].sort((a, b) => b.plays - a.plays).slice(0, MAX_SEED_SONGS));
   return songs.filter((song) => kept.has(song));
 };
 
