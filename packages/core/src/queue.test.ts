@@ -6,6 +6,7 @@ import {
   currentEntry,
   nextRepeatMode,
   parseQueueState,
+  queueHistory,
   reduceQueue,
   upNext,
   upNextMove,
@@ -526,5 +527,47 @@ describe("withPendingMoves", () => {
     const removed = apply(playing, { type: "remove", key: keyOf(playing, "c") });
     assert.equal(show(withPendingMoves(removed, [move])), "a [b] e d");
     assert.equal(show(apply(removed, { type: "move", ...move })), "a [b] e d");
+  });
+});
+
+describe("queueHistory", () => {
+  const tracks = "a b c d e";
+
+  test("holds the entries behind the current one, oldest first", () => {
+    assert.deepEqual(ids(queueHistory(start(tracks, 2))), ["a", "b"]);
+    assert.deepEqual(queueHistory(start(tracks)), []);
+    assert.deepEqual(queueHistory(EMPTY_QUEUE), []);
+  });
+
+  test("empties when shuffle turns on", () => {
+    assert.deepEqual(queueHistory(shuffleOn(start(tracks, 2))), []);
+  });
+
+  test("holds the context entries before the current one, played or not, when shuffle turns off", () => {
+    const shuffled = apply(shuffleOn(start(tracks)), { type: "next" });
+    const current = currentEntry(shuffled)!.trackId;
+    const off = apply(shuffled, { type: "setShuffle", on: false });
+    assert.deepEqual(
+      ids(queueHistory(off)),
+      tracks.split(" ").slice(0, tracks.split(" ").indexOf(current)),
+    );
+  });
+
+  test("empties when Repeat All wraps", () => {
+    const wrapped = apply(start(tracks, 4), { type: "setRepeat", mode: "all" }, { type: "next" });
+    assert.deepEqual(queueHistory(wrapped), []);
+  });
+
+  test("takes the entries a jump ahead skipped over", () => {
+    const playing = start(tracks);
+    const jumped = apply(playing, { type: "jumpTo", key: keyOf(playing, "d") });
+    assert.deepEqual(ids(queueHistory(jumped)), ["a", "b", "c"]);
+  });
+
+  test("gives back to Up Next the entries after one jumped back to", () => {
+    const playing = start(tracks, 3);
+    const back = apply(playing, { type: "jumpTo", key: keyOf(playing, "b") });
+    assert.deepEqual(ids(queueHistory(back)), ["a"]);
+    assert.deepEqual(ids(upNext(back)), ["c", "d", "e"]);
   });
 });

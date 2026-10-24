@@ -53,6 +53,7 @@ export {
   currentEntry,
   nextRepeatMode,
   parseQueueState,
+  queueHistory,
   readShuffleKind,
   playReplacesQueue,
   reduceQueue,
