@@ -88,17 +88,17 @@ export const NETWORK_SEEDS = [
 export const WHOLE_LIBRARY: Record<string, Exception> = {
   "library/PlaylistRecommendations.tsx#PlaylistRecommendations": {
     reason:
-      "The visit's read/refill waits for screen settlement, is aborted on loss of screen sight (including Now Playing), and uses one versioned paged source plus stepped Core ranking. Public behavior/work counts: playlistRecommendationVisit.test.ts and db/regressionSweep.test.ts.",
+      "The visit's read/refill waits for screen settlement, is aborted on loss of screen sight (including Now Playing), and reads the shared recommendation snapshot plus stepped Core ranking. Public behavior/work counts: playlistRecommendationVisit.test.ts and db/regressionSweep.test.ts.",
     capabilities: ["library/playlistRecommendationSource.ts#playlistRecommendationInput"],
   },
-  "library/playlistRecommendationSource.ts#playlistRecommendationInput": {
+  "library/playlistRecommendationSource.ts#inputs": {
     reason:
-      "Deferred background input seam: requires settlement before creating or reading the single shared paged source. Membership/feedback are scoped to the requesting playlist; source invalidation and eviction have real SQLite tests.",
-    capabilities: ["library/playlistRecommendationInputs.ts#observePlaylistRecommendationInputs"],
+      "#633: the app's playlist inputs over the recommendation snapshot (Library, catalog, stars), read only once a settled visit asks; the Library's tracks are derived once per snapshot read. Membership/feedback are scoped to the requesting playlist. Real SQLite tests: playlistRecommendationInputs.test.ts.",
+    capabilities: ["library/playlistRecommendationInputs.ts#sharePlaylistRecommendationInputs"],
   },
   "library/playlistRecommendationInputs.ts#observePlaylistRecommendationInputs": {
     reason:
-      "Background source lifetime installs explicit track/favorite/catalog invalidation and releases both listeners on disposal. The shared snapshot is paged and retains one version for at most a lazy sixty-second TTL.",
+      "Desktop replays' and tests' copy of the app's recommendation snapshot: counts Library changes and catalog writes as source versions and releases both listeners on disposal. Each part is paged and kept for at most a lazy sixty-second idle time.",
     capabilities: ["library/playlistRecommendationInputs.ts#sharePlaylistRecommendationInputs"],
   },
   "library/startupJobs.ts#readImportDownloadInput": {
@@ -558,11 +558,6 @@ export const TASTE_SOURCES: Record<string, Exception> = {
   "home/mixInputs.ts#readMixInputs": {
     reason:
       "Existing #594 daily mix background reader shares the bounded songs page; its multi-genre projection and cancellation remain owned by the mix build. Covered by db/mixInputs.test.ts.",
-    capabilities: ["library/LibraryStore.ts#mixSongsPage"],
-  },
-  "library/playlistRecommendationInputs.ts#sharePlaylistRecommendationInputs": {
-    reason:
-      "#599's single shared playlist recommendation source walks the bounded songs page with multi-genres after settlement; its own seed chain is guarded in WHOLE_LIBRARY. Covered by playlistRecommendationInputs.test.ts and db/regressionSweep.test.ts.",
     capabilities: ["library/LibraryStore.ts#mixSongsPage"],
   },
 };
