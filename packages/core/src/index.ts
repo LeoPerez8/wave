@@ -1972,10 +1972,12 @@ export {
   storedSwipeSettings,
   swipeChoiceAction,
   swipeChoiceLabel,
+  swipeActionTone,
   swipesChoose,
 } from "./swipeActions.ts";
 export type { RowMenuAction, RowSwipeActions, SwipeChoice, SwipeSettings } from "./swipeActions.ts";
 export { BACK_EXIT_WINDOW_MS, createBackExitConfirmation } from "./backExit.ts";
+export { favoriteToast, type FavoriteSource } from "./favoriteToast.ts";
 
 export {
   PLAYLIST_ARTIST_CAP,
