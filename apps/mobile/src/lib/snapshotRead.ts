@@ -55,6 +55,8 @@ export const snapshotRead = <A, E, R>(
     users: number;
   };
   let latest: Entry | null = null;
+  /** Every read not yet ended, the one under way and any queued after it, for `dispose`. */
+  const outstanding = new Set<Entry>();
   let disposed = false;
   /** A read started now, or once [before] ends: it reads the sources as they are when it starts. */
   const entryOf = (context: Context.Context<R>, before: Entry | null, at: number): Entry => {
@@ -73,12 +75,15 @@ export const snapshotRead = <A, E, R>(
       return Effect.runPromiseWith(context)(read, { signal: controller.signal });
     };
     entry.answer = before === null ? start() : before.answer.then(start, start);
+    outstanding.add(entry);
     void entry.answer.then(
       () => {
+        outstanding.delete(entry);
         entry.done = true;
         entry.usedAt = Math.max(entry.usedAt, now());
       },
       () => {
+        outstanding.delete(entry);
         entry.done = true;
         if (latest === entry) latest = null;
       },
@@ -116,9 +121,9 @@ export const snapshotRead = <A, E, R>(
     get,
     dispose: () => {
       disposed = true;
-      const entry = latest;
       latest = null;
-      if (entry !== null && !entry.done) entry.controller.abort();
+      for (const entry of outstanding) entry.controller.abort();
+      outstanding.clear();
     },
   };
 };

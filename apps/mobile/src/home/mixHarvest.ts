@@ -43,7 +43,7 @@ import { oneAtATime } from "@/lib/oneAtATime";
 import { appRuntime } from "@/library/runtime";
 import type { NativeYtRadioSong } from "@/native/waveYtMusic";
 import { onMobileData, online } from "@/native/waveNative";
-import { tasteProfileNow } from "@/playback/TasteProfile";
+import { tasteProfileForRecommendation } from "@/playback/TasteProfile";
 import { ytMusicEnabled } from "@/settings/ytMusic";
 import { noteRadioNow } from "@/ytmusic/candidateCatalog";
 import { YtMusic } from "@/ytmusic/YtMusic";
@@ -52,6 +52,7 @@ import { lookUpArtistProfiles, mixProfileOf } from "./artistGenres";
 import { artistMixPools } from "./artistMixPools";
 import { discoverSlidersNow } from "./discoverMixLevel";
 import { harvestMobileUsed, noteHarvestMobileUse } from "./harvestMobileUse";
+import { withSnapshotTaste } from "./homeMixBuild";
 import { recommendationSnapshot } from "./recommendationSnapshot";
 import { harvestRun } from "./mixHarvestRun";
 import { mixIndexes } from "./mixKnown";
@@ -216,8 +217,10 @@ const harvest = Effect.gen(function* () {
   const seeds = yield* harvestSeeds(mobile);
   if (seeds.length === 0) return 0;
   // The recommendation snapshot Home's mixes just read: its own batches go into the next one.
-  const { library, catalog, graph } = yield* recommendationSnapshot.get;
-  const taste = yield* tasteProfileNow;
+  const { library, catalog, graph, taste } = yield* withSnapshotTaste(
+    recommendationSnapshot.get,
+    tasteProfileForRecommendation,
+  );
   const profileOf = mixProfileOf(library);
   const styleOf = libraryStyleOf(library);
   yield* freeTurnEffect;

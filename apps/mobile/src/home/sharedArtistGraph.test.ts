@@ -100,3 +100,19 @@ test("playlist suggestions stop loading on a graph timeout and a renewal retries
   assert.equal(session.get().loading, false);
   assert.equal(session.get().error, null);
 });
+
+test("a stalled catalog fails the graph at its fifteen-second deadline", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"] });
+  const shared = shareArtistGraph(Effect.succeed(emptyStore), Effect.void, Effect.void, {
+    catalog: Effect.never,
+  });
+  t.after(shared.dispose);
+  let outcome = "pending";
+  const failed = assert.rejects(Effect.runPromise(shared.get)).then(() => {
+    outcome = "failed";
+  });
+  t.mock.timers.tick(15_000);
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal(outcome, "failed", "the wait for the catalog counts towards the graph's deadline");
+  await failed;
+});

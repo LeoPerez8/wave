@@ -4,7 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import { RECOMMENDATION_SNAPSHOT, snapshotVersionsAfter, type SnapshotVersions } from "@wave/core";
 import { snapshotRead } from "../lib/snapshotRead.ts";
-import { buildHomeMixes } from "./homeMixBuild.ts";
+import { buildHomeMixes, withSnapshotTaste } from "./homeMixBuild.ts";
 
 const turn = () => new Promise<void>((resolve) => setImmediate(resolve));
 
@@ -97,4 +97,27 @@ test("one wall-clock deadline includes the input wait and ranking, rejecting lat
   t.mock.timers.setTime(60_000);
   ranked();
   await rejected;
+});
+
+test("a cold build's taste maps the snapshot's own Library, which is read once", async () => {
+  let libraryReads = 0;
+  const snapshot = snapshotRead(
+    Effect.sync(() => ({ songs: [`read ${++libraryReads}`], artists: [] })),
+    { part: RECOMMENDATION_SNAPSHOT.library, versions: () => ({}) },
+  );
+  const tasteOf: unknown[] = [];
+  const inputs = await Effect.runPromise(
+    withSnapshotTaste(
+      Effect.map(snapshot.get, (library) => ({ library, catalog: [] })),
+      (library) =>
+        Effect.sync(() => {
+          tasteOf.push(library);
+          return "taste";
+        }),
+    ),
+  );
+  assert.equal(inputs.taste, "taste");
+  assert.deepEqual(tasteOf, [inputs.library], "the taste derives from the snapshot's Library");
+  assert.equal(libraryReads, 1);
+  snapshot.dispose();
 });

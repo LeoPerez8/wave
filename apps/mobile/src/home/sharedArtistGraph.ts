@@ -11,8 +11,8 @@ import { readArtistGraph, type ArtistGraphReads } from "./artistGraph.ts";
 
 /**
  * The longest the shared graph read may run, from its initial wait on: past
- * it, its callers get an error and a later read tries again. The shared
- * catalog it's derived from has its own deadline.
+ * it, its callers get an error and a later read tries again. It covers the
+ * wait for the shared catalog the graph is derived from.
  */
 const GRAPH_READ_TIMEOUT = 15_000;
 
@@ -20,9 +20,11 @@ const GRAPH_READ_TIMEOUT = 15_000;
  * The artist graph, read as the recommendation snapshot's graph part: kept
  * until a source it's derived from is written (`versions`, Core's
  * `snapshotAsk`), never rebuilt while it's built. Derived from [catalog]
- * when given (the snapshot's catalog part), else from the catalog's pages.
+ * when given (the snapshot's catalog part), else from the catalog's pages;
+ * `derived` also gives the catalog it was derived from, so a snapshot can
+ * take both from one read.
  */
-export const shareArtistGraph = <R, RC = never>(
+export const shareArtistGraph = <R, C extends ArtistGraphCatalogEntry = never, RC = never>(
   store: Effect.Effect<ArtistGraphReads, never, R>,
   start: Effect.Effect<void>,
   between: Effect.Effect<void>,
@@ -30,17 +32,23 @@ export const shareArtistGraph = <R, RC = never>(
     catalog,
     versions = () => ({}),
   }: {
-    readonly catalog?: Effect.Effect<readonly ArtistGraphCatalogEntry[], unknown, RC>;
+    readonly catalog?: Effect.Effect<readonly C[], unknown, RC>;
     readonly versions?: () => SnapshotVersions;
   } = {},
-) =>
-  snapshotRead(
+) => {
+  const part = snapshotRead(
     Effect.gen(function* () {
       const entries = catalog === undefined ? undefined : yield* catalog;
-      return yield* Effect.gen(function* () {
-        yield* start;
-        return yield* readArtistGraph(yield* store, between, entries);
-      }).pipe((graph) => withRecommendationDeadline(graph, GRAPH_READ_TIMEOUT));
-    }),
+      yield* start;
+      return { graph: yield* readArtistGraph(yield* store, between, entries), catalog: entries };
+    }).pipe((graph) => withRecommendationDeadline(graph, GRAPH_READ_TIMEOUT)),
     { part: RECOMMENDATION_SNAPSHOT.graph, versions },
   );
+  return {
+    /** The graph. */
+    get: Effect.map(part.get, ({ graph }) => graph),
+    /** The graph with the catalog it was derived from (undefined when read from the pages). */
+    derived: part.get,
+    dispose: part.dispose,
+  };
+};
