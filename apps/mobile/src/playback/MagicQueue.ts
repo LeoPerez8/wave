@@ -11,7 +11,7 @@ import {
   magicPickEnded,
   magicBatchRadios,
   magicLibrarySongs,
-  radioRankingBatch,
+  magicRadioBatch,
   magicPlaySignal,
   magicQueueEdits,
   magicQueueLabel,
@@ -48,7 +48,7 @@ import { appLog } from "@/log/appLog";
 import { ytMusicEnabled } from "@/settings/ytMusic";
 
 import { magicQueueYtCandidates } from "./magicQueueRadio";
-import { magicSongsOf } from "./magicSongs";
+import { magicSignalsOf } from "./magicSongs";
 import { Player } from "./Player";
 import { onPlayEnded } from "./PlayHistory";
 import { Queue, queueState, toQueueTrack, type QueueTrack } from "./Queue";
@@ -290,12 +290,6 @@ const ASKS_AGAIN: ReadonlySet<MagicSignalKind> = new Set(["favorite", "download"
  */
 let asked = 0;
 
-/** Those of [trackIds] the queue holds now. */
-const held = (trackIds: readonly string[]): string[] => {
-  const queued = new Set(queueState.get().entries.map((entry) => entry.trackId));
-  return trackIds.filter((id) => queued.has(id));
-};
-
 /**
  * Follows the queue for the Magic Queue under way: plays ending (Next
  * within 30 s, a song played through), stars, songs lined up by hand and
@@ -314,27 +308,34 @@ export const layer = Layer.effectDiscard(
       Effect.asVoid,
     );
 
-    /** Teaches the session under way [kind] about each of [trackIds] it holds. */
-    const learn = (kind: MagicSignalKind, trackIds: readonly string[]) =>
+    const pendingSignals = new Set<Promise<void>>();
+    const waitForSignals = () => Effect.promise(() => Promise.all(pendingSignals));
+
+    /** Teaches the session that was active when the owner acted. */
+    const learn = (sessionId: string, kind: MagicSignalKind, trackIds: readonly string[]) =>
       Effect.gen(function* () {
         if (activeMagicSession() === null) return;
-        const songs = yield* magicSongsOf(trackIds).pipe(
+        const signals = yield* magicSignalsOf(kind, trackIds).pipe(
           Effect.provideService(LibraryStore, store),
         );
         const session = activeMagicSession();
-        if (session === null || songs.length === 0) return;
-        save(songs.reduce((learned, song) => magicSignal(learned, { kind, song }), session));
+        if (session?.id !== sessionId || signals.length === 0) return;
+        save(signals.reduce((learned, signal) => magicSignal(learned, signal), session));
       });
 
     /** Learns [kind] about [trackIds] for the next available ranking. */
     const teach = (kind: MagicSignalKind, trackIds: readonly string[]): void => {
-      if (trackIds.length === 0 || activeMagicSession() === null) return;
-      fork(
-        learn(kind, trackIds).pipe(
-          // A star, a download or a song lined up by hand may find songs an empty pick didn't.
-          Effect.ensuring(Effect.sync(() => (ASKS_AGAIN.has(kind) ? askAgain() : undefined))),
-        ),
+      const session = activeMagicSession();
+      if (trackIds.length === 0 || session === null) return;
+      const learned = Effect.runPromise(
+        learn(session.id, kind, trackIds).pipe(Effect.catchCause(() => Effect.void)),
       );
+      pendingSignals.add(learned);
+      void learned.finally(() => {
+        pendingSignals.delete(learned);
+        // A star, a download or a song lined up by hand may find songs an empty pick didn't.
+        if (activeMagicSession()?.id === session.id && ASKS_AGAIN.has(kind)) askAgain();
+      });
     };
 
     /**
@@ -343,6 +344,9 @@ export const layer = Layer.effectDiscard(
      */
     const pick = (wanted: MagicSession, appended: (count: number) => void) =>
       Effect.gen(function* () {
+        yield* waitForSignals();
+        if (activeMagicSession()?.id !== wanted.id)
+          return { kind: "dropped" } satisfies MagicBatchOutcome;
         fork(warmInputs);
         const latest = recommendationSnapshot.peek();
         const library = latest.library ?? startingLibrary;
@@ -355,23 +359,30 @@ export const layer = Layer.effectDiscard(
         const live = activeMagicSession();
         const drawn = magicBatchRadios(live?.id === wanted.id ? live : wanted, Math.random);
         if (live?.id === wanted.id && drawn.session !== live) save(drawn.session);
-        const yt = yield* magicQueueYtCandidates(wanted, drawn.seeds, library, {
+        const yt = yield* magicQueueYtCandidates(drawn.session, drawn.seeds, library, {
           catalog,
           graph,
           taste,
           sliders,
           profileOf,
-          sessionNow: () => activeMagicSession() ?? wanted,
+          sessionNow: () => {
+            const current = activeMagicSession();
+            return current?.id === wanted.id ? current : drawn.session;
+          },
         }).pipe(
           Effect.provideService(LibraryStore, store),
           Effect.provideService(YtMusic, ytMusic),
         );
+        yield* waitForSignals();
         const session = activeMagicSession();
         if (session?.id !== wanted.id || !wantsMagicBatch(session, queueState.get()))
           return { kind: "dropped" } satisfies MagicBatchOutcome;
         const playable = library.songs.filter(songHasFile);
         const candidates = yt.candidates.filter((song) => !session.used.includes(song.trackId));
-        const selected = radioRankingBatch(candidates, {
+        const likedCandidates = yt.likedCandidates.filter(
+          (song) => !session.used.includes(song.trackId),
+        );
+        const selected = magicRadioBatch(candidates, likedCandidates, {
           size: session.batches === 0 ? 9 : 10,
           newMusicShare: session.ytShare,
         });
@@ -403,10 +414,11 @@ export const layer = Layer.effectDiscard(
             refill: yt.refilled,
           } satisfies MagicBatchOutcome;
         save(batch.session);
+        const allCandidates = [...candidates, ...likedCandidates];
         const tracks = new Map<string, QueueTrack>(
           playable.map((song) => [String(song.id), toQueueTrack(song)]),
         );
-        for (const candidate of candidates)
+        for (const candidate of allCandidates)
           if (candidate.source === "stream" && candidate.song !== null)
             tracks.set(candidate.trackId, toYtQueueTrack(candidate.song, null));
         const songs = batch.trackIds.flatMap((id) => tracks.get(id) ?? []);
@@ -414,7 +426,7 @@ export const layer = Layer.effectDiscard(
         const picked = new Set(batch.trackIds);
         appended(songs.length);
         yield* cacheYtCoversInBackground(
-          candidates.flatMap((candidate) =>
+          allCandidates.flatMap((candidate) =>
             picked.has(candidate.trackId) &&
             candidate.source === "stream" &&
             candidate.song !== null
@@ -542,8 +554,8 @@ export const layer = Layer.effectDiscard(
             const kind = magicPlaySignal(end);
             if (kind !== null) teach(kind, [end.play.trackId]);
           }),
-          onYtSongSignal((kind, videoIds) => teach(kind, held(videoIds.map(ytTrackId)))),
-          onStarred((trackIds) => teach("favorite", held(trackIds.map(String)))),
+          onYtSongSignal((kind, videoIds) => teach(kind, videoIds.map(ytTrackId))),
+          onStarred((trackIds) => teach("favorite", trackIds.map(String))),
         ];
         // A Magic Queue picked back up at launch may want its batch already.
         onQueue();
