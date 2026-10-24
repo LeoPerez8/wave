@@ -11,8 +11,8 @@ import android.window.SplashScreenView
  * splash with the moving logo (`launch_logo.xml`) and expo-splash-screen keeps
  * it up until the first screen is ready; then Android gives the splash to the
  * app to take away. This replaces expo-splash-screen's plain fade with one
- * timed by [LaunchLogoExit]: a quick start lets the waves finish their first
- * sweep, so they never flick on and off.
+ * timed by [LaunchLogoExit]: the fade starts as soon as Wave is ready,
+ * wherever the waves are in their sweep.
  */
 object LaunchSplashExit {
   /** Wall-clock times are past this; uptimes (milliseconds since boot) aren't. */
