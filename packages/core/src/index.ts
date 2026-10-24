@@ -1884,6 +1884,7 @@ export {
   undoneMagicQueueRefresh,
 } from "./magicQueueSection.ts";
 export type { MagicQueuePicking, MagicQueuePicks } from "./magicQueueSection.ts";
+export { randomMagicQueuePicks } from "./randomMagicQueuePicks.ts";
 export { magicQueueShare } from "./magicQueue.ts";
 export { discoverMixesOfRadios } from "./discoverMixRadios.ts";
 export type { DiscoverMixRead } from "./discoverMixRadios.ts";

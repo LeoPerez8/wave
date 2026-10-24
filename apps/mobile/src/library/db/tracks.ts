@@ -248,6 +248,16 @@ const deleteTracksWhere = (db: LibraryDatabase, which: SQL): void => {
   db.delete(tracks).where(which).run();
 };
 
+/** Home's random grid needs every playable id, without decoding song metadata or history. */
+export const selectPlayableSongIds = (db: LibraryDatabase): number[] =>
+  db
+    .select({ id: schema.tracks.id })
+    .from(schema.tracks)
+    .where(hasFile)
+    .orderBy(schema.tracks.id)
+    .all()
+    .map((row) => row.id);
+
 /** A short Home row's growth probe returns at most one id, never song metadata. */
 export const hasPlayableSongOutside = (db: LibraryDatabase, ids: readonly number[]): boolean =>
   db

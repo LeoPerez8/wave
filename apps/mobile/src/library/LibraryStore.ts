@@ -223,6 +223,7 @@ import {
   selectLibraryLookupSongs,
   trackArtistIds,
   selectPlayableSongs,
+  selectPlayableSongIds,
   hasPlayableSongOutside,
   selectSongGenres,
   selectVideoIds,
@@ -759,13 +760,15 @@ export class LibraryStore extends Context.Service<
      * The songs with these ids that can play, for the queue, in no particular
      * order; ids no longer indexed, and missing songs, are left out.
      */
+    readonly songsByIds: (
+      ids: readonly number[],
+    ) => Effect.Effect<readonly PlayableSongRow[], LibraryStoreError>;
+    /** All playable ids, without metadata or history, for Home's random Magic Queue grid. */
+    readonly playableSongIds: Effect.Effect<readonly number[], LibraryStoreError>;
     /** Whether a short Home row has another playable song to fill it (one id at most). */
     readonly hasPlayableSongOutside: (
       ids: readonly number[],
     ) => Effect.Effect<boolean, LibraryStoreError>;
-    readonly songsByIds: (
-      ids: readonly number[],
-    ) => Effect.Effect<readonly PlayableSongRow[], LibraryStoreError>;
     /** The YouTube video id each of the songs [ids] was downloaded from, by song id (those with one). */
     readonly videoIds: (
       ids: readonly number[],
@@ -1645,6 +1648,8 @@ const make = Effect.gen(function* () {
 
     hasPlayableSongOutside: (ids) =>
       attempt("probe Home pick growth", () => hasPlayableSongOutside(db, ids)),
+
+    playableSongIds: attempt("read Home seed ids", () => selectPlayableSongIds(db)),
 
     songsByIds: (ids) =>
       attempt("read queued songs", () => selectPlayableSongs(db, ids).filter(songHasFile)),
