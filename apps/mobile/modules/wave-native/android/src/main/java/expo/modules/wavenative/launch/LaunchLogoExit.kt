@@ -9,17 +9,10 @@ package expo.modules.wavenative.launch
  */
 data class LaunchLogoExit(val delayMs: Long, val fadeMs: Long) {
   companion object {
-    /** One sweep of the waves (`LAUNCH_LOGO.cycleMs`). */
-    const val CYCLE_MS = 1500L
-
     /** The splash's fade-out (`LAUNCH_LOGO.fadeMs`). */
     const val FADE_MS = 400L
 
-    /**
-     * [elapsedMs] since the waves started moving (null when Android didn't
-     * animate them); [animationsOn] is false with "Remove animations" on.
-     */
-    @Suppress("UNUSED_PARAMETER")
-    fun plan(elapsedMs: Long?, animationsOn: Boolean): LaunchLogoExit = LaunchLogoExit(0, FADE_MS)
+    /** Starts fading as soon as Wave is ready. Android applies the system animator scale. */
+    fun plan(): LaunchLogoExit = LaunchLogoExit(0, FADE_MS)
   }
 }

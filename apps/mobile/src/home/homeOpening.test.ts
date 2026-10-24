@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import * as Effect from "effect/Effect";
-import { HOME_SECTIONS, createLibraryQueries } from "@wave/core";
+import { createLibraryQueries } from "@wave/core";
 import { fileURLToPath } from "node:url";
 
 import { loadLibraryStore } from "../../bench/fastAgain/store.ts";
@@ -17,7 +17,7 @@ import {
   homeContent,
   homeOpeningState,
   homeSectionWaiting,
-  homeBodyHeight,
+  homePlaceholderHeight,
   magicQueueGrid,
 } from "./homeOpening.ts";
 import type { HomeContent } from "./homeOpening.ts";
@@ -249,16 +249,19 @@ test("leaving Home before either frame cancels its read-backed mount", () => {
 
 test("Home reserves matching shelf, list and adaptive Magic Queue dimensions at both text sizes", () => {
   for (const scale of [1, 1.3]) {
-    assert.equal(homeBodyHeight("most-played", scale), 560);
-    assert.equal(homeBodyHeight("favorites", scale), 560);
-    assert.equal(homeBodyHeight("recently-added", scale), scale === 1 ? 200 : 212);
-    assert.equal(homeBodyHeight("recently-played", scale), homeBodyHeight("recently-added", scale));
+    assert.equal(homePlaceholderHeight("most-played", scale), 560);
+    assert.equal(homePlaceholderHeight("favorites", scale), 560);
+    assert.equal(homePlaceholderHeight("recently-added", scale), scale === 1 ? 200 : 212);
     assert.equal(
-      homeBodyHeight("most-played-albums", scale),
-      homeBodyHeight("recently-added", scale),
+      homePlaceholderHeight("recently-played", scale),
+      homePlaceholderHeight("recently-added", scale),
     );
-    assert.equal(homeBodyHeight("most-played-artists", scale), scale === 1 ? 182 : 188.6);
-    assert.equal(Math.round(homeBodyHeight("stats", scale)!), scale === 1 ? 288 : 439);
+    assert.equal(
+      homePlaceholderHeight("most-played-albums", scale),
+      homePlaceholderHeight("recently-added", scale),
+    );
+    assert.equal(homePlaceholderHeight("most-played-artists", scale), scale === 1 ? 182 : 188.6);
+    assert.equal(Math.round(homePlaceholderHeight("stats", scale)!), scale === 1 ? 288 : 439);
   }
   assert.equal(magicQueueGrid(312, 1).columns, 3);
   assert.equal(magicQueueGrid(312, Math.fround(1.3)).columns, 2);
@@ -268,12 +271,4 @@ test("Home reserves matching shelf, list and adaptive Magic Queue dimensions at 
 test("the Magic Queue reserves all nine tile places before its saved picks answer", () => {
   assert.equal(Math.round(magicQueueGrid(312, 1).height), 456);
   assert.equal(Math.round(magicQueueGrid(312, Math.fround(1.3)).height), 1092);
-});
-
-test("loaded Home and Library sections have no reserved body height", () => {
-  for (const { id } of HOME_SECTIONS) {
-    for (const scale of [1, 1.3, 2]) {
-      assert.equal(homeBodyHeight(id, scale, false), undefined, `${id} at ${scale}`);
-    }
-  }
 });

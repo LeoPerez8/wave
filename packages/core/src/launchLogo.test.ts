@@ -156,40 +156,7 @@ describe("launchLogoWaves", () => {
 });
 
 describe("launchLogoExit", () => {
-  test("a quick start fades at once, wherever the first sweep is", () => {
-    for (const elapsedMs of [0, 100, 250, 600, 1100, 1499])
-      assert.deepEqual(launchLogoExit({ elapsedMs, animationsOn: true }), {
-        delayMs: 0,
-        fadeMs: 400,
-      });
-  });
-
-  test("a later start fades at once, wherever the sweep is", () => {
-    for (const elapsedMs of [1500, 2750, 12_000])
-      assert.deepEqual(launchLogoExit({ elapsedMs, animationsOn: true }), {
-        delayMs: 0,
-        fadeMs: 400,
-      });
-  });
-
-  test("with animations removed the splash goes as it always did", () => {
-    assert.deepEqual(launchLogoExit({ elapsedMs: 100, animationsOn: false }), {
-      delayMs: 0,
-      fadeMs: 400,
-    });
-  });
-
-  test("a logo that isn't moving (Android didn't animate it) isn't waited for", () => {
-    assert.deepEqual(launchLogoExit({ elapsedMs: null, animationsOn: true }), {
-      delayMs: 0,
-      fadeMs: 400,
-    });
-  });
-
-  test("a start time from the future never holds the splash", () => {
-    assert.deepEqual(launchLogoExit({ elapsedMs: -5000, animationsOn: true }), {
-      delayMs: 0,
-      fadeMs: 400,
-    });
+  test("fades immediately when Wave is ready", () => {
+    assert.deepEqual(launchLogoExit(), { delayMs: 0, fadeMs: 400 });
   });
 });

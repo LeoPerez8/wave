@@ -65,7 +65,7 @@ export const starSongs = (
   { tracks, ytSongs }: SongsToStar,
   on: boolean,
   find: FindInLibrary,
-  source: FavoriteSource = "nowPlaying",
+  source: FavoriteSource,
 ): Promise<void> => {
   const library = new Map(tracks.map((song) => [song.id, song]));
   const streamed: NativeYtSong[] = [];

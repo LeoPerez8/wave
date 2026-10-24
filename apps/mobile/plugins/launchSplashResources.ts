@@ -44,20 +44,33 @@ export const LAUNCH_LOGO_ATTRS = {
 /** The animated logo every splash draws (`launchLogoDrawable.ts`). */
 export const LAUNCH_LOGO_DRAWABLE = "launch_logo";
 
+type SplashTones = Pick<LaunchTheme, "light" | "dark">;
+const COLOR_KEYS = ["background", "primary", "secondary"] as const;
+
 /** One short resource name for each distinct pair of mode tones, shared by both waves. */
-const tones = new Map<string, { name: string; light: string; dark: string }>();
-const colorNames = (theme: Pick<LaunchTheme, "light" | "dark">) => {
-  const name = (key: "background" | "primary" | "secondary"): string => {
-    const light = theme.light[key];
-    const dark = theme.dark[key];
-    const pair = `${light}/${dark}`;
-    let color = tones.get(pair);
-    if (color === undefined) {
-      color = { name: `wlc${tones.size.toString(36)}`, light, dark };
-      tones.set(pair, color);
+const splashPalette = (themes: readonly SplashTones[]) => {
+  const colors = new Map<string, { name: string; light: string; dark: string }>();
+  for (const theme of themes) {
+    for (const key of COLOR_KEYS) {
+      const light = theme.light[key];
+      const dark = theme.dark[key];
+      const pair = `${light}/${dark}`;
+      if (!colors.has(pair))
+        colors.set(pair, { name: `wlc${colors.size.toString(36)}`, light, dark });
     }
-    return color.name;
-  };
+  }
+  return [...colors.values()];
+};
+
+const SPLASH_COLORS = splashPalette([launchTheme(DEFAULT_THEME_CHOICE), ...LAUNCH_SPLASH_THEMES]);
+const COLOR_NAMES = new Map(
+  SPLASH_COLORS.map(({ name, light, dark }) => [`${light}/${dark}`, name]),
+);
+
+/** Looks up names without changing the palette, regardless of which resource mod runs first. */
+const colorNames = (theme: SplashTones) => {
+  const name = (key: (typeof COLOR_KEYS)[number]): string =>
+    COLOR_NAMES.get(`${theme.light[key]}/${theme.dark[key]}`)!;
   return { background: name("background"), primary: name("primary"), secondary: name("secondary") };
 };
 
@@ -124,7 +137,7 @@ export const addLaunchSplashColors = (
       ...colors.resources,
       color: merge(
         colors.resources.color,
-        [...tones.values()].map((color) => value(color.name, color[scheme])),
+        SPLASH_COLORS.map((color) => value(color.name, color[scheme])),
       ),
     },
   };

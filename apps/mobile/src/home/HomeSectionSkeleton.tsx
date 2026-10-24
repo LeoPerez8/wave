@@ -1,5 +1,5 @@
-import { homeSectionTitle, type HomeSectionId } from "@wave/core";
-import { Fragment, type ReactNode } from "react";
+import { STATS_FACT_LABELS, homeSectionTitle, type HomeSectionId } from "@wave/core";
+import { Fragment } from "react";
 import { Text, View, useWindowDimensions } from "react-native";
 
 import { COVER_ROW_TILE, CoverRow } from "@/catalog/CoverRow";
@@ -8,26 +8,12 @@ import { Hairline } from "@/catalog/Hairline";
 import { SkeletonLine } from "@/catalog/SkeletonLine";
 import { AlbumCardSkeleton, SkeletonGroup, TrackSkeletons } from "@/catalog/Skeletons";
 import { TitledSection } from "@/catalog/TitledSection";
-import { openStats } from "@/library/routes";
 import { useYtMusicEnabled } from "@/settings/ytMusic";
 
 import { StatsFactRow } from "./StatsFactRow";
+import { statsSeeAllAction } from "./statsSeeAllAction";
 import { DiscoverMixesSkeleton } from "./DiscoverMixesSkeleton";
-import { homeBodyHeight } from "./homeOpening";
-
-/** Loaded sections fit their content; only the placeholder keeps its reserved height. */
-export function HomeSectionBody({
-  id,
-  children,
-  loading = false,
-}: {
-  id: HomeSectionId;
-  children: ReactNode;
-  loading?: boolean;
-}) {
-  const { fontScale } = useWindowDimensions();
-  return <View style={{ minHeight: homeBodyHeight(id, fontScale, loading) }}>{children}</View>;
-}
+import { homePlaceholderHeight } from "./homeOpening";
 
 function DiscoverSkeleton() {
   const enabled = useYtMusicEnabled();
@@ -52,18 +38,17 @@ export function HomeSectionSkeleton({ id }: { id: HomeSectionId }) {
   return (
     <TitledSection
       title={homeSectionTitle(id)}
-      {...(id === "stats" ? { action: { label: "See all", onPress: openStats } } : {})}
+      {...(id === "stats" ? { action: statsSeeAllAction } : {})}
     >
-      <HomeSectionBody id={id} loading>
+      <View style={{ minHeight: homePlaceholderHeight(id, fontScale) }}>
         {id === "discover" ? (
           <DiscoverSkeleton />
         ) : songs ? (
           <TrackSkeletons count={10} leading="card" />
         ) : id === "stats" ? (
           <SkeletonGroup label="Loading Stats">
-            {Array.from({ length: 6 }, (_, index) => (
-              // oxlint-disable-next-line react/no-array-index-key -- fixed placeholder rows
-              <Fragment key={index}>
+            {STATS_FACT_LABELS.map((label, index) => (
+              <Fragment key={label}>
                 {index > 0 && <Hairline />}
                 <StatsFactRow>
                   <View style={{ width: "45%" }}>
@@ -101,7 +86,7 @@ export function HomeSectionSkeleton({ id }: { id: HomeSectionId }) {
             </CoverRow>
           </SkeletonGroup>
         )}
-      </HomeSectionBody>
+      </View>
     </TitledSection>
   );
 }

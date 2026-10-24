@@ -7,6 +7,9 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Bundle
 import android.os.PowerManager
+import android.util.Log
+import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicReference
 
 /**
  * Switches Wave's launcher icon (an activity alias, see [LauncherAliases]).
@@ -25,18 +28,50 @@ class LauncherIconSwitcher(
 ) : Application.ActivityLifecycleCallbacks {
   private val packageManager: PackageManager = context.packageManager
 
-  @Volatile private var pending: Pair<String, List<String>>? = null
+  private val pending = AtomicReference<Pair<String, List<String>>?>(null)
+  private val worker = Executors.newSingleThreadExecutor()
+
+  // Read on the worker, once per process. An app update invalidates the saved reconciliation:
+  // newly shipped aliases may have manifest defaults that must be checked too.
+  private val preferences by lazy { context.getSharedPreferences("launcherIcon", Context.MODE_PRIVATE) }
+  private val installedAt by lazy {
+    @Suppress("DEPRECATION")
+    packageManager.getPackageInfo(context.packageName, 0).lastUpdateTime
+  }
+  private var appliedAlias: String? = null
+  private var restored = false
 
   /** Makes [alias] (of [aliases], simple names) the launcher icon once Wave leaves the screen. */
   fun request(alias: String, aliases: List<String>) {
-    pending = alias to aliases
+    pending.set(alias to aliases)
   }
 
-  /** Applies the requested icon now. */
+  /** Queues reconciliation off the activity thread; requests are applied in stop order. */
   fun applyPending() {
-    val (target, aliases) = pending ?: return
-    pending = null
-    val changes = LauncherAliases.plan(target, aliases) { isEnabled(component(it)) }
+    val request = pending.getAndSet(null) ?: return
+    worker.execute {
+      try {
+        apply(request.first, request.second)
+      } catch (error: Exception) {
+        // The next theme request reconciles a partial switch, including after a restart.
+        appliedAlias = null
+        Log.w("WaveLauncherIcon", "Couldn't switch launcher icon", error)
+      }
+    }
+  }
+
+  private fun apply(target: String, aliases: List<String>) {
+    if (!restored) {
+      if (preferences.getLong("installedAt", -1) == installedAt) {
+        appliedAlias = preferences.getString("appliedAlias", null)
+      }
+      restored = true
+    }
+    if (target == appliedAlias || target !in aliases) return
+    val changes = LauncherAliases.plan(target, aliases, appliedAlias) { isEnabled(component(it)) }
+    // Clear the durable marker before changing PackageManager, so an interrupted switch retries.
+    check(preferences.edit().remove("appliedAlias").commit())
+    appliedAlias = null
     for (change in changes) {
       packageManager.setComponentEnabledSetting(
         component(change.alias),
@@ -48,6 +83,8 @@ class LauncherIconSwitcher(
         PackageManager.DONT_KILL_APP,
       )
     }
+    check(preferences.edit().putLong("installedAt", installedAt).putString("appliedAlias", target).commit())
+    appliedAlias = target
     if (changes.isNotEmpty()) onSwitched()
   }
 

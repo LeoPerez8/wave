@@ -31,13 +31,6 @@ export const LAUNCH_LOGO = {
   android12MotionMs: 10_000,
 } as const;
 
-export interface LaunchLogoExitInput {
-  /** Since the waves started moving; null when Android didn't animate them. */
-  readonly elapsedMs: number | null;
-  /** False with the system's "Remove animations" on. */
-  readonly animationsOn: boolean;
-}
-
 export interface LaunchLogoExit {
   /** How long the splash stays after Wave is ready, before it starts fading. */
   readonly delayMs: number;
@@ -49,7 +42,7 @@ export interface LaunchLogoExit {
  * at once, wherever the sweep is. With animations removed (the logo stands
  * still) it goes as it always did.
  */
-export const launchLogoExit = (_input: LaunchLogoExitInput): LaunchLogoExit => ({
+export const launchLogoExit = (): LaunchLogoExit => ({
   delayMs: 0,
   fadeMs: LAUNCH_LOGO.fadeMs,
 });

@@ -13,9 +13,15 @@ object LauncherAliases {
    * The changes that leave [target] the only alias of [aliases] that is on:
    * [target] first, so Wave is never without a launcher entry, then every other
    * one that [isEnabled]. Empty when it's already so, or when [target] isn't one
-   * of [aliases].
+   * of [aliases]. A previously reconciled [appliedAlias] needs no reads.
    */
-  fun plan(target: String, aliases: List<String>, isEnabled: (String) -> Boolean): List<AliasChange> {
+  fun plan(
+    target: String,
+    aliases: List<String>,
+    appliedAlias: String? = null,
+    isEnabled: (String) -> Boolean,
+  ): List<AliasChange> {
+    if (target == appliedAlias) return emptyList()
     if (target !in aliases) return emptyList()
     val changes = mutableListOf<AliasChange>()
     if (!isEnabled(target)) changes += AliasChange(target, enabled = true)

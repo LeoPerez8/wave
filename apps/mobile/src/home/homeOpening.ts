@@ -1,5 +1,5 @@
 import type { HomePlays, HomeSections } from "../library/db/playHistory.ts";
-import type { HomeSectionId } from "@wave/core";
+import { STATS_FACT_LABELS, type HomeSectionId } from "@wave/core";
 import { CELL, grid } from "../catalog/grid.ts";
 
 /** Unanswered slices stay undefined; an answered empty slice is content too. */
@@ -57,12 +57,7 @@ export const homeSectionWaiting = (id: HomeSectionId, home: HomeContent): boolea
 };
 
 /** Only placeholders reserve space; answered sections use their content's height. */
-export const homeBodyHeight = (
-  id: HomeSectionId,
-  fontScale: number,
-  loading = true,
-): number | undefined => {
-  if (!loading) return undefined;
+export const homePlaceholderHeight = (id: HomeSectionId, fontScale: number): number => {
   switch (id) {
     case "most-played":
     case "favorites":
@@ -74,7 +69,7 @@ export const homeBodyHeight = (
     case "most-played-artists":
       return CELL * 19 + CELL + 22 * Math.max(1, fontScale);
     case "stats":
-      return homeStatsRowLayout(fontScale).minHeight * 6;
+      return homeStatsRowLayout(fontScale).minHeight * STATS_FACT_LABELS.length;
     default:
       return 0;
   }
@@ -82,6 +77,7 @@ export const homeBodyHeight = (
 
 /** Stats values move below their labels at large system text sizes. */
 export const homeStatsRowLayout = (fontScale: number) => {
+  // React Native reports Android fontScale as a 32-bit float (1.3 becomes 1.29999995).
   const stacked = fontScale >= Math.fround(1.3);
   return {
     stacked,

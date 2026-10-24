@@ -3,7 +3,7 @@ import { describe, test } from "node:test";
 
 import {
   counted,
-  listeningOverview,
+  statsFacts,
   listeningTotals,
   summedListeningTotals,
   type SongListening,
@@ -164,10 +164,10 @@ describe("summedListeningTotals", () => {
   });
 });
 
-describe("listeningOverview", () => {
+describe("statsFacts", () => {
   test("Home's Stats facts show listening first, then the library, with grouped values", () => {
     assert.deepEqual(
-      listeningOverview(
+      statsFacts(
         { songs: 2_500, albums: 600, artists: 800 },
         { minutesListened: 48_119, songsListened: 1_100, plays: 4_200, lastPlayedAt: 1_000 },
       ),
@@ -193,7 +193,7 @@ describe("listeningOverview", () => {
       [48_119, "801 h"],
       [60_000, "1,000 h"],
     ] as const) {
-      const facts = listeningOverview(
+      const facts = statsFacts(
         { songs: 0, albums: 0, artists: 0 },
         { ...listeningTotals([]), minutesListened: minutes },
       );

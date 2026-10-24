@@ -3,17 +3,17 @@ import { Text, View } from "react-native";
 
 import { Hairline } from "@/catalog/Hairline";
 import { TitledSection } from "@/catalog/TitledSection";
-import { useListeningOverview } from "@/library/hooks";
-import { openStats } from "@/library/routes";
+import { useStatsFacts } from "@/library/hooks";
 import { HomeSectionSkeleton } from "./HomeSectionSkeleton";
 import { StatsFactRow } from "./StatsFactRow";
+import { statsSeeAllAction } from "./statsSeeAllAction";
 
 /** Listening and library facts; only See all opens Library's Stats. */
 export function HomeStats() {
-  const facts = useListeningOverview();
+  const facts = useStatsFacts();
   if (facts === undefined) return <HomeSectionSkeleton id="stats" />;
   return (
-    <TitledSection title="Stats" action={{ label: "See all", onPress: openStats }}>
+    <TitledSection title="Stats" action={statsSeeAllAction}>
       <View>
         {facts.map(({ label, value }, index) => (
           <Fragment key={label}>
