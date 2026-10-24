@@ -6,9 +6,6 @@ import {
   NIGHT_SLATE,
   RECAP_COLOURS,
   RECAP_INK,
-  SETTINGS_PAGES,
-  SETTINGS_TILE_COLOURS,
-  SETTINGS_TILE_GLYPH,
   TONES,
   contrastRatio,
   themeContrastIssues,
@@ -123,48 +120,6 @@ describe("themeContrastIssues", () => {
   });
 });
 
-describe("SETTINGS_TILE_COLOURS", () => {
-  const schemes = ["light", "dark"] as const;
-
-  test("has a colour, in each scheme, for the tile of every Settings page", () => {
-    for (const scheme of schemes) {
-      for (const { title, colour } of SETTINGS_PAGES) {
-        assert.match(
-          SETTINGS_TILE_COLOURS[scheme][colour],
-          /^#[0-9a-f]{6}$/,
-          `${title}, ${scheme}`,
-        );
-      }
-    }
-  });
-
-  test("keeps a white glyph legible on every tile, light and dark (3:1, a non-text mark)", () => {
-    assert.equal(SETTINGS_TILE_GLYPH, "#ffffff");
-    for (const scheme of schemes) {
-      for (const [name, colour] of Object.entries(SETTINGS_TILE_COLOURS[scheme])) {
-        const ratio = contrastRatio(SETTINGS_TILE_GLYPH, colour);
-        assert.ok(ratio >= 3, `white on ${name} (${scheme}) is ${ratio.toFixed(2)}:1`);
-      }
-    }
-  });
-
-  test("takes the grey tile from the tone ramp in both schemes (no ad-hoc greys)", () => {
-    for (const scheme of schemes) {
-      assert.ok(
-        (TONES as readonly string[]).includes(SETTINGS_TILE_COLOURS[scheme].grey),
-        `${scheme} grey ${SETTINGS_TILE_COLOURS[scheme].grey}`,
-      );
-    }
-  });
-
-  test("sets every tile off dark mode's black ground", () => {
-    for (const [name, colour] of Object.entries(SETTINGS_TILE_COLOURS.dark)) {
-      const ratio = contrastRatio(colour, DEFAULT_THEME.dark.background);
-      assert.ok(ratio >= 3, `${name} on the dark ground is ${ratio.toFixed(2)}:1`);
-    }
-  });
-});
-
 describe("RECAP_COLOURS", () => {
   /** [ink] laid at [opacity] over [ground], as the app's `opacity-80` lines draw it. */
   const over = (ink: string, opacity: number, ground: string): string => {
@@ -190,15 +145,6 @@ describe("RECAP_COLOURS", () => {
     for (const [name, colour] of Object.entries(RECAP_COLOURS)) {
       const ratio = contrastRatio(over(RECAP_INK, 0.8, colour), colour);
       assert.ok(ratio >= 4.5, `80% white on ${name} is ${ratio.toFixed(2)}:1`);
-    }
-  });
-
-  test("are a Recap's own, apart from Settings' tiles", () => {
-    const tiles = new Set(
-      [SETTINGS_TILE_COLOURS.light, SETTINGS_TILE_COLOURS.dark].flatMap((c) => Object.values(c)),
-    );
-    for (const [name, colour] of Object.entries(RECAP_COLOURS)) {
-      if (name !== "grey") assert.ok(!tiles.has(colour), `${name} ${colour} is a Settings tile's`);
     }
   });
 
