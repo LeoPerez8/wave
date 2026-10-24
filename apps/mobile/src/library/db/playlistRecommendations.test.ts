@@ -9,6 +9,8 @@ import {
   playlistRecommendationSession,
   artistGraph,
   recommend,
+  type PlaylistRecommendationTrack,
+  type YtAlbumSong,
 } from "@wave/core";
 import { tasteHistory } from "./taste.ts";
 import {
@@ -26,6 +28,13 @@ import {
   dismissPlaylistRecommendation,
   selectPlaylistRecommendationInput,
 } from "./playlistRecommendations.ts";
+
+/** A seed's radio bringing [songs], or every Library song of the input, in order. */
+const radio = (songs: readonly YtAlbumSong[]) => [
+  { id: "song:seed", artists: ["Radiohead"], songs },
+];
+const libraryRadio = (input: { readonly library: readonly PlaylistRecommendationTrack[] }) =>
+  radio(input.library);
 
 test("acceptance commits membership and feedback together, once, and never learns from a failed or preexisting addition", async () => {
   const db = await openTestDatabase();
@@ -66,7 +75,7 @@ test("acceptance commits membership and feedback together, once, and never learn
   ]);
 });
 
-test("catalog acceptance saves a stream without favoriting or downloading, and resolves a newly downloaded recording once", async () => {
+test("radio acceptance saves a stream without favoriting or downloading, and resolves a newly downloaded recording once", async () => {
   let db = await openTestDatabase();
   const seed = addTrack(db, { title: "Airbag", artist: "Radiohead", genre: "Rock" });
   const song = {
@@ -79,12 +88,14 @@ test("catalog acceptance saves a stream without favoriting or downloading, and r
     artworkUrl: null,
     explicit: false,
   };
-  addCandidates(db, { seed: "Radiohead", songs: [song] }, 1);
   const first = createPlaylist(db, "First", [{ source: "library", trackId: seed }], 1).playlistId;
   const second = createPlaylist(db, "Second", [{ source: "library", trackId: seed }], 1).playlistId;
   const input = selectPlaylistRecommendationInput(db, first);
-  const track = playlistRecommendations(input.playlist, { ...input, graph: null, now: 1 })[0]!
-    .track;
+  const track = playlistRecommendations(input.playlist, {
+    ...input,
+    pages: radio([song]),
+    graph: null,
+  })[0]!.track;
   const baseline = tasteHistory(db);
   assert.equal(acceptPlaylistRecommendation(db, first, { key: "online", track }, 2), true);
   assert.equal(selectPlaylistEntries(db, first)[1]?.source, "stream");
@@ -144,13 +155,14 @@ test("acceptance follows a downloaded video's identity despite edited tags, and 
     artworkUrl: null,
     explicit: false,
   };
-  addCandidates(db, { seed: "Radiohead", songs: [song] }, 1);
   const input = selectPlaylistRecommendationInput(db, playlistId);
   const streamOffer = {
     key: "edited-download",
-    track: playlistRecommendations(input.playlist, { ...input, graph: null, now: 1 }).find(
-      (offer) => offer.track.videoId === song.videoId,
-    )!.track,
+    track: playlistRecommendations(input.playlist, {
+      ...input,
+      pages: radio([{ ...song, albumId: null }]),
+      graph: null,
+    }).find((offer) => offer.track.videoId === song.videoId)!.track,
   };
   const download = addTrack(db, {
     title: "Edited title",
@@ -233,7 +245,12 @@ test("dismiss then accept refills from updated contents, persists scoped learnin
   assert.equal(beforeGlobal.length, 2);
   const picks = (id: number) => {
     const input = selectPlaylistRecommendationInput(db, id);
-    return playlistRecommendations(input.playlist, { ...input, graph, now: 0, online: false });
+    return playlistRecommendations(input.playlist, {
+      ...input,
+      pages: libraryRadio(input),
+      graph,
+      online: false,
+    });
   };
   const otherBefore = picks(otherId);
   let id = 0;
@@ -241,7 +258,10 @@ test("dismiss then accept refills from updated contents, persists scoped learnin
     newId: () => `flow-${++id}`,
     read: async () => {
       const input = selectPlaylistRecommendationInput(db, playlistId);
-      return { playlist: input.playlist, sources: { ...input, graph, now: 0, online: false } };
+      return {
+        playlist: input.playlist,
+        sources: { ...input, pages: libraryRadio(input), graph, online: false },
+      };
     },
     dismiss: async (offer) => dismissPlaylistRecommendation(db, playlistId, offer, 2),
     accept: async (offer) => acceptPlaylistRecommendation(db, playlistId, offer, 3),
@@ -337,8 +357,9 @@ test("playlist dismissals upgrade, persist across database restart, and stay wit
 test("real-store dismissal failure is retryable and refill preserves the other offers without changing global taste", async () => {
   const db = await openTestDatabase();
   const seed = addTrack(db, { title: "Seed", artist: "Radiohead", genre: "Rock" });
+  // Each by their own artist: the suggestions hold at most 2 songs by one.
   for (const title of ["A", "B", "C", "D", "E", "F", "G"])
-    addTrack(db, { title, artist: "Radiohead", genre: "Rock" });
+    addTrack(db, { title, artist: `Artist ${title}`, genre: "Rock" });
   const playlistId = createPlaylist(
     db,
     "Alternative",
@@ -351,7 +372,10 @@ test("real-store dismissal failure is retryable and refill preserves the other o
     newId: () => String(++id),
     read: async () => {
       const input = selectPlaylistRecommendationInput(db, playlistId);
-      return { playlist: input.playlist, sources: { ...input, graph: null, now: 10 } };
+      return {
+        playlist: input.playlist,
+        sources: { ...input, pages: libraryRadio(input), graph: null },
+      };
     },
     dismiss: async (offer) => dismissPlaylistRecommendation(db, playlistId, offer, 10),
   });
@@ -381,7 +405,8 @@ for (const timing of [
   test(`real-store Add preserves held offers and processes external membership changes: ${timing}`, async () => {
     const db = await openTestDatabase();
     const seed = addTrack(db, { title: "Seed", artist: "Radiohead", genre: "Rock" });
-    for (const title of "ABCDEFGH") addTrack(db, { title, artist: "Radiohead", genre: "Rock" });
+    for (const title of "ABCDEFGH")
+      addTrack(db, { title, artist: `Artist ${title}`, genre: "Rock" });
     const { playlistId } = createPlaylist(
       db,
       "Alternative",
@@ -406,7 +431,10 @@ for (const timing of [
           blocked.resolve();
           await resumed.promise;
         }
-        return { playlist: input.playlist, sources: { ...input, graph: null, now: 10 } };
+        return {
+          playlist: input.playlist,
+          sources: { ...input, pages: libraryRadio(input), graph: null },
+        };
       },
       dismiss: async (offer) => dismissPlaylistRecommendation(db, playlistId, offer, 10),
       accept: async (offer) => {
@@ -453,7 +481,7 @@ for (const timing of [
   });
 }
 
-test("the stored playlist seeds ranked Library/catalog suggestions with recording exclusions and offline fallback", async () => {
+test("the stored playlist ranks its seeds' radios with Library recordings, recording exclusions and offline fallback with recording exclusions and offline fallback", async () => {
   const db = await openTestDatabase();
   const seed = addTrack(db, {
     title: "Airbag",
@@ -483,21 +511,14 @@ test("the stored playlist seeds ranked Library/catalog suggestions with recordin
     artworkUrl: null,
     explicit: false,
   };
-  addCandidates(
-    db,
-    {
-      seed: "Radiohead",
-      songs: [
-        song,
-        { ...song, videoId: "local-copy", title: "Let Down" },
-        { ...song, videoId: "new", title: "Lucky" },
-      ],
-    },
-    100,
-  );
+  const pages = radio([
+    song,
+    { ...song, videoId: "local-copy", title: "Let Down" },
+    { ...song, videoId: "new", title: "Lucky" },
+  ]);
   const input = selectPlaylistRecommendationInput(db, playlistId);
   const pick = (online: boolean) =>
-    playlistRecommendations(input.playlist, { ...input, graph: null, now: 100, online });
+    playlistRecommendations(input.playlist, { ...input, pages, graph: null, online });
   assert.deepEqual(
     pick(true).map((x) => x.track.id),
     [String(next), "yt:new"],
@@ -509,8 +530,8 @@ test("the stored playlist seeds ranked Library/catalog suggestions with recordin
   assert.deepEqual(
     playlistRecommendations(input.playlist, {
       ...input,
+      pages,
       graph: null,
-      now: 100,
       ytMusicEnabled: false,
     }).map((x) => x.track.id),
     [String(next)],
@@ -519,14 +540,14 @@ test("the stored playlist seeds ranked Library/catalog suggestions with recordin
   assert.deepEqual(
     playlistRecommendations([], {
       ...selectPlaylistRecommendationInput(db, empty.playlistId),
+      pages,
       graph: null,
-      now: 100,
     }),
     [],
   );
 });
 
-test("renewals read changed favorites and download status, including a catalog pending favorite", async () => {
+test("renewals read changed favorites and download status, including a radio's pending favorite", async () => {
   const db = await openTestDatabase();
   const seed = addTrack(db, { title: "Seed", artist: "Radiohead", genre: "Alternative Rock" });
   const ordinary = addTrack(db, {
@@ -560,11 +581,14 @@ test("renewals read changed favorites and download status, including a catalog p
     artworkUrl: null,
     explicit: false,
   };
-  addCandidates(db, { seed: "Radiohead", songs: [song] }, 100);
   addPendingFavorites(db, [song], 100);
   const read = () => {
     const input = selectPlaylistRecommendationInput(db, playlistId);
-    return playlistRecommendations(input.playlist, { ...input, graph: null, now: 100 });
+    return playlistRecommendations(input.playlist, {
+      ...input,
+      pages: radio([...input.library, { ...song, albumId: null }]),
+      graph: null,
+    });
   };
   assert.deepEqual(
     new Set(
@@ -587,8 +611,8 @@ test("Add validates its held recording without reading the entire Library", asyn
     const input = selectPlaylistRecommendationInput(fixture.db, fixture.playlistId);
     const track = playlistRecommendations(input.playlist, {
       ...input,
+      pages: libraryRadio(input),
       graph: null,
-      now: fixture.now,
       online: false,
     })[0]!.track;
     const result = traceQueries(fixture.db, () =>

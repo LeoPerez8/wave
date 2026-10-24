@@ -85,7 +85,6 @@ export const bench: FastAgainBench = {
                 hash({
                   playlist: value.playlist.map((song) => song.id),
                   library: value.library.map((song) => song.id),
-                  catalog: value.catalog,
                 }),
               details: {
                 source: "actual LibraryStore.playlistRecommendationInput",
@@ -101,7 +100,6 @@ export const bench: FastAgainBench = {
               core.playlistRecommendations(input.playlist, {
                 ...input,
                 graph: null,
-                now: fixture.now,
                 online: false,
                 ytMusicEnabled: false,
               }),

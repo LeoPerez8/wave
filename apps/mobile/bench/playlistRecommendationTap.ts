@@ -147,7 +147,7 @@ for (let run = 0; run <= runs; run++) {
   // The replacement's ranking alone, on the same input (the session runs it inside `replacementMs`).
   const input = lastInput!;
   const rankStart = performance.now();
-  playlistRecommendations(input.playlist, { ...input, graph: null, now: 1 });
+  playlistRecommendations(input.playlist, { ...input, graph: null });
   const rankMs = performance.now() - rankStart;
   if (session.get().slots[2] === null) throw new Error("the slot was not refilled");
   if (run > 0)

@@ -29,8 +29,10 @@ export const recommendationEntriesPage = (
     song: string | null;
     orderKey: string;
     syncId: string;
+    addedAt: number;
   }>(sql`
-    SELECT id, track_id AS trackId, yt_song AS song, order_key AS orderKey, sync_id AS syncId
+    SELECT id, track_id AS trackId, yt_song AS song, order_key AS orderKey, sync_id AS syncId,
+      added_at AS addedAt
     FROM playlist_items WHERE playlist_id = ${id} AND ${after === null ? sql`1` : sql`(order_key, sync_id) > (${after[0]}, ${after[1]})`} AND NOT deleted
     ORDER BY order_key, sync_id LIMIT 128`);
 };
