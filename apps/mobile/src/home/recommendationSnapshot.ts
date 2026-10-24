@@ -6,13 +6,20 @@
  * them. Every Library change and catalog or saved-page write is counted here;
  * a write never cancels a read under way, it goes into the next one.
  */
-import { snapshotVersionsAfter, type SnapshotSource, type SnapshotVersions } from "@wave/core";
+import {
+  RECOMMENDATION_SNAPSHOT,
+  snapshotVersionsAfter,
+  type SnapshotSource,
+  type SnapshotVersions,
+} from "@wave/core";
 import * as Effect from "effect/Effect";
 
 import { settledTurnEffect } from "@/lib/backgroundWork";
 import { recommendationTurnEffect } from "@/lib/recommendationWork";
+import { snapshotRead } from "@/lib/snapshotRead";
 import { onLibraryChange } from "@/library/libraryChanges";
 import { LibraryStore } from "@/library/LibraryStore";
+import { readRecommendationFavorites } from "@/library/playlistRecommendationInputs";
 
 import { onArtistGraphSourcesChanged } from "./graphSources";
 import type { MixIndexes } from "./mixKnown";
@@ -51,3 +58,15 @@ export const recommendationSnapshot = shareRecommendationSnapshot({
   },
   versions: () => versions,
 });
+
+/**
+ * The snapshot's stars part, for playlist suggestions: which songs are
+ * starred or downloaded. Kept apart from the Library so a star doesn't make
+ * Home's mixes read the Library again.
+ */
+export const recommendationFavorites = snapshotRead(
+  Effect.gen(function* () {
+    return yield* readRecommendationFavorites(yield* LibraryStore, recommendationTurnEffect);
+  }),
+  { part: RECOMMENDATION_SNAPSHOT.favorites, versions: () => versions },
+);

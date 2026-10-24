@@ -8,7 +8,7 @@ import {
   type SnapshotSource,
 } from "./index.ts";
 
-const { library, catalog, graph } = RECOMMENDATION_SNAPSHOT;
+const { library, catalog, graph, favorites } = RECOMMENDATION_SNAPSHOT;
 
 describe("when a recommendation snapshot is read again", () => {
   test("the first ask reads", () => {
@@ -69,6 +69,26 @@ describe("when a recommendation snapshot is read again", () => {
         [kept(library, source), kept(catalog, source), kept(graph, source)],
         [true, true, true],
       );
+  });
+
+  test("playlist suggestions' stars and downloads are read again for a star or a scan, and only those", () => {
+    const kept = (source: SnapshotSource) =>
+      snapshotAsk(
+        favorites,
+        { versions: {}, done: true, usedAt: 0 },
+        snapshotVersionsAfter({}, source),
+        0,
+      ) === "share";
+    assert.deepEqual(
+      (["favorites", "tracks", "plays", "playlists", "streamed", "catalog", "similar"] as const).map(
+        kept,
+      ),
+      [false, false, true, true, true, true, true],
+    );
+    assert.equal(
+      snapshotAsk(favorites, { versions: {}, done: true, usedAt: 10_000 }, {}, 70_001),
+      "read",
+    );
   });
 
   test("the Library and the catalog are read again once nobody asked for them for a minute; the graph is kept", () => {

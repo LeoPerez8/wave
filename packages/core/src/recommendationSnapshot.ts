@@ -70,4 +70,6 @@ export const RECOMMENDATION_SNAPSHOT = {
   library: { sources: ["tracks", "plays", "playlists", "streamed"], idleMs: 60_000 },
   catalog: { sources: ["catalog"], idleMs: 60_000 },
   graph: { sources: ["tracks", "plays", "catalog", "similar"] },
+  /** Which songs are starred or downloaded, for playlist suggestions: kept apart so a star doesn't re-read the Library. */
+  favorites: { sources: ["tracks", "favorites"], idleMs: 60_000 },
 } as const satisfies Record<string, SnapshotPart>;

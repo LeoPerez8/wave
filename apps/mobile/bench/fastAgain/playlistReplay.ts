@@ -74,11 +74,15 @@ export const createPlaylistReplay = async (
         "apps/mobile/src/library/playlistRecommendationInputs.ts",
       )
     : null;
+  const catalogWrites = new Set<() => void>();
   const source = sourceModule?.observePlaylistRecommendationInputs(
     store,
     turn,
     bus.onLibraryChange,
-    () => () => {},
+    (listener) => {
+      catalogWrites.add(listener);
+      return () => catalogWrites.delete(listener);
+    },
   );
   const visitModule = modern
     ? await loadWorktreeModule<typeof import("../../src/library/playlistRecommendationVisit.ts")>(
@@ -144,8 +148,12 @@ export const createPlaylistReplay = async (
         ? Effect.runPromise(store.playlistRecommendationInput(fixture.playlistId))
         : Effect.runPromise(source.get(fixture.playlistId), { signal });
     },
+    /** The next input reads everything again: a forget before the snapshot, writes since. */
     forget: () => {
-      source?.forget();
+      const older = source as { forget?: () => void } | undefined;
+      if (older?.forget !== undefined) return older.forget();
+      bus.publishLibraryChange({ kind: "tracks" });
+      for (const written of catalogWrites) written();
     },
     rank: async (
       input: Pick<

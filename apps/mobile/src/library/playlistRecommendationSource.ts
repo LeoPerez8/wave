@@ -1,39 +1,24 @@
-/** App lifetime source cache; no read starts until a settled, visible visit asks. */
+/** Playlist suggestions' inputs over the recommendation snapshot; no read starts until a settled, visible visit asks. */
 import * as Effect from "effect/Effect";
 import { settledTurnEffect } from "@/lib/backgroundWork";
 import { recommendationTurnEffect } from "@/lib/recommendationWork";
-import { onArtistGraphSourcesChanged } from "@/home/graphSources";
+import { recommendationFavorites, recommendationSnapshot } from "@/home/recommendationSnapshot";
 import { LibraryStore } from "./LibraryStore";
-import { onLibraryChange } from "./libraryChanges";
-import { observePlaylistRecommendationInputs } from "./playlistRecommendationInputs";
+import { sharePlaylistRecommendationInputs } from "./playlistRecommendationInputs";
 
-// One store and one source version are retained for this app runtime.
-let current:
-  | {
-      store: LibraryStore["Service"];
-      source: ReturnType<typeof observePlaylistRecommendationInputs>;
-    }
-  | undefined;
+const inputs = sharePlaylistRecommendationInputs(
+  {
+    library: recommendationSnapshot.library,
+    catalog: recommendationSnapshot.catalog,
+    favorites: recommendationFavorites.get,
+    store: Effect.service(LibraryStore),
+  },
+  recommendationTurnEffect,
+);
 
 /** Only the deferred playlist visit/refill invokes this whole-source capability. */
 export const playlistRecommendationInput = (id: number) =>
   Effect.gen(function* () {
     yield* settledTurnEffect;
-    const store = yield* LibraryStore;
-    if (current?.store !== store) {
-      current?.source.dispose();
-      current = {
-        store,
-        source: observePlaylistRecommendationInputs(
-          store,
-          recommendationTurnEffect,
-          onLibraryChange,
-          (listener) =>
-            onArtistGraphSourcesChanged((kind) => {
-              if (kind === "catalog") listener();
-            }),
-        ),
-      };
-    }
-    return yield* current.source.get(id);
+    return yield* inputs.get(id);
   });
