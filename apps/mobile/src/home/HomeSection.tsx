@@ -11,17 +11,15 @@ import { useState, type ComponentType, type ReactNode } from "react";
 import { Text, View, useWindowDimensions } from "react-native";
 
 import { COVER_ROW_TILE } from "@/catalog/CoverRow";
-import { EntryRow } from "@/catalog/EntryRow";
 import { PlaylistCard } from "@/catalog/cards/PlaylistCard";
 import { SongCard } from "@/catalog/cards/SongCard";
 import { CELL, grid } from "@/catalog/grid";
-import { Hairline } from "@/catalog/Hairline";
 import { PullRefreshRow } from "@/catalog/PullRefreshRow";
 import { TitledSection } from "@/catalog/TitledSection";
 import { RecommendationsFailed } from "@/components/RecommendationsFailed";
 import { fileUri } from "@/lib/fileUri";
 import type { MostPlayedRow } from "@/library/db/playHistory";
-import { openStats, openStatsSeeAll } from "@/library/routes";
+import { openStatsSeeAll } from "@/library/routes";
 import type { PlayableSongRow } from "@/library/LibraryStore";
 import { Crossfade } from "@/motion/Crossfade";
 import { openTrackActions } from "@/playback/ActionsMenu";
@@ -43,7 +41,7 @@ import {
 import { useMostPlayedOfAllTime } from "./mostPlayedOfAllTime";
 
 import { AlbumShelf, ArtistShelf, SongRows } from "./HomeSections";
-import { ListeningOverview } from "./ListeningOverview";
+import { HomeStats } from "./HomeStats";
 import { HomeSectionBody, HomeSectionSkeleton } from "./HomeSectionSkeleton";
 import {
   homeOpeningState,
@@ -375,13 +373,7 @@ const SECTIONS: Record<HomeSectionId, ComponentType<SectionProps>> = {
         </HomeSectionBody>
       </TitledSection>
     ),
-  stats: ({ title }) => (
-    <View style={{ marginTop: CELL * 5 }}>
-      <Hairline />
-      <EntryRow label={title} onPress={openStats} />
-    </View>
-  ),
-  "listening-overview": ListeningOverview,
+  stats: HomeStats,
 };
 
 /** Space above every section but the first on a screen: what `TitledSection` puts there. */

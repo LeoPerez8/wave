@@ -258,7 +258,7 @@ test("Home reserves matching shelf, list and adaptive Magic Queue dimensions at 
       homeBodyHeight("recently-added", scale),
     );
     assert.equal(homeBodyHeight("most-played-artists", scale), scale === 1 ? 182 : 188.6);
-    assert.equal(homeBodyHeight("listening-overview", scale), scale === 1 ? 124 : 160);
+    assert.equal(Math.round(homeBodyHeight("stats", scale)!), scale === 1 ? 288 : 439);
   }
   assert.equal(magicQueueGrid(312, 1).columns, 3);
   assert.equal(magicQueueGrid(312, Math.fround(1.3)).columns, 2);
