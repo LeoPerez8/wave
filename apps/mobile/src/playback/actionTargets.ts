@@ -1,11 +1,9 @@
 import {
   canFixSong,
-  commonKind,
   counted,
   groupSongs,
   joinArtists,
   queueSongTrackId,
-  unsearchedTrackId,
   type ActionItem,
   type ItemKind,
   type MixedSong,
@@ -13,9 +11,12 @@ import {
   type PlaylistSong,
   type QueueSong,
   type UnsearchedSong,
+  ytAlbumSongs,
   ytSongCredit,
   ytSongStarred,
 } from "@wave/core";
+
+import * as Result from "effect/Result";
 
 import type { ArtistImageSource } from "@/catalog/ArtistImage";
 import type { LibrarySection } from "@/catalog/sections";
@@ -23,7 +24,12 @@ import type { LibraryCounts } from "@/library/db/counts";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 import type { AlbumRow, ArtistRow, GenreRow, PlaylistRow, SongRow } from "@/library/LibraryStore";
 import { itemSongs, librarySectionSongs, playlistEntries } from "@/library/sectionSongs";
-import type { FindInLibrary } from "@/ytmusic/libraryFinder";
+import { currentLibraryFinder, type FindInLibrary } from "@/ytmusic/libraryFinder";
+import { askYtMusic } from "@/ytmusic/askYtMusic";
+import { resolveMixedEntries } from "./mixedEntries";
+import { trackEntry, type MixedItem } from "./mixedItems";
+
+export { mixedTarget, trackItemKey, type MixedItem } from "./mixedItems";
 
 /**
  * What Wave's item actions (`itemActions.ts`) act on: library items of one
@@ -71,14 +77,6 @@ export const isUnsearchedTrack = (item: TrackItem): item is UnsearchedTrackItem 
 export const listedTrackItem = (entry: MixedSong<NativeYtSong, SongRow>): TrackItem =>
   entry.source === "library" ? { song: entry.track } : { ytSong: entry.song };
 
-/** A song's selection key: a Library song by its id, a YT Music song by its video, an unsearched one by its id. */
-export const trackItemKey = (item: TrackItem): string =>
-  isLibraryTrack(item)
-    ? String(item.song.id)
-    : isUnsearchedTrack(item)
-      ? unsearchedTrackId(item.unsearched)
-      : `yt:${item.ytSong.videoId}`;
-
 /** The checked songs, as the selection bar acts on them. */
 export const tracksTarget = (items: readonly TrackItem[]): ActionItems => ({
   kind: "track",
@@ -107,11 +105,6 @@ export const targetStreamedArtistNames = (target: ActionItems): readonly string[
         : (item.ytSong.artists ?? []),
   );
 
-/** An item of a page that shows several kinds together (an artist's albums and songs). */
-export type MixedItem =
-  | { readonly kind: "track"; readonly item: TrackItem }
-  | { readonly kind: "album"; readonly item: AlbumRow };
-
 /** The item type of each kind. */
 export interface ItemOf {
   readonly track: TrackItem;
@@ -126,7 +119,10 @@ export interface ItemOf {
 /** What actions act on: items of one kind, in the order shown (one, for a menu). */
 export type ActionItems = {
   readonly [K in ItemKind]: { readonly kind: K; readonly items: readonly ItemOf[K][] };
-}[ItemKind];
+}[ItemKind] & {
+  /** Plan from displayed metadata; acquire songs and Library matches only after an action. */
+  readonly readOnAction?: true;
+};
 
 export interface Heading {
   readonly title: string;
@@ -226,8 +222,10 @@ const KIND_ALBUM: KindInfo<AlbumRow> = {
 };
 
 /** Runs [run] with a mixed item's own kind and the item, typed for each other. */
-const asOwnKind = <R>(mixed: MixedItem, run: <T>(kind: KindInfo<T>, item: T) => R): R =>
-  mixed.kind === "track" ? run(KIND_TRACK, mixed.item) : run(KIND_ALBUM, mixed.item);
+const asOwnKind = <R>(
+  mixed: Exclude<MixedItem, { readonly kind: "ytAlbum" }>,
+  run: <T>(kind: KindInfo<T>, item: T) => R,
+): R => (mixed.kind === "track" ? run(KIND_TRACK, mixed.item) : run(KIND_ALBUM, mixed.item));
 
 const KINDS: { readonly [K in ItemKind]: KindInfo<ItemOf[K]> } = {
   track: KIND_TRACK,
@@ -279,14 +277,26 @@ const KINDS: { readonly [K in ItemKind]: KindInfo<ItemOf[K]> } = {
   },
   // Albums and songs checked together: each acts as its own kind would.
   mixed: {
-    songs: (mixed) => asOwnKind(mixed, (kind, item) => kind.songs(item)),
+    // `targetEntries` reads mixed targets itself (`resolveMixedEntries`); a release has no Library songs.
+    songs: (mixed) =>
+      mixed.kind === "ytAlbum"
+        ? Promise.resolve([])
+        : asOwnKind(mixed, (kind, item) => kind.songs(item)),
     heading: (mixed, sectionSongs) =>
-      asOwnKind(mixed, (kind, item) => kind.heading(item, sectionSongs)),
+      mixed.kind === "ytAlbum"
+        ? {
+            title: mixed.item.title,
+            subtitle: joinArtists(mixed.item.artists),
+            covers: cover(mixed.item.artworkUrl),
+          }
+        : asOwnKind(mixed, (kind, item) => kind.heading(item, sectionSongs)),
     // An album counts as its own album, so songs checked with it share it (Go to Album).
     facts: (mixed, favorites, find, pending) =>
       mixed.kind === "track"
         ? KIND_TRACK.facts(mixed.item, favorites, find, pending)
-        : { albumId: mixed.item.id, artistIds: mixed.item.albumArtistIds },
+        : mixed.kind === "ytAlbum"
+          ? { streamed: true, artistNames: mixed.item.artists }
+          : { albumId: mixed.item.id, artistIds: mixed.item.albumArtistIds },
     noun: "item",
   },
 };
@@ -327,27 +337,18 @@ export type TargetEntry = QueueSong<NativeYtSong, SongRow>;
  * target's songs as `targetSongs` gives them.
  */
 export const targetEntries = async (target: ActionItems): Promise<readonly TargetEntry[]> => {
-  if (target.kind === "track")
-    return target.items.map((item): TargetEntry =>
-      isLibraryTrack(item)
-        ? { source: "library", track: item.song }
-        : isUnsearchedTrack(item)
-          ? { source: "unsearched", song: item.unsearched }
-          : { source: "stream", song: item.ytSong },
-    );
+  if (target.kind === "track") return target.items.map(trackEntry);
   // Albums and songs checked together: each item's entries, a song two of them hold once.
-  if (target.kind === "mixed") {
-    const lists = await Promise.all(
-      target.items.map((item) =>
-        targetEntries(
-          item.kind === "track"
-            ? { kind: "track", items: [item.item] }
-            : { kind: "album", items: [item.item] },
-        ),
-      ),
-    );
-    return groupSongs(lists, queueSongTrackId);
-  }
+  if (target.kind === "mixed")
+    return resolveMixedEntries(target.items, {
+      album: (album) => itemSongs("albums", album.id),
+      release: async (album) => {
+        const result = await askYtMusic((ytMusic) => ytMusic.album(album.browseId));
+        if (Result.isFailure(result)) throw result.failure;
+        return ytAlbumSongs(album.browseId, result.success);
+      },
+      finder: currentLibraryFinder,
+    });
   if (target.kind !== "playlist")
     return (await targetSongs(target)).map((track) => ({ source: "library", track }));
   const lists = await Promise.all(target.items.map((playlist) => playlistEntries(playlist.id)));
@@ -395,20 +396,6 @@ export const targetFacts = (
  */
 export const collectionSongFacts = (songs: readonly SongRow[]): ActionItem[] =>
   songs.map((song) => ({ missing: song.path === null, fixable: canFixSong(song) }));
-
-/**
- * What the actions act on when albums and songs are checked together, in page
- * order: all songs act as songs (Favorite, Delete), all albums as albums, and
- * a mix as `mixed` (the entries both share).
- */
-export const mixedTarget = (items: readonly MixedItem[]): ActionItems => {
-  const kind = commonKind(items.map((item) => item.kind));
-  if (kind === "track")
-    return { kind, items: items.flatMap((item) => (item.kind === "track" ? [item.item] : [])) };
-  if (kind === "album")
-    return { kind, items: items.flatMap((item) => (item.kind === "album" ? [item.item] : [])) };
-  return { kind: "mixed", items };
-};
 
 /** A menu's heading: what its one item is. */
 export const targetHeading = (

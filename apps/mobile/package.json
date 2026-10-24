@@ -53,7 +53,9 @@
   "devDependencies": {
     "@types/node": "catalog:",
     "@types/react": "~19.3.0",
+    "@types/react-test-renderer": "19.3.0",
     "@types/sql.js": "^1.4.11",
+    "react-test-renderer": "19.3.0",
     "sql.js": "^1.14.2",
     "typescript": "catalog:"
   },

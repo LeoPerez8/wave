@@ -36,8 +36,15 @@ import { useListScrollable } from "@/motion/heldTouch";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 import { openAlbumActions } from "@/playback/ActionsMenu";
 import { playPage } from "@/playback/actions";
-import { listedTrackItem, trackItemKey, tracksTarget } from "@/playback/actionTargets";
-import { useListSelection } from "@/selection/useListSelection";
+import {
+  artistSelectionItems,
+  artistSelectionTarget,
+  mixedItemKey,
+  type MixedItem,
+} from "@/playback/mixedItems";
+import { albumSelectionOf, trackSelectionOf, ytAlbumSelectionOf } from "@/selection/mixedSelection";
+import { selectableRow } from "@/selection/selectableRow";
+import { useListSelection, type ListSelection } from "@/selection/useListSelection";
 import { useThemeColor } from "@/theme/useThemeColor";
 import { useYtArtistPage } from "@/ytmusic/artistPage";
 import { DiscoverSongRow } from "@/ytmusic/DiscoverSongRow";
@@ -91,12 +98,24 @@ const itemKey = (item: Item): string => {
   }
 };
 
+const itemType = (item: Item): Item["type"] => item.type;
+const itemSize = (item: Item): number =>
+  item.type === "section" ? SECTION_HEAD : item.type === "shelf" ? SHELF_ROW : grid.row;
+
 /**
  * A shelf as one row of covers that scrolls sideways: a release the Library
  * has is its album, opened integrated as the page always is; the others are
  * YouTube Music's.
  */
-function ReleaseRow({ covers, selecting }: { covers: readonly Cover[]; selecting: boolean }) {
+function ReleaseRow({
+  covers,
+  selection,
+}: {
+  covers: readonly Cover[];
+  selection: ListSelection<MixedItem>;
+}) {
+  const albums = useMemo(() => albumSelectionOf(selection), [selection]);
+  const releases = useMemo(() => ytAlbumSelectionOf(selection), [selection]);
   return (
     <View style={{ height: SHELF_ROW }}>
       <CoverRow>
@@ -107,19 +126,19 @@ function ReleaseRow({ covers, selecting }: { covers: readonly Cover[]; selecting
               album={album}
               kind={kind}
               size={COVER_ROW_TILE}
-              selecting={selecting}
+              selection={releases}
             />
           ) : (
             <AlbumTile
               key={`album-${library.id}`}
               album={toAlbumSummary(library)}
               size={COVER_ROW_TILE}
-              onPress={() => {
-                if (!selecting) openAlbum(library.id, library, { integrated: true });
-              }}
-              onLongPress={() => {
-                if (!selecting) openAlbumActions(library);
-              }}
+              {...selectableRow(
+                library,
+                albums,
+                () => openAlbum(library.id, library, { integrated: true }),
+                (options) => openAlbumActions(library, options),
+              )}
             />
           ),
         )}
@@ -257,12 +276,16 @@ export default function YtArtistScreen() {
   const bottomInset = useChromeInset();
   const { view, retry } = useYtArtistPage(browseId, knownName, params.offline === "1");
   const songs = view?.songs ?? NO_SONGS;
-  const selectable = useMemo(() => songs.map(listedTrackItem), [songs]);
+  const selectable = useMemo(
+    () => (view === null ? [] : artistSelectionItems(view.shelves, view.songs)),
+    [view],
+  );
   const selection = useListSelection({
     items: selectable,
-    keyOf: trackItemKey,
-    target: tracksTarget,
+    keyOf: mixedItemKey,
+    target: artistSelectionTarget,
   });
+  const songSelection = useMemo(() => trackSelectionOf(selection), [selection]);
   const items = useMemo(() => (view === null ? [] : pageItems(view.shelves, view.songs)), [view]);
   const contextId = browseId ?? `name:${knownName ?? ""}`;
   const context = useMemo(() => ({ kind: "ytArtist", id: contextId }) as const, [contextId]);
@@ -274,6 +297,36 @@ export default function YtArtistScreen() {
   const name = view?.name ?? knownName;
   // Until the artist's page is in, skeletons hold its place (the view waits on the Library first).
   const loading = view === null || view.note === "loading";
+  const artworkUrl = view?.artworkUrl ?? null;
+  const header = useMemo(
+    () =>
+      name === null && !loading ? null : (
+        <Head
+          name={name}
+          artworkUrl={artworkUrl}
+          loading={loading}
+          onPlay={songs.length === 0 ? null : (shuffle) => play(undefined, shuffle)}
+        />
+      ),
+    [name, artworkUrl, loading, songs.length, play],
+  );
+  const footer = useMemo(
+    () =>
+      loading ? (
+        <TrackSkeletons />
+      ) : view === null ? null : (
+        <QuietLine
+          note={view.note === null ? null : NOTE[view.note]}
+          retry={view.retry}
+          onRetry={retry}
+        />
+      ),
+    [loading, view, retry],
+  );
+  const contentStyle = useMemo(
+    () => ({ paddingHorizontal: grid.margin, paddingBottom: bottomInset }),
+    [bottomInset],
+  );
 
   const renderItem = useCallback(
     ({ item }: { item: Item }) => {
@@ -282,20 +335,18 @@ export default function YtArtistScreen() {
           return <SectionHead label={item.label} />;
         case "shelf":
           // Keyed by shelf, so a recycled row doesn't keep another shelf's scroll position.
-          return (
-            <ReleaseRow key={item.label} covers={item.covers} selecting={selection.selecting} />
-          );
+          return <ReleaseRow key={item.label} covers={item.covers} selection={selection} />;
         case "song":
           return (
             <DiscoverSongRow
               song={item.song}
-              selection={selection}
+              selection={songSelection}
               onPress={() => play(item.index)}
             />
           );
       }
     },
-    [play, selection],
+    [play, selection, songSelection],
   );
 
   return (
@@ -308,34 +359,13 @@ export default function YtArtistScreen() {
         keyExtractor={itemKey}
         renderItem={renderItem}
         extraData={selection.selection}
-        getItemType={(item) => item.type}
-        getFixedItemSize={(item) =>
-          item.type === "section" ? SECTION_HEAD : item.type === "shelf" ? SHELF_ROW : grid.row
-        }
+        getItemType={itemType}
+        getFixedItemSize={itemSize}
         estimatedItemSize={grid.row}
         recycleItems
-        contentContainerStyle={{ paddingHorizontal: grid.margin, paddingBottom: bottomInset }}
-        ListHeaderComponent={
-          name === null && !loading ? null : (
-            <Head
-              name={name}
-              artworkUrl={view?.artworkUrl ?? null}
-              loading={loading}
-              onPlay={songs.length === 0 ? null : (shuffle) => play(undefined, shuffle)}
-            />
-          )
-        }
-        ListFooterComponent={
-          loading ? (
-            <TrackSkeletons />
-          ) : view === null ? null : (
-            <QuietLine
-              note={view.note === null ? null : NOTE[view.note]}
-              retry={view.retry}
-              onRetry={retry}
-            />
-          )
-        }
+        contentContainerStyle={contentStyle}
+        ListHeaderComponent={header}
+        ListFooterComponent={footer}
       />
     </View>
   );

@@ -264,6 +264,7 @@ const NO_LINKS: LinkRows = { album: null, artist: null };
 export const useLinkRows = (
   albumId: number | undefined,
   artistId: number | undefined,
+  active = true,
 ): LinkRows => {
   const query = useMemo(
     () =>
@@ -272,7 +273,7 @@ export const useLinkRows = (
       ),
     [albumId, artistId],
   );
-  return useLibraryQuery(query, NO_LINKS);
+  return useLibraryQuery(active ? query : null, NO_LINKS);
 };
 
 export const useAlbum = (id: number): AlbumDetail | null | undefined =>

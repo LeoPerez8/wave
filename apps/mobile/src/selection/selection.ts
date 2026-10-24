@@ -100,8 +100,11 @@ export const useIsSelecting = (): boolean =>
 
 /** The checked keys while [owner] is selecting, otherwise null. */
 export const useSelectionOf = (owner: object): Selection<string> | null => {
-  const current = useSelectionState();
-  return current.owner === owner ? current.selection : null;
+  // Publishing the list's latest source must not render it again: its items may be derived anew.
+  return useSyncExternalStore(state.subscribe, () => {
+    const current = state.get();
+    return current.owner === owner ? current.selection : null;
+  });
 };
 
 /** "N selected" and whether Select All has anything left to check; null outside selection mode. */
