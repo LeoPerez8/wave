@@ -153,6 +153,7 @@ export const sharePlaylistRecommendationInputs = <R>(
     library,
     favorites,
     store,
+    peek,
   }: {
     readonly library: Effect.Effect<
       { readonly songs: readonly RecommendationSong[]; readonly artists: readonly ArtistRow[] },
@@ -161,11 +162,18 @@ export const sharePlaylistRecommendationInputs = <R>(
     >;
     readonly favorites: Effect.Effect<RecommendationFavorites, unknown, R>;
     readonly store: Effect.Effect<RecommendationReads, never, R>;
+    readonly peek?: () => {
+      readonly library: {
+        readonly songs: readonly RecommendationSong[];
+        readonly artists: readonly ArtistRow[];
+      } | null;
+      readonly favorites: RecommendationFavorites | null;
+    };
   },
   between: Effect.Effect<void>,
 ) => {
   // The latest derivation, kept while the snapshot hands back the same parts;
-  // playlists asking while it's derived wait for it.
+  // background readers keep the last completed tracks while a new mapping runs.
   let derived:
     | {
         readonly library: object;
@@ -173,57 +181,106 @@ export const sharePlaylistRecommendationInputs = <R>(
         readonly tracks: Effect.Effect<Effect.Success<ReturnType<typeof libraryTracks>>, unknown>;
       }
     | undefined;
+  let completed: Effect.Success<ReturnType<typeof libraryTracks>> | null = null;
+  const emptyStars: RecommendationFavorites = { flags: [], pending: new Set() };
+  const emptyTracks = {
+    library: [],
+    librarySongs: [],
+    byId: new Map<number, PlaylistRecommendationTrack>(),
+    songById: new Map<string, SongRow>(),
+  };
+  const tracksFor = (
+    indexes: {
+      readonly songs: readonly RecommendationSong[];
+      readonly artists: readonly ArtistRow[];
+    },
+    stars: RecommendationFavorites,
+  ) => {
+    if (derived?.library !== indexes || derived.favorites !== stars) {
+      derived = {
+        library: indexes,
+        favorites: stars,
+        tracks: sharedRead(
+          libraryTracks(indexes, stars, between).pipe(
+            Effect.tap((tracks) =>
+              Effect.sync(() => {
+                if (derived?.library === indexes && derived.favorites === stars) completed = tracks;
+              }),
+            ),
+          ),
+        ).get,
+      };
+    }
+    return derived.tracks;
+  };
+  const warm = Effect.gen(function* () {
+    const last = peek?.();
+    if (last?.library != null) yield* tracksFor(last.library, last.favorites ?? emptyStars);
+    yield* Effect.all(
+      [
+        Effect.gen(function* () {
+          const indexes = yield* library;
+          yield* tracksFor(indexes, peek?.().favorites ?? emptyStars);
+        }),
+        Effect.gen(function* () {
+          const stars = yield* favorites;
+          const indexes = peek?.().library;
+          if (indexes != null) yield* tracksFor(indexes, stars);
+        }),
+      ],
+      { concurrency: "unbounded" },
+    );
+  });
+  const read = (id: number, background: boolean) =>
+    Effect.gen(function* () {
+      const indexes = background ? null : yield* library;
+      const stars = background ? (peek?.().favorites ?? emptyStars) : yield* favorites;
+      let selected = completed ?? emptyTracks;
+      if (indexes === null) yield* Effect.forkDetach(Effect.ignore(warm));
+      else selected = yield* tracksFor(indexes, stars);
+      const { byId, ...tracks } = selected;
+      const reads = yield* store;
+      const raw = yield* collect(
+        (after) => reads.recommendationEntriesPage(id, after, background),
+        (row) => [row.orderKey, row.syncId] as const,
+        between,
+        null as readonly [string, string] | null,
+      );
+      const ordered = raw;
+      const playlist: PlaylistRecommendationTrack[] = [];
+      // Each entry carries when it joined this playlist, which the seed draw leans to.
+      yield* runSteps(
+        mapSteps(ordered, (row) => {
+          if (row.song === null) {
+            const track =
+              row.local?.track ?? (row.trackId === null ? undefined : byId.get(row.trackId));
+            if (track !== undefined) playlist.push({ ...track, addedAt: row.addedAt });
+            return;
+          }
+          const entry = readPlaylistEntrySong(row.song);
+          if (entry === null) return;
+          playlist.push({ ...storedRecommendationTrack(entry, row.id), addedAt: row.addedAt });
+        }),
+        between,
+      );
+      const feedbackRows = yield* collect(
+        (after) => reads.recommendationFeedbackPage(id, after),
+        (row) => row.offerKey,
+        between,
+        null as string | null,
+      );
+      const feedbackOrdered = feedbackRows;
+      const feedback = yield* runSteps(
+        mapSteps(feedbackOrdered, ({ track, value }) => ({ track, value })),
+        between,
+      );
+      return { ...tracks, favoriteVideos: stars.pending, playlist, feedback };
+    });
   return {
-    get: (id: number) =>
-      Effect.gen(function* () {
-        const indexes = yield* library;
-        const stars = yield* favorites;
-        let latest = derived;
-        if (latest?.library !== indexes || latest.favorites !== stars) {
-          latest = {
-            library: indexes,
-            favorites: stars,
-            tracks: sharedRead(libraryTracks(indexes, stars, between)).get,
-          };
-          derived = latest;
-        }
-        const { byId, ...tracks } = yield* latest.tracks;
-        const reads = yield* store;
-        const raw = yield* collect(
-          (after) => reads.recommendationEntriesPage(id, after),
-          (row) => [row.orderKey, row.syncId] as const,
-          between,
-          null as readonly [string, string] | null,
-        );
-        const ordered = raw;
-        const playlist: PlaylistRecommendationTrack[] = [];
-        // Each entry carries when it joined this playlist, which the seed draw leans to.
-        yield* runSteps(
-          mapSteps(ordered, (row) => {
-            if (row.song === null) {
-              const track = row.trackId === null ? undefined : byId.get(row.trackId);
-              if (track !== undefined) playlist.push({ ...track, addedAt: row.addedAt });
-              return;
-            }
-            const entry = readPlaylistEntrySong(row.song);
-            if (entry === null) return;
-            playlist.push({ ...storedRecommendationTrack(entry, row.id), addedAt: row.addedAt });
-          }),
-          between,
-        );
-        const feedbackRows = yield* collect(
-          (after) => reads.recommendationFeedbackPage(id, after),
-          (row) => row.offerKey,
-          between,
-          null as string | null,
-        );
-        const feedbackOrdered = feedbackRows;
-        const feedback = yield* runSteps(
-          mapSteps(feedbackOrdered, ({ track, value }) => ({ track, value })),
-          between,
-        );
-        return { ...tracks, favoriteVideos: stars.pending, playlist, feedback };
-      }),
+    /** Explicit full reads for desktop replays; app recommendations use latest. */
+    get: (id: number) => read(id, false),
+    /** Recommendations take the last completed indexes, including on a cold start. */
+    latest: (id: number) => read(id, true),
   };
 };
 

@@ -1,9 +1,9 @@
 /**
  * A section's sliders moved (docs/spec.md, "Artist mixes"): its saved mixes
- * are ranked again from the candidate catalog at once, offline, with no new
+ * are ranked again from cached radio pages at once, offline, with no new
  * seed picked. Core says what the re-rank starts from (the build's seeds,
  * avoided songs and variety) and what it saves; the reads are
- * `catalogMixReader`'s.
+ * shared ranking's.
  */
 
 import {
@@ -20,7 +20,7 @@ export interface DiscoverMixesRerun {
   readonly seeds: readonly DiscoverMixSeed[];
   /** The new songs its refresh avoided (go last again). */
   readonly avoid: ReadonlySet<string>;
-  /** Its variety (`catalogMixReader`); absent: no nudge. */
+  /** Legacy saved variety; retained when reranking older mixes. */
   readonly variety?: number;
 }
 

@@ -131,42 +131,4 @@ describe("Mixes from radios read at once", () => {
       "m7",
     ]);
   });
-
-  test("each seed's songs are held to its own genres, and a refresh's avoided songs only make up a mix's fewest", () => {
-    const mixes = discoverMixesOfRadios(
-      [
-        {
-          seed: portishead,
-          radio: [yt("x1", "Metallica"), ...run("p", 1, 10)],
-          affinity: (song) => (song.artists[0] === "Metallica" ? "miss" : "match"),
-        },
-        { seed: tricky, radio: [yt("x1", "Metallica"), ...run("t", 1, 9)] },
-      ],
-      { known, library, avoid: new Set(["p1", "p2"]) },
-    );
-    assert.deepEqual(videos(mixes[0]), [
-      "p1",
-      "p2",
-      "p3",
-      "p4",
-      "p5",
-      "p6",
-      "p7",
-      "p8",
-      "p9",
-      "p10",
-    ]);
-    assert.deepEqual(videos(mixes[1]), [
-      "x1",
-      "t1",
-      "t2",
-      "t3",
-      "t4",
-      "t5",
-      "t6",
-      "t7",
-      "t8",
-      "t9",
-    ]);
-  });
 });

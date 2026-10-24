@@ -15,7 +15,6 @@ import {
 import type * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
-import { withRecommendationDeadline } from "./recommendationTimeout.ts";
 
 /** A snapshot part, read by whoever asks while it's kept. */
 export interface SnapshotRead<A, R> {
@@ -120,7 +119,7 @@ export const snapshotRead = <A, E, R>(
     if (disposed) return yield* Effect.fail(new Error("Snapshot read disposed"));
     if (Result.isSuccess(answer)) return answer.success;
     return yield* Effect.fail(answer.failure);
-  }).pipe(withRecommendationDeadline);
+  });
   return {
     get,
     peek: () => completed,

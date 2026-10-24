@@ -33,7 +33,7 @@ export const discoverLevel = persistedSetting<DiscoverMixLevel>({
 
 /**
  * Discover's Genre faithfulness and Popularity sliders (Core's
- * `mixSlidersEngine`): how the engine ranks the mixes, and every Magic
+ * `rankRadioSongs`): how the engine ranks the mixes, and every Magic
  * Queue's YouTube Music candidates, read again for each batch.
  */
 export const discoverSliders = persistedSetting<MixSliders>({

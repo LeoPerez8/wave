@@ -4,7 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import { RECOMMENDATION_SNAPSHOT, snapshotVersionsAfter, type SnapshotVersions } from "@wave/core";
 import { snapshotRead } from "../lib/snapshotRead.ts";
-import { buildHomeMixes, withSnapshotTaste } from "./homeMixBuild.ts";
+import { buildHomeMixes } from "./homeMixBuild.ts";
 
 const turn = () => new Promise<void>((resolve) => setImmediate(resolve));
 
@@ -72,52 +72,4 @@ test("a manual refresh builds only the requested row", async () => {
     results.map(({ result }) => Result.getOrThrow(result)),
     [{ id: "genre-mixes", input: 42 }],
   );
-});
-
-test("one wall-clock deadline includes the input wait and ranking, rejecting late mixes", async (t) => {
-  t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 0 });
-  let inputReady!: () => void;
-  let ranked!: () => void;
-  const building = Effect.runPromise(
-    buildHomeMixes(
-      ["artist-mixes"],
-      Effect.callback<string>((resume) => {
-        inputReady = () => resume(Effect.succeed("snapshot"));
-      }),
-      () =>
-        Effect.callback<string>((resume) => {
-          ranked = () => resume(Effect.succeed("late mixes"));
-        }),
-    ),
-  );
-  const rejected = assert.rejects(building, /Recommendation deadline elapsed/);
-  t.mock.timers.setTime(50_000);
-  inputReady();
-  await turn();
-  t.mock.timers.setTime(60_000);
-  ranked();
-  await rejected;
-});
-
-test("a cold build's taste maps the snapshot's own Library, which is read once", async () => {
-  let libraryReads = 0;
-  const snapshot = snapshotRead(
-    Effect.sync(() => ({ songs: [`read ${++libraryReads}`], artists: [] })),
-    { part: RECOMMENDATION_SNAPSHOT.library, versions: () => ({}) },
-  );
-  const tasteOf: unknown[] = [];
-  const inputs = await Effect.runPromise(
-    withSnapshotTaste(
-      Effect.map(snapshot.get, (library) => ({ library, catalog: [] })),
-      (library) =>
-        Effect.sync(() => {
-          tasteOf.push(library);
-          return "taste";
-        }),
-    ),
-  );
-  assert.equal(inputs.taste, "taste");
-  assert.deepEqual(tasteOf, [inputs.library], "the taste derives from the snapshot's Library");
-  assert.equal(libraryReads, 1);
-  snapshot.dispose();
 });

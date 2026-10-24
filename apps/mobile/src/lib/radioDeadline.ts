@@ -1,25 +1,19 @@
 import { recommendationDeadline } from "@wave/core";
 import * as Effect from "effect/Effect";
 
-/**
- * The longest a recommendation read may run (a Magic Queue batch, a mix's
- * build, a playlist's suggestions): past it, the read fails and its surface
- * shows the retry line instead of loading on (docs/spec.md).
- */
-export const RECOMMENDATION_TIMEOUT = 60_000;
-
+/** Radio network deadlines, checked on foreground resume as well as by timers. */
 const checks = new Set<() => void>();
-const deadlineElapsed = () => Effect.fail(new Error("Recommendation deadline elapsed"));
+const deadlineElapsed = () => Effect.fail(new Error("Radio deadline elapsed"));
 
 /** Called on foreground resume and at recommendation work boundaries, even if timers slept. */
-export const checkRecommendationDeadlines = (): void => {
+export const checkRadioDeadlines = (): void => {
   for (const check of checks) check();
 };
 
-/** A deadline covers scheduler waits, reads and ranking, and rejects late results. */
-export const withRecommendationDeadline = <A, E, R>(
+/** A network deadline rejects late radio responses. */
+export const withRadioDeadline = <A, E, R>(
   read: Effect.Effect<A, E, R>,
-  timeoutMs = RECOMMENDATION_TIMEOUT,
+  timeoutMs: number,
 ): Effect.Effect<A, E | Error, R> =>
   Effect.suspend(() => {
     const deadline = recommendationDeadline(timeoutMs);

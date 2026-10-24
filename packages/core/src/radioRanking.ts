@@ -1,6 +1,11 @@
 /** Shared radio ranking for Magic Queue, mixes and playlist suggestions. */
 import { artistNeighbourhood, type ArtistGraph } from "./artistGraph.ts";
-import { genreAffinity, type GenreProfile, type GenreProfileOf } from "./genreAffinity.ts";
+import {
+  GENRE_AFFINITY_THRESHOLD,
+  genreAffinity,
+  type GenreProfile,
+  type GenreProfileOf,
+} from "./genreAffinity.ts";
 import { magicArtistKey, magicYtSong, type MagicSong, type MagicSignal } from "./magicQueue.ts";
 import type { MixSliderStep } from "./mixSliders.ts";
 import { tasteWeight, type TasteProfile } from "./tasteProfile.ts";
@@ -97,7 +102,7 @@ export const rankRadioSongs = (
         seed.profile == null || seed.profile.size === 0 || profiles.length === 0
           ? null
           : Math.max(...profiles.map((profile) => genreAffinity(seed.profile!, profile)));
-      const incompatible = affinity !== null && affinity < 0.5;
+      const incompatible = affinity !== null && affinity < GENRE_AFFINITY_THRESHOLD;
       const step = options.faithfulness ?? 3;
       if (local === null && incompatible && step === 1) continue;
       const penalty = local === null && incompatible ? { 1: 0, 2: 8, 3: 5, 4: 2, 5: 0 }[step] : 0;

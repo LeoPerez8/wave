@@ -395,6 +395,20 @@ export const OPENING_REQUESTS: Record<string, Exception> = {
     reason:
       "The empty Library Add folder button opens a folder picker; choosing a folder starts the scan and background photo downloads.",
   },
+  "library/playlistSuggestionRadios.ts#playlistSuggestionRadios": {
+    kind: "opening",
+    reason:
+      "A visible settled playlist visit reads its drawn song radios. Execution-time Android connectivity is passed to the shared readers, so offline visits use cached pages. The shared setup does not read until this effect runs; each search and radio read has an eight-second limit.",
+    deferred: {
+      settlement: "screen",
+      connectivity: "android",
+      tests: [
+        "apps/mobile/src/library/playlistRecommendationVisit.test.ts",
+        "apps/mobile/src/playback/songRadioReaders.test.ts",
+        "apps/mobile/src/playback/songRadioSession.test.ts",
+      ],
+    },
+  },
   "ytmusic/artistSection.ts#useDeferredArtistSection": {
     kind: "opening",
     reason:

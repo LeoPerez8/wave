@@ -1,7 +1,7 @@
 /**
  * When the recommendation snapshot is read again (docs/spec.md, "Recommendation
  * snapshot"): Home's mixes, the Magic Queue radio, playlist suggestions and the
- * harvest share one read of each of its parts (the Library, the candidate
+ * radio readers share one read of each of its parts (the Library, the candidate
  * catalog, the artist graph). A write never cancels a read under way: it goes
  * into the next one, which whoever asks after the write waits for.
  */

@@ -30,9 +30,6 @@ export const bench: FastAgainBench = {
           "apps/mobile/src/home/readMixCatalog.ts",
         )
       : null;
-    const graphRead = await context.loadModule<typeof import("../../../src/home/artistGraph.ts")>(
-      "apps/mobile/src/home/artistGraph.ts",
-    );
     const stats = await context.loadModule<typeof import("../../../src/stats/Stats.ts")>(
       "apps/mobile/src/stats/Stats.ts",
     );
@@ -150,7 +147,6 @@ export const bench: FastAgainBench = {
             catalogRead === null
               ? yield* reads.candidateCatalog
               : yield* catalogRead.readMixCatalog(reads, between);
-          const graph = yield* graphRead.readArtistGraph(reads, between);
           const played =
             inputs === null
               ? (yield* stats.topAlbumsAndArtists(reads, "all", 0, 20)).artists.map(
@@ -188,26 +184,25 @@ export const bench: FastAgainBench = {
               ? yield* step(core.libraryMixProfilesSteps(library))
               : {
                   profileOf: core.libraryGenreProfiles(library),
-                  styleOf: core.libraryStyleOf(library),
                 };
-            const reader = core.catalogMixReader(
-              { catalog, graph, library, ...profiles, taste: null, now: context.fixture.now },
-              { variety },
+            const radioReads = seeds.map((seed) =>
+              core.rankedDiscoverMixRead(seed, {
+                pages: (seed.artists ?? [{ name: seed.name }]).map((artist) => ({
+                  id: `artist:${artist.name}`,
+                  artists: [artist.name],
+                  songs: catalog
+                    .filter((entry) =>
+                      entry.radios.some((radio) => radio.seed === core.catalogSeedKey(artist.name)),
+                    )
+                    .map((entry) => entry.song),
+                })),
+                profileOf: profiles.profileOf,
+                taste: null,
+              }),
             );
-            yield* between;
-            for (const seed of seeds) {
-              if (reader.readSteps === undefined) reader.read(seed);
-              else yield* step(reader.readSteps(seed));
-              yield* between;
-            }
-            const options = {
-              known: library.known,
-              library,
-              ...core.mixSlidersEngine({ faithfulness: 3, popularity: 3 }),
-            };
-            const mixes = stepped
-              ? yield* step(core.discoverMixesOfCatalogSteps(seeds, reader, options))
-              : core.discoverMixesOfCatalog(seeds, reader, options);
+            const mixes = yield* step(
+              core.discoverMixesOfRadiosSteps(radioReads, { library, known: library.known }),
+            );
             sections.push(core.discoverMixesBuilt(mixes, context.fixture.now, seeds, { variety }));
             yield* between;
           }
@@ -260,7 +255,7 @@ export const bench: FastAgainBench = {
             semanticEquality:
               "complete saved Artist and Genre mixes, seeds, familiar shares, order, build time, variety and every seed/variety random draw",
             omitted:
-              "React/KV persistence, scheduler waits, network/harvest and taste derivation (#593); identical null taste, 1200 saved catalog candidates, no offline similar fallback needed with 20 played artists",
+              "React/KV persistence, scheduler waits, network and taste derivation (#593); identical null taste, 1200 saved catalog candidates, no offline similar fallback needed with 20 played artists",
           },
         },
       ];

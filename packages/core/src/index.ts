@@ -631,7 +631,6 @@ export {
   MAGIC_SKIP_MS,
   isMagicQueue,
   magicArtistKey,
-  magicBatch,
   magicLibrarySongs,
   magicBatchRadios,
   magicLibraryMapperSteps,
@@ -1409,7 +1408,6 @@ export type { StreamBufferMinutes } from "./streamBuffer.ts";
 export {
   discoverMix,
   discoverMixCaption,
-  discoverMixReadsMore,
   discoverMixSongs,
   discoverMixesBuilt,
   discoverMixesDue,
@@ -1662,31 +1660,18 @@ export {
   genreFamily,
   genreMixSeeds,
   genreStyle,
-  interleaveRadios,
   songStyle,
-  styleAffinity,
 } from "./genreMixes.ts";
-export type { GenreFamily, GenreMixLibrary, GenreStyle, StyleLevel } from "./genreMixes.ts";
+export type { GenreFamily, GenreMixLibrary, GenreStyle } from "./genreMixes.ts";
 export {
-  DEEZER_GENRES_URL,
   GENRE_AFFINITY_THRESHOLD,
   artistProfilesKnown,
-  deezerArtistAlbumsUrl,
-  deezerArtistId,
-  deezerArtistProfile,
-  deezerGenreNames,
   parseArtistProfiles,
   storedArtistProfiles,
   withArtistProfiles,
   genreAffinity,
   genreProfile,
   libraryGenreProfiles,
-  libraryStyleOf,
-  mixAffinity,
-  mixProfileLookups,
-  mixSeedProfile,
-  mixSeedStyle,
-  styleOfArtists,
 } from "./genreAffinity.ts";
 export type {
   ArtistProfiles,
@@ -1694,8 +1679,6 @@ export type {
   GenreProfileLibrary,
   GenreProfileOf,
   GenreTagged,
-  MixAffinity,
-  StyleOf,
 } from "./genreAffinity.ts";
 export type { SearchOnline, YtPick } from "./onlineToggle.ts";
 export { readSearchOnline, searchOnlineAlways, writeSearchOnline } from "./onlineToggle.ts";
@@ -1911,7 +1894,6 @@ export {
 export type { ArtistRadioStarts, YtRadioStart } from "./artistRadioStarts.ts";
 export { MIX_PRE_DOWNLOAD_SONGS, mixPreDownload } from "./mixPreDownload.ts";
 export { MIX_MOST } from "./discoverMixes.ts";
-export { magicRadioLookups, mixProfileLookupsNext } from "./mixGenreLookups.ts";
 export {
   CATALOG_MOST,
   CATALOG_UNSEEN_MS,
@@ -1944,31 +1926,6 @@ export type {
   ArtistNeighbour,
   ArtistNeighbourhoodOptions,
 } from "./artistGraph.ts";
-export { RECOMMEND_NEWNESS_HALF_LIFE_MS, RECOMMEND_WEIGHTS, recommend } from "./recommend.ts";
-export type {
-  RecommendOptions,
-  RecommendSeed,
-  RecommendSources,
-  RecommendWeights,
-  RecommendedSong,
-} from "./recommend.ts";
-export { catalogMixRead, catalogMixSeed, discoverMixesOfCatalog } from "./catalogMixes.ts";
-export type { CatalogMixSong, CatalogMixSources, CatalogMixesOptions } from "./catalogMixes.ts";
-export {
-  HARVEST_EVERY_MS,
-  HARVEST_LOW,
-  HARVEST_MOBILE_BYTES,
-  HARVEST_RETRY_MS,
-  HARVEST_SEEDS,
-  harvestDue,
-  harvestMobileUsedToday,
-  harvestNext,
-  harvestWants,
-  parseHarvestMobileUse,
-  storedHarvestMobileUse,
-  withHarvestMobileUse,
-} from "./harvest.ts";
-export type { HarvestMobileUse, HarvestRun, HarvestWant } from "./harvest.ts";
 export {
   NO_SIMILAR_ARTISTS_KEPT,
   parseSimilarArtistsKept,
@@ -1978,39 +1935,17 @@ export {
 } from "./similarArtistsKept.ts";
 export type { SimilarArtistsKept } from "./similarArtistsKept.ts";
 export {
-  MAGIC_CATALOG_LOW,
-  MAGIC_CATALOG_POOL,
-  magicCatalogCandidates,
-  magicCatalogCandidatesSteps,
-  magicRefillDue,
-  magicSeedProfileSteps,
-} from "./magicQueueCatalog.ts";
-export { catalogRadiosReadAt } from "./harvest.ts";
-export type {
-  MagicCatalogCandidate,
-  MagicCatalogOptions,
-  MagicCatalogPick,
-} from "./magicQueueCatalog.ts";
-export {
   DEFAULT_MIX_SLIDERS,
   GENRE_FAITHFULNESS_STEPS,
   POPULARITY_STEPS,
-  faithfulnessStyles,
-  mixSlidersEngine,
   readMixSliders,
   storedMixSliders,
 } from "./mixSliders.ts";
 export type { MixSliderStep, MixSliders } from "./mixSliders.ts";
-export { catalogMixReader } from "./catalogMixes.ts";
-export type { CatalogMixReader } from "./catalogMixes.ts";
-export { rankRecommended, recommendCandidates } from "./recommend.ts";
-export type { RecommendCandidate } from "./recommend.ts";
 export { seededRandom } from "./weightedPick.ts";
 export type { DiscoverMixesBuild } from "./discoverMixes.ts";
 export { discoverMixesRerun, rerankedDiscoverMixes } from "./mixRerank.ts";
 export type { DiscoverMixesRerun } from "./mixRerank.ts";
-export { harvestSeedPool } from "./harvest.ts";
-export type { HarvestSeedSources } from "./harvest.ts";
 export { sliderStep, sliderStepLabel } from "./mixSliders.ts";
 export { DOUBLE_TAP_MS, coverDoubleTap, createCoverTaps } from "./coverGestures.ts";
 export type { CoverDoubleTap, CoverTaps } from "./coverGestures.ts";
@@ -2027,9 +1962,6 @@ export {
   storedLyricsTranslation,
 } from "./lyricsTranslation.ts";
 export type { LyricsTranslation, LyricsTranslationRequest } from "./lyricsTranslation.ts";
-export { magicCloseArtists, magicLibraryCandidates, magicSeedUnknown } from "./magicQueue.ts";
-export { magicLibraryLookups, magicSeedLookups } from "./mixGenreLookups.ts";
-export { magicLibraryThreshold } from "./mixSliders.ts";
 export {
   DEFAULT_SWIPE_SETTINGS,
   SWIPE_CHOICES,
@@ -2081,7 +2013,6 @@ export { SLOW_READ_BUDGET_MS, slowReadLine, slowReadsLine, type SlowRead } from 
 export { lostTapLine } from "./lostTap.ts";
 export type { LostLinkTap, LostTapReason } from "./lostTap.ts";
 export { createArtistGraphBuild, type ArtistGraphCatalogEntry } from "./artistGraphBuild.ts";
-export { discoverMixesOfCatalogSteps } from "./catalogMixes.ts";
 export { mixKnownSongsSteps } from "./mixKnownSongs.ts";
 export { genreMixSeedsSteps } from "./genreMixes.ts";
 export { mapSteps, sortSteps } from "./buildSteps.ts";

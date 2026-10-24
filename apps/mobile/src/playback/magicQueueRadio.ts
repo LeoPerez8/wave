@@ -17,14 +17,9 @@ import {
   type RankedRadioSong,
   type TasteProfile,
 } from "@wave/core";
-import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
-import { Storage } from "expo-sqlite/kv-store";
 
-import { artistRadio } from "@/home/ytArtistPage";
 import { lookedUpProfileOf } from "@/home/artistGenres";
-import { withNetworkLog } from "@/lib/networkMeter";
-import { appLog } from "@/log/appLog";
 import {
   songHasFile,
   type SongRow,
@@ -34,69 +29,12 @@ import {
 import { online } from "@/native/waveNative";
 import { WaveYtMusic } from "@/native/waveYtMusic";
 import { ytMusicEnabled } from "@/settings/ytMusic";
-import { noteRadioNow } from "@/ytmusic/candidateCatalog";
-import { createRadioPageCatalog } from "@/ytmusic/radioPageCatalog";
-import { withSearchTurn } from "@/ytmusic/searchAllowance";
 import { YtMusic } from "@/ytmusic/YtMusic";
-import { createSongRadioReaders } from "./songRadioReaders";
-import { createSongRadioSession, type SongRadioSeed } from "./songRadioSession";
+import type { SongRadioSeed } from "./songRadioSession";
+import { createAppSongRadioReaders } from "./songRadioSetup";
 
-const pages = createRadioPageCatalog({
-  read: () => Storage.getItemSync("candidateCatalog.radioPages"),
-  write: (value) => Storage.setItemSync("candidateCatalog.radioPages", value),
-});
 let found: readonly MagicSong[] = [];
-let services: {
-  readonly yt: YtMusic["Service"];
-  readonly context: Context.Context<LibraryStore>;
-} | null = null;
-
-/**
- * Every Magic Queue radio read so far, by session and radio
- * (`createSongRadioReaders`): the batches' drawn seed songs, an artist's or a
- * song's own radio. Each saves its pages and notes its seed artists' radio
- * in the candidate catalog.
- */
-const allReaders = createSongRadioReaders((seed: SongRadioSeed) => {
-  const { yt, context } = services!;
-  return createSongRadioSession(seed, {
-    cached: pages.get(seed.id),
-    radio: (videoId) => yt.radio({ videoId }),
-    search: (query) =>
-      withSearchTurn("discover", query, yt.searchSongs(query)).pipe(
-        Effect.map((page) => page.songs),
-      ),
-    artist: (name) =>
-      artistRadio({ name }).pipe(Effect.provide(context), Effect.provideService(YtMusic, yt)),
-    more: (token) => yt.radioMore(token),
-    measure: (read) =>
-      withNetworkLog("Magic Queue radio", read, (page) =>
-        page === null ? "no radio" : `${page.songs.length} songs`,
-      ),
-    save: (page) =>
-      Effect.gen(function* () {
-        pages.put(seed.id, page);
-        const artists =
-          seed.artists.length > 0
-            ? seed.artists
-            : (page.songs.find((song) => song.videoId === seed.videoId)?.artists ?? []);
-        for (const artist of artists)
-          yield* noteRadioNow(artist, page.songs).pipe(Effect.provide(context));
-      }),
-    fallback: (name) =>
-      appLog(
-        "info",
-        "WaveRecommendations",
-        `Magic Queue: no song match for ${seed.title}; using ${name}'s artist radio`,
-      ),
-  });
-});
-
-/** The readers, making new ones with [yt] and [context]. */
-const radioReaders = (yt: YtMusic["Service"], context: Context.Context<LibraryStore>) => {
-  services = { yt, context };
-  return allReaders;
-};
+const radioReaders = createAppSongRadioReaders("Magic Queue");
 
 /**
  * The radio an old session reads when it saved none (`magicBatchRadios`

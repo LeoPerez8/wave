@@ -40,7 +40,6 @@ import { recommendationSnapshot } from "@/home/recommendationSnapshot";
 import { discoverLevel, discoverSliders } from "@/lib/discoverSettings";
 import { makeExternalStore, subscribeAll } from "@/lib/externalStore";
 import { oneAtATime } from "@/lib/oneAtATime";
-import { withRecommendationDeadline } from "@/lib/recommendationTimeout";
 import { onStarred, onYtSongSignal } from "@/library/libraryChanges";
 import { LibraryStore, songHasFile, type SongRow, type ArtistRow } from "@/library/LibraryStore";
 import { YtMusic } from "@/ytmusic/YtMusic";
@@ -468,7 +467,6 @@ export const layer = Layer.effectDiscard(
         );
       };
       return pick(wanted, (songs) => log({ kind: "appended", songs })).pipe(
-        withRecommendationDeadline,
         Effect.tap((outcome) =>
           Effect.sync(() => {
             log(outcome);

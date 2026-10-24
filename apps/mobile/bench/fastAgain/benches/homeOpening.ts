@@ -268,7 +268,7 @@ export const bench: FastAgainBench = {
         resultKey: expected,
         details: {
           source:
-            "faithful replay of selected-worktree LibraryStore + Stats + Core + targeted pick descriptor when present; saved picks/mixes standing; YT Music enabled, offline harvest",
+            "faithful replay of selected-worktree LibraryStore + Stats + Core + targeted pick descriptor when present; saved picks/mixes standing; YT Music enabled, offline radio cache",
           semanticEquality:
             "complete local slice payloads, recap availability, album/artist rankings, overview inputs, nine pick ids, both known-video answers, eight blended mix payloads/captions and startup read/import/pause/duplicate results",
           firstFrameWaitsFor: opening === null ? ["homeAdded", "homePlays", "homeFavorites"] : [],

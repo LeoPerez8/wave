@@ -2,7 +2,7 @@
  * Playlist suggestions' inputs over the recommendation snapshot; no read
  * starts until a settled, visible visit asks. They take each part's last
  * completed read and warm a newer one in the background, so they never wait
- * for a derivation once one has completed.
+ * for a derivation, including on a cold start.
  */
 import * as Effect from "effect/Effect";
 import { settledTurnEffect } from "@/lib/backgroundWork";
@@ -11,19 +11,14 @@ import { recommendationFavorites, recommendationSnapshot } from "@/home/recommen
 import { LibraryStore } from "./LibraryStore";
 import { sharePlaylistRecommendationInputs } from "./playlistRecommendationInputs";
 
-/** [peek]'s last completed value at once, [read] meanwhile warming a newer one; a cold part waits for [read]. */
-const latest = <A, R>(peek: () => A | null, read: Effect.Effect<A, unknown, R>) =>
-  Effect.gen(function* () {
-    const last = peek();
-    if (last === null) return yield* read;
-    yield* Effect.forkDetach(Effect.ignore(read));
-    return last;
-  });
-
 const inputs = sharePlaylistRecommendationInputs(
   {
-    library: latest(() => recommendationSnapshot.peek().library, recommendationSnapshot.library),
-    favorites: latest(recommendationFavorites.peek, recommendationFavorites.get),
+    library: recommendationSnapshot.library,
+    favorites: recommendationFavorites.get,
+    peek: () => ({
+      library: recommendationSnapshot.peek().library,
+      favorites: recommendationFavorites.peek(),
+    }),
     store: Effect.service(LibraryStore),
   },
   recommendationTurnEffect,
@@ -33,7 +28,7 @@ const inputs = sharePlaylistRecommendationInputs(
 export const playlistRecommendationInput = (id: number) =>
   Effect.gen(function* () {
     yield* settledTurnEffect;
-    return yield* inputs.get(id);
+    return yield* inputs.latest(id);
   });
 
 /** The artist graph's last derivation (null before the first), warming a newer one meanwhile. */

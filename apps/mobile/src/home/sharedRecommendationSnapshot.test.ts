@@ -101,10 +101,10 @@ const fixture = (catalog: CatalogSong[] = [song("p1", "Portishead", "Massive Att
 };
 
 describe("the shared recommendation snapshot", () => {
-  test("Home mixes, the Magic Queue radio, playlist suggestions and the harvest read the Library, the catalog and the graph once", async () => {
+  test("Background mix, Magic Queue and playlist warming read the Library, the catalog and the graph once", async () => {
     const { snapshot, reads } = fixture();
     const surfaces = await Promise.all(
-      ["mixes", "radio", "suggestions", "harvest"].map(() => Effect.runPromise(snapshot.get)),
+      ["mixes", "radio", "suggestions", "another radio"].map(() => Effect.runPromise(snapshot.get)),
     );
     surfaces.push(await Effect.runPromise(snapshot.get));
     assert.deepEqual(reads, { library: 1, catalog: 1, graphPlays: 1, graphCatalog: 0 });
@@ -140,7 +140,7 @@ describe("the shared recommendation snapshot", () => {
     snapshot.dispose();
   });
 
-  test("a harvest batch written while recommendations read doesn't restart them; the next ask reads the catalog and graph again", async () => {
+  test("a radio page written while recommendations read doesn't restart them; the next ask reads the catalog and graph again", async () => {
     const { snapshot, reads, write, hold, release } = fixture();
     hold();
     const mixes = Effect.runPromise(snapshot.get);
@@ -149,14 +149,14 @@ describe("the shared recommendation snapshot", () => {
     release();
     const first = await mixes;
     assert.deepEqual(reads, { library: 1, catalog: 1, graphPlays: 1, graphCatalog: 0 });
-    const harvest = await Effect.runPromise(snapshot.get);
-    assert.equal(harvest.library, first.library, "a catalog write doesn't reach the Library");
-    assert.notEqual(harvest.graph, first.graph);
+    const refreshed = await Effect.runPromise(snapshot.get);
+    assert.equal(refreshed.library, first.library, "a catalog write doesn't reach the Library");
+    assert.notEqual(refreshed.graph, first.graph);
     assert.deepEqual(reads, { library: 1, catalog: 2, graphPlays: 2, graphCatalog: 0 });
     snapshot.dispose();
   });
 
-  test("a harvest batch written while the catalog is read leaves one get's catalog and graph from the same read", async () => {
+  test("a radio page written while the catalog is read leaves one get's catalog and graph from the same read", async () => {
     let versions: SnapshotVersions = {};
     let catalogReads = 0;
     const store: ArtistGraphReads = {

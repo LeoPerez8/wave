@@ -7,7 +7,7 @@ export interface SongRadioPage {
   readonly songs: readonly (YtAlbumSong & { readonly video?: boolean })[];
   readonly continuation: string | null;
 }
-export const MAGIC_RADIO_DEADLINE_MS = 8000;
+const MAGIC_RADIO_DEADLINE_MS = 8000;
 
 /** Network/database dependencies stay at this boundary; no graph or genre reads belong here. */
 export const createSongRadioSession = <E, R>(

@@ -600,6 +600,7 @@ export class LibraryStore extends Context.Service<
     readonly recommendationEntriesPage: (
       id: number,
       after: RecommendationEntryCursor,
+      includeTracks?: boolean,
     ) => Effect.Effect<ReturnType<typeof recommendationEntriesPage>, LibraryStoreError>;
     readonly recommendationFeedbackPage: (
       id: number,
@@ -1456,8 +1457,10 @@ const make = Effect.gen(function* () {
       attempt("read recommendation page", () => recommendationFlagsPage(db, after)),
     recommendationPendingPage: (after) =>
       attempt("read recommendation page", () => recommendationPendingPage(db, after)),
-    recommendationEntriesPage: (id, after) =>
-      attempt("read recommendation page", () => recommendationEntriesPage(db, id, after)),
+    recommendationEntriesPage: (id, after, includeTracks) =>
+      attempt("read recommendation page", () =>
+        recommendationEntriesPage(db, id, after, includeTracks),
+      ),
     recommendationFeedbackPage: (id, after) =>
       attempt("read recommendation page", () => recommendationFeedbackPage(db, id, after)),
     dismissPlaylistRecommendation: (id, offer) =>

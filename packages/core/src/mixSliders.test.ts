@@ -1,156 +1,16 @@
-import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-
+import assert from "node:assert/strict";
 import {
   DEFAULT_MIX_SLIDERS,
   GENRE_FAITHFULNESS_STEPS,
   POPULARITY_STEPS,
-  artistGraph,
-  genreStyle,
-  mixSlidersEngine,
   readMixSliders,
-  recommend,
   sliderStep,
   sliderStepLabel,
   storedMixSliders,
-  type CatalogSong,
-  type GenreProfile,
-  type GenreProfileOf,
-  type RecommendSources,
-  type StyleOf,
 } from "./index.ts";
 
-const DAY = 24 * 60 * 60 * 1000;
-const NOW = 100 * DAY;
-
-/** A catalog song by [artist] that the radios of [seeds] brought. */
-const catalogSong = (
-  videoId: string,
-  artist: string,
-  seeds: string[],
-  firstSeenAt = NOW - 30 * DAY,
-): CatalogSong => ({
-  song: {
-    videoId,
-    title: `Song ${videoId}`,
-    artists: [artist],
-    album: null,
-    albumId: null,
-    durationMs: 200_000,
-    artworkUrl: null,
-    explicit: false,
-  },
-  firstSeenAt,
-  lastSeenAt: NOW - DAY,
-  radios: seeds.map((seedName) => ({
-    seed: seedName.toLowerCase(),
-    seedName,
-    lastSeenAt: NOW - DAY,
-  })),
-});
-
-const rock: GenreProfile = new Map([["rock", 1]]);
-/** Rock with a minor share of pop: affinity to rock ~0.89. */
-const mostlyRock: GenreProfile = new Map([
-  ["rock", 2 / 3],
-  ["pop", 1 / 3],
-]);
-/** Half rock: affinity to rock ~0.71. */
-const rockPop: GenreProfile = new Map([
-  ["rock", 0.5],
-  ["pop", 0.5],
-]);
-/** A little rock: affinity to rock ~0.32. */
-const popRock: GenreProfile = new Map([
-  ["rock", 0.3],
-  ["pop", 0.9],
-]);
-
-const profileOf: GenreProfileOf = (artist) =>
-  ({ Muse: rock, "Mostly Rock": mostlyRock, "Rock Pop": rockPop, "Pop Rock": popRock })[artist];
-
-/** Muse's radio: songs of every genre, some carried by many radios, seen at different times. */
-const catalog = [
-  catalogSong("muse1", "Muse", ["Muse"], NOW - 50 * DAY),
-  catalogSong("hit", "Rock Pop", ["Muse", "Placebo", "Radiohead", "Blur"], NOW - 40 * DAY),
-  catalogSong("cut", "Rock Pop", ["Muse"], NOW - 2 * DAY),
-  catalogSong("close", "Mostly Rock", ["Muse", "Placebo"], NOW - 10 * DAY),
-  catalogSong("far", "Pop Rock", ["Muse"], NOW - 5 * DAY),
-  catalogSong("other", "Placebo", ["Placebo"], NOW - 20 * DAY),
-];
-
-// Styles for Same genres and Close: Muse's heavy, Mostly Rock's hard rock (a neighbour of heavy), the pop ones' soft.
-const heavy = genreStyle("Nu Metal")!.key;
-const hardRock = genreStyle("Hard Rock")!.key;
-const soft = genreStyle("Soft Rock")!.key;
-const styleOf: StyleOf = (artist) =>
-  (
-    ({ Muse: heavy, "Mostly Rock": hardRock, "Rock Pop": soft, "Pop Rock": soft }) as Record<
-      string,
-      string
-    >
-  )[artist];
-
-const sources: RecommendSources = {
-  catalog,
-  graph: artistGraph({ catalog, pages: [], plays: [] }),
-  profileOf,
-  styleOf,
-  now: NOW,
-};
-const seed = { artists: ["Muse"], profile: rock, style: heavy };
-
-const ranking = (options = {}) =>
-  recommend(seed, sources, options).map((entry) => [entry.song.videoId, entry.affinity]);
-
-const matches = (options = {}) =>
-  recommend(seed, sources, options)
-    .filter((entry) => entry.affinity === "match")
-    .map((entry) => entry.song.videoId);
-
 describe("A section's sliders", () => {
-  test("at their defaults, rank the catalog as the engine does without them", () => {
-    assert.deepEqual(ranking(mixSlidersEngine(DEFAULT_MIX_SLIDERS)), ranking());
-  });
-
-  test("Genre faithfulness: Same genres keeps the seed's style; Close its neighbours; wandering lets in more", () => {
-    // Balanced (today's threshold, 0.5): the half-rock songs match, the pop one with a little rock doesn't.
-    assert.deepEqual(new Set(matches()), new Set(["muse1", "hit", "cut", "close"]));
-    // Same genres: only the seed's style; Close: its neighbours too (hard rock sounds near heavy, soft doesn't).
-    const strictest = mixSlidersEngine({ ...DEFAULT_MIX_SLIDERS, faithfulness: 1 });
-    assert.deepEqual(new Set(matches(strictest)), new Set(["muse1"]));
-    const close = mixSlidersEngine({ ...DEFAULT_MIX_SLIDERS, faithfulness: 2 });
-    assert.deepEqual(new Set(matches(close)), new Set(["muse1", "close"]));
-    const wanders = mixSlidersEngine({ ...DEFAULT_MIX_SLIDERS, faithfulness: 5 });
-    assert.deepEqual(new Set(matches(wanders)), new Set(["muse1", "hit", "cut", "close", "far"]));
-  });
-
-  test("Popularity: hits put what many radios carry first; deep cuts put it last", () => {
-    const order = (popularity: 1 | 2 | 3 | 4 | 5) => {
-      const ids = recommend(
-        seed,
-        sources,
-        mixSlidersEngine({ ...DEFAULT_MIX_SLIDERS, popularity }),
-      ).map((entry) => entry.song.videoId);
-      return ids.filter((id) => id === "hit" || id === "cut");
-    };
-    // Neutral: the newer song first, as today.
-    assert.deepEqual(order(3), ["cut", "hit"]);
-    assert.deepEqual(order(1), ["hit", "cut"]);
-    assert.deepEqual(order(5), ["cut", "hit"]);
-    // Deep cuts push the four-radio hit below the one-radio Pop Rock song it beat before.
-    const deep = recommend(
-      seed,
-      sources,
-      mixSlidersEngine({ ...DEFAULT_MIX_SLIDERS, popularity: 5 }),
-    );
-    const ids = deep.map((entry) => entry.song.videoId);
-    assert.ok(ids.indexOf("far") < ids.indexOf("hit"));
-    assert.ok(
-      ranking().findIndex(([id]) => id === "hit") < ranking().findIndex(([id]) => id === "far"),
-    );
-  });
-
   test("each has five steps named from one end to the other, the middle one the default", () => {
     assert.deepEqual(
       GENRE_FAITHFULNESS_STEPS.map((step) => step.label),

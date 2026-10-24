@@ -197,7 +197,7 @@ describe("Artist mixes' seeds from artists similar to the Library's", () => {
   });
 });
 
-describe("Artist mixes' seed pool (what the harvest keeps candidates for)", () => {
+describe("Artist mixes' seed pool (available seed artists)", () => {
   test("is every played artist, in plays' order", () => {
     assert.deepEqual(seedNames(artistMixSeedPool({ played: MOST_PLAYED })), [
       "plays: Bad Omens",

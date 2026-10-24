@@ -35,7 +35,6 @@ import {
 } from "./playlistRecommendationSource";
 import { playlistSuggestionRadios, playlistSuggestionSeeds } from "./playlistSuggestionRadios";
 import { makeExternalStore } from "@/lib/externalStore";
-import { withRecommendationDeadline } from "@/lib/recommendationTimeout";
 import { CROSSFADE_MS } from "@/motion/Crossfade";
 import { WaveNative } from "@/native/waveNative";
 import { playTrackIds, playYtSongs } from "@/playback/actions";
@@ -112,7 +111,7 @@ export function PlaylistRecommendations({
                 online,
               },
             };
-          }).pipe(withRecommendationDeadline),
+          }),
           { signal },
         ),
       rank: async (input, signal) => {
@@ -121,7 +120,7 @@ export function PlaylistRecommendations({
             runSteps(
               playlistRecommendationsSteps(input.playlist, input.sources),
               recommendationTurnEffect,
-            ).pipe(withRecommendationDeadline),
+            ),
             { signal },
           )
           .catch((error: unknown) => {

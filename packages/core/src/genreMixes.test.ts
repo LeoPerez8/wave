@@ -12,7 +12,6 @@ import {
   genreFamily,
   artistGraph,
   genreMixSeeds,
-  interleaveRadios,
   mixKnownSongs,
   mixSectionOfId,
   mixSeedArtists,
@@ -398,23 +397,7 @@ describe("A song with several genres", () => {
   });
 });
 
-describe("A genre mix's radios", () => {
-  test("take turns, in the seed artists' order, until each runs out", () => {
-    assert.deepEqual(interleaveRadios([["a1", "a2", "a3"], ["b1"], ["c1", "c2"]]), [
-      "a1",
-      "b1",
-      "c1",
-      "a2",
-      "c2",
-      "a3",
-    ]);
-  });
-
-  test("of one artist are that radio", () => {
-    assert.deepEqual(interleaveRadios([["a1", "a2"]]), ["a1", "a2"]);
-    assert.deepEqual(interleaveRadios([]), []);
-  });
-});
+describe("A genre mix's radios", () => {});
 
 describe("A genre mix", () => {
   const radioSongs = (count: number) =>

@@ -263,3 +263,64 @@ test("playlists asking at once share one derivation of the Library's tracks", as
     fixture.close();
   }
 });
+
+test("cold suggestions use playlist seeds while Library and stars derive in the background", async (t) => {
+  const { sharePlaylistRecommendationInputs } = await import("./playlistRecommendationInputs.ts");
+  const fixture = await createFastAgainFixture();
+  t.after(() => fixture.close());
+  const store = await loadLibraryStore(root, fixture.db);
+  const source = sharePlaylistRecommendationInputs(
+    {
+      library: Effect.never,
+      favorites: Effect.never,
+      peek: () => ({ library: null, favorites: null }),
+      store: Effect.succeed(store),
+    },
+    Effect.void,
+  );
+  const input = await Effect.runPromise(
+    source.latest(fixture.playlistId).pipe(Effect.timeout(1000)),
+  );
+  const expected = Effect.runSync(store.playlistRecommendationInput(fixture.playlistId));
+  assert.deepEqual(input.playlist, expected.playlist);
+  assert.deepEqual(input.library, []);
+  assert.deepEqual(input.feedback, expected.feedback);
+});
+
+test("a cold visit warms reusable Library tracks as soon as its background inputs finish", async (t) => {
+  const { sharePlaylistRecommendationInputs, readRecommendationFavorites } =
+    await import("./playlistRecommendationInputs.ts");
+  const { readMixInputs } = await import("../home/mixInputs.ts");
+  const fixture = await createFastAgainFixture();
+  t.after(() => fixture.close());
+  const store = await loadLibraryStore(root, fixture.db);
+  const library = Effect.runSync(readMixInputs(store, Effect.void, fixture.now));
+  const favorites = Effect.runSync(readRecommendationFavorites(store, Effect.void));
+  let completed: typeof library | null = null;
+  let finish!: () => void;
+  const started = Promise.withResolvers<void>();
+  const source = sharePlaylistRecommendationInputs(
+    {
+      library: Effect.callback<typeof library>((resume) => {
+        finish = () => {
+          completed = library;
+          resume(Effect.succeed(library));
+        };
+        started.resolve();
+      }),
+      favorites: Effect.never,
+      peek: () => ({ library: completed, favorites }),
+      store: Effect.succeed(store),
+    },
+    Effect.void,
+  );
+  assert.deepEqual((await Effect.runPromise(source.latest(fixture.playlistId))).library, []);
+  await started.promise;
+  finish();
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  const next = await Effect.runPromise(source.latest(fixture.playlistId));
+  assert.deepEqual(
+    next.library,
+    Effect.runSync(store.playlistRecommendationInput(fixture.playlistId)).library,
+  );
+});

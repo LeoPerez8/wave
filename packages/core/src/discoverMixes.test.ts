@@ -6,7 +6,6 @@ import {
   blendDiscoverMix,
   discoverMix,
   discoverMixCaption,
-  discoverMixReadsMore,
   discoverMixesDue,
   discoverMixesBuilt,
   parseDiscoverMixes,
@@ -430,18 +429,5 @@ describe("The mixes are built again", () => {
     const built = discoverMixesBuilt(mixes, now, fromTheLibrary);
     assert.equal(built?.playSeeds, false);
     assert.equal(discoverMixesDue(built ?? null, { now: at(16, 10), played: true }), true);
-  });
-});
-
-describe("Reading a seed's radio", () => {
-  test("goes on while the mix has fewer than 25 songs and the radio has more", () => {
-    assert.equal(discoverMixReadsMore({ pages: 1, kept: 24, more: true }), true);
-    assert.equal(discoverMixReadsMore({ pages: 1, kept: 25, more: true }), false);
-    assert.equal(discoverMixReadsMore({ pages: 1, kept: 3, more: false }), false);
-  });
-
-  test("stops after three pages", () => {
-    assert.equal(discoverMixReadsMore({ pages: 2, kept: 3, more: true }), true);
-    assert.equal(discoverMixReadsMore({ pages: 3, kept: 3, more: true }), false);
   });
 });

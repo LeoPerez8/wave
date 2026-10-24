@@ -2,8 +2,7 @@
  * What Artist mixes' seeds are picked from (docs/spec.md, "Artist mixes"):
  * the owner's most played artists and the Library's, as Core's
  * `ArtistMixPools` takes them. A build picks its seeds from them
- * (`artistMixSeeds`); the harvest reads every one it may pick
- * (`harvestSeedPool`).
+ * (`artistMixSeeds`).
  */
 import { mapSteps, type ArtistMixPools, type MixRefreshAvoid } from "@wave/core";
 import * as Effect from "effect/Effect";

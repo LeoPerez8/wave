@@ -61,7 +61,6 @@ import {
 } from "./discoverMixLevel";
 import { recommendationSnapshot } from "./recommendationSnapshot";
 import { buildHomeMixes } from "./homeMixBuild";
-import { harvestSoon, onHarvested, setPickedSeeds } from "./mixHarvest";
 import { refreshKnownVideos, useKnownVideos } from "./mixKnown";
 import { noteMixesShown } from "./mixPreDownload";
 import { similarOffline, withSimilar } from "./similarArtists";
@@ -397,16 +396,6 @@ const SECTIONS: Record<MixSectionId, MixSection> = {
   "genre-mixes": section("home.genreMixes", buildGenreMixes, RETRY_MS),
 };
 
-// What a harvest on mobile data refills: each section's last build's seeds,
-// this session's or, after a relaunch, those its saved mixes were built from.
-setPickedSeeds(() =>
-  Object.values(SECTIONS).flatMap((mixSection) => {
-    if (mixSection.picked !== null) return mixSection.picked;
-    const saved = mixSection.saved.get();
-    return saved === null ? [] : discoverMixesRerun(saved, []).seeds;
-  }),
-);
-
 /**
  * Starts each due row independently ([played]: the owner has counted plays).
  * Saved mixes remain visible until that row saves a successful build.
@@ -425,7 +414,6 @@ const refresh = (played: boolean, onlyEmpty = false): void => {
     { now: Date.now(), played },
   );
   if (ids.length === 0) {
-    if (!onlyEmpty && !Object.values(SECTIONS).some((row) => row.building.get())) harvestSoon();
     return;
   }
   // Claim every row before yielding: another focus callback cannot launch it again.
@@ -465,21 +453,9 @@ const refresh = (played: boolean, onlyEmpty = false): void => {
       .finally(() => {
         mixSection.building.set(false);
         rerankAfterward(id);
-        harvestSoon();
       });
   }
 };
-
-// A harvest that refilled the catalog builds a section that has no mixes yet
-// (a fresh install's first ones), without waiting for its retry.
-onHarvested(() => {
-  for (const id of Object.keys(SECTIONS) as MixSectionId[]) {
-    const mixSection = SECTIONS[id];
-    if (mixSection.saved.get() !== null) continue;
-    mixSection.retryAt = null;
-  }
-  refresh(false, true);
-});
 
 /** The toast after a refresh saved new mixes; its Undo puts the previous ones back. */
 const NEW_MIXES = "New mixes";
@@ -538,7 +514,6 @@ export const refreshMixes = (id: MixSectionId): void => {
     .finally(() => {
       building.set(false);
       rerankAfterward(id);
-      harvestSoon();
     });
 };
 

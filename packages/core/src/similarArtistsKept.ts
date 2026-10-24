@@ -1,5 +1,5 @@
 /**
- * The similar artists the harvest read (docs/spec.md, "Artist mixes"): the
+ * Previously stored similar artists (docs/spec.md, "Artist mixes"): the
  * artists a Library artist's YouTube Music page lists as "Fans might also
  * like", kept on the phone by the Library artist's name, so Artist mixes
  * build with similar artists offline. Not synced.

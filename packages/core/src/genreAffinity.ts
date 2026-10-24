@@ -1,18 +1,9 @@
-/**
- * Genre affinity (docs/spec.md, "Artist mixes", "Genre mixes"): what keeps a
- * mix to its seed's style. An artist's profile is the share of each genre
- * family (Genre mixes' families, `genreFamily`) across their songs, and two
- * profiles' affinity is how alike they are, so sharing one minor genre isn't
- * enough. A radio song joins a mix only when its artist's affinity to the
- * seed's profile reaches [GENRE_AFFINITY_THRESHOLD]; an artist with no genre
- * known only fills a mix up to its fewest songs.
- */
-
+/** Known genre profiles and their affinity; recommendation ranking treats unknown genre as neutral. */
 import { artistPhotoName } from "./artistPhoto.ts";
-import type { DiscoverLibrarySong, DiscoverMixSeed, DiscoverSeedArtist } from "./discoverMixes.ts";
-import { commonStyleSteps, commonStyle, songFamilies, songStyle } from "./genreMixes.ts";
+import type { DiscoverLibrarySong, DiscoverSeedArtist } from "./discoverMixes.ts";
+import { songFamilies } from "./genreMixes.ts";
 import { isRecord, readStoredRecord } from "./storedJson.ts";
-import { libraryArtistFinderSteps, libraryArtistFinder, ytArtistQuery } from "./ytArtist.ts";
+import { libraryArtistFinderSteps, libraryArtistFinder } from "./ytArtist.ts";
 
 /**
  * An artist's genre profile: each genre family's share of their songs (by
@@ -58,7 +49,7 @@ export const genreAffinity = (a: GenreProfile, b: GenreProfile): number => {
   return lengths === 0 ? 0 : Math.min(1, dot / lengths);
 };
 
-/** The affinity a radio song's artist needs to the seed's profile to join its mix. */
+/** Below this affinity, a known genre receives the faithfulness penalty. */
 export const GENRE_AFFINITY_THRESHOLD = 0.5;
 
 /** The Library as genre profiles see it: its artists, and its songs' genre tags and artists. */
@@ -73,13 +64,6 @@ export interface GenreProfileLibrary {
  */
 export type GenreProfileOf = (artist: string) => GenreProfile | null | undefined;
 
-/**
- * An artist's style, by name (`libraryStyleOf`): the style of most of their
- * Library songs, null when those have none, undefined for an artist the
- * Library doesn't have (Deezer's profiles are family-level, so they have none).
- */
-export type StyleOf = (artist: string) => string | null | undefined;
-
 /** Each Library artist's songs' genre tags, by artist id. */
 const songsByArtist = (library: GenreProfileLibrary): Map<number, GenreTagged[]> => {
   const songs = new Map<number, GenreTagged[]>();
@@ -90,35 +74,6 @@ const songsByArtist = (library: GenreProfileLibrary): Map<number, GenreTagged[]>
       songs.set(id, of);
     }
   return songs;
-};
-
-/**
- * The Library artists' styles (`commonStyle` of the songs that credit them),
- * by name as `libraryGenreProfiles` finds them.
- */
-export const libraryStyleOf = (library: GenreProfileLibrary): StyleOf => {
-  const songs = songsByArtist(library);
-  const find = libraryArtistFinder(library.artists);
-  const styles = new Map<number, string | null>();
-  return (name) => {
-    const artist = find(name);
-    if (artist === null) return undefined;
-    if (!styles.has(artist.id))
-      styles.set(artist.id, commonStyle((songs.get(artist.id) ?? []).map(songStyle)));
-    return styles.get(artist.id) ?? null;
-  };
-};
-
-/** The style of the first of [artists] with one known ([styleOf]); null when none has. */
-export const styleOfArtists = (
-  artists: readonly string[],
-  styleOf: StyleOf | undefined,
-): string | null => {
-  for (const artist of artists) {
-    const style = styleOf?.(artist);
-    if (style) return style;
-  }
-  return null;
 };
 
 /**
@@ -139,148 +94,7 @@ export const libraryGenreProfiles = (library: GenreProfileLibrary): GenreProfile
   };
 };
 
-/**
- * The profile a mix's radio songs are held to: a genre mix's seed artists'
- * Library songs together, an artist mix's artist's profile ([profileOf],
- * Deezer's for an artist outside the Library). Null when it has no genre:
- * the mix then keeps any genre.
- */
-export const mixSeedProfile = (
-  seed: DiscoverMixSeed,
-  library: GenreProfileLibrary,
-  profileOf: GenreProfileOf,
-): GenreProfile | null => {
-  if (seed.kind === "genre" && seed.artists !== undefined) {
-    const songs = songsByArtist(library);
-    return genreProfile(seed.artists.flatMap((artist) => songs.get(artist.id) ?? []));
-  }
-  return profileOf(seed.name) ?? null;
-};
-
-/**
- * The style a mix's seed is held to (`styleAffinity`): a genre mix's seed
- * artists' Library songs' most common style, an artist mix's artist's
- * ([styleOf]: the Library's, none for an outside artist). Null when unknown.
- */
-export const mixSeedStyle = (
-  seed: DiscoverMixSeed,
-  library: GenreProfileLibrary,
-  styleOf: StyleOf,
-): string | null => {
-  if (seed.kind === "genre" && seed.artists !== undefined) {
-    const songs = songsByArtist(library);
-    return commonStyle(seed.artists.flatMap((artist) => songs.get(artist.id) ?? []).map(songStyle));
-  }
-  return styleOf(seed.name) ?? null;
-};
-
 /** Whether a radio song's artist suits a mix: alike enough, not alike, or no genre known. */
-export type MixAffinity = "match" | "miss" | "unknown";
-
-/**
- * Whether a radio song suits the mix whose profile is [seed]: it matches
- * when any of its artists' profile ([profileOf]) reaches
- * [GENRE_AFFINITY_THRESHOLD], misses when its artists with a profile all
- * fall short, and is unknown when none has a genre known. Every song matches
- * a seed with no genre.
- */
-export const mixAffinity =
-  (
-    seed: GenreProfile | null,
-    profileOf: GenreProfileOf,
-  ): ((song: { readonly artists: readonly string[] }) => MixAffinity) =>
-  (song) => {
-    if (seed === null) return "match";
-    let known = false;
-    for (const artist of song.artists) {
-      const profile = profileOf(artist);
-      if (profile === null || profile === undefined) continue;
-      if (genreAffinity(seed, profile) >= GENRE_AFFINITY_THRESHOLD) return "match";
-      known = true;
-    }
-    return known ? "miss" : "unknown";
-  };
-
-/**
- * The artists of [songs] to look up on Deezer: those with nothing known of
- * them yet ([profileOf] undefined), each once (by name as artist photos
- * compare it), in the songs' order. Names that aren't an artist's ("Various
- * Artists") are left out.
- */
-export const mixProfileLookups = (
-  songs: readonly { readonly artists: readonly string[] }[],
-  profileOf: GenreProfileOf,
-): string[] => {
-  const seen = new Set<string>();
-  const names: string[] = [];
-  for (const song of songs)
-    for (const artist of song.artists) {
-      const key = artistPhotoName(artist);
-      if (seen.has(key)) continue;
-      seen.add(key);
-      if (ytArtistQuery(artist) !== null && profileOf(artist) === undefined) names.push(artist);
-    }
-  return names;
-};
-
-/** Deezer's albums by the artist [artistId] (the first 50), each with its genre id. */
-export const deezerArtistAlbumsUrl = (artistId: number): string =>
-  `https://api.deezer.com/artist/${artistId}/albums?limit=50`;
-
-/** Deezer's list of genres, which names the genre ids its albums carry. */
-export const DEEZER_GENRES_URL = "https://api.deezer.com/genre";
-
-/** Deezer's genre names by id, from its list of genres; null for an answer that isn't one. */
-export const deezerGenreNames = (response: unknown): ReadonlyMap<number, string> | null => {
-  if (!isRecord(response) || !Array.isArray(response.data)) return null;
-  return new Map(
-    response.data.flatMap((genre: unknown) =>
-      isRecord(genre) && typeof genre.id === "number" && typeof genre.name === "string"
-        ? [[genre.id, genre.name] as const]
-        : [],
-    ),
-  );
-};
-
-/**
- * The Deezer id of the artist named [name] in an artist search's answer
- * (`deezerArtistSearchUrl`): the first whose name is it, as artist photos
- * compare names. Null when none is; undefined for an answer that isn't a
- * search's.
- */
-export const deezerArtistId = (response: unknown, name: string): number | null | undefined => {
-  if (!isRecord(response) || !Array.isArray(response.data)) return undefined;
-  const wanted = artistPhotoName(name);
-  for (const artist of response.data as unknown[])
-    if (
-      isRecord(artist) &&
-      typeof artist.id === "number" &&
-      typeof artist.name === "string" &&
-      artistPhotoName(artist.name) === wanted
-    )
-      return artist.id;
-  return null;
-};
-
-/**
- * An artist's genre profile from their Deezer albums (`deezerArtistAlbumsUrl`):
- * each album with a genre counts as a song of it ([genres] names the ids,
- * `deezerGenreNames`). Null when no album has a genre; undefined for an
- * answer that isn't a list of albums.
- */
-export const deezerArtistProfile = (
-  response: unknown,
-  genres: ReadonlyMap<number, string>,
-): GenreProfile | null | undefined => {
-  if (!isRecord(response) || !Array.isArray(response.data)) return undefined;
-  return genreProfile(
-    (response.data as unknown[]).flatMap((album) => {
-      const id = isRecord(album) ? album.genre_id : undefined;
-      const genre = typeof id === "number" ? genres.get(id) : undefined;
-      return genre === undefined ? [] : [{ genre }];
-    }),
-  );
-};
 
 /**
  * Artists' genre profiles looked up on Deezer, kept on the phone so each is
@@ -340,7 +154,7 @@ export const parseArtistProfiles = (stored: string | null): ArtistProfiles => {
   );
 };
 
-/** Eager profiles/styles avoid a first lookup doing a whole artist's work inside a candidate step. */
+/** Eager profiles avoid a first lookup doing a whole artist's work inside a candidate step. */
 export function* genreProfileSteps(
   songs: Iterable<GenreTagged>,
 ): Generator<void, GenreProfile | null> {
@@ -375,22 +189,13 @@ function* songsByArtistSteps(
 }
 export function* libraryMixProfilesSteps(
   library: GenreProfileLibrary,
-): Generator<void, { profileOf: GenreProfileOf; styleOf: StyleOf }> {
+): Generator<void, { profileOf: GenreProfileOf }> {
   const songs = yield* songsByArtistSteps(library);
   const find = yield* libraryArtistFinderSteps(library.artists);
   const profiles = new Map<number, GenreProfile | null>();
-  const styles = new Map<number, string | null>();
   for (const artist of library.artists) {
     const of = songs.get(artist.id) ?? [];
     profiles.set(artist.id, yield* genreProfileSteps(of));
-    styles.set(
-      artist.id,
-      yield* commonStyleSteps(
-        (function* () {
-          for (const song of of) yield songStyle(song);
-        })(),
-      ),
-    );
     yield;
   }
   return {
@@ -398,36 +203,5 @@ export function* libraryMixProfilesSteps(
       const artist = find(name);
       return artist === null ? undefined : (profiles.get(artist.id) ?? null);
     },
-    styleOf: (name) => {
-      const artist = find(name);
-      return artist === null ? undefined : (styles.get(artist.id) ?? null);
-    },
   };
-}
-export function* mixSeedProfileSteps(
-  seed: DiscoverMixSeed,
-  library: GenreProfileLibrary,
-  profileOf: GenreProfileOf,
-): Generator<void, GenreProfile | null> {
-  if (seed.kind !== "genre" || seed.artists === undefined) return profileOf(seed.name) ?? null;
-  const songs = yield* songsByArtistSteps(library);
-  return yield* genreProfileSteps(
-    (function* () {
-      for (const artist of seed.artists!) for (const song of songs.get(artist.id) ?? []) yield song;
-    })(),
-  );
-}
-export function* mixSeedStyleSteps(
-  seed: DiscoverMixSeed,
-  library: GenreProfileLibrary,
-  styleOf: StyleOf,
-): Generator<void, string | null> {
-  if (seed.kind !== "genre" || seed.artists === undefined) return styleOf(seed.name) ?? null;
-  const songs = yield* songsByArtistSteps(library);
-  return yield* commonStyleSteps(
-    (function* () {
-      for (const artist of seed.artists!)
-        for (const song of songs.get(artist.id) ?? []) yield songStyle(song);
-    })(),
-  );
 }

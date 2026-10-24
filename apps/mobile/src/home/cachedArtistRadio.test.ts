@@ -85,7 +85,7 @@ test("the eight-second deadline covers artist lookup and radio IO, preserves cac
     note: () => Effect.void,
   });
   const result = Effect.runPromise(read({ name: "Artist" }));
-  const rejected = assert.rejects(result, /Recommendation deadline elapsed/);
+  const rejected = assert.rejects(result, /Radio deadline elapsed/);
   t.mock.timers.tick(8000);
   await rejected;
   finish();

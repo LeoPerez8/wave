@@ -8,7 +8,7 @@ import {
   playlistRecommendations,
   playlistRecommendationSession,
   artistGraph,
-  recommend,
+  rankRadioSongs,
   type PlaylistRecommendationTrack,
   type YtAlbumSong,
 } from "@wave/core";
@@ -237,9 +237,17 @@ test("dismiss then accept refills from updated contents, persists scoped learnin
   const baselineTaste = tasteHistory(db);
   const baselineCatalog = selectCandidateCatalog(db);
   const globalRanking = () =>
-    recommend(
+    rankRadioSongs(
       { artists: ["Radiohead"] },
-      { catalog: selectCandidateCatalog(db), graph, now: 0, profileOf: () => null },
+      {
+        pages: [
+          {
+            id: "seed",
+            artists: ["Radiohead"],
+            songs: selectCandidateCatalog(db).map((entry) => entry.song),
+          },
+        ],
+      },
     );
   const beforeGlobal = globalRanking();
   assert.equal(beforeGlobal.length, 2);

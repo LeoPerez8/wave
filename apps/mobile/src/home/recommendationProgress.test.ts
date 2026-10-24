@@ -6,12 +6,13 @@ import * as Effect from "effect/Effect";
 import { sql } from "drizzle-orm";
 import {
   artistMixSeeds,
-  catalogMixReader,
-  discoverMixesOfCatalog,
+  discoverMixesOfRadios,
+  rankedDiscoverMixRead,
+  rankRadioSongs,
+  radioRankingBatch,
   genreMixSeeds,
   libraryGenreProfiles,
   magicArtistKey,
-  magicBatch,
   playlistRecommendations,
   RECOMMENDATION_SNAPSHOT,
   seededRandom,
@@ -25,9 +26,7 @@ import {
   readRecommendationFavorites,
   sharePlaylistRecommendationInputs,
 } from "../library/playlistRecommendationInputs.ts";
-import { magicCatalogRead } from "../playback/magicCatalogRead.ts";
 import { readMixInputs } from "./mixInputs.ts";
-import { readMixCatalog } from "./readMixCatalog.ts";
 import { snapshotRead } from "../lib/snapshotRead.ts";
 import { readArtistGraph } from "./artistGraph.ts";
 
@@ -122,39 +121,15 @@ test("2,531 Tracks and 900 artists finish paging, refill a Magic Queue online, a
       );
       assert.ok(started);
 
-      let requests = 0;
       const profileOf = libraryGenreProfiles(library);
-      const initialCatalog = await Effect.runPromise(readMixCatalog(store, between));
-      const pick = await Effect.runPromise(
-        magicCatalogRead(started.session, {
-          online: true,
-          onMobileData: false,
-          usedToday: 0,
-          now,
-          catalog: initialCatalog,
-          between,
-          graph: null,
-          profileOf,
-          taste: null,
-          inLibrary: () => false,
-          cached: Effect.succeed(new Set<string>()),
-          tried: new Map(),
-          usedOnMobile: () => {},
-          refill: Effect.sync(() => {
-            requests++;
-            addCandidates(db, { seed: artist.name, songs: radioSongs(artist.name, "radio") }, now);
-            return {
-              bytes: 1000,
-              reached: true,
-              pages: [{ seed: artist.name, songs: radioSongs(artist.name, "radio") }],
-            };
-          }),
-        }),
+      const page = { id: "seed", artists: [artist.name], songs: radioSongs(artist.name, "radio") };
+      addCandidates(db, { seed: artist.name, songs: page.songs }, now);
+      const batch = radioRankingBatch(
+        rankRadioSongs({ artists: [artist.name] }, { pages: [page], profileOf }),
+        { size: 9, newMusicShare: 1 },
       );
-      assert.equal(requests, 1, "an empty catalog reaches the online radio boundary");
-      const batch = magicBatch(started.session, [], seededRandom("621-batch"), pick.candidates);
-      assert.equal(batch.trackIds.length, 9);
-      assert.ok(batch.trackIds.every((id) => id.startsWith("yt:")));
+      assert.equal(batch.length, 9);
+      assert.ok(batch.every((song) => song.trackId.startsWith("yt:")));
       for (const played of library.topArtists)
         addCandidates(
           db,
@@ -162,7 +137,6 @@ test("2,531 Tracks and 900 artists finish paging, refill a Magic Queue online, a
           now,
         );
       const graph = await Effect.runPromise(readArtistGraph(store, between));
-      const catalog = await Effect.runPromise(readMixCatalog(store, between));
       const playlistId = createPlaylist(
         db,
         "621",
@@ -193,8 +167,17 @@ test("2,531 Tracks and 900 artists finish paging, refill a Magic Queue online, a
         genreMixSeeds(library, seededRandom("621-genres")),
       ]) {
         assert.ok(seeds.length > 0);
-        const reader = catalogMixReader({ catalog, graph, library, profileOf, taste: null, now });
-        const mixes = discoverMixesOfCatalog(seeds, reader, { library, known: library.known });
+        const radioReads = seeds.map((mixSeed) =>
+          rankedDiscoverMixRead(mixSeed, {
+            pages: (mixSeed.artists ?? [{ name: mixSeed.name }]).map((a) => ({
+              id: a.name,
+              artists: [a.name],
+              songs: radioSongs(a.name, a.name),
+            })),
+            profileOf,
+          }),
+        );
+        const mixes = discoverMixesOfRadios(radioReads, { library, known: library.known });
         assert.ok(mixes.length > 0, `${seeds[0]!.kind} mixes are populated`);
         assert.ok(mixes.every((mix) => mix.songs.length > 0));
       }
@@ -205,7 +188,7 @@ test("2,531 Tracks and 900 artists finish paging, refill a Magic Queue online, a
         "completed jobs leave no Track paging behind on another screen",
       );
       t.diagnostic(
-        `Desktop SQLite: 2531 Tracks, 900 artists; ${pages} total pages; 1 radio refill; ${batch.trackIds.length} batch Tracks; ${offers.length} playlist offers`,
+        `Desktop SQLite: 2531 Tracks, 900 artists; ${pages} total pages; 1 radio refill; ${batch.length} batch Tracks; ${offers.length} playlist offers`,
       );
     } finally {
       indexes.dispose();

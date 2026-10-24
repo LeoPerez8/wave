@@ -39,7 +39,7 @@ const sources = () => {
 const turn = () => new Promise<void>((resolve) => setImmediate(resolve));
 
 describe("a snapshot read", () => {
-  test("a harvest batch written while the catalog is read doesn't restart it; whoever asks after it gets the next read", async () => {
+  test("a radio page written while the catalog is read doesn't restart it; whoever asks after it gets the next read", async () => {
     const gate = gatedRead();
     const writes = sources();
     const catalog = snapshotRead(gate.read, {

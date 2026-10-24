@@ -11,7 +11,6 @@ import { finishSteps } from "./buildSteps.ts";
 import { splitCredit } from "./credits.ts";
 import type { BlendedDiscoverMix, DiscoverMixSong } from "./discoverMixLevels.ts";
 import type { ExplicitFlag } from "./explicit.ts";
-import type { MixAffinity } from "./genreAffinity.ts";
 import type { MixRowId } from "./homeSections.ts";
 import { identityKey } from "./library.ts";
 import { normalizeSearchText } from "./search.ts";
@@ -209,30 +208,18 @@ export interface DiscoverMixFilter<S extends DiscoverRadioSong> {
    * fewest songs, in the radio's order.
    */
   readonly avoid?: ReadonlySet<string>;
-  /**
-   * Whether the song's artist suits the seed's genres (Core's
-   * `mixAffinity`): a miss is left out, and a song whose artists have no
-   * genre known only makes up the mix's fewest songs, after every matching
-   * one. Absent: every song suits.
-   */
-  readonly affinity?: (song: S) => MixAffinity;
 }
 
 /** The most songs a mix has. */
 export const MIX_MOST = 50;
-/** A mix with this many songs stops reading its radio. */
-const MIX_ENOUGH = 25;
-/** The most pages of a radio a mix reads. */
-const RADIO_PAGES = 3;
 
 /**
  * A mix's songs from its seed's radio, as read so far ([pages], in order):
  * the songs, in the radio's order, the owner doesn't know yet. Music videos,
  * songs the owner knows (the Library's, played, streamed or in a playlist),
- * songs an earlier mix has, a song the radio plays again and songs whose
- * artist misses the seed's genres (`DiscoverMixFilter.affinity`) are left
- * out; 50 at most. Songs by artists with no genre known only make up the
- * mix's ten songs, after every matching one (and the avoided ones). Reading a page at a time, pass the songs kept from the pages before as [before]:
+ * songs an earlier mix has and
+ * recording repeats are left out; 50 at most. Genre ranking happens before
+ * this filter. Reading a page at a time, pass songs kept from earlier pages as [before]:
  * they come first, and only the new pages' songs are looked at.
  */
 export const discoverMixSongs = <S extends DiscoverRadioSong>(
@@ -251,11 +238,8 @@ export function* discoverMixSongsSteps<S extends DiscoverRadioSong>(
   const recordings = new Set(before.map(mixRecordingOf));
   const kept: S[] = [...before];
   // Songs kept back in case the mix is short without them, in the order
-  // they come back: those a refresh avoids, then those by artists with no
-  // genre known (the avoided ones last).
+  // they come back: those a refresh avoids.
   const held: S[] = [];
-  const unsure: S[] = [];
-  const unsureHeld: S[] = [];
   const radio: S[] = [];
   for (const page of pages)
     for (const song of page) {
@@ -268,16 +252,13 @@ export function* discoverMixSongsSteps<S extends DiscoverRadioSong>(
     const recording = mixRecordingOf(song);
     if (song.video || videos.has(song.videoId) || recordings.has(recording)) continue;
     if (filter.known(song)) continue;
-    const affinity = filter.affinity?.(song) ?? "match";
-    if (affinity === "miss") continue;
     videos.add(song.videoId);
     recordings.add(recording);
     const avoided = filter.avoid?.has(song.videoId) === true;
-    if (affinity === "unknown") (avoided ? unsureHeld : unsure).push(song);
-    else if (avoided) held.push(song);
+    if (avoided) held.push(song);
     else kept.push(song);
   }
-  const spare = [...held, ...unsure, ...unsureHeld];
+  const spare = held;
   if (kept.length >= MIX_FEWEST || spare.length === 0) return kept;
   const back = new Set(spare.slice(0, MIX_FEWEST - kept.length));
   const fromPages = new Set(kept.slice(before.length));
@@ -288,21 +269,6 @@ export function* discoverMixSongsSteps<S extends DiscoverRadioSong>(
   }
   return result;
 }
-
-/**
- * Whether to read another page of a seed's radio: after [pages] pages, the
- * mix has [kept] songs and the radio [more]. A mix reads until it has 25
- * songs, three pages at most.
- */
-export const discoverMixReadsMore = ({
-  pages,
-  kept,
-  more,
-}: {
-  readonly pages: number;
-  readonly kept: number;
-  readonly more: boolean;
-}): boolean => more && kept < MIX_ENOUGH && pages < RADIO_PAGES;
 
 /** A mix with fewer songs than this isn't one. */
 export const MIX_FEWEST = 10;
@@ -498,7 +464,7 @@ export interface DiscoverMixesBuild {
   readonly seeds: readonly DiscoverMixSeed[];
   /** A refresh's avoided new songs (`mixRefreshAvoid`); none for the day's build. */
   readonly avoid: readonly string[];
-  /** What its variety nudge was made from (`catalogMixReader`); absent: none. */
+  /** Legacy saved variety; absent for radio builds. */
   readonly variety?: number;
 }
 
