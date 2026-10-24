@@ -155,6 +155,18 @@ let found: {
   readonly profileOf: GenreProfileOf;
 } | null = null;
 
+/** A batch's YouTube Music candidates, with the counts the app log explains an empty batch by. */
+export interface MagicYtPick {
+  readonly candidates: readonly MagicCatalogCandidate[];
+  /** The catalog songs the engine ranked, and those eligible for the batch. */
+  readonly ranked: number;
+  readonly eligible: number;
+  /** The songs a refill's radios brought; null when none ran. */
+  readonly refilled: number | null;
+}
+
+const NO_YT: MagicYtPick = { candidates: [], ranked: 0, eligible: 0, refilled: null };
+
 /**
  * [session]'s YouTube Music candidates for its next batch, weighed against
  * [library] (its songs and artists), the genre profiles [profileOf] gives
@@ -185,7 +197,7 @@ export const magicQueueYtCandidates = (
   },
 ) =>
   Effect.gen(function* () {
-    if (!ytMusicEnabled()) return [];
+    if (!ytMusicEnabled()) return NO_YT;
     const inLibrary = yield* inLibraryOf(library);
     const pick = yield* magicCatalogRead(session, {
       online: online(),
@@ -206,7 +218,12 @@ export const magicQueueYtCandidates = (
       ...(engine === undefined ? {} : { engine }),
     });
     found = { candidates: pick.candidates, profileOf };
-    return pick.candidates;
+    return {
+      candidates: pick.candidates,
+      ranked: pick.ranked,
+      eligible: pick.left,
+      refilled: pick.refilled,
+    } satisfies MagicYtPick;
   });
 
 /**

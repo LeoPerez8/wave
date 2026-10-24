@@ -77,11 +77,14 @@ export interface MagicCatalogReadDeps<R> {
   readonly engine?: Omit<RecommendOptions, "avoid">;
 }
 
+/** A batch's pick, with the songs its refill's radios brought (null when none ran). */
+export type MagicCatalogReadPick = MagicCatalogPick & { readonly refilled: number | null };
+
 /** [session]'s YouTube Music candidates for its next batch, as [deps] have them. */
 export const magicCatalogRead = <R>(
   session: MagicSession,
   deps: MagicCatalogReadDeps<R>,
-): Effect.Effect<MagicCatalogPick, never, R> =>
+): Effect.Effect<MagicCatalogReadPick, never, R> =>
   Effect.gen(function* () {
     const { graph, profileOf, styleOf, taste, now, inLibrary } = deps;
     const engine = deps.engine === undefined ? {} : { engine: deps.engine };
@@ -96,13 +99,14 @@ export const magicCatalogRead = <R>(
       );
     if (!deps.online) {
       const cached = yield* deps.cached;
-      return yield* pickFrom(deps.catalog, (videoId) => cached.has(videoId));
+      const offline = yield* pickFrom(deps.catalog, (videoId) => cached.has(videoId));
+      return { ...offline, refilled: null };
     }
     const catalog = deps.catalog;
     const pick = yield* pickFrom(catalog);
     const { onMobileData, usedToday, tried } = deps;
     const run = { onMobileData, usedToday, now, tried };
-    if (!magicRefillDue(session, { catalog, left: pick.left }, run)) return pick;
+    if (!magicRefillDue(session, { catalog, left: pick.left }, run)) return { ...pick, refilled: null };
     const { bytes, reached, pages } = yield* deps.refill;
     if (reached) tried.set(session.id, now);
     if (onMobileData) deps.usedOnMobile(bytes);
@@ -129,5 +133,6 @@ export const magicCatalogRead = <R>(
       mapSteps(grown.values(), (entry) => entry),
       deps.between,
     );
-    return yield* pickFrom(entries);
+    const refilled = pages.reduce((sum, page) => sum + page.songs.length, 0);
+    return { ...(yield* pickFrom(entries)), refilled };
   });

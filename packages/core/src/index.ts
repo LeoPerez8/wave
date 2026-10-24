@@ -659,6 +659,8 @@ export type {
 } from "./magicQueue.ts";
 export { magicBatchFailed, magicBatchLoading } from "./magicQueue.ts";
 export { magicPickEnded } from "./magicQueue.ts";
+export { magicBatchLine } from "./magicBatchReport.ts";
+export type { MagicBatchOutcome, MagicBatchReport, MagicSourceCount } from "./magicBatchReport.ts";
 export type { MagicPickEnd } from "./magicQueue.ts";
 export { artistRanking } from "./moreFromArtist.ts";
 export type { ArtistRankingInput, ArtistRankingSong } from "./moreFromArtist.ts";

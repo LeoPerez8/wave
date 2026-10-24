@@ -1,9 +1,11 @@
 import {
+  GENRE_FAITHFULNESS_STEPS,
   MAGIC_QUEUE_CONTEXT,
   genreProfile,
   isMagicQueue,
   magicBatch,
   magicBatchFailed,
+  magicBatchLine,
   magicBatchLoading,
   magicPickEnded,
   magicLibraryCandidates,
@@ -15,14 +17,17 @@ import {
   magicQueueLabel,
   magicQueueShare,
   magicSeedLookups,
+  magicSeedProfile,
   faithfulnessStyles,
   libraryStyleOf,
   magicSignal,
   mixSlidersEngine,
   parseMagicSession,
   playEndPending,
+  sliderStepLabel,
   startMagicQueue as startSession,
   wantsMagicBatch,
+  type MagicBatchOutcome,
   type MagicSeed,
   type MagicSession,
   type MagicSignalKind,
@@ -274,7 +279,10 @@ export const layer = Layer.effectDiscard(
       );
     };
 
-    /** Picks [wanted]'s next batch, weighing every signal so far, and adds it while still wanted. */
+    /**
+     * Picks [wanted]'s next batch, weighing every signal so far, and adds it
+     * while still wanted; gives how it ended, for the app log (`magicBatchLine`).
+     */
     const pick = (wanted: MagicSession, appended: (count: number) => void) =>
       Effect.gen(function* () {
         yield* awaitSignals;
@@ -313,7 +321,8 @@ export const layer = Layer.effectDiscard(
         // Signals may have come, and the queue moved on, while the catalog was ranked (or refilled).
         yield* awaitSignals;
         const session = activeMagicSession();
-        if (session?.id !== wanted.id || !wantsMagicBatch(session, queueState.get())) return;
+        if (session?.id !== wanted.id || !wantsMagicBatch(session, queueState.get()))
+          return { kind: "dropped" } satisfies MagicBatchOutcome;
         const playable = library.songs.filter(songHasFile);
         const ofLibrary = { artists: library.artists, songs: playable };
         // At Wander the Library keeps every genre (null).
@@ -325,26 +334,35 @@ export const layer = Layer.effectDiscard(
           styles: faithfulnessStyles(sliders),
           graph,
         });
-        const batch = magicBatch(session, libraryCandidates, Math.random, yt, taste);
+        const batch = magicBatch(session, libraryCandidates, Math.random, yt.candidates, taste);
         // Library songs with no genre known stay out: their artists' genres are looked up for later batches.
         if (threshold !== null)
           fork(lookUpArtistProfiles(magicLibraryLookups(session, ofLibrary, { profileOf })));
-        if (batch.trackIds.length === 0) return;
+        if (batch.trackIds.length === 0)
+          return {
+            kind: "empty",
+            seedGenre: magicSeedProfile(session, profileOf) !== null,
+            step: sliderStepLabel(GENRE_FAITHFULNESS_STEPS, sliders.faithfulness),
+            library: { weighed: playable.length, admitted: libraryCandidates.length },
+            yt: { ranked: yt.ranked, eligible: yt.eligible },
+            refill: yt.refilled,
+          } satisfies MagicBatchOutcome;
         save(batch.session);
         const tracks = new Map<string, QueueTrack>(
           playable.map((song) => [String(song.id), toQueueTrack(song)]),
         );
-        for (const candidate of yt)
+        for (const candidate of yt.candidates)
           tracks.set(candidate.trackId, toYtQueueTrack(candidate.song, null));
         const songs = batch.trackIds.flatMap((id) => tracks.get(id) ?? []);
         yield* queue.dispatch({ type: "append", trackIds: songs.map((song) => song.id) }, songs);
         const picked = new Set(batch.trackIds);
         appended(songs.length);
         yield* cacheYtCoversInBackground(
-          yt
+          yt.candidates
             .filter((candidate) => picked.has(candidate.trackId))
             .map((candidate) => candidate.song),
         ).pipe(Effect.provideService(YtMusic, ytMusic), Effect.provideService(Player, player));
+        return { kind: "appended", songs: songs.length } satisfies MagicBatchOutcome;
       });
 
     /**
@@ -364,22 +382,26 @@ export const layer = Layer.effectDiscard(
           ? batchStart
           : { id: wanted.id, at: Date.now(), first: wanted.used.length <= 1 };
       let logged = false;
-      const log = (outcome: string) => {
+      const log = (outcome: MagicBatchOutcome) => {
         if (logged) return;
         logged = true;
         if (batchStart === timing) batchStart = null;
         appLog(
           "info",
           "WaveTiming",
-          `Magic Queue ${timing.first ? "first" : "next"} batch: ${Date.now() - timing.at}ms (${outcome})`,
+          magicBatchLine({ first: timing.first, ms: Date.now() - timing.at, outcome }),
         );
       };
-      return pick(wanted, (count) => log(`${count} songs appended`)).pipe(
+      return pick(wanted, (songs) => log({ kind: "appended", songs })).pipe(
         withRecommendationDeadline,
+        Effect.tap((outcome) => Effect.sync(() => log(outcome))),
+        Effect.asVoid,
         Effect.catchCause((cause) =>
           Effect.sync(() => {
             log(
-              Cause.hasInterruptsOnly(cause) ? "stopped" : `failed: ${String(Cause.squash(cause))}`,
+              Cause.hasInterruptsOnly(cause)
+                ? { kind: "stopped" }
+                : { kind: "failed", reason: String(Cause.squash(cause)) },
             );
             if (!Cause.hasInterruptsOnly(cause) && activeMagicSession()?.id === wanted.id)
               failedBatch.set(wanted.id);
@@ -388,7 +410,6 @@ export const layer = Layer.effectDiscard(
         // However the picking ends: added, failed, timed out or no longer wanted.
         Effect.ensuring(
           Effect.sync(() => {
-            log("no batch appended");
             const ended = magicPickEnded(
               wanted.id,
               picking.get(),

@@ -69,6 +69,8 @@ export interface MagicCatalogPick {
   readonly candidates: readonly MagicCatalogCandidate[];
   /** How many the session has left in the catalog, the best and the rest. */
   readonly left: number;
+  /** How many catalog songs the engine ranked for the session, before its eligibility check (the app log's count). */
+  readonly ranked: number;
 }
 
 /**
@@ -96,7 +98,8 @@ export function* magicCatalogCandidatesSteps(
   // Known styles can establish a match; unknown styles also need family evidence.
   const styles = engine.styles !== undefined;
   const profile = magicSeedProfile(session, sources.profileOf);
-  if (!styles && (profile === null || profile.size === 0)) return { candidates: [], left: 0 };
+  if (!styles && (profile === null || profile.size === 0))
+    return { candidates: [], left: 0, ranked: 0 };
   const candidates = yield* recommendCandidatesSteps(
     { artists: session.radioArtists, profile, style: session.seedStyle },
     sources,
@@ -145,6 +148,7 @@ export function* magicCatalogCandidatesSteps(
   return {
     candidates: yield* mapSteps(sorted.slice(0, MAGIC_CATALOG_POOL), (entry) => entry.candidate),
     left: scored.length,
+    ranked: ranked.length,
   };
 }
 
