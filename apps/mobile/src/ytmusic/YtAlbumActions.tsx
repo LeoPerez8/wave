@@ -1,4 +1,5 @@
 import {
+  ITEM_ACTION_LABELS,
   PLAY_ACTION_LABELS,
   YT_ALBUM_DOWNLOAD_ACTION_LABELS,
   discoverSongs,
@@ -18,6 +19,7 @@ import { CardHeading } from "@/overlay/CardHeading";
 import { MenuChoices, type MenuChoice } from "@/overlay/MenuChoices";
 import { followUp, openOverlay } from "@/overlay/overlay";
 import { playDiscoverSongs, queueDiscoverSongs } from "@/playback/actions";
+import type { MenuOptions } from "@/playback/ActionsMenu";
 
 import { askYtMusic } from "./askYtMusic";
 import { useLibraryFinder, useLoadedInLibrary } from "./libraryFinder";
@@ -33,10 +35,11 @@ export interface YtAlbumTarget extends YtListHead {
  * Opens a YT Music album's long-press menu next to its tile: Play, Play Next
  * and Add to Queue cards for its songs, then Shuffle, then Download Album, or
  * Cancel Album Download while its songs are on their way, or Retry Failed
- * after (Core's `ytAlbumDownload`). The album's page is read first (once a
- * session, see `readYtAlbum`), so the card opens with every entry it will have.
+ * after (Core's `ytAlbumDownload`), and Select where its shelf can select.
+ * The album's page is read first (once a session, see `readYtAlbum`), so the
+ * card opens with every entry it will have.
  */
-export const openYtAlbumActions = (album: YtAlbumTarget): void => {
+export const openYtAlbumActions = (album: YtAlbumTarget, { onSelect }: MenuOptions = {}): void => {
   const anchor = pressedRect();
   const allowed = pressedMenuAllowed();
   void followUp(async () => {
@@ -55,7 +58,9 @@ export const openYtAlbumActions = (album: YtAlbumTarget): void => {
     openOverlay({
       label: album.title,
       anchor,
-      render: (close) => <YtAlbumActionsMenu album={album} songs={songs} close={close} />,
+      render: (close) => (
+        <YtAlbumActionsMenu album={album} songs={songs} close={close} onSelect={onSelect} />
+      ),
     });
   });
 };
@@ -65,10 +70,12 @@ function YtAlbumActionsMenu({
   album,
   songs,
   close,
+  onSelect,
 }: {
   album: YtAlbumTarget;
   songs: readonly NativeYtSong[];
   close: () => void;
+  onSelect: (() => void) | undefined;
 }) {
   const find = useLibraryFinder();
   const inLibrary = useLoadedInLibrary();
@@ -91,7 +98,7 @@ function YtAlbumActionsMenu({
     onPress:
       action === "play" ? play(false) : closing(() => void queueDiscoverSongs(listed, action)),
   }));
-  const entries = layout.list.map(({ action }): MenuChoice =>
+  const entries: MenuChoice[] = layout.list.map(({ action }): MenuChoice =>
     action === "shuffle"
       ? { action, label: PLAY_ACTION_LABELS.shuffle, onPress: play(true) }
       : {
@@ -106,6 +113,13 @@ function YtAlbumActionsMenu({
           ),
         },
   );
+  // Select only checks the release: its songs are read when a bar action runs.
+  if (onSelect !== undefined)
+    entries.push({
+      action: "select",
+      label: ITEM_ACTION_LABELS.select,
+      onPress: closing(onSelect),
+    });
 
   return (
     <>
