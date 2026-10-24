@@ -157,9 +157,9 @@ export const createPlaylistReplay = async (
     },
     rank: async (
       input: Pick<
-        import("../../src/library/db/playlistRecommendations.ts").PlaylistRecommendationInput,
-        "playlist" | "library" | "catalog" | "favoriteVideos" | "feedback"
-      >,
+        import("@wave/core").PlaylistRecommendationSources,
+        "library" | "catalog" | "favoriteVideos" | "feedback"
+      > & { readonly playlist: readonly import("@wave/core").PlaylistRecommendationTrack[] },
     ) => {
       work.ranks++;
       const sources = {

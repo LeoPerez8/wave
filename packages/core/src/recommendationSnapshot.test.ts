@@ -80,9 +80,9 @@ describe("when a recommendation snapshot is read again", () => {
         0,
       ) === "share";
     assert.deepEqual(
-      (["favorites", "tracks", "plays", "playlists", "streamed", "catalog", "similar"] as const).map(
-        kept,
-      ),
+      (
+        ["favorites", "tracks", "plays", "playlists", "streamed", "catalog", "similar"] as const
+      ).map(kept),
       [false, false, true, true, true, true, true],
     );
     assert.equal(

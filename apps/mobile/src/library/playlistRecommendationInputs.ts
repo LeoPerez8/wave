@@ -36,7 +36,11 @@ export type RecommendationReads = Pick<
 
 /** The snapshot's stars part: each song's star and video, and the starred videos the Library lacks. */
 export interface RecommendationFavorites {
-  readonly flags: readonly { readonly id: number; readonly videoId: string | null; readonly favorite: number }[];
+  readonly flags: readonly {
+    readonly id: number;
+    readonly videoId: string | null;
+    readonly favorite: number;
+  }[];
   readonly pending: ReadonlySet<string>;
 }
 
@@ -79,7 +83,10 @@ export const readRecommendationFavorites = (
 
 /** The Library as the suggestions rank it, derived from one snapshot's Library and stars. */
 const libraryTracks = (
-  { songs: sorted, artists }: { readonly songs: readonly RecommendationSong[]; readonly artists: readonly ArtistRow[] },
+  {
+    songs: sorted,
+    artists,
+  }: { readonly songs: readonly RecommendationSong[]; readonly artists: readonly ArtistRow[] },
   { flags }: RecommendationFavorites,
   between: Effect.Effect<void>,
 ) =>
@@ -164,7 +171,7 @@ export const sharePlaylistRecommendationInputs = <R>(
     | {
         readonly library: object;
         readonly favorites: object;
-        readonly tracks: Effect.Effect.Success<ReturnType<typeof libraryTracks>>;
+        readonly tracks: Effect.Success<ReturnType<typeof libraryTracks>>;
       }
     | undefined;
   return {

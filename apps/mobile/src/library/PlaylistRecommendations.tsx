@@ -2,6 +2,7 @@ import { IconPlus, IconX } from "@tabler/icons-react-native";
 import {
   playlistRecommendationsSteps,
   playlistRecommendationSession,
+  playlistSuggestionsLine,
   type PlaylistRecommendationSlot,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
@@ -27,6 +28,7 @@ import { recommendationTurn, recommendationTurnEffect } from "@/lib/recommendati
 import { runSteps } from "@/lib/stepped";
 import { onArtistGraphSourcesChanged } from "@/home/graphSources";
 import { afterPaint } from "@/lib/afterPaint";
+import { appLog } from "@/log/appLog";
 import { followPlaylistRecommendations } from "./playlistRecommendationVisit";
 import { playlistRecommendationInput } from "./playlistRecommendationSource";
 import { makeExternalStore } from "@/lib/externalStore";
@@ -69,8 +71,10 @@ export function PlaylistRecommendations({
   const [libraryRows] = useState(() => makeExternalStore<ReadonlyMap<string, SongRow>>(new Map()));
   const libraryById = useSyncExternalStore(libraryRows.subscribe, libraryRows.get);
   const [latestRows] = useState(() => makeExternalStore<ReadonlyMap<string, SongRow>>(new Map()));
-  const [session] = useState(() =>
-    playlistRecommendationSession({
+  const [session] = useState(() => {
+    // The first renewal is the one opening the playlist asked for; its line counts from here.
+    let openedAt: number | undefined = performance.now();
+    return playlistRecommendationSession({
       newId: () =>
         `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${++nextOffer}`,
       read: (signal) =>
@@ -146,8 +150,16 @@ export function PlaylistRecommendations({
       // The tap's placeholder paints before the write; the replacement's read
       // gives rendering its frame when due (Core's `PlaylistRecommendationTurn`).
       yieldTurn: (kind) => (kind === "paint" ? afterPaint() : recommendationTurn()),
-    }),
-  );
+      timed: {
+        now: () => performance.now(),
+        report: (timing) => {
+          const sinceOpen = openedAt === undefined ? undefined : performance.now() - openedAt;
+          openedAt = undefined;
+          appLog("info", "WaveTiming", playlistSuggestionsLine(timing, sinceOpen));
+        },
+      },
+    });
+  });
   const state = useSyncExternalStore(session.subscribe, session.get);
   const reduceMotion = useReducedMotion();
   // What the busy slot says while its placeholder shows ("Adding Song").

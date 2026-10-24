@@ -42,6 +42,40 @@ export interface PlaylistRecommendationSessionInput {
  */
 export type PlaylistRecommendationTurn = "paint" | "free";
 
+/** How long one full renewal took (ms), as the owner waited for it. */
+export interface PlaylistRecommendationTiming {
+  /** From the renewal's start until its offers (or its failure) showed. */
+  readonly ms: number;
+  readonly readMs: number;
+  readonly rankMs: number;
+  /** The offers showing afterwards. */
+  readonly offers: number;
+  readonly failed: boolean;
+}
+
+const roundMs = (ms: number) => `${Math.round(ms)} ms`;
+
+/**
+ * [timing] as one log line; [sinceOpenMs], the time since the playlist
+ * opened, for the renewal that opening asked for.
+ */
+export const playlistSuggestionsLine = (
+  { ms, readMs, rankMs, offers, failed }: PlaylistRecommendationTiming,
+  sinceOpenMs?: number,
+): string => {
+  const parts = `(read ${roundMs(readMs)}, rank ${roundMs(rankMs)})`;
+  const shown = `${offers} ${offers === 1 ? "offer" : "offers"}`;
+  if (sinceOpenMs !== undefined) {
+    const when = `${roundMs(sinceOpenMs)} after opening`;
+    return failed
+      ? `Playlist suggestions failed ${when} ${parts}`
+      : `Playlist suggestions: ${shown} ${when} ${parts}`;
+  }
+  return failed
+    ? `Playlist suggestions failed renewing after ${roundMs(ms)} ${parts}`
+    : `Playlist suggestions renewed: ${shown} in ${roundMs(ms)} ${parts}`;
+};
+
 /** Owns visible offers and save-before-replace ordering; storage is a system boundary. */
 export const playlistRecommendationSession = (options: {
   readonly newId: () => string;
@@ -54,6 +88,11 @@ export const playlistRecommendationSession = (options: {
   readonly accept?: (offer: PlaylistRecommendationSlot) => Promise<unknown>;
   /** Resolves when the host's turn of [kind] comes; absent, steps follow on at once. */
   readonly yieldTurn?: (kind: PlaylistRecommendationTurn) => Promise<void>;
+  /** Told how long each full renewal that showed its offers or failed took, by [now]'s clock. */
+  readonly timed?: {
+    readonly now: () => number;
+    readonly report: (timing: PlaylistRecommendationTiming) => void;
+  };
 }) => {
   let state: PlaylistRecommendationState = {
     slots: [],
@@ -195,9 +234,29 @@ export const playlistRecommendationSession = (options: {
       if (request.refillOnly === true)
         publish({ pendingSlots: retrying, unfilled: [], error: null });
       else publish({ loading: true, unfilled: [], error: null });
+      const clock = options.timed?.now;
+      const startedAt = clock?.() ?? 0;
+      let readMs = 0;
+      let rankMs = 0;
+      const timed = (failed: boolean) => {
+        if (clock === undefined || request.refillOnly === true) return;
+        options.timed!.report({
+          ms: clock() - startedAt,
+          readMs,
+          rankMs,
+          offers: state.slots.filter((offer) => offer !== null).length,
+          failed,
+        });
+      };
       try {
         if (retrying.length > 0 && yieldTurn !== undefined) await yieldTurn("paint");
-        const input = await read(controller.signal);
+        let phase = clock?.() ?? 0;
+        let input: PlaylistRecommendationSessionInput;
+        try {
+          input = await read(controller.signal);
+        } finally {
+          if (clock !== undefined) readMs = clock() - phase;
+        }
         if (!current()) return;
         if (yieldTurn !== undefined) await yieldTurn("paint");
         if (!current()) return;
@@ -205,10 +264,16 @@ export const playlistRecommendationSession = (options: {
         const preserved = request.refillOnly
           ? state.slots.flatMap((offer) => (offer === null ? [] : [offer.track]))
           : [];
-        const ranked = await rank(
-          { ...input, sources: { ...input.sources, exclude: [...consumed, ...preserved] } },
-          controller.signal,
-        );
+        phase = clock?.() ?? 0;
+        let ranked: readonly PlaylistRecommendation[];
+        try {
+          ranked = await rank(
+            { ...input, sources: { ...input.sources, exclude: [...consumed, ...preserved] } },
+            controller.signal,
+          );
+        } finally {
+          if (clock !== undefined) rankMs = clock() - phase;
+        }
         if (!current()) return;
         const eligible = new Map(ranked.map((x) => [x.track.id, x.track]));
         const slots = request.refillOnly
@@ -230,13 +295,16 @@ export const playlistRecommendationSession = (options: {
           if (next !== undefined) slots[index] = slot(next.track);
         }
         publish({ slots });
+        timed(false);
       } catch {
-        if (current())
+        if (current()) {
           publish(
             request.refillOnly === true
               ? { error: "refill", unfilled: retrying }
               : { error: "load" },
           );
+          timed(true);
+        }
       } finally {
         working = false;
         // Cancellation retains offers, but must not leave their actions permanently busy,

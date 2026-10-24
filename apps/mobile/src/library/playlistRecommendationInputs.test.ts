@@ -75,7 +75,11 @@ test("snapshot-backed input equals historical input, reads in bounded turns, and
     const before = totalRows;
     const again = await Effect.runPromise(source.get(fixture.playlistId));
     assert.ok(totalRows - before < 60, "warm reads only scoped membership/feedback");
-    assert.equal(again.library, input.library, "the Library's tracks are derived once per snapshot");
+    assert.equal(
+      again.library,
+      input.library,
+      "the Library's tracks are derived once per snapshot",
+    );
     assert.equal(source.listeners(), 2);
     source.dispose();
     assert.equal(source.listeners(), 0, "its write listeners are released with it");
@@ -250,7 +254,11 @@ test("a Dismiss whose refill is reading when a catalog write lands refills from 
     assert.equal(after.error, null);
     assert.notEqual(after.slots[0], null);
     assert.notEqual(after.slots[0]!.key, before.slots[0]!.key);
-    assert.equal(catalogPasses, 2, "the first visit and the refill; the batch mid-read restarted nothing");
+    assert.equal(
+      catalogPasses,
+      2,
+      "the first visit and the refill; the batch mid-read restarted nothing",
+    );
     source.dispose();
   } finally {
     fixture.close();
