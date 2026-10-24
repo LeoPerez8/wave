@@ -1,22 +1,45 @@
 /** Shared version lifetime for every graph consumer, independent of React/native modules. */
+import {
+  RECOMMENDATION_SNAPSHOT,
+  type ArtistGraphCatalogEntry,
+  type SnapshotVersions,
+} from "@wave/core";
 import * as Effect from "effect/Effect";
-import { sharedRead } from "../lib/sharedRead.ts";
+import { snapshotRead } from "../lib/snapshotRead.ts";
 import { readArtistGraph, type ArtistGraphReads } from "./artistGraph.ts";
 
 /**
- * The longest the shared graph read may run: past it, its callers get an
- * error and a later read tries again.
+ * The longest the shared graph read may run, from its initial wait on: past
+ * it, its callers get an error and a later read tries again. The shared
+ * catalog it's derived from has its own deadline.
  */
 const GRAPH_READ_TIMEOUT = "15 seconds";
 
-export const shareArtistGraph = <R>(
+/**
+ * The artist graph, read as the recommendation snapshot's graph part: kept
+ * until a source it's derived from is written (`versions`, Core's
+ * `snapshotAsk`), never rebuilt while it's built. Derived from [catalog]
+ * when given (the snapshot's catalog part), else from the catalog's pages.
+ */
+export const shareArtistGraph = <R, RC = never>(
   store: Effect.Effect<ArtistGraphReads, never, R>,
   start: Effect.Effect<void>,
   between: Effect.Effect<void>,
+  {
+    catalog,
+    versions = () => ({}),
+  }: {
+    readonly catalog?: Effect.Effect<readonly ArtistGraphCatalogEntry[], unknown, RC>;
+    readonly versions?: () => SnapshotVersions;
+  } = {},
 ) =>
-  sharedRead(
+  snapshotRead(
     Effect.gen(function* () {
-      yield* start;
-      return yield* readArtistGraph(yield* store, between);
-    }).pipe(Effect.timeout(GRAPH_READ_TIMEOUT)),
+      const entries = catalog === undefined ? undefined : yield* catalog;
+      return yield* Effect.gen(function* () {
+        yield* start;
+        return yield* readArtistGraph(yield* store, between, entries);
+      }).pipe(Effect.timeout(GRAPH_READ_TIMEOUT));
+    }),
+    { part: RECOMMENDATION_SNAPSHOT.graph, versions },
   );

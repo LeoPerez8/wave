@@ -27,9 +27,9 @@ import {
 import * as Effect from "effect/Effect";
 
 import { lookUpArtistProfiles, lookedUpProfileOf } from "@/home/artistGenres";
-import { artistGraphNow, forgetArtistGraph } from "@/home/artistGraphNow";
+import { artistGraphNow } from "@/home/artistGraphNow";
 import { harvestMobileUsed, noteHarvestMobileUse } from "@/home/harvestMobileUse";
-import { forgetMixCatalog, mixCatalog } from "@/home/mixCatalog";
+import { mixCatalog } from "@/home/mixCatalog";
 import { artistRadio } from "@/home/ytArtistPage";
 import { freeTurnEffect } from "@/lib/backgroundWork";
 import { withNetworkLog } from "@/lib/networkMeter";
@@ -125,8 +125,6 @@ const refill = (
         used = { bytes: networkUseBytes(use), reached: use.ytMusic.bytes > 0 };
       },
     ).pipe(Effect.ignore);
-    forgetMixCatalog();
-    forgetArtistGraph();
     return used;
   });
 

@@ -13,6 +13,7 @@ import {
   magicArtistKey,
   magicBatch,
   playlistRecommendations,
+  RECOMMENDATION_SNAPSHOT,
   seededRandom,
   startMagicQueue,
 } from "@wave/core";
@@ -24,7 +25,7 @@ import { sharePlaylistRecommendationInputs } from "../library/playlistRecommenda
 import { magicCatalogRead } from "../playback/magicCatalogRead.ts";
 import { readMixInputs } from "./mixInputs.ts";
 import { readMixCatalog } from "./readMixCatalog.ts";
-import { createMixIndexesRead } from "./mixIndexesRead.ts";
+import { snapshotRead } from "../lib/snapshotRead.ts";
 import { readArtistGraph } from "./artistGraph.ts";
 
 const root = fileURLToPath(new URL("../../../../", import.meta.url));
@@ -72,7 +73,10 @@ test("2,531 Tracks and 900 artists finish paging, refill a Magic Queue online, a
           return store.mixSongsPage(after);
         }),
     };
-    const indexes = createMixIndexesRead(readMixInputs(reads, between, now));
+    const indexes = snapshotRead(readMixInputs(reads, between, now), {
+      part: RECOMMENDATION_SNAPSHOT.library,
+      versions: () => ({}),
+    });
     const recommendations = sharePlaylistRecommendationInputs(reads, between);
     try {
       const library = await Effect.runPromise(indexes.get);
