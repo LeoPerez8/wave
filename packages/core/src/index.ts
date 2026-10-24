@@ -433,12 +433,7 @@ export type { LauncherBehaviour, LauncherIcon, LauncherIconSwitch } from "./laun
 export { LAUNCH_SPLASH_THEMES, launchTheme, paletteSplashThemeFor } from "./launchTheme.ts";
 export type { LaunchColors, LaunchSplashTheme, LaunchTheme } from "./launchTheme.ts";
 export { LAUNCH_LOGO, launchLogoExit, launchLogoWaves } from "./launchLogo.ts";
-export type {
-  LaunchLogoExit,
-  LaunchLogoExitInput,
-  LaunchLogoTrim,
-  LaunchLogoWave,
-} from "./launchLogo.ts";
+export type { LaunchLogoExit, LaunchLogoTrim, LaunchLogoWave } from "./launchLogo.ts";
 export { sliderFraction, sliderValueAt, snapSliderValue, stepSlider } from "./slider.ts";
 export {
   BOUNCE_AMOUNT,
@@ -468,11 +463,17 @@ export {
   readGlassProbe,
 } from "./glassProbe.ts";
 export type { GlassLayers, GlassProbe } from "./glassProbe.ts";
-export { counted, listeningOverview, listeningTotals, summedListeningTotals } from "./listening.ts";
+export {
+  STATS_FACT_LABELS,
+  counted,
+  statsFacts,
+  listeningTotals,
+  summedListeningTotals,
+} from "./listening.ts";
 export type {
   LibraryTotals,
   ListeningFilter,
-  ListeningOverview,
+  StatsFacts,
   ListeningSums,
   ListeningTotals,
   SongListening,
@@ -1976,7 +1977,8 @@ export {
 } from "./swipeActions.ts";
 export type { RowMenuAction, RowSwipeActions, SwipeChoice, SwipeSettings } from "./swipeActions.ts";
 export { BACK_EXIT_WINDOW_MS, createBackExitConfirmation } from "./backExit.ts";
-export { favoriteToast, type FavoriteSource } from "./favoriteToast.ts";
+export { favoriteToast } from "./favoriteToast.ts";
+export type { FavoriteSource } from "./favoriteToast.ts";
 
 export {
   PLAYLIST_ARTIST_CAP,

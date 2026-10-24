@@ -93,7 +93,7 @@ export const listeningTotals = (
   return summedListeningTotals({ listenedMs, countedPlays, songsListened, lastPlayedAt });
 };
 
-/** The library totals the overview shows, as Library's Songs, Albums and Artists count them. */
+/** The library totals the Stats facts show, as Library's Songs, Albums and Artists count them. */
 export interface LibraryTotals {
   readonly songs: number;
   readonly albums: number;
@@ -101,7 +101,7 @@ export interface LibraryTotals {
 }
 
 /** Home's Stats facts, with each label separate from its formatted value. */
-export type ListeningOverview = readonly {
+export type StatsFacts = readonly {
   readonly label: string;
   readonly value: string;
 }[];
@@ -113,21 +113,28 @@ export type ListeningOverview = readonly {
 export const counted = (count: number, singular: string, plural = `${singular}s`): string =>
   `${count.toLocaleString("en")} ${count === 1 ? singular : plural}`;
 
+/** Home's fact labels in display order, also used by the loading placeholder. */
+export const STATS_FACT_LABELS = [
+  "Time listened",
+  "Plays",
+  "Songs listened",
+  "Songs",
+  "Albums",
+  "Artists",
+] as const;
+
 /** Home's facts, listening first and then the library. */
-export const listeningOverview = (
-  library: LibraryTotals,
-  listening: ListeningTotals,
-): ListeningOverview => [
-  {
-    label: "Time listened",
-    value:
+export const statsFacts = (library: LibraryTotals, listening: ListeningTotals): StatsFacts => {
+  const values: Record<(typeof STATS_FACT_LABELS)[number], string> = {
+    "Time listened":
       listening.minutesListened < 60
         ? `${listening.minutesListened} min`
         : `${Math.floor(listening.minutesListened / 60).toLocaleString("en")} h`,
-  },
-  { label: "Plays", value: listening.plays.toLocaleString("en") },
-  { label: "Songs listened", value: listening.songsListened.toLocaleString("en") },
-  { label: "Songs", value: library.songs.toLocaleString("en") },
-  { label: "Albums", value: library.albums.toLocaleString("en") },
-  { label: "Artists", value: library.artists.toLocaleString("en") },
-];
+    Plays: listening.plays.toLocaleString("en"),
+    "Songs listened": listening.songsListened.toLocaleString("en"),
+    Songs: library.songs.toLocaleString("en"),
+    Albums: library.albums.toLocaleString("en"),
+    Artists: library.artists.toLocaleString("en"),
+  };
+  return STATS_FACT_LABELS.map((label) => ({ label, value: values[label] }));
+};

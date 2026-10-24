@@ -1,9 +1,9 @@
 import {
-  listeningOverview,
+  statsFacts,
   summedListeningTotals,
   type CollectionKind,
   type LibraryReads,
-  type ListeningOverview,
+  type StatsFacts,
   type ListeningSums,
   type MissingTrack,
 } from "@wave/core";
@@ -396,14 +396,14 @@ const readListeningSums = storeQuery(
  * (at most every 1.5 s while Home is in sight, else when it comes back) and
  * scan batches.
  */
-export const useListeningOverview = (): ListeningOverview | undefined => {
+export const useStatsFacts = (): StatsFacts | undefined => {
   const counts = useLibraryCounts();
   const sums = useLibraryQuery<ListeningSums | undefined>(readListeningSums, undefined);
   return useMemo(
     () =>
       counts === undefined || sums === undefined
         ? undefined
-        : listeningOverview(counts, summedListeningTotals(sums)),
+        : statsFacts(counts, summedListeningTotals(sums)),
     [counts, sums],
   );
 };

@@ -151,7 +151,7 @@ const run = (
   entry: Entry,
   song: NativeYtSong,
   { find, playlistItem, onSelect }: MenuPlace,
-  source: FavoriteSource = "menu",
+  source: FavoriteSource,
 ): void => {
   if (entry.kind === "album") {
     // The page heads with what the song knows of its album until the page is read.
@@ -322,7 +322,7 @@ function YtSongActionsMenu({
   ];
   const choose = (entry: Entry) => () => {
     close();
-    run(entry, song, { find, playlistItem, onSelect });
+    run(entry, song, { find, playlistItem, onSelect }, "menu");
   };
   // Play Next and Add to Queue are its cards; a tap already plays it (Core's `menuLayout`).
   const layout = menuLayout("ytSong", entries);

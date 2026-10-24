@@ -42,7 +42,7 @@ import { useMostPlayedOfAllTime } from "./mostPlayedOfAllTime";
 
 import { AlbumShelf, ArtistShelf, SongRows } from "./HomeSections";
 import { HomeStats } from "./HomeStats";
-import { HomeSectionBody, HomeSectionSkeleton } from "./HomeSectionSkeleton";
+import { HomeSectionSkeleton } from "./HomeSectionSkeleton";
 import {
   homeOpeningState,
   homeSectionWaiting,
@@ -81,9 +81,7 @@ function MostPlayedAlbums({ title }: SectionProps) {
       title={title}
       action={{ label: "See all", onPress: () => openStatsSeeAll("albums", "all") }}
     >
-      <HomeSectionBody id="most-played-albums">
-        <AlbumShelf albums={albums} detail={countedPlays} />
-      </HomeSectionBody>
+      <AlbumShelf albums={albums} detail={countedPlays} />
     </TitledSection>
   );
 }
@@ -318,9 +316,7 @@ function MostPlayedArtists({ title }: SectionProps) {
       title={title}
       action={{ label: "See all", onPress: () => openStatsSeeAll("artists", "all") }}
     >
-      <HomeSectionBody id="most-played-artists">
-        <ArtistShelf artists={artists} />
-      </HomeSectionBody>
+      <ArtistShelf artists={artists} />
     </TitledSection>
   );
 }
@@ -336,27 +332,21 @@ const SECTIONS: Record<HomeSectionId, ComponentType<SectionProps>> = {
     home.recentlyAdded !== undefined &&
     home.recentlyAdded.length > 0 && (
       <TitledSection title={title}>
-        <HomeSectionBody id="recently-added">
-          <AlbumShelf albums={home.recentlyAdded} />
-        </HomeSectionBody>
+        <AlbumShelf albums={home.recentlyAdded} />
       </TitledSection>
     ),
   "recently-played": ({ home, title }) =>
     home.recentlyPlayed !== undefined &&
     home.recentlyPlayed.length > 0 && (
       <TitledSection title={title}>
-        <HomeSectionBody id="recently-played">
-          <AlbumShelf albums={home.recentlyPlayed} />
-        </HomeSectionBody>
+        <AlbumShelf albums={home.recentlyPlayed} />
       </TitledSection>
     ),
   "most-played": ({ home, title }) =>
     home.mostPlayed !== undefined &&
     home.mostPlayed.length > 0 && (
       <TitledSection title={title}>
-        <HomeSectionBody id="most-played">
-          <SongRows songs={home.mostPlayed} context={MOST_PLAYED_CONTEXT} plays={plays} />
-        </HomeSectionBody>
+        <SongRows songs={home.mostPlayed} context={MOST_PLAYED_CONTEXT} plays={plays} />
       </TitledSection>
     ),
   "most-played-albums": MostPlayedAlbums,
@@ -368,9 +358,7 @@ const SECTIONS: Record<HomeSectionId, ComponentType<SectionProps>> = {
         title={title}
         action={{ label: "See all", onPress: () => router.push("/library/favorites") }}
       >
-        <HomeSectionBody id="favorites">
-          <SongRows songs={home.favorites} context={FAVORITES_CONTEXT} />
-        </HomeSectionBody>
+        <SongRows songs={home.favorites} context={FAVORITES_CONTEXT} />
       </TitledSection>
     ),
   stats: HomeStats,

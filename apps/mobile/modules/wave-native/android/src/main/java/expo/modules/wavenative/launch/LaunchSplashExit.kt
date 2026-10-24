@@ -1,8 +1,6 @@
 package expo.modules.wavenative.launch
 
-import android.animation.ValueAnimator
 import android.app.Activity
-import android.os.SystemClock
 import android.view.animation.AccelerateInterpolator
 import android.window.SplashScreenView
 
@@ -15,19 +13,13 @@ import android.window.SplashScreenView
  * wherever the waves are in their sweep.
  */
 object LaunchSplashExit {
-  /** Wall-clock times are past this; uptimes (milliseconds since boot) aren't. */
-  private const val WALL_CLOCK_FLOOR = 1_000_000_000_000L
-
   /** Call after expo-splash-screen registered on [activity] (its listener is replaced). */
   fun install(activity: Activity) {
     activity.splashScreen.setOnExitAnimationListener { view -> exit(view) }
   }
 
   private fun exit(view: SplashScreenView) {
-    val plan = LaunchLogoExit.plan(
-      elapsedMs = view.iconAnimationStart?.toEpochMilli()?.let(::elapsedSince),
-      animationsOn = ValueAnimator.areAnimatorsEnabled(),
-    )
+    val plan = LaunchLogoExit.plan()
     view.animate()
       .alpha(0f)
       .setStartDelay(plan.delayMs)
@@ -37,9 +29,4 @@ object LaunchSplashExit {
       .start()
   }
 
-  /** Milliseconds since [start], whichever clock Android stamped it with. */
-  private fun elapsedSince(start: Long): Long {
-    val now = if (start >= WALL_CLOCK_FLOOR) System.currentTimeMillis() else SystemClock.uptimeMillis()
-    return now - start
-  }
 }

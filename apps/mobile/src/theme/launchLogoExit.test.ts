@@ -24,8 +24,7 @@ const constant = (name: string): number => {
 };
 
 describe("LaunchLogoExit.kt", () => {
-  test("times the hand-off by Core's sweep and fade", () => {
-    assert.equal(constant("CYCLE_MS"), LAUNCH_LOGO.cycleMs);
+  test("keeps the native fade duration in step with Core", () => {
     assert.equal(constant("FADE_MS"), LAUNCH_LOGO.fadeMs);
   });
 });

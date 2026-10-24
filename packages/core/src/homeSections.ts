@@ -148,17 +148,17 @@ const DISCOVER_ONCE: ReadonlySet<string> = new Set([
  */
 export const storedHomeSectionId = (value: unknown): HomeSectionId | null => {
   const id =
-    value === "listening-overview"
-      ? "stats"
-      : typeof value === "string" && DISCOVER_ONCE.has(value)
-        ? "discover"
-        : value;
+    typeof value === "string" && DISCOVER_ONCE.has(value) ? "discover" : currentSectionId(value);
   return isSectionId(id) ? id : null;
 };
 
+/** The id shared by a stored section and Home's arrangement migration. */
+const currentSectionId = (value: unknown): unknown =>
+  value === "listening-overview" ? "stats" : value;
+
 /** The catalogue's sections [values] name, in their order, each once; anything else left out. */
 const knownSections = (values: readonly unknown[]): HomeSectionId[] => [
-  ...new Set(values.map((id) => (id === "listening-overview" ? "stats" : id)).filter(isSectionId)),
+  ...new Set(values.map(currentSectionId).filter(isSectionId)),
 ];
 
 /**
