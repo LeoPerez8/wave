@@ -44,6 +44,7 @@ import {
 import { useQueue } from "@/playback/hooks";
 import {
   retryMagicBatch,
+  useMagicBatchEmptySeed,
   useMagicBatchFailed,
   useMagicBatchLoading,
   useMagicQueueLabel,
@@ -297,6 +298,7 @@ export function UpNextList({ bottomInset }: { bottomInset: number }) {
   const playingKey = currentEntry(queue)?.key ?? null;
   const batchLoading = useMagicBatchLoading();
   const batchFailed = useMagicBatchFailed();
+  const emptySeed = useMagicBatchEmptySeed();
 
   const onMove = useCallback((move: PendingMove, moved: Promise<void>) => {
     setPending((list) => [...list, move]);
@@ -351,6 +353,12 @@ export function UpNextList({ bottomInset }: { bottomInset: number }) {
 
   const failure = batchFailed ? (
     <RecommendationsFailed onRetry={retryMagicBatch} style={{ paddingTop: CELL * 2 }} />
+  ) : emptySeed !== null ? (
+    <RecommendationsFailed
+      message={`No songs found like ${emptySeed}.`}
+      onRetry={retryMagicBatch}
+      style={{ paddingTop: CELL * 2 }}
+    />
   ) : null;
 
   if (entries.length === 0) {

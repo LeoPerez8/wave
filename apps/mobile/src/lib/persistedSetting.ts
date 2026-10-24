@@ -118,7 +118,10 @@ export function persistedSetting<A>({
   onValue,
   synced = false,
   onApplied,
-}: PersistedSettingOptions<A>): PersistedSetting<A> {
+}: PersistedSettingOptions<A>): PersistedSetting<A> & {
+  /** Calls [listener] after each change; gives the function that stops it. */
+  readonly subscribe: (listener: () => void) => () => void;
+} {
   let loaded = false;
   let current: A;
   let pending: ReturnType<typeof setTimeout> | undefined;
@@ -188,5 +191,5 @@ export function persistedSetting<A>({
     return () => listeners.delete(listener);
   };
 
-  return { get, set, useValue: () => useSyncExternalStore(subscribe, get) };
+  return { get, set, subscribe, useValue: () => useSyncExternalStore(subscribe, get) };
 }

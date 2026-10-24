@@ -178,6 +178,7 @@ describe("The genres a Magic Queue looks up next", () => {
     radioArtists: ["Seed"],
     seedProfile: Object.fromEntries(rock ?? []),
     seedStyle: null,
+    seedVideoIds: [],
   };
   const options = { profileOf, inLibrary: () => false };
 
@@ -219,6 +220,7 @@ describe("The genres a Magic Queue's seed looks up", () => {
     radioArtists: ["Seed", "M1"],
     seedProfile: null,
     seedStyle: null,
+    seedVideoIds: [],
   };
 
   test("are its radio artists with nothing known, when its songs have no genre tag", () => {
@@ -252,6 +254,7 @@ describe("The genres a Magic Queue's Library songs look up", () => {
     radioArtists: ["Seed"],
     seedProfile: Object.fromEntries(rock ?? []),
     seedStyle: null,
+    seedVideoIds: [],
   };
   const artists = [
     { id: 1, name: "U1" },

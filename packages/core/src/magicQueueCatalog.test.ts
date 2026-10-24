@@ -271,6 +271,17 @@ describe("A Magic Queue's refill", () => {
     assert.equal(magicRefillDue(session, { catalog: never, left: 19 }, WIFI), true);
   });
 
+  test("a seed with no genre known counts as empty, however many associates it has (#637)", () => {
+    const session = sessionOf("Muse");
+    const unknown = { catalog: never, left: 40, genreKnown: false };
+    assert.equal(magicRefillDue(session, unknown, WIFI), true);
+    assert.equal(magicRefillDue(session, unknown, MOBILE), true);
+    assert.equal(
+      magicRefillDue(session, { ...unknown, catalog: readAgo(HARVEST_RETRY_MS - 1) }, WIFI),
+      false,
+    );
+  });
+
   test("on Wi-Fi, reads a radio running low unless it was read in the last 12 hours", () => {
     const session = sessionOf("Muse");
     const left = 5;
@@ -353,4 +364,23 @@ test("catalog ranking yields through a full catalog and keeps the best 50 compat
     ids(next.value.candidates),
     Array.from({ length: 50 }, (_, at) => `song${String(at + 2).padStart(4, "0")}`),
   );
+});
+
+describe("A Magic Queue's catalog pick, for the app log", () => {
+  test("counts the songs the engine ranked beside those eligible", () => {
+    const catalog = [
+      catalogSong("muse1", ["Muse"], ["Muse"]),
+      catalogSong("muse2", ["Muse"], ["Muse"]),
+      catalogSong("pop1", ["Pop Star"], ["Muse"]),
+    ];
+    const popIsPop: GenreProfileOf = (artist) =>
+      artist === "Pop Star" ? new Map([["pop", 1]]) : new Map([["rock", 1]]);
+    const pick = magicCatalogCandidates(
+      sessionOf("Muse"),
+      sources(catalog, { profileOf: popIsPop }),
+      { inLibrary: notInLibrary },
+    );
+    assert.equal(pick.left, 2);
+    assert.equal(pick.ranked, 3);
+  });
 });

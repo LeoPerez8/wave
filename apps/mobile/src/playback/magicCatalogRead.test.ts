@@ -109,6 +109,7 @@ const read = (
   const pick = Effect.runSync(magicCatalogRead(session, deps));
   return {
     ids: pick.candidates.map((candidate) => candidate.song.videoId),
+    refilled: pick.refilled,
     refills,
     cacheAsks,
     mobile,
@@ -138,6 +139,11 @@ describe("A Magic Queue batch's YT Music candidates", () => {
     assert.equal(empty.ids.length, 10);
     assert.equal(empty.mobile, 2 * MB);
     assert.equal(read([], { onMobileData: true, usedToday: HARVEST_MOBILE_BYTES }).refills, 0);
+  });
+
+  test("say how many songs a refill brought, and that none ran when the catalog had enough", () => {
+    assert.equal(read(songs(30)).refilled, null);
+    assert.equal(read(songs(5), { refilled: songs(40) }).refilled, 40);
   });
 
   test("a refill that brought nothing isn't tried again in the session within 12 hours", () => {

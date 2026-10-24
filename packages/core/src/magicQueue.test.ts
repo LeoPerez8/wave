@@ -8,8 +8,10 @@ import {
   genreProfile,
   magicArtistKey,
   magicBatch,
+  magicBatchEmpty,
   magicBatchFailed,
   magicBatchLoading,
+  magicPickDue,
   magicPickEnded,
   magicLibraryCandidates,
   magicLibrarySongs,
@@ -450,6 +452,33 @@ describe("A Magic Queue in the queue", () => {
     assert.equal(magicBatchFailed(session, "m1", other), false);
   });
 
+  test("says its batch found no songs until a batch lands or something else plays (#638)", () => {
+    const seedOnly = run(EMPTY_QUEUE, { type: "play", trackIds: ["s1"], startIndex: 0, context });
+    assert.equal(magicBatchEmpty(session, "m1", seedOnly), true);
+    assert.equal(magicBatchEmpty(session, null, seedOnly), false);
+    assert.equal(magicBatchEmpty(session, "m0", seedOnly), false);
+    assert.equal(
+      magicBatchEmpty(session, "m1", run(seedOnly, { type: "append", trackIds: ["a"] })),
+      false,
+    );
+    const other = run(seedOnly, {
+      type: "play",
+      trackIds: ["x"],
+      startIndex: 0,
+      context: { kind: "album", id: "4" },
+    });
+    assert.equal(magicBatchEmpty(session, "m1", other), false);
+  });
+
+  test("after a pick found nothing, moving through the queue doesn't pick again; a cleared mark does", () => {
+    const last = run(playing, { type: "next" }, { type: "next" });
+    assert.equal(magicPickDue(session, null, last), true);
+    assert.equal(magicPickDue(session, "m1", last), false);
+    // Another session's empty pick doesn't hold this one back.
+    assert.equal(magicPickDue(session, "m0", last), true);
+    assert.equal(magicPickDue(session, null, playing), false);
+  });
+
   test("a pick that ends clears only its own session's loading", () => {
     const seedOnly = run(EMPTY_QUEUE, { type: "play", trackIds: ["s1"], startIndex: 0, context });
     assert.equal(magicPickEnded("m1", "m1", session, seedOnly).picking, null);
@@ -743,7 +772,7 @@ describe("A Magic Queue's Library songs and Genre faithfulness", () => {
     assert.deepEqual(magicBatch(session, library, first).trackIds, ["20"]);
   });
 
-  test("withholds recommendations with nothing known of the seed's genre anywhere", () => {
+  test("with nothing known of the seed's genre anywhere, keeps only its own artists' songs (#637)", () => {
     const untagged: MagicLibrarySong = { id: 10, artistIds: [1], genre: null };
     const songs: MagicLibrarySong[] = [
       untagged,
@@ -756,7 +785,7 @@ describe("A Magic Queue's Library songs and Genre faithfulness", () => {
     });
     assert.deepEqual(
       library.map((picked) => picked.trackId),
-      [],
+      ["10"],
     );
   });
 

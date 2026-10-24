@@ -657,8 +657,15 @@ export type {
   MagicSong,
   MagicYtCandidate,
 } from "./magicQueue.ts";
-export { magicBatchFailed, magicBatchLoading } from "./magicQueue.ts";
+export {
+  magicBatchEmpty,
+  magicBatchFailed,
+  magicBatchLoading,
+  magicPickDue,
+} from "./magicQueue.ts";
 export { magicPickEnded } from "./magicQueue.ts";
+export { magicBatchLine } from "./magicBatchReport.ts";
+export type { MagicBatchOutcome, MagicBatchReport, MagicSourceCount } from "./magicBatchReport.ts";
 export type { MagicPickEnd } from "./magicQueue.ts";
 export { artistRanking } from "./moreFromArtist.ts";
 export type { ArtistRankingInput, ArtistRankingSong } from "./moreFromArtist.ts";
@@ -1971,6 +1978,7 @@ export {
   magicCatalogCandidates,
   magicCatalogCandidatesSteps,
   magicRefillDue,
+  magicSeedProfileSteps,
 } from "./magicQueueCatalog.ts";
 export { catalogRadiosReadAt } from "./harvest.ts";
 export type {
@@ -2014,7 +2022,7 @@ export {
   storedLyricsTranslation,
 } from "./lyricsTranslation.ts";
 export type { LyricsTranslation, LyricsTranslationRequest } from "./lyricsTranslation.ts";
-export { magicCloseArtists, magicLibraryCandidates } from "./magicQueue.ts";
+export { magicCloseArtists, magicLibraryCandidates, magicSeedUnknown } from "./magicQueue.ts";
 export { magicLibraryLookups, magicSeedLookups } from "./mixGenreLookups.ts";
 export { magicLibraryThreshold } from "./mixSliders.ts";
 export {

@@ -19,6 +19,7 @@ import {
   magicArtistKey,
   magicGenreMatches,
   magicSeedProfile,
+  radioPrimaryArtists,
   type MagicLibrarySong,
   type MagicSession,
 } from "./magicQueue.ts";
@@ -136,6 +137,9 @@ export const mixProfileLookupsNext = <S extends DiscoverRadioSong>(
  */
 const MAGIC_CANDIDATES_WANTED = 20;
 
+/** How many of its radio's artists a seed with no genre known looks up a round (`magicRadioLookups`). */
+const MAGIC_RADIO_SEED_LOOKUPS = 10;
+
 /** Whether [name] is an artist's, worth a lookup ("Various Artists" isn't). */
 const anArtist = (name: string): boolean => ytArtistQuery(name) !== null;
 
@@ -215,8 +219,12 @@ export const magicRadioLookups = <S extends DiscoverRadioSong>(
 ): string[] => {
   const seed = magicSeedLookups(session, profileOf).filter((name) => !asked.includes(name));
   if (seed.length > 0) return seed;
-  const profile = magicSeedProfile(session, profileOf);
-  if (profile === null || profile.size === 0) return [];
+  const profile = magicSeedProfile(session, profileOf, radio);
+  // Its genre then comes from its radio's primary artists (`magicSeedProfile`): those not looked up yet.
+  if (profile === null || profile.size === 0)
+    return radioPrimaryArtists(radio)
+      .filter((name) => anArtist(name) && profileOf(name) === undefined && !asked.includes(name))
+      .slice(0, MAGIC_RADIO_SEED_LOOKUPS);
   const used = new Set(session.used);
   const excluded = new Set(session.excludedArtists);
   // Songs no batch picks: the Library's, those queued already and those by excluded artists.
