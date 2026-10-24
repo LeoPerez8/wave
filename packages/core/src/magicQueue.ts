@@ -198,8 +198,7 @@ export const magicLibraryCandidates = (
   const seed = seedProfile === undefined ? magicSeedProfile(session, profileOf) : seedProfile;
   // Nothing to hold songs to: the seed's own artists and their neighbourhood stand in (association alone).
   const unknownSeed = (seed === null || seed.size === 0) && session.seedStyle === null;
-  const close =
-    styles || unknownSeed ? magicCloseArtists(session, graph) : new Set<string>();
+  const close = styles || unknownSeed ? magicCloseArtists(session, graph) : new Set<string>();
   const names = new Map(library.artists.map((artist) => [artist.id, artist.name]));
   const profileOfSong = (song: MagicLibrarySong): GenreProfile | null => {
     const own = genreProfile([song]);
@@ -214,14 +213,14 @@ export const magicLibraryCandidates = (
     const admitted = unknownSeed
       ? candidate.artists.some((artist) => close.has(artist))
       : styles
-      ? magicStyleMatches(
-          { profile: seed, style: session.seedStyle },
-          { profile, style: candidate.style },
-          styles,
-          candidate.artists.some((artist) => close.has(artist)),
-          threshold ?? GENRE_AFFINITY_THRESHOLD,
-        )
-      : magicGenreMatches(seed, profile, threshold ?? GENRE_AFFINITY_THRESHOLD);
+        ? magicStyleMatches(
+            { profile: seed, style: session.seedStyle },
+            { profile, style: candidate.style },
+            styles,
+            candidate.artists.some((artist) => close.has(artist)),
+            threshold ?? GENRE_AFFINITY_THRESHOLD,
+          )
+        : magicGenreMatches(seed, profile, threshold ?? GENRE_AFFINITY_THRESHOLD);
     return admitted ? [candidate] : [];
   });
 };
@@ -702,6 +701,31 @@ export const magicBatchFailed = (
   state: QueueState,
 ): boolean => session !== null && failed === session.id && wantsMagicBatch(session, state);
 
+/**
+ * Whether Up Next says that [session]'s last pick found no songs (a quiet
+ * line with Try Again, #638): it came back empty ([empty] is the id of the
+ * session whose pick did, null while none has) and [state] still wants the
+ * batch. So the line goes once a batch lands, and once something else plays.
+ */
+export const magicBatchEmpty = (
+  session: MagicSession | null,
+  empty: MagicSession["id"] | null,
+  state: QueueState,
+): boolean => session !== null && empty === session.id && wantsMagicBatch(session, state);
+
+/**
+ * Whether [session] should pick its next batch now: it wants one
+ * (`wantsMagicBatch`) and its last pick didn't come back empty ([empty]:
+ * the id of the session whose did). After an empty pick, moving through the
+ * queue doesn't pick again (the same inputs would find the same nothing);
+ * Try Again, a new signal or a slider move clears the mark first.
+ */
+export const magicPickDue = (
+  session: MagicSession,
+  empty: MagicSession["id"] | null,
+  state: QueueState,
+): boolean => empty !== session.id && wantsMagicBatch(session, state);
+
 /** What follows a batch's picking once it ends (`magicPickEnded`). */
 export interface MagicPickEnd {
   /** The session a batch is picked for now: still the one that took over, if another did. */
@@ -718,7 +742,8 @@ export interface MagicPickEnd {
  * session took over meanwhile and wants its batch, that one is picked at
  * once rather than at the next queue change. The session it ran for never
  * picks again on its own (a failed or empty pick would go round): the next
- * queue change asks again.
+ * queue change asks again, after an empty pick only once its mark is
+ * cleared (`magicPickDue`).
  */
 export const magicPickEnded = (
   ran: MagicSession["id"],

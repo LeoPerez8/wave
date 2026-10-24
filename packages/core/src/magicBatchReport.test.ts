@@ -27,7 +27,10 @@ test("a pick that lands, one dropped, one that failed and a refill each read as 
     line({ kind: "appended", songs: 10 }),
     "Magic Queue next batch: 1829ms (10 songs appended)",
   );
-  assert.equal(line({ kind: "appended", songs: 1 }), "Magic Queue next batch: 1829ms (1 song appended)");
+  assert.equal(
+    line({ kind: "appended", songs: 1 }),
+    "Magic Queue next batch: 1829ms (1 song appended)",
+  );
   assert.equal(line({ kind: "dropped" }), "Magic Queue next batch: 1829ms (no longer wanted)");
   assert.equal(
     line({ kind: "failed", reason: "TimeoutError" }),

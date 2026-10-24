@@ -657,7 +657,12 @@ export type {
   MagicSong,
   MagicYtCandidate,
 } from "./magicQueue.ts";
-export { magicBatchFailed, magicBatchLoading } from "./magicQueue.ts";
+export {
+  magicBatchEmpty,
+  magicBatchFailed,
+  magicBatchLoading,
+  magicPickDue,
+} from "./magicQueue.ts";
 export { magicPickEnded } from "./magicQueue.ts";
 export { magicBatchLine } from "./magicBatchReport.ts";
 export type { MagicBatchOutcome, MagicBatchReport, MagicSourceCount } from "./magicBatchReport.ts";

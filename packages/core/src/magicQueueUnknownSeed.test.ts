@@ -36,7 +36,10 @@ const obscureSeed = (): MagicSession => {
 const profiles: Record<string, ReadonlyMap<string, number> | null> = {
   "Obscure Band": null,
   "Metal One": new Map([["metal", 1]]),
-  "Metal Two": new Map([["metal", 0.5], ["rock", 0.5]]),
+  "Metal Two": new Map([
+    ["metal", 0.5],
+    ["rock", 0.5],
+  ]),
   "Pop Star": new Map([["pop", 1]]),
 };
 const profileOf: GenreProfileOf = (artist) => profiles[artist];

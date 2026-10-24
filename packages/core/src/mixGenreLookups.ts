@@ -226,7 +226,9 @@ export const magicRadioLookups = <S extends DiscoverRadioSong>(
         radio.flatMap((song) =>
           song.artists
             .slice(0, 1)
-            .filter((name) => anArtist(name) && profileOf(name) === undefined && !asked.includes(name)),
+            .filter(
+              (name) => anArtist(name) && profileOf(name) === undefined && !asked.includes(name),
+            ),
         ),
       ),
     ].slice(0, MAGIC_RADIO_SEED_LOOKUPS);

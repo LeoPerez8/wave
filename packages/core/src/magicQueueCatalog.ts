@@ -94,10 +94,8 @@ export function* magicSeedRadioSteps(
 }
 
 /** `magicSeedRadioSteps` at once. */
-export const magicSeedRadio = (
-  session: MagicSession,
-  catalog: readonly CatalogSong[],
-): YtSong[] => finishSteps(magicSeedRadioSteps(session, catalog));
+export const magicSeedRadio = (session: MagicSession, catalog: readonly CatalogSong[]): YtSong[] =>
+  finishSteps(magicSeedRadioSteps(session, catalog));
 
 /**
  * [session]'s YouTube Music candidates in [sources]' catalog, the best 50
@@ -131,7 +129,8 @@ export function* magicCatalogCandidatesSteps(
   const genreKnown = profile !== null && profile.size > 0;
   // Nothing to hold candidates to: the seed's radios and neighbourhood stand in (association alone).
   const unknownSeed = !genreKnown && session.seedStyle === null;
-  if (!styles && !genreKnown && !unknownSeed) return { candidates: [], left: 0, ranked: 0, profile };
+  if (!styles && !genreKnown && !unknownSeed)
+    return { candidates: [], left: 0, ranked: 0, profile };
   const candidates = yield* recommendCandidatesSteps(
     { artists: session.radioArtists, profile, style: session.seedStyle },
     sources,
@@ -153,14 +152,15 @@ export function* magicCatalogCandidatesSteps(
       unknownSeed
         ? closeness > 0
         : engine.styles !== undefined
-        ? magicStyleMatches(
-            { profile, style: session.seedStyle },
-            { profile: sources.profileOf(artist), style: sources.styleOf?.(artist) ?? null },
-            engine.styles,
-            closeness > 0,
-            threshold,
-          )
-        : affinity === "match" && magicGenreMatches(profile, sources.profileOf(artist), threshold),
+          ? magicStyleMatches(
+              { profile, style: session.seedStyle },
+              { profile: sources.profileOf(artist), style: sources.styleOf?.(artist) ?? null },
+              engine.styles,
+              closeness > 0,
+              threshold,
+            )
+          : affinity === "match" &&
+            magicGenreMatches(profile, sources.profileOf(artist), threshold),
     );
     if (!eligible) continue;
     const recording = mixRecordingOf(song);
