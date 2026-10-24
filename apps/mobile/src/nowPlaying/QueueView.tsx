@@ -116,14 +116,20 @@ const REPEAT_LABEL: Record<RepeatMode, string> = {
  * toggles (a long press on shuffle opens the shuffle card; it reads Smart
  * Shuffle, with its own icon, while that's chosen), then the Up Next heading ("Magic Queue · from <seed>" over a Magic Queue). Sits in the sheet's drag-to-dismiss area.
  */
-export function QueueHeader({ item }: { item: NonNullable<PlaybackState["item"]> }) {
+export function QueueHeader({
+  item,
+  onShowPlayer,
+}: {
+  item: NonNullable<PlaybackState["item"]>;
+  onShowPlayer: () => void;
+}) {
   const queue = useQueue();
   const shuffle = useShuffleControl();
   const count = queue.entries.length - queue.index - 1;
   const magic = useMagicQueueLabel();
   return (
     <View>
-      <TrackHeader item={item} />
+      <TrackHeader item={item} onShowPlayer={onShowPlayer} />
       <Hairline />
       <View className="flex-row" style={{ gap: CELL }}>
         <Toggle {...shuffle} on={queue.shuffle} onPress={toggleShuffle} />
