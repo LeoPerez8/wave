@@ -9,6 +9,7 @@ import {
   useReducedMotion,
   useSharedValue,
   withTiming,
+  type DerivedValue,
 } from "react-native-reanimated";
 import { scheduleOnUI } from "react-native-worklets";
 
@@ -16,14 +17,13 @@ import { scheduleOnUI } from "react-native-worklets";
 const CROSSFADE_MS = 700;
 
 /**
- * The Now Playing ground: a top-to-bottom gradient from the artwork's palette
- * (already toned for legibility by Core's `paletteGradient`). On a track
- * change it crossfades from wherever it is to the new colours, even mid-fade;
- * out of sight (`animate` off) it changes straight away, so the sheet opens on
- * the right colours.
+ * The Now Playing ground's colours: a top-to-bottom gradient from the
+ * artwork's palette (already toned for legibility by Core's
+ * `paletteGradient`). On a track change they crossfade from wherever they are
+ * to the new colours, even mid-fade; out of sight (`animate` off) they change
+ * straight away, so the sheet opens on the right colours.
  */
-export function Background({ gradient, animate }: { gradient: Gradient; animate: boolean }) {
-  const { width, height } = useWindowDimensions();
+export function useBackgroundColors(gradient: Gradient, animate: boolean): DerivedValue<string[]> {
   const reduceMotion = useReducedMotion();
   // Read when the colours change, so opening the sheet doesn't restart a fade.
   const animateRef = useRef(animate);
@@ -53,11 +53,18 @@ export function Background({ gradient, animate }: { gradient: Gradient; animate:
     });
   }, [top, bottom, reduceMotion, fromTop, fromBottom, toTop, toBottom, progress]);
 
-  const colors = useDerivedValue(() => [
+  return useDerivedValue(() => [
     interpolateColor(progress.get(), [0, 1], [fromTop.get(), toTop.get()]),
     interpolateColor(progress.get(), [0, 1], [fromBottom.get(), toBottom.get()]),
   ]);
+}
 
+/**
+ * The Now Playing ground, drawn window-sized from its colours
+ * (`useBackgroundColors`). The Queue's sticky bar draws its slice of it too.
+ */
+export function Background({ colors }: { colors: DerivedValue<string[]> }) {
+  const { width, height } = useWindowDimensions();
   return (
     <Canvas style={StyleSheet.absoluteFill} pointerEvents="none">
       <Rect x={0} y={0} width={width} height={height}>

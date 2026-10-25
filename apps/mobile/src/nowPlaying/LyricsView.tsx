@@ -639,11 +639,13 @@ export function LyricsView({
   nonDTrackId,
   item,
   palette,
+  onShowPlayer,
 }: {
   file: LibraryFile | null;
   nonDTrackId: string | null;
   item: Item;
   palette: ArtworkPalette | null;
+  onShowPlayer: () => void;
 }) {
   const path = file?.path ?? null;
   const library = useLibraryLyrics(file?.id ?? null, path);
@@ -733,7 +735,7 @@ export function LyricsView({
         ) : (
           <View className="flex-row items-center">
             <View className="flex-1">
-              <TrackHeader item={item} />
+              <TrackHeader item={item} onShowPlayer={onShowPlayer} />
             </View>
             {lines !== null && (
               // The icon's 48dp target reaches past the margin, so the glyph lines up with it.
