@@ -5,6 +5,7 @@ import { type PlayEvent, type YtAlbumSong } from "@wave/core";
 import { harness, pullAll } from "../../../sync/src/testing.ts";
 import { creditSplits } from "../library/db/credits.ts";
 import { endPlay, recordPlay } from "../library/db/playHistory.ts";
+import { listeningHistory } from "../library/db/listeningHistory.ts";
 import { openTestDatabase } from "../library/db/testDatabase.ts";
 import { syncCycle, type SyncTransport } from "./syncCycle.ts";
 
@@ -46,11 +47,11 @@ const account = async () => {
 const phone = async (transport: SyncTransport) => {
   const db = await openTestDatabase();
   let historyChanges = 0;
-  const sync = (songsChanged = false) =>
+  const sync = (songsChanged = false, to = transport) =>
     syncCycle({
       db,
       splits: creditSplits(),
-      transport,
+      transport: to,
       account: "ana@example.com",
       preferences: { value: () => null, apply: () => {} },
       now: () => 1_792_929_700_000,
@@ -83,5 +84,40 @@ test("a finished streamed play reaches the service with its recording key, snaps
     thumbPath: "https://i.ytimg.com/vi/history-video/hqdefault.jpg",
   });
   assert.equal((await a.sync()).pushed, 0);
+  service.db.close();
+});
+
+test("another phone keeps an unmatched streamed play in history immediately and merges repeat pulls by id", async () => {
+  const { service, transport } = await account();
+  const a = await phone(transport);
+  endPlay(a.db, recordPlay(a.db, PLAY, false, SONG), PLAY);
+  await a.sync();
+
+  const b = await phone(transport);
+  assert.equal((await b.sync()).pulled.plays, true);
+  const rows = listeningHistory(b.db).rows;
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0]?.startedAt, 1_792_929_600_000);
+  assert.equal(rows[0]?.videoId, "history-video");
+  assert.equal(rows[0]?.song, null);
+  assert.deepEqual(rows[0]?.snapshot, {
+    title: "Airbag",
+    artist: "Radiohead",
+    album: "OK Computer",
+    artworkPath: null,
+    thumbPath: null,
+    artworkUrl: "https://i.ytimg.com/vi/history-video/hqdefault.jpg",
+  });
+  assert.deepEqual(rows[0]?.streamedSong, SONG);
+  assert.equal(b.historyChanges(), 1);
+  const replay: SyncTransport = {
+    request: (method, path, body) =>
+      transport.request(method, method === "GET" ? "/v1/pull?since=0" : path, body),
+  };
+  const again = await b.sync(false, replay);
+  assert.equal(again.pulled.plays, false);
+  assert.equal(again.pushed, 0);
+  assert.deepEqual(listeningHistory(b.db).rows, rows);
+  assert.equal(b.historyChanges(), 1);
   service.db.close();
 });

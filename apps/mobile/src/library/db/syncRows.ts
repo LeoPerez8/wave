@@ -905,14 +905,39 @@ const applyPlay = (
     return false;
   }
   const trackId = trackIds.get(row.songId);
-  if (trackId === undefined) {
+  const videoId = trackId === undefined ? (row.videoId ?? null) : null;
+  if (trackId === undefined && videoId === null) {
     pend(tx, "plays", row, { songKey: row.songId });
     return false;
   }
+  const snapshot =
+    row.snapshot === null || row.snapshot === undefined
+      ? null
+      : {
+          title: row.snapshot.title,
+          artist: row.snapshot.artist,
+          album: row.snapshot.album,
+          artworkPath: null,
+          thumbPath: null,
+          artworkUrl: remoteCover(row.snapshot.artworkPath) ?? remoteCover(row.snapshot.thumbPath),
+        };
   unpend(tx, "plays", row.id);
   tx.insert(playEvents)
     .values({
-      trackId,
+      trackId: trackId ?? null,
+      videoId,
+      snapshot,
+      streamedSong:
+        videoId === null
+          ? null
+          : {
+              videoId,
+              title: snapshot?.title ?? "Unknown song",
+              artists: snapshot?.artist ? [snapshot.artist] : [],
+              album: snapshot?.album ?? null,
+              artworkUrl: snapshot?.artworkUrl ?? null,
+              durationMs: row.durationMs,
+            },
       recordingKey: row.songId,
       syncId: row.id,
       startedAt: row.startedAt,
