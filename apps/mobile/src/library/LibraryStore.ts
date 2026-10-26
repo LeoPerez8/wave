@@ -28,6 +28,8 @@ import {
   mixCreditPage,
   mixPlaylistedPage,
   mixStreamedPage,
+  mixStreamedPlaysPage,
+  mixCreditNamesPage,
   mixSongsPage,
   mixArtistsPage,
   mixHistoryPage,
@@ -1193,6 +1195,14 @@ export class LibraryStore extends Context.Service<
     readonly mixStreamedPage: (
       after: number,
     ) => Effect.Effect<ReturnType<typeof mixStreamedPage>, LibraryStoreError>;
+    /** A page of the streamed plays' kept totals (`streamed_totals`), by rowid. */
+    readonly mixStreamedPlaysPage: (
+      after: number,
+    ) => Effect.Effect<ReturnType<typeof mixStreamedPlaysPage>, LibraryStoreError>;
+    /** A page of the Library's credits as written, by track id, to split streamed credits with. */
+    readonly mixCreditNamesPage: (
+      after: number,
+    ) => Effect.Effect<ReturnType<typeof mixCreditNamesPage>, LibraryStoreError>;
     readonly mixPlaylistedPage: (
       after: number,
     ) => Effect.Effect<ReturnType<typeof mixPlaylistedPage>, LibraryStoreError>;
@@ -2027,6 +2037,10 @@ const make = Effect.gen(function* () {
 
     mixStreamedPage: (after) =>
       attempt("read a mix streamed page", () => mixStreamedPage(db, after)),
+    mixStreamedPlaysPage: (after) =>
+      attempt("read a mix streamed plays page", () => mixStreamedPlaysPage(db, after)),
+    mixCreditNamesPage: (after) =>
+      attempt("read a mix credit names page", () => mixCreditNamesPage(db, after)),
     mixPlaylistedPage: (after) =>
       attempt("read a mix playlist page", () => mixPlaylistedPage(db, after)),
     mixCreditPage: (after) => attempt("read a mix credit page", () => mixCreditPage(db, after)),

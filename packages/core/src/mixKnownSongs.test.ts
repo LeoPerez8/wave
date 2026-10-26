@@ -172,8 +172,17 @@ describe("The non-D songs the owner knows", () => {
         { song: yt("before", "Angel", ["Massive Attack"]), recordingKey: null, plays: 2, firstPlayedAt: 40 },
         { song: yt("since", "Karmacoma", ["Massive Attack"]), recordingKey: null, plays: 3, firstPlayedAt: 30 },
         { song: yt("once", "Protection", ["Massive Attack"]), recordingKey: null, plays: 1, firstPlayedAt: 50 },
+        // A download of it: the Library has it, whatever the finder makes of its length.
+        {
+          song: yt("downloaded", "Teardrop", ["Massive Attack"], { durationMs: 1_000 }),
+          recordingKey: null,
+          plays: 9,
+          firstPlayedAt: 50,
+          inLibrary: true,
+        },
       ],
     });
+    assert.equal(known.known(yt("downloaded", "Teardrop", ["Massive Attack"])), true);
     assert.deepEqual(
       known.nonD.map((song) => [song.song.videoId, song.plays]),
       [

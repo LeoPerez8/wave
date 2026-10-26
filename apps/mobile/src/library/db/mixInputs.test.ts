@@ -8,7 +8,11 @@ import { readMixInputs } from "../../home/mixInputs.ts";
 import { createFastAgainFixture } from "./fastAgainFixture.ts";
 import { sql } from "drizzle-orm";
 import { deleteTracksById } from "./tracks.ts";
-import { traceQueries } from "./testDatabase.ts";
+import { addTrack, openTestDatabase, traceQueries } from "./testDatabase.ts";
+import { creditSplits, relinkCredits } from "./credits.ts";
+import { recordPlay } from "./playHistory.ts";
+import { playedEntityTotals } from "./playedEntities.ts";
+import type { PlayEvent, YtAlbumSong } from "@wave/core";
 const collect = <A>(
   read: (after: number) => Effect.Effect<import("./artistGraph.ts").GraphPage<A, number>, unknown>,
 ) => {
@@ -32,6 +36,8 @@ test("mix, graph and taste pages seek past a cursor with indexed projection look
       ["mixCreditPage", 128, "pt"],
       ["mixHistoryPage", 128, "play_events"],
       ["mixStreamedPage", 128, "streamed_songs"],
+      ["mixStreamedPlaysPage", 128, "streamed_totals"],
+      ["mixCreditNamesPage", 128, "t"],
       ["mixPlaylistedPage", 128, "pi"],
       ["mixCatalogPage", 128, "candidate_songs"],
       ["graphCatalogPage", 128, "candidate_songs"],
@@ -213,4 +219,80 @@ test("taste paging preserves ti history order, end reasons, favorites/downloads 
   } finally {
     fixture.close();
   }
+});
+
+const counted = (trackId: string, startedAt: number, isCounted = true): PlayEvent => ({
+  trackId,
+  context: null,
+  startedAt,
+  listenedMs: 180_000,
+  durationMs: 180_000,
+  endReason: "completed",
+  counted: isCounted,
+  source: "phone",
+});
+const online = (videoId: string, title: string, artists: string[], album: string): YtAlbumSong => ({
+  videoId,
+  title,
+  artists,
+  album,
+  albumId: null,
+  durationMs: 200_000,
+  artworkUrl: null,
+  explicit: false,
+});
+
+test("streamed plays seed the mixes as Stats ranks them and make their songs known", async () => {
+  const db = await openTestDatabase();
+  const library = addTrack(db, { title: "Local", artist: "Polaris", album: "The Death of Me" });
+  const downloaded = addTrack(db, { title: "Granite", artist: "Sleep Token", album: "Sundowning" });
+  db.run(sql`UPDATE tracks SET video_id = 'v-granite' WHERE id = ${downloaded}`);
+  relinkCredits(db, creditSplits());
+  const store = await loadLibraryStore(root, db);
+  const granite = online("v-granite", "Granite", ["Sleep Token"], "Sundowning");
+  const circle = online("v-circle", "Circle With Me", ["Spiritbox"], "Eternal Blue");
+  const duet = online("v-duet", "Duet", ["Spiritbox & Polaris"], "Split");
+  recordPlay(db, counted(String(library), 1_000), false, undefined);
+  for (const at of [2_000, 3_000]) recordPlay(db, counted("yt:v-granite", at), false, granite);
+  for (const at of [4_000, 5_000, 6_000]) recordPlay(db, counted("yt:v-circle", at), false, circle);
+  recordPlay(db, counted("yt:v-circle", 7_000, false), false, circle);
+  recordPlay(db, counted("yt:v-duet", 8_000), false, duet);
+  const now = 10_000;
+
+  const inputs = Effect.runSync(readMixInputs(store, Effect.void, now));
+
+  const stats = playedEntityTotals(db, { from: null, to: now }).artists.slice(0, 20);
+  assert.deepEqual(
+    inputs.topArtists,
+    stats.map(({ item, countedPlays }) => ({ id: item.id, name: item.name, countedPlays })),
+  );
+  assert.deepEqual(
+    inputs.topArtists.map(({ name, countedPlays }) => [name, countedPlays]),
+    [
+      ["Spiritbox", 4],
+      ["Polaris", 2],
+      ["Sleep Token", 2],
+    ],
+  );
+  assert.deepEqual(
+    inputs.plays.map(({ id, countedPlays }) => [id, countedPlays]),
+    [
+      [library, 1],
+      [downloaded, 2],
+    ],
+  );
+  assert.equal(inputs.known.known(circle), true);
+  // Another video of a streamed recording, which the Library finder can't match by length.
+  assert.equal(
+    inputs.known.known({ ...circle, videoId: "v-circle-live", durationMs: 400_000 }),
+    true,
+  );
+  assert.equal(inputs.known.known(online("v-new", "Holy", ["Spiritbox"], "Eternal Blue")), false);
+  assert.deepEqual(
+    inputs.known.nonD.map(({ song, plays }) => [song.videoId, plays]),
+    [
+      ["v-circle", 4],
+      ["v-duet", 1],
+    ],
+  );
 });

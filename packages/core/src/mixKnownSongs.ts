@@ -37,6 +37,11 @@ export interface StreamedPlays {
   readonly plays: number;
   /** When it was first streamed (ms since the epoch). */
   readonly firstPlayedAt: number;
+  /**
+   * Whether its plays are a Library song's now (a download of it, or the same
+   * recording key): known, and played from the file, never streamed as non-D.
+   */
+  readonly inLibrary?: boolean;
 }
 
 /** A playlist entry that isn't a Library song, with when it was added. */
@@ -117,6 +122,8 @@ export function* mixKnownSongsSteps<L extends LibrarySongKey>(
   }
   const played = yield* playedFinderSteps(playedKeys);
   const byVideo = new Map<string, { song: YtAlbumSong; plays: number; addedAt: number }>();
+  // The videos whose plays are a Library song's: known, never non-D.
+  const libraryVideos = new Set<string>();
   const keys: LibrarySongKey[] = [];
   const note = (song: YtAlbumSong, plays: number, addedAt: number): void => {
     const before = byVideo.get(song.videoId);
@@ -126,8 +133,13 @@ export function* mixKnownSongsSteps<L extends LibrarySongKey>(
       addedAt: Math.max(before?.addedAt ?? addedAt, addedAt),
     });
   };
-  for (const streamed of [...sources.streamed, ...(sources.streamedPlays ?? [])]) {
+  for (const streamed of sources.streamed) {
     note(streamed.song, streamed.plays, streamed.firstPlayedAt);
+    yield;
+  }
+  for (const streamed of sources.streamedPlays ?? []) {
+    if (streamed.inLibrary === true) libraryVideos.add(streamed.song.videoId);
+    else note(streamed.song, streamed.plays, streamed.firstPlayedAt);
     yield;
   }
   for (const entry of sources.playlisted) {
@@ -150,6 +162,7 @@ export function* mixKnownSongsSteps<L extends LibrarySongKey>(
     inLibrary,
     known: (song) =>
       byVideo.has(song.videoId) ||
+      libraryVideos.has(song.videoId) ||
       inLibrary(song) !== null ||
       played(song) ||
       nonDFinder(song) !== null,
