@@ -331,7 +331,8 @@ const notMissing = (
   entry.source === "unavailable" || playable(entry);
 
 /**
- * Plays a playlist's [entries] from `startIndex` (or shuffled), by Core's
+ * Plays a playlist's [entries] (or a ranking: Stats' songs, Home's Most played)
+ * from `startIndex` (or shuffled), by Core's
  * `playlistPlayback`: with YT Music on and YT Music entries among them, the
  * whole list (the Library's files, the rest streamed); with it off, the
  * Library's songs alone. Unavailable entries never play (a tapped one is the

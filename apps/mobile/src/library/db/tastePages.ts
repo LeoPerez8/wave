@@ -1,7 +1,8 @@
 /** Bounded, historical taste inputs. Raw cursors advance even when no row decodes. */
-import type { TasteHistory } from "@wave/core";
+import { ytTrackId, type TasteHistory } from "@wave/core";
 import { sql } from "drizzle-orm";
 import type { LibraryDatabase } from "./database.ts";
+import { streamedTrack } from "./stats.ts";
 import {
   GRAPH_PAGE_SIZE,
   playEventsPage,
@@ -9,27 +10,41 @@ import {
   type GraphPlayCursor,
 } from "./artistGraph.ts";
 
+/**
+ * The Library song a play of `play_events pe` is in the taste profile's
+ * eyes, or null: its own while it's in the Library (one gone has no artist
+ * or genre left to weigh), and for a streamed play the Library song it is
+ * now (`streamedTrack`). A streamed play without one is its video's.
+ */
+export const tasteSong = sql`CASE WHEN pe.track_id IS NOT NULL
+  THEN (SELECT tracks.id FROM tracks WHERE tracks.id = pe.track_id)
+  ELSE ${streamedTrack(sql`pe.video_id`, sql`pe.recording_key`)} END`;
+
 export const tastePlaysPage = (
   db: LibraryDatabase,
   after: GraphPlayCursor,
 ): GraphPage<TasteHistory["plays"][number], GraphPlayCursor> => {
   const { rows, next } = playEventsPage<{
     id: number;
-    trackId: number;
-    present: number | null;
+    song: number | null;
+    videoId: string | null;
     startedAt: number;
     listenedMs: number;
     endReason: TasteHistory["plays"][number]["endReason"];
   }>(
     db,
     after,
-    sql`pe.id, pe.track_id AS trackId, t.id AS present,
+    sql`pe.id, ${tasteSong} AS song, pe.video_id AS videoId,
       pe.started_at AS startedAt, pe.listened_ms AS listenedMs, pe.end_reason AS endReason`,
-    sql`LEFT JOIN tracks t ON t.id = pe.track_id`,
+    sql``,
   );
   return {
-    rows: rows.flatMap(({ present, id: _id, trackId, ...play }) =>
-      present === null ? [] : [{ ...play, trackId: String(trackId) }],
+    rows: rows.flatMap(({ song, videoId, id: _id, ...play }) =>
+      song !== null
+        ? [{ ...play, trackId: String(song) }]
+        : videoId !== null
+          ? [{ ...play, trackId: ytTrackId(videoId) }]
+          : [],
     ),
     next,
   };
@@ -95,8 +110,11 @@ const TASTE_WRITES: readonly string[] = [
   "DELETE ON play_events",
   // Progress of a play that says nothing either side reads the same profile, whichever
   // listened time a page saw: the row keeps its place in the (started_at, id) walk.
-  `UPDATE OF track_id, started_at, listened_ms, end_reason ON play_events WHEN NOT (
-    OLD.track_id = NEW.track_id AND OLD.started_at = NEW.started_at
+  // A streamed play's song is its video's, or the Library song with its video id or key.
+  `UPDATE OF track_id, video_id, recording_key, started_at, listened_ms, end_reason ON play_events
+    WHEN NOT (
+    OLD.track_id IS NEW.track_id AND OLD.video_id IS NEW.video_id
+    AND OLD.recording_key IS NEW.recording_key AND OLD.started_at = NEW.started_at
     AND ${SAYS_NOTHING("OLD")} AND ${SAYS_NOTHING("NEW")})`,
 ];
 

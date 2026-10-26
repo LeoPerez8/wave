@@ -252,7 +252,7 @@ const isVersionNote = (note: string): boolean =>
  * A title as release matching compares it: without its version notes, then
  * case, accents and punctuation folded. A title that is only notes stays.
  */
-const releaseTitle = (title: string): string => {
+export const releaseTitle = (title: string): string => {
   const bare = title
     .replace(BRACKETED_NOTE, (note) => (isVersionNote(note) ? "" : note))
     .replace(DASHED_NOTE, (whole, note: string) => (isVersionNote(note) ? "" : whole))

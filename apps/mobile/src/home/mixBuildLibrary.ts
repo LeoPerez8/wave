@@ -1,5 +1,10 @@
 /** Mix builds use a completed index or direct local seed reads on a cold start. */
-import { artistPlayTotals, rankPlaysSteps, type YtAlbumSong, type YtSong } from "@wave/core";
+import {
+  rankEntityPlaysSteps,
+  type PlayedSeedArtist,
+  type YtAlbumSong,
+  type YtSong,
+} from "@wave/core";
 import * as Effect from "effect/Effect";
 import type { ArtistRow, LibraryStore, SongRow } from "../library/LibraryStore.ts";
 import { runSteps } from "../lib/stepped.ts";
@@ -16,7 +21,8 @@ export const readMixBuildLibrary = (
     | "mixSongsPage"
     | "mixArtistsPage"
     | "countedPlays"
-    | "creditedPlayTotals"
+    | "streamedLibraryPlays"
+    | "playedEntityTotals"
     | "knownVideos"
     | "matchingSong"
   >,
@@ -44,9 +50,15 @@ export const readMixBuildLibrary = (
       artists.push(...page);
       after = page.at(-1)!.id;
     }
-    const counts = yield* store.countedPlays(songs.map((song) => song.id));
-    const credits = yield* store.creditedPlayTotals({ from: null, to: Date.now() });
-    const ranked = yield* runSteps(rankPlaysSteps(artistPlayTotals(credits), 20), between);
+    const ids = songs.map((song) => song.id);
+    const counts = new Map(yield* store.countedPlays(ids));
+    // A Library song's streamed plays are its own (`streamedTrack`), as Stats counts them.
+    const songIds = new Set(ids);
+    for (const [id, plays] of yield* store.streamedLibraryPlays)
+      if (songIds.has(id)) counts.set(id, (counts.get(id) ?? 0) + plays);
+    // The artists Stats ranks, streamed credits and artists only streamed included.
+    const played = yield* store.playedEntityTotals({ from: null, to: Date.now() });
+    const ranked = yield* runSteps(rankEntityPlaysSteps(played.artists, 20), between);
     const byId = new Map(artists.map((artist) => [artist.id, artist]));
     const videos = new Set(yield* store.knownVideos);
     const matches = new Map<string, SongRow | null>();
@@ -62,7 +74,9 @@ export const readMixBuildLibrary = (
         latestPlayAt: 0,
         sortKey: "",
       })),
-      topArtists: ranked.flatMap((total) => {
+      topArtists: ranked.flatMap((total): PlayedSeedArtist[] => {
+        if (typeof total.id === "string")
+          return [{ id: total.id, name: total.item.name, countedPlays: total.countedPlays }];
         const artist = byId.get(total.id);
         return artist === undefined
           ? []

@@ -3,6 +3,7 @@ import type { ArtistGraphCatalogEntry, ArtistGraphPlay, CatalogSong } from "@wav
 import { sql, type SQL } from "drizzle-orm";
 import type { LibraryDatabase } from "./database.ts";
 import { readPlaylistYtSong } from "@wave/core";
+import { streamedTrack } from "./stats.ts";
 import { selectYtArtistSimilar, type YtArtistSimilar } from "./ytArtists.ts";
 
 export const GRAPH_PAGE_SIZE = 128;
@@ -35,16 +36,25 @@ export const playEventsPage = <R extends { readonly id: number; readonly started
   return { rows, next: last === undefined ? null : [last.startedAt, last.id] };
 };
 
+/**
+ * A play as the graph reads it. A streamed play whose song the Library doesn't
+ * have names its artists as its song credits them, still to split with the
+ * Library's credits (`streamed`); one the Library has now (`streamedTrack`)
+ * names that song's artists, as a Library play does.
+ */
+export type GraphPlay = ArtistGraphPlay & { readonly streamed?: boolean };
+
 export const graphPlayPage = (
   db: LibraryDatabase,
   after: GraphPlayCursor,
-): GraphPage<ArtistGraphPlay, GraphPlayCursor> => {
+): GraphPage<GraphPlay, GraphPlayCursor> => {
   const { rows, next } = playEventsPage<{
     id: number;
     startedAt: number;
     listenedMs: number;
     endReason: ArtistGraphPlay["endReason"];
     artists: string | null;
+    streamed: number;
   }>(
     db,
     after,
@@ -54,24 +64,35 @@ export const graphPlayPage = (
           SELECT ar.name FROM track_artists ta JOIN artists ar ON ar.id = ta.artist_id
           WHERE ta.track_id = t.id ORDER BY ta.position
         )
-      ) END AS artists`,
-    sql`LEFT JOIN tracks t ON t.id = pe.track_id
+      ) WHEN t.id IS NULL AND pe.video_id IS NOT NULL THEN coalesce(
+        CASE WHEN json_valid(pe.streamed_song) AND json_type(pe.streamed_song, '$.artists') = 'array'
+          THEN json_extract(pe.streamed_song, '$.artists') END,
+        CASE WHEN json_valid(pe.snapshot) AND json_type(pe.snapshot, '$.artist') = 'text'
+          AND json_extract(pe.snapshot, '$.artist') <> ''
+          THEN json_array(json_extract(pe.snapshot, '$.artist')) END
+      ) END AS artists,
+      t.id IS NULL AS streamed`,
+    sql`LEFT JOIN tracks t ON t.id = coalesce(pe.track_id, CASE WHEN pe.video_id IS NOT NULL THEN
+        ${streamedTrack(sql`pe.video_id`, sql`pe.recording_key`)} END)
       LEFT JOIN artists a ON a.id = t.artist_id
       LEFT JOIN albums al ON al.id = t.album_id`,
   );
   return {
-    rows: rows.flatMap((row) =>
-      row.artists === null
-        ? []
-        : [
-            {
-              startedAt: row.startedAt,
-              listenedMs: row.listenedMs,
-              endReason: row.endReason,
-              artists: JSON.parse(row.artists) as string[],
-            },
-          ],
-    ),
+    rows: rows.flatMap((row) => {
+      if (row.artists === null) return [];
+      const artists = (JSON.parse(row.artists) as unknown[]).filter(
+        (name): name is string => typeof name === "string",
+      );
+      return [
+        {
+          startedAt: row.startedAt,
+          listenedMs: row.listenedMs,
+          endReason: row.endReason,
+          artists,
+          streamed: row.streamed === 1,
+        },
+      ];
+    }),
     next,
   };
 };

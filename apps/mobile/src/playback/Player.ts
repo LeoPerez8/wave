@@ -22,6 +22,7 @@ import {
   type NativePlayerState,
   type NativeSyncStep,
   type PlayerItem,
+  type PlayerErrorEvent,
   type SeekEvent,
 } from "@/native/wavePlayer";
 
@@ -106,6 +107,10 @@ export class Player extends Context.Service<
     /** Calls `listener` for every seek within the current item while the scope lives. */
     readonly onSeek: (
       listener: (event: SeekEvent) => void,
+    ) => Effect.Effect<void, never, Scope.Scope>;
+    /** A playback failure, including a video YouTube no longer serves. */
+    readonly onPlayerError: (
+      listener: (event: PlayerErrorEvent) => void,
     ) => Effect.Effect<void, never, Scope.Scope>;
     /** Calls `listener` each time a crossfade's outgoing song goes silent, while the scope lives. */
     readonly onCrossfade: (
@@ -202,6 +207,13 @@ export const layer = Layer.effect(
         Effect.asVoid(
           Effect.acquireRelease(
             Effect.sync(() => WavePlayer.addListener("onSeek", listener)),
+            (subscription) => Effect.sync(() => subscription.remove()),
+          ),
+        ),
+      onPlayerError: (listener) =>
+        Effect.asVoid(
+          Effect.acquireRelease(
+            Effect.sync(() => WavePlayer.addListener("onPlayerError", listener)),
             (subscription) => Effect.sync(() => subscription.remove()),
           ),
         ),

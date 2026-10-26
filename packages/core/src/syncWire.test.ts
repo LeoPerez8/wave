@@ -23,6 +23,63 @@ const play = (n: number): SyncPlayRow => ({
 const utf8Bytes = (text: string): number => new TextEncoder().encode(text).length;
 
 describe("readPullPage", () => {
+  test("keeps legacy plays with absent or null metadata but leaves malformed new fields out", () => {
+    const snapshot = {
+      title: "Something",
+      artist: "The Beatles",
+      album: null,
+      artworkPath: null,
+      thumbPath: null,
+    };
+    const invalidSnapshots = [
+      "not an object",
+      [],
+      {},
+      { ...snapshot, title: 42 },
+      { ...snapshot, artist: ["The Beatles"] },
+      { ...snapshot, album: false },
+      { ...snapshot, artworkPath: 42 },
+      { ...snapshot, thumbPath: {} },
+    ];
+    const page = readPullPage(
+      JSON.stringify({
+        plays: [
+          play(1),
+          { ...play(2), snapshot: null, videoId: null },
+          ...invalidSnapshots.map((invalidSnapshot, n) => ({
+            ...play(n + 3),
+            snapshot: invalidSnapshot,
+          })),
+          { ...play(20), videoId: 42 },
+        ],
+        cursor: "20",
+        more: false,
+      }),
+    );
+
+    assert.deepEqual(page?.plays, [
+      { ...play(1), snapshot: null, videoId: null },
+      { ...play(2), snapshot: null, videoId: null },
+    ]);
+  });
+
+  test("keeps a play's display snapshot and a streamed play's video id", () => {
+    const snapshot = {
+      title: "Something",
+      artist: "The Beatles, Billy Preston",
+      album: "Abbey Road",
+      artworkPath: "https://i.ytimg.com/vi/video-id/hqdefault.jpg",
+      thumbPath: null,
+    };
+    const plays = [
+      { ...play(1), importedFrom: null, snapshot, videoId: "video-id" },
+      { ...play(2), snapshot: { ...snapshot, album: null, artworkPath: null }, videoId: null },
+    ];
+    const page = readPullPage(JSON.stringify({ plays, cursor: "2", more: false }));
+
+    assert.deepEqual(page?.plays, plays);
+  });
+
   test("reads every table's rows, tombstones too, with the cursor and whether more wait", () => {
     const song = {
       id: KEY,
@@ -66,7 +123,10 @@ describe("readPullPage", () => {
       more: true,
     };
 
-    assert.deepEqual(readPullPage(JSON.stringify(body)), body);
+    assert.deepEqual(readPullPage(JSON.stringify(body)), {
+      ...body,
+      plays: [{ ...play(1), snapshot: null, videoId: null }],
+    });
   });
 
   test("leaves out a row it can't read, and tables it doesn't know, but keeps the page", () => {

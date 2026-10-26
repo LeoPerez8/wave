@@ -355,6 +355,39 @@ describe("recap", () => {
   test("a Recap is titled by its month", () => {
     assert.equal(recap({ period: september, listening: [], songs: [] }).title, "September 2026");
   });
+
+  test("streamed songs and online artists rank with the Library's, a full tie to the Library", () => {
+    const streamed = (id: string, countedPlays: number) => ({ ...song(0, countedPlays), id });
+    const songs = [song(1, 3), streamed("v-airbag", 6), streamed("v-tie", 3)];
+    const artists = [song(11, 2), streamed("artist:radiohead", 6)];
+    const shown = recap({
+      period: september,
+      listening: [],
+      songs: [{ ...songs[2]!, sortKey: "song 1" }, songs[1]!, songs[0]!],
+      artists,
+      albums: [streamed("album:MPREb_ok", 6)],
+      // A streamed song's genre is left out unless it's known.
+      songGenres: [{ id: 1, genre: "Rock" }],
+      artistFirstPlays: [{ id: "artist:radiohead", firstPlayAt: at(2026, 9, 2) }],
+    });
+    assert.deepEqual(
+      shown.topSongs.map((entry) => entry.id),
+      ["v-airbag", 1, "v-tie"],
+    );
+    assert.deepEqual(
+      shown.topArtists.map((entry) => entry.id),
+      ["artist:radiohead", 11],
+    );
+    assert.equal(shown.topAlbum?.id, "album:MPREb_ok");
+    assert.deepEqual(
+      shown.topGenres.map((entry) => [entry.family.name, entry.share]),
+      [["Rock", 1]],
+    );
+    assert.deepEqual(
+      shown.discoveredArtists.map((entry) => entry.id),
+      ["artist:radiohead"],
+    );
+  });
 });
 
 describe("recapSlides", () => {

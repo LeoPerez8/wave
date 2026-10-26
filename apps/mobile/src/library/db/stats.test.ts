@@ -741,7 +741,7 @@ describe("Recap genres and discoveries", () => {
       .run();
 
     assert.deepEqual(
-      songGenres(db, [rock, multi, none]).toSorted((a, b) => a.id - b.id),
+      songGenres(db, [rock, multi, none]).toSorted((a, b) => Number(a.id) - Number(b.id)),
       [
         { id: rock, genre: "Rock", genres: null },
         { id: multi, genre: "Metalcore", genres: ["Metalcore", "Rock"] },
@@ -767,7 +767,7 @@ describe("Recap genres and discoveries", () => {
     const [a, b] = [artistNamed("A"), artistNamed("B")];
 
     assert.deepEqual(
-      artistFirstPlays(db, [a, b]).toSorted((x, y) => x.id - y.id),
+      artistFirstPlays(db, [a, b]).toSorted((x, y) => Number(x.id) - Number(y.id)),
       [
         { id: a, firstPlayAt: 1_000 },
         { id: b, firstPlayAt: 9_000 },

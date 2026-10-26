@@ -8,7 +8,6 @@
  */
 
 import { isRecord } from "./storedJson.ts";
-import { libraryTrackIds } from "./ytQueue.ts";
 
 export type RepeatMode = "off" | "all" | "one";
 
@@ -293,15 +292,18 @@ export const shufflesQueue = (state: QueueState, command: QueueCommand): boolean
 };
 
 /**
- * The Library tracks [command] orders when it shuffles [state]'s queue, each
- * once: a play's songs, or the queue's. Smart Shuffle needs their plays and no
- * others; a command that doesn't shuffle needs none.
+ * The songs [command] orders when it shuffles [state]'s queue, by track id,
+ * each once: a play's songs, or the queue's, streamed ones included. Smart
+ * Shuffle needs their plays and no others; a command that doesn't shuffle
+ * needs none.
  */
-export const shuffledTrackIds = (state: QueueState, command: QueueCommand): number[] => {
+export const shuffledTrackIds = (state: QueueState, command: QueueCommand): string[] => {
   if (!shufflesQueue(state, command)) return [];
-  return libraryTrackIds(
-    command.type === "play" ? command.trackIds : state.entries.map((entry) => entry.trackId),
-  );
+  return [
+    ...new Set(
+      command.type === "play" ? command.trackIds : state.entries.map((entry) => entry.trackId),
+    ),
+  ];
 };
 
 /** [entries] in the order [shuffle] gives them. */

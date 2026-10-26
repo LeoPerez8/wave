@@ -7,10 +7,14 @@ import {
   STATS_TOP,
   albumPlayTotals,
   artistPlayTotals,
+  rankEntityPlays,
+  rankEntityPlaysSteps,
   rankPlays,
+  rankSongPlays,
   statsWindow,
   type CreditedPlayTotals,
   type PlayTotals,
+  type SongPlayTotals,
 } from "./index.ts";
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -65,6 +69,58 @@ const totals = (id: number, overrides: Partial<PlayTotals> = {}): PlayTotals => 
 });
 
 const ids = (ranking: readonly PlayTotals[]) => ranking.map((entry) => entry.id);
+
+const song = (
+  ref: SongPlayTotals["song"],
+  overrides: Partial<SongPlayTotals> = {},
+): SongPlayTotals => ({
+  song: ref,
+  sortKey: "same",
+  countedPlays: 1,
+  listenedMs: 180_000,
+  latestPlayAt: 1_000,
+  ...overrides,
+});
+const library = (id: number) => ({ kind: "library", id }) as const;
+const streamed = (videoId: string) => ({ kind: "yt", videoId }) as const;
+
+describe("rankSongPlays", () => {
+  test("ranks streamed and Library songs together by the same rule", () => {
+    const ranking = rankSongPlays(
+      [
+        song(library(1), { countedPlays: 2 }),
+        song(streamed("v1"), { countedPlays: 5 }),
+        song(library(2), { countedPlays: 3, latestPlayAt: 9_000 }),
+        song(streamed("v2"), { countedPlays: 3, latestPlayAt: 1_000 }),
+        song(streamed("v3"), { countedPlays: 0, listenedMs: 60_000 }),
+      ],
+      STATS_TOP,
+    );
+    assert.deepEqual(
+      ranking.map((entry) => entry.song),
+      [streamed("v1"), library(2), streamed("v2"), library(1)],
+    );
+  });
+
+  test("a complete tie is settled by sort key, then Library ids before video ids", () => {
+    const tied = [
+      song(streamed("b")),
+      song(library(10)),
+      song(streamed("a")),
+      song(library(9)),
+      song(streamed("z"), { sortKey: "first" }),
+    ];
+    const expected = [streamed("z"), library(9), library(10), streamed("a"), streamed("b")];
+    assert.deepEqual(
+      rankSongPlays(tied, STATS_TOP).map((entry) => entry.song),
+      expected,
+    );
+    assert.deepEqual(
+      rankSongPlays(tied.toReversed(), 3).map((entry) => entry.song),
+      expected.slice(0, 3),
+    );
+  });
+});
 
 describe("rankPlays", () => {
   test("orders by counted plays, most first", () => {
@@ -150,6 +206,66 @@ const jazzHits = { id: 2, sort: "jazz hits" };
 const miles = { id: 10, sort: "davis, miles" };
 const coltrane = { id: 11, sort: "coltrane, john" };
 const evans = { id: 12, sort: "evans, bill" };
+
+/** Runs [steps] to their end, counting the turns they yielded. */
+const runSteps = <A>(steps: Generator<void, A>): { result: A; turns: number } => {
+  let turns = 0;
+  for (;;) {
+    const next = steps.next();
+    if (next.done) return { result: next.value, turns };
+    turns++;
+  }
+};
+
+const entityTotals = (id: number | string, countedPlays: number) => ({
+  id,
+  sortKey: "b",
+  countedPlays,
+  listenedMs: 0,
+  latestPlayAt: 0,
+});
+
+describe("rankEntityPlays", () => {
+  test("a full tie goes to Library ids, the lowest first, then online ids in order", () => {
+    const tied = [
+      entityTotals("album:b", 1),
+      entityTotals(12, 1),
+      entityTotals("album:a", 1),
+      entityTotals(3, 1),
+    ];
+    const expected = [3, 12, "album:a", "album:b"];
+    assert.deepEqual(
+      rankEntityPlays(tied, STATS_TOP).map((entry) => entry.id),
+      expected,
+    );
+    assert.deepEqual(
+      rankEntityPlays(tied.toReversed(), STATS_TOP).map((entry) => entry.id),
+      expected,
+    );
+  });
+});
+
+describe("rankEntityPlaysSteps", () => {
+  test("ranks online artists among Library ones, in steps, a Library id first on a full tie", () => {
+    const { result, turns } = runSteps(
+      rankEntityPlaysSteps(
+        [
+          entityTotals("artist:a", 2),
+          entityTotals(7, 2),
+          entityTotals("artist:never", 0),
+          entityTotals(3, 5),
+          entityTotals("artist:c", 9),
+        ],
+        3,
+      ),
+    );
+    assert.deepEqual(
+      result.map((entry) => entry.id),
+      ["artist:c", 3, 7],
+    );
+    assert.ok(turns >= 5);
+  });
+});
 
 describe("album and artist rankings", () => {
   // Jazz Hits is a compilation (album artist "Various Artists", id 99): its

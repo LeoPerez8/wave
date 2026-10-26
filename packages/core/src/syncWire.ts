@@ -6,6 +6,7 @@
  */
 
 import type { SyncRow } from "./sync.ts";
+import type { PlaySnapshot } from "./listeningHistory.ts";
 
 /** A synced row with its table's own [Fields], or a tombstone, which carries none. */
 export type SyncedRow<Fields> =
@@ -74,6 +75,10 @@ export interface SyncPlayRow {
   readonly contextId: string | null;
   readonly source: "phone" | "auto";
   readonly importedFrom: "blackplayer" | null;
+  /** What the play showed when it started; absent on older clients. */
+  readonly snapshot?: PlaySnapshot | null;
+  /** A streamed play's YouTube video id; songId remains its recording key. */
+  readonly videoId?: string | null;
 }
 
 /** Rows by table, as a push sends them and a pull answers them. */
@@ -109,7 +114,8 @@ export const SYNC_TABLE_NAMES = [
 ] as const satisfies readonly (keyof SyncTables)[];
 
 /** What one field holds: text, a whole number, a boolean, or one of a few values; `?` allows null. */
-export type SyncFieldKind = "text" | "text?" | "int" | "int?" | "bool" | readonly (string | null)[];
+export type SyncFieldKind =
+  "text" | "text?" | "int" | "int?" | "bool" | "snapshot?" | readonly (string | null)[];
 
 /**
  * Each table's own fields, as `readPullPage` checks them and the sync
@@ -152,6 +158,8 @@ export const SYNC_FIELDS: {
     contextId: "text?",
     source: ["phone", "auto"],
     importedFrom: ["blackplayer", null],
+    snapshot: "snapshot?",
+    videoId: "text?",
   },
 };
 
@@ -171,6 +179,15 @@ export const syncFieldFits = (kind: SyncFieldKind, value: unknown): boolean => {
       return Number.isSafeInteger(value);
     case "bool":
       return typeof value === "boolean";
+    case "snapshot?":
+      return (
+        isRecord(value) &&
+        typeof value.title === "string" &&
+        typeof value.artist === "string" &&
+        (value.album === null || typeof value.album === "string") &&
+        (value.artworkPath === null || typeof value.artworkPath === "string") &&
+        (value.thumbPath === null || typeof value.thumbPath === "string")
+      );
   }
 };
 

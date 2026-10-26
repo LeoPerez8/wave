@@ -14,6 +14,7 @@ const emptyStore: ArtistGraphReads = {
   graphCatalogPage: () => Effect.succeed({ rows: [], next: null }),
   graphRadioPage: () => Effect.succeed({ rows: [], next: null }),
   graphSimilarPage: () => Effect.succeed({ rows: [], next: null }),
+  mixCreditNamesPage: () => Effect.succeed({ rows: [], next: null }),
   graphPlayPage: () => Effect.succeed({ rows: [], next: null }),
 };
 

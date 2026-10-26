@@ -9,7 +9,8 @@ import { isRecord } from "./storedJson.ts";
 import { MAGIC_SKIP_MS } from "./tasteProfile.ts";
 import { drawSeedSongs } from "./seedSongDraw.ts";
 import { type RandomSource } from "./weightedPick.ts";
-import { parseTrackId, recordingMatches } from "./ytMusic.ts";
+import type { MixedSong } from "./ytDiscover.ts";
+import { parseTrackId, recordingMatches, ytTrackId, type YtSong } from "./ytMusic.ts";
 
 /**
  * An artist as the Magic Queue tells them apart, the same for the Library's
@@ -134,6 +135,40 @@ export interface MagicSeedSong extends MagicSongRadioSeed {
   /** Its counted plays: the most played are drawn most often. */
   readonly plays: number;
 }
+
+/**
+ * The seed songs of an album or a playlist ([songs]: its Library songs, with
+ * their artists' names and video id, and its streamed ones), in order, each
+ * with its counted plays from [plays] (by queue track id; a song missing from
+ * it was never counted): a streamed song is a seed as a Library one is.
+ */
+export const magicListSeedSongs = (
+  songs: readonly MixedSong<
+    YtSong,
+    Omit<MagicSongRadioSeed, "id" | "kind"> & { readonly id: number }
+  >[],
+  plays: ReadonlyMap<string, number>,
+): MagicSeedSong[] =>
+  songs.map((song) => {
+    if (song.source === "library") {
+      const { id, videoId, ...track } = song.track;
+      return {
+        id: `song:${id}`,
+        ...track,
+        ...(videoId === undefined ? {} : { videoId }),
+        plays: plays.get(String(id)) ?? 0,
+      };
+    }
+    const trackId = ytTrackId(song.song.videoId);
+    return {
+      id: `song:${trackId}`,
+      title: song.song.title,
+      artists: song.song.artists,
+      durationMs: song.song.durationMs,
+      videoId: song.song.videoId,
+      plays: plays.get(trackId) ?? 0,
+    };
+  });
 
 /** A Magic Queue under way: plain JSON saved with its queue. */
 export interface MagicSession {

@@ -18,7 +18,6 @@ import { PullRefreshRow } from "@/catalog/PullRefreshRow";
 import { TitledSection } from "@/catalog/TitledSection";
 import { RecommendationsFailed } from "@/components/RecommendationsFailed";
 import { fileUri } from "@/lib/fileUri";
-import type { MostPlayedRow } from "@/library/db/playHistory";
 import { openStatsSeeAll } from "@/library/routes";
 import type { PlayableSongRow } from "@/library/LibraryStore";
 import { Crossfade } from "@/motion/Crossfade";
@@ -40,7 +39,7 @@ import {
 } from "./magicQueueSection";
 import { useMostPlayedOfAllTime } from "./mostPlayedOfAllTime";
 
-import { AlbumShelf, ArtistShelf, SongRows } from "./HomeSections";
+import { AlbumShelf, ArtistShelf, MostPlayedRows, SongRows } from "./HomeSections";
 import { HomeStats } from "./HomeStats";
 import { HomeSectionSkeleton } from "./HomeSectionSkeleton";
 import {
@@ -60,9 +59,6 @@ const countedPlays = (entry: { readonly countedPlays: number }): string =>
 /** A ranking's entries with their counted plays, as the rows Home's sections take. */
 const withPlays = <A,>(ranking: readonly Ranked<A>[] | undefined) =>
   (ranking ?? []).map((entry) => ({ ...entry.item, countedPlays: entry.countedPlays }));
-
-/** The counted plays Most Played is ranked by, shown in each row's trailing cell. */
-const plays = (song: MostPlayedRow): number => song.playCount;
 
 type SectionProps = {
   /** Home's lists (`useHome`), read once for every section that shows them. */
@@ -346,7 +342,7 @@ const SECTIONS: Record<HomeSectionId, ComponentType<SectionProps>> = {
     home.mostPlayed !== undefined &&
     home.mostPlayed.length > 0 && (
       <TitledSection title={title}>
-        <SongRows songs={home.mostPlayed} context={MOST_PLAYED_CONTEXT} plays={plays} />
+        <MostPlayedRows rows={home.mostPlayed} context={MOST_PLAYED_CONTEXT} />
       </TitledSection>
     ),
   "most-played-albums": MostPlayedAlbums,

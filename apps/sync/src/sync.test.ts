@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { readPullPage } from "@wave/core";
+import { migrate } from "./migrations.ts";
 import { favorite, harness, pull, pullAll, push } from "./testing.ts";
 
 const song = (
@@ -59,6 +60,130 @@ const preference = (changedAt: number, value: unknown) => ({
 });
 
 describe("POST /v1/push and GET /v1/pull", () => {
+  test("malformed play metadata refuses the whole push", async () => {
+    const service = await harness();
+    const session = await service.signIn();
+    const snapshot = {
+      title: "Teardrop",
+      artist: "Massive Attack",
+      album: null,
+      artworkPath: null,
+      thumbPath: null,
+    };
+    for (const metadata of [
+      { snapshot: "not an object" },
+      { snapshot: [] },
+      { snapshot: {} },
+      { snapshot: { ...snapshot, title: 42 } },
+      { snapshot: { ...snapshot, artist: ["Massive Attack"] } },
+      { snapshot: { ...snapshot, album: false } },
+      { snapshot: { ...snapshot, artworkPath: 42 } },
+      { snapshot: { ...snapshot, thumbPath: {} } },
+      { videoId: 42 },
+    ]) {
+      const response = await service.request("POST", "/v1/push", {
+        session,
+        json: { plays: [play("valid"), play("invalid", metadata)] },
+      });
+      assert.equal(response.status, 400, JSON.stringify(metadata));
+    }
+    assert.deepEqual((await pull(service, session)).plays, []);
+  });
+
+  test("snapshot text obeys the service's field length limit and invalid pushes store nothing", async () => {
+    const service = await harness();
+    const session = await service.signIn();
+    const snapshot = {
+      title: "Teardrop",
+      artist: "Massive Attack",
+      album: null,
+      artworkPath: null,
+      thumbPath: null,
+    };
+    for (const field of Object.keys(snapshot)) {
+      const response = await service.request("POST", "/v1/push", {
+        session,
+        json: {
+          plays: [
+            play("valid"),
+            play("invalid", { snapshot: { ...snapshot, [field]: "x".repeat(16_385) } }),
+          ],
+        },
+      });
+      assert.equal(response.status, 400, field);
+      assert.deepEqual(await response.json(), {
+        error: "bad_request",
+        detail: `plays[1].snapshot.${field} is too long`,
+      });
+    }
+    assert.deepEqual((await pull(service, session)).plays, []);
+  });
+
+  test("an older client can push and pull plays without snapshot or video id", async () => {
+    const service = await harness();
+    const session = await service.signIn();
+    const legacy = play("old-client-play");
+    await push(service, session, { plays: [legacy] });
+
+    const page = await pull(service, session);
+    assert.deepEqual(page.plays, [{ ...legacy, snapshot: null, videoId: null }]);
+    assert.deepEqual(readPullPage(JSON.stringify(page))?.plays, page.plays);
+    await push(service, session, { plays: [play("next-old-client-play")] });
+    assert.deepEqual((await pull(service, session, page.cursor)).plays, [
+      { ...play("next-old-client-play"), snapshot: null, videoId: null },
+    ]);
+  });
+
+  test("upgrading an existing database keeps its old plays readable", async () => {
+    const service = await harness();
+    const session = await service.signIn();
+    await push(service, session, { plays: [play("before-upgrade")] });
+    // Recreate the deployed schema with an existing play, before migration 0005.
+    await service.db.batch(
+      [
+        "ALTER TABLE plays DROP COLUMN snapshot",
+        "ALTER TABLE plays DROP COLUMN video_id",
+        "DELETE FROM migrations WHERE id = '0005_play_snapshots'",
+      ],
+      "write",
+    );
+
+    assert.deepEqual(await migrate(service.db), ["0005_play_snapshots"]);
+    assert.deepEqual((await pull(service, session)).plays, [
+      { ...play("before-upgrade"), snapshot: null, videoId: null },
+    ]);
+    assert.deepEqual(await migrate(service.db), []);
+  });
+
+  test("another phone gets Library and streamed play snapshots without needing a song row", async () => {
+    const service = await harness();
+    const phoneA = await service.signIn();
+    const phoneB = await service.signIn();
+    const snapshot = {
+      title: "Teardrop",
+      artist: "Massive Attack, Elizabeth Fraser",
+      album: "Mezzanine",
+      artworkPath: "https://i.ytimg.com/vi/u7K72X4eo_s/hqdefault.jpg",
+      thumbPath: "https://i.ytimg.com/vi/u7K72X4eo_s/default.jpg",
+    };
+    const plays = [
+      play("streamed-play", { snapshot, videoId: "u7K72X4eo_s" }),
+      play("library-play", {
+        snapshot: { ...snapshot, album: null, artworkPath: null, thumbPath: null },
+        videoId: null,
+      }),
+    ];
+    await push(service, phoneA, { plays });
+
+    const page = await pull(service, phoneB);
+    assert.deepEqual(page.plays, plays);
+    assert.deepEqual(readPullPage(JSON.stringify(page))?.plays, plays);
+    const repeated = await push(service, phoneA, { plays });
+    assert.equal((repeated.accepted as Record<string, number>).plays, 0);
+    assert.deepEqual((await pull(service, phoneB)).plays, plays);
+    assert.deepEqual((await pull(service, phoneB, page.cursor)).plays, []);
+  });
+
   test("rows pushed by one phone come back to another phone of the account", async () => {
     const service = await harness();
     const phoneA = await service.signIn();
@@ -104,7 +229,7 @@ describe("POST /v1/push and GET /v1/pull", () => {
     assert.deepEqual(pulled.songs, [song("song-1", 10)]);
     assert.equal(pulled.playlistEntries[0]?.songId, "song-1");
     assert.equal(pulled.preferences[0]?.value, "black");
-    assert.deepEqual(pulled.plays, [play("play-1")]);
+    assert.deepEqual(pulled.plays, [play("play-1", { snapshot: null, videoId: null })]);
     assert.equal(pulled.more, false);
   });
 
@@ -359,7 +484,14 @@ describe("POST /v1/push and GET /v1/pull", () => {
         { id: "song-2", changedAt: 11, phoneId: "phone-a", deleted: true },
       ],
       preferences: [preference(10, "on")],
-      plays: [play("play-1", { durationMs: null, importedFrom: "blackplayer" })],
+      plays: [
+        play("play-1", {
+          durationMs: null,
+          importedFrom: "blackplayer",
+          snapshot: null,
+          videoId: null,
+        }),
+      ],
     };
     await push(service, session, rows);
     const response = await service.request("GET", "/v1/pull", { session });
