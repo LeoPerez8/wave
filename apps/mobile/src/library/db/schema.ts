@@ -186,6 +186,7 @@ export const tracks = sqliteTable(
     index("tracks_genre_idx").on(t.genreId),
     index("tracks_folder_idx").on(t.folderId),
     index("tracks_recording_key_idx").on(t.recordingKey),
+    index("tracks_video_idx").on(t.videoId),
   ],
 );
 
