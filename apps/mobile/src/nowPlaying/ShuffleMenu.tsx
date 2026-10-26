@@ -3,6 +3,7 @@ import { entryDivider, shuffleLineShows, type ShuffleKind } from "@wave/core";
 import { View } from "react-native";
 
 import { EntryRow } from "@/catalog/EntryRow";
+import { EvenShuffleIcon } from "@/components/EvenShuffleIcon";
 import { SmartShuffleIcon } from "@/components/SmartShuffleIcon";
 import { pressedRect } from "@/motion/pressedRect";
 import { CardEntries } from "@/overlay/CardEntries";
@@ -10,6 +11,7 @@ import { useOverlayFlow } from "@/overlay/flow";
 import { openOverlay } from "@/overlay/overlay";
 import { useSlideToChoose } from "@/overlay/useSlideToChoose";
 import { chooseShuffleKind } from "@/playback/actions";
+import type { ActionIcon } from "@/playback/actionIcons";
 import { countShuffleCardOpening } from "@/settings/shuffleCardOpenings";
 import { useShuffleKind } from "@/settings/shuffleKind";
 
@@ -32,13 +34,20 @@ const SHUFFLE_LABELS: Record<ShuffleKind, string> = {
 };
 
 /**
- * Every shuffle control follows the saved choice and opens the same card.
- * Even Shuffle keeps the plain shuffle icon until it has its own.
+ * What the shuffle button shows while [kind] is chosen: the plain shuffle
+ * arrows, the spark (#320) or the braid (#702).
  */
+const SHUFFLE_ICONS: Record<ShuffleKind, ActionIcon> = {
+  real: IconArrowsShuffle,
+  smart: SmartShuffleIcon,
+  even: EvenShuffleIcon,
+};
+
+/** Every shuffle control follows the saved choice and opens the same card. */
 export const useShuffleControl = () => {
   const kind = useShuffleKind();
   return {
-    icon: kind === "smart" ? SmartShuffleIcon : IconArrowsShuffle,
+    icon: SHUFFLE_ICONS[kind],
     label: SHUFFLE_LABELS[kind],
     onLongPress: openShuffleMenu,
     accessibilityHint: "Long press to choose Real Shuffle, Smart Shuffle or Even Shuffle",
