@@ -33,7 +33,7 @@ import { chunks } from "./chunks.ts";
 import type { LibraryDatabase } from "./database.ts";
 import * as schema from "./schema.ts";
 import { selectPhoneId, selectTrackIdentities, stamped } from "./sync.ts";
-import { hasFile } from "./tracks.ts";
+import { hasFile, trackQuery } from "./tracks.ts";
 
 // --- The account the Library is joined with ---------------------------------
 
@@ -910,9 +910,19 @@ const applyPlay = (
     pend(tx, "plays", row, { songKey: row.songId });
     return false;
   }
+  const song =
+    trackId === undefined ? undefined : trackQuery(tx).where(eq(schema.tracks.id, trackId)).get();
   const snapshot =
     row.snapshot === null || row.snapshot === undefined
-      ? null
+      ? song === undefined
+        ? null
+        : {
+            title: song.title,
+            artist: song.artist,
+            album: song.album,
+            artworkPath: song.artworkPath,
+            thumbPath: song.thumbPath,
+          }
       : {
           title: row.snapshot.title,
           artist: row.snapshot.artist,
