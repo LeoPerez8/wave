@@ -3,7 +3,7 @@ import { withOpacity, type SongCardColours } from "@wave/core";
 import type { ComponentRef, Ref } from "react";
 import { Image, Text, View } from "react-native";
 
-import { WaveMark } from "./LyricCard";
+import { WaveMark } from "./LyricCardArtwork";
 import type { SongShareContent } from "./songShare";
 
 /** The card's height as a multiple of its width: the square cover, the title, artist and mark. */
