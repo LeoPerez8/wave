@@ -281,6 +281,8 @@ test("streamed plays seed the mixes as Stats ranks them and make their songs kno
       [downloaded, 2],
     ],
   );
+  // A cold build reads the same song plays from the kept totals.
+  assert.deepEqual(Effect.runSync(store.streamedLibraryPlays), new Map([[downloaded, 2]]));
   assert.equal(inputs.known.known(circle), true);
   // Another video of a streamed recording, which the Library finder can't match by length.
   assert.equal(

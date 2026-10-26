@@ -67,19 +67,21 @@ for (const cachedFinder of [false, true])
           mixSongsPage: (after) => Effect.succeed(after === 0 ? songs : []),
           mixArtistsPage: (after) => Effect.succeed(after === 0 ? [artist] : []),
           countedPlays: () => Effect.succeed(new Map([[1, 10]])),
-          creditedPlayTotals: () =>
-            Effect.succeed([
-              {
-                albumId: 1,
-                albumSort: "album",
-                artistId: 1,
-                artistSort: "seed",
-                primary: true,
-                countedPlays: 10,
-                listenedMs: 1800000,
-                latestPlayAt: 1,
-              },
-            ]),
+          streamedLibraryPlays: Effect.succeed(new Map()),
+          playedEntityTotals: () =>
+            Effect.succeed({
+              albums: [],
+              artists: [
+                {
+                  id: 1,
+                  item: artist,
+                  sortKey: "seed",
+                  countedPlays: 10,
+                  listenedMs: 1800000,
+                  latestPlayAt: 1,
+                },
+              ],
+            }),
           knownVideos: Effect.succeed(["v1"]),
           matchingSong: (song) =>
             cachedFinder
@@ -116,3 +118,81 @@ for (const cachedFinder of [false, true])
       assert.equal(mixes[0]!.songs[0]?.videoId, "v2");
     }
   });
+
+test("a cold build seeds from streamed plays as Stats ranks them", async () => {
+  const song = {
+    id: 1,
+    title: "Granite",
+    path: "/music/granite.flac",
+    album: "Sundowning",
+    albumId: 1,
+    artistId: 1,
+    thumbPath: null,
+    artworkPath: null,
+    titleSort: "granite",
+    artistSort: "sleep token",
+    albumSort: "sundowning",
+    discNumber: null,
+    trackNumber: 1,
+    year: null,
+    hasLyrics: false,
+    explicit: "clean",
+    artist: "Sleep Token",
+    artistIds: [1],
+    durationMs: 180000,
+    genre: "Metal",
+    addedAt: 0,
+  } satisfies SongRow;
+  const artist = {
+    id: 1,
+    name: "Sleep Token",
+    sort: "sleep token",
+    trackCount: 1,
+    albumCount: 1,
+    thumbPath: null,
+    artworkPath: null,
+  };
+  const totals = (countedPlays: number) => ({ countedPlays, listenedMs: 0, latestPlayAt: 0 });
+  const { library } = await Effect.runPromise(
+    readMixBuildLibrary(
+      null,
+      {
+        mixSongsPage: (after) => Effect.succeed(after === 0 ? [song] : []),
+        mixArtistsPage: (after) => Effect.succeed(after === 0 ? [artist] : []),
+        countedPlays: () => Effect.succeed(new Map([[1, 2]])),
+        // Granite's downloaded video was streamed three times.
+        streamedLibraryPlays: Effect.succeed(new Map([[1, 3]])),
+        playedEntityTotals: () =>
+          Effect.succeed({
+            albums: [],
+            artists: [
+              {
+                id: "artist:spiritbox",
+                item: {
+                  id: "artist:spiritbox",
+                  name: "Spiritbox",
+                  online: true,
+                  thumbPath: null,
+                  artworkPath: null,
+                },
+                sortKey: "spiritbox",
+                ...totals(9),
+              },
+              { id: 1, item: artist, sortKey: "sleep token", ...totals(5) },
+            ],
+          }),
+        knownVideos: Effect.succeed([]),
+        matchingSong: () => Effect.succeed(null),
+      },
+      Effect.void,
+    ),
+  );
+  assert.deepEqual(library.topArtists, [
+    { id: "artist:spiritbox", name: "Spiritbox", countedPlays: 9 },
+    { id: 1, name: "Sleep Token", countedPlays: 5 },
+  ]);
+  assert.deepEqual(
+    library.plays.map(({ id, countedPlays }) => [id, countedPlays]),
+    [[1, 5]],
+  );
+});

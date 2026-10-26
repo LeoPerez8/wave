@@ -1,6 +1,7 @@
 import {
   playedEntityTotals,
   playedArtistSongs,
+  streamedLibraryPlays,
   type PlayedEntityTotals,
   type PlayedArtistSongs,
 } from "./db/playedEntities";
@@ -1037,6 +1038,11 @@ export class LibraryStore extends Context.Service<
     readonly playedEntityTotals: (
       window: StatsWindow,
     ) => Effect.Effect<PlayedEntityTotals, LibraryStoreError>;
+    /**
+     * The all-time counted plays streamed of each Library song they are now
+     * (a download of the video, or the same recording), by its id.
+     */
+    readonly streamedLibraryPlays: Effect.Effect<ReadonlyMap<number, number>, LibraryStoreError>;
     readonly playedArtistSongs: (
       artistId: number,
       now: number,
@@ -1925,6 +1931,9 @@ const make = Effect.gen(function* () {
 
     playedEntityTotals: (window) =>
       attempt("sum up played albums and artists", () => playedEntityTotals(db, window)),
+    streamedLibraryPlays: attempt("sum up the Library songs' streamed plays", () =>
+      streamedLibraryPlays(db),
+    ),
     playedArtistSongs: (artistId, now) =>
       attempt("read the artist listening", () => playedArtistSongs(db, artistId, now)),
     creditedPlayTotals: (window) =>
