@@ -3,6 +3,8 @@ import { test } from "node:test";
 import { eq, sql } from "drizzle-orm";
 import type { PlayEvent } from "@wave/core";
 
+import { tasteHistory } from "./taste.ts";
+import { graphPlayPage } from "./artistGraph.ts";
 import { listeningHistory } from "./listeningHistory.ts";
 import { endPlay, latestPlay, recordPlay, updatePlay } from "./playHistory.ts";
 import * as schema from "./schema.ts";
@@ -231,6 +233,8 @@ test("streamed starts, progress and ends leave Library totals and existing histo
     keys: playedRecordingKeys(db),
     playlists: [...selectPlaylistsLastPlayed(db)],
     push: selectUnpushed(db, 100, () => null).rows.plays,
+    taste: tasteHistory(db),
+    graph: graphPlayPage(db, [-Number.MAX_VALUE, 0]).rows,
   });
   const before = existing();
   const stream = {
@@ -286,5 +290,65 @@ test("upgrading preserves Library history, ids, snapshots, sync flags and totals
   );
   assert.ok(id > 50);
   assert.deepEqual(listeningSums(db), before);
+  assert.deepEqual(playTotalsDrift(db), []);
+});
+
+test("mixed history keeps streamed and Library rows in stable time order across pages", async () => {
+  const db = await openTestDatabase();
+  const track = addTrack(db, { title: "Library song" });
+  const expected = [];
+  for (let i = 0; i < 60; i++) {
+    const streamed = i % 2 === 0;
+    expected.unshift(
+      recordPlay(
+        db,
+        {
+          ...play(track, Math.floor(i / 3)),
+          trackId: streamed ? "yt:history-video" : String(track),
+        },
+        false,
+        streamed ? streamedSong : undefined,
+      ),
+    );
+  }
+  const { result: first, queries } = traceQueries(db, () => listeningHistory(db));
+  assert.equal(first.rows.length, 50);
+  assert.ok(queries.every(({ rows }) => rows <= 51));
+  const second = listeningHistory(db, first.next!);
+  assert.deepEqual(
+    [...first.rows, ...second.rows].map(({ id }) => id),
+    expected,
+  );
+  assert.equal(second.next, null);
+  assert.equal(first.rows[0]?.streamedSong, null);
+  assert.equal(first.rows[1]?.streamedSong?.videoId, "history-video");
+});
+
+test("totals stay correct when an event changes between Library and video identity or is removed", async () => {
+  const db = await openTestDatabase();
+  const track = addTrack(db, { title: "Library song" });
+  const id = recordPlay(db, play(track, 1000));
+  db.update(schema.playEvents)
+    .set({ trackId: null, videoId: "converted" })
+    .where(eq(schema.playEvents.id, id))
+    .run();
+  assert.equal(listeningSums(db).countedPlays, 0);
+  assert.deepEqual(playTotalsDrift(db), []);
+  db.update(schema.playEvents)
+    .set({ trackId: track, videoId: null })
+    .where(eq(schema.playEvents.id, id))
+    .run();
+  assert.equal(listeningSums(db).countedPlays, 1);
+  assert.deepEqual(playTotalsDrift(db), []);
+  const stream = recordPlay(
+    db,
+    { ...play(track, 2000), trackId: "yt:history-video" },
+    false,
+    streamedSong,
+  );
+  db.delete(schema.playEvents).where(eq(schema.playEvents.id, stream)).run();
+  assert.equal(listeningSums(db).countedPlays, 1);
+  db.delete(schema.playEvents).where(eq(schema.playEvents.id, id)).run();
+  assert.equal(listeningSums(db).countedPlays, 0);
   assert.deepEqual(playTotalsDrift(db), []);
 });

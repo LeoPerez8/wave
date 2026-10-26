@@ -1160,7 +1160,7 @@ CREATE INDEX play_events_started_at_idx ON play_events (started_at);
 --> statement-breakpoint
 CREATE INDEX play_events_pushed_idx ON play_events (pushed);
 --> statement-breakpoint
-CREATE INDEX play_events_context_idx ON play_events (context_type, context_id, started_at);
+CREATE INDEX play_events_context_idx ON play_events (context_type, context_id, started_at, track_id);
 --> statement-breakpoint
 CREATE INDEX play_events_history_idx ON play_events (started_at DESC, id DESC)
   WHERE counted = 1 AND imported_from IS NULL;

@@ -668,6 +668,10 @@ describe("how a play ended, for its listeners", () => {
       ["ended", "yt:def", "completed", false],
     ]);
     assert.deepEqual(
+      steps.flatMap((step) => (step.type === "ended" ? [step.play.counted] : [])),
+      [false, true],
+    );
+    assert.deepEqual(
       steps.filter((step) => step.type === "started").map((step) => step.play.trackId),
       ["yt:abc", "yt:def", "b"],
     );

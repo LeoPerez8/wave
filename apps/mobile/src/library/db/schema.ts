@@ -662,7 +662,7 @@ export const playEvents = sqliteTable(
       .where(sql`${t.counted} = 1 AND ${t.importedFrom} IS NULL`),
     index("play_events_pushed_idx").on(t.pushed),
     // When each playlist was last played (the Playlists list's Recently Played).
-    index("play_events_context_idx").on(t.contextType, t.contextId, t.startedAt),
+    index("play_events_context_idx").on(t.contextType, t.contextId, t.startedAt, t.trackId),
   ],
 );
 
