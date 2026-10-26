@@ -138,7 +138,7 @@ describe("trackPlays", () => {
     );
   });
 
-  test("a streamed YT Music song is never on record, and the Library songs around it are", () => {
+  test("streamed and Library songs are recorded in playback order", () => {
     const { started, ended } = run([
       playing(0, "1", "a"),
       moved(MIN, "2", "auto"),
@@ -149,12 +149,13 @@ describe("trackPlays", () => {
     ]);
     assert.deepEqual(
       started.map((play) => play.trackId),
-      ["a", "b"],
+      ["a", "yt:dQw4w9WgXcQ", "b"],
     );
     assert.deepEqual(
       ended.map((play) => [play.trackId, play.endReason, play.listenedMs]),
       [
         ["a", "completed", MIN],
+        ["yt:dQw4w9WgXcQ", "completed", 4 * MIN],
         ["b", "skipped", 3 * MIN],
       ],
     );
@@ -615,7 +616,7 @@ describe("trackPlays with crossfade", () => {
     assert.equal(fadingPlaySoFar(state, 179_000), null);
   });
 
-  test("a streamed song fading into a Library song opens only the Library song's play", () => {
+  test("a streamed song remains on record while fading into a Library song", () => {
     const { started, ended } = run([
       playing(1000, "1", "yt:abc"),
       moved(176_000, "2", "crossfade"),
@@ -624,9 +625,12 @@ describe("trackPlays with crossfade", () => {
     ]);
     assert.deepEqual(
       started.map((play) => play.trackId),
-      ["b"],
+      ["yt:abc", "b"],
     );
-    assert.deepEqual(ended, []);
+    assert.deepEqual(
+      ended.map((play) => [play.trackId, play.listenedMs, play.counted]),
+      [["yt:abc", 180_000, true]],
+    );
   });
 });
 
@@ -651,7 +655,7 @@ const endsOf = (steps: readonly PlayStep[]) =>
   );
 
 describe("how a play ended, for its listeners", () => {
-  test("a streamed song's end is heard, though it's never on record", () => {
+  test("streamed play ends reach listeners once, including short skips", () => {
     const steps = stepsOf([
       playing(0, "1", "yt:abc"),
       moved(10_000, "2", "seek", true),
@@ -660,18 +664,20 @@ describe("how a play ended, for its listeners", () => {
       playing(200_000, "3", "b"),
     ]);
     assert.deepEqual(endsOf(steps), [
-      ["heard", "yt:abc", "skipped", true],
-      ["heard", "yt:def", "completed", false],
+      ["ended", "yt:abc", "skipped", true],
+      ["ended", "yt:def", "completed", false],
     ]);
     assert.deepEqual(
       steps.filter((step) => step.type === "started").map((step) => step.play.trackId),
-      ["b"],
+      ["yt:abc", "yt:def", "b"],
     );
   });
 
-  test("a streamed song playing now isn't a play to keep up to date", () => {
+  test("a streamed song saves progress under the same counted threshold", () => {
     const { state } = run([playing(0, "1", "yt:abc")]);
-    assert.equal(playSoFar(state, 5_000), null);
+    assert.equal(playSoFar(state, 5_000)?.listenedMs, 5_000);
+    assert.equal(playSoFar(state, 15_000)?.counted, false);
+    assert.equal(playSoFar(state, 15_001)?.counted, true);
   });
 
   test("tells a Next apart from Previous, picking another entry and a replay", () => {
