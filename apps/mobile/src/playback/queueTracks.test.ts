@@ -17,6 +17,7 @@ import {
   toQueueTrack,
   toUnsearchedQueueTrack,
   queuedYtSong,
+  queuedShuffleSong,
   toYtQueueTrack,
   tracksToLookUp,
   type QueueTrack,
@@ -511,4 +512,29 @@ test("a queued song carries the downloaded icon only while its Library file is t
   assert.equal(queueTrackDownloaded(filed, new Set(["7"])), false);
   assert.equal(queueTrackDownloaded(toYtQueueTrack(ytSong("v1"), null), new Set()), false);
   assert.equal(queueTrackDownloaded(undefined, new Set()), false);
+});
+
+describe("queuedShuffleSong", () => {
+  test("gives Even Shuffle a YT Music song's first artist and album, and no genre", () => {
+    const track = toYtQueueTrack(
+      { ...ytSong("v1"), artists: ["Bring Me the Horizon", "BABYMETAL"], album: "Post Human" },
+      null,
+    );
+    assert.deepEqual(queuedShuffleSong(track), {
+      artist: "Bring Me the Horizon",
+      genre: null,
+      album: "Post Human",
+    });
+  });
+
+  test("falls back on the credit shown when the song's artists weren't kept", () => {
+    const { artists: _, ...saved } = toYtQueueTrack(ytSong("v2"), null);
+    assert.deepEqual(queuedShuffleSong(saved), { artist: "Artist", genre: null, album: null });
+    // A Library song the Library couldn't be asked about: its credit and album.
+    assert.deepEqual(queuedShuffleSong(toQueueTrack(song(3))), {
+      artist: "Artist 3",
+      genre: null,
+      album: "Album 3",
+    });
+  });
 });

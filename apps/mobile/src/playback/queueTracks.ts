@@ -22,6 +22,7 @@ import {
   type ArtworkPalette,
   type QueueCover,
   type QueueEntry,
+  type ShuffleSong,
   type UnsearchedSong,
   type YtSong,
 } from "@wave/core";
@@ -126,6 +127,18 @@ export const toYtQueueTrack = (song: QueuedYtSong, artwork: CachedArtwork | null
     ytSong: song,
   };
 };
+
+/**
+ * What Even Shuffle knows of a song from what the queue holds of it, as for
+ * a streamed song (a YT Music song or an unsearched entry): its first artist,
+ * or the credit shown when its artists weren't kept, and its album; its genre
+ * is unknown.
+ */
+export const queuedShuffleSong = (track: QueueTrack): ShuffleSong => ({
+  artist: track.artists?.[0] ?? track.artist,
+  genre: null,
+  album: track.album,
+});
 
 /**
  * The YT Music song a queue track was queued from, as a native list gives

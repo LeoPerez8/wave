@@ -21,26 +21,33 @@ const KINDS: readonly {
 }[] = [
   { kind: "real", label: "Real Shuffle", line: "Any order, every one as likely" },
   { kind: "smart", label: "Smart Shuffle", line: "Your most played, spread among the rest" },
+  { kind: "even", label: "Even Shuffle", line: "Artists take turns, never twice in a row" },
 ];
 
 /** What the shuffle button says while [kind] is chosen. */
-const shuffleLabel = (kind: ShuffleKind): string =>
-  kind === "smart" ? "Smart Shuffle" : "Shuffle";
+const SHUFFLE_LABELS: Record<ShuffleKind, string> = {
+  real: "Shuffle",
+  smart: "Smart Shuffle",
+  even: "Even Shuffle",
+};
 
-/** Every shuffle control follows the saved choice and opens the same card. */
+/**
+ * Every shuffle control follows the saved choice and opens the same card.
+ * Even Shuffle keeps the plain shuffle icon until it has its own.
+ */
 export const useShuffleControl = () => {
   const kind = useShuffleKind();
   return {
     icon: kind === "smart" ? SmartShuffleIcon : IconArrowsShuffle,
-    label: shuffleLabel(kind),
+    label: SHUFFLE_LABELS[kind],
     onLongPress: openShuffleMenu,
-    accessibilityHint: "Long press to choose Real Shuffle or Smart Shuffle",
+    accessibilityHint: "Long press to choose Real Shuffle, Smart Shuffle or Even Shuffle",
   };
 };
 
 /**
- * The shuffle card: Real Shuffle and Smart Shuffle, the chosen one checked.
- * Picking one saves it and shuffles with it. Opened by a long press, the
+ * The shuffle card: Real Shuffle, Smart Shuffle and Even Shuffle, the chosen
+ * one checked. Picking one saves it and shuffles with it. Opened by a long press, the
  * finger can slide onto an entry and lift to pick it. Each entry's line says
  * what it does: on every entry for the card's first openings
  * ([openedBefore], Core's `shuffleLineShows`), then only on the entry under
