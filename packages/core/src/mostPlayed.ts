@@ -4,6 +4,7 @@
  * or the same recording) counts as that Library song, its plays added to the
  * file's.
  */
+import { compareTrackRefs } from "./refOrder.ts";
 import type { TrackRef } from "./ytMusic.ts";
 
 /** A song's counted plays as the store keeps them over all time. */
@@ -45,20 +46,6 @@ const add = (sum: MostPlayed | undefined, song: TrackRef, plays: KeptPlays): Mos
         : Math.max(sum.lastCountedAt, plays.lastCountedAt),
 });
 
-/** Library songs first, the latest added (highest id) first; streamed songs by video id. */
-const compareSongs = (a: TrackRef, b: TrackRef): number =>
-  a.kind === "library"
-    ? b.kind === "library"
-      ? b.id - a.id
-      : -1
-    : b.kind === "library"
-      ? 1
-      : a.videoId < b.videoId
-        ? -1
-        : a.videoId > b.videoId
-          ? 1
-          : 0;
-
 /**
  * The [limit] songs with the most counted plays, then the latest counted
  * play, of the [library] songs' and [streamed] songs' plays summed per song.
@@ -88,7 +75,8 @@ export const rankMostPlayed = (
         (a, b) =>
           b.countedPlays - a.countedPlays ||
           (b.lastCountedAt ?? 0) - (a.lastCountedAt ?? 0) ||
-          compareSongs(a.song, b.song),
+          // Library songs first, the latest added first; streamed songs by video id.
+          compareTrackRefs(a.song, b.song, "latest first"),
       )
       .slice(0, limit)
   );

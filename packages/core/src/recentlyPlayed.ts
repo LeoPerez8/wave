@@ -4,6 +4,8 @@
  * page at a time, so the shelf costs a few songs however long the history.
  */
 
+import { compareRefIds } from "./refOrder.ts";
+
 /** A played song, as the store reads it for the shelf. */
 export interface LatestPlayedSong<Id = number> {
   readonly albumId: Id;
@@ -36,21 +38,7 @@ export const recentlyPlayedAlbums = <Id extends number | string>(
   return (
     settled
       // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh array; Hermes lacks toSorted
-      .sort(
-        ([a, aAt], [b, bAt]) =>
-          bAt - aAt ||
-          (typeof a === "number" && typeof b === "number"
-            ? b - a
-            : typeof a === "number"
-              ? -1
-              : typeof b === "number"
-                ? 1
-                : a < b
-                  ? -1
-                  : a > b
-                    ? 1
-                    : 0),
-      )
+      .sort(([a, aAt], [b, bAt]) => bAt - aAt || compareRefIds(a, b, "latest first"))
       .slice(0, limit)
       .map(([albumId]) => albumId)
   );

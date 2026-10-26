@@ -4,6 +4,7 @@
  * `isCountedPlay`) enter a ranking, and artists are credited by track artist.
  */
 import { sortSteps } from "./buildSteps.ts";
+import { compareRefIds, compareTrackRefs } from "./refOrder.ts";
 import type { TrackRef } from "./ytMusic.ts";
 
 /** A stats period: a rolling window ending now. */
@@ -65,18 +66,7 @@ export type EntityPlayTotals = Omit<PlayTotals, "id"> & { readonly id: number | 
 
 /** Most played first as `rankPlays` ranks, then Library ids in order before online ones. */
 const compareEntities = (a: EntityPlayTotals, b: EntityPlayTotals): number =>
-  compareTotals(a, b) ||
-  (typeof a.id === "number" && typeof b.id === "number"
-    ? a.id - b.id
-    : typeof a.id === "number"
-      ? -1
-      : typeof b.id === "number"
-        ? 1
-        : a.id < b.id
-          ? -1
-          : a.id > b.id
-            ? 1
-            : 0);
+  compareTotals(a, b) || compareRefIds(a.id, b.id);
 
 export const rankEntityPlays = <A extends EntityPlayTotals>(
   totals: readonly A[],
@@ -132,20 +122,6 @@ export interface SongPlayTotals extends Totals {
   readonly song: TrackRef;
 }
 
-/** Library ids in order before video ids, so a full tie never depends on the input order. */
-const compareSongs = (a: TrackRef, b: TrackRef): number =>
-  a.kind === "library"
-    ? b.kind === "library"
-      ? a.id - b.id
-      : -1
-    : b.kind === "library"
-      ? 1
-      : a.videoId < b.videoId
-        ? -1
-        : a.videoId > b.videoId
-          ? 1
-          : 0;
-
 /**
  * The top `limit` songs, streamed and Library ones together, by `rankPlays`'
  * rule; a full tie goes to the Library song, then by id.
@@ -154,7 +130,7 @@ export const rankSongPlays = <A extends SongPlayTotals>(totals: readonly A[], li
   totals
     .filter((entry) => entry.countedPlays > 0)
     // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh copy; Hermes lacks toSorted
-    .sort((a, b) => compareTotals(a, b) || compareSongs(a.song, b.song))
+    .sort((a, b) => compareTotals(a, b) || compareTrackRefs(a.song, b.song))
     .slice(0, limit);
 
 /**

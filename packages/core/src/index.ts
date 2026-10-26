@@ -243,6 +243,8 @@ export {
   statsWindow,
 } from "./stats.ts";
 export type { PlayTotals, SongPlayTotals, StatsPeriod, StatsWindow } from "./stats.ts";
+export { compareRefIds, compareTrackRefs } from "./refOrder.ts";
+export type { LibraryIdOrder, RefId } from "./refOrder.ts";
 export { rankMostPlayed } from "./mostPlayed.ts";
 export type { KeptPlays, LibraryKeptPlays, MostPlayed, StreamedKeptPlays } from "./mostPlayed.ts";
 export { albumPlayTotals, artistPlayTotals } from "./stats.ts";
