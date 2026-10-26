@@ -4,6 +4,7 @@
  * `isCountedPlay`) enter a ranking, and artists are credited by track artist.
  */
 import { sortSteps } from "./buildSteps.ts";
+import type { TrackRef } from "./ytMusic.ts";
 
 /** A stats period: a rolling window ending now. */
 export type StatsPeriod = "week" | "month" | "year" | "all";
@@ -59,12 +60,15 @@ export interface PlayTotals {
   readonly latestPlayAt: number;
 }
 
-const compareRanked = (a: PlayTotals, b: PlayTotals): number =>
+type Totals = Omit<PlayTotals, "id">;
+
+const compareTotals = (a: Totals, b: Totals): number =>
   b.countedPlays - a.countedPlays ||
   b.listenedMs - a.listenedMs ||
   b.latestPlayAt - a.latestPlayAt ||
-  (a.sortKey < b.sortKey ? -1 : a.sortKey > b.sortKey ? 1 : 0) ||
-  a.id - b.id;
+  (a.sortKey < b.sortKey ? -1 : a.sortKey > b.sortKey ? 1 : 0);
+
+const compareRanked = (a: PlayTotals, b: PlayTotals): number => compareTotals(a, b) || a.id - b.id;
 
 /**
  * The top `limit` entities: most counted plays first, then most listened time,
@@ -76,6 +80,40 @@ export const rankPlays = <A extends PlayTotals>(totals: readonly A[], limit: num
     .filter((entry) => entry.countedPlays > 0)
     // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh copy; Hermes lacks toSorted
     .sort(compareRanked)
+    .slice(0, limit);
+
+/**
+ * A song's totals over a stats window: a Library song's, its streamed plays
+ * included once it has their video id or recording key, or a streamed song's,
+ * one entry across its plays, by video id.
+ */
+export interface SongPlayTotals extends Totals {
+  readonly song: TrackRef;
+}
+
+/** Library ids in order before video ids, so a full tie never depends on the input order. */
+const compareSongs = (a: TrackRef, b: TrackRef): number =>
+  a.kind === "library"
+    ? b.kind === "library"
+      ? a.id - b.id
+      : -1
+    : b.kind === "library"
+      ? 1
+      : a.videoId < b.videoId
+        ? -1
+        : a.videoId > b.videoId
+          ? 1
+          : 0;
+
+/**
+ * The top `limit` songs, streamed and Library ones together, by `rankPlays`'
+ * rule; a full tie goes to the Library song, then by id.
+ */
+export const rankSongPlays = <A extends SongPlayTotals>(totals: readonly A[], limit: number): A[] =>
+  totals
+    .filter((entry) => entry.countedPlays > 0)
+    // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh copy; Hermes lacks toSorted
+    .sort((a, b) => compareTotals(a, b) || compareSongs(a.song, b.song))
     .slice(0, limit);
 
 /**

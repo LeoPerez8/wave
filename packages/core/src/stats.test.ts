@@ -8,9 +8,11 @@ import {
   albumPlayTotals,
   artistPlayTotals,
   rankPlays,
+  rankSongPlays,
   statsWindow,
   type CreditedPlayTotals,
   type PlayTotals,
+  type SongPlayTotals,
 } from "./index.ts";
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -65,6 +67,58 @@ const totals = (id: number, overrides: Partial<PlayTotals> = {}): PlayTotals => 
 });
 
 const ids = (ranking: readonly PlayTotals[]) => ranking.map((entry) => entry.id);
+
+describe("rankSongPlays", () => {
+  const song = (
+    song: SongPlayTotals["song"],
+    overrides: Partial<SongPlayTotals> = {},
+  ): SongPlayTotals => ({
+    song,
+    sortKey: "same",
+    countedPlays: 1,
+    listenedMs: 180_000,
+    latestPlayAt: 1_000,
+    ...overrides,
+  });
+  const library = (id: number) => ({ kind: "library", id }) as const;
+  const streamed = (videoId: string) => ({ kind: "yt", videoId }) as const;
+
+  test("ranks streamed and Library songs together by the same rule", () => {
+    const ranking = rankSongPlays(
+      [
+        song(library(1), { countedPlays: 2 }),
+        song(streamed("v1"), { countedPlays: 5 }),
+        song(library(2), { countedPlays: 3, latestPlayAt: 9_000 }),
+        song(streamed("v2"), { countedPlays: 3, latestPlayAt: 1_000 }),
+        song(streamed("v3"), { countedPlays: 0, listenedMs: 60_000 }),
+      ],
+      STATS_TOP,
+    );
+    assert.deepEqual(
+      ranking.map((entry) => entry.song),
+      [streamed("v1"), library(2), streamed("v2"), library(1)],
+    );
+  });
+
+  test("a complete tie is settled by sort key, then Library ids before video ids", () => {
+    const tied = [
+      song(streamed("b")),
+      song(library(10)),
+      song(streamed("a")),
+      song(library(9)),
+      song(streamed("z"), { sortKey: "first" }),
+    ];
+    const expected = [streamed("z"), library(9), library(10), streamed("a"), streamed("b")];
+    assert.deepEqual(
+      rankSongPlays(tied, STATS_TOP).map((entry) => entry.song),
+      expected,
+    );
+    assert.deepEqual(
+      rankSongPlays(tied.toReversed(), 3).map((entry) => entry.song),
+      expected.slice(0, 3),
+    );
+  });
+});
 
 describe("rankPlays", () => {
   test("orders by counted plays, most first", () => {
