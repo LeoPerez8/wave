@@ -92,6 +92,16 @@ describe("autoLyricLines", () => {
     });
   });
 
+  test("splitting a long line trims spaces left by stripped word timestamps", () => {
+    const lyrics = parseLyrics(
+      "[00:02.00]Hold me closer tiny <00:03.00>  dancer in the night\n[00:05.00]Next",
+    );
+    assert.deepEqual(autoLyricLines({ ...showing, lyrics, positionMs: 3_000 }), {
+      text: { title: "Hold me closer tiny", artist: "dancer in the night" },
+      nextChangeMs: 5_000,
+    });
+  });
+
   test("a line of the limit's length still goes whole in the title, with the next line as the artist", () => {
     const atLimit = "Hold me closer tiny dancer now";
     assert.equal(atLimit.length, AUTO_LYRIC_LINE_MAX);
