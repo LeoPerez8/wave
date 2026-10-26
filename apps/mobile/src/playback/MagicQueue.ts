@@ -11,6 +11,7 @@ import {
   magicPickEnded,
   magicBatchRadios,
   magicLibrarySongs,
+  magicListSeedSongs,
   completeMagicRadioBatch,
   magicPlaySignal,
   magicQueueEdits,
@@ -27,6 +28,7 @@ import {
   type MagicSession,
   type MagicSignalKind,
   type QueueState,
+  type YtSong,
   ytTrackId,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
@@ -173,17 +175,22 @@ const SEED_VIDEO_IDS = 5;
 
 /**
  * Starts a Magic Queue from [seed], whose songs are [seedSongs] (the song
- * itself for a song seed): it replaces the queue (with Undo, as any play
- * does) with the seed's first song; the first 9 recommendations follow as
- * the session's first batch, at once when the radios it reads were saved,
- * else once they were read. Recommendations follow the song's radio for a
- * song, the artist's for an artist, and for an album or a playlist the
- * radios of a few of its songs, drawn again each batch by their counted
- * plays (`magicBatchRadios`); known genres only rank them.
+ * itself for a song seed) and, for a playlist, its [streamedSongs]: it
+ * replaces the queue (with Undo, as any play does) with the seed's first
+ * Library song; the first 9 recommendations follow as the session's first
+ * batch, at once when the radios it reads were saved, else once they were
+ * read. Recommendations follow the song's radio for a song, the artist's for
+ * an artist, and for an album or a playlist the radios of a few of its songs,
+ * streamed ones included, drawn again each batch by their counted plays
+ * (`magicBatchRadios`), streamed plays included; known genres only rank them.
  * YouTube Music's share of a batch starts at Discover's New music level
  * (`discoverLevel`), from Home or any long-press menu.
  */
-export const startMagicQueue = (seed: MagicSeed, seedSongs: readonly SongRow[]) =>
+export const startMagicQueue = (
+  seed: MagicSeed,
+  seedSongs: readonly SongRow[],
+  streamedSongs: readonly YtSong[] = [],
+) =>
   Effect.gen(function* () {
     if (!ytMusicEnabled()) return;
     const startedAt = Date.now();
@@ -199,27 +206,40 @@ export const startMagicQueue = (seed: MagicSeed, seedSongs: readonly SongRow[]) 
     const videoIds = yield* store
       .videoIds(radioSongs.map((song) => song.id))
       .pipe(Effect.orElseSucceed((): ReadonlyMap<number, string> => new Map()));
+    const streamed = list ? streamedSongs : [];
     const plays = list
       ? yield* store
-          .countedPlays(seedSongs.map((song) => song.id))
-          .pipe(Effect.orElseSucceed((): ReadonlyMap<number, number> => new Map()))
-      : new Map<number, number>();
+          .songCountedPlays([
+            ...seedSongs.map((song) => String(song.id)),
+            ...streamed.map((song) => ytTrackId(song.videoId)),
+          ])
+          .pipe(Effect.orElseSucceed((): ReadonlyMap<string, number> => new Map()))
+      : new Map<string, number>();
     const names = new Map(artists.map((artist) => [artist.id, artist.name]));
-    const seedSong = (song: SongRow): MagicSeedSong => ({
-      id: `song:${song.id}`,
-      title: song.title,
-      artists: song.artistIds.flatMap((id) => names.get(id) ?? []),
-      durationMs: song.durationMs,
-      ...(videoIds.get(song.id) === undefined ? {} : { videoId: videoIds.get(song.id)! }),
-      plays: plays.get(song.id) ?? 0,
-    });
+    const listSeedSongs = (): MagicSeedSong[] =>
+      magicListSeedSongs(
+        [
+          ...seedSongs.map((song) => ({
+            source: "library" as const,
+            track: {
+              id: song.id,
+              title: song.title,
+              artists: song.artistIds.flatMap((id) => names.get(id) ?? []),
+              durationMs: song.durationMs,
+              ...(videoIds.get(song.id) === undefined ? {} : { videoId: videoIds.get(song.id)! }),
+            },
+          })),
+          ...streamed.map((song) => ({ source: "stream" as const, song })),
+        ],
+        plays,
+      );
     const started = startSession(seed, playable.map(magicLibrarySongs(artists)), {
       id: String(Date.now()),
       random: Math.random,
       radio: {
         artists: playable.flatMap((song) => song.artistIds.flatMap((id) => names.get(id) ?? [])),
         ...(list
-          ? { songs: seedSongs.map(seedSong) }
+          ? { songs: listSeedSongs() }
           : playable[0] === undefined
             ? {}
             : {

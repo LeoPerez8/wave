@@ -5,11 +5,13 @@ import {
   recentlyPlayedAlbums,
   sortKey,
   streamedCredits,
+  type ArtistFirstPlay,
   type ArtistStatsInput,
   type EntityPlayTotals,
   type PlayedAlbumKey,
   type PlayedArtistKey,
   type PlayTotals,
+  type RecapSongGenre,
   type SongListening,
   type SongPlayTotals,
   type StatsWindow,
@@ -22,7 +24,15 @@ import { selectAlbums } from "./albums.ts";
 import { selectArtists } from "./artists.ts";
 import { readCredits } from "./credits.ts";
 import type { LibraryDatabase } from "./database.ts";
-import { artistPlays, creditedPlayTotals, streamedTrack, type ArtistPlays } from "./stats.ts";
+import {
+  artistFirstPlays,
+  artistPlays,
+  creditedPlayTotals,
+  songGenres,
+  songPlayTotals,
+  streamedTrack,
+  type ArtistPlays,
+} from "./stats.ts";
 import { streamedSongsOf } from "./streamedSongs.ts";
 
 export type OnlineAlbum = PlayedAlbumKey & {
@@ -334,5 +344,110 @@ export const playedArtistSongs = (
     songPlays: [...played.values()],
     streamedListening,
     streamedSongPlays: [...streamedSongPlays.values()],
+  };
+};
+
+/** Each of [ids]' current credits, by song id, in credit order. */
+const songArtists = (db: LibraryDatabase, ids: Iterable<number>): Map<number, number[]> => {
+  const artists = new Map<number, number[]>();
+  for (const row of db.all<{ trackId: number; artistId: number }>(sql`
+    SELECT track_id AS "trackId", artist_id AS "artistId" FROM track_artists
+    WHERE track_id IN (SELECT value FROM json_each(${JSON.stringify([...new Set(ids)])}))
+    ORDER BY track_id, position`)) {
+    const links = artists.get(row.trackId) ?? [];
+    links.push(row.artistId);
+    artists.set(row.trackId, links);
+  }
+  return artists;
+};
+
+/**
+ * When each of the artists [ids] (a Library artist's id, or an online one's)
+ * had their first counted play ever, streamed plays included, credited as
+ * `playedEntityTotals` credits them; an artist never played isn't listed.
+ * Reads each streamed video's first play through the play events' video index.
+ */
+export const playedArtistFirstPlays = (
+  db: LibraryDatabase,
+  ids: readonly (number | string)[],
+): ArtistFirstPlay[] => {
+  const wanted = new Set(ids);
+  const firsts = new Map<number | string, number>();
+  const played = (id: number | string, at: number) => {
+    const first = firsts.get(id);
+    if (wanted.has(id) && (first === undefined || at < first)) firsts.set(id, at);
+  };
+  const library = ids.filter((id): id is number => typeof id === "number");
+  for (const first of library.length === 0 ? [] : artistFirstPlays(db, library))
+    played(first.id, first.firstPlayAt);
+  const streams = db.all<{ videoId: string; trackId: number | null; firstPlayAt: number }>(sql`
+    WITH firsts AS (
+      SELECT kept.video_id, kept.recording_key,
+        (SELECT min(play_events.started_at) FROM play_events
+          WHERE play_events.video_id = kept.video_id AND play_events.counted
+            AND coalesce(play_events.recording_key, '') = kept.recording_key) AS first
+      FROM streamed_totals AS kept WHERE kept.counted_plays > 0
+    )
+    SELECT video_id AS "videoId", first AS "firstPlayAt",
+      ${streamedTrack(sql`firsts.video_id`, sql`nullif(firsts.recording_key, '')`)} AS "trackId"
+    FROM firsts`);
+  if (streams.length === 0) return [...firsts].map(([id, firstPlayAt]) => ({ id, firstPlayAt }));
+  const downloaded = songArtists(
+    db,
+    streams.flatMap((entry) => (entry.trackId === null ? [] : [entry.trackId])),
+  );
+  const songs = streamedSongsOf(
+    db,
+    streams.flatMap((entry) => (entry.trackId === null ? [entry.videoId] : [])),
+  );
+  const resolve = playedLibrary(db, songs.values()).resolve;
+  for (const entry of streams) {
+    if (entry.trackId !== null) {
+      for (const artist of downloaded.get(entry.trackId) ?? []) played(artist, entry.firstPlayAt);
+      continue;
+    }
+    const song = songs.get(entry.videoId);
+    if (song === undefined) continue;
+    for (const artist of resolve(song).artists) played(artist.id, entry.firstPlayAt);
+  }
+  return [...firsts].map(([id, firstPlayAt]) => ({ id, firstPlayAt }));
+};
+
+/**
+ * What a Recap of [window] is computed from (Core's `recap`), streamed plays
+ * included and credited as Stats credits them: each song's counted plays (a
+ * Library song by its id, a streamed song the Library hasn't by its video
+ * id), each album's and artist's (their rows with them), the genres of the
+ * Library's songs (a streamed song's isn't known), and the artists' first plays.
+ */
+export interface RecapPlays {
+  readonly songs: readonly EntityPlayTotals[];
+  readonly artists: readonly PlayedEntityTotal<PlayedArtist>[];
+  readonly albums: readonly PlayedEntityTotal<PlayedAlbum>[];
+  readonly songGenres: readonly RecapSongGenre[];
+  readonly artistFirstPlays: readonly ArtistFirstPlay[];
+}
+
+export const recapPlays = (db: LibraryDatabase, window: StatsWindow): RecapPlays => {
+  const songs = songPlayTotals(db, window).map(({ song, ...totals }) => ({
+    ...totals,
+    id: song.kind === "library" ? song.id : song.videoId,
+  }));
+  const { albums, artists } = playedEntityTotals(db, window);
+  const library = songs.flatMap((entry) =>
+    typeof entry.id === "number" && entry.countedPlays > 0 ? [entry.id] : [],
+  );
+  return {
+    songs,
+    artists,
+    albums,
+    songGenres: library.length === 0 ? [] : songGenres(db, library),
+    artistFirstPlays:
+      artists.length === 0
+        ? []
+        : playedArtistFirstPlays(
+            db,
+            artists.map((artist) => artist.id),
+          ),
   };
 };

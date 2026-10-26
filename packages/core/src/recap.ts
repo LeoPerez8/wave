@@ -10,7 +10,7 @@ import {
   LYRIC_CARD_FALLBACK,
   type LyricStoryBackground,
 } from "./lyricsShare.ts";
-import { rankPlays, type PlayTotals, type StatsWindow } from "./stats.ts";
+import { rankEntityPlays, type EntityPlayTotals, type StatsWindow } from "./stats.ts";
 
 /** A calendar month, local time; `month` is 1 (January) to 12. */
 export interface RecapMonth {
@@ -147,12 +147,20 @@ export interface RecapInput {
   readonly period: RecapPeriod;
   /** Counted listening over any span: only what started within the period counts. */
   readonly listening: readonly CountedListening[];
-  /** Each song's counted plays within the period (`recapWindow`), in no order. */
-  readonly songs: readonly PlayTotals[];
-  /** Each artist's counted plays within the period, credited by track artist (`artistPlayTotals`). */
-  readonly artists?: readonly PlayTotals[];
+  /**
+   * Each song's counted plays within the period (`recapWindow`), in no order:
+   * a Library song's by its id, its streamed plays included, and a streamed
+   * song's the Library hasn't by its video id.
+   */
+  readonly songs: readonly EntityPlayTotals[];
+  /**
+   * Each artist's counted plays within the period, credited by track artist
+   * (`artistPlayTotals`), streamed plays included: an artist the Library
+   * hasn't by its online id.
+   */
+  readonly artists?: readonly EntityPlayTotals[];
   /** Each album's counted plays within the period (`albumPlayTotals`). */
-  readonly albums?: readonly PlayTotals[];
+  readonly albums?: readonly EntityPlayTotals[];
   /** The genre tags of `songs` (by id); a song not listed, or with no genre, is left out of the genres. */
   readonly songGenres?: readonly RecapSongGenre[];
   /**
@@ -164,13 +172,13 @@ export interface RecapInput {
 
 /** When the artist [id] had their first counted play ever (ms since the epoch). */
 export interface ArtistFirstPlay {
-  readonly id: number;
+  readonly id: number | string;
   readonly firstPlayAt: number;
 }
 
 /** A song's genre tag: its first value and, for a multi-value tag, every value. */
 export interface RecapSongGenre {
-  readonly id: number;
+  readonly id: number | string;
   readonly genre: string | null;
   readonly genres?: readonly string[] | null;
 }
@@ -189,17 +197,17 @@ export interface Recap {
   /** Whole minutes of counted listening in the period. */
   readonly minutesListened: number;
   /** The period's most played songs, the top one first, as `rankPlays` orders them. */
-  readonly topSongs: readonly PlayTotals[];
+  readonly topSongs: readonly EntityPlayTotals[];
   /** The period's most played artists, the top one first. */
-  readonly topArtists: readonly PlayTotals[];
+  readonly topArtists: readonly EntityPlayTotals[];
   /** The period's most played album; null with none played. */
-  readonly topAlbum: PlayTotals | null;
+  readonly topAlbum: EntityPlayTotals | null;
   /** The period's most played genre families, the top one first. */
   readonly topGenres: readonly RecapGenre[];
   /** When and how steadily the period was listened to; null with no counted listening. */
   readonly habits: RecapHabits | null;
   /** The artists whose first counted play ever was in the period, the most played first. */
-  readonly discoveredArtists: readonly PlayTotals[];
+  readonly discoveredArtists: readonly EntityPlayTotals[];
 }
 
 /** A Recap's listening habits, in local time. */
@@ -248,7 +256,7 @@ const habitsOf = (listening: readonly CountedListening[]): RecapHabits | null =>
  * families: a song in n families adds 1/n of its plays to each), then by name.
  */
 const topGenres = (
-  songs: readonly PlayTotals[],
+  songs: readonly EntityPlayTotals[],
   songGenres: readonly RecapSongGenre[],
 ): RecapGenre[] => {
   const tags = new Map(songGenres.map((tagged) => [tagged.id, tagged]));
@@ -304,12 +312,12 @@ export const recap = ({
     period,
     title: recapTitle(period),
     minutesListened: Math.floor(listenedMs / MINUTE_MS),
-    topSongs: rankPlays(songs, RECAP_TOP_SONGS),
-    topArtists: rankPlays(artists, RECAP_TOP_ARTISTS),
-    topAlbum: rankPlays(albums, 1)[0] ?? null,
+    topSongs: rankEntityPlays(songs, RECAP_TOP_SONGS),
+    topArtists: rankEntityPlays(artists, RECAP_TOP_ARTISTS),
+    topAlbum: rankEntityPlays(albums, 1)[0] ?? null,
     topGenres: topGenres(songs, songGenres),
     habits: habitsOf(within),
-    discoveredArtists: rankPlays(
+    discoveredArtists: rankEntityPlays(
       artists.filter((artist) => discovered.has(artist.id)),
       Number.POSITIVE_INFINITY,
     ),
@@ -445,25 +453,25 @@ export type RecapSlide =
   | {
       readonly kind: "topSongs";
       /** The top songs, the top one first: it's the one highlighted. */
-      readonly songs: readonly PlayTotals[];
+      readonly songs: readonly EntityPlayTotals[];
     }
-  | { readonly kind: "topArtists"; readonly artists: readonly PlayTotals[] }
-  | { readonly kind: "topAlbum"; readonly album: PlayTotals }
+  | { readonly kind: "topArtists"; readonly artists: readonly EntityPlayTotals[] }
+  | { readonly kind: "topAlbum"; readonly album: EntityPlayTotals }
   | { readonly kind: "topGenres"; readonly genres: readonly RecapGenre[] }
   | ({ readonly kind: "habits" } & RecapHabits)
   | {
       readonly kind: "discovered";
       /** Every artist discovered in the period, the most played first. */
-      readonly artists: readonly PlayTotals[];
+      readonly artists: readonly EntityPlayTotals[];
     }
   | {
       /** The summary card, always last: the Recap on one slide, as Wrapped's is. */
       readonly kind: "summary";
       readonly minutes: number;
       /** The top songs (up to 5), the top one first. */
-      readonly songs: readonly PlayTotals[];
+      readonly songs: readonly EntityPlayTotals[];
       /** The top artists (up to 5), the top one first. */
-      readonly artists: readonly PlayTotals[];
+      readonly artists: readonly EntityPlayTotals[];
       /** The top genre family; null with no song with a genre. */
       readonly genre: GenreFamily | null;
     };

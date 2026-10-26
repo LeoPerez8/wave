@@ -62,14 +62,40 @@ const playedThrough = (trackId: string) => ({
 });
 
 describe("The live taste profile", () => {
-  test("learns a Library song's play end, not a streamed song's", async () => {
+  test("learns a play end, a streamed song's as a Library song's", async () => {
     const { live } = liveTaste();
     await Effect.runPromise(live.profile);
     const streamed = ytTrackId("abc");
     await Effect.runPromise(live.played(playedThrough("7")));
     await Effect.runPromise(live.played(playedThrough(streamed)));
     assert.equal(await songScore(live, "7"), 1);
-    assert.equal(await songScore(live, streamed), 0);
+    assert.equal(await songScore(live, streamed), 1);
+  });
+
+  test("a streamed play is in the history: derived again, it counts once", async () => {
+    const streamed = ytTrackId("abc");
+    let history = NO_HISTORY;
+    const { live, holdDerivation } = liveTaste(() => history);
+    await Effect.runPromise(live.profile);
+    await Effect.runPromise(live.played(playedThrough(streamed)));
+    history = { ...NO_HISTORY, plays: [playedThrough(streamed)] };
+    live.invalidate();
+    assert.equal(await songScore(live, streamed), 1);
+    // One that comes while a derivation reads a history that has it counts once too.
+    live.invalidate();
+    const release = holdDerivation();
+    const again = Effect.runPromise(live.profile);
+    const later = { ...playedThrough(streamed), startedAt: NOW + 1 };
+    history = { ...NO_HISTORY, plays: [playedThrough(streamed), later] };
+    await Effect.runPromise(live.played(later));
+    release();
+    assert.equal((await again)?.songs.get(streamed), 2);
+  });
+
+  test("a streamed play before the profile was first asked for is left to the history", async () => {
+    const { live } = liveTaste();
+    await Effect.runPromise(live.played(playedThrough(ytTrackId("abc"))));
+    assert.equal(await songScore(live, ytTrackId("abc")), 0);
   });
 
   test("a signal that comes while the profile is being derived counts once it is", async () => {

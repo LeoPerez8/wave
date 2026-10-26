@@ -10,6 +10,7 @@ import {
   type GenreFamily,
   type RecapGenre,
   type RecapColour,
+  ytSongArtist,
 } from "@wave/core";
 import { StatusBar } from "expo-status-bar";
 import { useCallback, useEffect, useRef, useState, type Key, type ReactNode } from "react";
@@ -41,12 +42,13 @@ import { ArtistImage } from "@/catalog/ArtistImage";
 import { Artwork } from "@/catalog/Artwork";
 import { CELL, grid } from "@/catalog/grid";
 import { Press } from "@/motion/Press";
-import type { AlbumRow, ArtistRow, SongRow } from "@/library/LibraryStore";
+import type { PlayedAlbum, PlayedArtist } from "@/library/db/playedEntities";
+import { useYtMusicEnabled } from "@/settings/ytMusic";
 import { useInCapture } from "@/share/imageCapture";
 import { useThemeColor } from "@/theme/useThemeColor";
 
 import { RecapSharePreview } from "./RecapShare";
-import type { LoadedRecap, LoadedRecapSlide, Ranked } from "./Stats";
+import type { LoadedRecap, LoadedRecapSlide, Ranked, StatsSong } from "./Stats";
 import { useRecapMusic } from "./recapMusic";
 import { playCount } from "./StatsViews";
 
@@ -126,7 +128,36 @@ const artworkUri = (item: {
   return path === null ? undefined : `file://${path}`;
 };
 
-function TopSongsSlide({ songs }: { songs: readonly Ranked<SongRow>[] }) {
+/**
+ * A song as a Recap shows it: a Library song's, or a streamed one's as its
+ * latest play had it, its cover a placeholder while YT Music is off.
+ */
+const songShown = (song: StatsSong, ytMusic: boolean) =>
+  song.source === "library"
+    ? {
+        key: song.track.id,
+        title: song.track.title,
+        artist: song.track.artist,
+        artworkUri: artworkUri(song.track),
+      }
+    : {
+        key: song.song.videoId,
+        title: song.song.title,
+        artist: ytSongArtist(song.song),
+        artworkUri: ytMusic ? (song.song.artworkUrl ?? undefined) : undefined,
+      };
+
+/** An album's cover as a Recap shows it: an online album's is a placeholder while YT Music is off. */
+const albumArtworkUri = (album: PlayedAlbum, ytMusic: boolean): string | undefined =>
+  "online" in album ? (ytMusic ? (album.artworkUrl ?? undefined) : undefined) : artworkUri(album);
+
+/** An artist's image as a Recap shows it: an online artist's is a placeholder while YT Music is off. */
+const artistShown = (artist: PlayedArtist, ytMusic: boolean) =>
+  "online" in artist ? { ...artist, placeholder: !ytMusic } : artist;
+
+function TopSongsSlide({ songs: ranked }: { songs: readonly Ranked<StatsSong>[] }) {
+  const ytMusic = useYtMusicEnabled();
+  const songs = ranked.map((entry) => ({ ...entry, item: songShown(entry.item, ytMusic) }));
   const [top, ...rest] = songs;
   if (top === undefined) return null;
   return (
@@ -134,7 +165,7 @@ function TopSongsSlide({ songs }: { songs: readonly Ranked<SongRow>[] }) {
       <Heading>Your top songs</Heading>
       <Rise step={1}>
         <View style={{ gap: CELL * 1.5 }}>
-          <Artwork uri={artworkUri(top.item)} size={CELL * 26} radius={12} />
+          <Artwork uri={top.item.artworkUri} size={CELL * 26} radius={12} />
           <View>
             <Text className="font-sans text-footnote font-semibold text-on-recap opacity-80">
               #1 · {playCount(top.countedPlays)}
@@ -151,7 +182,7 @@ function TopSongsSlide({ songs }: { songs: readonly Ranked<SongRow>[] }) {
       <RankedLines
         entries={rest}
         firstRank={2}
-        entryKey={(entry) => entry.item.id}
+        entryKey={(entry) => entry.item.key}
         line={(entry) => ({
           title: entry.item.title,
           detail: `${entry.item.artist} · ${playCount(entry.countedPlays)}`,
@@ -239,16 +270,19 @@ function RankedLines<T>({
   );
 }
 
-const artistKey = (entry: Ranked<ArtistRow>): Key => entry.item.id;
+const artistKey = (entry: Ranked<PlayedArtist>): Key => entry.item.id;
 
 /** An artist's ranked line: its image, its name over its plays. */
-const artistLine = (entry: Ranked<ArtistRow>): RankedLineContent => ({
-  image: <ArtistImage artist={entry.item} size={CELL * 5} />,
-  title: entry.item.name,
-  detail: playCount(entry.countedPlays),
-});
+const artistLine =
+  (ytMusic: boolean) =>
+  (entry: Ranked<PlayedArtist>): RankedLineContent => ({
+    image: <ArtistImage artist={artistShown(entry.item, ytMusic)} size={CELL * 5} />,
+    title: entry.item.name,
+    detail: playCount(entry.countedPlays),
+  });
 
-function TopArtistsSlide({ artists }: { artists: readonly Ranked<ArtistRow>[] }) {
+function TopArtistsSlide({ artists }: { artists: readonly Ranked<PlayedArtist>[] }) {
+  const ytMusic = useYtMusicEnabled();
   const [top, ...rest] = artists;
   if (top === undefined) return null;
   return (
@@ -256,7 +290,7 @@ function TopArtistsSlide({ artists }: { artists: readonly Ranked<ArtistRow>[] })
       <Heading>Your top artists</Heading>
       <Rise step={1}>
         <View style={{ gap: CELL * 1.5 }}>
-          <ArtistImage artist={top.item} size={CELL * 22} large />
+          <ArtistImage artist={artistShown(top.item, ytMusic)} size={CELL * 22} large />
           <View>
             <Text className="font-sans text-footnote font-semibold text-on-recap opacity-80">
               #1 · {playCount(top.countedPlays)}
@@ -267,17 +301,18 @@ function TopArtistsSlide({ artists }: { artists: readonly Ranked<ArtistRow>[] })
           </View>
         </View>
       </Rise>
-      <RankedLines entries={rest} firstRank={2} entryKey={artistKey} line={artistLine} />
+      <RankedLines entries={rest} firstRank={2} entryKey={artistKey} line={artistLine(ytMusic)} />
     </View>
   );
 }
 
-function TopAlbumSlide({ album }: { album: Ranked<AlbumRow> }) {
+function TopAlbumSlide({ album }: { album: Ranked<PlayedAlbum> }) {
+  const ytMusic = useYtMusicEnabled();
   return (
     <View className="flex-1 justify-center" style={{ gap: CELL * 3 }}>
       <Heading>Your top album</Heading>
       <Rise step={1}>
-        <Artwork uri={artworkUri(album.item)} size={CELL * 32} radius={12} />
+        <Artwork uri={albumArtworkUri(album.item, ytMusic)} size={CELL * 32} radius={12} />
       </Rise>
       <Rise step={2}>
         <View>
@@ -367,8 +402,9 @@ function DiscoveredSlide({
   artists,
 }: {
   count: number;
-  artists: readonly Ranked<ArtistRow>[];
+  artists: readonly Ranked<PlayedArtist>[];
 }) {
+  const ytMusic = useYtMusicEnabled();
   return (
     <View className="flex-1 justify-center" style={{ gap: CELL * 3 }}>
       <Heading>You discovered</Heading>
@@ -383,7 +419,12 @@ function DiscoveredSlide({
           {count === 1 ? "new artist" : "new artists"}
         </Text>
       </Rise>
-      <RankedLines entries={artists} firstRank={1} entryKey={artistKey} line={artistLine} />
+      <RankedLines
+        entries={artists}
+        firstRank={1}
+        entryKey={artistKey}
+        line={artistLine(ytMusic)}
+      />
     </View>
   );
 }
@@ -437,17 +478,18 @@ function SummarySlide({
   genre,
 }: {
   minutes: number;
-  songs: readonly Ranked<SongRow>[];
-  artists: readonly Ranked<ArtistRow>[];
+  songs: readonly Ranked<StatsSong>[];
+  artists: readonly Ranked<PlayedArtist>[];
   genre: GenreFamily | null;
 }) {
+  const ytMusic = useYtMusicEnabled();
   const top = artists[0];
   return (
     <View className="flex-1 justify-center" style={{ gap: CELL * 4 }}>
       {top !== undefined && (
         <Rise step={0}>
           <View className="items-center">
-            <ArtistImage artist={top.item} size={CELL * 20} large />
+            <ArtistImage artist={artistShown(top.item, ytMusic)} size={CELL * 20} large />
           </View>
         </Rise>
       )}
@@ -461,7 +503,12 @@ function SummarySlide({
               />
             )}
             {songs.length > 0 && (
-              <SummaryColumn heading="Top songs" names={songs.map((entry) => entry.item.title)} />
+              <SummaryColumn
+                heading="Top songs"
+                names={songs.map(({ item }) =>
+                  item.source === "library" ? item.track.title : item.song.title,
+                )}
+              />
             )}
           </View>
         </Rise>

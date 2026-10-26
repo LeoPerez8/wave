@@ -7,7 +7,7 @@ import { beforeEach, describe, test } from "node:test";
 import type { IndexedTrack } from "../LibraryStore.ts";
 import { creditSplits } from "./credits.ts";
 import { homePlays, recordPlay, type MostPlayedRow } from "./playHistory.ts";
-import { listeningSums } from "./playTotals.ts";
+import { listeningSums, songCountedPlays } from "./playTotals.ts";
 import { saveBatch } from "./save.ts";
 import { songPlayTotals } from "./stats.ts";
 import {
@@ -317,5 +317,47 @@ describe("Home's Most played with streamed plays", () => {
         );
       }
     }
+  });
+});
+
+describe("the counted plays Smart Shuffle and Magic Queue weigh songs by", () => {
+  test("a streamed song in the queue has its counted plays, as a Library song has", () => {
+    const library = addTrack(db, { title: "So What" });
+    for (let i = 0; i < 3; i++) recordPlay(db, play(library, 1_000 + i));
+    for (let i = 0; i < 3; i++) stream(airbag, 2_000 + i);
+    stream(airbag, 3_000, { counted: false, listenedMs: 5_000, endReason: "skipped" });
+    assert.deepEqual(
+      songCountedPlays(db, [String(library), "yt:v-airbag", "yt:v-never"]),
+      new Map([
+        [String(library), 3],
+        ["yt:v-airbag", 3],
+      ]),
+    );
+  });
+
+  test("a downloaded song's plays add up its streamed ones, under either of its ids", () => {
+    for (let i = 0; i < 2; i++) stream(airbag, 1_000 + i);
+    const track = download("Airbag", { videoId: "v-airbag" });
+    recordPlay(db, play(track, 5_000));
+    assert.deepEqual(
+      songCountedPlays(db, [String(track), "yt:v-airbag"]),
+      new Map([
+        [String(track), 3],
+        ["yt:v-airbag", 3],
+      ]),
+    );
+  });
+
+  test("read the kept totals, never the play history", () => {
+    for (let i = 0; i < 20; i++) stream({ ...airbag, videoId: `v-${i}` }, 1_000 + i);
+    const track = download("Airbag", { videoId: "v-3" });
+    recordPlay(db, play(track, 5_000));
+    for (const query of traceQueries(db, () => songCountedPlays(db, [String(track), "yt:v-4"]))
+      .queries)
+      assert.deepEqual(
+        query.plan.filter((step) => /SCAN play_events/.test(step)),
+        [],
+        query.sql,
+      );
   });
 });
