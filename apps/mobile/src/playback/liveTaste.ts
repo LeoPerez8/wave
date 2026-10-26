@@ -41,9 +41,22 @@ const learned = (profile: TasteProfile, signals: readonly TasteSignal[]): TasteP
   signals.reduce(tasteLearned, profile);
 
 /**
+ * Whether [signal] is never on record: a streamed song's star or download.
+ * Its plays are, as a Library song's.
+ */
+const offRecord = ({
+  kind,
+  song,
+}: {
+  readonly kind: TasteSignalKind;
+  readonly song: Pick<MagicSong, "trackId">;
+}): boolean =>
+  (kind === "favorite" || kind === "download") && parseTrackId(song.trackId)?.kind === "yt";
+
+/**
  * The signals of [held] that [history] doesn't have yet. A play is on record
- * by its song and start; a star once its write landed (it's announced before);
- * a streamed song's signals are never on record.
+ * by its song and start, a streamed song's too; a star once its write landed
+ * (it's announced before); a streamed song's star or download is never on record.
  */
 function* historyMembership(
   history: TasteHistory | null,
@@ -65,7 +78,7 @@ function* historyMembership(
     yield;
   }
   return ({ kind, song, at }) =>
-    parseTrackId(song.trackId)?.kind !== "yt" &&
+    !offRecord({ kind, song }) &&
     (kind === "favorite"
       ? favorites.has(song.trackId)
       : kind === "download"
@@ -93,7 +106,7 @@ export const makeLiveTaste = <R>({
    * the history it read (that read starts it), so learned once it's done.
    */
   let held: OrderedSignal[] | null = null;
-  // Streamed signals have no SQLite source; replay them after invalidation too.
+  // A streamed song's stars and downloads have no SQLite source; replay them after invalidation too.
   let streamed: OrderedSignal[] = [];
   /** Only one derivation at a time: a second ask waits for the first's profile. */
   const deriving = Semaphore.makeUnsafe(1);
@@ -104,14 +117,16 @@ export const makeLiveTaste = <R>({
       // Before the first ask, the history the profile will be derived from has it.
       if (
         trackIds.length === 0 ||
-        (known === null && held === null && trackIds.every((id) => parseTrackId(id)?.kind !== "yt"))
+        (known === null &&
+          held === null &&
+          trackIds.every((id) => !offRecord({ kind, song: { trackId: id } })))
       )
         return;
       const songs = yield* songsOf(trackIds);
       const signals = songs.map((song) => ({ kind, song, at }));
       for (const signal of signals) {
         const entry = { order: signalOrder++, signal };
-        if (parseTrackId(signal.song.trackId)?.kind === "yt") streamed.push(entry);
+        if (offRecord(signal)) streamed.push(entry);
         else held?.push(entry);
       }
       if (known !== null) known = learned(known, signals);
@@ -189,15 +204,12 @@ export const makeLiveTaste = <R>({
 
     /**
      * A play ended: one played to the end, or skipped within its first 30 s
-     * (`tastePlaySignal`), moves the profile. A streamed YT Music song's
-     * says nothing: it's never in the history, so it would count only until
-     * the next launch.
+     * (`tastePlaySignal`), moves the profile, a streamed song's as a Library
+     * song's: both are in the history it's derived from again.
      */
     played: (play: Pick<PlayEvent, "trackId" | "startedAt" | "listenedMs" | "endReason">) => {
       const kind = tastePlaySignal(play);
-      return kind === null || parseTrackId(play.trackId)?.kind === "yt"
-        ? Effect.void
-        : learn(kind, [play.trackId], play.startedAt);
+      return kind === null ? Effect.void : learn(kind, [play.trackId], play.startedAt);
     },
 
     /** The owner starred or downloaded [trackIds] (a YT Music song's too) at [at]. */
