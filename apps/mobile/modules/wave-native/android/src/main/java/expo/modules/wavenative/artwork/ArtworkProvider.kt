@@ -12,6 +12,7 @@ import android.os.ParcelFileDescriptor
 import expo.modules.wavenative.log.WaveLog
 import java.io.File
 import java.io.FileNotFoundException
+import kotlin.concurrent.thread
 
 /**
  * Serves cached artwork read-only to Android Auto, the media notification and
@@ -25,7 +26,13 @@ import java.io.FileNotFoundException
 class ArtworkProvider : ContentProvider() {
   override fun onCreate(): Boolean {
     // Providers start with the process, before anything builds a player item.
-    authority = ArtworkUris.authority(context!!.packageName)
+    val appContext = context!!
+    authority = ArtworkUris.authority(appContext.packageName)
+    // Retire the old lyrics-image cache once at startup; no file IO on the main thread.
+    thread(name = "WaveArtworkCleanup", isDaemon = true) {
+      runCatching { File(appContext.cacheDir, "artwork-lyrics").deleteRecursively() }
+        .onFailure { WaveLog.w("WaveArtwork", "Couldn't delete the old lyrics images", it) }
+    }
     return true
   }
 
