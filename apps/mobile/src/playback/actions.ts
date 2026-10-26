@@ -363,6 +363,20 @@ export const playPlaylist = async (
   return null;
 };
 
+/**
+ * Plays a ranking (Stats' songs, Home's Most played) that mixes the
+ * Library's songs and streamed ones from `startIndex`, as `playPlaylist`
+ * plays a playlist: with YT Music off, the Library's songs alone, and a
+ * tapped streamed song plays nothing (its row is dimmed).
+ */
+export const playRankedSongs = async (
+  songs: readonly ListedSong[],
+  startIndex: number | undefined,
+  context: QueueContext,
+): Promise<void> => {
+  await playPlaylist(songs, startIndex, context);
+};
+
 export const playYtNext = (songs: readonly YtSong[]): Promise<void> =>
   dispatchWithYt({ type: "playNext", trackIds: ytTrackIds(songs) }, songs, undefined);
 

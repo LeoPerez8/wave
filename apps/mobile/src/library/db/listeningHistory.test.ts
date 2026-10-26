@@ -27,7 +27,6 @@ import {
 import { mixHistoryPage } from "./mixInputs.ts";
 import { selectUnpushed } from "./syncRows.ts";
 import { markPushed } from "./syncRows.ts";
-import { selectPlaylistsLastPlayed } from "./playlists.ts";
 import { deleteTracksById } from "./tracks.ts";
 
 const play = (trackId: number, startedAt: number, counted = true): PlayEvent => ({
@@ -217,14 +216,14 @@ test("a streamed play saves progress, its queue snapshot and recording identity 
   assert.deepEqual(listeningHistory(db).rows[0]?.snapshot, row.snapshot);
 });
 
-test("streamed starts, progress and ends leave Library totals and existing history consumers unchanged", async () => {
+test("streamed starts, progress and ends leave the Library-only consumers unchanged", async () => {
   const db = await openTestDatabase();
   const track = addTrack(db, { title: "Library song" });
   const id = recordPlay(db, play(track, 1000));
   endPlay(db, id, { ...play(track, 1000), endReason: "completed" });
   const existing = () => ({
-    home: homePlays(db),
-    totals: listeningSums(db),
+    // Most Played, the listening totals and playlist recency count streamed plays (streamedCounts.test.ts).
+    recentlyPlayed: homePlays(db).recentlyPlayed,
     listening: songListening(db),
     songs: trackPlayTotals(db, { from: null, to: 100_000 }),
     artists: creditedPlayTotals(db, { from: 0, to: 100_000 }),
@@ -232,7 +231,6 @@ test("streamed starts, progress and ends leave Library totals and existing histo
     recapPage: countedListeningPage(db, 0),
     mixes: mixHistoryPage(db, 0),
     keys: playedRecordingKeys(db),
-    playlists: [...selectPlaylistsLastPlayed(db)],
     taste: tasteHistory(db),
     graph: graphPlayPage(db, [-Number.MAX_VALUE, 0]).rows,
   });
@@ -266,8 +264,9 @@ test("earlier streamed rows resolve to a downloaded Library file by video id, ke
   assert.equal(row.song?.id, downloaded);
   assert.ok(row.song?.path);
   assert.deepEqual(row.snapshot, original.snapshot);
-  // Downloading doesn't start counting streamed plays in Library rankings in this ticket.
-  assert.equal(listeningSums(db).countedPlays, 0);
+  // Downloaded, its streamed play is the Library song's.
+  assert.equal(listeningSums(db).countedPlays, 1);
+  assert.equal(listeningSums(db).songsListened, 1);
 });
 
 test("upgrading preserves Library history, ids, snapshots, sync flags and totals before recording streams", async () => {
@@ -275,7 +274,8 @@ test("upgrading preserves Library history, ids, snapshots, sync flags and totals
   const track = addTrack(db, { title: "Existing song" });
   db.run(sql`INSERT INTO play_events (id, track_id, started_at, snapshot, listened_ms, end_reason, counted, sync_id, pushed, ongoing)
     VALUES (50, ${track}, 1000, '{"title":"Old title","artist":"Artist","album":null,"artworkPath":null,"thumbPath":null}', 20000, 'interrupted', 1, 'kept-sync-id', 1, 1)`);
-  const before = listeningSums(db);
+  // The row above's totals, which the upgrade keeps.
+  const before = { listenedMs: 20_000, countedPlays: 1, songsListened: 1, lastPlayedAt: 1000 };
   await migrateTestDatabase(db);
   assert.deepEqual(listeningSums(db), before);
   assert.equal(listeningHistory(db).rows[0]?.id, 50);
@@ -289,7 +289,13 @@ test("upgrading preserves Library history, ids, snapshots, sync flags and totals
     streamedSong,
   );
   assert.ok(id > 50);
-  assert.deepEqual(listeningSums(db), before);
+  assert.deepEqual(listeningSums(db), {
+    // The streamed song is a second song listened.
+    listenedMs: 40_000,
+    countedPlays: 2,
+    songsListened: 2,
+    lastPlayedAt: 2000,
+  });
   assert.deepEqual(playTotalsDrift(db), []);
 });
 
@@ -332,7 +338,8 @@ test("totals stay correct when an event changes between Library and video identi
     .set({ trackId: null, videoId: "converted" })
     .where(eq(schema.playEvents.id, id))
     .run();
-  assert.equal(listeningSums(db).countedPlays, 0);
+  assert.equal(listeningSums(db).countedPlays, 1);
+  assert.equal(listeningSums(db).songsListened, 1);
   assert.deepEqual(playTotalsDrift(db), []);
   db.update(schema.playEvents)
     .set({ trackId: track, videoId: null })

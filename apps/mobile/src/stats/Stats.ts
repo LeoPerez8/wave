@@ -5,6 +5,7 @@ import {
   availableRecaps,
   createRecapAvailability,
   rankPlays,
+  rankSongPlays,
   recap,
   recapId,
   recapSlides,
@@ -12,11 +13,14 @@ import {
   statsWindow,
   type ArtistStats as ArtistStatsLines,
   type GenreFamily,
+  type MixedSong,
   type CountedListening,
   type PlayTotals,
+  type SongPlayTotals,
   type RecapPeriod,
   type RecapSlide,
   type StatsPeriod,
+  type YtAlbumSong,
 } from "@wave/core";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -38,6 +42,9 @@ export interface Ranked<A> {
   readonly item: A;
   readonly countedPlays: number;
 }
+
+/** A song in Stats' song ranking: a Library song, or a streamed one the Library hasn't. */
+export type StatsSong = MixedSong<YtAlbumSong, SongRow>;
 
 /** An artist page's stats block, its most played songs loaded. */
 export type ArtistStats =
@@ -81,11 +88,14 @@ export interface LoadedRecap {
 export class Stats extends Context.Service<
   Stats,
   {
-    /** The `limit` songs played most in `period` (rolling, ending now), the top one first. */
+    /**
+     * The `limit` songs played most in `period` (rolling, ending now), the top
+     * one first, streamed songs included.
+     */
     readonly topSongs: (
       period: StatsPeriod,
       limit: number,
-    ) => Effect.Effect<readonly Ranked<SongRow>[], LibraryStoreError>;
+    ) => Effect.Effect<readonly Ranked<StatsSong>[], LibraryStoreError>;
     /** The `limit` albums played most in `period` (title + album artist, as in the Library). */
     readonly topAlbums: (
       period: StatsPeriod,
@@ -137,6 +147,40 @@ const rank = <A extends { readonly id: number }>(
   rows: (ids: readonly number[]) => Effect.Effect<readonly A[], LibraryStoreError>,
 ): Effect.Effect<readonly Ranked<A>[], LibraryStoreError> =>
   withRows(rankPlays(totals, limit), rows);
+
+/**
+ * Loads the rows of a song ranking, in ranking order: the Library's rows and
+ * the streamed songs' as their latest plays had them. A song that left since
+ * the totals were read is skipped.
+ */
+const rankSongs = (
+  store: LibraryStore["Service"],
+  ranking: readonly SongPlayTotals[],
+): Effect.Effect<readonly Ranked<StatsSong>[], LibraryStoreError> => {
+  const ids = ranking.flatMap(({ song }) => (song.kind === "library" ? [song.id] : []));
+  const videoIds = ranking.flatMap(({ song }) => (song.kind === "yt" ? [song.videoId] : []));
+  return Effect.map(
+    Effect.all([
+      ids.length === 0 ? Effect.succeed([]) : store.songsByIds(ids),
+      videoIds.length === 0
+        ? Effect.succeed(new Map<string, YtAlbumSong>())
+        : store.streamedSongsByIds(videoIds),
+    ]),
+    ([rows, streamed]) => {
+      const byId = new Map(rows.map((row) => [row.id, row]));
+      return ranking.flatMap(({ song, countedPlays }): Ranked<StatsSong>[] => {
+        if (song.kind === "library") {
+          const track = byId.get(song.id);
+          return track === undefined ? [] : [{ item: { source: "library", track }, countedPlays }];
+        }
+        const streamedSong = streamed.get(song.videoId);
+        return streamedSong === undefined
+          ? []
+          : [{ item: { source: "stream", song: streamedSong }, countedPlays }];
+      });
+    },
+  );
+};
 
 /** The albums and the artists played most in a period, ranked from one read. */
 export interface TopAlbumsAndArtists {
@@ -300,8 +344,8 @@ export const layer = Layer.effect(
     const store = yield* LibraryStore;
     return {
       topSongs: (period, limit) =>
-        Effect.flatMap(store.trackPlayTotals(statsWindow(period, Date.now())), (totals) =>
-          rank(totals, limit, store.songsByIds),
+        Effect.flatMap(store.songPlayTotals(statsWindow(period, Date.now())), (totals) =>
+          rankSongs(store, rankSongPlays(totals, limit)),
         ),
       topAlbums: (period, limit) =>
         Effect.flatMap(store.creditedPlayTotals(statsWindow(period, Date.now())), (credits) =>

@@ -141,7 +141,9 @@ const pageOf = <A>(rows: readonly A[], page: RowPage): readonly A[] =>
 
 /** The songs of each of Home's song sections, as the app's Home tab lists them. */
 const HOME_SONGS: Record<AutoHomeList, (home: HomeSections) => readonly SongRow[]> = {
-  "most-played": (home) => home.mostPlayed,
+  // Read in the "files" scope: only Library songs with a file, never a streamed song.
+  "most-played": (home) =>
+    home.mostPlayed.flatMap((row) => (row.source === "library" ? [row.track] : [])),
   favorites: (home) => home.favorites,
 };
 

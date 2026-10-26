@@ -76,7 +76,8 @@ test("Home's shared queries publish each real slice without waiting for its neig
     assert.equal(shown.at(-1)?.mostPlayed, undefined);
     assert.equal(homeOpeningState(snapshot()).played, undefined);
     const plays = traceQueries(fixture.db, () => pending.get(homeReads.plays.key)!());
-    assert.equal(plays.queries.length, 3);
+    // Recently played, Most played, and the streamed songs' totals (none here).
+    assert.equal(plays.queries.length, 3 + 1);
     assert.equal(
       plays.queries.reduce((sum, query) => sum + query.rows, 0),
       70,
@@ -163,7 +164,7 @@ test("Favorites and plays draw from their own reads even while Recently added ha
 
     const played = traceQueries(fixture.db, () => Effect.runSync(store.homePlays));
     const next = homeContent(undefined, played.result, starred.result);
-    assert.equal(played.queries.length, 3);
+    assert.equal(played.queries.length, 3 + 1);
     assert.equal(
       played.queries.reduce((sum, q) => sum + q.rows, 0),
       70,

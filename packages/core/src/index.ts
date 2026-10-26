@@ -230,8 +230,17 @@ export type {
 export { favoriteStar, starWriteSettled, starWriteStarted } from "./favorites.ts";
 export type { FavoriteStar } from "./favorites.ts";
 export { compareStrings } from "./library.ts";
-export { STATS_PERIODS, STATS_SEE_ALL, STATS_TOP, rankPlays, statsWindow } from "./stats.ts";
-export type { PlayTotals, StatsPeriod, StatsWindow } from "./stats.ts";
+export {
+  STATS_PERIODS,
+  STATS_SEE_ALL,
+  STATS_TOP,
+  rankPlays,
+  rankSongPlays,
+  statsWindow,
+} from "./stats.ts";
+export type { PlayTotals, SongPlayTotals, StatsPeriod, StatsWindow } from "./stats.ts";
+export { rankMostPlayed } from "./mostPlayed.ts";
+export type { KeptPlays, LibraryKeptPlays, MostPlayed, StreamedKeptPlays } from "./mostPlayed.ts";
 export { albumPlayTotals, artistPlayTotals } from "./stats.ts";
 export type { CreditedPlayTotals } from "./stats.ts";
 export { STATS_RANKINGS, statsSeeAll } from "./statsSeeAll.ts";

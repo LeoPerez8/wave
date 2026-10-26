@@ -5,7 +5,7 @@ import { beforeEach, describe, test } from "node:test";
 import { importedPlays, saveImportedPlays, selectImportTracks } from "./blackPlayer.ts";
 import { homeSections, latestPlay, recordPlay } from "./playHistory.ts";
 import { trackPlayTotals } from "./stats.ts";
-import { addTrack, openTestDatabase, type TestDatabase } from "./testDatabase.ts";
+import { addTrack, openTestDatabase, type TestDatabase, libraryRow } from "./testDatabase.ts";
 
 let db: TestDatabase;
 
@@ -35,7 +35,9 @@ describe("Imported BlackPlayer plays", () => {
       ],
     );
     assert.deepEqual(
-      homeSections(db).mostPlayed.map((row) => [row.title, row.playCount]),
+      homeSections(db)
+        .mostPlayed.map(libraryRow)
+        .map((row) => [row.title, row.playCount]),
       [
         ["Airbag", 2],
         ["Bloom", 1],

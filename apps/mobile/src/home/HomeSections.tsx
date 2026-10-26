@@ -1,4 +1,4 @@
-import type { QueueContext } from "@wave/core";
+import { discoverTrackId, type QueueContext } from "@wave/core";
 import { View } from "react-native";
 
 import { COVER_ROW_TILE, CoverRow } from "@/catalog/CoverRow";
@@ -10,9 +10,11 @@ import { useFavoriteIds } from "@/library/favorites";
 import type { AlbumRow, ArtistRow, SongRow } from "@/library/LibraryStore";
 import { openAlbum, openArtist } from "@/library/routes";
 import { toTrackSummary } from "@/library/TrackList";
-import { playSongs } from "@/playback/actions";
+import type { MostPlayedRow } from "@/library/db/playHistory";
+import { playRankedSongs, playSongs } from "@/playback/actions";
 import { useCurrentPlayingIds } from "@/playback/hooks";
 import { openAlbumActions, openArtistActions, openTrackActions } from "@/playback/ActionsMenu";
+import { RankedYtSongRow } from "@/ytmusic/YtSongRow";
 
 /**
  * A row of album cards that scrolls sideways, edge to edge. `detail` follows
@@ -81,6 +83,57 @@ export function SongRows<A extends SongRow>({
           onLongPress={() => openTrackActions(song)}
         />
       ))}
+    </View>
+  );
+}
+
+/**
+ * Most played as song rows, like `SongRows`, each with its counted plays in
+ * place of its length: Library songs and streamed ones (a plain streamed
+ * row, dimmed while it can't play). Tapping one plays the list from it.
+ */
+export function MostPlayedRows({
+  rows,
+  context,
+}: {
+  rows: readonly MostPlayedRow[];
+  context: QueueContext;
+}) {
+  const currentIds = useCurrentPlayingIds();
+  const favorites = useFavoriteIds();
+  return (
+    <View>
+      {rows.map((row, index) => {
+        const key = discoverTrackId(row);
+        const onPress = () => void playRankedSongs(rows, index, context);
+        if (row.source === "stream")
+          return (
+            <RankedYtSongRow
+              key={key}
+              song={row.song}
+              kind="Song · "
+              playDisc
+              plays={row.playCount}
+              playing={currentIds.has(key)}
+              onPress={onPress}
+            />
+          );
+        const song = row.track;
+        return (
+          <SwipeTrackRow
+            song={song}
+            key={key}
+            track={{ ...toTrackSummary(song), artist: `Song · ${song.artist}` }}
+            playDisc
+            plays={row.playCount}
+            state={currentIds.has(key) ? "playing" : undefined}
+            favorite={favorites.has(song.id)}
+            leading="artwork"
+            onPress={onPress}
+            onLongPress={() => openTrackActions(song)}
+          />
+        );
+      })}
     </View>
   );
 }

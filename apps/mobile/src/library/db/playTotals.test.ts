@@ -30,6 +30,7 @@ import {
   openTestDatabase,
   traceQueries,
   type TestDatabase,
+  libraryRow,
 } from "./testDatabase.ts";
 import { deleteTracksById } from "./tracks.ts";
 
@@ -323,11 +324,13 @@ describe("Home's all-time reads", () => {
 
     const home = homeSections(db);
     assert.deepEqual(
-      home.mostPlayed.map((song) => [song.id, song.playCount]),
+      home.mostPlayed.map(libraryRow).map((song) => [song.id, song.playCount]),
       mostPlayedFromHistory("library"),
     );
     assert.deepEqual(
-      homeSections(db, "files").mostPlayed.map((song) => [song.id, song.playCount]),
+      homeSections(db, "files")
+        .mostPlayed.map(libraryRow)
+        .map((song) => [song.id, song.playCount]),
       mostPlayedFromHistory("files"),
     );
     assert.deepEqual(

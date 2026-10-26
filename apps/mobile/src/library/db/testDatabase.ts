@@ -12,7 +12,7 @@ import initSqlJs from "sql.js";
 
 import { creditSplits, relinkCreditsIfUnlinked } from "./credits.ts";
 import migrations from "./migrations.ts";
-import { setFavorites } from "./playHistory.ts";
+import { setFavorites, type MostPlayedRow } from "./playHistory.ts";
 import * as schema from "./schema.ts";
 import { keyRecordings } from "./sync.ts";
 
@@ -555,3 +555,9 @@ const hasCredits = (db: TestDatabase): boolean =>
   db.get<{ n: number }>(
     sql`SELECT count(*) AS n FROM sqlite_master WHERE type = 'table' AND name = 'track_artists'`,
   ).n > 0;
+
+/** A Most Played row of a Library song as a song row with its plays; fails for a streamed song. */
+export const libraryRow = (row: MostPlayedRow) => {
+  if (row.source !== "library") throw new Error(`streamed ${row.song.videoId} in Most Played`);
+  return { ...row.track, playCount: row.playCount };
+};

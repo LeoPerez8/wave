@@ -186,6 +186,7 @@ export const tracks = sqliteTable(
     index("tracks_genre_idx").on(t.genreId),
     index("tracks_folder_idx").on(t.folderId),
     index("tracks_recording_key_idx").on(t.recordingKey),
+    index("tracks_video_idx").on(t.videoId),
   ],
 );
 
@@ -704,6 +705,30 @@ export const playTotals = sqliteTable(
     index("play_totals_counted_idx").on(t.countedPlays, t.lastCountedAt),
     index("play_totals_last_played_idx").on(t.lastPlayedAt),
   ],
+);
+
+/**
+ * Each streamed song's listening over its whole history, as `play_totals`
+ * keeps a track's: one row per video id and recording key with a streamed
+ * play (a key that changed between plays gives the video a row per key), kept
+ * by triggers on `play_events` (migration `0042_streamed_counts`). Home reads
+ * them beside `play_totals`, the rows whose video id or key a Library song has
+ * counting as that song's (`streamedTrack`).
+ */
+export const streamedTotals = sqliteTable(
+  "streamed_totals",
+  {
+    videoId: text("video_id").notNull(),
+    /** The plays' recording key; empty for plays without one. */
+    recordingKey: text("recording_key").notNull(),
+    plays: integer("plays").notNull(),
+    countedPlays: integer("counted_plays").notNull(),
+    listenedMs: integer("listened_ms").notNull(),
+    countedListenedMs: integer("counted_listened_ms").notNull(),
+    lastPlayedAt: integer("last_played_at").notNull(),
+    lastCountedAt: integer("last_counted_at"),
+  },
+  (t) => [primaryKey({ columns: [t.videoId, t.recordingKey] })],
 );
 
 /**

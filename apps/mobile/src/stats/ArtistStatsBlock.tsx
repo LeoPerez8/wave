@@ -51,7 +51,13 @@ export function ArtistStatsBlock({
       </TitledSection>
       {stats.played && stats.mostPlayed.length > 0 && (
         <TitledSection title="Most played">
-          <RankedSongs ranking={stats.mostPlayed} context={context} />
+          <RankedSongs
+            ranking={stats.mostPlayed.map((entry) => ({
+              item: { source: "library", track: entry.item },
+              countedPlays: entry.countedPlays,
+            }))}
+            context={context}
+          />
         </TitledSection>
       )}
     </View>

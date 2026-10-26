@@ -11,6 +11,7 @@
  */
 import {
   readStoredGenres,
+  sortKey,
   type ArtistFirstPlay,
   type ArtistStatsInput,
   type CountedListening,
@@ -18,6 +19,7 @@ import {
   type PlayTotals,
   type RecapSongGenre,
   type SongListening,
+  type SongPlayTotals,
   type StatsWindow,
 } from "@wave/core";
 import { and, eq, gte, inArray, isNotNull, lte, sql, type SQL } from "drizzle-orm";
@@ -26,16 +28,71 @@ import { chunks } from "./chunks.ts";
 import type { LibraryDatabase } from "./database.ts";
 import * as schema from "./schema.ts";
 
-/** Counted plays that started within `window`. */
-const countedIn = (window: StatsWindow): SQL | undefined => {
+/** Counted plays, streamed ones too, that started within `window`. */
+const countedOrStreamedIn = (window: StatsWindow): SQL | undefined => {
   const { playEvents } = schema;
   return and(
     eq(playEvents.counted, true),
-    isNotNull(playEvents.trackId),
     window.from === null ? undefined : gte(playEvents.startedAt, window.from),
     lte(playEvents.startedAt, window.to),
   );
 };
+
+/** Counted plays of Library songs that started within `window`. */
+const countedIn = (window: StatsWindow): SQL | undefined =>
+  and(countedOrStreamedIn(window), isNotNull(schema.playEvents.trackId));
+
+/**
+ * The Library song [videoId]'s streamed plays are, or null: the song with that
+ * video id (a download of it), else the one with the same [recordingKey]. A
+ * streamed play is that song's in every count once it is in the Library.
+ */
+export const streamedTrack = (videoId: SQL, recordingKey: SQL): SQL<number | null> => sql`coalesce(
+  (SELECT min(id) FROM tracks WHERE tracks.video_id = ${videoId}),
+  (SELECT min(id) FROM tracks WHERE tracks.recording_key = ${recordingKey}))`;
+
+/** Whose a play is: its Library song's, or the Library song its streamed song is now. */
+const playSong = sql`coalesce(play_events.track_id,
+  ${streamedTrack(sql`play_events.video_id`, sql`play_events.recording_key`)})`;
+
+/**
+ * Each song's counted plays within `window`, in no order: a Library song's,
+ * with the streamed plays that are its own now (`streamedTrack`), and a
+ * streamed song's (one entry per video id) while the Library has no song of
+ * it. Songs that left the Library drop out, as in `trackPlayTotals`.
+ */
+export const songPlayTotals = (db: LibraryDatabase, window: StatsWindow): SongPlayTotals[] =>
+  db
+    .all<{
+      trackId: number | null;
+      videoId: string | null;
+      titleSort: string | null;
+      title: string | null;
+      countedPlays: number;
+      listenedMs: number;
+      latestPlayAt: number;
+    }>(
+      sql`WITH plays AS (
+        SELECT ${playSong} AS song, video_id, listened_ms, started_at, snapshot, streamed_song
+        FROM play_events WHERE ${countedOrStreamedIn(window)}
+      ), songs AS (
+        -- The title is the latest play's: the only min or max is max(started_at).
+        SELECT song AS track_id, CASE WHEN song IS NULL THEN video_id END AS video_id,
+          count(*) AS plays, sum(listened_ms) AS listened, max(started_at) AS latest,
+          coalesce(json_extract(snapshot, '$.title'), json_extract(streamed_song, '$.title')) AS title
+        FROM plays GROUP BY 1, 2
+      )
+      SELECT tracks.id AS "trackId", songs.video_id AS "videoId", tracks.title_sort AS "titleSort",
+        songs.title AS title, songs.plays AS "countedPlays", songs.listened AS "listenedMs",
+        songs.latest AS "latestPlayAt"
+      FROM songs LEFT JOIN tracks ON tracks.id = songs.track_id
+      WHERE tracks.id IS NOT NULL OR songs.video_id IS NOT NULL`,
+    )
+    .map(({ trackId, videoId, titleSort, title, ...totals }) => ({
+      song: trackId === null ? { kind: "yt", videoId: videoId! } : { kind: "library", id: trackId },
+      sortKey: titleSort ?? sortKey(title ?? ""),
+      ...totals,
+    }));
 
 /** What every aggregate sums over its counted plays. */
 const sums = {

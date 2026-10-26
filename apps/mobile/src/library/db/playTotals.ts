@@ -11,6 +11,7 @@ import { and, gt, inArray, sql } from "drizzle-orm";
 import { chunks } from "./chunks.ts";
 import type { LibraryDatabase } from "./database.ts";
 import * as schema from "./schema.ts";
+import { streamedTrack } from "./stats.ts";
 
 /** `play_totals`' columns, in the order `SUMMED` gives them. */
 const COLUMNS = sql`track_id, plays, counted_plays, listened_ms, counted_listened_ms,
@@ -49,17 +50,32 @@ export const rebuildPlayTotals = (db: LibraryDatabase): void => {
 /**
  * The whole history's listening, summed in one row (Core's
  * `summedListeningTotals` reads it): time listened over every play, counted
- * plays, songs still in the library with a counted play, the latest play.
+ * plays, songs with a counted play, the latest play; streamed plays included.
+ * A song listened is one in the library, or a streamed song: one whose
+ * streamed plays are a Library song's (`streamedTrack`) is that song, once.
  * Songs since removed keep their time and plays.
  */
 export const listeningSums = (db: LibraryDatabase): ListeningSums =>
   db.get<ListeningSums>(sql`
+    WITH totals AS (
+      SELECT listened_ms, counted_plays, last_played_at FROM play_totals
+      UNION ALL
+      SELECT listened_ms, counted_plays, last_played_at FROM streamed_totals
+    ), streamed AS (
+      SELECT video_id,
+        ${streamedTrack(sql`streamed_totals.video_id`, sql`nullif(streamed_totals.recording_key, '')`)} AS track_id
+      FROM streamed_totals WHERE counted_plays > 0
+    ), listened AS (
+      SELECT play_totals.track_id AS song FROM play_totals JOIN tracks ON tracks.id = play_totals.track_id
+        WHERE play_totals.counted_plays > 0
+      UNION SELECT track_id FROM streamed WHERE track_id IS NOT NULL
+      UNION SELECT 'yt:' || video_id FROM streamed WHERE track_id IS NULL
+    )
     SELECT coalesce(sum(listened_ms), 0) AS "listenedMs",
       coalesce(sum(counted_plays), 0) AS "countedPlays",
-      (SELECT count(*) FROM play_totals JOIN tracks ON tracks.id = play_totals.track_id
-        WHERE play_totals.counted_plays > 0) AS "songsListened",
+      (SELECT count(*) FROM listened) AS "songsListened",
       max(last_played_at) AS "lastPlayedAt"
-    FROM play_totals`);
+    FROM totals`);
 
 /**
  * Each of the songs [ids]' counted plays, by song id; those never counted are

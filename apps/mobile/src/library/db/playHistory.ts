@@ -4,26 +4,31 @@
  * SQLite in plain Node (`testDatabase.ts`); `LibraryStore` calls them.
  */
 import {
+  rankMostPlayed,
   recentlyPlayedAlbums,
   parseTrackId,
   recordingKey,
   ytSongArtist,
+  type MixedSong,
   type YtAlbumSong,
   type PlayEvent,
 } from "@wave/core";
-import { and, desc, eq, gt, inArray, isNotNull, isNull, max } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, isNotNull, isNull, max, sql } from "drizzle-orm";
 
 import type { AlbumRow, SongRow } from "../LibraryStore.ts";
 import type { LibraryDatabase } from "./database.ts";
 import * as schema from "./schema.ts";
 import { playRecordingKey, stamped } from "./sync.ts";
 import { selectAlbums } from "./albums.ts";
+import { streamedTrack } from "./stats.ts";
+import { streamedSongsOf } from "./streamedSongs.ts";
 import { BY_TITLE, inScope, songColumns, trackQuery, type TrackScope } from "./tracks.ts";
 
-/** A Most Played song with its number of counted plays. */
-export interface MostPlayedRow extends SongRow {
-  readonly playCount: number;
-}
+/**
+ * A Most Played song with its number of counted plays: a Library song (its
+ * streamed plays included), or a streamed song the Library hasn't.
+ */
+export type MostPlayedRow = MixedSong<YtAlbumSong, SongRow> & { readonly playCount: number };
 
 /** A starred song, with when it was starred (Favorites can be sorted by it). */
 export interface FavoriteRow extends SongRow {
@@ -221,13 +226,20 @@ const recentlyPlayedShelf = (db: LibraryDatabase, scope: TrackScope): AlbumRow[]
 };
 
 /**
- * Songs by counted plays, then by their latest counted play, read in that
- * order from `play_totals` until the list is full.
+ * Songs by counted plays, then by their latest counted play (Core's
+ * `rankMostPlayed`): the top of `play_totals`, read in that order until the
+ * list is full, with every streamed song's kept totals (`streamed_totals`),
+ * which count for the Library song they are now (`streamedTrack`). With
+ * [scope] "files", only songs with a file: no streamed song of its own.
  */
 const mostPlayedSongs = (db: LibraryDatabase, scope: TrackScope): MostPlayedRow[] => {
   const { playTotals, tracks, artists, albums, artwork } = schema;
-  return db
-    .select({ ...songColumns, playCount: playTotals.countedPlays })
+  const top = db
+    .select({
+      ...songColumns,
+      countedPlays: playTotals.countedPlays,
+      lastCountedAt: playTotals.lastCountedAt,
+    })
     .from(playTotals)
     .innerJoin(tracks, inScope(eq(playTotals.trackId, tracks.id), scope))
     .innerJoin(artists, eq(tracks.artistId, artists.id))
@@ -241,6 +253,70 @@ const mostPlayedSongs = (db: LibraryDatabase, scope: TrackScope): MostPlayedRow[
     )
     .limit(LIST)
     .all();
+  const streamed = db.all<{
+    videoId: string;
+    trackId: number | null;
+    countedPlays: number;
+    lastCountedAt: number | null;
+  }>(sql`SELECT video_id AS "videoId",
+      ${streamedTrack(sql`streamed_totals.video_id`, sql`nullif(streamed_totals.recording_key, '')`)} AS "trackId",
+      counted_plays AS "countedPlays", last_counted_at AS "lastCountedAt"
+    FROM streamed_totals WHERE counted_plays > 0`);
+  const listed = new Set(top.map((song) => song.id));
+  const counted = [
+    ...new Set(streamed.flatMap(({ trackId }) => (trackId === null ? [] : [trackId]))),
+  ];
+  // The songs streamed plays count for, in [scope], with their files' own plays.
+  const credited =
+    counted.length === 0
+      ? []
+      : db
+          .select({
+            id: tracks.id,
+            countedPlays: sql<number>`coalesce(${playTotals.countedPlays}, 0)`,
+            lastCountedAt: playTotals.lastCountedAt,
+          })
+          .from(tracks)
+          .leftJoin(playTotals, eq(playTotals.trackId, tracks.id))
+          .where(
+            and(
+              inArray(tracks.id, counted),
+              scope === "files" ? isNotNull(tracks.path) : undefined,
+            ),
+          )
+          .all();
+  const inScopeIds = new Set([...listed, ...credited.map((song) => song.id)]);
+  const ranked = rankMostPlayed(
+    [...top, ...credited.filter((song) => !listed.has(song.id))],
+    streamed.filter(({ trackId }) =>
+      trackId === null ? scope === "library" : inScopeIds.has(trackId),
+    ),
+    LIST,
+  );
+  const rows = new Map<number, SongRow>(
+    top.map(({ countedPlays: _plays, lastCountedAt: _at, ...row }) => [row.id, row]),
+  );
+  // Only songs streamed plays lifted into the list are read here.
+  const lifted = ranked.flatMap(({ song }) =>
+    song.kind === "library" && !rows.has(song.id) ? [song.id] : [],
+  );
+  if (lifted.length > 0)
+    for (const row of trackQuery(db, scope).where(inArray(tracks.id, lifted)).all())
+      rows.set(row.id, row);
+  const songs = streamedSongsOf(
+    db,
+    ranked.flatMap(({ song }) => (song.kind === "yt" ? [song.videoId] : [])),
+  );
+  return ranked.flatMap(({ song, countedPlays }): MostPlayedRow[] => {
+    if (song.kind === "library") {
+      const track = rows.get(song.id);
+      return track === undefined ? [] : [{ source: "library", track, playCount: countedPlays }];
+    }
+    const streamedSong = songs.get(song.videoId);
+    return streamedSong === undefined
+      ? []
+      : [{ source: "stream", song: streamedSong, playCount: countedPlays }];
+  });
 };
 
 const recentFavorites = (db: LibraryDatabase, scope: TrackScope): SongRow[] => {
