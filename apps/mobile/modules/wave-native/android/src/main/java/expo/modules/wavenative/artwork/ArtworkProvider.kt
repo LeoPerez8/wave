@@ -16,8 +16,7 @@ import java.io.FileNotFoundException
 /**
  * Serves cached artwork read-only to Android Auto, the media notification and
  * System UI, which can't read Wave's files: covers straight from the artwork
- * folder, playlist mosaics drawn once from four thumbnails into the cache, and
- * Auto's lyrics images drawn once over a cover ([LyricArtworkFiles]).
+ * folder, and playlist mosaics drawn once from four thumbnails into the cache.
  * Which URIs exist is [ArtworkUris]'s call; anything else is "not found".
  *
  * Exported without a permission (as Google's UAMP sample does) because Auto
@@ -37,7 +36,6 @@ class ArtworkProvider : ContentProvider() {
     val file = when (val request = ArtworkUris.parse(authority ?: "", uri.toString())) {
       is ArtworkRequest.Cover -> ArtworkUris.coverFile(directory, request.hash)
       is ArtworkRequest.Mosaic -> mosaic(directory, File(context.cacheDir, MOSAIC_DIR), request.hashes)
-      is ArtworkRequest.Lyrics -> LyricArtworkFiles.file(File(context.cacheDir, LYRICS_DIR), request.id)
       null -> null
     } ?: throw FileNotFoundException(uri.toString())
     return ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)
@@ -48,7 +46,7 @@ class ArtworkProvider : ContentProvider() {
       null -> null
       // Covers keep their original format; image decoders sniff it anyway.
       is ArtworkRequest.Cover -> "image/*"
-      is ArtworkRequest.Mosaic, is ArtworkRequest.Lyrics -> "image/jpeg"
+      is ArtworkRequest.Mosaic -> "image/jpeg"
     }
 
   /** The mosaic of [hashes] as a JPEG, drawn on first use; null when a tile can't be read. */
@@ -101,7 +99,6 @@ class ArtworkProvider : ContentProvider() {
     /** Where [ArtworkStore] keeps artwork, under `filesDir` (see `WaveNativeModule`). */
     const val ARTWORK_DIR = "artwork"
     private const val MOSAIC_DIR = "artwork-mosaic"
-    private const val LYRICS_DIR = "artwork-lyrics"
 
     /** This app's artwork authority, once the provider has started (always, before any player item). */
     @Volatile

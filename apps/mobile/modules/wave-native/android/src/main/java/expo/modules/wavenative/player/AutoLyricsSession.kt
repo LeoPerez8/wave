@@ -1,10 +1,10 @@
 package expo.modules.wavenative.player
 
 import android.content.Context
-import android.net.Uri
 import android.os.Bundle
 import androidx.annotation.OptIn
 import androidx.media3.common.ForwardingSimpleBasePlayer
+import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.CommandButton
@@ -49,32 +49,38 @@ class PreferencesLyricsToggleStore(context: Context) : LyricsToggleStore {
 }
 
 /**
+ * [this] with the title and artist [text] gives in place of the track's own:
+ * the title is the line being sung and the artist the next one, or the
+ * track's own artist when [text] has none. Without [text], [this] as it is.
+ */
+fun MediaMetadata.withLyrics(text: LyricsText?): MediaMetadata {
+  text ?: return this
+  val builder = buildUpon().setTitle(text.title)
+  text.artist?.let { builder.setArtist(it) }
+  return builder.build()
+}
+
+/**
  * The player the media session shows: [player] as it is, except that the
- * artwork is the lyrics image [artworkFor] gives for the current item (its
- * entry key and cover file), when it gives one. Only the session's metadata
- * changes: the items, and so what Wave's own controller and the resume
- * snapshot read, keep their cover. Call [refresh] when [artworkFor] would
- * answer differently.
+ * current item's title and artist show the lyrics [textFor] gives for it (its
+ * entry key), when it gives some ([withLyrics]). Only the session's metadata
+ * changes: the items, and so Auto's queue, what Wave's own controller and the
+ * resume snapshot read, keep their title and artist. Call [refresh] when
+ * [textFor] would answer differently.
  */
 @OptIn(UnstableApi::class)
-class LyricArtworkPlayer(
+class LyricsTextPlayer(
   player: Player,
-  private val artworkFor: (itemId: String?, coverPath: String?) -> String?,
+  private val textFor: (itemId: String?) -> LyricsText?,
 ) : ForwardingSimpleBasePlayer(player) {
   override fun getState(): State {
     val state = super.getState()
     if (state.timeline.isEmpty) return state
-    val item = player.currentMediaItem
-    val cover = item?.mediaMetadata?.extras?.getString(PlayerMediaItems.ARTWORK_PATH)
-    val artwork = artworkFor(item?.mediaId, cover) ?: return state
-    val metadata = state.currentMetadata.buildUpon()
-      // A picture embedded in the file would win over the URI in Media3's bitmap loader.
-      .setArtworkData(null, null)
-      .setArtworkUri(Uri.parse(artwork))
-      .build()
+    val text = textFor(player.currentMediaItem?.mediaId) ?: return state
+    val metadata = state.currentMetadata.withLyrics(text)
     return state.buildUpon().setPlaylist(state.timeline, state.currentTracks, metadata).build()
   }
 
-  /** Shows the artwork [artworkFor] gives now. */
+  /** Shows the text [textFor] gives now. */
   fun refresh() = invalidateState()
 }

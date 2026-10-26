@@ -38,27 +38,6 @@ class ArtworkUrisTest {
   }
 
   @Test
-  fun aLyricsImageMapsToAContentUriAndBack() {
-    val uri = ArtworkUris.lyrics(authority, "k3x12")
-    assertEquals("content://$authority/lyrics/k3x12", uri)
-    assertEquals(ArtworkRequest.Lyrics("k3x12"), ArtworkUris.parse(authority, uri))
-  }
-
-  @Test
-  fun aLyricsUriMustNameOneImage() {
-    for (uri in listOf(
-      "content://$authority/lyrics",
-      "content://$authority/lyrics/",
-      "content://$authority/lyrics/../$a",
-      "content://$authority/lyrics/K3X12",
-      "content://$authority/lyrics/k3/x12",
-      "content://$authority/lyrics/$a/$b/$c/$d",
-    )) {
-      assertNull(uri, ArtworkUris.parse(authority, uri))
-    }
-  }
-
-  @Test
   fun noHashMeansNoUri() {
     assertNull(ArtworkUris.uri(authority, emptyList()))
   }

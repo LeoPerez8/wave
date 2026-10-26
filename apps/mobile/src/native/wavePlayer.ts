@@ -1,5 +1,5 @@
 import type {
-  AutoLyricsFrame,
+  AutoLyricsText,
   PlayerCoverUpdate,
   PlaySource,
   RepeatMode,
@@ -248,11 +248,11 @@ declare class WavePlayerModule extends NativeModule<WavePlayerEvents> {
   /** The Lyrics toggle and Auto's connection; `onAutoLyrics` reports changes. */
   getAutoLyrics(): Promise<AutoLyricsEvent>;
   /**
-   * Draws `lines` into the artwork of item `itemId` (its queue entry key) on
-   * Auto's player screen; null shows its own artwork. The service ignores it
+   * Shows `text` as the title and artist of item `itemId` (its queue entry
+   * key) on Auto's player screen; null shows its own. The service ignores it
    * while the toggle is off or Auto isn't connected.
    */
-  setAutoLyricLines(itemId: string | null, lines: AutoLyricsFrame | null): Promise<void>;
+  setAutoLyricsText(itemId: string | null, text: AutoLyricsText | null): Promise<void>;
 }
 
 export const WavePlayer = requireNativeModule<WavePlayerModule>("WavePlayer");
