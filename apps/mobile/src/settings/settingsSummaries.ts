@@ -93,6 +93,7 @@ export const useSettingsSummaries = (): Record<SettingsPage, string | null> => {
     layout: null,
     swipeActions: swipes ? null : "Off",
     playback: null,
+    history: null,
     lyricsAndTags:
       lookup.status === "running" ? libraryLookupProgress(lookup.done, lookup.total).line : null,
     downloads: downloadsSummary(downloads.failed, downloads.queued),

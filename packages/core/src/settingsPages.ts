@@ -18,6 +18,7 @@ export type SettingsPage =
   | "layout"
   | "swipeActions"
   | "playback"
+  | "history"
   | "lyricsAndTags"
   | "downloads"
   | "accounts"
@@ -28,7 +29,7 @@ export type SettingsPage =
  * (`settings/SettingsGlyph.tsx`).
  */
 export type SettingsIcon =
-  "books" | "palette" | "layout" | "swipe" | "play" | "quote" | "download" | "user" | "code";
+  "history" | "books" | "palette" | "layout" | "swipe" | "play" | "quote" | "download" | "user" | "code";
 
 export interface SettingsPageEntry {
   readonly page: SettingsPage;
@@ -62,6 +63,7 @@ export const SETTINGS_PAGES = [
     route: "/settings/playback",
     icon: "play",
   },
+  { page: "history", title: "Listening History", route: "/settings/history", icon: "history" },
   {
     page: "lyricsAndTags",
     title: "Lyrics and tags",

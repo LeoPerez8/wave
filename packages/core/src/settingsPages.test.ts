@@ -34,6 +34,7 @@ describe("Settings pages", () => {
         "layout",
         "swipeActions",
         "playback",
+        "history",
         "lyricsAndTags",
         "downloads",
         "accounts",
@@ -55,6 +56,7 @@ describe("Settings pages", () => {
         icon: "swipe",
       },
       { page: "playback", title: "Playback", route: "/settings/playback", icon: "play" },
+      { page: "history", title: "Listening History", route: "/settings/history", icon: "history" },
       {
         page: "lyricsAndTags",
         title: "Lyrics and tags",
