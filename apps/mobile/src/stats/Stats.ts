@@ -1,9 +1,7 @@
 import type { PlayedAlbum, PlayedArtist } from "@/library/db/playedEntities";
 import {
   ARTIST_MOST_PLAYED,
-  albumPlayTotals,
   artistStats,
-  artistPlayTotals,
   availableRecaps,
   createRecapAvailability,
   rankSongPlays,
@@ -17,7 +15,6 @@ import {
   type GenreFamily,
   type MixedSong,
   type CountedListening,
-  type PlayTotals,
   type SongPlayTotals,
   type RecapPeriod,
   type RecapSlide,
@@ -31,13 +28,7 @@ import * as Layer from "effect/Layer";
 import { runSteps } from "@/lib/stepped";
 import type { RecapHistoryVersion } from "./recapAvailability";
 
-import {
-  LibraryStore,
-  type AlbumRow,
-  type ArtistRow,
-  type LibraryStoreError,
-  type SongRow,
-} from "@/library/LibraryStore";
+import { LibraryStore, type LibraryStoreError, type SongRow } from "@/library/LibraryStore";
 
 /** A ranked entity with its counted plays in the period. */
 export interface Ranked<A> {
@@ -123,24 +114,6 @@ export class Stats extends Context.Service<
     readonly recap: (period: RecapPeriod) => Effect.Effect<LoadedRecap | null, LibraryStoreError>;
   }
 >()("@wave/mobile/stats/Stats") {}
-
-/**
- * Loads the rows of a ranking's entities, in ranking order. An entity that
- * left the library since the totals were read is skipped.
- */
-const withRows = <A extends { readonly id: number }>(
-  ranking: readonly PlayTotals[],
-  rows: (ids: readonly number[]) => Effect.Effect<readonly A[], LibraryStoreError>,
-): Effect.Effect<readonly Ranked<A>[], LibraryStoreError> => {
-  if (ranking.length === 0) return Effect.succeed([]);
-  return Effect.map(rows(ranking.map((entry) => entry.id)), (found) => {
-    const byId = new Map(found.map((row) => [row.id, row]));
-    return ranking.flatMap((entry) => {
-      const item = byId.get(entry.id);
-      return item === undefined ? [] : [{ item, countedPlays: entry.countedPlays }];
-    });
-  });
-};
 
 /**
  * Loads the rows of a song ranking, in ranking order: the Library's rows and

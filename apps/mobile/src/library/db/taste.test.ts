@@ -32,6 +32,14 @@ const play = (
   ...overrides,
 });
 
+/** A taste history's play of three minutes of [trackId]. */
+const at = (trackId: string, startedAt: number, endReason = "completed") => ({
+  trackId,
+  startedAt,
+  listenedMs: 180_000,
+  endReason,
+});
+
 describe("What the taste profile is derived from", () => {
   test("the plays of songs in the Library, with how long and how each ended", () => {
     const song = addTrack(db, { title: "Song" });
@@ -87,12 +95,6 @@ describe("What the taste profile is derived from", () => {
     recordPlay(db, streamed, false, airbag);
     recordPlay(db, { ...streamed, startedAt: 3_000, endReason: "skipped" }, false, airbag);
     const plays = () => [tasteHistory(db).plays, tastePlaysPage(db, [-Number.MAX_VALUE, 0]).rows];
-    const at = (trackId: string, startedAt: number, endReason = "completed") => ({
-      trackId,
-      startedAt,
-      listenedMs: 180_000,
-      endReason,
-    });
     for (const read of plays())
       assert.deepEqual(read, [
         at(String(song), 1_000),

@@ -323,6 +323,22 @@ test("a Magic Queue's cold taste uses its recommendation Library without another
   }
 });
 
+/** A streamed song as the profile weighs it, by its artists alone. */
+const streamedSong = (track: { readonly id: string; readonly artists: readonly string[] }) =>
+  magicYtSong({ trackId: track.id, artists: track.artists }, () => null);
+
+/** A play of [trackId] played through, or skipped after 5 s. */
+const endedPlay = (trackId: string, startedAt: number, endReason: "completed" | "skipped") => ({
+  trackId,
+  context: null,
+  startedAt,
+  listenedMs: endReason === "completed" ? 284_000 : 5_000,
+  durationMs: 284_000,
+  endReason,
+  counted: endReason === "completed",
+  source: "phone" as const,
+});
+
 test("rebuilding the profile gives streamed songs the scores the live updates gave them", async () => {
   const db = await openTestDatabase();
   const store = await loadLibraryStore(root, db);
@@ -338,20 +354,8 @@ test("rebuilding the profile gives streamed songs the scores the live updates ga
     albumId: null,
   };
   const streamed = ytTrackId(airbag.videoId);
-  const streamedSong = (track: { readonly id: string; readonly artists: readonly string[] }) =>
-    magicYtSong({ trackId: track.id, artists: track.artists }, () => null);
   const local = addTrack(db, { title: "Local", artist: "Radiohead" });
-  const play = (trackId: string, startedAt: number, endReason: "completed" | "skipped") => ({
-    trackId,
-    context: null,
-    startedAt,
-    listenedMs: endReason === "completed" ? 284_000 : 5_000,
-    durationMs: 284_000,
-    endReason,
-    counted: endReason === "completed",
-    source: "phone" as const,
-  });
-  recordPlay(db, play(String(local), 1_000, "completed"));
+  recordPlay(db, endedPlay(String(local), 1_000, "completed"));
   const derive = () => deriveTaste(store, Effect.void, now, undefined, undefined, streamedSong);
   const live = makeLiveTaste({
     derive: derive(),
@@ -368,7 +372,7 @@ test("rebuilding the profile gives streamed songs the scores the live updates ga
     [now - 1_000, "completed"],
     [now - 500, "skipped"],
   ] as const) {
-    const ended = play(streamed, at, end);
+    const ended = endedPlay(streamed, at, end);
     recordPlay(db, ended, false, airbag);
     await Effect.runPromise(live.played(ended));
   }

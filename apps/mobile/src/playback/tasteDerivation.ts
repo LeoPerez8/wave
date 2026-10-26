@@ -317,8 +317,11 @@ export const deriveTasteFromLibrary = (
       rows: { history, streamed },
     } = yield* tasteSnapshot(store, turn, (_, pace) =>
       Effect.gen(function* () {
-        const history = yield* readTasteHistory(store, pace);
-        return { history, streamed: yield* readStreamedSongs(store, history, streamedSong, pace) };
+        const read = yield* readTasteHistory(store, pace);
+        return {
+          history: read,
+          streamed: yield* readStreamedSongs(store, read, streamedSong, pace),
+        };
       }),
     );
     snapshotTaken(history);
