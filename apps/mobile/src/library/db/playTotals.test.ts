@@ -307,7 +307,7 @@ const recentlyPlayedFromHistory = () => {
   );
   const latest = new Map<number, number>();
   for (const { trackId, startedAt } of db.select().from(schema.playEvents).all()) {
-    const albumId = albumOf.get(trackId);
+    const albumId = trackId === null ? undefined : albumOf.get(trackId);
     if (albumId === undefined) continue;
     latest.set(albumId, Math.max(latest.get(albumId) ?? startedAt, startedAt));
   }

@@ -20,7 +20,7 @@ import {
   type SongListening,
   type StatsWindow,
 } from "@wave/core";
-import { and, eq, gte, inArray, lte, sql, type SQL } from "drizzle-orm";
+import { and, eq, gte, inArray, isNotNull, lte, sql, type SQL } from "drizzle-orm";
 
 import { chunks } from "./chunks.ts";
 import type { LibraryDatabase } from "./database.ts";
@@ -31,6 +31,7 @@ const countedIn = (window: StatsWindow): SQL | undefined => {
   const { playEvents } = schema;
   return and(
     eq(playEvents.counted, true),
+    isNotNull(playEvents.trackId),
     window.from === null ? undefined : gte(playEvents.startedAt, window.from),
     lte(playEvents.startedAt, window.to),
   );
@@ -159,7 +160,7 @@ export const songListening = (db: LibraryDatabase): SongListening[] => {
   }
   return db
     .select({
-      trackId: playEvents.trackId,
+      trackId: sql<number>`${playEvents.trackId}`,
       inLibrary: sql<boolean>`${tracks.id} IS NOT NULL`.mapWith(Boolean),
       countedPlays: sql<number>`sum(${playEvents.counted})`,
       listenedMs: sql<number>`sum(${playEvents.listenedMs})`,
@@ -167,6 +168,7 @@ export const songListening = (db: LibraryDatabase): SongListening[] => {
     })
     .from(playEvents)
     .leftJoin(tracks, eq(playEvents.trackId, tracks.id))
+    .where(isNotNull(playEvents.trackId))
     .groupBy(playEvents.trackId)
     .all()
     .map(({ trackId, ...song }) => ({ trackId, artistIds: artists.get(trackId) ?? [], ...song }));
@@ -294,7 +296,7 @@ export const countedListening = (db: LibraryDatabase): CountedListening[] => {
   return db
     .select({ startedAt: quarter, listenedMs: sql<number>`sum(${playEvents.listenedMs})` })
     .from(playEvents)
-    .where(eq(playEvents.counted, true))
+    .where(and(eq(playEvents.counted, true), isNotNull(playEvents.trackId)))
     .groupBy(quarter)
     .all();
 };
@@ -315,7 +317,7 @@ export const countedListeningPage = (db: LibraryDatabase, after: number): Counte
   }>(sql`
     WITH page AS MATERIALIZED (
       SELECT id, started_at, listened_ms, counted FROM play_events
-      WHERE id > ${after} ORDER BY id LIMIT 512
+      WHERE id > ${after} AND track_id IS NOT NULL ORDER BY id LIMIT 512
     )
     SELECT (started_at / ${QUARTER_HOUR_MS}) * ${QUARTER_HOUR_MS} AS "startedAt",
       sum(listened_ms) AS "listenedMs", NULL AS next, 0 AS size

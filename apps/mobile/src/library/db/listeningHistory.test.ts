@@ -4,7 +4,7 @@ import { eq, sql } from "drizzle-orm";
 import type { PlayEvent } from "@wave/core";
 
 import { listeningHistory } from "./listeningHistory.ts";
-import { recordPlay, updatePlay } from "./playHistory.ts";
+import { endPlay, latestPlay, recordPlay, updatePlay } from "./playHistory.ts";
 import * as schema from "./schema.ts";
 import {
   addMissingSong,
@@ -13,6 +13,18 @@ import {
   openTestDatabase,
   traceQueries,
 } from "./testDatabase.ts";
+import { homePlays, playedRecordingKeys } from "./playHistory.ts";
+import { listeningSums, playTotalsDrift, rebuildPlayTotals } from "./playTotals.ts";
+import {
+  countedListening,
+  countedListeningPage,
+  songListening,
+  trackPlayTotals,
+  creditedPlayTotals,
+} from "./stats.ts";
+import { mixHistoryPage } from "./mixInputs.ts";
+import { selectUnpushed } from "./syncRows.ts";
+import { selectPlaylistsLastPlayed } from "./playlists.ts";
 import { deleteTracksById } from "./tracks.ts";
 
 const play = (trackId: number, startedAt: number, counted = true): PlayEvent => ({
@@ -168,4 +180,111 @@ test("upgrading fills Library, account, retained Stats and unknown snapshots in 
       thumbPath: "/covers/library.thumb.jpg",
     },
   ]);
+});
+
+const streamedSong = {
+  videoId: "history-video",
+  title: "Airbag",
+  artists: ["Radiohead", "Guest"],
+  album: "OK Computer",
+  durationMs: 180_000,
+  artworkUrl: "https://i.ytimg.com/cover.jpg",
+  explicit: false,
+  albumId: "MPREb_album",
+};
+
+test("a streamed play saves progress, its queue snapshot and recording identity without a Library track", async () => {
+  const db = await openTestDatabase();
+  const started = { ...play(1, 1000, false), trackId: "yt:history-video" };
+  const id = recordPlay(db, started, false, streamedSong);
+  assert.equal(listeningHistory(db).rows.length, 0);
+  const counted = { ...started, listenedMs: 15_001, counted: true };
+  updatePlay(db, id, counted);
+  assert.equal(latestPlay(db)?.play.trackId, "yt:history-video");
+  const row = listeningHistory(db).rows[0]!;
+  assert.equal(row.videoId, "history-video");
+  assert.equal(row.song, null);
+  assert.deepEqual(row.streamedSong, streamedSong);
+  assert.equal(row.snapshot.title, "Airbag");
+  assert.equal(row.snapshot.artworkUrl, "https://i.ytimg.com/cover.jpg");
+  // albumKey(title, first artist), then normalized song title, with no track number.
+  assert.equal(row.recordingKey, "ok computer\u001fradiohead\u001fairbag");
+  endPlay(db, id, { ...counted, endReason: "skipped" });
+  assert.equal(latestPlay(db), null);
+  assert.deepEqual(listeningHistory(db).rows[0]?.snapshot, row.snapshot);
+});
+
+test("streamed starts, progress and ends leave Library totals and existing history consumers unchanged", async () => {
+  const db = await openTestDatabase();
+  const track = addTrack(db, { title: "Library song" });
+  const id = recordPlay(db, play(track, 1000));
+  endPlay(db, id, { ...play(track, 1000), endReason: "completed" });
+  const existing = () => ({
+    home: homePlays(db),
+    totals: listeningSums(db),
+    listening: songListening(db),
+    songs: trackPlayTotals(db, { from: null, to: 100_000 }),
+    artists: creditedPlayTotals(db, { from: 0, to: 100_000 }),
+    recap: countedListening(db),
+    recapPage: countedListeningPage(db, 0),
+    mixes: mixHistoryPage(db, 0),
+    keys: playedRecordingKeys(db),
+    playlists: [...selectPlaylistsLastPlayed(db)],
+    push: selectUnpushed(db, 100, () => null).rows.plays,
+  });
+  const before = existing();
+  const stream = {
+    ...play(track, 2000, false),
+    trackId: "yt:history-video",
+    context: { kind: "playlist", id: "22" },
+  };
+  const streamedId = recordPlay(db, stream, false, streamedSong);
+  assert.deepEqual(existing(), before);
+  updatePlay(db, streamedId, { ...stream, counted: true, listenedMs: 20_000 });
+  assert.deepEqual(existing(), before);
+  endPlay(db, streamedId, { ...stream, counted: true, listenedMs: 25_000, endReason: "completed" });
+  assert.deepEqual(existing(), before);
+  assert.deepEqual(playTotalsDrift(db), []);
+  rebuildPlayTotals(db);
+  assert.deepEqual(existing(), before);
+});
+
+test("earlier streamed rows resolve to a downloaded Library file by video id, keeping their snapshots", async () => {
+  const db = await openTestDatabase();
+  recordPlay(db, { ...play(1, 1000), trackId: "yt:history-video" }, false, streamedSong);
+  const original = listeningHistory(db).rows[0]!;
+  const downloaded = addTrack(db, { title: "Airbag (retagged)" });
+  db.update(schema.tracks)
+    .set({ videoId: streamedSong.videoId })
+    .where(eq(schema.tracks.id, downloaded))
+    .run();
+  const row = listeningHistory(db).rows[0]!;
+  assert.equal(row.song?.id, downloaded);
+  assert.ok(row.song?.path);
+  assert.deepEqual(row.snapshot, original.snapshot);
+  // Downloading doesn't start counting streamed plays in Library rankings in this ticket.
+  assert.equal(listeningSums(db).countedPlays, 0);
+});
+
+test("upgrading preserves Library history, ids, snapshots, sync flags and totals before recording streams", async () => {
+  const db = await openTestDatabase({ through: "0039_listening_history" });
+  const track = addTrack(db, { title: "Existing song" });
+  db.run(sql`INSERT INTO play_events (id, track_id, started_at, snapshot, listened_ms, end_reason, counted, sync_id, pushed, ongoing)
+    VALUES (50, ${track}, 1000, '{"title":"Old title","artist":"Artist","album":null,"artworkPath":null,"thumbPath":null}', 20000, 'interrupted', 1, 'kept-sync-id', 1, 1)`);
+  const before = listeningSums(db);
+  await migrateTestDatabase(db);
+  assert.deepEqual(listeningSums(db), before);
+  assert.equal(listeningHistory(db).rows[0]?.id, 50);
+  assert.equal(listeningHistory(db).rows[0]?.snapshot.title, "Old title");
+  assert.equal(latestPlay(db)?.id, 50);
+  assert.deepEqual(selectUnpushed(db, 100, () => null).rows.plays, []);
+  const id = recordPlay(
+    db,
+    { ...play(track, 2000), trackId: "yt:history-video" },
+    false,
+    streamedSong,
+  );
+  assert.ok(id > 50);
+  assert.deepEqual(listeningSums(db), before);
+  assert.deepEqual(playTotalsDrift(db), []);
 });

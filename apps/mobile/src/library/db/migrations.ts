@@ -1103,6 +1103,77 @@ UPDATE play_events SET snapshot = (
 CREATE INDEX play_events_history_idx ON play_events (started_at DESC, id DESC)
   WHERE counted = 1 AND imported_from IS NULL;`;
 
+// Streamed events have video identity; per-track totals keep summing Library events only.
+const mStreamedPlays = `
+DROP TRIGGER play_totals_insert;
+--> statement-breakpoint
+DROP TRIGGER play_totals_grow;
+--> statement-breakpoint
+DROP TRIGGER play_totals_change;
+--> statement-breakpoint
+DROP TRIGGER play_totals_delete;
+--> statement-breakpoint
+CREATE TABLE play_events_streamed (
+  id integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+  track_id integer,
+  video_id text,
+  streamed_song text,
+  started_at integer NOT NULL,
+  snapshot text,
+  listened_ms integer NOT NULL,
+  duration_ms integer,
+  end_reason text NOT NULL,
+  counted integer NOT NULL,
+  context_type text,
+  context_id text,
+  source text DEFAULT 'phone' NOT NULL,
+  album_id integer,
+  imported_from text,
+  recording_key text,
+  sync_id text,
+  ongoing integer DEFAULT false NOT NULL,
+  pushed integer DEFAULT false NOT NULL,
+  CONSTRAINT play_events_identity CHECK ((track_id IS NOT NULL) != (video_id IS NOT NULL))
+);
+--> statement-breakpoint
+INSERT INTO play_events_streamed (id, track_id, started_at, snapshot, listened_ms, duration_ms,
+  end_reason, counted, context_type, context_id, source, album_id, imported_from, recording_key,
+  sync_id, ongoing, pushed)
+SELECT id, track_id, started_at, snapshot, listened_ms, duration_ms, end_reason, counted,
+  context_type, context_id, source, album_id, imported_from, recording_key, sync_id, ongoing, pushed
+FROM play_events;
+--> statement-breakpoint
+UPDATE sqlite_sequence SET seq = max(seq, (SELECT seq FROM sqlite_sequence WHERE name = 'play_events'))
+  WHERE name = 'play_events_streamed';
+--> statement-breakpoint
+DROP TABLE play_events;
+--> statement-breakpoint
+ALTER TABLE play_events_streamed RENAME TO play_events;
+--> statement-breakpoint
+CREATE UNIQUE INDEX play_events_sync_id_unique ON play_events (sync_id);
+--> statement-breakpoint
+CREATE INDEX play_events_track_idx ON play_events (track_id);
+--> statement-breakpoint
+CREATE INDEX play_events_video_idx ON play_events (video_id);
+--> statement-breakpoint
+CREATE INDEX play_events_started_at_idx ON play_events (started_at);
+--> statement-breakpoint
+CREATE INDEX play_events_pushed_idx ON play_events (pushed);
+--> statement-breakpoint
+CREATE INDEX play_events_context_idx ON play_events (context_type, context_id, started_at);
+--> statement-breakpoint
+CREATE INDEX play_events_history_idx ON play_events (started_at DESC, id DESC)
+  WHERE counted = 1 AND imported_from IS NULL;
+--> statement-breakpoint
+${mPlayTotals
+  .slice(mPlayTotals.indexOf("CREATE TRIGGER"))
+  .replace(
+    "AFTER INSERT ON `play_events` BEGIN",
+    "AFTER INSERT ON `play_events` WHEN new.`track_id` IS NOT NULL BEGIN",
+  )
+  .replaceAll("new.`track_id` = old.`track_id`", "new.`track_id` IS old.`track_id`")}
+`;
+
 export default {
   journal: {
     entries: [
@@ -1156,6 +1227,7 @@ export default {
       { idx: 37, when: 1_795_003_200_000, tag: "0037_recording_titles", breakpoints: true },
       { idx: 38, when: 1_795_089_600_000, tag: "0038_genre_order", breakpoints: true },
       { idx: 39, when: 1_795_176_000_000, tag: "0039_listening_history", breakpoints: true },
+      { idx: 40, when: 1_795_262_400_000, tag: "0040_streamed_plays", breakpoints: true },
     ],
   },
   migrations: {
@@ -1199,5 +1271,6 @@ export default {
     m0037: mRecordingTitles,
     m0038: mGenreOrder,
     m0039: mListeningHistory,
+    m0040: mStreamedPlays,
   },
 };

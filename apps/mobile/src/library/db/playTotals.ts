@@ -21,7 +21,7 @@ const SUMMED = sql`
   SELECT track_id, count(*), sum(CASE WHEN counted THEN 1 ELSE 0 END), sum(listened_ms),
     sum(CASE WHEN counted THEN listened_ms ELSE 0 END), max(started_at),
     max(CASE WHEN counted THEN started_at END), max(CASE WHEN counted THEN album_id END)
-  FROM play_events GROUP BY track_id`;
+  FROM play_events WHERE track_id IS NOT NULL GROUP BY track_id`;
 
 /**
  * The tracks whose kept totals differ from their history, by id: none, unless

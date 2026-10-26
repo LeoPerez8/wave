@@ -1252,7 +1252,13 @@ export const selectPlaylistsLastPlayed = (db: LibraryDatabase): Map<number, numb
   const rows = db
     .select({ id: playEvents.contextId, at: sql<number>`max(${playEvents.startedAt})` })
     .from(playEvents)
-    .where(and(eq(playEvents.contextType, "playlist"), isNotNull(playEvents.contextId)))
+    .where(
+      and(
+        eq(playEvents.contextType, "playlist"),
+        isNotNull(playEvents.contextId),
+        isNotNull(playEvents.trackId),
+      ),
+    )
     .groupBy(playEvents.contextId)
     .all();
   const lastPlayed = new Map<number, number>();

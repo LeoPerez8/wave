@@ -53,7 +53,7 @@ export interface MixHistoryRow {
 export const mixHistoryPage = (db: LibraryDatabase, after: number): MixHistoryRow[] =>
   db.all<MixHistoryRow>(sql`
   SELECT id, track_id AS trackId, recording_key AS recordingKey, counted, started_at AS startedAt, listened_ms AS listenedMs
-  FROM play_events WHERE id > ${after} ORDER BY id LIMIT 128`);
+  FROM play_events WHERE id > ${after} AND track_id IS NOT NULL ORDER BY id LIMIT 128`);
 
 export const mixStreamedPage = (db: LibraryDatabase, after: number) => {
   const rows = db.all<{ cursor: number; song: string; plays: number; firstPlayedAt: number }>(sql`
