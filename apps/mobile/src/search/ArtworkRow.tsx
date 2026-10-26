@@ -10,7 +10,8 @@ type Props = {
   detail: string;
   artworkUri: string | undefined;
   onPress: () => void;
-  onLongPress?: () => void;
+  onLongPress?: (() => void) | undefined;
+  unavailable?: boolean | undefined;
   /** In a ranking: the entry's rank, shown leading (the top one in ember). */
   rank?: { readonly number: number; readonly top: boolean } | undefined;
 };
@@ -18,17 +19,30 @@ type Props = {
 const THUMB = CELL * 5;
 
 /** An album in search results or a ranking: a track row's thumbnail and two lines, without track cells. */
-export function ArtworkRow({ title, detail, artworkUri, onPress, onLongPress, rank }: Props) {
+export function ArtworkRow({
+  title,
+  detail,
+  artworkUri,
+  onPress,
+  onLongPress,
+  rank,
+  unavailable,
+}: Props) {
   return (
     <Press
       accessibilityRole="button"
       accessibilityLabel={`${title}, ${detail}`}
+      accessibilityState={{ disabled: unavailable }}
+      disabled={unavailable}
       onPress={onPress}
       onLongPress={onLongPress}
       haptic="selection"
       depth={0.015}
     >
-      <View className="flex-row items-center" style={{ height: grid.row, gap: CELL * 1.5 }}>
+      <View
+        className="flex-row items-center"
+        style={{ height: grid.row, gap: CELL * 1.5, opacity: unavailable ? 0.4 : 1 }}
+      >
         {rank !== undefined && <RankNumber rank={rank.number} top={rank.top} />}
         <Artwork uri={artworkUri} size={THUMB} />
         <View className="flex-1">

@@ -1,22 +1,25 @@
+import type { PlayedAlbum, PlayedArtist } from "@/library/db/playedEntities";
 import {
-  albumPlayTotals,
+  ARTIST_MOST_PLAYED,
   artistStats,
-  artistPlayTotals,
   availableRecaps,
   createRecapAvailability,
-  rankPlays,
+  rankSongPlays,
   recap,
   recapId,
   recapSlides,
   recapWindow,
   statsWindow,
   type ArtistStats as ArtistStatsLines,
+  type EntityPlayTotals,
   type GenreFamily,
+  type MixedSong,
   type CountedListening,
-  type PlayTotals,
+  type SongPlayTotals,
   type RecapPeriod,
   type RecapSlide,
   type StatsPeriod,
+  type YtAlbumSong,
 } from "@wave/core";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -25,13 +28,7 @@ import * as Layer from "effect/Layer";
 import { runSteps } from "@/lib/stepped";
 import type { RecapHistoryVersion } from "./recapAvailability";
 
-import {
-  LibraryStore,
-  type AlbumRow,
-  type ArtistRow,
-  type LibraryStoreError,
-  type SongRow,
-} from "@/library/LibraryStore";
+import { LibraryStore, type LibraryStoreError, type SongRow } from "@/library/LibraryStore";
 
 /** A ranked entity with its counted plays in the period. */
 export interface Ranked<A> {
@@ -39,32 +36,35 @@ export interface Ranked<A> {
   readonly countedPlays: number;
 }
 
+/** A song in Stats' song ranking: a Library song, or a streamed one the Library hasn't. */
+export type StatsSong = MixedSong<YtAlbumSong, SongRow>;
+
 /** An artist page's stats block, its most played songs loaded. */
 export type ArtistStats =
   | Extract<ArtistStatsLines, { played: false }>
   | (Omit<Extract<ArtistStatsLines, { played: true }>, "mostPlayed"> & {
-      readonly mostPlayed: readonly Ranked<SongRow>[];
+      readonly mostPlayed: readonly Ranked<StatsSong>[];
     });
 
 /** A Recap slide with the rows it shows loaded. */
 export type LoadedRecapSlide =
   | Exclude<RecapSlide, { kind: "topSongs" | "topArtists" | "topAlbum" | "discovered" | "summary" }>
-  | { readonly kind: "topSongs"; readonly songs: readonly Ranked<SongRow>[] }
-  | { readonly kind: "topArtists"; readonly artists: readonly Ranked<ArtistRow>[] }
-  | { readonly kind: "topAlbum"; readonly album: Ranked<AlbumRow> }
+  | { readonly kind: "topSongs"; readonly songs: readonly Ranked<StatsSong>[] }
+  | { readonly kind: "topArtists"; readonly artists: readonly Ranked<PlayedArtist>[] }
+  | { readonly kind: "topAlbum"; readonly album: Ranked<PlayedAlbum> }
   | {
       readonly kind: "discovered";
       /** How many artists the period discovered. */
       readonly count: number;
       /** The most played of them, the top one first. */
-      readonly artists: readonly Ranked<ArtistRow>[];
+      readonly artists: readonly Ranked<PlayedArtist>[];
     }
   | {
-      /** The summary card: the top songs and artists still in the Library. */
+      /** The summary card: the top songs (Library and streamed) and artists. */
       readonly kind: "summary";
       readonly minutes: number;
-      readonly songs: readonly Ranked<SongRow>[];
-      readonly artists: readonly Ranked<ArtistRow>[];
+      readonly songs: readonly Ranked<StatsSong>[];
+      readonly artists: readonly Ranked<PlayedArtist>[];
       readonly genre: GenreFamily | null;
     };
 
@@ -81,21 +81,24 @@ export interface LoadedRecap {
 export class Stats extends Context.Service<
   Stats,
   {
-    /** The `limit` songs played most in `period` (rolling, ending now), the top one first. */
+    /**
+     * The `limit` songs played most in `period` (rolling, ending now), the top
+     * one first, streamed songs included.
+     */
     readonly topSongs: (
       period: StatsPeriod,
       limit: number,
-    ) => Effect.Effect<readonly Ranked<SongRow>[], LibraryStoreError>;
+    ) => Effect.Effect<readonly Ranked<StatsSong>[], LibraryStoreError>;
     /** The `limit` albums played most in `period` (title + album artist, as in the Library). */
     readonly topAlbums: (
       period: StatsPeriod,
       limit: number,
-    ) => Effect.Effect<readonly Ranked<AlbumRow>[], LibraryStoreError>;
+    ) => Effect.Effect<readonly Ranked<PlayedAlbum>[], LibraryStoreError>;
     /** The `limit` artists played most in `period`, credited by track artist. */
     readonly topArtists: (
       period: StatsPeriod,
       limit: number,
-    ) => Effect.Effect<readonly Ranked<ArtistRow>[], LibraryStoreError>;
+    ) => Effect.Effect<readonly Ranked<PlayedArtist>[], LibraryStoreError>;
     /**
      * The artist page's stats block over all time, over the songs whose credit
      * names the artist (a collaboration counts for each of its artists).
@@ -113,35 +116,43 @@ export class Stats extends Context.Service<
 >()("@wave/mobile/stats/Stats") {}
 
 /**
- * Loads the rows of a ranking's entities, in ranking order. An entity that
- * left the library since the totals were read is skipped.
+ * Loads the rows of a song ranking, in ranking order: the Library's rows and
+ * the streamed songs' as their latest plays had them. A song that left since
+ * the totals were read is skipped.
  */
-const withRows = <A extends { readonly id: number }>(
-  ranking: readonly PlayTotals[],
-  rows: (ids: readonly number[]) => Effect.Effect<readonly A[], LibraryStoreError>,
-): Effect.Effect<readonly Ranked<A>[], LibraryStoreError> => {
-  if (ranking.length === 0) return Effect.succeed([]);
-  return Effect.map(rows(ranking.map((entry) => entry.id)), (found) => {
-    const byId = new Map(found.map((row) => [row.id, row]));
-    return ranking.flatMap((entry) => {
-      const item = byId.get(entry.id);
-      return item === undefined ? [] : [{ item, countedPlays: entry.countedPlays }];
-    });
-  });
+const rankSongs = (
+  store: LibraryStore["Service"],
+  ranking: readonly SongPlayTotals[],
+): Effect.Effect<readonly Ranked<StatsSong>[], LibraryStoreError> => {
+  const ids = ranking.flatMap(({ song }) => (song.kind === "library" ? [song.id] : []));
+  const videoIds = ranking.flatMap(({ song }) => (song.kind === "yt" ? [song.videoId] : []));
+  return Effect.map(
+    Effect.all([
+      ids.length === 0 ? Effect.succeed([]) : store.songsByIds(ids),
+      videoIds.length === 0
+        ? Effect.succeed(new Map<string, YtAlbumSong>())
+        : store.streamedSongsByIds(videoIds),
+    ]),
+    ([rows, streamed]) => {
+      const byId = new Map(rows.map((row) => [row.id, row]));
+      return ranking.flatMap(({ song, countedPlays }): Ranked<StatsSong>[] => {
+        if (song.kind === "library") {
+          const track = byId.get(song.id);
+          return track === undefined ? [] : [{ item: { source: "library", track }, countedPlays }];
+        }
+        const streamedSong = streamed.get(song.videoId);
+        return streamedSong === undefined
+          ? []
+          : [{ item: { source: "stream", song: streamedSong }, countedPlays }];
+      });
+    },
+  );
 };
-
-/** Ranks the store's totals with Core's rule, then loads the rows of the winners. */
-const rank = <A extends { readonly id: number }>(
-  totals: readonly PlayTotals[],
-  limit: number,
-  rows: (ids: readonly number[]) => Effect.Effect<readonly A[], LibraryStoreError>,
-): Effect.Effect<readonly Ranked<A>[], LibraryStoreError> =>
-  withRows(rankPlays(totals, limit), rows);
 
 /** The albums and the artists played most in a period, ranked from one read. */
 export interface TopAlbumsAndArtists {
-  readonly albums: readonly Ranked<AlbumRow>[];
-  readonly artists: readonly Ranked<ArtistRow>[];
+  readonly albums: readonly Ranked<PlayedAlbum>[];
+  readonly artists: readonly Ranked<PlayedArtist>[];
 }
 
 /**
@@ -155,53 +166,80 @@ export const topAlbumsAndArtists = (
   albumLimit: number,
   artistLimit: number,
 ): Effect.Effect<TopAlbumsAndArtists, LibraryStoreError> =>
-  Effect.flatMap(
-    Effect.suspend(() => store.creditedPlayTotals(statsWindow(period, Date.now()))),
-    (credits) =>
-      Effect.all({
-        albums: rank(albumPlayTotals(credits), albumLimit, store.albumsByIds),
-        artists: rank(artistPlayTotals(credits), artistLimit, store.artistsByIds),
-      }),
+  Effect.map(
+    Effect.suspend(() => store.playedEntityTotals(statsWindow(period, Date.now()))),
+    (totals) => ({
+      albums: totals.albums.slice(0, albumLimit),
+      artists: totals.artists.slice(0, artistLimit),
+    }),
+  );
+
+/** The rows a Recap's slides show, by the ids Core ranked them by. */
+interface RecapRows {
+  readonly artists: ReadonlyMap<number | string, PlayedArtist>;
+  readonly albums: ReadonlyMap<number | string, PlayedAlbum>;
+}
+
+/** [ranking]'s entities with their rows, in ranking order; one without a row is skipped. */
+const withItems = <A>(
+  ranking: readonly EntityPlayTotals[],
+  rows: ReadonlyMap<number | string, A>,
+): Ranked<A>[] =>
+  ranking.flatMap((entry) => {
+    const item = rows.get(entry.id);
+    return item === undefined ? [] : [{ item, countedPlays: entry.countedPlays }];
+  });
+
+/** A Recap's song ranking as Stats ranks songs: a Library song by its id, a streamed one by its video id. */
+const recapSongs = (
+  store: LibraryStore["Service"],
+  ranking: readonly EntityPlayTotals[],
+): Effect.Effect<readonly Ranked<StatsSong>[], LibraryStoreError> =>
+  rankSongs(
+    store,
+    ranking.map(({ id, ...totals }) => ({
+      ...totals,
+      song: typeof id === "number" ? { kind: "library", id } : { kind: "yt", videoId: id },
+    })),
   );
 
 /** Loads a slide's rows; a slide whose songs, artists or album all left the library is dropped. */
 const loadSlide = (
   store: LibraryStore["Service"],
+  rows: RecapRows,
   slide: RecapSlide,
 ): Effect.Effect<readonly LoadedRecapSlide[], LibraryStoreError> => {
   switch (slide.kind) {
     case "minutes":
       return Effect.succeed([slide]);
     case "topSongs":
-      return Effect.map(withRows(slide.songs, store.songsByIds), (songs) =>
+      return Effect.map(recapSongs(store, slide.songs), (songs) =>
         songs.length === 0 ? [] : [{ kind: "topSongs", songs }],
       );
-    case "topArtists":
-      return Effect.map(withRows(slide.artists, store.artistsByIds), (artists) =>
-        artists.length === 0 ? [] : [{ kind: "topArtists", artists }],
+    case "topArtists": {
+      const artists = withItems(slide.artists, rows.artists);
+      return Effect.succeed(artists.length === 0 ? [] : [{ kind: "topArtists", artists }]);
+    }
+    case "topAlbum": {
+      const [album] = withItems([slide.album], rows.albums);
+      return Effect.succeed(album === undefined ? [] : [{ kind: "topAlbum", album }]);
+    }
+    case "discovered": {
+      const artists = withItems(slide.artists.slice(0, DISCOVERED_SHOWN), rows.artists);
+      return Effect.succeed(
+        artists.length === 0 ? [] : [{ kind: "discovered", count: slide.artists.length, artists }],
       );
-    case "topAlbum":
-      return Effect.map(withRows([slide.album], store.albumsByIds), ([album]) =>
-        album === undefined ? [] : [{ kind: "topAlbum", album }],
-      );
-    case "discovered":
-      return Effect.map(
-        withRows(slide.artists.slice(0, DISCOVERED_SHOWN), store.artistsByIds),
-        (artists) =>
-          artists.length === 0
-            ? []
-            : [{ kind: "discovered", count: slide.artists.length, artists }],
-      );
+    }
     case "summary":
-      return Effect.map(
-        Effect.all([
-          withRows(slide.songs, store.songsByIds),
-          withRows(slide.artists, store.artistsByIds),
-        ]),
-        ([songs, artists]) => [
-          { kind: "summary", minutes: slide.minutes, songs, artists, genre: slide.genre },
-        ],
-      );
+      return Effect.map(recapSongs(store, slide.songs), (songs) => [
+        {
+          kind: "summary",
+          minutes: slide.minutes,
+          songs,
+          artists: withItems(slide.artists, rows.artists),
+          genre: slide.genre,
+        },
+      ]);
     case "topGenres":
     case "habits":
       return Effect.succeed([slide]);
@@ -220,24 +258,15 @@ const loadRecap = (
     if (!availableRecaps(listening, now).some((available) => recapId(available) === id)) {
       return null;
     }
-    const window = recapWindow(period);
-    const songs = yield* store.trackPlayTotals(window);
-    const credits = yield* store.creditedPlayTotals(window);
-    const artists = artistPlayTotals(credits);
-    const played = songs.filter((song) => song.countedPlays > 0).map((song) => song.id);
-    const songGenres = played.length === 0 ? [] : yield* store.songGenres(played);
-    const artistFirstPlays =
-      artists.length === 0 ? [] : yield* store.artistFirstPlays(artists.map((artist) => artist.id));
-    const computed = recap({
-      period,
-      listening,
-      songs,
-      artists,
-      albums: albumPlayTotals(credits),
-      songGenres,
-      artistFirstPlays,
-    });
-    const slides = yield* Effect.forEach(recapSlides(computed), (slide) => loadSlide(store, slide));
+    const plays = yield* store.recapPlays(recapWindow(period));
+    const computed = recap({ period, listening, ...plays });
+    const rows: RecapRows = {
+      artists: new Map(plays.artists.map((entry) => [entry.id, entry.item])),
+      albums: new Map(plays.albums.map((entry) => [entry.id, entry.item])),
+    };
+    const slides = yield* Effect.forEach(recapSlides(computed), (slide) =>
+      loadSlide(store, rows, slide),
+    );
     return { period, title: computed.title, slides: slides.flat() };
   });
 
@@ -300,25 +329,35 @@ export const layer = Layer.effect(
     const store = yield* LibraryStore;
     return {
       topSongs: (period, limit) =>
-        Effect.flatMap(store.trackPlayTotals(statsWindow(period, Date.now())), (totals) =>
-          rank(totals, limit, store.songsByIds),
+        Effect.flatMap(store.songPlayTotals(statsWindow(period, Date.now())), (totals) =>
+          rankSongs(store, rankSongPlays(totals, limit)),
         ),
       topAlbums: (period, limit) =>
-        Effect.flatMap(store.creditedPlayTotals(statsWindow(period, Date.now())), (credits) =>
-          rank(albumPlayTotals(credits), limit, store.albumsByIds),
+        Effect.map(store.playedEntityTotals(statsWindow(period, Date.now())), (totals) =>
+          totals.albums.slice(0, limit),
         ),
       topArtists: (period, limit) =>
-        Effect.flatMap(store.creditedPlayTotals(statsWindow(period, Date.now())), (credits) =>
-          rank(artistPlayTotals(credits), limit, store.artistsByIds),
+        Effect.map(store.playedEntityTotals(statsWindow(period, Date.now())), (totals) =>
+          totals.artists.slice(0, limit),
         ),
       artist: (artistId) => {
         const now = Date.now();
         return Effect.flatMap(
-          store.artistPlays(artistId, now),
+          store.playedArtistSongs(artistId, now),
           (plays): Effect.Effect<ArtistStats, LibraryStoreError> => {
             const stats = artistStats({ artistId, now, ...plays });
             if (!stats.played) return Effect.succeed(stats);
-            return Effect.map(withRows(stats.mostPlayed, store.songsByIds), (mostPlayed) => ({
+            const ranking = rankSongPlays(
+              [
+                ...stats.mostPlayed.map(({ id, ...totals }): SongPlayTotals => ({
+                  ...totals,
+                  song: { kind: "library", id },
+                })),
+                ...plays.streamedSongPlays,
+              ],
+              ARTIST_MOST_PLAYED,
+            );
+            return Effect.map(rankSongs(store, ranking), (mostPlayed) => ({
               ...stats,
               mostPlayed,
             }));

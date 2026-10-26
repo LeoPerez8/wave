@@ -12,7 +12,8 @@ type Props = {
   /** The quiet second line: counts, a path. */
   detail: string;
   onPress: () => void;
-  onLongPress?: () => void;
+  onLongPress?: (() => void) | undefined;
+  unavailable?: boolean | undefined;
   /** In a ranking: the entry's rank, shown leading (the top one in ember). */
   rank?: { readonly number: number; readonly top: boolean } | undefined;
   /** An artist row: the artist, whose image leads the row (after the rank). */
@@ -32,19 +33,34 @@ const ARTIST_THUMB = CELL * 5;
  * at one size like a track row, 56dp so long lists lay out by index. Artists
  * lead with their image.
  */
-export function NameRow({ name, detail, onPress, onLongPress, rank, artist, checked }: Props) {
+export function NameRow({
+  name,
+  detail,
+  onPress,
+  onLongPress,
+  rank,
+  artist,
+  checked,
+  unavailable,
+}: Props) {
   const selecting = checked !== undefined;
   return (
     <Press
       accessibilityRole={selecting ? "checkbox" : "button"}
       accessibilityLabel={`${name}, ${detail}`}
-      accessibilityState={selecting ? { checked } : undefined}
+      accessibilityState={
+        selecting ? { checked, disabled: unavailable } : { disabled: unavailable }
+      }
+      disabled={unavailable}
       onPress={onPress}
       onLongPress={onLongPress}
       haptic="selection"
       depth={0.015}
     >
-      <View className="flex-row items-center" style={{ height: grid.row, gap: CELL * 1.5 }}>
+      <View
+        className="flex-row items-center"
+        style={{ height: grid.row, gap: CELL * 1.5, opacity: unavailable ? 0.4 : 1 }}
+      >
         {selecting && <CheckCell checked={checked} />}
         {rank !== undefined && <RankNumber rank={rank.number} top={rank.top} />}
         {artist !== undefined && <ArtistImage artist={artist} size={ARTIST_THUMB} />}

@@ -15,7 +15,7 @@ import { CELL } from "@/catalog/grid";
 import { Press } from "@/motion/Press";
 import { addScreenBackHandler } from "@/overlay/back";
 
-import { LyricCard } from "./LyricCard";
+import { LyricCard } from "./LyricCardArtwork";
 import { closeLyricCard, useLyricCard, type LyricCardContent } from "./lyricCard";
 import { ShareDestinations } from "./ShareDestinations";
 import { SharePreviewFrame } from "./SharePreviewFrame";

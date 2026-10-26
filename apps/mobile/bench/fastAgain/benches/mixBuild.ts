@@ -149,8 +149,11 @@ export const bench: FastAgainBench = {
               : yield* catalogRead.readMixCatalog(reads, between);
           const played =
             inputs === null
-              ? (yield* stats.topAlbumsAndArtists(reads, "all", 0, 20)).artists.map(
-                  ({ item, countedPlays }) => ({ id: item.id, name: item.name, countedPlays }),
+              ? (yield* stats.topAlbumsAndArtists(reads, "all", 0, 20)).artists.flatMap(
+                  ({ item, countedPlays }) =>
+                    typeof item.id === "number"
+                      ? [{ id: item.id, name: item.name, countedPlays }]
+                      : [],
                 )
               : library.topArtists;
           const pools = {

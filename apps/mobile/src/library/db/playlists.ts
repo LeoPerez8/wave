@@ -1244,7 +1244,7 @@ const livePlaylist = eq(schema.playlists.deleted, false);
 
 /**
  * When a song last started playing from each playlist (a play whose context
- * is the playlist), by playlist id, for sorting the Playlists list by Recently
+ * is the playlist, streamed songs' included), by playlist id, for sorting the Playlists list by Recently
  * Played (Core's `sortPlaylists`). Playlists never played from aren't in it.
  */
 export const selectPlaylistsLastPlayed = (db: LibraryDatabase): Map<number, number> => {

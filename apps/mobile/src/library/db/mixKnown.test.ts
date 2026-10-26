@@ -131,4 +131,23 @@ describe("The videos the owner knows now, for re-blending mixes", () => {
       "streamed",
     ]);
   });
+
+  test("include the songs streamed since plays are recorded, counted or not", () => {
+    recordPlay(
+      db,
+      {
+        trackId: "yt:skipped",
+        context: null,
+        startedAt: 1_000,
+        listenedMs: 1_000,
+        durationMs: 200_000,
+        endReason: "skipped",
+        counted: false,
+        source: "phone",
+      },
+      false,
+      yt("skipped"),
+    );
+    assert.deepEqual(selectKnownVideos(db), ["skipped"]);
+  });
 });

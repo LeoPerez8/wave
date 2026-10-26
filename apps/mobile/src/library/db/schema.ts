@@ -1,5 +1,5 @@
 import { sql, type SQL } from "drizzle-orm";
-import type { PlaylistRecommendationTrack } from "@wave/core";
+import type { PlaySnapshot, PlaylistRecommendationTrack, YtAlbumSong } from "@wave/core";
 import {
   type AnySQLiteColumn,
   check,
@@ -186,6 +186,7 @@ export const tracks = sqliteTable(
     index("tracks_genre_idx").on(t.genreId),
     index("tracks_folder_idx").on(t.folderId),
     index("tracks_recording_key_idx").on(t.recordingKey),
+    index("tracks_video_idx").on(t.videoId),
   ],
 );
 
@@ -589,15 +590,22 @@ export const syncState = sqliteTable("sync_state", {
 /**
  * One row per time a track started playing (Core's `PlayEvent`). Append-only:
  * a row is written when the play starts and updated until it ends, never
- * aggregated away. `track_id` has no foreign key on purpose, so history
+ * aggregated away. A play identifies a Library track, a video, or a synced
+ * recording whose Library song hasn't arrived yet.
+ * `track_id` has no foreign key on purpose, so history
  * outlives a deleted file (track ids are never reused: AUTOINCREMENT).
  */
 export const playEvents = sqliteTable(
   "play_events",
   {
     id: integer("id").primaryKey({ autoIncrement: true }),
-    trackId: integer("track_id").notNull(),
+    trackId: integer("track_id"),
+    videoId: text("video_id"),
+    /** Queue metadata captured at start, for streamed history playback and menus. */
+    streamedSong: text("streamed_song", { mode: "json" }).$type<YtAlbumSong>(),
     startedAt: integer("started_at").notNull(),
+    /** Display metadata captured at playback start; never changed by a progress update. */
+    snapshot: text("snapshot", { mode: "json" }).$type<PlaySnapshot>(),
     listenedMs: integer("listened_ms").notNull(),
     /** Null when the player never learnt the track's length. */
     durationMs: integer("duration_ms"),
@@ -647,11 +655,22 @@ export const playEvents = sqliteTable(
     ...pushedFlag(),
   },
   (t) => [
+    check(
+      "play_events_identity",
+      sql`
+      (${t.trackId} IS NOT NULL AND ${t.videoId} IS NULL) OR
+      (${t.trackId} IS NULL AND (${t.videoId} IS NOT NULL OR
+        (${t.recordingKey} IS NOT NULL AND ${t.snapshot} IS NOT NULL)))`,
+    ),
+    index("play_events_video_idx").on(t.videoId),
     index("play_events_track_idx").on(t.trackId),
     index("play_events_started_at_idx").on(t.startedAt),
+    index("play_events_history_idx")
+      .on(sql`${t.startedAt} DESC`, sql`${t.id} DESC`)
+      .where(sql`${t.counted} = 1 AND ${t.importedFrom} IS NULL`),
     index("play_events_pushed_idx").on(t.pushed),
     // When each playlist was last played (the Playlists list's Recently Played).
-    index("play_events_context_idx").on(t.contextType, t.contextId, t.startedAt),
+    index("play_events_context_idx").on(t.contextType, t.contextId, t.startedAt, t.trackId),
   ],
 );
 
@@ -686,6 +705,30 @@ export const playTotals = sqliteTable(
     index("play_totals_counted_idx").on(t.countedPlays, t.lastCountedAt),
     index("play_totals_last_played_idx").on(t.lastPlayedAt),
   ],
+);
+
+/**
+ * Each streamed song's listening over its whole history, as `play_totals`
+ * keeps a track's: one row per video id and recording key with a streamed
+ * play (a key that changed between plays gives the video a row per key), kept
+ * by triggers on `play_events` (migration `0042_streamed_counts`). Home reads
+ * them beside `play_totals`, the rows whose video id or key a Library song has
+ * counting as that song's (`streamedTrack`).
+ */
+export const streamedTotals = sqliteTable(
+  "streamed_totals",
+  {
+    videoId: text("video_id").notNull(),
+    /** The plays' recording key; empty for plays without one. */
+    recordingKey: text("recording_key").notNull(),
+    plays: integer("plays").notNull(),
+    countedPlays: integer("counted_plays").notNull(),
+    listenedMs: integer("listened_ms").notNull(),
+    countedListenedMs: integer("counted_listened_ms").notNull(),
+    lastPlayedAt: integer("last_played_at").notNull(),
+    lastCountedAt: integer("last_counted_at"),
+  },
+  (t) => [primaryKey({ columns: [t.videoId, t.recordingKey] })],
 );
 
 /**

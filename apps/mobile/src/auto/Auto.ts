@@ -38,6 +38,7 @@ import type { RowPage } from "@/library/db/database";
 import type { HomeSections } from "@/library/db/playHistory";
 import {
   LibraryStore,
+  type AlbumRow,
   type LibraryStoreError,
   type PlaylistEntryRow,
   songHasFile,
@@ -141,7 +142,9 @@ const pageOf = <A>(rows: readonly A[], page: RowPage): readonly A[] =>
 
 /** The songs of each of Home's song sections, as the app's Home tab lists them. */
 const HOME_SONGS: Record<AutoHomeList, (home: HomeSections) => readonly SongRow[]> = {
-  "most-played": (home) => home.mostPlayed,
+  // Read in the "files" scope: only Library songs with a file, never a streamed song.
+  "most-played": (home) =>
+    home.mostPlayed.flatMap((row) => (row.source === "library" ? [row.track] : [])),
   favorites: (home) => home.favorites,
 };
 
@@ -226,9 +229,16 @@ export const layer = Layer.effect(
           );
         // The app's Home shelf: a handful of albums.
         case "recentlyPlayed":
-          return store
-            .home("files")
-            .pipe(Effect.map((home) => pageOf(home.recentlyPlayed, page).map(autoAlbumItem)));
+          return store.home("files").pipe(
+            Effect.map((home) =>
+              pageOf(
+                home.recentlyPlayed.filter(
+                  (album): album is AlbumRow => typeof album.id === "number",
+                ),
+                page,
+              ).map(autoAlbumItem),
+            ),
+          );
         case "artists":
           return store.listArtistsPage(page).pipe(
             Effect.flatMap(withCovers),

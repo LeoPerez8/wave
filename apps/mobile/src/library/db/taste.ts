@@ -4,33 +4,41 @@
  * them. Kept free of Expo so the store tests run it in plain Node;
  * `LibraryStore` calls it.
  */
-import type { TasteHistory } from "@wave/core";
+import { ytTrackId, type TasteHistory } from "@wave/core";
 import { and, eq, isNotNull, sql } from "drizzle-orm";
 
 import type { LibraryDatabase } from "./database.ts";
 import * as schema from "./schema.ts";
+import { tasteSong } from "./tastePages.ts";
 
 /**
  * Every play of a song still in the Library (one gone has no artist or
- * genre left to weigh), every song starred with when its star changed, and
+ * genre left to weigh) or streamed (`tasteSong`), every song starred with when its star changed, and
  * every song downloaded from YouTube Music, dated by its file: when it
  * entered the Library, or the file's own date when that's older (a Library
  * scanned afresh), so editing its tags later doesn't make it new.
  */
 export const tasteHistory = (db: LibraryDatabase): TasteHistory => {
-  const { playEvents, favorites, tracks } = schema;
+  const { favorites, tracks } = schema;
   const plays = db
-    .select({
-      trackId: playEvents.trackId,
-      startedAt: playEvents.startedAt,
-      listenedMs: playEvents.listenedMs,
-      endReason: playEvents.endReason,
-    })
-    .from(playEvents)
-    .innerJoin(tracks, eq(playEvents.trackId, tracks.id))
-    .orderBy(playEvents.startedAt, playEvents.id)
-    .all()
-    .map((play) => ({ ...play, trackId: String(play.trackId) }));
+    .all<{
+      song: number | null;
+      videoId: string | null;
+      startedAt: number;
+      listenedMs: number;
+      endReason: TasteHistory["plays"][number]["endReason"];
+    }>(
+      sql`SELECT ${tasteSong} AS song, pe.video_id AS "videoId", pe.started_at AS "startedAt",
+        pe.listened_ms AS "listenedMs", pe.end_reason AS "endReason"
+      FROM play_events pe ORDER BY pe.started_at, pe.id`,
+    )
+    .flatMap(({ song, videoId, ...play }) =>
+      song !== null
+        ? [{ trackId: String(song), ...play }]
+        : videoId !== null
+          ? [{ trackId: ytTrackId(videoId), ...play }]
+          : [],
+    );
   const starred = db
     .select({ trackId: favorites.trackId, changedAt: favorites.changedAt })
     .from(favorites)

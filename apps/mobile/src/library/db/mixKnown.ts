@@ -1,8 +1,9 @@
 /**
  * What Home's mixes read of the songs the owner knows beyond the Library and
  * the play history (Core's `mixKnownSongs`): the YT Music songs streamed
- * (`schema.streamedSongs`) and the playlists' entries other than Library
- * songs. Kept free of Expo for the store tests.
+ * before streamed plays were recorded (`schema.streamedSongs`, known songs
+ * only) and the playlists' entries other than Library songs. Kept free of
+ * Expo for the store tests.
  */
 import {
   readPlaylistEntrySong,
@@ -17,7 +18,11 @@ import { sql } from "drizzle-orm";
 import type { LibraryDatabase } from "./database.ts";
 import * as schema from "./schema.ts";
 
-/** Notes that the owner started streaming [song] at [at]: once more, and first then if never before. */
+/**
+ * Notes that the owner started streaming [song] at [at]: once more, and first
+ * then if never before. The old counter, as Wave kept it before streamed plays
+ * were recorded; Wave no longer writes it (the tests seed old databases with it).
+ */
 export const noteStreamedSong = (db: LibraryDatabase, song: YtAlbumSong, at: number): void => {
   const t = schema.streamedSongs;
   db.insert(t)
@@ -71,7 +76,8 @@ export const selectPlaylistedSongs = (db: LibraryDatabase): MixPlaylistEntry[] =
 
 /**
  * The videos of the songs the owner knows now beyond the build's view: the
- * songs streamed, the YT Music entries of playlists, and the downloaded
+ * songs streamed (since plays are recorded, and by the counter from before),
+ * the YT Music entries of playlists, and the downloaded
  * songs (`tracks.video_id`) played or in a playlist. A re-blend leaves the
  * mixes' new songs among them out, with no network (Core's `discoverMixKeep`).
  */
@@ -79,6 +85,8 @@ export const selectKnownVideos = (db: LibraryDatabase): string[] =>
   db
     .all<{ videoId: string | null }>(
       sql`SELECT video_id AS videoId FROM streamed_songs
+      UNION
+      SELECT video_id FROM streamed_totals
       UNION
       SELECT CASE WHEN json_valid(pi.yt_song) THEN json_extract(pi.yt_song, '$.videoId') END
         FROM playlist_items pi JOIN playlists p ON p.id = pi.playlist_id

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   magicBatchRadios,
+  magicListSeedSongs,
   parseMagicSession,
   seededRandom,
   startMagicQueue,
@@ -138,4 +139,64 @@ test("a long playlist keeps its 200 most played songs to draw from", () => {
   const session = start(playlist, songs);
   assert.equal(session.seedSongs?.length, 200);
   assert.ok(!session.seedSongs?.some((song) => song.plays < 50));
+});
+
+test("a playlist's streamed songs are seeds too, each with its counted plays", () => {
+  const seeds = magicListSeedSongs(
+    [
+      {
+        source: "library",
+        track: { id: 7, title: "Local", artists: ["A"], durationMs: 200_000, videoId: "v-local" },
+      },
+      {
+        source: "stream",
+        song: {
+          videoId: "v-airbag",
+          title: "Airbag",
+          artists: ["Radiohead"],
+          album: "OK Computer",
+          durationMs: 284_000,
+          artworkUrl: null,
+          explicit: false,
+        },
+      },
+      {
+        source: "library",
+        track: { id: 8, title: "Never played", artists: ["B"], durationMs: null },
+      },
+    ],
+    new Map([
+      ["7", 2],
+      ["yt:v-airbag", 9],
+    ]),
+  );
+  assert.deepEqual(seeds, [
+    {
+      id: "song:7",
+      title: "Local",
+      artists: ["A"],
+      durationMs: 200_000,
+      videoId: "v-local",
+      plays: 2,
+    },
+    {
+      id: "song:yt:v-airbag",
+      title: "Airbag",
+      artists: ["Radiohead"],
+      durationMs: 284_000,
+      videoId: "v-airbag",
+      plays: 9,
+    },
+    { id: "song:8", title: "Never played", artists: ["B"], durationMs: null, plays: 0 },
+  ]);
+  // The most played is drawn first most often, streamed or not.
+  const firsts = new Map<string, number>();
+  for (let i = 0; i < 200; i++) {
+    const first = magicBatchRadios(start(playlist, seeds), seededRandom(String(i))).seeds[0]!.id;
+    firsts.set(first, (firsts.get(first) ?? 0) + 1);
+  }
+  assert.ok(
+    (firsts.get("song:yt:v-airbag") ?? 0) > (firsts.get("song:7") ?? 0),
+    String([...firsts]),
+  );
 });

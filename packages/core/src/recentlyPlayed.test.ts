@@ -26,6 +26,17 @@ describe("recentlyPlayedAlbums", () => {
     assert.deepEqual(recentlyPlayedAlbums(read, 12, true), [7, 2, 4]);
   });
 
+  test("on a tie, Library albums, the latest added first, come before online ones in order", () => {
+    const read: LatestPlayedSong<number | string>[] = [
+      { albumId: "MPREb_b", lastPlayedAt: 900 },
+      { albumId: 2, lastPlayedAt: 900 },
+      { albumId: "MPREb_a", lastPlayedAt: 900 },
+      { albumId: 7, lastPlayedAt: 900 },
+    ];
+
+    assert.deepEqual(recentlyPlayedAlbums(read, 12, true), [7, 2, "MPREb_a", "MPREb_b"]);
+  });
+
   test("needs more songs while the songs read hold too few albums and others remain", () => {
     const read = songs([3, 900], [3, 800], [2, 700]);
 

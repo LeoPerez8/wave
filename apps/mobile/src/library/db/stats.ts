@@ -11,6 +11,7 @@
  */
 import {
   readStoredGenres,
+  sortKey,
   type ArtistFirstPlay,
   type ArtistStatsInput,
   type CountedListening,
@@ -18,16 +19,17 @@ import {
   type PlayTotals,
   type RecapSongGenre,
   type SongListening,
+  type SongPlayTotals,
   type StatsWindow,
 } from "@wave/core";
-import { and, eq, gte, inArray, lte, sql, type SQL } from "drizzle-orm";
+import { and, eq, gte, inArray, isNotNull, lte, sql, type SQL } from "drizzle-orm";
 
 import { chunks } from "./chunks.ts";
 import type { LibraryDatabase } from "./database.ts";
 import * as schema from "./schema.ts";
 
-/** Counted plays that started within `window`. */
-const countedIn = (window: StatsWindow): SQL | undefined => {
+/** Counted plays, streamed ones too, that started within `window`. */
+const countedOrStreamedIn = (window: StatsWindow): SQL | undefined => {
   const { playEvents } = schema;
   return and(
     eq(playEvents.counted, true),
@@ -35,6 +37,62 @@ const countedIn = (window: StatsWindow): SQL | undefined => {
     lte(playEvents.startedAt, window.to),
   );
 };
+
+/** Counted plays of Library songs that started within `window`. */
+const countedIn = (window: StatsWindow): SQL | undefined =>
+  and(countedOrStreamedIn(window), isNotNull(schema.playEvents.trackId));
+
+/**
+ * The Library song [videoId]'s streamed plays are, or null: the song with that
+ * video id (a download of it), else the one with the same [recordingKey]. A
+ * streamed play is that song's in every count once it is in the Library.
+ */
+export const streamedTrack = (videoId: SQL, recordingKey: SQL): SQL<number | null> => sql`coalesce(
+  (SELECT min(id) FROM tracks WHERE tracks.video_id = ${videoId}),
+  (SELECT min(id) FROM tracks WHERE tracks.recording_key = ${recordingKey}))`;
+
+/** Whose a play is: its Library song's, or the Library song its streamed song is now. */
+const playSong = sql`coalesce(play_events.track_id,
+  ${streamedTrack(sql`play_events.video_id`, sql`play_events.recording_key`)})`;
+
+/**
+ * Each song's counted plays within `window`, in no order: a Library song's,
+ * with the streamed plays that are its own now (`streamedTrack`), and a
+ * streamed song's (one entry per video id) while the Library has no song of
+ * it. Songs that left the Library drop out, as in `trackPlayTotals`.
+ */
+export const songPlayTotals = (db: LibraryDatabase, window: StatsWindow): SongPlayTotals[] =>
+  db
+    .all<{
+      trackId: number | null;
+      videoId: string | null;
+      titleSort: string | null;
+      title: string | null;
+      countedPlays: number;
+      listenedMs: number;
+      latestPlayAt: number;
+    }>(
+      sql`WITH plays AS (
+        SELECT ${playSong} AS song, video_id, listened_ms, started_at, snapshot, streamed_song
+        FROM play_events WHERE ${countedOrStreamedIn(window)}
+      ), songs AS (
+        -- The title is the latest play's: the only min or max is max(started_at).
+        SELECT song AS track_id, CASE WHEN song IS NULL THEN video_id END AS video_id,
+          count(*) AS plays, sum(listened_ms) AS listened, max(started_at) AS latest,
+          coalesce(json_extract(snapshot, '$.title'), json_extract(streamed_song, '$.title')) AS title
+        FROM plays GROUP BY 1, 2
+      )
+      SELECT tracks.id AS "trackId", songs.video_id AS "videoId", tracks.title_sort AS "titleSort",
+        songs.title AS title, songs.plays AS "countedPlays", songs.listened AS "listenedMs",
+        songs.latest AS "latestPlayAt"
+      FROM songs LEFT JOIN tracks ON tracks.id = songs.track_id
+      WHERE tracks.id IS NOT NULL OR songs.video_id IS NOT NULL`,
+    )
+    .map(({ trackId, videoId, titleSort, title, ...totals }) => ({
+      song: trackId === null ? { kind: "yt", videoId: videoId! } : { kind: "library", id: trackId },
+      sortKey: titleSort ?? sortKey(title ?? ""),
+      ...totals,
+    }));
 
 /** What every aggregate sums over its counted plays. */
 const sums = {
@@ -159,7 +217,7 @@ export const songListening = (db: LibraryDatabase): SongListening[] => {
   }
   return db
     .select({
-      trackId: playEvents.trackId,
+      trackId: sql<number>`${playEvents.trackId}`,
       inLibrary: sql<boolean>`${tracks.id} IS NOT NULL`.mapWith(Boolean),
       countedPlays: sql<number>`sum(${playEvents.counted})`,
       listenedMs: sql<number>`sum(${playEvents.listenedMs})`,
@@ -167,6 +225,7 @@ export const songListening = (db: LibraryDatabase): SongListening[] => {
     })
     .from(playEvents)
     .leftJoin(tracks, eq(playEvents.trackId, tracks.id))
+    .where(isNotNull(playEvents.trackId))
     .groupBy(playEvents.trackId)
     .all()
     .map(({ trackId, ...song }) => ({ trackId, artistIds: artists.get(trackId) ?? [], ...song }));
@@ -279,12 +338,18 @@ export const artistFirstPlays = (db: LibraryDatabase, ids: readonly number[]): A
     ),
   );
 
+/**
+ * A play of a Library song or a streamed one, as the listening totals count
+ * them (`listeningSums`): not a synced play still waiting for its song.
+ */
+const libraryOrStreamed = sql`(play_events.track_id IS NOT NULL OR play_events.video_id IS NOT NULL)`;
+
 /** A quarter hour: every time zone's offset is a whole number of them. */
 const QUARTER_HOUR_MS = 15 * 60_000;
 
 /**
  * The whole history's counted listening, summed per quarter hour (each row
- * starts at its quarter hour), deleted songs included: what Core's
+ * starts at its quarter hour), deleted and streamed songs included: what Core's
  * `availableRecaps` and `recap` read. A quarter hour never straddles a local
  * month or day, so the sums lose nothing a Recap needs, at a fraction of the rows.
  */
@@ -294,7 +359,7 @@ export const countedListening = (db: LibraryDatabase): CountedListening[] => {
   return db
     .select({ startedAt: quarter, listenedMs: sql<number>`sum(${playEvents.listenedMs})` })
     .from(playEvents)
-    .where(eq(playEvents.counted, true))
+    .where(and(eq(playEvents.counted, true), libraryOrStreamed))
     .groupBy(quarter)
     .all();
 };
@@ -315,7 +380,7 @@ export const countedListeningPage = (db: LibraryDatabase, after: number): Counte
   }>(sql`
     WITH page AS MATERIALIZED (
       SELECT id, started_at, listened_ms, counted FROM play_events
-      WHERE id > ${after} ORDER BY id LIMIT 512
+      WHERE id > ${after} AND ${libraryOrStreamed} ORDER BY id LIMIT 512
     )
     SELECT (started_at / ${QUARTER_HOUR_MS}) * ${QUARTER_HOUR_MS} AS "startedAt",
       sum(listened_ms) AS "listenedMs", NULL AS next, 0 AS size

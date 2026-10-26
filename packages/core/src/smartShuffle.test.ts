@@ -265,18 +265,38 @@ describe("shufflesQueue", () => {
 describe("shuffledTrackIds", () => {
   const playing = start(["1", "2", "yt:abc", "3", "2"]);
 
-  test("a play orders the songs it plays: only their plays are read", () => {
+  test("a play orders the songs it plays, streamed ones included: only their plays are read", () => {
     const play = { type: "play", trackIds: ["7", "yt:x", "8", "7"], context: songs } as const;
-    assert.deepEqual(shuffledTrackIds(playing, { ...play, shuffle: true }), [7, 8]);
+    assert.deepEqual(shuffledTrackIds(playing, { ...play, shuffle: true }), ["7", "yt:x", "8"]);
   });
 
-  test("turning shuffle on or reshuffling orders the queue's songs, each Library track once", () => {
-    assert.deepEqual(shuffledTrackIds(playing, { type: "setShuffle", on: true }), [1, 2, 3]);
-    assert.deepEqual(shuffledTrackIds(playing, { type: "reshuffle" }), [1, 2, 3]);
+  test("turning shuffle on or reshuffling orders the queue's songs, each once", () => {
+    assert.deepEqual(shuffledTrackIds(playing, { type: "setShuffle", on: true }), [
+      "1",
+      "2",
+      "yt:abc",
+      "3",
+    ]);
+    assert.deepEqual(shuffledTrackIds(playing, { type: "reshuffle" }), ["1", "2", "yt:abc", "3"]);
   });
 
   test("a command that doesn't shuffle needs no plays", () => {
     assert.deepEqual(shuffledTrackIds(playing, { type: "next" }), []);
+  });
+
+  test("a streamed song weighs by its counted plays as a Library song with as many does", () => {
+    // The streamed h2 is played as much as the Library's h1: both go on the most played side.
+    const tracks = ["c", "1", "yt:h2", "l1", "l2"];
+    const plays = { 1: 12, "yt:h2": 12, l1: 1 };
+    for (const seed of SEEDS) {
+      const { state } = run(start(tracks), { type: "setShuffle", on: true }, seed, smart(plays));
+      const rest = ids(upNext(state));
+      assert.equal(
+        longestRun(rest, (id) => id === "1" || id === "yt:h2"),
+        1,
+        `seed ${seed}: ${rest.join(" ")}`,
+      );
+    }
   });
 });
 

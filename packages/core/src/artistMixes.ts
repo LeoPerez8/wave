@@ -12,7 +12,6 @@ import { artistPhotoName } from "./artistPhoto.ts";
 import type {
   DiscoverLibraryArtist,
   DiscoverMixSeed,
-  DiscoverSeedArtist,
   DiscoverSeedSource,
   DiscoverSimilarArtist,
   DiscoverSimilarArtists,
@@ -28,10 +27,19 @@ export const ARTIST_MIX_COUNT = 4;
 /** How many of the Library's artists with the most songs may seed. */
 const LIBRARY_ARTISTS = 20;
 
-/** One of the owner's most played artists, with their all-time counted plays. */
-export interface PlayedSeedArtist extends DiscoverSeedArtist {
+/**
+ * One of the owner's most played artists, with their all-time counted plays:
+ * a Library artist, or an artist only streamed, by the online id Stats ranks
+ * them under (`streamedCredits`).
+ */
+export interface PlayedSeedArtist {
+  readonly id: number | string;
+  readonly name: string;
   readonly countedPlays: number;
 }
+
+/** An artist whose page `artistMixSimilarSource` asks for: a played or a Library one. */
+export type SimilarSourceArtist = Pick<PlayedSeedArtist, "id" | "name">;
 
 /** What Artist mixes' seeds are picked from, each source filling what the ones before left short. */
 export interface ArtistMixPools {
@@ -52,9 +60,9 @@ export interface ArtistMixPools {
  * [artists] that may seed, in order: each once (by name), none whose name
  * isn't an artist's ("Various Artists") or that [seen] has already.
  */
-const seedable = <A extends DiscoverSeedArtist>(artists: readonly A[], seen: Set<string>): A[] =>
+const seedable = <A extends SimilarSourceArtist>(artists: readonly A[], seen: Set<string>): A[] =>
   finishSteps(seedableSteps(artists, seen));
-function* seedableSteps<A extends DiscoverSeedArtist>(
+function* seedableSteps<A extends SimilarSourceArtist>(
   artists: readonly A[],
   seen: Set<string>,
 ): Generator<void, A[]> {
@@ -199,12 +207,12 @@ const SIMILAR_PAGES = 3;
  * that couldn't be read counts as read, with no artists. The random pick
  * doesn't matter here: plays leave room only when every played artist seeds.
  */
-export const artistMixSimilarSource = (pools: ArtistMixPools): DiscoverSeedArtist | null => {
+export const artistMixSimilarSource = (pools: ArtistMixPools): SimilarSourceArtist | null => {
   return finishSteps(artistMixSimilarSourceSteps(pools));
 };
 export function* artistMixSimilarSourceSteps(
   pools: ArtistMixPools,
-): Generator<void, DiscoverSeedArtist | null> {
+): Generator<void, SimilarSourceArtist | null> {
   const { played, library, similar = [] } = pools;
   if (library === undefined || similar.length >= SIMILAR_PAGES) return null;
   // A refresh's avoided artists leave room: pages are read for others first.
@@ -230,7 +238,7 @@ function* similarOfSteps({
   similar = [],
 }: ArtistMixPools): Generator<void, DiscoverSimilarArtist[]> {
   if (library === undefined) return [];
-  const known: DiscoverSeedArtist[] = [];
+  const known: SimilarSourceArtist[] = [];
   for (const source of [played, library])
     for (const artist of source) {
       known.push(artist);
@@ -247,7 +255,7 @@ function* similarOfSteps({
  */
 function* similarPoolSteps(
   similar: readonly DiscoverSimilarArtists[],
-  known: readonly DiscoverSeedArtist[],
+  known: readonly SimilarSourceArtist[],
 ): Generator<void, DiscoverSimilarArtist[]> {
   const inLibrary = yield* libraryArtistFinderSteps(known);
   const names = new Set<string>();

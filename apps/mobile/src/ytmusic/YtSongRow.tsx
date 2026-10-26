@@ -6,16 +6,30 @@ import {
   ytSongCredit,
   ytTrackId,
 } from "@wave/core";
-import type { ComponentProps } from "react";
+import { useSyncExternalStore, type ComponentProps } from "react";
 
 import type { RowSwipe } from "@/catalog/SwipeableRow";
 import { TrackRow } from "@/catalog/TrackRow";
 import { useIsFavorite } from "@/library/favorites";
 import type { NativeYtSong } from "@/native/waveYtMusic";
+import { unavailableStreamedVideos } from "@/playback/PlayHistory";
 import { useYtMusicEnabled } from "@/settings/ytMusic";
 
 import { useYtDownloadStatus } from "./YtDownloads";
 import { openYtSongActions, useYtSongSwipe } from "./YtSongActions";
+
+/**
+ * Whether streaming [videoId] can play now: YT Music is on and the video
+ * didn't refuse to play this session.
+ */
+export const useStreamPlayable = (videoId: string): boolean => {
+  const ytMusic = useYtMusicEnabled();
+  const unavailable = useSyncExternalStore(
+    unavailableStreamedVideos.subscribe,
+    unavailableStreamedVideos.get,
+  );
+  return ytMusic && !unavailable.has(videoId);
+};
 
 /**
  * A YT Music song as a Songs-list row: YouTube's cover, the artists and
@@ -35,6 +49,8 @@ export function YtSongRow({
   popularRank,
   kind = "",
   playDisc,
+  plays,
+  unavailable,
   accessibilityActions,
   onAccessibilityAction,
   swipe,
@@ -52,6 +68,10 @@ export function YtSongRow({
   kind?: string | undefined;
   /** The cover is a song card's, with a play disc on its corner (`TrackRow`'s `playDisc`). */
   playDisc?: boolean | undefined;
+  /** On a ranking by plays, its counted plays, shown in place of its length. */
+  plays?: number | undefined;
+  /** It can't play now (YT Music off, in a ranking): dimmed; the caller makes a tap do nothing. */
+  unavailable?: boolean | undefined;
   /** Screen-reader actions standing in for gestures (move, remove in a playlist). */
   accessibilityActions?: ComponentProps<typeof TrackRow>["accessibilityActions"];
   onAccessibilityAction?: ComponentProps<typeof TrackRow>["onAccessibilityAction"];
@@ -81,6 +101,8 @@ export function YtSongRow({
       leading={popularRank === undefined && trackNumber === undefined ? "artwork" : "number"}
       topNumber={popularRank === 1}
       playDisc={playDisc}
+      plays={plays}
+      unavailable={unavailable}
       progress={ytDownloadProgress(download)}
       onPress={onPress}
       onLongPress={onLongPress}
@@ -99,3 +121,19 @@ export function SwipeYtSongRow(props: Omit<ComponentProps<typeof YtSongRow>, "sw
   const swipe = useYtSongSwipe(props.song);
   return <YtSongRow {...props} swipe={swipe} />;
 }
+
+/**
+ * A streamed song's row in a ranking by plays (Stats' songs, Home's Most
+ * played): a `SwipeYtSongRow`, dimmed with its tap doing nothing while it
+ * can't play (`useStreamPlayable`); its cover is YouTube's only with YT Music on.
+ */
+export function RankedYtSongRow(
+  props: Omit<ComponentProps<typeof YtSongRow>, "swipe" | "unavailable">,
+) {
+  const playable = useStreamPlayable(props.song.videoId);
+  return (
+    <SwipeYtSongRow {...props} unavailable={!playable} onPress={playable ? props.onPress : noop} />
+  );
+}
+
+const noop = (): void => {};

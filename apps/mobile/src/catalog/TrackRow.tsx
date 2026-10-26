@@ -61,6 +61,10 @@ type Props = {
    * cell ("12 plays") in place of its length. Undefined shows the length.
    */
   plays?: number | undefined;
+  /** A history row's local start time, replacing the duration cell. */
+  trailingLabel?: string | undefined;
+  /** Removed history songs have neither a tap nor a menu. */
+  disabled?: boolean;
   /**
    * In selection mode, whether the row is checked: it shows a leading check
    * cell and reads as a checkbox. Undefined outside selection mode.
@@ -114,6 +118,8 @@ export function TrackRow({
   playDisc = false,
   topNumber = false,
   plays,
+  trailingLabel,
+  disabled = false,
   checked,
   progress,
   unavailable = false,
@@ -128,13 +134,15 @@ export function TrackRow({
   const fileNotFound = state === "fileNotFound";
   const playing = state === "playing";
   const missingSong = track.missingTrackId !== undefined;
-  const downloaded = trackRowDownloaded({ trackId: track.id, missing: missingSong, fileNotFound });
+  const downloaded =
+    !unavailable && trackRowDownloaded({ trackId: track.id, missing: missingSong, fileNotFound });
   const download = useMissingSongDownloadStatus(track.missingTrackId ?? null);
   const downloadLine = ytDownloadLine(download);
   const shownProgress = progress ?? ytDownloadProgress(download);
   const selecting = checked !== undefined;
   const fileNotFoundIcon = <IconFileOff size={18} color={tertiary} strokeWidth={1.5} />;
-  const trailing = trackRowTrailing({ durationMs: track.durationMs, countedPlays: plays });
+  const trailing =
+    trailingLabel ?? trackRowTrailing({ durationMs: track.durationMs, countedPlays: plays });
   const actions =
     swipe === undefined || selecting
       ? { accessibilityActions, onAccessibilityAction }
@@ -146,6 +154,7 @@ export function TrackRow({
       accessibilityLabel={[
         track.title,
         track.artist,
+        ...(trailingLabel === undefined ? [] : [trailingLabel]),
         ...(track.explicit === true ? ["explicit"] : []),
         ...(plays === undefined ? [] : [trailing]),
         ...(downloaded ? ["downloaded"] : []),
@@ -155,10 +164,10 @@ export function TrackRow({
       ].join(", ")}
       accessibilityState={
         selecting
-          ? { disabled: fileNotFound, checked }
-          : { disabled: fileNotFound, selected: playing }
+          ? { disabled: disabled || fileNotFound, checked }
+          : { disabled: disabled || fileNotFound, selected: playing }
       }
-      disabled={fileNotFound}
+      disabled={disabled || fileNotFound}
       onPress={onPress}
       onLongPress={onLongPress}
       accessibilityActions={actions.accessibilityActions}
@@ -228,7 +237,9 @@ export function TrackRow({
           className="font-sans text-footnote text-secondary"
           style={{
             fontVariant: ["tabular-nums"],
-            ...(plays === undefined ? { width: CELL * 5 } : { minWidth: CELL * 9 }),
+            ...(trailingLabel !== undefined || plays !== undefined
+              ? { minWidth: CELL * 9 }
+              : { width: CELL * 5 }),
             textAlign: "right",
           }}
         >

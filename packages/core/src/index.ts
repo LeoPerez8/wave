@@ -15,6 +15,18 @@
 export type { LibraryTrack, RawTrack } from "./library.ts";
 export { creditSplitter, respreadDeletedSongs, splitCredit } from "./credits.ts";
 export type { PrunedArtist } from "./credits.ts";
+export { pickStreamedAlbum, streamedCredits } from "./streamedCredits.ts";
+export type { PlayedAlbumKey, PlayedArtistKey } from "./streamedCredits.ts";
+export { rankEntityPlays, rankEntityPlaysSteps } from "./stats.ts";
+export type { EntityPlayTotals } from "./stats.ts";
+export { mergeCountedPlays } from "./countedPlays.ts";
+export type {
+  CountedPlays,
+  LibraryPlaySums,
+  PlaySums,
+  PlaysToMerge,
+  StreamedPlaySums,
+} from "./countedPlays.ts";
 export { formatDuration, formatRemaining } from "./time.ts";
 export { recommendationDeadline, recommendationFrameBudget } from "./recommendationWork.ts";
 export {
@@ -230,8 +242,19 @@ export type {
 export { favoriteStar, starWriteSettled, starWriteStarted } from "./favorites.ts";
 export type { FavoriteStar } from "./favorites.ts";
 export { compareStrings } from "./library.ts";
-export { STATS_PERIODS, STATS_SEE_ALL, STATS_TOP, rankPlays, statsWindow } from "./stats.ts";
-export type { PlayTotals, StatsPeriod, StatsWindow } from "./stats.ts";
+export {
+  STATS_PERIODS,
+  STATS_SEE_ALL,
+  STATS_TOP,
+  rankPlays,
+  rankSongPlays,
+  statsWindow,
+} from "./stats.ts";
+export type { PlayTotals, SongPlayTotals, StatsPeriod, StatsWindow } from "./stats.ts";
+export { compareRefIds, compareTrackRefs } from "./refOrder.ts";
+export type { LibraryIdOrder, RefId } from "./refOrder.ts";
+export { rankMostPlayed } from "./mostPlayed.ts";
+export type { KeptPlays, LibraryKeptPlays, MostPlayed, StreamedKeptPlays } from "./mostPlayed.ts";
 export { albumPlayTotals, artistPlayTotals } from "./stats.ts";
 export type { CreditedPlayTotals } from "./stats.ts";
 export { STATS_RANKINGS, statsSeeAll } from "./statsSeeAll.ts";
@@ -634,6 +657,7 @@ export {
   isMagicQueue,
   magicArtistKey,
   magicLibrarySongs,
+  magicListSeedSongs,
   magicBatchRadios,
   magicLibraryMapperSteps,
   magicRadioArtists,
@@ -1655,7 +1679,7 @@ export {
   artistMixSimilarSource,
   artistMixSimilarSourceSteps,
 } from "./artistMixes.ts";
-export type { ArtistMixPools, PlayedSeedArtist } from "./artistMixes.ts";
+export type { ArtistMixPools, PlayedSeedArtist, SimilarSourceArtist } from "./artistMixes.ts";
 export {
   GENRE_MIX_COUNT,
   commonStyle,
@@ -1742,6 +1766,7 @@ export type {
   MixKnownSongs,
   MixKnownSources,
   MixPlaylistEntry,
+  StreamedPlays,
   StreamedSong,
 } from "./mixKnownSongs.ts";
 export { starAskedAfter, starredHere, ytSongStarred } from "./starDownloads.ts";
@@ -2072,3 +2097,8 @@ export {
 
 export { rankedDiscoverMixRead } from "./radioMixes.ts";
 export { RADIO_CACHE_FRESH_MS, radioCacheFresh } from "./radioCache.ts";
+export {
+  listeningHistoryDays,
+  type ListeningHistoryDay,
+  type PlaySnapshot,
+} from "./listeningHistory.ts";

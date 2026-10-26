@@ -30,6 +30,7 @@ import {
   openTestDatabase,
   traceQueries,
   type TestDatabase,
+  libraryRow,
 } from "./testDatabase.ts";
 import { deleteTracksById } from "./tracks.ts";
 
@@ -182,9 +183,14 @@ describe("Play totals", () => {
     const before = await openTestDatabase({ through: "0022_playlist_revisions" });
     const kept = addTrack(before, { title: "Kept" });
     const gone = addTrack(before, { title: "Gone" });
-    playThrough(before, play(kept, 1_000));
-    playThrough(before, play(kept, 2_000, { listenedMs: 5_000, counted: false }));
-    playThrough(before, play(gone, 3_000));
+    // Seed what that app version wrote, before playback snapshots existed.
+    for (const event of [
+      play(kept, 1_000),
+      play(kept, 2_000, { listenedMs: 5_000, counted: false }),
+      play(gone, 3_000),
+    ])
+      before.run(sql`INSERT INTO play_events (track_id, started_at, listened_ms, duration_ms, end_reason, counted)
+        VALUES (${Number(event.trackId)}, ${event.startedAt}, ${event.listenedMs}, ${event.durationMs}, ${event.endReason}, ${event.counted})`);
     deleteTracksById(before, [gone]);
 
     await migrateTestDatabase(before);
@@ -302,7 +308,7 @@ const recentlyPlayedFromHistory = () => {
   );
   const latest = new Map<number, number>();
   for (const { trackId, startedAt } of db.select().from(schema.playEvents).all()) {
-    const albumId = albumOf.get(trackId);
+    const albumId = trackId === null ? undefined : albumOf.get(trackId);
     if (albumId === undefined) continue;
     latest.set(albumId, Math.max(latest.get(albumId) ?? startedAt, startedAt));
   }
@@ -318,11 +324,13 @@ describe("Home's all-time reads", () => {
 
     const home = homeSections(db);
     assert.deepEqual(
-      home.mostPlayed.map((song) => [song.id, song.playCount]),
+      home.mostPlayed.map(libraryRow).map((song) => [song.id, song.playCount]),
       mostPlayedFromHistory("library"),
     );
     assert.deepEqual(
-      homeSections(db, "files").mostPlayed.map((song) => [song.id, song.playCount]),
+      homeSections(db, "files")
+        .mostPlayed.map(libraryRow)
+        .map((song) => [song.id, song.playCount]),
       mostPlayedFromHistory("files"),
     );
     assert.deepEqual(

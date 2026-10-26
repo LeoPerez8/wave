@@ -1023,6 +1023,44 @@ describe("sorting the Playlists list", () => {
     );
   });
 
+  test("a streamed song played from a playlist counts as playing it", () => {
+    recordPlay(db, {
+      trackId: String(ids.Airbag),
+      context: fromPlaylist(playlistId),
+      startedAt: 1_000,
+      listenedMs: 1_000,
+      durationMs: 180_000,
+      endReason: "skipped",
+      counted: false,
+      source: "phone",
+    });
+    recordPlay(
+      db,
+      {
+        trackId: "yt:v-lucky",
+        context: fromPlaylist(playlistId),
+        startedAt: 4_000,
+        listenedMs: 1_000,
+        durationMs: 180_000,
+        endReason: "skipped",
+        counted: false,
+        source: "phone",
+      },
+      false,
+      {
+        videoId: "v-lucky",
+        title: "Lucky",
+        artists: ["Radiohead"],
+        album: "OK Computer",
+        durationMs: 260_000,
+        artworkUrl: null,
+        explicit: false,
+        albumId: null,
+      },
+    );
+    assert.deepEqual(selectPlaylistsLastPlayed(db), new Map([[playlistId, 4_000]]));
+  });
+
   test("when each playlist was last played is read from an index, never the whole play history", () => {
     for (let at = 1; at <= 200; at += 1) {
       recordPlay(db, {
@@ -1060,16 +1098,10 @@ describe("migration 0024", () => {
       [7_000, fromPlaylist(id)],
       [9_000, null],
     ] as const) {
-      recordPlay(old, {
-        trackId: String(track),
-        context,
-        startedAt,
-        listenedMs: 1_000,
-        durationMs: 180_000,
-        endReason: "skipped",
-        counted: false,
-        source: "phone",
-      });
+      // Seed the old version's columns, before playback snapshots existed.
+      old.run(sql`INSERT INTO play_events
+        (track_id, context_type, context_id, started_at, listened_ms, duration_ms, end_reason, counted, source)
+        VALUES (${track}, ${context?.kind ?? null}, ${context?.id ?? null}, ${startedAt}, 1000, 180000, 'skipped', 0, 'phone')`);
     }
 
     await migrateTestDatabase(old);
