@@ -232,7 +232,6 @@ test("streamed starts, progress and ends leave Library totals and existing histo
     mixes: mixHistoryPage(db, 0),
     keys: playedRecordingKeys(db),
     playlists: [...selectPlaylistsLastPlayed(db)],
-    push: selectUnpushed(db, 100, () => null).rows.plays,
     taste: tasteHistory(db),
     graph: graphPlayPage(db, [-Number.MAX_VALUE, 0]).rows,
   });

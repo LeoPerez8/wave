@@ -20,6 +20,7 @@ import {
   type SyncPlaylist,
   type SyncPlaylistEntry,
   type SyncPreference,
+  type PlaySnapshot,
   type SyncPullPage,
   type SyncRow,
   type SyncSong,
@@ -110,6 +111,21 @@ export const selectAccountTrackIds = (db: LibraryDatabase): Map<string, number> 
 };
 
 // --- What goes up ------------------------------------------------------------
+
+// Covers are caches on each phone. Only remote references travel to the account.
+const remoteCover = (value: string | null | undefined): string | null =>
+  value !== null && value !== undefined && /^https?:\/\//i.test(value) ? value : null;
+
+const wireSnapshot = (snapshot: PlaySnapshot | null): PlaySnapshot | null =>
+  snapshot === null
+    ? null
+    : {
+        title: snapshot.title,
+        artist: snapshot.artist,
+        album: snapshot.album,
+        artworkPath: remoteCover(snapshot.artworkUrl) ?? remoteCover(snapshot.artworkPath),
+        thumbPath: remoteCover(snapshot.thumbPath) ?? remoteCover(snapshot.artworkUrl),
+      };
 
 /** A local row a pushed row was read from, and the change it had then. */
 type PushMark =
@@ -344,7 +360,6 @@ export const selectUnpushed = (
     .where(
       and(
         eq(playEvents.pushed, false),
-        isNotNull(playEvents.trackId),
         eq(playEvents.ongoing, false),
         isNotNull(playEvents.syncId),
         isNotNull(playEvents.recordingKey),
@@ -369,6 +384,8 @@ export const selectUnpushed = (
           contextId: row.contextId,
           source: row.source,
           importedFrom: row.importedFrom,
+          snapshot: wireSnapshot(row.snapshot),
+          videoId: row.videoId,
         },
       ];
     });
