@@ -15,42 +15,58 @@ import type { ActionIcon } from "@/playback/actionIcons";
 import { countShuffleCardOpening } from "@/settings/shuffleCardOpenings";
 import { useShuffleKind } from "@/settings/shuffleKind";
 
-/** The card's entries: each kind's name and the line saying what it does. */
-const KINDS: readonly {
-  readonly kind: ShuffleKind;
-  readonly label: string;
-  readonly line: string;
-}[] = [
-  { kind: "real", label: "Real Shuffle", line: "Any order, every one as likely" },
-  { kind: "smart", label: "Smart Shuffle", line: "Your most played, spread among the rest" },
-  { kind: "even", label: "Even Shuffle", line: "Artists take turns, never twice in a row" },
-];
-
-/** What the shuffle button says while [kind] is chosen. */
-const SHUFFLE_LABELS: Record<ShuffleKind, string> = {
-  real: "Shuffle",
-  smart: "Smart Shuffle",
-  even: "Even Shuffle",
-};
-
 /**
- * What the shuffle button shows while [kind] is chosen: the plain shuffle
- * arrows, the spark (#320) or the braid (#702).
+ * Each kind of shuffle: its name and the line saying what it does, on the
+ * card; what the shuffle button says and shows while it's chosen (the plain
+ * shuffle arrows, the spark, #320, or the braid, #702). The card lists them
+ * in this order.
  */
-const SHUFFLE_ICONS: Record<ShuffleKind, ActionIcon> = {
-  real: IconArrowsShuffle,
-  smart: SmartShuffleIcon,
-  even: EvenShuffleIcon,
+const SHUFFLES: Record<
+  ShuffleKind,
+  {
+    readonly name: string;
+    readonly line: string;
+    readonly buttonLabel: string;
+    readonly icon: ActionIcon;
+  }
+> = {
+  real: {
+    name: "Real Shuffle",
+    line: "Any order, every one as likely",
+    buttonLabel: "Shuffle",
+    icon: IconArrowsShuffle,
+  },
+  smart: {
+    name: "Smart Shuffle",
+    line: "Your most played, spread among the rest",
+    buttonLabel: "Smart Shuffle",
+    icon: SmartShuffleIcon,
+  },
+  even: {
+    name: "Even Shuffle",
+    line: "Artists take turns, never twice in a row",
+    buttonLabel: "Even Shuffle",
+    icon: EvenShuffleIcon,
+  },
 };
+
+/** The card's entries, in order. */
+const KINDS = Object.keys(SHUFFLES) as ShuffleKind[];
+
+/** The kinds' names, in the card's order. */
+const KIND_NAMES = KINDS.map((kind) => SHUFFLES[kind].name);
+
+/** The shuffle buttons' hint: "Long press to choose Real Shuffle, Smart Shuffle or Even Shuffle". */
+const LONG_PRESS_HINT = `Long press to choose ${KIND_NAMES.slice(0, -1).join(", ")} or ${KIND_NAMES.at(-1)}`;
 
 /** Every shuffle control follows the saved choice and opens the same card. */
 export const useShuffleControl = () => {
   const kind = useShuffleKind();
   return {
-    icon: SHUFFLE_ICONS[kind],
-    label: SHUFFLE_LABELS[kind],
+    icon: SHUFFLES[kind].icon,
+    label: SHUFFLES[kind].buttonLabel,
     onLongPress: openShuffleMenu,
-    accessibilityHint: "Long press to choose Real Shuffle, Smart Shuffle or Even Shuffle",
+    accessibilityHint: LONG_PRESS_HINT,
   };
 };
 
@@ -66,19 +82,19 @@ function ShuffleMenu({ close, openedBefore }: { close: () => void; openedBefore:
   const chosen = useShuffleKind();
   const flow = useOverlayFlow();
   const choose = (index: number) => {
-    const entry = KINDS[index];
-    if (entry === undefined) return;
+    const kind = KINDS[index];
+    if (kind === undefined) return;
     close();
-    void chooseShuffleKind(entry.kind);
+    void chooseShuffleKind(kind);
   };
   const { underFinger, trackEntry, trackList } = useSlideToChoose(choose);
   return (
     <CardEntries listRef={trackList}>
-      {KINDS.map(({ kind, label, line }, index) => (
+      {KINDS.map((kind, index) => (
         <View key={kind} ref={trackEntry(index)} collapsable={false}>
           <EntryRow
-            label={label}
-            line={line}
+            label={SHUFFLES[kind].name}
+            line={SHUFFLES[kind].line}
             lineShown={shuffleLineShows({ openedBefore, underFinger, index })}
             selected={kind === chosen}
             divider={entryDivider(index, KINDS.length, flow)}

@@ -5,7 +5,7 @@
  */
 
 /** How many openings of the shuffle card explain every kind. */
-export const SHUFFLE_CARD_INTRO_OPENINGS = 3;
+const SHUFFLE_CARD_INTRO_OPENINGS = 3;
 
 /**
  * How many times the shuffle card opened before, from what the device stores

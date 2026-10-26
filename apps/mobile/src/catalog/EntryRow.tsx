@@ -127,7 +127,8 @@ function EntryLine({ text, shown }: { text: string; shown: boolean }) {
   return (
     // The row's hint already reads it to screen readers.
     <Animated.View
-      style={[{ overflow: "hidden" }, style]}
+      className="overflow-hidden"
+      style={style}
       importantForAccessibility="no-hide-descendants"
     >
       {/* Never shrunk by the room around it, so it reports its full height. */}

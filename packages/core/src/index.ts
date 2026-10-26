@@ -2104,7 +2104,6 @@ export {
   type PlaySnapshot,
 } from "./listeningHistory.ts";
 export {
-  SHUFFLE_CARD_INTRO_OPENINGS,
   readShuffleCardOpenings,
   shuffleCardOpened,
   shuffleLineShows,
