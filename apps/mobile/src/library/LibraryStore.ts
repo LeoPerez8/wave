@@ -221,7 +221,6 @@ import {
 } from "./db/replacementDuplicates";
 import { keepLyricsMiss, selectLyricsSearchTrack, type LyricsSearchTrack } from "./db/lyricsMisses";
 import {
-  noteStreamedSong,
   selectKnownVideos,
   selectPlaylistedSongs,
   selectStreamedSongs,
@@ -1151,14 +1150,9 @@ export class LibraryStore extends Context.Service<
       checkedAt: number | null,
     ) => Effect.Effect<void, LibraryStoreError>;
     /**
-     * Notes that the owner started streaming [song] at [at] (streamed plays
-     * aren't play history; Home's mixes read them). This phone only.
+     * Every YT Music song the owner streamed before streamed plays were
+     * recorded (the old counter), with how often and when first.
      */
-    readonly noteStreamedSong: (
-      song: YtAlbumSong,
-      at: number,
-    ) => Effect.Effect<void, LibraryStoreError>;
-    /** Every YT Music song the owner streamed, with how often and when first. */
     readonly streamedSongs: Effect.Effect<readonly StreamedSong[], LibraryStoreError>;
     /** The playlists' entries that aren't Library songs, with when each was added (Home's mixes). */
     readonly playlistedSongs: Effect.Effect<readonly MixPlaylistEntry[], LibraryStoreError>;
@@ -2019,9 +2013,6 @@ const make = Effect.gen(function* () {
 
     keepLyricsMiss: (trackId, checkedAt) =>
       writeAttempt("remember the lyrics search", () => keepLyricsMiss(db, trackId, checkedAt)),
-
-    noteStreamedSong: (song, at) =>
-      writeAttempt("note a streamed song", () => noteStreamedSong(db, song, at)),
 
     streamedSongs: attempt("read the songs streamed", () => selectStreamedSongs(db)),
 
