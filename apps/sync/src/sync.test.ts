@@ -60,6 +60,65 @@ const preference = (changedAt: number, value: unknown) => ({
 });
 
 describe("POST /v1/push and GET /v1/pull", () => {
+  test("malformed play metadata refuses the whole push", async () => {
+    const service = await harness();
+    const session = await service.signIn();
+    const snapshot = {
+      title: "Teardrop",
+      artist: "Massive Attack",
+      album: null,
+      artworkPath: null,
+      thumbPath: null,
+    };
+    for (const metadata of [
+      { snapshot: "not an object" },
+      { snapshot: [] },
+      { snapshot: {} },
+      { snapshot: { ...snapshot, title: 42 } },
+      { snapshot: { ...snapshot, artist: ["Massive Attack"] } },
+      { snapshot: { ...snapshot, album: false } },
+      { snapshot: { ...snapshot, artworkPath: 42 } },
+      { snapshot: { ...snapshot, thumbPath: {} } },
+      { videoId: 42 },
+    ]) {
+      const response = await service.request("POST", "/v1/push", {
+        session,
+        json: { plays: [play("valid"), play("invalid", metadata)] },
+      });
+      assert.equal(response.status, 400, JSON.stringify(metadata));
+    }
+    assert.deepEqual((await pull(service, session)).plays, []);
+  });
+
+  test("snapshot text obeys the service's field length limit and invalid pushes store nothing", async () => {
+    const service = await harness();
+    const session = await service.signIn();
+    const snapshot = {
+      title: "Teardrop",
+      artist: "Massive Attack",
+      album: null,
+      artworkPath: null,
+      thumbPath: null,
+    };
+    for (const field of Object.keys(snapshot)) {
+      const response = await service.request("POST", "/v1/push", {
+        session,
+        json: {
+          plays: [
+            play("valid"),
+            play("invalid", { snapshot: { ...snapshot, [field]: "x".repeat(16_385) } }),
+          ],
+        },
+      });
+      assert.equal(response.status, 400, field);
+      assert.deepEqual(await response.json(), {
+        error: "bad_request",
+        detail: `plays[1].snapshot.${field} is too long`,
+      });
+    }
+    assert.deepEqual((await pull(service, session)).plays, []);
+  });
+
   test("an older client can push and pull plays without snapshot or video id", async () => {
     const service = await harness();
     const session = await service.signIn();

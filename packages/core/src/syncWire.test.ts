@@ -23,6 +23,46 @@ const play = (n: number): SyncPlayRow => ({
 const utf8Bytes = (text: string): number => new TextEncoder().encode(text).length;
 
 describe("readPullPage", () => {
+  test("keeps legacy plays with absent or null metadata but leaves malformed new fields out", () => {
+    const snapshot = {
+      title: "Something",
+      artist: "The Beatles",
+      album: null,
+      artworkPath: null,
+      thumbPath: null,
+    };
+    const invalidSnapshots = [
+      "not an object",
+      [],
+      {},
+      { ...snapshot, title: 42 },
+      { ...snapshot, artist: ["The Beatles"] },
+      { ...snapshot, album: false },
+      { ...snapshot, artworkPath: 42 },
+      { ...snapshot, thumbPath: {} },
+    ];
+    const page = readPullPage(
+      JSON.stringify({
+        plays: [
+          play(1),
+          { ...play(2), snapshot: null, videoId: null },
+          ...invalidSnapshots.map((invalidSnapshot, n) => ({
+            ...play(n + 3),
+            snapshot: invalidSnapshot,
+          })),
+          { ...play(20), videoId: 42 },
+        ],
+        cursor: "20",
+        more: false,
+      }),
+    );
+
+    assert.deepEqual(page?.plays, [
+      { ...play(1), snapshot: null, videoId: null },
+      { ...play(2), snapshot: null, videoId: null },
+    ]);
+  });
+
   test("keeps a play's display snapshot and a streamed play's video id", () => {
     const snapshot = {
       title: "Something",

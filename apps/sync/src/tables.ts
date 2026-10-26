@@ -101,6 +101,7 @@ const isText = (value: unknown): value is string =>
 const misfit = (kind: SyncFieldKind): string => {
   if (typeof kind !== "string") return "one of its values";
   if (kind.startsWith("int")) return "an integer";
+  if (kind === "snapshot?") return "a play snapshot";
   return kind === "bool" ? "a boolean" : "text";
 };
 
@@ -112,6 +113,13 @@ const fieldValue = (kind: SyncFieldKind, json: boolean, value: unknown, where: s
   }
   if (typeof given === "string" && given.length > MAX_TEXT_LENGTH) {
     throw new InvalidRow(`${where} is too long`);
+  }
+  if (kind === "snapshot?" && isRecord(given)) {
+    for (const [name, snapshotValue] of Object.entries(given)) {
+      if (typeof snapshotValue === "string" && snapshotValue.length > MAX_TEXT_LENGTH) {
+        throw new InvalidRow(`${where}.${name} is too long`);
+      }
+    }
   }
   if (given === null) return null;
   if (json) return JSON.stringify(given);
