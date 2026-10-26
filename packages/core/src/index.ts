@@ -21,8 +21,8 @@ export { rankEntityPlays, rankEntityPlaysSteps } from "./stats.ts";
 export type { EntityPlayTotals } from "./stats.ts";
 export { mergeCountedPlays } from "./countedPlays.ts";
 export type {
+  CountedPlays,
   LibraryPlaySums,
-  MergedPlays,
   PlaySums,
   PlaysToMerge,
   StreamedPlaySums,

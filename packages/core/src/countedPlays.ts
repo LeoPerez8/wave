@@ -40,7 +40,7 @@ export interface PlaysToMerge {
 }
 
 /** Each song's plays, Library and streamed ones summed per song. */
-export interface MergedPlays {
+export interface CountedPlays {
   /** Each Library song's: its own plays and the streamed plays that are its, by id. */
   readonly library: ReadonlyMap<number, PlaySums>;
   /** Each streamed song's the Library hasn't, by video id. */
@@ -64,7 +64,7 @@ export const mergeCountedPlays = ({
   library = [],
   streamed,
   libraryVideos = new Map(),
-}: PlaysToMerge): MergedPlays => {
+}: PlaysToMerge): CountedPlays => {
   const songs = new Map<number, PlaySums>();
   const online = new Map<string, PlaySums>();
   const videoTracks = new Map(libraryVideos);

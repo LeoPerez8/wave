@@ -1,6 +1,7 @@
 import {
   albumPlayTotals,
   artistPlayTotals,
+  mergeCountedPlays,
   rankEntityPlays,
   recentlyPlayedAlbums,
   sortKey,
@@ -10,7 +11,7 @@ import {
   type EntityPlayTotals,
   type PlayedAlbumKey,
   type PlayedArtistKey,
-  type PlayTotals,
+  type PlaySums,
   type RecapSongGenre,
   type SongListening,
   type SongPlayTotals,
@@ -113,6 +114,15 @@ export const streamedLibraryPlays = (db: LibraryDatabase): Map<number, number> =
   return plays;
 };
 
+/** [entry]'s plays as Core's `mergeCountedPlays` sums them, the time over its counted plays. */
+const countedSums = (entry: StreamedListeningTotal) => ({
+  videoId: entry.videoId,
+  trackId: entry.trackId,
+  countedPlays: entry.countedPlays,
+  listenedMs: entry.countedListenedMs,
+  latestPlayAt: entry.latestPlayAt,
+});
+
 /** Metadata needed by Core's credit resolver, without reading play history. */
 const playedLibrary = (db: LibraryDatabase, releases: Iterable<YtAlbumSong> = []) => {
   const artists = selectArtists(db, {});
@@ -165,30 +175,30 @@ export const playedEntityTotals = (
     add(albums, albumRows.get(totals.id), totals.sortKey, totals);
   for (const totals of artistPlayTotals(credits))
     add(artists, artistRows.get(totals.id), totals.sortKey, totals);
+  // Each song's streamed plays: a Library song's credit its artists and album, the rest as resolved.
+  const merged = mergeCountedPlays({ streamed: streams.map(countedSums) });
   const downloaded = new Map<number, { albumId: number; artistId: number }[]>();
   for (const row of db.all<{ id: number; albumId: number; artistId: number }>(
     sql`
     SELECT tracks.id, tracks.album_id AS "albumId", track_artists.artist_id AS "artistId"
     FROM tracks JOIN track_artists ON track_artists.track_id = tracks.id
-    WHERE tracks.id IN (SELECT value FROM json_each(${JSON.stringify([...new Set(streams.flatMap((entry) => (entry.trackId === null ? [] : [entry.trackId])))])}))`,
+    WHERE tracks.id IN (SELECT value FROM json_each(${JSON.stringify([...merged.library.keys()])}))`,
   )) {
     const links = downloaded.get(row.id) ?? [];
     links.push(row);
     downloaded.set(row.id, links);
   }
-  for (const entry of streams) {
-    const totals = { ...entry, listenedMs: entry.countedListenedMs };
-    if (entry.trackId !== null) {
-      const links = downloaded.get(entry.trackId) ?? [];
-      for (const link of links) {
-        const artist = artistRows.get(link.artistId);
-        add(artists, artist, artist?.sort ?? "", totals);
-      }
-      const album = links[0] === undefined ? undefined : albumRows.get(links[0].albumId);
-      add(albums, album, album?.titleSort ?? "", totals);
-      continue;
+  for (const [trackId, totals] of merged.library) {
+    const links = downloaded.get(trackId) ?? [];
+    for (const link of links) {
+      const artist = artistRows.get(link.artistId);
+      add(artists, artist, artist?.sort ?? "", totals);
     }
-    const song = songs.get(entry.videoId);
+    const album = links[0] === undefined ? undefined : albumRows.get(links[0].albumId);
+    add(albums, album, album?.titleSort ?? "", totals);
+  }
+  for (const [videoId, totals] of merged.online) {
+    const song = songs.get(videoId);
     if (song === undefined) continue;
     const resolved = library.resolve(song);
     for (const artist of resolved.artists) {
@@ -273,7 +283,11 @@ export interface PlayedArtistSongs extends ArtistPlays {
   readonly streamedSongPlays: readonly SongPlayTotals[];
 }
 
-/** Keep the artist's indexed Library read; add per-video summaries without scanning their events. */
+/**
+ * Keep the artist's indexed Library read; add per-video summaries without
+ * scanning their events. The all-time streamed totals are the plays up to
+ * [now] as well, unless one started after [now] (a phone whose clock ran ahead).
+ */
 export const playedArtistSongs = (
   db: LibraryDatabase,
   artistId: number,
@@ -288,12 +302,6 @@ export const playedArtistSongs = (
     db,
     streams.map((entry) => entry.videoId),
   );
-  const listening = new Map<number, SongListening>(
-    base.listening.map((song) => [song.trackId, song]),
-  );
-  const played = new Map<number, PlayTotals>(base.songPlays.map((song) => [song.id, song]));
-  const streamedListening: StreamedListeningTotal[] = [];
-  const online = new Set<string>();
   const credited = (entry: StreamedListeningTotal): boolean => {
     if (entry.trackId !== null) return ids.has(entry.trackId);
     const song = songs.get(entry.videoId);
@@ -301,62 +309,70 @@ export const playedArtistSongs = (
       song !== undefined && library.resolve(song).artists.some((artist) => artist.id === artistId)
     );
   };
-  for (const entry of streams) {
-    if (!credited(entry)) continue;
-    if (entry.trackId === null) {
-      streamedListening.push(entry);
-      online.add(entry.videoId);
-      continue;
-    }
-    const previous = listening.get(entry.trackId);
-    listening.set(entry.trackId, {
+  const theirs = streams.filter(credited);
+  const upToNow = theirs.some((entry) => entry.lastPlayedAt > now)
+    ? streamedListeningTotals(db, { from: null, to: now }).filter(credited)
+    : theirs;
+  // Listening sums every play's time and takes the latest play, skipped ones included.
+  const listened = mergeCountedPlays({
+    library: base.listening.map((song) => ({
+      id: song.trackId,
+      countedPlays: song.countedPlays,
+      listenedMs: song.listenedMs,
+      latestPlayAt: song.lastPlayedAt,
+    })),
+    streamed: theirs.map((entry) => ({
+      videoId: entry.videoId,
       trackId: entry.trackId,
-      artistIds: previous?.artistIds ?? [artistId],
-      inLibrary: true,
-      countedPlays: (previous?.countedPlays ?? 0) + entry.countedPlays,
-      listenedMs: (previous?.listenedMs ?? 0) + entry.listenedMs,
-      lastPlayedAt: Math.max(previous?.lastPlayedAt ?? 0, entry.lastPlayedAt),
-    });
-  }
+      countedPlays: entry.countedPlays,
+      listenedMs: entry.listenedMs,
+      latestPlayAt: entry.lastPlayedAt,
+    })),
+  });
+  const played = mergeCountedPlays({
+    library: base.songPlays,
+    streamed: upToNow.filter((entry) => entry.countedPlays > 0).map(countedSums),
+  });
+  const ownListening = new Map(base.listening.map((song) => [song.trackId, song]));
+  const ownPlays = new Map(base.songPlays.map((song) => [song.id, song]));
   const titles = new Map(
     db
       .all<{ id: number; titleSort: string }>(
         sql`
     SELECT id, title_sort AS "titleSort" FROM tracks WHERE id IN
-      (SELECT value FROM json_each(${JSON.stringify([...new Set(streams.flatMap((entry) => (entry.trackId !== null && ids.has(entry.trackId) ? [entry.trackId] : [])))])}))`,
+      (SELECT value FROM json_each(${JSON.stringify([...played.library.keys()].filter((id) => !ownPlays.has(id)))}))`,
       )
       .map((row) => [row.id, row.titleSort]),
   );
-  const streamedSongPlays = new Map<string, SongPlayTotals>();
-  for (const entry of streamedListeningTotals(db, { from: null, to: now })) {
-    if (entry.countedPlays === 0 || !credited(entry)) continue;
-    if (entry.trackId === null) {
-      if (!online.has(entry.videoId)) continue;
-      const previous = streamedSongPlays.get(entry.videoId);
-      streamedSongPlays.set(entry.videoId, {
-        song: { kind: "yt", videoId: entry.videoId },
-        sortKey: sortKey(songs.get(entry.videoId)?.title ?? ""),
-        countedPlays: (previous?.countedPlays ?? 0) + entry.countedPlays,
-        listenedMs: (previous?.listenedMs ?? 0) + entry.countedListenedMs,
-        latestPlayAt: Math.max(previous?.latestPlayAt ?? 0, entry.latestPlayAt),
-      });
-    } else {
-      const previous = played.get(entry.trackId);
-      played.set(entry.trackId, {
-        id: entry.trackId,
-        sortKey: titles.get(entry.trackId) ?? "",
-        countedPlays: (previous?.countedPlays ?? 0) + entry.countedPlays,
-        listenedMs: (previous?.listenedMs ?? 0) + entry.countedListenedMs,
-        latestPlayAt: Math.max(previous?.latestPlayAt ?? 0, entry.latestPlayAt),
-      });
-    }
-  }
+  const listening = (trackId: number, sums: PlaySums): SongListening => {
+    const own = ownListening.get(trackId);
+    return {
+      trackId,
+      artistIds: own?.artistIds ?? [artistId],
+      inLibrary: own?.inLibrary ?? true,
+      countedPlays: sums.countedPlays,
+      listenedMs: sums.listenedMs,
+      lastPlayedAt: sums.latestPlayAt,
+    };
+  };
   return {
     ...base,
-    listening: [...listening.values()],
-    songPlays: [...played.values()],
-    streamedListening,
-    streamedSongPlays: [...streamedSongPlays.values()],
+    listening: [...listened.library].map(([trackId, sums]) => listening(trackId, sums)),
+    songPlays: [...played.library].map(([id, sums]) => ({
+      id,
+      sortKey: ownPlays.get(id)?.sortKey ?? titles.get(id) ?? "",
+      ...sums,
+    })),
+    streamedListening: [...listened.online.values()].map((sums) => ({
+      countedPlays: sums.countedPlays,
+      listenedMs: sums.listenedMs,
+      lastPlayedAt: sums.latestPlayAt,
+    })),
+    streamedSongPlays: [...played.online].map(([videoId, sums]) => ({
+      song: { kind: "yt" as const, videoId },
+      sortKey: sortKey(songs.get(videoId)?.title ?? ""),
+      ...sums,
+    })),
   };
 };
 
