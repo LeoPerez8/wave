@@ -1174,6 +1174,17 @@ ${mPlayTotals
   .replaceAll("new.`track_id` = old.`track_id`", "new.`track_id` IS old.`track_id`")}
 `;
 
+// Keep snapshot-only account plays before their Library song arrives. Rebuild
+// with the existing indexes/triggers, preserving every column and pushed flag.
+const mSyncedPlaySnapshots = mStreamedPlays
+  .replace(
+    "CHECK ((track_id IS NOT NULL) != (video_id IS NOT NULL))",
+    `CHECK ((track_id IS NOT NULL AND video_id IS NULL) OR
+      (track_id IS NULL AND (video_id IS NOT NULL OR
+        (recording_key IS NOT NULL AND snapshot IS NOT NULL))))`,
+  )
+  .replaceAll("id, track_id, started_at", "id, track_id, video_id, streamed_song, started_at");
+
 export default {
   journal: {
     entries: [
@@ -1228,6 +1239,7 @@ export default {
       { idx: 38, when: 1_795_089_600_000, tag: "0038_genre_order", breakpoints: true },
       { idx: 39, when: 1_795_176_000_000, tag: "0039_listening_history", breakpoints: true },
       { idx: 40, when: 1_795_262_400_000, tag: "0040_streamed_plays", breakpoints: true },
+      { idx: 41, when: 1_795_348_800_000, tag: "0041_synced_play_snapshots", breakpoints: true },
     ],
   },
   migrations: {
@@ -1272,5 +1284,6 @@ export default {
     m0038: mGenreOrder,
     m0039: mListeningHistory,
     m0040: mStreamedPlays,
+    m0041: mSyncedPlaySnapshots,
   },
 };

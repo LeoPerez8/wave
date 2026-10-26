@@ -6,7 +6,8 @@ import { harness, pullAll } from "../../../sync/src/testing.ts";
 import { creditSplits } from "../library/db/credits.ts";
 import { endPlay, recordPlay } from "../library/db/playHistory.ts";
 import { listeningHistory } from "../library/db/listeningHistory.ts";
-import { openTestDatabase } from "../library/db/testDatabase.ts";
+import { addTrack, openTestDatabase } from "../library/db/testDatabase.ts";
+import { deleteTracksById } from "../library/db/tracks.ts";
 import { syncCycle, type SyncTransport } from "./syncCycle.ts";
 
 const SONG: YtAlbumSong = {
@@ -16,6 +17,8 @@ const SONG: YtAlbumSong = {
   album: "OK Computer",
   durationMs: 284_000,
   artworkUrl: "https://i.ytimg.com/vi/history-video/hqdefault.jpg",
+  explicit: false,
+  albumId: null,
 };
 
 const PLAY: PlayEvent = {
@@ -119,5 +122,55 @@ test("another phone keeps an unmatched streamed play in history immediately and 
   assert.equal(again.pushed, 0);
   assert.deepEqual(listeningHistory(b.db).rows, rows);
   assert.equal(b.historyChanges(), 1);
+  service.db.close();
+});
+
+test("a Library play without an account song shows from its snapshot until the file arrives", async () => {
+  const { service, session, transport } = await account();
+  const a = await phone(transport);
+  const track = addTrack(a.db, {
+    title: "Airbag",
+    artist: "Radiohead",
+    album: "OK Computer",
+    durationMs: 284_000,
+    artworkHash: "ok",
+  });
+  const play = { ...PLAY, trackId: String(track) };
+  endPlay(a.db, recordPlay(a.db, play), play);
+  deleteTracksById(a.db, [track]);
+  await a.sync();
+  const stored = await pullAll(service, session);
+  assert.equal(stored.songs.length, 0);
+  assert.deepEqual(stored.plays[0]?.snapshot, {
+    title: "Airbag",
+    artist: "Radiohead",
+    album: "OK Computer",
+    artworkPath: null,
+    thumbPath: null,
+  });
+
+  const b = await phone(transport);
+  assert.equal((await b.sync()).pulled.plays, true);
+  const before = listeningHistory(b.db).rows;
+  assert.equal(before.length, 1);
+  assert.equal(before[0]?.snapshot.title, "Airbag");
+  assert.equal(before[0]?.song, null);
+  assert.equal(before[0]?.streamedSong, null);
+  assert.equal(before[0]?.videoId, null);
+  assert.equal((await b.sync()).pushed, 0);
+
+  const arrived = addTrack(b.db, {
+    title: "Airbag",
+    artist: "Radiohead",
+    album: "OK Computer",
+    durationMs: 284_000,
+  });
+  await b.sync(true);
+  const after = listeningHistory(b.db).rows;
+  assert.equal(after.length, 1);
+  assert.equal(after[0]?.id, before[0]?.id);
+  assert.equal(after[0]?.song?.id, arrived);
+  assert.equal(after[0]?.startedAt, 1_792_929_600_000);
+  assert.equal((await pullAll(service, session)).plays.length, 1);
   service.db.close();
 });

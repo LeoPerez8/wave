@@ -906,7 +906,7 @@ const applyPlay = (
   }
   const trackId = trackIds.get(row.songId);
   const videoId = trackId === undefined ? (row.videoId ?? null) : null;
-  if (trackId === undefined && videoId === null) {
+  if (trackId === undefined && videoId === null && row.snapshot == null) {
     pend(tx, "plays", row, { songKey: row.songId });
     return false;
   }
@@ -937,6 +937,8 @@ const applyPlay = (
               album: snapshot?.album ?? null,
               artworkUrl: snapshot?.artworkUrl ?? null,
               durationMs: row.durationMs,
+              explicit: false,
+              albumId: null,
             },
       recordingKey: row.songId,
       syncId: row.id,
@@ -1043,6 +1045,28 @@ export const applyPending = (
     }
     const changed = nothingChanged();
     applyRows(tx, rows, trackIds, changed);
+    // A snapshot-only Library play is already visible; attach it once its
+    // account song or file arrives, keeping its play id and display snapshot.
+    const detached = tx
+      .selectDistinct({ key: schema.playEvents.recordingKey })
+      .from(schema.playEvents)
+      .where(and(isNull(schema.playEvents.trackId), isNull(schema.playEvents.videoId)))
+      .all();
+    for (const { key } of detached) {
+      const trackId = key === null ? undefined : trackIds.get(key);
+      if (trackId === undefined || key === null) continue;
+      tx.update(schema.playEvents)
+        .set({ trackId })
+        .where(
+          and(
+            eq(schema.playEvents.recordingKey, key),
+            isNull(schema.playEvents.trackId),
+            isNull(schema.playEvents.videoId),
+          ),
+        )
+        .run();
+      changed.plays = true;
+    }
     return changed;
   });
 };
