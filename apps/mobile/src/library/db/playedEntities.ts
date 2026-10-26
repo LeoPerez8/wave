@@ -21,6 +21,7 @@ import { sql } from "drizzle-orm";
 
 import type { AlbumRow, ArtistRow } from "../LibraryStore.ts";
 import { selectAlbums } from "./albums.ts";
+import * as schema from "./schema.ts";
 import { selectArtists } from "./artists.ts";
 import { readCredits } from "./credits.ts";
 import type { LibraryDatabase } from "./database.ts";
@@ -215,7 +216,76 @@ export const playedEntityTotals = (
   };
 };
 
-/** Merge the already-settled Library shelf with streamed albums, including uncounted starts. */
+/**
+ * Home's Recently played resolves this many streamed songs per album it
+ * shows, then this many times more until they settle the shelf.
+ */
+const STREAM_PAGE_GROWTH = 4;
+
+interface StreamedAlbum {
+  readonly entry: StreamedListeningTotal;
+  readonly album: number | OnlineAlbum;
+}
+
+/**
+ * The album of each of [streams] it has one for: a downloaded song's Library
+ * album (its id), or the album its credits name (a Library album's id or an
+ * online album). [resolver] gives the credit resolver, knowing every streamed
+ * song's release id when asked with `true`, for a song that names its album
+ * without one.
+ */
+const streamedAlbums = (
+  db: LibraryDatabase,
+  streams: readonly StreamedListeningTotal[],
+  resolver: (releases: boolean) => ReturnType<typeof playedLibrary>["resolve"],
+): StreamedAlbum[] => {
+  const tracks = [
+    ...new Set(streams.flatMap((entry) => (entry.trackId === null ? [] : [entry.trackId]))),
+  ];
+  const trackAlbums = new Map(
+    tracks.length === 0
+      ? []
+      : db
+          .all<{ id: number; albumId: number }>(
+            sql`
+    SELECT id, album_id AS "albumId" FROM tracks WHERE id IN
+      (SELECT value FROM json_each(${JSON.stringify(tracks)}))`,
+          )
+          .map((row) => [row.id, row.albumId]),
+  );
+  // A downloaded song goes by its file's album; credits only settle the others.
+  const credited = streams.filter(
+    (entry) => entry.trackId === null || !trackAlbums.has(entry.trackId),
+  );
+  const songs = streamedSongsOf(
+    db,
+    credited.map((entry) => entry.videoId),
+  );
+  const resolve =
+    credited.length === 0
+      ? undefined
+      : resolver([...songs.values()].some((song) => song.albumId == null && song.album !== null));
+  return streams.flatMap((entry): StreamedAlbum[] => {
+    const downloaded = entry.trackId === null ? undefined : trackAlbums.get(entry.trackId);
+    if (downloaded !== undefined) return [{ entry, album: downloaded }];
+    const song = songs.get(entry.videoId);
+    const resolved = song === undefined || resolve === undefined ? null : resolve(song).album;
+    if (resolved === null) return [];
+    if (typeof resolved.id === "string") {
+      const album = { ...resolved, id: resolved.id, online: true as const };
+      return [{ entry, album: { ...album, albumArtist: resolved.artists.join(", ") } }];
+    }
+    // A Library song whose file wasn't found only takes an online album.
+    return entry.trackId === null ? [{ entry, album: resolved.id }] : [];
+  });
+};
+
+/**
+ * Merge the already-settled Library shelf [local] with the albums of the
+ * songs streamed ([streams]), counted or not, as Core's `recentlyPlayedAlbums`
+ * orders them. Only the latest streamed songs are resolved, a page at a time,
+ * until they settle the shelf; an online album shows its latest played song's details.
+ */
 export const recentlyPlayedEntities = (
   db: LibraryDatabase,
   local: readonly AlbumRow[],
@@ -223,49 +293,70 @@ export const recentlyPlayedEntities = (
   streams: readonly StreamedListeningTotal[],
 ): PlayedAlbum[] => {
   if (streams.length === 0) return [...local];
-  const songs = streamedSongsOf(
-    db,
-    streams.map((entry) => entry.videoId),
-  );
-  const library = playedLibrary(db, songs.values());
   const rows = new Map<number | string, PlayedAlbum>(local.map((album) => [album.id, album]));
   const latest = db.all<{ albumId: number | string; lastPlayedAt: number }>(sql`
     SELECT tracks.album_id AS "albumId", max(play_totals.last_played_at) AS "lastPlayedAt"
     FROM tracks JOIN play_totals ON play_totals.track_id = tracks.id
     WHERE tracks.album_id IN (${sql.join([sql`NULL`, ...local.map((album) => sql`${album.id}`)], sql`, `)})
     GROUP BY tracks.album_id`);
-  const trackAlbums = new Map(
-    db
-      .all<{ id: number; albumId: number }>(
-        sql`
-    SELECT id, album_id AS "albumId" FROM tracks WHERE id IN
-      (SELECT value FROM json_each(${JSON.stringify([...new Set(streams.flatMap((entry) => (entry.trackId === null ? [] : [entry.trackId])))])}))`,
-      )
-      .map((row) => [row.id, row.albumId]),
-  );
-  for (const entry of streams) {
-    const song = songs.get(entry.videoId);
-    const resolved = song === undefined ? null : library.resolve(song).album;
-    const albumId = entry.trackId === null ? resolved?.id : trackAlbums.get(entry.trackId);
-    const album =
-      typeof albumId === "number"
-        ? library.albums.find((row) => row.id === albumId)
-        : resolved === null || typeof resolved.id !== "string"
-          ? undefined
-          : {
-              ...resolved,
-              id: resolved.id,
-              online: true as const,
-              albumArtist: resolved.artists.join(", "),
-            };
-    if (album === undefined) continue;
-    rows.set(album.id, album);
-    latest.push({ albumId: album.id, lastPlayedAt: entry.lastPlayedAt });
+  // Latest played first; on a tie, the totals written last.
+  const newest = streams
+    .map((entry, index) => ({ entry, index }))
+    // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh array; Hermes lacks toSorted
+    .sort((a, b) => b.entry.lastPlayedAt - a.entry.lastPlayedAt || b.index - a.index)
+    .map(({ entry }) => entry);
+  let library:
+    | { readonly releases: boolean; readonly resolve: ReturnType<typeof playedLibrary>["resolve"] }
+    | undefined;
+  const resolver = (releases: boolean) => {
+    if (library === undefined || (releases && !library.releases))
+      library = {
+        releases,
+        // A song without its release id takes the one another streamed song of its album has.
+        resolve: playedLibrary(
+          db,
+          releases
+            ? streamedSongsOf(
+                db,
+                streams.map((entry) => entry.videoId),
+              ).values()
+            : [],
+        ).resolve,
+      };
+    return library.resolve;
+  };
+  for (let read = 0, page = limit * STREAM_PAGE_GROWTH; ; page *= STREAM_PAGE_GROWTH) {
+    const albums = streamedAlbums(db, newest.slice(read, page), resolver);
+    read = Math.min(page, newest.length);
+    const missing = [
+      ...new Set(
+        albums.flatMap(({ album }) =>
+          typeof album === "number" && !rows.has(album) ? [album] : [],
+        ),
+      ),
+    ];
+    if (missing.length > 0)
+      for (const row of selectAlbums(
+        db,
+        sql`${schema.albums.id} IN (SELECT value FROM json_each(${JSON.stringify(missing)}))`,
+      ))
+        rows.set(row.id, row);
+    for (const { entry, album } of albums) {
+      const id = typeof album === "number" ? album : album.id;
+      // Songs come latest played first: the first one met gives an online album's details.
+      if (typeof album !== "number" && !rows.has(id)) rows.set(id, album);
+      if (rows.has(id)) latest.push({ albumId: id, lastPlayedAt: entry.lastPlayedAt });
+    }
+    const complete = read === newest.length;
+    // Songs not resolved yet were played at or before the last one resolved.
+    const boundary = complete ? -Infinity : newest[read - 1]!.lastPlayedAt;
+    const settling = latest
+      .filter((song) => song.lastPlayedAt >= boundary)
+      // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh array; Hermes lacks toSorted
+      .sort((a, b) => b.lastPlayedAt - a.lastPlayedAt);
+    const ids = recentlyPlayedAlbums(settling, limit, complete);
+    if (ids !== null) return ids.flatMap((id) => rows.get(id) ?? []);
   }
-  // Core consumes latest-first songs and uses its usual tie-break between albums.
-  // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh array; Hermes lacks toSorted
-  latest.sort((a, b) => b.lastPlayedAt - a.lastPlayedAt);
-  return (recentlyPlayedAlbums(latest, limit, true) ?? []).flatMap((id) => rows.get(id) ?? []);
 };
 
 export interface PlayedArtistSongs extends ArtistPlays {

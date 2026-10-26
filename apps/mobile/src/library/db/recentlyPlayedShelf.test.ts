@@ -112,3 +112,17 @@ test("Recently played reads streamed songs in a few queries however many were st
   const songReads = queries.filter((query) => /streamed_song/.test(query.sql));
   assert.ok(songReads.length <= 3, `${songReads.length} streamed-song reads`);
 });
+
+test("a tie where the latest songs stop goes to the album first by id, whichever was read", async () => {
+  const db = await openTestDatabase();
+  for (let index = 0; index < 47; index++) {
+    const name = `B${String(index % 11).padStart(2, "0")}`;
+    stream(db, streamed(`b${index}`, name, `MPREb_${name}`, "B"), 5_000 + index);
+  }
+  stream(db, streamed("ta", "Tie a", "MPREb_ta", "T"), 4_000);
+  stream(db, streamed("tz", "Tie z", "MPREb_tz", "T"), 4_000);
+  assert.deepEqual(
+    homePlays(db).recentlyPlayed.map((played) => played.title),
+    ["B02", "B01", "B00", "B10", "B09", "B08", "B07", "B06", "B05", "B04", "B03", "Tie a"],
+  );
+});
