@@ -60,7 +60,7 @@ import { shuffleKind } from "@/settings/shuffleKind";
 
 import { Player, PlayerError, playbackState } from "./Player";
 import { searchPlaying } from "./playingSearch";
-import { learnQueueTracks, queueTracks, queuedShuffleSong, type QueueTrack } from "./queueTracks";
+import { evenShuffleSongs, learnQueueTracks, queueTracks, type QueueTrack } from "./queueTracks";
 
 export { toQueueTrack, type QueueTrack } from "./queueTracks";
 
@@ -364,7 +364,7 @@ export const layer = Layer.effect(
      * all-time counted plays for Smart Shuffle (plays that can't be read
      * count as none), their artists, genres and albums for Even Shuffle (the
      * Library's songs from the Library, streamed ones, and Library songs that
-     * can't be read, from what the queue knows of them: `queuedShuffleSong`).
+     * can't be read, from what the queue knows of them: `evenShuffleSongs`).
      */
     const shuffleFor = (state: QueueState, command: QueueCommand) =>
       Effect.gen(function* () {
@@ -377,17 +377,10 @@ export const layer = Layer.effect(
             .pipe(Effect.orElseSucceed((): ReadonlyMap<string, number> => new Map()));
           return { kind: "smart", plays } satisfies Shuffle;
         }
-        const songs = new Map(
-          yield* store
-            .shuffleSongs(trackIds)
-            .pipe(Effect.orElseSucceed((): ReadonlyMap<string, ShuffleSong> => new Map())),
-        );
-        for (const trackId of trackIds) {
-          const track = queueTracks.get().get(trackId);
-          if (!songs.has(trackId) && track !== undefined) {
-            songs.set(trackId, queuedShuffleSong(track));
-          }
-        }
+        const library = yield* store
+          .shuffleSongs(trackIds)
+          .pipe(Effect.orElseSucceed((): ReadonlyMap<string, ShuffleSong> => new Map()));
+        const songs = evenShuffleSongs(trackIds, library, queueTracks.get());
         return { kind: "even", songs } satisfies Shuffle;
       });
 
