@@ -11,7 +11,7 @@ import type { LibraryDatabase } from "./database.ts";
 import * as schema from "./schema.ts";
 import { playRecordingKey, stamped } from "./sync.ts";
 import { selectAlbums } from "./albums.ts";
-import { BY_TITLE, inScope, songColumns, type TrackScope } from "./tracks.ts";
+import { BY_TITLE, inScope, songColumns, trackQuery, type TrackScope } from "./tracks.ts";
 
 /** A Most Played song with its number of counted plays. */
 export interface MostPlayedRow extends SongRow {
@@ -60,12 +60,22 @@ export const recordPlay = (db: LibraryDatabase, play: PlayEvent, overlapping = f
     const { playEvents } = schema;
     if (!overlapping)
       tx.update(playEvents).set({ ongoing: false }).where(eq(playEvents.ongoing, true)).run();
+    const song = trackQuery(tx)
+      .where(eq(schema.tracks.id, Number(play.trackId)))
+      .get();
     return tx
       .insert(playEvents)
       .values({
         trackId: Number(play.trackId),
         recordingKey: playRecordingKey(Number(play.trackId)),
         startedAt: play.startedAt,
+        snapshot: {
+          title: song?.title ?? "Unknown song",
+          artist: song?.artist ?? "",
+          album: song?.album ?? null,
+          artworkPath: song?.artworkPath ?? null,
+          thumbPath: song?.thumbPath ?? null,
+        },
         contextType: play.context?.kind ?? null,
         contextId: play.context?.id ?? null,
         source: play.source,

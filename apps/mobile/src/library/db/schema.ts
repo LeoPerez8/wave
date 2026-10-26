@@ -1,5 +1,5 @@
 import { sql, type SQL } from "drizzle-orm";
-import type { PlaylistRecommendationTrack } from "@wave/core";
+import type { PlaySnapshot, PlaylistRecommendationTrack } from "@wave/core";
 import {
   type AnySQLiteColumn,
   check,
@@ -598,6 +598,8 @@ export const playEvents = sqliteTable(
     id: integer("id").primaryKey({ autoIncrement: true }),
     trackId: integer("track_id").notNull(),
     startedAt: integer("started_at").notNull(),
+    /** Display metadata captured at playback start; never changed by a progress update. */
+    snapshot: text("snapshot", { mode: "json" }).$type<PlaySnapshot>(),
     listenedMs: integer("listened_ms").notNull(),
     /** Null when the player never learnt the track's length. */
     durationMs: integer("duration_ms"),
@@ -649,6 +651,9 @@ export const playEvents = sqliteTable(
   (t) => [
     index("play_events_track_idx").on(t.trackId),
     index("play_events_started_at_idx").on(t.startedAt),
+    index("play_events_history_idx")
+      .on(sql`${t.startedAt} DESC`, sql`${t.id} DESC`)
+      .where(sql`${t.counted} = 1 AND ${t.importedFrom} IS NULL`),
     index("play_events_pushed_idx").on(t.pushed),
     // When each playlist was last played (the Playlists list's Recently Played).
     index("play_events_context_idx").on(t.contextType, t.contextId, t.startedAt),

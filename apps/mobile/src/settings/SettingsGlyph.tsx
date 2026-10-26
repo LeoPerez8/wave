@@ -1,5 +1,6 @@
 import {
   IconBooks,
+  IconHistory,
   IconCode,
   IconDownload,
   IconLayoutGrid,
@@ -22,6 +23,7 @@ const GLYPH = 20;
 
 const GLYPHS: Readonly<Record<SettingsIcon, Icon>> = {
   books: IconBooks,
+  history: IconHistory,
   palette: IconPalette,
   layout: IconLayoutGrid,
   swipe: IconSwipe,

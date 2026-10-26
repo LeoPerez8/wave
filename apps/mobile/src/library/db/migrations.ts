@@ -1075,6 +1075,34 @@ BEGIN
     ON CONFLICT (genre_id) DO UPDATE SET revision = revision + 1;
 END;`;
 
+const mListeningHistory = `ALTER TABLE play_events ADD COLUMN snapshot text;
+--> statement-breakpoint
+UPDATE play_events SET snapshot = (
+  SELECT json_object(
+    'title', coalesce(t.title, json_extract(a.song, '$.title'), 'Unknown song'),
+    'artist', coalesce(t.artist_credit, json_extract(a.song, '$.credit'), (
+      SELECT group_concat(name, ', ') FROM (
+        SELECT artists.name FROM deleted_track_artists d
+          JOIN artists ON artists.id = d.artist_id
+        WHERE d.track_id = p.track_id ORDER BY d.position
+      )), ''),
+    'album', coalesce(b.title, json_extract(a.song, '$.album'), retained.title),
+    'artworkPath', cover.path,
+    'thumbPath', cover.thumb_path
+  )
+  FROM play_events p
+    LEFT JOIN tracks t ON t.id = p.track_id
+    LEFT JOIN albums b ON b.id = t.album_id
+    LEFT JOIN account_songs a ON a.recording_key = p.recording_key
+      AND a.deleted = 0 AND json_valid(a.song)
+    LEFT JOIN albums retained ON retained.id = p.album_id
+    LEFT JOIN artwork cover ON cover.hash = coalesce(t.artwork_hash, b.artwork_hash, retained.artwork_hash)
+  WHERE p.id = play_events.id
+);
+--> statement-breakpoint
+CREATE INDEX play_events_history_idx ON play_events (started_at DESC, id DESC)
+  WHERE counted = 1 AND imported_from IS NULL;`;
+
 export default {
   journal: {
     entries: [
@@ -1127,6 +1155,7 @@ export default {
       },
       { idx: 37, when: 1_795_003_200_000, tag: "0037_recording_titles", breakpoints: true },
       { idx: 38, when: 1_795_089_600_000, tag: "0038_genre_order", breakpoints: true },
+      { idx: 39, when: 1_795_176_000_000, tag: "0039_listening_history", breakpoints: true },
     ],
   },
   migrations: {
@@ -1169,5 +1198,6 @@ export default {
     m0036: mPlaylistRecommendationFeedback,
     m0037: mRecordingTitles,
     m0038: mGenreOrder,
+    m0039: mListeningHistory,
   },
 };

@@ -43,9 +43,14 @@ const add = (map, owner, value) => {
   map.set(owner, values);
 };
 
+// The compiler asks with forward slashes even when node:path uses Windows separators.
+const canonical = (path) => path.split(sep).join("/");
+
 export const auditSources = (files, options) => {
   const root = resolve(import.meta.dirname, "..");
-  const absolute = new Map(Object.entries(files).map(([path, text]) => [join(root, path), text]));
+  const absolute = new Map(
+    Object.entries(files).map(([path, text]) => [canonical(join(root, path)), text]),
+  );
   const compilerOptions = {
     target: ts.ScriptTarget.ESNext,
     module: ts.ModuleKind.ESNext,
@@ -59,10 +64,10 @@ export const auditSources = (files, options) => {
   const originalExists = host.fileExists;
   const originalRead = host.readFile;
   const originalDirectoryExists = host.directoryExists;
-  host.fileExists = (path) => absolute.has(path) || originalExists(path);
-  host.readFile = (path) => absolute.get(path) ?? originalRead(path);
+  host.fileExists = (path) => absolute.has(canonical(path)) || originalExists(path);
+  host.readFile = (path) => absolute.get(canonical(path)) ?? originalRead(path);
   host.directoryExists = (path) =>
-    [...absolute.keys()].some((file) => file.startsWith(`${path}/`)) ||
+    [...absolute.keys()].some((file) => file.startsWith(`${canonical(path)}/`)) ||
     (originalDirectoryExists?.(path) ?? false);
   host.getSourceFile = (path, languageVersion) => {
     const text = host.readFile(path);
