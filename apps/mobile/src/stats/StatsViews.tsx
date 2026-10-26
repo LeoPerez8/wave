@@ -23,7 +23,7 @@ import { useFavoriteIds } from "@/library/favorites";
 import { openRecap } from "@/library/routes";
 import { toTrackSummary } from "@/library/TrackList";
 import { Press } from "@/motion/Press";
-import { playRankedSongs } from "@/playback/actions";
+import { playPlaylist } from "@/playback/actions";
 import { useCurrentPlayingIds } from "@/playback/hooks";
 import { openTrackActions } from "@/playback/ActionsMenu";
 import { RankedYtSongRow } from "@/ytmusic/YtSongRow";
@@ -108,7 +108,7 @@ function RankedSongRow({
   currentIds: ReadonlySet<string>;
   favorites: ReadonlySet<number>;
 }) {
-  const onPress = () => void playRankedSongs(songs, index, context);
+  const onPress = () => void playPlaylist(songs, index, context);
   const playing = currentIds.has(discoverTrackId(item));
   if (item.source === "stream")
     return (

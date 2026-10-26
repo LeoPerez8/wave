@@ -331,7 +331,8 @@ const notMissing = (
   entry.source === "unavailable" || playable(entry);
 
 /**
- * Plays a playlist's [entries] from `startIndex` (or shuffled), by Core's
+ * Plays a playlist's [entries] (or a ranking: Stats' songs, Home's Most played)
+ * from `startIndex` (or shuffled), by Core's
  * `playlistPlayback`: with YT Music on and YT Music entries among them, the
  * whole list (the Library's files, the rest streamed); with it off, the
  * Library's songs alone. Unavailable entries never play (a tapped one is the
@@ -361,20 +362,6 @@ export const playPlaylist = async (
   if (play === null) return "YT Music is off in Settings";
   await startPlayback(play.playback, play.startIndex, context, options);
   return null;
-};
-
-/**
- * Plays a ranking (Stats' songs, Home's Most played) that mixes the
- * Library's songs and streamed ones from `startIndex`, as `playPlaylist`
- * plays a playlist: with YT Music off, the Library's songs alone, and a
- * tapped streamed song plays nothing (its row is dimmed).
- */
-export const playRankedSongs = async (
-  songs: readonly ListedSong[],
-  startIndex: number | undefined,
-  context: QueueContext,
-): Promise<void> => {
-  await playPlaylist(songs, startIndex, context);
 };
 
 export const playYtNext = (songs: readonly YtSong[]): Promise<void> =>

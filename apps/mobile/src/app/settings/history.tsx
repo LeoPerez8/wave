@@ -8,9 +8,9 @@ import { TrackRow } from "@/catalog/TrackRow";
 import { useChromeInset } from "@/chrome/chrome";
 import { PlainTextButton } from "@/components/PlainTextButton";
 import type { ListeningHistoryRow } from "@/library/db/listeningHistory";
+import { historyArtworkUri } from "@/library/historyArtwork";
 import { toTrackSummary } from "@/library/TrackList";
 import { useListeningHistory } from "@/library/useListeningHistory";
-import { fileUri } from "@/lib/fileUri";
 import { useScreenContent } from "@/lib/screenTiming";
 import { openTrackActions } from "@/playback/ActionsMenu";
 import { unavailableStreamedVideos } from "@/playback/PlayHistory";
@@ -31,14 +31,7 @@ const HistorySong = memo(function HistorySong({ play }: { play: ListeningHistory
     unavailableStreamedVideos.get,
   );
   const streamPlayable = streamedSong !== null && ytMusic && !unavailable.has(streamedSong.videoId);
-  const artworkUri =
-    play.videoId === null
-      ? fileUri(snapshot.thumbPath ?? snapshot.artworkPath)
-      : song !== null
-        ? fileUri(song.thumbPath ?? song.artworkPath)
-        : streamPlayable
-          ? (snapshot.artworkUrl ?? undefined)
-          : undefined;
+  const artworkUri = historyArtworkUri(play, streamPlayable);
   const time = new Date(play.startedAt).toLocaleTimeString(undefined, {
     hour: "numeric",
     minute: "2-digit",

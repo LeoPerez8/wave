@@ -9,7 +9,7 @@ import { useFavoriteIds } from "@/library/favorites";
 import type { SongRow } from "@/library/LibraryStore";
 import { toTrackSummary } from "@/library/TrackList";
 import type { MostPlayedRow } from "@/library/db/playHistory";
-import { playRankedSongs, playSongs } from "@/playback/actions";
+import { playPlaylist, playSongs } from "@/playback/actions";
 import { useCurrentPlayingIds } from "@/playback/hooks";
 import { openTrackActions } from "@/playback/ActionsMenu";
 import { RankedYtSongRow } from "@/ytmusic/YtSongRow";
@@ -94,7 +94,7 @@ export function MostPlayedRows({
     <View>
       {rows.map((row, index) => {
         const key = discoverTrackId(row);
-        const onPress = () => void playRankedSongs(rows, index, context);
+        const onPress = () => void playPlaylist(rows, index, context);
         if (row.source === "stream")
           return (
             <RankedYtSongRow
