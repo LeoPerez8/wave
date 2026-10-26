@@ -100,6 +100,19 @@ export const streamedListeningTotals = (
       coalesce(last_counted_at, 0) AS "latestPlayAt", last_played_at AS "lastPlayedAt" FROM streamed`);
 };
 
+/**
+ * The all-time counted plays streamed of each Library song they are now
+ * (`streamedTrack`), by its id, from the kept totals: what a Library song's
+ * own counted plays leave out.
+ */
+export const streamedLibraryPlays = (db: LibraryDatabase): Map<number, number> => {
+  const plays = new Map<number, number>();
+  for (const entry of streamedListeningTotals(db))
+    if (entry.trackId !== null && entry.countedPlays > 0)
+      plays.set(entry.trackId, (plays.get(entry.trackId) ?? 0) + entry.countedPlays);
+  return plays;
+};
+
 /** Metadata needed by Core's credit resolver, without reading play history. */
 const playedLibrary = (db: LibraryDatabase, releases: Iterable<YtAlbumSong> = []) => {
   const artists = selectArtists(db, {});

@@ -17,7 +17,7 @@ export { creditSplitter, respreadDeletedSongs, splitCredit } from "./credits.ts"
 export type { PrunedArtist } from "./credits.ts";
 export { pickStreamedAlbum, streamedCredits } from "./streamedCredits.ts";
 export type { PlayedAlbumKey, PlayedArtistKey } from "./streamedCredits.ts";
-export { rankEntityPlays } from "./stats.ts";
+export { rankEntityPlays, rankEntityPlaysSteps } from "./stats.ts";
 export type { EntityPlayTotals } from "./stats.ts";
 export { formatDuration, formatRemaining } from "./time.ts";
 export { recommendationDeadline, recommendationFrameBudget } from "./recommendationWork.ts";
@@ -1669,7 +1669,7 @@ export {
   artistMixSimilarSource,
   artistMixSimilarSourceSteps,
 } from "./artistMixes.ts";
-export type { ArtistMixPools, PlayedSeedArtist } from "./artistMixes.ts";
+export type { ArtistMixPools, PlayedSeedArtist, SimilarSourceArtist } from "./artistMixes.ts";
 export {
   GENRE_MIX_COUNT,
   commonStyle,
@@ -1756,6 +1756,7 @@ export type {
   MixKnownSongs,
   MixKnownSources,
   MixPlaylistEntry,
+  StreamedPlays,
   StreamedSong,
 } from "./mixKnownSongs.ts";
 export { starAskedAfter, starredHere, ytSongStarred } from "./starDownloads.ts";

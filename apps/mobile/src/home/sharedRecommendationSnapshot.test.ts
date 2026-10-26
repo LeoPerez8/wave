@@ -54,6 +54,7 @@ const fixture = (catalog: CatalogSong[] = [song("p1", "Portishead", "Massive Att
         return { rows: [], next: null };
       }),
     graphSimilarPage: () => Effect.succeed({ rows: [], next: null }),
+    mixCreditNamesPage: () => Effect.succeed({ rows: [], next: null }),
     graphPlayPage: () =>
       Effect.suspend(() => {
         reads.graphPlays++;
@@ -163,6 +164,7 @@ describe("the shared recommendation snapshot", () => {
       graphCatalogPage: () => Effect.succeed({ rows: [], next: null }),
       graphRadioPage: () => Effect.succeed({ rows: [], next: null }),
       graphSimilarPage: () => Effect.succeed({ rows: [], next: null }),
+      mixCreditNamesPage: () => Effect.succeed({ rows: [], next: null }),
       graphPlayPage: () => Effect.succeed({ rows: [], next: null }),
     };
     const snapshot = shareRecommendationSnapshot({
@@ -210,6 +212,7 @@ test("peek returns cold inputs immediately and retains the last completed values
         graphCatalogPage: () => Effect.succeed({ rows: [], next: null }),
         graphRadioPage: () => Effect.succeed({ rows: [], next: null }),
         graphSimilarPage: () => Effect.succeed({ rows: [], next: null }),
+        mixCreditNamesPage: () => Effect.succeed({ rows: [], next: null }),
         graphPlayPage: () => Effect.succeed({ rows: [], next: null }),
       }),
       start: Effect.void,

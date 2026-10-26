@@ -96,6 +96,31 @@ describe("Artist mixes' seeds", () => {
     ]);
   });
 
+  test("take an artist only streamed (no Library id) once their plays rank them", () => {
+    const seeds = artistMixSeeds(
+      {
+        played: [
+          { id: "artist:sleep token", name: "Sleep Token", countedPlays: 40 },
+          played(2, "Spiritbox", 5),
+        ],
+        library: [library(2, "Spiritbox", 9), library(3, "Polaris", 12)],
+      },
+      always(0),
+    );
+    assert.deepEqual(seedNames(seeds), [
+      "plays: Sleep Token",
+      "plays: Spiritbox",
+      "library: Polaris",
+    ]);
+    assert.deepEqual(
+      artistMixSimilarSource({
+        played: [{ id: "artist:sleep token", name: "Sleep Token", countedPlays: 40 }],
+        library: [],
+      }),
+      { id: "artist:sleep token", name: "Sleep Token" },
+    );
+  });
+
   test("with nothing played, are the Library's artists with the most songs", () => {
     const seeds = artistMixSeeds(
       {

@@ -1,6 +1,7 @@
 import {
   playedEntityTotals,
   playedArtistSongs,
+  streamedLibraryPlays,
   recapPlays,
   type PlayedEntityTotals,
   type PlayedArtistSongs,
@@ -30,6 +31,8 @@ import {
   mixCreditPage,
   mixPlaylistedPage,
   mixStreamedPage,
+  mixStreamedPlaysPage,
+  mixCreditNamesPage,
   mixSongsPage,
   mixArtistsPage,
   mixHistoryPage,
@@ -41,9 +44,9 @@ import {
   graphSimilarPage,
   graphPlayPage,
   type GraphPage,
+  type GraphPlay,
   type GraphPlayCursor,
 } from "./db/artistGraph";
-import type { ArtistGraphPlay } from "@wave/core";
 import { selectNowPlayingSong } from "./db/nowPlayingSong";
 import type { PlayingSongAnswer, PlayingSongTarget } from "../nowPlaying/songLookup";
 import {
@@ -220,12 +223,7 @@ import {
   type DuplicateFixToApply,
 } from "./db/replacementDuplicates";
 import { keepLyricsMiss, selectLyricsSearchTrack, type LyricsSearchTrack } from "./db/lyricsMisses";
-import {
-  noteStreamedSong,
-  selectKnownVideos,
-  selectPlaylistedSongs,
-  selectStreamedSongs,
-} from "./db/mixKnown";
+import { selectKnownVideos, selectPlaylistedSongs, selectStreamedSongs } from "./db/mixKnown";
 import { addCandidates, selectCandidateCatalog } from "./db/candidateCatalog";
 import { hasUnscannedRoot, pruneOrphans, saveBatch, type SavedBatch } from "./db/save";
 import * as schema from "./db/schema";
@@ -1047,6 +1045,11 @@ export class LibraryStore extends Context.Service<
     readonly playedEntityTotals: (
       window: StatsWindow,
     ) => Effect.Effect<PlayedEntityTotals, LibraryStoreError>;
+    /**
+     * The all-time counted plays streamed of each Library song they are now
+     * (a download of the video, or the same recording), by its id.
+     */
+    readonly streamedLibraryPlays: Effect.Effect<ReadonlyMap<number, number>, LibraryStoreError>;
     readonly playedArtistSongs: (
       artistId: number,
       now: number,
@@ -1166,14 +1169,9 @@ export class LibraryStore extends Context.Service<
       checkedAt: number | null,
     ) => Effect.Effect<void, LibraryStoreError>;
     /**
-     * Notes that the owner started streaming [song] at [at] (streamed plays
-     * aren't play history; Home's mixes read them). This phone only.
+     * Every YT Music song the owner streamed before streamed plays were
+     * recorded (the old counter), with how often and when first.
      */
-    readonly noteStreamedSong: (
-      song: YtAlbumSong,
-      at: number,
-    ) => Effect.Effect<void, LibraryStoreError>;
-    /** Every YT Music song the owner streamed, with how often and when first. */
     readonly streamedSongs: Effect.Effect<readonly StreamedSong[], LibraryStoreError>;
     /** The playlists' entries that aren't Library songs, with when each was added (Home's mixes). */
     readonly playlistedSongs: Effect.Effect<readonly MixPlaylistEntry[], LibraryStoreError>;
@@ -1210,6 +1208,14 @@ export class LibraryStore extends Context.Service<
     readonly mixStreamedPage: (
       after: number,
     ) => Effect.Effect<ReturnType<typeof mixStreamedPage>, LibraryStoreError>;
+    /** A page of the streamed plays' kept totals (`streamed_totals`), by rowid. */
+    readonly mixStreamedPlaysPage: (
+      after: number,
+    ) => Effect.Effect<ReturnType<typeof mixStreamedPlaysPage>, LibraryStoreError>;
+    /** A page of the Library's credits as written, by track id, to split streamed credits with. */
+    readonly mixCreditNamesPage: (
+      after: number,
+    ) => Effect.Effect<ReturnType<typeof mixCreditNamesPage>, LibraryStoreError>;
     readonly mixPlaylistedPage: (
       after: number,
     ) => Effect.Effect<ReturnType<typeof mixPlaylistedPage>, LibraryStoreError>;
@@ -1240,7 +1246,7 @@ export class LibraryStore extends Context.Service<
     ) => Effect.Effect<GraphPage<YtArtistSimilar, string>, LibraryStoreError>;
     readonly graphPlayPage: (
       after: GraphPlayCursor,
-    ) => Effect.Effect<GraphPage<ArtistGraphPlay, GraphPlayCursor>, LibraryStoreError>;
+    ) => Effect.Effect<GraphPage<GraphPlay, GraphPlayCursor>, LibraryStoreError>;
     readonly candidateCatalog: Effect.Effect<readonly CatalogSong[], LibraryStoreError>;
     /**
      * Every saved YT Music artist page's artist with who "Fans might also
@@ -1940,6 +1946,9 @@ const make = Effect.gen(function* () {
 
     playedEntityTotals: (window) =>
       attempt("sum up played albums and artists", () => playedEntityTotals(db, window)),
+    streamedLibraryPlays: attempt("sum up the Library songs' streamed plays", () =>
+      streamedLibraryPlays(db),
+    ),
     playedArtistSongs: (artistId, now) =>
       attempt("read the artist listening", () => playedArtistSongs(db, artistId, now)),
     recapPlays: (window) => attempt("sum up a Recap's plays", () => recapPlays(db, window)),
@@ -2030,9 +2039,6 @@ const make = Effect.gen(function* () {
     keepLyricsMiss: (trackId, checkedAt) =>
       writeAttempt("remember the lyrics search", () => keepLyricsMiss(db, trackId, checkedAt)),
 
-    noteStreamedSong: (song, at) =>
-      writeAttempt("note a streamed song", () => noteStreamedSong(db, song, at)),
-
     streamedSongs: attempt("read the songs streamed", () => selectStreamedSongs(db)),
 
     playlistedSongs: attempt("read the playlists' songs", () => selectPlaylistedSongs(db)),
@@ -2047,6 +2053,10 @@ const make = Effect.gen(function* () {
 
     mixStreamedPage: (after) =>
       attempt("read a mix streamed page", () => mixStreamedPage(db, after)),
+    mixStreamedPlaysPage: (after) =>
+      attempt("read a mix streamed plays page", () => mixStreamedPlaysPage(db, after)),
+    mixCreditNamesPage: (after) =>
+      attempt("read a mix credit names page", () => mixCreditNamesPage(db, after)),
     mixPlaylistedPage: (after) =>
       attempt("read a mix playlist page", () => mixPlaylistedPage(db, after)),
     mixCreditPage: (after) => attempt("read a mix credit page", () => mixCreditPage(db, after)),

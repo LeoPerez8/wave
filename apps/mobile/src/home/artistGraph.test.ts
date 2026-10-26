@@ -68,6 +68,7 @@ const store = (counts: { reads: number }, catalog: CatalogSong[] = []): ArtistGr
           : [],
       next: null,
     }),
+  mixCreditNamesPage: () => Effect.succeed({ rows: [], next: null }),
   graphPlayPage: () =>
     Effect.succeed({
       rows: [
