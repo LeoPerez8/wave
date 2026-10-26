@@ -10,6 +10,7 @@
 import {
   UNKNOWN_ALBUM,
   accountTrackIds,
+  creditSplitter,
   mergeRows,
   planSongSync,
   songsLeaving,
@@ -906,6 +907,7 @@ const applyPlay = (
   tx: LibraryDatabase,
   row: SyncPlayRow,
   trackIds: ReadonlyMap<string, number>,
+  split: (credit: string) => readonly string[],
 ): boolean => {
   const { playEvents } = schema;
   const held = tx
@@ -960,7 +962,7 @@ const applyPlay = (
           : {
               videoId,
               title: snapshot?.title ?? "Unknown song",
-              artists: snapshot?.artist ? [snapshot.artist] : [],
+              artists: split(snapshot?.artist ?? ""),
               album: snapshot?.album ?? null,
               artworkUrl: snapshot?.artworkUrl ?? null,
               durationMs: row.durationMs,
@@ -997,16 +999,26 @@ const applyRows = (
   for (const row of rows.favorites) {
     if (applyFavorite(tx, row, trackIds)) changed.favorites = true;
   }
-  for (const row of rows.plays) {
-    if (applyPlay(tx, row, trackIds)) changed.plays = true;
+  if (rows.plays.length > 0) {
+    const split = creditSplitter(
+      tx
+        .select({ name: schema.artists.name })
+        .from(schema.artists)
+        .all()
+        .map((row) => row.name),
+    );
+    for (const row of rows.plays) {
+      if (applyPlay(tx, row, trackIds, split)) changed.plays = true;
+    }
   }
 };
 
 /**
  * Applies a page the account sent: each row merged with the phone's by
  * Core's rules (`mergeRows`, plays by id only), recording keys turned into
- * the phone's Tracks by [trackIds] (`selectAccountTrackIds`). A row whose
- * song or playlist the phone lacks waits in `sync_pending`. The page's
+ * the phone's Tracks by [trackIds] (`selectAccountTrackIds`). Streamed plays
+ * and Library plays with snapshots show immediately; other rows whose
+ * song or playlist the phone lacks wait in `sync_pending`. The page's
  * cursor is kept for the next pull, in the same transaction.
  */
 export const applyPulledPage = (

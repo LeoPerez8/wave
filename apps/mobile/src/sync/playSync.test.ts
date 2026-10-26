@@ -351,3 +351,17 @@ test("newly imported plays also send a snapshot and keep their import origin", a
   });
   service.db.close();
 });
+
+test("a pulled streamed collaboration keeps its artists for playback and song actions", async () => {
+  const { service, transport } = await account();
+  const a = await phone(transport);
+  const collaboration = { ...SONG, artists: ["Ariana Grande", "Doja Cat"] };
+  endPlay(a.db, recordPlay(a.db, PLAY, false, collaboration), PLAY);
+  await a.sync();
+  const b = await phone(transport);
+  await b.sync();
+  const row = listeningHistory(b.db).rows[0];
+  assert.equal(row?.snapshot.artist, "Ariana Grande & Doja Cat");
+  assert.deepEqual(row?.streamedSong?.artists, ["Ariana Grande", "Doja Cat"]);
+  service.db.close();
+});
