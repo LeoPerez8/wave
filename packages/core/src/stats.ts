@@ -63,6 +63,21 @@ export interface PlayTotals {
 /** An album or artist's totals, including an online identity while absent from the Library. */
 export type EntityPlayTotals = Omit<PlayTotals, "id"> & { readonly id: number | string };
 
+/** Most played first as `rankPlays` ranks, then Library ids in order before online ones. */
+const compareEntities = (a: EntityPlayTotals, b: EntityPlayTotals): number =>
+  compareTotals(a, b) ||
+  (typeof a.id === "number" && typeof b.id === "number"
+    ? a.id - b.id
+    : typeof a.id === "number"
+      ? -1
+      : typeof b.id === "number"
+        ? 1
+        : a.id < b.id
+          ? -1
+          : a.id > b.id
+            ? 1
+            : 0);
+
 export const rankEntityPlays = <A extends EntityPlayTotals>(
   totals: readonly A[],
   limit: number,
@@ -70,22 +85,21 @@ export const rankEntityPlays = <A extends EntityPlayTotals>(
   totals
     .filter((entry) => entry.countedPlays > 0)
     // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh copy; Hermes lacks toSorted
-    .sort(
-      (a, b) =>
-        compareTotals(a, b) ||
-        (typeof a.id === "number" && typeof b.id === "number"
-          ? a.id - b.id
-          : typeof a.id === "number"
-            ? -1
-            : typeof b.id === "number"
-              ? 1
-              : a.id < b.id
-                ? -1
-                : a.id > b.id
-                  ? 1
-                  : 0),
-    )
+    .sort(compareEntities)
     .slice(0, limit);
+
+/** `rankEntityPlays` in scheduler-independent bounded work steps. */
+export function* rankEntityPlaysSteps<A extends EntityPlayTotals>(
+  totals: Iterable<A>,
+  limit: number,
+): Generator<void, A[]> {
+  const eligible: A[] = [];
+  for (const entry of totals) {
+    if (entry.countedPlays > 0) eligible.push(entry);
+    yield;
+  }
+  return (yield* sortSteps(eligible, compareEntities)).slice(0, limit);
+}
 
 type Totals = Omit<PlayTotals, "id">;
 
