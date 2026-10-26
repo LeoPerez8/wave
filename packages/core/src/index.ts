@@ -87,6 +87,7 @@ export type {
   RepeatMode,
   Shuffle,
   ShuffleKind,
+  ShuffleSong,
 } from "./queue.ts";
 export { applyPlayerSync, keysToLoad, planPlayerSync } from "./playerSync.ts";
 export type { PlayerList, QueueList, SyncStep } from "./playerSync.ts";
