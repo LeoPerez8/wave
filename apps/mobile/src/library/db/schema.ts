@@ -701,6 +701,30 @@ export const playTotals = sqliteTable(
 );
 
 /**
+ * Each streamed song's listening over its whole history, as `play_totals`
+ * keeps a track's: one row per video id and recording key with a streamed
+ * play (a key that changed between plays gives the video a row per key), kept
+ * by triggers on `play_events` (migration `0041_streamed_counts`). Home reads
+ * them beside `play_totals`, the rows whose video id or key a Library song has
+ * counting as that song's (`streamedTrack`).
+ */
+export const streamedTotals = sqliteTable(
+  "streamed_totals",
+  {
+    videoId: text("video_id").notNull(),
+    /** The plays' recording key; empty for plays without one. */
+    recordingKey: text("recording_key").notNull(),
+    plays: integer("plays").notNull(),
+    countedPlays: integer("counted_plays").notNull(),
+    listenedMs: integer("listened_ms").notNull(),
+    countedListenedMs: integer("counted_listened_ms").notNull(),
+    lastPlayedAt: integer("last_played_at").notNull(),
+    lastCountedAt: integer("last_counted_at"),
+  },
+  (t) => [primaryKey({ columns: [t.videoId, t.recordingKey] })],
+);
+
+/**
  * Pending favorites (Core's `PendingFavorite`): liked songs Also add to
  * Favorites couldn't star because the Library didn't have them, and YT Music
  * songs starred anywhere (a star means downloaded), each by its

@@ -1174,8 +1174,55 @@ ${mPlayTotals
   .replaceAll("new.`track_id` = old.`track_id`", "new.`track_id` IS old.`track_id`")}
 `;
 
-// Streamed plays count for the Library song with their video id (or recording key).
-const mStreamedCounts = `CREATE INDEX tracks_video_idx ON tracks (video_id);`;
+/** Sums the streamed plays of `video_id` [video] with recording key [key] into its `streamed_totals` row. */
+const streamedTotalsOf = (video: string, key: string) => `
+	DELETE FROM streamed_totals WHERE video_id = ${video} AND recording_key = coalesce(${key}, '');
+	INSERT INTO streamed_totals (video_id, recording_key, plays, counted_plays, listened_ms,
+		counted_listened_ms, last_played_at, last_counted_at)
+		SELECT video_id, coalesce(recording_key, ''), count(*), sum(CASE WHEN counted THEN 1 ELSE 0 END),
+			sum(listened_ms), sum(CASE WHEN counted THEN listened_ms ELSE 0 END), max(started_at),
+			max(CASE WHEN counted THEN started_at END)
+		FROM play_events WHERE video_id = ${video} AND coalesce(recording_key, '') = coalesce(${key}, '')
+		GROUP BY video_id;`;
+
+// Streamed plays count for the Library song with their video id (or recording
+// key), and Home sums them from totals kept as `play_totals` is. Each write
+// sums its video's plays again (a few, through the video index).
+const mStreamedCounts = `CREATE INDEX tracks_video_idx ON tracks (video_id);
+--> statement-breakpoint
+CREATE TABLE streamed_totals (
+	video_id text NOT NULL,
+	recording_key text NOT NULL,
+	plays integer NOT NULL,
+	counted_plays integer NOT NULL,
+	listened_ms integer NOT NULL,
+	counted_listened_ms integer NOT NULL,
+	last_played_at integer NOT NULL,
+	last_counted_at integer,
+	PRIMARY KEY (video_id, recording_key)
+);
+--> statement-breakpoint
+INSERT INTO streamed_totals (video_id, recording_key, plays, counted_plays, listened_ms,
+	counted_listened_ms, last_played_at, last_counted_at)
+	SELECT video_id, coalesce(recording_key, ''), count(*), sum(CASE WHEN counted THEN 1 ELSE 0 END),
+		sum(listened_ms), sum(CASE WHEN counted THEN listened_ms ELSE 0 END), max(started_at),
+		max(CASE WHEN counted THEN started_at END)
+	FROM play_events WHERE video_id IS NOT NULL GROUP BY video_id, coalesce(recording_key, '');
+--> statement-breakpoint
+CREATE TRIGGER streamed_totals_insert AFTER INSERT ON play_events WHEN new.video_id IS NOT NULL BEGIN
+${streamedTotalsOf("new.video_id", "new.recording_key")}
+END;
+--> statement-breakpoint
+CREATE TRIGGER streamed_totals_change
+AFTER UPDATE OF video_id, recording_key, started_at, listened_ms, counted ON play_events
+WHEN old.video_id IS NOT NULL OR new.video_id IS NOT NULL BEGIN
+${streamedTotalsOf("old.video_id", "old.recording_key")}
+${streamedTotalsOf("new.video_id", "new.recording_key")}
+END;
+--> statement-breakpoint
+CREATE TRIGGER streamed_totals_delete AFTER DELETE ON play_events WHEN old.video_id IS NOT NULL BEGIN
+${streamedTotalsOf("old.video_id", "old.recording_key")}
+END;`;
 
 export default {
   journal: {

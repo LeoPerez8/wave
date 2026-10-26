@@ -7,9 +7,16 @@ import { beforeEach, describe, test } from "node:test";
 import type { IndexedTrack } from "../LibraryStore.ts";
 import { creditSplits } from "./credits.ts";
 import { recordPlay } from "./playHistory.ts";
+import { listeningSums } from "./playTotals.ts";
 import { saveBatch } from "./save.ts";
 import { songPlayTotals } from "./stats.ts";
-import { addTrack, openTestDatabase, type TestDatabase } from "./testDatabase.ts";
+import {
+  addTrack,
+  migrateTestDatabase,
+  openTestDatabase,
+  traceQueries,
+  type TestDatabase,
+} from "./testDatabase.ts";
 
 let db: TestDatabase;
 
@@ -139,5 +146,94 @@ describe("Stats' song totals with streamed plays", () => {
     const scanned = download("Airbag");
     recordPlay(db, play(scanned, 2_000));
     assert.deepEqual(songCounts(), [[scanned, 3]]);
+  });
+});
+
+describe("Listening totals with streamed plays", () => {
+  test("time, plays and songs listened include streamed plays", () => {
+    const library = addTrack(db, { title: "So What" });
+    recordPlay(db, play(library, 1_000));
+    for (let i = 0; i < 5; i++) stream(airbag, 2_000 + i, { listenedMs: 100_000 });
+    stream(airbag, 3_000, { counted: false, listenedMs: 5_000, endReason: "skipped" });
+    stream({ ...airbag, videoId: "v-skipped" }, 3_001, {
+      counted: false,
+      listenedMs: 1_000,
+      endReason: "skipped",
+    });
+
+    assert.deepEqual(listeningSums(db), {
+      listenedMs: 180_000 + 500_000 + 5_000 + 1_000,
+      countedPlays: 6,
+      songsListened: 2,
+      lastPlayedAt: 3_001,
+    });
+  });
+
+  test("a downloaded song is one song listened, whose plays are streamed and from its file", () => {
+    stream(airbag, 1_000);
+    stream({ ...airbag, videoId: "v-airbag-video" }, 1_001);
+    const before = listeningSums(db);
+    assert.equal(before.songsListened, 2);
+    // Tagged with a track number, its recording key isn't the streamed one: only its video's plays are its.
+    const downloaded = download("Airbag", { videoId: "v-airbag", trackNumber: "1" });
+    assert.deepEqual(listeningSums(db), before);
+    recordPlay(db, play(downloaded, 2_000));
+    assert.deepEqual(listeningSums(db), {
+      listenedMs: 3 * 180_000,
+      countedPlays: 3,
+      songsListened: 2,
+      lastPlayedAt: 2_000,
+    });
+  });
+
+  test("two videos of one Library song are one song listened", () => {
+    stream(airbag, 1_000);
+    stream({ ...airbag, videoId: "v-airbag-video" }, 1_001);
+    download("Airbag", { videoId: "v-airbag" });
+    assert.equal(listeningSums(db).songsListened, 1);
+  });
+
+  test("streamed plays kept as they're written: a play that grows, or one deleted", () => {
+    const id = stream(airbag, 1_000, { counted: false, listenedMs: 1_000, endReason: "skipped" });
+    assert.equal(listeningSums(db).countedPlays, 0);
+    db.run(sql`UPDATE play_events SET counted = 1, listened_ms = 60000 WHERE id = ${id}`);
+    assert.deepEqual(listeningSums(db), {
+      listenedMs: 60_000,
+      countedPlays: 1,
+      songsListened: 1,
+      lastPlayedAt: 1_000,
+    });
+    db.run(sql`DELETE FROM play_events WHERE id = ${id}`);
+    assert.deepEqual(listeningSums(db), {
+      listenedMs: 0,
+      countedPlays: 0,
+      songsListened: 0,
+      lastPlayedAt: null,
+    });
+  });
+
+  test("upgrading sums the streamed plays recorded before", async () => {
+    db = await openTestDatabase({ through: "0040_streamed_plays" });
+    stream(airbag, 1_000);
+    stream(airbag, 2_000, { counted: false, listenedMs: 1_000, endReason: "skipped" });
+    await migrateTestDatabase(db);
+    assert.deepEqual(listeningSums(db), {
+      listenedMs: 181_000,
+      countedPlays: 1,
+      songsListened: 1,
+      lastPlayedAt: 2_000,
+    });
+  });
+
+  test("read the kept totals, never the play history", () => {
+    for (let i = 0; i < 20; i++) stream({ ...airbag, videoId: `v-${i}` }, 1_000 + i);
+    download("Airbag", { videoId: "v-3" });
+    for (const query of traceQueries(db, () => listeningSums(db)).queries) {
+      assert.deepEqual(
+        query.plan.filter((step) => /SCAN (play_events|tracks)/.test(step)),
+        [],
+        query.sql,
+      );
+    }
   });
 });
