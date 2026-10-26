@@ -647,6 +647,7 @@ export {
   isMagicQueue,
   magicArtistKey,
   magicLibrarySongs,
+  magicListSeedSongs,
   magicBatchRadios,
   magicLibraryMapperSteps,
   magicRadioArtists,
