@@ -177,7 +177,7 @@ function BarGround({ colors, top, scroll, start }: Ground) {
 /**
  * The Queue list's sticky bar, between History and Up Next: the shuffle and
  * repeat toggles (a long press on shuffle opens the shuffle card; it reads
- * Smart Shuffle, with its own icon, while that's chosen), then the Up Next
+ * Smart Shuffle or Even Shuffle, each with its own icon, while that's chosen), then the Up Next
  * heading ("Magic Queue · from <seed>" over a Magic Queue).
  */
 function UpNextBar({ ground }: { ground: Ground }) {

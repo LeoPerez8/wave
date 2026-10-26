@@ -38,7 +38,7 @@ const services = Layer.mergeAll(
   NativeScanner.layer,
   // The Magic Queue reads YouTube Music's radios.
   YtMusic.layer,
-  // The queue reads play counts for Smart Shuffle.
+  // The queue reads play counts for Smart Shuffle, and artists, genres and albums for Even Shuffle.
   Queue.layer.pipe(Layer.provideMerge(Player.layer)),
 ).pipe(Layer.provideMerge(LibraryStore.layer));
 

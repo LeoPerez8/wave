@@ -39,6 +39,7 @@ import {
   type QueueUndo,
   type RepeatMode,
   type Shuffle,
+  type ShuffleSong,
   type SongChangeCause,
   type SyncStep,
   type UnsearchedSettlement,
@@ -59,7 +60,7 @@ import { shuffleKind } from "@/settings/shuffleKind";
 
 import { Player, PlayerError, playbackState } from "./Player";
 import { searchPlaying } from "./playingSearch";
-import { learnQueueTracks, queueTracks, type QueueTrack } from "./queueTracks";
+import { evenShuffleSongs, learnQueueTracks, queueTracks, type QueueTrack } from "./queueTracks";
 
 export { toQueueTrack, type QueueTrack } from "./queueTracks";
 
@@ -358,17 +359,29 @@ export const layer = Layer.effect(
 
     /**
      * The kind of shuffle [command] uses on [state] (Core's `shufflesQueue`):
-     * the chosen one, with the all-time counted plays of the songs it orders
-     * (`shuffledTrackIds`, streamed ones included) for Smart Shuffle, read
-     * only when the command shuffles. Plays that can't be read count as none.
+     * the chosen one, with what it orders the songs by (`shuffledTrackIds`,
+     * streamed ones included), read only when the command shuffles: their
+     * all-time counted plays for Smart Shuffle (plays that can't be read
+     * count as none), their artists, genres and albums for Even Shuffle (the
+     * Library's songs from the Library, streamed ones, and Library songs that
+     * can't be read, from what the queue knows of them: `evenShuffleSongs`).
      */
     const shuffleFor = (state: QueueState, command: QueueCommand) =>
       Effect.gen(function* () {
-        if (shuffleKind() === "real" || !shufflesQueue(state, command)) return REAL_SHUFFLE;
-        const plays = yield* store
-          .songCountedPlays(shuffledTrackIds(state, command))
-          .pipe(Effect.orElseSucceed((): ReadonlyMap<string, number> => new Map()));
-        return { kind: "smart", plays } satisfies Shuffle;
+        const kind = shuffleKind();
+        if (kind === "real" || !shufflesQueue(state, command)) return REAL_SHUFFLE;
+        const trackIds = shuffledTrackIds(state, command);
+        if (kind === "smart") {
+          const plays = yield* store
+            .songCountedPlays(trackIds)
+            .pipe(Effect.orElseSucceed((): ReadonlyMap<string, number> => new Map()));
+          return { kind: "smart", plays } satisfies Shuffle;
+        }
+        const library = yield* store
+          .shuffleSongs(trackIds)
+          .pipe(Effect.orElseSucceed((): ReadonlyMap<string, ShuffleSong> => new Map()));
+        const songs = evenShuffleSongs(trackIds, library, queueTracks.get());
+        return { kind: "even", songs } satisfies Shuffle;
       });
 
     /**

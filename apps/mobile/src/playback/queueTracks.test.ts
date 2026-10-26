@@ -17,6 +17,8 @@ import {
   toQueueTrack,
   toUnsearchedQueueTrack,
   queuedYtSong,
+  queuedShuffleSong,
+  evenShuffleSongs,
   toYtQueueTrack,
   tracksToLookUp,
   type QueueTrack,
@@ -511,4 +513,60 @@ test("a queued song carries the downloaded icon only while its Library file is t
   assert.equal(queueTrackDownloaded(filed, new Set(["7"])), false);
   assert.equal(queueTrackDownloaded(toYtQueueTrack(ytSong("v1"), null), new Set()), false);
   assert.equal(queueTrackDownloaded(undefined, new Set()), false);
+});
+
+describe("queuedShuffleSong", () => {
+  test("gives Even Shuffle a YT Music song's first artist and album, and no genre", () => {
+    const track = toYtQueueTrack(
+      { ...ytSong("v1"), artists: ["Bring Me the Horizon", "BABYMETAL"], album: "Post Human" },
+      null,
+    );
+    assert.deepEqual(queuedShuffleSong(track), {
+      artist: "Bring Me the Horizon",
+      genre: null,
+      album: "Post Human",
+    });
+  });
+
+  test("falls back on the credit shown when the song's artists weren't kept", () => {
+    const { artists: _, ...saved } = toYtQueueTrack(ytSong("v2"), null);
+    assert.deepEqual(queuedShuffleSong(saved), { artist: "Artist", genre: null, album: null });
+    // A Library song the Library couldn't be asked about: its credit and album.
+    assert.deepEqual(queuedShuffleSong(toQueueTrack(song(3))), {
+      artist: "Artist 3",
+      genre: null,
+      album: "Album 3",
+    });
+  });
+
+  test("goes by the credit's primary artist, so a featured artist doesn't make another", () => {
+    const featuring = { ...toQueueTrack(song(4)), artist: "Lana Del Rey feat. Father John Misty" };
+    assert.equal(queuedShuffleSong(featuring).artist, "Lana Del Rey");
+    const { artists: _, ...saved } = toYtQueueTrack(
+      { ...ytSong("v5"), artists: ["Sleep Token", "Bring Me the Horizon"] },
+      null,
+    );
+    assert.equal(queuedShuffleSong(saved).artist, "Sleep Token");
+    // A credit naming nobody leaves the artist unknown.
+    assert.equal(queuedShuffleSong({ ...featuring, artist: "" }).artist, null);
+  });
+});
+
+describe("evenShuffleSongs", () => {
+  test("takes each song from the Library first, then from what the queue knows of it", () => {
+    const library = new Map([["1", { artist: "Deftones", genre: "Metal", album: "White Pony" }]]);
+    const queued = new Map(
+      [toQueueTrack(song(1)), toQueueTrack(song(2)), toYtQueueTrack(ytSong("v3"), null)].map(
+        (track) => [track.id, track],
+      ),
+    );
+    assert.deepEqual(
+      evenShuffleSongs(["1", "2", "yt:v3", "9"], library, queued),
+      new Map([
+        ["1", { artist: "Deftones", genre: "Metal", album: "White Pony" }],
+        ["2", { artist: "Artist 2", genre: null, album: "Album 2" }],
+        ["yt:v3", { artist: "Artist", genre: null, album: null }],
+      ]),
+    );
+  });
 });

@@ -13,15 +13,18 @@ import {
   libraryTrackIds,
   withQueueCovers,
   parseTrackId,
+  splitCredit,
   streamedCoverUrl,
   streamedCoverUrls,
   trackRowDownloaded,
+  UNKNOWN_ARTIST,
   unsearchedTrackId,
   ytSongArtist,
   ytTrackId,
   type ArtworkPalette,
   type QueueCover,
   type QueueEntry,
+  type ShuffleSong,
   type UnsearchedSong,
   type YtSong,
 } from "@wave/core";
@@ -125,6 +128,47 @@ export const toYtQueueTrack = (song: QueuedYtSong, artwork: CachedArtwork | null
     explicit: song.explicit,
     ytSong: song,
   };
+};
+
+/**
+ * What Even Shuffle knows of a song from what the queue holds of it, as for
+ * a streamed song (a YT Music song or an unsearched entry): its first artist,
+ * or the primary artist of the credit shown when its artists weren't kept
+ * (Core's `splitCredit`, so "A feat. B" goes by "A"; none when the credit
+ * names nobody), and its album; its genre is unknown.
+ */
+export const queuedShuffleSong = (track: QueueTrack): ShuffleSong => ({
+  artist: track.artists?.[0] ?? primaryArtist(track.artist),
+  genre: null,
+  album: track.album,
+});
+
+/**
+ * What Even Shuffle orders [trackIds] by, per track id: each song's artist,
+ * genre and album as the Library has them ([library], `shuffleSongs`), else
+ * from what the queue holds of it ([queued], `queuedShuffleSong`): a streamed
+ * song, or a Library song the Library couldn't be asked about. A song neither
+ * knows is left out.
+ */
+export const evenShuffleSongs = (
+  trackIds: readonly string[],
+  library: ReadonlyMap<string, ShuffleSong>,
+  queued: ReadonlyMap<string, QueueTrack>,
+): Map<string, ShuffleSong> => {
+  const songs = new Map<string, ShuffleSong>();
+  for (const trackId of trackIds) {
+    const track = queued.get(trackId);
+    const song =
+      library.get(trackId) ?? (track === undefined ? undefined : queuedShuffleSong(track));
+    if (song !== undefined) songs.set(trackId, song);
+  }
+  return songs;
+};
+
+/** The first artist [credit] names, null when it names none. */
+const primaryArtist = (credit: string): string | null => {
+  const [first] = splitCredit(credit);
+  return first === undefined || first === UNKNOWN_ARTIST ? null : first;
 };
 
 /**
