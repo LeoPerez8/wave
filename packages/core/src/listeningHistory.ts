@@ -1,3 +1,12 @@
+/** What a play showed when it started, independent of Library membership. */
+export interface PlaySnapshot {
+  readonly title: string;
+  readonly artist: string;
+  readonly album: string | null;
+  readonly artworkPath: string | null;
+  readonly thumbPath: string | null;
+}
+
 /** A local calendar day of listening, with the newest plays first. */
 export interface ListeningHistoryDay<T> {
   readonly key: string;
