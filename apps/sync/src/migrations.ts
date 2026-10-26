@@ -154,6 +154,13 @@ const MIGRATIONS: readonly Migration[] = [
       )`,
     ],
   },
+  {
+    id: "0005_play_snapshots",
+    statements: [
+      "ALTER TABLE plays ADD COLUMN snapshot TEXT",
+      "ALTER TABLE plays ADD COLUMN video_id TEXT",
+    ],
+  },
 ];
 
 /** Runs the migrations [db] hasn't run yet, each in its own transaction. Gives the ids it ran. */

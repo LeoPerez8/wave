@@ -92,6 +92,14 @@ characters. The tables and their fields are Core's wire (`SYNC_TABLE_NAMES`, `SY
 `packages/core/src/syncWire.ts`), which the app reads pulls with; `src/tables.ts` builds its
 tables from them.
 
+Plays also accept optional, nullable `snapshot` and `videoId` fields. `snapshot` uses
+Core's `PlaySnapshot` shape: `{ title: string, artist: string, album: string | null,
+artworkPath: string | null, thumbPath: string | null }`. `artist` is the artist credit
+as written; the artwork fields hold cover references, not image bytes. `videoId` is a
+streamed play's YouTube video id; `songId` stays its recording key. Older clients may
+omit both fields, which come back as null. Snapshot text has the same length limit
+as other text. Migration `0005_play_snapshots` adds the nullable storage columns.
+
 `200`, how many rows of each table won (and were stored):
 
 ```json
@@ -298,6 +306,9 @@ By hand, the steps are:
    ```sh
    TURSO_DATABASE_URL=libsql://… TURSO_AUTH_TOKEN=… pnpm --filter @wave/sync run deploy
    ```
+
+Deploy play snapshot and video id support before releasing an app that sends those
+fields. Existing clients can keep pushing and pulling while the new service runs.
 
 ## Extending it
 
