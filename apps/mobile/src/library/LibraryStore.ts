@@ -42,6 +42,7 @@ import {
   graphSimilarPage,
   graphPlayPage,
   type GraphPage,
+  type GraphPlay,
   type GraphPlayCursor,
 } from "./db/artistGraph";
 import type { ArtistGraphPlay } from "@wave/core";
@@ -1233,7 +1234,7 @@ export class LibraryStore extends Context.Service<
     ) => Effect.Effect<GraphPage<YtArtistSimilar, string>, LibraryStoreError>;
     readonly graphPlayPage: (
       after: GraphPlayCursor,
-    ) => Effect.Effect<GraphPage<ArtistGraphPlay, GraphPlayCursor>, LibraryStoreError>;
+    ) => Effect.Effect<GraphPage<GraphPlay, GraphPlayCursor>, LibraryStoreError>;
     readonly candidateCatalog: Effect.Effect<readonly CatalogSong[], LibraryStoreError>;
     /**
      * Every saved YT Music artist page's artist with who "Fans might also
