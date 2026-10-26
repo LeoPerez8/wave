@@ -3,7 +3,6 @@ import { test } from "node:test";
 import { eq, sql } from "drizzle-orm";
 import type { PlayEvent } from "@wave/core";
 
-import { tasteHistory } from "./taste.ts";
 import { listeningHistory } from "./listeningHistory.ts";
 import { endPlay, latestPlay, recordPlay, updatePlay } from "./playHistory.ts";
 import * as schema from "./schema.ts";
@@ -16,13 +15,7 @@ import {
 } from "./testDatabase.ts";
 import { playedRecordingKeys } from "./playHistory.ts";
 import { listeningSums, playTotalsDrift, rebuildPlayTotals } from "./playTotals.ts";
-import {
-  countedListening,
-  countedListeningPage,
-  songListening,
-  trackPlayTotals,
-  creditedPlayTotals,
-} from "./stats.ts";
+import { songListening, trackPlayTotals, creditedPlayTotals } from "./stats.ts";
 import { mixHistoryPage } from "./mixInputs.ts";
 import { selectUnpushed } from "./syncRows.ts";
 import { markPushed } from "./syncRows.ts";
@@ -221,16 +214,15 @@ test("streamed starts, progress and ends leave the Library-only consumers unchan
   const id = recordPlay(db, play(track, 1000));
   endPlay(db, id, { ...play(track, 1000), endReason: "completed" });
   const existing = () => ({
-    // Most Played, the listening totals and playlist recency count streamed plays (streamedCounts.test.ts),
-    // and so do Discover's mix inputs and the artist graph (mixInputs.test.ts, artistGraph.test.ts).
+    // Most Played, the listening totals and playlist recency count streamed plays
+    // (streamedCounts.test.ts), and so do Recaps (recapPlays.test.ts), the Taste
+    // profile (taste.test.ts), Discover's mix inputs (mixInputs.test.ts) and the
+    // artist graph (artistGraph.test.ts).
     listening: songListening(db),
     songs: trackPlayTotals(db, { from: null, to: 100_000 }),
     artists: creditedPlayTotals(db, { from: 0, to: 100_000 }),
-    recap: countedListening(db),
-    recapPage: countedListeningPage(db, 0),
     mixes: mixHistoryPage(db, 0),
     keys: playedRecordingKeys(db),
-    taste: tasteHistory(db),
   });
   const before = existing();
   const stream = {

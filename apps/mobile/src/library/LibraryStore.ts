@@ -2,8 +2,10 @@ import {
   playedEntityTotals,
   playedArtistSongs,
   streamedLibraryPlays,
+  recapPlays,
   type PlayedEntityTotals,
   type PlayedArtistSongs,
+  type RecapPlays,
 } from "./db/playedEntities";
 import {
   type RecommendationEntryCursor,
@@ -161,7 +163,7 @@ import {
   type HomeSections,
   type RecordedPlay,
 } from "./db/playHistory";
-import { listeningSums, selectCountedPlays } from "./db/playTotals";
+import { listeningSums, selectCountedPlays, songCountedPlays } from "./db/playTotals";
 import {
   listeningHistory,
   type ListeningHistoryCursor,
@@ -790,6 +792,15 @@ export class LibraryStore extends Context.Service<
     readonly countedPlays: (
       ids: readonly number[],
     ) => Effect.Effect<ReadonlyMap<number, number>, LibraryStoreError>;
+    /**
+     * Each of the queue's songs [trackIds]' counted plays over all time, by
+     * track id (those with any), streamed songs included and merged into the
+     * Library song they are: what Smart Shuffle and a Magic Queue's seeds
+     * weigh songs by.
+     */
+    readonly songCountedPlays: (
+      trackIds: readonly string[],
+    ) => Effect.Effect<ReadonlyMap<string, number>, LibraryStoreError>;
     readonly loadPlayback: Effect.Effect<SavedPlayback | null, LibraryStoreError>;
     /** Saves the queue with where its current entry is. */
     readonly saveQueue: (
@@ -1043,6 +1054,12 @@ export class LibraryStore extends Context.Service<
       artistId: number,
       now: number,
     ) => Effect.Effect<PlayedArtistSongs, LibraryStoreError>;
+    /**
+     * What a Recap of [window] is computed from (Core's `recap`): its songs',
+     * albums' and artists' counted plays, streamed plays included and credited
+     * as Stats credits them, the songs' genres and the artists' first plays.
+     */
+    readonly recapPlays: (window: StatsWindow) => Effect.Effect<RecapPlays, LibraryStoreError>;
     readonly creditedPlayTotals: (
       window: StatsWindow,
     ) => Effect.Effect<readonly CreditedPlayTotals[], LibraryStoreError>;
@@ -1707,6 +1724,8 @@ const make = Effect.gen(function* () {
     videoIds: (ids) => attempt("read the songs' video ids", () => selectVideoIds(db, ids)),
     countedPlays: (ids) =>
       attempt("read the songs' counted plays", () => selectCountedPlays(db, ids)),
+    songCountedPlays: (trackIds) =>
+      attempt("read the songs' counted plays", () => songCountedPlays(db, trackIds)),
 
     loadPlayback: attempt(
       "read the saved queue",
@@ -1932,6 +1951,7 @@ const make = Effect.gen(function* () {
     ),
     playedArtistSongs: (artistId, now) =>
       attempt("read the artist listening", () => playedArtistSongs(db, artistId, now)),
+    recapPlays: (window) => attempt("sum up a Recap's plays", () => recapPlays(db, window)),
     creditedPlayTotals: (window) =>
       attempt("sum up album and artist plays", () => creditedPlayTotals(db, window)),
 

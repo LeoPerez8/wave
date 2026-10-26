@@ -513,6 +513,7 @@ export const itemActionPress = ({
                 startMagicQueue(
                   seed,
                   entries.flatMap((song) => (song.source === "library" ? [song.track] : [])),
+                  entries.flatMap((song) => (song.source === "stream" ? [song.song] : [])),
                 ),
               ),
             )

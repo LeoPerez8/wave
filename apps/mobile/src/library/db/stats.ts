@@ -338,12 +338,18 @@ export const artistFirstPlays = (db: LibraryDatabase, ids: readonly number[]): A
     ),
   );
 
+/**
+ * A play of a Library song or a streamed one, as the listening totals count
+ * them (`listeningSums`): not a synced play still waiting for its song.
+ */
+const libraryOrStreamed = sql`(play_events.track_id IS NOT NULL OR play_events.video_id IS NOT NULL)`;
+
 /** A quarter hour: every time zone's offset is a whole number of them. */
 const QUARTER_HOUR_MS = 15 * 60_000;
 
 /**
  * The whole history's counted listening, summed per quarter hour (each row
- * starts at its quarter hour), deleted songs included: what Core's
+ * starts at its quarter hour), deleted and streamed songs included: what Core's
  * `availableRecaps` and `recap` read. A quarter hour never straddles a local
  * month or day, so the sums lose nothing a Recap needs, at a fraction of the rows.
  */
@@ -353,7 +359,7 @@ export const countedListening = (db: LibraryDatabase): CountedListening[] => {
   return db
     .select({ startedAt: quarter, listenedMs: sql<number>`sum(${playEvents.listenedMs})` })
     .from(playEvents)
-    .where(and(eq(playEvents.counted, true), isNotNull(playEvents.trackId)))
+    .where(and(eq(playEvents.counted, true), libraryOrStreamed))
     .groupBy(quarter)
     .all();
 };
@@ -374,7 +380,7 @@ export const countedListeningPage = (db: LibraryDatabase, after: number): Counte
   }>(sql`
     WITH page AS MATERIALIZED (
       SELECT id, started_at, listened_ms, counted FROM play_events
-      WHERE id > ${after} AND track_id IS NOT NULL ORDER BY id LIMIT 512
+      WHERE id > ${after} AND ${libraryOrStreamed} ORDER BY id LIMIT 512
     )
     SELECT (started_at / ${QUARTER_HOUR_MS}) * ${QUARTER_HOUR_MS} AS "startedAt",
       sum(listened_ms) AS "listenedMs", NULL AS next, 0 AS size
