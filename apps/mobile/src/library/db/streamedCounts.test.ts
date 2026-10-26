@@ -348,6 +348,12 @@ describe("the counted plays Smart Shuffle and Magic Queue weigh songs by", () =>
     );
   });
 
+  test("a queued streamed song never streamed has the plays of the downloaded song with its video id", () => {
+    const track = download("Airbag", { videoId: "v-airbag" });
+    for (let i = 0; i < 2; i++) recordPlay(db, play(track, 1_000 + i));
+    assert.deepEqual(songCountedPlays(db, ["yt:v-airbag"]), new Map([["yt:v-airbag", 2]]));
+  });
+
   test("read the kept totals, never the play history", () => {
     for (let i = 0; i < 20; i++) stream({ ...airbag, videoId: `v-${i}` }, 1_000 + i);
     const track = download("Airbag", { videoId: "v-3" });

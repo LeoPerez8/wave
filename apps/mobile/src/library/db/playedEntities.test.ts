@@ -144,6 +144,24 @@ test("the Library artist's Stats block includes stream credits, skips and downlo
   assert.equal(downloaded.played && downloaded.mostPlayed[0]!.countedPlays, 1);
 });
 
+test("the artist's Stats block reads the streamed totals once, unless a stream is from the future", async () => {
+  const db = await openTestDatabase();
+  addTrack(db, { title: "Local", artist: "A", album: "Album" });
+  relinkCredits(db, creditSplits());
+  const artistId = db.get<{ id: number }>(sql`SELECT id FROM artists WHERE name = 'A'`).id;
+  recordPlay(db, play("yt:collaboration", 1_000), false, song);
+  const streamedReads = () =>
+    traceQueries(db, () => playedArtistSongs(db, artistId, 10_000)).queries.filter((query) =>
+      /\bstreamed_totals\b/.test(query.sql),
+    ).length;
+  assert.equal(streamedReads(), 1);
+  // A play started after now (a phone whose clock ran ahead) is listening, not a play up to now.
+  recordPlay(db, play("yt:collaboration", 20_000), false, song);
+  const read = playedArtistSongs(db, artistId, 10_000);
+  assert.equal(read.streamedListening[0]!.countedPlays, 2);
+  assert.equal(read.streamedSongPlays[0]!.countedPlays, 1);
+});
+
 test("all-time artist and album totals never scan raw play history", async () => {
   const db = await openTestDatabase();
   recordPlay(db, play("yt:collaboration", 1_000), false, song);

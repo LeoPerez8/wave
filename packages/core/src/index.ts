@@ -19,6 +19,14 @@ export { pickStreamedAlbum, streamedCredits } from "./streamedCredits.ts";
 export type { PlayedAlbumKey, PlayedArtistKey } from "./streamedCredits.ts";
 export { rankEntityPlays, rankEntityPlaysSteps } from "./stats.ts";
 export type { EntityPlayTotals } from "./stats.ts";
+export { mergeCountedPlays } from "./countedPlays.ts";
+export type {
+  CountedPlays,
+  LibraryPlaySums,
+  PlaySums,
+  PlaysToMerge,
+  StreamedPlaySums,
+} from "./countedPlays.ts";
 export { formatDuration, formatRemaining } from "./time.ts";
 export { recommendationDeadline, recommendationFrameBudget } from "./recommendationWork.ts";
 export {

@@ -108,11 +108,11 @@ export class Player extends Context.Service<
     readonly onSeek: (
       listener: (event: SeekEvent) => void,
     ) => Effect.Effect<void, never, Scope.Scope>;
-    /** Calls `listener` each time a crossfade's outgoing song goes silent, while the scope lives. */
     /** A playback failure, including a video YouTube no longer serves. */
     readonly onPlayerError: (
       listener: (event: PlayerErrorEvent) => void,
     ) => Effect.Effect<void, never, Scope.Scope>;
+    /** Calls `listener` each time a crossfade's outgoing song goes silent, while the scope lives. */
     readonly onCrossfade: (
       listener: (event: CrossfadeEndedEvent) => void,
     ) => Effect.Effect<void, never, Scope.Scope>;
