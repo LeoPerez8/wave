@@ -165,8 +165,8 @@ const play = (
   const { entries, nextKey } = makeEntries(trackIds, state.nextKey, (i) => i);
   if (entries.length === 0) return result({ ...EMPTY_QUEUE, repeat: state.repeat, nextKey });
   const shuffle = command.shuffle ?? state.shuffle;
-  // Smart Shuffle with no song tapped (a Shuffle button) orders the whole list, first song included.
-  if (shuffle && tapped === undefined && kind.kind === "smart") {
+  // Smart and Even Shuffle with no song tapped (a Shuffle button) order the whole list, first song included.
+  if (shuffle && tapped === undefined && kind.kind !== "real") {
     const order = shuffleEntries(entries, random, kind);
     return result(
       { ...state, context: command.context, entries: order, index: 0, shuffle: true, nextKey },
@@ -230,15 +230,267 @@ const smartShuffled = (
 };
 
 /**
+ * What Even Shuffle knows of a song: its primary artist, its genre and its
+ * album, each null when unknown (a YT Music song has no genre).
+ */
+export interface ShuffleSong {
+  readonly artist: string | null;
+  readonly genre: string | null;
+  readonly album: string | null;
+}
+
+/** The key Even Shuffle compares [name] by (trimmed, lower case); null when there's no name. */
+const nameKey = (name: string | null | undefined): string | null => {
+  const key = name?.trim().toLowerCase() ?? "";
+  return key === "" ? null : key;
+};
+
+/**
+ * The key Even Shuffle groups [entry] by for [name] (an artist or an album):
+ * the name's key, or, when the name is unknown, a key of the entry's own, so
+ * it makes a group by itself. The NUL keeps it apart from every name's key.
+ */
+const groupKey = (name: string | null | undefined, entry: QueueEntry): string =>
+  nameKey(name) ?? `\u0000${entry.key}`;
+
+/** A song as `takeTurns` keeps it: its group and genre, and where it sits in the lists it's in. */
+interface TurnSong {
+  readonly entry: QueueEntry;
+  readonly group: string;
+  readonly genre: string | null;
+  /** Where it is among every song left, and among its group's. */
+  at: number;
+  groupAt: number;
+}
+
+/** A group's songs left, with how many of them each genre has. */
+interface TurnGroup {
+  readonly songs: TurnSong[];
+  readonly genres: Map<string, number>;
+}
+
+/** Takes [song] out of [list] (where it sits at [song]'s [field]), moving the last song into its place. */
+const takeOut = (list: TurnSong[], song: TurnSong, field: "at" | "groupAt"): void => {
+  const moved = list.pop()!;
+  if (moved === song) return;
+  list[song[field]] = moved;
+  moved[field] = song[field];
+};
+
+/**
+ * A random song of [list] that [fits]; one must. Drawn from the whole list
+ * until one fits, so it costs about as many draws as the list is to the
+ * fitting songs; past `FITTING_DRAWS` it picks among the fitting ones.
+ */
+const randomFitting = (
+  list: readonly TurnSong[],
+  random: () => number,
+  fits: (song: TurnSong) => boolean,
+): TurnSong => {
+  for (let draw = 0; draw < FITTING_DRAWS; draw += 1) {
+    const song = list[Math.floor(random() * list.length)]!;
+    if (fits(song)) return song;
+  }
+  const fitting = list.filter(fits);
+  return fitting[Math.floor(random() * fitting.length)]!;
+};
+
+/** How many draws `randomFitting` makes before it lists the fitting songs. */
+const FITTING_DRAWS = 64;
+
+/** Adds [by] to [key]'s count in [counts]. */
+const addCount = (counts: Map<string, number>, key: string | null, by: number): void => {
+  if (key !== null) counts.set(key, (counts.get(key) ?? 0) + by);
+};
+
+/** What `takeTurns` orders, and how it tells the songs' groups and genres apart. */
+interface Turns {
+  readonly entries: readonly QueueEntry[];
+  readonly groupOf: (entry: QueueEntry) => string;
+  readonly genreOf: (entry: QueueEntry) => string | null;
+  /** The song before them, if any: the first song taken avoids its group and genre. */
+  readonly previous: QueueEntry | null;
+  readonly random: () => number;
+}
+
+/**
+ * Takes [turns]' songs one at a time so their groups take turns after the
+ * previous song: two songs of one group only follow each other when nothing
+ * else is left. Each turn, a group that holds more than half the songs left
+ * goes whenever it may (so when one group outnumbers all the others, its
+ * leftover songs close the order); otherwise any group but the previous
+ * song's may. Among the songs of the groups that may go next, the next one is
+ * a random song of another genre than the previous song's when there's one (a
+ * song with no genre never repeats one).
+ */
+const turnTaker = ({ entries, groupOf, genreOf, previous, random }: Turns) => {
+  const left: TurnSong[] = [];
+  const groups = new Map<string, TurnGroup>();
+  const genres = new Map<string, number>();
+  for (const entry of entries) {
+    const song: TurnSong = {
+      entry,
+      group: groupOf(entry),
+      genre: genreOf(entry),
+      at: left.length,
+      groupAt: 0,
+    };
+    let group = groups.get(song.group);
+    if (group === undefined) {
+      group = { songs: [], genres: new Map() };
+      groups.set(song.group, group);
+    }
+    song.groupAt = group.songs.length;
+    group.songs.push(song);
+    left.push(song);
+    addCount(group.genres, song.genre, 1);
+    addCount(genres, song.genre, 1);
+  }
+  // The groups by how many songs they have left, so the biggest is found at once.
+  const bySize = new Map<number, Set<string>>();
+  const fileBySize = (name: string, size: number): void => {
+    bySize.set(size, (bySize.get(size) ?? new Set()).add(name));
+  };
+  let biggestSize = 0;
+  for (const [name, group] of groups) {
+    fileBySize(name, group.songs.length);
+    biggestSize = Math.max(biggestSize, group.songs.length);
+  }
+  let previousGroupName = previous === null ? null : groupOf(previous);
+  let previousGenre = previous === null ? null : genreOf(previous);
+
+  /** Whether [song] doesn't repeat the previous song's genre. */
+  const changesGenre = (song: TurnSong): boolean =>
+    previousGenre === null || song.genre !== previousGenre;
+  /** How many songs of a list whose genres are counted in [counts] repeat the previous song's genre. */
+  const repeatingGenre = (counts: Map<string, number>): number =>
+    previousGenre === null ? 0 : (counts.get(previousGenre) ?? 0);
+  /** A random song of [list] (genres counted in [counts]) that changes genre, or any when none does. */
+  const changingGenreIfAny = (list: readonly TurnSong[], counts: Map<string, number>): TurnSong => {
+    const anyChanges = list.length > repeatingGenre(counts);
+    return randomFitting(list, random, (song) => !anyChanges || changesGenre(song));
+  };
+
+  /** The next song, taken out of those left: each group as likely as the songs it has that may go. */
+  const next = (): TurnSong => {
+    // Only the biggest group can hold more than half the songs left.
+    const [biggestGroupName] = bySize.get(biggestSize) ?? [];
+    const previousGroup = previousGroupName === null ? undefined : groups.get(previousGroupName);
+    const previousGroupSize = previousGroup?.songs.length ?? 0;
+    const previousGroupChanging =
+      previousGroupSize - (previousGroup === undefined ? 0 : repeatingGenre(previousGroup.genres));
+    const otherGroupsChanging = left.length - repeatingGenre(genres) - previousGroupChanging;
+    if (
+      biggestGroupName !== undefined &&
+      biggestGroupName !== previousGroupName &&
+      2 * biggestSize > left.length
+    ) {
+      const group = groups.get(biggestGroupName)!;
+      return changingGenreIfAny(group.songs, group.genres);
+    }
+    if (otherGroupsChanging > 0) {
+      return randomFitting(
+        left,
+        random,
+        (song) => song.group !== previousGroupName && changesGenre(song),
+      );
+    }
+    if (left.length > previousGroupSize) {
+      return randomFitting(left, random, (song) => song.group !== previousGroupName);
+    }
+    return changingGenreIfAny(left, genres);
+  };
+
+  return {
+    /** How many groups still have songs. */
+    groupsLeft: (): number => groups.size,
+    /** Takes the next song (one must be left). */
+    take: (): QueueEntry => {
+      const song = next();
+      const group = groups.get(song.group)!;
+      const size = group.songs.length;
+      takeOut(left, song, "at");
+      takeOut(group.songs, song, "groupAt");
+      addCount(group.genres, song.genre, -1);
+      addCount(genres, song.genre, -1);
+      bySize.get(size)!.delete(song.group);
+      if (size > 1) fileBySize(song.group, size - 1);
+      else groups.delete(song.group);
+      while (biggestSize > 0 && (bySize.get(biggestSize)?.size ?? 0) === 0) biggestSize -= 1;
+      previousGroupName = song.group;
+      previousGenre = song.genre;
+      return song.entry;
+    },
+    /** The songs not taken yet. */
+    rest: (): QueueEntry[] => left.map((song) => song.entry),
+  };
+};
+
+/** [turns]' songs, ordered so their groups take turns (`turnTaker`). */
+const takeTurns = (turns: Turns): QueueEntry[] => {
+  const taker = turnTaker(turns);
+  const order: QueueEntry[] = [];
+  while (taker.groupsLeft() > 0) order.push(taker.take());
+  return order;
+};
+
+/**
+ * [turns]' songs ordered as `takeTurns` does until a single group is left:
+ * the songs taken until then, and that group's songs as the [rest].
+ */
+const takeTurnsUntilOneGroup = (turns: Turns): { order: QueueEntry[]; rest: QueueEntry[] } => {
+  const taker = turnTaker(turns);
+  const order: QueueEntry[] = [];
+  while (taker.groupsLeft() > 1) order.push(taker.take());
+  return { order, rest: taker.rest() };
+};
+
+/**
+ * Even Shuffle's order after [previous] (the song before it, if any): artists
+ * take turns, then genres among the artists that may go next (`takeTurns`).
+ * Once a single artist is left, its albums take turns the same way.
+ */
+const evenShuffled = (
+  entries: readonly QueueEntry[],
+  random: () => number,
+  songs: ReadonlyMap<string, ShuffleSong>,
+  previous: QueueEntry | null,
+): QueueEntry[] => {
+  // A song with no known artist is an artist of its own, and one with no known album an album.
+  const artistOf = (entry: QueueEntry): string => groupKey(songs.get(entry.trackId)?.artist, entry);
+  const albumOf = (entry: QueueEntry): string =>
+    `${artistOf(entry)}\u0000${groupKey(songs.get(entry.trackId)?.album, entry)}`;
+  const genreOf = (entry: QueueEntry): string | null => nameKey(songs.get(entry.trackId)?.genre);
+  const artists = takeTurnsUntilOneGroup({
+    entries,
+    groupOf: artistOf,
+    genreOf,
+    previous,
+    random,
+  });
+  const albums = takeTurns({
+    entries: artists.rest,
+    groupOf: albumOf,
+    genreOf,
+    previous: artists.order.at(-1) ?? previous,
+    random,
+  });
+  return [...artists.order, ...albums];
+};
+
+/**
  * Which kind of shuffle reorders the queue when shuffle turns on:
  * - `real`: every order is as likely (Fisher–Yates).
  * - `smart`: the most played songs (by all-time counted [plays], per track id;
  *   a track missing from it has never been played) interleaved with the less
  *   played ones, so neither side bunches up.
+ * - `even`: artists take turns (by each song's primary artist in [songs], per
+ *   track id), then genres, then a lone artist's albums.
  */
 export type Shuffle =
   | { readonly kind: "real" }
-  | { readonly kind: "smart"; readonly plays: ReadonlyMap<string, number> };
+  | { readonly kind: "smart"; readonly plays: ReadonlyMap<string, number> }
+  | { readonly kind: "even"; readonly songs: ReadonlyMap<string, ShuffleSong> };
 
 export const REAL_SHUFFLE: Shuffle = { kind: "real" };
 
@@ -270,13 +522,14 @@ const playing = (trackIds: readonly string[], passOver: PassOver): readonly stri
 /** The kind of shuffle the owner chose on the shuffle card. */
 export type ShuffleKind = Shuffle["kind"];
 
-/** The saved shuffle kind (what `ShuffleKind` stores as); Real Shuffle unless Smart was chosen. */
+/** The saved shuffle kind (what `ShuffleKind` stores as); Real Shuffle unless another was chosen. */
 export const readShuffleKind = (stored: string | null): ShuffleKind =>
-  stored === "smart" ? "smart" : "real";
+  stored === "smart" || stored === "even" ? stored : "real";
 
 /**
  * Whether [command] shuffles [state]'s queue, and so uses the kind of shuffle
- * `reduceQueue` is given: the app reads play counts for Smart Shuffle only then.
+ * `reduceQueue` is given: the app reads play counts for Smart Shuffle, and
+ * artists, genres and albums for Even Shuffle, only then.
  */
 export const shufflesQueue = (state: QueueState, command: QueueCommand): boolean => {
   switch (command.type) {
@@ -294,8 +547,8 @@ export const shufflesQueue = (state: QueueState, command: QueueCommand): boolean
 /**
  * The songs [command] orders when it shuffles [state]'s queue, by track id,
  * each once: a play's songs, or the queue's, streamed ones included. Smart
- * Shuffle needs their plays and no others; a command that doesn't shuffle
- * needs none.
+ * Shuffle needs their plays and Even Shuffle their `ShuffleSong`s, and no
+ * others; a command that doesn't shuffle needs none.
  */
 export const shuffledTrackIds = (state: QueueState, command: QueueCommand): string[] => {
   if (!shufflesQueue(state, command)) return [];
@@ -306,15 +559,22 @@ export const shuffledTrackIds = (state: QueueState, command: QueueCommand): stri
   ];
 };
 
-/** [entries] in the order [shuffle] gives them. */
+/** [entries] in the order [shuffle] gives them, after [previous] (the song before them, if any). */
 const shuffleEntries = (
   entries: readonly QueueEntry[],
   random: () => number,
   shuffle: Shuffle,
-): QueueEntry[] =>
-  shuffle.kind === "smart"
-    ? smartShuffled(entries, random, shuffle.plays)
-    : shuffled(entries, random);
+  previous: QueueEntry | null = null,
+): QueueEntry[] => {
+  switch (shuffle.kind) {
+    case "smart":
+      return smartShuffled(entries, random, shuffle.plays);
+    case "even":
+      return evenShuffled(entries, random, shuffle.songs, previous);
+    case "real":
+      return shuffled(entries, random);
+  }
+};
 
 /** Queued entries after the current one; they stay next whenever the order changes. */
 const upcomingQueued = (state: QueueState): QueueEntry[] =>
@@ -329,9 +589,11 @@ const shuffleOn = (state: QueueState, random: () => number, shuffle: Shuffle): Q
   const current = currentEntry(state);
   if (current === null) return { ...state, shuffle: true };
   const others = state.entries.filter((entry) => entry !== current && !isQueued(entry));
+  const queued = upcomingQueued(state);
+  const previous = queued.at(-1) ?? current;
   return {
     ...state,
-    entries: [current, ...upcomingQueued(state), ...shuffleEntries(others, random, shuffle)],
+    entries: [current, ...queued, ...shuffleEntries(others, random, shuffle, previous)],
     index: 0,
     shuffle: true,
   };

@@ -14,7 +14,7 @@ import {
   recommendationEntriesPage,
   recommendationFeedbackPage,
 } from "./db/recommendationPages";
-import type { YtSong } from "@wave/core";
+import type { ShuffleSong, YtSong } from "@wave/core";
 import { makeExternalStore, type ExternalStore } from "@/lib/externalStore";
 import { publishSavedRecordings } from "./libraryChanges";
 import { backfillRecordingTitles, selectMatchingSong } from "./db/matchingSong";
@@ -164,6 +164,7 @@ import {
   type RecordedPlay,
 } from "./db/playHistory";
 import { listeningSums, selectCountedPlays, songCountedPlays } from "./db/playTotals";
+import { shuffleSongs } from "./db/shuffleSongs";
 import {
   listeningHistory,
   type ListeningHistoryCursor,
@@ -801,6 +802,13 @@ export class LibraryStore extends Context.Service<
     readonly songCountedPlays: (
       trackIds: readonly string[],
     ) => Effect.Effect<ReadonlyMap<string, number>, LibraryStoreError>;
+    /**
+     * Each of the Library songs among [trackIds]' primary artist, genre and
+     * album, by track id (those the Library has): what Even Shuffle orders by.
+     */
+    readonly shuffleSongs: (
+      trackIds: readonly string[],
+    ) => Effect.Effect<ReadonlyMap<string, ShuffleSong>, LibraryStoreError>;
     readonly loadPlayback: Effect.Effect<SavedPlayback | null, LibraryStoreError>;
     /** Saves the queue with where its current entry is. */
     readonly saveQueue: (
@@ -1726,6 +1734,8 @@ const make = Effect.gen(function* () {
       attempt("read the songs' counted plays", () => selectCountedPlays(db, ids)),
     songCountedPlays: (trackIds) =>
       attempt("read the songs' counted plays", () => songCountedPlays(db, trackIds)),
+    shuffleSongs: (trackIds) =>
+      attempt("read the songs' artists, genres and albums", () => shuffleSongs(db, trackIds)),
 
     loadPlayback: attempt(
       "read the saved queue",

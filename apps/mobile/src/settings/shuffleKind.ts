@@ -4,7 +4,7 @@ import { persistedSetting } from "@/lib/persistedSetting";
 
 /**
  * The kind of shuffle chosen on the card opened by any shuffle button:
- * Real Shuffle unless Smart Shuffle was chosen.
+ * Real Shuffle unless Smart Shuffle or Even Shuffle was chosen.
  * Every shuffle uses it, the Shuffle buttons and Android Auto's included.
  */
 const shuffleKindSetting = persistedSetting<ShuffleKind>({
