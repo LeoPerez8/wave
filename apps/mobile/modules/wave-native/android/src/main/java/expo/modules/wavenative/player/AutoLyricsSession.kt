@@ -55,9 +55,13 @@ class PreferencesLyricsToggleStore(context: Context) : LyricsToggleStore {
  */
 fun MediaMetadata.withLyrics(text: LyricsText?): MediaMetadata {
   text ?: return this
-  val builder = buildUpon().setTitle(text.title)
-  text.artist?.let { builder.setArtist(it) }
-  return builder.build()
+  val lyricArtist = text.artist ?: artist
+  return buildUpon()
+    .setTitle(text.title)
+    .setDisplayTitle(text.title)
+    .setArtist(lyricArtist)
+    .setSubtitle(lyricArtist)
+    .build()
 }
 
 /**

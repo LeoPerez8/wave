@@ -21,7 +21,13 @@ class AutoLyricsTest {
   private val last = LyricsText(title = "Quando fecho os olhos", artist = null)
 
   /** The now-playing item's own metadata. */
-  private val real = MediaMetadata.Builder().setTitle("Title").setArtist("Artist").setAlbumTitle("Album").build()
+  private val real = MediaMetadata.Builder()
+    .setTitle("Title")
+    .setDisplayTitle("Display title")
+    .setArtist("Artist")
+    .setSubtitle("Subtitle")
+    .setAlbumTitle("Album")
+    .build()
 
   private fun showing(): AutoLyricsState =
     AutoLyricsState().apply {
@@ -123,7 +129,9 @@ class AutoLyricsTest {
     val shown = real.withLyrics(state.textFor("entry-1"))
 
     assertEquals("Mais real ainda", shown.title.toString())
+    assertEquals("Mais real ainda", shown.displayTitle.toString())
     assertEquals("Quando fecho os olhos", shown.artist.toString())
+    assertEquals("Quando fecho os olhos", shown.subtitle.toString())
     assertEquals("Album", shown.albumTitle.toString())
   }
 
@@ -132,7 +140,9 @@ class AutoLyricsTest {
     val shown = real.withLyrics(last)
 
     assertEquals("Quando fecho os olhos", shown.title.toString())
+    assertEquals("Quando fecho os olhos", shown.displayTitle.toString())
     assertEquals("Artist", shown.artist.toString())
+    assertEquals("Artist", shown.subtitle.toString())
   }
 
   @Test
@@ -144,6 +154,8 @@ class AutoLyricsTest {
 
     val shown = real.withLyrics(state.textFor("entry-1"))
     assertEquals("Title", shown.title.toString())
+    assertEquals("Display title", shown.displayTitle.toString())
     assertEquals("Artist", shown.artist.toString())
+    assertEquals("Subtitle", shown.subtitle.toString())
   }
 }
