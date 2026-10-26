@@ -1,6 +1,6 @@
 import { LegendList } from "@legendapp/list/react-native";
 import { listeningHistoryDays } from "@wave/core";
-import { memo, useMemo } from "react";
+import { memo, useMemo, useSyncExternalStore } from "react";
 import { ActivityIndicator, Text, View } from "react-native";
 
 import { grid, CELL } from "@/catalog/grid";
@@ -13,7 +13,10 @@ import { useListeningHistory } from "@/library/useListeningHistory";
 import { fileUri } from "@/lib/fileUri";
 import { useScreenContent } from "@/lib/screenTiming";
 import { openTrackActions } from "@/playback/ActionsMenu";
-import { playSongs } from "@/playback/actions";
+import { unavailableStreamedVideos } from "@/playback/PlayHistory";
+import { useYtMusicEnabled } from "@/settings/ytMusic";
+import { openYtSongActions } from "@/ytmusic/YtSongActions";
+import { playYtSongs, playSongs } from "@/playback/actions";
 import { SettingsEditorScreen } from "@/settings/SettingsPage";
 
 type Row =
@@ -21,7 +24,21 @@ type Row =
   | { readonly kind: "play"; readonly key: string; readonly play: ListeningHistoryRow };
 
 const HistorySong = memo(function HistorySong({ play }: { play: ListeningHistoryRow }) {
-  const { snapshot, song } = play;
+  const { snapshot, song, streamedSong } = play;
+  const ytMusic = useYtMusicEnabled();
+  const unavailable = useSyncExternalStore(
+    unavailableStreamedVideos.subscribe,
+    unavailableStreamedVideos.get,
+  );
+  const streamPlayable = streamedSong !== null && ytMusic && !unavailable.has(streamedSong.videoId);
+  const artworkUri =
+    play.videoId === null
+      ? fileUri(snapshot.thumbPath ?? snapshot.artworkPath)
+      : song !== null
+        ? fileUri(song.thumbPath ?? song.artworkPath)
+        : streamPlayable
+          ? (snapshot.artworkUrl ?? undefined)
+          : undefined;
   const time = new Date(play.startedAt).toLocaleTimeString(undefined, {
     hour: "numeric",
     minute: "2-digit",
@@ -32,21 +49,28 @@ const HistorySong = memo(function HistorySong({ play }: { play: ListeningHistory
         ...(song === null ? { id: `history:${play.id}`, durationMs: null } : toTrackSummary(song)),
         title: snapshot.title,
         artist: snapshot.artist,
-        artworkUri: fileUri(snapshot.thumbPath ?? snapshot.artworkPath),
+        artworkUri,
       }}
       leading="artwork"
       trailingLabel={time}
-      unavailable={song === null}
-      disabled={song === null}
+      unavailable={song === null && !streamPlayable}
+      disabled={song === null && streamedSong === null}
       onPress={() => {
         if (song !== null) void playSongs([song], 0, { kind: "history", id: null });
+        else if (streamPlayable) void playYtSongs([streamedSong], 0, { kind: "history", id: null });
       }}
-      onLongPress={song === null ? undefined : () => openTrackActions(song)}
+      onLongPress={
+        song !== null
+          ? () => openTrackActions(song)
+          : streamedSong === null
+            ? undefined
+            : () => openYtSongActions(streamedSong)
+      }
     />
   );
 });
 
-/** Counted Library plays, including saved rows for songs that have since left. */
+/** Counted plays, including streamed songs and saved rows for songs that have since left. */
 export default function ListeningHistoryScreen() {
   const { rows: plays, loading, error, loadMore, refresh } = useListeningHistory();
   useScreenContent(!loading || plays.length > 0);

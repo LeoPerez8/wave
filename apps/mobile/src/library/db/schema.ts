@@ -1,5 +1,5 @@
 import { sql, type SQL } from "drizzle-orm";
-import type { PlaySnapshot, PlaylistRecommendationTrack } from "@wave/core";
+import type { PlaySnapshot, PlaylistRecommendationTrack, YtAlbumSong } from "@wave/core";
 import {
   type AnySQLiteColumn,
   check,
@@ -589,14 +589,18 @@ export const syncState = sqliteTable("sync_state", {
 /**
  * One row per time a track started playing (Core's `PlayEvent`). Append-only:
  * a row is written when the play starts and updated until it ends, never
- * aggregated away. `track_id` has no foreign key on purpose, so history
+ * aggregated away. A play identifies either a Library track or a video.
+ * `track_id` has no foreign key on purpose, so history
  * outlives a deleted file (track ids are never reused: AUTOINCREMENT).
  */
 export const playEvents = sqliteTable(
   "play_events",
   {
     id: integer("id").primaryKey({ autoIncrement: true }),
-    trackId: integer("track_id").notNull(),
+    trackId: integer("track_id"),
+    videoId: text("video_id"),
+    /** Queue metadata captured at start, for streamed history playback and menus. */
+    streamedSong: text("streamed_song", { mode: "json" }).$type<YtAlbumSong>(),
     startedAt: integer("started_at").notNull(),
     /** Display metadata captured at playback start; never changed by a progress update. */
     snapshot: text("snapshot", { mode: "json" }).$type<PlaySnapshot>(),
@@ -649,6 +653,8 @@ export const playEvents = sqliteTable(
     ...pushedFlag(),
   },
   (t) => [
+    check("play_events_identity", sql`(${t.trackId} IS NOT NULL) != (${t.videoId} IS NOT NULL)`),
+    index("play_events_video_idx").on(t.videoId),
     index("play_events_track_idx").on(t.trackId),
     index("play_events_started_at_idx").on(t.startedAt),
     index("play_events_history_idx")
@@ -656,7 +662,7 @@ export const playEvents = sqliteTable(
       .where(sql`${t.counted} = 1 AND ${t.importedFrom} IS NULL`),
     index("play_events_pushed_idx").on(t.pushed),
     // When each playlist was last played (the Playlists list's Recently Played).
-    index("play_events_context_idx").on(t.contextType, t.contextId, t.startedAt),
+    index("play_events_context_idx").on(t.contextType, t.contextId, t.startedAt, t.trackId),
   ],
 );
 

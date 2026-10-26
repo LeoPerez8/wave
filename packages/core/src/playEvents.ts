@@ -7,7 +7,6 @@
 
 import { RESTART_THRESHOLD_MS, type QueueCommand, type QueueState } from "./queue.ts";
 import { RECAP_PLAY_CONTEXT } from "./recapMusic.ts";
-import { parseTrackId } from "./ytMusic.ts";
 
 /**
  * Listening longer than this counts a play; a song this long or shorter
@@ -143,8 +142,6 @@ const isReplay = (fromMs: number, toMs: number): boolean =>
 /** The play going on now. */
 interface OpenPlay extends PlayTrack {
   readonly key: string;
-  /** Whether it goes on record: a streamed song's play is only told to listeners as it ends. */
-  readonly onRecord: boolean;
   readonly startedAt: number;
   readonly durationMs: number | null;
   /** Listened before `playingSince`. */
@@ -171,15 +168,9 @@ export interface PlayEnd {
   readonly byNext: boolean;
 }
 
-/**
- * A play starting (to be recorded at once), ending (to be recorded as
- * final), or a streamed song's play ending (`heard`: never on record, as play
- * history and stats are about the Library, but its listeners learn from it).
- */
+/** A play starting (recorded at once) or ending (recorded as final). */
 export type PlayStep =
-  | { readonly type: "started"; readonly play: PlayEvent }
-  | ({ readonly type: "ended" } & PlayEnd)
-  | ({ readonly type: "heard" } & PlayEnd);
+  { readonly type: "started"; readonly play: PlayEvent } | ({ readonly type: "ended" } & PlayEnd);
 
 export interface PlayTrackerResult {
   readonly state: PlayTrackerState;
@@ -203,22 +194,15 @@ const toEvent = (play: OpenPlay, at: number, endReason: PlayEndReason): PlayEven
   };
 };
 
-/** [play]'s end at [at]: on record, or only heard for a streamed song. */
+/** [play]'s end at [at], for storage and listeners. */
 const endOf = (play: OpenPlay, at: number, reason: PlayEndReason, byNext: boolean): PlayStep => ({
-  type: play.onRecord ? "ended" : "heard",
+  type: "ended",
   play: toEvent(play, at, reason),
   byNext,
 });
 
-const open = (
-  key: string,
-  track: PlayTrack,
-  at: number,
-  durationMs: number | null,
-  onRecord: boolean,
-): OpenPlay => ({
+const open = (key: string, track: PlayTrack, at: number, durationMs: number | null): OpenPlay => ({
   key,
-  onRecord,
   trackId: track.trackId,
   context: track.context,
   source: track.source,
@@ -238,14 +222,14 @@ const cutShort = (play: OpenPlay): PlayEndReason =>
 /**
  * The play going on now as it should be on record at `at`, in case it never
  * gets to end (Wave's process dies): interrupted while playing, stopped while
- * paused. Null when nothing is playing, or only a streamed song (never on record).
+ * paused. Null when nothing is playing.
  */
 export const playSoFar = (state: PlayTrackerState, at: number): PlayEvent | null =>
-  state.play?.onRecord === true ? toEvent(state.play, at, cutShort(state.play)) : null;
+  state.play === null ? null : toEvent(state.play, at, cutShort(state.play));
 
 /** The play of the song fading out during a crossfade as it should be on record at `at` (see `playSoFar`). */
 export const fadingPlaySoFar = (state: PlayTrackerState, at: number): PlayEvent | null =>
-  state.fading?.onRecord === true ? toEvent(state.fading, at, cutShort(state.fading)) : null;
+  state.fading === null ? null : toEvent(state.fading, at, cutShort(state.fading));
 
 /**
  * Whether a play's end is still to come with the queue on [currentKey]: the
@@ -294,7 +278,6 @@ export const resumePlay = (
   return {
     play: {
       key,
-      onRecord: true,
       trackId: track.trackId,
       context: track.context,
       // The play on record keeps where it was started from.
@@ -369,14 +352,10 @@ const trackCurrentPlay = (
       if (!signal.playing || signal.key === null || signal.track === null) return unchanged;
       // A Recap's music is never followed: watching a Recap mustn't add to what it reports.
       if (signal.track.context?.kind === RECAP_PLAY_CONTEXT.kind) return unchanged;
-      // Play history and stats are about the Library: streamed songs are never on record.
-      const onRecord = parseTrackId(signal.track.trackId)?.kind !== "yt";
-      const started = open(signal.key, signal.track, signal.at, signal.durationMs, onRecord);
+      const started = open(signal.key, signal.track, signal.at, signal.durationMs);
       return {
         state: { play: started, fading: null },
-        steps: onRecord
-          ? [{ type: "started", play: toEvent(started, signal.at, cutShort(started)) }]
-          : [],
+        steps: [{ type: "started", play: toEvent(started, signal.at, cutShort(started)) }],
       };
     }
   }

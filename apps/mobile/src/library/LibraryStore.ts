@@ -976,6 +976,7 @@ export class LibraryStore extends Context.Service<
     readonly recordPlay: (
       play: PlayEvent,
       overlapping?: boolean,
+      streamedSong?: YtAlbumSong,
     ) => Effect.Effect<number, LibraryStoreError>;
     /** Brings a recorded play up to date: listened time, how it ended (so far), counted. */
     readonly updatePlay: (id: number, play: PlayEvent) => Effect.Effect<void, LibraryStoreError>;
@@ -1846,8 +1847,8 @@ const make = Effect.gen(function* () {
         fixReplacementDuplicate(db, splits, fix, Date.now()),
       ),
 
-    recordPlay: (play, overlapping) =>
-      historyWrite("record the play", () => recordPlay(db, play, overlapping)),
+    recordPlay: (play, overlapping, streamedSong) =>
+      historyWrite("record the play", () => recordPlay(db, play, overlapping, streamedSong)),
 
     updatePlay: (id, play) => historyWrite("update the play", () => updatePlay(db, id, play)),
     endPlay: (id, play) => historyWrite("end the play", () => endPlay(db, id, play)),

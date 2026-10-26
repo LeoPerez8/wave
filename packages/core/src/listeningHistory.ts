@@ -5,6 +5,8 @@ export interface PlaySnapshot {
   readonly album: string | null;
   readonly artworkPath: string | null;
   readonly thumbPath: string | null;
+  /** Original remote cover for a streamed play; local paths remain null. */
+  readonly artworkUrl?: string | null;
 }
 
 /** A local calendar day of listening, with the newest plays first. */

@@ -3,7 +3,14 @@
  * database. Kept free of Expo so the store tests run them against a real
  * SQLite in plain Node (`testDatabase.ts`); `LibraryStore` calls them.
  */
-import { recentlyPlayedAlbums, type PlayEvent } from "@wave/core";
+import {
+  recentlyPlayedAlbums,
+  parseTrackId,
+  recordingKey,
+  ytSongArtist,
+  type YtAlbumSong,
+  type PlayEvent,
+} from "@wave/core";
 import { and, desc, eq, gt, inArray, isNotNull, isNull, max } from "drizzle-orm";
 
 import type { AlbumRow, SongRow } from "../LibraryStore.ts";
@@ -55,27 +62,60 @@ const progress = (play: PlayEvent) => ({
  * it's [overlapping], still fading out in a crossfade and ended on its own);
  * returns its row id, to update it as it goes on.
  */
-export const recordPlay = (db: LibraryDatabase, play: PlayEvent, overlapping = false): number =>
+export const recordPlay = (
+  db: LibraryDatabase,
+  play: PlayEvent,
+  overlapping = false,
+  streamedSong?: YtAlbumSong,
+): number =>
   db.transaction((tx) => {
     const { playEvents } = schema;
     if (!overlapping)
       tx.update(playEvents).set({ ongoing: false }).where(eq(playEvents.ongoing, true)).run();
-    const song = trackQuery(tx)
-      .where(eq(schema.tracks.id, Number(play.trackId)))
-      .get();
+    const ref = parseTrackId(play.trackId);
+    const videoId = ref?.kind === "yt" ? ref.videoId : null;
+    if (videoId !== null && streamedSong?.videoId !== videoId)
+      throw new Error("Streamed play needs its queued song");
+    const song =
+      videoId === null
+        ? trackQuery(tx)
+            .where(eq(schema.tracks.id, Number(play.trackId)))
+            .get()
+        : undefined;
     return tx
       .insert(playEvents)
       .values({
-        trackId: Number(play.trackId),
-        recordingKey: playRecordingKey(Number(play.trackId)),
+        trackId: videoId === null ? Number(play.trackId) : null,
+        videoId,
+        streamedSong: videoId === null ? null : streamedSong,
+        recordingKey:
+          videoId === null
+            ? playRecordingKey(Number(play.trackId))
+            : recordingKey({
+                title: streamedSong!.title,
+                album: streamedSong!.album,
+                albumArtist: streamedSong!.artists[0] ?? "",
+                discNumber: null,
+                trackNumber: null,
+              }),
         startedAt: play.startedAt,
-        snapshot: {
-          title: song?.title ?? "Unknown song",
-          artist: song?.artist ?? "",
-          album: song?.album ?? null,
-          artworkPath: song?.artworkPath ?? null,
-          thumbPath: song?.thumbPath ?? null,
-        },
+        snapshot:
+          videoId !== null
+            ? {
+                title: streamedSong!.title,
+                artist: ytSongArtist(streamedSong!),
+                album: streamedSong!.album,
+                artworkPath: null,
+                thumbPath: null,
+                artworkUrl: streamedSong!.artworkUrl,
+              }
+            : {
+                title: song?.title ?? "Unknown song",
+                artist: song?.artist ?? "",
+                album: song?.album ?? null,
+                artworkPath: song?.artworkPath ?? null,
+                thumbPath: song?.thumbPath ?? null,
+              },
         contextType: play.context?.kind ?? null,
         contextId: play.context?.id ?? null,
         source: play.source,
@@ -122,7 +162,7 @@ export const latestPlay = (db: LibraryDatabase): RecordedPlay | null => {
   return {
     id: row.id,
     play: {
-      trackId: String(row.trackId),
+      trackId: row.videoId === null ? String(row.trackId) : `yt:${row.videoId}`,
       context:
         row.contextType === null ? null : { kind: row.contextType, id: row.contextId ?? null },
       startedAt: row.startedAt,
@@ -251,7 +291,7 @@ export const playedRecordingKeys = (db: LibraryDatabase): string[] =>
   db
     .selectDistinct({ key: schema.playEvents.recordingKey })
     .from(schema.playEvents)
-    .where(isNotNull(schema.playEvents.recordingKey))
+    .where(and(isNotNull(schema.playEvents.recordingKey), isNotNull(schema.playEvents.trackId)))
     .all()
     .flatMap((row) => (row.key === null ? [] : [row.key]));
 

@@ -48,8 +48,8 @@ const playEndListeners = new Set<(end: PlayEnd) => void>();
 
 /**
  * Calls [listener] with every play as it ends (how long it was listened
- * to, how it ended, whether by Next), a streamed song's too though it's
- * never on record: the Magic Queue learns skips and songs played through
+ * to, how it ended, whether by Next), including streamed songs:
+ * the Magic Queue learns skips and songs played through
  * from them. Returns how to stop.
  */
 export const onPlayEnded = (listener: (end: PlayEnd) => void): (() => void) => {
@@ -67,6 +67,9 @@ export const playTracker = makeExternalStore<PlayTrackerState>(EMPTY_PLAY_TRACKE
 
 /** How often a play still going on is brought up to date, should Wave's process die. */
 const SAVE_INTERVAL_MS = 15_000;
+
+/** Videos YouTube refused in this session; an offline or temporary failure never marks one. */
+export const unavailableStreamedVideos = makeExternalStore<ReadonlySet<string>>(new Set());
 
 type StateSignal = Extract<PlaybackSignal, { type: "state" }>;
 
@@ -120,7 +123,7 @@ export const layer = Layer.effectDiscard(
 
     /**
      * Notes a YT Music song as streamed once its entry starts playing. Streamed
-     * plays aren't play history (`trackPlays`); Home's mixes read them, so a
+     * plays also keep the existing known-song counter; Home's mixes read it, so a
      * song the owner streamed is never new to them.
      */
     const noteStreamed = (key: string | null, playing: boolean, at: number): void => {
@@ -147,15 +150,12 @@ export const layer = Layer.effectDiscard(
       const result = trackPlays(tracker, signal);
       tracker = result.state;
       for (const step of result.steps) {
-        if (step.type === "heard") {
-          // A streamed song's play: never on record, but its listeners learn from it.
-          for (const listener of playEndListeners) listener(step);
-          continue;
-        }
         // The play's row, if it has one: a play the store couldn't record changed no history.
         let rowId: number | null | undefined;
         if (step.type === "started") {
-          rowId = write(store.recordPlay(step.play, tracker.fading !== null));
+          const queued = queueTracks.get().get(step.play.trackId);
+          const song = queued === undefined ? undefined : (queuedYtSong(queued) ?? undefined);
+          rowId = write(store.recordPlay(step.play, tracker.fading !== null, song));
           if (rowId !== null) rowIds.set(identity(step.play), rowId);
           lastSave = Date.now();
         } else {
@@ -191,6 +191,15 @@ export const layer = Layer.effectDiscard(
     const onPlaybackState = (): void => {
       const state = playbackState.get();
       const key = state.item?.id ?? null;
+      if (state.isPlaying && key !== null) {
+        const ref = parseTrackId(trackFor(key)?.trackId ?? "");
+        if (ref?.kind === "yt" && unavailableStreamedVideos.get().has(ref.videoId))
+          unavailableStreamedVideos.update((videos) => {
+            const next = new Set(videos);
+            next.delete(ref.videoId);
+            return next;
+          });
+      }
       // The track only matters when a play may open: none is, or the entry changed.
       const noTrackNeeded = key === null || tracker.play?.key === key;
       const signal: StateSignal = {
@@ -210,6 +219,13 @@ export const layer = Layer.effectDiscard(
       if (pausedOrResumed || (state.isPlaying && Date.now() - lastSave >= SAVE_INTERVAL_MS))
         saveProgress();
     };
+
+    yield* player.onPlayerError((event) => {
+      if (event.code !== "ytUnavailable" || event.itemId === null) return;
+      const ref = parseTrackId(trackFor(event.itemId)?.trackId ?? "");
+      if (ref?.kind === "yt" && !unavailableStreamedVideos.get().has(ref.videoId))
+        unavailableStreamedVideos.update((videos) => new Set([...videos, ref.videoId]));
+    });
 
     yield* player.onItemTransition((event) =>
       feed({

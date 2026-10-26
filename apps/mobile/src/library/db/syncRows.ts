@@ -344,6 +344,7 @@ export const selectUnpushed = (
     .where(
       and(
         eq(playEvents.pushed, false),
+        isNotNull(playEvents.trackId),
         eq(playEvents.ongoing, false),
         isNotNull(playEvents.syncId),
         isNotNull(playEvents.recordingKey),

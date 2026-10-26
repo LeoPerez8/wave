@@ -5,7 +5,7 @@
  * Kept free of Expo so the store tests run them against a real SQLite.
  */
 import type { BlackPlayerPlay, BlackPlayerTrack, ImportedPlays } from "@wave/core";
-import { eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
 
 import type { LibraryDatabase } from "./database.ts";
 import * as schema from "./schema.ts";
@@ -38,12 +38,12 @@ export const importedPlays = (db: LibraryDatabase): ImportedPlays<number>[] => {
   const { playEvents } = schema;
   return db
     .select({
-      trackId: playEvents.trackId,
+      trackId: sql<number>`${playEvents.trackId}`,
       plays: sql<number>`count(*)`,
       latestAt: sql<number>`max(${playEvents.startedAt})`,
     })
     .from(playEvents)
-    .where(eq(playEvents.importedFrom, "blackplayer"))
+    .where(and(eq(playEvents.importedFrom, "blackplayer"), isNotNull(playEvents.trackId)))
     .groupBy(playEvents.trackId)
     .all();
 };
