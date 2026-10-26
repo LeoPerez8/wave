@@ -17,13 +17,7 @@ import {
 } from "./testDatabase.ts";
 import { playedRecordingKeys } from "./playHistory.ts";
 import { listeningSums, playTotalsDrift, rebuildPlayTotals } from "./playTotals.ts";
-import {
-  countedListening,
-  countedListeningPage,
-  songListening,
-  trackPlayTotals,
-  creditedPlayTotals,
-} from "./stats.ts";
+import { songListening, trackPlayTotals, creditedPlayTotals } from "./stats.ts";
 import { mixHistoryPage } from "./mixInputs.ts";
 import { selectUnpushed } from "./syncRows.ts";
 import { markPushed } from "./syncRows.ts";
@@ -222,12 +216,11 @@ test("streamed starts, progress and ends leave the Library-only consumers unchan
   const id = recordPlay(db, play(track, 1000));
   endPlay(db, id, { ...play(track, 1000), endReason: "completed" });
   const existing = () => ({
-    // Most Played, the listening totals and playlist recency count streamed plays (streamedCounts.test.ts).
+    // Most Played, the listening totals and playlist recency count streamed plays
+    // (streamedCounts.test.ts), and so do Recaps (recapPlays.test.ts).
     listening: songListening(db),
     songs: trackPlayTotals(db, { from: null, to: 100_000 }),
     artists: creditedPlayTotals(db, { from: 0, to: 100_000 }),
-    recap: countedListening(db),
-    recapPage: countedListeningPage(db, 0),
     mixes: mixHistoryPage(db, 0),
     keys: playedRecordingKeys(db),
     taste: tasteHistory(db),

@@ -1,8 +1,10 @@
 import {
   playedEntityTotals,
   playedArtistSongs,
+  recapPlays,
   type PlayedEntityTotals,
   type PlayedArtistSongs,
+  type RecapPlays,
 } from "./db/playedEntities";
 import {
   type RecommendationEntryCursor,
@@ -1040,6 +1042,12 @@ export class LibraryStore extends Context.Service<
       artistId: number,
       now: number,
     ) => Effect.Effect<PlayedArtistSongs, LibraryStoreError>;
+    /**
+     * What a Recap of [window] is computed from (Core's `recap`): its songs',
+     * albums' and artists' counted plays, streamed plays included and credited
+     * as Stats credits them, the songs' genres and the artists' first plays.
+     */
+    readonly recapPlays: (window: StatsWindow) => Effect.Effect<RecapPlays, LibraryStoreError>;
     readonly creditedPlayTotals: (
       window: StatsWindow,
     ) => Effect.Effect<readonly CreditedPlayTotals[], LibraryStoreError>;
@@ -1923,6 +1931,7 @@ const make = Effect.gen(function* () {
       attempt("sum up played albums and artists", () => playedEntityTotals(db, window)),
     playedArtistSongs: (artistId, now) =>
       attempt("read the artist listening", () => playedArtistSongs(db, artistId, now)),
+    recapPlays: (window) => attempt("sum up a Recap's plays", () => recapPlays(db, window)),
     creditedPlayTotals: (window) =>
       attempt("sum up album and artist plays", () => creditedPlayTotals(db, window)),
 

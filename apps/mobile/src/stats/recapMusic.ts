@@ -37,7 +37,8 @@ export function useRecapMusic(
       recap === undefined || recap === null
         ? null
         : recapSong(recap.slides, index, { playingBefore });
-    return song !== null && songHasFile(song.item) ? song.item : null;
+    // A streamed #1 stays silent: Recap music plays only files.
+    return song?.item.source === "library" && songHasFile(song.item.track) ? song.item.track : null;
   }, [recap, index, playingBefore]);
 
   // Whether the stories are held (or Share is open) as each step runs.
