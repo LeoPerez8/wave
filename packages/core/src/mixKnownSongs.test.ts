@@ -69,6 +69,34 @@ describe("A song the owner knows", () => {
     );
   });
 
+  test("is one the owner streamed since plays are recorded, by its video id and its recording key", () => {
+    const angel = { ...yt("s", "Angel", ["Massive Attack"]), album: "Mezzanine" };
+    const known = mixKnownSongs({
+      ...none,
+      streamedPlays: [
+        {
+          song: angel,
+          recordingKey: recordingKey({
+            title: "Angel",
+            album: "Mezzanine",
+            albumArtist: "Massive Attack",
+            discNumber: null,
+            trackNumber: null,
+          }),
+          plays: 2,
+          firstPlayedAt: 5,
+        },
+      ],
+    });
+    assert.equal(known.known(yt("s", "Angel (Official Audio)", ["Someone"])), true);
+    // Another video of the recording, whose length the Library finder would tell apart.
+    assert.equal(
+      known.known(yt("live", "Angel", ["Massive Attack"], { durationMs: 400_000 })),
+      true,
+    );
+    assert.equal(known.known(yt("t", "Teardrop", ["Massive Attack"])), false);
+  });
+
   test("is in a playlist: a YT Music entry by its video, an unsearched or unavailable one by title and artists", () => {
     const known = mixKnownSongs({
       ...none,
@@ -133,6 +161,26 @@ describe("The non-D songs the owner knows", () => {
     assert.deepEqual(
       known.nonD.map((song) => song.song.videoId),
       ["often", "once", "new", "old"],
+    );
+  });
+
+  test("include the songs streamed since plays are recorded, their plays added to the old counts", () => {
+    const known = mixKnownSongs({
+      ...none,
+      streamed: [{ song: yt("before", "Angel", ["Massive Attack"]), plays: 2, firstPlayedAt: 10 }],
+      streamedPlays: [
+        { song: yt("before", "Angel", ["Massive Attack"]), recordingKey: null, plays: 2, firstPlayedAt: 40 },
+        { song: yt("since", "Karmacoma", ["Massive Attack"]), recordingKey: null, plays: 3, firstPlayedAt: 30 },
+        { song: yt("once", "Protection", ["Massive Attack"]), recordingKey: null, plays: 1, firstPlayedAt: 50 },
+      ],
+    });
+    assert.deepEqual(
+      known.nonD.map((song) => [song.song.videoId, song.plays]),
+      [
+        ["before", 4],
+        ["since", 3],
+        ["once", 1],
+      ],
     );
   });
 });

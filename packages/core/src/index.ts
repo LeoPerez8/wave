@@ -1755,6 +1755,7 @@ export type {
   MixKnownSongs,
   MixKnownSources,
   MixPlaylistEntry,
+  StreamedPlays,
   StreamedSong,
 } from "./mixKnownSongs.ts";
 export { starAskedAfter, starredHere, ytSongStarred } from "./starDownloads.ts";
