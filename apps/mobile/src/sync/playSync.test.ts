@@ -16,6 +16,7 @@ import {
 import { deleteTracksById } from "../library/db/tracks.ts";
 import * as schema from "../library/db/schema.ts";
 import { joinAccount } from "../library/db/syncRows.ts";
+import { saveImportedPlays } from "../library/db/blackPlayer.ts";
 import { syncCycle, type SyncTransport } from "./syncCycle.ts";
 
 const SONG: YtAlbumSong = {
@@ -208,8 +209,13 @@ test("a pulled streamed play attaches to a Library song by recording key or vide
     const rows = listeningHistory(b.db).rows;
     assert.equal(rows.length, 1);
     assert.equal(rows[0]?.song?.id, track, match);
+    assert.equal(rows[0]?.videoId, "history-video");
     assert.equal(rows[0]?.snapshot.title, "Airbag");
     assert.equal((await b.sync()).pushed, 0);
+    deleteTracksById(b.db, [track]);
+    const removed = listeningHistory(b.db).rows[0];
+    assert.equal(removed?.song, null);
+    assert.equal(removed?.streamedSong?.videoId, "history-video");
   }
   service.db.close();
 });
@@ -324,5 +330,24 @@ test("an upgrade pushes migrated snapshots but leaves already stored play ids al
     thumbPath: null,
   });
   assert.equal((await a.sync()).pushed, 0);
+  service.db.close();
+});
+
+test("newly imported plays also send a snapshot and keep their import origin", async () => {
+  const { service, session, transport } = await account();
+  const a = await phone(transport);
+  const track = addTrack(a.db, { title: "Airbag", artist: "Radiohead", album: "OK Computer" });
+  saveImportedPlays(a.db, [{ trackId: track, startedAt: PLAY.startedAt }]);
+  await a.sync();
+  const stored = (await pullAll(service, session)).plays;
+  assert.equal(stored.length, 1);
+  assert.equal(stored[0]?.importedFrom, "blackplayer");
+  assert.deepEqual(stored[0]?.snapshot, {
+    title: "Airbag",
+    artist: "Radiohead",
+    album: "OK Computer",
+    artworkPath: null,
+    thumbPath: null,
+  });
   service.db.close();
 });

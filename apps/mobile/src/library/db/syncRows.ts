@@ -27,7 +27,7 @@ import {
   type SyncSongFields,
   type SyncTables,
 } from "@wave/core";
-import { and, asc, eq, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
+import { and, asc, eq, getTableColumns, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 
 import { chunks } from "./chunks.ts";
 import type { LibraryDatabase } from "./database.ts";
@@ -355,8 +355,15 @@ export const selectUnpushed = (
     });
 
   const plays = db
-    .select()
+    .select({
+      ...getTableColumns(playEvents),
+      currentTitle: tracks.title,
+      currentArtist: tracks.artistCredit,
+      currentAlbum: schema.albums.title,
+    })
     .from(playEvents)
+    .leftJoin(tracks, eq(playEvents.trackId, tracks.id))
+    .leftJoin(schema.albums, eq(tracks.albumId, schema.albums.id))
     .where(
       and(
         eq(playEvents.pushed, false),
@@ -384,7 +391,15 @@ export const selectUnpushed = (
           contextId: row.contextId,
           source: row.source,
           importedFrom: row.importedFrom,
-          snapshot: wireSnapshot(row.snapshot),
+          snapshot: wireSnapshot(
+            row.snapshot ?? {
+              title: row.currentTitle ?? "Unknown song",
+              artist: row.currentArtist ?? "",
+              album: row.currentAlbum,
+              artworkPath: null,
+              thumbPath: null,
+            },
+          ),
           videoId: row.videoId,
         },
       ];
@@ -904,8 +919,10 @@ const applyPlay = (
     unpend(tx, "plays", row.id);
     return false;
   }
-  const trackId = trackIds.get(row.songId);
-  const videoId = trackId === undefined ? (row.videoId ?? null) : null;
+  // Keep a stream's video identity even when its file is here, just as a
+  // locally recorded stream does. History resolves its current Library song.
+  const videoId = row.videoId ?? null;
+  const trackId = videoId === null ? trackIds.get(row.songId) : undefined;
   if (trackId === undefined && videoId === null && row.snapshot == null) {
     pend(tx, "plays", row, { songKey: row.songId });
     return false;
