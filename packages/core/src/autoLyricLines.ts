@@ -54,7 +54,7 @@ const splitAt = (line: string, separator: string): AutoLyricsText | null => {
     if (best === -1 || offCentre(at) < offCentre(best)) best = at;
   }
   if (best === -1) return null;
-  return { title: line.slice(0, best), artist: line.slice(best + separator.length) };
+  return { title: line.slice(0, best).trim(), artist: line.slice(best + separator.length).trim() };
 };
 
 /**
