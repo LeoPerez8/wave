@@ -38,6 +38,7 @@ import type { RowPage } from "@/library/db/database";
 import type { HomeSections } from "@/library/db/playHistory";
 import {
   LibraryStore,
+  type AlbumRow,
   type LibraryStoreError,
   type PlaylistEntryRow,
   songHasFile,
@@ -228,9 +229,16 @@ export const layer = Layer.effect(
           );
         // The app's Home shelf: a handful of albums.
         case "recentlyPlayed":
-          return store
-            .home("files")
-            .pipe(Effect.map((home) => pageOf(home.recentlyPlayed, page).map(autoAlbumItem)));
+          return store.home("files").pipe(
+            Effect.map((home) =>
+              pageOf(
+                home.recentlyPlayed.filter(
+                  (album): album is AlbumRow => typeof album.id === "number",
+                ),
+                page,
+              ).map(autoAlbumItem),
+            ),
+          );
         case "artists":
           return store.listArtistsPage(page).pipe(
             Effect.flatMap(withCovers),

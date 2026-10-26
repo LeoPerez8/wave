@@ -15,8 +15,10 @@
 export type { LibraryTrack, RawTrack } from "./library.ts";
 export { creditSplitter, respreadDeletedSongs, splitCredit } from "./credits.ts";
 export type { PrunedArtist } from "./credits.ts";
-export { streamedCredits } from "./streamedCredits.ts";
+export { pickStreamedAlbum, streamedCredits } from "./streamedCredits.ts";
 export type { PlayedAlbumKey, PlayedArtistKey } from "./streamedCredits.ts";
+export { rankEntityPlays } from "./stats.ts";
+export type { EntityPlayTotals } from "./stats.ts";
 export { formatDuration, formatRemaining } from "./time.ts";
 export { recommendationDeadline, recommendationFrameBudget } from "./recommendationWork.ts";
 export {

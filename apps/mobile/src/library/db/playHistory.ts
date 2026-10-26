@@ -20,8 +20,13 @@ import type { LibraryDatabase } from "./database.ts";
 import * as schema from "./schema.ts";
 import { playRecordingKey, stamped } from "./sync.ts";
 import { selectAlbums } from "./albums.ts";
-import { streamedTrack } from "./stats.ts";
 import { streamedSongsOf } from "./streamedSongs.ts";
+import {
+  recentlyPlayedEntities,
+  streamedListeningTotals,
+  type StreamedListeningTotal,
+  type PlayedAlbum,
+} from "./playedEntities.ts";
 import { BY_TITLE, inScope, songColumns, trackQuery, type TrackScope } from "./tracks.ts";
 
 /**
@@ -39,7 +44,7 @@ export interface HomeSections {
   /** Albums by when their newest song entered the library, newest first. */
   readonly recentlyAdded: readonly AlbumRow[];
   /** Albums of the tracks played, the most recently played first. */
-  readonly recentlyPlayed: readonly AlbumRow[];
+  readonly recentlyPlayed: readonly PlayedAlbum[];
   /** Songs by counted plays (Core's rule), then by their latest counted play, then latest added. */
   readonly mostPlayed: readonly MostPlayedRow[];
   /** Starred songs, the most recently starred first. */
@@ -210,7 +215,11 @@ const recentlyAddedAlbums = (db: LibraryDatabase, scope: TrackScope): AlbumRow[]
  * `recentlyPlayedAlbums`): played songs read by their latest play through
  * `play_totals`, a page at a time, until the page settles the shelf.
  */
-const recentlyPlayedShelf = (db: LibraryDatabase, scope: TrackScope): AlbumRow[] => {
+const recentlyPlayedShelf = (
+  db: LibraryDatabase,
+  scope: TrackScope,
+  streamed: readonly StreamedListeningTotal[],
+): PlayedAlbum[] => {
   const { playTotals, tracks } = schema;
   for (let page = SHELF * PAGE_GROWTH; ; page *= PAGE_GROWTH) {
     const songs = db
@@ -221,7 +230,10 @@ const recentlyPlayedShelf = (db: LibraryDatabase, scope: TrackScope): AlbumRow[]
       .limit(page)
       .all();
     const ids = recentlyPlayedAlbums(songs, SHELF, songs.length < page);
-    if (ids !== null) return albumsInOrder(db, ids, scope);
+    if (ids !== null) {
+      const local = albumsInOrder(db, ids, scope);
+      return scope === "files" ? local : recentlyPlayedEntities(db, local, SHELF, streamed);
+    }
   }
 };
 
@@ -232,7 +244,11 @@ const recentlyPlayedShelf = (db: LibraryDatabase, scope: TrackScope): AlbumRow[]
  * which count for the Library song they are now (`streamedTrack`). With
  * [scope] "files", only songs with a file: no streamed song of its own.
  */
-const mostPlayedSongs = (db: LibraryDatabase, scope: TrackScope): MostPlayedRow[] => {
+const mostPlayedSongs = (
+  db: LibraryDatabase,
+  scope: TrackScope,
+  streams: readonly StreamedListeningTotal[],
+): MostPlayedRow[] => {
   const { playTotals, tracks, artists, albums, artwork } = schema;
   const top = db
     .select({
@@ -253,15 +269,12 @@ const mostPlayedSongs = (db: LibraryDatabase, scope: TrackScope): MostPlayedRow[
     )
     .limit(LIST)
     .all();
-  const streamed = db.all<{
-    videoId: string;
-    trackId: number | null;
-    countedPlays: number;
-    lastCountedAt: number | null;
-  }>(sql`SELECT video_id AS "videoId",
-      ${streamedTrack(sql`streamed_totals.video_id`, sql`nullif(streamed_totals.recording_key, '')`)} AS "trackId",
-      counted_plays AS "countedPlays", last_counted_at AS "lastCountedAt"
-    FROM streamed_totals WHERE counted_plays > 0`);
+  const streamed = streams
+    .filter((entry) => entry.countedPlays > 0)
+    .map((entry) => ({
+      ...entry,
+      lastCountedAt: entry.latestPlayAt,
+    }));
   const listed = new Set(top.map((song) => song.id));
   const counted = [
     ...new Set(streamed.flatMap(({ trackId }) => (trackId === null ? [] : [trackId]))),
@@ -418,10 +431,13 @@ export const homeAdded = (
 ): Pick<HomeSections, "recentlyAdded"> => ({ recentlyAdded: recentlyAddedAlbums(db, scope) });
 
 /** Recently Played and Most Played, read from the play totals (`play_totals`). */
-export const homePlays = (db: LibraryDatabase, scope: TrackScope = "library"): HomePlays => ({
-  recentlyPlayed: recentlyPlayedShelf(db, scope),
-  mostPlayed: mostPlayedSongs(db, scope),
-});
+export const homePlays = (db: LibraryDatabase, scope: TrackScope = "library"): HomePlays => {
+  const streamed = streamedListeningTotals(db);
+  return {
+    recentlyPlayed: recentlyPlayedShelf(db, scope, streamed),
+    mostPlayed: mostPlayedSongs(db, scope, streamed),
+  };
+};
 
 /** Favorites, which stars change. */
 export const homeFavorites = (

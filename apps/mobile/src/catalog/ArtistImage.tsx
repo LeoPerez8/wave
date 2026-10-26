@@ -14,6 +14,8 @@ export interface ArtistImageSource {
   readonly artworkPath: string | null;
   /** An image online (a YouTube Music artist's), shown when there's no file. */
   readonly imageUrl?: string | null | undefined;
+  /** A disabled online entry must show its placeholder even when a photo is cached. */
+  readonly placeholder?: boolean | undefined;
 }
 
 type Props = {
@@ -35,7 +37,11 @@ export function ArtistImage({ artist, size, large = false }: Props) {
   const path = large
     ? (photo?.path ?? artist.artworkPath ?? artist.thumbPath)
     : (photo?.thumbPath ?? artist.thumbPath);
-  const uri = path === null ? (artist.imageUrl ?? null) : `file://${path}`;
+  const uri = artist.placeholder
+    ? null
+    : path === null
+      ? (artist.imageUrl ?? null)
+      : `file://${path}`;
   const circle = { width: size, height: size, borderRadius: size / 2 };
   const captured = useCapturedImage(uri);
   if (uri !== null && captured !== undefined) {

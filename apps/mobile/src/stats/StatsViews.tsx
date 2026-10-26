@@ -1,3 +1,5 @@
+import type { PlayedAlbum, PlayedArtist } from "@/library/db/playedEntities";
+import { PlayedAlbumRow, PlayedArtistRow } from "./PlayedEntityViews";
 import { IconChartBar } from "@tabler/icons-react-native";
 import { LegendList } from "@legendapp/list/react-native";
 import {
@@ -14,19 +16,16 @@ import { useCallback, useMemo, type ReactElement } from "react";
 import { ScrollView, Text, useWindowDimensions, View } from "react-native";
 
 import { CELL, grid } from "@/catalog/grid";
-import { NameRow } from "@/catalog/NameRow";
 import { SwipeTrackRow } from "@/library/SwipeTrackRow";
 import { useChromeInset } from "@/chrome/chrome";
 import { EmptyState } from "@/components/EmptyState";
 import { useFavoriteIds } from "@/library/favorites";
-import type { AlbumRow, ArtistRow } from "@/library/LibraryStore";
-import { openAlbum, openArtist, openRecap } from "@/library/routes";
+import { openRecap } from "@/library/routes";
 import { toTrackSummary } from "@/library/TrackList";
 import { Press } from "@/motion/Press";
 import { playRankedSongs } from "@/playback/actions";
 import { useCurrentPlayingIds } from "@/playback/hooks";
-import { openAlbumActions, openArtistActions, openTrackActions } from "@/playback/ActionsMenu";
-import { ArtworkRow } from "@/search/ArtworkRow";
+import { openTrackActions } from "@/playback/ActionsMenu";
 import { RankedYtSongRow } from "@/ytmusic/YtSongRow";
 
 import type { Ranked, StatsSong } from "./Stats";
@@ -174,35 +173,17 @@ export function RankedSongs({
 }
 
 /** A ranked album: rank, cover, title over the album artist and its counted plays. */
-function renderRankedAlbum({ item: album, countedPlays }: Ranked<AlbumRow>, index: number) {
-  return (
-    <ArtworkRow
-      title={album.title}
-      detail={`${album.albumArtist} · ${playCount(countedPlays)}`}
-      artworkUri={album.thumbPath === null ? undefined : `file://${album.thumbPath}`}
-      rank={{ number: index + 1, top: index === 0 }}
-      onPress={() => openAlbum(album.id, album)}
-      onLongPress={() => openAlbumActions(album)}
-    />
-  );
+function renderRankedAlbum({ item, countedPlays }: Ranked<PlayedAlbum>, index: number) {
+  return <PlayedAlbumRow album={item} detail={playCount(countedPlays)} index={index} />;
 }
 
-/** A ranked artist (credited by track artist): rank, name over its counted plays. */
-function renderRankedArtist({ item: artist, countedPlays }: Ranked<ArtistRow>, index: number) {
-  return (
-    <NameRow
-      name={artist.name}
-      artist={artist}
-      detail={playCount(countedPlays)}
-      rank={{ number: index + 1, top: index === 0 }}
-      onPress={() => openArtist(artist.id, artist)}
-      onLongPress={() => openArtistActions(artist)}
-    />
-  );
+/** A ranked artist, including a streamed artist absent from the Library. */
+function renderRankedArtist({ item, countedPlays }: Ranked<PlayedArtist>, index: number) {
+  return <PlayedArtistRow artist={item} detail={playCount(countedPlays)} index={index} />;
 }
 
 /** An album ranking. Tapping an album opens it; long-press opens the album's menu. */
-export function RankedAlbums({ ranking }: { ranking: readonly Ranked<AlbumRow>[] }) {
+export function RankedAlbums({ ranking }: { ranking: readonly Ranked<PlayedAlbum>[] }) {
   return (
     <View>
       {ranking.map((entry, index) => (
@@ -216,7 +197,7 @@ export function RankedAlbums({ ranking }: { ranking: readonly Ranked<AlbumRow>[]
  * An artist ranking, credited by track artist. Tapping an artist opens it;
  * long-press opens the artist's menu.
  */
-export function RankedArtists({ ranking }: { ranking: readonly Ranked<ArtistRow>[] }) {
+export function RankedArtists({ ranking }: { ranking: readonly Ranked<PlayedArtist>[] }) {
   return (
     <View>
       {ranking.map((entry, index) => (
@@ -227,7 +208,7 @@ export function RankedArtists({ ranking }: { ranking: readonly Ranked<ArtistRow>
 }
 
 /** A See all list of albums or artists, virtualised like `RankedSongList`. */
-function RankedEntityList<A extends { readonly id: number }>({
+function RankedEntityList<A extends { readonly id: number | string }>({
   ranking,
   renderRow,
   header,
@@ -263,7 +244,7 @@ export function RankedAlbumList({
   ranking,
   header,
 }: {
-  ranking: readonly Ranked<AlbumRow>[];
+  ranking: readonly Ranked<PlayedAlbum>[];
   header?: ReactElement;
 }) {
   return <RankedEntityList ranking={ranking} renderRow={renderRankedAlbum} header={header} />;
@@ -274,14 +255,15 @@ export function RankedArtistList({
   ranking,
   header,
 }: {
-  ranking: readonly Ranked<ArtistRow>[];
+  ranking: readonly Ranked<PlayedArtist>[];
   header?: ReactElement;
 }) {
   return <RankedEntityList ranking={ranking} renderRow={renderRankedArtist} header={header} />;
 }
 
 /** A See all list's key: the ranked entity's id. */
-export const rankedKey = (entry: Ranked<{ readonly id: number }>): string => String(entry.item.id);
+export const rankedKey = (entry: Ranked<{ readonly id: number | string }>): string =>
+  String(entry.item.id);
 
 /**
  * See all › Top songs: the Stats screen's rows, virtualised. Tap and

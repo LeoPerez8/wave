@@ -15,7 +15,7 @@ import {
   openTestDatabase,
   traceQueries,
 } from "./testDatabase.ts";
-import { homePlays, playedRecordingKeys } from "./playHistory.ts";
+import { playedRecordingKeys } from "./playHistory.ts";
 import { listeningSums, playTotalsDrift, rebuildPlayTotals } from "./playTotals.ts";
 import {
   countedListening,
@@ -223,7 +223,6 @@ test("streamed starts, progress and ends leave the Library-only consumers unchan
   endPlay(db, id, { ...play(track, 1000), endReason: "completed" });
   const existing = () => ({
     // Most Played, the listening totals and playlist recency count streamed plays (streamedCounts.test.ts).
-    recentlyPlayed: homePlays(db).recentlyPlayed,
     listening: songListening(db),
     songs: trackPlayTotals(db, { from: null, to: 100_000 }),
     artists: creditedPlayTotals(db, { from: 0, to: 100_000 }),
