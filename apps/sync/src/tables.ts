@@ -62,7 +62,7 @@ const STORAGE: { readonly [K in TableName]: TableStorage } = {
   // so the column still holds it JSON-encoded.
   preferences: { limit: "maxPreferences", json: ["value"] },
   // Core's play event, its song known by recording key.
-  plays: { limit: "maxPlays" },
+  plays: { limit: "maxPlays", json: ["snapshot"] },
 };
 
 export const column = (field: string): string =>
