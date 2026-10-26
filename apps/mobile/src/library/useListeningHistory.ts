@@ -58,7 +58,8 @@ export const useListeningHistory = () => {
             const byId = new Map(previous.rows.map((row) => [row.id, row]));
             for (const row of result.rows) byId.set(row.id, row);
             result = {
-              rows: [...byId.values()].toSorted((a, b) => b.startedAt - a.startedAt || b.id - a.id),
+              // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh copy; Hermes lacks toSorted
+              rows: [...byId.values()].sort((a, b) => b.startedAt - a.startedAt || b.id - a.id),
               next: read === "more" ? result.next : previous.next,
             };
           }

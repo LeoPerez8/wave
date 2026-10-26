@@ -43,10 +43,11 @@ const add = (map, owner, value) => {
   map.set(owner, values);
 };
 
+// The compiler asks with forward slashes even when node:path uses Windows separators.
+const canonical = (path) => path.split(sep).join("/");
+
 export const auditSources = (files, options) => {
   const root = resolve(import.meta.dirname, "..");
-  // The compiler asks with forward slashes even when node:path uses Windows separators.
-  const canonical = (path) => path.split(sep).join("/");
   const absolute = new Map(
     Object.entries(files).map(([path, text]) => [canonical(join(root, path)), text]),
   );

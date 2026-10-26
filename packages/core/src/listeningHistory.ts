@@ -25,7 +25,8 @@ export const listeningHistoryDays = <T extends { readonly startedAt: number }>(
 ): readonly ListeningHistoryDay<T>[] => {
   const today = new Date(now);
   const groups = new Map<number, { key: string; title: string; plays: T[] }>();
-  for (const play of plays.toSorted((a, b) => b.startedAt - a.startedAt)) {
+  // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh copy; Hermes lacks toSorted
+  for (const play of [...plays].sort((a, b) => b.startedAt - a.startedAt)) {
     const date = new Date(play.startedAt);
     const day = calendarDay(date);
     let group = groups.get(day);
