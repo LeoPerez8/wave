@@ -9,27 +9,21 @@ sealed interface ArtworkRequest {
 
   /** A playlist's 2×2 mosaic of four covers (Core's `playlistMosaic`), in reading order. */
   data class Mosaic(val hashes: List<String>) : ArtworkRequest
-
-  /** Lyrics drawn over a cover for Android Auto (`LyricArtworks`' image [id]). */
-  data class Lyrics(val id: String) : ArtworkRequest
 }
 
 /**
  * Content URIs for cached artwork, which Android Auto (and the media
  * notification) can read where app file paths can't be:
  * `content://<package>.artwork/<hash>` for a cover and
- * `content://<package>.artwork/mosaic/<h1>/<h2>/<h3>/<h4>` for a mosaic and
- * `content://<package>.artwork/lyrics/<id>` for lyrics drawn over a cover. A
+ * `content://<package>.artwork/mosaic/<h1>/<h2>/<h3>/<h4>` for a mosaic. A
  * hash is [ArtworkStore]'s 40 lowercase hex chars; anything else is rejected,
- * as is a lyrics id that isn't lowercase letters and digits, so the provider
- * never serves a file outside its folders.
+ * so the provider never serves a file outside its folders.
  *
  * Plain strings and files only, so it runs in JVM tests.
  */
 object ArtworkUris {
   private const val SCHEME = "content://"
   private const val MOSAIC = "mosaic"
-  private const val LYRICS = "lyrics"
   const val MOSAIC_TILES = 4
 
   /**
@@ -40,7 +34,6 @@ object ArtworkUris {
   const val PLAYLIST_IMAGES = "playlists"
 
   private val HASH = Regex("^[0-9a-f]{40}$")
-  private val LYRICS_ID = Regex("^[0-9a-z]{1,40}$")
 
   /** The original's extensions, as [ArtworkStore.extensionOf] names them. */
   private val EXTENSIONS = listOf("jpg", "png", "webp", "gif", "bmp", "img")
@@ -68,17 +61,11 @@ object ArtworkUris {
   /** The URI showing cached artwork [files] (Core's `AutoArtwork`); files that aren't cached artwork are skipped. */
   fun forFiles(authority: String, files: List<String>): String? = uri(authority, files.mapNotNull(::hashOf))
 
-  /** The URI of lyrics image [id] (`LyricArtworks`). */
-  fun lyrics(authority: String, id: String): String = "$SCHEME$authority/$LYRICS/$id"
-
   /** What [uri] asks for, or null when it isn't a well-formed artwork URI of [authority]. */
   fun parse(authority: String, uri: String): ArtworkRequest? {
     val prefix = "$SCHEME$authority/"
     if (!uri.startsWith(prefix)) return null
     val segments = uri.substring(prefix.length).split('/')
-    if (segments.size == 2 && segments[0] == LYRICS && LYRICS_ID.matches(segments[1])) {
-      return ArtworkRequest.Lyrics(segments[1])
-    }
     if (!segments.all(::isSegment)) return null
     return when {
       segments.size == 1 && isHash(segments[0]) -> ArtworkRequest.Cover(segments[0])

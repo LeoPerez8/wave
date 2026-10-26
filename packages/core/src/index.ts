@@ -201,8 +201,8 @@ export { resolveRowSwipe, rowSwipeArmed } from "./rowGestures.ts";
 export type { RowSwipeSide, RowSwipeSides } from "./rowGestures.ts";
 export { currentLyricIndex, parseLyrics, pickLyrics } from "./lyrics.ts";
 export type { LyricLine, Lyrics, LyricsSources } from "./lyrics.ts";
-export { autoLyricLines } from "./autoLyricLines.ts";
-export type { AutoLyricLines, AutoLyricLinesInput, AutoLyricsFrame } from "./autoLyricLines.ts";
+export { AUTO_LYRIC_LINE_MAX, autoLyricLines } from "./autoLyricLines.ts";
+export type { AutoLyricLines, AutoLyricLinesInput, AutoLyricsText } from "./autoLyricLines.ts";
 export {
   CUSTOM_SLEEP_MINUTES,
   SLEEP_TIMER_PRESETS,

@@ -37,7 +37,6 @@ import com.google.common.collect.ImmutableList
 import com.google.common.util.concurrent.FutureCallback
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
-import expo.modules.wavenative.artwork.ArtworkProvider
 import expo.modules.wavenative.launcher.LauncherIconSwitcher
 import expo.modules.wavenative.log.WaveLog
 import expo.modules.wavenative.yt.YtAudioCache
@@ -68,9 +67,8 @@ import expo.modules.wavenative.yt.YtStreamFailure
  * died, Auto and the system media controls can resume the last queue before
  * JS is up ([SessionCallback.onPlaybackResumption]).
  *
- * While Auto is connected and its Lyrics toggle is on, the session's artwork
- * shows the lyrics JS sends, drawn over the cover ([AutoLyrics],
- * [LyricArtworkPlayer]).
+ * While Auto is connected and its Lyrics toggle is on, the session's title and
+ * artist show the lyrics JS sends ([AutoLyrics], [LyricsTextPlayer]).
  *
  * With Crossfade on, the next song opens on a second player ahead of the
  * overlap; at the handoff that player becomes the session's, and the one it
@@ -228,13 +226,11 @@ class PlaybackService : MediaLibraryService() {
   /** Whether [item] is a streamed YT Music song. */
   private fun streams(item: MediaItem?) = YtMedia.videoIdOf(item?.localConfiguration?.uri?.toString() ?: "") != null
 
-  /** The player the media session shows ([LyricArtworkPlayer] over [exoPlayer]). */
-  private var shown: LyricArtworkPlayer? = null
+  /** The player the media session shows ([LyricsTextPlayer] over [exoPlayer]). */
+  private var shown: LyricsTextPlayer? = null
 
-  private fun showOnSession(player: ExoPlayer): LyricArtworkPlayer =
-    LyricArtworkPlayer(player) { itemId, cover ->
-      ArtworkProvider.authority?.let { AutoLyrics.artworks.uriFor(it, AutoLyrics.state.linesFor(itemId), cover) }
-    }.also { shown = it }
+  private fun showOnSession(player: ExoPlayer): LyricsTextPlayer =
+    LyricsTextPlayer(player, AutoLyrics.state::textFor).also { shown = it }
 
   /**
    * A crossfade's handoff: the second player, already playing the next song,
@@ -509,7 +505,7 @@ class PlaybackService : MediaLibraryService() {
   /** Stops following JS's shuffle and repeat ([AutoModes.state]). */
   private var stopModes: (() -> Unit)? = null
 
-  /** Stops following the Lyrics toggle and lines ([AutoLyrics.state]). */
+  /** Stops following the Lyrics toggle and text ([AutoLyrics.state]). */
   private var stopLyrics: (() -> Unit)? = null
 
   /** Whether Android Auto is connected (projected on a car's screen, or Android Automotive). */
@@ -800,7 +796,7 @@ class PlaybackService : MediaLibraryService() {
       customCommand: SessionCommand,
       args: Bundle,
     ): ListenableFuture<SessionResult> {
-      // The Lyrics toggle: JS hears of it and sends lines while it's on.
+      // The Lyrics toggle: JS hears of it and sends the lyrics while it's on.
       if (customCommand.customAction == AutoLyrics.TOGGLE_ACTION) {
         AutoLyrics.state.toggle()
         return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
