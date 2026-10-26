@@ -29,7 +29,16 @@ export type SettingsPage =
  * (`settings/SettingsGlyph.tsx`).
  */
 export type SettingsIcon =
-  "history" | "books" | "palette" | "layout" | "swipe" | "play" | "quote" | "download" | "user" | "code";
+  | "history"
+  | "books"
+  | "palette"
+  | "layout"
+  | "swipe"
+  | "play"
+  | "quote"
+  | "download"
+  | "user"
+  | "code";
 
 export interface SettingsPageEntry {
   readonly page: SettingsPage;

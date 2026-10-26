@@ -1060,16 +1060,10 @@ describe("migration 0024", () => {
       [7_000, fromPlaylist(id)],
       [9_000, null],
     ] as const) {
-      recordPlay(old, {
-        trackId: String(track),
-        context,
-        startedAt,
-        listenedMs: 1_000,
-        durationMs: 180_000,
-        endReason: "skipped",
-        counted: false,
-        source: "phone",
-      });
+      // Seed the old version's columns, before playback snapshots existed.
+      old.run(sql`INSERT INTO play_events
+        (track_id, context_type, context_id, started_at, listened_ms, duration_ms, end_reason, counted, source)
+        VALUES (${track}, ${context?.kind ?? null}, ${context?.id ?? null}, ${startedAt}, 1000, 180000, 'skipped', 0, 'phone')`);
     }
 
     await migrateTestDatabase(old);

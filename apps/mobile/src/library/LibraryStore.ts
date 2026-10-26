@@ -152,6 +152,11 @@ import {
   type RecordedPlay,
 } from "./db/playHistory";
 import { listeningSums, selectCountedPlays } from "./db/playTotals";
+import {
+  listeningHistory,
+  type ListeningHistoryCursor,
+  type ListeningHistoryPage,
+} from "./db/listeningHistory";
 import { tasteHistory } from "./db/taste";
 import {
   removePlaylistImage,
@@ -989,6 +994,10 @@ export class LibraryStore extends Context.Service<
     readonly homeFavorites: Effect.Effect<Pick<HomeSections, "favorites">, LibraryStoreError>;
     /** The play recorded last, to pick back up when JS restarts while the player kept going. */
     readonly latestPlay: Effect.Effect<RecordedPlay | null, LibraryStoreError>;
+    /** Counted plays with saved display metadata, newest first, 50 per page. */
+    readonly listeningHistory: (
+      before?: ListeningHistoryCursor,
+    ) => Effect.Effect<ListeningHistoryPage, LibraryStoreError>;
     /**
      * Each track's counted plays within [window] (tracks still in the library),
      * in no order; with [trackIds], only those tracks'.
@@ -1870,6 +1879,8 @@ const make = Effect.gen(function* () {
     ),
 
     latestPlay: attempt("read the latest play", () => latestPlay(db)),
+    listeningHistory: (before) =>
+      attempt("read listening history", () => listeningHistory(db, before)),
 
     trackPlayTotals: (window, trackIds) =>
       attempt("sum up song plays", () => trackPlayTotals(db, window, trackIds)),

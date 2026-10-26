@@ -6,7 +6,13 @@ import type { PlayEvent } from "@wave/core";
 import { listeningHistory } from "./listeningHistory.ts";
 import { recordPlay, updatePlay } from "./playHistory.ts";
 import * as schema from "./schema.ts";
-import { addTrack, migrateTestDatabase, openTestDatabase, traceQueries } from "./testDatabase.ts";
+import {
+  addMissingSong,
+  addTrack,
+  migrateTestDatabase,
+  openTestDatabase,
+  traceQueries,
+} from "./testDatabase.ts";
 import { deleteTracksById } from "./tracks.ts";
 
 const play = (trackId: number, startedAt: number, counted = true): PlayEvent => ({
@@ -18,6 +24,20 @@ const play = (trackId: number, startedAt: number, counted = true): PlayEvent => 
   endReason: "interrupted",
   context: null,
   source: "phone",
+});
+
+test("a missing song keeps its Library identity for the usual download and menu actions", async () => {
+  const db = await openTestDatabase();
+  const track = addMissingSong(db, {
+    title: "Missing song",
+    artist: "Radiohead",
+    album: "OK Computer",
+  });
+  recordPlay(db, play(track, 1000));
+  const row = listeningHistory(db).rows[0]!;
+  assert.equal(row.snapshot.title, "Missing song");
+  assert.equal(row.song?.id, track);
+  assert.equal(row.song?.path, null);
 });
 
 test("history pages counted plays with stable ties, excluding skips and imported dates", async () => {
