@@ -1244,7 +1244,7 @@ const livePlaylist = eq(schema.playlists.deleted, false);
 
 /**
  * When a song last started playing from each playlist (a play whose context
- * is the playlist), by playlist id, for sorting the Playlists list by Recently
+ * is the playlist, streamed songs' included), by playlist id, for sorting the Playlists list by Recently
  * Played (Core's `sortPlaylists`). Playlists never played from aren't in it.
  */
 export const selectPlaylistsLastPlayed = (db: LibraryDatabase): Map<number, number> => {
@@ -1252,13 +1252,7 @@ export const selectPlaylistsLastPlayed = (db: LibraryDatabase): Map<number, numb
   const rows = db
     .select({ id: playEvents.contextId, at: sql<number>`max(${playEvents.startedAt})` })
     .from(playEvents)
-    .where(
-      and(
-        eq(playEvents.contextType, "playlist"),
-        isNotNull(playEvents.contextId),
-        isNotNull(playEvents.trackId),
-      ),
-    )
+    .where(and(eq(playEvents.contextType, "playlist"), isNotNull(playEvents.contextId)))
     .groupBy(playEvents.contextId)
     .all();
   const lastPlayed = new Map<number, number>();

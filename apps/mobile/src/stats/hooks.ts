@@ -19,7 +19,7 @@ import { useScreenSight } from "@/lib/screenSight";
 
 import { getOpenedRecaps } from "./openedRecaps";
 import { knownRecaps, useRecapAvailability } from "./recapAvailabilityLive";
-import { Stats, type ArtistStats, type LoadedRecap, type Ranked } from "./Stats";
+import { Stats, type ArtistStats, type LoadedRecap, type Ranked, type StatsSong } from "./Stats";
 
 /**
  * What `read` gives from Stats, or undefined while it first loads. Re-read
@@ -69,7 +69,7 @@ const useRanking = <A>(
 ): readonly Ranked<A>[] | undefined =>
   useStatsRead(useCallback((stats) => read(stats, period, limit), [read, period, limit]));
 
-const readTopSongs: ReadRanking<SongRow> = (stats, period, limit) => stats.topSongs(period, limit);
+const readTopSongs: ReadRanking<StatsSong> = (stats, period, limit) => stats.topSongs(period, limit);
 
 const readTopAlbums: ReadRanking<AlbumRow> = (stats, period, limit) =>
   stats.topAlbums(period, limit);
@@ -95,7 +95,7 @@ export const useArtistStats = (
 export const useTopSongs = (
   period: StatsPeriod,
   limit: number = STATS_TOP,
-): readonly Ranked<SongRow>[] | undefined => useRanking(period, limit, readTopSongs);
+): readonly Ranked<StatsSong>[] | undefined => useRanking(period, limit, readTopSongs);
 
 /** Top albums: the `limit` albums played most in `period`. */
 export const useTopAlbums = (

@@ -1,12 +1,12 @@
 /// <reference types="node" />
-import { normalizeTrack, type PlayEvent, type YtAlbumSong } from "@wave/core";
+import { normalizeTrack, type PlayEvent, type StatsWindow, type YtAlbumSong } from "@wave/core";
 import { sql } from "drizzle-orm";
 import assert from "node:assert/strict";
 import { beforeEach, describe, test } from "node:test";
 
 import type { IndexedTrack } from "../LibraryStore.ts";
 import { creditSplits } from "./credits.ts";
-import { recordPlay } from "./playHistory.ts";
+import { homePlays, recordPlay, type MostPlayedRow } from "./playHistory.ts";
 import { listeningSums } from "./playTotals.ts";
 import { saveBatch } from "./save.ts";
 import { songPlayTotals } from "./stats.ts";
@@ -90,7 +90,7 @@ const download = (
 const ALL = { from: null, to: 1_000_000 };
 
 /** Each song's counted plays in [window], by Library id or video id. */
-const songCounts = (window = ALL) =>
+const songCounts = (window: StatsWindow = ALL) =>
   songPlayTotals(db, window)
     .map((entry) => [
       entry.song.kind === "library" ? entry.song.id : entry.song.videoId,
@@ -234,6 +234,88 @@ describe("Listening totals with streamed plays", () => {
         [],
         query.sql,
       );
+    }
+  });
+});
+
+/** Home's Most played as [title, plays, streamed?] rows. */
+const mostPlayed = (scope: "library" | "files" = "library") =>
+  homePlays(db, scope).mostPlayed.map((row: MostPlayedRow) =>
+    row.source === "library"
+      ? [row.track.title, row.playCount]
+      : [row.song.title, row.playCount, "streamed"],
+  );
+
+describe("Home's Most played with streamed plays", () => {
+  test("a streamed song played 5 times ranks with 5 plays, as the streamed song", () => {
+    const library = addTrack(db, { title: "So What" });
+    for (const at of [1_000, 1_001]) recordPlay(db, play(library, at));
+    for (let i = 0; i < 5; i++) stream(airbag, 2_000 + i);
+    stream({ ...airbag, videoId: "v-once", title: "Once" }, 3_000);
+
+    assert.deepEqual(mostPlayed(), [
+      ["Airbag", 5, "streamed"],
+      ["So What", 2],
+      ["Once", 1, "streamed"],
+    ]);
+    const [top] = homePlays(db).mostPlayed;
+    assert.deepEqual(top?.source === "stream" ? top.song : null, airbag);
+  });
+
+  test("downloading the song leaves one row with all its plays, and the file's plays add to it", () => {
+    const other = addTrack(db, { title: "So What" });
+    for (let i = 0; i < 6; i++) recordPlay(db, play(other, 1_000 + i));
+    for (let i = 0; i < 5; i++) stream(airbag, 2_000 + i);
+    const downloaded = download("Airbag", { videoId: "v-airbag", trackNumber: "1" });
+    assert.deepEqual(mostPlayed(), [
+      ["So What", 6],
+      ["Airbag", 5],
+    ]);
+    recordPlay(db, play(downloaded, 3_000));
+    recordPlay(db, play(downloaded, 3_001));
+    assert.deepEqual(mostPlayed(), [
+      ["Airbag", 7],
+      ["So What", 6],
+    ]);
+  });
+
+  test("a song outside the top ten by its file's plays climbs in with its streamed ones", () => {
+    for (let n = 0; n < 10; n++) {
+      const track = addTrack(db, { title: `Song ${n}` });
+      for (let i = 0; i < 3; i++) recordPlay(db, play(track, 1_000 + n * 10 + i));
+    }
+    const downloaded = download("Airbag", { videoId: "v-airbag", trackNumber: "1" });
+    recordPlay(db, play(downloaded, 5_000));
+    for (let i = 0; i < 3; i++) stream(airbag, 6_000 + i);
+    assert.deepEqual(mostPlayed()[0], ["Airbag", 4]);
+    assert.equal(mostPlayed().length, 10);
+  });
+
+  test("Android Auto's lists only songs with a file", () => {
+    const library = addTrack(db, { title: "So What" });
+    recordPlay(db, play(library, 1_000));
+    for (let i = 0; i < 5; i++) stream(airbag, 2_000 + i);
+    stream({ ...airbag, videoId: "v-other", title: "Lucky" }, 3_000);
+    assert.deepEqual(mostPlayed("files"), [["So What", 1]]);
+    download("Lucky", { videoId: "v-other", trackNumber: "2" });
+    assert.deepEqual(mostPlayed("files"), [
+      ["Lucky", 1],
+      ["So What", 1],
+    ]);
+  });
+
+  test("read the kept totals, never the play history", () => {
+    for (let i = 0; i < 20; i++) stream({ ...airbag, videoId: `v-${i}` }, 1_000 + i);
+    const track = download("Airbag", { videoId: "v-3" });
+    recordPlay(db, play(track, 5_000));
+    for (const scope of ["library", "files"] as const) {
+      for (const query of traceQueries(db, () => homePlays(db, scope)).queries) {
+        assert.deepEqual(
+          query.plan.filter((step) => /SCAN (play_events|tracks)/.test(step)),
+          [],
+          query.sql,
+        );
+      }
     }
   });
 });

@@ -24,6 +24,7 @@ import {
   openTestDatabase,
   star,
   type TestDatabase,
+  libraryRow,
 } from "./testDatabase.ts";
 
 const album = { kind: "album", id: "1" } as const;
@@ -84,7 +85,7 @@ describe("History of removed files", () => {
       ["Here"],
     );
     assert.deepEqual(
-      home.mostPlayed.map((row) => row.title),
+      home.mostPlayed.map(libraryRow).map((row) => row.title),
       ["Kept"],
     );
   });
@@ -263,7 +264,7 @@ describe("Most Played", () => {
     recordPlay(db, play(never, (at += 1), skip));
 
     assert.deepEqual(
-      homeSections(db).mostPlayed.map((row) => [row.title, row.playCount]),
+      homeSections(db).mostPlayed.map(libraryRow).map((row) => [row.title, row.playCount]),
       [
         ["Often", 3],
         ["Skipped a lot", 2],
@@ -282,7 +283,7 @@ describe("Most Played", () => {
     updatePlay(db, id, play(track, 1_000, { listenedMs: 95_000, endReason: "completed" }));
     updatePlay(db, id, play(track, 1_000, { listenedMs: 180_000, endReason: "completed" }));
     assert.deepEqual(
-      homeSections(db).mostPlayed.map((row) => [row.title, row.playCount]),
+      homeSections(db).mostPlayed.map(libraryRow).map((row) => [row.title, row.playCount]),
       [["Growing", 1]],
     );
   });
@@ -294,7 +295,7 @@ describe("Most Played", () => {
     recordPlay(db, play(second, 2_000));
 
     assert.deepEqual(
-      homeSections(db).mostPlayed.map((row) => row.title),
+      homeSections(db).mostPlayed.map(libraryRow).map((row) => row.title),
       ["Second", "First"],
     );
   });
@@ -307,7 +308,7 @@ describe("Most Played", () => {
     for (const song of [second, third, first]) recordPlay(db, play(song, 1_000));
 
     assert.deepEqual(
-      homeSections(db).mostPlayed.map((row) => row.title),
+      homeSections(db).mostPlayed.map(libraryRow).map((row) => row.title),
       ["Third", "Second", "First"],
     );
   });
@@ -342,7 +343,7 @@ describe("The latest play", () => {
 
     assert.deepEqual(latestPlay(db), { id, play: play(track, 2_000, { context: folder }) });
     assert.deepEqual(
-      homeSections(db).mostPlayed.map((row) => [row.title, row.playCount]),
+      homeSections(db).mostPlayed.map(libraryRow).map((row) => [row.title, row.playCount]),
       [["From a folder", 2]],
     );
   });
@@ -391,7 +392,7 @@ describe("Play source", () => {
       ["Second", "First"],
     );
     assert.deepEqual(
-      home.mostPlayed.map((row) => [row.title, row.playCount]),
+      home.mostPlayed.map(libraryRow).map((row) => [row.title, row.playCount]),
       [
         ["Often", 2],
         ["Once", 1],
@@ -448,7 +449,7 @@ describe("Recounting past plays", () => {
       ),
     );
     assert.deepEqual(
-      homeSections(v2).mostPlayed.map((row) => [row.title, row.playCount]),
+      homeSections(v2).mostPlayed.map(libraryRow).map((row) => [row.title, row.playCount]),
       [
         ["Song", 2],
         ["Jingle", 1],

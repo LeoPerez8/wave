@@ -63,6 +63,7 @@ import {
   type CreditedPlayTotals,
   type PlayEvent,
   type PlayTotals,
+  type SongPlayTotals,
   type ListeningSums,
   type StatsWindow,
   type TryAgainAnswered,
@@ -245,9 +246,11 @@ import {
   type CountedListeningPage,
   creditedPlayTotals,
   songGenres,
+  songPlayTotals,
   trackPlayTotals,
   type ArtistPlays,
 } from "./db/stats";
+import { streamedSongsOf } from "./db/streamedSongs";
 import { keyRecordings, stampPreference } from "./db/sync";
 import {
   filesGone,
@@ -1007,6 +1010,18 @@ export class LibraryStore extends Context.Service<
       window: StatsWindow,
       trackIds?: readonly number[],
     ) => Effect.Effect<readonly PlayTotals[], LibraryStoreError>;
+    /**
+     * Each song's counted plays within [window], streamed songs included, in
+     * no order: a streamed song the Library has (by video id or recording
+     * key) is that Library song's entry.
+     */
+    readonly songPlayTotals: (
+      window: StatsWindow,
+    ) => Effect.Effect<readonly SongPlayTotals[], LibraryStoreError>;
+    /** The streamed songs [videoIds] as their latest plays had them, by video id. */
+    readonly streamedSongsByIds: (
+      videoIds: readonly string[],
+    ) => Effect.Effect<ReadonlyMap<string, YtAlbumSong>, LibraryStoreError>;
     /**
      * Counted plays within [window] per album and credited artist (deleted
      * songs included; a collaboration in a row for each artist it credits), in
@@ -1885,6 +1900,12 @@ const make = Effect.gen(function* () {
 
     trackPlayTotals: (window, trackIds) =>
       attempt("sum up song plays", () => trackPlayTotals(db, window, trackIds)),
+
+    songPlayTotals: (window) =>
+      attempt("sum up song plays", () => songPlayTotals(db, window)),
+
+    streamedSongsByIds: (videoIds) =>
+      attempt("read streamed songs", () => streamedSongsOf(db, videoIds)),
 
     creditedPlayTotals: (window) =>
       attempt("sum up album and artist plays", () => creditedPlayTotals(db, window)),

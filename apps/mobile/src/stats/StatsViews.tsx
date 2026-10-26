@@ -2,6 +2,7 @@ import { IconChartBar } from "@tabler/icons-react-native";
 import { LegendList } from "@legendapp/list/react-native";
 import {
   counted,
+  discoverTrackId,
   recapId,
   recapTitle,
   STATS_PERIODS,
@@ -22,12 +23,13 @@ import type { AlbumRow, ArtistRow, SongRow } from "@/library/LibraryStore";
 import { openAlbum, openArtist, openRecap } from "@/library/routes";
 import { toTrackSummary } from "@/library/TrackList";
 import { Press } from "@/motion/Press";
-import { playSongs } from "@/playback/actions";
+import { playRankedSongs } from "@/playback/actions";
 import { useCurrentPlayingIds } from "@/playback/hooks";
 import { openAlbumActions, openArtistActions, openTrackActions } from "@/playback/ActionsMenu";
 import { ArtworkRow } from "@/search/ArtworkRow";
+import { RankedYtSongRow } from "@/ytmusic/YtSongRow";
 
-import type { Ranked } from "./Stats";
+import type { Ranked, StatsSong } from "./Stats";
 import { recapCardHeight } from "./recapAnnouncement";
 import { useListScrollable } from "@/motion/heldTouch";
 
@@ -86,37 +88,57 @@ export function PeriodTabs({
   );
 }
 
-/** A ranked song: numbered by rank (the top one in ember), its counted plays in the length's cell. */
+/**
+ * A ranked song: numbered by rank (the top one in ember), its counted plays in
+ * the length's cell. A streamed song is a plain streamed row, dimmed while it
+ * can't play.
+ */
 function RankedSongRow({
-  entry: { item: song, countedPlays },
+  entry: { item, countedPlays },
   index,
   songs,
   context,
   currentIds,
   favorites,
 }: {
-  entry: Ranked<SongRow>;
+  entry: Ranked<StatsSong>;
   index: number;
   /** The whole ranking's songs: tapping a row plays them from it. */
-  songs: readonly SongRow[];
+  songs: readonly StatsSong[];
   context: QueueContext;
   currentIds: ReadonlySet<string>;
   favorites: ReadonlySet<number>;
 }) {
+  const onPress = () => void playRankedSongs(songs, index, context);
+  const playing = currentIds.has(discoverTrackId(item));
+  if (item.source === "stream")
+    return (
+      <RankedYtSongRow
+        song={item.song}
+        playing={playing}
+        popularRank={index + 1}
+        plays={countedPlays}
+        onPress={onPress}
+      />
+    );
+  const song = item.track;
   return (
     <SwipeTrackRow
       song={song}
       track={{ ...toTrackSummary(song), trackNumber: index + 1 }}
       plays={countedPlays}
-      state={currentIds.has(String(song.id)) ? "playing" : undefined}
+      state={playing ? "playing" : undefined}
       favorite={favorites.has(song.id)}
       leading="number"
       topNumber={index === 0}
-      onPress={() => playSongs(songs, index, context)}
+      onPress={onPress}
       onLongPress={() => openTrackActions(song)}
     />
   );
 }
+
+/** A song ranking's key: the song's queue id. */
+const rankedSongKey = (entry: Ranked<StatsSong>): string => discoverTrackId(entry.item);
 
 /**
  * A song ranking: each row numbered by rank (the top one in ember), with its
@@ -127,7 +149,7 @@ export function RankedSongs({
   ranking,
   context,
 }: {
-  ranking: readonly Ranked<SongRow>[];
+  ranking: readonly Ranked<StatsSong>[];
   /** What tapping a song plays: the ranking, from the song (see `statsSongsContext`). */
   context: QueueContext;
 }) {
@@ -138,7 +160,7 @@ export function RankedSongs({
     <View>
       {ranking.map((entry, index) => (
         <RankedSongRow
-          key={entry.item.id}
+          key={rankedSongKey(entry)}
           entry={entry}
           index={index}
           songs={songs}
@@ -270,7 +292,7 @@ export function RankedSongList({
   period,
   header,
 }: {
-  ranking: readonly Ranked<SongRow>[];
+  ranking: readonly Ranked<StatsSong>[];
   period: StatsPeriod;
   header?: ReactElement;
 }) {
@@ -282,7 +304,7 @@ export function RankedSongList({
   const songs = useMemo(() => ranking.map((entry) => entry.item), [ranking]);
   const context = useMemo(() => statsSongsContext(period), [period]);
   const renderItem = useCallback(
-    ({ item, index }: { item: Ranked<SongRow>; index: number }) => (
+    ({ item, index }: { item: Ranked<StatsSong>; index: number }) => (
       <RankedSongRow
         entry={item}
         index={index}
@@ -299,7 +321,7 @@ export function RankedSongList({
       scrollEnabled={scrollable}
       className="flex-1"
       data={ranking}
-      keyExtractor={rankedKey}
+      keyExtractor={rankedSongKey}
       renderItem={renderItem}
       extraData={rowState}
       estimatedItemSize={grid.row}
