@@ -7,6 +7,7 @@ import {
   STATS_TOP,
   albumPlayTotals,
   artistPlayTotals,
+  rankEntityPlays,
   rankEntityPlaysSteps,
   rankPlays,
   rankSongPlays,
@@ -222,6 +223,26 @@ const entityTotals = (id: number | string, countedPlays: number) => ({
   countedPlays,
   listenedMs: 0,
   latestPlayAt: 0,
+});
+
+describe("rankEntityPlays", () => {
+  test("a full tie goes to Library ids, the lowest first, then online ids in order", () => {
+    const tied = [
+      entityTotals("album:b", 1),
+      entityTotals(12, 1),
+      entityTotals("album:a", 1),
+      entityTotals(3, 1),
+    ];
+    const expected = [3, 12, "album:a", "album:b"];
+    assert.deepEqual(
+      rankEntityPlays(tied, STATS_TOP).map((entry) => entry.id),
+      expected,
+    );
+    assert.deepEqual(
+      rankEntityPlays(tied.toReversed(), STATS_TOP).map((entry) => entry.id),
+      expected,
+    );
+  });
 });
 
 describe("rankEntityPlaysSteps", () => {
