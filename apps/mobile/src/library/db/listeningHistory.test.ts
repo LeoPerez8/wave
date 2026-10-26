@@ -4,7 +4,6 @@ import { eq, sql } from "drizzle-orm";
 import type { PlayEvent } from "@wave/core";
 
 import { tasteHistory } from "./taste.ts";
-import { graphPlayPage } from "./artistGraph.ts";
 import { listeningHistory } from "./listeningHistory.ts";
 import { endPlay, latestPlay, recordPlay, updatePlay } from "./playHistory.ts";
 import * as schema from "./schema.ts";
@@ -222,7 +221,8 @@ test("streamed starts, progress and ends leave the Library-only consumers unchan
   const id = recordPlay(db, play(track, 1000));
   endPlay(db, id, { ...play(track, 1000), endReason: "completed" });
   const existing = () => ({
-    // Most Played, the listening totals and playlist recency count streamed plays (streamedCounts.test.ts).
+    // Most Played, the listening totals and playlist recency count streamed plays (streamedCounts.test.ts),
+    // and so do Discover's mix inputs and the artist graph (mixInputs.test.ts, artistGraph.test.ts).
     listening: songListening(db),
     songs: trackPlayTotals(db, { from: null, to: 100_000 }),
     artists: creditedPlayTotals(db, { from: 0, to: 100_000 }),
@@ -231,7 +231,6 @@ test("streamed starts, progress and ends leave the Library-only consumers unchan
     mixes: mixHistoryPage(db, 0),
     keys: playedRecordingKeys(db),
     taste: tasteHistory(db),
-    graph: graphPlayPage(db, [-Number.MAX_VALUE, 0]).rows,
   });
   const before = existing();
   const stream = {
