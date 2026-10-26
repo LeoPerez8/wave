@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, mock, test } from "node:test";
 
-import { parseLyrics, type AutoLyricsFrame, type Lyrics } from "@wave/core";
+import { parseLyrics, type AutoLyricsText, type Lyrics } from "@wave/core";
 
 import { makeExternalStore } from "../lib/externalStore.ts";
 import { startAutoLyricLines, type AutoLyricLinesPlayback } from "./autoLyricLines.ts";
@@ -21,9 +21,9 @@ const playing = (itemId: string, positionMs: number): AutoLyricLinesPlayback => 
 const settle = () => new Promise<void>((resolve) => setImmediate(resolve));
 
 describe("startAutoLyricLines", () => {
-  let shown: (AutoLyricsFrame | null)[];
-  /** The line being sung in the last artwork sent; null for the cover. */
-  const sung = () => shown.at(-1)?.current ?? null;
+  let shown: (AutoLyricsText | null)[];
+  /** The line being sung in the last title sent; null for the real title. */
+  const sung = () => shown.at(-1)?.title ?? null;
   let lyricsByPath: Map<string, Lyrics>;
 
   const start = (initial: AutoLyricLinesPlayback) => {
@@ -32,7 +32,7 @@ describe("startAutoLyricLines", () => {
       playback,
       pathOf: (itemId) => `/music/${itemId}.flac`,
       readLyrics: (path) => Promise.resolve(lyricsByPath.get(path) ?? { kind: "none" }),
-      show: (_itemId, lines) => shown.push(lines),
+      show: (_itemId, text) => shown.push(text),
     });
     return { playback, sync };
   };
@@ -45,7 +45,7 @@ describe("startAutoLyricLines", () => {
 
   afterEach(() => mock.timers.reset());
 
-  test("in the car with the toggle on, the artwork shows the line being sung and moves on with the song", async () => {
+  test("in the car with the toggle on, the title shows the line being sung and moves on with the song", async () => {
     const { sync } = start(playing("a", 6_000));
     sync.setToggle({ on: true, carConnected: true });
     await settle();
@@ -55,11 +55,11 @@ describe("startAutoLyricLines", () => {
     assert.equal(sung(), "Three");
   });
 
-  test("the artwork has the lines before and after the one being sung", async () => {
+  test("the artist shows the line sung next", async () => {
     const { sync } = start(playing("a", 6_000));
     sync.setToggle({ on: true, carConnected: true });
     await settle();
-    assert.deepEqual(shown.at(-1), { previous: "One", current: "Two", next: "Three" });
+    assert.deepEqual(shown.at(-1), { title: "Two", artist: "Three" });
   });
 
   test("position reports within a line send nothing new, so Auto isn't flooded", async () => {
@@ -73,14 +73,14 @@ describe("startAutoLyricLines", () => {
     assert.equal(shown.length, sent);
   });
 
-  test("a streamed YT Music song, which has no lyrics, keeps its cover", async () => {
+  test("a streamed YT Music song, which has no lyrics, keeps its real title and artist", async () => {
     const { sync } = start(playing("yt:dQw4w9WgXcQ", 6_000));
     sync.setToggle({ on: true, carConnected: true });
     await settle();
     assert.deepEqual(shown, [null]);
   });
 
-  test("a seek shows the lines at the new position", async () => {
+  test("a seek shows the line at the new position", async () => {
     const { playback, sync } = start(playing("a", 6_000));
     sync.setToggle({ on: true, carConnected: true });
     await settle();
@@ -89,7 +89,7 @@ describe("startAutoLyricLines", () => {
     assert.equal(sung(), "One");
   });
 
-  test("the next track shows its cover until its own lyrics are read", async () => {
+  test("the next track shows its real title and artist until its own lyrics are read", async () => {
     const { playback, sync } = start(playing("a", 6_000));
     sync.setToggle({ on: true, carConnected: true });
     await settle();
@@ -105,7 +105,7 @@ describe("startAutoLyricLines", () => {
       playback,
       pathOf: (itemId) => (known ? `/music/${itemId}.flac` : null),
       readLyrics: (path) => Promise.resolve(lyricsByPath.get(path) ?? { kind: "none" }),
-      show: (_itemId, lines) => shown.push(lines),
+      show: (_itemId, text) => shown.push(text),
     });
     sync.setToggle({ on: true, carConnected: true });
     await settle();
@@ -117,7 +117,7 @@ describe("startAutoLyricLines", () => {
     assert.equal(sung(), "Two");
   });
 
-  test("turning the toggle off shows the cover", async () => {
+  test("turning the toggle off brings the real title and artist back", async () => {
     const { sync } = start(playing("a", 6_000));
     sync.setToggle({ on: true, carConnected: true });
     await settle();

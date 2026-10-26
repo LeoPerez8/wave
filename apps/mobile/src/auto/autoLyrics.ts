@@ -13,8 +13,8 @@ const pathOf = (itemId: string): string | null => {
 };
 
 /**
- * Draws the lyrics being sung into the artwork on Android Auto's player
- * screen while its Lyrics toggle is on (see `startAutoLyricLines`). The toggle
+ * Shows the lyrics being sung as the title and artist on Android Auto's
+ * player screen while its Lyrics toggle is on (see `startAutoLyricLines`). The toggle
  * lives in the playback service, which reports it with Auto's connection.
  * Call it once per JS runtime (`startServices` does).
  */
@@ -23,8 +23,8 @@ export const startAutoLyrics = (): void => {
     playback: playbackState,
     pathOf,
     readLyrics: readTrackLyrics,
-    show: (itemId, lines) => {
-      WavePlayer.setAutoLyricLines(itemId, lines).catch(() => undefined);
+    show: (itemId, text) => {
+      WavePlayer.setAutoLyricsText(itemId, text).catch(() => undefined);
     },
   });
   let reported = false;

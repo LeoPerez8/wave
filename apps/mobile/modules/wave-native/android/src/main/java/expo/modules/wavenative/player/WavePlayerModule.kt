@@ -40,11 +40,10 @@ class ItemArtworkRecord : Record {
   @Field val artworkPath: String = ""
 }
 
-/** The lines Core's `autoLyricLines` picked, as JS sends them ([LyricFrame]). */
-class AutoLyricsFrameRecord : Record {
-  @Field val previous: String? = null
-  @Field val current: String = ""
-  @Field val next: String? = null
+/** The title and artist Core's `autoLyricLines` picked, as JS sends them ([LyricsText]). */
+class AutoLyricsTextRecord : Record {
+  @Field val title: String = ""
+  @Field val artist: String? = null
 }
 
 /** One [SyncStep] as JS sends it. */
@@ -436,11 +435,11 @@ class WavePlayerModule : Module() {
     }.runOnQueue(Queues.MAIN)
 
     /**
-     * Draws [lines] into the artwork of item [itemId] on Auto's player screen,
-     * or shows its cover again with null (see [AutoLyrics]).
+     * Shows [text] as the title and artist of item [itemId] on Auto's player
+     * screen, or its own title and artist again with null (see [AutoLyrics]).
      */
-    AsyncFunction("setAutoLyricLines") { itemId: String?, lines: AutoLyricsFrameRecord?, promise: Promise ->
-      AutoLyrics.state.showLines(itemId, lines?.let { LyricFrame(it.previous, it.current, it.next) })
+    AsyncFunction("setAutoLyricsText") { itemId: String?, text: AutoLyricsTextRecord?, promise: Promise ->
+      AutoLyrics.state.showText(itemId, text?.let { LyricsText(it.title, it.artist) })
       promise.resolve(null)
     }.runOnQueue(Queues.MAIN)
 
