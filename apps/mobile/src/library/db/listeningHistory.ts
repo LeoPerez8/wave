@@ -1,5 +1,5 @@
 import type { PlaySnapshot, YtAlbumSong } from "@wave/core";
-import { and, desc, eq, inArray, isNull, min, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, min, sql } from "drizzle-orm";
 
 import type { SongRow } from "../LibraryStore.ts";
 import type { LibraryDatabase } from "./database.ts";
@@ -78,6 +78,20 @@ export const listeningHistory = (
           .groupBy(tracks.videoId)
           .all();
   const downloadedByVideo = new Map(downloaded.map(({ id, videoId }) => [videoId, id]));
+  const recordingKeys = shown.flatMap((play) =>
+    play.trackId === null && play.recordingKey !== null ? [play.recordingKey] : [],
+  );
+  const recordings =
+    recordingKeys.length === 0
+      ? []
+      : db
+          .select({ id: tracks.id, key: tracks.recordingKey })
+          .from(tracks)
+          .where(and(inArray(tracks.recordingKey, recordingKeys), hasFile))
+          .orderBy(asc(tracks.id))
+          .all();
+  const byKey = new Map<string | null, number>();
+  for (const { id, key } of recordings) if (!byKey.has(key)) byKey.set(key, id);
   const songs =
     shown.length === 0
       ? []
@@ -86,6 +100,7 @@ export const listeningHistory = (
             inArray(tracks.id, [
               ...shown.flatMap(({ trackId }) => (trackId === null ? [] : [trackId])),
               ...downloaded.flatMap(({ id }) => (id === null ? [] : [id])),
+              ...byKey.values(),
             ]),
           )
           .all();
@@ -100,7 +115,10 @@ export const listeningHistory = (
       videoId: play.videoId,
       recordingKey: play.recordingKey,
       streamedSong: play.streamedSong,
-      song: byId.get(play.trackId ?? downloadedByVideo.get(play.videoId) ?? -1) ?? null,
+      song:
+        byId.get(
+          play.trackId ?? downloadedByVideo.get(play.videoId) ?? byKey.get(play.recordingKey) ?? -1,
+        ) ?? null,
     })),
   };
 };
