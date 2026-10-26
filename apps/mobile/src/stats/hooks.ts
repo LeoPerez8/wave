@@ -1,3 +1,4 @@
+import type { PlayedAlbum, PlayedArtist } from "@/library/db/playedEntities";
 import {
   STATS_TOP,
   homeRecapVisibility,
@@ -11,7 +12,7 @@ import { useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import { AppState } from "react-native";
 
-import type { AlbumRow, ArtistRow, LibraryStoreError } from "@/library/LibraryStore";
+import type { LibraryStoreError } from "@/library/LibraryStore";
 import { useFocusedVersion } from "@/lib/useFocusedVersion";
 import { appRuntime } from "@/library/runtime";
 import { playHistoryVersion } from "@/playback/PlayHistory";
@@ -72,10 +73,10 @@ const useRanking = <A>(
 const readTopSongs: ReadRanking<StatsSong> = (stats, period, limit) =>
   stats.topSongs(period, limit);
 
-const readTopAlbums: ReadRanking<AlbumRow> = (stats, period, limit) =>
+const readTopAlbums: ReadRanking<PlayedAlbum> = (stats, period, limit) =>
   stats.topAlbums(period, limit);
 
-const readTopArtists: ReadRanking<ArtistRow> = (stats, period, limit) =>
+const readTopArtists: ReadRanking<PlayedArtist> = (stats, period, limit) =>
   stats.topArtists(period, limit);
 
 /**
@@ -102,13 +103,13 @@ export const useTopSongs = (
 export const useTopAlbums = (
   period: StatsPeriod,
   limit: number = STATS_TOP,
-): readonly Ranked<AlbumRow>[] | undefined => useRanking(period, limit, readTopAlbums);
+): readonly Ranked<PlayedAlbum>[] | undefined => useRanking(period, limit, readTopAlbums);
 
 /** Top artists: the `limit` artists played most in `period`, credited by track artist. */
 export const useTopArtists = (
   period: StatsPeriod,
   limit: number = STATS_TOP,
-): readonly Ranked<ArtistRow>[] | undefined => useRanking(period, limit, readTopArtists);
+): readonly Ranked<PlayedArtist>[] | undefined => useRanking(period, limit, readTopArtists);
 
 /** Every period with a Recap, newest first, or undefined while it first loads. */
 export const useRecaps = useRecapAvailability;

@@ -1,4 +1,10 @@
 import {
+  playedEntityTotals,
+  playedArtistSongs,
+  type PlayedEntityTotals,
+  type PlayedArtistSongs,
+} from "./db/playedEntities";
+import {
   type RecommendationEntryCursor,
   recommendationFlagsPage,
   recommendationPendingPage,
@@ -1027,6 +1033,13 @@ export class LibraryStore extends Context.Service<
      * songs included; a collaboration in a row for each artist it credits), in
      * no order; Core's `albumPlayTotals` / `artistPlayTotals` group them.
      */
+    readonly playedEntityTotals: (
+      window: StatsWindow,
+    ) => Effect.Effect<PlayedEntityTotals, LibraryStoreError>;
+    readonly playedArtistSongs: (
+      artistId: number,
+      now: number,
+    ) => Effect.Effect<PlayedArtistSongs, LibraryStoreError>;
     readonly creditedPlayTotals: (
       window: StatsWindow,
     ) => Effect.Effect<readonly CreditedPlayTotals[], LibraryStoreError>;
@@ -1906,6 +1919,10 @@ const make = Effect.gen(function* () {
     streamedSongsByIds: (videoIds) =>
       attempt("read streamed songs", () => streamedSongsOf(db, videoIds)),
 
+    playedEntityTotals: (window) =>
+      attempt("sum up played albums and artists", () => playedEntityTotals(db, window)),
+    playedArtistSongs: (artistId, now) =>
+      attempt("read the artist listening", () => playedArtistSongs(db, artistId, now)),
     creditedPlayTotals: (window) =>
       attempt("sum up album and artist plays", () => creditedPlayTotals(db, window)),
 

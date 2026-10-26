@@ -60,6 +60,33 @@ export interface PlayTotals {
   readonly latestPlayAt: number;
 }
 
+/** An album or artist's totals, including an online identity while absent from the Library. */
+export type EntityPlayTotals = Omit<PlayTotals, "id"> & { readonly id: number | string };
+
+export const rankEntityPlays = <A extends EntityPlayTotals>(
+  totals: readonly A[],
+  limit: number,
+): A[] =>
+  totals
+    .filter((entry) => entry.countedPlays > 0)
+    // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh copy; Hermes lacks toSorted
+    .sort(
+      (a, b) =>
+        compareTotals(a, b) ||
+        (typeof a.id === "number" && typeof b.id === "number"
+          ? a.id - b.id
+          : typeof a.id === "number"
+            ? -1
+            : typeof b.id === "number"
+              ? 1
+              : a.id < b.id
+                ? -1
+                : a.id > b.id
+                  ? 1
+                  : 0),
+    )
+    .slice(0, limit);
+
 type Totals = Omit<PlayTotals, "id">;
 
 const compareTotals = (a: Totals, b: Totals): number =>

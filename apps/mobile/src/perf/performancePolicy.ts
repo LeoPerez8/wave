@@ -342,6 +342,21 @@ export const WHOLE_LIBRARY: Record<string, Exception> = {
   },
 };
 export const OPENING_REQUESTS: Record<string, Exception> = {
+  "stats/PlayedEntityViews.tsx#openOnlineAlbum": {
+    kind: "gesture",
+    reason:
+      "A tap on a ranked or recently played online album resolves its missing browse id. Consent is checked before search and again before opening the page.",
+  },
+  "stats/PlayedEntityViews.tsx#usePlayedArtist": {
+    kind: "opening",
+    reason:
+      "Visible online artist rows ask for their image after screen settlement, with execution-time YT consent and Android connectivity checks. In-flight name requests are shared; disabled entries show placeholders.",
+    deferred: {
+      settlement: "screen",
+      connectivity: "android",
+      tests: ["apps/mobile/src/stats/playedEntityOpening.test.ts"],
+    },
+  },
   "playback/actionTargets.ts#targetEntries": {
     kind: "gesture",
     reason:

@@ -26,6 +26,12 @@ export interface ArtistStatsInput {
    * one (the store reads just those); other songs are left out.
    */
   readonly songPlays: readonly PlayTotals[];
+  /** Unmatched streamed songs credited to this artist. Library coverage stays over Library songs. */
+  readonly streamedListening?: readonly {
+    readonly countedPlays: number;
+    readonly listenedMs: number;
+    readonly lastPlayedAt: number;
+  }[];
   readonly now: number;
 }
 
@@ -78,14 +84,24 @@ const ago = (at: number, now: number): string => {
  * is not played yet (rather than a row of zeros).
  */
 export const artistStats = (input: ArtistStatsInput): ArtistStats => {
-  const totals = listeningTotals(input.listening, { artistId: input.artistId });
+  const totals = { ...listeningTotals(input.listening, { artistId: input.artistId }) };
+  let listenedMs = input.listening.reduce(
+    (sum, song) => sum + (song.artistIds.includes(input.artistId) ? song.listenedMs : 0),
+    0,
+  );
+  for (const stream of input.streamedListening ?? []) {
+    totals.plays += stream.countedPlays;
+    listenedMs += stream.listenedMs;
+    totals.lastPlayedAt = Math.max(totals.lastPlayedAt ?? 0, stream.lastPlayedAt);
+  }
+  const minutesListened = Math.floor(listenedMs / MINUTE_MS);
   if (totals.plays === 0 || totals.lastPlayedAt === null) return { played: false };
   const songIds = new Set(input.songIds);
   const songCount = songIds.size;
   return {
     played: true,
     plays: counted(totals.plays, "play", "plays"),
-    minutesListened: counted(totals.minutesListened, "minute listened", "minutes listened"),
+    minutesListened: counted(minutesListened, "minute listened", "minutes listened"),
     songsListened: `${totals.songsListened.toLocaleString("en")} of ${counted(songCount, "song", "songs")}`,
     lastPlayed: `Last played ${ago(totals.lastPlayedAt, input.now)}`,
     mostPlayed: rankPlays(

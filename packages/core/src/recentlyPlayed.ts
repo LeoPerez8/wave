@@ -5,8 +5,8 @@
  */
 
 /** A played song, as the store reads it for the shelf. */
-export interface LatestPlayedSong {
-  readonly albumId: number;
+export interface LatestPlayedSong<Id = number> {
+  readonly albumId: Id;
   /** When its latest play (counted or not) started. */
   readonly lastPlayedAt: number;
 }
@@ -19,12 +19,12 @@ export interface LatestPlayedSong {
  * shelf yet: an album only counts once a song played after the last one read
  * names it, as a song not read yet may tie with that one. Read more and ask again.
  */
-export const recentlyPlayedAlbums = (
-  songs: readonly LatestPlayedSong[],
+export const recentlyPlayedAlbums = <Id extends number | string>(
+  songs: readonly LatestPlayedSong<Id>[],
   limit: number,
   complete: boolean,
-): readonly number[] | null => {
-  const latest = new Map<number, number>();
+): readonly Id[] | null => {
+  const latest = new Map<Id, number>();
   for (const song of songs) {
     if (!latest.has(song.albumId)) latest.set(song.albumId, song.lastPlayedAt);
   }
@@ -36,7 +36,21 @@ export const recentlyPlayedAlbums = (
   return (
     settled
       // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh array; Hermes lacks toSorted
-      .sort(([a, aAt], [b, bAt]) => bAt - aAt || b - a)
+      .sort(
+        ([a, aAt], [b, bAt]) =>
+          bAt - aAt ||
+          (typeof a === "number" && typeof b === "number"
+            ? b - a
+            : typeof a === "number"
+              ? -1
+              : typeof b === "number"
+                ? 1
+                : a < b
+                  ? -1
+                  : a > b
+                    ? 1
+                    : 0),
+      )
       .slice(0, limit)
       .map(([albumId]) => albumId)
   );
