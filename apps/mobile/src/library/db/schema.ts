@@ -590,7 +590,8 @@ export const syncState = sqliteTable("sync_state", {
 /**
  * One row per time a track started playing (Core's `PlayEvent`). Append-only:
  * a row is written when the play starts and updated until it ends, never
- * aggregated away. A play identifies either a Library track or a video.
+ * aggregated away. A play identifies a Library track, a video, or a synced
+ * recording whose Library song hasn't arrived yet.
  * `track_id` has no foreign key on purpose, so history
  * outlives a deleted file (track ids are never reused: AUTOINCREMENT).
  */
@@ -654,7 +655,13 @@ export const playEvents = sqliteTable(
     ...pushedFlag(),
   },
   (t) => [
-    check("play_events_identity", sql`(${t.trackId} IS NOT NULL) != (${t.videoId} IS NOT NULL)`),
+    check(
+      "play_events_identity",
+      sql`
+      (${t.trackId} IS NOT NULL AND ${t.videoId} IS NULL) OR
+      (${t.trackId} IS NULL AND (${t.videoId} IS NOT NULL OR
+        (${t.recordingKey} IS NOT NULL AND ${t.snapshot} IS NOT NULL)))`,
+    ),
     index("play_events_video_idx").on(t.videoId),
     index("play_events_track_idx").on(t.trackId),
     index("play_events_started_at_idx").on(t.startedAt),
@@ -704,7 +711,7 @@ export const playTotals = sqliteTable(
  * Each streamed song's listening over its whole history, as `play_totals`
  * keeps a track's: one row per video id and recording key with a streamed
  * play (a key that changed between plays gives the video a row per key), kept
- * by triggers on `play_events` (migration `0041_streamed_counts`). Home reads
+ * by triggers on `play_events` (migration `0042_streamed_counts`). Home reads
  * them beside `play_totals`, the rows whose video id or key a Library song has
  * counting as that song's (`streamedTrack`).
  */

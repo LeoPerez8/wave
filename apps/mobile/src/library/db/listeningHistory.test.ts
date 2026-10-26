@@ -26,6 +26,7 @@ import {
 } from "./stats.ts";
 import { mixHistoryPage } from "./mixInputs.ts";
 import { selectUnpushed } from "./syncRows.ts";
+import { markPushed } from "./syncRows.ts";
 import { selectPlaylistsLastPlayed } from "./playlists.ts";
 import { deleteTracksById } from "./tracks.ts";
 
@@ -231,7 +232,6 @@ test("streamed starts, progress and ends leave the Library-only consumers unchan
     recapPage: countedListeningPage(db, 0),
     mixes: mixHistoryPage(db, 0),
     keys: playedRecordingKeys(db),
-    push: selectUnpushed(db, 100, () => null).rows.plays,
     taste: tasteHistory(db),
     graph: graphPlayPage(db, [-Number.MAX_VALUE, 0]).rows,
   });
@@ -358,5 +358,21 @@ test("totals stay correct when an event changes between Library and video identi
   assert.equal(listeningSums(db).countedPlays, 1);
   db.delete(schema.playEvents).where(eq(schema.playEvents.id, id)).run();
   assert.equal(listeningSums(db).countedPlays, 0);
+  assert.deepEqual(playTotalsDrift(db), []);
+});
+
+test("the snapshot-sync upgrade preserves Library and streamed history and their pushed flags", async () => {
+  const db = await openTestDatabase({ through: "0040_streamed_plays" });
+  const track = addTrack(db, { title: "Library song" });
+  const library = play(track, 1000);
+  endPlay(db, recordPlay(db, library), library);
+  const stream = { ...play(track, 2000), trackId: "yt:history-video" };
+  endPlay(db, recordPlay(db, stream, false, streamedSong), stream);
+  const outgoing = selectUnpushed(db, 100, () => null);
+  markPushed(db, [...outgoing.marks.values()].flat());
+  const before = listeningHistory(db);
+  await migrateTestDatabase(db);
+  assert.deepEqual(listeningHistory(db), before);
+  assert.deepEqual(selectUnpushed(db, 100, () => null).rows.plays, []);
   assert.deepEqual(playTotalsDrift(db), []);
 });

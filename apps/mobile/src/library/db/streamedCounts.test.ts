@@ -213,7 +213,7 @@ describe("Listening totals with streamed plays", () => {
   });
 
   test("upgrading sums the streamed plays recorded before", async () => {
-    db = await openTestDatabase({ through: "0040_streamed_plays" });
+    db = await openTestDatabase({ through: "0041_synced_play_snapshots" });
     stream(airbag, 1_000);
     stream(airbag, 2_000, { counted: false, listenedMs: 1_000, endReason: "skipped" });
     await migrateTestDatabase(db);

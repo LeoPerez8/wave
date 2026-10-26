@@ -10,6 +10,7 @@
 import {
   UNKNOWN_ALBUM,
   accountTrackIds,
+  creditSplitter,
   mergeRows,
   planSongSync,
   songsLeaving,
@@ -20,19 +21,20 @@ import {
   type SyncPlaylist,
   type SyncPlaylistEntry,
   type SyncPreference,
+  type PlaySnapshot,
   type SyncPullPage,
   type SyncRow,
   type SyncSong,
   type SyncSongFields,
   type SyncTables,
 } from "@wave/core";
-import { and, asc, eq, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
+import { and, asc, eq, getTableColumns, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 
 import { chunks } from "./chunks.ts";
 import type { LibraryDatabase } from "./database.ts";
 import * as schema from "./schema.ts";
 import { selectPhoneId, selectTrackIdentities, stamped } from "./sync.ts";
-import { hasFile } from "./tracks.ts";
+import { hasFile, trackQuery } from "./tracks.ts";
 
 // --- The account the Library is joined with ---------------------------------
 
@@ -110,6 +112,21 @@ export const selectAccountTrackIds = (db: LibraryDatabase): Map<string, number> 
 };
 
 // --- What goes up ------------------------------------------------------------
+
+// Covers are caches on each phone. Only remote references travel to the account.
+const remoteCover = (value: string | null | undefined): string | null =>
+  value !== null && value !== undefined && /^https?:\/\//i.test(value) ? value : null;
+
+const wireSnapshot = (snapshot: PlaySnapshot | null): PlaySnapshot | null =>
+  snapshot === null
+    ? null
+    : {
+        title: snapshot.title,
+        artist: snapshot.artist,
+        album: snapshot.album,
+        artworkPath: remoteCover(snapshot.artworkUrl) ?? remoteCover(snapshot.artworkPath),
+        thumbPath: remoteCover(snapshot.thumbPath) ?? remoteCover(snapshot.artworkUrl),
+      };
 
 /** A local row a pushed row was read from, and the change it had then. */
 type PushMark =
@@ -339,12 +356,18 @@ export const selectUnpushed = (
     });
 
   const plays = db
-    .select()
+    .select({
+      ...getTableColumns(playEvents),
+      currentTitle: tracks.title,
+      currentArtist: tracks.artistCredit,
+      currentAlbum: schema.albums.title,
+    })
     .from(playEvents)
+    .leftJoin(tracks, eq(playEvents.trackId, tracks.id))
+    .leftJoin(schema.albums, eq(tracks.albumId, schema.albums.id))
     .where(
       and(
         eq(playEvents.pushed, false),
-        isNotNull(playEvents.trackId),
         eq(playEvents.ongoing, false),
         isNotNull(playEvents.syncId),
         isNotNull(playEvents.recordingKey),
@@ -369,6 +392,16 @@ export const selectUnpushed = (
           contextId: row.contextId,
           source: row.source,
           importedFrom: row.importedFrom,
+          snapshot: wireSnapshot(
+            row.snapshot ?? {
+              title: row.currentTitle ?? "Unknown song",
+              artist: row.currentArtist ?? "",
+              album: row.currentAlbum,
+              artworkPath: null,
+              thumbPath: null,
+            },
+          ),
+          videoId: row.videoId,
         },
       ];
     });
@@ -874,6 +907,7 @@ const applyPlay = (
   tx: LibraryDatabase,
   row: SyncPlayRow,
   trackIds: ReadonlyMap<string, number>,
+  split: (credit: string) => readonly string[],
 ): boolean => {
   const { playEvents } = schema;
   const held = tx
@@ -887,15 +921,54 @@ const applyPlay = (
     unpend(tx, "plays", row.id);
     return false;
   }
-  const trackId = trackIds.get(row.songId);
-  if (trackId === undefined) {
+  // Keep a stream's video identity even when its file is here, just as a
+  // locally recorded stream does. History resolves its current Library song.
+  const videoId = row.videoId ?? null;
+  const trackId = videoId === null ? trackIds.get(row.songId) : undefined;
+  if (trackId === undefined && videoId === null && row.snapshot == null) {
     pend(tx, "plays", row, { songKey: row.songId });
     return false;
   }
+  const song =
+    trackId === undefined ? undefined : trackQuery(tx).where(eq(schema.tracks.id, trackId)).get();
+  const snapshot =
+    row.snapshot === null || row.snapshot === undefined
+      ? song === undefined
+        ? null
+        : {
+            title: song.title,
+            artist: song.artist,
+            album: song.album,
+            artworkPath: song.artworkPath,
+            thumbPath: song.thumbPath,
+          }
+      : {
+          title: row.snapshot.title,
+          artist: row.snapshot.artist,
+          album: row.snapshot.album,
+          artworkPath: null,
+          thumbPath: null,
+          artworkUrl: remoteCover(row.snapshot.artworkPath) ?? remoteCover(row.snapshot.thumbPath),
+        };
   unpend(tx, "plays", row.id);
   tx.insert(playEvents)
     .values({
-      trackId,
+      trackId: trackId ?? null,
+      videoId,
+      snapshot,
+      streamedSong:
+        videoId === null
+          ? null
+          : {
+              videoId,
+              title: snapshot?.title ?? "Unknown song",
+              artists: split(snapshot?.artist ?? ""),
+              album: snapshot?.album ?? null,
+              artworkUrl: snapshot?.artworkUrl ?? null,
+              durationMs: row.durationMs,
+              explicit: false,
+              albumId: null,
+            },
       recordingKey: row.songId,
       syncId: row.id,
       startedAt: row.startedAt,
@@ -926,16 +999,26 @@ const applyRows = (
   for (const row of rows.favorites) {
     if (applyFavorite(tx, row, trackIds)) changed.favorites = true;
   }
-  for (const row of rows.plays) {
-    if (applyPlay(tx, row, trackIds)) changed.plays = true;
+  if (rows.plays.length > 0) {
+    const split = creditSplitter(
+      tx
+        .select({ name: schema.artists.name })
+        .from(schema.artists)
+        .all()
+        .map((row) => row.name),
+    );
+    for (const row of rows.plays) {
+      if (applyPlay(tx, row, trackIds, split)) changed.plays = true;
+    }
   }
 };
 
 /**
  * Applies a page the account sent: each row merged with the phone's by
  * Core's rules (`mergeRows`, plays by id only), recording keys turned into
- * the phone's Tracks by [trackIds] (`selectAccountTrackIds`). A row whose
- * song or playlist the phone lacks waits in `sync_pending`. The page's
+ * the phone's Tracks by [trackIds] (`selectAccountTrackIds`). Streamed plays
+ * and Library plays with snapshots show immediately; other rows whose
+ * song or playlist the phone lacks wait in `sync_pending`. The page's
  * cursor is kept for the next pull, in the same transaction.
  */
 export const applyPulledPage = (
@@ -1001,6 +1084,28 @@ export const applyPending = (
     }
     const changed = nothingChanged();
     applyRows(tx, rows, trackIds, changed);
+    // A snapshot-only Library play is already visible; attach it once its
+    // account song or file arrives, keeping its play id and display snapshot.
+    const detached = tx
+      .selectDistinct({ key: schema.playEvents.recordingKey })
+      .from(schema.playEvents)
+      .where(and(isNull(schema.playEvents.trackId), isNull(schema.playEvents.videoId)))
+      .all();
+    for (const { key } of detached) {
+      const trackId = key === null ? undefined : trackIds.get(key);
+      if (trackId === undefined || key === null) continue;
+      tx.update(schema.playEvents)
+        .set({ trackId })
+        .where(
+          and(
+            eq(schema.playEvents.recordingKey, key),
+            isNull(schema.playEvents.trackId),
+            isNull(schema.playEvents.videoId),
+          ),
+        )
+        .run();
+      changed.plays = true;
+    }
     return changed;
   });
 };
