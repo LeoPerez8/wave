@@ -27,7 +27,6 @@ import {
 import { mixHistoryPage } from "./mixInputs.ts";
 import { selectUnpushed } from "./syncRows.ts";
 import { markPushed } from "./syncRows.ts";
-import { selectPlaylistsLastPlayed } from "./playlists.ts";
 import { deleteTracksById } from "./tracks.ts";
 
 const play = (trackId: number, startedAt: number, counted = true): PlayEvent => ({

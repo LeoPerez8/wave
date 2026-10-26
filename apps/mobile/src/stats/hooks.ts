@@ -11,7 +11,7 @@ import { useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import { AppState } from "react-native";
 
-import type { AlbumRow, ArtistRow, LibraryStoreError, SongRow } from "@/library/LibraryStore";
+import type { AlbumRow, ArtistRow, LibraryStoreError } from "@/library/LibraryStore";
 import { useFocusedVersion } from "@/lib/useFocusedVersion";
 import { appRuntime } from "@/library/runtime";
 import { playHistoryVersion } from "@/playback/PlayHistory";
@@ -69,7 +69,8 @@ const useRanking = <A>(
 ): readonly Ranked<A>[] | undefined =>
   useStatsRead(useCallback((stats) => read(stats, period, limit), [read, period, limit]));
 
-const readTopSongs: ReadRanking<StatsSong> = (stats, period, limit) => stats.topSongs(period, limit);
+const readTopSongs: ReadRanking<StatsSong> = (stats, period, limit) =>
+  stats.topSongs(period, limit);
 
 const readTopAlbums: ReadRanking<AlbumRow> = (stats, period, limit) =>
   stats.topAlbums(period, limit);

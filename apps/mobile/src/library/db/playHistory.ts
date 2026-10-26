@@ -278,7 +278,12 @@ const mostPlayedSongs = (db: LibraryDatabase, scope: TrackScope): MostPlayedRow[
           })
           .from(tracks)
           .leftJoin(playTotals, eq(playTotals.trackId, tracks.id))
-          .where(and(inArray(tracks.id, counted), scope === "files" ? isNotNull(tracks.path) : undefined))
+          .where(
+            and(
+              inArray(tracks.id, counted),
+              scope === "files" ? isNotNull(tracks.path) : undefined,
+            ),
+          )
           .all();
   const inScopeIds = new Set([...listed, ...credited.map((song) => song.id)]);
   const ranked = rankMostPlayed(

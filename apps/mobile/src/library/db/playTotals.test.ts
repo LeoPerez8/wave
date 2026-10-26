@@ -328,7 +328,9 @@ describe("Home's all-time reads", () => {
       mostPlayedFromHistory("library"),
     );
     assert.deepEqual(
-      homeSections(db, "files").mostPlayed.map(libraryRow).map((song) => [song.id, song.playCount]),
+      homeSections(db, "files")
+        .mostPlayed.map(libraryRow)
+        .map((song) => [song.id, song.playCount]),
       mostPlayedFromHistory("files"),
     );
     assert.deepEqual(

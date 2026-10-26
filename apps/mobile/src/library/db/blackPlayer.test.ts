@@ -35,7 +35,9 @@ describe("Imported BlackPlayer plays", () => {
       ],
     );
     assert.deepEqual(
-      homeSections(db).mostPlayed.map(libraryRow).map((row) => [row.title, row.playCount]),
+      homeSections(db)
+        .mostPlayed.map(libraryRow)
+        .map((row) => [row.title, row.playCount]),
       [
         ["Airbag", 2],
         ["Bloom", 1],

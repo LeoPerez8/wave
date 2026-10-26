@@ -89,10 +89,7 @@ export const songPlayTotals = (db: LibraryDatabase, window: StatsWindow): SongPl
       WHERE tracks.id IS NOT NULL OR songs.video_id IS NOT NULL`,
     )
     .map(({ trackId, videoId, titleSort, title, ...totals }) => ({
-      song:
-        trackId === null
-          ? { kind: "yt", videoId: videoId! }
-          : { kind: "library", id: trackId },
+      song: trackId === null ? { kind: "yt", videoId: videoId! } : { kind: "library", id: trackId },
       sortKey: titleSort ?? sortKey(title ?? ""),
       ...totals,
     }));

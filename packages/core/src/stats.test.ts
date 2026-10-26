@@ -68,21 +68,21 @@ const totals = (id: number, overrides: Partial<PlayTotals> = {}): PlayTotals => 
 
 const ids = (ranking: readonly PlayTotals[]) => ranking.map((entry) => entry.id);
 
-describe("rankSongPlays", () => {
-  const song = (
-    song: SongPlayTotals["song"],
-    overrides: Partial<SongPlayTotals> = {},
-  ): SongPlayTotals => ({
-    song,
-    sortKey: "same",
-    countedPlays: 1,
-    listenedMs: 180_000,
-    latestPlayAt: 1_000,
-    ...overrides,
-  });
-  const library = (id: number) => ({ kind: "library", id }) as const;
-  const streamed = (videoId: string) => ({ kind: "yt", videoId }) as const;
+const song = (
+  ref: SongPlayTotals["song"],
+  overrides: Partial<SongPlayTotals> = {},
+): SongPlayTotals => ({
+  song: ref,
+  sortKey: "same",
+  countedPlays: 1,
+  listenedMs: 180_000,
+  latestPlayAt: 1_000,
+  ...overrides,
+});
+const library = (id: number) => ({ kind: "library", id }) as const;
+const streamed = (videoId: string) => ({ kind: "yt", videoId }) as const;
 
+describe("rankSongPlays", () => {
   test("ranks streamed and Library songs together by the same rule", () => {
     const ranking = rankSongPlays(
       [

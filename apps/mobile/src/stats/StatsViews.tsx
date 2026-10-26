@@ -19,7 +19,7 @@ import { SwipeTrackRow } from "@/library/SwipeTrackRow";
 import { useChromeInset } from "@/chrome/chrome";
 import { EmptyState } from "@/components/EmptyState";
 import { useFavoriteIds } from "@/library/favorites";
-import type { AlbumRow, ArtistRow, SongRow } from "@/library/LibraryStore";
+import type { AlbumRow, ArtistRow } from "@/library/LibraryStore";
 import { openAlbum, openArtist, openRecap } from "@/library/routes";
 import { toTrackSummary } from "@/library/TrackList";
 import { Press } from "@/motion/Press";

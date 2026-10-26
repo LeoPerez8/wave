@@ -1901,8 +1901,7 @@ const make = Effect.gen(function* () {
     trackPlayTotals: (window, trackIds) =>
       attempt("sum up song plays", () => trackPlayTotals(db, window, trackIds)),
 
-    songPlayTotals: (window) =>
-      attempt("sum up song plays", () => songPlayTotals(db, window)),
+    songPlayTotals: (window) => attempt("sum up song plays", () => songPlayTotals(db, window)),
 
     streamedSongsByIds: (videoIds) =>
       attempt("read streamed songs", () => streamedSongsOf(db, videoIds)),

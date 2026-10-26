@@ -19,7 +19,10 @@ export const streamedSongsOf = (
   videoIds: readonly string[],
 ): Map<string, YtAlbumSong> => {
   const songs = new Map<string, YtAlbumSong>();
-  const latest = (videoId: string, kept: typeof playEvents.streamedSong | typeof playEvents.snapshot) =>
+  const latest = (
+    videoId: string,
+    kept: typeof playEvents.streamedSong | typeof playEvents.snapshot,
+  ) =>
     db
       .select({ song: playEvents.streamedSong, snapshot: playEvents.snapshot })
       .from(playEvents)

@@ -162,7 +162,9 @@ const rankSongs = (
   return Effect.map(
     Effect.all([
       ids.length === 0 ? Effect.succeed([]) : store.songsByIds(ids),
-      videoIds.length === 0 ? Effect.succeed(new Map<string, YtAlbumSong>()) : store.streamedSongsByIds(videoIds),
+      videoIds.length === 0
+        ? Effect.succeed(new Map<string, YtAlbumSong>())
+        : store.streamedSongsByIds(videoIds),
     ]),
     ([rows, streamed]) => {
       const byId = new Map(rows.map((row) => [row.id, row]));
