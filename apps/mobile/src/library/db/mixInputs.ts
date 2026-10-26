@@ -119,13 +119,18 @@ export const mixStreamedPlaysPage = (db: LibraryDatabase, after: number) => {
     rows.map((row) => row.videoId),
   );
   return {
-    rows: rows.map(
-      ({ cursor: _, credits, ...row }): MixStreamedPlays => ({
-        ...row,
-        credits: JSON.parse(credits) as [number, string][],
-        song: songs.get(row.videoId) ?? null,
-      }),
-    ),
+    rows: rows.map((row): MixStreamedPlays => ({
+      videoId: row.videoId,
+      recordingKey: row.recordingKey,
+      trackId: row.trackId,
+      credits: JSON.parse(row.credits) as [number, string][],
+      plays: row.plays,
+      countedPlays: row.countedPlays,
+      countedListenedMs: row.countedListenedMs,
+      latestPlayAt: row.latestPlayAt,
+      firstPlayedAt: row.firstPlayedAt,
+      song: songs.get(row.videoId) ?? null,
+    })),
     next: rows.at(-1)?.cursor ?? null,
   };
 };

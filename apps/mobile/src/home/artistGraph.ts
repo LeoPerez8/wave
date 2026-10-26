@@ -57,7 +57,7 @@ export const readArtistGraph = (
       const page = yield* store.graphPlayPage(plays);
       if (split === null && page.rows.some((play) => play.streamed)) {
         const credits: string[] = [];
-        for (let after: number | null = 0; after !== null; ) {
+        for (let after: number | null = 0; after !== null;) {
           yield* between;
           const names: Effect.Success<ReturnType<ArtistGraphReads["mixCreditNamesPage"]>> =
             yield* store.mixCreditNamesPage(after);

@@ -45,7 +45,6 @@ import {
   type GraphPlay,
   type GraphPlayCursor,
 } from "./db/artistGraph";
-import type { ArtistGraphPlay } from "@wave/core";
 import { selectNowPlayingSong } from "./db/nowPlayingSong";
 import type { PlayingSongAnswer, PlayingSongTarget } from "../nowPlaying/songLookup";
 import {
@@ -222,11 +221,7 @@ import {
   type DuplicateFixToApply,
 } from "./db/replacementDuplicates";
 import { keepLyricsMiss, selectLyricsSearchTrack, type LyricsSearchTrack } from "./db/lyricsMisses";
-import {
-  selectKnownVideos,
-  selectPlaylistedSongs,
-  selectStreamedSongs,
-} from "./db/mixKnown";
+import { selectKnownVideos, selectPlaylistedSongs, selectStreamedSongs } from "./db/mixKnown";
 import { addCandidates, selectCandidateCatalog } from "./db/candidateCatalog";
 import { hasUnscannedRoot, pruneOrphans, saveBatch, type SavedBatch } from "./db/save";
 import * as schema from "./db/schema";

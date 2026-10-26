@@ -206,32 +206,34 @@ const miles = { id: 10, sort: "davis, miles" };
 const coltrane = { id: 11, sort: "coltrane, john" };
 const evans = { id: 12, sort: "evans, bill" };
 
-describe("rankEntityPlaysSteps", () => {
-  const run = <A>(steps: Generator<void, A>): { result: A; turns: number } => {
-    let turns = 0;
-    for (;;) {
-      const next = steps.next();
-      if (next.done) return { result: next.value, turns };
-      turns++;
-    }
-  };
-  const totals = (id: number | string, countedPlays: number, sortKey = "b") => ({
-    id,
-    sortKey,
-    countedPlays,
-    listenedMs: 0,
-    latestPlayAt: 0,
-  });
+/** Runs [steps] to their end, counting the turns they yielded. */
+const runSteps = <A>(steps: Generator<void, A>): { result: A; turns: number } => {
+  let turns = 0;
+  for (;;) {
+    const next = steps.next();
+    if (next.done) return { result: next.value, turns };
+    turns++;
+  }
+};
 
+const entityTotals = (id: number | string, countedPlays: number) => ({
+  id,
+  sortKey: "b",
+  countedPlays,
+  listenedMs: 0,
+  latestPlayAt: 0,
+});
+
+describe("rankEntityPlaysSteps", () => {
   test("ranks online artists among Library ones, in steps, a Library id first on a full tie", () => {
-    const { result, turns } = run(
+    const { result, turns } = runSteps(
       rankEntityPlaysSteps(
         [
-          totals("artist:a", 2),
-          totals(7, 2),
-          totals("artist:never", 0),
-          totals(3, 5),
-          totals("artist:c", 9),
+          entityTotals("artist:a", 2),
+          entityTotals(7, 2),
+          entityTotals("artist:never", 0),
+          entityTotals(3, 5),
+          entityTotals("artist:c", 9),
         ],
         3,
       ),

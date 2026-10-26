@@ -396,6 +396,33 @@ test("pages of deleted plays advance without skipping the surviving graph and ta
   }
 });
 
+const streamPlay = (trackId: string, startedAt: number): PlayEvent => ({
+  trackId,
+  context: null,
+  startedAt,
+  listenedMs: 180_000,
+  durationMs: 180_000,
+  endReason: "completed",
+  counted: true,
+  source: "phone",
+});
+const onlineSong = (videoId: string, artists: string[]): YtAlbumSong => ({
+  videoId,
+  title: videoId,
+  artists,
+  album: null,
+  albumId: null,
+  durationMs: 180_000,
+  artworkUrl: null,
+  explicit: false,
+});
+const heard = (startedAt: number, artists: string[]) => ({
+  startedAt,
+  listenedMs: 180_000,
+  endReason: "completed" as const,
+  artists,
+});
+
 test("streamed plays join the owner's sessions with their credited artists", async () => {
   const db = await openTestDatabase();
   const roads = addTrack(db, { title: "Roads", artist: "Portishead", album: "Dummy" });
@@ -404,51 +431,40 @@ test("streamed plays join the owner's sessions with their credited artists", asy
   addTrack(db, { title: "Hymn", artist: "Simon & Garfunkel", album: "Hits" });
   relinkCredits(db, creditSplits());
   const store = await loadLibraryStore(root, db);
-  const play = (trackId: string, startedAt: number): PlayEvent => ({
-    trackId,
-    context: null,
-    startedAt,
-    listenedMs: 180_000,
-    durationMs: 180_000,
-    endReason: "completed",
-    counted: true,
-    source: "phone",
-  });
-  const online = (videoId: string, artists: string[]): YtAlbumSong => ({
-    videoId,
-    title: videoId,
-    artists,
-    album: null,
-    albumId: null,
-    durationMs: 180_000,
-    artworkUrl: null,
-    explicit: false,
-  });
-  recordPlay(db, play(String(roads), 0));
+  recordPlay(db, streamPlay(String(roads), 0));
   // An unknown duo splits as Stats credits it; one the Library knows whole stays whole.
-  recordPlay(db, play("yt:v-teardrop", 200_000), false, online("v-teardrop", ["Massive Attack & Tricky"]));
-  recordPlay(db, play("yt:v-hymn", 400_000), false, online("v-hymn", ["Simon & Garfunkel"]));
+  recordPlay(
+    db,
+    streamPlay("yt:v-teardrop", 200_000),
+    false,
+    onlineSong("v-teardrop", ["Massive Attack & Tricky"]),
+  );
+  recordPlay(
+    db,
+    streamPlay("yt:v-hymn", 400_000),
+    false,
+    onlineSong("v-hymn", ["Simon & Garfunkel"]),
+  );
   // The download of a streamed video: its plays are the Library song's, by its artists.
-  recordPlay(db, play("yt:v-archangel", 600_000), false, online("v-archangel", ["Someone Else"]));
+  recordPlay(
+    db,
+    streamPlay("yt:v-archangel", 600_000),
+    false,
+    onlineSong("v-archangel", ["Someone Else"]),
+  );
 
   const graph = Effect.runSync(readArtistGraph(store));
 
-  const at = (startedAt: number, artists: string[]) => ({
-    startedAt,
-    listenedMs: 180_000,
-    endReason: "completed" as const,
-    artists,
-  });
   assert.deepEqual(
     graph,
     artistGraph({
       catalog: [],
       pages: [],
       plays: [
-        at(0, ["Portishead"]),
-        at(200_000, ["Massive Attack", "Tricky"]),
-        at(400_000, ["Simon & Garfunkel"]),
-        at(600_000, ["Burial"]),
+        heard(0, ["Portishead"]),
+        heard(200_000, ["Massive Attack", "Tricky"]),
+        heard(400_000, ["Simon & Garfunkel"]),
+        heard(600_000, ["Burial"]),
       ],
     }),
   );

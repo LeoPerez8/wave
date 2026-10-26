@@ -119,6 +119,8 @@ for (const cachedFinder of [false, true])
     }
   });
 
+const totals = (countedPlays: number) => ({ countedPlays, listenedMs: 0, latestPlayAt: 0 });
+
 test("a cold build seeds from streamed plays as Stats ranks them", async () => {
   const song = {
     id: 1,
@@ -152,7 +154,6 @@ test("a cold build seeds from streamed plays as Stats ranks them", async () => {
     thumbPath: null,
     artworkPath: null,
   };
-  const totals = (countedPlays: number) => ({ countedPlays, listenedMs: 0, latestPlayAt: 0 });
   const { library } = await Effect.runPromise(
     readMixBuildLibrary(
       null,

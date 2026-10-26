@@ -118,13 +118,13 @@ export const readMixInputs = (
         (function* () {
           for (const row of page) {
             const total = allTotals.get(row.id);
-            for (const [id, sortKey] of JSON.parse(row.credits) as [number, string][]) {
+            for (const [id, key] of JSON.parse(row.credits) as [number, string][]) {
               if (total !== undefined) {
                 const previous = artistTotals.get(id);
                 artistTotals.set(id, {
                   ...total,
                   id,
-                  sortKey,
+                  sortKey: key,
                   countedPlays: (previous?.countedPlays ?? 0) + total.countedPlays,
                   listenedMs: (previous?.listenedMs ?? 0) + total.listenedMs,
                   latestPlayAt: Math.max(previous?.latestPlayAt ?? -Infinity, total.latestPlayAt),
