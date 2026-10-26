@@ -239,11 +239,19 @@ export interface ShuffleSong {
   readonly album: string | null;
 }
 
-/** The name Even Shuffle compares [value] by; null when there's none. */
-const sameKey = (value: string | null | undefined): string | null => {
-  const key = value?.trim().toLowerCase() ?? "";
+/** The key Even Shuffle compares [name] by (trimmed, lower case); null when there's no name. */
+const nameKey = (name: string | null | undefined): string | null => {
+  const key = name?.trim().toLowerCase() ?? "";
   return key === "" ? null : key;
 };
+
+/**
+ * The key Even Shuffle groups [entry] by for [name] (an artist or an album):
+ * the name's key, or, when the name is unknown, a key of the entry's own, so
+ * it makes a group by itself. The NUL keeps it apart from every name's key.
+ */
+const groupKey = (name: string | null | undefined, entry: QueueEntry): string =>
+  nameKey(name) ?? `\u0000${entry.key}`;
 
 /** A song as `takeTurns` keeps it: its group and genre, and where it sits in the lists it's in. */
 interface TurnSong {
@@ -295,27 +303,28 @@ const addCount = (counts: Map<string, number>, key: string | null, by: number): 
   if (key !== null) counts.set(key, (counts.get(key) ?? 0) + by);
 };
 
+/** What `takeTurns` orders, and how it tells the songs' groups and genres apart. */
+interface Turns {
+  readonly entries: readonly QueueEntry[];
+  readonly groupOf: (entry: QueueEntry) => string;
+  readonly genreOf: (entry: QueueEntry) => string | null;
+  /** The song before them, if any: the first song taken avoids its group and genre. */
+  readonly previous: QueueEntry | null;
+  readonly random: () => number;
+}
+
 /**
- * Orders [entries] so their groups ([groupOf]) take turns after [last] (the
- * song before them, if any): two songs of one group only follow each other
- * when nothing else is left. Each turn, a group that holds more than half the
- * songs left goes whenever it may (so when one group outnumbers all the
- * others, its leftover songs close the order); otherwise any group but the
- * previous song's may. Among the songs of the groups that may go next, the
- * next one is a random song of another genre ([genreOf]) than the previous
- * song's when there's one (a song with no genre never repeats one). With
- * [untilOne], it stops once a single group is left and hands its songs back
- * as [rest].
+ * Takes [turns]' songs one at a time so their groups take turns after the
+ * previous song: two songs of one group only follow each other when nothing
+ * else is left. Each turn, a group that holds more than half the songs left
+ * goes whenever it may (so when one group outnumbers all the others, its
+ * leftover songs close the order); otherwise any group but the previous
+ * song's may. Among the songs of the groups that may go next, the next one is
+ * a random song of another genre than the previous song's when there's one (a
+ * song with no genre never repeats one).
  */
-const takeTurns = (
-  entries: readonly QueueEntry[],
-  groupOf: (entry: QueueEntry) => string,
-  genreOf: (entry: QueueEntry) => string | null,
-  last: QueueEntry | null,
-  random: () => number,
-  untilOne: boolean,
-): { order: QueueEntry[]; rest: QueueEntry[] } => {
-  const all: TurnSong[] = [];
+const turnTaker = ({ entries, groupOf, genreOf, previous, random }: Turns) => {
+  const left: TurnSong[] = [];
   const groups = new Map<string, TurnGroup>();
   const genres = new Map<string, number>();
   for (const entry of entries) {
@@ -323,7 +332,7 @@ const takeTurns = (
       entry,
       group: groupOf(entry),
       genre: genreOf(entry),
-      at: all.length,
+      at: left.length,
       groupAt: 0,
     };
     let group = groups.get(song.group);
@@ -333,62 +342,107 @@ const takeTurns = (
     }
     song.groupAt = group.songs.length;
     group.songs.push(song);
-    all.push(song);
+    left.push(song);
     addCount(group.genres, song.genre, 1);
     addCount(genres, song.genre, 1);
   }
   // The groups by how many songs they have left, so the biggest is found at once.
   const bySize = new Map<number, Set<string>>();
-  let biggest = 0;
-  for (const [name, group] of groups) {
-    const size = group.songs.length;
+  const fileBySize = (name: string, size: number): void => {
     bySize.set(size, (bySize.get(size) ?? new Set()).add(name));
-    biggest = Math.max(biggest, size);
+  };
+  let biggestSize = 0;
+  for (const [name, group] of groups) {
+    fileBySize(name, group.songs.length);
+    biggestSize = Math.max(biggestSize, group.songs.length);
   }
-  const order: QueueEntry[] = [];
-  let lastGroup = last === null ? null : groupOf(last);
-  let lastGenre = last === null ? null : genreOf(last);
-  while (all.length > 0) {
-    if (untilOne && groups.size === 1) break;
-    const left = all.length;
-    const fresh = (song: TurnSong): boolean => lastGenre === null || song.genre !== lastGenre;
-    const sameGenre = (counts: Map<string, number>): number =>
-      lastGenre === null ? 0 : (counts.get(lastGenre) ?? 0);
+  let previousGroupName = previous === null ? null : groupOf(previous);
+  let previousGenre = previous === null ? null : genreOf(previous);
+
+  /** Whether [song] doesn't repeat the previous song's genre. */
+  const changesGenre = (song: TurnSong): boolean =>
+    previousGenre === null || song.genre !== previousGenre;
+  /** How many songs of a list whose genres are counted in [counts] repeat the previous song's genre. */
+  const repeatingGenre = (counts: Map<string, number>): number =>
+    previousGenre === null ? 0 : (counts.get(previousGenre) ?? 0);
+  /** A random song of [list] (genres counted in [counts]) that changes genre, or any when none does. */
+  const changingGenreIfAny = (list: readonly TurnSong[], counts: Map<string, number>): TurnSong => {
+    const anyChanges = list.length > repeatingGenre(counts);
+    return randomFitting(list, random, (song) => !anyChanges || changesGenre(song));
+  };
+
+  /** The next song, taken out of those left: each group as likely as the songs it has that may go. */
+  const next = (): TurnSong => {
     // Only the biggest group can hold more than half the songs left.
-    const [ahead] = bySize.get(biggest) ?? [];
-    const lastOnes = lastGroup === null ? undefined : groups.get(lastGroup);
-    const lastSize = lastOnes?.songs.length ?? 0;
-    const lastFresh = lastSize - (lastOnes === undefined ? 0 : sameGenre(lastOnes.genres));
-    const othersFresh = left - sameGenre(genres) - lastFresh;
-    // A random song of those that may go next: each group as likely as the songs it has that may.
-    let song: TurnSong;
-    if (ahead !== undefined && ahead !== lastGroup && 2 * biggest > left) {
-      const group = groups.get(ahead)!;
-      const anyFresh = group.songs.length > sameGenre(group.genres);
-      song = randomFitting(group.songs, random, (one) => !anyFresh || fresh(one));
-    } else if (othersFresh > 0) {
-      song = randomFitting(all, random, (one) => one.group !== lastGroup && fresh(one));
-    } else if (left > lastSize) {
-      song = randomFitting(all, random, (one) => one.group !== lastGroup);
-    } else {
-      const anyFresh = left > sameGenre(genres);
-      song = randomFitting(all, random, (one) => !anyFresh || fresh(one));
+    const [biggestGroupName] = bySize.get(biggestSize) ?? [];
+    const previousGroup = previousGroupName === null ? undefined : groups.get(previousGroupName);
+    const previousGroupSize = previousGroup?.songs.length ?? 0;
+    const previousGroupChanging =
+      previousGroupSize - (previousGroup === undefined ? 0 : repeatingGenre(previousGroup.genres));
+    const otherGroupsChanging = left.length - repeatingGenre(genres) - previousGroupChanging;
+    if (
+      biggestGroupName !== undefined &&
+      biggestGroupName !== previousGroupName &&
+      2 * biggestSize > left.length
+    ) {
+      const group = groups.get(biggestGroupName)!;
+      return changingGenreIfAny(group.songs, group.genres);
     }
-    const group = groups.get(song.group)!;
-    const size = group.songs.length;
-    takeOut(all, song, "at");
-    takeOut(group.songs, song, "groupAt");
-    addCount(group.genres, song.genre, -1);
-    addCount(genres, song.genre, -1);
-    bySize.get(size)!.delete(song.group);
-    if (size > 1) bySize.set(size - 1, (bySize.get(size - 1) ?? new Set()).add(song.group));
-    else groups.delete(song.group);
-    while (biggest > 0 && (bySize.get(biggest)?.size ?? 0) === 0) biggest -= 1;
-    order.push(song.entry);
-    lastGroup = song.group;
-    lastGenre = song.genre;
-  }
-  return { order, rest: all.map((song) => song.entry) };
+    if (otherGroupsChanging > 0) {
+      return randomFitting(
+        left,
+        random,
+        (song) => song.group !== previousGroupName && changesGenre(song),
+      );
+    }
+    if (left.length > previousGroupSize) {
+      return randomFitting(left, random, (song) => song.group !== previousGroupName);
+    }
+    return changingGenreIfAny(left, genres);
+  };
+
+  return {
+    /** How many groups still have songs. */
+    groupsLeft: (): number => groups.size,
+    /** Takes the next song (one must be left). */
+    take: (): QueueEntry => {
+      const song = next();
+      const group = groups.get(song.group)!;
+      const size = group.songs.length;
+      takeOut(left, song, "at");
+      takeOut(group.songs, song, "groupAt");
+      addCount(group.genres, song.genre, -1);
+      addCount(genres, song.genre, -1);
+      bySize.get(size)!.delete(song.group);
+      if (size > 1) fileBySize(song.group, size - 1);
+      else groups.delete(song.group);
+      while (biggestSize > 0 && (bySize.get(biggestSize)?.size ?? 0) === 0) biggestSize -= 1;
+      previousGroupName = song.group;
+      previousGenre = song.genre;
+      return song.entry;
+    },
+    /** The songs not taken yet. */
+    rest: (): QueueEntry[] => left.map((song) => song.entry),
+  };
+};
+
+/** [turns]' songs, ordered so their groups take turns (`turnTaker`). */
+const takeTurns = (turns: Turns): QueueEntry[] => {
+  const taker = turnTaker(turns);
+  const order: QueueEntry[] = [];
+  while (taker.groupsLeft() > 0) order.push(taker.take());
+  return order;
+};
+
+/**
+ * [turns]' songs ordered as `takeTurns` does until a single group is left:
+ * the songs taken until then, and that group's songs as the [rest].
+ */
+const takeTurnsUntilOneGroup = (turns: Turns): { order: QueueEntry[]; rest: QueueEntry[] } => {
+  const taker = turnTaker(turns);
+  const order: QueueEntry[] = [];
+  while (taker.groupsLeft() > 1) order.push(taker.take());
+  return { order, rest: taker.rest() };
 };
 
 /**
@@ -403,15 +457,25 @@ const evenShuffled = (
   previous: QueueEntry | null,
 ): QueueEntry[] => {
   // A song with no known artist is an artist of its own, and one with no known album an album.
-  const artistOf = (entry: QueueEntry): string =>
-    sameKey(songs.get(entry.trackId)?.artist) ?? `\u0000${entry.key}`;
+  const artistOf = (entry: QueueEntry): string => groupKey(songs.get(entry.trackId)?.artist, entry);
   const albumOf = (entry: QueueEntry): string =>
-    `${artistOf(entry)}\u0000${sameKey(songs.get(entry.trackId)?.album) ?? `\u0000${entry.key}`}`;
-  const genreOf = (entry: QueueEntry): string | null => sameKey(songs.get(entry.trackId)?.genre);
-  const artists = takeTurns(entries, artistOf, genreOf, previous, random, true);
-  const last = artists.order.at(-1) ?? previous;
-  const albums = takeTurns(artists.rest, albumOf, genreOf, last, random, false);
-  return [...artists.order, ...albums.order];
+    `${artistOf(entry)}\u0000${groupKey(songs.get(entry.trackId)?.album, entry)}`;
+  const genreOf = (entry: QueueEntry): string | null => nameKey(songs.get(entry.trackId)?.genre);
+  const artists = takeTurnsUntilOneGroup({
+    entries,
+    groupOf: artistOf,
+    genreOf,
+    previous,
+    random,
+  });
+  const albums = takeTurns({
+    entries: artists.rest,
+    groupOf: albumOf,
+    genreOf,
+    previous: artists.order.at(-1) ?? previous,
+    random,
+  });
+  return [...artists.order, ...albums];
 };
 
 /**
