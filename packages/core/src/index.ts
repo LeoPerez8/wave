@@ -239,6 +239,8 @@ export {
   statsWindow,
 } from "./stats.ts";
 export type { PlayTotals, SongPlayTotals, StatsPeriod, StatsWindow } from "./stats.ts";
+export { rankMostPlayed } from "./mostPlayed.ts";
+export type { KeptPlays, LibraryKeptPlays, MostPlayed, StreamedKeptPlays } from "./mostPlayed.ts";
 export { albumPlayTotals, artistPlayTotals } from "./stats.ts";
 export type { CreditedPlayTotals } from "./stats.ts";
 export { STATS_RANKINGS, statsSeeAll } from "./statsSeeAll.ts";
