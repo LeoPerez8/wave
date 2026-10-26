@@ -1,9 +1,8 @@
 package expo.modules.wavenative.player
 
+import androidx.media3.common.MediaMetadata
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotEquals
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -18,17 +17,17 @@ class AutoLyricsTest {
     }
   }
 
-  private val sung = LyricFrame(previous = "Tudo o que eu sinto", current = "Mais real ainda", next = "Quando fecho os olhos")
-  private val after = LyricFrame(previous = "Mais real ainda", current = "Quando fecho os olhos", next = null)
+  private val sung = LyricsText(title = "Mais real ainda", artist = "Quando fecho os olhos")
+  private val last = LyricsText(title = "Quando fecho os olhos", artist = null)
+
+  /** The now-playing item's own metadata. */
+  private val real = MediaMetadata.Builder().setTitle("Title").setArtist("Artist").setAlbumTitle("Album").build()
 
   private fun showing(): AutoLyricsState =
     AutoLyricsState().apply {
       init(MemoryStore(saved = true))
       setCarConnected(true)
     }
-
-  private val authority = "dev.leoperez.wave.artwork"
-  private val cover = "/data/files/artwork/${"a".repeat(40)}.jpg"
 
   @Test
   fun `the toggle is off on a fresh install`() {
@@ -53,45 +52,45 @@ class AutoLyricsTest {
   }
 
   @Test
-  fun `the lines JS sent belong to their item`() {
+  fun `the text JS sent belongs to its item`() {
     val state = showing()
-    state.showLines("entry-1", sung)
+    state.showText("entry-1", sung)
 
-    assertEquals(sung, state.linesFor("entry-1"))
+    assertEquals(sung, state.textFor("entry-1"))
   }
 
   @Test
-  fun `another item shows its own artwork until JS sends its lines`() {
+  fun `another item shows its own title and artist until JS sends its text`() {
     val state = showing()
-    state.showLines("entry-1", sung)
+    state.showText("entry-1", sung)
 
-    assertNull(state.linesFor("entry-2"))
+    assertNull(state.textFor("entry-2"))
   }
 
   @Test
-  fun `turning the toggle off brings the artwork back at once`() {
+  fun `turning the toggle off brings the real title and artist back at once`() {
     val state = showing()
-    state.showLines("entry-1", sung)
+    state.showText("entry-1", sung)
 
     state.toggle()
 
-    assertNull(state.linesFor("entry-1"))
+    assertNull(state.textFor("entry-1"))
   }
 
   @Test
-  fun `Auto disconnecting brings the artwork back, and late lines don't show`() {
+  fun `Auto disconnecting brings the real title and artist back, and late text doesn't show`() {
     val state = showing()
-    state.showLines("entry-1", sung)
+    state.showText("entry-1", sung)
 
     state.setCarConnected(false)
-    assertNull(state.linesFor("entry-1"))
+    assertNull(state.textFor("entry-1"))
 
-    state.showLines("entry-1", after)
-    assertNull(state.linesFor("entry-1"))
+    state.showText("entry-1", last)
+    assertNull(state.textFor("entry-1"))
   }
 
   @Test
-  fun `listeners hear about the toggle, the connection and the lines`() {
+  fun `listeners hear about the toggle, the connection and the text`() {
     val state = showing()
     var calls = 0
     state.listen { calls += 1 }
@@ -99,75 +98,52 @@ class AutoLyricsTest {
     state.toggle()
     state.setCarConnected(false)
     state.setCarConnected(false)
-    state.showLines("entry-1", null)
+    state.showText("entry-1", null)
 
     assertEquals(2, calls)
   }
 
   @Test
-  fun `the same lines sent again don't wake the listeners`() {
+  fun `the same text sent again doesn't wake the listeners`() {
     val state = showing()
-    state.showLines("entry-1", sung)
+    state.showText("entry-1", sung)
     var calls = 0
     state.listen { calls += 1 }
 
-    state.showLines("entry-1", sung.copy())
+    state.showText("entry-1", sung.copy())
 
     assertEquals(0, calls)
   }
 
   @Test
-  fun `with lyrics, the session shows a lyrics image in place of the item's artwork`() {
-    val artwork = LyricArtworks()
+  fun `with lyrics, the title is the line being sung and the artist the next one`() {
     val state = showing()
-    state.showLines("entry-1", sung)
+    state.showText("entry-1", sung)
 
-    val uri = artwork.uriFor(authority, state.linesFor("entry-1"), cover)
+    val shown = real.withLyrics(state.textFor("entry-1"))
 
-    assertNotNull(uri)
-    assertTrue(uri!!.startsWith("content://$authority/lyrics/"))
-    assertEquals(LyricArtworks.Entry(sung, cover), artwork.find(uri.substringAfterLast('/')))
+    assertEquals("Mais real ainda", shown.title.toString())
+    assertEquals("Quando fecho os olhos", shown.artist.toString())
+    assertEquals("Album", shown.albumTitle.toString())
   }
 
   @Test
-  fun `each new line is a new image, and the same line keeps its image`() {
-    val artwork = LyricArtworks()
+  fun `on the last line the artist is the real one`() {
+    val shown = real.withLyrics(last)
 
-    val first = artwork.uriFor(authority, sung, cover)
-    val again = artwork.uriFor(authority, sung.copy(), cover)
-    val next = artwork.uriFor(authority, after, cover)
-
-    assertEquals(first, again)
-    assertNotEquals(first, next)
+    assertEquals("Quando fecho os olhos", shown.title.toString())
+    assertEquals("Artist", shown.artist.toString())
   }
 
   @Test
-  fun `Auto disconnecting gives the phone's notification and lock screen their artwork back`() {
-    val artwork = LyricArtworks()
+  fun `Auto disconnecting gives the phone's notification and lock screen the real title and artist back`() {
     val state = showing()
-    state.showLines("entry-1", sung)
-    assertNotNull(artwork.uriFor(authority, state.linesFor("entry-1"), cover))
+    state.showText("entry-1", sung)
 
     state.setCarConnected(false)
 
-    assertNull(artwork.uriFor(authority, state.linesFor("entry-1"), cover))
-  }
-
-  @Test
-  fun `only the latest images are kept`() {
-    val artwork = LyricArtworks()
-    val oldest = artwork.uriFor(authority, sung, cover)!!.substringAfterLast('/')
-    repeat(LyricArtworks.KEPT) { artwork.uriFor(authority, sung.copy(current = "Line $it"), cover) }
-
-    assertNull(artwork.find(oldest))
-    assertEquals(LyricArtworks.KEPT, artwork.liveIds().size)
-  }
-
-  @Test
-  fun `another process's images are never mistaken for this one's`() {
-    val first = LyricArtworks().uriFor(authority, sung, cover)
-    val second = LyricArtworks().uriFor(authority, sung, cover)
-
-    assertNotEquals(first, second)
+    val shown = real.withLyrics(state.textFor("entry-1"))
+    assertEquals("Title", shown.title.toString())
+    assertEquals("Artist", shown.artist.toString())
   }
 }

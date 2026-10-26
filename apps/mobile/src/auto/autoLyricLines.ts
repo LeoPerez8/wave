@@ -1,11 +1,11 @@
 /**
- * Keeps the lyrics Wave draws into Android Auto's artwork in time with the
- * song. Core's `autoLyricLines` decides what shows; this reads the playing
+ * Keeps the lyrics Wave shows as the title and artist on Android Auto's
+ * player screen in time with the song. Core's `autoLyricLines` decides what shows; this reads the playing
  * track's lyrics, asks it at each position report, seek and toggle change,
  * and wakes up again when the next line is due. Kept free of Expo so it runs
  * under plain Node tests.
  */
-import { autoLyricLines, extrapolatePosition, type AutoLyricsFrame, type Lyrics } from "@wave/core";
+import { autoLyricLines, extrapolatePosition, type AutoLyricsText, type Lyrics } from "@wave/core";
 
 import type { ExternalStore } from "../lib/externalStore.ts";
 
@@ -33,8 +33,8 @@ export interface AutoLyricLinesPorts {
   readonly pathOf: (itemId: string) => string | null;
   /** The lyrics to show for a file (the Lyrics view's). */
   readonly readLyrics: (path: string) => Promise<Lyrics>;
-  /** Draws `lines` into the artwork of `itemId`; null shows its own artwork. */
-  readonly show: (itemId: string | null, lines: AutoLyricsFrame | null) => void;
+  /** Shows `text` as the title and artist of `itemId`; null shows its own. */
+  readonly show: (itemId: string | null, text: AutoLyricsText | null) => void;
 }
 
 export interface AutoLyricLinesSync {
@@ -45,14 +45,9 @@ export interface AutoLyricLinesSync {
 
 const NONE: Lyrics = { kind: "none" };
 
-/** Whether two frames draw the same artwork (each change is a new image for Auto). */
-const sameFrame = (a: AutoLyricsFrame | null, b: AutoLyricsFrame | null): boolean =>
-  a === b ||
-  (a !== null &&
-    b !== null &&
-    a.previous === b.previous &&
-    a.current === b.current &&
-    a.next === b.next);
+/** Whether two texts show the same title and artist. */
+const sameText = (a: AutoLyricsText | null, b: AutoLyricsText | null): boolean =>
+  a === b || (a !== null && b !== null && a.title === b.title && a.artist === b.artist);
 
 /** Follows the player and shows the lyrics until `stop`; the toggle starts off. */
 export const startAutoLyricLines = (ports: AutoLyricLinesPorts): AutoLyricLinesSync => {
@@ -60,8 +55,7 @@ export const startAutoLyricLines = (ports: AutoLyricLinesPorts): AutoLyricLinesS
   /** The lyrics of one item; null while they are read. */
   let loaded: { readonly itemId: string; readonly lyrics: Lyrics | null } | null = null;
   /** What was last sent, so position reports don't resend it. */
-  let sent: { readonly itemId: string | null; readonly lines: AutoLyricsFrame | null } | null =
-    null;
+  let sent: { readonly itemId: string | null; readonly text: AutoLyricsText | null } | null = null;
   let timer: ReturnType<typeof setTimeout> | null = null;
   let stopped = false;
 
@@ -91,10 +85,10 @@ export const startAutoLyricLines = (ports: AutoLyricLinesPorts): AutoLyricLinesS
     if (showing && itemId !== null && loaded?.itemId !== itemId) load(itemId);
     const lyrics = loaded !== null && loaded.itemId === itemId ? loaded.lyrics : null;
     const positionMs = extrapolatePosition(state, Date.now());
-    const { lines, nextChangeMs } = autoLyricLines({ ...toggle, lyrics, positionMs });
-    if (sent?.itemId !== itemId || !sameFrame(sent.lines, lines)) {
-      sent = { itemId, lines };
-      ports.show(itemId, lines);
+    const { text, nextChangeMs } = autoLyricLines({ ...toggle, lyrics, positionMs });
+    if (sent?.itemId !== itemId || !sameText(sent.text, text)) {
+      sent = { itemId, text };
+      ports.show(itemId, text);
     }
     if (state.isPlaying && nextChangeMs !== null) {
       timer = setTimeout(update, Math.max(0, nextChangeMs - positionMs));

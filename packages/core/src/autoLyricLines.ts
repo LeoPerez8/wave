@@ -1,8 +1,7 @@
 /**
- * The lyrics Wave draws into the artwork it hands Android Auto, with the
- * Lyrics toggle in the overflow menu of Auto's player screen on: the synced
- * line being sung, big, between the lines before and after it. The title and
- * artist lines stay as they are.
+ * The lyrics Wave shows on Android Auto's player screen with the Lyrics
+ * toggle in its overflow menu on: the synced line being sung in place of the
+ * title, and the next sung line in place of the artist. The cover stays.
  */
 import { currentLyricIndex, type LyricLine, type Lyrics } from "./lyrics.ts";
 
@@ -17,31 +16,29 @@ export interface AutoLyricLinesInput {
   readonly positionMs: number;
 }
 
-/** The three lines drawn into the artwork. */
-export interface AutoLyricsFrame {
-  /** The line sung before, dimmed above; null when there is none. */
-  readonly previous: string | null;
-  /** The line being sung, big and bold in the middle. */
-  readonly current: string;
-  /** The line sung next, dimmed below; null when there is none. */
-  readonly next: string | null;
+/** What the now-playing title and artist show in place of the track's own. */
+export interface AutoLyricsText {
+  /** The line being sung, as the title. */
+  readonly title: string;
+  /** The next sung line, as the artist; null keeps the track's own artist (after the last line). */
+  readonly artist: string | null;
 }
 
 export interface AutoLyricLines {
-  /** The lines to draw into the artwork, or null for the track's own artwork. */
-  readonly lines: AutoLyricsFrame | null;
-  /** The position at which `lines` change next while playing on, or null if they won't. */
+  /** The lyrics to show as the title and artist, or null for the track's own. */
+  readonly text: AutoLyricsText | null;
+  /** The position at which `text` changes next while playing on, or null if it won't. */
   readonly nextChangeMs: number | null;
 }
 
-const COVER: AutoLyricLines = { lines: null, nextChangeMs: null };
+const REAL: AutoLyricLines = { text: null, nextChangeMs: null };
 
-/** A line as drawn: lines sung together share the one line. Empty for a pause in the singing. */
+/** A line as shown: lines sung together share the one line. Empty for a pause in the singing. */
 const textOf = (line: LyricLine | undefined): string => line?.text.split("\n").join(" / ") ?? "";
 
-/** The nearest sung (non-empty) line from `index` on, stepping by `step`; null when there is none. */
-const nearestSung = (lines: readonly LyricLine[], index: number, step: 1 | -1): string | null => {
-  for (let at = index; at >= 0 && at < lines.length; at += step) {
+/** The first sung (non-empty) line after `index`; null when there is none. */
+const nextSung = (lines: readonly LyricLine[], index: number): string | null => {
+  for (let at = index + 1; at < lines.length; at += 1) {
     const text = textOf(lines[at]);
     if (text !== "") return text;
   }
@@ -49,12 +46,13 @@ const nearestSung = (lines: readonly LyricLine[], index: number, step: 1 | -1): 
 };
 
 /**
- * What the artwork shows at `positionMs`. Lyrics only show with the toggle on
- * while Auto is connected: the phone's notification and lock screen share the
- * artwork, so they get the cover back once Auto disconnects. Only synced
- * lyrics show; before the first line and in a pause between lines (an empty
- * line) the cover does. The neighbours skip pauses, so the line after a pause
- * is already there below.
+ * What the title and artist show at `positionMs`. Lyrics only show with the
+ * toggle on while Auto is connected: the phone's notification and lock screen
+ * share the title and artist, so they get the real ones back once Auto
+ * disconnects. Only synced lyrics show; before the first line and in a pause
+ * between lines (an empty line) the real title and artist do. The artist
+ * skips pauses, so the line after a pause is already there; on the last line
+ * it is the real artist.
  */
 export const autoLyricLines = ({
   on,
@@ -62,18 +60,11 @@ export const autoLyricLines = ({
   lyrics,
   positionMs,
 }: AutoLyricLinesInput): AutoLyricLines => {
-  if (!on || !carConnected || lyrics?.kind !== "synced") return COVER;
+  if (!on || !carConnected || lyrics?.kind !== "synced") return REAL;
   const { lines } = lyrics;
   const index = currentLyricIndex(lines, positionMs);
   const nextChangeMs = lines[index + 1]?.timeMs ?? null;
-  const current = textOf(lines[index]);
-  if (current === "") return { lines: null, nextChangeMs };
-  return {
-    lines: {
-      previous: nearestSung(lines, index - 1, -1),
-      current,
-      next: nearestSung(lines, index + 1, 1),
-    },
-    nextChangeMs,
-  };
+  const title = textOf(lines[index]);
+  if (title === "") return { text: null, nextChangeMs };
+  return { text: { title, artist: nextSung(lines, index) }, nextChangeMs };
 };
