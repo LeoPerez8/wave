@@ -3,8 +3,10 @@ import { describe, test } from "node:test";
 
 import {
   magicArtistKey,
+  magicYtSong,
   tasteLearned,
   tasteProfile,
+  ytTrackId,
   type MagicSong,
   type TasteHistory,
 } from "./index.ts";
@@ -132,5 +134,46 @@ describe("A taste profile", () => {
     assert.deepEqual(learned, derived);
     // The profile it learned from stays as it was.
     assert.equal(before.songs.get("fav"), undefined);
+  });
+
+  test("a streamed song's plays weigh as a Library song's, learned or derived again", () => {
+    const streamed = magicYtSong(
+      { trackId: ytTrackId("v-airbag"), artists: ["Radiohead", "Guest"] },
+      () => null,
+    );
+    const songsOf = (trackId: string) =>
+      trackId === streamed.trackId ? streamed : songs.get(trackId);
+    const history: TasteHistory = { ...NONE, plays: [played("full", NOW - 10 * DAY)] };
+    const before = tasteProfile(history, songsOf, NOW);
+    const learned = [
+      { kind: "playedThrough", at: NOW - DAY },
+      { kind: "skip", at: NOW - 40 * DAY },
+    ].reduce(
+      (profile, signal) =>
+        tasteLearned(profile, {
+          kind: signal.kind as "playedThrough" | "skip",
+          song: streamed,
+          at: signal.at,
+        }),
+      before,
+    );
+    const derived = tasteProfile(
+      {
+        ...history,
+        plays: [
+          ...history.plays,
+          played(streamed.trackId, NOW - DAY),
+          skipped(streamed.trackId, NOW - 40 * DAY),
+        ],
+      },
+      songsOf,
+      NOW,
+    );
+    assert.deepEqual(learned, derived);
+    assert.ok(derived.songs.get(streamed.trackId)! > 0);
+    assert.equal(
+      derived.artists.get(magicArtistKey("Radiohead")),
+      derived.songs.get(streamed.trackId),
+    );
   });
 });
