@@ -1,8 +1,11 @@
 import {
   magicLibraryMapperSteps,
+  magicYtSong,
+  parseTrackId,
   tasteProfileSteps,
   sortSteps,
   mapSteps,
+  ytTrackId,
   type MagicSong,
   type TasteHistory,
 } from "@wave/core";
@@ -221,6 +224,51 @@ export const readTasteHistory = (store: LibraryStore["Service"], turn: Effect.Ef
     return { plays, favorites, downloads };
   });
 
+/** A streamed song as the profile weighs it, from its queue id and its artists. */
+export type StreamedTasteSong = (track: {
+  readonly id: string;
+  readonly artists: readonly string[];
+}) => MagicSong;
+
+/** By its artists alone, no genre known: what a profile reads with no YT Music lookups at hand. */
+const byArtists: StreamedTasteSong = (track) =>
+  magicYtSong({ trackId: track.id, artists: track.artists }, () => null);
+
+/** How many streamed songs one read gives the songs of. */
+const STREAMED_PAGE = 128;
+
+/**
+ * The streamed songs [history]'s plays are, by queue id, as [streamedSong]
+ * weighs them: each as its latest play had it (`streamedSongsByIds`), read
+ * a page at a time on free turns. One the store has no song for is left out.
+ */
+const readStreamedSongs = (
+  store: LibraryStore["Service"],
+  history: TasteHistory,
+  streamedSong: StreamedTasteSong,
+  pace: Effect.Effect<void>,
+) =>
+  Effect.gen(function* () {
+    const videoIds = [
+      ...new Set(
+        history.plays.flatMap((play) => {
+          const ref = parseTrackId(play.trackId);
+          return ref?.kind === "yt" ? [ref.videoId] : [];
+        }),
+      ),
+    ];
+    const songs = new Map<string, MagicSong>();
+    for (let start = 0; start < videoIds.length; start += STREAMED_PAGE) {
+      yield* pace;
+      const page = yield* store.streamedSongsByIds(videoIds.slice(start, start + STREAMED_PAGE));
+      for (const [videoId, song] of page) {
+        const id = ytTrackId(videoId);
+        songs.set(id, streamedSong({ id, artists: song.artists }));
+      }
+    }
+    return songs;
+  });
+
 /**
  * The same scores as ti, using an optional already-read Library snapshot when it's still
  * current; one read at another revision would mix versions, so the Library is read again
@@ -232,19 +280,21 @@ export const deriveTaste = (
   now: number,
   library?: TasteLibrary,
   snapshotTaken: (history: TasteHistory) => void = () => {},
+  streamedSong: StreamedTasteSong = byArtists,
 ) =>
   Effect.gen(function* () {
     const { revision, rows } = yield* tasteSnapshot(store, turn, (at, pace) =>
       Effect.gen(function* () {
         const history = yield* readTasteHistory(store, pace);
+        const streamed = yield* readStreamedSongs(store, history, streamedSong, pace);
         const own = library?.revision === at ? null : yield* tasteLibraryRows(store, pace);
-        return { history, own };
+        return { history, streamed, own };
       }),
     );
     snapshotTaken(rows.history);
     const input = rows.own === null ? library! : yield* tasteLibraryOf(rows.own, revision, turn);
     return yield* runSteps(
-      tasteProfileSteps(rows.history, (id) => input.byId.get(id), now),
+      tasteProfileSteps(rows.history, (id) => input.byId.get(id) ?? rows.streamed.get(id), now),
       turn,
     );
   });
@@ -259,15 +309,21 @@ export const deriveTasteFromLibrary = (
   now: number,
   library: TasteLibraryRows,
   snapshotTaken: (history: TasteHistory) => void = () => {},
+  streamedSong: StreamedTasteSong = byArtists,
 ) =>
   Effect.gen(function* () {
     const input = yield* tasteLibraryOf(library, "recommendation", turn);
-    const { rows: history } = yield* tasteSnapshot(store, turn, (_, pace) =>
-      readTasteHistory(store, pace),
+    const {
+      rows: { history, streamed },
+    } = yield* tasteSnapshot(store, turn, (_, pace) =>
+      Effect.gen(function* () {
+        const history = yield* readTasteHistory(store, pace);
+        return { history, streamed: yield* readStreamedSongs(store, history, streamedSong, pace) };
+      }),
     );
     snapshotTaken(history);
     return yield* runSteps(
-      tasteProfileSteps(history, (id) => input.byId.get(id), now),
+      tasteProfileSteps(history, (id) => input.byId.get(id) ?? streamed.get(id), now),
       turn,
     );
   });

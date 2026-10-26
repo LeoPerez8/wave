@@ -4,17 +4,26 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 import * as Effect from "effect/Effect";
 import {
+  magicArtistKey,
   magicLibrarySongs,
+  magicYtSong,
   tasteProfile,
   magicQueuePicks,
   refreshedMagicQueuePicks,
   seededRandom,
   tasteLearned,
   ytTrackId,
+  type YtAlbumSong,
 } from "@wave/core";
 import { loadLibraryStore } from "../../bench/fastAgain/store.ts";
 import { createFastAgainFixture } from "../library/db/fastAgainFixture.ts";
-import { traceQueries, observeSqlTasks } from "../library/db/testDatabase.ts";
+import {
+  addTrack,
+  openTestDatabase,
+  traceQueries,
+  observeSqlTasks,
+} from "../library/db/testDatabase.ts";
+import { recordPlay } from "../library/db/playHistory.ts";
 import { deleteTracksById } from "../library/db/tracks.ts";
 import { buildHomeMagicQueue } from "../home/magicQueueJob.ts";
 import {
@@ -312,4 +321,64 @@ test("a Magic Queue's cold taste uses its recommendation Library without another
   } finally {
     fixture.close();
   }
+});
+
+test("rebuilding the profile gives streamed songs the scores the live updates gave them", async () => {
+  const db = await openTestDatabase();
+  const store = await loadLibraryStore(root, db);
+  const now = 50 * 24 * 60 * 60 * 1000;
+  const airbag: YtAlbumSong = {
+    videoId: "v-airbag",
+    title: "Airbag",
+    artists: ["Radiohead", "Guest"],
+    album: "OK Computer",
+    durationMs: 284_000,
+    artworkUrl: null,
+    explicit: false,
+    albumId: null,
+  };
+  const streamed = ytTrackId(airbag.videoId);
+  const streamedSong = (track: { readonly id: string; readonly artists: readonly string[] }) =>
+    magicYtSong({ trackId: track.id, artists: track.artists }, () => null);
+  const local = addTrack(db, { title: "Local", artist: "Radiohead" });
+  const play = (trackId: string, startedAt: number, endReason: "completed" | "skipped") => ({
+    trackId,
+    context: null,
+    startedAt,
+    listenedMs: endReason === "completed" ? 284_000 : 5_000,
+    durationMs: 284_000,
+    endReason,
+    counted: endReason === "completed",
+    source: "phone" as const,
+  });
+  recordPlay(db, play(String(local), 1_000, "completed"));
+  const derive = () => deriveTaste(store, Effect.void, now, undefined, undefined, streamedSong);
+  const live = makeLiveTaste({
+    derive: derive(),
+    songsOf: (ids) =>
+      Effect.succeed(
+        ids.flatMap((id) =>
+          id === streamed ? [streamedSong({ id, artists: airbag.artists })] : [],
+        ),
+      ),
+  });
+  await Effect.runPromise(live.profile);
+  for (const [at, end] of [
+    [now - 40 * 24 * 60 * 60 * 1000, "completed"],
+    [now - 1_000, "completed"],
+    [now - 500, "skipped"],
+  ] as const) {
+    const ended = play(streamed, at, end);
+    recordPlay(db, ended, false, airbag);
+    await Effect.runPromise(live.played(ended));
+  }
+  const learned = (await Effect.runPromise(live.profile))!;
+  const rebuilt = await Effect.runPromise(derive());
+  assert.ok(learned.songs.has(streamed));
+  assert.equal(rebuilt.songs.get(streamed), learned.songs.get(streamed));
+  for (const artist of ["Radiohead", "Guest"].map(magicArtistKey))
+    assert.ok(
+      Math.abs(rebuilt.artists.get(artist)! - learned.artists.get(artist)!) < 1e-12,
+      artist,
+    );
 });

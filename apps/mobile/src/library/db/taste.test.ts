@@ -1,5 +1,5 @@
 /// <reference types="node" />
-import type { PlayEvent } from "@wave/core";
+import type { PlayEvent, YtAlbumSong } from "@wave/core";
 import { eq } from "drizzle-orm";
 import assert from "node:assert/strict";
 import { beforeEach, describe, test } from "node:test";
@@ -7,6 +7,7 @@ import { beforeEach, describe, test } from "node:test";
 import { recordPlay, setFavorites } from "./playHistory.ts";
 import * as schema from "./schema.ts";
 import { tasteHistory } from "./taste.ts";
+import { tastePlaysPage } from "./tastePages.ts";
 import { addTrack, openTestDatabase, type TestDatabase } from "./testDatabase.ts";
 
 let db: TestDatabase;
@@ -67,5 +68,48 @@ describe("What the taste profile is derived from", () => {
       { trackId: String(downloaded), downloadedAt: 7_000 },
       { trackId: String(retagged), downloadedAt: 8_000 },
     ]);
+  });
+
+  test("the plays of streamed songs, by their queue id until the Library has the song", () => {
+    const airbag: YtAlbumSong = {
+      videoId: "v-airbag",
+      title: "Airbag",
+      artists: ["Radiohead"],
+      album: "OK Computer",
+      durationMs: 284_000,
+      artworkUrl: null,
+      explicit: false,
+      albumId: null,
+    };
+    const song = addTrack(db, { title: "Song" });
+    recordPlay(db, play(song, 1_000));
+    const streamed = { ...play(song, 2_000), trackId: "yt:v-airbag" };
+    recordPlay(db, streamed, false, airbag);
+    recordPlay(db, { ...streamed, startedAt: 3_000, endReason: "skipped" }, false, airbag);
+    const plays = () => [tasteHistory(db).plays, tastePlaysPage(db, [-Number.MAX_VALUE, 0]).rows];
+    const at = (trackId: string, startedAt: number, endReason = "completed") => ({
+      trackId,
+      startedAt,
+      listenedMs: 180_000,
+      endReason,
+    });
+    for (const read of plays())
+      assert.deepEqual(read, [
+        at(String(song), 1_000),
+        at("yt:v-airbag", 2_000),
+        at("yt:v-airbag", 3_000, "skipped"),
+      ]);
+    // Downloaded, its streamed plays are the Library song's, as in every count.
+    const downloaded = addTrack(db, { title: "Airbag" });
+    db.update(schema.tracks)
+      .set({ videoId: "v-airbag" })
+      .where(eq(schema.tracks.id, downloaded))
+      .run();
+    for (const read of plays())
+      assert.deepEqual(read, [
+        at(String(song), 1_000),
+        at(String(downloaded), 2_000),
+        at(String(downloaded), 3_000, "skipped"),
+      ]);
   });
 });

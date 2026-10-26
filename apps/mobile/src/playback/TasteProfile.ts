@@ -9,6 +9,7 @@ import { LibraryStore, type SongRow, type ArtistRow } from "@/library/LibrarySto
 
 import { deriveTaste, deriveTasteFromLibrary } from "./tasteDerivation";
 import { makeLiveTaste } from "./liveTaste";
+import { magicStreamedSong } from "./magicQueueRadio";
 import { magicSongsOf } from "./magicSongs";
 import { onPlayEnded } from "./PlayHistory";
 
@@ -18,8 +19,9 @@ import { onPlayEnded } from "./PlayHistory";
  * from the play history, favorites and downloads (`tasteProfile`), so it
  * keeps no state of its own; this module derives it once per launch, the
  * first time it's asked for, and keeps it up to date as signals come from
- * playback anywhere in the app (`makeLiveTaste`): Library plays ending,
- * stars and unstars, YT Music stars and downloads.
+ * playback anywhere in the app (`makeLiveTaste`): plays ending (streamed ones
+ * too, weighed as `magicSongsOf` weighs them live), stars and unstars, YT
+ * Music stars and downloads.
  */
 const derive = (snapshotTaken: (history: TasteHistory) => void) =>
   Effect.gen(function* () {
@@ -29,6 +31,7 @@ const derive = (snapshotTaken: (history: TasteHistory) => void) =>
       Date.now(),
       undefined,
       snapshotTaken,
+      magicStreamedSong,
     );
   });
 const live = makeLiveTaste({
@@ -56,6 +59,7 @@ export const tasteProfileForRecommendation = (library: {
         Date.now(),
         library,
         snapshotTaken,
+        magicStreamedSong,
       );
     }),
   );
