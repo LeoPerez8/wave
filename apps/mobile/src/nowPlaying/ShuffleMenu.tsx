@@ -1,5 +1,5 @@
 import { IconArrowsShuffle } from "@tabler/icons-react-native";
-import { entryDivider, type ShuffleKind } from "@wave/core";
+import { entryDivider, shuffleLineShows, type ShuffleKind } from "@wave/core";
 import { View } from "react-native";
 
 import { EntryRow } from "@/catalog/EntryRow";
@@ -10,11 +10,17 @@ import { useOverlayFlow } from "@/overlay/flow";
 import { openOverlay } from "@/overlay/overlay";
 import { useSlideToChoose } from "@/overlay/useSlideToChoose";
 import { chooseShuffleKind } from "@/playback/actions";
+import { countShuffleCardOpening } from "@/settings/shuffleCardOpenings";
 import { useShuffleKind } from "@/settings/shuffleKind";
 
-const KINDS: readonly { readonly kind: ShuffleKind; readonly label: string }[] = [
-  { kind: "real", label: "Real Shuffle" },
-  { kind: "smart", label: "Smart Shuffle" },
+/** The card's entries: each kind's name and the line saying what it does. */
+const KINDS: readonly {
+  readonly kind: ShuffleKind;
+  readonly label: string;
+  readonly line: string;
+}[] = [
+  { kind: "real", label: "Real Shuffle", line: "Any order, every one as likely" },
+  { kind: "smart", label: "Smart Shuffle", line: "Your most played, spread among the rest" },
 ];
 
 /** What the shuffle button says while [kind] is chosen. */
@@ -35,9 +41,12 @@ export const useShuffleControl = () => {
 /**
  * The shuffle card: Real Shuffle and Smart Shuffle, the chosen one checked.
  * Picking one saves it and shuffles with it. Opened by a long press, the
- * finger can slide onto an entry and lift to pick it.
+ * finger can slide onto an entry and lift to pick it. Each entry's line says
+ * what it does: on every entry for the card's first openings
+ * ([openedBefore], Core's `shuffleLineShows`), then only on the entry under
+ * the sliding finger.
  */
-function ShuffleMenu({ close }: { close: () => void }) {
+function ShuffleMenu({ close, openedBefore }: { close: () => void; openedBefore: number }) {
   const chosen = useShuffleKind();
   const flow = useOverlayFlow();
   const choose = (index: number) => {
@@ -49,10 +58,12 @@ function ShuffleMenu({ close }: { close: () => void }) {
   const { underFinger, trackEntry, trackList } = useSlideToChoose(choose);
   return (
     <CardEntries listRef={trackList}>
-      {KINDS.map(({ kind, label }, index) => (
+      {KINDS.map(({ kind, label, line }, index) => (
         <View key={kind} ref={trackEntry(index)} collapsable={false}>
           <EntryRow
             label={label}
+            line={line}
+            lineShown={shuffleLineShows({ openedBefore, underFinger, index })}
             selected={kind === chosen}
             divider={entryDivider(index, KINDS.length, flow)}
             highlighted={index === underFinger}
@@ -66,9 +77,10 @@ function ShuffleMenu({ close }: { close: () => void }) {
 
 /** Opens the shuffle card next to the shuffle button whose long press calls it. */
 const openShuffleMenu = (): void => {
+  const openedBefore = countShuffleCardOpening();
   openOverlay({
     label: "Shuffle",
     anchor: pressedRect(),
-    render: (close) => <ShuffleMenu close={close} />,
+    render: (close) => <ShuffleMenu close={close} openedBefore={openedBefore} />,
   });
 };
