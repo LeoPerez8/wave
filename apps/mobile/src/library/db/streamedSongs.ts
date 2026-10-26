@@ -3,8 +3,8 @@
  * queue had it when its latest play started. Kept free of Expo so the store
  * tests run it against a real SQLite (`testDatabase.ts`).
  */
-import type { YtAlbumSong } from "@wave/core";
-import { and, desc, eq, isNotNull } from "drizzle-orm";
+import type { PlaySnapshot, YtAlbumSong } from "@wave/core";
+import { and, isNotNull, max, sql } from "drizzle-orm";
 
 import type { LibraryDatabase } from "./database.ts";
 import { playEvents } from "./schema.ts";
@@ -18,25 +18,40 @@ export const streamedSongsOf = (
   db: LibraryDatabase,
   videoIds: readonly string[],
 ): Map<string, YtAlbumSong> => {
-  const songs = new Map<string, YtAlbumSong>();
-  const latest = (
-    videoId: string,
+  const wanted = [...new Set(videoIds)];
+  if (wanted.length === 0) return new Map();
+  // One read for all the videos: grouped with a single max(), SQLite takes
+  // the kept column from the row with the latest start.
+  const latest = <K>(
+    ids: readonly string[],
     kept: typeof playEvents.streamedSong | typeof playEvents.snapshot,
   ) =>
-    db
-      .select({ song: playEvents.streamedSong, snapshot: playEvents.snapshot })
-      .from(playEvents)
-      .where(and(eq(playEvents.videoId, videoId), isNotNull(kept)))
-      .orderBy(desc(playEvents.startedAt))
-      .limit(1)
-      .get();
-  for (const videoId of new Set(videoIds)) {
-    const song = latest(videoId, playEvents.streamedSong)?.song;
+    new Map(
+      db
+        .select({ videoId: playEvents.videoId, kept, startedAt: max(playEvents.startedAt) })
+        .from(playEvents)
+        .where(
+          and(
+            sql`${playEvents.videoId} IN (SELECT value FROM json_each(${JSON.stringify(ids)}))`,
+            isNotNull(kept),
+          ),
+        )
+        .groupBy(playEvents.videoId)
+        .all()
+        .map((row) => [row.videoId, row.kept as K | null]),
+    );
+  const kept = latest<YtAlbumSong>(wanted, playEvents.streamedSong);
+  const unkept = wanted.filter((videoId) => kept.get(videoId) == null);
+  const snapshots =
+    unkept.length === 0 ? new Map() : latest<PlaySnapshot>(unkept, playEvents.snapshot);
+  const songs = new Map<string, YtAlbumSong>();
+  for (const videoId of wanted) {
+    const song = kept.get(videoId);
     if (song != null) {
       songs.set(videoId, song);
       continue;
     }
-    const snapshot = latest(videoId, playEvents.snapshot)?.snapshot;
+    const snapshot = snapshots.get(videoId);
     if (snapshot != null)
       songs.set(videoId, {
         videoId,
