@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { upNextScroll, type UpNextScroller } from "./upNextScroll.ts";
+import { upNextEndSpace, upNextScroll, type UpNextScroller } from "./upNextScroll.ts";
 
 /** A stand-in for Legend List's handle, scrolled to `scroll`, recording the scrolls asked of it. */
 const list = (scroll: number) => {
@@ -85,5 +85,28 @@ describe("upNextScroll", () => {
     const second = list(0);
     place(second.scroller, album, 0);
     assert.deepEqual([...first.asked, ...second.asked], []);
+  });
+});
+
+describe("upNextEndSpace", () => {
+  // A 600 dp list, a 60 dp bar, 50 dp rows, 40 dp of bottom inset.
+  const sizes = { bar: 60, row: 50, bottomInset: 40 };
+
+  test("a short Up Next gets the room that lets its start reach the top", () => {
+    // 600 - (60 + 3 × 50 + 40) = 350
+    assert.equal(upNextEndSpace(600, { ...sizes, count: 3 }), 350);
+  });
+
+  test("an empty Up Next leaves the bar at the top over the room under it", () => {
+    assert.equal(upNextEndSpace(600, { ...sizes, count: 0 }), 500);
+  });
+
+  test("an Up Next filling the list, or far longer than it, needs none", () => {
+    assert.equal(upNextEndSpace(600, { ...sizes, count: 10 }), 0);
+    assert.equal(upNextEndSpace(600, { ...sizes, count: 2545 }), 0);
+  });
+
+  test("a list not laid out yet needs none", () => {
+    assert.equal(upNextEndSpace(0, { ...sizes, count: 3 }), 0);
   });
 });

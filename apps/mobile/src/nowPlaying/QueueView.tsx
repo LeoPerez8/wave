@@ -67,7 +67,7 @@ import { useQueueTracks } from "./hooks";
 import { useShuffleControl } from "./ShuffleMenu";
 import { TrackHeader } from "./TrackHeader";
 import { ROW, useUpNextDrag, useUpNextRowDrag, type UpNextDragRows } from "./upNextDrag";
-import { upNextScroll } from "./upNextScroll";
+import { upNextEndSpace, upNextScroll } from "./upNextScroll";
 
 type IconProps = { size?: number; color?: string; strokeWidth?: number };
 
@@ -416,6 +416,9 @@ const rowType = (row: QueueRow): QueueRow["kind"] => row.kind;
 const rowSize = (row: QueueRow): number =>
   row.kind === "historyHead" ? SECTION_HEAD : row.kind === "bar" ? BAR : ROW;
 
+/** The Queue list's height when it was last laid out, 0 before it ever was. */
+let lastListHeight = 0;
+
 /** The sticky bar's offset in the list: below History and its heading, when there's any. */
 const barOffset = (history: number): number => (history === 0 ? 0 : SECTION_HEAD + history * ROW);
 
@@ -488,9 +491,18 @@ export function UpNextList({
   );
   const barIndex = history.length > 0 ? history.length + 1 : 0;
   const sticky = useMemo(() => [barIndex], [barIndex]);
-  // Up Next's start can reach the top however short it is: History stays out of sight.
-  const endSpace = useMemo(() => ({ anchorIndex: barIndex }), [barIndex]);
   const start = barOffset(history.length);
+  // Up Next's start can reach the top however short it is: History stays out of sight.
+  // The height renders the footer's room (the drag reads it on the UI thread,
+  // `height`); a first showing starts from the last one measured, so it opens
+  // with the room already there.
+  const [listHeight, setListHeight] = useState(lastListHeight);
+  const endSpace = upNextEndSpace(listHeight, {
+    bar: BAR,
+    row: ROW,
+    count: entries.length,
+    bottomInset,
+  });
 
   const onMove = useCallback((move: PendingMove, moved: Promise<void>) => {
     setPending((list) => [...list, move]);
@@ -594,7 +606,11 @@ export function UpNextList({
         const { y, height: measured } = event.nativeEvent.layout;
         setListTop(y);
         // Hidden behind another view, the list may be laid out empty: keep its last height.
-        if (measured > 0) height.set(measured);
+        if (measured > 0) {
+          height.set(measured);
+          setListHeight(measured);
+          lastListHeight = measured;
+        }
       }}
     >
       <AnimatedLegendList
@@ -610,12 +626,11 @@ export function UpNextList({
         estimatedItemSize={ROW}
         initialScrollOffset={start}
         stickyHeaderIndices={sticky}
-        anchoredEndSpace={endSpace}
         alwaysRender={drag === null ? undefined : { keys: [drag.key] }}
         scrollEnabled={drag === null}
         scrollEventThrottle={16}
         contentContainerStyle={{ paddingBottom: bottomInset }}
-        ListFooterComponent={footer}
+        ListFooterComponent={<View style={{ minHeight: endSpace }}>{footer}</View>}
       />
       {drag !== null && (
         <Animated.View
