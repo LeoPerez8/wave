@@ -39,9 +39,12 @@ test("the root layout mounts the share, cropper and picker hosts, not their scre
   }
 });
 
-test("Now Playing draws without Skia: it stays for the share cards", () => {
-  const skia = readdirSync(join(src, "nowPlaying"))
+test("Now Playing draws without Skia and mounts the lyrics card's host, not its preview", () => {
+  const nowPlaying = readdirSync(join(src, "nowPlaying"))
     .filter((name) => name.endsWith(".tsx") || name.endsWith(".ts"))
-    .filter((name) => imports(read(`nowPlaying/${name}`)).includes("@shopify/react-native-skia"));
-  assert.deepEqual(skia, []);
+    .map((name) => [name, imports(read(`nowPlaying/${name}`))] as const);
+  for (const heavy of ["@shopify/react-native-skia", "@/share/LyricCardPreview"]) {
+    const importers = nowPlaying.filter(([, from]) => from.includes(heavy)).map(([name]) => name);
+    assert.deepEqual(importers, [], `nowPlaying/ imports ${heavy}`);
+  }
 });

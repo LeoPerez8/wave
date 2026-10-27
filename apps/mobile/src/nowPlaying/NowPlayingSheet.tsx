@@ -27,7 +27,7 @@ import { useRenderCount } from "@/perf/perf";
 import type { TrackDetails } from "@/library/LibraryStore";
 import { useCurrentTrackId } from "@/playback/hooks";
 import { playbackState, type PlaybackState } from "@/playback/Player";
-import { LyricCardLayer } from "@/share/LyricCardPreview";
+import { LyricCardLayer } from "@/share/LyricCardLayer";
 import { useLyricCardShown } from "@/share/lyricCard";
 import { useSongShareShown } from "@/share/songShare";
 import { shareNowPlaying } from "@/share/songShare";
