@@ -143,6 +143,7 @@ import {
 } from "./db/genrePages";
 import { selectGenreSongs } from "./db/genres";
 import type { RowPage } from "./db/database";
+import { configureConnection, optimizeDatabase } from "./db/connection";
 import migrations from "./db/migrations";
 import { selectLinkRows, type LinkIds, type LinkRows } from "./db/links";
 import {
@@ -1088,6 +1089,12 @@ export class LibraryStore extends Context.Service<
     readonly listeningSums: Effect.Effect<ListeningSums, LibraryStoreError>;
     /** Changes after every committed listening write, including progress and each sync page. */
     readonly listeningHistoryVersion: Pick<ExternalStore<number>, "get" | "subscribe">;
+    /**
+     * Lets SQLite refresh its planner statistics, sampling a bounded number of rows: those
+     * it lacks once Wave has `opened` (after migrations), and those this session's reads
+     * made stale when `leaving` for the background (`optimizeDatabase`).
+     */
+    readonly optimize: (when: "opened" | "leaving") => Effect.Effect<void, LibraryStoreError>;
     /** Legacy whole-history quarter sums, retained as a semantic control; UI uses bounded pages. */
     readonly countedListening: Effect.Effect<readonly CountedListening[], LibraryStoreError>;
     /** At most 512 raw events per indexed read, with Core's historical quarter-hour projection. */
@@ -1374,7 +1381,7 @@ const make = Effect.gen(function* () {
   const db: Database = yield* Effect.try({
     try: () => {
       const client = openDatabaseSync(DATABASE_NAME);
-      client.execSync("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;");
+      configureConnection((statements) => client.execSync(statements));
       return drizzle(client, { schema });
     },
     catch: (cause) => new LibraryStoreError({ operation: "open the database", cause }),
@@ -1424,6 +1431,7 @@ const make = Effect.gen(function* () {
 
   return LibraryStore.of({
     listeningHistoryVersion,
+    optimize: (when) => writeAttempt("optimize the database", () => optimizeDatabase(db, when)),
     ensureDefaultRoot: (path) =>
       writeAttempt("set up scan roots", () => {
         const existing = db.select().from(schema.scanRoots).all();
