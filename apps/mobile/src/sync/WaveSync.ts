@@ -17,7 +17,7 @@ const expected = (code: WaveAccountErrorCode | null): boolean =>
   code === "ERR_WAVE_OFFLINE" || code === "ERR_WAVE_SIGNED_OUT";
 
 /** What syncing needs from the app that only the app (not a headless start) has. */
-interface WaveSyncPorts {
+export interface WaveSyncPorts {
   /** The synced preferences' values (`syncedPreferences`). */
   readonly preferences: SyncPreferences;
   /** Hears what each sync changed on the phone, to show it. */

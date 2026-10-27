@@ -2,9 +2,10 @@ import type { SpotifyAccountFailure, SpotifySession } from "@wave/core";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 
-import { WaveSpotify, spotifyErrorCode, type SpotifyErrorCode } from "@/native/waveSpotify";
+import { lazyService } from "@/lib/lazyService";
+
+import { makeSpotify } from "./spotifyLive";
 
 /**
  * A Spotify request that didn't get an answer: no network, Spotify failed or
@@ -14,30 +15,6 @@ import { WaveSpotify, spotifyErrorCode, type SpotifyErrorCode } from "@/native/w
 export class SpotifyError extends Data.TaggedError("SpotifyError")<{
   readonly reason: SpotifyAccountFailure;
 }> {}
-
-const REASONS: Record<SpotifyErrorCode, SpotifyAccountFailure> = {
-  ERR_SPOTIFY_OFFLINE: "offline",
-  ERR_SPOTIFY_FAILED: "failed",
-  ERR_SPOTIFY_SIGNED_OUT: "signedOut",
-  ERR_SPOTIFY_CHANGED: "changed",
-};
-
-const fromNative = (error: unknown): SpotifyError =>
-  new SpotifyError({ reason: REASONS[spotifyErrorCode(error)] });
-
-const request = <A>(send: () => Promise<A>): Effect.Effect<A, SpotifyError> =>
-  Effect.tryPromise({ try: send, catch: fromNative });
-
-/** The `data` a query resolved as JSON, parsed; an answer that isn't JSON fails. */
-const data = (query: () => Promise<string>): Effect.Effect<unknown, SpotifyError> =>
-  request(query).pipe(
-    Effect.flatMap((json) =>
-      Effect.try({
-        try: (): unknown => JSON.parse(json),
-        catch: () => new SpotifyError({ reason: "failed" }),
-      }),
-    ),
-  );
 
 /**
  * The signed-in Spotify account as a typed service, over the native
@@ -89,20 +66,5 @@ export class Spotify extends Context.Service<
   }
 >()("@wave/mobile/spotify/Spotify") {}
 
-export const layer = Layer.succeed(Spotify, {
-  session: request(() => WaveSpotify.session()),
-  checkSession: request(() => WaveSpotify.checkSession()),
-  signIn: request(() => WaveSpotify.signIn()),
-  signOut: request(() => WaveSpotify.signOut()),
-  library: (offset) => data(() => WaveSpotify.library(offset)),
-  likedSongs: (offset) => data(() => WaveSpotify.likedSongs(offset)),
-  playlist: (uri, offset) => data(() => WaveSpotify.playlist(uri, offset)),
-  searchTracks: (term) => data(() => WaveSpotify.searchTracks(term)),
-  createPlaylist: (name) => request(() => WaveSpotify.createPlaylist(name)),
-  makePlaylistPublic: (uri) => request(() => WaveSpotify.makePlaylistPublic(uri)),
-  renamePlaylist: (uri, name) => request(() => WaveSpotify.renamePlaylist(uri, name)),
-  addToPlaylist: (uri, trackUris) => request(() => WaveSpotify.addToPlaylist(uri, trackUris)),
-  removeFromPlaylist: (uri, uids) => request(() => WaveSpotify.removeFromPlaylist(uri, uids)),
-  movePlaylistEntry: (uri, uid, before) =>
-    request(() => WaveSpotify.movePlaylistEntry(uri, uid, before)),
-});
+/** Built on first use (`lazyService`): the launch never asks Spotify. */
+export const layer = lazyService(Spotify, () => Effect.sync(makeSpotify));
