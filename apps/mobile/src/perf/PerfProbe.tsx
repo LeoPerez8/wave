@@ -12,7 +12,7 @@ import {
   sheetHeight,
   sheetOffset,
 } from "@/nowPlaying/sheet";
-import { playbackState } from "@/playback/Player";
+import { playbackState, positionState } from "@/playback/Player";
 import { queueState } from "@/playback/Queue";
 import { queueTracks } from "@/playback/queueTracks";
 
@@ -21,6 +21,7 @@ import { perfMark, perfTiming, registerPerfMeta, startPerfFlushes } from "./perf
 /** Subscribers to the stores Now Playing and its Queue follow, for each flush's metadata. */
 const listenerCounts = () => ({
   playback: playbackState.listenerCount(),
+  position: positionState.listenerCount(),
   queue: queueState.listenerCount(),
   queueTracks: queueTracks.listenerCount(),
   nowPlaying: nowPlayingListenerCount(),

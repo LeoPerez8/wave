@@ -11,6 +11,7 @@ import {
 import * as Effect from "effect/Effect";
 import { Image } from "react-native";
 
+import { artworkUri } from "@/catalog/artworkUri";
 import { makeExternalStore } from "@/lib/externalStore";
 import { WaveNative, type PlaylistPhoto } from "@/native/waveNative";
 
@@ -216,7 +217,8 @@ export const pickPlaylistImage = async (id: number, frame: FramePhoto): Promise<
 };
 
 /** A saved image's size, in px. */
-const imageSize = (path: string): Promise<ImageSize> => Image.getSize(`file://${path}`);
+const imageSize = (path: string): Promise<ImageSize> =>
+  Image.getSize(artworkUri({ artworkPath: path }, "original") ?? path);
 
 /**
  * Adjust Image: frames the playlist's original photo again with [frame],

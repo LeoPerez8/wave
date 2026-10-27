@@ -26,6 +26,7 @@ import Animated, { useAnimatedStyle, useSharedValue } from "react-native-reanima
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { scheduleOnRN } from "react-native-worklets";
 
+import { artworkUri } from "@/catalog/artworkUri";
 import { CELL, grid } from "@/catalog/grid";
 import { TextButton } from "@/components/TextButton";
 import { makeExternalStore } from "@/lib/externalStore";
@@ -192,7 +193,7 @@ function CropScreen({ request: { photo, framing: start, done } }: { request: Cro
               }}
             >
               <Animated.Image
-                source={{ uri: `file://${photo.path}` }}
+                source={{ uri: artworkUri({ artworkPath: photo.path }, "original") }}
                 resizeMode="stretch"
                 style={[
                   {

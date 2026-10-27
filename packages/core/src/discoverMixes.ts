@@ -1,3 +1,4 @@
+import { fileUri } from "./fileUri.ts";
 import { finishSteps } from "./buildSteps.ts";
 /**
  * Home's mixes (docs/spec.md, "Artist mixes"): mixes made of songs the owner
@@ -422,7 +423,7 @@ export const discoverMixCaption = (
 const coverOf = (song: DiscoverMixSong): string | null => {
   if (song.source === "stream") return song.song.artworkUrl;
   const path = song.track.artworkPath;
-  return path === undefined ? null : `file://${path}`;
+  return fileUri(path) ?? null;
 };
 
 /** The covers [songs] have, in order. */

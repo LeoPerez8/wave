@@ -36,7 +36,7 @@ import { TextButton } from "@/components/TextButton";
 import { Press } from "@/motion/Press";
 import { addScreenBackHandler } from "@/overlay/back";
 import { seekTo } from "@/playback/actions";
-import { playbackState, type PlaybackState } from "@/playback/Player";
+import { positionState, type PlaybackState } from "@/playback/Player";
 import { setLyricsTranslationOn, useLyricsTranslationOn } from "@/settings/lyricsTranslation";
 import { closeLyricCard, openLyricCard } from "@/share/lyricCard";
 import { useThemeColor } from "@/theme/useThemeColor";
@@ -268,7 +268,7 @@ function SyncedLyrics({
   useRenderCount("SyncedLyrics");
   const [current, setCurrent] = useState(() => ({
     lines,
-    index: currentLyricIndex(lines, extrapolatePosition(playbackState.get(), Date.now())),
+    index: currentLyricIndex(lines, extrapolatePosition(positionState.get(), Date.now())),
   }));
   const latestLines = useRef(lines);
   useLayoutEffect(() => {
@@ -277,7 +277,7 @@ function SyncedLyrics({
   const index =
     current?.lines === lines
       ? current.index
-      : currentLyricIndex(lines, playbackState.get().positionMs);
+      : currentLyricIndex(lines, positionState.get().positionMs);
   const publishIndex = useCallback(
     (next: number) => {
       if (isPlayheadLive() && latestLines.current === lines)

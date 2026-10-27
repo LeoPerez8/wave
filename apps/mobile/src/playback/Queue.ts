@@ -58,7 +58,7 @@ import { perfMark } from "@/perf/perf";
 import { dontPlayExplicit, onDontPlayExplicit } from "@/settings/dontPlayExplicit";
 import { shuffleKind } from "@/settings/shuffleKind";
 
-import { Player, PlayerError, playbackState } from "./Player";
+import { Player, PlayerError, playbackState, positionState } from "./Player";
 import { searchPlaying } from "./playingSearch";
 import { evenShuffleSongs, learnQueueTracks, queueTracks, type QueueTrack } from "./queueTracks";
 
@@ -269,7 +269,7 @@ const reported = <A, E>(effect: Effect.Effect<A, E>): Effect.Effect<A | void> =>
   effect.pipe(Effect.catch((error) => Effect.sync(() => reportError(error))));
 
 /** Where the current track is now, extrapolated from the last position report. */
-export const currentPositionMs = (): number => extrapolatePosition(playbackState.get(), Date.now());
+export const currentPositionMs = (): number => extrapolatePosition(positionState.get(), Date.now());
 
 export const layer = Layer.effect(
   Queue,

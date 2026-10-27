@@ -10,6 +10,7 @@ import { router } from "@/lib/timingRouter";
 import { useState, type ComponentType, type ReactNode } from "react";
 import { Text, View, useWindowDimensions } from "react-native";
 
+import { artworkUri } from "@/catalog/artworkUri";
 import { COVER_ROW_TILE } from "@/catalog/CoverRow";
 import { PlaylistCard } from "@/catalog/cards/PlaylistCard";
 import { SongCard } from "@/catalog/cards/SongCard";
@@ -17,7 +18,6 @@ import { CELL, grid } from "@/catalog/grid";
 import { PullRefreshRow } from "@/catalog/PullRefreshRow";
 import { TitledSection } from "@/catalog/TitledSection";
 import { RecommendationsFailed } from "@/components/RecommendationsFailed";
-import { fileUri } from "@/lib/fileUri";
 import { openStatsSeeAll } from "@/library/routes";
 import type { PlayableSongRow } from "@/library/LibraryStore";
 import { Crossfade } from "@/motion/Crossfade";
@@ -293,7 +293,7 @@ function MagicQueueTile({ song, size }: { song: PlayableSongRow; size: number })
     <SongCard
       title={song.title}
       artist={song.artist}
-      artworkUri={fileUri(song.artworkPath ?? song.thumbPath)}
+      artworkUri={artworkUri(song, "medium")}
       size={size}
       label={`${song.title} by ${song.artist}, ${song.album}, start Magic Queue`}
       onPress={() => startMagicQueueFrom(song)}

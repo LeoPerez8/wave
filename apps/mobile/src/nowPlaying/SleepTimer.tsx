@@ -35,7 +35,7 @@ import { useOverlayFlow } from "@/overlay/flow";
 import { openOverlay } from "@/overlay/overlay";
 import { cancelSleepTimer, setSleepTimer } from "@/playback/actions";
 import { useRenderCount } from "@/perf/perf";
-import { playbackState, sleepTimerState } from "@/playback/Player";
+import { positionState, sleepTimerState } from "@/playback/Player";
 import { useThemeColor } from "@/theme/useThemeColor";
 
 import { isPlayheadLive, playhead } from "./playhead";
@@ -115,7 +115,7 @@ function EndOfTrackStatus() {
     const text = status.get();
     return { text, defaultValue: text, accessibilityLabel: text } as TextInputProps;
   });
-  const state = playbackState.get();
+  const state = positionState.get();
   const remaining = sleepTimerRemaining(
     { type: "endOfTrack" },
     {

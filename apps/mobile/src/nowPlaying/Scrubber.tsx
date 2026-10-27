@@ -33,7 +33,7 @@ import { withUniwind } from "uniwind";
 import { CELL } from "@/catalog/grid";
 import { perfCount, useRenderCount } from "@/perf/perf";
 import { seekTo } from "@/playback/actions";
-import { playbackState } from "@/playback/Player";
+import { positionState } from "@/playback/Player";
 import { queueState } from "@/playback/Queue";
 import { useThemeColor } from "@/theme/useThemeColor";
 
@@ -216,7 +216,7 @@ export function Scrubber() {
           accessibilityActions={[{ name: "increment" }, { name: "decrement" }]}
           onAccessibilityAction={(event) => {
             const step = event.nativeEvent.actionName === "increment" ? STEP_MS : -STEP_MS;
-            const positionMs = extrapolatePosition(playbackState.get(), Date.now());
+            const positionMs = extrapolatePosition(positionState.get(), Date.now());
             if (enabled) seekTo(Math.min(duration, Math.max(0, positionMs + step)), "scrubber");
           }}
           className="justify-center"

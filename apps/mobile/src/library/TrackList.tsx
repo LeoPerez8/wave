@@ -12,6 +12,7 @@ import {
 import { useCallback, useMemo, useRef, type ReactElement, type ReactNode } from "react";
 import { View } from "react-native";
 
+import { artworkUri } from "@/catalog/artworkUri";
 import { AlphabetSpine } from "@/catalog/AlphabetSpine";
 import { songRowLine } from "@/catalog/cards/SongCard";
 import { CatalogLine } from "@/catalog/CatalogLine";
@@ -19,7 +20,6 @@ import { CELL, grid } from "@/catalog/grid";
 import { PlayShuffle, type LineToggle } from "@/catalog/PlayShuffle";
 import type { TrackSummary } from "@/catalog/TrackRow";
 import { useChromeInset } from "@/chrome/chrome";
-import { fileUri } from "@/lib/fileUri";
 import { useRenderCount } from "@/perf/perf";
 import { playSongs } from "@/playback/actions";
 import { useCurrentPlayingIds, usePlayPage } from "@/playback/hooks";
@@ -45,7 +45,7 @@ export const toTrackSummary = (song: SongRow): TrackSummary => ({
   title: song.title,
   artist: song.artist,
   durationMs: song.durationMs,
-  artworkUri: fileUri(song.thumbPath),
+  artworkUri: artworkUri(song),
   // A missing song: dimmed, as a YT Music song not downloaded is.
   missingTrackId: song.path === null ? song.id : undefined,
   explicit: showsExplicitBadge(song.explicit),

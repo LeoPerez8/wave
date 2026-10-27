@@ -42,6 +42,8 @@ class ArtworkProvider : ContentProvider() {
     val directory = File(context.filesDir, ARTWORK_DIR)
     val file = when (val request = ArtworkUris.parse(authority ?: "", uri.toString())) {
       is ArtworkRequest.Cover -> ArtworkUris.coverFile(directory, request.hash)
+      is ArtworkRequest.Medium -> ArtworkUris.mediumFile(directory, request.hash)
+      is ArtworkRequest.Thumbnail -> ArtworkUris.thumbnailFile(directory, request.hash)
       is ArtworkRequest.Mosaic -> mosaic(directory, File(context.cacheDir, MOSAIC_DIR), request.hashes)
       null -> null
     } ?: throw FileNotFoundException(uri.toString())
@@ -52,7 +54,7 @@ class ArtworkProvider : ContentProvider() {
     when (ArtworkUris.parse(authority ?: "", uri.toString())) {
       null -> null
       // Covers keep their original format; image decoders sniff it anyway.
-      is ArtworkRequest.Cover -> "image/*"
+      is ArtworkRequest.Cover, is ArtworkRequest.Medium, is ArtworkRequest.Thumbnail -> "image/*"
       is ArtworkRequest.Mosaic -> "image/jpeg"
     }
 

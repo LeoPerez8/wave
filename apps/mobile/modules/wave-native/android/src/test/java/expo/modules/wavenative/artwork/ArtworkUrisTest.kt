@@ -131,4 +131,30 @@ class ArtworkUrisTest {
       ArtworkUris.mosaicTiles(dir, listOf(a, b, c, d)),
     )
   }
+  @Test
+  fun mediumCoversFallBackToOriginalsUntilTheBackfillArrives() {
+    val dir = Fixtures.tempDir()
+    val original = File(dir, "$a.png").apply { writeBytes(byteArrayOf(1)) }
+    val uri = "content://$authority/medium/$a"
+    assertEquals(ArtworkRequest.Medium(a), ArtworkUris.parse(authority, uri))
+    assertEquals(original, ArtworkUris.mediumFile(dir, a))
+    val medium = File(dir, "${a}_medium.jpg").apply { writeBytes(byteArrayOf(2)) }
+    assertEquals(medium, ArtworkUris.mediumFile(dir, a))
+    assertEquals(original, ArtworkUris.coverFile(dir, a))
+    assertNull(ArtworkUris.mediumFile(dir, "../$a"))
+    assertNull(ArtworkUris.parse(authority, "content://$authority/medium/../$a"))
+  }
+
+  @Test
+  fun rowsUseThumbnailThenMediumThenOriginal() {
+    val dir = Fixtures.tempDir()
+    val original = File(dir, "$a.png").apply { writeBytes(byteArrayOf(1)) }
+    assertEquals(original, ArtworkUris.thumbnailFile(dir, a))
+    val medium = File(dir, "${a}_medium.jpg").apply { writeBytes(byteArrayOf(2)) }
+    assertEquals(medium, ArtworkUris.thumbnailFile(dir, a))
+    val thumb = File(dir, "${a}_thumb.jpg").apply { writeBytes(byteArrayOf(3)) }
+    assertEquals(thumb, ArtworkUris.thumbnailFile(dir, a))
+    assertEquals(ArtworkRequest.Thumbnail(a), ArtworkUris.parse(authority, "content://$authority/thumbnail/$a"))
+  }
+
 }
