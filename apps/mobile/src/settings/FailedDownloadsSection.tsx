@@ -10,7 +10,7 @@ import { Text, View } from "react-native";
 import { CatalogLine } from "@/catalog/CatalogLine";
 import { CELL } from "@/catalog/grid";
 import { Hairline } from "@/catalog/Hairline";
-import { PlainTextButton } from "@/components/PlainTextButton";
+import { TextButton } from "@/components/TextButton";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 import { DownloadSongRow } from "@/settings/DownloadSongRow";
 import { SECTION_GAP } from "@/settings/SettingsPage";
@@ -40,10 +40,19 @@ export const FailedSectionHeader = memo(function FailedSectionHeader({
     <View style={{ marginTop: SECTION_GAP }}>
       <CatalogLine className="mb-2">{row.line}</CatalogLine>
       <View className="flex-row items-center" style={{ gap: CELL * 3 }}>
-        <PlainTextButton label="Retry All" onPress={() => retryFailedDownloads(failed)} />
-        <PlainTextButton label="Clear All" onPress={() => clearFailedDownloads(failed)} />
+        <TextButton
+          variant="plain"
+          label="Retry All"
+          onPress={() => retryFailedDownloads(failed)}
+        />
+        <TextButton
+          variant="plain"
+          label="Clear All"
+          onPress={() => clearFailedDownloads(failed)}
+        />
         <View className="flex-1" />
-        <PlainTextButton
+        <TextButton
+          variant="plain"
           label={row.expanded ? "Hide Songs" : "Show Songs"}
           accessibilityLabel={row.expanded ? "Hide failed songs" : "Show failed songs"}
           onPress={onToggle}
@@ -78,12 +87,14 @@ export const FailedGroupHeader = memo(
           >
             {row.line}
           </Text>
-          <PlainTextButton
+          <TextButton
+            variant="plain"
             label="Retry"
             accessibilityLabel={`Retry ${row.line}`}
             onPress={() => retryFailedDownloads(row.failed)}
           />
-          <PlainTextButton
+          <TextButton
+            variant="plain"
             label="Remove"
             accessibilityLabel={`Remove ${row.line} from failed downloads`}
             onPress={() => clearFailedDownloads(row.failed)}
@@ -114,8 +125,9 @@ export const FailedDownloadRow = memo(
     const { song, line, detail } = failed;
     return (
       <DownloadSongRow song={song} covers={covers} line={line} detail={detail}>
-        <PlainTextButton label="Retry" onPress={() => retryFailedDownloads([failed])} />
-        <PlainTextButton
+        <TextButton variant="plain" label="Retry" onPress={() => retryFailedDownloads([failed])} />
+        <TextButton
+          variant="plain"
           label="Remove"
           accessibilityLabel="Remove from failed downloads"
           onPress={() => clearFailedDownloads([failed])}

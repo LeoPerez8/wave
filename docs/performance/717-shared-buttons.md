@@ -13,8 +13,8 @@ and fill through one lookup each.
 
 IconButton owns the target, glyph size, tone, caption, press depth and haptic.
 TextButton owns text actions, pills, Stats segments and the plain list variant.
-PlainTextButton delegates to that plain variant. It still uses Pressable and
-pressed opacity, with no animated style registered for a Downloads row (#446).
+The plain variant uses Pressable and pressed opacity, with no animated style
+registered for a Downloads row (#446).
 
 Now Playing's song actions, transport, view toggles and title star, Up Next's
 remove and queue toggles, selection actions, menu play cards and entries,

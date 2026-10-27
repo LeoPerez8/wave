@@ -4,7 +4,7 @@ import { ActivityIndicator, Text, View } from "react-native";
 
 import { grid, CELL } from "@/catalog/grid";
 import { useChromeInset } from "@/chrome/chrome";
-import { PlainTextButton } from "@/components/PlainTextButton";
+import { TextButton } from "@/components/TextButton";
 import type { ListeningHistoryRow } from "@/library/db/listeningHistory";
 import { historyArtwork } from "@/library/historyArtwork";
 import { useListeningHistory } from "@/library/useListeningHistory";
@@ -143,7 +143,7 @@ export default function ListeningHistoryScreen() {
                 <Text className="font-sans text-body text-secondary">
                   Couldn't load listening history.
                 </Text>
-                <PlainTextButton label="Try again" onPress={refresh} />
+                <TextButton variant="plain" label="Try again" onPress={refresh} />
               </>
             )}
           </View>
