@@ -76,13 +76,18 @@ const runAborting = <A, E>(effect: Effect.Effect<A, E, LibraryStore>, signal: Ab
  * (`createGenreOrderLoad`): `load` for what acts on it, `shown` for the list,
  * which keeps the last whole order of the genre in its sort until the next
  * one arrives (a scan moves a few songs; the list doesn't fall back to its
- * first page). Openings in one revision of the genre's order share one load.
+ * first page), and `current` for the load's own whole order once it's read.
+ * Openings in one revision of the genre's order share one load.
  */
 const useWholeOrder = (
   genreId: number,
   sort: LibrarySongSort,
   opening: GenreOpening | undefined,
-): { readonly load: GenreOrderLoad | null; readonly shown: SongOrder | null } => {
+): {
+  readonly load: GenreOrderLoad | null;
+  readonly shown: SongOrder | null;
+  readonly current: SongOrder | null;
+} => {
   const sorted = `${genreId}:${sort.key}:${sort.descending ? "desc" : "asc"}`;
   const key = opening === undefined ? null : `${sorted}:${opening.revision}`;
   const load = useMemo(
@@ -115,7 +120,7 @@ const useWholeOrder = (
     null,
   );
   if (whole !== null && whole !== last?.order) setLast({ sorted, order: whole });
-  return { load, shown: whole ?? (last?.sorted === sorted ? last.order : null) };
+  return { load, shown: whole ?? (last?.sorted === sorted ? last.order : null), current: whole };
 };
 
 const NO_IDS: readonly number[] = [];
@@ -147,7 +152,7 @@ export function GenreSongList({
   const bottomInset = useChromeInset();
   const context = useMemo(() => ({ kind: "genre", id: String(genre.id) }) as const, [genre.id]);
 
-  const { load, shown: whole } = useWholeOrder(genre.id, sort, opening);
+  const { load, shown: whole, current } = useWholeOrder(genre.id, sort, opening);
   const ids = whole?.ids ?? opening?.order.ids ?? NO_IDS;
   const { pages, version } = usePagedSongs(ids, opening?.songs ?? NO_SUMMARIES);
   const spine = useSpineEntries(whole?.spine ?? NO_SPINE, list);
@@ -223,7 +228,7 @@ export function GenreSongList({
   const target = useCallback(
     (selected: readonly number[]): ActionItems | null => {
       // Not before the genre's whole order is read: Select All checks every song in it.
-      if (load?.current() == null) return null;
+      if (current === null) return null;
       const items: { song: SongRow }[] = [];
       for (const id of selected) {
         const song = full.get(id);
@@ -232,9 +237,7 @@ export function GenreSongList({
       }
       return { kind: "track", items };
     },
-    // `whole` re-makes it as the whole order arrives.
-    // oxlint-disable-next-line react-hooks/exhaustive-deps
-    [full, load, whole],
+    [full, current],
   );
   const listSelection = useListSelection({ items: ids, keyOf: songIdKey, target });
   // Do not expose a partial selection source: Select All must see the complete genre.
