@@ -26,8 +26,6 @@ export interface GroundColors {
   readonly fade: SharedValue<number>;
   /** The colours the ground settles on. */
   readonly target: Gradient;
-  /** When [fade] started (ms), to know where it is without reading it during a render. */
-  readonly fadeStartedAt: { at: number | null };
   /** Counts the changes: the incoming layer mounts anew with each, at its new fade's 0. */
   readonly change: number;
 }
@@ -36,13 +34,16 @@ const settled = (gradient: Gradient, change: number): GroundColors => ({
   layers: { base: gradient, incoming: null },
   fade: makeMutable(1),
   target: gradient,
-  fadeStartedAt: { at: null },
   change,
 });
 
-/** Where a fade started at [startedAt] is now, from 0 to 1, along its easing. */
-const fadeProgress = (startedAt: number | null): number => {
-  if (startedAt === null) return 0;
+/** When each fade started (ms): where it is, known without reading it during a render. */
+const fadeStarts = new WeakMap<SharedValue<number>, number>();
+
+/** Where [fade] is now, from 0 to 1, along its easing. */
+const fadeProgress = (fade: SharedValue<number>): number => {
+  const startedAt = fadeStarts.get(fade);
+  if (startedAt === undefined) return 0;
   return CROSSFADE_EASING(Math.min(1, (Date.now() - startedAt) / CROSSFADE_MS));
 };
 
@@ -60,7 +61,7 @@ export function useBackgroundColors(gradient: Gradient, animate: boolean): Groun
   if (ground.target.top !== gradient.top || ground.target.bottom !== gradient.bottom) {
     // Adjusted while rendering, so the new layers commit with the render that brought the colours.
     const instant = reduceMotion || !animate;
-    const progress = ground.layers.incoming === null ? 1 : fadeProgress(ground.fadeStartedAt.at);
+    const progress = ground.layers.incoming === null ? 1 : fadeProgress(ground.fade);
     const layers = crossfadeGround(ground.layers, gradient, progress, instant);
     setGround(
       layers.incoming === null
@@ -69,19 +70,18 @@ export function useBackgroundColors(gradient: Gradient, animate: boolean): Groun
             layers,
             fade: makeMutable(0),
             target: gradient,
-            fadeStartedAt: { at: null },
             change: ground.change + 1,
           },
     );
   }
 
-  const { layers, fade, fadeStartedAt } = ground;
+  const { layers, fade } = ground;
   useEffect(() => {
     if (layers.incoming === null) return undefined;
-    fadeStartedAt.at = Date.now();
+    fadeStarts.set(fade, Date.now());
     fade.set(withTiming(1, { duration: CROSSFADE_MS, easing: CROSSFADE_EASING }));
     return () => cancelAnimation(fade);
-  }, [layers, fade, fadeStartedAt]);
+  }, [layers, fade]);
   return ground;
 }
 
