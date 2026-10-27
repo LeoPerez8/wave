@@ -90,6 +90,10 @@ export const NETWORK_SEEDS = [
 export interface WholeLibraryException extends Exception {
   readonly howOften: string;
 }
+/** How often a visible page or menu that follows the shared Library finder builds it. */
+const FOLLOWED_FINDER =
+  "Once per shared Library query version while this visible page or menu follows it; unchanged renders reuse the finder.";
+
 export const WHOLE_LIBRARY: Record<string, WholeLibraryException> = {
   "library/PlaylistRecommendations.tsx#PlaylistRecommendations": {
     howOften:
@@ -143,14 +147,12 @@ export const WHOLE_LIBRARY: Record<string, WholeLibraryException> = {
     capabilities: ["stats/Stats.ts#recaps"],
   },
   "app/library/discover-mix/[id].tsx#DiscoverMixScreen": {
-    howOften:
-      "Once per shared Library query version while this visible page or menu follows it; unchanged renders reuse the finder.",
+    howOften: FOLLOWED_FINDER,
     reason: "Visible mix page resolves streamed entries against Library files.",
     capabilities: ["ytmusic/libraryFinder.ts#useLibraryFinder"],
   },
   "home/DiscoverMixActions.tsx#DiscoverMixActionsMenu": {
-    howOften:
-      "Once per shared Library query version while this visible page or menu follows it; unchanged renders reuse the finder.",
+    howOften: FOLLOWED_FINDER,
     reason:
       "Explicitly opened mix menu resolves downloads and playlist entries; not an always-mounted control.",
     capabilities: [
@@ -223,14 +225,12 @@ export const WHOLE_LIBRARY: Record<string, WholeLibraryException> = {
   },
 
   "playback/ActionsMenu.tsx#usePlaylistDownloadEntries": {
-    howOften:
-      "Once per shared Library query version while this visible page or menu follows it; unchanged renders reuse the finder.",
+    howOften: FOLLOWED_FINDER,
     reason: "Visible playlist menu checks which entries are downloaded; created for a user action.",
     capabilities: ["ytmusic/libraryFinder.ts#useLoadedInLibrary"],
   },
   "playback/itemActions.ts#useStreamedSongFinder": {
-    howOften:
-      "Once per shared Library query version while this visible page or menu follows it; unchanged renders reuse the finder.",
+    howOften: FOLLOWED_FINDER,
     reason: "A visible selection/menu resolves streamed items for user actions.",
     capabilities: ["ytmusic/libraryFinder.ts#useLibraryFinder"],
   },
@@ -272,15 +272,13 @@ export const WHOLE_LIBRARY: Record<string, WholeLibraryException> = {
     ],
   },
   "ytmusic/albumSection.ts#useYtAlbumSection": {
-    howOften:
-      "Once per shared Library query version while this visible page or menu follows it; unchanged renders reuse the finder.",
+    howOften: FOLLOWED_FINDER,
     reason:
       "The album opening policy enables the shared finder only after local content and screen settlement, with a loaded online release. Its local rows and offline note draw independently. albumOpening.test.ts checks real-store work and row placement.",
     capabilities: ["ytmusic/libraryFinder.ts#useLoadedLibraryFinder"],
   },
   "ytmusic/artistPage.ts#useLibraryReleases": {
-    howOften:
-      "Once per shared Library query version while this visible page or menu follows it; unchanged renders reuse the finder.",
+    howOften: FOLLOWED_FINDER,
     reason:
       "Only a settled, usable-network YT artist page with a standing full answer activates the shared artist/album identities and song finder. Offline/loading/failure render without those reads. See ytArtistPageOpening.test.ts and detailOpening.test.ts.",
     capabilities: [
@@ -289,15 +287,13 @@ export const WHOLE_LIBRARY: Record<string, WholeLibraryException> = {
     ],
   },
   "ytmusic/artistPage.ts#useYtArtistPage": {
-    howOften:
-      "Once per shared Library query version while this visible page or menu follows it; unchanged renders reuse the finder.",
+    howOften: FOLLOWED_FINDER,
     reason:
       "Only a settled, usable-network YT artist page with a standing full answer activates the shared artist/album identities and song finder. Offline/loading/failure render without those reads. See ytArtistPageOpening.test.ts and detailOpening.test.ts.",
     capabilities: ["ytmusic/libraryFinder.ts#useLoadedLibraryFinder"],
   },
   "ytmusic/artistSection.ts#useDeferredArtistSection": {
-    howOften:
-      "Once per shared Library query version while this visible page or menu follows it; unchanged renders reuse the finder.",
+    howOften: FOLLOWED_FINDER,
     reason:
       "Online additions only: the artist opening policy gates this shared finder on local content, screen settlement, Online and a standing full answer. Library mode and missing, pending, partial or expired answers do not subscribe. See ytArtistOpening.test.ts and artistOpening.test.ts.",
     capabilities: ["ytmusic/libraryFinder.ts#useLoadedLibraryFinder"],
@@ -332,8 +328,7 @@ export const WHOLE_LIBRARY: Record<string, WholeLibraryException> = {
     capabilities: ["ytmusic/libraryFinder.ts#useLoadedLibraryFinder"],
   },
   "ytmusic/YtAlbumActions.tsx#YtAlbumActionsMenu": {
-    howOften:
-      "Once per shared Library query version while this visible page or menu follows it; unchanged renders reuse the finder.",
+    howOften: FOLLOWED_FINDER,
     reason: "Explicit album menu resolves downloaded songs while the card is shown.",
     capabilities: [
       "ytmusic/libraryFinder.ts#useLibraryFinder",
@@ -361,8 +356,7 @@ export const WHOLE_LIBRARY: Record<string, WholeLibraryException> = {
     capabilities: ["ytmusic/libraryFinder.ts#currentLibraryFinder"],
   },
   "ytmusic/YtDownloads.ts#useFailedDownloadsInput": {
-    howOften:
-      "Once per shared Library query version while this visible page or menu follows it; unchanged renders reuse the finder.",
+    howOften: FOLLOWED_FINDER,
     reason:
       "Download recovery runs on explicit/background work; the failed-download UI follows only while shown.",
     capabilities: ["ytmusic/libraryFinder.ts#useLoadedLibraryFinder"],
@@ -373,8 +367,7 @@ export const WHOLE_LIBRARY: Record<string, WholeLibraryException> = {
     capabilities: ["ytmusic/libraryFinder.ts#currentLibraryFinder"],
   },
   "ytmusic/YtSongActions.tsx#YtSongActionsMenu": {
-    howOften:
-      "Once per shared Library query version while this visible page or menu follows it; unchanged renders reuse the finder.",
+    howOften: FOLLOWED_FINDER,
     reason: "Explicit song menus and completed swipes resolve Library identity for their action.",
     capabilities: [
       "ytmusic/libraryFinder.ts#useLibraryFinder",
@@ -382,8 +375,7 @@ export const WHOLE_LIBRARY: Record<string, WholeLibraryException> = {
     ],
   },
   "ytmusic/YtSongList.tsx#useYtAlbumDownloadButton": {
-    howOften:
-      "Once per shared Library query version while this visible page or menu follows it; unchanged renders reuse the finder.",
+    howOften: FOLLOWED_FINDER,
     reason:
       "Only nonempty online album songs after screen settlement activate this finder. Library album openings with no online answer start no cold follower.",
     capabilities: [
@@ -392,8 +384,7 @@ export const WHOLE_LIBRARY: Record<string, WholeLibraryException> = {
     ],
   },
   "ytmusic/YtSongList.tsx#useYtPlaylistDownloadButton": {
-    howOften:
-      "Once per shared Library query version while this visible page or menu follows it; unchanged renders reuse the finder.",
+    howOften: FOLLOWED_FINDER,
     reason:
       "Visible online lists and their download buttons resolve local files; they are not the hidden Now Playing subtree.",
     capabilities: [
@@ -402,8 +393,7 @@ export const WHOLE_LIBRARY: Record<string, WholeLibraryException> = {
     ],
   },
   "ytmusic/YtSongList.tsx#YtSongList": {
-    howOften:
-      "Once per shared Library query version while this visible page or menu follows it; unchanged renders reuse the finder.",
+    howOften: FOLLOWED_FINDER,
     reason:
       "Only a loaded remote list after screen settlement follows the finder; offline/loading pages render without acquiring it.",
     capabilities: ["ytmusic/libraryFinder.ts#useLibraryFinder"],
