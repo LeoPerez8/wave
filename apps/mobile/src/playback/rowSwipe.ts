@@ -1,4 +1,5 @@
 import {
+  songRowSwipeDirections,
   ITEM_ACTION_LABELS,
   UNAVAILABLE_ENTRY_ACTION_LABELS,
   actionBarLabel,
@@ -155,7 +156,7 @@ const planTrack = (
  * resolves only its requested artist names; song actions acquire the Library
  * song finder when they need it.
  */
-const runTrackSwipe = (target: ActionItems, side: RowSwipeSide): void => {
+export const runTrackSwipe = (target: ActionItems, side: RowSwipeSide): void => {
   const here = currentPath();
   const settings = swipeSettingsNow();
   const press = (find: FindInLibrary) => {
@@ -251,4 +252,46 @@ export const useSongSummarySwipe = (summary: SongSummary | undefined): RowSwipe 
       })
       .catch((error: unknown) => showError("Couldn't load the song", error));
   });
+};
+
+/** Paged lists read full action metadata only when a swipe runs. */
+export const runSummarySwipe = (id: number, side: RowSwipeSide): void => {
+  songsWithIds([id])
+    .then(([song]) => {
+      if (song !== undefined) runTrackSwipe({ kind: "track", items: [{ song }] }, side);
+    })
+    .catch((error: unknown) => showError("Couldn't load the song", error));
+};
+
+/** Temporary bridge for #716's remaining TrackRow callers; one subscription per container. */
+export const useLibrarySongSwipes = (): ((song: SongRow) => RowSwipe) => {
+  const settings = useSwipeSettings();
+  const here = useCurrentPath(false);
+  return (song) => {
+    const target: ActionItems = { kind: "track", items: [{ song }] };
+    const item = targetFacts(target, favoriteIdsNow(), findNothing)[0]!;
+    const directions = songRowSwipeDirections(
+      {
+        kind: "track",
+        item: {
+          ...item,
+          download: song.path === null ? missingSongDownloadStatusNow(song.id) : null,
+        },
+        here,
+        onlineLookups: lyricsAndGenreLookupsEnabled(),
+      },
+      settings,
+    );
+    const side = (action: RowMenuAction | null, direction: RowSwipeSide): SwipeSide | null =>
+      action === null
+        ? null
+        : {
+            action,
+            label: shortLabel(action),
+            accessibilityLabel: fullLabel(action),
+            leaves: false,
+            run: () => runTrackSwipe(target, direction),
+          };
+    return { right: side(directions.right, "right"), left: side(directions.left, "left") };
+  };
 };

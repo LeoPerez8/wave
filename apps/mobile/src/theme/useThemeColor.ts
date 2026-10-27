@@ -16,3 +16,13 @@ export const useThemeColor = (name: ThemeColor): string => {
   const value = useCSSVariable(`--color-${name}`);
   return typeof value === "string" ? value : "transparent";
 };
+
+/** Several native colour props share one uniwind subscription. */
+export const useThemeColors = <const T extends readonly ThemeColor[]>(
+  names: T,
+): { [K in keyof T]: string } => {
+  const values = useCSSVariable(names.map((name) => `--color-${name}`));
+  return values.map((value) => (typeof value === "string" ? value : "transparent")) as {
+    [K in keyof T]: string;
+  };
+};

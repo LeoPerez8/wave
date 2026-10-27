@@ -2101,3 +2101,6 @@ export const cancelUnstarredDownloads = (
     })
     .catch(() => undefined);
 };
+
+/** One journal subscription per song list, shared by local missing and remote rows. */
+export const useSongListDownloads = () => useSyncExternalStore(downloads.subscribe, downloads.get);
