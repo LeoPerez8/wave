@@ -2124,3 +2124,5 @@ export {
   shuffleLineShows,
 } from "./shuffleCardLines.ts";
 export { fileUri } from "./fileUri.ts";
+
+export { queuePersistence, type QueuePersistenceState } from "./queuePersistence.ts";

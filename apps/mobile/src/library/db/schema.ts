@@ -315,6 +315,9 @@ export const savedPlayback = sqliteTable("playback_state", {
   id: integer("id").primaryKey(),
   /** Core's `QueueState` as JSON; entries hold track ids. */
   queue: text("queue").notNull(),
+  queueIndex: integer("queue_index"),
+  /** Context, shuffle, repeat and key counter; separate from the entry JSON. */
+  metadata: text("queue_metadata"),
   /** Where the current entry was, last time it was saved. */
   positionMs: integer("position_ms").notNull().default(0),
   updatedAt: integer("updated_at").notNull(),
