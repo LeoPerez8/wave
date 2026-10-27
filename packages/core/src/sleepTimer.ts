@@ -27,6 +27,12 @@ export type SleepTimerChoice =
 export type SleepTimer =
   { readonly type: "deadline"; readonly endsAt: number } | { readonly type: "endOfTrack" };
 
+/** Whole seconds shown by a deadline label; End of track has no ticking label. */
+export const sleepTimerLabelSeconds = (timer: SleepTimer, now: number): number | null => {
+  "worklet";
+  return timer.type === "deadline" ? Math.max(0, Math.ceil((timer.endsAt - now) / 1000)) : null;
+};
+
 /** The timer a choice starts at `now`. */
 export const startSleepTimer = (choice: SleepTimerChoice, now: number): SleepTimer | null => {
   if (choice.type === "endOfTrack") return { type: "endOfTrack" };
@@ -70,6 +76,7 @@ export interface SleepTimerClock {
 
 /** How long until the timer pauses playback, in ms. */
 export const sleepTimerRemaining = (timer: SleepTimer, clock: SleepTimerClock): number | null => {
+  "worklet";
   if (timer.type === "deadline") return Math.max(0, timer.endsAt - clock.now);
   if (clock.durationMs === null) return null;
   return Math.max(0, clock.durationMs - clock.positionMs);

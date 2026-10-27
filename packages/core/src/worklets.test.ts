@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
+  currentLyricIndex,
+  extrapolatePosition,
   elapsedWavePath,
   formatDuration,
   formatRemaining,
@@ -17,6 +19,8 @@ import {
   reorderTarget,
   rowSwipeArmed,
   scrubPosition,
+  sleepTimerLabelSeconds,
+  sleepTimerRemaining,
 } from "./index.ts";
 
 // The app calls these on the UI thread, inside Reanimated worklets: the
@@ -28,6 +32,8 @@ import {
 // any other function there throws. Node ignores the directive, so these tests
 // are the only check short of running the app.
 const onUiThread = {
+  currentLyricIndex,
+  extrapolatePosition,
   elapsedWavePath,
   formatDuration,
   formatRemaining,
@@ -43,6 +49,8 @@ const onUiThread = {
   reorderTarget,
   rowSwipeArmed,
   scrubPosition,
+  sleepTimerLabelSeconds,
+  sleepTimerRemaining,
 };
 
 const startsWithWorkletDirective = (fn: (...args: never[]) => unknown): boolean =>
