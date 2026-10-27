@@ -54,6 +54,7 @@ import expo.modules.wavenative.scan.KnownFile
 import expo.modules.wavenative.scan.LibraryScanner
 import expo.modules.wavenative.scan.ScanListener
 import expo.modules.wavenative.scan.ScanProgress
+import expo.modules.wavenative.scan.ScanSlot
 import expo.modules.wavenative.scan.ScannedTrack
 import expo.modules.wavenative.scan.artworkToMap
 import expo.modules.wavenative.scan.trackToMap
@@ -74,7 +75,6 @@ import java.io.File
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
-import java.util.concurrent.atomic.AtomicInteger
 
 /** A square of a playlist image's original as JS passes it (Core's `FramingSquare`), in px. */
 class FramingSquareRecord : Record {
@@ -97,8 +97,7 @@ class WaveNativeModule : Module() {
   private val scanExecutor: ExecutorService = Executors.newSingleThreadExecutor { runnable ->
     Thread(runnable, "wave-scanner").apply { priority = Thread.NORM_PRIORITY - 1 }
   }
-  private val nextScanId = AtomicInteger(1)
-  @Volatile private var currentScan: Pair<Int, AtomicBoolean>? = null
+  private val scans = ScanSlot()
   private val lyricsReader by lazy {
     LyricsReader(AudioTagReader(primary = JAudioTaggerReader(), fallback = MediaRetrieverTagReader()))
   }
@@ -276,11 +275,14 @@ class WaveNativeModule : Module() {
     }
 
     /**
-     * Scans [roots] minus [excluded], cancelling any scan in progress. The known
-     * files (parallel lists of path, size and modification time) make it
-     * incremental: unchanged files aren't read again and missing ones are reported.
+     * Scans [roots] minus [excluded] as scan [scanId] (JS numbers its scans in order), cancelling
+     * any scan in progress. The known files (parallel lists of path, size and modification time)
+     * make it incremental: unchanged files aren't read again and missing ones are reported.
+     * Async: the lists can hold the whole Library, so they cross and are indexed off the JS
+     * thread. Resolves once the scan is queued; its events carry [scanId].
      */
-    Function("startScan") {
+    AsyncFunction("startScan") {
+        scanId: Int,
         roots: List<String>,
         excluded: List<String>,
         knownPaths: List<String>,
@@ -294,23 +296,20 @@ class WaveNativeModule : Module() {
       for (i in knownPaths.indices) {
         known[knownPaths[i]] = KnownFile(knownSizes[i].toLong(), knownModifiedAt[i].toLong())
       }
-      val id = nextScanId.getAndIncrement()
-      val cancelled = AtomicBoolean(false)
-      currentScan?.second?.set(true)
-      currentScan = id to cancelled
-      val artworkDir = File(context.filesDir, "artwork")
-      scanExecutor.execute {
-        runScan(id, cancelled, roots.map(::File), excluded.map(::File), known, artworkDir)
+      // Null when a newer scan already started: this one's start arrived late and never runs.
+      val cancelled = scans.claim(scanId)
+      if (cancelled != null) {
+        val artworkDir = File(context.filesDir, "artwork")
+        scanExecutor.execute {
+          runScan(scanId, cancelled, roots.map(::File), excluded.map(::File), known, artworkDir)
+        }
       }
-      id
     }
 
     /** Encodes at most one cached cover. JS calls again only on a free turn; no tag rescan. */
     AsyncFunction("backfillMediumCover") { mediumCovers.step() }
 
-    Function("cancelScan") { scanId: Int ->
-      currentScan?.takeIf { it.first == scanId }?.second?.set(true)
-    }
+    Function("cancelScan") { scanId: Int -> scans.cancel(scanId) }
 
     /**
      * A track's lyrics, unparsed: `{ embedded, sidecar }`, each the text or
@@ -469,7 +468,7 @@ class WaveNativeModule : Module() {
       SharedTextInbox.onReceived = null
       stopConnectivity?.invoke()
       stopConnectivity = null
-      currentScan?.second?.set(true)
+      scans.cancelAll()
       scanExecutor.shutdownNow()
       launcherIconSwitcher?.let { switcher ->
         appContext.reactContext?.let { (it.applicationContext as Application).unregisterActivityLifecycleCallbacks(switcher) }
@@ -687,7 +686,7 @@ class WaveNativeModule : Module() {
     } catch (e: Throwable) {
       sendEvent("onScanError", mapOf("scanId" to id, "message" to (e.message ?: e.toString())))
     } finally {
-      if (currentScan?.first == id) currentScan = null
+      scans.finished(id)
     }
   }
 

@@ -158,18 +158,23 @@ declare class WaveNativeModule extends NativeModule<WaveNativeEvents> {
    */
   takeSharedText(): string | null;
   /**
-   * Starts a scan, cancelling any running one, and returns its id. The known
-   * files (parallel lists) make it incremental: files with the same size and
-   * modification time aren't read again, and known files under the roots that
-   * are gone are reported in `onScanMissing`.
+   * Starts scan [scanId], cancelling any running one. JS numbers its scans
+   * in order: a start that arrives after a newer scan's never runs. The
+   * known files (parallel lists) make it incremental: files with the same
+   * size and modification time aren't read again, and known files under the
+   * roots that are gone are reported in `onScanMissing`. Async, as the lists
+   * can hold the whole Library; it resolves once the scan is queued, and its
+   * events carry [scanId].
    */
   startScan(
+    scanId: number,
     roots: readonly string[],
     excluded: readonly string[],
     knownPaths: readonly string[],
     knownSizes: readonly number[],
     knownModifiedAt: readonly number[],
-  ): number;
+  ): Promise<void>;
+  /** Cancels scan [scanId] if it is the one running; call it once its start resolved. */
   cancelScan(scanId: number): void;
   /** A track's lyrics, unparsed: from its tags and from a sidecar `.lrc` beside it. */
   readLyrics(path: string): Promise<NativeLyrics>;

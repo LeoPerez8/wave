@@ -243,8 +243,8 @@ declare class WavePlayerModule extends NativeModule<WavePlayerEvents> {
    * the runtime was starting. Call it once a listener is in place.
    */
   attachAuto(): void;
-  /** Answers request `id` with JSON (see `AutoRequest`). */
-  respondAuto(id: number, json: string): void;
+  /** Answers request `id` with JSON (see `AutoRequest`); async, as the answer can be a long list. */
+  respondAuto(id: number, json: string): Promise<void>;
   /** Answers request `id` with an error Auto shows as `message`. */
   failAuto(id: number, message: string): void;
   /** The Lyrics toggle and Auto's connection; `onAutoLyrics` reports changes. */

@@ -35,10 +35,9 @@ export const startAutoResponder = (answer: AutoAnswer): void => {
   WavePlayer.addListener("onAutoRequest", (event) => {
     Promise.resolve()
       .then(() => answer(readRequest(event)))
-      .then(
-        (value) => WavePlayer.respondAuto(event.id, JSON.stringify(value)),
-        (error: unknown) => WavePlayer.failAuto(event.id, failureMessage(event.type, error)),
-      );
+      // The answer can list a whole shelf: it crosses to native off the JS thread.
+      .then((value) => WavePlayer.respondAuto(event.id, JSON.stringify(value)))
+      .catch((error: unknown) => WavePlayer.failAuto(event.id, failureMessage(event.type, error)));
   });
   WavePlayer.attachAuto();
 };

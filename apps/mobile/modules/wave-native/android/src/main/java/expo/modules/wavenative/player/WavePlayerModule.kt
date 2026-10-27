@@ -427,7 +427,8 @@ class WavePlayerModule : Module() {
       }
     }
 
-    Function("respondAuto") { id: Int, json: String -> AutoLibrary.bridge.respond(id, json) }
+    // Async: an answer can list a whole shelf, which shouldn't cross on the JS thread.
+    AsyncFunction("respondAuto") { id: Int, json: String -> AutoLibrary.bridge.respond(id, json) }
 
     Function("failAuto") { id: Int, message: String -> AutoLibrary.bridge.fail(id, message) }
 
