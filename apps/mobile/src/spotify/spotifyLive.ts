@@ -3,7 +3,8 @@ import * as Effect from "effect/Effect";
 
 import { WaveSpotify, spotifyErrorCode, type SpotifyErrorCode } from "@/native/waveSpotify";
 
-import { SpotifyError, type Spotify } from "./Spotify";
+import type { Spotify } from "./Spotify";
+import { SpotifyError } from "./SpotifyError";
 
 const REASONS: Record<SpotifyErrorCode, SpotifyAccountFailure> = {
   ERR_SPOTIFY_OFFLINE: "offline",

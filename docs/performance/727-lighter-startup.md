@@ -18,7 +18,7 @@ Ticket: #727 (parent #712). Branch `feat/727-lighter-startup`, based on
   lyrics card opens.
 - **Services are built on first use.** `lib/lazyService.ts` gives a layer whose implementation is
   built at the first read of one of its members, behind the same `Context.Service` interface.
-  Spotify (`spotify/spotifyLive.ts`), Stats and Recap (`stats/statsLive.ts`) and Wave account
+  Spotify (`spotify/spotifyLive.ts`, its error in `spotify/SpotifyError.ts`), Stats and Recap (`stats/statsLive.ts`) and Wave account
   sync (`sync/waveSyncLive.ts`) use it. Signed out, sync never makes its triggers, so
   `syncTriggers` and the sync cycle never load. Lyrics translation needed no change: its storage
   and request already sit in closures that run only while translation is on, so inline requires

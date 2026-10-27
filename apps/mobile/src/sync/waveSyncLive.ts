@@ -8,7 +8,7 @@ import { WaveAccount, waveAccountErrorCode, type WaveAccountErrorCode } from "@/
 import { perfCount } from "@/perf/perf";
 
 import { syncTriggers, type SyncClock, type SyncTriggers } from "./syncTriggers";
-import { WaveSync, type WaveSyncPorts } from "./WaveSync";
+import type { WaveSync, WaveSyncPorts } from "./WaveSync";
 
 /** Offline or signed out: a sync stops, and tries again at the next chance, with nothing to warn of. */
 const expected = (code: WaveAccountErrorCode | null): boolean =>
@@ -101,7 +101,7 @@ export const make = Effect.gen(function* () {
     );
   };
 
-  return WaveSync.of({
+  const sync: WaveSync["Service"] = {
     start: (given) =>
       Effect.sync(() => {
         if (ports !== null) return;
@@ -121,5 +121,6 @@ export const make = Effect.gen(function* () {
       Effect.sync(() => {
         if (account !== null) signedInTriggers().played(step);
       }),
-  });
+  };
+  return sync;
 });

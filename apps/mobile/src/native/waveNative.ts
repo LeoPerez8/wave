@@ -316,7 +316,7 @@ export type FileDeleteOutcome = "deleted" | "missing" | "denied" | "readOnly" | 
 export const WaveNative = requireNativeModule<WaveNativeModule>("WaveNative");
 
 /** The phone's connectivity, pushed from the native cache as it changes (`connectivityStore`). */
-export const connectivity = connectivityStore({
+const connectivity = connectivityStore({
   read: () => WaveNative.connectivity(),
   subscribe: (listener) => {
     const subscription = WaveNative.addListener("onConnectivityChanged", listener);

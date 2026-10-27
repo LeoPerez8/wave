@@ -1,20 +1,11 @@
-import type { SpotifyAccountFailure, SpotifySession } from "@wave/core";
+import type { SpotifySession } from "@wave/core";
 import * as Context from "effect/Context";
-import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 
 import { lazyService } from "@/lib/lazyService";
 
+import type { SpotifyError } from "./SpotifyError";
 import { makeSpotify } from "./spotifyLive";
-
-/**
- * A Spotify request that didn't get an answer: no network, Spotify failed or
- * answered something unreadable, no session Spotify accepts, or Spotify
- * changed its web player so Wave needs an update (Core's `SpotifyAccountFailure`).
- */
-export class SpotifyError extends Data.TaggedError("SpotifyError")<{
-  readonly reason: SpotifyAccountFailure;
-}> {}
 
 /**
  * The signed-in Spotify account as a typed service, over the native
