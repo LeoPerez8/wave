@@ -1,15 +1,12 @@
-import { LegendList } from "@legendapp/list/react-native";
 import { listeningHistoryDays } from "@wave/core";
-import { memo, useMemo, useSyncExternalStore } from "react";
+import { useMemo, useSyncExternalStore } from "react";
 import { ActivityIndicator, Text, View } from "react-native";
 
 import { grid, CELL } from "@/catalog/grid";
-import { TrackRow } from "@/catalog/TrackRow";
 import { useChromeInset } from "@/chrome/chrome";
 import { PlainTextButton } from "@/components/PlainTextButton";
 import type { ListeningHistoryRow } from "@/library/db/listeningHistory";
-import { historyArtworkUri } from "@/library/historyArtwork";
-import { toTrackSummary } from "@/library/TrackList";
+import { historyArtwork } from "@/library/historyArtwork";
 import { useListeningHistory } from "@/library/useListeningHistory";
 import { useScreenContent } from "@/lib/screenTiming";
 import { openTrackActions } from "@/playback/ActionsMenu";
@@ -18,56 +15,72 @@ import { useYtMusicEnabled } from "@/settings/ytMusic";
 import { openYtSongActions } from "@/ytmusic/YtSongActions";
 import { playYtSongs, playSongs } from "@/playback/actions";
 import { SettingsEditorScreen } from "@/settings/SettingsPage";
+import { SongList } from "@/songs/SongList";
+import type { SongListEntry } from "@/songs/songListSources";
+
+const HISTORY_CONTEXT = { kind: "history", id: null } as const;
 
 type Row =
   | { readonly kind: "day"; readonly key: string; readonly title: string }
   | { readonly kind: "play"; readonly key: string; readonly play: ListeningHistoryRow };
 
-const HistorySong = memo(function HistorySong({ play }: { play: ListeningHistoryRow }) {
+const rowKey = (row: Row): string => row.key;
+const slotType = (row: Row): string => row.kind;
+/** Day headings size themselves. */
+const slotSize = (): undefined => undefined;
+
+/** What a play can do now: replay its Library song, or its stream while that can play. */
+const playable = (play: ListeningHistoryRow, ytMusic: boolean, refused: ReadonlySet<string>) =>
+  play.streamedSong !== null && ytMusic && !refused.has(play.streamedSong.videoId);
+
+/**
+ * A play as the song row shows it: the title and artist it was played as,
+ * its start time in place of the length, no star or playing mark. A removed
+ * song is dimmed and its stream replays while it can; with neither, it does
+ * nothing.
+ */
+const historyEntry = (play: ListeningHistoryRow, streamPlayable: boolean): SongListEntry => {
   const { snapshot, song, streamedSong } = play;
-  const ytMusic = useYtMusicEnabled();
-  const unavailable = useSyncExternalStore(
-    unavailableStreamedVideos.subscribe,
-    unavailableStreamedVideos.get,
-  );
-  const streamPlayable = streamedSong !== null && ytMusic && !unavailable.has(streamedSong.videoId);
-  const artworkUri = historyArtworkUri(play, streamPlayable);
-  const time = new Date(play.startedAt).toLocaleTimeString(undefined, {
-    hour: "numeric",
-    minute: "2-digit",
-  });
-  return (
-    <TrackRow
-      track={{
-        ...(song === null ? { id: `history:${play.id}`, durationMs: null } : toTrackSummary(song)),
-        title: snapshot.title,
-        artist: snapshot.artist,
-        artworkUri,
-      }}
-      leading="artwork"
-      trailingLabel={time}
-      unavailable={song === null && !streamPlayable}
-      disabled={song === null && streamedSong === null}
-      onPress={() => {
-        if (song !== null) void playSongs([song], 0, { kind: "history", id: null });
-        else if (streamPlayable) void playYtSongs([streamedSong], 0, { kind: "history", id: null });
-      }}
-      onLongPress={
-        song !== null
-          ? () => openTrackActions(song)
-          : streamedSong === null
-            ? undefined
-            : () => openYtSongActions(streamedSong)
-      }
-    />
-  );
-});
+  return {
+    source: {
+      kind: "history",
+      id: play.id,
+      trackId: song === null ? undefined : String(song.id),
+      title: snapshot.title,
+      artist: snapshot.artist,
+      durationMs: song?.durationMs ?? null,
+      explicit: song?.explicit ?? false,
+      artwork: historyArtwork(play, streamPlayable),
+      missing: song !== null && song.path === null,
+      unavailable: song === null && !streamPlayable,
+      disabled: song === null && streamedSong === null,
+    },
+    state: {
+      playing: false,
+      starred: false,
+      remoteArtwork: true,
+      trailingLabel: new Date(play.startedAt).toLocaleTimeString(undefined, {
+        hour: "numeric",
+        minute: "2-digit",
+      }),
+    },
+    // A missing song shows its download as it goes.
+    facts: song === null ? undefined : { missing: song.path === null },
+  };
+};
 
 /** Counted plays, including streamed songs and saved rows for songs that have since left. */
 export default function ListeningHistoryScreen() {
   const { rows: plays, loading, error, loadMore, refresh } = useListeningHistory();
   useScreenContent(!loading || plays.length > 0);
   const bottom = useChromeInset();
+  // Followed once for the list: whether each removed song's stream can still play.
+  const ytMusic = useYtMusicEnabled();
+  const refused = useSyncExternalStore(
+    unavailableStreamedVideos.subscribe,
+    unavailableStreamedVideos.get,
+  );
+  const streamable = (play: ListeningHistoryRow) => playable(play, ytMusic, refused);
   const rows = useMemo(
     () =>
       listeningHistoryDays(plays).flatMap<Row>((day) => [
@@ -79,17 +92,14 @@ export default function ListeningHistoryScreen() {
 
   return (
     <SettingsEditorScreen page="history">
-      <LegendList
+      <SongList
         className="flex-1"
         data={rows}
-        keyExtractor={(row) => row.key}
-        getItemType={(row) => row.kind}
-        estimatedItemSize={grid.row}
-        recycleItems
-        renderItem={({ item }) =>
-          item.kind === "play" ? (
-            <HistorySong play={item.play} />
-          ) : (
+        keyExtractor={rowKey}
+        song={(row) => (row.kind === "play" ? historyEntry(row.play, streamable(row.play)) : null)}
+        context={HISTORY_CONTEXT}
+        renderSlot={({ item }) =>
+          item.kind === "day" ? (
             <Text
               accessibilityRole="header"
               className="font-sans text-title3 font-semibold text-foreground"
@@ -97,8 +107,23 @@ export default function ListeningHistoryScreen() {
             >
               {item.title}
             </Text>
-          )
+          ) : null
         }
+        slotType={slotType}
+        slotSize={slotSize}
+        onPlay={(row) => {
+          if (row.kind !== "play") return;
+          const { song, streamedSong } = row.play;
+          if (song !== null) void playSongs([song], 0, HISTORY_CONTEXT);
+          else if (streamedSong !== null && streamable(row.play))
+            void playYtSongs([streamedSong], 0, HISTORY_CONTEXT);
+        }}
+        onMenu={(row) => {
+          if (row.kind !== "play") return;
+          const { song, streamedSong } = row.play;
+          if (song !== null) openTrackActions(song);
+          else if (streamedSong !== null) openYtSongActions(streamedSong);
+        }}
         contentContainerStyle={{ paddingHorizontal: grid.margin, paddingBottom: bottom }}
         onEndReached={loadMore}
         onEndReachedThreshold={0.5}
