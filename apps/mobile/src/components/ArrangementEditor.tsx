@@ -13,8 +13,7 @@ import {
   type RowReorder,
 } from "@/components/RowReorder";
 import { TextButton } from "@/components/TextButton";
-import { Press } from "@/motion/Press";
-import { useThemeColor } from "@/theme/useThemeColor";
+import { IconButton } from "@/components/IconButton";
 
 const ROW = grid.row;
 /** A 48dp target for each of a row's buttons. */
@@ -41,22 +40,18 @@ function RowButton({
   onPress: () => void;
   disabled?: boolean;
 }) {
-  const accent = useThemeColor("accent");
-  const secondary = useThemeColor("secondary");
   return (
-    <Press
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      accessibilityState={{ disabled }}
+    <IconButton
+      icon={Icon}
+      iconSize={20}
+      strokeWidth={1.75}
+      size={BUTTON}
+      label={label}
       disabled={disabled}
+      disabledTone="secondary"
       onPress={onPress}
-      haptic="selection"
-      depth={0.1}
-      className="items-center justify-center"
-      style={{ width: BUTTON, height: BUTTON, opacity: disabled ? 0.4 : 1 }}
-    >
-      <Icon size={20} color={disabled ? secondary : accent} strokeWidth={1.75} />
-    </Press>
+      style={{ opacity: disabled ? 0.4 : 1 }}
+    />
   );
 }
 

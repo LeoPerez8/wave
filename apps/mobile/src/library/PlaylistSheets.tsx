@@ -16,7 +16,6 @@ import { CELL, grid } from "@/catalog/grid";
 import { Hairline } from "@/catalog/Hairline";
 import { PlaylistEntry } from "@/catalog/PlaylistEntry";
 import { TextButton } from "@/components/TextButton";
-import { Press } from "@/motion/Press";
 import { confirmAction } from "@/overlay/alert";
 import { CardEntries } from "@/overlay/CardEntries";
 import { followUp, openOverlay, presentOverlay } from "@/overlay/overlay";
@@ -90,8 +89,7 @@ function NameCard({
   request: NameRequest;
   finish: (name: string | null) => void;
 }) {
-  const accent = useThemeColor("accent");
-  const secondary = useThemeColor("secondary");
+  const [accent, secondary] = useThemeColor(["accent", "secondary"]);
   const [value, setValue] = useState(request.initial);
   const check = checkPlaylistName(value, request.otherNames);
 
@@ -171,7 +169,6 @@ const addSongs = (playlistId: number, songs: () => Promise<readonly PlaylistSong
 };
 
 function AddCard({ subject, close }: { subject: AddSubject; close: () => void }) {
-  const accent = useThemeColor("accent");
   const playlists = usePlaylists();
 
   return (
@@ -183,22 +180,26 @@ function AddCard({ subject, close }: { subject: AddSubject; close: () => void })
         </Text>
       </View>
       <Hairline />
-      <Press
+      <TextButton
+        label="New Playlist"
         accessibilityRole="button"
         accessibilityLabel="New Playlist"
         onPress={() => {
           close();
           void newPlaylist(subject.songs);
         }}
-        haptic="selection"
         className="flex-row items-center"
-        style={{ height: grid.row, gap: CELL * 1.5 }}
+        style={{ height: grid.row, gap: CELL * 1.5, justifyContent: "flex-start" }}
       >
-        <View className="items-center justify-center" style={{ width: CELL * 5 }}>
-          <IconPlus size={24} color={accent} strokeWidth={1.5} />
-        </View>
-        <Text className="font-sans text-body font-medium text-accent">New Playlist</Text>
-      </Press>
+        {(accent) => (
+          <>
+            <View className="items-center justify-center" style={{ width: CELL * 5 }}>
+              <IconPlus size={24} color={accent} strokeWidth={1.5} />
+            </View>
+            <Text className="font-sans text-body font-medium text-accent">New Playlist</Text>
+          </>
+        )}
+      </TextButton>
       {/* The card stops short of the screen edges; a long list scrolls inside it.
           Each playlist follows a divider, so none trails the last. */}
       <CardEntries>

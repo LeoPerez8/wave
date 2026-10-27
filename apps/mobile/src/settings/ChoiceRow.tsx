@@ -5,9 +5,8 @@ import { CatalogLine } from "@/catalog/CatalogLine";
 import { CELL, grid } from "@/catalog/grid";
 import { Hairline } from "@/catalog/Hairline";
 import type { PersistedSetting } from "@/lib/persistedSetting";
-import { Press } from "@/motion/Press";
+import { TextButton } from "@/components/TextButton";
 import type { TitleChoice } from "@/overlay/titleChoices";
-import { useThemeColor } from "@/theme/useThemeColor";
 
 /**
  * One choice of a Settings radio list; the current one carries a check.
@@ -25,25 +24,30 @@ export function ChoiceRow({
   onPress: () => void;
   accessibilityLabel?: string;
 }) {
-  const accent = useThemeColor("accent");
   return (
-    <Press
+    <TextButton
+      label={label}
       accessibilityRole="radio"
       accessibilityLabel={accessibilityLabel}
       accessibilityState={{ checked: chosen }}
       onPress={onPress}
-      haptic="selection"
     >
-      {/* At least a row tall; large text grows it rather than clipping the label. */}
-      <View
-        className="flex-row items-center"
-        style={{ minHeight: grid.row, paddingVertical: CELL / 2 }}
-      >
-        <Text className="flex-1 font-sans text-title3 font-normal text-foreground">{label}</Text>
-        {chosen && <IconCheck size={24} color={accent} strokeWidth={1.5} />}
-      </View>
-      <Hairline />
-    </Press>
+      {(accent) => (
+        <>
+          {/* At least a row tall; large text grows it rather than clipping the label. */}
+          <View
+            className="flex-row items-center"
+            style={{ minHeight: grid.row, paddingVertical: CELL / 2 }}
+          >
+            <Text className="flex-1 font-sans text-title3 font-normal text-foreground">
+              {label}
+            </Text>
+            {chosen && <IconCheck size={24} color={accent} strokeWidth={1.5} />}
+          </View>
+          <Hairline />
+        </>
+      )}
+    </TextButton>
   );
 }
 

@@ -18,8 +18,7 @@ type Props = {
 
 /** Album art, treated as a photograph: square, no frame, no rounding unless asked. */
 export function Artwork({ uri: input, tint, size, radius = 0 }: Props) {
-  const tertiary = useThemeColor("tertiary");
-  const fill = useThemeColor("fill");
+  const [tertiary, fill] = useThemeColor(["tertiary", "fill"]);
   const inCapture = useInCapture();
   const uri = artworkUri(
     input,
