@@ -15,6 +15,7 @@ import { queueState } from "./Queue";
 import { queuedYtSong, queueTracks } from "./queueTracks";
 import * as Effect from "effect/Effect";
 import { subscribeAll } from "@/lib/externalStore";
+import { useSightedStore } from "@/lib/screenSight";
 import { LibraryStore } from "@/library/LibraryStore";
 import { appRuntime } from "@/library/runtime";
 import {
@@ -54,9 +55,12 @@ const playingIds = createPlayingIds({
   onLibraryChange,
 });
 
-/** All row identities of the playing recording, shared across retained list screens. */
+/**
+ * All row identities of the playing recording, shared across retained list
+ * screens. A screen out of sight doesn't follow them (`useSightedStore`).
+ */
 export const useCurrentPlayingIds = (): ReadonlySet<string> =>
-  useSyncExternalStore(playingIds.subscribe, playingIds.get);
+  useSightedStore(playingIds.subscribe, playingIds.get);
 
 /**
  * Play / Shuffle for a screen's songs, which may still be loading (a screen

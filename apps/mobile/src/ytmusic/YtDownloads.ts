@@ -132,6 +132,7 @@ import { fillInLyricsAndGenre, lookUpLyricsAndGenre } from "@/library/lyricsAndG
 import { appRuntime } from "@/library/runtime";
 import { settleUnsearchedSong } from "@/library/unsearchedEntries";
 import { makeExternalStore } from "@/lib/externalStore";
+import { useSightedStore } from "@/lib/screenSight";
 import { WaveNative } from "@/native/waveNative";
 import {
   WaveSoulseek,
@@ -2073,5 +2074,8 @@ export const cancelUnstarredDownloads = (
     .catch(() => undefined);
 };
 
-/** One journal subscription per song list, shared by local missing and remote rows. */
-export const useSongListDownloads = () => useSyncExternalStore(downloads.subscribe, downloads.get);
+/**
+ * One journal subscription per song list, shared by local missing and remote
+ * rows. A list out of sight doesn't follow download progress (`useSightedStore`).
+ */
+export const useSongListDownloads = () => useSightedStore(downloads.subscribe, downloads.get);
