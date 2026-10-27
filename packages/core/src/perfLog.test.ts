@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { PERF_FLUSH_QUIET_MS, PERF_LOG_TAG, createPerfRecorder, parsePerfLog } from "./index.ts";
+import {
+  PERF_AWAY_PREFIX,
+  PERF_FLUSH_QUIET_MS,
+  PERF_LOG_TAG,
+  createPerfRecorder,
+  parsePerfLog,
+} from "./index.ts";
 
 /** A clock the test moves by hand, in ms. */
 const clock = (start = 1_000) => {
@@ -54,6 +60,22 @@ describe("perf recorder and log", () => {
     recorder.render("TabBar");
     const [second] = parsePerfLog(logcat(recorder.drain()));
     assert.deepEqual(second?.renders, { TabBar: 1 });
+  });
+
+  test("renders while the app is away count apart, so a screen-off window shows its own work", () => {
+    const recorder = createPerfRecorder({ now: clock().now });
+    recorder.render("SongRow");
+    recorder.away(true);
+    recorder.render("SongRow");
+    recorder.render("js:sync.run");
+    recorder.away(false);
+    recorder.render("SongRow");
+    const [flush] = parsePerfLog(logcat(recorder.drain()));
+    assert.deepEqual(flush?.renders, {
+      SongRow: 2,
+      [`${PERF_AWAY_PREFIX}SongRow`]: 1,
+      [`${PERF_AWAY_PREFIX}js:sync.run`]: 1,
+    });
   });
 
   test("a drain empties the buffer", () => {
@@ -162,6 +184,18 @@ describe("when the recorder flushes", () => {
     time.advance(PERF_FLUSH_QUIET_MS - 1);
     assert.equal(recorder.dueForFlush(), false);
     time.advance(1);
+    assert.equal(recorder.dueForFlush(), true);
+  });
+
+  test("not within the quiet time after the app comes back, so the return's catch-up joins the away window's flush", () => {
+    const time = clock(0);
+    const recorder = createPerfRecorder({ now: time.now });
+    recorder.away(true);
+    time.advance(300_000);
+    recorder.render("MiniPlayer");
+    recorder.away(false);
+    assert.equal(recorder.dueForFlush(), false);
+    time.advance(PERF_FLUSH_QUIET_MS);
     assert.equal(recorder.dueForFlush(), true);
   });
 

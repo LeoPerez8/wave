@@ -63,6 +63,9 @@ export class NativeScanner extends Context.Service<
   }
 >()("@wave/mobile/library/NativeScanner") {}
 
+/** The last scan's number: each scan takes the next, so the native side knows which is newest. */
+let lastScanId = 0;
+
 const scan = (
   roots: readonly string[],
   excluded: readonly string[],
@@ -73,8 +76,8 @@ const scan = (
       Effect.gen(function* () {
         const columns = yield* scanInputColumns(known, startupTurnEffect);
         yield* startupTurnEffect;
-        // Native events reach JS after this synchronous block, so the id is known before any arrive.
-        let scanId = -1;
+        // Chosen here, so events that arrive before the start resolves are already this scan's.
+        const scanId = ++lastScanId;
         let finished = false;
         const subscriptions = [
           WaveNative.addListener("onScanProgress", (event) => {
@@ -98,17 +101,27 @@ const scan = (
             Queue.failCauseUnsafe(queue, Cause.fail(new ScanFailed({ message: event.message })));
           }),
         ];
-        scanId = WaveNative.startScan(
+        const started = WaveNative.startScan(
+          scanId,
           roots,
           excluded,
           columns.paths,
           columns.sizes,
           columns.modified,
+        ).then(
+          () => true,
+          (error: unknown) => {
+            finished = true;
+            const message = error instanceof Error ? error.message : String(error);
+            Queue.failCauseUnsafe(queue, Cause.fail(new ScanFailed({ message })));
+            return false;
+          },
         );
         return {
           release: () => {
             for (const subscription of subscriptions) subscription.remove();
-            if (!finished) WaveNative.cancelScan(scanId);
+            // A cancel sent before the start is through would find no scan to cancel.
+            if (!finished) void started.then((queued) => queued && WaveNative.cancelScan(scanId));
           },
         };
       }),

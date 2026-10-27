@@ -29,6 +29,13 @@ export type Action =
   /** Nothing: a window that watches the app on its own (an import filling). */
   | { readonly kind: "idle" }
   /**
+   * The screen turned off (`KEYCODE_SLEEP`) for the step's window, then on again
+   * and unlocked. The app's threads' wake-ups are read on either side of the
+   * window; the step's frames and renders are the return's, its `away:` renders
+   * the window's.
+   */
+  | { readonly kind: "screenOff" }
+  /**
    * A finger dragged in a straight line (`input swipe`), [from] and [to] in dp
    * from [target]'s centre, taking [durationMs].
    */
@@ -86,7 +93,7 @@ export interface Scenario {
   /** Launch the app fresh before every iteration instead of once per scenario. */
   readonly coldEachIteration?: boolean;
   /** Unmeasured actions after the launch, before the iterations. */
-  readonly setup?: readonly Action[];
+  readonly setup?: readonly Action[] | ((config: ScenarioConfig) => readonly Action[]);
   /** Unmeasured actions after each iteration's steps. */
   readonly teardown?: readonly Action[];
   readonly steps: (config: ScenarioConfig) => readonly Step[];
@@ -179,6 +186,24 @@ const FIRST_REMOVE: Target = { descPrefix: "Remove " };
 const HANDLE: Point = { x: 48, y: 0 };
 /** Up Next rows are 56 dp tall. */
 const THREE_ROWS_DOWN: Point = { x: 48, y: 3 * 56 };
+
+/**
+ * A screen-off window: long enough for a once-a-minute batch (Wave account
+ * sync's play ends) to show in a per-minute rate.
+ */
+const SCREEN_OFF_MS = 5 * 60_000;
+
+const SCREEN_OFF: Step = {
+  measure: "screen-off",
+  action: { kind: "screenOff" },
+  windowMs: SCREEN_OFF_MS,
+};
+
+/** Now Playing open, playing: the soaks' music. The fixture leaves the player paused. */
+const OPEN_AND_PLAY: readonly Action[] = [
+  { kind: "tap", target: { descPrefix: "Now playing:" } },
+  { kind: "tap", target: { desc: "Play" } },
+];
 
 /** Ten tab changes away from Home and back, cycling through [tabs]. */
 const tabCycleLabels = (tabs: readonly string[], count: number): string[] =>
@@ -403,6 +428,25 @@ export const SCENARIOS: readonly Scenario[] = [
     warmup: 1,
   },
   {
+    name: "skip-library",
+    summary:
+      "Library › Songs › Play, the whole Library as the queue (12,000 songs on the owner's phone), then the mini player's Next track, until the player holds the next entry.",
+    setup: [
+      { kind: "tap", target: tab("Library") },
+      { kind: "tap", target: { text: "Songs" } },
+      { kind: "tap", target: { desc: "Play" } },
+    ],
+    steps: () => [
+      {
+        measure: "next",
+        action: { kind: "tap", target: { desc: "Next track" } },
+        expect: { mark: "queue.synced" },
+      },
+    ],
+    iterations: 10,
+    warmup: 1,
+  },
+  {
     name: "scrub",
     summary:
       "Now Playing's scrubber dragged forward 240 dp and back, a second each; each drag seeks where it lets go.",
@@ -428,6 +472,20 @@ export const SCENARIOS: readonly Scenario[] = [
     ],
     iterations: 10,
     warmup: 1,
+  },
+  {
+    name: "scroll-playlist",
+    summary:
+      "Flings on Library › Playlists › the named playlist: its songs scrolling under the mini player.",
+    setup: ({ playlist }) => [
+      { kind: "tap", target: tab("Library") },
+      { kind: "tap", target: { text: "Playlists" } },
+      { kind: "tap", target: { text: playlist ?? "" } },
+    ],
+    steps: () => flings,
+    iterations: 10,
+    warmup: 1,
+    needsPlaylist: true,
   },
   {
     name: "search-first-tap",
@@ -528,6 +586,31 @@ export const SCENARIOS: readonly Scenario[] = [
     memorySamples: 6,
   },
   {
+    name: "screen-off",
+    summary:
+      "Music playing, Now Playing closed, the screen off for five minutes: the JS thread's and the process's wake-ups per minute, and what rendered while away.",
+    setup: [...OPEN_AND_PLAY, { kind: "tap", target: { desc: "Close Now Playing" } }],
+    steps: () => [SCREEN_OFF],
+    iterations: 3,
+    warmup: 1,
+    byName: true,
+  },
+  {
+    name: "screen-off-lyrics",
+    summary:
+      "As screen-off, with Now Playing left open on its lyrics and a 60-minute sleep timer running. Play a song with synced lyrics.",
+    setup: [
+      ...OPEN_AND_PLAY,
+      { kind: "tap", target: { desc: "Lyrics" } },
+      { kind: "tap", target: { desc: "Sleep timer" } },
+      { kind: "tap", target: { text: "60 Minutes" } },
+    ],
+    steps: () => [SCREEN_OFF],
+    iterations: 3,
+    warmup: 1,
+    byName: true,
+  },
+  {
     name: "scroll-home",
     summary:
       "Glass: flings on Home, its content scrolling under the tab bar, the Search pill and the mini player.",
@@ -555,6 +638,19 @@ export const SCENARIOS: readonly Scenario[] = [
       "Glass: five seconds of Home with nothing touched; with the mini player paused, any frame is idle rendering.",
     steps: () => [{ measure: "idle", action: { kind: "idle" }, windowMs: 5_000 }],
     iterations: 5,
+    warmup: 1,
+    glass: true,
+  },
+  {
+    name: "scroll-queue",
+    summary:
+      "Glass: flings on Now Playing's Up Next, settled open over the tabs and their three glass views (#721). Needs a long queue.",
+    setup: [
+      { kind: "tap", target: { descPrefix: "Now playing:" } },
+      { kind: "tap", target: { desc: "Queue" } },
+    ],
+    steps: () => flings,
+    iterations: 10,
     warmup: 1,
     glass: true,
   },

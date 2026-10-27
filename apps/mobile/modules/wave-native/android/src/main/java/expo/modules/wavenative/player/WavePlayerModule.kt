@@ -63,7 +63,10 @@ class SyncStepRecord : Record {
  * After a cold start, playback resumption seeds it from the resume snapshot.
  */
 object QueueSnapshot {
+  /** Core's `QueueState` JSON, with the index and metadata JS saved apart since (null: none). */
   @Volatile var json: String? = null
+  @Volatile var index: Int? = null
+  @Volatile var metadata: String? = null
 
   /** Where the queue was started from (`phone` or `auto`), for the plays JS records. */
   @Volatile var source: String? = null
@@ -336,16 +339,25 @@ class WavePlayerModule : Module() {
     }.runOnQueue(Queues.MAIN)
 
     /**
-     * Keeps the queue for when JS comes back (see [QueueSnapshot]), and for a
-     * cold start ([ResumeStore]), with where it was started from.
+     * Keeps the queue parts JS changed (Core's `queueWrite`; null ones didn't)
+     * for when JS comes back (see [QueueSnapshot]), and for a cold start
+     * ([ResumeStore]), with where it was started from. A skip sends only the index.
      */
-    Function("saveQueue") { json: String, source: String? ->
-      QueueSnapshot.json = json
+    AsyncFunction("saveQueue") { queue: String?, metadata: String?, index: Int?, source: String?, promise: Promise ->
+      if (queue != null) QueueSnapshot.json = queue
+      if (metadata != null) QueueSnapshot.metadata = metadata
+      if (index != null) QueueSnapshot.index = index
       if (source != null) QueueSnapshot.source = source
-      ResumeStore.saveQueue(json, source)
-    }
+      ResumeStore.saveQueue(queue, metadata, index, source)
+      promise.resolve(null)
+    }.runOnQueue(Queues.MAIN)
 
-    Function("savedQueue") { QueueSnapshot.json }
+    /** The parts last saved, which Core's `savedQueueState` puts back together; null before any. */
+    Function("savedQueue") {
+      QueueSnapshot.json?.let { json ->
+        mapOf("queue" to json, "metadata" to QueueSnapshot.metadata, "index" to QueueSnapshot.index)
+      }
+    }
 
     Function("savedQueueSource") { QueueSnapshot.source }
 
@@ -427,7 +439,8 @@ class WavePlayerModule : Module() {
       }
     }
 
-    Function("respondAuto") { id: Int, json: String -> AutoLibrary.bridge.respond(id, json) }
+    // Async: an answer can list a whole shelf, which shouldn't cross on the JS thread.
+    AsyncFunction("respondAuto") { id: Int, json: String -> AutoLibrary.bridge.respond(id, json) }
 
     Function("failAuto") { id: Int, message: String -> AutoLibrary.bridge.fail(id, message) }
 

@@ -315,6 +315,9 @@ export const savedPlayback = sqliteTable("playback_state", {
   id: integer("id").primaryKey(),
   /** Core's `QueueState` as JSON; entries hold track ids. */
   queue: text("queue").notNull(),
+  queueIndex: integer("queue_index"),
+  /** Context, shuffle, repeat and key counter; separate from the entry JSON. */
+  metadata: text("queue_metadata"),
   /** Where the current entry was, last time it was saved. */
   positionMs: integer("position_ms").notNull().default(0),
   updatedAt: integer("updated_at").notNull(),
@@ -669,6 +672,10 @@ export const playEvents = sqliteTable(
       .on(sql`${t.startedAt} DESC`, sql`${t.id} DESC`)
       .where(sql`${t.counted} = 1 AND ${t.importedFrom} IS NULL`),
     index("play_events_pushed_idx").on(t.pushed),
+    // The ongoing play, which a play start ends (`recordPlay`).
+    index("play_events_ongoing_idx")
+      .on(t.ongoing)
+      .where(sql`${t.ongoing} = 1`),
     // When each playlist was last played (the Playlists list's Recently Played).
     index("play_events_context_idx").on(t.contextType, t.contextId, t.startedAt, t.trackId),
   ],

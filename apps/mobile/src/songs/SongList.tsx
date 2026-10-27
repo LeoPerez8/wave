@@ -14,6 +14,7 @@ import { AlphabetSpine } from "@/catalog/AlphabetSpine";
 import { CatalogLine } from "@/catalog/CatalogLine";
 import { CELL, grid } from "@/catalog/grid";
 import type { Spine } from "@/library/useSpine";
+import { useRenderCount } from "@/perf/perf";
 
 import { useSongRows, type SongRowsOptions } from "./useSongRows";
 
@@ -69,6 +70,7 @@ export function SongList<T>({
   extraData,
   ...list
 }: SongListProps<T>) {
+  useRenderCount("SongList");
   const rows = useSongRows({
     data,
     keyExtractor,

@@ -47,6 +47,7 @@ describe("how hidden tabs are kept (chosen at bundle time, for the comparison)",
       detach: true,
       keepLayout: false,
       freeze: false,
+      followHidden: false,
       retain: 5,
     });
     assert.deepEqual(parseTabScreens(""), parseTabScreens(undefined));
@@ -57,14 +58,22 @@ describe("how hidden tabs are kept (chosen at bundle time, for the comparison)",
       detach: true,
       keepLayout: true,
       freeze: true,
+      followHidden: false,
       retain: 3,
     });
     assert.deepEqual(parseTabScreens("attach"), {
       detach: false,
       keepLayout: false,
       freeze: false,
+      followHidden: false,
       retain: 5,
     });
+  });
+
+  test("hidden screens stop following stores unless a bundle asks them to follow (#722)", () => {
+    assert.equal(parseTabScreens("follow").followHidden, true);
+    assert.equal(parseTabScreens("follow pause").followHidden, false);
+    assert.equal(parseTabScreens("attach follow").followHidden, true);
   });
 
   test("a hidden tab left attached doesn't keep its layout: it would draw under the shown one", () => {
@@ -86,5 +95,8 @@ describe("how hidden tabs are kept (chosen at bundle time, for the comparison)",
     const attached = parseTabScreens("attach");
     assert.deepEqual(parseTabScreens(describeTabScreens(attached)), attached);
     assert.equal(describeTabScreens(parseTabScreens(undefined)), "detach,display-none,retain=5");
+    const following = parseTabScreens("follow");
+    assert.equal(describeTabScreens(following), "detach,display-none,follow,retain=5");
+    assert.deepEqual(parseTabScreens(describeTabScreens(following)), following);
   });
 });

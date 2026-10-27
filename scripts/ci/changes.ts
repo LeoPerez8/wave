@@ -1,5 +1,5 @@
 // Which parts of the repo a change touches, whether it can change the APK, and
-// whether it can change the result of wave-native's JVM tests.
+// whether it can change the result of the native modules' JVM tests.
 // The CI workflow runs it on a PR's changed files and turns jobs off by it:
 //   <paths, one per line> | node scripts/ci/changes.ts   # PRs
 //   node scripts/ci/changes.ts --all                      # everything else
@@ -22,9 +22,11 @@ const AREAS = {
   perf: ["scripts/perf/"],
   // TypeScript config the packages extend.
   tsconfig: ["tsconfig.base.json"],
-  // wave-native and what decides how prebuild generates the project it builds in.
+  // The native modules with JVM tests and what decides how prebuild generates the
+  // project they build in.
   native: [
     "apps/mobile/modules/wave-native/",
+    "apps/mobile/modules/wave-glass/",
     "apps/mobile/app.config.ts",
     "apps/mobile/plugins/",
     "apps/mobile/package.json",
@@ -40,7 +42,7 @@ const APK_AREAS: readonly Area[] = ["app", "core", "workspace", "ci"];
 // all of them. Otherwise it checks only the packages a PR changed and their dependents.
 const ALL_PACKAGES_AREAS: readonly Area[] = ["workspace", "ci", "tsconfig", "perf"];
 
-// wave-native's JVM tests can only change result when one of these does.
+// The native modules' JVM tests can only change result when one of these does.
 const NATIVE_TEST_AREAS: readonly Area[] = ["native", "workspace", "ci"];
 
 export type Changes = Record<Area | "apk" | "allPackages" | "nativeTests", boolean>;

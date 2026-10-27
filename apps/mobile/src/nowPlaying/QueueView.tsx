@@ -28,7 +28,6 @@ import { GestureDetector } from "react-native-gesture-handler";
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
-  type DerivedValue,
   type SharedValue,
 } from "react-native-reanimated";
 
@@ -63,7 +62,7 @@ import { SongRow } from "@/songs/SongRow";
 import { createSongListModel, type SongRowPresentation } from "@/songs/songListModel";
 import { useThemeColor } from "@/theme/useThemeColor";
 
-import { Background } from "./Background";
+import { Background, type GroundColors } from "./Background";
 import { useQueueTracks } from "./hooks";
 import { useShuffleControl } from "./ShuffleMenu";
 import { TrackHeader } from "./TrackHeader";
@@ -136,7 +135,7 @@ const BAR = CELL * 11;
 /** What the sticky bar draws its slice of the Now Playing ground from. */
 type Ground = {
   /** The ground's colours (`useBackgroundColors`). */
-  readonly colors: DerivedValue<string[]>;
+  readonly colors: GroundColors;
   /** The list's top on the sheet, where the bar sticks. */
   readonly top: SharedValue<number>;
   /** The list's scroll, and the bar's offset in it. */
@@ -414,7 +413,7 @@ export function UpNextList({
   paneTop,
 }: {
   bottomInset: number;
-  ground: DerivedValue<string[]>;
+  ground: GroundColors;
   paneTop: number;
 }) {
   useRenderCount("UpNextList");

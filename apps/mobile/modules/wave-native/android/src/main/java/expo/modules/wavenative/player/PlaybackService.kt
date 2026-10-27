@@ -857,6 +857,8 @@ class PlaybackService : MediaLibraryService() {
               AutoModes.fromJs(saved.shuffle, saved.repeat)?.let(AutoModes.state::publish)
             }
             QueueSnapshot.json = snapshot?.queueJson
+            QueueSnapshot.index = snapshot?.queueIndex
+            QueueSnapshot.metadata = snapshot?.queueMetadata
             QueueSnapshot.source = resumption.source
             QueueSnapshot.resumed = true
           }

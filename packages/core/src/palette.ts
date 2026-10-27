@@ -116,3 +116,39 @@ export const contrastRatio = (a: string, b: string): number => {
   const lb = luminance(b);
   return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
 };
+
+/**
+ * The Now Playing ground as drawn: an opaque [base] gradient and, while the
+ * colours change, the [incoming] one fading in over it (null once nothing is
+ * fading). Two plain layers, so the fade costs an opacity, not a redraw.
+ */
+export interface GroundLayers {
+  readonly base: Gradient;
+  readonly incoming: Gradient | null;
+}
+
+/**
+ * The ground's layers once its colours change to [target], with the incoming
+ * layer at opacity [progress] (0 to 1). The fade starts from what is on
+ * screen, mid-fade too: the two layers blended where they are, which is itself
+ * a two-stop gradient. [instant] (out of sight, reduced motion) shows [target]
+ * at once.
+ */
+export const crossfadeGround = (
+  shown: GroundLayers,
+  target: Gradient,
+  progress: number,
+  instant: boolean,
+): GroundLayers => {
+  if (instant) return { base: target, incoming: null };
+  const { base, incoming } = shown;
+  if (incoming === null) return { base, incoming: target };
+  const amount = Math.min(1, Math.max(0, progress));
+  return {
+    base: {
+      top: mix(base.top, incoming.top, amount),
+      bottom: mix(base.bottom, incoming.bottom, amount),
+    },
+    incoming: target,
+  };
+};

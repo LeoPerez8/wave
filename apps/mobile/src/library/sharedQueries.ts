@@ -4,6 +4,7 @@ import { useCallback, useContext, useEffect, useSyncExternalStore } from "react"
 
 import { firstContentShown } from "@/lib/backgroundWork";
 import { CoveredByNowPlaying, useScreenSight } from "@/lib/screenSight";
+import { attachInSight } from "@/lib/sight";
 import { registerPerfMeta } from "@/perf/perf";
 
 import { onLibraryChange } from "./libraryChanges";
@@ -78,7 +79,8 @@ const idle = () => () => {};
  * - Screens showing the same query share its result and its reads.
  * - It re-reads when a Library change reaches its reads: an edit at once,
  *   scan batches at most every 1.5 s. While the screen is out of sight
- *   (another tab, a pushed screen, Now Playing over it) it doesn't re-read;
+ *   (another tab, a pushed screen, Now Playing over it, the app in the
+ *   background) it doesn't re-read;
  *   it catches up once when the screen comes back.
  */
 export const useLibraryQuery = <A>(query: LibraryQuery<A> | null, initial: A): A => {
@@ -91,18 +93,7 @@ export const useLibraryQuery = <A>(query: LibraryQuery<A> | null, initial: A): A
       const { key } = definition;
       definitions.set(key, definition);
       stopFollowing ??= onLibraryChange(registry.change);
-      const attached = registry.attach(key, definition.reads, {
-        visible: sight.visible(),
-        onChange,
-        onStateChange: onChange,
-      });
-      const stopWatching = sight.subscribe((visible) =>
-        visible ? attached.show() : attached.hide(),
-      );
-      return () => {
-        stopWatching();
-        attached.detach();
-      };
+      return attachInSight(registry, key, definition.reads, sight, onChange);
     },
     [definition, sight],
   );

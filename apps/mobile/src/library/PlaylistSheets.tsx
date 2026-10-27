@@ -25,7 +25,7 @@ import { useThemeColor } from "@/theme/useThemeColor";
 import { usePlaylists } from "./hooks";
 import type { PlaylistRow } from "./LibraryStore";
 import { cancelPlaylistImport } from "./playlistImports";
-import { framePhoto } from "./PhotoCropper";
+import { framePhoto } from "./PhotoCropperHost";
 import {
   addToPlaylist,
   adjustPlaylistImage,

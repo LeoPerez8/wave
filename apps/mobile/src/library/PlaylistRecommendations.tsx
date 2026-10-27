@@ -35,7 +35,7 @@ import {
 import { playlistSuggestionRadios, playlistSuggestionSeeds } from "./playlistSuggestionRadios";
 import { makeExternalStore } from "@/lib/externalStore";
 import { CROSSFADE_MS } from "@/motion/Crossfade";
-import { WaveNative } from "@/native/waveNative";
+import { online as phoneOnline } from "@/native/waveNative";
 import { playTrackIds, playYtSongs } from "@/playback/actions";
 import {
   mixedSongEntry,
@@ -103,7 +103,7 @@ export function PlaylistRecommendations({
             // Source rows are retained for the five visible offers only, never a copy of the Library.
             latestRows.set(input.songById);
             const seeds = playlistSuggestionSeeds(playlistId, input.playlist);
-            const online = WaveNative.online();
+            const online = phoneOnline();
             const pages = yield* playlistSuggestionRadios(visitId, seeds, {
               online,
               low: remaining < LOW,

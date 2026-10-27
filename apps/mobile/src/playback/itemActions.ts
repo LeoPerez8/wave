@@ -24,7 +24,7 @@ import { followArtistLink, followStreamedArtistLink } from "@/library/ArtistChoi
 import { confirmDeleteSongs, confirmRemoveSongs } from "@/library/deleteSongs";
 import type { LinkRows } from "@/library/db/links";
 import { songHasFile, type ArtistRow, type SongRow } from "@/library/LibraryStore";
-import { useFavoriteIds, usePendingFavoriteVideos } from "@/library/favorites";
+import { useLiveFavoriteIds, useLivePendingFavoriteVideos } from "@/library/favorites";
 import { starSongs } from "@/library/starSongs";
 import { fixSongs } from "@/library/findLyricsAndGenre";
 import {
@@ -247,7 +247,7 @@ function usePlan(
     return statuses.slice(start, start + (perAlbum[index]?.length ?? 0));
   };
   // Starred YT Music songs waiting for their files: their Favorite reads Remove from Favorites.
-  const pending = usePendingFavoriteVideos(!deferred);
+  const pending = useLivePendingFavoriteVideos(!deferred);
   const facts = targetFacts(target, favorites, find, pending);
   const planned = itemActions({
     kind: target.kind,
@@ -311,7 +311,7 @@ export function useItemActions(
 ): readonly ActionEntry[] {
   const here = usePathname();
   const deferred = target.readOnAction === true;
-  const favorites = useFavoriteIds(!deferred);
+  const favorites = useLiveFavoriteIds(!deferred);
   const find = useStreamedSongFinder(hasStreamedSongs(target) && !deferred);
 
   // [missingSongs]: the albums' missing songs, which their download entries act on.

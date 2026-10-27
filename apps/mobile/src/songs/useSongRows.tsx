@@ -13,7 +13,6 @@ import {
   useMemo,
   useRef,
   useState,
-  useSyncExternalStore,
   type ReactElement,
   type ReactNode,
 } from "react";
@@ -21,6 +20,7 @@ import type { AccessibilityActionInfo } from "react-native";
 
 import { useFavoriteIds, usePendingFavoriteVideos } from "@/library/favorites";
 import { useCurrentPath } from "@/library/routes";
+import { useSightedStore } from "@/lib/screenSight";
 import type { MenuOptions } from "@/playback/ActionsMenu";
 import { useCurrentPlayingIds } from "@/playback/hooks";
 import { unavailableStreamedVideos } from "@/playback/PlayHistory";
@@ -104,6 +104,7 @@ export function useSongRows<T>({
   onRowAction,
   decorateRow,
 }: SongRowsOptions<T>) {
+  // Followed only while the list's screen is in sight (#722): a hidden tab renders nothing here.
   const currentIds = useCurrentPlayingIds();
   const favorites = useFavoriteIds();
   const pending = usePendingFavoriteVideos();
@@ -111,7 +112,7 @@ export function useSongRows<T>({
   const settings = useSwipeSettings();
   const here = useCurrentPath(false);
   const ytMusic = useYtMusicEnabled();
-  const unplayable = useSyncExternalStore(
+  const unplayable = useSightedStore(
     unavailableStreamedVideos.subscribe,
     unavailableStreamedVideos.get,
   );

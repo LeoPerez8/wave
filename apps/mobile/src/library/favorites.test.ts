@@ -23,13 +23,18 @@ test("cold scoped stars follow optimistic gestures and restore the saved star af
       runPromise: effect => Effect.runPromise(Effect.provideService(effect, LibraryStore, service))
     };
   `)}`;
+  // Screen sight is navigation and React Native; the hooks that follow it aren't run here.
+  const sightUrl = `data:text/javascript,${encodeURIComponent("export const useSightedStore = () => { throw new Error('not in a screen'); };")}`;
+  const favoritesUrl = import.meta.url.replace("favorites.test.ts", "favorites.ts");
   const hooks = registerHooks({
     resolve(specifier, context, nextResolve) {
       if (
-        context.parentURL === import.meta.url.replace("favorites.test.ts", "favorites.ts") &&
+        context.parentURL === favoritesUrl &&
         (specifier === "./runtime" || specifier === new URL("./runtime.ts", import.meta.url).href)
       )
         return { url: runtimeUrl, shortCircuit: true };
+      if (context.parentURL === favoritesUrl && /lib\/screenSight(\.ts)?$/.test(specifier))
+        return { url: sightUrl, shortCircuit: true };
       return nextResolve(specifier, context);
     },
   });

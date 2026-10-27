@@ -73,7 +73,8 @@ interface ScanListener {
 /**
  * Library scan: walks the roots, then reads tags on a small thread pool and
  * reports results in batches of [batchSize], so JS can store and show tracks
- * while the scan is still running.
+ * while the scan is still running. By default a batch is one JS save slice
+ * (Core's `SCAN_SAVE_SLICE`), so JS saves each as it arrives.
  *
  * Incremental mode: given the [KnownFile]s the index holds, files found with the
  * same size and modification time are not read again, and known files under the
@@ -84,7 +85,7 @@ interface ScanListener {
 class LibraryScanner(
   private val tagReader: TagReader,
   private val artworkStore: ArtworkStore,
-  private val batchSize: Int = 500,
+  private val batchSize: Int = SAVE_SLICE,
   private val threads: Int = 4,
   private val progressIntervalMs: Long = 250,
   private val clock: () -> Long = System::currentTimeMillis,
@@ -179,5 +180,10 @@ class LibraryScanner(
       hasLyrics = !tags.lyrics.isNullOrBlank() || Sidecars.hasOne(file, sidecars),
     )
     return track to artwork
+  }
+
+  companion object {
+    /** Core's `SCAN_SAVE_SLICE`: how many files JS saves in one transaction. */
+    const val SAVE_SLICE = 100
   }
 }

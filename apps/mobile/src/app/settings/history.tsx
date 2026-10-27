@@ -1,5 +1,5 @@
 import { listeningHistoryDays } from "@wave/core";
-import { useMemo, useSyncExternalStore } from "react";
+import { useMemo } from "react";
 import { ActivityIndicator, Text, View } from "react-native";
 
 import { grid, CELL } from "@/catalog/grid";
@@ -8,6 +8,7 @@ import { PlainTextButton } from "@/components/PlainTextButton";
 import type { ListeningHistoryRow } from "@/library/db/listeningHistory";
 import { historyArtwork } from "@/library/historyArtwork";
 import { useListeningHistory } from "@/library/useListeningHistory";
+import { useSightedStore } from "@/lib/screenSight";
 import { useScreenContent } from "@/lib/screenTiming";
 import { openTrackActions } from "@/playback/ActionsMenu";
 import { unavailableStreamedVideos } from "@/playback/PlayHistory";
@@ -76,7 +77,7 @@ export default function ListeningHistoryScreen() {
   const bottom = useChromeInset();
   // Followed once for the list: whether each removed song's stream can still play.
   const ytMusic = useYtMusicEnabled();
-  const refused = useSyncExternalStore(
+  const refused = useSightedStore(
     unavailableStreamedVideos.subscribe,
     unavailableStreamedVideos.get,
   );

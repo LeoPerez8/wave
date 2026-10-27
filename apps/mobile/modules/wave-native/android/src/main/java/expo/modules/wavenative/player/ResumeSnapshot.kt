@@ -17,11 +17,16 @@ data class ResumeItem(
  * after Wave's process died, before JS is up (Media3's playback resumption):
  * the items, the current one and its position, shuffle and repeat (Core's
  * `off`, `all` or `one`), where the queue was started from ([source], `phone`
- * or `auto`, as plays record it), and the queue JS last saved ([queueJson],
- * Core's `QueueState`), which JS adopts when it comes up.
+ * or `auto`, as plays record it), and the queue JS last saved, which JS adopts
+ * when it comes up: [queueJson] (Core's `QueueState`), with the index and
+ * metadata JS saved apart from it since ([queueIndex], [queueMetadata]; Core's
+ * `savedQueueState` reads them back together).
  *
- * Written as plain text (one tab-separated record per line) so it reads and
- * writes on the JVM without Android's JSON.
+ * Written in two parts ([ResumeFiles]): the items with the queue, rewritten
+ * only when they change, and the small place part (everything else), written
+ * on every song change and every few seconds while playing. Both are plain
+ * text (one tab-separated record per line) so they read and write on the JVM
+ * without Android's JSON.
  */
 data class ResumeSnapshot(
   val items: List<ResumeItem>,
@@ -31,29 +36,57 @@ data class ResumeSnapshot(
   val repeat: String,
   val source: String,
   val queueJson: String?,
+  val queueIndex: Int? = null,
+  val queueMetadata: String? = null,
 ) {
-  fun encode(): String = buildString {
-    appendLine(HEADER)
-    appendLine(record("index", index.toString()))
-    appendLine(record("position", positionMs.toString()))
-    appendLine(record("shuffle", shuffle.toString()))
-    appendLine(record("repeat", repeat))
-    appendLine(record("source", source))
+  /** The rarely written part: the items and the queue's JSON. */
+  fun encodeItems(): String = buildString {
+    appendLine(ITEMS_HEADER)
     appendLine(record("queue", queueJson))
     for (item in items) {
       appendLine(record("item", item.id, item.path, item.title, item.artist, item.album, item.artworkPath))
     }
   }
 
+  /** The small part: where the player is, and what JS saved apart from the queue's JSON. */
+  fun encodePlace(): String = buildString {
+    appendLine(PLACE_HEADER)
+    appendLine(record("index", index.toString()))
+    appendLine(record("position", positionMs.toString()))
+    appendLine(record("shuffle", shuffle.toString()))
+    appendLine(record("repeat", repeat))
+    appendLine(record("source", source))
+    appendLine(record("queueIndex", queueIndex?.toString()))
+    appendLine(record("queueMetadata", queueMetadata))
+  }
+
   companion object {
+    /** The one-file snapshot earlier versions wrote. */
     private const val HEADER = "wave-resume 1"
+    private const val ITEMS_HEADER = "wave-resume-items 1"
+    private const val PLACE_HEADER = "wave-resume-place 1"
     private const val NULL = "\\N"
 
-    /** The snapshot in [text], or null when there is none or it can't be read. */
+    /** The snapshot an earlier version wrote in one file, or null when there is none or it can't be read. */
     fun decode(text: String?): ResumeSnapshot? {
+      val parts = parse(text, HEADER) ?: return null
+      return snapshot(parts, parts)
+    }
+
+    /** The snapshot written in its two parts, or null when either is missing or can't be read. */
+    fun decode(items: String?, place: String?): ResumeSnapshot? {
+      val itemsPart = parse(items, ITEMS_HEADER) ?: return null
+      val placePart = parse(place, PLACE_HEADER) ?: return null
+      if (placePart.items.isNotEmpty()) return null
+      return snapshot(itemsPart, placePart)
+    }
+
+    private class Parsed(val fields: Map<String, String?>, val items: List<ResumeItem>)
+
+    private fun parse(text: String?, header: String): Parsed? {
       if (text == null) return null
       val lines = text.split('\n').filter { it.isNotEmpty() }
-      if (lines.firstOrNull() != HEADER) return null
+      if (lines.firstOrNull() != header) return null
       val fields = mutableMapOf<String, String?>()
       val items = mutableListOf<ResumeItem>()
       for (line in lines.drop(1)) {
@@ -76,14 +109,22 @@ data class ResumeSnapshot(
           }
         }
       }
+      return Parsed(fields, items)
+    }
+
+    private fun snapshot(items: Parsed, place: Parsed): ResumeSnapshot? {
+      val fields = place.fields
+      val queueIndex = fields["queueIndex"]
       return ResumeSnapshot(
-        items = items,
+        items = items.items,
         index = fields["index"]?.toIntOrNull() ?: return null,
         positionMs = fields["position"]?.toLongOrNull() ?: return null,
         shuffle = fields["shuffle"]?.toBooleanStrictOrNull() ?: return null,
         repeat = fields["repeat"] ?: return null,
         source = fields["source"] ?: return null,
-        queueJson = fields["queue"],
+        queueJson = items.fields["queue"],
+        queueIndex = if (queueIndex == null) null else queueIndex.toIntOrNull() ?: return null,
+        queueMetadata = fields["queueMetadata"],
       )
     }
 

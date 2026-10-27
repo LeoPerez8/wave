@@ -7,6 +7,8 @@ import type {
 } from "@wave/core";
 import { NativeModule, requireNativeModule } from "expo";
 
+import { connectivityStore, type Connectivity } from "./connectivityStore";
+
 /** One audio file as read by the native scanner (`modules/wave-native`). Tag values are raw. */
 export interface NativeScannedTrack {
   readonly path: string;
@@ -121,6 +123,8 @@ type WaveNativeEvents = {
   onScanError: (event: ScanErrorEvent) => void;
   /** Text was shared to Wave; `takeSharedText` has it. */
   onShareReceived: () => void;
+  /** The default network changed what `connectivity` answers. */
+  onConnectivityChanged: (event: Connectivity) => void;
 };
 
 declare class WaveNativeModule extends NativeModule<WaveNativeEvents> {
@@ -132,10 +136,12 @@ declare class WaveNativeModule extends NativeModule<WaveNativeEvents> {
   requestAllFilesAccess(): Promise<void>;
   /** Absolute path of the shared `Music` folder. */
   getDefaultMusicFolder(): string;
-  /** Whether the phone is on mobile data rather than Wi-Fi (a quality replacement's card says so). */
-  onMobileData(): boolean;
-  /** Whether the phone is online: Android checked its default network reaches the internet. */
-  online(): boolean;
+  /**
+   * Whether the phone is online (Android checked its default network reaches
+   * the internet) and on mobile data rather than Wi-Fi: the native cache,
+   * which `onConnectivityChanged` follows. Read once; checks use `online()`.
+   */
+  connectivity(): Connectivity;
   /** Opens the system folder picker and resolves the picked folder's absolute path. */
   pickFolder(): Promise<FolderPick>;
   /** Opens the system file picker for M3U playlists; one result per picked file, none when cancelled. */
@@ -152,18 +158,23 @@ declare class WaveNativeModule extends NativeModule<WaveNativeEvents> {
    */
   takeSharedText(): string | null;
   /**
-   * Starts a scan, cancelling any running one, and returns its id. The known
-   * files (parallel lists) make it incremental: files with the same size and
-   * modification time aren't read again, and known files under the roots that
-   * are gone are reported in `onScanMissing`.
+   * Starts scan [scanId], cancelling any running one. JS numbers its scans
+   * in order: a start that arrives after a newer scan's never runs. The
+   * known files (parallel lists) make it incremental: files with the same
+   * size and modification time aren't read again, and known files under the
+   * roots that are gone are reported in `onScanMissing`. Async, as the lists
+   * can hold the whole Library; it resolves once the scan is queued, and its
+   * events carry [scanId].
    */
   startScan(
+    scanId: number,
     roots: readonly string[],
     excluded: readonly string[],
     knownPaths: readonly string[],
     knownSizes: readonly number[],
     knownModifiedAt: readonly number[],
-  ): number;
+  ): Promise<void>;
+  /** Cancels scan [scanId] if it is the one running; call it once its start resolved. */
   cancelScan(scanId: number): void;
   /** A track's lyrics, unparsed: from its tags and from a sidecar `.lrc` beside it. */
   readLyrics(path: string): Promise<NativeLyrics>;
@@ -304,23 +315,20 @@ export type FileDeleteOutcome = "deleted" | "missing" | "denied" | "readOnly" | 
 
 export const WaveNative = requireNativeModule<WaveNativeModule>("WaveNative");
 
+/** The phone's connectivity, pushed from the native cache as it changes (`connectivityStore`). */
+const connectivity = connectivityStore({
+  read: () => WaveNative.connectivity(),
+  subscribe: (listener) => {
+    const subscription = WaveNative.addListener("onConnectivityChanged", listener);
+    return () => subscription.remove();
+  },
+});
+
 /** Whether the phone is on mobile data now; Wi-Fi when the module can't tell. */
-export const onMobileData = (): boolean => {
-  try {
-    return WaveNative.onMobileData();
-  } catch {
-    return false;
-  }
-};
+export const onMobileData = (): boolean => connectivity.get().onMobileData;
 
 /** Whether the phone is online now; online when the module can't tell. */
-export const online = (): boolean => {
-  try {
-    return WaveNative.online();
-  } catch {
-    return true;
-  }
-};
+export const online = (): boolean => connectivity.get().online;
 
 /** Converts a signed ARGB int from Android into a `#rrggbb` CSS colour. */
 export const argbToHex = (argb: number): string =>

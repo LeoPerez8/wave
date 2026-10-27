@@ -13,7 +13,6 @@ import android.graphics.RuntimeShader
 import android.graphics.Shader
 import android.os.Build
 import android.view.View
-import android.view.ViewGroup
 import android.view.ViewTreeObserver
 import expo.modules.kotlin.AppContext
 import expo.modules.kotlin.views.ExpoView
@@ -34,7 +33,8 @@ import expo.modules.kotlin.views.ExpoView
  * references the node, and the RenderThread syncs the node's new recording with
  * whatever frame the window is drawing anyway (a scroll, an image loading). So
  * an idle screen renders no frames, and a scroll costs one re-record per frame.
- * A glass that isn't shown skips its recording. With [coalesce] (a glass probe,
+ * A glass that isn't shown skips its recording, as under a settled Now Playing
+ * ([WaveCoverView], issue #721). With [coalesce] (a glass probe,
  * issue #316), the glass over one backdrop share one recording ([SharedBackdrop]).
  */
 class WaveGlassView(context: Context, appContext: AppContext) : ExpoView(context, appContext) {
@@ -106,8 +106,11 @@ class WaveGlassView(context: Context, appContext: AppContext) : ExpoView(context
   private var sharedHeight = -1
 
   private val preDrawListener = ViewTreeObserver.OnPreDrawListener {
-    // A glass that isn't shown (it or an ancestor not VISIBLE) draws nothing this frame, so
-    // its recording would go unused. Shown again, the next pre-draw records before it draws.
+    // Now Playing hides or shows the screen under it first, whichever pre-draw runs first.
+    WaveCoverView.refreshAll()
+    // A glass that isn't shown (it or an ancestor not VISIBLE, as under a settled Now Playing)
+    // draws nothing this frame, so its recording would go unused. Shown again, the next
+    // pre-draw records before it draws.
     if (isShown) {
       val hadContent = node.hasDisplayList()
       val recorded = if (coalesce) recordShared() else recordBackdrop()
@@ -152,31 +155,6 @@ class WaveGlassView(context: Context, appContext: AppContext) : ExpoView(context
     val id = backdropNativeId ?: return null
     backdrop = findByNativeId(rootView, id)
     return backdrop
-  }
-
-  /**
-   * React Native stores `nativeID` as a view tag keyed by `R.id.view_tag_native_id`.
-   * ReactFindViewUtil, which used to look it up, is gone in RN 0.88, and React
-   * Native's R class isn't on this module's compile classpath, so the id is
-   * resolved by name from the app's merged resources.
-   */
-  @Suppress("DiscouragedApi")
-  private val nativeIdTagKey: Int by lazy {
-    resources.getIdentifier("view_tag_native_id", "id", context.packageName)
-  }
-
-  /** Breadth-first, since the backdrop sits near the root. */
-  private fun findByNativeId(root: View, nativeId: String): View? {
-    val key = nativeIdTagKey
-    if (key == 0) return null
-    val queue = ArrayDeque<View>()
-    queue.add(root)
-    while (queue.isNotEmpty()) {
-      val view = queue.removeFirst()
-      if (view.getTag(key) == nativeId) return view
-      if (view is ViewGroup) for (i in 0 until view.childCount) queue.add(view.getChildAt(i))
-    }
-    return null
   }
 
   /** Re-records the backdrop under this view. Returns false when there's nothing to draw. */

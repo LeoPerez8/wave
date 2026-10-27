@@ -128,7 +128,7 @@ export const WHOLE_LIBRARY: Record<string, WholeLibraryException> = {
       "A queued or explicitly retried library import builds its matching index on settled startup turns, in budgeted steps; never an opening read. Source order and pause/retry semantics have behavioral coverage in startupJobs.test.ts and libraryImportResume.test.ts.",
     capabilities: ["../../../packages/core/src/playlistImport.ts#planLinkImportSteps"],
   },
-  "stats/Stats.ts#readListeningPages": {
+  "stats/statsLive.ts#readListeningPages": {
     howOften:
       "Once per requested period and source version, in pages of at most 512 events per free turn.",
     reason:

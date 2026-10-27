@@ -24,22 +24,29 @@ export interface TabScreens {
    * with `detach`: react-native-screens freezes only the screens it manages.
    */
   readonly freeze: boolean;
+  /**
+   * A hidden screen keeps following external stores (playing ids, stars, scan
+   * status) and re-renders with them, as before #722. By default it pauses
+   * and catches up once when it shows again.
+   */
+  readonly followHidden: boolean;
   /** The most tabs kept mounted, the shown one included. */
   readonly retain: number;
 }
 
-/** As the tabs were before #304: expo-router's defaults, every tab on the bar kept. */
+/** expo-router's defaults, every tab on the bar kept (#304); hidden screens pause (#722). */
 const DEFAULT_TAB_SCREENS: TabScreens = {
   detach: true,
   keepLayout: false,
   freeze: false,
+  followHidden: false,
   retain: MAX_TABS,
 };
 
 /**
  * The choices [value] names, separated by commas or spaces: `detach` or
- * `attach`, `keep-layout` or `display-none`, `freeze`, `retain=<n>`. Anything
- * not named, unknown or out of range stays at its default (as before #304).
+ * `attach`, `keep-layout` or `display-none`, `freeze`, `follow` or `pause`,
+ * `retain=<n>`. Anything not named, unknown or out of range stays at its default.
  */
 export const parseTabScreens = (value: string | undefined): TabScreens => {
   let screens = DEFAULT_TAB_SCREENS;
@@ -50,6 +57,8 @@ export const parseTabScreens = (value: string | undefined): TabScreens => {
     else if (token === "keep-layout" || token === "display-none") {
       screens = { ...screens, keepLayout: token === "keep-layout" };
     } else if (token === "freeze") screens = { ...screens, freeze: true };
+    else if (token === "follow" || token === "pause")
+      screens = { ...screens, followHidden: token === "follow" };
     else if (retain !== undefined && Number(retain) >= 1)
       screens = { ...screens, retain: Number(retain) };
   }
@@ -62,6 +71,7 @@ export const describeTabScreens = (screens: TabScreens): string =>
     screens.detach ? "detach" : "attach",
     screens.keepLayout ? "keep-layout" : "display-none",
     ...(screens.freeze ? ["freeze"] : []),
+    ...(screens.followHidden ? ["follow"] : []),
     `retain=${screens.retain}`,
   ].join(",");
 

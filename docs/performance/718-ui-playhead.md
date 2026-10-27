@@ -27,11 +27,13 @@ bundle with `EXPO_PUBLIC_WAVE_PERF_STALL_MS=1500`: the scrubber, its times and t
 menu countdown must continue moving while JS is blocked. Lyrics still need JS to render a
 new current line, so their highlight can catch up after a stall.
 
-The screen-off soak scenario belongs to #713 and is absent from this ticket's starting
-commit. After integration, use its final scenario name and the budgets in
-`docs/performance/712-budgets.md`. Run it with Now Playing left on synced lyrics, first with
-a deadline timer and then End of track. Also leave the sheet closed with playback running.
-Repeat each with a foreground return: times and the current line must catch up immediately.
+The screen-off soaks came with #713, after this ticket's starting commit: run
+`--scenario screen-off-lyrics,screen-off` against the budgets in
+`docs/performance/712-budgets.md`. `screen-off-lyrics` leaves Now Playing on synced lyrics
+with a 60-minute (deadline) timer; `screen-off` leaves the sheet closed with playback running.
+End of track isn't scripted (the timer stops the music inside the window): set it by hand
+and watch `SleepTimerLabel` in a `now-playing` run. Each soak window ends with a foreground
+return: times and the current line must catch up immediately.
 
 Budgets for this change:
 

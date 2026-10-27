@@ -4,7 +4,8 @@ import * as Result from "effect/Result";
 
 import { appRuntime } from "@/library/runtime";
 
-import { Spotify, type SpotifyError } from "./Spotify";
+import { Spotify } from "./Spotify";
+import type { SpotifyError } from "./SpotifyError";
 
 /**
  * Runs a Spotify request ([use] on the `Spotify` service) on the app runtime,
