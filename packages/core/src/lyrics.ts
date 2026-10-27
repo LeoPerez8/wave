@@ -102,6 +102,7 @@ export const pickLyrics = (sources: LyricsSources): Lyrics => {
  * -1 before the first. `lines` are in time order, as `parseLyrics` returns them.
  */
 export const currentLyricIndex = (lines: readonly LyricLine[], positionMs: number): number => {
+  "worklet";
   let low = 0;
   let high = lines.length - 1;
   let found = -1;

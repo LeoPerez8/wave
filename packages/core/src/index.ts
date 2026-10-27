@@ -223,6 +223,7 @@ export {
   SLEEP_TIMER_PRESETS,
   formatSleepMinutes,
   formatSleepRemaining,
+  sleepTimerLabelSeconds,
   sleepTimerRemaining,
   startSleepTimer,
   stepSleepMinutes,
@@ -2122,3 +2123,4 @@ export {
   shuffleCardOpened,
   shuffleLineShows,
 } from "./shuffleCardLines.ts";
+export { fileUri } from "./fileUri.ts";

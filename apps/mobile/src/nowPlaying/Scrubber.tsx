@@ -2,6 +2,7 @@ import {
   UNDERLINE_WAVE,
   currentEntry,
   elapsedWavePath,
+  extrapolatePosition,
   formatDuration,
   formatRemaining,
   scrubPosition,
@@ -21,7 +22,6 @@ import { GestureDetector, usePanGesture } from "react-native-gesture-handler";
 import Animated, {
   createAnimatedComponent,
   useAnimatedProps,
-  useAnimatedStyle,
   useDerivedValue,
   useSharedValue,
   type SharedValue,
@@ -33,10 +33,11 @@ import { withUniwind } from "uniwind";
 import { CELL } from "@/catalog/grid";
 import { perfCount, useRenderCount } from "@/perf/perf";
 import { seekTo } from "@/playback/actions";
+import { positionState } from "@/playback/Player";
 import { queueState } from "@/playback/Queue";
 import { useThemeColor } from "@/theme/useThemeColor";
 
-import { usePlayhead } from "./hooks";
+import { playhead, usePlayheadDuration } from "./playhead";
 
 /** How far a screen reader's increment / decrement moves the playhead. */
 const STEP_MS = 10_000;
@@ -79,16 +80,13 @@ const playingKey = (): string | null => currentEntry(queueState.get())?.key ?? n
  */
 export function Scrubber() {
   useRenderCount("Scrubber");
-  const { positionMs, durationMs } = usePlayhead();
+  const durationMs = usePlayheadDuration();
   const entryKey = useSyncExternalStore(queueState.subscribe, playingKey);
   const [width, setWidth] = useState(0);
   const duration = durationMs ?? 0;
   const enabled = duration > 0;
-  const shownMs = Math.min(positionMs, duration);
 
-  // What the UI thread draws from: JavaScript hands it the playhead, the
-  // bar's size and the playing entry; the finger sets the rest there.
-  const playhead = useSharedValue(shownMs);
+  // The shared playhead and the finger both stay on the UI thread.
   const bar = useSharedValue({ width, durationMs: duration });
   const entry = useSharedValue(entryKey);
   // Where the finger points while it's down.
@@ -97,7 +95,6 @@ export function Scrubber() {
   const grabbed = useSharedValue<string | null>(null);
   // Where the finger let go, shown until JavaScript has seeked there or dropped the seek.
   const released = useSharedValue(NONE);
-  useLayoutEffect(() => playhead.set(shownMs), [playhead, shownMs]);
   useLayoutEffect(() => bar.set({ width, durationMs: duration }), [bar, width, duration]);
   useLayoutEffect(() => entry.set(entryKey), [entry, entryKey]);
 
@@ -163,7 +160,7 @@ export function Scrubber() {
   const shown = useDerivedValue(() => {
     const finger = scrub.get();
     const release = released.get();
-    const ms = finger !== NONE ? finger : release !== NONE ? release : playhead.get();
+    const ms = finger !== NONE ? finger : release !== NONE ? release : playhead.positionMs.get();
     return Math.min(ms, bar.get().durationMs);
   });
   // Where the wave meets the line, in dp from the bar's left end.
@@ -188,21 +185,21 @@ export function Scrubber() {
     };
   });
 
-  // The times: JavaScript's while no finger or release is on the bar, the UI
-  // thread's (on top, in their place) while one is.
-  const live = useDerivedValue(() => scrub.get() !== NONE || released.get() !== NONE);
-  const settledStyle = useAnimatedStyle(() => ({ opacity: live.get() ? 0 : 1 }));
-  const liveStyle = useAnimatedStyle(() => ({ opacity: live.get() ? 1 : 0 }));
-  // Idle, they stay blank, so the playhead's ticks don't touch them. `text`
-  // is TextInput's native value, which Reanimated sets without a render.
+  // Native text props follow the same UI-thread position, including during a drag.
   const elapsedProps = useAnimatedProps(() => {
-    const text = live.get() ? formatDuration(shown.get()) : "";
-    return { text, defaultValue: text } as TextInputProps;
+    const text = formatDuration(shown.get());
+    return { text, defaultValue: text, accessibilityLabel: text } as TextInputProps;
   });
   const remainingProps = useAnimatedProps(() => {
-    const text = live.get() ? formatRemaining(shown.get(), bar.get().durationMs) : "";
-    return { text, defaultValue: text } as TextInputProps;
+    const length = bar.get().durationMs;
+    const text = length > 0 ? formatRemaining(shown.get(), length) : "–:––";
+    return { text, defaultValue: text, accessibilityLabel: text } as TextInputProps;
   });
+  const accessibilityProps = useAnimatedProps(() => ({
+    accessibilityValue: {
+      text: `${formatDuration(shown.get())} of ${formatDuration(bar.get().durationMs)}`,
+    },
+  }));
 
   const accent = useThemeColor("accent");
   const tertiary = useThemeColor("tertiary");
@@ -210,17 +207,16 @@ export function Scrubber() {
   return (
     <View>
       <GestureDetector gesture={pan}>
-        <View
+        <Animated.View
+          animatedProps={accessibilityProps}
           accessible
           accessibilityRole="adjustable"
           accessibilityState={{ disabled: !enabled }}
           accessibilityLabel="Playback position"
-          accessibilityValue={{
-            text: `${formatDuration(shownMs)} of ${formatDuration(duration)}`,
-          }}
           accessibilityActions={[{ name: "increment" }, { name: "decrement" }]}
           onAccessibilityAction={(event) => {
             const step = event.nativeEvent.actionName === "increment" ? STEP_MS : -STEP_MS;
+            const positionMs = extrapolatePosition(positionState.get(), Date.now());
             if (enabled) seekTo(Math.min(duration, Math.max(0, positionMs + step)), "scrubber");
           }}
           className="justify-center"
@@ -241,36 +237,37 @@ export function Scrubber() {
               />
             </Svg>
           )}
-        </View>
+        </Animated.View>
       </GestureDetector>
       <View className="flex-row justify-between">
+        {/* Text reserves the original line box; the native values draw over it. */}
         <Animated.Text
+          accessible={false}
           className="font-sans text-footnote text-secondary"
-          style={[TABULAR, settledStyle]}
+          style={[TABULAR, styles.placeholder]}
         >
-          {formatDuration(shownMs)}
+          0:00
         </Animated.Text>
         <Animated.Text
+          accessible={false}
           className="font-sans text-footnote text-secondary"
-          style={[TABULAR, settledStyle]}
+          style={[TABULAR, styles.placeholder]}
         >
-          {enabled ? formatRemaining(shownMs, duration) : "–:––"}
+          –:––
         </Animated.Text>
-        <Animated.View
-          pointerEvents="none"
-          accessibilityElementsHidden
-          importantForAccessibility="no-hide-descendants"
-          className="flex-row"
-          style={[StyleSheet.absoluteFill, liveStyle]}
-        >
+        <Animated.View pointerEvents="none" className="flex-row" style={StyleSheet.absoluteFill}>
           <AnimatedTextInput
             editable={false}
+            accessibilityRole="text"
+            underlineColorAndroid="transparent"
             animatedProps={elapsedProps}
             className="flex-1 font-sans text-footnote text-secondary"
             style={[TABULAR, styles.liveTime]}
           />
           <AnimatedTextInput
             editable={false}
+            accessibilityRole="text"
+            underlineColorAndroid="transparent"
             animatedProps={remainingProps}
             className="flex-1 font-sans text-footnote text-secondary"
             style={[TABULAR, styles.liveTime, styles.trailing]}
@@ -284,5 +281,6 @@ export function Scrubber() {
 const styles = StyleSheet.create({
   // A TextInput's own padding and box would move the digits off the Text's.
   liveTime: { padding: 0, margin: 0, textAlignVertical: "top" },
+  placeholder: { opacity: 0 },
   trailing: { textAlign: "right" },
 });

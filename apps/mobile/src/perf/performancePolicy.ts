@@ -308,7 +308,7 @@ export const WHOLE_LIBRARY: Record<string, Exception> = {
       "Download recovery runs on explicit/background work; the failed-download UI follows only while shown.",
     capabilities: ["ytmusic/libraryFinder.ts#useLoadedLibraryFinder"],
   },
-  "ytmusic/YtSongActions.tsx#useYtSongSwipe": {
+  "ytmusic/YtSongActions.tsx#runYtSongSwipe": {
     reason: "Explicit song menus and completed swipes resolve Library identity for their action.",
     capabilities: ["ytmusic/libraryFinder.ts#currentLibraryFinder"],
   },

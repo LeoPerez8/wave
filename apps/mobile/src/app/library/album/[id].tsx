@@ -14,6 +14,7 @@ import { useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useMemo } from "react";
 import { Text, useWindowDimensions, View } from "react-native";
 
+import { artworkUri } from "@/catalog/artworkUri";
 import { Artwork } from "@/catalog/Artwork";
 
 import { CELL, grid } from "@/catalog/grid";
@@ -167,10 +168,7 @@ function AlbumHead({
     .join(" · ");
   return (
     <View style={{ gap: CELL * 2, paddingBottom: CELL }}>
-      <Artwork
-        uri={album.artworkPath === null ? undefined : `file://${album.artworkPath}`}
-        size={width - grid.margin * 2}
-      />
+      <Artwork uri={artworkUri(album, "original")} size={width - grid.margin * 2} />
       <View style={{ gap: CELL / 2 }}>
         <Text
           accessibilityRole="header"

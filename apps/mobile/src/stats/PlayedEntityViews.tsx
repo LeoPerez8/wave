@@ -8,6 +8,7 @@ import * as Effect from "effect/Effect";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { View } from "react-native";
 
+import { artworkUri } from "@/catalog/artworkUri";
 import { AlbumCard } from "@/catalog/cards/AlbumCard";
 import { ArtistCard } from "@/catalog/cards/ArtistCard";
 import { NameRow } from "@/catalog/NameRow";
@@ -102,9 +103,7 @@ const usePlayedAlbum = (album: PlayedAlbum) => {
       ? enabled
         ? (album.artworkUrl ?? undefined)
         : undefined
-      : album.thumbPath === null
-        ? undefined
-        : `file://${album.thumbPath}`,
+      : artworkUri(album, "medium"),
     open: () => {
       if ("online" in album) void openOnlineAlbum(album);
       else openAlbum(album.id, album);

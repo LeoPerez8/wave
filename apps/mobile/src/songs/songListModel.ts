@@ -1,4 +1,4 @@
-import { fileUri } from "../lib/fileUri.ts";
+import { artworkUri } from "../catalog/artworkUri.ts";
 import { songRowView, type SongListRowSource, type SongRowState } from "@wave/core";
 
 /** The memoized leaf receives only display primitives and keyed action handlers. */
@@ -14,7 +14,7 @@ export const songRowPresentation = (source: SongListRowSource, state: SongRowSta
     downloaded: view.badges.downloaded,
     artworkUri:
       view.artwork.kind === "file"
-        ? fileUri(view.artwork.path)
+        ? artworkUri(view.artwork.path, "thumbnail")
         : view.artwork.kind === "remote"
           ? view.artwork.url
           : undefined,

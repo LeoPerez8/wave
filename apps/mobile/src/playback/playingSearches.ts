@@ -39,7 +39,7 @@ import { showToast } from "@/overlay/toast";
 import { crossfadeMs } from "@/settings/crossfade";
 import { ytMusicEnabled } from "@/settings/ytMusic";
 
-import { playbackState } from "./Player";
+import { playbackState, positionState } from "./Player";
 import { setPlayingSearcher } from "./playingSearch";
 import { passOverNow, Queue, queueState } from "./Queue";
 import { learnQueueTracks, toYtQueueTrack } from "./queueTracks";
@@ -187,13 +187,14 @@ const schedulePrefetch = (): void => {
     prefetched = false;
   }
   if (key === null || prefetched || !playback.isPlaying) return;
-  const at = crossfadePrefetchAt(crossfadeMs(), playback.durationMs);
+  const position = positionState.get();
+  const at = crossfadePrefetchAt(crossfadeMs(), position.durationMs);
   if (at === null) return;
   const due = (): void => {
     prefetched = true;
     lookAhead(true);
   };
-  const waitMs = at - extrapolatePosition(playback, Date.now());
+  const waitMs = at - extrapolatePosition(position, Date.now());
   if (waitMs <= 0) due();
   else prefetchTimer = setTimeout(due, waitMs);
 };

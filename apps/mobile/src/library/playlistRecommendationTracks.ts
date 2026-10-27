@@ -1,3 +1,4 @@
+import { artworkUri } from "../catalog/artworkUri.ts";
 /** The recommendation tracks the Library store's read and the shared paged source both build. */
 import {
   showsExplicitBadge,
@@ -30,7 +31,7 @@ export const libraryRecommendationTrack = (
   album: song.album,
   albumId: null,
   durationMs: song.durationMs,
-  artworkUrl: song.thumbPath === null ? null : `file://${song.thumbPath}`,
+  artworkUrl: artworkUri(song) ?? null,
   explicit: showsExplicitBadge(song.explicit),
   genre: song.genre,
   ...(genres === undefined ? {} : { genres }),

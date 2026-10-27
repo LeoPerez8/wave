@@ -9,7 +9,7 @@ import { autoLyricLines, extrapolatePosition, type AutoLyricsText, type Lyrics }
 
 import type { ExternalStore } from "../lib/externalStore.ts";
 
-/** What the lyrics need to know of the player (the app's `PlaybackState` fits). */
+/** What the lyrics need to know of the player (the app's `PositionState` fits). */
 export interface AutoLyricLinesPlayback {
   /** The playing item; `id` is its queue entry key. */
   readonly item: { readonly id: string } | null;
@@ -27,7 +27,7 @@ export interface AutoLyricsToggle {
 }
 
 export interface AutoLyricLinesPorts {
-  /** The player as the app mirrors it; only read and followed. */
+  /** Subscribing acquires position reports, so follow only while car lyrics are shown. */
   readonly playback: Pick<ExternalStore<AutoLyricLinesPlayback>, "get" | "subscribe">;
   /** The audio file of a queue entry, if the queue knows it. */
   readonly pathOf: (itemId: string) => string | null;
@@ -95,18 +95,26 @@ export const startAutoLyricLines = (ports: AutoLyricLinesPorts): AutoLyricLinesS
     }
   };
 
-  const unsubscribe = ports.playback.subscribe(update);
+  let unsubscribe: (() => void) | undefined;
 
   return {
     setToggle: (next) => {
+      if (stopped) return;
       toggle = next;
+      if (toggle.on && toggle.carConnected) {
+        unsubscribe ??= ports.playback.subscribe(update);
+      } else {
+        unsubscribe?.();
+        unsubscribe = undefined;
+      }
       // The native side drops its lyrics when either turns off; send them afresh.
       sent = null;
       update();
     },
     stop: () => {
       stopped = true;
-      unsubscribe();
+      unsubscribe?.();
+      unsubscribe = undefined;
       if (timer !== null) clearTimeout(timer);
       timer = null;
     },

@@ -229,6 +229,8 @@ declare class WavePlayerModule extends NativeModule<WavePlayerEvents> {
   /** `source` is where the seek came from, for the app log's crossfade lines. */
   seekTo(positionMs: number, source: SeekSource): Promise<void>;
   getState(): Promise<NativePlayerState>;
+  /** Request 500 ms position reports while a JS consumer needs them. Events always report. */
+  setPositionReporting(requested: boolean): Promise<void>;
   /**
    * Starts the sleep timer in the playback service, which enforces it even with
    * Wave in the background. `endsAt` (wall-clock ms) is for `deadline` only.

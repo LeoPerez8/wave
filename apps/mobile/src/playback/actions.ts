@@ -36,7 +36,7 @@ import { ytMusicEnabled } from "@/settings/ytMusic";
 import { downloadMissingSongs } from "@/ytmusic/YtDownloads";
 import type { YtMusic } from "@/ytmusic/YtMusic";
 
-import { Player, playbackState } from "./Player";
+import { Player, playbackState, positionState } from "./Player";
 import { Queue, currentPositionMs, queueState, toQueueTrack } from "./Queue";
 import { toUnsearchedQueueTrack, toYtQueueTrack, type QueueTrack } from "./queueTracks";
 import { cacheYtCoversInBackground, ytQueueTrack } from "./ytQueueTracks";
@@ -452,7 +452,7 @@ export const removeQueueEntry = (key: string): Promise<void> => dispatch({ type:
  * [source] names the seek in the app log's crossfade lines.
  */
 export const seekTo = (positionMs: number, source: SeekSource): void => {
-  playbackState.update((state) => ({ ...state, positionMs, at: Date.now() }));
+  positionState.update((state) => ({ ...state, positionMs, at: Date.now() }));
   void run(
     Effect.gen(function* () {
       const player = yield* Player;

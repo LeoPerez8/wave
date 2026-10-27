@@ -27,6 +27,12 @@ export type SleepTimerChoice =
 export type SleepTimer =
   { readonly type: "deadline"; readonly endsAt: number } | { readonly type: "endOfTrack" };
 
+/** Whole seconds shown by a deadline label; End of track has no ticking label. */
+export const sleepTimerLabelSeconds = (timer: SleepTimer, now: number): number | null => {
+  "worklet";
+  return timer.type === "deadline" ? Math.max(0, Math.ceil((timer.endsAt - now) / 1000)) : null;
+};
+
 /** The timer a choice starts at `now`. */
 export const startSleepTimer = (choice: SleepTimerChoice, now: number): SleepTimer | null => {
   if (choice.type === "endOfTrack") return { type: "endOfTrack" };
@@ -50,8 +56,10 @@ export const stepSleepMinutes = (minutes: number, direction: 1 | -1): number => 
  * The time left as a countdown, e.g. `14:59`. Rounded up to the whole second,
  * so it reads `0:00` only once the timer is due.
  */
-export const formatSleepRemaining = (ms: number): string =>
-  formatDuration(Math.ceil(ms / MS_PER_SECOND) * MS_PER_SECOND);
+export const formatSleepRemaining = (ms: number): string => {
+  "worklet";
+  return formatDuration(Math.ceil(ms / MS_PER_SECOND) * MS_PER_SECOND);
+};
 
 /** A duration in whole minutes as the stepper shows it, e.g. `45 min` or `1 h 30 min`. */
 export const formatSleepMinutes = (minutes: number): string => {
@@ -70,6 +78,7 @@ export interface SleepTimerClock {
 
 /** How long until the timer pauses playback, in ms. */
 export const sleepTimerRemaining = (timer: SleepTimer, clock: SleepTimerClock): number | null => {
+  "worklet";
   if (timer.type === "deadline") return Math.max(0, timer.endsAt - clock.now);
   if (clock.durationMs === null) return null;
   return Math.max(0, clock.durationMs - clock.positionMs);

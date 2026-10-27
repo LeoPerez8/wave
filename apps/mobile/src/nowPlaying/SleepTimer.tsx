@@ -6,12 +6,21 @@ import {
   formatSleepMinutes,
   formatSleepRemaining,
   sleepTimerRemaining,
+  sleepTimerLabelSeconds,
   stepSleepMinutes,
   type SleepTimer,
   type SleepTimerChoice,
 } from "@wave/core";
-import { useEffect, useState, useSyncExternalStore } from "react";
-import { Text, View } from "react-native";
+import { useCallback, useState, useSyncExternalStore } from "react";
+import { StyleSheet, Text, TextInput, View, type TextInputProps } from "react-native";
+import {
+  createAnimatedComponent,
+  useAnimatedProps,
+  useAnimatedReaction,
+  useDerivedValue,
+} from "react-native-reanimated";
+import { scheduleOnRN } from "react-native-worklets";
+import { withUniwind } from "uniwind";
 
 import { CatalogLine } from "@/catalog/CatalogLine";
 import { EntryRow } from "@/catalog/EntryRow";
@@ -25,35 +34,41 @@ import { CardEntries } from "@/overlay/CardEntries";
 import { useOverlayFlow } from "@/overlay/flow";
 import { openOverlay } from "@/overlay/overlay";
 import { cancelSleepTimer, setSleepTimer } from "@/playback/actions";
-import { sleepTimerState } from "@/playback/Player";
+import { useRenderCount } from "@/perf/perf";
+import { positionState, sleepTimerState } from "@/playback/Player";
 import { useThemeColor } from "@/theme/useThemeColor";
 
-import { usePlayhead } from "./hooks";
-import { useNowPlayingShown } from "./sheet";
+import { isPlayheadLive, playhead } from "./playhead";
 
-/** How often a deadline's countdown re-reads the clock (it shows whole seconds). */
-const TICK_MS = 250;
+const AnimatedTextInput = withUniwind(createAnimatedComponent(TextInput));
 
 const useSleepTimer = (): SleepTimer | null =>
   useSyncExternalStore(sleepTimerState.subscribe, sleepTimerState.get);
 
-/** Time left on a running timer: on the clock for a deadline, on the playhead for end of track. */
+/** Only changed whole seconds cross to React. End of track never schedules a callback. */
 const useRemaining = (timer: SleepTimer): number | null => {
-  const playhead = usePlayhead();
-  const [now, setNow] = useState(Date.now);
-  // The countdown only runs while Now Playing (or the menu over it) is up.
-  const shown = useNowPlayingShown();
-  const onClock = timer.type === "deadline" && shown;
-  useEffect(() => {
-    if (!onClock) return undefined;
-    const tick = setInterval(() => setNow(Date.now()), TICK_MS);
-    return () => clearInterval(tick);
-  }, [onClock]);
-  return sleepTimerRemaining(timer, { now, ...playhead });
+  const [seconds, setSeconds] = useState(() => sleepTimerLabelSeconds(timer, Date.now()));
+  const publish = useCallback(
+    (next: number) => {
+      if (isPlayheadLive() && sleepTimerState.get() === timer) setSeconds(next);
+    },
+    [timer],
+  );
+  useAnimatedReaction(
+    () =>
+      timer.type === "deadline" && playhead.live.get()
+        ? sleepTimerLabelSeconds(timer, playhead.now.get())
+        : null,
+    (next, previous) => {
+      if (next !== null && next !== previous) scheduleOnRN(publish, next);
+    },
+  );
+  return seconds === null ? null : seconds * 1000;
 };
 
 /** The time left beside the glyph, in teal. */
 function ButtonLabel({ timer }: { timer: SleepTimer }) {
+  useRenderCount("SleepTimerLabel");
   const remaining = useRemaining(timer);
   return (
     <Text
@@ -69,12 +84,8 @@ function ButtonLabel({ timer }: { timer: SleepTimer }) {
 /** What the running timer will do, and when. */
 function Status({ timer }: { timer: SleepTimer }) {
   const remaining = useRemaining(timer);
-  const text =
-    timer.type === "deadline"
-      ? `Pauses in ${formatSleepRemaining(remaining ?? 0)}`
-      : remaining === null
-        ? "Pauses when this track ends"
-        : `Pauses when this track ends, in ${formatSleepRemaining(remaining)}`;
+  if (timer.type === "endOfTrack") return <EndOfTrackStatus />;
+  const text = `Pauses in ${formatSleepRemaining(remaining ?? 0)}`;
   return (
     <Text
       className="font-sans text-subheadline text-foreground"
@@ -82,6 +93,65 @@ function Status({ timer }: { timer: SleepTimer }) {
     >
       {text}
     </Text>
+  );
+}
+
+/** Keep the menu's track countdown on the UI thread too; the button still says End of track. */
+function EndOfTrackStatus() {
+  const status = useDerivedValue(() => {
+    const remaining = sleepTimerRemaining(
+      { type: "endOfTrack" },
+      {
+        now: playhead.now.get(),
+        positionMs: playhead.positionMs.get(),
+        durationMs: playhead.durationMs.get(),
+      },
+    );
+    return remaining === null
+      ? "Pauses when this track ends"
+      : `Pauses when this track ends, in ${formatSleepRemaining(remaining)}`;
+  });
+  const animatedProps = useAnimatedProps(() => {
+    const text = status.get();
+    return { text, defaultValue: text, accessibilityLabel: text } as TextInputProps;
+  });
+  const state = positionState.get();
+  const remaining = sleepTimerRemaining(
+    { type: "endOfTrack" },
+    {
+      now: state.at,
+      positionMs: state.positionMs,
+      durationMs: state.durationMs,
+    },
+  );
+  const initial =
+    remaining === null
+      ? "Pauses when this track ends"
+      : `Pauses when this track ends, in ${formatSleepRemaining(remaining)}`;
+  return (
+    <View>
+      <Text
+        accessible={false}
+        className="font-sans text-subheadline text-foreground"
+        style={{ opacity: 0 }}
+      >
+        {initial}
+      </Text>
+      <AnimatedTextInput
+        editable={false}
+        accessibilityRole="text"
+        pointerEvents="none"
+        multiline
+        underlineColorAndroid="transparent"
+        defaultValue={initial}
+        animatedProps={animatedProps}
+        className="font-sans text-subheadline text-foreground"
+        style={[
+          StyleSheet.absoluteFill,
+          { padding: 0, margin: 0, textAlignVertical: "top", fontVariant: ["tabular-nums"] },
+        ]}
+      />
+    </View>
   );
 }
 
@@ -125,7 +195,7 @@ function SleepTimerMenu({ close }: { close: () => void }) {
             Pause playback after a while, or when this track ends.
           </Text>
         ) : (
-          <Status timer={timer} />
+          <Status key={timer.type === "deadline" ? timer.endsAt : timer.type} timer={timer} />
         )}
       </View>
       <Hairline />
@@ -212,7 +282,9 @@ export function SleepTimerButton() {
       <View className="items-center justify-center" style={{ width: CELL * 6, height: CELL * 6 }}>
         <IconZzz size={24} color={timer === null ? secondary : accent} strokeWidth={1.5} />
       </View>
-      {timer !== null && <ButtonLabel timer={timer} />}
+      {timer !== null && (
+        <ButtonLabel key={timer.type === "deadline" ? timer.endsAt : timer.type} timer={timer} />
+      )}
     </Press>
   );
 }
