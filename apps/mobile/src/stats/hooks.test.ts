@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import * as Effect from "effect/Effect";
-import { createElement, useEffect } from "react";
+import { createElement } from "react";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 
 import type { ExternalStore } from "../lib/externalStore.ts";
@@ -34,71 +34,77 @@ const playHistory = stubModule(
   `import { makeExternalStore } from ${externalStore};
    export const playHistoryVersion = makeExternalStore(0);`,
 );
-const builds = await reactCompilerBuilds<typeof import("./hooks.ts")>(
-  new URL("./hooks.ts", import.meta.url).href,
-  {
-    // The screen is focused for the whole test.
-    "expo-router": stubModule(
-      `import { useEffect } from ${react};
+type Hooks = typeof import("./hooks.ts");
+const builds = await reactCompilerBuilds<Hooks>(new URL("./hooks.ts", import.meta.url).href, {
+  // The screen is focused for the whole test.
+  "expo-router": stubModule(
+    `import { useEffect } from ${react};
        export const useFocusEffect = (callback) => useEffect(() => callback(), [callback]);`,
-    ),
-    "react-native": stubModule(
-      `export const AppState = { currentState: "active", addEventListener: () => ({ remove() {} }) };`,
-    ),
-    "@/library/runtime": stubModule(
-      `import * as Effect from ${JSON.stringify(import.meta.resolve("effect/Effect"))};
+  ),
+  "react-native": stubModule(
+    `export const AppState = { currentState: "active", addEventListener: () => ({ remove() {} }) };`,
+  ),
+  "@/library/runtime": stubModule(
+    `import * as Effect from ${JSON.stringify(import.meta.resolve("effect/Effect"))};
        export const appRuntime = { runPromise: (effect) => Effect.runPromise(effect) };`,
-    ),
-    "./Stats": stubModule(
-      `export const Stats = { use: (read) => read(globalThis.__statsHooksTest.stats) };`,
-    ),
-    "@/playback/PlayHistory": playHistory,
-    "@/nowPlaying/sheet": stubModule(
-      `export const isNowPlayingShown = () => false;
+  ),
+  "./Stats": stubModule(
+    `export const Stats = { use: (read) => read(globalThis.__statsHooksTest.stats) };`,
+  ),
+  "@/playback/PlayHistory": playHistory,
+  "@/nowPlaying/sheet": stubModule(
+    `export const isNowPlayingShown = () => false;
        export const onNowPlayingShownChange = () => () => {};`,
-    ),
-    "@/lib/screenSight": stubModule(
-      `export const useScreenSight = () => { throw new Error("unused"); };`,
-    ),
-    "./openedRecaps": stubModule(`export const getOpenedRecaps = () => [];`),
-    "./recapAvailabilityLive": stubModule(
-      `export const knownRecaps = () => [];
+  ),
+  "@/lib/screenSight": stubModule(
+    `export const useScreenSight = () => { throw new Error("unused"); };`,
+  ),
+  "./openedRecaps": stubModule(`export const getOpenedRecaps = () => [];`),
+  "./recapAvailabilityLive": stubModule(
+    `export const knownRecaps = () => [];
        export const useRecapAvailability = () => undefined;`,
-    ),
-  },
-);
+  ),
+});
 const { playHistoryVersion } = (await import(playHistory)) as {
   playHistoryVersion: ExternalStore<number>;
 };
 
+function Block({ hooks, artistId, songs }: { hooks: Hooks; artistId: number; songs: unknown[] }) {
+  hooks.useArtistStats(artistId, songs);
+  return null;
+}
+
+function Ranking({ hooks, tick }: { hooks: Hooks; tick: number }) {
+  const top = hooks.useTopSongs("month", 10);
+  return top === undefined ? null : createElement("ranking", { tick });
+}
+
 /** Lets started reads finish and their results render. */
 const settle = () => act(() => new Promise((resolve) => setTimeout(resolve, 0)));
 
-for (const [build, { useArtistStats, useTopSongs }] of Object.entries(builds)) {
+for (const [build, hooks] of Object.entries(builds)) {
   test(`${build}: an artist's stats are read again when the page's songs or the artist change`, async () => {
     reads.length = 0;
-    function Block({ artistId, songs }: { artistId: number; songs: readonly unknown[] }) {
-      useArtistStats(artistId, songs);
-      return null;
-    }
     const first = [{ id: 1 }];
     let renderer: ReactTestRenderer | undefined;
     try {
       await act(() => {
-        renderer = create(createElement(Block, { artistId: 7, songs: first }));
+        renderer = create(createElement(Block, { hooks, artistId: 7, songs: first }));
       });
       await settle();
       assert.deepEqual(reads, ["artist 7"]);
 
-      await act(() => renderer!.update(createElement(Block, { artistId: 7, songs: first })));
+      await act(() => renderer!.update(createElement(Block, { hooks, artistId: 7, songs: first })));
       await settle();
       assert.deepEqual(reads, ["artist 7"], "the same songs aren't read again");
 
-      await act(() => renderer!.update(createElement(Block, { artistId: 7, songs: [{ id: 1 }] })));
+      await act(() =>
+        renderer!.update(createElement(Block, { hooks, artistId: 7, songs: [{ id: 1 }] })),
+      );
       await settle();
       assert.deepEqual(reads, ["artist 7", "artist 7"], "a scan's new songs re-read the stats");
 
-      await act(() => renderer!.update(createElement(Block, { artistId: 8, songs: first })));
+      await act(() => renderer!.update(createElement(Block, { hooks, artistId: 8, songs: first })));
       await settle();
       assert.deepEqual(reads, ["artist 7", "artist 7", "artist 8"]);
     } finally {
@@ -108,20 +114,15 @@ for (const [build, { useArtistStats, useTopSongs }] of Object.entries(builds)) {
 
   test(`${build}: a ranking is read again when a play starts or ends, and not on other renders`, async () => {
     reads.length = 0;
-    function Ranking({ tick }: { tick: number }) {
-      const top = useTopSongs("month", 10);
-      useEffect(() => void tick, [tick]);
-      return top === undefined ? null : createElement("ranking");
-    }
     let renderer: ReactTestRenderer | undefined;
     try {
       await act(() => {
-        renderer = create(createElement(Ranking, { tick: 0 }));
+        renderer = create(createElement(Ranking, { hooks, tick: 0 }));
       });
       await settle();
       assert.deepEqual(reads, ["topSongs month 10"]);
 
-      await act(() => renderer!.update(createElement(Ranking, { tick: 1 })));
+      await act(() => renderer!.update(createElement(Ranking, { hooks, tick: 1 })));
       await settle();
       assert.deepEqual(reads, ["topSongs month 10"]);
 
