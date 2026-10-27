@@ -101,6 +101,9 @@ and `SongsList` at 0 when their screen isn't the one changing; `TabsLayout` unch
 
 ## React Compiler
 
+**Superseded by #728** (`728-react-compiler.md`): the hooks below are fixed, the flag is now
+`EXPO_PUBLIC_WAVE_REACT_COMPILER=1`, and the comparison is described there.
+
 **Decision: off, pending a phone comparison.** It stays off in normal builds. Measuring it needs
 a full native build, and enabling it needs two code fixes first (below).
 
