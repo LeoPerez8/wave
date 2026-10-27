@@ -581,19 +581,20 @@ const upcomingQueued = (state: QueueState): QueueEntry[] =>
   state.entries.slice(state.index + 1).filter(isQueued);
 
 /**
- * The current entry goes first, lined-up entries stay right after it, and every
- * other context entry (played or not) is shuffled after them. Lined-up entries
- * that already played are dropped.
+ * The current entry goes first, and every other context entry (played or not)
+ * is shuffled after it, with the lined-up entries still to play mixed in (they
+ * stay lined up, so turning shuffle off puts them back right after the current
+ * entry). Lined-up entries that already played are dropped.
  */
 const shuffleOn = (state: QueueState, random: () => number, shuffle: Shuffle): QueueState => {
   const current = currentEntry(state);
   if (current === null) return { ...state, shuffle: true };
-  const others = state.entries.filter((entry) => entry !== current && !isQueued(entry));
-  const queued = upcomingQueued(state);
-  const previous = queued.at(-1) ?? current;
+  const others = state.entries.filter(
+    (entry, i) => entry !== current && (!isQueued(entry) || i > state.index),
+  );
   return {
     ...state,
-    entries: [current, ...queued, ...shuffleEntries(others, random, shuffle, previous)],
+    entries: [current, ...shuffleEntries(others, random, shuffle, current)],
     index: 0,
     shuffle: true,
   };

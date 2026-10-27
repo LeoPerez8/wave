@@ -168,10 +168,16 @@ describe("Smart Shuffle", () => {
     assert.deepEqual([...firsts].toSorted(), ["h1", "h2", "h3", "h4"]);
   });
 
-  test("keeps lined-up songs right after the current one", () => {
+  test("mixes the lined-up songs in with the rest", () => {
     const queued = reduceQueue(start(tracks), { type: "addToQueue", trackIds: ["x", "y"] }).state;
-    const { state } = run(queued, { type: "setShuffle", on: true }, 3, smart(plays));
-    assert.deepEqual(ids(upNext(state)).slice(0, 2), ["x", "y"]);
+    const spots = new Set(
+      SEEDS.map((seed) => {
+        const { state } = run(queued, { type: "setShuffle", on: true }, seed, smart(plays));
+        return ids(upNext(state)).indexOf("x");
+      }),
+    );
+    assert.ok(!spots.has(-1));
+    assert.ok(spots.size > 1);
   });
 
   test("a Shuffle button interleaves the whole list, the first song included", () => {
@@ -222,14 +228,9 @@ describe("Smart Shuffle", () => {
       assert.equal(state.shuffle, true);
       assert.equal(playback, "keep");
       assert.equal(currentEntry(state)?.key, currentEntry(queued)?.key);
-      const [first, ...rest] = ids(upNext(state));
-      assert.equal(first, "x");
+      const rest = ids(upNext(state));
+      assert.ok(rest.includes("x"));
       assert.equal(longestRun(rest, most), 1, `seed ${seed}: ${rest.join(" ")}`);
-      assert.equal(
-        longestRun(rest, (id) => !most(id)),
-        1,
-        `seed ${seed}: ${rest.join(" ")}`,
-      );
     }
   });
 

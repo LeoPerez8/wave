@@ -263,9 +263,19 @@ describe("shuffle", () => {
     assert.equal(playback, "keep");
   });
 
-  test("keeps lined-up tracks right after the current one", () => {
+  test("shuffles lined-up tracks in with the rest", () => {
     const queued = apply(start(tracks, 2), { type: "addToQueue", trackIds: ["x", "y"] });
-    assert.deepEqual(ids(upNext(shuffleOn(queued))).slice(0, 2), ["x", "y"]);
+    const spots = new Set(
+      [1, 2, 3, 4, 5, 6, 7, 8].map((seed) => ids(upNext(shuffleOn(queued, seed))).indexOf("x")),
+    );
+    assert.ok(spots.size > 1);
+    assert.equal(ids(upNext(shuffleOn(queued))).length, 11);
+  });
+
+  test("turning it off puts lined-up tracks back right after the current one", () => {
+    const queued = apply(start("a b c d e", 2), { type: "addToQueue", trackIds: ["x", "y"] });
+    const restored = apply(shuffleOn(queued), { type: "setShuffle", on: false });
+    assert.match(show(restored), /^a b \[c\] (x y|y x) d e$/);
   });
 
   test("drops lined-up tracks that already played", () => {
