@@ -4,7 +4,8 @@ import { discoverTrackId, type QueueContext } from "@wave/core";
 import { View } from "react-native";
 
 import { COVER_ROW_TILE, CoverRow } from "@/catalog/CoverRow";
-import { SwipeTrackRow } from "@/library/SwipeTrackRow";
+import { TrackRow } from "@/catalog/TrackRow";
+import { useLibrarySongSwipes } from "@/playback/rowSwipe";
 import { useFavoriteIds } from "@/library/favorites";
 import type { SongRow } from "@/library/LibraryStore";
 import { toTrackSummary } from "@/library/TrackList";
@@ -54,13 +55,14 @@ export function SongRows<A extends SongRow>({
   /** On a ranking by plays (Most Played), each song's counted plays, shown in place of its length. */
   plays?: (song: A) => number;
 }) {
+  const swipe = useLibrarySongSwipes();
   const currentIds = useCurrentPlayingIds();
   const favorites = useFavoriteIds();
   return (
     <View>
       {songs.map((song, index) => (
-        <SwipeTrackRow
-          song={song}
+        <TrackRow
+          swipe={swipe(song)}
           key={song.id}
           track={{ ...toTrackSummary(song), artist: `Song · ${song.artist}` }}
           playDisc
@@ -88,6 +90,7 @@ export function MostPlayedRows({
   rows: readonly MostPlayedRow[];
   context: QueueContext;
 }) {
+  const swipe = useLibrarySongSwipes();
   const currentIds = useCurrentPlayingIds();
   const favorites = useFavoriteIds();
   return (
@@ -109,8 +112,8 @@ export function MostPlayedRows({
           );
         const song = row.track;
         return (
-          <SwipeTrackRow
-            song={song}
+          <TrackRow
+            swipe={swipe(song)}
             key={key}
             track={{ ...toTrackSummary(song), artist: `Song · ${song.artist}` }}
             playDisc

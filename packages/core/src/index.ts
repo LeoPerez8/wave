@@ -2125,3 +2125,13 @@ export {
   shuffleLineShows,
 } from "./shuffleCardLines.ts";
 export { fileUri } from "./fileUri.ts";
+
+export {
+  queuePersistence,
+  queueWrite,
+  savedQueueState,
+  type QueueParts,
+  type QueuePersistenceState,
+  type QueueWrite,
+  type SavedQueueParts,
+} from "./queuePersistence.ts";

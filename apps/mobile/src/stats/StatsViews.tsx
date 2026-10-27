@@ -16,7 +16,8 @@ import { useCallback, useMemo, type ReactElement } from "react";
 import { ScrollView, Text, useWindowDimensions, View } from "react-native";
 
 import { CELL, grid } from "@/catalog/grid";
-import { SwipeTrackRow } from "@/library/SwipeTrackRow";
+import { TrackRow } from "@/catalog/TrackRow";
+import { useLibrarySongSwipes } from "@/playback/rowSwipe";
 import { useChromeInset } from "@/chrome/chrome";
 import { EmptyState } from "@/components/EmptyState";
 import { useFavoriteIds } from "@/library/favorites";
@@ -96,6 +97,7 @@ function RankedSongRow({
   currentIds: ReadonlySet<string>;
   favorites: ReadonlySet<number>;
 }) {
+  const swipe = useLibrarySongSwipes();
   const onPress = () => void playPlaylist(songs, index, context);
   const playing = currentIds.has(discoverTrackId(item));
   if (item.source === "stream")
@@ -110,8 +112,8 @@ function RankedSongRow({
     );
   const song = item.track;
   return (
-    <SwipeTrackRow
-      song={song}
+    <TrackRow
+      swipe={swipe(song)}
       track={{ ...toTrackSummary(song), trackNumber: index + 1 }}
       plays={countedPlays}
       state={playing ? "playing" : undefined}

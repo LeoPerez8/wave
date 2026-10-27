@@ -4,7 +4,7 @@ import { downloadSyncedStars } from "@/library/starSongs";
 import { onPlaylistsEdited, playlistsChanged } from "@/library/playlists";
 import { appRuntime } from "@/library/runtime";
 import { WaveSoulseek } from "@/native/waveSoulseek";
-import { playHistoryChanged, playHistoryVersion } from "@/playback/PlayHistory";
+import { onPlaysRecorded, playHistoryChanged, type PlaysRecorded } from "@/playback/PlayHistory";
 import { followPulledBestQuality } from "@/settings/bestQuality";
 
 import type { SyncedChanges } from "./syncCycle";
@@ -15,6 +15,13 @@ let started = false;
 
 const changed = (songs: boolean) => (): void => {
   void appRuntime.runPromise(WaveSync.use((sync) => sync.changed({ songs }))).catch(() => {});
+};
+
+/** A play's start or end goes up with the next batch of play ends; imported plays as an edit does. */
+const recorded = (what: PlaysRecorded): void => {
+  if (what === "imported") return changed(false)();
+  // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
+  void appRuntime.runPromise(WaveSync.use((sync) => sync.played(what))).catch(() => {});
 };
 
 /**
@@ -33,8 +40,9 @@ const showPulled = (changes: SyncedChanges): void => {
 /**
  * Starts syncing the Library with the Wave account while signed in
  * (`WaveSync`), and tells it of the changes made here: playlist edits,
- * stars, plays (Wave's own and imported) and the song list (scans,
- * downloads, deletions). Synced preferences tell it as they're stamped
+ * stars, plays (Wave's own in batches, imported ones as edits) and the song
+ * list (scans, downloads, deletions). Plays pulled from the account aren't
+ * changes made here, so they start no sync. Synced preferences tell it as they're stamped
  * (`startServices`). Missing songs with a star download, those starred
  * before Wave started too. The app's root layout calls it; a headless start
  * (Android Auto) doesn't sync. Safe to call repeatedly.
@@ -58,6 +66,6 @@ export const startSync = (): void => {
   void downloadSyncedStars();
   onPlaylistsEdited(changed(false));
   onFavoritesSaved(changed(false));
-  playHistoryVersion.subscribe(changed(false));
+  onPlaysRecorded(recorded);
   libraryVersion.subscribe(changed(true));
 };

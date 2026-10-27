@@ -1,4 +1,5 @@
 import {
+  songRowSwipeDirections,
   ITEM_ACTION_LABELS,
   UNAVAILABLE_ENTRY_ACTION_LABELS,
   actionBarLabel,
@@ -18,7 +19,7 @@ import { useMemo } from "react";
 
 import { NO_SWIPE, type RowSwipe, type SwipeSide } from "@/catalog/SwipeableRow";
 import { favoriteIdsNow } from "@/library/favorites";
-import type { ArtistRow, SongRow, SongSummary } from "@/library/LibraryStore";
+import type { ArtistRow, SongRow } from "@/library/LibraryStore";
 import { currentPath, useCurrentPath } from "@/library/routes";
 import { songsWithIds } from "@/library/sectionSongs";
 import { showError } from "@/overlay/alert";
@@ -155,7 +156,7 @@ const planTrack = (
  * resolves only its requested artist names; song actions acquire the Library
  * song finder when they need it.
  */
-const runTrackSwipe = (target: ActionItems, side: RowSwipeSide): void => {
+export const runTrackSwipe = (target: ActionItems, side: RowSwipeSide): void => {
   const here = currentPath();
   const settings = swipeSettingsNow();
   const press = (find: FindInLibrary) => {
@@ -216,39 +217,44 @@ export const useUnsearchedSwipe = (
   return useTrackItemSwipe(target, options);
 };
 
-/**
- * What swiping a row of Library › Songs runs. A paged row holds only what it
- * shows ([summary]), so its directions come from what that says (whether
- * it's a missing song, whether it's starred), and the song's full row is
- * read when one runs, as its menu reads it before opening.
- */
-export const useSongSummarySwipe = (summary: SongSummary | undefined): RowSwipe => {
+/** Paged lists read full action metadata only when a swipe runs. */
+export const runSummarySwipe = (id: number, side: RowSwipeSide): void => {
+  songsWithIds([id])
+    .then(([song]) => {
+      if (song !== undefined) runTrackSwipe({ kind: "track", items: [{ song }] }, side);
+    })
+    .catch((error: unknown) => showError("Couldn't load the song", error));
+};
+
+/** Temporary bridge for #716's remaining TrackRow callers; one subscription per container. */
+export const useLibrarySongSwipes = (): ((song: SongRow) => RowSwipe) => {
   const settings = useSwipeSettings();
   const here = useCurrentPath(false);
-  if (!settings.enabled || summary === undefined) return NO_SWIPE;
-  const { id, hasFile } = summary;
-  const menu = itemActions({
-    kind: "track",
-    items: [
+  return (song) => {
+    const target: ActionItems = { kind: "track", items: [{ song }] };
+    const item = targetFacts(target, favoriteIdsNow(), findNothing)[0]!;
+    const directions = songRowSwipeDirections(
       {
-        missing: !hasFile,
-        favorite: favoriteIdsNow().has(id),
-        albumId: summary.albumId,
-        artistIds: [summary.artistId],
-        fixable: summary.fixable,
-        ...(!hasFile && swipesChoose(settings, "download")
-          ? { download: missingSongDownloadStatusNow(id) }
-          : {}),
+        kind: "track",
+        item: {
+          ...item,
+          download: song.path === null ? missingSongDownloadStatusNow(song.id) : null,
+        },
+        here,
+        onlineLookups: lyricsAndGenreLookupsEnabled(),
       },
-    ],
-    onlineLookups: lyricsAndGenreLookupsEnabled(),
-    here,
-  }).map((entry) => entry.action);
-  return rowSwipe(menu, (_, side) => {
-    songsWithIds([id])
-      .then(([song]) => {
-        if (song !== undefined) runTrackSwipe({ kind: "track", items: [{ song }] }, side);
-      })
-      .catch((error: unknown) => showError("Couldn't load the song", error));
-  });
+      settings,
+    );
+    const side = (action: RowMenuAction | null, direction: RowSwipeSide): SwipeSide | null =>
+      action === null
+        ? null
+        : {
+            action,
+            label: shortLabel(action),
+            accessibilityLabel: fullLabel(action),
+            leaves: false,
+            run: () => runTrackSwipe(target, direction),
+          };
+    return { right: side(directions.right, "right"), left: side(directions.left, "left") };
+  };
 };

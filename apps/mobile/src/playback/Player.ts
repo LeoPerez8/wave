@@ -1,7 +1,9 @@
 import {
   type PlayerCoverUpdate,
   type PlaySource,
+  type QueueWrite,
   type RepeatMode,
+  type SavedQueueParts,
   type SeekSource,
   type SleepTimer,
   type SongChangeCause,
@@ -72,8 +74,9 @@ export class Player extends Context.Service<
     readonly setItemArtwork: (
       updates: readonly PlayerCoverUpdate[],
     ) => Effect.Effect<void, PlayerError>;
-    readonly saveQueue: (json: string, source: PlaySource) => Effect.Effect<void>;
-    readonly savedQueue: Effect.Effect<string | null>;
+    /** Keeps the queue parts [write] changed for a JS restart and a cold start; skips its position. */
+    readonly saveQueue: (write: QueueWrite, source: PlaySource) => Effect.Effect<void, PlayerError>;
+    readonly savedQueue: Effect.Effect<SavedQueueParts | null>;
     readonly savedQueueSource: Effect.Effect<PlaySource | null>;
     /** Whether the player resumed the saved queue on its own (a cold start); clears it. */
     readonly takeResumed: Effect.Effect<boolean>;
@@ -156,7 +159,15 @@ export const layer = Layer.effect(
         updates.length === 0
           ? Effect.void
           : call("show the cached covers", () => WavePlayer.setItemArtwork(updates)),
-      saveQueue: (json, source) => Effect.sync(() => WavePlayer.saveQueue(json, source)),
+      saveQueue: (write, source) =>
+        call("save the queue", () =>
+          WavePlayer.saveQueue(
+            write.queue ?? null,
+            write.metadata ?? null,
+            write.index ?? null,
+            source,
+          ),
+        ),
       savedQueue: Effect.sync(() => WavePlayer.savedQueue()),
       savedQueueSource: Effect.sync(() => WavePlayer.savedQueueSource()),
       takeResumed: Effect.sync(() => WavePlayer.takeResumed()),

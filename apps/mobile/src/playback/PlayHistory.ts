@@ -45,6 +45,28 @@ export const playHistoryChanged = (trackIds?: readonly number[]): void => {
   });
 };
 
+/** What went into the play history: a play started or ended here, or plays were imported. */
+export type PlaysRecorded = "started" | "ended" | "imported";
+
+const recordedListeners = new Set<(what: PlaysRecorded) => void>();
+
+/**
+ * Calls [listener] each time plays go into the history here (not those
+ * pulled from the Wave account): `WaveSync` sends them up. Returns how to stop.
+ */
+export const onPlaysRecorded = (listener: (what: PlaysRecorded) => void): (() => void) => {
+  recordedListeners.add(listener);
+  return () => {
+    recordedListeners.delete(listener);
+  };
+};
+
+/** Plays were imported (BlackPlayer's stats): the history changed, and they go up. */
+export const playsImported = (): void => {
+  playHistoryChanged();
+  for (const listener of recordedListeners) listener("imported");
+};
+
 const playEndListeners = new Set<(end: PlayEnd) => void>();
 
 /**
@@ -145,6 +167,7 @@ export const layer = Layer.effectDiscard(
         // Only a Library song has an id to name; a streamed play (`yt:<videoId>`) has none.
         const played = parseTrackId(step.play.trackId);
         playHistoryChanged(played?.kind === "library" ? [played.id] : undefined);
+        for (const listener of recordedListeners) listener(step.type);
       }
       playTracker.set(tracker);
     };

@@ -15,7 +15,7 @@ import {
   recommendationEntriesPage,
   recommendationFeedbackPage,
 } from "./db/recommendationPages";
-import type { ShuffleSong, YtSong, YtDownloadJournalJob } from "@wave/core";
+import type { QueueWrite, ShuffleSong, YtSong, YtDownloadJournalJob } from "@wave/core";
 import { makeExternalStore, type ExternalStore } from "@/lib/externalStore";
 import { publishSavedRecordings } from "./libraryChanges";
 import { backfillRecordingTitles, selectMatchingSong } from "./db/matchingSong";
@@ -165,6 +165,7 @@ import {
   type RecordedPlay,
 } from "./db/playHistory";
 import { listeningSums, selectCountedPlays, songCountedPlays } from "./db/playTotals";
+import { loadPlayback, savePlayback, type SavedPlayback } from "./db/playback";
 import { shuffleSongs } from "./db/shuffleSongs";
 import {
   listeningHistory,
@@ -474,13 +475,6 @@ interface GenreDetail {
 export interface PathMove {
   readonly from: string;
   readonly to: string;
-}
-
-/** The queue and position saved for the next launch. */
-export interface SavedPlayback {
-  /** Core's `QueueState` as JSON. */
-  readonly queue: string;
-  readonly positionMs: number;
 }
 
 /** What Now Playing shows about a track beyond the player's item. */
@@ -818,11 +812,8 @@ export class LibraryStore extends Context.Service<
       trackIds: readonly string[],
     ) => Effect.Effect<ReadonlyMap<string, ShuffleSong>, LibraryStoreError>;
     readonly loadPlayback: Effect.Effect<SavedPlayback | null, LibraryStoreError>;
-    /** Saves the queue with where its current entry is. */
-    readonly saveQueue: (
-      queue: string,
-      positionMs: number,
-    ) => Effect.Effect<void, LibraryStoreError>;
+    /** Saves the parts of the queue a change touched (Core's `queueWrite`). */
+    readonly saveQueue: (write: QueueWrite) => Effect.Effect<void, LibraryStoreError>;
     readonly savePosition: (positionMs: number) => Effect.Effect<void, LibraryStoreError>;
     /** The playing track's links and artwork palette, for Now Playing; null once it's gone. */
     readonly nowPlayingSong: (
@@ -1340,8 +1331,6 @@ const getGenreSync = (db: Database, id: number): GenreDetail | null => {
   return { genre: { ...genre, trackCount: songs.length }, songs };
 };
 
-const SAVED_PLAYBACK_ID = 1;
-
 const listRecentSearchesSync = (db: Pick<Database, "select">): string[] =>
   db
     .select({ query: schema.recentSearches.query })
@@ -1748,35 +1737,14 @@ const make = Effect.gen(function* () {
     shuffleSongs: (trackIds) =>
       attempt("read the songs' artists, genres and albums", () => shuffleSongs(db, trackIds)),
 
-    loadPlayback: attempt(
-      "read the saved queue",
-      () =>
-        db
-          .select({
-            queue: schema.savedPlayback.queue,
-            positionMs: schema.savedPlayback.positionMs,
-          })
-          .from(schema.savedPlayback)
-          .where(eq(schema.savedPlayback.id, SAVED_PLAYBACK_ID))
-          .get() ?? null,
-    ),
+    loadPlayback: attempt("read the saved queue", () => loadPlayback(db)),
 
-    saveQueue: (queue, positionMs) =>
-      writeAttempt("save the queue", () => {
-        const row = { queue, positionMs: Math.round(positionMs), updatedAt: Date.now() };
-        db.insert(schema.savedPlayback)
-          .values({ id: SAVED_PLAYBACK_ID, ...row })
-          .onConflictDoUpdate({ target: schema.savedPlayback.id, set: row })
-          .run();
-      }),
+    saveQueue: (write) => writeAttempt("save the queue", () => savePlayback(db, write, Date.now())),
 
     savePosition: (positionMs) =>
-      writeAttempt("save the playback position", () => {
-        db.update(schema.savedPlayback)
-          .set({ positionMs: Math.round(positionMs), updatedAt: Date.now() })
-          .where(eq(schema.savedPlayback.id, SAVED_PLAYBACK_ID))
-          .run();
-      }),
+      writeAttempt("save the playback position", () =>
+        savePlayback(db, { positionMs }, Date.now()),
+      ),
 
     listRecentSearches: attempt("read recent searches", () => listRecentSearchesSync(db)),
 

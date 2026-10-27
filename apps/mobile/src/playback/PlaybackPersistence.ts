@@ -1,4 +1,4 @@
-import { libraryTrackIds, parseQueueState, restorableTrack, restorePlayback } from "@wave/core";
+import { libraryTrackIds, restorableTrack, restorePlayback, savedQueueState } from "@wave/core";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { AppState } from "react-native";
@@ -8,7 +8,7 @@ import { ytMusicEnabled } from "@/settings/ytMusic";
 
 import { playbackState } from "./Player";
 import { Queue, currentPositionMs, queueState, settledQueue, toQueueTrack } from "./Queue";
-import { learnUnknownQueueTracks } from "./queueTracks";
+import { learnUnknownQueueTracks, queueTracks, type QueueTrack } from "./queueTracks";
 import { savedYtQueueTracks, saveYtQueueTracks } from "./ytQueueTracks";
 
 /** How often the position is written while playing; it's also written on pause and on leaving the app. */
@@ -32,7 +32,7 @@ export const layer = Layer.effectDiscard(
     const restore = Effect.gen(function* () {
       const saved = yield* store.loadPlayback;
       if (saved === null) return;
-      const state = parseQueueState(yield* Effect.try(() => JSON.parse(saved.queue) as unknown));
+      const state = savedQueueState(saved.parts);
       if (state === null) return;
       const songs = yield* store.songsByIds(
         libraryTrackIds(state.entries.map((entry) => entry.trackId)),
@@ -57,6 +57,7 @@ export const layer = Layer.effectDiscard(
 
     let saving = false;
     let lastPositionSave = 0;
+    let savedTracks: ReadonlyMap<string, QueueTrack> | null = null;
 
     const savePosition = (): void => {
       lastPositionSave = Date.now();
@@ -74,14 +75,20 @@ export const layer = Layer.effectDiscard(
             learnUnknownQueueTracks(queueState.get().entries, store.songsByIds, savedYtQueueTracks),
           );
         }),
-        // `Queue` serialises the queue once changes settle (skips, reorders come in bursts).
+        // `Queue` works out what changed once changes settle (skips, reorders come in bursts).
         settledQueue.subscribe(() => {
-          const json = settledQueue.get();
-          if (!saving || json === null) return;
+          const write = settledQueue.get();
+          if (!saving || write === null) return;
           lastPositionSave = Date.now();
-          // Its YT Music songs aren't in the Library: their details go with it.
-          run(Effect.sync(() => saveYtQueueTracks(queueState.get().entries)));
-          run(store.saveQueue(json, currentPositionMs()));
+          // Its YT Music songs aren't in the Library: their details go with it, when
+          // its entries or their details (a cover cached later) changed.
+          const tracks = queueTracks.get();
+          if (write.queue !== undefined || tracks !== savedTracks) {
+            savedTracks = tracks;
+            run(Effect.sync(() => saveYtQueueTracks(queueState.get().entries)));
+          }
+          // The position moved on since the last settle (saved on its own meanwhile): it always goes.
+          run(store.saveQueue({ ...write, positionMs: currentPositionMs() }));
         }),
         playbackState.subscribe(() => {
           if (!saving) return;
