@@ -1,4 +1,5 @@
-import { LegendList, type LegendListRef } from "@legendapp/list/react-native";
+import type { LegendListRef } from "@legendapp/list/react-native";
+import { AnimatedLegendList } from "@legendapp/list/reanimated";
 import { IconMenu2, IconRepeat, IconRepeatOnce, IconX } from "@tabler/icons-react-native";
 import {
   currentEntry,
@@ -435,6 +436,13 @@ const barOffset = (history: number): number => (history === 0 ? 0 : SECTION_HEAD
  * lands in one render with the offsets reset, and stays shown
  * (`withPendingMoves`) until the queue has it.
  *
+ * The list is Legend List's Reanimated one: its sticky bar follows the
+ * scroll as Reanimated reads it. The plain list's follows a scroll event it
+ * builds again whenever the bar's index changes, and a reshuffle emptying
+ * History moved the bar to the top as the list scrolled there, so the bar
+ * missed that scroll and stayed drawn at History's old height, over Up Next
+ * (#706).
+ *
  * While a Magic Queue picks its next batch, skeleton rows stand where it will
  * land: in place of "Nothing up next.", or under the songs already in Up
  * Next, which stay put (docs/spec.md, Skeletons).
@@ -589,7 +597,7 @@ export function UpNextList({
         if (measured > 0) height.set(measured);
       }}
     >
-      <LegendList
+      <AnimatedLegendList
         ref={listRef}
         refScrollView={scrollRef}
         className="flex-1"

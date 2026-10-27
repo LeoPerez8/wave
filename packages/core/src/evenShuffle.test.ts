@@ -229,13 +229,17 @@ describe("Even Shuffle", () => {
     }
   });
 
-  test("keeps lined-up songs right after the current one, the shuffled songs after them", () => {
-    const queued = reduceQueue(start(mixed), { type: "addToQueue", trackIds: ["x", "y"] }).state;
+  test("mixes the lined-up songs in, so their artist takes turns with the rest", () => {
+    // Adele playing with three more of hers, three Amy Winehouse songs added to the queue.
+    const context = many("adele", 4);
+    const added = many("amy", 3);
+    const queued = reduceQueue(start(context), { type: "addToQueue", trackIds: added }).state;
     for (const seed of SEEDS) {
-      const { state } = run(queued, { type: "setShuffle", on: true }, seed, even(mixed));
-      const rest = ids(upNext(state));
-      assert.deepEqual(rest.slice(0, 2), ["x", "y"]);
-      assert.equal(repeats(rest.slice(2), artistOf), 0, `seed ${seed}: ${rest.join(" ")}`);
+      const { state } = run(queued, { type: "reshuffle" }, seed, even([...context, ...added]));
+      const order = ids(state.entries);
+      assert.equal(order[0], context[0]);
+      assert.deepEqual(order.toSorted(), [...context, ...added].toSorted());
+      assert.equal(repeats(order, artistOf), 0, `seed ${seed}: ${order.join(" ")}`);
     }
   });
 
