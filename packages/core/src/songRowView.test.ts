@@ -224,6 +224,7 @@ test("playing, stars, selection, leading cells and trailing overrides preserve t
   assert.equal(view.secondLine, "Song · Daft Punk");
   assert.equal(view.trailingText, "12 plays");
   assert.deepEqual(view.leading, { kind: "rank", number: 1, top: true });
+  assert.equal(view.leading.kind === "rank" && view.leading.top, true);
   assert.equal(
     view.accessibilityLabel,
     "One More Time, Song · Daft Punk, explicit, 12 plays, downloaded, now playing",

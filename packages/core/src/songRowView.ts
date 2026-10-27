@@ -136,7 +136,8 @@ export interface SongRowView {
   readonly starred: boolean;
   readonly selecting: boolean;
   readonly leading:
-    SongRowLeading | { readonly kind: "rank"; readonly number: number; readonly top: boolean };
+    | Exclude<SongRowLeading, { readonly kind: "rank" }>
+    | { readonly kind: "rank"; readonly number: number; readonly top: boolean };
   readonly accessibilityState:
     | { readonly disabled: boolean; readonly selected: boolean }
     | { readonly disabled: boolean; readonly checked: boolean };
@@ -208,7 +209,7 @@ const contentOf = (source: SongRowSource): RowContent => {
         credit:
           source.kind === "unavailable"
             ? unavailableEntryView(source.song).line
-            : ytSongCredit({ ...song, videoId: "", explicit: false }),
+            : ytSongCredit(song),
         durationMs: song.durationMs,
         explicit: source.kind === "ytMusic" && showsExplicitBadge(source.song.explicit),
         artwork: song.artworkUrl
