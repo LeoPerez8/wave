@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { EMPTY_QUEUE, reduceQueue } from "./queue.ts";
-import { queuePersistence, queueWrite, savedQueueState } from "./queuePersistence.ts";
+import {
+  EMPTY_QUEUE,
+  queuePersistence,
+  queueWrite,
+  reduceQueue,
+  savedQueueState,
+} from "./index.ts";
 
 const state = reduceQueue(EMPTY_QUEUE, {
   type: "play",
