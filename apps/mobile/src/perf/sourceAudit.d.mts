@@ -14,3 +14,5 @@ export const auditSources: (
   files: Readonly<Record<string, string>>,
   options: AuditOptions,
 ) => { library: SourceUse[]; network: SourceUse[]; boundaries: string[]; missingSeeds: string[] };
+/** Every `useMemo`/`useCallback` dependency its function doesn't read, as `file#owner: hook [dep]`. */
+export const unreadMemoDependencies: (files: Readonly<Record<string, string>>) => string[];
