@@ -95,7 +95,10 @@ test("paging keeps the song key as a loading slot becomes a song; shape determin
 
 test("checking a song or advancing its missing download changes only that row's primitive props", () => {
   const model = createSongListModel();
-  const missing: SongListRowSource = { kind: "missing", song: { id: 9, title: "Missing", artist: "Artist", durationMs: 180000, explicit: "explicit" } };
+  const missing: SongListRowSource = {
+    kind: "missing",
+    song: { id: 9, title: "Missing", artist: "Artist", durationMs: 180000, explicit: "explicit" },
+  };
   const first = model.row(sources[0]!, { selection: "unchecked" });
   const queued = model.row(missing, { selection: "unchecked", download: { kind: "queued" } });
   const checked = model.row(missing, { selection: "checked", download: { kind: "queued" } });
@@ -103,13 +106,20 @@ test("checking a song or advancing its missing download changes only that row's 
   assert.equal(checked.checked, true);
   assert.equal(checked.accessibilityRole, "checkbox");
   assert.equal(checked.accessibilityLabel, queued.accessibilityLabel);
-  const progress = model.row(missing, { selection: "checked", download: { kind: "downloading", received: 25, total: 100 } });
+  const progress = model.row(missing, {
+    selection: "checked",
+    download: { kind: "downloading", received: 25, total: 100 },
+  });
   assert.equal(progress.progress, 0.25);
   assert.equal(progress.dimmed, true);
   assert.equal(progress.explicit, true);
   assert.match(progress.accessibilityLabel, /explicit/);
   assert.equal(model.row(sources[0]!, { selection: "unchecked" }), first);
-  for (const value of Object.values(progress)) assert.ok(value === null || typeof value !== "object", "leaf props contain no collections or state objects");
+  for (const value of Object.values(progress))
+    assert.ok(
+      value === null || typeof value !== "object",
+      "leaf props contain no collections or state objects",
+    );
 });
 
 test("the row cache releases old rows after its nearby-row budget", () => {

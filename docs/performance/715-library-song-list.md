@@ -1,7 +1,7 @@
 # #715 Library song list and row
 
-Ticket #715, parent #712. Branch `feat/715-library-song-list`, based on
-integration commit `5cad76af`. No physical-phone measurements have been collected.
+Ticket #715, parent #712. Branch `feat/715-library-song-list`, merged with
+integration commit `16492035` (#719, #726). No physical-phone measurements have been collected.
 
 ## Change and work budgets
 
@@ -55,7 +55,7 @@ advance between them, star a visible song, and inspect the SongRow counter delta
 without scrolling. Then scrub the spine and check that list jumps and the letter
 plate still follow the finger. Record the APK/source hashes and results-file path.
 
-## Before (5cad76af)
+## Before (16492035)
 
 Pending the owner's S24+ run. No numbers are inferred from desktop tests.
 
