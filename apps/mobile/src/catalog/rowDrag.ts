@@ -28,6 +28,7 @@ import {
 import { scheduleOnRN, scheduleOnUI } from "react-native-worklets";
 
 import { grid } from "@/catalog/grid";
+import { liftedTop } from "@/catalog/liftedRow";
 import { perfCount } from "@/perf/perf";
 
 /**
@@ -76,15 +77,6 @@ type Session = {
 type Aside = { readonly from: number; readonly to: number; readonly live: boolean };
 
 const AT_REST: Aside = { from: -1, to: -1, live: false };
-
-/**
- * The lifted row's top on screen: under the finger, kept inside the list
- * below [floor] (the sticky bar, or the first Up Next row's slot under it).
- */
-const liftedTop = (top: number, viewport: number, floor: number): number => {
-  "worklet";
-  return Math.min(Math.max(floor, viewport - ROW), Math.max(floor, top));
-};
 
 /** Marks a drop as landing: JavaScript places the rows for the new order from here. */
 const settle = (aside: SharedValue<Aside>): void => {
@@ -140,7 +132,9 @@ export type DragRows = {
  * [onDrop] hears a drop that moved one (its key, from, to). The first of them
  * starts [lead] into the list's content (a head, or History and the sticky
  * bar above Up Next), and a bar [bar] tall stays over the list's top while
- * the rows scroll under it. Auto-scroll goes no higher than [scrollFloor]
+ * the rows scroll under it. [keepLifted] keeps the lifted row inside the
+ * list, below the bar or the first row's slot (Up Next); otherwise it follows
+ * the finger over the head. Auto-scroll goes no higher than [scrollFloor]
  * (the list's own scroll) and the list opens at [initialScroll]. [counter]
  * names the perf counters (`<counter>.start`, `.target`, `.end`).
  */
@@ -149,6 +143,7 @@ export function useRowDrag({
   bottomInset,
   lead,
   bar = 0,
+  keepLifted = false,
   scrollFloor,
   initialScroll,
   counter,
@@ -158,6 +153,7 @@ export function useRowDrag({
   bottomInset: number;
   lead: number;
   bar?: number;
+  keepLifted?: boolean;
   scrollFloor: number;
   initialScroll: number;
   counter: string;
@@ -184,8 +180,8 @@ export function useRowDrag({
   // The top of the list a lifted row stays under: the bar, or Up Next's first slot below it.
   const floor = useCallback(() => {
     "worklet";
-    return Math.max(bar, -scrolled());
-  }, [bar, scrolled]);
+    return keepLifted ? Math.max(bar, -scrolled()) : null;
+  }, [keepLifted, bar, scrolled]);
 
   const session = useSharedValue<Session | null>(null);
   const aside = useSharedValue<Aside>(AT_REST);
@@ -278,7 +274,9 @@ export function useRowDrag({
 
   const follow = useCallback(() => {
     "worklet";
-    liftedY.set(liftedTop(anchor.get() + translation.get(), height.get(), floor()) + scrolled());
+    liftedY.set(
+      liftedTop(anchor.get() + translation.get(), height.get(), floor(), ROW) + scrolled(),
+    );
   }, [liftedY, anchor, translation, height, scrolled, floor]);
 
   const retarget = useCallback(() => {
@@ -426,7 +424,9 @@ export function useRowDrag({
 
   // The lifted copy, drawn over the list once JavaScript knows the drag.
   const liftedStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: liftedTop(anchor.get() + translation.get(), height.get(), floor()) }],
+    transform: [
+      { translateY: liftedTop(anchor.get() + translation.get(), height.get(), floor(), ROW) },
+    ],
   }));
 
   return {

@@ -469,6 +469,7 @@ export function UpNextList({
     // Up Next opens at its start under the bar, which History scrolls no lower than.
     lead: start + BAR,
     bar: BAR,
+    keepLifted: true,
     scrollFloor: start,
     initialScroll: start,
     counter: "upNext",

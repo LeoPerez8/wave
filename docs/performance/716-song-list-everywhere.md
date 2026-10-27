@@ -105,7 +105,7 @@ downloads); playlists (grip, lifted row on `fill`, auto-scroll, save on release,
 Move up/down for TalkBack, swipe-to-remove sliding out, unsearched and unavailable
 entries, selection with unavailable entries inert, Find, recommendations staying
 put on Add); the Queue (History fade, remove, drag, sticky bar, TalkBack actions
-and hints). Known differences: a playlist's lifted row now stops at the first row's
-slot instead of riding over the head, and Search's Library hits show their star
-(the ticket asks for it). Phone, Hermes, gestures and TalkBack remain unverified.
+and hints). Known difference: Search's Library hits show their star (the ticket asks
+for it). A playlist's lifted row rides over the head as before; only the Queue's stays
+below Up Next's first slot. Phone, Hermes, gestures and TalkBack remain unverified.
 No native code or dependencies changed.
