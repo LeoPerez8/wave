@@ -45,7 +45,7 @@ export const sightOf = (...conditions: readonly SightCondition[]): ScreenSight =
 });
 
 /** A store as `useSyncExternalStore` reads it. */
-export interface FollowedStore<A> {
+interface FollowedStore<A> {
   readonly subscribe: (onChange: () => void) => () => void;
   readonly get: () => A;
 }
@@ -56,7 +56,7 @@ export interface FollowedStore<A> {
  * subscribed, so its changes render nothing. Coming back calls `onChange`
  * once if the store moved meanwhile. Make one per subscriber.
  */
-export const followInSight = <A>(sight: ScreenSight, store: FollowedStore<A>): FollowedStore<A> => {
+const followInSight = <A>(sight: ScreenSight, store: FollowedStore<A>): FollowedStore<A> => {
   let held: { readonly value: A } | null = null;
   return {
     get: () => (held === null ? store.get() : held.value),

@@ -18,7 +18,7 @@ export interface ArtworkSource {
 }
 
 /** The size covering a display's long side in physical pixels. */
-export const artworkSize = (pixels: number): ArtworkSize =>
+const artworkSize = (pixels: number): ArtworkSize =>
   pixels <= 300 ? "thumbnail" : pixels <= 640 ? "medium" : "original";
 
 /**

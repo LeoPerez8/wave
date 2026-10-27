@@ -24,7 +24,7 @@ class ScanSlotTest {
   }
 
   @Test
-  fun `cancelling names the scan: an older id leaves the current one running`() {
+  fun `cancelling names the scan, so an older id leaves the current one running`() {
     val slot = ScanSlot()
     slot.claim(1)
     val current = claimed(slot.claim(2))

@@ -1,6 +1,5 @@
 import {
   favoriteStar,
-  parseTrackId,
   starWriteSettled,
   starWriteStarted,
   ytSongStarred,
@@ -185,28 +184,6 @@ export const useFavoriteIds = (active = true): ReadonlySet<number> => {
 export const useLiveFavoriteIds = (active = true): ReadonlySet<number> => {
   useLoadedFavorites(active);
   return useSyncExternalStore(favorites.subscribe, favoriteIdsNow);
-};
-
-/**
- * Whether a track is starred; takes a SongRow id or a queue track id (Now
- * Playing). A YT Music song's (`yt:<videoId>`) is its pending favorite:
- * starred, its file on its way.
- */
-export const useIsFavorite = (trackId: number | string | null): boolean => {
-  const ref = typeof trackId === "string" ? parseTrackId(trackId) : null;
-  const video = ref?.kind === "yt" ? ref.videoId : null;
-  const pendingStar = video !== null;
-  useEffect(() => {
-    if (pendingStar) loadPendingFavorites();
-    else loadFavorites();
-  }, [pendingStar]);
-  return useSyncExternalStore(
-    video === null ? favorites.subscribe : pendingFavorites.subscribe,
-    () =>
-      video !== null
-        ? pendingFavorites.get().videos.has(video)
-        : trackId !== null && favorites.get().ids.has(Number(trackId)),
-  );
 };
 
 /**

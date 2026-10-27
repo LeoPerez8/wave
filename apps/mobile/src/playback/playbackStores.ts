@@ -11,7 +11,7 @@ export interface PlaybackState extends Omit<NativePlayerState, "index" | keyof P
 }
 
 /** The item key keeps car lyrics paired with the report that selected it. */
-export interface PositionState extends PositionReport {
+interface PositionState extends PositionReport {
   readonly item: { readonly id: string } | null;
 }
 

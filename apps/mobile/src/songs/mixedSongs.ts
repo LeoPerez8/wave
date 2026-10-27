@@ -47,6 +47,19 @@ export const runMixedSongSwipe = (
   else runYtSongSwipe(song.song, shown, options);
 };
 
+/** A page item that may be one of its songs (an artist's page mixes songs with headings and shelves). */
+type PageItem = { readonly type: string; readonly song?: ListedSong };
+
+/** A mixed page's song-list menu and swipe: its song items act as [openMixedSongActions] and [runMixedSongSwipe]. */
+export const mixedPageSongHandlers = {
+  onMenu: (item: PageItem, options?: MenuOptions): void => {
+    if (item.type === "song" && item.song) openMixedSongActions(item.song, options);
+  },
+  onSongSwipe: (item: PageItem, shown: RowMenuAction): void => {
+    if (item.type === "song" && item.song) runMixedSongSwipe(item.song, shown);
+  },
+} as const;
+
 interface Selecting<U> {
   readonly selecting: boolean;
   readonly isChecked: (item: U) => boolean;

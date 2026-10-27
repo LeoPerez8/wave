@@ -48,12 +48,7 @@ import { useSortedSongs } from "@/library/songSort";
 import { ListIntro, songCount } from "@/library/TrackList";
 import { SongList } from "@/songs/SongList";
 import type { SongListEntry } from "@/songs/songListSources";
-import {
-  mixedSongEntry,
-  openMixedSongActions,
-  runMixedSongSwipe,
-  songSelection,
-} from "@/songs/mixedSongs";
+import { mixedSongEntry, mixedPageSongHandlers, songSelection } from "@/songs/mixedSongs";
 import { useListScrollable } from "@/motion/heldTouch";
 import { selectableRow } from "@/selection/selectableRow";
 import { useListSelection, type ListSelection } from "@/selection/useListSelection";
@@ -433,12 +428,7 @@ function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegr
       onPlay={(item) => {
         if (item.type === "song") void playPage(pageSongs, item.index, context);
       }}
-      onMenu={(item, options) => {
-        if (item.type === "song") openMixedSongActions(item.song, options);
-      }}
-      onSongSwipe={(item, shown) => {
-        if (item.type === "song") runMixedSongSwipe(item.song, shown);
-      }}
+      {...mixedPageSongHandlers}
       contentContainerStyle={{ paddingHorizontal: grid.margin, paddingBottom: bottomInset }}
       ListHeaderComponent={
         <>

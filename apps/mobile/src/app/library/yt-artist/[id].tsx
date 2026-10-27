@@ -48,12 +48,7 @@ import { useListSelection, type ListSelection } from "@/selection/useListSelecti
 import { listedTrackItem } from "@/playback/actionTargets";
 import { useThemeColor } from "@/theme/useThemeColor";
 import { useYtArtistPage } from "@/ytmusic/artistPage";
-import {
-  mixedSongEntry,
-  openMixedSongActions,
-  runMixedSongSwipe,
-  songSelection,
-} from "@/songs/mixedSongs";
+import { mixedSongEntry, mixedPageSongHandlers, songSelection } from "@/songs/mixedSongs";
 import { SongList } from "@/songs/SongList";
 import { occurrenceKeys } from "@/songs/songRowState";
 import { YT_ARTIST_NOTE, YtReleaseTile } from "@/ytmusic/YtArtistSection";
@@ -370,12 +365,7 @@ export default function YtArtistScreen() {
         onPlay={(item) => {
           if (item.type === "song") play(item.index);
         }}
-        onMenu={(item, options) => {
-          if (item.type === "song") openMixedSongActions(item.song, options);
-        }}
-        onSongSwipe={(item, shown) => {
-          if (item.type === "song") runMixedSongSwipe(item.song, shown);
-        }}
+        {...mixedPageSongHandlers}
         contentContainerStyle={contentStyle}
         ListHeaderComponent={header}
         ListFooterComponent={footer}
