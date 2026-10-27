@@ -1,5 +1,5 @@
 import { WavePlayer, type AutoLyricsEvent } from "@/native/wavePlayer";
-import { playbackState } from "@/playback/Player";
+import { positionState } from "@/playback/Player";
 import { queueState } from "@/playback/Queue";
 import { queueTracks } from "@/playback/queueTracks";
 import { readTrackLyrics } from "@/playback/trackLyrics";
@@ -20,7 +20,7 @@ const pathOf = (itemId: string): string | null => {
  */
 export const startAutoLyrics = (): void => {
   const sync = startAutoLyricLines({
-    playback: playbackState,
+    playback: positionState,
     pathOf,
     readLyrics: readTrackLyrics,
     show: (itemId, text) => {

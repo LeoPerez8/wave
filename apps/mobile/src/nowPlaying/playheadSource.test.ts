@@ -117,3 +117,33 @@ test("seek, pause, and a song change replace the report immediately without rest
   assert.equal(h.live(), false);
   assert.equal(h.ticking(), false);
 });
+
+test("visibility acquires native reporting demand while passive event snapshots stay fresh", async () => {
+  const { makePlaybackStores } = await import("../playback/playbackStores.ts");
+  const demand: boolean[] = [];
+  const { positionState: reports, reportPosition } = makePlaybackStores((on) => demand.push(on));
+  const shown = makeExternalStore(false);
+  const active = makeExternalStore(true);
+  const timer = makeExternalStore<SleepTimer | null>(null);
+  const frames: PositionReport[] = [];
+  const stop = observePlayhead(
+    { reports, shown, active, timer },
+    {
+      report: (report) => frames.push(report),
+      live: () => {},
+      ticking: () => {},
+    },
+  );
+  assert.deepEqual(demand, []);
+  shown.set(true);
+  assert.deepEqual(demand, [true]);
+  active.set(false);
+  assert.deepEqual(demand, [true, false]);
+  reportPosition({ positionMs: 45_000, durationMs: 180_000, at: 50_000 });
+  active.set(true);
+  assert.equal(frames.at(-1)?.positionMs, 45_000);
+  assert.deepEqual(demand, [true, false, true]);
+  shown.set(false);
+  assert.deepEqual(demand, [true, false, true, false]);
+  stop();
+});

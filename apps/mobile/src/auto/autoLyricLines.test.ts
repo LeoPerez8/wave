@@ -148,3 +148,28 @@ describe("startAutoLyricLines", () => {
     assert.equal(shown.length, sent);
   });
 });
+
+test("car lyrics acquire position reports only with the toggle on in a connected car", () => {
+  const playback = makeExternalStore<AutoLyricLinesPlayback>(playing("a", 0));
+  const sync = startAutoLyricLines({
+    playback,
+    pathOf: () => null,
+    readLyrics: () => Promise.resolve({ kind: "none" }),
+    show: () => {},
+  });
+  assert.equal(playback.listenerCount(), 0);
+  sync.setToggle({ on: true, carConnected: false });
+  assert.equal(playback.listenerCount(), 0);
+  sync.setToggle({ on: true, carConnected: true });
+  assert.equal(playback.listenerCount(), 1);
+  sync.setToggle({ on: true, carConnected: true });
+  assert.equal(playback.listenerCount(), 1);
+  sync.setToggle({ on: false, carConnected: true });
+  assert.equal(playback.listenerCount(), 0);
+  sync.setToggle({ on: true, carConnected: true });
+  sync.setToggle({ on: true, carConnected: false });
+  assert.equal(playback.listenerCount(), 0);
+  sync.setToggle({ on: true, carConnected: true });
+  sync.stop();
+  assert.equal(playback.listenerCount(), 0);
+});

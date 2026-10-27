@@ -5,7 +5,7 @@ import { makeMutable, useFrameCallback } from "react-native-reanimated";
 import { scheduleOnUI } from "react-native-worklets";
 
 import { makeExternalStore } from "@/lib/externalStore";
-import { playbackState, sleepTimerState } from "@/playback/Player";
+import { positionState, sleepTimerState } from "@/playback/Player";
 import { observePlayhead } from "./playheadSource";
 import { isNowPlayingShown, onNowPlayingShownChange } from "./sheet";
 
@@ -59,7 +59,7 @@ export const usePlayheadSource = (): void => {
     () =>
       observePlayhead(
         {
-          reports: playbackState,
+          reports: positionState,
           timer: sleepTimerState,
           shown: { get: isNowPlayingShown, subscribe: onNowPlayingShownChange },
           active: {
