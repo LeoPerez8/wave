@@ -293,7 +293,7 @@ export const layer = Layer.effect(
     let settleTimer: ReturnType<typeof setTimeout> | null = null;
 
     // The queue as last saved, which the next save writes only the changed parts of.
-    let saved: QueuePersistenceState | null = null;
+    let lastSaved: QueuePersistenceState | null = null;
     let savedSource: PlaySource | null = null;
 
     /** Saves the parts of the queue that changed, for the player and the library (`settledQueue`). */
@@ -301,8 +301,8 @@ export const layer = Layer.effect(
       if (settleTimer !== null) clearTimeout(settleTimer);
       settleTimer = null;
       const next = { state: queueState.get(), positionMs: currentPositionMs() };
-      const write = queueWrite(saved, next);
-      saved = next;
+      const write = queueWrite(lastSaved, next);
+      lastSaved = next;
       const source = queueSource.get();
       const forPlayer =
         write.queue !== undefined || write.metadata !== undefined || write.index !== undefined;
