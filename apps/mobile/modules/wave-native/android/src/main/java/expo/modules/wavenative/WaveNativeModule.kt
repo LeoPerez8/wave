@@ -44,7 +44,8 @@ import expo.modules.wavenative.launcher.LauncherIconSwitcher
 import expo.modules.wavenative.launch.LaunchTheme
 import expo.modules.wavenative.launch.LaunchThemeStore
 import expo.modules.wavenative.lyrics.LyricsReader
-import expo.modules.wavenative.net.Connectivity
+import expo.modules.wavenative.net.AndroidConnectivity
+import expo.modules.wavenative.net.ConnectivityState
 import expo.modules.wavenative.playlists.AndroidPlaylistImages
 import expo.modules.wavenative.playlists.PlaylistFiles
 import expo.modules.wavenative.playlists.PlaylistImageStore
@@ -101,6 +102,7 @@ class WaveNativeModule : Module() {
   private val lyricsReader by lazy {
     LyricsReader(AudioTagReader(primary = JAudioTaggerReader(), fallback = MediaRetrieverTagReader()))
   }
+  private var stopConnectivity: (() -> Unit)? = null
   /** Only touched on the main thread, where the pickers start and their results arrive. */
   private var pendingFolderPick: Promise? = null
   private var pendingPlaylistPick: Promise? = null
@@ -119,10 +121,17 @@ class WaveNativeModule : Module() {
       "onScanComplete",
       "onScanError",
       "onShareReceived",
+      "onConnectivityChanged",
     )
 
     // A share can arrive before JS listens: it stays in the inbox until `takeSharedText`.
-    OnCreate { SharedTextInbox.onReceived = { sendEvent("onShareReceived") } }
+    OnCreate {
+      SharedTextInbox.onReceived = { sendEvent("onShareReceived") }
+      // JS keeps its own copy of the cache (`connectivityStore`), pushed on each change.
+      stopConnectivity = appContext.reactContext?.let { react ->
+        AndroidConnectivity.cache(react).listen { sendEvent("onConnectivityChanged", connectivityToMap(it)) }
+      }
+    }
 
     Function("hasAllFilesAccess") { Environment.isExternalStorageManager() }
 
@@ -143,11 +152,12 @@ class WaveNativeModule : Module() {
       }
     }
 
-    /** Whether the phone is on mobile data rather than Wi-Fi (a quality replacement's card says so). */
-    Function("onMobileData") { Connectivity(context).onMobileData() }
-
-    /** Whether the phone is online: Android checked its default network reaches the internet. */
-    Function("online") { Connectivity(context).online() }
+    /**
+     * Whether the phone is online (Android checked its default network reaches the internet) and
+     * on mobile data rather than Wi-Fi: the cached answer, read once by JS, which then follows
+     * `onConnectivityChanged`.
+     */
+    Function("connectivity") { connectivityToMap(AndroidConnectivity.cache(context).current) }
 
     Function("getDefaultMusicFolder") {
       @Suppress("DEPRECATION")
@@ -457,6 +467,8 @@ class WaveNativeModule : Module() {
 
     OnDestroy {
       SharedTextInbox.onReceived = null
+      stopConnectivity?.invoke()
+      stopConnectivity = null
       currentScan?.second?.set(true)
       scanExecutor.shutdownNow()
       launcherIconSwitcher?.let { switcher ->
@@ -678,6 +690,9 @@ class WaveNativeModule : Module() {
       if (currentScan?.first == id) currentScan = null
     }
   }
+
+  private fun connectivityToMap(state: ConnectivityState) =
+    mapOf("online" to state.online, "onMobileData" to state.onMobileData)
 
   private companion object {
     const val PICK_FOLDER_REQUEST = 0x5741
