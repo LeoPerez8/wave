@@ -416,6 +416,9 @@ const rowType = (row: QueueRow): QueueRow["kind"] => row.kind;
 const rowSize = (row: QueueRow): number =>
   row.kind === "historyHead" ? SECTION_HEAD : row.kind === "bar" ? BAR : ROW;
 
+/** The Queue list's height when it was last laid out, 0 before it ever was. */
+let lastListHeight = 0;
+
 /** The sticky bar's offset in the list: below History and its heading, when there's any. */
 const barOffset = (history: number): number => (history === 0 ? 0 : SECTION_HEAD + history * ROW);
 
@@ -490,7 +493,10 @@ export function UpNextList({
   const sticky = useMemo(() => [barIndex], [barIndex]);
   const start = barOffset(history.length);
   // Up Next's start can reach the top however short it is: History stays out of sight.
-  const [listHeight, setListHeight] = useState(0);
+  // The height renders the footer's room (the drag reads it on the UI thread,
+  // `height`); a first showing starts from the last one measured, so it opens
+  // with the room already there.
+  const [listHeight, setListHeight] = useState(lastListHeight);
   const endSpace = upNextEndSpace(listHeight, {
     bar: BAR,
     row: ROW,
@@ -603,6 +609,7 @@ export function UpNextList({
         if (measured > 0) {
           height.set(measured);
           setListHeight(measured);
+          lastListHeight = measured;
         }
       }}
     >

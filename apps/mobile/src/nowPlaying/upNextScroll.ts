@@ -54,5 +54,5 @@ export function upNextScroll<Context>() {
  */
 export const upNextEndSpace = (
   listHeight: number,
-  sizes: { bar: number; row: number; count: number; bottomInset: number },
-): number => Math.max(0, listHeight - sizes.bar - sizes.count * sizes.row - sizes.bottomInset);
+  layout: { bar: number; row: number; count: number; bottomInset: number },
+): number => Math.max(0, listHeight - layout.bar - layout.count * layout.row - layout.bottomInset);
