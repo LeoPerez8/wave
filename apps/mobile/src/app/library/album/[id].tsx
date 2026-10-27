@@ -1,8 +1,7 @@
 import { useScreenContent } from "@/lib/screenTiming";
-import { LegendList } from "@legendapp/list/react-native";
+
 import {
   artistLink,
-  discoverTrackId,
   ytAlbumSongCount,
   ytTrackId,
   type MixedSong,
@@ -15,25 +14,35 @@ import { useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useMemo } from "react";
 import { Text, useWindowDimensions, View } from "react-native";
 
+import { artworkUri } from "@/catalog/artworkUri";
 import { Artwork } from "@/catalog/Artwork";
-import { CatalogLine } from "@/catalog/CatalogLine";
+
 import { CELL, grid } from "@/catalog/grid";
 import { PlayShuffle, type LineToggle } from "@/catalog/PlayShuffle";
 import { TrackSkeletons } from "@/catalog/Skeletons";
-import { SwipeTrackRow } from "@/library/SwipeTrackRow";
-import { useChromeInset } from "@/chrome/chrome";
+
 import { Press } from "@/motion/Press";
 import { playPage, playSongs } from "@/playback/actions";
-import { useCurrentPlayingIds, usePlayPage } from "@/playback/hooks";
-import { openTrackActions } from "@/playback/ActionsMenu";
+
 import { followArtistLink } from "@/library/ArtistChoice";
 import { DetailFrame } from "@/library/DetailFrame";
-import { useFavoriteIds } from "@/library/favorites";
+
 import { useAlbum, useLinkRows } from "@/library/hooks";
 import type { AlbumRow, AlbumTrackRow, SongRow } from "@/library/LibraryStore";
 import { parseId, useKnownRow, useOpenedIntegrated } from "@/library/routes";
-import { songCount, toTrackSummary } from "@/library/TrackList";
+import { songCount } from "@/library/TrackList";
 import { useVisitState } from "@/lib/useVisitState";
+import { usePlayPage } from "@/playback/hooks";
+import { useChromeInset } from "@/chrome/chrome";
+import { SongList } from "@/songs/SongList";
+import { librarySongEntry, type SongListEntry } from "@/songs/songListSources";
+import {
+  mixedSongEntry,
+  openMixedSongActions,
+  runMixedSongSwipe,
+  songSelection,
+  type ListedSong,
+} from "@/songs/mixedSongs";
 import { useListScrollable } from "@/motion/heldTouch";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 import {
@@ -42,14 +51,12 @@ import {
   tracksTarget,
   type TrackItem,
 } from "@/playback/actionTargets";
-import { selectableRow } from "@/selection/selectableRow";
-import { useListSelection, type ListSelection } from "@/selection/useListSelection";
+
+import { useListSelection } from "@/selection/useListSelection";
 import { albumJoinedItems } from "@/ytmusic/albumOpening";
 import { useYtAlbumSection } from "@/ytmusic/albumSection";
 import { YtLookupFooter } from "@/ytmusic/YtLookupFooter";
 import { listDownloadAction, useYtAlbumDownloadButton } from "@/ytmusic/YtSongList";
-import { SwipeYtSongRow } from "@/ytmusic/YtSongRow";
-import { openYtSongActions } from "@/ytmusic/YtSongActions";
 
 type Entry = YtAlbumEntry<NativeYtSong, SongRow>;
 
@@ -58,8 +65,6 @@ type Item =
   | { readonly type: "track"; readonly track: AlbumTrackRow; readonly index: number }
   /** With YouTube Music's songs joined in: a Library song or a streamed one, in the release's order. */
   | { readonly type: "entry"; readonly entry: Entry; readonly index: number };
-
-const DISC_HEAD = CELL * 6;
 
 /** Tracks in album order, with a "Disc n" head before each disc when there is more than one. */
 const albumItems = (tracks: readonly AlbumTrackRow[]): Item[] => {
@@ -84,6 +89,14 @@ interface Shown {
 }
 
 const NO_TRACKS: readonly AlbumTrackRow[] = [];
+
+/** A track or a joined entry as the mixed song it is; a disc head is none. */
+const listedOf = (item: Item): ListedSong | null =>
+  item.type === "disc"
+    ? null
+    : item.type === "track"
+      ? { source: "library", track: item.track }
+      : item.entry;
 const NO_SONGS: readonly NativeYtSong[] = [];
 
 const itemKey = (item: Item): string => {
@@ -165,10 +178,7 @@ function AlbumHead({
     .join(" · ");
   return (
     <View style={{ gap: CELL * 2, paddingBottom: CELL }}>
-      <Artwork
-        uri={album.artworkPath === null ? undefined : `file://${album.artworkPath}`}
-        size={width - grid.margin * 2}
-      />
+      <Artwork uri={artworkUri(album, "original")} size={width - grid.margin * 2} />
       <View style={{ gap: CELL / 2 }}>
         <Text
           accessibilityRole="header"
@@ -212,48 +222,6 @@ function AlbumHead({
   );
 }
 
-/**
- * A row of the album with YouTube Music's songs joined in: a Library song,
- * marked downloaded, or a streamed one with the YT Music song's menu.
- */
-function EntryRow({
-  entry,
-  playing,
-  favorite,
-  listSelection,
-  onPress,
-}: {
-  entry: Entry;
-  playing: boolean;
-  favorite: boolean;
-  listSelection: ListSelection<TrackItem>;
-  onPress: () => void;
-}) {
-  if (entry.source === "stream")
-    return (
-      <SwipeYtSongRow
-        song={entry.song}
-        trackNumber={entry.number}
-        playing={playing}
-        {...selectableRow({ ytSong: entry.song }, listSelection, onPress, (options) =>
-          openYtSongActions(entry.song, options),
-        )}
-      />
-    );
-  return (
-    <SwipeTrackRow
-      song={entry.track}
-      track={{ ...toTrackSummary(entry.track), trackNumber: entry.number ?? undefined }}
-      state={playing ? "playing" : undefined}
-      favorite={favorite}
-      leading="number"
-      {...selectableRow({ song: entry.track }, listSelection, onPress, (options) =>
-        openTrackActions(entry.track, options),
-      )}
-    />
-  );
-}
-
 function AlbumTracks({ shown, openedIntegrated }: { shown: Shown; openedIntegrated: boolean }) {
   const tracks = shown.tracks ?? NO_TRACKS;
   // The album goes by its first album artist's YouTube Music answer.
@@ -290,8 +258,6 @@ function AlbumTracks({ shown, openedIntegrated }: { shown: Shown; openedIntegrat
   const mixed = useMemo(() => (entries === null ? null : mixedSongs(entries)), [entries]);
   const scrollable = useListScrollable();
   const bottomInset = useChromeInset();
-  const currentIds = useCurrentPlayingIds();
-  const favorites = useFavoriteIds();
   // Selection keys the tracks themselves (every disc), not the disc heads.
   const selectable = useMemo(
     (): TrackItem[] =>
@@ -303,10 +269,6 @@ function AlbumTracks({ shown, openedIntegrated }: { shown: Shown; openedIntegrat
     keyOf: trackItemKey,
     target: tracksTarget,
   });
-  const rowState = useMemo(
-    () => ({ currentIds, favorites, selection: listSelection.selection }),
-    [currentIds, favorites, listSelection.selection],
-  );
   const items = useMemo<readonly Item[]>(
     () =>
       entries === null ? albumItems(tracks) : albumJoinedItems(layoutTracks ?? tracks, entries),
@@ -317,63 +279,47 @@ function AlbumTracks({ shown, openedIntegrated }: { shown: Shown; openedIntegrat
     [shown.album.id],
   );
 
-  const renderItem = useCallback(
-    ({ item }: { item: Item }) => {
-      switch (item.type) {
-        case "disc":
-          return (
-            <View className="justify-end" style={{ height: DISC_HEAD, paddingBottom: CELL }}>
-              <CatalogLine>{`Disc ${item.disc}`}</CatalogLine>
-            </View>
-          );
-        case "entry": {
-          const song = mixed?.[item.index];
-          return (
-            <EntryRow
-              entry={item.entry}
-              playing={song !== undefined && currentIds.has(discoverTrackId(song))}
-              favorite={item.entry.source === "library" && favorites.has(item.entry.track.id)}
-              listSelection={listSelection}
-              onPress={() => mixed !== null && void playPage(mixed, item.index, context)}
-            />
-          );
-        }
-        case "track":
-          return (
-            <SwipeTrackRow
-              song={item.track}
-              track={{
-                ...toTrackSummary(item.track),
-                trackNumber: item.track.trackNumber ?? undefined,
-              }}
-              state={currentIds.has(String(item.track.id)) ? "playing" : undefined}
-              favorite={favorites.has(item.track.id)}
-              leading="number"
-              {...selectableRow(
-                { song: item.track },
-                listSelection,
-                () => playSongs(tracks, item.index, context),
-                (options) => openTrackActions(item.track, options),
-              )}
-            />
-          );
-      }
-    },
-    [context, currentIds, tracks, favorites, listSelection, mixed],
+  const source = useCallback((item: Item): SongListEntry => {
+    if (item.type === "disc")
+      return { source: { kind: "discHeader", key: itemKey(item), label: `Disc ${item.disc}` } };
+    if (item.type === "track")
+      return librarySongEntry(item.track, {
+        leading: { kind: "trackNumber", number: item.track.trackNumber ?? undefined },
+      });
+    return mixedSongEntry(item.entry, {
+      leading: { kind: "trackNumber", number: item.entry.number ?? undefined },
+    });
+  }, []);
+  const rowSelection = useMemo(
+    () =>
+      songSelection(listSelection, (item: Item) => {
+        const song = listedOf(item);
+        return song === null ? null : listedTrackItem(song);
+      }),
+    [listSelection],
   );
 
   return (
-    <LegendList
+    <SongList
       scrollEnabled={scrollable}
       className="flex-1"
       data={items}
       keyExtractor={itemKey}
-      renderItem={renderItem}
-      extraData={rowState}
-      getItemType={(item) => item.type}
-      getFixedItemSize={(item) => (item.type === "disc" ? DISC_HEAD : grid.row)}
-      estimatedItemSize={grid.row}
-      recycleItems
+      song={source}
+      context={context}
+      selection={rowSelection}
+      onPlay={(item) => {
+        if (item.type === "track") playSongs(tracks, item.index, context);
+        else if (item.type === "entry" && mixed !== null) void playPage(mixed, item.index, context);
+      }}
+      onMenu={(item, options) => {
+        const song = listedOf(item);
+        if (song !== null) openMixedSongActions(song, options);
+      }}
+      onSongSwipe={(item, shown) => {
+        const song = listedOf(item);
+        if (song !== null) runMixedSongSwipe(song, shown);
+      }}
       contentContainerStyle={{ paddingHorizontal: grid.margin, paddingBottom: bottomInset }}
       ListHeaderComponent={
         <AlbumHead

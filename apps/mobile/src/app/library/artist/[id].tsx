@@ -1,5 +1,5 @@
 import { useScreenContent } from "@/lib/screenTiming";
-import { LegendList } from "@legendapp/list/react-native";
+
 import {
   artistPageItems,
   artistSongOrder,
@@ -23,11 +23,11 @@ import {
   SkeletonGroup,
   TrackSkeletons,
 } from "@/catalog/Skeletons";
-import { SwipeTrackRow } from "@/library/SwipeTrackRow";
+
 import { useChromeInset } from "@/chrome/chrome";
 import { playPage } from "@/playback/actions";
-import { useCurrentPlayingIds } from "@/playback/hooks";
-import { openAlbumActions, openTrackActions } from "@/playback/ActionsMenu";
+
+import { openAlbumActions } from "@/playback/ActionsMenu";
 import { mixedTarget, type MixedItem } from "@/playback/actionTargets";
 import {
   albumItem,
@@ -39,13 +39,16 @@ import {
 import { albumSelectionOf, ytAlbumSelectionOf } from "@/selection/mixedSelection";
 import { toAlbumSummary } from "@/library/AlbumGrid";
 import { DetailFrame } from "@/library/DetailFrame";
-import { useFavoriteIds } from "@/library/favorites";
+
 import { useArtist } from "@/library/hooks";
 import type { AlbumRow, ArtistDetail, ArtistRow, SongRow } from "@/library/LibraryStore";
 import { openAlbum, parseId, useKnownRow, useOpenedIntegrated } from "@/library/routes";
 import { SongSortButton } from "@/library/SongSortButton";
 import { useSortedSongs } from "@/library/songSort";
-import { ListIntro, songCount, toTrackSummary } from "@/library/TrackList";
+import { ListIntro, songCount } from "@/library/TrackList";
+import { SongList } from "@/songs/SongList";
+import type { SongListEntry } from "@/songs/songListSources";
+import { mixedSongEntry, mixedPageSongHandlers, songSelection } from "@/songs/mixedSongs";
 import { useListScrollable } from "@/motion/heldTouch";
 import { selectableRow } from "@/selection/selectableRow";
 import { useListSelection, type ListSelection } from "@/selection/useListSelection";
@@ -55,8 +58,6 @@ import { useArtistSongsFinder, useYtArtistSection } from "@/ytmusic/artistSectio
 import { useHeldSongs, useSongsInPlace } from "@/ytmusic/songsInPlace";
 import { YT_ARTIST_NOTE, YtReleaseCard } from "@/ytmusic/YtArtistSection";
 import { YtLookupFooter } from "@/ytmusic/YtLookupFooter";
-import { SwipeYtSongRow } from "@/ytmusic/YtSongRow";
-import { openYtSongActions } from "@/ytmusic/YtSongActions";
 
 /** A cover on one of the page's album shelves: a Library album, or a release only YouTube Music has. */
 type AlbumCell =
@@ -148,7 +149,7 @@ const itemKey = (item: Item): string => {
       return `shelf-${item.label}`;
     case "song":
       return item.song.source === "library"
-        ? `track-${item.song.track.id}`
+        ? String(item.song.track.id)
         : ytTrackId(item.song.song.videoId);
   }
 };
@@ -274,6 +275,13 @@ const unread = (artist: ArtistRow): ArtistDetail => ({
   songs: [],
 });
 
+const selectedSong = (item: Item): MixedItem | null =>
+  item.type !== "song"
+    ? null
+    : item.song.source === "library"
+      ? trackItem(item.song.track)
+      : ytTrackItem(item.song.song);
+
 function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegrated: boolean }) {
   const loaded = shown.detail !== undefined;
   const detail = useMemo(() => shown.detail ?? unread(shown.artist), [shown.detail, shown.artist]);
@@ -281,8 +289,6 @@ function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegr
   const { fontScale } = useWindowDimensions();
   const shelfHeight = shelfRowHeight(fontScale);
   const bottomInset = useChromeInset();
-  const currentIds = useCurrentPlayingIds();
-  const favorites = useFavoriteIds();
   // The releases among these the Library has aren't YouTube Music's to add.
   const libraryAlbums = useMemo(
     () => [...detail.albums, ...detail.appearsOn],
@@ -355,89 +361,45 @@ function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegr
   const page = useListSelection({ items: selectable, keyOf: mixedItemKey, target: mixedTarget });
   const albumSelection = useMemo(() => albumSelectionOf(page), [page]);
   const releaseSelection = useMemo(() => ytAlbumSelectionOf(page), [page]);
-  const { selection } = page;
-  const rowState = useMemo(
-    () => ({ currentIds, favorites, selection, integrated }),
-    [currentIds, favorites, selection, integrated],
-  );
+  const rowSelection = useMemo(() => songSelection(page, selectedSong), [page]);
   const context = useMemo(
     () => ({ kind: "artist", id: String(detail.artist.id) }) as const,
     [detail.artist.id],
   );
 
-  const renderItem = useCallback(
-    ({ item }: { item: Item }) => {
-      switch (item.type) {
-        case "section":
-          return <SectionHead label={item.label} />;
-        case "shelf":
-          // Keyed by shelf, so a recycled row doesn't keep another shelf's scroll position.
-          return (
-            <AlbumShelfRow
-              key={item.label}
-              cells={item.covers}
-              selection={albumSelection}
-              releases={releaseSelection}
-              integrated={integrated}
-              height={shelfHeight}
-            />
-          );
-        // A song reads as a song card's row: its cover with the play disc, then "Song · <artist>".
-        case "song": {
-          if (item.song.source === "stream") {
-            const song = item.song.song;
-            return (
-              <SwipeYtSongRow
-                song={song}
-                playing={currentIds.has(ytTrackId(song.videoId))}
-                kind="Song · "
-                playDisc
-                popularRank={item.song.popularRank}
-                {...selectableRow(
-                  ytTrackItem(song),
-                  page,
-                  () => void playPage(pageSongs, item.index, context),
-                  (options) => openYtSongActions(song, options),
-                )}
-              />
-            );
-          }
-          const song = item.song.track;
-          const card = { ...toTrackSummary(song), artist: `Song · ${song.artist}` };
-          // Under Popular the rank leads the row in place of the artwork, numbered as a ranking
-          // is; a song the list doesn't hold leads with nothing.
-          return (
-            <SwipeTrackRow
-              song={song}
-              track={byPopularity ? { ...card, trackNumber: item.song.popularRank } : card}
-              state={currentIds.has(String(song.id)) ? "playing" : undefined}
-              favorite={favorites.has(song.id)}
-              leading={byPopularity ? "number" : "artwork"}
-              playDisc
-              topNumber={item.song.popularRank === 1}
-              {...selectableRow(
-                trackItem(song),
-                page,
-                () => void playPage(pageSongs, item.index, context),
-                (options) => openTrackActions(song, options),
-              )}
-            />
-          );
-        }
-      }
+  const source = useCallback(
+    (item: Item): SongListEntry | null => {
+      if (item.type !== "song") return null;
+      const rank = item.song.popularRank;
+      const leading =
+        byPopularity && item.song.source === "library"
+          ? rank === undefined
+            ? { kind: "trackNumber" as const }
+            : { kind: "rank" as const, number: rank }
+          : rank === undefined
+            ? { kind: "playDisc" as const }
+            : { kind: "rank" as const, number: rank };
+      return mixedSongEntry(item.song, { leading, kindLine: true });
     },
-    [
-      context,
-      currentIds,
-      favorites,
-      pageSongs,
-      albumSelection,
-      releaseSelection,
-      page,
-      integrated,
-      byPopularity,
-      shelfHeight,
-    ],
+    [byPopularity],
+  );
+  const renderSlot = useCallback(
+    ({ item }: { item: Item }) => {
+      if (item.type === "section") return <SectionHead label={item.label} />;
+      if (item.type === "shelf")
+        return (
+          <AlbumShelfRow
+            key={item.label}
+            cells={item.covers}
+            selection={albumSelection}
+            releases={releaseSelection}
+            integrated={integrated}
+            height={shelfHeight}
+          />
+        );
+      return null;
+    },
+    [albumSelection, releaseSelection, integrated, shelfHeight],
   );
 
   // With Online and an answer found, the counts take in what YouTube Music adds to the page.
@@ -451,19 +413,22 @@ function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegr
     .join(" · ");
 
   return (
-    <LegendList
+    <SongList
       scrollEnabled={scrollable}
       className="flex-1"
       data={items}
       keyExtractor={itemKey}
-      renderItem={renderItem}
-      extraData={rowState}
-      getItemType={(item) => (item.type === "song" ? `${item.song.source}-song` : item.type)}
-      getFixedItemSize={(item) =>
-        item.type === "section" ? SECTION_HEAD : item.type === "shelf" ? shelfHeight : grid.row
-      }
-      estimatedItemSize={grid.row}
-      recycleItems
+      song={source}
+      context={context}
+      renderSlot={renderSlot}
+      slotType={(item) => item.type}
+      slotSize={(item) => (item.type === "section" ? SECTION_HEAD : shelfHeight)}
+      extraData={{ albumSelection, releaseSelection, integrated, shelfHeight }}
+      selection={rowSelection}
+      onPlay={(item) => {
+        if (item.type === "song") void playPage(pageSongs, item.index, context);
+      }}
+      {...mixedPageSongHandlers}
       contentContainerStyle={{ paddingHorizontal: grid.margin, paddingBottom: bottomInset }}
       ListHeaderComponent={
         <>

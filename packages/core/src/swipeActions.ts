@@ -7,8 +7,13 @@
  * inert: the row doesn't move that way. How a swipe ends is `resolveRowSwipe`.
  */
 
-import { isDestructiveAction, ITEM_ACTION_LABELS, type ItemAction } from "./itemActions.ts";
-import type { UnavailableEntryAction } from "./playlistEntries.ts";
+import {
+  actionBarLabel,
+  isDestructiveAction,
+  ITEM_ACTION_LABELS,
+  type ItemAction,
+} from "./itemActions.ts";
+import { UNAVAILABLE_ENTRY_ACTION_LABELS, type UnavailableEntryAction } from "./playlistEntries.ts";
 import { readStoredRecord } from "./storedJson.ts";
 
 /** An entry of a song row's long-press menu: the Library's, a YT Music song's, an unavailable entry's. */
@@ -21,6 +26,20 @@ export const swipeActionTone = (action: RowMenuAction): "accent" | "highlight" |
     return "destructive";
   return "accent";
 };
+
+/**
+ * What a swipe direction running [action] shows: the caption on the side it
+ * uncovers (its action bar caption) and what TalkBack reads (its full name).
+ */
+export const swipeActionLabels = (
+  action: RowMenuAction,
+): { readonly label: string; readonly accessibilityLabel: string } =>
+  action === "search"
+    ? {
+        label: UNAVAILABLE_ENTRY_ACTION_LABELS[action],
+        accessibilityLabel: UNAVAILABLE_ENTRY_ACTION_LABELS[action],
+      }
+    : { label: actionBarLabel(action), accessibilityLabel: ITEM_ACTION_LABELS[action] };
 
 /**
  * What a swipe direction can be set to run, in the order Settings › Swipe
@@ -141,3 +160,14 @@ export const rowSwipeActions = <A extends RowMenuAction>(
  */
 export const swipesChoose = (settings: SwipeSettings, choice: SwipeChoice): boolean =>
   settings.enabled && (settings.right === choice || settings.left === choice);
+
+/**
+ * The entry a swipe runs from its row's menu as planned when the swipe runs
+ * ([entries]): the one whose action the row showed ([shown]), so a swipe
+ * never runs what its row didn't show. None when that entry has left the menu
+ * since the row was drawn (a fact it stood on changed): the swipe does nothing.
+ */
+export const shownSwipeEntry = <E extends { readonly action: RowMenuAction }>(
+  entries: readonly E[],
+  shown: RowMenuAction,
+): E | undefined => entries.find((entry) => entry.action === shown);

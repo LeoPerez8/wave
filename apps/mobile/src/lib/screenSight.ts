@@ -1,7 +1,13 @@
+import { parseTabScreens } from "@wave/core";
 import { useNavigation } from "expo-router";
 import { createContext, useContext, useMemo } from "react";
+import { AppState } from "react-native";
 
 import { isNowPlayingShown, onNowPlayingShownChange } from "@/nowPlaying/sheet";
+
+import { sightOf, useStoreInSight, type ScreenSight, type SightCondition } from "./sight";
+
+export type { ScreenSight } from "./sight";
 
 /**
  * True under `UnderNowPlaying` (the app's screens), which Now Playing covers
@@ -9,53 +15,62 @@ import { isNowPlayingShown, onNowPlayingShownChange } from "@/nowPlaying/sheet";
  */
 export const CoveredByNowPlaying = createContext(false);
 
-/**
- * Whether the screen a component is on is in sight: its route is focused (tabs
- * stay mounted; a pushed screen hides the one below) and, for the app's
- * screens, Now Playing isn't over it. Read and followed without rendering.
- */
-export interface ScreenSight {
-  readonly visible: () => boolean;
-  /** Calls [listener] each time the screen comes into or goes out of sight; returns how to stop. */
-  readonly subscribe: (listener: (visible: boolean) => void) => () => void;
-}
+/** The app in front: in the background (the screen off, another app) nothing is in sight. */
+const inFront = (state: string | null | undefined): boolean => state !== "background";
+const appInFront: SightCondition = {
+  holds: () => inFront(AppState.currentState),
+  subscribe: (listener) => {
+    const subscription = AppState.addEventListener("change", (state) => listener(inFront(state)));
+    return () => subscription.remove();
+  },
+};
+
+const notCovered: SightCondition = {
+  holds: () => !isNowPlayingShown(),
+  subscribe: (listener) => onNowPlayingShownChange((shown) => listener(!shown)),
+};
 
 /**
  * The calling component's `ScreenSight`, stable while it stays on the same
- * screen. Following it never re-renders the component: shared Library queries
- * pause and resume on it without touching React state.
+ * screen: in sight while its route is focused (tabs stay mounted; a pushed
+ * screen hides the one below), Now Playing isn't over it (for the app's
+ * screens) and the app isn't in the background. Following it never re-renders
+ * the component: shared Library queries pause and resume on it without
+ * touching React state.
  */
 export const useScreenSight = (): ScreenSight => {
   const navigation = useNavigation();
   const coverable = useContext(CoveredByNowPlaying);
   return useMemo(() => {
-    const covered = (): boolean => coverable && isNowPlayingShown();
-    return {
-      visible: () => navigation.isFocused() && !covered(),
+    const focused: SightCondition = {
+      holds: () => navigation.isFocused(),
       subscribe: (listener) => {
-        let focused = navigation.isFocused();
-        let last = focused && !covered();
-        const check = (): void => {
-          const now = focused && !covered();
-          if (now === last) return;
-          last = now;
-          listener(now);
-        };
         const stops = [
-          navigation.addListener("focus", () => {
-            focused = true;
-            check();
-          }),
-          navigation.addListener("blur", () => {
-            focused = false;
-            check();
-          }),
+          navigation.addListener("focus", () => listener(true)),
+          navigation.addListener("blur", () => listener(false)),
         ];
-        if (coverable) stops.push(onNowPlayingShownChange(check));
         return () => {
           for (const stop of stops) stop();
         };
       },
     };
+    return coverable ? sightOf(focused, notCovered, appInFront) : sightOf(focused, appInFront);
   }, [navigation, coverable]);
+};
+
+/** A bundle built with `EXPO_PUBLIC_WAVE_TABS=follow` keeps hidden screens following stores. */
+const FOLLOW_HIDDEN = parseTabScreens(process.env.EXPO_PUBLIC_WAVE_TABS).followHidden;
+
+/**
+ * An external store as the calling screen follows it (#722): while the screen
+ * is out of sight its changes render nothing, and it catches up once when the
+ * screen comes back. For what screens show (playing ids, stars, scan status);
+ * [subscribe] and [get] must be stable.
+ */
+export const useSightedStore = <A>(
+  subscribe: (onChange: () => void) => () => void,
+  get: () => A,
+): A => {
+  const sight = useScreenSight();
+  return useStoreInSight(FOLLOW_HIDDEN ? null : sight, subscribe, get);
 };

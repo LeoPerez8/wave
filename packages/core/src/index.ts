@@ -45,6 +45,20 @@ export { trackRowTrailing } from "./trackRowTrailing.ts";
 export type { TrackRowTrailingInput } from "./trackRowTrailing.ts";
 export { trackRowDownloaded } from "./trackRowDownloaded.ts";
 export type { TrackRowDownloadedInput } from "./trackRowDownloaded.ts";
+export { songRowTrackId, songRowView } from "./songRowView.ts";
+export { songRowSwipeDirections } from "./songRowSwipeDirections.ts";
+export type { SongRowSwipeFacts } from "./songRowSwipeDirections.ts";
+export type {
+  SongRowState,
+  SongRowLeading,
+  SongRowSource,
+  SongListRowSource,
+  SongRowRecycleType,
+  SongRowView,
+  SongRowFiles,
+  SongRowLibrarySong,
+  SongRowArtwork,
+} from "./songRowView.ts";
 export { lastListActionForm, listActionsForms } from "./listActions.ts";
 export type {
   ListActionForm,
@@ -124,8 +138,8 @@ export {
 export type { FramingSquare, FramingView, ImageFraming, ImageSize } from "./imageFraming.ts";
 export { elapsedWavePath } from "./elapsedWave.ts";
 export type { ElapsedWave } from "./elapsedWave.ts";
-export { contrastRatio, paletteGradient } from "./palette.ts";
-export type { ArtworkPalette, Gradient, GradientTheme } from "./palette.ts";
+export { contrastRatio, crossfadeGround, paletteGradient } from "./palette.ts";
+export type { ArtworkPalette, Gradient, GradientTheme, GroundLayers } from "./palette.ts";
 export { settleSheet } from "./sheet.ts";
 export type { SheetDrag, SheetState } from "./sheet.ts";
 export {
@@ -209,6 +223,7 @@ export {
   SLEEP_TIMER_PRESETS,
   formatSleepMinutes,
   formatSleepRemaining,
+  sleepTimerLabelSeconds,
   sleepTimerRemaining,
   startSleepTimer,
   stepSleepMinutes,
@@ -1235,6 +1250,7 @@ export {
   fillAnswered,
   fillPauseLine,
   nextFillStep,
+  indexFillPlaylists,
 } from "./backgroundFill.ts";
 export type {
   BackgroundFill,
@@ -1490,7 +1506,13 @@ export type { LibraryShelf } from "./libraryShelf.ts";
 export { NO_HELD_SONGS, heldTracks, inLibraryUnlessHeld, songsInPlace } from "./songsInPlace.ts";
 export type { HeldSongs, SongsInPlace } from "./songsInPlace.ts";
 
-export { PERF_FLUSH_QUIET_MS, PERF_LOG_TAG, createPerfRecorder, parsePerfLog } from "./perfLog.ts";
+export {
+  PERF_AWAY_PREFIX,
+  PERF_FLUSH_QUIET_MS,
+  PERF_LOG_TAG,
+  createPerfRecorder,
+  parsePerfLog,
+} from "./perfLog.ts";
 export type { PerfEntry, PerfFlush, PerfMeta, PerfRecorder, PerfTiming } from "./perfLog.ts";
 export { createPagedRows, PAGED_ROWS_LIMITS } from "./pagedRows.ts";
 export type { PagedRows, PagedRowsLimits, PagedRowsStats } from "./pagedRows.ts";
@@ -1999,7 +2021,9 @@ export {
   rowSwipeActions,
   storedSwipeSettings,
   swipeChoiceAction,
+  shownSwipeEntry,
   swipeChoiceLabel,
+  swipeActionLabels,
   swipeActionTone,
   swipesChoose,
 } from "./swipeActions.ts";
@@ -2108,3 +2132,22 @@ export {
   shuffleCardOpened,
   shuffleLineShows,
 } from "./shuffleCardLines.ts";
+export { fileUri } from "./fileUri.ts";
+
+export {
+  queuePersistence,
+  queueWrite,
+  savedQueueState,
+  type QueueParts,
+  type QueuePersistenceState,
+  type QueueWrite,
+  type SavedQueueParts,
+} from "./queuePersistence.ts";
+export {
+  FOREGROUND_SYNC_INTERVAL_MS,
+  PLAY_BATCH_DELAY_MS,
+  PLAY_BATCH_MAX_MS,
+  PUSH_DELAY_MS,
+  syncTriggers,
+} from "./syncTriggers.ts";
+export type { SyncClock, SyncTriggers, SyncTriggersInput } from "./syncTriggers.ts";

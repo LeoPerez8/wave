@@ -1,4 +1,4 @@
-import { libraryTrackIds, parseQueueState, restorableTrack, restorePlayback } from "@wave/core";
+import { libraryTrackIds, restorableTrack, restorePlayback, savedQueueState } from "@wave/core";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { AppState } from "react-native";
@@ -8,11 +8,9 @@ import { ytMusicEnabled } from "@/settings/ytMusic";
 
 import { playbackState } from "./Player";
 import { Queue, currentPositionMs, queueState, settledQueue, toQueueTrack } from "./Queue";
-import { learnUnknownQueueTracks } from "./queueTracks";
+import { observeQueueSaves } from "./queueSaves";
+import { learnUnknownQueueTracks, queueTracks, type QueueTrack } from "./queueTracks";
 import { savedYtQueueTracks, saveYtQueueTracks } from "./ytQueueTracks";
-
-/** How often the position is written while playing; it's also written on pause and on leaving the app. */
-const POSITION_SAVE_INTERVAL_MS = 5_000;
 
 /** Saving is best effort: a failed write must never disturb playback. */
 const run = (effect: Effect.Effect<void, unknown>): void => {
@@ -32,7 +30,7 @@ export const layer = Layer.effectDiscard(
     const restore = Effect.gen(function* () {
       const saved = yield* store.loadPlayback;
       if (saved === null) return;
-      const state = parseQueueState(yield* Effect.try(() => JSON.parse(saved.queue) as unknown));
+      const state = savedQueueState(saved.parts);
       if (state === null) return;
       const songs = yield* store.songsByIds(
         libraryTrackIds(state.entries.map((entry) => entry.trackId)),
@@ -55,74 +53,53 @@ export const layer = Layer.effectDiscard(
       );
     });
 
-    let saving = false;
-    let lastPositionSave = 0;
+    let savedTracks: ReadonlyMap<string, QueueTrack> | null = null;
 
-    const savePosition = (): void => {
-      lastPositionSave = Date.now();
-      run(store.savePosition(currentPositionMs()));
-    };
-
-    let wasPlaying = false;
-
-    yield* Effect.acquireRelease(
-      Effect.sync(() => [
+    const saves = yield* Effect.acquireRelease(
+      Effect.sync(() => {
+        const saves = observeQueueSaves({
+          playback: playbackState,
+          settled: settledQueue,
+          positionMs: currentPositionMs,
+          saveQueue: (write) => {
+            // Its YT Music songs aren't in the Library: their details go with it, when
+            // its entries or their details (a cover cached later) changed.
+            const tracks = queueTracks.get();
+            if (write.queue !== undefined || tracks !== savedTracks) {
+              savedTracks = tracks;
+              run(Effect.sync(() => saveYtQueueTracks(queueState.get().entries)));
+            }
+            run(store.saveQueue(write));
+          },
+          savePosition: (positionMs) => run(store.savePosition(positionMs)),
+        });
         // A queue picked back up from the player comes without its tracks:
         // read them as soon as it's there, before Up Next is opened.
-        queueState.subscribe(() => {
+        const stopLearning = queueState.subscribe(() => {
           Effect.runFork(
             learnUnknownQueueTracks(queueState.get().entries, store.songsByIds, savedYtQueueTracks),
           );
-        }),
-        // `Queue` serialises the queue once changes settle (skips, reorders come in bursts).
-        settledQueue.subscribe(() => {
-          const json = settledQueue.get();
-          if (!saving || json === null) return;
-          lastPositionSave = Date.now();
-          // Its YT Music songs aren't in the Library: their details go with it.
-          run(Effect.sync(() => saveYtQueueTracks(queueState.get().entries)));
-          run(store.saveQueue(json, currentPositionMs()));
-        }),
-        playbackState.subscribe(() => {
-          if (!saving) return;
-          const { isPlaying } = playbackState.get();
-          const paused = wasPlaying && !isPlaying;
-          wasPlaying = isPlaying;
-          // Track changes reach the queue, whose save carries the position too.
-          if (paused || (isPlaying && Date.now() - lastPositionSave >= POSITION_SAVE_INTERVAL_MS)) {
-            savePosition();
-          }
-        }),
-        (() => {
-          const subscription = AppState.addEventListener("change", (next) => {
-            if (!saving || next === "active") return;
-            Effect.runSync(queue.flush);
-            savePosition();
-          });
-          return () => subscription.remove();
-        })(),
-      ]),
-      (unsubscribes) =>
-        queue.flush.pipe(
-          Effect.andThen(
-            Effect.sync(() => {
-              for (const unsubscribe of unsubscribes) unsubscribe();
-            }),
-          ),
-        ),
-    );
+        });
+        const leaving = AppState.addEventListener("change", (next) => {
+          if (next === "active") return;
+          Effect.runSync(queue.flush);
+          saves.savePositionNow();
+        });
+        return {
+          saves,
+          stop: () => {
+            saves.stop();
+            stopLearning();
+            leaving.remove();
+          },
+        };
+      }),
+      ({ stop }) => queue.flush.pipe(Effect.andThen(Effect.sync(stop))),
+    ).pipe(Effect.map(({ saves }) => saves));
 
     // Saving starts after the restore so an empty queue at startup can't overwrite the saved one.
     yield* Effect.forkScoped(
-      restore.pipe(
-        Effect.ignore,
-        Effect.ensuring(
-          Effect.sync(() => {
-            saving = true;
-            wasPlaying = playbackState.get().isPlaying;
-          }),
-        ),
-      ),
+      restore.pipe(Effect.ignore, Effect.ensuring(Effect.sync(saves.start))),
     );
   }),
 );

@@ -28,7 +28,7 @@ import {
   type YtLibraryRow,
 } from "@wave/core";
 import * as Result from "effect/Result";
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -52,48 +52,16 @@ import { CheckCell } from "@/catalog/CheckCell";
 import { CELL, grid } from "@/catalog/grid";
 import { Hairline } from "@/catalog/Hairline";
 import { TextButton } from "@/components/TextButton";
-import { makeExternalStore } from "@/lib/externalStore";
 import { Press } from "@/motion/Press";
 import { showError } from "@/overlay/alert";
-import { signInToSpotify, spotifySignedIn } from "@/settings/spotifyAccount";
-import { signInToYtMusic, ytMusicSignedIn } from "@/settings/ytAccount";
+import { signInToSpotify } from "@/settings/spotifyAccount";
+import { signInToYtMusic } from "@/settings/ytAccount";
 import { askSpotifyAccount } from "@/spotify/askSpotify";
 import { useThemeColor } from "@/theme/useThemeColor";
 import { askYtMusic } from "@/ytmusic/askYtMusic";
 
+import type { LibraryService } from "./YtLibraryPickerHost";
 import { currentYtLibraryOrigins, importYtLibrary } from "./ytLibraryImport";
-
-// ---------------------------------------------------------------------------
-// Entry
-
-/** Whose library a picker lists. */
-type LibraryService = "ytMusic" | "spotify";
-
-/** The picker that is up, if any (`YtLibraryPickerHost` draws it). */
-const shown = makeExternalStore<LibraryService | null>(null);
-
-/**
- * From YT Music: the picker, once signed in. Signed out (or the session
- * expired), the sign-in opens first; leaving it opens nothing.
- */
-export const openYtLibraryImport = async (): Promise<void> => {
-  if ((await ytMusicSignedIn()) || (await signInToYtMusic())) shown.set("ytMusic");
-};
-
-/**
- * From Spotify: the picker, once signed in to Spotify. Signed out (or the
- * session expired), Spotify's sign-in opens first; leaving it opens nothing.
- */
-export const openSpotifyLibraryImport = async (): Promise<void> => {
-  if ((await spotifySignedIn()) || (await signInToSpotify())) shown.set("spotify");
-};
-
-/** Draws the picker while it's up; mounted once at the root. */
-export function YtLibraryPickerHost() {
-  const open = useSyncExternalStore(shown.subscribe, shown.get);
-  const close = useCallback(() => shown.set(null), []);
-  return open === null ? null : <PickerSheet key={open} service={open} onClosed={close} />;
-}
 
 // ---------------------------------------------------------------------------
 // Reading the library
@@ -163,7 +131,14 @@ const COVER = CELL * 6;
  * The picker: rises from the bottom as it opens, reads the library (again on
  * Try Again), and goes back down on Cancel, Back, a drag down or Import.
  */
-function PickerSheet({ service, onClosed }: { service: LibraryService; onClosed: () => void }) {
+/** The picker sheet for [service]'s library (`YtLibraryPickerHost` mounts it while it's up). */
+export function PickerSheet({
+  service,
+  onClosed,
+}: {
+  service: LibraryService;
+  onClosed: () => void;
+}) {
   const config = SERVICES[service];
   const { height } = useWindowDimensions();
   const insets = useSafeAreaInsets();

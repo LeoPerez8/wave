@@ -280,6 +280,32 @@ export const parseWmSize = (text: string): { width: number; height: number } | n
 export const parseDensity = (text: string): number | null =>
   number(text, /^Override density: (\d+)/m) ?? number(text, /^Physical density: (\d+)/m);
 
+/** One of the app's threads: its name (`comm`) and its voluntary context switches so far. */
+export interface ThreadSwitches {
+  readonly name: string;
+  readonly switches: number;
+}
+
+/**
+ * Each of the app's threads by id, from `threadSwitchesCommand`'s lines
+ * (`<tid> <voluntary_ctxt_switches> <comm>`). A voluntary switch is the thread
+ * going to sleep, so the count's growth is how often it woke. Empty when the
+ * app isn't running.
+ */
+export const parseThreadSwitches = (text: string): ReadonlyMap<string, ThreadSwitches> =>
+  new Map(
+    text.split("\n").flatMap((line): [string, ThreadSwitches][] => {
+      const match = /^(\d+) (\d+) (.+)$/.exec(line.trim());
+      return match === null
+        ? []
+        : [[match[1] ?? "", { name: match[3] ?? "", switches: Number(match[2]) }]];
+    }),
+  );
+
+/** Prints each thread of [pkg]'s process as `parseThreadSwitches` reads it. */
+export const threadSwitchesCommand = (pkg: string): string =>
+  `p=$(pidof ${pkg}) && for t in /proc/$p/task/*; do echo "\${t##*/} $(awk '/^voluntary_ctxt_switches/ {print $2}' $t/status) $(cat $t/comm)"; done`;
+
 /** What the runner taps, found in a `uiautomator dump`. */
 export type Target =
   { readonly desc: string } | { readonly descPrefix: string } | { readonly text: string };

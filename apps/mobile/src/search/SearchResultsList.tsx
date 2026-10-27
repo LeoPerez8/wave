@@ -1,15 +1,14 @@
-import { LegendList } from "@legendapp/list/react-native";
 import {
   counted,
   joinArtists,
   type QueueContext,
   type SearchKind,
   type YtArtistAlbum,
-  ytTrackId,
 } from "@wave/core";
 import { useCallback, useMemo } from "react";
 import { Text, View } from "react-native";
 
+import { artworkUri } from "@/catalog/artworkUri";
 import { AlbumCardRow } from "@/catalog/cards/AlbumCard";
 import { ArtistCardRow } from "@/catalog/cards/ArtistCard";
 import { PlaylistCardRow } from "@/catalog/cards/PlaylistCard";
@@ -17,33 +16,33 @@ import { CatalogLine } from "@/catalog/CatalogLine";
 import { CELL, grid } from "@/catalog/grid";
 import { NameRow } from "@/catalog/NameRow";
 import { SKELETON_ROWS, TrackSkeletons } from "@/catalog/Skeletons";
-import { SwipeTrackRow } from "@/library/SwipeTrackRow";
 import { useChromeInset } from "@/chrome/chrome";
 import { TextButton } from "@/components/TextButton";
-import type { TrackItem } from "@/playback/actionTargets";
-import type { NativeYtSong } from "@/native/waveYtMusic";
+import { listedTrackItem, type TrackItem } from "@/playback/actionTargets";
 import { openAlbum, openArtist, openGenre, openPlaylist } from "@/library/routes";
-import { toTrackSummary } from "@/library/TrackList";
 import { playPage } from "@/playback/actions";
-import { useCurrentPlayingIds } from "@/playback/hooks";
 import {
   openAlbumActions,
   openArtistActions,
   openGenreActions,
   openPlaylistActions,
-  openTrackActions,
 } from "@/playback/ActionsMenu";
 
 import type { ResultRow, ResultSong } from "./rows";
 import type { SearchHit } from "./searchIndex";
 import { useListScrollable } from "@/motion/heldTouch";
-import { selectableRow } from "@/selection/selectableRow";
 import type { ListSelection } from "@/selection/useListSelection";
 import { openYtAlbum, openYtArtist } from "@/ytmusic/routes";
 import { openYtAlbumActions } from "@/ytmusic/YtAlbumActions";
 import { openYtArtistActions } from "@/ytmusic/YtArtistActions";
-import { SwipeYtSongRow } from "@/ytmusic/YtSongRow";
-import { openYtSongActions } from "@/ytmusic/YtSongActions";
+import {
+  mixedSongEntry,
+  openMixedSongActions,
+  runMixedSongSwipe,
+  songSelection,
+} from "@/songs/mixedSongs";
+import { SongList } from "@/songs/SongList";
+import type { SongListEntry } from "@/songs/songListSources";
 
 /** Tapping a song plays the song results from it. */
 const SEARCH_CONTEXT: QueueContext = { kind: "search", id: null };
@@ -70,44 +69,6 @@ const ignore = (): void => undefined;
 const playResults = (songs: readonly ResultSong[], index: number): void =>
   void playPage(songs, index, SEARCH_CONTEXT);
 
-/**
- * A song YT Music found, among the song results. Tapping plays the results
- * from it, or checks it while selecting.
- */
-function SearchYtSongRow({
-  song,
-  songs,
-  index,
-  playing,
-  onOpen,
-  selection,
-}: {
-  song: NativeYtSong;
-  songs: readonly ResultSong[];
-  index: number;
-  playing: boolean;
-  onOpen: () => void;
-  selection: ListSelection<TrackItem>;
-}) {
-  return (
-    <SwipeYtSongRow
-      song={song}
-      kind="Song · "
-      playDisc
-      playing={playing}
-      {...selectableRow(
-        { ytSong: song },
-        selection,
-        () => {
-          onOpen();
-          playResults(songs, index);
-        },
-        (options) => openYtSongActions(song, options),
-      )}
-    />
-  );
-}
-
 /** What a YT Music album's page and menu know of it from its row. */
 const ytAlbumHead = (album: YtArtistAlbum) => ({
   browseId: album.browseId,
@@ -121,6 +82,27 @@ const itemType = (row: ResultRow): ResultRow["type"] => row.type;
 const itemSize = (row: ResultRow): number | undefined =>
   row.type === "note" || row.type === "capped" ? undefined : HEIGHT[row.type];
 
+/** A song result as a song card's row: its play disc, "Song · " before its artist. */
+const SONG_CARD = { leading: { kind: "playDisc" }, kindLine: true } as const;
+
+/** The song a result row is, if it is one: what it plays, swipes and checks as. */
+const songOf = (row: ResultRow): ResultSong | null =>
+  row.type === "hit" && row.hit.kind === "song"
+    ? { source: "library", track: row.hit.song }
+    : row.type === "ytSong"
+      ? { source: "stream", song: row.song }
+      : null;
+
+const songEntry = (row: ResultRow): SongListEntry | null => {
+  const song = songOf(row);
+  return song === null ? null : mixedSongEntry(song, SONG_CARD);
+};
+
+const songItem = (row: ResultRow): TrackItem | null => {
+  const song = songOf(row);
+  return song === null ? null : listedTrackItem(song);
+};
+
 type Props = {
   rows: readonly ResultRow[];
   /** Called when a result opens, so the search is kept among the recent ones. */
@@ -132,22 +114,19 @@ type Props = {
   selection: ListSelection<TrackItem>;
 };
 
+/** A result that isn't a song: a card or name row, which ignores taps while selecting. */
 function Hit({
   hit,
   top,
-  songs,
   integrated,
-  playing,
   onOpen,
   selection,
 }: {
-  hit: SearchHit;
+  hit: Exclude<SearchHit, { readonly kind: "song" }>;
   /** The top result says what type it is (genres, which have no card). */
   top: boolean;
-  songs: readonly ResultSong[];
   /** An album opens integrated. */
   integrated: boolean;
-  playing: boolean;
   onOpen: () => void;
   selection: ListSelection<TrackItem>;
 }) {
@@ -175,37 +154,11 @@ function Hit({
         <AlbumCardRow
           title={hit.name}
           artist={hit.album.albumArtist}
-          artworkUri={hit.album.thumbPath === null ? undefined : `file://${hit.album.thumbPath}`}
+          artworkUri={artworkUri(hit.album)}
           onPress={open(() => openAlbum(hit.album.id, hit.album, { integrated }))}
           onLongPress={menu(() => openAlbumActions(hit.album))}
         />
       );
-    case "song": {
-      const track = toTrackSummary(hit.song);
-      return (
-        <SwipeTrackRow
-          song={hit.song}
-          track={{ ...track, artist: `Song · ${track.artist}` }}
-          state={playing ? "playing" : undefined}
-          leading="artwork"
-          playDisc
-          {...selectableRow(
-            { song: hit.song },
-            selection,
-            open(() =>
-              playResults(
-                songs,
-                Math.max(
-                  0,
-                  songs.findIndex((song) => song.source === "library" && song.track === hit.song),
-                ),
-              ),
-            ),
-            (options) => openTrackActions(hit.song, options),
-          )}
-        />
-      );
-    }
     case "playlist":
       return (
         <PlaylistCardRow
@@ -235,13 +188,13 @@ function Hit({
 export function SearchResultsList({ rows, onOpen, onShowAll, integrated, selection }: Props) {
   const scrollable = useListScrollable();
   const bottomInset = useChromeInset();
-  const currentIds = useCurrentPlayingIds();
+  const rowSelection = useMemo(() => songSelection(selection, songItem), [selection]);
   const rowState = useMemo(
-    () => ({ currentIds, selection: selection.selection, integrated }),
-    [currentIds, selection.selection, integrated],
+    () => ({ selection: selection.selection, integrated }),
+    [selection.selection, integrated],
   );
 
-  const renderItem = useCallback(
+  const renderSlot = useCallback(
     ({ item }: { item: ResultRow }) => {
       switch (item.type) {
         case "heading":
@@ -251,13 +204,11 @@ export function SearchResultsList({ rows, onOpen, onShowAll, integrated, selecti
             </View>
           );
         case "hit":
-          return (
+          return item.hit.kind === "song" ? null : (
             <Hit
               hit={item.hit}
               top={item.top}
-              songs={item.songs}
               integrated={integrated}
-              playing={item.hit.kind === "song" && currentIds.has(String(item.hit.song.id))}
               onOpen={onOpen}
               selection={selection}
             />
@@ -283,16 +234,7 @@ export function SearchResultsList({ rows, onOpen, onShowAll, integrated, selecti
             </View>
           );
         case "ytSong":
-          return (
-            <SearchYtSongRow
-              song={item.song}
-              songs={item.songs}
-              index={item.index}
-              playing={currentIds.has(ytTrackId(item.song.videoId))}
-              onOpen={onOpen}
-              selection={selection}
-            />
-          );
+          return null;
         case "ytArtist": {
           const { artist } = item;
           return (
@@ -354,24 +296,51 @@ export function SearchResultsList({ rows, onOpen, onShowAll, integrated, selecti
           return <TrackSkeletons label="Loading online results" leading="card" />;
       }
     },
-    [currentIds, onOpen, onShowAll, integrated, selection],
+    [onOpen, onShowAll, integrated, selection],
   );
 
   return (
-    <LegendList
-      scrollEnabled={scrollable}
-      className="flex-1"
-      data={rows}
-      keyExtractor={keyExtractor}
-      getItemType={itemType}
-      renderItem={renderItem}
-      extraData={rowState}
-      estimatedItemSize={grid.row}
-      getFixedItemSize={itemSize}
-      recycleItems
-      keyboardShouldPersistTaps="handled"
-      keyboardDismissMode="on-drag"
-      contentContainerStyle={{ paddingHorizontal: grid.margin, paddingBottom: bottomInset }}
-    />
+    <View className="flex-1">
+      <SongList
+        scrollEnabled={scrollable}
+        className="flex-1"
+        data={rows}
+        keyExtractor={keyExtractor}
+        song={songEntry}
+        context={SEARCH_CONTEXT}
+        renderSlot={renderSlot}
+        slotType={itemType}
+        slotSize={itemSize}
+        extraData={rowState}
+        selection={rowSelection}
+        onPlay={(row) => {
+          const song = songOf(row);
+          if (song === null) return;
+          onOpen();
+          if (row.type === "ytSong") playResults(row.songs, row.index);
+          else if (row.type === "hit" && row.hit.kind === "song") {
+            const track = row.hit.song;
+            playResults(
+              row.songs,
+              Math.max(
+                0,
+                row.songs.findIndex((entry) => entry.source === "library" && entry.track === track),
+              ),
+            );
+          }
+        }}
+        onMenu={(row, options) => {
+          const song = songOf(row);
+          if (song !== null) openMixedSongActions(song, options);
+        }}
+        onSongSwipe={(row, side) => {
+          const song = songOf(row);
+          if (song !== null) runMixedSongSwipe(song, side);
+        }}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        contentContainerStyle={{ paddingHorizontal: grid.margin, paddingBottom: bottomInset }}
+      />
+    </View>
   );
 }

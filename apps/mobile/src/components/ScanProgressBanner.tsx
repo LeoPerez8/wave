@@ -4,7 +4,7 @@ import { CatalogLine } from "@/catalog/CatalogLine";
 import { CELL } from "@/catalog/grid";
 import { Hairline } from "@/catalog/Hairline";
 import { TextButton } from "@/components/TextButton";
-import { useScanState } from "@/library/hooks";
+import { useScanProgress } from "@/library/hooks";
 import { startRescan } from "@/library/runtime";
 
 const count = (n: number): string => n.toLocaleString("en");
@@ -14,7 +14,7 @@ const count = (n: number): string => n.toLocaleString("en");
  * it failed. Incremental rescans stay quiet unless there are files to read.
  */
 export function ScanProgressBanner() {
-  const scan = useScanState();
+  const scan = useScanProgress();
 
   if (scan.status === "failed") {
     return (

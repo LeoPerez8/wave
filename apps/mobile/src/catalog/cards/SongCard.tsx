@@ -53,13 +53,10 @@ export function SongCover({
 
 /**
  * A song's disc in a list row: a 40dp cover, the disc 20dp and overhanging the
- * cover's corner by 4dp. A song row is a `TrackRow` with `playDisc`, which
+ * cover's corner by 4dp. A song row with a `playDisc` leading cell (`SongRow`)
  * takes these.
  */
 export const SONG_ROW_COVER = { disc: CELL * 2.5, inset: -CELL / 2 } as const;
-
-/** A song row's second line: "Song · " before its artist, as a song card's rows show it. */
-export const songRowLine = (artist: string): string => `Song · ${artist}`;
 
 /** A song on a shelf: a 104dp cover (about two thirds of an album's), its disc 8dp in from the corner. */
 const TILE = { size: CELL * 13, disc: CELL * 3.5, inset: CELL } as const;

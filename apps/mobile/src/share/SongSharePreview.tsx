@@ -23,7 +23,7 @@ import { ShareDestinations, type ShareDestination } from "./ShareDestinations";
 import { SharePreviewFrame } from "./SharePreviewFrame";
 import type { ImageSource } from "./shareImage";
 import { SONG_CARD_ASPECT, SongCard } from "./SongCard";
-import { closeSongShare, useSongShare, type SongShareContent } from "./songShare";
+import { closeSongShare, type SongShareContent } from "./songShare";
 import { useDrawingCorners, useImageShare } from "./useImageShare";
 
 const LOG_TAG = "SongShare";
@@ -118,7 +118,7 @@ function StoryGround({
  * sticker on a Story in the cover's colours, and the destinations row under
  * it. Close (or Back) closes it.
  */
-function SongSharePreview({ content }: { content: SongShareContent }) {
+export function SongSharePreview({ content }: { content: SongShareContent }) {
   const colours = useMemo(() => songCardColours(content.palette), [content.palette]);
   // A cover still loading would be missing from the image.
   const [loaded, setLoaded] = useState<string | undefined>(undefined);
@@ -207,10 +207,4 @@ function SongSharePreview({ content }: { content: SongShareContent }) {
       </View>
     </SharePreviewFrame>
   );
-}
-
-/** The song share sheet while one is open (`openSongShare`), over Now Playing and the app. */
-export function SongShareLayer() {
-  const content = useSongShare();
-  return content === null ? null : <SongSharePreview content={content} />;
 }

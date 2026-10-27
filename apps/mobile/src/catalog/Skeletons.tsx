@@ -28,14 +28,14 @@ export function SkeletonGroup({ label, children }: { label: string; children: Re
   );
 }
 
-/** As `TrackRow`'s thumbnail. */
+/** As `SongRow`'s thumbnail. */
 const THUMB = CELL * 5;
 
-/** As `TrackRow`'s gap between its cells. */
+/** As `SongRow`'s gap between its cells. */
 const ROW_GAP = CELL * 1.5;
 
 /**
- * What ends a track row: `TrackRow`'s favorite cell and length, or an Up Next
+ * What ends a track row: `SongRow`'s favorite cell and length, or an Up Next
  * row's two cells (remove and the drag handle, `nowPlaying/QueueView.tsx`).
  */
 type SkeletonTrailing = "length" | "queue";
@@ -47,7 +47,7 @@ type SkeletonTrailing = "length" | "queue";
 type TrackLeading = "artwork" | "card" | "number";
 
 /**
- * A track row's stand-in, laid out as `TrackRow` is: the leading cover square
+ * A track row's stand-in, laid out as `SongRow` is: the leading cover square
  * (or a numbered list's number), two lines (body), the favorite cell and the
  * length; or as an Up Next row is, ending in the space of its two cells.
  */
@@ -117,7 +117,7 @@ const CONTROL = 48;
 
 /**
  * A track row with icon controls after it (a playlist recommendation's Add
- * and Dismiss) standing in for one that is on its way: `TrackRow`'s stand-in
+ * and Dismiss) standing in for one that is on its way: `SongRow`'s stand-in
  * followed by [controls] 48dp cells, each with a 24dp glyph's square, so it
  * is exactly as tall and wide as the row it replaces. Screen readers skip
  * it; its container says what is busy.

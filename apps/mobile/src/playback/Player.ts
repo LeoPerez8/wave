@@ -1,8 +1,9 @@
 import {
-  playerErrorNotice,
   type PlayerCoverUpdate,
   type PlaySource,
+  type QueueWrite,
   type RepeatMode,
+  type SavedQueueParts,
   type SeekSource,
   type SleepTimer,
   type SongChangeCause,
@@ -14,12 +15,13 @@ import * as Layer from "effect/Layer";
 import type * as Scope from "effect/Scope";
 
 import { makeExternalStore } from "@/lib/externalStore";
+import { perfCount } from "@/perf/perf";
+import { makePlaybackStores } from "./playbackStores";
 import {
   WavePlayer,
   type CrossfadeEndedEvent,
   type ItemTransitionEvent,
   type NativeItemIds,
-  type NativePlayerState,
   type NativeSyncStep,
   type PlayerItem,
   type PlayerErrorEvent,
@@ -35,37 +37,14 @@ export class PlayerError extends Data.TaggedError("PlayerError")<{
   }
 }
 
-export interface PlaybackState extends Omit<NativePlayerState, "index"> {
-  /**
-   * The last playback error for the current item, cleared when the item
-   * changes or plays again.
-   */
-  readonly error: string | null;
-  /**
-   * What the player says about that error in place of the artist (Core's
-   * `playerErrorNotice`): a file that couldn't play, or why a YT Music song
-   * couldn't stream. Null with no error from the player.
-   */
-  readonly notice: string | null;
-}
+export type { PlaybackState } from "./playbackStores";
 
-const IDLE: PlaybackState = {
-  status: "idle",
-  isPlaying: false,
-  playWhenReady: false,
-  item: null,
-  positionMs: 0,
-  durationMs: null,
-  at: 0,
-  error: null,
-  notice: null,
-};
-
-/**
- * What the player is doing, for the mini player and track rows. `item.id` is
- * the queue entry key; the track id comes from the queue (`useCurrentTrackId`).
- */
-export const playbackState = makeExternalStore<PlaybackState>(IDLE);
+/** Position subscriptions acquire native reports; plain snapshot reads never do. */
+const stores = makePlaybackStores((requested) => {
+  perfCount(requested ? "player.positionDemand.start" : "player.positionDemand.stop");
+  WavePlayer.setPositionReporting(requested).catch(() => undefined);
+});
+export const { playbackState, positionState } = stores;
 
 /** The sleep timer the playback service is running, if any (it enforces it natively). */
 export const sleepTimerState = makeExternalStore<SleepTimer | null>(null);
@@ -95,8 +74,9 @@ export class Player extends Context.Service<
     readonly setItemArtwork: (
       updates: readonly PlayerCoverUpdate[],
     ) => Effect.Effect<void, PlayerError>;
-    readonly saveQueue: (json: string, source: PlaySource) => Effect.Effect<void>;
-    readonly savedQueue: Effect.Effect<string | null>;
+    /** Keeps the queue parts [write] changed for a JS restart and a cold start; skips its position. */
+    readonly saveQueue: (write: QueueWrite, source: PlaySource) => Effect.Effect<void, PlayerError>;
+    readonly savedQueue: Effect.Effect<SavedQueueParts | null, PlayerError>;
     readonly savedQueueSource: Effect.Effect<PlaySource | null>;
     /** Whether the player resumed the saved queue on its own (a cold start); clears it. */
     readonly takeResumed: Effect.Effect<boolean>;
@@ -130,41 +110,28 @@ export class Player extends Context.Service<
 const call = <A>(operation: string, run: () => Promise<A>): Effect.Effect<A, PlayerError> =>
   Effect.tryPromise({ try: run, catch: (cause) => new PlayerError({ operation, cause }) });
 
-const fromNative = ({
-  index: _index,
-  ...state
-}: NativePlayerState): Omit<PlaybackState, "error" | "notice"> => state;
-
-/** Whether the error on record still stands once the player reports [state]. */
-const errorStands = (previous: PlaybackState, state: NativePlayerState): boolean =>
-  previous.item?.id === state.item?.id && !state.isPlaying;
-
 /** Mirrors native player events into [playbackState] for as long as the layer lives. */
 const syncState = Effect.acquireRelease(
   Effect.sync(() => {
+    let reported = false;
     const subscriptions = [
-      WavePlayer.addListener("onPlaybackState", (state) =>
-        playbackState.update((previous) => ({
-          ...fromNative(state),
-          error: errorStands(previous, state) ? previous.error : null,
-          notice: errorStands(previous, state) ? previous.notice : null,
-        })),
-      ),
-      WavePlayer.addListener("onPosition", (position) =>
-        playbackState.update((previous) => ({ ...previous, ...position })),
-      ),
-      WavePlayer.addListener("onPlayerError", (event) =>
-        playbackState.update((previous) => ({
-          ...previous,
-          error: event.message,
-          notice: playerErrorNotice(event.code),
-        })),
-      ),
+      WavePlayer.addListener("onPlaybackState", (state) => {
+        perfCount("player.playbackState");
+        reported = true;
+        stores.reportState(state);
+      }),
+      WavePlayer.addListener("onPosition", (position) => {
+        perfCount("player.positionReport");
+        stores.reportPosition(position);
+      }),
+      WavePlayer.addListener("onPlayerError", stores.reportError),
       WavePlayer.addListener("onSleepTimer", (event) => sleepTimerState.set(event.timer)),
     ];
     // The service may already be playing (Wave was reopened from the notification).
     WavePlayer.getState()
-      .then((state) => playbackState.update((previous) => ({ ...previous, ...fromNative(state) })))
+      .then((state) => {
+        if (!reported) stores.reportState(state);
+      })
       .catch(() => undefined);
     WavePlayer.getSleepTimer()
       .then((timer) => sleepTimerState.set(timer))
@@ -192,8 +159,16 @@ export const layer = Layer.effect(
         updates.length === 0
           ? Effect.void
           : call("show the cached covers", () => WavePlayer.setItemArtwork(updates)),
-      saveQueue: (json, source) => Effect.sync(() => WavePlayer.saveQueue(json, source)),
-      savedQueue: Effect.sync(() => WavePlayer.savedQueue()),
+      saveQueue: (write, source) =>
+        call("save the queue", () =>
+          WavePlayer.saveQueue(
+            write.queue ?? null,
+            write.metadata ?? null,
+            write.index ?? null,
+            source,
+          ),
+        ),
+      savedQueue: call("read the saved queue", () => WavePlayer.savedQueue()),
       savedQueueSource: Effect.sync(() => WavePlayer.savedQueueSource()),
       takeResumed: Effect.sync(() => WavePlayer.takeResumed()),
       onItemTransition: (listener) =>

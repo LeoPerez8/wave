@@ -43,6 +43,22 @@ const add = (map, owner, value) => {
   map.set(owner, values);
 };
 
+/** The outermost named declaration around [node], as owners are named. */
+const declarationOf = (node) => {
+  let owner = "<module>";
+  for (let current = node; current && !ts.isSourceFile(current); current = current.parent)
+    if (
+      (ts.isVariableDeclaration(current) ||
+        ts.isFunctionDeclaration(current) ||
+        ts.isClassDeclaration(current) ||
+        ts.isBindingElement(current)) &&
+      current.name &&
+      ts.isIdentifier(current.name)
+    )
+      owner = current.name.text;
+  return owner;
+};
+
 // The compiler asks with forward slashes even when node:path uses Windows separators.
 const canonical = (path) => path.split(sep).join("/");
 
@@ -76,26 +92,16 @@ export const auditSources = (files, options) => {
   const program = ts.createProgram([...absolute.keys()], compilerOptions, host);
   const checker = program.getTypeChecker();
   const pathOf = (node) => relative(root, node.getSourceFile().fileName).split(sep).join("/");
-  const nameOf = (node) => {
-    if (
-      (ts.isVariableDeclaration(node) ||
-        ts.isFunctionDeclaration(node) ||
-        ts.isClassDeclaration(node) ||
-        ts.isBindingElement(node)) &&
-      node.name &&
-      ts.isIdentifier(node.name)
-    )
-      return node.name.text;
-    return undefined;
+  // A dependency's declarations are named by its package (`react-native#Pressable`), wherever
+  // the package manager put its typings.
+  const moduleOf = (node) => {
+    const path = pathOf(node);
+    const at = path.lastIndexOf("node_modules/");
+    if (at === -1) return path;
+    const [scope, name] = path.slice(at + "node_modules/".length).split("/");
+    return scope.startsWith("@") ? `${scope}/${name}` : scope;
   };
-  const ownerOf = (node) => {
-    let owner = "<module>";
-    for (let current = node; current && !ts.isSourceFile(current); current = current.parent) {
-      const name = nameOf(current);
-      if (name !== undefined) owner = name;
-    }
-    return `${pathOf(node)}#${owner}`;
-  };
+  const ownerOf = (node) => `${pathOf(node)}#${declarationOf(node)}`;
   const edges = new Map();
   const library = new Map();
   const asks = new Map();
@@ -104,10 +110,10 @@ export const auditSources = (files, options) => {
     [...options.librarySeeds, ...options.networkSeeds].map((key) => key.split("#")[0]),
   );
   for (const source of program.getSourceFiles())
-    if (seedPaths.has(pathOf(source))) {
+    if (seedPaths.has(moduleOf(source))) {
       const collect = (node) => {
         if (node.name && (ts.isIdentifier(node.name) || ts.isStringLiteralLike(node.name)))
-          declared.add(`${pathOf(node)}#${node.name.text}`);
+          declared.add(`${moduleOf(node)}#${node.name.text}`);
         ts.forEachChild(node, collect);
       };
       collect(source);
@@ -116,9 +122,25 @@ export const auditSources = (files, options) => {
     (seed) => !declared.has(seed),
   );
   const libSeeds = new Set(options.librarySeeds);
+  const libSeedNames = new Set(options.librarySeeds.map((key) => key.split("#")[1]));
   const netSeeds = new Set(options.networkSeeds);
   const recordUse = (node, symbol) => {
     const owner = ownerOf(node);
+    // A dependency often re-exports a component under its public name from an internal one
+    // (react-native's `Pressable` is `$$Pressable`), so its seeds match any re-export on the way.
+    for (
+      let step = symbol;
+      step?.flags && step.flags & ts.SymbolFlags.Alias;
+      step = checker.getImmediateAliasedSymbol(step)
+    )
+      for (const declaration of step.declarations ?? [])
+        if (pathOf(declaration).includes("node_modules/")) {
+          const identity = `${moduleOf(declaration)}#${step.getName()}`;
+          if (libSeeds.has(identity)) {
+            library.set(`${owner}:${identity}`, { owner, capability: identity, via: [owner] });
+            add(edges, owner, identity);
+          }
+        }
     if (symbol?.flags && symbol.flags & ts.SymbolFlags.Alias)
       symbol = checker.getAliasedSymbol(symbol);
     if (
@@ -129,9 +151,11 @@ export const auditSources = (files, options) => {
     )
       add(asks, owner, "global#fetch");
     for (const declaration of symbol?.declarations ?? []) {
-      const identity = `${pathOf(declaration)}#${symbol.getName()}`;
-      if (libSeeds.has(identity))
+      const identity = `${moduleOf(declaration)}#${symbol.getName()}`;
+      if (libSeeds.has(identity)) {
         library.set(`${owner}:${identity}`, { owner, capability: identity, via: [owner] });
+        add(edges, owner, identity);
+      }
       if (netSeeds.has(identity)) add(asks, owner, identity);
       // A service's class/type is a token, not execution of its implementation.
       if (
@@ -207,6 +231,20 @@ export const auditSources = (files, options) => {
         (ts.isPropertyAccessExpression(node) && ["bind", "call", "apply"].includes(node.name.text))
       )
         visit(node.expression);
+      // A receiver that is itself a seed (a store: `queueState.get()`) is still a use of it.
+      else if (libSeedNames.has(node.expression.text)) {
+        let receiver = checker.getSymbolAtLocation(node.expression);
+        if (receiver?.flags && receiver.flags & ts.SymbolFlags.Alias)
+          receiver = checker.getAliasedSymbol(receiver);
+        for (const declaration of receiver?.declarations ?? []) {
+          const identity = `${moduleOf(declaration)}#${receiver.getName()}`;
+          if (libSeeds.has(identity)) {
+            const owner = ownerOf(node);
+            library.set(`${owner}:${identity}`, { owner, capability: identity, via: [owner] });
+            add(edges, owner, identity);
+          }
+        }
+      }
       return;
     }
     if (ts.isIdentifier(node)) {
@@ -267,5 +305,163 @@ export const auditSources = (files, options) => {
     network,
     boundaries: [...boundaries].filter((owner) => networkCapable.has(owner)).toSorted(),
     missingSeeds,
+    follows: edges,
   };
+};
+
+const sorted = (uses) =>
+  uses.toSorted(
+    (a, b) => a.owner.localeCompare(b.owner) || a.capability.localeCompare(b.capability),
+  );
+
+/**
+ * What rows follow of whole sets and stores (docs/spec.md, Performance rules 3 and 4): a
+ * store a row names itself, or a whole-set hook it calls directly or through its own hooks
+ * (declarations named `use…`). A narrow hook may read a store; only the row itself may not.
+ */
+export const rowSubscriptions = (audit, { isRow, hooks, stores }) => {
+  const wholeSets = new Set(hooks);
+  const wholeStores = new Set(stores);
+  const found = [];
+  for (const owner of audit.follows.keys()) {
+    if (!isRow(owner)) continue;
+    const seen = new Set([owner]);
+    const walk = (from, via) => {
+      for (const target of audit.follows.get(from) ?? []) {
+        if (seen.has(target)) continue;
+        seen.add(target);
+        if (wholeSets.has(target) || (from === owner && wholeStores.has(target)))
+          found.push({ owner, capability: target, via: [...via, target] });
+        else if (/^use[A-Z0-9]/.test(target.split("#")[1] ?? "")) walk(target, [...via, target]);
+      }
+    };
+    walk(owner, [owner]);
+  }
+  return sorted(found);
+};
+
+const ARTWORK_URI = /file:\/\/|content:\/\/dev\.leoperez\.wave\.artwork/;
+const ARTWORK_PATHS = new Set(["thumbPath", "mediumPath", "artworkPath"]);
+
+/**
+ * Artwork URIs built by hand (Performance rule 9: one helper picks the file): a `file://` or
+ * artwork-provider literal, or an image `source`'s `uri:` set straight from a cached artwork
+ * path. Calls are not looked into: a helper that builds a URI shows up by its own literal or
+ * its `fileUri` call. `<Artwork uri={path}>` is fine, as Artwork resolves paths itself.
+ */
+export const handBuiltArtwork = (files) => {
+  const found = [];
+  for (const [path, text] of Object.entries(files)) {
+    if (!ARTWORK_URI.test(text) && ![...ARTWORK_PATHS].some((name) => text.includes(name)))
+      continue;
+    const source = ts.createSourceFile(
+      path,
+      text,
+      ts.ScriptTarget.ESNext,
+      true,
+      path.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
+    );
+    const report = (node, capability) =>
+      found.push({ owner: `${path}#${declarationOf(node)}`, capability, via: [node.getText()] });
+    const readsPath = (node) => {
+      if (ts.isCallExpression(node)) return false;
+      if (
+        (ts.isPropertyAccessExpression(node) && ARTWORK_PATHS.has(node.name.text)) ||
+        (ts.isIdentifier(node) && ARTWORK_PATHS.has(node.text))
+      )
+        return true;
+      return ts.forEachChild(node, readsPath) ?? false;
+    };
+    const visit = (node) => {
+      if (
+        (ts.isStringLiteralLike(node) ||
+          ts.isTemplateHead(node) ||
+          ts.isTemplateMiddle(node) ||
+          ts.isTemplateTail(node)) &&
+        ARTWORK_URI.test(node.text)
+      )
+        report(node, "literal");
+      if (
+        ts.isPropertyAssignment(node) &&
+        (ts.isIdentifier(node.name) || ts.isStringLiteral(node.name)) &&
+        node.name.text === "uri" &&
+        readsPath(node.initializer)
+      )
+        report(node, "rawPath");
+      ts.forEachChild(node, visit);
+    };
+    visit(source);
+  }
+  return sorted(found);
+};
+
+/** The declaration a node sits in (the outermost named one), for `file#name`. */
+const memoOwner = (node) => {
+  let owner = "(module)";
+  for (let at = node.parent; at !== undefined; at = at.parent)
+    if ((ts.isVariableDeclaration(at) || ts.isFunctionDeclaration(at)) && at.name !== undefined)
+      owner = at.name.getText();
+  return owner;
+};
+
+/** The variable an expression starts from: `a` for `a`, `a.b`, `a?.[b]!`. */
+const memoRoot = (node) => {
+  let at = node;
+  while (
+    ts.isPropertyAccessExpression(at) ||
+    ts.isElementAccessExpression(at) ||
+    ts.isNonNullExpression(at) ||
+    ts.isParenthesizedExpression(at)
+  )
+    at = at.expression;
+  return ts.isIdentifier(at) ? at.text : null;
+};
+
+/** The names [node] reads, leaving out property names after a dot. */
+const memoReads = (node) => {
+  const reads = new Set();
+  const visit = (at) => {
+    if (ts.isIdentifier(at) && !(ts.isPropertyAccessExpression(at.parent) && at.parent.name === at))
+      reads.add(at.text);
+    ts.forEachChild(at, visit);
+  };
+  visit(node);
+  return reads;
+};
+
+/**
+ * Every `useMemo`/`useCallback` dependency its function doesn't read, as
+ * `file#owner: hook [dep]`. The React Compiler keys its memos on what the
+ * function reads, so it drops these (#728).
+ */
+export const unreadMemoDependencies = (files) => {
+  const found = [];
+  for (const [path, text] of Object.entries(files)) {
+    const kind = path.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS;
+    const source = ts.createSourceFile(path, text, ts.ScriptTarget.Latest, true, kind);
+    const visit = (node) => {
+      if (ts.isCallExpression(node)) {
+        const callee = ts.isPropertyAccessExpression(node.expression)
+          ? node.expression.name.text
+          : node.expression.getText();
+        const [fn, deps] = node.arguments;
+        if (
+          (callee === "useMemo" || callee === "useCallback") &&
+          fn !== undefined &&
+          deps !== undefined &&
+          ts.isArrayLiteralExpression(deps)
+        ) {
+          const reads = memoReads(fn);
+          for (const dep of deps.elements) {
+            const root = memoRoot(dep);
+            if (root !== null && !reads.has(root))
+              found.push(`${path}#${memoOwner(node)}: ${callee} [${dep.getText()}]`);
+          }
+        }
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(source);
+  }
+  return found;
 };

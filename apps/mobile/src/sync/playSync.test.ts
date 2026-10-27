@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { type PlayEvent, type YtAlbumSong } from "@wave/core";
+import { syncTriggers, type PlayEvent, type YtAlbumSong } from "@wave/core";
 import { eq, sql } from "drizzle-orm";
 
 import { harness, pullAll, push } from "../../../sync/src/testing.ts";
@@ -18,6 +18,7 @@ import * as schema from "../library/db/schema.ts";
 import { joinAccount } from "../library/db/syncRows.ts";
 import { saveImportedPlays } from "../library/db/blackPlayer.ts";
 import { syncCycle, type SyncTransport } from "./syncCycle.ts";
+import { fakeClock } from "../../../../packages/core/src/testSyncClock.ts";
 
 const SONG: YtAlbumSong = {
   videoId: "history-video",
@@ -363,5 +364,52 @@ test("a pulled streamed collaboration keeps its artists for playback and song ac
   const row = listeningHistory(b.db).rows[0];
   assert.equal(row?.snapshot.artist, "Ariana Grande & Doja Cat");
   assert.deepEqual(row?.streamedSong?.artists, ["Ariana Grande", "Doja Cat"]);
+  service.db.close();
+});
+
+test("a play goes up in the batch after its end, and a sync that didn't finish loses none", async () => {
+  const { service, session, transport } = await account();
+  const a = await phone(transport);
+  let online = false;
+  const offline: SyncTransport = {
+    request: async () => {
+      throw Object.assign(new Error("offline"), { code: "ERR_WAVE_OFFLINE" });
+    },
+  };
+  const { clock, pass } = fakeClock();
+  let runs = 0;
+  let last: Promise<boolean> = Promise.resolve(true);
+  const triggers = syncTriggers({
+    clock,
+    // In the background, where play ends wait for their batch.
+    inForeground: () => false,
+    run: (songs) => {
+      runs++;
+      last = a.sync(songs, online ? transport : offline).then(
+        () => true,
+        () => false,
+      );
+      return last;
+    },
+  });
+
+  const id = recordPlay(a.db, PLAY, false, SONG);
+  triggers.played("started");
+  await pass(10 * 60_000);
+  assert.equal(runs, 0);
+  endPlay(a.db, id, PLAY);
+  triggers.played("ended");
+  await pass(60_000);
+  assert.equal(await last, false);
+  assert.equal(runs, 1);
+  assert.equal((await pullAll(service, session)).plays.length, 0);
+
+  online = true;
+  triggers.foreground();
+  assert.equal(await last, true);
+  assert.equal(runs, 2);
+  const stored = (await pullAll(service, session)).plays;
+  assert.equal(stored.length, 1);
+  assert.equal(stored[0]?.startedAt, 1_792_929_600_000);
   service.db.close();
 });

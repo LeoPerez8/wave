@@ -1,230 +1,150 @@
 import { PlaylistRecommendations } from "./PlaylistRecommendations";
 import { IconGripVertical } from "@tabler/icons-react-native";
-import { moveItem, queueSongTrackId, type PlaylistPlace, type QueueContext } from "@wave/core";
-import { useCallback, useLayoutEffect, useMemo, useRef, useState, type ReactElement } from "react";
-import { View, type AccessibilityActionEvent } from "react-native";
+import type { LegendListRef } from "@legendapp/list/react-native";
+import { moveItem, type PlaylistPlace, type QueueContext, type RowMenuAction } from "@wave/core";
+import {
+  cloneElement,
+  memo,
+  useCallback,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactElement,
+} from "react";
+import { View, type AccessibilityActionInfo } from "react-native";
 import { GestureDetector } from "react-native-gesture-handler";
 import Animated, { useAnimatedReaction, useSharedValue } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
 
+import { usePositions } from "@/lib/usePositions";
 import { CELL, grid } from "@/catalog/grid";
-import { SwipeableRow, swipeAccessibility, type RowSwipe } from "@/catalog/SwipeableRow";
-import { TrackRow } from "@/catalog/TrackRow";
+import { ROW, useDraggedRow, useRowDrag, type DragRows } from "@/catalog/rowDrag";
 import { useChromeInset } from "@/chrome/chrome";
+import { useListScrollable } from "@/motion/heldTouch";
 import { playPlaylist } from "@/playback/actions";
-import { useCurrentPlayingIds } from "@/playback/hooks";
-import { openTrackActions, openUnsearchedActions } from "@/playback/ActionsMenu";
+import { openTrackActions, openUnsearchedActions, type MenuOptions } from "@/playback/ActionsMenu";
 import type { ActionItems, TrackItem } from "@/playback/actionTargets";
-import { useSongSwipe, useUnsearchedSwipe } from "@/playback/rowSwipe";
-import { selectableRow } from "@/selection/selectableRow";
+import { runTrackSwipe } from "@/playback/rowSwipe";
 import { useListSelection } from "@/selection/useListSelection";
 import { useYtMusicEnabled } from "@/settings/ytMusic";
+import { SongList, type SongListSelection } from "@/songs/SongList";
+import { librarySongEntry, type SongListEntry } from "@/songs/songListSources";
+import type { SongRowActions } from "@/songs/SongRow";
 import { useThemeColor } from "@/theme/useThemeColor";
 import { showToast } from "@/overlay/toast";
-import { YtSongRow } from "@/ytmusic/YtSongRow";
-import { openYtSongActions, useYtSongSwipe } from "@/ytmusic/YtSongActions";
+import { openYtSongActions, runYtSongSwipe } from "@/ytmusic/YtSongActions";
 
-import {
-  explainUnavailable,
-  openUnavailableEntryActions,
-  UnavailableSongRow,
-  useUnavailableSwipe,
-} from "./UnavailableEntry";
-
-import { UnsearchedSongRow } from "./UnsearchedSongRow";
-
-import { useFavoriteIds } from "./favorites";
+import { explainUnavailable, openUnavailableEntryActions } from "./UnavailableEntry";
 import type { PlaylistEntryRow } from "./LibraryStore";
-import { entryText, FIND_FIELD_HEIGHT, FindHead, useFindInList } from "./FindInPlaylist";
-import {
-  useDragCell,
-  useListDrag,
-  type DragHandlers,
-  type DragState,
-  type ListDrag,
-} from "./listDrag";
+import { entryText, FIND_FIELD_HEIGHT, FindHead, useFindInLegendList } from "./FindInPlaylist";
 import { movePlaylistItem, removePlaylistItems } from "./playlists";
-import { toTrackSummary } from "./TrackList";
-import { useListScrollable } from "@/motion/heldTouch";
 
-const ROW = grid.row;
-/** One column of rows, a row tall. */
-const CELLS = { columns: 1, width: 0, height: ROW };
+/** What the list holds besides the entries: the empty note, then the recommendations. */
+type Slot = { readonly kind: "empty" } | { readonly kind: "recommendations" };
+type Item = PlaylistEntryRow | Slot;
 
-type RowProps = {
-  item: PlaylistEntryRow;
-  /** The entry's place in the playlist: what its menu and swipe act on. */
-  place: PlaylistPlace;
-  index: number;
-  count: number;
-  drag: DragState;
-  playing: boolean;
-  favorite: boolean;
-  /** Whether the list is in selection mode: no dragging or swiping then. */
-  selecting: boolean;
-  /** Whether the row can be dragged to a new place: not while Find in Playlist narrows the list. */
-  reorderable: boolean;
-  /** In selection mode, whether the row is checked; undefined otherwise. */
-  checked: boolean | undefined;
-  onPress: () => void;
-  onLongPress: () => void;
-  handlers: DragHandlers;
-  onMove: (from: number, to: number) => void;
-  onRemove: (item: PlaylistEntryRow) => void;
-};
+const EMPTY: Slot = { kind: "empty" };
+const RECOMMENDATIONS: Slot = { kind: "recommendations" };
+
+const entryOf = (item: Item): PlaylistEntryRow | null => ("kind" in item ? null : item);
+
+/** Each entry is its own row and selection item, so a song in the playlist twice is checked per copy. */
+const entryKey = (item: PlaylistEntryRow): string => String(item.itemId);
+const itemKey = (item: Item): string => ("kind" in item ? item.kind : entryKey(item));
+const slotType = (item: Item): string => ("kind" in item ? item.kind : "entry");
+/** The empty note and the recommendations size themselves. */
+const slotSize = (): undefined => undefined;
+
+/** Whether the entry can be checked: an unavailable entry has nothing the selection bar acts on. */
+const checkable = (item: PlaylistEntryRow): boolean => item.source !== "unavailable";
 
 /**
- * What swiping a playlist entry runs, whatever kind it is (`rowSwipe`): left
- * takes it out of the playlist at once ([onRemove]), right queues it when
- * its menu can.
+ * A playlist entry's row: a Library song as the Library shows it, a YT Music
+ * entry streamed with the YT Music song's menu, an unsearched entry as any
+ * song (it plays, searched as it's about to), an unavailable one dimmed. Its
+ * menu and swipes remove it from this playlist.
  */
-const useEntrySwipe = (
-  item: PlaylistEntryRow,
-  place: PlaylistPlace,
-  onRemove: (item: PlaylistEntryRow) => void,
-): RowSwipe => {
-  const options = { playlistItem: place, onRemove: () => onRemove(item) };
-  const song = useSongSwipe(item.source === "library" ? item.track : null, options);
-  const stream = useYtSongSwipe(item.source === "stream" ? item.song : null, options);
-  const unsearched = useUnsearchedSwipe(item.source === "unsearched" ? item.song : null, options);
-  const unavailable = useUnavailableSwipe(
-    item.source === "unavailable" ? item.song : null,
-    options,
-  );
+const playlistEntry = (item: PlaylistEntryRow): SongListEntry => {
   switch (item.source) {
-    case "library":
-      return song;
+    case "library": {
+      const entry = librarySongEntry(item.track);
+      return { ...entry, facts: { ...entry.facts, inPlaylist: true } };
+    }
     case "stream":
-      return stream;
+      return { source: { kind: "ytMusic", song: item.song }, facts: { inPlaylist: true } };
     case "unsearched":
-      return unsearched;
+      return {
+        source: { kind: "unsearched", song: item.song },
+        facts: {
+          streamed: true,
+          unsearched: true,
+          artistNames: item.song.artists,
+          inPlaylist: true,
+        },
+      };
     case "unavailable":
-      return unavailable;
+      return { source: { kind: "unavailable", song: item.song } };
   }
 };
 
-/**
- * A playlist entry: a Library song's track row, a YT Music entry's stream
- * row with the YT Music song's menu, or an unavailable entry's dimmed row,
- * that swipes as every song row does (`SwipeableRow`: left removes it from
- * the playlist), with a grip on the right to drag it elsewhere. Screen
- * readers get Move up / Move down and the swipes' actions. While selecting,
- * an unavailable entry can't be checked.
- */
-function PlaylistItem({
-  item,
-  place,
-  index,
-  count,
-  drag,
-  playing,
-  favorite,
-  selecting,
-  reorderable,
-  checked,
-  onPress,
-  onLongPress,
-  handlers,
-  onMove,
-  onRemove,
-}: RowProps) {
-  const fill = useThemeColor("fill");
-  const secondary = useThemeColor("secondary");
-  const swipe = useEntrySwipe(item, place, onRemove);
-  const { style: rowStyle, grip } = useDragCell({
-    drag,
-    index,
-    cells: CELLS,
-    enabled: !selecting && reorderable,
-    liftedColor: fill,
-    handlers,
-  });
+const NO_MOVES: readonly AccessibilityActionInfo[] = [];
+const MOVE_UP = { name: "moveUp", label: "Move up" } as const;
+const MOVE_DOWN = { name: "moveDown", label: "Move down" } as const;
 
-  const moves = selecting
-    ? []
-    : [
-        ...(reorderable && index > 0 ? [{ name: "moveUp", label: "Move up" }] : []),
-        ...(reorderable && index < count - 1 ? [{ name: "moveDown", label: "Move down" }] : []),
-      ];
-  const onMoveAction = (event: AccessibilityActionEvent) => {
-    const action = event.nativeEvent.actionName;
-    if (action === "moveUp") onMove(index, index - 1);
-    else if (action === "moveDown") onMove(index, index + 1);
-  };
-  const { accessibilityActions, onAccessibilityAction } = selecting
-    ? { accessibilityActions: moves, onAccessibilityAction: onMoveAction }
-    : swipeAccessibility(swipe, moves, onMoveAction);
-
+/** The grip, 48dp of target drawn in the 32dp state cell. */
+function Grip({ shown, color }: { shown: boolean; color: string }) {
   return (
-    <Animated.View
-      // Placed by index: only a window of rows is mounted (see `rowWindow`).
-      style={[{ position: "absolute", top: index * ROW, left: 0, right: 0 }, rowStyle]}
+    <View
+      accessible={false}
+      importantForAccessibility="no-hide-descendants"
+      className="items-end justify-center"
+      style={{ width: grid.stateCell + CELL * 2, height: ROW, marginLeft: -CELL * 2 }}
     >
-      <SwipeableRow swipe={swipe} enabled={!selecting}>
-        <View className="flex-row items-center">
-          <View className="flex-1">
-            {item.source === "library" ? (
-              <TrackRow
-                track={toTrackSummary(item.track)}
-                state={playing ? "playing" : undefined}
-                favorite={favorite}
-                leading="artwork"
-                checked={checked}
-                onPress={onPress}
-                onLongPress={onLongPress}
-                accessibilityActions={accessibilityActions}
-                onAccessibilityAction={onAccessibilityAction}
-              />
-            ) : item.source === "stream" ? (
-              <YtSongRow
-                song={item.song}
-                checked={checked}
-                playing={playing}
-                onPress={onPress}
-                onLongPress={onLongPress}
-                accessibilityActions={accessibilityActions}
-                onAccessibilityAction={onAccessibilityAction}
-              />
-            ) : item.source === "unsearched" ? (
-              <UnsearchedSongRow
-                song={item.song}
-                checked={checked}
-                playing={playing}
-                onPress={onPress}
-                onLongPress={onLongPress}
-                accessibilityActions={accessibilityActions}
-                onAccessibilityAction={onAccessibilityAction}
-              />
-            ) : (
-              <UnavailableSongRow
-                song={item.song}
-                checked={checked}
-                onPress={onPress}
-                onLongPress={onLongPress}
-                accessibilityActions={accessibilityActions}
-                onAccessibilityAction={onAccessibilityAction}
-              />
-            )}
-          </View>
-          <GestureDetector gesture={grip}>
-            <View
-              accessible={false}
-              importantForAccessibility="no-hide-descendants"
-              className="items-end justify-center"
-              // 48dp of target for a grip drawn in the 32dp state cell.
-              style={{ width: grid.stateCell + CELL * 2, height: ROW, marginLeft: -CELL * 2 }}
-            >
-              {/* Hidden, not removed, while selecting or finding: the rows keep their width. */}
-              {!selecting && reorderable && (
-                <IconGripVertical size={20} color={secondary} strokeWidth={1.5} />
-              )}
-            </View>
-          </GestureDetector>
-        </View>
-      </SwipeableRow>
-    </Animated.View>
+      {/* Hidden, not removed, while selecting or finding: the rows keep their width. */}
+      {shown && <IconGripVertical size={20} color={color} strokeWidth={1.5} />}
+    </View>
   );
 }
+
+/**
+ * An entry's row with its grip on the right, dragged by it on the UI thread
+ * (`useRowDrag`): it steps aside as another passes, and leaves a gap while
+ * its lifted copy follows the finger. Memoized: it renders again only when
+ * its row, its place or the drag's state for it changes.
+ */
+const DraggableEntry = memo(function DraggableEntry({
+  row,
+  rowKey,
+  index,
+  drag,
+  lifted,
+  grip,
+}: {
+  row: ReactElement<SongRowActions>;
+  rowKey: string;
+  index: number;
+  drag: DragRows;
+  lifted: boolean;
+  /** The grip shows and drags: not while selecting or finding. */
+  grip: boolean;
+}) {
+  const secondary = useThemeColor("secondary");
+  const { pan, style } = useDraggedRow(drag, rowKey, index, grip);
+  const accessory = useMemo(
+    () => (
+      <GestureDetector gesture={pan}>
+        <Grip shown={grip} color={secondary} />
+      </GestureDetector>
+    ),
+    [pan, grip, secondary],
+  );
+  return (
+    <Animated.View style={[{ height: ROW, opacity: lifted ? 0 : 1 }, style]}>
+      {cloneElement(row, { accessory })}
+    </Animated.View>
+  );
+});
 
 type Props = {
   playlistId: number;
@@ -237,27 +157,6 @@ type Props = {
 };
 
 const NO_ITEMS: readonly PlaylistEntryRow[] = [];
-
-/**
- * The scroll view's content is the head (0), the rows or the empty note (1),
- * then the recommendations (2), each one native view (`collapsable={false}`).
- * Anchoring from index 2 keeps the recommendations where they are on screen
- * as rows are added or removed above them (#608).
- */
-const RECOMMENDATIONS_ANCHOR = { minIndexForVisible: 2 } as const;
-
-/** Each entry is its own selection item, so a song in the playlist twice is checked per copy. */
-const entryKey = (item: PlaylistEntryRow): string => String(item.itemId);
-
-/** The id the entry's song goes by in the queue, to show it playing; null for one that never plays. */
-const queueId = (item: PlaylistEntryRow): string | null =>
-  item.source === "unavailable" ? null : queueSongTrackId(item);
-
-/** Whether the entry can be checked: an unavailable entry has nothing the selection bar acts on. */
-const checkable = (item: PlaylistEntryRow): boolean => item.source !== "unavailable";
-
-/** While selecting, an unavailable entry's row does nothing. */
-const INERT_ROW = { checked: undefined, onPress: () => undefined, onLongPress: () => undefined };
 
 /**
  * Plays the playlist from [startIndex] (or from the top, or shuffled),
@@ -283,21 +182,24 @@ export const playPlaylistEntries = (
 
 /**
  * A playlist's songs in order, the Library's and YT Music's (streamed, with
- * the YT Music song's menu): tap plays the playlist from the song, the grip
- * drags it to a new place (scrolling the list near its edges), a swipe runs
- * an entry of its menu as every song row's does (left removes it from the
- * playlist at once, right adds it to the queue), long-press opens its menu. The menu's Select starts selection
+ * the YT Music song's menu), on the song list: tap plays the playlist from
+ * the song, the grip drags it to a new place (scrolling the list near its
+ * edges, saved on release), a swipe runs an entry of its menu as every song
+ * row's does (left removes it from the playlist at once, right adds it to
+ * the queue), long-press opens its menu. The menu's Select starts selection
  * mode (check cells, taps toggle, no dragging or swiping), whose bar adds
- * Remove from Playlist, for Library and YT Music songs alike.
+ * Remove from Playlist, for Library and YT Music songs alike. Screen readers
+ * get Move up / Move down and the swipes' actions. While selecting, an
+ * unavailable entry can't be checked and does nothing.
  */
 export function PlaylistItems({ playlistId, items, header, empty }: Props) {
   const scrollable = useListScrollable();
   const read = items ?? NO_ITEMS;
   const bottomInset = useChromeInset();
-  const currentIds = useCurrentPlayingIds();
-  const favorites = useFavoriteIds();
+  const fill = useThemeColor("fill");
+  const secondary = useThemeColor("secondary");
   const placeOf = useCallback(
-    (item: PlaylistEntryRow) => ({ playlistId, itemId: item.itemId }),
+    (item: PlaylistEntryRow): PlaylistPlace => ({ playlistId, itemId: item.itemId }),
     [playlistId],
   );
 
@@ -333,20 +235,17 @@ export function PlaylistItems({ playlistId, items, header, empty }: Props) {
     keyOf: entryKey,
     target: tracksOf,
   });
-  // Find in Playlist: the list scrolls back to where it was once the query is cleared.
-  const dragRef = useRef<ListDrag | null>(null);
-  const find = useFindInList(
-    order,
-    entryText,
-    () => dragRef.current?.drag.scroll.get() ?? 0,
-    (y) => dragRef.current?.scrollRef.current?.scrollTo({ y, animated: false }),
-  );
+  const list = useRef<LegendListRef>(null);
+  const find = useFindInLegendList(list, order, entryText, true);
   // The rows shown: the whole playlist, or the songs the query finds, in playlist order.
   const { found, shown } = find;
+  const reorderable = found === null;
+  const selecting = listSelection.selecting;
   const orderRef = useRef(order);
   useLayoutEffect(() => {
     orderRef.current = order;
   });
+  const places = usePositions(order);
 
   const reorder = (fromIndex: number, toIndex: number): boolean => {
     // A narrowed list has no places to move to.
@@ -359,18 +258,28 @@ export function PlaylistItems({ playlistId, items, header, empty }: Props) {
     void movePlaylistItem(playlistId, item.itemId, toIndex);
     return true;
   };
-  const listDrag = useListDrag({ count: shown.length, cells: CELLS, bottomInset, move: reorder });
-  const { scrollRef } = listDrag;
+
+  // The rows start under the head (the Find field and the playlist's head).
+  const [lead, setLead] = useState(0);
+  const keys = useMemo(() => shown.map(entryKey), [shown]);
+  const { drag, rowDrag, liftedStyle, height, scroll, scrollRef } = useRowDrag({
+    keys,
+    bottomInset,
+    lead,
+    scrollFloor: 0,
+    // Find in Playlist waits above the head until the list is pulled down.
+    initialScroll: FIND_FIELD_HEIGHT,
+    counter: "playlist",
+    onDrop: (_key, from, to) => void reorder(from, to),
+  });
 
   // Recommendations hold their screen position only while some of them are in sight: an Add
   // grows the list above them without pushing them down, and someone reading the rows above
   // (the footer out of sight) sees nothing move.
   const recommendationsTop = useSharedValue(Number.POSITIVE_INFINITY);
-  const viewportHeight = useSharedValue(0);
   const [anchored, setAnchored] = useState(false);
   useAnimatedReaction(
-    () =>
-      recommendationsTop.get() < listDrag.drag.scroll.get() + viewportHeight.get() - bottomInset,
+    () => recommendationsTop.get() < scroll.get() + height.get() - bottomInset,
     (inSight, previous) => {
       if (inSight !== previous) scheduleOnRN(setAnchored, inSight);
     },
@@ -378,94 +287,185 @@ export function PlaylistItems({ playlistId, items, header, empty }: Props) {
   );
   // Suggestions come from YouTube Music radios: with YT Music off there are none.
   const ytMusic = useYtMusicEnabled();
-  const recommending = ytMusic && items !== undefined && found === null && !listSelection.selecting;
+  const recommending = ytMusic && items !== undefined && found === null && !selecting;
   useLayoutEffect(() => {
-    dragRef.current = listDrag;
-  });
+    recommendationsTop.set(recommending ? lead + shown.length * ROW : Number.POSITIVE_INFINITY);
+  }, [recommendationsTop, recommending, lead, shown.length]);
 
   const onRemove = (item: PlaylistEntryRow) => {
     setOrder((current) => current.filter((row) => row.itemId !== item.itemId));
     void removePlaylistItems(playlistId, [item.itemId]);
   };
 
-  const context = { kind: "playlist", id: String(playlistId) } as const;
+  const context = useMemo(
+    (): QueueContext => ({ kind: "playlist", id: String(playlistId) }),
+    [playlistId],
+  );
+  const data = useMemo(
+    (): readonly Item[] =>
+      items === undefined
+        ? []
+        : [
+            ...shown,
+            ...(found === null && order.length === 0 ? [EMPTY] : []),
+            ...(recommending ? [RECOMMENDATIONS] : []),
+          ],
+    [items, shown, found, order.length, recommending],
+  );
+  const song = useCallback((item: Item) => {
+    const entry = entryOf(item);
+    return entry === null ? null : playlistEntry(entry);
+  }, []);
+  const selection = useMemo(
+    (): SongListSelection<Item> => ({
+      selecting,
+      isChecked: (item) => {
+        const entry = entryOf(item);
+        return entry !== null && listSelection.isChecked(entry);
+      },
+      toggle: (item) => {
+        const entry = entryOf(item);
+        if (entry !== null && checkable(entry)) listSelection.toggle(entry);
+      },
+      start: (item) => {
+        const entry = entryOf(item);
+        if (entry !== null && checkable(entry)) listSelection.start(entry);
+      },
+      checkable: (item) => {
+        const entry = entryOf(item);
+        return entry !== null && checkable(entry);
+      },
+    }),
+    [selecting, listSelection],
+  );
+  const count = shown.length;
+  const rowActions = useCallback(
+    (_item: Item, index: number): readonly AccessibilityActionInfo[] =>
+      selecting || !reorderable
+        ? NO_MOVES
+        : [...(index > 0 ? [MOVE_UP] : []), ...(index < count - 1 ? [MOVE_DOWN] : [])],
+    [selecting, reorderable, count],
+  );
+  const decorateRow = useCallback(
+    (row: ReactElement, item: Item, index: number) => {
+      const key = itemKey(item);
+      return (
+        <DraggableEntry
+          row={row as ReactElement<SongRowActions>}
+          rowKey={key}
+          index={index}
+          drag={rowDrag}
+          lifted={drag?.key === key}
+          grip={!selecting && reorderable}
+        />
+      );
+    },
+    [rowDrag, drag, selecting, reorderable],
+  );
+  const renderSlot = ({ item }: { item: Item }) =>
+    "kind" in item ? (
+      item.kind === "empty" ? (
+        empty
+      ) : (
+        <PlaylistRecommendations key={playlistId} playlistId={playlistId} items={read} />
+      )
+    ) : null;
 
-  const renderRow = (index: number) => {
-    const item = shown[index];
-    if (item === undefined) return null;
-    // A found song plays the whole playlist from its own place in it.
-    const play = () => playPlaylistEntries(order, find.placeOf(index), context);
-    const row =
-      item.source === "unavailable" && listSelection.selecting
-        ? INERT_ROW
-        : selectableRow(item, listSelection, play, (options) => {
-            const menu = { ...options, playlistItem: placeOf(item) };
-            if (item.source === "library") openTrackActions(item.track, menu);
-            else if (item.source === "stream") openYtSongActions(item.song, menu);
-            else if (item.source === "unsearched") openUnsearchedActions(item.song, menu);
-            else openUnavailableEntryActions(item.song, placeOf(item));
-          });
-    return (
-      <PlaylistItem
-        key={item.itemId}
-        item={item}
-        place={placeOf(item)}
-        index={index}
-        count={shown.length}
-        drag={listDrag.drag}
-        playing={queueId(item) !== null && currentIds.has(queueId(item) ?? "")}
-        favorite={item.source === "library" && favorites.has(item.track.id)}
-        selecting={listSelection.selecting}
-        reorderable={found === null}
-        {...row}
-        handlers={listDrag}
-        onMove={reorder}
-        onRemove={onRemove}
-      />
-    );
+  const swipe = (item: Item, shown: RowMenuAction) => {
+    const entry = entryOf(item);
+    if (entry === null) return;
+    const playlistItem = placeOf(entry);
+    if (entry.source === "library")
+      runTrackSwipe({ kind: "track", items: [{ song: entry.track, playlistItem }] }, shown);
+    else if (entry.source === "stream") runYtSongSwipe(entry.song, shown, { playlistItem });
+    else if (entry.source === "unsearched")
+      runTrackSwipe({ kind: "track", items: [{ unsearched: entry.song, playlistItem }] }, shown);
+    // An unavailable entry's only swipe is Remove from Playlist (`onSongRemove`).
+  };
+  const menu = (item: Item, options: MenuOptions) => {
+    const entry = entryOf(item);
+    if (entry === null) return;
+    const place = placeOf(entry);
+    const withPlace = { ...options, playlistItem: place };
+    if (entry.source === "library") openTrackActions(entry.track, withPlace);
+    else if (entry.source === "stream") openYtSongActions(entry.song, withPlace);
+    else if (entry.source === "unsearched") openUnsearchedActions(entry.song, withPlace);
+    else openUnavailableEntryActions(entry.song, place);
   };
 
   return (
-    <Animated.ScrollView
-      keyboardShouldPersistTaps="handled"
-      keyboardDismissMode="on-drag"
-      scrollEnabled={scrollable}
-      ref={scrollRef}
-      className="flex-1"
-      maintainVisibleContentPosition={anchored && recommending ? RECOMMENDATIONS_ANCHOR : undefined}
-      onLayout={(event) => {
-        listDrag.onLayout(event);
-        viewportHeight.set(event.nativeEvent.layout.height);
-      }}
-      onContentSizeChange={listDrag.onContentSizeChange}
-      // Find in Playlist waits above the head until the list is pulled down.
-      contentOffset={{ x: 0, y: FIND_FIELD_HEIGHT }}
-      contentContainerStyle={{
-        paddingHorizontal: grid.margin,
-        paddingBottom: bottomInset,
-        minHeight: find.minHeight,
-      }}
+    <View
+      className="flex-1 overflow-hidden"
+      onLayout={(event) => height.set(event.nativeEvent.layout.height)}
     >
-      <View onLayout={listDrag.onHeaderLayout}>
-        <FindHead find={find} header={header} />
-      </View>
-      {items !== undefined && found === null && order.length === 0 && (
-        <View collapsable={false}>{empty}</View>
-      )}
-      {items !== undefined && shown.length > 0 && (
-        <View collapsable={false} style={{ height: shown.length * ROW }}>
-          {/* The dragged row stays mounted however far auto-scroll takes the list. */}
-          {listDrag.indices.map(renderRow)}
-        </View>
-      )}
-      {recommending && items !== undefined && (
-        <View
-          collapsable={false}
-          onLayout={(event) => recommendationsTop.set(event.nativeEvent.layout.y)}
-        >
-          <PlaylistRecommendations key={playlistId} playlistId={playlistId} items={items} />
-        </View>
-      )}
-    </Animated.ScrollView>
+      <SongList
+        animated
+        ref={list}
+        refScrollView={scrollRef}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        scrollEnabled={scrollable && drag === null}
+        scrollEventThrottle={16}
+        className="flex-1"
+        data={data}
+        keyExtractor={itemKey}
+        song={song}
+        context={context}
+        selection={selection}
+        // A found song plays the whole playlist from its own place in it.
+        onPlay={(item) => {
+          const entry = entryOf(item);
+          if (entry !== null) playPlaylistEntries(order, places.get(entry), context);
+        }}
+        onMenu={menu}
+        onSongSwipe={swipe}
+        onSongRemove={(item) => {
+          const entry = entryOf(item);
+          if (entry !== null) onRemove(entry);
+        }}
+        rowActions={rowActions}
+        onRowAction={(item, name) => {
+          const entry = entryOf(item);
+          const index = entry === null ? -1 : orderRef.current.indexOf(entry);
+          if (index < 0) return;
+          if (name === "moveUp") reorder(index, index - 1);
+          else if (name === "moveDown") reorder(index, index + 1);
+        }}
+        decorateRow={decorateRow}
+        renderSlot={renderSlot}
+        slotType={slotType}
+        slotSize={slotSize}
+        extraData={drag}
+        alwaysRender={drag === null ? undefined : { keys: [drag.key] }}
+        maintainVisibleContentPosition={
+          anchored && recommending
+            ? { data: true, shouldRestorePosition: (item) => item === RECOMMENDATIONS }
+            : undefined
+        }
+        lifted={
+          drag === null
+            ? null
+            : {
+                key: drag.key,
+                style: [
+                  { height: ROW, left: grid.margin, right: grid.margin, backgroundColor: fill },
+                  liftedStyle,
+                ],
+                accessory: <Grip shown color={secondary} />,
+              }
+        }
+        contentContainerStyle={{
+          paddingHorizontal: grid.margin,
+          paddingBottom: bottomInset,
+          minHeight: find.minHeight,
+        }}
+        initialScrollOffset={FIND_FIELD_HEIGHT}
+        ListHeaderComponent={
+          <View onLayout={(event) => setLead(event.nativeEvent.layout.height)}>
+            <FindHead find={find} header={header} />
+          </View>
+        }
+      />
+    </View>
   );
 }

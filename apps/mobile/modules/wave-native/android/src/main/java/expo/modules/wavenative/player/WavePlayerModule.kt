@@ -63,7 +63,10 @@ class SyncStepRecord : Record {
  * After a cold start, playback resumption seeds it from the resume snapshot.
  */
 object QueueSnapshot {
+  /** Core's `QueueState` JSON, with the index and metadata JS saved apart since (null: none). */
   @Volatile var json: String? = null
+  @Volatile var index: Int? = null
+  @Volatile var metadata: String? = null
 
   /** Where the queue was started from (`phone` or `auto`), for the plays JS records. */
   @Volatile var source: String? = null
@@ -111,7 +114,7 @@ private class ControllerPlaylist(private val player: Player) : PlaylistEditor<Me
  * queue engine) and keeps the item list in step with `applySync`; the player
  * plays it gaplessly (or with a crossfade, [Crossfade]) and reports
  * `onPlaybackState` (on any change), `onPosition` (every 500 ms while
- * playing), `onItemTransition`, `onSeek`, `onCrossfade` (the song fading out
+ * playing with JS demand), `onItemTransition`, `onSeek`, `onCrossfade` (the song fading out
  * went silent) and `onPlayerError`. The controller is only touched on the
  * main thread.
  */
@@ -126,13 +129,11 @@ class WavePlayerModule : Module() {
   private val context: Context
     get() = appContext.reactContext ?: throw Exceptions.ReactContextLost()
 
-  private val positionTicker = object : Runnable {
-    override fun run() {
-      val player = controller ?: return
-      sendEvent("onPosition", position(player))
-      if (player.isPlaying) main.postDelayed(this, POSITION_INTERVAL_MS)
-    }
-  }
+  private val positionReporting = PositionReporting(
+    schedule = { tick, delay -> main.postDelayed(tick, delay); Unit },
+    cancel = { tick -> main.removeCallbacks(tick) },
+    report = { controller?.let { sendEvent("onPosition", position(it)) } },
+  )
 
   private val listener = object : Player.Listener {
     override fun onEvents(player: Player, events: Player.Events) {
@@ -140,8 +141,7 @@ class WavePlayerModule : Module() {
     }
 
     override fun onIsPlayingChanged(isPlaying: Boolean) {
-      main.removeCallbacks(positionTicker)
-      if (isPlaying) main.post(positionTicker)
+      positionReporting.setPlaying(isPlaying)
     }
 
     override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
@@ -339,16 +339,31 @@ class WavePlayerModule : Module() {
     }.runOnQueue(Queues.MAIN)
 
     /**
-     * Keeps the queue for when JS comes back (see [QueueSnapshot]), and for a
-     * cold start ([ResumeStore]), with where it was started from.
+     * Keeps the queue parts JS changed (Core's `queueWrite`; null ones didn't)
+     * for when JS comes back (see [QueueSnapshot]), and for a cold start
+     * ([ResumeStore]), with where it was started from. A skip sends only the index.
      */
-    Function("saveQueue") { json: String, source: String? ->
-      QueueSnapshot.json = json
+    AsyncFunction("saveQueue") { queue: String?, metadata: String?, index: Int?, source: String?, promise: Promise ->
+      if (queue != null) QueueSnapshot.json = queue
+      if (metadata != null) QueueSnapshot.metadata = metadata
+      if (index != null) QueueSnapshot.index = index
       if (source != null) QueueSnapshot.source = source
-      ResumeStore.saveQueue(json, source)
-    }
+      ResumeStore.saveQueue(queue, metadata, index, source)
+      promise.resolve(null)
+    }.runOnQueue(Queues.MAIN)
 
-    Function("savedQueue") { QueueSnapshot.json }
+    /**
+     * The parts last saved, which Core's `savedQueueState` puts back together;
+     * null before any. Async: the queue JSON can hold thousands of entries.
+     * On the main queue, after any `saveQueue` already sent.
+     */
+    AsyncFunction("savedQueue") { promise: Promise ->
+      promise.resolve(
+        QueueSnapshot.json?.let { json ->
+          mapOf("queue" to json, "metadata" to QueueSnapshot.metadata, "index" to QueueSnapshot.index)
+        },
+      )
+    }.runOnQueue(Queues.MAIN)
 
     Function("savedQueueSource") { QueueSnapshot.source }
 
@@ -409,6 +424,12 @@ class WavePlayerModule : Module() {
       }
     }.runOnQueue(Queues.MAIN)
 
+    /** JS's active position consumers; state events are reported regardless of demand. */
+    AsyncFunction("setPositionReporting") { requested: Boolean, promise: Promise ->
+      positionReporting.setRequested(requested)
+      promise.resolve(null)
+    }.runOnQueue(Queues.MAIN)
+
     /** The current state, e.g. when JS starts while the service is already playing. */
     AsyncFunction("getState") { promise: Promise ->
       withController(promise) { player -> promise.resolve(state(player)) }
@@ -424,7 +445,8 @@ class WavePlayerModule : Module() {
       }
     }
 
-    Function("respondAuto") { id: Int, json: String -> AutoLibrary.bridge.respond(id, json) }
+    // Async: an answer can list a whole shelf, which shouldn't cross on the JS thread.
+    AsyncFunction("respondAuto") { id: Int, json: String -> AutoLibrary.bridge.respond(id, json) }
 
     Function("failAuto") { id: Int, message: String -> AutoLibrary.bridge.fail(id, message) }
 
@@ -449,7 +471,7 @@ class WavePlayerModule : Module() {
         stopAutoLyrics?.invoke()
         stopAutoLyrics = null
         if (CrossfadeLink.onFadeEnded === fadeEnded) CrossfadeLink.onFadeEnded = null
-        main.removeCallbacks(positionTicker)
+        positionReporting.stop()
         controller?.removeListener(listener)
         controllerFuture?.let(MediaController::releaseFuture)
         controller = null
@@ -532,7 +554,7 @@ class WavePlayerModule : Module() {
         controller = connected
         sendEvent("onPlaybackState", state(connected))
         sendSleepTimer(connected.sessionExtras)
-        if (connected.isPlaying) main.post(positionTicker)
+        positionReporting.setPlaying(connected.isPlaying)
       },
       context.mainExecutor,
     )
@@ -586,8 +608,6 @@ class WavePlayerModule : Module() {
   }
 
   private companion object {
-    const val POSITION_INTERVAL_MS = 500L
-
     val STATE_EVENTS = intArrayOf(
       Player.EVENT_PLAYBACK_STATE_CHANGED,
       Player.EVENT_IS_PLAYING_CHANGED,

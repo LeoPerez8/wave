@@ -14,6 +14,7 @@ export interface PositionReport {
 
 /** The position at wall-clock time `now`, running on from the last report while playing. */
 export const extrapolatePosition = (report: PositionReport, now: number): number => {
+  "worklet";
   const elapsed = report.isPlaying ? Math.max(0, now - report.at) : 0;
   const position = report.positionMs + elapsed;
   return report.durationMs === null ? position : Math.min(position, report.durationMs);

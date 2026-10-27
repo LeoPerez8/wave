@@ -56,6 +56,25 @@ export const appLayer = Layer.mergeAll(
 
 export const appRuntime = ManagedRuntime.make(appLayer);
 
+let optimizeOnLeave: { remove: () => void } | null = null;
+
+const optimize = (when: "opened" | "leaving"): void =>
+  void appRuntime.runPromiseExit(
+    Effect.flatMap(LibraryStore.LibraryStore, (store) => store.optimize(when)),
+  );
+
+/**
+ * Lets SQLite gather the planner statistics it lacks (startup work, once the first screen has
+ * settled), then refresh the ones each session's reads made stale whenever Wave goes to the
+ * background. Statistics only guide the planner: a failed run leaves every read as it was.
+ */
+export const optimizeLibraryDatabase = (): void => {
+  optimize("opened");
+  optimizeOnLeave ??= AppState.addEventListener("change", (state) => {
+    if (state === "background") optimize("leaving");
+  });
+};
+
 export type AppServices =
   LibraryStore.LibraryStore | NativeScanner.NativeScanner | Player.Player | Queue.Queue;
 

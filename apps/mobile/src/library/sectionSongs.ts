@@ -9,7 +9,7 @@ import {
 } from "./LibraryStore";
 import { sortedPlaylists } from "./playlistOrder";
 import { appRuntime } from "./runtime";
-import { sortedForKind } from "./songSort";
+import { songsSortNow, sortedForKind } from "./songSort";
 
 type Store = LibraryStore["Service"];
 type Query<A> = (store: Store) => Effect.Effect<A, LibraryStoreError>;
@@ -87,7 +87,7 @@ export const itemSongs = (
 export const librarySectionSongs = (section: LibrarySectionSlug): Promise<readonly SongRow[]> =>
   sectionSongs(section, {
     // As Library › Songs shows them, in the sort chosen there.
-    songs: () => run((store) => store.listSongs).then((songs) => sortedForKind("songs", songs)),
+    songs: () => run((store) => store.listSortedSongs(songsSortNow())),
     favorites: () =>
       run((store) => store.listFavorites).then((songs) => sortedForKind("favorites", songs)),
     ...collections,

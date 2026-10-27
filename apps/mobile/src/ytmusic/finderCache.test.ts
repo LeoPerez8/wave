@@ -89,3 +89,23 @@ describe("one Library finder shared by every screen", () => {
     assert.equal((await again)(), "a");
   });
 });
+
+test("alternating full and artist rows reuse their finder without replacing the known Library", () => {
+  let builds = 0;
+  const cache = makeFinderCache({
+    version: () => 1,
+    read: async () => [],
+    build: (rows: readonly string[]) => {
+      builds++;
+      return build(rows);
+    },
+  });
+  const rows = ["full"];
+  const artist = ["artist"];
+  const full = cache.over(rows);
+  const own = cache.forRows(artist);
+  assert.equal(cache.over(rows), full);
+  assert.equal(cache.forRows(artist), own);
+  assert.equal(cache.known(), full);
+  assert.equal(builds, 2);
+});

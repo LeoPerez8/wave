@@ -1,12 +1,13 @@
 import { IconMusic } from "@tabler/icons-react-native";
 import { Image } from "expo-image";
-import { Image as SoftwareImage, View } from "react-native";
+import { Image as SoftwareImage, PixelRatio, View } from "react-native";
 
-import { useCapturedImage } from "@/share/imageCapture";
+import { artworkUri } from "./artworkUri";
+import { useCapturedImage, useInCapture } from "@/share/imageCapture";
 import { useThemeColor } from "@/theme/useThemeColor";
 
 type Props = {
-  /** File URI of the cached artwork; absent for files without embedded art. */
+  /** Cached path or artwork URI; absent for files without embedded art. */
   uri?: string | undefined;
   /** Solid field shown instead of an image (synthetic preview covers). */
   tint?: string | undefined;
@@ -16,9 +17,13 @@ type Props = {
 };
 
 /** Album art, treated as a photograph: square, no frame, no rounding unless asked. */
-export function Artwork({ uri, tint, size, radius = 0 }: Props) {
-  const tertiary = useThemeColor("tertiary");
-  const fill = useThemeColor("fill");
+export function Artwork({ uri: input, tint, size, radius = 0 }: Props) {
+  const [tertiary, fill] = useThemeColor(["tertiary", "fill"]);
+  const inCapture = useInCapture();
+  const uri = artworkUri(
+    input,
+    inCapture ? "original" : PixelRatio.getPixelSizeForLayoutSize(size),
+  );
   const captured = useCapturedImage(uri);
   if (uri !== undefined && captured !== undefined) {
     // Drawn into a shared image: a bitmap the snapshot's software canvas can draw.
@@ -36,6 +41,8 @@ export function Artwork({ uri, tint, size, radius = 0 }: Props) {
     return (
       <Image
         source={{ uri }}
+        // A medium URI may serve its original before migration. Never keep that fallback on disk.
+        cachePolicy={uri.startsWith("content://") ? "memory" : undefined}
         // List rows are recycled; the key stops the previous track's artwork flashing.
         recyclingKey={uri}
         style={{ width: size, height: size, borderRadius: radius, backgroundColor: fill }}

@@ -84,7 +84,7 @@ test("playback's own saves don't restart a taste derivation: it finishes in one 
   try {
     fewerPlays(fixture);
     const base = await loadLibraryStore(root, fixture.db);
-    Effect.runSync(base.saveQueue("[]", 0));
+    Effect.runSync(base.saveQueue({ queue: "[]", positionMs: 0 }));
     const track = fixture.songIds[3]!;
     const startedAt = fixture.now - 60_000;
     const playId = Effect.runSync(base.recordPlay(ongoing(track, startedAt, 0)));
@@ -241,14 +241,15 @@ test("the taste revision moves only for what the taste reads", async () => {
   const fixture = await createFastAgainFixture();
   try {
     const store = await loadLibraryStore(root, fixture.db);
-    Effect.runSync(store.saveQueue("[]", 0));
+    Effect.runSync(store.saveQueue({ queue: "[]", positionMs: 0 }));
     const track = fixture.songIds[5]!;
     const startedAt = fixture.now - 60_000;
     const playId = Effect.runSync(store.recordPlay(ongoing(track, startedAt, 0)));
     const revision = () => Effect.runSync(store.tasteRevision);
     const unrelated: Record<string, () => void> = {
       "position save": () => Effect.runSync(store.savePosition(1234)),
-      "queue save": () => Effect.runSync(store.saveQueue("[]", 99)),
+      "queue save": () =>
+        Effect.runSync(store.saveQueue({ queue: "[]", index: 1, positionMs: 99 })),
       "ongoing play's progress": () =>
         Effect.runSync(store.updatePlay(playId, ongoing(track, startedAt, 15_000))),
       "pause of the ongoing play": () =>

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { auditSources } from "./sourceAudit.mjs";
+import { auditSources, handBuiltArtwork, rowSubscriptions } from "./sourceAudit.mjs";
 
 const sources = {
   "library.ts": `export const libraryListQueries = { songs: { read: () => [] } };
@@ -162,4 +162,78 @@ test("a removed request makes its exception stale even if the hook is still moun
   );
   assert.deepEqual(audit.network, []);
   assert.deepEqual(audit.boundaries, []);
+});
+
+test("a row's whole-set follows are found through its hooks; a narrow hook may read a store", () => {
+  const files = {
+    "stores.ts": `export const ids = { get: () => new Set<string>() };
+      export const useIds = () => ids.get();
+      export const useHas = (id: string) => ids.get().has(id);`,
+    "hooks.ts": `import { useIds } from './stores';
+      export const usePlaying = (id: string) => useIds().has(id);
+      export const label = (id: string) => useIds().size + id;`,
+    "rows.tsx": `import { ids, useHas } from './stores';
+      import { usePlaying, label } from './hooks';
+      export const DeepRow = ({ id }: { id: string }) => usePlaying(id);
+      export const StoreRow = () => ids.get().size;
+      export const NarrowRow = ({ id }: { id: string }) => useHas(id);
+      export const CallbackRow = ({ id }: { id: string }) => () => label(id);
+      export const List = () => useHas('a');`,
+  };
+  const audit = auditSources(files, {
+    librarySeeds: ["stores.ts#useIds", "stores.ts#ids"],
+    networkSeeds: [],
+    roots: [],
+  });
+  assert.deepEqual(
+    rowSubscriptions(audit, {
+      isRow: (owner) => owner.endsWith("Row"),
+      hooks: ["stores.ts#useIds"],
+      stores: ["stores.ts#ids"],
+    }).map((use) => use.via.join(" > ")),
+    [
+      "rows.tsx#DeepRow > hooks.ts#usePlaying > stores.ts#useIds",
+      "rows.tsx#StoreRow > stores.ts#ids",
+    ],
+  );
+});
+
+test("a dependency's component is found by its public name through renamed and namespace imports", () => {
+  const audit = auditSources(
+    {
+      "tap.tsx": `import { Pressable as Tap } from 'react-native';
+        import * as RN from 'react-native';
+        export const A = () => <Tap />;
+        export const B = () => <RN.Pressable />;
+        export const C = () => <RN.View />;`,
+    },
+    { librarySeeds: ["react-native#Pressable"], networkSeeds: [], roots: [] },
+  );
+  assert.deepEqual(audit.missingSeeds, []);
+  assert.deepEqual(
+    audit.library.map((use) => use.owner),
+    ["tap.tsx#A", "tap.tsx#B"],
+  );
+});
+
+test("hand-built artwork URIs are literals and raw cached paths; the helper and Artwork's path are not", () => {
+  const found = handBuiltArtwork({
+    "cover.tsx": `
+      // \`file://\${song.thumbPath}\` in a comment is not code
+      export const Built = (song: any) => <Image source={{ uri: \`file://\${song.artworkPath}\` }} />;
+      export const Sized = (song: any) => \`content://dev.leoperez.wave.artwork/medium/\${song.hash}\`;
+      export const Raw = (song: any) => <Image source={{ uri: song.mediumPath ?? undefined }} />;
+      export const Helper = (song: any) => <Image source={{ uri: artworkUri(song, "medium") }} />;
+      export const Path = (song: any) => <Artwork uri={song.thumbPath} size={40} />;
+      export const Remote = (song: any) => <Image source={{ uri: song.artworkUrl }} />;`,
+  });
+  assert.deepEqual(
+    found.map((use) => `${use.owner} ${use.capability}`),
+    [
+      "cover.tsx#Built literal",
+      "cover.tsx#Built rawPath",
+      "cover.tsx#Raw rawPath",
+      "cover.tsx#Sized literal",
+    ],
+  );
 });

@@ -16,7 +16,7 @@ import { Press } from "@/motion/Press";
 import { addScreenBackHandler } from "@/overlay/back";
 
 import { LyricCard } from "./LyricCardArtwork";
-import { closeLyricCard, useLyricCard, type LyricCardContent } from "./lyricCard";
+import { closeLyricCard, type LyricCardContent } from "./lyricCard";
 import { ShareDestinations } from "./ShareDestinations";
 import { SharePreviewFrame } from "./SharePreviewFrame";
 import type { ImageSource } from "./shareImage";
@@ -130,7 +130,7 @@ function FittedCard({
  * colours, then save it or share it from the destinations row. Close (or
  * Back) goes back to picking lines.
  */
-function LyricCardPreview({ content }: { content: LyricCardContent }) {
+export function LyricCardPreview({ content }: { content: LyricCardContent }) {
   const [colour, setColour] = useState(content.colours[0] ?? LYRIC_CARD_FALLBACK);
   // A cover still loading would be missing from the image.
   const [ready, setReady] = useState(content.artworkUri === undefined);
@@ -185,10 +185,4 @@ function LyricCardPreview({ content }: { content: LyricCardContent }) {
       </View>
     </SharePreviewFrame>
   );
-}
-
-/** The lyrics card's preview while one is open (`openLyricCard`), over Now Playing. */
-export function LyricCardLayer() {
-  const content = useLyricCard();
-  return content === null ? null : <LyricCardPreview content={content} />;
 }

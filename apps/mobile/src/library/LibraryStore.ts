@@ -1,3 +1,4 @@
+import { selectDownloadsToForget } from "./db/downloadRecovery";
 import {
   playedEntityTotals,
   playedArtistSongs,
@@ -14,7 +15,7 @@ import {
   recommendationEntriesPage,
   recommendationFeedbackPage,
 } from "./db/recommendationPages";
-import type { ShuffleSong, YtSong } from "@wave/core";
+import type { QueueWrite, ShuffleSong, YtSong, YtDownloadJournalJob } from "@wave/core";
 import { makeExternalStore, type ExternalStore } from "@/lib/externalStore";
 import { publishSavedRecordings } from "./libraryChanges";
 import { backfillRecordingTitles, selectMatchingSong } from "./db/matchingSong";
@@ -143,6 +144,7 @@ import {
 } from "./db/genrePages";
 import { selectGenreSongs } from "./db/genres";
 import type { RowPage } from "./db/database";
+import { configureConnection, optimizeDatabase } from "./db/connection";
 import migrations from "./db/migrations";
 import { selectLinkRows, type LinkIds, type LinkRows } from "./db/links";
 import {
@@ -164,6 +166,7 @@ import {
   type RecordedPlay,
 } from "./db/playHistory";
 import { listeningSums, selectCountedPlays, songCountedPlays } from "./db/playTotals";
+import { loadPlayback, savePlayback, type SavedPlayback } from "./db/playback";
 import { shuffleSongs } from "./db/shuffleSongs";
 import {
   listeningHistory,
@@ -278,6 +281,7 @@ import {
   selectSongOrder,
   selectSongSummaries,
   selectSongsWithIds,
+  selectSortedSongs,
   type SongOrder,
   type SongSummary,
 } from "./db/songOrder";
@@ -474,13 +478,6 @@ export interface PathMove {
   readonly to: string;
 }
 
-/** The queue and position saved for the next launch. */
-export interface SavedPlayback {
-  /** Core's `QueueState` as JSON. */
-  readonly queue: string;
-  readonly positionMs: number;
-}
-
 /** What Now Playing shows about a track beyond the player's item. */
 export interface TrackDetails {
   readonly id: number;
@@ -631,12 +628,18 @@ export class LibraryStore extends Context.Service<
     ) => Effect.Effect<boolean, LibraryStoreError>;
     /** The streamed recording's Library row, including missing songs, without a Library read. */
     readonly matchingSong: (song: YtSong) => Effect.Effect<SongRow | null, LibraryStoreError>;
+    readonly downloadsToForget: (
+      jobs: readonly YtDownloadJournalJob[],
+    ) => Effect.Effect<readonly string[], LibraryStoreError>;
     readonly listSongs: Effect.Effect<readonly SongRow[], LibraryStoreError>;
     /**
      * Library › Songs in [sort] as Track ids, with its A–Z spine and its
      * missing songs, without the rows' details (`songSummaries` reads those
      * for the rows on screen).
      */
+    readonly listSortedSongs: (
+      sort: LibrarySongSort,
+    ) => Effect.Effect<readonly SongRow[], LibraryStoreError>;
     readonly listSongOrder: (sort: LibrarySongSort) => Effect.Effect<SongOrder, LibraryStoreError>;
     /** What finds each Library song by id (its title, artist and album), for Find in Songs. */
     readonly songFindTexts: Effect.Effect<ReadonlyMap<number, PlaylistFindText>, LibraryStoreError>;
@@ -810,11 +813,8 @@ export class LibraryStore extends Context.Service<
       trackIds: readonly string[],
     ) => Effect.Effect<ReadonlyMap<string, ShuffleSong>, LibraryStoreError>;
     readonly loadPlayback: Effect.Effect<SavedPlayback | null, LibraryStoreError>;
-    /** Saves the queue with where its current entry is. */
-    readonly saveQueue: (
-      queue: string,
-      positionMs: number,
-    ) => Effect.Effect<void, LibraryStoreError>;
+    /** Saves the parts of the queue a change touched (Core's `queueWrite`). */
+    readonly saveQueue: (write: QueueWrite) => Effect.Effect<void, LibraryStoreError>;
     readonly savePosition: (positionMs: number) => Effect.Effect<void, LibraryStoreError>;
     /** The playing track's links and artwork palette, for Now Playing; null once it's gone. */
     readonly nowPlayingSong: (
@@ -1088,6 +1088,12 @@ export class LibraryStore extends Context.Service<
     readonly listeningSums: Effect.Effect<ListeningSums, LibraryStoreError>;
     /** Changes after every committed listening write, including progress and each sync page. */
     readonly listeningHistoryVersion: Pick<ExternalStore<number>, "get" | "subscribe">;
+    /**
+     * Lets SQLite refresh its planner statistics, sampling a bounded number of rows: those
+     * it lacks once Wave has `opened` (after migrations), and those this session's reads
+     * made stale when `leaving` for the background (`optimizeDatabase`).
+     */
+    readonly optimize: (when: "opened" | "leaving") => Effect.Effect<void, LibraryStoreError>;
     /** Legacy whole-history quarter sums, retained as a semantic control; UI uses bounded pages. */
     readonly countedListening: Effect.Effect<readonly CountedListening[], LibraryStoreError>;
     /** At most 512 raw events per indexed read, with Core's historical quarter-hour projection. */
@@ -1332,8 +1338,6 @@ const getGenreSync = (db: Database, id: number): GenreDetail | null => {
   return { genre: { ...genre, trackCount: songs.length }, songs };
 };
 
-const SAVED_PLAYBACK_ID = 1;
-
 const listRecentSearchesSync = (db: Pick<Database, "select">): string[] =>
   db
     .select({ query: schema.recentSearches.query })
@@ -1374,7 +1378,7 @@ const make = Effect.gen(function* () {
   const db: Database = yield* Effect.try({
     try: () => {
       const client = openDatabaseSync(DATABASE_NAME);
-      client.execSync("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;");
+      configureConnection((statements) => client.execSync(statements));
       return drizzle(client, { schema });
     },
     catch: (cause) => new LibraryStoreError({ operation: "open the database", cause }),
@@ -1424,6 +1428,7 @@ const make = Effect.gen(function* () {
 
   return LibraryStore.of({
     listeningHistoryVersion,
+    optimize: (when) => writeAttempt("optimize the database", () => optimizeDatabase(db, when)),
     ensureDefaultRoot: (path) =>
       writeAttempt("set up scan roots", () => {
         const existing = db.select().from(schema.scanRoots).all();
@@ -1541,12 +1546,15 @@ const make = Effect.gen(function* () {
         acceptPlaylistRecommendation(db, id, offer, Date.now()),
       ),
     matchingSong: (song) => attempt("read matching song", () => selectMatchingSong(db, song)),
+    downloadsToForget: (jobs) =>
+      attempt("read downloaded files", () => selectDownloadsToForget(db, jobs)),
     listSongs: attempt("list songs", () =>
       trackQuery(db)
         .orderBy(...BY_TITLE)
         .all(),
     ),
 
+    listSortedSongs: (sort) => attempt("list sorted songs", () => selectSortedSongs(db, sort)),
     listSongOrder: (sort) =>
       attempt(
         "order songs",
@@ -1737,35 +1745,14 @@ const make = Effect.gen(function* () {
     shuffleSongs: (trackIds) =>
       attempt("read the songs' artists, genres and albums", () => shuffleSongs(db, trackIds)),
 
-    loadPlayback: attempt(
-      "read the saved queue",
-      () =>
-        db
-          .select({
-            queue: schema.savedPlayback.queue,
-            positionMs: schema.savedPlayback.positionMs,
-          })
-          .from(schema.savedPlayback)
-          .where(eq(schema.savedPlayback.id, SAVED_PLAYBACK_ID))
-          .get() ?? null,
-    ),
+    loadPlayback: attempt("read the saved queue", () => loadPlayback(db)),
 
-    saveQueue: (queue, positionMs) =>
-      writeAttempt("save the queue", () => {
-        const row = { queue, positionMs: Math.round(positionMs), updatedAt: Date.now() };
-        db.insert(schema.savedPlayback)
-          .values({ id: SAVED_PLAYBACK_ID, ...row })
-          .onConflictDoUpdate({ target: schema.savedPlayback.id, set: row })
-          .run();
-      }),
+    saveQueue: (write) => writeAttempt("save the queue", () => savePlayback(db, write, Date.now())),
 
     savePosition: (positionMs) =>
-      writeAttempt("save the playback position", () => {
-        db.update(schema.savedPlayback)
-          .set({ positionMs: Math.round(positionMs), updatedAt: Date.now() })
-          .where(eq(schema.savedPlayback.id, SAVED_PLAYBACK_ID))
-          .run();
-      }),
+      writeAttempt("save the playback position", () =>
+        savePlayback(db, { positionMs }, Date.now()),
+      ),
 
     listRecentSearches: attempt("read recent searches", () => listRecentSearchesSync(db)),
 

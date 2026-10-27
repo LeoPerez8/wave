@@ -24,7 +24,7 @@ import { AlphabetSpine } from "@/catalog/AlphabetSpine";
 import { CatalogLine } from "@/catalog/CatalogLine";
 import { CELL, grid } from "@/catalog/grid";
 import { PlaylistEntry } from "@/catalog/PlaylistEntry";
-import { TrackRow } from "@/catalog/TrackRow";
+import { SongRow } from "@/songs/SongRow";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { PlaylistsButtons, PlaylistsHeader } from "@/library/PlaylistsList";
 import { SortButton } from "@/library/SongSortButton";
@@ -53,6 +53,7 @@ import {
   SYNTHETIC_TRACKS,
   type SyntheticTrack,
 } from "@/preview/syntheticLibrary";
+import { syntheticSongRow } from "@/preview/syntheticSongRow";
 
 /** Fixed height of an album tile's caption block (catalog line, title, furniture). */
 const CAPTION = CELL * 12;
@@ -284,11 +285,9 @@ function DesignPreview({ opening }: { opening: PreviewState | undefined }) {
                 renderItem={({ item, index }) =>
                   anchored(
                     index,
-                    <TrackRow
-                      track={item.track}
-                      state={item.state}
-                      favorite={item.favorite}
-                      leading="artwork"
+                    <SongRow
+                      {...syntheticSongRow(item)}
+                      tint={item.track.tint}
                       onPress={() => undefined}
                       onLongPress={() => openSongCard(item)}
                     />,

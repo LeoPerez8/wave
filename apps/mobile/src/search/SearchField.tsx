@@ -3,7 +3,7 @@ import { type ComponentRef, type Ref, useState } from "react";
 import { StyleSheet, TextInput, View } from "react-native";
 
 import { CELL, grid } from "@/catalog/grid";
-import { Press } from "@/motion/Press";
+import { IconButton } from "@/components/IconButton";
 import { useThemeColor } from "@/theme/useThemeColor";
 
 /** The drawn glyphs: Wave's 24dp line icons. */
@@ -90,16 +90,14 @@ export function SearchField({
         />
         <View style={{ width: TARGET, height: TARGET, marginRight: -OVERHANG }}>
           {value.length > 0 && (
-            <Press
-              accessibilityRole="button"
-              accessibilityLabel="Clear search"
+            <IconButton
+              icon={IconX}
+              label="Clear search"
               onPress={() => onChange("")}
-              haptic="selection"
-              depth={0.1}
-              className="flex-1 items-center justify-center"
-            >
-              <IconX size={GLYPH} color={secondary} strokeWidth={1.5} />
-            </Press>
+              tone="secondary"
+              size={TARGET}
+              iconSize={GLYPH}
+            />
           )}
         </View>
       </View>

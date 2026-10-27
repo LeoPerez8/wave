@@ -42,11 +42,12 @@ import {
   formatFrameParts,
   formatPhases,
   formatSummary,
+  formatWakeups,
   summarize,
 } from "./metrics.ts";
 import { compareMemory, formatGrowth, formatMemoryComparison, memoryGrowth } from "./memory.ts";
 import { compileWithBaseline, generateProfiles, readProfileState } from "./profileDevice.ts";
-import { comparability, readResults, type Results } from "./results.ts";
+import { comparability, reactCompilerOf, readResults, type Results } from "./results.ts";
 import { runPerf, type Device } from "./runner.ts";
 import { ALL_SCENARIOS, GLASS_SCENARIOS, SCENARIOS, VARIANTS, type Variant } from "./scenarios.ts";
 
@@ -156,7 +157,7 @@ const describeRun = (results: Results): string => {
   return [
     `${run.label}${run.dryRun ? " (DRY RUN: simulated numbers)" : ""}, ${run.startedAt}`,
     `Wave ${run.apk.versionName ?? "?"} (${run.apk.versionCode ?? "?"}), commit ${run.apk.commit ?? "unknown"}` +
-      `, ${run.perfBuild ? "perf build" : "not a perf build"}, ${run.compilation?.status ?? "?"} (${run.compilation?.reason ?? "?"})`,
+      `, ${run.perfBuild ? `perf build (React Compiler ${reactCompilerOf(run)})` : "not a perf build"}, ${run.compilation?.status ?? "?"} (${run.compilation?.reason ?? "?"})`,
     `${run.device.manufacturer ?? ""} ${run.device.model ?? "?"}, Android ${run.device.android ?? "?"} (SDK ${run.device.sdk ?? "?"})` +
       `, ${run.display.refreshRateHz ?? "?"} Hz (motion smoothness ${run.display.refreshRateMode ?? "?"}), thermal ${run.thermalStatus ?? "?"}`,
     `Library: ${library.tracks ?? "?"} songs, ${library.playlists ?? "?"} playlists (${library.playlistItems ?? "?"} entries, largest ${
@@ -545,6 +546,9 @@ const printSummary = (results: Results): void => {
   console.log(`\nWhere the kept frames' time went (mean / p90 ms):\n\n${formatFrameParts(rows)}`);
   const phases = formatPhases(rows);
   if (phases !== "") console.log(`\n${phases}`);
+  const wakeups = formatWakeups(rows);
+  if (wakeups !== "")
+    console.log(`\nWake-ups with the screen off (median / p90 per minute):\n\n${wakeups}`);
   for (const [measure, label] of [
     ["cold", "Cold launch"],
     ["warm", "Warm launch"],

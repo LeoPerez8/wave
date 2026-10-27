@@ -272,3 +272,31 @@ test("the real store keeps ranked/page reads identifiable in read timing", async
     fixture.close();
   }
 });
+
+test("with planner statistics, a 12,000-song Library's artist reads still seek their credits", async () => {
+  const fixture = await createFastAgainFixture(12000);
+  try {
+    const store = await loadLibraryStore(ROOT, fixture.db);
+    // As the phone's startup work leaves it (#725).
+    Effect.runSync(store.optimize("opened"));
+    const ids = [fixture.targets.small.artistId, fixture.targets.large.artistId];
+    const page = { offset: 5, limit: 3 };
+    for (const read of [
+      traceQueries(fixture.db, () => Effect.runSync(store.artistsByIds(ids))),
+      traceQueries(fixture.db, () => Effect.runSync(store.listArtistsPage(page))),
+    ]) {
+      const plan = read.queries.flatMap((query) => query.plan);
+      for (const index of ["track_artists_artist_idx", "album_artists_artist_idx"])
+        assert.ok(
+          plan.some((step) => step.includes("SEARCH") && step.includes(index)),
+          plan.join("\n"),
+        );
+      assert.ok(
+        !plan.some((step) => /SCAN (?:track_artists|album_artists|tracks)\b/.test(step)),
+        plan.join("\n"),
+      );
+    }
+  } finally {
+    fixture.close();
+  }
+});

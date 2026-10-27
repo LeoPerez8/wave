@@ -39,7 +39,7 @@ function DownloadCover({ uri }: { uri: string | undefined }) {
 /**
  * A song in Settings › Downloads, queued or failed: its artwork, title and artists, the line
  * that says where it stands, what went wrong when there's [detail], then its buttons
- * ([children], `PlainTextButton`s), over a hairline. Nothing in it draws an SVG or carries an
+ * ([children], plain `TextButton`s), over a hairline. Nothing in it draws an SVG or carries an
  * animated style of its own.
  */
 export function DownloadSongRow({
