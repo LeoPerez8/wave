@@ -184,8 +184,7 @@ const SyncedLine = memo(function SyncedLine({
   onPick,
   onLayoutLine,
 }: LineProps) {
-  const foreground = useThemeColor("foreground");
-  const secondary = useThemeColor("secondary");
+  const [foreground, secondary] = useThemeColor(["foreground", "secondary"]);
   const translationLit = withOpacity(foreground, 0.72);
   const selectedFill = useSelectedFill();
   const reduceMotion = useReducedMotion();

@@ -80,8 +80,7 @@ function NowPlayingArtwork({ uri, playing, streamed }: ArtworkProps) {
   const [box, setBox] = useState(lastBox);
   const { favorite, disabled, star } = useNowPlayingStar();
   const reduceMotion = useReducedMotion();
-  const fill = useThemeColor("fill");
-  const tertiary = useThemeColor("tertiary");
+  const [fill, tertiary] = useThemeColor(["fill", "tertiary"]);
   const scale = useSharedValue(playing ? 1 : PAUSED_SCALE);
   // Whether the artwork has been in sight since it last came back: a play or
   // pause while the player was hidden doesn't spring once it shows again.

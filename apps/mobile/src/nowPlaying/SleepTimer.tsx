@@ -263,8 +263,7 @@ const openSleepTimer = (): void => {
  */
 export function SleepTimerButton() {
   const timer = useSleepTimer();
-  const accent = useThemeColor("accent");
-  const secondary = useThemeColor("secondary");
+  const [accent, secondary] = useThemeColor(["accent", "secondary"]);
   return (
     <Press
       accessibilityRole="button"

@@ -6,8 +6,9 @@ Parent: #712. Baseline source: `874fb3753b8a26efee5d22a4bd608374f9cbe23a`.
 
 `useThemeColor` accepts a token or a readonly array of tokens. A batch makes one
 Uniwind array lookup and returns strings in the same order, with `transparent`
-for a missing or non-string value. TrackRow, Artwork and the download progress
-ring now batch their native colours. Shared buttons resolve their ink, caption
+for a missing or non-string value. TrackRow, Artwork, the download progress ring and
+every Now Playing component (including the lyrics view, title star, scrubber and
+sleep timer label) now make at most one lookup per function. Shared buttons resolve their ink, caption
 and fill through one lookup each.
 
 IconButton owns the target, glyph size, tone, caption, press depth and haptic.
@@ -21,14 +22,18 @@ arrangement buttons, list actions, playlist-card actions and Settings choices
 use these components. The star's custom animated face keeps its existing pop.
 Swatches keep their existing circles and colour-picker artwork inside the shared
 target. No screen is restyled. Now Playing's scrubber, lyric-line rendering,
-cover gestures and sleep-timer internals are outside this change (#718).
+cover gestures and sleep-timer internals keep their own `Press` and behaviour
+(#718); only their two-colour reads became one batched read.
 
 ## Desktop checks
 
 The new tests use the repo's Node test runner, react-test-renderer and module
 hooks. No dependency was added. The hook test replaces the native Uniwind
 boundary and verifies an ordered batch, transparent fallbacks, scalar callers,
-readonly tuples, an empty batch and updates after a theme notification.
+readonly tuples, an empty batch and updates after a theme notification. A source
+guard (`themeLookups.test.ts`) parses TrackRow, Artwork, both shared buttons and
+every Now Playing component, and fails if any one function calls `useThemeColor`
+more than once.
 
 Button tests exercise the pure appearance and plain-press decisions consumed
 by the components: targets and glyph sizes, tones, feedback, selected segment
@@ -41,6 +46,7 @@ Those checks remain in the phone scenario below.
 pnpm --filter @wave/mobile typecheck
 node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test \
   apps/mobile/src/theme/useThemeColor.test.ts \
+  apps/mobile/src/theme/themeLookups.test.ts \
   apps/mobile/src/components/buttonAppearance.test.ts
 ```
 
