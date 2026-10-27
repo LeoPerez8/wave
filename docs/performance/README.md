@@ -355,7 +355,7 @@ ticket needs evidence, and give a new response mark a scenario step's `expect` i
   shows what it read (again after each re-read);
 - `startup.content`, on the frame after the first app screen in sight showed a Library query's
   result: startup work may go (#315). `startup.started` (`scan`, `imports`, `sync`, `playlists`,
-  `downloads`, `lookupSummary`) as each piece of startup work starts;
+  `downloads`, `lookupSummary`, `optimize`) as each piece of startup work starts;
 - touches with their native timestamp, from the root view's `onTouchStart`.
 
 Each flush also reports the shared Library queries' counters since launch, as `libraryQueries.*`
