@@ -18,6 +18,8 @@ import androidx.lifecycle.LiveData
 import androidx.lifecycle.Observer
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
+import androidx.media3.datasource.DataSourceBitmapLoader
+import androidx.media3.session.CacheBitmapLoader
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
@@ -487,6 +489,9 @@ class PlaybackService : MediaLibraryService() {
     stopAccent = NotificationAccent.state.listen { triggerNotificationUpdate() }
     AutoLyrics.state.init(PreferencesLyricsToggleStore(this))
     session = MediaLibrarySession.Builder(this, showOnSession(player), SessionCallback())
+      .setBitmapLoader(CacheBitmapLoader(DataSourceBitmapLoader.Builder(this)
+        .setMaximumOutputDimension(640)
+        .build()))
       .apply { openAppIntent()?.let(::setSessionActivity) }
       .build()
     showModes(AutoModes.state.current)

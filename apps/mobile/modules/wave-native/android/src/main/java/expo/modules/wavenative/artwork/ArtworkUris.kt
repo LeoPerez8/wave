@@ -7,6 +7,12 @@ sealed interface ArtworkRequest {
   /** One cover: the original image of artwork [hash]. */
   data class Cover(val hash: String) : ArtworkRequest
 
+  /** A row-sized cover, falling back to medium and original. */
+  data class Thumbnail(val hash: String) : ArtworkRequest
+
+  /** A tile-sized embedded cover, falling back to the original while migration is pending. */
+  data class Medium(val hash: String) : ArtworkRequest
+
   /** A playlist's 2×2 mosaic of four covers (Core's `playlistMosaic`), in reading order. */
   data class Mosaic(val hashes: List<String>) : ArtworkRequest
 }
@@ -68,6 +74,8 @@ object ArtworkUris {
     val segments = uri.substring(prefix.length).split('/')
     if (!segments.all(::isSegment)) return null
     return when {
+      segments.size == 2 && segments[0] == "thumbnail" && isHash(segments[1]) -> ArtworkRequest.Thumbnail(segments[1])
+      segments.size == 2 && segments[0] == "medium" && isHash(segments[1]) -> ArtworkRequest.Medium(segments[1])
       segments.size == 1 && isHash(segments[0]) -> ArtworkRequest.Cover(segments[0])
       segments.size == MOSAIC_TILES + 1 && segments[0] == MOSAIC && segments.drop(1).all(::isHash) ->
         ArtworkRequest.Mosaic(segments.drop(1))
@@ -75,7 +83,7 @@ object ArtworkUris {
     }
   }
 
-  private fun isSegment(segment: String): Boolean = segment == MOSAIC || isHash(segment)
+  private fun isSegment(segment: String): Boolean = segment == MOSAIC || segment == "thumbnail" || segment == "medium" || isHash(segment)
 
   /**
    * The original image of cover [hash] in [directory], whatever its format, or
@@ -85,6 +93,18 @@ object ArtworkUris {
     if (!isHash(hash)) return null
     return (EXTENSIONS.map { File(directory, "$hash.$it") } + File(File(directory, PLAYLIST_IMAGES), "$hash.jpg"))
       .firstOrNull { it.isFile }
+  }
+
+  /** Thumbnail, medium, original. A missing size never causes the cover to disappear. */
+  fun thumbnailFile(directory: File, hash: String): File? {
+    if (!isHash(hash)) return null
+    return File(directory, "${hash}_thumb.jpg").takeIf { it.isFile } ?: mediumFile(directory, hash)
+  }
+
+  /** Medium, then original. Never serves a partial file or a path outside the artwork folder. */
+  fun mediumFile(directory: File, hash: String): File? {
+    if (!isHash(hash)) return null
+    return File(directory, "${hash}_medium.jpg").takeIf { it.isFile } ?: coverFile(directory, hash)
   }
 
   /** The thumbnails a mosaic of [hashes] is drawn from, in reading order. */

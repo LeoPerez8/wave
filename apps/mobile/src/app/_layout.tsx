@@ -1,3 +1,4 @@
+import { startMediumCovers } from "@/library/mediumCovers";
 import "../../global.css";
 // Lays the chosen theme colours over global.css's, in the chosen appearance, before anything renders.
 // oxlint-disable-next-line import/no-unassigned-import
@@ -89,6 +90,8 @@ export default function RootLayout() {
     // Playlists live in the database already: read ahead for the first Add to Playlist card.
     if (granted) return afterFirstSettled("playlists", primePlaylists);
   }, [granted]);
+
+  useEffect(() => startMediumCovers(), []);
 
   // A whole-Library lyrics and genre run that ended in the background says how it went.
   useEffect(() => afterFirstSettled("lookupSummary", followLibraryLookupSummary), []);
