@@ -15,7 +15,6 @@ import {
   fillAnswered,
   fillPauseLine,
   nextFillStep,
-  unsearchedTrackId,
   type BackgroundFill,
   type FillPlaylist,
   type UnsearchedSettlement,
@@ -24,11 +23,12 @@ import {
 } from "@wave/core";
 import * as Effect from "effect/Effect";
 
+import { freeTurnEffect } from "@/lib/backgroundWork";
 import { appLog } from "@/log/appLog";
 import { ytMusicEnabled } from "@/settings/ytMusic";
 import { downloadsOnTheirWay, onDownloadsChanged } from "@/ytmusic/YtDownloads";
 
-import type { PlaylistUnsearched } from "./db/playlists";
+import { readBackgroundFillInput } from "./backgroundFillInput";
 import { LibraryStore } from "./LibraryStore";
 import { onPlaylistsEdited } from "./playlists";
 import { appRuntime } from "./runtime";
@@ -47,10 +47,7 @@ const READ_AGAIN_MS = 15_000;
 let fill: BackgroundFill = NO_FILL;
 
 /** Each playlist's unsearched songs as last read, and when each was last played from. */
-let known: {
-  readonly playlists: readonly PlaylistUnsearched[];
-  readonly lastPlayed: ReadonlyMap<number, number>;
-} | null = null;
+let known: Effect.Success<ReturnType<typeof readBackgroundFillInput>> | null = null;
 /** When the playlists were last read (ms). */
 let readAt = 0;
 /** Whether the playlists changed since they were read. */
@@ -67,14 +64,19 @@ let searching: AbortController | null = null;
 let started = false;
 
 const readPlaylists = async (): Promise<void> => {
-  stale = false;
-  readAt = Date.now();
   known = await appRuntime.runPromise(
-    // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
+    // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service.
     LibraryStore.use((store) =>
-      store.unsearchedEntries.pipe(
-        Effect.zip(store.playlistsLastPlayed),
-        Effect.map(([playlists, lastPlayed]) => ({ playlists, lastPlayed })),
+      readBackgroundFillInput(
+        store,
+        freeTurnEffect.pipe(
+          Effect.tap(() =>
+            Effect.sync(() => {
+              stale = false;
+              readAt = Date.now();
+            }),
+          ),
+        ),
       ),
     ),
   );
@@ -82,7 +84,7 @@ const readPlaylists = async (): Promise<void> => {
 
 /** The playlists as the fill sees them: when each was last opened or played from. */
 const fillPlaylists = (): FillPlaylist[] =>
-  (known?.playlists ?? []).map(({ playlistId, songs }) => {
+  (known?.entries.playlists() ?? []).map(({ id: playlistId, songs }) => {
     const used = [opened.get(playlistId), known?.lastPlayed.get(playlistId)].filter(
       (at): at is number => at !== undefined,
     );
@@ -91,15 +93,7 @@ const fillPlaylists = (): FillPlaylist[] =>
 
 /** What was read without [song], which a search just settled in every playlist. */
 const drop = (song: UnsearchedSong): void => {
-  if (known === null) return;
-  const key = unsearchedTrackId(song);
-  known = {
-    ...known,
-    playlists: known.playlists.map((playlist) => ({
-      ...playlist,
-      songs: playlist.songs.filter((one) => unsearchedTrackId(one) !== key),
-    })),
-  };
+  known?.entries.drop(song);
 };
 
 /** Searches [song] as the fill and takes in what it settled. */
@@ -125,11 +119,12 @@ const later = (ms: number): void => {
 
 /** Takes the fill's next step: reads the playlists when due, then searches, waits or rests. */
 const step = async (): Promise<void> => {
-  const downloading = downloadsOnTheirWay();
+  let downloading = downloadsOnTheirWay();
   if (!downloading) {
     const due = known === null || (stale && (Date.now() - readAt >= READ_AGAIN_MS || isEmpty()));
     if (due) await readPlaylists();
   }
+  downloading = downloadsOnTheirWay();
   const world = { playlists: fillPlaylists(), downloading, ytMusicOn: ytMusicEnabled() };
   const now = Date.now();
   const next = nextFillStep(fill, world, now);
@@ -150,7 +145,7 @@ const step = async (): Promise<void> => {
 };
 
 /** Whether what was read holds no song left. */
-const isEmpty = (): boolean => known?.playlists.every(({ songs }) => songs.length === 0) ?? true;
+const isEmpty = (): boolean => known?.entries.empty() ?? true;
 
 /** Runs a step now, or once the one going on ends. */
 const kick = (): void => {
@@ -177,8 +172,7 @@ const kick = (): void => {
 export const playlistOpened = (playlistId: number, settled: boolean): void => {
   if (!settled) return;
   opened.set(playlistId, Date.now());
-  if (!(known?.playlists.some((playlist) => playlist.playlistId === playlistId) ?? false))
-    readAt = 0;
+  if (!(known?.entries.has(playlistId) ?? false)) readAt = 0;
   if (started) kick();
 };
 

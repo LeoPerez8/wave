@@ -33,8 +33,7 @@ import {
 } from "@wave/core";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
-import { useFocusEffect } from "expo-router";
-import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useSyncExternalStore } from "react";
 
 import { runSteps } from "@/lib/stepped";
 import { settledTurnEffect } from "@/lib/backgroundWork";
@@ -51,6 +50,7 @@ import { latestTasteProfile, tasteProfileForRecommendation } from "@/playback/Ta
 import { useDontPlayExplicit } from "@/settings/dontPlayExplicit";
 import { useYtMusicEnabled } from "@/settings/ytMusic";
 
+import { useDiscoverFocus } from "./discoverFocus";
 import { lookedUpProfileOf } from "./artistGenres";
 import { artistMixPools } from "./artistMixPools";
 import {
@@ -570,15 +570,9 @@ export const useLibraryTracks = (): ReadonlyMap<number, SongRow> | null => {
  * What the Home mix section [id] shows (`discoverMixesSection`): the last
  * mixes built, blended by its level (saying they're updating while a
  * rebuild runs), a skeleton while the first ones build, or nothing while YT
- * Music is off. Each time Home comes into focus with YT
- * Music on, they're built again if they weren't today, and while it's in
- * focus once [played] turns true (the first counted plays) if the last build
- * had no seeds from plays.
+ * Music is off. The screen warms both rows through `useDiscoverMixesFocus`.
  */
-export const useDiscoverMixes = (
-  id: MixSectionId,
-  played: boolean | undefined,
-): DiscoverMixesSection => {
+export const useDiscoverMixes = (id: MixSectionId): DiscoverMixesSection => {
   const { saved, nothingToBuildFrom, building, failed } = SECTIONS[id];
   const enabled = useYtMusicEnabled();
   const mixes = saved.useValue();
@@ -586,35 +580,6 @@ export const useDiscoverMixes = (
   const nothing = nothingToBuildFrom.useValue();
   const rebuilding = useSyncExternalStore(building.subscribe, building.get);
   const buildFailed = useSyncExternalStore(failed.subscribe, failed.get);
-  useFocusEffect(
-    useCallback(() => {
-      // Saved rows can draw before Home's plays answer; run focus work once that input is known.
-      if (!enabled || played === undefined) return;
-      refreshKnownVideos();
-      const previousLibrary = recommendationSnapshot.peek().library;
-      void appRuntime
-        .runPromise(recommendationSnapshot.library)
-        .then((library) => {
-          // A newly completed index can provide seeds a cold or empty Library did not have.
-          if (library !== previousLibrary) refresh(played);
-          void appRuntime.runPromise(tasteProfileForRecommendation(library)).catch(() => {});
-        })
-        .catch(() => {});
-      const previousGraph = recommendationSnapshot.peek().graph;
-      void appRuntime
-        .runPromise(recommendationSnapshot.graph)
-        .then((graph) => {
-          const genre = SECTIONS["genre-mixes"];
-          if (graph !== previousGraph && genre.saved.get() === null) {
-            genre.retryAt = null;
-            refresh(played, true);
-          }
-        })
-        .catch(() => {});
-      // Focus changes leave the in-flight attempt running to completion.
-      refresh(played);
-    }, [enabled, played]),
-  );
   const shown = useMemo(
     () =>
       discoverMixesSection(mixes, {
@@ -651,4 +616,35 @@ export const useDiscoverMix = (
     () => (enabled ? savedDiscoverMix(mixes, id, blend) : null),
     [enabled, mixes, id, blend],
   );
+};
+
+/** Both mix rows warm their inputs once per screen focus. */
+const focusMixes = (played: boolean): void => {
+  refreshKnownVideos();
+  const previousLibrary = recommendationSnapshot.peek().library;
+  void appRuntime
+    .runPromise(recommendationSnapshot.library)
+    .then((library) => {
+      // A newly completed index can provide seeds a cold or empty Library did not have.
+      if (library !== previousLibrary) refresh(played);
+      void appRuntime.runPromise(tasteProfileForRecommendation(library)).catch(() => {});
+    })
+    .catch(() => {});
+  const previousGraph = recommendationSnapshot.peek().graph;
+  void appRuntime
+    .runPromise(recommendationSnapshot.graph)
+    .then((graph) => {
+      const genre = SECTIONS["genre-mixes"];
+      if (graph !== previousGraph && genre.saved.get() === null) {
+        genre.retryAt = null;
+        refresh(played, true);
+      }
+    })
+    .catch(() => {});
+  // Focus changes leave the in-flight attempt running to completion.
+  refresh(played);
+};
+
+export const useDiscoverMixesFocus = (enabled: boolean, played: boolean | undefined): void => {
+  useDiscoverFocus(enabled, played, focusMixes);
 };

@@ -33,6 +33,10 @@ const finders = makeFinderCache<SongRow, FindInLibrary>({
   build: finderOver,
 });
 
+/** Reuses the shared cache for an already-read subset without another Library read. */
+export const libraryFinderForRows = (songs: readonly SongRow[]): FindInLibrary =>
+  finders.forRows(songs);
+
 /** A finder current with the Library: at once when one was read at this Library version, else after a read. */
 export const currentLibraryFinder = (): Promise<FindInLibrary> => finders.current();
 

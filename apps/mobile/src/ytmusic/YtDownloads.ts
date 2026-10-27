@@ -23,7 +23,6 @@ import {
   failedDownloadCount,
   failedDownloads,
   isWithin,
-  libraryFinder,
   listedSongTags,
   missingSongJob,
   missingSongJobId,
@@ -69,7 +68,6 @@ import {
   ytDownloadStatus,
   ytDownloadTags,
   ytDownloadsFromJournal,
-  ytDownloadsToForget,
   ytPlaylistDownload,
   ytSongsDownload,
   type DownloadFailurePlan,
@@ -125,7 +123,7 @@ import {
   publishSavedStars,
   publishYtSongSignal,
 } from "@/library/libraryChanges";
-import { LibraryStore, type SongRow } from "@/library/LibraryStore";
+import { LibraryStore } from "@/library/LibraryStore";
 import { useLoadedMissingSongs, useMissingSongs } from "@/library/hooks";
 import { refreshDownloadPolicy } from "@/library/downloadPolicy";
 import { finishFileDeletions } from "@/library/fileDeletions";
@@ -157,7 +155,8 @@ import { ytMusicEnabled } from "@/settings/ytMusic";
 import { readYtAlbum } from "./albumPages";
 import { failedJobsNow, journal, queuedCountsNow } from "./downloadJournal";
 import { followDownloadRuns } from "./downloadRun";
-import { useLoadedLibraryFinder } from "./libraryFinder";
+import { createDownloadRecovery } from "./downloadRecovery";
+import { currentLibraryFinder, useLoadedLibraryFinder } from "./libraryFinder";
 import { followYoutubeThrottle } from "./youtubeThrottle";
 import { withSearchTurn } from "./searchAllowance";
 import { YtMusic, type YtMusicError } from "./YtMusic";
@@ -1120,50 +1119,23 @@ let poll: ReturnType<typeof setInterval> | null = null;
 
 let refreshing = false;
 let refreshAgain = false;
-/** Read once per Library version (`downloadLibraryVersion`), including when downloads land between edits. */
-let downloadLibrary: { readonly version: string; readonly songs: readonly SongRow[] } | null = null;
-/** Progress on unfinished jobs doesn't change which finished jobs the Library still has. */
-let reconciledDownloads = "";
+/** Reconcile only after the run finishes; later Library edits can remove a kept download. */
+const recoverDownloads = createDownloadRecovery<NativeDownloadJob>({
+  version: downloadLibraryVersion,
+  read: (jobs) => {
+    // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service.
+    return appRuntime.runPromise(LibraryStore.use((store) => store.downloadsToForget(jobs)));
+  },
+  forget: (id, generation) => WaveSoulseek.forgetCompletedJob(id, generation),
+});
 
-/** Core's finished jobs to forget, decided against a Library read after their journal snapshot. */
 const forgetDeletedDownloads = async (
   jobs: readonly NativeDownloadJob[],
 ): Promise<readonly NativeDownloadJob[]> => {
-  if (!jobs.some((job) => job.phase === "completed" && job.acknowledged === true)) return jobs;
   const version = downloadLibraryVersion();
-  const revision = JSON.stringify([
-    version,
-    jobs
-      .filter((job) => job.phase === "completed" && job.acknowledged === true)
-      .map((job) => [job.id, job.generation]),
-  ]);
-  if (revision === reconciledDownloads) return jobs;
-  if (downloadLibrary?.version !== version) {
-    const songs = await appRuntime.runPromise(
-      Effect.gen(function* () {
-        const store = yield* LibraryStore;
-        return yield* store.listSongs;
-      }),
-    );
-    // A scan or import landed while the read was pending. Re-read both snapshots before deciding.
-    if (version !== downloadLibraryVersion()) {
-      refreshAgain = true;
-      return jobs;
-    }
-    downloadLibrary = { version, songs };
-  }
-  const forgotten = new Set<string>();
-  for (const id of ytDownloadsToForget(jobs, downloadLibrary.songs)) {
-    if (version !== downloadLibraryVersion()) {
-      refreshAgain = true;
-      break;
-    }
-    const job = jobs.find((candidate) => candidate.id === id);
-    if (job !== undefined && (await WaveSoulseek.forgetCompletedJob(id, job.generation)))
-      forgotten.add(id);
-  }
-  if (version === downloadLibraryVersion()) reconciledDownloads = revision;
-  return forgotten.size === 0 ? jobs : jobs.filter((job) => !forgotten.has(job.id));
+  const recovered = await recoverDownloads(jobs, jobs.some(unfinished));
+  if (version !== downloadLibraryVersion()) refreshAgain = true;
+  return recovered;
 };
 
 /** The replacement jobs (Core's `qualityJobId`) already recorded as having no better copy this launch. */
@@ -1331,13 +1303,13 @@ const forgetSettledFailures = (): void => {
       // A replacement with no better copy settles here once what it found is recorded: while
       // that can't be written, the journal keeps it, so the song isn't offered again.
       const recorded = await rememberNoBetterCopies(jobs);
-      const { songs, missing } = await appRuntime.runPromise(
+      const find = await currentLibraryFinder();
+      const missing = await appRuntime.runPromise(
         Effect.gen(function* () {
           const store = yield* LibraryStore;
-          return { songs: yield* store.listSongs, missing: yield* store.missingSongs() };
+          return yield* store.missingSongs();
         }),
       );
-      const find = libraryFinder(songs);
       const settled = settledDownloadFailures(jobs, {
         inLibrary: (song) => find(song) !== null,
         missingTrackIds: new Set(missing.map((track) => track.id)),
@@ -1365,11 +1337,11 @@ const requeueThrottledFailures = (): void => {
       if (Storage.getItemSync(THROTTLED_REQUEUE_KEY) !== null) return;
       const jobs = await WaveSoulseek.jobsSnapshot();
       const session = await sessionNow();
+      const find = await currentLibraryFinder();
       const library = await appRuntime.runPromise(
         Effect.gen(function* () {
           const store = yield* LibraryStore;
           return yield* Effect.all({
-            songs: store.listSongs,
             missing: store.missingSongs(),
             files: store.qualityFiles,
             upgrade: store.noBetterCopies("upgrade"),
@@ -1377,7 +1349,6 @@ const requeueThrottledFailures = (): void => {
           });
         }),
       );
-      const find = libraryFinder(library.songs);
       const failed = throttledFailures(jobs, {
         inLibrary: (song) => find(song) !== null,
         missingTrackIds: new Set(library.missing.map((track) => track.id)),
