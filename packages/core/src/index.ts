@@ -45,6 +45,18 @@ export { trackRowTrailing } from "./trackRowTrailing.ts";
 export type { TrackRowTrailingInput } from "./trackRowTrailing.ts";
 export { trackRowDownloaded } from "./trackRowDownloaded.ts";
 export type { TrackRowDownloadedInput } from "./trackRowDownloaded.ts";
+export { songRowView } from "./songRowView.ts";
+export type {
+  SongRowState,
+  SongRowLeading,
+  SongRowSource,
+  SongListRowSource,
+  SongRowRecycleType,
+  SongRowView,
+  SongRowFiles,
+  SongRowLibrarySong,
+  SongRowArtwork,
+} from "./songRowView.ts";
 export { lastListActionForm, listActionsForms } from "./listActions.ts";
 export type {
   ListActionForm,
