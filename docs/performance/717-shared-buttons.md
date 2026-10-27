@@ -7,7 +7,7 @@ Parent: #712. Baseline source: `874fb3753b8a26efee5d22a4bd608374f9cbe23a`.
 `useThemeColor` accepts a token or a readonly array of tokens. A batch makes one
 Uniwind array lookup and returns strings in the same order, with `transparent`
 for a missing or non-string value. TrackRow, Artwork, the download progress ring and
-every Now Playing component (including the lyrics view, title star, scrubber and
+every Now Playing component (including synced lyric lines, the cover, the scrubber and
 sleep timer label) now make at most one lookup per function. Shared buttons resolve their ink, caption
 and fill through one lookup each.
 
