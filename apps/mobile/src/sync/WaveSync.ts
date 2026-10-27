@@ -9,9 +9,7 @@ import { LibraryStore } from "@/library/LibraryStore";
 import { WaveAccount, waveAccountErrorCode, type WaveAccountErrorCode } from "@/native/waveAccount";
 
 import type { SyncedChanges, SyncPreferences } from "./syncCycle";
-
-/** How long a push waits after the last change, so a run of edits goes up as one. */
-const PUSH_DELAY_MS = 3_000;
+import { syncTriggers, type SyncClock } from "./syncTriggers";
 
 /** Offline or signed out: a sync stops, and tries again at the next chance, with nothing to warn of. */
 const expected = (code: WaveAccountErrorCode | null): boolean =>
@@ -34,9 +32,10 @@ interface WaveSyncPorts {
 
 /**
  * Syncs the Library with the Wave account while signed in, with no button
- * (docs/spec.md, "When it talks to the service"): a change goes up a few
- * seconds after it's made, and the account is pulled when Wave opens, when
- * it comes back to the foreground and after each push. Offline, changes
+ * (docs/spec.md, "When it talks to the service"): an edit goes up a few
+ * seconds after it's made, play ends in batches (`syncTriggers`), and the
+ * account is pulled when Wave opens, when it comes back to the foreground
+ * after a while and after each push. Offline, changes
  * wait in the store. A sync that fails tries again at the next of those, and
  * never reaches the Library. Signing out stops it; signing in again joins
  * the Library with the account as the first time does.
@@ -51,6 +50,8 @@ export class WaveSync extends Context.Service<
      * the last change. [songs]: the song list may have changed (a scan, a download).
      */
     readonly changed: (what: { readonly songs: boolean }) => Effect.Effect<void>;
+    /** A play started or ended here: its play goes up in the next batch of play ends. */
+    readonly played: (step: "started" | "ended") => Effect.Effect<void>;
   }
 >()("@wave/mobile/sync/WaveSync") {}
 
@@ -59,27 +60,20 @@ const make = Effect.gen(function* () {
   let ports: WaveSyncPorts | null = null;
   /** The account signed in (its email), or null. */
   let account: string | null = null;
-  let running = false;
-  /** Asked to sync while one was running: sync once more when it ends. */
-  let again = false;
-  /** The first sync after launch looks at the song list too. */
-  let songsChanged = true;
-  let pending: ReturnType<typeof setTimeout> | undefined;
 
-  const sync = (): void => {
-    if (pending !== undefined) clearTimeout(pending);
-    pending = undefined;
-    if (account === null || ports === null) return;
-    if (running) {
-      again = true;
-      return;
-    }
-    running = true;
-    again = false;
-    const songs = songsChanged;
-    songsChanged = false;
+  const clock: SyncClock = {
+    now: Date.now,
+    after: (ms, run) => {
+      const timer = setTimeout(run, ms);
+      return () => clearTimeout(timer);
+    },
+  };
+
+  /** One sync; resolves whether it finished. */
+  const run = async (songs: boolean): Promise<boolean> => {
+    if (account === null || ports === null) return false;
     const { preferences, pulled, soulseek } = ports;
-    void Effect.runPromise(
+    const finished = await Effect.runPromise(
       store.syncWithAccount({
         transport: WaveAccount,
         preferences,
@@ -90,43 +84,44 @@ const make = Effect.gen(function* () {
         // Each database step waits until the owner's taps are through.
         turn: freeTurn,
       }),
-    )
-      .then(
-        (result) => pulled(result.pulled),
-        (error: unknown) => {
-          // The song list is looked at again next time.
-          if (songs) songsChanged = true;
-          if (!expected(waveAccountErrorCode((error as { cause?: unknown }).cause))) {
-            console.warn("[wave] Syncing with the Wave account didn't finish", error);
-          }
-        },
-      )
-      // The Soulseek account follows the Wave account's at each pull, the first after sign-in too.
-      .then(() => (account === null ? undefined : soulseek()))
-      .catch((error: unknown) => {
+    ).then(
+      (result) => {
+        pulled(result.pulled);
+        return true;
+      },
+      (error: unknown) => {
+        if (!expected(waveAccountErrorCode((error as { cause?: unknown }).cause))) {
+          console.warn("[wave] Syncing with the Wave account didn't finish", error);
+        }
+        return false;
+      },
+    );
+    // The Soulseek account follows the Wave account's at each pull, the first after sign-in too.
+    if (account !== null) {
+      await soulseek().catch((error: unknown) => {
         const code = waveAccountErrorCode(error);
         if (!expected(code)) {
           // The code only: the native module's errors never carry the account.
           console.warn("[wave] Couldn't follow the Wave account's Soulseek account", { code });
         }
-      })
-      .finally(() => {
-        running = false;
-        if (again) sync();
       });
+    }
+    return finished;
   };
+
+  // The first sync after launch looks at the song list too.
+  const triggers = syncTriggers({ clock, run, songsChanged: true });
 
   const sessionChanged = (session: WaveSession): void => {
     if (session.status === "signedIn") {
       const signedIn = session.account.email;
       const changedAccount = account !== signedIn;
       account = signedIn;
-      if (changedAccount) sync();
+      if (changedAccount) triggers.now();
       return;
     }
     account = null;
-    if (pending !== undefined) clearTimeout(pending);
-    pending = undefined;
+    triggers.stop();
     // The Library stays, but for its missing songs; the next sign-in joins it with the account anew.
     void Effect.runPromise(store.leaveAccount).then(
       () =>
@@ -150,15 +145,17 @@ const make = Effect.gen(function* () {
         WaveAccount.addListener("onSessionChanged", sessionChanged);
         WaveAccount.session().then(sessionChanged, () => {});
         AppState.addEventListener("change", (state) => {
-          if (state === "active") sync();
+          if (state === "active" && account !== null) triggers.foreground();
         });
       }),
     changed: (what) =>
       Effect.sync(() => {
-        if (what.songs) songsChanged = true;
-        if (account === null) return;
-        if (pending !== undefined) clearTimeout(pending);
-        pending = setTimeout(sync, PUSH_DELAY_MS);
+        // Signed out: signing in joins the Library anew, its song list with it.
+        if (account !== null) triggers.edited(what);
+      }),
+    played: (step) =>
+      Effect.sync(() => {
+        if (account !== null) triggers.played(step);
       }),
   });
 });

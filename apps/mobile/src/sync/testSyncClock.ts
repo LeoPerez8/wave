@@ -20,9 +20,7 @@ export const fakeClock = () => {
   const pass = async (ms: number): Promise<void> => {
     const end = time + ms;
     for (;;) {
-      const due = timers
-        .filter((timer) => timer.at <= end)
-        .sort((a, b) => a.at - b.at)[0];
+      const due = timers.filter((timer) => timer.at <= end).toSorted((a, b) => a.at - b.at)[0];
       if (due === undefined) break;
       timers = timers.filter((timer) => timer !== due);
       time = due.at;
