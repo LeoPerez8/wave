@@ -2,6 +2,7 @@ import { IconLanguage, IconQuoteOff, IconShare3 } from "@tabler/icons-react-nati
 import {
   MAX_SHARED_LYRIC_LINES,
   currentLyricIndex,
+  extrapolatePosition,
   isLyricLineSelected,
   lyricCardColours,
   shareableLyricLines,
@@ -13,16 +14,20 @@ import {
   type LyricSelection,
 } from "@wave/core";
 import * as Haptics from "expo-haptics";
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ScrollView, Text, View, type ScrollViewInstance } from "react-native";
 import Animated, {
   interpolateColor,
+  useAnimatedReaction,
   useAnimatedStyle,
   useReducedMotion,
   useSharedValue,
   withTiming,
 } from "react-native-reanimated";
 
+import { scheduleOnRN } from "react-native-worklets";
+
+import { useRenderCount } from "@/perf/perf";
 import { CELL, grid } from "@/catalog/grid";
 import { SkeletonLine } from "@/catalog/SkeletonLine";
 import { EmptyState } from "@/components/EmptyState";
@@ -31,13 +36,14 @@ import { TextButton } from "@/components/TextButton";
 import { Press } from "@/motion/Press";
 import { addScreenBackHandler } from "@/overlay/back";
 import { seekTo } from "@/playback/actions";
-import type { PlaybackState } from "@/playback/Player";
+import { playbackState, type PlaybackState } from "@/playback/Player";
 import { setLyricsTranslationOn, useLyricsTranslationOn } from "@/settings/lyricsTranslation";
 import { closeLyricCard, openLyricCard } from "@/share/lyricCard";
 import { useThemeColor } from "@/theme/useThemeColor";
 
 import { DismissArea } from "./DismissArea";
-import { usePlayhead, type LibraryFile } from "./hooks";
+import type { LibraryFile } from "./hooks";
+import { isPlayheadLive, playhead, playheadVisibility } from "./playhead";
 import { TrackHeader } from "./TrackHeader";
 import { useLibraryLyrics, type LibraryLyricsShown } from "./useLibraryLyrics";
 import { useLyricsTranslation, type TranslationShown } from "./useLyricsTranslation";
@@ -259,8 +265,38 @@ function SyncedLyrics({
   translation: TranslationShown | null;
   retryTranslation: () => void;
 }) {
-  const { positionMs } = usePlayhead();
-  const index = currentLyricIndex(lines, positionMs);
+  useRenderCount("SyncedLyrics");
+  const [current, setCurrent] = useState(() => ({
+    lines,
+    index: currentLyricIndex(lines, extrapolatePosition(playbackState.get(), Date.now())),
+  }));
+  const latestLines = useRef(lines);
+  useLayoutEffect(() => {
+    latestLines.current = lines;
+  }, [lines]);
+  const index =
+    current?.lines === lines
+      ? current.index
+      : currentLyricIndex(lines, playbackState.get().positionMs);
+  const publishIndex = useCallback(
+    (next: number) => {
+      if (isPlayheadLive() && latestLines.current === lines)
+        setCurrent((previous) =>
+          previous?.lines === lines && previous.index === next ? previous : { lines, index: next },
+        );
+    },
+    [lines],
+  );
+  useAnimatedReaction(
+    () => (playhead.live.get() ? currentLyricIndex(lines, playhead.positionMs.get()) : null),
+    (next, previous) => {
+      if (next !== null && next !== previous) scheduleOnRN(publishIndex, next);
+    },
+  );
+  const translations = useMemo(
+    () => lines.map((line, at) => lineTranslation(translation, at, line.text)),
+    [lines, translation],
+  );
   const reduceMotion = useReducedMotion();
   const scroll = useRef<ScrollViewInstance>(null);
   const [height, setHeight] = useState(0);
@@ -274,7 +310,7 @@ function SyncedLyrics({
 
   const scrollToCurrent = useCallback(
     (animated: boolean) => {
-      if (!following.current || height === 0) return;
+      if (!isPlayheadLive() || !following.current || height === 0) return;
       const at = currentIndex.current;
       const y = at < 0 ? 0 : offsets.current[at];
       if (y === undefined) return;
@@ -301,7 +337,18 @@ function SyncedLyrics({
     if (resume.current !== null) clearTimeout(resume.current);
     resume.current = null;
   }, []);
-  useEffect(() => stopResume, [stopResume]);
+  useEffect(() => {
+    const stop = playheadVisibility.subscribe(() => {
+      if (!playheadVisibility.get()) {
+        stopResume();
+        following.current = !pickingNow.current;
+      }
+    });
+    return () => {
+      stop();
+      stopResume();
+    };
+  }, [stopResume]);
 
   const onSeek = useCallback(
     (line: LyricLine, at: number) => {
@@ -340,8 +387,9 @@ function SyncedLyrics({
       }}
       onScrollEndDrag={() => {
         stopResume();
+        if (!isPlayheadLive()) return;
         resume.current = setTimeout(() => {
-          if (pickingNow.current) return;
+          if (!isPlayheadLive() || pickingNow.current) return;
           following.current = true;
           scrollToCurrent(!reduceMotion);
         }, RESUME_FOLLOW_MS);
@@ -359,7 +407,7 @@ function SyncedLyrics({
           current={at === index}
           picking={isPicking}
           selected={picking?.isSelected(at) ?? false}
-          {...lineTranslation(translation, at, line.text)}
+          {...translations[at]!}
           onSeek={onSeek}
           onPick={onPick}
           onLayoutLine={onLayoutLine}

@@ -56,8 +56,10 @@ export const stepSleepMinutes = (minutes: number, direction: 1 | -1): number => 
  * The time left as a countdown, e.g. `14:59`. Rounded up to the whole second,
  * so it reads `0:00` only once the timer is due.
  */
-export const formatSleepRemaining = (ms: number): string =>
-  formatDuration(Math.ceil(ms / MS_PER_SECOND) * MS_PER_SECOND);
+export const formatSleepRemaining = (ms: number): string => {
+  "worklet";
+  return formatDuration(Math.ceil(ms / MS_PER_SECOND) * MS_PER_SECOND);
+};
 
 /** A duration in whole minutes as the stepper shows it, e.g. `45 min` or `1 h 30 min`. */
 export const formatSleepMinutes = (minutes: number): string => {
