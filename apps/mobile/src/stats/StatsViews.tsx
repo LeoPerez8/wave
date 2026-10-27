@@ -16,13 +16,15 @@ import { useCallback, useMemo, type ReactElement } from "react";
 import { ScrollView, Text, useWindowDimensions, View } from "react-native";
 
 import { CELL, grid } from "@/catalog/grid";
-import { SwipeTrackRow } from "@/library/SwipeTrackRow";
+import { TrackRow } from "@/catalog/TrackRow";
+import { useLibrarySongSwipes } from "@/playback/rowSwipe";
 import { useChromeInset } from "@/chrome/chrome";
 import { EmptyState } from "@/components/EmptyState";
 import { useFavoriteIds } from "@/library/favorites";
 import { openRecap } from "@/library/routes";
 import { toTrackSummary } from "@/library/TrackList";
 import { Press } from "@/motion/Press";
+import { TextButton } from "@/components/TextButton";
 import { playPlaylist } from "@/playback/actions";
 import { useCurrentPlayingIds } from "@/playback/hooks";
 import { openTrackActions } from "@/playback/ActionsMenu";
@@ -59,28 +61,15 @@ export function PeriodTabs({
       {STATS_PERIODS.map((option) => {
         const selected = option.id === period;
         return (
-          <Press
+          <TextButton
             key={option.id}
-            accessibilityRole="tab"
+            label={option.tab}
             accessibilityLabel={option.label}
-            accessibilityState={{ selected }}
+            accessibilityRole="tab"
+            variant="segment"
+            selected={selected}
             onPress={() => onChange(option.id)}
-            haptic="selection"
-            style={{ minHeight: 48, justifyContent: "center" }}
-          >
-            <Text
-              numberOfLines={1}
-              className={`font-sans text-body ${
-                selected ? "font-semibold text-foreground" : "text-secondary"
-              }`}
-            >
-              {option.tab}
-            </Text>
-            <View
-              className={selected ? "bg-accent" : "bg-transparent"}
-              style={{ height: 2, marginTop: CELL / 2 }}
-            />
-          </Press>
+          />
         );
       })}
     </View>
@@ -108,6 +97,7 @@ function RankedSongRow({
   currentIds: ReadonlySet<string>;
   favorites: ReadonlySet<number>;
 }) {
+  const swipe = useLibrarySongSwipes();
   const onPress = () => void playPlaylist(songs, index, context);
   const playing = currentIds.has(discoverTrackId(item));
   if (item.source === "stream")
@@ -122,8 +112,8 @@ function RankedSongRow({
     );
   const song = item.track;
   return (
-    <SwipeTrackRow
-      song={song}
+    <TrackRow
+      swipe={swipe(song)}
       track={{ ...toTrackSummary(song), trackNumber: index + 1 }}
       plays={countedPlays}
       state={playing ? "playing" : undefined}

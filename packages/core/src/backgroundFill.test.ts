@@ -269,3 +269,36 @@ describe("refusals and the background fill's pauses", () => {
     ]);
   });
 });
+
+test("settling an indexed fill song removes every occurrence without revisiting unrelated song keys", async () => {
+  const { indexFillPlaylists } = await import("./index.ts");
+  let titleReads = 0;
+  const untouched = {
+    ...song("Untouched"),
+    get title() {
+      titleReads++;
+      return "Untouched";
+    },
+  };
+  const settled = song("Touch");
+  const index = indexFillPlaylists([
+    { id: 1, usedAt: 100, songs: [settled, song("Contact"), settled] },
+    { id: 2, usedAt: 200, songs: [settled] },
+    { id: 3, usedAt: null, songs: [untouched] },
+  ]);
+  const before = index.playlists();
+  titleReads = 0;
+  index.drop(settled);
+  const after = index.playlists();
+  assert.equal(titleReads, 0);
+  assert.deepEqual(
+    after.map((p) => p.songs.map((s) => s.title)),
+    [["Contact"], [], ["Untouched"]],
+  );
+  assert.equal(after[2], before[2]);
+  assert.equal(index.empty(), false);
+  assert.equal(searched(nextFillStep(NO_FILL, world(after), 0).step), "Contact");
+  index.drop(song("Contact"));
+  index.drop(untouched);
+  assert.equal(index.empty(), true);
+});

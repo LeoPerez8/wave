@@ -1,6 +1,7 @@
 import { discoverTrackId, type MixedSong } from "@wave/core";
 
-import { SwipeTrackRow } from "@/library/SwipeTrackRow";
+import { TrackRow } from "@/catalog/TrackRow";
+import { useLibrarySongSwipes } from "@/playback/rowSwipe";
 import { useFavoriteIds } from "@/library/favorites";
 import type { SongRow } from "@/library/LibraryStore";
 import { toTrackSummary } from "@/library/TrackList";
@@ -33,6 +34,7 @@ export function DiscoverSongRow({
   trackNumber?: number | undefined;
   selection?: ListSelection<TrackItem> | undefined;
 }) {
+  const swipe = useLibrarySongSwipes();
   const currentIds = useCurrentPlayingIds();
   const favorites = useFavoriteIds();
   const playing = currentIds.has(discoverTrackId(song));
@@ -44,8 +46,8 @@ export function DiscoverSongRow({
   if (song.source === "stream")
     return <SwipeYtSongRow song={song.song} playing={playing} trackNumber={trackNumber} {...row} />;
   return (
-    <SwipeTrackRow
-      song={song.track}
+    <TrackRow
+      swipe={swipe(song.track)}
       track={{ ...toTrackSummary(song.track), trackNumber }}
       state={playing ? "playing" : undefined}
       favorite={favorites.has(song.track.id)}

@@ -1250,6 +1250,7 @@ export {
   fillAnswered,
   fillPauseLine,
   nextFillStep,
+  indexFillPlaylists,
 } from "./backgroundFill.ts";
 export type {
   BackgroundFill,

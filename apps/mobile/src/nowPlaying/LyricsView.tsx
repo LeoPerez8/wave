@@ -184,8 +184,7 @@ const SyncedLine = memo(function SyncedLine({
   onPick,
   onLayoutLine,
 }: LineProps) {
-  const foreground = useThemeColor("foreground");
-  const secondary = useThemeColor("secondary");
+  const [foreground, secondary] = useThemeColor(["foreground", "secondary"]);
   const translationLit = withOpacity(foreground, 0.72);
   const selectedFill = useSelectedFill();
   const reduceMotion = useReducedMotion();
@@ -500,21 +499,15 @@ function UnsyncedLyrics({
  * while off, as the sleep timer's glyph.
  */
 function TranslateButton({ on, onPress }: { on: boolean; onPress: () => void }) {
-  const accent = useThemeColor("accent");
-  const secondary = useThemeColor("secondary");
   return (
-    <Press
+    <IconButton
+      icon={IconLanguage}
+      label="Translate Lyrics"
       accessibilityRole="switch"
-      accessibilityLabel="Translate Lyrics"
       accessibilityState={{ checked: on }}
+      tone={on ? "accent" : "secondary"}
       onPress={onPress}
-      haptic="selection"
-      depth={0.1}
-      className="items-center justify-center"
-      style={{ width: 48, height: 48 }}
-    >
-      <IconLanguage size={24} color={on ? accent : secondary} strokeWidth={1.5} />
-    </Press>
+    />
   );
 }
 

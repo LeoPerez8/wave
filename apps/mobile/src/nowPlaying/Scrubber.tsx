@@ -201,8 +201,7 @@ export function Scrubber() {
     },
   }));
 
-  const accent = useThemeColor("accent");
-  const tertiary = useThemeColor("tertiary");
+  const [accent, tertiary] = useThemeColor(["accent", "tertiary"]);
 
   return (
     <View>

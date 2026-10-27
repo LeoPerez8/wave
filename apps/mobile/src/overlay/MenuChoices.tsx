@@ -1,11 +1,10 @@
-import { PLAY_ACTION_LABELS, entryDivider, withOpacity, type PlayCard } from "@wave/core";
-import { Text, View } from "react-native";
+import { PLAY_ACTION_LABELS, entryDivider, type PlayCard } from "@wave/core";
+import { View } from "react-native";
 
 import { CELL, grid } from "@/catalog/grid";
-import { Press } from "@/motion/Press";
+import { IconButton } from "@/components/IconButton";
 import { useShuffleControl } from "@/nowPlaying/ShuffleMenu";
 import { ACTION_ICONS, type MenuAction } from "@/playback/actionIcons";
-import { useThemeColor } from "@/theme/useThemeColor";
 
 import { CardEntries } from "./CardEntries";
 import { useOverlayFlow } from "./flow";
@@ -44,31 +43,31 @@ function PlayCardButton({
   onPress: () => void;
   highlighted: boolean;
 }) {
-  const ink = useThemeColor("foreground");
   const Icon = ACTION_ICONS[action];
   const label = PLAY_ACTION_LABELS[action];
   return (
-    <Press
-      accessibilityRole="button"
-      accessibilityLabel={label}
+    <IconButton
+      icon={Icon}
+      label={label}
+      caption={label}
+      tone="on-glass"
+      iconSize={CARD_ICON}
+      strokeWidth={CARD_STROKE}
+      fillOpacity={CARD_FILL}
+      depth={0.04}
       onPress={onPress}
-      haptic="selection"
       highlighted={highlighted}
-      className="items-center justify-center"
       style={{
+        width: undefined,
+        height: undefined,
         minHeight: grid.row + CELL * 2,
         borderRadius: CARD_RADIUS,
-        backgroundColor: withOpacity(ink, CARD_FILL),
         paddingVertical: CELL * 1.5,
         paddingHorizontal: CELL / 2,
         gap: CELL / 2,
       }}
-    >
-      <Icon size={CARD_ICON} color={ink} strokeWidth={CARD_STROKE} />
-      <Text numberOfLines={2} className="text-center font-sans text-footnote text-foreground">
-        {label}
-      </Text>
-    </Press>
+      captionProps={{ numberOfLines: 2, className: "text-center font-sans text-footnote" }}
+    />
   );
 }
 

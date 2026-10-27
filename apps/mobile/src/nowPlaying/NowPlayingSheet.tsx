@@ -22,7 +22,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { CELL, grid } from "@/catalog/grid";
 import { IconButton } from "@/components/IconButton";
 import { CoveredByNowPlaying } from "@/lib/screenSight";
-import { Press } from "@/motion/Press";
 import { addScreenBackHandler } from "@/overlay/back";
 import { useRenderCount } from "@/perf/perf";
 import type { TrackDetails } from "@/library/LibraryStore";
@@ -32,7 +31,6 @@ import { LyricCardLayer } from "@/share/LyricCardPreview";
 import { useLyricCardShown } from "@/share/lyricCard";
 import { useSongShareShown } from "@/share/songShare";
 import { shareNowPlaying } from "@/share/songShare";
-import { useThemeColor } from "@/theme/useThemeColor";
 
 import { Background, useBackgroundColors } from "./Background";
 import { DismissArea } from "./DismissArea";
@@ -85,21 +83,15 @@ function ViewToggle({
   on: boolean;
   onPress: () => void;
 }) {
-  const accent = useThemeColor("accent");
-  const secondary = useThemeColor("secondary");
   return (
-    <Press
+    <IconButton
+      icon={Icon}
+      label={label}
       accessibilityRole="switch"
-      accessibilityLabel={label}
       accessibilityState={{ checked: on }}
       onPress={onPress}
-      haptic="selection"
-      depth={0.1}
-      className="items-center justify-center"
-      style={{ width: CELL * 6, height: CELL * 6 }}
-    >
-      <Icon size={24} color={on ? accent : secondary} strokeWidth={1.5} />
-    </Press>
+      tone={on ? "accent" : "secondary"}
+    />
   );
 }
 

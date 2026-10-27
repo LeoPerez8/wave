@@ -11,7 +11,7 @@ import Svg, { Circle } from "react-native-svg";
 import { CELL } from "@/catalog/grid";
 import { openAddToPlaylist } from "@/library/PlaylistSheets";
 import { songHasFile } from "@/library/LibraryStore";
-import { Press } from "@/motion/Press";
+import { IconButton } from "@/components/IconButton";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 import { useThemeColor } from "@/theme/useThemeColor";
 import { useMissingSongDownloadStatus, useYtDownloadStatus } from "@/ytmusic/YtDownloads";
@@ -40,33 +40,26 @@ export function AddToPlaylistButton({
   ytSong: NativeYtSong | null;
   title: string;
 }) {
-  const secondary = useThemeColor("secondary");
   const target = usePlayingSongTarget(trackId, ytSong);
   const disabled = target === null;
   const songs = () =>
     target === null ? Promise.resolve([]) : nowPlayingSongActions.playlist(target);
   return (
-    <Press
-      accessibilityRole="button"
-      accessibilityLabel="Add to Playlist"
-      accessibilityState={{ disabled }}
+    <IconButton
+      icon={IconPlaylistAdd}
+      label="Add to Playlist"
+      tone="secondary"
+      disabledTone="secondary"
       disabled={disabled}
       onPress={() => openAddToPlaylist({ title, songs })}
       opensMenu
-      haptic="selection"
-      depth={0.1}
-      className="items-center justify-center"
-      style={BOX}
-    >
-      <IconPlaylistAdd size={ICON} color={secondary} strokeWidth={1.5} />
-    </Press>
+    />
   );
 }
 
 /** How far a download has come, as a ring filling clockwise from the top. */
 function ProgressRing({ fraction }: { fraction: number }) {
-  const accent = useThemeColor("accent");
-  const secondary = useThemeColor("secondary");
+  const [accent, secondary] = useThemeColor(["accent", "secondary"]);
   const size = ICON - 2;
   const stroke = 2;
   const radius = (size - stroke) / 2;
@@ -114,7 +107,6 @@ export function DownloadButton({
   ytSong: NativeYtSong | null;
 }) {
   const secondary = useThemeColor("secondary");
-  const accent = useThemeColor("accent");
   const target = usePlayingSongTarget(trackId, ytSong);
   const answer = usePlayingSongAnswer(target);
   const track = answer?.track ?? null;
@@ -128,7 +120,8 @@ export function DownloadButton({
   const download = (): void => {
     void nowPlayingSongActions.download(target).catch(songActionFailed);
   };
-  if (state.kind === "downloaded") return <DownloadedButton color={accent} onPress={download} />;
+  if (state.kind === "downloaded")
+    return <IconButton icon={IconDownload} label="Downloaded" onPress={download} />;
 
   if (state.kind === "waiting" || state.kind === "progress") {
     const percent = state.kind === "progress" ? Math.round(state.fraction * 100) : null;
@@ -153,34 +146,12 @@ export function DownloadButton({
   const failed = state.kind === "failed";
   const Icon = failed ? IconRefreshAlert : IconDownload;
   return (
-    <Press
-      accessibilityRole="button"
-      accessibilityLabel={failed ? "Download failed" : "Download"}
+    <IconButton
+      icon={Icon}
+      label={failed ? "Download failed" : "Download"}
       accessibilityHint={failed ? "Tries the download again" : undefined}
+      tone="secondary"
       onPress={download}
-      haptic="selection"
-      depth={0.1}
-      className="items-center justify-center"
-      style={BOX}
-    >
-      <Icon size={ICON} color={secondary} strokeWidth={1.5} />
-    </Press>
-  );
-}
-
-/** Download, tinted, for a song this phone has the file of: a tap only says so. */
-function DownloadedButton({ color, onPress }: { color: string; onPress: () => void }) {
-  return (
-    <Press
-      accessibilityRole="button"
-      accessibilityLabel="Downloaded"
-      onPress={onPress}
-      haptic="selection"
-      depth={0.1}
-      className="items-center justify-center"
-      style={BOX}
-    >
-      <IconDownload size={ICON} color={color} strokeWidth={1.5} />
-    </Press>
+    />
   );
 }

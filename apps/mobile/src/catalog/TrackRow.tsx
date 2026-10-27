@@ -129,8 +129,7 @@ export function TrackRow({
   onAccessibilityAction,
   swipe,
 }: Props) {
-  const highlight = useThemeColor("highlight");
-  const tertiary = useThemeColor("tertiary");
+  const [highlight, tertiary] = useThemeColor(["highlight", "tertiary"]);
   const fileNotFound = state === "fileNotFound";
   const playing = state === "playing";
   const missingSong = track.missingTrackId !== undefined;
