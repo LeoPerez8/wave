@@ -163,7 +163,6 @@ JavaScript saw that key, not when it was pressed.
 | `scrub`             | Now Playing's scrubber dragged 240 dp forward (`forward`), then back (`back`)                | (none)                    |         10 |
 | `queue-drag`        | The first Up Next row dragged three rows down by its handle (`down`), then up (`up`)         | (none)                    |         10 |
 | `scroll-playlist`   | on the named playlist, a fling up (`fling-up`) and back down (`fling-down`)                  | -                         |         10 |
-| `scroll-queue`      | the same on Now Playing › Queue's Up Next                                                    | -                         |         10 |
 | `search-first-tap`  | the first Search tap after a fresh launch (`first-tap`)                                      | `keyboard.show`           |          5 |
 | `search-typing`     | after a Search tap, types `love` (`type`), from `search.typed`; Clear search after           | `search.results` love     |         10 |
 | `import`            | share the link (`card`), tap Import (`start`), 10 s of the import (`during-import`)          | `import.running`          |          1 |
@@ -205,9 +204,9 @@ songs on the owner's phone; `queue.synced`'s detail gives the length), then it s
 on screen, so its `SongRow` renders show what a song change costs a visible list. It leaves the
 whole Library as the queue, playing; the next scenario's launch stops it.
 
-`scroll-playlist` flings the fixture's playlist (`--playlist`), `scroll-queue` Up Next. Neither is
-a glass scenario, so both run in `all`; `scroll-queue` scrolls whatever queue is loaded, the whole
-Library when it runs after `skip-library`.
+`scroll-playlist` flings the fixture's playlist (`--playlist`), the same flings as the glass
+scenarios, and runs in `all`. The glass `scroll-queue` scrolls whatever queue is loaded: run it
+after `skip-library` (or load the whole Library by hand) for a 12,000-song Up Next.
 
 ### Screen-off soaks
 

@@ -100,8 +100,6 @@ describe("runPerf on the simulated phone", () => {
       "queue-drag/idle/up",
       "scroll-playlist/idle/fling-up",
       "scroll-playlist/idle/fling-down",
-      "scroll-queue/idle/fling-up",
-      "scroll-queue/idle/fling-down",
       "search-first-tap/idle/first-tap",
       "search-typing/idle/type",
     ]);
@@ -428,29 +426,20 @@ describe("runPerf on the simulated phone", () => {
     }
   });
 
-  it("flings a playlist and the Queue in every baseline (#712)", async () => {
+  it("flings the named playlist in every baseline (#712)", async () => {
     const device = new FakeDevice();
-    const { out } = await runPerf(
-      device,
-      options("scroll", { scenarios: ["scroll-playlist", "scroll-queue"] }),
-    );
+    const { out } = await runPerf(device, options("scroll", { scenarios: ["scroll-playlist"] }));
     const { steps, errors } = readResults(readFileSync(out, "utf8"));
     assert.deepEqual(errors, []);
     assert.deepEqual(
       summarize(steps).map((row) => row.key),
-      [
-        "scroll-playlist/idle/fling-up",
-        "scroll-playlist/idle/fling-down",
-        "scroll-queue/idle/fling-up",
-        "scroll-queue/idle/fling-down",
-      ],
+      ["scroll-playlist/idle/fling-up", "scroll-playlist/idle/fling-down"],
     );
     for (const step of steps) {
       assert.ok(step.touchAt !== null, "a fling is measured from its touch");
       assert.ok(step.frames.total > 120);
     }
     assert.ok(ALL_SCENARIOS.includes("scroll-playlist"));
-    assert.ok(ALL_SCENARIOS.includes("scroll-queue"));
   });
 
   it("skips through the whole Library played as the queue (#712)", async () => {

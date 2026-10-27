@@ -488,17 +488,6 @@ export const SCENARIOS: readonly Scenario[] = [
     needsPlaylist: true,
   },
   {
-    name: "scroll-queue",
-    summary: "Flings on Now Playing › Queue: Up Next scrolling. Load a long queue first.",
-    setup: [
-      { kind: "tap", target: { descPrefix: "Now playing:" } },
-      { kind: "tap", target: { desc: "Queue" } },
-    ],
-    steps: () => flings,
-    iterations: 10,
-    warmup: 1,
-  },
-  {
     name: "search-first-tap",
     summary: "The first Search tap after a launch, until the keyboard is up.",
     coldEachIteration: true,

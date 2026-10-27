@@ -1,6 +1,6 @@
 # #712 Budgets: what "faster and lighter" is measured against
 
-Ticket: #713 (parent #712). Branch `feat/713-perf-rules`, based on `feat/712-faster-lighter` at 97568424.
+Ticket: #713 (parent #712). Branch `feat/713-perf-rules`, merged with `feat/712-faster-lighter` at 96286144.
 
 The Performance rules in `docs/spec.md` say a performance change states its budget and its
 before and after phone runs. This doc holds the budgets for #712's work, each tied to a
@@ -40,8 +40,8 @@ node scripts/perf/perf.ts summary perf-results/<file>.jsonl
 ```
 
 Repeat each three times (`-2`, `-3`) before reading noise. `all` runs `skip-library` after
-`skip`, so from there on the queue is the whole Library: `scroll-queue` scrolls a 12,000-song Up
-Next. The screen-off soaks need a song with synced lyrics at the head of the queue, the player
+`skip`, so from there on the queue is the whole Library, and the glass group's `scroll-queue`,
+which runs after `all`, scrolls a 12,000-song Up Next. The screen-off soaks need a song with synced lyrics at the head of the queue, the player
 paused, and a lock screen without a PIN (the runner unlocks with `wm dismiss-keyguard`). They take
 about 20 minutes each (one warm-up and three five-minute windows); for #723's 30-minute check pass
 `--iterations 6`.
@@ -53,15 +53,15 @@ about 20 minutes each (one warm-up and three five-minute windows); for #723's 30
 At 120 Hz a frame has 8.33 ms. Flings render more frames than gfxinfo keeps, so their first frame
 and settle stay empty; frames, deadline misses and frame parts are what they measure.
 
-| Scenario step                                                    | Metric                        | Budget                 |
-| ---------------------------------------------------------------- | ----------------------------- | ---------------------- |
-| `scroll-songs/idle/fling-up`, `fling-down` (glass group)         | frame p90                     | within 8.33 ms         |
-|                                                                  | deadline-miss rate, frame p99 | set from the first run |
-| `scroll-playlist/idle/fling-up`, `fling-down`                    | frame p90                     | within 8.33 ms         |
-|                                                                  | deadline-miss rate, frame p99 | set from the first run |
-| `scroll-queue/idle/fling-up`, `fling-down` (12,000-song Up Next) | frame p90                     | within 8.33 ms         |
-|                                                                  | deadline-miss rate, frame p99 | set from the first run |
-| each of the above, `import` variant                              | deadline-miss rate            | set from the first run |
+| Scenario step                                                                 | Metric                        | Budget                 |
+| ----------------------------------------------------------------------------- | ----------------------------- | ---------------------- |
+| `scroll-songs/idle/fling-up`, `fling-down` (glass group)                      | frame p90                     | within 8.33 ms         |
+|                                                                               | deadline-miss rate, frame p99 | set from the first run |
+| `scroll-playlist/idle/fling-up`, `fling-down`                                 | frame p90                     | within 8.33 ms         |
+|                                                                               | deadline-miss rate, frame p99 | set from the first run |
+| `scroll-queue/idle/fling-up`, `fling-down` (glass group, 12,000-song Up Next) | frame p90                     | within 8.33 ms         |
+|                                                                               | deadline-miss rate, frame p99 | set from the first run |
+| each of the above, `import` variant                                           | deadline-miss rate            | set from the first run |
 
 ### Navigation (tap to first frame)
 
@@ -145,21 +145,23 @@ Instrumentation section (`js:player.*` from #719, `js:sync.run` from #723).
 
 Every scenario a ticket doc names exists in `scripts/perf/scenarios.ts`:
 
-| Ticket doc                  | Scenarios                                                                                     |
-| --------------------------- | --------------------------------------------------------------------------------------------- |
-| `714-song-row-view.md`      | `scroll-songs`, `push-tracklist`, `push-playlist`, `queue`                                    |
-| `715-library-song-list.md`  | `scroll-songs`, `push-tracklist`, `push-artist`                                               |
-| `717-shared-buttons.md`     | `now-playing-first`, `now-playing`, `queue-first`, `queue`, `push-settings`                   |
-| `718-ui-playhead.md`        | `now-playing`, `now-playing-first`, `scrub`, `soak-player`, `screen-off-lyrics`, `screen-off` |
-| `719-position-on-demand.md` | `now-playing`, `now-playing-first`, `scrub`, `soak-player`, `screen-off`, `screen-off-lyrics` |
-| `720-queue-persistence.md`  | `skip`, `queue-drag`, `soak-player` (and `skip-library` for the 12,000-song skip)             |
-| `723-sync-batching.md`      | `soak-player`, `screen-off`                                                                   |
-| `724-repeated-work.md`      | `startup`, `tab-switch`, `queue`, `push-playlist`                                             |
-| `726-medium-covers.md`      | `push-library`, `push-playlist`, `tab-switch`, `now-playing`, `soak-routes`                   |
+| Ticket doc                       | Scenarios                                                                                     |
+| -------------------------------- | --------------------------------------------------------------------------------------------- |
+| `714-song-row-view.md`           | `scroll-songs`, `push-tracklist`, `push-playlist`, `queue`                                    |
+| `715-library-song-list.md`       | `scroll-songs`, `push-tracklist`, `push-artist`                                               |
+| `717-shared-buttons.md`          | `now-playing-first`, `now-playing`, `queue-first`, `queue`, `push-settings`                   |
+| `718-ui-playhead.md`             | `now-playing`, `now-playing-first`, `scrub`, `soak-player`, `screen-off-lyrics`, `screen-off` |
+| `719-position-on-demand.md`      | `now-playing`, `now-playing-first`, `scrub`, `soak-player`, `screen-off`, `screen-off-lyrics` |
+| `720-queue-persistence.md`       | `skip`, `queue-drag`, `soak-player` (and `skip-library` for the 12,000-song skip)             |
+| `721-glass-under-now-playing.md` | `scroll-queue`, `now-playing`, `soak-player`                                                  |
+| `723-sync-batching.md`           | `soak-player`, `screen-off`                                                                   |
+| `724-repeated-work.md`           | `startup`, `tab-switch`, `queue`, `push-playlist`                                             |
+| `725-database-settings.md`       | `skip`, `startup`, `rescan-return`                                                            |
+| `726-medium-covers.md`           | `push-library`, `push-playlist`, `tab-switch`, `now-playing`, `soak-routes`                   |
 
-`scroll-songs` stays in the glass group (`--scenario glass`), as #316 set it; name it or the group
-when a ticket needs it. #721's notes plan a glass `scroll-queue`; the one here is the same flings
-in `all`, so #721 can reuse it rather than add a second.
+`scroll-songs` (#316) and `scroll-queue` (#721) are in the glass group (`--scenario glass`), so
+their glass probes can be compared; name them or the group when a ticket needs them.
+`scroll-playlist` is in `all`.
 
 ## Not measured
 
