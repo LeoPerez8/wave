@@ -1,3 +1,4 @@
+import { selectDownloadsToForget } from "./db/downloadRecovery";
 import {
   playedEntityTotals,
   playedArtistSongs,
@@ -14,7 +15,7 @@ import {
   recommendationEntriesPage,
   recommendationFeedbackPage,
 } from "./db/recommendationPages";
-import type { ShuffleSong, YtSong } from "@wave/core";
+import type { ShuffleSong, YtSong, YtDownloadJournalJob } from "@wave/core";
 import { makeExternalStore, type ExternalStore } from "@/lib/externalStore";
 import { publishSavedRecordings } from "./libraryChanges";
 import { backfillRecordingTitles, selectMatchingSong } from "./db/matchingSong";
@@ -279,6 +280,7 @@ import {
   selectSongOrder,
   selectSongSummaries,
   selectSongsWithIds,
+  selectSortedSongs,
   type SongOrder,
   type SongSummary,
 } from "./db/songOrder";
@@ -632,12 +634,18 @@ export class LibraryStore extends Context.Service<
     ) => Effect.Effect<boolean, LibraryStoreError>;
     /** The streamed recording's Library row, including missing songs, without a Library read. */
     readonly matchingSong: (song: YtSong) => Effect.Effect<SongRow | null, LibraryStoreError>;
+    readonly downloadsToForget: (
+      jobs: readonly YtDownloadJournalJob[],
+    ) => Effect.Effect<readonly string[], LibraryStoreError>;
     readonly listSongs: Effect.Effect<readonly SongRow[], LibraryStoreError>;
     /**
      * Library › Songs in [sort] as Track ids, with its A–Z spine and its
      * missing songs, without the rows' details (`songSummaries` reads those
      * for the rows on screen).
      */
+    readonly listSortedSongs: (
+      sort: LibrarySongSort,
+    ) => Effect.Effect<readonly SongRow[], LibraryStoreError>;
     readonly listSongOrder: (sort: LibrarySongSort) => Effect.Effect<SongOrder, LibraryStoreError>;
     /** What finds each Library song by id (its title, artist and album), for Find in Songs. */
     readonly songFindTexts: Effect.Effect<ReadonlyMap<number, PlaylistFindText>, LibraryStoreError>;
@@ -1549,12 +1557,15 @@ const make = Effect.gen(function* () {
         acceptPlaylistRecommendation(db, id, offer, Date.now()),
       ),
     matchingSong: (song) => attempt("read matching song", () => selectMatchingSong(db, song)),
+    downloadsToForget: (jobs) =>
+      attempt("read downloaded files", () => selectDownloadsToForget(db, jobs)),
     listSongs: attempt("list songs", () =>
       trackQuery(db)
         .orderBy(...BY_TITLE)
         .all(),
     ),
 
+    listSortedSongs: (sort) => attempt("list sorted songs", () => selectSortedSongs(db, sort)),
     listSongOrder: (sort) =>
       attempt(
         "order songs",

@@ -27,7 +27,12 @@ import type { Ranked } from "@/stats/Stats";
 import { playCount } from "@/stats/StatsViews";
 import { openDiscoverMix } from "@/ytmusic/routes";
 
-import { refreshMixes, useDiscoverMixes, type MixSectionId } from "./discoverMixes";
+import {
+  refreshMixes,
+  useDiscoverMixes,
+  useDiscoverMixesFocus,
+  type MixSectionId,
+} from "./discoverMixes";
 import { openDiscoverMixActions } from "./DiscoverMixActions";
 import { DiscoverMixesSkeleton } from "./DiscoverMixesSkeleton";
 import { DiscoverSettingsButton } from "./DiscoverSettings";
@@ -97,9 +102,10 @@ const MIXES_UPDATING = "Updating…";
 function Discover({ home, title }: SectionProps) {
   const ytMusic = useYtMusicEnabled();
   const { played } = homeOpeningState(home);
+  useDiscoverMixesFocus(ytMusic, played);
   const magicQueue = useMagicQueueSection();
-  const artistMixes = useDiscoverMixes("artist-mixes", played);
-  const genreMixes = useDiscoverMixes("genre-mixes", played);
+  const artistMixes = useDiscoverMixes("artist-mixes");
+  const genreMixes = useDiscoverMixes("genre-mixes");
   const showsMagicQueue = ytMusic && magicQueue.songs.length > 0;
   if (!showsMagicQueue && artistMixes.kind === "hidden" && genreMixes.kind === "hidden")
     return null;

@@ -13,7 +13,7 @@ import { Text, useColorScheme, View } from "react-native";
 import { CatalogLine } from "@/catalog/CatalogLine";
 import { Hairline } from "@/catalog/Hairline";
 import { TextButton } from "@/components/TextButton";
-import { Press } from "@/motion/Press";
+import { IconButton } from "@/components/IconButton";
 import { confirmAction } from "@/overlay/alert";
 
 import { HUE_STOPS, openColourPicker } from "./ColourPicker";
@@ -31,12 +31,12 @@ const TARGET = 48;
 
 function Swatch({ swatch, group }: { swatch: ThemeSwatchOption; group: ThemeGroup }) {
   return (
-    <Press
+    <IconButton
       accessibilityRole="radio"
       accessibilityLabel={swatch.label}
       accessibilityState={{ checked: swatch.selected }}
       onPress={() => void setThemeSwatch(group, swatch.id, confirmAction)}
-      haptic="selection"
+      depth={0.04}
       className="items-center justify-center"
       style={{ width: TARGET, height: TARGET }}
     >
@@ -48,7 +48,7 @@ function Swatch({ swatch, group }: { swatch: ThemeSwatchOption; group: ThemeGrou
       >
         {swatch.selected ? <IconCheck size={18} strokeWidth={2.5} color={swatch.mark} /> : null}
       </View>
-    </Press>
+    </IconButton>
   );
 }
 
@@ -71,13 +71,13 @@ function CustomSwatch({
 }) {
   const r = SWATCH / 2;
   return (
-    <Press
+    <IconButton
       accessibilityRole="radio"
       accessibilityLabel="Custom colour"
       accessibilityHint="Opens the colour picker"
       accessibilityState={{ checked: custom.selected }}
       onPress={() => openColourPicker(group, custom.picked ?? current)}
-      haptic="selection"
+      depth={0.04}
       className="items-center justify-center"
       style={{ width: TARGET, height: TARGET }}
     >
@@ -100,7 +100,7 @@ function CustomSwatch({
           <IconCheck size={18} strokeWidth={2.5} color={custom.mark} />
         ) : null}
       </View>
-    </Press>
+    </IconButton>
   );
 }
 

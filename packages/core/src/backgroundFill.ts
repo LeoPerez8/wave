@@ -206,3 +206,48 @@ const clock = (ms: number): string => new Date(ms).toISOString().slice(11, 19);
 /** The app log's line for [pause]: how long, why, and when the fill goes on. */
 export const fillPauseLine = (pause: FillPause): string =>
   `The background fill pauses for ${logDuration(pause.until - pause.at)}: YouTube Music refused ${pause.refused.toLocaleString("en")} different searches in a row; it goes on at ${clock(pause.until)} UTC`;
+
+/** A read of the fill's playlists, indexed once so an answer removes only its own occurrences. */
+export const indexFillPlaylists = (playlists: readonly FillPlaylist[]) => {
+  type Entry = {
+    readonly original: Omit<FillPlaylist, "songs">;
+    readonly songs: Map<number, UnsearchedSong>;
+    current: FillPlaylist | null;
+  };
+  const byKey = new Map<string, { entry: Entry; position: number }[]>();
+  let remaining = 0;
+  const entries = playlists.map((playlist): Entry => {
+    const entry: Entry = {
+      original: { id: playlist.id, usedAt: playlist.usedAt },
+      songs: new Map(),
+      current: playlist,
+    };
+    playlist.songs.forEach((song, position) => {
+      entry.songs.set(position, song);
+      const key = unsearchedTrackId(song);
+      let occurrences = byKey.get(key);
+      if (occurrences === undefined) byKey.set(key, (occurrences = []));
+      occurrences.push({ entry, position });
+      remaining++;
+    });
+    return entry;
+  });
+  const playlistIds = new Set(playlists.map((playlist) => playlist.id));
+  return {
+    has: (id: number): boolean => playlistIds.has(id),
+    empty: (): boolean => remaining === 0,
+    drop: (song: UnsearchedSong): void => {
+      const key = unsearchedTrackId(song);
+      for (const { entry, position } of byKey.get(key) ?? []) {
+        entry.songs.delete(position);
+        entry.current = null;
+        remaining--;
+      }
+      byKey.delete(key);
+    },
+    playlists: (): readonly FillPlaylist[] =>
+      entries.map(
+        (entry) => (entry.current ??= { ...entry.original, songs: [...entry.songs.values()] }),
+      ),
+  };
+};

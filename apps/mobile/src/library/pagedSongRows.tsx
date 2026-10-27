@@ -1,81 +1,11 @@
-/** The rows Songs and a genre's songs share: read a page at a time, keyed by Track id. */
+/** Page visibility and selection prefetch for the shared song list. */
 import type { OnViewableItemsChangedInfo } from "@legendapp/list/react-native";
-import { PAGED_ROWS_LIMITS, showsExplicitBadge, type PagedRows } from "@wave/core";
-import { useCallback, useRef, type ReactElement } from "react";
-import { View } from "react-native";
-
-import { artworkUri } from "@/catalog/artworkUri";
-import { Artwork } from "@/catalog/Artwork";
-import { songRowLine } from "@/catalog/cards/SongCard";
-import { CELL, grid } from "@/catalog/grid";
-import type { TrackSummary } from "@/catalog/TrackRow";
-import { openTrackActionsById } from "@/playback/ActionsMenu";
-import { selectableRow } from "@/selection/selectableRow";
+import { PAGED_ROWS_LIMITS, type PagedRows } from "@wave/core";
+import { useCallback, useRef } from "react";
 import type { ListSelection } from "@/selection/useListSelection";
-
 import type { SongSummary } from "./LibraryStore";
-import { SwipeSummaryRow } from "./SwipeTrackRow";
-
-/** A row as `TrackRow` draws it, as a song card: "Song · " before the artist. */
-const songTrackSummary = (song: SongSummary): TrackSummary => ({
-  id: String(song.id),
-  title: song.title,
-  artist: songRowLine(song.artist),
-  durationMs: song.durationMs,
-  artworkUri: artworkUri(song),
-  // A missing song: dimmed, as a YT Music song not downloaded is.
-  missingTrackId: song.hasFile ? undefined : song.id,
-  explicit: showsExplicitBadge(song.explicit),
-});
-
-/** A row whose page is still being read: its thumbnail's place, and nothing to press. */
-function LoadingSongRow() {
-  return (
-    <View
-      accessible
-      accessibilityLabel="Loading song"
-      className="flex-row items-center"
-      style={{ height: grid.row }}
-    >
-      <Artwork uri={undefined} size={CELL * 5} radius={CELL / 2} />
-    </View>
-  );
-}
 
 export const songIdKey = (id: number): string => String(id);
-
-/**
- * Song [id]'s row: [song] once its page is read, its place until then. A tap
- * runs [play], or toggles the row while [selection] is selecting.
- */
-export const pagedSongRow = (
-  id: number,
-  song: SongSummary | undefined,
-  {
-    currentIds,
-    favorites,
-    selection,
-    play,
-  }: {
-    readonly currentIds: ReadonlySet<string>;
-    readonly favorites: ReadonlySet<number>;
-    readonly selection: ListSelection<number>;
-    readonly play: () => void;
-  },
-): ReactElement => {
-  if (song === undefined) return <LoadingSongRow />;
-  return (
-    <SwipeSummaryRow
-      summary={song}
-      track={songTrackSummary(song)}
-      state={currentIds.has(String(id)) ? "playing" : undefined}
-      favorite={favorites.has(id)}
-      leading="artwork"
-      playDisc
-      {...selectableRow(id, selection, play, (options) => openTrackActionsById(id, options))}
-    />
-  );
-};
 
 /** Rows read past the screen each way while selecting, so checking one acts at once. */
 const SELECTING_AHEAD = PAGED_ROWS_LIMITS.pageSize;

@@ -1,6 +1,6 @@
-import { spineLayout, spineSlotAt, spineStep, type IndexEntry } from "@wave/core";
+import { spineLayout, spineStep, type IndexEntry } from "@wave/core";
 import * as Haptics from "expo-haptics";
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useMemo, useState } from "react";
 import { AccessibilityInfo, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import { GestureDetector, usePanGesture } from "react-native-gesture-handler";
 import Animated, {
@@ -15,6 +15,8 @@ import { scheduleOnRN } from "react-native-worklets";
 import { useChromeInset } from "@/chrome/chrome";
 import { ENTRY } from "@/motion/entry";
 import { useTapAnimationMs } from "@/settings/tapAnimation";
+
+import { spineLetterChange } from "./spineLetterChange";
 
 import { CATALOG_TRACKING, CELL, grid } from "./grid";
 
@@ -59,8 +61,7 @@ export function AlphabetSpine({ entries, onJump, topRow }: Props) {
   const { fontScale } = useWindowDimensions();
   const [space, setSpace] = useState(0);
   const [chosen, setChosen] = useState<Chosen>({ letter: null, held: false });
-  // The letter under the finger, read between renders while it moves.
-  const heldRef = useRef<string | null>(null);
+  const heldLetter = useSharedValue<string | null>(null);
 
   const layout = useMemo(
     () =>
@@ -71,52 +72,48 @@ export function AlphabetSpine({ entries, onJump, topRow }: Props) {
       }),
     [entries, space, fontScale],
   );
-  // `move` runs from the gesture, so it reads the latest of these through refs.
-  const layoutRef = useRef(layout);
-  const onJumpRef = useRef(onJump);
-  useEffect(() => {
-    layoutRef.current = layout;
-    onJumpRef.current = onJump;
-  }, [layout, onJump]);
-
-  // The finger, in dp below the first letter's place (UI thread).
+  // The plate follows the finger without crossing to JavaScript.
   const fingerY = useSharedValue(0);
   const shown = useSharedValue(0);
-
-  // Runs on the JS thread for every move, but only acts when the letter changes.
-  const move = useCallback((y: number) => {
-    const slot = spineSlotAt(layoutRef.current, y);
-    if (slot === undefined || slot.target.letter === heldRef.current) return;
-    heldRef.current = slot.target.letter;
-    setChosen({ letter: slot.target.letter, held: true });
-    void Haptics.selectionAsync();
-    onJumpRef.current(slot.target);
-  }, []);
-
+  const move = useCallback(
+    (entry: IndexEntry) => {
+      setChosen({ letter: entry.letter, held: true });
+      void Haptics.selectionAsync();
+      onJump(entry);
+    },
+    [onJump],
+  );
   const release = useCallback(() => {
-    heldRef.current = null;
     setChosen((current) => ({ letter: current.letter, held: false }));
   }, []);
+  const moveOnUI = (y: number) => {
+    "worklet";
+    fingerY.set(y);
+    const entry = spineLetterChange(layout, y, heldLetter.get());
+    if (entry === undefined) return;
+    heldLetter.set(entry.letter);
+    scheduleOnRN(move, entry);
+  };
 
   const pan = usePanGesture({
     minDistance: 0,
     onBegin: (event) => {
       "worklet";
       const y = event.y - CELL;
-      fingerY.set(y);
+      heldLetter.set(null);
       shown.set(ms === 0 ? 1 : withTiming(1, { duration: ms, ...FADE }));
-      scheduleOnRN(move, y);
+      moveOnUI(y);
     },
     onUpdate: (event) => {
       "worklet";
       const y = event.y - CELL;
-      fingerY.set(y);
-      scheduleOnRN(move, y);
+      moveOnUI(y);
     },
     onFinalize: () => {
       "worklet";
       // Out in half the time it came in, so the rows it lands on are clear at once.
       shown.set(ms === 0 ? 0 : withTiming(0, { duration: ms / 2, ...FADE }));
+      heldLetter.set(null);
       scheduleOnRN(release);
     },
   });

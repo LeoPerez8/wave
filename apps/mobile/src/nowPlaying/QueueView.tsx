@@ -41,6 +41,7 @@ import { DownloadedIcon } from "@/catalog/TrackRow";
 import { RecommendationsFailed } from "@/components/RecommendationsFailed";
 import { useMissingSongs } from "@/library/hooks";
 import { Press } from "@/motion/Press";
+import { IconButton } from "@/components/IconButton";
 import { usePerfVisible, useRenderCount } from "@/perf/perf";
 import {
   cycleRepeat,
@@ -88,29 +89,24 @@ type ToggleProps = {
 
 /** A labelled toggle: teal while it's on, graphite while it's off. */
 function Toggle({ icon: Icon, label, on, onPress, onLongPress, accessibilityHint }: ToggleProps) {
-  const accent = useThemeColor("accent");
-  const secondary = useThemeColor("secondary");
-  const color = on ? accent : secondary;
   return (
-    <Press
+    <IconButton
+      icon={Icon}
+      label={label}
+      caption={label}
+      layout="horizontal"
+      iconSize={20}
+      tone={on ? "accent" : "secondary"}
       accessibilityRole="switch"
-      accessibilityLabel={label}
       accessibilityState={{ checked: on }}
       accessibilityHint={accessibilityHint}
       onPress={onPress}
       onLongPress={onLongPress}
-      haptic="selection"
       depth={0.04}
-      className="flex-1 flex-row items-center justify-center"
-      style={{ height: CELL * 6, gap: CELL }}
-    >
-      <Icon size={20} color={color} strokeWidth={1.5} />
-      <Text
-        className={`font-sans text-body ${on ? "font-semibold text-accent" : "text-secondary"}`}
-      >
-        {label}
-      </Text>
-    </Press>
+      className="flex-1"
+      style={{ width: undefined, height: CELL * 6, gap: CELL }}
+      captionProps={{ className: `font-sans text-body ${on ? "font-semibold" : ""}` }}
+    />
   );
 }
 
@@ -336,17 +332,14 @@ const UpNextRow = memo(function UpNextRow({
         >
           <RowText track={track} downloaded={downloaded} />
         </Press>
-        <Press
-          accessibilityRole="button"
-          accessibilityLabel={`Remove ${title} from Up Next`}
+        <IconButton
+          icon={IconX}
+          iconSize={20}
+          size={grid.upNextCell}
+          tone="secondary"
+          label={`Remove ${title} from Up Next`}
           onPress={() => removeQueueEntry(key)}
-          haptic="selection"
-          depth={0.1}
-          className="items-center justify-center"
-          style={{ width: grid.upNextCell, height: grid.upNextCell }}
-        >
-          <IconX size={20} color={secondary} strokeWidth={1.5} />
-        </Press>
+        />
         <GestureDetector gesture={pan}>
           <View
             accessibilityElementsHidden

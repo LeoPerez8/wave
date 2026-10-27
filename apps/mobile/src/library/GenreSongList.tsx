@@ -1,11 +1,14 @@
-import { LegendList, type LegendListRef } from "@legendapp/list/react-native";
+import { type LegendListRef } from "@legendapp/list/react-native";
 import type { IndexEntry, LibrarySongSort } from "@wave/core";
 import * as Effect from "effect/Effect";
 import { useScrollToTop } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { View } from "react-native";
 
-import { AlphabetSpine } from "@/catalog/AlphabetSpine";
+import { SongList } from "@/songs/SongList";
+import { summarySongEntry } from "@/songs/songListSources";
+import { openTrackActionsById } from "@/playback/ActionsMenu";
+import { runSummarySwipe } from "@/playback/rowSwipe";
 import { grid } from "@/catalog/grid";
 import { useChromeInset } from "@/chrome/chrome";
 import { freeTurnEffect, settledTurnEffect } from "@/lib/backgroundWork";
@@ -13,10 +16,9 @@ import { useListScrollable } from "@/motion/heldTouch";
 import { useRenderCount } from "@/perf/perf";
 import { playTrackIds } from "@/playback/actions";
 import type { ActionItems } from "@/playback/actionTargets";
-import { useCurrentPlayingIds } from "@/playback/hooks";
+
 import { useListSelection } from "@/selection/useListSelection";
 
-import { useFavoriteIds } from "./favorites";
 import {
   createGenreOrderActions,
   createGenreOrderLoad,
@@ -33,7 +35,7 @@ import {
   type SongSummary,
 } from "./LibraryStore";
 import { usePagedSongs } from "./pagedSongs";
-import { pagedSongRow, songIdKey, useRowsNearScreen } from "./pagedSongRows";
+import { songIdKey, useRowsNearScreen } from "./pagedSongRows";
 import { appRuntime } from "./runtime";
 import { libraryQuery, useLibraryQuery, type LibraryQuery } from "./sharedQueries";
 import { SongSortButton } from "./SongSortButton";
@@ -143,8 +145,6 @@ export function GenreSongList({
   const list = useRef<LegendListRef>(null);
   useScrollToTop(list);
   const bottomInset = useChromeInset();
-  const currentIds = useCurrentPlayingIds();
-  const favorites = useFavoriteIds();
   const context = useMemo(() => ({ kind: "genre", id: String(genre.id) }) as const, [genre.id]);
 
   const { load, shown: whole } = useWholeOrder(genre.id, sort, opening);
@@ -277,37 +277,24 @@ export function GenreSongList({
     want(nearScreen());
   }, [selection, load, want, nearScreen, opening]);
 
-  const rowState = useMemo(
-    () => ({ currentIds, favorites, selection, version }),
-    [currentIds, favorites, selection, version],
-  );
-
-  const renderItem = useCallback(
-    ({ item }: { item: number }) =>
-      pagedSongRow(item, pages.rowOf(item), {
-        currentIds,
-        favorites,
-        selection: selectable,
-        play: () => play(item),
-      }),
-    // `version` re-renders the rows as their pages arrive.
-    // oxlint-disable-next-line react-hooks/exhaustive-deps
-    [pages, version, currentIds, favorites, selectable, play],
-  );
+  const source = useCallback((id: number) => summarySongEntry(id, pages.rowOf(id)), [pages]);
 
   return (
     <View className="flex-1">
-      <LegendList
+      <SongList
         scrollEnabled={scrollable}
         ref={list}
         className="flex-1"
         data={ids}
         keyExtractor={songIdKey}
-        renderItem={renderItem}
-        extraData={rowState}
-        estimatedItemSize={grid.row}
-        getFixedItemSize={() => grid.row}
-        recycleItems
+        song={source}
+        extraData={version}
+        context={context}
+        selection={selectable}
+        onPlay={(id) => play(id)}
+        onMenu={(id, options) => openTrackActionsById(id, options)}
+        onSongSwipe={(id, side) => runSummarySwipe(id, side)}
+        spine={spine}
         onViewableItemsChanged={onViewableItemsChanged}
         contentContainerStyle={{
           paddingLeft: grid.margin,
@@ -324,9 +311,6 @@ export function GenreSongList({
           />
         }
       />
-      {spine.show && (
-        <AlphabetSpine entries={spine.entries} onJump={spine.onJump} topRow={spine.topRow} />
-      )}
     </View>
   );
 }

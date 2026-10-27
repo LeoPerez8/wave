@@ -5,6 +5,8 @@
  * Library itself once per Library version.
  */
 export interface FinderCache<R, F> {
+  /** A cached finder for scoped rows, without replacing the last full-Library finder. */
+  readonly forRows: (rows: readonly R[]) => F;
   /** The finder over [rows]: the same one for the same array. It becomes the known one. */
   readonly over: (rows: readonly R[]) => F;
   /** The last finder made, or null before the first. */
@@ -27,12 +29,23 @@ export const makeFinderCache = <R, F>(options: {
   /** The last own read, and the version it was started at. */
   let fresh: { readonly version: number; readonly find: Promise<F> } | null = null;
 
+  // Keys are weak: a closed page's scoped rows do not stay alive in the cache.
+  const byRows = new WeakMap<readonly R[], { readonly find: F }>();
+  const forRows = (rows: readonly R[]): F => {
+    let entry = byRows.get(rows);
+    if (entry === undefined) {
+      entry = { find: build(rows) };
+      byRows.set(rows, entry);
+    }
+    return entry.find;
+  };
   const over = (rows: readonly R[]): F => {
-    if (known?.rows !== rows) known = { rows, find: build(rows) };
+    if (known?.rows !== rows) known = { rows, find: forRows(rows) };
     return known.find;
   };
 
   return {
+    forRows,
     over,
     known: () => known?.find ?? null,
     current: () => {
