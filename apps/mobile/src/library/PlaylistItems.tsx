@@ -376,8 +376,7 @@ export function PlaylistItems({ playlistId, items, header, empty }: Props) {
     const playlistItem = placeOf(entry);
     if (entry.source === "library")
       runTrackSwipe({ kind: "track", items: [{ song: entry.track, playlistItem }] }, side);
-    else if (entry.source === "stream")
-      runYtSongSwipe(entry.song, side, { playlistItem, onRemove: () => onRemove(entry) });
+    else if (entry.source === "stream") runYtSongSwipe(entry.song, side, { playlistItem });
     else if (entry.source === "unsearched")
       runTrackSwipe({ kind: "track", items: [{ unsearched: entry.song, playlistItem }] }, side);
     // An unavailable entry's only swipe is Remove from Playlist (`onSongRemove`).

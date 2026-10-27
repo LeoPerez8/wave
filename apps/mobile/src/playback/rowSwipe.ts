@@ -1,8 +1,4 @@
 import {
-  songRowSwipeDirections,
-  ITEM_ACTION_LABELS,
-  UNAVAILABLE_ENTRY_ACTION_LABELS,
-  actionBarLabel,
   itemActions,
   rowSwipeActions,
   swipesChoose,
@@ -13,18 +9,14 @@ import {
   type RowSwipeActions,
   type RowSwipeSide,
   type SwipeSettings,
-  type UnsearchedSong,
 } from "@wave/core";
-import { useMemo } from "react";
-
-import { NO_SWIPE, type RowSwipe, type SwipeSide } from "@/catalog/SwipeableRow";
 import { favoriteIdsNow } from "@/library/favorites";
-import type { ArtistRow, SongRow } from "@/library/LibraryStore";
-import { currentPath, useCurrentPath } from "@/library/routes";
+import type { ArtistRow } from "@/library/LibraryStore";
+import { currentPath } from "@/library/routes";
 import { songsWithIds } from "@/library/sectionSongs";
 import { showError } from "@/overlay/alert";
 import { lyricsAndGenreLookupsEnabled } from "@/settings/lyricsAndGenre";
-import { swipeSettingsNow, useSwipeSettings } from "@/settings/swipeActions";
+import { swipeSettingsNow } from "@/settings/swipeActions";
 import { currentLibraryFinder, type FindInLibrary } from "@/ytmusic/libraryFinder";
 import { streamedArtistContextNow } from "@/ytmusic/streamedArtist";
 import { missingSongDownloadStatusNow } from "@/ytmusic/YtDownloads";
@@ -38,24 +30,16 @@ import { itemActionPress } from "./itemActions";
  * it as the menu does (the same toast, the same confirmation).
  *
  * What each direction runs is Settings › Swipe actions' choice
- * (`settings/swipeActions`): a row renders again when that changes.
- *
- * A list mounts many rows, so a row follows nothing else to work out its
- * swipe: it reads the route, the stars and, when a direction is set to them,
- * a download's state and a streamed song's artists as it renders (its list
- * renders it again when its star changes), and reads them afresh when a
- * swipe runs.
+ * (`settings/swipeActions`). The song list works out a row's two directions
+ * as it renders (Core's `songRowSwipeDirections`, no menu built); a swipe
+ * plans the menu afresh here, from the route, the stars, the download and
+ * the artists as they are when it runs.
  */
 
 /** Where a row is shown, for what its swipes do. */
 export interface RowSwipeOptions {
   /** The row's place in the playlist it's shown in: its menu, and so its swipe, removes it from there. */
   readonly playlistItem?: PlaylistPlace | undefined;
-  /**
-   * Runs instead of the menu's Remove from Playlist: the playlist takes the
-   * row out at once, so it slides out as it goes.
-   */
-  readonly onRemove?: (() => void) | undefined;
 }
 
 /**
@@ -64,38 +48,6 @@ export interface RowSwipeOptions {
  */
 export const swipeActionsOf = <A extends RowMenuAction>(menu: readonly A[]): RowSwipeActions<A> =>
   rowSwipeActions(menu, swipeSettingsNow());
-
-const fullLabel = (action: RowMenuAction): string =>
-  action === "search" ? UNAVAILABLE_ENTRY_ACTION_LABELS[action] : ITEM_ACTION_LABELS[action];
-
-const shortLabel = (action: RowMenuAction): string =>
-  action === "search" ? UNAVAILABLE_ENTRY_ACTION_LABELS[action] : actionBarLabel(action);
-
-/**
- * A row's swipe from its long-press menu's actions ([menu]), [run] doing what
- * the entry a direction ([side]) shows does: Remove from Playlist, Delete
- * and Remove from Library uncover in red; [onRemove] stands in for Remove
- * from Playlist.
- */
-export const rowSwipe = <A extends RowMenuAction>(
-  menu: readonly A[],
-  run: (action: A, side: RowSwipeSide) => void,
-  { onRemove }: RowSwipeOptions = {},
-): RowSwipe => {
-  const { right, left } = swipeActionsOf(menu);
-  const side = (action: A | null, towards: RowSwipeSide): SwipeSide | null => {
-    if (action === null) return null;
-    const removes = action === "removeFromPlaylist" && onRemove !== undefined;
-    return {
-      action,
-      label: shortLabel(action),
-      accessibilityLabel: fullLabel(action),
-      leaves: removes,
-      run: removes ? onRemove : () => run(action, towards),
-    };
-  };
-  return { right: side(right, "right"), left: side(left, "left") };
-};
 
 /**
  * The entry [side] runs on [entries] (a menu as it is now), or none: the
@@ -179,44 +131,6 @@ export const runTrackSwipe = (target: ActionItems, side: RowSwipeSide): void => 
       .catch((error: unknown) => showError("Couldn't load the song", error));
 };
 
-/** A Library song's or unsearched entry's swipe, from the menu `openTrackActions` opens. */
-const useTrackItemSwipe = (target: ActionItems, options: RowSwipeOptions): RowSwipe => {
-  const settings = useSwipeSettings();
-  const here = useCurrentPath(false);
-  if (!settings.enabled || target.items.length === 0) return NO_SWIPE;
-  return rowSwipe(
-    planTrack(target, here, findNothing, settings).map((entry) => entry.action),
-    (_, side) => runTrackSwipe(target, side),
-    options,
-  );
-};
-
-/**
- * What swiping a Library [song]'s row runs (none for null, so a row of
- * several kinds can ask for each).
- */
-export const useSongSwipe = (song: SongRow | null, options: RowSwipeOptions = {}): RowSwipe => {
-  const { playlistItem } = options;
-  const target = useMemo<ActionItems>(
-    () => ({ kind: "track", items: song === null ? [] : [{ song, playlistItem }] }),
-    [song, playlistItem],
-  );
-  return useTrackItemSwipe(target, options);
-};
-
-/** What swiping a playlist's unsearched entry runs (none for null). */
-export const useUnsearchedSwipe = (
-  song: UnsearchedSong | null,
-  options: RowSwipeOptions = {},
-): RowSwipe => {
-  const { playlistItem } = options;
-  const target = useMemo<ActionItems>(
-    () => ({ kind: "track", items: song === null ? [] : [{ unsearched: song, playlistItem }] }),
-    [song, playlistItem],
-  );
-  return useTrackItemSwipe(target, options);
-};
-
 /** Paged lists read full action metadata only when a swipe runs. */
 export const runSummarySwipe = (id: number, side: RowSwipeSide): void => {
   songsWithIds([id])
@@ -224,37 +138,4 @@ export const runSummarySwipe = (id: number, side: RowSwipeSide): void => {
       if (song !== undefined) runTrackSwipe({ kind: "track", items: [{ song }] }, side);
     })
     .catch((error: unknown) => showError("Couldn't load the song", error));
-};
-
-/** Temporary bridge for #716's remaining TrackRow callers; one subscription per container. */
-export const useLibrarySongSwipes = (): ((song: SongRow) => RowSwipe) => {
-  const settings = useSwipeSettings();
-  const here = useCurrentPath(false);
-  return (song) => {
-    const target: ActionItems = { kind: "track", items: [{ song }] };
-    const item = targetFacts(target, favoriteIdsNow(), findNothing)[0]!;
-    const directions = songRowSwipeDirections(
-      {
-        kind: "track",
-        item: {
-          ...item,
-          download: song.path === null ? missingSongDownloadStatusNow(song.id) : null,
-        },
-        here,
-        onlineLookups: lyricsAndGenreLookupsEnabled(),
-      },
-      settings,
-    );
-    const side = (action: RowMenuAction | null, direction: RowSwipeSide): SwipeSide | null =>
-      action === null
-        ? null
-        : {
-            action,
-            label: shortLabel(action),
-            accessibilityLabel: fullLabel(action),
-            leaves: false,
-            run: () => runTrackSwipe(target, direction),
-          };
-    return { right: side(directions.right, "right"), left: side(directions.left, "left") };
-  };
 };

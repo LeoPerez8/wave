@@ -540,16 +540,12 @@ export function UpNextList({
       if (item.kind === "historyHead") return <SectionHead label="History" />;
       if (item.kind === "bar") return <UpNextBar ground={barGround} />;
       const track = tracks.get(item.entry.trackId);
-      const history = item.kind === "history";
-      const shown = model.row(
-        queueSource(item.entry, track, missingIds, history),
-        {},
-        item.entry.key,
-      );
-      if (history) return <HistoryRow shown={shown} actions={actions} />;
+      const played = item.kind === "history";
+      const row = model.row(queueSource(item.entry, track, missingIds, played), {}, item.entry.key);
+      if (played) return <HistoryRow shown={row} actions={actions} />;
       return (
         <UpNextRow
-          shown={shown}
+          shown={row}
           index={item.index}
           title={track?.title ?? "Song"}
           up={item.index > 0}

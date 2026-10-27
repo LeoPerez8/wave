@@ -10,13 +10,11 @@ import {
   type UnavailableEntryAction,
   type UnavailableSong,
 } from "@wave/core";
-import { useMemo, type ComponentProps } from "react";
+import { useMemo } from "react";
 import { Text, View } from "react-native";
 
 import { Artwork } from "@/catalog/Artwork";
-import { NO_SWIPE, type RowSwipe } from "@/catalog/SwipeableRow";
 import { CELL } from "@/catalog/grid";
-import { TrackRow } from "@/catalog/TrackRow";
 import { TextButton } from "@/components/TextButton";
 import { pressedRect } from "@/motion/pressedRect";
 import { CardEntries } from "@/overlay/CardEntries";
@@ -27,60 +25,13 @@ import { MenuRow } from "@/overlay/MenuRow";
 import { openOverlay } from "@/overlay/overlay";
 import { showToast } from "@/overlay/toast";
 import { useSlideToChoose } from "@/overlay/useSlideToChoose";
-import { rowSwipe, type RowSwipeOptions } from "@/playback/rowSwipe";
 import { openSearch } from "@/search/queryRequest";
-import { useSwipeSettings } from "@/settings/swipeActions";
 import { useTabBar } from "@/settings/tabBar";
 import { useYtMusicEnabled } from "@/settings/ytMusic";
 
 import type { PlaylistEntryRow } from "./LibraryStore";
 import { removePlaylistItems } from "./playlists";
 import { tryAgainUnavailable, useTryingAgain } from "./tryAgainUnavailable";
-
-/**
- * A playlist's unavailable entry (a song an import couldn't find) as a
- * Songs-list row: dimmed, with the source's cover (while YT Music is on, as
- * a YT Music entry's), and why it's unavailable as its second line (Core's
- * `unavailableEntryView`).
- */
-export function UnavailableSongRow({
-  song,
-  checked,
-  onPress,
-  onLongPress,
-  accessibilityActions,
-  onAccessibilityAction,
-  swipe,
-}: {
-  song: UnavailableSong;
-  checked?: boolean | undefined;
-  onPress: () => void;
-  onLongPress: () => void;
-  accessibilityActions?: ComponentProps<typeof TrackRow>["accessibilityActions"];
-  onAccessibilityAction?: ComponentProps<typeof TrackRow>["onAccessibilityAction"];
-  swipe?: RowSwipe | undefined;
-}) {
-  const ytMusic = useYtMusicEnabled();
-  return (
-    <TrackRow
-      track={{
-        id: `unavailable:${song.title}`,
-        title: song.title,
-        artist: unavailableEntryView(song).line,
-        durationMs: song.durationMs,
-        artworkUri: ytMusic ? (song.artworkUrl ?? undefined) : undefined,
-      }}
-      unavailable
-      checked={checked}
-      leading="artwork"
-      onPress={onPress}
-      onLongPress={onLongPress}
-      accessibilityActions={accessibilityActions}
-      onAccessibilityAction={onAccessibilityAction}
-      swipe={swipe}
-    />
-  );
-}
 
 /** Tapping an unavailable entry says why it doesn't play (Core's `unavailableEntryView`). */
 export const explainUnavailable = (song: UnavailableSong): void => {
@@ -121,25 +72,6 @@ const run = (
       openSearch(unavailableSearchQuery(song));
       return;
   }
-};
-
-/**
- * What swiping an unavailable entry's row runs (none for null, so a row of
- * several kinds can ask for each): its menu's entries (`rowSwipe`), so it
- * swipes out of its playlist and never joins the queue.
- */
-export const useUnavailableSwipe = (
-  song: UnavailableSong | null,
-  options: RowSwipeOptions & { readonly playlistItem: PlaylistPlace },
-): RowSwipe => {
-  const settings = useSwipeSettings();
-  const search = useTabBar().includes("search");
-  if (song === null || !settings.enabled) return NO_SWIPE;
-  return rowSwipe(
-    unavailableEntryActions({ search }),
-    (action) => run(action, song, options.playlistItem),
-    options,
-  );
 };
 
 /** The menu card: the song as its row shows it, then its entries. */

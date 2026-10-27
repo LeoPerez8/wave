@@ -29,24 +29,22 @@ import { starSongs } from "@/library/starSongs";
 import type { ArtistRow } from "@/library/LibraryStore";
 import { openAddToPlaylist } from "@/library/PlaylistSheets";
 import { removePlaylistItems } from "@/library/playlists";
-import { currentPath, useCurrentPath } from "@/library/routes";
+import { currentPath } from "@/library/routes";
 import { pressedMenuAllowed, pressedRect } from "@/motion/pressedRect";
 import type { NativeYtSong } from "@/native/waveYtMusic";
-import { NO_SWIPE, type RowSwipe } from "@/catalog/SwipeableRow";
 import { CardHeading } from "@/overlay/CardHeading";
 import { MenuChoices, type MenuChoice, type PlayCardChoice } from "@/overlay/MenuChoices";
 import { followUp, openOverlay } from "@/overlay/overlay";
 import { addYtToQueue, playYtNext } from "@/playback/actions";
 import type { MenuOptions } from "@/playback/ActionsMenu";
-import { rowSwipe, swipeEntryNow, type RowSwipeOptions } from "@/playback/rowSwipe";
+import { swipeEntryNow, type RowSwipeOptions } from "@/playback/rowSwipe";
 import { showError } from "@/overlay/alert";
-import { swipeSettingsNow, useSwipeSettings } from "@/settings/swipeActions";
+import { swipeSettingsNow } from "@/settings/swipeActions";
 import { ytMusicEnabled, useYtMusicEnabled } from "@/settings/ytMusic";
 import { shareStreamedSong } from "@/share/songShare";
 
 import {
   currentLibraryFinder,
-  knownLibraryFinder,
   useLibraryFinder,
   useLoadedInLibrary,
   type FindInLibrary,
@@ -204,39 +202,6 @@ const run = (
       onSelect?.();
       return;
   }
-};
-
-/**
- * What swiping a YT Music [song]'s row runs (none for null, so a row of
- * several kinds can ask for each): its menu's entries (`rowSwipe`), run as
- * the menu runs them. A list mounts many rows, so it follows nothing but the
- * swipe settings: the route and the stars are read as it renders and again
- * as a swipe runs, and so, only while a direction is set to them, are its
- * artists (Go to Artist, once the Library's artists are read) and its
- * download's state (Download).
- */
-export const useYtSongSwipe = (
-  song: NativeYtSong | null,
-  options: RowSwipeOptions = {},
-): RowSwipe => {
-  const settings = useSwipeSettings();
-  const ytMusic = useYtMusicEnabled();
-  const here = useCurrentPath(false);
-  if (song === null || !settings.enabled) return NO_SWIPE;
-  const known = swipesChoose(settings, "download") ? knownLibraryFinder() : null;
-  return rowSwipe(
-    ytSongSwipeEntries(
-      song,
-      options,
-      settings,
-      ytMusic,
-      () => null,
-      here,
-      known === null || known(song) !== null,
-    ).map((entry) => entry.action),
-    (_, side) => runYtSongSwipe(song, side, options),
-    options,
-  );
 };
 
 /**

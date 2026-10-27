@@ -341,8 +341,8 @@ export function useRowDrag({
     const max = Math.max(0, extent.get() - height.get());
     const now = scrolled();
     // It scrolls no higher than its floor (the start of Up Next: History stays out of sight).
-    const floor = floorAt.get() - leadAt.get();
-    const next = Math.min(max, Math.max(Math.min(floor, now), now + speed * seconds));
+    const lowest = floorAt.get() - leadAt.get();
+    const next = Math.min(max, Math.max(Math.min(lowest, now), now + speed * seconds));
     if (next === now) return;
     scrollTo(scrollRef, 0, next + leadAt.get(), false);
     listScroll.set(next + leadAt.get());
