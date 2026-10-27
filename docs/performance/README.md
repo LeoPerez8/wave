@@ -166,6 +166,7 @@ JavaScript saw that key, not when it was pressed.
 | `scroll-home`       | glass: a fling up (`fling-up`) and back down (`fling-down`) on Home                          | -                         |         10 |
 | `scroll-songs`      | glass: the same on Library › Songs, under the mini player                                    | -                         |         10 |
 | `idle-home`         | glass: 5 s of Home untouched (`idle`); any frame is idle rendering                           | -                         |          5 |
+| `scroll-queue`      | glass: the flings on Now Playing's Up Next, settled open over the tabs (#721)                | -                         |         10 |
 | `soak-routes`       | a cycle: Library, Albums and back, Songs and back, the other tabs, Home, Settings and back   | `route`, `songs.rows`     |         20 |
 | `soak-player`       | a cycle: open Now Playing, Queue, Queue again, Close (`open`, `queue-open`, …, `close`)      | as `now-playing`, `queue` |         30 |
 
@@ -187,7 +188,8 @@ waiting for its flush, so `soak-routes` takes about 25 minutes and `soak-player`
 The glass scenarios (`--scenario glass`) aren't part of `all`. A fling is `input swipe` from 70%
 to 30% of the screen's height (or back) in 120 ms, at the screen's centre, clear of the chrome. A
 fling renders more frames than gfxinfo keeps, so its first frame and settle stay empty; its frame
-totals, histogram and frame parts are what it measures. `idle-home` needs the mini player paused.
+totals, histogram and frame parts are what it measures. `idle-home` needs the mini player paused;
+`scroll-queue` needs more songs up next than fit on the screen.
 
 `skip` measures how long a skip takes to reach the player, so it depends on the queue's length:
 load the queue under test before the run (a short album, or the whole Library as Songs) and leave
@@ -353,7 +355,7 @@ ticket needs evidence, and give a new response mark a scenario step's `expect` i
   shows what it read (again after each re-read);
 - `startup.content`, on the frame after the first app screen in sight showed a Library query's
   result: startup work may go (#315). `startup.started` (`scan`, `imports`, `sync`, `playlists`,
-  `downloads`, `lookupSummary`) as each piece of startup work starts;
+  `downloads`, `lookupSummary`, `optimize`) as each piece of startup work starts;
 - touches with their native timestamp, from the root view's `onTouchStart`.
 
 Each flush also reports the shared Library queries' counters since launch, as `libraryQueries.*`

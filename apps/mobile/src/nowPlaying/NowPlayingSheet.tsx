@@ -21,6 +21,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { CELL, grid } from "@/catalog/grid";
 import { IconButton } from "@/components/IconButton";
+import { NativeCover } from "@/glass/waveGlass";
 import { CoveredByNowPlaying } from "@/lib/screenSight";
 import { addScreenBackHandler } from "@/overlay/back";
 import { useRenderCount } from "@/perf/perf";
@@ -157,15 +158,21 @@ const PlayerPane = memo(function PlayerPane({
   );
 });
 
+/** `nativeID` of the screens under Now Playing, which the sheet's cover hides (`NativeCover`). */
+const UNDER_NOW_PLAYING = "wave-under-now-playing";
+
 /**
  * Wraps the screens under Now Playing: screen readers skip them while it is
- * up, and their shared Library queries pause (`CoveredByNowPlaying`).
+ * up, and their shared Library queries pause (`CoveredByNowPlaying`). Once the
+ * sheet settles open over them they aren't drawn, glass included, until it
+ * moves again (`NativeCover`).
  */
 export function UnderNowPlaying({ children }: { children: ReactNode }) {
   const shown = useNowPlayingShown();
   const sharing = useSongShareShown();
   return (
     <View
+      nativeID={UNDER_NOW_PLAYING}
       collapsable={false}
       style={{ flex: 1 }}
       importantForAccessibility={shown || sharing ? "no-hide-descendants" : "auto"}
@@ -264,6 +271,13 @@ export function NowPlayingSheet() {
       accessibilityElementsHidden={!shown || songSharing}
     >
       <Background colors={ground} />
+      {/* Opaque and settled over the screens under it, the sheet stops their drawing (#721). */}
+      <NativeCover
+        pointerEvents="none"
+        style={StyleSheet.absoluteFill}
+        coveredNativeId={UNDER_NOW_PLAYING}
+        settled={settled}
+      />
       <View
         className="flex-1"
         importantForAccessibility={lyricSharing ? "no-hide-descendants" : "auto"}

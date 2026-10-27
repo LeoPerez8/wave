@@ -433,6 +433,8 @@ describe("runPerf on the simulated phone", () => {
         "scroll-songs/idle/fling-up",
         "scroll-songs/idle/fling-down",
         "idle-home/idle/idle",
+        "scroll-queue/idle/fling-up",
+        "scroll-queue/idle/fling-down",
       ],
     );
     // A fling is a swipe across the middle of the screen, clear of the chrome at the bottom.
@@ -443,6 +445,10 @@ describe("runPerf on the simulated phone", () => {
       assert.ok(step.frames.total > 120, "a fling renders more frames than gfxinfo keeps");
       assert.ok(step.frameParts.issueMs.frames > 0, "and splits the kept ones into their parts");
     }
+    // Up Next flings over the tabs and their glass, which settled-open Now Playing hides (#721).
+    const queueOpened = device.commands.lastIndexOf("input tap 1170 2870");
+    assert.ok(queueOpened > 0, "the last scenario opens Now Playing's Queue");
+    assert.ok(device.commands.slice(queueOpened).includes("input swipe 720 2184 720 936 120"));
     const idle = steps.filter((one) => one.scenario === "idle-home");
     assert.ok(idle.length > 0);
     for (const step of idle) assert.equal(step.frames.total, 0, "an idle screen draws nothing");
