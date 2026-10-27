@@ -33,3 +33,29 @@ test("a finished run cleans up once, with no reads for each landed song or repea
   await recovery(jobs, false);
   assert.equal(reads, 2, "a later Library deletion is checked");
 });
+
+test("a Library change during recovery discards the old read and a failed read can retry", async () => {
+  let version = 1;
+  let fail = true;
+  let forgets = 0;
+  const recovery = createDownloadRecovery({
+    version: () => String(version),
+    read: async () => {
+      if (fail) throw new Error("read failed");
+      if (version === 1) version++;
+      return ["gone"];
+    },
+    forget: async (_id: string, generation: number) => {
+      assert.equal(generation, 7);
+      forgets++;
+      return true;
+    },
+  });
+  const jobs = [done("gone", 7)];
+  await assert.rejects(recovery(jobs, false), /read failed/);
+  fail = false;
+  assert.deepEqual(await recovery(jobs, false), jobs);
+  assert.equal(forgets, 0, "a stale answer cannot remove the download");
+  assert.deepEqual(await recovery(jobs, false), []);
+  assert.equal(forgets, 1);
+});

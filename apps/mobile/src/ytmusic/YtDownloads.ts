@@ -1,4 +1,3 @@
-import { createDownloadRecovery } from "./downloadRecovery";
 /**
  * The Download menu and rows of YT Music songs, backed by the native journal: Core picks the
  * source (`downloadSource`), Soulseek's automatic recording selection or YouTube Music's M4A,
@@ -156,6 +155,7 @@ import { ytMusicEnabled } from "@/settings/ytMusic";
 import { readYtAlbum } from "./albumPages";
 import { failedJobsNow, journal, queuedCountsNow } from "./downloadJournal";
 import { followDownloadRuns } from "./downloadRun";
+import { createDownloadRecovery } from "./downloadRecovery";
 import { currentLibraryFinder, useLoadedLibraryFinder } from "./libraryFinder";
 import { followYoutubeThrottle } from "./youtubeThrottle";
 import { withSearchTurn } from "./searchAllowance";
@@ -1122,7 +1122,10 @@ let refreshAgain = false;
 /** Reconcile only after the run finishes; later Library edits can remove a kept download. */
 const recoverDownloads = createDownloadRecovery<NativeDownloadJob>({
   version: downloadLibraryVersion,
-  read: (jobs) => appRuntime.runPromise(LibraryStore.use((store) => store.downloadsToForget(jobs))),
+  read: (jobs) => {
+    // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service.
+    return appRuntime.runPromise(LibraryStore.use((store) => store.downloadsToForget(jobs)));
+  },
   forget: (id, generation) => WaveSoulseek.forgetCompletedJob(id, generation),
 });
 
