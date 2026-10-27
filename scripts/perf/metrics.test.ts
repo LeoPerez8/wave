@@ -9,8 +9,10 @@ import {
   formatFrameParts,
   formatPhases,
   formatSummary,
+  formatWakeups,
   stepMetrics,
   summarize,
+  threadWakeups,
   type StepRecord,
 } from "./metrics.ts";
 
@@ -443,5 +445,80 @@ describe("compareSummaries", () => {
     );
     assert.match(table, /^\| Scenario step \| Metric \| Before \| After \| Change \|$/m);
     assert.match(table, /^\| a\/idle\/x \| responseMs median \| 200 \| 150 \| -50 \(-25%\) \|$/m);
+  });
+});
+
+describe("threadWakeups", () => {
+  const threads = (entries: [string, string, number][]) =>
+    new Map(entries.map(([tid, name, switches]) => [tid, { name, switches }]));
+
+  it("counts each thread's wake-ups per minute of the window, the JS thread's apart", () => {
+    const wakeups = threadWakeups(
+      threads([
+        ["1", "dev.leoperez.wave", 100],
+        ["2", "mqt_v_js", 1_000],
+        ["3", "RenderThread", 50],
+      ]),
+      threads([
+        ["1", "dev.leoperez.wave", 130],
+        ["2", "mqt_v_js", 1_020],
+        ["3", "RenderThread", 50],
+        // Born during the window: every switch it made counts.
+        ["4", "AsyncTask #1", 10],
+      ]),
+      120_000,
+    );
+    assert.deepEqual(wakeups, {
+      minutes: 2,
+      jsThread: "mqt_v_js",
+      jsPerMinute: 10,
+      processPerMinute: 30,
+      top: [
+        { name: "dev.leoperez.wave", perMinute: 15 },
+        { name: "mqt_v_js", perMinute: 10 },
+        { name: "AsyncTask #1", perMinute: 5 },
+      ],
+    });
+  });
+
+  it("knows the old architecture's JS thread, and says when there is none", () => {
+    const old = threadWakeups(
+      threads([["2", "mqt_js", 0]]),
+      threads([["2", "mqt_js", 60]]),
+      60_000,
+    );
+    assert.equal(old.jsThread, "mqt_js");
+    assert.equal(old.jsPerMinute, 60);
+    const none = threadWakeups(threads([["1", "main", 0]]), threads([["1", "main", 6]]), 60_000);
+    assert.equal(none.jsThread, null);
+    assert.equal(none.jsPerMinute, null);
+  });
+});
+
+describe("summarize, screen-off wake-ups", () => {
+  const off = (jsPerMinute: number, processPerMinute: number) =>
+    record("screen-off", "screen-off", null, {
+      wakeups: { minutes: 5, jsThread: "mqt_v_js", jsPerMinute, processPerMinute, top: [] },
+    });
+
+  it("gives the steps' wake-ups per minute their distribution, none to other steps", () => {
+    const rows = summarize([off(4, 40), off(6, 60), record("push-settings", "push", 100)]);
+    assert.deepEqual(rows[0]?.wakeups, {
+      jsPerMinute: { n: 2, median: 5, p90: 6, max: 6 },
+      processPerMinute: { n: 2, median: 50, p90: 60, max: 60 },
+    });
+    assert.equal(rows[1]?.wakeups, null);
+  });
+
+  it("prints them as a table, and nothing when no step counted them", () => {
+    const table = formatWakeups(summarize([off(4, 40), off(6, 60)]));
+    assert.match(table, /^\| screen-off\/idle\/screen-off \| 2 \| 5 \/ 6 \| 50 \/ 60 \|$/m);
+    assert.equal(formatWakeups(summarize([record("push-settings", "push", 100)])), "");
+  });
+
+  it("lines them up in a comparison", () => {
+    const rows = compareSummaries(summarize([off(120, 400)]), summarize([off(2, 30)]));
+    const js = rows.find((row) => row.metric === "JS wake-ups/min median");
+    assert.equal(js?.change, -118);
   });
 });

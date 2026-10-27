@@ -28,10 +28,10 @@ node scripts/perf/perf.ts run --scenario now-playing,now-playing-first,scrub,soa
 node scripts/perf/perf.ts compare <before.jsonl> <after.jsonl>
 ```
 
-Repeat `now-playing,now-playing-first,scrub` with `--variant import`. The screen-off scenario
-is owned by #713 and was absent at this ticket's starting commit. Once integrated, use its
-final name for a soak with playback running, first with Now Playing closed and then left
-open on synced lyrics. Return to the app and confirm an immediate position correction.
+Repeat `now-playing,now-playing-first,scrub` with `--variant import`. The screen-off soaks
+came with #713, after this ticket's starting commit: `--scenario screen-off,screen-off-lyrics`
+plays with Now Playing closed, then left open on synced lyrics; `away:js:player.positionReport`
+counts reports while the screen is off. Return to the app and confirm an immediate position correction.
 Repeat with Auto disconnected, with a connected car's Lyrics toggle off, and with it on.
 
 Perf builds count `js:player.positionReport`, `js:player.playbackState`,

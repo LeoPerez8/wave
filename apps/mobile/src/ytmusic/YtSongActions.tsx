@@ -8,6 +8,7 @@ import {
   ytDownloadActions,
   ytSongActions,
   ytSongCredit,
+  type SwipeSettings,
   type FavoriteSource,
   type PlaylistPlace,
   type PlaylistSong,
@@ -39,8 +40,8 @@ import { addYtToQueue, playYtNext } from "@/playback/actions";
 import type { MenuOptions } from "@/playback/ActionsMenu";
 import { rowSwipe, swipeEntryNow, type RowSwipeOptions } from "@/playback/rowSwipe";
 import { showError } from "@/overlay/alert";
-import { useSwipeSettings } from "@/settings/swipeActions";
-import { useYtMusicEnabled } from "@/settings/ytMusic";
+import { swipeSettingsNow, useSwipeSettings } from "@/settings/swipeActions";
+import { ytMusicEnabled, useYtMusicEnabled } from "@/settings/ytMusic";
 import { shareStreamedSong } from "@/share/songShare";
 
 import {
@@ -222,51 +223,18 @@ export const useYtSongSwipe = (
   const ytMusic = useYtMusicEnabled();
   const here = useCurrentPath(false);
   if (song === null || !settings.enabled) return NO_SWIPE;
-  const { playlistItem } = options;
-  const entriesWith = (find: FindInLibrary, at: string, inLibrary: boolean): Entry[] => {
-    const artists = swipesChoose(settings, "goToArtist") ? streamedArtistContextNow() : undefined;
-    return [
-      ...songEntries(
-        artists === undefined ? undefined : streamedArtistLink(song.artists ?? [], artists),
-        {
-          inPlaylist: playlistItem !== undefined,
-          favorite: ytSongStarredNow(song.videoId, find(song)),
-          album: song.albumId,
-          ytAlbumHere: ytAlbumPageHere(at),
-          ytMusic,
-          selectable: false,
-        },
-      ),
-      ...(swipesChoose(settings, "download")
-        ? ytDownloadActions(ytDownloadStatusNow(song.videoId), { inLibrary }).map(
-            (action): Entry => ({ kind: "download", action }),
-          )
-        : []),
-    ];
-  };
-  // Download: until the Library is read, a song counts as in it, so Download never shows only to go away.
   const known = swipesChoose(settings, "download") ? knownLibraryFinder() : null;
   return rowSwipe(
-    entriesWith(() => null, here, known === null || known(song) !== null).map(
-      (entry) => entry.action,
-    ),
-    (_, side) => {
-      const artistEntry = swipeEntryNow(
-        entriesWith(() => null, currentPath(), false),
-        side,
-      );
-      if (artistEntry?.action === "goToArtist") {
-        run(artistEntry, song, { find: () => null, playlistItem, onSelect: undefined }, "swipe");
-        return;
-      }
-      currentLibraryFinder()
-        .then((find) => {
-          const entry = swipeEntryNow(entriesWith(find, currentPath(), find(song) !== null), side);
-          if (entry !== undefined)
-            run(entry, song, { find, playlistItem, onSelect: undefined }, "swipe");
-        })
-        .catch((error: unknown) => showError("Couldn't load the song", error));
-    },
+    ytSongSwipeEntries(
+      song,
+      options,
+      settings,
+      ytMusic,
+      () => null,
+      here,
+      known === null || known(song) !== null,
+    ).map((entry) => entry.action),
+    (_, side) => runYtSongSwipe(song, side, options),
     options,
   );
 };
@@ -351,3 +319,63 @@ function YtSongActionsMenu({
     </>
   );
 }
+
+/** Re-plan when a shared song-list swipe executes, using the current route and stars. */
+export const runYtSongSwipe = (
+  song: NativeYtSong,
+  side: import("@wave/core").RowSwipeSide,
+  options: RowSwipeOptions = {},
+): void => {
+  const settings = swipeSettingsNow();
+  const ytMusic = ytMusicEnabled();
+  const { playlistItem } = options;
+
+  const entriesWith = (find: FindInLibrary, at: string, inLibrary: boolean) =>
+    ytSongSwipeEntries(song, options, settings, ytMusic, find, at, inLibrary);
+
+  const artistEntry = swipeEntryNow(
+    entriesWith(() => null, currentPath(), false),
+    side,
+  );
+  if (artistEntry?.action === "goToArtist") {
+    run(artistEntry, song, { find: () => null, playlistItem, onSelect: undefined }, "swipe");
+    return;
+  }
+  currentLibraryFinder()
+    .then((find) => {
+      const entry = swipeEntryNow(entriesWith(find, currentPath(), find(song) !== null), side);
+      if (entry !== undefined)
+        run(entry, song, { find, playlistItem, onSelect: undefined }, "swipe");
+    })
+    .catch((error: unknown) => showError("Couldn't load the song", error));
+};
+
+const ytSongSwipeEntries = (
+  song: NativeYtSong,
+  { playlistItem }: RowSwipeOptions,
+  settings: SwipeSettings,
+  ytMusic: boolean,
+  find: FindInLibrary,
+  at: string,
+  inLibrary: boolean,
+): Entry[] => {
+  const artists = swipesChoose(settings, "goToArtist") ? streamedArtistContextNow() : undefined;
+  return [
+    ...songEntries(
+      artists === undefined ? undefined : streamedArtistLink(song.artists ?? [], artists),
+      {
+        inPlaylist: playlistItem !== undefined,
+        favorite: ytSongStarredNow(song.videoId, find(song)),
+        album: song.albumId,
+        ytAlbumHere: ytAlbumPageHere(at),
+        ytMusic,
+        selectable: false,
+      },
+    ),
+    ...(swipesChoose(settings, "download")
+      ? ytDownloadActions(ytDownloadStatusNow(song.videoId), { inLibrary }).map(
+          (action): Entry => ({ kind: "download", action }),
+        )
+      : []),
+  ];
+};

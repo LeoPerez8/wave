@@ -11,7 +11,7 @@ import { IconButton } from "@/components/IconButton";
 import { ScanProgressBanner } from "@/components/ScanProgressBanner";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { TextButton } from "@/components/TextButton";
-import { useLoadedExcludedFolders, useLoadedScanRoots, useScanState } from "@/library/hooks";
+import { useLoadedExcludedFolders, useLoadedScanRoots, useScanStatus } from "@/library/hooks";
 import { promptForExcludedFolder } from "@/library/promptForExcludedFolder";
 import { promptForMusicFolder } from "@/library/promptForMusicFolder";
 import type { ScanRootSummary } from "@/library/LibraryStore";
@@ -89,7 +89,7 @@ export default function MusicFoldersScreen() {
   // Both lists, or neither: a list not read yet isn't an empty one, and edits wait for both.
   const loaded = roots !== null && excluded !== null;
   useScreenContent(loaded);
-  const scanning = useScanState().status === "scanning";
+  const scanning = useScanStatus() === "scanning";
   return (
     <View className="flex-1 bg-background">
       <ScreenHeader title="Music folders" />

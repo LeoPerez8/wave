@@ -13,6 +13,7 @@ import { AppState } from "react-native";
 
 import { WaveNative } from "@/native/waveNative";
 import { homeContent, type HomeContent } from "@/home/homeOpening";
+import { useSightedStore } from "@/lib/screenSight";
 import { createAllFilesAccess, type AllFilesAccessState } from "./allFilesAccess";
 
 import type { LibraryCounts } from "./db/counts";
@@ -40,8 +41,18 @@ import { libraryQuery, useLibraryQuery, type LibraryQuery } from "./sharedQuerie
 
 export { libraryQuery, useLibraryQuery } from "./sharedQueries";
 
-export const useScanState = (): ScanState =>
-  useSyncExternalStore(scanState.subscribe, scanState.get);
+const scanStatusNow = (): ScanState["status"] => scanState.get().status;
+
+/**
+ * Whether a scan runs, ended or failed, without its progress: a scan's
+ * progress re-renders only the banner (`useScanProgress`). A screen out of
+ * sight doesn't follow it.
+ */
+export const useScanStatus = (): ScanState["status"] =>
+  useSightedStore(scanState.subscribe, scanStatusNow);
+
+/** The scan's progress, for `ScanProgressBanner` alone; everything else reads `useScanStatus`. */
+export const useScanProgress = (): ScanState => useSightedStore(scanState.subscribe, scanState.get);
 
 /**
  * Whether Wave holds all-files access. Re-checked whenever the app comes back

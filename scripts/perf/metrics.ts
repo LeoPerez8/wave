@@ -2,7 +2,7 @@
 // sum up per scenario (summarize), and how two runs compare (compareSummaries).
 // docs/performance/README.md defines each metric.
 import type { PerfEntry, PerfFlush } from "../../packages/core/src/index.ts";
-import { FRAME_PARTS, type GfxFrame, type GfxSummary } from "./device.ts";
+import { FRAME_PARTS, type GfxFrame, type GfxSummary, type ThreadSwitches } from "./device.ts";
 
 type Part = (typeof FRAME_PARTS)[number];
 
@@ -231,6 +231,51 @@ export const stepMetrics = (step: {
   };
 };
 
+/** The names React Native gives its JavaScript thread: the new architecture's, then the old one's. */
+const JS_THREADS = ["mqt_v_js", "mqt_js"] as const;
+
+/** How often the app's threads woke over a window (a screen-off soak's), per minute. */
+export interface Wakeups {
+  readonly minutes: number;
+  /** The JavaScript thread's name; null when the process had none. */
+  readonly jsThread: string | null;
+  readonly jsPerMinute: number | null;
+  /** Every thread of the process, the JavaScript thread included. */
+  readonly processPerMinute: number;
+  /** The threads that woke most, busiest first (five at most). */
+  readonly top: readonly { readonly name: string; readonly perMinute: number }[];
+}
+
+/**
+ * The wake-ups between two readings of the app's threads [windowMs] apart. A
+ * thread born in the window counts all its switches; one that ended in it is
+ * lost, as its count went with it.
+ */
+export const threadWakeups = (
+  before: ReadonlyMap<string, ThreadSwitches>,
+  after: ReadonlyMap<string, ThreadSwitches>,
+  windowMs: number,
+): Wakeups => {
+  const minutes = windowMs / 60_000;
+  const perMinute = (count: number): number => round(count / minutes);
+  const woke = [...after].map(([tid, { name, switches }]) => ({
+    name,
+    count: Math.max(0, switches - (before.get(tid)?.switches ?? 0)),
+  }));
+  const js = woke.find((thread) => (JS_THREADS as readonly string[]).includes(thread.name));
+  return {
+    minutes: round(minutes),
+    jsThread: js?.name ?? null,
+    jsPerMinute: js === undefined ? null : perMinute(js.count),
+    processPerMinute: perMinute(woke.reduce((sum, thread) => sum + thread.count, 0)),
+    top: woke
+      .filter((thread) => thread.count > 0)
+      .toSorted((a, b) => b.count - a.count)
+      .slice(0, 5)
+      .map((thread) => ({ name: thread.name, perMinute: perMinute(thread.count) })),
+  };
+};
+
 /** One measured step, as the results file keeps it. */
 export interface StepRecord extends StepMetrics {
   readonly type: "step";
@@ -241,6 +286,8 @@ export interface StepRecord extends StepMetrics {
   readonly measure: string;
   readonly iteration: number;
   readonly index: number;
+  /** A screen-off window's wake-ups (`screenOff` steps only). */
+  readonly wakeups?: Wakeups | null;
 }
 
 export interface Distribution {
@@ -315,6 +362,11 @@ export interface SummaryRow {
   readonly missing: number;
   /** Each phase the steps timed (`phasesMs`), from the touch. */
   readonly phases: Readonly<Record<string, Distribution>>;
+  /** Wake-ups per minute, for steps that counted them (screen-off windows); null otherwise. */
+  readonly wakeups: {
+    readonly jsPerMinute: Distribution;
+    readonly processPerMinute: Distribution;
+  } | null;
 }
 
 /** [group]'s frame parts pooled; steps recorded before parts were measured count as none. */
@@ -390,8 +442,43 @@ export const summarize = (steps: readonly StepRecord[]): SummaryRow[] => {
           ),
         ]),
       ),
+      wakeups: wakeupsOf(group),
     };
   });
+};
+
+const wakeupsOf = (group: readonly StepRecord[]): SummaryRow["wakeups"] => {
+  const counted = group.flatMap((step) => {
+    const wakeups = step.wakeups ?? null;
+    return wakeups === null ? [] : [wakeups];
+  });
+  return counted.length === 0
+    ? null
+    : {
+        jsPerMinute: distribution(counted.map((wakeups) => wakeups.jsPerMinute)),
+        processPerMinute: distribution(counted.map((wakeups) => wakeups.processPerMinute)),
+      };
+};
+
+/**
+ * Wake-ups per minute (median / p90) per scenario step that counted them, as a
+ * Markdown table. Empty when no step did.
+ */
+export const formatWakeups = (rows: readonly SummaryRow[]): string => {
+  const lines = rows.flatMap(({ key, steps, wakeups }) =>
+    wakeups === null
+      ? []
+      : [
+          `| ${key} | ${steps} | ${pair(wakeups.jsPerMinute)} | ${pair(wakeups.processPerMinute)} |`,
+        ],
+  );
+  return lines.length === 0
+    ? ""
+    : [
+        "| Scenario step | Steps | JS wake-ups/min | Process wake-ups/min |",
+        "| --- | ---: | ---: | ---: |",
+        ...lines,
+      ].join("\n");
 };
 
 /**
@@ -499,6 +586,8 @@ const comparable = (row: SummaryRow): [string, number | null][] => [
     [`${phase} median`, value.median],
     [`${phase} p90`, value.p90],
   ]),
+  ["JS wake-ups/min median", row.wakeups?.jsPerMinute.median ?? null],
+  ["process wake-ups/min median", row.wakeups?.processPerMinute.median ?? null],
   ...Object.entries(row.rendersPerStep).map(([component, count]): [string, number | null] => [
     `renders ${component}`,
     count,

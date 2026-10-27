@@ -13,3 +13,15 @@ android {
     versionName '0.0.0'
   }
 }
+
+dependencies {
+  testImplementation 'junit:junit:4.13.2'
+}
+
+// Print assertion messages in CI logs, which are all the PR comment shows.
+tasks.withType(Test).configureEach {
+  testLogging {
+    events 'failed'
+    exceptionFormat 'full'
+  }
+}

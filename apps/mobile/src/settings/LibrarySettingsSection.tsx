@@ -5,7 +5,7 @@ import { Text, View } from "react-native";
 import { EntryRow } from "@/catalog/EntryRow";
 import { Hairline } from "@/catalog/Hairline";
 import { TextButton } from "@/components/TextButton";
-import { useScanRoots, useScanState } from "@/library/hooks";
+import { useScanRoots, useScanStatus } from "@/library/hooks";
 import { importBlackPlayerStats } from "@/library/importBlackPlayerStats";
 import { startRescan } from "@/library/runtime";
 
@@ -36,7 +36,7 @@ function BlackPlayerImport() {
 /** Settings › Library: the music folders, Rescan library and Import BlackPlayer Stats. */
 export function LibrarySettingsSection() {
   const roots = useScanRoots();
-  const scanning = useScanState().status === "scanning";
+  const scanning = useScanStatus() === "scanning";
   return (
     <View>
       <Hairline />

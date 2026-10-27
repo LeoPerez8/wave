@@ -51,8 +51,9 @@ node scripts/perf/perf.ts run --scenario soak-player --variant idle --label 723-
 node scripts/perf/perf.ts compare <before.jsonl> <after.jsonl>
 ```
 
-Then, with #713's screen-off soak once integrated, play an album with the screen off for
-30 minutes signed in, and switch away from and back to Wave ten times within a minute.
+Then, signed in, run #713's screen-off soak for 30 minutes of play
+(`--scenario screen-off --iterations 6`) and read `away:js:sync.run`, and switch away from and
+back to Wave ten times within a minute.
 
 Budgets:
 

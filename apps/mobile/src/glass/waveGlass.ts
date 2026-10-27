@@ -2,7 +2,10 @@ import { NativeModule, requireNativeModule, requireNativeView } from "expo";
 import type { ComponentType } from "react";
 import type { ColorValue, ViewProps } from "react-native";
 
-/** Native bindings from `modules/wave-glass`: the glass view and the frame-time meter. */
+/**
+ * Native bindings from `modules/wave-glass`: the glass view, the cover under Now
+ * Playing and the frame-time meter.
+ */
 
 export interface FrameStats {
   /** Frames rendered per second over the last 500 ms window. */
@@ -47,6 +50,22 @@ export interface NativeGlassViewProps extends ViewProps {
 
 export const NativeGlassView: ComponentType<NativeGlassViewProps> =
   requireNativeView<NativeGlassViewProps>("WaveGlass");
+
+export interface NativeCoverProps extends ViewProps {
+  /** `nativeID` of the screen under Now Playing. */
+  readonly coveredNativeId: string;
+  /** Now Playing settled open: the screen goes undrawn while the sheet lies over all of it. */
+  readonly settled: boolean;
+}
+
+/**
+ * Fills Now Playing and hides the screen under it from drawing, glass included,
+ * while the sheet rests settled over it (#721, see WaveCoverView.kt). Draws nothing.
+ */
+export const NativeCover: ComponentType<NativeCoverProps> = requireNativeView<NativeCoverProps>(
+  "WaveGlass",
+  "WaveCover",
+);
 
 export interface NativeWaveUnderlineProps extends ViewProps {
   readonly color: ColorValue;
