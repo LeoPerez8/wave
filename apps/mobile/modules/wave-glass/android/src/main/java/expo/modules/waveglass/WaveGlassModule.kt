@@ -9,8 +9,9 @@ import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 
 /**
- * The native glass view (the tab bar and mini player material) and a
- * frame-time meter used by the glass spike screen (issue #4).
+ * The native glass view (the tab bar and mini player material), the view that
+ * hides the screen under a settled Now Playing (issue #721) and a frame-time
+ * meter used by the glass spike screen (issue #4).
  *
  * The meter listens to FrameMetrics for the current window, so it measures what
  * the RenderThread and GPU actually took per frame (where blur and shaders cost
@@ -47,6 +48,12 @@ class WaveGlassModule : Module() {
       }
       Prop("rim") { view: WaveGlassView, enabled: Boolean -> view.rimEnabled = enabled }
       Prop("coalesce") { view: WaveGlassView, enabled: Boolean -> view.coalesce = enabled }
+    }
+
+    View(WaveCoverView::class) {
+      Name("WaveCover")
+      Prop("coveredNativeId") { view: WaveCoverView, id: String? -> view.coveredNativeId = id }
+      Prop("settled") { view: WaveCoverView, settled: Boolean -> view.settled = settled }
     }
 
     View(WaveUnderlineView::class) {
