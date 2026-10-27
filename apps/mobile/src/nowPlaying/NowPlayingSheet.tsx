@@ -16,7 +16,7 @@ import {
   useSyncExternalStore,
 } from "react";
 import { StyleSheet, Text, View, useWindowDimensions } from "react-native";
-import Animated, { useAnimatedStyle, type DerivedValue } from "react-native-reanimated";
+import Animated, { useAnimatedStyle } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { CELL, grid } from "@/catalog/grid";
@@ -32,7 +32,7 @@ import { useLyricCardShown } from "@/share/lyricCard";
 import { useSongShareShown } from "@/share/songShare";
 import { shareNowPlaying } from "@/share/songShare";
 
-import { Background, useBackgroundColors } from "./Background";
+import { Background, useBackgroundColors, type GroundColors } from "./Background";
 import { DismissArea } from "./DismissArea";
 import {
   useDownloadedFile,
@@ -117,7 +117,7 @@ const QueuePane = memo(function QueuePane({
   onShowPlayer,
 }: {
   item: Item;
-  ground: DerivedValue<string[]>;
+  ground: GroundColors;
   onShowPlayer: () => void;
 }) {
   // Where the pane sits on the sheet: the list's sticky bar draws the ground there.
