@@ -10,6 +10,7 @@ import { iconButtonAppearance, type IconButtonAppearance } from "./buttonAppeara
 type IconProps = { size?: number; color?: string; strokeWidth?: number };
 export type IconButtonProps = Omit<ComponentProps<typeof Press>, "children"> &
   IconButtonAppearance & {
+    onPress: NonNullable<ComponentProps<typeof Press>["onPress"]>;
     icon?: ComponentType<IconProps>;
     /** Spoken label; captions can supply it when there is visible text. */
     label?: string;

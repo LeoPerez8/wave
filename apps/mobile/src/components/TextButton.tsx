@@ -14,6 +14,7 @@ import {
 } from "./buttonAppearance";
 
 export type TextButtonProps = Omit<ComponentProps<typeof Press>, "children"> & {
+  onPress: NonNullable<ComponentProps<typeof Press>["onPress"]>;
   label: string;
   tone?: ButtonTone;
   variant?: TextButtonVariant;

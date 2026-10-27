@@ -3,7 +3,7 @@ import { listActionsForms, type ListActionsRoom, type YtPick } from "@wave/core"
 import { useState, type ComponentType, type ReactNode } from "react";
 import { Text, View, type LayoutChangeEvent } from "react-native";
 
-import { Press } from "@/motion/Press";
+import { IconButton } from "@/components/IconButton";
 import { useShuffleControl } from "@/nowPlaying/ShuffleMenu";
 import { useThemeColor } from "@/theme/useThemeColor";
 import { OnlineToggle, OnlineToggleFaces } from "@/ytmusic/OnlineToggle";
@@ -49,19 +49,30 @@ export function ListAction({
   accessibilityHint?: string;
 }) {
   return (
-    <Press
-      accessibilityRole="button"
-      accessibilityLabel={accessibilityLabel}
+    <IconButton
+      icon={icon}
+      label={accessibilityLabel}
+      caption={label}
+      layout="horizontal"
       accessibilityHint={accessibilityHint}
       onPress={onPress}
       onLongPress={onLongPress}
       haptic="impact"
-      className="flex-row items-center"
-      // Too little room even for the icon alone after them, Play and Shuffle shorten their labels.
-      style={{ minHeight: 48, gap: CELL, flexShrink: 1 }}
-    >
-      <ActionFace icon={icon} label={label} />
-    </Press>
+      depth={0.04}
+      style={{
+        width: undefined,
+        height: undefined,
+        minHeight: 48,
+        gap: CELL,
+        flexShrink: 1,
+        justifyContent: "flex-start",
+      }}
+      captionProps={{
+        numberOfLines: 1,
+        className: "font-sans text-body font-medium",
+        style: { flexShrink: 1 },
+      }}
+    />
   );
 }
 
@@ -155,7 +166,6 @@ function LineWithLast({
   /** Nothing after it on the line: its icon alone sits on the right margin. */
   endsLine: boolean;
 }) {
-  const accent = useThemeColor("accent");
   const [measured, setMeasured] = useState<Measured>(NOTHING_MEASURED);
   // Each width is kept only when it changed, so layout settles.
   const update = (change: (current: Measured) => Measured | null) =>
@@ -215,21 +225,18 @@ function LineWithLast({
         />
       )}
       {last !== null && form === "icon" && (
-        <Press
-          accessibilityRole="button"
-          accessibilityLabel={last.accessibilityLabel}
+        <IconButton
+          icon={last.icon}
+          label={last.accessibilityLabel}
           onPress={last.onPress}
           haptic="impact"
-          depth={0.1}
           // Ending the line, its glyph sits on the right margin, as a playlist's ⋯ does;
           // before a toggle, it sits beside it.
           className={`items-center justify-center${toggle === null ? " ml-auto" : ""}${
             endsLine && toggle === null ? " -mr-3" : ""
           }`}
           style={{ width: 48, height: 48 }}
-        >
-          <last.icon size={24} color={accent} strokeWidth={1.5} />
-        </Press>
+        />
       )}
       {toggle !== null && forms.toggle !== null && (
         <View className="ml-auto">

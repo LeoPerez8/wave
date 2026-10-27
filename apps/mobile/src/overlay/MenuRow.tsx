@@ -2,9 +2,8 @@ import { Text, View } from "react-native";
 
 import { CELL, grid } from "@/catalog/grid";
 import { Hairline } from "@/catalog/Hairline";
-import { Press } from "@/motion/Press";
+import { TextButton } from "@/components/TextButton";
 import { ACTION_ICONS, type ActionIcon, type MenuAction } from "@/playback/actionIcons";
-import { useThemeColor } from "@/theme/useThemeColor";
 
 /** A menu row's icon: a Tabler line icon a little taller than the Body label beside it. */
 const ICON_SIZE = 22;
@@ -40,27 +39,30 @@ export function MenuRow({
   highlighted = false,
   destructive = false,
 }: Props) {
-  // The icon's colour is a native prop; the label takes the same token as a class.
-  const tone = useThemeColor(destructive ? "destructive" : "foreground");
   const Icon = icon ?? ACTION_ICONS[action];
   return (
-    <Press
+    <TextButton
+      label={label}
+      tone={destructive ? "destructive" : "primary"}
       accessibilityRole="button"
       accessibilityLabel={label}
       onPress={onPress}
-      haptic="selection"
       highlighted={highlighted}
     >
-      <View className="flex-row items-center" style={{ minHeight: grid.row, gap: CELL * 1.5 }}>
-        <Icon size={ICON_SIZE} color={tone} strokeWidth={ICON_STROKE} />
-        <Text
-          className={`flex-1 font-sans text-body ${destructive ? "text-destructive" : "text-foreground"}`}
-          style={{ paddingVertical: CELL / 2 }}
-        >
-          {label}
-        </Text>
-      </View>
-      {divider && <Hairline />}
-    </Press>
+      {(tone) => (
+        <>
+          <View className="flex-row items-center" style={{ minHeight: grid.row, gap: CELL * 1.5 }}>
+            <Icon size={ICON_SIZE} color={tone} strokeWidth={ICON_STROKE} />
+            <Text
+              className={`flex-1 font-sans text-body ${destructive ? "text-destructive" : "text-foreground"}`}
+              style={{ paddingVertical: CELL / 2 }}
+            >
+              {label}
+            </Text>
+          </View>
+          {divider && <Hairline />}
+        </>
+      )}
+    </TextButton>
   );
 }

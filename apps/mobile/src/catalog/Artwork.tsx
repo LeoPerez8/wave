@@ -17,8 +17,7 @@ type Props = {
 
 /** Album art, treated as a photograph: square, no frame, no rounding unless asked. */
 export function Artwork({ uri, tint, size, radius = 0 }: Props) {
-  const tertiary = useThemeColor("tertiary");
-  const fill = useThemeColor("fill");
+  const [tertiary, fill] = useThemeColor(["tertiary", "fill"]);
   const captured = useCapturedImage(uri);
   if (uri !== undefined && captured !== undefined) {
     // Drawn into a shared image: a bitmap the snapshot's software canvas can draw.

@@ -22,6 +22,7 @@ import { appRuntime } from "@/library/runtime";
 import { showError } from "@/overlay/alert";
 import { openAlbum, useCurrentPath } from "@/library/routes";
 import { Press } from "@/motion/Press";
+import { IconButton } from "@/components/IconButton";
 import { useRenderCount } from "@/perf/perf";
 import { useCurrentTrackId } from "@/playback/hooks";
 import { playbackState, type PlaybackState } from "@/playback/Player";
@@ -231,7 +232,6 @@ const STAR_POP_FROM = 0.6;
  * double-tap pops it; under reduce motion it just fills.
  */
 function FavoriteStar({ title }: { title: string }) {
-  const highlight = useThemeColor("highlight");
   const reduceMotion = useReducedMotion();
   const { song, favorite, disabled, star } = useNowPlayingStar();
   const scale = useSharedValue(1);
@@ -243,25 +243,25 @@ function FavoriteStar({ title }: { title: string }) {
   }, [song, favorite, reduceMotion, scale]);
   const popStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.get() }] }));
   return (
-    <Press
-      accessibilityRole="button"
-      accessibilityLabel={favorite ? `Remove ${title} from Favorites` : `Favorite ${title}`}
+    <IconButton
+      label={favorite ? `Remove ${title} from Favorites` : `Favorite ${title}`}
       accessibilityState={{ selected: favorite, disabled }}
+      tone="highlight"
+      disabledTone="highlight"
       disabled={disabled}
       onPress={() => star()}
       haptic="impact"
-      depth={0.1}
-      className="items-center justify-center"
-      style={{ width: CELL * 6, height: CELL * 6 }}
     >
-      <Animated.View style={popStyle}>
-        {favorite ? (
-          <IconStarFilled size={24} color={highlight} />
-        ) : (
-          <IconStar size={24} color={highlight} strokeWidth={1.5} />
-        )}
-      </Animated.View>
-    </Press>
+      {(highlight) => (
+        <Animated.View style={popStyle}>
+          {favorite ? (
+            <IconStarFilled size={24} color={highlight} />
+          ) : (
+            <IconStar size={24} color={highlight} strokeWidth={1.5} />
+          )}
+        </Animated.View>
+      )}
+    </IconButton>
   );
 }
 
