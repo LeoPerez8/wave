@@ -102,7 +102,7 @@ const MIXES_UPDATING = "Updating…";
 function Discover({ home, title }: SectionProps) {
   const ytMusic = useYtMusicEnabled();
   const { played } = homeOpeningState(home);
-  useDiscoverMixesFocus(played);
+  useDiscoverMixesFocus(ytMusic, played);
   const magicQueue = useMagicQueueSection();
   const artistMixes = useDiscoverMixes("artist-mixes");
   const genreMixes = useDiscoverMixes("genre-mixes");

@@ -645,6 +645,6 @@ const focusMixes = (played: boolean): void => {
   refresh(played);
 };
 
-export const useDiscoverMixesFocus = (played: boolean | undefined): void => {
-  useDiscoverFocus(useYtMusicEnabled(), played, focusMixes);
+export const useDiscoverMixesFocus = (enabled: boolean, played: boolean | undefined): void => {
+  useDiscoverFocus(enabled, played, focusMixes);
 };

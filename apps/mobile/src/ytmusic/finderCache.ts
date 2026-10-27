@@ -5,9 +5,9 @@
  * Library itself once per Library version.
  */
 export interface FinderCache<R, F> {
-  /** The finder over [rows]: the same one for the same array. It becomes the known one. */
   /** A cached finder for scoped rows, without replacing the last full-Library finder. */
   readonly forRows: (rows: readonly R[]) => F;
+  /** The finder over [rows]: the same one for the same array. It becomes the known one. */
   readonly over: (rows: readonly R[]) => F;
   /** The last finder made, or null before the first. */
   readonly known: () => F | null;
@@ -40,7 +40,7 @@ export const makeFinderCache = <R, F>(options: {
     return entry.find;
   };
   const over = (rows: readonly R[]): F => {
-    known = { rows, find: forRows(rows) };
+    if (known?.rows !== rows) known = { rows, find: forRows(rows) };
     return known.find;
   };
 
