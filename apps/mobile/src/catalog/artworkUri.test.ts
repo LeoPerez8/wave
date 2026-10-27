@@ -85,3 +85,20 @@ test("sized catalog images can recover originals for sharing and thumbnails for 
     `content://dev.leoperez.wave.artwork/${hash}`,
   );
 });
+
+test("remote artwork URLs that resemble cache filenames stay remote", () => {
+  const remote = "https://covers.example/artwork/0123456789abcdef0123456789abcdef01234567.jpg";
+  assert.equal(artworkUri(remote, "medium"), remote);
+});
+
+test("an already sized local image keeps its file URI at that size", () => {
+  const hash = "0123456789abcdef0123456789abcdef01234567";
+  assert.equal(
+    artworkUri(`/files/artwork/${hash}_thumb.jpg`, "thumbnail"),
+    `file:///files/artwork/${hash}_thumb.jpg`,
+  );
+  assert.equal(
+    artworkUri(`/files/artwork/${hash}_medium.jpg`, "medium"),
+    `file:///files/artwork/${hash}_medium.jpg`,
+  );
+});

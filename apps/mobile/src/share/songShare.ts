@@ -16,8 +16,8 @@ import {
 import * as Effect from "effect/Effect";
 import { useSyncExternalStore } from "react";
 
+import { artworkUri } from "@/catalog/artworkUri";
 import { makeExternalStore } from "@/lib/externalStore";
-import { fileUri } from "@/lib/fileUri";
 import { LibraryStore, type SongRow } from "@/library/LibraryStore";
 import { appRuntime } from "@/library/runtime";
 import { appLog } from "@/log/appLog";
@@ -151,7 +151,7 @@ export const shareLibrarySong = (song: SongRow): void =>
     {
       title: song.title,
       artist: song.artist,
-      artworkUri: fileUri(song.artworkPath),
+      artworkUri: artworkUri(song, "original"),
       palette: null,
     },
     appRuntime.runPromise(
@@ -198,7 +198,10 @@ export const shareStreamedSong = (song: StreamedShareSong): void => {
           Effect.gen(function* () {
             const ytMusic = yield* YtMusic;
             const artwork = yield* cacheStreamedCover(url, ytMusic.cacheArtwork);
-            return { artworkUri: `file://${artwork.path}`, palette: artwork.palette };
+            return {
+              artworkUri: artworkUri({ artworkPath: artwork.path }, "original"),
+              palette: artwork.palette,
+            };
           }),
         ),
     streamedSongLinks(song),

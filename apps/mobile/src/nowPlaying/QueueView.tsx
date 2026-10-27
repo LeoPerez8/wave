@@ -31,6 +31,7 @@ import Animated, {
   type SharedValue,
 } from "react-native-reanimated";
 
+import { artworkUri } from "@/catalog/artworkUri";
 import { Artwork } from "@/catalog/Artwork";
 import { CatalogLine, SectionHead, SECTION_HEAD } from "@/catalog/CatalogLine";
 import { CELL, grid } from "@/catalog/grid";
@@ -73,8 +74,7 @@ type IconProps = { size?: number; color?: string; strokeWidth?: number };
 
 const THUMB = CELL * 5;
 
-const thumbUri = (track: QueueTrack | undefined): string | undefined =>
-  track?.thumbPath == null ? undefined : `file://${track.thumbPath}`;
+const thumbUri = (track: QueueTrack | undefined): string | undefined => artworkUri(track);
 
 type ToggleProps = {
   icon: ComponentType<IconProps>;

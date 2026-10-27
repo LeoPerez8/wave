@@ -2108,3 +2108,4 @@ export {
   shuffleCardOpened,
   shuffleLineShows,
 } from "./shuffleCardLines.ts";
+export { fileUri } from "./fileUri.ts";

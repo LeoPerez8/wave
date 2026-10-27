@@ -38,6 +38,7 @@ import Animated, {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { scheduleOnRN } from "react-native-worklets";
 
+import { artworkUri } from "@/catalog/artworkUri";
 import { ArtistImage } from "@/catalog/ArtistImage";
 import { Artwork } from "@/catalog/Artwork";
 import { CELL, grid } from "@/catalog/grid";
@@ -119,15 +120,6 @@ function MinutesSlide({ title, minutes }: { title: string; minutes: number }) {
   );
 }
 
-/** A song's or an album's cover as a file URI: its artwork, else its thumbnail. */
-const artworkUri = (item: {
-  readonly artworkPath: string | null;
-  readonly thumbPath: string | null;
-}): string | undefined => {
-  const path = item.artworkPath ?? item.thumbPath;
-  return path === null ? undefined : `file://${path}`;
-};
-
 /**
  * A song as a Recap shows it: a Library song's, or a streamed one's as its
  * latest play had it, its cover a placeholder while YT Music is off.
@@ -138,7 +130,7 @@ const songShown = (song: StatsSong, ytMusic: boolean) =>
         key: song.track.id,
         title: song.track.title,
         artist: song.track.artist,
-        artworkUri: artworkUri(song.track),
+        artworkUri: artworkUri(song.track, "original"),
       }
     : {
         key: song.song.videoId,
@@ -149,7 +141,11 @@ const songShown = (song: StatsSong, ytMusic: boolean) =>
 
 /** An album's cover as a Recap shows it: an online album's is a placeholder while YT Music is off. */
 const albumArtworkUri = (album: PlayedAlbum, ytMusic: boolean): string | undefined =>
-  "online" in album ? (ytMusic ? (album.artworkUrl ?? undefined) : undefined) : artworkUri(album);
+  "online" in album
+    ? ytMusic
+      ? (album.artworkUrl ?? undefined)
+      : undefined
+    : artworkUri(album, "original");
 
 /** An artist's image as a Recap shows it: an online artist's is a placeholder while YT Music is off. */
 const artistShown = (artist: PlayedArtist, ytMusic: boolean) =>

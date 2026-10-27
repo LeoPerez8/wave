@@ -6,7 +6,7 @@ export const startMediumCovers = (): (() => void) => {
   let cancelled = false;
   const stopStart = afterFirstSettled("mediumCovers", () => {
     void (async () => {
-      while (!cancelled) {
+      while (true) {
         await freeTurn();
         if (cancelled || (await WaveNative.backfillMediumCover())) return;
       }

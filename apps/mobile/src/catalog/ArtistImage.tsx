@@ -1,10 +1,11 @@
 import { artistInitial } from "@wave/core";
 import { IconUser } from "@tabler/icons-react-native";
 import { Image } from "expo-image";
-import { Image as SoftwareImage, Text, View } from "react-native";
+import { Image as SoftwareImage, PixelRatio, Text, View } from "react-native";
 
+import { artworkUri } from "./artworkUri";
 import { useArtistPhoto } from "@/library/artistPhotos";
-import { useCapturedImage } from "@/share/imageCapture";
+import { useCapturedImage, useInCapture } from "@/share/imageCapture";
 import { useThemeColor } from "@/theme/useThemeColor";
 
 /** What an artist image needs: the artist's name and image (see `ArtistRow`). */
@@ -34,17 +35,16 @@ export function ArtistImage({ artist, size, large = false }: Props) {
   const secondary = useThemeColor("secondary");
   const fill = useThemeColor("fill");
   const photo = useArtistPhoto(artist.name);
-  const path = large
-    ? (photo?.path ?? artist.artworkPath ?? artist.thumbPath)
-    : (photo?.thumbPath ?? artist.thumbPath);
+  const inCapture = useInCapture();
   const uri = artist.placeholder
-    ? null
-    : path === null
-      ? (artist.imageUrl ?? null)
-      : `file://${path}`;
+    ? undefined
+    : artworkUri(
+        { ...artist, photo },
+        inCapture ? "original" : large ? PixelRatio.getPixelSizeForLayoutSize(size) : "thumbnail",
+      );
   const circle = { width: size, height: size, borderRadius: size / 2 };
   const captured = useCapturedImage(uri);
-  if (uri !== null && captured !== undefined) {
+  if (uri !== undefined && captured !== undefined) {
     // Drawn into a shared image: a bitmap the snapshot's software canvas can draw.
     return (
       <SoftwareImage
@@ -56,10 +56,12 @@ export function ArtistImage({ artist, size, large = false }: Props) {
       />
     );
   }
-  if (uri !== null) {
+  if (uri !== undefined) {
     return (
       <Image
         source={{ uri }}
+        // Medium URIs fall back to originals while the one-time migration is pending.
+        cachePolicy={uri.startsWith("content://") ? "memory" : undefined}
         // List rows are recycled; the key stops the previous artist's image flashing.
         recyclingKey={uri}
         style={[circle, { backgroundColor: fill }]}

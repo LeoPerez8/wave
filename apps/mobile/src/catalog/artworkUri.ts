@@ -35,14 +35,20 @@ export function artworkUri(
   // Only embedded artwork uses derived sizes. Photos and playlist images keep their own files.
   const cachedPath = source.artworkPath ?? source.thumbPath;
   const local = cachedPath?.match(
-    /\/artwork\/([0-9a-f]{40})(?:_(thumb|medium)\.jpg|\.(?:jpg|png|webp|gif|bmp|img))$/,
+    /^(?:file:\/\/)?\/(?:[^/]+\/)*artwork\/([0-9a-f]{40})(?:_(thumb|medium)\.jpg|\.(?:jpg|png|webp|gif|bmp|img))$/,
   );
   const served = cachedPath?.match(
     /^content:\/\/dev\.leoperez\.wave\.artwork\/(?:(thumbnail|medium)\/)?([0-9a-f]{40})$/,
   );
   const hash = local?.[1] ?? served?.[2];
-  const sized =
-    hash === undefined
+  const sameLocalSize =
+    local !== null &&
+    local !== undefined &&
+    ((requested === "thumbnail" && local[2] === "thumb") ||
+      (requested === "medium" && local[2] === "medium"));
+  const sized = sameLocalSize
+    ? cachedPath
+    : hash === undefined
       ? undefined
       : `content://dev.leoperez.wave.artwork/${requested === "original" ? "" : requested + "/"}${hash}`;
   const original =

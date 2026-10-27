@@ -20,7 +20,8 @@ sealed interface ArtworkRequest {
 /**
  * Content URIs for cached artwork, which Android Auto (and the media
  * notification) can read where app file paths can't be:
- * `content://<package>.artwork/<hash>` for a cover and
+ * `content://<package>.artwork/<hash>` for an original,
+ * `content://<package>.artwork/medium/<hash>` and `/thumbnail/<hash>` for sized covers, and
  * `content://<package>.artwork/mosaic/<h1>/<h2>/<h3>/<h4>` for a mosaic. A
  * hash is [ArtworkStore]'s 40 lowercase hex chars; anything else is rejected,
  * so the provider never serves a file outside its folders.
