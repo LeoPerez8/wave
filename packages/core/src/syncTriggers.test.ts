@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { syncTriggers } from "./syncTriggers.ts";
+import { syncTriggers } from "./index.ts";
 import { fakeClock } from "./testSyncClock.ts";
 
 /** Triggers over a sync that records when it ran and succeeds unless told otherwise. */

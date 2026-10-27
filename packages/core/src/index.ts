@@ -2143,3 +2143,11 @@ export {
   type QueueWrite,
   type SavedQueueParts,
 } from "./queuePersistence.ts";
+export {
+  FOREGROUND_SYNC_INTERVAL_MS,
+  PLAY_BATCH_DELAY_MS,
+  PLAY_BATCH_MAX_MS,
+  PUSH_DELAY_MS,
+  syncTriggers,
+} from "./syncTriggers.ts";
+export type { SyncClock, SyncTriggers, SyncTriggersInput } from "./syncTriggers.ts";

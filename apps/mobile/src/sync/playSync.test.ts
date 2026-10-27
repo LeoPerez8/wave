@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { type PlayEvent, type YtAlbumSong } from "@wave/core";
+import { syncTriggers, type PlayEvent, type YtAlbumSong } from "@wave/core";
 import { eq, sql } from "drizzle-orm";
 
 import { harness, pullAll, push } from "../../../sync/src/testing.ts";
@@ -18,8 +18,7 @@ import * as schema from "../library/db/schema.ts";
 import { joinAccount } from "../library/db/syncRows.ts";
 import { saveImportedPlays } from "../library/db/blackPlayer.ts";
 import { syncCycle, type SyncTransport } from "./syncCycle.ts";
-import { syncTriggers } from "./syncTriggers.ts";
-import { fakeClock } from "./testSyncClock.ts";
+import { fakeClock } from "../../../../packages/core/src/testSyncClock.ts";
 
 const SONG: YtAlbumSong = {
   videoId: "history-video",

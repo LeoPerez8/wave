@@ -1,4 +1,4 @@
-import type { WaveSession } from "@wave/core";
+import { syncTriggers, type SyncClock, type SyncTriggers, type WaveSession } from "@wave/core";
 import * as Effect from "effect/Effect";
 import { AppState } from "react-native";
 
@@ -7,7 +7,6 @@ import { LibraryStore } from "@/library/LibraryStore";
 import { WaveAccount, waveAccountErrorCode, type WaveAccountErrorCode } from "@/native/waveAccount";
 import { perfCount } from "@/perf/perf";
 
-import { syncTriggers, type SyncClock, type SyncTriggers } from "./syncTriggers";
 import type { WaveSync, WaveSyncPorts } from "./WaveSync";
 
 /** Offline or signed out: a sync stops, and tries again at the next chance, with nothing to warn of. */

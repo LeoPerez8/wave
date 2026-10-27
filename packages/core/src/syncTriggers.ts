@@ -1,7 +1,7 @@
 /**
  * When Wave syncs with the account (docs/spec.md, "When it talks to the
- * service"). Kept free of Expo and React Native so its tests run it against
- * a hand-moved clock; `WaveSync` feeds it the app's events and runs the sync.
+ * service"), against an injected clock so its tests move it by hand; the
+ * app's `WaveSync` feeds it the app's events and runs the sync.
  */
 
 /** How long a push waits after the last edit, so a run of edits goes up as one. */

@@ -10,7 +10,7 @@ Before this ticket every play start and every play end bumped `playHistoryVersio
 after each pull that brought plays (the pull bumped the version too). Every return to the
 foreground synced, with no minimum interval.
 
-`apps/mobile/src/sync/syncTriggers.ts` now times the syncs, free of React Native:
+Core's `syncTriggers.ts` now times the syncs, free of React Native:
 
 - A play start schedules no sync. Its row isn't pushed until the play ends anyway.
 - Play ends batch: a sync a minute after the last end (`PLAY_BATCH_DELAY_MS`), at most
@@ -31,7 +31,7 @@ launch or sign-in still syncs at once.
 
 ## Tests
 
-`apps/mobile/src/sync/syncTriggers.test.ts` drives the triggers with a hand-moved clock
+Core's `syncTriggers.test.ts` drives the triggers with a hand-moved clock
 (`testSyncClock.ts`): no sync on play start, batched and capped play ends, the 3-second
 push, edits and play ends together, the song-list flag across a failed sync, the foreground
 interval (after a finished and a failed sync, during a running sync, with plays waiting),

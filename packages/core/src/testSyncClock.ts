@@ -1,6 +1,6 @@
 /** The sync triggers' tests' clock (`syncTriggers.ts`). */
 /// <reference types="node" />
-import type { SyncClock } from "./syncTriggers.ts";
+import type { SyncClock } from "./index.ts";
 
 /** A clock the test moves by hand; timers run as it passes them. */
 export const fakeClock = () => {
