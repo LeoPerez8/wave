@@ -667,3 +667,214 @@ export const TASTE_SOURCES: Record<string, Exception> = {
     capabilities: ["library/LibraryStore.ts#mixSongsPage"],
   },
 };
+
+/**
+ * Shared components per pattern (docs/spec.md, Performance rules 3, 4, 9 and 11). Each list
+ * names exact owners; a new one fails `performanceGuards.test.ts` until it is reviewed here.
+ */
+export const SONG_ROW = "songs/SongRow.tsx#SongRow";
+export const SONG_ROW_VIEW = "../../../packages/core/src/songRowView.ts#songRowView";
+/** The only places a song row is drawn: the song list's renderer, the Queue, the previews. */
+export const SONG_ROW_SITES: Record<string, Exception> = {
+  "songs/useSongRows.tsx#useSongRows": {
+    reason:
+      "The song list's one renderer, behind SongList, SongPreview (the capped previews) and a dragged row's lifted copy.",
+  },
+  "nowPlaying/QueueView.tsx#HistoryRow": {
+    reason:
+      "Queue History is its own Legend List (sticky bar, faded covers) drawing rows from the song list model's queue source.",
+  },
+  "nowPlaying/QueueView.tsx#UpNextRow": {
+    reason: "Up Next rows carry the Queue's remove control and drag, around the same song row.",
+  },
+  "nowPlaying/QueueView.tsx#UpNextList": {
+    reason: "The lifted copy of the Up Next row being dragged, drawn over the list.",
+  },
+  "app/design-preview.tsx#DesignPreview": {
+    reason: "Developer Design preview: synthetic rows from preview/syntheticSongRow.ts.",
+  },
+  "preview/KindCards.tsx#SongRow": {
+    reason: "Developer Design preview cards: synthetic rows from preview/syntheticSongRow.ts.",
+  },
+};
+/** Core's song row view is computed once per song and state, by the song list's model. */
+export const SONG_ROW_VIEW_SITES: Record<string, Exception> = {
+  "songs/songListModel.ts#songRowPresentation": {
+    reason: "The model's memoized presentation of one row: Core's view of its source and state.",
+  },
+  "songs/songListModel.ts#createSongListModel": {
+    reason:
+      "The model's identity() and row cache key: a source's key and recycle type, without a presentation.",
+  },
+};
+/** Per-screen song rows #715 and #716 replaced. None may be declared again. */
+export const RETIRED_SONG_ROWS = [
+  "TrackRow",
+  "SwipeTrackRow",
+  "SwipeSummaryRow",
+  "SwipeYtSongRow",
+  "YtSongRow",
+  "RankedYtSongRow",
+  "DiscoverSongRow",
+  "UnsearchedSongRow",
+  "UnavailableSongRow",
+  "PlaylistItem",
+];
+
+/** Hooks that follow a whole set or a whole state object. A row follows none of them. */
+export const WHOLE_SET_HOOKS = [
+  "playback/hooks.ts#useCurrentPlayingIds",
+  "playback/hooks.ts#usePlayback",
+  "playback/hooks.ts#useQueue",
+  ...[
+    "useFavoriteIds",
+    "useLiveFavoriteIds",
+    "usePendingFavoriteVideos",
+    "useLivePendingFavoriteVideos",
+  ].map((name) => `library/favorites.ts#${name}`),
+  ...[
+    "useSongListDownloads",
+    "useDownloadJournal",
+    "useMissingSongDownloadStatuses",
+    "useDownloadingList",
+    "useFailedDownloads",
+  ].map((name) => `ytmusic/YtDownloads.ts#${name}`),
+  "library/hooks.ts#useScanProgress",
+];
+/** Whole stores a row may not name itself (a narrow hook may read them for it). */
+export const WHOLE_STORES = [
+  "playback/PlayHistory.ts#unavailableStreamedVideos",
+  "ytmusic/downloadJournal.ts#journal",
+  "playback/Queue.ts#queueState",
+  "playback/queueTracks.ts#queueTracks",
+  "playback/Player.ts#playbackState",
+  "playback/Player.ts#positionState",
+  "library/LibraryScan.ts#scanState",
+];
+/** Rows: components named `…Row`, and everything in the song row's module. */
+export const isRow = (owner: string): boolean =>
+  /#[A-Z]\w*Row$/.test(owner) || owner.startsWith("songs/SongRow.tsx#");
+
+/** Core's `fileUri` builds file URIs; for artwork only the one helper calls it. */
+export const FILE_URI = "../../../packages/core/src/fileUri.ts#fileUri";
+export const ARTWORK_URI_BUILDERS: Record<string, Exception> = {
+  "catalog/artworkUri.ts#artworkUri": {
+    reason:
+      "The one artwork helper (#726): picks thumbnail, medium or original and builds the URI, with one fallback order.",
+  },
+};
+
+/** Press targets: Wave's animated Press, and React Native's and Gesture Handler's own. */
+export const PRESS_SEEDS = [
+  "motion/Press.tsx#Press",
+  ...["Pressable", "TouchableOpacity", "TouchableHighlight", "TouchableWithoutFeedback"].flatMap(
+    (name) => [`react-native#${name}`, `react-native-gesture-handler#${name}`],
+  ),
+];
+/**
+ * Who presses without the shared buttons. An icon, text or pill button uses IconButton or
+ * TextButton; the rest are controls whose face or gesture is their own (rows, tiles, links,
+ * the cover, the tab bar) and say so.
+ */
+export const OWN_PRESS: Record<string, Exception> = {
+  "motion/Press.tsx#AnimatedPressable": {
+    reason: "Press itself: the animated Pressable every press target, shared or not, builds on.",
+  },
+  "components/IconButton.tsx#IconButton": {
+    reason: "The shared icon button itself, which every icon target uses.",
+  },
+  "components/TextButton.tsx#TextButton": {
+    reason: "The shared text button itself; its plain variant is React Native's Pressable.",
+  },
+  "songs/SongRow.tsx#SongRow": {
+    reason: "The one song row: row press, long-press menu, selection and swipe.",
+  },
+  "catalog/cards/CardParts.tsx#CardRow": {
+    reason: "A card's whole row is the target, with selection and its long-press menu.",
+  },
+  "catalog/cards/CardParts.tsx#CardTile": {
+    reason: "A card's whole tile is the target, with selection and its long-press menu.",
+  },
+  "catalog/CoverTile.tsx#CoverTile": {
+    reason: "An album or playlist cover tile in a grid, with selection and its long-press menu.",
+  },
+  "catalog/EntryRow.tsx#EntryRow": {
+    reason: "A Library entry row (label, count, line), the whole row a target.",
+  },
+  "catalog/NameRow.tsx#NameRow": {
+    reason: "An artist or genre row, with selection and its long-press menu.",
+  },
+  "catalog/PlaylistEntry.tsx#PlaylistEntry": {
+    reason: "A playlist row, with selection and its long-press menu.",
+  },
+  "library/YtLibraryPicker.tsx#PickerRow": {
+    reason: "The YT Music library picker's checkbox row.",
+  },
+  "search/ArtworkRow.tsx#ArtworkRow": {
+    reason: "Search's album and artist result row.",
+  },
+  "settings/SettingsPage.tsx#SettingsPageRow": {
+    reason: "A Settings row opening a page, with its title and summary.",
+  },
+  "settings/SwipeDirections.tsx#SwipeDirectionRow": {
+    reason: "A Settings row naming the action a swipe runs.",
+  },
+  "stats/StatsViews.tsx#RecapCard": { reason: "A Recap's card on Stats opens that Recap." },
+  "stats/StatsViews.tsx#RecapsRow": { reason: "The row of Recap cards on Stats, each a target." },
+  "chrome/TabBar.tsx#Tab": {
+    reason: "A tab bar control: selected state and the long press that edits the tab bar.",
+  },
+  "nowPlaying/CoverPress.tsx#CoverPress": {
+    reason: "Now Playing's cover: a tap plays or pauses, with its own press animation.",
+  },
+  "nowPlaying/LyricsView.tsx#SyncedLine": {
+    reason: "A synced lyric line is the target: a tap seeks to it.",
+  },
+  "nowPlaying/LyricsView.tsx#UnsyncedLyrics": {
+    reason: "Each unsynced line is a target that selects it to share.",
+  },
+  "nowPlaying/PlayerView.tsx#MetaLink": {
+    reason: "Now Playing's artist and album links: text with the link role.",
+  },
+  "app/library/album/[id].tsx#AlbumHead": {
+    reason: "The album page's artist line is a link to the artist.",
+  },
+  "nowPlaying/TrackHeader.tsx#TrackHeader": {
+    reason: "The Queue's playing-song header (artwork, title, artist) returns to the player.",
+  },
+  "playback/MiniPlayer.tsx#MiniPlayer": {
+    reason: "The whole mini player opens Now Playing, with its accessibility actions.",
+  },
+  "nowPlaying/SleepTimer.tsx#SleepTimerButton": {
+    reason: "Its face is the sleep countdown drawn on the UI thread (#718), not a glyph.",
+  },
+  "components/TitleLongPress.tsx#TitlePress": {
+    reason: "A screen title whose long press runs its action; it has the header role.",
+  },
+  "overlay/OverlayHost.tsx#OverlayCard": {
+    reason: "The backdrop around an overlay card dismisses it.",
+  },
+  "share/LyricCardPreview.tsx#FittedCard": {
+    reason: "The lyrics card preview itself: a tap changes its colour.",
+  },
+  "share/ShareDestinations.tsx#ShareDestinations": {
+    reason:
+      "A share destination: a filled circle with its icon or a spinner, and its label and note below.",
+  },
+  "ytmusic/OnlineToggle.tsx#Segment": {
+    reason: "A segment of the Online toggle: radio role, the pill's long-press highlight.",
+  },
+  "log/ErrorScreen.tsx#Action": {
+    reason: "The error screen draws outside the app's providers, with React Native's views only.",
+  },
+  "app/(tabs)/index.tsx#HomeContent": {
+    reason: "Developer-only (__DEV__) link to the glass spike under Home.",
+  },
+  "app/dev/glass.tsx#GlassSpikeScreen": { reason: "Developer-only glass spike screen's controls." },
+  "app/design-preview.tsx#DesignPreview": {
+    reason: "Developer Design preview's shelf tabs, drawn as the preview's own.",
+  },
+  "preview/KindCards.tsx#SchemeSwitch": {
+    reason: "Developer Design preview's light and dark switch.",
+  },
+};
