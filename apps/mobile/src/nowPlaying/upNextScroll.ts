@@ -41,3 +41,18 @@ export function upNextScroll<Context>() {
     },
   };
 }
+
+/**
+ * The room under Up Next that lets its start (the sticky bar) scroll to the
+ * top of a [listHeight] list however short Up Next is, History out of sight
+ * above it: what the list lacks below the bar, its [count] rows of [row] and
+ * the [bottomInset] included. The footer stands at least this tall, so its
+ * own content counts toward it.
+ *
+ * Legend List's `anchoredEndSpace` would work this out too, but it renders
+ * every row from the anchor on to measure them, all of a long Up Next (#709).
+ */
+export const upNextEndSpace = (
+  listHeight: number,
+  layout: { bar: number; row: number; count: number; bottomInset: number },
+): number => Math.max(0, listHeight - layout.bar - layout.count * layout.row - layout.bottomInset);
