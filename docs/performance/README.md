@@ -166,7 +166,7 @@ JavaScript saw that key, not when it was pressed.
 | `scroll-home`       | glass: a fling up (`fling-up`) and back down (`fling-down`) on Home                          | -                         |         10 |
 | `scroll-songs`      | glass: the same on Library › Songs, under the mini player                                    | -                         |         10 |
 | `idle-home`         | glass: 5 s of Home untouched (`idle`); any frame is idle rendering                           | -                         |          5 |
-| `scroll-queue`      | glass: the flings on Now Playing's Up Next, settled open over the tabs (#721)               | -                         |         10 |
+| `scroll-queue`      | glass: the flings on Now Playing's Up Next, settled open over the tabs (#721)                | -                         |         10 |
 | `soak-routes`       | a cycle: Library, Albums and back, Songs and back, the other tabs, Home, Settings and back   | `route`, `songs.rows`     |         20 |
 | `soak-player`       | a cycle: open Now Playing, Queue, Queue again, Close (`open`, `queue-open`, …, `close`)      | as `now-playing`, `queue` |         30 |
 
