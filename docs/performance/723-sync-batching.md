@@ -13,9 +13,10 @@ foreground synced, with no minimum interval.
 Core's `syncTriggers.ts` now times the syncs, free of React Native:
 
 - A play start schedules no sync. Its row isn't pushed until the play ends anyway.
-- Play ends batch: a sync a minute after the last end (`PLAY_BATCH_DELAY_MS`), at most
-  five minutes after the batch's first end (`PLAY_BATCH_MAX_MS`), so skipping through
-  songs can't hold it back. The timing is the same in the foreground and the background.
+- Play ends in the background batch: a sync a minute after the last end
+  (`PLAY_BATCH_DELAY_MS`), at most five minutes after the batch's first end
+  (`PLAY_BATCH_MAX_MS`), so skipping through songs can't hold it back. With Wave in the
+  foreground a play end goes up 3 seconds later, as before, and takes a waiting batch with it.
 - Playlist, favorite and synced-setting edits, imported plays and song-list changes keep
   the 3-second debounced push. A push waiting takes the batched plays with it, and a play
   end doesn't hold a push back.

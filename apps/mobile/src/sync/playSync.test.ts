@@ -381,6 +381,8 @@ test("a play goes up in the batch after its end, and a sync that didn't finish l
   let last: Promise<boolean> = Promise.resolve(true);
   const triggers = syncTriggers({
     clock,
+    // In the background, where play ends wait for their batch.
+    inForeground: () => false,
     run: (songs) => {
       runs++;
       last = a.sync(songs, online ? transport : offline).then(

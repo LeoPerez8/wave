@@ -6,7 +6,7 @@
 
 /** How long a push waits after the last edit, so a run of edits goes up as one. */
 export const PUSH_DELAY_MS = 3_000;
-/** How long a play end waits for more before its batch goes up. */
+/** How long a play end in the background waits for more before its batch goes up. */
 export const PLAY_BATCH_DELAY_MS = 60_000;
 /** A batch of play ends goes up this long after its first end at the latest. */
 export const PLAY_BATCH_MAX_MS = 5 * 60_000;
@@ -23,6 +23,8 @@ export interface SyncClock {
 
 export interface SyncTriggersInput {
   readonly clock: SyncClock;
+  /** Whether Wave is in the foreground: only play ends in the background batch. */
+  readonly inForeground: () => boolean;
   /**
    * Runs one sync; resolves whether it finished. [songs]: the song list may
    * have changed since the last sync that finished.
@@ -33,7 +35,11 @@ export interface SyncTriggersInput {
 }
 
 export interface SyncTriggers {
-  /** A play started or ended. A start syncs nothing: its play goes up once it ends. */
+  /**
+   * A play started or ended. A start syncs nothing: its play goes up once it
+   * ends, a few seconds later as an edit does, or with Wave in the
+   * background in a batch of play ends.
+   */
   readonly played: (step: "started" | "ended") => void;
   /**
    * Something else changed here (a playlist, a star, a synced setting,
@@ -51,6 +57,7 @@ export interface SyncTriggers {
 
 export const syncTriggers = ({
   clock,
+  inForeground,
   run,
   songsChanged: songsAtFirst = false,
 }: SyncTriggersInput): SyncTriggers => {
@@ -104,8 +111,11 @@ export const syncTriggers = ({
 
   return {
     played: (step) => {
+      if (step === "started") return;
+      // In front, the play shows up on the other devices as soon as an edit would.
+      if (inForeground()) return syncIn("push", PUSH_DELAY_MS);
       // A push waiting takes the plays with it, sooner.
-      if (step === "started" || pending?.kind === "push") return;
+      if (pending?.kind === "push") return;
       const now = clock.now();
       batchSince ??= now;
       // Each end pushes the batch back, up to its cap.

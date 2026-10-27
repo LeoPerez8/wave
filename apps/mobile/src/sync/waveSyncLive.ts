@@ -73,7 +73,12 @@ export const make = Effect.gen(function* () {
   let triggers: SyncTriggers | null = null;
   // The first sync after launch looks at the song list too.
   const signedInTriggers = (): SyncTriggers =>
-    (triggers ??= syncTriggers({ clock, run, songsChanged: true }));
+    (triggers ??= syncTriggers({
+      clock,
+      inForeground: () => AppState.currentState === "active",
+      run,
+      songsChanged: true,
+    }));
 
   const sessionChanged = (session: WaveSession): void => {
     if (session.status === "signedIn") {

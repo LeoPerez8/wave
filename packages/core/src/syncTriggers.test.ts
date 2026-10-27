@@ -4,13 +4,18 @@ import { test } from "node:test";
 import { syncTriggers } from "./index.ts";
 import { fakeClock } from "./testSyncClock.ts";
 
-/** Triggers over a sync that records when it ran and succeeds unless told otherwise. */
+/**
+ * Triggers over a sync that records when it ran and succeeds unless told
+ * otherwise, with Wave in the background unless told otherwise.
+ */
 const scheduled = () => {
   const { clock, pass } = fakeClock();
   const runs: { at: number; songs: boolean }[] = [];
   let fails = false;
+  let inForeground = false;
   const triggers = syncTriggers({
     clock,
+    inForeground: () => inForeground,
     run: async (songs) => {
       runs.push({ at: clock.now(), songs });
       return !fails;
@@ -23,6 +28,9 @@ const scheduled = () => {
     failing: (value: boolean) => {
       fails = value;
     },
+    foreground: (value: boolean) => {
+      inForeground = value;
+    },
   };
 };
 
@@ -33,7 +41,30 @@ test("a play start schedules no sync", async () => {
   assert.deepEqual(runs, []);
 });
 
-test("play ends go up together a minute after the last one", async () => {
+test("with Wave in the foreground, a play end goes up 3 seconds later", async () => {
+  const { triggers, pass, runs, foreground } = scheduled();
+  foreground(true);
+  triggers.played("ended");
+  await pass(2_999);
+  assert.deepEqual(runs, []);
+  await pass(1);
+  assert.deepEqual(runs, [{ at: 3_000, songs: false }]);
+});
+
+test("a play end in the foreground takes the background's play ends waiting with it", async () => {
+  const { triggers, pass, runs, foreground } = scheduled();
+  triggers.played("ended");
+  await pass(20_000);
+  foreground(true);
+  triggers.played("ended");
+  await pass(10 * 60_000);
+  assert.deepEqual(
+    runs.map((run) => run.at),
+    [23_000],
+  );
+});
+
+test("in the background, play ends go up together a minute after the last one", async () => {
   const { triggers, pass, runs } = scheduled();
   triggers.played("ended");
   await pass(40_000);
@@ -160,6 +191,7 @@ test("returning to the app while a sync runs adds none; an edit meanwhile syncs 
   let finish = (): void => {};
   const triggers = syncTriggers({
     clock,
+    inForeground: () => true,
     run: () =>
       new Promise((resolve) => {
         runs.push(clock.now());
@@ -197,6 +229,7 @@ test("the first sync after launch looks at the song list when asked to", async (
   const runs: boolean[] = [];
   const triggers = syncTriggers({
     clock,
+    inForeground: () => true,
     songsChanged: true,
     run: async (songs) => {
       runs.push(songs);
