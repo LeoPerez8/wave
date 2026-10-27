@@ -10,25 +10,21 @@ import {
   STATS_PERIODS,
   type QueueContext,
   type RecapPeriod,
+  type RowSwipeSide,
   type StatsPeriod,
 } from "@wave/core";
 import { useCallback, useMemo, type ReactElement } from "react";
 import { ScrollView, Text, useWindowDimensions, View } from "react-native";
 
 import { CELL, grid } from "@/catalog/grid";
-import { TrackRow } from "@/catalog/TrackRow";
-import { useLibrarySongSwipes } from "@/playback/rowSwipe";
 import { useChromeInset } from "@/chrome/chrome";
 import { EmptyState } from "@/components/EmptyState";
-import { useFavoriteIds } from "@/library/favorites";
 import { openRecap } from "@/library/routes";
-import { toTrackSummary } from "@/library/TrackList";
 import { Press } from "@/motion/Press";
 import { TextButton } from "@/components/TextButton";
 import { playPlaylist } from "@/playback/actions";
-import { useCurrentPlayingIds } from "@/playback/hooks";
-import { openTrackActions } from "@/playback/ActionsMenu";
-import { RankedYtSongRow } from "@/ytmusic/YtSongRow";
+import { mixedSongEntry, openMixedSongActions, runMixedSongSwipe } from "@/songs/mixedSongs";
+import { SongList, SongPreview } from "@/songs/SongList";
 
 import type { Ranked, StatsSong } from "./Stats";
 import { recapCardHeight } from "./recapAnnouncement";
@@ -78,56 +74,38 @@ export function PeriodTabs({
 
 /**
  * A ranked song: numbered by rank (the top one in ember), its counted plays in
- * the length's cell. A streamed song is a plain streamed row, dimmed while it
- * can't play.
+ * the length's cell. A streamed song is a plain streamed row, dimmed with its
+ * tap doing nothing while it can't play.
  */
-function RankedSongRow({
-  entry: { item, countedPlays },
-  index,
-  songs,
-  context,
-  currentIds,
-  favorites,
-}: {
-  entry: Ranked<StatsSong>;
-  index: number;
-  /** The whole ranking's songs: tapping a row plays them from it. */
-  songs: readonly StatsSong[];
-  context: QueueContext;
-  currentIds: ReadonlySet<string>;
-  favorites: ReadonlySet<number>;
-}) {
-  const swipe = useLibrarySongSwipes();
-  const onPress = () => void playPlaylist(songs, index, context);
-  const playing = currentIds.has(discoverTrackId(item));
-  if (item.source === "stream")
-    return (
-      <RankedYtSongRow
-        song={item.song}
-        playing={playing}
-        popularRank={index + 1}
-        plays={countedPlays}
-        onPress={onPress}
-      />
-    );
-  const song = item.track;
-  return (
-    <TrackRow
-      swipe={swipe(song)}
-      track={{ ...toTrackSummary(song), trackNumber: index + 1 }}
-      plays={countedPlays}
-      state={playing ? "playing" : undefined}
-      favorite={favorites.has(song.id)}
-      leading="number"
-      topNumber={index === 0}
-      onPress={onPress}
-      onLongPress={() => openTrackActions(song)}
-    />
+const rankedSongEntry = (entry: Ranked<StatsSong>, rank: number) =>
+  mixedSongEntry(
+    entry.item,
+    { leading: { kind: "rank", number: rank }, countedPlays: entry.countedPlays },
+    true,
   );
-}
 
 /** A song ranking's key: the song's queue id. */
 const rankedSongKey = (entry: Ranked<StatsSong>): string => discoverTrackId(entry.item);
+
+/** A ranking's rows, rank and play order, for a preview or its See all. */
+const useRankedSongRows = (ranking: readonly Ranked<StatsSong>[], context: QueueContext) => {
+  const songs = useMemo(() => ranking.map((entry) => entry.item), [ranking]);
+  const places = useMemo(() => new Map(ranking.map((entry, index) => [entry, index])), [ranking]);
+  const song = useCallback(
+    (entry: Ranked<StatsSong>) => rankedSongEntry(entry, (places.get(entry) ?? 0) + 1),
+    [places],
+  );
+  return {
+    data: ranking,
+    keyExtractor: rankedSongKey,
+    song,
+    context,
+    onPlay: (entry: Ranked<StatsSong>) => void playPlaylist(songs, places.get(entry), context),
+    onMenu: (entry: Ranked<StatsSong>) => openMixedSongActions(entry.item),
+    onSongSwipe: (entry: Ranked<StatsSong>, side: RowSwipeSide) =>
+      runMixedSongSwipe(entry.item, side),
+  };
+};
 
 /**
  * A song ranking: each row numbered by rank (the top one in ember), with its
@@ -142,24 +120,7 @@ export function RankedSongs({
   /** What tapping a song plays: the ranking, from the song (see `statsSongsContext`). */
   context: QueueContext;
 }) {
-  const currentIds = useCurrentPlayingIds();
-  const favorites = useFavoriteIds();
-  const songs = ranking.map((entry) => entry.item);
-  return (
-    <View>
-      {ranking.map((entry, index) => (
-        <RankedSongRow
-          key={rankedSongKey(entry)}
-          entry={entry}
-          index={index}
-          songs={songs}
-          context={context}
-          currentIds={currentIds}
-          favorites={favorites}
-        />
-      ))}
-    </View>
-  );
+  return <SongPreview {...useRankedSongRows(ranking, context)} />;
 }
 
 /** A ranked album: rank, cover, title over the album artist and its counted plays. */
@@ -270,38 +231,17 @@ export function RankedSongList({
 }) {
   const scrollable = useListScrollable();
   const bottomInset = useChromeInset();
-  const currentIds = useCurrentPlayingIds();
-  const favorites = useFavoriteIds();
-  const rowState = useMemo(() => ({ currentIds, favorites }), [currentIds, favorites]);
-  const songs = useMemo(() => ranking.map((entry) => entry.item), [ranking]);
   const context = useMemo(() => statsSongsContext(period), [period]);
-  const renderItem = useCallback(
-    ({ item, index }: { item: Ranked<StatsSong>; index: number }) => (
-      <RankedSongRow
-        entry={item}
-        index={index}
-        songs={songs}
-        context={context}
-        currentIds={currentIds}
-        favorites={favorites}
-      />
-    ),
-    [songs, context, currentIds, favorites],
-  );
   return (
-    <LegendList
-      scrollEnabled={scrollable}
-      className="flex-1"
-      data={ranking}
-      keyExtractor={rankedSongKey}
-      renderItem={renderItem}
-      extraData={rowState}
-      estimatedItemSize={grid.row}
-      getFixedItemSize={() => grid.row}
-      recycleItems
-      contentContainerStyle={{ paddingHorizontal: grid.margin, paddingBottom: bottomInset }}
-      ListHeaderComponent={header}
-    />
+    <View className="flex-1">
+      <SongList
+        {...useRankedSongRows(ranking, context)}
+        scrollEnabled={scrollable}
+        className="flex-1"
+        contentContainerStyle={{ paddingHorizontal: grid.margin, paddingBottom: bottomInset }}
+        ListHeaderComponent={header}
+      />
+    </View>
   );
 }
 

@@ -128,7 +128,7 @@ export function SongList<T>({
  * artist's Most played), not virtualised: the same rows, subscriptions and
  * handlers as the song list. Its See all uses `SongList`.
  */
-export function SongRows<T>(props: SongRowsOptions<T>) {
+export function SongPreview<T>(props: SongRowsOptions<T>) {
   const { render } = useSongRows(props);
   return (
     <View>
