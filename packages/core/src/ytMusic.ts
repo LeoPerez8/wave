@@ -31,10 +31,10 @@ export const joinArtists = (artists: readonly string[]): string =>
     : `${artists.slice(0, -1).join(", ")} & ${artists[artists.length - 1]}`;
 
 /** A YT Music song's artists as one credit, as the player shows it in place of a track's artist. */
-export const ytSongArtist = (song: YtSong): string => joinArtists(song.artists);
+export const ytSongArtist = (song: Pick<YtSong, "artists">): string => joinArtists(song.artists);
 
 /** A YT Music song's line under its title: its artists, then its album when known. */
-export const ytSongCredit = (song: YtSong): string =>
+export const ytSongCredit = (song: Pick<YtSong, "artists" | "album">): string =>
   [ytSongArtist(song), song.album].filter((part) => part !== null && part !== "").join(" · ");
 
 /** A Library song as matching sees it. */
