@@ -111,7 +111,7 @@ private class ControllerPlaylist(private val player: Player) : PlaylistEditor<Me
  * queue engine) and keeps the item list in step with `applySync`; the player
  * plays it gaplessly (or with a crossfade, [Crossfade]) and reports
  * `onPlaybackState` (on any change), `onPosition` (every 500 ms while
- * playing), `onItemTransition`, `onSeek`, `onCrossfade` (the song fading out
+ * playing with JS demand), `onItemTransition`, `onSeek`, `onCrossfade` (the song fading out
  * went silent) and `onPlayerError`. The controller is only touched on the
  * main thread.
  */
@@ -126,13 +126,11 @@ class WavePlayerModule : Module() {
   private val context: Context
     get() = appContext.reactContext ?: throw Exceptions.ReactContextLost()
 
-  private val positionTicker = object : Runnable {
-    override fun run() {
-      val player = controller ?: return
-      sendEvent("onPosition", position(player))
-      if (player.isPlaying) main.postDelayed(this, POSITION_INTERVAL_MS)
-    }
-  }
+  private val positionReporting = PositionReporting(
+    schedule = { tick, delay -> main.postDelayed(tick, delay); Unit },
+    cancel = { tick -> main.removeCallbacks(tick) },
+    report = { controller?.let { sendEvent("onPosition", position(it)) } },
+  )
 
   private val listener = object : Player.Listener {
     override fun onEvents(player: Player, events: Player.Events) {
@@ -140,8 +138,7 @@ class WavePlayerModule : Module() {
     }
 
     override fun onIsPlayingChanged(isPlaying: Boolean) {
-      main.removeCallbacks(positionTicker)
-      if (isPlaying) main.post(positionTicker)
+      positionReporting.setPlaying(isPlaying)
     }
 
     override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
@@ -409,6 +406,12 @@ class WavePlayerModule : Module() {
       }
     }.runOnQueue(Queues.MAIN)
 
+    /** JS's active position consumers; state events are reported regardless of demand. */
+    AsyncFunction("setPositionReporting") { requested: Boolean, promise: Promise ->
+      positionReporting.setRequested(requested)
+      promise.resolve(null)
+    }.runOnQueue(Queues.MAIN)
+
     /** The current state, e.g. when JS starts while the service is already playing. */
     AsyncFunction("getState") { promise: Promise ->
       withController(promise) { player -> promise.resolve(state(player)) }
@@ -449,7 +452,7 @@ class WavePlayerModule : Module() {
         stopAutoLyrics?.invoke()
         stopAutoLyrics = null
         if (CrossfadeLink.onFadeEnded === fadeEnded) CrossfadeLink.onFadeEnded = null
-        main.removeCallbacks(positionTicker)
+        positionReporting.stop()
         controller?.removeListener(listener)
         controllerFuture?.let(MediaController::releaseFuture)
         controller = null
@@ -532,7 +535,7 @@ class WavePlayerModule : Module() {
         controller = connected
         sendEvent("onPlaybackState", state(connected))
         sendSleepTimer(connected.sessionExtras)
-        if (connected.isPlaying) main.post(positionTicker)
+        positionReporting.setPlaying(connected.isPlaying)
       },
       context.mainExecutor,
     )
@@ -586,8 +589,6 @@ class WavePlayerModule : Module() {
   }
 
   private companion object {
-    const val POSITION_INTERVAL_MS = 500L
-
     val STATE_EVENTS = intArrayOf(
       Player.EVENT_PLAYBACK_STATE_CHANGED,
       Player.EVENT_IS_PLAYING_CHANGED,

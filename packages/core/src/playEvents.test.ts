@@ -757,3 +757,34 @@ describe("playEndPending", () => {
     assert.equal(playEndPending(trackPlays(state, fadeEnded(181_000)).state, "2"), false);
   });
 });
+
+describe("event-only playback reports", () => {
+  test("counts listening across long report gaps, excluding pauses and buffering and adding no time for a seek", () => {
+    const { ended } = run([
+      playing(10_000, "1", "a"),
+      { ...paused(30_000, "1", "a"), status: "buffering" },
+      playing(90_000, "1", "a"),
+      paused(100_000, "1", "a"),
+      playing(200_000, "1", "a"),
+      seeked(205_000, "1", 15_000, 120_000),
+      playing(205_000, "1", "a"),
+      moved(215_000, "2", "sync", true),
+    ]);
+    assert.deepEqual(
+      ended.map((play) => [play.listenedMs, play.counted, play.endReason]),
+      [[45_000, true, "skipped"]],
+    );
+  });
+
+  test("a short song completed with only start and transition events counts exactly once", () => {
+    const { started, ended } = run([
+      playing(1_000, "1", "a", { durationMs: 8_000 }),
+      moved(9_000, "2", "auto"),
+    ]);
+    assert.equal(started.length, 1);
+    assert.deepEqual(
+      ended.map((play) => [play.listenedMs, play.counted, play.endReason]),
+      [[8_000, true, "completed"]],
+    );
+  });
+});
