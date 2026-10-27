@@ -20,7 +20,8 @@ function repeatedLookups(source: string): number[] {
           ts.isCallExpression(child) &&
           ts.isIdentifier(child.expression) &&
           child.expression.text === "useThemeColor"
-        ) reads++;
+        )
+          reads++;
         ts.forEachChild(child, count);
       };
       count(node.body);
@@ -43,8 +44,9 @@ test("hot rows, artwork, shared buttons and Now Playing batch their theme reads"
       .map((name) => `nowPlaying/${name}`),
   ];
   const offenders = paths.flatMap((path) =>
-    repeatedLookups(readFileSync(new URL(`../${path}`, import.meta.url), "utf8"))
-      .map((line) => `${path}:${line}`),
+    repeatedLookups(readFileSync(new URL(`../${path}`, import.meta.url), "utf8")).map(
+      (line) => `${path}:${line}`,
+    ),
   );
   assert.deepEqual(offenders, [], "Use the array form of useThemeColor in these functions");
 });
