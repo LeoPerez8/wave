@@ -7,7 +7,9 @@ Ticket #724, parent #712. Branch `feat/724-repeated-work`, based on
 
 Download recovery must read only completed jobs' candidate files and recordings, once after
 a run finishes. Progress polls and individual landings during a run must issue zero recovery
-queries. A later Library edit may trigger one new recovery read. The desktop fixture has
+queries. A later Library edit (not a landing) may trigger one new recovery read, even while
+jobs are still queued (`libraryEditsVersion`), so a deleted song's download isn't kept until a
+held queue drains. The desktop fixture has
 1,000 unrelated songs; its moved-file, alias and deleted-file recovery returns fewer than ten
 candidate rows and uses the recording-title index.
 

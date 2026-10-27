@@ -112,6 +112,7 @@ import { appLog } from "@/log/appLog";
 import { askForNotifications } from "@/lib/askForNotifications";
 import { persistedSetting } from "@/lib/persistedSetting";
 import {
+  libraryEditsVersion,
   libraryVersion,
   songsFilledIn,
   songsLanded,
@@ -1120,9 +1121,10 @@ let poll: ReturnType<typeof setInterval> | null = null;
 
 let refreshing = false;
 let refreshAgain = false;
-/** Reconcile only after the run finishes; later Library edits can remove a kept download. */
+/** Reconcile after the run finishes, and on Library edits (not landings) during it. */
 const recoverDownloads = createDownloadRecovery<NativeDownloadJob>({
   version: downloadLibraryVersion,
+  edits: () => String(libraryEditsVersion()),
   read: (jobs) => {
     // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service.
     return appRuntime.runPromise(LibraryStore.use((store) => store.downloadsToForget(jobs)));

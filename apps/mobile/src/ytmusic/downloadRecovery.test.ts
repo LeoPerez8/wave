@@ -14,6 +14,7 @@ test("a finished run cleans up once, with no reads for each landed song or repea
   let reads = 0;
   const recovery = createDownloadRecovery({
     version: () => String(version),
+    edits: () => "0",
     read: async () => {
       reads++;
       return ["gone"];
@@ -40,6 +41,7 @@ test("a Library change during recovery discards the old read and a failed read c
   let forgets = 0;
   const recovery = createDownloadRecovery({
     version: () => String(version),
+    edits: () => "0",
     read: async () => {
       if (fail) throw new Error("read failed");
       if (version === 1) version++;
@@ -58,4 +60,53 @@ test("a Library change during recovery discards the old read and a failed read c
   assert.equal(forgets, 0, "a stale answer cannot remove the download");
   assert.deepEqual(await recovery(jobs, false), []);
   assert.equal(forgets, 1);
+});
+
+test("a Library edit during a run cleans up at once; the run's own landings wait for its end", async () => {
+  let version = 0;
+  let edits = 0;
+  let reads = 0;
+  const recovery = createDownloadRecovery({
+    version: () => String(version),
+    edits: () => String(edits),
+    read: async () => {
+      reads++;
+      return ["deleted"];
+    },
+    forget: async () => true,
+  });
+  const jobs = [done("deleted"), done("kept")];
+  // A held queue (waiting for Wi-Fi) keeps the run going; songs land meanwhile.
+  version++;
+  await recovery(jobs, true);
+  assert.equal(reads, 0);
+  // The owner deletes a downloaded song from the Library.
+  version++;
+  edits++;
+  assert.deepEqual(await recovery(jobs, true), [done("kept")]);
+  assert.equal(reads, 1);
+  // More landings don't read again until the run ends.
+  version++;
+  await recovery(jobs, true);
+  assert.equal(reads, 1);
+});
+
+test("an edit with nothing to clean up still leaves the run's later landings alone", async () => {
+  let version = 0;
+  let edits = 0;
+  let reads = 0;
+  const recovery = createDownloadRecovery({
+    version: () => String(version),
+    edits: () => String(edits),
+    read: async () => {
+      reads++;
+      return [];
+    },
+    forget: async () => true,
+  });
+  edits++;
+  await recovery([], true);
+  version++;
+  await recovery([done("landed")], true);
+  assert.equal(reads, 0);
 });
