@@ -20,7 +20,7 @@ export const songRowPresentation = (
     downloaded: view.badges.downloaded,
     artworkUri:
       view.artwork.kind === "file"
-        ? artworkUri(view.artwork.path, "thumbnail")
+        ? artworkUri(view.artwork.files, "thumbnail")
         : view.artwork.kind === "remote"
           ? view.artwork.url
           : undefined,

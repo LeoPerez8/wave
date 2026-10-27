@@ -21,11 +21,7 @@ test("a Library row keeps its credit, length, downloaded badge and spoken order"
   assert.equal(view.secondLine, "Daft Punk");
   assert.equal(view.trailingText, "5:20");
   assert.deepEqual(view.badges, { explicit: false, downloaded: true });
-  assert.deepEqual(view.artwork, {
-    kind: "file",
-    path: "/art/one-thumb.jpg",
-    size: "thumbnail",
-  });
+  assert.deepEqual(view.artwork, { kind: "file", files: { thumbPath: "/art/one-thumb.jpg" } });
   assert.equal(view.accessibilityLabel, "One More Time, Daft Punk, downloaded");
   assert.equal(view.disabled, false);
   assert.equal(view.dimmed, false);
@@ -274,19 +270,22 @@ test("keys survive state changes and distinguish repeated songs and unavailable 
   );
 });
 
-test("rows choose thumbnail then larger local covers, and hide remote covers when requested", () => {
+test("rows hand every local cover file over for the app's one picker, and hide remote covers when requested", () => {
   for (const [files, expected] of [
     [
       { thumbPath: "/thumb", mediumPath: "/medium", artworkPath: "/original" },
-      { kind: "file", path: "/thumb", size: "thumbnail" },
+      {
+        kind: "file",
+        files: { thumbPath: "/thumb", mediumPath: "/medium", artworkPath: "/original" },
+      },
     ],
     [
       { thumbPath: null, mediumPath: "/medium", artworkPath: "/original" },
-      { kind: "file", path: "/medium", size: "medium" },
+      { kind: "file", files: { mediumPath: "/medium", artworkPath: "/original" } },
     ],
     [
       { thumbPath: null, artworkPath: "/original" },
-      { kind: "file", path: "/original", size: "original" },
+      { kind: "file", files: { artworkPath: "/original" } },
     ],
     [{ thumbPath: null }, { kind: "placeholder" }],
   ] as const) {

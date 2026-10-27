@@ -3,7 +3,11 @@ import { test } from "node:test";
 import { createElement, memo } from "react";
 import { act, create } from "react-test-renderer";
 import type { SongListRowSource } from "@wave/core";
-import { createSongListModel, type SongRowPresentation } from "./songListModel.ts";
+import {
+  createSongListModel,
+  songRowPresentation,
+  type SongRowPresentation,
+} from "./songListModel.ts";
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 const sources: SongListRowSource[] = [1, 2, 3].map((id) => ({
@@ -153,4 +157,23 @@ test("a queue row has no star or length cell; History fades its cover and title,
   assert.equal(history.fadedCover, true);
   assert.equal(history.accessibilityLabel, "Song, Artist, downloaded");
   assert.equal(model.row(sources[0]!).trailing, true);
+});
+
+test("a song row's cover follows the artwork helper's order: the thumbnail derived from the original wins over another medium file", () => {
+  const hash = "0123456789abcdef0123456789abcdef01234567";
+  const presented = songRowPresentation({
+    kind: "library",
+    song: {
+      id: 7,
+      title: "Song",
+      artist: "Artist",
+      durationMs: 180000,
+      explicit: "clean",
+      path: "/music/song.flac",
+      thumbPath: null,
+      mediumPath: "/data/files/covers/song-medium.jpg",
+      artworkPath: `/data/files/artwork/${hash}.jpg`,
+    },
+  });
+  assert.equal(presented.artworkUri, `content://dev.leoperez.wave.artwork/thumbnail/${hash}`);
 });

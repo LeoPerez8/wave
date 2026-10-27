@@ -33,5 +33,5 @@ export const historyArtwork = (
   if (uri === undefined) return { kind: "placeholder" };
   return /^https?:/i.test(uri)
     ? { kind: "remote", url: uri, size: "thumbnail" }
-    : { kind: "file", path: uri, size: "thumbnail" };
+    : { kind: "file", files: { artworkPath: uri } };
 };

@@ -87,13 +87,13 @@ export type SongRowRecycleType =
   | "discHeader"
   | "loadingRow";
 
-/** Rows request thumbnails; size records the actual file chosen after fallback. */
+/**
+ * A row's cover. Rows request thumbnails: a local cover hands over the files
+ * it has, and the app's one artwork helper picks among them, so a row
+ * follows the same fallback order as every other cover.
+ */
 export type SongRowArtwork =
-  | {
-      readonly kind: "file";
-      readonly path: string;
-      readonly size: "thumbnail" | "medium" | "original";
-    }
+  | { readonly kind: "file"; readonly files: SongRowFiles }
   | { readonly kind: "remote"; readonly url: string; readonly size: "thumbnail" }
   | { readonly kind: "placeholder" };
 
@@ -145,12 +145,17 @@ export interface SongRowView {
   readonly accessibilityRole: "button" | "checkbox" | "header" | "text";
 }
 
-const localArtwork = (files: SongRowFiles): SongRowArtwork => {
-  if (files.thumbPath) return { kind: "file", path: files.thumbPath, size: "thumbnail" };
-  if (files.mediumPath) return { kind: "file", path: files.mediumPath, size: "medium" };
-  if (files.artworkPath) return { kind: "file", path: files.artworkPath, size: "original" };
-  return { kind: "placeholder" };
-};
+const localArtwork = ({ thumbPath, mediumPath, artworkPath }: SongRowFiles): SongRowArtwork =>
+  thumbPath || mediumPath || artworkPath
+    ? {
+        kind: "file",
+        files: {
+          ...(thumbPath ? { thumbPath } : {}),
+          ...(mediumPath ? { mediumPath } : {}),
+          ...(artworkPath ? { artworkPath } : {}),
+        },
+      }
+    : { kind: "placeholder" };
 
 interface RowContent {
   readonly key: string;
