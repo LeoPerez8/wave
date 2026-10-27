@@ -45,7 +45,7 @@ export { trackRowTrailing } from "./trackRowTrailing.ts";
 export type { TrackRowTrailingInput } from "./trackRowTrailing.ts";
 export { trackRowDownloaded } from "./trackRowDownloaded.ts";
 export type { TrackRowDownloadedInput } from "./trackRowDownloaded.ts";
-export { songRowView } from "./songRowView.ts";
+export { songRowTrackId, songRowView } from "./songRowView.ts";
 export { songRowSwipeDirections } from "./songRowSwipeDirections.ts";
 export type { SongRowSwipeFacts } from "./songRowSwipeDirections.ts";
 export type {

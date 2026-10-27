@@ -1,8 +1,6 @@
 import {
   missingSongJobId,
-  unsearchedTrackId,
-  ytTrackId,
-  type SongListRowSource,
+  songRowTrackId,
   type SongRowState,
   type YtDownloadStatus,
 } from "@wave/core";
@@ -22,26 +20,6 @@ export interface SongListSnapshot {
   /** Videos that refused to play this session. */
   readonly unplayable: ReadonlySet<string>;
 }
-
-/** The id a row's song goes by in the queue, for its playing flag. */
-export const rowTrackId = (source: SongListRowSource, key: string): string => {
-  switch (source.kind) {
-    case "library":
-    case "librarySummary":
-    case "missing":
-      return String(source.song.id);
-    case "ytMusic":
-      return ytTrackId(source.song.videoId);
-    case "unsearched":
-      return unsearchedTrackId(source.song);
-    case "queue":
-      return source.entry.trackId;
-    case "history":
-      return source.trackId ?? key;
-    default:
-      return key;
-  }
-};
 
 const downloadJob = (entry: SongListEntry, trackId: string): string | null => {
   const { source } = entry;
@@ -63,7 +41,7 @@ export const songRowState = (
   selection: NonNullable<SongRowState["selection"]> = "off",
 ): { readonly state: SongRowState; readonly blocked: boolean } => {
   const { source } = entry;
-  const trackId = rowTrackId(source, key);
+  const trackId = songRowTrackId(source) ?? key;
   const plays = source.kind !== "unavailable";
   const starred =
     source.kind === "ytMusic"

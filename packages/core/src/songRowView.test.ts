@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { songRowView, type SongRowSource, type YtDownloadStatus } from "./index.ts";
+import { songRowTrackId, songRowView, type SongRowSource, type YtDownloadStatus } from "./index.ts";
 
 const librarySong = {
   id: 42,
@@ -336,4 +336,21 @@ test("Queue History, unresolved Queue songs and removed listening-history songs 
   assert.equal(removed.dimmed, true);
   assert.equal(removed.trailingText, "9:41 AM");
   assert.equal(removed.accessibilityLabel, "Old song, Old credit, 9:41 AM, unavailable");
+});
+
+test("a row's song goes by its queue id; a deleted song's queue entry and a non-song slot by none", () => {
+  assert.equal(songRowTrackId({ kind: "library", song: librarySong }), "42");
+  assert.equal(
+    songRowTrackId({
+      kind: "queue",
+      entry: { key: "q1", trackId: "42" },
+      track: { title: "One More Time", artist: "Daft Punk" },
+    }),
+    "42",
+  );
+  assert.equal(
+    songRowTrackId({ kind: "queue", entry: { key: "q1", trackId: "42" }, track: undefined }),
+    "",
+  );
+  assert.equal(songRowTrackId({ kind: "loading", key: "3" }), null);
 });

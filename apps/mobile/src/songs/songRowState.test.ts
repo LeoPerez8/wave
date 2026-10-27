@@ -131,6 +131,16 @@ test("a queue row follows the entry's song id", () => {
   );
 });
 
+test("a queue row whose song was deleted from the Library isn't shown playing", () => {
+  const entry: SongListEntry = {
+    source: { kind: "queue", entry: { key: "q1", trackId: "7" }, track: undefined },
+  };
+  assert.equal(
+    songRowState(entry, "q1", snapshot({ playing: new Set(["7"]) })).state.playing,
+    false,
+  );
+});
+
 test("a ranked stream that can't play is dimmed and its tap is blocked", () => {
   const entry: SongListEntry = { source: { kind: "ytMusic", song: yt("v") }, gated: true };
   const playable = songRowState(entry, "yt:v", snapshot());

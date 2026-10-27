@@ -256,6 +256,14 @@ const contentOf = (source: SongRowSource): RowContent => {
   }
 };
 
+/**
+ * The id a row's song goes by in the queue, for its playing flag, star and
+ * download; null for a slot that isn't a song. A queue entry whose song is
+ * gone from the Library has none (""), so it never shows as playing.
+ */
+export const songRowTrackId = (source: SongListRowSource): string | null =>
+  source.kind === "discHeader" || source.kind === "loading" ? null : contentOf(source).trackId;
+
 /** Computes display values only: no stores, callbacks, queries or native dependencies. */
 export const songRowView = (source: SongListRowSource, state: SongRowState = {}): SongRowView => {
   const playing = state.playing === true;
