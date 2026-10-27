@@ -163,6 +163,12 @@ Every scenario a ticket doc names exists in `scripts/perf/scenarios.ts`:
 their glass probes can be compared; name them or the group when a ticket needs them.
 `scroll-playlist` is in `all`.
 
+## App size
+
+CI measures every APK build, not the phone (#729, `docs/performance/729-perf-guards.md`): the APK
+and its Hermes bundle against the v0.33.5 release's sizes plus 5% (80.87 MB and 17.68 MB), in
+the Android APK job's sticky comment and run summary. Over budget warns; it never fails a build.
+
 ## Not measured
 
 - Every number: **pending** the owner's S24+ runs. No dry-run number is a measurement.
