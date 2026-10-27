@@ -652,6 +652,19 @@ export const SCENARIOS: readonly Scenario[] = [
     warmup: 1,
     glass: true,
   },
+  {
+    name: "scroll-queue",
+    summary:
+      "Glass: flings on Now Playing's Up Next, settled open over the tabs and their three glass views (#721). Needs a long queue.",
+    setup: [
+      { kind: "tap", target: { descPrefix: "Now playing:" } },
+      { kind: "tap", target: { desc: "Queue" } },
+    ],
+    steps: () => flings,
+    iterations: 10,
+    warmup: 1,
+    glass: true,
+  },
 ];
 
 /** The scenarios a full baseline runs, in order (`--scenario all`). */

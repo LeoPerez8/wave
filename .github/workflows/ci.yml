@@ -78,7 +78,7 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           scripts/ci/report.sh skipped "Native unit tests" \
-            "Nothing they test changed (wave-native, the app config, config plugins, the lockfile or CI), so they didn't run."
+            "Nothing they test changed (wave-native, wave-glass, the app config, config plugins, the lockfile or CI), so they didn't run."
 
   # A push to main or ti that changes the app releases the next version (ti's end in -ti):
   # this commits it to the branch's package.json as "Release Wave <version>", on top of the
@@ -227,8 +227,9 @@ jobs:
           HEAD_SHA: ${{ steps.autofix.outputs.sha || github.event.pull_request.head.sha }}
         run: scripts/ci/report.sh "${{ job.status }}" "Checks"
 
-  # JVM tests for the local native module (tag reading, folder walking, artwork), in a
-  # job of their own so they run beside the APK build instead of before it.
+  # JVM tests for the local native modules (tag reading, folder walking, artwork, the
+  # screen under Now Playing), in a job of their own so they run beside the APK build
+  # instead of before it.
   native-tests:
     name: Native unit tests
     needs: [changes, checks]
@@ -269,7 +270,7 @@ jobs:
       # AGP 9 only creates unit-test tasks for the tested build type (debug) in libraries.
       - name: Native unit tests
         working-directory: apps/mobile/android
-        run: ../../../scripts/ci/step.sh "Native unit tests" ./gradlew :wave-native:testDebugUnitTest --no-daemon --console=plain
+        run: ../../../scripts/ci/step.sh "Native unit tests" ./gradlew :wave-native:testDebugUnitTest :wave-glass:testDebugUnitTest --no-daemon --console=plain
 
       - name: Report
         if: always() && env.IS_SAME_REPO_PR == 'true' && job.status != 'cancelled'

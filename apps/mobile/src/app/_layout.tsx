@@ -25,7 +25,7 @@ import { FollowCurrentRoute } from "@/library/routes";
 import { useOpenSharedText } from "@/library/sharedText";
 import { YtLibraryPickerHost } from "@/library/YtLibraryPicker";
 import { launchScanDone } from "@/library/replacementDuplicates";
-import { startInitialScan } from "@/library/runtime";
+import { optimizeLibraryDatabase, startInitialScan } from "@/library/runtime";
 import { ErrorScreen } from "@/log/ErrorScreen";
 import { NowPlayingSheet, UnderNowPlaying } from "@/nowPlaying/NowPlayingSheet";
 import { PERF_ENABLED, perfTouch, useRenderCount } from "@/perf/perf";
@@ -82,6 +82,9 @@ export default function RootLayout() {
       };
     }
   }, [granted]);
+
+  // SQLite gathers the planner statistics the Library database lacks (src/library/db/connection.ts).
+  useEffect(() => afterFirstSettled("optimize", optimizeLibraryDatabase), []);
 
   // While signed in to a Wave account, the Library syncs with it (src/sync/WaveSync.ts).
   useEffect(() => afterFirstSettled("sync", startSync), []);
