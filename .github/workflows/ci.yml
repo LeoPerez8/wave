@@ -501,6 +501,17 @@ jobs:
           echo "path=$RUNNER_TEMP/$name" >> "$GITHUB_OUTPUT"
           echo "name=$name" >> "$GITHUB_OUTPUT"
 
+      # The APK's and the Hermes bundle's size against their budget (scripts/ci/size-budget.json),
+      # for the sticky comment and every run's summary, releases' included. Over budget warns;
+      # it never fails the build.
+      - name: Measure the APK and the bundle
+        continue-on-error: true
+        run: |
+          node scripts/ci/app-size.ts "${{ steps.apk.outputs.path }}" \
+            apps/mobile/android/app/build/generated/assets/react/release/index.android.bundle \
+            "$RUNNER_TEMP/app-size.md"
+          cat "$RUNNER_TEMP/app-size.md" >> "$GITHUB_STEP_SUMMARY"
+
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.apk.outputs.name }}
@@ -536,6 +547,7 @@ jobs:
           if [ -n "${{ steps.publish.outputs.url }}" ]; then
             extra="$extra"$'\n\n'"📱 **[Download APK](${{ steps.publish.outputs.url }})** (built from \`${HEAD_SHA:0:7}\`)"
           fi
+          if [ -f "$RUNNER_TEMP/app-size.md" ]; then extra="$extra"$'\n\n'"$(cat "$RUNNER_TEMP/app-size.md")"; fi
           scripts/ci/report.sh "${{ job.status }}" "Android APK" "$extra"
 
   # Publishes the release the Checks job decided on: a hand-pushed tag, or a branch push's
