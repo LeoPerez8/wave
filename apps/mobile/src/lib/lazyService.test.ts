@@ -40,9 +40,11 @@ test("the app's services start without building a lazy service", async () => {
   const { built, runtime } = recapsLayer();
   // Another service's use builds the whole layer, as a launch does.
   await runtime.runPromise(Effect.void);
-  await runtime.runPromise(Effect.gen(function* () {
-    yield* Recaps;
-  }));
+  await runtime.runPromise(
+    Effect.gen(function* () {
+      yield* Recaps;
+    }),
+  );
   assert.equal(built.times, 0);
   await runtime.dispose();
 });
