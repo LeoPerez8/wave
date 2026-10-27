@@ -17,7 +17,7 @@ const ignoreLongPress = (): void => undefined;
  * How a row in a selectable list behaves: a tap runs [open] and a long-press
  * opens its menu ([openMenu], offered Select when the list can select);
  * while the list is selecting, the row shows a check and taps toggle it.
- * Spread the result onto the row: `<TrackRow {...selectableRow(…)} />`.
+ * Spread the result onto the row: `<NameRow {...selectableRow(…)} />`.
  */
 export const selectableRow = <T>(
   item: T,

@@ -2,7 +2,6 @@ import { type LegendListRef } from "@legendapp/list/react-native";
 import { useScrollToTop } from "expo-router";
 import {
   counted,
-  showsExplicitBadge,
   songSpineKeys,
   type MixedSong,
   type QueueContext,
@@ -12,11 +11,9 @@ import {
 import { useCallback, useMemo, useRef, type ReactElement, type ReactNode } from "react";
 import { View } from "react-native";
 
-import { artworkUri } from "@/catalog/artworkUri";
 import { CatalogLine } from "@/catalog/CatalogLine";
 import { CELL, grid } from "@/catalog/grid";
 import { PlayShuffle, type LineToggle } from "@/catalog/PlayShuffle";
-import type { TrackSummary } from "@/catalog/TrackRow";
 import { useChromeInset } from "@/chrome/chrome";
 import { useRenderCount } from "@/perf/perf";
 import { playSongs } from "@/playback/actions";
@@ -37,17 +34,6 @@ import {
 import type { SongRow } from "./LibraryStore";
 import { useSpine } from "./useSpine";
 import { useListScrollable } from "@/motion/heldTouch";
-
-export const toTrackSummary = (song: SongRow): TrackSummary => ({
-  id: String(song.id),
-  title: song.title,
-  artist: song.artist,
-  durationMs: song.durationMs,
-  artworkUri: artworkUri(song),
-  // A missing song: dimmed, as a YT Music song not downloaded is.
-  missingTrackId: song.path === null ? song.id : undefined,
-  explicit: showsExplicitBadge(song.explicit),
-});
 
 export const songCount = (count: number): string => counted(count, "song");
 

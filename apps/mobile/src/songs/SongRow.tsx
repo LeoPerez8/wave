@@ -50,6 +50,8 @@ export interface SongRowActions {
    * grip, Up Next's remove and grip). Keep the node stable, or the row renders again.
    */
   readonly accessory?: ReactNode;
+  /** The placeholder cover's colour (the Design preview's synthetic songs). */
+  readonly tint?: string | undefined;
 }
 
 const NO_ACTIONS: readonly AccessibilityActionInfo[] = [];
@@ -140,13 +142,18 @@ export const SongRow = memo(function SongRow(props: SongRowPresentation & SongRo
         )}
         {props.leading === "artwork" || props.leading === "playDisc" ? (
           props.leading === "playDisc" ? (
-            <SongCover uri={props.artworkUri} size={CELL * 5} {...SONG_ROW_COVER} />
+            <SongCover
+              uri={props.artworkUri}
+              tint={props.tint}
+              size={CELL * 5}
+              {...SONG_ROW_COVER}
+            />
           ) : props.fadedCover ? (
             <View className="opacity-45">
               <Artwork uri={props.artworkUri} size={CELL * 5} />
             </View>
           ) : (
-            <Artwork uri={props.artworkUri} size={CELL * 5} />
+            <Artwork uri={props.artworkUri} tint={props.tint} size={CELL * 5} />
           )
         ) : !props.fileNotFound && props.number !== undefined ? (
           <RankNumber rank={props.number} top={props.top} />

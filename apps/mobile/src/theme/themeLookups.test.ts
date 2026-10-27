@@ -35,7 +35,7 @@ function repeatedLookups(source: string): number[] {
 
 test("hot rows, artwork, shared buttons and Now Playing batch their theme reads", () => {
   const paths = [
-    "catalog/TrackRow.tsx",
+    "songs/SongRow.tsx",
     "catalog/Artwork.tsx",
     "components/IconButton.tsx",
     "components/TextButton.tsx",
