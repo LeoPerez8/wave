@@ -316,9 +316,9 @@ function AlbumTracks({ shown, openedIntegrated }: { shown: Shown; openedIntegrat
         const song = listedOf(item);
         if (song !== null) openMixedSongActions(song, options);
       }}
-      onSongSwipe={(item, side) => {
+      onSongSwipe={(item, shown) => {
         const song = listedOf(item);
-        if (song !== null) runMixedSongSwipe(song, side);
+        if (song !== null) runMixedSongSwipe(song, shown);
       }}
       contentContainerStyle={{ paddingHorizontal: grid.margin, paddingBottom: bottomInset }}
       ListHeaderComponent={

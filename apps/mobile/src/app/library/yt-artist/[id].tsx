@@ -373,8 +373,8 @@ export default function YtArtistScreen() {
         onMenu={(item, options) => {
           if (item.type === "song") openMixedSongActions(item.song, options);
         }}
-        onSongSwipe={(item, side) => {
-          if (item.type === "song") runMixedSongSwipe(item.song, side);
+        onSongSwipe={(item, shown) => {
+          if (item.type === "song") runMixedSongSwipe(item.song, shown);
         }}
         contentContainerStyle={contentStyle}
         ListHeaderComponent={header}

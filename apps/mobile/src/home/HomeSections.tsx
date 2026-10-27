@@ -71,7 +71,7 @@ export function SongRows<A extends SongRow>({
       context={context}
       onPlay={(song) => playSongs(songs, places.get(song), context)}
       onMenu={(song) => openTrackActions(song)}
-      onSongSwipe={(song, side) => runTrackSwipe({ kind: "track", items: [{ song }] }, side)}
+      onSongSwipe={(song, shown) => runTrackSwipe({ kind: "track", items: [{ song }] }, shown)}
     />
   );
 }
@@ -102,7 +102,7 @@ export function MostPlayedRows({
       onPlay={(row) => void playPlaylist(rows, places.get(row), context)}
       // The menu offers no Select: Home doesn't select.
       onMenu={(row) => openMixedSongActions(row)}
-      onSongSwipe={(row, side) => runMixedSongSwipe(row, side)}
+      onSongSwipe={(row, shown) => runMixedSongSwipe(row, shown)}
     />
   );
 }

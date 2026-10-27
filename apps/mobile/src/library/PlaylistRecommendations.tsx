@@ -249,9 +249,9 @@ export function PlaylistRecommendations({
       const listed = listedOf(song);
       if (listed !== null) openMixedSongActions(listed, options);
     },
-    onSongSwipe: (song, side) => {
+    onSongSwipe: (song, shown) => {
       const listed = listedOf(song);
-      if (listed !== null) runMixedSongSwipe(listed, side);
+      if (listed !== null) runMixedSongSwipe(listed, shown);
     },
   });
   // While one slot is replaced the others keep their look (no section-wide dimming) and take

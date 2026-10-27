@@ -1,13 +1,11 @@
 import {
   itemActions,
-  rowSwipeActions,
+  shownSwipeEntry,
   swipesChoose,
   type ActionItem,
   type ItemActionEntry,
   type PlaylistPlace,
   type RowMenuAction,
-  type RowSwipeActions,
-  type RowSwipeSide,
   type SwipeSettings,
 } from "@wave/core";
 import { favoriteIdsNow } from "@/library/favorites";
@@ -33,7 +31,8 @@ import { itemActionPress } from "./itemActions";
  * (`settings/swipeActions`). The song list works out a row's two directions
  * as it renders (Core's `songRowSwipeDirections`, no menu built); a swipe
  * plans the menu afresh here, from the route, the stars, the download and
- * the artists as they are when it runs.
+ * the artists as they are when it runs, and runs the entry the row showed
+ * (Core's `shownSwipeEntry`), so what it runs can't drift from what it showed.
  */
 
 /** Where a row is shown, for what its swipes do. */
@@ -41,26 +40,6 @@ export interface RowSwipeOptions {
   /** The row's place in the playlist it's shown in: its menu, and so its swipe, removes it from there. */
   readonly playlistItem?: PlaylistPlace | undefined;
 }
-
-/**
- * The entry of a row's [menu] each direction runs: the one place the swipes'
- * settings (Settings › Swipe actions, as they are now) come in.
- */
-export const swipeActionsOf = <A extends RowMenuAction>(menu: readonly A[]): RowSwipeActions<A> =>
-  rowSwipeActions(menu, swipeSettingsNow());
-
-/**
- * The entry [side] runs on [entries] (a menu as it is now), or none: the
- * menu may have changed since the row showed it (a star, a download), and
- * the swipe runs what the direction stands for now.
- */
-export const swipeEntryNow = <E extends { readonly action: RowMenuAction }>(
-  entries: readonly E[],
-  side: RowSwipeSide,
-): E | undefined => {
-  const action = swipeActionsOf(entries.map((entry) => entry.action))[side];
-  return action === null ? undefined : entries.find((entry) => entry.action === action);
-};
 
 const nothing = (): void => undefined;
 const findNothing: FindInLibrary = () => null;
@@ -103,16 +82,16 @@ const planTrack = (
 };
 
 /**
- * Runs what swiping towards [side] does on [target] now, as its menu would:
- * the entry planned for it, pressed through `itemActionPress`. Go to Artist
+ * Runs the swipe [target]'s row showed ([shown]) as its menu would: the
+ * entry planned for it now, pressed through `itemActionPress`. Go to Artist
  * resolves only its requested artist names; song actions acquire the Library
  * song finder when they need it.
  */
-export const runTrackSwipe = (target: ActionItems, side: RowSwipeSide): void => {
+export const runTrackSwipe = (target: ActionItems, shown: RowMenuAction): void => {
   const here = currentPath();
   const settings = swipeSettingsNow();
   const press = (find: FindInLibrary) => {
-    const entry = swipeEntryNow(planTrack(target, here, find, settings), side);
+    const entry = shownSwipeEntry(planTrack(target, here, find, settings), shown);
     if (entry !== undefined)
       itemActionPress({
         target,
@@ -123,8 +102,7 @@ export const runTrackSwipe = (target: ActionItems, side: RowSwipeSide): void => 
         find,
       })(entry)();
   };
-  const chosen = swipeEntryNow(planTrack(target, here, findNothing, settings), side);
-  if (!hasStreamedSongs(target) || chosen?.action === "goToArtist") press(findNothing);
+  if (!hasStreamedSongs(target) || shown === "goToArtist") press(findNothing);
   else
     currentLibraryFinder()
       .then(press)
@@ -132,10 +110,10 @@ export const runTrackSwipe = (target: ActionItems, side: RowSwipeSide): void => 
 };
 
 /** Paged lists read full action metadata only when a swipe runs. */
-export const runSummarySwipe = (id: number, side: RowSwipeSide): void => {
+export const runSummarySwipe = (id: number, shown: RowMenuAction): void => {
   songsWithIds([id])
     .then(([song]) => {
-      if (song !== undefined) runTrackSwipe({ kind: "track", items: [{ song }] }, side);
+      if (song !== undefined) runTrackSwipe({ kind: "track", items: [{ song }] }, shown);
     })
     .catch((error: unknown) => showError("Couldn't load the song", error));
 };

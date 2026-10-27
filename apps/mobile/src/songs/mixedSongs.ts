@@ -1,4 +1,4 @@
-import type { MixedSong, RowSwipeSide, SongRowState } from "@wave/core";
+import type { MixedSong, RowMenuAction, SongRowState } from "@wave/core";
 
 import type { SongRow } from "@/library/LibraryStore";
 import type { NativeYtSong } from "@/native/waveYtMusic";
@@ -33,18 +33,18 @@ export const openMixedSongActions = (song: ListedSong, options: MenuOptions = {}
   else openYtSongActions(song.song, options);
 };
 
-/** What swiping [song]'s row towards [side] runs, as its menu would. */
+/** Runs the swipe [song]'s row showed ([shown]), as its menu would. */
 export const runMixedSongSwipe = (
   song: ListedSong,
-  side: RowSwipeSide,
+  shown: RowMenuAction,
   options: RowSwipeOptions = {},
 ): void => {
   if (song.source === "library")
     runTrackSwipe(
       { kind: "track", items: [{ song: song.track, playlistItem: options.playlistItem }] },
-      side,
+      shown,
     );
-  else runYtSongSwipe(song.song, side, options);
+  else runYtSongSwipe(song.song, shown, options);
 };
 
 interface Selecting<U> {

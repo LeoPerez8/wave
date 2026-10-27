@@ -296,7 +296,7 @@ export function GenreSongList({
         selection={selectable}
         onPlay={(id) => play(id)}
         onMenu={(id, options) => openTrackActionsById(id, options)}
-        onSongSwipe={(id, side) => runSummarySwipe(id, side)}
+        onSongSwipe={(id, shown) => runSummarySwipe(id, shown)}
         spine={spine}
         onViewableItemsChanged={onViewableItemsChanged}
         contentContainerStyle={{

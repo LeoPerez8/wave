@@ -1,7 +1,7 @@
 import { PlaylistRecommendations } from "./PlaylistRecommendations";
 import { IconGripVertical } from "@tabler/icons-react-native";
 import type { LegendListRef } from "@legendapp/list/react-native";
-import { moveItem, type PlaylistPlace, type QueueContext, type RowSwipeSide } from "@wave/core";
+import { moveItem, type PlaylistPlace, type QueueContext, type RowMenuAction } from "@wave/core";
 import {
   cloneElement,
   memo,
@@ -370,15 +370,15 @@ export function PlaylistItems({ playlistId, items, header, empty }: Props) {
       )
     ) : null;
 
-  const swipe = (item: Item, side: RowSwipeSide) => {
+  const swipe = (item: Item, shown: RowMenuAction) => {
     const entry = entryOf(item);
     if (entry === null) return;
     const playlistItem = placeOf(entry);
     if (entry.source === "library")
-      runTrackSwipe({ kind: "track", items: [{ song: entry.track, playlistItem }] }, side);
-    else if (entry.source === "stream") runYtSongSwipe(entry.song, side, { playlistItem });
+      runTrackSwipe({ kind: "track", items: [{ song: entry.track, playlistItem }] }, shown);
+    else if (entry.source === "stream") runYtSongSwipe(entry.song, shown, { playlistItem });
     else if (entry.source === "unsearched")
-      runTrackSwipe({ kind: "track", items: [{ unsearched: entry.song, playlistItem }] }, side);
+      runTrackSwipe({ kind: "track", items: [{ unsearched: entry.song, playlistItem }] }, shown);
     // An unavailable entry's only swipe is Remove from Playlist (`onSongRemove`).
   };
   const menu = (item: Item, options: MenuOptions) => {

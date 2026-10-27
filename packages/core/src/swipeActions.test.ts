@@ -12,6 +12,8 @@ import {
   ytDownloadActions,
   swipeChoiceLabel,
   swipeActionTone,
+  swipeActionLabels,
+  shownSwipeEntry,
   unavailableEntryActions,
   ytSongActions,
   type ActionItem,
@@ -245,5 +247,40 @@ describe("stored swipe settings", () => {
       left: "share",
     });
     assert.deepEqual(readSwipeSettings("not json"), DEFAULT_SWIPE_SETTINGS);
+  });
+});
+
+describe("shownSwipeEntry", () => {
+  const entries = [
+    { action: "addToQueue", label: "Add to Queue" },
+    { action: "download", label: "Download" },
+    { action: "removeFromLibrary", label: "Remove from Library" },
+  ] as const;
+
+  test("a swipe runs the entry its row showed, even where the menu now puts another on that side", () => {
+    // The row showed Delete on the left; the song went missing since, so the menu planned now
+    // offers Remove from Library there instead. The swipe doesn't run what the row didn't show.
+    assert.equal(shownSwipeEntry(entries, "delete"), undefined);
+    assert.equal(shownSwipeEntry(entries, "download"), entries[1]);
+  });
+});
+
+describe("swipeActionLabels", () => {
+  test("a direction shows its menu entry's bar caption and reads its full name", () => {
+    assert.deepEqual(swipeActionLabels("unfavorite"), {
+      label: "Un\u00adfavorite",
+      accessibilityLabel: "Remove from Favorites",
+    });
+    assert.deepEqual(swipeActionLabels("addToQueue"), {
+      label: "Add to Queue",
+      accessibilityLabel: "Add to Queue",
+    });
+  });
+
+  test("an unavailable entry's Search reads as Search", () => {
+    assert.deepEqual(swipeActionLabels("search"), {
+      label: "Search",
+      accessibilityLabel: "Search",
+    });
   });
 });

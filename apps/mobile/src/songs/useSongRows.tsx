@@ -56,7 +56,7 @@ export interface SongRowsOptions<T> {
   readonly context: QueueContext;
   readonly onPlay: (item: T, context: QueueContext) => void;
   readonly onMenu: (item: T, options: MenuOptions) => void;
-  readonly onSongSwipe?: ((item: T, side: RowSwipeSide) => void) | undefined;
+  readonly onSongSwipe?: ((item: T, shown: RowMenuAction) => void) | undefined;
   /** A swipe to Remove from Playlist runs this instead, and the row slides out as it goes. */
   readonly onSongRemove?: ((item: T) => void) | undefined;
   readonly selection?: SongListSelection<T> | undefined;
@@ -191,7 +191,7 @@ export function useSongRows<T>({
     if (item === undefined || current.selection?.selecting) return;
     if (action === "removeFromPlaylist" && current.onSongRemove !== undefined)
       current.onSongRemove(item);
-    else current.onSongSwipe?.(item, side);
+    else current.onSongSwipe?.(item, action);
   }, []);
   const extra = useCallback((key: string, name: string) => {
     const current = latest.current;

@@ -556,7 +556,7 @@ export function YtSongList({
         // A found song plays the whole playlist from its own place in it.
         onPlay={(song) => play(places.get(song))}
         onMenu={openMixedSongActions}
-        onSongSwipe={(song, side) => runMixedSongSwipe(song, side)}
+        onSongSwipe={(song, shown) => runMixedSongSwipe(song, shown)}
         contentContainerStyle={{
           paddingHorizontal: grid.margin,
           paddingBottom: bottomInset,

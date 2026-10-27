@@ -4,6 +4,7 @@ import {
   YT_DOWNLOAD_ACTION_LABELS,
   menuLayout,
   streamedArtistLink,
+  shownSwipeEntry,
   swipesChoose,
   ytDownloadActions,
   ytSongActions,
@@ -12,6 +13,7 @@ import {
   type FavoriteSource,
   type PlaylistPlace,
   type PlaylistSong,
+  type RowMenuAction,
   type StreamedArtistLink,
   type YtDownloadAction,
   type YtSongActionOptions,
@@ -37,7 +39,7 @@ import { MenuChoices, type MenuChoice, type PlayCardChoice } from "@/overlay/Men
 import { followUp, openOverlay } from "@/overlay/overlay";
 import { addYtToQueue, playYtNext } from "@/playback/actions";
 import type { MenuOptions } from "@/playback/ActionsMenu";
-import { swipeEntryNow, type RowSwipeOptions } from "@/playback/rowSwipe";
+import type { RowSwipeOptions } from "@/playback/rowSwipe";
 import { showError } from "@/overlay/alert";
 import { swipeSettingsNow } from "@/settings/swipeActions";
 import { ytMusicEnabled, useYtMusicEnabled } from "@/settings/ytMusic";
@@ -285,10 +287,13 @@ function YtSongActionsMenu({
   );
 }
 
-/** Re-plan when a shared song-list swipe executes, using the current route and stars. */
+/**
+ * Runs the swipe a shared song-list row showed ([shown]): the menu is planned
+ * again with the current route and stars, and its entry for [shown] runs.
+ */
 export const runYtSongSwipe = (
   song: NativeYtSong,
-  side: import("@wave/core").RowSwipeSide,
+  shown: RowMenuAction,
   options: RowSwipeOptions = {},
 ): void => {
   const settings = swipeSettingsNow();
@@ -298,17 +303,18 @@ export const runYtSongSwipe = (
   const entriesWith = (find: FindInLibrary, at: string, inLibrary: boolean) =>
     ytSongSwipeEntries(song, options, settings, ytMusic, find, at, inLibrary);
 
-  const artistEntry = swipeEntryNow(
-    entriesWith(() => null, currentPath(), false),
-    side,
-  );
-  if (artistEntry?.action === "goToArtist") {
-    run(artistEntry, song, { find: () => null, playlistItem, onSelect: undefined }, "swipe");
+  if (shown === "goToArtist") {
+    const artistEntry = shownSwipeEntry(
+      entriesWith(() => null, currentPath(), false),
+      shown,
+    );
+    if (artistEntry !== undefined)
+      run(artistEntry, song, { find: () => null, playlistItem, onSelect: undefined }, "swipe");
     return;
   }
   currentLibraryFinder()
     .then((find) => {
-      const entry = swipeEntryNow(entriesWith(find, currentPath(), find(song) !== null), side);
+      const entry = shownSwipeEntry(entriesWith(find, currentPath(), find(song) !== null), shown);
       if (entry !== undefined)
         run(entry, song, { find, playlistItem, onSelect: undefined }, "swipe");
     })

@@ -204,7 +204,7 @@ export function TrackList({
         selection={listSelection}
         onPlay={(song) => playSongs(songs, positions.get(song.id), context)}
         onMenu={(song, options) => openTrackActions(song, options)}
-        onSongSwipe={(song, side) => runTrackSwipe({ kind: "track", items: [{ song }] }, side)}
+        onSongSwipe={(song, shown) => runTrackSwipe({ kind: "track", items: [{ song }] }, shown)}
         spine={found === null ? spine : undefined}
         contentContainerStyle={{
           paddingLeft: grid.margin,

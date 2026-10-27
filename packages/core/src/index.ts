@@ -2021,7 +2021,9 @@ export {
   rowSwipeActions,
   storedSwipeSettings,
   swipeChoiceAction,
+  shownSwipeEntry,
   swipeChoiceLabel,
+  swipeActionLabels,
   swipeActionTone,
   swipesChoose,
 } from "./swipeActions.ts";

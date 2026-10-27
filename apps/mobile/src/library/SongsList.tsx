@@ -226,7 +226,7 @@ function PagedSongList({
         selection={listSelection}
         onPlay={(id) => void playTrackIds(order.ids, missing, order.ids.indexOf(id), SONGS_CONTEXT)}
         onMenu={(id, options) => openTrackActionsById(id, options)}
-        onSongSwipe={(id, side) => runSummarySwipe(id, side)}
+        onSongSwipe={(id, shown) => runSummarySwipe(id, shown)}
         spine={found === null ? spine : undefined}
         onViewableItemsChanged={onViewableItemsChanged}
         contentContainerStyle={{

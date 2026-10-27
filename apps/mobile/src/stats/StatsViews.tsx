@@ -10,7 +10,7 @@ import {
   STATS_PERIODS,
   type QueueContext,
   type RecapPeriod,
-  type RowSwipeSide,
+  type RowMenuAction,
   type StatsPeriod,
 } from "@wave/core";
 import { useCallback, useMemo, type ReactElement } from "react";
@@ -102,8 +102,8 @@ const useRankedSongRows = (ranking: readonly Ranked<StatsSong>[], context: Queue
     context,
     onPlay: (entry: Ranked<StatsSong>) => void playPlaylist(songs, places.get(entry), context),
     onMenu: (entry: Ranked<StatsSong>) => openMixedSongActions(entry.item),
-    onSongSwipe: (entry: Ranked<StatsSong>, side: RowSwipeSide) =>
-      runMixedSongSwipe(entry.item, side),
+    onSongSwipe: (entry: Ranked<StatsSong>, shown: RowMenuAction) =>
+      runMixedSongSwipe(entry.item, shown),
   };
 };
 

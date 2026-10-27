@@ -5,13 +5,7 @@ import {
   IconFileOff,
   IconStarFilled,
 } from "@tabler/icons-react-native";
-import {
-  ITEM_ACTION_LABELS,
-  UNAVAILABLE_ENTRY_ACTION_LABELS,
-  actionBarLabel,
-  type RowMenuAction,
-  type RowSwipeSide,
-} from "@wave/core";
+import { swipeActionLabels, type RowMenuAction, type RowSwipeSide } from "@wave/core";
 import { memo, useCallback, useMemo, type ReactNode } from "react";
 import {
   Text,
@@ -78,14 +72,7 @@ export const SongRow = memo(function SongRow(props: SongRowPresentation & SongRo
         ? null
         : {
             action,
-            label:
-              action === "search"
-                ? UNAVAILABLE_ENTRY_ACTION_LABELS[action]
-                : actionBarLabel(action),
-            accessibilityLabel:
-              action === "search"
-                ? UNAVAILABLE_ENTRY_ACTION_LABELS[action]
-                : ITEM_ACTION_LABELS[action],
+            ...swipeActionLabels(action),
             leaves: removes === true && action === "removeFromPlaylist",
             run: () => onSwipe(rowKey, direction, action),
           };
