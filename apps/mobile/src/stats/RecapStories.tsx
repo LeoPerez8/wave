@@ -42,7 +42,7 @@ import { artworkUri } from "@/catalog/artworkUri";
 import { ArtistImage } from "@/catalog/ArtistImage";
 import { Artwork } from "@/catalog/Artwork";
 import { CELL, grid } from "@/catalog/grid";
-import { Press } from "@/motion/Press";
+import { IconButton } from "@/components/IconButton";
 import type { PlayedAlbum, PlayedArtist } from "@/library/db/playedEntities";
 import { useYtMusicEnabled } from "@/settings/ytMusic";
 import { useInCapture } from "@/share/imageCapture";
@@ -760,27 +760,13 @@ export function RecapStories({
             {recap?.title ?? ""}
           </Text>
           {recap !== null && recap !== undefined && slide !== undefined && (
-            <Press
-              accessibilityRole="button"
-              accessibilityLabel="Share slide"
-              onPress={() => setSharing(true)}
-              haptic="selection"
-              className="items-center justify-center"
-              style={{ width: 48, height: 48 }}
-            >
+            <IconButton label="Share slide" onPress={() => setSharing(true)} depth={0.04}>
               <IconShare3 size={24} color={ink} strokeWidth={1.5} />
-            </Press>
+            </IconButton>
           )}
-          <Press
-            accessibilityRole="button"
-            accessibilityLabel="Close Recap"
-            onPress={close}
-            haptic="selection"
-            className="items-center justify-center"
-            style={{ width: 48, height: 48 }}
-          >
+          <IconButton label="Close Recap" onPress={close} depth={0.04}>
             <IconX size={24} color={ink} strokeWidth={1.5} />
-          </Press>
+          </IconButton>
         </View>
         {/* The slide takes the taps, holds and drags; the close button above stays its own. */}
         <GestureDetector gesture={gesture}>
