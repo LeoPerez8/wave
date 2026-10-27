@@ -10,6 +10,7 @@ import {
 import { useCallback, useMemo } from "react";
 import { Text, View } from "react-native";
 
+import { artworkUri } from "@/catalog/artworkUri";
 import { AlbumCardRow } from "@/catalog/cards/AlbumCard";
 import { ArtistCardRow } from "@/catalog/cards/ArtistCard";
 import { PlaylistCardRow } from "@/catalog/cards/PlaylistCard";
@@ -175,7 +176,7 @@ function Hit({
         <AlbumCardRow
           title={hit.name}
           artist={hit.album.albumArtist}
-          artworkUri={hit.album.thumbPath === null ? undefined : `file://${hit.album.thumbPath}`}
+          artworkUri={artworkUri(hit.album)}
           onPress={open(() => openAlbum(hit.album.id, hit.album, { integrated }))}
           onLongPress={menu(() => openAlbumActions(hit.album))}
         />

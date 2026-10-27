@@ -33,6 +33,7 @@ import expo.modules.wavenative.artwork.ArtistPhotoStore
 import expo.modules.wavenative.artwork.ArtworkInfo
 import expo.modules.wavenative.artwork.ArtworkProvider
 import expo.modules.wavenative.artwork.ArtworkStore
+import expo.modules.wavenative.artwork.MediumCoverBackfill
 import expo.modules.wavenative.download.AndroidMediaScans
 import expo.modules.wavenative.download.BackgroundThreads
 import expo.modules.wavenative.files.AudioLengths
@@ -293,6 +294,9 @@ class WaveNativeModule : Module() {
       }
       id
     }
+
+    /** Encodes at most one cached cover. JS calls again only on a free turn; no tag rescan. */
+    AsyncFunction("backfillMediumCover") { mediumCovers.step() }
 
     Function("cancelScan") { scanId: Int ->
       currentScan?.takeIf { it.first == scanId }?.second?.set(true)
@@ -581,6 +585,13 @@ class WaveNativeModule : Module() {
       if (cursor.moveToFirst()) cursor.getString(0) else null
     }
   }.getOrNull()
+
+  private val mediumCovers by lazy {
+    val processor = AndroidArtworkProcessor()
+    MediumCoverBackfill(File(context.filesDir, "artwork")) { original, target ->
+      original.length() <= ArtworkStore.MAX_IMAGE_BYTES && processor.medium(original.readBytes(), target)
+    }
+  }
 
   private fun artistPhotos() = ArtistPhotoStore(File(File(context.filesDir, "artwork"), "artists"))
 

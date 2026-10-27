@@ -4,11 +4,11 @@ import { PAGED_ROWS_LIMITS, showsExplicitBadge, type PagedRows } from "@wave/cor
 import { useCallback, useRef, type ReactElement } from "react";
 import { View } from "react-native";
 
+import { artworkUri } from "@/catalog/artworkUri";
 import { Artwork } from "@/catalog/Artwork";
 import { songRowLine } from "@/catalog/cards/SongCard";
 import { CELL, grid } from "@/catalog/grid";
 import type { TrackSummary } from "@/catalog/TrackRow";
-import { fileUri } from "@/lib/fileUri";
 import { openTrackActionsById } from "@/playback/ActionsMenu";
 import { selectableRow } from "@/selection/selectableRow";
 import type { ListSelection } from "@/selection/useListSelection";
@@ -22,7 +22,7 @@ const songTrackSummary = (song: SongSummary): TrackSummary => ({
   title: song.title,
   artist: songRowLine(song.artist),
   durationMs: song.durationMs,
-  artworkUri: fileUri(song.thumbPath),
+  artworkUri: artworkUri(song),
   // A missing song: dimmed, as a YT Music song not downloaded is.
   missingTrackId: song.hasFile ? undefined : song.id,
   explicit: showsExplicitBadge(song.explicit),

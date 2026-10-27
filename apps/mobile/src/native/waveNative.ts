@@ -124,6 +124,8 @@ type WaveNativeEvents = {
 };
 
 declare class WaveNativeModule extends NativeModule<WaveNativeEvents> {
+  /** Makes at most one medium cover from cached artwork; true when this launch's pass is done. */
+  backfillMediumCover(): Promise<boolean>;
   /** Whether Wave holds "All files access" (MANAGE_EXTERNAL_STORAGE). */
   hasAllFilesAccess(): boolean;
   /** Opens the system settings screen where the user grants all-files access. */

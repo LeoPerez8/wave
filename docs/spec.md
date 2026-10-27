@@ -493,6 +493,22 @@ How it works and why is in `docs/spotify-account.md` (#484). There's no official
 6. **UI** (app, Expo Router). Tabs the owner arranges — Home, then any of Library, Search and the Library's sections (Search rendered as a separate glass pill; see "Editable tab bar"). A custom glass tab bar, a floating glass mini player and a full-screen Now Playing presented over the tabs with an interactive drag-to-dismiss gesture. Detail screens for album, artist, playlist and genre. Settings, a list of pages (see "Settings").
 7. **Sync service** (`apps/sync`, Cloudflare Worker, Turso). Checks Google ID tokens, holds sessions, merges pushed rows by Core's rules, serves pulls and deletes accounts. The app's side is an Effect service (`WaveSync`) that hears of local changes, pushes and pulls, and translates local ids to recording keys through the store (see "Wave account and sync").
 
+### Cached artwork
+
+The scanner keeps the original embedded artwork, a thumbnail (long side at most 300 px),
+and a medium JPEG (at most 640 px) for each image hash. The thumbnail and medium come
+from one decoded bitmap; the palette still comes from the thumbnail. Existing Libraries
+get medium covers from their cached originals, one image per free turn, without reading
+audio tags again. The pass resumes after interruption and records completion on disk.
+
+The app's `catalog/artworkUri.ts` selects by display size: thumbnail through 300 physical
+pixels, medium through 640, otherwise original. Artist photos take precedence, then the
+requested size, the next larger size, and the existing placeholder. Sized content URIs
+resolve available files in that order, so a pending medium keeps showing its original.
+Rows, tiles, mosaics and artist images share this helper. Now Playing and image captures
+use originals. The media session's bitmap loader caps decoding at 640 px for the
+notification and Android Auto.
+
 ### Play event shape
 
 One row per playback start: either a Library track id or a streamed song's video id, started-at, listened milliseconds, track duration, end reason (`completed` | `skipped` | `stopped` | `interrupted`), counted flag, and play context (type + id). A streamed play follows the same start, progress, end, restart and crossfade handling and counted-play rule as a Library play. It keeps the queue's song metadata and original cover URL, plus Core's recording key from its title, album and first artist (no disc or track number). A Recap's music is still excluded. Nothing is aggregated away. Streamed events feed Listening History and every song count (see Streamed song counts); Artist and album rankings, Home's Recently played and artist-page Stats include them too (see Streamed artist and album counts); Discover, Recap and taste consumers follow in #689 and #690. The old `streamed_songs` counters remain a known-song source and are never turned into historical events. Streamed events stay unpushed until #686 completes the app's sync support.
