@@ -67,7 +67,7 @@ import { useQueueTracks } from "./hooks";
 import { useShuffleControl } from "./ShuffleMenu";
 import { TrackHeader } from "./TrackHeader";
 import { ROW, useUpNextDrag, useUpNextRowDrag, type UpNextDragRows } from "./upNextDrag";
-import { upNextScroll } from "./upNextScroll";
+import { upNextEndSpace, upNextScroll } from "./upNextScroll";
 
 type IconProps = { size?: number; color?: string; strokeWidth?: number };
 
@@ -488,9 +488,15 @@ export function UpNextList({
   );
   const barIndex = history.length > 0 ? history.length + 1 : 0;
   const sticky = useMemo(() => [barIndex], [barIndex]);
-  // Up Next's start can reach the top however short it is: History stays out of sight.
-  const endSpace = useMemo(() => ({ anchorIndex: barIndex }), [barIndex]);
   const start = barOffset(history.length);
+  // Up Next's start can reach the top however short it is: History stays out of sight.
+  const [listHeight, setListHeight] = useState(0);
+  const endSpace = upNextEndSpace(listHeight, {
+    bar: BAR,
+    row: ROW,
+    count: entries.length,
+    bottomInset,
+  });
 
   const onMove = useCallback((move: PendingMove, moved: Promise<void>) => {
     setPending((list) => [...list, move]);
@@ -594,7 +600,10 @@ export function UpNextList({
         const { y, height: measured } = event.nativeEvent.layout;
         setListTop(y);
         // Hidden behind another view, the list may be laid out empty: keep its last height.
-        if (measured > 0) height.set(measured);
+        if (measured > 0) {
+          height.set(measured);
+          setListHeight(measured);
+        }
       }}
     >
       <AnimatedLegendList
@@ -610,12 +619,11 @@ export function UpNextList({
         estimatedItemSize={ROW}
         initialScrollOffset={start}
         stickyHeaderIndices={sticky}
-        anchoredEndSpace={endSpace}
         alwaysRender={drag === null ? undefined : { keys: [drag.key] }}
         scrollEnabled={drag === null}
         scrollEventThrottle={16}
         contentContainerStyle={{ paddingBottom: bottomInset }}
-        ListFooterComponent={footer}
+        ListFooterComponent={<View style={{ minHeight: endSpace }}>{footer}</View>}
       />
       {drag !== null && (
         <Animated.View
