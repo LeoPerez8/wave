@@ -17,7 +17,8 @@ import { CatalogLine } from "@/catalog/CatalogLine";
 import { CELL, grid } from "@/catalog/grid";
 import { NameRow } from "@/catalog/NameRow";
 import { SKELETON_ROWS, TrackSkeletons } from "@/catalog/Skeletons";
-import { SwipeTrackRow } from "@/library/SwipeTrackRow";
+import { TrackRow } from "@/catalog/TrackRow";
+import { useLibrarySongSwipes } from "@/playback/rowSwipe";
 import { useChromeInset } from "@/chrome/chrome";
 import { TextButton } from "@/components/TextButton";
 import type { TrackItem } from "@/playback/actionTargets";
@@ -160,6 +161,7 @@ function Hit({
           action();
         };
   const menu = (action: () => void) => (selecting ? ignore : action);
+  const swipe = useLibrarySongSwipes();
   switch (hit.kind) {
     case "artist":
       return (
@@ -183,8 +185,8 @@ function Hit({
     case "song": {
       const track = toTrackSummary(hit.song);
       return (
-        <SwipeTrackRow
-          song={hit.song}
+        <TrackRow
+          swipe={swipe(hit.song)}
           track={{ ...track, artist: `Song · ${track.artist}` }}
           state={playing ? "playing" : undefined}
           leading="artwork"

@@ -1,4 +1,4 @@
-import { LegendList, type LegendListRef } from "@legendapp/list/react-native";
+import { type LegendListRef } from "@legendapp/list/react-native";
 import { useScrollToTop } from "expo-router";
 import {
   counted,
@@ -12,8 +12,6 @@ import {
 import { useCallback, useMemo, useRef, type ReactElement, type ReactNode } from "react";
 import { View } from "react-native";
 
-import { AlphabetSpine } from "@/catalog/AlphabetSpine";
-import { songRowLine } from "@/catalog/cards/SongCard";
 import { CatalogLine } from "@/catalog/CatalogLine";
 import { CELL, grid } from "@/catalog/grid";
 import { PlayShuffle, type LineToggle } from "@/catalog/PlayShuffle";
@@ -21,14 +19,17 @@ import type { TrackSummary } from "@/catalog/TrackRow";
 import { useChromeInset } from "@/chrome/chrome";
 import { fileUri } from "@/lib/fileUri";
 import { useRenderCount } from "@/perf/perf";
+import { usePlayPage } from "@/playback/hooks";
+import { SongList } from "@/songs/SongList";
+import { librarySongEntry } from "@/songs/songListSources";
+import { runTrackSwipe } from "@/playback/rowSwipe";
 import { playSongs } from "@/playback/actions";
-import { useCurrentPlayingIds, usePlayPage } from "@/playback/hooks";
+
 import { openTrackActions } from "@/playback/ActionsMenu";
 import type { ActionItems } from "@/playback/actionTargets";
-import { selectableRow } from "@/selection/selectableRow";
+
 import { useListSelection } from "@/selection/useListSelection";
 
-import { useFavoriteIds } from "./favorites";
 import {
   FIND_FIELD_HEIGHT,
   FindHead,
@@ -36,7 +37,7 @@ import {
   useFindInLegendList,
 } from "./FindInPlaylist";
 import type { SongRow } from "./LibraryStore";
-import { SwipeTrackRow } from "./SwipeTrackRow";
+
 import { useSpine } from "./useSpine";
 import { useListScrollable } from "@/motion/heldTouch";
 
@@ -182,52 +183,32 @@ export function TrackList({
   const list = useRef<LegendListRef>(null);
   useScrollToTop(list);
   const bottomInset = useChromeInset();
-  const currentIds = useCurrentPlayingIds();
-  const favorites = useFavoriteIds();
   const listSelection = useListSelection({
     items: songs,
     keyOf: keyExtractor,
     target: tracksOf,
   });
-  const rowState = useMemo(
-    () => ({ currentIds, favorites, selection: listSelection.selection }),
-    [currentIds, favorites, listSelection.selection],
-  );
   const sortKeys = useMemo(
     () => (sort === undefined ? NO_KEYS : (songSpineKeys(songs, sort) ?? NO_KEYS)),
     [sort, songs],
   );
   const spine = useSpine(sortKeys, list);
   const find = useFindInLegendList(list, songs, librarySongText, findable);
-  const { found, shown, placeOf } = find;
+  const { found, shown } = find;
 
-  const renderItem = useCallback(
-    ({ item, index }: { item: SongRow; index: number }) => {
-      const track = toTrackSummary(item);
-      return (
-        <SwipeTrackRow
-          song={item}
-          track={songCards ? { ...track, artist: songRowLine(track.artist) } : track}
-          state={currentIds.has(String(item.id)) ? "playing" : undefined}
-          favorite={favorites.has(item.id)}
-          leading="artwork"
-          playDisc={songCards}
-          {...selectableRow(
-            item,
-            listSelection,
-            // A found song plays the whole list from its own place in it.
-            () => playSongs(songs, placeOf(index), context),
-            (options) => openTrackActions(item, options),
-          )}
-        />
-      );
-    },
-    [context, currentIds, favorites, songs, placeOf, listSelection, songCards],
+  const source = useCallback(
+    (song: SongRow) =>
+      librarySongEntry(song, {
+        leading: { kind: songCards ? "playDisc" : "artwork" },
+        kindLine: songCards,
+      }),
+    [songCards],
   );
+  const positions = useMemo(() => new Map(songs.map((song, index) => [song.id, index])), [songs]);
 
   return (
     <View className="flex-1">
-      <LegendList
+      <SongList
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
         scrollEnabled={scrollable}
@@ -235,11 +216,13 @@ export function TrackList({
         className="flex-1"
         data={shown}
         keyExtractor={keyExtractor}
-        renderItem={renderItem}
-        extraData={rowState}
-        estimatedItemSize={grid.row}
-        getFixedItemSize={() => grid.row}
-        recycleItems
+        song={source}
+        context={context}
+        selection={listSelection}
+        onPlay={(song) => playSongs(songs, positions.get(song.id), context)}
+        onMenu={(song, options) => openTrackActions(song, options)}
+        onSongSwipe={(song, side) => runTrackSwipe({ kind: "track", items: [{ song }] }, side)}
+        spine={found === null ? spine : undefined}
         contentContainerStyle={{
           paddingLeft: grid.margin,
           paddingRight: spine.paddingRight,
@@ -250,9 +233,6 @@ export function TrackList({
         initialScrollOffset={findable ? FIND_FIELD_HEIGHT : undefined}
         ListHeaderComponent={findable ? <FindHead find={find} header={header} /> : header}
       />
-      {spine.show && found === null && (
-        <AlphabetSpine entries={spine.entries} onJump={spine.onJump} topRow={spine.topRow} />
-      )}
     </View>
   );
 }
