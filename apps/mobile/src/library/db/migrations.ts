@@ -1235,6 +1235,9 @@ CREATE TRIGGER streamed_totals_delete AFTER DELETE ON play_events WHEN old.video
 ${streamedTotalsOf("old.video_id", "old.recording_key")}
 END;`;
 
+// A play start ends the ongoing play: only ongoing plays (at most a couple) are indexed.
+const mOngoingPlays = `CREATE INDEX play_events_ongoing_idx ON play_events (ongoing) WHERE ongoing = 1;`;
+
 export default {
   journal: {
     entries: [
@@ -1291,6 +1294,8 @@ export default {
       { idx: 40, when: 1_795_262_400_000, tag: "0040_streamed_plays", breakpoints: true },
       { idx: 41, when: 1_795_348_800_000, tag: "0041_synced_play_snapshots", breakpoints: true },
       { idx: 42, when: 1_795_435_200_000, tag: "0042_streamed_counts", breakpoints: true },
+      // 0043 is #720's queue persistence; this one runs after it.
+      { idx: 44, when: 1_795_608_000_000, tag: "0044_ongoing_plays", breakpoints: true },
     ],
   },
   migrations: {
@@ -1337,5 +1342,6 @@ export default {
     m0040: mStreamedPlays,
     m0041: mSyncedPlaySnapshots,
     m0042: mStreamedCounts,
+    m0044: mOngoingPlays,
   },
 };
