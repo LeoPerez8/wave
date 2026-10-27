@@ -24,7 +24,7 @@ import { useListSelection } from "@/selection/useListSelection";
 
 import { FIND_FIELD_HEIGHT, FindHead, useFindInLegendList } from "./FindInPlaylist";
 import { folderPhrase } from "./folderPhrase";
-import { useScanRoots, useScanState } from "./hooks";
+import { useScanRoots, useScanStatus } from "./hooks";
 import type { SongOrder, SongRow } from "./LibraryStore";
 import { LibraryReadFeedback, LibraryReadNote } from "./LibraryReadFeedback";
 import { songOrderQueryKey, usePagedSongs, useSongFindTexts, useSongOrder } from "./pagedSongs";
@@ -56,7 +56,7 @@ export function SongsList() {
   if (read !== null && read !== last) setLast(read);
   const order = read ?? last;
   useScreenContent(order !== null && order.ids.length === 0);
-  const scan = useScanState();
+  const scanStatus = useScanStatus();
   const roots = useScanRoots();
 
   if (order === null)
@@ -68,14 +68,14 @@ export function SongsList() {
         <ScanProgressBanner />
         <EmptyState
           icon={IconMusic}
-          title={scan.status === "scanning" ? "Looking for songs" : "No songs"}
+          title={scanStatus === "scanning" ? "Looking for songs" : "No songs"}
           message={
-            scan.status === "scanning"
+            scanStatus === "scanning"
               ? "Songs appear here as Wave finds them."
               : `Wave didn't find any songs in ${folderPhrase(roots)}.`
           }
           action={
-            scan.status === "scanning" ? undefined : (
+            scanStatus === "scanning" ? undefined : (
               <TextButton label="Choose music folder" onPress={() => void promptForMusicFolder()} />
             )
           }

@@ -22,6 +22,7 @@ import { CELL, grid } from "@/catalog/grid";
 import { useFavoriteIds, usePendingFavoriteVideos } from "@/library/favorites";
 import { useCurrentPath } from "@/library/routes";
 import type { Spine } from "@/library/useSpine";
+import { useRenderCount } from "@/perf/perf";
 import { useCurrentPlayingIds } from "@/playback/hooks";
 import { lyricsAndGenreLookupsEnabled } from "@/settings/lyricsAndGenre";
 import { useSwipeSettings } from "@/settings/swipeActions";
@@ -82,6 +83,8 @@ export function SongList<T>({
   extraData,
   ...list
 }: SongListProps<T>) {
+  useRenderCount("SongList");
+  // Followed only while the list's screen is in sight (#722): a hidden tab renders nothing here.
   const currentIds = useCurrentPlayingIds();
   const favorites = useFavoriteIds();
   const pending = usePendingFavoriteVideos();

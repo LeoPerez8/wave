@@ -194,3 +194,34 @@ test("encapsulated playlist recommendation inputs are guarded on opening paths",
     ],
   );
 });
+
+test("only the scan banner follows scan progress; everything else reads its status (#722)", () => {
+  const progress = (files: Record<string, string>) =>
+    auditSources(files, {
+      librarySeeds: ["library/hooks.ts#useScanProgress"],
+      networkSeeds: [],
+      roots: [],
+    });
+  const followers = (files: Record<string, string>) =>
+    progress(files).library.map((use) => use.owner);
+  assert.deepEqual(progress(sources).missingSeeds, []);
+  assert.deepEqual(followers(sources), ["components/ScanProgressBanner.tsx#ScanProgressBanner"]);
+
+  const path = "library/ScanCount.tsx";
+  const added = followers({
+    ...sources,
+    [path]: `
+    import { useScanProgress } from './hooks';
+    export function ScanCount() {
+      return useScanProgress().status;
+    }`,
+  });
+  assert.ok(added.includes(`${path}#ScanCount`), "a new follower of the progress is caught");
+
+  // The store itself is subscribed only by the hooks that select from it.
+  const subscribers = Object.entries(sources)
+    .filter(([, text]) => /scanState\.subscribe/.test(text))
+    .map(([file]) => file)
+    .toSorted();
+  assert.deepEqual(subscribers, ["library/LibraryScan.ts", "library/hooks.ts"]);
+});
