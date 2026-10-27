@@ -19,10 +19,12 @@ import * as schema from "./schema.ts";
 import { trackPlayTotals } from "./stats.ts";
 import { keyRecordings, selectChangesSince, selectPhoneId } from "./sync.ts";
 import {
+  addHistory,
   addTrack,
   migrateTestDatabase,
   openTestDatabase,
   star,
+  traceQueries,
   type TestDatabase,
   libraryRow,
 } from "./testDatabase.ts";
@@ -360,6 +362,60 @@ describe("The latest play", () => {
 
   test("there is none before anything was played", () => {
     assert.equal(latestPlay(db), null);
+  });
+});
+
+/** The plans of the statements [run] ran against play_events. */
+const playEventPlans = (run: () => unknown): string[] =>
+  traceQueries(db, run)
+    .queries.filter((query) => /\bplay_events\b/.test(query.sql))
+    .flatMap((query) => query.plan.filter((step) => /\bplay_events\b/.test(step)));
+
+describe("The ongoing play", () => {
+  test("a play start ends the one before through the ongoing plays alone", () => {
+    // A large imported history: none of it is ongoing.
+    addHistory(db, { artist: "Imported", tracks: 50, plays: 5_000 });
+    const track = addTrack(db, { title: "Now" });
+    const before = recordPlay(db, play(track, 10_000));
+
+    const plans = playEventPlans(() => recordPlay(db, play(track, 20_000)));
+
+    assert.ok(plans.some((step) => step.includes("USING INDEX play_events_ongoing_idx")));
+    assert.ok(!plans.some((step) => /^SCAN play_events\b/.test(step)), plans.join("\n"));
+    const ongoing = db
+      .select({ id: schema.playEvents.id })
+      .from(schema.playEvents)
+      .where(eq(schema.playEvents.ongoing, true))
+      .all()
+      .map((row) => row.id);
+    assert.equal(ongoing.length, 1);
+    assert.notEqual(ongoing[0], before);
+  });
+
+  test("picking the play back up reads only the ongoing plays", () => {
+    addHistory(db, { artist: "Imported", tracks: 50, plays: 5_000 });
+    const track = addTrack(db, { title: "Now" });
+    const id = recordPlay(db, play(track, 10_000));
+
+    const { result, queries } = traceQueries(db, () => latestPlay(db));
+
+    assert.equal(result?.id, id);
+    const plans = queries.flatMap((query) => query.plan);
+    assert.ok(plans.some((step) => step.includes("USING INDEX play_events_ongoing_idx")));
+  });
+
+  test("an upgraded Library gets the index, with its plays as they were", async () => {
+    const old = await openTestDatabase({ through: "0042_streamed_counts" });
+    const track = addTrack(old, { title: "Going" });
+    const id = recordPlay(old, play(track, 1_000));
+
+    await migrateTestDatabase(old);
+
+    const index = old.get<{ sql: string }>(
+      sql`SELECT sql FROM sqlite_master WHERE name = 'play_events_ongoing_idx'`,
+    );
+    assert.match(index?.sql ?? "", /WHERE/i);
+    assert.equal(latestPlay(old)?.id, id);
   });
 });
 
