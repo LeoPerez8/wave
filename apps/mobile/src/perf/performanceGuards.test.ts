@@ -5,6 +5,7 @@ import { test } from "node:test";
 
 import { auditSources, mobileSources } from "./sourceAudit.mjs";
 import {
+  type Exception,
   LIBRARY_SEEDS,
   NETWORK_SEEDS,
   OPENING_REQUESTS,
@@ -28,7 +29,7 @@ const scan = (files: Record<string, string>) =>
   });
 const audit = scan(sources);
 
-const explain = (list: typeof WHOLE_LIBRARY): void => {
+const explain = (list: Record<string, Exception>): void => {
   for (const [owner, entry] of Object.entries(list)) {
     assert.match(
       owner,
