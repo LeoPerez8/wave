@@ -396,7 +396,7 @@ test("planted offenders fail each shared-component guard, through the real APIs 
     export const PlayingRow = ({ id }: { id: string }) => (useRowPlaying(id) ? 'playing' : null);`,
     "planted/Cover.tsx": `
     import { Image } from 'expo-image';
-    import { fileUri } from '@/lib/fileUri';
+    import { fileUri } from '@wave/core';
     export function Cover({ song }: { song: { thumbPath: string | null; artworkPath: string | null } }) {
       const built = \`file://\${song.artworkPath}\`;
       return [

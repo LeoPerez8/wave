@@ -1,4 +1,4 @@
-import { fileUri } from "../lib/fileUri.ts";
+import { fileUri } from "@wave/core";
 
 export type ArtworkSize = "thumbnail" | "medium" | "original";
 

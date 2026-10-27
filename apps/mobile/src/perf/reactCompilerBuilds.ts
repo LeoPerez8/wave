@@ -1,7 +1,7 @@
 /**
  * Desktop tests only; never imported by the app. Loads a module twice, as
  * written and as the React Compiler builds it for a release
- * (`WAVE_REACT_COMPILER=1`, docs/performance/728-react-compiler.md), so a test
+ * (`EXPO_PUBLIC_WAVE_REACT_COMPILER=1`, docs/performance/728-react-compiler.md), so a test
  * can check both behave the same. Only that module is compiled; what it
  * imports loads as written.
  */
