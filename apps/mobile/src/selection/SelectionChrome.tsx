@@ -9,7 +9,7 @@ import { chrome } from "@/chrome/chrome";
 import { OnFloatingChrome } from "@/chrome/onFloatingChrome";
 import { TextButton } from "@/components/TextButton";
 import { Glass } from "@/glass/Glass";
-import { Press } from "@/motion/Press";
+import { IconButton } from "@/components/IconButton";
 import { pressedRect } from "@/motion/pressedRect";
 import { CardEntries } from "@/overlay/CardEntries";
 import { useOverlayFlow } from "@/overlay/flow";
@@ -18,7 +18,6 @@ import { openOverlay } from "@/overlay/overlay";
 import { ACTION_ICONS, type ActionIcon } from "@/playback/actionIcons";
 import { targetCount, type ActionItems } from "@/playback/actionTargets";
 import { useItemActions, type ActionEntry } from "@/playback/itemActions";
-import { useThemeColor } from "@/theme/useThemeColor";
 
 import { endSelection, selectAllInList, useSelectedTarget, useSelectionSummary } from "./selection";
 
@@ -48,32 +47,24 @@ function BarButton({
   opensMenu?: boolean;
   destructive?: boolean;
 }) {
-  // The icon's colour is a native prop; the caption takes the same token as a class.
-  const tone = useThemeColor(destructive ? "destructive" : "accent");
   return (
-    <Press
-      accessibilityRole="button"
-      accessibilityLabel={label}
+    <IconButton
+      icon={Icon}
+      label={label}
+      caption={caption}
+      tone={destructive ? "destructive" : "accent"}
       onPress={onPress}
       opensMenu={opensMenu}
-      haptic="selection"
-      depth={0.1}
-      className="flex-1 items-center justify-center"
-      style={{ gap: 2, paddingHorizontal: 2 }}
-    >
-      <Icon size={24} color={tone} strokeWidth={1.5} />
-      <Text
-        numberOfLines={2}
-        android_hyphenationFrequency="normal"
-        adjustsFontSizeToFit
-        minimumFontScale={0.85}
-        className={`text-center font-sans text-caption font-semibold ${
-          destructive ? "text-destructive" : "text-accent"
-        }`}
-      >
-        {caption}
-      </Text>
-    </Press>
+      className="flex-1"
+      style={{ width: undefined, height: undefined, gap: 2, paddingHorizontal: 2 }}
+      captionProps={{
+        numberOfLines: 2,
+        android_hyphenationFrequency: "normal",
+        adjustsFontSizeToFit: true,
+        minimumFontScale: 0.85,
+        className: "text-center font-sans text-caption font-semibold",
+      }}
+    />
   );
 }
 

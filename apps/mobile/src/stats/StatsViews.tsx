@@ -24,6 +24,7 @@ import { useFavoriteIds } from "@/library/favorites";
 import { openRecap } from "@/library/routes";
 import { toTrackSummary } from "@/library/TrackList";
 import { Press } from "@/motion/Press";
+import { TextButton } from "@/components/TextButton";
 import { playPlaylist } from "@/playback/actions";
 import { useCurrentPlayingIds } from "@/playback/hooks";
 import { openTrackActions } from "@/playback/ActionsMenu";
@@ -60,28 +61,15 @@ export function PeriodTabs({
       {STATS_PERIODS.map((option) => {
         const selected = option.id === period;
         return (
-          <Press
+          <TextButton
             key={option.id}
-            accessibilityRole="tab"
+            label={option.tab}
             accessibilityLabel={option.label}
-            accessibilityState={{ selected }}
+            accessibilityRole="tab"
+            variant="segment"
+            selected={selected}
             onPress={() => onChange(option.id)}
-            haptic="selection"
-            style={{ minHeight: 48, justifyContent: "center" }}
-          >
-            <Text
-              numberOfLines={1}
-              className={`font-sans text-body ${
-                selected ? "font-semibold text-foreground" : "text-secondary"
-              }`}
-            >
-              {option.tab}
-            </Text>
-            <View
-              className={selected ? "bg-accent" : "bg-transparent"}
-              style={{ height: 2, marginTop: CELL / 2 }}
-            />
-          </Press>
+          />
         );
       })}
     </View>

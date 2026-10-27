@@ -3,7 +3,6 @@ import {
   identityKey,
   inLibraryUnlessHeld,
   libraryAlbumFinder,
-  libraryFinder,
   stepYtArtistSection,
   ytArtistCounts,
   ytArtistFullPage,
@@ -50,7 +49,7 @@ import { readArtistPage } from "./candidateCatalog";
 import { artistPopularSongs, createArtistOpeningRead } from "./artistOpeningRead";
 import { searchAllowanceSnapshot, withSearchTurn } from "./searchAllowance";
 import { artistOpeningRequest } from "./artistOpeningRequest";
-import { useLoadedLibraryFinder, type FindInLibrary } from "./libraryFinder";
+import { libraryFinderForRows, useLoadedLibraryFinder, type FindInLibrary } from "./libraryFinder";
 import { useLineToggle } from "./OnlineToggle";
 import { YtMusic, YtMusicError } from "./YtMusic";
 
@@ -458,6 +457,6 @@ export const useArtistSongsFinder = (
 ): FindInLibrary | null =>
   useMemo(() => {
     if (shared === null) return null;
-    const own = libraryFinder(songs);
+    const own = libraryFinderForRows(songs);
     return (song) => own(song) ?? shared(song);
   }, [songs, shared]);

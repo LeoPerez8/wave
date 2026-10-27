@@ -24,7 +24,7 @@ import { SwipeableRow, swipeAccessibility, type SwipeSide } from "@/catalog/Swip
 import { WavyUnderline } from "@/catalog/WavyUnderline";
 import { Press } from "@/motion/Press";
 import { useRenderCount } from "@/perf/perf";
-import { useThemeColors } from "@/theme/useThemeColor";
+import { useThemeColor } from "@/theme/useThemeColor";
 import type { SongRowPresentation } from "./songListModel";
 
 export interface SongRowActions {
@@ -38,7 +38,7 @@ export interface SongRowActions {
 /** One memoized song leaf. Its list owns all changing stores and menu planning. */
 export const SongRow = memo(function SongRow(props: SongRowPresentation & SongRowActions) {
   useRenderCount("SongRow");
-  const [highlight, tertiary, accent] = useThemeColors(["highlight", "tertiary", "accent"]);
+  const [highlight, tertiary, accent] = useThemeColor(["highlight", "tertiary", "accent"]);
   const { rowKey, onPress, onLongPress, onSwipe, swipeRight, swipeLeft } = props;
   const press = useCallback(() => onPress(rowKey), [onPress, rowKey]);
   const longPress = useCallback(() => onLongPress?.(rowKey), [onLongPress, rowKey]);
