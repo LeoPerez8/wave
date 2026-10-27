@@ -175,6 +175,9 @@ describe("libraryFinder", () => {
 });
 
 describe("ytSongCredit", () => {
+  test("an unsearched row needs only its artist names and album to format its credit", () => {
+    assert.equal(ytSongCredit({ artists: ["A", "B"], album: "Together" }), "A & B · Together");
+  });
   test("names every artist, then the album", () => {
     const song = ytSong({
       title: "Get Lucky",
