@@ -69,6 +69,7 @@ export interface SongRowsOptions<T> {
 }
 
 const NO_SWIPE: RowSwipeActions = { right: null, left: null };
+const ignore = (): void => undefined;
 const NO_ACTIONS: readonly AccessibilityActionInfo[] = [];
 /** Rows kept in the element cache: about four screens. */
 const ELEMENTS = 256;
@@ -233,9 +234,9 @@ export function useSongRows<T>({
     [here, ytMusic, settings],
   );
 
-  /** The song row for [item], or null for a non-song slot. */
-  const render = useCallback(
-    (item: T, index: number): ReactNode | null => {
+  /** What [item]'s row shows, or null for a non-song slot. */
+  const shownOf = useCallback(
+    (item: T, index: number) => {
       const entry = song(item);
       if (entry === null) return null;
       const key = keyExtractor(item, index);
@@ -250,7 +251,17 @@ export function useSongRows<T>({
             : "unchecked"
           : "off",
       );
-      const shown = model.row(entry.source, state, key);
+      return { entry, key, state, shown: model.row(entry.source, state, key) };
+    },
+    [song, keyExtractor, selection, snapshot, model],
+  );
+
+  /** The song row for [item], or null for a non-song slot. */
+  const render = useCallback(
+    (item: T, index: number): ReactNode | null => {
+      const row = shownOf(item, index);
+      if (row === null) return null;
+      const { entry, key, state, shown } = row;
       const directions =
         onSongSwipe === undefined || selection?.selecting || shown.disabled
           ? NO_SWIPE
@@ -299,11 +310,8 @@ export function useSongRows<T>({
       return decorateRow === undefined ? element : decorateRow(element, item, index);
     },
     [
-      song,
-      keyExtractor,
+      shownOf,
       selection,
-      snapshot,
-      model,
       onSongSwipe,
       onSongRemove,
       directionsOf,
@@ -323,5 +331,20 @@ export function useSongRows<T>({
     () => ({ snapshot, selection, settings, here }),
     [snapshot, selection, settings, here],
   );
-  return { render, model, state };
+  /**
+   * The row of the item keyed [key] as it shows, without its actions or
+   * swipes: the copy a drag lifts over the list, with [accessory] (its grip).
+   */
+  const still = useCallback(
+    (key: string, accessory?: ReactNode): ReactNode | null => {
+      const item = items.get(key);
+      if (item === undefined) return null;
+      const row = shownOf(item, data.indexOf(item));
+      return row === null ? null : (
+        <SongRow {...row.shown} onPress={ignore} accessory={accessory} />
+      );
+    },
+    [items, data, shownOf],
+  );
+  return { render, still, model, state };
 }

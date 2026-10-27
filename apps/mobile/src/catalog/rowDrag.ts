@@ -440,10 +440,10 @@ export function useRowDrag({
 }
 
 /**
- * A row's side: its handle's pan, and its offset (stepping aside, or
+ * A row's side: its handle's pan (off while [enabled] is false), and its offset (stepping aside, or
  * following the finger while it's the lifted row).
  */
-export function useDraggedRow(rowDrag: DragRows, key: string, index: number) {
+export function useDraggedRow(rowDrag: DragRows, key: string, index: number, enabled = true) {
   const { session, aside, lifted, liftedY, waiting, begin, move, drop, retarget, trackOffset } =
     rowDrag;
   const offset = useSharedValue(0);
@@ -502,6 +502,7 @@ export function useDraggedRow(rowDrag: DragRows, key: string, index: number) {
   const pan = usePanGesture(
     useMemo(
       () => ({
+        enabled,
         minDistance: 0,
         onActivate: (event: { translationY: number }) => {
           "worklet";
@@ -527,7 +528,7 @@ export function useDraggedRow(rowDrag: DragRows, key: string, index: number) {
           if (session.get()?.key === key) drop(event.canceled);
         },
       }),
-      [aside, waiting, begin, session, move, drop, key, rowIndex],
+      [enabled, aside, waiting, begin, session, move, drop, key, rowIndex],
     ),
   );
 

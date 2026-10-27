@@ -37,7 +37,13 @@ import { makeExternalStore } from "@/lib/externalStore";
 import { CROSSFADE_MS } from "@/motion/Crossfade";
 import { WaveNative } from "@/native/waveNative";
 import { playTrackIds, playYtSongs } from "@/playback/actions";
-import { DiscoverSongRow } from "@/ytmusic/DiscoverSongRow";
+import {
+  mixedSongEntry,
+  openMixedSongActions,
+  runMixedSongSwipe,
+  type ListedSong,
+} from "@/songs/mixedSongs";
+import { useSongRows } from "@/songs/useSongRows";
 
 import { LibraryStore, type PlaylistEntryRow, type SongRow } from "./LibraryStore";
 import { onLibraryChange } from "./libraryChanges";
@@ -45,6 +51,8 @@ import { appRuntime } from "./runtime";
 import { playlistsChanged } from "./playlists";
 
 let nextOffer = 0;
+
+const offerKey = (song: PlaylistRecommendationSlot): string => song.key;
 
 /** A replacement fades into its slot; with reduce motion on it just appears. */
 const arrive = FadeIn.duration(CROSSFADE_MS).reduceMotion(ReduceMotion.Never);
@@ -222,6 +230,30 @@ export function PlaylistRecommendations({
     else void playYtSongs([track], 0, context);
   };
   const songs = state.slots.filter((song) => song !== null);
+  // An offer is the Library's song once read, else YT Music's, streamed.
+  const listedOf = (song: PlaylistRecommendationSlot): ListedSong | null => {
+    if (song.track.source === "stream") return { source: "stream", song: song.track };
+    const local = libraryById.get(song.track.id);
+    return local === undefined ? null : { source: "library", track: local };
+  };
+  const offers = useSongRows({
+    data: songs,
+    keyExtractor: offerKey,
+    song: (song) => {
+      const listed = listedOf(song);
+      return listed === null ? null : mixedSongEntry(listed);
+    },
+    context: { kind: "playlist", id: String(playlistId) },
+    onPlay: play,
+    onMenu: (song, options) => {
+      const listed = listedOf(song);
+      if (listed !== null) openMixedSongActions(listed, options);
+    },
+    onSongSwipe: (song, side) => {
+      const listed = listedOf(song);
+      if (listed !== null) runMixedSongSwipe(listed, side);
+    },
+  });
   // While one slot is replaced the others keep their look (no section-wide dimming) and take
   // their own taps; the session saves them in turn and ignores a repeated tap on a busy offer.
   const act = async (song: PlaylistRecommendationSlot, kind: "add" | "dismiss") => {
@@ -264,18 +296,9 @@ export function PlaylistRecommendations({
     });
   };
   const offerRow = (song: PlaylistRecommendationSlot) => {
-    const local = libraryById.get(song.track.id);
-    const row =
-      song.track.source === "stream"
-        ? { source: "stream" as const, song: song.track }
-        : local === undefined
-          ? null
-          : { source: "library" as const, track: local };
     return (
       <View className="flex-row items-center" style={{ minHeight: grid.row }}>
-        <View className="flex-1">
-          {row !== null && <DiscoverSongRow song={row} onPress={() => play(song)} />}
-        </View>
+        <View className="flex-1">{offers.render(song, 0)}</View>
         <IconButton
           icon={IconPlus}
           label={`Add ${song.track.title} to playlist`}

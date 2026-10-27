@@ -4,9 +4,11 @@ import {
   type LegendListProps,
   type LegendListRenderItemProps,
 } from "@legendapp/list/react-native";
+import { AnimatedLegendList } from "@legendapp/list/reanimated";
 import { Fragment, useCallback, useMemo } from "react";
-import type { ReactNode, Ref } from "react";
+import type { ComponentProps, ReactNode, Ref } from "react";
 import { View } from "react-native";
+import Animated from "react-native-reanimated";
 
 import { AlphabetSpine } from "@/catalog/AlphabetSpine";
 import { CatalogLine } from "@/catalog/CatalogLine";
@@ -28,6 +30,20 @@ export type SongListProps<T> = Omit<
     readonly slotType?: ((item: T) => string) | undefined;
     /** A slot's fixed height (default one row); undefined lets it size itself. */
     readonly slotSize?: ((item: T) => number | undefined) | undefined;
+    /**
+     * Legend List's Reanimated list, for a UI-thread drag: its `refScrollView`
+     * then takes an animated ref (`useRowDrag`).
+     */
+    readonly animated?: boolean;
+    /**
+     * A dragged row's lifted copy, drawn over the list with [accessory] (its
+     * grip), placed by [style]; its own row stays mounted as a gap.
+     */
+    readonly lifted?: {
+      readonly key: string;
+      readonly style: ComponentProps<typeof Animated.View>["style"];
+      readonly accessory?: ReactNode;
+    } | null;
   };
 
 /** The list owns subscriptions. Recycled leaves receive primitive display props and stable actions. */
@@ -48,6 +64,8 @@ export function SongList<T>({
   renderSlot,
   slotType,
   slotSize,
+  animated = false,
+  lifted,
   extraData,
   ...list
 }: SongListProps<T>) {
@@ -65,7 +83,7 @@ export function SongList<T>({
     onRowAction,
     decorateRow,
   });
-  const { render, model } = rows;
+  const { render, still, model } = rows;
   const row = useCallback(
     (props: LegendListRenderItemProps<T>) => {
       const { item, index } = props;
@@ -89,9 +107,11 @@ export function SongList<T>({
     [song, renderSlot, model, keyExtractor, render],
   );
   const state = useMemo(() => ({ rows: rows.state, extraData }), [rows.state, extraData]);
+  // Same props: the Reanimated list only drives its scroll view from the UI thread.
+  const List = (animated ? AnimatedLegendList : LegendList) as typeof LegendList;
   return (
     <>
-      <LegendList
+      <List
         {...list}
         data={data}
         keyExtractor={keyExtractor}
@@ -118,6 +138,17 @@ export function SongList<T>({
       />
       {spine?.show && (
         <AlphabetSpine entries={spine.entries} onJump={spine.onJump} topRow={spine.topRow} />
+      )}
+      {lifted != null && (
+        <Animated.View
+          pointerEvents="none"
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
+          className="absolute left-0 right-0 top-0"
+          style={lifted.style}
+        >
+          {still(lifted.key, lifted.accessory)}
+        </Animated.View>
       )}
     </>
   );
