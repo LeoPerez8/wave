@@ -129,3 +129,28 @@ test("the row cache releases old rows after its nearby-row budget", () => {
   model.row(sources[2]!);
   assert.notEqual(model.row(sources[0]!), first);
 });
+
+test("a row goes by its list's key, so keyed press handlers find the item", () => {
+  const model = createSongListModel();
+  assert.equal(model.row(sources[0]!, {}, "playlist-item-40").rowKey, "playlist-item-40");
+  assert.equal(model.row(sources[0]!).rowKey, "1");
+});
+
+test("a queue row has no star or length cell; History fades its cover and title, not the row", () => {
+  const model = createSongListModel();
+  const track = { title: "Song", artist: "Artist", thumbPath: null };
+  const upNext = model.row({ kind: "queue", entry: { key: "a", trackId: "1" }, track });
+  assert.equal(upNext.trailing, false);
+  assert.equal(upNext.dimmed, false);
+  assert.equal(upNext.fadedCover, false);
+  const history = model.row({
+    kind: "queue",
+    entry: { key: "b", trackId: "1" },
+    track,
+    history: true,
+  });
+  assert.equal(history.dimmed, false);
+  assert.equal(history.fadedCover, true);
+  assert.equal(history.accessibilityLabel, "Song, Artist, downloaded");
+  assert.equal(model.row(sources[0]!).trailing, true);
+});

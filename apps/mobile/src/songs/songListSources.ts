@@ -6,6 +6,11 @@ export interface SongListEntry {
   readonly state?: SongRowState;
   /** Metadata already read by the screen; menu construction waits for an action. */
   readonly facts?: ActionItem;
+  /**
+   * A stream in a ranking (Stats, Home's Most played): dimmed, its tap doing
+   * nothing, while it can't play (YT Music off, or it refused this session).
+   */
+  readonly gated?: boolean;
 }
 
 export const librarySongEntry = (song: SongRow, state?: SongRowState): SongListEntry => ({

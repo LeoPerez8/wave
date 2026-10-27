@@ -13,7 +13,12 @@ import {
   type RowSwipeSide,
 } from "@wave/core";
 import { memo, useCallback, useMemo } from "react";
-import { Text, View } from "react-native";
+import {
+  Text,
+  View,
+  type AccessibilityActionEvent,
+  type AccessibilityActionInfo,
+} from "react-native";
 
 import { Artwork } from "@/catalog/Artwork";
 import { SONG_ROW_COVER, SongCover } from "@/catalog/cards/SongCard";
@@ -30,18 +35,32 @@ import type { SongRowPresentation } from "./songListModel";
 export interface SongRowActions {
   readonly onPress: (key: string) => void;
   readonly onLongPress?: ((key: string) => void) | undefined;
-  readonly onSwipe?: ((key: string, side: RowSwipeSide) => void) | undefined;
+  /** [action] is the direction's entry, as the row offered it. */
+  readonly onSwipe?: ((key: string, side: RowSwipeSide, action: RowMenuAction) => void) | undefined;
   readonly swipeRight?: RowMenuAction | null | undefined;
   readonly swipeLeft?: RowMenuAction | null | undefined;
+  /** Remove from Playlist takes the row out at once: it slides out as it goes. */
+  readonly removes?: boolean | undefined;
+  /** Screen-reader actions besides the swipes' (a playlist's Move up), from a stable list. */
+  readonly extraActions?: readonly AccessibilityActionInfo[] | undefined;
+  readonly onExtraAction?: ((key: string, name: string) => void) | undefined;
+  readonly accessibilityHint?: string | undefined;
 }
+
+const NO_ACTIONS: readonly AccessibilityActionInfo[] = [];
 
 /** One memoized song leaf. Its list owns all changing stores and menu planning. */
 export const SongRow = memo(function SongRow(props: SongRowPresentation & SongRowActions) {
   useRenderCount("SongRow");
   const [highlight, tertiary, accent] = useThemeColor(["highlight", "tertiary", "accent"]);
-  const { rowKey, onPress, onLongPress, onSwipe, swipeRight, swipeLeft } = props;
+  const { rowKey, onPress, onLongPress, onSwipe, swipeRight, swipeLeft, removes } = props;
+  const { extraActions = NO_ACTIONS, onExtraAction } = props;
   const press = useCallback(() => onPress(rowKey), [onPress, rowKey]);
   const longPress = useCallback(() => onLongPress?.(rowKey), [onLongPress, rowKey]);
+  const extra = useCallback(
+    (event: AccessibilityActionEvent) => onExtraAction?.(rowKey, event.nativeEvent.actionName),
+    [onExtraAction, rowKey],
+  );
   const swipe = useMemo(() => {
     if (props.selecting || props.disabled || onSwipe === undefined) return undefined;
     const side = (
@@ -60,14 +79,19 @@ export const SongRow = memo(function SongRow(props: SongRowPresentation & SongRo
               action === "search"
                 ? UNAVAILABLE_ENTRY_ACTION_LABELS[action]
                 : ITEM_ACTION_LABELS[action],
-            leaves: false,
-            run: () => onSwipe(rowKey, direction),
+            leaves: removes === true && action === "removeFromPlaylist",
+            run: () => onSwipe(rowKey, direction, action),
           };
     const right = side(swipeRight, "right");
     const left = side(swipeLeft, "left");
     return right === null && left === null ? undefined : { right, left };
-  }, [rowKey, onSwipe, swipeRight, swipeLeft, props.selecting, props.disabled]);
-  const actions = swipe === undefined ? {} : swipeAccessibility(swipe, undefined, undefined);
+  }, [rowKey, onSwipe, swipeRight, swipeLeft, removes, props.selecting, props.disabled]);
+  const actions =
+    swipe === undefined
+      ? extraActions.length === 0
+        ? {}
+        : { accessibilityActions: [...extraActions], onAccessibilityAction: extra }
+      : swipeAccessibility(swipe, extraActions, extra);
   if (props.recycleType === "loadingRow")
     return (
       <View
@@ -84,6 +108,7 @@ export const SongRow = memo(function SongRow(props: SongRowPresentation & SongRo
     <Press
       accessibilityRole={props.accessibilityRole}
       accessibilityLabel={props.accessibilityLabel}
+      accessibilityHint={props.accessibilityHint}
       accessibilityState={
         props.selecting
           ? { disabled: props.disabled, checked: props.checked }
@@ -111,6 +136,10 @@ export const SongRow = memo(function SongRow(props: SongRowPresentation & SongRo
         {props.leading === "artwork" || props.leading === "playDisc" ? (
           props.leading === "playDisc" ? (
             <SongCover uri={props.artworkUri} size={CELL * 5} {...SONG_ROW_COVER} />
+          ) : props.fadedCover ? (
+            <View className="opacity-45">
+              <Artwork uri={props.artworkUri} size={CELL * 5} />
+            </View>
           ) : (
             <Artwork uri={props.artworkUri} size={CELL * 5} />
           )
@@ -126,7 +155,7 @@ export const SongRow = memo(function SongRow(props: SongRowPresentation & SongRo
             <View style={{ flexShrink: 1 }}>
               <Text
                 numberOfLines={1}
-                className={`font-sans text-body font-medium ${props.playing ? "text-highlight" : props.fileNotFound ? "text-secondary" : "text-foreground"}`}
+                className={`font-sans text-body font-medium ${props.playing ? "text-highlight" : props.fileNotFound || props.fadedCover ? "text-secondary" : "text-foreground"}`}
               >
                 {props.title}
               </Text>
@@ -154,20 +183,24 @@ export const SongRow = memo(function SongRow(props: SongRowPresentation & SongRo
             {fileIcon}
           </View>
         )}
-        <View className="items-center" style={{ width: CELL * 3 }}>
-          {props.starred && <IconStarFilled size={14} color={highlight} />}
-        </View>
-        <Text
-          numberOfLines={1}
-          className="font-sans text-footnote text-secondary"
-          style={{
-            fontVariant: ["tabular-nums"],
-            ...(props.wideTrailing ? { minWidth: CELL * 9 } : { width: CELL * 5 }),
-            textAlign: "right",
-          }}
-        >
-          {props.trailingText}
-        </Text>
+        {props.trailing && (
+          <View className="items-center" style={{ width: CELL * 3 }}>
+            {props.starred && <IconStarFilled size={14} color={highlight} />}
+          </View>
+        )}
+        {props.trailing && (
+          <Text
+            numberOfLines={1}
+            className="font-sans text-footnote text-secondary"
+            style={{
+              fontVariant: ["tabular-nums"],
+              ...(props.wideTrailing ? { minWidth: CELL * 9 } : { width: CELL * 5 }),
+              textAlign: "right",
+            }}
+          >
+            {props.trailingText}
+          </Text>
+        )}
       </View>
     </Press>
   );

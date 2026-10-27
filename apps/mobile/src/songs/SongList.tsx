@@ -4,65 +4,31 @@ import {
   type LegendListProps,
   type LegendListRenderItemProps,
 } from "@legendapp/list/react-native";
-import {
-  missingSongJobId,
-  songRowSwipeDirections,
-  streamedArtistLink,
-  ytDownloadStatus,
-  type QueueContext,
-  type RowSwipeSide,
-} from "@wave/core";
-import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { ReactElement, ReactNode, Ref } from "react";
+import { Fragment, useCallback, useMemo } from "react";
+import type { ReactNode, Ref } from "react";
 import { View } from "react-native";
 
 import { AlphabetSpine } from "@/catalog/AlphabetSpine";
 import { CatalogLine } from "@/catalog/CatalogLine";
 import { CELL, grid } from "@/catalog/grid";
-import { useFavoriteIds, usePendingFavoriteVideos } from "@/library/favorites";
-import { useCurrentPath } from "@/library/routes";
 import type { Spine } from "@/library/useSpine";
-import { useCurrentPlayingIds } from "@/playback/hooks";
-import { lyricsAndGenreLookupsEnabled } from "@/settings/lyricsAndGenre";
-import { useSwipeSettings } from "@/settings/swipeActions";
-import { useYtMusicEnabled } from "@/settings/ytMusic";
-import { knownLibraryFinder } from "@/ytmusic/libraryFinder";
-import { ytAlbumPageHere } from "@/ytmusic/routes";
-import { streamedArtistContextNow } from "@/ytmusic/streamedArtist";
-import { useSongListDownloads } from "@/ytmusic/YtDownloads";
-import { SongRow } from "./SongRow";
-import { createSongListModel } from "./songListModel";
-import type { SongListEntry } from "./songListSources";
-import type { NativeYtSong } from "@/native/waveYtMusic";
-import type { MenuOptions } from "@/playback/ActionsMenu";
 
-export interface SongListSelection<T> {
-  readonly selecting: boolean;
-  readonly isChecked: (item: T) => boolean;
-  readonly toggle: (item: T) => void;
-  readonly start: (item: T) => void;
-}
+import { useSongRows, type SongRowsOptions } from "./useSongRows";
+
+export type { SongListSelection } from "./useSongRows";
 
 export type SongListProps<T> = Omit<
   LegendListProps<T>,
-  "renderItem" | "getItemType" | "getFixedItemSize" | "recycleItems"
-> & {
-  readonly ref?: Ref<LegendListRef> | undefined;
-  readonly data: readonly T[];
-  readonly keyExtractor: (item: T, index: number) => string;
-  /** Null delegates a typed non-song slot to renderSlot. */
-  readonly song: (item: T) => SongListEntry | null;
-  readonly context: QueueContext;
-  readonly onPlay: (item: T, context: QueueContext) => void;
-  readonly onMenu: (item: T, options: MenuOptions) => void;
-  readonly onSongSwipe?: ((item: T, side: RowSwipeSide) => void) | undefined;
-  readonly selection?: SongListSelection<T> | undefined;
-  readonly spine?: Spine | undefined;
-  readonly decorateRow?: ((row: ReactElement, item: T) => ReactNode) | undefined;
-  readonly renderSlot?: ((props: LegendListRenderItemProps<T>) => ReactNode) | undefined;
-  readonly slotType?: ((item: T) => string) | undefined;
-  readonly slotSize?: ((item: T) => number) | undefined;
-};
+  "renderItem" | "getItemType" | "getFixedItemSize" | "recycleItems" | "data" | "keyExtractor"
+> &
+  SongRowsOptions<T> & {
+    readonly ref?: Ref<LegendListRef> | undefined;
+    readonly spine?: Spine | undefined;
+    readonly renderSlot?: ((props: LegendListRenderItemProps<T>) => ReactNode) | undefined;
+    readonly slotType?: ((item: T) => string) | undefined;
+    /** A slot's fixed height (default one row); undefined lets it size itself. */
+    readonly slotSize?: ((item: T) => number | undefined) | undefined;
+  };
 
 /** The list owns subscriptions. Recycled leaves receive primitive display props and stable actions. */
 export function SongList<T>({
@@ -73,89 +39,40 @@ export function SongList<T>({
   onPlay,
   onMenu,
   onSongSwipe,
+  onSongRemove,
   selection,
+  rowActions,
+  onRowAction,
+  decorateRow,
   spine,
   renderSlot,
-  decorateRow,
   slotType,
   slotSize,
   extraData,
   ...list
 }: SongListProps<T>) {
-  const currentIds = useCurrentPlayingIds();
-  const favorites = useFavoriteIds();
-  const pending = usePendingFavoriteVideos();
-  const downloads = useSongListDownloads();
-  const settings = useSwipeSettings();
-  const here = useCurrentPath(false);
-  const ytMusic = useYtMusicEnabled();
-  const [model] = useState(createSongListModel);
-  const items = useMemo(
-    () => new Map(data.map((item, index) => [keyExtractor(item, index), item])),
-    [data, keyExtractor],
-  );
-  const latest = useRef({ items, context, onPlay, onMenu, onSongSwipe, selection });
-  useLayoutEffect(() => {
-    latest.current = { items, context, onPlay, onMenu, onSongSwipe, selection };
+  const rows = useSongRows({
+    data,
+    keyExtractor,
+    song,
+    context,
+    onPlay,
+    onMenu,
+    onSongSwipe,
+    onSongRemove,
+    selection,
+    rowActions,
+    onRowAction,
+    decorateRow,
   });
-  const press = useCallback((key: string) => {
-    const current = latest.current;
-    const item = current.items.get(key);
-    if (item === undefined) return;
-    if (current.selection?.selecting) current.selection.toggle(item);
-    else current.onPlay(item, current.context);
-  }, []);
-  const menu = useCallback((key: string) => {
-    const current = latest.current;
-    const item = current.items.get(key);
-    if (item === undefined || current.selection?.selecting) return;
-    current.onMenu(
-      item,
-      current.selection === undefined ? {} : { onSelect: () => current.selection?.start(item) },
-    );
-  }, []);
-  const swipe = useCallback((key: string, side: RowSwipeSide) => {
-    const current = latest.current;
-    const item = current.items.get(key);
-    if (item !== undefined && !current.selection?.selecting) current.onSongSwipe?.(item, side);
-  }, []);
+  const { render, model } = rows;
   const row = useCallback(
-    ({ item, index, ...rest }: LegendListRenderItemProps<T>) => {
+    (props: LegendListRenderItemProps<T>) => {
+      const { item, index } = props;
       const entry = song(item);
-      if (entry === null) return renderSlot?.({ item, index, ...rest }) ?? null;
-      const { source } = entry;
-      const key = keyExtractor(item, index);
-      const trackId =
-        source.kind === "library" || source.kind === "librarySummary" || source.kind === "missing"
-          ? String(source.song.id)
-          : source.kind === "ytMusic"
-            ? `yt:${source.song.videoId}`
-            : key;
-      const remote = source.kind === "ytMusic";
-      const starred = remote ? pending.has(source.song.videoId) : favorites.has(Number(trackId));
-      const job = remote
-        ? source.song.videoId
-        : entry.facts?.missing
-          ? missingSongJobId(Number(trackId))
-          : null;
-      const download = job === null ? null : ytDownloadStatus(downloads, job);
-      const shown = model.row(
-        source,
-        {
-          ...entry.state,
-          playing: currentIds.has(trackId),
-          starred,
-          download,
-          remoteArtwork: ytMusic,
-          selection: selection?.selecting
-            ? selection.isChecked(item)
-              ? "checked"
-              : "unchecked"
-            : "off",
-        },
-        key,
-      );
-      if (source.kind === "discHeader")
+      if (entry === null) return renderSlot?.(props) ?? null;
+      if (entry.source.kind === "discHeader") {
+        const shown = model.row(entry.source, {}, keyExtractor(item, index));
         return (
           <View
             className="justify-end"
@@ -166,86 +83,12 @@ export function SongList<T>({
             <CatalogLine>{shown.title}</CatalogLine>
           </View>
         );
-      const directions =
-        onSongSwipe === undefined || shown.selecting || shown.disabled
-          ? { right: null, left: null }
-          : remote
-            ? songRowSwipeDirections(
-                {
-                  kind: "ytMusic",
-                  options: {
-                    favorite: starred,
-                    album: (source.song as NativeYtSong).albumId,
-                    ytAlbumHere: ytAlbumPageHere(here),
-                    ytMusic,
-                  },
-                  download,
-                  inLibrary:
-                    knownLibraryFinder() === null || knownLibraryFinder()?.(source.song) != null,
-                  artists: streamedArtistLink(
-                    source.song.artists ?? [],
-                    streamedArtistContextNow(),
-                  ),
-                },
-                settings,
-              )
-            : entry.facts === undefined
-              ? { right: null, left: null }
-              : songRowSwipeDirections(
-                  {
-                    kind: "track",
-                    item: { ...entry.facts, favorite: starred, download },
-                    here,
-                    onlineLookups: lyricsAndGenreLookupsEnabled(),
-                  },
-                  settings,
-                );
-      const rendered = (
-        <SongRow
-          {...shown}
-          onPress={press}
-          onLongPress={menu}
-          onSwipe={swipe}
-          swipeRight={directions.right}
-          swipeLeft={directions.left}
-        />
-      );
-      return decorateRow === undefined ? rendered : decorateRow(rendered, item);
+      }
+      return render(item, index);
     },
-    [
-      decorateRow,
-      song,
-      renderSlot,
-      keyExtractor,
-      model,
-      currentIds,
-      favorites,
-      pending,
-      downloads,
-      selection,
-      settings,
-      here,
-      ytMusic,
-      onSongSwipe,
-      press,
-      menu,
-      swipe,
-    ],
+    [song, renderSlot, model, keyExtractor, render],
   );
-  const state = useMemo(
-    () => ({
-      currentIds,
-      favorites,
-      pending,
-      downloads,
-      selection,
-      settings,
-      here,
-      ytMusic,
-      extraData,
-    }),
-    [currentIds, favorites, pending, downloads, selection, settings, here, ytMusic, extraData],
-  );
+  const state = useMemo(() => ({ rows: rows.state, extraData }), [rows.state, extraData]);
   return (
     <>
       <LegendList
@@ -265,7 +108,9 @@ export function SongList<T>({
         getFixedItemSize={(item) => {
           const entry = song(item);
           return entry === null
-            ? (slotSize?.(item) ?? grid.row)
+            ? slotSize === undefined
+              ? grid.row
+              : slotSize(item)
             : entry.source.kind === "discHeader"
               ? CELL * 6
               : grid.row;
@@ -275,5 +120,21 @@ export function SongList<T>({
         <AlphabetSpine entries={spine.entries} onJump={spine.onJump} topRow={spine.topRow} />
       )}
     </>
+  );
+}
+
+/**
+ * A short, capped run of song rows (Home's shelves, Stats' top songs, an
+ * artist's Most played), not virtualised: the same rows, subscriptions and
+ * handlers as the song list. Its See all uses `SongList`.
+ */
+export function SongRows<T>(props: SongRowsOptions<T>) {
+  const { render } = useSongRows(props);
+  return (
+    <View>
+      {props.data.map((item, index) => (
+        <Fragment key={props.keyExtractor(item, index)}>{render(item, index)}</Fragment>
+      ))}
+    </View>
   );
 }
