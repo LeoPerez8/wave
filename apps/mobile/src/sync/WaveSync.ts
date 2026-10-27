@@ -7,6 +7,7 @@ import { AppState } from "react-native";
 import { freeTurn } from "@/lib/backgroundWork";
 import { LibraryStore } from "@/library/LibraryStore";
 import { WaveAccount, waveAccountErrorCode, type WaveAccountErrorCode } from "@/native/waveAccount";
+import { perfCount } from "@/perf/perf";
 
 import type { SyncedChanges, SyncPreferences } from "./syncCycle";
 import { syncTriggers, type SyncClock } from "./syncTriggers";
@@ -72,6 +73,7 @@ const make = Effect.gen(function* () {
   /** One sync; resolves whether it finished. */
   const run = async (songs: boolean): Promise<boolean> => {
     if (account === null || ports === null) return false;
+    perfCount("sync.run");
     const { preferences, pulled, soulseek } = ports;
     const finished = await Effect.runPromise(
       store.syncWithAccount({
