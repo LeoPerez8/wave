@@ -13,6 +13,15 @@ data class ResumeItem(
 )
 
 /**
+ * The player's [reported] items when they differ from the [kept] ones, or
+ * null when they're the same: ExoPlayer raises a timeline change whenever it
+ * prepares an item (before each song change), which mustn't rewrite the
+ * items part.
+ */
+fun changedResumeItems(kept: List<ResumeItem>?, reported: List<ResumeItem>): List<ResumeItem>? =
+  reported.takeIf { it != kept }
+
+/**
  * The last player state, kept on disk so the playback service can resume it
  * after Wave's process died, before JS is up (Media3's playback resumption):
  * the items, the current one and its position, shuffle and repeat (Core's

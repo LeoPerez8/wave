@@ -69,16 +69,24 @@ object ResumeStore {
   fun load(): ListenableFuture<ResumeSnapshot?> = io.submit<ResumeSnapshot?> { files?.let(::read) }
 
   /**
-   * Records the player's state. [withItems] re-reads the item list (it
-   * changed); otherwise only the current item, position and repeat are. An
-   * empty player that didn't just change keeps the last snapshot, so a
-   * service that started and stopped without playing doesn't erase it.
-   * Call it on the main thread (it reads [AutoModes.state]).
+   * Records the player's state. [withItems] re-reads the item list (its
+   * timeline changed), and rewrites the items part only when the list did;
+   * otherwise only the current item, position and repeat are read. An empty
+   * player that didn't just change keeps the last snapshot, so a service that
+   * started and stopped without playing doesn't erase it. Call it on the main
+   * thread (it reads [AutoModes.state]).
    */
   fun savePlayer(player: Player, withItems: Boolean) {
     if (!withItems && player.mediaItemCount == 0) return
+    var itemsNew = false
     synchronized(this) {
-      if (withItems) items = (0 until player.mediaItemCount).map { item(player.getMediaItemAt(it)) }
+      if (withItems) {
+        val reported = (0 until player.mediaItemCount).map { item(player.getMediaItemAt(it)) }
+        changedResumeItems(items, reported)?.let {
+          items = it
+          itemsNew = true
+        }
+      }
       index = if (player.mediaItemCount == 0) -1 else player.currentMediaItemIndex
       positionMs = player.currentPosition
       shuffle = AutoModes.state.current.shuffle
@@ -88,7 +96,7 @@ object ResumeStore {
         else -> "off"
       }
     }
-    write(withItems)
+    write(itemsNew)
   }
 
   /**

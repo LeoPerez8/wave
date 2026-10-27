@@ -54,7 +54,9 @@ entries, so it still serialises the queue once per settled drag and should stay 
 Budgets:
 
 - A skip serialises no queue: no `JSON.stringify` of entries in JS, one SQLite statement that
-  leaves `queue` alone, and no native write of the items file.
+  leaves `queue` alone, and no native write of the items file. ExoPlayer's timeline change
+  from preparing the next item re-reads the item list but writes the items file only when the
+  list differs (`changedResumeItems`).
 - Position saves (JS every 5 seconds, native every 10 seconds while playing) write only the
   position in SQLite and only the place file natively.
 - `skip`'s `next` response (tap to `queue.synced`) is unchanged. With the long queue, the
