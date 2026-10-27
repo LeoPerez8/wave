@@ -22,16 +22,29 @@ import { getOpenedRecaps } from "./openedRecaps";
 import { knownRecaps, useRecapAvailability } from "./recapAvailabilityLive";
 import { Stats, type ArtistStats, type LoadedRecap, type Ranked, type StatsSong } from "./Stats";
 
+/** A Stats read's result with what it reflects: the play history's version and the caller's `sources`. */
+interface StatsReading<A> {
+  readonly value: A;
+  readonly plays: number;
+  readonly sources: unknown;
+}
+
 /**
  * What `read` gives from Stats, or undefined while it first loads. Re-read
- * when the screen comes back into focus (windows end now), when `read`
- * changes and when a play starts or ends while it's focused. `read` must be stable.
+ * when the screen comes back into focus (windows end now), when `read` or
+ * `sources` change (an artist page's songs after a scan) and when a play
+ * starts or ends while it's focused. `read` must be stable.
+ *
+ * The reading keeps the version and sources it reflects, so the read depends
+ * on values it reads: the React Compiler keeps a hook's memo dependencies only
+ * when the memo reads them (docs/performance/728-react-compiler.md).
  */
 const useStatsRead = <A>(
   read: (stats: Stats["Service"]) => Effect.Effect<A, LibraryStoreError>,
+  sources: unknown = null,
 ): A | undefined => {
   const plays = useFocusedVersion(playHistoryVersion);
-  const [value, setValue] = useState<A | undefined>(undefined);
+  const [reading, setReading] = useState<StatsReading<A> | undefined>(undefined);
 
   useFocusEffect(
     useCallback(() => {
@@ -39,8 +52,8 @@ const useStatsRead = <A>(
       appRuntime
         // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
         .runPromise(Stats.use(read))
-        .then((result) => {
-          if (current) setValue(result);
+        .then((value) => {
+          if (current) setReading({ value, plays, sources });
         })
         .catch(() => {
           // Keep showing the last good value.
@@ -48,12 +61,10 @@ const useStatsRead = <A>(
       return () => {
         current = false;
       };
-      // `plays` isn't read in here: a change re-reads after a play.
-      // oxlint-disable-next-line react-hooks/exhaustive-deps, react/memo-dependencies
-    }, [read, plays]),
+    }, [read, plays, sources]),
   );
 
-  return value;
+  return reading?.value;
 };
 
 type ReadRanking<A> = (
@@ -88,9 +99,8 @@ export const useArtistStats = (
   songs: readonly unknown[],
 ): ArtistStats | undefined =>
   useStatsRead(
-    // `songs` isn't read in here: a change re-reads the artist's songs.
-    // oxlint-disable-next-line react-hooks/exhaustive-deps, react/memo-dependencies
-    useCallback((stats: Stats["Service"]) => stats.artist(artistId), [artistId, songs]),
+    useCallback((stats: Stats["Service"]) => stats.artist(artistId), [artistId]),
+    songs,
   );
 
 /** Top songs: the `limit` songs played most in `period` (10 on Stats, 100 in See all). */

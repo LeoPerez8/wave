@@ -24,6 +24,9 @@ export const PERF_ENABLED = process.env.EXPO_PUBLIC_WAVE_PERF === "1";
 /** The app commit a perf build was made from, when the build said (`EXPO_PUBLIC_WAVE_COMMIT`). */
 const COMMIT = process.env.EXPO_PUBLIC_WAVE_COMMIT ?? null;
 
+/** Whether the bundle was built with the React Compiler (`app.config.ts`, #728). */
+const REACT_COMPILER = process.env.EXPO_PUBLIC_WAVE_REACT_COMPILER === "1";
+
 type MetaSource = () => PerfMeta | Promise<PerfMeta>;
 
 const recorder = PERF_ENABLED ? createPerfRecorder({ now: () => performance.now() }) : null;
@@ -127,6 +130,7 @@ const collectMeta = async (): Promise<PerfMeta> => {
     perfBuild: true,
     commit: COMMIT,
     stallMs: STALL_MS,
+    reactCompiler: REACT_COMPILER,
     ...startupMeta(),
     ...heapMeta(),
   };

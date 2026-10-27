@@ -394,3 +394,74 @@ export const handBuiltArtwork = (files) => {
   }
   return sorted(found);
 };
+
+/** The declaration a node sits in (the outermost named one), for `file#name`. */
+const memoOwner = (node) => {
+  let owner = "(module)";
+  for (let at = node.parent; at !== undefined; at = at.parent)
+    if ((ts.isVariableDeclaration(at) || ts.isFunctionDeclaration(at)) && at.name !== undefined)
+      owner = at.name.getText();
+  return owner;
+};
+
+/** The variable an expression starts from: `a` for `a`, `a.b`, `a?.[b]!`. */
+const memoRoot = (node) => {
+  let at = node;
+  while (
+    ts.isPropertyAccessExpression(at) ||
+    ts.isElementAccessExpression(at) ||
+    ts.isNonNullExpression(at) ||
+    ts.isParenthesizedExpression(at)
+  )
+    at = at.expression;
+  return ts.isIdentifier(at) ? at.text : null;
+};
+
+/** The names [node] reads, leaving out property names after a dot. */
+const memoReads = (node) => {
+  const reads = new Set();
+  const visit = (at) => {
+    if (ts.isIdentifier(at) && !(ts.isPropertyAccessExpression(at.parent) && at.parent.name === at))
+      reads.add(at.text);
+    ts.forEachChild(at, visit);
+  };
+  visit(node);
+  return reads;
+};
+
+/**
+ * Every `useMemo`/`useCallback` dependency its function doesn't read, as
+ * `file#owner: hook [dep]`. The React Compiler keys its memos on what the
+ * function reads, so it drops these (#728).
+ */
+export const unreadMemoDependencies = (files) => {
+  const found = [];
+  for (const [path, text] of Object.entries(files)) {
+    const kind = path.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS;
+    const source = ts.createSourceFile(path, text, ts.ScriptTarget.Latest, true, kind);
+    const visit = (node) => {
+      if (ts.isCallExpression(node)) {
+        const callee = ts.isPropertyAccessExpression(node.expression)
+          ? node.expression.name.text
+          : node.expression.getText();
+        const [fn, deps] = node.arguments;
+        if (
+          (callee === "useMemo" || callee === "useCallback") &&
+          fn !== undefined &&
+          deps !== undefined &&
+          ts.isArrayLiteralExpression(deps)
+        ) {
+          const reads = memoReads(fn);
+          for (const dep of deps.elements) {
+            const root = memoRoot(dep);
+            if (root !== null && !reads.has(root))
+              found.push(`${path}#${memoOwner(node)}: ${callee} [${dep.getText()}]`);
+          }
+        }
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(source);
+  }
+  return found;
+};

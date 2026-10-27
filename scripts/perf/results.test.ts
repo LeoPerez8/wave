@@ -83,6 +83,17 @@ describe("comparability", () => {
     ]);
   });
 
+  it("says which run's build had the React Compiler on", () => {
+    const on: RunRecord = { ...RUN, app: { reactCompiler: true } };
+    assert.deepEqual(comparability({ ...RUN, app: { reactCompiler: false } }, on), [
+      "React Compiler: off, then on.",
+    ]);
+    assert.deepEqual(comparability(RUN, on), ["React Compiler: unknown, then on."]);
+    assert.deepEqual(comparability(on, on), []);
+    // Builds from before #728 don't say, and had it off.
+    assert.deepEqual(comparability(RUN, { ...RUN, app: { reactCompiler: false } }), []);
+  });
+
   it("warns when playlist-opening runs used different playlists", () => {
     const before = { ...RUN, runner: { playlist: "Alternative pop" } };
     const after = { ...RUN, runner: { playlist: "Long import" } };

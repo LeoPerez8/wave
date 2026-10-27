@@ -299,19 +299,22 @@ const retired = new RegExp(
 );
 
 /** What each shared-component guard finds in [files]: owners, or the route to a whole set. */
-const sharedReport = (files: Record<string, string>, audit = sharedScan(files)) => {
+const sharedReport = (files: Record<string, string>) => {
+  const scanned = sharedScan(files);
   const users = (seeds: readonly string[]) =>
     [
-      ...new Set(audit.library.filter((use) => seeds.includes(use.capability)).map((u) => u.owner)),
+      ...new Set(
+        scanned.library.filter((use) => seeds.includes(use.capability)).map((use) => use.owner),
+      ),
     ].toSorted();
   return {
-    missingSeeds: audit.missingSeeds,
+    missingSeeds: scanned.missingSeeds,
     songRowSites: users([SONG_ROW]),
     songRowViews: users([SONG_ROW_VIEW]),
     retiredRows: Object.entries(files)
       .filter(([, text]) => retired.test(text))
       .map(([path, text]) => `${path}#${retired.exec(text)![1]}`),
-    rowSubscriptions: rowSubscriptions(audit, {
+    rowSubscriptions: rowSubscriptions(scanned, {
       isRow,
       hooks: WHOLE_SET_HOOKS,
       stores: WHOLE_STORES,

@@ -156,10 +156,17 @@ const glassOf = (run: RunRecord): { probe: string | null; settings: string | nul
   };
 };
 
+/** Whether a perf build was bundled with the React Compiler (#728); unknown before it said. */
+export const reactCompilerOf = (run: RunRecord): string => {
+  const on = run.app?.reactCompiler;
+  return typeof on === "boolean" ? (on ? "on" : "off") : "unknown";
+};
+
 /**
  * What makes [before] and [after] not like for like: another phone, refresh rate,
- * compiler filter, animation scales, Library size, build kind, glass. Empty when
- * they compare. A glass probe comparison is meant to differ in the probe alone.
+ * compiler filter, animation scales, Library size, build kind, React Compiler,
+ * glass. Empty when they compare. A glass probe comparison is meant to differ in
+ * the probe alone, and the React Compiler comparison in the compiler alone.
  */
 export const comparability = (before: RunRecord, after: RunRecord): string[] => [
   ...(before.device.model === after.device.model
@@ -178,6 +185,9 @@ export const comparability = (before: RunRecord, after: RunRecord): string[] => 
   ...grew("Play history", before.library.playEvents, after.library.playEvents),
   ...differs("Playlist fixture", before.runner.playlist ?? null, after.runner.playlist ?? null),
   ...differs("Perf build", before.perfBuild ? "yes" : "no", after.perfBuild ? "yes" : "no"),
+  ...(reactCompilerOf(before) === "on" || reactCompilerOf(after) === "on"
+    ? differs("React Compiler", reactCompilerOf(before), reactCompilerOf(after))
+    : []),
   ...differs("Glass probe", glassOf(before).probe, glassOf(after).probe),
   ...differs("Glass settings", glassOf(before).settings, glassOf(after).settings),
   ...(before.dryRun || after.dryRun

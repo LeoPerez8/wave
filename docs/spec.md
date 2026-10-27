@@ -706,6 +706,8 @@ Every feature is reviewed against these rules (#712). Budgets and the scenarios 
 
 The mechanical checks are `apps/mobile/src/perf/performanceGuards.test.ts` (#729), with their reviewed exceptions in `performancePolicy.ts`: whole-Library reads say how often they run (6); song rows are drawn only by the song list, the Queue and the previews, and no row follows a whole set or store (3, 4, 11); artwork URIs come from `artworkUri` (9); presses outside `IconButton` and `TextButton` are listed controls with a face or gesture of their own (11); the startup guards are in `startupGuards.test.ts` (10). CI reports the APK and Hermes bundle size against their budget (see Build and CI).
 
+**React Compiler: off, the comparison is ready (#728).** Builds don't use the React Compiler until a phone comparison shows it helps; `docs/performance/728-react-compiler.md` holds the two runs (the same scenarios with the compiler off and on), what decides it and the behaviour checks. A perf build bundled with `EXPO_PUBLIC_WAVE_REACT_COMPILER=1` has it on and says so in its runs. Either way, a `useMemo` or `useCallback` reads every dependency it lists (the compiler drops the ones it doesn't, and a desktop guard checks it), and a hook that must read a changing outside value again on some change keeps that value in state rather than caching a call in render. If it is adopted, hand-written `useMemo` and `useCallback` the compiler covers are left to it and the rules above still apply.
+
 ## Testing Decisions
 
 - A good test exercises a module only through its public interface and asserts observable behaviour (resulting queue, counted/not counted, search results order, reconciled changes) — never internals. Tests should survive refactors of the implementation.

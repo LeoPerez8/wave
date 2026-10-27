@@ -33,3 +33,5 @@ export const rowSubscriptions: (
 ) => SourceUse[];
 /** `capability` is `literal` (a file or artwork-provider URI) or `rawPath`; `via` its code. */
 export const handBuiltArtwork: (files: Readonly<Record<string, string>>) => SourceUse[];
+/** Every `useMemo`/`useCallback` dependency its function doesn't read, as `file#owner: hook [dep]`. */
+export const unreadMemoDependencies: (files: Readonly<Record<string, string>>) => string[];

@@ -4,7 +4,7 @@ import {
   writeSearchOnline,
   type SearchOnline,
 } from "@wave/core";
-import { useMemo } from "react";
+import { useState } from "react";
 
 import { persistedSetting } from "@/lib/persistedSetting";
 import { onMobileData } from "@/native/waveNative";
@@ -34,13 +34,24 @@ const searchOnline = persistedSetting<SearchOnline>({
  */
 export const useSearchOnlineAlways = (visit: unknown = null): boolean => {
   const preference = searchOnline.useValue();
-  return useMemo(
-    () => searchOnlineAlways(preference, { onMobileData: onMobileData() }),
-    // [visit] only says when to read the network again.
-    // oxlint-disable-next-line react-hooks/exhaustive-deps
-    [preference, visit],
-  );
+  const [reading, setReading] = useState(() => readSearchOnlineAlways(preference, visit));
+  // Read again during the render that brings a new preference or visit. The
+  // reading keeps both, so a memo (the React Compiler's included) can't cache
+  // the network past them.
+  if (reading.preference !== preference || reading.visit !== visit) {
+    const next = readSearchOnlineAlways(preference, visit);
+    setReading(next);
+    return next.always;
+  }
+  return reading.always;
 };
+
+/** Whether the view searches online now, with the preference and visit it was read for. */
+const readSearchOnlineAlways = (preference: SearchOnline, visit: unknown) => ({
+  preference,
+  visit,
+  always: searchOnlineAlways(preference, { onMobileData: onMobileData() }),
+});
 
 /** Current eligibility for an automatic artist read, including a network change since opening. */
 export const searchOnlineAlwaysNow = (): boolean =>
