@@ -12,7 +12,7 @@ import {
   type RowMenuAction,
   type RowSwipeSide,
 } from "@wave/core";
-import { memo, useCallback, useMemo } from "react";
+import { memo, useCallback, useMemo, type ReactNode } from "react";
 import {
   Text,
   View,
@@ -45,6 +45,11 @@ export interface SongRowActions {
   readonly extraActions?: readonly AccessibilityActionInfo[] | undefined;
   readonly onExtraAction?: ((key: string, name: string) => void) | undefined;
   readonly accessibilityHint?: string | undefined;
+  /**
+   * Controls after the row's pressable part, sliding with it (a playlist's
+   * grip, Up Next's remove and grip). Keep the node stable, or the row renders again.
+   */
+  readonly accessory?: ReactNode;
 }
 
 const NO_ACTIONS: readonly AccessibilityActionInfo[] = [];
@@ -204,5 +209,14 @@ export const SongRow = memo(function SongRow(props: SongRowPresentation & SongRo
       </View>
     </Press>
   );
-  return swipe === undefined ? row : <SwipeableRow swipe={swipe}>{row}</SwipeableRow>;
+  const full =
+    props.accessory === undefined ? (
+      row
+    ) : (
+      <View className="flex-row items-center">
+        <View className="flex-1">{row}</View>
+        {props.accessory}
+      </View>
+    );
+  return swipe === undefined ? full : <SwipeableRow swipe={swipe}>{full}</SwipeableRow>;
 });

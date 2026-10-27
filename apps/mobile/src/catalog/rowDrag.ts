@@ -1,12 +1,4 @@
-import {
-  reorderScrollSpeed,
-  reorderShift,
-  reorderTarget,
-  upNextMove,
-  type PendingMove,
-  type QueueEntry,
-  type QueueState,
-} from "@wave/core";
+import { reorderScrollSpeed, reorderShift, reorderTarget } from "@wave/core";
 import * as Haptics from "expo-haptics";
 import {
   useCallback,
@@ -37,10 +29,10 @@ import { scheduleOnRN, scheduleOnUI } from "react-native-worklets";
 
 import { grid } from "@/catalog/grid";
 import { perfCount } from "@/perf/perf";
-import { moveQueueEntry } from "@/playback/actions";
 
 /**
- * Dragging an Up Next row by its handle, on the UI thread.
+ * Dragging a row of a recycled list by its handle (Up Next, a playlist's
+ * songs), on the UI thread.
  *
  * The finger, the lifted row, the rows stepping aside and the edge auto-scroll
  * all run there, so they keep up while JavaScript is busy (an import, a
@@ -128,7 +120,7 @@ const cancelDrag = (
 type Drag = { readonly key: string };
 
 /** What a row needs to be dragged and to step aside. */
-export type UpNextDragRows = {
+export type DragRows = {
   readonly session: SharedValue<Session | null>;
   readonly aside: SharedValue<Aside>;
   readonly lifted: SharedValue<string | null>;
@@ -144,40 +136,47 @@ export type UpNextDragRows = {
 };
 
 /**
- * The list's side of the drag. `shown` is the queue as Up Next shows it,
- * `entries` its Up Next; `onMove` records a dropped move until the queue has it.
- * Up Next's first row starts [lead] into the list (History and the sticky
- * bar above it), and the bar, [bar] tall, stays over the list's top while
- * Up Next scrolls under it.
+ * The list's side of the drag. [keys] are the draggable rows' keys in order;
+ * [onDrop] hears a drop that moved one (its key, from, to). The first of them
+ * starts [lead] into the list's content (a head, or History and the sticky
+ * bar above Up Next), and a bar [bar] tall stays over the list's top while
+ * the rows scroll under it. Auto-scroll goes no higher than [scrollFloor]
+ * (the list's own scroll) and the list opens at [initialScroll]. [counter]
+ * names the perf counters (`<counter>.start`, `.target`, `.end`).
  */
-export function useUpNextDrag({
-  shown,
-  entries,
+export function useRowDrag({
+  keys,
   bottomInset,
   lead,
-  bar,
-  onMove,
+  bar = 0,
+  scrollFloor,
+  initialScroll,
+  counter,
+  onDrop: dropped,
 }: {
-  shown: QueueState;
-  entries: readonly QueueEntry[];
+  keys: readonly string[];
   bottomInset: number;
   lead: number;
-  bar: number;
-  onMove: (move: PendingMove, moved: Promise<void>) => void;
+  bar?: number;
+  scrollFloor: number;
+  initialScroll: number;
+  counter: string;
+  onDrop: (key: string, from: number, to: number) => void;
 }) {
   const scrollRef = useAnimatedRef<ScrollView>();
-  // The list's scroll, and Up Next's (counted from its first row), which the drag works in.
-  // It starts where the list opens, at the start of Up Next, until the list scrolls.
-  const listScroll = useScrollOffset(scrollRef, useSharedValue(lead - bar));
+  // The list's scroll, and the rows' (counted from the first row), which the drag works in.
+  const listScroll = useScrollOffset(scrollRef, useSharedValue(initialScroll));
   const leadAt = useSharedValue(lead);
+  const floorAt = useSharedValue(scrollFloor);
   const height = useSharedValue(0);
-  const count = useSharedValue(entries.length);
-  const extent = useSharedValue(entries.length * ROW + bottomInset);
+  const count = useSharedValue(keys.length);
+  const extent = useSharedValue(keys.length * ROW + bottomInset);
   useLayoutEffect(() => {
-    count.set(entries.length);
-    extent.set(entries.length * ROW + bottomInset);
+    count.set(keys.length);
+    extent.set(keys.length * ROW + bottomInset);
     leadAt.set(lead);
-  }, [count, extent, leadAt, entries.length, bottomInset, lead]);
+    floorAt.set(scrollFloor);
+  }, [count, extent, leadAt, floorAt, keys.length, bottomInset, lead, scrollFloor]);
   const scrolled = useCallback(() => {
     "worklet";
     return listScroll.get() - leadAt.get();
@@ -208,34 +207,28 @@ export function useUpNextDrag({
   const rows = useRef(new Set<SharedValue<number>>());
   // True from a drop landing until the list has rendered its new order.
   const landing = useRef(false);
-  // The order on screen, for turning a drop index into a move.
-  const shownNow = useRef(shown);
+  const keysNow = useRef(keys);
+  const droppedNow = useRef(dropped);
   useLayoutEffect(() => {
-    shownNow.current = shown;
-  }, [shown]);
-  const entriesNow = useRef(entries);
-  useLayoutEffect(() => {
-    entriesNow.current = entries;
-  }, [entries]);
+    keysNow.current = keys;
+    droppedNow.current = dropped;
+  });
 
   const onTarget = useCallback(() => {
-    perfCount("upNext.target");
+    perfCount(`${counter}.target`);
     void Haptics.selectionAsync();
-  }, []);
+  }, [counter]);
 
   const onDrop = useCallback(
     (key: string, from: number, to: number) => {
-      perfCount("upNext.end");
+      perfCount(`${counter}.end`);
       scheduleOnUI(settle, aside);
       landing.current = true;
       setDrag(null);
       rerender();
-      if (to === from) return;
-      // Named by its neighbours, so a track change before the queue takes it keeps the order.
-      const move: PendingMove = upNextMove(shownNow.current, key, to);
-      onMove(move, moveQueueEntry(move));
+      if (to !== from) droppedNow.current(key, from, to);
     },
-    [aside, onMove],
+    [aside, counter],
   );
 
   const drop = useCallback(
@@ -259,7 +252,7 @@ export function useUpNextDrag({
     [session, aside, liftedY, translation, scrolled, anchor, onDrop],
   );
 
-  // The dragged entry left Up Next (it started playing, or was removed): its drag ends where it began.
+  // The dragged row left the list (it started playing, or was removed): its drag ends where it began.
   const abandon = useCallback(
     (key: string) => {
       scheduleOnUI(() => {
@@ -272,15 +265,15 @@ export function useUpNextDrag({
 
   const onBegin = useCallback(
     (key: string) => {
-      perfCount("upNext.start");
-      if (!entriesNow.current.some((entry) => entry.key === key)) {
+      perfCount(`${counter}.start`);
+      if (!keysNow.current.includes(key)) {
         abandon(key);
         return;
       }
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       setDrag({ key });
     },
-    [abandon],
+    [abandon, counter],
   );
 
   const follow = useCallback(() => {
@@ -347,8 +340,9 @@ export function useUpNextDrag({
     const seconds = (frame.timeSincePreviousFrame ?? 0) / 1000;
     const max = Math.max(0, extent.get() - height.get());
     const now = scrolled();
-    // It scrolls no higher than the start of Up Next: History stays out of sight.
-    const next = Math.min(max, Math.max(Math.min(-bar, now), now + speed * seconds));
+    // It scrolls no higher than its floor (the start of Up Next: History stays out of sight).
+    const floor = floorAt.get() - leadAt.get();
+    const next = Math.min(max, Math.max(Math.min(floor, now), now + speed * seconds));
     if (next === now) return;
     scrollTo(scrollRef, 0, next + leadAt.get(), false);
     listScroll.set(next + leadAt.get());
@@ -377,14 +371,14 @@ export function useUpNextDrag({
     scheduleOnUI(rest, aside, lifted);
   });
 
-  // The dragged entry left Up Next under the drag.
+  // The dragged row left the list under the drag.
   useLayoutEffect(() => {
-    if (drag !== null && !entries.some((entry) => entry.key === drag.key)) abandon(drag.key);
-  }, [drag, entries, abandon]);
+    if (drag !== null && !keys.includes(drag.key)) abandon(drag.key);
+  }, [drag, keys, abandon]);
 
-  // The Queue went out of sight under a drag (the player view or a closing
-  // sheet took over; hidden, its effects and gestures are torn down): the drag
-  // ends where it began, with no move, and the list shows again at rest.
+  // The list went out of sight under a drag (the Queue's player view or a
+  // closing sheet took over; hidden, its effects and gestures are torn down):
+  // the drag ends where it began, with no move, and the list shows again at rest.
   useLayoutEffect(
     () => () => {
       scheduleOnUI(cancelDrag, session, aside, lifted, waiting, translation);
@@ -401,7 +395,7 @@ export function useUpNextDrag({
     };
   }, []);
 
-  const rowDrag = useMemo<UpNextDragRows>(
+  const rowDrag = useMemo<DragRows>(
     () => ({
       session,
       aside,
@@ -449,7 +443,7 @@ export function useUpNextDrag({
  * A row's side: its handle's pan, and its offset (stepping aside, or
  * following the finger while it's the lifted row).
  */
-export function useUpNextRowDrag(rowDrag: UpNextDragRows, key: string, index: number) {
+export function useDraggedRow(rowDrag: DragRows, key: string, index: number) {
   const { session, aside, lifted, liftedY, waiting, begin, move, drop, retarget, trackOffset } =
     rowDrag;
   const offset = useSharedValue(0);
