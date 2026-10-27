@@ -1,5 +1,4 @@
 import {
-  extrapolatePosition,
   paletteGradient,
   parseTrackId,
   type ArtworkPalette,
@@ -12,7 +11,6 @@ import { useColorScheme } from "react-native";
 
 import { LibraryStore, type TrackDetails } from "@/library/LibraryStore";
 import { appRuntime } from "@/library/runtime";
-import { playbackState } from "@/playback/Player";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 import {
   learnUnknownQueueTracks,
@@ -23,8 +21,6 @@ import {
 import { savedYtQueueTracks } from "@/playback/ytQueueTracks";
 import { useThemeColor } from "@/theme/useThemeColor";
 import { usePlayingSongAnswer, usePlayingSongTarget } from "./playingSong";
-
-import { useNowPlayingShown } from "./sheet";
 
 /**
  * The playing track's album and artist (for the links) and palette, from the
@@ -115,44 +111,6 @@ export const useNowPlayingGradient = (palette: ArtworkPalette | null): Gradient 
     if (!isHex(ground) || !ink.every(isHex)) return { top: ground, bottom: ground };
     return paletteGradient(palette, { scheme, ground, ink });
   }, [palette, scheme, ground, foreground, secondary, accent]);
-};
-
-const TICK_MS = 200;
-
-const ignore = (): (() => void) => () => {};
-
-/** The player's position reports; not listened to while `live` is off, re-read when it turns on. */
-const usePositionReport = (live: boolean) => {
-  const subscribe = live ? playbackState.subscribe : ignore;
-  const positionMs = useSyncExternalStore(subscribe, () => playbackState.get().positionMs);
-  const durationMs = useSyncExternalStore(subscribe, () => playbackState.get().durationMs);
-  const at = useSyncExternalStore(subscribe, () => playbackState.get().at);
-  const isPlaying = useSyncExternalStore(subscribe, () => playbackState.get().isPlaying);
-  return { positionMs, durationMs, at, isPlaying };
-};
-
-/**
- * Where the playhead is now, ticking between the player's reports (every
- * 500 ms) so the scrubber and the elapsed / remaining labels run smoothly.
- * It stands still while Now Playing is out of sight.
- */
-export const usePlayhead = (): {
-  readonly positionMs: number;
-  readonly durationMs: number | null;
-} => {
-  const live = useNowPlayingShown();
-  const report = usePositionReport(live);
-  const [now, setNow] = useState(Date.now);
-  const ticking = live && report.isPlaying;
-  useEffect(() => {
-    if (!ticking) return undefined;
-    const timer = setInterval(() => setNow(Date.now()), TICK_MS);
-    return () => clearInterval(timer);
-  }, [ticking]);
-  return {
-    positionMs: extrapolatePosition(report, Math.max(now, report.at)),
-    durationMs: report.durationMs,
-  };
 };
 
 /**

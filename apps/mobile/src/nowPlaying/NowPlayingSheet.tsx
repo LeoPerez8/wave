@@ -46,6 +46,7 @@ import { LyricsView } from "./LyricsView";
 import { PlayerView } from "./PlayerView";
 import { QueueHeader, UpNextList } from "./QueueView";
 import { Scrubber } from "./Scrubber";
+import { usePlayheadSource } from "./playhead";
 import {
   closeNowPlaying,
   nowPlayingContentCommitted,
@@ -186,6 +187,7 @@ export function UnderNowPlaying({ children }: { children: ReactNode }) {
  */
 export function NowPlayingSheet() {
   useRenderCount("NowPlayingSheet");
+  usePlayheadSource();
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
   const shown = useNowPlayingShown();
