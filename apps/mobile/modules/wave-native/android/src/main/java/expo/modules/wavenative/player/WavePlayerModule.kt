@@ -352,12 +352,18 @@ class WavePlayerModule : Module() {
       promise.resolve(null)
     }.runOnQueue(Queues.MAIN)
 
-    /** The parts last saved, which Core's `savedQueueState` puts back together; null before any. */
-    Function("savedQueue") {
-      QueueSnapshot.json?.let { json ->
-        mapOf("queue" to json, "metadata" to QueueSnapshot.metadata, "index" to QueueSnapshot.index)
-      }
-    }
+    /**
+     * The parts last saved, which Core's `savedQueueState` puts back together;
+     * null before any. Async: the queue JSON can hold thousands of entries.
+     * On the main queue, after any `saveQueue` already sent.
+     */
+    AsyncFunction("savedQueue") { promise: Promise ->
+      promise.resolve(
+        QueueSnapshot.json?.let { json ->
+          mapOf("queue" to json, "metadata" to QueueSnapshot.metadata, "index" to QueueSnapshot.index)
+        },
+      )
+    }.runOnQueue(Queues.MAIN)
 
     Function("savedQueueSource") { QueueSnapshot.source }
 

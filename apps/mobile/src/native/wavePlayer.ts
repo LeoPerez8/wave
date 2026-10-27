@@ -223,7 +223,7 @@ declare class WavePlayerModule extends NativeModule<WavePlayerEvents> {
     source: PlaySource,
   ): Promise<void>;
   /** The parts saved last (Core's `savedQueueState` reads them); null before a queue was saved. */
-  savedQueue(): SavedQueueParts | null;
+  savedQueue(): Promise<SavedQueueParts | null>;
   /** Where the saved queue was started from; null before any was saved. */
   savedQueueSource(): PlaySource | null;
   /**

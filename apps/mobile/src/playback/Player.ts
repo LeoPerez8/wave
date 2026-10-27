@@ -76,7 +76,7 @@ export class Player extends Context.Service<
     ) => Effect.Effect<void, PlayerError>;
     /** Keeps the queue parts [write] changed for a JS restart and a cold start; skips its position. */
     readonly saveQueue: (write: QueueWrite, source: PlaySource) => Effect.Effect<void, PlayerError>;
-    readonly savedQueue: Effect.Effect<SavedQueueParts | null>;
+    readonly savedQueue: Effect.Effect<SavedQueueParts | null, PlayerError>;
     readonly savedQueueSource: Effect.Effect<PlaySource | null>;
     /** Whether the player resumed the saved queue on its own (a cold start); clears it. */
     readonly takeResumed: Effect.Effect<boolean>;
@@ -168,7 +168,7 @@ export const layer = Layer.effect(
             source,
           ),
         ),
-      savedQueue: Effect.sync(() => WavePlayer.savedQueue()),
+      savedQueue: call("read the saved queue", () => WavePlayer.savedQueue()),
       savedQueueSource: Effect.sync(() => WavePlayer.savedQueueSource()),
       takeResumed: Effect.sync(() => WavePlayer.takeResumed()),
       onItemTransition: (listener) =>
