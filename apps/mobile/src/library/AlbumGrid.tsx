@@ -82,13 +82,13 @@ export function AlbumPair({
       style={{ gap: grid.gutter, height: albumCardRowHeight(size, fontScale) }}
     >
       {albums.map((album) => {
-        const { title, albumArtist, artworkUri } = toAlbumSummary(album);
+        const { title, albumArtist, artworkUri: coverUri } = toAlbumSummary(album);
         return (
           <AlbumCard
             key={album.id}
             title={title}
             artist={albumArtist}
-            artworkUri={artworkUri}
+            artworkUri={coverUri}
             size={size}
             {...selectableRow(
               album,
