@@ -12,7 +12,13 @@ export type ThemeColor = keyof ThemeColors | `recap-${RecapColour}` | "on-recap"
  * className (navigation options, icon colours, status bar). Updates when the
  * system theme or the theme chosen in Settings changes.
  */
-export const useThemeColor = (name: ThemeColor): string => {
-  const value = useCSSVariable(`--color-${name}`);
-  return typeof value === "string" ? value : "transparent";
-};
+export function useThemeColor(name: ThemeColor): string;
+export function useThemeColor<const T extends readonly ThemeColor[]>(
+  names: T,
+): { -readonly [K in keyof T]: string };
+export function useThemeColor(name: ThemeColor | readonly ThemeColor[]): string | string[] {
+  const names = typeof name === "string" ? [name] : name;
+  const values = useCSSVariable(names.map((token) => `--color-${token}`));
+  const colors = values.map((value) => (typeof value === "string" ? value : "transparent"));
+  return typeof name === "string" ? colors[0]! : colors;
+}
