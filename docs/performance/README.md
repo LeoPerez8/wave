@@ -29,6 +29,7 @@ node scripts/perf/perf.ts run --label baseline --variant idle,import
 node scripts/perf/perf.ts run --scenario now-playing,queue --label 304-after
 node scripts/perf/perf.ts run --scenario push-playlist --playlist "Alternative pop" --label playlist
 node scripts/perf/perf.ts run --scenario soak-routes,soak-player --label 318-soak
+node scripts/perf/perf.ts run --scenario screen-off,screen-off-lyrics --label 712-screen-off
 node scripts/perf/perf.ts summary perf-results/<file>.jsonl
 node scripts/perf/perf.ts compare <before.jsonl> <after.jsonl>
 node scripts/perf/perf.ts run --dry-run             # the whole pipeline on a simulated phone
@@ -158,8 +159,11 @@ JavaScript saw that key, not when it was pressed.
 | `queue`             | Queue in Now Playing (`open`), Queue again (`close`)                                         | `visible` queue           |         10 |
 | `queue-first`       | the first Queue tap after a fresh launch, Now Playing already open (`open`)                  | `visible` queue           |          5 |
 | `skip`              | the mini player's Next track (`next`)                                                        | `queue.synced`            |         10 |
+| `skip-library`      | after Library › Songs › Play (the whole Library as the queue), Next track (`next`)           | `queue.synced`            |         10 |
 | `scrub`             | Now Playing's scrubber dragged 240 dp forward (`forward`), then back (`back`)                | (none)                    |         10 |
 | `queue-drag`        | The first Up Next row dragged three rows down by its handle (`down`), then up (`up`)         | (none)                    |         10 |
+| `scroll-playlist`   | on the named playlist, a fling up (`fling-up`) and back down (`fling-down`)                  | -                         |         10 |
+| `scroll-queue`      | the same on Now Playing › Queue's Up Next                                                    | -                         |         10 |
 | `search-first-tap`  | the first Search tap after a fresh launch (`first-tap`)                                      | `keyboard.show`           |          5 |
 | `search-typing`     | after a Search tap, types `love` (`type`), from `search.typed`; Clear search after           | `search.results` love     |         10 |
 | `import`            | share the link (`card`), tap Import (`start`), 10 s of the import (`during-import`)          | `import.running`          |          1 |
@@ -168,6 +172,8 @@ JavaScript saw that key, not when it was pressed.
 | `idle-home`         | glass: 5 s of Home untouched (`idle`); any frame is idle rendering                           | -                         |          5 |
 | `soak-routes`       | a cycle: Library, Albums and back, Songs and back, the other tabs, Home, Settings and back   | `route`, `songs.rows`     |         20 |
 | `soak-player`       | a cycle: open Now Playing, Queue, Queue again, Close (`open`, `queue-open`, …, `close`)      | as `now-playing`, `queue` |         30 |
+| `screen-off`        | music playing, Now Playing closed: the screen off for 5 minutes (`screen-off`); by name      | -                         |          3 |
+| `screen-off-lyrics` | the same with Now Playing open on lyrics and a 60-minute sleep timer; by name                | -                         |          3 |
 
 `rescan-return` (#315) isn't part of `all` either: each iteration waits past Wave's 60 s rescan
 interval, so ask for it by name. Its return starts the rescan, a sync and any import's next
@@ -191,7 +197,36 @@ totals, histogram and frame parts are what it measures. `idle-home` needs the mi
 
 `skip` measures how long a skip takes to reach the player, so it depends on the queue's length:
 load the queue under test before the run (a short album, or the whole Library as Songs) and leave
-it paused. Each iteration moves one entry on, so start far enough from the end.
+it paused. Each iteration moves one entry on, so start far enough from the end. `skip-library`
+loads the longest queue itself: Library › Songs › Play queues the whole Library (about 12,000
+songs on the owner's phone; `queue.synced`'s detail gives the length), then it skips with Songs
+on screen, so its `SongRow` renders show what a song change costs a visible list. It leaves the
+whole Library as the queue, playing; the next scenario's launch stops it.
+
+`scroll-playlist` flings the fixture's playlist (`--playlist`), `scroll-queue` Up Next. Neither is
+a glass scenario, so both run in `all`; `scroll-queue` scrolls whatever queue is loaded, the whole
+Library when it runs after `skip-library`.
+
+### Screen-off soaks
+
+`screen-off` and `screen-off-lyrics` (#712) measure what Wave does while nobody looks. Each opens
+Now Playing and taps Play (leave the player paused), then either closes the sheet or switches it
+to Lyrics and starts a 60-minute sleep timer. Each step turns the screen off (`KEYCODE_SLEEP`) for
+five minutes, then on again (`KEYCODE_WAKEUP`, `wm dismiss-keyguard`). One warm-up window and
+three measured ones make about 20 minutes a scenario; `--iterations` changes the count. They need
+a lock screen without a PIN, and for `screen-off-lyrics` a song with synced lyrics.
+
+Around the window the runner reads every thread of Wave's process from `/proc/<pid>/task/*`: its
+name and its voluntary context switches, each one a time the thread went to sleep and so woke
+again. The step records `wakeups`: the window's `minutes`, the JS thread's switches per minute
+(`jsPerMinute`, thread `mqt_v_js`, or `mqt_js` on the old architecture), the whole process's
+(`processPerMinute`), and the five busiest threads. This works on any APK.
+
+A perf build stops its own 500 ms flush check while the app is in the background, so it adds no
+wake-ups, and counts what renders meanwhile as `away:<name>` (`away:SongRow`,
+`away:js:sync.run`). Its flush comes after the return, holding the window's `away:` counts and the
+return's catch-up under the plain names. `summary` prints a wake-ups table (median / p90 per
+minute) and `compare` lines up the medians.
 
 `push-empty` is the control: navigation with next to nothing to render. If it's as slow as
 `push-settings`, the cost is in navigation itself, not in what the screen shows.
@@ -296,8 +331,8 @@ measured. Records, in order:
   `launch` and `appStartup` for a cold launch, `importProgress` while an import runs, and
   `libraryQueries` and `playlistWork` on a perf build (counters since launch, below), and
   `listeners` (subscribers to the playback stores and the sheet at the step's flush: `playback`,
-  `queue`, `queueTracks`, `nowPlaying`), and `jsHeapUsed` (Hermes's used heap in bytes at the
-  flush, when Hermes reports it).
+  `position`, `queue`, `queueTracks`, `nowPlaying`), `jsHeapUsed` (Hermes's used heap in bytes at
+  the flush, when Hermes reports it), and `wakeups` on a screen-off step (above).
 - `memory`, one per scenario: `scenario`, `variant`, the `dumpsys meminfo` fields in KB and its
   object counts (`views`, `viewRoots`, `activities`, `appContexts`, `localBinders`,
   `proxyBinders`, `deathRecipients`). A soak scenario writes six, each with the `iteration` (cycles
@@ -351,6 +386,8 @@ ticket needs evidence, and give a new response mark a scenario step's `expect` i
   player took a queue change;
 - `artist.stats` ("played" or "not played"), on the frame after an artist page's stats block
   shows what it read (again after each re-read);
+- `app.away`, `app.active`, when the app goes to the background and comes back (renders in
+  between count as `away:<name>`);
 - `startup.content`, on the frame after the first app screen in sight showed a Library query's
   result: startup work may go (#315). `startup.started` (`scan`, `imports`, `sync`, `playlists`,
   `downloads`, `lookupSummary`) as each piece of startup work starts;
@@ -383,10 +420,15 @@ copies them to each step as `playlistWork`. `import.progressShown` counts the im
 notification's updates; the runner adds it to `importProgress`.
 
 Render counts are in RootLayout, TabsLayout, LibraryLayout, TabBar, MiniPlayer, NowPlayingSheet,
-PlayerView, UpNextList, UpNextRow, Scrubber, HomeScreen, LibraryScreen, SearchScreen,
-SettingsScreen, LargeTitleScreen (Home's and Library's), SongsList, TrackList, ArtistStatsBlock,
-PlaylistsList, PlaylistScreen and PlaylistImportLine. Gesture calls to JavaScript are counted as
-`js:scrub.*` and `js:upNext.*` (#313).
+PlayerView, UpNextList, UpNextRow, HistoryRow, Scrubber, HomeScreen, LibraryScreen, SearchScreen,
+SettingsScreen, LargeTitleScreen (Home's and Library's), SongsList, PagedSongList, GenreSongList,
+TrackList, ArtistStatsBlock, PlaylistsList, PlaylistScreen and PlaylistImportLine, and in the
+three #712 watches: SongRow (every song row), SyncedLyrics (the lyrics' current line) and
+SleepTimerLabel (the sleep timer's time left). Gesture calls to JavaScript are counted as
+`js:scrub.*` and `js:upNext.*` (#313). Other calls to JavaScript: `js:player.positionReport`,
+`js:player.playbackState`, `js:player.positionDemand.start` and `.stop` (#719), and `js:sync.run`,
+each Wave account sync started (#723). `docs/performance/712-budgets.md` says what each should
+show.
 
 A new scenario goes in `SCENARIOS` (`scripts/perf/scenarios.ts`). Then make the simulated phone in
 `fakeDevice.ts` answer it, so `--dry-run` and the tests cover it.
@@ -452,7 +494,11 @@ Things only a phone can confirm, to check on the first device run:
   `--glass` shows the asked probe in the run's `Glass:` line.
 - `uiautomator dump` finds each target. Labels: the tab labels, `Settings`, `Back`, `Albums`,
   `Songs`, `Artists`, the fixture's artist, `Developer`, `Now playing: …`, `Close Now Playing`,
-  `Queue`, `Next track`, `Import`.
+  `Queue`, `Next track`, `Import`, `Play` (Songs' head and Now Playing's transport), `Lyrics`,
+  `Sleep timer` and its `60 Minutes`. Targets are found anew in each scenario, so one label in two
+  places is fine.
+- The screen-off soaks: adb's shell reads `/proc/<pid>/task/*/status` (the step stops with an error
+  if not), the JS thread is `mqt_v_js`, and `KEYCODE_SLEEP` puts Wave in the background.
 
 ## A ticket's performance doc
 
