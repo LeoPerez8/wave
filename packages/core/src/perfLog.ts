@@ -25,6 +25,14 @@ export const PERF_LOG_TAG = "WavePerf";
  */
 export const PERF_FLUSH_QUIET_MS = 4_000;
 
+/**
+ * What a render counted while the app was away (in the background, the screen
+ * off) is reported under: `away:SongRow`, `away:js:sync.run`. A screen-off
+ * window's flush comes after the app is back, so its own work and the catch-up
+ * on return are told apart by name.
+ */
+export const PERF_AWAY_PREFIX = "away:";
+
 /** One thing a perf build noticed. Times in ms (`performance.now()`). */
 export type PerfEntry =
   | { readonly kind: "mark"; readonly name: string; readonly detail?: string; readonly at: number }
@@ -66,8 +74,13 @@ export interface PerfRecorder {
   mark(name: string, detail?: string): void;
   /** A touch Android timestamped at [eventAt] (the event's native timestamp, ms). */
   touch(eventAt: number): void;
-  /** One render of [component]. */
+  /** One render of [component]; counted under `PERF_AWAY_PREFIX` while the app is away. */
   render(component: string): void;
+  /**
+   * Whether the app is away (in the background) from now on. Coming back counts
+   * as activity, like a touch: no flush for the quiet time after it.
+   */
+  away(away: boolean): void;
   timing(entry: PerfTiming): void;
   /**
    * Whether to flush now: the app hasn't flushed yet, or has something to say,
@@ -107,7 +120,8 @@ export const createPerfRecorder = (options: {
   let renders = new Map<string, number>();
   let dropped = 0;
   let flushes = 0;
-  // A touch or a flush: the quiet time counts from the later of them, or from the start.
+  let prefix = "";
+  // A touch, a return or a flush: the quiet time counts from the latest, or from the start.
   let lastActivity = options.now();
   const now = (): number => round(options.now());
   const add = (entry: PerfEntry): void => {
@@ -128,7 +142,15 @@ export const createPerfRecorder = (options: {
       lastActivity = options.now();
       add({ kind: "touch", eventAt: round(eventAt), at: now() });
     },
-    render: (component) => renders.set(component, (renders.get(component) ?? 0) + 1),
+    render: (component) => {
+      const name = prefix + component;
+      renders.set(name, (renders.get(name) ?? 0) + 1);
+    },
+    away: (away) => {
+      // Coming back counts as activity: the return's catch-up joins the away window's flush.
+      if (!away && prefix !== "") lastActivity = options.now();
+      prefix = away ? PERF_AWAY_PREFIX : "";
+    },
     timing: (entry) => add(entry),
     dueForFlush: () =>
       (flushes === 0 || entries.length > 0 || renders.size > 0) &&
