@@ -1,9 +1,9 @@
 import { useScreenContent } from "@/lib/screenTiming";
-import { LegendList } from "@legendapp/list/react-native";
 import { IconUser } from "@tabler/icons-react-native";
 import {
   artistInitial,
   artistPageItems,
+  discoverTrackId,
   type ArtistPageItem,
   type DiscoverSong,
   type YtArtistPageNote,
@@ -42,12 +42,20 @@ import {
   mixedItemKey,
   type MixedItem,
 } from "@/playback/mixedItems";
-import { albumSelectionOf, trackSelectionOf, ytAlbumSelectionOf } from "@/selection/mixedSelection";
+import { albumSelectionOf, ytAlbumSelectionOf } from "@/selection/mixedSelection";
 import { selectableRow } from "@/selection/selectableRow";
 import { useListSelection, type ListSelection } from "@/selection/useListSelection";
+import { listedTrackItem } from "@/playback/actionTargets";
 import { useThemeColor } from "@/theme/useThemeColor";
 import { useYtArtistPage } from "@/ytmusic/artistPage";
-import { DiscoverSongRow } from "@/ytmusic/DiscoverSongRow";
+import {
+  mixedSongEntry,
+  openMixedSongActions,
+  runMixedSongSwipe,
+  songSelection,
+} from "@/songs/mixedSongs";
+import { SongList } from "@/songs/SongList";
+import { occurrenceKeys } from "@/songs/songRowState";
 import { YT_ARTIST_NOTE, YtReleaseTile } from "@/ytmusic/YtArtistSection";
 import { YT_ARTIST_BY_NAME } from "@/ytmusic/routes";
 
@@ -87,20 +95,8 @@ const pageItems = (shelves: readonly YtArtistShelf<AlbumRow>[], songs: readonly 
     songs,
   );
 
-const itemKey = (item: Item): string => {
-  switch (item.type) {
-    case "section":
-      return `section-${item.label}`;
-    case "shelf":
-      return `shelf-${item.label}`;
-    case "song":
-      return `song-${item.index}-${item.song.song.videoId}`;
-  }
-};
-
 const itemType = (item: Item): Item["type"] => item.type;
-const itemSize = (item: Item): number =>
-  item.type === "section" ? SECTION_HEAD : item.type === "shelf" ? SHELF_ROW : grid.row;
+const slotSize = (item: Item): number => (item.type === "section" ? SECTION_HEAD : SHELF_ROW);
 
 /**
  * A shelf as one row of covers that scrolls sideways: a release the Library
@@ -285,8 +281,25 @@ export default function YtArtistScreen() {
     keyOf: mixedItemKey,
     target: artistSelectionTarget,
   });
-  const songSelection = useMemo(() => trackSelectionOf(selection), [selection]);
+  const rowSelection = useMemo(
+    () =>
+      songSelection(selection, (item: Item): MixedItem | null =>
+        item.type === "song" ? { kind: "track", item: listedTrackItem(item.song) } : null,
+      ),
+    [selection],
+  );
   const items = useMemo(() => (view === null ? [] : pageItems(view.shelves, view.songs)), [view]);
+  // Songs key by id, a real duplicate by its occurrence, never by place.
+  const songKeys = useMemo(() => occurrenceKeys(songs, discoverTrackId), [songs]);
+  const itemKey = useCallback(
+    (item: Item): string =>
+      item.type === "section"
+        ? `section-${item.label}`
+        : item.type === "shelf"
+          ? `shelf-${item.label}`
+          : (songKeys.get(item.song) ?? discoverTrackId(item.song)),
+    [songKeys],
+  );
   const contextId = browseId ?? `name:${knownName ?? ""}`;
   const context = useMemo(() => ({ kind: "ytArtist", id: contextId }) as const, [contextId]);
   const play = useCallback(
@@ -328,41 +341,41 @@ export default function YtArtistScreen() {
     [bottomInset],
   );
 
-  const renderItem = useCallback(
+  const renderSlot = useCallback(
     ({ item }: { item: Item }) => {
-      switch (item.type) {
-        case "section":
-          return <SectionHead label={item.label} />;
-        case "shelf":
-          // Keyed by shelf, so a recycled row doesn't keep another shelf's scroll position.
-          return <ReleaseRow key={item.label} covers={item.covers} selection={selection} />;
-        case "song":
-          return (
-            <DiscoverSongRow
-              song={item.song}
-              selection={songSelection}
-              onPress={() => play(item.index)}
-            />
-          );
-      }
+      if (item.type === "section") return <SectionHead label={item.label} />;
+      // Keyed by shelf, so a recycled row doesn't keep another shelf's scroll position.
+      if (item.type === "shelf")
+        return <ReleaseRow key={item.label} covers={item.covers} selection={selection} />;
+      return null;
     },
-    [play, selection, songSelection],
+    [selection],
   );
 
   return (
     <View className="flex-1 bg-background">
       <ScreenHeader />
-      <LegendList
+      <SongList
         scrollEnabled={scrollable}
         className="flex-1"
         data={items}
         keyExtractor={itemKey}
-        renderItem={renderItem}
+        song={(item) => (item.type === "song" ? mixedSongEntry(item.song) : null)}
+        context={context}
+        renderSlot={renderSlot}
+        slotType={itemType}
+        slotSize={slotSize}
         extraData={selection.selection}
-        getItemType={itemType}
-        getFixedItemSize={itemSize}
-        estimatedItemSize={grid.row}
-        recycleItems
+        selection={rowSelection}
+        onPlay={(item) => {
+          if (item.type === "song") play(item.index);
+        }}
+        onMenu={(item, options) => {
+          if (item.type === "song") openMixedSongActions(item.song, options);
+        }}
+        onSongSwipe={(item, side) => {
+          if (item.type === "song") runMixedSongSwipe(item.song, side);
+        }}
         contentContainerStyle={contentStyle}
         ListHeaderComponent={header}
         ListFooterComponent={footer}

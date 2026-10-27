@@ -24,7 +24,6 @@ import { TrackSkeletons } from "@/catalog/Skeletons";
 import { Press } from "@/motion/Press";
 import { playPage, playSongs } from "@/playback/actions";
 
-import { openTrackActions } from "@/playback/ActionsMenu";
 import { followArtistLink } from "@/library/ArtistChoice";
 import { DetailFrame } from "@/library/DetailFrame";
 
@@ -37,8 +36,13 @@ import { usePlayPage } from "@/playback/hooks";
 import { useChromeInset } from "@/chrome/chrome";
 import { SongList } from "@/songs/SongList";
 import { librarySongEntry, type SongListEntry } from "@/songs/songListSources";
-import { runTrackSwipe } from "@/playback/rowSwipe";
-import { runYtSongSwipe } from "@/ytmusic/YtSongActions";
+import {
+  mixedSongEntry,
+  openMixedSongActions,
+  runMixedSongSwipe,
+  songSelection,
+  type ListedSong,
+} from "@/songs/mixedSongs";
 import { useListScrollable } from "@/motion/heldTouch";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 import {
@@ -53,8 +57,6 @@ import { albumJoinedItems } from "@/ytmusic/albumOpening";
 import { useYtAlbumSection } from "@/ytmusic/albumSection";
 import { YtLookupFooter } from "@/ytmusic/YtLookupFooter";
 import { listDownloadAction, useYtAlbumDownloadButton } from "@/ytmusic/YtSongList";
-
-import { openYtSongActions } from "@/ytmusic/YtSongActions";
 
 type Entry = YtAlbumEntry<NativeYtSong, SongRow>;
 
@@ -87,6 +89,14 @@ interface Shown {
 }
 
 const NO_TRACKS: readonly AlbumTrackRow[] = [];
+
+/** A track or a joined entry as the mixed song it is; a disc head is none. */
+const listedOf = (item: Item): ListedSong | null =>
+  item.type === "disc"
+    ? null
+    : item.type === "track"
+      ? { source: "library", track: item.track }
+      : item.entry;
 const NO_SONGS: readonly NativeYtSong[] = [];
 
 const itemKey = (item: Item): string => {
@@ -276,17 +286,18 @@ function AlbumTracks({ shown, openedIntegrated }: { shown: Shown; openedIntegrat
       return librarySongEntry(item.track, {
         leading: { kind: "trackNumber", number: item.track.trackNumber ?? undefined },
       });
-    const leading = { kind: "trackNumber" as const, number: item.entry.number ?? undefined };
-    return item.entry.source === "library"
-      ? librarySongEntry(item.entry.track, { leading })
-      : { source: { kind: "ytMusic", song: item.entry.song }, state: { leading } };
+    return mixedSongEntry(item.entry, {
+      leading: { kind: "trackNumber", number: item.entry.number ?? undefined },
+    });
   }, []);
-  const trackOf = (item: Item): TrackItem | null =>
-    item.type === "disc"
-      ? null
-      : item.type === "track"
-        ? { song: item.track }
-        : listedTrackItem(item.entry);
+  const rowSelection = useMemo(
+    () =>
+      songSelection(listSelection, (item: Item) => {
+        const song = listedOf(item);
+        return song === null ? null : listedTrackItem(song);
+      }),
+    [listSelection],
+  );
 
   return (
     <SongList
@@ -296,36 +307,18 @@ function AlbumTracks({ shown, openedIntegrated }: { shown: Shown; openedIntegrat
       keyExtractor={itemKey}
       song={source}
       context={context}
-      selection={{
-        selecting: listSelection.selecting,
-        isChecked: (item) => {
-          const track = trackOf(item);
-          return track !== null && listSelection.isChecked(track);
-        },
-        toggle: (item) => {
-          const track = trackOf(item);
-          if (track !== null) listSelection.toggle(track);
-        },
-        start: (item) => {
-          const track = trackOf(item);
-          if (track !== null) listSelection.start(track);
-        },
-      }}
+      selection={rowSelection}
       onPlay={(item) => {
         if (item.type === "track") playSongs(tracks, item.index, context);
         else if (item.type === "entry" && mixed !== null) void playPage(mixed, item.index, context);
       }}
       onMenu={(item, options) => {
-        const track = trackOf(item);
-        if (track === null) return;
-        if ("song" in track) openTrackActions(track.song, options);
-        else if ("ytSong" in track) openYtSongActions(track.ytSong, options);
+        const song = listedOf(item);
+        if (song !== null) openMixedSongActions(song, options);
       }}
       onSongSwipe={(item, side) => {
-        const track = trackOf(item);
-        if (track === null) return;
-        if ("song" in track) runTrackSwipe({ kind: "track", items: [track] }, side);
-        else if ("ytSong" in track) runYtSongSwipe(track.ytSong, side);
+        const song = listedOf(item);
+        if (song !== null) runMixedSongSwipe(song, side);
       }}
       contentContainerStyle={{ paddingHorizontal: grid.margin, paddingBottom: bottomInset }}
       ListHeaderComponent={

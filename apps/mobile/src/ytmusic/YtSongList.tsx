@@ -1,4 +1,4 @@
-import { LegendList, type LegendListRef } from "@legendapp/list/react-native";
+import type { LegendListRef } from "@legendapp/list/react-native";
 import {
   IconCircleCheck,
   IconCloudOff,
@@ -60,10 +60,17 @@ import { showToast } from "@/overlay/toast";
 import { playDiscoverSongs } from "@/playback/actions";
 import { listedTrackItem, trackItemKey, tracksTarget } from "@/playback/actionTargets";
 import { useListSelection } from "@/selection/useListSelection";
+import {
+  mixedSongEntry,
+  openMixedSongActions,
+  runMixedSongSwipe,
+  songSelection,
+} from "@/songs/mixedSongs";
+import { SongList } from "@/songs/SongList";
+import { occurrenceKeys } from "@/songs/songRowState";
 
 import { artistOpeningRequest } from "./artistOpeningRequest";
 import { askYtMusic } from "./askYtMusic";
-import { DiscoverSongRow } from "./DiscoverSongRow";
 import { useLibraryFinder, useLoadedInLibrary, useLoadedLibraryFinder } from "./libraryFinder";
 import type { YtListHead, YtListScreen } from "./routes";
 import {
@@ -404,8 +411,6 @@ function Head({
 /** Skeleton rows for a page's songs while it loads: enough to fill the screen under the head. */
 const PAGE_SKELETON_ROWS = 6;
 
-const keyOf = (song: Song, index: number): string => `${index}-${discoverTrackId(song)}`;
-
 /**
  * A YT Music album, playlist or Discover mix: its cover, title, maker
  * and furniture, Play / Shuffle, then its songs. Songs the Library has play
@@ -477,7 +482,22 @@ export function YtSongList({
   );
   const list = useRef<LegendListRef>(null);
   const findInList = useFindInLegendList(list, songs, entryText, findable);
-  const { shown, placeOf } = findInList;
+  const { shown } = findInList;
+  // Rows key by song, a real duplicate by its occurrence: a playlist filling in keeps its keys.
+  const keys = useMemo(() => occurrenceKeys(songs, discoverTrackId), [songs]);
+  const keyOf = useCallback((song: Song) => keys.get(song) ?? discoverTrackId(song), [keys]);
+  const places = useMemo(() => new Map(songs.map((song, index) => [song, index])), [songs]);
+  const source = useCallback(
+    (song: Song) =>
+      mixedSongEntry(
+        song,
+        numbered
+          ? { leading: { kind: "trackNumber", number: (places.get(song) ?? 0) + 1 } }
+          : undefined,
+      ),
+    [numbered, places],
+  );
+  const rowSelection = useMemo(() => songSelection(selection, listedTrackItem), [selection]);
   const head = page?.head ?? known;
   const loading = load.status === "loading";
   // More of a playlist's pages on their way.
@@ -489,19 +509,6 @@ export function YtSongList({
       : [page.kind, songCount(songs.length), totalMinutes(songs)]
           .filter((part) => part !== null)
           .join(" · ");
-
-  const renderItem = useCallback(
-    ({ item, index }: { item: Song; index: number }) => (
-      <DiscoverSongRow
-        song={item}
-        selection={selection}
-        trackNumber={numbered ? placeOf(index) + 1 : undefined}
-        // A found song plays the whole playlist from its own place in it.
-        onPress={() => play(placeOf(index))}
-      />
-    ),
-    [numbered, play, selection, placeOf],
-  );
 
   const pageHead = (
     <>
@@ -535,7 +542,7 @@ export function YtSongList({
   return (
     <View className="flex-1 bg-background">
       <ScreenHeader />
-      <LegendList
+      <SongList
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
         scrollEnabled={scrollable}
@@ -543,11 +550,13 @@ export function YtSongList({
         className="flex-1"
         data={shown}
         keyExtractor={keyOf}
-        renderItem={renderItem}
-        extraData={selection.selection}
-        getFixedItemSize={() => grid.row}
-        estimatedItemSize={grid.row}
-        recycleItems
+        song={source}
+        context={context}
+        selection={rowSelection}
+        // A found song plays the whole playlist from its own place in it.
+        onPlay={(song) => play(places.get(song))}
+        onMenu={openMixedSongActions}
+        onSongSwipe={(song, side) => runMixedSongSwipe(song, side)}
         contentContainerStyle={{
           paddingHorizontal: grid.margin,
           paddingBottom: bottomInset,

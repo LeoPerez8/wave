@@ -27,7 +27,7 @@ import {
 import { useChromeInset } from "@/chrome/chrome";
 import { playPage } from "@/playback/actions";
 
-import { openAlbumActions, openTrackActions } from "@/playback/ActionsMenu";
+import { openAlbumActions } from "@/playback/ActionsMenu";
 import { mixedTarget, type MixedItem } from "@/playback/actionTargets";
 import {
   albumItem,
@@ -47,9 +47,13 @@ import { SongSortButton } from "@/library/SongSortButton";
 import { useSortedSongs } from "@/library/songSort";
 import { ListIntro, songCount } from "@/library/TrackList";
 import { SongList } from "@/songs/SongList";
-import { librarySongEntry, type SongListEntry } from "@/songs/songListSources";
-import { runTrackSwipe } from "@/playback/rowSwipe";
-import { runYtSongSwipe } from "@/ytmusic/YtSongActions";
+import type { SongListEntry } from "@/songs/songListSources";
+import {
+  mixedSongEntry,
+  openMixedSongActions,
+  runMixedSongSwipe,
+  songSelection,
+} from "@/songs/mixedSongs";
 import { useListScrollable } from "@/motion/heldTouch";
 import { selectableRow } from "@/selection/selectableRow";
 import { useListSelection, type ListSelection } from "@/selection/useListSelection";
@@ -59,8 +63,6 @@ import { useArtistSongsFinder, useYtArtistSection } from "@/ytmusic/artistSectio
 import { useHeldSongs, useSongsInPlace } from "@/ytmusic/songsInPlace";
 import { YT_ARTIST_NOTE, YtReleaseCard } from "@/ytmusic/YtArtistSection";
 import { YtLookupFooter } from "@/ytmusic/YtLookupFooter";
-
-import { openYtSongActions } from "@/ytmusic/YtSongActions";
 
 /** A cover on one of the page's album shelves: a Library album, or a release only YouTube Music has. */
 type AlbumCell =
@@ -364,6 +366,7 @@ function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegr
   const page = useListSelection({ items: selectable, keyOf: mixedItemKey, target: mixedTarget });
   const albumSelection = useMemo(() => albumSelectionOf(page), [page]);
   const releaseSelection = useMemo(() => ytAlbumSelectionOf(page), [page]);
+  const rowSelection = useMemo(() => songSelection(page, selectedSong), [page]);
   const context = useMemo(
     () => ({ kind: "artist", id: String(detail.artist.id) }) as const,
     [detail.artist.id],
@@ -381,10 +384,7 @@ function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegr
           : rank === undefined
             ? { kind: "playDisc" as const }
             : { kind: "rank" as const, number: rank };
-      const state = { leading, kindLine: true };
-      return item.song.source === "library"
-        ? librarySongEntry(item.song.track, state)
-        : { source: { kind: "ytMusic", song: item.song.song }, state };
+      return mixedSongEntry(item.song, { leading, kindLine: true });
     },
     [byPopularity],
   );
@@ -429,34 +429,15 @@ function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegr
       slotType={(item) => item.type}
       slotSize={(item) => (item.type === "section" ? SECTION_HEAD : shelfHeight)}
       extraData={{ albumSelection, releaseSelection, integrated, shelfHeight }}
-      selection={{
-        selecting: page.selecting,
-        isChecked: (item) => {
-          const track = selectedSong(item);
-          return track !== null && page.isChecked(track);
-        },
-        toggle: (item) => {
-          const track = selectedSong(item);
-          if (track !== null) page.toggle(track);
-        },
-        start: (item) => {
-          const track = selectedSong(item);
-          if (track !== null) page.start(track);
-        },
-      }}
+      selection={rowSelection}
       onPlay={(item) => {
         if (item.type === "song") void playPage(pageSongs, item.index, context);
       }}
       onMenu={(item, options) => {
-        if (item.type !== "song") return;
-        if (item.song.source === "library") openTrackActions(item.song.track, options);
-        else openYtSongActions(item.song.song, options);
+        if (item.type === "song") openMixedSongActions(item.song, options);
       }}
       onSongSwipe={(item, side) => {
-        if (item.type !== "song") return;
-        if (item.song.source === "library")
-          runTrackSwipe({ kind: "track", items: [{ song: item.song.track }] }, side);
-        else runYtSongSwipe(item.song.song, side);
+        if (item.type === "song") runMixedSongSwipe(item.song, side);
       }}
       contentContainerStyle={{ paddingHorizontal: grid.margin, paddingBottom: bottomInset }}
       ListHeaderComponent={
