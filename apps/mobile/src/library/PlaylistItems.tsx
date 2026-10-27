@@ -17,6 +17,7 @@ import { GestureDetector } from "react-native-gesture-handler";
 import Animated, { useAnimatedReaction, useSharedValue } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
 
+import { usePositions } from "@/lib/usePositions";
 import { CELL, grid } from "@/catalog/grid";
 import { ROW, useDraggedRow, useRowDrag, type DragRows } from "@/catalog/rowDrag";
 import { useChromeInset } from "@/chrome/chrome";
@@ -244,7 +245,7 @@ export function PlaylistItems({ playlistId, items, header, empty }: Props) {
   useLayoutEffect(() => {
     orderRef.current = order;
   });
-  const places = useMemo(() => new Map(order.map((item, index) => [item, index])), [order]);
+  const places = usePositions(order);
 
   const reorder = (fromIndex: number, toIndex: number): boolean => {
     // A narrowed list has no places to move to.

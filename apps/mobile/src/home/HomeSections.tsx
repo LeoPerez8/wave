@@ -1,7 +1,8 @@
+import { usePositions } from "@/lib/usePositions";
 import type { PlayedAlbum, PlayedArtist } from "@/library/db/playedEntities";
 import { PlayedAlbumCard, PlayedArtistCard } from "@/stats/PlayedEntityViews";
 import { discoverTrackId, type QueueContext } from "@wave/core";
-import { useCallback, useMemo } from "react";
+import { useCallback } from "react";
 
 import { COVER_ROW_TILE, CoverRow } from "@/catalog/CoverRow";
 import { runTrackSwipe } from "@/playback/rowSwipe";
@@ -58,7 +59,7 @@ export function SongRows<A extends SongRow>({
   /** On a ranking by plays (Most Played), each song's counted plays, shown in place of its length. */
   plays?: (song: A) => number;
 }) {
-  const places = useMemo(() => new Map(songs.map((song, index) => [song, index])), [songs]);
+  const places = usePositions(songs);
   const source = useCallback(
     (song: A) => librarySongEntry(song, { ...SONG_CARD, countedPlays: plays?.(song) }),
     [plays],
@@ -92,7 +93,7 @@ export function MostPlayedRows({
   rows: readonly MostPlayedRow[];
   context: QueueContext;
 }) {
-  const places = useMemo(() => new Map(rows.map((row, index) => [row, index])), [rows]);
+  const places = usePositions(rows);
   return (
     <SongPreview
       data={rows}

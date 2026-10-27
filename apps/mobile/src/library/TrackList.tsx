@@ -11,6 +11,7 @@ import {
 import { useCallback, useMemo, useRef, type ReactElement, type ReactNode } from "react";
 import { View } from "react-native";
 
+import { usePositions } from "@/lib/usePositions";
 import { CatalogLine } from "@/catalog/CatalogLine";
 import { CELL, grid } from "@/catalog/grid";
 import { PlayShuffle, type LineToggle } from "@/catalog/PlayShuffle";
@@ -118,6 +119,7 @@ export function ListIntroLayout({
 const NO_KEYS: readonly string[] = [];
 
 const keyExtractor = (song: SongRow): string => String(song.id);
+const songId = (song: SongRow): number => song.id;
 
 /** The actions in selection mode act on the checked songs. */
 const tracksOf = (songs: readonly SongRow[]): ActionItems => ({
@@ -187,7 +189,7 @@ export function TrackList({
       }),
     [songCards],
   );
-  const positions = useMemo(() => new Map(songs.map((song, index) => [song.id, index])), [songs]);
+  const positions = usePositions(songs, songId);
 
   return (
     <View className="flex-1">

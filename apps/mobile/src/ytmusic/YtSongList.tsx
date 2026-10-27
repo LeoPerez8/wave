@@ -31,6 +31,7 @@ import * as Result from "effect/Result";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Text, useWindowDimensions, View } from "react-native";
 
+import { usePositions } from "@/lib/usePositions";
 import { Artwork } from "@/catalog/Artwork";
 import { CELL, grid } from "@/catalog/grid";
 import { PlayShuffle, type LastListAction } from "@/catalog/PlayShuffle";
@@ -486,7 +487,7 @@ export function YtSongList({
   // Rows key by song, a real duplicate by its occurrence: a playlist filling in keeps its keys.
   const keys = useMemo(() => occurrenceKeys(songs, discoverTrackId), [songs]);
   const keyOf = useCallback((song: Song) => keys.get(song) ?? discoverTrackId(song), [keys]);
-  const places = useMemo(() => new Map(songs.map((song, index) => [song, index])), [songs]);
+  const places = usePositions(songs);
   const source = useCallback(
     (song: Song) =>
       mixedSongEntry(

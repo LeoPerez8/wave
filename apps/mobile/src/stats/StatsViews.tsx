@@ -1,3 +1,4 @@
+import { usePositions } from "@/lib/usePositions";
 import type { PlayedAlbum, PlayedArtist } from "@/library/db/playedEntities";
 import { PlayedAlbumRow, PlayedArtistRow } from "./PlayedEntityViews";
 import { IconChartBar } from "@tabler/icons-react-native";
@@ -90,7 +91,7 @@ const rankedSongKey = (entry: Ranked<StatsSong>): string => discoverTrackId(entr
 /** A ranking's rows, rank and play order, for a preview or its See all. */
 const useRankedSongRows = (ranking: readonly Ranked<StatsSong>[], context: QueueContext) => {
   const songs = useMemo(() => ranking.map((entry) => entry.item), [ranking]);
-  const places = useMemo(() => new Map(ranking.map((entry, index) => [entry, index])), [ranking]);
+  const places = usePositions(ranking);
   const song = useCallback(
     (entry: Ranked<StatsSong>) => rankedSongEntry(entry, (places.get(entry) ?? 0) + 1),
     [places],
