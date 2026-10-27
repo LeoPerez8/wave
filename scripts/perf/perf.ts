@@ -42,6 +42,7 @@ import {
   formatFrameParts,
   formatPhases,
   formatSummary,
+  formatWakeups,
   summarize,
 } from "./metrics.ts";
 import { compareMemory, formatGrowth, formatMemoryComparison, memoryGrowth } from "./memory.ts";
@@ -545,6 +546,9 @@ const printSummary = (results: Results): void => {
   console.log(`\nWhere the kept frames' time went (mean / p90 ms):\n\n${formatFrameParts(rows)}`);
   const phases = formatPhases(rows);
   if (phases !== "") console.log(`\n${phases}`);
+  const wakeups = formatWakeups(rows);
+  if (wakeups !== "")
+    console.log(`\nWake-ups with the screen off (median / p90 per minute):\n\n${wakeups}`);
   for (const [measure, label] of [
     ["cold", "Cold launch"],
     ["warm", "Warm launch"],

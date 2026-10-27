@@ -108,6 +108,19 @@ export class FakeDevice implements Device {
   private savedRules: Set<string>;
   private skipFile = false;
   private compilation = { status: "speed-profile", reason: "install-dm" };
+  /** The songs in the queue: the fixture's, until Songs' Play queues the whole Library. */
+  queueLength = 2_000;
+  playing = false;
+  screenOn = true;
+  /** What Now Playing shows: the player, or its lyrics. */
+  nowPlayingView: "player" | "lyrics" = "player";
+  /** The running sleep timer's menu entry, if any. */
+  sleepTimer: string | null = null;
+  private sleepMenu = false;
+  /** The JS thread's voluntary context switches since the launch: how often it woke. */
+  private jsSwitches = 0;
+  /** When the screen went off, while it is. */
+  private offSince: number | null = null;
 
   constructor(options: FakeDeviceOptions = {}) {
     this.perfBuild = options.perfBuild ?? true;
@@ -151,8 +164,21 @@ export class FakeDevice implements Device {
     this.clock = until;
   }
 
-  /** What the app does on its own: the perf build's flush check. */
+  /**
+   * What the app does on its own: the perf build's flush check, which wakes the
+   * JS thread every 500 ms while the app is in front and stops while it is away.
+   * With the screen off and music playing, the simulated app's JS thread wakes
+   * twice a minute, for a playback event.
+   */
   private tick(): void {
+    if (this.offSince !== null) {
+      if (this.playing && (this.clock - this.offSince) % 30_000 < 500) {
+        this.jsSwitches++;
+        this.recorder?.render("js:player.playbackState");
+      }
+      return;
+    }
+    if (this.running) this.jsSwitches++;
     if (this.recorder?.dueForFlush() !== true) return;
     const meta = {
       perfBuild: true,
@@ -231,7 +257,10 @@ export class FakeDevice implements Device {
       for (const rule of APK_BASELINE) this.savedRules.add(rule);
     this.routes = ["/"];
     this.visited = new Set(["Home"]);
-    this.nowPlaying = this.queue = this.keyboard = this.importCard = false;
+    this.nowPlaying = this.queue = this.keyboard = this.importCard = this.sleepMenu = false;
+    this.nowPlayingView = "player";
+    this.sleepTimer = null;
+    this.jsSwitches = 0;
     this.searchQuery = "";
     this.frames = [];
     this.framesSinceReset = 0;
@@ -347,10 +376,27 @@ export class FakeDevice implements Device {
       this.recorder?.render("UpNextList");
       this.advance(90);
       if (this.queue) this.respond("visible", "queue");
+    } else if (label === "Play" || label === "Pause") {
+      this.playing = label === "Play";
+      // Songs' Play queues the whole Library.
+      if (this.route === "/library/songs" && !this.nowPlaying) this.queueLength = 12_345;
+      this.render(this.clock, 4);
+    } else if (label === "Lyrics") {
+      this.nowPlayingView = "lyrics";
+      this.recorder?.render("SyncedLyrics");
+      this.render(this.clock, 20);
+    } else if (label === "Sleep timer") {
+      this.sleepMenu = true;
+      this.render(this.clock, 12);
+    } else if (label === "60 Minutes") {
+      this.sleepMenu = false;
+      this.sleepTimer = label;
+      this.recorder?.render("SleepTimerLabel");
+      this.render(this.clock, 12);
     } else if (label === "Next track") {
       this.render(this.clock, 12);
       this.advance(30);
-      this.respond("queue.synced", "seek 2000");
+      this.respond("queue.synced", `seek ${this.queueLength}`);
     } else if (label === "Import") {
       this.importCard = false;
       this.importing = true;
@@ -418,9 +464,14 @@ export class FakeDevice implements Device {
   private nodes(): Node[] {
     if (!this.running) return [];
     if (this.importCard) return [{ text: "Import", bounds: [900, 2400, 1300, 2520] }];
+    if (this.nowPlaying && this.sleepMenu)
+      return [{ text: "60 Minutes", desc: "60 Minutes", bounds: [800, 1800, 1300, 1900] }];
     if (this.nowPlaying)
       return [
         { desc: "Close Now Playing", bounds: [640, 120, 800, 260] },
+        { desc: this.playing ? "Pause" : "Play", bounds: [640, 2500, 800, 2640] },
+        { desc: "Lyrics", bounds: [100, 2800, 240, 2940] },
+        { desc: "Sleep timer", bounds: [400, 2800, 540, 2940] },
         ...(this.queue
           ? [{ desc: "Remove Airbag from Up Next", bounds: [1128, 828, 1272, 972] } as Node]
           : [{ desc: "Playback position", bounds: [96, 2200, 1344, 2296] } as Node]),
@@ -438,6 +489,12 @@ export class FakeDevice implements Device {
           : []),
         ...(route === "/library/playlists"
           ? [{ text: this.playlist, bounds: [80, 700, 900, 800] } as Node]
+          : []),
+        ...(route === "/library/songs"
+          ? [
+              { desc: "Play", bounds: [80, 500, 400, 600] } as Node,
+              { desc: "Next track", bounds: [1260, 2720, 1380, 2840] } as Node,
+            ]
           : []),
       ];
     const tabs = this.tabs.map((label, i): Node => ({
@@ -549,7 +606,35 @@ export class FakeDevice implements Device {
   }
 
   private readonly answers: readonly [RegExp, (match: RegExpExecArray) => string][] = [
-    [/^input keyevent KEYCODE_WAKEUP$/, () => ""],
+    [
+      /^input keyevent KEYCODE_WAKEUP$/,
+      () => {
+        if (this.offSince !== null) {
+          this.offSince = null;
+          this.recorder?.away(false);
+          this.render(this.clock + 20, 30);
+        }
+        this.screenOn = true;
+        return "";
+      },
+    ],
+    [
+      /^input keyevent KEYCODE_SLEEP$/,
+      () => {
+        this.screenOn = false;
+        this.offSince = this.clock;
+        this.recorder?.away(true);
+        return "";
+      },
+    ],
+    [/^wm dismiss-keyguard$/, () => ""],
+    [
+      /^p=\$\(pidof \S+\) && for t in \/proc\/\$p\/task\/\*; do /,
+      () =>
+        this.running
+          ? `4242 ${2 * this.jsSwitches + 100} dev.leoperez.wave\n4300 ${this.jsSwitches} mqt_v_js\n4310 ${this.frames.length} RenderThread\n4320 7 AsyncTask #1\n`
+          : "",
+    ],
     [
       /^cmd package compile -m (\S+) -f \S+$/,
       (match) => {
@@ -601,7 +686,8 @@ export class FakeDevice implements Device {
       () => {
         // A killed app loses what ART hadn't saved yet.
         this.pendingRules.clear();
-        this.running = false;
+        this.running = this.playing = false;
+        this.offSince = null;
         this.recorder = null;
         return "";
       },

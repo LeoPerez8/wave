@@ -93,10 +93,15 @@ describe("runPerf on the simulated phone", () => {
       "queue/idle/close",
       "queue-first/idle/open",
       "skip/idle/next",
+      "skip-library/idle/next",
       "scrub/idle/forward",
       "scrub/idle/back",
       "queue-drag/idle/down",
       "queue-drag/idle/up",
+      "scroll-playlist/idle/fling-up",
+      "scroll-playlist/idle/fling-down",
+      "scroll-queue/idle/fling-up",
+      "scroll-queue/idle/fling-down",
       "search-first-tap/idle/first-tap",
       "search-typing/idle/type",
     ]);
@@ -106,9 +111,12 @@ describe("runPerf on the simulated phone", () => {
       assert.equal(step.expectMissing, false, `${step.scenario} ${step.measure} lost its mark`);
       assert.ok((step.responseMs ?? -1) > 0, `${step.scenario} ${step.measure} has no response`);
     }
-    // Launches have no touch to count a first frame from.
+    // Launches have no touch to count a first frame from. A fling renders more frames than
+    // gfxinfo keeps, so its first frame stays empty.
     const launches = new Set(["startup", "warm-start"]);
-    for (const step of steps.filter((measured) => !launches.has(measured.scenario))) {
+    for (const step of steps.filter(
+      (measured) => !launches.has(measured.scenario) && !measured.measure.startsWith("fling"),
+    )) {
       assert.ok(step.firstFrameMs !== null, `${step.scenario} ${step.measure} has no first frame`);
       assert.ok(step.frames.total > 0);
     }
@@ -418,6 +426,91 @@ describe("runPerf on the simulated phone", () => {
       assert.equal(step.responseMs, null);
       assert.ok(step.burstMs !== null);
     }
+  });
+
+  it("flings a playlist and the Queue in every baseline (#712)", async () => {
+    const device = new FakeDevice();
+    const { out } = await runPerf(
+      device,
+      options("scroll", { scenarios: ["scroll-playlist", "scroll-queue"] }),
+    );
+    const { steps, errors } = readResults(readFileSync(out, "utf8"));
+    assert.deepEqual(errors, []);
+    assert.deepEqual(
+      summarize(steps).map((row) => row.key),
+      [
+        "scroll-playlist/idle/fling-up",
+        "scroll-playlist/idle/fling-down",
+        "scroll-queue/idle/fling-up",
+        "scroll-queue/idle/fling-down",
+      ],
+    );
+    for (const step of steps) {
+      assert.ok(step.touchAt !== null, "a fling is measured from its touch");
+      assert.ok(step.frames.total > 120);
+    }
+    assert.ok(ALL_SCENARIOS.includes("scroll-playlist"));
+    assert.ok(ALL_SCENARIOS.includes("scroll-queue"));
+  });
+
+  it("skips through the whole Library played as the queue (#712)", async () => {
+    const device = new FakeDevice();
+    const { out } = await runPerf(device, options("skip-library", { scenarios: ["skip-library"] }));
+    const { steps, errors } = readResults(readFileSync(out, "utf8"));
+    assert.deepEqual(errors, []);
+    assert.deepEqual(
+      summarize(steps).map((row) => row.key),
+      ["skip-library/idle/next"],
+    );
+    for (const step of steps) assert.equal(step.expectMissing, false);
+    assert.equal(device.queueLength, 12_345, "Songs' Play queues the whole Library");
+  });
+
+  it("finds each scenario's targets anew, as one label can sit in different places (Songs' and Now Playing's Play)", async () => {
+    const device = new FakeDevice();
+    await runPerf(device, options("targets", { scenarios: ["skip-library", "screen-off"] }));
+    const taps = device.commands.filter((command) => command.startsWith("input tap"));
+    // Songs' Play, in the list's head, then the transport's Play in Now Playing.
+    assert.ok(taps.includes("input tap 240 550"));
+    assert.ok(taps.includes("input tap 720 2570"));
+    assert.equal(device.playing, true);
+  });
+
+  it("counts JS wake-ups per minute with the screen off and music playing, apart from the return (#712)", async () => {
+    const device = new FakeDevice();
+    const { out } = await runPerf(
+      device,
+      options("screen-off", { scenarios: ["screen-off", "screen-off-lyrics"] }),
+    );
+    const { steps, errors } = readResults(readFileSync(out, "utf8"));
+    assert.deepEqual(errors, []);
+    assert.deepEqual(
+      summarize(steps).map((row) => row.key),
+      ["screen-off/idle/screen-off", "screen-off-lyrics/idle/screen-off"],
+    );
+    for (const step of steps) {
+      const wakeups = step.wakeups;
+      assert.ok(wakeups !== undefined && wakeups !== null);
+      assert.equal(wakeups.minutes, 5);
+      assert.equal(wakeups.jsThread, "mqt_v_js");
+      // The simulated app wakes its JS thread about twice a minute with the screen off. The
+      // perf build's flush check (120 a minute) stays stopped while it is away.
+      const js = wakeups.jsPerMinute ?? 0;
+      assert.ok(js >= 2 && js < 3, `JS woke ${js} times a minute`);
+      assert.ok(wakeups.processPerMinute >= js);
+      // What rendered while away is reported apart from the catch-up on return.
+      assert.ok((step.renders["away:js:player.playbackState"] ?? 0) > 0);
+    }
+    assert.ok(device.playing, "the soak plays music");
+    // The second soak leaves Now Playing open on its lyrics, with an hour's sleep timer.
+    assert.equal(device.nowPlayingView, "lyrics");
+    assert.equal(device.sleepTimer, "60 Minutes");
+    // Every window ends with the screen back on, so the next step and the run can go on.
+    const sleeps = device.commands.filter((command) => command === "input keyevent KEYCODE_SLEEP");
+    assert.equal(sleeps.length, 2 * 3, "one per iteration, warm-up included");
+    assert.equal(device.screenOn, true);
+    assert.equal(ALL_SCENARIOS.includes("screen-off"), false);
+    assert.equal(ALL_SCENARIOS.includes("screen-off-lyrics"), false);
   });
 
   it("measures flings under the glass and an idle screen (the glass scenarios)", async () => {

@@ -12,6 +12,7 @@ import {
   parsePackage,
   parseRefreshRate,
   parseThermalStatus,
+  parseThreadSwitches,
   parseWmSize,
 } from "./device.ts";
 
@@ -374,5 +375,25 @@ describe("findNode", () => {
 
   it("finds nothing when nothing matches", () => {
     assert.equal(findNode(xml, { desc: "Queue" }), null);
+  });
+});
+
+describe("parseThreadSwitches", () => {
+  it("reads each thread's voluntary context switches, names with spaces kept whole", () => {
+    const threads = parseThreadSwitches(
+      "4242 812 dev.leoperez.wave\n4300 15022 mqt_v_js\n4311 40 AsyncTask #1\n\nnoise\n",
+    );
+    assert.deepEqual(
+      [...threads],
+      [
+        ["4242", { name: "dev.leoperez.wave", switches: 812 }],
+        ["4300", { name: "mqt_v_js", switches: 15_022 }],
+        ["4311", { name: "AsyncTask #1", switches: 40 }],
+      ],
+    );
+  });
+
+  it("is empty when the app isn't running", () => {
+    assert.equal(parseThreadSwitches("").size, 0);
   });
 });
