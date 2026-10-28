@@ -21,6 +21,7 @@ import {
   parseMagicSession,
   sliderStepLabel,
   startMagicQueue as startSession,
+  startStreamedMagicQueue as startStreamedSession,
   wantsMagicBatch,
   type MagicBatchOutcome,
   type MagicSeed,
@@ -55,7 +56,7 @@ import { onPlayEnded } from "./PlayHistory";
 import { Queue, queueState, toQueueTrack, type QueueTrack } from "./Queue";
 import { toYtQueueTrack } from "./queueTracks";
 import { latestTasteProfile, tasteProfileForRecommendation } from "./TasteProfile";
-import { cacheYtCoversInBackground } from "./ytQueueTracks";
+import { cacheYtCoversInBackground, ytQueueTrack } from "./ytQueueTracks";
 
 /**
  * The Magic Queue (docs/spec.md, Magic Queue): Core's engine picks the songs
@@ -265,6 +266,38 @@ export const startMagicQueue = (
     const first = playable.find((song) => String(song.id) === started?.first);
     if (started === null || first === undefined) return;
     startingLibrary = { songs: playable, artists };
+    yield* begin(started.session, startedAt, toQueueTrack(first));
+  });
+
+/**
+ * Starts a Magic Queue from a streamed YT Music [song] (its long-press menu
+ * in Search, a YT Music list, a Discover mix or the queue): as a Library
+ * song's does, it replaces the queue (with Undo) with the song, and the
+ * first 9 recommendations follow from its radio (Core's
+ * `startStreamedMagicQueue`).
+ */
+export const startStreamedMagicQueue = (song: YtSong) =>
+  Effect.gen(function* () {
+    if (!ytMusicEnabled()) return;
+    const startedAt = Date.now();
+    const { session } = startStreamedSession(song, {
+      id: String(Date.now()),
+      ytShare: magicQueueShare(discoverLevel.get()),
+    });
+    // Nothing of the Library was read for it: the first pick waits for the snapshot's.
+    startingLibrary = { songs: [], artists: [] };
+    const track = yield* ytQueueTrack(song);
+    yield* begin(session, startedAt, track);
+    yield* cacheYtCoversInBackground(track.thumbPath === null ? [song] : []);
+  });
+
+/**
+ * Plays [session]'s first song, [track], as its queue, with the first batch
+ * on its way from the first frame; the taste profile warms meanwhile.
+ */
+const begin = (session: MagicSession, startedAt: number, track: QueueTrack) =>
+  Effect.gen(function* () {
+    const store = yield* LibraryStore;
     // Warm future picks without joining their derivation to this first batch.
     yield* Effect.forkDetach(
       recommendationSnapshot.get.pipe(
@@ -273,22 +306,22 @@ export const startMagicQueue = (
         Effect.ignore,
       ),
     );
-    batchStart = { id: started.session.id, at: startedAt, first: true };
-    save(started.session);
+    batchStart = { id: session.id, at: startedAt, first: true };
+    save(session);
     // The first batch is on its way as the seed starts: Up Next shows it loading from the first frame.
-    picking.set(started.session.id);
+    picking.set(session.id);
     failedBatch.set(null);
     emptyBatch.set(null);
     const queue = yield* Queue;
     yield* queue.dispatch(
       {
         type: "play",
-        trackIds: [started.first],
+        trackIds: [track.id],
         startIndex: 0,
-        context: { kind: MAGIC_QUEUE_CONTEXT, id: started.session.id },
+        context: { kind: MAGIC_QUEUE_CONTEXT, id: session.id },
         shuffle: false,
       },
-      [toQueueTrack(first)],
+      [track],
     );
   });
 

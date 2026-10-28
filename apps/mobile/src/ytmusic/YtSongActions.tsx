@@ -28,7 +28,8 @@ import { CELL } from "@/catalog/grid";
 import { followStreamedArtistLink } from "@/library/ArtistChoice";
 import { useYtSongStarred, ytSongStarredNow } from "@/library/favorites";
 import { starSongs } from "@/library/starSongs";
-import type { ArtistRow } from "@/library/LibraryStore";
+import { songHasFile, type ArtistRow } from "@/library/LibraryStore";
+import { appRuntime } from "@/library/runtime";
 import { openAddToPlaylist } from "@/library/PlaylistSheets";
 import { removePlaylistItems } from "@/library/playlists";
 import { currentPath } from "@/library/routes";
@@ -38,6 +39,7 @@ import { CardHeading } from "@/overlay/CardHeading";
 import { MenuChoices, type MenuChoice, type PlayCardChoice } from "@/overlay/MenuChoices";
 import { followUp, openOverlay } from "@/overlay/overlay";
 import { addYtToQueue, playYtNext } from "@/playback/actions";
+import { startMagicQueue, startStreamedMagicQueue } from "@/playback/MagicQueue";
 import type { MenuOptions } from "@/playback/ActionsMenu";
 import type { RowSwipeOptions } from "@/playback/rowSwipe";
 import { showError } from "@/overlay/alert";
@@ -101,7 +103,13 @@ type Entry =
   | {
       readonly kind: "queue";
       readonly action:
-        "playNext" | "addToQueue" | "addToPlaylist" | "removeFromPlaylist" | "share" | "select";
+        | "playNext"
+        | "addToQueue"
+        | "magicQueue"
+        | "addToPlaylist"
+        | "removeFromPlaylist"
+        | "share"
+        | "select";
     }
   | { readonly kind: "album"; readonly action: "goToAlbum"; readonly album: string }
   | {
@@ -141,6 +149,21 @@ const playlistSong = (song: NativeYtSong, find: FindInLibrary): PlaylistSong => 
   return track === null ? { source: "stream", song } : { source: "library", trackId: track.id };
 };
 
+/**
+ * Starts a Magic Queue from [song]: from the Library's file when the Library
+ * has it (as that song's own menu would), else from the stream's radio.
+ */
+const startMagicQueueFromStream = (song: NativeYtSong, find: FindInLibrary): void => {
+  const track = find(song);
+  appRuntime
+    .runPromise(
+      track !== null && songHasFile(track)
+        ? startMagicQueue({ kind: "track", id: String(track.id), title: track.title }, [track])
+        : startStreamedMagicQueue(song),
+    )
+    .catch((error: unknown) => showError("Couldn't start the Magic Queue", error));
+};
+
 /** Where the menu acts: the Library finder, and what its list gave it (`YtSongMenuOptions`). */
 interface MenuPlace {
   readonly find: FindInLibrary;
@@ -176,6 +199,9 @@ const run = (
       return;
     case "addToQueue":
       void addYtToQueue([song]);
+      return;
+    case "magicQueue":
+      startMagicQueueFromStream(song, find);
       return;
     case "addToPlaylist":
       openAddToPlaylist({

@@ -452,6 +452,7 @@ export type YtSongActionEntry<A> =
       readonly action:
         | "playNext"
         | "addToQueue"
+        | "magicQueue"
         | "addToPlaylist"
         | "favorite"
         | "unfavorite"
@@ -480,7 +481,11 @@ export interface YtSongActionOptions {
   readonly album?: string | null | undefined;
   /** The browse id of the YT Music album page you're on, so Go to Album doesn't lead to it. */
   readonly ytAlbumHere?: string | null | undefined;
-  /** Whether YT Music is on in Settings: an album page asks YouTube, so off, there's no Go to Album. */
+  /**
+   * Whether YT Music is on in Settings: an album page asks YouTube and a
+   * Magic Queue grows from the song's radio, so off, there's no Go to Album
+   * nor Magic Queue.
+   */
   readonly ytMusic?: boolean | undefined;
   /** The menu was opened from a list that can select: it offers Select. */
   readonly selectable?: boolean | undefined;
@@ -498,8 +503,10 @@ export interface YtSongActionOptions {
  * `streamedArtistLink`), Go to Artist opens them integrated (none when its
  * only artist is the page you're on); last, Select, opened from a list that
  * can select ([selectable]). Playing ([playing]), it's the song already on,
- * so it has no Play Next or Add to Queue. The Library's other entries (Fix
- * Song, Delete) are about its files, which a streamed song isn't.
+ * so it has no Play Next or Add to Queue. With YT Music on, it starts a
+ * Magic Queue from its radio, as a Library song's menu does. The Library's
+ * other entries (Fix Song, Delete) are about its files, which a streamed
+ * song isn't.
  */
 export const ytSongActions = <A>(
   artists?: StreamedArtistLink<A>,
@@ -514,6 +521,7 @@ export const ytSongActions = <A>(
   }: YtSongActionOptions = {},
 ): YtSongActionEntry<A>[] => [
   ...(playing ? [] : [{ action: "playNext" } as const, { action: "addToQueue" } as const]),
+  ...(ytMusic ? [{ action: "magicQueue" } as const] : []),
   { action: "addToPlaylist" },
   ...(favorite === undefined ? [] : [{ action: favorite ? "unfavorite" : "favorite" } as const]),
   ...(inPlaylist ? [{ action: "removeFromPlaylist" } as const] : []),

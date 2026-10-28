@@ -687,6 +687,7 @@ export {
   magicSignal,
   parseMagicSession,
   startMagicQueue,
+  startStreamedMagicQueue,
   wantsMagicBatch,
 } from "./magicQueue.ts";
 export type {
