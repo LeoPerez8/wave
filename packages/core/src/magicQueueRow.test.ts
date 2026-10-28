@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { describe, test } from "node:test";
 
 import {
   magicQueueMixPicks,
   magicQueueRow,
+  magicQueueShown,
   type BlendedDiscoverMix,
   type DiscoverMixesSection,
   type DiscoverMixSong,
@@ -29,7 +30,7 @@ const streamed = (videoId: string, artist: string): DiscoverMixSong => ({
 /** A chart artist's mix of [count] streamed songs, `<artist>1`…. */
 const mix = (artist: string, count: number): BlendedDiscoverMix => ({
   id: `artist:${artist}`,
-  seed: { kind: "artist", name: artist },
+  seed: { kind: "artist", name: artist, from: "chart" },
   songs: Array.from({ length: count }, (_, place) => streamed(`${artist}${place + 1}`, artist)),
 });
 
@@ -83,6 +84,32 @@ test("an empty Library takes the row's songs from the Artist mixes", () => {
   assert.deepEqual(magicQueueRow({ ytMusic: true, library: [], artistMixes: mixes(chartMixes) }), {
     kind: "mixes",
     mixes: chartMixes,
+  });
+});
+
+test("an empty Library takes the row's songs only from the mixes seeded from the chart", () => {
+  const played: BlendedDiscoverMix = {
+    ...mix("p", 10),
+    seed: { kind: "artist", name: "p", from: "plays" },
+  };
+  const saved: BlendedDiscoverMix = { ...mix("s", 10), seed: { kind: "artist", name: "s" } };
+  assert.deepEqual(
+    magicQueueRow({
+      ytMusic: true,
+      library: [],
+      artistMixes: mixes([played, chartMixes[0]!, saved, chartMixes[1]!]),
+    }),
+    { kind: "mixes", mixes: [chartMixes[0], chartMixes[1]] },
+  );
+});
+
+test("an empty Library with no mix seeded from the chart hides the row", () => {
+  const similar: BlendedDiscoverMix = {
+    ...mix("s", 10),
+    seed: { kind: "artist", name: "s", from: "similar" },
+  };
+  assert.deepEqual(magicQueueRow({ ytMusic: true, library: [], artistMixes: mixes([similar]) }), {
+    kind: "hidden",
   });
 });
 
@@ -170,4 +197,55 @@ test("no mixes, no picks", () => {
     magicQueueMixPicks([], () => 0),
     [],
   );
+});
+
+describe("the row as drawn, its mixes' songs picked", () => {
+  const row = (shown: readonly BlendedDiscoverMix[]) =>
+    magicQueueRow<number>({ ytMusic: true, library: [], artistMixes: mixes(shown) });
+
+  test("a fresh draw picks nine of the mixes' songs", () => {
+    const { shown, picks } = magicQueueShown(row(chartMixes), null, () => 0);
+    assert.deepEqual(shown.kind === "mixes" && ids(shown.songs), [
+      "a1",
+      "b1",
+      "c1",
+      "a2",
+      "b2",
+      "c2",
+      "a3",
+      "b3",
+      "c3",
+    ]);
+    assert.deepEqual(picks?.songs, shown.kind === "mixes" ? shown.songs : null);
+  });
+
+  test("keeps its picks while the mixes are the same ones, however often it's drawn", () => {
+    const first = magicQueueShown(row(chartMixes), null, Math.random);
+    // A plays-seeded mix appearing leaves the chart's mixes as they were.
+    const played: BlendedDiscoverMix = {
+      ...mix("p", 10),
+      seed: { kind: "artist", name: "p", from: "plays" },
+    };
+    const again = magicQueueShown(row([...chartMixes, played]), first.picks, Math.random);
+    assert.equal(again.picks, first.picks);
+  });
+
+  test("rebuilt mixes keep the songs still in them in their places", () => {
+    const first = magicQueueShown(row(chartMixes), null, () => 0);
+    const rebuilt = [mix("a", 10), mix("b", 10), mix("d", 10)];
+    const { shown } = magicQueueShown(row(rebuilt), first.picks, () => 0);
+    const picked = shown.kind === "mixes" ? ids(shown.songs) : [];
+    assert.deepEqual(
+      [picked[0], picked[1], picked[3], picked[4], picked[6], picked[7]],
+      ["a1", "b1", "a2", "b2", "a3", "b3"],
+    );
+    for (const place of [2, 5, 8]) assert.match(picked[place]!, /^d/);
+  });
+
+  test("the Library's songs, a skeleton or nothing are drawn as the row says", () => {
+    const library = magicQueueRow({ ytMusic: true, library: [1, 2], artistMixes: SKELETON });
+    assert.deepEqual(magicQueueShown(library, null, () => 0).shown, library);
+    const skeleton = magicQueueRow<number>({ ytMusic: true, library: [], artistMixes: SKELETON });
+    assert.deepEqual(magicQueueShown(skeleton, null, () => 0).shown, { kind: "skeleton" });
+  });
 });

@@ -229,12 +229,14 @@ describe("A mix", () => {
     assert.deepEqual(discoverMix({ ...portishead, genre: "Trip Hop" }, songs(10))?.seed, {
       kind: "artist",
       name: "Portishead",
+      from: "plays",
       genre: "Trip Hop",
       artists: ["Portishead"],
     });
     assert.deepEqual(discoverMix(portishead, songs(10))?.seed, {
       kind: "artist",
       name: "Portishead",
+      from: "plays",
       artists: ["Portishead"],
     });
   });
@@ -309,6 +311,14 @@ describe("The saved mixes", () => {
         browseId: "UC-portishead",
       },
     ]);
+  });
+
+  test("keep where each mix's seed came from", () => {
+    const fromTheChart = {
+      ...saved,
+      mixes: [{ ...saved.mixes[0]!, seed: { ...saved.mixes[0]!.seed, from: "chart" as const } }],
+    };
+    assert.deepEqual(parseDiscoverMixes(storedDiscoverMixes(fromTheChart)), fromTheChart);
   });
 
   test("keep each mix's genre and seed artists", () => {
