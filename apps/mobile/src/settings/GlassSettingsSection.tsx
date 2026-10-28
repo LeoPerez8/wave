@@ -1,4 +1,10 @@
-import { GLASS_SETTINGS, isDefaultGlassSettings } from "@wave/core";
+import {
+  GLASS_LEVEL_RANGE,
+  glassLevel,
+  glassLevelValue,
+  isDefaultGlassSettings,
+  type GlassLevelSetting,
+} from "@wave/core";
 import { Text, View } from "react-native";
 
 import { CatalogLine } from "@/catalog/CatalogLine";
@@ -7,10 +13,32 @@ import { SettingsSwitch } from "@/components/SettingsSwitch";
 import { SettingsSlider } from "@/components/SettingsSlider";
 import { TextButton } from "@/components/TextButton";
 
+import { GlassSample } from "./GlassSample";
 import { resetGlassSettings, setGlassSetting, useGlassSettings } from "./glass";
 
 const dp = (value: number) => `${value} dp`;
 const percent = (value: number) => `${value}%`;
+
+type LevelSliderProps = {
+  label: string;
+  setting: GlassLevelSetting;
+  value: number;
+  /** The setting's value at a level, as shown beside the label, e.g. "24 dp". */
+  format: (value: number) => string;
+};
+
+/** A glass setting's slider: it snaps to the setting's five levels and stores the level's value. */
+function GlassLevelSlider({ label, setting, value, format }: LevelSliderProps) {
+  return (
+    <SettingsSlider
+      label={label}
+      value={glassLevel(setting, value)}
+      range={GLASS_LEVEL_RANGE}
+      format={(level) => format(glassLevelValue(setting, level))}
+      onChange={(level) => setGlassSetting(setting, glassLevelValue(setting, level))}
+    />
+  );
+}
 
 /** Settings › Appearance › Glass: tunes the glass of the tab bar, mini player, menus and dialogs. */
 export function GlassSettingsSection() {
@@ -19,30 +47,20 @@ export function GlassSettingsSection() {
   return (
     <View>
       <CatalogLine className="mb-2">Glass</CatalogLine>
+      <View className="mb-3">
+        <GlassSample />
+      </View>
       <Hairline />
-      <SettingsSlider
-        label="Blur"
-        value={glass.blur}
-        range={GLASS_SETTINGS.blur}
-        format={dp}
-        onChange={(value) => setGlassSetting("blur", value)}
-      />
+      <GlassLevelSlider label="Blur" setting="blur" value={glass.blur} format={dp} />
       <Hairline />
-      <SettingsSlider
+      <GlassLevelSlider
         label="Refraction"
+        setting="refraction"
         value={glass.refraction}
-        range={GLASS_SETTINGS.refraction}
         format={(value) => (value === 0 ? "Off" : dp(value))}
-        onChange={(value) => setGlassSetting("refraction", value)}
       />
       <Hairline />
-      <SettingsSlider
-        label="Tint"
-        value={glass.tint}
-        range={GLASS_SETTINGS.tint}
-        format={percent}
-        onChange={(value) => setGlassSetting("tint", value)}
-      />
+      <GlassLevelSlider label="Tint" setting="tint" value={glass.tint} format={percent} />
       <Hairline />
       <SettingsSwitch
         label="Rim"
@@ -53,7 +71,8 @@ export function GlassSettingsSection() {
       <Text className="mt-2 font-sans text-footnote text-secondary">
         How the tab bar, mini player, menus and dialogs show what&apos;s behind them. Blur softens
         it, refraction bends it at the edges (off leaves blur, tint and rim), tint lays the surface
-        colour over it so text stays legible, and the rim is the bright edge.
+        colour over it so text stays legible, and the rim is the bright edge. The sample shows each
+        change; the app&apos;s glass takes it once you leave Appearance.
       </Text>
       <View className="mt-4 items-start">
         <TextButton
