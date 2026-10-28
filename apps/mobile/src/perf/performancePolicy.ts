@@ -129,7 +129,7 @@ export const WHOLE_LIBRARY: Record<string, WholeLibraryException> = {
   },
   "library/ytLibraryImport.ts#buildLibraryIndex": {
     howOften:
-      "Once per Library version while a From YT Music or From Spotify batch (or a retry) reads, shared by its playlists (#759); dropped once no import reads.",
+      "At most once per playlist read (From YT Music or From Spotify, or a retry), and once per batch while the Library stays unchanged: shared by its playlists (#759) until the Library version moves (downloads landing bump it), dropped once no import reads.",
     reason:
       "A queued or explicitly retried library import builds its matching index on settled startup turns, in budgeted steps; never an opening read. Reuse across a batch is covered by importIndexCache.test.ts; source order and pause/retry semantics by startupJobs.test.ts and libraryImportResume.test.ts.",
     capabilities: ["../../../packages/core/src/playlistImport.ts#importLibraryIndexSteps"],
