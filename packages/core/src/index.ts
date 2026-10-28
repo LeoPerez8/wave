@@ -1974,6 +1974,8 @@ export {
 } from "./magicQueueSection.ts";
 export type { MagicQueuePicking, MagicQueuePicks } from "./magicQueueSection.ts";
 export { randomMagicQueuePicks } from "./randomMagicQueuePicks.ts";
+export { magicQueueMixPicks, magicQueueRow } from "./magicQueueRow.ts";
+export type { MagicQueueRow } from "./magicQueueRow.ts";
 export { magicQueueShare } from "./magicQueue.ts";
 export { discoverMixesOfRadios, discoverMixesOfRadiosSteps } from "./discoverMixRadios.ts";
 export type { DiscoverMixRead } from "./discoverMixRadios.ts";
