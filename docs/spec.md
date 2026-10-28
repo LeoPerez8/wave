@@ -609,7 +609,7 @@ One row per playback start: either a Library track id or a streamed song's video
 
 - Settings (the gear on Home) is a short list of rows. Each opens a page of its own with the usual push animation, and back returns to the list. The pages, in order (Core's `SETTINGS_PAGES`; each also opens from `wave://settings/<page>`):
   - **Library**: Music folders, Rescan library (with the scan's progress) and Import BlackPlayer Stats.
-  - **Appearance**: Appearance (System, Light or Dark), Theme, Glass (Blur, Refraction and Tint, five levels each, and the Rim switch; see Visual design), Motion (tap animation, Bounce amount), Touch (long-press delay).
+  - **Appearance**: Appearance (System, Light or Dark), Theme, Glass (a sample glass card, then Blur, Refraction and Tint, five levels each, and the Rim switch; see Visual design), Motion (tap animation, Bounce amount), Touch (long-press delay).
   - **Layout**: the options a long press opens on a screen's title or the tab bar, for whoever doesn't know the long press or finds the card cramped. Its page lists **Home** (Home's editor), **Library** (the shelf under its rows), **Playlists** (List, Grid or Large Cards, then Sort by) and **Tab bar** (the bar's editor), each a page of its own (Core's `LAYOUT_PAGES`, at `/settings/layout/<page>`). Each is the editor or choice list the long press opens, with the same rules, laid out as a page that scrolls (except while a row is dragged) rather than as a card: an editor there has no Done, as each change is saved as it's made and shows at once on the screen it shapes. A change from a long press shows there too. The long presses are unchanged.
   - **Swipe actions**: whether song rows swipe and what each direction runs (see Swipe actions).
   - **Playback**: Crossfade, Don't play explicit and Buffer.
@@ -720,6 +720,8 @@ One row per playback start: either a Library track id or a streamed song's video
   | Tint (%)        | 50      | 61  | 72          | 86  | 100 |
 
   The slider shows the level's value beside its label ("24 dp", "Off", "72%"), and TalkBack steps one level at a time. The settings are stored and synced as `settings.glass`, each the level's value; a value stored or synced before the levels reads as the nearest level (halfway between two, the lower one), and a missing or unreadable one as its default (Core's `GLASS_SETTINGS`, `glassLevel`, `glassLevelValue`, `readGlassSettings`). The levels keep the glass readable: blur never goes sharp and the tint never drops below half.
+
+  A sample glass card sits at the top of the Glass settings, over a fixed, busy backdrop of colourful stripes and lines of text, the same in every theme. It's drawn with the settings as they are, so each level of Blur, Refraction and Tint and the Rim switch shows on it as soon as it's chosen (`settings/GlassSample.tsx`). Below Android 12 it's the opaque surface the app's glass is there. The app's own glass (tab bar, mini player, toast, cards and menus, selection bar) doesn't follow each change: while Appearance is open it keeps the glass it had when the page opened, and takes the new settings once the owner leaves Appearance (`holdAppliedGlass`, `useAppliedGlassSettings`). So a change redraws only the sample. Each change is still saved and synced as it's made.
 
 - Now Playing background: gradient from the artwork palette, animated on track change (two plain view layers crossfading, Core's `crossfadeGround`; no Skia); controls use the app palette.
 
