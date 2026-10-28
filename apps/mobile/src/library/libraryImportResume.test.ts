@@ -133,7 +133,7 @@ test("library resume waits between actual items, pauses offline without consumin
       expected: null,
       state: "filled",
     };
-    batch = { reads: [filled, ...batch.reads], lastToken: filled.token };
+    batch = { ...batch, reads: [filled, ...batch.reads], lastToken: filled.token };
     events.length = 0;
     await drain(run());
     assert.deepEqual(events, ["prune", `settle:${filled.playlistId}`, "download:Filled"]);

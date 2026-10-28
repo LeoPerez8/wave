@@ -18,6 +18,7 @@ import { useListSelection, type ListSelection } from "@/selection/useListSelecti
 
 import { LibraryReadFeedback } from "./LibraryReadFeedback";
 import { ArrangeablePlaylists, TILE_GRIP_INSET } from "./ArrangeablePlaylists";
+import { ImportBatchLine } from "./ImportBatchLine";
 import { openPlaylistImport } from "./importPlaylistLink";
 import { useImportProgress } from "./importProgress";
 import type { PlaylistRow } from "./LibraryStore";
@@ -151,7 +152,8 @@ const rowHeight = (layout: PlaylistLayout, tile: number, fontScale: number): num
  * whatever the order. Each playlist's handle drags it to a new place, which
  * under another sort switches the list to Custom from the order on screen.
  * Find in Playlists, above them all, narrows the list by name (see
- * `ArrangeablePlaylists`).
+ * `ArrangeablePlaylists`). While a batch of playlists imports, its line
+ * ("Importing playlists · 12 of 80") sits under the field, whatever the query.
  */
 export function PlaylistsList({ empty }: { empty: string }) {
   useRenderCount("PlaylistsList");
@@ -207,6 +209,7 @@ export function PlaylistsList({ empty }: { empty: string }) {
           <PlaylistsActions />
         </PlaylistsHeader>
       }
+      lead={<ImportBatchLine />}
       renderPlaylist={renderPlaylist}
     />
   );
