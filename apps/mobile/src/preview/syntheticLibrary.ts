@@ -3,7 +3,6 @@
  * can be judged before the scanner (#5) exists. Delete with the preview.
  */
 import type { AlbumSummary } from "@/catalog/AlbumTile";
-import type { TrackState, TrackSummary } from "@/catalog/TrackRow";
 
 const ARTISTS = [
   "Nils Aarvold",
@@ -133,7 +132,22 @@ const ALBUMS: readonly AlbumSummary[] = byTitle(
   (album) => album.title,
 );
 
-export type SyntheticTrack = { track: TrackSummary; state: TrackState; favorite: boolean };
+/** A synthetic song: no file, a tinted placeholder for a cover. */
+export interface SyntheticSong {
+  readonly id: string;
+  readonly title: string;
+  readonly artist: string;
+  readonly durationMs: number | null;
+  readonly trackNumber?: number | undefined;
+  readonly tint?: string | undefined;
+}
+
+/** A song row's look in the preview: playing, its file not found, or plain; starred or not. */
+export type SyntheticTrack = {
+  track: SyntheticSong;
+  state: "playing" | "fileNotFound" | undefined;
+  favorite: boolean;
+};
 
 const SONGS: readonly SyntheticTrack[] = byTitle(
   ALBUMS.flatMap((album) =>

@@ -12,9 +12,12 @@ import {
   type QueueEntry,
   type QueueState,
   type RepeatMode,
+  type SongListRowSource,
 } from "@wave/core";
 import {
+  createContext,
   memo,
+  use,
   useCallback,
   useLayoutEffect,
   useMemo,
@@ -22,24 +25,21 @@ import {
   useState,
   type ComponentType,
 } from "react";
-import { Text, View, useWindowDimensions, type PressableProps } from "react-native";
+import { Text, View, useWindowDimensions } from "react-native";
 import { GestureDetector } from "react-native-gesture-handler";
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
-  type DerivedValue,
   type SharedValue,
 } from "react-native-reanimated";
 
-import { Artwork } from "@/catalog/Artwork";
 import { CatalogLine, SectionHead, SECTION_HEAD } from "@/catalog/CatalogLine";
 import { CELL, grid } from "@/catalog/grid";
 import { Hairline } from "@/catalog/Hairline";
 import { TrackSkeletons } from "@/catalog/Skeletons";
-import { DownloadedIcon } from "@/catalog/TrackRow";
 import { RecommendationsFailed } from "@/components/RecommendationsFailed";
 import { useMissingSongs } from "@/library/hooks";
-import { Press } from "@/motion/Press";
+import { IconButton } from "@/components/IconButton";
 import { usePerfVisible, useRenderCount } from "@/perf/perf";
 import {
   cycleRepeat,
@@ -59,22 +59,19 @@ import {
 } from "@/playback/MagicQueue";
 import { queueState } from "@/playback/Queue";
 import type { PlaybackState } from "@/playback/Player";
-import { queueTrackDownloaded, type QueueTrack } from "@/playback/queueTracks";
+import type { QueueTrack } from "@/playback/queueTracks";
+import { SongRow } from "@/songs/SongRow";
+import { createSongListModel, type SongRowPresentation } from "@/songs/songListModel";
 import { useThemeColor } from "@/theme/useThemeColor";
 
-import { Background } from "./Background";
+import { Background, type GroundColors } from "./Background";
 import { useQueueTracks } from "./hooks";
 import { useShuffleControl } from "./ShuffleMenu";
 import { TrackHeader } from "./TrackHeader";
-import { ROW, useUpNextDrag, useUpNextRowDrag, type UpNextDragRows } from "./upNextDrag";
+import { ROW, useDraggedRow, useRowDrag, type DragRows } from "@/catalog/rowDrag";
 import { upNextEndSpace, upNextScroll } from "./upNextScroll";
 
 type IconProps = { size?: number; color?: string; strokeWidth?: number };
-
-const THUMB = CELL * 5;
-
-const thumbUri = (track: QueueTrack | undefined): string | undefined =>
-  track?.thumbPath == null ? undefined : `file://${track.thumbPath}`;
 
 type ToggleProps = {
   icon: ComponentType<IconProps>;
@@ -88,29 +85,24 @@ type ToggleProps = {
 
 /** A labelled toggle: teal while it's on, graphite while it's off. */
 function Toggle({ icon: Icon, label, on, onPress, onLongPress, accessibilityHint }: ToggleProps) {
-  const accent = useThemeColor("accent");
-  const secondary = useThemeColor("secondary");
-  const color = on ? accent : secondary;
   return (
-    <Press
+    <IconButton
+      icon={Icon}
+      label={label}
+      caption={label}
+      layout="horizontal"
+      iconSize={20}
+      tone={on ? "accent" : "secondary"}
       accessibilityRole="switch"
-      accessibilityLabel={label}
       accessibilityState={{ checked: on }}
       accessibilityHint={accessibilityHint}
       onPress={onPress}
       onLongPress={onLongPress}
-      haptic="selection"
       depth={0.04}
-      className="flex-1 flex-row items-center justify-center"
-      style={{ height: CELL * 6, gap: CELL }}
-    >
-      <Icon size={20} color={color} strokeWidth={1.5} />
-      <Text
-        className={`font-sans text-body ${on ? "font-semibold text-accent" : "text-secondary"}`}
-      >
-        {label}
-      </Text>
-    </Press>
+      className="flex-1"
+      style={{ width: undefined, height: CELL * 6, gap: CELL }}
+      captionProps={{ className: `font-sans text-body ${on ? "font-semibold" : ""}` }}
+    />
   );
 }
 
@@ -145,13 +137,21 @@ const BAR = CELL * 11;
 /** What the sticky bar draws its slice of the Now Playing ground from. */
 type Ground = {
   /** The ground's colours (`useBackgroundColors`). */
-  readonly colors: DerivedValue<string[]>;
+  readonly colors: GroundColors;
   /** The list's top on the sheet, where the bar sticks. */
   readonly top: SharedValue<number>;
   /** The list's scroll, and the bar's offset in it. */
   readonly scroll: SharedValue<number>;
   readonly start: SharedValue<number>;
 };
+
+/**
+ * The sticky bar's ground, handed down to it past the list: Legend List draws
+ * a row again only when its item or `extraData` changes, so a prop through
+ * `renderItem` kept the colours the bar was first drawn with, an earlier
+ * song's, once the song changed (#732).
+ */
+const BarGroundContext = createContext<Ground | null>(null);
 
 /**
  * The ground behind the sticky bar while it sticks: the sheet's gradient
@@ -181,14 +181,15 @@ function BarGround({ colors, top, scroll, start }: Ground) {
  * Smart Shuffle or Even Shuffle, each with its own icon, while that's chosen), then the Up Next
  * heading ("Magic Queue · from <seed>" over a Magic Queue).
  */
-function UpNextBar({ ground }: { ground: Ground }) {
+function UpNextBar() {
+  const ground = use(BarGroundContext);
   const queue = useQueue();
   const shuffle = useShuffleControl();
   const count = queue.entries.length - queue.index - 1;
   const magic = useMagicQueueLabel();
   return (
     <View className="overflow-hidden" style={{ height: BAR }}>
-      <BarGround {...ground} />
+      {ground !== null && <BarGround {...ground} />}
       <View className="flex-row" style={{ gap: CELL }}>
         <Toggle {...shuffle} on={queue.shuffle} onPress={toggleShuffle} />
         <Toggle
@@ -214,139 +215,89 @@ function UpNextBar({ ground }: { ground: Ground }) {
   );
 }
 
-type RowContentProps = {
-  track: QueueTrack | undefined;
-  /** It has a Library file (`queueTrackDownloaded`). */
-  downloaded: boolean;
-  /** A History row: secondary title, faded artwork. */
-  dimmed?: boolean;
-};
-
-/** Thumbnail, title and artist: the part of an Up Next row that a drag lifts. */
-function RowText({ track, downloaded, dimmed = false }: RowContentProps) {
-  return (
-    <>
-      <View className={dimmed ? "opacity-45" : undefined}>
-        <Artwork uri={thumbUri(track)} size={THUMB} />
-      </View>
-      <View className="flex-1">
-        <Text
-          numberOfLines={1}
-          className={`font-sans text-body font-medium ${dimmed ? "text-secondary" : "text-foreground"}`}
-        >
-          {track?.title ?? " "}
-        </Text>
-        <View className="flex-row items-center" style={{ gap: CELL / 2 }}>
-          {downloaded && <DownloadedIcon />}
-          <Text numberOfLines={1} className="flex-1 font-sans text-body text-secondary">
-            {track?.artist ?? " "}
-          </Text>
-        </View>
-      </View>
-    </>
-  );
-}
-
-/**
- * What an Up Next and a History row's song share: what VoiceOver reads, and
- * the song's menu on a long press or its "Song actions" action. A row's own
- * further [actions] are run by [onAction].
- */
-const songPressProps = (
+/** A queue entry's row, as the song row shows it: no star, length or playing mark. */
+const queueSource = (
   entry: QueueEntry,
   track: QueueTrack | undefined,
-  downloaded: boolean,
-  actions: NonNullable<PressableProps["accessibilityActions"]> = [],
-  onAction: (name: string) => void = () => {},
-): Pick<
-  PressableProps,
-  "accessibilityLabel" | "accessibilityActions" | "onAccessibilityAction" | "onLongPress"
-> => {
-  const openMenu = () => openQueuedSongActions(entry.trackId);
-  return {
-    accessibilityLabel: `${track?.title ?? "Song"}, ${track?.artist ?? ""}${downloaded ? ", downloaded" : ""}`,
-    accessibilityActions: [{ name: "longpress", label: "Song actions" }, ...actions],
-    onAccessibilityAction: (event) => {
-      const action = event.nativeEvent.actionName;
-      if (action === "longpress") openMenu();
-      else onAction(action);
-    },
-    onLongPress: openMenu,
-  };
+  missingIds: ReadonlySet<string>,
+  history: boolean,
+): SongListRowSource => ({
+  kind: "queue",
+  entry: { key: entry.key, trackId: entry.trackId },
+  track,
+  missing: missingIds.has(entry.trackId),
+  history,
+});
+
+/** Screen-reader actions an Up Next row offers, one list per place it can move to. */
+const SONG_ACTIONS = { name: "longpress", label: "Song actions" } as const;
+const UP_NEXT_ACTIONS = new Map(
+  [false, true].flatMap((up) =>
+    [false, true].map((down) => [
+      `${up}:${down}`,
+      [
+        SONG_ACTIONS,
+        { name: "remove", label: "Remove from Up Next" },
+        ...(up ? [{ name: "moveUp", label: "Move up" }] : []),
+        ...(down ? [{ name: "moveDown", label: "Move down" }] : []),
+      ],
+    ]),
+  ),
+);
+const HISTORY_ACTIONS = [SONG_ACTIONS];
+
+/** What a Queue row's keyed handlers act on: the entries on screen. */
+type QueueRowActions = {
+  readonly onPress: (key: string) => void;
+  readonly onLongPress: (key: string) => void;
+  readonly onAction: (key: string, name: string) => void;
 };
 
 type RowProps = {
-  entry: QueueEntry;
+  shown: SongRowPresentation;
   index: number;
-  track: QueueTrack | undefined;
-  downloaded: boolean;
+  /** Removing it says the song's title. */
+  title: string;
+  /** Its place can move up or down: not first, not last. */
+  up: boolean;
+  down: boolean;
   /** The row being dragged leaves a gap; its lifted copy follows the finger. */
   lifted: boolean;
-  drag: UpNextDragRows;
-  count: number;
+  drag: DragRows;
+  actions: QueueRowActions;
 };
 
 /**
- * Memoized: Legend List renders every visible row again when the queue's
- * tracks change (a batch of covers landing), and only the rows whose track
- * changed need to.
+ * Up Next's song row with its remove button and drag handle. Memoized:
+ * Legend List renders every visible row again when the queue's tracks change
+ * (a batch of covers landing) or it grows, and only the rows whose song or
+ * place changed need to.
  */
 const UpNextRow = memo(function UpNextRow({
-  entry,
+  shown,
   index,
-  track,
-  downloaded,
+  title,
+  up,
+  down,
   lifted,
   drag,
-  count,
+  actions,
 }: RowProps) {
   useRenderCount("UpNextRow");
   const secondary = useThemeColor("secondary");
-  const key = entry.key;
-  const { pan, style } = useUpNextRowDrag(drag, key, index);
-
-  const title = track?.title ?? "Song";
-  return (
-    <Animated.View style={[{ height: ROW, opacity: lifted ? 0 : 1 }, style]}>
-      <View className="flex-1 flex-row items-center">
-        <Press
-          accessibilityRole="button"
-          accessibilityHint="Plays this song now. Long press for song actions"
-          {...songPressProps(
-            entry,
-            track,
-            downloaded,
-            [
-              { name: "remove", label: "Remove from Up Next" },
-              ...(index > 0 ? [{ name: "moveUp", label: "Move up" }] : []),
-              ...(index < count - 1 ? [{ name: "moveDown", label: "Move down" }] : []),
-            ],
-            (action) => {
-              if (action === "remove") removeQueueEntry(key);
-              if (action === "moveUp")
-                void moveQueueEntry(upNextMove(queueState.get(), key, index - 1));
-              if (action === "moveDown")
-                void moveQueueEntry(upNextMove(queueState.get(), key, index + 1));
-            },
-          )}
-          onPress={() => playQueueEntry(key)}
-          depth={0.015}
-          className="flex-1 flex-row items-center self-stretch"
-          style={{ gap: CELL * 1.5 }}
-        >
-          <RowText track={track} downloaded={downloaded} />
-        </Press>
-        <Press
-          accessibilityRole="button"
-          accessibilityLabel={`Remove ${title} from Up Next`}
+  const key = shown.rowKey;
+  const { pan, style } = useDraggedRow(drag, key, index);
+  const accessory = useMemo(
+    () => (
+      <>
+        <IconButton
+          icon={IconX}
+          iconSize={20}
+          size={grid.upNextCell}
+          tone="secondary"
+          label={`Remove ${title} from Up Next`}
           onPress={() => removeQueueEntry(key)}
-          haptic="selection"
-          depth={0.1}
-          className="items-center justify-center"
-          style={{ width: grid.upNextCell, height: grid.upNextCell }}
-        >
-          <IconX size={20} color={secondary} strokeWidth={1.5} />
-        </Press>
+        />
         <GestureDetector gesture={pan}>
           <View
             accessibilityElementsHidden
@@ -357,37 +308,51 @@ const UpNextRow = memo(function UpNextRow({
             <IconMenu2 size={20} color={secondary} strokeWidth={1.5} />
           </View>
         </GestureDetector>
-      </View>
+      </>
+    ),
+    [title, key, pan, secondary],
+  );
+  return (
+    <Animated.View style={[{ height: ROW, opacity: lifted ? 0 : 1 }, style]}>
+      <SongRow
+        {...shown}
+        onPress={actions.onPress}
+        onLongPress={actions.onLongPress}
+        extraActions={UP_NEXT_ACTIONS.get(`${up}:${down}`)}
+        onExtraAction={actions.onAction}
+        accessibilityHint="Plays this song now. Long press for song actions"
+        accessory={accessory}
+      />
     </Animated.View>
   );
 });
 
-type HistoryRowProps = {
-  entry: QueueEntry;
-  track: QueueTrack | undefined;
-  downloaded: boolean;
-};
-
 /**
- * A History row: an Up Next row's shape, dimmed, with no X and no drag
- * handle. A tap jumps back to it; a long press opens the song's menu.
+ * A History row: an Up Next row's song, its cover and title faded, with no X
+ * and no drag handle. A tap jumps back to it; a long press opens the song's menu.
  */
-const HistoryRow = memo(function HistoryRow({ entry, track, downloaded }: HistoryRowProps) {
+const HistoryRow = memo(function HistoryRow({
+  shown,
+  actions,
+}: {
+  shown: SongRowPresentation;
+  actions: QueueRowActions;
+}) {
   useRenderCount("HistoryRow");
   return (
-    <Press
-      accessibilityRole="button"
+    <SongRow
+      {...shown}
+      onPress={actions.onPress}
+      onLongPress={actions.onLongPress}
+      extraActions={HISTORY_ACTIONS}
+      onExtraAction={actions.onAction}
       accessibilityHint="Plays this song again. Long press for song actions"
-      {...songPressProps(entry, track, downloaded)}
-      onPress={() => playQueueEntry(entry.key)}
-      depth={0.015}
-      className="flex-row items-center"
-      style={{ height: ROW, gap: CELL * 1.5 }}
-    >
-      <RowText track={track} downloaded={downloaded} dimmed />
-    </Press>
+    />
   );
 });
+
+/** The lifted copy only follows the finger. */
+const ignore = (): void => undefined;
 
 /** Up Next rows' stand-ins while a Magic Queue batch is picked, heard as one busy group. */
 function UpNextSkeletons() {
@@ -433,7 +398,7 @@ const barOffset = (history: number): number => (history === 0 ? 0 : SECTION_HEAD
  * handle to move it. Near either edge a drag scrolls the list. A long press
  * on any row opens its song menu.
  *
- * A drag runs on the UI thread (`upNextDrag.ts`): the lifted row follows the
+ * A drag runs on the UI thread (`catalog/rowDrag.ts`): the lifted row follows the
  * finger and the others step aside with no React render per movement or drop
  * target. On drop the lifted copy settles into its slot, then the new order
  * lands in one render with the offsets reset, and stays shown
@@ -459,7 +424,7 @@ export function UpNextList({
   paneTop,
 }: {
   bottomInset: number;
-  ground: DerivedValue<string[]>;
+  ground: GroundColors;
   paneTop: number;
 }) {
   useRenderCount("UpNextList");
@@ -508,14 +473,52 @@ export function UpNextList({
     setPending((list) => [...list, move]);
     void moved.finally(() => setPending((list) => list.filter((other) => other !== move)));
   }, []);
-  const { drag, rowDrag, liftedStyle, height, scroll, scrollRef } = useUpNextDrag({
-    shown,
-    entries,
+  const keys = useMemo(() => entries.map((entry) => entry.key), [entries]);
+  const { drag, rowDrag, liftedStyle, height, scroll, scrollRef } = useRowDrag({
+    keys,
     bottomInset,
+    // Up Next opens at its start under the bar, which History scrolls no lower than.
     lead: start + BAR,
     bar: BAR,
-    onMove,
+    keepLifted: true,
+    scrollFloor: start,
+    initialScroll: start,
+    counter: "upNext",
+    onDrop: (key, _from, to) => {
+      // Named by its neighbours, so a track change before the queue takes it keeps the order.
+      const move = upNextMove(shown, key, to);
+      onMove(move, moveQueueEntry(move));
+    },
   });
+
+  // Rows act through keyed handlers that read the entries on screen when they run.
+  const onScreen = useRef({ entries, shown });
+  useLayoutEffect(() => {
+    onScreen.current = { entries, shown };
+  });
+  const actions = useMemo<QueueRowActions>(() => {
+    const trackOf = (key: string) =>
+      queueState.get().entries.find((entry) => entry.key === key)?.trackId ??
+      onScreen.current.shown.entries.find((entry) => entry.key === key)?.trackId;
+    const openMenu = (key: string) => {
+      const trackId = trackOf(key);
+      if (trackId !== undefined) openQueuedSongActions(trackId);
+    };
+    return {
+      onPress: playQueueEntry,
+      onLongPress: openMenu,
+      onAction: (key, name) => {
+        const index = onScreen.current.entries.findIndex((entry) => entry.key === key);
+        if (name === "longpress") openMenu(key);
+        else if (name === "remove") removeQueueEntry(key);
+        else if (name === "moveUp")
+          void moveQueueEntry(upNextMove(queueState.get(), key, index - 1));
+        else if (name === "moveDown")
+          void moveQueueEntry(upNextMove(queueState.get(), key, index + 1));
+      },
+    };
+  }, []);
+  const [model] = useState(createSongListModel);
 
   // The sticky bar's slice of the sheet's ground, placed where the bar sits.
   const [listTop, setListTop] = useState(0);
@@ -546,25 +549,26 @@ export function UpNextList({
   const renderItem = useCallback(
     ({ item }: { item: QueueRow }) => {
       if (item.kind === "historyHead") return <SectionHead label="History" />;
-      if (item.kind === "bar") return <UpNextBar ground={barGround} />;
+      if (item.kind === "bar") return <UpNextBar />;
       const track = tracks.get(item.entry.trackId);
-      const downloaded = queueTrackDownloaded(track, missingIds);
-      if (item.kind === "history") {
-        return <HistoryRow entry={item.entry} track={track} downloaded={downloaded} />;
-      }
+      const played = item.kind === "history";
+      const row = model.row(queueSource(item.entry, track, missingIds, played), {}, item.entry.key);
+      if (played) return <HistoryRow shown={row} actions={actions} />;
       return (
         <UpNextRow
-          entry={item.entry}
+          shown={row}
           index={item.index}
-          track={track}
-          downloaded={downloaded}
+          title={track?.title ?? "Song"}
+          up={item.index > 0}
+          // Only the last row's changes as Up Next grows or shrinks.
+          down={item.index < entries.length - 1}
           lifted={drag?.key === item.entry.key}
           drag={rowDrag}
-          count={entries.length}
+          actions={actions}
         />
       );
     },
-    [tracks, missingIds, drag, rowDrag, entries.length, barGround],
+    [tracks, missingIds, drag, rowDrag, entries.length, model, actions],
   );
   // Legend List re-renders a row only when its item or extraData changes, and a
   // queue picked back up after JS restarted learns its tracks after the first render.
@@ -594,10 +598,15 @@ export function UpNextList({
     </View>
   );
 
-  const liftedTrack =
-    drag === null
-      ? undefined
-      : tracks.get(entries.find((entry) => entry.key === drag.key)?.trackId ?? "");
+  const liftedEntry = drag === null ? undefined : entries.find((entry) => entry.key === drag.key);
+  const lifted =
+    liftedEntry === undefined
+      ? null
+      : model.row(
+          queueSource(liftedEntry, tracks.get(liftedEntry.trackId), missingIds, false),
+          {},
+          liftedEntry.key,
+        );
 
   return (
     <View
@@ -613,36 +622,38 @@ export function UpNextList({
         }
       }}
     >
-      <AnimatedLegendList
-        ref={listRef}
-        refScrollView={scrollRef}
-        className="flex-1"
-        data={rows}
-        keyExtractor={rowKey}
-        getItemType={rowType}
-        getFixedItemSize={rowSize}
-        renderItem={renderItem}
-        extraData={rowState}
-        estimatedItemSize={ROW}
-        initialScrollOffset={start}
-        stickyHeaderIndices={sticky}
-        alwaysRender={drag === null ? undefined : { keys: [drag.key] }}
-        scrollEnabled={drag === null}
-        scrollEventThrottle={16}
-        contentContainerStyle={{ paddingBottom: bottomInset }}
-        ListFooterComponent={<View style={{ minHeight: endSpace }}>{footer}</View>}
-      />
+      <BarGroundContext value={barGround}>
+        <AnimatedLegendList
+          ref={listRef}
+          refScrollView={scrollRef}
+          className="flex-1"
+          data={rows}
+          keyExtractor={rowKey}
+          getItemType={rowType}
+          getFixedItemSize={rowSize}
+          renderItem={renderItem}
+          extraData={rowState}
+          estimatedItemSize={ROW}
+          initialScrollOffset={start}
+          stickyHeaderIndices={sticky}
+          recycleItems
+          alwaysRender={drag === null ? undefined : { keys: [drag.key] }}
+          scrollEnabled={drag === null}
+          scrollEventThrottle={16}
+          contentContainerStyle={{ paddingBottom: bottomInset }}
+          ListFooterComponent={<View style={{ minHeight: endSpace }}>{footer}</View>}
+        />
+      </BarGroundContext>
       {drag !== null && (
         <Animated.View
           pointerEvents="none"
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
           className="absolute left-0 right-0 top-0 flex-row items-center bg-surface"
           style={[{ height: ROW }, liftedStyle]}
         >
-          <View className="flex-1 flex-row items-center" style={{ gap: CELL * 1.5 }}>
-            <RowText
-              track={liftedTrack}
-              downloaded={queueTrackDownloaded(liftedTrack, missingIds)}
-            />
+          <View className="flex-1">
+            {lifted !== null && <SongRow {...lifted} onPress={ignore} />}
           </View>
           <View style={{ width: grid.upNextTrailing }} />
         </Animated.View>

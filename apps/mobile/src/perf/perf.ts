@@ -24,6 +24,9 @@ export const PERF_ENABLED = process.env.EXPO_PUBLIC_WAVE_PERF === "1";
 /** The app commit a perf build was made from, when the build said (`EXPO_PUBLIC_WAVE_COMMIT`). */
 const COMMIT = process.env.EXPO_PUBLIC_WAVE_COMMIT ?? null;
 
+/** Whether the bundle was built with the React Compiler (`app.config.ts`, #728). */
+const REACT_COMPILER = process.env.EXPO_PUBLIC_WAVE_REACT_COMPILER === "1";
+
 type MetaSource = () => PerfMeta | Promise<PerfMeta>;
 
 const recorder = PERF_ENABLED ? createPerfRecorder({ now: () => performance.now() }) : null;
@@ -127,6 +130,7 @@ const collectMeta = async (): Promise<PerfMeta> => {
     perfBuild: true,
     commit: COMMIT,
     stallMs: STALL_MS,
+    reactCompiler: REACT_COMPILER,
     ...startupMeta(),
     ...heapMeta(),
   };
@@ -161,11 +165,46 @@ const flushIfDue = async (): Promise<void> => {
 /** How often a perf build checks whether it's due to flush. */
 const FLUSH_CHECK_MS = 500;
 
-/** Starts the perf build's flushes; returns the stop. A no-op outside perf builds. */
-export const startPerfFlushes: () => () => void =
+/** Whether the app is in front, and its changes (React Native's AppState, in the app). */
+export interface PerfAppActivity {
+  readonly active: () => boolean;
+  /** Calls [listener] with each change; returns the stop. */
+  readonly onChange: (listener: (active: boolean) => void) => () => void;
+}
+
+/**
+ * Starts the perf build's flushes; returns the stop. A no-op outside perf builds.
+ *
+ * While the app is away (in the background, the screen off) the flush check
+ * stops, so the perf build adds no wake-up of its own to a screen-off soak,
+ * and renders count as `away:` (Core's `PERF_AWAY_PREFIX`). The window's flush
+ * comes once the app is back and quiet. Marks `app.away` and `app.active`.
+ */
+export const startPerfFlushes: (app: PerfAppActivity) => () => void =
   recorder === null
     ? () => noop
-    : () => {
-        const timer = setInterval(() => void flushIfDue(), FLUSH_CHECK_MS);
-        return () => clearInterval(timer);
+    : (app) => {
+        let timer: ReturnType<typeof setInterval> | null = null;
+        const stopChecks = (): void => {
+          if (timer !== null) clearInterval(timer);
+          timer = null;
+        };
+        const follow = (active: boolean): void => {
+          recorder.away(!active);
+          if (!active) stopChecks();
+          else timer ??= setInterval(() => void flushIfDue(), FLUSH_CHECK_MS);
+        };
+        let active = app.active();
+        follow(active);
+        const stopFollowing = app.onChange((now) => {
+          if (now === active) return;
+          active = now;
+          perfMark(now ? "app.active" : "app.away");
+          follow(now);
+        });
+        return () => {
+          stopFollowing();
+          stopChecks();
+          recorder.away(false);
+        };
       };

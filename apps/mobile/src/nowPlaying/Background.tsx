@@ -1,75 +1,134 @@
-import { Canvas, LinearGradient, Rect, vec } from "@shopify/react-native-skia";
-import type { Gradient } from "@wave/core";
-import { useEffect, useRef } from "react";
-import { StyleSheet, useWindowDimensions } from "react-native";
-import {
+import { crossfadeGround, type Gradient, type GroundLayers } from "@wave/core";
+import { useEffect, useState } from "react";
+import { StyleSheet, View, useWindowDimensions } from "react-native";
+import Animated, {
+  cancelAnimation,
   Easing,
-  interpolateColor,
-  useDerivedValue,
+  makeMutable,
+  useAnimatedStyle,
   useReducedMotion,
-  useSharedValue,
   withTiming,
-  type DerivedValue,
+  type SharedValue,
 } from "react-native-reanimated";
-import { scheduleOnUI } from "react-native-worklets";
 
 /** Long enough to read as a change of mood, not a flash. */
 const CROSSFADE_MS = 700;
+const CROSSFADE_EASING = Easing.inOut(Easing.quad);
+
+/**
+ * The Now Playing ground's colours as drawn (Core's `GroundLayers`): the base
+ * gradient and the one fading in over it at [fade]'s opacity. Each change
+ * makes a new [fade] that starts at 0 in the same commit as its layers, so a
+ * layer never shows new colours at an old opacity.
+ */
+export interface GroundColors {
+  readonly layers: GroundLayers;
+  readonly fade: SharedValue<number>;
+  /** The colours the ground settles on. */
+  readonly target: Gradient;
+  /** Counts the changes: the incoming layer mounts anew with each, at its new fade's 0. */
+  readonly change: number;
+}
+
+const settled = (gradient: Gradient, change: number): GroundColors => ({
+  layers: { base: gradient, incoming: null },
+  fade: makeMutable(1),
+  target: gradient,
+  change,
+});
+
+/** When each fade started (ms): where it is, known without reading it during a render. */
+const fadeStarts = new WeakMap<SharedValue<number>, number>();
+
+/** Where [fade] is now, from 0 to 1, along its easing. */
+const fadeProgress = (fade: SharedValue<number>): number => {
+  const startedAt = fadeStarts.get(fade);
+  if (startedAt === undefined) return 0;
+  return CROSSFADE_EASING(Math.min(1, (Date.now() - startedAt) / CROSSFADE_MS));
+};
 
 /**
  * The Now Playing ground's colours: a top-to-bottom gradient from the
  * artwork's palette (already toned for legibility by Core's
  * `paletteGradient`). On a track change they crossfade from wherever they are
- * to the new colours, even mid-fade; out of sight (`animate` off) they change
- * straight away, so the sheet opens on the right colours.
+ * to the new colours, even mid-fade (Core's `crossfadeGround`); out of sight
+ * (`animate` off) they change straight away, so the sheet opens on the right
+ * colours.
  */
-export function useBackgroundColors(gradient: Gradient, animate: boolean): DerivedValue<string[]> {
+export function useBackgroundColors(gradient: Gradient, animate: boolean): GroundColors {
   const reduceMotion = useReducedMotion();
-  // Read when the colours change, so opening the sheet doesn't restart a fade.
-  const animateRef = useRef(animate);
-  useEffect(() => {
-    animateRef.current = animate;
-  }, [animate]);
-  const fromTop = useSharedValue(gradient.top);
-  const fromBottom = useSharedValue(gradient.bottom);
-  const toTop = useSharedValue(gradient.top);
-  const toBottom = useSharedValue(gradient.bottom);
-  const progress = useSharedValue(1);
+  const [ground, setGround] = useState(() => settled(gradient, 0));
+  if (ground.target.top !== gradient.top || ground.target.bottom !== gradient.bottom) {
+    // Adjusted while rendering, so the new layers commit with the render that brought the colours.
+    const instant = reduceMotion || !animate;
+    const progress = ground.layers.incoming === null ? 1 : fadeProgress(ground.fade);
+    const layers = crossfadeGround(ground.layers, gradient, progress, instant);
+    setGround(
+      layers.incoming === null
+        ? settled(gradient, ground.change + 1)
+        : {
+            layers,
+            fade: makeMutable(0),
+            target: gradient,
+            change: ground.change + 1,
+          },
+    );
+  }
 
-  const { top, bottom } = gradient;
+  const { layers, fade } = ground;
   useEffect(() => {
-    const instant = reduceMotion || !animateRef.current;
-    scheduleOnUI(() => {
-      "worklet";
-      const p = progress.get();
-      fromTop.set(interpolateColor(p, [0, 1], [fromTop.get(), toTop.get()]));
-      fromBottom.set(interpolateColor(p, [0, 1], [fromBottom.get(), toBottom.get()]));
-      toTop.set(top);
-      toBottom.set(bottom);
-      progress.set(0);
-      progress.set(
-        instant ? 1 : withTiming(1, { duration: CROSSFADE_MS, easing: Easing.inOut(Easing.quad) }),
-      );
-    });
-  }, [top, bottom, reduceMotion, fromTop, fromBottom, toTop, toBottom, progress]);
+    if (layers.incoming === null) return undefined;
+    fadeStarts.set(fade, Date.now());
+    fade.set(withTiming(1, { duration: CROSSFADE_MS, easing: CROSSFADE_EASING }));
+    return () => cancelAnimation(fade);
+  }, [layers, fade]);
+  return ground;
+}
 
-  return useDerivedValue(() => [
-    interpolateColor(progress.get(), [0, 1], [fromTop.get(), toTop.get()]),
-    interpolateColor(progress.get(), [0, 1], [fromBottom.get(), toBottom.get()]),
-  ]);
+/** One layer's two-stop gradient, top to bottom. */
+const gradientStyle = ({ top, bottom }: Gradient) => ({
+  backgroundImage: [
+    {
+      type: "linear-gradient" as const,
+      direction: "to bottom",
+      colorStops: [{ color: top }, { color: bottom }],
+    },
+  ],
+});
+
+function IncomingLayer({
+  gradient,
+  fade,
+  height,
+}: {
+  gradient: Gradient;
+  fade: SharedValue<number>;
+  height: number;
+}) {
+  const style = useAnimatedStyle(() => ({ opacity: fade.get() }));
+  return <Animated.View style={[styles.layer, { height }, gradientStyle(gradient), style]} />;
 }
 
 /**
- * The Now Playing ground, drawn window-sized from its colours
- * (`useBackgroundColors`). The Queue's sticky bar draws its slice of it too.
+ * The Now Playing ground, drawn window-tall from its colours
+ * (`useBackgroundColors`): the base gradient with the incoming one fading in
+ * over it, as plain views. The Queue's sticky bar draws its slice of it too.
  */
-export function Background({ colors }: { colors: DerivedValue<string[]> }) {
-  const { width, height } = useWindowDimensions();
+export function Background({ colors }: { colors: GroundColors }) {
+  const { height } = useWindowDimensions();
+  const { layers, fade, change } = colors;
   return (
-    <Canvas style={StyleSheet.absoluteFill} pointerEvents="none">
-      <Rect x={0} y={0} width={width} height={height}>
-        <LinearGradient start={vec(0, 0)} end={vec(0, height)} colors={colors} />
-      </Rect>
-    </Canvas>
+    <View style={styles.ground} pointerEvents="none">
+      <View style={[styles.layer, { height }, gradientStyle(layers.base)]} />
+      {layers.incoming === null ? null : (
+        <IncomingLayer key={change} gradient={layers.incoming} fade={fade} height={height} />
+      )}
+    </View>
   );
 }
+
+const styles = StyleSheet.create({
+  // Clipped to its place as the canvas it replaces was; the gradient spans the window's height.
+  ground: { position: "absolute", top: 0, right: 0, bottom: 0, left: 0, overflow: "hidden" },
+  layer: { position: "absolute", top: 0, left: 0, right: 0 },
+});

@@ -3,6 +3,7 @@ import type {
   PlayerCoverUpdate,
   PlaySource,
   RepeatMode,
+  SavedQueueParts,
   SeekSource,
   SleepTimer,
   SongChangeCause,
@@ -211,11 +212,18 @@ declare class WavePlayerModule extends NativeModule<WavePlayerEvents> {
    */
   setItemArtwork(updates: readonly PlayerCoverUpdate[]): Promise<void>;
   /**
-   * Keeps the queue (JSON) in the native process, for when JS restarts, and on
-   * disk with where it was started from, for a cold start (playback resumption).
+   * Keeps the queue's changed parts (Core's `queueWrite`; null parts are
+   * unchanged) in the native process, for when JS restarts, and on disk with
+   * where it was started from, for a cold start (playback resumption).
    */
-  saveQueue(json: string, source: PlaySource): void;
-  savedQueue(): string | null;
+  saveQueue(
+    queue: string | null,
+    metadata: string | null,
+    index: number | null,
+    source: PlaySource,
+  ): Promise<void>;
+  /** The parts saved last (Core's `savedQueueState` reads them); null before a queue was saved. */
+  savedQueue(): Promise<SavedQueueParts | null>;
   /** Where the saved queue was started from; null before any was saved. */
   savedQueueSource(): PlaySource | null;
   /**
@@ -229,6 +237,8 @@ declare class WavePlayerModule extends NativeModule<WavePlayerEvents> {
   /** `source` is where the seek came from, for the app log's crossfade lines. */
   seekTo(positionMs: number, source: SeekSource): Promise<void>;
   getState(): Promise<NativePlayerState>;
+  /** Request 500 ms position reports while a JS consumer needs them. Events always report. */
+  setPositionReporting(requested: boolean): Promise<void>;
   /**
    * Starts the sleep timer in the playback service, which enforces it even with
    * Wave in the background. `endsAt` (wall-clock ms) is for `deadline` only.
@@ -241,8 +251,8 @@ declare class WavePlayerModule extends NativeModule<WavePlayerEvents> {
    * the runtime was starting. Call it once a listener is in place.
    */
   attachAuto(): void;
-  /** Answers request `id` with JSON (see `AutoRequest`). */
-  respondAuto(id: number, json: string): void;
+  /** Answers request `id` with JSON (see `AutoRequest`); async, as the answer can be a long list. */
+  respondAuto(id: number, json: string): Promise<void>;
   /** Answers request `id` with an error Auto shows as `message`. */
   failAuto(id: number, message: string): void;
   /** The Lyrics toggle and Auto's connection; `onAutoLyrics` reports changes. */

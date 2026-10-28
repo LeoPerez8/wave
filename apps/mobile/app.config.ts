@@ -50,8 +50,9 @@ const config: ExpoConfig = {
   experiments: {
     typedRoutes: true,
     // React Compiler stays off until a phone run shows it helps (docs/performance/
-    // 303-contained-nav-renders.md). `WAVE_REACT_COMPILER=1` at bundle time builds the comparison.
-    ...(process.env.WAVE_REACT_COMPILER === "1" && { reactCompiler: true }),
+    // 728-react-compiler.md). `EXPO_PUBLIC_WAVE_REACT_COMPILER=1` at bundle time builds the
+    // comparison; the bundle inlines it too, so a perf build reports it.
+    ...(process.env.EXPO_PUBLIC_WAVE_REACT_COMPILER === "1" && { reactCompiler: true }),
   },
   // The Wave account (docs/spec.md, "Wave account and sync"): the sync service's URL and Wave's
   // web OAuth client id, the audience of the Google ID tokens it accepts. Neither is a secret.

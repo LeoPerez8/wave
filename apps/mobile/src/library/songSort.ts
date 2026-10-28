@@ -4,6 +4,7 @@ import {
   sortSongs,
   writeSongSort,
   type SongListKind,
+  type LibrarySongSort,
   type SongSort,
   type SortableSong,
 } from "@wave/core";
@@ -63,3 +64,6 @@ export function useSortedSongs<S extends SortableSong>(
   );
   return { sort, songs: sorted };
 }
+
+/** The Songs tab's saved SQL sort, also used by its Queue section action. */
+export const songsSortNow = (): LibrarySongSort => setting("songs").get() as LibrarySongSort;

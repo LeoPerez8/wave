@@ -16,11 +16,12 @@ import { SongCard } from "@/catalog/cards/SongCard";
 import { CatalogLine } from "@/catalog/CatalogLine";
 import { COVER_ROW_TILE, CoverRow } from "@/catalog/CoverRow";
 import { CELL, grid } from "@/catalog/grid";
-import { TrackRow } from "@/catalog/TrackRow";
+import { SongRow as SongRowLeaf } from "@/songs/SongRow";
 import { Press } from "@/motion/Press";
 import { getAppearance } from "@/settings/appearance";
 
 import { SYNTHETIC_ALBUMS, SYNTHETIC_PLAYLISTS, SYNTHETIC_TRACKS } from "./syntheticLibrary";
+import { syntheticSongRow } from "./syntheticSongRow";
 
 type Kind = "album" | "artist" | "song" | "playlist";
 
@@ -115,7 +116,7 @@ function KindShelf({ kind }: { kind: Kind }) {
   );
 }
 
-/** A kind's list rows, as Search lists them: a song's is a `TrackRow` with its play disc. */
+/** A kind's list rows, as Search lists them: a song's is a song row with its play disc. */
 function KindRows({ kind }: { kind: Kind }) {
   if (kind === "album")
     return ALBUMS.slice(0, 2).map((album) => (
@@ -151,20 +152,15 @@ function KindRows({ kind }: { kind: Kind }) {
 }
 
 function SongRow({ song }: { song: Song }) {
-  return (
-    <TrackRow
-      track={{
-        id: song.title,
-        title: song.title,
-        artist: `Song · ${song.artist}`,
-        durationMs: null,
-        tint: song.tint,
-      }}
-      leading="artwork"
-      playDisc
-      onPress={noop}
-    />
+  const shown = syntheticSongRow(
+    {
+      track: { id: song.title, title: song.title, artist: song.artist, durationMs: null },
+      state: undefined,
+      favorite: false,
+    },
+    true,
   );
+  return <SongRowLeaf {...shown} tint={song.tint} onPress={noop} />;
 }
 
 function KindSection({ kind }: { kind: Kind }) {

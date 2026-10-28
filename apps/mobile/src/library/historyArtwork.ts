@@ -1,4 +1,5 @@
-import { fileUri } from "../lib/fileUri.ts";
+import type { SongRowArtwork } from "@wave/core";
+import { artworkUri } from "../catalog/artworkUri.ts";
 import type { ListeningHistoryRow } from "./db/listeningHistory.ts";
 
 /**
@@ -12,13 +13,25 @@ export const historyArtworkUri = (
   streamPlayable: boolean,
 ): string | undefined =>
   videoId === null
-    ? (fileUri(
-        snapshot.thumbPath ?? snapshot.artworkPath ?? song?.thumbPath ?? song?.artworkPath,
-      ) ??
-      snapshot.artworkUrl ??
-      undefined)
+    ? (artworkUri(snapshot) ?? artworkUri(song) ?? snapshot.artworkUrl ?? undefined)
     : song !== null
-      ? fileUri(song.thumbPath ?? song.artworkPath)
+      ? artworkUri(song)
       : streamPlayable
         ? (snapshot.artworkUrl ?? undefined)
         : undefined;
+
+/**
+ * A History row's cover as the song row takes it: the address
+ * `historyArtworkUri` chose, a web cover as a remote one (the policy already
+ * decided it may show), anything else as the file it is.
+ */
+export const historyArtwork = (
+  play: Pick<ListeningHistoryRow, "videoId" | "snapshot" | "song">,
+  streamPlayable: boolean,
+): SongRowArtwork => {
+  const uri = historyArtworkUri(play, streamPlayable);
+  if (uri === undefined) return { kind: "placeholder" };
+  return /^https?:/i.test(uri)
+    ? { kind: "remote", url: uri, size: "thumbnail" }
+    : { kind: "file", files: { artworkPath: uri } };
+};

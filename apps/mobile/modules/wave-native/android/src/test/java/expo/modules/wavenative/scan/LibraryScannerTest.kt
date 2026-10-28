@@ -93,6 +93,19 @@ class LibraryScannerTest {
   }
 
   @Test
+  fun reportsBatchesTheSizeOfJsSaveSlicesByDefault() {
+    // Core's SCAN_SAVE_SLICE: each batch JS receives is one save transaction.
+    val many = Fixtures.libraryOf(*(1..250).map { "untagged.mp3" to "Many/$it.mp3" }.toTypedArray())
+    val recorder = Recorder()
+    LibraryScanner(
+      tagReader = AudioTagReader(primary = JAudioTaggerReader()),
+      artworkStore = ArtworkStore(Fixtures.tempDir(), fakeProcessor),
+      threads = 2,
+    ).scan(listOf(many), emptyList(), recorder)
+    assertEquals(listOf(100, 100, 50), recorder.batches.map { it.first.size })
+  }
+
+  @Test
   fun reportsDiscoveryThenReadingProgress() {
     val recorder = Recorder()
     scanner(batchSize = 2).scan(listOf(library), emptyList(), recorder)

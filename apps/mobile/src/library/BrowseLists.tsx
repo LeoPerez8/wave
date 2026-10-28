@@ -29,7 +29,7 @@ import {
   useAlbumTileSize,
 } from "./AlbumGrid";
 import { FIND_FIELD_HEIGHT, FindHead, useFindInLegendList } from "./FindInPlaylist";
-import { useAlbums, useArtists, useGenres, useScanState } from "./hooks";
+import { useAlbums, useArtists, useGenres, useScanStatus } from "./hooks";
 import type { AlbumRow, ArtistRow, GenreRow } from "./LibraryStore";
 import { openArtist, openGenre } from "./routes";
 import { useSpine } from "./useSpine";
@@ -46,13 +46,13 @@ function ListHead({ line }: { line: string }) {
 
 /** Shown while a list has nothing: the scan may still be finding it. */
 function NothingYet({ message }: { message: string }) {
-  const scan = useScanState();
+  const scanStatus = useScanStatus();
   return (
     <View style={{ paddingHorizontal: grid.margin }}>
       <ScanProgressBanner />
       <EmptyState
         icon={IconStack2}
-        title={scan.status === "scanning" ? "Looking for music" : "Nothing here yet"}
+        title={scanStatus === "scanning" ? "Looking for music" : "Nothing here yet"}
         message={message}
       />
     </View>

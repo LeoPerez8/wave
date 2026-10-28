@@ -12,7 +12,6 @@ import {
   keysToLoad,
   newQueueToast,
   noticeLine,
-  parseQueueState,
   passedOverNotice,
   planPlayerSync,
   playerQueueList,
@@ -20,7 +19,9 @@ import {
   playReplacesQueue,
   queuedPassedOver,
   queueUndo,
+  queueWrite,
   reduceQueue,
+  savedQueueState,
   shuffledTrackIds,
   shufflesQueue,
   songChangeCause,
@@ -34,8 +35,10 @@ import {
   type PlaySource,
   type QueueCommand,
   type QueueEntry,
+  type QueuePersistenceState,
   type QueuePlayback,
   type QueueState,
+  type QueueWrite,
   type QueueUndo,
   type RepeatMode,
   type Shuffle,
@@ -58,7 +61,7 @@ import { perfMark } from "@/perf/perf";
 import { dontPlayExplicit, onDontPlayExplicit } from "@/settings/dontPlayExplicit";
 import { shuffleKind } from "@/settings/shuffleKind";
 
-import { Player, PlayerError, playbackState } from "./Player";
+import { Player, PlayerError, playbackState, positionState } from "./Player";
 import { searchPlaying } from "./playingSearch";
 import { evenShuffleSongs, learnQueueTracks, queueTracks, type QueueTrack } from "./queueTracks";
 
@@ -81,14 +84,15 @@ export const keptPlayingKey = makeExternalStore<string | null>(null);
  */
 export const queueSource = makeExternalStore<PlaySource>("phone");
 
-/** Queue changes come in bursts (skips, reorders); the queue is serialised once they settle. */
+/** Queue changes come in bursts (skips, reorders); the queue is saved once they settle. */
 const QUEUE_SETTLE_MS = 500;
 
 /**
- * The queue as JSON, serialised once per settled change and shared: the player
- * keeps it for when JS restarts, and `PlaybackPersistence` writes it to the library.
+ * The parts of the queue each settled change touched (Core's `queueWrite`),
+ * worked out once and shared: the player keeps them for when JS restarts, and
+ * `PlaybackPersistence` writes them to the library. A skip serialises nothing.
  */
-export const settledQueue = makeExternalStore<string | null>(null);
+export const settledQueue = makeExternalStore<QueueWrite | null>(null);
 
 export class Queue extends Context.Service<
   Queue,
@@ -269,7 +273,7 @@ const reported = <A, E>(effect: Effect.Effect<A, E>): Effect.Effect<A | void> =>
   effect.pipe(Effect.catch((error) => Effect.sync(() => reportError(error))));
 
 /** Where the current track is now, extrapolated from the last position report. */
-export const currentPositionMs = (): number => extrapolatePosition(playbackState.get(), Date.now());
+export const currentPositionMs = (): number => extrapolatePosition(positionState.get(), Date.now());
 
 export const layer = Layer.effect(
   Queue,
@@ -288,13 +292,25 @@ export const layer = Layer.effect(
     let appliedRepeat: RepeatMode | null = null;
     let settleTimer: ReturnType<typeof setTimeout> | null = null;
 
-    /** Serialises the queue once, for the player and the library (`settledQueue`). */
+    // The queue as last saved, which the next save writes only the changed parts of.
+    let lastSaved: QueuePersistenceState | null = null;
+    let savedSource: PlaySource | null = null;
+
+    /** Saves the parts of the queue that changed, for the player and the library (`settledQueue`). */
     const settle = (): void => {
       if (settleTimer !== null) clearTimeout(settleTimer);
       settleTimer = null;
-      const json = JSON.stringify(queueState.get());
-      Effect.runSync(player.saveQueue(json, queueSource.get()));
-      settledQueue.set(json);
+      const next = { state: queueState.get(), positionMs: currentPositionMs() };
+      const write = queueWrite(lastSaved, next);
+      lastSaved = next;
+      const source = queueSource.get();
+      const forPlayer =
+        write.queue !== undefined || write.metadata !== undefined || write.index !== undefined;
+      if (forPlayer || source !== savedSource) {
+        savedSource = source;
+        Effect.runFork(Effect.ignore(player.saveQueue(write, source)));
+      }
+      settledQueue.set(write);
     };
 
     const queueChanged = (): void => {
@@ -694,8 +710,8 @@ export const layer = Layer.effect(
      */
     const restore = Effect.gen(function* () {
       yield* readNative;
-      const json = yield* player.savedQueue;
-      const parsed = json === null ? null : parseQueueState(JSON.parse(json));
+      const parts = yield* player.savedQueue;
+      const parsed = parts === null ? null : savedQueueState(parts);
       // Saved while its playing song was searched, it goes on from a song the player holds.
       const saved = parsed === null ? null : keptQueue(parsed, native.keys);
       if (saved === null) return;

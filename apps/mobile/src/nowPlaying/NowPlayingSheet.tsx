@@ -16,25 +16,24 @@ import {
   useSyncExternalStore,
 } from "react";
 import { StyleSheet, Text, View, useWindowDimensions } from "react-native";
-import Animated, { useAnimatedStyle, type DerivedValue } from "react-native-reanimated";
+import Animated, { useAnimatedStyle } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { CELL, grid } from "@/catalog/grid";
 import { IconButton } from "@/components/IconButton";
+import { NativeCover } from "@/glass/waveGlass";
 import { CoveredByNowPlaying } from "@/lib/screenSight";
-import { Press } from "@/motion/Press";
 import { addScreenBackHandler } from "@/overlay/back";
 import { useRenderCount } from "@/perf/perf";
 import type { TrackDetails } from "@/library/LibraryStore";
 import { useCurrentTrackId } from "@/playback/hooks";
 import { playbackState, type PlaybackState } from "@/playback/Player";
-import { LyricCardLayer } from "@/share/LyricCardPreview";
+import { LyricCardLayer } from "@/share/LyricCardLayer";
 import { useLyricCardShown } from "@/share/lyricCard";
 import { useSongShareShown } from "@/share/songShare";
 import { shareNowPlaying } from "@/share/songShare";
-import { useThemeColor } from "@/theme/useThemeColor";
 
-import { Background, useBackgroundColors } from "./Background";
+import { Background, useBackgroundColors, type GroundColors } from "./Background";
 import { DismissArea } from "./DismissArea";
 import {
   useDownloadedFile,
@@ -48,6 +47,7 @@ import { LyricsView } from "./LyricsView";
 import { PlayerView } from "./PlayerView";
 import { QueueHeader, UpNextList } from "./QueueView";
 import { Scrubber } from "./Scrubber";
+import { usePlayheadSource } from "./playhead";
 import {
   closeNowPlaying,
   nowPlayingContentCommitted,
@@ -84,21 +84,15 @@ function ViewToggle({
   on: boolean;
   onPress: () => void;
 }) {
-  const accent = useThemeColor("accent");
-  const secondary = useThemeColor("secondary");
   return (
-    <Press
+    <IconButton
+      icon={Icon}
+      label={label}
       accessibilityRole="switch"
-      accessibilityLabel={label}
       accessibilityState={{ checked: on }}
       onPress={onPress}
-      haptic="selection"
-      depth={0.1}
-      className="items-center justify-center"
-      style={{ width: CELL * 6, height: CELL * 6 }}
-    >
-      <Icon size={24} color={on ? accent : secondary} strokeWidth={1.5} />
-    </Press>
+      tone={on ? "accent" : "secondary"}
+    />
   );
 }
 
@@ -124,7 +118,7 @@ const QueuePane = memo(function QueuePane({
   onShowPlayer,
 }: {
   item: Item;
-  ground: DerivedValue<string[]>;
+  ground: GroundColors;
   onShowPlayer: () => void;
 }) {
   // Where the pane sits on the sheet: the list's sticky bar draws the ground there.
@@ -164,15 +158,21 @@ const PlayerPane = memo(function PlayerPane({
   );
 });
 
+/** `nativeID` of the screens under Now Playing, which the sheet's cover hides (`NativeCover`). */
+const UNDER_NOW_PLAYING = "wave-under-now-playing";
+
 /**
  * Wraps the screens under Now Playing: screen readers skip them while it is
- * up, and their shared Library queries pause (`CoveredByNowPlaying`).
+ * up, and their shared Library queries pause (`CoveredByNowPlaying`). Once the
+ * sheet settles open over them they aren't drawn, glass included, until it
+ * moves again (`NativeCover`).
  */
 export function UnderNowPlaying({ children }: { children: ReactNode }) {
   const shown = useNowPlayingShown();
   const sharing = useSongShareShown();
   return (
     <View
+      nativeID={UNDER_NOW_PLAYING}
       collapsable={false}
       style={{ flex: 1 }}
       importantForAccessibility={shown || sharing ? "no-hide-descendants" : "auto"}
@@ -194,6 +194,7 @@ export function UnderNowPlaying({ children }: { children: ReactNode }) {
  */
 export function NowPlayingSheet() {
   useRenderCount("NowPlayingSheet");
+  usePlayheadSource();
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
   const shown = useNowPlayingShown();
@@ -270,6 +271,13 @@ export function NowPlayingSheet() {
       accessibilityElementsHidden={!shown || songSharing}
     >
       <Background colors={ground} />
+      {/* Opaque and settled over the screens under it, the sheet stops their drawing (#721). */}
+      <NativeCover
+        pointerEvents="none"
+        style={StyleSheet.absoluteFill}
+        coveredNativeId={UNDER_NOW_PLAYING}
+        settled={settled}
+      />
       <View
         className="flex-1"
         importantForAccessibility={lyricSharing ? "no-hide-descendants" : "auto"}

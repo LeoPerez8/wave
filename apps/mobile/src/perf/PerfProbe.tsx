@@ -1,6 +1,6 @@
 import { usePathname } from "expo-router";
 import { useEffect } from "react";
-import { Keyboard } from "react-native";
+import { AppState, Keyboard } from "react-native";
 import { useAnimatedReaction } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
 
@@ -12,15 +12,22 @@ import {
   sheetHeight,
   sheetOffset,
 } from "@/nowPlaying/sheet";
-import { playbackState } from "@/playback/Player";
+import { playbackState, positionState } from "@/playback/Player";
 import { queueState } from "@/playback/Queue";
 import { queueTracks } from "@/playback/queueTracks";
 
-import { perfMark, perfTiming, registerPerfMeta, startPerfFlushes } from "./perf";
+import {
+  perfMark,
+  perfTiming,
+  registerPerfMeta,
+  startPerfFlushes,
+  type PerfAppActivity,
+} from "./perf";
 
 /** Subscribers to the stores Now Playing and its Queue follow, for each flush's metadata. */
 const listenerCounts = () => ({
   playback: playbackState.listenerCount(),
+  position: positionState.listenerCount(),
   queue: queueState.listenerCount(),
   queueTracks: queueTracks.listenerCount(),
   nowPlaying: nowPlayingListenerCount(),
@@ -103,6 +110,17 @@ const observeTimings = (): (() => void) => {
   return () => observers.forEach((observer) => observer.disconnect());
 };
 
+/** React Native's AppState as the flushes follow it: only `active` is in front. */
+const appActivity: PerfAppActivity = {
+  active: () => AppState.currentState === "active",
+  onChange: (listener) => {
+    const subscription = AppState.addEventListener("change", (state) =>
+      listener(state === "active"),
+    );
+    return () => subscription.remove();
+  },
+};
+
 /**
  * What a perf build marks for the whole app, mounted once by the root layout
  * (only in perf builds): each route on the first frame it shows (`route`), the
@@ -135,7 +153,7 @@ export function PerfProbe() {
       perfMark(now ? "nowPlaying.shown" : "nowPlaying.hidden");
     });
     const stopTimings = observeTimings();
-    const stopFlushes = startPerfFlushes();
+    const stopFlushes = startPerfFlushes(appActivity);
     return () => {
       stopFlushes();
       show.remove();

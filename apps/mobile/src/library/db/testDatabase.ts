@@ -10,6 +10,7 @@ import { drizzle } from "drizzle-orm/sql-js";
 import { migrate } from "drizzle-orm/expo-sqlite/migrator";
 import initSqlJs from "sql.js";
 
+import { configureConnection } from "./connection.ts";
 import { creditSplits, relinkCreditsIfUnlinked } from "./credits.ts";
 import migrations from "./migrations.ts";
 import { setFavorites, type MostPlayedRow } from "./playHistory.ts";
@@ -48,8 +49,8 @@ const migrationsThrough = (through: string): typeof migrations => {
 export const openTestDatabase = async (options: { readonly through?: string } = {}) => {
   const SQL = await initSqlJs();
   const client = new SQL.Database();
-  // As on the phone: cascades only happen with foreign keys on.
-  client.exec("PRAGMA foreign_keys = ON;");
+  // As on the phone (cascades only happen with foreign keys on).
+  configureConnection((statements) => client.exec(statements));
   const db = drizzle(client, { schema });
   clients.set(db, client);
   // The Expo migrator is typed for Expo's database but only uses the dialect
@@ -69,7 +70,7 @@ export const reopenTestDatabase = async (db: TestDatabase): Promise<TestDatabase
   client.close();
   const SQL = await initSqlJs();
   const reopened = new SQL.Database(image);
-  reopened.exec("PRAGMA foreign_keys = ON;");
+  configureConnection((statements) => reopened.exec(statements));
   const next = drizzle(reopened, { schema });
   clients.set(next, reopened);
   await migrate(next as unknown as Migrator, migrations);
@@ -147,6 +148,52 @@ export const traceQueries = <A>(
     ];
   });
   return { result, queries };
+};
+
+/** How [write]'s statements were grouped into transactions. */
+export interface TracedTransactions<A> {
+  readonly result: A;
+  /** Top-level transactions begun (savepoints inside one aren't counted). */
+  readonly transactions: number;
+  /** Writes that ran outside any transaction, each its own commit. */
+  readonly writesOutside: readonly string[];
+}
+
+/**
+ * Runs [write] against [db] and records how its statements were grouped:
+ * how many transactions it began and which writes committed on their own.
+ */
+export const traceTransactions = <A>(db: TestDatabase, write: () => A): TracedTransactions<A> => {
+  const client = clients.get(db);
+  if (client === undefined) throw new Error("not a test database");
+  let transactions = 0;
+  let open = false;
+  const writesOutside: string[] = [];
+  const prepare = client.prepare;
+  client.prepare = (text, params) => {
+    const statement = prepare.call(client, text, params);
+    const step = statement.step;
+    statement.step = () => {
+      const verb = /^\s*(\w+)/.exec(text)?.[1]?.toLowerCase() ?? "";
+      if (verb === "begin") {
+        transactions += 1;
+        open = true;
+      } else if (verb === "commit" || verb === "end" || verb === "rollback") {
+        if (!/^\s*rollback\s+to\b/i.test(text)) open = false;
+      } else if (!open && /^(insert|update|delete|replace|with)$/.test(verb)) {
+        writesOutside.push(text);
+      }
+      return step.call(statement);
+    };
+    return statement;
+  };
+  let result: A;
+  try {
+    result = write();
+  } finally {
+    client.prepare = prepare;
+  }
+  return { result, transactions, writesOutside };
 };
 
 /** Desktop bench only: statement prepare/bind/step/decode/free time, without

@@ -59,7 +59,8 @@ import { signInToSpotify, spotifySignedIn } from "@/settings/spotifyAccount";
 import { signInToYtMusic, ytMusicSignedIn } from "@/settings/ytAccount";
 import { ytMusicEnabled } from "@/settings/ytMusic";
 import { askSpotifyOrFail } from "@/spotify/askSpotify";
-import { SpotifyError, type Spotify } from "@/spotify/Spotify";
+import type { Spotify } from "@/spotify/Spotify";
+import { SpotifyError } from "@/spotify/SpotifyError";
 import { askYtMusic, searchSongsInTurn } from "@/ytmusic/askYtMusic";
 import { YtLibraryError, YtMusic } from "@/ytmusic/YtMusic";
 

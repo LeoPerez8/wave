@@ -208,3 +208,9 @@ export const selectSongFindTexts = (db: LibraryDatabase): ReadonlyMap<number, Pl
     .all();
   return new Map(rows.map(({ id, title, artist, album }) => [id, { title, artist, album }]));
 };
+
+/** Full rows for a Songs section action, ordered by the same SQL terms as the paged tab. */
+export const selectSortedSongs = (db: LibraryDatabase, sort: LibrarySongSort) =>
+  trackQuery(db)
+    .orderBy(...orderBy(sort))
+    .all();

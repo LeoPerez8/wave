@@ -33,6 +33,7 @@ import expo.modules.wavenative.artwork.ArtistPhotoStore
 import expo.modules.wavenative.artwork.ArtworkInfo
 import expo.modules.wavenative.artwork.ArtworkProvider
 import expo.modules.wavenative.artwork.ArtworkStore
+import expo.modules.wavenative.artwork.MediumCoverBackfill
 import expo.modules.wavenative.download.AndroidMediaScans
 import expo.modules.wavenative.download.BackgroundThreads
 import expo.modules.wavenative.files.AudioLengths
@@ -43,7 +44,8 @@ import expo.modules.wavenative.launcher.LauncherIconSwitcher
 import expo.modules.wavenative.launch.LaunchTheme
 import expo.modules.wavenative.launch.LaunchThemeStore
 import expo.modules.wavenative.lyrics.LyricsReader
-import expo.modules.wavenative.net.Connectivity
+import expo.modules.wavenative.net.AndroidConnectivity
+import expo.modules.wavenative.net.ConnectivityState
 import expo.modules.wavenative.playlists.AndroidPlaylistImages
 import expo.modules.wavenative.playlists.PlaylistFiles
 import expo.modules.wavenative.playlists.PlaylistImageStore
@@ -52,6 +54,7 @@ import expo.modules.wavenative.scan.KnownFile
 import expo.modules.wavenative.scan.LibraryScanner
 import expo.modules.wavenative.scan.ScanListener
 import expo.modules.wavenative.scan.ScanProgress
+import expo.modules.wavenative.scan.ScanSlot
 import expo.modules.wavenative.scan.ScannedTrack
 import expo.modules.wavenative.scan.artworkToMap
 import expo.modules.wavenative.scan.trackToMap
@@ -72,7 +75,6 @@ import java.io.File
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
-import java.util.concurrent.atomic.AtomicInteger
 
 /** A square of a playlist image's original as JS passes it (Core's `FramingSquare`), in px. */
 class FramingSquareRecord : Record {
@@ -95,11 +97,11 @@ class WaveNativeModule : Module() {
   private val scanExecutor: ExecutorService = Executors.newSingleThreadExecutor { runnable ->
     Thread(runnable, "wave-scanner").apply { priority = Thread.NORM_PRIORITY - 1 }
   }
-  private val nextScanId = AtomicInteger(1)
-  @Volatile private var currentScan: Pair<Int, AtomicBoolean>? = null
+  private val scans = ScanSlot()
   private val lyricsReader by lazy {
     LyricsReader(AudioTagReader(primary = JAudioTaggerReader(), fallback = MediaRetrieverTagReader()))
   }
+  private var stopConnectivity: (() -> Unit)? = null
   /** Only touched on the main thread, where the pickers start and their results arrive. */
   private var pendingFolderPick: Promise? = null
   private var pendingPlaylistPick: Promise? = null
@@ -118,10 +120,17 @@ class WaveNativeModule : Module() {
       "onScanComplete",
       "onScanError",
       "onShareReceived",
+      "onConnectivityChanged",
     )
 
     // A share can arrive before JS listens: it stays in the inbox until `takeSharedText`.
-    OnCreate { SharedTextInbox.onReceived = { sendEvent("onShareReceived") } }
+    OnCreate {
+      SharedTextInbox.onReceived = { sendEvent("onShareReceived") }
+      // JS keeps its own copy of the cache (`connectivityStore`), pushed on each change.
+      stopConnectivity = appContext.reactContext?.let { react ->
+        AndroidConnectivity.cache(react).listen { sendEvent("onConnectivityChanged", connectivityToMap(it)) }
+      }
+    }
 
     Function("hasAllFilesAccess") { Environment.isExternalStorageManager() }
 
@@ -142,11 +151,12 @@ class WaveNativeModule : Module() {
       }
     }
 
-    /** Whether the phone is on mobile data rather than Wi-Fi (a quality replacement's card says so). */
-    Function("onMobileData") { Connectivity(context).onMobileData() }
-
-    /** Whether the phone is online: Android checked its default network reaches the internet. */
-    Function("online") { Connectivity(context).online() }
+    /**
+     * Whether the phone is online (Android checked its default network reaches the internet) and
+     * on mobile data rather than Wi-Fi: the cached answer, read once by JS, which then follows
+     * `onConnectivityChanged`.
+     */
+    Function("connectivity") { connectivityToMap(AndroidConnectivity.cache(context).current) }
 
     Function("getDefaultMusicFolder") {
       @Suppress("DEPRECATION")
@@ -265,11 +275,14 @@ class WaveNativeModule : Module() {
     }
 
     /**
-     * Scans [roots] minus [excluded], cancelling any scan in progress. The known
-     * files (parallel lists of path, size and modification time) make it
-     * incremental: unchanged files aren't read again and missing ones are reported.
+     * Scans [roots] minus [excluded] as scan [scanId] (JS numbers its scans in order), cancelling
+     * any scan in progress. The known files (parallel lists of path, size and modification time)
+     * make it incremental: unchanged files aren't read again and missing ones are reported.
+     * Async: the lists can hold the whole Library, so they cross and are indexed off the JS
+     * thread. Resolves once the scan is queued; its events carry [scanId].
      */
-    Function("startScan") {
+    AsyncFunction("startScan") {
+        scanId: Int,
         roots: List<String>,
         excluded: List<String>,
         knownPaths: List<String>,
@@ -283,20 +296,20 @@ class WaveNativeModule : Module() {
       for (i in knownPaths.indices) {
         known[knownPaths[i]] = KnownFile(knownSizes[i].toLong(), knownModifiedAt[i].toLong())
       }
-      val id = nextScanId.getAndIncrement()
-      val cancelled = AtomicBoolean(false)
-      currentScan?.second?.set(true)
-      currentScan = id to cancelled
-      val artworkDir = File(context.filesDir, "artwork")
-      scanExecutor.execute {
-        runScan(id, cancelled, roots.map(::File), excluded.map(::File), known, artworkDir)
+      // Null when a newer scan already started: this one's start arrived late and never runs.
+      val cancelled = scans.claim(scanId)
+      if (cancelled != null) {
+        val artworkDir = File(context.filesDir, "artwork")
+        scanExecutor.execute {
+          runScan(scanId, cancelled, roots.map(::File), excluded.map(::File), known, artworkDir)
+        }
       }
-      id
     }
 
-    Function("cancelScan") { scanId: Int ->
-      currentScan?.takeIf { it.first == scanId }?.second?.set(true)
-    }
+    /** Encodes at most one cached cover. JS calls again only on a free turn; no tag rescan. */
+    AsyncFunction("backfillMediumCover") { mediumCovers.step() }
+
+    Function("cancelScan") { scanId: Int -> scans.cancel(scanId) }
 
     /**
      * A track's lyrics, unparsed: `{ embedded, sidecar }`, each the text or
@@ -453,7 +466,9 @@ class WaveNativeModule : Module() {
 
     OnDestroy {
       SharedTextInbox.onReceived = null
-      currentScan?.second?.set(true)
+      stopConnectivity?.invoke()
+      stopConnectivity = null
+      scans.cancelAll()
       scanExecutor.shutdownNow()
       launcherIconSwitcher?.let { switcher ->
         appContext.reactContext?.let { (it.applicationContext as Application).unregisterActivityLifecycleCallbacks(switcher) }
@@ -582,6 +597,13 @@ class WaveNativeModule : Module() {
     }
   }.getOrNull()
 
+  private val mediumCovers by lazy {
+    val processor = AndroidArtworkProcessor()
+    MediumCoverBackfill(File(context.filesDir, "artwork")) { original, target ->
+      original.length() <= ArtworkStore.MAX_IMAGE_BYTES && processor.medium(original.readBytes(), target)
+    }
+  }
+
   private fun artistPhotos() = ArtistPhotoStore(File(File(context.filesDir, "artwork"), "artists"))
 
   /** Reads single files the way a scan does (same tag reader and artwork store). */
@@ -664,9 +686,12 @@ class WaveNativeModule : Module() {
     } catch (e: Throwable) {
       sendEvent("onScanError", mapOf("scanId" to id, "message" to (e.message ?: e.toString())))
     } finally {
-      if (currentScan?.first == id) currentScan = null
+      scans.finished(id)
     }
   }
+
+  private fun connectivityToMap(state: ConnectivityState) =
+    mapOf("online" to state.online, "onMobileData" to state.onMobileData)
 
   private companion object {
     const val PICK_FOLDER_REQUEST = 0x5741

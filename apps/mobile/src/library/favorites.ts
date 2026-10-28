@@ -1,6 +1,5 @@
 import {
   favoriteStar,
-  parseTrackId,
   starWriteSettled,
   starWriteStarted,
   ytSongStarred,
@@ -10,6 +9,7 @@ import {
 import { useEffect, useSyncExternalStore } from "react";
 
 import { makeExternalStore, subscribeAll } from "@/lib/externalStore";
+import { useSightedStore } from "@/lib/screenSight";
 
 import {
   onSavedStars,
@@ -165,36 +165,25 @@ export const favoriteIdsNow = (): ReadonlySet<number> => favorites.get().ids;
 export const toggleFavorite = (trackId: number | string): Promise<void> =>
   setFavorite(trackId, !isFavorite(trackId));
 
-const useFavoritesState = (active = true): FavoritesState => {
+const useLoadedFavorites = (active: boolean): void => {
   useEffect(() => {
     if (active) loadFavorites();
   }, [active]);
-  return useSyncExternalStore(favorites.subscribe, favorites.get);
 };
 
-/** The ids of every starred track (for marking rows in a list). */
-export const useFavoriteIds = (active = true): ReadonlySet<number> => useFavoritesState(active).ids;
-
 /**
- * Whether a track is starred; takes a SongRow id or a queue track id (Now
- * Playing). A YT Music song's (`yt:<videoId>`) is its pending favorite:
- * starred, its file on its way.
+ * The ids of every starred track (for marking rows in a list). A screen out of
+ * sight doesn't follow them; it catches up when it comes back (`useSightedStore`).
  */
-export const useIsFavorite = (trackId: number | string | null): boolean => {
-  const ref = typeof trackId === "string" ? parseTrackId(trackId) : null;
-  const video = ref?.kind === "yt" ? ref.videoId : null;
-  const pendingStar = video !== null;
-  useEffect(() => {
-    if (pendingStar) loadPendingFavorites();
-    else loadFavorites();
-  }, [pendingStar]);
-  return useSyncExternalStore(
-    video === null ? favorites.subscribe : pendingFavorites.subscribe,
-    () =>
-      video !== null
-        ? pendingFavorites.get().videos.has(video)
-        : trackId !== null && favorites.get().ids.has(Number(trackId)),
-  );
+export const useFavoriteIds = (active = true): ReadonlySet<number> => {
+  useLoadedFavorites(active);
+  return useSightedStore(favorites.subscribe, favoriteIdsNow);
+};
+
+/** `useFavoriteIds` followed whether or not a screen is in sight: for menus and Now Playing. */
+export const useLiveFavoriteIds = (active = true): ReadonlySet<number> => {
+  useLoadedFavorites(active);
+  return useSyncExternalStore(favorites.subscribe, favoriteIdsNow);
 };
 
 /**
@@ -318,12 +307,27 @@ export const setPendingFavorites = (
   );
 };
 
-/** The videos of every pending favorite (for marking YT Music songs starred). */
-export const usePendingFavoriteVideos = (active = true): ReadonlySet<string> => {
+const pendingVideosNow = (): ReadonlySet<string> => pendingFavorites.get().videos;
+
+const useLoadedPendingFavorites = (active: boolean): void => {
   useEffect(() => {
     if (active) loadPendingFavorites();
   }, [active]);
-  return useSyncExternalStore(pendingFavorites.subscribe, () => pendingFavorites.get().videos);
+};
+
+/**
+ * The videos of every pending favorite (for marking YT Music songs starred in
+ * a list). A screen out of sight doesn't follow them (`useSightedStore`).
+ */
+export const usePendingFavoriteVideos = (active = true): ReadonlySet<string> => {
+  useLoadedPendingFavorites(active);
+  return useSightedStore(pendingFavorites.subscribe, pendingVideosNow);
+};
+
+/** `usePendingFavoriteVideos` followed whether or not a screen is in sight: for menus and Now Playing. */
+export const useLivePendingFavoriteVideos = (active = true): ReadonlySet<string> => {
+  useLoadedPendingFavorites(active);
+  return useSyncExternalStore(pendingFavorites.subscribe, pendingVideosNow);
 };
 
 /**
@@ -332,8 +336,8 @@ export const usePendingFavoriteVideos = (active = true): ReadonlySet<string> => 
  * song shows (Now Playing, its menu).
  */
 export const useYtSongStarred = (videoId: string | null, track: { id: number } | null): boolean => {
-  const favoriteIds = useFavoriteIds();
-  const pending = usePendingFavoriteVideos();
+  const favoriteIds = useLiveFavoriteIds();
+  const pending = useLivePendingFavoriteVideos();
   return videoId !== null && ytSongStarred(videoId, track, favoriteIds, pending);
 };
 

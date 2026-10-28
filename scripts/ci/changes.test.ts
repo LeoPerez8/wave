@@ -61,6 +61,15 @@ describe("changes", () => {
     );
   });
 
+  it("runs the native tests when wave-glass changes", () => {
+    assert.equal(
+      changes([
+        "apps/mobile/modules/wave-glass/android/src/main/java/expo/modules/waveglass/WaveCoverView.kt",
+      ]).nativeTests,
+      true,
+    );
+  });
+
   for (const path of [
     "apps/mobile/app.config.ts",
     "apps/mobile/plugins/withGradleBuildCache.ts",

@@ -23,12 +23,14 @@ import {
   parsePackage,
   parseRefreshRate,
   parseThermalStatus,
+  parseThreadSwitches,
   parseWmSize,
+  threadSwitchesCommand,
   type AmStart,
   type Target,
 } from "./device.ts";
 import { compileWithBaseline, readProfileState } from "./profileDevice.ts";
-import { stepMetrics, type StepRecord } from "./metrics.ts";
+import { stepMetrics, threadWakeups, type StepRecord, type Wakeups } from "./metrics.ts";
 import {
   findScenario,
   type Action,
@@ -277,6 +279,7 @@ export const runPerf = async (
       case "launch":
       case "resume":
       case "idle":
+      case "screenOff":
         return null;
     }
   };
@@ -378,6 +381,32 @@ export const runPerf = async (
   // ---------------------------------------------------------------------------
   // Measuring
 
+  const threads = async () => {
+    const read = parseThreadSwitches(await shell(threadSwitchesCommand(pkg)));
+    if (read.size === 0)
+      throw new ScenarioError(`Couldn't read ${pkg}'s threads (is it running?).`);
+    return read;
+  };
+
+  /**
+   * Turns the screen off for [windowMs] and counts what woke the app's threads
+   * meanwhile; then turns it on and unlocks it (a lock screen without a PIN),
+   * so the app comes back to the front.
+   */
+  const screenOff = async (windowMs: number): Promise<Wakeups> => {
+    await device.sleep(options.settleMs);
+    await shell("logcat -c");
+    await shell(`dumpsys gfxinfo ${pkg} reset`);
+    const before = await threads();
+    await shell("input keyevent KEYCODE_SLEEP");
+    await device.sleep(windowMs);
+    const after = await threads();
+    await shell("input keyevent KEYCODE_WAKEUP");
+    await shell("wm dismiss-keyguard");
+    await shell(`dumpsys gfxinfo ${pkg} reset`);
+    return threadWakeups(before, after, windowMs);
+  };
+
   const measure = async (
     scenario: Scenario,
     variant: Variant,
@@ -388,6 +417,7 @@ export const runPerf = async (
     const tag = `${scenario.name}/${variant}#${position.iteration}.${position.index}`;
     const command = await prepare(step.action);
     let launched: AmStart | null = null;
+    let wakeups: Wakeups | null = null;
     if (step.action.kind === "launch") {
       launched = await launch();
     } else if (step.action.kind === "resume") {
@@ -401,13 +431,18 @@ export const runPerf = async (
       );
       if (launched.status !== "ok")
         throw new ScenarioError(`Couldn't bring ${pkg} back (${launched.status ?? "no status"}).`);
+    } else if (step.action.kind === "screenOff") {
+      wakeups = await screenOff(step.windowMs ?? options.windowMs);
     } else {
       await device.sleep(options.settleMs);
       await shell("logcat -c");
       await shell(`dumpsys gfxinfo ${pkg} reset`);
       if (command !== null) await shell(command);
     }
-    await device.sleep(step.windowMs ?? options.windowMs);
+    // A screen-off step's window was the screen off; what follows is the return.
+    await device.sleep(
+      step.action.kind === "screenOff" ? options.windowMs : (step.windowMs ?? options.windowMs),
+    );
     const gfx = parseGfxinfo(await shell(`dumpsys gfxinfo ${pkg} framestats`));
     // Wait for the flush even when not recording, so this step's marks don't reach the next.
     const perf = perfBuild ? await collect(touches(step.action), flushWait) : null;
@@ -470,6 +505,8 @@ export const runPerf = async (
       ...(Object.keys(backgroundWork).length > 0 ? { backgroundWork } : {}),
       // Subscribers to the playback stores and the sheet when the step's flush was written.
       ...(Object.keys(listeners).length > 0 ? { listeners } : {}),
+      // The screen-off window's wake-ups per minute, the JS thread's and the process's (#712).
+      ...(wakeups === null ? {} : { wakeups }),
       // Hermes's used heap in bytes at the step's flush, when it reports it (#318's growth check).
       ...(typeof meta["js.heapUsed"] === "number" ? { jsHeapUsed: meta["js.heapUsed"] } : {}),
     };
@@ -479,7 +516,10 @@ export const runPerf = async (
         metrics.firstFrameMs,
       )}, settle ${ms(metrics.settleMs)}, burst ${ms(metrics.burstMs)}, ` +
         `${metrics.frames.deadlineMissed}/${metrics.frames.total} frames late` +
-        (launched === null ? "" : `, launch ${ms(launched.totalTimeMs)}`),
+        (launched === null ? "" : `, launch ${ms(launched.totalTimeMs)}`) +
+        (wakeups === null
+          ? ""
+          : `, JS ${wakeups.jsPerMinute ?? "?"} and process ${wakeups.processPerMinute} wake-ups/min`),
     );
   };
 
@@ -510,6 +550,8 @@ export const runPerf = async (
 
   const runScenario = async (scenario: Scenario, variant: Variant): Promise<void> => {
     log(`${scenario.name} (${variant})`);
+    // One label can sit in different places on different screens (Songs' Play, the transport's).
+    targets.clear();
     const steps = scenario.steps(options.config);
     const launchesItself = steps[0]?.action.kind === "launch";
     const start = async (): Promise<void> => {
@@ -517,7 +559,9 @@ export const runPerf = async (
       await launch();
       await device.sleep(options.launchSettleMs);
       await ensureForeground();
-      for (const action of scenario.setup ?? []) await unmeasured(action);
+      const setup =
+        typeof scenario.setup === "function" ? scenario.setup(options.config) : scenario.setup;
+      for (const action of setup ?? []) await unmeasured(action);
     };
     const traceName = `${run}-${scenario.name}-${variant}`;
     let trace: Trace | null = null;

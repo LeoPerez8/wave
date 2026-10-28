@@ -3,7 +3,6 @@ import {
   identityKey,
   inLibraryUnlessHeld,
   libraryAlbumFinder,
-  libraryFinder,
   stepYtArtistSection,
   ytArtistCounts,
   ytArtistFullPage,
@@ -36,7 +35,7 @@ import {
 
 import type { LineToggle } from "@/catalog/PlayShuffle";
 import { LibraryStore, type AlbumRow, type SongRow } from "@/library/LibraryStore";
-import { useScreenSettled } from "@/lib/screenTiming";
+import { useSettledOnce } from "@/lib/screenTiming";
 import { useScreenSight } from "@/lib/screenSight";
 import { isScreenSettled } from "@/lib/timing";
 import { appRuntime } from "@/library/runtime";
@@ -50,7 +49,7 @@ import { readArtistPage } from "./candidateCatalog";
 import { artistPopularSongs, createArtistOpeningRead } from "./artistOpeningRead";
 import { searchAllowanceSnapshot, withSearchTurn } from "./searchAllowance";
 import { artistOpeningRequest } from "./artistOpeningRequest";
-import { useLoadedLibraryFinder, type FindInLibrary } from "./libraryFinder";
+import { libraryFinderForRows, useLoadedLibraryFinder, type FindInLibrary } from "./libraryFinder";
 import { useLineToggle } from "./OnlineToggle";
 import { YtMusic, YtMusicError } from "./YtMusic";
 
@@ -399,7 +398,8 @@ const useDeferredArtistSection = (
   always: boolean,
   pick: YtPick | null,
 ) => {
-  const settled = useScreenSettled();
+  // Settled once is enough for this artist: Now Playing over the page keeps its online rows.
+  const settled = useSettledOnce(name);
   const sight = useScreenSight();
   const enabled = useYtMusicEnabled();
   const [reader] = useState(() =>
@@ -458,6 +458,6 @@ export const useArtistSongsFinder = (
 ): FindInLibrary | null =>
   useMemo(() => {
     if (shared === null) return null;
-    const own = libraryFinder(songs);
+    const own = libraryFinderForRows(songs);
     return (song) => own(song) ?? shared(song);
   }, [songs, shared]);

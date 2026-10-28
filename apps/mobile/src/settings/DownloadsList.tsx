@@ -33,7 +33,7 @@ import { CatalogLine } from "@/catalog/CatalogLine";
 import { CELL, grid } from "@/catalog/grid";
 import { Hairline } from "@/catalog/Hairline";
 import { REORDER_HANDLE_ROOM, ReorderHandle } from "@/components/RowReorder";
-import { PlainTextButton } from "@/components/PlainTextButton";
+import { TextButton } from "@/components/TextButton";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 import { DownloadRunPanel, RunBar } from "@/settings/DownloadRunPanel";
 import { DownloadSongRow } from "@/settings/DownloadSongRow";
@@ -141,7 +141,7 @@ const QueuedDownloadRow = memo(
         onAccessibilityAction={onAccessibilityAction}
       >
         {cancel !== null && (
-          <PlainTextButton label="Cancel" onPress={() => cancelQueuedDownload(queued)} />
+          <TextButton variant="plain" label="Cancel" onPress={() => cancelQueuedDownload(queued)} />
         )}
         <HandleSlot handle={handle} />
       </DownloadSongRow>

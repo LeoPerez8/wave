@@ -16,7 +16,7 @@ import {
   useHome,
   useLibraryCounts,
   useScanRoots,
-  useScanState,
+  useScanStatus,
   useTrackCount,
 } from "@/library/hooks";
 import { libraryShelfTitleLongPress, useLibraryShelf } from "@/library/libraryShelf";
@@ -34,12 +34,12 @@ function LibraryShelfSection({ id }: { id: HomeSectionId }) {
 export default function LibraryScreen() {
   useScreenContent(true);
   useRenderCount("LibraryScreen");
-  const scan = useScanState();
+  const scanStatus = useScanStatus();
   const trackCount = useTrackCount();
   const roots = useScanRoots();
   const counts = useLibraryCounts();
   const shelf = useLibraryShelf();
-  const empty = scan.status === "done" && trackCount === 0;
+  const empty = scanStatus === "done" && trackCount === 0;
 
   return (
     <LargeTitleScreen

@@ -1,3 +1,4 @@
+import { startMediumCovers } from "@/library/mediumCovers";
 import "../../global.css";
 // Lays the chosen theme colours over global.css's, in the chosen appearance, before anything renders.
 // oxlint-disable-next-line import/no-unassigned-import
@@ -12,25 +13,25 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { afterFirstSettled, touchEnded, touchStarted, touchTakenOver } from "@/lib/backgroundWork";
-import { followLibraryLookupSummary } from "@/library/findLyricsAndGenre";
+import { followFixSongsSummary } from "@/library/findLyricsAndGenre";
 import { useAllFilesAccess } from "@/library/hooks";
 import { resumePlaylistImports } from "@/library/playlistImports";
 import { resumeYtLibraryImport } from "@/library/ytLibraryImport";
 import { primePlaylists } from "@/library/playlists";
 import { OverlayHost } from "@/overlay/OverlayHost";
 import { AndroidBack } from "@/overlay/AndroidBack";
-import { PhotoCropperHost } from "@/library/PhotoCropper";
+import { PhotoCropperHost } from "@/library/PhotoCropperHost";
 import { FollowCurrentRoute } from "@/library/routes";
 import { useOpenSharedText } from "@/library/sharedText";
-import { YtLibraryPickerHost } from "@/library/YtLibraryPicker";
+import { YtLibraryPickerHost } from "@/library/YtLibraryPickerHost";
 import { launchScanDone } from "@/library/replacementDuplicates";
-import { startInitialScan } from "@/library/runtime";
+import { optimizeLibraryDatabase, startInitialScan } from "@/library/runtime";
 import { ErrorScreen } from "@/log/ErrorScreen";
 import { NowPlayingSheet, UnderNowPlaying } from "@/nowPlaying/NowPlayingSheet";
 import { PERF_ENABLED, perfTouch, useRenderCount } from "@/perf/perf";
 import { PerfProbe } from "@/perf/PerfProbe";
 import { startServices } from "@/services";
-import { SongShareLayer } from "@/share/SongSharePreview";
+import { SongShareLayer } from "@/share/SongShareLayer";
 import { useNavigationBarScheme } from "@/settings/appearance";
 import { startSync } from "@/sync/startSync";
 import { useThemeColor } from "@/theme/useThemeColor";
@@ -82,6 +83,9 @@ export default function RootLayout() {
     }
   }, [granted]);
 
+  // SQLite gathers the planner statistics the Library database lacks (src/library/db/connection.ts).
+  useEffect(() => afterFirstSettled("optimize", optimizeLibraryDatabase), []);
+
   // While signed in to a Wave account, the Library syncs with it (src/sync/WaveSync.ts).
   useEffect(() => afterFirstSettled("sync", startSync), []);
 
@@ -90,8 +94,10 @@ export default function RootLayout() {
     if (granted) return afterFirstSettled("playlists", primePlaylists);
   }, [granted]);
 
+  useEffect(() => startMediumCovers(), []);
+
   // A whole-Library lyrics and genre run that ended in the background says how it went.
-  useEffect(() => afterFirstSettled("lookupSummary", followLibraryLookupSummary), []);
+  useEffect(() => afterFirstSettled("lookupSummary", followFixSongsSummary), []);
 
   return (
     <GestureHandlerRootView

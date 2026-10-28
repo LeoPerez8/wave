@@ -1,5 +1,6 @@
 import { View } from "react-native";
 
+import { artworkUri } from "./artworkUri";
 import { useYtMusicEnabled } from "@/settings/ytMusic";
 
 import { Artwork } from "./Artwork";
@@ -17,18 +18,11 @@ type Props = {
   radius?: number | undefined;
 };
 
-const ADDRESS = /^[a-z][a-z0-9+.-]*:\/\//i;
-
-/**
- * Where [path] loads from: a cached file, or a YT Music entry's cover address,
- * only while YT Music is on (off, Wave asks YouTube for nothing, so the
- * placeholder shows instead).
- */
-const uri = (path: string | undefined, ytMusic: boolean): string | undefined => {
-  if (path === undefined) return undefined;
-  if (!ADDRESS.test(path)) return `file://${path}`;
-  return ytMusic ? path : undefined;
-};
+/** Local artwork stays available while YT Music is off; remote covers follow its switch. */
+const uri = (path: string | undefined, ytMusic: boolean): string | undefined =>
+  path !== undefined && (!/^https?:/i.test(path) || ytMusic)
+    ? artworkUri(path, "original")
+    : undefined;
 
 /**
  * A playlist's artwork: four album covers in a 2×2 square, butted together

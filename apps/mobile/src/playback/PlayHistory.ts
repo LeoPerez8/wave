@@ -21,7 +21,8 @@ import { makeExternalStore } from "@/lib/externalStore";
 import { publishLibraryChange } from "@/library/libraryChanges";
 import { LibraryStore } from "@/library/LibraryStore";
 
-import { Player, playbackState } from "./Player";
+import { Player, playbackState, positionState } from "./Player";
+import { observePlayCheckpoints } from "./playCheckpoints";
 import { keptPlayingKey, queueSource, queueState } from "./Queue";
 import { queuedYtSong, queueTracks } from "./queueTracks";
 
@@ -44,6 +45,28 @@ export const playHistoryChanged = (trackIds?: readonly number[]): void => {
   });
 };
 
+/** What went into the play history: a play started or ended here, or plays were imported. */
+export type PlaysRecorded = "started" | "ended" | "imported";
+
+const recordedListeners = new Set<(what: PlaysRecorded) => void>();
+
+/**
+ * Calls [listener] each time plays go into the history here (not those
+ * pulled from the Wave account): `WaveSync` sends them up. Returns how to stop.
+ */
+export const onPlaysRecorded = (listener: (what: PlaysRecorded) => void): (() => void) => {
+  recordedListeners.add(listener);
+  return () => {
+    recordedListeners.delete(listener);
+  };
+};
+
+/** Plays were imported (BlackPlayer's stats): the history changed, and they go up. */
+export const playsImported = (): void => {
+  playHistoryChanged();
+  for (const listener of recordedListeners) listener("imported");
+};
+
 const playEndListeners = new Set<(end: PlayEnd) => void>();
 
 /**
@@ -64,9 +87,6 @@ export const onPlayEnded = (listener: (end: PlayEnd) => void): (() => void) => {
  * so far: with Core's `playEndPending`, whether a play's end is yet to come.
  */
 export const playTracker = makeExternalStore<PlayTrackerState>(EMPTY_PLAY_TRACKER);
-
-/** How often a play still going on is brought up to date, should Wave's process die. */
-const SAVE_INTERVAL_MS = 15_000;
 
 /** Videos YouTube refused in this session; an offline or temporary failure never marks one. */
 export const unavailableStreamedVideos = makeExternalStore<ReadonlySet<string>>(new Set());
@@ -114,13 +134,12 @@ export const layer = Layer.effectDiscard(
 
     let tracker = EMPTY_PLAY_TRACKER;
     const rowIds = new Map<string, number>();
-    let lastSave = 0;
     let wasPlaying = false;
     // Whether the player keeping a play going through a JS restart was checked for.
     let resumeChecked = false;
     const saveProgress = (): void => {
-      lastSave = Date.now();
-      for (const play of [playSoFar(tracker, lastSave), fadingPlaySoFar(tracker, lastSave)]) {
+      const at = Date.now();
+      for (const play of [playSoFar(tracker, at), fadingPlaySoFar(tracker, at)]) {
         if (play === null) continue;
         const rowId = rowIds.get(identity(play));
         if (rowId !== undefined) write(store.updatePlay(rowId, play));
@@ -138,7 +157,6 @@ export const layer = Layer.effectDiscard(
           const song = queued === undefined ? undefined : (queuedYtSong(queued) ?? undefined);
           rowId = write(store.recordPlay(step.play, tracker.fading !== null, song));
           if (rowId !== null) rowIds.set(identity(step.play), rowId);
-          lastSave = Date.now();
         } else {
           rowId = rowIds.get(identity(step.play));
           if (rowId !== undefined) write(store.endPlay(rowId, step.play));
@@ -149,6 +167,7 @@ export const layer = Layer.effectDiscard(
         // Only a Library song has an id to name; a streamed play (`yt:<videoId>`) has none.
         const played = parseTrackId(step.play.trackId);
         playHistoryChanged(played?.kind === "library" ? [played.id] : undefined);
+        for (const listener of recordedListeners) listener(step.type);
       }
       playTracker.set(tracker);
     };
@@ -166,11 +185,11 @@ export const layer = Layer.effectDiscard(
       if (latest === null || resumed === null) return;
       tracker = resumed;
       rowIds.set(identity(latest.play), latest.id);
-      lastSave = Date.now();
     };
 
     const onPlaybackState = (): void => {
       const state = playbackState.get();
+      const position = positionState.get();
       const key = state.item?.id ?? null;
       if (state.isPlaying && key !== null) {
         const ref = parseTrackId(trackFor(key)?.trackId ?? "");
@@ -185,19 +204,18 @@ export const layer = Layer.effectDiscard(
       const noTrackNeeded = key === null || tracker.play?.key === key;
       const signal: StateSignal = {
         type: "state",
-        at: state.at > 0 ? state.at : Date.now(),
+        at: position.at > 0 ? position.at : Date.now(),
         key,
         status: state.status,
         playing: state.isPlaying,
-        durationMs: state.durationMs,
+        durationMs: position.durationMs,
         track: noTrackNeeded ? null : trackFor(key),
       };
       resume(signal);
       feed(signal);
       const pausedOrResumed = wasPlaying !== state.isPlaying;
       wasPlaying = state.isPlaying;
-      if (pausedOrResumed || (state.isPlaying && Date.now() - lastSave >= SAVE_INTERVAL_MS))
-        saveProgress();
+      if (pausedOrResumed) saveProgress();
     };
 
     yield* player.onPlayerError((event) => {
@@ -236,7 +254,9 @@ export const layer = Layer.effectDiscard(
         });
         // The player may already be playing (JS restarted while it kept going).
         onPlaybackState();
+        const stopCheckpoints = observePlayCheckpoints(playbackState, saveProgress);
         return () => {
+          stopCheckpoints();
           appState.remove();
           unsubscribe();
         };

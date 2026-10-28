@@ -1,5 +1,6 @@
 import { useWindowDimensions, View } from "react-native";
 
+import { artworkUri } from "@/catalog/artworkUri";
 import type { AlbumSummary } from "@/catalog/AlbumTile";
 import { AlbumCard } from "@/catalog/cards/AlbumCard";
 import { captionHeight } from "@/catalog/cards/CardParts";
@@ -47,7 +48,7 @@ export const toAlbumSummary = (album: AlbumRow): AlbumSummary => ({
   year: album.year ?? undefined,
   trackCount: album.trackCount,
   durationMs: album.durationMs,
-  artworkUri: album.artworkPath === null ? undefined : `file://${album.artworkPath}`,
+  artworkUri: artworkUri(album, "medium"),
 });
 
 const albumKey = (album: AlbumRow): string => String(album.id);
@@ -81,13 +82,13 @@ export function AlbumPair({
       style={{ gap: grid.gutter, height: albumCardRowHeight(size, fontScale) }}
     >
       {albums.map((album) => {
-        const { title, albumArtist, artworkUri } = toAlbumSummary(album);
+        const { title, albumArtist, artworkUri: coverUri } = toAlbumSummary(album);
         return (
           <AlbumCard
             key={album.id}
             title={title}
             artist={albumArtist}
-            artworkUri={artworkUri}
+            artworkUri={coverUri}
             size={size}
             {...selectableRow(
               album,
