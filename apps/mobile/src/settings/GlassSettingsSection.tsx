@@ -13,6 +13,7 @@ import { SettingsSwitch } from "@/components/SettingsSwitch";
 import { SettingsSlider } from "@/components/SettingsSlider";
 import { TextButton } from "@/components/TextButton";
 
+import { GlassSample } from "./GlassSample";
 import { resetGlassSettings, setGlassSetting, useGlassSettings } from "./glass";
 
 const dp = (value: number) => `${value} dp`;
@@ -46,6 +47,9 @@ export function GlassSettingsSection() {
   return (
     <View>
       <CatalogLine className="mb-2">Glass</CatalogLine>
+      <View className="mb-3">
+        <GlassSample />
+      </View>
       <Hairline />
       <GlassLevelSlider label="Blur" setting="blur" value={glass.blur} format={dp} />
       <Hairline />
@@ -67,7 +71,8 @@ export function GlassSettingsSection() {
       <Text className="mt-2 font-sans text-footnote text-secondary">
         How the tab bar, mini player, menus and dialogs show what&apos;s behind them. Blur softens
         it, refraction bends it at the edges (off leaves blur, tint and rim), tint lays the surface
-        colour over it so text stays legible, and the rim is the bright edge.
+        colour over it so text stays legible, and the rim is the bright edge. The sample shows each
+        change; the app&apos;s glass takes it once you leave Appearance.
       </Text>
       <View className="mt-4 items-start">
         <TextButton
