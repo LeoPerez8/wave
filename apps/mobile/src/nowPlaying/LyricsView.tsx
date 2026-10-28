@@ -1,9 +1,16 @@
-import { IconLanguage, IconQuoteOff, IconShare3 } from "@tabler/icons-react-native";
+import {
+  IconLanguage,
+  IconMicrophone2,
+  IconQuoteOff,
+  IconShare3,
+} from "@tabler/icons-react-native";
 import {
   MAX_SHARED_LYRIC_LINES,
   currentLyricIndex,
+  currentLyricWordIndex,
   extrapolatePosition,
   isLyricLineSelected,
+  karaokeLyricLines,
   lyricCardColours,
   shareableLyricLines,
   sharedLyricLines,
@@ -37,6 +44,7 @@ import { Press } from "@/motion/Press";
 import { addScreenBackHandler } from "@/overlay/back";
 import { seekTo } from "@/playback/actions";
 import { positionState, type PlaybackState } from "@/playback/Player";
+import { setKaraokeOn, useKaraokeOn } from "@/settings/karaoke";
 import { setLyricsTranslationOn, useLyricsTranslationOn } from "@/settings/lyricsTranslation";
 import { closeLyricCard, openLyricCard } from "@/share/lyricCard";
 import { useThemeColor } from "@/theme/useThemeColor";
@@ -154,6 +162,7 @@ type LineProps = {
   line: LyricLine;
   index: number;
   current: boolean;
+  karaoke: boolean;
   /** Share is picking lines: a tap selects instead of seeking. */
   picking: boolean;
   selected: boolean;
@@ -167,8 +176,39 @@ type LineProps = {
 };
 
 /**
- * One synced line: ink while it's sung, graphite otherwise, with its
- * translation under it lit along with it. Tap either to play from there.
+ * The sung line with Karaoke on: the words already sung and the one being
+ * sung in ink, the rest in the line's dim tone. Core says which word is sung
+ * at the shared playhead, so a seek either way relights the right word at
+ * once, and the line renders once a word, never every frame.
+ */
+function KaraokeText({ line }: { line: LyricLine }) {
+  const words = line.words ?? [];
+  const [sung, setSung] = useState(() =>
+    currentLyricWordIndex(words, extrapolatePosition(positionState.get(), Date.now())),
+  );
+  useAnimatedReaction(
+    () => (playhead.live.get() ? currentLyricWordIndex(words, playhead.positionMs.get()) : null),
+    (next, previous) => {
+      if (next !== null && next !== previous) scheduleOnRN(setSung, next);
+    },
+  );
+  return (
+    <Text className="font-sans text-title2 font-medium text-secondary">
+      {line.text.slice(0, words[0]?.start ?? line.text.length)}
+      {words.map((word, at) => (
+        // Each word carries the spaces after it, so the line wraps as the plain one does.
+        <Text key={word.start} className={at <= sung ? "text-foreground" : undefined}>
+          {line.text.slice(word.start, words[at + 1]?.start ?? line.text.length)}
+        </Text>
+      ))}
+    </Text>
+  );
+}
+
+/**
+ * One synced line: ink while it's sung (word by word with Karaoke on),
+ * graphite otherwise, with its translation under it lit along with it. Tap
+ * either to play from there.
  * While Share picks lines, ink on a faint backdrop marks the selected ones,
  * and a tap picks instead.
  */
@@ -176,6 +216,7 @@ const SyncedLine = memo(function SyncedLine({
   line,
   index,
   current,
+  karaoke,
   picking,
   selected,
   translation,
@@ -228,6 +269,8 @@ const SyncedLine = memo(function SyncedLine({
       >
         {line.text === "" ? (
           <PauseDots current={!picking && current} />
+        ) : karaoke && current && !picking ? (
+          <KaraokeText line={line} />
         ) : (
           <Animated.Text className="font-sans text-title2 font-medium" style={tint}>
             {line.text}
@@ -254,17 +297,23 @@ const SyncedLine = memo(function SyncedLine({
  * picks lines they don't follow the song.
  */
 function SyncedLyrics({
-  lines,
+  lines: sourceLines,
+  karaoke,
   picking,
   translation,
   retryTranslation,
 }: {
   lines: readonly LyricLine[];
+  karaoke: boolean;
   picking: Picking | null;
   translation: TranslationShown | null;
   retryTranslation: () => void;
 }) {
   useRenderCount("SyncedLyrics");
+  const lines = useMemo(
+    () => (karaoke ? karaokeLyricLines(sourceLines) : sourceLines),
+    [sourceLines, karaoke],
+  );
   const [current, setCurrent] = useState(() => ({
     lines,
     index: currentLyricIndex(lines, extrapolatePosition(positionState.get(), Date.now())),
@@ -404,6 +453,7 @@ function SyncedLyrics({
           line={line}
           index={at}
           current={at === index}
+          karaoke={karaoke}
           picking={isPicking}
           selected={picking?.isSelected(at) ?? false}
           {...translations[at]!}
@@ -574,12 +624,14 @@ type Shown = LibraryLyricsShown | Exclude<NonDLyricsShown, { kind: "lyrics" }>;
 /** The lyrics themselves, the search's skeleton, or the empty state. */
 function LyricsBody({
   shown,
+  karaoke,
   picking,
   retry,
   translation,
   retryTranslation,
 }: {
   shown: Shown | null;
+  karaoke: boolean;
   picking: Picking | null;
   retry: () => void;
   translation: TranslationShown | null;
@@ -599,6 +651,7 @@ function LyricsBody({
       return (
         <SyncedLyrics
           lines={shown.lines}
+          karaoke={karaoke}
           picking={picking}
           translation={translation}
           retryTranslation={retryTranslation}
@@ -703,6 +756,7 @@ export function LyricsView({
   // The song whose lines are picked: its file, or a non-D song's track id.
   const song = path ?? nonDTrackId;
   const translationOn = useLyricsTranslationOn();
+  const karaokeOn = useKaraokeOn();
   // A Library track by its id, a non-D song by its track id: its saved translation's key.
   const translationSong =
     file !== null ? `library:${file.id}` : nonDTrackId === null ? null : `track:${nonDTrackId}`;
@@ -781,6 +835,16 @@ export function LyricsView({
             {lines !== null && (
               // The icon's 48dp target reaches past the margin, so the glyph lines up with it.
               <View className="flex-row" style={{ marginRight: -12 }}>
+                {shown?.kind === "synced" && (
+                  <IconButton
+                    icon={IconMicrophone2}
+                    label="Karaoke"
+                    accessibilityRole="switch"
+                    accessibilityState={{ checked: karaokeOn }}
+                    tone={karaokeOn ? "accent" : "secondary"}
+                    onPress={() => setKaraokeOn(!karaokeOn)}
+                  />
+                )}
                 <TranslateButton
                   on={translationOn}
                   onPress={() => setLyricsTranslationOn(!translationOn)}
@@ -797,6 +861,7 @@ export function LyricsView({
       </DismissArea>
       <LyricsBody
         shown={shown}
+        karaoke={karaokeOn}
         picking={picking}
         retry={nonD.shown === null ? library.retry : nonD.retry}
         translation={translation.shown}

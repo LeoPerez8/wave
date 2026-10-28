@@ -90,10 +90,35 @@ describe("parseLyrics", () => {
     );
   });
 
-  test("word timings of enhanced LRC are dropped from the text", () => {
+  test("lines sharing a time keep each one's word stamps at its place in the joined text", () => {
+    assert.deepEqual(parseLyrics("[00:01]Hello friend\n[00:01]<00:01>Hola <00:02>amigo"), {
+      kind: "synced",
+      lines: [
+        {
+          timeMs: 1_000,
+          text: "Hello friend\nHola amigo",
+          words: [
+            { timeMs: 1_000, text: "Hola", start: 13, end: 17 },
+            { timeMs: 2_000, text: "amigo", start: 18, end: 23 },
+          ],
+        },
+      ],
+    });
+  });
+
+  test("enhanced LRC keeps word timings and stamp-free text", () => {
     assert.deepEqual(parseLyrics("[00:01.00] <00:01.00>Hello <00:01.50>world <00:02.00>"), {
       kind: "synced",
-      lines: [{ timeMs: 1_000, text: "Hello world" }],
+      lines: [
+        {
+          timeMs: 1_000,
+          text: "Hello world",
+          words: [
+            { timeMs: 1_000, text: "Hello", start: 0, end: 5 },
+            { timeMs: 1_500, text: "world", start: 6, end: 11 },
+          ],
+        },
+      ],
     });
   });
 
