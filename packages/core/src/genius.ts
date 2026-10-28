@@ -5,6 +5,7 @@
  * and keeps the saved text.
  */
 
+import { savedGeniusReferents, type GeniusReferent } from "./geniusAnnotations.ts";
 import { isSameSong, type SongLookup } from "./lyricsAndGenre.ts";
 
 /** The Genius song a song matched: what annotations (#742) ask Genius about by its id. */
@@ -95,12 +96,15 @@ export const GENIUS_MISS_MS = 7 * 24 * 60 * 60 * 1000;
 /**
  * What the phone keeps for a song (this phone only, never synced): when it
  * was asked, the Genius song it matched, kept without a description too so
- * annotations (#742) can use it, and the description.
+ * its annotations can be asked, the description, and the annotated
+ * fragments (`geniusReferentsPage`; null while not asked yet, as an answer
+ * saved before annotations came, or after they failed).
  */
 export interface SavedGenius {
   readonly checkedAt: number;
   readonly match: GeniusMatch | null;
   readonly description: string | null;
+  readonly referents: readonly GeniusReferent[] | null;
 }
 
 /** [song]'s Genius answer as the phone stores it, with the title and artist it was asked for. */
@@ -114,6 +118,7 @@ export const storedGenius = (
     checkedAt: answer.checkedAt,
     match: answer.match,
     description: answer.description,
+    referents: answer.referents,
   });
 
 const isMatch = (value: unknown): value is GeniusMatch =>
@@ -153,6 +158,8 @@ export const savedGenius = (
   )
     return null;
   const { checkedAt, match, description } = saved;
+  const referents = saved.referents == null ? null : savedGeniusReferents(saved.referents);
+  if (saved.referents != null && referents === null) return null;
   if (description === null && now - checkedAt >= GENIUS_MISS_MS) return null;
-  return { checkedAt, match, description };
+  return { checkedAt, match, description, referents };
 };

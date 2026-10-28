@@ -2164,3 +2164,18 @@ export {
   storedGenius,
 } from "./genius.ts";
 export type { GeniusHit, GeniusMatch, SavedGenius } from "./genius.ts";
+export {
+  GENIUS_REFERENTS_MAX_PAGES,
+  GENIUS_REFERENTS_PER_PAGE,
+  geniusLineSegments,
+  geniusReferentsPage,
+  geniusReferentsUrl,
+  placeGeniusReferents,
+} from "./geniusAnnotations.ts";
+export type {
+  GeniusAnnotation,
+  GeniusHighlight,
+  GeniusLineSegment,
+  GeniusPlacement,
+  GeniusReferent,
+} from "./geniusAnnotations.ts";
