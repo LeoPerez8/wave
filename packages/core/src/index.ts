@@ -175,6 +175,7 @@ export {
   findPlaceholder,
   findNoMatch,
   artistFindText,
+  playlistFindText,
   albumFindText,
   genreFindText,
 } from "./findInPlaylist.ts";

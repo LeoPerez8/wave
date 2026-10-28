@@ -1,5 +1,5 @@
 import { IconGripVertical } from "@tabler/icons-react-native";
-import type { PlaylistLayout } from "@wave/core";
+import { playlistFindText, type PlaylistFindText, type PlaylistLayout } from "@wave/core";
 import { useScrollToTop } from "expo-router";
 import { useLayoutEffect, useRef, type ReactElement, type ReactNode, type RefObject } from "react";
 import { useWindowDimensions, View, type ScrollViewInstance } from "react-native";
@@ -13,12 +13,14 @@ import { useChromeInset } from "@/chrome/chrome";
 import { useListScrollable } from "@/motion/heldTouch";
 import { useThemeColor } from "@/theme/useThemeColor";
 
+import { FIND_FIELD_HEIGHT, FindHead, useFindInList } from "./FindInPlaylist";
 import {
   useDragCell,
   useListDrag,
   type DragCells,
   type DragHandlers,
   type DragState,
+  type ListDrag,
 } from "./listDrag";
 import type { PlaylistRow } from "./LibraryStore";
 import { moveShownPlaylist } from "./playlistOrder";
@@ -39,8 +41,8 @@ type CellProps = {
   cells: Cells;
   layout: PlaylistLayout;
   drag: DragState;
-  /** Whether the list is in selection mode: no dragging then. */
-  selecting: boolean;
+  /** Whether the playlist can be dragged: not while selecting, nor while Find narrows the list. */
+  arrangeable: boolean;
   children: ReactNode;
   handlers: DragHandlers;
 };
@@ -50,7 +52,15 @@ type CellProps = {
  * end in the list, over the end of the name's line on a tile. Other
  * playlists step aside, back or on one place, as it passes them.
  */
-function ArrangeableCell({ index, cells, layout, drag, selecting, children, handlers }: CellProps) {
+function ArrangeableCell({
+  index,
+  cells,
+  layout,
+  drag,
+  arrangeable,
+  children,
+  handlers,
+}: CellProps) {
   const fill = useThemeColor("fill");
   const secondary = useThemeColor("secondary");
   const { fontScale } = useWindowDimensions();
@@ -62,7 +72,7 @@ function ArrangeableCell({ index, cells, layout, drag, selecting, children, hand
     drag,
     index,
     cells,
-    enabled: !selecting,
+    enabled: arrangeable,
     liftedColor: list ? fill : undefined,
     handlers,
   });
@@ -86,8 +96,8 @@ function ArrangeableCell({ index, cells, layout, drag, selecting, children, hand
               }
         }
       >
-        {/* Hidden, not removed, while selecting: the cells keep their size. */}
-        {!selecting && <IconGripVertical size={20} color={secondary} strokeWidth={1.5} />}
+        {/* Hidden, not removed, while selecting or finding: the cells keep their size. */}
+        {arrangeable && <IconGripVertical size={20} color={secondary} strokeWidth={1.5} />}
       </View>
     </GestureDetector>
   );
@@ -131,17 +141,30 @@ type Props = {
   rowHeight: number;
   /** Whether the list is in selection mode: handles hide, nothing drags. */
   selecting: boolean;
-  /** Import Playlists and New Playlist, over the playlists. */
+  /**
+   * The list's head (the count, Import Playlists and New Playlist), under the
+   * Find field, stepping aside while a query narrows the list.
+   */
   header: ReactElement;
-  /** Draws the playlist at [index] as the layout shows it. */
-  renderPlaylist: (playlist: PlaylistRow, index: number) => ReactNode;
+  /**
+   * Draws the playlist at [index] of the playlists shown as the layout shows
+   * it; [arrangeable] says whether it can be moved (not while selecting or
+   * while Find narrows the list).
+   */
+  renderPlaylist: (playlist: PlaylistRow, index: number, arrangeable: boolean) => ReactNode;
 };
+
+/** What finds a playlist in Find in Playlists: its name alone. */
+const playlistFind = (playlist: PlaylistRow): PlaylistFindText => playlistFindText(playlist.name);
 
 /**
  * The Playlists list in any layout and any sort: each playlist has a handle
  * that drags it to a new place (scrolling the list near its edges), across a
  * grid's columns as well as down. A drop keeps the new order at once,
  * everywhere, switching to Custom from the order on screen under another sort.
+ * Find in Playlists waits above the head until the list is pulled down; a
+ * query narrows the list to the playlists found, in the list's order, and
+ * nothing drags until it's cleared.
  */
 export function ArrangeablePlaylists({
   playlists,
@@ -161,22 +184,35 @@ export function ArrangeablePlaylists({
     height: rowHeight,
     tile: layout === "list" ? undefined : tile,
   };
+  // The scroll handles Find keeps the list's place with, once the drag machinery has them.
+  const scrolling = useRef<ListDrag | null>(null);
+  const find = useFindInList(
+    playlists,
+    playlistFind,
+    () => scrolling.current?.drag.scroll.get() ?? 0,
+    (y) => scrolling.current?.scrollRef.current?.scrollTo({ y, animated: false }),
+  );
+  const shown = find.shown;
+  const arrangeable = !selecting && find.found === null;
   const idsRef = useRef<readonly number[]>([]);
   useLayoutEffect(() => {
-    idsRef.current = playlists.map((playlist) => playlist.id);
+    idsRef.current = shown.map((playlist) => playlist.id);
   });
   const listDrag = useListDrag({
-    count: playlists.length,
+    count: shown.length,
     cells,
     bottomInset,
     move: (from, to) => moveShownPlaylist(idsRef.current, from, to),
+  });
+  useLayoutEffect(() => {
+    scrolling.current = listDrag;
   });
   const { scrollRef } = listDrag;
   // The tab bar's second tap scrolls it to the top, as the other lists.
   useScrollToTop(scrollRef as unknown as RefObject<ScrollViewInstance>);
 
   const renderCell = (index: number) => {
-    const playlist = playlists[index];
+    const playlist = shown[index];
     if (playlist === undefined) return null;
     return (
       <ArrangeableCell
@@ -185,25 +221,35 @@ export function ArrangeablePlaylists({
         cells={cells}
         layout={layout}
         drag={listDrag.drag}
-        selecting={selecting}
+        arrangeable={arrangeable}
         handlers={listDrag}
       >
-        {renderPlaylist(playlist, index)}
+        {renderPlaylist(playlist, index, arrangeable)}
       </ArrangeableCell>
     );
   };
 
   return (
     <Animated.ScrollView
+      keyboardShouldPersistTaps="handled"
+      keyboardDismissMode="on-drag"
       scrollEnabled={scrollable}
       ref={scrollRef}
       className="flex-1"
       onLayout={listDrag.onLayout}
       onContentSizeChange={listDrag.onContentSizeChange}
-      contentContainerStyle={{ paddingHorizontal: grid.margin, paddingBottom: bottomInset }}
+      // Find in Playlists waits above the head until the list is pulled down.
+      contentOffset={{ x: 0, y: FIND_FIELD_HEIGHT }}
+      contentContainerStyle={{
+        paddingHorizontal: grid.margin,
+        paddingBottom: bottomInset,
+        minHeight: find.minHeight,
+      }}
     >
-      <View onLayout={listDrag.onHeaderLayout}>{header}</View>
-      <View style={{ height: Math.ceil(playlists.length / columns) * rowHeight }}>
+      <View onLayout={listDrag.onHeaderLayout}>
+        <FindHead find={find} header={header} of="playlists" />
+      </View>
+      <View style={{ height: Math.ceil(shown.length / columns) * rowHeight }}>
         {listDrag.indices.map(renderCell)}
       </View>
     </Animated.ScrollView>

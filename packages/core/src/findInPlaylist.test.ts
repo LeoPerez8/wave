@@ -12,6 +12,7 @@ import {
   findPlaceholder,
   foundInPlaylist,
   hasFindQuery,
+  playlistFindText,
 } from "./index.ts";
 
 interface Song {
@@ -263,6 +264,37 @@ describe("Find in the Library's Genres", () => {
   });
 });
 
+describe("Find in the Library's Playlists", () => {
+  const PLAYLISTS = ["Road Trip", "Sunday Morning", "Café del Mar", "Rock & Roll", "Morning Run"];
+  const list = () => createFindableList(PLAYLISTS, playlistFindText, true);
+
+  test("a playlist is found by its name, folded as a song's title is", () => {
+    assert.deepEqual(list().show("cafe").found, [2]);
+    assert.deepEqual(list().show("ROCK roll").found, [3]);
+    assert.deepEqual(list().show("rock & ").found, [3]);
+  });
+
+  test("the playlists found keep the list's order, in its current sort, and lead back to their place", () => {
+    const shown = list().show("morning");
+    assert.deepEqual(shown.songs, ["Sunday Morning", "Morning Run"]);
+    assert.equal(shown.placeOf(1), 4);
+  });
+
+  test("every word of the query starts a word of the name, in any order", () => {
+    assert.deepEqual(list().show("run morn").found, [4]);
+    assert.deepEqual(list().show("orning").found, []);
+  });
+
+  test("only the name finds a playlist", () => {
+    assert.deepEqual(playlistFindText("Road Trip"), { title: "Road Trip" });
+  });
+
+  test("a blank query shows every playlist", () => {
+    assert.equal(list().show("  ").found, null);
+    assert.deepEqual(list().show("").songs, PLAYLISTS);
+  });
+});
+
 describe("what a findable list's field and empty line say", () => {
   test("each list's field names it", () => {
     assert.equal(findPlaceholder("playlist"), "Find in Playlist");
@@ -270,6 +302,7 @@ describe("what a findable list's field and empty line say", () => {
     assert.equal(findPlaceholder("artists"), "Find in Artists");
     assert.equal(findPlaceholder("albums"), "Find in Albums");
     assert.equal(findPlaceholder("genres"), "Find in Genres");
+    assert.equal(findPlaceholder("playlists"), "Find in Playlists");
   });
 
   test("a query that finds nothing says what wasn't found", () => {
@@ -278,5 +311,6 @@ describe("what a findable list's field and empty line say", () => {
     assert.equal(findNoMatch("artists"), "No artists match");
     assert.equal(findNoMatch("albums"), "No albums match");
     assert.equal(findNoMatch("genres"), "No genres match");
+    assert.equal(findNoMatch("playlists"), "No playlists match");
   });
 });
