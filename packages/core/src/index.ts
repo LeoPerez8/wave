@@ -2153,3 +2153,14 @@ export {
   syncTriggers,
 } from "./syncTriggers.ts";
 export type { SyncClock, SyncTriggers, SyncTriggersInput } from "./syncTriggers.ts";
+export {
+  GENIUS_MISS_MS,
+  geniusCandidates,
+  geniusDescription,
+  geniusSearchUrl,
+  geniusSongUrl,
+  pickGeniusSong,
+  savedGenius,
+  storedGenius,
+} from "./genius.ts";
+export type { GeniusHit, GeniusMatch, SavedGenius } from "./genius.ts";

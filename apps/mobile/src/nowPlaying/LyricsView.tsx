@@ -50,9 +50,11 @@ import { closeLyricCard, openLyricCard } from "@/share/lyricCard";
 import { useThemeColor } from "@/theme/useThemeColor";
 
 import { DismissArea } from "./DismissArea";
+import { GeniusAbout } from "./GeniusAbout";
 import type { LibraryFile } from "./hooks";
 import { isPlayheadLive, playhead, playheadVisibility } from "./playhead";
 import { TrackHeader } from "./TrackHeader";
+import { useGenius } from "./useGenius";
 import { useLibraryLyrics, type LibraryLyricsShown } from "./useLibraryLyrics";
 import { useLyricsTranslation, type TranslationShown } from "./useLyricsTranslation";
 import { useNonDLyrics, type NonDLyricsShown } from "./useNonDLyrics";
@@ -302,12 +304,14 @@ function SyncedLyrics({
   picking,
   translation,
   retryTranslation,
+  about,
 }: {
   lines: readonly LyricLine[];
   karaoke: boolean;
   picking: Picking | null;
   translation: TranslationShown | null;
   retryTranslation: () => void;
+  about: string | null;
 }) {
   useRenderCount("SyncedLyrics");
   const lines = useMemo(
@@ -444,7 +448,8 @@ function SyncedLyrics({
       }}
       contentContainerStyle={{ paddingTop: CELL * 2, paddingBottom: height * (1 - ANCHOR) }}
     >
-      {/* Above the lines, so their offsets (where they rest) count it in. */}
+      {/* Above the lines, so their offsets (where they rest) count them in. */}
+      <GeniusAbout key={about} description={about} />
       <TranslationNote shown={translation} retry={retryTranslation} />
       {lines.map((line, at) => (
         <SyncedLine
@@ -477,11 +482,13 @@ function UnsyncedLyrics({
   picking,
   translation,
   retryTranslation,
+  about,
 }: {
   lines: readonly string[];
   picking: Picking | null;
   translation: TranslationShown | null;
   retryTranslation: () => void;
+  about: string | null;
 }) {
   const selectedFill = useSelectedFill();
   return (
@@ -490,6 +497,7 @@ function UnsyncedLyrics({
       showsVerticalScrollIndicator={false}
       contentContainerStyle={{ paddingTop: CELL * 2, paddingBottom: CELL * 6 }}
     >
+      <GeniusAbout key={about} description={about} />
       <TranslationNote shown={translation} retry={retryTranslation} />
       {lines.map((line, at) => {
         if (line === "") {
@@ -629,6 +637,7 @@ function LyricsBody({
   retry,
   translation,
   retryTranslation,
+  about,
 }: {
   shown: Shown | null;
   karaoke: boolean;
@@ -636,6 +645,7 @@ function LyricsBody({
   retry: () => void;
   translation: TranslationShown | null;
   retryTranslation: () => void;
+  about: string | null;
 }) {
   // Reading takes a moment; an empty field avoids flashing the empty state.
   if (shown === null) {
@@ -655,6 +665,7 @@ function LyricsBody({
           picking={picking}
           translation={translation}
           retryTranslation={retryTranslation}
+          about={about}
         />
       );
     case "unsynced":
@@ -664,6 +675,7 @@ function LyricsBody({
           picking={picking}
           translation={translation}
           retryTranslation={retryTranslation}
+          about={about}
         />
       );
     case "searching":
@@ -726,7 +738,8 @@ type Item = NonNullable<PlaybackState["item"]>;
  * five lines (Core's `tapLyricLine`), then Next previews them as a card
  * (`LyricCardPreview`) in the cover's colours, and Translate, which puts
  * each line's translation into the phone's language under it
- * (`useLyricsTranslation`) until it's turned off.
+ * (`useLyricsTranslation`) until it's turned off. Above the lyrics, Genius's
+ * About card (`useGenius`, `GeniusAbout`) once its answer comes.
  */
 export function LyricsView({
   file,
@@ -757,9 +770,10 @@ export function LyricsView({
   const song = path ?? nonDTrackId;
   const translationOn = useLyricsTranslationOn();
   const karaokeOn = useKaraokeOn();
-  // A Library track by its id, a non-D song by its track id: its saved translation's key.
+  // A Library track by its id, a non-D song by its track id: its saved translation's and Genius answer's key.
   const translationSong =
     file !== null ? `library:${file.id}` : nonDTrackId === null ? null : `track:${nonDTrackId}`;
+  const genius = useGenius(translationSong, item.title ?? "", item.artist ?? "", lyrics !== null);
   // Only lyrics with words to share have words to translate.
   const translation = useLyricsTranslation(
     translationSong,
@@ -866,6 +880,7 @@ export function LyricsView({
         retry={nonD.shown === null ? library.retry : nonD.retry}
         translation={translation.shown}
         retryTranslation={translation.retry}
+        about={genius?.description ?? null}
       />
     </View>
   );

@@ -292,6 +292,9 @@ jobs:
       !(github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v'))) }}
     runs-on: ubuntu-latest
     env:
+      # Genius's read-only client token (docs/spec.md, "Genius About"). Metro inlines it into the
+      # JS bundle, which "Bundle JavaScript" builds once for full builds and repacks alike.
+      EXPO_PUBLIC_GENIUS_ACCESS_TOKEN: ${{ secrets.GENIUS_ACCESS_TOKEN }}
       HEAD_SHA: ${{ needs.checks.outputs.sha }}
       # ccache (scripts/ci/ccache.sh) keeps its cache in ~/.cache/ccache.
       # Paths under the checkout are hashed relative to it, and the working directory
@@ -497,6 +500,13 @@ jobs:
           # Hermes keeps the inlined label as a plain string.
           grep -qaF -- "${EXPO_PUBLIC_WAVE_BUILD_LABEL:?}" "$bundle"
           echo "Labelled: $EXPO_PUBLIC_WAVE_BUILD_LABEL"
+          # Genius's token, inlined the same way; a run without the secret (a fork's PR) never asks Genius.
+          if [ -n "${EXPO_PUBLIC_GENIUS_ACCESS_TOKEN:-}" ]; then
+            grep -qaF -- "$EXPO_PUBLIC_GENIUS_ACCESS_TOKEN" "$bundle"
+            echo "Carries Genius's token"
+          else
+            echo "::warning::No GENIUS_ACCESS_TOKEN secret: this APK never asks Genius."
+          fi
           cp "$built" "$RUNNER_TEMP/$name"
           echo "path=$RUNNER_TEMP/$name" >> "$GITHUB_OUTPUT"
           echo "name=$name" >> "$GITHUB_OUTPUT"
