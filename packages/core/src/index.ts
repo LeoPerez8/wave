@@ -704,6 +704,7 @@ export {
   parseMagicSession,
   startMagicQueue,
   startStreamedMagicQueue,
+  streamedSongMagicStart,
   wantsMagicBatch,
 } from "./magicQueue.ts";
 export type {
@@ -712,6 +713,7 @@ export type {
   MagicQueueEdits,
   MagicRadioSeed,
   MagicSeed,
+  StreamedSongMagicStart,
   MagicSeedSong,
   MagicSession,
   MagicSongRadioSeed,

@@ -17,11 +17,10 @@ import { useFocusEffect } from "expo-router";
 import { useCallback, useMemo, useRef, useState } from "react";
 
 import { LibraryStore, type PlayableSongRow } from "@/library/LibraryStore";
-import { appRuntime } from "@/library/runtime";
 import { libraryQuery, useLibraryQuery } from "@/library/sharedQueries";
-import { showError } from "@/overlay/alert";
 import { showToast } from "@/overlay/toast";
 import { startMagicQueue, startStreamedMagicQueue } from "@/playback/MagicQueue";
+import { runMagicQueueStart } from "@/playback/magicQueueStart";
 
 import { randomMagicQueueRead } from "./randomMagicQueueRead";
 
@@ -115,15 +114,11 @@ export const useMagicQueueSection = (
 };
 
 /** Starts the same seeded Magic Queue as the song's long-press menu, including queue Undo. */
-export const startMagicQueueFrom = (song: PlayableSongRow): void => {
-  appRuntime
-    .runPromise(startMagicQueue({ kind: "track", id: String(song.id), title: song.title }, [song]))
-    .catch((error: unknown) => showError("Couldn't start the Magic Queue", error));
-};
+export const startMagicQueueFrom = (song: PlayableSongRow): void =>
+  runMagicQueueStart(
+    startMagicQueue({ kind: "track", id: String(song.id), title: song.title }, [song]),
+  );
 
 /** Starts a Magic Queue from a mix's streamed [song], as its long-press menu's Magic Queue does. */
-export const startStreamedMagicQueueFrom = (song: YtAlbumSong): void => {
-  appRuntime
-    .runPromise(startStreamedMagicQueue(song))
-    .catch((error: unknown) => showError("Couldn't start the Magic Queue", error));
-};
+export const startStreamedMagicQueueFrom = (song: YtAlbumSong): void =>
+  runMagicQueueStart(startStreamedMagicQueue(song));

@@ -15,6 +15,7 @@ import {
   type MagicSeed,
   albumDownloadOrigin,
 } from "@wave/core";
+import * as Effect from "effect/Effect";
 import * as Haptics from "expo-haptics";
 import { usePathname } from "expo-router";
 import { router } from "@/lib/timingRouter";
@@ -43,7 +44,6 @@ import {
   renamePlaylistFlow,
 } from "@/library/PlaylistSheets";
 import { removePlaylistItems } from "@/library/playlists";
-import { appRuntime } from "@/library/runtime";
 import { openAlbum } from "@/library/routes";
 import { showError } from "@/overlay/alert";
 import {
@@ -86,6 +86,7 @@ import {
 import { addToQueue, playNext, queueDiscoverSongs } from "./actions";
 import { goToArtistPress } from "./goToArtistPress";
 import { startMagicQueue } from "./MagicQueue";
+import { runMagicQueueStart } from "./magicQueueStart";
 
 /**
  * Wave's actions on library items, defined once for the long-press menu (one
@@ -507,17 +508,15 @@ export const itemActionPress = ({
         return run(() => {
           const seed = magicSeed(target);
           if (seed === null) return;
-          entriesNow()
-            .then((entries) =>
-              appRuntime.runPromise(
-                startMagicQueue(
-                  seed,
-                  entries.flatMap((song) => (song.source === "library" ? [song.track] : [])),
-                  entries.flatMap((song) => (song.source === "stream" ? [song.song] : [])),
-                ),
+          runMagicQueueStart(
+            Effect.flatMap(Effect.tryPromise(entriesNow), (entries) =>
+              startMagicQueue(
+                seed,
+                entries.flatMap((song) => (song.source === "library" ? [song.track] : [])),
+                entries.flatMap((song) => (song.source === "stream" ? [song.song] : [])),
               ),
-            )
-            .catch((error: unknown) => showError("Couldn't start the Magic Queue", error));
+            ),
+          );
         });
       case "addToPlaylist":
         return run(() =>
