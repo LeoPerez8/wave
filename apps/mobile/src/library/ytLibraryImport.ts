@@ -117,13 +117,31 @@ export const currentYtLibraryOrigins = async (): Promise<YtLibraryOrigins> => {
   return live;
 };
 
-/** After a delete: the deleted playlists forget where they came from. */
-export const forgetDeletedYtLibraryOrigins = async (): Promise<void> => {
-  if (origins.get().size > 0) await currentYtLibraryOrigins();
-};
-
 /** The playlists still to be read, and those whose read failed; phone-local, never synced. */
 const batch = ytLibraryBatch;
+
+/**
+ * After a delete: the [deleted] playlists leave the batch at once, whatever
+ * their phase, so its line counts them done. One waiting, being read or
+ * matched drops its read (whose answer then goes to nothing) and its
+ * progress; one whose songs were being added already ended its link import
+ * (`cancelPlaylistImport`). They also forget where they came from.
+ */
+export const forgetDeletedYtLibraryPlaylists = async (
+  deleted: readonly number[],
+): Promise<void> => {
+  const gone = new Set(deleted);
+  const current = batch.get();
+  const kept = current.reads.flatMap((read) =>
+    gone.has(read.playlistId) ? [] : [read.playlistId],
+  );
+  const pruned = pruneYtLibraryBatch(current, kept);
+  if (pruned !== current) {
+    for (const id of deleted) endImportProgress(id);
+    batch.set(pruned);
+  }
+  if (origins.get().size > 0) await currentYtLibraryOrigins();
+};
 
 /** The batch, for a playlist page's line. */
 export const useYtLibraryBatch = (): YtLibraryBatch => batch.useValue();
@@ -350,8 +368,9 @@ const prune = async (): Promise<void> => {
  * Reads the waiting playlists one at a time, in order, until none is left,
  * or until a read finds Wave offline or YT Music off: the batch then waits
  * for its next turn (Wave starting again, coming back to the foreground, or
- * another Import). The playlists deleted are dropped once, as it starts; one
- * deleted while it runs is read, and its link import ends at once. First, the
+ * another Import). The playlists deleted are dropped as they are deleted here
+ * (`forgetDeletedYtLibraryPlaylists`), and those deleted on another phone as it
+ * starts; a read under way when its playlist goes answers nothing. First, the
  * playlists Import & Download filled before Wave stopped queue their downloads.
  */
 const readBatch = async (): Promise<void> => {

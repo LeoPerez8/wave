@@ -25,6 +25,7 @@ import { useSyncExternalStore } from "react";
 
 import { makeExternalStore, subscribeAll } from "@/lib/externalStore";
 
+import { playlistImports } from "./playlistImportsStore";
 import { ytLibraryBatch, ytLibraryBatchPause } from "./ytLibraryBatchStore";
 
 /** The live phases past waiting, by playlist id. */
@@ -64,17 +65,22 @@ export const useImportProgress = (playlistId: number): ImportProgress | null =>
 let batchLine: ImportBatchLine | null = null;
 
 /**
- * The batch's line at the top of Playlists (Core's `importBatchLine`); the
- * same object while what it says doesn't change, so a page or a slice added
- * draws it again only when its count moves.
+ * The batch's line at the top of Playlists (Core's `importBatchLine`), from
+ * the kept batch and link imports, so Wave starting again doesn't step it
+ * back; the same object while what it says doesn't change, so a page or a
+ * slice added draws it again only when its count moves.
  */
 const importBatchLineNow = (): ImportBatchLine | null => {
-  const next = importBatchLine(ytLibraryBatch.get(), board.get(), ytLibraryBatchPause.get());
+  const next = importBatchLine(
+    ytLibraryBatch.get(),
+    playlistImports.get(),
+    ytLibraryBatchPause.get(),
+  );
   if (next?.text !== batchLine?.text || next?.paused !== batchLine?.paused) batchLine = next;
   return batchLine;
 };
 
-const subscribeImportBatch = subscribeAll(board, ytLibraryBatch, ytLibraryBatchPause);
+const subscribeImportBatch = subscribeAll(playlistImports, ytLibraryBatch, ytLibraryBatchPause);
 
 /** "Importing playlists · 12 of 80", "Import paused · offline", or null with no batch importing. */
 export const useImportBatchLine = (): ImportBatchLine | null =>

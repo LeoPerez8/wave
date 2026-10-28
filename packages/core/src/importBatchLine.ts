@@ -5,13 +5,16 @@
  * paused · offline" while the batch waits for its reason to go.
  *
  * It counts the batch's run (`YtLibraryBatch.run`): a playlist is left while
- * it waits to be read, or once read while its songs are matched and added
- * (its entry on the progress board). One whose read failed counts as done,
- * as does one deleted meanwhile: its own page carries Try Again. A From a
- * Link import never joins the batch, so it shows no line.
+ * it waits in the batch (to be read, being read or matched), or once read
+ * while its link import still gives it its songs (Adding). Both are kept on
+ * the phone, so Wave starting again never steps the count back. One whose
+ * read failed counts as done (its own page carries Try Again), as does one
+ * deleted meanwhile: deleting it drops its read and ends its import. A From
+ * a Link import never joins the batch, so it shows no line.
  */
 
-import type { ImportProgressBoard } from "./importProgress.ts";
+import type { PlaylistImport } from "./playlistImport.ts";
+import type { YtSong } from "./ytMusic.ts";
 import {
   nextYtLibraryRead,
   type YtLibraryBatch,
@@ -39,22 +42,25 @@ const PAUSE_WORDS: Readonly<Record<YtLibraryPauseReason, string>> = {
 const number = (count: number): string => count.toLocaleString("en");
 
 /**
- * The line for [batch] with the playlists importing past waiting on
- * [board], or null while none of its run is left. [pausedBy] is the reason
- * the batch last paused for (`ytLibraryReadFailed`), or null once it goes
- * on; it shows only while a playlist still waits.
+ * The line for [batch] with the link imports [imports] (`PlaylistImports`),
+ * or null while none of its run is left. [pausedBy] is the reason the batch
+ * last paused for (`ytLibraryReadFailed`), or null once it goes on; it shows
+ * only while a playlist still waits.
  */
 export const importBatchLine = (
   batch: YtLibraryBatch,
-  board: ImportProgressBoard,
+  imports: readonly Pick<PlaylistImport<YtSong>, "playlistId" | "state">[],
   pausedBy: YtLibraryPauseReason | null,
 ): ImportBatchLine | null => {
   if (batch.run.length === 0) return null;
   const states = new Map(batch.reads.map((read) => [read.playlistId, read.state]));
+  const adding = new Set(
+    imports.flatMap((job) => (job.state.kind === "importing" ? [job.playlistId] : [])),
+  );
   const left = batch.run.filter((id) => {
     const state = states.get(id);
     if (state === "waiting") return true;
-    return state !== "failed" && board.has(id);
+    return state !== "failed" && adding.has(id);
   }).length;
   if (left === 0) return null;
   const total = batch.run.length;
