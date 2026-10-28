@@ -10,6 +10,7 @@ import {
   magicBatchEmpty,
   magicBatchFailed,
   magicBatchLoading,
+  magicBatchRadios,
   magicLibrarySongs,
   magicSeedProfile,
   magicYtSong,
@@ -22,6 +23,7 @@ import {
   parseMagicSession,
   reduceQueue,
   startMagicQueue,
+  startStreamedMagicQueue,
   wantsMagicBatch,
   type DiscoverMixLevel,
   type GenreProfileOf,
@@ -429,5 +431,45 @@ describe("A Magic Queue's radio artists", () => {
     const playlist: MagicSeed = { kind: "playlist", id: "2", title: "Mine" };
     assert.deepEqual(magicRadioArtists(playlist, ["B", "A", "C", "A", "B", "A"]), ["A", "B"]);
     assert.deepEqual(magicRadioArtists(SONG_SEED, ["Solo"]), ["Solo"]);
+  });
+});
+
+describe("a Magic Queue from a streamed song", () => {
+  const streamed = {
+    videoId: "vid1",
+    title: "Midnight City",
+    artists: ["M83", "Anthony Gonzalez"],
+    album: "Hurry Up, We're Dreaming",
+    durationMs: 244_000,
+    artworkUrl: null,
+    explicit: false,
+  };
+
+  test("plays the song first and grows from its own radio, read by its video", () => {
+    const { session, first: firstSong } = startStreamedMagicQueue(streamed, {
+      id: "s1",
+      ytShare: 0.6,
+    });
+    assert.equal(firstSong, "yt:vid1");
+    assert.deepEqual(session.used, ["yt:vid1"]);
+    assert.equal(magicQueueLabel(session), "Magic Queue · from Midnight City");
+    assert.equal(session.ytShare, 0.6);
+    assert.deepEqual(session.radioArtists, ["M83", "Anthony Gonzalez"]);
+    assert.deepEqual(session.seedVideoIds, ["vid1"]);
+    // Each batch reads the song's radio, as a Library song's session does.
+    assert.deepEqual(magicBatchRadios(session, first).seeds, [
+      {
+        id: "song:yt:vid1",
+        title: "Midnight City",
+        artists: ["M83", "Anthony Gonzalez"],
+        durationMs: 244_000,
+        videoId: "vid1",
+      },
+    ]);
+  });
+
+  test("goes on after a restart", () => {
+    const { session } = startStreamedMagicQueue(streamed, { id: "s1" });
+    assert.deepEqual(parseMagicSession(JSON.parse(JSON.stringify(session))), session);
   });
 });

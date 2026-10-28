@@ -32,6 +32,17 @@ class YtPages(private val client: YtClient) {
   }
 
   /**
+   * The top artists of YouTube Music's charts page, in the chart's order
+   * ([YtArtistParser.chartArtists]). Asked signed out, on a session of its
+   * own, and without choosing a country, so YouTube Music picks one.
+   */
+  suspend fun chartArtists(): List<YtArtistCandidate> = client.request {
+    client.signedOut { tube ->
+      YtArtistParser.chartArtists(tube.browse(YouTubeClient.WEB_REMIX, CHARTS).bodyAsText())
+    }
+  }
+
+  /**
    * The playlist [playlistId] (without `VL`): its head, its first page of
    * songs and the token for the next page ([playlistMore]).
    */
@@ -120,5 +131,8 @@ class YtPages(private val client: YtClient) {
 
     /** The account's library page of playlists. */
     const val LIBRARY_PLAYLISTS = "FEmusic_liked_playlists"
+
+    /** YouTube Music's charts page (not the account's home). */
+    const val CHARTS = "FEmusic_charts"
   }
 }

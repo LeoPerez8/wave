@@ -187,6 +187,13 @@ export type {
   ShownInPlaylist,
   FindableListKind,
 } from "./findInPlaylist.ts";
+export {
+  findFieldPlacement,
+  findScrollOnPin,
+  readKeepFindVisible,
+  storedKeepFindVisible,
+} from "./keepFindVisible.ts";
+export type { FindFieldPlacement } from "./keepFindVisible.ts";
 export { createSearchCatalog } from "./searchCatalog.ts";
 export type { SearchCatalog, SearchCatalogStats } from "./searchCatalog.ts";
 export { SEARCH_FOCUS_LIMITS, startSearchFocus, stepSearchFocus } from "./searchFocus.ts";
@@ -696,6 +703,7 @@ export {
   magicSignal,
   parseMagicSession,
   startMagicQueue,
+  startStreamedMagicQueue,
   wantsMagicBatch,
 } from "./magicQueue.ts";
 export type {
@@ -1565,7 +1573,10 @@ export type {
   YtLibraryPlaylistKind,
   YtLibraryRow,
 } from "./ytLibrary.ts";
+export { importBatchLine } from "./importBatchLine.ts";
+export type { ImportBatchLine } from "./importBatchLine.ts";
 export {
+  endYtLibraryRun,
   isYtLibraryReadQueued,
   nextYtLibraryRead,
   NO_YT_LIBRARY_READS,
@@ -1589,6 +1600,7 @@ export {
   importProgressByPlaylist,
   importProgressFraction,
   importProgressLine,
+  importRing,
   MATCHING_PROGRESS,
   NO_IMPORT_PROGRESS,
   readingProgress,
@@ -1598,6 +1610,7 @@ export type {
   AddingProgress,
   ImportProgress,
   ImportProgressBoard,
+  ImportRing,
   MatchingProgress,
   ReadingProgress,
   WaitingProgress,
@@ -1727,13 +1740,24 @@ export type { SeedSong } from "./seedSongDraw.ts";
 export type { RandomSource } from "./weightedPick.ts";
 export {
   ARTIST_MIX_COUNT,
+  artistMixNeedsChart,
+  artistMixNeedsChartSteps,
   artistMixSeedPool,
   artistMixSeeds,
   artistMixSeedsSteps,
   artistMixSimilarSource,
   artistMixSimilarSourceSteps,
+  libraryCanSeedArtistMixes,
 } from "./artistMixes.ts";
 export type { ArtistMixPools, PlayedSeedArtist, SimilarSourceArtist } from "./artistMixes.ts";
+export {
+  YT_CHART_READ_MS,
+  parseYtChart,
+  storedYtChart,
+  withYtChartRead,
+  ytChartReadDue,
+} from "./ytChart.ts";
+export type { YtChartArtist, YtChartKept } from "./ytChart.ts";
 export {
   GENRE_MIX_COUNT,
   commonStyle,
@@ -1962,6 +1986,8 @@ export {
 } from "./magicQueueSection.ts";
 export type { MagicQueuePicking, MagicQueuePicks } from "./magicQueueSection.ts";
 export { randomMagicQueuePicks } from "./randomMagicQueuePicks.ts";
+export { magicQueueMixPicks, magicQueueRow } from "./magicQueueRow.ts";
+export type { MagicQueueRow } from "./magicQueueRow.ts";
 export { magicQueueShare } from "./magicQueue.ts";
 export { discoverMixesOfRadios, discoverMixesOfRadiosSteps } from "./discoverMixRadios.ts";
 export type { DiscoverMixRead } from "./discoverMixRadios.ts";

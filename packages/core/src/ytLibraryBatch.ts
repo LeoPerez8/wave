@@ -61,10 +61,18 @@ export interface YtLibraryRead {
 export interface YtLibraryBatch {
   readonly reads: readonly YtLibraryRead[];
   readonly lastToken: number;
+  /**
+   * The playlists of the batch's run, by playlist id, in the order they were
+   * queued: every one an Import queued since the batch last had none
+   * waiting, done or not. Playlists' "Importing playlists · 12 of 80" counts
+   * them (Core's `importBatchLine`). Forgotten once the run ends
+   * (`endYtLibraryRun`), so Try Again's read later isn't counted.
+   */
+  readonly run: readonly number[];
 }
 
 /** A batch with nothing to read. */
-export const NO_YT_LIBRARY_READS: YtLibraryBatch = { reads: [], lastToken: 0 };
+export const NO_YT_LIBRARY_READS: YtLibraryBatch = { reads: [], lastToken: 0, run: [] };
 
 /** A playlist an Import queues: Import & Download's with `download`, Import's without. */
 export type YtLibraryReadToQueue = Omit<
@@ -80,11 +88,13 @@ export type YtLibraryReadToQueue = Omit<
  * its order) waiting after it, each with a new token. A refreshed playlist
  * still in the batch, waiting or failed, leaves its old place: it's read
  * once, in the new order, and a read of it still running answers nothing.
+ * They join the batch's run, which starts afresh when none was waiting.
  */
 export const queueYtLibraryReads = (
   batch: YtLibraryBatch,
   reads: readonly YtLibraryReadToQueue[],
 ): YtLibraryBatch => ({
+  run: joinRun(nextYtLibraryRead(batch) === undefined ? [] : batch.run, reads),
   reads: [
     ...batch.reads.filter((queued) => !reads.some((read) => read.playlistId === queued.playlistId)),
     ...reads.map(({ source, playlistId, name, capped, favorites, download, expected }, index) => ({
@@ -101,6 +111,30 @@ export const queueYtLibraryReads = (
   ],
   lastToken: batch.lastToken + reads.length,
 });
+
+/** [run] with [reads]' playlists after it, each once. */
+const joinRun = (
+  run: readonly number[],
+  reads: readonly YtLibraryReadToQueue[],
+): readonly number[] => {
+  const ids = new Set(run);
+  const joined = [...run];
+  for (const { playlistId } of reads) {
+    if (ids.has(playlistId)) continue;
+    ids.add(playlistId);
+    joined.push(playlistId);
+  }
+  return joined;
+};
+
+/**
+ * [batch] once its run ended, none of its playlists waiting: the run is
+ * forgotten, so the line at the top of Playlists goes and Try Again's read
+ * of a failed playlist isn't counted. With one still waiting (the run
+ * paused, or another Import queued meanwhile), [batch] as it is.
+ */
+export const endYtLibraryRun = (batch: YtLibraryBatch): YtLibraryBatch =>
+  batch.run.length === 0 || nextYtLibraryRead(batch) !== undefined ? batch : { ...batch, run: [] };
 
 /**
  * The playlist to read next: the first one waiting. One being read when
@@ -275,6 +309,7 @@ export const writeYtLibraryBatch = (batch: YtLibraryBatch): string | null =>
     ? null
     : JSON.stringify({
         version: KEPT_VERSION,
+        run: batch.run,
         batch: batch.reads.map(
           ({ source, playlistId, name, capped, favorites, download, expected, state }) => ({
             source,
@@ -323,15 +358,22 @@ const readRead = (value: unknown, token: number): YtLibraryRead | null => {
 /**
  * The batch kept as [stored] (`writeYtLibraryBatch`), in its order, each
  * playlist with a new token; a playlist kept unreadably is left out. Empty
- * when nothing readable is kept, or it was kept another way.
+ * when nothing readable is kept, or it was kept another way. A batch kept
+ * by a Wave from before the run has the playlists it kept as its run.
  */
 export const readYtLibraryBatch = (stored: string | null): YtLibraryBatch => {
-  const { version, batch } = readStoredRecord(stored);
+  const { version, batch, run } = readStoredRecord(stored);
   if (version !== KEPT_VERSION || !Array.isArray(batch)) return NO_YT_LIBRARY_READS;
   const reads = batch
     .map((value: unknown, index) => readRead(value, index + 1))
     .filter((read): read is YtLibraryRead => read !== null);
-  return { reads, lastToken: batch.length };
+  return {
+    reads,
+    lastToken: batch.length,
+    run: Array.isArray(run)
+      ? run.filter((id: unknown): id is number => typeof id === "number")
+      : reads.map((read) => read.playlistId),
+  };
 };
 
 /** Per-song favorite preparation for a resumed background library import. */

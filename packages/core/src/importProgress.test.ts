@@ -8,6 +8,7 @@ import {
   importProgressByPlaylist,
   importProgressFraction,
   importProgressLine,
+  importRing,
   MATCHING_PROGRESS,
   NO_IMPORT_PROGRESS,
   NO_YT_LIBRARY_READS,
@@ -301,5 +302,33 @@ describe("live progress never runs backwards", () => {
     const board = setImportProgress(NO_IMPORT_PROGRESS, 41, MATCHING_PROGRESS);
     assert.equal(setImportProgress(board, 41, MATCHING_PROGRESS), board);
     assert.equal(clearImportProgress(NO_IMPORT_PROGRESS, 41), NO_IMPORT_PROGRESS);
+  });
+});
+
+describe("the cover's ring", () => {
+  test("a playlist that isn't importing has none", () => {
+    assert.equal(importRing(null), null);
+    assert.equal(importRing(importProgress(queued, NO_IMPORT_PROGRESS, 99)), null);
+  });
+
+  test("waiting shows it empty and still", () => {
+    assert.deepEqual(importRing(importProgress(queued, NO_IMPORT_PROGRESS, 41)), {
+      fraction: 0,
+      pulses: false,
+    });
+  });
+
+  test("reading fills it, and a read paused offline holds it still where it stopped", () => {
+    const paused = importProgress(queued, reading(41, 617), 41);
+    assert.deepEqual(importRing(paused), { fraction: 0.25, pulses: false });
+  });
+
+  test("matching holds it at half and pulses", () => {
+    assert.deepEqual(importRing(MATCHING_PROGRESS), { fraction: 0.5, pulses: true });
+  });
+
+  test("adding fills the rest", () => {
+    assert.deepEqual(importRing(addingProgress(300, 400)), { fraction: 0.875, pulses: false });
+    assert.deepEqual(importRing(addingProgress(400, 400)), { fraction: 1, pulses: false });
   });
 });

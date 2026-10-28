@@ -31,6 +31,7 @@ import { registerTimingBackground, timingBackgroundChanged } from "@/lib/timing"
  * one refreshes that playlist as Replace does. Deleting it forgets it.
  */
 import {
+  endYtLibraryRun,
   importLibraryIndexSteps,
   importPhaseTimer,
   importTimingsLogLine,
@@ -91,7 +92,7 @@ import { cancelPlaylistImport, settlePlaylistImport, startLinkImport } from "./p
 import { createPlaylist, currentPlaylists, replacePlaylistSongs } from "./playlists";
 import { appRuntime } from "./runtime";
 import { downloadSyncedStars } from "./starSongs";
-import { ytLibraryBatch } from "./ytLibraryBatchStore";
+import { ytLibraryBatch, ytLibraryBatchPause } from "./ytLibraryBatchStore";
 
 const LOG_TAG = "WaveImport";
 
@@ -192,6 +193,11 @@ const readSource = async (read: YtLibraryRead): Promise<SourceRead> => {
       showImportProgress(read.playlistId, readingProgress(read, done, total));
   };
   readSoFar(0, null);
+  // A page arriving for the batch's read: whatever paused the batch is gone.
+  const onPage = (done: number, total: number | null): void => {
+    if (read.state === "waiting") ytLibraryBatchPause.set(null);
+    readSoFar(done, total);
+  };
   if (isSpotifyLibrarySource(read.source)) {
     const answer = await readSpotifyAccountPlaylist(
       read.source,
@@ -203,7 +209,7 @@ const readSource = async (read: YtLibraryRead): Promise<SourceRead> => {
             : spotify.playlist(request.uri, request.offset),
         );
       },
-      readSoFar,
+      onPage,
     );
     if (!answer.ok) return answer;
     // Typed whole, not narrowed to Spotify's side, so the plan's songs are YT Music's as the app reads them.
@@ -214,7 +220,7 @@ const readSource = async (read: YtLibraryRead): Promise<SourceRead> => {
     ytMusic.playlist(read.source, {
       uncapped: !read.capped,
       // Rows read, a video listed again included, as the source counts them.
-      onPage: (playlist) => readSoFar(playlist.songs.length + playlist.repeats.length, null),
+      onPage: (playlist) => onPage(playlist.songs.length + playlist.repeats.length, null),
     }),
   );
   return Result.isSuccess(answer)
@@ -350,7 +356,10 @@ const prune = async (): Promise<void> => {
 const readBatch = async (): Promise<void> => {
   const left = batch.get();
   if (reading) return;
-  if (nextYtLibraryRead(left) === undefined && ytLibraryDownloadsToQueue(left).length === 0) return;
+  if (nextYtLibraryRead(left) === undefined && ytLibraryDownloadsToQueue(left).length === 0) {
+    endRun();
+    return;
+  }
   reading = true;
   readingSince = performance.now();
   timingBackgroundChanged();
@@ -361,8 +370,16 @@ const readBatch = async (): Promise<void> => {
       prune,
       settle: settlePlaylistImport,
       download: queueDownloads,
-      fill,
-      paused: (read, reason) => appLog("info", LOG_TAG, ytLibraryPauseLogLine(read, reason)),
+      fill: async (read) => {
+        const pausedBy = await fill(read);
+        // Read, or failed on its own: the batch got on.
+        if (pausedBy === null) ytLibraryBatchPause.set(null);
+        return pausedBy;
+      },
+      paused: (read, reason) => {
+        ytLibraryBatchPause.set(reason);
+        appLog("info", LOG_TAG, ytLibraryPauseLogLine(read, reason));
+      },
     });
   } catch (error) {
     const why = error instanceof Error ? error.message : String(error);
@@ -371,7 +388,21 @@ const readBatch = async (): Promise<void> => {
     reading = false;
     readingSince = null;
     dropIdleLibraryIndex();
+    endRun();
   }
+};
+
+/**
+ * With none of the batch's playlists waiting, its run ends (Core's
+ * `endYtLibraryRun`): the line at the top of Playlists goes, and isn't
+ * paused any more.
+ */
+const endRun = (): void => {
+  const current = batch.get();
+  if (nextYtLibraryRead(current) !== undefined) return;
+  ytLibraryBatchPause.set(null);
+  const ended = endYtLibraryRun(current);
+  if (ended !== current) batch.set(ended);
 };
 
 /**

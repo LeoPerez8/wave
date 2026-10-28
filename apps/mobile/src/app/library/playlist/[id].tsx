@@ -16,6 +16,7 @@ import { playlistOpened } from "@/library/backgroundFill";
 import { DetailFrame } from "@/library/DetailFrame";
 import { usePlaylist } from "@/library/hooks";
 import { LibraryStore, type PlaylistEntryRow, type PlaylistRow } from "@/library/LibraryStore";
+import { ImportCoverRing } from "@/library/ImportCoverRing";
 import { ImportProgressLine } from "@/library/ImportProgressLine";
 import { PlaylistImportLine } from "@/library/PlaylistImportLine";
 import { PlaylistItems, playPlaylistEntries } from "@/library/PlaylistItems";
@@ -41,6 +42,7 @@ const readPlaylist = (id: number) => LibraryStore.use((store) => store.getPlayli
 function PlaylistHead({ shown }: { shown: Shown }) {
   const { width } = useWindowDimensions();
   const { playlist, items } = shown;
+  const cover = width - grid.margin * 2;
   const context = { kind: "playlist", id: String(playlist.id) } as const;
   // The whole list, its YT Music entries streamed, while YT Music is on (`playPlaylistEntries`).
   const play = (shuffle: boolean) => {
@@ -79,7 +81,10 @@ function PlaylistHead({ shown }: { shown: Shown }) {
   );
   return (
     <View style={{ gap: CELL * 2, paddingBottom: CELL }}>
-      <Mosaic paths={playlist.artworkPaths} size={width - grid.margin * 2} />
+      <View>
+        <Mosaic paths={playlist.artworkPaths} size={cover} />
+        <ImportCoverRing playlistId={playlist.id} cover={cover} />
+      </View>
       <View style={{ gap: CELL / 2 }}>
         <Text
           accessibilityRole="header"

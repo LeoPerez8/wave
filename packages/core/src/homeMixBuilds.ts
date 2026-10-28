@@ -5,11 +5,11 @@ import type { MixRowId } from "./homeSections.ts";
 export const homeMixBuildsDue = (
   rows: readonly {
     readonly id: MixRowId;
-    readonly saved: Pick<DiscoverMixes, "builtAt" | "playSeeds"> | null;
+    readonly saved: Pick<DiscoverMixes, "builtAt" | "playSeeds" | "build"> | null;
     readonly building: boolean;
     readonly retryAt: number | null;
   }[],
-  at: { readonly now: number; readonly played: boolean },
+  at: { readonly now: number; readonly played: boolean; readonly librarySeeds?: boolean },
 ): MixRowId[] =>
   rows
     .filter(

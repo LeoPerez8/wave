@@ -1,7 +1,7 @@
 import { useScreenContent } from "@/lib/screenTiming";
 import { libraryQueryHasContent } from "./sharedQueries";
 import { IconPlaylist } from "@tabler/icons-react-native";
-import { counted, importProgressLine, type PlaylistLayout } from "@wave/core";
+import { counted, importProgressLine, importRing, type PlaylistLayout } from "@wave/core";
 import { useCallback, useMemo, type ReactNode } from "react";
 import { useWindowDimensions, View, type AccessibilityActionEvent } from "react-native";
 
@@ -18,6 +18,7 @@ import { useListSelection, type ListSelection } from "@/selection/useListSelecti
 
 import { LibraryReadFeedback } from "./LibraryReadFeedback";
 import { ArrangeablePlaylists, TILE_GRIP_INSET } from "./ArrangeablePlaylists";
+import { ImportBatchLine } from "./ImportBatchLine";
 import { openPlaylistImport } from "./importPlaylistLink";
 import { useImportProgress } from "./importProgress";
 import type { PlaylistRow } from "./LibraryStore";
@@ -106,15 +107,18 @@ function PlaylistView({
 }) {
   const press = playlistPress(playlist, selection);
   const moves = moveActions(index, ids, arrangeable);
-  // An importing playlist says what its import is doing instead of its count (Core's `importProgressLine`).
+  // An importing playlist says what its import is doing instead of its count, and shows a
+  // ring over its cover (Core's `importProgressLine`, `importRing`).
   const progress = useImportProgress(playlist.id);
   const detail = progress === null ? songCount(playlist.trackCount) : importProgressLine(progress);
+  const ring = importRing(progress);
   if (layout === "list") {
     return (
       <PlaylistCardRow
         name={playlist.name}
         detail={detail}
         paths={playlist.thumbPaths}
+        ring={ring}
         {...press}
         {...moves}
       />
@@ -125,6 +129,7 @@ function PlaylistView({
       name={playlist.name}
       detail={detail}
       paths={playlist.thumbPaths}
+      ring={ring}
       size={tile}
       nameInset={TILE_GRIP_INSET}
       {...press}
@@ -151,7 +156,8 @@ const rowHeight = (layout: PlaylistLayout, tile: number, fontScale: number): num
  * whatever the order. Each playlist's handle drags it to a new place, which
  * under another sort switches the list to Custom from the order on screen.
  * Find in Playlists, above them all, narrows the list by name (see
- * `ArrangeablePlaylists`).
+ * `ArrangeablePlaylists`). While a batch of playlists imports, its line
+ * ("Importing playlists · 12 of 80") sits under the field, whatever the query.
  */
 export function PlaylistsList({ empty }: { empty: string }) {
   useRenderCount("PlaylistsList");
@@ -207,6 +213,7 @@ export function PlaylistsList({ empty }: { empty: string }) {
           <PlaylistsActions />
         </PlaylistsHeader>
       }
+      lead={<ImportBatchLine />}
       renderPlaylist={renderPlaylist}
     />
   );

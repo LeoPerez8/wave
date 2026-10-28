@@ -12,6 +12,7 @@ import "@/settings/bounceAmount";
 import "@/settings/dontPlayExplicit";
 import "@/settings/genius";
 import "@/settings/glass";
+import "@/settings/keepFindVisible";
 import "@/settings/longPressDelay";
 import "@/settings/lyricsAndGenre";
 import "@/settings/shuffleKind";
