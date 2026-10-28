@@ -5,11 +5,7 @@ import { CatalogLine } from "@/catalog/CatalogLine";
 import { Hairline } from "@/catalog/Hairline";
 import { SettingsSwitch } from "@/components/SettingsSwitch";
 import { TextButton } from "@/components/TextButton";
-import {
-  cancelLibraryLookup,
-  startLibraryLookup,
-  useLibraryLookup,
-} from "@/library/findLyricsAndGenre";
+import { cancelFixSongs, startLibraryLookup, useFixSongsRun } from "@/library/findLyricsAndGenre";
 
 import { setLyricsAndGenreLookupsEnabled, useLyricsAndGenreLookupsEnabled } from "./lyricsAndGenre";
 
@@ -18,8 +14,8 @@ const LOOKUPS_LABEL = "Fix songs online";
 
 const setLookups = (on: boolean): void => {
   setLyricsAndGenreLookupsEnabled(on);
-  // Off means no more requests, including the Library-wide run's.
-  if (!on) cancelLibraryLookup();
+  // Off means no more requests, including the Fix Songs run's.
+  if (!on) cancelFixSongs();
 };
 
 /**
@@ -29,7 +25,7 @@ const setLookups = (on: boolean): void => {
  */
 export function LyricsAndGenreSettingsSection() {
   const enabled = useLyricsAndGenreLookupsEnabled();
-  const run = useLibraryLookup();
+  const run = useFixSongsRun();
 
   return (
     <View>
@@ -52,7 +48,7 @@ export function LyricsAndGenreSettingsSection() {
           >
             {libraryLookupProgress(run.done, run.total).line}
           </Text>
-          <TextButton label="Cancel" onPress={cancelLibraryLookup} />
+          <TextButton label="Cancel" onPress={cancelFixSongs} />
         </View>
       ) : (
         <View className="mt-4 items-start">

@@ -698,6 +698,34 @@ describe("songsToFix", () => {
   test("an empty Library fixes and skips nothing", () => {
     assert.deepEqual(songsToFix([]), { fix: [], skipped: 0 });
   });
+
+  test("leaves out the songs the run going on was given already, without counting them skipped", () => {
+    const at = (title: string, hasLyrics: boolean) => ({
+      ...indexed(title, hasLyrics, "Rock"),
+      path: `/Music/${title}.mp3`,
+    });
+    // Airbag and Lucky are being fixed; Exit Music was skipped as having everything.
+    const given = new Set(["/Music/Airbag.mp3", "/Music/Lucky.mp3", "/Music/Exit Music.mp3"]);
+    const run = songsToFix(
+      [at("Lucky", false), at("Karma Police", false), at("Let Down", true), at("Exit Music", true)],
+      given,
+    );
+    assert.deepEqual(
+      run.fix.map((fixed) => fixed.title),
+      ["Karma Police"],
+    );
+    assert.equal(run.skipped, 1);
+  });
+
+  test("takes a song given twice once", () => {
+    const song = { ...indexed("Airbag", false, "Rock"), path: "/Music/Airbag.mp3" };
+    assert.deepEqual(songsToFix([song, { ...song }]), { fix: [song], skipped: 0 });
+  });
+
+  test("counts a song with everything given twice as skipped once", () => {
+    const song = { ...indexed("Let Down", true, "Rock"), path: "/Music/Let Down.mp3" };
+    assert.deepEqual(songsToFix([song, { ...song }]), { fix: [], skipped: 1 });
+  });
 });
 
 describe("fixLookups", () => {

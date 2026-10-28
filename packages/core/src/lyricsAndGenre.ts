@@ -557,15 +557,28 @@ export const canFixSong = (song: IndexedTags): boolean =>
 
 /**
  * Which of [songs] Fix Song works on: those it can do something for
- * (`canFixSong`), in the order given. The others are skipped (and counted
- * for the summary), so running it again on the whole Library only does new or
- * incomplete songs.
+ * (`canFixSong`), in the order given, each file once. The others are skipped
+ * (and counted for the summary, each file once), so running it again on the
+ * whole Library only does new or incomplete songs. Songs started while a run
+ * goes on join it: the files [given] holds (those the run was given already,
+ * fixed or skipped) are left out, not counted again.
  */
 export const songsToFix = <S extends IndexedTags>(
   songs: readonly S[],
+  given: ReadonlySet<string> = new Set(),
 ): { readonly fix: S[]; readonly skipped: number } => {
-  const fix = songs.filter(canFixSong);
-  return { fix, skipped: songs.length - fix.length };
+  const seen = new Set<string>();
+  const fix: S[] = [];
+  let skipped = 0;
+  for (const song of songs) {
+    if (song.path != null) {
+      if (given.has(song.path) || seen.has(song.path)) continue;
+      seen.add(song.path);
+    }
+    if (canFixSong(song)) fix.push(song);
+    else skipped += 1;
+  }
+  return { fix, skipped };
 };
 
 /**
