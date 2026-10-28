@@ -437,6 +437,8 @@ export {
   pickColour,
 } from "./colourPicker.ts";
 export type { ColourPickerLayout, ColourPickerTarget } from "./colourPicker.ts";
+export { COLOUR_PICKER_REST_MS, createColourPickerPreview } from "./colourPickerPreview.ts";
+export type { ColourPickerPreview, ColourPickerPreviewDeps } from "./colourPickerPreview.ts";
 export { overlayDivider } from "./overlayDivider.ts";
 export type { ContrastIssue, RecapColour, Theme, ThemeColors } from "./theme.ts";
 export {

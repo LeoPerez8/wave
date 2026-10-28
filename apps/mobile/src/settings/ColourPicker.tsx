@@ -15,12 +15,13 @@ import {
   hsvToHex,
   parseHexColour,
   pickColour,
+  type ColourPickerPreview,
   type ColourPickerTarget,
   type CustomInkPreview,
   type Hsv,
   type InkGroup,
 } from "@wave/core";
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Text, TextInput, View } from "react-native";
 import { GestureDetector, usePanGesture } from "react-native-gesture-handler";
 
@@ -58,26 +59,31 @@ const HUE_STEP = 15;
 
 /**
  * Opens the colour picker for Primary or Secondary on `initial` (`#rrggbb`).
- * The app recolours while the owner picks; Done keeps the colour (asking
- * first when that switches the launcher icon), Cancel, Back or a tap outside
- * puts the colours back.
+ * The picker follows the finger; the app recolours once it rests or lifts.
+ * Done keeps the colour (asking first when that switches the launcher icon),
+ * Cancel, Back or a tap outside puts the colours back.
  */
 export const openColourPicker = (group: InkGroup, initial: string): void => {
+  const preview = previewCustomInk(group);
   void presentOverlay<string | null>({
     label: TITLE[group],
     align: "top",
     dismissed: null,
-    render: (finish) => <ColourPickerCard group={group} initial={initial} finish={finish} />,
+    render: (finish) => (
+      <ColourPickerCard group={group} initial={initial} preview={preview} finish={finish} />
+    ),
   }).then((hex) => (hex === null ? cancelCustomInk() : setCustomInk(group, hex, confirmAction)));
 };
 
 function ColourPickerCard({
   group,
   initial,
+  preview,
   finish,
 }: {
   group: InkGroup;
   initial: string;
+  preview: ColourPickerPreview;
   finish: (hex: string | null) => void;
 }) {
   const choice = useThemeChoice();
@@ -87,25 +93,38 @@ function ColourPickerCard({
   const [text, setText] = useState(initial.slice(1));
   const hex = hsvToHex(hsv);
   const entered = parseHexColour(text);
-  const preview = customInkPreview(choice, group, hex);
+  const applies = useMemo(() => customInkPreview(choice, group, hex), [choice, group, hex]);
 
-  const pick = (next: Hsv, fromText = false) => {
+  /** Shows `next` in the picker; the app's recolour is up to `preview`. */
+  const show = (next: Hsv, fromText = false) => {
     setHsv(next);
     if (!fromText) setText(hsvToHex(next).slice(1));
-    previewCustomInk(group, hsvToHex(next));
+  };
+
+  const drag = (next: Hsv) => {
+    show(next);
+    preview.drag(hsvToHex(next));
+  };
+
+  const step = (next: Hsv) => {
+    show(next);
+    preview.pick(hsvToHex(next));
   };
 
   const typed = (value: string) => {
     setText(value);
     const parsed = parseHexColour(value);
-    if (parsed !== null && parsed !== hex) pick(hexToHsv(parsed), true);
+    if (parsed !== null && parsed !== hex) {
+      show(hexToHsv(parsed), true);
+      preview.pick(parsed);
+    }
   };
 
   return (
     <>
       <CatalogLine className="mb-2">{TITLE[group]}</CatalogLine>
       <CardEntries>
-        <HueAndShade hsv={hsv} onPick={pick} />
+        <HueAndShade hsv={hsv} onDrag={drag} onLift={preview.lift} onStep={step} />
         <View className="flex-row items-center" style={{ height: grid.row }}>
           <Text className="font-sans text-title3 text-secondary">#</Text>
           <TextInput
@@ -125,8 +144,8 @@ function ColourPickerCard({
           />
         </View>
         <View className="flex-row flex-wrap" style={{ gap: CELL, paddingBottom: CELL }}>
-          <AppliesAs label="Light" preview={preview.light} />
-          <AppliesAs label="Dark" preview={preview.dark} />
+          <AppliesAs label="Light" preview={applies.light} />
+          <AppliesAs label="Dark" preview={applies.dark} />
         </View>
         <Hairline />
         {/* The line is reserved so the actions don't jump when the note appears. */}
@@ -137,11 +156,11 @@ function ColourPickerCard({
         >
           {entered === null
             ? "Enter a 3- or 6-digit hex colour."
-            : preview.light.adjusted || preview.dark.adjusted
+            : applies.light.adjusted || applies.dark.adjusted
               ? `Adjusted to read on your ${
-                  preview.light.adjusted && preview.dark.adjusted
+                  applies.light.adjusted && applies.dark.adjusted
                     ? "backgrounds"
-                    : `${preview.light.adjusted ? "light" : "dark"} background`
+                    : `${applies.light.adjusted ? "light" : "dark"} background`
                 }, as shown.`
               : ""}
         </Text>
@@ -185,8 +204,22 @@ function AppliesAs({ label, preview }: { label: string; preview: CustomInkPrevie
   );
 }
 
-/** The hue ring around the saturation and brightness square, drawn with Skia; drag either. */
-function HueAndShade({ hsv, onPick }: { hsv: Hsv; onPick: (next: Hsv) => void }) {
+/**
+ * The hue ring around the saturation and brightness square, drawn with Skia:
+ * drag either (`onDrag` on each move, `onLift` when the finger leaves), or
+ * step the hue with a screen reader (`onStep`).
+ */
+function HueAndShade({
+  hsv,
+  onDrag,
+  onLift,
+  onStep,
+}: {
+  hsv: Hsv;
+  onDrag: (next: Hsv) => void;
+  onLift: () => void;
+  onStep: (next: Hsv) => void;
+}) {
   const [size, setSize] = useState(0);
   const layout = colourPickerLayout(size);
   // A drag keeps to the part it started on, even when it strays off it.
@@ -198,14 +231,15 @@ function HueAndShade({ hsv, onPick }: { hsv: Hsv; onPick: (next: Hsv) => void })
     onActivate: (event) => {
       target.current = colourPickerTarget(layout, event.x, event.y);
       if (target.current !== null)
-        onPick(pickColour(layout, target.current, event.x, event.y, hsv));
+        onDrag(pickColour(layout, target.current, event.x, event.y, hsv));
     },
     onUpdate: (event) => {
       if (target.current !== null)
-        onPick(pickColour(layout, target.current, event.x, event.y, hsv));
+        onDrag(pickColour(layout, target.current, event.x, event.y, hsv));
     },
     onFinalize: () => {
       target.current = null;
+      onLift();
     },
   });
 
@@ -229,7 +263,7 @@ function HueAndShade({ hsv, onPick }: { hsv: Hsv; onPick: (next: Hsv) => void })
           accessibilityValue={{ text: `${Math.round(hsv.h)} degrees` }}
           accessibilityActions={[{ name: "increment" }, { name: "decrement" }]}
           onAccessibilityAction={(event) =>
-            onPick({
+            onStep({
               ...hsv,
               h:
                 (hsv.h +
