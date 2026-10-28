@@ -3,8 +3,10 @@ import { describe, test } from "node:test";
 
 import {
   finishPlaylistImport,
+  importLibraryIndexSteps,
   importLogLine,
   planLinkImport,
+  planLinkImportWithIndexSteps,
   playlistImportView,
   queuePlaylistImport,
   readPlaylistImports,
@@ -597,5 +599,61 @@ describe("an import kept by a Wave from before unavailable entries", () => {
     assert.deepEqual(view(updatePlaylistImport([read], finished.job))?.leftOut?.sections, [
       { heading: "Not found", songs: ["Doin' it Right · Daft Punk & Panda Bear"] },
     ]);
+  });
+});
+
+describe("a batch's imports sharing one Library index", () => {
+  /** Runs [steps] to the end: their result and how many times they yielded. */
+  const run = <A>(steps: Generator<void, A>) => {
+    let yields = 0;
+    for (;;) {
+      const next = steps.next();
+      if (next.done) return { result: next.value, yields };
+      yields++;
+    }
+  };
+
+  const sources = [
+    ytPlaylist([yt("a", "Touch"), yt("b", "Doin' it Right"), yt("c", "Touch")], "Late Night", [
+      yt("a", "Touch"),
+    ]),
+    spotifyPlaylist([
+      spotify("Giorgio by Moroder"),
+      spotify("Beyond"),
+      spotify("Beyond"),
+      spotify("Local File", { artists: [] }),
+    ]),
+    ytPlaylist([yt("d", "Giorgio by Moroder", { durationMs: 200_000 })], "Edits"),
+  ];
+
+  test("each playlist's plan over the shared index is the plan over the Library", () => {
+    const index = run(importLibraryIndexSteps(library)).result;
+    for (const source of sources)
+      assert.deepEqual(
+        run(planLinkImportWithIndexSteps(source, index)).result,
+        planLinkImport(source, library),
+      );
+  });
+
+  test("planning over the index doesn't go through the Library again", () => {
+    const big = Array.from({ length: 5000 }, (_, id) => ({
+      id: id + 10,
+      title: `Song ${id}`,
+      artist: "Someone",
+      durationMs: 200_000,
+    }));
+    const index = run(importLibraryIndexSteps([...library, ...big])).result;
+    const source = ytPlaylist([
+      yt("t", "Touch", { durationMs: 498_000 }),
+      yt("s", "Song 4999", { artists: ["Someone"], durationMs: 200_000 }),
+      yt("n", "Nowhere"),
+    ]);
+    const plan = run(planLinkImportWithIndexSteps(source, index));
+    assert.ok(plan.yields < 20, `${plan.yields} steps for three rows`);
+    assert.deepEqual(plan.result.finds.slice(0, 2), [
+      { kind: "library", trackId: 2 },
+      { kind: "library", trackId: 5009 },
+    ]);
+    assert.equal(plan.result.finds[2]?.kind, "ytMusic");
   });
 });

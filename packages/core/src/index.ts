@@ -2112,7 +2112,13 @@ export { ytArtistPageOpening } from "./ytArtistPageOpening.ts";
 
 export { reconcileScanSteps } from "./scanReconcile.ts";
 export { replacementDuplicatesSteps } from "./replacementDuplicates.ts";
-export { planLinkImportSteps, finishPlaylistImportSteps } from "./playlistImport.ts";
+export {
+  planLinkImportSteps,
+  finishPlaylistImportSteps,
+  importLibraryIndexSteps,
+  planLinkImportWithIndexSteps,
+  type ImportLibraryIndex,
+} from "./playlistImport.ts";
 
 export { playlistImportCompletionSteps } from "./playlistImport.ts";
 
@@ -2210,3 +2216,11 @@ export type {
   GeniusPlacement,
   GeniusReferent,
 } from "./geniusAnnotations.ts";
+
+export {
+  importPhaseTimer,
+  importTimingsLogLine,
+  type ImportPhase,
+  type ImportPhaseTimer,
+  type ImportPhaseTimings,
+} from "./importTimings.ts";
