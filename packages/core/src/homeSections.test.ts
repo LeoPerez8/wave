@@ -200,6 +200,13 @@ describe("what Home lists", () => {
     ]);
   });
 
+  test("with an empty Library, Home lists only Discover, under its empty state, when arranged", () => {
+    const empty = { nothingPlayed: true, empty: true };
+    assert.deepEqual(homeItems(TODAYS_HOME as HomeArrangement, empty), sections("discover"));
+    assert.deepEqual(homeItems(["favorites", "stats"], empty), []);
+    assert.deepEqual(homeItems([], empty), []);
+  });
+
   test("with nothing played and no section plays fill, there's no line asking for a play", () => {
     assert.deepEqual(
       homeItems(["favorites", "recently-added", "stats"], {

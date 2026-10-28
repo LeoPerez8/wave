@@ -1,7 +1,7 @@
 import { useScreenContent } from "@/lib/screenTiming";
 import { libraryQueryHasContent } from "./sharedQueries";
 import { IconPlaylist } from "@tabler/icons-react-native";
-import { counted, type PlaylistLayout } from "@wave/core";
+import { counted, importProgressLine, importRing, type PlaylistLayout } from "@wave/core";
 import { useCallback, useMemo, type ReactNode } from "react";
 import { useWindowDimensions, View, type AccessibilityActionEvent } from "react-native";
 
@@ -18,7 +18,9 @@ import { useListSelection, type ListSelection } from "@/selection/useListSelecti
 
 import { LibraryReadFeedback } from "./LibraryReadFeedback";
 import { ArrangeablePlaylists, TILE_GRIP_INSET } from "./ArrangeablePlaylists";
+import { ImportBatchLine } from "./ImportBatchLine";
 import { openPlaylistImport } from "./importPlaylistLink";
+import { useImportProgress } from "./importProgress";
 import type { PlaylistRow } from "./LibraryStore";
 import { usePlaylistLayout } from "./playlistLayout";
 import { moveShownPlaylist } from "./playlistOrder";
@@ -60,11 +62,11 @@ const playlistPress = (playlist: PlaylistRow, selection: ListSelection<PlaylistR
 /**
  * Move up and Move down for screen readers, on the playlist at [index] of
  * [ids] (the list's order on screen): they arrange the list by hand, so under
- * another sort they switch it to Custom from the order shown. None while
- * selecting.
+ * another sort they switch it to Custom from the order shown. None unless
+ * [arrangeable] (not while selecting, nor while Find narrows the list).
  */
-const moveActions = (index: number, ids: readonly number[], selecting: boolean) => {
-  if (selecting) return {};
+const moveActions = (index: number, ids: readonly number[], arrangeable: boolean) => {
+  if (!arrangeable) return {};
   return {
     accessibilityActions: [
       ...(index > 0 ? [{ name: "moveUp", label: "Move up" }] : []),
@@ -90,24 +92,33 @@ function PlaylistView({
   layout,
   tile,
   selection,
+  arrangeable,
 }: {
   playlist: PlaylistRow;
   /** Its place in the list: an index of [ids], the order on screen. */
   index: number;
   ids: readonly number[];
+  /** Whether it can be moved: not while selecting, nor while Find narrows the list. */
+  arrangeable: boolean;
   layout: PlaylistLayout;
   /** The cover's side for this layout's tiles. */
   tile: number;
   selection: ListSelection<PlaylistRow>;
 }) {
   const press = playlistPress(playlist, selection);
-  const moves = moveActions(index, ids, selection.selecting);
+  const moves = moveActions(index, ids, arrangeable);
+  // An importing playlist says what its import is doing instead of its count, and shows a
+  // ring over its cover (Core's `importProgressLine`, `importRing`).
+  const progress = useImportProgress(playlist.id);
+  const detail = progress === null ? songCount(playlist.trackCount) : importProgressLine(progress);
+  const ring = importRing(progress);
   if (layout === "list") {
     return (
       <PlaylistCardRow
         name={playlist.name}
-        detail={songCount(playlist.trackCount)}
+        detail={detail}
         paths={playlist.thumbPaths}
+        ring={ring}
         {...press}
         {...moves}
       />
@@ -116,8 +127,9 @@ function PlaylistView({
   return (
     <PlaylistCard
       name={playlist.name}
-      detail={songCount(playlist.trackCount)}
+      detail={detail}
       paths={playlist.thumbPaths}
+      ring={ring}
       size={tile}
       nameInset={TILE_GRIP_INSET}
       {...press}
@@ -143,6 +155,9 @@ const rowHeight = (layout: PlaylistLayout, tile: number, fontScale: number): num
  * title's long press, with Import Playlists and New Playlist above them
  * whatever the order. Each playlist's handle drags it to a new place, which
  * under another sort switches the list to Custom from the order on screen.
+ * Find in Playlists, above them all, narrows the list by name (see
+ * `ArrangeablePlaylists`). While a batch of playlists imports, its line
+ * ("Importing playlists · 12 of 80") sits under the field, whatever the query.
  */
 export function PlaylistsList({ empty }: { empty: string }) {
   useRenderCount("PlaylistsList");
@@ -154,7 +169,7 @@ export function PlaylistsList({ empty }: { empty: string }) {
   const selection = useListSelection({ items: playlists, keyOf, target: playlistsOf });
   const ids = useMemo(() => playlists.map((playlist) => playlist.id), [playlists]);
   const renderPlaylist = useCallback(
-    (playlist: PlaylistRow, index: number) => (
+    (playlist: PlaylistRow, index: number, arrangeable: boolean) => (
       <PlaylistView
         playlist={playlist}
         index={index}
@@ -162,6 +177,7 @@ export function PlaylistsList({ empty }: { empty: string }) {
         layout={layout}
         tile={tile}
         selection={selection}
+        arrangeable={arrangeable}
       />
     ),
     [ids, layout, tile, selection],
@@ -197,6 +213,7 @@ export function PlaylistsList({ empty }: { empty: string }) {
           <PlaylistsActions />
         </PlaylistsHeader>
       }
+      lead={<ImportBatchLine />}
       renderPlaylist={renderPlaylist}
     />
   );

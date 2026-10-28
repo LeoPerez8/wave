@@ -55,6 +55,7 @@ describe("ytLibraryPicker", () => {
       title: "Liked Songs",
       artworkUrl: "https://lh3.googleusercontent.com/LM",
       line: "1,834 songs",
+      songCount: 1834,
       imported: false,
       ticked: true,
     });
@@ -67,6 +68,7 @@ describe("ytLibraryPicker", () => {
         title: "Liked Songs",
         artworkUrl: null,
         line: null,
+        songCount: null,
         imported: false,
         ticked: true,
       },
@@ -80,6 +82,7 @@ describe("ytLibraryPicker", () => {
       title: "Road trip",
       artworkUrl: "https://lh3.googleusercontent.com/PLroad",
       line: "1 song",
+      songCount: 1,
       imported: false,
       ticked: true,
     });
@@ -257,21 +260,37 @@ describe("importing again", () => {
   test("an Imported row ticked again refreshes the playlist it made, under its name in Wave, and makes no second one", () => {
     const picker = toggleYtLibraryRow(ytLibraryPicker(library, origins), "PLgym");
     assert.deepEqual(planYtLibraryImport(picker, wave("Road trip", "Gym workout")), [
-      { playlistId: "LM", name: "Liked Songs", replaces: null, uncapped: true, favorites: false },
+      {
+        playlistId: "LM",
+        name: "Liked Songs",
+        replaces: null,
+        uncapped: true,
+        favorites: false,
+        expected: 1834,
+      },
       {
         playlistId: "PLroad",
         name: "Road trip 2",
         replaces: null,
         uncapped: false,
         favorites: false,
+        expected: 1,
       },
-      { playlistId: "PLgym", name: "Gym workout", replaces: 2, uncapped: false, favorites: false },
+      {
+        playlistId: "PLgym",
+        name: "Gym workout",
+        replaces: 2,
+        uncapped: false,
+        favorites: false,
+        expected: 1234,
+      },
       {
         playlistId: "RDCLAK5uy_chill",
         name: "Chill Hits",
         replaces: null,
         uncapped: false,
         favorites: false,
+        expected: 50,
       },
     ]);
   });
@@ -279,7 +298,14 @@ describe("importing again", () => {
   test("Liked Songs ticked again refreshes its playlist, still read whole", () => {
     const picker = toggleYtLibraryRow(ytLibraryPicker([], new Map([["LM", 4]])), "LM");
     assert.deepEqual(planYtLibraryImport(picker, wave("Road trip", "Gym", "Chill", "My Likes")), [
-      { playlistId: "LM", name: "My Likes", replaces: 4, uncapped: true, favorites: false },
+      {
+        playlistId: "LM",
+        name: "My Likes",
+        replaces: 4,
+        uncapped: true,
+        favorites: false,
+        expected: null,
+      },
     ]);
   });
 
@@ -296,7 +322,14 @@ describe("importing again", () => {
     const plan = planYtLibraryImport(picker, [{ id: 5, name: "Gym" }]);
     assert.deepEqual(
       plan.find((item) => item.playlistId === "PLgym"),
-      { playlistId: "PLgym", name: "Gym 2", replaces: null, uncapped: false, favorites: false },
+      {
+        playlistId: "PLgym",
+        name: "Gym 2",
+        replaces: null,
+        uncapped: false,
+        favorites: false,
+        expected: 1234,
+      },
     );
   });
 });
@@ -352,7 +385,14 @@ describe("Also add to Favorites", () => {
       toggleYtLibraryRow(ytLibraryPicker([], new Map([["LM", 1]])), "LM"),
     );
     assert.deepEqual(planYtLibraryImport(picker, wave("My Likes")), [
-      { playlistId: "LM", name: "My Likes", replaces: 1, uncapped: true, favorites: true },
+      {
+        playlistId: "LM",
+        name: "My Likes",
+        replaces: 1,
+        uncapped: true,
+        favorites: true,
+        expected: null,
+      },
     ]);
   });
 

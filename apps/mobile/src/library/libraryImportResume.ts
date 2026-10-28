@@ -4,6 +4,7 @@ import {
   isYtLibraryReadQueued,
   ytLibraryDownloadsToQueue,
   type YtLibraryBatch,
+  type YtLibraryPauseReason,
   type YtLibraryRead,
 } from "@wave/core";
 interface Ports {
@@ -12,8 +13,8 @@ interface Ports {
   readonly prune: () => Promise<void>;
   readonly settle: (id: number) => Promise<void>;
   readonly download: (read: YtLibraryRead) => Promise<void>;
-  readonly fill: (read: YtLibraryRead) => Promise<string | null>;
-  readonly paused: (read: YtLibraryRead, reason: string) => void;
+  readonly fill: (read: YtLibraryRead) => Promise<YtLibraryPauseReason | null>;
+  readonly paused: (read: YtLibraryRead, reason: YtLibraryPauseReason) => void;
 }
 /** Does not consume a paused/failed transport answer. The caller retains its single-run lock. */
 export const resumeLibraryReads = async (ports: Ports): Promise<void> => {

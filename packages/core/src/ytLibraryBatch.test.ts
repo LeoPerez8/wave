@@ -249,8 +249,8 @@ describe("a failed read", () => {
 describe("a read offline, or with YT Music off", () => {
   for (const reason of ["offline", "disabled"]) {
     test(`(${reason}) pauses the batch, its playlist and the rest still waiting in order`, () => {
-      const { batch, pause } = ytLibraryReadFailed(imported, readOf(imported, 41), reason);
-      assert.equal(pause, true);
+      const { batch, pausedBy } = ytLibraryReadFailed(imported, readOf(imported, 41), reason);
+      assert.equal(pausedBy, reason);
       assert.deepEqual(
         batch.reads.map((read) => [read.source, read.state]),
         [
@@ -274,7 +274,7 @@ describe("a read offline, or with YT Music off", () => {
 
   test("a refused read, or an answer Wave can't read, doesn't pause the batch", () => {
     for (const reason of ["failed", "HTTP 500"]) {
-      assert.equal(ytLibraryReadFailed(imported, readOf(imported, 41), reason).pause, false);
+      assert.equal(ytLibraryReadFailed(imported, readOf(imported, 41), reason).pausedBy, null);
     }
   });
 
@@ -298,14 +298,14 @@ describe("a From Spotify read in the batch", () => {
   ]);
 
   test("the Spotify session ending pauses the batch, as being offline does", () => {
-    const { batch, pause } = ytLibraryReadFailed(spotify, readOf(spotify, 44), "signedOut");
-    assert.equal(pause, true);
+    const { batch, pausedBy } = ytLibraryReadFailed(spotify, readOf(spotify, 44), "signedOut");
+    assert.equal(pausedBy, "signedOut");
     assert.equal(readOf(batch, 44).state, "waiting");
   });
 
   test("Spotify changing its web player fails that playlist, with Try Again", () => {
-    const { batch, pause } = ytLibraryReadFailed(spotify, readOf(spotify, 44), "changed");
-    assert.equal(pause, false);
+    const { batch, pausedBy } = ytLibraryReadFailed(spotify, readOf(spotify, 44), "changed");
+    assert.equal(pausedBy, null);
     assert.equal(ytLibraryReadView(batch, 44)?.line, "Couldn't read it online");
   });
 

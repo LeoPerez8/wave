@@ -175,6 +175,9 @@ export {
   findPlaceholder,
   findNoMatch,
   artistFindText,
+  playlistFindText,
+  albumFindText,
+  genreFindText,
 } from "./findInPlaylist.ts";
 export type {
   FoundInPlaylist,
@@ -184,6 +187,13 @@ export type {
   ShownInPlaylist,
   FindableListKind,
 } from "./findInPlaylist.ts";
+export {
+  findFieldPlacement,
+  findScrollOnPin,
+  readKeepFindVisible,
+  storedKeepFindVisible,
+} from "./keepFindVisible.ts";
+export type { FindFieldPlacement } from "./keepFindVisible.ts";
 export { createSearchCatalog } from "./searchCatalog.ts";
 export type { SearchCatalog, SearchCatalogStats } from "./searchCatalog.ts";
 export { SEARCH_FOCUS_LIMITS, startSearchFocus, stepSearchFocus } from "./searchFocus.ts";
@@ -437,6 +447,8 @@ export {
   pickColour,
 } from "./colourPicker.ts";
 export type { ColourPickerLayout, ColourPickerTarget } from "./colourPicker.ts";
+export { COLOUR_PICKER_REST_MS, createColourPickerPreview } from "./colourPickerPreview.ts";
+export type { ColourPickerPreview, ColourPickerPreviewDeps } from "./colourPickerPreview.ts";
 export { overlayDivider } from "./overlayDivider.ts";
 export type { ContrastIssue, RecapColour, Theme, ThemeColors } from "./theme.ts";
 export {
@@ -490,13 +502,17 @@ export type { BounceSpring, SpringShape } from "./bounce.ts";
 export type { SliderRange } from "./slider.ts";
 export { LONG_PRESS_DELAY, readLongPressDelay, snapLongPressDelay } from "./longPress.ts";
 export {
+  DEFAULT_GLASS_LEVEL,
   DEFAULT_GLASS_SETTINGS,
+  GLASS_LEVEL_RANGE,
   GLASS_SETTINGS,
+  glassLevel,
+  glassLevelValue,
   glassTintAlpha,
   isDefaultGlassSettings,
   readGlassSettings,
 } from "./glassSettings.ts";
-export type { GlassSettings } from "./glassSettings.ts";
+export type { GlassLevelSetting, GlassSettings } from "./glassSettings.ts";
 export {
   GLASS_PROBES,
   GLASS_PROBE_EXTRA,
@@ -687,6 +703,8 @@ export {
   magicSignal,
   parseMagicSession,
   startMagicQueue,
+  startStreamedMagicQueue,
+  streamedSongMagicStart,
   wantsMagicBatch,
 } from "./magicQueue.ts";
 export type {
@@ -695,6 +713,7 @@ export type {
   MagicQueueEdits,
   MagicRadioSeed,
   MagicSeed,
+  StreamedSongMagicStart,
   MagicSeedSong,
   MagicSession,
   MagicSongRadioSeed,
@@ -1556,7 +1575,10 @@ export type {
   YtLibraryPlaylistKind,
   YtLibraryRow,
 } from "./ytLibrary.ts";
+export { importBatchLine } from "./importBatchLine.ts";
+export type { ImportBatchLine } from "./importBatchLine.ts";
 export {
+  endYtLibraryRun,
   isYtLibraryReadQueued,
   nextYtLibraryRead,
   NO_YT_LIBRARY_READS,
@@ -1570,11 +1592,35 @@ export {
   ytLibraryDownloadsToQueue,
   ytLibraryDownloadsQueued,
   ytLibraryReadFailed,
+  isYtLibraryPauseReason,
   ytLibraryReadLogLine,
   ytLibraryReadView,
 } from "./ytLibraryBatch.ts";
+export {
+  addingProgress,
+  clearImportProgress,
+  importProgress,
+  importProgressByPlaylist,
+  importProgressFraction,
+  importProgressLine,
+  importRing,
+  MATCHING_PROGRESS,
+  NO_IMPORT_PROGRESS,
+  readingProgress,
+  setImportProgress,
+} from "./importProgress.ts";
+export type {
+  AddingProgress,
+  ImportProgress,
+  ImportProgressBoard,
+  ImportRing,
+  MatchingProgress,
+  ReadingProgress,
+  WaitingProgress,
+} from "./importProgress.ts";
 export type {
   YtLibraryBatch,
+  YtLibraryPauseReason,
   YtLibraryRead,
   YtLibraryReadFailure,
   YtLibraryReadState,
@@ -1698,13 +1744,24 @@ export type { SeedSong } from "./seedSongDraw.ts";
 export type { RandomSource } from "./weightedPick.ts";
 export {
   ARTIST_MIX_COUNT,
+  artistMixNeedsChart,
+  artistMixNeedsChartSteps,
   artistMixSeedPool,
   artistMixSeeds,
   artistMixSeedsSteps,
   artistMixSimilarSource,
   artistMixSimilarSourceSteps,
+  libraryCanSeedArtistMixes,
 } from "./artistMixes.ts";
 export type { ArtistMixPools, PlayedSeedArtist, SimilarSourceArtist } from "./artistMixes.ts";
+export {
+  YT_CHART_READ_MS,
+  parseYtChart,
+  storedYtChart,
+  withYtChartRead,
+  ytChartReadDue,
+} from "./ytChart.ts";
+export type { YtChartArtist, YtChartKept } from "./ytChart.ts";
 export {
   GENRE_MIX_COUNT,
   commonStyle,
@@ -1933,6 +1990,8 @@ export {
 } from "./magicQueueSection.ts";
 export type { MagicQueuePicking, MagicQueuePicks } from "./magicQueueSection.ts";
 export { randomMagicQueuePicks } from "./randomMagicQueuePicks.ts";
+export { magicQueueMixPicks, magicQueueRow, magicQueueShown } from "./magicQueueRow.ts";
+export type { MagicQueueMixPicks, MagicQueueRow, MagicQueueShown } from "./magicQueueRow.ts";
 export { magicQueueShare } from "./magicQueue.ts";
 export { discoverMixesOfRadios, discoverMixesOfRadiosSteps } from "./discoverMixRadios.ts";
 export type { DiscoverMixRead } from "./discoverMixRadios.ts";
@@ -2083,7 +2142,13 @@ export { ytArtistPageOpening } from "./ytArtistPageOpening.ts";
 
 export { reconcileScanSteps } from "./scanReconcile.ts";
 export { replacementDuplicatesSteps } from "./replacementDuplicates.ts";
-export { planLinkImportSteps, finishPlaylistImportSteps } from "./playlistImport.ts";
+export {
+  planLinkImportSteps,
+  finishPlaylistImportSteps,
+  importLibraryIndexSteps,
+  planLinkImportWithIndexSteps,
+  type ImportLibraryIndex,
+} from "./playlistImport.ts";
 
 export { playlistImportCompletionSteps } from "./playlistImport.ts";
 
@@ -2181,3 +2246,11 @@ export type {
   GeniusPlacement,
   GeniusReferent,
 } from "./geniusAnnotations.ts";
+
+export {
+  importPhaseTimer,
+  importTimingsLogLine,
+  type ImportPhase,
+  type ImportPhaseTimer,
+  type ImportPhaseTimings,
+} from "./importTimings.ts";

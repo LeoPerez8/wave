@@ -128,6 +128,7 @@ const direction = <A extends LibraryArtistRef>(
     case "goToArtist":
       return facts.artists !== undefined && facts.artists.kind !== "here" ? choice : null;
     case "magicQueue":
+      return options.ytMusic === true ? choice : null;
     case "fixSong":
       return null;
   }
