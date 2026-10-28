@@ -38,7 +38,7 @@ import {
   removePlaylistImage,
   renamePlaylist,
 } from "./playlists";
-import { forgetDeletedYtLibraryOrigins } from "./ytLibraryImport";
+import { forgetDeletedYtLibraryPlaylists } from "./ytLibraryImport";
 
 const toast = (message: string): void => void showToast(message);
 
@@ -337,7 +337,7 @@ export const confirmDeletePlaylists = (
         cancelPlaylistImport(playlist.id);
         await deletePlaylist(playlist.id);
       }
-      await forgetDeletedYtLibraryOrigins();
+      await forgetDeletedYtLibraryPlaylists(playlists.map((playlist) => playlist.id));
       onDeleted?.();
     } catch {
       failed(playlists.length === 1 ? "delete the playlist" : "delete the playlists")();

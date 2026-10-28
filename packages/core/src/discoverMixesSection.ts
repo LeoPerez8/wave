@@ -43,7 +43,8 @@ export type DiscoverMixesSection = (
  * build found [nothingToBuildFrom] (no plays and an empty Library). While a
  * build is [building], saved mixes say they're updating (no skeleton over
  * them); with none saved, the skeleton stands for it. A failure shows only
- * while no build runs, on the mixes or alone (`failed`).
+ * while no build runs, on the mixes or alone (`failed`). Genre mixes stay
+ * hidden, no skeleton, while the Library has [noTaggedSongs] (an empty one).
  */
 export const discoverMixesSection = (
   saved: DiscoverMixes | null,
@@ -53,6 +54,7 @@ export const discoverMixesSection = (
     blend,
     building = false,
     failed = false,
+    noTaggedSongs = false,
   }: {
     readonly ytMusic: boolean;
     readonly nothingToBuildFrom: boolean;
@@ -60,9 +62,14 @@ export const discoverMixesSection = (
     /** A build of the section's mixes is running; absent for none. */
     readonly building?: boolean;
     readonly failed?: boolean;
+    /**
+     * The Library has no tagged songs (it's empty), so Genre mixes have
+     * nothing to grow from; absent for the Library as it may be.
+     */
+    readonly noTaggedSongs?: boolean;
   },
 ): DiscoverMixesSection => {
-  if (!ytMusic) return { kind: "hidden", failed: false };
+  if (!ytMusic || noTaggedSongs) return { kind: "hidden", failed: false };
   const shownFailed = !building && failed;
   if (saved !== null) {
     const mixes = saved.mixes.map((mix) => blendDiscoverMix(mix, blend)).filter(isMix);

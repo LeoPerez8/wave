@@ -6,8 +6,10 @@
 import {
   magicQueueMixPicks,
   magicQueueRow,
-  type BlendedDiscoverMix,
+  magicQueueShown,
   type DiscoverMixesSection,
+  type MagicQueueMixPicks,
+  type MagicQueueShown as CoreMagicQueueShown,
   type YtAlbumSong,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
@@ -15,31 +17,20 @@ import { useFocusEffect } from "expo-router";
 import { useCallback, useMemo, useRef, useState } from "react";
 
 import { LibraryStore, type PlayableSongRow } from "@/library/LibraryStore";
-import { appRuntime } from "@/library/runtime";
 import { libraryQuery, useLibraryQuery } from "@/library/sharedQueries";
-import { showError } from "@/overlay/alert";
 import { showToast } from "@/overlay/toast";
 import { startMagicQueue, startStreamedMagicQueue } from "@/playback/MagicQueue";
+import { runMagicQueueStart } from "@/playback/magicQueueStart";
 
 import { randomMagicQueueRead } from "./randomMagicQueueRead";
 
-/** What the row draws (Core's `magicQueueRow`), its mixes' songs picked. */
-export type MagicQueueShown =
-  | { readonly kind: "hidden" }
-  | { readonly kind: "skeleton" }
-  | { readonly kind: "library"; readonly songs: readonly PlayableSongRow[] }
-  | { readonly kind: "mixes"; readonly songs: readonly YtAlbumSong[] };
+/** What the row draws (Core's `magicQueueShown`), its mixes' songs picked. */
+export type MagicQueueShown = CoreMagicQueueShown<PlayableSongRow>;
 
 export interface MagicQueueSection {
   readonly shown: MagicQueueShown;
   /** Brings another random set, with Undo. */
   readonly refresh: () => void;
-}
-
-/** The mixes' songs the row shows, and the mixes they were picked from. */
-interface MixPicks {
-  readonly mixes: readonly BlendedDiscoverMix[];
-  readonly songs: readonly YtAlbumSong[];
 }
 
 const videoIdsOf = (songs: readonly YtAlbumSong[]): string[] => songs.map((song) => song.videoId);
@@ -75,7 +66,7 @@ export const useMagicQueueSection = (
 ): MagicQueueSection => {
   const { songs: librarySongs, setRead } = useLibraryPicks();
   // Null: draw afresh from the mixes on the next render.
-  const [mixPicks, setMixPicks] = useState<MixPicks | null>(null);
+  const [mixPicks, setMixPicks] = useState<MagicQueueMixPicks | null>(null);
   const opened = useRef(false);
   useFocusEffect(
     useCallback(() => {
@@ -87,24 +78,14 @@ export const useMagicQueueSection = (
     }, [setRead]),
   );
   const row = magicQueueRow({ ytMusic, library: librarySongs, artistMixes });
-  const mixes = row.kind === "mixes" ? row.mixes : null;
-  let mixSongs = mixPicks?.songs ?? [];
-  if (mixes !== null && mixPicks?.mixes !== mixes) {
-    // Rebuilt or re-ranked mixes keep the songs still in them in their places.
-    const picked = magicQueueMixPicks(mixes, Math.random, videoIdsOf(mixSongs));
-    setMixPicks({ mixes, songs: picked });
-    mixSongs = picked;
-  }
-  const shown: MagicQueueShown =
-    row.kind === "mixes"
-      ? mixSongs.length === 0
-        ? { kind: "hidden" }
-        : { kind: "mixes", songs: mixSongs }
-      : row;
+  const { shown, picks } = magicQueueShown(row, mixPicks, Math.random);
+  // Kept for the next render: the same mixes keep these songs.
+  if (picks !== mixPicks) setMixPicks(picks);
   const refresh = () => {
-    if (mixes !== null) {
-      const previous = videoIdsOf(mixSongs);
-      const next: MixPicks = { mixes, songs: magicQueueMixPicks(mixes, Math.random) };
+    if (row.kind === "mixes") {
+      const { mixes } = row;
+      const previous = videoIdsOf(picks?.songs ?? []);
+      const next: MagicQueueMixPicks = { mixes, songs: magicQueueMixPicks(mixes, Math.random) };
       setMixPicks(next);
       void showToast("New songs", {
         label: "Undo",
@@ -133,15 +114,11 @@ export const useMagicQueueSection = (
 };
 
 /** Starts the same seeded Magic Queue as the song's long-press menu, including queue Undo. */
-export const startMagicQueueFrom = (song: PlayableSongRow): void => {
-  appRuntime
-    .runPromise(startMagicQueue({ kind: "track", id: String(song.id), title: song.title }, [song]))
-    .catch((error: unknown) => showError("Couldn't start the Magic Queue", error));
-};
+export const startMagicQueueFrom = (song: PlayableSongRow): void =>
+  runMagicQueueStart(
+    startMagicQueue({ kind: "track", id: String(song.id), title: song.title }, [song]),
+  );
 
 /** Starts a Magic Queue from a mix's streamed [song], as its long-press menu's Magic Queue does. */
-export const startStreamedMagicQueueFrom = (song: YtAlbumSong): void => {
-  appRuntime
-    .runPromise(startStreamedMagicQueue(song))
-    .catch((error: unknown) => showError("Couldn't start the Magic Queue", error));
-};
+export const startStreamedMagicQueueFrom = (song: YtAlbumSong): void =>
+  runMagicQueueStart(startStreamedMagicQueue(song));

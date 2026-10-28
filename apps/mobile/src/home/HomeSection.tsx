@@ -107,10 +107,11 @@ const MIXES_UPDATING = "Updating…";
  */
 function Discover({ home, title }: SectionProps) {
   const ytMusic = useYtMusicEnabled();
-  const { played } = homeOpeningState(home);
+  const { played, empty } = homeOpeningState(home);
   useDiscoverMixesFocus(ytMusic, played);
   const artistMixes = useDiscoverMixes("artist-mixes");
-  const genreMixes = useDiscoverMixes("genre-mixes");
+  // An empty Library has no tagged songs: Genre mixes stay hidden, no skeleton.
+  const genreMixes = useDiscoverMixes("genre-mixes", empty);
   const magicQueue = useMagicQueueSection(ytMusic, artistMixes);
   const showsMagicQueue = magicQueue.shown.kind !== "hidden";
   if (!showsMagicQueue && artistMixes.kind === "hidden" && genreMixes.kind === "hidden")

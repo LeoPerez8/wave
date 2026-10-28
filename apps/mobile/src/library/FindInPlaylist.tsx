@@ -111,16 +111,14 @@ export function useFindInList<T>(
 ): FindInList<T> {
   const { height } = useWindowDimensions();
   const pinned = useKeepFindVisible() && findable;
-  const { minHeight } = findFieldPlacement({
+  const placement = findFieldPlacement({
     pinned,
     fieldHeight: FIND_FIELD_HEIGHT,
     viewportHeight: height,
   });
-  const [initialOffset] = useState(
-    () =>
-      findFieldPlacement({ pinned, fieldHeight: FIND_FIELD_HEIGHT, viewportHeight: height })
-        .initialOffset,
-  );
+  const { minHeight } = placement;
+  // Read once, as the list opens.
+  const [initialOffset] = useState(placement.initialOffset);
   const [query, setQuery] = useState("");
   const list = useMemo(
     () => createFindableList(songs, describe, findable),

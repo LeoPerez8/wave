@@ -29,6 +29,25 @@ describe("an import's phase timings in the app log", () => {
     );
   });
 
+  test("a read that joins the index another playlist is building names that wait apart", () => {
+    let now = 0;
+    const timer = importPhaseTimer(() => now);
+    now = 100;
+    timer.mark("waiting");
+    now = 1_100;
+    timer.mark("reading");
+    // The other playlist's build lists and indexes the Library meanwhile.
+    now = 3_600;
+    timer.mark("joining");
+    now = 4_100;
+    timer.mark("matching");
+    assert.equal(
+      importTimingsLogLine("Gym", 200, timer.timings()),
+      'Import of "Gym" (200 songs) phases: waited 0.1 s, read 1.0 s, ' +
+        "waited for the Library's index 2.5 s, matched 0.5 s; 4.1 s in all",
+    );
+  });
+
   test("a phase it went through twice adds up, and one it skipped isn't named", () => {
     let now = 0;
     const timer = importPhaseTimer(() => now);

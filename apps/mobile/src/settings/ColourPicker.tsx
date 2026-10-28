@@ -21,7 +21,7 @@ import {
   type Hsv,
   type InkGroup,
 } from "@wave/core";
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Text, TextInput, View } from "react-native";
 import { GestureDetector, usePanGesture } from "react-native-gesture-handler";
 
@@ -29,6 +29,7 @@ import { CatalogLine } from "@/catalog/CatalogLine";
 import { CELL, grid } from "@/catalog/grid";
 import { Hairline } from "@/catalog/Hairline";
 import { TextButton } from "@/components/TextButton";
+import { makeExternalStore, type ExternalStore } from "@/lib/externalStore";
 import { confirmAction } from "@/overlay/alert";
 import { CardEntries } from "@/overlay/CardEntries";
 import { presentOverlay } from "@/overlay/overlay";
@@ -64,41 +65,98 @@ const HUE_STEP = 15;
  * Cancel, Back or a tap outside puts the colours back.
  */
 export const openColourPicker = (group: InkGroup, initial: string): void => {
-  const preview = previewCustomInk(group);
+  // The colour the app last took (at rest, on lift, typed or stepped): the samples show it.
+  const applied = makeExternalStore(initial);
+  const preview = previewCustomInk(group, applied.set);
   void presentOverlay<string | null>({
     label: TITLE[group],
     align: "top",
     dismissed: null,
     render: (finish) => (
-      <ColourPickerCard group={group} initial={initial} preview={preview} finish={finish} />
+      <ColourPickerCard
+        group={group}
+        initial={initial}
+        preview={preview}
+        applied={applied}
+        finish={finish}
+      />
     ),
   }).then((hex) => (hex === null ? cancelCustomInk() : setCustomInk(group, hex, confirmAction)));
 };
 
+/**
+ * The card around the picker. A drag re-renders only the picker's own parts
+ * (`ColourFields`: the markers and the hex); the Light and Dark samples and
+ * the note follow the colour the app takes (`AppliedSamples`), and the card
+ * itself only when the hex turns valid or not.
+ */
 function ColourPickerCard({
   group,
   initial,
   preview,
+  applied,
   finish,
 }: {
   group: InkGroup;
   initial: string;
   preview: ColourPickerPreview;
+  applied: ExternalStore<string>;
   finish: (hex: string | null) => void;
 }) {
-  const choice = useThemeChoice();
+  // What Done keeps: the fields' colour, null while the hex typed isn't one.
+  const entered = useRef<string | null>(initial);
+  const [valid, setValid] = useState(true);
+  const onColour = (hex: string | null) => {
+    const was = entered.current !== null;
+    entered.current = hex;
+    if (was !== (hex !== null)) setValid(hex !== null);
+  };
+
+  return (
+    <>
+      <CatalogLine className="mb-2">{TITLE[group]}</CatalogLine>
+      <CardEntries>
+        <ColourFields initial={initial} preview={preview} onColour={onColour} />
+        <AppliedSamples group={group} applied={applied} valid={valid} />
+      </CardEntries>
+      <View className="flex-row justify-end" style={{ gap: CELL * 3 }}>
+        <TextButton label="Cancel" onPress={() => finish(null)} />
+        <TextButton
+          label="Done"
+          disabled={!valid}
+          onPress={() => {
+            if (entered.current !== null) finish(entered.current);
+          }}
+        />
+      </View>
+    </>
+  );
+}
+
+/**
+ * The hue ring and shade square, and the hex field: what follows the finger.
+ * Each colour shown goes to [onColour] (null for a hex that isn't one).
+ */
+function ColourFields({
+  initial,
+  preview,
+  onColour,
+}: {
+  initial: string;
+  preview: ColourPickerPreview;
+  onColour: (hex: string | null) => void;
+}) {
   const accent = useThemeColor("accent");
   const secondary = useThemeColor("secondary");
   const [hsv, setHsv] = useState<Hsv>(() => hexToHsv(initial));
   const [text, setText] = useState(initial.slice(1));
   const hex = hsvToHex(hsv);
-  const entered = parseHexColour(text);
-  const applies = useMemo(() => customInkPreview(choice, group, hex), [choice, group, hex]);
 
-  /** Shows `next` in the picker; the app's recolour is up to `preview`. */
-  const show = (next: Hsv, fromText = false) => {
+  /** Shows `next` in the picker ([typed] when it came from the field); the app's recolour is up to `preview`. */
+  const show = (next: Hsv, typed?: string) => {
     setHsv(next);
-    if (!fromText) setText(hsvToHex(next).slice(1));
+    if (typed === undefined) setText(hsvToHex(next).slice(1));
+    onColour(typed ?? hsvToHex(next));
   };
 
   const drag = (next: Hsv) => {
@@ -114,67 +172,78 @@ function ColourPickerCard({
   const typed = (value: string) => {
     setText(value);
     const parsed = parseHexColour(value);
-    if (parsed !== null && parsed !== hex) {
-      show(hexToHsv(parsed), true);
+    if (parsed === null) onColour(null);
+    else if (parsed !== hex) {
+      show(hexToHsv(parsed), parsed);
       preview.pick(parsed);
-    }
+    } else onColour(parsed);
   };
 
   return (
     <>
-      <CatalogLine className="mb-2">{TITLE[group]}</CatalogLine>
-      <CardEntries>
-        <HueAndShade hsv={hsv} onDrag={drag} onLift={preview.lift} onStep={step} />
-        <View className="flex-row items-center" style={{ height: grid.row }}>
-          <Text className="font-sans text-title3 text-secondary">#</Text>
-          <TextInput
-            value={text}
-            onChangeText={typed}
-            maxLength={7}
-            autoCapitalize="none"
-            autoCorrect={false}
-            returnKeyType="done"
-            accessibilityLabel="Hex colour"
-            placeholder="rrggbb"
-            placeholderTextColor={secondary}
-            selectionColor={accent}
-            cursorColor={accent}
-            className="flex-1 font-sans text-title3 text-foreground"
-            style={{ padding: 0, marginLeft: CELL / 2 }}
-          />
-        </View>
-        <View className="flex-row flex-wrap" style={{ gap: CELL, paddingBottom: CELL }}>
-          <AppliesAs label="Light" preview={applies.light} />
-          <AppliesAs label="Dark" preview={applies.dark} />
-        </View>
-        <Hairline />
-        {/* The line is reserved so the actions don't jump when the note appears. */}
-        <Text
-          accessibilityLiveRegion="polite"
-          className="font-sans text-footnote text-secondary"
-          style={{ minHeight: CELL * 5, paddingTop: CELL / 2 }}
-        >
-          {entered === null
-            ? "Enter a 3- or 6-digit hex colour."
-            : applies.light.adjusted || applies.dark.adjusted
-              ? `Adjusted to read on your ${
-                  applies.light.adjusted && applies.dark.adjusted
-                    ? "backgrounds"
-                    : `${applies.light.adjusted ? "light" : "dark"} background`
-                }, as shown.`
-              : ""}
-        </Text>
-      </CardEntries>
-      <View className="flex-row justify-end" style={{ gap: CELL * 3 }}>
-        <TextButton label="Cancel" onPress={() => finish(null)} />
-        <TextButton
-          label="Done"
-          disabled={entered === null}
-          onPress={() => {
-            if (entered !== null) finish(entered);
-          }}
+      <HueAndShade hsv={hsv} onDrag={drag} onLift={preview.lift} onStep={step} />
+      <View className="flex-row items-center" style={{ height: grid.row }}>
+        <Text className="font-sans text-title3 text-secondary">#</Text>
+        <TextInput
+          value={text}
+          onChangeText={typed}
+          maxLength={7}
+          autoCapitalize="none"
+          autoCorrect={false}
+          returnKeyType="done"
+          accessibilityLabel="Hex colour"
+          placeholder="rrggbb"
+          placeholderTextColor={secondary}
+          selectionColor={accent}
+          cursorColor={accent}
+          className="flex-1 font-sans text-title3 text-foreground"
+          style={{ padding: 0, marginLeft: CELL / 2 }}
         />
       </View>
+    </>
+  );
+}
+
+/**
+ * The colour as the app took it ([applied]) in Light and Dark, and the note
+ * under them: asking for a hex while the one typed isn't [valid], else
+ * saying when the colour was adjusted to read on a background.
+ */
+function AppliedSamples({
+  group,
+  applied,
+  valid,
+}: {
+  group: InkGroup;
+  applied: ExternalStore<string>;
+  valid: boolean;
+}) {
+  const choice = useThemeChoice();
+  const hex = useSyncExternalStore(applied.subscribe, applied.get);
+  const applies = useMemo(() => customInkPreview(choice, group, hex), [choice, group, hex]);
+  return (
+    <>
+      <View className="flex-row flex-wrap" style={{ gap: CELL, paddingBottom: CELL }}>
+        <AppliesAs label="Light" preview={applies.light} />
+        <AppliesAs label="Dark" preview={applies.dark} />
+      </View>
+      <Hairline />
+      {/* The line is reserved so the actions don't jump when the note appears. */}
+      <Text
+        accessibilityLiveRegion="polite"
+        className="font-sans text-footnote text-secondary"
+        style={{ minHeight: CELL * 5, paddingTop: CELL / 2 }}
+      >
+        {!valid
+          ? "Enter a 3- or 6-digit hex colour."
+          : applies.light.adjusted || applies.dark.adjusted
+            ? `Adjusted to read on your ${
+                applies.light.adjusted && applies.dark.adjusted
+                  ? "backgrounds"
+                  : `${applies.light.adjusted ? "light" : "dark"} background`
+              }, as shown.`
+            : ""}
+      </Text>
     </>
   );
 }

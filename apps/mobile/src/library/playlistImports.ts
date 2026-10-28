@@ -15,11 +15,9 @@ import {
   addingProgress,
   playlistImportCompletionSteps,
   queuePlaylistImport,
-  readPlaylistImports,
   startPlaylistImport,
   updatePlaylistImport,
   withoutPlaylistImport,
-  writePlaylistImports,
   type LinkImportPlan,
   type PlaylistImport,
   type PlaylistImports,
@@ -30,7 +28,6 @@ import { runSteps } from "@/lib/stepped";
 import { startupTurnEffect, startupTurn } from "@/lib/backgroundWork";
 import { finishLinkImport } from "./startupJobs";
 
-import { persistedSetting } from "@/lib/persistedSetting";
 import { appLog } from "@/log/appLog";
 import { showError } from "@/overlay/alert";
 import { perfMark, registerPerfMeta } from "@/perf/perf";
@@ -38,6 +35,7 @@ import { perfMark, registerPerfMeta } from "@/perf/perf";
 import { playlistWorkReport } from "./db/playlistWork";
 import { endImportProgress, showImportProgress } from "./importProgress";
 import { LibraryStore } from "./LibraryStore";
+import { playlistImports as imports } from "./playlistImportsStore";
 import { currentPlaylists, playlistsChanged } from "./playlists";
 import { appRuntime } from "./runtime";
 
@@ -47,13 +45,6 @@ type Job = PlaylistImport<YtAlbumSong>;
 export const listLibrary = () =>
   // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
   appRuntime.runPromise(LibraryStore.use((store) => store.listSongs));
-
-/** The imports giving their playlist its songs, or done with songs left out to show, kept until Wave starts again. */
-const imports = persistedSetting<PlaylistImports<YtAlbumSong>>({
-  key: "playlistImports",
-  read: readPlaylistImports,
-  write: (value) => (value.length === 0 ? null : writePlaylistImports(value)),
-});
 
 /** The playlists whose import is giving them their songs now, so none is given twice. */
 const finishing = new Map<number, { job: Job; promise: Promise<void> }>();

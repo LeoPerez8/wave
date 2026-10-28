@@ -330,6 +330,31 @@ export const startMagicQueue = (
   };
 };
 
+/** Where a streamed song's Magic Queue starts (`streamedSongMagicStart`). */
+export type StreamedSongMagicStart<T> =
+  /** From the Library's file, seeded by its track, as that song's own menu would. */
+  | { readonly from: "library"; readonly seed: MagicSeed; readonly track: T }
+  /** From the stream's own radio (`startStreamedMagicQueue`). */
+  | { readonly from: "stream" };
+
+/**
+ * Where the Magic Queue a streamed song's menu offers starts, given the
+ * Library's song it is ([found], `libraryFinder`; null for none): from its
+ * file when it has one, else from the stream.
+ */
+export const streamedSongMagicStart = <
+  T extends { readonly id: number; readonly title: string; readonly path: string | null },
+>(
+  found: T | null,
+): StreamedSongMagicStart<T> =>
+  found === null || found.path === null
+    ? { from: "stream" }
+    : {
+        from: "library",
+        seed: { kind: "track", id: String(found.id), title: found.title },
+        track: found,
+      };
+
 /**
  * Starts a Magic Queue from a streamed YT Music [song] (Search, a YT Music
  * list, a Discover mix, the queue): it plays that song first, and its

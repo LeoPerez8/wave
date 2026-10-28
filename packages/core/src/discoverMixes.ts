@@ -282,6 +282,12 @@ export interface DiscoverMix {
   readonly seed: {
     readonly kind: DiscoverMixSeed["kind"];
     readonly name: string;
+    /**
+     * Where the seed came from (`DiscoverMixSeed.from`): an empty Library's
+     * Magic Queue row takes songs only from the chart's. Absent on mixes
+     * saved before it was kept.
+     */
+    readonly from?: DiscoverSeedSource;
     /** The Library genre the mix stands for (`DiscoverMixSeed.genre`); absent for the others. */
     readonly genre?: string;
     /**
@@ -363,6 +369,7 @@ export const discoverMix = (
         seed: {
           kind: seed.kind,
           name: seed.name,
+          from: seed.from,
           ...(seed.genre === undefined ? {} : { genre: seed.genre }),
           artists: mixSeedArtists(seed).map((artist) => artist.name),
         },
@@ -547,13 +554,14 @@ const readSong = (value: unknown): YtAlbumSong | null => {
 
 const readMix = (value: unknown): DiscoverMix | null => {
   if (!isRecord(value) || !isString(value.id) || !isRecord(value.seed)) return null;
-  const { kind, name, genre, artists } = value.seed;
+  const { kind, name, from, genre, artists } = value.seed;
   if ((kind !== "artist" && kind !== "genre") || !isString(name)) return null;
   if (!Array.isArray(value.songs)) return null;
   const songs = value.songs.flatMap((song) => readSong(song) ?? []);
   const seed: DiscoverMix["seed"] = {
     kind,
     name,
+    ...(SEED_SOURCES.includes(from) ? { from: from as DiscoverSeedSource } : {}),
     ...(isString(genre) && genre !== "" ? { genre } : {}),
     ...(Array.isArray(artists) && artists.every(isString) ? { artists } : {}),
   };

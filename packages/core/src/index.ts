@@ -704,6 +704,7 @@ export {
   parseMagicSession,
   startMagicQueue,
   startStreamedMagicQueue,
+  streamedSongMagicStart,
   wantsMagicBatch,
 } from "./magicQueue.ts";
 export type {
@@ -712,6 +713,7 @@ export type {
   MagicQueueEdits,
   MagicRadioSeed,
   MagicSeed,
+  StreamedSongMagicStart,
   MagicSeedSong,
   MagicSession,
   MagicSongRadioSeed,
@@ -1590,6 +1592,7 @@ export {
   ytLibraryDownloadsToQueue,
   ytLibraryDownloadsQueued,
   ytLibraryReadFailed,
+  isYtLibraryPauseReason,
   ytLibraryReadLogLine,
   ytLibraryReadView,
 } from "./ytLibraryBatch.ts";
@@ -1617,6 +1620,7 @@ export type {
 } from "./importProgress.ts";
 export type {
   YtLibraryBatch,
+  YtLibraryPauseReason,
   YtLibraryRead,
   YtLibraryReadFailure,
   YtLibraryReadState,
@@ -1986,8 +1990,8 @@ export {
 } from "./magicQueueSection.ts";
 export type { MagicQueuePicking, MagicQueuePicks } from "./magicQueueSection.ts";
 export { randomMagicQueuePicks } from "./randomMagicQueuePicks.ts";
-export { magicQueueMixPicks, magicQueueRow } from "./magicQueueRow.ts";
-export type { MagicQueueRow } from "./magicQueueRow.ts";
+export { magicQueueMixPicks, magicQueueRow, magicQueueShown } from "./magicQueueRow.ts";
+export type { MagicQueueMixPicks, MagicQueueRow, MagicQueueShown } from "./magicQueueRow.ts";
 export { magicQueueShare } from "./magicQueue.ts";
 export { discoverMixesOfRadios, discoverMixesOfRadiosSteps } from "./discoverMixRadios.ts";
 export type { DiscoverMixRead } from "./discoverMixRadios.ts";

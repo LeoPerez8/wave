@@ -24,6 +24,7 @@ import {
   reduceQueue,
   startMagicQueue,
   startStreamedMagicQueue,
+  streamedSongMagicStart,
   wantsMagicBatch,
   type DiscoverMixLevel,
   type GenreProfileOf,
@@ -471,5 +472,21 @@ describe("a Magic Queue from a streamed song", () => {
   test("goes on after a restart", () => {
     const { session } = startStreamedMagicQueue(streamed, { id: "s1" });
     assert.deepEqual(parseMagicSession(JSON.parse(JSON.stringify(session))), session);
+  });
+
+  test("starts from the Library's file when the Library has the song, as its own menu would", () => {
+    const track = { id: 12, title: "Midnight City", path: "/music/m83.flac" };
+    assert.deepEqual(streamedSongMagicStart(track), {
+      from: "library",
+      seed: { kind: "track", id: "12", title: "Midnight City" },
+      track,
+    });
+  });
+
+  test("starts from the stream when the Library hasn't the song, or has it without a file", () => {
+    assert.deepEqual(streamedSongMagicStart(null), { from: "stream" });
+    assert.deepEqual(streamedSongMagicStart({ id: 12, title: "Midnight City", path: null }), {
+      from: "stream",
+    });
   });
 });

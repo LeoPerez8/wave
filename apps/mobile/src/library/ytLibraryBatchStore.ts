@@ -5,7 +5,12 @@
  * read failed. Its own module so the progress lines (`importProgress.ts`)
  * read it without the batch's runner (`ytLibraryImport.ts`).
  */
-import { readYtLibraryBatch, writeYtLibraryBatch, type YtLibraryBatch } from "@wave/core";
+import {
+  readYtLibraryBatch,
+  writeYtLibraryBatch,
+  type YtLibraryBatch,
+  type YtLibraryPauseReason,
+} from "@wave/core";
 
 import { makeExternalStore } from "@/lib/externalStore";
 import { persistedSetting } from "@/lib/persistedSetting";
@@ -22,4 +27,4 @@ export const ytLibraryBatch = persistedSetting<YtLibraryBatch>({
  * of Playlists ("Import paused · offline"). Lives while Wave runs: the
  * batch resumes as Wave starts, and pauses again if it must.
  */
-export const ytLibraryBatchPause = makeExternalStore<string | null>(null);
+export const ytLibraryBatchPause = makeExternalStore<YtLibraryPauseReason | null>(null);

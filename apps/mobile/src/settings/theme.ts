@@ -103,12 +103,18 @@ let preview: ColourPickerPreview | null = null;
  * moves, without keeping it: the notification, the launcher icon and the
  * splash wait for Done. A drag recolours only once the finger rests or lifts
  * (Core's `createColourPickerPreview`), since a recolour re-renders every
- * themed view.
+ * themed view. [applied] hears each colour the app takes.
  */
-export const previewCustomInk = (group: InkGroup): ColourPickerPreview => {
+export const previewCustomInk = (
+  group: InkGroup,
+  applied: (hex: string) => void = () => {},
+): ColourPickerPreview => {
   preview?.stop();
   preview = createColourPickerPreview({
-    apply: (hex) => recolour(themeFor(chooseCustomInk(theme.get(), group, hex))),
+    apply: (hex) => {
+      recolour(themeFor(chooseCustomInk(theme.get(), group, hex)));
+      applied(hex);
+    },
     now: Date.now,
     wait: (ms, done) => {
       const timer = setTimeout(done, ms);

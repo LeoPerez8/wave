@@ -2,14 +2,27 @@
  * How long a From YT Music or From Spotify playlist's import spent in each
  * phase (#759), for one line in the app log once its songs are in: waiting
  * its turn in the batch, reading its source, listing and indexing the
- * Library, matching its songs, starring them, and adding them.
+ * Library (or taking the index another playlist's import built),
+ * matching its songs, starring them, and adding them.
  */
 
 import { counted } from "./listening.ts";
 
 /** An import's phases, in the order they run. */
 export type ImportPhase =
-  "waiting" | "reading" | "listing" | "indexing" | "matching" | "starring" | "adding";
+  | "waiting"
+  | "reading"
+  | "listing"
+  | "indexing"
+  /**
+   * Taking the Library's index another playlist's import built, or waiting
+   * for it while that one builds it (a Try Again read joining the batch's):
+   * the listing and indexing are booked on that one's timer.
+   */
+  | "joining"
+  | "matching"
+  | "starring"
+  | "adding";
 
 /** Milliseconds spent in each phase an import went through. */
 export type ImportPhaseTimings = Readonly<Partial<Record<ImportPhase, number>>>;
@@ -27,6 +40,7 @@ const PHASES: readonly ImportPhase[] = [
   "reading",
   "listing",
   "indexing",
+  "joining",
   "matching",
   "starring",
   "adding",
@@ -37,6 +51,7 @@ const PHASE_WORDS: Readonly<Record<ImportPhase, string>> = {
   reading: "read",
   listing: "listed the Library",
   indexing: "indexed the Library",
+  joining: "waited for the Library's index",
   matching: "matched",
   starring: "starred",
   adding: "added",

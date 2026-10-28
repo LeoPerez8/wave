@@ -25,9 +25,10 @@ export type MagicQueueRow<T> =
 /**
  * What the row shows: nothing while YT Music is off ([ytMusic]) or before
  * the Library's songs are read ([library] null); the Library's songs when it
- * has any; else songs of the Artist mixes ([artistMixes], what their row
- * shows): a skeleton while the first ones build, nothing when there are none
- * or none has a streamed song to start from.
+ * has any; else songs of the Artist mixes seeded from YouTube Music's chart
+ * ([artistMixes], what their row shows; a mix seeded from plays or similar
+ * artists stays out): a skeleton while the first ones build, nothing when
+ * there are none or none has a streamed song to start from.
  */
 export const magicQueueRow = <T>({
   ytMusic,
@@ -41,9 +42,56 @@ export const magicQueueRow = <T>({
   if (!ytMusic || library === null) return { kind: "hidden" };
   if (library.length > 0) return { kind: "library", songs: library };
   if (artistMixes.kind === "skeleton") return { kind: "skeleton" };
-  if (artistMixes.kind !== "mixes" || !artistMixes.mixes.some((mix) => streamedOf(mix).length > 0))
-    return { kind: "hidden" };
-  return { kind: "mixes", mixes: artistMixes.mixes };
+  if (artistMixes.kind !== "mixes") return { kind: "hidden" };
+  const chart = artistMixes.mixes.filter((mix) => mix.seed.from === "chart");
+  if (!chart.some((mix) => streamedOf(mix).length > 0)) return { kind: "hidden" };
+  return { kind: "mixes", mixes: chart };
+};
+
+/** The mixes' songs the row shows, and the mixes they were picked from. */
+export interface MagicQueueMixPicks {
+  readonly mixes: readonly BlendedDiscoverMix[];
+  readonly songs: readonly YtAlbumSong[];
+}
+
+/** What the row draws, its mixes' songs picked (`magicQueueShown`). */
+export type MagicQueueShown<T> =
+  | Exclude<MagicQueueRow<T>, { readonly kind: "mixes" }>
+  | { readonly kind: "mixes"; readonly songs: readonly YtAlbumSong[] };
+
+/** Whether [a] and [b] are the same mixes, in the same order. */
+const sameMixes = (a: readonly BlendedDiscoverMix[], b: readonly BlendedDiscoverMix[]): boolean =>
+  a.length === b.length && a.every((mix, place) => mix === b[place]);
+
+/**
+ * What the row draws for [row] (`magicQueueRow`), given the songs it last
+ * picked from the mixes ([picked], null for a fresh draw: a new visit). The
+ * same picks while the mixes are the same ones; mixes rebuilt or re-ranked
+ * keep the songs still in them in their places and fill the others
+ * (`magicQueueMixPicks`, [random]). Hidden when the mixes give no song.
+ * [picks] is what to pass the next time.
+ */
+export const magicQueueShown = <T>(
+  row: MagicQueueRow<T>,
+  picked: MagicQueueMixPicks | null,
+  random: RandomSource,
+): { readonly shown: MagicQueueShown<T>; readonly picks: MagicQueueMixPicks | null } => {
+  if (row.kind !== "mixes") return { shown: row, picks: picked };
+  const picks =
+    picked !== null && sameMixes(picked.mixes, row.mixes)
+      ? picked
+      : {
+          mixes: row.mixes,
+          songs: magicQueueMixPicks(
+            row.mixes,
+            random,
+            (picked?.songs ?? []).map((song) => song.videoId),
+          ),
+        };
+  return {
+    shown: picks.songs.length === 0 ? { kind: "hidden" } : { kind: "mixes", songs: picks.songs },
+    picks,
+  };
 };
 
 /** [mix]'s songs that stream, in its order. */

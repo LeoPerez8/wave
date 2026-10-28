@@ -1,6 +1,6 @@
 /**
  * YouTube Music's chart for Artist mixes' last seeds (docs/spec.md, "Artist
- * mixes"): its top artists, read signed out and without a country, at most
+ * mixes"): its top artists, read signed out (the country follows the network), at most
  * once a week, and kept on the phone (not synced), so offline and cold
  * builds use the last read. Core says when it's due (`ytChartReadDue`).
  */

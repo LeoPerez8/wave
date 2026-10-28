@@ -582,9 +582,10 @@ export const useLibraryTracks = (): ReadonlyMap<number, SongRow> | null => {
  * What the Home mix section [id] shows (`discoverMixesSection`): the last
  * mixes built, blended by its level (saying they're updating while a
  * rebuild runs), a skeleton while the first ones build, or nothing while YT
- * Music is off. The screen warms both rows through `useDiscoverMixesFocus`.
+ * Music is off, or for Genre mixes while the Library is [empty] (no tagged
+ * songs). The screen warms both rows through `useDiscoverMixesFocus`.
  */
-export const useDiscoverMixes = (id: MixSectionId): DiscoverMixesSection => {
+export const useDiscoverMixes = (id: MixSectionId, empty = false): DiscoverMixesSection => {
   const { saved, nothingToBuildFrom, building, failed } = SECTIONS[id];
   const enabled = useYtMusicEnabled();
   const mixes = saved.useValue();
@@ -600,8 +601,9 @@ export const useDiscoverMixes = (id: MixSectionId): DiscoverMixesSection => {
         blend,
         building: rebuilding,
         failed: buildFailed,
+        noTaggedSongs: id === "genre-mixes" && empty,
       }),
-    [mixes, enabled, nothing, blend, rebuilding, buildFailed],
+    [id, mixes, enabled, nothing, blend, rebuilding, buildFailed, empty],
   );
   // The start of what Home shows is fetched ahead on Wi-Fi.
   useEffect(() => noteMixesShown(id, shown), [id, shown]);

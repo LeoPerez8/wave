@@ -123,8 +123,8 @@ export const importRing = (progress: ImportProgress | null): ImportRing | null =
     ? null
     : { fraction: importProgressFraction(progress), pulses: progress.phase === "matching" };
 
-/** A count as the line shows it ("2,300"). */
-const number = (count: number): string => count.toLocaleString("en");
+/** A count as the import lines show it ("2,300"). */
+export const importCount = (count: number): string => count.toLocaleString("en");
 
 /**
  * The line under an importing playlist's name (its Library row) and under
@@ -138,12 +138,12 @@ export const importProgressLine = (progress: ImportProgress): string => {
       return progress.total === null ? "Waiting" : `Waiting · ${counted(progress.total, "song")}`;
     case "reading":
       return progress.total === null
-        ? `Reading ${number(progress.done)}`
-        : `Reading ${number(progress.done)} of ${number(progress.total)}`;
+        ? `Reading ${importCount(progress.done)}`
+        : `Reading ${importCount(progress.done)} of ${importCount(progress.total)}`;
     case "matching":
       return "Matching with Library…";
     case "adding":
-      return `Adding ${number(progress.done)} of ${number(progress.total)}`;
+      return `Adding ${importCount(progress.done)} of ${importCount(progress.total)}`;
   }
 };
 
