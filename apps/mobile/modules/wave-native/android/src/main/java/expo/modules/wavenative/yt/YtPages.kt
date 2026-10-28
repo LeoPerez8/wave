@@ -34,7 +34,8 @@ class YtPages(private val client: YtClient) {
   /**
    * The top artists of YouTube Music's charts page, in the chart's order
    * ([YtArtistParser.chartArtists]). Asked signed out, on a session of its
-   * own, and without choosing a country, so YouTube Music picks one.
+   * own. innertubex always sends the phone's region (`gl`), but the chart's
+   * country follows the network's location, so YouTube Music picks it.
    */
   suspend fun chartArtists(): List<YtArtistCandidate> = client.request {
     client.signedOut { tube ->

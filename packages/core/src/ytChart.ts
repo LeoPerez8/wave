@@ -1,7 +1,7 @@
 /**
  * YouTube Music's chart (docs/spec.md, "Artist mixes"): the top artists of
- * its charts page, read signed out and without a country (YouTube Music
- * picks one), at most once a week, and kept on the phone (not synced), so
+ * its charts page, read signed out (YouTube Music picks its country from the
+ * network's location), at most once a week, and kept on the phone (not synced), so
  * Artist mixes for an empty Library build offline and on a cold launch.
  */
 
