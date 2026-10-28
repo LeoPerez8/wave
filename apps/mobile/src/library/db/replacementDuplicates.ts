@@ -29,13 +29,13 @@ const playlistIds = sql<string | null>`(SELECT group_concat(id) FROM (
   WHERE playlist_items.track_id = tracks.id AND playlist_items.deleted = 0
   ORDER BY playlist_items.playlist_id))`;
 
+/** [ids] in order; a fresh array, sorted in place (Hermes lacks `toSorted`). */
+const sortedIds = (ids: readonly number[]): number[] =>
+  // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh copy; Hermes lacks toSorted
+  [...ids].sort((a, b) => a - b);
+
 const readIds = (ids: string | null): number[] =>
-  ids === null
-    ? []
-    : ids
-        .split(",")
-        .map(Number)
-        .toSorted((a, b) => a - b);
+  ids === null ? [] : sortedIds(ids.split(",").map(Number));
 
 /**
  * The Library's MP3 and M4A files (the only kinds a replacement makes), with
@@ -148,7 +148,7 @@ export const fixReplacementDuplicate = (
     ): found is NonNullable<typeof found> =>
       found !== undefined &&
       Boolean(found.favorite) === track.favorite &&
-      readIds(found.playlists).join() === track.playlists.toSorted((a, b) => a - b).join();
+      readIds(found.playlists).join() === sortedIds(track.playlists).join();
     const kept = fileOf(fix.keep);
     const dropped = fileOf(fix.drop);
     if (!asChecked(kept, fix.keep) || !asChecked(dropped, fix.drop)) return false;
