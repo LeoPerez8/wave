@@ -1,7 +1,7 @@
 import { useScreenContent } from "@/lib/screenTiming";
 import { libraryQueryHasContent } from "./sharedQueries";
 import { IconPlaylist } from "@tabler/icons-react-native";
-import { counted, importProgressLine, type PlaylistLayout } from "@wave/core";
+import { counted, importProgressLine, importRing, type PlaylistLayout } from "@wave/core";
 import { useCallback, useMemo, type ReactNode } from "react";
 import { useWindowDimensions, View, type AccessibilityActionEvent } from "react-native";
 
@@ -107,15 +107,18 @@ function PlaylistView({
 }) {
   const press = playlistPress(playlist, selection);
   const moves = moveActions(index, ids, arrangeable);
-  // An importing playlist says what its import is doing instead of its count (Core's `importProgressLine`).
+  // An importing playlist says what its import is doing instead of its count, and shows a
+  // ring over its cover (Core's `importProgressLine`, `importRing`).
   const progress = useImportProgress(playlist.id);
   const detail = progress === null ? songCount(playlist.trackCount) : importProgressLine(progress);
+  const ring = importRing(progress);
   if (layout === "list") {
     return (
       <PlaylistCardRow
         name={playlist.name}
         detail={detail}
         paths={playlist.thumbPaths}
+        ring={ring}
         {...press}
         {...moves}
       />
@@ -126,6 +129,7 @@ function PlaylistView({
       name={playlist.name}
       detail={detail}
       paths={playlist.thumbPaths}
+      ring={ring}
       size={tile}
       nameInset={TILE_GRIP_INSET}
       {...press}

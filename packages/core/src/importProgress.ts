@@ -104,6 +104,25 @@ export const importProgressFraction = (progress: ImportProgress): number => {
   }
 };
 
+/** The ring over an importing playlist's cover: how full it is, and whether it pulses. */
+export interface ImportRing {
+  /** The whole import, 0 to 1 (`importProgressFraction`). */
+  readonly fraction: number;
+  /** Matching with the Library, which has no count: the ring holds at half and pulses. */
+  readonly pulses: boolean;
+}
+
+/**
+ * The ring an importing playlist's cover shows for [progress]; none when it
+ * isn't importing. Waiting, it's empty; reading and adding fill it, still
+ * between steps (a read paused offline holds where it stopped); matching
+ * holds it at half, pulsing.
+ */
+export const importRing = (progress: ImportProgress | null): ImportRing | null =>
+  progress === null
+    ? null
+    : { fraction: importProgressFraction(progress), pulses: progress.phase === "matching" };
+
 /** A count as the line shows it ("2,300"). */
 const number = (count: number): string => count.toLocaleString("en");
 
