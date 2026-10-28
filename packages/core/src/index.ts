@@ -187,6 +187,13 @@ export type {
   ShownInPlaylist,
   FindableListKind,
 } from "./findInPlaylist.ts";
+export {
+  findFieldPlacement,
+  findScrollOnPin,
+  readKeepFindVisible,
+  storedKeepFindVisible,
+} from "./keepFindVisible.ts";
+export type { FindFieldPlacement } from "./keepFindVisible.ts";
 export { createSearchCatalog } from "./searchCatalog.ts";
 export type { SearchCatalog, SearchCatalogStats } from "./searchCatalog.ts";
 export { SEARCH_FOCUS_LIMITS, startSearchFocus, stepSearchFocus } from "./searchFocus.ts";
