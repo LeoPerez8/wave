@@ -292,8 +292,14 @@ const fill = async (read: YtLibraryRead): Promise<YtLibraryPauseReason | null> =
       showImportProgress(read.playlistId, MATCHING_PROGRESS);
       await startupTurn();
       // Listed and indexed once for the playlists after it, while the Library stays as it was.
-      const index = await libraryIndex.current(() => buildLibraryIndex(timer));
-      timer.mark("indexing");
+      let built = false;
+      const index = await libraryIndex.current(() => {
+        built = true;
+        return buildLibraryIndex(timer);
+      });
+      // Another playlist's build (a Try Again read joining the batch's) times its own listing:
+      // the wait for it is one phase here.
+      timer.mark(built ? "indexing" : "joining");
       const plan = await appRuntime.runPromise(
         runSteps(planLinkImportWithIndexSteps(answer.source, index), startupTurnEffect),
       );
