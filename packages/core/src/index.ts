@@ -1573,6 +1573,26 @@ export {
   ytLibraryReadLogLine,
   ytLibraryReadView,
 } from "./ytLibraryBatch.ts";
+export {
+  addingProgress,
+  clearImportProgress,
+  importProgress,
+  importProgressByPlaylist,
+  importProgressFraction,
+  importProgressLine,
+  MATCHING_PROGRESS,
+  NO_IMPORT_PROGRESS,
+  readingProgress,
+  setImportProgress,
+} from "./importProgress.ts";
+export type {
+  AddingProgress,
+  ImportProgress,
+  ImportProgressBoard,
+  MatchingProgress,
+  ReadingProgress,
+  WaitingProgress,
+} from "./importProgress.ts";
 export type {
   YtLibraryBatch,
   YtLibraryRead,

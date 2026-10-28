@@ -40,10 +40,10 @@ import {
   pruneYtLibraryBatch,
   readSpotifyAccountPlaylist,
   queueYtLibraryReads,
-  readYtLibraryBatch,
+  readingProgress,
   readYtLibraryOrigins,
-  writeYtLibraryBatch,
   writeYtLibraryOrigins,
+  MATCHING_PROGRESS,
   ytLibraryFavoritesSteps,
   ytLibraryPauseLogLine,
   ytLibraryDownloadsQueued,
@@ -77,12 +77,14 @@ import { askYtMusic } from "@/ytmusic/askYtMusic";
 import { downloadStarredSongs, runYtPlaylistDownloadAction } from "@/ytmusic/YtDownloads";
 
 import { setFavorites, setPendingFavorites } from "./favorites";
+import { endImportProgress, showImportProgress } from "./importProgress";
 import { LibraryStore } from "./LibraryStore";
 import { listLibrary } from "./playlistImports";
 import { cancelPlaylistImport, settlePlaylistImport, startLinkImport } from "./playlistImports";
 import { createPlaylist, currentPlaylists, replacePlaylistSongs } from "./playlists";
 import { appRuntime } from "./runtime";
 import { downloadSyncedStars } from "./starSongs";
+import { ytLibraryBatch } from "./ytLibraryBatchStore";
 
 const LOG_TAG = "WaveImport";
 
@@ -112,11 +114,7 @@ export const forgetDeletedYtLibraryOrigins = async (): Promise<void> => {
 };
 
 /** The playlists still to be read, and those whose read failed; phone-local, never synced. */
-const batch = persistedSetting<YtLibraryBatch>({
-  key: "ytLibraryBatch",
-  read: readYtLibraryBatch,
-  write: writeYtLibraryBatch,
-});
+const batch = ytLibraryBatch;
 
 /** The batch, for a playlist page's line. */
 export const useYtLibraryBatch = (): YtLibraryBatch => batch.useValue();
@@ -181,22 +179,36 @@ type SourceRead =
  * any other from YouTube Music, up to the cap unless it's Liked Songs.
  */
 const readSource = async (read: YtLibraryRead): Promise<SourceRead> => {
+  // Each page moves its playlist's "Reading N of M", while the read is still the batch's.
+  const readSoFar = (done: number, total: number | null): void => {
+    if (isYtLibraryReadQueued(batch.get(), read))
+      showImportProgress(read.playlistId, readingProgress(read, done, total));
+  };
+  readSoFar(0, null);
   if (isSpotifyLibrarySource(read.source)) {
-    const answer = await readSpotifyAccountPlaylist(read.source, async (request) => {
-      await startupTurn();
-      return askSpotifyAccount((spotify) =>
-        request.kind === "likedSongs"
-          ? spotify.likedSongs(request.offset)
-          : spotify.playlist(request.uri, request.offset),
-      );
-    });
+    const answer = await readSpotifyAccountPlaylist(
+      read.source,
+      async (request) => {
+        await startupTurn();
+        return askSpotifyAccount((spotify) =>
+          request.kind === "likedSongs"
+            ? spotify.likedSongs(request.offset)
+            : spotify.playlist(request.uri, request.offset),
+        );
+      },
+      readSoFar,
+    );
     if (!answer.ok) return answer;
     // Typed whole, not narrowed to Spotify's side, so the plan's songs are YT Music's as the app reads them.
     const source: LinkedSource<NativeYtSong> = { service: "spotify", playlist: answer.playlist };
     return { ok: true, source };
   }
   const answer = await askYtMusic((ytMusic) =>
-    ytMusic.playlist(read.source, { uncapped: !read.capped }),
+    ytMusic.playlist(read.source, {
+      uncapped: !read.capped,
+      // Rows read, a video listed again included, as the source counts them.
+      onPage: (playlist) => readSoFar(playlist.songs.length + playlist.repeats.length, null),
+    }),
   );
   return Result.isSuccess(answer)
     ? { ok: true, source: { service: "ytMusic", playlist: answer.success } }
@@ -221,6 +233,7 @@ const fill = async (read: YtLibraryRead): Promise<string | null> => {
     const answer = await readSource(read);
     if (answer.ok) {
       if (!isYtLibraryReadQueued(batch.get(), read)) return null;
+      showImportProgress(read.playlistId, MATCHING_PROGRESS);
       await startupTurn();
       const library = await listLibrary();
       const plan = await appRuntime.runPromise(
@@ -262,6 +275,8 @@ const fill = async (read: YtLibraryRead): Promise<string | null> => {
   if (failure.pause) return reason;
   if (isYtLibraryReadQueued(batch.get(), read)) {
     appLog("warn", LOG_TAG, ytLibraryReadLogLine(read, reason));
+    // Its page says "Couldn't read it online" instead.
+    endImportProgress(read.playlistId);
   }
   batch.set(failure.batch);
   return null;
@@ -358,6 +373,8 @@ const makeYtLibraryPlaylists = async (
       item.replaces === null
         ? await createPlaylist(item.name)
         : await emptyPlaylist(item.replaces, item.name);
+    // A refreshed playlist starts again from Waiting.
+    endImportProgress(made.playlistId);
     batch.set(
       queueYtLibraryReads(batch.get(), [
         {
@@ -367,6 +384,7 @@ const makeYtLibraryPlaylists = async (
           capped: !item.uncapped,
           favorites: item.favorites,
           download,
+          expected: item.expected,
         },
       ]),
     );

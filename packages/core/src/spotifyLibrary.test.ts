@@ -205,6 +205,7 @@ describe("spotifyLibraryPicker", () => {
         title: "Liked Songs",
         artworkUrl: "https://misc.scdn.co/liked-songs.png",
         line: "1,834 songs",
+        songCount: 1834,
         imported: false,
         ticked: true,
       },
@@ -213,6 +214,7 @@ describe("spotifyLibraryPicker", () => {
         title: "Road trip",
         artworkUrl: "https://i.scdn.co/image/road",
         line: null,
+        songCount: null,
         imported: false,
         ticked: true,
       },
@@ -221,6 +223,7 @@ describe("spotifyLibraryPicker", () => {
         title: "Chill Hits",
         artworkUrl: null,
         line: null,
+        songCount: null,
         imported: false,
         ticked: true,
       },
@@ -269,6 +272,7 @@ describe("planYtLibraryImport, From Spotify", () => {
         replaces: null,
         uncapped: true,
         favorites: false,
+        expected: 1834,
       },
       {
         playlistId: "spotify:playlist:road",
@@ -276,6 +280,7 @@ describe("planYtLibraryImport, From Spotify", () => {
         replaces: null,
         uncapped: true,
         favorites: false,
+        expected: null,
       },
     ]);
   });
@@ -293,6 +298,7 @@ describe("planYtLibraryImport, From Spotify", () => {
         replaces: 4,
         uncapped: true,
         favorites: false,
+        expected: null,
       },
     ]);
   });
@@ -366,6 +372,22 @@ describe("readSpotifyAccountPlaylist", () => {
         total: 3,
       },
     });
+  });
+
+  test("tells each page as it arrives: the items read so far and Spotify's total", async () => {
+    const pages: [number, number][] = [];
+    await readSpotifyAccountPlaylist(
+      "spotify:playlist:road",
+      async (request) => ({
+        ok: true,
+        data: request.offset === 0 ? playlistData(["A", "B"], 3) : playlistData(["C"], 3),
+      }),
+      (read, total) => pages.push([read, total]),
+    );
+    assert.deepEqual(pages, [
+      [2, 3],
+      [3, 3],
+    ]);
   });
 
   test("reads Liked Songs as a playlist named Liked Songs", async () => {
