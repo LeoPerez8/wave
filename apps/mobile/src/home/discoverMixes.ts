@@ -1,5 +1,6 @@
 /** Discover's saved mix rows, built and reranked from ordered artist radios. */
 import {
+  artistMixNeedsChartSteps,
   artistMixSeedsSteps,
   discoverMixKeep,
   discoverMixesBuilt,
@@ -12,6 +13,7 @@ import {
   discoverRowTitle,
   mixesShown,
   mixRefreshAvoid,
+  libraryCanSeedArtistMixes,
   libraryMixProfilesSteps,
   mixSectionOfId,
   parseDiscoverMixes,
@@ -64,6 +66,7 @@ import { buildHomeMixes } from "./homeMixBuild";
 import { refreshKnownVideos, useKnownVideos } from "./mixKnown";
 import { noteMixesShown } from "./mixPreDownload";
 import { similarOffline, withSimilar } from "./similarArtists";
+import { chartArtists } from "./ytChart";
 import { artistRadioCacheId } from "./cachedArtistRadio";
 import { mixRadioPages, readMixArtistRadio } from "./mixArtistRadio";
 import { readMixRadios } from "./mixRadioReads";
@@ -223,18 +226,22 @@ setMixSlidersListener(rerank);
  * Builds Artist mixes from the owner's all-time most played artists, picked
  * at random (`Math.random`) leaning towards the most played, and the
  * Library's when plays are short, then artists similar to the Library's when
- * its artists are too few (those the phone has read: `similarOffline`).
- * "nothing-to-build-from" when there are no seeds (no plays and an empty
- * Library), null when no seed made a usable mix: either way what was saved
- * stays, and a later visit can try again. A refresh passes [avoid]
- * (`mixRefreshAvoid`): other artists, other songs.
+ * its artists are too few (those the phone has read: `similarOffline`), then
+ * the top artists of YouTube Music's chart while slots are left (read once a
+ * week only then, else as kept: `chartArtists`). "nothing-to-build-from"
+ * when there are no seeds (no plays, an empty Library and no chart), null
+ * when no seed made a usable mix: either way what was saved stays, and a
+ * later visit can try again. A refresh passes [avoid] (`mixRefreshAvoid`):
+ * other artists, other songs.
  */
 const buildArtistMixes = (inputs: MixBuildInputs, avoid?: MixRefreshAvoid) =>
   Effect.gen(function* () {
     const library = inputs.library;
+    const pools = yield* withSimilar(yield* artistMixPools(library, avoid), similarOffline);
+    const needsChart = yield* runSteps(artistMixNeedsChartSteps(pools), recommendationTurnEffect);
     const seeds = yield* runSteps(
       artistMixSeedsSteps(
-        yield* withSimilar(yield* artistMixPools(library, avoid), similarOffline),
+        needsChart ? { ...pools, chart: yield* chartArtists } : pools,
         Math.random,
       ),
       recommendationTurnEffect,
@@ -415,7 +422,12 @@ const refresh = (played: boolean, onlyEmpty = false): void => {
         building: SECTIONS[id].building.get(),
         retryAt: SECTIONS[id].retryAt,
       })),
-    { now: Date.now(), played },
+    {
+      now: Date.now(),
+      played,
+      // Mixes seeded from the chart alone give way once the Library can seed.
+      librarySeeds: libraryCanSeedArtistMixes(recommendationSnapshot.peek().library?.artists ?? []),
+    },
   );
   if (ids.length === 0) {
     return;

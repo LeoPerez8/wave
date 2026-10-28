@@ -35,7 +35,7 @@ import {
   useAlbumSelection,
   useAlbumTileSize,
 } from "./AlbumGrid";
-import { FIND_FIELD_HEIGHT, FindHead, useFindInLegendList } from "./FindInPlaylist";
+import { FindFrame, FindHead, useFindInLegendList } from "./FindInPlaylist";
 import { useAlbums, useArtists, useGenres, useScanStatus } from "./hooks";
 import type { AlbumRow, ArtistRow, GenreRow } from "./LibraryStore";
 import { openArtist, openGenre } from "./routes";
@@ -114,7 +114,7 @@ function NameList<A>({
   if (items.length === 0) return <NothingYet message={empty} />;
   const head = <ListHead line={counted(items.length, noun)} />;
   return (
-    <View className="flex-1">
+    <FindFrame find={find} of={findIn?.of} inset={spine.paddingRight}>
       <LegendList
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
@@ -134,7 +134,7 @@ function NameList<A>({
           paddingBottom: bottomInset,
           minHeight: findable ? find.minHeight : undefined,
         }}
-        initialScrollOffset={findable ? FIND_FIELD_HEIGHT : undefined}
+        initialScrollOffset={findable ? find.initialOffset : undefined}
         ListHeaderComponent={
           findIn === undefined ? head : <FindHead find={find} header={head} of={findIn.of} />
         }
@@ -142,7 +142,7 @@ function NameList<A>({
       {spine.show && find.found === null && (
         <AlphabetSpine entries={spine.entries} onJump={spine.onJump} topRow={spine.topRow} />
       )}
-    </View>
+    </FindFrame>
   );
 }
 
@@ -266,7 +266,7 @@ export function AlbumsList({ empty }: { empty: string }) {
   if (albums.length === 0) return <NothingYet message={empty} />;
   const head = <ListHead line={counted(albums.length, "album")} />;
   return (
-    <View className="flex-1">
+    <FindFrame find={find} of="albums" inset={spine.paddingRight}>
       <LegendList
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
@@ -286,12 +286,12 @@ export function AlbumsList({ empty }: { empty: string }) {
           paddingBottom: bottomInset,
           minHeight: find.minHeight,
         }}
-        initialScrollOffset={FIND_FIELD_HEIGHT}
+        initialScrollOffset={find.initialOffset}
         ListHeaderComponent={<FindHead find={find} header={head} of="albums" />}
       />
       {spine.show && find.found === null && (
         <AlphabetSpine entries={spine.entries} onJump={spine.onJump} topRow={spine.topRow} />
       )}
-    </View>
+    </FindFrame>
   );
 }

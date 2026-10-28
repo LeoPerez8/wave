@@ -1,0 +1,747 @@
+{
+ "contents": {
+  "singleColumnBrowseResultsRenderer": {
+   "tabs": [
+    {
+     "tabRenderer": {
+      "content": {
+       "sectionListRenderer": {
+        "contents": [
+         {
+          "musicShelfRenderer": {
+           "subheaders": [
+            {
+             "musicSideAlignedItemRenderer": {
+              "startItems": [
+               {
+                "musicSortFilterButtonRenderer": {
+                 "title": {
+                  "runs": [
+                   {
+                    "text": "Brazil"
+                   }
+                  ]
+                 },
+                 "icon": {
+                  "iconType": "CHEVRON_DOWN"
+                 },
+                 "menu": {
+                  "musicMultiSelectMenuRenderer": {
+                   "title": {
+                    "musicMenuTitleRenderer": {
+                     "primaryText": {
+                      "runs": [
+                       {
+                        "text": "Select a country"
+                       }
+                      ]
+                     }
+                    }
+                   },
+                   "options": [
+                    {
+                     "musicMultiSelectMenuItemRenderer": {
+                      "title": {
+                       "runs": [
+                        {
+                         "text": "Brazil"
+                        }
+                       ]
+                      },
+                      "formItemEntityKey": "EidleHBsb3JlX2NoYXJ0c19jb3VudHJ5X21lbnVfMzE2NzY2NTY3QlIgkQEoAQ%3D%3D",
+                      "trackingParams": "CL4DEJOUBRgAIhMI2NDJutLdlwMV6YvwAB2gJDQw",
+                      "selectedIcon": {
+                       "iconType": "CHECK"
+                      },
+                      "accessibility": {
+                       "accessibilityData": {
+                        "label": "Brazil"
+                       }
+                      }
+                     }
+                    },
+                    {
+                     "musicMultiSelectMenuItemRenderer": {
+                      "title": {
+                       "runs": [
+                        {
+                         "text": "Global"
+                        }
+                       ]
+                      },
+                      "formItemEntityKey": "EidleHBsb3JlX2NoYXJ0c19jb3VudHJ5X21lbnVfMzE2NzY2NTY3WlogkQEoAQ%3D%3D",
+                      "selectedCommand": {
+                       "clickTrackingParams": "CL0DEJOUBRgBIhMI2NDJutLdlwMV6YvwAB2gJDQwygEEN2qIdA==",
+                       "commandExecutorCommand": {
+                        "commands": [
+                         {
+                          "clickTrackingParams": "CL0DEJOUBRgBIhMI2NDJutLdlwMV6YvwAB2gJDQwygEEN2qIdA==",
+                          "musicCheckboxFormItemMutatedCommand": {
+                           "formItemEntityKey": "EidleHBsb3JlX2NoYXJ0c19jb3VudHJ5X21lbnVfMzE2NzY2NTY3WlogkQEoAQ%3D%3D",
+                           "newCheckedState": true
+                          }
+                         },
+                         {
+                          "clickTrackingParams": "CL0DEJOUBRgBIhMI2NDJutLdlwMV6YvwAB2gJDQwygEEN2qIdA==",
+                          "musicCheckboxFormItemMutatedCommand": {
+                           "formItemEntityKey": "EidleHBsb3JlX2NoYXJ0c19jb3VudHJ5X21lbnVfMzE2NzY2NTY3QlIgkQEoAQ%3D%3D",
+                           "newCheckedState": false
+                          }
+                         },
+                         {
+                          "clickTrackingParams": "CL0DEJOUBRgBIhMI2NDJutLdlwMV6YvwAB2gJDQwygEEN2qIdA==",
+                          "musicBrowseFormBinderCommand": {
+                           "browseEndpoint": {
+                            "browseId": "FEmusic_charts",
+                            "navigationType": "BROWSE_NAVIGATION_TYPE_LOAD_IN_PLACE"
+                           },
+                           "formEntityKey": "EiVleHBsb3JlX2NoYXJ0c19jb3VudHJ5X21lbnVfMzE2NzY2NTY3IJABKAE%3D"
+                          }
+                         }
+                        ]
+                       }
+                      },
+                      "trackingParams": "CL0DEJOUBRgBIhMI2NDJutLdlwMV6YvwAB2gJDQw",
+                      "selectedIcon": {
+                       "iconType": "CHECK"
+                      },
+                      "accessibility": {
+                       "accessibilityData": {
+                        "label": "Global"
+                       }
+                      }
+                     }
+                    }
+                   ],
+                   "trackingParams": "CPgCEJKUBSITCNjQybrS3ZcDFemL8AAdoCQ0MA==",
+                   "formEntityKey": "EiVleHBsb3JlX2NoYXJ0c19jb3VudHJ5X21lbnVfMzE2NzY2NTY3IJABKAE%3D"
+                  }
+                 },
+                 "accessibility": {
+                  "accessibilityData": {
+                   "label": "Select a country - Brazil selected, dropdown"
+                  }
+                 },
+                 "trackingParams": "CPcCEJGUBRgAIhMI2NDJutLdlwMV6YvwAB2gJDQw"
+                }
+               }
+              ],
+              "trackingParams": "CPYCEMb-AxgAIhMI2NDJutLdlwMV6YvwAB2gJDQw"
+             }
+            }
+           ],
+           "contents": []
+          }
+         },
+         {
+          "musicCarouselShelfRenderer": {
+           "header": {
+            "musicCarouselShelfBasicHeaderRenderer": {
+             "title": {
+              "runs": [
+               {
+                "text": "Video charts"
+               }
+              ]
+             },
+             "accessibilityData": {
+              "accessibilityData": {
+               "label": "Video charts"
+              }
+             },
+             "headerStyle": "MUSIC_CAROUSEL_SHELF_BASIC_HEADER_STYLE_DISPLAY_TWO",
+             "trackingParams": "CPQCEIi8BCITCNjQybrS3ZcDFemL8AAdoCQ0MA=="
+            }
+           },
+           "contents": [
+            {
+             "musicTwoRowItemRenderer": {
+              "thumbnailRenderer": {
+               "musicThumbnailRenderer": {
+                "thumbnail": {
+                 "thumbnails": [
+                  {
+                   "url": "https://yt3.googleusercontent.com/TJBNlmzy8_yJMxfWWOnKxtOf5O_yrd3OAW31OthmjdzARTOzKyX4d_DRQ1SQUYCRB7cVDNbEL_U=s192",
+                   "width": 192,
+                   "height": 192
+                  },
+                  {
+                   "url": "https://yt3.googleusercontent.com/TJBNlmzy8_yJMxfWWOnKxtOf5O_yrd3OAW31OthmjdzARTOzKyX4d_DRQ1SQUYCRB7cVDNbEL_U=s576",
+                   "width": 576,
+                   "height": 576
+                  }
+                 ]
+                },
+                "thumbnailCrop": "MUSIC_THUMBNAIL_CROP_UNSPECIFIED",
+                "thumbnailScale": "MUSIC_THUMBNAIL_SCALE_ASPECT_FILL",
+                "trackingParams": "CPMCEIS_AiITCNjQybrS3ZcDFemL8AAdoCQ0MA=="
+               }
+              },
+              "aspectRatio": "MUSIC_TWO_ROW_ITEM_THUMBNAIL_ASPECT_RATIO_SQUARE",
+              "title": {
+               "runs": [
+                {
+                 "text": "Trending 20 Brazil",
+                 "navigationEndpoint": {
+                  "clickTrackingParams": "COUCEKCzAhgAIhMI2NDJutLdlwMV6YvwAB2gJDQwygEEN2qIdA==",
+                  "browseEndpoint": {
+                   "browseId": "VLOLAK5uy_nxSJNrV0WQ9XbKv_4R9Y98EYwJnZBgkfg",
+                   "browseEndpointContextSupportedConfigs": {
+                    "browseEndpointContextMusicConfig": {
+                     "pageType": "MUSIC_PAGE_TYPE_PLAYLIST"
+                    }
+                   }
+                  }
+                 }
+                }
+               ]
+              },
+              "subtitle": {
+               "runs": [
+                {
+                 "text": "Chart"
+                },
+                {
+                 "text": " • "
+                },
+                {
+                 "text": "YouTube Charts",
+                 "navigationEndpoint": {
+                  "clickTrackingParams": "COUCEKCzAhgAIhMI2NDJutLdlwMV6YvwAB2gJDQwygEEN2qIdA==",
+                  "browseEndpoint": {
+                   "browseId": "FEmusic_charts",
+                   "browseEndpointContextSupportedConfigs": {
+                    "browseEndpointContextMusicConfig": {
+                     "pageType": "MUSIC_PAGE_TYPE_USER_CHANNEL"
+                    }
+                   }
+                  }
+                 }
+                }
+               ]
+              },
+              "navigationEndpoint": {
+               "clickTrackingParams": "COUCEKCzAhgAIhMI2NDJutLdlwMV6YvwAB2gJDQwygEEN2qIdA==",
+               "browseEndpoint": {
+                "browseId": "VLOLAK5uy_nxSJNrV0WQ9XbKv_4R9Y98EYwJnZBgkfg",
+                "browseEndpointContextSupportedConfigs": {
+                 "browseEndpointContextMusicConfig": {
+                  "pageType": "MUSIC_PAGE_TYPE_PLAYLIST"
+                 }
+                }
+               }
+              },
+              "thumbnailOverlay": {
+               "musicItemThumbnailOverlayRenderer": {
+                "background": {
+                 "verticalGradient": {
+                  "gradientLayerColors": [
+                   "2147483648",
+                   "0",
+                   "0"
+                  ]
+                 }
+                },
+                "content": {
+                 "musicPlayButtonRenderer": {
+                  "playNavigationEndpoint": {
+                   "clickTrackingParams": "COYCEMjeAiITCNjQybrS3ZcDFemL8AAdoCQ0MMoBBDdqiHQ=",
+                   "watchPlaylistEndpoint": {
+                    "playlistId": "OLAK5uy_nxSJNrV0WQ9XbKv_4R9Y98EYwJnZBgkfg",
+                    "params": "wAEB"
+                   }
+                  },
+                  "trackingParams": "COYCEMjeAiITCNjQybrS3ZcDFemL8AAdoCQ0MA==",
+                  "playIcon": {
+                   "iconType": "PLAY_ARROW"
+                  },
+                  "pauseIcon": {
+                   "iconType": "PAUSE"
+                  },
+                  "iconColor": 4294967295,
+                  "backgroundColor": 2566914048,
+                  "activeBackgroundColor": 4278190080,
+                  "loadingIndicatorColor": 14745645,
+                  "playingIcon": {
+                   "iconType": "VOLUME_UP"
+                  },
+                  "iconLoadingColor": 1308622847,
+                  "activeScaleFactor": 1.2,
+                  "buttonSize": "MUSIC_PLAY_BUTTON_SIZE_MEDIUM",
+                  "rippleTarget": "MUSIC_PLAY_BUTTON_RIPPLE_TARGET_SELF",
+                  "accessibilityPlayData": {
+                   "accessibilityData": {
+                    "label": "Play Trending 20 Brazil"
+                   }
+                  },
+                  "accessibilityPauseData": {
+                   "accessibilityData": {
+                    "label": "Pause Trending 20 Brazil"
+                   }
+                  }
+                 }
+                },
+                "contentPosition": "MUSIC_ITEM_THUMBNAIL_OVERLAY_CONTENT_POSITION_BOTTOM_RIGHT",
+                "displayStyle": "MUSIC_ITEM_THUMBNAIL_OVERLAY_DISPLAY_STYLE_HOVER"
+               }
+              }
+             }
+            }
+           ]
+          }
+         },
+         {
+          "musicCarouselShelfRenderer": {
+           "header": {
+            "musicCarouselShelfBasicHeaderRenderer": {
+             "title": {
+              "runs": [
+               {
+                "text": "Top artists"
+               }
+              ]
+             },
+             "accessibilityData": {
+              "accessibilityData": {
+               "label": "Top artists"
+              }
+             },
+             "headerStyle": "MUSIC_CAROUSEL_SHELF_BASIC_HEADER_STYLE_DISPLAY_TWO",
+             "trackingParams": "CMUCEIi8BCITCNjQybrS3ZcDFemL8AAdoCQ0MA=="
+            }
+           },
+           "contents": [
+            {
+             "musicResponsiveListItemRenderer": {
+              "thumbnail": {
+               "musicThumbnailRenderer": {
+                "thumbnail": {
+                 "thumbnails": [
+                  {
+                   "url": "https://lh3.googleusercontent.com/FkRYhIqHJj-8HFPeA6V_vqVIWTFoAh7LMWbZtDHl9TozaTXK3TLqrUJaCHFgn4Rryz7I5c5g5wFUmmtf=w60-h60-p-l90-rj",
+                   "width": 60,
+                   "height": 60
+                  },
+                  {
+                   "url": "https://lh3.googleusercontent.com/FkRYhIqHJj-8HFPeA6V_vqVIWTFoAh7LMWbZtDHl9TozaTXK3TLqrUJaCHFgn4Rryz7I5c5g5wFUmmtf=w120-h120-p-l90-rj",
+                   "width": 120,
+                   "height": 120
+                  }
+                 ]
+                },
+                "thumbnailCrop": "MUSIC_THUMBNAIL_CROP_CIRCLE",
+                "thumbnailScale": "MUSIC_THUMBNAIL_SCALE_ASPECT_FILL",
+                "trackingParams": "CMQCEIS_AiITCNjQybrS3ZcDFemL8AAdoCQ0MA=="
+               }
+              },
+              "flexColumns": [
+               {
+                "musicResponsiveListItemFlexColumnRenderer": {
+                 "text": {
+                  "runs": [
+                   {
+                    "text": "Henrique & Juliano"
+                   }
+                  ]
+                 },
+                 "displayPriority": "MUSIC_RESPONSIVE_LIST_ITEM_COLUMN_DISPLAY_PRIORITY_HIGH"
+                }
+               },
+               {
+                "musicResponsiveListItemFlexColumnRenderer": {
+                 "text": {
+                  "runs": [
+                   {
+                    "text": "17.7M subscribers"
+                   }
+                  ]
+                 },
+                 "displayPriority": "MUSIC_RESPONSIVE_LIST_ITEM_COLUMN_DISPLAY_PRIORITY_HIGH"
+                }
+               }
+              ],
+              "flexColumnDisplayStyle": "MUSIC_RESPONSIVE_LIST_ITEM_FLEX_COLUMN_DISPLAY_STYLE_TWO_LINE_STACK",
+              "navigationEndpoint": {
+               "clickTrackingParams": "CL0CEMn0AhgAIhMI2NDJutLdlwMV6YvwAB2gJDQwygEEN2qIdA==",
+               "browseEndpoint": {
+                "browseId": "UCt8Ihy3hj9uHGXKTpO214AQ",
+                "browseEndpointContextSupportedConfigs": {
+                 "browseEndpointContextMusicConfig": {
+                  "pageType": "MUSIC_PAGE_TYPE_ARTIST"
+                 }
+                }
+               }
+              },
+              "itemHeight": "MUSIC_RESPONSIVE_LIST_ITEM_HEIGHT_MEDIUM_COMPACT",
+              "customIndexColumn": {
+               "musicCustomIndexColumnRenderer": {
+                "text": {
+                 "runs": [
+                  {
+                   "text": "1"
+                  }
+                 ]
+                },
+                "icon": {
+                 "iconType": "ARROW_DROP_UP"
+                },
+                "iconColorStyle": "CUSTOM_INDEX_COLUMN_ICON_COLOR_STYLE_GREEN",
+                "accessibilityData": {
+                 "accessibilityData": {
+                  "label": "Rank increased to 1"
+                 }
+                }
+               }
+              }
+             }
+            },
+            {
+             "musicResponsiveListItemRenderer": {
+              "thumbnail": {
+               "musicThumbnailRenderer": {
+                "thumbnail": {
+                 "thumbnails": [
+                  {
+                   "url": "https://yt3.googleusercontent.com/_cEioY7yfolIcxq0g-A2lOsua2k5GsHfbVvA96Bv7yrxhLdszVddVFWkonTT7C26vzSJGSmImilQSsU=w60-h60-p-l90-rj",
+                   "width": 60,
+                   "height": 60
+                  },
+                  {
+                   "url": "https://yt3.googleusercontent.com/_cEioY7yfolIcxq0g-A2lOsua2k5GsHfbVvA96Bv7yrxhLdszVddVFWkonTT7C26vzSJGSmImilQSsU=w120-h120-p-l90-rj",
+                   "width": 120,
+                   "height": 120
+                  }
+                 ]
+                },
+                "thumbnailCrop": "MUSIC_THUMBNAIL_CROP_CIRCLE",
+                "thumbnailScale": "MUSIC_THUMBNAIL_SCALE_ASPECT_FILL",
+                "trackingParams": "CLwCEIS_AiITCNjQybrS3ZcDFemL8AAdoCQ0MA=="
+               }
+              },
+              "flexColumns": [
+               {
+                "musicResponsiveListItemFlexColumnRenderer": {
+                 "text": {
+                  "runs": [
+                   {
+                    "text": "MC Ryan SP"
+                   }
+                  ]
+                 },
+                 "displayPriority": "MUSIC_RESPONSIVE_LIST_ITEM_COLUMN_DISPLAY_PRIORITY_HIGH"
+                }
+               },
+               {
+                "musicResponsiveListItemFlexColumnRenderer": {
+                 "text": {
+                  "runs": [
+                   {
+                    "text": "1.92M subscribers"
+                   }
+                  ]
+                 },
+                 "displayPriority": "MUSIC_RESPONSIVE_LIST_ITEM_COLUMN_DISPLAY_PRIORITY_HIGH"
+                }
+               }
+              ],
+              "flexColumnDisplayStyle": "MUSIC_RESPONSIVE_LIST_ITEM_FLEX_COLUMN_DISPLAY_STYLE_TWO_LINE_STACK",
+              "navigationEndpoint": {
+               "clickTrackingParams": "CLUCEMn0AhgBIhMI2NDJutLdlwMV6YvwAB2gJDQwygEEN2qIdA==",
+               "browseEndpoint": {
+                "browseId": "UCVRLEQf_wH8zFb4qCfXqDXw",
+                "browseEndpointContextSupportedConfigs": {
+                 "browseEndpointContextMusicConfig": {
+                  "pageType": "MUSIC_PAGE_TYPE_ARTIST"
+                 }
+                }
+               }
+              },
+              "itemHeight": "MUSIC_RESPONSIVE_LIST_ITEM_HEIGHT_MEDIUM_COMPACT",
+              "customIndexColumn": {
+               "musicCustomIndexColumnRenderer": {
+                "text": {
+                 "runs": [
+                  {
+                   "text": "2"
+                  }
+                 ]
+                },
+                "icon": {
+                 "iconType": "ARROW_DROP_DOWN"
+                },
+                "iconColorStyle": "CUSTOM_INDEX_COLUMN_ICON_COLOR_STYLE_RED",
+                "accessibilityData": {
+                 "accessibilityData": {
+                  "label": "Rank decreased to 2"
+                 }
+                }
+               }
+              }
+             }
+            },
+            {
+             "musicResponsiveListItemRenderer": {
+              "thumbnail": {
+               "musicThumbnailRenderer": {
+                "thumbnail": {
+                 "thumbnails": [
+                  {
+                   "url": "https://yt3.googleusercontent.com/DHC4m9MMWSFa_phIDlrkVAO62CuY97hupCwvoFnkMtKUsR2GOacQ7ee2khndxl7m96v2EihORHFLFi4=w60-h60-p-l90-rj",
+                   "width": 60,
+                   "height": 60
+                  },
+                  {
+                   "url": "https://yt3.googleusercontent.com/DHC4m9MMWSFa_phIDlrkVAO62CuY97hupCwvoFnkMtKUsR2GOacQ7ee2khndxl7m96v2EihORHFLFi4=w120-h120-p-l90-rj",
+                   "width": 120,
+                   "height": 120
+                  }
+                 ]
+                },
+                "thumbnailCrop": "MUSIC_THUMBNAIL_CROP_CIRCLE",
+                "thumbnailScale": "MUSIC_THUMBNAIL_SCALE_ASPECT_FILL",
+                "trackingParams": "CLQCEIS_AiITCNjQybrS3ZcDFemL8AAdoCQ0MA=="
+               }
+              },
+              "flexColumns": [
+               {
+                "musicResponsiveListItemFlexColumnRenderer": {
+                 "text": {
+                  "runs": [
+                   {
+                    "text": "Marília Mendonça"
+                   }
+                  ]
+                 },
+                 "displayPriority": "MUSIC_RESPONSIVE_LIST_ITEM_COLUMN_DISPLAY_PRIORITY_HIGH"
+                }
+               },
+               {
+                "musicResponsiveListItemFlexColumnRenderer": {
+                 "text": {
+                  "runs": [
+                   {
+                    "text": "27.7M subscribers"
+                   }
+                  ]
+                 },
+                 "displayPriority": "MUSIC_RESPONSIVE_LIST_ITEM_COLUMN_DISPLAY_PRIORITY_HIGH"
+                }
+               }
+              ],
+              "flexColumnDisplayStyle": "MUSIC_RESPONSIVE_LIST_ITEM_FLEX_COLUMN_DISPLAY_STYLE_TWO_LINE_STACK",
+              "navigationEndpoint": {
+               "clickTrackingParams": "CK0CEMn0AhgCIhMI2NDJutLdlwMV6YvwAB2gJDQwygEEN2qIdA==",
+               "browseEndpoint": {
+                "browseId": "UCj14PDgkcQQMz6v-g2eruBA",
+                "browseEndpointContextSupportedConfigs": {
+                 "browseEndpointContextMusicConfig": {
+                  "pageType": "MUSIC_PAGE_TYPE_ARTIST"
+                 }
+                }
+               }
+              },
+              "itemHeight": "MUSIC_RESPONSIVE_LIST_ITEM_HEIGHT_MEDIUM_COMPACT",
+              "customIndexColumn": {
+               "musicCustomIndexColumnRenderer": {
+                "text": {
+                 "runs": [
+                  {
+                   "text": "3"
+                  }
+                 ]
+                },
+                "icon": {
+                 "iconType": "ARROW_DROP_UP"
+                },
+                "iconColorStyle": "CUSTOM_INDEX_COLUMN_ICON_COLOR_STYLE_GREEN",
+                "accessibilityData": {
+                 "accessibilityData": {
+                  "label": "Rank increased to 3"
+                 }
+                }
+               }
+              }
+             }
+            },
+            {
+             "musicResponsiveListItemRenderer": {
+              "thumbnail": {
+               "musicThumbnailRenderer": {
+                "thumbnail": {
+                 "thumbnails": [
+                  {
+                   "url": "https://lh3.googleusercontent.com/h6sTF1hy0i8ThxmgYpGjtwHWjrWjwXrA8AtpOBztfKM9GXhKY_YuMpN4AVKGuEW7-glJqGKtG_GRkpuG=w60-h60-p-l90-rj",
+                   "width": 60,
+                   "height": 60
+                  },
+                  {
+                   "url": "https://lh3.googleusercontent.com/h6sTF1hy0i8ThxmgYpGjtwHWjrWjwXrA8AtpOBztfKM9GXhKY_YuMpN4AVKGuEW7-glJqGKtG_GRkpuG=w120-h120-p-l90-rj",
+                   "width": 120,
+                   "height": 120
+                  }
+                 ]
+                },
+                "thumbnailCrop": "MUSIC_THUMBNAIL_CROP_CIRCLE",
+                "thumbnailScale": "MUSIC_THUMBNAIL_SCALE_ASPECT_FILL",
+                "trackingParams": "CKwCEIS_AiITCNjQybrS3ZcDFemL8AAdoCQ0MA=="
+               }
+              },
+              "flexColumns": [
+               {
+                "musicResponsiveListItemFlexColumnRenderer": {
+                 "text": {
+                  "runs": [
+                   {
+                    "text": "Netto Brito"
+                   }
+                  ]
+                 },
+                 "displayPriority": "MUSIC_RESPONSIVE_LIST_ITEM_COLUMN_DISPLAY_PRIORITY_HIGH"
+                }
+               },
+               {
+                "musicResponsiveListItemFlexColumnRenderer": {
+                 "text": {
+                  "runs": [
+                   {
+                    "text": "1.05M subscribers"
+                   }
+                  ]
+                 },
+                 "displayPriority": "MUSIC_RESPONSIVE_LIST_ITEM_COLUMN_DISPLAY_PRIORITY_HIGH"
+                }
+               }
+              ],
+              "flexColumnDisplayStyle": "MUSIC_RESPONSIVE_LIST_ITEM_FLEX_COLUMN_DISPLAY_STYLE_TWO_LINE_STACK",
+              "navigationEndpoint": {
+               "clickTrackingParams": "CKUCEMn0AhgDIhMI2NDJutLdlwMV6YvwAB2gJDQwygEEN2qIdA==",
+               "browseEndpoint": {
+                "browseId": "UCoJNuHofAOaTKHY5O8VE64A",
+                "browseEndpointContextSupportedConfigs": {
+                 "browseEndpointContextMusicConfig": {
+                  "pageType": "MUSIC_PAGE_TYPE_ARTIST"
+                 }
+                }
+               }
+              },
+              "itemHeight": "MUSIC_RESPONSIVE_LIST_ITEM_HEIGHT_MEDIUM_COMPACT",
+              "customIndexColumn": {
+               "musicCustomIndexColumnRenderer": {
+                "text": {
+                 "runs": [
+                  {
+                   "text": "4"
+                  }
+                 ]
+                },
+                "icon": {
+                 "iconType": "ARROW_CHART_NEUTRAL"
+                },
+                "iconColorStyle": "CUSTOM_INDEX_COLUMN_ICON_COLOR_STYLE_GREY",
+                "accessibilityData": {
+                 "accessibilityData": {
+                  "label": "Rank stayed at 4"
+                 }
+                }
+               }
+              }
+             }
+            },
+            {
+             "musicResponsiveListItemRenderer": {
+              "thumbnail": {
+               "musicThumbnailRenderer": {
+                "thumbnail": {
+                 "thumbnails": [
+                  {
+                   "url": "https://yt3.googleusercontent.com/Wg6rn31XzvstPgYSF8jbFMMxmy0sngJeslH8a14livec28XoQjzrskMmH8FhOLvOK89cVSXv-A=w60-h60-l90-rj-dcpSWe7JUK",
+                   "width": 60,
+                   "height": 60
+                  },
+                  {
+                   "url": "https://yt3.googleusercontent.com/Wg6rn31XzvstPgYSF8jbFMMxmy0sngJeslH8a14livec28XoQjzrskMmH8FhOLvOK89cVSXv-A=w120-h120-l90-rj-dcpSWe7JUK",
+                   "width": 120,
+                   "height": 120
+                  }
+                 ]
+                },
+                "thumbnailCrop": "MUSIC_THUMBNAIL_CROP_CIRCLE",
+                "thumbnailScale": "MUSIC_THUMBNAIL_SCALE_ASPECT_FILL",
+                "trackingParams": "CKQCEIS_AiITCNjQybrS3ZcDFemL8AAdoCQ0MA=="
+               }
+              },
+              "flexColumns": [
+               {
+                "musicResponsiveListItemFlexColumnRenderer": {
+                 "text": {
+                  "runs": [
+                   {
+                    "text": "MC MENO K"
+                   }
+                  ]
+                 },
+                 "displayPriority": "MUSIC_RESPONSIVE_LIST_ITEM_COLUMN_DISPLAY_PRIORITY_HIGH"
+                }
+               },
+               {
+                "musicResponsiveListItemFlexColumnRenderer": {
+                 "text": {
+                  "runs": [
+                   {
+                    "text": "1.05M subscribers"
+                   }
+                  ]
+                 },
+                 "displayPriority": "MUSIC_RESPONSIVE_LIST_ITEM_COLUMN_DISPLAY_PRIORITY_HIGH"
+                }
+               }
+              ],
+              "flexColumnDisplayStyle": "MUSIC_RESPONSIVE_LIST_ITEM_FLEX_COLUMN_DISPLAY_STYLE_TWO_LINE_STACK",
+              "navigationEndpoint": {
+               "clickTrackingParams": "CJ0CEMn0AhgEIhMI2NDJutLdlwMV6YvwAB2gJDQwygEEN2qIdA==",
+               "browseEndpoint": {
+                "browseId": "UCj1Ja_ZGKK2bN495vMrruiQ",
+                "browseEndpointContextSupportedConfigs": {
+                 "browseEndpointContextMusicConfig": {
+                  "pageType": "MUSIC_PAGE_TYPE_ARTIST"
+                 }
+                }
+               }
+              },
+              "itemHeight": "MUSIC_RESPONSIVE_LIST_ITEM_HEIGHT_MEDIUM_COMPACT",
+              "customIndexColumn": {
+               "musicCustomIndexColumnRenderer": {
+                "text": {
+                 "runs": [
+                  {
+                   "text": "5"
+                  }
+                 ]
+                },
+                "icon": {
+                 "iconType": "ARROW_CHART_NEUTRAL"
+                },
+                "iconColorStyle": "CUSTOM_INDEX_COLUMN_ICON_COLOR_STYLE_GREY",
+                "accessibilityData": {
+                 "accessibilityData": {
+                  "label": "Rank stayed at 5"
+                 }
+                }
+               }
+              }
+             }
+            }
+           ]
+          }
+         }
+        ],
+        "trackingParams": "CAMQui8iEwjY0Mm60t2XAxXpi_AAHaAkNDA="
+       }
+      },
+      "trackingParams": "CAIQ8JMBGEYiEwjY0Mm60t2XAxXpi_AAHaAkNDA="
+     }
+    }
+   ]
+  }
+ }
+}

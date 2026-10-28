@@ -26,12 +26,7 @@ import { useListSelection } from "@/selection/useListSelection";
 import { SongList } from "@/songs/SongList";
 import { librarySongEntry } from "@/songs/songListSources";
 
-import {
-  FIND_FIELD_HEIGHT,
-  FindHead,
-  librarySongText,
-  useFindInLegendList,
-} from "./FindInPlaylist";
+import { FindFrame, FindHead, librarySongText, useFindInLegendList } from "./FindInPlaylist";
 import type { SongRow } from "./LibraryStore";
 import { useSpine } from "./useSpine";
 import { useListScrollable } from "@/motion/heldTouch";
@@ -192,7 +187,7 @@ export function TrackList({
   const positions = usePositions(songs, songId);
 
   return (
-    <View className="flex-1">
+    <FindFrame find={find} inset={spine.paddingRight}>
       <SongList
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
@@ -215,9 +210,9 @@ export function TrackList({
           paddingBottom: bottomInset,
           minHeight: findable ? find.minHeight : undefined,
         }}
-        initialScrollOffset={findable ? FIND_FIELD_HEIGHT : undefined}
+        initialScrollOffset={findable ? find.initialOffset : undefined}
         ListHeaderComponent={findable ? <FindHead find={find} header={header} /> : header}
       />
-    </View>
+    </FindFrame>
   );
 }

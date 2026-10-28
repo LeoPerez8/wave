@@ -22,7 +22,7 @@ import type { ActionItems } from "@/playback/actionTargets";
 
 import { useListSelection } from "@/selection/useListSelection";
 
-import { FIND_FIELD_HEIGHT, FindHead, useFindInLegendList } from "./FindInPlaylist";
+import { FindFrame, FindHead, useFindInLegendList } from "./FindInPlaylist";
 import { folderPhrase } from "./folderPhrase";
 import { useScanRoots, useScanStatus } from "./hooks";
 import type { SongOrder, SongRow } from "./LibraryStore";
@@ -211,7 +211,7 @@ function PagedSongList({
   );
 
   return (
-    <View className="flex-1">
+    <FindFrame find={find} of="songs" inset={spine.paddingRight}>
       <SongList
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
@@ -236,7 +236,7 @@ function PagedSongList({
           paddingBottom: bottomInset,
           minHeight: find.minHeight,
         }}
-        initialScrollOffset={FIND_FIELD_HEIGHT}
+        initialScrollOffset={find.initialOffset}
         ListHeaderComponent={
           <View>
             <FindHead find={find} header={header} of="songs" allRead={findTexts !== null} />
@@ -246,6 +246,6 @@ function PagedSongList({
           </View>
         }
       />
-    </View>
+    </FindFrame>
   );
 }

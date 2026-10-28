@@ -37,7 +37,7 @@ import { openYtSongActions, runYtSongSwipe } from "@/ytmusic/YtSongActions";
 
 import { explainUnavailable, openUnavailableEntryActions } from "./UnavailableEntry";
 import type { PlaylistEntryRow } from "./LibraryStore";
-import { entryText, FIND_FIELD_HEIGHT, FindHead, useFindInLegendList } from "./FindInPlaylist";
+import { entryText, FindFrame, FindHead, useFindInLegendList } from "./FindInPlaylist";
 import { movePlaylistItem, removePlaylistItems } from "./playlists";
 
 /** What the list holds besides the entries: the empty note, then the recommendations. */
@@ -267,8 +267,8 @@ export function PlaylistItems({ playlistId, items, header, empty }: Props) {
     bottomInset,
     lead,
     scrollFloor: 0,
-    // Find in Playlist waits above the head until the list is pulled down.
-    initialScroll: FIND_FIELD_HEIGHT,
+    // Find in Playlist waits above the head until the list is pulled down (unless it's pinned).
+    initialScroll: find.initialOffset,
     counter: "playlist",
     onDrop: (_key, from, to) => void reorder(from, to),
   });
@@ -394,78 +394,80 @@ export function PlaylistItems({ playlistId, items, header, empty }: Props) {
   };
 
   return (
-    <View
-      className="flex-1 overflow-hidden"
-      onLayout={(event) => height.set(event.nativeEvent.layout.height)}
-    >
-      <SongList
-        animated
-        ref={list}
-        refScrollView={scrollRef}
-        keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="on-drag"
-        scrollEnabled={scrollable && drag === null}
-        scrollEventThrottle={16}
-        className="flex-1"
-        data={data}
-        keyExtractor={itemKey}
-        song={song}
-        context={context}
-        selection={selection}
-        // A found song plays the whole playlist from its own place in it.
-        onPlay={(item) => {
-          const entry = entryOf(item);
-          if (entry !== null) playPlaylistEntries(order, places.get(entry), context);
-        }}
-        onMenu={menu}
-        onSongSwipe={swipe}
-        onSongRemove={(item) => {
-          const entry = entryOf(item);
-          if (entry !== null) onRemove(entry);
-        }}
-        rowActions={rowActions}
-        onRowAction={(item, name) => {
-          const entry = entryOf(item);
-          const index = entry === null ? -1 : orderRef.current.indexOf(entry);
-          if (index < 0) return;
-          if (name === "moveUp") reorder(index, index - 1);
-          else if (name === "moveDown") reorder(index, index + 1);
-        }}
-        decorateRow={decorateRow}
-        renderSlot={renderSlot}
-        slotType={slotType}
-        slotSize={slotSize}
-        extraData={drag}
-        alwaysRender={drag === null ? undefined : { keys: [drag.key] }}
-        maintainVisibleContentPosition={
-          anchored && recommending
-            ? { data: true, shouldRestorePosition: (item) => item === RECOMMENDATIONS }
-            : undefined
-        }
-        lifted={
-          drag === null
-            ? null
-            : {
-                key: drag.key,
-                style: [
-                  { height: ROW, left: grid.margin, right: grid.margin, backgroundColor: fill },
-                  liftedStyle,
-                ],
-                accessory: <Grip shown color={secondary} />,
-              }
-        }
-        contentContainerStyle={{
-          paddingHorizontal: grid.margin,
-          paddingBottom: bottomInset,
-          minHeight: find.minHeight,
-        }}
-        initialScrollOffset={FIND_FIELD_HEIGHT}
-        ListHeaderComponent={
-          <View onLayout={(event) => setLead(event.nativeEvent.layout.height)}>
-            <FindHead find={find} header={header} />
-          </View>
-        }
-      />
-    </View>
+    <FindFrame find={find}>
+      <View
+        className="flex-1 overflow-hidden"
+        onLayout={(event) => height.set(event.nativeEvent.layout.height)}
+      >
+        <SongList
+          animated
+          ref={list}
+          refScrollView={scrollRef}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          scrollEnabled={scrollable && drag === null}
+          scrollEventThrottle={16}
+          className="flex-1"
+          data={data}
+          keyExtractor={itemKey}
+          song={song}
+          context={context}
+          selection={selection}
+          // A found song plays the whole playlist from its own place in it.
+          onPlay={(item) => {
+            const entry = entryOf(item);
+            if (entry !== null) playPlaylistEntries(order, places.get(entry), context);
+          }}
+          onMenu={menu}
+          onSongSwipe={swipe}
+          onSongRemove={(item) => {
+            const entry = entryOf(item);
+            if (entry !== null) onRemove(entry);
+          }}
+          rowActions={rowActions}
+          onRowAction={(item, name) => {
+            const entry = entryOf(item);
+            const index = entry === null ? -1 : orderRef.current.indexOf(entry);
+            if (index < 0) return;
+            if (name === "moveUp") reorder(index, index - 1);
+            else if (name === "moveDown") reorder(index, index + 1);
+          }}
+          decorateRow={decorateRow}
+          renderSlot={renderSlot}
+          slotType={slotType}
+          slotSize={slotSize}
+          extraData={drag}
+          alwaysRender={drag === null ? undefined : { keys: [drag.key] }}
+          maintainVisibleContentPosition={
+            anchored && recommending
+              ? { data: true, shouldRestorePosition: (item) => item === RECOMMENDATIONS }
+              : undefined
+          }
+          lifted={
+            drag === null
+              ? null
+              : {
+                  key: drag.key,
+                  style: [
+                    { height: ROW, left: grid.margin, right: grid.margin, backgroundColor: fill },
+                    liftedStyle,
+                  ],
+                  accessory: <Grip shown color={secondary} />,
+                }
+          }
+          contentContainerStyle={{
+            paddingHorizontal: grid.margin,
+            paddingBottom: bottomInset,
+            minHeight: find.minHeight,
+          }}
+          initialScrollOffset={find.initialOffset}
+          ListHeaderComponent={
+            <View onLayout={(event) => setLead(event.nativeEvent.layout.height)}>
+              <FindHead find={find} header={header} />
+            </View>
+          }
+        />
+      </View>
+    </FindFrame>
   );
 }

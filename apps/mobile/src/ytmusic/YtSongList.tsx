@@ -45,12 +45,7 @@ import { useChromeInset } from "@/chrome/chrome";
 import { EmptyState } from "@/components/EmptyState";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { TextButton } from "@/components/TextButton";
-import {
-  entryText,
-  FIND_FIELD_HEIGHT,
-  FindHead,
-  useFindInLegendList,
-} from "@/library/FindInPlaylist";
+import { entryText, FindFrame, FindHead, useFindInLegendList } from "@/library/FindInPlaylist";
 import type { SongRow } from "@/library/LibraryStore";
 import { songCount } from "@/library/TrackList";
 import { useListScrollable } from "@/motion/heldTouch";
@@ -543,46 +538,51 @@ export function YtSongList({
   return (
     <View className="flex-1 bg-background">
       <ScreenHeader />
-      <SongList
-        keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="on-drag"
-        scrollEnabled={scrollable}
-        ref={list}
-        className="flex-1"
-        data={shown}
-        keyExtractor={keyOf}
-        song={source}
-        context={context}
-        selection={rowSelection}
-        // A found song plays the whole playlist from its own place in it.
-        onPlay={(song) => play(places.get(song))}
-        onMenu={openMixedSongActions}
-        onSongSwipe={(song, shown) => runMixedSongSwipe(song, shown)}
-        contentContainerStyle={{
-          paddingHorizontal: grid.margin,
-          paddingBottom: bottomInset,
-          minHeight: findable ? findInList.minHeight : undefined,
-        }}
-        initialScrollOffset={findable ? FIND_FIELD_HEIGHT : undefined}
-        ListHeaderComponent={
-          findable ? (
-            // Pages still on their way may hold matches: no "No songs match" until they're all in.
-            <FindHead find={findInList} header={pageHead} allRead={!reading} />
-          ) : (
-            pageHead
-          )
-        }
-        ListFooterComponent={
-          loading ? (
-            <TrackSkeletons count={PAGE_SKELETON_ROWS} leading={numbered ? "number" : "artwork"} />
-          ) : reading ? (
-            // More pages coming: skeleton rows at the list's end, where their songs will go.
-            <TrackSkeletons leading={numbered ? "number" : "artwork"} />
-          ) : (
-            <RestLine line={restLine} />
-          )
-        }
-      />
+      <FindFrame find={findInList}>
+        <SongList
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          scrollEnabled={scrollable}
+          ref={list}
+          className="flex-1"
+          data={shown}
+          keyExtractor={keyOf}
+          song={source}
+          context={context}
+          selection={rowSelection}
+          // A found song plays the whole playlist from its own place in it.
+          onPlay={(song) => play(places.get(song))}
+          onMenu={openMixedSongActions}
+          onSongSwipe={(song, shown) => runMixedSongSwipe(song, shown)}
+          contentContainerStyle={{
+            paddingHorizontal: grid.margin,
+            paddingBottom: bottomInset,
+            minHeight: findable ? findInList.minHeight : undefined,
+          }}
+          initialScrollOffset={findable ? findInList.initialOffset : undefined}
+          ListHeaderComponent={
+            findable ? (
+              // Pages still on their way may hold matches: no "No songs match" until they're all in.
+              <FindHead find={findInList} header={pageHead} allRead={!reading} />
+            ) : (
+              pageHead
+            )
+          }
+          ListFooterComponent={
+            loading ? (
+              <TrackSkeletons
+                count={PAGE_SKELETON_ROWS}
+                leading={numbered ? "number" : "artwork"}
+              />
+            ) : reading ? (
+              // More pages coming: skeleton rows at the list's end, where their songs will go.
+              <TrackSkeletons leading={numbered ? "number" : "artwork"} />
+            ) : (
+              <RestLine line={restLine} />
+            )
+          }
+        />
+      </FindFrame>
     </View>
   );
 }

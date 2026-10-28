@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { artistMixSeedPool, artistMixSeeds, artistMixSimilarSource } from "./index.ts";
+import {
+  artistMixNeedsChart,
+  artistMixSeedPool,
+  artistMixSeeds,
+  artistMixSimilarSource,
+} from "./index.ts";
 
 const played = (id: number, name: string, countedPlays: number) => ({ id, name, countedPlays });
 const library = (id: number, name: string, songCount: number) => ({ id, name, songCount });
@@ -258,5 +263,152 @@ describe("Artist mixes' seed pool (available seed artists)", () => {
       library: [library(9, "Polaris", 40)],
     });
     assert.equal(pool.length, 4);
+  });
+});
+
+const chart = (name: string) => ({ name, browseId: `UC-chart-${name}` });
+
+describe("Artist mixes' seeds from YouTube Music's chart", () => {
+  const CHART = [
+    chart("Henrique & Juliano"),
+    chart("Various Artists"),
+    chart("MC Ryan SP"),
+    chart("Marília Mendonça"),
+    chart("Netto Brito"),
+    chart("Zé Vaqueiro"),
+  ];
+
+  test("with no plays and an empty Library, are the chart's top artists, in its order", () => {
+    const seeds = artistMixSeeds({ played: [], library: [], chart: CHART }, always(0));
+    assert.deepEqual(seedNames(seeds), [
+      "chart: Henrique & Juliano",
+      "chart: MC Ryan SP",
+      "chart: Marília Mendonça",
+      "chart: Netto Brito",
+    ]);
+    assert.equal(seeds[0]?.browseId, "UC-chart-Henrique & Juliano");
+  });
+
+  test("come last: after plays, the Library's artists and similar artists, only while slots are left", () => {
+    const seeds = artistMixSeeds(
+      {
+        played: [played(1, "Sleep Token", 500)],
+        library: [library(1, "Sleep Token", 20), library(2, "Spiritbox", 10)],
+        similar: [{ of: "Sleep Token", artists: [similar("Erra")] }],
+        chart: CHART,
+      },
+      always(0),
+    );
+    assert.deepEqual(seedNames(seeds), [
+      "plays: Sleep Token",
+      "library: Spiritbox",
+      "similar: Erra",
+      "chart: Henrique & Juliano",
+    ]);
+    const fromPlays = seedNames(artistMixSeeds({ played: MOST_PLAYED, chart: CHART }, always(0)));
+    assert.deepEqual(
+      fromPlays.filter((seed) => seed.startsWith("chart")),
+      [],
+    );
+  });
+
+  test("leave out artists the Library has or that are already seeds", () => {
+    const seeds = artistMixSeeds(
+      {
+        played: [played(1, "MC Ryan SP", 3)],
+        library: [library(1, "MC Ryan SP", 1), library(2, "henrique & juliano", 1)],
+        similar: [{ of: "MC Ryan SP", artists: [similar("Netto Brito")] }],
+        chart: CHART,
+      },
+      always(0),
+    );
+    assert.deepEqual(seedNames(seeds), [
+      "plays: MC Ryan SP",
+      "library: henrique & juliano",
+      "similar: Netto Brito",
+      "chart: Marília Mendonça",
+    ]);
+  });
+
+  test("on a refresh, take only what the owner's artists shown today leave", () => {
+    const seeds = artistMixSeeds(
+      {
+        played: MOST_PLAYED.slice(0, 2),
+        library: [library(9, "Polaris", 1)],
+        avoid: {
+          mixes: new Map(),
+          artists: new Map([
+            ["bad omens", 1],
+            ["polaris", 2],
+          ]),
+          songs: new Set(),
+        },
+        chart: CHART,
+      },
+      always(0),
+    );
+    assert.deepEqual(seedNames(seeds), [
+      "plays: Sleep Token",
+      "plays: Bad Omens",
+      "library: Polaris",
+      "chart: Henrique & Juliano",
+    ]);
+  });
+
+  test("never hold back reading similar artists: those come first", () => {
+    const pools = { played: [], library: [library(1, "Sleep Token", 20)], chart: CHART };
+    assert.deepEqual(artistMixSimilarSource(pools), { id: 1, name: "Sleep Token" });
+  });
+
+  test("are wanted only while plays, the Library and similar artists leave a slot", () => {
+    assert.equal(artistMixNeedsChart({ played: [], library: [] }), true);
+    assert.equal(
+      artistMixNeedsChart({
+        played: [played(1, "Sleep Token", 500)],
+        library: [library(1, "Sleep Token", 20)],
+        similar: [{ of: "Sleep Token", artists: [similar("Erra"), similar("Polaris")] }],
+      }),
+      true,
+    );
+    assert.equal(artistMixNeedsChart({ played: MOST_PLAYED }), false);
+    assert.equal(
+      artistMixNeedsChart({
+        played: [],
+        library: [
+          library(1, "Sleep Token", 20),
+          library(2, "Spiritbox", 10),
+          library(3, "Erra", 9),
+          library(4, "Polaris", 8),
+        ],
+      }),
+      false,
+    );
+  });
+
+  test("on a refresh, pass over the chart artists shown today while others are left", () => {
+    const avoid = {
+      mixes: new Map<string, number>(),
+      artists: new Map([
+        ["henrique & juliano", 1],
+        ["mc ryan sp", 2],
+      ]),
+      songs: new Set<string>(),
+    };
+    const seeds = artistMixSeeds({ played: [], library: [], chart: CHART, avoid }, always(0));
+    assert.deepEqual(seedNames(seeds), [
+      "chart: Marília Mendonça",
+      "chart: Netto Brito",
+      "chart: Zé Vaqueiro",
+      "chart: Henrique & Juliano",
+    ]);
+  });
+
+  test("join the seed pool last", () => {
+    const pool = artistMixSeedPool({
+      played: [played(1, "Sleep Token", 500)],
+      library: [library(1, "Sleep Token", 20)],
+      chart: [chart("Sleep Token"), chart("Erra")],
+    });
+    assert.deepEqual(seedNames(pool), ["plays: Sleep Token", "chart: Erra"]);
   });
 });
