@@ -3,7 +3,13 @@ import { join, resolve } from "node:path";
 import { existsSync } from "node:fs";
 import { test } from "node:test";
 
-import { auditSources, handBuiltArtwork, mobileSources, rowSubscriptions } from "./sourceAudit.mjs";
+import {
+  auditSources,
+  handBuiltArtwork,
+  mobileSources,
+  pressedText,
+  rowSubscriptions,
+} from "./sourceAudit.mjs";
 import {
   ARTWORK_URI_BUILDERS,
   type Exception,
@@ -323,7 +329,9 @@ const sharedReport = (files: Record<string, string>) => {
     handBuiltArtwork: handBuiltArtwork(files)
       .filter((use) => !(use.capability === "literal" && use.owner in ARTWORK_URI_BUILDERS))
       .map((use) => `${use.owner}: ${use.via[0]}`),
-    ownPress: users(PRESS_SEEDS),
+    ownPress: [
+      ...new Set([...users(PRESS_SEEDS), ...pressedText(files).map((use) => use.owner)]),
+    ].toSorted(),
   };
 };
 const shared = sharedReport(sources);
@@ -414,6 +422,9 @@ test("planted offenders fail each shared-component guard, through the real APIs 
     );
     export const Done = ({ onPress }: { onPress: () => void }) => (
       <RN.Pressable onPress={onPress}><RN.Text>Done</RN.Text></RN.Pressable>
+    );
+    export const Link = ({ onPress }: { onPress: () => void }) => (
+      <RN.Text>Read <RN.Text onPress={onPress}>more</RN.Text></RN.Text>
     );`,
   };
   const found = sharedReport(planted);
@@ -431,5 +442,9 @@ test("planted offenders fail each shared-component guard, through the real APIs 
     "planted/Cover.tsx#Cover: `file://${",
     "planted/Cover.tsx#Cover: uri: song.thumbPath ?? undefined",
   ]);
-  assert.deepEqual(found.ownPress, ["planted/Close.tsx#Close", "planted/Close.tsx#Done"]);
+  assert.deepEqual(found.ownPress, [
+    "planted/Close.tsx#Close",
+    "planted/Close.tsx#Done",
+    "planted/Close.tsx#Link",
+  ]);
 });

@@ -1,9 +1,11 @@
 /**
  * The lyrics Wave shows on Android Auto's player screen with the Lyrics
- * toggle in its overflow menu on: the synced line being sung in place of the
- * title, and the next sung line in place of the artist; a line too long for
- * the title takes both. The cover stays.
+ * toggle in its overflow menu on, word by word: the chunk of the synced line
+ * holding the word being sung in place of the title, and what comes next in
+ * place of the artist. The cover stays.
  */
+import { currentLyricWordIndex, karaokeLyricLines } from "./karaoke.ts";
+import { characterCount, textWords, type TextWord } from "./lyricText.ts";
 import { currentLyricIndex, type LyricLine, type Lyrics } from "./lyrics.ts";
 
 export interface AutoLyricLinesInput {
@@ -19,11 +21,12 @@ export interface AutoLyricLinesInput {
 
 /** What the now-playing title and artist show in place of the track's own. */
 export interface AutoLyricsText {
-  /** The line being sung, as the title, or its first half when it is too long. */
+  /** The chunk of the sung line holding the word being sung, as the title. */
   readonly title: string;
   /**
-   * The next sung line, or the second half of a long line, as the artist;
-   * null keeps the track's own artist (on the last line).
+   * What comes next, as the artist: the line's next chunk, or the next sung
+   * line's first; null keeps the track's own artist (on the last chunk of the
+   * last sung line).
    */
   readonly artist: string | null;
 }
@@ -38,45 +41,99 @@ export interface AutoLyricLines {
 const REAL: AutoLyricLines = { text: null, nextChangeMs: null };
 
 /**
- * The longest sung line that goes whole in the title; a longer one splits
- * across the title and the artist. To be tuned once seen in the car.
+ * The longest chunk of a sung line that shows in one field; a longer line
+ * shows in chunks. To be tuned once seen in the car.
  */
 export const AUTO_LYRIC_LINE_MAX = 30;
 
 /** Lines sung together share the one line, joined by this. */
 const TOGETHER = " / ";
 
-/** Splits `line` at the `separator` closest to its middle; null when it has none. */
-const splitAt = (line: string, separator: string): AutoLyricsText | null => {
-  const offCentre = (at: number) => Math.abs(2 * at + separator.length - line.length);
-  let best = -1;
-  for (let at = line.indexOf(separator); at !== -1; at = line.indexOf(separator, at + 1)) {
-    if (best === -1 || offCentre(at) < offCentre(best)) best = at;
+/** A piece of a line that fits a field: its text and the tokens it holds, `[from, to)`. */
+interface Chunk {
+  readonly text: string;
+  readonly from: number;
+  readonly to: number;
+}
+
+/**
+ * [tokens] packed into as few pieces as the limit allows, as even as they can
+ * be: the narrowest width that still needs no more pieces than packing to the
+ * limit does. A word longer than the limit is a piece of its own.
+ */
+const balancedPieces = (tokens: readonly TextWord[]): TextWord[][] => {
+  const pack = (width: number): TextWord[][] => {
+    const pieces: TextWord[][] = [];
+    let length = 0;
+    for (const token of tokens) {
+      const piece = pieces.at(-1);
+      const size = characterCount(token.text);
+      if (piece !== undefined && length + 1 + size <= width) {
+        piece.push(token);
+        length += 1 + size;
+      } else {
+        pieces.push([token]);
+        length = size;
+      }
+    }
+    return pieces;
+  };
+  const fewest = pack(AUTO_LYRIC_LINE_MAX);
+  const total = tokens.reduce((sum, token) => sum + characterCount(token.text), tokens.length - 1);
+  for (let width = Math.ceil(total / fewest.length); width < AUTO_LYRIC_LINE_MAX; width += 1) {
+    const pieces = pack(width);
+    if (pieces.length <= fewest.length) return pieces;
   }
-  if (best === -1) return null;
-  return { title: line.slice(0, best).trim(), artist: line.slice(best + separator.length).trim() };
+  return fewest;
 };
 
 /**
- * A line too long for the title, split across the title and the artist:
- * where lines sung together meet, else at the space closest to its middle.
- * Null for a line that goes whole, short or without a space.
+ * [text] (a line, lines sung together split by line breaks) in chunks of up
+ * to `AUTO_LYRIC_LINE_MAX` characters, broken between words. Each line sung
+ * together is chunked on its own, and the chunks where two of them meet share
+ * a field (`Me / You`) when they fit in one.
  */
-const splitLong = (line: string): AutoLyricsText | null => {
-  if (line.length <= AUTO_LYRIC_LINE_MAX) return null;
-  return line.includes(TOGETHER) ? splitAt(line, TOGETHER) : splitAt(line, " ");
+const chunksOf = (text: string): Chunk[] => {
+  const chunks: Chunk[] = [];
+  let index = 0;
+  for (const part of partsOf(text)) {
+    const pieces = balancedPieces(part).map((piece) => {
+      const from = index;
+      index += piece.length;
+      return { text: piece.map((token) => token.text).join(" "), from, to: index };
+    });
+    const last = chunks.at(-1);
+    const first = pieces[0];
+    if (last !== undefined && first !== undefined) {
+      const joined = last.text + TOGETHER + first.text;
+      if (characterCount(joined) <= AUTO_LYRIC_LINE_MAX) {
+        chunks[chunks.length - 1] = { text: joined, from: last.from, to: first.to };
+        pieces.shift();
+      }
+    }
+    chunks.push(...pieces);
+  }
+  return chunks;
 };
 
-/** A line as shown: lines sung together share the one line. Empty for a pause in the singing. */
-const textOf = (line: LyricLine | undefined): string => line?.text.split("\n").join(TOGETHER) ?? "";
-
-/** The first sung (non-empty) line after `index`; null when there is none. */
-const nextSung = (lines: readonly LyricLine[], index: number): string | null => {
-  for (let at = index + 1; at < lines.length; at += 1) {
-    const text = textOf(lines[at]);
-    if (text !== "") return text;
+/** The words of each line sung together in [text], in order. */
+const partsOf = (text: string): TextWord[][] => {
+  const parts: TextWord[][] = [];
+  let offset = 0;
+  for (const row of text.split("\n")) {
+    const tokens = textWords(row, offset);
+    if (tokens.length > 0) parts.push(tokens);
+    offset += row.length + 1;
   }
-  return null;
+  return parts;
+};
+
+/** The first sung line after `index`; -1 when there is none. */
+const nextSungIndex = (lines: readonly LyricLine[], index: number): number => {
+  for (let at = index + 1; at < lines.length; at += 1) {
+    if (/\S/.test(lines[at]!.text)) return at;
+  }
+  return -1;
 };
 
 /**
@@ -84,10 +141,15 @@ const nextSung = (lines: readonly LyricLine[], index: number): string | null => 
  * toggle on while Auto is connected: the phone's notification and lock screen
  * share the title and artist, so they get the real ones back once Auto
  * disconnects. Only synced lyrics show; before the first line and in a pause
- * between lines (an empty line) the real title and artist do. The artist
- * skips pauses, so the line after a pause is already there; on the last line
- * it is the real artist. A line longer than `AUTO_LYRIC_LINE_MAX` splits
- * across the title and the artist, in place of the next line.
+ * between lines (an empty line) the real title and artist do.
+ *
+ * The sung line shows in chunks of up to `AUTO_LYRIC_LINE_MAX` characters,
+ * broken between words and as even as they can be. The title is the chunk
+ * holding the word being sung (Karaoke's word timings: real where the lyrics
+ * stamp them, estimated elsewhere), and it moves on once the next chunk's
+ * first word starts. The artist is the chunk after it, or on the line's last
+ * chunk the next sung line's first one, skipping pauses; on the last chunk of
+ * the last sung line it is the real artist.
  */
 export const autoLyricLines = ({
   on,
@@ -98,10 +160,32 @@ export const autoLyricLines = ({
   if (!on || !carConnected || lyrics?.kind !== "synced") return REAL;
   const { lines } = lyrics;
   const index = currentLyricIndex(lines, positionMs);
-  const nextChangeMs = lines[index + 1]?.timeMs ?? null;
-  const title = textOf(lines[index]);
-  if (title === "") return { text: null, nextChangeMs };
-  const split = splitLong(title);
-  if (split) return { text: split, nextChangeMs };
-  return { text: { title, artist: nextSung(lines, index) }, nextChangeMs };
+  const lineEndMs = lines[index + 1]?.timeMs ?? null;
+  const line = lines[index];
+  const chunks = line === undefined ? [] : chunksOf(line.text);
+  if (line === undefined || chunks.length === 0) return { text: null, nextChangeMs: lineEndMs };
+  // A line's word timings only need the next line's start.
+  const words = karaokeLyricLines(lines.slice(index, index + 2))[0]!.words;
+  const tokens = partsOf(line.text).flat();
+  const chunkOfWord = words.map((word) => {
+    const token = tokens.findIndex((candidate) => candidate.end > word.start);
+    return chunks.findIndex((chunk) => chunk.to > token);
+  });
+  const chunkAt = (atMs: number): number => chunkOfWord[currentLyricWordIndex(words, atMs)] ?? 0;
+  const shown = chunkAt(positionMs);
+  let nextChangeMs = lineEndMs;
+  // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh copy; Hermes lacks toSorted
+  for (const word of [...words].sort((a, b) => a.timeMs - b.timeMs)) {
+    if (word.timeMs <= positionMs) continue;
+    if (lineEndMs !== null && word.timeMs >= lineEndMs) break;
+    if (chunkAt(word.timeMs) !== shown) {
+      nextChangeMs = word.timeMs;
+      break;
+    }
+  }
+  const next = nextSungIndex(lines, index);
+  const artist =
+    chunks[shown + 1]?.text ??
+    (next === -1 ? null : (chunksOf(lines[next]!.text)[0]?.text ?? null));
+  return { text: { title: chunks[shown]!.text, artist }, nextChangeMs };
 };

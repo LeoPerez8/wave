@@ -1,0 +1,57 @@
+{
+  "meta": {
+    "status": 200
+  },
+  "response": {
+    "hits": [
+      {
+        "type": "song",
+        "result": {
+          "id": 3,
+          "title": "Imagine (Traducción al Español)",
+          "artist_names": "Genius Traducciones al Español",
+          "primary_artist": {
+            "name": "Genius Traducciones al Español"
+          },
+          "url": "https://genius.com/Genius-traducciones-al-espanol-john-lennon-imagine-traduccion-al-espanol-lyrics"
+        }
+      },
+      {
+        "type": "song",
+        "result": {
+          "id": 1,
+          "title": "Imagine",
+          "primary_artist": {
+            "name": "A cover artist"
+          },
+          "url": "https://genius.com/cover-lyrics",
+          "artist_names": "A cover artist"
+        }
+      },
+      {
+        "type": "song",
+        "result": {
+          "id": 10356,
+          "title": "Imagine",
+          "primary_artist": {
+            "name": "John Lennon"
+          },
+          "url": "https://genius.com/John-lennon-imagine-lyrics",
+          "artist_names": "John Lennon"
+        }
+      },
+      {
+        "type": "song",
+        "result": {
+          "id": 2,
+          "title": "Under Pressure",
+          "artist_names": "Queen & David Bowie",
+          "primary_artist": {
+            "name": "Queen"
+          },
+          "url": "https://genius.com/Queen-and-david-bowie-under-pressure-lyrics"
+        }
+      }
+    ]
+  }
+}
