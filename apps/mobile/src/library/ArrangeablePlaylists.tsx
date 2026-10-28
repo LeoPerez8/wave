@@ -1,7 +1,14 @@
 import { IconGripVertical } from "@tabler/icons-react-native";
 import { playlistFindText, type PlaylistFindText, type PlaylistLayout } from "@wave/core";
 import { useScrollToTop } from "expo-router";
-import { useLayoutEffect, useRef, useState, type ReactElement, type ReactNode, type RefObject } from "react";
+import {
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactElement,
+  type ReactNode,
+  type RefObject,
+} from "react";
 import { useWindowDimensions, View, type ScrollViewInstance } from "react-native";
 import { GestureDetector } from "react-native-gesture-handler";
 import Animated from "react-native-reanimated";
