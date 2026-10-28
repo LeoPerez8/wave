@@ -5,6 +5,9 @@ import { AUTO_LYRIC_LINE_MAX, autoLyricLines, parseLyrics } from "./index.ts";
 
 const synced = parseLyrics("[00:02.00]One\n[00:05.00]Two\n[00:09.00]Three");
 
+/** Fourteen 4-letter words: too long for two chunks. */
+const THREE_CHUNKS = "Here come your dark days back from that cold room down into your arms";
+
 const showing = { on: true, carConnected: true } as const;
 
 /** The track's own title and artist, for good. */
@@ -84,21 +87,97 @@ describe("autoLyricLines", () => {
     });
   });
 
-  test("a line longer than the limit splits at the space closest to its middle, title then artist", () => {
-    const long = parseLyrics("[00:02.00]Hold me closer tiny dancer in the night\n[00:05.00]Next");
+  test("a long line shows a chunk at a time: the title holds the word being sung, the artist the chunk after it", () => {
+    // 32 letters over the 4 s to the next line, so "dancer" (16 letters in) starts at 4 s.
+    const long = parseLyrics("[00:02.00]Hold me closer tiny dancer in the night\n[00:06.00]Next");
     assert.deepEqual(autoLyricLines({ ...showing, lyrics: long, positionMs: 3_000 }), {
       text: { title: "Hold me closer tiny", artist: "dancer in the night" },
-      nextChangeMs: 5_000,
+      nextChangeMs: 4_000,
     });
   });
 
-  test("splitting a long line trims spaces left by stripped word timestamps", () => {
+  test("real word timings move the title on when the next chunk's first stamped word starts", () => {
+    // An estimate would start "dancer" at 5 s; its stamp says 4.5 s.
     const lyrics = parseLyrics(
-      "[00:02.00]Hold me closer tiny <00:03.00>  dancer in the night\n[00:05.00]Next",
+      "[00:02.00]<00:02.00>Hold me closer tiny <00:04.50>  dancer in the night\n[00:08.00]Next",
+    );
+    assert.deepEqual(autoLyricLines({ ...showing, lyrics, positionMs: 4_000 }), {
+      text: { title: "Hold me closer tiny", artist: "dancer in the night" },
+      nextChangeMs: 4_500,
+    });
+    assert.deepEqual(autoLyricLines({ ...showing, lyrics, positionMs: 4_500 }), {
+      text: { title: "dancer in the night", artist: "Next" },
+      nextChangeMs: 8_000,
+    });
+  });
+
+  test("a line needing three chunks gets three even ones, each taking the title as its first word is sung", () => {
+    // Fourteen 4-letter words (56 letters) over the 8 s cap: a word every 571 ms.
+    const lyrics = parseLyrics(`[00:10.00]${THREE_CHUNKS}\n[00:40.00]Next`);
+    assert.deepEqual(autoLyricLines({ ...showing, lyrics, positionMs: 10_000 }), {
+      text: { title: "Here come your dark days", artist: "back from that cold room" },
+      nextChangeMs: 12_857,
+    });
+    assert.deepEqual(autoLyricLines({ ...showing, lyrics, positionMs: 12_857 }), {
+      text: { title: "back from that cold room", artist: "down into your arms" },
+      nextChangeMs: 15_714,
+    });
+    assert.deepEqual(autoLyricLines({ ...showing, lyrics, positionMs: 15_714 }), {
+      text: { title: "down into your arms", artist: "Next" },
+      nextChangeMs: 40_000,
+    });
+  });
+
+  test("on the last chunk of the last sung line the artist is the real one, to the end of the track", () => {
+    const lyrics = parseLyrics(`[00:10.00]${THREE_CHUNKS}`);
+    assert.deepEqual(autoLyricLines({ ...showing, lyrics, positionMs: 13_000 }), {
+      text: { title: "back from that cold room", artist: "down into your arms" },
+      nextChangeMs: 15_714,
+    });
+    assert.deepEqual(autoLyricLines({ ...showing, lyrics, positionMs: 200_000 }), {
+      text: { title: "down into your arms", artist: null },
+      nextChangeMs: null,
+    });
+  });
+
+  test("a seek either way shows the chunk being sung at the new position", () => {
+    const lyrics = parseLyrics(`[00:10.00]${THREE_CHUNKS}\n[00:40.00]Next`);
+    for (const [positionMs, title] of [
+      [16_000, "down into your arms"],
+      [11_000, "Here come your dark days"],
+      [13_500, "back from that cold room"],
+    ] as const) {
+      assert.equal(autoLyricLines({ ...showing, lyrics, positionMs }).text?.title, title);
+    }
+  });
+
+  test("after a line's last chunk the artist is the next sung line's first chunk, past a pause", () => {
+    const lyrics = parseLyrics(
+      "[00:02.00]One\n[00:04.00]\n[00:10.00]Hold me closer tiny dancer in the night",
     );
     assert.deepEqual(autoLyricLines({ ...showing, lyrics, positionMs: 3_000 }), {
+      text: { title: "One", artist: "Hold me closer tiny" },
+      nextChangeMs: 4_000,
+    });
+  });
+
+  test("before a line's first stamped word, the title is its first chunk", () => {
+    const lyrics = parseLyrics(
+      "[00:02.00]<00:03.00>Hold me closer tiny <00:04.50>dancer in the night\n[00:08.00]Next",
+    );
+    assert.deepEqual(autoLyricLines({ ...showing, lyrics, positionMs: 2_500 }), {
       text: { title: "Hold me closer tiny", artist: "dancer in the night" },
-      nextChangeMs: 5_000,
+      nextChangeMs: 4_500,
+    });
+  });
+
+  test("a word longer than the limit is a chunk of its own; Auto cuts it with an ellipsis", () => {
+    const lyrics = parseLyrics(
+      "[00:02.00]<00:02.00>Supercalifragilisticexpialidocious <00:04.00>is the word\n[00:08.00]Next",
+    );
+    assert.deepEqual(autoLyricLines({ ...showing, lyrics, positionMs: 3_000 }), {
+      text: { title: "Supercalifragilisticexpialidocious", artist: "is the word" },
+      nextChangeMs: 4_000,
     });
   });
 
@@ -112,13 +191,18 @@ describe("autoLyricLines", () => {
     });
   });
 
-  test("long lines sung together split where one ends and the other starts", () => {
+  test("long lines sung together each take their own chunk, in the order they're sung", () => {
+    // 34 letters over 3 s: "We" (11 letters in) starts at 2.971 s.
     const duet = parseLyrics(
       "[00:02.00]Running away\n[00:02.00]We will never come back here\n[00:05.00]Next",
     );
-    assert.deepEqual(autoLyricLines({ ...showing, lyrics: duet, positionMs: 3_000 }).text, {
-      title: "Running away",
-      artist: "We will never come back here",
+    assert.deepEqual(autoLyricLines({ ...showing, lyrics: duet, positionMs: 2_500 }), {
+      text: { title: "Running away", artist: "We will never come back here" },
+      nextChangeMs: 2_971,
+    });
+    assert.deepEqual(autoLyricLines({ ...showing, lyrics: duet, positionMs: 3_000 }), {
+      text: { title: "We will never come back here", artist: "Next" },
+      nextChangeMs: 5_000,
     });
   });
 

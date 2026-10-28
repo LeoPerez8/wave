@@ -2,7 +2,7 @@
  * Keeps the lyrics Wave shows as the title and artist on Android Auto's
  * player screen in time with the song. Core's `autoLyricLines` decides what shows; this reads the playing
  * track's lyrics, asks it at each position report, seek and toggle change,
- * and wakes up again when the next line is due. Kept free of Expo so it runs
+ * and wakes up again when the next chunk of words is due. Kept free of Expo so it runs
  * under plain Node tests.
  */
 import { autoLyricLines, extrapolatePosition, type AutoLyricsText, type Lyrics } from "@wave/core";
