@@ -13,7 +13,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { afterFirstSettled, touchEnded, touchStarted, touchTakenOver } from "@/lib/backgroundWork";
-import { followLibraryLookupSummary } from "@/library/findLyricsAndGenre";
+import { followFixSongsSummary } from "@/library/findLyricsAndGenre";
 import { useAllFilesAccess } from "@/library/hooks";
 import { resumePlaylistImports } from "@/library/playlistImports";
 import { resumeYtLibraryImport } from "@/library/ytLibraryImport";
@@ -97,7 +97,7 @@ export default function RootLayout() {
   useEffect(() => startMediumCovers(), []);
 
   // A whole-Library lyrics and genre run that ended in the background says how it went.
-  useEffect(() => afterFirstSettled("lookupSummary", followLibraryLookupSummary), []);
+  useEffect(() => afterFirstSettled("lookupSummary", followFixSongsSummary), []);
 
   return (
     <GestureHandlerRootView

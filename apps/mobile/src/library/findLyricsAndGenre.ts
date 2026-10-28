@@ -1,9 +1,10 @@
 /**
  * Fix Song as the owner starts it: on songs from a menu or the selection bar,
- * or on the whole Library from Settings, in the background (a foreground
- * service, `WaveLibraryLookup`) with progress and Cancel in Settings and in a
- * notification. Each works only on the songs missing something (Core's
- * `songsToFix`) and ends with a toast of Core's summary (`tagLookupsToast`).
+ * or on the whole Library from Settings. Every run goes on in the background
+ * (a foreground service, `WaveLibraryLookup`) with progress and Cancel in
+ * Settings and in a notification, one at a time: songs started while one runs
+ * join it. Each works only on the songs missing something (Core's
+ * `songsToFix`) and ends with Core's summary (`tagLookupsToast`) on a toast.
  */
 import {
   describeTagLookups,
@@ -25,40 +26,102 @@ import { AppState } from "react-native";
 import { askForNotifications } from "@/lib/askForNotifications";
 import { makeExternalStore } from "@/lib/externalStore";
 import { persistedSetting } from "@/lib/persistedSetting";
+import { appLog } from "@/log/appLog";
 import { WaveLibraryLookup } from "@/native/waveLibraryLookup";
 import { showToast } from "@/overlay/toast";
 
-import { LibraryStore, type LibraryLookupSong } from "./LibraryStore";
+import { LibraryStore } from "./LibraryStore";
 import { fixEachSong, LookupsOff, type TaggableSong } from "./lyricsAndGenre";
 import { appRuntime } from "./runtime";
 
 type Result = { readonly title: string; readonly outcome: SongTagOutcome };
 
-/** Runs Fix Song on [songs], collecting results; resolves how the run ended. */
-const run = async <S extends TaggableSong>(
-  songs: readonly S[],
-  results: Result[],
-  onResult: () => void,
-  signal?: AbortSignal,
-): Promise<{ readonly stop: TagLookupStop | undefined; readonly error: unknown }> => {
+const TAG = "WaveLookup";
+
+/**
+ * The Fix Songs run going on: its songs in order (a Fix Songs started while
+ * it runs adds its own at the end), the files it was given (fixed or
+ * skipped), the results so far, how many songs it skipped as having
+ * everything, and its Cancel.
+ */
+interface FixRun {
+  readonly songs: TaggableSong[];
+  readonly given: Set<string>;
+  readonly results: Result[];
+  skipped: number;
+  readonly controller: AbortController;
+}
+
+let fixRun: FixRun | null = null;
+/** Settles when the last run has ended: a cancelled one winds down before the next starts. */
+let runEnded: Promise<void> = Promise.resolve();
+
+/** How a run ended: why it stopped early, or what failed it. */
+interface RunOutcome {
+  readonly stop: TagLookupStop | undefined;
+  readonly error: unknown;
+}
+
+/** The run's progress, for Settings: idle, or [done] of [total] songs. */
+export type FixSongsRunState =
+  | { readonly status: "idle" }
+  | { readonly status: "running"; readonly done: number; readonly total: number };
+
+const runState = makeExternalStore<FixSongsRunState>({ status: "idle" });
+
+/** The Fix Songs run's progress; re-renders as songs are done. */
+export const useFixSongsRun = (): FixSongsRunState =>
+  useSyncExternalStore(runState.subscribe, runState.get);
+
+/** Shows how far [run] is in Settings and in the notification. */
+const showProgress = (run: FixRun): void => {
+  const done = run.results.length;
+  const total = run.songs.length;
+  runState.set({ status: "running", done, total });
+  const { title, detail } = libraryLookupProgress(done, total);
+  WaveLibraryLookup.progress(title, detail, done, total);
+};
+
+/** The songs [run] hasn't done yet. */
+const left = (run: FixRun): number => run.songs.length - run.results.length;
+
+/**
+ * Runs Fix Song on the songs [run] hasn't done yet, collecting results. Songs
+ * joining meanwhile wait for the next pass (`fixAll`).
+ */
+const pass = async (run: FixRun): Promise<RunOutcome> => {
   const exit = await appRuntime.runPromiseExit(
-    fixEachSong(songs, (song, outcome) => {
-      results.push({ title: song.title, outcome });
-      onResult();
+    fixEachSong(run.songs.slice(run.results.length), (song, outcome) => {
+      run.results.push({ title: song.title, outcome });
+      showProgress(run);
     }),
-    signal === undefined ? undefined : { signal },
+    { signal: run.controller.signal },
   );
-  const left = songs.length - results.length;
   if (Exit.isSuccess(exit))
     return {
-      stop: exit.value === "unreachable" ? { stopped: "unreachable", left } : undefined,
+      stop: exit.value === "unreachable" ? { stopped: "unreachable", left: left(run) } : undefined,
       error: undefined,
     };
   const error = Cause.squash(exit.cause);
   // Cancel, or Settings turning lookups off halfway: the songs left aren't looked up.
   if (Cause.hasInterruptsOnly(exit.cause) || error instanceof LookupsOff)
-    return { stop: { stopped: "cancelled", left }, error: undefined };
+    return { stop: { stopped: "cancelled", left: left(run) }, error: undefined };
   return { stop: undefined, error };
+};
+
+/**
+ * Fixes [run]'s songs until all are done or it stops, a pass at a time: each
+ * takes the songs that joined during the one before.
+ */
+const fixAll = async (run: FixRun): Promise<RunOutcome> => {
+  while (left(run) > 0) {
+    // Cancelled while its songs were picked, or between passes.
+    if (run.controller.signal.aborted)
+      return { stop: { stopped: "cancelled", left: left(run) }, error: undefined };
+    const outcome = await pass(run);
+    if (outcome.stop !== undefined || outcome.error !== undefined) return outcome;
+  }
+  return { stop: undefined, error: undefined };
 };
 
 const failedSummary = (error: unknown): LibraryLookupSummary => {
@@ -67,48 +130,30 @@ const failedSummary = (error: unknown): LibraryLookupSummary => {
 };
 
 /**
- * How a run ended: why it stopped early, what failed it, and how many songs
- * it skipped as already having everything a lookup finds.
- */
-interface RunOutcome {
-  readonly stop: TagLookupStop | undefined;
-  readonly error: unknown;
-  readonly skipped?: number;
-}
-
-/**
- * How a run went, in full and as its toast says it: Core's summary, or what
+ * How [run] went, in full and as its toast says it: Core's summary, or what
  * went wrong when the run failed before anything was looked up.
  */
-const summarize = (results: readonly Result[], outcome: RunOutcome): LibraryLookupSummary =>
-  outcome.error !== undefined && results.length === 0
+const summarize = (run: FixRun, outcome: RunOutcome): LibraryLookupSummary =>
+  outcome.error !== undefined && run.results.length === 0
     ? failedSummary(outcome.error)
     : {
-        ...describeTagLookups(results, outcome.stop, outcome.skipped),
-        toast: tagLookupsToast(results, outcome.stop, outcome.skipped),
+        ...describeTagLookups(run.results, outcome.stop, run.skipped),
+        toast: tagLookupsToast(run.results, outcome.stop, run.skipped),
       };
 
 /**
- * Fix Song on songs from a long-press menu or the selection bar: those
- * missing something are looked up one after another in the background, what
- * they lack is written, and a toast says how it went (Core's
- * `tagLookupsToast`, counting the songs skipped as having everything).
+ * Adds those of [songs] Fix Song can do something for that [run] doesn't hold
+ * yet to it, counting the others as skipped; resolves how many it added.
  */
-export const fixSongs = async (songs: readonly TaggableSong[]): Promise<void> => {
-  const { fix, skipped } = songsToFix(songs);
-  if (fix.length === 0) return;
-  const results: Result[] = [];
-  const outcome = await run(fix, results, () => {});
-  await showToast(summarize(results, { ...outcome, skipped }).toast);
+const join = (run: FixRun, songs: readonly TaggableSong[]): number => {
+  const { fix, skipped } = songsToFix(songs, run.given);
+  for (const song of songs) run.given.add(song.path);
+  // One push at a time: spreading a whole Library's songs into one call can overflow the stack.
+  for (const song of fix) run.songs.push(song);
+  run.skipped += skipped;
+  if (fix.length > 0) showProgress(run);
+  return fix.length;
 };
-
-/** The Library-wide run, for Settings: its progress while it runs. */
-export type LibraryLookupState =
-  | { readonly status: "idle" }
-  | { readonly status: "running"; readonly done: number; readonly total: number };
-
-const libraryLookup = makeExternalStore<LibraryLookupState>({ status: "idle" });
-let libraryRun: AbortController | null = null;
 
 /**
  * The run's end summary, kept until the owner has seen it in Wave: a run that
@@ -121,88 +166,101 @@ const unseenSummary = persistedSetting<LibraryLookupSummary | null>({
 });
 
 // Cancel in the run's notification.
-WaveLibraryLookup.addListener("onCancel", () => cancelLibraryLookup());
-
-/** The Library-wide run's progress; re-renders as songs are done. */
-export const useLibraryLookup = (): LibraryLookupState =>
-  useSyncExternalStore(libraryLookup.subscribe, libraryLookup.get);
-
-/** Shows [done] of [total] in Settings and in the notification. */
-const showProgress = (done: number, total: number): void => {
-  libraryLookup.set({ status: "running", done, total });
-  const { title, detail } = libraryLookupProgress(done, total);
-  WaveLibraryLookup.progress(title, detail, done, total);
-};
+WaveLibraryLookup.addListener("onCancel", () => cancelFixSongs());
 
 /**
- * Fix Song on [songs] (the caller picks them from the Library), showing
- * progress over them as it goes; [signal] cancels. Resolves the end summary,
- * which counts [skipped] songs the caller left out as already having everything.
+ * Starts a run on the songs [pick] resolves, [from] where (for the log), in
+ * the background: a foreground service with a progress notification and
+ * Cancel keeps it going with Wave in the background and the screen off.
+ * Fix Songs started meanwhile join it. Ends with the updated / not found /
+ * failed summary and the songs skipped as having everything, in a
+ * notification and in Wave (now, or when Wave is next on screen:
+ * `followFixSongsSummary`).
  */
-const lookUpLibrary = async (
-  songs: readonly LibraryLookupSong[],
-  skipped: number,
-  signal: AbortSignal,
-): Promise<LibraryLookupSummary> => {
-  const results: Result[] = [];
-  showProgress(0, songs.length);
-  const outcome = signal.aborted
-    ? { stop: { stopped: "cancelled", left: songs.length } as const, error: undefined }
-    : await run(songs, results, () => showProgress(results.length, songs.length), signal);
-  return summarize(results, { ...outcome, skipped });
-};
-
-/**
- * Fix Song on the songs in the Library missing lyrics, a genre, a track
- * number, a year or a checked explicit flag (Core's `songsToFix`) in the background: a
- * foreground service with a progress notification and Cancel keeps it going
- * with Wave in the background and the screen off. Settings follows it with
- * `useLibraryLookup`; `cancelLibraryLookup` stops it. Ends with the updated /
- * not found / failed summary and the songs skipped as having all five, in a notification and
- * in Wave (now, or when Wave is next on screen: `followLibraryLookupSummary`).
- * Does nothing while one runs.
- */
-export const startLibraryLookup = async (): Promise<void> => {
-  if (libraryRun !== null) return;
-  const controller = new AbortController();
-  libraryRun = controller;
+const startRun = async (
+  from: string,
+  pick: () => Promise<readonly TaggableSong[]>,
+): Promise<void> => {
+  let ended!: () => void;
+  runEnded = new Promise((resolve) => {
+    ended = resolve;
+  });
+  const run: FixRun = {
+    songs: [],
+    given: new Set(),
+    results: [],
+    skipped: 0,
+    controller: new AbortController(),
+  };
+  fixRun = run;
   askForNotifications();
-  libraryLookup.set({ status: "running", done: 0, total: 0 });
+  runState.set({ status: "running", done: 0, total: 0 });
   let summary: LibraryLookupSummary;
   try {
     const { title, detail } = libraryLookupProgress(0, 0);
     WaveLibraryLookup.start(title, detail);
-    const { fix: songs, skipped } = songsToFix(
-      await appRuntime.runPromise(
-        Effect.gen(function* () {
-          return yield* (yield* LibraryStore).listLibraryLookupSongs;
-        }),
-      ),
-    );
-    summary = await lookUpLibrary(songs, skipped, controller.signal);
+    const added = join(run, await pick());
+    appLog("info", TAG, `Fix Songs started on ${added} songs from ${from}`);
+    summary = summarize(run, await fixAll(run));
   } catch (error) {
     summary = failedSummary(error);
   }
-  libraryLookup.set({ status: "idle" });
-  libraryRun = null;
+  runState.set({ status: "idle" });
+  fixRun = null;
+  appLog("info", TAG, `Fix Songs ended: ${summary.toast}`);
   unseenSummary.set(summary);
   WaveLibraryLookup.end(summary.title, summary.message);
-  await showUnseenLibraryLookupSummary();
+  ended();
+  await showUnseenFixSongsSummary();
 };
 
-/** Stops the Library-wide run; songs done so far keep what was written. */
-export const cancelLibraryLookup = (): void => {
-  libraryRun?.abort();
+/**
+ * Fix Song on songs from a long-press menu or the selection bar, in the
+ * background: those missing something (Core's `songsToFix`) are looked up
+ * one after another, and what they lack is written. With a run going on,
+ * they join it. With none missing anything, nothing runs.
+ */
+export const fixSongs = async (songs: readonly TaggableSong[]): Promise<void> => {
+  if (fixRun !== null && !fixRun.controller.signal.aborted) {
+    const added = join(fixRun, songs);
+    if (added > 0) appLog("info", TAG, `Fix Songs added ${added} songs to the run`);
+    return;
+  }
+  if (songsToFix(songs).fix.length === 0) return;
+  // A cancelled run winds down first; one started meanwhile takes these songs.
+  await runEnded;
+  if (fixRun !== null) return fixSongs(songs);
+  await startRun("a menu", async () => songs);
+};
+
+/**
+ * Fix Song on the songs in the Library missing lyrics, a genre, a track
+ * number, a year or a checked explicit flag (Core's `songsToFix`), in the
+ * background. Does nothing while a run goes on.
+ */
+export const startLibraryLookup = async (): Promise<void> => {
+  if (fixRun !== null) return;
+  await startRun("the whole Library", () =>
+    appRuntime.runPromise(
+      Effect.gen(function* () {
+        return yield* (yield* LibraryStore).listLibraryLookupSongs;
+      }),
+    ),
+  );
+};
+
+/** Stops the run; songs done so far keep what was written. */
+export const cancelFixSongs = (): void => {
+  fixRun?.controller.abort();
 };
 
 let showingSummary = false;
 
 /**
- * Shows the last Library-wide run's summary as a toast when the owner hasn't
- * seen it yet and Wave is on screen; once the toast has gone, its
- * notification goes too.
+ * Shows the last run's summary as a toast when the owner hasn't seen it yet
+ * and Wave is on screen; once the toast has gone, its notification goes too.
  */
-const showUnseenLibraryLookupSummary = async (): Promise<void> => {
+const showUnseenFixSongsSummary = async (): Promise<void> => {
   const summary = unseenSummary.get();
   if (summary === null || showingSummary || AppState.currentState !== "active") return;
   showingSummary = true;
@@ -212,7 +270,7 @@ const showUnseenLibraryLookupSummary = async (): Promise<void> => {
     showingSummary = false;
   }
   // A run that ended while this summary showed shows its own next.
-  if (unseenSummary.get() !== summary) return showUnseenLibraryLookupSummary();
+  if (unseenSummary.get() !== summary) return showUnseenFixSongsSummary();
   unseenSummary.set(null);
   WaveLibraryLookup.dismissSummary();
 };
@@ -220,13 +278,13 @@ const showUnseenLibraryLookupSummary = async (): Promise<void> => {
 let summaryOnReturn: { remove: () => void } | null = null;
 
 /**
- * Shows the summary of a Library-wide run the owner hasn't seen (it ended with
- * Wave in the background or closed) now, and whenever Wave comes back to the
- * foreground. Safe to call repeatedly.
+ * Shows the summary of a run the owner hasn't seen (it ended with Wave in the
+ * background or closed) now, and whenever Wave comes back to the foreground.
+ * Safe to call repeatedly.
  */
-export const followLibraryLookupSummary = (): void => {
-  void showUnseenLibraryLookupSummary();
+export const followFixSongsSummary = (): void => {
+  void showUnseenFixSongsSummary();
   summaryOnReturn ??= AppState.addEventListener("change", (state) => {
-    if (state === "active") void showUnseenLibraryLookupSummary();
+    if (state === "active") void showUnseenFixSongsSummary();
   });
 };

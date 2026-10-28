@@ -12,7 +12,7 @@ import * as Result from "effect/Result";
 import { useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 
-import { useLibraryLookup } from "@/library/findLyricsAndGenre";
+import { useFixSongsRun } from "@/library/findLyricsAndGenre";
 import { useScanRoots, useScanStatus } from "@/library/hooks";
 import { WaveAccount } from "@/native/waveAccount";
 import { WaveSpotify } from "@/native/waveSpotify";
@@ -78,7 +78,7 @@ const useAccountsSummary = (): string | null => {
 export const useSettingsSummaries = (): Record<SettingsPage, string | null> => {
   const roots = useScanRoots();
   const scanning = useScanStatus() === "scanning";
-  const lookup = useLibraryLookup();
+  const lookup = useFixSongsRun();
   const accounts = useAccountsSummary();
   // Counts only: building the failed or queued lists here froze Settings with hundreds of songs.
   const downloads = useDownloadCounts();
