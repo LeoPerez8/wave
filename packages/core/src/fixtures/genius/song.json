@@ -1,0 +1,14 @@
+{
+  "meta": { "status": 200 },
+  "response": {
+    "song": {
+      "id": 10356,
+      "title": "Imagine",
+      "url": "https://genius.com/John-lennon-imagine-lyrics",
+      "primary_artist": { "name": "John Lennon" },
+      "description": {
+        "plain": "A song about imagining a peaceful world.\n\nThis is synthetic fixture text."
+      }
+    }
+  }
+}

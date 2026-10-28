@@ -215,7 +215,9 @@ export type {
 export { resolveRowSwipe, rowSwipeArmed } from "./rowGestures.ts";
 export type { RowSwipeSide, RowSwipeSides } from "./rowGestures.ts";
 export { currentLyricIndex, parseLyrics, pickLyrics } from "./lyrics.ts";
-export type { LyricLine, Lyrics, LyricsSources } from "./lyrics.ts";
+export type { LyricLine, LyricWord, Lyrics, LyricsSources } from "./lyrics.ts";
+export { currentLyricWordIndex, karaokeLyricLines } from "./karaoke.ts";
+export type { KaraokeLyricLine } from "./karaoke.ts";
 export { AUTO_LYRIC_LINE_MAX, autoLyricLines } from "./autoLyricLines.ts";
 export type { AutoLyricLines, AutoLyricLinesInput, AutoLyricsText } from "./autoLyricLines.ts";
 export {
@@ -2151,3 +2153,31 @@ export {
   syncTriggers,
 } from "./syncTriggers.ts";
 export type { SyncClock, SyncTriggers, SyncTriggersInput } from "./syncTriggers.ts";
+export {
+  GENIUS_MISS_MS,
+  geniusCandidates,
+  geniusDescription,
+  geniusSearchUrl,
+  geniusSongUrl,
+  pickGeniusSong,
+  savedGenius,
+  storedGenius,
+} from "./genius.ts";
+export type { GeniusHit, GeniusMatch, SavedGenius } from "./genius.ts";
+export {
+  GENIUS_REFERENTS_MAX_PAGES,
+  GENIUS_REFERENTS_PER_PAGE,
+  geniusLineSegments,
+  geniusReferentsPage,
+  geniusReferentsUrl,
+  geniusSection,
+  placeGeniusReferents,
+} from "./geniusAnnotations.ts";
+export type {
+  GeniusAnnotation,
+  GeniusAnnotationState,
+  GeniusHighlight,
+  GeniusLineSegment,
+  GeniusPlacement,
+  GeniusReferent,
+} from "./geniusAnnotations.ts";

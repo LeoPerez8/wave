@@ -10,6 +10,7 @@ import "@/settings/artistPhotos";
 import "@/settings/bestQuality";
 import "@/settings/bounceAmount";
 import "@/settings/dontPlayExplicit";
+import "@/settings/genius";
 import "@/settings/glass";
 import "@/settings/longPressDelay";
 import "@/settings/lyricsAndGenre";

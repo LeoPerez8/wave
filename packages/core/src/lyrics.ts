@@ -3,10 +3,27 @@
  * plain text (unsynced lyrics).
  */
 
+import { textWords } from "./lyricText.ts";
+
+/** A timed word (or a syllable a stamp splits off), placed in its line's stamp-free text. */
+export interface LyricWord {
+  /** When it starts being sung. */
+  readonly timeMs: number;
+  readonly text: string;
+  /** Its UTF-16 offsets in the line's `text`: `text.slice(start, end)` is the word. */
+  readonly start: number;
+  readonly end: number;
+}
+
 /** One synced line: shown from `timeMs` until the next line's time. */
 export interface LyricLine {
   readonly timeMs: number;
   readonly text: string;
+  /**
+   * Its words as Enhanced LRC's `<mm:ss.xx>` stamps time them; absent on a
+   * line without stamps (`karaokeLyricLines` estimates those).
+   */
+  readonly words?: readonly LyricWord[];
 }
 
 export type Lyrics =
@@ -17,7 +34,7 @@ export type Lyrics =
 /** `[mm:ss]`, `[mm:ss.x]`, `[mm:ss.xx]` or `[mm:ss.xxx]`; some taggers use `:` or `,` for the dot. */
 const STAMP = /^\[(\d+):(\d{1,2})(?:[.:,](\d{1,3}))?\]/;
 /** Enhanced LRC's per-word timings, `<mm:ss.xx>`. */
-const WORD_STAMP = /<\d+:\d{1,2}(?:[.:,]\d{1,3})?>/g;
+const WORD_STAMP = /<(\d+):(\d{1,2})(?:[.:,](\d{1,3}))?>/g;
 /** `[offset:+500]`: shifts every line, in ms; positive shows lines earlier. */
 const OFFSET = /^\[offset:\s*([+-]?\d+)\s*\]/i;
 /** LRC header tags; only these keys, so section labels like `[Chorus: Jay-Z]` stay lyrics. */
@@ -29,6 +46,35 @@ const trimBlankEdges = (rows: readonly string[]): string[] => {
   while (start < end && rows[start] === "") start += 1;
   while (end > start && rows[end - 1] === "") end -= 1;
   return rows.slice(start, end);
+};
+
+/** A `<mm:ss.xx>` word stamp's time, in ms. */
+const wordStampMs = ([, minutes = "0", seconds = "0", fraction = "0"]: RegExpMatchArray): number =>
+  Number(minutes) * 60_000 + Number(seconds) * 1000 + Number(fraction.padEnd(3, "0"));
+
+/**
+ * The words of [rest] (a row after its line stamps) timed by its Enhanced LRC
+ * word stamps, at their places in the stamp-free text; null when it has none.
+ * Words before the first stamp start with the line, at [lineMs].
+ */
+const stampedWords = (rest: string, lineMs: number): LyricWord[] | null => {
+  const stamps = [...rest.matchAll(WORD_STAMP)];
+  if (stamps.length === 0) return null;
+  const clean = rest.replace(WORD_STAMP, "");
+  // The shown text is trimmed, so offsets count from its first character.
+  let at = -(clean.length - clean.trimStart().length);
+  let timeMs = lineMs;
+  let from = 0;
+  const words: LyricWord[] = [];
+  for (const stamp of [...stamps, null]) {
+    const segment = rest.slice(from, stamp?.index ?? rest.length);
+    for (const word of textWords(segment, at)) words.push({ timeMs, ...word });
+    if (stamp === null) break;
+    at += segment.length;
+    timeMs = wordStampMs(stamp);
+    from = stamp.index + stamp[0].length;
+  }
+  return words.length > 0 ? words : null;
 };
 
 /** Parses lyrics text: LRC with timestamps is synced, anything else is plain text. */
@@ -53,7 +99,20 @@ export const parseLyrics = (text: string): Lyrics => {
       rest = rest.slice(stamp.length);
     }
     const words = rest.replace(WORD_STAMP, "").trim();
-    for (const timeMs of times) lines.push({ timeMs, text: words });
+    const timed = times.length > 0 ? stampedWords(rest, times[0]!) : null;
+    for (const timeMs of times) {
+      // A repeated line's word stamps are written for its first time.
+      const shift = timeMs - times[0]!;
+      lines.push(
+        timed === null
+          ? { timeMs, text: words }
+          : {
+              timeMs,
+              text: words,
+              words: timed.map((word) => ({ ...word, timeMs: word.timeMs + shift })),
+            },
+      );
+    }
   }
   if (lines.length === 0) {
     const plain = trimBlankEdges(rows);
@@ -62,6 +121,14 @@ export const parseLyrics = (text: string): Lyrics => {
   const shifted = lines.map((line) => ({
     timeMs: Math.max(0, line.timeMs - offsetMs),
     text: line.text,
+    ...(line.words
+      ? {
+          words: line.words.map((word) => ({
+            ...word,
+            timeMs: Math.max(0, word.timeMs - offsetMs),
+          })),
+        }
+      : {}),
   }));
   // Stable, so lines sharing a time keep the order they were written in.
   shifted.sort((a, b) => a.timeMs - b.timeMs);
@@ -70,7 +137,21 @@ export const parseLyrics = (text: string): Lyrics => {
     const previous = merged.at(-1);
     if (previous?.timeMs === line.timeMs) {
       const joined = [previous.text, line.text].filter((part) => part !== "").join("\n");
-      merged[merged.length - 1] = { timeMs: line.timeMs, text: joined };
+      // The later line's words move past the earlier text and the line break.
+      const shift = previous.text === "" ? 0 : previous.text.length + 1;
+      const words = [
+        ...(previous.words ?? []),
+        ...(line.words ?? []).map((word) => ({
+          ...word,
+          start: word.start + shift,
+          end: word.end + shift,
+        })),
+      ];
+      merged[merged.length - 1] = {
+        timeMs: line.timeMs,
+        text: joined,
+        ...(words.length ? { words } : {}),
+      };
     } else {
       merged.push(line);
     }

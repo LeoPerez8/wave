@@ -62,6 +62,21 @@ describe("startAutoLyricLines", () => {
     assert.deepEqual(shown.at(-1), { title: "Two", artist: "Three" });
   });
 
+  test("a long line's next chunk takes the title when its first word is sung", async () => {
+    // 32 letters over the 4 s to the next line: "dancer" (16 letters in) starts at 4 s.
+    lyricsByPath.set(
+      "/music/a.flac",
+      parseLyrics("[00:02.00]Hold me closer tiny dancer in the night\n[00:06.00]Next"),
+    );
+    const { sync } = start(playing("a", 3_000));
+    sync.setToggle({ on: true, carConnected: true });
+    await settle();
+    assert.deepEqual(shown.at(-1), { title: "Hold me closer tiny", artist: "dancer in the night" });
+
+    mock.timers.tick(1_000);
+    assert.deepEqual(shown.at(-1), { title: "dancer in the night", artist: "Next" });
+  });
+
   test("position reports within a line send nothing new, so Auto isn't flooded", async () => {
     const { playback, sync } = start(playing("a", 6_000));
     sync.setToggle({ on: true, carConnected: true });
