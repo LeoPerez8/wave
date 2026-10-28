@@ -1,7 +1,7 @@
 import { IconGripVertical } from "@tabler/icons-react-native";
 import { playlistFindText, type PlaylistFindText, type PlaylistLayout } from "@wave/core";
 import { useScrollToTop } from "expo-router";
-import { useLayoutEffect, useRef, type ReactElement, type ReactNode, type RefObject } from "react";
+import { useLayoutEffect, useRef, useState, type ReactElement, type ReactNode, type RefObject } from "react";
 import { useWindowDimensions, View, type ScrollViewInstance } from "react-native";
 import { GestureDetector } from "react-native-gesture-handler";
 import Animated from "react-native-reanimated";
@@ -198,6 +198,9 @@ export function ArrangeablePlaylists({
     () => scrolling.current?.drag.scroll.get() ?? 0,
     (y) => scrolling.current?.scrollRef.current?.scrollTo({ y, animated: false }),
   );
+  // One object for the list's life: a new one on a re-render (Keep Find Field Visible
+  // toggled) would snap the list back to where it opened.
+  const [contentOffset] = useState(() => ({ x: 0, y: find.initialOffset }));
   const shown = find.shown;
   const arrangeable = !selecting && find.found === null;
   const idsRef = useRef<readonly number[]>([]);
@@ -246,7 +249,7 @@ export function ArrangeablePlaylists({
         onLayout={listDrag.onLayout}
         onContentSizeChange={listDrag.onContentSizeChange}
         // Find in Playlists waits above the head until the list is pulled down (unless it's pinned).
-        contentOffset={{ x: 0, y: find.initialOffset }}
+        contentOffset={contentOffset}
         contentContainerStyle={{
           paddingHorizontal: grid.margin,
           paddingBottom: bottomInset,
