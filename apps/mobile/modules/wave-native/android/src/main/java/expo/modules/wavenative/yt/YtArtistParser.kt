@@ -91,6 +91,24 @@ object YtArtistParser {
       .distinctBy { it.browseId }
   }
 
+  /**
+   * The top artists of YouTube Music's charts page (`browse` with
+   * `FEmusic_charts`), in the chart's order: the rows of its first carousel
+   * of artist rows ("Top artists"). None when the page has no such carousel.
+   */
+  fun chartArtists(body: String): List<YtArtistCandidate> {
+    val root = json.parseToJsonElement(body).obj ?: return emptyList()
+    return root.path("contents", "singleColumnBrowseResultsRenderer", "tabs").arr
+      ?.firstOrNull().path("tabRenderer", "content", "sectionListRenderer", "contents").arr.orEmpty()
+      .mapNotNull { it.path("musicCarouselShelfRenderer").obj }
+      .map { shelf ->
+        shelf["contents"].arr.orEmpty()
+          .mapNotNull { it.path("musicResponsiveListItemRenderer").obj?.let(::artistRow) }
+      }
+      .firstOrNull { it.isNotEmpty() }.orEmpty()
+      .distinctBy { it.browseId }
+  }
+
   /** "75.1M monthly audience", "2.4K subscribers", "3 subscribers" as a number; null for anything else. */
   fun audience(text: String): Long? {
     val match = AUDIENCE.find(text.trim()) ?: return null

@@ -66,9 +66,10 @@ export interface DiscoverSongPlays {
 
 /**
  * Where a seed comes from: the owner's plays, the Library when plays are
- * short, or artists YouTube Music finds similar to the Library's.
+ * short, artists YouTube Music finds similar to the Library's, or the top
+ * artists of YouTube Music's chart (`ytChart.ts`) when those leave room.
  */
-export type DiscoverSeedSource = "plays" | "library" | "similar";
+export type DiscoverSeedSource = "plays" | "library" | "similar" | "chart";
 
 /** An artist YouTube Music lists as similar to a Library artist. */
 export interface DiscoverSimilarArtist {
@@ -97,7 +98,7 @@ export interface DiscoverMixSeed {
   /** The artist's name, or the genre family's ("Metal"). */
   readonly name: string;
   readonly from: DiscoverSeedSource;
-  /** Their YouTube Music page, for a similar artist: their radio starts there. */
+  /** Their YouTube Music page, for a similar or a chart artist: their radio starts there. */
   readonly browseId?: string;
   /** The genre family the mix stands for (Core's `genreFamily` name); absent for an artist's mix. */
   readonly genre?: string;
@@ -604,6 +605,7 @@ const SEED_SOURCES: readonly unknown[] = [
   "plays",
   "library",
   "similar",
+  "chart",
 ] satisfies DiscoverSeedSource[];
 
 const readSeedArtist = (value: unknown): DiscoverSeedArtist[] => {
@@ -643,18 +645,31 @@ const readBuild = (value: unknown): DiscoverMixesBuild | null => {
 /** [ms]'s day on the phone's calendar, to tell days apart. */
 export const localDay = (ms: number): string => new Date(ms).toDateString();
 
+/** Whether every seed of [last]'s build came from YouTube Music's chart (none from the owner's music). */
+const chartOnly = (last: Pick<DiscoverMixes, "build">): boolean => {
+  const seeds = last.build?.seeds ?? [];
+  return seeds.length > 0 && seeds.every((seed) => seed.from === "chart");
+};
+
 /**
  * Whether to build the mixes again at [now], given the last build ([last],
  * null for never) and whether the owner has [played] anything (counted plays):
  * once a day, from the next day on the phone's calendar, and as soon as there
- * are plays when the last build had no seeds from plays. Built later than
- * now, the clock went back, so they're built again.
+ * are plays when the last build had no seeds from plays. A build seeded from
+ * YouTube Music's chart alone is built again as soon as the Library has an
+ * artist that can seed ([librarySeeds], `libraryCanSeedArtistMixes`). Built
+ * later than now, the clock went back, so they're built again.
  */
 export const discoverMixesDue = (
-  last: Pick<DiscoverMixes, "builtAt" | "playSeeds"> | null,
-  { now, played }: { readonly now: number; readonly played: boolean },
+  last: Pick<DiscoverMixes, "builtAt" | "playSeeds" | "build"> | null,
+  {
+    now,
+    played,
+    librarySeeds = false,
+  }: { readonly now: number; readonly played: boolean; readonly librarySeeds?: boolean },
 ): boolean =>
   last === null ||
   last.builtAt > now ||
   localDay(last.builtAt) !== localDay(now) ||
-  (played && !last.playSeeds);
+  (played && !last.playSeeds) ||
+  (librarySeeds && chartOnly(last));

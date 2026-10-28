@@ -165,6 +165,19 @@ class YtClient private constructor(private val context: Context) {
     return session.state
   }
 
+  /**
+   * [block] on a session of its own, signed out whatever the account: no
+   * cookie and no account, only this client's visitor data and locale.
+   */
+  suspend fun <T> signedOut(block: suspend (InnerTube) -> T): T {
+    val tube = innerTube.createIsolatedSession(includeAccount = false)
+    try {
+      return block(tube)
+    } finally {
+      tube.close()
+    }
+  }
+
   /** The account menu as [credentials] see it, asked on a session of its own. */
   private suspend fun accountMenu(credentials: YtCredentials): YtAccountMenu {
     val asked = tube.createIsolatedSession(includeAccount = false).apply { use(credentials) }

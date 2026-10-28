@@ -236,4 +236,25 @@ class YtArtistParserTest {
     assertNull(YtArtistParser.page("""{"contents":{}}"""))
     assertNull(YtArtistParser.page(body("album-page.json")))
   }
+
+  /**
+   * `browse` of `FEmusic_charts` signed out and without a country (YouTube Music
+   * picked Brazil), trimmed to the video charts' first tile and five top artists.
+   */
+  @Test
+  fun readsTheChartsTopArtistsInOrder() {
+    val artists = YtArtistParser.chartArtists(body("charts-signed-out.json"))
+    assertEquals(
+      listOf("Henrique & Juliano", "MC Ryan SP", "Marília Mendonça", "Netto Brito", "MC MENO K"),
+      artists.map { it.name },
+    )
+    assertEquals("UCt8Ihy3hj9uHGXKTpO214AQ", artists.first().browseId)
+    assertEquals(17_700_000L, artists.first().audience)
+  }
+
+  @Test
+  fun aPageWithoutTopArtistsHasNone() {
+    assertEquals(emptyList<YtArtistCandidate>(), YtArtistParser.chartArtists("""{"contents":{}}"""))
+    assertEquals(emptyList<YtArtistCandidate>(), YtArtistParser.chartArtists(body("explore-shelves.json")))
+  }
 }
