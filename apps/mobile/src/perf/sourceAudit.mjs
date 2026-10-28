@@ -395,6 +395,38 @@ export const handBuiltArtwork = (files) => {
   return sorted(found);
 };
 
+const TEXT_TAG = /^(?:[\w$]+\.)?Text$/;
+const PRESS_PROPS = new Set(["onPress", "onLongPress", "onPressIn", "onPressOut"]);
+
+/**
+ * Text pressed on its own (Performance rule 11): a `<Text>` (`RN.Text`, `Animated.Text`) given
+ * a press prop, which the press seeds can't see, as React Native's Text takes presses itself.
+ */
+export const pressedText = (files) => {
+  const found = [];
+  for (const [path, text] of Object.entries(files)) {
+    if (!path.endsWith(".tsx") || !/\bonPress|\bonLongPress/.test(text)) continue;
+    const source = ts.createSourceFile(path, text, ts.ScriptTarget.ESNext, true, ts.ScriptKind.TSX);
+    const visit = (node) => {
+      if (
+        (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) &&
+        TEXT_TAG.test(node.tagName.getText()) &&
+        node.attributes.properties.some(
+          (prop) => ts.isJsxAttribute(prop) && PRESS_PROPS.has(prop.name.getText()),
+        )
+      )
+        found.push({
+          owner: `${path}#${declarationOf(node)}`,
+          capability: "react-native#Text",
+          via: [node.tagName.getText()],
+        });
+      ts.forEachChild(node, visit);
+    };
+    visit(source);
+  }
+  return sorted(found);
+};
+
 /** The declaration a node sits in (the outermost named one), for `file#name`. */
 const memoOwner = (node) => {
   let owner = "(module)";

@@ -21,9 +21,9 @@ export function GeniusSettingsSection() {
       />
       <Hairline />
       <Text className="mt-2 font-sans text-footnote text-secondary">
-        Opening Lyrics on a song with lyrics shows what Genius says about it above the lyrics, which
-        means sending Genius the song&apos;s title and artist. Off, Wave makes no requests to
-        Genius.
+        Opening Lyrics on a song with lyrics shows what Genius says about it above the lyrics and
+        highlights the lines Genius annotates, which means sending Genius the song&apos;s title and
+        artist. Off, Wave makes no requests to Genius.
       </Text>
     </View>
   );

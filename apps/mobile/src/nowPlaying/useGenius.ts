@@ -1,6 +1,6 @@
 import { songLookup, type SavedGenius } from "@wave/core";
 import { Storage } from "expo-sqlite/kv-store";
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 
 import {
   geniusInsightsEnabled,
@@ -38,13 +38,14 @@ export const useGenius = (
 ): SavedGenius | null => {
   const on = useGeniusInsightsEnabled();
   const visible = useSyncExternalStore(playheadVisibility.subscribe, playheadVisibility.get);
-  const lookup = songLookup({ title, artist, album: "", durationMs: 0 });
-  // What's asked, as text: a re-render with the same song doesn't ask again.
-  const ask =
-    on && hasLyrics && GENIUS_TOKEN !== "" && song !== null && lookup !== null
-      ? JSON.stringify({ key: song, song: lookup, token: GENIUS_TOKEN } satisfies GeniusAsk)
-      : null;
-  const [answer, setAnswer] = useState<{ ask: string; saved: SavedGenius | null } | null>(null);
+  const asking = on && hasLyrics && GENIUS_TOKEN !== "";
+  // Kept while the song, its title and artist stay: a re-render with the same song doesn't ask again.
+  const ask = useMemo((): GeniusAsk | null => {
+    if (!asking || song === null) return null;
+    const lookup = songLookup({ title, artist, album: "", durationMs: 0 });
+    return lookup === null ? null : { key: song, song: lookup, token: GENIUS_TOKEN };
+  }, [asking, song, title, artist]);
+  const [answer, setAnswer] = useState<{ ask: GeniusAsk; saved: SavedGenius | null } | null>(null);
 
   // Asks only while Now Playing shows on screen; an answer already in stays while it's hidden.
   useEffect(() => {
@@ -54,7 +55,7 @@ export const useGenius = (
     const stop = subscribeGeniusInsights(() => {
       if (!geniusInsightsEnabled()) controller.abort();
     });
-    void loadGenius(JSON.parse(ask) as GeniusAsk, {
+    void loadGenius(ask, {
       read: (key) => Storage.getItemAsync(key),
       keep: keepGenius,
       enabled: () =>

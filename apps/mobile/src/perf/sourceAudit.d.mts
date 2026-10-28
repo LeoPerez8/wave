@@ -35,3 +35,5 @@ export const rowSubscriptions: (
 export const handBuiltArtwork: (files: Readonly<Record<string, string>>) => SourceUse[];
 /** Every `useMemo`/`useCallback` dependency its function doesn't read, as `file#owner: hook [dep]`. */
 export const unreadMemoDependencies: (files: Readonly<Record<string, string>>) => string[];
+/** Every `<Text>` given a press prop, owned by its declaration (`capability` `react-native#Text`). */
+export const pressedText: (files: Readonly<Record<string, string>>) => SourceUse[];

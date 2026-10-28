@@ -562,6 +562,11 @@ export const OPENING_REQUESTS: Record<string, Exception> = {
     reason:
       "LyricsView mounts only after selecting Lyrics; NowPlayingSheet starts on player and resets on hide. The explicit Lyrics search asks LRCLIB/YouTube, not the initial sheet opening.",
   },
+  "nowPlaying/useGenius.ts#useGenius": {
+    kind: "gesture",
+    reason:
+      "Genius is asked only in the explicitly selected Lyrics view showing lyrics, with Genius insights on, and only while Now Playing is visible. Each sheet opening starts on player; api.genius.com is outside the three guarded hosts.",
+  },
   "nowPlaying/useLyricsTranslation.ts#useLyricsTranslation": {
     kind: "gesture",
     reason:
@@ -822,6 +827,14 @@ export const OWN_PRESS: Record<string, Exception> = {
   },
   "nowPlaying/LyricsView.tsx#UnsyncedLyrics": {
     reason: "Each unsynced line is a target that selects it to share.",
+  },
+  "nowPlaying/GeniusAnnotations.tsx#HighlightedLine": {
+    reason:
+      "A Genius highlight is a span of a lyric line's text that wraps with it mid-line, which only a nested Text's onPress can be; a Pressable can't sit inline. A tap opens its annotations, the rest of the line still seeks.",
+  },
+  "components/ScreenHeader.tsx#ScreenHeader": {
+    reason:
+      "The screen title's own tap (Settings' five taps to Developer) on the header Text, so its target hugs the title's text; TitlePress keeps the long press.",
   },
   "nowPlaying/PlayerView.tsx#MetaLink": {
     reason: "Now Playing's artist and album links: text with the link role.",
