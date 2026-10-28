@@ -5,11 +5,25 @@
  * app sends the requests and draws the highlights.
  */
 
-/** One annotation on a fragment: its plain text and who wrote it. */
+import { geniusResponse } from "./geniusReply.ts";
+import { isRecord } from "./storedJson.ts";
+
+/**
+ * One annotation on a fragment: its plain text, who wrote it, and whether
+ * Genius's editors accepted it or it's still `pending` (genius.com's
+ * "Unreviewed").
+ */
 export interface GeniusAnnotation {
   readonly text: string;
   readonly authors: readonly string[];
+  readonly state: GeniusAnnotationState;
 }
+
+export type GeniusAnnotationState = "accepted" | "pending";
+
+/** An annotation's `state` as Genius gives it: only "pending" is unreviewed. */
+const annotationState = (state: unknown): GeniusAnnotationState =>
+  state === "pending" ? "pending" : "accepted";
 
 /** A fragment of Genius's lyrics and the annotations explaining it. */
 export interface GeniusReferent {
@@ -24,20 +38,17 @@ export const GENIUS_REFERENTS_PER_PAGE = 50;
 /** At most this many pages are asked for one song. */
 export const GENIUS_REFERENTS_MAX_PAGES = 20;
 
-const record = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null;
-
 /** Page [page] (from 1) of the referents of Genius's song [id], as plain text. */
 export const geniusReferentsUrl = (id: number, page: number): string =>
   `https://api.genius.com/referents?song_id=${id}&text_format=plain&per_page=${GENIUS_REFERENTS_PER_PAGE}&page=${page}`;
 
 const readAnnotation = (value: unknown): GeniusAnnotation[] => {
-  if (!record(value) || !record(value.body) || typeof value.body.plain !== "string") return [];
+  if (!isRecord(value) || !isRecord(value.body) || typeof value.body.plain !== "string") return [];
   const text = value.body.plain.trim();
   if (text === "" || text === "?") return [];
   const authors = Array.isArray(value.authors)
     ? value.authors.flatMap((author: unknown) => {
-        if (!record(author) || !record(author.user)) return [];
+        if (!isRecord(author) || !isRecord(author.user)) return [];
         const { name, login } = author.user;
         const shown =
           typeof name === "string" && name.trim() !== ""
@@ -48,7 +59,7 @@ const readAnnotation = (value: unknown): GeniusAnnotation[] => {
         return shown === "" ? [] : [shown];
       })
     : [];
-  return [{ text, authors }];
+  return [{ text, authors, state: annotationState(value.state) }];
 };
 
 /**
@@ -56,7 +67,7 @@ const readAnnotation = (value: unknown): GeniusAnnotation[] => {
  * null for anything else (the song's description, another song's, unreadable).
  */
 const readReferent = (value: unknown, song: number | null): GeniusReferent | null => {
-  if (!record(value) || value.is_description === true) return null;
+  if (!isRecord(value) || value.is_description === true) return null;
   if (song !== null && value.song_id !== song) return null;
   const { id, fragment } = value;
   if (typeof id !== "number" || !Number.isSafeInteger(id) || typeof fragment !== "string")
@@ -76,9 +87,9 @@ export const geniusReferentsPage = (
   reply: unknown,
   id: number,
 ): { readonly referents: readonly GeniusReferent[]; readonly last: boolean } | null => {
-  if (!record(reply) || !record(reply.meta) || reply.meta.status !== 200) return null;
-  if (!record(reply.response) || !Array.isArray(reply.response.referents)) return null;
-  const raw: unknown[] = reply.response.referents;
+  const response = geniusResponse(reply);
+  if (response === null || !Array.isArray(response.referents)) return null;
+  const raw: unknown[] = response.referents;
   return {
     referents: raw.flatMap((each) => readReferent(each, id) ?? []),
     last: raw.length < GENIUS_REFERENTS_PER_PAGE,
@@ -91,7 +102,7 @@ export const savedGeniusReferents = (value: unknown): readonly GeniusReferent[] 
   const referents: GeniusReferent[] = [];
   for (const each of value) {
     if (
-      !record(each) ||
+      !isRecord(each) ||
       typeof each.id !== "number" ||
       typeof each.fragment !== "string" ||
       !Array.isArray(each.annotations)
@@ -100,24 +111,45 @@ export const savedGeniusReferents = (value: unknown): readonly GeniusReferent[] 
     const annotations: GeniusAnnotation[] = [];
     for (const annotation of each.annotations) {
       if (
-        !record(annotation) ||
+        !isRecord(annotation) ||
         typeof annotation.text !== "string" ||
         !Array.isArray(annotation.authors) ||
         !annotation.authors.every((author: unknown) => typeof author === "string")
       )
         return null;
-      annotations.push({ text: annotation.text, authors: annotation.authors as string[] });
+      // Answers saved before Wave kept the state count as accepted.
+      annotations.push({
+        text: annotation.text,
+        authors: annotation.authors as string[],
+        state: annotationState(annotation.state),
+      });
     }
     referents.push({ id: each.id, fragment: each.fragment, annotations });
   }
   return referents;
 };
 
-/** Part of a lyric line a referent's fragment covers: [start, end) in the line's text. */
+/** A fragment that is a single section heading, `[Verse 1]` or `[Chorus: Freddie Mercury]`. */
+const SECTION = /^\s*\[([^[\]]+)\]\s*$/;
+
+/**
+ * The section [fragment] names when it is only a section heading (`[Verse
+ * 1]` gives "Verse 1"): its annotation explains the whole section, which
+ * isn't one place on the lines, so it goes to More insights under that
+ * name. Null for a fragment of lyrics.
+ */
+export const geniusSection = (fragment: string): string | null =>
+  SECTION.exec(fragment)?.[1]!.trim() || null;
+
+/**
+ * Part of a lyric line a fragment covers: [start, end) in the line's text,
+ * and the referents a tap there opens: the fragment placed there first, then
+ * any shorter one found only inside it.
+ */
 export interface GeniusHighlight {
   readonly start: number;
   readonly end: number;
-  readonly referent: GeniusReferent;
+  readonly referents: readonly GeniusReferent[];
 }
 
 /**
@@ -203,8 +235,10 @@ const compared = (): Compared => ({ text: "", line: [], from: [], to: [], starts
  * where its words follow each other in the lyrics, whole words only, case,
  * accents, punctuation and bracketed ad-libs aside. It may be part of a line
  * or run over several; it gets every place it fits (a repeated chorus).
- * Longer fragments are placed first and places never overlap. A referent
- * that fits nowhere is listed as unplaced, in Genius's order.
+ * Longer fragments are placed first and places never overlap: a shorter
+ * fragment found only inside places already taken joins each of them, so a
+ * tap there opens both. A section heading's referent (`geniusSection`), and
+ * one that fits nowhere, is listed as unplaced, in Genius's order.
  */
 export const placeGeniusReferents = (
   lines: readonly string[],
@@ -212,10 +246,14 @@ export const placeGeniusReferents = (
 ): GeniusPlacement => {
   const lyrics = compared();
   lines.forEach((line, at) => compare(lyrics, line, at));
-  const taken = new Uint8Array(lyrics.text.length);
-  const highlights: GeniusHighlight[][] = lines.map(() => []);
+  /** Each place: where it starts and ends in the compared lyrics, and its referents. */
+  const places: { readonly at: number; readonly end: number; referents: GeniusReferent[] }[] = [];
+  /** Which place (from 1) holds each compared unit; 0 for none. */
+  const taken = new Int32Array(lyrics.text.length);
   const placed = new Set<GeniusReferent>();
   const wanted = referents
+    // A section's annotation explains the whole section: never placed, even on a heading line.
+    .filter((referent) => geniusSection(referent.fragment) === null)
     .map((referent) => {
       const fragment = compared();
       compare(fragment, referent.fragment, 0);
@@ -225,24 +263,29 @@ export const placeGeniusReferents = (
     // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh array; Hermes lacks toSorted
     .sort((a, b) => b.text.length - a.text.length);
   for (const { referent, text } of wanted) {
-    for (let at = lyrics.text.indexOf(text); at !== -1;) {
+    const inside = new Set<number>();
+    for (let at = lyrics.text.indexOf(text); at !== -1; at = lyrics.text.indexOf(text, at + 1)) {
       const end = at + text.length;
-      if (lyrics.starts[at] && lyrics.ends[end - 1] && !taken.subarray(at, end).includes(1)) {
-        taken.fill(1, at, end);
+      if (!lyrics.starts[at] || !lyrics.ends[end - 1]) continue;
+      const holders = new Set(taken.subarray(at, end));
+      if (holders.size === 1 && holders.has(0)) {
+        places.push({ at, end, referents: [referent] });
+        taken.fill(places.length, at, end);
         placed.add(referent);
-        for (let unit = at; unit < end; unit += 1) {
-          const spans = highlights[lyrics.line[unit]!]!;
-          const last = spans.at(-1);
-          if (
-            last?.referent === referent &&
-            unit > at &&
-            lyrics.line[unit - 1] === lyrics.line[unit]
-          )
-            spans[spans.length - 1] = { ...last, end: lyrics.to[unit]! };
-          else spans.push({ start: lyrics.from[unit]!, end: lyrics.to[unit]!, referent });
-        }
-        at = lyrics.text.indexOf(text, end);
-      } else at = lyrics.text.indexOf(text, at + 1);
+      } else if (holders.size === 1) inside.add(taken[at]!);
+    }
+    if (placed.has(referent)) continue;
+    for (const place of inside) places[place - 1]!.referents.push(referent);
+    if (inside.size > 0) placed.add(referent);
+  }
+  const highlights: GeniusHighlight[][] = lines.map(() => []);
+  for (const { at, end, referents: shown } of places) {
+    for (let unit = at; unit < end; unit += 1) {
+      const spans = highlights[lyrics.line[unit]!]!;
+      const last = spans.at(-1);
+      if (last?.referents === shown && unit > at && lyrics.line[unit - 1] === lyrics.line[unit])
+        spans[spans.length - 1] = { ...last, end: lyrics.to[unit]! };
+      else spans.push({ start: lyrics.from[unit]!, end: lyrics.to[unit]!, referents: shown });
     }
   }
   return {
@@ -258,8 +301,11 @@ export interface GeniusLineSegment {
   readonly end: number;
   /** The word it belongs to (Karaoke's sung word index), -1 before the first. */
   readonly word: number;
-  readonly referent: GeniusReferent | null;
+  /** The referents a tap on it opens (its highlight's); none off the highlights. */
+  readonly referents: readonly GeniusReferent[];
 }
+
+const NOT_HIGHLIGHTED: readonly GeniusReferent[] = [];
 
 /**
  * [text] cut wherever a highlight or a word starts or ends, so a line can
@@ -286,6 +332,6 @@ export const geniusLineSegments = (
     let word = -1;
     while (word + 1 < wordStarts.length && wordStarts[word + 1]! <= start) word += 1;
     const highlight = highlights.find((each) => each.start <= start && start < each.end);
-    return { start, end: cuts[at + 1]!, word, referent: highlight?.referent ?? null };
+    return { start, end: cuts[at + 1]!, word, referents: highlight?.referents ?? NOT_HIGHLIGHTED };
   });
 };

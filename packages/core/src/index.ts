@@ -2170,10 +2170,12 @@ export {
   geniusLineSegments,
   geniusReferentsPage,
   geniusReferentsUrl,
+  geniusSection,
   placeGeniusReferents,
 } from "./geniusAnnotations.ts";
 export type {
   GeniusAnnotation,
+  GeniusAnnotationState,
   GeniusHighlight,
   GeniusLineSegment,
   GeniusPlacement,

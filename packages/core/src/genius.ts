@@ -6,7 +6,9 @@
  */
 
 import { savedGeniusReferents, type GeniusReferent } from "./geniusAnnotations.ts";
+import { geniusResponse } from "./geniusReply.ts";
 import { isSameSong, type SongLookup } from "./lyricsAndGenre.ts";
+import { isRecord, readStoredRecord } from "./storedJson.ts";
 
 /** The Genius song a song matched: what annotations (#742) ask Genius about by its id. */
 export interface GeniusMatch {
@@ -16,8 +18,6 @@ export interface GeniusMatch {
   readonly url: string;
 }
 
-const record = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null;
 const positiveId = (value: unknown): value is number =>
   typeof value === "number" && Number.isSafeInteger(value) && value > 0;
 
@@ -29,11 +29,6 @@ export const geniusSearchUrl = (song: Pick<SongLookup, "title" | "artist">): str
 export const geniusSongUrl = (id: number): string =>
   `https://api.genius.com/songs/${id}?text_format=plain`;
 
-const responseBody = (reply: unknown): Record<string, unknown> | null =>
-  record(reply) && record(reply.meta) && reply.meta.status === 200 && record(reply.response)
-    ? reply.response
-    : null;
-
 /** A song Genius's search found: its match, and its full credit ("Queen & David Bowie"). */
 export interface GeniusHit extends GeniusMatch {
   readonly credit: string;
@@ -41,15 +36,15 @@ export interface GeniusHit extends GeniusMatch {
 
 /** Null means a failed reply, an empty array a successful search with no songs. */
 export const geniusCandidates = (reply: unknown): GeniusHit[] | null => {
-  const body = responseBody(reply);
+  const body = geniusResponse(reply);
   if (!body || !Array.isArray(body.hits)) return null;
   return body.hits.flatMap((hit: unknown) => {
-    if (!record(hit) || hit.type !== "song" || !record(hit.result)) return [];
+    if (!isRecord(hit) || hit.type !== "song" || !isRecord(hit.result)) return [];
     const song = hit.result;
     if (
       !positiveId(song.id) ||
       typeof song.title !== "string" ||
-      !record(song.primary_artist) ||
+      !isRecord(song.primary_artist) ||
       typeof song.primary_artist.name !== "string" ||
       typeof song.url !== "string"
     )
@@ -83,9 +78,9 @@ export const geniusDescription = (
   reply: unknown,
   id: number,
 ): { readonly text: string | null } | null => {
-  const song = responseBody(reply)?.song;
-  if (!record(song) || song.id !== id) return null;
-  if (!record(song.description) || typeof song.description.plain !== "string") return null;
+  const song = geniusResponse(reply)?.song;
+  if (!isRecord(song) || song.id !== id) return null;
+  if (!isRecord(song.description) || typeof song.description.plain !== "string") return null;
   const text = song.description.plain.trim();
   return { text: text === "" || text === "?" ? null : text };
 };
@@ -122,7 +117,7 @@ export const storedGenius = (
   });
 
 const isMatch = (value: unknown): value is GeniusMatch =>
-  record(value) &&
+  isRecord(value) &&
   positiveId(value.id) &&
   typeof value.title === "string" &&
   typeof value.artist === "string" &&
@@ -138,17 +133,10 @@ export const savedGenius = (
   now: number,
   song: Pick<SongLookup, "title" | "artist">,
 ): SavedGenius | null => {
-  if (stored === null) return null;
-  let saved: unknown;
-  try {
-    saved = JSON.parse(stored);
-  } catch {
-    return null;
-  }
+  const saved = readStoredRecord(stored);
   if (
-    !record(saved) ||
     saved.version !== 1 ||
-    !record(saved.asked) ||
+    !isRecord(saved.asked) ||
     saved.asked.title !== song.title ||
     saved.asked.artist !== song.artist ||
     typeof saved.checkedAt !== "number" ||

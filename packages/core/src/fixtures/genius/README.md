@@ -12,7 +12,9 @@ referents-1.json and referents-2.json are two pages of `/referents?song_id=10356
 synthetic too, shaped as Genius documents referents (https://docs.genius.com/#referents-h2):
 each referent's `fragment`, `is_description`, `song_id`, and its `annotations` with `body.plain`
 and `authors[].user`. The first page holds the song's description referent (`is_description`),
-which annotations leave out; the second an annotation without text. An unauthenticated
+which annotations leave out; the second an annotation without text and an unreviewed one
+(`state` `pending`, its referent's `classification` `unreviewed`), as Genius marks annotations its
+editors haven't accepted yet. An unauthenticated
 `/referents` request on 2026-10-28 also returned HTTP 401, so no real reply could be captured.
 The fragments differ from the lyrics the way Genius's text differs from LRCLIB's: curly
 apostrophes, an em dash, accents, case, a bracketed ad-lib, and one fragment from a verse the
