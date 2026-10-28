@@ -1,7 +1,7 @@
 import { useScreenContent } from "@/lib/screenTiming";
 import { libraryQueryHasContent } from "./sharedQueries";
 import { IconPlaylist } from "@tabler/icons-react-native";
-import { counted, type PlaylistLayout } from "@wave/core";
+import { counted, importProgressLine, type PlaylistLayout } from "@wave/core";
 import { useCallback, useMemo, type ReactNode } from "react";
 import { useWindowDimensions, View, type AccessibilityActionEvent } from "react-native";
 
@@ -19,6 +19,7 @@ import { useListSelection, type ListSelection } from "@/selection/useListSelecti
 import { LibraryReadFeedback } from "./LibraryReadFeedback";
 import { ArrangeablePlaylists, TILE_GRIP_INSET } from "./ArrangeablePlaylists";
 import { openPlaylistImport } from "./importPlaylistLink";
+import { useImportProgress } from "./importProgress";
 import type { PlaylistRow } from "./LibraryStore";
 import { usePlaylistLayout } from "./playlistLayout";
 import { moveShownPlaylist } from "./playlistOrder";
@@ -105,11 +106,14 @@ function PlaylistView({
 }) {
   const press = playlistPress(playlist, selection);
   const moves = moveActions(index, ids, arrangeable);
+  // An importing playlist says what its import is doing instead of its count (Core's `importProgressLine`).
+  const progress = useImportProgress(playlist.id);
+  const detail = progress === null ? songCount(playlist.trackCount) : importProgressLine(progress);
   if (layout === "list") {
     return (
       <PlaylistCardRow
         name={playlist.name}
-        detail={songCount(playlist.trackCount)}
+        detail={detail}
         paths={playlist.thumbPaths}
         {...press}
         {...moves}
@@ -119,7 +123,7 @@ function PlaylistView({
   return (
     <PlaylistCard
       name={playlist.name}
-      detail={songCount(playlist.trackCount)}
+      detail={detail}
       paths={playlist.thumbPaths}
       size={tile}
       nameInset={TILE_GRIP_INSET}

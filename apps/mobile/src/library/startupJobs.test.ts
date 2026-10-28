@@ -80,6 +80,48 @@ test("link imports append ti's songs in 100-song transactions, one per turn, kee
   }
 });
 
+test("a link import tells how many of its songs have landed, before the first slice and after each", async () => {
+  const fixture = await createFastAgainFixture();
+  try {
+    const store = await loadLibraryStore(root, fixture.db);
+    const made = Effect.runSync(store.createPlaylist("Counted", []));
+    const titles = Array.from({ length: 250 }, (_, i) => `Song ${i}`);
+    const plan = planLinkImport<YtAlbumSong, never>(
+      {
+        service: "spotify",
+        playlist: {
+          title: "Counted",
+          artworkUrl: null,
+          total: titles.length,
+          truncated: false,
+          songs: titles.map((title) => ({ title, artists: ["A"], album: null, durationMs: 1000 })),
+        },
+      },
+      [],
+    );
+    const job = startPlaylistImport(plan, { playlistId: made.playlistId, name: made.name });
+    const told: [number, number][] = [];
+    Effect.runSync(
+      finishLinkImport(
+        store,
+        job,
+        Effect.void,
+        () => true,
+        () => {},
+        (added, total) => told.push([added, total]),
+      ),
+    );
+    assert.deepEqual(told, [
+      [0, 250],
+      [100, 250],
+      [200, 250],
+      [250, 250],
+    ]);
+  } finally {
+    fixture.close();
+  }
+});
+
 test("Liked Songs' stars and pending favorites go in 100-row writes per turn, and the downloads in one request, as on ti", async () => {
   const { dispatchLibraryFavorites } = await import("./startupJobs.ts");
   const favorites = {

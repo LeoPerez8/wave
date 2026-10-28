@@ -43,6 +43,8 @@ export interface YtLibraryRow {
   readonly artworkUrl: string | null;
   /** "N songs", from the library page; null when it doesn't say. */
   readonly line: string | null;
+  /** That count; null when the page doesn't say. An Import's read keeps it (`YtLibraryRead.expected`). */
+  readonly songCount: number | null;
   /** Imported on this phone before (its origin is kept): the row says Imported. */
   readonly imported: boolean;
   readonly ticked: boolean;
@@ -139,6 +141,7 @@ const pickerRow = (
   title,
   artworkUrl,
   line: songCount === null ? null : counted(songCount, "song"),
+  songCount,
 });
 
 /**
@@ -299,6 +302,8 @@ export interface YtLibraryImportItem {
    * Songs, with Also add to Favorites on.
    */
   readonly favorites: boolean;
+  /** How many songs its picker row said it has; null when it said none (`YtLibraryRead.expected`). */
+  readonly expected: number | null;
 }
 
 /**
@@ -331,6 +336,7 @@ export const planYtLibraryImport = (
         replaces: refreshed.id,
         uncapped,
         favorites,
+        expected: row.songCount,
       });
       continue;
     }
@@ -343,7 +349,14 @@ export const planYtLibraryImport = (
             taken.map((playlist) => playlist.name),
           );
     taken.push({ name });
-    items.push({ playlistId: row.playlistId, name, replaces: null, uncapped, favorites });
+    items.push({
+      playlistId: row.playlistId,
+      name,
+      replaces: null,
+      uncapped,
+      favorites,
+      expected: row.songCount,
+    });
   }
   return items;
 };

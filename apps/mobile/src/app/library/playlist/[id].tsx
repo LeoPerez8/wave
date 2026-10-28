@@ -16,6 +16,7 @@ import { playlistOpened } from "@/library/backgroundFill";
 import { DetailFrame } from "@/library/DetailFrame";
 import { usePlaylist } from "@/library/hooks";
 import { LibraryStore, type PlaylistEntryRow, type PlaylistRow } from "@/library/LibraryStore";
+import { ImportProgressLine } from "@/library/ImportProgressLine";
 import { PlaylistImportLine } from "@/library/PlaylistImportLine";
 import { PlaylistItems, playPlaylistEntries } from "@/library/PlaylistItems";
 import { parseId, useKnownRow } from "@/library/routes";
@@ -102,6 +103,7 @@ function PlaylistHead({ shown }: { shown: Shown }) {
             {download.progress}
           </Text>
         )}
+        <ImportProgressLine playlistId={playlist.id} />
         <PlaylistImportLine playlistId={playlist.id} />
         <YtLibraryReadLine playlistId={playlist.id} />
       </View>
