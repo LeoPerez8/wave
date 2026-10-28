@@ -34,7 +34,7 @@ import type { SongRow } from "./LibraryStore";
  * down, so the field waits above the page header until the list is pulled
  * down, as in Apple Music (unless Keep Find Field Visible pins it).
  */
-export const FIND_FIELD_HEIGHT = grid.row + CELL;
+const FIND_FIELD_HEIGHT = grid.row + CELL;
 
 /** What finds a Library song: its title, artist and album. */
 export const librarySongText = (song: SongRow): PlaylistFindText => song;

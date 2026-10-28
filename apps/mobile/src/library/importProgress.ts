@@ -46,7 +46,7 @@ let cached: {
 } | null = null;
 
 /** Every importing playlist's progress, by playlist id; the same map while nothing changed. */
-export const importProgressNow = (): ReadonlyMap<number, ImportProgress> => {
+const importProgressNow = (): ReadonlyMap<number, ImportProgress> => {
   const batch = ytLibraryBatch.get();
   const live = board.get();
   if (cached !== null && cached.batch === batch && cached.board === live) return cached.all;
@@ -56,7 +56,7 @@ export const importProgressNow = (): ReadonlyMap<number, ImportProgress> => {
 };
 
 /** Calls [listener] whenever any playlist's progress may have changed; gives the function that stops it. */
-export const subscribeImportProgress = subscribeAll(board, ytLibraryBatch);
+const subscribeImportProgress = subscribeAll(board, ytLibraryBatch);
 
 /** [playlistId]'s import progress; null when it isn't importing, so its live count shows. */
 export const useImportProgress = (playlistId: number): ImportProgress | null =>
