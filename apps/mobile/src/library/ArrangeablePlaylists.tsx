@@ -147,6 +147,11 @@ type Props = {
    */
   header: ReactElement;
   /**
+   * Under the Find field, above the head, staying while a query narrows the
+   * list (the batch's "Importing playlists · 12 of 80").
+   */
+  lead?: ReactNode;
+  /**
    * Draws the playlist at [index] of the playlists shown as the layout shows
    * it; [arrangeable] says whether it can be moved (not while selecting or
    * while Find narrows the list).
@@ -173,6 +178,7 @@ export function ArrangeablePlaylists({
   rowHeight,
   selecting,
   header,
+  lead,
   renderPlaylist,
 }: Props) {
   const scrollable = useListScrollable();
@@ -248,7 +254,7 @@ export function ArrangeablePlaylists({
         }}
       >
         <View onLayout={listDrag.onHeaderLayout}>
-          <FindHead find={find} header={header} of="playlists" />
+          <FindHead find={find} header={header} lead={lead} of="playlists" />
         </View>
         <View style={{ height: Math.ceil(shown.length / columns) * rowHeight }}>
           {listDrag.indices.map(renderCell)}

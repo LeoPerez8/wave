@@ -1573,7 +1573,10 @@ export type {
   YtLibraryPlaylistKind,
   YtLibraryRow,
 } from "./ytLibrary.ts";
+export { importBatchLine } from "./importBatchLine.ts";
+export type { ImportBatchLine } from "./importBatchLine.ts";
 export {
+  endYtLibraryRun,
   isYtLibraryReadQueued,
   nextYtLibraryRead,
   NO_YT_LIBRARY_READS,

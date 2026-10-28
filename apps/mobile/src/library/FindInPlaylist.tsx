@@ -192,23 +192,27 @@ export function useFindInLegendList<T>(
  * nothing is typed, or "No songs match" ("No artists match") when the query
  * finds nothing (Core's `findInPlaylistHead`, `findNoMatch`). A list still
  * reading what it finds by ([allRead] false: a YT Music playlist's pages,
- * the Library's songs) doesn't say so yet.
+ * the Library's songs) doesn't say so yet. A [lead] sits under the field (first, when
+ * it's pinned), whatever the query (Playlists' import line).
  */
 export function FindHead({
   find,
   header,
   allRead = true,
   of = "playlist",
+  lead = null,
 }: {
   find: FindInList;
   header: ReactNode;
   allRead?: boolean;
   of?: FindableListKind;
+  lead?: ReactNode;
 }) {
   const head = findInPlaylistHead(find.found, allRead);
   return (
     <>
       {!find.pinned && <FindField find={find} of={of} />}
+      {lead}
       {head === "header" ? header : head === "noMatch" ? <NoMatch of={of} /> : null}
     </>
   );
