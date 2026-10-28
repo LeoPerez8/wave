@@ -1031,6 +1031,26 @@ describe("ytSongActions", () => {
     );
   });
 
+  test("with YT Music on it starts a Magic Queue, after the queue entries as a Library song's does", () => {
+    const actions = (options: YtSongActionOptions) =>
+      ytSongActions(undefined, options).map((entry) => entry.action);
+    assert.deepEqual(actions({ ytMusic: true }), [
+      "playNext",
+      "addToQueue",
+      "magicQueue",
+      "addToPlaylist",
+      "share",
+    ]);
+    // Playing, it still does, as the playing Library song's menu does.
+    assert.deepEqual(actions({ ytMusic: true, playing: true }), [
+      "magicQueue",
+      "addToPlaylist",
+      "share",
+    ]);
+    assert.ok(!actions({ ytMusic: false }).includes("magicQueue"));
+    assert.ok(!actions({}).includes("magicQueue"));
+  });
+
   test("it offers Go to Artist, leading where the streamed song's artist link does", () => {
     const artists = { kind: "open", target: { kind: "yt", name: "Justice" } } as const;
     assert.deepEqual(ytSongActions(artists), [
@@ -1082,6 +1102,7 @@ describe("ytSongActions", () => {
     assert.deepEqual(ytSongActions(artists, { album: "MPREb_cross", ytMusic: true }), [
       { action: "playNext" },
       { action: "addToQueue" },
+      { action: "magicQueue" },
       { action: "addToPlaylist" },
       { action: "goToAlbum", album: "MPREb_cross" },
       { action: "goToArtist", artists },
@@ -1094,10 +1115,17 @@ describe("ytSongActions", () => {
       ytSongActions(undefined, { album: "MPREb_cross", ytAlbumHere, ytMusic: true }).map(
         (entry) => entry.action,
       );
-    assert.deepEqual(actions("MPREb_cross"), ["playNext", "addToQueue", "addToPlaylist", "share"]);
+    assert.deepEqual(actions("MPREb_cross"), [
+      "playNext",
+      "addToQueue",
+      "magicQueue",
+      "addToPlaylist",
+      "share",
+    ]);
     assert.deepEqual(actions("MPREb_other"), [
       "playNext",
       "addToQueue",
+      "magicQueue",
       "addToPlaylist",
       "goToAlbum",
       "share",
@@ -1117,9 +1145,10 @@ describe("ytSongActions", () => {
     const actions = (options: YtSongActionOptions) =>
       ytSongActions(undefined, options).map((entry) => entry.action);
     const queue = ["playNext", "addToQueue", "addToPlaylist", "share"];
-    assert.deepEqual(actions({ album: null, ytMusic: true }), queue);
-    assert.deepEqual(actions({ album: "", ytMusic: true }), queue);
-    assert.deepEqual(actions({ ytMusic: true }), queue);
+    const magic = ["playNext", "addToQueue", "magicQueue", "addToPlaylist", "share"];
+    assert.deepEqual(actions({ album: null, ytMusic: true }), magic);
+    assert.deepEqual(actions({ album: "", ytMusic: true }), magic);
+    assert.deepEqual(actions({ ytMusic: true }), magic);
     assert.deepEqual(actions({ album: "MPREb_cross", ytMusic: false }), queue);
     assert.deepEqual(actions({ album: "MPREb_cross", inPlaylist: true }), [
       "playNext",
@@ -1149,11 +1178,20 @@ describe("the playing song's menu", () => {
     const options = { album: "MPREb_cross", ytMusic: true, favorite: false } as const;
     assert.deepEqual(
       ytSongActions(artists, { ...options, playing: true }).map((entry) => entry.action),
-      ["addToPlaylist", "favorite", "goToAlbum", "goToArtist", "share"],
+      ["magicQueue", "addToPlaylist", "favorite", "goToAlbum", "goToArtist", "share"],
     );
     assert.deepEqual(
       ytSongActions(artists, { ...options, playing: false }).map((entry) => entry.action),
-      ["playNext", "addToQueue", "addToPlaylist", "favorite", "goToAlbum", "goToArtist", "share"],
+      [
+        "playNext",
+        "addToQueue",
+        "magicQueue",
+        "addToPlaylist",
+        "favorite",
+        "goToAlbum",
+        "goToArtist",
+        "share",
+      ],
     );
   });
 });

@@ -80,12 +80,15 @@ export type HomeItem = { readonly section: HomeSectionId } | "play-hint" | "no-s
  * What Home lists for [arrangement]: its sections in order. With nothing
  * played yet, a line asking for a play comes before the first section plays
  * fill (where those sections would be). With every section removed, the
- * line saying how to add them back.
+ * line saying how to add them back. With an [empty] Library, Home shows its
+ * empty state and, under it, only Discover (when arranged), whose Artist
+ * mixes can grow from YouTube Music's chart.
  */
 export const homeItems = (
   arrangement: HomeArrangement,
-  { nothingPlayed }: { readonly nothingPlayed: boolean },
+  { nothingPlayed, empty = false }: { readonly nothingPlayed: boolean; readonly empty?: boolean },
 ): readonly HomeItem[] => {
+  if (empty) return arrangement.includes("discover") ? [{ section: "discover" }] : [];
   if (arrangement.length === 0) return ["no-sections"];
   const items: HomeItem[] = arrangement.map((id) => ({ section: id }));
   const hintAt = nothingPlayed ? arrangement.findIndex((id) => sectionOf(id)?.fromPlays) : -1;
