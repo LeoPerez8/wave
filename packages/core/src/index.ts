@@ -215,7 +215,7 @@ export type {
 export { resolveRowSwipe, rowSwipeArmed } from "./rowGestures.ts";
 export type { RowSwipeSide, RowSwipeSides } from "./rowGestures.ts";
 export { currentLyricIndex, parseLyrics, pickLyrics } from "./lyrics.ts";
-export type { LyricLine, Lyrics, LyricsSources } from "./lyrics.ts";
+export type { LyricLine, LyricWord, Lyrics, LyricsSources } from "./lyrics.ts";
 export { AUTO_LYRIC_LINE_MAX, autoLyricLines } from "./autoLyricLines.ts";
 export type { AutoLyricLines, AutoLyricLinesInput, AutoLyricsText } from "./autoLyricLines.ts";
 export {
@@ -2151,3 +2151,6 @@ export {
   syncTriggers,
 } from "./syncTriggers.ts";
 export type { SyncClock, SyncTriggers, SyncTriggersInput } from "./syncTriggers.ts";
+
+export { karaokeLyricLines, currentLyricWordIndex } from "./karaoke.ts";
+export type { KaraokeLyricLine } from "./karaoke.ts";

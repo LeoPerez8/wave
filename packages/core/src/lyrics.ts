@@ -3,10 +3,19 @@
  * plain text (unsynced lyrics).
  */
 
+/** A timed word (or stamped syllable), with UTF-16 offsets in the stamp-free line. */
+export interface LyricWord {
+  readonly timeMs: number;
+  readonly text: string;
+  readonly start: number;
+  readonly end: number;
+}
+
 /** One synced line: shown from `timeMs` until the next line's time. */
 export interface LyricLine {
   readonly timeMs: number;
   readonly text: string;
+  readonly words?: readonly LyricWord[];
 }
 
 export type Lyrics =
@@ -17,7 +26,7 @@ export type Lyrics =
 /** `[mm:ss]`, `[mm:ss.x]`, `[mm:ss.xx]` or `[mm:ss.xxx]`; some taggers use `:` or `,` for the dot. */
 const STAMP = /^\[(\d+):(\d{1,2})(?:[.:,](\d{1,3}))?\]/;
 /** Enhanced LRC's per-word timings, `<mm:ss.xx>`. */
-const WORD_STAMP = /<\d+:\d{1,2}(?:[.:,]\d{1,3})?>/g;
+const WORD_STAMP = /<(\d+):(\d{1,2})(?:[.:,](\d{1,3}))?>/g;
 /** `[offset:+500]`: shifts every line, in ms; positive shows lines earlier. */
 const OFFSET = /^\[offset:\s*([+-]?\d+)\s*\]/i;
 /** LRC header tags; only these keys, so section labels like `[Chorus: Jay-Z]` stay lyrics. */
@@ -53,7 +62,45 @@ export const parseLyrics = (text: string): Lyrics => {
       rest = rest.slice(stamp.length);
     }
     const words = rest.replace(WORD_STAMP, "").trim();
-    for (const timeMs of times) lines.push({ timeMs, text: words });
+    const stamps = [...rest.matchAll(WORD_STAMP)];
+    const timed: LyricWord[] = [];
+    let cleanOffset = 0;
+    let sourceOffset = 0;
+    let wordTime = times[0] ?? 0;
+    const clean = rest.replace(WORD_STAMP, "");
+    const leading = clean.length - clean.trimStart().length;
+    for (const stamp of [...stamps, null]) {
+      const segment = rest.slice(sourceOffset, stamp?.index ?? rest.length);
+      for (const token of segment.matchAll(/\S+/g)) {
+        // Leading whitespace is removed from the displayed text.
+        timed.push({
+          timeMs: wordTime,
+          text: token[0],
+          start: cleanOffset + token.index - leading,
+          end: cleanOffset + token.index - leading + token[0].length,
+        });
+      }
+      cleanOffset += segment.length;
+      if (stamp === null) break;
+      wordTime =
+        Number(stamp[1]) * 60_000 +
+        Number(stamp[2]) * 1000 +
+        Number((stamp[3] ?? "0").padEnd(3, "0"));
+      sourceOffset = stamp.index + stamp[0].length;
+    }
+    for (const timeMs of times)
+      lines.push({
+        timeMs,
+        text: words,
+        ...(stamps.length > 0 && timed.length > 0
+          ? {
+              words: timed.map((word) => ({
+                ...word,
+                timeMs: word.timeMs + timeMs - (times[0] ?? timeMs),
+              })),
+            }
+          : {}),
+      });
   }
   if (lines.length === 0) {
     const plain = trimBlankEdges(rows);
@@ -62,6 +109,14 @@ export const parseLyrics = (text: string): Lyrics => {
   const shifted = lines.map((line) => ({
     timeMs: Math.max(0, line.timeMs - offsetMs),
     text: line.text,
+    ...(line.words
+      ? {
+          words: line.words.map((word) => ({
+            ...word,
+            timeMs: Math.max(0, word.timeMs - offsetMs),
+          })),
+        }
+      : {}),
   }));
   // Stable, so lines sharing a time keep the order they were written in.
   shifted.sort((a, b) => a.timeMs - b.timeMs);
@@ -70,7 +125,20 @@ export const parseLyrics = (text: string): Lyrics => {
     const previous = merged.at(-1);
     if (previous?.timeMs === line.timeMs) {
       const joined = [previous.text, line.text].filter((part) => part !== "").join("\n");
-      merged[merged.length - 1] = { timeMs: line.timeMs, text: joined };
+      const shift = previous.text === "" ? 0 : previous.text.length + (line.text === "" ? 0 : 1);
+      const words = [
+        ...(previous.words ?? []),
+        ...(line.words ?? []).map((word) => ({
+          ...word,
+          start: word.start + shift,
+          end: word.end + shift,
+        })),
+      ];
+      merged[merged.length - 1] = {
+        timeMs: line.timeMs,
+        text: joined,
+        ...(words.length ? { words } : {}),
+      };
     } else {
       merged.push(line);
     }

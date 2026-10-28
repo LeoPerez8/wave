@@ -309,6 +309,13 @@ The Lyrics view can show a song's lyrics translated into the phone's language (#
 - **Saved.** A song's translation is saved in the key-value store (this phone only, never synced) under the song and target language (`lyricsTranslationKey`: a Library track by its id, a non-D song by its track id), with a fingerprint of the lyrics it translated (`storedLyricsTranslation`). Reopening the song's lyrics shows it with no request, offline too. When the song's lyrics change (Fix Song, a new file) the fingerprint no longer matches (`savedLyricsTranslation`), so the saved translation is dropped and the new lyrics are translated afresh.
 - **Failure.** Offline, after 15 s without an answer, on an error status or an unreadable reply, the original lyrics show unchanged with a quiet line above them, "Couldn't translate the lyrics.", and Try Again. Nothing is saved, and translations already saved still show.
 
+### Karaoke
+
+- **Karaoke** sits beside Translate and Share in the Lyrics header, only for synced lyrics (#739). It is off by default, graphite while off and teal while on. The choice applies to later songs and survives restarts (`settings.karaoke`), on this phone only, never synced.
+- **Lighting.** With Karaoke on, words in the sung line turn to ink at their start time and stay lit; upcoming words use the line's usual dim tone. Other lines keep their existing appearance. Seeking in either direction updates the lighting from the playhead. Sharing selects whole lines as before.
+- **Word timings.** Core's `parseLyrics` retains Enhanced LRC's `<mm:ss.xx>` stamps as `LyricLine.words`, including offsets and repeated lines. Text stays stamp-free. Words carry their start time and UTF-16 text offsets, so syllable stamps and original whitespace survive rendering. `karaokeLyricLines` fills missing timings by sharing the span to the next line among words by Unicode character count. Estimates are capped at 400 ms per character and 8 seconds per line to avoid stretching words across an instrumental gap; the last line uses that same cap. Real timings take precedence. `currentLyricWordIndex` finds the word at a playback position. These APIs are available independently of the phone's toggle for Android Auto to reuse (#741).
+- Translation, share cards and Android Auto still consume the stamp-free line text. Saved and written lyrics retain their original raw stamps. Android Auto's word-by-word display is a separate change (#741).
+
 ### Lyrics on Android Auto
 
 - **The Lyrics toggle** sits in the overflow menu of Auto's player screen ("Lyrics on" / "Lyrics off"), off on a fresh install and remembered between drives.

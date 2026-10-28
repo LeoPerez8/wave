@@ -1,7 +1,14 @@
-import { IconLanguage, IconQuoteOff, IconShare3 } from "@tabler/icons-react-native";
+import {
+  IconLanguage,
+  IconMicrophone2,
+  IconQuoteOff,
+  IconShare3,
+} from "@tabler/icons-react-native";
 import {
   MAX_SHARED_LYRIC_LINES,
   currentLyricIndex,
+  karaokeLyricLines,
+  type LyricWord,
   extrapolatePosition,
   isLyricLineSelected,
   lyricCardColours,
@@ -37,6 +44,7 @@ import { Press } from "@/motion/Press";
 import { addScreenBackHandler } from "@/overlay/back";
 import { seekTo } from "@/playback/actions";
 import { positionState, type PlaybackState } from "@/playback/Player";
+import { setKaraokeOn, useKaraokeOn } from "@/settings/karaoke";
 import { setLyricsTranslationOn, useLyricsTranslationOn } from "@/settings/lyricsTranslation";
 import { closeLyricCard, openLyricCard } from "@/share/lyricCard";
 import { useThemeColor } from "@/theme/useThemeColor";
@@ -154,6 +162,7 @@ type LineProps = {
   line: LyricLine;
   index: number;
   current: boolean;
+  karaoke: boolean;
   /** Share is picking lines: a tap selects instead of seeking. */
   picking: boolean;
   selected: boolean;
@@ -166,6 +175,35 @@ type LineProps = {
   onLayoutLine: (index: number, y: number) => void;
 };
 
+/** Word colours read the shared playhead, so playback does not render React every frame. */
+function KaraokeWord({ word, suffix }: { word: LyricWord; suffix: string }) {
+  const [foreground, secondary] = useThemeColor(["foreground", "secondary"]);
+  const tint = useAnimatedStyle(() => ({
+    color: playhead.positionMs.get() >= word.timeMs ? foreground : secondary,
+  }));
+  return (
+    <Animated.Text style={tint}>
+      {word.text}
+      {suffix}
+    </Animated.Text>
+  );
+}
+
+function KaraokeText({ line }: { line: LyricLine }) {
+  return (
+    <Text className="font-sans text-title2 font-medium">
+      {line.text.slice(0, line.words?.[0]?.start ?? 0)}
+      {line.words?.map((word, at, words) => (
+        <KaraokeWord
+          key={word.start}
+          word={word}
+          suffix={line.text.slice(word.end, words[at + 1]?.start ?? line.text.length)}
+        />
+      ))}
+    </Text>
+  );
+}
+
 /**
  * One synced line: ink while it's sung, graphite otherwise, with its
  * translation under it lit along with it. Tap either to play from there.
@@ -176,6 +214,7 @@ const SyncedLine = memo(function SyncedLine({
   line,
   index,
   current,
+  karaoke,
   picking,
   selected,
   translation,
@@ -228,6 +267,8 @@ const SyncedLine = memo(function SyncedLine({
       >
         {line.text === "" ? (
           <PauseDots current={!picking && current} />
+        ) : karaoke && current && !picking ? (
+          <KaraokeText line={line} />
         ) : (
           <Animated.Text className="font-sans text-title2 font-medium" style={tint}>
             {line.text}
@@ -254,17 +295,23 @@ const SyncedLine = memo(function SyncedLine({
  * picks lines they don't follow the song.
  */
 function SyncedLyrics({
-  lines,
+  lines: sourceLines,
+  karaoke,
   picking,
   translation,
   retryTranslation,
 }: {
   lines: readonly LyricLine[];
+  karaoke: boolean;
   picking: Picking | null;
   translation: TranslationShown | null;
   retryTranslation: () => void;
 }) {
   useRenderCount("SyncedLyrics");
+  const lines = useMemo(
+    () => (karaoke ? karaokeLyricLines(sourceLines) : sourceLines),
+    [sourceLines, karaoke],
+  );
   const [current, setCurrent] = useState(() => ({
     lines,
     index: currentLyricIndex(lines, extrapolatePosition(positionState.get(), Date.now())),
@@ -404,6 +451,7 @@ function SyncedLyrics({
           line={line}
           index={at}
           current={at === index}
+          karaoke={karaoke}
           picking={isPicking}
           selected={picking?.isSelected(at) ?? false}
           {...translations[at]!}
@@ -574,12 +622,14 @@ type Shown = LibraryLyricsShown | Exclude<NonDLyricsShown, { kind: "lyrics" }>;
 /** The lyrics themselves, the search's skeleton, or the empty state. */
 function LyricsBody({
   shown,
+  karaoke,
   picking,
   retry,
   translation,
   retryTranslation,
 }: {
   shown: Shown | null;
+  karaoke: boolean;
   picking: Picking | null;
   retry: () => void;
   translation: TranslationShown | null;
@@ -599,6 +649,7 @@ function LyricsBody({
       return (
         <SyncedLyrics
           lines={shown.lines}
+          karaoke={karaoke}
           picking={picking}
           translation={translation}
           retryTranslation={retryTranslation}
@@ -703,6 +754,7 @@ export function LyricsView({
   // The song whose lines are picked: its file, or a non-D song's track id.
   const song = path ?? nonDTrackId;
   const translationOn = useLyricsTranslationOn();
+  const karaokeOn = useKaraokeOn();
   // A Library track by its id, a non-D song by its track id: its saved translation's key.
   const translationSong =
     file !== null ? `library:${file.id}` : nonDTrackId === null ? null : `track:${nonDTrackId}`;
@@ -781,6 +833,16 @@ export function LyricsView({
             {lines !== null && (
               // The icon's 48dp target reaches past the margin, so the glyph lines up with it.
               <View className="flex-row" style={{ marginRight: -12 }}>
+                {shown?.kind === "synced" && (
+                  <IconButton
+                    icon={IconMicrophone2}
+                    label="Karaoke"
+                    accessibilityRole="switch"
+                    accessibilityState={{ checked: karaokeOn }}
+                    tone={karaokeOn ? "accent" : "secondary"}
+                    onPress={() => setKaraokeOn(!karaokeOn)}
+                  />
+                )}
                 <TranslateButton
                   on={translationOn}
                   onPress={() => setLyricsTranslationOn(!translationOn)}
@@ -797,6 +859,7 @@ export function LyricsView({
       </DismissArea>
       <LyricsBody
         shown={shown}
+        karaoke={karaokeOn}
         picking={picking}
         retry={nonD.shown === null ? library.retry : nonD.retry}
         translation={translation.shown}
