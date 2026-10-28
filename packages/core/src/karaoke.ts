@@ -4,6 +4,7 @@
  * `LyricLine.words`); the other words get estimated ones. Android Auto's word
  * by word lyrics reuse these, whatever the Lyrics view's Karaoke button says.
  */
+import { characterCount, textWords } from "./lyricText.ts";
 import type { LyricLine, LyricWord } from "./lyrics.ts";
 
 /** A synced line with a time for every word: real ones where stamped, estimated elsewhere. */
@@ -16,9 +17,6 @@ const MAX_MS_PER_CHARACTER = 400;
 /** The longest a line's estimated words span. */
 const MAX_LINE_MS = 8_000;
 
-/** Characters as a reader counts them (code points), not UTF-16 units. */
-const characters = (text: string): number => [...text].length;
-
 /**
  * [lines] with every word timed. A stamped word keeps its time; an unstamped
  * word shares the line's span (its start to the next line's, or the cap on the
@@ -29,16 +27,15 @@ const characters = (text: string): number => [...text].length;
  */
 export const karaokeLyricLines = (lines: readonly LyricLine[]): readonly KaraokeLyricLine[] =>
   lines.map((line, index) => {
-    const tokens = [...line.text.matchAll(/\S+/g)];
-    const length = tokens.reduce((sum, token) => sum + characters(token[0]), 0);
+    const tokens = textWords(line.text);
+    const length = tokens.reduce((sum, token) => sum + characterCount(token.text), 0);
     const cap = Math.min(MAX_LINE_MS, length * MAX_MS_PER_CHARACTER);
     const next = lines[index + 1]?.timeMs ?? Infinity;
     const span = Math.max(0, Math.min(cap, next - line.timeMs));
     const words: LyricWord[] = [];
     let used = 0;
     for (const token of tokens) {
-      const start = token.index;
-      const end = start + token[0].length;
+      const { start, end } = token;
       // A stamp can split a word into syllables: keep every stamped part of it.
       const stamped = line.words?.filter((word) => word.start < end && word.end > start) ?? [];
       if (stamped.length > 0) {
@@ -46,9 +43,9 @@ export const karaokeLyricLines = (lines: readonly LyricLine[]): readonly Karaoke
       } else {
         const estimate = line.timeMs + Math.round((span * used) / length);
         const timeMs = Math.max(estimate, words.at(-1)?.timeMs ?? estimate);
-        words.push({ timeMs, text: token[0], start, end });
+        words.push({ timeMs, text: token.text, start, end });
       }
-      used += characters(token[0]);
+      used += characterCount(token.text);
     }
     return { ...line, words };
   });

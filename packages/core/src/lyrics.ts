@@ -3,6 +3,8 @@
  * plain text (unsynced lyrics).
  */
 
+import { textWords } from "./lyricText.ts";
+
 /** A timed word (or a syllable a stamp splits off), placed in its line's stamp-free text. */
 export interface LyricWord {
   /** When it starts being sung. */
@@ -66,10 +68,7 @@ const stampedWords = (rest: string, lineMs: number): LyricWord[] | null => {
   const words: LyricWord[] = [];
   for (const stamp of [...stamps, null]) {
     const segment = rest.slice(from, stamp?.index ?? rest.length);
-    for (const token of segment.matchAll(/\S+/g)) {
-      const start = at + token.index;
-      words.push({ timeMs, text: token[0], start, end: start + token[0].length });
-    }
+    for (const word of textWords(segment, at)) words.push({ timeMs, ...word });
     if (stamp === null) break;
     at += segment.length;
     timeMs = wordStampMs(stamp);

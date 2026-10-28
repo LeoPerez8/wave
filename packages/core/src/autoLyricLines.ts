@@ -5,6 +5,7 @@
  * place of the artist. The cover stays.
  */
 import { currentLyricWordIndex, karaokeLyricLines } from "./karaoke.ts";
+import { characterCount, textWords, type TextWord } from "./lyricText.ts";
 import { currentLyricIndex, type LyricLine, type Lyrics } from "./lyrics.ts";
 
 export interface AutoLyricLinesInput {
@@ -48,16 +49,6 @@ export const AUTO_LYRIC_LINE_MAX = 30;
 /** Lines sung together share the one line, joined by this. */
 const TOGETHER = " / ";
 
-/** Characters as a reader counts them (code points), not UTF-16 units. */
-const characters = (text: string): number => [...text].length;
-
-/** A word of a line as written: its text and its UTF-16 offsets in the line's `text`. */
-interface Token {
-  readonly text: string;
-  readonly start: number;
-  readonly end: number;
-}
-
 /** A piece of a line that fits a field: its text and the tokens it holds, `[from, to)`. */
 interface Chunk {
   readonly text: string;
@@ -70,13 +61,13 @@ interface Chunk {
  * be: the narrowest width that still needs no more pieces than packing to the
  * limit does. A word longer than the limit is a piece of its own.
  */
-const balancedPieces = (tokens: readonly Token[]): Token[][] => {
-  const pack = (width: number): Token[][] => {
-    const pieces: Token[][] = [];
+const balancedPieces = (tokens: readonly TextWord[]): TextWord[][] => {
+  const pack = (width: number): TextWord[][] => {
+    const pieces: TextWord[][] = [];
     let length = 0;
     for (const token of tokens) {
       const piece = pieces.at(-1);
-      const size = characters(token.text);
+      const size = characterCount(token.text);
       if (piece !== undefined && length + 1 + size <= width) {
         piece.push(token);
         length += 1 + size;
@@ -88,7 +79,7 @@ const balancedPieces = (tokens: readonly Token[]): Token[][] => {
     return pieces;
   };
   const fewest = pack(AUTO_LYRIC_LINE_MAX);
-  const total = tokens.reduce((sum, token) => sum + characters(token.text), tokens.length - 1);
+  const total = tokens.reduce((sum, token) => sum + characterCount(token.text), tokens.length - 1);
   for (let width = Math.ceil(total / fewest.length); width < AUTO_LYRIC_LINE_MAX; width += 1) {
     const pieces = pack(width);
     if (pieces.length <= fewest.length) return pieces;
@@ -115,7 +106,7 @@ const chunksOf = (text: string): Chunk[] => {
     const first = pieces[0];
     if (last !== undefined && first !== undefined) {
       const joined = last.text + TOGETHER + first.text;
-      if (characters(joined) <= AUTO_LYRIC_LINE_MAX) {
+      if (characterCount(joined) <= AUTO_LYRIC_LINE_MAX) {
         chunks[chunks.length - 1] = { text: joined, from: last.from, to: first.to };
         pieces.shift();
       }
@@ -126,15 +117,11 @@ const chunksOf = (text: string): Chunk[] => {
 };
 
 /** The words of each line sung together in [text], in order. */
-const partsOf = (text: string): Token[][] => {
-  const parts: Token[][] = [];
+const partsOf = (text: string): TextWord[][] => {
+  const parts: TextWord[][] = [];
   let offset = 0;
   for (const row of text.split("\n")) {
-    const tokens = [...row.matchAll(/\S+/g)].map((match) => ({
-      text: match[0],
-      start: offset + match.index,
-      end: offset + match.index + match[0].length,
-    }));
+    const tokens = textWords(row, offset);
     if (tokens.length > 0) parts.push(tokens);
     offset += row.length + 1;
   }
@@ -187,6 +174,7 @@ export const autoLyricLines = ({
   const chunkAt = (atMs: number): number => chunkOfWord[currentLyricWordIndex(words, atMs)] ?? 0;
   const shown = chunkAt(positionMs);
   let nextChangeMs = lineEndMs;
+  // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh copy; Hermes lacks toSorted
   for (const word of [...words].sort((a, b) => a.timeMs - b.timeMs)) {
     if (word.timeMs <= positionMs) continue;
     if (lineEndMs !== null && word.timeMs >= lineEndMs) break;
