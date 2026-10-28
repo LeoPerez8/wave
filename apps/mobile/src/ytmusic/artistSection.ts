@@ -35,7 +35,7 @@ import {
 
 import type { LineToggle } from "@/catalog/PlayShuffle";
 import { LibraryStore, type AlbumRow, type SongRow } from "@/library/LibraryStore";
-import { useScreenSettled } from "@/lib/screenTiming";
+import { useSettledOnce } from "@/lib/screenTiming";
 import { useScreenSight } from "@/lib/screenSight";
 import { isScreenSettled } from "@/lib/timing";
 import { appRuntime } from "@/library/runtime";
@@ -398,7 +398,8 @@ const useDeferredArtistSection = (
   always: boolean,
   pick: YtPick | null,
 ) => {
-  const settled = useScreenSettled();
+  // Settled once is enough for this artist: Now Playing over the page keeps its online rows.
+  const settled = useSettledOnce(name);
   const sight = useScreenSight();
   const enabled = useYtMusicEnabled();
   const [reader] = useState(() =>
