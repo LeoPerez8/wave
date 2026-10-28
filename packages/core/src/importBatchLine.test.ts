@@ -18,6 +18,7 @@ import {
   ytLibraryReadFailed,
   type ImportProgressBoard,
   type YtLibraryBatch,
+  type YtLibraryPauseReason,
   type YtLibraryRead,
 } from "./index.ts";
 
@@ -62,7 +63,7 @@ const board = (...entries: [number, Parameters<typeof setImportProgress>[2]][]) 
 const lineText = (
   batch: YtLibraryBatch,
   live = NO_IMPORT_PROGRESS,
-  pausedBy: string | null = null,
+  pausedBy: YtLibraryPauseReason | null = null,
 ) => importBatchLine(batch, live, pausedBy)?.text ?? null;
 
 const eighty = Array.from({ length: 80 }, (_, index) => index + 1);

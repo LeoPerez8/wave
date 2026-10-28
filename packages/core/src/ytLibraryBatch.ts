@@ -197,18 +197,31 @@ export const pruneYtLibraryBatch = (
   return reads.length === batch.reads.length ? batch : { ...batch, reads };
 };
 
+/**
+ * Why a read failed when every read would fail alike, so the batch pauses:
+ * no network, YT Music off, or (From Spotify) no Spotify session Spotify accepts.
+ */
+export type YtLibraryPauseReason = "offline" | "disabled" | "signedOut";
+
+const PAUSING_REASONS: ReadonlySet<string> = new Set<YtLibraryPauseReason>([
+  "offline",
+  "disabled",
+  "signedOut",
+]);
+
+/** Whether a read that failed because of [reason] pauses the batch. */
+export const isYtLibraryPauseReason = (reason: string): reason is YtLibraryPauseReason =>
+  PAUSING_REASONS.has(reason);
+
 /** What a failed read leaves (`ytLibraryReadFailed`). */
 export interface YtLibraryReadFailure {
   readonly batch: YtLibraryBatch;
-  /** Whether the batch stops reading for now, as every read after it would fail alike. */
-  readonly pause: boolean;
+  /**
+   * Why the batch stops reading for now, as every read after it would fail
+   * alike; null when it goes on.
+   */
+  readonly pausedBy: YtLibraryPauseReason | null;
 }
-
-/**
- * Why a read failed when every read would fail alike: no network, YT Music
- * off, or (From Spotify) no Spotify session Spotify accepts.
- */
-const PAUSING_REASONS: ReadonlySet<string> = new Set(["offline", "disabled", "signedOut"]);
 
 /**
  * What [batch] becomes once [read] failed because of [reason]. Offline
@@ -224,8 +237,8 @@ export const ytLibraryReadFailed = (
   read: YtLibraryRead,
   reason: string,
 ): YtLibraryReadFailure => {
-  if (PAUSING_REASONS.has(reason)) return { batch, pause: true };
-  if (!isYtLibraryReadQueued(batch, read)) return { batch, pause: false };
+  if (isYtLibraryPauseReason(reason)) return { batch, pausedBy: reason };
+  if (!isYtLibraryReadQueued(batch, read)) return { batch, pausedBy: null };
   return {
     batch: {
       ...batch,
@@ -235,7 +248,7 @@ export const ytLibraryReadFailed = (
           : queued,
       ),
     },
-    pause: false,
+    pausedBy: null,
   };
 };
 

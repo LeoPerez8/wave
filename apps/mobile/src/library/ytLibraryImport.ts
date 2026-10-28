@@ -61,6 +61,7 @@ import {
   type LinkedSource,
   type YtLibraryBatch,
   type YtLibraryOrigins,
+  type YtLibraryPauseReason,
   type YtLibraryPicker,
   type YtLibraryRead,
   playlistDownloadOrigin,
@@ -257,7 +258,7 @@ let readingSince: number | null = null;
  * it resolves the reason: the batch pauses there. Any other failure leaves the playlist empty, marks
  * it failed and says so in the log.
  */
-const fill = async (read: YtLibraryRead): Promise<string | null> => {
+const fill = async (read: YtLibraryRead): Promise<YtLibraryPauseReason | null> => {
   let reason: string;
   // Each phase's time goes to the app log once the songs are in (#759).
   const timer = importPhaseTimer(
@@ -319,13 +320,13 @@ const fill = async (read: YtLibraryRead): Promise<string | null> => {
     reason = error instanceof Error ? error.message : String(error);
   }
   const failure = ytLibraryReadFailed(batch.get(), read, reason);
-  if (failure.pause) return reason;
+  if (failure.pausedBy !== null) return failure.pausedBy;
   if (isYtLibraryReadQueued(batch.get(), read)) {
     appLog("warn", LOG_TAG, ytLibraryReadLogLine(read, reason));
     // Its page says "Couldn't read it online" instead.
     endImportProgress(read.playlistId);
   }
-  if (!failure.pause) queuedAt.delete(read.playlistId);
+  queuedAt.delete(read.playlistId);
   batch.set(failure.batch);
   return null;
 };

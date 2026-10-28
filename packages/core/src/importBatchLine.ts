@@ -12,7 +12,11 @@
  */
 
 import type { ImportProgressBoard } from "./importProgress.ts";
-import { nextYtLibraryRead, type YtLibraryBatch } from "./ytLibraryBatch.ts";
+import {
+  nextYtLibraryRead,
+  type YtLibraryBatch,
+  type YtLibraryPauseReason,
+} from "./ytLibraryBatch.ts";
 
 /** What the line says, and the counts it says it from. */
 export interface ImportBatchLine {
@@ -24,8 +28,8 @@ export interface ImportBatchLine {
   readonly paused: boolean;
 }
 
-/** A pause's reason as the line words it (`ytLibraryReadFailed`'s pausing reasons). */
-const PAUSE_WORDS: Readonly<Record<string, string>> = {
+/** A pause's reason as the line words it. */
+const PAUSE_WORDS: Readonly<Record<YtLibraryPauseReason, string>> = {
   offline: "offline",
   disabled: "YT Music off",
   signedOut: "signed out of Spotify",
@@ -43,7 +47,7 @@ const number = (count: number): string => count.toLocaleString("en");
 export const importBatchLine = (
   batch: YtLibraryBatch,
   board: ImportProgressBoard,
-  pausedBy: string | null,
+  pausedBy: YtLibraryPauseReason | null,
 ): ImportBatchLine | null => {
   if (batch.run.length === 0) return null;
   const states = new Map(batch.reads.map((read) => [read.playlistId, read.state]));
@@ -56,9 +60,8 @@ export const importBatchLine = (
   const total = batch.run.length;
   const done = total - left;
   if (pausedBy !== null && nextYtLibraryRead(batch) !== undefined) {
-    const why = PAUSE_WORDS[pausedBy];
     return {
-      text: why === undefined ? "Import paused" : `Import paused · ${why}`,
+      text: `Import paused · ${PAUSE_WORDS[pausedBy]}`,
       done,
       total,
       paused: true,

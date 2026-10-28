@@ -1590,6 +1590,7 @@ export {
   ytLibraryDownloadsToQueue,
   ytLibraryDownloadsQueued,
   ytLibraryReadFailed,
+  isYtLibraryPauseReason,
   ytLibraryReadLogLine,
   ytLibraryReadView,
 } from "./ytLibraryBatch.ts";
@@ -1617,6 +1618,7 @@ export type {
 } from "./importProgress.ts";
 export type {
   YtLibraryBatch,
+  YtLibraryPauseReason,
   YtLibraryRead,
   YtLibraryReadFailure,
   YtLibraryReadState,

@@ -150,7 +150,7 @@ export const startupReplay = async (context: FastAgainContext, store: LibrarySto
             item.source === "library" ? item.track.id : item.song.title,
           ),
           next: next?.source,
-          paused: paused?.pause,
+          paused: paused === null ? undefined : paused.pausedBy !== null,
           pairs,
         };
       }),
