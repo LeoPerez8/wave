@@ -30,7 +30,7 @@ const composite = (colour: string, ground: string): string =>
 
 /** What an overlay card can show behind its dividers: the opaque fallback, or glass over anything. */
 const cardGrounds = (colors: ThemeColors): string[] => {
-  const tints = [GLASS_SETTINGS.tint.min, GLASS_SETTINGS.tint.default, GLASS_SETTINGS.tint.max];
+  const tints = GLASS_SETTINGS.tint.levels;
   const backdrops = ["#000000", "#ffffff", "#808080", colors.background, colors.foreground];
   return [
     colors.surface,
