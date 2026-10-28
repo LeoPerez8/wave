@@ -2,11 +2,13 @@ import {
   DEFAULT_THEME_CHOICE,
   appearanceAccent,
   chooseCustomInk,
+  createColourPickerPreview,
   launcherIconSwitch,
   launchTheme,
   readThemeChoice,
   themeFor,
   type Appearance,
+  type ColourPickerPreview,
   type InkGroup,
   type LauncherIconSwitch,
   type Theme,
@@ -94,37 +96,32 @@ export const setThemeSwatch = (group: ThemeGroup, id: string, confirm: Confirm):
   // Read back through Core so an unknown id lands on the default.
   changeTheme(readThemeChoice(JSON.stringify({ ...theme.get(), [group]: id })), confirm);
 
-/**
- * How often the app recolours while a colour is being picked: every frame
- * would re-render everything that reads a colour, mid-drag.
- */
-const PREVIEW_INTERVAL_MS = 80;
-
-let previewTimer: ReturnType<typeof setTimeout> | null = null;
-let pendingPreview: ThemeChoice | null = null;
+let preview: ColourPickerPreview | null = null;
 
 /**
- * Recolours the app with `hex` as the group's custom colour while the picker
- * is open, without keeping it: the notification, the launcher icon and the
- * splash wait for Done.
+ * Starts recolouring the app with the group's custom colour as the picker
+ * moves, without keeping it: the notification, the launcher icon and the
+ * splash wait for Done. A drag recolours only once the finger rests or lifts
+ * (Core's `createColourPickerPreview`), since a recolour re-renders every
+ * themed view.
  */
-export const previewCustomInk = (group: InkGroup, hex: string): void => {
-  pendingPreview = chooseCustomInk(theme.get(), group, hex);
-  if (previewTimer !== null) return;
-  recolour(themeFor(pendingPreview));
-  pendingPreview = null;
-  previewTimer = setTimeout(() => {
-    previewTimer = null;
-    if (pendingPreview !== null) recolour(themeFor(pendingPreview));
-    pendingPreview = null;
-  }, PREVIEW_INTERVAL_MS);
+export const previewCustomInk = (group: InkGroup): ColourPickerPreview => {
+  preview?.stop();
+  preview = createColourPickerPreview({
+    apply: (hex) => recolour(themeFor(chooseCustomInk(theme.get(), group, hex))),
+    now: Date.now,
+    wait: (ms, done) => {
+      const timer = setTimeout(done, ms);
+      return () => clearTimeout(timer);
+    },
+  });
+  return preview;
 };
 
 /** Ends a preview: the app goes back to the kept colours (or the ones Done just kept). */
 const endPreview = (): void => {
-  if (previewTimer !== null) clearTimeout(previewTimer);
-  previewTimer = null;
-  pendingPreview = null;
+  preview?.stop();
+  preview = null;
   recolour(themeFor(theme.get()));
 };
 
