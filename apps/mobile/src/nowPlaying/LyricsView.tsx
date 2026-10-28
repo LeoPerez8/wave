@@ -7,10 +7,10 @@ import {
 import {
   MAX_SHARED_LYRIC_LINES,
   currentLyricIndex,
-  karaokeLyricLines,
-  type LyricWord,
+  currentLyricWordIndex,
   extrapolatePosition,
   isLyricLineSelected,
+  karaokeLyricLines,
   lyricCardColours,
   shareableLyricLines,
   sharedLyricLines,
@@ -175,38 +175,40 @@ type LineProps = {
   onLayoutLine: (index: number, y: number) => void;
 };
 
-/** Word colours read the shared playhead, so playback does not render React every frame. */
-function KaraokeWord({ word, suffix }: { word: LyricWord; suffix: string }) {
-  const [foreground, secondary] = useThemeColor(["foreground", "secondary"]);
-  const tint = useAnimatedStyle(() => ({
-    color: playhead.positionMs.get() >= word.timeMs ? foreground : secondary,
-  }));
-  return (
-    <Animated.Text style={tint}>
-      {word.text}
-      {suffix}
-    </Animated.Text>
-  );
-}
-
+/**
+ * The sung line with Karaoke on: the words already sung and the one being
+ * sung in ink, the rest in the line's dim tone. Core says which word is sung
+ * at the shared playhead, so a seek either way relights the right word at
+ * once, and the line renders once a word, never every frame.
+ */
 function KaraokeText({ line }: { line: LyricLine }) {
+  const words = line.words ?? [];
+  const [sung, setSung] = useState(() =>
+    currentLyricWordIndex(words, extrapolatePosition(positionState.get(), Date.now())),
+  );
+  useAnimatedReaction(
+    () => (playhead.live.get() ? currentLyricWordIndex(words, playhead.positionMs.get()) : null),
+    (next, previous) => {
+      if (next !== null && next !== previous) scheduleOnRN(setSung, next);
+    },
+  );
   return (
-    <Text className="font-sans text-title2 font-medium">
-      {line.text.slice(0, line.words?.[0]?.start ?? 0)}
-      {line.words?.map((word, at, words) => (
-        <KaraokeWord
-          key={word.start}
-          word={word}
-          suffix={line.text.slice(word.end, words[at + 1]?.start ?? line.text.length)}
-        />
+    <Text className="font-sans text-title2 font-medium text-secondary">
+      {line.text.slice(0, words[0]?.start ?? line.text.length)}
+      {words.map((word, at) => (
+        // Each word carries the spaces after it, so the line wraps as the plain one does.
+        <Text key={word.start} className={at <= sung ? "text-foreground" : undefined}>
+          {line.text.slice(word.start, words[at + 1]?.start ?? line.text.length)}
+        </Text>
       ))}
     </Text>
   );
 }
 
 /**
- * One synced line: ink while it's sung, graphite otherwise, with its
- * translation under it lit along with it. Tap either to play from there.
+ * One synced line: ink while it's sung (word by word with Karaoke on),
+ * graphite otherwise, with its translation under it lit along with it. Tap
+ * either to play from there.
  * While Share picks lines, ink on a faint backdrop marks the selected ones,
  * and a tap picks instead.
  */
