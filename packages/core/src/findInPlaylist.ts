@@ -8,10 +8,11 @@
  * songs found stay in the playlist's order, given by their place in it, so a
  * tap plays the whole playlist from the song.
  *
- * The Library's Songs, Artists and Playlists lists find the same way (#530,
- * #754): Songs by each song's title, artist and album, Artists by the
- * artist's name alone (`artistFindText`), Playlists by the playlist's name
- * alone (`playlistFindText`), each keeping its list's order.
+ * The Library's Songs and Artists lists find the same way (#530): Songs by
+ * each song's title, artist and album, Artists by the artist's name alone
+ * (`artistFindText`), each keeping its list's order. Albums find by title and
+ * album artist (`albumFindText`), Genres by name (`genreFindText`) (#753),
+ * Playlists by name alone (`playlistFindText`) (#754).
  */
 
 import { createSearchIndex, normalizeSearchText, type SearchEntry } from "./search.ts";
@@ -44,28 +45,40 @@ export const FIND_IN_PLAYLIST_NO_MATCH = "No songs match";
 
 /**
  * A list Find narrows: a playlist (Favorites too), or the Library's Songs,
- * Artists or Playlists.
+ * Artists, Albums, Genres or Playlists.
  */
-export type FindableListKind = "playlist" | "songs" | "artists" | "playlists";
+export type FindableListKind = "playlist" | "songs" | "artists" | "albums" | "genres" | "playlists";
 
-/** What each list's field says before anything is typed, and under it when nothing is found. */
-const FIND_WORDS: Readonly<
-  Record<FindableListKind, { readonly placeholder: string; readonly noMatch: string }>
+/** What each findable list's field says, and what it says when the query finds nothing. */
+const FIND_TEXTS: Record<
+  FindableListKind,
+  { readonly placeholder: string; readonly noMatch: string }
 > = {
   playlist: { placeholder: FIND_IN_PLAYLIST_PLACEHOLDER, noMatch: FIND_IN_PLAYLIST_NO_MATCH },
   songs: { placeholder: "Find in Songs", noMatch: FIND_IN_PLAYLIST_NO_MATCH },
   artists: { placeholder: "Find in Artists", noMatch: "No artists match" },
+  albums: { placeholder: "Find in Albums", noMatch: "No albums match" },
+  genres: { placeholder: "Find in Genres", noMatch: "No genres match" },
   playlists: { placeholder: "Find in Playlists", noMatch: "No playlists match" },
 };
 
 /** What [list]'s field says before anything is typed ("Find in Songs"). */
-export const findPlaceholder = (list: FindableListKind): string => FIND_WORDS[list].placeholder;
+export const findPlaceholder = (list: FindableListKind): string => FIND_TEXTS[list].placeholder;
 
 /** What [list] says under its field when the query finds nothing ("No artists match"). */
-export const findNoMatch = (list: FindableListKind): string => FIND_WORDS[list].noMatch;
+export const findNoMatch = (list: FindableListKind): string => FIND_TEXTS[list].noMatch;
 
 /** What finds an artist in the Library's Artists: its name, matched as a song's title is. */
 export const artistFindText = (name: string): PlaylistFindText => ({ title: name });
+
+/** What finds an album in the Library's Albums: its title and its album artist. */
+export const albumFindText = (title: string, albumArtist: string): PlaylistFindText => ({
+  title,
+  artist: albumArtist,
+});
+
+/** What finds a genre in the Library's Genres: its name. */
+export const genreFindText = (name: string): PlaylistFindText => ({ title: name });
 
 /** What finds a playlist in the Library's Playlists: its name alone, matched as a song's title is. */
 export const playlistFindText = (name: string): PlaylistFindText => ({ title: name });

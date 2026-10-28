@@ -4,7 +4,14 @@ import { LibraryReadFeedback } from "./LibraryReadFeedback";
 import { LegendList, type LegendListRef } from "@legendapp/list/react-native";
 import { useScrollToTop } from "expo-router";
 import { IconStack2 } from "@tabler/icons-react-native";
-import { artistFindText, counted, type PlaylistFindText } from "@wave/core";
+import {
+  albumFindText,
+  artistFindText,
+  counted,
+  genreFindText,
+  type FindableListKind,
+  type PlaylistFindText,
+} from "@wave/core";
 import { useCallback, useMemo, useRef, type ReactElement } from "react";
 import { useWindowDimensions, View } from "react-native";
 
@@ -70,10 +77,11 @@ type NameListProps<A> = {
   /** A row; [selection] tells it whether the list is selecting and what's checked. */
   renderRow: (item: A, selection: ListSelection<A>) => ReactElement;
   /**
-   * Find in Artists: what finds each item. Its field waits above the head
-   * until the list is pulled down, and narrows the list as you type.
+   * Find in Artists or Genres ([of]): what finds each item ([by]). Its field
+   * waits above the head until the list is pulled down, and narrows the list
+   * as you type.
    */
-  findBy?: (item: A) => PlaylistFindText | null;
+  findIn?: { readonly of: FindableListKind; readonly by: (item: A) => PlaylistFindText | null };
 };
 
 const unfindable = (): null => null;
@@ -87,7 +95,7 @@ function NameList<A>({
   keyOf,
   target,
   renderRow,
-  findBy,
+  findIn,
 }: NameListProps<A>) {
   const scrollable = useListScrollable();
   const list = useRef<LegendListRef>(null);
@@ -96,8 +104,8 @@ function NameList<A>({
   const sortKeys = useMemo(() => items.map(sortKey), [items, sortKey]);
   const spine = useSpine(sortKeys, list);
   const selection = useListSelection({ items, keyOf, target });
-  const findable = findBy !== undefined;
-  const find = useFindInLegendList(list, items, findBy ?? unfindable, findable);
+  const findable = findIn !== undefined;
+  const find = useFindInLegendList(list, items, findIn?.by ?? unfindable, findable);
   const renderItem = useCallback(
     ({ item }: { item: A }) => renderRow(item, selection),
     [renderRow, selection],
@@ -127,7 +135,9 @@ function NameList<A>({
           minHeight: findable ? find.minHeight : undefined,
         }}
         initialScrollOffset={findable ? FIND_FIELD_HEIGHT : undefined}
-        ListHeaderComponent={findable ? <FindHead find={find} header={head} of="artists" /> : head}
+        ListHeaderComponent={
+          findIn === undefined ? head : <FindHead find={find} header={head} of={findIn.of} />
+        }
       />
       {spine.show && find.found === null && (
         <AlphabetSpine entries={spine.entries} onJump={spine.onJump} topRow={spine.topRow} />
@@ -138,7 +148,10 @@ function NameList<A>({
 
 const artistSort = (artist: ArtistRow) => artist.sort;
 const artistKey = (artist: ArtistRow) => String(artist.id);
-const artistFind = (artist: ArtistRow): PlaylistFindText => artistFindText(artist.name);
+const findArtists = {
+  of: "artists",
+  by: (artist: ArtistRow): PlaylistFindText => artistFindText(artist.name),
+} as const;
 const artistsOf = (artists: readonly ArtistRow[]): ActionItems => ({
   kind: "artist",
   items: artists,
@@ -171,13 +184,17 @@ export function ArtistsList({ empty }: { empty: string }) {
       keyOf={artistKey}
       target={artistsOf}
       renderRow={renderArtist}
-      findBy={artistFind}
+      findIn={findArtists}
     />
   );
 }
 
 const genreSort = (genre: GenreRow) => genre.sort;
 const genreKey = (genre: GenreRow) => String(genre.id);
+const findGenres = {
+  of: "genres",
+  by: (genre: GenreRow): PlaylistFindText => genreFindText(genre.name),
+} as const;
 const genresOf = (genres: readonly GenreRow[]): ActionItems => ({ kind: "genre", items: genres });
 const renderGenre = (genre: GenreRow, selection: ListSelection<GenreRow>) => (
   <NameRow
@@ -206,14 +223,21 @@ export function GenresList({ empty }: { empty: string }) {
       keyOf={genreKey}
       target={genresOf}
       renderRow={renderGenre}
+      findIn={findGenres}
     />
   );
 }
 
+const findAlbum = (album: AlbumRow): PlaylistFindText =>
+  albumFindText(album.title, album.albumArtist);
 const pairKey = (pair: readonly AlbumRow[]): string => pair.map((album) => album.id).join("-");
 const pairRow = (index: number): number => Math.floor(index / 2);
 
-/** Library › Albums: a two-column artwork grid by title, with the A–Z spine. */
+/**
+ * Library › Albums: a two-column artwork grid by title, with the A–Z spine.
+ * Find in Albums waits above the head until the grid is pulled down, and
+ * narrows it by title and album artist as you type.
+ */
 export function AlbumsList({ empty }: { empty: string }) {
   const scrollable = useListScrollable();
   const albums = useAlbums();
@@ -226,7 +250,8 @@ export function AlbumsList({ empty }: { empty: string }) {
   const tile = useAlbumTileSize(spine.paddingRight);
   const { fontScale } = useWindowDimensions();
   const rowHeight = albumCardRowHeight(tile, fontScale);
-  const rows = useMemo(() => albumPairs(albums), [albums]);
+  const find = useFindInLegendList(list, albums, findAlbum, true);
+  const rows = useMemo(() => albumPairs(find.shown), [find.shown]);
   const selection = useAlbumSelection(albums);
   const rowState = useMemo(() => ({ tile, selection }), [tile, selection]);
   const renderItem = useCallback(
@@ -239,9 +264,12 @@ export function AlbumsList({ empty }: { empty: string }) {
   if (!libraryQueryHasContent("albums"))
     return <LibraryReadFeedback queryKey="albums" label="albums" shape="albums" scan />;
   if (albums.length === 0) return <NothingYet message={empty} />;
+  const head = <ListHead line={counted(albums.length, "album")} />;
   return (
     <View className="flex-1">
       <LegendList
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
         scrollEnabled={scrollable}
         ref={list}
         className="flex-1"
@@ -256,10 +284,12 @@ export function AlbumsList({ empty }: { empty: string }) {
           paddingLeft: grid.margin,
           paddingRight: spine.paddingRight,
           paddingBottom: bottomInset,
+          minHeight: find.minHeight,
         }}
-        ListHeaderComponent={<ListHead line={counted(albums.length, "album")} />}
+        initialScrollOffset={FIND_FIELD_HEIGHT}
+        ListHeaderComponent={<FindHead find={find} header={head} of="albums" />}
       />
-      {spine.show && (
+      {spine.show && find.found === null && (
         <AlphabetSpine entries={spine.entries} onJump={spine.onJump} topRow={spine.topRow} />
       )}
     </View>

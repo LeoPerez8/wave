@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import {
+  albumFindText,
   createFindableList,
   artistFindText,
+  genreFindText,
   createPlaylistFinder,
   findInPlaylistHead,
   findNoMatch,
@@ -202,6 +204,66 @@ describe("Find in the Library's Artists", () => {
   });
 });
 
+describe("Find in the Library's Albums", () => {
+  interface Album {
+    readonly title: string;
+    readonly albumArtist: string;
+  }
+  const ALBUMS: readonly Album[] = [
+    { title: "Back in Black", albumArtist: "AC/DC" },
+    { title: "Lemonade", albumArtist: "Beyoncé" },
+    { title: "Abbey Road", albumArtist: "The Beatles" },
+    { title: "Beyoncé", albumArtist: "Beyoncé" },
+    { title: "Hunting High and Low", albumArtist: "a-ha" },
+  ];
+  const list = () => createFindableList(ALBUMS, (a) => albumFindText(a.title, a.albumArtist), true);
+
+  test("an album is found by its title", () => {
+    assert.deepEqual(list().show("lemon").found, [1]);
+    assert.deepEqual(list().show("high hunting").found, [4]);
+  });
+
+  test("an album is found by its album artist, folded as Songs folds", () => {
+    assert.deepEqual(list().show("ac/dc").found, [0]);
+    assert.deepEqual(list().show("BEATL").found, [2]);
+  });
+
+  test("the albums found keep the list's order, and a row leads back to its place", () => {
+    const shown = list().show("beyonce");
+    assert.deepEqual(
+      shown.songs.map((a) => a.title),
+      ["Lemonade", "Beyoncé"],
+    );
+    assert.equal(shown.placeOf(1), 3);
+  });
+
+  test("a query's words can mix the title and the album artist", () => {
+    assert.deepEqual(list().show("road beatles").found, [2]);
+  });
+
+  test("a blank query shows every album", () => {
+    assert.equal(list().show("").found, null);
+  });
+});
+
+describe("Find in the Library's Genres", () => {
+  const GENRES = ["Hip-Hop", "Rock", "Indie Rock", "Música Popular Brasileira"];
+  const list = () => createFindableList(GENRES, genreFindText, true);
+
+  test("a genre is found by its name, folded as Songs folds", () => {
+    assert.deepEqual(list().show("hiphop").found, [0]);
+    assert.deepEqual(list().show("musica").found, [3]);
+  });
+
+  test("the genres found keep the list's order", () => {
+    assert.deepEqual(list().show("rock").songs, ["Rock", "Indie Rock"]);
+  });
+
+  test("every word of the query starts a word of the name", () => {
+    assert.deepEqual(list().show("ock").found, []);
+  });
+});
+
 describe("Find in the Library's Playlists", () => {
   const PLAYLISTS = ["Road Trip", "Sunday Morning", "Café del Mar", "Rock & Roll", "Morning Run"];
   const list = () => createFindableList(PLAYLISTS, playlistFindText, true);
@@ -238,6 +300,8 @@ describe("what a findable list's field and empty line say", () => {
     assert.equal(findPlaceholder("playlist"), "Find in Playlist");
     assert.equal(findPlaceholder("songs"), "Find in Songs");
     assert.equal(findPlaceholder("artists"), "Find in Artists");
+    assert.equal(findPlaceholder("albums"), "Find in Albums");
+    assert.equal(findPlaceholder("genres"), "Find in Genres");
     assert.equal(findPlaceholder("playlists"), "Find in Playlists");
   });
 
@@ -245,6 +309,8 @@ describe("what a findable list's field and empty line say", () => {
     assert.equal(findNoMatch("playlist"), "No songs match");
     assert.equal(findNoMatch("songs"), "No songs match");
     assert.equal(findNoMatch("artists"), "No artists match");
+    assert.equal(findNoMatch("albums"), "No albums match");
+    assert.equal(findNoMatch("genres"), "No genres match");
     assert.equal(findNoMatch("playlists"), "No playlists match");
   });
 });

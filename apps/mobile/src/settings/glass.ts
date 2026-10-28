@@ -17,7 +17,7 @@ export const setGlassSetting = <K extends keyof GlassSettings>(
   key: K,
   value: GlassSettings[K],
 ): void =>
-  // Read back through Core so the value lands on the slider's range and step.
+  // Read back through Core so the value lands on one of the setting's levels.
   glass.set(readGlassSettings(JSON.stringify({ ...glass.get(), [key]: value })));
 
 /** Puts the glass back as it was before it could be tuned. */
