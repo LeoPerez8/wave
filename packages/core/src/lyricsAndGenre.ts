@@ -69,7 +69,7 @@ const artistName = (artist: string): string => {
 };
 
 /** Whether a result's title and artist are [song]'s. */
-const isSameSong = (song: SongLookup, title: string, artist: string): boolean =>
+export const isSameSong = (song: SongLookup, title: string, artist: string): boolean =>
   titleName(title) === titleName(song.title) && artistName(artist) === artistName(song.artist);
 
 /** Whether a result is from [song]'s album. */
