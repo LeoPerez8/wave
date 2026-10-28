@@ -12,11 +12,14 @@ import {
   isLyricLineSelected,
   karaokeLyricLines,
   lyricCardColours,
+  placeGeniusReferents,
   shareableLyricLines,
   sharedLyricLines,
   tapLyricLine,
   withOpacity,
   type ArtworkPalette,
+  type GeniusHighlight,
+  type GeniusPlacement,
   type LyricLine,
   type LyricSelection,
 } from "@wave/core";
@@ -51,6 +54,12 @@ import { useThemeColor } from "@/theme/useThemeColor";
 
 import { DismissArea } from "./DismissArea";
 import { GeniusAbout } from "./GeniusAbout";
+import {
+  HighlightedLine,
+  MoreInsights,
+  NO_HIGHLIGHTS,
+  annotationActions,
+} from "./GeniusAnnotations";
 import type { LibraryFile } from "./hooks";
 import { isPlayheadLive, playhead, playheadVisibility } from "./playhead";
 import { TrackHeader } from "./TrackHeader";
@@ -172,6 +181,8 @@ type LineProps = {
   translation: string | null;
   /** Its translation is on its way: a skeleton under it. */
   translating: boolean;
+  /** Genius's annotated fragments on it (none while Share picks lines). */
+  highlights: readonly GeniusHighlight[];
   onSeek: (line: LyricLine, index: number) => void;
   onPick: (index: number) => void;
   onLayoutLine: (index: number, y: number) => void;
@@ -179,11 +190,18 @@ type LineProps = {
 
 /**
  * The sung line with Karaoke on: the words already sung and the one being
- * sung in ink, the rest in the line's dim tone. Core says which word is sung
- * at the shared playhead, so a seek either way relights the right word at
- * once, and the line renders once a word, never every frame.
+ * sung in ink, the rest in the line's dim tone, over Genius's highlights.
+ * Core says which word is sung at the shared playhead, so a seek either way
+ * relights the right word at once, and the line renders once a word, never
+ * every frame.
  */
-function KaraokeText({ line }: { line: LyricLine }) {
+function KaraokeText({
+  line,
+  highlights,
+}: {
+  line: LyricLine;
+  highlights: readonly GeniusHighlight[];
+}) {
   const words = line.words ?? [];
   const [sung, setSung] = useState(() =>
     currentLyricWordIndex(words, extrapolatePosition(positionState.get(), Date.now())),
@@ -194,23 +212,25 @@ function KaraokeText({ line }: { line: LyricLine }) {
       if (next !== null && next !== previous) scheduleOnRN(setSung, next);
     },
   );
+  const wordStarts = useMemo(() => (line.words ?? []).map((word) => word.start), [line.words]);
   return (
     <Text className="font-sans text-title2 font-medium text-secondary">
-      {line.text.slice(0, words[0]?.start ?? line.text.length)}
-      {words.map((word, at) => (
-        // Each word carries the spaces after it, so the line wraps as the plain one does.
-        <Text key={word.start} className={at <= sung ? "text-foreground" : undefined}>
-          {line.text.slice(word.start, words[at + 1]?.start ?? line.text.length)}
-        </Text>
-      ))}
+      {/* Each word carries the spaces after it, so the line wraps as the plain one does. */}
+      <HighlightedLine
+        text={line.text}
+        highlights={highlights}
+        wordStarts={wordStarts}
+        lit={(word) => word >= 0 && word <= sung}
+      />
     </Text>
   );
 }
 
 /**
  * One synced line: ink while it's sung (word by word with Karaoke on),
- * graphite otherwise, with its translation under it lit along with it. Tap
- * either to play from there.
+ * graphite otherwise, with its translation under it lit along with it and
+ * Genius's annotated fragments on a soft backdrop. Tap a fragment for its
+ * annotation, anywhere else to play from there.
  * While Share picks lines, ink on a faint backdrop marks the selected ones,
  * and a tap picks instead.
  */
@@ -223,6 +243,7 @@ const SyncedLine = memo(function SyncedLine({
   selected,
   translation,
   translating,
+  highlights,
   onSeek,
   onPick,
   onLayoutLine,
@@ -259,6 +280,7 @@ const SyncedLine = memo(function SyncedLine({
         }
         accessibilityHint={picking ? "Selects this line to share" : "Plays from this line"}
         accessibilityState={{ selected: on }}
+        {...annotationActions(highlights)}
         onPress={() => (picking ? onPick(index) : onSeek(line, index))}
         // Picking gives its own haptic, another one for a tap that can't select.
         haptic={picking ? undefined : "selection"}
@@ -272,10 +294,10 @@ const SyncedLine = memo(function SyncedLine({
         {line.text === "" ? (
           <PauseDots current={!picking && current} />
         ) : karaoke && current && !picking ? (
-          <KaraokeText line={line} />
+          <KaraokeText line={line} highlights={highlights} />
         ) : (
           <Animated.Text className="font-sans text-title2 font-medium" style={tint}>
-            {line.text}
+            <HighlightedLine text={line.text} highlights={highlights} />
           </Animated.Text>
         )}
         {translation !== null && (
@@ -305,6 +327,7 @@ function SyncedLyrics({
   translation,
   retryTranslation,
   about,
+  annotations,
 }: {
   lines: readonly LyricLine[];
   karaoke: boolean;
@@ -312,6 +335,7 @@ function SyncedLyrics({
   translation: TranslationShown | null;
   retryTranslation: () => void;
   about: string | null;
+  annotations: GeniusPlacement | null;
 }) {
   useRenderCount("SyncedLyrics");
   const lines = useMemo(
@@ -462,20 +486,23 @@ function SyncedLyrics({
           picking={isPicking}
           selected={picking?.isSelected(at) ?? false}
           {...translations[at]!}
+          highlights={isPicking ? NO_HIGHLIGHTS : (annotations?.lines[at] ?? NO_HIGHLIGHTS)}
           onSeek={onSeek}
           onPick={onPick}
           onLayoutLine={onLayoutLine}
         />
       ))}
+      {!isPicking && annotations !== null && <MoreInsights referents={annotations.unplaced} />}
     </ScrollView>
   );
 }
 
 /**
  * Unsynced lyrics: the words as tagged, to scroll through at your own pace,
- * each line's translation under it while translation is on. While Share
- * picks lines each is a tap target, the selected ones in ink on a faint
- * backdrop and the rest in graphite.
+ * each line's translation under it while translation is on, and Genius's
+ * annotated fragments on a soft backdrop (a tap opens the annotation). While
+ * Share picks lines each is a tap target, the selected ones in ink on a
+ * faint backdrop and the rest in graphite, without highlights.
  */
 function UnsyncedLyrics({
   lines,
@@ -483,12 +510,14 @@ function UnsyncedLyrics({
   translation,
   retryTranslation,
   about,
+  annotations,
 }: {
   lines: readonly string[];
   picking: Picking | null;
   translation: TranslationShown | null;
   retryTranslation: () => void;
   about: string | null;
+  annotations: GeniusPlacement | null;
 }) {
   const selectedFill = useSelectedFill();
   return (
@@ -511,7 +540,9 @@ function UnsyncedLyrics({
               key={at}
               style={[LINE_INSET, under.translation !== null && { paddingBottom: CELL }]}
             >
-              <Text className="font-sans text-title2 font-medium text-foreground">{line}</Text>
+              <Text className="font-sans text-title2 font-medium text-foreground">
+                <HighlightedLine text={line} highlights={annotations?.lines[at] ?? NO_HIGHLIGHTS} />
+              </Text>
               {under.translation !== null && (
                 <Text className="font-sans text-body text-secondary">{under.translation}</Text>
               )}
@@ -547,6 +578,9 @@ function UnsyncedLyrics({
           </Press>
         );
       })}
+      {picking === null && annotations !== null && (
+        <MoreInsights referents={annotations.unplaced} />
+      )}
     </ScrollView>
   );
 }
@@ -638,6 +672,7 @@ function LyricsBody({
   translation,
   retryTranslation,
   about,
+  annotations,
 }: {
   shown: Shown | null;
   karaoke: boolean;
@@ -646,6 +681,7 @@ function LyricsBody({
   translation: TranslationShown | null;
   retryTranslation: () => void;
   about: string | null;
+  annotations: GeniusPlacement | null;
 }) {
   // Reading takes a moment; an empty field avoids flashing the empty state.
   if (shown === null) {
@@ -666,6 +702,7 @@ function LyricsBody({
           translation={translation}
           retryTranslation={retryTranslation}
           about={about}
+          annotations={annotations}
         />
       );
     case "unsynced":
@@ -676,6 +713,7 @@ function LyricsBody({
           translation={translation}
           retryTranslation={retryTranslation}
           about={about}
+          annotations={annotations}
         />
       );
     case "searching":
@@ -739,7 +777,9 @@ type Item = NonNullable<PlaybackState["item"]>;
  * (`LyricCardPreview`) in the cover's colours, and Translate, which puts
  * each line's translation into the phone's language under it
  * (`useLyricsTranslation`) until it's turned off. Above the lyrics, Genius's
- * About card (`useGenius`, `GeniusAbout`) once its answer comes.
+ * About card (`useGenius`, `GeniusAbout`) once its answer comes, and on them
+ * its annotated fragments, those not found under the last line
+ * (`placeGeniusReferents`, `GeniusAnnotations`).
  */
 export function LyricsView({
   file,
@@ -774,6 +814,18 @@ export function LyricsView({
   const translationSong =
     file !== null ? `library:${file.id}` : nonDTrackId === null ? null : `track:${nonDTrackId}`;
   const genius = useGenius(translationSong, item.title ?? "", item.artist ?? "", lyrics !== null);
+  const referents = genius?.referents ?? null;
+  // Where Genius's fragments sit on these lines; recomputed only when the lyrics or the answer change.
+  const annotations = useMemo(
+    () =>
+      lyrics === null || referents === null || referents.length === 0
+        ? null
+        : placeGeniusReferents(
+            lyrics.kind === "synced" ? lyrics.lines.map((line) => line.text) : lyrics.lines,
+            referents,
+          ),
+    [lyrics, referents],
+  );
   // Only lyrics with words to share have words to translate.
   const translation = useLyricsTranslation(
     translationSong,
@@ -881,6 +933,7 @@ export function LyricsView({
         translation={translation.shown}
         retryTranslation={translation.retry}
         about={genius?.description ?? null}
+        annotations={annotations}
       />
     </View>
   );

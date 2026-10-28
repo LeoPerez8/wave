@@ -50,11 +50,17 @@ test("Genius reads plain descriptions, distinguishes absent text from failed rep
 test("saved Genius misses expire at one week while matches survive offline", async () => {
   const { savedGenius, storedGenius, GENIUS_MISS_MS } = await import("./index.ts");
   const song = { title: "Imagine", artist: "John Lennon", album: null, durationMs: 0 };
-  const miss = storedGenius(song, { checkedAt: 100, match: null, description: null });
+  const miss = storedGenius(song, {
+    checkedAt: 100,
+    match: null,
+    description: null,
+    referents: null,
+  });
   assert.deepEqual(savedGenius(miss, 100 + GENIUS_MISS_MS - 1, song), {
     checkedAt: 100,
     match: null,
     description: null,
+    referents: null,
   });
   assert.equal(savedGenius(miss, 100 + GENIUS_MISS_MS, song), null);
   assert.equal(savedGenius("bad", 100, song), null);
@@ -74,7 +80,7 @@ test("saved Genius misses expire at one week while matches survive offline", asy
     null,
   );
   const match = pickGeniusSong(song, geniusCandidates(search)!);
-  const found = { checkedAt: 100, match, description: "About" };
+  const found = { checkedAt: 100, match, description: "About", referents: null };
   assert.deepEqual(savedGenius(storedGenius(song, found), 100 + GENIUS_MISS_MS, song), found);
 });
 
@@ -95,7 +101,12 @@ test("Genius matches a shared credit by its full artist names or its primary art
 test("a song's saved Genius answer stands only for the title and artist it was asked for", async () => {
   const { savedGenius, storedGenius } = await import("./index.ts");
   const song = { title: "Imagine", artist: "John Lennon", album: null, durationMs: 0 };
-  const stored = storedGenius(song, { checkedAt: 100, match: null, description: null });
+  const stored = storedGenius(song, {
+    checkedAt: 100,
+    match: null,
+    description: null,
+    referents: null,
+  });
   assert.equal(savedGenius(stored, 100, song)?.checkedAt, 100);
   assert.equal(savedGenius(stored, 100, { ...song, title: "Jealous Guy" }), null);
   assert.equal(savedGenius(stored, 100, { ...song, artist: "Yoko Ono" }), null);

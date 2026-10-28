@@ -1,0 +1,446 @@
+{
+  "meta": {
+    "status": 200
+  },
+  "response": {
+    "referents": [
+      {
+        "_type": "referent",
+        "annotator_id": 9003,
+        "annotator_login": "cyrille",
+        "api_path": "/referents/2005",
+        "classification": "accepted",
+        "fragment": "Burn, burn, little flame\nNobody here remembers your name",
+        "id": 2005,
+        "is_description": false,
+        "path": "/2005/Example-band-paper-lanterns/Fragment",
+        "range": {
+          "content": "Burn, burn, little flame\nNobody here remembers your name"
+        },
+        "song_id": 10356,
+        "url": "https://genius.com/2005/Example-band-paper-lanterns/Fragment",
+        "verified_annotator_ids": [],
+        "annotatable": {
+          "_type": "song",
+          "api_path": "/songs/10356",
+          "client_timestamps": {
+            "updated_by_human_at": 1700000000,
+            "lyrics_updated_at": 1700000000
+          },
+          "context": "The Example Band",
+          "id": 10356,
+          "image_url": "https://images.genius.com/example.300x300x1.jpg",
+          "link_title": "Paper Lanterns by The Example Band",
+          "title": "Paper Lanterns",
+          "type": "Song",
+          "url": "https://genius.com/Example-band-paper-lanterns-lyrics"
+        },
+        "annotations": [
+          {
+            "_type": "annotation",
+            "api_path": "/annotations/3005",
+            "body": {
+              "plain": "The flame is the band itself, forgotten by its hometown."
+            },
+            "comment_count": 0,
+            "community": true,
+            "custom_preview": null,
+            "has_voters": true,
+            "id": 3005,
+            "pinned": false,
+            "share_url": "https://genius.com/3005",
+            "source": null,
+            "state": "accepted",
+            "url": "https://genius.com/3005/Example-band-paper-lanterns/Fragment",
+            "verified": false,
+            "votes_total": 12,
+            "current_user_metadata": {
+              "permissions": [],
+              "excluded_permissions": ["vote"],
+              "interactions": {
+                "cosign": false,
+                "pyong": false,
+                "vote": null
+              },
+              "iq_by_action": {}
+            },
+            "authors": [
+              {
+                "_type": "user_attribution",
+                "attribution": 0.8,
+                "pinned_role": null,
+                "user": {
+                  "_type": "user",
+                  "api_path": "/users/9003",
+                  "avatar": {
+                    "tiny": {
+                      "url": "https://images.genius.com/avatars/tiny/9003",
+                      "bounding_box": {
+                        "width": 16,
+                        "height": 16
+                      }
+                    }
+                  },
+                  "header_image_url": "https://images.genius.com/avatars/medium/9003",
+                  "human_readable_role_for_display": "Contributor",
+                  "id": 9003,
+                  "iq": 1200,
+                  "login": "cyrille",
+                  "name": "Cyrille",
+                  "role_for_display": "contributor",
+                  "url": "https://genius.com/cyrille",
+                  "current_user_metadata": {
+                    "permissions": [],
+                    "excluded_permissions": ["follow"],
+                    "interactions": {
+                      "following": false
+                    }
+                  }
+                }
+              },
+              {
+                "_type": "user_attribution",
+                "attribution": 0.2,
+                "pinned_role": null,
+                "user": {
+                  "_type": "user",
+                  "api_path": "/users/9001",
+                  "avatar": {
+                    "tiny": {
+                      "url": "https://images.genius.com/avatars/tiny/9001",
+                      "bounding_box": {
+                        "width": 16,
+                        "height": 16
+                      }
+                    }
+                  },
+                  "header_image_url": "https://images.genius.com/avatars/medium/9001",
+                  "human_readable_role_for_display": "Contributor",
+                  "id": 9001,
+                  "iq": 1200,
+                  "login": "lantern_keeper",
+                  "name": "Lantern Keeper",
+                  "role_for_display": "contributor",
+                  "url": "https://genius.com/lantern_keeper",
+                  "current_user_metadata": {
+                    "permissions": [],
+                    "excluded_permissions": ["follow"],
+                    "interactions": {
+                      "following": false
+                    }
+                  }
+                }
+              }
+            ],
+            "cosigned_by": [],
+            "rejection_comment": null,
+            "verified_by": null
+          }
+        ]
+      },
+      {
+        "_type": "referent",
+        "annotator_id": 9002,
+        "annotator_login": "bo_reads",
+        "api_path": "/referents/2006",
+        "classification": "accepted",
+        "fragment": "Rock ’n’ roll in the attic",
+        "id": 2006,
+        "is_description": false,
+        "path": "/2006/Example-band-paper-lanterns/Fragment",
+        "range": {
+          "content": "Rock ’n’ roll in the attic"
+        },
+        "song_id": 10356,
+        "url": "https://genius.com/2006/Example-band-paper-lanterns/Fragment",
+        "verified_annotator_ids": [],
+        "annotatable": {
+          "_type": "song",
+          "api_path": "/songs/10356",
+          "client_timestamps": {
+            "updated_by_human_at": 1700000000,
+            "lyrics_updated_at": 1700000000
+          },
+          "context": "The Example Band",
+          "id": 10356,
+          "image_url": "https://images.genius.com/example.300x300x1.jpg",
+          "link_title": "Paper Lanterns by The Example Band",
+          "title": "Paper Lanterns",
+          "type": "Song",
+          "url": "https://genius.com/Example-band-paper-lanterns-lyrics"
+        },
+        "annotations": [
+          {
+            "_type": "annotation",
+            "api_path": "/annotations/3006",
+            "body": {
+              "plain": "They rehearsed in the singer's parents' attic."
+            },
+            "comment_count": 0,
+            "community": true,
+            "custom_preview": null,
+            "has_voters": true,
+            "id": 3006,
+            "pinned": false,
+            "share_url": "https://genius.com/3006",
+            "source": null,
+            "state": "accepted",
+            "url": "https://genius.com/3006/Example-band-paper-lanterns/Fragment",
+            "verified": false,
+            "votes_total": 12,
+            "current_user_metadata": {
+              "permissions": [],
+              "excluded_permissions": ["vote"],
+              "interactions": {
+                "cosign": false,
+                "pyong": false,
+                "vote": null
+              },
+              "iq_by_action": {}
+            },
+            "authors": [
+              {
+                "_type": "user_attribution",
+                "attribution": 0.8,
+                "pinned_role": null,
+                "user": {
+                  "_type": "user",
+                  "api_path": "/users/9002",
+                  "avatar": {
+                    "tiny": {
+                      "url": "https://images.genius.com/avatars/tiny/9002",
+                      "bounding_box": {
+                        "width": 16,
+                        "height": 16
+                      }
+                    }
+                  },
+                  "header_image_url": "https://images.genius.com/avatars/medium/9002",
+                  "human_readable_role_for_display": "Contributor",
+                  "id": 9002,
+                  "iq": 1200,
+                  "login": "bo_reads",
+                  "name": "Bo Reads",
+                  "role_for_display": "contributor",
+                  "url": "https://genius.com/bo_reads",
+                  "current_user_metadata": {
+                    "permissions": [],
+                    "excluded_permissions": ["follow"],
+                    "interactions": {
+                      "following": false
+                    }
+                  }
+                }
+              }
+            ],
+            "cosigned_by": [],
+            "rejection_comment": null,
+            "verified_by": null
+          }
+        ]
+      },
+      {
+        "_type": "referent",
+        "annotator_id": 9001,
+        "annotator_login": "lantern_keeper",
+        "api_path": "/referents/2007",
+        "classification": "accepted",
+        "fragment": "Under a sky with no stars at all",
+        "id": 2007,
+        "is_description": false,
+        "path": "/2007/Example-band-paper-lanterns/Fragment",
+        "range": {
+          "content": "Under a sky with no stars at all"
+        },
+        "song_id": 10356,
+        "url": "https://genius.com/2007/Example-band-paper-lanterns/Fragment",
+        "verified_annotator_ids": [],
+        "annotatable": {
+          "_type": "song",
+          "api_path": "/songs/10356",
+          "client_timestamps": {
+            "updated_by_human_at": 1700000000,
+            "lyrics_updated_at": 1700000000
+          },
+          "context": "The Example Band",
+          "id": 10356,
+          "image_url": "https://images.genius.com/example.300x300x1.jpg",
+          "link_title": "Paper Lanterns by The Example Band",
+          "title": "Paper Lanterns",
+          "type": "Song",
+          "url": "https://genius.com/Example-band-paper-lanterns-lyrics"
+        },
+        "annotations": [
+          {
+            "_type": "annotation",
+            "api_path": "/annotations/3007",
+            "body": {
+              "plain": "This bridge is only on the album version."
+            },
+            "comment_count": 0,
+            "community": true,
+            "custom_preview": null,
+            "has_voters": true,
+            "id": 3007,
+            "pinned": false,
+            "share_url": "https://genius.com/3007",
+            "source": null,
+            "state": "accepted",
+            "url": "https://genius.com/3007/Example-band-paper-lanterns/Fragment",
+            "verified": false,
+            "votes_total": 12,
+            "current_user_metadata": {
+              "permissions": [],
+              "excluded_permissions": ["vote"],
+              "interactions": {
+                "cosign": false,
+                "pyong": false,
+                "vote": null
+              },
+              "iq_by_action": {}
+            },
+            "authors": [
+              {
+                "_type": "user_attribution",
+                "attribution": 0.8,
+                "pinned_role": null,
+                "user": {
+                  "_type": "user",
+                  "api_path": "/users/9001",
+                  "avatar": {
+                    "tiny": {
+                      "url": "https://images.genius.com/avatars/tiny/9001",
+                      "bounding_box": {
+                        "width": 16,
+                        "height": 16
+                      }
+                    }
+                  },
+                  "header_image_url": "https://images.genius.com/avatars/medium/9001",
+                  "human_readable_role_for_display": "Contributor",
+                  "id": 9001,
+                  "iq": 1200,
+                  "login": "lantern_keeper",
+                  "name": "Lantern Keeper",
+                  "role_for_display": "contributor",
+                  "url": "https://genius.com/lantern_keeper",
+                  "current_user_metadata": {
+                    "permissions": [],
+                    "excluded_permissions": ["follow"],
+                    "interactions": {
+                      "following": false
+                    }
+                  }
+                }
+              }
+            ],
+            "cosigned_by": [],
+            "rejection_comment": null,
+            "verified_by": null
+          }
+        ]
+      },
+      {
+        "_type": "referent",
+        "annotator_id": 9002,
+        "annotator_login": "bo_reads",
+        "api_path": "/referents/2008",
+        "classification": "accepted",
+        "fragment": "dust on the keys",
+        "id": 2008,
+        "is_description": false,
+        "path": "/2008/Example-band-paper-lanterns/Fragment",
+        "range": {
+          "content": "dust on the keys"
+        },
+        "song_id": 10356,
+        "url": "https://genius.com/2008/Example-band-paper-lanterns/Fragment",
+        "verified_annotator_ids": [],
+        "annotatable": {
+          "_type": "song",
+          "api_path": "/songs/10356",
+          "client_timestamps": {
+            "updated_by_human_at": 1700000000,
+            "lyrics_updated_at": 1700000000
+          },
+          "context": "The Example Band",
+          "id": 10356,
+          "image_url": "https://images.genius.com/example.300x300x1.jpg",
+          "link_title": "Paper Lanterns by The Example Band",
+          "title": "Paper Lanterns",
+          "type": "Song",
+          "url": "https://genius.com/Example-band-paper-lanterns-lyrics"
+        },
+        "annotations": [
+          {
+            "_type": "annotation",
+            "api_path": "/annotations/3008",
+            "body": {
+              "plain": ""
+            },
+            "comment_count": 0,
+            "community": true,
+            "custom_preview": null,
+            "has_voters": true,
+            "id": 3008,
+            "pinned": false,
+            "share_url": "https://genius.com/3008",
+            "source": null,
+            "state": "accepted",
+            "url": "https://genius.com/3008/Example-band-paper-lanterns/Fragment",
+            "verified": false,
+            "votes_total": 12,
+            "current_user_metadata": {
+              "permissions": [],
+              "excluded_permissions": ["vote"],
+              "interactions": {
+                "cosign": false,
+                "pyong": false,
+                "vote": null
+              },
+              "iq_by_action": {}
+            },
+            "authors": [
+              {
+                "_type": "user_attribution",
+                "attribution": 0.8,
+                "pinned_role": null,
+                "user": {
+                  "_type": "user",
+                  "api_path": "/users/9002",
+                  "avatar": {
+                    "tiny": {
+                      "url": "https://images.genius.com/avatars/tiny/9002",
+                      "bounding_box": {
+                        "width": 16,
+                        "height": 16
+                      }
+                    }
+                  },
+                  "header_image_url": "https://images.genius.com/avatars/medium/9002",
+                  "human_readable_role_for_display": "Contributor",
+                  "id": 9002,
+                  "iq": 1200,
+                  "login": "bo_reads",
+                  "name": "Bo Reads",
+                  "role_for_display": "contributor",
+                  "url": "https://genius.com/bo_reads",
+                  "current_user_metadata": {
+                    "permissions": [],
+                    "excluded_permissions": ["follow"],
+                    "interactions": {
+                      "following": false
+                    }
+                  }
+                }
+              }
+            ],
+            "cosigned_by": [],
+            "rejection_comment": null,
+            "verified_by": null
+          }
+        ]
+      }
+    ]
+  }
+}
