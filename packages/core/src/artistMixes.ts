@@ -3,7 +3,8 @@ import { finishSteps, sortSteps } from "./buildSteps.ts";
  * Artist mixes (docs/spec.md, "Artist mixes"): Home's mixes that each grow
  * from one artist's YouTube Music radio. Core picks the artists: the owner's
  * most played, at random each build but leaning towards the most played,
- * then the Library's artists while plays give too few. The radio, the songs
+ * then the Library's artists while plays give too few, then artists similar
+ * to the Library's, then the top artists of YouTube Music's chart. The radio, the songs
  * a mix keeps and its Library pool are the mixes' shared rules
  * (`discoverMixes.ts`, `discoverMixLevels.ts`).
  */
@@ -20,6 +21,7 @@ import { identityKey } from "./library.ts";
 import { freshFirstSteps, type MixRefreshAvoid } from "./mixRefresh.ts";
 import { pickWeightedSteps, playsWeight, type RandomSource } from "./weightedPick.ts";
 import { libraryArtistFinderSteps, ytArtistQuery } from "./ytArtist.ts";
+import type { YtChartArtist } from "./ytChart.ts";
 
 /** How many Artist mixes Home shows at most. */
 export const ARTIST_MIX_COUNT = 4;
@@ -52,6 +54,11 @@ export interface ArtistMixPools {
    * `artistMixSimilarSource` asked for them. Used with [library] only.
    */
   readonly similar?: readonly DiscoverSimilarArtists[];
+  /**
+   * The top artists of YouTube Music's chart, in its order (`ytChart.ts`):
+   * the last seeds, for the slots the others leave.
+   */
+  readonly chart?: readonly YtChartArtist[];
   /** For a refresh: what the section showed today (`mixRefreshAvoid`). */
   readonly avoid?: MixRefreshAvoid;
 }
@@ -94,9 +101,19 @@ interface SeedPick {
   readonly seeds: DiscoverMixSeed[];
   /** The artists a refresh avoids that could seed, the least recently shown first. */
   readonly comeback: DiscoverMixSeed[];
+  /**
+   * The chart's artists that may seed, for the slots [seeds] and [comeback]
+   * leave: those a refresh avoids last, the least recently shown first.
+   * None when not asked for.
+   */
+  readonly chart: DiscoverMixSeed[];
 }
 
-function* pickSeedsSteps(pools: ArtistMixPools, random: RandomSource): Generator<void, SeedPick> {
+function* pickSeedsSteps(
+  pools: ArtistMixPools,
+  random: RandomSource,
+  withChart: boolean,
+): Generator<void, SeedPick> {
   const { avoid } = pools;
   const shownAt =
     avoid === undefined
@@ -124,7 +141,8 @@ function* pickSeedsSteps(pools: ArtistMixPools, random: RandomSource): Generator
   );
   for (const artist of library.fresh.slice(0, ARTIST_MIX_COUNT - seeds.length))
     seeds.push(artistSeed(artist, "library"));
-  const similar = yield* freshFirstSteps(yield* similarOfSteps(pools), shownAt);
+  const similarPool = yield* similarOfSteps(pools);
+  const similar = yield* freshFirstSteps(similarPool, shownAt);
   for (const artist of similar.fresh.slice(0, ARTIST_MIX_COUNT - seeds.length))
     seeds.push({ ...artistSeed(artist, "similar"), browseId: artist.browseId });
   const ids = new Set<string>();
@@ -145,10 +163,49 @@ function* pickSeedsSteps(pools: ArtistMixPools, random: RandomSource): Generator
       }
       yield;
     }
+  const chart: DiscoverMixSeed[] = [];
+  if (withChart && seeds.length + comeback.length < ARTIST_MIX_COUNT) {
+    const fromChart = yield* freshFirstSteps(yield* chartOfSteps(pools, similarPool), shownAt);
+    for (const artist of [...fromChart.fresh, ...fromChart.shown])
+      chart.push({ ...artistSeed(artist, "chart"), browseId: artist.browseId });
+  }
   return {
     seeds,
     comeback: yield* sortSteps(comeback, (a, b) => (shownAt?.(a) ?? 0) - (shownAt?.(b) ?? 0)),
+    chart,
   };
+}
+
+/**
+ * The chart's artists of [pools] that may seed, in its order: each once,
+ * none whose name isn't an artist's, that the owner played, that the
+ * Library has, or that [similar] holds (by name or by page).
+ */
+function* chartOfSteps(
+  { played, library = [], chart = [] }: ArtistMixPools,
+  similar: readonly DiscoverSimilarArtist[],
+): Generator<void, YtChartArtist[]> {
+  if (chart.length === 0) return [];
+  const known: SimilarSourceArtist[] = [];
+  for (const source of [played, library])
+    for (const artist of source) {
+      known.push(artist);
+      yield;
+    }
+  const inLibrary = yield* libraryArtistFinderSteps(known);
+  const names = new Set(similar.map((artist) => artistPhotoName(artist.name)));
+  const pages = new Set(similar.map((artist) => artist.browseId));
+  const kept: YtChartArtist[] = [];
+  for (const artist of chart) {
+    yield;
+    const name = artistPhotoName(artist.name);
+    if (ytArtistQuery(artist.name) === null || inLibrary(artist.name) !== null) continue;
+    if (names.has(name) || pages.has(artist.browseId)) continue;
+    names.add(name);
+    pages.add(artist.browseId);
+    kept.push(artist);
+  }
+  return kept;
 }
 
 /**
@@ -156,10 +213,11 @@ function* pickSeedsSteps(pools: ArtistMixPools, random: RandomSource): Generator
  * artists, picked by [random] (`pickWeighted`), the most played more likely
  * (`playsWeight`), most played first. With fewer, the Library's artists with
  * the most songs (of its 20 with the most) fill the rest, then similar
- * artists. Names that aren't an artist's seed nothing, and an artist seeds
- * once. A refresh (`ArtistMixPools.avoid`) passes over the artists the
- * section showed today while others are left, then brings them back, the
- * least recently shown first.
+ * artists, then the chart's top artists that none of those already is.
+ * Names that aren't an artist's seed nothing, and an artist seeds once. A
+ * refresh (`ArtistMixPools.avoid`) passes over the artists the section
+ * showed today while others are left, then brings them back, the least
+ * recently shown first; chart artists only take the slots still left.
  */
 export const artistMixSeeds = (pools: ArtistMixPools, random: RandomSource): DiscoverMixSeed[] => {
   return finishSteps(artistMixSeedsSteps(pools, random));
@@ -168,15 +226,36 @@ export function* artistMixSeedsSteps(
   pools: ArtistMixPools,
   random: RandomSource,
 ): Generator<void, DiscoverMixSeed[]> {
-  const { seeds, comeback } = yield* pickSeedsSteps(pools, random);
-  return [...seeds, ...comeback.slice(0, ARTIST_MIX_COUNT - seeds.length)];
+  const { seeds, comeback, chart } = yield* pickSeedsSteps(pools, random, true);
+  return [...seeds, ...comeback, ...chart].slice(0, ARTIST_MIX_COUNT);
 }
+
+/**
+ * Whether the chart's artists would seed: when the owner's plays, the
+ * Library's artists and the similar artists read (those a refresh avoids
+ * too) give fewer than four seeds. Only then is the chart needed.
+ */
+export const artistMixNeedsChart = (pools: ArtistMixPools): boolean =>
+  finishSteps(artistMixNeedsChartSteps(pools));
+export function* artistMixNeedsChartSteps(pools: ArtistMixPools): Generator<void, boolean> {
+  // The random pick doesn't matter: it never changes how many seed.
+  const { seeds, comeback } = yield* pickSeedsSteps(pools, () => 0, false);
+  return seeds.length + comeback.length < ARTIST_MIX_COUNT;
+}
+
+/**
+ * Whether the Library has an artist that can seed Artist mixes (a name
+ * that's an artist's): then mixes seeded from the chart alone are built
+ * again (`discoverMixesDue`).
+ */
+export const libraryCanSeedArtistMixes = (artists: readonly { readonly name: string }[]): boolean =>
+  artists.some((artist) => ytArtistQuery(artist.name) !== null);
 
 /**
  * Every artist Artist mixes' seeds may be picked from, in their order: the
  * owner's played artists, then, while plays give fewer than four, the
  * Library's (of its 20 with the most songs, the most songs first), then,
- * while those still give fewer, the similar artists.
+ * while those still give fewer, the similar artists, then the chart's.
  */
 export const artistMixSeedPool = (pools: ArtistMixPools): DiscoverMixSeed[] => {
   const seen = new Set<string>();
@@ -191,8 +270,12 @@ export const artistMixSeedPool = (pools: ArtistMixPools): DiscoverMixSeed[] => {
   );
   seeds.push(...library.map((artist) => artistSeed(artist, "library")));
   if (seeds.length >= ARTIST_MIX_COUNT) return seeds;
-  for (const artist of similarOf(pools))
+  const similar = similarOf(pools);
+  for (const artist of similar)
     seeds.push({ ...artistSeed(artist, "similar"), browseId: artist.browseId });
+  if (seeds.length >= ARTIST_MIX_COUNT) return seeds;
+  for (const artist of finishSteps(chartOfSteps(pools, similar)))
+    seeds.push({ ...artistSeed(artist, "chart"), browseId: artist.browseId });
   return seeds;
 };
 
@@ -216,7 +299,7 @@ export function* artistMixSimilarSourceSteps(
   const { played, library, similar = [] } = pools;
   if (library === undefined || similar.length >= SIMILAR_PAGES) return null;
   // A refresh's avoided artists leave room: pages are read for others first.
-  if ((yield* pickSeedsSteps(pools, () => 0)).seeds.length >= ARTIST_MIX_COUNT) return null;
+  if ((yield* pickSeedsSteps(pools, () => 0, false)).seeds.length >= ARTIST_MIX_COUNT) return null;
   const read = new Set(similar.map((page) => identityKey(page.of)));
   // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh copy; Hermes lacks toSorted
   const byMostSongs = yield* sortSteps(library, (a, b) => b.songCount - a.songCount);

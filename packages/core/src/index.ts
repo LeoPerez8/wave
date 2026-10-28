@@ -703,6 +703,7 @@ export {
   magicSignal,
   parseMagicSession,
   startMagicQueue,
+  startStreamedMagicQueue,
   wantsMagicBatch,
 } from "./magicQueue.ts";
 export type {
@@ -1589,6 +1590,26 @@ export {
   ytLibraryReadLogLine,
   ytLibraryReadView,
 } from "./ytLibraryBatch.ts";
+export {
+  addingProgress,
+  clearImportProgress,
+  importProgress,
+  importProgressByPlaylist,
+  importProgressFraction,
+  importProgressLine,
+  MATCHING_PROGRESS,
+  NO_IMPORT_PROGRESS,
+  readingProgress,
+  setImportProgress,
+} from "./importProgress.ts";
+export type {
+  AddingProgress,
+  ImportProgress,
+  ImportProgressBoard,
+  MatchingProgress,
+  ReadingProgress,
+  WaitingProgress,
+} from "./importProgress.ts";
 export type {
   YtLibraryBatch,
   YtLibraryRead,
@@ -1714,13 +1735,24 @@ export type { SeedSong } from "./seedSongDraw.ts";
 export type { RandomSource } from "./weightedPick.ts";
 export {
   ARTIST_MIX_COUNT,
+  artistMixNeedsChart,
+  artistMixNeedsChartSteps,
   artistMixSeedPool,
   artistMixSeeds,
   artistMixSeedsSteps,
   artistMixSimilarSource,
   artistMixSimilarSourceSteps,
+  libraryCanSeedArtistMixes,
 } from "./artistMixes.ts";
 export type { ArtistMixPools, PlayedSeedArtist, SimilarSourceArtist } from "./artistMixes.ts";
+export {
+  YT_CHART_READ_MS,
+  parseYtChart,
+  storedYtChart,
+  withYtChartRead,
+  ytChartReadDue,
+} from "./ytChart.ts";
+export type { YtChartArtist, YtChartKept } from "./ytChart.ts";
 export {
   GENRE_MIX_COUNT,
   commonStyle,

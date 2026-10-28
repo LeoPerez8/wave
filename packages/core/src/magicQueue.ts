@@ -330,6 +330,43 @@ export const startMagicQueue = (
   };
 };
 
+/**
+ * Starts a Magic Queue from a streamed YT Music [song] (Search, a YT Music
+ * list, a Discover mix, the queue): it plays that song first, and its
+ * batches read the song's own radio by its video, as a Library song's
+ * session does. Its genre comes from its artists' known profiles
+ * (`magicSeedProfile`), since a stream has no tags.
+ */
+export const startStreamedMagicQueue = (
+  song: YtSong,
+  { id, ytShare }: { readonly id: string; readonly ytShare?: number },
+): { readonly session: MagicSession; readonly first: string } => {
+  const trackId = ytTrackId(song.videoId);
+  const started = startMagicQueue(
+    { kind: "track", id: trackId, title: song.title },
+    [{ trackId, artists: song.artists.map(magicArtistKey), genre: null, style: null }],
+    {
+      id,
+      random: () => 0,
+      radio: {
+        song: {
+          id: `song:${trackId}`,
+          title: song.title,
+          artists: song.artists,
+          durationMs: song.durationMs,
+          videoId: song.videoId,
+        },
+        artists: song.artists,
+        profile: null,
+        videoIds: [song.videoId],
+      },
+      ...(ytShare === undefined ? {} : { ytShare }),
+    },
+  );
+  // A song seed always has its song.
+  return started!;
+};
+
 /** How many of an album's or a playlist's songs a session keeps to draw its radios from. */
 const MAX_SEED_SONGS = 200;
 

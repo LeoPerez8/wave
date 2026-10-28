@@ -121,6 +121,11 @@ declare class WaveYtMusicModule extends NativeModule<WaveYtMusicEvents> {
   searchAlbums(query: string): Promise<readonly YtArtistAlbum[]>;
   /** The artist page [browseId] (`UC…`): their top songs, albums, singles and songs playlist. */
   artist(browseId: string, meter?: string): Promise<NativeYtArtistPage>;
+  /**
+   * The top artists of YouTube Music's charts page, in the chart's order:
+   * read signed out, without a country, so YouTube Music picks one.
+   */
+  chartArtists(meter?: string): Promise<readonly YtArtistCandidate[]>;
   /** The playlist [playlistId] (without `VL`): its head and its first page of songs. */
   playlist(playlistId: string): Promise<NativeYtPlaylistPage>;
   /** The playlist page a first page's (or a later page's) [continuation] leads to. */

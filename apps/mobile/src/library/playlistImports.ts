@@ -12,6 +12,7 @@ import { registerTimingBackground, timingBackgroundChanged } from "@/lib/timing"
  * app log notes each import in one line (`importLogLine`).
  */
 import {
+  addingProgress,
   playlistImportCompletionSteps,
   queuePlaylistImport,
   readPlaylistImports,
@@ -35,6 +36,7 @@ import { showError } from "@/overlay/alert";
 import { perfMark, registerPerfMeta } from "@/perf/perf";
 
 import { playlistWorkReport } from "./db/playlistWork";
+import { endImportProgress, showImportProgress } from "./importProgress";
 import { LibraryStore } from "./LibraryStore";
 import { currentPlaylists, playlistsChanged } from "./playlists";
 import { appRuntime } from "./runtime";
@@ -89,16 +91,25 @@ const give = async (job: Job, resumed: boolean): Promise<void> => {
         startupTurnEffect,
         () => imports.get().includes(job),
         () => playlistsChanged([job.playlistId], true),
+        // "Adding 340 of 10,000" while the songs land.
+        (added, total) => {
+          if (imports.get().includes(job))
+            showImportProgress(job.playlistId, addingProgress(added, total));
+        },
       ),
     );
     done = await appRuntime.runPromise(giving);
+    // Replaced or deleted meanwhile, its progress already went (`cancelPlaylistImport`).
+    if (done !== null) endImportProgress(job.playlistId);
     await startupTurn();
     playlistsChanged([job.playlistId]);
     if (done === null) return;
   } catch (error) {
     const kept = (await currentPlaylists().catch(() => [])).some(({ id }) => id === job.playlistId);
-    if (imports.get().includes(job))
+    if (imports.get().includes(job)) {
+      endImportProgress(job.playlistId);
       imports.set(withoutPlaylistImport(imports.get(), job.playlistId));
+    }
     if (kept) void showError("Couldn't import the playlist", error);
     return;
   }
@@ -128,6 +139,9 @@ export const startLinkImport = (
 ): Promise<void> => {
   const job = startPlaylistImport(plan, { playlistId, name });
   imports.set(queuePlaylistImport(imports.get(), job));
+  // At once, while its rows are built: a new import starts its adding from none.
+  endImportProgress(playlistId);
+  showImportProgress(playlistId, addingProgress(0, plan.songs.length));
   return finish(job, false);
 };
 
@@ -137,6 +151,8 @@ export const startLinkImport = (
  */
 export const cancelPlaylistImport = (playlistId: number): void => {
   if (!imports.get().some((job) => job.playlistId === playlistId)) return;
+  // An import still giving it songs ends here, its line with it.
+  if (finishing.has(playlistId)) endImportProgress(playlistId);
   imports.set(withoutPlaylistImport(imports.get(), playlistId));
 };
 

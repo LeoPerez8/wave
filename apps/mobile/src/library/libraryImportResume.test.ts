@@ -130,6 +130,7 @@ test("library resume waits between actual items, pauses offline without consumin
       favorites: false,
       capped: true,
       download: true,
+      expected: null,
       state: "filled",
     };
     batch = { reads: [filled, ...batch.reads], lastToken: filled.token };

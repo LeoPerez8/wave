@@ -47,6 +47,13 @@ export interface YtLibraryRead {
    * Try Again imports it without downloading.
    */
   readonly download: boolean;
+  /**
+   * How many songs its source says it has, as the picker showed it (null
+   * when the picker had no count: a Spotify playlist, or a library page that
+   * didn't say). Its progress line's "Waiting · N songs" and the first total
+   * it's read against (Core's `importProgress`).
+   */
+  readonly expected: number | null;
   readonly state: YtLibraryReadState;
 }
 
@@ -60,8 +67,12 @@ export interface YtLibraryBatch {
 export const NO_YT_LIBRARY_READS: YtLibraryBatch = { reads: [], lastToken: 0 };
 
 /** A playlist an Import queues: Import & Download's with `download`, Import's without. */
-export type YtLibraryReadToQueue = Omit<YtLibraryRead, "state" | "token" | "download"> & {
+export type YtLibraryReadToQueue = Omit<
+  YtLibraryRead,
+  "state" | "token" | "download" | "expected"
+> & {
   readonly download?: boolean;
+  readonly expected?: number | null;
 };
 
 /**
@@ -76,7 +87,7 @@ export const queueYtLibraryReads = (
 ): YtLibraryBatch => ({
   reads: [
     ...batch.reads.filter((queued) => !reads.some((read) => read.playlistId === queued.playlistId)),
-    ...reads.map(({ source, playlistId, name, capped, favorites, download }, index) => ({
+    ...reads.map(({ source, playlistId, name, capped, favorites, download, expected }, index) => ({
       token: batch.lastToken + index + 1,
       source,
       playlistId,
@@ -84,6 +95,7 @@ export const queueYtLibraryReads = (
       capped,
       favorites,
       download: download === true,
+      expected: expected ?? null,
       state: "waiting" as const,
     })),
   ],
@@ -264,13 +276,14 @@ export const writeYtLibraryBatch = (batch: YtLibraryBatch): string | null =>
     : JSON.stringify({
         version: KEPT_VERSION,
         batch: batch.reads.map(
-          ({ source, playlistId, name, capped, favorites, download, state }) => ({
+          ({ source, playlistId, name, capped, favorites, download, expected, state }) => ({
             source,
             playlistId,
             name,
             capped,
             favorites,
             download,
+            expected,
             state,
           }),
         ),
@@ -279,14 +292,13 @@ export const writeYtLibraryBatch = (batch: YtLibraryBatch): string | null =>
 /**
  * A kept playlist, given [token]; null when unreadable. One kept by a Wave
  * from before Also add to Favorites stars nothing, and one from before
- * Import & Download downloads nothing.
+ * Import & Download downloads nothing, and one from before the expected
+ * count has none.
  */
 const readRead = (value: unknown, token: number): YtLibraryRead | null => {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
-  const { source, playlistId, name, capped, favorites, download, state } = value as Record<
-    string,
-    unknown
-  >;
+  const { source, playlistId, name, capped, favorites, download, expected, state } =
+    value as Record<string, unknown>;
   if (typeof source !== "string" || typeof playlistId !== "number" || typeof name !== "string") {
     return null;
   }
@@ -300,6 +312,10 @@ const readRead = (value: unknown, token: number): YtLibraryRead | null => {
     capped,
     favorites: favorites === true,
     download: download === true,
+    expected:
+      typeof expected === "number" && Number.isSafeInteger(expected) && expected >= 0
+        ? expected
+        : null,
     state,
   };
 };
