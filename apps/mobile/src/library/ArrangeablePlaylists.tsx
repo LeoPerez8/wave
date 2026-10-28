@@ -13,7 +13,7 @@ import { useChromeInset } from "@/chrome/chrome";
 import { useListScrollable } from "@/motion/heldTouch";
 import { useThemeColor } from "@/theme/useThemeColor";
 
-import { FIND_FIELD_HEIGHT, FindHead, useFindInList } from "./FindInPlaylist";
+import { FindFrame, FindHead, useFindInList } from "./FindInPlaylist";
 import {
   useDragCell,
   useListDrag,
@@ -230,28 +230,30 @@ export function ArrangeablePlaylists({
   };
 
   return (
-    <Animated.ScrollView
-      keyboardShouldPersistTaps="handled"
-      keyboardDismissMode="on-drag"
-      scrollEnabled={scrollable}
-      ref={scrollRef}
-      className="flex-1"
-      onLayout={listDrag.onLayout}
-      onContentSizeChange={listDrag.onContentSizeChange}
-      // Find in Playlists waits above the head until the list is pulled down.
-      contentOffset={{ x: 0, y: FIND_FIELD_HEIGHT }}
-      contentContainerStyle={{
-        paddingHorizontal: grid.margin,
-        paddingBottom: bottomInset,
-        minHeight: find.minHeight,
-      }}
-    >
-      <View onLayout={listDrag.onHeaderLayout}>
-        <FindHead find={find} header={header} of="playlists" />
-      </View>
-      <View style={{ height: Math.ceil(shown.length / columns) * rowHeight }}>
-        {listDrag.indices.map(renderCell)}
-      </View>
-    </Animated.ScrollView>
+    <FindFrame find={find} of="playlists">
+      <Animated.ScrollView
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        scrollEnabled={scrollable}
+        ref={scrollRef}
+        className="flex-1"
+        onLayout={listDrag.onLayout}
+        onContentSizeChange={listDrag.onContentSizeChange}
+        // Find in Playlists waits above the head until the list is pulled down (unless it's pinned).
+        contentOffset={{ x: 0, y: find.initialOffset }}
+        contentContainerStyle={{
+          paddingHorizontal: grid.margin,
+          paddingBottom: bottomInset,
+          minHeight: find.minHeight,
+        }}
+      >
+        <View onLayout={listDrag.onHeaderLayout}>
+          <FindHead find={find} header={header} of="playlists" />
+        </View>
+        <View style={{ height: Math.ceil(shown.length / columns) * rowHeight }}>
+          {listDrag.indices.map(renderCell)}
+        </View>
+      </Animated.ScrollView>
+    </FindFrame>
   );
 }
