@@ -80,6 +80,11 @@ export class YtMusic extends Context.Service<
     readonly searchAlbums: (query: string) => Effect.Effect<readonly YtArtistAlbum[], YtMusicError>;
     /** The artist page [browseId] (`UC…`): their top songs, albums, singles and songs playlist. */
     readonly artist: (browseId: string) => Effect.Effect<NativeYtArtistPage, YtMusicError>;
+    /**
+     * The top artists of YouTube Music's charts page, in its order, read
+     * signed out and without a country (YouTube Music picks one).
+     */
+    readonly chartArtists: Effect.Effect<readonly YtArtistCandidate[], YtMusicError>;
     /** The album page [browseId] (`MPREb_…`) and its tracklist. */
     readonly album: (browseId: string) => Effect.Effect<NativeYtAlbum, YtMusicError>;
     /**
@@ -166,6 +171,7 @@ export const layer = Layer.succeed(YtMusic, {
   searchAlbums: (query) =>
     Effect.tryPromise({ try: () => WaveYtMusic.searchAlbums(query), catch: fromNative }),
   artist: (browseId) => metered((meter) => WaveYtMusic.artist(browseId, meter)),
+  chartArtists: metered((meter) => WaveYtMusic.chartArtists(meter)),
   // Album pages are read by the downloads module (a download's tags come from them), once a session.
   album: (browseId) => Effect.tryPromise({ try: () => readYtAlbum(browseId), catch: fromNative }),
   playlist: (playlistId, options = {}) =>

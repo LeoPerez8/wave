@@ -115,6 +115,15 @@ class YtMusicModule : Module() {
     }
 
     /**
+     * The top artists of YouTube Music's charts page, read signed out and
+     * without a country: `[{ name, browseId, audience, artworkUrl }]` in the
+     * chart's order, or an `ERR_YT_*` rejection.
+     */
+    AsyncFunction("chartArtists") Coroutine { meter: String? ->
+      coded(meter) { YtPages(client).chartArtists().map(YtArtistCandidate::toMap) }
+    }
+
+    /**
      * The playlist [playlistId]'s first page: `{ title, author, artworkUrl,
      * songs, continuation }`, or an `ERR_YT_*` rejection.
      */
