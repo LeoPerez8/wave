@@ -15,7 +15,9 @@ import {
   type SongListRowSource,
 } from "@wave/core";
 import {
+  createContext,
   memo,
+  use,
   useCallback,
   useLayoutEffect,
   useMemo,
@@ -144,6 +146,14 @@ type Ground = {
 };
 
 /**
+ * The sticky bar's ground, handed down to it past the list: Legend List draws
+ * a row again only when its item or `extraData` changes, so a prop through
+ * `renderItem` kept the colours the bar was first drawn with, an earlier
+ * song's, once the song changed (#732).
+ */
+const BarGroundContext = createContext<Ground | null>(null);
+
+/**
  * The ground behind the sticky bar while it sticks: the sheet's gradient
  * where the bar sits, so the rows scrolling under it don't show through.
  * Elsewhere nothing passes under the bar, which shows the sheet's own.
@@ -171,14 +181,15 @@ function BarGround({ colors, top, scroll, start }: Ground) {
  * Smart Shuffle or Even Shuffle, each with its own icon, while that's chosen), then the Up Next
  * heading ("Magic Queue · from <seed>" over a Magic Queue).
  */
-function UpNextBar({ ground }: { ground: Ground }) {
+function UpNextBar() {
+  const ground = use(BarGroundContext);
   const queue = useQueue();
   const shuffle = useShuffleControl();
   const count = queue.entries.length - queue.index - 1;
   const magic = useMagicQueueLabel();
   return (
     <View className="overflow-hidden" style={{ height: BAR }}>
-      <BarGround {...ground} />
+      {ground !== null && <BarGround {...ground} />}
       <View className="flex-row" style={{ gap: CELL }}>
         <Toggle {...shuffle} on={queue.shuffle} onPress={toggleShuffle} />
         <Toggle
@@ -538,7 +549,7 @@ export function UpNextList({
   const renderItem = useCallback(
     ({ item }: { item: QueueRow }) => {
       if (item.kind === "historyHead") return <SectionHead label="History" />;
-      if (item.kind === "bar") return <UpNextBar ground={barGround} />;
+      if (item.kind === "bar") return <UpNextBar />;
       const track = tracks.get(item.entry.trackId);
       const played = item.kind === "history";
       const row = model.row(queueSource(item.entry, track, missingIds, played), {}, item.entry.key);
@@ -557,7 +568,7 @@ export function UpNextList({
         />
       );
     },
-    [tracks, missingIds, drag, rowDrag, entries.length, barGround, model, actions],
+    [tracks, missingIds, drag, rowDrag, entries.length, model, actions],
   );
   // Legend List re-renders a row only when its item or extraData changes, and a
   // queue picked back up after JS restarted learns its tracks after the first render.
@@ -611,26 +622,28 @@ export function UpNextList({
         }
       }}
     >
-      <AnimatedLegendList
-        ref={listRef}
-        refScrollView={scrollRef}
-        className="flex-1"
-        data={rows}
-        keyExtractor={rowKey}
-        getItemType={rowType}
-        getFixedItemSize={rowSize}
-        renderItem={renderItem}
-        extraData={rowState}
-        estimatedItemSize={ROW}
-        initialScrollOffset={start}
-        stickyHeaderIndices={sticky}
-        recycleItems
-        alwaysRender={drag === null ? undefined : { keys: [drag.key] }}
-        scrollEnabled={drag === null}
-        scrollEventThrottle={16}
-        contentContainerStyle={{ paddingBottom: bottomInset }}
-        ListFooterComponent={<View style={{ minHeight: endSpace }}>{footer}</View>}
-      />
+      <BarGroundContext value={barGround}>
+        <AnimatedLegendList
+          ref={listRef}
+          refScrollView={scrollRef}
+          className="flex-1"
+          data={rows}
+          keyExtractor={rowKey}
+          getItemType={rowType}
+          getFixedItemSize={rowSize}
+          renderItem={renderItem}
+          extraData={rowState}
+          estimatedItemSize={ROW}
+          initialScrollOffset={start}
+          stickyHeaderIndices={sticky}
+          recycleItems
+          alwaysRender={drag === null ? undefined : { keys: [drag.key] }}
+          scrollEnabled={drag === null}
+          scrollEventThrottle={16}
+          contentContainerStyle={{ paddingBottom: bottomInset }}
+          ListFooterComponent={<View style={{ minHeight: endSpace }}>{footer}</View>}
+        />
+      </BarGroundContext>
       {drag !== null && (
         <Animated.View
           pointerEvents="none"
