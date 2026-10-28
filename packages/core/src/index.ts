@@ -175,6 +175,8 @@ export {
   findPlaceholder,
   findNoMatch,
   artistFindText,
+  albumFindText,
+  genreFindText,
 } from "./findInPlaylist.ts";
 export type {
   FoundInPlaylist,
@@ -492,13 +494,17 @@ export type { BounceSpring, SpringShape } from "./bounce.ts";
 export type { SliderRange } from "./slider.ts";
 export { LONG_PRESS_DELAY, readLongPressDelay, snapLongPressDelay } from "./longPress.ts";
 export {
+  DEFAULT_GLASS_LEVEL,
   DEFAULT_GLASS_SETTINGS,
+  GLASS_LEVEL_RANGE,
   GLASS_SETTINGS,
+  glassLevel,
+  glassLevelValue,
   glassTintAlpha,
   isDefaultGlassSettings,
   readGlassSettings,
 } from "./glassSettings.ts";
-export type { GlassSettings } from "./glassSettings.ts";
+export type { GlassLevelSetting, GlassSettings } from "./glassSettings.ts";
 export {
   GLASS_PROBES,
   GLASS_PROBE_EXTRA,
