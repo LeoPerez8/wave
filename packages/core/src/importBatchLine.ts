@@ -13,6 +13,7 @@
  * a Link import never joins the batch, so it shows no line.
  */
 
+import { importCount } from "./importProgress.ts";
 import type { PlaylistImport } from "./playlistImport.ts";
 import type { YtSong } from "./ytMusic.ts";
 import {
@@ -37,9 +38,6 @@ const PAUSE_WORDS: Readonly<Record<YtLibraryPauseReason, string>> = {
   disabled: "YT Music off",
   signedOut: "signed out of Spotify",
 };
-
-/** A count as the line shows it ("1,200"). */
-const number = (count: number): string => count.toLocaleString("en");
 
 /**
  * The line for [batch] with the link imports [imports] (`PlaylistImports`),
@@ -74,7 +72,7 @@ export const importBatchLine = (
     };
   }
   return {
-    text: `Importing playlists · ${number(done)} of ${number(total)}`,
+    text: `Importing playlists · ${importCount(done)} of ${importCount(total)}`,
     done,
     total,
     paused: false,
