@@ -2,6 +2,7 @@ import { AppState } from "react-native";
 import { useNavigation } from "expo-router";
 import { useCallback, useEffect, useLayoutEffect, useSyncExternalStore } from "react";
 
+import { useLatchedFor } from "./latched";
 import { useScreenSight } from "./screenSight";
 import {
   activeTiming,
@@ -66,3 +67,10 @@ export const useScreenSettled = (): boolean => {
   );
   return useSyncExternalStore(subscribe, () => sight.visible() && isScreenSettled());
 };
+
+/**
+ * `useScreenSettled`, kept once the screen has settled for [key] (the artist it
+ * shows): Now Playing over it, a pushed screen or another tab don't take what
+ * waited for settlement back to loading. Requests still check live settlement.
+ */
+export const useSettledOnce = (key: string): boolean => useLatchedFor(key, useScreenSettled());

@@ -13,7 +13,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useAlbums, useArtists } from "@/library/hooks";
 import { LibraryStore, type AlbumRow, type SongRow } from "@/library/LibraryStore";
-import { useScreenSettled } from "@/lib/screenTiming";
+import { useSettledOnce } from "@/lib/screenTiming";
 import { online } from "@/native/waveNative";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 
@@ -128,10 +128,7 @@ export const useYtArtistPage = (
   const { state, enabled, openedAt, show } = useSavedYtArtist(key, ask);
 
   // Settled once is enough for this artist: a later menu or selection must not take the page back to loading.
-  const [settledFor, setSettledFor] = useState<string | null>(null);
-  const settledNow = useScreenSettled();
-  if (settledNow && settledFor !== key) setSettledFor(key);
-  const settled = settledNow || settledFor === key;
+  const settled = useSettledOnce(key);
   const [offlineHint, setOfflineHint] = useState(initiallyOffline);
   const connected = !offlineHint && online();
   const [retry, setRetry] = useState(0);
