@@ -11,7 +11,7 @@ import type { SongRow } from "@/library/LibraryStore";
 
 import { playPage } from "./actions";
 import { playbackState, type PlaybackState } from "./Player";
-import { queueState } from "./Queue";
+import { queueState, upNextReshuffles } from "./Queue";
 import { queuedYtSong, queueTracks } from "./queueTracks";
 import * as Effect from "effect/Effect";
 import { subscribeAll } from "@/lib/externalStore";
@@ -34,6 +34,10 @@ export const usePlayWhenReady = (): boolean =>
 
 export const useQueue = (): QueueState =>
   useSyncExternalStore(queueState.subscribe, queueState.get);
+
+/** How many times a shuffle toggle or a kind picked reordered Up Next (`upNextReshuffles`). */
+export const useUpNextReshuffles = (): number =>
+  useSyncExternalStore(upNextReshuffles.subscribe, upNextReshuffles.get);
 
 /** The track id of the current queue entry, if any (for highlighting the playing row). */
 export const useCurrentTrackId = (): string | null =>

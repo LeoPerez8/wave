@@ -11,6 +11,7 @@ import { ScrollView, Text, View } from "react-native";
 import { CELL, grid } from "@/catalog/grid";
 import { Hairline } from "@/catalog/Hairline";
 import { ScreenHeader } from "@/components/ScreenHeader";
+import { useListScrollable } from "@/motion/heldTouch";
 import { Press } from "@/motion/Press";
 
 import { SettingsGlyph } from "./SettingsGlyph";
@@ -38,13 +39,16 @@ const pageTitle = (id: PageId): string => {
 
 /**
  * A Settings page: back, its title, then its sections (each one element) with
- * room between them, scrolling.
+ * room between them, scrolling. It holds still while a long-pressed finger
+ * slides on a menu (Touch's sample opens one).
  */
 export function SettingsPageScreen({ children, ...id }: PageId & { children: ReactNode }) {
+  const scrollable = useListScrollable();
   return (
     <View className="flex-1 bg-background">
       <ScreenHeader title={pageTitle(id)} />
       <ScrollView
+        scrollEnabled={scrollable}
         contentContainerStyle={{
           paddingHorizontal: grid.margin,
           paddingBottom: SECTION_GAP,

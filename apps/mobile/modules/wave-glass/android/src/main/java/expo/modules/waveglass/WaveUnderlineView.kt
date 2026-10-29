@@ -10,7 +10,8 @@ import expo.modules.kotlin.views.ExpoView
 
 /**
  * The wavy underline under the playing song's title: the `wave_underline` tile
- * repeated across this view's width, sliding left while `animating`.
+ * repeated across this view's width, sliding left while `animating`. With the
+ * `listening` shape it draws the Recognize card's larger wave (`wave_listening`).
  *
  * The slide is an AnimatedVectorDrawable, which runs on the RenderThread. The
  * UI thread never traverses the view tree for it, so the glass views'
@@ -19,17 +20,33 @@ import expo.modules.kotlin.views.ExpoView
  * still shows it moving: its layer takes the RenderThread damage like any other.
  */
 class WaveUnderlineView(context: Context, appContext: AppContext) : ExpoView(context, appContext) {
-  private val tile =
-    (context.getDrawable(R.drawable.wave_underline)!!.mutate() as AnimatedVectorDrawable).apply {
-      setBounds(0, 0, intrinsicWidth, intrinsicHeight)
-      callback = this@WaveUnderlineView
-    }
+  private var tile = tileFor(UNDERLINE)
 
   var color = Color.WHITE
     set(value) {
       field = value
       tile.setTint(value)
     }
+
+  /** `underline` (the default) or `listening`. */
+  var shape = UNDERLINE
+    set(value) {
+      if (field == value) return
+      field = value
+      tile.stop()
+      tile.callback = null
+      tile = tileFor(value).apply { setTint(color) }
+      syncAnimation()
+      invalidate()
+    }
+
+  private fun tileFor(shape: String): AnimatedVectorDrawable {
+    val drawable = if (shape == LISTENING) R.drawable.wave_listening else R.drawable.wave_underline
+    return (context.getDrawable(drawable)!!.mutate() as AnimatedVectorDrawable).apply {
+      setBounds(0, 0, intrinsicWidth, intrinsicHeight)
+      callback = this@WaveUnderlineView
+    }
+  }
 
   var animating = false
     set(value) {
@@ -76,5 +93,10 @@ class WaveUnderlineView(context: Context, appContext: AppContext) : ExpoView(con
       x += step
     }
     canvas.restore()
+  }
+
+  private companion object {
+    const val UNDERLINE = "underline"
+    const val LISTENING = "listening"
   }
 }

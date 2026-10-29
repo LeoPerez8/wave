@@ -1,23 +1,29 @@
 import { Canvas, Circle, SweepGradient, vec } from "@shopify/react-native-skia";
 import { IconCheck } from "@tabler/icons-react-native";
 import {
-  isDefaultThemeChoice,
+  isDefaultThemeState,
   themeSwatchRows,
   type CustomSwatchOption,
   type InkGroup,
+  type SavedSwatchOption,
   type ThemeGroup,
   type ThemeSwatchOption,
 } from "@wave/core";
 import { Text, useColorScheme, View } from "react-native";
 
 import { CatalogLine } from "@/catalog/CatalogLine";
+import { CELL } from "@/catalog/grid";
 import { Hairline } from "@/catalog/Hairline";
 import { TextButton } from "@/components/TextButton";
 import { IconButton } from "@/components/IconButton";
-import { confirmAction } from "@/overlay/alert";
+import { pressedRect } from "@/motion/pressedRect";
+import { showAlert } from "@/overlay/alert";
+import { CardHeading } from "@/overlay/CardHeading";
+import { MenuChoices } from "@/overlay/MenuChoices";
+import { openOverlay } from "@/overlay/overlay";
 
 import { HUE_STOPS, openColourPicker } from "./ColourPicker";
-import { resetTheme, setThemeSwatch, useThemeChoice } from "./theme";
+import { removeSavedInk, resetTheme, setSavedInk, setThemeSwatch, useThemeState } from "./theme";
 
 const ROW_LABEL: Record<ThemeGroup, string> = {
   light: "Light background",
@@ -35,7 +41,94 @@ function Swatch({ swatch, group }: { swatch: ThemeSwatchOption; group: ThemeGrou
       accessibilityRole="radio"
       accessibilityLabel={swatch.label}
       accessibilityState={{ checked: swatch.selected }}
-      onPress={() => void setThemeSwatch(group, swatch.id, confirmAction)}
+      onPress={() => void setThemeSwatch(group, swatch.id, showAlert)}
+      depth={0.04}
+      className="items-center justify-center"
+      style={{ width: TARGET, height: TARGET }}
+    >
+      <View
+        className={`items-center justify-center rounded-full ${
+          swatch.selected ? "border-2 border-foreground" : "border border-separator"
+        }`}
+        style={{ width: SWATCH, height: SWATCH, backgroundColor: swatch.colour }}
+      >
+        {swatch.selected ? <IconCheck size={18} strokeWidth={2.5} color={swatch.mark} /> : null}
+      </View>
+    </IconButton>
+  );
+}
+
+/** A saved colour's spoken name: its place in the row and its hex. */
+const savedLabel = (index: number, swatch: SavedSwatchOption): string =>
+  `Saved colour ${index + 1}, ${swatch.hex}`;
+
+/** A saved colour's long-press menu: Remove, which leaves the colours in use as they are. */
+function SavedColourMenu({
+  group,
+  swatch,
+  label,
+  close,
+}: {
+  group: InkGroup;
+  swatch: SavedSwatchOption;
+  label: string;
+  close: () => void;
+}) {
+  return (
+    <>
+      <CardHeading>
+        <View
+          className="rounded-full border border-separator"
+          style={{ width: CELL * 5, height: CELL * 5, backgroundColor: swatch.colour }}
+        />
+        <Text numberOfLines={1} className="flex-1 font-sans text-body font-medium text-foreground">
+          {label}
+        </Text>
+      </CardHeading>
+      <MenuChoices
+        cards={[]}
+        entries={[
+          {
+            action: "removeColour",
+            label: "Remove",
+            onPress: () => {
+              close();
+              removeSavedInk(group, swatch.hex);
+            },
+          },
+        ]}
+      />
+    </>
+  );
+}
+
+/** A saved colour, as it applies: a tap applies it, a long press offers Remove. */
+function SavedSwatch({
+  swatch,
+  group,
+  index,
+}: {
+  swatch: SavedSwatchOption;
+  group: InkGroup;
+  index: number;
+}) {
+  const label = savedLabel(index, swatch);
+  return (
+    <IconButton
+      accessibilityRole="radio"
+      accessibilityLabel={label}
+      accessibilityHint="Long-press to remove it"
+      accessibilityState={{ checked: swatch.selected }}
+      onPress={() => void setSavedInk(group, swatch.hex, showAlert)}
+      onLongPress={() =>
+        openOverlay({
+          label,
+          anchor: pressedRect(),
+          render: (close) => (
+            <SavedColourMenu group={group} swatch={swatch} label={label} close={close} />
+          ),
+        })
+      }
       depth={0.04}
       className="items-center justify-center"
       style={{ width: TARGET, height: TARGET }}
@@ -57,8 +150,9 @@ const RIM = 4;
 
 /**
  * The swatch that ends Primary and Secondary: a hue wheel until a colour is
- * picked, then that colour (as it applies) inside a rainbow rim. It opens
- * the colour picker on the picked colour, or else on the row's current one.
+ * picked (and while a saved swatch shows it), then that colour (as it
+ * applies) inside a rainbow rim. It opens the colour picker on the picked
+ * colour, or else on the row's current one.
  */
 function CustomSwatch({
   custom,
@@ -104,9 +198,13 @@ function CustomSwatch({
   );
 }
 
-/** Settings › Appearance › Theme: background (per scheme), primary and secondary colours from swatches. */
+/**
+ * Settings › Appearance › Theme: a background per scheme from swatches, and
+ * Primary and Secondary from Default, their saved colours and Custom.
+ */
 export function ThemeSettingsSection() {
-  const choice = useThemeChoice();
+  const state = useThemeState();
+  const { choice } = state;
   const scheme = useColorScheme() === "dark" ? "dark" : "light";
   const rows = themeSwatchRows(choice, scheme);
 
@@ -116,6 +214,7 @@ export function ThemeSettingsSection() {
       <Hairline />
       {rows.map((row) => {
         const chosen = row.swatches.find((swatch) => swatch.selected);
+        const saved = row.saved.find((swatch) => swatch.selected);
         const { custom, group } = row;
         return (
           <View key={row.group}>
@@ -129,7 +228,7 @@ export function ThemeSettingsSection() {
                   {ROW_LABEL[row.group]}
                 </Text>
                 <Text className="font-sans text-subheadline text-secondary">
-                  {custom?.selected ? "Custom" : chosen?.label}
+                  {custom?.selected ? "Custom" : saved !== undefined ? "Saved" : chosen?.label}
                 </Text>
               </View>
               <View className="-mx-1.5 flex-row flex-wrap py-1">
@@ -137,11 +236,16 @@ export function ThemeSettingsSection() {
                   <Swatch key={swatch.id} swatch={swatch} group={row.group} />
                 ))}
                 {custom !== null && (group === "primary" || group === "secondary") ? (
-                  <CustomSwatch
-                    custom={custom}
-                    group={group}
-                    current={custom.colour ?? chosen?.colour ?? "#000000"}
-                  />
+                  <>
+                    {row.saved.map((swatch, index) => (
+                      <SavedSwatch key={swatch.hex} swatch={swatch} group={group} index={index} />
+                    ))}
+                    <CustomSwatch
+                      custom={custom}
+                      group={group}
+                      current={custom.colour ?? saved?.hex ?? chosen?.colour ?? "#000000"}
+                    />
+                  </>
                 ) : null}
               </View>
             </View>
@@ -152,15 +256,18 @@ export function ThemeSettingsSection() {
       <Text className="mt-2 font-sans text-footnote text-secondary">
         Cards, groups, separators and text follow the background you choose for each mode. Primary
         colours progress, toggles and what&apos;s active; secondary marks favorites and what&apos;s
-        playing; the last swatch of each takes any colour. A colour that wouldn&apos;t read on your
-        background is deepened or brightened until it does. The app icon takes your primary and
-        secondary, or the presets closest to custom ones, once you leave Wave.
+        playing. Default is white in dark mode and the text colour in light. The last swatch of each
+        takes any colour, and Save in its picker keeps up to four colours in the row; long-press a
+        saved colour to remove it. A colour that wouldn&apos;t read on your background is deepened
+        or brightened until it does. When new colours would change the app icon, Wave asks first; if
+        you say yes, the icon takes them, or the icon colours closest to custom ones, once you leave
+        Wave.
       </Text>
       <View className="mt-4 items-start">
         <TextButton
           label="Reset to defaults"
-          disabled={isDefaultThemeChoice(choice)}
-          onPress={() => void resetTheme(confirmAction)}
+          disabled={isDefaultThemeState(state)}
+          onPress={() => void resetTheme(showAlert)}
         />
       </View>
     </View>

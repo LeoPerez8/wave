@@ -13,6 +13,7 @@ import {
   launcherIconFor,
   paletteSplashThemeFor,
   contrastRatio,
+  readThemeChoice,
 } from "./index.ts";
 
 test("custom cyan and red take the vivid inks their dark theme shows (#654)", () => {
@@ -34,6 +35,39 @@ test("pastel cyan and mint stay with presets in either wave", () => {
       assert.equal(pair[group].kind, "preset", `${group} ${hex}`);
     }
   }
+});
+
+test("a custom colour close to white takes the white ink in either wave (#793)", () => {
+  // Cream, beige, ivory, linen, snow and a light grey: light, with little chroma.
+  for (const hex of ["#fffdd0", "#f5f5dc", "#fffff0", "#faf0e6", "#fffafa", "#e0e0e0", "#ffffff"])
+    for (const group of ["primary", "secondary"] as const) {
+      const pair = inkPairFor(
+        chooseCustomInk(
+          readThemeChoice(JSON.stringify({ primary: "teal", secondary: "ember" })),
+          group,
+          hex,
+        ),
+      );
+      assert.equal(pair[group].id, "white", `${group} ${hex}`);
+    }
+});
+
+test("saturated or darker colours never take the white ink", () => {
+  // Yellow, lemon, peach, two pastel pinks, mid grey and the vivid tones' own sources.
+  for (const hex of [
+    "#ffff00",
+    "#f5d742",
+    "#ffe5b4",
+    "#ffc0cb",
+    "#f8c8dc",
+    "#9e9e9e",
+    "#00e5ff",
+    "#ff0004",
+  ])
+    for (const group of ["primary", "secondary"] as const) {
+      const pair = inkPairFor(chooseCustomInk(DEFAULT_THEME_CHOICE, group, hex));
+      assert.notEqual(pair[group].id, "white", `${group} ${hex}`);
+    }
 });
 
 test("the pastel guard ends at dark-ink OKLCH chroma 0.12", () => {
@@ -59,15 +93,38 @@ test("matching uses the corrected dark ink rather than the raw pick", () => {
 
 test("a custom primary can take Sky from the secondary presets", () => {
   const choice = chooseCustomInk(DEFAULT_THEME_CHOICE, "primary", "#89cff0");
-  assert.equal(inkPairFor(choice).id, "sky_ember");
+  assert.equal(inkPairFor(choice).id, "sky_white");
 });
 
-test("the palette supplies 24 inks and all 576 uniquely named pairs", () => {
-  assert.equal(INK_PALETTE.length, 24);
-  assert.equal(new Set(INK_PALETTE.map((ink) => ink.id)).size, 24);
-  assert.equal(INK_PALETTE.filter((ink) => ink.kind === "preset").length, 12);
-  assert.equal(INK_PAIRS.length, 576);
-  assert.equal(new Set(INK_PAIRS.map((pair) => pair.id)).size, 576);
+test("the palette supplies 25 inks, white last, and all 625 uniquely named pairs (#793)", () => {
+  // Splash style names count positions in this order, so the first 24 never move.
+  assert.deepEqual(
+    INK_PALETTE.map((ink) => ink.id),
+    [
+      "teal",
+      "blue",
+      "violet",
+      "green",
+      "rose",
+      "lime",
+      "ember",
+      "gold",
+      "coral",
+      "magenta",
+      "sky",
+      "lemon",
+      ...[29, 59, 89, 119, 149, 179, 209, 239, 269, 299, 329, 359].map((hue) => `vivid${hue}`),
+      "white",
+    ],
+  );
+  assert.deepEqual(INK_PALETTE.at(-1), {
+    id: "white",
+    kind: "preset",
+    light: "#121b1d",
+    dark: "#ffffff",
+  });
+  assert.equal(INK_PAIRS.length, 625);
+  assert.equal(new Set(INK_PAIRS.map((pair) => pair.id)).size, 625);
   for (const primary of INK_PALETTE) {
     for (const secondary of INK_PALETTE) {
       const pair = INK_PAIRS.find((pair) => pair.id === `${primary.id}_${secondary.id}`);
@@ -75,22 +132,49 @@ test("the palette supplies 24 inks and all 576 uniquely named pairs", () => {
       assert.match(pair.id, /^[a-z][a-z0-9_]*$/);
     }
   }
+  for (const id of ["white_white", "white_teal", "teal_white", "vivid29_white", "white_lemon"])
+    assert.ok(
+      INK_PAIRS.some((pair) => pair.id === id),
+      id,
+    );
 });
 
-test("all 36 preset choices keep their icon ids and inks", () => {
-  for (const primary of THEME_SWATCHES.primary) {
-    for (const secondary of THEME_SWATCHES.secondary) {
-      const choice = { ...DEFAULT_THEME_CHOICE, primary: primary.id, secondary: secondary.id };
-      const pair = inkPairFor(choice);
-      const icon = launcherIconFor(choice);
-      assert.equal(pair.id, `${primary.id}_${secondary.id}`);
-      assert.equal(icon.id, pair.id);
-      assert.equal(pair.primary.dark, primary.id === "teal" ? "#14b7a6" : primary.dark);
-      assert.equal(pair.secondary.dark, secondary.id === "ember" ? "#f5b83d" : secondary.dark);
-      assert.equal(pair.primary.light, primary.light);
-      assert.equal(pair.secondary.light, secondary.light);
-    }
-  }
+test("the 12 former presets keep their inks, ids and light tones in the palette (#794)", () => {
+  assert.deepEqual(
+    INK_PALETTE.filter((ink) => ink.kind === "preset" && ink.id !== "white").map(
+      ({ id, light, dark }) => [id, light, dark],
+    ),
+    [
+      ["teal", "#006a5f", "#14b7a6"],
+      ["blue", "#1f5fb8", "#7aaef5"],
+      ["violet", "#5b4bb7", "#a99af0"],
+      ["green", "#2f6b1f", "#8fcf6e"],
+      ["rose", "#a8325e", "#f08cb0"],
+      ["lime", "#8cc63f", "#b5e36b"],
+      ["ember", "#a14f09", "#f5b83d"],
+      ["gold", "#866600", "#e8c454"],
+      ["coral", "#b2402c", "#f5917e"],
+      ["magenta", "#9c2d8a", "#e78fd6"],
+      ["sky", "#1b6a93", "#7cc4ea"],
+      ["lemon", "#f2d22e", "#f5d742"],
+    ],
+  );
+});
+
+test("a former preset's colour keeps its ink in either wave, even where matching would differ", () => {
+  // Ember's colour on its own would match the vivid orange.
+  for (const [hex, ink] of [
+    ["#ec9d53", "ember"],
+    ["#59c0ad", "teal"],
+    ["#e8c454", "gold"],
+    ["#a99af0", "violet"],
+  ] as const)
+    for (const group of ["primary", "secondary"] as const)
+      assert.equal(
+        inkPairFor(chooseCustomInk(DEFAULT_THEME_CHOICE, group, hex))[group].id,
+        ink,
+        `${group} ${hex}`,
+      );
 });
 
 test("the 12 vivid tones carry the custom-ink corrections in both modes", () => {
@@ -118,16 +202,11 @@ test("the 12 vivid tones carry the custom-ink corrections in both modes", () => 
   );
 });
 
-test("kept custom colours and invalid preset ids fall back independently by group", () => {
-  assert.equal(inkPairFor({ ...DEFAULT_THEME_CHOICE, customPrimary: "#00e9ff" }).id, "teal_ember");
-  assert.equal(
-    inkPairFor({ ...DEFAULT_THEME_CHOICE, primary: "unknown", secondary: "sky" }).id,
-    "teal_sky",
-  );
-  assert.equal(
-    inkPairFor({ ...DEFAULT_THEME_CHOICE, primary: "blue", secondary: "unknown" }).id,
-    "blue_ember",
-  );
+test("kept custom colours and unknown ids fall back to white independently by group", () => {
+  assert.equal(inkPairFor({ ...DEFAULT_THEME_CHOICE, customPrimary: "#00e9ff" }).id, "white_white");
+  const sky = chooseCustomInk(DEFAULT_THEME_CHOICE, "secondary", "#7cc4ea");
+  assert.equal(inkPairFor({ ...sky, primary: "teal" }).id, "white_sky");
+  assert.equal(inkPairFor({ ...sky, secondary: "unknown" }).id, "white_white");
 });
 
 test("launcher icons use the shared palette for both waves", () => {
@@ -143,7 +222,7 @@ test("launcher icons use the shared palette for both waves", () => {
     top: "#00e5ff",
     bottom: "#ff1a1d",
   });
-  assert.equal(LAUNCHER_ICONS.length, 576);
+  assert.equal(LAUNCHER_ICONS.length, 625);
   for (const pair of INK_PAIRS) {
     assert.deepEqual(
       LAUNCHER_ICONS.find((icon) => icon.id === pair.id),
@@ -190,7 +269,7 @@ test("palette splash resources cover every background and ink pair with readable
       for (const pair of INK_PAIRS) {
         const splash = paletteSplashThemeFor(choice, pair);
         if (splash === null) {
-          assert.equal(pair.id, "teal_ember");
+          assert.equal(pair.id, "white_white");
           assert.equal(light.id, "fog");
           assert.equal(dark.id, "black");
           continue;
@@ -212,5 +291,5 @@ test("palette splash resources cover every background and ink pair with readable
       }
     }
   }
-  assert.equal(names.size, 20735);
+  assert.equal(names.size, 36 * 625 - 1);
 });

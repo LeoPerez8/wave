@@ -13,6 +13,7 @@ import {
   customInkPreview,
   hexToHsv,
   hsvToHex,
+  inkSaveState,
   parseHexColour,
   pickColour,
   type ColourPickerPreview,
@@ -30,12 +31,18 @@ import { CELL, grid } from "@/catalog/grid";
 import { Hairline } from "@/catalog/Hairline";
 import { TextButton } from "@/components/TextButton";
 import { makeExternalStore, type ExternalStore } from "@/lib/externalStore";
-import { confirmAction } from "@/overlay/alert";
+import { showAlert } from "@/overlay/alert";
 import { CardEntries } from "@/overlay/CardEntries";
 import { presentOverlay } from "@/overlay/overlay";
 import { useThemeColor } from "@/theme/useThemeColor";
 
-import { cancelCustomInk, previewCustomInk, setCustomInk, useThemeChoice } from "./theme";
+import {
+  cancelCustomInk,
+  previewCustomInk,
+  saveCustomInk,
+  setCustomInk,
+  useThemeChoice,
+} from "./theme";
 
 /** The hue wheel's colours, red round to red, for Skia's sweep gradient (clockwise from 3 o'clock). */
 export const HUE_STOPS = [
@@ -61,8 +68,9 @@ const HUE_STEP = 15;
 /**
  * Opens the colour picker for Primary or Secondary on `initial` (`#rrggbb`).
  * The picker follows the finger; the app recolours once it rests or lifts.
- * Done keeps the colour (asking first when that switches the launcher icon),
- * Cancel, Back or a tap outside puts the colours back.
+ * Save adds the colour to the row's saved colours and leaves the picker
+ * open; Done keeps the colour (asking first when that switches the launcher
+ * icon); Cancel, Back or a tap outside puts the colours back.
  */
 export const openColourPicker = (group: InkGroup, initial: string): void => {
   // The colour the app last took (at rest, on lift, typed or stepped): the samples show it.
@@ -81,7 +89,7 @@ export const openColourPicker = (group: InkGroup, initial: string): void => {
         finish={finish}
       />
     ),
-  }).then((hex) => (hex === null ? cancelCustomInk() : setCustomInk(group, hex, confirmAction)));
+  }).then((hex) => (hex === null ? cancelCustomInk() : setCustomInk(group, hex, showAlert)));
 };
 
 /**
@@ -121,6 +129,7 @@ function ColourPickerCard({
       </CardEntries>
       <View className="flex-row justify-end" style={{ gap: CELL * 3 }}>
         <TextButton label="Cancel" onPress={() => finish(null)} />
+        <SaveButton group={group} applied={applied} valid={valid} entered={entered} />
         <TextButton
           label="Done"
           disabled={!valid}
@@ -129,7 +138,72 @@ function ColourPickerCard({
           }}
         />
       </View>
+      <SaveNote group={group} applied={applied} valid={valid} />
     </>
+  );
+}
+
+/** What Save would do with the colour the app shows (Core's `inkSaveState`). */
+const useSaveState = (group: InkGroup, applied: ExternalStore<string>, valid: boolean) => {
+  const choice = useThemeChoice();
+  const hex = useSyncExternalStore(applied.subscribe, applied.get);
+  return valid ? inkSaveState(choice, group, hex) : "invalid";
+};
+
+/**
+ * Save: adds the picker's colour to the row's saved colours without applying
+ * it. Off while the colour isn't one, is saved already or the row holds four.
+ */
+function SaveButton({
+  group,
+  applied,
+  valid,
+  entered,
+}: {
+  group: InkGroup;
+  applied: ExternalStore<string>;
+  valid: boolean;
+  entered: { readonly current: string | null };
+}) {
+  const state = useSaveState(group, applied, valid);
+  return (
+    <TextButton
+      label="Save"
+      accessibilityHint="Adds this colour to the saved colours without applying it"
+      disabled={state !== "ready"}
+      onPress={() => {
+        if (entered.current !== null) saveCustomInk(group, entered.current);
+      }}
+    />
+  );
+}
+
+/** The line under the actions when Save is off for a saved colour or a full row. */
+function SaveNote({
+  group,
+  applied,
+  valid,
+}: {
+  group: InkGroup;
+  applied: ExternalStore<string>;
+  valid: boolean;
+}) {
+  const state = useSaveState(group, applied, valid);
+  const note =
+    state === "full"
+      ? "Four colours are saved. To save this one, long-press a saved colour and remove it."
+      : state === "saved"
+        ? "This colour is saved."
+        : null;
+  if (note === null) return null;
+  return (
+    <Text
+      accessibilityLiveRegion="polite"
+      className="text-right font-sans text-footnote text-secondary"
+      style={{ paddingTop: CELL }}
+    >
+      {note}
+    </Text>
   );
 }
 

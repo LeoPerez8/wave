@@ -1,4 +1,4 @@
-import { IconSearch, IconX } from "@tabler/icons-react-native";
+import { IconMicrophone, IconSearch, IconX } from "@tabler/icons-react-native";
 import { type ComponentRef, type Ref, useState } from "react";
 import { StyleSheet, TextInput, View } from "react-native";
 
@@ -8,7 +8,7 @@ import { useThemeColor } from "@/theme/useThemeColor";
 
 /** The drawn glyphs: Wave's 24dp line icons. */
 const GLYPH = CELL * 3;
-/** The clear button's touch target. */
+/** The clear (or Recognize Song) button's touch target. */
 const TARGET = CELL * 6;
 /**
  * How far the clear button's target reaches past the field's trailing edge, so
@@ -33,6 +33,8 @@ type Props = {
   onLayout?: () => void;
   /** The field took or lost the focus. */
   onFocusChange?: (focused: boolean) => void;
+  /** Search's own field: a Recognize Song button holds the clear button's cell while the field is empty. */
+  onRecognize?: () => void;
 };
 
 /**
@@ -40,7 +42,8 @@ type Props = {
  * a row tall, over a hairline that turns teal while it has the keyboard. The
  * search glyph leads in a 32dp cell, the query reads in Body ink, and a clear
  * button's cell is kept at the end even when there is nothing to clear, so the
- * query never reflows as it appears.
+ * query never reflows as it appears. With [onRecognize], the empty field shows the
+ * Recognize Song microphone in that cell.
  */
 export function SearchField({
   ref,
@@ -52,6 +55,7 @@ export function SearchField({
   autoFocus = false,
   onLayout,
   onFocusChange,
+  onRecognize,
 }: Props) {
   const secondary = useThemeColor("secondary");
   const accent = useThemeColor("accent");
@@ -89,7 +93,7 @@ export function SearchField({
           accessibilityLabel={accessibilityLabel}
         />
         <View style={{ width: TARGET, height: TARGET, marginRight: -OVERHANG }}>
-          {value.length > 0 && (
+          {value.length > 0 ? (
             <IconButton
               icon={IconX}
               label="Clear search"
@@ -98,6 +102,17 @@ export function SearchField({
               size={TARGET}
               iconSize={GLYPH}
             />
+          ) : (
+            onRecognize !== undefined && (
+              <IconButton
+                icon={IconMicrophone}
+                label="Recognize Song"
+                onPress={onRecognize}
+                tone="secondary"
+                size={TARGET}
+                iconSize={GLYPH}
+              />
+            )
           )}
         </View>
       </View>

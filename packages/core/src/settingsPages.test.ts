@@ -71,7 +71,7 @@ describe("Settings pages", () => {
 });
 
 describe("the Layout page", () => {
-  test("lists Home, Library, Playlists and Tab bar, each opening its own page", () => {
+  test("lists Home, Library, Playlists, Tab bar and Now Playing, each opening its own page", () => {
     assert.deepEqual(
       LAYOUT_PAGES.map(({ title, route }) => [title, route]),
       [
@@ -79,6 +79,7 @@ describe("the Layout page", () => {
         ["Library", "/settings/layout/library"],
         ["Playlists", "/settings/layout/playlists"],
         ["Tab bar", "/settings/layout/tab-bar"],
+        ["Now Playing", "/settings/layout/now-playing"],
       ],
     );
   });

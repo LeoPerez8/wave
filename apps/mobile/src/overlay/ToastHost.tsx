@@ -21,7 +21,6 @@ import { CELL, grid } from "@/catalog/grid";
 import { BACKDROP, chrome } from "@/chrome/chrome";
 import { Glass } from "@/glass/Glass";
 import { useBounceSpring } from "@/motion/bounce";
-import { useTapAnimationMs } from "@/settings/tapAnimation";
 
 import { currentToast, dismissToast, removeToast, runToastAction, type Toast } from "./toast";
 import { useEnterAndLeave } from "./useEnterAndLeave";
@@ -67,7 +66,6 @@ export function ToastHost() {
  */
 function ToastPill({ toast }: { toast: Toast }) {
   const insets = useSafeAreaInsets();
-  const ms = useTapAnimationMs();
   const reduceMotion = useReducedMotion();
   // A swipe up let go short springs back as far past rest as the Bounce amount says.
   const spring = useBounceSpring(RETURN_SPRINGS.toast);
@@ -124,7 +122,7 @@ function ToastPill({ toast }: { toast: Toast }) {
     }
     dragging.current = false;
     // It carries on up, off the top, as it fades.
-    offsetY.set(withTiming(-size.current.height * 2, { duration: ms === 0 ? 0 : 160 }));
+    offsetY.set(withTiming(-size.current.height * 2, { duration: 160 }));
     dismissToast(id);
   };
 

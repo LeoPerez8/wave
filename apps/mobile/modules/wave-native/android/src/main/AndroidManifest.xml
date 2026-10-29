@@ -19,6 +19,10 @@
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
   <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+  <!-- Recognize listens through the microphone, asked for on first use (docs/spec.md, "Recognize"). -->
+  <uses-permission android:name="android.permission.RECORD_AUDIO" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
+
   <!-- The Wi-Fi pre-download's job is kept across reboots (PreDownloads, JobInfo.setPersisted). -->
   <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
@@ -32,6 +36,10 @@
   </queries>
 
   <application>
+    <service
+      android:name="expo.modules.wavenative.recognize.PlaybackCaptureService"
+      android:exported="false"
+      android:foregroundServiceType="mediaProjection" />
     <!-- A media library service: Android Auto browses Wave through it (docs/auto-spike.md). -->
     <service
       android:name="expo.modules.wavenative.player.PlaybackService"

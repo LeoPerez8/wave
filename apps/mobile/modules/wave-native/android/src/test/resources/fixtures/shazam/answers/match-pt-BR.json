@@ -1,0 +1,262 @@
+{
+ "matches": [
+  {
+   "id": "211404070",
+   "offset": 92.90021875,
+   "timeskew": 1.0609627e-05,
+   "frequencyskew": 0.0
+  },
+  {
+   "id": "470796028",
+   "offset": 92.889773437,
+   "timeskew": -0.000988543,
+   "frequencyskew": -0.0011270046
+  },
+  {
+   "id": "204623863",
+   "offset": 95.603273437,
+   "timeskew": -0.0009743571,
+   "frequencyskew": -0.0010867715
+  },
+  {
+   "id": "269529421",
+   "offset": 92.71364843699999,
+   "timeskew": 0.0007967949,
+   "frequencyskew": 0.00076544285
+  },
+  {
+   "id": "263448849",
+   "offset": 92.919515625,
+   "timeskew": -0.00017297268,
+   "frequencyskew": -0.0003221631
+  },
+  {
+   "id": "310909953",
+   "offset": 92.693554687,
+   "timeskew": 0.0009942055,
+   "frequencyskew": 0.00096702576
+  },
+  {
+   "id": "251749889",
+   "offset": 92.9951875,
+   "timeskew": 0.0016810894,
+   "frequencyskew": 0.0016525984
+  },
+  {
+   "id": "5908310",
+   "offset": 82.291164062,
+   "timeskew": -0.05315131,
+   "frequencyskew": -0.001046598
+  },
+  {
+   "id": "327761212",
+   "offset": 92.727585937,
+   "timeskew": 2.0980835e-05,
+   "frequencyskew": -8.0525875e-05
+  },
+  {
+   "id": "305556282",
+   "offset": 85.73553125,
+   "timeskew": -0.008015275,
+   "frequencyskew": -0.007422924
+  }
+ ],
+ "location": {
+  "accuracy": 0.01
+ },
+ "timestamp": 1793232881931,
+ "timezone": "Europe/Paris",
+ "track": {
+  "layout": "5",
+  "type": "MUSIC",
+  "key": "53982678",
+  "title": "I Will Survive",
+  "subtitle": "Gloria Gaynor",
+  "images": {
+   "background": "https://is1-ssl.mzstatic.com/image/thumb/Features125/v4/06/6d/b7/066db7b1-bf0a-e032-61f9-fd607a0b0d76/mzl.jruxuhnc.jpg/800x800cc.jpg",
+   "coverart": "https://is1-ssl.mzstatic.com/image/thumb/Music123/v4/0c/72/a1/0c72a174-9208-6c86-e479-79865376e904/19UMGIM66006.rgb.jpg/400x400cc.jpg",
+   "coverarthq": "https://is1-ssl.mzstatic.com/image/thumb/Music123/v4/0c/72/a1/0c72a174-9208-6c86-e479-79865376e904/19UMGIM66006.rgb.jpg/400x400cc.jpg",
+   "joecolor": "b:842b5ap:f4d2e9s:fac2det:deb1ccq:e3a4c3"
+  },
+  "display": {
+   "actions": [
+    {
+     "name": "display:updateshazam",
+     "type": "webview",
+     "uri": "https://www.shazam.com/inapp/updatenow/53982678"
+    }
+   ]
+  },
+  "share": {
+   "subject": "I Will Survive - Gloria Gaynor",
+   "text": "I Will Survive de Gloria Gaynor",
+   "href": "https://www.shazam.com/track/53982678/i-will-survive",
+   "image": "https://is1-ssl.mzstatic.com/image/thumb/Music123/v4/0c/72/a1/0c72a174-9208-6c86-e479-79865376e904/19UMGIM66006.rgb.jpg/400x400cc.jpg",
+   "twitter": "Usei o @Shazam para descobrir I Will Survive de Gloria Gaynor.",
+   "html": "https://www.shazam.com/snippets/email-share/53982678?lang=pt-BR&country=BR",
+   "avatar": "https://is1-ssl.mzstatic.com/image/thumb/Features125/v4/06/6d/b7/066db7b1-bf0a-e032-61f9-fd607a0b0d76/mzl.jruxuhnc.jpg/800x800cc.jpg",
+   "snapchat": "https://www.shazam.com/partner/sc/track/53982678"
+  },
+  "hub": {
+   "type": "APPLEMUSIC",
+   "image": "https://images.shazam.com/static/icons/hub/ios/v5/applemusic_{scalefactor}.png",
+   "actions": [
+    {
+     "name": "apple",
+     "type": "applemusicplay",
+     "id": "1475006475"
+    },
+    {
+     "name": "apple",
+     "type": "uri",
+     "uri": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/55/c0/68/55c068b9-5ede-7d3e-72a7-28a46cb84a18/mzaf_12388805681805224989.plus.aac.ep.m4a"
+    }
+   ],
+   "providers": [
+    {
+     "caption": "Abrir no Spotify",
+     "images": {
+      "overflow": "https://images.shazam.com/static/icons/hub/ios/v5/spotify-overflow_{scalefactor}.png",
+      "default": "https://images.shazam.com/static/icons/hub/ios/v5/spotify_{scalefactor}.png"
+     },
+     "actions": [
+      {
+       "name": "hub:spotify:searchdeeplink",
+       "type": "uri",
+       "uri": "spotify:search:I%20Will%20Survive%20Gloria%20Gaynor"
+      }
+     ],
+     "type": "SPOTIFY"
+    },
+    {
+     "caption": "Abrir no Deezer",
+     "images": {
+      "overflow": "https://images.shazam.com/static/icons/hub/ios/v5/deezer-overflow_{scalefactor}.png",
+      "default": "https://images.shazam.com/static/icons/hub/ios/v5/deezer_{scalefactor}.png"
+     },
+     "actions": [
+      {
+       "name": "hub:deezer:searchdeeplink",
+       "type": "uri",
+       "uri": "deezer-query://www.deezer.com/play?query=%7Btrack%3A%27I+Will+Survive%27%20artist%3A%27Gloria+Gaynor%27%7D"
+      }
+     ],
+     "type": "DEEZER"
+    }
+   ],
+   "explicit": false,
+   "displayname": "APPLE MUSIC",
+   "options": [
+    {
+     "caption": "ABRIR NO",
+     "actions": [
+      {
+       "name": "hub:applemusic:deeplink",
+       "type": "applemusicopen",
+       "uri": "https://music.apple.com/br/album/i-will-survive/1475006468?i=1475006475&mttnagencyid=s2n&mttnsiteid=125115&mttn3pid=Apple-Shazam&mttnsub1=Shazam_ios&mttnsub2=5348615A-616D-3235-3830-44754D6D5973&itscg=30201&app=music&itsct=Shazam_ios"
+      },
+      {
+       "name": "hub:applemusic:deeplink",
+       "type": "uri",
+       "uri": "https://music.apple.com/br/album/i-will-survive/1475006468?i=1475006475&mttnagencyid=s2n&mttnsiteid=125115&mttn3pid=Apple-Shazam&mttnsub1=Shazam_ios&mttnsub2=5348615A-616D-3235-3830-44754D6D5973&itscg=30201&app=music&itsct=Shazam_ios"
+      }
+     ],
+     "beacondata": {
+      "type": "open",
+      "providername": "applemusic"
+     },
+     "image": "https://images.shazam.com/static/icons/hub/ios/v5/overflow-open-option_{scalefactor}.png",
+     "type": "open",
+     "listcaption": "Abrir no Apple Music",
+     "overflowimage": "https://images.shazam.com/static/icons/hub/ios/v5/applemusic-overflow_{scalefactor}.png",
+     "colouroverflowimage": false,
+     "providername": "applemusic"
+    },
+    {
+     "caption": "COMPRAR",
+     "actions": [
+      {
+       "type": "uri",
+       "uri": "https://itunes.apple.com/br/album/i-will-survive/1475006468?i=1475006475&mttnagencyid=s2n&mttnsiteid=125115&mttn3pid=Apple-Shazam&mttnsub1=Shazam_ios&mttnsub2=5348615A-616D-3235-3830-44754D6D5973&itscg=30201&app=itunes&itsct=Shazam_ios"
+      }
+     ],
+     "beacondata": {
+      "type": "buy",
+      "providername": "itunes"
+     },
+     "image": "https://images.shazam.com/static/icons/hub/ios/v5/itunes-overflow-buy_{scalefactor}.png",
+     "type": "buy",
+     "listcaption": "Comprar no iTunes",
+     "overflowimage": "https://images.shazam.com/static/icons/hub/ios/v5/itunes-overflow-buy_{scalefactor}.png",
+     "colouroverflowimage": false,
+     "providername": "itunes"
+    }
+   ]
+  },
+  "sections": [
+   {
+    "type": "SONG",
+    "metapages": [
+     {
+      "image": "https://is1-ssl.mzstatic.com/image/thumb/Features125/v4/06/6d/b7/066db7b1-bf0a-e032-61f9-fd607a0b0d76/mzl.jruxuhnc.jpg/800x800cc.jpg",
+      "caption": "Gloria Gaynor"
+     },
+     {
+      "image": "https://is1-ssl.mzstatic.com/image/thumb/Music123/v4/0c/72/a1/0c72a174-9208-6c86-e479-79865376e904/19UMGIM66006.rgb.jpg/400x400cc.jpg",
+      "caption": "I Will Survive"
+     }
+    ],
+    "tabname": "Música",
+    "metadata": [
+     {
+      "title": "Álbum",
+      "text": "Love Tracks"
+     },
+     {
+      "title": "Selo",
+      "text": "Polydor"
+     },
+     {
+      "title": "Lançado",
+      "text": "1978"
+     }
+    ]
+   },
+   {
+    "type": "RELATED",
+    "url": "https://cdn.shazam.com/shazam/v3/pt-BR/BR/iphone/-/tracks/track-similarities-id-53982678?startFrom=0&pageSize=20&connected=",
+    "tabname": "Relacionado"
+   }
+  ],
+  "url": "https://www.shazam.com/track/53982678/i-will-survive",
+  "artists": [
+   {
+    "id": "42",
+    "adamid": "136869"
+   }
+  ],
+  "genres": {
+   "primary": "Pop"
+  },
+  "urlparams": {
+   "{tracktitle}": "I+Will+Survive",
+   "{trackartist}": "Gloria+Gaynor"
+  },
+  "myshazam": {
+   "apple": {
+    "actions": [
+     {
+      "name": "myshazam:apple",
+      "type": "uri",
+      "uri": "https://music.apple.com/br/album/i-will-survive/1475006468?i=1475006475&mttnagencyid=s2n&mttnsiteid=125115&mttn3pid=Apple-Shazam&mttnsub1=Shazam_ios&mttnsub2=5348615A-616D-3235-3830-44754D6D5973&itscg=30201&app=music&itsct=Shazam_ios"
+     }
+    ]
+   }
+  },
+  "highlightsurls": {},
+  "relatedtracksurl": "https://cdn.shazam.com/shazam/v3/pt-BR/BR/iphone/-/tracks/track-similarities-id-53982678?startFrom=0&pageSize=20&connected=",
+  "albumadamid": "1475006468",
+  "isrc": "USUR10200634"
+ },
+ "tagid": "26121107-A188-4ED1-BA40-3C5551E27720"
+}

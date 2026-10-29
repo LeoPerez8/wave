@@ -10,9 +10,9 @@ import { SettingsPageRow, SettingsPageScreen } from "@/settings/SettingsPage";
 
 /**
  * Settings › Layout: the options a long press opens on Home's, the
- * Library's and Playlists' titles and on the tab bar, a row each (Core's
- * `LAYOUT_PAGES`), for whoever doesn't know the long press; then Keep Find
- * Field Visible.
+ * Library's and Playlists' titles and on the tab bar, and Now Playing's
+ * buttons, a row each (Core's `LAYOUT_PAGES`), for whoever doesn't know the
+ * long press; then Keep Find Field Visible.
  */
 export default function LayoutSettingsScreen() {
   useScreenContent(true);

@@ -9,17 +9,21 @@ import {
   contrastRatio,
   chooseCustomInk,
   launchTheme,
+  launcherIconFor,
+  readThemeChoice,
   themeFor,
   type ThemeChoice,
 } from "./index.ts";
 
-const choose = (change: Partial<ThemeChoice>): ThemeChoice => ({
-  ...DEFAULT_THEME_CHOICE,
-  ...change,
-});
+/** A choice; a former preset id (#794) reads as Wave reads it now, custom and saved. */
+const choose = (change: Partial<ThemeChoice>): ThemeChoice =>
+  readThemeChoice(JSON.stringify({ ...DEFAULT_THEME_CHOICE, ...change }));
 
 const choiceKey = (choice: ThemeChoice): string =>
   `${choice.light}/${choice.dark}/${choice.primary}/${choice.secondary}`;
+
+/** The splash style a choice opens with. */
+const named = (choice: Partial<ThemeChoice>) => launchTheme(choose(choice)).splashTheme;
 
 /** The colours of the splash theme a choice opens with. */
 const splash = (choice: ThemeChoice) => {
@@ -28,25 +32,84 @@ const splash = (choice: ThemeChoice) => {
   return theme && { light: theme.light, dark: theme.dark };
 };
 
-/** Every choice Settings › Theme can make. */
+/** Every background with Default or a former preset's colour for each ink. */
 const everyChoice = (): ThemeChoice[] =>
   THEME_SWATCHES.light.flatMap((light) =>
     THEME_SWATCHES.dark.flatMap((dark) =>
-      THEME_SWATCHES.primary.flatMap((primary) =>
-        THEME_SWATCHES.secondary.map((secondary) => ({
-          ...DEFAULT_THEME_CHOICE,
-          light: light.id,
-          dark: dark.id,
-          primary: primary.id,
-          secondary: secondary.id,
-        })),
+      ["white", "teal", "blue", "violet", "green", "rose", "lime"].flatMap((primary) =>
+        ["white", "ember", "gold", "coral", "magenta", "sky", "lemon"].map((secondary) =>
+          choose({ light: light.id, dark: dark.id, primary, secondary }),
+        ),
       ),
     ),
   );
 
 describe("launchTheme", () => {
-  test("the shipped theme opens on the manifest's splash", () => {
-    assert.equal(launchTheme(DEFAULT_THEME_CHOICE).splashTheme, null);
+  test("uses the stored icon's waves with the app's current grounds after No (#792)", () => {
+    const choice = choose({ light: "sand", dark: "navy", primary: "rose", secondary: "gold" });
+    const stored = launcherIconFor(choose({ primary: "teal", secondary: "ember" }));
+    const launch = launchTheme(choice, stored);
+    assert.deepEqual(launch.light, {
+      background: "#ede6da",
+      primary: "#006a5f",
+      secondary: "#a14f09",
+    });
+    assert.deepEqual(launch.dark, {
+      background: "#0a0f1f",
+      primary: "#14b7a6",
+      secondary: "#f5b83d",
+    });
+    const style = LAUNCH_SPLASH_THEMES.find((theme) => theme.name === launch.splashTheme);
+    assert.deepEqual(style && { light: style.light, dark: style.dark }, {
+      light: launch.light,
+      dark: launch.dark,
+    });
+  });
+  test("the shipped theme opens on the manifest's splash: white waves in dark, the text colour in light (#793)", () => {
+    assert.deepEqual(launchTheme(DEFAULT_THEME_CHOICE), {
+      splashTheme: null,
+      light: { background: "#e0ecef", primary: "#121b1d", secondary: "#121b1d" },
+      dark: { background: "#000000", primary: "#ffffff", secondary: "#ffffff" },
+    });
+  });
+
+  test("the white waves take each light ground's own text colour, as the app's default inks do", () => {
+    for (const light of THEME_SWATCHES.light)
+      for (const dark of THEME_SWATCHES.dark) {
+        const choice = choose({ light: light.id, dark: dark.id });
+        const theme = themeFor(choice);
+        const launch = launchTheme(choice);
+        assert.deepEqual(launch.light, {
+          background: theme.light.background,
+          primary: theme.light.foreground,
+          secondary: theme.light.foreground,
+        });
+        assert.deepEqual(launch.dark, {
+          background: theme.dark.background,
+          primary: "#ffffff",
+          secondary: "#ffffff",
+        });
+      }
+  });
+
+  test("Teal over Ember on the shipped grounds now opens on a splash style of its own", () => {
+    const choice = choose({ primary: "teal", secondary: "ember" });
+    assert.equal(launchTheme(choice).splashTheme, "Wl.0.0.0.6");
+    assert.deepEqual(splash(choice), {
+      light: { background: "#e0ecef", primary: "#006a5f", secondary: "#a14f09" },
+      dark: { background: "#000000", primary: "#14b7a6", secondary: "#f5b83d" },
+    });
+  });
+
+  test("splash styles keep their names; the white ones are new (#793)", () => {
+    assert.equal(named({ primary: "rose", secondary: "gold" }), "Wl.0.0.4.7");
+    assert.equal(
+      named({ light: "sand", dark: "navy", primary: "teal", secondary: "ember" }),
+      "Wl.1.3.0.6",
+    );
+    assert.equal(named({ dark: "slate" }), "Wl.0.1.o.o");
+    assert.equal(named({ primary: "teal" }), "Wl.0.0.0.o");
+    assert.equal(named({ secondary: "sky" }), "Wl.0.0.o.a");
   });
 
   test("a chosen primary or secondary opens on a splash whose logo wears it", () => {
@@ -71,15 +134,15 @@ describe("launchTheme", () => {
     assert.equal(splash(choose({ dark: "navy" }))?.dark.background, "#0a0f1f");
   });
 
-  test("every choice Settings offers has a splash theme Android can name", () => {
+  test("every background with Default or a former preset's colour has a splash theme Android can name", () => {
     const names = new Set(LAUNCH_SPLASH_THEMES.map((theme) => theme.name));
     const choices = everyChoice();
     for (const choice of choices) {
       const name = launchTheme(choice).splashTheme;
       if (name !== null) assert.ok(names.has(name), `${JSON.stringify(choice)}: ${name}`);
     }
-    assert.equal(LAUNCH_SPLASH_THEMES.length, 20735);
-    assert.equal(names.size, 20735);
+    assert.equal(LAUNCH_SPLASH_THEMES.length, 36 * 625 - 1);
+    assert.equal(names.size, 36 * 625 - 1);
     for (const name of names) {
       assert.match(name, /^[A-Za-z][A-Za-z0-9_.]*$/);
       assert.ok(name.length <= 10, `compact Android style name: ${name}`);
@@ -88,7 +151,7 @@ describe("launchTheme", () => {
 
   test("every background pair and palette ink pair ships exactly once, except the manifest default", () => {
     const choices = new Set(LAUNCH_SPLASH_THEMES.map((theme) => choiceKey(theme.choice)));
-    assert.equal(choices.size, 20735);
+    assert.equal(choices.size, 36 * 625 - 1);
     for (const light of THEME_SWATCHES.light) {
       for (const dark of THEME_SWATCHES.dark) {
         for (const pair of INK_PAIRS) {
@@ -120,14 +183,17 @@ describe("launchTheme", () => {
   });
 
   test("a palette splash uses the icon's shipped teal and ember dark inks on other grounds", () => {
-    assert.deepEqual(splash(choose({ light: "sand", dark: "navy" }))?.dark, {
-      background: "#0a0f1f",
-      primary: "#14b7a6",
-      secondary: "#f5b83d",
-    });
+    assert.deepEqual(
+      splash(choose({ light: "sand", dark: "navy", primary: "teal", secondary: "ember" }))?.dark,
+      {
+        background: "#0a0f1f",
+        primary: "#14b7a6",
+        secondary: "#f5b83d",
+      },
+    );
   });
 
-  test("custom cyan and red open on their vivid palette splash and keep the app's own inks", () => {
+  test("custom cyan and red use the vivid icon inks in both native splash layers", () => {
     const choice = chooseCustomInk(
       chooseCustomInk(DEFAULT_THEME_CHOICE, "primary", "#00e9ff"),
       "secondary",
@@ -147,18 +213,17 @@ describe("launchTheme", () => {
       primary: "#007380",
       secondary: "#d20003",
     });
-    assert.equal(launchTheme(choice).dark.primary, "#00e9ff");
-    assert.equal(launchTheme(choice).dark.secondary, "#ff1f13");
+    assert.deepEqual(launchTheme(choice).dark, selected?.dark);
+    assert.deepEqual(launchTheme(choice).light, selected?.light);
   });
 
   test("a custom colour can still match a preset ink", () => {
     const custom = choose({ light: "sand", primary: "custom", customPrimary: "#0d2350" });
     assert.equal(
       launchTheme(custom).splashTheme,
-      launchTheme({ ...custom, primary: "blue" }).splashTheme,
+      launchTheme(choose({ light: "sand", primary: "blue" })).splashTheme,
     );
-    // What's saved is still what the app draws.
-    assert.equal(launchTheme(custom).light.primary, themeFor(custom).light.accent);
+    assert.equal(launchTheme(custom).light.primary, "#1f5fb8");
   });
 
   test("a kept custom colour that isn't chosen leaves the shipped splash", () => {

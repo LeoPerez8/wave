@@ -71,6 +71,8 @@ export interface NativeWaveUnderlineProps extends ViewProps {
   readonly color: ColorValue;
   /** Slides the wave along (on the RenderThread) while true; lies still otherwise. */
   readonly animating: boolean;
+  /** The underline's small wave (the default), or the Recognize card's larger one. */
+  readonly shape?: "underline" | "listening";
 }
 
 /** The playing song's wavy underline, animated on the RenderThread (see WaveUnderlineView.kt). */

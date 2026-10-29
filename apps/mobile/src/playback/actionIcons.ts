@@ -44,7 +44,8 @@ export type ActionIcon = ComponentType<ActionIconProps>;
 /**
  * Every entry a long-press menu or the selection bar can offer: the Library's
  * item actions, a YT Music album's, a playlist's and a Discover mix's
- * entries, an unavailable entry's, and the play cards and Shuffle row.
+ * entries, an unavailable entry's, the play cards and Shuffle row, and a
+ * saved theme colour's Remove.
  */
 export type MenuAction =
   | ItemAction
@@ -52,7 +53,9 @@ export type MenuAction =
   | YtAlbumDownloadAction
   | YtPlaylistDownloadAction
   | DiscoverMixAction
-  | UnavailableEntryAction;
+  | UnavailableEntryAction
+  | "addToShazam"
+  | "removeColour";
 
 /**
  * Each action's one icon, the same in every menu that offers it and on the
@@ -66,6 +69,7 @@ export const ACTION_ICONS: { readonly [A in MenuAction]: ActionIcon } = {
   addToQueue: IconRowInsertBottom,
   magicQueue: IconSparkles,
   addToPlaylist: IconPlaylistAdd,
+  addToShazam: IconPlaylistAdd,
   favorite: IconStar,
   unfavorite: IconStarOff,
   removeFromPlaylist: IconPlaylistX,
@@ -94,4 +98,5 @@ export const ACTION_ICONS: { readonly [A in MenuAction]: ActionIcon } = {
   cancelPlaylistDownload: IconX,
   saveAsPlaylist: IconDeviceFloppy,
   search: IconSearch,
+  removeColour: IconTrash,
 };

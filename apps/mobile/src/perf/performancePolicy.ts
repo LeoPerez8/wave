@@ -363,6 +363,23 @@ export const WHOLE_LIBRARY: Record<string, WholeLibraryException> = {
       "Download recovery runs on explicit/background work; the failed-download UI follows only while shown.",
     capabilities: ["ytmusic/libraryFinder.ts#useLoadedLibraryFinder"],
   },
+  "recognize/RecognizeCard.tsx#depsFor": {
+    howOften:
+      "Once per recognized match after capture ends, from an explicitly opened card; never while listening.",
+    reason:
+      "Recognition needs the Library before searching online, using the shared songs query. resolveRecognition.test.ts covers one Library read per match and no online search for a Library match.",
+    capabilities: ["library/hooks.ts#songs"],
+  },
+  "recognize/RecognizeCard.tsx#RecognizeCard": {
+    howOften:
+      "Once per shared Library version while a streamed result is visible, plus one current-finder lookup when Add to Playlist saves it.",
+    reason:
+      "The explicitly opened result card follows download membership only for a streamed result and rechecks identity before saving, so a completed download is not offered again or saved as a streamed duplicate.",
+    capabilities: [
+      "ytmusic/libraryFinder.ts#useLoadedInLibrary",
+      "ytmusic/libraryFinder.ts#currentLibraryFinder",
+    ],
+  },
   "ytmusic/YtSongActions.tsx#runYtSongSwipe": {
     howOften: "Once per completed song swipe; finder reads are shared per Library version.",
     reason: "Explicit song menus and completed swipes resolve Library identity for their action.",
@@ -693,6 +710,10 @@ export const SONG_ROW_SITES: Record<string, Exception> = {
   "preview/KindCards.tsx#SongRow": {
     reason: "Developer Design preview cards: synthetic rows from preview/syntheticSongRow.ts.",
   },
+  "settings/SampleSongRow.tsx#SampleSongRow": {
+    reason:
+      "Settings' one fixed fake song (Motion's and Touch's samples), not a list: no Library song, no store.",
+  },
 };
 /** Core's song row view is computed once per song and state, by the song list's model. */
 export const SONG_ROW_VIEW_SITES: Record<string, Exception> = {
@@ -852,6 +873,10 @@ export const OWN_PRESS: Record<string, Exception> = {
   },
   "nowPlaying/SleepTimer.tsx#SleepTimerButton": {
     reason: "Its face is the sleep countdown drawn on the UI thread (#718), not a glyph.",
+  },
+  "nowPlaying/SongButtons.tsx#DownloadButton": {
+    reason:
+      "While it waits or downloads it has no tap, only a slot's long press (#800), and its face is a progress bar.",
   },
   "components/TitleLongPress.tsx#TitlePress": {
     reason: "A screen title whose long press runs its action; it has the header role.",

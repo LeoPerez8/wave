@@ -11,29 +11,38 @@ const AT_START = 1;
  * Places the Queue's list at the start of Up Next: the offset of its sticky
  * bar, with History above it out of sight. A list showing for the first time
  * lays itself out there (its initial offset). After that each showing, and a
- * new play while it shows, scroll there through the list, so the rows it
- * draws match the offset on screen, even when it sat out of sight while its
- * queue changed. While it shows, a list sitting at the start of Up Next
- * stays there as History grows or empties (the song changed); scrolled
- * anywhere else, the rows on screen hold still.
+ * new play or a reshuffle while it shows (a new [reshuffles] count: a shuffle
+ * toggle or a kind picked on the shuffle card, even the one already chosen,
+ * which reorders Up Next and leaves History as it is), scroll there through
+ * the list, so the rows it draws match the offset on screen, even when it sat
+ * out of sight while its queue changed. While it shows, a list sitting at the
+ * start of Up Next stays there as History grows or empties (the song
+ * changed); scrolled anywhere else, the rows on screen hold still.
  *
- * `place` is the call to make on every showing and whenever the play context
- * or the start of Up Next changes while it shows; `hide`, when it goes out of
- * sight.
+ * `place` is the call to make on every showing and whenever the play context,
+ * the reshuffle count or the start of Up Next changes while it shows; `hide`,
+ * when it goes out of sight.
  */
 export function upNextScroll<Context>() {
-  let last: { list: UpNextScroller; context: Context; start: number } | undefined;
+  let last:
+    { list: UpNextScroller; context: Context; start: number; reshuffles: unknown } | undefined;
   let hidden = false;
   return {
-    place(list: UpNextScroller | null, context: Context, start: number): void {
+    place(
+      list: UpNextScroller | null,
+      context: Context,
+      start: number,
+      reshuffles?: unknown,
+    ): void {
       if (list === null) return;
       const previous = last;
       const showing = hidden;
       hidden = false;
-      last = { list, context, start };
+      last = { list, context, start, reshuffles };
       if (previous?.list !== list) return;
       const atStart = Math.abs(list.getState().scroll - previous.start) < AT_START;
-      if (!showing && context === previous.context && !atStart) return;
+      const reordered = context !== previous.context || reshuffles !== previous.reshuffles;
+      if (!showing && !reordered && !atStart) return;
       void list.scrollToOffset({ offset: start, animated: false });
     },
     hide(): void {
@@ -56,3 +65,28 @@ export const upNextEndSpace = (
   listHeight: number,
   layout: { bar: number; row: number; count: number; bottomInset: number },
 ): number => Math.max(0, listHeight - layout.bar - layout.count * layout.row - layout.bottomInset);
+
+/**
+ * Where the Queue's Back to Current Song pill points to bring back the start
+ * of Up Next (its sticky bar, at [start] in the list), or null while it's in
+ * sight: down when the list is scrolled up into History, up when it's more
+ * than one screen (the [listHeight] list's height) down Up Next. A little way
+ * down Up Next shows no pill, nor does a list not laid out yet.
+ *
+ * [shownFrom] is the scroll the list last reported before the Queue showed
+ * again, until it reports another (null after that). While [scroll] is still
+ * that one, the showing's placement (`upNextScroll`) hasn't landed and the
+ * scroll says where the list was, not where it is: no pill, so it doesn't
+ * blink in and out on each showing.
+ */
+export const backToCurrentSong = (
+  scroll: number,
+  start: number,
+  listHeight: number,
+  shownFrom: number | null = null,
+): "up" | "down" | null => {
+  "worklet";
+  if (listHeight <= 0 || scroll === shownFrom) return null;
+  if (scroll < start - AT_START) return "down";
+  return scroll > start + listHeight ? "up" : null;
+};

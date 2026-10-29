@@ -14,7 +14,7 @@ import { scheduleOnRN } from "react-native-worklets";
 
 import { useChromeInset } from "@/chrome/chrome";
 import { ENTRY } from "@/motion/entry";
-import { useTapAnimationMs } from "@/settings/tapAnimation";
+import { TAP_ANIMATION_MS } from "@/motion/timing";
 
 import { spineLetterChange } from "./spineLetterChange";
 
@@ -55,7 +55,6 @@ type Chosen = { readonly letter: string | null; readonly held: boolean };
  * list in view underneath.
  */
 export function AlphabetSpine({ entries, onJump, topRow }: Props) {
-  const ms = useTapAnimationMs();
   const reduceMotion = useReducedMotion();
   const chromeInset = useChromeInset();
   const { fontScale } = useWindowDimensions();
@@ -101,7 +100,7 @@ export function AlphabetSpine({ entries, onJump, topRow }: Props) {
       "worklet";
       const y = event.y - CELL;
       heldLetter.set(null);
-      shown.set(ms === 0 ? 1 : withTiming(1, { duration: ms, ...FADE }));
+      shown.set(withTiming(1, { duration: TAP_ANIMATION_MS, ...FADE }));
       moveOnUI(y);
     },
     onUpdate: (event) => {
@@ -112,7 +111,7 @@ export function AlphabetSpine({ entries, onJump, topRow }: Props) {
     onFinalize: () => {
       "worklet";
       // Out in half the time it came in, so the rows it lands on are clear at once.
-      shown.set(ms === 0 ? 0 : withTiming(0, { duration: ms / 2, ...FADE }));
+      shown.set(withTiming(0, { duration: TAP_ANIMATION_MS / 2, ...FADE }));
       heldLetter.set(null);
       scheduleOnRN(release);
     },

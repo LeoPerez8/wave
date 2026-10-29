@@ -2,7 +2,12 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { upNextEndSpace, upNextScroll, type UpNextScroller } from "./upNextScroll.ts";
+import {
+  backToCurrentSong,
+  upNextEndSpace,
+  upNextScroll,
+  type UpNextScroller,
+} from "./upNextScroll.ts";
 
 /** A stand-in for Legend List's handle, scrolled to `scroll`, recording the scrolls asked of it. */
 const list = (scroll: number) => {
@@ -47,6 +52,36 @@ describe("upNextScroll", () => {
     place(scroller, songs, 300);
     place(scroller, album, 0);
     assert.deepEqual(asked, [{ offset: 0, animated: false }]);
+  });
+
+  test("a shuffle toggle while Up Next shows starts it at its start, from wherever it was", () => {
+    for (const scroll of [120, 300, 900]) {
+      const { place } = upNextScroll();
+      const { scroller, asked } = list(scroll);
+      place(scroller, songs, 300, "off");
+      place(scroller, songs, 300, "on");
+      assert.deepEqual(asked, [{ offset: 300, animated: false }], `scrolled to ${scroll}`);
+    }
+  });
+
+  test("each reshuffle while Up Next shows starts it at its start, the same kind picked again too", () => {
+    const { place } = upNextScroll();
+    const { scroller, asked } = list(900);
+    place(scroller, songs, 300, 1);
+    place(scroller, songs, 300, 2);
+    place(scroller, songs, 300, 3);
+    assert.deepEqual(asked, [
+      { offset: 300, animated: false },
+      { offset: 300, animated: false },
+    ]);
+  });
+
+  test("with no reshuffle, scrolled down Up Next, the rows on screen hold still", () => {
+    const { place } = upNextScroll();
+    const { scroller, asked } = list(900);
+    place(scroller, songs, 300, 4);
+    place(scroller, songs, 300, 4);
+    assert.deepEqual(asked, []);
   });
 
   test("sitting at the start of Up Next, it stays there as History grows or empties", () => {
@@ -108,5 +143,48 @@ describe("upNextEndSpace", () => {
 
   test("a list not laid out yet needs none", () => {
     assert.equal(upNextEndSpace(0, { ...sizes, count: 3 }), 0);
+  });
+});
+
+describe("backToCurrentSong", () => {
+  // Up Next starts 300 dp down a 600 dp list.
+  const start = 300;
+  const height = 600;
+
+  test("scrolled into History, the pill points down to Up Next", () => {
+    assert.equal(backToCurrentSong(120, start, height), "down");
+    assert.equal(backToCurrentSong(0, start, height), "down");
+  });
+
+  test("more than one screen down Up Next, it points up to its start", () => {
+    assert.equal(backToCurrentSong(901, start, height), "up");
+    assert.equal(backToCurrentSong(5000, start, height), "up");
+  });
+
+  test("at the start of Up Next, or less than a screen down it, there's no pill", () => {
+    assert.equal(backToCurrentSong(300, start, height), null);
+    assert.equal(backToCurrentSong(299.5, start, height), null);
+    assert.equal(backToCurrentSong(600, start, height), null);
+    assert.equal(backToCurrentSong(900, start, height), null);
+  });
+
+  test("a list not laid out yet shows none", () => {
+    assert.equal(backToCurrentSong(120, start, 0), null);
+    assert.equal(backToCurrentSong(5000, start, 0), null);
+  });
+
+  test("a showing waits for its placement while the scroll is still the one from before", () => {
+    // Hidden at the old start of Up Next (300); 3 songs later it starts 168 dp lower.
+    assert.equal(backToCurrentSong(300, 468, height, 300), null);
+    // Hidden deep in Up Next, or up in History.
+    assert.equal(backToCurrentSong(5000, start, height, 5000), null);
+    assert.equal(backToCurrentSong(120, start, height, 120), null);
+  });
+
+  test("once the list reports another scroll, the pill follows it", () => {
+    assert.equal(backToCurrentSong(468, 468, height, 300), null);
+    assert.equal(backToCurrentSong(120, start, height, 5000), "down");
+    assert.equal(backToCurrentSong(5000, start, height, 120), "up");
+    assert.equal(backToCurrentSong(120, start, height, null), "down");
   });
 });

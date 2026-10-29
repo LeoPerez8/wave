@@ -17,6 +17,7 @@ import { WaveNative, type PlaylistPhoto } from "@/native/waveNative";
 
 import { showError } from "@/overlay/alert";
 import { showToast } from "@/overlay/toast";
+import { shazamPlaylistId, setShazamPlaylistId } from "@/settings/shazamPlaylist";
 
 import { countNotified } from "./db/playlistWork";
 import {
@@ -136,6 +137,20 @@ export const createPlaylist = (
   name: string,
   songs: readonly PlaylistSong[] = [],
 ): Promise<PlaylistAddResult> => edit((store) => store.createPlaylist(name, songs));
+
+// Read the preference after the previous save finishes, including rapid first taps.
+let shazamSave: Promise<void> = Promise.resolve();
+
+/** One-tap Recognize save; the ordinary playlist and preference use normal sync. */
+export const addToShazam = (song: PlaylistSong): Promise<void> => {
+  const save = shazamSave.then(async () => {
+    const result = await edit((store) => store.addToShazam(shazamPlaylistId(), song));
+    setShazamPlaylistId(result.syncId);
+    showToast(result.toast);
+  });
+  shazamSave = save.catch(() => {});
+  return save;
+};
 
 /** A playlist just created empty, as Library › Playlists will list it: for its screen's first frame. */
 export const emptyPlaylistRow = (id: number, name: string): PlaylistRow => ({

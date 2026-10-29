@@ -1,6 +1,13 @@
 import type { LegendListRef } from "@legendapp/list/react-native";
 import { AnimatedLegendList } from "@legendapp/list/reanimated";
-import { IconMenu2, IconRepeat, IconRepeatOnce, IconX } from "@tabler/icons-react-native";
+import {
+  IconArrowDown,
+  IconArrowUp,
+  IconMenu2,
+  IconRepeat,
+  IconRepeatOnce,
+  IconX,
+} from "@tabler/icons-react-native";
 import {
   currentEntry,
   counted,
@@ -28,10 +35,16 @@ import {
 import { Text, View, useWindowDimensions } from "react-native";
 import { GestureDetector } from "react-native-gesture-handler";
 import Animated, {
+  FadeIn,
+  FadeOut,
+  ReduceMotion,
+  useAnimatedReaction,
   useAnimatedStyle,
+  useReducedMotion,
   useSharedValue,
   type SharedValue,
 } from "react-native-reanimated";
+import { scheduleOnRN, scheduleOnUI } from "react-native-worklets";
 
 import { CatalogLine, SectionHead, SECTION_HEAD } from "@/catalog/CatalogLine";
 import { CELL, grid } from "@/catalog/grid";
@@ -40,6 +53,8 @@ import { TrackSkeletons } from "@/catalog/Skeletons";
 import { RecommendationsFailed } from "@/components/RecommendationsFailed";
 import { useMissingSongs } from "@/library/hooks";
 import { IconButton } from "@/components/IconButton";
+import { TextButton } from "@/components/TextButton";
+import { TAP_ANIMATION_MS } from "@/motion/timing";
 import { usePerfVisible, useRenderCount } from "@/perf/perf";
 import {
   cycleRepeat,
@@ -49,7 +64,7 @@ import {
   toggleShuffle,
 } from "@/playback/actions";
 import { openQueuedSongActions } from "@/playback/ActionsMenu";
-import { useQueue } from "@/playback/hooks";
+import { useQueue, useUpNextReshuffles } from "@/playback/hooks";
 import {
   retryMagicBatch,
   useMagicBatchEmptySeed,
@@ -69,7 +84,7 @@ import { useQueueTracks } from "./hooks";
 import { useShuffleControl } from "./ShuffleMenu";
 import { TrackHeader } from "./TrackHeader";
 import { ROW, useDraggedRow, useRowDrag, type DragRows } from "@/catalog/rowDrag";
-import { upNextEndSpace, upNextScroll } from "./upNextScroll";
+import { backToCurrentSong, upNextEndSpace, upNextScroll } from "./upNextScroll";
 
 type IconProps = { size?: number; color?: string; strokeWidth?: number };
 
@@ -106,7 +121,8 @@ function Toggle({ icon: Icon, label, on, onPress, onLongPress, accessibilityHint
   );
 }
 
-const REPEAT_LABEL: Record<RepeatMode, string> = {
+/** What the repeat toggles say for each mode. */
+export const REPEAT_LABEL: Record<RepeatMode, string> = {
   off: "Repeat",
   all: "Repeat",
   one: "Repeat One",
@@ -351,6 +367,59 @@ const HistoryRow = memo(function HistoryRow({
   );
 });
 
+/** The Back to Current Song pill's height, and the room it takes over the list's bottom. */
+const PILL = CELL * 6;
+const PILL_ROOM = PILL + CELL;
+
+const pillIn = FadeIn.duration(TAP_ANIMATION_MS).reduceMotion(ReduceMotion.Never);
+const pillOut = FadeOut.duration(TAP_ANIMATION_MS).reduceMotion(ReduceMotion.Never);
+
+/**
+ * The pill floating over the Queue list's bottom that brings back the start of
+ * Up Next: its arrow points the way there ([direction], `backToCurrentSong`).
+ * It fades in and out with the tap animation, or just appears and goes under
+ * reduce motion.
+ */
+function BackToCurrentSong({
+  direction,
+  bottom,
+  onPress,
+}: {
+  direction: "up" | "down";
+  bottom: number;
+  onPress: () => void;
+}) {
+  const reduceMotion = useReducedMotion();
+  const Arrow = direction === "up" ? IconArrowUp : IconArrowDown;
+  return (
+    <Animated.View
+      entering={reduceMotion ? undefined : pillIn}
+      exiting={reduceMotion ? undefined : pillOut}
+      pointerEvents="box-none"
+      className="absolute left-0 right-0 items-center"
+      style={{ bottom }}
+    >
+      <TextButton
+        variant="pill"
+        label="Current Song"
+        accessibilityLabel="Back to Current Song"
+        onPress={onPress}
+        className="flex-row items-center"
+        style={{ height: PILL, gap: CELL }}
+      >
+        {(color) => (
+          <>
+            <Arrow size={16} color={color} strokeWidth={2} />
+            <Text className="font-sans text-subheadline font-semibold" style={{ color }}>
+              Current Song
+            </Text>
+          </>
+        )}
+      </TextButton>
+    </Animated.View>
+  );
+}
+
 /** The lifted copy only follows the finger. */
 const ignore = (): void => undefined;
 
@@ -406,10 +475,14 @@ const barOffset = (history: number): number => (history === 0 ? 0 : SECTION_HEAD
  *
  * The list is Legend List's Reanimated one: its sticky bar follows the
  * scroll as Reanimated reads it. The plain list's follows a scroll event it
- * builds again whenever the bar's index changes, and a reshuffle emptying
- * History moved the bar to the top as the list scrolled there, so the bar
- * missed that scroll and stayed drawn at History's old height, over Up Next
- * (#706).
+ * builds again whenever the bar's index changes, and a reshuffle that
+ * emptied History (as one did before #797) moved the bar to the top as the
+ * list scrolled there, so the bar missed that scroll and stayed drawn at
+ * History's old height, over Up Next (#706).
+ *
+ * Scrolled into History, or more than a screen down Up Next, a pill over the
+ * list's bottom brings back the start of Up Next (`BackToCurrentSong`); the
+ * list's end leaves room for it, so the last row can scroll clear of it.
  *
  * While a Magic Queue picks its next batch, skeleton rows stand where it will
  * land: in place of "Nothing up next.", or under the songs already in Up
@@ -462,11 +535,13 @@ export function UpNextList({
   // `height`); a first showing starts from the last one measured, so it opens
   // with the room already there.
   const [listHeight, setListHeight] = useState(lastListHeight);
+  // Under the last row, room for the Back to Current Song pill too.
+  const endInset = bottomInset + PILL_ROOM;
   const endSpace = upNextEndSpace(listHeight, {
     bar: BAR,
     row: ROW,
     count: entries.length,
-    bottomInset,
+    bottomInset: endInset,
   });
 
   const onMove = useCallback((move: PendingMove, moved: Promise<void>) => {
@@ -476,7 +551,7 @@ export function UpNextList({
   const keys = useMemo(() => entries.map((entry) => entry.key), [entries]);
   const { drag, rowDrag, liftedStyle, height, scroll, scrollRef } = useRowDrag({
     keys,
-    bottomInset,
+    bottomInset: endInset,
     // Up Next opens at its start under the bar, which History scrolls no lower than.
     lead: start + BAR,
     bar: BAR,
@@ -538,13 +613,48 @@ export function UpNextList({
   // again on each showing. Each showing places the list at the start of Up
   // Next through Legend List, which draws the rows for that offset even if its
   // queue changed out of sight; while it shows, the place follows History
-  // growing or emptying under it.
+  // growing or emptying under it. A shuffle toggle, or a kind chosen on the
+  // shuffle card (the one already chosen too), reorders Up Next with History
+  // as it was: the list goes back to Up Next's start, from wherever it was
+  // scrolled. It counts the reorders as they land, not the shuffle setting,
+  // so a kind synced in from another device doesn't move the list.
   const listRef = useRef<LegendListRef>(null);
   const [placement] = useState(() => upNextScroll<QueueState["context"]>());
+  const reshuffles = useUpNextReshuffles();
   useLayoutEffect(() => {
-    placement.place(listRef.current, queue.context, start);
-  }, [placement, queue.context, start]);
+    placement.place(listRef.current, queue.context, start, reshuffles);
+  }, [placement, queue.context, start, reshuffles]);
   useLayoutEffect(() => placement.hide, [placement]);
+
+  // The Back to Current Song pill follows the scroll on the UI thread, and a
+  // tap scrolls to where each showing opens. Hidden, the Queue drops it: the
+  // next showing opens at the start of Up Next. Until the list reports a
+  // scroll after a showing, the scroll is where it was when it hid, so the
+  // pill waits for the showing's placement (`shownFrom`) rather than blink.
+  const [pill, setPill] = useState<"up" | "down" | null>(null);
+  const shownFrom = useSharedValue<number | null>(null);
+  useLayoutEffect(() => {
+    scheduleOnUI(() => {
+      shownFrom.set(scroll.get());
+    });
+    return () => setPill(null);
+  }, [shownFrom, scroll]);
+  useAnimatedReaction(
+    () => scroll.get(),
+    (now) => {
+      if (shownFrom.get() !== null && now !== shownFrom.get()) shownFrom.set(null);
+    },
+  );
+  useAnimatedReaction(
+    () => backToCurrentSong(scroll.get(), barStart.get(), height.get(), shownFrom.get()),
+    (now, before) => {
+      if (now !== before) scheduleOnRN(setPill, now);
+    },
+  );
+  const reduceMotion = useReducedMotion();
+  const backToStart = useCallback(() => {
+    void listRef.current?.scrollToOffset({ offset: start, animated: !reduceMotion });
+  }, [start, reduceMotion]);
 
   const renderItem = useCallback(
     ({ item }: { item: QueueRow }) => {
@@ -640,10 +750,13 @@ export function UpNextList({
           alwaysRender={drag === null ? undefined : { keys: [drag.key] }}
           scrollEnabled={drag === null}
           scrollEventThrottle={16}
-          contentContainerStyle={{ paddingBottom: bottomInset }}
+          contentContainerStyle={{ paddingBottom: endInset }}
           ListFooterComponent={<View style={{ minHeight: endSpace }}>{footer}</View>}
         />
       </BarGroundContext>
+      {pill !== null && drag === null && (
+        <BackToCurrentSong direction={pill} bottom={bottomInset} onPress={backToStart} />
+      )}
       {drag !== null && (
         <Animated.View
           pointerEvents="none"

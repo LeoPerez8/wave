@@ -183,7 +183,11 @@ const play = (
     shuffle: false,
     nextKey,
   };
-  return result(shuffle ? shuffleOn(started, random, kind) : started, "play");
+  if (!shuffle) return result(started, "play");
+  // A fresh start has no History: the first song plays first, the rest shuffled after it.
+  const first = entries[index]!;
+  const firstUp = { ...started, entries: [first, ...entries.filter((e) => e !== first)], index: 0 };
+  return result(shuffleOn(firstUp, random, kind), "play");
 };
 
 /** A shuffled copy (Fisher–Yates): every order equally likely. */
@@ -529,7 +533,9 @@ export const readShuffleKind = (stored: string | null): ShuffleKind =>
 /**
  * Whether [command] shuffles [state]'s queue, and so uses the kind of shuffle
  * `reduceQueue` is given: the app reads play counts for Smart Shuffle, and
- * artists, genres and albums for Even Shuffle, only then.
+ * artists, genres and albums for Even Shuffle, only then. Besides a shuffle
+ * toggle, a kind picked and a play with shuffle, Repeat All's next lap with
+ * shuffle on is a new shuffle (`wrapToStart`), whichever command starts it.
  */
 export const shufflesQueue = (state: QueueState, command: QueueCommand): boolean => {
   switch (command.type) {
@@ -539,24 +545,66 @@ export const shufflesQueue = (state: QueueState, command: QueueCommand): boolean
       return command.on && !state.shuffle;
     case "reshuffle":
       return true;
+    case "next":
+    case "trackEnded":
+      return shuffledLapNext(state);
+    case "playerMoved":
+      return shuffledLapNext(state) && lapOpening(state)?.key === command.key;
+    case "removeTracks":
+      return state.shuffle && state.repeat === "all" && removalWraps(state, command.trackIds);
+    case "settled":
+      return (
+        command.becomes === null &&
+        state.shuffle &&
+        state.repeat === "all" &&
+        removalWraps(state, [command.trackId])
+      );
     default:
       return false;
   }
 };
 
 /**
+ * Whether [command] took [before] to [after] by reordering Up Next with
+ * History as it was: a shuffle toggle either way, or a kind picked on the
+ * shuffle card, even the one already chosen. The Queue view goes back to the
+ * start of Up Next after one (story 25), however the list was scrolled.
+ */
+export const reshuffledUpNext = (
+  before: QueueState,
+  command: QueueCommand,
+  after: QueueState,
+): boolean => (command.type === "setShuffle" || command.type === "reshuffle") && after !== before;
+
+/** Whether [state] plays its last entry with shuffle and Repeat All on: a shuffled lap comes next. */
+const shuffledLapNext = (state: QueueState): boolean =>
+  state.shuffle &&
+  state.repeat === "all" &&
+  state.index >= 0 &&
+  state.index === state.entries.length - 1;
+
+/** Whether removing [trackIds] takes the current entry and all after it, so Repeat All wraps. */
+const removalWraps = (state: QueueState, trackIds: readonly string[]): boolean => {
+  const gone = new Set(trackIds);
+  const current = currentEntry(state);
+  if (current === null || !gone.has(current.trackId)) return false;
+  const kept = (entry: QueueEntry): boolean => !gone.has(entry.trackId);
+  return !upNext(state).some(kept) && queueHistory(state).some(kept);
+};
+
+/**
  * The songs [command] orders when it shuffles [state]'s queue, by track id,
- * each once: a play's songs, or the queue's, streamed ones included. Smart
- * Shuffle needs their plays and Even Shuffle their `ShuffleSong`s, and no
- * others; a command that doesn't shuffle needs none.
+ * each once: a play's songs, the current song's and Up Next's for a toggle or
+ * a kind picked (History stays as it is), or every song of the queue for
+ * Repeat All's next lap, streamed ones included. Smart Shuffle needs their
+ * plays and Even Shuffle their `ShuffleSong`s (the current song's, to follow
+ * it), and no others; a command that doesn't shuffle needs none.
  */
 export const shuffledTrackIds = (state: QueueState, command: QueueCommand): string[] => {
   if (!shufflesQueue(state, command)) return [];
-  return [
-    ...new Set(
-      command.type === "play" ? command.trackIds : state.entries.map((entry) => entry.trackId),
-    ),
-  ];
+  if (command.type === "play") return [...new Set(command.trackIds)];
+  const from = command.type === "setShuffle" || command.type === "reshuffle" ? state.index : 0;
+  return [...new Set(state.entries.slice(Math.max(0, from)).map((entry) => entry.trackId))];
 };
 
 /** [entries] in the order [shuffle] gives them, after [previous] (the song before them, if any). */
@@ -581,53 +629,40 @@ const upcomingQueued = (state: QueueState): QueueEntry[] =>
   state.entries.slice(state.index + 1).filter(isQueued);
 
 /**
- * The current entry goes first, and every other context entry (played or not)
- * is shuffled after it, with the lined-up entries still to play mixed in (they
- * stay lined up, so turning shuffle off puts them back right after the current
- * entry). Lined-up entries that already played are dropped.
+ * Shuffles Up Next only: History and the current entry stay where they are,
+ * and the entries after the current one are shuffled, the lined-up ones mixed
+ * in (they stay lined up, so turning shuffle off puts them back right after
+ * the current entry).
  */
 const shuffleOn = (state: QueueState, random: () => number, shuffle: Shuffle): QueueState => {
   const current = currentEntry(state);
   if (current === null) return { ...state, shuffle: true };
-  const others = state.entries.filter(
-    (entry, i) => entry !== current && (!isQueued(entry) || i > state.index),
-  );
   return {
     ...state,
-    entries: [current, ...shuffleEntries(others, random, shuffle, current)],
-    index: 0,
+    entries: [
+      ...state.entries.slice(0, state.index + 1),
+      ...shuffleEntries(upNext(state), random, shuffle, current),
+    ],
     shuffle: true,
   };
 };
 
 /**
- * Restores the context order (entries removed meanwhile stay removed) around
- * the current entry, with lined-up entries right after it. A lined-up current
- * entry stays after the context entry that played before it.
+ * History stays as it played and the current entry where it is. Up Next goes
+ * back to the context's order, holding the context entries not played yet
+ * (entries removed meanwhile stay removed), with the lined-up entries right
+ * after the current one.
  */
 const shuffleOff = (state: QueueState): QueueState => {
   const current = currentEntry(state);
   if (current === null) return { ...state, shuffle: false };
-  const context = state.entries
+  const context = upNext(state)
     .filter((entry) => !isQueued(entry))
     // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh copy; Hermes lacks toSorted
     .sort((a, b) => a.contextIndex! - b.contextIndex!);
-  let split: number;
-  if (isQueued(current)) {
-    let before: QueueEntry | undefined;
-    for (let i = state.index - 1; i >= 0 && before === undefined; i -= 1) {
-      if (!isQueued(state.entries[i]!)) before = state.entries[i];
-    }
-    split = before === undefined ? 0 : context.indexOf(before) + 1;
-  } else {
-    split = context.indexOf(current);
-  }
-  const head = context.slice(0, split);
-  const tail = context.slice(split).filter((entry) => entry !== current);
   return {
     ...state,
-    entries: [...head, current, ...upcomingQueued(state), ...tail],
-    index: head.length,
+    entries: [...state.entries.slice(0, state.index + 1), ...upcomingQueued(state), ...context],
     shuffle: false,
   };
 };
@@ -642,18 +677,47 @@ const setShuffle = (
   return result(on ? shuffleOn(state, random, shuffle) : shuffleOff(state));
 };
 
-/** Moves to the next entry; past the end it stops. */
-const advance = (state: QueueState): QueueResult => {
+/** Moves to the next entry; past the end it stops, or Repeat All starts the next lap. */
+const advance = (state: QueueState, random: () => number, shuffle: Shuffle): QueueResult => {
   if (state.index < 0) return result(state);
   if (state.index + 1 < state.entries.length) return result({ ...state, index: state.index + 1 });
-  if (state.repeat === "all") return result(wrapToStart(state));
+  if (state.repeat === "all") return result(wrapToStart(state, random, shuffle));
   return result(state, "stop");
 };
 
-/** Repeat all starts over; lined-up entries have all played by then and are dropped. */
-const wrapToStart = (state: QueueState): QueueState => {
+/** The entries Repeat All's next lap holds: the context's, as lined-up ones have all played by then. */
+const lapEntries = (state: QueueState): readonly QueueEntry[] => {
   const context = state.entries.filter((entry) => !isQueued(entry));
-  return { ...state, entries: context.length > 0 ? context : state.entries, index: 0 };
+  return context.length > 0 ? context : state.entries;
+};
+
+/**
+ * The entry the player goes on to when it wraps by itself with Repeat All:
+ * the first it holds of the lap, which is History's first context entry.
+ */
+const lapOpening = (state: QueueState): QueueEntry | null => lapEntries(state)[0] ?? null;
+
+/**
+ * Repeat All's next lap: the queue starts over, its lined-up entries dropped,
+ * in the order shuffle gives it now: the context's order with shuffle off, a
+ * new shuffle of the kind given with shuffle on (after the song that just
+ * played). A toggle mid-lap leaves History in the order it played, so the lap
+ * doesn't take History's order. [opening] is the entry the player already
+ * went on to when it wrapped by itself (`lapOpening`): it opens the lap, the
+ * rest after it.
+ */
+const wrapToStart = (
+  state: QueueState,
+  random: () => number,
+  shuffle: Shuffle,
+  opening: QueueEntry | null = null,
+): QueueState => {
+  const rest = lapEntries(state).filter((entry) => entry !== opening);
+  const ordered = state.shuffle
+    ? shuffleEntries(rest, random, shuffle, opening ?? currentEntry(state))
+    : // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh copy; Hermes lacks toSorted
+      rest.sort((a, b) => (a.contextIndex ?? 0) - (b.contextIndex ?? 0));
+  return { ...state, entries: opening === null ? ordered : [opening, ...ordered], index: 0 };
 };
 
 const NEXT_REPEAT: Record<RepeatMode, RepeatMode> = { off: "all", all: "one", one: "off" };
@@ -748,11 +812,26 @@ const select = (state: QueueState, key: string): QueueState => {
 const jumpTo = (state: QueueState, key: string): QueueResult =>
   indexOfKey(state, key) < 0 ? result(state) : result(select(state, key), "play");
 
-/** Follows the native player; moving forward (including a repeat-all wrap) is an ordinary advance. */
-const playerMoved = (state: QueueState, key: string): QueueResult => {
+/**
+ * Follows the native player; moving forward is an ordinary advance. Past the
+ * last entry with Repeat All, the player wraps by itself to the first one it
+ * holds: that one opens the next lap (`wrapToStart`).
+ */
+const playerMoved = (
+  state: QueueState,
+  key: string,
+  random: () => number,
+  shuffle: Shuffle,
+): QueueResult => {
   if (currentEntry(state)?.key === key) return result(state);
-  const advanced = advance(state).state;
-  return result(currentEntry(advanced)?.key === key ? advanced : select(state, key));
+  const at = indexOfKey(state, key);
+  if (at >= 0 && at === state.index + 1) return result({ ...state, index: at });
+  const atEnd = state.index >= 0 && state.index === state.entries.length - 1;
+  const opening = lapOpening(state);
+  if (state.repeat === "all" && atEnd && opening?.key === key) {
+    return result(wrapToStart(state, random, shuffle, opening));
+  }
+  return result(select(state, key));
 };
 
 /** Moves an Up Next entry to another Up Next position (clamped). */
@@ -787,7 +866,12 @@ const remove = (state: QueueState, key: string): QueueResult => {
  * to the next entry left (wrapping with repeat all); with nothing after it, it
  * stops on the entry before.
  */
-const removeTracks = (state: QueueState, trackIds: readonly string[]): QueueResult => {
+const removeTracks = (
+  state: QueueState,
+  trackIds: readonly string[],
+  random: () => number,
+  shuffle: Shuffle,
+): QueueResult => {
   const gone = new Set(trackIds);
   if (!state.entries.some((entry) => gone.has(entry.trackId))) return result(state);
   const entries = state.entries.filter((entry) => !gone.has(entry.trackId));
@@ -799,7 +883,9 @@ const removeTracks = (state: QueueState, trackIds: readonly string[]): QueueResu
   // The entries before the current one that stay: the next one left takes its place.
   const before = state.entries.slice(0, state.index).filter((entry) => !gone.has(entry.trackId));
   if (before.length < entries.length) return result({ ...state, entries, index: before.length });
-  if (state.repeat === "all") return result(wrapToStart({ ...state, entries, index: 0 }));
+  if (state.repeat === "all") {
+    return result(wrapToStart({ ...state, entries, index: 0 }, random, shuffle));
+  }
   return result({ ...state, entries, index: entries.length - 1 }, "stop");
 };
 
@@ -812,8 +898,12 @@ const settled = (
   trackId: string,
   becomes: string | null,
   passOver: PassOver,
+  random: () => number,
+  shuffle: Shuffle,
 ): QueueResult => {
-  if (becomes === null || passOver(becomes)) return removeTracks(state, [trackId]);
+  if (becomes === null || passOver(becomes)) {
+    return removeTracks(state, [trackId], random, shuffle);
+  }
   if (!state.entries.some((entry) => entry.trackId === trackId)) return result(state);
   const entries = state.entries.map((entry) =>
     entry.trackId === trackId ? { ...entry, trackId: becomes } : entry,
@@ -841,9 +931,9 @@ export const reduceQueue = (
     case "reshuffle":
       return result(shuffleOn(state, random, shuffle));
     case "next":
-      return advance(state);
+      return advance(state, random, shuffle);
     case "trackEnded":
-      return state.repeat === "one" ? result(state) : advance(state);
+      return state.repeat === "one" ? result(state) : advance(state, random, shuffle);
     case "previous":
       return back(state, command.positionMs);
     case "setRepeat":
@@ -859,15 +949,15 @@ export const reduceQueue = (
     case "jumpTo":
       return jumpTo(state, command.key);
     case "playerMoved":
-      return playerMoved(state, command.key);
+      return playerMoved(state, command.key, random, shuffle);
     case "move":
       return move(state, command);
     case "remove":
       return remove(state, command.key);
     case "removeTracks":
-      return removeTracks(state, command.trackIds);
+      return removeTracks(state, command.trackIds, random, shuffle);
     case "settled":
-      return settled(state, command.trackId, command.becomes, passOver);
+      return settled(state, command.trackId, command.becomes, passOver, random, shuffle);
   }
 };
 
@@ -952,9 +1042,9 @@ export const upNext = (state: QueueState): readonly QueueEntry[] =>
 
 /**
  * The entries behind the current one, oldest first: the queue's History,
- * which Previous steps back through. Not the play log: shuffle on empties
- * it, shuffle off gives back the context entries before the current one
- * (played or not), and a Repeat All wrap empties it.
+ * which Previous steps back through. Not the play log: a jump ahead adds the
+ * entries it skipped, and a Repeat All wrap empties it. Turning shuffle on or
+ * off leaves it as it is.
  */
 export const queueHistory = (state: QueueState): readonly QueueEntry[] =>
   state.entries.slice(0, Math.max(0, state.index));

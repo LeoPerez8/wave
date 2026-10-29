@@ -10,6 +10,7 @@ import {
   normalizeTrack,
   recordingKey,
   signOutPlan,
+  syncsPreference,
   vanishedFile,
 } from "./index.ts";
 import type { RawTrack } from "./index.ts";
@@ -28,6 +29,18 @@ const something: RawTrack = {
 };
 
 const keyOf = (raw: RawTrack): string => recordingKey(normalizeTrack(raw));
+
+describe("syncsPreference", () => {
+  test("the retired tap duration stays on the phone instead of syncing", () => {
+    assert.equal(syncsPreference("settings.tapAnimationMs"), false);
+  });
+
+  test("other preferences keep syncing, including keys from a newer Wave", () => {
+    for (const key of ["settings.bounceAmount", "settings.longPressDelayMs", "settings.future"]) {
+      assert.equal(syncsPreference(key), true);
+    }
+  });
+});
 
 describe("recordingKey", () => {
   test("a re-download from another source is the same recording", () => {

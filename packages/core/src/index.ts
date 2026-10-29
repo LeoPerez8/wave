@@ -83,6 +83,7 @@ export {
   readShuffleKind,
   playReplacesQueue,
   reduceQueue,
+  reshuffledUpNext,
   shuffledTrackIds,
   shufflesQueue,
   upNext,
@@ -122,8 +123,8 @@ export { planExclusion } from "./scanRoots.ts";
 export type { ExclusionPlan } from "./scanRoots.ts";
 export { restorePlayback } from "./playbackRestore.ts";
 export type { RestoredPlayback } from "./playbackRestore.ts";
-export { extrapolatePosition, scrubPosition } from "./position.ts";
-export type { PositionReport, ScrubTouch } from "./position.ts";
+export { extrapolatePosition, scrubHitSlop, scrubPosition } from "./position.ts";
+export type { PositionReport, ScrubTouch, VerticalSlop } from "./position.ts";
 export {
   CENTRE_FRAMING,
   adjustFraming,
@@ -455,10 +456,21 @@ export {
   CUSTOM_INK,
   DEFAULT_THEME_CHOICE,
   THEME_SWATCHES,
+  WHITE_INK,
+  MAX_SAVED_INKS,
   chooseCustomInk,
+  chooseSavedInk,
+  chooseThemeSwatch,
   customInkPreview,
+  inkSaveState,
   isDefaultThemeChoice,
+  pulledThemeChoice,
   readThemeChoice,
+  removeSavedInk,
+  resetThemeChoice,
+  sameThemeChoice,
+  saveInk,
+  storedThemeOnStart,
   themeFor,
   themeSwatchRows,
 } from "./themeChoice.ts";
@@ -467,8 +479,11 @@ export type {
   CustomInkPreview,
   CustomSwatchOption,
   InkGroup,
+  InkSaveState,
   InkSwatch,
+  SavedSwatchOption,
   Scheme,
+  StartingThemeState,
   ThemeChoice,
   ThemeGroup,
   ThemeSwatchOption,
@@ -478,12 +493,22 @@ export {
   LAUNCHER_ICONS,
   LAUNCHER_ICON_ART,
   LAUNCHER_ICON_RADIUS,
+  MANIFEST_LAUNCHER_ICON,
   launcherIconFor,
+  launcherIconOnStart,
   launcherIconSwitch,
+  isDefaultThemeState,
+  resolveThemeChange,
 } from "./launcherIcon.ts";
 export { INK_PALETTE, INK_PAIRS, PASTEL_CHROMA_THRESHOLD, inkPairFor } from "./inkPalette.ts";
 export type { PaletteInk, InkPair } from "./inkPalette.ts";
-export type { LauncherBehaviour, LauncherIcon, LauncherIconSwitch } from "./launcherIcon.ts";
+export type {
+  LauncherBehaviour,
+  LauncherIcon,
+  LauncherIconSwitch,
+  StartingIconState,
+  ThemeState,
+} from "./launcherIcon.ts";
 export { LAUNCH_SPLASH_THEMES, launchTheme, paletteSplashThemeFor } from "./launchTheme.ts";
 export type { LaunchColors, LaunchSplashTheme, LaunchTheme } from "./launchTheme.ts";
 export { LAUNCH_LOGO, launchLogoExit, launchLogoWaves } from "./launchLogo.ts";
@@ -605,7 +630,7 @@ export { concentricRadius } from "./corners.ts";
 export type { InsetSquare } from "./corners.ts";
 export { LOGO_WAVES, logoIconPaths, logoWaveY } from "./logo.ts";
 export type { LogoIconBox, LogoIconPaths, LogoWave } from "./logo.ts";
-export { UNDERLINE_WAVE, underlineMotion, wavePath } from "./wavyUnderline.ts";
+export { LISTENING_WAVE, UNDERLINE_WAVE, underlineMotion, wavePath } from "./wavyUnderline.ts";
 export type { UnderlineMotion, UnderlineMotionInput, WaveShape } from "./wavyUnderline.ts";
 export {
   cardShowsHeading,
@@ -1350,6 +1375,7 @@ export {
   mergeRows,
   recordingKey,
   signOutPlan,
+  syncsPreference,
   vanishedFile,
 } from "./sync.ts";
 export type {
@@ -2254,3 +2280,69 @@ export {
   type ImportPhaseTimer,
   type ImportPhaseTimings,
 } from "./importTimings.ts";
+
+export {
+  RECOGNIZE_CARD_ACTION_LABELS,
+  recognizeCardView,
+  recognizeHoldsPlayback,
+  recognizeLogLine,
+  recognizeSource,
+  startRecognize,
+  stepRecognize,
+} from "./recognize.ts";
+export { recognizeEntryAction } from "./recognizeEntry.ts";
+export type {
+  RecognizeAnswer,
+  RecognizeCard,
+  RecognizeCardAction,
+  RecognizeCardView,
+  RecognizedSong,
+  RecognizeEnd,
+  RecognizeEvent,
+  RecognizeFailure,
+  RecognizeLogOutcome,
+  RecognizeSession,
+  RecognizeSource,
+  RecognizeStep,
+} from "./recognize.ts";
+export {
+  resolveRecognizedSong,
+  recognizeResultActions,
+  recognizePlaylistSong,
+} from "./recognition.ts";
+
+export type {
+  RecognizeLookup,
+  RecognizeResolution,
+  RecognizeResult,
+  RecognizeResultAction,
+  RecognizeTrack,
+} from "./recognition.ts";
+export { planShazamAdd } from "./shazamPlaylist.ts";
+export { bounceDemoSwipe, sampleSwipeActions } from "./motionSample.ts";
+export type { BounceDemoSwipe } from "./motionSample.ts";
+export {
+  LONG_PRESS_SAMPLE_MENU,
+  longPressFill,
+  longPressHoldStep,
+  type HeldFinger,
+  type LongPressHoldStep,
+  type SampleTouch,
+  type SampleTouchEvent,
+} from "./touchSample.ts";
+export type { LongPressFill, SampleMenuEntry } from "./touchSample.ts";
+export {
+  NOW_PLAYING_ACTIONS,
+  editNowPlayingButtons,
+  nowPlayingSlotShow,
+  readNowPlayingButtons,
+  readNowPlayingSlotRoute,
+  storedNowPlayingButtons,
+} from "./nowPlayingButtons.ts";
+export type {
+  NowPlayingAction,
+  NowPlayingButtons,
+  NowPlayingButtonsEdit,
+  NowPlayingSlot,
+  NowPlayingSlotSong,
+} from "./nowPlayingButtons.ts";

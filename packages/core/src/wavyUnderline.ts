@@ -25,6 +25,18 @@ export const UNDERLINE_WAVE = {
 } as const;
 
 /**
+ * The Recognize card's listening wave, in dp, drawn natively as the underline is
+ * (`wave_listening.xml`, checked against this by a test): the same line, larger and
+ * slower, in the accent colour, rippling while Wave listens.
+ */
+export const LISTENING_WAVE = {
+  wavelength: 24,
+  amplitude: 6,
+  stroke: 2,
+  rippleMs: 1200,
+} as const;
+
+/**
  * The start of a wave path: `halves` whole half-waves (crest first) from x = 0,
  * centre line at y = amplitude. With none, just the move to the start. A
  * worklet, for the scrubber's `elapsedWavePath` on the UI thread.
@@ -52,13 +64,11 @@ export type UnderlineMotion = "wriggle" | "still";
 export type UnderlineMotionInput = {
   isPlaying: boolean;
   reduceMotion: boolean;
-  tapAnimationMs: number;
 };
 
 /**
  * Whether the underline ripples along the title or lies still. It only moves
- * while music plays, and motion is off under the system's reduce-motion
- * setting or with the tap animation set to 0 ms (Wave's own "no motion").
+ * while music plays, unless the system's reduce-motion setting is on.
  */
 export const underlineMotion = (input: UnderlineMotionInput): UnderlineMotion =>
-  input.isPlaying && !input.reduceMotion && input.tapAnimationMs > 0 ? "wriggle" : "still";
+  input.isPlaying && !input.reduceMotion ? "wriggle" : "still";

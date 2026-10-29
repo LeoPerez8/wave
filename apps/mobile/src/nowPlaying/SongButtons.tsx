@@ -12,10 +12,12 @@ import { CELL } from "@/catalog/grid";
 import { openAddToPlaylist } from "@/library/PlaylistSheets";
 import { songHasFile } from "@/library/LibraryStore";
 import { IconButton } from "@/components/IconButton";
+import { Press } from "@/motion/Press";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 import { useThemeColor } from "@/theme/useThemeColor";
 import { useMissingSongDownloadStatus, useYtDownloadStatus } from "@/ytmusic/YtDownloads";
 
+import type { SlotChange } from "./ChangeSlotMenu";
 import {
   nowPlayingSongActions,
   songActionFailed,
@@ -35,10 +37,13 @@ export function AddToPlaylistButton({
   trackId,
   ytSong,
   title,
+  change,
 }: {
   trackId: string | null;
   ytSong: NativeYtSong | null;
   title: string;
+  /** In a slot, a long press changes it, while it waits for the song included. */
+  change?: SlotChange | undefined;
 }) {
   const target = usePlayingSongTarget(trackId, ytSong);
   const disabled = target === null;
@@ -46,6 +51,7 @@ export function AddToPlaylistButton({
     target === null ? Promise.resolve([]) : nowPlayingSongActions.playlist(target);
   return (
     <IconButton
+      {...change}
       icon={IconPlaylistAdd}
       label="Add to Playlist"
       tone="secondary"
@@ -102,9 +108,12 @@ function ProgressRing({ fraction }: { fraction: number }) {
 export function DownloadButton({
   trackId,
   ytSong,
+  change,
 }: {
   trackId: string | null;
   ytSong: NativeYtSong | null;
+  /** In a slot, a long press changes it, waiting and downloading included. */
+  change?: SlotChange | undefined;
 }) {
   const secondary = useThemeColor("secondary");
   const target = usePlayingSongTarget(trackId, ytSong);
@@ -121,25 +130,32 @@ export function DownloadButton({
     void nowPlayingSongActions.download(target).catch(songActionFailed);
   };
   if (state.kind === "downloaded")
-    return <IconButton icon={IconDownload} label="Downloaded" onPress={download} />;
+    return <IconButton {...change} icon={IconDownload} label="Downloaded" onPress={download} />;
 
   if (state.kind === "waiting" || state.kind === "progress") {
     const percent = state.kind === "progress" ? Math.round(state.fraction * 100) : null;
-    return (
-      <View
-        accessible
-        accessibilityRole="progressbar"
-        accessibilityLabel={percent === null ? "Waiting to download" : "Downloading"}
-        accessibilityValue={percent === null ? undefined : { min: 0, max: 100, now: percent }}
-        className="items-center justify-center"
-        style={BOX}
-      >
-        {state.kind === "progress" ? (
-          <ProgressRing fraction={state.fraction} />
-        ) : (
-          <IconCircleDashed size={ICON} color={secondary} strokeWidth={1.5} />
-        )}
+    const face =
+      state.kind === "progress" ? (
+        <ProgressRing fraction={state.fraction} />
+      ) : (
+        <IconCircleDashed size={ICON} color={secondary} strokeWidth={1.5} />
+      );
+    const progress = {
+      accessibilityRole: "progressbar",
+      accessibilityLabel: percent === null ? "Waiting to download" : "Downloading",
+      accessibilityValue: percent === null ? undefined : { min: 0, max: 100, now: percent },
+      className: "items-center justify-center",
+      style: BOX,
+    } as const;
+    // Nothing to tap while it waits or downloads, but in a slot it still long-presses.
+    return change === undefined ? (
+      <View accessible {...progress}>
+        {face}
       </View>
+    ) : (
+      <Press {...change} {...progress}>
+        {face}
+      </Press>
     );
   }
 
@@ -147,6 +163,7 @@ export function DownloadButton({
   const Icon = failed ? IconRefreshAlert : IconDownload;
   return (
     <IconButton
+      {...change}
       icon={Icon}
       label={failed ? "Download failed" : "Download"}
       accessibilityHint={failed ? "Tries the download again" : undefined}

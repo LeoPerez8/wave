@@ -38,10 +38,12 @@ function PlayCardButton({
   action,
   onPress,
   highlighted,
+  accessibilityHint,
 }: {
   action: PlayCard;
   onPress: () => void;
   highlighted: boolean;
+  accessibilityHint: string | undefined;
 }) {
   const Icon = ACTION_ICONS[action];
   const label = PLAY_ACTION_LABELS[action];
@@ -57,6 +59,7 @@ function PlayCardButton({
       depth={0.04}
       onPress={onPress}
       highlighted={highlighted}
+      accessibilityHint={accessibilityHint}
       style={{
         width: undefined,
         height: undefined,
@@ -79,14 +82,17 @@ function PlayCardButton({
  * when the card opened above the finger, the cards at its bottom edge and the
  * entries up from them. The finger that long-pressed the row can slide onto a
  * card or an entry and lift to run it; the one under it shows pressed
- * meanwhile.
+ * meanwhile. [accessibilityHint] follows every choice's label for screen
+ * readers (Settings' sample menu says its items only close it).
  */
 export function MenuChoices({
   cards,
   entries,
+  accessibilityHint,
 }: {
   cards: readonly PlayCardChoice[];
   entries: readonly MenuChoice[];
+  accessibilityHint?: string | undefined;
 }) {
   // Cards first, then the entries, by one index.
   const { underFinger, trackEntry, trackList } = useSlideToChoose((index) =>
@@ -110,6 +116,7 @@ export function MenuChoices({
                 action={card.action}
                 onPress={card.onPress}
                 highlighted={index === underFinger}
+                accessibilityHint={accessibilityHint}
               />
             </View>
           ))}
@@ -127,6 +134,7 @@ export function MenuChoices({
               divider={entryDivider(index, entries.length, flow)}
               highlighted={cards.length + index === underFinger}
               destructive={entry.destructive === true}
+              accessibilityHint={accessibilityHint}
             />
           </View>
         ))}

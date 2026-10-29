@@ -54,7 +54,7 @@ describe("addShareShortcuts", () => {
     const manifest = addShareShortcuts(addLauncherAliases(prebuildManifest()));
     const aliases = application(manifest)["activity-alias"] ?? [];
     assert.equal(aliases.length, LAUNCHER_ICONS.length);
-    assert.equal(aliases.length, 576);
+    assert.equal(aliases.length, 625);
     for (const alias of aliases) {
       assert.deepEqual(shortcutsResources(alias), ["@xml/shortcuts"], alias.$?.["android:name"]);
     }
@@ -83,6 +83,25 @@ describe("addShareShortcuts", () => {
       ["text/plain"],
     );
   });
+
+  test("Quick Settings can bind the Recognize tile, once across repeated prebuilds", () => {
+    const manifest = addShareShortcuts(addShareShortcuts(prebuildManifest()));
+    const tiles = (application(manifest).service ?? []).filter(
+      (service) =>
+        service.$["android:name"] === "expo.modules.wavenative.recognize.RecognizeTileService",
+    );
+    assert.equal(tiles.length, 1);
+    assert.equal(tiles[0]!.$["android:permission"], "android.permission.BIND_QUICK_SETTINGS_TILE");
+    assert.equal(tiles[0]!.$["android:exported"], "true");
+    assert.partialDeepStrictEqual(tiles[0]!.$, {
+      "android:label": "@string/recognize_song",
+      "android:icon": "@drawable/ic_recognize",
+    });
+    assert.deepEqual(
+      tiles[0]!["intent-filter"]?.flatMap((filter) => filter.action),
+      [named("android.service.quicksettings.action.QS_TILE")],
+    );
+  });
 });
 
 describe("shareShortcutFiles", () => {
@@ -103,7 +122,68 @@ describe("shareShortcutFiles", () => {
     );
   });
 
-  test("declares no static shortcut, so the launcher's long-press menu stays as it was", () => {
-    assert.doesNotMatch(shortcuts, /<shortcut[\s>]/);
+  test("Recognize Song forwards its action without clearing Wave's existing task", () => {
+    const entries = [...shortcuts.matchAll(/<shortcut\s([^>]*?)>([\s\S]*?)<\/shortcut>/g)];
+    assert.equal(entries.length, 1);
+    assert.match(entries[0]![1]!, /android:shortcutId="recognize_song"/);
+    assert.match(entries[0]![1]!, /android:shortcutShortLabel="@string\/recognize_song"/);
+    assert.match(entries[0]![2]!, /android:action="dev\.leoperez\.wave\.action\.RECOGNIZE"/);
+    assert.match(entries[0]![2]!, /android:targetPackage="dev\.leoperez\.wave"/);
+    assert.match(
+      entries[0]![2]!,
+      /android:targetClass="expo\.modules\.wavenative\.recognize\.RecognizeShortcutActivity"/,
+    );
+    const manifest = addShareShortcuts(addShareShortcuts(prebuildManifest()));
+    const forwarders = application(manifest).activity!.filter(
+      (activity) =>
+        activity.$["android:name"] ===
+        "expo.modules.wavenative.recognize.RecognizeShortcutActivity",
+    );
+    assert.equal(forwarders.length, 1);
+    assert.partialDeepStrictEqual(forwarders[0]!.$, {
+      "android:taskAffinity": "",
+      "android:theme": "@android:style/Theme.NoDisplay",
+      "android:exported": "true",
+      "android:excludeFromRecents": "true",
+      "android:noHistory": "true",
+    });
+    assert.match(
+      shareShortcutFiles("dev.leoperez.wave")["values/recognize.xml"]!,
+      />Recognize Song</,
+    );
+  });
+
+  test("the app icon shortcut shows its mic on a coloured ground; the tile keeps the white glyph Android tints", () => {
+    const files = shareShortcutFiles("dev.leoperez.wave");
+    /** The file a `@type/name` reference resolves to, whatever its qualifiers. */
+    const resource = (reference: string): string => {
+      const [, type, name] = /^@(\w+)\/(\w+)$/.exec(reference) ?? [];
+      const path = Object.keys(files).find((p) =>
+        new RegExp(`^${type}(-[^/]*)?/${name}\\.xml$`).test(p),
+      );
+      assert.ok(path, `no file for ${reference}`);
+      return files[path]!;
+    };
+    const shortcutIcon = /<shortcut\s[^>]*android:icon="([^"]*)"/.exec(shortcuts)?.[1] ?? "";
+    const tile = (application(addShareShortcuts(prebuildManifest())).service ?? []).find(
+      (service) =>
+        service.$["android:name"] === "expo.modules.wavenative.recognize.RecognizeTileService",
+    );
+    // Expo omits service icons from its manifest attribute type.
+    const tileIcon = (tile?.$ as Record<string, string> | undefined)?.["android:icon"] ?? "";
+    assert.notEqual(shortcutIcon, tileIcon);
+
+    const adaptive = resource(shortcutIcon);
+    assert.match(adaptive, /<adaptive-icon/);
+    const background = /<background android:drawable="@color\/(\w+)"/.exec(adaptive)?.[1];
+    const colour = new RegExp(`<color name="${background}">(#[0-9A-Fa-f]{6})</color>`).exec(
+      files["values/recognize.xml"]!,
+    )?.[1];
+    assert.ok(colour, "the background is a colour resource");
+    assert.notEqual(colour.toUpperCase(), "#FFFFFF");
+    const foreground = /<foreground android:drawable="([^"]*)"/.exec(adaptive)?.[1] ?? "";
+    assert.match(resource(foreground), /android:fillColor="#FFFFFFFF"/);
+    assert.match(resource(foreground), /android:viewportWidth="108"/);
+    assert.match(resource(tileIcon), /android:fillColor="#FFFFFFFF"/);
   });
 });
