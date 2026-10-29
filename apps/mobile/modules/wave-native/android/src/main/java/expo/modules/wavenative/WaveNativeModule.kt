@@ -44,6 +44,7 @@ import expo.modules.wavenative.launcher.LauncherIconRecord
 import expo.modules.wavenative.launcher.LauncherIconSwitcher
 import expo.modules.wavenative.launch.LaunchTheme
 import expo.modules.wavenative.launch.LaunchThemeStore
+import expo.modules.wavenative.locale.PreferredLanguages
 import expo.modules.wavenative.lyrics.LyricsReader
 import expo.modules.wavenative.net.AndroidConnectivity
 import expo.modules.wavenative.net.ConnectivityState
@@ -158,6 +159,9 @@ class WaveNativeModule : Module() {
      * `onConnectivityChanged`.
      */
     Function("connectivity") { connectivityToMap(AndroidConnectivity.cache(context).current) }
+
+    /** The phone's preferred languages, in order: Wave's per-app language when set, else the system's. */
+    Function("preferredLanguages") { PreferredLanguages.read(context) }
 
     Function("getDefaultMusicFolder") {
       @Suppress("DEPRECATION")

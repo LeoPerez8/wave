@@ -394,6 +394,10 @@ export {
   tabsOffBar,
 } from "./tabBar.ts";
 export type { TabBar, TabBarEdit, TabBarTab } from "./tabBar.ts";
+export { catalogueOf, resolveAppLanguage } from "./localisation.ts";
+export type { AppLanguage, Catalogue } from "./localisation.ts";
+export { plural } from "./plural.ts";
+export type { PluralForms } from "./plural.ts";
 export { createDeveloperTitleTaps } from "./developerSettings.ts";
 export {
   LAYOUT_PAGES,
