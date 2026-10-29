@@ -76,7 +76,7 @@ export const followFeed = (input: {
               if (shown) seen.add(r.key);
               return shown;
             })
-            .toSorted(
+            .sort(
               (a, b) => b.releaseDate.localeCompare(a.releaseDate) || a.key.localeCompare(b.key),
             ),
   };
@@ -117,7 +117,7 @@ export const deezerReleases = (value: unknown, artistKey: string): FollowRelease
 export const resolveDeezerFollowArtist = (value: unknown, name: string): number | null => {
   const candidates = deezerFollowArtists(value)
     ?.filter((a) => followArtistKey(a.name) === followArtistKey(name))
-    .toSorted((a, b) => b.fans - a.fans);
+    .sort((a, b) => b.fans - a.fans);
   return candidates?.[0]?.deezerId ?? null;
 };
 export const matchFollowRelease = <

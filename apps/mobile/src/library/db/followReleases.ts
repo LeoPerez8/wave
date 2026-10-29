@@ -35,13 +35,9 @@ export const hideFollowRelease = (db: LibraryDatabase, key: string): void => {
   db.insert(hiddenFollowReleases).values({ key }).onConflictDoNothing().run();
 };
 /** Read only candidate albums and their songs; play checks use the existing totals indexes. */
-export const followReleaseListening = (
-  db: LibraryDatabase,
-  releases: readonly FollowRelease[],
-  names: Readonly<Record<string, string>>,
-) => {
+export const followReleaseListening = (db: LibraryDatabase, releases: readonly FollowRelease[]) => {
+  if (releases.length === 0) return { releases: [], countedPlays: [] };
   const played = new Set<string>();
-  void names;
   const wantedArtists = new Set(releases.map((r) => r.artistKey));
   const idsByArtist = db
     .select({ id: artists.id, name: artists.name })

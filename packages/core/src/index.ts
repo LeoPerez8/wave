@@ -2358,3 +2358,5 @@ export type {
 
 export * from "./followedArtists.ts";
 export * from "./followArtistSearch.ts";
+
+export { releaseTitle } from "./ytArtist.ts";

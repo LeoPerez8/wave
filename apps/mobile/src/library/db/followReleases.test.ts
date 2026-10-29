@@ -33,7 +33,7 @@ test("owned releases open the Library album and a counted song clears the feed a
     videoIds: [],
     recordingKeys: [],
   };
-  const input = () => followReleaseListening(db, [release], { abba: "ABBA" });
+  const input = () => followReleaseListening(db, [release]);
   assert.equal(typeof input().releases[0]?.libraryAlbumId, "number");
   recordPlay(db, {
     trackId: String(trackId),
@@ -46,7 +46,7 @@ test("owned releases open the Library album and a counted song clears the feed a
     source: "phone",
   });
   const reopened = await reopenTestDatabase(db);
-  const listening = followReleaseListening(reopened, [release], { abba: "ABBA" });
+  const listening = followReleaseListening(reopened, [release]);
   const follows = [
     {
       key: "abba",
@@ -102,6 +102,6 @@ test("streamed counted video ids clear releases without any Library files", asyn
       durationMs: 180000,
     },
   );
-  assert.deepEqual(followReleaseListening(db, [release], {}).countedPlays, ["abc"]);
+  assert.deepEqual(followReleaseListening(db, [release]).countedPlays, ["abc"]);
   closeTestDatabase(db);
 });

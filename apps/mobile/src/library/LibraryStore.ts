@@ -572,7 +572,6 @@ export class LibraryStore extends Context.Service<
     readonly hideFollowRelease: (key: string) => Effect.Effect<void, LibraryStoreError>;
     readonly followReleaseListening: (
       releases: readonly FollowRelease[],
-      names: Readonly<Record<string, string>>,
     ) => Effect.Effect<ReturnType<typeof followReleaseListening>, LibraryStoreError>;
     readonly listFollows: Effect.Effect<readonly FollowedArtist[], LibraryStoreError>;
     readonly countFollows: Effect.Effect<number, LibraryStoreError>;
@@ -1474,8 +1473,8 @@ const make = Effect.gen(function* () {
       writeAttempt("save follow releases", () => saveFollowReleases(db, key, releases, checkedAt)),
     hideFollowRelease: (key) =>
       writeAttempt("hide follow release", () => hideFollowRelease(db, key)),
-    followReleaseListening: (releases, names) =>
-      attempt("read release listening", () => followReleaseListening(db, releases, names)),
+    followReleaseListening: (releases) =>
+      attempt("read release listening", () => followReleaseListening(db, releases)),
     listFollows: attempt("list follows", () => selectFollows(db)),
     countFollows: attempt("count follows", () => countFollows(db)),
     getFollow: (name) => attempt("read follow", () => selectFollow(db, name)),
