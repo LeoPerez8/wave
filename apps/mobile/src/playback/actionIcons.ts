@@ -24,6 +24,7 @@ import {
   IconTrash,
   IconTrashX,
   IconX,
+  IconUserPlus,
 } from "@tabler/icons-react-native";
 import type {
   DiscoverMixAction,
@@ -55,7 +56,8 @@ export type MenuAction =
   | DiscoverMixAction
   | UnavailableEntryAction
   | "addToShazam"
-  | "removeColour";
+  | "removeColour"
+  | "follow";
 
 /**
  * Each action's one icon, the same in every menu that offers it and on the
@@ -63,6 +65,7 @@ export type MenuAction =
  * album's, a playlist's or a mix's, a cancel the X, a retry the circling arrows.
  */
 export const ACTION_ICONS: { readonly [A in MenuAction]: ActionIcon } = {
+  follow: IconUserPlus,
   play: IconPlayerPlay,
   shuffle: IconArrowsShuffle,
   playNext: IconArrowForwardUp,

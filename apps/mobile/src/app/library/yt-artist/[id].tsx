@@ -1,3 +1,4 @@
+import { useFollowAction } from "@/library/FollowButton";
 import { useScreenContent } from "@/lib/screenTiming";
 import { IconUser } from "@tabler/icons-react-native";
 import {
@@ -19,7 +20,7 @@ import { AlbumTile } from "@/catalog/AlbumTile";
 import { SECTION_HEAD, SectionHead } from "@/catalog/CatalogLine";
 import { COVER_ROW_TILE, CoverRow } from "@/catalog/CoverRow";
 import { CELL, grid } from "@/catalog/grid";
-import { PlayShuffle } from "@/catalog/PlayShuffle";
+import { PlayShuffle, ListAction } from "@/catalog/PlayShuffle";
 import {
   HiddenSkeletonBox,
   HiddenSkeletonLine,
@@ -177,16 +178,19 @@ function YtArtistImage({ name, uri, size }: { name: string; uri: string | null; 
  * have their skeleton.
  */
 function Head({
+  browseId,
   name,
   artworkUrl,
   loading,
   onPlay,
 }: {
+  browseId: string | null;
   name: string | null;
   artworkUrl: string | null;
   loading: boolean;
   onPlay: ((shuffle: boolean) => void) | null;
 }) {
+  const follow = useFollowAction({ name: name ?? "", ytBrowseId: browseId });
   const { width } = useWindowDimensions();
   // Three fifths of the content width, on the cell grid.
   const size = Math.floor(((width - grid.margin * 2) * 0.6) / CELL) * CELL;
@@ -216,11 +220,15 @@ function Head({
       </View>
       {loading ? (
         <PlayShuffleSkeleton />
-      ) : (
-        onPlay !== null && (
-          <PlayShuffle onPlay={() => onPlay(false)} onShuffle={() => onPlay(true)} />
-        )
-      )}
+      ) : onPlay !== null ? (
+        <PlayShuffle
+          onPlay={() => onPlay(false)}
+          onShuffle={() => onPlay(true)}
+          last={name === null ? null : follow}
+        />
+      ) : name !== null ? (
+        <ListAction {...follow} />
+      ) : null}
     </View>
   );
 }
@@ -265,7 +273,11 @@ export default function YtArtistScreen() {
   const knownName = params.name === undefined || params.name === "" ? null : params.name;
   const scrollable = useListScrollable();
   const bottomInset = useChromeInset();
-  const { view, retry } = useYtArtistPage(browseId, knownName, params.offline === "1");
+  const {
+    view,
+    retry,
+    browseId: resolvedBrowseId,
+  } = useYtArtistPage(browseId, knownName, params.offline === "1");
   const songs = view?.songs ?? NO_SONGS;
   const selectable = useMemo(
     () => (view === null ? [] : artistSelectionItems(view.shelves, view.songs)),
@@ -311,12 +323,13 @@ export default function YtArtistScreen() {
       name === null && !loading ? null : (
         <Head
           name={name}
+          browseId={resolvedBrowseId}
           artworkUrl={artworkUrl}
           loading={loading}
           onPlay={songs.length === 0 ? null : (shuffle) => play(undefined, shuffle)}
         />
       ),
-    [name, artworkUrl, loading, songs.length, play],
+    [name, resolvedBrowseId, artworkUrl, loading, songs.length, play],
   );
   const footer = useMemo(
     () =>

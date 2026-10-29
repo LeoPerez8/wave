@@ -9,6 +9,7 @@ import {
   IconQuote,
   IconSwipe,
   IconUser,
+  IconUserCheck,
   type Icon,
 } from "@tabler/icons-react-native";
 import type { SettingsIcon } from "@wave/core";
@@ -23,6 +24,7 @@ const GLYPH = 20;
 
 const GLYPHS: Readonly<Record<SettingsIcon, Icon>> = {
   books: IconBooks,
+  userCheck: IconUserCheck,
   history: IconHistory,
   palette: IconPalette,
   layout: IconLayoutGrid,
