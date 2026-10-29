@@ -7,7 +7,6 @@ import {
   type SampleTouch,
   type SampleTouchEvent,
 } from "@wave/core";
-import * as Haptics from "expo-haptics";
 import { useEffect, useEffectEvent, useRef } from "react";
 import { Text, View, type GestureResponderEvent } from "react-native";
 import Animated, {
@@ -93,7 +92,8 @@ const touchEventOf = (
 /**
  * Long-press delay's sample: the sample song row to hold. A fill sweeps
  * across it over the current delay (only this sample shows one), then the
- * long-press haptic fires and the sample menu opens, anchored to the row. Lifting early, drifting off as a real row's long-press
+ * long-press haptic fires (the song row's own) and the sample menu opens,
+ * anchored to the row. Lifting early, drifting off as a real row's long-press
  * would, or scrolling the page stops the fill and opens nothing; other
  * fingers touching the screen meanwhile change nothing (`longPressHoldStep`).
  * Each change of [demo] sweeps the fill once over the delay, with no menu.
@@ -158,7 +158,6 @@ export function LongPressSample({ demo }: { demo: number }) {
       onLongPress={() => {
         hold.current = null;
         fade();
-        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         openSampleMenu();
       }}
       behind={
