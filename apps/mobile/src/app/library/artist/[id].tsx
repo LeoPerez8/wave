@@ -1,3 +1,4 @@
+import { useFollowAction } from "@/library/FollowButton";
 import { useScreenContent } from "@/lib/screenTiming";
 
 import {
@@ -433,7 +434,8 @@ function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegr
       ListHeaderComponent={
         <>
           <ArtistHead artist={detail.artist} />
-          <ListIntro
+          <FollowArtistIntro
+            artist={detail.artist}
             line={line}
             songs={loaded ? songs : undefined}
             mixed={loaded ? pageSongs : undefined}
@@ -487,4 +489,12 @@ export default function ArtistScreen() {
       {(artist) => <ArtistContent shown={artist} openedIntegrated={openedIntegrated} />}
     </DetailFrame>
   );
+}
+
+function FollowArtistIntro({
+  artist,
+  ...props
+}: React.ComponentProps<typeof ListIntro> & { artist: ArtistRow }) {
+  const last = useFollowAction(artist);
+  return <ListIntro {...props} last={last} />;
 }

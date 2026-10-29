@@ -1,3 +1,5 @@
+import { followUp as followMenuUp } from "@/overlay/overlay";
+import { openFollowActions } from "./FollowButton";
 import {
   activeTiming,
   continueTiming,
@@ -197,6 +199,10 @@ function ArtistChoiceCard({
           <Fragment key={choice.key}>
             <Hairline />
             <NameRow
+              onLongPress={() => {
+                close();
+                void followMenuUp(async () => openFollowActions({ name: choice.name }));
+              }}
               name={choice.name}
               detail={choice.detail}
               artist={choice.image}

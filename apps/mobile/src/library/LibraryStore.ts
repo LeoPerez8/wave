@@ -1,3 +1,12 @@
+import type { FollowedArtist, FollowLevel } from "@wave/core";
+import {
+  selectFollow,
+  selectFollows,
+  countFollows,
+  saveFollow,
+  removeFollow,
+  type FollowTarget,
+} from "./db/follows";
 import { selectDownloadsToForget } from "./db/downloadRecovery";
 import {
   playedEntityTotals,
@@ -546,6 +555,14 @@ export class LibraryStore extends Context.Service<
       path: string,
     ) => Effect.Effect<readonly ScanRoot[], LibraryStoreError>;
     /** Every scan root in the order it was added, with its track count. */
+    readonly listFollows: Effect.Effect<readonly FollowedArtist[], LibraryStoreError>;
+    readonly countFollows: Effect.Effect<number, LibraryStoreError>;
+    readonly getFollow: (name: string) => Effect.Effect<FollowedArtist | null, LibraryStoreError>;
+    readonly setFollow: (
+      target: FollowTarget,
+      level: FollowLevel,
+    ) => Effect.Effect<void, LibraryStoreError>;
+    readonly unfollow: (name: string) => Effect.Effect<void, LibraryStoreError>;
     readonly listRoots: Effect.Effect<readonly ScanRootSummary[], LibraryStoreError>;
     /**
      * Adds [path] as a root the owner picked and removes the roots in [drop]
@@ -1433,6 +1450,12 @@ const make = Effect.gen(function* () {
     writeAttempt(operation, run).pipe(Effect.tap(() => Effect.sync(historyChanged)));
 
   return LibraryStore.of({
+    listFollows: attempt("list follows", () => selectFollows(db)),
+    countFollows: attempt("count follows", () => countFollows(db)),
+    getFollow: (name) => attempt("read follow", () => selectFollow(db, name)),
+    setFollow: (target, level) =>
+      writeAttempt("follow artist", () => saveFollow(db, target, level, Date.now())),
+    unfollow: (name) => writeAttempt("unfollow artist", () => removeFollow(db, name)),
     listeningHistoryVersion,
     optimize: (when) => writeAttempt("optimize the database", () => optimizeDatabase(db, when)),
     ensureDefaultRoot: (path) =>

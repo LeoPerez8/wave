@@ -19,6 +19,7 @@ export type SettingsPage =
   | "swipeActions"
   | "playback"
   | "history"
+  | "followedArtists"
   | "lyricsAndTags"
   | "downloads"
   | "accounts"
@@ -30,6 +31,7 @@ export type SettingsPage =
  */
 export type SettingsIcon =
   | "history"
+  | "userCheck"
   | "books"
   | "palette"
   | "layout"
@@ -73,6 +75,12 @@ export const SETTINGS_PAGES = [
     icon: "play",
   },
   { page: "history", title: "Listening History", route: "/settings/history", icon: "history" },
+  {
+    page: "followedArtists",
+    title: "Followed Artists",
+    route: "/settings/followed-artists",
+    icon: "userCheck",
+  },
   {
     page: "lyricsAndTags",
     title: "Lyrics and tags",

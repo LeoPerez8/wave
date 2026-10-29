@@ -1,0 +1,89 @@
+import type { FollowedArtist } from "@wave/core";
+import * as Effect from "effect/Effect";
+import { Text, View } from "react-native";
+import { ArtistImage } from "@/catalog/ArtistImage";
+import { CELL } from "@/catalog/grid";
+import { TextButton } from "@/components/TextButton";
+import { SettingsSwitch } from "@/components/SettingsSwitch";
+import { findLinkArtists } from "@/library/artistLookup";
+import { openFollowCard } from "@/library/FollowButton";
+import { useFollows } from "@/library/follows";
+import { LibraryStore } from "@/library/LibraryStore";
+import { openArtist } from "@/library/routes";
+import { appRuntime } from "@/library/runtime";
+import { useScreenContent } from "@/lib/screenTiming";
+import { showError } from "@/overlay/alert";
+import { SettingsPageScreen } from "@/settings/SettingsPage";
+import { setFollowedArtistsEnabled, useFollowedArtistsEnabled } from "@/settings/followedArtists";
+import { openYtArtist, openYtArtistNamed } from "@/ytmusic/routes";
+
+const openFollowedArtist = async (artist: FollowedArtist): Promise<void> => {
+  const found = await findLinkArtists([artist.name], {
+    signal: new AbortController().signal,
+    readPage: (after) =>
+      appRuntime.runPromise(
+        Effect.flatMap(LibraryStore, (store) => store.artistNamesForLink(after)),
+      ),
+  });
+  const library = found.get(artist.key);
+  if (library !== undefined) openArtist(library.id);
+  else if (artist.ytBrowseId !== null) openYtArtist(artist.ytBrowseId, artist.name);
+  else openYtArtistNamed(artist.name);
+};
+export default function FollowedArtistsSettingsScreen() {
+  const enabled = useFollowedArtistsEnabled();
+  const follows = useFollows();
+  useScreenContent(true);
+  return (
+    <SettingsPageScreen page="followedArtists">
+      <SettingsSwitch
+        label="Followed artists"
+        value={enabled}
+        onValueChange={setFollowedArtistsEnabled}
+      />
+      <View>
+        {follows.length === 0 && (
+          <Text className="font-sans text-body text-secondary">
+            You aren't following any artists yet.
+          </Text>
+        )}
+        {follows.map((artist) => (
+          <View key={artist.key} className="flex-row items-center">
+            <TextButton
+              label={artist.name}
+              tone="primary"
+              className="flex-1"
+              onPress={() =>
+                void openFollowedArtist(artist).catch((error) =>
+                  showError("Couldn't open artist", error),
+                )
+              }
+            >
+              <View className="flex-row items-center" style={{ gap: CELL * 1.5 }}>
+                <ArtistImage
+                  artist={{ name: artist.name, thumbPath: null, artworkPath: null }}
+                  size={CELL * 5}
+                />
+                <Text numberOfLines={1} className="flex-1 font-sans text-body text-foreground">
+                  {artist.name}
+                </Text>
+              </View>
+            </TextButton>
+            <TextButton
+              label="Following"
+              accessibilityLabel={`Manage ${artist.name}, Following, New releases`}
+              onPress={() => openFollowCard(artist)}
+            >
+              <View className="py-2 pl-3">
+                <Text className="font-sans text-body text-accent">Following</Text>
+                <Text className="font-sans text-footnote text-secondary">
+                  {artist.level === "releases" ? "New releases" : "New releases and shows"}
+                </Text>
+              </View>
+            </TextButton>
+          </View>
+        ))}
+      </View>
+    </SettingsPageScreen>
+  );
+}
