@@ -63,6 +63,12 @@ const STORAGE: { readonly [K in TableName]: TableStorage } = {
   preferences: { limit: "maxPreferences", json: ["value"] },
   // Core's play event, its song known by recording key.
   plays: { limit: "maxPlays", json: ["snapshot"] },
+  // The id is the artist's normalised name (Core's `followArtistKey`).
+  follows: { limit: "maxFollows" },
+  // The id is the release key (`deezer:<albumId>`); the row carries nothing else.
+  hiddenReleases: { limit: "maxHiddenReleases" },
+  // The id is the Ticketmaster event id; the row carries nothing else.
+  notifiedShows: { limit: "maxNotifiedShows" },
 };
 
 export const column = (field: string): string =>

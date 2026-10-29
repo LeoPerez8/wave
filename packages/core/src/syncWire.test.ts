@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { EMPTY_SYNC_TABLES, SYNC_PUSH_BATCH, pushBatches, readPullPage } from "./index.ts";
+import {
+  EMPTY_SYNC_TABLES,
+  SYNC_PUSH_BATCH,
+  pushBatches,
+  pushBody,
+  readPullPage,
+} from "./index.ts";
 import type { SyncPlayRow, SyncTables } from "./index.ts";
 
 const KEY = "abbey road\u001fthe beatles\u001fsomething\u001f1.2";
@@ -119,6 +125,21 @@ describe("readPullPage", () => {
         { id: "settings.theme", changedAt: 14, phoneId: "b", deleted: false, value: '{"a":"b"}' },
       ],
       plays: [play(1)],
+      follows: [
+        {
+          id: "the beatles",
+          changedAt: 15,
+          phoneId: "b",
+          deleted: false,
+          name: "The Beatles",
+          level: "releases",
+          followedAt: 15,
+          deezerId: 1,
+          ytBrowseId: null,
+        },
+      ],
+      hiddenReleases: [{ id: "deezer:1", changedAt: 16, phoneId: "b", deleted: false }],
+      notifiedShows: [{ id: "event-1", changedAt: 17, phoneId: "b", deleted: true }],
       cursor: "42",
       more: true,
     };
@@ -126,6 +147,45 @@ describe("readPullPage", () => {
     assert.deepEqual(readPullPage(JSON.stringify(body)), {
       ...body,
       plays: [{ ...play(1), snapshot: null, videoId: null }],
+    });
+  });
+
+  test("reads follows with their level and ids, hidden releases and notified shows", () => {
+    const follow = {
+      id: "massive attack",
+      changedAt: 20,
+      phoneId: "b",
+      deleted: false,
+      name: "Massive Attack",
+      level: "shows",
+      followedAt: 18,
+      deezerId: 2_163,
+      ytBrowseId: "UCQ2f9WmyRrpUQ8xv3IxhPOQ",
+    };
+    const body = {
+      follows: [
+        follow,
+        { ...follow, id: "portishead", name: "Portishead", level: "releases", deezerId: null },
+        { ...follow, id: "tricky", level: "everything" },
+        { id: "bjork", changedAt: 21, phoneId: "b", deleted: true },
+      ],
+      hiddenReleases: [{ id: "deezer:302127", changedAt: 22, phoneId: "b", deleted: false }],
+      notifiedShows: [{ id: "G5vYZ9Ma1Jb5U", changedAt: 23, phoneId: "b", deleted: false }],
+      cursor: "23",
+      more: false,
+    };
+
+    assert.deepEqual(readPullPage(JSON.stringify(body)), {
+      ...EMPTY_SYNC_TABLES,
+      follows: [
+        follow,
+        { ...follow, id: "portishead", name: "Portishead", level: "releases", deezerId: null },
+        { id: "bjork", changedAt: 21, phoneId: "b", deleted: true },
+      ],
+      hiddenReleases: body.hiddenReleases,
+      notifiedShows: body.notifiedShows,
+      cursor: "23",
+      more: false,
     });
   });
 
@@ -182,6 +242,16 @@ describe("pushBatches", () => {
     };
     assert.deepEqual(pushBatches(changes), [changes]);
     assert.deepEqual(pushBatches(EMPTY_SYNC_TABLES), []);
+  });
+
+  test("a push body names only the tables with rows, so an older service still takes it", () => {
+    const favorites = [
+      { id: KEY, changedAt: 5, phoneId: "a", deleted: false as const, addedAt: 5 },
+    ];
+    const [batch] = pushBatches({ ...EMPTY_SYNC_TABLES, favorites });
+
+    assert.ok(batch !== undefined);
+    assert.deepEqual(JSON.parse(pushBody(batch)), { favorites });
   });
 
   test("the limit counts bytes, not characters", () => {
