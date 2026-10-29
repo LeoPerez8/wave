@@ -52,7 +52,8 @@ export const importsPtBr: typeof importsEn = {
     "Não foi possível ler esta playlist. Ela pode ser privada ou ter sido apagada, ou não houve resposta online.",
   ytMusicOffInSettings: "O YT Music está desativado em Ajustes.",
   playlistMissing: "Esta playlist não existe ou não é pública.",
-  spotifyUnreachable: "Não foi possível acessar o Spotify. Verifique sua conexão e tente novamente.",
+  spotifyUnreachable:
+    "Não foi possível acessar o Spotify. Verifique sua conexão e tente novamente.",
   spotifyFailed: "Não foi possível ler esta playlist. O Spotify não respondeu como esperado.",
   readingPlaylist: "Lendo a playlist…",
   noSongsToImport: "Ela não tem músicas para importar.",
@@ -74,8 +75,7 @@ export const importsPtBr: typeof importsEn = {
       one: `${n(count)} não é música`,
       other: `${n(count)} não são músicas`,
     }),
-  truncated: (count: number): string =>
-    `Ela passa de ${counted(count)}. Só essas são importadas.`,
+  truncated: (count: number): string => `Ela passa de ${counted(count)}. Só essas são importadas.`,
   onlyFirst: (count: number, service: string): string =>
     plural("pt-BR", count, {
       one: `Só a primeira música veio do ${service}`,

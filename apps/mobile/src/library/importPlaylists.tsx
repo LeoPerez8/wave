@@ -70,7 +70,10 @@ export const saveImportedPlaylist = async (
 ): Promise<ImportedPlaylist> => {
   const playlists = await currentPlaylists();
   const clash = importNameClash(name, playlists);
-  if (clash !== undefined && (await confirmAction(confirmImportReplace(clash.name, currentLocalisation().language)))) {
+  if (
+    clash !== undefined &&
+    (await confirmAction(confirmImportReplace(clash.name, currentLocalisation().language)))
+  ) {
     // A link import still filling it would add its songs to the new ones.
     cancelPlaylistImport(clash.id);
     await replacePlaylistSongs(clash.id, songs);

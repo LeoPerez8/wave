@@ -115,10 +115,7 @@ const itemKey = (item: Item): string => {
 };
 
 /** The quiet line under the tracks about the album online: an outcome (loading shows skeleton rows). */
-const ytNote = (
-  note: Exclude<YtLibraryAlbumNote, "loading">,
-  { library }: Catalogue,
-): string =>
+const ytNote = (note: Exclude<YtLibraryAlbumNote, "loading">, { library }: Catalogue): string =>
   note === "notFound"
     ? library.notFoundOnline
     : note === "offline"
@@ -287,19 +284,26 @@ function AlbumTracks({ shown, openedIntegrated }: { shown: Shown; openedIntegrat
     [shown.album.id],
   );
 
-  const source = useCallback((item: Item): SongListEntry => {
-    if (item.type === "disc")
-      return {
-        source: { kind: "discHeader", key: itemKey(item), label: strings.library.disc(item.disc) },
-      };
-    if (item.type === "track")
-      return librarySongEntry(item.track, {
-        leading: { kind: "trackNumber", number: item.track.trackNumber ?? undefined },
+  const source = useCallback(
+    (item: Item): SongListEntry => {
+      if (item.type === "disc")
+        return {
+          source: {
+            kind: "discHeader",
+            key: itemKey(item),
+            label: strings.library.disc(item.disc),
+          },
+        };
+      if (item.type === "track")
+        return librarySongEntry(item.track, {
+          leading: { kind: "trackNumber", number: item.track.trackNumber ?? undefined },
+        });
+      return mixedSongEntry(item.entry, {
+        leading: { kind: "trackNumber", number: item.entry.number ?? undefined },
       });
-    return mixedSongEntry(item.entry, {
-      leading: { kind: "trackNumber", number: item.entry.number ?? undefined },
-    });
-  }, [strings]);
+    },
+    [strings],
+  );
   const rowSelection = useMemo(
     () =>
       songSelection(listSelection, (item: Item) => {

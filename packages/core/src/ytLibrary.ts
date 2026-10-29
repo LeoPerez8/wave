@@ -116,7 +116,6 @@ export interface YtLibraryPicker {
  */
 export const YT_LIKED_SONGS_ID = "LM";
 
-
 /**
  * [rows] as this phone's [origins] mark them: a row imported before says
  * Imported and starts unticked, any other starts ticked. By source id alone,
@@ -385,7 +384,10 @@ const FAILURES = {
   failed: { line: "ytLibraryFailed", action: "tryAgain" },
   signedOut: { line: "ytSignedOut", action: "signIn" },
   disabled: { line: "ytMusicOffInSettings", action: null },
-} as const satisfies Record<YtLibraryFailure, { line: string; action: YtLibraryFailureView["action"] }>;
+} as const satisfies Record<
+  YtLibraryFailure,
+  { line: string; action: YtLibraryFailureView["action"] }
+>;
 
 /** The picker's message for a library page that wasn't read, and what it offers, in [language]. */
 export const ytLibraryFailure = (

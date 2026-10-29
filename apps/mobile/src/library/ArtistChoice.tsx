@@ -7,11 +7,7 @@ import {
   timingSurfaceCommitted,
   timingLinkNavigated,
 } from "@/lib/timing";
-import {
-  type ArtistLink,
-  type StreamedArtistLink,
-  type StreamedArtistTarget,
-} from "@wave/core";
+import { type ArtistLink, type StreamedArtistLink, type StreamedArtistTarget } from "@wave/core";
 import * as Effect from "effect/Effect";
 import { Fragment, useLayoutEffect } from "react";
 import { View } from "react-native";

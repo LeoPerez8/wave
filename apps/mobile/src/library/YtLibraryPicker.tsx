@@ -419,7 +419,6 @@ function PickerRow({ row, toggle }: { row: YtLibraryRow; toggle: () => void }) {
 /** Where a row's name starts: past its tick and cover. */
 const TEXT_INSET = grid.margin - CELL + grid.stateCell + CELL * 1.5 + COVER + CELL * 1.5;
 
-
 /**
  * Also add to Favorites, under Liked Songs, lined up with the rows' names:
  * Import stars the liked songs the Library has. Off and dimmed while Liked

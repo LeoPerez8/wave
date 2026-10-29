@@ -38,7 +38,10 @@ export const checkPlaylistName = (
  * The name a new playlist starts with: New Playlist, then New Playlist 2, 3…,
  * in [language]. It's saved as written, so a later language change leaves it.
  */
-export const nextPlaylistName = (names: readonly string[], language: AppLanguage = "en"): string => {
+export const nextPlaylistName = (
+  names: readonly string[],
+  language: AppLanguage = "en",
+): string => {
   const base = catalogueOf(language).playlists.defaultName;
   const taken = new Set(names.map(foldAccentsAndCase));
   if (!taken.has(foldAccentsAndCase(base))) return base;

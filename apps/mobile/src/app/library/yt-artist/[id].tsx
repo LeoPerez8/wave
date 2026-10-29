@@ -74,7 +74,6 @@ const SHELF_ROW = albumRowHeight(COVER_ROW_TILE);
 
 const NO_SONGS: readonly Song[] = [];
 
-
 /** The quiet line in place of what the page can't show (while it loads, skeletons show). */
 const pageNote = (note: Exclude<YtArtistPageNote, "loading">, strings: Catalogue): string =>
   note === "off" ? strings.library.ytArtistOff : ytArtistNote(note, strings);
@@ -349,7 +348,7 @@ export default function YtArtistScreen() {
           onRetry={retry}
         />
       ),
-    [loading, view, retry],
+    [loading, view, retry, strings],
   );
   const contentStyle = useMemo(
     () => ({ paddingHorizontal: grid.margin, paddingBottom: bottomInset }),

@@ -61,7 +61,9 @@ function NothingYet({ message }: { message: string }) {
       <EmptyState
         icon={IconStack2}
         title={
-          scanStatus === "scanning" ? strings.library.lookingForMusic : strings.library.nothingHereYet
+          scanStatus === "scanning"
+            ? strings.library.lookingForMusic
+            : strings.library.nothingHereYet
         }
         message={message}
       />

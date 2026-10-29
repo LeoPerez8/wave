@@ -474,7 +474,10 @@ describe("playlist entries in Portuguese", () => {
   });
 
   test("an unavailable entry's menu reads in Portuguese", () => {
-    assert.deepEqual(unavailableEntryActionLabel("removeFromPlaylist", "pt-BR"), "Remover da Playlist");
+    assert.deepEqual(
+      unavailableEntryActionLabel("removeFromPlaylist", "pt-BR"),
+      "Remover da Playlist",
+    );
     assert.deepEqual(unavailableEntryActionLabel("search", "pt-BR"), "Buscar");
     assert.equal(unavailableEntryActionLabel("search"), UNAVAILABLE_ENTRY_ACTION_LABELS.search);
   });

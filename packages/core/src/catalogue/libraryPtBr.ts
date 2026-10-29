@@ -200,8 +200,7 @@ export const libraryPtBr: typeof libraryEn = {
     notFound: "Não encontrada online",
     localFile: "Arquivo local no Spotify",
     notFoundNotice: "O Wave não encontrou esta música online nem na sua Biblioteca.",
-    localFileNotice:
-      "Esta música é um arquivo local no Spotify, então o Wave não pôde procurá-la.",
+    localFileNotice: "Esta música é um arquivo local no Spotify, então o Wave não pôde procurá-la.",
     allNotFound: "O Wave não encontrou estas músicas online nem na sua Biblioteca.",
     allLocalFiles:
       "Estas músicas são arquivos locais no Spotify, então o Wave não pôde procurá-las.",
@@ -209,8 +208,7 @@ export const libraryPtBr: typeof libraryEn = {
       "O Wave não encontrou estas músicas online nem na sua Biblioteca, ou elas são arquivos locais no Spotify.",
     removeFromPlaylist: "Remover da Playlist",
     search: "Buscar",
-    found: (found: number, searched: number): string =>
-      `${n(found)} de ${n(searched)} encontradas`,
+    found: (found: number, searched: number): string => `${n(found)} de ${n(searched)} encontradas`,
     searchesFailed: (count: number): string =>
       plural("pt-BR", count, {
         one: `${n(count)} busca falhou`,

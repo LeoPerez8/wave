@@ -170,7 +170,13 @@ export const openAddToPlaylist = (subject: AddSubject): void => {
     });
   };
   if (knownPlaylists() !== undefined) open();
-  else void followUp(() => currentPlaylists().then(open, failed(() => text().couldntList)));
+  else
+    void followUp(() =>
+      currentPlaylists().then(
+        open,
+        failed(() => text().couldntList),
+      ),
+    );
 };
 
 const addSongs = (playlistId: number, songs: () => Promise<readonly PlaylistSong[]>): void => {
@@ -331,11 +337,17 @@ const renameNamedPlaylist = async (playlist: NamedPlaylist): Promise<void> => {
  * photo, then that square of it in place of the mosaic.
  */
 export const changePlaylistImageFlow = (playlist: NamedPlaylist): Promise<void> =>
-  pickPlaylistImage(playlist.id, framePhoto).then(() => {}, failed(() => text().couldntChangeImage));
+  pickPlaylistImage(playlist.id, framePhoto).then(
+    () => {},
+    failed(() => text().couldntChangeImage),
+  );
 
 /** Adjust Image: the crop screen on the original photo, at the last framing. */
 export const adjustPlaylistImageFlow = (playlist: NamedPlaylist): Promise<void> =>
-  adjustPlaylistImage(playlist.id, framePhoto).then(() => {}, failed(() => text().couldntAdjustImage));
+  adjustPlaylistImage(playlist.id, framePhoto).then(
+    () => {},
+    failed(() => text().couldntAdjustImage),
+  );
 
 /** Remove Image: the playlist's mosaic shows again. */
 export const removePlaylistImageFlow = (playlist: NamedPlaylist): Promise<void> =>
@@ -358,18 +370,20 @@ export const confirmDeletePlaylists = (
   } = {},
 ): void => {
   if (playlists.length === 0) return;
-  void confirmAction(confirmPlaylistDeletion(playlists, currentLocalisation().language)).then(async (confirmed) => {
-    if (!confirmed) return;
-    onConfirm?.();
-    try {
-      for (const playlist of playlists) {
-        cancelPlaylistImport(playlist.id);
-        await deletePlaylist(playlist.id);
+  void confirmAction(confirmPlaylistDeletion(playlists, currentLocalisation().language)).then(
+    async (confirmed) => {
+      if (!confirmed) return;
+      onConfirm?.();
+      try {
+        for (const playlist of playlists) {
+          cancelPlaylistImport(playlist.id);
+          await deletePlaylist(playlist.id);
+        }
+        await forgetDeletedYtLibraryPlaylists(playlists.map((playlist) => playlist.id));
+        onDeleted?.();
+      } catch {
+        failed(() => text().couldntDelete(playlists.length))();
       }
-      await forgetDeletedYtLibraryPlaylists(playlists.map((playlist) => playlist.id));
-      onDeleted?.();
-    } catch {
-      failed(() => text().couldntDelete(playlists.length))();
-    }
-  });
+    },
+  );
 };

@@ -316,8 +316,7 @@ describe("what a findable list's field and empty line say", () => {
 });
 
 describe("Find's text in Portuguese", () => {
-  test("each list's field and no-match line follow the glossary", async () => {
-    const { findPlaceholder, findNoMatch } = await import("./index.ts");
+  test("each list's field and no-match line follow the glossary", () => {
     assert.equal(findPlaceholder("playlist", "pt-BR"), "Buscar na Playlist");
     assert.equal(findPlaceholder("songs", "pt-BR"), "Buscar em Músicas");
     assert.equal(findPlaceholder("albums", "pt-BR"), "Buscar em Álbuns");

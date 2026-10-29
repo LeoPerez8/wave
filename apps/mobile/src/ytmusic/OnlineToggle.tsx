@@ -114,9 +114,7 @@ function Segment({
     <Press
       accessibilityRole="radio"
       accessibilityLabel={label}
-      accessibilityHint={
-        onLongPress === undefined ? hint : strings.library.longPressOnline(hint)
-      }
+      accessibilityHint={onLongPress === undefined ? hint : strings.library.longPressOnline(hint)}
       accessibilityState={{ checked: selected, selected }}
       onPress={onPress}
       onLongPress={onLongPress}

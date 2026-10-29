@@ -49,8 +49,14 @@ describe("importing from a link, in Portuguese", () => {
   test("the card counts the songs and how many the Library has", () => {
     const view = linkImportView(read([yt("g1", "Genesis"), yt("s1", "Stress")]), PT);
     assert.equal(view.line, "2 músicas · 1 na sua Biblioteca");
-    assert.equal(linkImportView(read([yt("s1", "Stress")]), PT).line, "1 música · nenhuma na sua Biblioteca");
-    assert.equal(linkImportView(read([yt("g1", "Genesis")]), PT).line, "1 música · todas na sua Biblioteca");
+    assert.equal(
+      linkImportView(read([yt("s1", "Stress")]), PT).line,
+      "1 música · nenhuma na sua Biblioteca",
+    );
+    assert.equal(
+      linkImportView(read([yt("g1", "Genesis")]), PT).line,
+      "1 música · todas na sua Biblioteca",
+    );
     assert.equal(
       linkImportView(read([yt("s1", "Stress")], true), PT).note,
       "Ela passa de 1 música. Só essas são importadas.",
@@ -67,8 +73,14 @@ describe("importing from a link, in Portuguese", () => {
   });
 
   test("a link that isn't a playlist says why", () => {
-    assert.equal(playlistLinkReason("song", PT), "Este é o link de uma música, não de uma playlist.");
-    assert.equal(playlistLinkReason("empty"), "Paste a link to a YouTube Music or Spotify playlist.");
+    assert.equal(
+      playlistLinkReason("song", PT),
+      "Este é o link de uma música, não de uma playlist.",
+    );
+    assert.equal(
+      playlistLinkReason("empty"),
+      "Paste a link to a YouTube Music or Spotify playlist.",
+    );
     assert.deepEqual(sharedTextImport("hello", { ytMusic: false }, PT), {
       kind: "notice",
       title: "O YT Music está desativado",
@@ -94,7 +106,10 @@ describe("import progress in Portuguese", () => {
       importProgressLine({ phase: "reading", done: 2300, total: 10_000 }, PT),
       "Lendo 2.300 de 10.000",
     );
-    assert.equal(importProgressLine({ phase: "reading", done: 2300, total: null }, PT), "Lendo 2.300");
+    assert.equal(
+      importProgressLine({ phase: "reading", done: 2300, total: null }, PT),
+      "Lendo 2.300",
+    );
     assert.equal(importProgressLine({ phase: "matching" }, PT), "Comparando com a Biblioteca…");
     assert.equal(
       importProgressLine({ phase: "adding", done: 340, total: 10_000 }, PT),
@@ -114,10 +129,7 @@ describe("import progress in Portuguese", () => {
     });
     const batch = queueYtLibraryReads(NO_YT_LIBRARY_READS, [toQueue(1), toQueue(2)]);
     assert.equal(importBatchLine(batch, [], null, PT)?.text, "Importando playlists · 0 de 2");
-    assert.equal(
-      importBatchLine(batch, [], "offline", PT)?.text,
-      "Importação pausada · offline",
-    );
+    assert.equal(importBatchLine(batch, [], "offline", PT)?.text, "Importação pausada · offline");
     assert.equal(
       importBatchLine(batch, [], "signedOut", PT)?.text,
       "Importação pausada · sessão do Spotify finalizada",
@@ -133,9 +145,13 @@ describe("import progress in Portuguese", () => {
 
 describe("From YT Music and From Spotify in Portuguese", () => {
   test("Liked Songs is named in the active language, with its count", () => {
-    const yt = ytLibraryPicker([{ kind: "own", playlistId: "LM", title: "Liked Music", artworkUrl: null, songCount: 0 }], undefined, PT);
-    assert.equal(yt.rows[0]?.title, "Músicas Curtidas");
-    assert.equal(yt.rows[0]?.line, "Nenhuma música");
+    const picker = ytLibraryPicker(
+      [{ kind: "own", playlistId: "LM", title: "Liked Music", artworkUrl: null, songCount: 0 }],
+      undefined,
+      PT,
+    );
+    assert.equal(picker.rows[0]?.title, "Músicas Curtidas");
+    assert.equal(picker.rows[0]?.line, "Nenhuma música");
     const spotify = spotifyLibraryPicker([], undefined, PT);
     assert.equal(spotify.rows[0]?.title, "Músicas Curtidas");
   });
@@ -171,7 +187,13 @@ describe("playlists from files in Portuguese", () => {
     assert.deepEqual(
       summarizeM3uImport(
         [
-          { kind: "imported", name: "Road Trip", songs: 1, missing: ["a.mp3", "b.mp3"], replaced: true },
+          {
+            kind: "imported",
+            name: "Road Trip",
+            songs: 1,
+            missing: ["a.mp3", "b.mp3"],
+            replaced: true,
+          },
           { kind: "nothingFound", file: "x.m3u", missing: [] },
           { kind: "notPlaylist", file: "y.txt" },
           { kind: "unreadable", file: "z.m3u" },
@@ -195,7 +217,13 @@ describe("playlists from files in Portuguese", () => {
     assert.equal(summarizeM3uImport([], PT).title, "Nada importado");
     const two = { kind: "imported", songs: 2, missing: [], replaced: false } as const;
     assert.equal(
-      summarizeM3uImport([{ ...two, name: "A" }, { ...two, name: "B" }], PT).title,
+      summarizeM3uImport(
+        [
+          { ...two, name: "A" },
+          { ...two, name: "B" },
+        ],
+        PT,
+      ).title,
       "2 playlists importadas",
     );
   });

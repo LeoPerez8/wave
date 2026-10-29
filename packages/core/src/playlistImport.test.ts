@@ -336,7 +336,10 @@ describe("the songs an import left out", () => {
 
   test("says what was listed twice in Portuguese", () => {
     const { job } = importSpotify(songs);
-    assert.equal(playlistImportView([job], 7, "pt-BR")?.line, "2 músicas foram listadas duas vezes");
+    assert.equal(
+      playlistImportView([job], 7, "pt-BR")?.line,
+      "2 músicas foram listadas duas vezes",
+    );
     assert.deepEqual(playlistImportView([job], 7, "pt-BR")?.leftOut, {
       title: "2 músicas foram listadas duas vezes",
       message: "Cada uma entrou em Late Night uma vez.",

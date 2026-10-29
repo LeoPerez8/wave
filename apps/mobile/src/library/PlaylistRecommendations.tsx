@@ -401,16 +401,12 @@ export function PlaylistRecommendations({
           accessibilityLiveRegion="polite"
           className="font-sans text-subheadline text-secondary"
         >
-          {state.error === "save"
-            ? text.couldntSaveChoice
-            : text.couldntLoadRecommendations}
+          {state.error === "save" ? text.couldntSaveChoice : text.couldntLoadRecommendations}
         </Text>
       )}
       {!state.loading && state.error === null && shownSlots.length === 0 && (
         <Text className="font-sans text-subheadline text-secondary">
-          {items.length === 0
-            ? text.addSongsForRecommendations
-            : text.noMoreMatching}
+          {items.length === 0 ? text.addSongsForRecommendations : text.noMoreMatching}
         </Text>
       )}
     </TitledSection>

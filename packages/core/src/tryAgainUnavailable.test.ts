@@ -172,7 +172,10 @@ describe("tryAgainNotice", () => {
 
 describe("Try Again's notice in Portuguese", () => {
   test("counts what was found and the searches that failed", () => {
-    assert.equal(tryAgainNotice({ searched: 3, found: 2, failed: 0 }, "pt-BR"), "2 de 3 encontradas");
+    assert.equal(
+      tryAgainNotice({ searched: 3, found: 2, failed: 0 }, "pt-BR"),
+      "2 de 3 encontradas",
+    );
     assert.equal(
       tryAgainNotice({ searched: 1234, found: 0, failed: 1 }, "pt-BR"),
       "0 de 1.234 encontradas · 1 busca falhou",
