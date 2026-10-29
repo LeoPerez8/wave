@@ -1350,6 +1350,7 @@ export {
   mergeRows,
   recordingKey,
   signOutPlan,
+  syncsPreference,
   vanishedFile,
 } from "./sync.ts";
 export type {

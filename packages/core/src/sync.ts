@@ -7,6 +7,9 @@
 import { UNKNOWN_ALBUM, albumKey } from "./library.ts";
 import { normalizeSearchText } from "./search.ts";
 
+/** Retired preferences stay stored locally but no longer go up or apply on a pull. */
+export const syncsPreference = (key: string): boolean => key !== "settings.tapAnimationMs";
+
 /** The tags a song's recording key is built from. A `LibraryTrack` has them all. */
 export interface RecordingTags {
   readonly title: string;

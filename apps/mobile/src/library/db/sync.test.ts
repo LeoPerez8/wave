@@ -432,6 +432,30 @@ describe("saving files", () => {
 });
 
 describe("stampPreference", () => {
+  test("a legacy tap duration cannot occupy a preference upload batch", async () => {
+    const db = await openTestDatabase();
+    stampPreference(db, "settings.tapAnimationMs", 1_000);
+    stampPreference(db, "settings.theme", 2_000);
+    const stored = new Map([
+      ["settings.tapAnimationMs", "0"],
+      ["settings.theme", "rose"],
+    ]);
+    const oldStamps = selectChangesSince(db, 0).preferences;
+
+    const batch = selectUnpushed(db, 1, (key) => stored.get(key) ?? null);
+
+    assert.deepEqual(batch.rows.preferences, [
+      {
+        id: "settings.theme",
+        value: "rose",
+        changedAt: 2_000,
+        phoneId: selectPhoneId(db),
+        deleted: false,
+      },
+    ]);
+    assert.deepEqual(selectChangesSince(db, 0).preferences, oldStamps);
+  });
+
   test("records when each synced preference last changed here, one row per preference", async () => {
     const db = await openTestDatabase();
     stampPreference(db, "settings.theme", 1_000);
