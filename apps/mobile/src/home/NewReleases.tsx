@@ -4,10 +4,10 @@ import { openAlbumActions } from "@/playback/ActionsMenu";
 import { useState } from "react";
 import { Text, View } from "react-native";
 import {
-  followArtistKey,
-  matchFollowRelease,
+  followReleaseOpening,
   releaseDateLine,
   type FollowRelease,
+  type FollowReleaseOpening,
   type FollowedArtist,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
@@ -38,9 +38,11 @@ const guardedRequest = <A,>(read: Effect.Effect<A, YtMusicError>) =>
       return yield* Effect.fail(new YtMusicError({ reason: "disabled" }));
     return yield* read;
   });
-const resolve = async (release: FollowRelease, artist: string): Promise<string | null> => {
-  if (!followedArtistsEnabled() || !ytMusicEnabled()) return null;
-  if (release.browseId) return release.browseId;
+/** Where a release the Library lacks opens (Core's `followReleaseOpening`), after an Albums search when unmatched. */
+const resolve = async (release: FollowRelease, artist: string): Promise<FollowReleaseOpening> => {
+  const ytMusic = () => followedArtistsEnabled() && ytMusicEnabled();
+  const opening = followReleaseOpening(release, { ytMusic: ytMusic() });
+  if (opening.kind !== "search") return opening;
   const result = await askYtMusic((yt) =>
     withSearchTurn(
       "search",
@@ -48,16 +50,13 @@ const resolve = async (release: FollowRelease, artist: string): Promise<string |
       guardedRequest(yt.searchAlbums(`${artist} ${release.title}`)),
     ),
   );
-  if (Result.isFailure(result) || !followedArtistsEnabled() || !ytMusicEnabled()) return null;
-  const match = matchFollowRelease(
-    release,
-    result.success.filter((a) =>
-      a.artists.some((name) => followArtistKey(name) === release.artistKey),
-    ),
-  );
-  if (!match) return null;
+  const found = followReleaseOpening(release, {
+    ytMusic: ytMusic(),
+    found: Result.isSuccess(result) ? result.success : null,
+  });
+  if (found.kind !== "open") return found;
   const album = await askYtMusic((yt) =>
-    withSearchTurn("search", release.title, guardedRequest(yt.album(match.browseId))),
+    withSearchTurn("search", release.title, guardedRequest(yt.album(found.browseId))),
   );
   if (Result.isSuccess(album) && followedArtistsEnabled())
     await appRuntime.runPromise(
@@ -72,7 +71,7 @@ const resolve = async (release: FollowRelease, artist: string): Promise<string |
               r.key === release.key
                 ? {
                     ...r,
-                    browseId: match.browseId,
+                    browseId: found.browseId,
                     videoIds: album.success.tracks.map((t) => t.videoId),
                   }
                 : r,
@@ -81,7 +80,7 @@ const resolve = async (release: FollowRelease, artist: string): Promise<string |
           );
       }),
     );
-  return match.browseId;
+  return found;
 };
 
 function ReleaseTile({
@@ -119,8 +118,10 @@ function ReleaseTile({
         openAlbum(release.libraryAlbumId);
         return;
       }
-      const id = await resolve(release, follow.name);
-      if (id) openYtAlbum(id, head);
+      const opening = await resolve(release, follow.name);
+      if (opening.kind === "open") openYtAlbum(opening.browseId, head);
+      else if (opening.kind === "ytMusicOff") await showMessage(release.title, copy.ytMusicOff);
+      else if (opening.kind === "noAnswer") await showMessage(release.title, copy.noAnswer);
       else await showMessage(release.title, copy.unavailable);
     });
   const menu = () =>
@@ -134,8 +135,9 @@ function ReleaseTile({
           return;
         }
       }
-      const id = await resolve(release, follow.name);
-      if (id) openYtAlbumActions({ ...head, browseId: id }, { releaseEntries: entries });
+      const opening = await resolve(release, follow.name);
+      if (opening.kind === "open")
+        openYtAlbumActions({ ...head, browseId: opening.browseId }, { releaseEntries: entries });
       else
         openOverlay({
           label: release.title,

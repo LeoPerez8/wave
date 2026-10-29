@@ -74,6 +74,7 @@ export const en = {
     ep: "EP",
     album: "Album",
     unavailable: "Not on YouTube Music yet",
+    ytMusicOff: "YT Music is off in Settings",
     noAnswer: "No answer online. Try again in a moment.",
     hideFailed: "Couldn't hide this release. Try again.",
     hide: "Hide",

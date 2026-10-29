@@ -203,6 +203,46 @@ export const matchFollowRelease = <
       releaseTitle(a.title) === releaseTitle(release.title) &&
       (a.releaseType ?? "album") === release.type,
   ) ?? null;
+/** What tapping a new release the Library lacks does (`followReleaseOpening`). */
+export type FollowReleaseOpening =
+  | { readonly kind: "open"; readonly browseId: string }
+  | { readonly kind: "search" }
+  | { readonly kind: "ytMusicOff" }
+  | { readonly kind: "noAnswer" }
+  | { readonly kind: "notFound" };
+/**
+ * Opening a new release the Library lacks: with YT Music off it says so, even
+ * for a matched release; a matched one opens; an unmatched one asks for an
+ * Albums search first. With the search's albums ([found], null when it failed
+ * or was offline) the release by the same artist opens, a failure is no
+ * answer, and only a search that answered without it is "Not on YouTube Music yet".
+ */
+export const followReleaseOpening = (
+  release: FollowRelease,
+  state: {
+    readonly ytMusic: boolean;
+    readonly found?:
+      | readonly {
+          readonly title: string;
+          readonly releaseType?: ReleaseType | null;
+          readonly browseId: string;
+          readonly artists: readonly string[];
+        }[]
+      | null;
+  },
+): FollowReleaseOpening => {
+  if (!state.ytMusic) return { kind: "ytMusicOff" };
+  if (state.found === undefined)
+    return release.browseId ? { kind: "open", browseId: release.browseId } : { kind: "search" };
+  if (state.found === null) return { kind: "noAnswer" };
+  const match = matchFollowRelease(
+    release,
+    state.found.filter((a) =>
+      a.artists.some((name) => followArtistKey(name) === release.artistKey),
+    ),
+  );
+  return match === null ? { kind: "notFound" } : { kind: "open", browseId: match.browseId };
+};
 /** Home opening checks after 12 hours, the daily background task after 24. */
 export type FollowCheckContext = "home" | "background";
 export const checkDue = (last: number | null, now: number, context: FollowCheckContext): boolean =>
