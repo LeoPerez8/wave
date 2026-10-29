@@ -152,4 +152,38 @@ describe("shareShortcutFiles", () => {
       />Recognize Song</,
     );
   });
+
+  test("the app icon shortcut shows its mic on a coloured ground; the tile keeps the white glyph Android tints", () => {
+    const files = shareShortcutFiles("dev.leoperez.wave");
+    /** The file a `@type/name` reference resolves to, whatever its qualifiers. */
+    const resource = (reference: string): string => {
+      const [, type, name] = /^@(\w+)\/(\w+)$/.exec(reference) ?? [];
+      const path = Object.keys(files).find((p) =>
+        new RegExp(`^${type}(-[^/]*)?/${name}\\.xml$`).test(p),
+      );
+      assert.ok(path, `no file for ${reference}`);
+      return files[path]!;
+    };
+    const shortcutIcon = /<shortcut\s[^>]*android:icon="([^"]*)"/.exec(shortcuts)?.[1] ?? "";
+    const tile = (application(addShareShortcuts(prebuildManifest())).service ?? []).find(
+      (service) =>
+        service.$["android:name"] === "expo.modules.wavenative.recognize.RecognizeTileService",
+    );
+    // Expo omits service icons from its manifest attribute type.
+    const tileIcon = (tile?.$ as Record<string, string> | undefined)?.["android:icon"] ?? "";
+    assert.notEqual(shortcutIcon, tileIcon);
+
+    const adaptive = resource(shortcutIcon);
+    assert.match(adaptive, /<adaptive-icon/);
+    const background = /<background android:drawable="@color\/(\w+)"/.exec(adaptive)?.[1];
+    const colour = new RegExp(`<color name="${background}">(#[0-9A-Fa-f]{6})</color>`).exec(
+      files["values/recognize.xml"]!,
+    )?.[1];
+    assert.ok(colour, "the background is a colour resource");
+    assert.notEqual(colour.toUpperCase(), "#FFFFFF");
+    const foreground = /<foreground android:drawable="([^"]*)"/.exec(adaptive)?.[1] ?? "";
+    assert.match(resource(foreground), /android:fillColor="#FFFFFFFF"/);
+    assert.match(resource(foreground), /android:viewportWidth="108"/);
+    assert.match(resource(tileIcon), /android:fillColor="#FFFFFFFF"/);
+  });
 });
