@@ -161,6 +161,48 @@ const MIGRATIONS: readonly Migration[] = [
       "ALTER TABLE plays ADD COLUMN video_id TEXT",
     ],
   },
+  {
+    // Followed artists: a follow by its name key, and the releases hidden and shows
+    // notified, by their release key and Ticketmaster event id.
+    id: "0006_follows",
+    statements: [
+      `CREATE TABLE follows (
+        account_id TEXT NOT NULL,
+        id TEXT NOT NULL,
+        change_no INTEGER NOT NULL,
+        changed_at INTEGER NOT NULL,
+        phone_id TEXT NOT NULL,
+        deleted INTEGER NOT NULL,
+        name TEXT,
+        level TEXT,
+        followed_at INTEGER,
+        deezer_id INTEGER,
+        yt_browse_id TEXT,
+        PRIMARY KEY (account_id, id)
+      )`,
+      `CREATE INDEX follows_change_idx ON follows (account_id, change_no)`,
+      `CREATE TABLE hidden_releases (
+        account_id TEXT NOT NULL,
+        id TEXT NOT NULL,
+        change_no INTEGER NOT NULL,
+        changed_at INTEGER NOT NULL,
+        phone_id TEXT NOT NULL,
+        deleted INTEGER NOT NULL,
+        PRIMARY KEY (account_id, id)
+      )`,
+      `CREATE INDEX hidden_releases_change_idx ON hidden_releases (account_id, change_no)`,
+      `CREATE TABLE notified_shows (
+        account_id TEXT NOT NULL,
+        id TEXT NOT NULL,
+        change_no INTEGER NOT NULL,
+        changed_at INTEGER NOT NULL,
+        phone_id TEXT NOT NULL,
+        deleted INTEGER NOT NULL,
+        PRIMARY KEY (account_id, id)
+      )`,
+      `CREATE INDEX notified_shows_change_idx ON notified_shows (account_id, change_no)`,
+    ],
+  },
 ];
 
 /** Runs the migrations [db] hasn't run yet, each in its own transaction. Gives the ids it ran. */

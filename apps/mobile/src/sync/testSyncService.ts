@@ -8,6 +8,7 @@ import {
   EMPTY_SYNC_TABLES,
   mergePlays,
   mergeRows,
+  SYNC_TABLE_NAMES,
   type SyncPlayRow,
   type SyncTables,
 } from "@wave/core";
@@ -16,14 +17,7 @@ import type { SyncTransport } from "./syncCycle.ts";
 
 type Table = keyof SyncTables;
 
-const TABLES: readonly Table[] = [
-  "songs",
-  "playlists",
-  "playlistEntries",
-  "favorites",
-  "preferences",
-  "plays",
-];
+const TABLES: readonly Table[] = SYNC_TABLE_NAMES;
 
 /** The service's limit on a request body (`SYNC_LIMITS.maxBodyBytes`). */
 const MAX_BODY_BYTES = 2 * 1024 * 1024;

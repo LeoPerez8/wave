@@ -75,3 +75,15 @@ export const setArtistFollow = async (
   count.set(await run((s) => s.countFollows));
   if (list.listenerCount() > 0) list.set(await run((s) => s.listFollows));
 };
+/**
+ * Reads follows again after the Wave account changed them (another phone
+ * followed, unfollowed or changed a level): the count, the list while it's
+ * shown, and every artist page's follow.
+ */
+export const reloadFollows = async (): Promise<void> => {
+  const follows = await run((s) => s.listFollows);
+  const byKey = new Map(follows.map((follow) => [follow.key, follow]));
+  for (const [key, store] of artists) store.set(byKey.get(key) ?? null);
+  count.set(follows.length);
+  list.set(follows);
+};
