@@ -1,4 +1,4 @@
-import { BOUNCE_AMOUNT, readBounceAmount, storedBounceAmount } from "@wave/core";
+import { readBounceAmount, storedBounceAmount } from "@wave/core";
 
 import { persistedSetting } from "@/lib/persistedSetting";
 
@@ -21,9 +21,6 @@ const bounceAmount = persistedSetting<number>({
 export const setBounceAmount = (amount: number): void =>
   // Read back through Core so the value lands on the slider's range and step.
   bounceAmount.set(readBounceAmount(String(amount)));
-
-/** Puts the bounce back as Wave always had it (100%). */
-export const resetBounceAmount = (): void => bounceAmount.set(BOUNCE_AMOUNT.default);
 
 /** The persisted bounce amount; re-renders when Settings changes it. */
 export const useBounceAmount = bounceAmount.useValue;

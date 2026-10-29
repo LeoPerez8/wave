@@ -1,4 +1,5 @@
 import {
+  bounceDemoSwipe,
   resolveRowSwipe,
   RETURN_SPRINGS,
   rowSwipeArmed,
@@ -7,7 +8,7 @@ import {
   type RowSwipeSide,
 } from "@wave/core";
 import * as Haptics from "expo-haptics";
-import { useLayoutEffect, useRef, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, type ReactNode } from "react";
 import {
   Text,
   View,
@@ -19,6 +20,7 @@ import Animated, {
   useAnimatedStyle,
   useReducedMotion,
   useSharedValue,
+  withSequence,
   withSpring,
   withTiming,
 } from "react-native-reanimated";
@@ -122,14 +124,24 @@ function Uncovered({ action, edge }: { action: SwipeSide; edge: "start" | "end" 
  * the list's; taps and long-presses stay the row's. No swipe while
  * [enabled] is false (selection mode) or while a long-pressed finger slides
  * to choose in a menu.
+ *
+ * A [sample] row (Settings › Appearance › Motion's) swipes the same way but
+ * runs nothing: it moves both ways, uncovering and arming only towards a
+ * side with an action, and letting go always springs it back. Each change
+ * of [demo] after the first render plays one short swipe and spring by
+ * itself (Core's `bounceDemoSwipe`; none under reduce motion).
  */
 export function SwipeableRow({
   swipe,
   enabled = true,
+  sample = false,
+  demo = 0,
   children,
 }: {
   swipe: RowSwipe;
   enabled?: boolean;
+  sample?: boolean;
+  demo?: number;
   children: ReactNode;
 }) {
   const scrollable = useListScrollable();
@@ -137,7 +149,9 @@ export function SwipeableRow({
   const spring = useBounceSpring(RETURN_SPRINGS.swipeRow);
   const canRight = swipe.right !== null;
   const canLeft = swipe.left !== null;
-  const active = enabled && scrollable && (canRight || canLeft);
+  const movesRight = sample || canRight;
+  const movesLeft = sample || canLeft;
+  const active = enabled && scrollable && (movesRight || movesLeft);
 
   const offsetX = useSharedValue(0);
   const width = useSharedValue(1);
@@ -164,13 +178,35 @@ export function SwipeableRow({
     offsetX.set(reduceMotion ? 0 : withSpring(0, spring));
   };
 
+  // The spring and motion setting as of the latest render, for a demo asked for in the same commit.
+  const motion = useRef({ spring, reduceMotion });
+  useLayoutEffect(() => {
+    motion.current = { spring, reduceMotion };
+  });
+  const firstDemo = useRef(demo);
+  useEffect(() => {
+    if (demo === firstDemo.current) return;
+    const plan = bounceDemoSwipe({
+      width: widthRef.current,
+      reduceMotion: motion.current.reduceMotion,
+    });
+    if (plan === null) return;
+    offsetX.set(
+      withSequence(
+        withTiming(plan.translationX, { duration: plan.outMs }),
+        withSpring(0, motion.current.spring),
+      ),
+    );
+  }, [demo, offsetX]);
+
   const finish = (translationX: number, velocityX: number, canceled: boolean) => {
-    const side = canceled
-      ? null
-      : resolveRowSwipe(
-          { translationX, velocityX, width: widthRef.current },
-          { right: swipeRef.current.right !== null, left: swipeRef.current.left !== null },
-        );
+    const side =
+      sample || canceled
+        ? null
+        : resolveRowSwipe(
+            { translationX, velocityX, width: widthRef.current },
+            { right: swipeRef.current.right !== null, left: swipeRef.current.left !== null },
+          );
     const action = side === null ? null : swipeRef.current[side];
     if (side === null || action === null) {
       settle();
@@ -193,14 +229,16 @@ export function SwipeableRow({
     enabled: active,
     // Only towards the sides with an action; a vertical move belongs to the list.
     activeOffsetX:
-      canRight && canLeft ? [-DRAG_SLOP, DRAG_SLOP] : canRight ? DRAG_SLOP : -DRAG_SLOP,
+      movesRight && movesLeft ? [-DRAG_SLOP, DRAG_SLOP] : movesRight ? DRAG_SLOP : -DRAG_SLOP,
     failOffsetY: [-DRAG_SLOP, DRAG_SLOP],
     onUpdate: (event) => {
       "worklet";
       const x = event.translationX;
-      const shown = (x > 0 && canRight) || (x < 0 && canLeft) ? x : 0;
+      const shown = (x > 0 && movesRight) || (x < 0 && movesLeft) ? x : 0;
       offsetX.set(shown);
-      const now = rowSwipeArmed({ translationX: shown, width: width.get() });
+      // A sample arms only towards a side with an action to uncover.
+      const reached = rowSwipeArmed({ translationX: shown, width: width.get() });
+      const now = reached === null || (reached === "right" ? canRight : canLeft) ? reached : null;
       if (now !== armed.get()) {
         armed.set(now);
         if (now !== null) scheduleOnRN(tick);
