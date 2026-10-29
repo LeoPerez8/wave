@@ -172,4 +172,19 @@ describe("backToCurrentSong", () => {
     assert.equal(backToCurrentSong(120, start, 0), null);
     assert.equal(backToCurrentSong(5000, start, 0), null);
   });
+
+  test("a showing waits for its placement while the scroll is still the one from before", () => {
+    // Hidden at the old start of Up Next (300); 3 songs later it starts 168 dp lower.
+    assert.equal(backToCurrentSong(300, 468, height, 300), null);
+    // Hidden deep in Up Next, or up in History.
+    assert.equal(backToCurrentSong(5000, start, height, 5000), null);
+    assert.equal(backToCurrentSong(120, start, height, 120), null);
+  });
+
+  test("once the list reports another scroll, the pill follows it", () => {
+    assert.equal(backToCurrentSong(468, 468, height, 300), null);
+    assert.equal(backToCurrentSong(120, start, height, 5000), "down");
+    assert.equal(backToCurrentSong(5000, start, height, 120), "up");
+    assert.equal(backToCurrentSong(120, start, height, null), "down");
+  });
 });

@@ -44,7 +44,7 @@ import Animated, {
   useSharedValue,
   type SharedValue,
 } from "react-native-reanimated";
-import { scheduleOnRN } from "react-native-worklets";
+import { scheduleOnRN, scheduleOnUI } from "react-native-worklets";
 
 import { CatalogLine, SectionHead, SECTION_HEAD } from "@/catalog/CatalogLine";
 import { CELL, grid } from "@/catalog/grid";
@@ -628,11 +628,25 @@ export function UpNextList({
 
   // The Back to Current Song pill follows the scroll on the UI thread, and a
   // tap scrolls to where each showing opens. Hidden, the Queue drops it: the
-  // next showing opens at the start of Up Next.
+  // next showing opens at the start of Up Next. Until the list reports a
+  // scroll after a showing, the scroll is where it was when it hid, so the
+  // pill waits for the showing's placement (`shownFrom`) rather than blink.
   const [pill, setPill] = useState<"up" | "down" | null>(null);
-  useLayoutEffect(() => () => setPill(null), []);
+  const shownFrom = useSharedValue<number | null>(null);
+  useLayoutEffect(() => {
+    scheduleOnUI(() => {
+      shownFrom.set(scroll.get());
+    });
+    return () => setPill(null);
+  }, [shownFrom, scroll]);
   useAnimatedReaction(
-    () => backToCurrentSong(scroll.get(), barStart.get(), height.get()),
+    () => scroll.get(),
+    (now) => {
+      if (shownFrom.get() !== null && now !== shownFrom.get()) shownFrom.set(null);
+    },
+  );
+  useAnimatedReaction(
+    () => backToCurrentSong(scroll.get(), barStart.get(), height.get(), shownFrom.get()),
     (now, before) => {
       if (now !== before) scheduleOnRN(setPill, now);
     },

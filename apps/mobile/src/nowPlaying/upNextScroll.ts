@@ -72,14 +72,21 @@ export const upNextEndSpace = (
  * sight: down when the list is scrolled up into History, up when it's more
  * than one screen (the [listHeight] list's height) down Up Next. A little way
  * down Up Next shows no pill, nor does a list not laid out yet.
+ *
+ * [shownFrom] is the scroll the list last reported before the Queue showed
+ * again, until it reports another (null after that). While [scroll] is still
+ * that one, the showing's placement (`upNextScroll`) hasn't landed and the
+ * scroll says where the list was, not where it is: no pill, so it doesn't
+ * blink in and out on each showing.
  */
 export const backToCurrentSong = (
   scroll: number,
   start: number,
   listHeight: number,
+  shownFrom: number | null = null,
 ): "up" | "down" | null => {
   "worklet";
-  if (listHeight <= 0) return null;
+  if (listHeight <= 0 || scroll === shownFrom) return null;
   if (scroll < start - AT_START) return "down";
   return scroll > start + listHeight ? "up" : null;
 };
