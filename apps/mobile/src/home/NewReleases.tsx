@@ -1,3 +1,4 @@
+import { YtMusicError } from "@/ytmusic/YtMusic";
 import { useLocalisation } from "@/localisation/localisation";
 import { openAlbumActions } from "@/playback/ActionsMenu";
 import { useState } from "react";
@@ -31,11 +32,21 @@ import { openYtAlbumActions } from "@/ytmusic/YtAlbumActions";
 import { hideRelease, useFollowReleases } from "./followReleases";
 import { HomeSectionSkeleton } from "./HomeSectionSkeleton";
 
+const guardedRequest = <A,>(read: Effect.Effect<A, YtMusicError>) =>
+  Effect.gen(function* () {
+    if (!followedArtistsEnabled() || !ytMusicEnabled())
+      return yield* Effect.fail(new YtMusicError({ reason: "disabled" }));
+    return yield* read;
+  });
 const resolve = async (release: FollowRelease, artist: string): Promise<string | null> => {
   if (!followedArtistsEnabled() || !ytMusicEnabled()) return null;
   if (release.browseId) return release.browseId;
   const result = await askYtMusic((yt) =>
-    withSearchTurn("search", release.title, yt.searchAlbums(`${artist} ${release.title}`)),
+    withSearchTurn(
+      "search",
+      release.title,
+      guardedRequest(yt.searchAlbums(`${artist} ${release.title}`)),
+    ),
   );
   if (Result.isFailure(result) || !followedArtistsEnabled() || !ytMusicEnabled()) return null;
   const match = matchFollowRelease(
@@ -46,7 +57,7 @@ const resolve = async (release: FollowRelease, artist: string): Promise<string |
   );
   if (!match) return null;
   const album = await askYtMusic((yt) =>
-    withSearchTurn("search", release.title, yt.album(match.browseId)),
+    withSearchTurn("search", release.title, guardedRequest(yt.album(match.browseId))),
   );
   if (Result.isSuccess(album) && followedArtistsEnabled())
     await appRuntime.runPromise(

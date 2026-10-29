@@ -37,7 +37,7 @@ test("new releases start at the follow window and stay until played or hidden, n
       hidden: ["hidden"],
       countedPlays: ["video"],
       now,
-    }).releaseCards.map((r) => r.key),
+    }).releaseCards.map((card) => card.key),
     ["new", "boundary"],
   );
 });
@@ -60,7 +60,7 @@ test("a collaboration release followed through both artists has one cover", () =
       hidden: [],
       countedPlays: [],
       now,
-    }).releaseCards.map((r) => r.key),
+    }).releaseCards.map((card) => card.key),
     ["shared"],
   );
 });

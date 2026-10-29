@@ -1,3 +1,4 @@
+import { formatNumber, type AppLanguage } from "@wave/core";
 import type {
   DiscoverSong,
   MixedSong,
@@ -171,6 +172,7 @@ export const resultRows = (
   yt: YtSectionView<NativeYtSong> | null,
   { songs: placed, rowOf }: PlacedYtSongs,
   topArtist: TopArtistSongs | null = null,
+  language: AppLanguage = "en",
 ): ResultRow[] => {
   const rows: ResultRow[] = [];
   const ytArtists = yt?.artists ?? NO_YT_ARTISTS;
@@ -253,7 +255,7 @@ export const resultRows = (
     rows.push({
       type: "heading",
       key: `heading:${group.kind}`,
-      label: `${LABEL[group.kind]} · ${total.toLocaleString("en")}`,
+      label: `${LABEL[group.kind]} · ${formatNumber(language, total)}`,
     });
     const groupRows: ResultRow[] = [...group.items.map((hit) => hitRow(hit, false)), ...extra];
     const open = expanded.has(group.kind) || groups.length === 1;

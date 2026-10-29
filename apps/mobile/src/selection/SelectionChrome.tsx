@@ -1,3 +1,5 @@
+import { formatNumber } from "@wave/core";
+import { useLocalisation } from "@/localisation/localisation";
 import { IconDots } from "@tabler/icons-react-native";
 import { actionBarLabel, entryDivider, splitActionBar } from "@wave/core";
 import { memo } from "react";
@@ -155,6 +157,7 @@ export function SelectionBar({ backdropId }: { backdropId: string }) {
  * and Done, over the screen's own header.
  */
 export function SelectionHeader() {
+  const { language } = useLocalisation();
   const insets = useSafeAreaInsets();
   const summary = useSelectionSummary();
   const target = useSelectedTarget();
@@ -176,7 +179,7 @@ export function SelectionHeader() {
         >
           {/* Songs (and albums with songs) say "12 selected"; other kinds name themselves ("3 albums"). */}
           {target === null || target.kind === "track" || target.kind === "mixed"
-            ? `${summary.count.toLocaleString("en")} selected`
+            ? `${formatNumber(language, summary.count)} selected`
             : targetCount(target)}
         </Text>
         <TextButton label="Select All" disabled={summary.all} onPress={selectAllInList} />

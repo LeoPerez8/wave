@@ -1,3 +1,4 @@
+/* oxlint-disable unicorn/no-array-sort -- Hermes lacks the copying array methods; both receivers are fresh arrays. */
 import { releaseTitle } from "./ytArtist.ts";
 import { en, type Catalogue } from "./catalogueEn.ts";
 import { deezerFollowArtists } from "./followArtistSearch.ts";
