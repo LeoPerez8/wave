@@ -1424,12 +1424,16 @@ export {
   SYNC_PUSH_BATCH,
   SYNC_TABLE_NAMES,
   pushBatches,
+  pushBody,
   readPullPage,
   syncFieldFits,
 } from "./syncWire.ts";
 export type {
   SyncFavorite,
   SyncFieldKind,
+  SyncFollow,
+  SyncHiddenRelease,
+  SyncNotifiedShow,
   SyncPullPage,
   SyncPlayEnd,
   SyncPlayRow,

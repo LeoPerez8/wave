@@ -217,6 +217,9 @@ export interface Pulled {
   readonly favorites: readonly PulledRow[];
   readonly preferences: readonly PulledRow[];
   readonly plays: readonly PulledRow[];
+  readonly follows: readonly PulledRow[];
+  readonly hiddenReleases: readonly PulledRow[];
+  readonly notifiedShows: readonly PulledRow[];
   readonly cursor: string;
   readonly more: boolean;
 }
