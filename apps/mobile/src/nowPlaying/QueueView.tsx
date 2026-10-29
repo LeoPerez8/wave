@@ -53,7 +53,7 @@ import { TrackSkeletons } from "@/catalog/Skeletons";
 import { RecommendationsFailed } from "@/components/RecommendationsFailed";
 import { useMissingSongs } from "@/library/hooks";
 import { IconButton } from "@/components/IconButton";
-import { Press } from "@/motion/Press";
+import { TextButton } from "@/components/TextButton";
 import { TAP_ANIMATION_MS } from "@/motion/timing";
 import { usePerfVisible, useRenderCount } from "@/perf/perf";
 import {
@@ -369,7 +369,7 @@ const HistoryRow = memo(function HistoryRow({
 });
 
 /** The Back to Current Song pill's height, and the room it takes over the list's bottom. */
-const PILL = CELL * 5;
+const PILL = CELL * 6;
 const PILL_ROOM = PILL + CELL;
 
 const pillIn = FadeIn.duration(TAP_ANIMATION_MS).reduceMotion(ReduceMotion.Never);
@@ -391,7 +391,6 @@ function BackToCurrentSong({
   onPress: () => void;
 }) {
   const reduceMotion = useReducedMotion();
-  const ink = useThemeColor("on-accent");
   const Arrow = direction === "up" ? IconArrowUp : IconArrowDown;
   return (
     <Animated.View
@@ -401,19 +400,23 @@ function BackToCurrentSong({
       className="absolute left-0 right-0 items-center"
       style={{ bottom }}
     >
-      <Press
-        accessibilityRole="button"
+      <TextButton
+        variant="pill"
+        label="Current Song"
         accessibilityLabel="Back to Current Song"
         onPress={onPress}
-        hitSlop={CELL / 2}
-        className="flex-row items-center bg-accent"
-        style={{ height: PILL, borderRadius: PILL / 2, paddingHorizontal: CELL * 2, gap: CELL }}
+        className="flex-row items-center"
+        style={{ height: PILL, gap: CELL }}
       >
-        <Arrow size={16} color={ink} strokeWidth={2} />
-        <Text className="font-sans text-subheadline font-semibold text-on-accent">
-          Current Song
-        </Text>
-      </Press>
+        {(color) => (
+          <>
+            <Arrow size={16} color={color} strokeWidth={2} />
+            <Text className="font-sans text-subheadline font-semibold" style={{ color }}>
+              Current Song
+            </Text>
+          </>
+        )}
+      </TextButton>
     </Animated.View>
   );
 }
