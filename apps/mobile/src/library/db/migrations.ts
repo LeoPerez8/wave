@@ -1252,6 +1252,18 @@ const m0046 = `CREATE TABLE follow_release_cache (key text PRIMARY KEY NOT NULL,
 --> statement-breakpoint
 CREATE TABLE hidden_follow_releases (key text PRIMARY KEY NOT NULL);`;
 
+const m0047 = `
+CREATE TABLE follow_show_cache (
+  key text PRIMARY KEY NOT NULL,
+  attraction_id text NOT NULL,
+  country text NOT NULL,
+  shows text NOT NULL,
+  checked_at integer NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE notified_follow_shows (id text PRIMARY KEY NOT NULL);
+`;
+
 export default {
   journal: {
     entries: [
@@ -1312,6 +1324,7 @@ export default {
       { idx: 44, when: 1_795_608_000_000, tag: "0044_ongoing_plays", breakpoints: true },
       { idx: 45, when: 1_795_694_400_000, tag: "0045_follows", breakpoints: true },
       { idx: 46, when: 1_795_780_800_000, tag: "0046_follow_releases", breakpoints: true },
+      { idx: 47, when: 1_795_867_200_000, tag: "0047_follow_shows", breakpoints: true },
     ],
   },
   migrations: {
@@ -1362,5 +1375,6 @@ export default {
     m0044: mOngoingPlays,
     m0045,
     m0046,
+    m0047,
   },
 };
