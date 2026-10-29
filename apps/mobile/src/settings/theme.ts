@@ -5,6 +5,7 @@ import {
   launcherIconFor,
   launcherIconSwitch,
   launchTheme,
+  pulledThemeChoice,
   readThemeChoice,
   removeSavedInk as withoutSavedInk,
   resetThemeChoice,
@@ -102,6 +103,8 @@ const theme = persistedSetting<ThemeChoice>({
   key: THEME_KEY,
   synced: true,
   read: readThemeChoice,
+  // A theme from a Wave before saved colours has none: this phone's are kept.
+  readPulled: pulledThemeChoice,
   write: (choice) => JSON.stringify(choice),
   equals: sameThemeChoice,
   onValue: apply,

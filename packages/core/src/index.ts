@@ -461,6 +461,7 @@ export {
   customInkPreview,
   inkSaveState,
   isDefaultThemeChoice,
+  pulledThemeChoice,
   readThemeChoice,
   removeSavedInk,
   resetThemeChoice,

@@ -17,6 +17,12 @@ export interface PersistedSettingOptions<A> {
   readonly key: string;
   /** The value from what's stored (null when nothing is); Core's readers fall back to defaults. */
   readonly read: (stored: string | null) => A;
+  /**
+   * With `synced`: the value from what the Wave account pulled, given the
+   * current one, for a value an older Wave pushes without some of its fields.
+   * Absent: `read`.
+   */
+  readonly readPulled?: (stored: string | null, current: A) => A;
   /** What to store; null removes the key. */
   readonly write: (value: A) => string | null;
   readonly equals?: (a: A, b: A) => boolean;
@@ -111,6 +117,7 @@ const followLeaving = (): void => {
 export function persistedSetting<A>({
   key,
   read,
+  readPulled = read,
   write,
   equals = Object.is,
   persistDelayMs,
@@ -179,7 +186,7 @@ export function persistedSetting<A>({
     syncedSettings.set(key, {
       stored: () => write(get()),
       apply: (stored) => {
-        const value = read(stored);
+        const value = readPulled(stored, get());
         onApplied?.(value);
         change(value, false);
       },

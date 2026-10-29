@@ -11,6 +11,7 @@ import {
   chooseCustomInk,
   customInkPreview,
   inkSaveState,
+  pulledThemeChoice,
   readThemeChoice,
   removeSavedInk,
   resetThemeChoice,
@@ -580,5 +581,42 @@ describe("saved colours (#794)", () => {
     assert.equal(sameThemeChoice(choice, choose({ savedPrimary: ["#a99af0", "#3a7bd5"] })), false);
     assert.equal(sameThemeChoice(choice, { ...choice, savedSecondary: ["#3a7bd5"] }), false);
     assert.equal(sameThemeChoice(choice, { ...choice, dark: "navy" }), false);
+  });
+});
+
+describe("pulledThemeChoice", () => {
+  const four = ["#000001", "#000002", "#000003", "#000004"];
+  const local = choose({ savedPrimary: four, savedSecondary: ["#ff00aa"] });
+
+  test("a theme from a Wave before saved colours keeps this phone's saved colours", () => {
+    // That phone picked the Blue preset and kept a custom secondary.
+    const pulled = JSON.stringify({
+      light: "fog",
+      dark: "navy",
+      primary: "blue",
+      secondary: "custom",
+      customPrimary: null,
+      customSecondary: "#123456",
+    });
+    const choice = pulledThemeChoice(pulled, local);
+    assert.equal(choice.dark, "navy");
+    assert.equal(choice.customPrimary, "#7aaef5");
+    assert.equal(choice.customSecondary, "#123456");
+    // The former preset's colour goes first, as on this phone's own update.
+    assert.deepEqual(choice.savedPrimary, ["#7aaef5", "#000001", "#000002", "#000003"]);
+    assert.deepEqual(choice.savedSecondary, ["#ff00aa"]);
+    assert.deepEqual(pulledThemeChoice(null, local).savedPrimary, four);
+  });
+
+  test("a theme with saved colours takes them as they are, even none", () => {
+    const pulled = JSON.stringify(choose({ savedPrimary: [], savedSecondary: ["#00aa55"] }));
+    assert.deepEqual(pulledThemeChoice(pulled, local), readThemeChoice(pulled));
+    const one = JSON.stringify({
+      ...choose({}),
+      savedPrimary: ["#00aa55"],
+      savedSecondary: undefined,
+    });
+    assert.deepEqual(pulledThemeChoice(one, local).savedSecondary, ["#ff00aa"]);
+    assert.deepEqual(pulledThemeChoice(one, local).savedPrimary, ["#00aa55"]);
   });
 });

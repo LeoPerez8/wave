@@ -427,3 +427,20 @@ test("Yes stores the icon of the colours as they are when it's answered", async 
   });
   assert.equal(device.alias, "LauncherIcon_rose_sky");
 });
+
+test("a theme pulled from a Wave before saved colours keeps this phone's saved colours", async () => {
+  const { settings, Storage } = await loadTheme({
+    "settings.theme": JSON.stringify({
+      ...DEFAULT_THEME_CHOICE,
+      savedPrimary: ["#3a7bd5", "#00aa55"],
+    }),
+  });
+  // That phone picked Blue, a preset it still offers, and pushes no saved colours.
+  settings.applySyncedSetting(
+    "settings.theme",
+    JSON.stringify({ light: "fog", dark: "black", primary: "blue", secondary: "white" }),
+  );
+  const stored = JSON.parse(Storage.getItemSync("settings.theme")!);
+  assert.equal(stored.customPrimary, "#7aaef5");
+  assert.deepEqual(stored.savedPrimary, ["#7aaef5", "#3a7bd5", "#00aa55"]);
+});

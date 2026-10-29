@@ -181,31 +181,39 @@ const storedHex = (value: unknown): string | null =>
 const savedList = (colours: readonly (string | null)[]): readonly string[] =>
   [...new Set(colours.filter((colour) => colour !== null))].slice(0, MAX_SAVED_INKS);
 
+/** The group's saved colours as `record` stores them; null when it has no list. */
+const storedSaved = (
+  record: Readonly<Record<string, unknown>>,
+  group: InkGroup,
+): readonly (string | null)[] | null => {
+  const listed = record[SAVED_FIELD[group]];
+  return Array.isArray(listed) ? listed.map(storedHex) : null;
+};
+
 /**
- * The theme choice from its stored JSON; anything missing or unknown is its
- * default. A former preset (`FORMER_INK_SWATCHES`) reads as its dark tone,
- * custom and first saved, ahead of the custom colour it kept, so nothing on
- * screen changes and the colour can be picked again.
+ * The theme choice from a stored record, each group's saved colours from
+ * `saved` (given the custom colour a former preset kept, else null). A former
+ * preset (`FORMER_INK_SWATCHES`) reads as its dark tone, custom and saved first.
  */
-export const readThemeChoice = (stored: string | null): ThemeChoice => {
-  const record = readStoredRecord(stored);
+const readRecord = (
+  record: Readonly<Record<string, unknown>>,
+  saved: (group: InkGroup, kept: string | null) => readonly (string | null)[],
+): ThemeChoice => {
   const read = (group: InkGroup) => {
     const kept = storedHex(record[CUSTOM_FIELD[group]]);
-    const listed = record[SAVED_FIELD[group]];
-    const saved = Array.isArray(listed) ? listed.map(storedHex) : [];
     const former = FORMER_INK_SWATCHES[group].find((swatch) => swatch.id === record[group]);
     if (former !== undefined)
       return {
         id: CUSTOM_INK,
         custom: former.dark,
-        saved: savedList([former.dark, kept, ...saved]),
+        saved: savedList([former.dark, ...saved(group, kept)]),
       };
     const id = record[group];
     const custom = id === CUSTOM_INK && kept !== null;
     return {
       id: custom ? CUSTOM_INK : has(group, id) ? id : DEFAULT_THEME_CHOICE[group],
       custom: kept,
-      saved: savedList(saved),
+      saved: savedList(saved(group, null)),
     };
   };
   const background = (group: "light" | "dark"): string => {
@@ -224,6 +232,31 @@ export const readThemeChoice = (stored: string | null): ThemeChoice => {
     savedPrimary: primary.saved,
     savedSecondary: secondary.saved,
   };
+};
+
+/**
+ * The theme choice from its stored JSON; anything missing or unknown is its
+ * default. A former preset (`FORMER_INK_SWATCHES`) reads as its dark tone,
+ * custom and first saved, ahead of the custom colour it kept, so nothing on
+ * screen changes and the colour can be picked again.
+ */
+export const readThemeChoice = (stored: string | null): ThemeChoice => {
+  const record = readStoredRecord(stored);
+  return readRecord(record, (group, kept) => [kept, ...(storedSaved(record, group) ?? [])]);
+};
+
+/**
+ * A theme choice pulled from the Wave account, read over this phone's
+ * `current` one. A Wave from before saved colours pushes none: where the
+ * pulled record has no saved list, the group keeps this phone's, after a
+ * former preset's colour as on an update, rather than losing them.
+ */
+export const pulledThemeChoice = (stored: string | null, current: ThemeChoice): ThemeChoice => {
+  const record = readStoredRecord(stored);
+  return readRecord(record, (group, kept) => {
+    const saved = storedSaved(record, group);
+    return saved === null ? current[SAVED_FIELD[group]] : [kept, ...saved];
+  });
 };
 
 /** What this phone holds when Wave starts, for `storedThemeOnStart`. */
