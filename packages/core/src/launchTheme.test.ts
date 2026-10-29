@@ -9,6 +9,7 @@ import {
   contrastRatio,
   chooseCustomInk,
   launchTheme,
+  launcherIconFor,
   themeFor,
   type ThemeChoice,
 } from "./index.ts";
@@ -45,6 +46,26 @@ const everyChoice = (): ThemeChoice[] =>
   );
 
 describe("launchTheme", () => {
+  test("uses the stored icon's waves with the app's current grounds after No (#792)", () => {
+    const choice = choose({ light: "sand", dark: "navy", primary: "rose", secondary: "gold" });
+    const stored = launcherIconFor(DEFAULT_THEME_CHOICE);
+    const launch = launchTheme(choice, stored);
+    assert.deepEqual(launch.light, {
+      background: "#ede6da",
+      primary: "#006a5f",
+      secondary: "#a14f09",
+    });
+    assert.deepEqual(launch.dark, {
+      background: "#0a0f1f",
+      primary: "#14b7a6",
+      secondary: "#f5b83d",
+    });
+    const style = LAUNCH_SPLASH_THEMES.find((theme) => theme.name === launch.splashTheme);
+    assert.deepEqual(style && { light: style.light, dark: style.dark }, {
+      light: launch.light,
+      dark: launch.dark,
+    });
+  });
   test("the shipped theme opens on the manifest's splash", () => {
     assert.equal(launchTheme(DEFAULT_THEME_CHOICE).splashTheme, null);
   });
@@ -127,7 +148,7 @@ describe("launchTheme", () => {
     });
   });
 
-  test("custom cyan and red open on their vivid palette splash and keep the app's own inks", () => {
+  test("custom cyan and red use the vivid icon inks in both native splash layers", () => {
     const choice = chooseCustomInk(
       chooseCustomInk(DEFAULT_THEME_CHOICE, "primary", "#00e9ff"),
       "secondary",
@@ -147,8 +168,8 @@ describe("launchTheme", () => {
       primary: "#007380",
       secondary: "#d20003",
     });
-    assert.equal(launchTheme(choice).dark.primary, "#00e9ff");
-    assert.equal(launchTheme(choice).dark.secondary, "#ff1f13");
+    assert.deepEqual(launchTheme(choice).dark, selected?.dark);
+    assert.deepEqual(launchTheme(choice).light, selected?.light);
   });
 
   test("a custom colour can still match a preset ink", () => {
@@ -157,8 +178,7 @@ describe("launchTheme", () => {
       launchTheme(custom).splashTheme,
       launchTheme({ ...custom, primary: "blue" }).splashTheme,
     );
-    // What's saved is still what the app draws.
-    assert.equal(launchTheme(custom).light.primary, themeFor(custom).light.accent);
+    assert.equal(launchTheme(custom).light.primary, "#1f5fb8");
   });
 
   test("a kept custom colour that isn't chosen leaves the shipped splash", () => {

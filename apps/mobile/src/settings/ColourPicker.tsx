@@ -30,7 +30,7 @@ import { CELL, grid } from "@/catalog/grid";
 import { Hairline } from "@/catalog/Hairline";
 import { TextButton } from "@/components/TextButton";
 import { makeExternalStore, type ExternalStore } from "@/lib/externalStore";
-import { confirmAction } from "@/overlay/alert";
+import { showAlert } from "@/overlay/alert";
 import { CardEntries } from "@/overlay/CardEntries";
 import { presentOverlay } from "@/overlay/overlay";
 import { useThemeColor } from "@/theme/useThemeColor";
@@ -81,7 +81,7 @@ export const openColourPicker = (group: InkGroup, initial: string): void => {
         finish={finish}
       />
     ),
-  }).then((hex) => (hex === null ? cancelCustomInk() : setCustomInk(group, hex, confirmAction)));
+  }).then((hex) => (hex === null ? cancelCustomInk() : setCustomInk(group, hex, showAlert)));
 };
 
 /**
