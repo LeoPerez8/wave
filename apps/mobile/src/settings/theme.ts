@@ -8,6 +8,7 @@ import {
   launchTheme,
   readThemeChoice,
   resolveThemeChange,
+  storedThemeOnStart,
   themeFor,
   type Appearance,
   type AlertChoice,
@@ -20,6 +21,7 @@ import {
   type ThemeGroup,
   type ThemeState,
 } from "@wave/core";
+import { Storage } from "expo-sqlite/kv-store";
 import { Uniwind } from "uniwind";
 
 import { persistedSetting, sameFields } from "@/lib/persistedSetting";
@@ -32,6 +34,7 @@ import {
   getLauncherIcon,
   setLauncherIcon,
   showLauncherIcon,
+  storedLauncherIcon,
   useStoredLauncherIcon,
 } from "./launcherIcon";
 
@@ -74,8 +77,20 @@ const apply = (choice: ThemeChoice): void => {
   );
 };
 
+const THEME_KEY = "settings.theme";
+
+// An install from before the white default with no theme stored keeps the
+// teal over ember it shows (Core's `storedThemeOnStart`). Stored as it was
+// read, not as a change made here, so the Wave account doesn't push it.
+const keep = storedThemeOnStart({
+  storedTheme: Storage.getItemSync(THEME_KEY),
+  storedIcon: storedLauncherIcon()?.id ?? null,
+  launchThemeSaved: WaveNative.hasLaunchTheme(),
+});
+if (keep !== null) Storage.setItemSync(THEME_KEY, keep);
+
 const theme = persistedSetting<ThemeChoice>({
-  key: "settings.theme",
+  key: THEME_KEY,
   synced: true,
   read: readThemeChoice,
   write: (choice) => JSON.stringify(choice),

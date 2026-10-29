@@ -28,13 +28,13 @@ describe("resolveThemeChange", () => {
   test("Yes keeps the new colours and their icon", () => {
     const result = resolveThemeChange(current, next, "action");
     assert.deepEqual(result.choice, next);
-    assert.equal(result.icon.id, "rose_ember");
+    assert.equal(result.icon.id, "rose_white");
   });
 
   test("No keeps the new colours and stored icon, so a later colour change asks again", () => {
     const result = resolveThemeChange(current, next, "alternative");
     assert.deepEqual(result.choice, next);
-    assert.equal(result.icon.id, "teal_ember");
+    assert.equal(result.icon.id, "white_white");
     assert.equal(
       launcherIconSwitch(result.icon, choose({ primary: "rose", secondary: "sky" }), {
         dropsHomeScreenIcon: true,
@@ -49,7 +49,7 @@ describe("resolveThemeChange", () => {
 });
 
 describe("isDefaultThemeState", () => {
-  const rose = LAUNCHER_ICONS.find((icon) => icon.id === "rose_ember")!;
+  const rose = LAUNCHER_ICONS.find((icon) => icon.id === "rose_white")!;
 
   test("the shipped colours with the shipped icon have nothing to reset", () => {
     assert.equal(
@@ -77,11 +77,22 @@ const customIcon = (customPrimary: string, customSecondary: string): string =>
   ).id;
 
 describe("launcherIconFor", () => {
-  test("the shipped theme keeps the teal-over-amber icon (#94)", () => {
-    const icon = launcherIconFor(DEFAULT_THEME_CHOICE);
+  test("the shipped theme shows white waves on black, the first icon (#793)", () => {
+    assert.deepEqual(launcherIconFor(DEFAULT_THEME_CHOICE), {
+      id: "white_white",
+      primary: "white",
+      secondary: "white",
+      top: "#ffffff",
+      bottom: "#ffffff",
+    });
+    assert.equal(LAUNCHER_ICONS[0]?.id, "white_white");
+  });
+
+  test("Teal and Ember keep the teal-over-amber icon Wave shipped before (#94)", () => {
+    const icon = launcherIconFor(choose({ primary: "teal", secondary: "ember" }));
+    assert.equal(icon.id, "teal_ember");
     assert.equal(icon.top, "#14b7a6");
     assert.equal(icon.bottom, "#f5b83d");
-    assert.equal(LAUNCHER_ICONS[0]?.id, "teal_ember");
   });
 
   test("the top wave takes the primary and the bottom wave the secondary, in their dark tones", () => {
@@ -110,7 +121,7 @@ describe("launcherIconFor", () => {
     for (const group of ["primary", "secondary"] as const) {
       for (const [hex, ink] of samples) {
         const choice = chooseCustomInk(DEFAULT_THEME_CHOICE, group, hex);
-        const expected = group === "primary" ? `${ink}_ember` : `teal_${ink}`;
+        const expected = group === "primary" ? `${ink}_white` : `white_${ink}`;
         for (const light of THEME_SWATCHES.light) {
           for (const dark of THEME_SWATCHES.dark) {
             assert.equal(
@@ -143,7 +154,7 @@ describe("launcherIconFor", () => {
   });
 
   test("a kept custom colour doesn't change the icon while a preset is chosen", () => {
-    assert.equal(launcherIconFor(choose({ customPrimary: "#ff00aa" })).id, "teal_ember");
+    assert.equal(launcherIconFor(choose({ customPrimary: "#ff00aa" })).id, "white_white");
   });
 });
 
@@ -194,7 +205,7 @@ describe("launcherIconSwitch", () => {
   test("compares the next colours with the stored icon, including a vivid icon (#792)", () => {
     const stored = LAUNCHER_ICONS.find((icon) => icon.id === "vivid209_vivid29")!;
     const change = launcherIconSwitch(stored, DEFAULT_THEME_CHOICE, keeps);
-    assert.equal(change?.icon.id, "teal_ember");
+    assert.equal(change?.icon.id, "white_white");
     assert.equal(change?.warning.title, "Change the app icon too?");
     assert.deepEqual(planAlert(change!.warning).buttons, [
       { label: "No", tone: "accent", choice: "alternative" },
@@ -237,17 +248,24 @@ describe("launcherIconSwitch", () => {
       choose({ primary: "violet" }),
       keeps,
     );
-    assert.equal(change?.icon.id, "violet_ember");
+    assert.equal(change?.icon.id, "violet_white");
     assert.equal(change?.warning.title, "Change the app icon too?");
   });
 
-  test("resetting to defaults brings back the teal-over-amber icon", () => {
+  test("resetting to defaults asks to bring back the white icon (#793)", () => {
     const change = launcherIconSwitch(
       launcherIconFor(choose({ primary: "rose", secondary: "sky" })),
       DEFAULT_THEME_CHOICE,
       keeps,
     );
-    assert.equal(change?.icon.id, "teal_ember");
+    assert.equal(change?.icon.id, "white_white");
+  });
+
+  test("resetting to defaults doesn't ask when the white icon is already on", () => {
+    const white = launcherIconFor(DEFAULT_THEME_CHOICE);
+    assert.equal(launcherIconSwitch(white, DEFAULT_THEME_CHOICE, drops), null);
+    const cream = choose({ primary: "custom", customPrimary: "#fffdd0" });
+    assert.equal(launcherIconSwitch(launcherIconFor(cream), DEFAULT_THEME_CHOICE, drops), null);
   });
 
   test("warns first when the launcher drops the home-screen icon on a switch", () => {
@@ -256,7 +274,7 @@ describe("launcherIconSwitch", () => {
       choose({ secondary: "gold" }),
       drops,
     );
-    assert.equal(change?.icon.id, "teal_gold");
+    assert.equal(change?.icon.id, "white_gold");
     assert.match(change?.warning?.message ?? "", /home screen/);
     assert.equal(change?.warning?.action.destructive, undefined);
   });

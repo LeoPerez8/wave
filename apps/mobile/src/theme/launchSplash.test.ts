@@ -103,6 +103,56 @@ describe("launch splash styles", () => {
     );
   });
 
+  test("the shipped splash draws white waves in dark mode and the text colour in light (#793)", () => {
+    assert.deepEqual(
+      {
+        primary: shows(SHIPPED_SPLASH, "dark").primary,
+        secondary: shows(SHIPPED_SPLASH, "dark").secondary,
+      },
+      { primary: "#ffffff", secondary: "#ffffff" },
+    );
+    assert.deepEqual(
+      {
+        primary: shows(SHIPPED_SPLASH, "light").primary,
+        secondary: shows(SHIPPED_SPLASH, "light").secondary,
+      },
+      { primary: "#121b1d", secondary: "#121b1d" },
+    );
+  });
+
+  test("white waves ship on the other grounds, and teal over ember gets a style of its own", () => {
+    // White over white on fog and Slate (positions 0 and 1; white is ink 24, "o").
+    assert.deepEqual(shows("Wl.0.1.o.o", "dark"), {
+      background: "#0a1113",
+      primary: "#ffffff",
+      secondary: "#ffffff",
+    });
+    // Teal over ember on fog and true black was the manifest's splash before white.
+    assert.deepEqual(shows("Wl.0.0.0.6", "light"), {
+      background: "#e0ecef",
+      primary: "#006a5f",
+      secondary: "#a14f09",
+    });
+    assert.deepEqual(shows("Wl.0.0.0.6", "dark"), {
+      background: "#000000",
+      primary: "#14b7a6",
+      secondary: "#f5b83d",
+    });
+    assert.equal(style("Wl.0.0.o.o"), undefined);
+  });
+
+  test("every style of the 24 earlier inks keeps its name; white adds the rest", () => {
+    const names = [...stylesByName.keys()].filter((name) => name.startsWith("Wl."));
+    assert.equal(names.length, 36 * 25 * 25 - 1);
+    for (let light = 0; light < 6; light++)
+      for (let dark = 0; dark < 6; dark++)
+        for (let primary = 0; primary < 24; primary++)
+          for (let secondary = 0; secondary < 24; secondary++) {
+            const name = `Wl.${light}.${dark}.${primary.toString(36)}.${secondary.toString(36)}`;
+            assert.ok(stylesByName.has(name), name);
+          }
+  });
+
   test("every splash draws the moving logo and hands over to the app theme", () => {
     for (const name of [SHIPPED_SPLASH, ...LAUNCH_SPLASH_THEMES.map((theme) => theme.name)]) {
       assert.equal(item(name, "windowSplashScreenAnimatedIcon"), "@drawable/launch_logo", name);

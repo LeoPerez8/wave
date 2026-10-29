@@ -22,6 +22,9 @@ const choose = (change: Partial<ThemeChoice>): ThemeChoice => ({
 const choiceKey = (choice: ThemeChoice): string =>
   `${choice.light}/${choice.dark}/${choice.primary}/${choice.secondary}`;
 
+/** The splash style a choice opens with. */
+const named = (choice: Partial<ThemeChoice>) => launchTheme(choose(choice)).splashTheme;
+
 /** The colours of the splash theme a choice opens with. */
 const splash = (choice: ThemeChoice) => {
   const name = launchTheme(choice).splashTheme;
@@ -48,7 +51,7 @@ const everyChoice = (): ThemeChoice[] =>
 describe("launchTheme", () => {
   test("uses the stored icon's waves with the app's current grounds after No (#792)", () => {
     const choice = choose({ light: "sand", dark: "navy", primary: "rose", secondary: "gold" });
-    const stored = launcherIconFor(DEFAULT_THEME_CHOICE);
+    const stored = launcherIconFor(choose({ primary: "teal", secondary: "ember" }));
     const launch = launchTheme(choice, stored);
     assert.deepEqual(launch.light, {
       background: "#ede6da",
@@ -66,8 +69,51 @@ describe("launchTheme", () => {
       dark: launch.dark,
     });
   });
-  test("the shipped theme opens on the manifest's splash", () => {
-    assert.equal(launchTheme(DEFAULT_THEME_CHOICE).splashTheme, null);
+  test("the shipped theme opens on the manifest's splash: white waves in dark, the text colour in light (#793)", () => {
+    assert.deepEqual(launchTheme(DEFAULT_THEME_CHOICE), {
+      splashTheme: null,
+      light: { background: "#e0ecef", primary: "#121b1d", secondary: "#121b1d" },
+      dark: { background: "#000000", primary: "#ffffff", secondary: "#ffffff" },
+    });
+  });
+
+  test("the white waves take each light ground's own text colour, as the app's default inks do", () => {
+    for (const light of THEME_SWATCHES.light)
+      for (const dark of THEME_SWATCHES.dark) {
+        const choice = choose({ light: light.id, dark: dark.id });
+        const theme = themeFor(choice);
+        const launch = launchTheme(choice);
+        assert.deepEqual(launch.light, {
+          background: theme.light.background,
+          primary: theme.light.foreground,
+          secondary: theme.light.foreground,
+        });
+        assert.deepEqual(launch.dark, {
+          background: theme.dark.background,
+          primary: "#ffffff",
+          secondary: "#ffffff",
+        });
+      }
+  });
+
+  test("Teal over Ember on the shipped grounds now opens on a splash style of its own", () => {
+    const choice = choose({ primary: "teal", secondary: "ember" });
+    assert.equal(launchTheme(choice).splashTheme, "Wl.0.0.0.6");
+    assert.deepEqual(splash(choice), {
+      light: { background: "#e0ecef", primary: "#006a5f", secondary: "#a14f09" },
+      dark: { background: "#000000", primary: "#14b7a6", secondary: "#f5b83d" },
+    });
+  });
+
+  test("splash styles keep their names; the white ones are new (#793)", () => {
+    assert.equal(named({ primary: "rose", secondary: "gold" }), "Wl.0.0.4.7");
+    assert.equal(
+      named({ light: "sand", dark: "navy", primary: "teal", secondary: "ember" }),
+      "Wl.1.3.0.6",
+    );
+    assert.equal(named({ dark: "slate" }), "Wl.0.1.o.o");
+    assert.equal(named({ primary: "teal" }), "Wl.0.0.0.o");
+    assert.equal(named({ secondary: "sky" }), "Wl.0.0.o.a");
   });
 
   test("a chosen primary or secondary opens on a splash whose logo wears it", () => {
@@ -99,8 +145,8 @@ describe("launchTheme", () => {
       const name = launchTheme(choice).splashTheme;
       if (name !== null) assert.ok(names.has(name), `${JSON.stringify(choice)}: ${name}`);
     }
-    assert.equal(LAUNCH_SPLASH_THEMES.length, 20735);
-    assert.equal(names.size, 20735);
+    assert.equal(LAUNCH_SPLASH_THEMES.length, 36 * 625 - 1);
+    assert.equal(names.size, 36 * 625 - 1);
     for (const name of names) {
       assert.match(name, /^[A-Za-z][A-Za-z0-9_.]*$/);
       assert.ok(name.length <= 10, `compact Android style name: ${name}`);
@@ -109,7 +155,7 @@ describe("launchTheme", () => {
 
   test("every background pair and palette ink pair ships exactly once, except the manifest default", () => {
     const choices = new Set(LAUNCH_SPLASH_THEMES.map((theme) => choiceKey(theme.choice)));
-    assert.equal(choices.size, 20735);
+    assert.equal(choices.size, 36 * 625 - 1);
     for (const light of THEME_SWATCHES.light) {
       for (const dark of THEME_SWATCHES.dark) {
         for (const pair of INK_PAIRS) {
@@ -141,11 +187,14 @@ describe("launchTheme", () => {
   });
 
   test("a palette splash uses the icon's shipped teal and ember dark inks on other grounds", () => {
-    assert.deepEqual(splash(choose({ light: "sand", dark: "navy" }))?.dark, {
-      background: "#0a0f1f",
-      primary: "#14b7a6",
-      secondary: "#f5b83d",
-    });
+    assert.deepEqual(
+      splash(choose({ light: "sand", dark: "navy", primary: "teal", secondary: "ember" }))?.dark,
+      {
+        background: "#0a0f1f",
+        primary: "#14b7a6",
+        secondary: "#f5b83d",
+      },
+    );
   });
 
   test("custom cyan and red use the vivid icon inks in both native splash layers", () => {

@@ -11,6 +11,7 @@ import {
   CUSTOM_INK,
   DEFAULT_THEME_CHOICE,
   THEME_SWATCHES,
+  WHITE_INK,
   isDefaultThemeChoice,
   themeFor,
   type ThemeChoice,
@@ -66,16 +67,19 @@ const launchColors = (scheme: ThemeColors): LaunchColors => ({
 
 // Each mode's tones depend only on its ground and one palette ink, not the
 // other mode or wave. Reuse those corrections across the catalog's pairs.
+// White is chosen as the Default swatch rather than as a hex, so its light
+// tone is the ground's own text colour, as in the app.
 const paletteTones = new Map<string, LaunchColors>();
 const paletteTone = (choice: ThemeChoice, ink: PaletteInk, scheme: Scheme): LaunchColors => {
-  const key = `${scheme}/${choice[scheme]}/${ink[scheme]}`;
+  const id = ink.id === WHITE_INK ? WHITE_INK : CUSTOM_INK;
+  const key = `${scheme}/${choice[scheme]}/${id}/${ink[scheme]}`;
   let colors = paletteTones.get(key);
   if (colors === undefined) {
     colors = launchColors(
       themeFor({
         ...choice,
-        primary: CUSTOM_INK,
-        secondary: CUSTOM_INK,
+        primary: id,
+        secondary: id,
         customPrimary: ink[scheme],
         customSecondary: ink[scheme],
       })[scheme],

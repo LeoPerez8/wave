@@ -435,6 +435,9 @@ class WaveNativeModule : Module() {
       }
     }
 
+    /** Whether a launch theme was ever saved: Wave ran before on this phone's data. */
+    Function("hasLaunchTheme") { LaunchThemeStore.isSaved(context) }
+
     /** Saves Core's `launchTheme` for the next cold start and picks its splash (Android 13+). */
     AsyncFunction("setLaunchTheme") { theme: Map<String, Any?> ->
       val launch = LaunchTheme.fromJs(theme) ?: throw IllegalArgumentException("Malformed launch theme: $theme")

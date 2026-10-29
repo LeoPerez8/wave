@@ -11,6 +11,7 @@ import {
   chooseCustomInk,
   customInkPreview,
   readThemeChoice,
+  storedThemeOnStart,
   themeContrastIssues,
   themeFor,
   themeSwatchRows,
@@ -27,8 +28,33 @@ const brighter = (a: string, b: string): boolean =>
   contrastRatio(a, "#000000") > contrastRatio(b, "#000000");
 
 describe("themeFor", () => {
-  test("the default choice is the shipped theme", () => {
-    assert.deepEqual(themeFor(DEFAULT_THEME_CHOICE), DEFAULT_THEME);
+  test("the default choice is the shipped neutrals with white inks: white in dark, the text colour in light (#793)", () => {
+    const theme = themeFor(DEFAULT_THEME_CHOICE);
+    assert.deepEqual(theme.dark, {
+      ...DEFAULT_THEME.dark,
+      accent: "#ffffff",
+      highlight: "#ffffff",
+    });
+    assert.deepEqual(theme.light, {
+      ...DEFAULT_THEME.light,
+      accent: "#121b1d",
+      highlight: "#121b1d",
+    });
+  });
+
+  test("Teal and Ember still give the theme Wave shipped before", () => {
+    assert.deepEqual(themeFor(choose({ primary: "teal", secondary: "ember" })), DEFAULT_THEME);
+  });
+
+  test("the default inks take each light ground's own text colour and stay white on every dark ground", () => {
+    for (const light of THEME_SWATCHES.light)
+      for (const dark of THEME_SWATCHES.dark) {
+        const theme = themeFor(choose({ light: light.id, dark: dark.id }));
+        assert.equal(theme.light.accent, theme.light.foreground, light.id);
+        assert.equal(theme.light.highlight, theme.light.foreground, light.id);
+        assert.equal(theme.dark.accent, "#ffffff", dark.id);
+        assert.equal(theme.dark.highlight, "#ffffff", dark.id);
+      }
   });
 
   test("every preset combination meets WCAG AA in both schemes", () => {
@@ -59,7 +85,10 @@ describe("themeFor", () => {
   });
 
   test("Slate is still offered, and gives the night slate theme Wave shipped before", () => {
-    assert.deepEqual(themeFor(choose({ dark: "slate" })).dark, NIGHT_SLATE);
+    assert.deepEqual(
+      themeFor(choose({ dark: "slate", primary: "teal", secondary: "ember" })).dark,
+      NIGHT_SLATE,
+    );
   });
 
   test("the chosen background is the ground, and grouped areas share a tinted dark ground", () => {
@@ -155,6 +184,36 @@ describe("readThemeChoice", () => {
   });
 });
 
+describe("storedThemeOnStart", () => {
+  const ranBefore = { storedTheme: null, storedIcon: null, launchThemeSaved: true };
+
+  test("an install that ran an older Wave with nothing stored keeps teal over ember (#793)", () => {
+    const stored = storedThemeOnStart(ranBefore);
+    assert.notEqual(stored, null);
+    assert.deepEqual(readThemeChoice(stored), {
+      light: "fog",
+      dark: "black",
+      primary: "teal",
+      secondary: "ember",
+      customPrimary: null,
+      customSecondary: null,
+    });
+  });
+
+  test("a fresh install stores nothing and starts on the white default", () => {
+    assert.equal(storedThemeOnStart({ ...ranBefore, launchThemeSaved: false }), null);
+  });
+
+  test("a stored theme is kept as it is", () => {
+    const storedTheme = JSON.stringify({ ...DEFAULT_THEME_CHOICE, primary: "rose" });
+    assert.equal(storedThemeOnStart({ ...ranBefore, storedTheme }), null);
+  });
+
+  test("once this Wave has stored its icon, nothing stored means the white default", () => {
+    assert.equal(storedThemeOnStart({ ...ranBefore, storedIcon: "white_white" }), null);
+  });
+});
+
 describe("themeSwatchRows", () => {
   test("lists light and dark backgrounds, primary and secondary, with the current choice marked", () => {
     const rows = themeSwatchRows(choose({ dark: "slate", primary: "rose" }), "dark");
@@ -164,7 +223,7 @@ describe("themeSwatchRows", () => {
         ["light", ["fog"]],
         ["dark", ["slate"]],
         ["primary", ["rose"]],
-        ["secondary", ["ember"]],
+        ["secondary", ["white"]],
       ],
     );
   });
@@ -182,12 +241,35 @@ describe("themeSwatchRows", () => {
     );
   });
 
+  test("Primary and Secondary start with a Default swatch: white in dark mode, the text colour in light (#793)", () => {
+    for (const [scheme, colour, mark] of [
+      ["dark", "#ffffff", "#000000"],
+      ["light", "#121b1d", "#ffffff"],
+    ] as const) {
+      const [, , primary, secondary] = themeSwatchRows(DEFAULT_THEME_CHOICE, scheme);
+      for (const row of [primary, secondary])
+        assert.deepEqual(row?.swatches[0], {
+          id: "white",
+          label: "Default",
+          colour,
+          selected: true,
+          mark,
+        });
+    }
+    const [, , primary, secondary] = themeSwatchRows(choose({ primary: "teal" }), "dark");
+    assert.equal(primary?.swatches[0]?.selected, false);
+    assert.equal(secondary?.swatches[0]?.selected, true);
+  });
+
   test("ink swatches show the colour they would take, readability adjustment included", () => {
     const [, , primary] = themeSwatchRows(DEFAULT_THEME_CHOICE, "light");
     const lime = primary?.swatches.find((s) => s.id === "lime");
     assert.ok(lime !== undefined && lime.colour !== "#8cc63f");
     assert.ok(contrastRatio(lime.colour, DEFAULT_THEME.light.background) >= 4.5);
-    assert.equal(primary?.swatches[0]?.colour, DEFAULT_THEME.light.accent);
+    assert.equal(
+      primary?.swatches.find((s) => s.id === "teal")?.colour,
+      DEFAULT_THEME.light.accent,
+    );
   });
 
   test("the chosen swatch's check mark is black on a pale swatch and white on a deep one", () => {
@@ -230,7 +312,7 @@ describe("custom primary and secondary", () => {
       const choice = readThemeChoice(
         JSON.stringify({ ...DEFAULT_THEME_CHOICE, secondary: "custom", customSecondary }),
       );
-      assert.equal(choice.secondary, "ember", String(customSecondary));
+      assert.equal(choice.secondary, "white", String(customSecondary));
       assert.equal(choice.customSecondary, null);
     }
   });

@@ -153,10 +153,11 @@ export function ThemeSettingsSection() {
       <Text className="mt-2 font-sans text-footnote text-secondary">
         Cards, groups, separators and text follow the background you choose for each mode. Primary
         colours progress, toggles and what&apos;s active; secondary marks favorites and what&apos;s
-        playing; the last swatch of each takes any colour. A colour that wouldn&apos;t read on your
-        background is deepened or brightened until it does. When new colours would change the app
-        icon, Wave asks first; if you say yes, the icon takes them, or the presets closest to custom
-        ones, once you leave Wave.
+        playing. Default is white in dark mode and the text colour in light; the last swatch of each
+        takes any colour. A colour that wouldn&apos;t read on your background is deepened or
+        brightened until it does. When new colours would change the app icon, Wave asks first; if
+        you say yes, the icon takes them, or the icon colours closest to custom ones, once you leave
+        Wave.
       </Text>
       <View className="mt-4 items-start">
         <TextButton
