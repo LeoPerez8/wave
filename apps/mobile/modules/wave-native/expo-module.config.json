@@ -11,7 +11,8 @@
       "expo.modules.wavenative.account.WaveAccountModule",
       "expo.modules.wavenative.lookup.LibraryLookupModule",
       "expo.modules.wavenative.log.AppLogModule",
-      "expo.modules.wavenative.share.ShareModule"
+      "expo.modules.wavenative.share.ShareModule",
+      "expo.modules.wavenative.recognize.RecognizeModule"
     ]
   }
 }
