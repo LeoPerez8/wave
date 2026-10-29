@@ -158,7 +158,9 @@ describe("shareShortcutFiles", () => {
     /** The file a `@type/name` reference resolves to, whatever its qualifiers. */
     const resource = (reference: string): string => {
       const [, type, name] = /^@(\w+)\/(\w+)$/.exec(reference) ?? [];
-      const path = Object.keys(files).find((p) => new RegExp(`^${type}(-[^/]*)?/${name}\\.xml$`).test(p));
+      const path = Object.keys(files).find((p) =>
+        new RegExp(`^${type}(-[^/]*)?/${name}\\.xml$`).test(p),
+      );
       assert.ok(path, `no file for ${reference}`);
       return files[path]!;
     };
