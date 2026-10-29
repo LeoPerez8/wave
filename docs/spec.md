@@ -661,6 +661,7 @@ One row per playback start: either a Library track id or a streamed song's video
 - Android 13+ lists exactly English and Português (Brasil) in Wave's per-app language settings. The `withAppLanguages` config plugin writes `localeConfig` and adds `locale|layoutDirection` to MainActivity's handled configuration changes. Native configuration callbacks and a foreground refresh invalidate the phone-language cache and notify `subscribeLocalisation`; the provider updates in place without restarting the Activity or touching playback, the queue or position. The preview switch still gates Portuguese, including an explicit Android choice.
 - Screens read the catalogue through `useLocalisation()` under the root's `LocalisationProvider`; code outside React (Effect services, notifications) reads the same value with `currentLocalisation()`. Log text and internal errors stay in English and out of the catalogue.
 - Translated so far: the tab bar's labels and its TalkBack labels, hint and action. Until the glossary is approved, Portuguese terms follow Apple Music's pt-BR (Início, Biblioteca, Buscar).
+- Home, Discover, Stats, Recaps, Listening History and the share cards read from the catalogue (#784). A Discover mix saved as a playlist is named in the language Wave is in when it's saved and keeps that name. Portuguese month and weekday names are lower case mid-sentence ("Em outubro de 2026, você ouviu por") and capitalised at the start of a title or header ("Outubro de 2026", "Segunda-feira").
 
 ### Streamed song counts
 
