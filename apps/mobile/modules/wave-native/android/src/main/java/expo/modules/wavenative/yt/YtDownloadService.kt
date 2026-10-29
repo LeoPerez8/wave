@@ -1,5 +1,6 @@
 package expo.modules.wavenative.yt
 
+import expo.modules.wavenative.locale.NativeText
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -35,6 +36,7 @@ class YtDownloadService : Service() {
   private val downloads get() = AndroidDownloads.get(this)
   private var wakeLock: PowerManager.WakeLock? = null
   private var wifiLock: WifiManager.WifiLock? = null
+  private var stopLanguage: (() -> Unit)? = null
   /** When it started (elapsed realtime), for the log line if Android ends it on its time limit. */
   private var startedAt = 0L
   /** Why it's stopping, once it asked to ([onIdle]); otherwise Android stopped it. */
@@ -43,12 +45,15 @@ class YtDownloadService : Service() {
 
   override fun onCreate() {
     super.onCreate()
+    expo.modules.wavenative.locale.NativeLanguage.init(this)
+    stopLanguage = NativeText.listen {
+      createChannel()
+      lastShown = null
+      lastPostedAt = 0L
+      refresh()
+    }
     startedAt = SystemClock.elapsedRealtime()
-    getSystemService(NotificationManager::class.java).createNotificationChannel(
-      NotificationChannel(CHANNEL, "Downloads", NotificationManager.IMPORTANCE_LOW).apply {
-        description = "Songs being saved to the Library"; setShowBadge(false)
-      },
-    )
+    createChannel()
     // With the screen off the CPU and Wi-Fi radio may sleep; both locks are renewed while work remains.
     wakeLock = getSystemService(PowerManager::class.java).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "wave:downloads").also {
       it.setReferenceCounted(false); it.acquire(LOCK_MS)
@@ -57,6 +62,14 @@ class YtDownloadService : Service() {
     wifiLock = (applicationContext.getSystemService(WifiManager::class.java))?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "wave:downloads")?.also {
       it.setReferenceCounted(false); it.acquire()
     }
+  }
+
+  private fun createChannel() {
+    getSystemService(NotificationManager::class.java).createNotificationChannel(
+      NotificationChannel(CHANNEL, NativeText.get("downloads"), NotificationManager.IMPORTANCE_LOW).apply {
+        description = NativeText.get("downloadsDescription"); setShowBadge(false)
+      },
+    )
   }
 
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -85,6 +98,8 @@ class YtDownloadService : Service() {
   }
 
   override fun onDestroy() {
+    stopLanguage?.invoke()
+    stopLanguage = null
     downloads.stop(stopping ?: DownloadServiceStop.ANDROID)
     wakeLock?.let { if (it.isHeld) it.release() }; wakeLock = null
     wifiLock?.let { if (it.isHeld) it.release() }; wifiLock = null
@@ -131,18 +146,18 @@ class YtDownloadService : Service() {
     // With several songs on their way, the whole run (Core's `downloadRunNotice`, as Settings › Downloads counts it).
     val run = downloads.runNotice
     val title = when {
-      pause != null -> "Paused: YouTube is limiting downloads"
+      pause != null -> NativeText.get("pausedYoutube")
       run != null -> run.title
-      saving -> "Saving to the Library"
-      queued -> "Waiting to download"
-      else -> "Downloading"
+      saving -> NativeText.get("saving")
+      queued -> NativeText.get("waiting")
+      else -> NativeText.get("downloading")
     }
-    builder.setContentTitle(title).setContentText(run?.text ?: song?.get("title") as? String ?: "A YT Music song")
+    builder.setContentTitle(title).setContentText(run?.text ?: song?.get("title") as? String ?: NativeText.get("ytSong"))
     if (pause != null) builder.setWhen(pause.until).setShowWhen(true).setUsesChronometer(true).setChronometerCountDown(true)
     if (run != null) builder.setProgress(run.total, run.finished, false) else songProgress(builder, current, saving, queued)
     if (current != null && !saving) {
       val intent = Intent(this, YtDownloadService::class.java).setAction(CANCEL).putExtra("jobId", current["id"] as String)
-      builder.addAction(Notification.Action.Builder(null, "Cancel", PendingIntent.getService(this, 1, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)).build())
+      builder.addAction(Notification.Action.Builder(null, NativeText.get("cancel"), PendingIntent.getService(this, 1, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)).build())
     }
     return builder.build()
   }
@@ -152,9 +167,15 @@ class YtDownloadService : Service() {
     // Several songs (an album, or songs asked for one after another): how many download now (hold a slot), how many
     // wait their turn to be saved, and how many are left (Core's `queuedDownloadCounts`, the same rule).
     val (running, left, toSave) = downloads.jobs.counts()
-    if (running + left + toSave > 1) builder.setSubText(listOfNotNull("$running downloading".takeIf { running > 0 }, "$toSave saving".takeIf { toSave > 0 }, "$left left".takeIf { left > 0 }).joinToString(" · "))
+    if (running + left + toSave > 1) builder.setSubText(listOfNotNull(countText("runningCount", running).takeIf { running > 0 }, countText("savingCount", toSave).takeIf { toSave > 0 }, countText("leftCount", left).takeIf { left > 0 }).joinToString(" · "))
     val percent = percent(current)
     if (percent != null && !saving && !queued) builder.setProgress(100, percent, false) else builder.setProgress(0, 0, true)
+  }
+
+  private fun countText(key: String, count: Int): String {
+    val form = if (key == "leftCount" && count == 1) "leftOne" else key
+    val number = if (NativeText.language == "en") count.toString() else java.text.NumberFormat.getNumberInstance(java.util.Locale.forLanguageTag(NativeText.language)).format(count)
+    return NativeText.get(form).replace("%s", number)
   }
 
   private companion object {

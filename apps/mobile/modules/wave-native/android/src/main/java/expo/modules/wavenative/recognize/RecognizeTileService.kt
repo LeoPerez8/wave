@@ -6,6 +6,12 @@ import android.service.quicksettings.TileService
 
 /** Only brings Wave forward; capture starts in the visible Recognize card. */
 class RecognizeTileService : TileService() {
+  override fun onStartListening() {
+    super.onStartListening()
+    expo.modules.wavenative.locale.NativeLanguage.init(this)
+    qsTile?.let { it.label = expo.modules.wavenative.locale.NativeText.get("recognize"); it.updateTile() }
+  }
+
   override fun onClick() {
     super.onClick()
     if (isLocked) unlockAndRun { openWave() } else openWave()
