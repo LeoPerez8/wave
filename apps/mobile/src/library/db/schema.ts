@@ -995,3 +995,14 @@ export const followReleaseCache = sqliteTable("follow_release_cache", {
 export const hiddenFollowReleases = sqliteTable("hidden_follow_releases", {
   key: text("key").primaryKey(),
 });
+
+export const followShowCache = sqliteTable("follow_show_cache", {
+  key: text("key").primaryKey(),
+  attractionId: text("attraction_id").notNull(),
+  country: text("country").notNull(),
+  shows: text("shows", { mode: "json" }).$type<import("@wave/core").FollowShow[]>().notNull(),
+  checkedAt: integer("checked_at").notNull(),
+});
+export const notifiedFollowShows = sqliteTable("notified_follow_shows", {
+  id: text("id").primaryKey(),
+});

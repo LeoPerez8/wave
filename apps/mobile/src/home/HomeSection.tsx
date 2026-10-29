@@ -1,5 +1,6 @@
 import { useLocalisation } from "@/localisation/localisation";
 import { NewReleases } from "./NewReleases";
+import { UpcomingShows } from "./UpcomingShows";
 import {
   discoverMixCaption,
   discoverMixRowsToBuild,
@@ -406,6 +407,7 @@ function MostPlayedArtists({ title }: SectionProps) {
 const SECTIONS: Record<HomeSectionId, ComponentType<SectionProps>> = {
   discover: Discover,
   "new-releases": NewReleases,
+  "upcoming-shows": UpcomingShows,
   "recently-added": ({ home, title }) =>
     home.recentlyAdded !== undefined &&
     home.recentlyAdded.length > 0 && (

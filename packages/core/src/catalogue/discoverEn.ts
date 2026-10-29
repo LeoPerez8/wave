@@ -36,8 +36,6 @@ export const discoverEn = {
   undo: "Undo",
   searchLimit: (minutes: number) =>
     `Search limit reached · new mixes in about ${formatNumber("en", minutes)} min`,
-  recommendationsFailed: "Couldn't load recommendations.",
-  tryAgain: "Try Again",
   openMixFailed: "Couldn't open the mix's actions",
   saveMixFailed: "Couldn't save the mix as a playlist",
   saved: (name: string) => `Saved ${name}`,

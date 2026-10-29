@@ -8,6 +8,10 @@ import { shareEn } from "./catalogue/shareEn.ts";
 import { downloadNoticeEn } from "./catalogue/downloadNoticeEn.ts";
 import { nativeEn } from "./catalogue/nativeEn.ts";
 import { autoEn } from "./catalogue/autoEn.ts";
+import { playbackTextEn } from "./catalogue/playbackTextEn.ts";
+import { lyricsLanguagesEn } from "./catalogue/lyricsLanguagesEn.ts";
+import { showsEn } from "./catalogue/showsEn.ts";
+import { upcomingShowsEn } from "./catalogue/upcomingShowsEn.ts";
 /**
  * Wave's interface text in English: the shape every other catalogue must fill
  * (`Catalogue`), so a phrase missing from one fails the type check. Group
@@ -21,6 +25,10 @@ export const en = {
   downloadNotice: downloadNoticeEn,
   native: nativeEn,
   auto: autoEn,
+  lyricsLanguages: lyricsLanguagesEn,
+  playbackText: playbackTextEn,
+  shows: showsEn,
+  upcomingShows: upcomingShowsEn,
   home: homeEn,
   arrangement: arrangementEn,
   discover: discoverEn,

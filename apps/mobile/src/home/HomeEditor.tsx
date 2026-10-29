@@ -47,7 +47,7 @@ export function HomeEditor({
               inline
               shown={arrangement.discoverRows}
               hidden={hiddenDiscoverRows(arrangement)}
-              title={(id) => discoverRowTitle(id, strings)}
+              title={(row) => discoverRowTitle(row, strings)}
               place={strings.arrangement.discover}
               hiddenHeading=""
               canRemove={arrangement.discoverRows.length > 1}

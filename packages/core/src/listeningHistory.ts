@@ -23,6 +23,9 @@ export interface ListeningHistoryDay<T> {
 const calendarDay = (date: Date): number =>
   Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()) / 86_400_000;
 
+// Portuguese writes weekdays and months in lower case; a header starts with a capital.
+const header = (text: string): string => text.charAt(0).toUpperCase() + text.slice(1);
+
 /** Groups history in the phone's timezone, headed in [language]; [now] makes day headers deterministic. */
 export const listeningHistoryDays = <T extends { readonly startedAt: number }>(
   plays: readonly T[],
@@ -31,8 +34,6 @@ export const listeningHistoryDays = <T extends { readonly startedAt: number }>(
 ): readonly ListeningHistoryDay<T>[] => {
   const today = new Date(now);
   const strings = catalogueOf(language).listeningHistory;
-  // Portuguese writes weekdays and months in lower case; a header starts with a capital.
-  const header = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
   const groups = new Map<number, { key: string; title: string; plays: T[] }>();
   // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh copy; Hermes lacks toSorted
   for (const play of [...plays].sort((a, b) => b.startedAt - a.startedAt)) {

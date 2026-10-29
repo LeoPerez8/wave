@@ -179,10 +179,10 @@ export const mixPullCanStart = (scrollX: number): boolean => {
 
 /**
  * The toast for a refresh whose YouTube Music searches wait for the search
- * allowance, [waitMs] more at most (`searchRoomAt`), in [strings]' language.
+ * allowance, [waitMs] more at most (`searchRoomAt`), in [catalogue]'s language.
  */
-export const mixRefreshWaitNotice = (waitMs: number, strings: Catalogue = en): string =>
-  strings.discover.searchLimit(Math.max(1, Math.ceil(waitMs / 60_000)));
+export const mixRefreshWaitNotice = (waitMs: number, catalogue: Catalogue = en): string =>
+  catalogue.discover.searchLimit(Math.max(1, Math.ceil(waitMs / 60_000)));
 
 /** Source-order partition and stable shown-time ordering on bounded CPU steps. */
 export function* freshFirstSteps<T>(

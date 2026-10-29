@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
+import { catalogueOf } from "./localisation.ts";
 import {
   EMPTY_QUEUE,
   answerPlayingWalk,
   explicitPassOver,
   explicitPlayNotice,
+  explicitSkipNotice,
   playReplacesQueue,
   queuedPassedOver,
   reduceQueue,
@@ -239,6 +241,24 @@ describe("what a play says when Don't play explicit passed over its songs", () =
       notice({ type: "addToQueue", trackIds: ["b", "d"] }),
       "Didn't add: every song is explicit.",
     );
+  });
+
+  test("says it in Portuguese for an app in pt-BR", () => {
+    const pt = catalogueOf("pt-BR");
+    const said = (command: QueueCommand) =>
+      explicitPlayNotice(command, passOver, (trackId) => titles.get(trackId) ?? trackId, pt);
+    assert.equal(said(playOf("a b c", 1)), `"Bad" foi pulada: é explícita.`);
+    assert.equal(said(playOf("b d", 0)), `"Bad" não foi reproduzida: é explícita.`);
+    assert.equal(said(playOf("b d")), "Nada foi reproduzido: todas as músicas são explícitas.");
+    assert.equal(
+      said({ type: "playNext", trackIds: ["b"] }),
+      `"Bad" não foi adicionada: é explícita.`,
+    );
+    assert.equal(
+      said({ type: "addToQueue", trackIds: ["b", "d"] }),
+      "Nada foi adicionado: todas as músicas são explícitas.",
+    );
+    assert.equal(explicitSkipNotice("Bad", pt), `"Bad" foi pulada: é explícita.`);
   });
 
   test("a play that plays clean songs, or passes none over, says nothing", () => {

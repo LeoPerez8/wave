@@ -33,6 +33,7 @@ import {
 } from "@wave/core";
 
 import { appRuntime } from "@/library/runtime";
+import { currentLocalisation } from "@/localisation/localisation";
 import { WavePlayer } from "@/native/wavePlayer";
 import { searchUnsearchedSong } from "@/library/unsearchedEntries";
 import { showToast } from "@/overlay/toast";
@@ -134,12 +135,15 @@ const settleComingUp = (trackId: string, settled: Settlement | null): void => {
     // Found as a song the queue passes over (explicit), it leaves the queue (Core's `reduceQueue`).
     const becomes = ytTrackId(settled.becomes.song.videoId);
     if (song !== null && passOverNow([toYtQueueTrack(settled.becomes.song, null)])(becomes)) {
-      void showToast(explicitSkipNotice(song.title));
+      void showToast(explicitSkipNotice(song.title, currentLocalisation().strings));
     }
     void dispatch(trackId, becomes);
     return;
   }
-  const step = song === null ? null : playingAnswerStep(song, settled, { chosen: false });
+  const step =
+    song === null
+      ? null
+      : playingAnswerStep(song, settled, { chosen: false }, currentLocalisation().strings);
   if (step !== null && step.kind !== "play") void showToast(step.notice);
   void dispatch(trackId, null);
 };

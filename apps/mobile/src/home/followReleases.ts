@@ -1,11 +1,14 @@
+import { checkFollowShows } from "./followShows";
 import {
   checkDue,
+  followCheckDue,
   resolveDeezerFollowArtist,
   deezerArtistSearchUrl,
   deezerReleases,
   followFeed,
   matchFollowRelease,
   pickYtArtist,
+  type FollowCheckContext,
   type FollowRelease,
   type FollowedArtist,
 } from "@wave/core";
@@ -17,6 +20,8 @@ import { appRuntime } from "@/library/runtime";
 import { useFollows } from "@/library/follows";
 import { settledTurnEffect } from "@/lib/backgroundWork";
 import { useFollowedArtistsEnabled, followedArtistsEnabled } from "@/settings/followedArtists";
+import { currentFollowCountry } from "@/settings/followCountry";
+import { ticketmasterKey } from "@/library/showNotifications";
 import { useYtMusicEnabled, ytMusicEnabled } from "@/settings/ytMusic";
 import { useDontPlayExplicit } from "@/settings/dontPlayExplicit";
 import { withSearchTurn } from "@/ytmusic/searchAllowance";
@@ -46,19 +51,41 @@ const ytRead = <A>(read: Effect.Effect<A, YtMusicError>) =>
     );
   });
 
-/** Foreground Follows check; failed artists retain their last successful answers and due time. */
-export const checkFollowReleases = (youtubeEnabled = ytMusicEnabled()) =>
+/**
+ * The Follows check, on Home opening and in the daily background task (`followCheckTask.ts`);
+ * the context picks the due window. Failed artists retain their last successful answers and
+ * due time. With the switch off, nothing followed or nothing due, it sends no request.
+ */
+export const checkFollowReleases = (
+  youtubeEnabled = ytMusicEnabled(),
+  context: FollowCheckContext = "home",
+) =>
   Effect.gen(function* () {
     if (!allowed()) return;
     const store = yield* LibraryStore;
-    const yt = yield* YtMusic;
     const follows = yield* store.listFollows;
     const cache = yield* store.followReleaseCache;
+    const shows = yield* store.followShowCache;
+    if (
+      !followCheckDue({
+        enabled: allowed(),
+        follows,
+        releaseChecks: cache.artists,
+        showChecks: shows.artists,
+        country: ticketmasterKey === "" ? "" : currentFollowCountry(),
+        now: Date.now(),
+        context,
+      })
+    )
+      return;
+    const yt = yield* YtMusic;
+    // A shows failure never holds back the releases.
+    yield* checkFollowShows(context).pipe(Effect.ignore);
     for (const follow of follows) {
       yield* settledTurnEffect;
       if (!allowed()) return;
       const previous = cache.artists.find((a) => a.key === follow.key);
-      if (!checkDue(previous?.checkedAt ?? null, Date.now(), "home")) continue;
+      if (!checkDue(previous?.checkedAt ?? null, Date.now(), context)) continue;
       yield* Effect.gen(function* () {
         let id = follow.deezerId;
         if (id === null) {

@@ -85,7 +85,8 @@ function HomePlaceholders({ newRecap }: { newRecap: RecapPeriod | null }) {
       <HomeRecap period={newRecap} />
       <View style={newRecap === null ? FIRST_SECTION : undefined}>
         {arrangement.sections
-          .filter((id) => id !== "new-releases")
+          // Followed artists' sections draw their own wait, if any.
+          .filter((id) => id !== "new-releases" && id !== "upcoming-shows")
           .map((id) => (
             <HomeSectionSkeleton key={id} id={id} />
           ))}

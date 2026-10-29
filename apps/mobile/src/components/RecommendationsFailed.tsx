@@ -26,9 +26,9 @@ export function RecommendationsFailed({
         accessibilityLiveRegion="polite"
         className="flex-1 font-sans text-subheadline text-secondary"
       >
-        {message ?? strings.discover.recommendationsFailed}
+        {message ?? strings.playbackText.couldntLoadRecommendations}
       </Text>
-      <TextButton label={strings.discover.tryAgain} onPress={onRetry} />
+      <TextButton label={strings.playbackText.tryAgain} onPress={onRetry} />
     </View>
   );
 }

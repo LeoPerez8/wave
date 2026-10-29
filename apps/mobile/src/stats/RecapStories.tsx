@@ -540,7 +540,6 @@ function SummarySlide({
 }
 
 function Slide({ recap, slide }: { recap: LoadedRecap; slide: LoadedRecapSlide }) {
-  const { strings } = useLocalisation();
   switch (slide.kind) {
     case "minutes":
       return <MinutesSlide period={recap.period} minutes={slide.minutes} />;

@@ -1,3 +1,4 @@
+import { useLocalisation } from "@/localisation/localisation";
 import {
   IconPlayerPauseFilled,
   IconPlayerPlayFilled,
@@ -17,6 +18,7 @@ import { playbackState } from "@/playback/Player";
  * three seconds (Core's queue engine decides), like Apple Music.
  */
 export function Transport() {
+  const { strings } = useLocalisation();
   const playing = useSyncExternalStore(
     playbackState.subscribe,
     () => playbackState.get().playWhenReady,
@@ -27,7 +29,7 @@ export function Transport() {
         tone="primary"
         haptic="impact"
         icon={IconPlayerTrackPrevFilled}
-        label="Previous track"
+        label={strings.playbackText.previousTrack}
         onPress={skipToPrevious}
         iconSize={CELL * 4}
         size={CELL * 7}
@@ -36,7 +38,7 @@ export function Transport() {
         tone="primary"
         haptic="impact"
         icon={playing ? IconPlayerPauseFilled : IconPlayerPlayFilled}
-        label={playing ? "Pause" : "Play"}
+        label={playing ? strings.playbackText.pause : strings.playbackText.play}
         onPress={togglePlayPause}
         iconSize={CELL * 6}
         size={CELL * 9}
@@ -45,7 +47,7 @@ export function Transport() {
         tone="primary"
         haptic="impact"
         icon={IconPlayerTrackNextFilled}
-        label="Next track"
+        label={strings.playbackText.nextTrack}
         onPress={skipToNext}
         iconSize={CELL * 4}
         size={CELL * 7}

@@ -295,6 +295,9 @@ jobs:
       # Genius's read-only client token (docs/spec.md, "Genius About"). Metro inlines it into the
       # JS bundle, which "Bundle JavaScript" builds once for full builds and repacks alike.
       EXPO_PUBLIC_GENIUS_ACCESS_TOKEN: ${{ secrets.GENIUS_ACCESS_TOKEN }}
+      # Ticketmaster Discovery's client key, inlined the same way; without it the APK never asks
+      # for shows (docs/spec.md, "Followed artists").
+      EXPO_PUBLIC_TICKETMASTER_API_KEY: ${{ secrets.TICKETMASTER_API_KEY }}
       HEAD_SHA: ${{ needs.checks.outputs.sha }}
       # ccache (scripts/ci/ccache.sh) keeps its cache in ~/.cache/ccache.
       # Paths under the checkout are hashed relative to it, and the working directory
@@ -506,6 +509,12 @@ jobs:
             echo "Carries Genius's token"
           else
             echo "::warning::No GENIUS_ACCESS_TOKEN secret: this APK never asks Genius."
+          fi
+          if [ -n "${EXPO_PUBLIC_TICKETMASTER_API_KEY:-}" ]; then
+            grep -qaF -- "$EXPO_PUBLIC_TICKETMASTER_API_KEY" "$bundle"
+            echo "Carries Ticketmaster's key"
+          else
+            echo "::warning::No TICKETMASTER_API_KEY secret: this APK never asks for shows."
           fi
           cp "$built" "$RUNNER_TEMP/$name"
           echo "path=$RUNNER_TEMP/$name" >> "$GITHUB_OUTPUT"

@@ -30,8 +30,6 @@ export const discoverPtBr: typeof discoverEn = {
   undo: "Desfazer",
   searchLimit: (minutes: number) =>
     `Limite de buscas atingido · novos mixes em cerca de ${formatNumber("pt-BR", minutes)} min`,
-  recommendationsFailed: "Não foi possível carregar as recomendações.",
-  tryAgain: "Tentar Novamente",
   openMixFailed: "Não foi possível abrir as ações do mix",
   saveMixFailed: "Não foi possível salvar o mix como playlist",
   saved: (name: string) => `${name} salvo`,

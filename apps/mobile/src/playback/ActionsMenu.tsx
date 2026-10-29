@@ -1,4 +1,5 @@
 import { useFollow } from "@/library/follows";
+import { currentLocalisation, useLocalisation } from "@/localisation/localisation";
 import { followMenuPress } from "@/library/FollowButton";
 import {
   PLAY_ACTION_LABELS,
@@ -66,7 +67,12 @@ export const openItemCard = (
   render: (close: () => void) => ReactNode,
   anchor = pressedRect(),
 ): void => {
-  openOverlay({ label: targetHeading(target, undefined)?.title ?? "Actions", anchor, render });
+  openOverlay({
+    label:
+      targetHeading(target, undefined)?.title ?? currentLocalisation().strings.playbackText.actions,
+    anchor,
+    render,
+  });
 };
 
 /**
@@ -290,6 +296,7 @@ function ActionsMenu({
     collectionSongs,
     playing,
   });
+  const { strings } = useLocalisation();
   const artist = target.kind === "artist" ? target.items[0] : undefined;
   const follow = useFollow(artist?.name ?? "");
   const followEntries: readonly MenuChoice[] =
@@ -298,7 +305,7 @@ function ActionsMenu({
       : [
           {
             action: "follow",
-            label: follow === null ? "Follow" : "Following",
+            label: follow === null ? strings.playbackText.follow : strings.playbackText.following,
             onPress: () => followMenuPress(artist, close),
           },
         ];

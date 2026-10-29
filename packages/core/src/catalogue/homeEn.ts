@@ -2,7 +2,7 @@ import type { HomeSectionId } from "../homeSections.ts";
 
 /** Home: its title's button, section titles, empty states and edit mode. */
 export const homeEn = {
-  /** Each section's title, in sentence case as Home heads it (New releases has its own). */
+  /** Each section's title, in sentence case as Home heads it (followed artists' have their own). */
   sections: {
     discover: "Discover",
     "recently-added": "Recently added",
@@ -12,7 +12,7 @@ export const homeEn = {
     "most-played-artists": "Most played artists",
     favorites: "Favorites",
     stats: "Stats",
-  } satisfies Record<Exclude<HomeSectionId, "new-releases">, string>,
+  } satisfies Record<Exclude<HomeSectionId, "new-releases" | "upcoming-shows">, string>,
   settings: "Settings",
   seeAll: "See all",
   emptyTitle: "Nothing here yet",

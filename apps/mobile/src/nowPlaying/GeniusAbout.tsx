@@ -1,3 +1,4 @@
+import { useLocalisation } from "@/localisation/localisation";
 import { useState } from "react";
 import { Text, View } from "react-native";
 
@@ -13,20 +14,25 @@ const FOLDED_LINES = 3;
  * a tap (another tap folds it again). Nothing without a description.
  */
 export function GeniusAbout({ description }: { description: string | null }) {
+  const { strings } = useLocalisation();
   const [expanded, setExpanded] = useState(false);
   if (description === null) return null;
   return (
     <TextButton
-      label={`About this song, from Genius. ${description}`}
+      label={strings.playbackText.aboutThisSongFromGeniusValue(description)}
       tone="primary"
       accessibilityState={{ expanded }}
-      accessibilityHint={expanded ? "Shows less of it" : "Shows all of it"}
+      accessibilityHint={
+        expanded ? strings.playbackText.showsLessOfIt : strings.playbackText.showsAllOfIt
+      }
       onPress={() => setExpanded((was) => !was)}
       className="rounded-2xl bg-surface"
       style={{ padding: CELL * 2, marginBottom: CELL * 2 }}
     >
       <View>
-        <Text className="font-sans text-footnote font-semibold text-secondary">About · Genius</Text>
+        <Text className="font-sans text-footnote font-semibold text-secondary">
+          {strings.playbackText.aboutGenius}
+        </Text>
         <Text
           numberOfLines={expanded ? undefined : FOLDED_LINES}
           className="font-sans text-body text-foreground"
@@ -38,7 +44,7 @@ export function GeniusAbout({ description }: { description: string | null }) {
           className="font-sans text-footnote font-medium text-accent"
           style={{ marginTop: CELL }}
         >
-          {expanded ? "Show Less" : "More"}
+          {expanded ? strings.playbackText.showLess : strings.playbackText.more}
         </Text>
       </View>
     </TextButton>

@@ -1,5 +1,8 @@
+import { en, type Catalogue } from "./catalogueEn.ts";
+import type { AppLanguage } from "./localisation.ts";
+
 /**
- * Lyrics translated into the phone's language (docs/spec.md, "Lyrics
+ * Lyrics translated into the app's language (docs/spec.md, "Lyrics
  * translation"), through Google Translate's keyless web endpoint: the
  * request, the reply read back line for line, the same-language check and
  * what the phone keeps of it.
@@ -134,117 +137,17 @@ export const lyricsTranslationTarget = (locale: string): string => {
   return RENAMED[language] ?? language;
 };
 
-/** The languages Google Translate translates into, named in English. */
-const LANGUAGE_NAMES: Readonly<Record<string, string>> = {
-  af: "Afrikaans",
-  am: "Amharic",
-  ar: "Arabic",
-  az: "Azerbaijani",
-  be: "Belarusian",
-  bg: "Bulgarian",
-  bn: "Bengali",
-  bs: "Bosnian",
-  ca: "Catalan",
-  cs: "Czech",
-  cy: "Welsh",
-  da: "Danish",
-  de: "German",
-  el: "Greek",
-  en: "English",
-  eo: "Esperanto",
-  es: "Spanish",
-  et: "Estonian",
-  eu: "Basque",
-  fa: "Persian",
-  fi: "Finnish",
-  fil: "Filipino",
-  fr: "French",
-  ga: "Irish",
-  gl: "Galician",
-  gu: "Gujarati",
-  ha: "Hausa",
-  haw: "Hawaiian",
-  he: "Hebrew",
-  hi: "Hindi",
-  hr: "Croatian",
-  ht: "Haitian Creole",
-  hu: "Hungarian",
-  hy: "Armenian",
-  id: "Indonesian",
-  ig: "Igbo",
-  is: "Icelandic",
-  it: "Italian",
-  ja: "Japanese",
-  jv: "Javanese",
-  ka: "Georgian",
-  kk: "Kazakh",
-  km: "Khmer",
-  kn: "Kannada",
-  ko: "Korean",
-  ku: "Kurdish",
-  ky: "Kyrgyz",
-  la: "Latin",
-  lb: "Luxembourgish",
-  lo: "Lao",
-  lt: "Lithuanian",
-  lv: "Latvian",
-  mg: "Malagasy",
-  mi: "Maori",
-  mk: "Macedonian",
-  ml: "Malayalam",
-  mn: "Mongolian",
-  mr: "Marathi",
-  ms: "Malay",
-  mt: "Maltese",
-  my: "Burmese",
-  ne: "Nepali",
-  nl: "Dutch",
-  no: "Norwegian",
-  nb: "Norwegian",
-  pa: "Punjabi",
-  pl: "Polish",
-  ps: "Pashto",
-  pt: "Portuguese",
-  ro: "Romanian",
-  ru: "Russian",
-  rw: "Kinyarwanda",
-  sd: "Sindhi",
-  si: "Sinhala",
-  sk: "Slovak",
-  sl: "Slovenian",
-  sm: "Samoan",
-  sn: "Shona",
-  so: "Somali",
-  sq: "Albanian",
-  sr: "Serbian",
-  st: "Sesotho",
-  su: "Sundanese",
-  sv: "Swedish",
-  sw: "Swahili",
-  ta: "Tamil",
-  te: "Telugu",
-  tg: "Tajik",
-  th: "Thai",
-  tk: "Turkmen",
-  tl: "Filipino",
-  tr: "Turkish",
-  tt: "Tatar",
-  ug: "Uyghur",
-  uk: "Ukrainian",
-  ur: "Urdu",
-  uz: "Uzbek",
-  vi: "Vietnamese",
-  xh: "Xhosa",
-  yi: "Yiddish",
-  yo: "Yoruba",
-  "zh-cn": "Chinese (Simplified)",
-  "zh-tw": "Chinese (Traditional)",
-  zu: "Zulu",
-};
+/**
+ * Google's code for the app's [language], the language lyrics are translated
+ * into: `pt` for an app in pt-BR, `en` for an app in English, whatever the
+ * phone's language.
+ */
+export const appLyricsTranslationTarget = (language: AppLanguage): string =>
+  lyricsTranslationTarget(language);
 
-/** The language Google's [code] names, in English, for "already in <language>"; the code itself when unknown. */
-export const lyricsTranslationLanguageName = (code: string): string =>
-  LANGUAGE_NAMES[languageOf(code)] ?? code;
+/** The language Google's [code] names, in [catalogue]'s language, for "already in <language>"; the code itself when unknown. */
+export const lyricsTranslationLanguageName = (code: string, catalogue: Catalogue = en): string =>
+  (catalogue.lyricsLanguages as Readonly<Record<string, string>>)[languageOf(code)] ?? code;
 
 /**
  * Where the phone keeps [song]'s translation into [target]: [song] says

@@ -146,6 +146,17 @@ declare class WaveNativeModule extends NativeModule<WaveNativeEvents> {
    * Absent from an APK built before it (a JS-only repack).
    */
   preferredLanguages?(): string[];
+  phoneCountry?(): string;
+  showCountries?(language: string): { code: string; name: string }[];
+  showNotificationsEnabled?(): boolean;
+  openShowNotificationSettings?(): void;
+  postShowNotification?(
+    id: string,
+    title: string,
+    body: string,
+    url: string,
+    channel: string,
+  ): boolean;
   /**
    * Whether the phone is online (Android checked its default network reaches
    * the internet) and on mobile data rather than Wi-Fi: the native cache,

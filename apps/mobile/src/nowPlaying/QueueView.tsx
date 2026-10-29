@@ -1,3 +1,4 @@
+import { currentLocalisation, useLocalisation } from "@/localisation/localisation";
 import type { LegendListRef } from "@legendapp/list/react-native";
 import { AnimatedLegendList } from "@legendapp/list/reanimated";
 import {
@@ -10,7 +11,6 @@ import {
 } from "@tabler/icons-react-native";
 import {
   currentEntry,
-  counted,
   queueHistory,
   upNext,
   upNextMove,
@@ -123,9 +123,15 @@ function Toggle({ icon: Icon, label, on, onPress, onLongPress, accessibilityHint
 
 /** What the repeat toggles say for each mode. */
 export const REPEAT_LABEL: Record<RepeatMode, string> = {
-  off: "Repeat",
-  all: "Repeat",
-  one: "Repeat One",
+  get off() {
+    return currentLocalisation().strings.playbackText.repeat;
+  },
+  get all() {
+    return currentLocalisation().strings.playbackText.repeat;
+  },
+  get one() {
+    return currentLocalisation().strings.playbackText.repeatOne;
+  },
 };
 
 /**
@@ -198,6 +204,7 @@ function BarGround({ colors, top, scroll, start }: Ground) {
  * heading ("Magic Queue · from <seed>" over a Magic Queue).
  */
 function UpNextBar() {
+  const { strings } = useLocalisation();
   const ground = use(BarGroundContext);
   const queue = useQueue();
   const shuffle = useShuffleControl();
@@ -217,13 +224,13 @@ function UpNextBar() {
       </View>
       <Hairline />
       <View className="flex-1 flex-row items-end justify-between" style={{ paddingBottom: CELL }}>
-        <CatalogLine className="shrink">{magic ?? "Up next"}</CatalogLine>
+        <CatalogLine className="shrink">{magic ?? strings.playbackText.upNext}</CatalogLine>
         {count > 0 && (
           <Text
             className="font-sans text-footnote text-secondary"
             style={{ fontVariant: ["tabular-nums"] }}
           >
-            {counted(count, "song")}
+            {strings.playbackText.songCount(count)}
           </Text>
         )}
       </View>
@@ -246,16 +253,25 @@ const queueSource = (
 });
 
 /** Screen-reader actions an Up Next row offers, one list per place it can move to. */
-const SONG_ACTIONS = { name: "longpress", label: "Song actions" } as const;
+const SONG_ACTIONS = {
+  name: "longpress",
+  get label() {
+    return currentLocalisation().strings.playbackText.songActions;
+  },
+} as const;
 const UP_NEXT_ACTIONS = new Map(
   [false, true].flatMap((up) =>
     [false, true].map((down) => [
       `${up}:${down}`,
       [
         SONG_ACTIONS,
-        { name: "remove", label: "Remove from Up Next" },
-        ...(up ? [{ name: "moveUp", label: "Move up" }] : []),
-        ...(down ? [{ name: "moveDown", label: "Move down" }] : []),
+        { name: "remove", label: currentLocalisation().strings.playbackText.removeFromUpNext },
+        ...(up
+          ? [{ name: "moveUp", label: currentLocalisation().strings.playbackText.moveUp }]
+          : []),
+        ...(down
+          ? [{ name: "moveDown", label: currentLocalisation().strings.playbackText.moveDown }]
+          : []),
       ],
     ]),
   ),
@@ -299,6 +315,7 @@ const UpNextRow = memo(function UpNextRow({
   drag,
   actions,
 }: RowProps) {
+  const { strings } = useLocalisation();
   useRenderCount("UpNextRow");
   const secondary = useThemeColor("secondary");
   const key = shown.rowKey;
@@ -311,7 +328,7 @@ const UpNextRow = memo(function UpNextRow({
           iconSize={20}
           size={grid.upNextCell}
           tone="secondary"
-          label={`Remove ${title} from Up Next`}
+          label={strings.playbackText.removeValueFromUpNext(title)}
           onPress={() => removeQueueEntry(key)}
         />
         <GestureDetector gesture={pan}>
@@ -326,7 +343,7 @@ const UpNextRow = memo(function UpNextRow({
         </GestureDetector>
       </>
     ),
-    [title, key, pan, secondary],
+    [title, key, pan, secondary, strings],
   );
   return (
     <Animated.View style={[{ height: ROW, opacity: lifted ? 0 : 1 }, style]}>
@@ -336,7 +353,7 @@ const UpNextRow = memo(function UpNextRow({
         onLongPress={actions.onLongPress}
         extraActions={UP_NEXT_ACTIONS.get(`${up}:${down}`)}
         onExtraAction={actions.onAction}
-        accessibilityHint="Plays this song now. Long press for song actions"
+        accessibilityHint={strings.playbackText.playsThisSongNowLongPressForSongActions}
         accessory={accessory}
       />
     </Animated.View>
@@ -354,6 +371,7 @@ const HistoryRow = memo(function HistoryRow({
   shown: SongRowPresentation;
   actions: QueueRowActions;
 }) {
+  const { strings } = useLocalisation();
   useRenderCount("HistoryRow");
   return (
     <SongRow
@@ -362,7 +380,7 @@ const HistoryRow = memo(function HistoryRow({
       onLongPress={actions.onLongPress}
       extraActions={HISTORY_ACTIONS}
       onExtraAction={actions.onAction}
-      accessibilityHint="Plays this song again. Long press for song actions"
+      accessibilityHint={strings.playbackText.playsThisSongAgainLongPressForSongActions}
     />
   );
 });
@@ -389,6 +407,7 @@ function BackToCurrentSong({
   bottom: number;
   onPress: () => void;
 }) {
+  const { strings } = useLocalisation();
   const reduceMotion = useReducedMotion();
   const Arrow = direction === "up" ? IconArrowUp : IconArrowDown;
   return (
@@ -401,8 +420,8 @@ function BackToCurrentSong({
     >
       <TextButton
         variant="pill"
-        label="Current Song"
-        accessibilityLabel="Back to Current Song"
+        label={strings.playbackText.currentSong}
+        accessibilityLabel={strings.playbackText.backToCurrentSong}
         onPress={onPress}
         className="flex-row items-center"
         style={{ height: PILL, gap: CELL }}
@@ -411,7 +430,7 @@ function BackToCurrentSong({
           <>
             <Arrow size={16} color={color} strokeWidth={2} />
             <Text className="font-sans text-subheadline font-semibold" style={{ color }}>
-              Current Song
+              {strings.playbackText.currentSong}
             </Text>
           </>
         )}
@@ -500,6 +519,7 @@ export function UpNextList({
   ground: GroundColors;
   paneTop: number;
 }) {
+  const { strings } = useLocalisation();
   useRenderCount("UpNextList");
   usePerfVisible("queue");
   const queue = useQueue();
@@ -658,7 +678,7 @@ export function UpNextList({
 
   const renderItem = useCallback(
     ({ item }: { item: QueueRow }) => {
-      if (item.kind === "historyHead") return <SectionHead label="History" />;
+      if (item.kind === "historyHead") return <SectionHead label={strings.playbackText.history} />;
       if (item.kind === "bar") return <UpNextBar />;
       const track = tracks.get(item.entry.trackId);
       const played = item.kind === "history";
@@ -668,7 +688,7 @@ export function UpNextList({
         <UpNextRow
           shown={row}
           index={item.index}
-          title={track?.title ?? "Song"}
+          title={track?.title ?? strings.playbackText.song}
           up={item.index > 0}
           // Only the last row's changes as Up Next grows or shrinks.
           down={item.index < entries.length - 1}
@@ -678,7 +698,7 @@ export function UpNextList({
         />
       );
     },
-    [tracks, missingIds, drag, rowDrag, entries.length, model, actions],
+    [tracks, missingIds, drag, rowDrag, entries.length, model, actions, strings],
   );
   // Legend List re-renders a row only when its item or extraData changes, and a
   // queue picked back up after JS restarted learns its tracks after the first render.
@@ -688,7 +708,7 @@ export function UpNextList({
     <RecommendationsFailed onRetry={retryMagicBatch} style={{ paddingTop: CELL * 2 }} />
   ) : emptySeed !== null ? (
     <RecommendationsFailed
-      message={`No songs found like ${emptySeed}.`}
+      message={strings.playbackText.noSongsFoundLikeValue(emptySeed)}
       onRetry={retryMagicBatch}
       style={{ paddingTop: CELL * 2 }}
     />
@@ -702,7 +722,9 @@ export function UpNextList({
     <View style={{ paddingTop: CELL * 2 }}>
       {failure ?? (
         <Text className="font-sans text-subheadline text-secondary">
-          {playingKey === null ? "Nothing is playing." : "Nothing up next."}
+          {playingKey === null
+            ? strings.playbackText.nothingIsPlaying
+            : strings.playbackText.nothingUpNext}
         </Text>
       )}
     </View>
