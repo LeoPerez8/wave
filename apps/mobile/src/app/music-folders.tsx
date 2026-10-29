@@ -1,7 +1,7 @@
 import { currentLocalisation } from "@/localisation/localisation";
 import { useLocalisation } from "@/localisation/localisation";
 import { useScreenContent } from "@/lib/screenTiming";
-import { counted, describeFolder } from "@wave/core";
+import { describeFolder } from "@wave/core";
 import { IconMinus } from "@tabler/icons-react-native";
 import { ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -44,7 +44,8 @@ type FolderRowProps = {
 };
 
 function FolderRow({ path, detail, removeLabel, removable, onRemove }: FolderRowProps) {
-  const label = describeFolder(path);
+  const { strings } = useLocalisation();
+  const label = describeFolder(path, strings);
   const parent = label.relativePath.includes("/")
     ? label.relativePath.slice(0, label.relativePath.lastIndexOf("/"))
     : null;
@@ -140,10 +141,12 @@ function FolderLists({
         <FolderRow
           key={root.path}
           path={root.path}
-          detail={root.lastScannedAt === null ? undefined : counted(root.trackCount, "song")}
+          detail={
+            root.lastScannedAt === null ? undefined : strings.library.songCount(root.trackCount)
+          }
           removeLabel={strings.settings.remove}
           removable={roots.length > 1 && !scanning}
-          onRemove={() => void confirmRemove(root.path, describeFolder(root.path).name)}
+          onRemove={() => void confirmRemove(root.path, describeFolder(root.path, strings).name)}
         />
       ))}
       <View className="items-start">

@@ -2,8 +2,6 @@ import { useFollow } from "@/library/follows";
 import { currentLocalisation, useLocalisation } from "@/localisation/localisation";
 import { followMenuPress } from "@/library/FollowButton";
 import {
-  PLAY_ACTION_LABELS,
-  YT_PLAYLIST_DOWNLOAD_ACTION_LABELS,
   currentEntry,
   menuLayout,
   type DownloadOrigin,
@@ -245,11 +243,12 @@ function usePlaylistDownloadEntries(
   origin: DownloadOrigin | null,
   close: () => void,
 ): MenuChoice[] {
+  const { strings } = useLocalisation();
   const inLibrary = useLoadedInLibrary();
   const download = useYtPlaylistDownload(entries, inLibrary);
   return download.actions.map((action) => ({
     action,
-    label: YT_PLAYLIST_DOWNLOAD_ACTION_LABELS[action],
+    label: strings.downloads.playlistActions[action],
     onPress: () => {
       close();
       runYtPlaylistDownloadAction(action, entries, inLibrary, origin);
@@ -363,6 +362,7 @@ export function ItemMenuCard({
   /** A collection's Play ([shuffle] false) and Shuffle: closes the menu and plays it. */
   play: (shuffle: boolean) => void;
 }) {
+  const { strings } = useLocalisation();
   const layout = menuLayout(target.kind, actions);
   const cards = layout.cards.flatMap((card): PlayCardChoice[] => {
     if (card === "play") return [{ action: card, onPress: () => play(false) }];
@@ -372,7 +372,13 @@ export function ItemMenuCard({
   // A playlist's download entries follow Add to Playlist, before Rename and Delete.
   const entries = layout.list.flatMap((entry): MenuChoice[] =>
     entry.action === "shuffle"
-      ? [{ action: "shuffle", label: PLAY_ACTION_LABELS.shuffle, onPress: () => play(true) }]
+      ? [
+          {
+            action: "shuffle",
+            label: strings.itemActions.playLabels.shuffle,
+            onPress: () => play(true),
+          },
+        ]
       : [entry, ...(entry.action === "addToPlaylist" ? downloads : [])],
   );
 

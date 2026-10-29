@@ -181,8 +181,6 @@ class WaveNativeModule : Module() {
       expo.modules.wavenative.shows.ShowNotifications.post(context, id, title, body, url, channel)
     }
     /** The phone's preferred languages, in order: Wave's per-app language when set, else the system's. */
-    Function("setPortuguesePreview") { enabled: Boolean -> expo.modules.wavenative.locale.NativeLanguage.setPreview(context, enabled) }
-
     Function("preferredLanguages") { PreferredLanguages.read(context) }
 
     Function("getDefaultMusicFolder") {

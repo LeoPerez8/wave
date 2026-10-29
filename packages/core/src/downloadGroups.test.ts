@@ -281,3 +281,24 @@ describe("Downloading groups while following the journal by its changes", () => 
     ]);
   });
 });
+
+describe("Downloading groups in Portuguese", () => {
+  test("Songs, Favorites and the replacement runs are named in Portuguese; a playlist keeps its name", () => {
+    const jobs = [
+      job("own"),
+      job("a", { origin: roadTrip }),
+      job("b", { origin: roadTrip }),
+      job("star", { origin: { kind: "favorites", id: "favorites", name: "Favorites" } }),
+      job("up", { origin: { kind: "quality", id: "upgrade", name: "Quality upgrade" } }),
+    ];
+    assert.deepEqual(
+      downloadingList(jobs, "pt-BR").groups.map((group) => [group.name, group.line]),
+      [
+        ["Músicas", "1 música restante"],
+        ["Road Trip", "2 músicas restantes"],
+        ["Favoritas", "1 música restante"],
+        ["Melhoria de qualidade", "1 música restante"],
+      ],
+    );
+  });
+});

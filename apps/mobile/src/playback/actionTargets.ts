@@ -1,6 +1,5 @@
 import {
   canFixSong,
-  counted,
   groupSongs,
   joinArtists,
   queueSongTrackId,
@@ -19,6 +18,7 @@ import {
 import * as Result from "effect/Result";
 
 import type { ArtistImageSource } from "@/catalog/ArtistImage";
+import { currentLocalisation } from "@/localisation/localisation";
 import type { LibrarySection } from "@/catalog/sections";
 import type { LibraryCounts } from "@/library/db/counts";
 import type { NativeYtSong } from "@/native/waveYtMusic";
@@ -150,9 +150,12 @@ interface KindInfo<T> {
     find: FindInLibrary,
     pending: ReadonlySet<string>,
   ) => ActionItem;
-  /** What a count of them is called ("12 songs"). */
-  readonly noun: string;
+  /** A count of them in the app's language ("12 songs"). */
+  readonly count: (count: number) => string;
 }
+
+const library = () => currentLocalisation().strings.library;
+const songCount = (count: number): string => library().songCount(count);
 
 const cover = (thumbPath: string | null): readonly string[] =>
   thumbPath === null ? [] : [thumbPath];
@@ -207,7 +210,7 @@ const KIND_TRACK: KindInfo<TrackItem> = {
             inPlaylist: item.playlistItem !== undefined,
           }
         : ytFacts(item, favorites, find(item.ytSong), pending),
-  noun: "song",
+  count: songCount,
 };
 
 const KIND_ALBUM: KindInfo<AlbumRow> = {
@@ -218,7 +221,7 @@ const KIND_ALBUM: KindInfo<AlbumRow> = {
     covers: cover(album.thumbPath),
   }),
   facts: (album) => ({ artistIds: album.albumArtistIds }),
-  noun: "album",
+  count: (count) => library().kindCounts.album(count),
 };
 
 /** Runs [run] with a mixed item's own kind and the item, typed for each other. */
@@ -234,33 +237,33 @@ const KINDS: { readonly [K in ItemKind]: KindInfo<ItemOf[K]> } = {
     songs: (artist) => itemSongs("artists", artist.id),
     heading: (artist) => ({
       title: artist.name,
-      subtitle: counted(artist.trackCount, "song"),
+      subtitle: songCount(artist.trackCount),
       covers: undefined,
       artist,
     }),
     facts: () => NO_FACTS,
-    noun: "artist",
+    count: (count) => library().kindCounts.artist(count),
   },
   // Genres have no picture; their headings are text only.
   playlist: {
     songs: (playlist) => itemSongs("playlists", playlist.id),
     heading: (playlist) => ({
       title: playlist.name,
-      subtitle: counted(playlist.trackCount, "song"),
+      subtitle: songCount(playlist.trackCount),
       covers: playlist.thumbPaths,
     }),
     facts: (playlist) => ({ hasImage: playlist.hasImage }),
-    noun: "playlist",
+    count: (count) => library().kindCounts.playlist(count),
   },
   genre: {
     songs: (genre) => itemSongs("genres", genre.id),
     heading: (genre) => ({
       title: genre.name,
-      subtitle: counted(genre.trackCount, "song"),
+      subtitle: songCount(genre.trackCount),
       covers: undefined,
     }),
     facts: () => NO_FACTS,
-    noun: "genre",
+    count: (count) => library().kindCounts.genre(count),
   },
   section: {
     songs: (section) => librarySectionSongs(section.slug),
@@ -268,12 +271,12 @@ const KINDS: { readonly [K in ItemKind]: KindInfo<ItemOf[K]> } = {
       const count = sectionSongs?.[section.slug];
       return {
         title: section.label,
-        subtitle: count === undefined ? "" : counted(count, "song"),
+        subtitle: count === undefined ? "" : songCount(count),
         covers: undefined,
       };
     },
     facts: () => NO_FACTS,
-    noun: "section",
+    count: (count) => library().kindCounts.section(count),
   },
   // Albums and songs checked together: each acts as its own kind would.
   mixed: {
@@ -297,7 +300,7 @@ const KINDS: { readonly [K in ItemKind]: KindInfo<ItemOf[K]> } = {
         : mixed.kind === "ytAlbum"
           ? { streamed: true, artistNames: mixed.item.artists }
           : { albumId: mixed.item.id, artistIds: mixed.item.albumArtistIds },
-    noun: "item",
+    count: (count) => library().kindCounts.item(count),
   },
 };
 
@@ -408,4 +411,4 @@ export const targetHeading = (
 
 /** "12 songs", "3 albums": what a count of the target's items is called. */
 export const targetCount = (target: ActionItems): string =>
-  counted(target.items.length, kindInfo(target).noun);
+  kindInfo(target).count(target.items.length);

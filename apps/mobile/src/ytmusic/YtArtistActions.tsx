@@ -1,6 +1,6 @@
 import { useFollow } from "@/library/follows";
 import { followMenuPress } from "@/library/FollowButton";
-import { PLAY_ACTION_LABELS, menuLayout, type DiscoverSong } from "@wave/core";
+import { menuLayout, type DiscoverSong } from "@wave/core";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import { Text, View } from "react-native";
@@ -83,7 +83,7 @@ function YtArtistActionsMenu({
   }));
   const entries = layout.list.map(({ action }): MenuChoice => ({
     action,
-    label: PLAY_ACTION_LABELS[action],
+    label: strings.itemActions.playLabels[action],
     onPress: play(true),
   }));
 

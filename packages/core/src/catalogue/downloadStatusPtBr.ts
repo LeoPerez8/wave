@@ -25,6 +25,8 @@ export const downloadStatusPtBr: typeof downloadStatusEn = {
     ytUnavailable: "Esta música não está disponível no YouTube Music",
     notFound: "Não encontrada online",
   },
+  youtubePaused: (minutes) =>
+    `Pausado: o YouTube está limitando os downloads. Próxima tentativa em ${formatNumber("pt-BR", minutes)} min`,
   downloadingCount: (n) => `${formatNumber("pt-BR", n)} baixando`,
   savingCount: (n) => `${formatNumber("pt-BR", n)} salvando`,
   waitingCount: (n) => `${formatNumber("pt-BR", n)} aguardando`,

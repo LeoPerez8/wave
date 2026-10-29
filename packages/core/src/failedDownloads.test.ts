@@ -12,6 +12,7 @@ import {
   ytDownloadActions,
   ytDownloadStatus,
   ytDownloadsFromJournal,
+  catalogueOf,
 } from "./index.ts";
 import type { FailedDownload, YtDownloadJournalJob, YtSong } from "./index.ts";
 
@@ -382,5 +383,24 @@ describe("the failed section's rows", () => {
 
   test("no failed song, no section", () => {
     assert.deepEqual(failedDownloadRows([], { expanded: true }), []);
+  });
+});
+
+describe("failed downloads in Portuguese", () => {
+  test("each failure's line and the section's count read in Portuguese", () => {
+    const failed = failedDownloads(
+      [job("a", { reason: "offline" }), job("b", { reason: "failed" })],
+      {
+        ...nothingInLibrary,
+        strings: catalogueOf("pt-BR"),
+      },
+    );
+    assert.deepEqual(
+      failed.map((each) => each.line),
+      ["O download falhou: offline", "O download falhou"],
+    );
+    assert.deepEqual(failedDownloadRows(failed, { expanded: false }, catalogueOf("pt-BR")), [
+      { kind: "failedHeader", key: "failed", line: "2 músicas falharam", expanded: false },
+    ]);
   });
 });

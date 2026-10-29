@@ -93,7 +93,7 @@ function MoreCard({ entries, close }: { entries: readonly ActionEntry[]; close: 
 }
 
 function ActionBar({ target, backdropId }: { target: ActionItems; backdropId: string }) {
-  const { strings } = useLocalisation();
+  const { language, strings } = useLocalisation();
   const insets = useSafeAreaInsets();
   const entries = useItemActions(target, { surface: "selection", finish: endSelection });
   const { bar, more } = splitActionBar(entries, BAR_SLOTS);
@@ -117,7 +117,7 @@ function ActionBar({ target, backdropId }: { target: ActionItems; backdropId: st
             key={entry.action}
             icon={ACTION_ICONS[entry.action]}
             label={entry.label}
-            caption={actionBarLabel(entry.action)}
+            caption={actionBarLabel(entry.action, language)}
             onPress={entry.onPress}
             destructive={entry.destructive}
           />

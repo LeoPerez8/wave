@@ -398,4 +398,7 @@ export const settingsPtBr: typeof settingsEn = {
     `${formatNumber("pt-BR", n)} ${plural("pt-BR", n, { one: "pasta de música", other: "pastas de música" })}`,
   artistCount: (n) =>
     `${formatNumber("pt-BR", n)} ${plural("pt-BR", n, { one: "artista", other: "artistas" })}`,
+  // Only the first letter drops: feature names inside keep their capital ("editar Início").
+  titleLongPressHint: (label) =>
+    `Toque e segure para ${label.charAt(0).toLowerCase()}${label.slice(1)}`,
 };

@@ -40,7 +40,7 @@ object ShareShortcut {
     val packageManager = context.packageManager
     val launcher = packageManager.getLaunchIntentForPackage(context.packageName)?.component ?: return
     val icon = packageManager.getActivityInfo(launcher, 0).iconResource
-    // The static entry stays disabled: its resource locale cannot follow the preview gate.
+    // The static entry stays disabled: this dynamic one is labelled from NativeText, in Wave's language.
     val mic = context.resources.getIdentifier("ic_recognize_shortcut", "mipmap", context.packageName)
     val recognize = ShortcutInfoCompat.Builder(context, "wave_recognize_song")
       .setShortLabel(NativeText.get("recognize"))

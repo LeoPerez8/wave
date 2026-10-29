@@ -1,6 +1,6 @@
 /**
- * Wave's languages (docs/spec.md, "Language"): English, and Brazilian
- * Portuguese while it's in preview. The text itself lives in the catalogues
+ * Wave's languages (docs/spec.md, "Language"): English and Brazilian
+ * Portuguese. The text itself lives in the catalogues
  * (`catalogueEn.ts`, `cataloguePtBr.ts`); this picks the language and the
  * catalogue; `plural.ts` writes counted phrases.
  */
@@ -19,18 +19,14 @@ const primarySubtag = (tag: string): string => tag.split(/[-_]/)[0]!.toLowerCase
 /**
  * The language Wave reads in, from the phone's preferred languages in order
  * (Android's per-app language when set, else the system's): the first one
- * Wave has wins. Any Portuguese is Brazilian Portuguese, when
- * [portugueseEnabled] (the developer switch, until Portuguese launches);
- * everything else, and no match at all, is English.
+ * Wave has wins. Any Portuguese is Brazilian Portuguese; everything else,
+ * and no match at all, is English.
  */
-export const resolveAppLanguage = (
-  preferred: readonly string[],
-  { portugueseEnabled }: { readonly portugueseEnabled: boolean },
-): AppLanguage => {
+export const resolveAppLanguage = (preferred: readonly string[]): AppLanguage => {
   for (const tag of preferred) {
     const language = primarySubtag(tag);
     if (language === "en") return "en";
-    if (language === "pt" && portugueseEnabled) return "pt-BR";
+    if (language === "pt") return "pt-BR";
   }
   return "en";
 };

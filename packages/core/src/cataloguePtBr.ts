@@ -19,6 +19,9 @@ import { settingsPtBr } from "./catalogue/settingsPtBr.ts";
 import { downloadStatusPtBr } from "./catalogue/downloadStatusPtBr.ts";
 import { alertPtBr } from "./catalogue/alertPtBr.ts";
 import { fixSongsPtBr } from "./catalogue/fixSongsPtBr.ts";
+import { downloadsPtBr } from "./catalogue/downloadsPtBr.ts";
+import { itemActionsPtBr } from "./catalogue/itemActionsPtBr.ts";
+import { songDeletionPtBr } from "./catalogue/songDeletionPtBr.ts";
 /**
  * Wave's interface text in Brazilian Portuguese, entry for entry with
  * `catalogueEn.ts`. Terms follow the spec's glossary; until it's approved,
@@ -49,6 +52,9 @@ export const ptBR: Catalogue = {
   downloadStatus: downloadStatusPtBr,
   alert: alertPtBr,
   fixSongs: fixSongsPtBr,
+  downloads: downloadsPtBr,
+  itemActions: itemActionsPtBr,
+  songDeletion: songDeletionPtBr,
   tabs: {
     index: "Início",
     library: "Biblioteca",

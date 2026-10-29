@@ -3,6 +3,7 @@ import {
   BOUNCE_AMOUNT,
   sampleSwipeActions,
   swipeActionLabels,
+  type AppLanguage,
   type RowMenuAction,
 } from "@wave/core";
 import { useMemo, useState } from "react";
@@ -22,8 +23,15 @@ const percent = (value: number) => `${value}%`;
 const nothing = (): void => undefined;
 
 /** A side of the sample's swipe: what it uncovers, running nothing. */
-const sampleSide = (action: RowMenuAction | null): SwipeSide | null =>
-  action === null ? null : { action, ...swipeActionLabels(action), leaves: false, run: nothing };
+const sampleSide = (action: RowMenuAction | null, language: AppLanguage): SwipeSide | null =>
+  action === null
+    ? null
+    : {
+        action,
+        ...swipeActionLabels(action, language),
+        leaves: false,
+        run: nothing,
+      };
 
 /**
  * Bounce amount's sample: the sample song row on the real swipe gesture,
@@ -32,12 +40,12 @@ const sampleSide = (action: RowMenuAction | null): SwipeSide | null =>
  * swipe and spring.
  */
 function BounceSample({ demo }: { demo: number }) {
-  const { strings } = useLocalisation();
+  const { language, strings } = useLocalisation();
   const settings = useSwipeSettings();
   const swipe = useMemo((): RowSwipe => {
     const { right, left } = sampleSwipeActions(settings);
-    return { right: sampleSide(right), left: sampleSide(left) };
-  }, [settings]);
+    return { right: sampleSide(right, language), left: sampleSide(left, language) };
+  }, [settings, language]);
   return (
     <SwipeableRow swipe={swipe} sample demo={demo}>
       <SampleSongRow accessibilityHint={strings.settings.showsTheBounceWhenSwipedItPlays} />

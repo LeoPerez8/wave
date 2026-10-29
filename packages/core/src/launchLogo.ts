@@ -123,6 +123,7 @@ const arcLength = (cubics: readonly LogoCubic[]): ((x: number) => number) => {
 const fraction = (n: number): string => String(Math.round(n * 10_000) / 10_000);
 
 /** A pace curve: `progress(t)` for t from 0 to 1, as interpolator path data. */
+// not UI text: interpolator path data
 const paceCurve = (progress: (t: number) => number): string => {
   let d = "M0 0";
   for (let i = 1; i < CURVE_STEPS; i++) {

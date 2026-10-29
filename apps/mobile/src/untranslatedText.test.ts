@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import { runTextGuard } from "../../../scripts/ci/untranslated-text-report.ts";
 
-test("app UI text comes from the catalogue (report until Portuguese launches)", () => {
+test("app UI text comes from the catalogue", () => {
   runTextGuard("apps/mobile/src");
 });

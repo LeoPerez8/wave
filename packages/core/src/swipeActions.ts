@@ -7,13 +7,9 @@
  * inert: the row doesn't move that way. How a swipe ends is `resolveRowSwipe`.
  */
 
-import {
-  actionBarLabel,
-  isDestructiveAction,
-  ITEM_ACTION_LABELS,
-  type ItemAction,
-} from "./itemActions.ts";
-import { UNAVAILABLE_ENTRY_ACTION_LABELS, type UnavailableEntryAction } from "./playlistEntries.ts";
+import { actionBarLabel, isDestructiveAction, type ItemAction } from "./itemActions.ts";
+import { catalogueOf, type AppLanguage } from "./localisation.ts";
+import { unavailableEntryActionLabel, type UnavailableEntryAction } from "./playlistEntries.ts";
 import { readStoredRecord } from "./storedJson.ts";
 
 /** An entry of a song row's long-press menu: the Library's, a YT Music song's, an unavailable entry's. */
@@ -29,17 +25,22 @@ export const swipeActionTone = (action: RowMenuAction): "accent" | "highlight" |
 
 /**
  * What a swipe direction running [action] shows: the caption on the side it
- * uncovers (its action bar caption) and what TalkBack reads (its full name).
+ * uncovers (its action bar caption) and what TalkBack reads (its full name),
+ * in [language].
  */
 export const swipeActionLabels = (
   action: RowMenuAction,
+  language: AppLanguage = "en",
 ): { readonly label: string; readonly accessibilityLabel: string } =>
   action === "search"
     ? {
-        label: UNAVAILABLE_ENTRY_ACTION_LABELS[action],
-        accessibilityLabel: UNAVAILABLE_ENTRY_ACTION_LABELS[action],
+        label: unavailableEntryActionLabel(action, language),
+        accessibilityLabel: unavailableEntryActionLabel(action, language),
       }
-    : { label: actionBarLabel(action), accessibilityLabel: ITEM_ACTION_LABELS[action] };
+    : {
+        label: actionBarLabel(action, language),
+        accessibilityLabel: catalogueOf(language).itemActions.labels[action],
+      };
 
 /**
  * What a swipe direction can be set to run, in the order Settings › Swipe
@@ -67,9 +68,19 @@ export const SWIPE_CHOICES = [
 /** One of `SWIPE_CHOICES`. */
 export type SwipeChoice = (typeof SWIPE_CHOICES)[number];
 
-/** What Settings calls [choice]: its menu entry's name, or Remove. */
-export const swipeChoiceLabel = (choice: SwipeChoice): string =>
-  choice === "remove" ? "Remove" : ITEM_ACTION_LABELS[choice];
+/**
+ * What Settings calls a choice in [language]: its menu entry's name, or
+ * Remove. A function of the choice, so it maps over `SWIPE_CHOICES`.
+ */
+export const swipeChoiceLabelFor =
+  (language: AppLanguage) =>
+  (choice: SwipeChoice): string => {
+    const { labels, remove } = catalogueOf(language).itemActions;
+    return choice === "remove" ? remove : labels[choice];
+  };
+
+/** What Settings calls [choice] in English (`swipeChoiceLabelFor`). */
+export const swipeChoiceLabel: (choice: SwipeChoice) => string = swipeChoiceLabelFor("en");
 
 /** How the rows swipe: on or off, and what each direction runs. */
 export interface SwipeSettings {

@@ -270,7 +270,8 @@ const learnTracks = (
 ): void => learnQueueTracks(added, { forgetOthers: playReplacesQueue(command, passOver) });
 
 /** A song's title for a notice, from what the queue knows of it. */
-const titleOf = (trackId: string): string => queueTracks.get().get(trackId)?.title ?? "This song";
+const titleOf = (trackId: string): string =>
+  queueTracks.get().get(trackId)?.title ?? currentLocalisation().strings.playbackText.thisSong;
 
 const reportError = (error: unknown): void =>
   playbackState.update((previous) => ({

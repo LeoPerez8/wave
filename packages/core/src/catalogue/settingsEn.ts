@@ -406,4 +406,6 @@ export const settingsEn = {
     `${formatNumber("en", n)} ${plural("en", n, { one: "music folder", other: "music folders" })}`,
   artistCount: (n: number) =>
     `${formatNumber("en", n)} ${plural("en", n, { one: "artist", other: "artists" })}`,
+  /** A screen title's TalkBack hint when a long press opens its options ("Choose how playlists show"). */
+  titleLongPressHint: (label: string) => `Long press to ${label.toLowerCase()}`,
 };

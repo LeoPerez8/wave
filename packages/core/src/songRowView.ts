@@ -312,7 +312,7 @@ export const songRowView = (source: SongListRowSource, state: SongRowState = {})
   const queue = source.kind === "queue";
   const remoteSong = source.kind === "ytMusic" || source.kind === "unsearched";
   const download = row.missing || remoteSong ? (state.download ?? null) : null;
-  const downloadLine = ytDownloadLine(download);
+  const downloadLine = ytDownloadLine(download, catalogueOf(language));
   const baseCredit =
     source.kind === "ytMusic" && state.leading?.kind === "trackNumber"
       ? ytSongArtist(source.song)
@@ -325,7 +325,7 @@ export const songRowView = (source: SongListRowSource, state: SongRowState = {})
         : baseCredit;
   const trailingText =
     state.trailingLabel ??
-    trackRowTrailing({ durationMs: row.durationMs, countedPlays: state.countedPlays });
+    trackRowTrailing({ durationMs: row.durationMs, countedPlays: state.countedPlays }, language);
   const disabled =
     row.disabled || state.disabled === true || fileNotFound || selection === "disabled";
   return {

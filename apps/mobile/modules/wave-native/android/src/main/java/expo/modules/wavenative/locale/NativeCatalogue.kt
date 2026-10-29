@@ -4,6 +4,10 @@ package expo.modules.wavenative.locale
 object NativeCatalogue {
   val en = mapOf(
     "recognize" to "Recognize Song",
+    "listeningToPhone" to "Listening to audio from this phone",
+    "fixSongs" to "Fix Songs",
+    "fixSongsDescription" to "Fixing songs in the whole Library",
+    "fixingSongs" to "Fixing songs…",
     "importWave" to "Import to Wave",
     "downloads" to "Downloads",
     "downloadsDescription" to "Songs being saved to the Library",
@@ -31,6 +35,10 @@ object NativeCatalogue {
   )
   val pt = mapOf(
     "recognize" to "Reconhecer Música",
+    "listeningToPhone" to "Ouvindo o áudio deste celular",
+    "fixSongs" to "Corrigir Músicas",
+    "fixSongsDescription" to "Corrigindo músicas da Biblioteca inteira",
+    "fixingSongs" to "Corrigindo músicas…",
     "importWave" to "Importar para o Wave",
     "downloads" to "Downloads",
     "downloadsDescription" to "Músicas sendo salvas na Biblioteca",

@@ -145,7 +145,9 @@ let shazamSave: Promise<void> = Promise.resolve();
 /** One-tap Recognize save; the ordinary playlist and preference use normal sync. */
 export const addToShazam = (song: PlaylistSong): Promise<void> => {
   const save = shazamSave.then(async () => {
-    const result = await edit((store) => store.addToShazam(shazamPlaylistId(), song));
+    const result = await edit((store) =>
+      store.addToShazam(shazamPlaylistId(), song, currentLocalisation().language),
+    );
     setShazamPlaylistId(result.syncId);
     showToast(result.toast);
   });

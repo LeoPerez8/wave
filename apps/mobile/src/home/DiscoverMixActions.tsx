@@ -1,6 +1,5 @@
 import { currentLocalisation, useLocalisation } from "@/localisation/localisation";
 import {
-  PLAY_ACTION_LABELS,
   discoverMixActions,
   discoverMixCaption,
   discoverMixPlaylist,
@@ -111,7 +110,7 @@ function DiscoverMixActionsMenu({
   const cards = layout.cards.map((action) => ({ action, onPress: run(action) }));
   const entries = layout.list.map((entry): MenuChoice => ({
     action: entry.action,
-    label: "label" in entry ? entry.label : PLAY_ACTION_LABELS.shuffle,
+    label: "label" in entry ? entry.label : strings.itemActions.playLabels.shuffle,
     onPress: run(entry.action),
   }));
 

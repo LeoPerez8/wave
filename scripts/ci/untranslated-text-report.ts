@@ -3,8 +3,8 @@ import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { findUntranslatedText, isTextSource, type TextFinding } from "./untranslated-text.mjs";
 
-/** Launch flips this once the translation tickets have reduced findings to zero. */
-export const STRICT_UNTRANSLATED_TEXT = false;
+/** On since Portuguese launched (#789): any finding fails the app and Core tests. */
+export const STRICT_UNTRANSLATED_TEXT = true;
 const root = new URL("../../", import.meta.url);
 
 export function collectTextFindings(scope: string, path = ""): TextFinding[] {
