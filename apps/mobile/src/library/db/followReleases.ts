@@ -1,6 +1,7 @@
 import { followArtistKey, releaseTitle, type FollowRelease } from "@wave/core";
 import { and, eq, gt, inArray } from "drizzle-orm";
 import type { LibraryDatabase } from "./database.ts";
+import { stamped } from "./sync.ts";
 import {
   followReleaseCache,
   hiddenFollowReleases,
@@ -14,8 +15,9 @@ import {
 export const readFollowReleases = (db: LibraryDatabase) => ({
   artists: db.select().from(followReleaseCache).all(),
   hidden: db
-    .select()
+    .select({ key: hiddenFollowReleases.key })
     .from(hiddenFollowReleases)
+    .where(eq(hiddenFollowReleases.deleted, false))
     .all()
     .map((r) => r.key),
 });
@@ -31,8 +33,16 @@ export const saveFollowReleases = (
     .onConflictDoUpdate({ target: followReleaseCache.key, set: row })
     .run();
 };
-export const hideFollowRelease = (db: LibraryDatabase, key: string): void => {
-  db.insert(hiddenFollowReleases).values({ key }).onConflictDoNothing().run();
+/** Hides a release here, and on the owner's other phones once it syncs. */
+export const hideFollowRelease = (db: LibraryDatabase, key: string, now: number): void => {
+  db.insert(hiddenFollowReleases)
+    .values({ key, changedAt: now })
+    .onConflictDoUpdate({
+      target: hiddenFollowReleases.key,
+      set: { deleted: false, ...stamped(hiddenFollowReleases, now) },
+      setWhere: eq(hiddenFollowReleases.deleted, true),
+    })
+    .run();
 };
 /** Read only candidate albums and their songs; play checks use the existing totals indexes. */
 export const followReleaseListening = (db: LibraryDatabase, releases: readonly FollowRelease[]) => {

@@ -5,7 +5,7 @@ import { readFollowReleases, saveFollowReleases, hideFollowRelease } from "./fol
 test("a release cache and Hide survive restarting the database", async () => {
   const db = await openTestDatabase();
   saveFollowReleases(db, "abba", [], 123);
-  hideFollowRelease(db, "deezer:12");
+  hideFollowRelease(db, "deezer:12", 1);
   const reopened = await reopenTestDatabase(db);
   assert.deepEqual(readFollowReleases(reopened), {
     artists: [{ key: "abba", releases: [], checkedAt: 123 }],

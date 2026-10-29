@@ -63,7 +63,10 @@ Changed rows in, by table. Every table is optional.
   "playlistEntries": [PlaylistEntry],
   "favorites": [Favorite],
   "preferences": [Preference],
-  "plays": [Play]
+  "plays": [Play],
+  "follows": [Follow],
+  "hiddenReleases": [HiddenRelease],
+  "notifiedShows": [NotifiedShow]
 }
 ```
 
@@ -86,6 +89,9 @@ already held is ignored.
 | `favorites`       | recording key               | `addedAt`                                                                                                                                                                                                                                          |
 | `preferences`     | preference key              | `value?` (text: what the app's key-value store holds, `null` for nothing)                                                                                                                                                                          |
 | `plays`           | play id (made on the phone) | `songId` (recording key), `startedAt`, `listenedMs`, `durationMs?`, `endReason` (`completed`, `skipped`, `stopped`, `interrupted`), `counted` (boolean), `contextType?`, `contextId?`, `source` (`phone`, `auto`), `importedFrom?` (`blackplayer`) |
+| `follows`         | artist name key             | `name`, `level` (`releases`, `shows`), `followedAt`, `deezerId?`, `ytBrowseId?`                                                                                                                                                                    |
+| `hiddenReleases`  | release key                 | none                                                                                                                                                                                                                                               |
+| `notifiedShows`   | Ticketmaster event id       | none                                                                                                                                                                                                                                               |
 
 Times are ms since the epoch; numbers are integers. Ids and text are at most 16,384
 characters. The tables and their fields are Core's wire (`SYNC_TABLE_NAMES`, `SYNC_FIELDS` in
@@ -100,6 +106,11 @@ streamed play's YouTube video id; `songId` stays its recording key. Older client
 omit both fields, which come back as null. Snapshot text has the same length limit
 as other text. Migration `0005_play_snapshots` adds the nullable storage columns.
 
+Migration `0006_follows` adds `follows`, `hidden_releases` and `notified_shows`. A service
+from before it refuses a push naming them, so deploy it before an app that sends them. The
+app leaves empty tables out of a push (Core's `pushBody`), so only a phone with follows
+would be refused.
+
 `200`, how many rows of each table won (and were stored):
 
 ```json
@@ -110,7 +121,10 @@ as other text. Migration `0005_play_snapshots` adds the nullable storage columns
     "playlistEntries": 1,
     "favorites": 0,
     "preferences": 1,
-    "plays": 1
+    "plays": 1,
+    "follows": 0,
+    "hiddenReleases": 0,
+    "notifiedShows": 0
   }
 }
 ```
@@ -131,6 +145,9 @@ The rows changed after `since`, oldest change first, at most 1,000 a page. Leave
   "favorites": [Favorite],
   "preferences": [Preference],
   "plays": [Play],
+  "follows": [Follow],
+  "hiddenReleases": [HiddenRelease],
+  "notifiedShows": [NotifiedShow],
   "cursor": "1234",
   "more": false
 }
@@ -206,6 +223,9 @@ rate) and names it. Starting values, so a 50,000-song Library with 200,000 plays
 | `maxFavorites`         | 100,000   |                                                 |
 | `maxPreferences`       | 200       |                                                 |
 | `maxPlays`             | 1,000,000 |                                                 |
+| `maxFollows`           | 5,000     |                                                 |
+| `maxHiddenReleases`    | 50,000    |                                                 |
+| `maxNotifiedShows`     | 50,000    |                                                 |
 | `maxRequestsPerMinute` | 120       | per session                                     |
 | `maxSignInsPerMinute`  | 10        | `POST /v1/session`, per address and per account |
 

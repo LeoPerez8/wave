@@ -11,8 +11,8 @@ test("shows keep attraction IDs and notification receipts after restart; country
     shows: [],
     checkedAt: 123,
   });
-  assert.equal(markShowNotified(db, "show-1"), true);
-  assert.equal(markShowNotified(db, "show-1"), false);
+  assert.equal(markShowNotified(db, "show-1", 1), true);
+  assert.equal(markShowNotified(db, "show-1", 1), false);
   const next = await reopenTestDatabase(db);
   assert.deepEqual(readFollowShows(next).notified, ["show-1"]);
   assert.equal(readFollowShows(next).artists[0]?.attractionId, "music");
