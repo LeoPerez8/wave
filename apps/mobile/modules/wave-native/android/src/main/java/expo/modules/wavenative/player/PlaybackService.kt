@@ -473,6 +473,7 @@ class PlaybackService : MediaLibraryService() {
   @OptIn(UnstableApi::class)
   override fun onCreate() {
     super.onCreate()
+    ActiveWaveAudio.count = { listOf(exoPlayer, secondPlayer).count { it?.isPlaying == true } }
     ResumeStore.init(this)
     // The stored Buffer setting, before JS (if any) sends it again.
     StreamBuffer.init(this)
@@ -578,6 +579,7 @@ class PlaybackService : MediaLibraryService() {
   }
 
   override fun onDestroy() {
+    ActiveWaveAudio.count = { 0 }
     stopModes?.invoke()
     stopModes = null
     stopAccent?.invoke()

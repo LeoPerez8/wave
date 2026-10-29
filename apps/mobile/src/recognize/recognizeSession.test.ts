@@ -6,6 +6,7 @@ import {
   type RecognizeAnswer,
   type RecognizeCard,
   type RecognizedSong,
+  type RecognizeSource,
 } from "@wave/core";
 
 import {
@@ -27,8 +28,10 @@ const SONG: RecognizedSong = {
 const settle = () => new Promise<void>((resolve) => setImmediate(resolve));
 
 /** A native module whose capture and answers the test drives. */
-const fakeNative = (options: { startFails?: boolean } = {}) => {
-  let heard: ((session: number, heardMs: number) => void) | null = null;
+const fakeNative = (
+  options: { startFails?: boolean; otherPlaying?: boolean; consentDeclined?: boolean } = {},
+) => {
+  let heard: ((session: number, heardMs: number, audible: boolean) => void) | null = null;
   let captureFailed: ((session: number) => void) | null = null;
   const answers: ((answer: RecognizeAnswer) => void)[] = [];
   const rejections: ((error: Error) => void)[] = [];
@@ -36,10 +39,21 @@ const fakeNative = (options: { startFails?: boolean } = {}) => {
     started: 0,
     asks: [] as { session: number; last: boolean }[],
     stopped: [] as number[],
-    start: async () => {
+    sources: [] as RecognizeSource[],
+    playbackActivity: async () => ({
+      activeMediaPlayers: options.otherPlaying ? 1 : 0,
+      waveMediaPlayers: 0,
+    }),
+    cancelledStarts: [] as number[],
+    requests: [] as number[],
+    cancelStart: (request: number) => void native.cancelledStarts.push(request),
+    start: async (source: RecognizeSource, request: number): Promise<number> => {
+      native.sources.push(source);
+      native.requests.push(request);
+      if (options.consentDeclined) throw { code: "ERR_RECOGNIZE_CONSENT" };
       if (options.startFails) throw new Error("The microphone couldn't be opened");
       native.started++;
-      return 7;
+      return 6 + native.started;
     },
     ask: (session: number, last: boolean) => {
       native.asks.push({ session, last });
@@ -49,7 +63,7 @@ const fakeNative = (options: { startFails?: boolean } = {}) => {
       });
     },
     stop: (session: number) => void native.stopped.push(session),
-    onHeard: (listener: (session: number, heardMs: number) => void) => {
+    onHeard: (listener: (session: number, heardMs: number, audible: boolean) => void) => {
       heard = listener;
       return () => void (heard = null);
     },
@@ -58,8 +72,8 @@ const fakeNative = (options: { startFails?: boolean } = {}) => {
       return () => void (captureFailed = null);
     },
     /** The capture has heard [seconds] in all. */
-    hear: async (seconds: number, session = 7) => {
-      heard?.(session, seconds * 1000);
+    hear: async (seconds: number, session = 7, audible = true) => {
+      heard?.(session, seconds * 1000, audible);
       await settle();
     },
     /** Answers the oldest ask still out. */
@@ -91,6 +105,9 @@ const setup = (
     microphone?: "granted" | "denied";
     playing?: boolean;
     startFails?: boolean;
+    otherPlaying?: boolean;
+    consentDeclined?: boolean;
+    source?: RecognizeSource | "auto";
     resolve?: RecognizeDeps["resolve"];
   } = {},
 ) => {
@@ -99,39 +116,131 @@ const setup = (
   const lines: string[] = [];
   const levels: string[] = [];
   const playback = { playing: options.playing ?? false, pauses: 0, resumes: 0 };
-  const session = startRecognizeSession(
-    {
-      online: () => options.online ?? true,
-      microphone: async () => options.microphone ?? "granted",
-      holdPlayback: async () => {
-        if (!playback.playing) return () => undefined;
-        playback.playing = false;
-        playback.pauses++;
-        return () => {
-          playback.playing = true;
-          playback.resumes++;
-        };
-      },
-      native,
-      resolve:
-        options.resolve ??
-        (async (song) => {
-          const answer = resolveRecognizedSong(song, [], "disabled");
-          if (answer.kind !== "resolved") throw new Error("Expected a result");
-          return answer;
-        }),
-      log: (level, line) => {
-        levels.push(level);
-        lines.push(line);
-      },
+  const deps: RecognizeDeps = {
+    online: () => options.online ?? true,
+    microphone: async () => options.microphone ?? "granted",
+    holdPlayback: async () => {
+      if (!playback.playing) return () => undefined;
+      playback.playing = false;
+      playback.pauses++;
+      return () => {
+        playback.playing = true;
+        playback.resumes++;
+      };
     },
-    "microphone",
+    native,
+    resolve:
+      options.resolve ??
+      (async (song) => {
+        const answer = resolveRecognizedSong(song, [], "disabled");
+        if (answer.kind !== "resolved") throw new Error("Expected a result");
+        return answer;
+      }),
+    log: (level, line) => {
+      levels.push(level);
+      lines.push(line);
+    },
+  };
+  const session = startRecognizeSession(
+    deps,
+    options.source ?? "microphone",
     (card) => void cards.push(card),
   );
-  return { native, cards, lines, levels, playback, session, last: () => cards.at(-1) };
+  return { deps, native, cards, lines, levels, playback, session, last: () => cards.at(-1) };
 };
 
 describe("a Recognize session", () => {
+  test("switching sources restarts at four seconds and ignores the previous source's answer", async () => {
+    const { deps, native, session, cards, playback } = setup({
+      source: "microphone",
+      playing: true,
+    });
+    await settle();
+    await native.hear(8);
+    session.cancel();
+    await session.done;
+    const phone = startRecognizeSession(deps, "playback", (card) => void cards.push(card));
+    await settle();
+    assert.equal(playback.playing, true);
+    await native.answer({ kind: "match", song: SONG });
+    assert.equal(cards.at(-1)?.kind, "listening");
+    await native.hear(3.75, 8);
+    assert.equal(native.asks.length, 1);
+    await native.hear(4, 8);
+    assert.deepEqual(native.asks.at(-1), { session: 8, last: false });
+    phone.cancel();
+    await phone.done;
+    assert.deepEqual(native.stopped, [7, 8]);
+  });
+
+  test("switching away while consent is pending cancels that start and stops any late capture", async () => {
+    const { deps, native, session } = setup({ source: "playback" });
+    let grant!: (id: number) => void;
+    native.start = async (source, request) => {
+      native.requests.push(request);
+      return source === "playback"
+        ? new Promise<number>((resolve) => {
+            grant = resolve;
+          })
+        : 8;
+    };
+    await settle();
+    const oldRequest = native.requests[0];
+    session.cancel();
+    await session.done;
+    assert.deepEqual(native.cancelledStarts, [oldRequest]);
+    const microphone = startRecognizeSession(deps, "microphone", () => undefined);
+    await settle();
+    grant(7);
+    await settle();
+    assert.deepEqual(native.stopped, [7]);
+    assert.notEqual(native.requests[1], oldRequest);
+    microphone.cancel();
+    await microphone.done;
+    assert.deepEqual(native.stopped, [7, 8]);
+  });
+  test("automatic choice uses the microphone when nothing else plays", async () => {
+    const { native, session } = setup({ source: "auto" });
+    await settle();
+    assert.deepEqual(native.sources, ["microphone"]);
+    session.cancel();
+    await session.done;
+  });
+
+  test("silent phone capture offers the microphone without sending a signature", async () => {
+    const { native, session, last } = setup({ source: "playback" });
+    await settle();
+    await native.hear(4, 7, false);
+    await session.done;
+    assert.deepEqual(last(), { kind: "ended", end: { kind: "blocked" } });
+    assert.deepEqual(native.asks, []);
+    assert.deepEqual(native.stopped, [7]);
+  });
+
+  test("declining Android's capture consent ends with its own message", async () => {
+    const { session, last, lines } = setup({ source: "playback", consentDeclined: true });
+    await session.done;
+    assert.deepEqual(last(), { kind: "ended", end: { kind: "consentDeclined" } });
+    assert.deepEqual(lines, [
+      "Recognize through this phone: capture consent declined, nothing heard",
+    ]);
+  });
+  test("automatically captures another app without pausing Wave", async () => {
+    const { native, playback, session, lines } = setup({
+      source: "auto",
+      otherPlaying: true,
+      playing: true,
+    });
+    await settle();
+    assert.deepEqual(native.sources, ["playback"]);
+    assert.equal(playback.pauses, 0);
+    await native.hear(4);
+    await native.answer({ kind: "match", song: SONG });
+    await session.done;
+    assert.deepEqual(lines, [
+      "Recognize through this phone: a match after 4.0 s, YT Music lookup: disabled",
+    ]);
+  });
   test("listens, asks at 4 seconds and shows the match", async () => {
     const { native, last, lines, levels, session } = setup();
     await settle();
