@@ -24,7 +24,8 @@ export const selectFollows = (db: LibraryDatabase): FollowedArtist[] =>
     .select()
     .from(follows)
     .all()
-    .toSorted((a, b) => a.key.localeCompare(b.key));
+    // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh array; Hermes lacks toSorted
+    .sort((a, b) => a.key.localeCompare(b.key));
 export const saveFollow = (
   db: LibraryDatabase,
   target: FollowTarget,
