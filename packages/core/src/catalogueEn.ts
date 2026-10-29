@@ -1,6 +1,10 @@
 import { downloadNoticeEn } from "./catalogue/downloadNoticeEn.ts";
 import { nativeEn } from "./catalogue/nativeEn.ts";
 import { autoEn } from "./catalogue/autoEn.ts";
+import { settingsEn } from "./catalogue/settingsEn.ts";
+import { downloadStatusEn } from "./catalogue/downloadStatusEn.ts";
+import { alertEn } from "./catalogue/alertEn.ts";
+import { fixSongsEn } from "./catalogue/fixSongsEn.ts";
 /**
  * Wave's interface text in English: the shape every other catalogue must fill
  * (`Catalogue`), so a phrase missing from one fails the type check. Group
@@ -14,6 +18,10 @@ export const en = {
   downloadNotice: downloadNoticeEn,
   native: nativeEn,
   auto: autoEn,
+  settings: settingsEn,
+  downloadStatus: downloadStatusEn,
+  alert: alertEn,
+  fixSongs: fixSongsEn,
   /** Each tab's name, in the tab bar, its editor and TalkBack. */
   tabs: {
     index: "Home",

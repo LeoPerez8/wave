@@ -5,7 +5,7 @@
  */
 
 import { foldAccentsAndCase } from "./library.ts";
-import { counted } from "./listening.ts";
+import { en, type Catalogue } from "./catalogueEn.ts";
 import { libraryPathIndex, pathKey, type M3uImportSummary } from "./m3u.ts";
 import { normalizeSearchText } from "./search.ts";
 import { libraryMatches } from "./ytMusic.ts";
@@ -166,22 +166,22 @@ const tagMatcher = <Id>(
 };
 
 /** The summary shown once an import is done, in the shape of the M3U import's. */
-export const summarizeBlackPlayerImport = <Id>(plan: BlackPlayerImport<Id>): M3uImportSummary => {
+export const summarizeBlackPlayerImport = <Id>(
+  plan: BlackPlayerImport<Id>,
+  { settings: { blackPlayerImport: text } }: Catalogue = en,
+): M3uImportSummary => {
   const plays = plan.plays.length;
   const songs = new Set(plan.plays.map((play) => play.trackId)).size;
   const unmatchedPlays = plan.unmatched.reduce((sum, song) => sum + song.plays, 0);
   return {
-    title: plays === 0 ? "Nothing new imported" : "Imported BlackPlayer stats",
+    title: plays === 0 ? text.nothingNew : text.imported,
     sections: [
       ...(plan.snapshots === 0
         ? []
         : [
             {
-              heading: counted(plays, "new play"),
-              detail:
-                plays === 0
-                  ? "Every play in these files is in your history already"
-                  : `Of ${counted(songs, "song")}, from ${counted(plan.snapshots, "snapshot")}`,
+              heading: text.newPlays(plays),
+              detail: plays === 0 ? text.allInHistory : text.from(songs, plan.snapshots),
               missing: [],
             },
           ]),
@@ -189,8 +189,8 @@ export const summarizeBlackPlayerImport = <Id>(plan: BlackPlayerImport<Id>): M3u
         ? []
         : [
             {
-              heading: `${counted(plan.unmatched.length, "song")} not in your library`,
-              detail: `${plan.unmatched.length === 1 ? "Its" : "Their"} ${counted(unmatchedPlays, "play")} ${unmatchedPlays === 1 ? "wasn't" : "weren't"} imported`,
+              heading: text.notInLibrary(plan.unmatched.length),
+              detail: text.notImported(plan.unmatched.length, unmatchedPlays),
               missing: plan.unmatched.map(({ title, artist }) =>
                 artist === "" ? title : `${artist} – ${title}`,
               ),
@@ -198,7 +198,7 @@ export const summarizeBlackPlayerImport = <Id>(plan: BlackPlayerImport<Id>): M3u
           ]),
       ...plan.skipped.map(({ file, reason }) => ({
         heading: file,
-        detail: reason === "unreadable" ? "Couldn't be read" : "Not a BlackPlayer stats file",
+        detail: reason === "unreadable" ? text.unreadable : text.notStats,
         missing: [],
       })),
     ],

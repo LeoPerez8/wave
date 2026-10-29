@@ -1,6 +1,10 @@
 import { downloadNoticePtBr } from "./catalogue/downloadNoticePtBr.ts";
 import { nativePtBr } from "./catalogue/nativePtBr.ts";
 import { autoPtBr } from "./catalogue/autoPtBr.ts";
+import { settingsPtBr } from "./catalogue/settingsPtBr.ts";
+import { downloadStatusPtBr } from "./catalogue/downloadStatusPtBr.ts";
+import { alertPtBr } from "./catalogue/alertPtBr.ts";
+import { fixSongsPtBr } from "./catalogue/fixSongsPtBr.ts";
 /**
  * Wave's interface text in Brazilian Portuguese, entry for entry with
  * `catalogueEn.ts`. Terms follow the spec's glossary; until it's approved,
@@ -13,6 +17,10 @@ export const ptBR: Catalogue = {
   downloadNotice: downloadNoticePtBr,
   native: nativePtBr,
   auto: autoPtBr,
+  settings: settingsPtBr,
+  downloadStatus: downloadStatusPtBr,
+  alert: alertPtBr,
+  fixSongs: fixSongsPtBr,
   tabs: {
     index: "Início",
     library: "Biblioteca",

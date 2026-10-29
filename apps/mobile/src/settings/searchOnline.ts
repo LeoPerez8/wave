@@ -1,3 +1,4 @@
+import { currentLocalisation } from "@/localisation/localisation";
 import {
   readSearchOnline,
   searchOnlineAlways,
@@ -59,14 +60,31 @@ export const searchOnlineAlwaysNow = (): boolean =>
 
 /** Search online's choices, as Settings and the toggle's long-press card both label them. */
 const CHOICES: ChoiceSetting<SearchOnline>["choices"] = [
-  { value: "always", label: "Always search online" },
-  { value: "wifi", label: "Always search on Wi-Fi" },
-  { value: "onDemand", label: "Only on demand" },
+  {
+    value: "always",
+    get label() {
+      return currentLocalisation().strings.settings.alwaysSearchOnline;
+    },
+  },
+  {
+    value: "wifi",
+    get label() {
+      return currentLocalisation().strings.settings.alwaysSearchOnWiFi;
+    },
+  },
+  {
+    value: "onDemand",
+    get label() {
+      return currentLocalisation().strings.settings.onlyOnDemand;
+    },
+  },
 ];
 
 /** Search online as Settings › Accounts lists it, under YT Music. */
 export const searchOnlineChoice: ChoiceSetting<SearchOnline> = {
-  label: "Search online",
+  get label() {
+    return currentLocalisation().strings.settings.searchOnline;
+  },
   choices: CHOICES,
   setting: searchOnline,
 };
@@ -78,7 +96,7 @@ export const searchOnlineChoice: ChoiceSetting<SearchOnline> = {
  */
 export const openSearchOnlineChoices = (): void =>
   openTitleChoices({
-    label: "Search online",
+    label: currentLocalisation().strings.settings.searchOnline,
     choices: CHOICES,
     current: searchOnline.get(),
     choose: searchOnline.set,

@@ -5,6 +5,7 @@
  * through `ytDownloadsFromJournal`.
  */
 
+import { en, type Catalogue } from "./catalogueEn.ts";
 import type { DownloadSource } from "./downloadSource.ts";
 import type { DownloadOrigin } from "./downloadGroups.ts";
 import type { YtSong } from "./ytMusic.ts";
@@ -261,22 +262,6 @@ export const ytDownloadActions = (
   }
 };
 
-const FAILURE_LINES: { readonly [F in YtDownloadFailure]: string } = {
-  offline: "Download failed: offline",
-  failed: "Download failed",
-  timedOut: "Download failed",
-  noFolder: "Download failed: no music folder",
-  storage: "Download failed: couldn't save the file",
-  account: "Turn on Download in best quality in Settings",
-  // A rejected account is forgotten and the switch turned off; turning it on makes a new one.
-  accountRejected: "Turn on Download in best quality in Settings",
-  unreachable: "Download failed: Soulseek can't be reached",
-  unavailable: "This recording is unavailable in 320 kbps",
-  noSource: "Turn on YT Music or Download in best quality in Settings",
-  ytUnavailable: "This song is unavailable on YouTube Music",
-  notFound: "Not found online",
-};
-
 /** The fraction of the file that has arrived, or null when there's no size to measure against. */
 export const ytDownloadProgress = (status: YtDownloadStatus | null): number | null =>
   status?.kind === "downloading" && status.total !== null && status.total > 0
@@ -284,25 +269,30 @@ export const ytDownloadProgress = (status: YtDownloadStatus | null): number | nu
     : null;
 
 /** What a downloading song's row says under its title instead of its artists; null without a download. */
-export const ytDownloadLine = (status: YtDownloadStatus | null): string | null => {
+export const ytDownloadLine = (
+  status: YtDownloadStatus | null,
+  catalogue: Catalogue = en,
+): string | null => {
   switch (status?.kind) {
     case undefined:
       return null;
     case "queued":
-      return "Waiting to download";
+      return catalogue.downloadStatus.queued;
     case "downloading": {
-      if (status.phase === "connecting") return "Connecting";
-      if (status.phase === "searching") return "Finding this recording";
-      if (status.phase === "queued") return "Waiting to download";
-      if (status.phase === "validating") return "Checking the download";
+      if (status.phase === "connecting") return catalogue.downloadStatus.connecting;
+      if (status.phase === "searching") return catalogue.downloadStatus.searching;
+      if (status.phase === "queued") return catalogue.downloadStatus.queued;
+      if (status.phase === "validating") return catalogue.downloadStatus.validating;
       const progress = ytDownloadProgress(status);
-      return progress === null ? "Downloading" : `Downloading · ${Math.floor(progress * 100)}%`;
+      return progress === null
+        ? catalogue.downloadStatus.downloading
+        : catalogue.downloadStatus.downloadingPercent(Math.floor(progress * 100));
     }
     case "saving":
-      return "Saving to the Library";
+      return catalogue.downloadStatus.saving;
     case "failed":
-      return FAILURE_LINES[status.reason];
+      return catalogue.downloadStatus.failures[status.reason];
     case "done":
-      return "In the Library";
+      return catalogue.downloadStatus.done;
   }
 };

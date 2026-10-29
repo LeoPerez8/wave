@@ -1,3 +1,4 @@
+import { currentLocalisation } from "@/localisation/localisation";
 import { describeFolder } from "@wave/core";
 
 import { showError, showMessage } from "@/overlay/alert";
@@ -11,20 +12,25 @@ import { chooseMusicFolder } from "./runtime";
  */
 export const promptForMusicFolder = async (): Promise<void> => {
   if (scanState.get().status === "scanning") {
-    await showMessage("Wave is scanning", "You can add a folder once the scan finishes.");
+    await showMessage(
+      currentLocalisation().strings.settings.waveIsScanning,
+      currentLocalisation().strings.settings.youCanAddAFolderOnceThe,
+    );
     return;
   }
   try {
     const choice = await chooseMusicFolder();
     if (choice.kind === "covered") {
       await showMessage(
-        "Already in your library",
-        `Wave already shows the songs in ${describeFolder(choice.by).name}, which includes this folder.`,
+        currentLocalisation().strings.settings.alreadyInYourLibrary,
+        currentLocalisation().strings.settings.folderCovered(
+          describeFolder(choice.by, currentLocalisation().strings).name,
+        ),
       );
     } else if (choice.kind === "unsupported") {
       await showMessage(
-        "Wave can't read this folder",
-        "Pick it from your phone's storage or SD card in the picker, rather than from a shortcut like Downloads or a cloud drive.",
+        currentLocalisation().strings.settings.waveCantReadThisFolder,
+        currentLocalisation().strings.settings.pickItFromYourPhonesStorageOr,
       );
     }
   } catch (error) {

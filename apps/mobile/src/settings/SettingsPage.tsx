@@ -1,10 +1,5 @@
-import {
-  LAYOUT_PAGES,
-  SETTINGS_PAGES,
-  type LayoutPage,
-  type SettingsIcon,
-  type SettingsPage,
-} from "@wave/core";
+import { useLocalisation } from "@/localisation/localisation";
+import { type Catalogue, type LayoutPage, type SettingsIcon, type SettingsPage } from "@wave/core";
 import type { ReactNode } from "react";
 import { ScrollView, Text, View } from "react-native";
 
@@ -28,13 +23,11 @@ type PageId =
   | { readonly layoutPage: LayoutPage }
   | { readonly title: string };
 
-const pageTitle = (id: PageId): string => {
+const pageTitle = (id: PageId, strings: Catalogue): string => {
   if ("title" in id) return id.title;
-  const entry =
-    "page" in id
-      ? SETTINGS_PAGES.find(({ page }) => page === id.page)
-      : LAYOUT_PAGES.find(({ page }) => page === id.layoutPage);
-  return entry?.title ?? "";
+  return "page" in id
+    ? strings.settings.pages[id.page]
+    : strings.settings.layoutPages[id.layoutPage];
 };
 
 /**
@@ -43,10 +36,11 @@ const pageTitle = (id: PageId): string => {
  * slides on a menu (Touch's sample opens one).
  */
 export function SettingsPageScreen({ children, ...id }: PageId & { children: ReactNode }) {
+  const { strings } = useLocalisation();
   const scrollable = useListScrollable();
   return (
     <View className="flex-1 bg-background">
-      <ScreenHeader title={pageTitle(id)} />
+      <ScreenHeader title={pageTitle(id, strings)} />
       <ScrollView
         scrollEnabled={scrollable}
         contentContainerStyle={{
@@ -67,9 +61,10 @@ export function SettingsPageScreen({ children, ...id }: PageId & { children: Rea
  * Settings › Downloads' virtualized list.
  */
 export function SettingsEditorScreen({ children, ...id }: PageId & { children: ReactNode }) {
+  const { strings } = useLocalisation();
   return (
     <View className="flex-1 bg-background">
-      <ScreenHeader title={pageTitle(id)} />
+      <ScreenHeader title={pageTitle(id, strings)} />
       {children}
     </View>
   );

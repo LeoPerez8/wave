@@ -5,6 +5,8 @@
  * Paths are absolute, `/`-separated, without a trailing slash.
  */
 
+import { en, type Catalogue } from "./catalogueEn.ts";
+
 export interface ScanRootState {
   readonly path: string;
   /** Added by Wave on first launch (the shared Music folder), not picked by the owner. */
@@ -85,10 +87,15 @@ const INTERNAL = /^\/storage\/emulated\/\d+(?=\/|$)/;
 const REMOVABLE = /^\/storage\/[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}(?=\/|$)/;
 
 /** How a scan root is shown: `/storage/emulated/0/Músicas` is "Músicas" on internal storage. */
-export const describeFolder = (path: string): FolderLabel => {
+export const describeFolder = (path: string, catalogue: Catalogue = en): FolderLabel => {
   const internal = INTERNAL.exec(path);
   const volume = internal ?? REMOVABLE.exec(path);
-  const storage = internal !== null ? "Internal storage" : volume !== null ? "SD card" : null;
+  const storage =
+    internal !== null
+      ? catalogue.settings.internalStorage
+      : volume !== null
+        ? catalogue.settings.sdCard
+        : null;
   const relativePath = volume === null ? path : path.slice(volume[0].length + 1);
   const name = relativePath.slice(relativePath.lastIndexOf("/") + 1);
   return { name: name || storage || path, storage, relativePath };

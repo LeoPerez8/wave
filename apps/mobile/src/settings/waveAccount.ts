@@ -1,6 +1,6 @@
 import {
-  CONFIRM_WAVE_ACCOUNT_DELETION,
-  WAVE_ACCOUNT_CARD,
+  confirmWaveAccountDeletion,
+  waveAccountCard,
   WAVE_ACCOUNT_SIGNED_OUT,
   stepWaveAccount,
   waveAccountConfig,
@@ -11,6 +11,7 @@ import {
 import Constants from "expo-constants";
 import { useCallback, useEffect, useReducer } from "react";
 
+import { currentLocalisation } from "@/localisation/localisation";
 import { persistedSetting } from "@/lib/persistedSetting";
 import { WaveAccount, waveAccountErrorCode } from "@/native/waveAccount";
 import { confirmAction } from "@/overlay/alert";
@@ -66,7 +67,8 @@ export const useWaveAccount = (): {
     const config = WAVE_ACCOUNT_CONFIG;
     if (config === null) return;
     void (async () => {
-      if (!cardSeen.get() && !(await confirmAction(WAVE_ACCOUNT_CARD))) return;
+      if (!cardSeen.get() && !(await confirmAction(waveAccountCard(currentLocalisation().strings))))
+        return;
       dispatch({ type: "signInStarted" });
       try {
         const session = await WaveAccount.signIn(config.syncUrl, config.googleWebClientId);
@@ -96,7 +98,7 @@ export const useWaveAccount = (): {
 
   const deleteAccount = useCallback(() => {
     void (async () => {
-      if (!(await confirmAction(CONFIRM_WAVE_ACCOUNT_DELETION))) return;
+      if (!(await confirmAction(confirmWaveAccountDeletion(currentLocalisation().strings)))) return;
       dispatch({ type: "deleteStarted" });
       try {
         const session = await WaveAccount.deleteAccount();

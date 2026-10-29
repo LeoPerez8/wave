@@ -1,3 +1,5 @@
+import { currentLocalisation } from "@/localisation/localisation";
+import { useLocalisation } from "@/localisation/localisation";
 import type { ReactNode } from "react";
 import { View, type ViewProps } from "react-native";
 
@@ -6,7 +8,15 @@ import { songRowPresentation } from "@/songs/songListModel";
 
 /** The fixed fake song: plain artwork, no file and no Library id, so it never touches the Library. */
 const SAMPLE = songRowPresentation(
-  { kind: "history", id: "sample", title: "Sample song", artist: "Wave", durationMs: 200_000 },
+  {
+    kind: "history",
+    id: "sample",
+    get title() {
+      return currentLocalisation().strings.settings.sampleSong;
+    },
+    artist: "Wave",
+    durationMs: 200_000,
+  },
   {},
   "sample",
 );
@@ -37,12 +47,13 @@ type Props = Pick<
  * the touch handlers see the row's touches as they bubble up.
  */
 export function SampleSongRow({ accessibilityHint, onLongPress, behind, ...rest }: Props) {
+  const { strings } = useLocalisation();
   return (
     <View
       {...rest}
       accessible
       accessibilityRole="none"
-      accessibilityLabel="Sample song row"
+      accessibilityLabel={strings.settings.sampleSongRow}
       accessibilityHint={accessibilityHint}
     >
       {behind}

@@ -1,3 +1,5 @@
+import { currentLocalisation } from "@/localisation/localisation";
+import { useLocalisation } from "@/localisation/localisation";
 import { NOW_PLAYING_ACTIONS, storedNowPlayingButtons, type NowPlayingSlot } from "@wave/core";
 import { Text, View } from "react-native";
 
@@ -14,7 +16,7 @@ import {
 import { SettingsPageRow, SettingsPageScreen } from "./SettingsPage";
 
 /** A slot's name on its row and its picker's header: "Slot 1" for the leftmost. */
-const slotTitle = (slot: number): string => `Slot ${slot + 1}`;
+const slotTitle = (slot: number): string => currentLocalisation().strings.settings.slot(slot + 1);
 
 /** Where slot [slot]'s picker is (also `wave://settings/layout/now-playing/<n>`). */
 const pickerRoute = (slot: number) => `/settings/layout/now-playing/${slot + 1}` as const;
@@ -25,6 +27,7 @@ const pickerRoute = (slot: number) => `/settings/layout/now-playing/${slot + 1}`
  * today's).
  */
 export function NowPlayingSlotsSection() {
+  const { strings } = useLocalisation();
   const buttons = useNowPlayingButtons();
   return (
     <View>
@@ -38,12 +41,11 @@ export function NowPlayingSlotsSection() {
         />
       ))}
       <Text className="mt-2 font-sans text-footnote text-secondary">
-        Now Playing&apos;s bottom row, left to right, with Queue always on the right. A slot set to
-        None leaves the row, and the other buttons spread out.
+        {strings.settings.nowPlayingsBottomRowLeftToRight}
       </Text>
       <View className="mt-4 items-start">
         <TextButton
-          label="Reset to Default"
+          label={strings.settings.resetToDefault}
           disabled={storedNowPlayingButtons(buttons) === null}
           onPress={() => editSavedNowPlayingButtons("reset")}
         />
@@ -67,6 +69,7 @@ const closePicker = (): void => {
  * slot holds swaps into that slot's place. Back leaves it as it was.
  */
 export function NowPlayingSlotPickerScreen({ slot }: { slot: number }) {
+  const { strings } = useLocalisation();
   const title = slotTitle(slot);
   const buttons = useNowPlayingButtons();
   const chosen = buttons[slot];
@@ -85,7 +88,7 @@ export function NowPlayingSlotPickerScreen({ slot }: { slot: number }) {
                 accessibilityLabel={
                   holder === -1 || holder === slot
                     ? `${label}, ${title}`
-                    : `${label}, ${title}, swaps with ${slotTitle(holder)}`
+                    : strings.settings.swapSlot(label, title, slotTitle(holder))
                 }
                 chosen={choice === chosen}
                 onPress={() => {
@@ -97,7 +100,7 @@ export function NowPlayingSlotPickerScreen({ slot }: { slot: number }) {
           })}
         </View>
         <Text className="mt-2 font-sans text-footnote text-secondary">
-          A button another slot holds swaps places with this slot&apos;s.
+          {strings.settings.aButtonAnotherSlotHoldsSwapsPlaces}
         </Text>
       </View>
     </SettingsPageScreen>

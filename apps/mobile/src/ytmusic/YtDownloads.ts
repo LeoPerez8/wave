@@ -110,6 +110,7 @@ import { useMemo, useSyncExternalStore } from "react";
 import { appLog } from "@/log/appLog";
 
 import { askForNotifications } from "@/lib/askForNotifications";
+import { useLocalisation } from "@/localisation/localisation";
 import { persistedSetting } from "@/lib/persistedSetting";
 import {
   libraryEditsVersion,
@@ -1834,8 +1835,9 @@ export const downloadJournal = (): readonly NativeDownloadJob[] => journal.get()
 export const useMissingSongsDownload = (): MissingSongsDownload<MissingSongJob> => {
   const missing: readonly MissingTrack[] = useMissingSongs();
   const jobs = useSyncExternalStore(journal.subscribe, journal.get);
+  const { strings } = useLocalisation();
   const songs = useMemo(() => missing.map(missingSongJob), [missing]);
-  return useMemo(() => missingSongsDownload(songs, jobs), [songs, jobs]);
+  return useMemo(() => missingSongsDownload(songs, jobs, strings), [songs, jobs, strings]);
 };
 
 /**

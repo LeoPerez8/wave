@@ -1,3 +1,4 @@
+import { useLocalisation } from "@/localisation/localisation";
 import { useScreenContent } from "@/lib/screenTiming";
 import { Text, View } from "react-native";
 
@@ -14,6 +15,7 @@ import { SWIPE_SIDES, SwipeDirectionRow } from "@/settings/SwipeDirections";
  * at once and shows on the lists' rows straight away.
  */
 export default function SwipeActionsSettingsScreen() {
+  const { strings } = useLocalisation();
   useScreenContent(true);
   const settings = useSwipeSettings();
   const { enabled } = settings;
@@ -21,12 +23,16 @@ export default function SwipeActionsSettingsScreen() {
     <SettingsPageScreen page="swipeActions">
       <View>
         <Hairline />
-        <SettingsSwitch label="Swipe actions" value={enabled} onValueChange={setSwipesOn} />
+        <SettingsSwitch
+          label={strings.settings.swipeActions}
+          value={enabled}
+          onValueChange={setSwipesOn}
+        />
         <Hairline />
         <Text className="mt-2 font-sans text-footnote text-secondary">
           {enabled
-            ? "Swipe a song sideways in a list to run one of its actions. Up Next doesn't swipe."
-            : "Song rows don't swipe. Every action is still in a song's long-press menu."}
+            ? strings.settings.swipeASongSidewaysInAList
+            : strings.settings.songRowsDontSwipeEveryActionIs}
         </Text>
       </View>
       <View>

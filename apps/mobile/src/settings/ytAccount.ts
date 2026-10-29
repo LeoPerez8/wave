@@ -17,10 +17,10 @@ const ytAccount = accountSignIn<YtAccount, YtSignInFailure, YtMusicError>({
   step: stepYtAccount,
   signedOut: YT_ACCOUNT_SIGNED_OUT,
   failureOf: (error) => (error.reason === "offline" ? "offline" : "failed"),
-  failureLines: {
-    offline: "Couldn't sign in without a connection.",
-    failed: "YouTube didn't confirm the sign-in. Try again.",
-  },
+  failureLines: (strings) => ({
+    offline: strings.settings.couldntSignInWithoutAConnection,
+    failed: strings.settings.youtubeDidntConfirmTheSigninTryAgain,
+  }),
 });
 
 /**

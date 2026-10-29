@@ -1,3 +1,4 @@
+import { useLocalisation } from "@/localisation/localisation";
 import { Text, View } from "react-native";
 
 import { CatalogLine } from "@/catalog/CatalogLine";
@@ -8,6 +9,7 @@ import { setGeniusInsightsEnabled, useGeniusInsightsEnabled } from "./genius";
 
 /** Settings › Lyrics and tags › Genius: the switch for every Genius request. */
 export function GeniusSettingsSection() {
+  const { strings } = useLocalisation();
   const enabled = useGeniusInsightsEnabled();
 
   return (
@@ -15,15 +17,13 @@ export function GeniusSettingsSection() {
       <CatalogLine className="mb-2">Genius</CatalogLine>
       <Hairline />
       <SettingsSwitch
-        label="Genius insights"
+        label={strings.settings.geniusInsights}
         value={enabled}
         onValueChange={setGeniusInsightsEnabled}
       />
       <Hairline />
       <Text className="mt-2 font-sans text-footnote text-secondary">
-        Opening Lyrics on a song with lyrics shows what Genius says about it above the lyrics and
-        highlights the lines Genius annotates, which means sending Genius the song&apos;s title and
-        artist. Off, Wave makes no requests to Genius.
+        {strings.settings.openingLyricsOnASongWithLyrics}
       </Text>
     </View>
   );

@@ -4,15 +4,16 @@
  * one scheme whatever Android says.
  */
 
+import { en } from "./catalogueEn.ts";
 import type { Theme } from "./theme.ts";
 
 export type Appearance = "system" | "light" | "dark";
 
 /** The choices in the order Settings lists them. */
 export const APPEARANCES: readonly { readonly id: Appearance; readonly label: string }[] = [
-  { id: "system", label: "System" },
-  { id: "light", label: "Light" },
-  { id: "dark", label: "Dark" },
+  { id: "system", label: en.settings.appearances.system },
+  { id: "light", label: en.settings.appearances.light },
+  { id: "dark", label: en.settings.appearances.dark },
 ];
 
 const DEFAULT_APPEARANCE: Appearance = "system";
