@@ -176,7 +176,7 @@ export const checkFollowReleases = (
     }
   });
 
-export const readReleaseFeed = (follows: readonly FollowedArtist[]) =>
+const readReleaseFeed = (follows: readonly FollowedArtist[]) =>
   Effect.gen(function* () {
     const store = yield* LibraryStore;
     const cache = yield* store.followReleaseCache;

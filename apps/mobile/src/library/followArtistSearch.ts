@@ -32,10 +32,10 @@ export const useFollowArtistSearch = (query: string, enabled: boolean) => {
     if (text === "" || !enabled || !visible) return;
     const controller = new AbortController();
     let current = true;
-    let timeout: ReturnType<typeof setTimeout> | undefined;
+    // The request gets 10 s once the 350 ms debounce has passed.
+    const timeout = setTimeout(() => controller.abort(), 10_350);
     const debounce = setTimeout(() => {
       if (!followedArtistsEnabled()) return;
-      timeout = setTimeout(() => controller.abort(), 10_000);
       void (async () => {
         try {
           const response = await fetch(deezerArtistSearchUrl(text), { signal: controller.signal });

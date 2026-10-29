@@ -1,5 +1,4 @@
-import { followArtistKey } from "./followedArtists.ts";
-import { deezerArtistCandidates } from "./artistPhoto.ts";
+import { artistPhotoName as followArtistKey, deezerArtistCandidates } from "./artistPhoto.ts";
 
 export interface DeezerFollowArtist {
   readonly name: string;

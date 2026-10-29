@@ -4,10 +4,10 @@ import { fileURLToPath } from "node:url";
 import { findUntranslatedText, isTextSource, type TextFinding } from "./untranslated-text.mjs";
 
 /** On since Portuguese launched (#789): any finding fails the app and Core tests. */
-export const STRICT_UNTRANSLATED_TEXT = true;
+const STRICT_UNTRANSLATED_TEXT = true;
 const root = new URL("../../", import.meta.url);
 
-export function collectTextFindings(scope: string, path = ""): TextFinding[] {
+function collectTextFindings(scope: string, path = ""): TextFinding[] {
   const folder = new URL(`${scope}/`, root);
   return readdirSync(folder, { recursive: true, encoding: "utf8" })
     .map((name) => `${scope}/${name.replaceAll("\\", "/")}`)

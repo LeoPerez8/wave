@@ -32,7 +32,7 @@ const BRANDS = new Set([
 ]);
 
 /** Only private tools belong here; production glass and performance code still gets scanned. */
-export const TEXT_ALLOWLIST = [
+const TEXT_ALLOWLIST = [
   "apps/mobile/src/app/settings/developer.tsx",
   "apps/mobile/src/app/design-preview.tsx",
   "apps/mobile/src/app/dev/",

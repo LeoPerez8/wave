@@ -76,6 +76,9 @@
     "minLines": 5,
     "minOccurrences": 2,
     "ignoreSymlinks": true,
+    // Each English catalogue file and its pt-BR twin share their shape on purpose
+    // (the pt-BR type is the English one), so their parallel entries aren't clones.
+    "ignore": ["packages/core/src/catalogue/**"],
     // Zero disables the gate. This positive floor gates any new clone group.
     "threshold": 0.0001,
   },
