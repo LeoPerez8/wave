@@ -1,5 +1,6 @@
 package expo.modules.wavenative.share
 
+import expo.modules.wavenative.locale.NativeText
 import android.content.Context
 import android.content.Intent
 import android.os.Build
@@ -10,7 +11,7 @@ import expo.modules.wavenative.launcher.LauncherIconSwitcher
 import expo.modules.wavenative.log.WaveLog
 
 /**
- * The "Import to Wave" sharing shortcut (#205): a dynamic shortcut in the share target's
+ * The NativeText.get("importWave") sharing shortcut (#205): a dynamic shortcut in the share target's
  * category, so the share sheet shows Wave in its direct-share row for shared text. Picking
  * it sends the share target's SEND intent to MainActivity, which [SharedTextInbox] takes
  * like any other share. The share target is in the shortcuts file the `shareShortcut`
@@ -39,8 +40,17 @@ object ShareShortcut {
     val packageManager = context.packageManager
     val launcher = packageManager.getLaunchIntentForPackage(context.packageName)?.component ?: return
     val icon = packageManager.getActivityInfo(launcher, 0).iconResource
+    // The static entry stays disabled: its resource locale cannot follow the preview gate.
+    val mic = context.resources.getIdentifier("ic_recognize_shortcut", "mipmap", context.packageName)
+    val recognize = ShortcutInfoCompat.Builder(context, "wave_recognize_song")
+      .setShortLabel(NativeText.get("recognize"))
+      .setIcon(IconCompat.createWithResource(context, mic))
+      .setActivity(launcher)
+      .setIntent(Intent("dev.leoperez.wave.action.RECOGNIZE").setClassName(context, "expo.modules.wavenative.recognize.RecognizeShortcutActivity"))
+      .build()
+    ShortcutManagerCompat.pushDynamicShortcut(context, recognize)
     val shortcut = ShortcutInfoCompat.Builder(context, ID)
-      .setShortLabel("Import to Wave")
+      .setShortLabel(NativeText.get("importWave"))
       .setIcon(IconCompat.createWithResource(context, icon))
       .setActivity(launcher)
       // Required, but the share sheet sends the share target's SEND intent instead.

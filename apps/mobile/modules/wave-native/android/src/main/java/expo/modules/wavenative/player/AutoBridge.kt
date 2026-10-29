@@ -1,5 +1,6 @@
 package expo.modules.wavenative.player
 
+import expo.modules.wavenative.locale.NativeText
 import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.MoreExecutors
 import com.google.common.util.concurrent.SettableFuture
@@ -130,6 +131,6 @@ class AutoBridge(private val host: AutoBridgeHost) {
   }
 
   companion object {
-    const val STILL_LOADING = "Wave is still loading your library. Try again in a moment."
+    val STILL_LOADING get() = NativeText.get("stillLoading")
   }
 }

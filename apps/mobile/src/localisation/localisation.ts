@@ -7,7 +7,7 @@ import {
   type ReactNode,
 } from "react";
 
-import { phoneLanguages, subscribePhoneLanguages } from "@/native/waveNative";
+import { WaveNative, phoneLanguages, subscribePhoneLanguages } from "@/native/waveNative";
 import { portuguesePreview, subscribePortuguesePreview } from "@/settings/portuguesePreview";
 
 /** The language Wave reads in and its text (Core's catalogue). */
@@ -19,6 +19,7 @@ export interface Localisation {
 /** Android's per-app language, else the system's; invalidated by native locale changes. */
 let phone: readonly string[] | null = null;
 let current: Localisation | null = null;
+let nativePreview: boolean | null = null;
 
 /**
  * The language Wave reads in now and its text, for code outside React
@@ -28,11 +29,19 @@ let current: Localisation | null = null;
 export const currentLocalisation = (): Localisation => {
   phone ??= phoneLanguages();
   const language = resolveAppLanguage(phone, { portugueseEnabled: portuguesePreview() });
+  const preview = portuguesePreview();
+  if (nativePreview !== preview) {
+    nativePreview = preview;
+    WaveNative.setPortuguesePreview?.(preview);
+  }
   if (current?.language !== language) current = { language, strings: catalogueOf(language) };
   return current;
 };
 
 const listeners = new Set<() => void>();
+subscribePortuguesePreview(() => {
+  currentLocalisation();
+});
 
 /** Calls [listener] when the language may have changed; gives the function that stops it. */
 export const subscribeLocalisation = (listener: () => void): (() => void) => {

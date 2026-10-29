@@ -17,7 +17,7 @@ const device = stubModule(
   `import { makeExternalStore } from ${externalStore};
    export const preview = makeExternalStore(false);
    export const localeChanged = makeExternalStore(0);
-   export const phone = { languages: ["pt-BR", "en-US"] };`,
+   export const phone = { languages: ["pt-BR", "en-US"], preview: false };`,
 );
 const builds = await reactCompilerBuilds<typeof import("./localisation.ts")>(
   new URL("./localisation.ts", import.meta.url).href,
@@ -29,6 +29,7 @@ const builds = await reactCompilerBuilds<typeof import("./localisation.ts")>(
     ),
     "@/native/waveNative": stubModule(
       `import { phone, localeChanged } from ${JSON.stringify(device)};
+       export const WaveNative = { setPortuguesePreview: (enabled) => { phone.preview = enabled; } };
        export const phoneLanguages = () => phone.languages;
        export const subscribePhoneLanguages = localeChanged.subscribe;`,
     ),
@@ -36,7 +37,7 @@ const builds = await reactCompilerBuilds<typeof import("./localisation.ts")>(
 );
 const { preview, phone, localeChanged } = (await import(device)) as {
   preview: ExternalStore<boolean>;
-  phone: { languages: string[] };
+  phone: { languages: string[]; preview: boolean };
   localeChanged: ExternalStore<number>;
 };
 const changeLanguages = (languages: string[]) => {
@@ -72,9 +73,11 @@ for (const [build, localisation] of Object.entries(builds)) {
       await act(() => preview.set(true));
       assert.equal(shown.at(-1), "pt-BR Início", "on, it reads in Portuguese at once");
       assert.equal(currentLocalisation().language, "pt-BR", "services read the same value");
+      assert.equal(phone.preview, true, "native services receive the preview gate");
 
       await act(() => preview.set(false));
       assert.equal(shown.at(-1), "en Home");
+      assert.equal(phone.preview, false);
       assert.equal(mounts, 1, "the screen isn't remounted");
     } finally {
       await act(() => renderer?.unmount());

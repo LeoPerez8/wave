@@ -1,5 +1,6 @@
 package expo.modules.wavenative.player
 
+import expo.modules.wavenative.locale.NativeText
 /**
  * More from this artist, in the overflow menu of Auto's player screen next to
  * shuffle and repeat. A custom session command like theirs: a tap is forwarded
@@ -9,7 +10,7 @@ package expo.modules.wavenative.player
  */
 object MoreFromArtist {
   const val ACTION = "expo.modules.wavenative.AUTO_MORE_FROM_ARTIST"
-  const val LABEL = "More from this artist"
+  val LABEL get() = NativeText.get("moreArtist")
 
   /** The bridge request a tap on [action] sends, or null when it isn't this button. */
   fun request(action: String): AutoCommandRequest? =
