@@ -27,7 +27,7 @@ interface RecognizeAudio {
 class RecognizeSession(
   private val audio: RecognizeAudio,
   private val recognize: (ShazamSignature) -> RecognizeOutcome,
-  private val onHeard: (heardMs: Int) -> Unit,
+  private val onHeard: (heardMs: Int, audible: Boolean) -> Unit,
   private val onCaptureFailed: () -> Unit,
 ) {
   private val generator = SignatureGenerator()
@@ -58,10 +58,12 @@ class RecognizeSession(
   private fun capture() {
     val buffer = ShortArray(BUFFER)
     var reported = 0L
+    var audible = false
     try {
       while (!stopped) {
         val count = audio.read(buffer)
         if (count < 0) break
+        if (!audible) audible = (0 until count).any { buffer[it] != 0.toShort() }
         val samples = synchronized(generator) {
           generator.append(buffer, 0, count)
           generator.sampleCount
@@ -69,9 +71,12 @@ class RecognizeSession(
         val steps = samples / SAMPLES_PER_STEP
         while (reported < steps) {
           reported++
-          onHeard((reported * HEARD_STEP_MS).toInt())
+          onHeard((reported * HEARD_STEP_MS).toInt(), audible)
         }
       }
+    } catch (_: Exception) {
+      // Projection revocation or a device disconnect may make AudioRecord.read throw.
+      // The controller still needs the capture-failed event to finish its session.
     } finally {
       audio.release()
     }

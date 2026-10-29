@@ -13,6 +13,45 @@ import org.junit.Test
 
 /** A session over audio served from a fixture, as a capture would deliver it. */
 class RecognizeSessionTest {
+  @Test
+  fun `sound in an earlier read still counts when the first window ends in silence`() {
+    val samples = ShortArray(64_000).also { it[200] = Short.MIN_VALUE }
+    val audio = FakeAudio(samples)
+    val levels = CopyOnWriteArrayList<Boolean>()
+    val session = RecognizeSession(audio, { RecognizeOutcome.NoMatch },
+      onHeard = { ms, audible -> levels += audible; heard += ms },
+      onCaptureFailed = { captureFailed.countDown() })
+    session.start()
+    waitForHeard(4_000)
+    session.stop()
+    assertTrue(levels.all { it })
+  }
+
+  @Test
+  fun `a capture read that throws still reports its failure and releases the audio`() {
+    val released = CountDownLatch(1)
+    val audio = object : RecognizeAudio {
+      override fun read(buffer: ShortArray): Int = throw IllegalStateException("Projection stopped")
+      override fun stop() = Unit
+      override fun release() = released.countDown()
+    }
+    session(audio).start()
+    assertTrue(captureFailed.await(1, TimeUnit.SECONDS))
+    assertTrue(released.await(1, TimeUnit.SECONDS))
+  }
+  @Test
+  fun `reports silent PCM at the first window`() {
+    val audio = FakeAudio(ShortArray(64_000))
+    val levels = CopyOnWriteArrayList<Boolean>()
+    val session = RecognizeSession(audio, { RecognizeOutcome.NoMatch },
+      onHeard = { ms, audible -> levels += audible; heard += ms },
+      onCaptureFailed = { captureFailed.countDown() })
+    session.start()
+    waitForHeard(4_000)
+    session.stop()
+    assertEquals(16, levels.size)
+    assertTrue(levels.none { it })
+  }
   private val chordSong: ShortArray = run {
     val bytes = Fixtures.file("shazam/chord-song.pcm").readBytes()
     ShortArray(bytes.size / 2).also { ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer().get(it) }
@@ -54,7 +93,7 @@ class RecognizeSessionTest {
   private val captureFailed = CountDownLatch(1)
 
   private fun session(audio: RecognizeAudio, recognize: (ShazamSignature) -> RecognizeOutcome = { RecognizeOutcome.NoMatch }) =
-    RecognizeSession(audio, recognize, onHeard = { heard += it }, onCaptureFailed = { captureFailed.countDown() })
+    RecognizeSession(audio, recognize, onHeard = { ms, _ -> heard += ms }, onCaptureFailed = { captureFailed.countDown() })
 
   private fun waitForHeard(ms: Int) {
     val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
