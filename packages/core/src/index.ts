@@ -2314,7 +2314,15 @@ export type {
 export { planShazamAdd } from "./shazamPlaylist.ts";
 export { bounceDemoSwipe, sampleSwipeActions } from "./motionSample.ts";
 export type { BounceDemoSwipe } from "./motionSample.ts";
-export { LONG_PRESS_SAMPLE_MENU, longPressFill, longPressHoldLasts } from "./touchSample.ts";
+export {
+  LONG_PRESS_SAMPLE_MENU,
+  longPressFill,
+  longPressHoldStep,
+  type HeldFinger,
+  type LongPressHoldStep,
+  type SampleTouch,
+  type SampleTouchEvent,
+} from "./touchSample.ts";
 export type { LongPressFill, SampleMenuEntry } from "./touchSample.ts";
 export {
   NOW_PLAYING_ACTIONS,

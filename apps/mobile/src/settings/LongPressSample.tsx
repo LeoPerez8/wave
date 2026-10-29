@@ -1,9 +1,11 @@
 import {
   LONG_PRESS_SAMPLE_MENU,
   longPressFill,
-  longPressHoldLasts,
+  longPressHoldStep,
   withOpacity,
-  type SlidePoint,
+  type HeldFinger,
+  type SampleTouch,
+  type SampleTouchEvent,
 } from "@wave/core";
 import * as Haptics from "expo-haptics";
 import { useEffect, useEffectEvent, useRef } from "react";
@@ -72,18 +74,30 @@ const openSampleMenu = (): void => {
   });
 };
 
-const pointOf = ({ nativeEvent }: GestureResponderEvent): SlidePoint => ({
-  x: nativeEvent.pageX,
-  y: nativeEvent.pageY,
+const fingersOf = (touches: GestureResponderEvent["nativeEvent"]["touches"] | undefined) =>
+  (touches ?? []).map((touch): SampleTouch => ({
+    id: touch.identifier,
+    x: touch.pageX,
+    y: touch.pageY,
+  }));
+
+const touchEventOf = (
+  kind: SampleTouchEvent["kind"],
+  { nativeEvent }: GestureResponderEvent,
+): SampleTouchEvent => ({
+  kind,
+  touches: fingersOf(nativeEvent.touches),
+  changed: fingersOf(nativeEvent.changedTouches),
 });
 
 /**
  * Long-press delay's sample: the sample song row to hold. A fill sweeps
  * across it over the current delay (only this sample shows one), then the
- * long-press haptic fires and the sample menu opens, anchored to the row.
- * Lifting early, drifting off as a real row's long-press would, or scrolling
- * the page stops the fill and opens nothing. Each change of [demo] sweeps the
- * fill once over the delay, with no menu. Under reduce motion nothing fills.
+ * long-press haptic fires and the sample menu opens, anchored to the row. Lifting early, drifting off as a real row's long-press
+ * would, or scrolling the page stops the fill and opens nothing; other
+ * fingers touching the screen meanwhile change nothing (`longPressHoldStep`).
+ * Each change of [demo] sweeps the fill once over the delay, with no menu.
+ * Under reduce motion nothing fills.
  */
 export function LongPressSample({ demo }: { demo: number }) {
   const delayMs = useLongPressDelayMs();
@@ -91,8 +105,8 @@ export function LongPressSample({ demo }: { demo: number }) {
   const accent = useThemeColor("accent");
   const progress = useSharedValue(0);
   const shown = useSharedValue(0);
-  // Where the finger holding the row went down; null when no hold is running.
-  const holdStart = useRef<SlidePoint | null>(null);
+  // The finger holding the row and where it went down; null when no hold is running.
+  const hold = useRef<HeldFinger | null>(null);
 
   const fillStyle = useAnimatedStyle(() => ({
     width: `${progress.get() * 100}%`,
@@ -111,10 +125,14 @@ export function LongPressSample({ demo }: { demo: number }) {
     cancelAnimation(progress);
     shown.set(withTiming(0, { duration: TAP_ANIMATION_MS }));
   };
-  const endHold = (): void => {
-    if (holdStart.current === null) return;
-    holdStart.current = null;
-    fade();
+  const follow = (kind: SampleTouchEvent["kind"], event: GestureResponderEvent): void => {
+    const step = longPressHoldStep(hold.current, touchEventOf(kind, event));
+    hold.current = step.hold;
+    if (step.fill === "stop") fade();
+    if (step.fill === "start") {
+      const fill = longPressFill({ delayMs, reduceMotion });
+      if (fill !== null) sweep(fill.durationMs, false);
+    }
   };
 
   const sweepOnce = useEffectEvent(() => {
@@ -133,19 +151,12 @@ export function LongPressSample({ demo }: { demo: number }) {
       onAccessibilityAction={({ nativeEvent }) => {
         if (nativeEvent.actionName === OPEN_ACTION) openSampleMenu();
       }}
-      onTouchStart={(event) => {
-        holdStart.current = pointOf(event);
-        const fill = longPressFill({ delayMs, reduceMotion });
-        if (fill !== null) sweep(fill.durationMs, false);
-      }}
-      onTouchMove={(event) => {
-        const start = holdStart.current;
-        if (start !== null && !longPressHoldLasts(start, pointOf(event))) endHold();
-      }}
-      onTouchEnd={endHold}
-      onTouchCancel={endHold}
+      onTouchStart={(event) => follow("start", event)}
+      onTouchMove={(event) => follow("move", event)}
+      onTouchEnd={(event) => follow("end", event)}
+      onTouchCancel={(event) => follow("cancel", event)}
       onLongPress={() => {
-        holdStart.current = null;
+        hold.current = null;
         fade();
         void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         openSampleMenu();
