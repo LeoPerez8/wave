@@ -83,9 +83,9 @@ export const INK_PAIRS: readonly InkPair[] = INK_PALETTE.flatMap((primary) =>
 /** Below the soft presets' roughly 0.12 chroma, a custom ink must stay a preset. */
 export const PASTEL_CHROMA_THRESHOLD = 0.12;
 
-/** A preset keeps its ink; a custom colour matches by what its dark theme displays. */
+/** A preset keeps its ink; a custom colour matches its corrected ink on the icon's black ground. */
 export const inkPairFor = (choice: ThemeChoice): InkPair => {
-  const theme = themeFor(choice);
+  const theme = themeFor({ ...choice, dark: "black" });
   const pick = (group: InkGroup): PaletteInk => {
     const presets = THEME_SWATCHES[group];
     const custom = group === "primary" ? choice.customPrimary : choice.customSecondary;

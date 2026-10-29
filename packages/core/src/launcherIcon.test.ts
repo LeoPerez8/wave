@@ -6,6 +6,7 @@ import {
   LAUNCHER_ICON_ART,
   LAUNCHER_ICONS,
   THEME_SWATCHES,
+  chooseCustomInk,
   contrastRatio,
   launcherIconFor,
   launcherIconSwitch,
@@ -42,6 +43,33 @@ describe("launcherIconFor", () => {
       launcherIconFor(choose({ light: "sand", dark: "black" })),
       launcherIconFor(DEFAULT_THEME_CHOICE),
     );
+  });
+
+  test("custom primaries and secondaries keep their black-ground icon on every background (#791)", () => {
+    const samples = [
+      ["#1177bb", "vivid239"],
+      ["#330099", "vivid269"],
+      ["#001932", "blue"],
+      ["#00e9ff", "vivid209"],
+      ["#ff0d00", "vivid29"],
+      ["#89cff0", "sky"],
+      ["#f8c8dc", "rose"],
+    ] as const;
+    for (const group of ["primary", "secondary"] as const) {
+      for (const [hex, ink] of samples) {
+        const choice = chooseCustomInk(DEFAULT_THEME_CHOICE, group, hex);
+        const expected = group === "primary" ? `${ink}_ember` : `teal_${ink}`;
+        for (const light of THEME_SWATCHES.light) {
+          for (const dark of THEME_SWATCHES.dark) {
+            assert.equal(
+              launcherIconFor({ ...choice, light: light.id, dark: dark.id }).id,
+              expected,
+              `${group} ${hex} on ${light.id}/${dark.id}`,
+            );
+          }
+        }
+      }
+    }
   });
 
   test("every primary × secondary combination has an icon of its own", () => {
