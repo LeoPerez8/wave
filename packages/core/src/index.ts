@@ -2348,3 +2348,4 @@ export type {
 } from "./nowPlayingButtons.ts";
 
 export * from "./followedArtists.ts";
+export * from "./followArtistSearch.ts";
