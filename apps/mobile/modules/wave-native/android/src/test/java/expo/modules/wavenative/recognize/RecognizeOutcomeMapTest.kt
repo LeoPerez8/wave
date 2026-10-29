@@ -28,8 +28,17 @@ class RecognizeOutcomeMapTest {
   @Test
   fun `no match and failures say which they are`() {
     assertEquals(mapOf("kind" to "noMatch"), RecognizeOutcome.NoMatch.toMap())
-    assertEquals(mapOf("kind" to "failed", "failure" to "network"), RecognizeOutcome.Failed(RecognizeFailure.NETWORK).toMap())
-    assertEquals(mapOf("kind" to "failed", "failure" to "refused"), RecognizeOutcome.Failed(RecognizeFailure.REFUSED).toMap())
-    assertEquals(mapOf("kind" to "failed", "failure" to "unreadable"), RecognizeOutcome.Failed(RecognizeFailure.UNREADABLE).toMap())
+    assertEquals(
+      mapOf("kind" to "failed", "failure" to "network", "status" to null),
+      RecognizeOutcome.Failed(RecognizeFailure.NETWORK).toMap(),
+    )
+    assertEquals(
+      mapOf("kind" to "failed", "failure" to "refused", "status" to 429),
+      RecognizeOutcome.Failed(RecognizeFailure.REFUSED, 429).toMap(),
+    )
+    assertEquals(
+      mapOf("kind" to "failed", "failure" to "unreadable", "status" to null),
+      RecognizeOutcome.Failed(RecognizeFailure.UNREADABLE).toMap(),
+    )
   }
 }

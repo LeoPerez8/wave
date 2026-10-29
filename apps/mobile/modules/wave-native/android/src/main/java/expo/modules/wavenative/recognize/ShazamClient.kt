@@ -37,7 +37,8 @@ enum class RecognizeFailure(val code: String) {
 sealed interface RecognizeOutcome {
   data class Match(val song: RecognizedSong) : RecognizeOutcome
   data object NoMatch : RecognizeOutcome
-  data class Failed(val failure: RecognizeFailure) : RecognizeOutcome
+  /** [status] is the HTTP status of a [RecognizeFailure.REFUSED] request (429 when Shazam rate-limits). */
+  data class Failed(val failure: RecognizeFailure, val status: Int? = null) : RecognizeOutcome
 
   /** The outcome as JS receives it: `kind` is `match`, `noMatch` or `failed`. */
   fun toMap(): Map<String, Any?> = when (this) {
@@ -53,7 +54,7 @@ sealed interface RecognizeOutcome {
       ),
     )
     NoMatch -> mapOf("kind" to "noMatch")
-    is Failed -> mapOf("kind" to "failed", "failure" to failure.code)
+    is Failed -> mapOf("kind" to "failed", "failure" to failure.code, "status" to status)
   }
 }
 
@@ -110,7 +111,7 @@ class ShazamClient(
     } catch (_: IOException) {
       return RecognizeOutcome.Failed(RecognizeFailure.NETWORK)
     }
-    if (response.status !in 200..299) return RecognizeOutcome.Failed(RecognizeFailure.REFUSED)
+    if (response.status !in 200..299) return RecognizeOutcome.Failed(RecognizeFailure.REFUSED, response.status)
     return readAnswer(response.body)
   }
 

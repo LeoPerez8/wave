@@ -19,6 +19,9 @@
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
   <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+  <!-- Recognize listens through the microphone, asked for on first use (docs/spec.md, "Recognize"). -->
+  <uses-permission android:name="android.permission.RECORD_AUDIO" />
+
   <!-- The Wi-Fi pre-download's job is kept across reboots (PreDownloads, JobInfo.setPersisted). -->
   <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 

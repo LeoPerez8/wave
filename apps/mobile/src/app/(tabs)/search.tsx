@@ -46,6 +46,7 @@ import {
   songResults,
   ytFooterRows,
 } from "@/search/rows";
+import { openRecognize, recognizeAvailable } from "@/recognize/RecognizeCard";
 import { useSearchRequests } from "@/search/queryRequest";
 import { useYtMusicSection } from "@/search/ytMusicSearch";
 import { useSearchFieldFocus } from "@/search/fieldFocus";
@@ -94,6 +95,9 @@ function RecentSearches({ onPick }: { onPick: (query: string) => void }) {
     </ScrollView>
   );
 }
+
+/** Search's Recognize Song button opens the listening card; none in a build without Recognize. */
+const recognizeSong = recognizeAvailable ? () => openRecognize() : undefined;
 
 /**
  * The Search tab: results update as you type, grouped by type under a top
@@ -257,6 +261,7 @@ export default function SearchScreen() {
               onSubmit={remember}
               onLayout={focus.onLayout}
               onFocusChange={focus.onFocusChange}
+              onRecognize={recognizeSong}
             />
           }
         />

@@ -72,10 +72,10 @@ class ShazamClientTest {
   }
 
   @Test
-  fun `an HTTP error fails, even with a no-match body`() {
+  fun `an HTTP error fails with its status, even with a no-match body`() {
     for (status in listOf(429, 404, 500, 503)) {
       answer = { ShazamResponse(status, saved("no-match")) }
-      assertEquals("$status", RecognizeOutcome.Failed(RecognizeFailure.REFUSED), client().recognize(signature))
+      assertEquals("$status", RecognizeOutcome.Failed(RecognizeFailure.REFUSED, status), client().recognize(signature))
     }
   }
 

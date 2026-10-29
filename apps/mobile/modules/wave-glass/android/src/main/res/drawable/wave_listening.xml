@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  One 96dp tile of the Recognize card's listening wave (WaveUnderlineView with the
+  "listening" shape repeats it across the card). Wavelength 24, amplitude 6, stroke 2,
+  all in dp: the underline's line, larger and slower. The path is
+  `wavePath({ width: 96, wavelength: 24, amplitude: 6 })` from @wave/core, one
+  wavelength past the tile, so sliding the group left by a wavelength, forever, reads
+  as a continuous ripple and the tiles meet without a seam.
+
+  Every number here comes from Core's LISTENING_WAVE; src/catalog/underlineDrawable.test.ts
+  fails if they drift. It runs on the RenderThread, as the underline does (issue #93).
+  The stroke is white; the view tints it with the theme's accent colour.
+-->
+<animated-vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt">
+  <aapt:attr name="android:drawable">
+    <vector
+        android:width="96dp"
+        android:height="14dp"
+        android:viewportWidth="96"
+        android:viewportHeight="14">
+      <group android:translateY="1">
+        <group android:name="wave">
+          <path
+              android:pathData="M0 6Q6 -6 12 6T24 6T36 6T48 6T60 6T72 6T84 6T96 6T108 6T120 6"
+              android:strokeColor="#FFFFFFFF"
+              android:strokeWidth="2"
+              android:strokeLineCap="round" />
+        </group>
+      </group>
+    </vector>
+  </aapt:attr>
+  <target android:name="wave">
+    <aapt:attr name="android:animation">
+      <objectAnimator
+          android:propertyName="translateX"
+          android:valueFrom="0"
+          android:valueTo="-24"
+          android:valueType="floatType"
+          android:duration="1200"
+          android:repeatCount="infinite"
+          android:repeatMode="restart"
+          android:interpolator="@android:anim/linear_interpolator" />
+    </aapt:attr>
+  </target>
+</animated-vector>
