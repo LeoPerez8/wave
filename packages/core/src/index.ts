@@ -2319,6 +2319,7 @@ export type { LongPressFill, SampleMenuEntry } from "./touchSample.ts";
 export {
   NOW_PLAYING_ACTIONS,
   editNowPlayingButtons,
+  nowPlayingSlotShow,
   readNowPlayingButtons,
   storedNowPlayingButtons,
 } from "./nowPlayingButtons.ts";
@@ -2327,4 +2328,5 @@ export type {
   NowPlayingButtons,
   NowPlayingButtonsEdit,
   NowPlayingSlot,
+  NowPlayingSlotSong,
 } from "./nowPlayingButtons.ts";

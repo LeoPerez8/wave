@@ -98,3 +98,30 @@ export const editNowPlayingButtons = (
   });
   return [a ?? null, b ?? null, c ?? null, d ?? null];
 };
+
+/**
+ * What's on, as the slots see it: nothing, an unsearched entry while its
+ * search runs, or a song.
+ */
+export type NowPlayingSlotSong = "nothing" | "unsearched" | "song";
+
+/** The actions that need a song on to show: with nothing playing their slots stay empty. */
+const NEEDS_SONG: ReadonlySet<NowPlayingAction> = new Set([
+  "addToPlaylist",
+  "download",
+  "share",
+  "songMenu",
+]);
+
+/**
+ * How slot [action]'s button shows with [song] on: hidden, off (it shows
+ * disabled and only long-presses to change the slot), or on. Song menu is off
+ * while an unsearched entry's search runs, since the song has no menu yet.
+ */
+export const nowPlayingSlotShow = (
+  action: NowPlayingAction,
+  song: NowPlayingSlotSong,
+): "hidden" | "off" | "on" => {
+  if (song === "nothing") return NEEDS_SONG.has(action) ? "hidden" : "on";
+  return song === "unsearched" && action === "songMenu" ? "off" : "on";
+};
