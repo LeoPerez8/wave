@@ -29,6 +29,14 @@
 -if class androidx.credentials.CredentialManager
 -keep class androidx.credentials.playservices.** { *; }
 
+# Expo Background Task brings WorkManager 2.9 / Room 2.5. Room loads this class by
+# name and calls Class.newInstance() during Startup provider initialization, before
+# JS or the app log exists. Its bundled rules keep the class name but R8 full mode
+# removes the constructor, crashing every cold start in 0.38.0-ti.
+-keep class androidx.work.impl.WorkDatabase_Impl {
+    public <init>();
+}
+
 # The app log (#331) writes exceptions by class name: keep Wave's own readable in release
 # builds, and keep line numbers so a logged stack can be retraced with R8's mapping.
 -keepnames class expo.modules.wavenative.** extends java.lang.Throwable
