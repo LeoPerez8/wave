@@ -5,7 +5,11 @@
  * letting it go runs nothing.
  */
 
-import type { RowMenuAction, RowSwipeActions, SwipeSettings } from "./swipeActions.ts";
+import type { RowMenuAction, RowSwipeActions, SwipeChoice, SwipeSettings } from "./swipeActions.ts";
+
+/** The entry [choice] runs on the sample: a Library song with its file, so Remove deletes it. */
+const sampleAction = (choice: SwipeChoice): RowMenuAction =>
+  choice === "remove" ? "delete" : choice;
 
 /**
  * What the sample row uncovers on each side under [settings]: the menu entry
@@ -13,13 +17,10 @@ import type { RowMenuAction, RowSwipeActions, SwipeSettings } from "./swipeActio
  * star favorites it), so every choice shows, whatever a given song offers.
  * With swipes off it uncovers nothing: it still moves, to show the bounce.
  */
-export const sampleSwipeActions = (settings: SwipeSettings): RowSwipeActions => {
-  const action = (choice: SwipeSettings["right"]): RowMenuAction =>
-    choice === "remove" ? "delete" : choice;
-  return settings.enabled
-    ? { right: action(settings.right), left: action(settings.left) }
+export const sampleSwipeActions = (settings: SwipeSettings): RowSwipeActions =>
+  settings.enabled
+    ? { right: sampleAction(settings.right), left: sampleAction(settings.left) }
     : { right: null, left: null };
-};
 
 /** One demo swipe: out [translationX] dp to the right over [outMs], then the row's own spring back. */
 export interface BounceDemoSwipe {
