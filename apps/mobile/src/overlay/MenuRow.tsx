@@ -22,6 +22,8 @@ type Props = {
   highlighted?: boolean;
   /** Deletes something for good: the icon and label in the destructive colour. */
   destructive?: boolean;
+  /** What screen readers add after the label (a sample menu's "only closes the menu"). */
+  accessibilityHint?: string | undefined;
 };
 
 /**
@@ -38,6 +40,7 @@ export function MenuRow({
   divider = true,
   highlighted = false,
   destructive = false,
+  accessibilityHint,
 }: Props) {
   const Icon = icon ?? ACTION_ICONS[action];
   return (
@@ -46,6 +49,7 @@ export function MenuRow({
       tone={destructive ? "destructive" : "primary"}
       accessibilityRole="button"
       accessibilityLabel={label}
+      accessibilityHint={accessibilityHint}
       onPress={onPress}
       highlighted={highlighted}
     >
