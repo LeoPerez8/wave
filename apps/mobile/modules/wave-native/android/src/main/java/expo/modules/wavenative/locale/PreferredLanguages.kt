@@ -1,7 +1,9 @@
 package expo.modules.wavenative.locale
 
 import android.app.LocaleManager
+import android.content.ComponentCallbacks
 import android.content.Context
+import android.content.res.Configuration
 import android.content.res.Resources
 import android.os.Build
 import android.os.LocaleList
@@ -24,4 +26,29 @@ object PreferredLanguages {
   }
 
   private fun tags(list: LocaleList): List<String> = (0 until list.size()).map { list[it].toLanguageTag() }
+}
+
+/** Observes handled configuration changes; foreground refresh catches changes made while away. */
+class PreferredLanguageObserver(context: Context, private val changed: () -> Unit) : ComponentCallbacks {
+  private val application = context.applicationContext
+  private var languages = PreferredLanguages.read(application)
+
+  init {
+    application.registerComponentCallbacks(this)
+  }
+
+  fun refresh() {
+    val next = PreferredLanguages.read(application)
+    if (next == languages) return
+    languages = next
+    changed()
+  }
+
+  override fun onConfigurationChanged(newConfig: Configuration) = refresh()
+
+  override fun onLowMemory() = Unit
+
+  fun close() {
+    application.unregisterComponentCallbacks(this)
+  }
 }
