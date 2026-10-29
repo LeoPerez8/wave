@@ -262,6 +262,9 @@ describe("Smart Shuffle", () => {
   });
 });
 
+const at = (state: QueueState, index: number): QueueState => ({ ...state, index });
+const all = (state: QueueState): QueueState => ({ ...state, repeat: "all" });
+
 describe("shufflesQueue", () => {
   const playing = start(["a", "b", "c"]);
   const shuffled = reduceQueue(playing, { type: "setShuffle", on: true }).state;
@@ -280,6 +283,26 @@ describe("shufflesQueue", () => {
     assert.equal(shufflesQueue(shuffled, play), true);
     assert.equal(shufflesQueue(playing, { ...play, shuffle: true }), true);
     assert.equal(shufflesQueue(shuffled, { ...play, shuffle: false }), false);
+  });
+
+  test("Repeat All's next lap shuffles with shuffle on, however it starts", () => {
+    const last = at(all(shuffled), 2);
+    const opening = last.entries[0]!.key;
+    assert.equal(shufflesQueue(last, { type: "next" }), true);
+    assert.equal(shufflesQueue(last, { type: "trackEnded" }), true);
+    assert.equal(shufflesQueue(last, { type: "playerMoved", key: opening }), true);
+    const current = currentEntry(last)!.trackId;
+    assert.equal(shufflesQueue(last, { type: "removeTracks", trackIds: [current] }), true);
+    const notFound = { type: "settled", trackId: current, becomes: null } as const;
+    assert.equal(shufflesQueue(last, notFound), true);
+    assert.equal(shufflesQueue(last, { ...notFound, becomes: "yt:found" }), false);
+    // Not past the end, not wrapping, or with shuffle off: no lap is shuffled.
+    assert.equal(shufflesQueue(at(all(shuffled), 1), { type: "next" }), false);
+    assert.equal(shufflesQueue(at(shuffled, 2), { type: "next" }), false);
+    assert.equal(shufflesQueue({ ...last, repeat: "one" }, { type: "trackEnded" }), false);
+    assert.equal(shufflesQueue(at(all(playing), 2), { type: "next" }), false);
+    assert.equal(shufflesQueue(last, { type: "playerMoved", key: last.entries[1]!.key }), false);
+    assert.equal(shufflesQueue(last, { type: "removeTracks", trackIds: ["zzz"] }), false);
   });
 });
 
@@ -309,6 +332,17 @@ describe("shuffledTrackIds", () => {
       "4",
     ]);
     assert.deepEqual(shuffledTrackIds(later, { type: "reshuffle" }), ["yt:abc", "3", "4"]);
+  });
+
+  test("Repeat All's shuffled lap orders every song of the queue, each once", () => {
+    const shuffled = reduceQueue(playing, { type: "setShuffle", on: true }).state;
+    const last = { ...shuffled, repeat: "all" as const, index: shuffled.entries.length - 1 };
+    assert.deepEqual(shuffledTrackIds(last, { type: "next" }).toSorted(), [
+      "1",
+      "2",
+      "3",
+      "yt:abc",
+    ]);
   });
 
   test("a command that doesn't shuffle needs no plays", () => {

@@ -589,3 +589,111 @@ describe("queueHistory", () => {
     assert.deepEqual(ids(upNext(back)), ["c", "d", "e"]);
   });
 });
+
+/** Applies commands in order with one seeded random source, returning the final state. */
+const run = (state: QueueState, seed: number, ...commands: QueueCommand[]): QueueState => {
+  const random = seeded(seed);
+  return commands.reduce((current, command) => reduceQueue(current, command, random).state, state);
+};
+
+/** Moves on with `next` until the last entry plays. */
+const toLast = (state: QueueState): QueueState => {
+  let at = state;
+  while (at.index < at.entries.length - 1) at = apply(at, { type: "next" });
+  return at;
+};
+
+describe("Repeat All's next lap after a shuffle toggle", () => {
+  const tracks = "a b c d e f g h i j";
+  const album = tracks.split(" ");
+
+  /** Shuffle on from f with Repeat All, played to the last song: History holds a–e in album order. */
+  const onMidAlbum = (seed: number): QueueState =>
+    toLast(
+      run(
+        start(tracks, 5),
+        seed,
+        { type: "setRepeat", mode: "all" },
+        { type: "setShuffle", on: true },
+      ),
+    );
+
+  /** Shuffle on from the start, 5 songs played, then shuffle off: History holds 5 shuffled songs. */
+  const offAfterShuffle = (seed: number): QueueState => {
+    const shuffled = reduceQueue(
+      EMPTY_QUEUE,
+      { type: "play", trackIds: album, context: songs, shuffle: true },
+      seeded(seed),
+    ).state;
+    const played = apply(
+      shuffled,
+      { type: "setRepeat", mode: "all" },
+      ...Array.from({ length: 5 }, () => ({ type: "next" }) as const),
+      { type: "setShuffle", on: false },
+    );
+    assert.notDeepEqual(ids(queueHistory(played)), album.slice(0, 5));
+    return toLast(played);
+  };
+
+  test("with shuffle turned on mid-album, the next lap is a new shuffle, not History's album order", () => {
+    const orders = new Set<string>();
+    for (const seed of [3, 7, 11, 19, 23]) {
+      const last = onMidAlbum(seed);
+      for (const command of [{ type: "next" }, { type: "trackEnded" }] as const) {
+        const { state, playback } = reduceQueue(last, command, seeded(seed + 1));
+        assert.equal(state.shuffle, true);
+        assert.equal(state.index, 0);
+        assert.equal(playback, "keep");
+        assert.deepEqual(ids(state.entries).toSorted(), album);
+        assert.notDeepEqual(ids(state.entries).slice(0, 5), album.slice(0, 5), `seed ${seed}`);
+        orders.add(ids(state.entries).join(" "));
+      }
+    }
+    assert.ok(orders.size > 1);
+  });
+
+  test("with shuffle turned off, the next lap plays in the context's order", () => {
+    for (const seed of [3, 7, 11]) {
+      const last = offAfterShuffle(seed);
+      assert.equal(show(apply(last, { type: "next" })), `[a] ${album.slice(1).join(" ")}`);
+      assert.equal(show(apply(last, { type: "trackEnded" })), `[a] ${album.slice(1).join(" ")}`);
+    }
+  });
+
+  test("the player wrapping by itself opens the lap with History's first song, the rest as shuffle says", () => {
+    const off = offAfterShuffle(5);
+    const first = off.entries[0]!;
+    const wrappedOff = apply(off, { type: "playerMoved", key: first.key });
+    assert.equal(currentEntry(wrappedOff)?.key, first.key);
+    assert.equal(wrappedOff.index, 0);
+    assert.deepEqual(
+      ids(upNext(wrappedOff)),
+      album.filter((id) => id !== first.trackId),
+    );
+
+    const on = onMidAlbum(5);
+    const wrappedOn = run(on, 9, { type: "playerMoved", key: keyOf(on, "a") });
+    assert.equal(show(wrappedOn).split(" ")[0], "[a]");
+    assert.deepEqual(ids(wrappedOn.entries).toSorted(), album);
+    assert.notDeepEqual(ids(upNext(wrappedOn)), album.slice(1));
+  });
+
+  test("lined-up songs that played still drop out of the lap", () => {
+    const queued = apply(onMidAlbum(5), { type: "playNext", trackIds: ["x"] }, { type: "next" });
+    const { state } = reduceQueue(queued, { type: "next" }, seeded(2));
+    assert.deepEqual(ids(state.entries).toSorted(), album);
+  });
+
+  test("deleting the last song with shuffle off wraps to the context's order", () => {
+    const last = offAfterShuffle(7);
+    const { state } = reduceQueue(last, {
+      type: "removeTracks",
+      trackIds: [currentEntry(last)!.trackId],
+    });
+    assert.equal(state.index, 0);
+    assert.deepEqual(
+      ids(state.entries),
+      album.filter((id) => id !== currentEntry(last)!.trackId),
+    );
+  });
+});
