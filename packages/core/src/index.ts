@@ -605,7 +605,7 @@ export { concentricRadius } from "./corners.ts";
 export type { InsetSquare } from "./corners.ts";
 export { LOGO_WAVES, logoIconPaths, logoWaveY } from "./logo.ts";
 export type { LogoIconBox, LogoIconPaths, LogoWave } from "./logo.ts";
-export { UNDERLINE_WAVE, underlineMotion, wavePath } from "./wavyUnderline.ts";
+export { LISTENING_WAVE, UNDERLINE_WAVE, underlineMotion, wavePath } from "./wavyUnderline.ts";
 export type { UnderlineMotion, UnderlineMotionInput, WaveShape } from "./wavyUnderline.ts";
 export {
   cardShowsHeading,
