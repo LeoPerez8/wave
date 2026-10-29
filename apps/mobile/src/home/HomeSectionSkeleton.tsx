@@ -46,14 +46,13 @@ const localisation = useLocalisation();
 
 /** A still, labelled placeholder in the section's own shape, including its heading. */
 export function HomeSectionSkeleton({ id }: { id: HomeSectionId }) {
- const localisation = useLocalisation();
-
+  const { strings } = useLocalisation();
   const { fontScale } = useWindowDimensions();
   const songs = id === "most-played" || id === "favorites";
   const artists = id === "most-played-artists";
   return (
     <TitledSection
-      title={homeSectionTitle(id, localisation.strings)}
+      title={homeSectionTitle(id, strings)}
       {...(id === "stats" ? { action: statsSeeAllAction } : {})}
     >
       <View style={{ minHeight: homePlaceholderHeight(id, fontScale) }}>

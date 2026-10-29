@@ -1248,6 +1248,10 @@ const m0045 = `CREATE TABLE follows (
   deezer_id integer, yt_browse_id text
 );`;
 
+const m0046 = `CREATE TABLE follow_release_cache (key text PRIMARY KEY NOT NULL, releases text NOT NULL, checked_at integer NOT NULL);
+--> statement-breakpoint
+CREATE TABLE hidden_follow_releases (key text PRIMARY KEY NOT NULL);`;
+
 export default {
   journal: {
     entries: [
@@ -1307,6 +1311,7 @@ export default {
       { idx: 43, when: 1_795_521_600_000, tag: "0043_queue_persistence", breakpoints: true },
       { idx: 44, when: 1_795_608_000_000, tag: "0044_ongoing_plays", breakpoints: true },
       { idx: 45, when: 1_795_694_400_000, tag: "0045_follows", breakpoints: true },
+      { idx: 46, when: 1_795_780_800_000, tag: "0046_follow_releases", breakpoints: true },
     ],
   },
   migrations: {
@@ -1356,5 +1361,6 @@ export default {
     m0043: mQueuePersistence,
     m0044: mOngoingPlays,
     m0045,
+    m0046,
   },
 };

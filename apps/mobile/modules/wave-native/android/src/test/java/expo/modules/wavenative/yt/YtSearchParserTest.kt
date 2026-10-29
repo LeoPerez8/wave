@@ -71,6 +71,8 @@ class YtSearchParserTest {
     assertEquals("Watch The Throne (Deluxe)", album.title)
     assertEquals(listOf("JAŸ-Z", "Kanye West"), album.artists)
     assertEquals(2011, album.year)
+    assertEquals("album", album.releaseType)
+    assertEquals("album", album.toMap()["releaseType"])
     assertTrue("the largest cover", album.artworkUrl!!.contains("w544-h544"))
     assertEquals(listOf("Kanye West"), albums[1].artists)
   }

@@ -1,5 +1,6 @@
 package expo.modules.wavenative.player
 
+import expo.modules.wavenative.locale.NativeText
 /** Core's `RepeatMode`. */
 enum class RepeatSetting(val wire: String) {
   OFF("off"),
@@ -45,14 +46,14 @@ object AutoModes {
   fun buttons(modes: PlaybackModes): List<ModeButton> =
     listOf(
       if (modes.shuffle) {
-        ModeButton(SHUFFLE_ACTION, ModeIcon.SHUFFLE_ON, "Shuffle on")
+        ModeButton(SHUFFLE_ACTION, ModeIcon.SHUFFLE_ON, NativeText.get("shuffleOn"))
       } else {
-        ModeButton(SHUFFLE_ACTION, ModeIcon.SHUFFLE_OFF, "Shuffle off")
+        ModeButton(SHUFFLE_ACTION, ModeIcon.SHUFFLE_OFF, NativeText.get("shuffleOff"))
       },
       when (modes.repeat) {
-        RepeatSetting.OFF -> ModeButton(REPEAT_ACTION, ModeIcon.REPEAT_OFF, "Repeat off")
-        RepeatSetting.ALL -> ModeButton(REPEAT_ACTION, ModeIcon.REPEAT_ALL, "Repeat all")
-        RepeatSetting.ONE -> ModeButton(REPEAT_ACTION, ModeIcon.REPEAT_ONE, "Repeat one")
+        RepeatSetting.OFF -> ModeButton(REPEAT_ACTION, ModeIcon.REPEAT_OFF, NativeText.get("repeatOff"))
+        RepeatSetting.ALL -> ModeButton(REPEAT_ACTION, ModeIcon.REPEAT_ALL, NativeText.get("repeatAll"))
+        RepeatSetting.ONE -> ModeButton(REPEAT_ACTION, ModeIcon.REPEAT_ONE, NativeText.get("repeatOne"))
       },
     )
 

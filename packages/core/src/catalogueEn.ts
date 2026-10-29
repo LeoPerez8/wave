@@ -1,3 +1,6 @@
+import { downloadNoticeEn } from "./catalogue/downloadNoticeEn.ts";
+import { nativeEn } from "./catalogue/nativeEn.ts";
+import { autoEn } from "./catalogue/autoEn.ts";
 import { homeEn } from "./catalogue/homeEn.ts";
 /**
  * Wave's interface text in English: the shape every other catalogue must fill
@@ -9,6 +12,9 @@ import { homeEn } from "./catalogue/homeEn.ts";
 import type { TabBarTab } from "./tabBar.ts";
 
 export const en = {
+  downloadNotice: downloadNoticeEn,
+  native: nativeEn,
+  auto: autoEn,
   home: homeEn,
   /** Each tab's name, in the tab bar, its editor and TalkBack. */
   tabs: {
@@ -22,6 +28,23 @@ export const en = {
     genres: "Genres",
     favorites: "Favorites",
   } satisfies Record<TabBarTab, string>,
+  newReleases: {
+    title: "New from Artists You Follow",
+    single: "Single",
+    ep: "EP",
+    album: "Album",
+    unavailable: "Not on YouTube Music yet",
+    noAnswer: "No answer online. Try again in a moment.",
+    hideFailed: "Couldn't hide this release. Try again.",
+    hide: "Hide",
+    goToArtist: "Go to Artist",
+    addToPlaylist: "Add to Playlist",
+    today: "Today",
+    yesterday: "Yesterday",
+    daysAgo: (days: number) => `${days} days ago`,
+    absoluteDate: (month: number, day: number, year: number | null) =>
+      `${["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][month - 1]} ${day}${year === null ? "" : `, ${year}`}`,
+  },
   followArtistSearch: {
     placeholder: "Find artists to follow",
     follow: "Follow",

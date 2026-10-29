@@ -1,5 +1,6 @@
 package expo.modules.wavenative.player
 
+import expo.modules.wavenative.locale.NativeText
 import android.app.PendingIntent
 import android.content.Intent
 import android.content.res.Configuration
@@ -495,6 +496,12 @@ class PlaybackService : MediaLibraryService() {
       )
       .apply { openAppIntent()?.let(::setSessionActivity) }
       .build()
+    expo.modules.wavenative.locale.NativeLanguage.init(this)
+    stopLanguage = NativeText.listen {
+      showModes(AutoModes.state.current)
+      triggerNotificationUpdate()
+      for (parent in languageParents.toList()) session?.notifyChildrenChanged(parent, Int.MAX_VALUE, null)
+    }
     showModes(AutoModes.state.current)
     stopModes = AutoModes.state.listen(::showModes)
     stopLyrics = AutoLyrics.state.listen {
@@ -509,6 +516,8 @@ class PlaybackService : MediaLibraryService() {
   }
 
   /** Stops following JS's shuffle and repeat ([AutoModes.state]). */
+  private val languageParents = mutableSetOf("root", "tab/home", "tab/playlists", "tab/albums", "tab/artists")
+  private var stopLanguage: (() -> Unit)? = null
   private var stopModes: (() -> Unit)? = null
 
   /** Stops following the Lyrics toggle and text ([AutoLyrics.state]). */
@@ -580,6 +589,8 @@ class PlaybackService : MediaLibraryService() {
 
   override fun onDestroy() {
     ActiveWaveAudio.count = { 0 }
+    stopLanguage?.invoke()
+    stopLanguage = null
     stopModes?.invoke()
     stopModes = null
     stopAccent?.invoke()
@@ -714,6 +725,7 @@ class PlaybackService : MediaLibraryService() {
       parentId: String,
       params: LibraryParams?,
     ): ListenableFuture<LibraryResult<Void>> {
+      languageParents += parentId
       keepJsFor(browser)
       return Futures.immediateFuture(LibraryResult.ofVoid(params))
     }
@@ -726,6 +738,7 @@ class PlaybackService : MediaLibraryService() {
       pageSize: Int,
       params: LibraryParams?,
     ): ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> {
+      languageParents += parentId
       keepJsFor(browser)
       return AutoLibrary.children(parentId, page, pageSize, params)
     }
@@ -757,7 +770,7 @@ class PlaybackService : MediaLibraryService() {
         return super.onSetMediaItems(mediaSession, controller, mediaItems, startIndex, startPositionMs)
       }
       val requested = mediaItems.getOrNull(startIndex) ?: mediaItems.firstOrNull()
-        ?: return Futures.immediateFailedFuture(AutoPlayException("Nothing to play."))
+        ?: return Futures.immediateFailedFuture(AutoPlayException(NativeText.get("nothingToPlay")))
       keepJsFor(controller)
       // JS may search the song first, longer than a note waits: the move its answer makes keeps
       // the controller's name in the app log's crossfade lines.

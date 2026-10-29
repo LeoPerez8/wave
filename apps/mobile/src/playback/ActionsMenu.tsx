@@ -49,6 +49,7 @@ const NO_DOWNLOADS: readonly MenuChoice[] = [];
 
 /** How a menu was opened. */
 export interface MenuOptions {
+  readonly extraEntries?: readonly MenuChoice[] | undefined;
   /** The list it was opened from can select: the menu offers Select, which calls this. */
   readonly onSelect?: (() => void) | undefined;
   /** The song is the one playing (the mini player's long press): no Play Next or Add to Queue. */
@@ -88,6 +89,7 @@ const openActions = (
         <ActionsMenu
           target={target}
           close={close}
+          extraEntries={options.extraEntries}
           onSelect={options.onSelect}
           playing={options.playing}
           playlistEntries={entries}
@@ -266,8 +268,10 @@ function ActionsMenu({
   playlistEntries: listed,
   collectionSongs,
   playing,
+  extraEntries = [],
 }: {
   target: ActionItems;
+  extraEntries?: readonly MenuChoice[] | undefined;
   close: () => void;
   onSelect: (() => void) | undefined;
   /** The song is the one playing: no Play Next or Add to Queue. */
@@ -310,7 +314,16 @@ function ActionsMenu({
       sectionSongs={sectionSongs}
       actions={actions}
       downloads={downloads}
-      extraEntries={followEntries}
+      extraEntries={[
+        ...followEntries,
+        ...extraEntries.map((entry) => ({
+          ...entry,
+          onPress: () => {
+            close();
+            entry.onPress();
+          },
+        })),
+      ]}
       play={(shuffle) => {
         close();
         playTarget(target, shuffle);

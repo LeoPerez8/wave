@@ -31,15 +31,14 @@ export function HomeEditor({
   edit: (change: HomeArrangementEdit) => void;
   onDone?: (() => void) | undefined;
 }) {
- const localisation = useLocalisation();
-
+  const { strings } = useLocalisation();
   return (
     <ArrangementEditor
       shown={arrangement.sections}
       hidden={hiddenHomeSections(arrangement)}
-      title={(id) => homeSectionTitle(id, localisation.strings)}
-      place={localisation.strings.home.home}
-      hiddenHeading={localisation.strings.home.notOnHome}
+      title={(id) => homeSectionTitle(id, strings)}
+      place={strings.home.home}
+      hiddenHeading={strings.home.notOnHome}
       edit={edit}
       renderNested={(id, onDraggingChange) =>
         id === "discover" ? (

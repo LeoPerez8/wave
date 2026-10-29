@@ -13,6 +13,7 @@ export type YtShelfItem<S extends YtSong = YtSong> =
   | { readonly kind: "song"; readonly song: S }
   | {
       readonly kind: "album";
+      readonly releaseType?: "single" | "ep" | "album" | null;
       /** The album's page (`MPREb_…`). */
       readonly browseId: string;
       readonly title: string;

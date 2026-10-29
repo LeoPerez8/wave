@@ -1,3 +1,4 @@
+import { currentLocalisation } from "@/localisation/localisation";
 import {
   artistRanking,
   autoAlbumItem,
@@ -70,9 +71,9 @@ export class Auto extends Context.Service<
   }
 >()("@wave/mobile/auto/Auto") {}
 
-const NOT_FOUND = "This is no longer in your library.";
-
-const notFound = Effect.fail(new AutoError({ message: NOT_FOUND }));
+const notFound = Effect.suspend(() =>
+  Effect.fail(new AutoError({ message: currentLocalisation().strings.auto.notFound })),
+);
 
 const decode = (mediaId: string): Effect.Effect<AutoNode, AutoError> => {
   const node = decodeAutoMediaId(mediaId);
@@ -135,7 +136,9 @@ const toAutoQueueTrack = (song: AutoSong): QueueTrack =>
       ? toYtQueueTrack(song.song, null)
       : toUnsearchedQueueTrack(song.song);
 
-const ytMusicOff = Effect.fail(new AutoError({ message: "YT Music is off in Settings." }));
+const ytMusicOff = Effect.suspend(() =>
+  Effect.fail(new AutoError({ message: currentLocalisation().strings.auto.ytMusicOff })),
+);
 
 const pageOf = <A>(rows: readonly A[], page: RowPage): readonly A[] =>
   rows.slice(page.offset, page.offset + page.limit);
@@ -225,7 +228,11 @@ export const layer = Layer.effect(
         // A handful of rows: page the Library's own list, in the order the phone shows it.
         case "playlists":
           return sortedPlaylists(store).pipe(
-            Effect.map((playlists) => pageOf(playlists, page).map(autoPlaylistItem)),
+            Effect.map((playlists) =>
+              pageOf(playlists, page).map((row) =>
+                autoPlaylistItem(row, currentLocalisation().strings),
+              ),
+            ),
           );
         // The app's Home shelf: a handful of albums.
         case "recentlyPlayed":
@@ -266,17 +273,17 @@ export const layer = Layer.effect(
     const children = (parentId: string, page: number, pageSize: number) =>
       Effect.gen(function* () {
         const node = yield* decode(parentId);
-        const result = autoChildren(node, page, pageSize);
+        const result = autoChildren(node, page, pageSize, currentLocalisation().strings);
         if (result === null) return [];
         const rows = result.fetch === null ? [] : yield* fetch(result.fetch.source, result.fetch);
-        return autoPageItems(node, page, [...result.items, ...rows]);
+        return autoPageItems(node, page, [...result.items, ...rows], currentLocalisation().strings);
       });
 
     /** A node's item; the ones built from a library row load it. */
     const item = (mediaId: string) =>
       Effect.gen(function* () {
         const node = yield* decode(mediaId);
-        const known = autoItem(node);
+        const known = autoItem(node, currentLocalisation().strings);
         if (known !== null) return known;
         if (node.type === "list") {
           switch (node.list.kind) {
@@ -286,7 +293,9 @@ export const layer = Layer.effect(
             }
             case "playlist": {
               const detail = yield* store.getPlaylist(Number(node.list.id), "files");
-              return detail === null ? yield* notFound : autoPlaylistItem(detail.playlist);
+              return detail === null
+                ? yield* notFound
+                : autoPlaylistItem(detail.playlist, currentLocalisation().strings);
             }
           }
         }

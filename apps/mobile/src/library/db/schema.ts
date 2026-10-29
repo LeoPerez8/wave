@@ -984,3 +984,14 @@ export const follows = sqliteTable("follows", {
   deezerId: integer("deezer_id"),
   ytBrowseId: text("yt_browse_id"),
 });
+
+export const followReleaseCache = sqliteTable("follow_release_cache", {
+  key: text("key").primaryKey(),
+  releases: text("releases", { mode: "json" })
+    .$type<import("@wave/core").FollowRelease[]>()
+    .notNull(),
+  checkedAt: integer("checked_at").notNull(),
+});
+export const hiddenFollowReleases = sqliteTable("hidden_follow_releases", {
+  key: text("key").primaryKey(),
+});

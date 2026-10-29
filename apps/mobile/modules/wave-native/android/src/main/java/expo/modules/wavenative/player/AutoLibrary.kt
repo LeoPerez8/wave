@@ -1,5 +1,6 @@
 package expo.modules.wavenative.player
 
+import expo.modules.wavenative.locale.NativeText
 import android.os.SystemClock
 import android.util.Log
 import androidx.annotation.OptIn
@@ -58,7 +59,7 @@ object AutoLibrary {
   const val WARM_TIMEOUT_MS = 5_000L
 
   /** Shown when JS's answer can't be read (a bug, not a state the user can fix). */
-  private const val UNREADABLE = "Wave couldn't load this."
+  private val UNREADABLE get() = NativeText.get("unreadable")
 
   /**
    * The browse root, answered here rather than by JS: Media3 blocks the main
