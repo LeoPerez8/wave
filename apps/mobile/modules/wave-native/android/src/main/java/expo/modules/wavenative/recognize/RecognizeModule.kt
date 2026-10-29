@@ -30,8 +30,9 @@ import kotlinx.coroutines.withContext
 class RecognizeModule : Module() {
   private val context: Context get() = appContext.reactContext ?: throw Exceptions.ReactContextLost()
   private val main = Handler(Looper.getMainLooper())
-  private var current: Pair<Int, RecognizeSession>? = null
-  private var lastId = 0
+  private val sessions = RecognizeSessions(::recognize,
+    onHeard = { id, ms, audible -> sendEvent(HEARD, mapOf("session" to id, "heardMs" to ms, "audible" to audible)) },
+    onCaptureFailed = { id -> sendEvent(CAPTURE_FAILED, mapOf("session" to id)) })
   private var lastRequestCode = 17710
   private var pending: PendingStart? = null
   private var foreground = true
@@ -57,16 +58,17 @@ class RecognizeModule : Module() {
     }.runOnQueue(Queues.MAIN)
 
     // A request id lets JS cancel even while start is waiting for Android's consent result.
+    // It is also the session's id, so JS knows it before any event names it.
     AsyncFunction("start") { source: String, request: Int, promise: Promise ->
       cancelPending()
-      stopCurrent()
+      sessions.stopAll()
       try {
         require(source == "microphone" || source == "playback") { "Unknown source $source" }
         if (context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
           throw CodedException("ERR_RECOGNIZE_PERMISSION", "Wave may not capture audio", null)
         }
         if (source == "microphone") {
-          promise.resolve(startAudio(MicrophoneAudio.open()))
+          sessions.start(request, MicrophoneAudio.open()) { promise.resolve(it) }
         } else {
           check(Build.VERSION.SDK_INT >= 29) { "Phone audio capture requires Android 10" }
           val activity = appContext.currentActivity ?: throw Exceptions.MissingActivity()
@@ -104,15 +106,11 @@ class RecognizeModule : Module() {
     }
 
     AsyncFunction("ask") Coroutine { id: Int, last: Boolean ->
-      val session = session(id) ?: throw CodedException("ERR_RECOGNIZE_ENDED", "The session has ended", null)
+      val session = sessions.get(id) ?: throw CodedException("ERR_RECOGNIZE_ENDED", "The session has ended", null)
       withContext(Dispatchers.IO) { session.ask(last).toMap() }
     }
 
-    Function("stop") { id: Int ->
-      synchronized(this@RecognizeModule) {
-        if (current?.first == id) stopCurrent()
-      }
-    }
+    Function("stop") { id: Int -> sessions.stop(id) }
 
     OnActivityEntersForeground {
       foreground = true
@@ -123,15 +121,14 @@ class RecognizeModule : Module() {
       foreground = false
       // Consent itself can pause the activity. Only cancel a start already binding its service.
       if (pending?.cancelCapture != null) cancelPending()
-      val id = synchronized(this@RecognizeModule) { current?.first }
-      stopCurrent()
-      if (id != null) sendEvent(CAPTURE_FAILED, mapOf("session" to id))
+      // Wave's own stop, not a capture failure: JS cancels the session when it sees the background.
+      sessions.stopAll()
     }
 
     OnDestroy {
       RecognizeInbox.onReceived = null
       main.post { cancelPending() }
-      stopCurrent()
+      sessions.stopAll()
     }
   }
 
@@ -145,7 +142,7 @@ class RecognizeModule : Module() {
         opened = { audio ->
           if (pending !== start) audio.release() else {
             pending = null
-            start.promise.resolve(startAudio(audio))
+            sessions.start(start.request, audio) { start.promise.resolve(it) }
           }
         },
         failed = { error ->
@@ -166,26 +163,6 @@ class RecognizeModule : Module() {
     start.cancelCapture?.invoke()
     start.promise.reject("ERR_RECOGNIZE_ENDED", "The session has ended", null)
   }
-
-  @Synchronized
-  private fun startAudio(audio: RecognizeAudio): Int {
-    val id = ++lastId
-    val session = RecognizeSession(audio, recognize = ::recognize,
-      onHeard = { ms, audible -> sendEvent(HEARD, mapOf("session" to id, "heardMs" to ms, "audible" to audible)) },
-      onCaptureFailed = { sendEvent(CAPTURE_FAILED, mapOf("session" to id)) })
-    current = id to session
-    session.start()
-    return id
-  }
-
-  @Synchronized
-  private fun stopCurrent() {
-    current?.second?.stop()
-    current = null
-  }
-
-  @Synchronized
-  private fun session(id: Int): RecognizeSession? = current?.takeIf { it.first == id }?.second
 
   private fun recognize(signature: ShazamSignature): RecognizeOutcome {
     val installId = ShazamInstallId(File(context.filesDir, "recognize/shazam-install-id")).get()
