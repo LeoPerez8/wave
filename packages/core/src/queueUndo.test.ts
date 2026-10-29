@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
+import { catalogueOf } from "./localisation.ts";
 import {
   EMPTY_QUEUE,
   newQueueToast,
@@ -87,6 +88,17 @@ describe("newQueueToast", () => {
   test("says a new queue is playing", () => {
     assert.equal(newQueueToast("play", []), "New queue playing");
     assert.equal(newQueueToast("play", [null, null]), "New queue playing");
+  });
+
+  test("says it in Portuguese for an app in pt-BR", () => {
+    assert.equal(
+      newQueueToast(
+        "play",
+        [null, `"Airbag" foi pulada: não encontrada online.`],
+        catalogueOf("pt-BR"),
+      ),
+      `Nova fila em reprodução · "Airbag" foi pulada: não encontrada online.`,
+    );
   });
 
   test("says why a song was skipped on the way along with it", () => {

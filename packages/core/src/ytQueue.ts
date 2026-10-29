@@ -7,6 +7,7 @@
  * queue so a cold start can pick them back up.
  */
 
+import { en, type Catalogue } from "./catalogueEn.ts";
 import { isUnsearchedTrackId } from "./playlistEntries.ts";
 import type { QueueEntry } from "./queue.ts";
 import { parseTrackId } from "./ytMusic.ts";
@@ -50,22 +51,22 @@ export const queuedYtTracks = <T>(
  */
 export type PlayerErrorCode = "ytOffline" | "ytDisabled" | "ytUnavailable" | "ytFailed";
 
-const NOTICES: { readonly [C in PlayerErrorCode]: string } = {
-  ytOffline: "You're offline. YT Music songs need the network.",
-  ytDisabled: "YT Music is off in Settings.",
-  ytUnavailable: "YT Music won't stream this song.",
-  ytFailed: "YT Music didn't send this song. Try again.",
-};
+const notices = (catalogue: Catalogue): { readonly [C in PlayerErrorCode]: string } => ({
+  ytOffline: catalogue.playbackText.youreOfflineYTMusicSongsNeedTheNetwork,
+  ytDisabled: catalogue.playbackText.yTMusicIsOffInSettings,
+  ytUnavailable: catalogue.playbackText.yTMusicWontStreamThisSong,
+  ytFailed: catalogue.playbackText.yTMusicDidntSendThisSongTryAgain,
+});
 
 /**
  * The line the mini player and Now Playing show in place of the artist when
  * playback stopped on an error. The player pauses on a YT Music song that
  * can't stream; the Library's songs around it still play.
  */
-export const playerErrorNotice = (code: string | null): string =>
-  code !== null && Object.hasOwn(NOTICES, code)
-    ? NOTICES[code as PlayerErrorCode]
-    : "Couldn't play this file";
+export const playerErrorNotice = (code: string | null, catalogue: Catalogue = en): string =>
+  code !== null && Object.hasOwn(notices(catalogue), code)
+    ? notices(catalogue)[code as PlayerErrorCode]
+    : catalogue.playbackText.couldntPlayThisFile;
 
 /** What a saved queue can still play once Wave starts again. */
 export interface RestorableTracks {

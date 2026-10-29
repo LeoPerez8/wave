@@ -12,6 +12,7 @@ import { readStoredRecord } from "./storedJson.ts";
 /** A section of Home's catalogue, by id. */
 export type HomeSectionId =
   | "new-releases"
+  | "upcoming-shows"
   | "discover"
   | "recently-added"
   | "recently-played"
@@ -39,6 +40,7 @@ export interface HomeSection {
  */
 export const HOME_SECTIONS: readonly HomeSection[] = [
   { id: "new-releases", title: en.newReleases.title, fromPlays: false },
+  { id: "upcoming-shows", title: en.upcomingShows.title, fromPlays: false },
   { id: "discover", title: "Discover", fromPlays: false },
   { id: "recently-added", title: "Recently added", fromPlays: false },
   { id: "recently-played", title: "Recently played", fromPlays: true },
@@ -54,7 +56,11 @@ const sectionOf = (id: HomeSectionId): HomeSection | undefined =>
 
 /** The title of the section [id]. */
 export const homeSectionTitle = (id: HomeSectionId, strings: Catalogue = en): string =>
-  id === "new-releases" ? strings.newReleases.title : (sectionOf(id)?.title ?? id);
+  id === "new-releases"
+    ? strings.newReleases.title
+    : id === "upcoming-shows"
+      ? strings.upcomingShows.title
+      : (sectionOf(id)?.title ?? id);
 
 /** A row of Home's Discover section. */
 export type DiscoverRowId = "magic-queue" | "artist-mixes" | "genre-mixes";
@@ -85,8 +91,9 @@ export type HomeItem = { readonly section: HomeSectionId } | "play-hint" | "no-s
  * played yet, a line asking for a play comes before the first section plays
  * fill (where those sections would be). With every section removed, the
  * line saying how to add them back. With an [empty] Library, Home shows its
- * empty state and, under it, only Discover (when arranged), whose Artist
- * mixes can grow from YouTube Music's chart.
+ * empty state and, under it, only the sections that need no Library (when
+ * arranged): Discover, whose Artist mixes can grow from YouTube Music's
+ * chart, and the followed artists' New releases and Upcoming Shows.
  */
 export const homeItems = (
   { sections: arrangement }: HomeArrangement,
@@ -94,7 +101,7 @@ export const homeItems = (
 ): readonly HomeItem[] => {
   if (empty)
     return arrangement
-      .filter((id) => id === "discover" || id === "new-releases")
+      .filter((id) => id === "discover" || id === "new-releases" || id === "upcoming-shows")
       .map((section) => ({ section }));
   if (arrangement.length === 0) return ["no-sections"];
   const items: HomeItem[] = arrangement.map((id) => ({ section: id }));

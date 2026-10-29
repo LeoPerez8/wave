@@ -2,40 +2,21 @@ import { FollowCountryRow } from "@/settings/FollowCountryRow";
 import { useFollowCountryName } from "@/settings/followCountry";
 import { useLocalisation } from "@/localisation/localisation";
 import { useState } from "react";
-import type { FollowedArtist } from "@wave/core";
-import * as Effect from "effect/Effect";
 import { Text, View } from "react-native";
 import { ArtistImage } from "@/catalog/ArtistImage";
 import { CELL } from "@/catalog/grid";
 import { TextButton } from "@/components/TextButton";
 import { SettingsSwitch } from "@/components/SettingsSwitch";
-import { findLinkArtists } from "@/library/artistLookup";
 import { openFollowCard } from "@/library/FollowButton";
 import { SearchField } from "@/search/SearchField";
 import { useFollowArtistSearch } from "@/library/followArtistSearch";
 import { useFollows } from "@/library/follows";
-import { LibraryStore } from "@/library/LibraryStore";
-import { openArtist } from "@/library/routes";
-import { appRuntime } from "@/library/runtime";
+import { openFollowedArtist } from "@/library/openFollowedArtist";
 import { useScreenContent } from "@/lib/screenTiming";
 import { showError } from "@/overlay/alert";
 import { SettingsPageScreen } from "@/settings/SettingsPage";
 import { setFollowedArtistsEnabled, useFollowedArtistsEnabled } from "@/settings/followedArtists";
-import { openYtArtist, openYtArtistNamed } from "@/ytmusic/routes";
 
-const openFollowedArtist = async (artist: FollowedArtist): Promise<void> => {
-  const found = await findLinkArtists([artist.name], {
-    signal: new AbortController().signal,
-    readPage: (after) =>
-      appRuntime.runPromise(
-        Effect.flatMap(LibraryStore, (store) => store.artistNamesForLink(after)),
-      ),
-  });
-  const library = found.get(artist.key);
-  if (library !== undefined) openArtist(library.id);
-  else if (artist.ytBrowseId !== null) openYtArtist(artist.ytBrowseId, artist.name);
-  else openYtArtistNamed(artist.name);
-};
 export default function FollowedArtistsSettingsScreen() {
   const { strings } = useLocalisation();
   const country = useFollowCountryName();

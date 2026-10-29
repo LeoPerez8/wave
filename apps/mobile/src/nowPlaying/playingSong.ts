@@ -1,3 +1,4 @@
+import { currentLocalisation } from "@/localisation/localisation";
 import { parseTrackId } from "@wave/core";
 import { useEffect, useMemo, useSyncExternalStore } from "react";
 import { scopedSongStarredNow, rememberSongFavorite } from "@/library/favorites";
@@ -29,7 +30,7 @@ export const nowPlayingSongActions = createNowPlayingSongActions(nowPlayingSongL
   download: (command) => {
     switch (command.kind) {
       case "downloaded":
-        void showToast("Downloaded");
+        void showToast(currentLocalisation().strings.playbackText.downloaded);
         break;
       case "missing":
         downloadMissingSongs([command.id]);
@@ -38,7 +39,10 @@ export const nowPlayingSongActions = createNowPlayingSongActions(nowPlayingSongL
         downloadYtSong(command.song as NativeYtSong);
         break;
       case "gone":
-        showError("Couldn't download the song", "The song is no longer in the Library.");
+        showError(
+          currentLocalisation().strings.playbackText.couldntDownloadTheSong,
+          currentLocalisation().strings.playbackText.theSongIsNoLongerInTheLibrary,
+        );
         break;
     }
   },
@@ -60,7 +64,7 @@ export const nowPlayingSongActions = createNowPlayingSongActions(nowPlayingSongL
   },
 });
 export const songActionFailed = (error: unknown): void => {
-  void showError("Couldn't update the song", error);
+  void showError(currentLocalisation().strings.playbackText.couldntUpdateTheSong, error);
 };
 
 export const usePlayingSongTarget = (
