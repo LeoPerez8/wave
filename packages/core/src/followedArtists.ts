@@ -183,6 +183,35 @@ export const deezerReleases = (value: unknown, artistKey: string): FollowRelease
     ];
   });
 };
+/** The first page of a Deezer artist's releases. */
+export const deezerArtistAlbumsUrl = (deezerId: number): string =>
+  `https://api.deezer.com/artist/${deezerId}/albums?limit=100`;
+/**
+ * The next page of [deezerId]'s releases a Deezer albums reply names, over
+ * HTTPS; null on the last page or when it points anywhere but that artist's albums.
+ */
+export const deezerReleasesNext = (value: unknown, deezerId: number): string | null => {
+  if (!record(value) || typeof value.next !== "string") return null;
+  const next = value.next.replace(/^http:/, "https:");
+  const albums = `https://api.deezer.com/artist/${deezerId}/albums`;
+  return next.startsWith(albums) && /^(?:\?.*)?$/.test(next.slice(albums.length)) ? next : null;
+};
+/**
+ * A check's [fresh] releases with what [previous] knew: YT Music matches made
+ * earlier stay, and releases Deezer no longer lists stay at the end.
+ */
+export const keepFollowReleases = (
+  fresh: readonly FollowRelease[],
+  previous: readonly FollowRelease[] | undefined,
+): FollowRelease[] => {
+  const known = new Map(previous?.map((r) => [r.key, r]));
+  const kept = fresh.map((r) => {
+    const earlier = known.get(r.key);
+    return earlier?.browseId ? { ...r, browseId: earlier.browseId, videoIds: earlier.videoIds } : r;
+  });
+  const seen = new Set(kept.map((r) => r.key));
+  return [...kept, ...(previous?.filter((r) => !seen.has(r.key)) ?? [])];
+};
 export const resolveDeezerFollowArtist = (value: unknown, name: string): number | null => {
   const candidates = deezerFollowArtists(value)
     ?.filter((a) => followArtistKey(a.name) === followArtistKey(name))
