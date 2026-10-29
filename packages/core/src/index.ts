@@ -2260,6 +2260,7 @@ export {
   recognizeCardView,
   recognizeHoldsPlayback,
   recognizeLogLine,
+  recognizeSource,
   startRecognize,
   stepRecognize,
 } from "./recognize.ts";

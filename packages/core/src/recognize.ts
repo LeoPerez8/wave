@@ -3,8 +3,15 @@
  * Shazam; Core decides when to ask and what the session's answer is.
  */
 
-/** Where the audio comes from. #771 adds the phone's own audio. */
-export type RecognizeSource = "microphone";
+/** Where the audio comes from. Playback capture excludes Wave's own audio. */
+export type RecognizeSource = "microphone" | "playback";
+
+/** Android hides player identities; discount Wave's active players from the media count. */
+export const recognizeSource = (activity: {
+  readonly activeMediaPlayers: number;
+  readonly waveMediaPlayers: number;
+}): RecognizeSource =>
+  activity.activeMediaPlayers > activity.waveMediaPlayers ? "playback" : "microphone";
 
 /** How much audio each ask covers: everything heard so far, at about 4, 8 and 12 seconds. */
 const RECOGNIZE_STEPS_MS: readonly number[] = [4_000, 8_000, 12_000];
@@ -52,16 +59,18 @@ export type RecognizeAnswer =
     };
 
 /** How a session ended: an answer that ends it, or Cancel. */
-export type RecognizeEnd = RecognizeAnswer | { readonly kind: "cancelled" };
+export type RecognizeEnd =
+  RecognizeAnswer | { readonly kind: "cancelled" | "blocked" | "consentDeclined" };
 
 /** What happened in a session. */
 export type RecognizeEvent =
   /** The capture has [ms] of audio in all. */
-  | { readonly kind: "heard"; readonly ms: number }
+  | { readonly kind: "heard"; readonly ms: number; readonly audible?: boolean }
   /** The ask out was answered. */
   | { readonly kind: "answer"; readonly answer: RecognizeAnswer }
   /** The capture stopped before the audio for every ask was heard. */
   | { readonly kind: "captureFailed" }
+  | { readonly kind: "consentDeclined" }
   | { readonly kind: "cancel" };
 
 /** The session after an event, and whether to ask now (`last`: no more audio is needed after it). */
@@ -100,6 +109,14 @@ export const stepRecognize = (session: RecognizeSession, event: RecognizeEvent):
   if (session.ended !== null) return { session, ask: null };
   switch (event.kind) {
     case "heard":
+      // `audible` covers everything captured so far, including the first window.
+      if (
+        session.source === "playback" &&
+        session.asked === 0 &&
+        event.ms >= RECOGNIZE_STEPS_MS[0]! &&
+        event.audible === false
+      )
+        return end({ ...session, heardMs: event.ms }, { kind: "blocked" });
       return askIfDue({ ...session, heardMs: Math.max(session.heardMs, event.ms) });
     case "answer": {
       if (!session.asking) return { session, ask: null };
@@ -114,6 +131,8 @@ export const stepRecognize = (session: RecognizeSession, event: RecognizeEvent):
         : end(session, { kind: "failed", failure: "capture", status: null });
     case "cancel":
       return end(session, { kind: "cancelled" });
+    case "consentDeclined":
+      return end(session, { kind: "consentDeclined" });
   }
 };
 
@@ -128,13 +147,17 @@ export const recognizeHoldsPlayback = (source: RecognizeSource): boolean => sour
  * listen (no connection before it started, the microphone permission denied).
  */
 export type RecognizeCard =
-  | { readonly kind: "listening" }
+  | { readonly kind: "listening"; readonly source?: RecognizeSource }
   | { readonly kind: "offline" }
   | { readonly kind: "denied" }
-  | { readonly kind: "ended"; readonly end: RecognizeAnswer };
+  | {
+      readonly kind: "ended";
+      readonly end: RecognizeAnswer | { readonly kind: "blocked" | "consentDeclined" };
+    };
 
 /** The card's buttons, in order. */
-export type RecognizeCardAction = "cancel" | "done" | "close" | "tryAgain" | "openSettings";
+export type RecognizeCardAction =
+  "cancel" | "done" | "close" | "tryAgain" | "openSettings" | "useMicrophone";
 
 export const RECOGNIZE_CARD_ACTION_LABELS: Readonly<Record<RecognizeCardAction, string>> = {
   cancel: "Cancel",
@@ -142,6 +165,7 @@ export const RECOGNIZE_CARD_ACTION_LABELS: Readonly<Record<RecognizeCardAction, 
   close: "Close",
   tryAgain: "Try Again",
   openSettings: "Open Settings",
+  useMicrophone: "Use Microphone",
 };
 
 export interface RecognizeCardView {
@@ -174,7 +198,7 @@ const FAILURE_LINES: Readonly<Record<RecognizeFailure, string>> = {
   network: "The connection dropped before an answer came.",
   refused: "The recognition service turned the request down. Try again in a minute.",
   unreadable: "The recognition service sent an answer Wave can't read.",
-  capture: "The microphone stopped sending sound.",
+  capture: "The audio capture stopped sending sound.",
 };
 
 /** What the card shows for [card]. */
@@ -183,7 +207,11 @@ export const recognizeCardView = (card: RecognizeCard): RecognizeCardView => {
     case "listening":
       return {
         title: "Listening…",
-        lines: ["Hold your phone near the music."],
+        lines: [
+          card.source === "playback"
+            ? "Listening to audio from this phone."
+            : "Hold your phone near the music.",
+        ],
         cover: false,
         coverUrl: null,
         listening: true,
@@ -200,6 +228,17 @@ export const recognizeCardView = (card: RecognizeCard): RecognizeCardView => {
     case "ended": {
       const ending = card.end;
       switch (ending.kind) {
+        case "blocked":
+          return notice(
+            "This app blocks audio capture",
+            "Try the microphone to recognize music around you.",
+            "useMicrophone",
+          );
+        case "consentDeclined":
+          return notice(
+            "Phone audio access declined",
+            "Allow Android's capture request to recognize audio from this phone.",
+          );
         case "match":
           return {
             title: ending.song.title,
@@ -230,6 +269,7 @@ export type RecognizeLogOutcome =
 
 const SOURCE_NAMES: Readonly<Record<RecognizeSource, string>> = {
   microphone: "the microphone",
+  playback: "this phone",
 };
 
 /**
@@ -255,6 +295,10 @@ export const recognizeLogLine = (session: {
         return `no match ${after}`;
       case "cancelled":
         return `cancelled ${after}`;
+      case "blocked":
+        return `app blocks capture ${after}`;
+      case "consentDeclined":
+        return "capture consent declined, nothing heard";
       case "failed":
         return `failed ${after} (${outcome.failure}${outcome.status === null ? "" : `, HTTP ${outcome.status}`})`;
     }

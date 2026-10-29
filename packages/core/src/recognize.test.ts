@@ -6,6 +6,7 @@ import {
   recognizeCardView,
   recognizeHoldsPlayback,
   recognizeLogLine,
+  recognizeSource,
   startRecognize,
   stepRecognize,
   type RecognizeCardView,
@@ -16,6 +17,66 @@ import {
   type RecognizeSession,
   type RecognizeStep,
 } from "./index.ts";
+
+describe("the audio source", () => {
+  test("audible phone audio and a silent microphone still follow the recognition schedule", () => {
+    for (const [source, audible] of [
+      ["playback", true],
+      ["microphone", false],
+    ] as const) {
+      const step = stepRecognize(startRecognize(source), { kind: "heard", ms: 4_000, audible });
+      assert.deepEqual(step.ask, { last: false });
+      assert.equal(step.session.ended, null);
+    }
+  });
+
+  test("blocked capture offers the microphone and declining consent never says No match", () => {
+    const blocked = recognizeCardView({ kind: "ended", end: { kind: "blocked" } });
+    assert.equal(blocked.title, "This app blocks audio capture");
+    assert.deepEqual(labels(blocked), ["Close", "Use Microphone"]);
+    const declined = stepRecognize(startRecognize("playback"), { kind: "consentDeclined" });
+    assert.deepEqual(declined.session.ended, { kind: "consentDeclined" });
+    assert.equal(
+      recognizeCardView({ kind: "ended", end: { kind: "consentDeclined" } }).title,
+      "Phone audio access declined",
+    );
+    assert.equal(
+      recognizeLogLine({ source: "playback", heardMs: 4_000, outcome: { kind: "blocked" } }),
+      "Recognize through this phone: app blocks capture after 4.0 s",
+    );
+  });
+  test("switching to the phone starts a fresh schedule and ignores the earlier answer", () => {
+    const previous = stepRecognize(startRecognize("microphone"), { kind: "heard", ms: 8_000 });
+    assert.equal(previous.session.asking, true);
+    let next = startRecognize("playback");
+    next = stepRecognize(next, { kind: "answer", answer: { kind: "noMatch" } }).session;
+    assert.equal(next.ended, null);
+    assert.equal(stepRecognize(next, { kind: "heard", ms: 3_750 }).ask, null);
+    const first = stepRecognize(next, { kind: "heard", ms: 4_000 });
+    assert.equal(first.session.asked, 1);
+    assert.deepEqual(first.ask, { last: false });
+  });
+
+  test("silent phone audio ends at the first window as blocked capture without asking", () => {
+    const early = stepRecognize(startRecognize("playback"), {
+      kind: "heard",
+      ms: 3_750,
+      audible: false,
+    });
+    assert.equal(early.session.ended, null);
+    const blocked = stepRecognize(early.session, { kind: "heard", ms: 4_000, audible: false });
+    assert.deepEqual(blocked.session.ended, { kind: "blocked" });
+    assert.equal(blocked.ask, null);
+  });
+  test("chooses the phone when another media player is active, discounting Wave", () => {
+    assert.equal(recognizeSource({ activeMediaPlayers: 1, waveMediaPlayers: 0 }), "playback");
+    assert.equal(recognizeSource({ activeMediaPlayers: 2, waveMediaPlayers: 1 }), "playback");
+    assert.equal(recognizeSource({ activeMediaPlayers: 1, waveMediaPlayers: 1 }), "microphone");
+    assert.equal(recognizeSource({ activeMediaPlayers: 0, waveMediaPlayers: 0 }), "microphone");
+    assert.equal(recognizeSource({ activeMediaPlayers: 2, waveMediaPlayers: 2 }), "microphone");
+    assert.equal(recognizeHoldsPlayback("playback"), false);
+  });
+});
 
 /** Runs [events] from a new microphone session; the last step. */
 const run = (...events: readonly RecognizeEvent[]): RecognizeStep =>
