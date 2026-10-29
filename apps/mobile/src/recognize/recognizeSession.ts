@@ -1,6 +1,7 @@
 import {
   recognizeHoldsPlayback,
   recognizeLogLine,
+  recognizeSource,
   startRecognize,
   stepRecognize,
   type RecognizeAnswer,
@@ -13,13 +14,21 @@ import {
 
 /** The native half of Recognize (`WaveRecognize`, `recognize/RecognizeModule.kt`). */
 export interface RecognizeNative {
+  readonly playbackActivity: () => Promise<{
+    activeMediaPlayers: number;
+    waveMediaPlayers: number;
+  }>;
   /** Starts capturing from [source]; the session's id. Rejects when it can't capture. */
-  readonly start: (source: RecognizeSource) => Promise<number>;
+  readonly start: (source: RecognizeSource, request: number) => Promise<number>;
+  /** Cancels a start still waiting for consent or for its foreground service. */
+  readonly cancelStart: (request: number) => void;
   /** Sends the signature of everything [session] has heard; [last] stops its capture first. */
   readonly ask: (session: number, last: boolean) => Promise<RecognizeAnswer>;
   readonly stop: (session: number) => void;
   /** How much a session has heard in all; returns the unsubscribe. */
-  readonly onHeard: (listener: (session: number, heardMs: number) => void) => () => void;
+  readonly onHeard: (
+    listener: (session: number, heardMs: number, audible: boolean) => void,
+  ) => () => void;
   /** A session's audio stopped on its own. */
   readonly onCaptureFailed: (listener: (session: number) => void) => () => void;
 }
@@ -27,7 +36,7 @@ export interface RecognizeNative {
 export interface RecognizeDeps {
   /** Whether the phone is online now. */
   readonly online: () => boolean;
-  /** Whether Wave may use the microphone, asking Android on first use. */
+  /** RECORD_AUDIO permission, required by Android for either source. */
   readonly microphone: () => Promise<"granted" | "denied">;
   /** Pauses Wave's playback if it's playing; the release resumes it (and does nothing otherwise). */
   readonly holdPlayback: () => Promise<() => void>;
@@ -43,6 +52,8 @@ export interface RecognizeRun {
   readonly done: Promise<void>;
 }
 
+let lastRequest = 0;
+
 /**
  * Runs one Recognize session from [source], showing each state of its card through
  * [show]: listening, then how it ended (no card for Cancel, which closes it). Offline it
@@ -53,10 +64,11 @@ export interface RecognizeRun {
  */
 export const startRecognizeSession = (
   deps: RecognizeDeps,
-  source: RecognizeSource,
+  source: RecognizeSource | "auto",
   show: (card: RecognizeCard) => void,
 ): RecognizeRun => {
-  let session: RecognizeSession = startRecognize(source);
+  let session: RecognizeSession = startRecognize(source === "auto" ? "microphone" : source);
+  const request = ++lastRequest;
   let nativeId: number | null = null;
   let release: (() => void) | null = null;
   const unsubscribes: (() => void)[] = [];
@@ -71,9 +83,10 @@ export const startRecognizeSession = (
     if (finished) return;
     finished = true;
     for (const unsubscribe of unsubscribes) unsubscribe();
+    deps.native.cancelStart(request);
     if (nativeId !== null) deps.native.stop(nativeId);
     release?.();
-    const line = recognizeLogLine({ source, heardMs: session.heardMs, outcome });
+    const line = recognizeLogLine({ source: session.source, heardMs: session.heardMs, outcome });
     deps.log(outcome.kind === "failed" ? "warn" : "info", line);
     if (outcome.kind === "offline" || outcome.kind === "denied") show({ kind: outcome.kind });
     else if (outcome.kind !== "cancelled") show({ kind: "ended", end: outcome });
@@ -96,35 +109,50 @@ export const startRecognizeSession = (
   };
 
   const run = async (): Promise<void> => {
-    show({ kind: "listening" });
+    show(source === "playback" ? { kind: "listening", source } : { kind: "listening" });
     if (!deps.online()) return finish({ kind: "offline" });
-    if (source === "microphone") {
+    if (source === "auto") {
+      const activity = await deps.native.playbackActivity();
+      if (finished) return;
+      session = startRecognize(recognizeSource(activity));
+      show({ kind: "listening", source: session.source });
+    }
+    // Android requires RECORD_AUDIO for playback capture too, even though no microphone is opened.
+    {
       const permission = await deps.microphone();
       if (finished) return;
       if (permission === "denied") return finish({ kind: "denied" });
     }
-    if (recognizeHoldsPlayback(source)) {
+    if (recognizeHoldsPlayback(session.source)) {
       const held = await deps.holdPlayback();
       if (finished) return held();
       release = held;
     }
     unsubscribes.push(
-      deps.native.onHeard((id, heardMs) => {
-        if (id === nativeId) step({ kind: "heard", ms: heardMs });
+      deps.native.onHeard((id, heardMs, audible) => {
+        if (id === nativeId) step({ kind: "heard", ms: heardMs, audible });
       }),
       deps.native.onCaptureFailed((id) => {
         if (id === nativeId) step({ kind: "captureFailed" });
       }),
     );
     try {
-      const id = await deps.native.start(source);
+      const id = await deps.native.start(session.source, request);
       if (finished) return deps.native.stop(id);
       nativeId = id;
-    } catch {
-      step({ kind: "captureFailed" });
+    } catch (error) {
+      step({
+        kind:
+          typeof error === "object" &&
+          error !== null &&
+          "code" in error &&
+          error.code === "ERR_RECOGNIZE_CONSENT"
+            ? "consentDeclined"
+            : "captureFailed",
+      });
     }
   };
 
-  void run();
+  void run().catch(() => step({ kind: "captureFailed" }));
   return { cancel: () => step({ kind: "cancel" }), done };
 };

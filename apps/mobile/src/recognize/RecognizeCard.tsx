@@ -51,7 +51,7 @@ const depsFor = (native: RecognizeNative): RecognizeDeps => ({
  * start listening at once (the tile and the app shortcut, #772). Closing the card,
  * by Cancel, Back or a tap outside, ends the session.
  */
-export const openRecognize = (source: RecognizeSource = "microphone"): void => {
+export const openRecognize = (source: RecognizeSource | "auto" = "auto"): void => {
   const native = recognizeNative;
   if (native === null) return;
   openOverlay({
@@ -68,14 +68,18 @@ export const openRecognize = (source: RecognizeSource = "microphone"): void => {
  */
 function RecognizeCard({
   native,
-  source,
+  source: initialSource,
   close,
 }: {
   native: RecognizeNative;
-  source: RecognizeSource;
+  source: RecognizeSource | "auto";
   close: () => void;
 }) {
   const [attempt, setAttempt] = useState(0);
+  const [source, setSource] = useState(initialSource);
+  const [activeSource, setActiveSource] = useState<RecognizeSource | null>(
+    initialSource === "auto" ? null : initialSource,
+  );
   // The card for this attempt; an earlier attempt's end never shows over a new one.
   const [shown, setShown] = useState<{ attempt: number; card: RecognizeCardState }>({
     attempt: 0,
@@ -84,26 +88,38 @@ function RecognizeCard({
   const run = useRef<RecognizeRun | null>(null);
 
   useEffect(() => {
-    const session = startRecognizeSession(depsFor(native), source, (card) =>
-      setShown({ attempt, card }),
-    );
+    const session = startRecognizeSession(depsFor(native), source, (card) => {
+      if (card.kind === "listening" && card.source !== undefined) setActiveSource(card.source);
+      setShown({ attempt, card });
+    });
     run.current = session;
     return () => session.cancel();
   }, [native, source, attempt]);
 
   const card: RecognizeCardState = shown.attempt === attempt ? shown.card : { kind: "listening" };
 
+  const pickSource = (picked: RecognizeSource): void => {
+    run.current?.cancel();
+    setSource(picked);
+    setActiveSource(picked);
+    setAttempt((n) => n + 1);
+  };
+
   // Back from Android's settings with the microphone allowed: listen at once.
   const denied = card.kind === "denied";
   useEffect(() => {
     if (!denied) return undefined;
+    let current = true;
     const subscription = AppState.addEventListener("change", (state) => {
       if (state !== "active") return;
       void hasMicrophone().then((granted) => {
-        if (granted) setAttempt((n) => n + 1);
+        if (current && granted) setAttempt((n) => n + 1);
       });
     });
-    return () => subscription.remove();
+    return () => {
+      current = false;
+      subscription.remove();
+    };
   }, [denied]);
 
   const press = (action: RecognizeCardAction): void => {
@@ -122,6 +138,9 @@ function RecognizeCard({
       case "openSettings":
         void Linking.openSettings().catch(() => undefined);
         return;
+      case "useMicrophone":
+        pickSource("microphone");
+        return;
     }
   };
 
@@ -130,6 +149,32 @@ function RecognizeCard({
     <>
       <View style={{ paddingTop: CELL, paddingBottom: CELL * 2, gap: CELL * 1.5 }}>
         <CatalogLine>Recognize Song</CatalogLine>
+        <View className="flex-row rounded-full bg-fill" accessibilityRole="radiogroup">
+          {(
+            [
+              ["microphone", "Around me"],
+              ["playback", "This phone"],
+            ] as const
+          ).map(([pick, label]) => (
+            <TextButton
+              key={pick}
+              label={label}
+              variant="pill"
+              tone="secondary"
+              selected={activeSource === pick}
+              accessibilityRole="radio"
+              accessibilityLabel={label}
+              accessibilityState={{ checked: activeSource === pick }}
+              accessibilityHint="Starts listening again from this source"
+              haptic="selection"
+              onPress={() => {
+                if (pick !== activeSource) pickSource(pick);
+              }}
+              className="flex-1 items-center"
+              labelProps={{ className: "font-sans text-subheadline font-semibold" }}
+            />
+          ))}
+        </View>
         <View className="flex-row items-center" style={{ gap: CELL * 1.5 }}>
           {view.cover && (
             <Artwork uri={view.coverUrl ?? undefined} size={COVER} radius={CELL / 2} />

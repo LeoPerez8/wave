@@ -60,7 +60,10 @@ export type RecognizeAnswer =
 
 /** How a session ended: an answer that ends it, or Cancel. */
 export type RecognizeEnd =
-  RecognizeAnswer | { readonly kind: "cancelled" | "blocked" | "consentDeclined" };
+  | RecognizeAnswer
+  | { readonly kind: "cancelled" }
+  | { readonly kind: "blocked" }
+  | { readonly kind: "consentDeclined" };
 
 /** What happened in a session. */
 export type RecognizeEvent =
@@ -222,7 +225,7 @@ export const recognizeCardView = (card: RecognizeCard): RecognizeCardView => {
     case "denied":
       return notice(
         "Microphone access is off",
-        "Allow Wave to use the microphone in its Android settings to recognize songs around you.",
+        "Allow Wave to capture audio in its Android settings to recognize songs.",
         "openSettings",
       );
     case "ended": {
@@ -252,7 +255,7 @@ export const recognizeCardView = (card: RecognizeCard): RecognizeCardView => {
             actions: ["done"],
           };
         case "noMatch":
-          return notice("No match", "Wave couldn't name this song. Try again closer to the music.");
+          return notice("No match", "Wave couldn't name this song. Try listening again.");
         case "failed":
           return notice("Couldn't recognize the song", FAILURE_LINES[ending.failure]);
       }
