@@ -106,7 +106,8 @@ function Toggle({ icon: Icon, label, on, onPress, onLongPress, accessibilityHint
   );
 }
 
-const REPEAT_LABEL: Record<RepeatMode, string> = {
+/** What the repeat toggles say for each mode. */
+export const REPEAT_LABEL: Record<RepeatMode, string> = {
   off: "Repeat",
   all: "Repeat",
   one: "Repeat One",

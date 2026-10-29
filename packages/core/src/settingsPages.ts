@@ -108,7 +108,7 @@ export const visibleSettingsPages = (developerVisible = false): readonly Setting
  * screen's title (Home, the Library, Playlists) or on the tab bar, each as a
  * page of its own.
  */
-export type LayoutPage = "home" | "library" | "playlists" | "tabBar";
+export type LayoutPage = "home" | "library" | "playlists" | "tabBar" | "nowPlaying";
 
 export interface LayoutPageEntry {
   readonly page: LayoutPage;
@@ -124,6 +124,7 @@ export const LAYOUT_PAGES = [
   { page: "library", title: "Library", route: "/settings/layout/library" },
   { page: "playlists", title: "Playlists", route: "/settings/layout/playlists" },
   { page: "tabBar", title: "Tab bar", route: "/settings/layout/tab-bar" },
+  { page: "nowPlaying", title: "Now Playing", route: "/settings/layout/now-playing" },
 ] as const satisfies readonly LayoutPageEntry[];
 
 /**
