@@ -502,6 +502,13 @@ export const selectUnpushed = (
   };
 };
 
+/** The follow tables a push mark names, each row found by one text key. */
+const followRows = {
+  follows: { table: schema.follows, key: schema.follows.key },
+  hiddenReleases: { table: schema.hiddenFollowReleases, key: schema.hiddenFollowReleases.key },
+  notifiedShows: { table: schema.notifiedFollowShows, key: schema.notifiedFollowShows.id },
+} as const;
+
 /**
  * Records that the account has the changes behind [marks] (`selectUnpushed`).
  * A row changed again since it was read keeps waiting.
@@ -557,26 +564,12 @@ export const markPushed = (db: LibraryDatabase, marks: readonly PushMark[]): voi
             .run();
           break;
         case "follows":
-          tx.update(schema.follows)
-            .set({ pushed: true })
-            .where(
-              and(eq(schema.follows.key, from.key), eq(schema.follows.changedAt, from.changedAt)),
-            )
-            .run();
-          break;
-        case "hiddenReleases": {
-          const { hiddenFollowReleases: hidden } = schema;
-          tx.update(hidden)
-            .set({ pushed: true })
-            .where(and(eq(hidden.key, from.key), eq(hidden.changedAt, from.changedAt)))
-            .run();
-          break;
-        }
+        case "hiddenReleases":
         case "notifiedShows": {
-          const { notifiedFollowShows: notified } = schema;
-          tx.update(notified)
+          const { table, key } = followRows[from.table];
+          tx.update(table)
             .set({ pushed: true })
-            .where(and(eq(notified.id, from.key), eq(notified.changedAt, from.changedAt)))
+            .where(and(eq(key, from.key), eq(table.changedAt, from.changedAt)))
             .run();
           break;
         }
