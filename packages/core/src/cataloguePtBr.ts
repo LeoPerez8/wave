@@ -1,3 +1,4 @@
+import { homePtBr } from "./catalogue/homePtBr.ts";
 /**
  * Wave's interface text in Brazilian Portuguese, entry for entry with
  * `catalogueEn.ts`. Terms follow the spec's glossary; until it's approved,
@@ -7,6 +8,7 @@
 import type { Catalogue } from "./catalogueEn.ts";
 
 export const ptBR: Catalogue = {
+  home: homePtBr,
   tabs: {
     index: "Início",
     library: "Biblioteca",

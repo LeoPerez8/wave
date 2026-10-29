@@ -1,3 +1,4 @@
+import { en, type Catalogue } from "./catalogueEn.ts";
 /**
  * Listening stats: rankings of the songs, albums and artists played most over
  * a stats period, a rolling window ending now. Only counted plays (see
@@ -17,10 +18,10 @@ export const STATS_PERIODS: readonly {
   /** The label on the period selector's tab, where four must fit across. */
   readonly tab: string;
 }[] = [
-  { id: "week", label: "Last 7 days", tab: "7 days" },
-  { id: "month", label: "Last 30 days", tab: "30 days" },
-  { id: "year", label: "Last 12 months", tab: "12 months" },
-  { id: "all", label: "All time", tab: "All time" },
+  { id: "week", label: en.home.last7Days, tab: en.home.period7Days },
+  { id: "month", label: en.home.last30Days, tab: en.home.period30Days },
+  { id: "year", label: en.home.last12Months, tab: en.home.period12Months },
+  { id: "all", label: en.home.allTime, tab: en.home.allTime },
 ];
 
 /** The plays a period covers: started at or after `from` (no start for all time) and at or before `to`. */
@@ -223,3 +224,10 @@ export function* rankPlaysSteps<A extends PlayTotals>(
   }
   return (yield* sortSteps(eligible, compareRanked)).slice(0, limit);
 }
+
+export const statsPeriods = (catalogue: Catalogue = en): typeof STATS_PERIODS => [
+  { id: "week", label: catalogue.home.last7Days, tab: catalogue.home.period7Days },
+  { id: "month", label: catalogue.home.last30Days, tab: catalogue.home.period30Days },
+  { id: "year", label: catalogue.home.last12Months, tab: catalogue.home.period12Months },
+  { id: "all", label: catalogue.home.allTime, tab: catalogue.home.allTime },
+];

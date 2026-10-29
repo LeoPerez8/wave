@@ -1,3 +1,4 @@
+import { currentLocalisation } from "@/localisation/localisation";
 import type { PlayedAlbum, PlayedArtist } from "@/library/db/playedEntities";
 import {
   ARTIST_MOST_PLAYED,
@@ -6,6 +7,7 @@ import {
   createRecapAvailability,
   rankSongPlays,
   recap,
+  recapTitle,
   recapId,
   recapSlides,
   recapWindow,
@@ -154,7 +156,7 @@ const loadRecap = (
     const slides = yield* Effect.forEach(recapSlides(computed), (slide) =>
       loadSlide(store, rows, slide),
     );
-    return { period, title: computed.title, slides: slides.flat() };
+    return { period, title: recapTitle(period, currentLocalisation().strings), slides: slides.flat() };
   });
 
 /** Stories retain only the requested period, quarter sums unchanged; source reads still yield. */
@@ -231,7 +233,7 @@ export const make = Effect.gen(function* () {
       return Effect.flatMap(
         store.playedArtistSongs(artistId, now),
         (plays): Effect.Effect<ArtistStats, LibraryStoreError> => {
-          const stats = artistStats({ artistId, now, ...plays });
+          const stats = artistStats({ artistId, now, ...plays }, currentLocalisation().strings);
           if (!stats.played) return Effect.succeed(stats);
           const ranking = rankSongPlays(
             [

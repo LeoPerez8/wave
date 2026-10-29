@@ -1,3 +1,4 @@
+import { currentLocalisation } from "@/localisation/localisation";
 /**
  * Home draws nine random playable Library songs on each visit, independently
  * of recommendations; with none in the Library, nine streamed songs of the
@@ -88,8 +89,8 @@ export const useMagicQueueSection = (
       const previous = videoIdsOf(picks?.songs ?? []);
       const next: MagicQueueMixPicks = { mixes, songs: magicQueueMixPicks(mixes, Math.random) };
       setMixPicks(next);
-      void showToast("New songs", {
-        label: "Undo",
+      void showToast(currentLocalisation().strings.home.newSongs, {
+        get label() { return currentLocalisation().strings.home.undo; },
         run: () =>
           setMixPicks((current) =>
             current === next
@@ -102,8 +103,8 @@ export const useMagicQueueSection = (
     const previous = (librarySongs ?? []).map((song) => song.id);
     const next = randomMagicQueueRead(Math.random);
     setRead(next);
-    void showToast("New songs", {
-      label: "Undo",
+    void showToast(currentLocalisation().strings.home.newSongs, {
+      get label() { return currentLocalisation().strings.home.undo; },
       run: () => {
         setRead((current) =>
           current === next ? randomMagicQueueRead(Math.random, previous) : current,

@@ -1,3 +1,4 @@
+import { useLocalisation } from "@/localisation/localisation";
 import {
   statsFacts,
   summedListeningTotals,
@@ -409,13 +410,14 @@ const readListeningSums = storeQuery(
  * scan batches.
  */
 export const useStatsFacts = (): StatsFacts | undefined => {
+ const { language } = useLocalisation();
   const counts = useLibraryCounts();
   const sums = useLibraryQuery<ListeningSums | undefined>(readListeningSums, undefined);
   return useMemo(
     () =>
       counts === undefined || sums === undefined
         ? undefined
-        : statsFacts(counts, summedListeningTotals(sums)),
-    [counts, sums],
+        : statsFacts(counts, summedListeningTotals(sums), language),
+    [counts, sums, language],
   );
 };

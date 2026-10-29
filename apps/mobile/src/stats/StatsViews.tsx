@@ -1,14 +1,14 @@
+import { useLocalisation, currentLocalisation } from "@/localisation/localisation";
 import { usePositions } from "@/lib/usePositions";
 import type { PlayedAlbum, PlayedArtist } from "@/library/db/playedEntities";
 import { PlayedAlbumRow, PlayedArtistRow } from "./PlayedEntityViews";
 import { IconChartBar } from "@tabler/icons-react-native";
 import { LegendList } from "@legendapp/list/react-native";
 import {
-  counted,
+  statsPeriods,
   discoverTrackId,
   recapId,
   recapTitle,
-  STATS_PERIODS,
   type QueueContext,
   type RecapPeriod,
   type RowMenuAction,
@@ -32,7 +32,7 @@ import { recapCardHeight } from "./recapAnnouncement";
 import { useListScrollable } from "@/motion/heldTouch";
 
 /** "3 plays", "1 play". */
-export const playCount = (count: number): string => counted(count, "play");
+export const playCount = (count: number): string => currentLocalisation().strings.home.plays(count);
 
 /** What tapping a song in a period's song ranking plays: that ranking. */
 export const statsSongsContext = (period: StatsPeriod): QueueContext => ({
@@ -48,6 +48,8 @@ export function PeriodTabs({
   period: StatsPeriod;
   onChange: (period: StatsPeriod) => void;
 }) {
+const localisation = useLocalisation();
+
   return (
     // Wraps rather than clips at large font scales.
     <View
@@ -55,7 +57,7 @@ export function PeriodTabs({
       className="flex-row flex-wrap"
       style={{ columnGap: CELL * 3 }}
     >
-      {STATS_PERIODS.map((option) => {
+      {statsPeriods(localisation.strings).map((option) => {
         const selected = option.id === period;
         return (
           <TextButton
@@ -261,8 +263,8 @@ const RECAP_LOOK: {
     readonly colour: string;
   };
 } = {
-  month: { label: "Recap", ready: "Your Recap is ready", colour: "bg-recap-indigo" },
-  year: { label: "Year in music", ready: "Your year in music is ready", colour: "bg-recap-purple" },
+  month: { get label() { return currentLocalisation().strings.home.recap; }, get ready() { return currentLocalisation().strings.home.yourRecapIsReady; }, colour: "bg-recap-indigo" },
+  year: { get label() { return currentLocalisation().strings.home.yearInMusic; }, get ready() { return currentLocalisation().strings.home.yourYearInMusicIsReady; }, colour: "bg-recap-purple" },
 };
 
 /**
@@ -270,12 +272,14 @@ const RECAP_LOOK: {
  * opened. Tapping it plays its stories.
  */
 export function RecapCard({ period }: { period: RecapPeriod }) {
+ const localisation = useLocalisation();
+
   const { fontScale } = useWindowDimensions();
   const { ready, colour } = RECAP_LOOK[period.kind];
   return (
     <Press
       accessibilityRole="button"
-      accessibilityLabel={`${ready}: ${recapTitle(period)}`}
+      accessibilityLabel={`${ready}: ${recapTitle(period, localisation.strings)}`}
       onPress={() => openRecap(period)}
       haptic="selection"
       className={`rounded-2xl ${colour}`}
@@ -285,9 +289,9 @@ export function RecapCard({ period }: { period: RecapPeriod }) {
         {ready}
       </Text>
       <Text numberOfLines={1} className="font-sans text-title2 font-bold text-on-recap">
-        {recapTitle(period)}
+        {recapTitle(period, localisation.strings)}
       </Text>
-      <Text className="font-sans text-subheadline text-on-recap opacity-80">Tap to watch</Text>
+      <Text className="font-sans text-subheadline text-on-recap opacity-80">{localisation.strings.home.tapToWatch}</Text>
     </Press>
   );
 }
@@ -298,6 +302,8 @@ export function RecapCard({ period }: { period: RecapPeriod }) {
  * plays its stories.
  */
 export function RecapsRow({ recaps }: { recaps: readonly RecapPeriod[] }) {
+const localisation = useLocalisation();
+
   const { fontScale } = useWindowDimensions();
   // Keep full month names readable as system type grows, on the catalog's cell grid.
   const tileWidth = Math.ceil((RECAP_TILE.width * Math.max(1, fontScale)) / CELL) * CELL;
@@ -312,7 +318,7 @@ export function RecapsRow({ recaps }: { recaps: readonly RecapPeriod[] }) {
         <Press
           key={recapId(period)}
           accessibilityRole="button"
-          accessibilityLabel={`${recapTitle(period)} ${RECAP_LOOK[period.kind].label}`}
+          accessibilityLabel={`${recapTitle(period, localisation.strings)} ${RECAP_LOOK[period.kind].label}`}
           onPress={() => openRecap(period)}
           haptic="selection"
           className={`justify-end rounded-2xl ${RECAP_LOOK[period.kind].colour}`}
@@ -322,7 +328,7 @@ export function RecapsRow({ recaps }: { recaps: readonly RecapPeriod[] }) {
             {RECAP_LOOK[period.kind].label}
           </Text>
           <Text className="font-sans text-title3 font-bold text-on-recap">
-            {recapTitle(period).replace(" ", "\n")}
+            {recapTitle(period, localisation.strings).replace(" ", "\n")}
           </Text>
         </Press>
       ))}
@@ -332,20 +338,22 @@ export function RecapsRow({ recaps }: { recaps: readonly RecapPeriod[] }) {
 
 /** The period's label: "Last 7 days", "All time"… */
 export const periodLabel = (period: StatsPeriod): string =>
-  STATS_PERIODS.find((option) => option.id === period)?.label ?? "";
+  statsPeriods(currentLocalisation().strings).find((option) => option.id === period)?.label ?? "";
 
 /** "No plays in the last 7 days", or "No plays yet" for all time. */
 const nothingPlayed = (period: StatsPeriod): string =>
-  period === "all" ? "No plays yet" : `No plays in the ${periodLabel(period).toLowerCase()}`;
+  currentLocalisation().strings.home.nothingPlayed(periodLabel(period));
 
 /** A ranking's empty state: nothing was played enough to count in `period`. */
 export function NothingPlayed({ period }: { period: StatsPeriod }) {
+ const localisation = useLocalisation();
+
   return (
     <EmptyState
       icon={IconChartBar}
       title={nothingPlayed(period)}
       // Core's counted-play rule (`isCountedPlay`).
-      message="Songs you listen to for more than 15 seconds are counted here."
+      message={localisation.strings.home.songsYouListenToForMoreThan15SecondsAreCountedHere}
     />
   );
 }

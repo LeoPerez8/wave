@@ -1,3 +1,4 @@
+import { useLocalisation } from "@/localisation/localisation";
 import {
   IconBrandInstagram,
   IconBrandWhatsapp,
@@ -110,6 +111,8 @@ export function useImageShare({
   readonly known: boolean;
   readonly disabled: boolean;
 } {
+const localisation = useLocalisation();
+
   const [busy, setBusy] = useState(false);
   // Two taps in one frame both see busy false; this sees the first.
   const sending = useRef(false);
@@ -154,31 +157,31 @@ export function useImageShare({
   const all: Record<LyricShareDestination, ShareDestination> = {
     instagramStories: {
       key: "instagramStories",
-      label: "Instagram Stories",
+      label: localisation.strings.home.instagramStories,
       icon: IconBrandInstagram,
       onPress: () =>
         void sendImage(
           "instagramStories",
           `share ${what} to Instagram Stories`,
           (path) => shareImageToInstagramStory(path, storyBackground, storyFrame),
-          "Couldn't open Instagram",
+          localisation.strings.home.couldnTOpenInstagram,
         ),
     },
     whatsapp: {
       key: "whatsapp",
-      label: "WhatsApp",
+      label: localisation.strings.home.whatsApp,
       icon: IconBrandWhatsapp,
       onPress: () =>
         void sendImage(
           "whatsapp",
           `share ${what} to WhatsApp`,
           shareImageToWhatsApp,
-          "Couldn't open WhatsApp",
+          localisation.strings.home.couldnTOpenWhatsapp,
         ),
     },
     save: {
       key: "save",
-      label: "Save image",
+      get label() { return localisation.strings.home.saveImage; },
       icon: IconPhotoDown,
       onPress: () =>
         void sendImage(
@@ -186,21 +189,21 @@ export function useImageShare({
           `save ${what}`,
           async (path) => {
             await saveImageToGallery(path);
-            void showToast("Saved to your gallery");
+            void showToast(localisation.strings.home.savedToYourGallery);
           },
-          "Couldn't save the image",
+          localisation.strings.home.couldnTSaveTheImage,
         ),
     },
     more: {
       key: "more",
-      label: "More",
+      get label() { return localisation.strings.home.more; },
       icon: IconDots,
       onPress: () =>
         void sendImage(
           "more",
           `share ${what}`,
           (path) => openImageShareSheet(path, sheetTitle),
-          "Couldn't share the image",
+          localisation.strings.home.couldnTShareTheImage,
         ),
     },
   };

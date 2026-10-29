@@ -1,3 +1,4 @@
+import { useLocalisation, currentLocalisation } from "@/localisation/localisation";
 import {
   discoverMixCaption,
   discoverMixRowsToBuild,
@@ -81,6 +82,8 @@ type SectionProps = {
 };
 
 function MostPlayedAlbums({ title }: SectionProps) {
+ const localisation = useLocalisation();
+
   const ranking = useMostPlayedOfAllTime();
   if (ranking === undefined) return <HomeSectionSkeleton id="most-played-albums" />;
   const albums = withPlays(ranking.albums);
@@ -88,7 +91,7 @@ function MostPlayedAlbums({ title }: SectionProps) {
   return (
     <TitledSection
       title={title}
-      action={{ label: "See all", onPress: () => openStatsSeeAll("albums", "all") }}
+      action={{ label: localisation.strings.home.seeAll, onPress: () => openStatsSeeAll("albums", "all") }}
     >
       <AlbumShelf albums={albums} detail={countedPlays} />
     </TitledSection>
@@ -96,7 +99,7 @@ function MostPlayedAlbums({ title }: SectionProps) {
 }
 
 /** The quiet line after a mix row's label while its mixes rebuild over the saved ones. */
-const MIXES_UPDATING = "Updating…";
+
 
 /**
  * Home's Discover section: one header, its adjustments icon opening the
@@ -210,16 +213,18 @@ function DiscoverRow({
  * "Updating…" while a rebuild runs.
  */
 function MixRow({ id, section }: { id: MixSectionId; section: DiscoverMixesSection }) {
+const localisation = useLocalisation();
+
   if (section.kind === "hidden") return null;
-  const label = discoverRowTitle(id);
+  const label = discoverRowTitle(id, localisation.strings);
   const refresh = () => refreshMixes(id);
   const updating = section.kind === "skeleton" || (section.kind === "mixes" && section.updating);
   return (
     <DiscoverRow
       label={label}
-      status={section.kind === "mixes" && section.updating ? MIXES_UPDATING : undefined}
+      status={section.kind === "mixes" && section.updating ? localisation.strings.home.updating : undefined}
       busy={updating}
-      refresh={{ label: `Get new ${label.toLowerCase()}`, run: refresh, enabled: !updating }}
+      refresh={{ label: localisation.strings.home.getNew(label), run: refresh, enabled: !updating }}
     >
       {section.kind === "skeleton" ? (
         <DiscoverMixesSkeleton />
@@ -248,10 +253,12 @@ function DiscoverMixRow({
   onRefresh: () => void;
   refreshing: boolean;
 }) {
+const localisation = useLocalisation();
+
   return (
     <PullRefreshRow onRefresh={onRefresh} enabled={!refreshing}>
       {mixes.map((mix, place) => {
-        const caption = discoverMixCaption(mix);
+        const caption = discoverMixCaption(mix, localisation.strings);
         const shows = [mix.id, caption.artworkUrl, caption.title, caption.artists, caption.line];
         return (
           // oxlint-disable-next-line react/no-array-index-key -- a place crossfades from the mix it had to the one it has now
@@ -281,6 +288,8 @@ function DiscoverMixRow({
  * place crossfades its tile when its song changes. Hidden with YT Music off.
  */
 function MagicQueueRow({ section }: { section: MagicQueueSection }) {
+ const localisation = useLocalisation();
+
   const { width, fontScale } = useWindowDimensions();
   const [available, setAvailable] = useState(width - grid.margin * 2);
   const { size } = magicQueueGrid(available, fontScale);
@@ -300,13 +309,13 @@ function MagicQueueRow({ section }: { section: MagicQueueSection }) {
   const skeleton = shown.kind === "skeleton";
   return (
     <DiscoverRow
-      label={discoverRowTitle("magic-queue")}
+      label={discoverRowTitle("magic-queue", localisation.strings)}
       busy={skeleton}
-      refresh={{ label: "Get other songs", run: section.refresh, enabled: !skeleton }}
+      refresh={{ label: localisation.strings.home.getOtherSongs, run: section.refresh, enabled: !skeleton }}
     >
       <View onLayout={(event) => setAvailable(event.nativeEvent.layout.width)}>
         {skeleton ? (
-          <SkeletonGroup label="Finding songs">
+          <SkeletonGroup label={localisation.strings.home.findingSongs}>
             <MagicQueueGrid width={available}>
               {Array.from({ length: MAGIC_QUEUE_PICKS }, (_, place) => (
                 <SongCardSkeleton key={place} size={size} fontScale={fontScale} />
@@ -339,13 +348,15 @@ function MagicQueueGrid({ width, children }: { width: number; children: ReactNod
 
 /** A Library song as a song card in its grid column; a tap starts the Magic Queue from it. */
 function LibraryTile({ song, size }: { song: PlayableSongRow; size: number }) {
+const localisation = useLocalisation();
+
   return (
     <SongCard
       title={song.title}
       artist={song.artist}
       artworkUri={artworkUri(song, "medium")}
       size={size}
-      label={`${song.title} by ${song.artist}, ${song.album}, start Magic Queue`}
+      label={localisation.strings.home.magicSong(song.title, song.artist, song.album)}
       onPress={() => startMagicQueueFrom(song)}
       onLongPress={() => openTrackActions(song)}
     />
@@ -354,6 +365,8 @@ function LibraryTile({ song, size }: { song: PlayableSongRow; size: number }) {
 
 /** A mix's streamed song as a song card; a tap starts the Magic Queue from its radio. */
 function StreamedTile({ song, size }: { song: YtAlbumSong; size: number }) {
+const localisation = useLocalisation();
+
   const artist = ytSongArtist(song);
   return (
     <SongCard
@@ -361,7 +374,7 @@ function StreamedTile({ song, size }: { song: YtAlbumSong; size: number }) {
       artist={artist}
       artworkUri={song.artworkUrl ?? undefined}
       size={size}
-      label={`${song.title} by ${artist}${song.album ? `, ${song.album}` : ""}, start Magic Queue`}
+      label={localisation.strings.home.magicSong(song.title, artist, song.album)}
       onPress={() => startStreamedMagicQueueFrom(song)}
       onLongPress={() => openYtSongActions(song)}
     />
@@ -369,6 +382,8 @@ function StreamedTile({ song, size }: { song: YtAlbumSong; size: number }) {
 }
 
 function MostPlayedArtists({ title }: SectionProps) {
+ const localisation = useLocalisation();
+
   const ranking = useMostPlayedOfAllTime();
   if (ranking === undefined) return <HomeSectionSkeleton id="most-played-artists" />;
   const artists = ranking.artists.map((entry) => entry.item);
@@ -376,7 +391,7 @@ function MostPlayedArtists({ title }: SectionProps) {
   return (
     <TitledSection
       title={title}
-      action={{ label: "See all", onPress: () => openStatsSeeAll("artists", "all") }}
+      action={{ label: localisation.strings.home.seeAll, onPress: () => openStatsSeeAll("artists", "all") }}
     >
       <ArtistShelf artists={artists} />
     </TitledSection>
@@ -418,7 +433,7 @@ const SECTIONS: Record<HomeSectionId, ComponentType<SectionProps>> = {
     home.favorites.length > 0 && (
       <TitledSection
         title={title}
-        action={{ label: "See all", onPress: () => router.push("/library/favorites") }}
+        action={{ get label() { return currentLocalisation().strings.home.seeAll; }, onPress: () => router.push("/library/favorites") }}
       >
         <SongRows songs={home.favorites} context={FAVORITES_CONTEXT} />
       </TitledSection>
@@ -436,7 +451,9 @@ export const SECTION_GAP = CELL * 5;
  * [home] is `useHome`'s answer.
  */
 export function HomeSection({ id, home }: { id: HomeSectionId; home: HomeContent }) {
+const localisation = useLocalisation();
+
   if (homeSectionWaiting(id, home)) return <HomeSectionSkeleton id={id} />;
   const Section = SECTIONS[id];
-  return <Section home={home} title={homeSectionTitle(id)} />;
+  return <Section home={home} title={homeSectionTitle(id, localisation.strings)} />;
 }

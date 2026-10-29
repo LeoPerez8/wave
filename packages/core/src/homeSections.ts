@@ -1,3 +1,4 @@
+import { en, type Catalogue } from "./catalogueEn.ts";
 /**
  * Home's sections as a catalogue: every section Home can show, with its id,
  * its title and its place in the default order. The owner arranges Home from
@@ -36,21 +37,21 @@ export interface HomeSection {
  * their three sections, so it joins every Home arranged before it on top.
  */
 export const HOME_SECTIONS: readonly HomeSection[] = [
-  { id: "discover", title: "Discover", fromPlays: false },
-  { id: "recently-added", title: "Recently added", fromPlays: false },
-  { id: "recently-played", title: "Recently played", fromPlays: true },
-  { id: "most-played", title: "Most played", fromPlays: true },
-  { id: "most-played-albums", title: "Most played albums", fromPlays: true },
-  { id: "most-played-artists", title: "Most played artists", fromPlays: true },
-  { id: "favorites", title: "Favorites", fromPlays: false },
-  { id: "stats", title: "Stats", fromPlays: false },
+  { id: "discover", title: en.home.discover, fromPlays: false },
+  { id: "recently-added", title: en.home.recentlyAdded, fromPlays: false },
+  { id: "recently-played", title: en.home.recentlyPlayed, fromPlays: true },
+  { id: "most-played", title: en.home.mostPlayed, fromPlays: true },
+  { id: "most-played-albums", title: en.home.mostPlayedAlbums, fromPlays: true },
+  { id: "most-played-artists", title: en.home.mostPlayedArtists, fromPlays: true },
+  { id: "favorites", title: en.home.favorites, fromPlays: false },
+  { id: "stats", title: en.home.stats, fromPlays: false },
 ];
 
 const sectionOf = (id: HomeSectionId): HomeSection | undefined =>
   HOME_SECTIONS.find((section) => section.id === id);
 
 /** The title of the section [id]. */
-export const homeSectionTitle = (id: HomeSectionId): string => sectionOf(id)?.title ?? id;
+export const homeSectionTitle = (id: HomeSectionId, catalogue: Catalogue = en): string => ({ "discover": catalogue.home.discover, "recently-added": catalogue.home.recentlyAdded, "recently-played": catalogue.home.recentlyPlayed, "most-played": catalogue.home.mostPlayed, "most-played-albums": catalogue.home.mostPlayedAlbums, "most-played-artists": catalogue.home.mostPlayedArtists, "favorites": catalogue.home.favorites, "stats": catalogue.home.stats })[id];
 
 /** A row of Home's Discover section. */
 export type DiscoverRowId = "magic-queue" | "artist-mixes" | "genre-mixes";
@@ -60,14 +61,13 @@ export type MixRowId = Exclude<DiscoverRowId, "magic-queue">;
 
 /** Discover's rows, top to bottom, each with the label over it. */
 export const DISCOVER_ROWS: readonly { readonly id: DiscoverRowId; readonly title: string }[] = [
-  { id: "magic-queue", title: "Magic Queue" },
-  { id: "artist-mixes", title: "Artist mixes" },
-  { id: "genre-mixes", title: "Genre mixes" },
+  { id: "magic-queue", title: en.home.magicQueue },
+  { id: "artist-mixes", title: en.home.artistMixes },
+  { id: "genre-mixes", title: en.home.genreMixes },
 ];
 
 /** The label over Discover's row [id]. */
-export const discoverRowTitle = (id: DiscoverRowId): string =>
-  DISCOVER_ROWS.find((row) => row.id === id)?.title ?? id;
+export const discoverRowTitle = (id: DiscoverRowId, catalogue: Catalogue = en): string => ({ "magic-queue": catalogue.home.magicQueue, "artist-mixes": catalogue.home.artistMixes, "genre-mixes": catalogue.home.genreMixes })[id];
 
 /**
  * One thing Home lists: a section of the catalogue (drawn only when it has

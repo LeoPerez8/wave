@@ -1,3 +1,4 @@
+import { useLocalisation } from "@/localisation/localisation";
 import { Canvas, LinearGradient, Rect, vec } from "@shopify/react-native-skia";
 import {
   LYRIC_CARD_FALLBACK,
@@ -60,6 +61,8 @@ function FittedCard({
   onReady: () => void;
   onPress: () => void;
 }) {
+ const localisation = useLocalisation();
+
   const storyScale = Math.min(area.width / frame.width, area.height / frame.height);
   const storyWidth = frame.width * storyScale;
   const storyHeight = frame.height * storyScale;
@@ -89,8 +92,8 @@ function FittedCard({
       </Canvas>
       <Press
         accessibilityRole="button"
-        accessibilityLabel="Lyrics card"
-        accessibilityHint="Changes the card's colour"
+        accessibilityLabel={localisation.strings.home.lyricsCard}
+        accessibilityHint={localisation.strings.home.changesTheCardSColour}
         onPress={onPress}
         haptic="selection"
         depth={0.02}
@@ -131,6 +134,8 @@ function FittedCard({
  * Back) goes back to picking lines.
  */
 export function LyricCardPreview({ content }: { content: LyricCardContent }) {
+ const localisation = useLocalisation();
+
   const [colour, setColour] = useState(content.colours[0] ?? LYRIC_CARD_FALLBACK);
   // A cover still loading would be missing from the image.
   const [ready, setReady] = useState(content.artworkUri === undefined);
@@ -151,7 +156,7 @@ export function LyricCardPreview({ content }: { content: LyricCardContent }) {
     source: card,
     fileName: () => cardFileName(content.title),
     what: "the lyrics card",
-    sheetTitle: "Share Lyrics",
+    sheetTitle: localisation.strings.home.shareLyrics,
     logTag: LOG_TAG,
     storyBackground: background,
     storyFrame: frame,
@@ -177,7 +182,7 @@ export function LyricCardPreview({ content }: { content: LyricCardContent }) {
         className="text-center font-sans text-footnote text-secondary"
         style={{ marginBottom: CELL * 3 }}
       >
-        {content.colours.length > 1 ? "Tap the card to change its colour" : " "}
+        {content.colours.length > 1 ? localisation.strings.home.tapTheCardToChangeItsColour : " "}
       </Text>
       {/* Hidden, not left out, until some answer is known: the row's height stays and the card doesn't jump. */}
       <View style={{ opacity: share.known ? 1 : 0 }}>

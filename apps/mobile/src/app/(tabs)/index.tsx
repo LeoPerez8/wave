@@ -1,3 +1,4 @@
+import { useLocalisation } from "@/localisation/localisation";
 import { useScreenContent } from "@/lib/screenTiming";
 import { IconMusic, IconSettings } from "@tabler/icons-react-native";
 import { homeItems, type RecapPeriod } from "@wave/core";
@@ -20,6 +21,8 @@ import { useRecapToAnnounce } from "@/stats/hooks";
 import { RecapCard } from "@/stats/StatsViews";
 
 /** The first section sits a cell under the large title, not a section's gap. */
+const DEV_GLASS_LABEL = "Developer: glass spike";
+
 const FIRST_SECTION = { marginTop: CELL - SECTION_GAP } as const;
 
 /** A new Recap's card sits a cell under the large title, a section's gap above the sections. */
@@ -43,6 +46,8 @@ function HomeLine({ children, top }: { children: string; top: number }) {
 }
 
 export default function HomeScreen() {
+ const localisation = useLocalisation();
+
   useRenderCount("HomeScreen");
   const [painted, setPainted] = useState(false);
   const newRecap = useRecapToAnnounce(painted);
@@ -57,10 +62,10 @@ export default function HomeScreen() {
   // Even focus effects in Discover or Recap cannot read before the shell has painted.
   return (
     <LargeTitleScreen
-      title="Home"
+      title={localisation.strings.home.home}
       titleLongPress={homeTitleLongPress}
       action={
-        <IconButton icon={IconSettings} label="Settings" onPress={() => router.push("/settings")} />
+        <IconButton icon={IconSettings} label={localisation.strings.home.settings} onPress={() => router.push("/settings")} />
       }
     >
       {painted ? <HomeContent newRecap={newRecap} /> : <HomePlaceholders newRecap={newRecap} />}
@@ -84,6 +89,8 @@ function HomePlaceholders({ newRecap }: { newRecap: RecapPeriod | null }) {
 }
 
 function HomeContent({ newRecap }: { newRecap: RecapPeriod | null }) {
+ const localisation = useLocalisation();
+
   const home = useHomeContent();
   const { empty, nothingPlayed, ready } = homeOpeningState(home);
   useScreenContent(ready);
@@ -95,8 +102,8 @@ function HomeContent({ newRecap }: { newRecap: RecapPeriod | null }) {
         <>
           <EmptyState
             icon={IconMusic}
-            title="Nothing here yet"
-            message="Your recently added, recently played and most played music will show up here."
+            title={localisation.strings.home.nothingHereYet}
+            message={localisation.strings.home.yourRecentlyAddedRecentlyPlayedAndMostPlayedMusicWillShowUpHere}
           />
           {/* Discover's Artist mixes grow from YouTube Music's chart while the Library is empty. */}
           {homeItems(arrangement, { nothingPlayed, empty }).map((item) =>
@@ -114,12 +121,10 @@ function HomeContent({ newRecap }: { newRecap: RecapPeriod | null }) {
             {homeItems(arrangement, { nothingPlayed }).map((item, index) =>
               item === "no-sections" ? (
                 <HomeLine key={item} top={SECTION_GAP}>
-                  Long-press Home to add sections back.
-                </HomeLine>
+                  {localisation.strings.home.longPressHomeToAddSectionsBack}</HomeLine>
               ) : item === "play-hint" ? (
                 <HomeLine key={item} top={index === 0 ? SECTION_GAP : CELL * 3}>
-                  Play something, and what you listen to will show up here.
-                </HomeLine>
+                  {localisation.strings.home.playSomethingAndWhatYouListenToWillShowUpHere}</HomeLine>
               ) : (
                 <HomeSection key={item.section} id={item.section} home={home} />
               ),
@@ -130,7 +135,7 @@ function HomeContent({ newRecap }: { newRecap: RecapPeriod | null }) {
             <Link href="/dev/glass" asChild>
               <Pressable className="mt-12 self-center py-2">
                 <Text className="font-sans text-footnote text-tertiary">
-                  Developer: glass spike
+                  {DEV_GLASS_LABEL}
                 </Text>
               </Pressable>
             </Link>

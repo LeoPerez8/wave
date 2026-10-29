@@ -1,3 +1,4 @@
+import { useLocalisation } from "@/localisation/localisation";
 import {
   editHomeArrangement,
   discoverRowTitle,
@@ -30,13 +31,15 @@ export function HomeEditor({
   edit: (change: HomeArrangementEdit) => void;
   onDone?: (() => void) | undefined;
 }) {
+ const localisation = useLocalisation();
+
   return (
     <ArrangementEditor
       shown={arrangement.sections}
       hidden={hiddenHomeSections(arrangement)}
-      title={homeSectionTitle}
-      place="Home"
-      hiddenHeading="Not on Home"
+      title={(id) => homeSectionTitle(id, localisation.strings)}
+      place={localisation.strings.home.home}
+      hiddenHeading={localisation.strings.home.notOnHome}
       edit={edit}
       renderNested={(id, onDraggingChange) =>
         id === "discover" ? (
@@ -45,8 +48,8 @@ export function HomeEditor({
               inline
               shown={arrangement.discoverRows}
               hidden={hiddenDiscoverRows(arrangement)}
-              title={discoverRowTitle}
-              place="Discover"
+              title={(id) => discoverRowTitle(id, localisation.strings)}
+              place={localisation.strings.home.discover}
               hiddenHeading=""
               canRemove={arrangement.discoverRows.length > 1}
               edit={(discover) => edit({ discover })}

@@ -1,3 +1,4 @@
+import { useLocalisation } from "@/localisation/localisation";
 import { useScreenContent } from "@/lib/screenTiming";
 import type { StatsPeriod } from "@wave/core";
 import { useState } from "react";
@@ -23,6 +24,8 @@ import {
 
 /** Stats: what was played most over a rolling period ending now. */
 export default function StatsScreen() {
+ const localisation = useLocalisation();
+
   const [period, setPeriod] = useState<StatsPeriod>("month");
   const topSongs = useTopSongs(period);
   useScreenContent(topSongs !== undefined);
@@ -34,39 +37,39 @@ export default function StatsScreen() {
 
   return (
     <View className="flex-1 bg-background">
-      <ScreenHeader title="Stats" />
+      <ScreenHeader title={localisation.strings.home.stats} />
       <ScrollView
         scrollEnabled={scrollable}
         contentContainerStyle={{ paddingHorizontal: grid.margin, paddingBottom: bottomInset }}
       >
         {recaps !== undefined && recaps.length > 0 && (
-          <TitledSection title="Recaps" first>
+          <TitledSection title={localisation.strings.home.recaps} first>
             <RecapsRow recaps={recaps} />
           </TitledSection>
         )}
         <PeriodTabs period={period} onChange={setPeriod} />
-        {topSongs === undefined && <TrackSkeletons label="Loading listening stats" />}
+        {topSongs === undefined && <TrackSkeletons label={localisation.strings.home.loadingListeningStats} />}
         {topSongs !== undefined && topSongs.length === 0 && <NothingPlayed period={period} />}
         {topSongs !== undefined && topSongs.length > 0 && (
           <TitledSection
-            title="Top songs"
-            action={{ label: "See all", onPress: () => openStatsSeeAll("songs", period) }}
+            title={localisation.strings.home.topSongs}
+            action={{ label: localisation.strings.home.seeAll, onPress: () => openStatsSeeAll("songs", period) }}
           >
             <RankedSongs ranking={topSongs} context={statsSongsContext(period)} />
           </TitledSection>
         )}
         {topAlbums !== undefined && topAlbums.length > 0 && (
           <TitledSection
-            title="Top albums"
-            action={{ label: "See all", onPress: () => openStatsSeeAll("albums", period) }}
+            title={localisation.strings.home.topAlbums}
+            action={{ label: localisation.strings.home.seeAll, onPress: () => openStatsSeeAll("albums", period) }}
           >
             <RankedAlbums ranking={topAlbums} />
           </TitledSection>
         )}
         {topArtists !== undefined && topArtists.length > 0 && (
           <TitledSection
-            title="Top artists"
-            action={{ label: "See all", onPress: () => openStatsSeeAll("artists", period) }}
+            title={localisation.strings.home.topArtists}
+            action={{ label: localisation.strings.home.seeAll, onPress: () => openStatsSeeAll("artists", period) }}
           >
             <RankedArtists ranking={topArtists} />
           </TitledSection>

@@ -1,3 +1,5 @@
+import { useLocalisation } from "@/localisation/localisation";
+import { currentLocalisation } from "@/localisation/localisation";
 import {
   PLAY_ACTION_LABELS,
   discoverMixActions,
@@ -41,25 +43,25 @@ export const openDiscoverMixActions = (mix: BlendedDiscoverMix): void => {
     try {
       await currentLibraryFinder();
       openOverlay({
-        label: discoverMixCaption(mix).title,
+        label: discoverMixCaption(mix, currentLocalisation().strings).title,
         anchor,
         render: (close) => <DiscoverMixActionsMenu mix={mix} close={close} />,
       });
     } catch (error) {
-      await showError("Couldn't open the mix's actions", error);
+      await showError(currentLocalisation().strings.home.openMixFailed, error);
     }
   });
 };
 
 /** A one-time copy using the same Replace / Keep Both choice as a playlist import. */
 const saveAsPlaylist = (mix: BlendedDiscoverMix): void => {
-  const playlist = discoverMixPlaylist(mix);
+  const playlist = discoverMixPlaylist(mix, currentLocalisation().strings);
   void followUp(async () => {
     try {
       const saved = await saveImportedPlaylist(playlist.name, playlist.songs);
-      void showToast(`Saved ${saved.name}`);
+      void showToast(currentLocalisation().strings.home.saved(saved.name));
     } catch (error) {
-      await showError("Couldn't save the mix as a playlist", error);
+      await showError(currentLocalisation().strings.home.saveMixFailed, error);
     }
   });
 };
@@ -71,6 +73,8 @@ function DiscoverMixActionsMenu({
   mix: BlendedDiscoverMix;
   close: () => void;
 }) {
+const localisation = useLocalisation();
+
   const find = useLibraryFinder();
   const tracks = useLibraryTracks();
   // Blended again without Library songs the Library no longer has (Home doesn't read every song).
@@ -79,7 +83,7 @@ function DiscoverMixActionsMenu({
   // Its songs that stream download (new ones, and familiar ones with no file); the rest are here.
   const fresh = useMemo(() => newSongsOf(mix), [mix]);
   const download = useYtAlbumDownload(fresh, inLibrary);
-  const caption = discoverMixCaption(mix);
+  const caption = discoverMixCaption(mix, localisation.strings);
   // As its page plays them, blended: the Library's files for the songs it has, the rest streamed.
   const listed = placeDiscoverMixSongs(mix, { find, track: (id) => tracks?.get(id) ?? null });
   const context = { kind: "discoverMix", id: mix.id };
@@ -105,7 +109,7 @@ function DiscoverMixActionsMenu({
         });
     }
   };
-  const layout = menuLayout("discoverMix", discoverMixActions(download));
+  const layout = menuLayout("discoverMix", discoverMixActions(download, localisation.strings));
   const cards = layout.cards.map((action) => ({ action, onPress: run(action) }));
   const entries = layout.list.map((entry): MenuChoice => ({
     action: entry.action,

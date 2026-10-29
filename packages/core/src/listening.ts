@@ -1,3 +1,5 @@
+import { catalogueOf, type AppLanguage } from "./localisation.ts";
+import { formatNumber } from "./formatting.ts";
 /**
  * Listening totals over all time: minutes listened, songs listened and plays,
  * for the whole history (Home's Stats) or one artist's songs
@@ -124,17 +126,17 @@ export const STATS_FACT_LABELS = [
 ] as const;
 
 /** Home's facts, listening first and then the library. */
-export const statsFacts = (library: LibraryTotals, listening: ListeningTotals): StatsFacts => {
+export const statsFacts = (library: LibraryTotals, listening: ListeningTotals, language: AppLanguage = "en"): StatsFacts => {
   const values: Record<(typeof STATS_FACT_LABELS)[number], string> = {
     "Time listened":
       listening.minutesListened < 60
         ? `${listening.minutesListened} min`
-        : `${Math.floor(listening.minutesListened / 60).toLocaleString("en")} h`,
-    Plays: listening.plays.toLocaleString("en"),
-    "Songs listened": listening.songsListened.toLocaleString("en"),
-    Songs: library.songs.toLocaleString("en"),
-    Albums: library.albums.toLocaleString("en"),
-    Artists: library.artists.toLocaleString("en"),
+        : `${formatNumber(language, Math.floor(listening.minutesListened / 60))} h`,
+    Plays: formatNumber(language, listening.plays),
+    "Songs listened": formatNumber(language, listening.songsListened),
+    Songs: formatNumber(language, library.songs),
+    Albums: formatNumber(language, library.albums),
+    Artists: formatNumber(language, library.artists),
   };
-  return STATS_FACT_LABELS.map((label) => ({ label, value: values[label] }));
+  return STATS_FACT_LABELS.map((label) => ({ label: catalogueOf(language).home.factLabels[STATS_FACT_LABELS.indexOf(label)]!, value: values[label] }));
 };

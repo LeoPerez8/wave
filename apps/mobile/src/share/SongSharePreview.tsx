@@ -1,3 +1,4 @@
+import { useLocalisation, currentLocalisation } from "@/localisation/localisation";
 import { Canvas, LinearGradient, Rect, vec } from "@shopify/react-native-skia";
 import { IconBrandSpotify, IconBrandYoutube, IconLink } from "@tabler/icons-react-native";
 import {
@@ -44,7 +45,7 @@ const PREVIEW_RADIUS = CELL * 2;
 const cardFileName = (title: string): string => songCardFileName(title, new Date());
 
 const LINK_LABELS: Record<SongLinkOption, string> = {
-  copyLink: "Copy Link",
+  get copyLink() { return currentLocalisation().strings.home.copyLink; },
   spotify: "Spotify",
   ytMusic: "YT Music",
 };
@@ -58,11 +59,11 @@ const LINK_ICONS: Record<SongLinkOption, ShareDestination["icon"]> = {
 /** Copies [url] (song.link's page) and says so. */
 const copyLink = async (url: string): Promise<void> => {
   try {
-    await WaveNative.writeClipboardText("Song link", url);
-    void showToast("Link copied");
+    await WaveNative.writeClipboardText(currentLocalisation().strings.home.songLink, url);
+    void showToast(currentLocalisation().strings.home.linkCopied);
   } catch (error) {
     appLog("warn", LOG_TAG, `Couldn't copy the song's link: ${String(error)}`);
-    void showToast("Couldn't copy the link");
+    void showToast(currentLocalisation().strings.home.couldnTCopyTheLink);
   }
 };
 
@@ -72,7 +73,7 @@ const shareLink = async (url: string, title: string): Promise<void> => {
     await Share.share({ message: url, title });
   } catch (error) {
     appLog("warn", LOG_TAG, `Couldn't share the song's link: ${String(error)}`);
-    void showToast("Couldn't share the link");
+    void showToast(currentLocalisation().strings.home.couldnTShareTheLink);
   }
 };
 
@@ -119,6 +120,8 @@ function StoryGround({
  * it. Close (or Back) closes it.
  */
 export function SongSharePreview({ content }: { content: SongShareContent }) {
+ const localisation = useLocalisation();
+
   const colours = useMemo(() => songCardColours(content.palette), [content.palette]);
   // A cover still loading would be missing from the image.
   const [loaded, setLoaded] = useState<string | undefined>(undefined);
@@ -141,7 +144,7 @@ export function SongSharePreview({ content }: { content: SongShareContent }) {
     source: card,
     fileName: () => cardFileName(content.title),
     what: "the song",
-    sheetTitle: "Share Song",
+    sheetTitle: localisation.strings.home.shareSong,
     logTag: LOG_TAG,
     storyBackground: colours.story,
     prepare: (destination) =>

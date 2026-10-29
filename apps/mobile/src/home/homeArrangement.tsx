@@ -1,3 +1,4 @@
+import { currentLocalisation } from "@/localisation/localisation";
 import { editHomeArrangement, type HomeArrangementEdit } from "@wave/core";
 
 import type { TitleLongPress } from "@/components/TitleLongPress";
@@ -18,10 +19,10 @@ export const editSavedHomeArrangement = (change: HomeArrangementEdit): void =>
  * saves the arrangement; Back or a tap outside leaves Home as it was.
  */
 export const homeTitleLongPress: TitleLongPress = {
-  label: "Edit Home",
+  get label() { return currentLocalisation().strings.home.editHome; },
   open: () => {
     openOverlay({
-      label: "Edit Home",
+      get label() { return currentLocalisation().strings.home.editHome; },
       anchor: pressedRect(),
       render: (close) => (
         <HomeEditorCard

@@ -1,3 +1,4 @@
+import { useLocalisation } from "@/localisation/localisation";
 import {
   STATS_FACT_LABELS,
   discoverRowTitle,
@@ -22,6 +23,8 @@ import { useHomeArrangement } from "./homeArrangement";
 import { homePlaceholderHeight } from "./homeOpening";
 
 function DiscoverSkeleton() {
+const localisation = useLocalisation();
+
   const enabled = useYtMusicEnabled();
   const { discoverRows } = useHomeArrangement();
   return (
@@ -32,7 +35,7 @@ function DiscoverSkeleton() {
           .map((id) => (
             <View key={id} style={{ gap: CELL }}>
               <Text className="font-sans text-footnote font-medium text-secondary">
-                {discoverRowTitle(id)}
+                {discoverRowTitle(id, localisation.strings)}
               </Text>
               <DiscoverMixesSkeleton />
             </View>
@@ -43,12 +46,14 @@ function DiscoverSkeleton() {
 
 /** A still, labelled placeholder in the section's own shape, including its heading. */
 export function HomeSectionSkeleton({ id }: { id: HomeSectionId }) {
+ const localisation = useLocalisation();
+
   const { fontScale } = useWindowDimensions();
   const songs = id === "most-played" || id === "favorites";
   const artists = id === "most-played-artists";
   return (
     <TitledSection
-      title={homeSectionTitle(id)}
+      title={homeSectionTitle(id, localisation.strings)}
       {...(id === "stats" ? { action: statsSeeAllAction } : {})}
     >
       <View style={{ minHeight: homePlaceholderHeight(id, fontScale) }}>
@@ -57,7 +62,7 @@ export function HomeSectionSkeleton({ id }: { id: HomeSectionId }) {
         ) : songs ? (
           <TrackSkeletons count={10} leading="card" />
         ) : id === "stats" ? (
-          <SkeletonGroup label="Loading Stats">
+          <SkeletonGroup label={localisation.strings.home.loadingStats}>
             {STATS_FACT_LABELS.map((label, index) => (
               <Fragment key={label}>
                 {index > 0 && <Hairline />}
@@ -73,7 +78,7 @@ export function HomeSectionSkeleton({ id }: { id: HomeSectionId }) {
             ))}
           </SkeletonGroup>
         ) : (
-          <SkeletonGroup label={artists ? "Loading artists" : "Loading albums"}>
+          <SkeletonGroup label={artists ? localisation.strings.home.loadingArtists : localisation.strings.home.loadingAlbums}>
             <CoverRow>
               {Array.from({ length: 3 }, (_, index) =>
                 artists ? (

@@ -1,10 +1,11 @@
+import { en, type Catalogue } from "./catalogueEn.ts";
 /**
  * An artist page's stats block: the artist's all-time listening totals, as
  * `listeningTotals` sums them (over the songs whose credit names the artist,
  * as in Stats, so a collaboration counts for each of its artists), and their
  * most played songs, ranked by Stats' rule (`rankPlays`).
  */
-import { counted, listeningTotals, type SongListening } from "./listening.ts";
+import { listeningTotals, type SongListening } from "./listening.ts";
 import { rankPlays, type PlayTotals } from "./stats.ts";
 
 /** What the artist page knows and reads for its stats block. */
@@ -60,7 +61,7 @@ const HOUR_MS = 60 * MINUTE_MS;
 const DAY_MS = 24 * HOUR_MS;
 
 /** How long ago `at` was, from `now`: "just now", "5 minutes ago", "yesterday", "3 weeks ago"… */
-const ago = (at: number, now: number): string => {
+const ago = (at: number, now: number, catalogue: Catalogue): string => {
   const elapsed = Math.max(0, now - at);
   const units: readonly (readonly [number, string, string])[] = [
     [365 * DAY_MS, "year", "years"],
@@ -70,20 +71,20 @@ const ago = (at: number, now: number): string => {
     [HOUR_MS, "hour", "hours"],
     [MINUTE_MS, "minute", "minutes"],
   ];
-  for (const [size, singular, plural] of units) {
+  for (const [size] of units) {
     const count = Math.floor(elapsed / size);
     if (count === 0) continue;
-    if (size === DAY_MS && count === 1) return "yesterday";
-    return `${counted(count, singular, plural)} ago`;
+    if (size === DAY_MS && count === 1) return catalogue.home.yesterdayAgo;
+    return catalogue.home.ago(count, units.findIndex((unit) => unit[0] === size));
   }
-  return "just now";
+  return catalogue.home.justNow;
 };
 
 /**
  * The artist's stats block. An artist none of whose songs has a counted play
  * is not played yet (rather than a row of zeros).
  */
-export const artistStats = (input: ArtistStatsInput): ArtistStats => {
+export const artistStats = (input: ArtistStatsInput, catalogue: Catalogue = en): ArtistStats => {
   const totals = { ...listeningTotals(input.listening, { artistId: input.artistId }) };
   let listenedMs = input.listening.reduce(
     (sum, song) => sum + (song.artistIds.includes(input.artistId) ? song.listenedMs : 0),
@@ -100,10 +101,10 @@ export const artistStats = (input: ArtistStatsInput): ArtistStats => {
   const songCount = songIds.size;
   return {
     played: true,
-    plays: counted(totals.plays, "play", "plays"),
-    minutesListened: counted(minutesListened, "minute listened", "minutes listened"),
-    songsListened: `${totals.songsListened.toLocaleString("en")} of ${counted(songCount, "song", "songs")}`,
-    lastPlayed: `Last played ${ago(totals.lastPlayedAt, input.now)}`,
+    plays: catalogue.home.plays(totals.plays),
+    minutesListened: catalogue.home.minutesListenedCount(minutesListened),
+    songsListened: catalogue.home.coverage(totals.songsListened, songCount),
+    lastPlayed: catalogue.home.lastPlayed(ago(totals.lastPlayedAt, input.now, catalogue)),
     mostPlayed: rankPlays(
       input.songPlays.filter((song) => songIds.has(song.id)),
       ARTIST_MOST_PLAYED,

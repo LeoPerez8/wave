@@ -1,3 +1,4 @@
+import { useLocalisation, currentLocalisation } from "@/localisation/localisation";
 /**
  * Sharing a playlist on YT Music or Spotify (docs/spec.md, "Sharing
  * playlists"): its menu's Share opens a card of services; each makes a
@@ -313,7 +314,7 @@ const TARGETS: Record<PlaylistShareService, ShareTarget> = {
     match: matchOnYtMusic,
     playlists: ytMusicPlaylists,
     url: ytMusicPlaylistUrl,
-    nothingFound: "None of the playlist's songs are on YouTube Music.",
+    get nothingFound() { return currentLocalisation().strings.home.noneOfThePlaylistSSongsAreOnYoutubeMusic; },
     failure: ytMusicFailure,
   },
   spotify: {
@@ -322,7 +323,7 @@ const TARGETS: Record<PlaylistShareService, ShareTarget> = {
     match: matchOnSpotify,
     playlists: spotifyPlaylists,
     url: spotifyPlaylistUrl,
-    nothingFound: "None of the playlist's songs are on Spotify.",
+    get nothingFound() { return currentLocalisation().strings.home.noneOfThePlaylistSSongsAreOnSpotify; },
     failure: spotifyFailure,
   },
 };
@@ -354,11 +355,11 @@ const sharePlaylistOn = async (
 ): Promise<void> => {
   if (!(await ensureSignedIn(service))) return;
   const target = TARGETS[service];
-  void showToast(`Sharing ${playlist.name} on ${PLAYLIST_SHARE_LABELS[service]}…`);
+  void showToast(currentLocalisation().strings.home.sharingPlaylist(playlist.name, PLAYLIST_SHARE_LABELS[service]));
   try {
     const shared = await target.match(playlist.id);
     if (shared.ids.length === 0) {
-      await showMessage("Nothing to share", target.nothingFound);
+      await showMessage(currentLocalisation().strings.home.nothingToShare, target.nothingFound);
       return;
     }
     const playlistId = await syncSharedPlaylist(
@@ -381,6 +382,8 @@ function ShareMenu({
   services: readonly PlaylistShareService[];
   choose: (service: PlaylistShareService) => void;
 }) {
+ const localisation = useLocalisation();
+
   const flow = useOverlayFlow();
   return (
     <>
@@ -389,8 +392,7 @@ function ShareMenu({
         className="font-sans text-body font-medium text-foreground"
         style={{ paddingBottom: CELL * 1.5 }}
       >
-        Share
-      </Text>
+        {localisation.strings.home.share}</Text>
       <Hairline />
       <CardEntries>
         {services.map((service, index) => (
@@ -414,7 +416,7 @@ function ShareMenu({
 export const openSharePlaylist = (playlist: NamedPlaylist): void => {
   const services = playlistShareServices({ ytMusic: ytMusicEnabled() });
   openOverlay({
-    label: "Share",
+    get label() { return currentLocalisation().strings.home.share; },
     anchor: pressedRect(),
     render: (close) => (
       <ShareMenu

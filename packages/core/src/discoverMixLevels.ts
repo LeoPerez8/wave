@@ -1,3 +1,4 @@
+import { en, type Catalogue } from "./catalogueEn.ts";
 import { indexSteps, finishSteps, sortSteps } from "./buildSteps.ts";
 /**
  * How much of each mix is new music (docs/spec.md, "Artist mixes"): a level
@@ -112,11 +113,11 @@ export const DISCOVER_MIX_LEVELS: readonly {
   readonly share: string;
 }[] = (
   [
-    [1, "Mostly familiar"],
-    [2, "More familiar"],
-    [3, "Balanced"],
-    [4, "Mostly new"],
-    [5, "All new"],
+    [1, en.home.mostlyFamiliar],
+    [2, en.home.moreFamiliar],
+    [3, en.home.balanced],
+    [4, en.home.mostlyNew],
+    [5, en.home.allNew],
   ] as const
 ).map(([level, label]) => ({ level, label, share: `${(level * 100) / LEVELS}% new` }));
 
@@ -125,9 +126,8 @@ export const DISCOVER_MIX_LEVELS: readonly {
  * share ("Balanced · 60% new"). One scale for the Magic Queue and the mixes
  * (`magicQueueShare`).
  */
-export const discoverLevelLabel = (level: DiscoverMixLevel): string => {
-  const entry = DISCOVER_MIX_LEVELS.find((candidate) => candidate.level === level)!;
-  return `${entry.label} · ${entry.share}`;
+export const discoverLevelLabel = (level: DiscoverMixLevel, catalogue: Catalogue = en): string => {
+  return `${[catalogue.home.mostlyFamiliar, catalogue.home.moreFamiliar, catalogue.home.balanced, catalogue.home.mostlyNew, catalogue.home.allNew][level - 1]} · ${catalogue.home.newShare(level * 20)}`;
 };
 
 /** The level kept on the phone ([stored], null for none): 3 for anything that isn't one. */

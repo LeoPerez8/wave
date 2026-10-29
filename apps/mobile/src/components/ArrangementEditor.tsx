@@ -1,3 +1,4 @@
+import { useLocalisation } from "@/localisation/localisation";
 import { IconMinus, IconPlus } from "@tabler/icons-react-native";
 import { useEffect, useState, type ComponentType, type ReactNode } from "react";
 import { ScrollView, Text, View, type AccessibilityActionEvent } from "react-native";
@@ -93,6 +94,8 @@ export function FixedRow({
   onRemove?: () => void;
   divider: boolean;
 }) {
+const localisation = useLocalisation();
+
   return (
     <View style={ROW_BOX}>
       <View className="flex-row items-center" style={ROW_LINE}>
@@ -101,7 +104,7 @@ export function FixedRow({
           <View style={{ marginRight: -CELL * 1.5 }}>
             <RowButton
               icon={IconMinus}
-              label={`Remove ${title} from ${place}`}
+              label={localisation.strings.home.removeFrom(title, place)}
               onPress={onRemove}
             />
           </View>
@@ -144,6 +147,8 @@ function ShownRow<Id>({
   canRemove = true,
   children,
 }: ShownRowProps<Id>) {
+const localisation = useLocalisation();
+
   const { style, underline, handle } = useReorderRow({ index, reorder });
 
   const onAccessibilityAction = (event: AccessibilityActionEvent) => {
@@ -162,9 +167,9 @@ function ShownRow<Id>({
         accessible
         accessibilityLabel={title}
         accessibilityActions={[
-          ...(index > 0 ? [{ name: "moveUp", label: "Move up" }] : []),
-          ...(index < count - 1 ? [{ name: "moveDown", label: "Move down" }] : []),
-          ...(canRemove ? [{ name: "remove", label: `Remove from ${place}` }] : []),
+          ...(index > 0 ? [{ name: "moveUp", label: localisation.strings.home.moveUp }] : []),
+          ...(index < count - 1 ? [{ name: "moveDown", label: localisation.strings.home.moveDown }] : []),
+          ...(canRemove ? [{ name: "remove", label: localisation.strings.home.removePlace(place) }] : []),
         ]}
         onAccessibilityAction={onAccessibilityAction}
         className="flex-row items-center"
@@ -173,7 +178,7 @@ function ShownRow<Id>({
         <RowLabel title={title} detail={detail} />
         <RowButton
           icon={IconMinus}
-          label={`Remove ${title} from ${place}`}
+          label={localisation.strings.home.removeFrom(title, place)}
           disabled={!canRemove}
           onPress={() => edit({ remove: id })}
         />
@@ -207,6 +212,8 @@ function HiddenRow<Id>({
   canAdd: boolean;
   edit: (edit: ArrangementEdit<Id>) => void;
 }) {
+const localisation = useLocalisation();
+
   return (
     <View style={ROW_BOX}>
       <View className="flex-row items-center" style={ROW_LINE}>
@@ -214,7 +221,7 @@ function HiddenRow<Id>({
         <View style={{ marginRight: -CELL * 1.5 }}>
           <RowButton
             icon={IconPlus}
-            label={`Add ${title} to ${place}`}
+            label={localisation.strings.home.addTo(title, place)}
             disabled={!canAdd}
             onPress={() => edit({ add: id })}
           />
@@ -288,6 +295,8 @@ export function ArrangementEditor<Id extends string>({
   note,
   onDone,
 }: ArrangementEditorProps<Id>) {
+const localisation = useLocalisation();
+
   const reorder = useRowReorder({
     ids: shown,
     rowHeight: ROW,
@@ -363,7 +372,7 @@ export function ArrangementEditor<Id extends string>({
       </View>
       {onDone !== undefined && (
         <View className="flex-row justify-end" style={{ paddingTop: CELL }}>
-          <TextButton label="Done" onPress={onDone} />
+          <TextButton label={localisation.strings.home.done} onPress={onDone} />
         </View>
       )}
     </>

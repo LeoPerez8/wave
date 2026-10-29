@@ -1,3 +1,4 @@
+import { catalogueOf } from "./localisation.ts";
 import { formatDate } from "./formatting.ts";
 import type { AppLanguage } from "./localisation.ts";
 
@@ -40,9 +41,9 @@ export const listeningHistoryDays = <T extends { readonly startedAt: number }>(
       const age = calendarDay(today) - day;
       const title =
         age === 0
-          ? "Today"
+          ? catalogueOf(language).home.today
           : age === 1
-            ? "Yesterday"
+            ? catalogueOf(language).home.yesterday
             : age > 1 && age < 7
               ? formatDate(language, date, { weekday: "long" })
               : formatDate(language, date, {

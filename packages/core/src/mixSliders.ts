@@ -1,3 +1,4 @@
+import { en } from "./catalogueEn.ts";
 /**
  * The sliders of a Home section's level card (docs/spec.md, "Artist mixes",
  * Magic Queue section): beside the new-music level (`DISCOVER_MIX_LEVELS`),
@@ -29,21 +30,21 @@ export const GENRE_FAITHFULNESS_STEPS: readonly {
   readonly step: MixSliderStep;
   readonly label: string;
 }[] = [
-  { step: 1, label: "Same genres" },
-  { step: 2, label: "Close" },
-  { step: 3, label: "Balanced" },
-  { step: 4, label: "Neighbours" },
-  { step: 5, label: "Wander" },
+  { step: 1, label: en.home.sameGenres },
+  { step: 2, label: en.home.close },
+  { step: 3, label: en.home.balanced },
+  { step: 4, label: en.home.neighbours },
+  { step: 5, label: en.home.wander },
 ];
 
 /** Popularity shifts the ranking from hits to deep cuts. */
 export const POPULARITY_STEPS: readonly { readonly step: MixSliderStep; readonly label: string }[] =
   [
-    { step: 1, label: "Hits" },
-    { step: 2, label: "Popular" },
-    { step: 3, label: "Balanced" },
-    { step: 4, label: "Lesser known" },
-    { step: 5, label: "Deep cuts" },
+    { step: 1, label: en.home.hits },
+    { step: 2, label: en.home.popular },
+    { step: 3, label: en.home.balanced },
+    { step: 4, label: en.home.lesserKnown },
+    { step: 5, label: en.home.deepCuts },
   ];
 
 const stepOf = <T extends { readonly step: MixSliderStep }>(steps: readonly T[], step: number): T =>
