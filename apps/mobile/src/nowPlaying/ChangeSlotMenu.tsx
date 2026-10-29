@@ -1,3 +1,4 @@
+import { currentLocalisation } from "@/localisation/localisation";
 import { entryDivider, NOW_PLAYING_ACTIONS } from "@wave/core";
 import * as Haptics from "expo-haptics";
 import type { ComponentProps } from "react";
@@ -61,7 +62,7 @@ function ChangeSlotMenu({ slot, close }: { slot: number; close: () => void }) {
 /** Opens slot [slot]'s card next to the button whose long press calls it. */
 const openChangeSlotMenu = (slot: number): void => {
   openOverlay({
-    label: "Change Button",
+    label: currentLocalisation().strings.playbackText.changeButton,
     anchor: pressedRect(),
     render: (close) => <ChangeSlotMenu slot={slot} close={close} />,
   });
@@ -76,7 +77,9 @@ export const slotChange = (slot: number): SlotChange => ({
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     openChangeSlotMenu(slot);
   },
-  accessibilityActions: [{ name: "changeButton", label: "Change Button" }],
+  accessibilityActions: [
+    { name: "changeButton", label: currentLocalisation().strings.playbackText.changeButton },
+  ],
   onAccessibilityAction: ({ nativeEvent: { actionName } }) => {
     if (actionName === "changeButton") openChangeSlotMenu(slot);
   },

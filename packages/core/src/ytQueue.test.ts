@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
+import { catalogueOf } from "./localisation.ts";
 import {
   libraryTrackIds,
   playerErrorNotice,
@@ -121,4 +122,13 @@ describe("playerErrorNotice", () => {
     assert.equal(playerErrorNotice(null), "Couldn't play this file");
     assert.equal(playerErrorNotice("somethingNew"), "Couldn't play this file");
   });
+});
+
+test("playback errors explain the failure in Portuguese", () => {
+  const pt = catalogueOf("pt-BR");
+  assert.equal(
+    playerErrorNotice("ytOffline", pt),
+    "Você está offline. As músicas do YT Music precisam de conexão.",
+  );
+  assert.equal(playerErrorNotice(null, pt), "Não foi possível reproduzir este arquivo");
 });

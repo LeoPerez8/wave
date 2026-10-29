@@ -1,6 +1,7 @@
+import { currentLocalisation, useLocalisation } from "@/localisation/localisation";
 import {
   LISTENING_WAVE,
-  RECOGNIZE_CARD_ACTION_LABELS,
+  recognizeCardActionLabels,
   recognizeCardView,
   recognizePlaylistSong,
   type RecognizeCard as RecognizeCardState,
@@ -90,7 +91,7 @@ const entry = createRecognizeEntry({
     const native = recognizeNative;
     if (native === null) return closed();
     openOverlay({
-      label: "Recognize Song",
+      label: currentLocalisation().strings.playbackText.recognizeSong,
       render: (close) => (
         <RecognizeCard native={native} source={source} close={close} onClosed={closed} />
       ),
@@ -119,6 +120,7 @@ function RecognizeCard({
   close: () => void;
   onClosed: () => void;
 }) {
+  const { strings } = useLocalisation();
   const [attempt, setAttempt] = useState(0);
   const [source, setSource] = useState(initialSource);
   const [activeSource, setActiveSource] = useState<RecognizeSource | null>(
@@ -200,11 +202,16 @@ function RecognizeCard({
   const result = card.kind === "resolved" ? card.result : null;
   const status = useYtDownloadStatus(result?.kind === "stream" ? result.song.videoId : "");
   const inLibrary = useLoadedInLibrary(result?.kind === "stream");
-  const view = recognizeCardView(card, {
-    ytMusic,
-    status,
-    inLibrary: result?.kind === "stream" && inLibrary(result.song),
-  });
+  const labels = recognizeCardActionLabels(strings);
+  const view = recognizeCardView(
+    card,
+    {
+      ytMusic,
+      status,
+      inLibrary: result?.kind === "stream" && inLibrary(result.song),
+    },
+    strings,
+  );
 
   const press = (action: RecognizeCardAction): void => {
     switch (action) {
@@ -238,7 +245,9 @@ function RecognizeCard({
                   ? recognizePlaylistSong(result)
                   : { source: "library", trackId: track.id },
               );
-            })().catch((error: unknown) => showError("Couldn't add to Shazam", error));
+            })().catch((error: unknown) =>
+              showError(strings.playbackText.couldntAddToShazam, error),
+            );
             return;
           case "addToPlaylist":
             openAddToPlaylist({
@@ -259,23 +268,23 @@ function RecognizeCard({
             if (result.kind === "library") {
               close();
               void playSongs([result.track], 0, { kind: "search", id: null }).catch(
-                (error: unknown) => showError("Couldn't play the song", error),
+                (error: unknown) => showError(strings.playbackText.couldntPlayTheSong, error),
               );
             } else if (result.kind === "stream") {
               close();
               void playYtSongs([result.song], 0, { kind: "search", id: null }).catch(
-                (error: unknown) => showError("Couldn't play the song", error),
+                (error: unknown) => showError(strings.playbackText.couldntPlayTheSong, error),
               );
             }
             return;
           case "playNext":
             if (result.kind === "library")
               void playNext([result.track]).catch((error: unknown) =>
-                showError("Couldn't queue the song", error),
+                showError(strings.playbackText.couldntQueueTheSong, error),
               );
             else if (result.kind === "stream")
               void playYtNext([result.song]).catch((error: unknown) =>
-                showError("Couldn't queue the song", error),
+                showError(strings.playbackText.couldntQueueTheSong, error),
               );
             return;
           case "goToAlbum":
@@ -297,12 +306,12 @@ function RecognizeCard({
   return (
     <>
       <View style={{ paddingTop: CELL, paddingBottom: CELL * 2, gap: CELL * 1.5 }}>
-        <CatalogLine>Recognize Song</CatalogLine>
+        <CatalogLine>{strings.playbackText.recognizeSong}</CatalogLine>
         <View className="flex-row rounded-full bg-fill" accessibilityRole="radiogroup">
           {(
             [
-              ["microphone", "Around me"],
-              ["playback", "This phone"],
+              ["microphone", strings.playbackText.aroundMe],
+              ["playback", strings.playbackText.thisPhone],
             ] as const
           ).map(([pick, label]) => (
             <TextButton
@@ -314,7 +323,7 @@ function RecognizeCard({
               accessibilityRole="radio"
               accessibilityLabel={label}
               accessibilityState={{ checked: activeSource === pick }}
-              accessibilityHint="Starts listening again from this source"
+              accessibilityHint={strings.playbackText.startsListeningAgainFromThisSource}
               haptic="selection"
               onPress={() => {
                 if (pick !== activeSource) pickSource(pick);
@@ -366,7 +375,7 @@ function RecognizeCard({
                     <MenuRow
                       key={action}
                       action={action}
-                      label={RECOGNIZE_CARD_ACTION_LABELS[action]}
+                      label={labels[action]}
                       onPress={() => press(action)}
                     />
                   );
@@ -376,7 +385,7 @@ function RecognizeCard({
             })}
           </CardEntries>
           <TextButton
-            label={RECOGNIZE_CARD_ACTION_LABELS.listenAgain}
+            label={labels.listenAgain}
             onPress={() => press("listenAgain")}
             style={{ alignSelf: "flex-end" }}
           />
@@ -384,11 +393,7 @@ function RecognizeCard({
       ) : (
         <View className="flex-row items-center justify-end" style={{ gap: CELL * 3 }}>
           {view.actions.map((action) => (
-            <TextButton
-              key={action}
-              label={RECOGNIZE_CARD_ACTION_LABELS[action]}
-              onPress={() => press(action)}
-            />
+            <TextButton key={action} label={labels[action]} onPress={() => press(action)} />
           ))}
         </View>
       )}

@@ -1,3 +1,4 @@
+import { useLocalisation } from "@/localisation/localisation";
 import { Text, View } from "react-native";
 
 import { Artwork } from "@/catalog/Artwork";
@@ -16,10 +17,11 @@ export function TrackHeader({
   item: NonNullable<PlaybackState["item"]>;
   onShowPlayer: () => void;
 }) {
+  const { strings } = useLocalisation();
   return (
     <Press
       accessibilityRole="button"
-      accessibilityLabel="Show player"
+      accessibilityLabel={strings.playbackText.showPlayer}
       onPress={onShowPlayer}
       haptic="selection"
       depth={0.015}
@@ -29,10 +31,10 @@ export function TrackHeader({
       <Artwork uri={item.artworkUri ?? undefined} size={grid.row} />
       <View className="flex-1">
         <Text numberOfLines={1} className="font-sans text-body font-medium text-foreground">
-          {item.title ?? "Unknown title"}
+          {item.title ?? strings.playbackText.unknownTitle}
         </Text>
         <Text numberOfLines={1} className="font-sans text-body text-secondary">
-          {item.artist ?? "Unknown Artist"}
+          {item.artist ?? strings.playbackText.unknownArtist}
         </Text>
       </View>
     </Press>
