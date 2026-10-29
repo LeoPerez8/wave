@@ -14,6 +14,7 @@
  */
 
 import { importCount } from "./importProgress.ts";
+import { catalogueOf, type AppLanguage } from "./localisation.ts";
 import type { PlaylistImport } from "./playlistImport.ts";
 import type { YtSong } from "./ytMusic.ts";
 import {
@@ -33,11 +34,11 @@ export interface ImportBatchLine {
 }
 
 /** A pause's reason as the line words it. */
-const PAUSE_WORDS: Readonly<Record<YtLibraryPauseReason, string>> = {
-  offline: "offline",
-  disabled: "YT Music off",
-  signedOut: "signed out of Spotify",
-};
+const PAUSE_WORDS = {
+  offline: "pausedOffline",
+  disabled: "pausedYtMusicOff",
+  signedOut: "pausedSignedOut",
+} as const satisfies Record<YtLibraryPauseReason, string>;
 
 /**
  * The line for [batch] with the link imports [imports] (`PlaylistImports`),
@@ -49,7 +50,9 @@ export const importBatchLine = (
   batch: YtLibraryBatch,
   imports: readonly Pick<PlaylistImport<YtSong>, "playlistId" | "state">[],
   pausedBy: YtLibraryPauseReason | null,
+  language: AppLanguage = "en",
 ): ImportBatchLine | null => {
+  const text = catalogueOf(language).imports;
   if (batch.run.length === 0) return null;
   const states = new Map(batch.reads.map((read) => [read.playlistId, read.state]));
   const adding = new Set(
@@ -65,14 +68,14 @@ export const importBatchLine = (
   const done = total - left;
   if (pausedBy !== null && nextYtLibraryRead(batch) !== undefined) {
     return {
-      text: `Import paused · ${PAUSE_WORDS[pausedBy]}`,
+      text: text.importPaused(text[PAUSE_WORDS[pausedBy]]),
       done,
       total,
       paused: true,
     };
   }
   return {
-    text: `Importing playlists · ${importCount(done)} of ${importCount(total)}`,
+    text: text.importingPlaylists(importCount(done, language), importCount(total, language)),
     done,
     total,
     paused: false,

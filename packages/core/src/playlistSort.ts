@@ -5,6 +5,7 @@
  * owner's own order (Custom), arranged by dragging.
  */
 
+import { en } from "./catalogueEn.ts";
 import { compareStrings } from "./library.ts";
 import { moveItem } from "./playlists.ts";
 import { readStoredRecord } from "./storedJson.ts";
@@ -17,10 +18,10 @@ export const PLAYLIST_SORTS: readonly {
   readonly sort: PlaylistSort;
   readonly label: string;
 }[] = [
-  { sort: "name", label: "Name" },
-  { sort: "added", label: "Recently Added" },
-  { sort: "played", label: "Recently Played" },
-  { sort: "custom", label: "Custom" },
+  { sort: "name", label: en.playlists.sorts.name },
+  { sort: "added", label: en.playlists.sorts.added },
+  { sort: "played", label: en.playlists.sorts.played },
+  { sort: "custom", label: en.playlists.sorts.custom },
 ];
 
 /**

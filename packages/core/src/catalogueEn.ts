@@ -1,3 +1,6 @@
+import { libraryEn } from "./catalogue/libraryEn.ts";
+import { playlistsEn } from "./catalogue/playlistsEn.ts";
+import { importsEn } from "./catalogue/importsEn.ts";
 import { downloadNoticeEn } from "./catalogue/downloadNoticeEn.ts";
 import { nativeEn } from "./catalogue/nativeEn.ts";
 import { autoEn } from "./catalogue/autoEn.ts";
@@ -14,6 +17,9 @@ export const en = {
   downloadNotice: downloadNoticeEn,
   native: nativeEn,
   auto: autoEn,
+  library: libraryEn,
+  playlists: playlistsEn,
+  imports: importsEn,
   /** Each tab's name, in the tab bar, its editor and TalkBack. */
   tabs: {
     index: "Home",

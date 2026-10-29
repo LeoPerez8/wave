@@ -41,12 +41,14 @@ export const TEXT_ALLOWLIST = [
   // Pure log/diagnostic builders and SVG path geometry; none returns UI copy.
   "packages/core/src/appLog.ts",
   "packages/core/src/failureCause.ts",
+  "packages/core/src/importLog.ts",
   "packages/core/src/importTimings.ts",
   "packages/core/src/lostTap.ts",
   "packages/core/src/magicBatchReport.ts",
   "packages/core/src/slowRead.ts",
   "packages/core/src/timing.ts",
   "packages/core/src/overlayOrigin.ts",
+  "packages/core/src/catalogue/",
   "packages/core/src/catalogueEn.ts",
   "packages/core/src/cataloguePtBr.ts",
 ];

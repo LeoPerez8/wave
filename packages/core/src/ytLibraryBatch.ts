@@ -7,6 +7,8 @@
  */
 
 import { finishSteps } from "./buildSteps.ts";
+import { importPausedLogLine, importReadFailedLogLine } from "./importLog.ts";
+import { catalogueOf, type AppLanguage } from "./localisation.ts";
 import { pendingFavorite, type PendingFavorite } from "./pendingFavorites.ts";
 import type { LinkImportPlan } from "./playlistImport.ts";
 import { isSpotifyLibrarySource } from "./spotifyLibrary.ts";
@@ -291,9 +293,12 @@ export interface YtLibraryReadView {
 export const ytLibraryReadView = (
   batch: YtLibraryBatch,
   playlistId: number,
+  language: AppLanguage = "en",
 ): YtLibraryReadView | null => {
   const read = batch.reads.find((queued) => queued.playlistId === playlistId);
-  return read?.state === "failed" ? { line: "Couldn't read it online", read } : null;
+  return read?.state === "failed"
+    ? { line: catalogueOf(language).imports.couldntReadOnline, read }
+    : null;
 };
 
 /** The service [read] is read from, as the app log names it. */
@@ -302,11 +307,11 @@ const serviceName = (read: YtLibraryRead): string =>
 
 /** The app log's line for [read] that failed because of [reason]; no song titles. */
 export const ytLibraryReadLogLine = (read: YtLibraryRead, reason: string): string =>
-  `Import of "${read.name}" from ${serviceName(read)} couldn't read the playlist (${reason}); it stays empty, with Try Again`;
+  importReadFailedLogLine(read.name, serviceName(read), reason);
 
 /** The app log's line for the batch paused at [read] because of [reason] (`ytLibraryReadFailed`). */
 export const ytLibraryPauseLogLine = (read: YtLibraryRead, reason: string): string =>
-  `Import of "${read.name}" from ${serviceName(read)} waits (${reason}); the batch goes on when Wave starts again, comes back to the foreground or imports again`;
+  importPausedLogLine(read.name, serviceName(read), reason);
 
 // ---------------------------------------------------------------------------
 // Kept while Wave is closed

@@ -577,6 +577,7 @@ export {
   songOrderTerms,
   songSpineField,
   songSortLabel,
+  songSortLabelFor,
   songSortsFor,
   songSpineKeys,
   sortSongs,
@@ -1202,6 +1203,7 @@ export {
   playlistUnplayableNotice,
   readPlaylistEntrySong,
   UNAVAILABLE_ENTRY_ACTION_LABELS,
+  unavailableEntryActionLabel,
   unavailableEntryActions,
   unavailableEntryView,
   unavailableSearchQuery,
@@ -1238,6 +1240,8 @@ export {
   sharedTextImport,
   spotifyShortLinkTarget,
   YT_MUSIC_OFF_NOTICE,
+  ytMusicOffNotice,
+  playlistLinkReason,
 } from "./playlistLinks.ts";
 export type {
   ImportNotice,

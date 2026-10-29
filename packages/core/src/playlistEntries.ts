@@ -7,7 +7,7 @@
  */
 
 import { splitCredit } from "./credits.ts";
-import { counted } from "./listening.ts";
+import { catalogueOf, type AppLanguage } from "./localisation.ts";
 import { pagePlayback, skipMissingSongs, type PagePlayback } from "./pagePlayback.ts";
 import { planPlaylistAdd, type PlaylistAdd } from "./playlists.ts";
 import type { MixedSong, YtAlbumSong } from "./ytDiscover.ts";
@@ -398,24 +398,15 @@ export interface UnavailableEntryView {
   readonly notice: string;
 }
 
-const UNAVAILABLE_VIEWS: { readonly [R in UnavailableReason]: UnavailableEntryView } = {
-  notFound: {
-    line: "Not found online",
-    notice: "Wave couldn't find this song online or in your Library.",
-  },
-  localFile: {
-    line: "Local file on Spotify",
-    notice: "This song is a local file on Spotify, so Wave couldn't look for it.",
-  },
-};
-
 /** Why [song] is unavailable: its row's second line, and what tapping it says instead of playing. */
-export const unavailableEntryView = (song: UnavailableSong): UnavailableEntryView =>
-  UNAVAILABLE_VIEWS[song.reason];
-
-const UNPLAYABLE_NOTICES: { readonly [R in UnavailableReason]: string } = {
-  notFound: "Wave couldn't find these songs online or in your Library.",
-  localFile: "These songs are local files on Spotify, so Wave couldn't look for them.",
+export const unavailableEntryView = (
+  song: UnavailableSong,
+  language: AppLanguage = "en",
+): UnavailableEntryView => {
+  const text = catalogueOf(language).library.unavailable;
+  return song.reason === "notFound"
+    ? { line: text.notFound, notice: text.notFoundNotice }
+    : { line: text.localFile, notice: text.localFileNotice };
 };
 
 /**
@@ -425,24 +416,31 @@ const UNPLAYABLE_NOTICES: { readonly [R in UnavailableReason]: string } = {
  */
 export const playlistUnplayableNotice = <S extends YtSong, L>(
   entries: readonly PlaylistItem<S, L>[],
+  language: AppLanguage = "en",
 ): string | null => {
   const songs = entries.flatMap((entry) => (entry.source === "unavailable" ? [entry.song] : []));
   const [first] = songs;
   if (first === undefined || songs.length !== entries.length) return null;
-  if (songs.length === 1) return unavailableEntryView(first).notice;
-  return songs.every((song) => song.reason === first.reason)
-    ? UNPLAYABLE_NOTICES[first.reason]
-    : "Wave couldn't find these songs online or in your Library, or they're local files on Spotify.";
+  if (songs.length === 1) return unavailableEntryView(first, language).notice;
+  const text = catalogueOf(language).library.unavailable;
+  if (!songs.every((song) => song.reason === first.reason)) return text.allMixed;
+  return first.reason === "notFound" ? text.allNotFound : text.allLocalFiles;
 };
 
 /** What an unavailable entry's menu offers. */
 export type UnavailableEntryAction = "removeFromPlaylist" | "search";
 
+/** How [action] reads in [language]'s menu. */
+export const unavailableEntryActionLabel = (
+  action: UnavailableEntryAction,
+  language: AppLanguage = "en",
+): string => catalogueOf(language).library.unavailable[action];
+
 export const UNAVAILABLE_ENTRY_ACTION_LABELS: {
   readonly [A in UnavailableEntryAction]: string;
 } = {
-  removeFromPlaylist: "Remove from Playlist",
-  search: "Search",
+  removeFromPlaylist: unavailableEntryActionLabel("removeFromPlaylist"),
+  search: unavailableEntryActionLabel("search"),
 };
 
 /**
@@ -466,7 +464,13 @@ export const unavailableSearchQuery = (song: UnavailableSong): string => {
  * A playlist's count: every entry, and how many of them can't play
  * ("2,451 songs · 3 unavailable"); with none unavailable, the count alone.
  */
-export const playlistSongsLine = (count: number, unavailable: number): string =>
-  unavailable === 0
-    ? counted(count, "song")
-    : `${counted(count, "song")} · ${unavailable.toLocaleString("en")} unavailable`;
+export const playlistSongsLine = (
+  count: number,
+  unavailable: number,
+  language: AppLanguage = "en",
+): string => {
+  const text = catalogueOf(language).playlists;
+  return unavailable === 0
+    ? text.songs(count)
+    : `${text.songs(count)} · ${text.unavailable(unavailable)}`;
+};

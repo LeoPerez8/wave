@@ -1,3 +1,6 @@
+import { libraryPtBr } from "./catalogue/libraryPtBr.ts";
+import { playlistsPtBr } from "./catalogue/playlistsPtBr.ts";
+import { importsPtBr } from "./catalogue/importsPtBr.ts";
 import { downloadNoticePtBr } from "./catalogue/downloadNoticePtBr.ts";
 import { nativePtBr } from "./catalogue/nativePtBr.ts";
 import { autoPtBr } from "./catalogue/autoPtBr.ts";
@@ -13,6 +16,9 @@ export const ptBR: Catalogue = {
   downloadNotice: downloadNoticePtBr,
   native: nativePtBr,
   auto: autoPtBr,
+  library: libraryPtBr,
+  playlists: playlistsPtBr,
+  imports: importsPtBr,
   tabs: {
     index: "Início",
     library: "Biblioteca",

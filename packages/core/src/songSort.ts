@@ -5,6 +5,7 @@
  * date starred, an artist's Popular: YouTube Music's order of their songs).
  */
 
+import { catalogueOf, type AppLanguage } from "./localisation.ts";
 import { readStoredRecord } from "./storedJson.ts";
 import { compareAlbumTracks, compareByTitle, compareStrings } from "./library.ts";
 
@@ -60,10 +61,11 @@ const byText =
   (a, b) =>
     compareStrings(key(a), key(b));
 
+type Direction = "aToZ" | "zToA" | "oldestFirst" | "newestFirst";
+
 interface Order {
-  readonly name: string;
-  /** How each direction reads: [ascending, descending]. */
-  readonly directions: readonly [string, string];
+  /** How each direction reads: [ascending, descending]; none for a sort offered one way. */
+  readonly directions: readonly [Direction, Direction] | null;
   /** The part descending reverses. */
   readonly primary: Compare;
   /** What orders songs the primary key can't tell apart; never reversed. */
@@ -72,14 +74,13 @@ interface Order {
   readonly spineKey?: (song: SortableSong) => string;
 }
 
-const ALPHABETICAL = ["A to Z", "Z to A"] as const;
+const ALPHABETICAL = ["aToZ", "zToA"] as const;
 
 /** Where an unranked song sorts under Popular: after every ranked one. */
 const UNRANKED = Number.MAX_SAFE_INTEGER;
 
 const ORDERS: Record<SongSortKey, Order> = {
   title: {
-    name: "Song name",
     directions: ALPHABETICAL,
     primary: byText((song) => song.titleSort),
     // compareByTitle re-checks the title, which is equal here, then goes by artist.
@@ -87,35 +88,30 @@ const ORDERS: Record<SongSortKey, Order> = {
     spineKey: (song) => song.titleSort,
   },
   artist: {
-    name: "Artist",
     directions: ALPHABETICAL,
     primary: byText((song) => song.artistSort),
     ties: (a, b) => compareStrings(a.albumSort, b.albumSort) || byAlbumTracks(a, b),
     spineKey: (song) => song.artistSort,
   },
   album: {
-    name: "Album",
     directions: ALPHABETICAL,
     primary: byText((song) => song.albumSort),
     ties: byAlbumTracks,
     spineKey: (song) => song.albumSort,
   },
   added: {
-    name: "Date added",
-    directions: ["oldest first", "newest first"],
+    directions: ["oldestFirst", "newestFirst"],
     primary: (a, b) => a.addedAt - b.addedAt,
     ties: compareByTitle,
   },
   starred: {
-    name: "Date starred",
-    directions: ["oldest first", "newest first"],
+    directions: ["oldestFirst", "newestFirst"],
     primary: (a, b) => (a.starredAt ?? 0) - (b.starredAt ?? 0),
     ties: compareByTitle,
   },
   popular: {
-    name: "Popular",
     // Offered one way only: its label reads the name alone (`songSortLabel`).
-    directions: ["most popular first", "most popular first"],
+    directions: null,
     primary: (a, b) => (a.popularRank ?? UNRANKED) - (b.popularRank ?? UNRANKED),
     // Songs the list doesn't hold come after the ranked ones, in song name order.
     ties: compareByTitle,
@@ -168,13 +164,20 @@ export const songSortsFor = (kind: SongListKind): readonly SongSort[] => {
 export const defaultSongSort = (kind: SongListKind): SongSort =>
   OWN_ORDER[kind]?.[0] ?? DEFAULT_SONG_SORT;
 
-/** How a sort reads in the control and to screen readers, e.g. "Artist, Z to A". */
-export const songSortLabel = (sort: SongSort): string => {
-  const order = ORDERS[sort.key];
-  return sort.key === "popular"
-    ? order.name
-    : `${order.name}, ${order.directions[sort.descending ? 1 : 0]}`;
-};
+/** How a sort reads in [language]'s control and to screen readers, e.g. "Artist, Z to A". */
+export const songSortLabelFor =
+  (language: AppLanguage) =>
+  (sort: SongSort): string => {
+    const text = catalogueOf(language).library;
+    const { directions } = ORDERS[sort.key];
+    const name = text.songSorts[sort.key];
+    return directions === null
+      ? name
+      : text.sortLabel(name, text.sortDirections[directions[sort.descending ? 1 : 0]]);
+  };
+
+/** How a sort reads in English. */
+export const songSortLabel = songSortLabelFor("en");
 
 /**
  * A fresh copy of [songs] in [sort]'s order. Descending reverses the primary

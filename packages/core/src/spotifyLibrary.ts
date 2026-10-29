@@ -9,7 +9,7 @@
  */
 
 import { array, at, text } from "./json.ts";
-import { SPOTIFY_CHANGED_LINE } from "./spotifyAccount.ts";
+import { catalogueOf, type AppLanguage } from "./localisation.ts";
 import {
   firstImage,
   readSpotifyPages,
@@ -47,19 +47,27 @@ const PLAYLIST_URI = /^spotify:playlist:[A-Za-z0-9]+$/u;
 export const isSpotifyLibrarySource = (source: string): boolean =>
   source === SPOTIFY_LIKED_SONGS_SOURCE || PLAYLIST_URI.test(source);
 
-const FAILURES: Record<SpotifyAccountFailure, YtLibraryFailureView> = {
-  offline: { line: "You're offline. Try again when you're back online.", action: "tryAgain" },
-  failed: { line: "Couldn't read your Spotify library. No answer online.", action: "tryAgain" },
-  signedOut: {
-    line: "Your Spotify session ended. Sign in again to see your playlists.",
-    action: "signIn",
-  },
-  changed: { line: SPOTIFY_CHANGED_LINE, action: "tryAgain" },
-};
+/** Liked Songs as read, before the picker names it in the app's language. */
+const LIKED_SONGS = "Liked Songs";
+
+const FAILURES = {
+  offline: { line: "offline", action: "tryAgain" },
+  failed: { line: "spotifyLibraryFailed", action: "tryAgain" },
+  signedOut: { line: "spotifySignedOut", action: "signIn" },
+  changed: { line: "spotifyChanged", action: "tryAgain" },
+} as const satisfies Record<
+  SpotifyAccountFailure,
+  { line: string; action: YtLibraryFailureView["action"] }
+>;
 
 /** The From Spotify picker's message for a library that wasn't read, and what it offers. */
-export const spotifyLibraryFailure = (reason: SpotifyAccountFailure): YtLibraryFailureView =>
-  FAILURES[reason];
+export const spotifyLibraryFailure = (
+  reason: SpotifyAccountFailure,
+  language: AppLanguage = "en",
+): YtLibraryFailureView => {
+  const { line, action } = FAILURES[reason];
+  return { line: catalogueOf(language).imports[line], action };
+};
 
 /** A playlist in the account's library, as From Spotify lists it. */
 export interface SpotifyLibraryPlaylist {
@@ -86,7 +94,7 @@ const libraryPlaylist = (entry: unknown): SpotifyLibraryPlaylist | null => {
       const count = at(data, "count");
       return {
         source: SPOTIFY_LIKED_SONGS_SOURCE,
-        title: "Liked Songs",
+        title: LIKED_SONGS,
         artworkUrl: firstImage(at(data, "image", "sources")),
         songCount: typeof count === "number" && Number.isSafeInteger(count) ? count : null,
       };
@@ -160,8 +168,6 @@ interface Page {
   readonly items: number;
   readonly songs: readonly SpotifySong[];
 }
-
-const LIKED_SONGS = "Liked Songs";
 
 /** A `fetchLibraryTracks` answer's page of Liked Songs; null when it isn't one. */
 const likedSongsPage = (data: unknown): Page | null => {

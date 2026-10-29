@@ -23,9 +23,14 @@ export interface FollowLevelEntry {
   readonly checked: boolean;
 }
 /** UI renders these choices without deciding which levels are available. */
-export const followLevelEntries = (level: FollowLevel | null): readonly FollowLevelEntry[] => [
-  { action: "releases", label: "New releases", checked: level === "releases" },
-  ...(level === null ? [] : [{ action: "unfollow" as const, label: "Unfollow", checked: false }]),
+export const followLevelEntries = (
+  level: FollowLevel | null,
+  strings: Catalogue = en,
+): readonly FollowLevelEntry[] => [
+  { action: "releases", label: strings.library.newReleases, checked: level === "releases" },
+  ...(level === null
+    ? []
+    : [{ action: "unfollow" as const, label: strings.library.unfollow, checked: false }]),
 ];
 
 export type ReleaseType = "single" | "ep" | "album";

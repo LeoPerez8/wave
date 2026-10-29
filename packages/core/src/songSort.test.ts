@@ -399,3 +399,14 @@ describe("sameSongSort", () => {
     );
   });
 });
+
+describe("song sorts in Portuguese", () => {
+  test("a sort reads its name and direction", async () => {
+    const { songSortLabelFor } = await import("./index.ts");
+    const label = songSortLabelFor("pt-BR");
+    assert.equal(label({ key: "title", descending: false }), "Nome da música, A a Z");
+    assert.equal(label({ key: "artist", descending: true }), "Artista, Z a A");
+    assert.equal(label({ key: "added", descending: true }), "Data de adição, mais recentes primeiro");
+    assert.equal(label({ key: "popular", descending: false }), "Populares");
+  });
+});
