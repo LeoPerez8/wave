@@ -1,4 +1,6 @@
+import { useLocalisation } from "@/localisation/localisation";
 import {
+  formatNumber,
   counted,
   joinArtists,
   type QueueContext,
@@ -186,12 +188,13 @@ function Hit({
  * results and "Show all". Scrolling or tapping a row lets the keyboard go.
  */
 export function SearchResultsList({ rows, onOpen, onShowAll, integrated, selection }: Props) {
+  const { language } = useLocalisation();
   const scrollable = useListScrollable();
   const bottomInset = useChromeInset();
   const rowSelection = useMemo(() => songSelection(selection, songItem), [selection]);
   const rowState = useMemo(
-    () => ({ selection: selection.selection, integrated }),
-    [selection.selection, integrated],
+    () => ({ selection: selection.selection, integrated, language }),
+    [selection.selection, integrated, language],
   );
 
   const renderSlot = useCallback(
@@ -217,7 +220,7 @@ export function SearchResultsList({ rows, onOpen, onShowAll, integrated, selecti
           return (
             <View style={{ height: HEIGHT.more }}>
               <TextButton
-                label={`Show all ${item.total.toLocaleString("en")}`}
+                label={`Show all ${formatNumber(language, item.total)}`}
                 onPress={() => onShowAll(item.kind)}
               />
             </View>
@@ -229,7 +232,7 @@ export function SearchResultsList({ rows, onOpen, onShowAll, integrated, selecti
               style={{ minHeight: HEIGHT.capped, paddingVertical: CELL }}
             >
               <Text className="font-sans text-footnote text-secondary">
-                {`The best ${item.shown.toLocaleString("en")} of ${item.total.toLocaleString("en")}. Keep typing to narrow them down.`}
+                {`The best ${formatNumber(language, item.shown)} of ${formatNumber(language, item.total)}. Keep typing to narrow them down.`}
               </Text>
             </View>
           );
@@ -296,7 +299,7 @@ export function SearchResultsList({ rows, onOpen, onShowAll, integrated, selecti
           return <TrackSkeletons label="Loading online results" leading="card" />;
       }
     },
-    [onOpen, onShowAll, integrated, selection],
+    [onOpen, onShowAll, integrated, selection, language],
   );
 
   return (

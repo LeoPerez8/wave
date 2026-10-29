@@ -1,5 +1,7 @@
+import { useLocalisation } from "@/localisation/localisation";
 import { IconShare3, IconX } from "@tabler/icons-react-native";
 import {
+  formatNumber,
   RECAP_SLIDE_MS,
   recapBack,
   recapAutoForward,
@@ -96,6 +98,7 @@ const BACKDROP: Record<LoadedRecapSlide["kind"], RecapColour> = {
 };
 
 function MinutesSlide({ title, minutes }: { title: string; minutes: number }) {
+  const { language } = useLocalisation();
   return (
     <View className="flex-1 justify-center" style={{ gap: CELL * 2 }}>
       <Rise step={0}>
@@ -108,7 +111,7 @@ function MinutesSlide({ title, minutes }: { title: string; minutes: number }) {
           className="font-sans font-bold text-on-recap"
           style={{ fontSize: 96, lineHeight: 104, fontVariant: ["tabular-nums"] }}
         >
-          {minutes.toLocaleString("en")}
+          {formatNumber(language, minutes)}
         </Text>
       </Rise>
       <Rise step={2}>
@@ -401,6 +404,7 @@ function DiscoveredSlide({
   artists: readonly Ranked<PlayedArtist>[];
 }) {
   const ytMusic = useYtMusicEnabled();
+  const { language } = useLocalisation();
   return (
     <View className="flex-1 justify-center" style={{ gap: CELL * 3 }}>
       <Heading>You discovered</Heading>
@@ -409,7 +413,7 @@ function DiscoveredSlide({
           className="font-sans font-bold text-on-recap"
           style={{ fontSize: 72, lineHeight: 80, fontVariant: ["tabular-nums"] }}
         >
-          {count.toLocaleString("en")}
+          {formatNumber(language, count)}
         </Text>
         <Text className="font-sans text-title1 font-semibold text-on-recap">
           {count === 1 ? "new artist" : "new artists"}
@@ -479,6 +483,7 @@ function SummarySlide({
   genre: GenreFamily | null;
 }) {
   const ytMusic = useYtMusicEnabled();
+  const { language } = useLocalisation();
   const top = artists[0];
   return (
     <View className="flex-1 justify-center" style={{ gap: CELL * 4 }}>
@@ -511,7 +516,7 @@ function SummarySlide({
       )}
       <Rise step={2}>
         <View className="flex-row" style={{ gap: CELL * 2 }}>
-          <SummaryFigure label="Minutes listened" value={minutes.toLocaleString("en")} />
+          <SummaryFigure label="Minutes listened" value={formatNumber(language, minutes)} />
           {genre !== null && <SummaryFigure label="Top genre" value={genre.name} />}
         </View>
       </Rise>

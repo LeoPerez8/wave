@@ -1,3 +1,5 @@
+import { formatNumber } from "@wave/core";
+import { currentLocalisation } from "@/localisation/localisation";
 import { Text, View } from "react-native";
 
 import { CatalogLine } from "@/catalog/CatalogLine";
@@ -23,7 +25,7 @@ const setDownloads = (on: boolean): void => {
 const confirmClear = async (count: number): Promise<void> => {
   const clear = await confirmAction({
     title: "Clear artist photos?",
-    message: `The ${count === 1 ? "photo" : `${count.toLocaleString("en")} photos`} Wave downloaded will be deleted. Artists show their album artwork until photos are downloaded again.`,
+    message: `The ${count === 1 ? "photo" : `${formatNumber(currentLocalisation().language, count)} photos`} Wave downloaded will be deleted. Artists show their album artwork until photos are downloaded again.`,
     action: { label: "Clear", destructive: true },
   });
   if (clear)

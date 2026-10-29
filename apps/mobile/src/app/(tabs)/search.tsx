@@ -1,3 +1,4 @@
+import { useLocalisation } from "@/localisation/localisation";
 import { useScreenContent } from "@/lib/screenTiming";
 import { IconSearch } from "@tabler/icons-react-native";
 import {
@@ -181,6 +182,7 @@ export default function SearchScreen() {
     inLibrary?.hasSong ?? null,
     onlineTaps,
   );
+  const { language } = useLocalisation();
   const rows = useMemo(() => {
     if (results === null) return [];
     const ytFound =
@@ -188,9 +190,9 @@ export default function SearchScreen() {
     const ours =
       libraryEmpty && ytFound === 0
         ? [noLibraryResultsRow(deferredQuery)]
-        : resultRows(results, expanded, ytView, placed, topArtistSongs);
+        : resultRows(results, expanded, ytView, placed, topArtistSongs, language);
     return [...ours, ...ytFooterRows(ytView)];
-  }, [results, libraryEmpty, deferredQuery, expanded, ytView, placed, topArtistSongs]);
+  }, [results, libraryEmpty, deferredQuery, expanded, ytView, placed, topArtistSongs, language]);
 
   // Song results can be selected. The selection lives here, not in the list,
   // so a new query (or none matching) keeps it: checked songs that drop out of

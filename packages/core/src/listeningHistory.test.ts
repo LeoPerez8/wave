@@ -52,3 +52,19 @@ test("a yesterday with 25 hours and a spring day with 23 hours keep their calend
     "Saturday",
   );
 });
+
+test("Portuguese history formats calendar headings without changing grouping", () => {
+  const days = listeningHistoryDays(
+    [
+      { startedAt: at(2026, 10, 19) },
+      { startedAt: at(2026, 10, 18) },
+      { startedAt: at(2025, 12, 31) },
+    ],
+    at(2026, 10, 25),
+    "pt-BR",
+  );
+  assert.deepEqual(
+    days.map((day) => day.title),
+    ["segunda-feira", "18 de outubro", "31 de dezembro de 2025"],
+  );
+});
