@@ -291,12 +291,16 @@ describe("shuffle", () => {
     assert.ok(!ids(upNext(state)).includes("x"));
   });
 
-  test("turning it off restores the context order around the current track", () => {
+  test("turning it off keeps History as played and the songs not played yet in context order", () => {
     const shuffled = apply(shuffleOn(start(tracks, 2)), { type: "next" }, { type: "next" });
-    const current = currentEntry(shuffled)!.trackId;
+    const history = ids(queueHistory(shuffled));
+    const current = currentEntry(shuffled)!;
     const { state, playback } = reduceQueue(shuffled, { type: "setShuffle", on: false });
     assert.equal(state.shuffle, false);
-    assert.equal(show(state), tracks.replace(current, `[${current}]`));
+    assert.deepEqual(ids(queueHistory(state)), history);
+    assert.equal(currentEntry(state)?.key, current.key);
+    const notPlayed = tracks.split(" ").filter((id) => !history.includes(id) && id !== current.trackId);
+    assert.deepEqual(ids(upNext(state)), notPlayed);
     assert.equal(playback, "keep");
   });
 
@@ -310,9 +314,9 @@ describe("shuffle", () => {
     assert.equal(show(apply(edited, { type: "setShuffle", on: false })), "a b [c] x e");
   });
 
-  test("turning it off while a lined-up track plays keeps it after the context track before it", () => {
+  test("turning it off while a lined-up track plays keeps it playing after History", () => {
     const shuffled = shuffleOn(start("a b c d e", 2));
-    const before = upNext(shuffled)[0]!.trackId;
+    const [before, after] = ids(upNext(shuffled));
     const queuedPlaying = apply(
       shuffled,
       { type: "next" },
@@ -321,7 +325,7 @@ describe("shuffle", () => {
     );
     const state = apply(queuedPlaying, { type: "setShuffle", on: false });
     assert.equal(currentEntry(state)?.trackId, "x");
-    assert.equal(show(state), "a b c d e".replace(before, `${before} [x]`));
+    assert.equal(show(state), `a b c ${before} [x] ${after}`);
   });
 
   test("playing with shuffle starts at the tapped track and shuffles the rest", () => {
@@ -556,14 +560,13 @@ describe("queueHistory", () => {
     assert.deepEqual(ids(queueHistory(shuffleOn(start(tracks, 2)))), ["a", "b"]);
   });
 
-  test("holds the context entries before the current one, played or not, when shuffle turns off", () => {
-    const shuffled = apply(shuffleOn(start(tracks)), { type: "next" });
-    const current = currentEntry(shuffled)!.trackId;
+  test("stays as played, out of context order too, when shuffle turns off", () => {
+    const shuffled = apply(shuffleOn(start(tracks)), { type: "next" }, { type: "next" });
+    const played = ids(queueHistory(shuffled));
+    assert.notDeepEqual(played, ["a", "b"]);
     const off = apply(shuffled, { type: "setShuffle", on: false });
-    assert.deepEqual(
-      ids(queueHistory(off)),
-      tracks.split(" ").slice(0, tracks.split(" ").indexOf(current)),
-    );
+    assert.deepEqual(ids(queueHistory(off)), played);
+    assert.equal(currentEntry(off)?.key, currentEntry(shuffled)?.key);
   });
 
   test("empties when Repeat All wraps", () => {
