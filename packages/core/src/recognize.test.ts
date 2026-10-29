@@ -8,9 +8,11 @@ import {
   recognizeLogLine,
   startRecognize,
   stepRecognize,
+  type RecognizeCardView,
   type RecognizedSong,
   type RecognizeEvent,
   type RecognizeFailure,
+  type RecognizeLogOutcome,
   type RecognizeSession,
   type RecognizeStep,
 } from "./index.ts";
@@ -154,10 +156,10 @@ describe("the session's end", () => {
   });
 });
 
-describe("the card", () => {
-  const labels = (view: { readonly actions: readonly string[] }) =>
-    view.actions.map((action) => RECOGNIZE_CARD_ACTION_LABELS[action as "cancel"]);
+const labels = (view: RecognizeCardView): readonly string[] =>
+  view.actions.map((action) => RECOGNIZE_CARD_ACTION_LABELS[action]);
 
+describe("the card", () => {
   test("says it's listening over the wave, with Cancel", () => {
     const view = recognizeCardView({ kind: "listening" });
     assert.equal(view.title, "Listening…");
@@ -218,10 +220,11 @@ describe("the card", () => {
   });
 });
 
+const line = (outcome: RecognizeLogOutcome, heardMs: number): string =>
+  recognizeLogLine({ source: "microphone", heardMs, outcome });
+
 describe("the app log's line", () => {
   test("names the source, the seconds heard and the outcome", () => {
-    const line = (end: Parameters<typeof recognizeLogLine>[0]["outcome"], heardMs: number) =>
-      recognizeLogLine({ source: "microphone", heardMs, outcome: end });
     assert.equal(
       line({ kind: "match", song: SONG }, 4_096),
       "Recognize through the microphone: a match after 4.1 s",
@@ -253,13 +256,9 @@ describe("the app log's line", () => {
   });
 
   test("never holds the song", () => {
-    const line = recognizeLogLine({
-      source: "microphone",
-      heardMs: 4_000,
-      outcome: { kind: "match", song: SONG },
-    });
+    const written = line({ kind: "match", song: SONG }, 4_000);
     for (const field of [SONG.title, SONG.artist, SONG.album!, SONG.isrc!]) {
-      assert.equal(line.includes(field), false, field);
+      assert.equal(written.includes(field), false, field);
     }
   });
 });

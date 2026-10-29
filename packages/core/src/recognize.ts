@@ -7,7 +7,7 @@
 export type RecognizeSource = "microphone";
 
 /** How much audio each ask covers: everything heard so far, at about 4, 8 and 12 seconds. */
-export const RECOGNIZE_STEPS_MS: readonly number[] = [4_000, 8_000, 12_000];
+const RECOGNIZE_STEPS_MS: readonly number[] = [4_000, 8_000, 12_000];
 
 /** A recognition session as the schedule sees it. */
 export interface RecognizeSession {
@@ -198,21 +198,24 @@ export const recognizeCardView = (card: RecognizeCard): RecognizeCardView => {
         "openSettings",
       );
     case "ended": {
-      const { end } = card;
-      switch (end.kind) {
+      const ending = card.end;
+      switch (ending.kind) {
         case "match":
           return {
-            title: end.song.title,
-            lines: end.song.album === null ? [end.song.artist] : [end.song.artist, end.song.album],
+            title: ending.song.title,
+            lines:
+              ending.song.album === null
+                ? [ending.song.artist]
+                : [ending.song.artist, ending.song.album],
             cover: true,
-            coverUrl: end.song.coverUrl,
+            coverUrl: ending.song.coverUrl,
             listening: false,
             actions: ["done"],
           };
         case "noMatch":
           return notice("No match", "Wave couldn't name this song. Try again closer to the music.");
         case "failed":
-          return notice("Couldn't recognize the song", FAILURE_LINES[end.failure]);
+          return notice("Couldn't recognize the song", FAILURE_LINES[ending.failure]);
       }
     }
   }
