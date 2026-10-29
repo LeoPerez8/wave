@@ -3,6 +3,7 @@ import { describe, test } from "node:test";
 
 import {
   actionBarLabel,
+  catalogueOf,
   artistLink,
   confirmsFirst,
   isDestructiveAction,
@@ -1220,4 +1221,17 @@ test("YouTube Music off removes Magic Queue from every Library seed menu", () =>
       false,
     );
   }
+});
+
+describe("menu labels in Portuguese", () => {
+  test("every entry has the glossary's Portuguese, and bar captions stay short", () => {
+    const { labels } = catalogueOf("pt-BR").itemActions;
+    assert.equal(labels.playNext, "Reproduzir a Seguir");
+    assert.equal(labels.addToPlaylist, "Adicionar à Playlist");
+    assert.equal(labels.goToAlbum, "Ir para o Álbum");
+    assert.equal(labels.removeFromLibrary, "Remover da Biblioteca");
+    assert.equal(actionBarLabel("removeFromPlaylist", "pt-BR"), "Remover");
+    assert.equal(actionBarLabel("unfavorite", "pt-BR"), "Des\u00adfavoritar");
+    assert.equal(actionBarLabel("share", "pt-BR"), "Compartilhar");
+  });
 });

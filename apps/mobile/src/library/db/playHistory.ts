@@ -12,6 +12,7 @@ import {
   type MixedSong,
   type YtAlbumSong,
   type PlayEvent,
+  UNKNOWN_SONG_TITLE,
 } from "@wave/core";
 import { and, desc, eq, gt, inArray, isNotNull, isNull, max, sql } from "drizzle-orm";
 
@@ -120,7 +121,7 @@ export const recordPlay = (
                 artworkUrl: streamedSong!.artworkUrl,
               }
             : {
-                title: song?.title ?? "Unknown song",
+                title: song?.title ?? UNKNOWN_SONG_TITLE,
                 artist: song?.artist ?? "",
                 album: song?.album ?? null,
                 artworkPath: song?.artworkPath ?? null,

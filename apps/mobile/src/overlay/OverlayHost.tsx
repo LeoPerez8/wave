@@ -1,3 +1,4 @@
+import { useLocalisation } from "@/localisation/localisation";
 import {
   cardContentHeight,
   cardKeyboard,
@@ -123,6 +124,7 @@ export function OverlayHost({ children }: { children: ReactNode }) {
 
 /** One dimmed backdrop and its glass card, fading and growing in and out. */
 function OverlayCard({ entry, frontmost }: { entry: OverlayEntry; frontmost: boolean }) {
+  const { strings } = useLocalisation();
   const window = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const keyboardHeight = useKeyboardHeight();
@@ -241,7 +243,7 @@ function OverlayCard({ entry, frontmost }: { entry: OverlayEntry; frontmost: boo
         <Pressable
           style={{ flex: 1 }}
           accessibilityRole="button"
-          accessibilityLabel="Close"
+          accessibilityLabel={strings.settings.close}
           onPress={() => dismissOverlay(entry)}
         >
           <Svg

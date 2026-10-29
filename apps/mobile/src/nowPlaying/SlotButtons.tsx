@@ -1,3 +1,4 @@
+import { useLocalisation } from "@/localisation/localisation";
 import {
   IconDots,
   IconQuote,
@@ -15,7 +16,7 @@ import { openPlayingActions } from "@/playback/ActionsMenu";
 import { useQueue } from "@/playback/hooks";
 
 import { slotChange, type SlotChange } from "./ChangeSlotMenu";
-import { REPEAT_LABEL } from "./QueueView";
+import { repeatLabel } from "./QueueView";
 import { useShuffleControl } from "./ShuffleMenu";
 import { SleepTimerButton } from "./SleepTimer";
 import { AddToPlaylistButton, DownloadButton } from "./SongButtons";
@@ -81,12 +82,13 @@ function ShuffleSlot({ change }: { change: SlotChange }) {
 
 /** Repeat: off → all → one, teal while on, with the repeat-one glyph on one. */
 function RepeatSlot({ change }: { change: SlotChange }) {
+  const { strings } = useLocalisation();
   const repeat = useQueue().repeat;
   return (
     <ViewToggle
       change={change}
       icon={repeat === "one" ? IconRepeatOnce : IconRepeat}
-      label={REPEAT_LABEL[repeat]}
+      label={repeatLabel(repeat, strings)}
       on={repeat !== "off"}
       onPress={() => void cycleRepeat()}
     />
@@ -109,13 +111,14 @@ export function SlotButton({
   off: boolean;
   context: SlotContext;
 }) {
+  const { strings } = useLocalisation();
   const change = slotChange(slot);
   switch (action) {
     case "lyrics":
       return (
         <ViewToggle
           icon={IconQuote}
-          label="Lyrics"
+          label={strings.playbackText.lyrics}
           on={context.lyricsShown}
           onPress={context.toggleLyrics}
           change={change}
@@ -143,7 +146,7 @@ export function SlotButton({
         <IconButton
           {...change}
           icon={IconShare3}
-          label="Share Song"
+          label={strings.playbackText.shareSong}
           tone="secondary"
           onPress={context.share}
         />
@@ -153,7 +156,7 @@ export function SlotButton({
         <IconButton
           {...change}
           icon={IconDots}
-          label="Song Menu"
+          label={strings.playbackText.songMenu}
           tone="secondary"
           disabled={off}
           opensMenu

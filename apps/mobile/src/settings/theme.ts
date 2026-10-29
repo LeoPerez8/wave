@@ -30,6 +30,7 @@ import {
 import { Storage } from "expo-sqlite/kv-store";
 import { Uniwind } from "uniwind";
 
+import { currentLocalisation } from "@/localisation/localisation";
 import { persistedSetting } from "@/lib/persistedSetting";
 import { WaveNative } from "@/native/waveNative";
 import { WavePlayer } from "@/native/wavePlayer";
@@ -134,7 +135,12 @@ const changeTheme = async (
   confirm: Confirm,
 ): Promise<void> => {
   const asked = themeState();
-  const change = launcherIconSwitch(asked.icon, edit(asked.choice), LAUNCHER);
+  const change = launcherIconSwitch(
+    asked.icon,
+    edit(asked.choice),
+    LAUNCHER,
+    currentLocalisation().strings,
+  );
   // No prompt: the new colours give the stored icon, so keeping it is the same as switching.
   const answer = change === null ? "alternative" : await confirm(change.warning);
   if (answer === "dismiss") return;

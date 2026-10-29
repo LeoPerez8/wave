@@ -193,6 +193,7 @@ export const ytAudioMatches = (
  * the failed download's row says it rather than an earlier source's failure.
  * Null when it is the song.
  */
+// not UI text: the failure's cause, an internal error message kept on the job
 export const ytAudioRejection = (
   song: { readonly durationMs: number | null },
   durationMs: number,
@@ -241,6 +242,7 @@ const EXPECTED_FROM: Record<YtDownloadReport["expectedFrom"], string> = {
   spotify: "Spotify's listing",
 };
 
+// not UI text: lengths for the app log
 const seconds = (ms: number): string => `${(ms / 1000).toFixed(1)} s`;
 
 /**
@@ -248,6 +250,7 @@ const seconds = (ms: number): string => `${(ms / 1000).toFixed(1)} s`;
  * videos asked for and served, the client, the video type and the three
  * lengths, which together tell a music video from the song's audio track.
  */
+// not UI text: the app log's line
 export const ytDownloadReport = (report: YtDownloadReport): string => {
   const type = report.videoType?.replace(/^MUSIC_VIDEO_TYPE_/u, "") ?? "unknown type";
   const of = report.song === null ? "" : ` of ${report.song}`;

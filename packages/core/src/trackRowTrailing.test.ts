@@ -17,3 +17,13 @@ describe("trackRowTrailing", () => {
     assert.equal(trackRowTrailing({ durationMs: null }), "");
   });
 });
+
+describe("trackRowTrailing in Portuguese", () => {
+  test("plays are counted in Portuguese", () => {
+    assert.equal(trackRowTrailing({ durationMs: 1000, countedPlays: 1 }, "pt-BR"), "1 reprodução");
+    assert.equal(
+      trackRowTrailing({ durationMs: 1000, countedPlays: 1200 }, "pt-BR"),
+      "1.200 reproduções",
+    );
+  });
+});

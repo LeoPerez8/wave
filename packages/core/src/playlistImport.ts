@@ -8,7 +8,9 @@
 
 import { finishSteps } from "./buildSteps.ts";
 import { UNKNOWN_ARTIST } from "./library.ts";
+import { importDoneLogLine } from "./importLog.ts";
 import { counted } from "./listening.ts";
+import { catalogueOf, type AppLanguage } from "./localisation.ts";
 import { importedPlaylistName } from "./m3u.ts";
 import {
   playlistSongKey,
@@ -502,33 +504,37 @@ export interface ImportLeftOutSection {
  * The songs this Wave doesn't find aren't left out: they're in the playlist,
  * unsearched or unavailable.
  */
-const leftOutNotice = <S extends YtSong>(job: PlaylistImport<S>): ImportLeftOut | null => {
+const leftOutNotice = <S extends YtSong>(
+  job: PlaylistImport<S>,
+  language: AppLanguage = "en",
+): ImportLeftOut | null => {
+  const text = catalogueOf(language).imports;
   const notFound = job.leftOut
     .filter((left) => left.reason === "notFound")
     .map((left) => left.song);
   const twice = listedTwice(job);
   if (notFound.length === 0 && twice.length === 0) return null;
-  const missing = `${counted(notFound.length, "song")} ${notFound.length === 1 ? "wasn't" : "weren't"} found`;
+  const missing = text.wereNotFound(notFound.length);
   const sections: ImportLeftOutSection[] = [];
-  if (notFound.length > 0) sections.push({ heading: "Not found", songs: notFound.map(songLine) });
-  if (twice.length > 0) sections.push({ heading: "Listed twice", songs: twice.map(songLine) });
+  if (notFound.length > 0) sections.push({ heading: text.notFound, songs: notFound.map(songLine) });
+  if (twice.length > 0) sections.push({ heading: text.listedTwice, songs: twice.map(songLine) });
   if (twice.length === 0) {
     return {
       title: missing,
-      message: `${job.name} was imported without ${notFound.length === 1 ? "it" : "them"}.`,
+      message: text.importedWithout(job.name, notFound.length),
       sections,
     };
   }
   if (notFound.length === 0) {
     return {
-      title: `${counted(twice.length, "song")} ${twice.length === 1 ? "was" : "were"} listed twice`,
-      message: `Each went into ${job.name} once.`,
+      title: text.wereListedTwice(twice.length),
+      message: text.eachWentInOnce(job.name),
       sections,
     };
   }
   return {
-    title: `${missing} · ${twice.length.toLocaleString("en")} listed twice`,
-    message: `${job.name} was imported without the songs not found. Each song listed twice went in once.`,
+    title: text.notFoundAndTwice(missing, twice.length),
+    message: text.importedWithoutBoth(job.name),
     sections,
   };
 };
@@ -558,14 +564,15 @@ export interface PlaylistImportView {
 export const playlistImportView = <S extends YtSong>(
   imports: PlaylistImports<S>,
   playlistId: number,
+  language: AppLanguage = "en",
 ): PlaylistImportView | null => {
   const job = imports.find((queued) => queued.playlistId === playlistId);
   if (job?.state.kind !== "done") return null;
-  const leftOut = leftOutNotice(job);
+  const leftOut = leftOutNotice(job, language);
   const cut =
     job.cut === null
       ? null
-      : `Only its first ${counted(job.cut, "song")} came from ${SERVICE_NAMES[job.service]}`;
+      : catalogueOf(language).imports.onlyFirst(job.cut, SERVICE_NAMES[job.service]);
   const lines = [cut, leftOut?.title].filter((line) => line !== null && line !== undefined);
   return lines.length === 0 ? null : { line: lines.join(" · "), leftOut };
 };
@@ -606,10 +613,7 @@ const importLine = <S extends YtSong>(
     ...(twice > 0 ? [`${twice.toLocaleString("en")} listed twice`] : []),
   ];
   const what = `${counted(job.songs.length, "song")}: ${parts.join(", ")}`;
-  const name = `Import of "${job.name}" from ${SERVICE_NAMES[job.service]}`;
-  return resumed
-    ? `${name}, kept from before the update, ended as Wave started: ${what}`
-    : `${name} done at once: ${what}`;
+  return importDoneLogLine(job.name, SERVICE_NAMES[job.service], what, resumed);
 };
 
 /** Background import planning yields during Library indexing and per source row. */

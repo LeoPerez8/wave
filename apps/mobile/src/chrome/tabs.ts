@@ -1,5 +1,5 @@
 import { IconHome, IconSearch, IconStack2, type Icon } from "@tabler/icons-react-native";
-import type { TabBarTab } from "@wave/core";
+import type { Catalogue, TabBarTab } from "@wave/core";
 
 import { findSection } from "@/catalog/sections";
 
@@ -9,15 +9,17 @@ export interface TabLook {
   readonly icon: Icon;
 }
 
-const FIXED: Readonly<Record<"index" | "library" | "search", TabLook>> = {
-  index: { label: "Home", icon: IconHome },
-  library: { label: "Library", icon: IconStack2 },
-  search: { label: "Search", icon: IconSearch },
+const FIXED_ICONS: Readonly<Record<"index" | "library" | "search", Icon>> = {
+  index: IconHome,
+  library: IconStack2,
+  search: IconSearch,
 };
 
-/** [tab]'s label and icon: a section tab takes its Library section's. */
-export const tabLook = (tab: TabBarTab): TabLook => {
-  if (tab === "index" || tab === "library" || tab === "search") return FIXED[tab];
-  const section = findSection(tab);
-  return { label: section?.label ?? tab, icon: section?.icon ?? IconStack2 };
-};
+/** [tab]'s label in [strings]' language, and its icon: a section tab takes its Library section's. */
+export const tabLook = (tab: TabBarTab, strings: Catalogue): TabLook => ({
+  label: strings.tabs[tab],
+  icon:
+    tab === "index" || tab === "library" || tab === "search"
+      ? FIXED_ICONS[tab]
+      : (findSection(tab)?.icon ?? IconStack2),
+});

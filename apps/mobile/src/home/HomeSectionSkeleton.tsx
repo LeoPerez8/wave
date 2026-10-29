@@ -1,4 +1,10 @@
-import { STATS_FACT_LABELS, homeSectionTitle, type HomeSectionId } from "@wave/core";
+import { useLocalisation } from "@/localisation/localisation";
+import {
+  STATS_FACT_LABELS,
+  discoverRowTitle,
+  homeSectionTitle,
+  type HomeSectionId,
+} from "@wave/core";
 import { Fragment } from "react";
 import { Text, View, useWindowDimensions } from "react-native";
 
@@ -13,32 +19,40 @@ import { useYtMusicEnabled } from "@/settings/ytMusic";
 import { StatsFactRow } from "./StatsFactRow";
 import { statsSeeAllAction } from "./statsSeeAllAction";
 import { DiscoverMixesSkeleton } from "./DiscoverMixesSkeleton";
+import { useHomeArrangement } from "./homeArrangement";
 import { homePlaceholderHeight } from "./homeOpening";
 
 function DiscoverSkeleton() {
+  const { strings } = useLocalisation();
   const enabled = useYtMusicEnabled();
+  const { discoverRows } = useHomeArrangement();
   return (
     <View style={{ gap: CELL * 3 }}>
       {enabled &&
-        ["Artist mixes", "Genre mixes"].map((label) => (
-          <View key={label} style={{ gap: CELL }}>
-            <Text className="font-sans text-footnote font-medium text-secondary">{label}</Text>
-            <DiscoverMixesSkeleton />
-          </View>
-        ))}
+        discoverRows
+          .filter((id) => id !== "magic-queue")
+          .map((id) => (
+            <View key={id} style={{ gap: CELL }}>
+              <Text className="font-sans text-footnote font-medium text-secondary">
+                {discoverRowTitle(id, strings)}
+              </Text>
+              <DiscoverMixesSkeleton />
+            </View>
+          ))}
     </View>
   );
 }
 
 /** A still, labelled placeholder in the section's own shape, including its heading. */
 export function HomeSectionSkeleton({ id }: { id: HomeSectionId }) {
+  const { strings } = useLocalisation();
   const { fontScale } = useWindowDimensions();
   const songs = id === "most-played" || id === "favorites";
   const artists = id === "most-played-artists";
   return (
     <TitledSection
-      title={homeSectionTitle(id)}
-      {...(id === "stats" ? { action: statsSeeAllAction } : {})}
+      title={homeSectionTitle(id, strings)}
+      {...(id === "stats" ? { action: statsSeeAllAction(strings) } : {})}
     >
       <View style={{ minHeight: homePlaceholderHeight(id, fontScale) }}>
         {id === "discover" ? (
@@ -46,7 +60,7 @@ export function HomeSectionSkeleton({ id }: { id: HomeSectionId }) {
         ) : songs ? (
           <TrackSkeletons count={10} leading="card" />
         ) : id === "stats" ? (
-          <SkeletonGroup label="Loading Stats">
+          <SkeletonGroup label={strings.home.loadingStats}>
             {STATS_FACT_LABELS.map((label, index) => (
               <Fragment key={label}>
                 {index > 0 && <Hairline />}
@@ -62,7 +76,7 @@ export function HomeSectionSkeleton({ id }: { id: HomeSectionId }) {
             ))}
           </SkeletonGroup>
         ) : (
-          <SkeletonGroup label={artists ? "Loading artists" : "Loading albums"}>
+          <SkeletonGroup label={artists ? strings.home.loadingArtists : strings.home.loadingAlbums}>
             <CoverRow>
               {Array.from({ length: 3 }, (_, index) =>
                 artists ? (

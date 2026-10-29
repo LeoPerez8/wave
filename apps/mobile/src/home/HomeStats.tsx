@@ -1,3 +1,4 @@
+import { useLocalisation } from "@/localisation/localisation";
 import { Fragment } from "react";
 import { Text, View } from "react-native";
 
@@ -10,10 +11,11 @@ import { statsSeeAllAction } from "./statsSeeAllAction";
 
 /** Listening and library facts; only See all opens Library's Stats. */
 export function HomeStats() {
+  const { strings } = useLocalisation();
   const facts = useStatsFacts();
   if (facts === undefined) return <HomeSectionSkeleton id="stats" />;
   return (
-    <TitledSection title="Stats" action={statsSeeAllAction}>
+    <TitledSection title={strings.home.sections.stats} action={statsSeeAllAction(strings)}>
       <View>
         {facts.map(({ label, value }, index) => (
           <Fragment key={label}>

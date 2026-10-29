@@ -1,6 +1,6 @@
+import { en, type Catalogue } from "./catalogueEn.ts";
 import {
   recognizeResultActions,
-  type RecognizeLookup,
   type RecognizeResult,
   type RecognizeTrack,
   type RecognizeResultAction,
@@ -268,23 +268,32 @@ export type RecognizeCardAction =
   | "useMicrophone"
   | RecognizeResultAction;
 
-export const RECOGNIZE_CARD_ACTION_LABELS: Readonly<Record<RecognizeCardAction, string>> = {
-  play: "Play",
-  playNext: "Play Next",
-  addToShazam: "Add to Shazam",
-  addToPlaylist: "Add to Playlist",
-  goToAlbum: "Go to Album",
-  download: "Download",
-  cancelDownload: "Cancel Download",
-  retryDownload: "Retry Download",
-  listenAgain: "Listen Again",
-  cancel: "Cancel",
-  done: "Done",
-  close: "Close",
-  tryAgain: "Try Again",
-  openSettings: "Open Settings",
-  useMicrophone: "Use Microphone",
+/** The card's button labels in [catalogue]'s language. */
+export const recognizeCardActionLabels = (
+  catalogue: Catalogue = en,
+): Readonly<Record<RecognizeCardAction, string>> => {
+  const text = catalogue.playbackText;
+  return {
+    play: text.play,
+    playNext: text.playNext,
+    addToShazam: text.addToShazam,
+    addToPlaylist: text.addToPlaylist,
+    goToAlbum: text.goToAlbum,
+    download: text.download,
+    cancelDownload: text.cancelDownload,
+    retryDownload: text.retryDownload,
+    listenAgain: text.listenAgain,
+    cancel: text.cancel,
+    done: text.done,
+    close: text.close,
+    tryAgain: text.tryAgain,
+    openSettings: text.openSettings,
+    useMicrophone: text.useMicrophone,
+  };
 };
+
+/** The card's button labels in English. */
+export const RECOGNIZE_CARD_ACTION_LABELS = recognizeCardActionLabels(en);
 
 export interface RecognizeCardView {
   /** The song's title, or what's happening. */
@@ -312,12 +321,12 @@ const notice = (
   actions: ["close", action],
 });
 
-const FAILURE_LINES: Readonly<Record<RecognizeFailure, string>> = {
-  network: "The connection dropped before an answer came.",
-  refused: "The recognition service turned the request down. Try again in a minute.",
-  unreadable: "The recognition service sent an answer Wave can't read.",
-  capture: "The audio capture stopped sending sound.",
-};
+const failureLines = (catalogue: Catalogue): Readonly<Record<RecognizeFailure, string>> => ({
+  network: catalogue.playbackText.theConnectionDroppedBeforeAnAnswerCame,
+  refused: catalogue.playbackText.theRecognitionServiceTurnedTheRequestDownTryAgainInAMinute,
+  unreadable: catalogue.playbackText.theRecognitionServiceSentAnAnswerWaveCantRead,
+  capture: catalogue.playbackText.theAudioCaptureStoppedSendingSound,
+});
 
 /** What the card shows for [card]. */
 export const recognizeCardView = (
@@ -325,6 +334,7 @@ export const recognizeCardView = (
   options: RecognizeResultOptions = {
     ytMusic: true,
   },
+  catalogue: Catalogue = en,
 ): RecognizeCardView => {
   switch (card.kind) {
     case "resolving":
@@ -352,11 +362,11 @@ export const recognizeCardView = (
     }
     case "listening":
       return {
-        title: "Listening…",
+        title: catalogue.playbackText.listening,
         lines: [
           card.source === "playback"
-            ? "Listening to audio from this phone."
-            : "Hold your phone near the music.",
+            ? catalogue.playbackText.listeningToAudioFromThisPhone
+            : catalogue.playbackText.holdYourPhoneNearTheMusic,
         ],
         cover: false,
         coverUrl: null,
@@ -364,11 +374,14 @@ export const recognizeCardView = (
         actions: ["cancel"],
       };
     case "offline":
-      return notice("No connection", "Connect to the internet to recognize a song.");
+      return notice(
+        catalogue.playbackText.noConnection,
+        catalogue.playbackText.connectToTheInternetToRecognizeASong,
+      );
     case "denied":
       return notice(
-        "Microphone access is off",
-        "Allow Wave to capture audio in its Android settings to recognize songs.",
+        catalogue.playbackText.microphoneAccessIsOff,
+        catalogue.playbackText.allowWaveToCaptureAudioInItsAndroidSettingsToRecognizeSongs,
         "openSettings",
       );
     case "ended": {
@@ -376,14 +389,14 @@ export const recognizeCardView = (
       switch (ending.kind) {
         case "blocked":
           return notice(
-            "This app blocks audio capture",
-            "Try the microphone to recognize music around you.",
+            catalogue.playbackText.thisAppBlocksAudioCapture,
+            catalogue.playbackText.tryTheMicrophoneToRecognizeMusicAroundYou,
             "useMicrophone",
           );
         case "consentDeclined":
           return notice(
-            "Phone audio access declined",
-            "Allow Android's capture request to recognize audio from this phone.",
+            catalogue.playbackText.phoneAudioAccessDeclined,
+            catalogue.playbackText.allowAndroidsCaptureRequestToRecognizeAudioFromThisPhone,
           );
         case "match":
           return {
@@ -398,57 +411,16 @@ export const recognizeCardView = (
             actions: ["done"],
           };
         case "noMatch":
-          return notice("No match", "Wave couldn't name this song. Try listening again.");
+          return notice(
+            catalogue.playbackText.noMatch,
+            catalogue.playbackText.waveCouldntNameThisSongTryListeningAgain,
+          );
         case "failed":
-          return notice("Couldn't recognize the song", FAILURE_LINES[ending.failure]);
+          return notice(
+            catalogue.playbackText.couldntRecognizeTheSong,
+            failureLines(catalogue)[ending.failure],
+          );
       }
     }
   }
-};
-
-// ---------------------------------------------------------------------------
-// The app log
-
-/** How a session went for the log: its end, or why it never listened. */
-export type RecognizeLogOutcome =
-  RecognizeEnd | { readonly kind: "offline" } | { readonly kind: "denied" };
-
-const SOURCE_NAMES: Readonly<Record<RecognizeSource, string>> = {
-  microphone: "the microphone",
-  playback: "this phone",
-};
-
-/**
- * The session's one app log line: the source, the seconds heard and the outcome
- * (with a refusal's HTTP status). Never the song, the audio or the signature.
- */
-export const recognizeLogLine = (session: {
-  readonly source: RecognizeSource;
-  readonly heardMs: number;
-  readonly outcome: RecognizeLogOutcome;
-  readonly lookup?: RecognizeLookup;
-}): string => {
-  const { outcome } = session;
-  const after = `after ${(session.heardMs / 1000).toFixed(1)} s`;
-  const what = (() => {
-    switch (outcome.kind) {
-      case "offline":
-        return "offline, nothing heard";
-      case "denied":
-        return "microphone permission denied, nothing heard";
-      case "match":
-        return `a match ${after}`;
-      case "noMatch":
-        return `no match ${after}`;
-      case "cancelled":
-        return `cancelled ${after}`;
-      case "blocked":
-        return `app blocks capture ${after}`;
-      case "consentDeclined":
-        return "capture consent declined, nothing heard";
-      case "failed":
-        return `failed ${after} (${outcome.failure}${outcome.status === null ? "" : `, HTTP ${outcome.status}`})`;
-    }
-  })();
-  return `Recognize through ${SOURCE_NAMES[session.source]}: ${what}${session.lookup === undefined ? "" : `, YT Music lookup: ${session.lookup}`}`;
 };

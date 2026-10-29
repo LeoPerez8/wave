@@ -1,7 +1,6 @@
 import { beginTiming } from "@/lib/timing";
+import { currentLocalisation } from "@/localisation/localisation";
 import {
-  ITEM_ACTION_LABELS,
-  YT_DOWNLOAD_ACTION_LABELS,
   menuLayout,
   streamedArtistLink,
   shownSwipeEntry,
@@ -137,10 +136,9 @@ const songEntries = (
     }
   });
 
+/** The entry's label in the app's language (the menu is built as it opens). */
 const label = (entry: Entry): string =>
-  entry.kind === "download"
-    ? YT_DOWNLOAD_ACTION_LABELS[entry.action]
-    : ITEM_ACTION_LABELS[entry.action];
+  currentLocalisation().strings.itemActions.labels[entry.action];
 
 /** What [song] joins a playlist as: the Library's song when it has it, else the stream. */
 const playlistSong = (song: NativeYtSong, find: FindInLibrary): PlaylistSong => {
@@ -196,7 +194,7 @@ const run = (
     case "removeFromPlaylist":
       if (playlistItem === undefined) return;
       removePlaylistItems(playlistItem.playlistId, [playlistItem.itemId]).catch((error: unknown) =>
-        showError("Couldn't remove the song", error),
+        showError(currentLocalisation().strings.library.couldntRemoveSong, error),
       );
       return;
     case "download":
@@ -328,7 +326,9 @@ export const runYtSongSwipe = (
       if (entry !== undefined)
         run(entry, song, { find, playlistItem, onSelect: undefined }, "swipe");
     })
-    .catch((error: unknown) => showError("Couldn't load the song", error));
+    .catch((error: unknown) =>
+      showError(currentLocalisation().strings.playbackText.couldntLoadTheSong, error),
+    );
 };
 
 const ytSongSwipeEntries = (

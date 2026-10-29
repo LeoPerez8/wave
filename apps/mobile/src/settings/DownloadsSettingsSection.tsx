@@ -5,6 +5,7 @@ import { Text, View } from "react-native";
 
 import { Hairline } from "@/catalog/Hairline";
 import { SettingsSwitch } from "@/components/SettingsSwitch";
+import { currentLocalisation, useLocalisation } from "@/localisation/localisation";
 import { WaveSoulseek, soulseekErrorCode, type SoulseekSession } from "@/native/waveSoulseek";
 
 import { cancelQualityReplacements } from "@/ytmusic/YtDownloads";
@@ -20,11 +21,11 @@ const sessionCall = <A,>(call: () => Promise<A>) =>
 const turnOnMessage = (error: unknown): string => {
   switch (soulseekErrorCode(error)) {
     case "ERR_SLSK_UNREACHABLE":
-      return "Soulseek's server isn't answering. Try again later.";
+      return currentLocalisation().strings.settings.soulseeksServerIsntAnsweringTryAgainLater;
     case "ERR_SLSK_NO_ACCOUNT":
-      return "Couldn't make a Soulseek account. Try again.";
+      return currentLocalisation().strings.settings.couldntMakeASoulseekAccountTryAgain;
     default:
-      return "Couldn't connect to Soulseek. Try again when you're online.";
+      return currentLocalisation().strings.settings.couldntConnectToSoulseekTryAgainWhen;
   }
 };
 
@@ -42,6 +43,7 @@ const offer = (direction: QualityDirection): void => {
  * again. Either way the other direction's waiting replacements are cancelled.
  */
 export function DownloadsSettingsSection() {
+  const { strings } = useLocalisation();
   const [session, setSession] = useState<SoulseekSession>({ status: "off", username: null });
   /** The value asked for while the native module turns it on or off. */
   const [asked, setAsked] = useState<boolean | null>(null);
@@ -60,7 +62,10 @@ export function DownloadsSettingsSection() {
           if (current) setSession(next);
         },
         () => {
-          if (current) setMessage("Couldn't read the setting. Reopen Settings to retry.");
+          if (current)
+            setMessage(
+              currentLocalisation().strings.settings.couldntReadTheSettingReopenSettingsTo,
+            );
         },
       )
       .finally(() => {
@@ -87,7 +92,7 @@ export function DownloadsSettingsSection() {
           offer(on ? "upgrade" : "downgrade");
         },
         (error: unknown) =>
-          setMessage(on ? turnOnMessage(error) : "Couldn't turn it off. Try again."),
+          setMessage(on ? turnOnMessage(error) : strings.settings.couldntTurnItOffTryAgain),
       )
       .finally(() => {
         setBusy(false);
@@ -99,7 +104,7 @@ export function DownloadsSettingsSection() {
     <View>
       <Hairline />
       <SettingsSwitch
-        label="Download in best quality"
+        label={strings.settings.downloadInBestQuality}
         value={asked ?? session.status !== "off"}
         disabled={busy}
         onValueChange={change}
@@ -113,9 +118,7 @@ export function DownloadsSettingsSection() {
         />
       )}
       <Text className="mt-2 font-sans text-footnote text-secondary">
-        Best quality is MP3 320 kbps from other people's shared music. It's slower than YouTube
-        Music, and a song it can't find comes from YouTube Music instead. Off, downloads come from
-        YouTube Music while YT Music is on.
+        {strings.settings.bestQualityIsMP3320KbpsFrom}
       </Text>
       {message !== null && (
         <Text

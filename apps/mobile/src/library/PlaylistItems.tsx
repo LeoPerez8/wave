@@ -19,6 +19,7 @@ import { scheduleOnRN } from "react-native-worklets";
 
 import { usePositions } from "@/lib/usePositions";
 import { CELL, grid } from "@/catalog/grid";
+import { useLocalisation } from "@/localisation/localisation";
 import { ROW, useDraggedRow, useRowDrag, type DragRows } from "@/catalog/rowDrag";
 import { useChromeInset } from "@/chrome/chrome";
 import { useListScrollable } from "@/motion/heldTouch";
@@ -89,8 +90,6 @@ const playlistEntry = (item: PlaylistEntryRow): SongListEntry => {
 };
 
 const NO_MOVES: readonly AccessibilityActionInfo[] = [];
-const MOVE_UP = { name: "moveUp", label: "Move up" } as const;
-const MOVE_DOWN = { name: "moveDown", label: "Move down" } as const;
 
 /** The grip, 48dp of target drawn in the 32dp state cell. */
 function Grip({ shown, color }: { shown: boolean; color: string }) {
@@ -193,6 +192,7 @@ export const playPlaylistEntries = (
  * unavailable entry can't be checked and does nothing.
  */
 export function PlaylistItems({ playlistId, items, header, empty }: Props) {
+  const { strings } = useLocalisation();
   const scrollable = useListScrollable();
   const read = items ?? NO_ITEMS;
   const bottomInset = useChromeInset();
@@ -339,12 +339,19 @@ export function PlaylistItems({ playlistId, items, header, empty }: Props) {
     [selecting, listSelection],
   );
   const count = shown.length;
+  const moves = useMemo(
+    () => ({
+      up: { name: "moveUp", label: strings.playlists.moveUp },
+      down: { name: "moveDown", label: strings.playlists.moveDown },
+    }),
+    [strings],
+  );
   const rowActions = useCallback(
     (_item: Item, index: number): readonly AccessibilityActionInfo[] =>
       selecting || !reorderable
         ? NO_MOVES
-        : [...(index > 0 ? [MOVE_UP] : []), ...(index < count - 1 ? [MOVE_DOWN] : [])],
-    [selecting, reorderable, count],
+        : [...(index > 0 ? [moves.up] : []), ...(index < count - 1 ? [moves.down] : [])],
+    [selecting, reorderable, count, moves],
   );
   const decorateRow = useCallback(
     (row: ReactElement, item: Item, index: number) => {

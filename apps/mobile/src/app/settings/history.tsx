@@ -1,4 +1,11 @@
-import { listeningHistoryDays } from "@wave/core";
+import { useLocalisation } from "@/localisation/localisation";
+import {
+  UNKNOWN_SONG_TITLE,
+  catalogueOf,
+  formatTime,
+  listeningHistoryDays,
+  type AppLanguage,
+} from "@wave/core";
 import { useMemo } from "react";
 import { ActivityIndicator, Text, View } from "react-native";
 
@@ -40,14 +47,21 @@ const playable = (play: ListeningHistoryRow, ytMusic: boolean, refused: Readonly
  * song is dimmed and its stream replays while it can; with neither, it does
  * nothing.
  */
-const historyEntry = (play: ListeningHistoryRow, streamPlayable: boolean): SongListEntry => {
+const historyEntry = (
+  play: ListeningHistoryRow,
+  streamPlayable: boolean,
+  language: AppLanguage,
+): SongListEntry => {
   const { snapshot, song, streamedSong } = play;
   return {
     source: {
       kind: "history",
       id: play.id,
       trackId: song === null ? undefined : String(song.id),
-      title: snapshot.title,
+      title:
+        snapshot.title === UNKNOWN_SONG_TITLE
+          ? catalogueOf(language).listeningHistory.unknownSong
+          : snapshot.title,
       artist: snapshot.artist,
       durationMs: song?.durationMs ?? null,
       explicit: song?.explicit ?? false,
@@ -60,10 +74,7 @@ const historyEntry = (play: ListeningHistoryRow, streamPlayable: boolean): SongL
       playing: false,
       starred: false,
       remoteArtwork: true,
-      trailingLabel: new Date(play.startedAt).toLocaleTimeString(undefined, {
-        hour: "numeric",
-        minute: "2-digit",
-      }),
+      trailingLabel: formatTime(language, play.startedAt),
     },
     // A missing song shows its download as it goes.
     facts: song === null ? undefined : { missing: song.path === null },
@@ -72,6 +83,7 @@ const historyEntry = (play: ListeningHistoryRow, streamPlayable: boolean): SongL
 
 /** Counted plays, including streamed songs and saved rows for songs that have since left. */
 export default function ListeningHistoryScreen() {
+  const { language, strings } = useLocalisation();
   const { rows: plays, loading, error, loadMore, refresh } = useListeningHistory();
   useScreenContent(!loading || plays.length > 0);
   const bottom = useChromeInset();
@@ -84,11 +96,11 @@ export default function ListeningHistoryScreen() {
   const streamable = (play: ListeningHistoryRow) => playable(play, ytMusic, refused);
   const rows = useMemo(
     () =>
-      listeningHistoryDays(plays).flatMap<Row>((day) => [
+      listeningHistoryDays(plays, undefined, language).flatMap<Row>((day) => [
         { kind: "day", key: `day:${day.key}`, title: day.title },
         ...day.plays.map((play): Row => ({ kind: "play", key: `play:${play.id}`, play })),
       ]),
-    [plays],
+    [plays, language],
   );
 
   return (
@@ -97,7 +109,9 @@ export default function ListeningHistoryScreen() {
         className="flex-1"
         data={rows}
         keyExtractor={rowKey}
-        song={(row) => (row.kind === "play" ? historyEntry(row.play, streamable(row.play)) : null)}
+        song={(row) =>
+          row.kind === "play" ? historyEntry(row.play, streamable(row.play), language) : null
+        }
         context={HISTORY_CONTEXT}
         renderSlot={({ item }) =>
           item.kind === "day" ? (
@@ -131,7 +145,7 @@ export default function ListeningHistoryScreen() {
         ListEmptyComponent={
           !loading && !error ? (
             <Text className="font-sans text-body text-secondary" style={{ paddingTop: CELL * 3 }}>
-              No listening history yet.
+              {strings.listeningHistory.empty}
             </Text>
           ) : null
         }
@@ -141,9 +155,13 @@ export default function ListeningHistoryScreen() {
             {error && (
               <>
                 <Text className="font-sans text-body text-secondary">
-                  Couldn't load listening history.
+                  {strings.listeningHistory.failed}
                 </Text>
-                <TextButton variant="plain" label="Try again" onPress={refresh} />
+                <TextButton
+                  variant="plain"
+                  label={strings.listeningHistory.tryAgain}
+                  onPress={refresh}
+                />
               </>
             )}
           </View>

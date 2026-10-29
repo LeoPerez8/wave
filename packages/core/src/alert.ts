@@ -3,6 +3,8 @@
  * card. Decide which buttons it shows and what Back or a tap outside means.
  */
 
+import { en, type Catalogue } from "./catalogueEn.ts";
+
 export interface AlertSpec {
   readonly title: string;
   readonly message: string;
@@ -37,20 +39,17 @@ export interface AlertPlan {
 /** A title reads as a sentence: "Wave is scanning" gets a full stop, "Delete X?" keeps its mark. */
 const asSentence = (title: string): string => (/[.?!…]$/.test(title) ? title : `${title}.`);
 
-export const planAlert = ({
-  title,
-  message,
-  action,
-  dismissLabel,
-  alternativeLabel,
-}: AlertSpec): AlertPlan => ({
+export const planAlert = (
+  { title, message, action, dismissLabel, alternativeLabel }: AlertSpec,
+  catalogue: Catalogue = en,
+): AlertPlan => ({
   announcement: `${asSentence(title)} ${message}`,
   buttons:
     action === undefined
-      ? [{ label: dismissLabel ?? "OK", tone: "accent", choice: "dismiss" }]
+      ? [{ label: dismissLabel ?? catalogue.alert.ok, tone: "accent", choice: "dismiss" }]
       : [
           alternativeLabel === undefined
-            ? { label: dismissLabel ?? "Cancel", tone: "accent", choice: "dismiss" }
+            ? { label: dismissLabel ?? catalogue.alert.cancel, tone: "accent", choice: "dismiss" }
             : { label: alternativeLabel, tone: "accent", choice: "alternative" },
           {
             label: action.label,

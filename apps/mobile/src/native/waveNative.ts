@@ -125,6 +125,8 @@ type WaveNativeEvents = {
   onShareReceived: () => void;
   /** The default network changed what `connectivity` answers. */
   onConnectivityChanged: (event: Connectivity) => void;
+  /** Android changed Wave's per-app or system language. */
+  onPreferredLanguagesChanged: () => void;
 };
 
 declare class WaveNativeModule extends NativeModule<WaveNativeEvents> {
@@ -136,6 +138,23 @@ declare class WaveNativeModule extends NativeModule<WaveNativeEvents> {
   requestAllFilesAccess(): Promise<void>;
   /** Absolute path of the shared `Music` folder. */
   getDefaultMusicFolder(): string;
+  /**
+   * The phone's preferred languages as BCP 47 tags, in order: Wave's own
+   * language from Android's per-app list when one is set, else the system's.
+   * Absent from an APK built before it (a JS-only repack).
+   */
+  preferredLanguages?(): string[];
+  phoneCountry?(): string;
+  showCountries?(language: string): { code: string; name: string }[];
+  showNotificationsEnabled?(): boolean;
+  openShowNotificationSettings?(): void;
+  postShowNotification?(
+    id: string,
+    title: string,
+    body: string,
+    url: string,
+    channel: string,
+  ): boolean;
   /**
    * Whether the phone is online (Android checked its default network reaches
    * the internet) and on mobile data rather than Wi-Fi: the native cache,
@@ -333,6 +352,17 @@ const connectivity = connectivityStore({
 
 /** Whether the phone is on mobile data now; Wi-Fi when the module can't tell. */
 export const onMobileData = (): boolean => connectivity.get().onMobileData;
+
+/** The phone's preferred languages, in order (`preferredLanguages`); none from an older APK. */
+export const phoneLanguages = (): readonly string[] => WaveNative.preferredLanguages?.() ?? [];
+
+/** Follows Android locale changes without restarting the Activity or touching the player. */
+export const subscribePhoneLanguages = (listener: () => void): (() => void) => {
+  // Older APKs have neither the reader nor the event.
+  if (!WaveNative.preferredLanguages) return () => {};
+  const subscription = WaveNative.addListener("onPreferredLanguagesChanged", listener);
+  return () => subscription.remove();
+};
 
 /** Whether the phone is online now; online when the module can't tell. */
 export const online = (): boolean => connectivity.get().online;

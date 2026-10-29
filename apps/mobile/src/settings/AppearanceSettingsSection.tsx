@@ -1,3 +1,4 @@
+import { useLocalisation } from "@/localisation/localisation";
 import { APPEARANCES } from "@wave/core";
 import { Text, View } from "react-native";
 
@@ -9,24 +10,24 @@ import { ChoiceRow } from "./ChoiceRow";
 
 /** Settings › Appearance › Appearance: follow Android's light or dark setting, or keep to one. */
 export function AppearanceSettingsSection() {
+  const { strings } = useLocalisation();
   const appearance = useAppearance();
   return (
     <View>
-      <CatalogLine className="mb-2">Appearance</CatalogLine>
+      <CatalogLine className="mb-2">{strings.settings.appearance}</CatalogLine>
       <Hairline />
-      <View accessibilityRole="radiogroup" accessibilityLabel="Appearance">
-        {APPEARANCES.map(({ id, label }) => (
+      <View accessibilityRole="radiogroup" accessibilityLabel={strings.settings.appearance}>
+        {APPEARANCES.map(({ id }) => (
           <ChoiceRow
             key={id}
-            label={label}
+            label={strings.settings.appearances[id]}
             chosen={id === appearance}
             onPress={() => setAppearance(id)}
           />
         ))}
       </View>
       <Text className="mt-2 font-sans text-footnote text-secondary">
-        System follows Android&apos;s light or dark setting. Light and Dark keep Wave in that mode
-        whatever Android says.
+        {strings.settings.systemFollowsAndroidsLightOrDarkSetting}
       </Text>
     </View>
   );

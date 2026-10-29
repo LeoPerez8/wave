@@ -1,3 +1,4 @@
+import { currentLocalisation, subscribeLocalisation } from "@/localisation/localisation";
 import {
   NO_DOWNLOAD_RUN,
   downloadRunNotice,
@@ -45,6 +46,7 @@ export const followDownloadRuns = (): void => {
   });
   // A pause on YouTube's downloads takes the time left away, and its end brings it back.
   onYoutubePauseChanged(showRunSoon);
+  subscribeLocalisation(showRunSoon);
 };
 
 /** How often the download notification and the kv-store hear of the run: at most about once a second. */
@@ -70,7 +72,7 @@ const showRun = () => {
     else Storage.setItemSync(RUN_KEY, kept);
   }
   const { progress, timeLeft } = downloadRunNow();
-  const notice = downloadRunNotice(progress.overall, timeLeft);
+  const notice = downloadRunNotice(progress.overall, timeLeft, currentLocalisation().language);
   const key = JSON.stringify(notice);
   if (key === runNoticeShown) return;
   runNoticeShown = key;

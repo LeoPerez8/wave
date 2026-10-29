@@ -1,0 +1,10 @@
+const view = <Text title={strings.home.title} accessibilityHint={strings.play.hint}>
+  {strings.home.recent} Wave <Text>YouTube Music</Text><Text>YT Music</Text>
+  <Text>Spotify</Text><Text>Android Auto</Text><Text>Genius</Text><Text>Shazam</Text>
+  <Text>123 + … ♪</Text><Text>{`${count}`}</Text>
+</Text>;
+console.log("Starting playback", { message: "Internal detail" });
+logger.error("Database failed", { title: "Log title" });
+throw new Error("Internal failure");
+const id = "recently-played";
+const size = "large";

@@ -8,9 +8,7 @@ import {
   IconX,
 } from "@tabler/icons-react-native";
 import {
-  YT_ALBUM_DOWNLOAD_ACTION_LABELS,
-  YT_DOWNLOAD_BUTTON_LABELS,
-  YT_PLAYLIST_DOWNLOAD_ACTION_LABELS,
+  catalogueOf,
   discoverSongs,
   discoverTrackId,
   joinArtists,
@@ -18,6 +16,9 @@ import {
   ytAlbumSongs,
   ytPlaylistDownloadButton,
   ytPlaylistRestLine,
+  ytDownloadButtonLabels,
+  type AppLanguage,
+  type Catalogue,
   type MixedSong,
   type PlaylistItem,
   type QueueContext,
@@ -25,6 +26,7 @@ import {
   type YtPlaylistRest,
   type YtQuietReason,
 } from "@wave/core";
+import { useLocalisation } from "@/localisation/localisation";
 import type { DownloadOrigin } from "@wave/core";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
@@ -80,11 +82,24 @@ import type { YtMusic, YtMusicError } from "./YtMusic";
 
 const NO_SONGS: readonly NativeYtSong[] = [];
 
+/** What a list page is: an album (with its year when known), a playlist or a Discover mix. */
+export type YtListKind =
+  | { readonly type: "album"; readonly year: number | null }
+  | { readonly type: "playlist" }
+  | { readonly type: "mix" };
+
+/** [kind] as the page says it before its count and length: "Album · 2013", "Playlist". */
+const kindLine = (kind: YtListKind, strings: Catalogue): string => {
+  const text = strings.library.pageKind;
+  if (kind.type !== "album") return text[kind.type];
+  return kind.year === null ? text.album : text.albumOf(kind.year);
+};
+
 /** A YT Music album or playlist page as its screen shows it. */
 export interface YtListPage {
   readonly head: YtListHead;
-  /** "Album · 2013", "Playlist": what the page is, before its count and length. */
-  readonly kind: string;
+  /** What the page is, said before its count and length (`kindLine`). */
+  readonly kind: YtListKind;
   readonly songs: readonly NativeYtSong[];
   /**
    * The list as it shows and plays, when it isn't [songs] alone: a Discover
@@ -107,7 +122,7 @@ const LOADING: YtListLoad = { status: "loading" };
 
 const playlistPage = (playlist: NativeYtPlaylist): YtListPage => ({
   head: { title: playlist.title, line: playlist.author ?? "", artworkUrl: playlist.artworkUrl },
-  kind: "Playlist",
+  kind: { type: "playlist" },
   songs: playlist.songs,
 });
 
@@ -131,7 +146,7 @@ const readPage =
               line: joinArtists(album.artists),
               artworkUrl: album.artworkUrl,
             },
-            kind: album.year === null ? "Album" : `Album · ${album.year}`,
+            kind: { type: "album", year: album.year },
             songs: ytAlbumSongs(id, album),
           })),
         )
@@ -206,13 +221,13 @@ export const useYtListPage = (screen: YtListScreen, id: string) => {
 
 type Song = MixedSong<NativeYtSong, SongRow>;
 
-const totalMinutes = (songs: readonly Song[]): string | null => {
+const totalMinutes = (songs: readonly Song[], strings: Catalogue): string | null => {
   const ms = songs.reduce(
     (total, song) =>
       total + ((song.source === "library" ? song.track.durationMs : song.song.durationMs) ?? 0),
     0,
   );
-  return ms === 0 ? null : `${Math.max(1, Math.round(ms / 60_000))} min`;
+  return ms === 0 ? null : strings.library.minutes(Math.max(1, Math.round(ms / 60_000)));
 };
 
 /** What a list's download button can show: an entry to act on, or that every song is downloaded. */
@@ -235,33 +250,47 @@ const DOWNLOAD_ICONS: { readonly [A in YtListDownloadButtonAction]: typeof IconD
 export interface YtListDownloadButton {
   readonly action: YtListDownloadButtonAction;
   readonly label: string;
+  /** The full name ("Download Playlist"…), heard in either of its forms. */
+  readonly accessibilityLabel: string;
+  /** Every label the button can say, so the page can measure them ahead. */
+  readonly labels: readonly string[];
   readonly onPress: () => void;
 }
 
-/** The full name of each download button, heard in either of its forms. */
-const DOWNLOAD_NAMES: { readonly [A in YtListDownloadButtonAction]: string } = {
-  ...YT_ALBUM_DOWNLOAD_ACTION_LABELS,
-  ...YT_PLAYLIST_DOWNLOAD_ACTION_LABELS,
-  downloaded: "Downloaded",
+/** The full name of each download button in [language]. */
+const downloadName = (action: YtListDownloadButtonAction, language: AppLanguage): string => {
+  const { albumActions, playlistActions, downloaded } = catalogueOf(language).downloads;
+  if (action === "downloaded") return downloaded;
+  return action in albumActions
+    ? albumActions[action as keyof typeof albumActions]
+    : playlistActions[action as keyof typeof playlistActions];
 };
-
-/** Tapping Downloaded only says so: it never removes a file. */
-const sayDownloaded = (): void => void showToast("Downloaded");
 
 /**
  * A page's download button from Core's [button]: an entry runs [run];
- * Downloaded only says so, and waits for the Library's first read ([loaded]),
- * before which every song counts as in it.
+ * Downloaded only says so (tapping it never removes a file), and waits for
+ * the Library's first read ([loaded]), before which every song counts as in
+ * it. Its names are in [language].
  */
 const pageButton = <A extends YtListDownloadAction>(
   button: YtListDownloadButtonState<A> | null,
   loaded: boolean,
+  language: AppLanguage,
   run: (action: A) => void,
 ): YtListDownloadButton | null => {
   if (button === null) return null;
   const { action, label } = button;
-  if (action === "downloaded") return loaded ? { action, label, onPress: sayDownloaded } : null;
-  return { action, label, onPress: () => run(action) };
+  const named = {
+    action,
+    label,
+    accessibilityLabel: downloadName(action, language),
+    labels: ytDownloadButtonLabels(language),
+  };
+  if (action === "downloaded")
+    return loaded
+      ? { ...named, onPress: () => void showToast(catalogueOf(language).downloads.downloaded) }
+      : null;
+  return { ...named, onPress: () => run(action) };
 };
 
 /** An album's or a playlist's download button, as the list action after Play and Shuffle. */
@@ -271,8 +300,8 @@ export const listDownloadAction = (download: YtListDownloadButton | null): LastL
     : {
         icon: DOWNLOAD_ICONS[download.action],
         label: download.label,
-        labels: YT_DOWNLOAD_BUTTON_LABELS,
-        accessibilityLabel: DOWNLOAD_NAMES[download.action],
+        labels: download.labels,
+        accessibilityLabel: download.accessibilityLabel,
         onPress: download.onPress,
       };
 
@@ -291,13 +320,14 @@ export const useYtAlbumDownloadButton = (
   const inLibrary = useLoadedInLibrary(active);
   const loaded = useLoadedLibraryFinder(active) !== null;
   const download = useYtAlbumDownload(songs, inLibrary);
-  const button = ytAlbumDownloadButton(download);
+  const { language } = useLocalisation();
+  const button = ytAlbumDownloadButton(download, language);
   return {
     progress: download.line,
     button:
       songs.length === 0
         ? null
-        : pageButton(button, loaded, (action) =>
+        : pageButton(button, loaded, language, (action) =>
             runYtDownloadAction(action, songs, inLibrary, origin),
           ),
   };
@@ -315,10 +345,11 @@ export const useYtPlaylistDownloadButton = (
   const inLibrary = useLoadedInLibrary();
   const loaded = useLoadedLibraryFinder() !== null;
   const download = useYtPlaylistDownload(entries, inLibrary);
-  const button = ytPlaylistDownloadButton(download);
+  const { language } = useLocalisation();
+  const button = ytPlaylistDownloadButton(download, language);
   return {
     progress: download.line,
-    button: pageButton(button, loaded, (action) =>
+    button: pageButton(button, loaded, language, (action) =>
       runYtPlaylistDownloadAction(action, entries, inLibrary, origin),
     ),
   };
@@ -445,6 +476,7 @@ export function YtSongList({
   /** Repeat the existing online page read after a failure. */
   onRetry?: () => void;
 }) {
+  const { language, strings } = useLocalisation();
   const scrollable = useListScrollable();
   const bottomInset = useChromeInset();
   const settled = useScreenSettled();
@@ -498,11 +530,15 @@ export function YtSongList({
   const loading = load.status === "loading";
   // More of a playlist's pages on their way.
   const reading = load.status === "loaded" && load.rest === "reading";
-  const restLine = load.status === "loaded" ? ytPlaylistRestLine(load.rest) : null;
+  const restLine = load.status === "loaded" ? ytPlaylistRestLine(load.rest, language) : null;
   const furniture =
     page === null
       ? null
-      : [page.kind, songCount(songs.length), totalMinutes(songs)]
+      : [
+          kindLine(page.kind, strings),
+          songCount(songs.length, strings),
+          totalMinutes(songs, strings),
+        ]
           .filter((part) => part !== null)
           .join(" · ");
 
@@ -522,14 +558,16 @@ export function YtSongList({
         <>
           <EmptyState
             icon={load.reason === "offline" ? IconWifiOff : IconCloudOff}
-            title={load.reason === "offline" ? "You're offline" : "No answer online"}
+            title={load.reason === "offline" ? strings.library.offline : strings.library.noAnswer}
             message={
               load.reason === "offline"
-                ? "These songs need the network."
-                : "The songs couldn't be loaded. Try again."
+                ? strings.library.songsNeedNetwork
+                : strings.library.songsCouldntLoad
             }
           />
-          {onRetry !== undefined && <TextButton label="Try Again" onPress={onRetry} />}
+          {onRetry !== undefined && (
+            <TextButton label={strings.library.tryAgain} onPress={onRetry} />
+          )}
         </>
       )}
     </>

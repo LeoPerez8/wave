@@ -40,6 +40,7 @@ import { appRuntime } from "./runtime";
 import { libraryQuery, useLibraryQuery, type LibraryQuery } from "./sharedQueries";
 import { SongSortButton } from "./SongSortButton";
 import { ListIntroLayout, songCount } from "./TrackList";
+import { useLocalisation } from "@/localisation/localisation";
 import { useSpineEntries } from "./useSpine";
 
 /**
@@ -145,6 +146,7 @@ export function GenreSongList({
   opening: GenreOpening | undefined;
   sort: LibrarySongSort;
 }) {
+  const { strings } = useLocalisation();
   useRenderCount("GenreSongList");
   const scrollable = useListScrollable();
   const list = useRef<LegendListRef>(null);
@@ -307,7 +309,7 @@ export function GenreSongList({
         }}
         ListHeaderComponent={
           <ListIntroLayout
-            line={songCount(opening?.genre.trackCount ?? genre.trackCount)}
+            line={songCount(opening?.genre.trackCount ?? genre.trackCount, strings)}
             onPlay={() => play(undefined)}
             onShuffle={() => play(undefined, { shuffle: true })}
             sortControl={<SongSortButton kind="genre" />}

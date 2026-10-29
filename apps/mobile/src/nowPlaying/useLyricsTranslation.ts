@@ -1,4 +1,5 @@
-import { lyricsTranslationLanguageName, lyricsTranslationTarget, type Lyrics } from "@wave/core";
+import { useLocalisation } from "@/localisation/localisation";
+import { appLyricsTranslationTarget, lyricsTranslationLanguageName, type Lyrics } from "@wave/core";
 import { Storage } from "expo-sqlite/kv-store";
 import { useEffect, useMemo, useState } from "react";
 
@@ -32,24 +33,13 @@ const phoneService: TranslationService = {
   },
 };
 
-/** The phone's language, as Google Translate names it (Core's `lyricsTranslationTarget`). */
-const phoneLanguage = (): string => {
-  let locale = "";
-  try {
-    locale = Intl.DateTimeFormat().resolvedOptions().locale;
-  } catch {
-    // An engine without Intl: English.
-  }
-  return lyricsTranslationTarget(locale);
-};
-
 /** What shows under the lyrics while translation is on. */
 export type TranslationShown =
   /** Asking Google: a skeleton line under each line with words. */
   | { readonly kind: "loading" }
   /** One translation per lyric line, in order; null where none shows. */
   | { readonly kind: "translated"; readonly lines: readonly (string | null)[] }
-  /** The lyrics are already in the phone's language, named in English. */
+  /** The lyrics are already in the app's language, named in that language. */
   | { readonly kind: "sameLanguage"; readonly language: string }
   /** Offline, or Google failed: a quiet line and Try Again. */
   | { readonly kind: "failed" };
@@ -70,7 +60,7 @@ const linesOf = (lyrics: Lyrics | null): readonly string[] | null => {
 };
 
 /**
- * The translation of [song]'s [lyrics] into the phone's language while [on]
+ * The translation of [song]'s [lyrics] into the app's language while [on]
  * (docs/spec.md, "Lyrics translation"), and Try Again. Null while off, for a
  * song without lyrics, or lyrics without a word; nothing is read or sent then.
  * [song] names the song for its saved translation (`lyricsTranslationKey`).
@@ -80,15 +70,16 @@ export const useLyricsTranslation = (
   lyrics: Lyrics | null,
   on: boolean,
 ): { readonly shown: TranslationShown | null; readonly retry: () => void } => {
+  const { language, strings } = useLocalisation();
   const lines = useMemo(() => linesOf(lyrics), [lyrics]);
   const [attempt, setAttempt] = useState(0);
   // What's being translated, as text: lyrics read again unchanged don't ask again.
   const ask = useMemo(
     () =>
       on && song !== null && lines !== null
-        ? JSON.stringify({ song, lines, target: phoneLanguage() })
+        ? JSON.stringify({ song, lines, target: appLyricsTranslationTarget(language) })
         : null,
-    [on, song, lines],
+    [on, song, lines, language],
   );
   // The answer for one ask and attempt; another ask shows the skeleton until its own answer.
   const [answer, setAnswer] = useState<{
@@ -113,7 +104,7 @@ export const useLyricsTranslation = (
             : translation.kind === "sameLanguage"
               ? {
                   kind: "sameLanguage",
-                  language: lyricsTranslationLanguageName(translation.language),
+                  language: lyricsTranslationLanguageName(translation.language, strings),
                 }
               : { kind: "translated", lines: translation.lines };
       setAnswer({ ask, attempt, shown });
@@ -121,7 +112,7 @@ export const useLyricsTranslation = (
     return () => {
       current = false;
     };
-  }, [ask, attempt]);
+  }, [ask, attempt, strings]);
 
   const retry = useMemo(() => () => setAttempt((at) => at + 1), []);
   if (ask === null) return { shown: null, retry };

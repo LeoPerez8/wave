@@ -1,4 +1,5 @@
 import { sortSteps } from "./buildSteps.ts";
+import { en, type Catalogue } from "./catalogueEn.ts";
 /**
  * Pulling a mixes carousel sideways for new mixes (docs/spec.md, "Artist
  * mixes", "Genre mixes"): a refresh rebuilds the pulled section at once, and
@@ -178,10 +179,10 @@ export const mixPullCanStart = (scrollX: number): boolean => {
 
 /**
  * The toast for a refresh whose YouTube Music searches wait for the search
- * allowance, [waitMs] more at most (`searchRoomAt`).
+ * allowance, [waitMs] more at most (`searchRoomAt`), in [catalogue]'s language.
  */
-export const mixRefreshWaitNotice = (waitMs: number): string =>
-  `Search limit reached · new mixes in about ${Math.max(1, Math.ceil(waitMs / 60_000))} min`;
+export const mixRefreshWaitNotice = (waitMs: number, catalogue: Catalogue = en): string =>
+  catalogue.discover.searchLimit(Math.max(1, Math.ceil(waitMs / 60_000)));
 
 /** Source-order partition and stable shown-time ordering on bounded CPU steps. */
 export function* freshFirstSteps<T>(

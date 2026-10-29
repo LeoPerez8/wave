@@ -1,3 +1,4 @@
+import { currentLocalisation, useLocalisation } from "@/localisation/localisation";
 import { IconMinus, IconPlus, IconZzz } from "@tabler/icons-react-native";
 import {
   CUSTOM_SLEEP_MINUTES,
@@ -69,6 +70,7 @@ const useRemaining = (timer: SleepTimer): number | null => {
 
 /** The time left beside the glyph, in teal. */
 function ButtonLabel({ timer }: { timer: SleepTimer }) {
+  const { strings } = useLocalisation();
   useRenderCount("SleepTimerLabel");
   const remaining = useRemaining(timer);
   return (
@@ -77,16 +79,19 @@ function ButtonLabel({ timer }: { timer: SleepTimer }) {
       className="font-sans text-footnote text-accent"
       style={{ fontVariant: ["tabular-nums"] }}
     >
-      {timer.type === "endOfTrack" ? "End of track" : formatSleepRemaining(remaining ?? 0)}
+      {timer.type === "endOfTrack"
+        ? strings.playbackText.endOfTrack2
+        : formatSleepRemaining(remaining ?? 0)}
     </Text>
   );
 }
 
 /** What the running timer will do, and when. */
 function Status({ timer }: { timer: SleepTimer }) {
+  const { strings } = useLocalisation();
   const remaining = useRemaining(timer);
   if (timer.type === "endOfTrack") return <EndOfTrackStatus />;
-  const text = `Pauses in ${formatSleepRemaining(remaining ?? 0)}`;
+  const text = strings.playbackText.pausesInValue(formatSleepRemaining(remaining ?? 0));
   return (
     <Text
       className="font-sans text-subheadline text-foreground"
@@ -99,6 +104,12 @@ function Status({ timer }: { timer: SleepTimer }) {
 
 /** Keep the menu's track countdown on the UI thread too; the button still says End of track. */
 function EndOfTrackStatus() {
+  const { strings } = useLocalisation();
+  const endLabel = strings.playbackText.pausesWhenThisTrackEnds;
+  // The worklet can't call the catalogue's function: it fills the time in around a marker.
+  const [beforeTime = "", afterTime = ""] = strings.playbackText
+    .pausesWhenThisTrackEndsInValue("\u0000")
+    .split("\u0000");
   const status = useDerivedValue(() => {
     const remaining = sleepTimerRemaining(
       { type: "endOfTrack" },
@@ -108,9 +119,7 @@ function EndOfTrackStatus() {
         durationMs: playhead.durationMs.get(),
       },
     );
-    return remaining === null
-      ? "Pauses when this track ends"
-      : `Pauses when this track ends, in ${formatSleepRemaining(remaining)}`;
+    return remaining === null ? endLabel : beforeTime + formatSleepRemaining(remaining) + afterTime;
   });
   const animatedProps = useAnimatedProps(() => {
     const text = status.get();
@@ -127,8 +136,8 @@ function EndOfTrackStatus() {
   );
   const initial =
     remaining === null
-      ? "Pauses when this track ends"
-      : `Pauses when this track ends, in ${formatSleepRemaining(remaining)}`;
+      ? endLabel
+      : strings.playbackText.pausesWhenThisTrackEndsInValue(formatSleepRemaining(remaining));
   return (
     <View>
       <Text
@@ -162,6 +171,7 @@ function EndOfTrackStatus() {
  * long-press menu.
  */
 function SleepTimerMenu({ close }: { close: () => void }) {
+  const { strings } = useLocalisation();
   const timer = useSleepTimer();
   const [custom, setCustom] = useState(false);
   const [minutes, setMinutes] = useState<number>(CUSTOM_SLEEP_MINUTES.initial);
@@ -179,21 +189,23 @@ function SleepTimerMenu({ close }: { close: () => void }) {
 
   const entries: readonly { label: string; onPress: () => void }[] = [
     ...SLEEP_TIMER_PRESETS.map((preset) => ({
-      label: `${preset} Minutes`,
+      label: strings.playbackText.valueMinutes(preset),
       onPress: () => pick({ type: "minutes", minutes: preset }),
     })),
-    { label: "Custom…", onPress: () => setCustom(true) },
-    { label: "End of Track", onPress: () => pick({ type: "endOfTrack" }) },
-    ...(timer === null ? [] : [{ label: "Turn Off Timer", onPress: turnOff }]),
+    { label: strings.playbackText.custom, onPress: () => setCustom(true) },
+    { label: strings.playbackText.endOfTrack, onPress: () => pick({ type: "endOfTrack" }) },
+    ...(timer === null ? [] : [{ label: strings.playbackText.turnOffTimer, onPress: turnOff }]),
   ];
 
   return (
     <>
       <View style={{ paddingBottom: CELL * 2, gap: CELL / 2 }}>
-        <CatalogLine tone={timer === null ? "secondary" : "accent"}>Sleep timer</CatalogLine>
+        <CatalogLine tone={timer === null ? "secondary" : "accent"}>
+          {strings.playbackText.sleepTimer2}
+        </CatalogLine>
         {timer === null ? (
           <Text className="font-sans text-subheadline text-secondary">
-            Pause playback after a while, or when this track ends.
+            {strings.playbackText.pausePlaybackAfterAWhileOrWhenThisTrackEnds}
           </Text>
         ) : (
           <Status key={timer.type === "deadline" ? timer.endsAt : timer.type} timer={timer} />
@@ -203,11 +215,13 @@ function SleepTimerMenu({ close }: { close: () => void }) {
       {custom ? (
         <>
           <View style={{ paddingVertical: CELL }}>
-            <Text className="font-sans text-title3 font-normal text-foreground">Pause After</Text>
+            <Text className="font-sans text-title3 font-normal text-foreground">
+              {strings.playbackText.pauseAfter}
+            </Text>
             <View className="flex-row items-center justify-center" style={{ minHeight: grid.row }}>
               <IconButton
                 icon={IconMinus}
-                label="Shorter"
+                label={strings.playbackText.shorter}
                 disabled={minutes <= CUSTOM_SLEEP_MINUTES.min}
                 onPress={() => setMinutes((current) => stepSleepMinutes(current, -1))}
               />
@@ -217,11 +231,11 @@ function SleepTimerMenu({ close }: { close: () => void }) {
                 numberOfLines={1}
                 style={{ minWidth: CELL * 12, fontVariant: ["tabular-nums"] }}
               >
-                {formatSleepMinutes(minutes)}
+                {formatSleepMinutes(minutes, strings)}
               </Text>
               <IconButton
                 icon={IconPlus}
-                label="Longer"
+                label={strings.playbackText.longer}
                 disabled={minutes >= CUSTOM_SLEEP_MINUTES.max}
                 onPress={() => setMinutes((current) => stepSleepMinutes(current, 1))}
               />
@@ -229,8 +243,11 @@ function SleepTimerMenu({ close }: { close: () => void }) {
           </View>
           <Hairline />
           <View className="flex-row items-center justify-between">
-            <TextButton label="Back" onPress={() => setCustom(false)} />
-            <TextButton label="Start Timer" onPress={() => pick({ type: "minutes", minutes })} />
+            <TextButton label={strings.playbackText.back} onPress={() => setCustom(false)} />
+            <TextButton
+              label={strings.playbackText.startTimer}
+              onPress={() => pick({ type: "minutes", minutes })}
+            />
           </View>
         </>
       ) : (
@@ -252,7 +269,7 @@ function SleepTimerMenu({ close }: { close: () => void }) {
 /** Opens the timer menu over everything, Now Playing included, next to its button. */
 const openSleepTimer = (): void => {
   openOverlay({
-    label: "Sleep timer",
+    label: currentLocalisation().strings.playbackText.sleepTimer2,
     anchor: pressedRect(),
     render: (close) => <SleepTimerMenu close={close} />,
   });
@@ -263,15 +280,21 @@ const openSleepTimer = (): void => {
  * with the time left beside it) that opens the timer menu.
  */
 export function SleepTimerButton({ change }: { change?: SlotChange | undefined }) {
+  const { strings } = useLocalisation();
   const timer = useSleepTimer();
   const [accent, secondary] = useThemeColor(["accent", "secondary"]);
   return (
     <Press
       {...change}
       accessibilityRole="button"
-      accessibilityLabel="Sleep timer"
+      accessibilityLabel={strings.playbackText.sleepTimer2}
       accessibilityValue={{
-        text: timer === null ? "Off" : timer.type === "endOfTrack" ? "End of track" : "On",
+        text:
+          timer === null
+            ? strings.playbackText.off
+            : timer.type === "endOfTrack"
+              ? strings.playbackText.endOfTrack2
+              : strings.playbackText.on,
       }}
       onPress={openSleepTimer}
       opensMenu

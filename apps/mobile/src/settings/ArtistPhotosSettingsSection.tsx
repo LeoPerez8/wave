@@ -1,3 +1,5 @@
+import { useLocalisation } from "@/localisation/localisation";
+import { currentLocalisation } from "@/localisation/localisation";
 import { Text, View } from "react-native";
 
 import { CatalogLine } from "@/catalog/CatalogLine";
@@ -22,35 +24,38 @@ const setDownloads = (on: boolean): void => {
 
 const confirmClear = async (count: number): Promise<void> => {
   const clear = await confirmAction({
-    title: "Clear artist photos?",
-    message: `The ${count === 1 ? "photo" : `${count.toLocaleString("en")} photos`} Wave downloaded will be deleted. Artists show their album artwork until photos are downloaded again.`,
-    action: { label: "Clear", destructive: true },
+    title: currentLocalisation().strings.settings.clearArtistPhotos,
+    message: currentLocalisation().strings.settings.clearPhotos(count),
+    action: { label: currentLocalisation().strings.settings.clear, destructive: true },
   });
   if (clear)
     await clearArtistPhotoCache().catch((error) =>
-      showError("Couldn't clear artist photos", error),
+      showError(currentLocalisation().strings.settings.couldntClearArtistPhotos, error),
     );
 };
 
 /** Settings › Lyrics and tags › Artist photos: downloading artist photos online, and clearing them. */
 export function ArtistPhotosSettingsSection() {
+  const { strings } = useLocalisation();
   const enabled = useArtistPhotosEnabled();
   const count = useArtistPhotoCount();
 
   return (
     <View>
-      <CatalogLine className="mb-2">Artist photos</CatalogLine>
+      <CatalogLine className="mb-2">{strings.settings.artistPhotos}</CatalogLine>
       <Hairline />
-      <SettingsSwitch label="Download artist photos" value={enabled} onValueChange={setDownloads} />
+      <SettingsSwitch
+        label={strings.settings.downloadArtistPhotos}
+        value={enabled}
+        onValueChange={setDownloads}
+      />
       <Hairline />
       <Text className="mt-2 font-sans text-footnote text-secondary">
-        Wave looks up a photo of each artist on Deezer, which means sending artist names to it, and
-        keeps the photos on your phone. Off, artists show their album artwork and Wave makes no
-        requests.
+        {strings.settings.waveLooksUpAPhotoOfEach}
       </Text>
       <View className="mt-4 items-start">
         <TextButton
-          label="Clear artist photos"
+          label={strings.settings.clearArtistPhotosText}
           tone="destructive"
           disabled={count === 0}
           onPress={() => void confirmClear(count)}

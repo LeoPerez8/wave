@@ -9,6 +9,7 @@ import { useThemeColor } from "@/theme/useThemeColor";
 import { OnlineToggle, OnlineToggleFaces } from "@/ytmusic/OnlineToggle";
 
 import { CELL, widthOf } from "./grid";
+import { useLocalisation } from "@/localisation/localisation";
 
 type IconProps = { size?: number; color?: string; strokeWidth?: number };
 
@@ -114,12 +115,13 @@ export interface LineToggle {
  * `listActionsForms`).
  */
 export function PlayShuffle({ onPlay, onShuffle, last, menu, toggle }: Props) {
+  const { strings } = useLocalisation();
   const shuffle = useShuffleControl();
   return (
     <View className="flex-row items-center" style={{ flexGrow: 1, flexShrink: 1 }}>
       {last == null && toggle == null ? (
         <View className="flex-1 flex-row items-center" style={{ columnGap: GAP }}>
-          <ListAction icon={IconPlayerPlay} label="Play" onPress={onPlay} />
+          <ListAction icon={IconPlayerPlay} label={strings.library.play} onPress={onPlay} />
           <ListAction {...shuffle} onPress={onShuffle} />
         </View>
       ) : (
@@ -166,6 +168,7 @@ function LineWithLast({
   /** Nothing after it on the line: its icon alone sits on the right margin. */
   endsLine: boolean;
 }) {
+  const { strings } = useLocalisation();
   const [measured, setMeasured] = useState<Measured>(NOTHING_MEASURED);
   // Each width is kept only when it changed, so layout settles.
   const update = (change: (current: Measured) => Measured | null) =>
@@ -214,7 +217,7 @@ function LineWithLast({
       style={{ columnGap: GAP }}
       onLayout={measureLine}
     >
-      <ListAction icon={IconPlayerPlay} label="Play" onPress={onPlay} />
+      <ListAction icon={IconPlayerPlay} label={strings.library.play} onPress={onPlay} />
       <ListAction {...shuffle} onPress={onShuffle} />
       {last !== null && form === "labelled" && (
         <ListAction
@@ -255,7 +258,7 @@ function LineWithLast({
         importantForAccessibility="no-hide-descendants"
         className="absolute top-0 left-0 items-start opacity-0"
       >
-        <Face icon={IconPlayerPlay} label="Play" onLayout={measureBefore(0)} />
+        <Face icon={IconPlayerPlay} label={strings.library.play} onLayout={measureBefore(0)} />
         <Face icon={shuffle.icon} label={shuffle.label} onLayout={measureBefore(1)} />
         {last !== null &&
           labels.map((label) => (

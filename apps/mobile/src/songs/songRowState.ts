@@ -1,6 +1,7 @@
 import {
   missingSongJobId,
   songRowTrackId,
+  type AppLanguage,
   type SongRowState,
   type YtDownloadStatus,
 } from "@wave/core";
@@ -19,6 +20,8 @@ export interface SongListSnapshot {
   readonly ytMusic: boolean;
   /** Videos that refused to play this session. */
   readonly unplayable: ReadonlySet<string>;
+  /** The language rows read in; English unless given. */
+  readonly language?: AppLanguage;
 }
 
 const downloadJob = (entry: SongListEntry, trackId: string): string | null => {
@@ -61,6 +64,7 @@ export const songRowState = (
       download: job === null ? null : list.download(job),
       remoteArtwork: list.ytMusic,
       selection,
+      language: list.language,
       ...(blocked ? { unavailable: true } : {}),
       ...entry.state,
     },

@@ -6,6 +6,7 @@ import {
 } from "@wave/core";
 import * as Effect from "effect/Effect";
 
+import { currentLocalisation } from "@/localisation/localisation";
 import { WaveAccount } from "@/native/waveAccount";
 import { confirmAction, showMessage } from "@/overlay/alert";
 import { Queue } from "@/playback/Queue";
@@ -90,13 +91,14 @@ export const confirmRemoveSongs = async (
   { onConfirm }: { readonly onConfirm?: (() => void) | undefined } = {},
 ): Promise<void> => {
   if (songs.length === 0) return;
-  if (!(await confirmAction(confirmSongRemoval(songs)))) return;
+  const { strings } = currentLocalisation();
+  if (!(await confirmAction(confirmSongRemoval(songs, strings)))) return;
   onConfirm?.();
   try {
     await appRuntime.runPromise(leaveLibrary(songs.map((song) => song.id)));
   } catch (cause) {
     await showMessage(
-      "Couldn't remove the songs",
+      strings.songDeletion.couldntRemoveSongs,
       cause instanceof Error ? cause.message : String(cause),
     );
   }
@@ -115,20 +117,23 @@ export const confirmDeleteSongs = async <S extends DeletableSong>(
 ): Promise<readonly S[]> => {
   if (songs.length === 0) return [];
   const signedInNow = await signedIn();
-  if (!(await confirmAction(confirmSongDeletion(songs, { signedIn: signedInNow })))) return [];
+  const { strings } = currentLocalisation();
+  if (!(await confirmAction(confirmSongDeletion(songs, { signedIn: signedInNow }, strings))))
+    return [];
   onConfirm?.();
   try {
     const { deleted, failed } = await deleteSongs(songs);
     const error = songDeletionFailure(
       failed.map(({ song, reason }) => ({ title: song.title, reason })),
       songs.length,
+      strings,
     );
     if (error !== null) await showMessage(error.title, error.message);
     return deleted;
   } catch (cause) {
     // The files went, but the library or the queue couldn't catch up; a rescan will.
     await showMessage(
-      "Couldn't update the library",
+      strings.songDeletion.couldntUpdateLibrary,
       cause instanceof Error ? cause.message : String(cause),
     );
     return [];

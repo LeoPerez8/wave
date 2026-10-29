@@ -1,4 +1,5 @@
 import { useScreenContent } from "@/lib/screenTiming";
+import { useLocalisation } from "@/localisation/localisation";
 import { createDeveloperTitleTaps, visibleSettingsPages, type SettingsPage } from "@wave/core";
 import { useFocusEffect } from "expo-router";
 import { useCallback, useState } from "react";
@@ -26,7 +27,8 @@ function SettingsPageRows({
   summaries: Record<SettingsPage, string | null>;
   developerVisible: boolean;
 }) {
-  return visibleSettingsPages(developerVisible).map(({ page, title, route, icon }) => (
+  const { strings } = useLocalisation();
+  return visibleSettingsPages(developerVisible, strings).map(({ page, title, route, icon }) => (
     <SettingsPageRow
       key={page}
       title={title}
@@ -39,6 +41,7 @@ function SettingsPageRows({
 
 /** Settings: a row for each of its pages (Core's `SETTINGS_PAGES`), with a line on some. */
 export default function SettingsScreen() {
+  const { strings } = useLocalisation();
   useScreenContent(true);
   useRenderCount("SettingsScreen");
   const summaries = useSettingsSummaries();
@@ -50,12 +53,12 @@ export default function SettingsScreen() {
     const visible = titleTaps.tap(developerSettingsVisible(), performance.now());
     if (visible === null) return;
     setDeveloperSettingsVisible(visible);
-    void showToast(visible ? "Developer is on" : "Developer hidden");
+    void showToast(visible ? strings.settings.developerIsOn : strings.settings.developerHidden);
   };
 
   return (
     <View className="flex-1 bg-background">
-      <ScreenHeader title="Settings" onTitlePress={onTitlePress} />
+      <ScreenHeader title={strings.settings.settings} onTitlePress={onTitlePress} />
       <ScrollView contentContainerStyle={{ paddingHorizontal: grid.margin, paddingBottom: 48 }}>
         <Hairline />
         <SettingsPageRows summaries={summaries} developerVisible={developerVisible} />

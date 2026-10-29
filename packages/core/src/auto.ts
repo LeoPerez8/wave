@@ -1,3 +1,4 @@
+import { en, type Catalogue } from "./catalogueEn.ts";
 /**
  * Wave's browse tree in Android Auto: which nodes exist, how their media IDs
  * read, what each node's children are (page by page) and what playing a node
@@ -5,7 +6,7 @@
  * the queue engine, so the car and the phone share one set of playback rules.
  *
  * Extending the tree:
- * - a tab: add it to `AUTO_TABS` and `TAB_TITLES`, and describe its children in
+ * - a tab: add it to `AUTO_TABS` and the Auto catalogue, and describe its children in
  *   `tabChildren` (fixed items and/or an `AutoSource`);
  * - a track list (something with a Shuffle item and tracks that play it as
  *   their context): add its kind to `AutoTrackListKind` and `TRACK_LISTS`
@@ -29,13 +30,6 @@ import type { YtSong } from "./ytMusic.ts";
 export type AutoTab = "home" | "playlists" | "albums" | "artists";
 
 export const AUTO_TABS: readonly AutoTab[] = ["home", "playlists", "albums", "artists"];
-
-const TAB_TITLES: Record<AutoTab, string> = {
-  home: "Home",
-  playlists: "Playlists",
-  albums: "Albums",
-  artists: "Artists",
-};
 
 /**
  * A track as a track list needs it: shown in Auto and played. A list's tracks
@@ -81,7 +75,6 @@ interface TrackListKind {
   /** The only ids the kind has, when it has a fixed set (Home's sections). */
   readonly ids?: readonly string[];
   /** The title of its Shuffle item, when not "Shuffle". */
-  readonly shuffleTitle?: string;
 }
 
 /** One entry per track list kind; the media ID segment is the kind itself. */
@@ -91,7 +84,7 @@ const TRACK_LISTS: Record<AutoTrackListKind, TrackListKind> = {
   // Home's song sections.
   home: { context: (id) => ({ kind: "home", id }), ids: AUTO_HOME_LISTS },
   // Not `artist`: that segment names the browsable artist.
-  artistSongs: { context: (id) => ({ kind: "artist", id }), shuffleTitle: "Shuffle all" },
+  artistSongs: { context: (id) => ({ kind: "artist", id }) },
 };
 
 const isTrackListKind = (kind: string): kind is AutoTrackListKind =>
@@ -303,24 +296,21 @@ interface Listing {
   readonly source: AutoSource | null;
 }
 
-const RECENTLY_PLAYED_ITEM = folder({ type: "recentlyPlayed" }, "Recently Played");
-
-const HOME_LIST_TITLES: Record<AutoHomeList, string> = {
-  "most-played": "Most Played",
-  favorites: "Favorites",
-};
-
+const recentlyPlayedItem = (c: Catalogue) =>
+  folder({ type: "recentlyPlayed" }, c.auto.recentlyPlayed);
 /** The Home song section `list` is, or undefined for any other list. */
 const homeList = (list: AutoTrackList): AutoHomeList | undefined =>
   list.kind === "home" ? AUTO_HOME_LISTS.find((known) => known === list.id) : undefined;
 
 /** The folder of one of Home's song sections, or null for any other list. */
-const homeListItem = (list: AutoTrackList): AutoItem | null => {
+const homeListItem = (list: AutoTrackList, c: Catalogue): AutoItem | null => {
   const id = homeList(list);
-  return id === undefined ? null : folder({ type: "list", list }, HOME_LIST_TITLES[id]);
+  return id === undefined
+    ? null
+    : folder({ type: "list", list }, id === "most-played" ? c.auto.mostPlayed : c.auto.favorites);
 };
 
-const tabChildren = (tab: AutoTab): Listing => {
+const tabChildren = (tab: AutoTab, c: Catalogue): Listing => {
   switch (tab) {
     case "albums":
       return { items: [], source: { type: "albums" } };
@@ -329,8 +319,8 @@ const tabChildren = (tab: AutoTab): Listing => {
     case "home":
       return {
         items: [
-          RECENTLY_PLAYED_ITEM,
-          ...AUTO_HOME_LISTS.flatMap((id) => homeListItem({ kind: "home", id }) ?? []),
+          recentlyPlayedItem(c),
+          ...AUTO_HOME_LISTS.flatMap((id) => homeListItem({ kind: "home", id }, c) ?? []),
         ],
         source: null,
       };
@@ -339,47 +329,53 @@ const tabChildren = (tab: AutoTab): Listing => {
   }
 };
 
-const tabItem = (tab: AutoTab): AutoItem => folder({ type: "tab", tab }, TAB_TITLES[tab]);
+const tabItem = (tab: AutoTab, c: Catalogue): AutoItem => folder({ type: "tab", tab }, c.auto[tab]);
 
-const shuffleItem = (list: AutoTrackList): AutoItem =>
-  playable({ type: "shuffle", list }, TRACK_LISTS[list.kind].shuffleTitle ?? "Shuffle");
+const shuffleItem = (list: AutoTrackList, c: Catalogue): AutoItem =>
+  playable(
+    { type: "shuffle", list },
+    list.kind === "artistSongs" ? c.auto.shuffleAll : c.auto.shuffle,
+  );
 
-const listing = (node: AutoNode): Listing | null => {
+const listing = (node: AutoNode, c: Catalogue = en): Listing | null => {
   switch (node.type) {
     case "root":
-      return { items: AUTO_TABS.map(tabItem), source: null };
+      return { items: AUTO_TABS.map((tab) => tabItem(tab, c)), source: null };
     case "tab":
-      return tabChildren(node.tab);
+      return tabChildren(node.tab, c);
     case "recentlyPlayed":
       return { items: [], source: { type: "recentlyPlayed" } };
     case "list":
-      return { items: [shuffleItem(node.list)], source: { type: "tracks", list: node.list } };
+      return { items: [shuffleItem(node.list, c)], source: { type: "tracks", list: node.list } };
     case "shuffle":
     case "track":
     case "empty":
       return null;
     case "artist":
       return {
-        items: [shuffleItem({ kind: "artistSongs", id: node.id })],
+        items: [shuffleItem({ kind: "artistSongs", id: node.id }, c)],
         source: { type: "artistAlbums", id: node.id },
       };
   }
 };
 
 /** What a node shows when it lists nothing (title, subtitle), or null: nothing at all. */
-const emptyTitles = (node: AutoNode): readonly [string, string | null] | null => {
+const emptyTitles = (
+  node: AutoNode,
+  c: Catalogue = en,
+): readonly [string, string | null] | null => {
   if (node.type === "tab" && node.tab === "playlists") {
-    return ["No playlists yet", "Create one in Wave on your phone"];
+    return [c.auto.noPlaylists, c.auto.createPlaylist];
   }
   if (node.type === "recentlyPlayed") {
-    return ["Nothing played yet", "Albums you play show up here"];
+    return [c.auto.nothingPlayed, c.auto.albumsPlayed];
   }
   if (node.type === "list") {
     switch (homeList(node.list)) {
       case "most-played":
-        return ["No plays yet", "Songs you play most show up here"];
+        return [c.auto.noPlays, c.auto.songsPlayed];
       case "favorites":
-        return ["No favorites yet", "Songs you star show up here"];
+        return [c.auto.noFavorites, c.auto.songsStarred];
       case undefined:
         return null;
     }
@@ -387,8 +383,8 @@ const emptyTitles = (node: AutoNode): readonly [string, string | null] | null =>
   return null;
 };
 
-const emptyItem = (parent: AutoNode): AutoItem | null => {
-  const titles = emptyTitles(parent);
+const emptyItem = (parent: AutoNode, c: Catalogue): AutoItem | null => {
+  const titles = emptyTitles(parent, c);
   if (titles === null) return null;
   return {
     mediaId: encodeAutoMediaId({ type: "empty", parent }),
@@ -408,9 +404,10 @@ export const autoPageItems = (
   node: AutoNode,
   page: number,
   items: readonly AutoItem[],
+  c: Catalogue = en,
 ): readonly AutoItem[] => {
-  const fixed = listing(node)?.items.length ?? 0;
-  const empty = page === 0 && items.length <= fixed ? emptyItem(node) : null;
+  const fixed = listing(node, c)?.items.length ?? 0;
+  const empty = page === 0 && items.length <= fixed ? emptyItem(node, c) : null;
   return empty === null ? items : [empty];
 };
 
@@ -419,20 +416,20 @@ export const autoPageItems = (
  * the library (Home's sections among them); null for nodes the app builds
  * from a row (`autoAlbumItem`, `autoTrackItems`).
  */
-export const autoItem = (node: AutoNode): AutoItem | null => {
+export const autoItem = (node: AutoNode, c: Catalogue = en): AutoItem | null => {
   switch (node.type) {
     case "root":
       return AUTO_ROOT;
     case "tab":
-      return tabItem(node.tab);
+      return tabItem(node.tab, c);
     case "shuffle":
-      return shuffleItem(node.list);
+      return shuffleItem(node.list, c);
     case "empty":
-      return emptyItem(node.parent);
+      return emptyItem(node.parent, c);
     case "recentlyPlayed":
-      return RECENTLY_PLAYED_ITEM;
+      return recentlyPlayedItem(c);
     case "list":
-      return homeListItem(node.list);
+      return homeListItem(node.list, c);
     case "track":
     case "artist":
       return null;
@@ -466,14 +463,12 @@ export interface AutoPlaylist {
   readonly thumbPaths?: readonly string[];
 }
 
-const songCount = (count: number): string => `${count} ${count === 1 ? "song" : "songs"}`;
-
 /** A playlist in a list (the Playlists tab): opens its tracks. */
-export const autoPlaylistItem = (playlist: AutoPlaylist): AutoItem =>
+export const autoPlaylistItem = (playlist: AutoPlaylist, c: Catalogue = en): AutoItem =>
   folder(
     { type: "list", list: { kind: "playlist", id: String(playlist.id) } },
     playlist.name,
-    songCount(playlist.trackCount),
+    c.auto.songs(playlist.trackCount),
     playlist.thumbPaths ?? [],
   );
 
@@ -615,8 +610,9 @@ export const autoChildren = (
   node: AutoNode,
   page: number,
   pageSize: number,
+  c: Catalogue = en,
 ): AutoChildren | null => {
-  const children = listing(node);
+  const children = listing(node, c);
   if (children === null) return null;
   const size = Math.max(0, pageSize);
   const start = Math.max(0, page) * size;

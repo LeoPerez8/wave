@@ -1,3 +1,4 @@
+import { en, type Catalogue } from "./catalogueEn.ts";
 /**
  * Recaps: a Wrapped-style look back at one calendar period of listening, in
  * the phone's local time, from counted plays (see `isCountedPlay`). This
@@ -100,24 +101,9 @@ export const recapWindow = (period: RecapPeriod): StatsWindow => ({
   to: periodEnd(period) - 1,
 });
 
-const MONTHS = [
-  "January",
-  "February",
-  "March",
-  "April",
-  "May",
-  "June",
-  "July",
-  "August",
-  "September",
-  "October",
-  "November",
-  "December",
-];
-
-/** `period` as a Recap's title: "September 2026", or "2026" for the year. */
-export const recapTitle = (period: RecapPeriod): string =>
-  period.kind === "month" ? `${MONTHS[period.month - 1]} ${period.year}` : String(period.year);
+/** `period` as a Recap's title in [strings]' language: "September 2026", or "2026" for the year. */
+export const recapTitle = (period: RecapPeriod, strings: Catalogue = en): string =>
+  strings.recap.title(period);
 
 /**
  * A shared slide's PNG's file name, the Recap [title]'s (`recapTitle`):
@@ -502,14 +488,11 @@ export const recapSlides = (shown: Recap): RecapSlide[] => {
   return slides;
 };
 
-/** A habit's peak hour (0 to 23) on a 12-hour clock: "10 PM". */
-export const recapHourLabel = (hour: number): string =>
-  `${hour % 12 === 0 ? 12 : hour % 12} ${hour < 12 ? "AM" : "PM"}`;
+/** A habit's peak hour (0 to 23) on a 12-hour clock: "10 PM" (the catalogue's `recap.hour`). */
+export const recapHourLabel = (hour: number): string => en.recap.hour(hour);
 
-const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-
-/** A habit's peak weekday (0 Sunday to 6 Saturday), as a habit says it: "Fridays". */
-export const recapWeekdayLabel = (weekday: number): string => `${WEEKDAYS[weekday]}s`;
+/** A habit's peak weekday (0 Sunday to 6 Saturday), as a habit says it: "Fridays" (`recap.weekdays`). */
+export const recapWeekdayLabel = (weekday: number): string => en.recap.weekdays[weekday]!;
 
 /** How long a slide shows before the stories move on by themselves. */
 export const RECAP_SLIDE_MS = 6000;

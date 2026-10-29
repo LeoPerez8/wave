@@ -1,3 +1,4 @@
+import { currentLocalisation, useLocalisation } from "@/localisation/localisation";
 import { LegendList, type LegendListRef } from "@legendapp/list/react-native";
 import {
   downloadListRows,
@@ -65,8 +66,10 @@ type Handle = Grip | "drawn" | "room";
 
 /** Screen readers' Move up / Move down, for a row that has a place above or below it. */
 const moveActions = (index: number, count: number) => [
-  ...(index > 0 ? [{ name: "moveUp", label: "Move up" }] : []),
-  ...(index < count - 1 ? [{ name: "moveDown", label: "Move down" }] : []),
+  ...(index > 0 ? [{ name: "moveUp", label: currentLocalisation().strings.settings.moveUp }] : []),
+  ...(index < count - 1
+    ? [{ name: "moveDown", label: currentLocalisation().strings.settings.moveDown }]
+    : []),
 ];
 
 /**
@@ -131,6 +134,7 @@ const QueuedDownloadRow = memo(
     count?: number;
     onAccessibilityAction?: (event: AccessibilityActionEvent) => void;
   }) {
+    const { strings } = useLocalisation();
     const { song, line, cancel } = queued;
     return (
       <DownloadSongRow
@@ -141,7 +145,11 @@ const QueuedDownloadRow = memo(
         onAccessibilityAction={onAccessibilityAction}
       >
         {cancel !== null && (
-          <TextButton variant="plain" label="Cancel" onPress={() => cancelQueuedDownload(queued)} />
+          <TextButton
+            variant="plain"
+            label={strings.settings.cancel}
+            onPress={() => cancelQueuedDownload(queued)}
+          />
         )}
         <HandleSlot handle={handle} />
       </DownloadSongRow>
@@ -178,7 +186,8 @@ function DownloadGroupHeader({
   count?: number;
   onAccessibilityAction?: (event: AccessibilityActionEvent) => void;
 }) {
-  const line = progress === undefined ? group.line : downloadRunGroupLine(progress);
+  const { language } = useLocalisation();
+  const line = progress === undefined ? group.line : downloadRunGroupLine(progress, language);
   return (
     <View>
       <View className="flex-row items-center" style={{ gap: CELL * 1.5, paddingTop: CELL }}>
@@ -432,6 +441,7 @@ const typeOf = (row: PageRow) => row.kind;
  * `moveDownloadGroup` / `moveDownloadInGroup`, which the journal then runs; `downloadsDrag.ts`).
  */
 export function DownloadsList({ header }: { header: ReactElement }) {
+  const { strings } = useLocalisation();
   const list = useDownloadingList();
   const run = useDownloadRun();
   const groupProgress = run.progress.groups;
@@ -442,14 +452,14 @@ export function DownloadsList({ header }: { header: ReactElement }) {
   const covers = useYtMusicEnabled();
   const rows = useMemo(() => downloadListRows(list), [list]);
   const failedRows = useMemo(
-    () => failedDownloadRows(failed, { expanded: failedShown }),
-    [failed, failedShown],
+    () => failedDownloadRows(failed, { expanded: failedShown }, strings),
+    [failed, failedShown, strings],
   );
   const pageRows = useMemo<readonly PageRow[]>(
     () => (failedRows.length === 0 ? rows : [...rows, ...failedRows]),
     [rows, failedRows],
   );
-  const summary = useMemo(() => queuedDownloadsSummary(list.counts), [list]);
+  const summary = useMemo(() => queuedDownloadsSummary(list.counts, strings), [list, strings]);
   const pauseNotice = useYoutubePauseNotice();
   const listRef = useRef<LegendListRef>(null);
   const { drag, rowDrag, moveSong, moveGroup, liftedStyle, scrollRef, container, onLayout } =
@@ -516,7 +526,7 @@ export function DownloadsList({ header }: { header: ReactElement }) {
       {header}
       {summary !== null && (
         <View>
-          <CatalogLine className="mb-1">Downloading</CatalogLine>
+          <CatalogLine className="mb-1">{strings.settings.downloading}</CatalogLine>
           <DownloadRunPanel run={run} summary={summary} pauseNotice={pauseNotice} />
           <Hairline />
         </View>

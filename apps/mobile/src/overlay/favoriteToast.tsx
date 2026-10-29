@@ -1,6 +1,7 @@
 import { IconStarFilled } from "@tabler/icons-react-native";
 import { favoriteToast, type FavoriteSource } from "@wave/core";
 
+import { currentLocalisation } from "@/localisation/localisation";
 import { useThemeColor } from "@/theme/useThemeColor";
 
 import { showToast } from "./toast";
@@ -12,6 +13,6 @@ function FavoriteIcon() {
 
 /** Confirms a favorite where the song's star doesn't already show the change. */
 export const showFavoriteToast = (source: FavoriteSource, on: boolean, count: number): void => {
-  const text = favoriteToast(source, on, count);
+  const text = favoriteToast(source, on, count, currentLocalisation().language);
   if (text !== null) void showToast(text, null, <FavoriteIcon />);
 };

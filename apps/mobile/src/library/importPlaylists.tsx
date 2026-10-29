@@ -15,6 +15,7 @@ import { ScrollView, Text, View } from "react-native";
 
 import { CELL } from "@/catalog/grid";
 import { TextButton } from "@/components/TextButton";
+import { currentLocalisation, useLocalisation } from "@/localisation/localisation";
 import { WaveNative, type PickedPlaylistFile } from "@/native/waveNative";
 import { confirmAction, showError } from "@/overlay/alert";
 import { presentOverlay } from "@/overlay/overlay";
@@ -69,7 +70,10 @@ export const saveImportedPlaylist = async (
 ): Promise<ImportedPlaylist> => {
   const playlists = await currentPlaylists();
   const clash = importNameClash(name, playlists);
-  if (clash !== undefined && (await confirmAction(confirmImportReplace(clash.name)))) {
+  if (
+    clash !== undefined &&
+    (await confirmAction(confirmImportReplace(clash.name, currentLocalisation().language)))
+  ) {
     // A link import still filling it would add its songs to the new ones.
     cancelPlaylistImport(clash.id);
     await replacePlaylistSongs(clash.id, songs);
@@ -103,9 +107,9 @@ export const importPlaylists = async (): Promise<void> => {
     const outcomes: M3uImportOutcome[] = [];
     // One at a time: each may ask about a name clash, and sees the playlists made before it.
     for (const file of files) outcomes.push(await importFile(file, library));
-    await showImportSummary(summarizeM3uImport(outcomes));
+    await showImportSummary(summarizeM3uImport(outcomes, currentLocalisation().language));
   } catch (error) {
-    await showError("Couldn't import the playlists", error);
+    await showError(currentLocalisation().strings.imports.couldntImportPlaylists, error);
   }
 };
 
@@ -121,6 +125,7 @@ export const showImportSummary = (summary: M3uImportSummary): Promise<void> =>
   });
 
 function ImportSummaryCard({ summary, finish }: { summary: M3uImportSummary; finish: () => void }) {
+  const { strings } = useLocalisation();
   return (
     <>
       <Text
@@ -149,7 +154,7 @@ function ImportSummaryCard({ summary, finish }: { summary: M3uImportSummary; fin
         </ScrollView>
       </View>
       <View className="flex-row items-center justify-end">
-        <TextButton label="OK" onPress={finish} />
+        <TextButton label={strings.imports.ok} onPress={finish} />
       </View>
     </>
   );

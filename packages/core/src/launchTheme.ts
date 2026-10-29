@@ -56,6 +56,7 @@ const catalogId = (catalog: readonly { readonly id: string }[], name: string): s
   ).toString(36);
 
 /** Base-36 catalog positions keep the 20,735 style names short and unique. */
+// not UI text: an Android style name
 const splashThemeName = (choice: ThemeChoice): string =>
   `Wl.${catalogId(THEME_SWATCHES.light, choice.light)}.${catalogId(THEME_SWATCHES.dark, choice.dark)}.${catalogId(INK_PALETTE, choice.primary)}.${catalogId(INK_PALETTE, choice.secondary)}`;
 

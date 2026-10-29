@@ -2,6 +2,7 @@ import { ytThrottleNotice, ytThrottleRead, ytThrottleRestored, type YtThrottle }
 import { useEffect, useSyncExternalStore } from "react";
 
 import { makeExternalStore } from "@/lib/externalStore";
+import { currentLocalisation, subscribeLocalisation } from "@/localisation/localisation";
 import { appLog } from "@/log/appLog";
 import { WaveSoulseek, type NativeDownloadJob } from "@/native/waveSoulseek";
 
@@ -73,16 +74,19 @@ export const useYoutubePauseNotice = (): string | null => {
 };
 
 /** The line now: the same string between ticks, so a render reads a stable value. */
-const notice = (): string | null => ytThrottleNotice(pausedUntil.get(), Date.now());
+const notice = (): string | null =>
+  ytThrottleNotice(pausedUntil.get(), Date.now(), currentLocalisation().language);
 
 /** Follows the pause, and ticks while one is on so the minutes count down. */
 const subscribeNotice = (changed: () => void): (() => void) => {
   const unsubscribe = pausedUntil.subscribe(changed);
+  const unsubscribeLanguage = subscribeLocalisation(changed);
   const tick = setInterval(() => {
     if (pausedUntil.get() !== null) changed();
   }, TICK_MS);
   return () => {
     unsubscribe();
+    unsubscribeLanguage();
     clearInterval(tick);
   };
 };

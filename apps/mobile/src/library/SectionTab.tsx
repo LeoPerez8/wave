@@ -5,6 +5,7 @@ import { View } from "react-native";
 
 import { findSection } from "@/catalog/sections";
 import { LargeTitle, useLargeTitleTop } from "@/components/LargeTitleScreen";
+import { useLocalisation } from "@/localisation/localisation";
 import { useThemeColor } from "@/theme/useThemeColor";
 
 import { SectionList } from "./SectionList";
@@ -32,10 +33,11 @@ export function SectionTabStack() {
  */
 export function SectionTabScreen({ slug }: { slug: LibrarySectionSlug }) {
   const top = useLargeTitleTop();
+  const { strings } = useLocalisation();
   const section = findSection(slug);
   return (
     <View className="flex-1 bg-background" style={{ paddingTop: top }}>
-      <LargeTitle title={section?.label ?? slug} titleLongPress={sectionTitleLongPress(section)} />
+      <LargeTitle title={strings.tabs[slug]} titleLongPress={sectionTitleLongPress(section)} />
       <SectionList section={section} />
     </View>
   );

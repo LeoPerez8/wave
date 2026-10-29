@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { View } from "react-native";
 
 import { CELL, grid } from "./grid";
+import { useLocalisation } from "@/localisation/localisation";
 import { SkeletonLine as Line } from "./SkeletonLine";
 
 /*
@@ -146,7 +147,7 @@ export const SKELETON_ROWS = 3;
 
 /** [count] track row skeletons, heard as one busy group ("Loading songs"). */
 export function TrackSkeletons({
-  label = "Loading songs",
+  label,
   count = SKELETON_ROWS,
   leading,
   trailing,
@@ -156,8 +157,9 @@ export function TrackSkeletons({
   leading?: TrackLeading;
   trailing?: SkeletonTrailing;
 }) {
+  const { strings } = useLocalisation();
   return (
-    <SkeletonGroup label={label}>
+    <SkeletonGroup label={label ?? strings.library.loadingSongs}>
       {Array.from({ length: count }, (_, index) => (
         <TrackRowSkeleton key={index} leading={leading} trailing={trailing} />
       ))}

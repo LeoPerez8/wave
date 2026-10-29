@@ -1,3 +1,4 @@
+import { useLocalisation } from "@/localisation/localisation";
 import { activeTiming, beginTiming, timingSurfaceCommitted } from "@/lib/timing";
 import { IconChevronDown, IconListNumbers, IconShare3 } from "@tabler/icons-react-native";
 import { isUnsearchedTrackId, nowPlayingSlotShow, type NowPlayingSlotSong } from "@wave/core";
@@ -163,6 +164,7 @@ export function UnderNowPlaying({ children }: { children: ReactNode }) {
  * spring and its first frame is already right.
  */
 export function NowPlayingSheet() {
+  const { strings } = useLocalisation();
   useRenderCount("NowPlayingSheet");
   usePlayheadSource();
   const insets = useSafeAreaInsets();
@@ -235,8 +237,8 @@ export function NowPlayingSheet() {
     if (item === null) return;
     shareNowPlaying(
       {
-        title: item.title ?? "Unknown title",
-        artist: item.artist ?? "Unknown Artist",
+        title: item.title ?? strings.playbackText.unknownTitle,
+        artist: item.artist ?? strings.playbackText.unknownArtist,
         artworkUri: item.artworkUri ?? undefined,
         palette,
       },
@@ -247,7 +249,7 @@ export function NowPlayingSheet() {
   const slotContext: SlotContext = {
     trackId,
     ytSong,
-    title: item?.title ?? "Unknown title",
+    title: item?.title ?? strings.playbackText.unknownTitle,
     lyricsShown: view === "lyrics",
     toggleLyrics,
     share,
@@ -294,21 +296,36 @@ export function NowPlayingSheet() {
           style={{ marginHorizontal: -grid.margin, paddingHorizontal: grid.margin - 12 }}
         >
           <View className="flex-row items-center justify-between" style={{ height: CELL * 7 }}>
-            <IconButton icon={IconChevronDown} label="Close Now Playing" onPress={close} />
-            {item !== null && <IconButton icon={IconShare3} label="Share Song" onPress={share} />}
+            <IconButton
+              icon={IconChevronDown}
+              label={strings.playbackText.closeNowPlaying}
+              onPress={close}
+            />
+            {item !== null && (
+              <IconButton
+                icon={IconShare3}
+                label={strings.playbackText.shareSong}
+                onPress={share}
+              />
+            )}
           </View>
         </DismissArea>
 
         {item === null ? (
           <DismissArea style={{ flex: 1 }}>
             <View className="flex-1 items-center justify-center">
-              <Text className="font-sans text-subheadline text-secondary">Nothing is playing.</Text>
+              <Text className="font-sans text-subheadline text-secondary">
+                {strings.playbackText.nothingIsPlaying}
+              </Text>
             </View>
           </DismissArea>
         ) : (
           <>
             {queueWarm && (
-              <Activity mode={view === "queue" ? "visible" : "hidden"} name="Queue">
+              <Activity
+                mode={view === "queue" ? "visible" : "hidden"}
+                name={strings.playbackText.queue}
+              >
                 <QueuePane item={item} ground={ground} onShowPlayer={showPlayer} />
               </Activity>
             )}
@@ -342,7 +359,7 @@ export function NowPlayingSheet() {
             ))}
             <ViewToggle
               icon={IconListNumbers}
-              label="Queue"
+              label={strings.playbackText.queue}
               on={view === "queue"}
               onPress={toggleQueue}
             />

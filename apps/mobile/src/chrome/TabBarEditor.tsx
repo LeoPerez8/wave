@@ -10,14 +10,12 @@ import {
 import { useCallback, useState } from "react";
 
 import { ArrangementEditor, FixedRow } from "@/components/ArrangementEditor";
+import { currentLocalisation, useLocalisation } from "@/localisation/localisation";
 import { pressedRect } from "@/motion/pressedRect";
 import { openOverlay } from "@/overlay/overlay";
 import { getTabBar, setTabBar } from "@/settings/tabBar";
 
 import { tabLook } from "./tabs";
-
-const PLACE = "the tab bar";
-const title = (tab: TabBarTab): string => tabLook(tab).label;
 
 /**
  * The tab bar's editor: Home first (it can't move or go), the tabs after it
@@ -35,31 +33,34 @@ export function TabBarEditor({
   edit: (change: TabBarEdit) => void;
   onDone?: (() => void) | undefined;
 }) {
+  const { strings } = useLocalisation();
+  const title = (tab: TabBarTab): string => tabLook(tab, strings).label;
   const search = bar.includes("search");
   const middle = movableTabs(bar);
+  const place = strings.arrangement.tabBar;
   return (
     <ArrangementEditor
       shown={middle}
       hidden={tabsOffBar(bar)}
       title={title}
-      place={PLACE}
-      hiddenHeading="Not in the tab bar"
+      place={place}
+      hiddenHeading={strings.arrangement.notInTabBar}
       edit={edit}
       canAdd={!tabBarFull(bar)}
       first={
-        <FixedRow title={title("index")} place={PLACE} divider={middle.length > 0 || search} />
+        <FixedRow title={title("index")} place={place} divider={middle.length > 0 || search} />
       }
       last={
         search ? (
           <FixedRow
             title={title("search")}
-            place={PLACE}
+            place={place}
             divider={false}
             onRemove={() => edit({ remove: "search" })}
           />
         ) : undefined
       }
-      note="Home stays first, and Search keeps its own pill at the end. Up to five tabs fit."
+      note={strings.arrangement.tabBarNote}
       onDone={onDone}
     />
   );
@@ -86,7 +87,7 @@ function TabBarEditorCard({ initial, done }: { initial: TabBar; done: (bar: TabB
  */
 export const openTabBarEditor = (): void => {
   openOverlay({
-    label: "Edit tab bar",
+    label: currentLocalisation().strings.arrangement.editTabBar,
     anchor: pressedRect(),
     render: (close) => (
       <TabBarEditorCard

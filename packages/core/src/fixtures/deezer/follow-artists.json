@@ -1,0 +1,21 @@
+{
+  "data": [
+    {
+      "id": 27,
+      "name": "Daft Punk",
+      "nb_fan": 5900000,
+      "picture_medium": "https://cdn-images.dzcdn.net/images/artist/daft/250x250.jpg"
+    },
+    {
+      "id": 954,
+      "name": "Daft Punk Tribute",
+      "nb_fan": 42,
+      "picture_medium": "https://cdn-images.dzcdn.net/images/artist//250x250.jpg"
+    },
+    { "id": 123, "name": "No Picture" },
+    { "name": "No ID" },
+    { "id": 42 },
+    null
+  ],
+  "total": 3
+}

@@ -6,29 +6,33 @@
  */
 
 import type { AlertSpec } from "./alert.ts";
+import { en, type Catalogue } from "./catalogueEn.ts";
 
 /**
  * The card before the first sign-in on a phone: what goes up to Wave's
  * server and what never does (story 80). Continue opens Google's picker;
  * Cancel changes nothing.
  */
-export const WAVE_ACCOUNT_CARD = {
-  title: "What goes up to Wave",
-  message:
-    "Signed in, your song list, playlists, favorites, play history and preferences go up to " +
-    "Wave's server, and so does the Soulseek account Download in best quality made. Audio, " +
-    "file paths and your YouTube sign-in never do.",
-  action: { label: "Continue" },
-} as const satisfies AlertSpec;
+export const waveAccountCard = ({ settings: { waveAccountCard: text } }: Catalogue = en) =>
+  ({
+    title: text.title,
+    message: text.message,
+    action: { label: text.action },
+  }) satisfies AlertSpec;
+
+export const WAVE_ACCOUNT_CARD = waveAccountCard();
 
 /** Delete Account asks first: the server's copy goes, the phone's stays. */
-export const CONFIRM_WAVE_ACCOUNT_DELETION = {
-  title: "Delete your Wave account?",
-  message:
-    "Wave's server deletes everything it has of the account, and this phone signs out. " +
-    "Nothing on this phone is deleted.",
-  action: { label: "Delete Account", destructive: true },
-} as const satisfies AlertSpec;
+export const confirmWaveAccountDeletion = ({
+  settings: { deleteWaveAccount: text },
+}: Catalogue = en) =>
+  ({
+    title: text.title,
+    message: text.message,
+    action: { label: text.action, destructive: true },
+  }) satisfies AlertSpec;
+
+export const CONFIRM_WAVE_ACCOUNT_DELETION = confirmWaveAccountDeletion();
 
 /** Where this build's sync service is and the Google client its ID tokens are for. */
 export interface WaveAccountConfig {

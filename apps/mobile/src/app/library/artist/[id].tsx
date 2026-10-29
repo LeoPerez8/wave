@@ -1,3 +1,5 @@
+import { ArtistShows } from "@/library/ArtistShows";
+import { useFollowAction } from "@/library/FollowButton";
 import { useScreenContent } from "@/lib/screenTiming";
 
 import {
@@ -5,6 +7,7 @@ import {
   artistSongOrder,
   ytTrackId,
   type ArtistPageItem,
+  type Catalogue,
   type RankedArtistSong,
   type YtArtistAlbum,
 } from "@wave/core";
@@ -46,6 +49,7 @@ import { openAlbum, parseId, useKnownRow, useOpenedIntegrated } from "@/library/
 import { SongSortButton } from "@/library/SongSortButton";
 import { useSortedSongs } from "@/library/songSort";
 import { ListIntro, songCount } from "@/library/TrackList";
+import { useLocalisation } from "@/localisation/localisation";
 import { SongList } from "@/songs/SongList";
 import type { SongListEntry } from "@/songs/songListSources";
 import { mixedSongEntry, mixedPageSongHandlers, songSelection } from "@/songs/mixedSongs";
@@ -56,7 +60,7 @@ import { ArtistStatsBlock } from "@/stats/ArtistStatsBlock";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 import { useArtistSongsFinder, useYtArtistSection } from "@/ytmusic/artistSection";
 import { useHeldSongs, useSongsInPlace } from "@/ytmusic/songsInPlace";
-import { YT_ARTIST_NOTE, YtReleaseCard } from "@/ytmusic/YtArtistSection";
+import { ytArtistNote, YtReleaseCard } from "@/ytmusic/YtArtistSection";
 import { YtLookupFooter } from "@/ytmusic/YtLookupFooter";
 
 /** A cover on one of the page's album shelves: a Library album, or a release only YouTube Music has. */
@@ -119,12 +123,13 @@ const artistItems = (
   yt: YtAdditions,
   loading: boolean,
   songsLabel: string,
+  { library }: Catalogue,
 ): Item[] =>
   artistPageItems(
     [
       // YouTube Music's releases the Library lacks follow the Library's own, on one shelf.
       {
-        label: "Albums",
+        label: library.albums,
         covers: [
           ...detail.albums.map(libraryCell),
           ...yt.albums.map((album): AlbumCell => ({ kind: "yt", album })),
@@ -132,10 +137,10 @@ const artistItems = (
         ],
       },
       {
-        label: "Singles & EPs",
+        label: library.singlesAndEps,
         covers: yt.singles.map((album): AlbumCell => ({ kind: "yt", album })),
       },
-      { label: "Appears on", covers: detail.appearsOn.map(libraryCell) },
+      { label: library.appearsOn, covers: detail.appearsOn.map(libraryCell) },
     ],
     songs,
     songsLabel,
@@ -189,6 +194,7 @@ function AlbumShelfRow({
   integrated: boolean;
   height: number;
 }) {
+  const { strings } = useLocalisation();
   return (
     <View style={{ height }}>
       <CoverRow>
@@ -223,7 +229,7 @@ function AlbumShelfRow({
               );
             case "skeleton":
               return (
-                <SkeletonGroup key={cellKey(cell)} label="Loading albums">
+                <SkeletonGroup key={cellKey(cell)} label={strings.library.loadingAlbums}>
                   <View className="flex-row" style={{ gap: grid.gutter }}>
                     {Array.from({ length: SKELETON_TILES }, (_, index) => (
                       <AlbumCardSkeleton key={index} size={COVER_ROW_TILE} />
@@ -258,8 +264,6 @@ function ArtistHead({ artist }: { artist: ArtistRow }) {
   );
 }
 
-const albumsLine = (count: number): string => `${count} ${count === 1 ? "album" : "albums"}`;
-
 /** What the screen shows: the artist, and their page once it is read. */
 interface Shown {
   readonly artist: ArtistRow;
@@ -283,6 +287,7 @@ const selectedSong = (item: Item): MixedItem | null =>
       : ytTrackItem(item.song.song);
 
 function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegrated: boolean }) {
+  const { strings } = useLocalisation();
   const loaded = shown.detail !== undefined;
   const detail = useMemo(() => shown.detail ?? unread(shown.artist), [shown.detail, shown.artist]);
   const scrollable = useListScrollable();
@@ -350,8 +355,16 @@ function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegr
   // While YouTube Music is asked, skeletons stand where its releases and songs will go.
   const ytLoading = ytView?.note === "loading";
   const items = useMemo(
-    () => artistItems(detail, pageSongs, additions, ytLoading, byPopularity ? "Popular" : "Songs"),
-    [detail, pageSongs, additions, ytLoading, byPopularity],
+    () =>
+      artistItems(
+        detail,
+        pageSongs,
+        additions,
+        ytLoading,
+        byPopularity ? strings.library.popular : strings.library.songs,
+        strings,
+      ),
+    [detail, pageSongs, additions, ytLoading, byPopularity, strings],
   );
   // Albums and songs select together; the bar acts on them in page order.
   const selectable = useMemo(
@@ -408,7 +421,10 @@ function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegr
     songs: loaded ? songs.length : detail.artist.trackCount,
   };
   const counts = loaded ? yt.counts(local) : local;
-  const line = [counts.albums > 0 ? albumsLine(counts.albums) : null, songCount(counts.songs)]
+  const line = [
+    counts.albums > 0 ? strings.library.albumCount(counts.albums) : null,
+    songCount(counts.songs, strings),
+  ]
     .filter((part) => part !== null)
     .join(" · ");
 
@@ -433,7 +449,8 @@ function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegr
       ListHeaderComponent={
         <>
           <ArtistHead artist={detail.artist} />
-          <ListIntro
+          <FollowArtistIntro
+            artist={detail.artist}
             line={line}
             songs={loaded ? songs : undefined}
             mixed={loaded ? pageSongs : undefined}
@@ -441,6 +458,7 @@ function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegr
             sortControl={<SongSortButton kind="artist" />}
             toggle={loaded ? yt.toggle : null}
           />
+          <ArtistShows name={detail.artist.name} />
           {loaded && <ArtistStatsBlock artistId={detail.artist.id} songs={detail.songs} />}
         </>
       }
@@ -448,7 +466,7 @@ function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegr
         ytView === null ? null : ytView.note === "loading" ? (
           <TrackSkeletons leading="card" />
         ) : (
-          <YtLookupFooter note={ytView.note === null ? null : YT_ARTIST_NOTE[ytView.note]} />
+          <YtLookupFooter note={ytView.note === null ? null : ytArtistNote(ytView.note, strings)} />
         )
       }
     />
@@ -487,4 +505,12 @@ export default function ArtistScreen() {
       {(artist) => <ArtistContent shown={artist} openedIntegrated={openedIntegrated} />}
     </DetailFrame>
   );
+}
+
+function FollowArtistIntro({
+  artist,
+  ...props
+}: React.ComponentProps<typeof ListIntro> & { artist: ArtistRow }) {
+  const last = useFollowAction(artist);
+  return <ListIntro {...props} last={last} />;
 }

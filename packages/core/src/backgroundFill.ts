@@ -204,6 +204,7 @@ export const fillAnswered = (
 const clock = (ms: number): string => new Date(ms).toISOString().slice(11, 19);
 
 /** The app log's line for [pause]: how long, why, and when the fill goes on. */
+// not UI text: the app log's line
 export const fillPauseLine = (pause: FillPause): string =>
   `The background fill pauses for ${logDuration(pause.until - pause.at)}: YouTube Music refused ${pause.refused.toLocaleString("en")} different searches in a row; it goes on at ${clock(pause.until)} UTC`;
 

@@ -1,3 +1,5 @@
+import { followUp as followMenuUp } from "@/overlay/overlay";
+import { openFollowActions } from "./FollowButton";
 import {
   activeTiming,
   continueTiming,
@@ -5,12 +7,7 @@ import {
   timingSurfaceCommitted,
   timingLinkNavigated,
 } from "@/lib/timing";
-import {
-  counted,
-  type ArtistLink,
-  type StreamedArtistLink,
-  type StreamedArtistTarget,
-} from "@wave/core";
+import { type ArtistLink, type StreamedArtistLink, type StreamedArtistTarget } from "@wave/core";
 import * as Effect from "effect/Effect";
 import { Fragment, useLayoutEffect } from "react";
 import { View } from "react-native";
@@ -21,6 +18,7 @@ import { CELL } from "@/catalog/grid";
 import { Hairline } from "@/catalog/Hairline";
 import { NameRow } from "@/catalog/NameRow";
 import { failNowPlayingLink, revealNowPlayingLink } from "@/nowPlaying/sheet";
+import { currentLocalisation, useLocalisation } from "@/localisation/localisation";
 import { showError } from "@/overlay/alert";
 import { CardEntries } from "@/overlay/CardEntries";
 import { followUp, openOverlay } from "@/overlay/overlay";
@@ -75,7 +73,7 @@ const libraryChoice = (
 ): ArtistChoice => ({
   key: `library-${artist.id}`,
   name: artist.name,
-  detail: counted(artist.trackCount, "song"),
+  detail: currentLocalisation().strings.library.songCount(artist.trackCount),
   image: artist,
   open,
 });
@@ -106,7 +104,8 @@ export const followStreamedArtistLink = (link: StreamedArtistLink<ArtistRow>): v
   const deliver = (resolved: StreamedArtistLink<ArtistRow> | undefined) => {
     if (resolved === undefined) {
       failNowPlayingLink(timingId);
-      showError("Couldn't open the artist", "YouTube Music is turned off.");
+      const { library } = currentLocalisation().strings;
+      showError(library.couldntOpenArtist, library.ytMusicTurnedOff);
       return;
     }
     if (resolved?.kind === "open") openStreamedArtist(resolved.target);
@@ -119,7 +118,7 @@ export const followStreamedArtistLink = (link: StreamedArtistLink<ArtistRow>): v
   void followStreamedArtistTap(link, { resolve: resolveStreamedArtistTap, deliver }).catch(
     (error: unknown) => {
       failNowPlayingLink(timingId);
-      showError("Couldn't open the artist", error);
+      showError(currentLocalisation().strings.library.couldntOpenArtist, error);
     },
   );
 };
@@ -137,7 +136,7 @@ const artistRows = (ids: readonly number[]): Promise<readonly ArtistRow[]> =>
 
 const openChoiceCard = (choices: readonly ArtistChoice[], timingId?: number): void => {
   openOverlay({
-    label: "Go to Artist",
+    label: currentLocalisation().strings.library.goToArtist,
     render: (close) => <ArtistChoiceCard choices={choices} close={close} />,
   });
   timingLinkNavigated(timingId);
@@ -164,7 +163,7 @@ const openArtistChoice = (artistIds: readonly number[], timingId?: number): void
       },
       (error: unknown) => {
         failNowPlayingLink(timingId);
-        showError("Couldn't read the artists", error);
+        showError(currentLocalisation().strings.library.couldntReadArtists, error);
       },
     ),
   );
@@ -186,10 +185,11 @@ function ArtistChoiceCard({
     const active = activeTiming();
     if (active?.kind === "choiceCard") timingSurfaceCommitted(active.id);
   }, []);
+  const { strings } = useLocalisation();
   return (
     <>
       <View style={{ paddingBottom: CELL * 2 }}>
-        <CatalogLine>Go to Artist</CatalogLine>
+        <CatalogLine>{strings.library.goToArtist}</CatalogLine>
       </View>
       {/* Each artist follows a divider, so none trails the last. */}
       <CardEntries>
@@ -197,6 +197,10 @@ function ArtistChoiceCard({
           <Fragment key={choice.key}>
             <Hairline />
             <NameRow
+              onLongPress={() => {
+                close();
+                void followMenuUp(async () => openFollowActions({ name: choice.name }));
+              }}
               name={choice.name}
               detail={choice.detail}
               artist={choice.image}

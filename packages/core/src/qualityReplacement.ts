@@ -10,6 +10,8 @@
 import type { DownloadOrigin } from "./downloadGroups.ts";
 import type { DownloadSource } from "./downloadSource.ts";
 import { advisoryTag, type ExplicitFlag } from "./explicit.ts";
+import { formatNumber } from "./formatting.ts";
+import { catalogueOf, type AppLanguage } from "./localisation.ts";
 import { UNKNOWN_ALBUM } from "./library.ts";
 import { parseLyrics, type LyricsSources } from "./lyrics.ts";
 import { spotifySearchQuery, spotifyYtMatch } from "./spotifyImport.ts";
@@ -105,13 +107,14 @@ const sizeOf = (file: QualityFile): number =>
   file.sizeBytes > 0 ? file.sizeBytes : bytesAt(file.bitrateKbps ?? 0, file.durationMs);
 
 /**
- * A size as the offer says it: whole MB under a GB, else GB with one decimal
- * ("900 MB", "1.2 GB"); never under 1 MB.
+ * A size as the offer says it in [language]: whole MB under a GB, else GB
+ * with one decimal ("900 MB", "1.2 GB", "1,2 GB"); never under 1 MB.
  */
-export const formatStorageSize = (bytes: number): string => {
+export const formatStorageSize = (bytes: number, language: AppLanguage = "en"): string => {
+  const { megabytes, gigabytes } = catalogueOf(language).downloads;
   const mb = Math.max(1, Math.round(bytes / 1e6));
-  if (mb < 1000) return `${mb.toLocaleString("en")} MB`;
-  return `${(bytes / 1e9).toFixed(1).replace(/\.0$/, "")} GB`;
+  if (mb < 1000) return megabytes(formatNumber(language, mb));
+  return gigabytes(formatNumber(language, Number((bytes / 1e9).toFixed(1))));
 };
 
 /** The card a replacement run is offered with, and the Settings row that offers it again. */
@@ -136,9 +139,6 @@ export interface QualityOffer {
   readonly summary: string;
 }
 
-const songs = (count: number): string =>
-  `${count.toLocaleString("en")} ${count === 1 ? "song" : "songs"}`;
-
 /** From this much to download, a run is large: on mobile data the card says so. */
 const MOBILE_DATA_NOTE_FROM_BYTES = 100e6;
 
@@ -146,20 +146,25 @@ const MOBILE_DATA_NOTE_FROM_BYTES = 100e6;
  * What the card adds on mobile data ([onMobileData]) for a large run: what it
  * downloads, and that the phone isn't on Wi-Fi. Null otherwise.
  */
-const mobileDataNote = (downloadBytes: number, onMobileData: boolean): string | null =>
+const mobileDataNote = (
+  downloadBytes: number,
+  onMobileData: boolean,
+  language: AppLanguage,
+): string | null =>
   onMobileData && downloadBytes >= MOBILE_DATA_NOTE_FROM_BYTES
-    ? `It downloads about ${formatStorageSize(downloadBytes)}, and the phone isn't on Wi-Fi.`
+    ? catalogueOf(language).downloads.quality.mobileData(formatStorageSize(downloadBytes, language))
     : null;
 
 /**
  * Turning best quality on: the offer to replace [files] (`qualityUpgradeSongs`)
  * with MP3 320 copies, its estimate the difference to 320 kbps over their
  * lengths. On mobile data ([onMobileData]) the card says what a large run
- * downloads. Null when no song qualifies.
+ * downloads. Null when no song qualifies. Its text is in [language].
  */
 export const qualityUpgradeOffer = (
   files: readonly QualityFile[],
   { onMobileData }: { readonly onMobileData: boolean },
+  language: AppLanguage = "en",
 ): QualityOffer | null => {
   if (files.length === 0) return null;
   let downloadBytes = 0;
@@ -169,20 +174,21 @@ export const qualityUpgradeOffer = (
     downloadBytes += best;
     bytes += Math.max(0, best - sizeOf(file));
   }
-  const estimate = `About +${formatStorageSize(bytes)}`;
-  const note = mobileDataNote(downloadBytes, onMobileData);
+  const text = catalogueOf(language).downloads.quality;
+  const estimate = text.upgradeEstimate(formatStorageSize(bytes, language));
+  const note = mobileDataNote(downloadBytes, onMobileData, language);
   return {
     direction: "upgrade",
     trackIds: files.map((file) => file.id),
     bytes,
     downloadBytes,
     alert: {
-      title: `Replace ${songs(files.length)} with best quality?`,
+      title: text.upgradeTitle(files.length),
       message: note === null ? estimate : `${estimate}. ${note}`,
-      action: { label: "Replace" },
-      dismissLabel: "Not now",
+      action: { label: text.replace },
+      dismissLabel: text.notNow,
     },
-    row: `Replace ${songs(files.length)} with best quality`,
+    row: text.upgradeRow(files.length),
     summary: estimate,
   };
 };
@@ -198,11 +204,12 @@ const YOUTUBE_KBPS = 128;
  * owner's YouTube downloads get ([youTubeKbps], `youTubeCopyKbps`), its
  * estimate what that saves over their lengths. On mobile data
  * ([onMobileData]) the card says what a large run downloads. Null when
- * nothing would be saved.
+ * nothing would be saved. Its text is in [language].
  */
 export const qualityDowngradeOffer = (
   files: readonly QualityFile[],
   { onMobileData, youTubeKbps }: { readonly onMobileData: boolean; readonly youTubeKbps: number },
+  language: AppLanguage = "en",
 ): QualityOffer | null => {
   let downloadBytes = 0;
   let bytes = 0;
@@ -212,24 +219,23 @@ export const qualityDowngradeOffer = (
     bytes += Math.max(0, sizeOf(file) - copy);
   }
   if (bytes <= 0) return null;
-  const size = formatStorageSize(bytes);
-  const copies = `YouTube Music's copies are AAC at ${
-    youTubeKbps >= YOUTUBE_PREMIUM_KBPS ? "" : "about "
-  }${youTubeKbps} kbps.`;
-  const note = mobileDataNote(downloadBytes, onMobileData);
+  const text = catalogueOf(language).downloads.quality;
+  const size = formatStorageSize(bytes, language);
+  const copies = text.copies(youTubeKbps, youTubeKbps >= YOUTUBE_PREMIUM_KBPS);
+  const note = mobileDataNote(downloadBytes, onMobileData, language);
   return {
     direction: "downgrade",
     trackIds: files.map((file) => file.id),
     bytes,
     downloadBytes,
     alert: {
-      title: `Free about ${size} by replacing ${songs(files.length)} with YouTube Music copies?`,
+      title: text.downgradeTitle(size, files.length),
       message: note === null ? copies : `${copies} ${note}`,
-      action: { label: "Replace" },
-      dismissLabel: "Not now",
+      action: { label: text.replace },
+      dismissLabel: text.notNow,
     },
-    row: `Free up space: replace ${songs(files.length)}`,
-    summary: `Frees about ${size}`,
+    row: text.downgradeRow(files.length),
+    summary: text.downgradeEstimate(size),
   };
 };
 
@@ -334,7 +340,8 @@ export const qualityDirection = (on: boolean): QualityDirection => (on ? "upgrad
 /**
  * Where replacement runs wait in Settings › Downloads (`downloadingList`):
  * "Quality upgrade" and "Free up space", reorderable and cancellable like
- * any other group.
+ * any other group. The list names them in the app's language; the name kept
+ * on the job is English.
  */
 export const QUALITY_ORIGINS: { readonly [D in QualityDirection]: DownloadOrigin } = {
   upgrade: { kind: "quality", id: "upgrade", name: "Quality upgrade" },

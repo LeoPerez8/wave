@@ -11,8 +11,8 @@ import {
   readUnsearchedTrackId,
   type UnsearchedSong,
 } from "./playlistEntries.ts";
+import { en, type Catalogue } from "./catalogueEn.ts";
 import { explicitSkipNotice } from "./explicitPlayback.ts";
-import { counted } from "./listening.ts";
 import type { QueueList } from "./playerSync.ts";
 import {
   reduceQueue,
@@ -151,12 +151,10 @@ export type PlayingAnswerStep =
   | { readonly kind: "stay"; readonly notice: string }
   | { readonly kind: "stop"; readonly notice: string };
 
-const SKIPPED_BECAUSE: Readonly<Record<SearchFailure | "notFound", string>> = {
-  notFound: "not found online",
-  failed: "no answer online",
-  offline: "you're offline",
-  disabled: "YT Music is off",
-};
+/** Why a song was skipped, in [catalogue]'s words, keyed as the search ended. */
+const skippedBecause = (
+  catalogue: Catalogue,
+): Readonly<Record<SearchFailure | "notFound", string>> => catalogue.playbackText.skipReasons;
 
 const STAY_CODES: Readonly<Partial<Record<SearchFailure, PlayerErrorCode>>> = {
   offline: "ytOffline",
@@ -167,13 +165,17 @@ export const playingAnswerStep = <S extends YtSong>(
   song: UnsearchedSong,
   settlement: UnsearchedSettlement<S>,
   { chosen }: { readonly chosen: boolean },
+  catalogue: Catalogue = en,
 ): PlayingAnswerStep => {
   if (settlement.kind === "found") return { kind: "play" };
   const why = settlement.kind === "notFound" ? "notFound" : settlement.reason;
   const code = settlement.kind === "failed" ? STAY_CODES[settlement.reason] : undefined;
   if (code !== undefined)
-    return { kind: chosen ? "stay" : "stop", notice: playerErrorNotice(code) };
-  return { kind: "skip", notice: `Skipped "${song.title}": ${SKIPPED_BECAUSE[why]}.` };
+    return { kind: chosen ? "stay" : "stop", notice: playerErrorNotice(code, catalogue) };
+  return {
+    kind: "skip",
+    notice: catalogue.playbackText.skipped(song.title, skippedBecause(catalogue)[why]),
+  };
 };
 
 /**
@@ -290,6 +292,7 @@ export const answerPlayingWalk = <S extends YtSong>(
   walk: PlayingWalk,
   settlement: UnsearchedSettlement<S>,
   passOver: PassOver = () => false,
+  catalogue: Catalogue = en,
 ): PlayingStep => {
   const current = walk.state.entries[walk.state.index]!;
   const song = readUnsearchedTrackId(current.trackId)!;
@@ -308,8 +311,8 @@ export const answerPlayingWalk = <S extends YtSong>(
   // Only the song the command made current was chosen; those after it come as skips do.
   const chosen = walk.chosen && walk.asked.length === 1;
   const step: PlayingAnswerStep = passed
-    ? { kind: "skip", notice: explicitSkipNotice(song.title) }
-    : playingAnswerStep(song, settlement, { chosen });
+    ? { kind: "skip", notice: explicitSkipNotice(song.title, catalogue) }
+    : playingAnswerStep(song, settlement, { chosen }, catalogue);
   if (step.kind === "stay") return { kind: "stay", state: walk.before, notice: step.notice };
   // The songs after it can't be searched either: none is asked, nor named.
   if (step.kind === "stop") {
@@ -341,7 +344,11 @@ export const answerPlayingWalk = <S extends YtSong>(
  * skipped as a failed search skips them. Null when it passed over none (or
  * went back).
  */
-export const passedOverNotice = (before: QueueState, after: QueueState): string | null => {
+export const passedOverNotice = (
+  before: QueueState,
+  after: QueueState,
+  catalogue: Catalogue = en,
+): string | null => {
   const from = before.entries[before.index];
   if (from === undefined) return null;
   const start = after.entries.findIndex((entry) => entry.key === from.key);
@@ -352,10 +359,10 @@ export const passedOverNotice = (before: QueueState, after: QueueState): string 
   });
   const [first] = songs;
   if (first === undefined) return null;
-  const because = SKIPPED_BECAUSE.failed;
+  const because = skippedBecause(catalogue).failed;
   return songs.length === 1
-    ? `Skipped "${first.title}": ${because}.`
-    : `Skipped ${counted(songs.length, "song")}: ${because}.`;
+    ? catalogue.playbackText.skipped(first.title, because)
+    : catalogue.playbackText.skippedSongs(songs.length, because);
 };
 
 /** The entries from the playing one on, `PLAYING_SEARCHES` of them, wrapping with repeat all. */

@@ -1,11 +1,17 @@
+import { useLocalisation } from "@/localisation/localisation";
 import {
   editHomeArrangement,
+  discoverRowTitle,
+  hiddenDiscoverRows,
   hiddenHomeSections,
   homeSectionTitle,
   type HomeArrangement,
   type HomeArrangementEdit,
 } from "@wave/core";
 import { useCallback, useState } from "react";
+import { View } from "react-native";
+
+import { CELL } from "@/catalog/grid";
 
 import { ArrangementEditor } from "@/components/ArrangementEditor";
 
@@ -25,14 +31,32 @@ export function HomeEditor({
   edit: (change: HomeArrangementEdit) => void;
   onDone?: (() => void) | undefined;
 }) {
+  const { strings } = useLocalisation();
   return (
     <ArrangementEditor
-      shown={arrangement}
+      shown={arrangement.sections}
       hidden={hiddenHomeSections(arrangement)}
-      title={homeSectionTitle}
-      place="Home"
-      hiddenHeading="Not on Home"
+      title={(id) => homeSectionTitle(id, strings)}
+      place={strings.arrangement.home}
+      hiddenHeading={strings.home.notOnHome}
       edit={edit}
+      renderNested={(id, onDraggingChange) =>
+        id === "discover" ? (
+          <View style={{ paddingLeft: CELL * 3 }}>
+            <ArrangementEditor
+              inline
+              shown={arrangement.discoverRows}
+              hidden={hiddenDiscoverRows(arrangement)}
+              title={(row) => discoverRowTitle(row, strings)}
+              place={strings.arrangement.discover}
+              hiddenHeading=""
+              canRemove={arrangement.discoverRows.length > 1}
+              edit={(discover) => edit({ discover })}
+              onDraggingChange={onDraggingChange}
+            />
+          </View>
+        ) : null
+      }
       onDone={onDone}
     />
   );

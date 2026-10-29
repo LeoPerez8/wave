@@ -1,6 +1,6 @@
 {
   "name": "@wave/mobile",
-  "version": "0.37.1-ti",
+  "version": "0.37.2",
   "private": true,
   "main": "./index.ts",
   "scripts": {
@@ -28,6 +28,7 @@
     "drizzle-orm": "0.45.4",
     "effect": "4.0.2",
     "expo": "~58.0.2",
+    "expo-background-task": "~58.0.11",
     "expo-build-properties": "~58.0.10",
     "expo-constants": "~58.0.10",
     "expo-font": "~58.0.7",
@@ -39,6 +40,7 @@
     "expo-sqlite": "~58.0.11",
     "expo-status-bar": "~58.0.3",
     "expo-system-ui": "~58.0.5",
+    "expo-task-manager": "~58.0.12",
     "react": "19.3.0",
     "react-native": "0.88.0-rc.4",
     "react-native-gesture-handler": "~3.2.1",

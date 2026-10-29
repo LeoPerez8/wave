@@ -23,3 +23,13 @@ describe("favoriteToast", () => {
     assert.equal(favoriteToast("selection", true, 12), "Added 12 songs to Favorites");
   });
 });
+
+describe("favoriteToast in Portuguese", () => {
+  test("one song and several", () => {
+    assert.equal(favoriteToast("menu", true, 1, "pt-BR"), "Adicionada às Favoritas");
+    assert.equal(
+      favoriteToast("selection", true, 3, "pt-BR"),
+      "3 músicas adicionadas às Favoritas",
+    );
+  });
+});

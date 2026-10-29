@@ -56,6 +56,7 @@ import * as Semaphore from "effect/Semaphore";
 
 import { makeExternalStore } from "@/lib/externalStore";
 import { LibraryStore } from "@/library/LibraryStore";
+import { currentLocalisation } from "@/localisation/localisation";
 import type { NativeSyncStep, PlayerItem } from "@/native/wavePlayer";
 import { currentToast, dismissToast, showToast } from "@/overlay/toast";
 import { perfMark } from "@/perf/perf";
@@ -269,7 +270,8 @@ const learnTracks = (
 ): void => learnQueueTracks(added, { forgetOthers: playReplacesQueue(command, passOver) });
 
 /** A song's title for a notice, from what the queue knows of it. */
-const titleOf = (trackId: string): string => queueTracks.get().get(trackId)?.title ?? "This song";
+const titleOf = (trackId: string): string =>
+  queueTracks.get().get(trackId)?.title ?? currentLocalisation().strings.playbackText.thisSong;
 
 const reportError = (error: unknown): void =>
   playbackState.update((previous) => ({
@@ -443,7 +445,9 @@ export const layer = Layer.effect(
         // The play's own notice waits, while a search goes on, for how the walk ends.
         const notices = [takeBack?.notice ?? null, step.notice];
         const text =
-          step.kind === "go" && takeBack !== null ? newQueueToast(step.playback, notices) : null;
+          step.kind === "go" && takeBack !== null
+            ? newQueueToast(step.playback, notices, currentLocalisation().strings)
+            : null;
         const said = noticeLine(step.kind === "search" ? [step.notice] : notices);
         if (said !== null && text === null) void showToast(said);
         switch (step.kind) {
@@ -495,7 +499,12 @@ export const layer = Layer.effect(
         const passOver = passOverNow(added);
         learnTracks(command, added, passOver);
         // A tapped explicit song skipped, or nothing played or queued: say why.
-        const passed = explicitPlayNotice(command, passOver, titleOf);
+        const passed = explicitPlayNotice(
+          command,
+          passOver,
+          titleOf,
+          currentLocalisation().strings,
+        );
         if (command.type === "playerMoved") native = { ...native, currentKey: command.key };
         const before = queueState.get();
         // A play offers going back to the queue the player holds (a walk's
@@ -518,7 +527,7 @@ export const layer = Layer.effect(
         const step = startPlayingWalk(before, command, reduced, pending?.walk ?? null);
         // The player went on past songs still unsearched: they're skipped, as a failed search skips them.
         if (command.type === "playerMoved" && step.kind === "go") {
-          const notice = passedOverNotice(before, step.state);
+          const notice = passedOverNotice(before, step.state, currentLocalisation().strings);
           if (notice !== null) void showToast(notice);
         }
         return yield* take(step, knownBefore, pending, takeBack);
@@ -529,7 +538,12 @@ export const layer = Layer.effect(
       Effect.gen(function* () {
         if (waiting !== w) return { kind: "superseded" } satisfies Outcome;
         waiting = null;
-        const step = answerPlayingWalk(w.walk, answer, passOverNow());
+        const step = answerPlayingWalk(
+          w.walk,
+          answer,
+          passOverNow(),
+          currentLocalisation().strings,
+        );
         return yield* take(step, w.knownBefore, null, w.takeBack);
       });
 
@@ -607,7 +621,7 @@ export const layer = Layer.effect(
 
     const offerUndo = ({ text, takeBack }: NewQueue): void => {
       void showToast(text, {
-        label: "Undo",
+        label: currentLocalisation().strings.playbackText.undo,
         run: () => Effect.runFork(reported(undoPlay(takeBack))),
       });
       offered = { takeBack, toastId: currentToast.get()?.id ?? null };

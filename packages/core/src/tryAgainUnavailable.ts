@@ -4,7 +4,7 @@
  * YouTube Music once more, and what each answer settles.
  */
 
-import { counted } from "./listening.ts";
+import { catalogueOf, type AppLanguage } from "./localisation.ts";
 import {
   playlistSongKey,
   type PlaylistItem,
@@ -98,15 +98,19 @@ export const tryAgainSettles = <S extends YtSong>(
  * What Try Again says once it ends: how many of the [searched] songs were
  * found ("Found 2 of 3"), and how many searches failed, if any.
  */
-export const tryAgainNotice = ({
-  searched,
-  found,
-  failed,
-}: {
-  readonly searched: number;
-  readonly found: number;
-  readonly failed: number;
-}): string => {
-  const line = `Found ${found.toLocaleString("en")} of ${searched.toLocaleString("en")}`;
-  return failed === 0 ? line : `${line} · ${counted(failed, "search", "searches")} failed`;
+export const tryAgainNotice = (
+  {
+    searched,
+    found,
+    failed,
+  }: {
+    readonly searched: number;
+    readonly found: number;
+    readonly failed: number;
+  },
+  language: AppLanguage = "en",
+): string => {
+  const text = catalogueOf(language).library.unavailable;
+  const line = text.found(found, searched);
+  return failed === 0 ? line : `${line} · ${text.searchesFailed(failed)}`;
 };

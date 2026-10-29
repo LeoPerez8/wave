@@ -3,6 +3,7 @@ import { View } from "react-native";
 import { Artwork } from "../Artwork";
 import { TileCheck } from "../CheckCell";
 import { CELL } from "../grid";
+import { useLocalisation } from "@/localisation/localisation";
 
 import { CAPTION_TOP, CardDetail, CardRow, CardTile, CardTitle } from "./CardParts";
 
@@ -33,10 +34,11 @@ export function AlbumCard({
   onLongPress,
   checked,
 }: Props & { size: number }) {
+  const { strings } = useLocalisation();
   return (
     <CardTile
       width={size}
-      label={`${title}, album by ${artist}`}
+      label={strings.library.albumLabel(title, artist)}
       onPress={onPress}
       onLongPress={onLongPress}
       checked={checked}
@@ -63,11 +65,12 @@ export function AlbumCardRow({
   onLongPress,
   checked,
 }: Props) {
+  const { strings } = useLocalisation();
   return (
     <CardRow
       lead={<Artwork uri={artworkUri} tint={tint} size={THUMB} radius={CELL / 2} />}
       title={title}
-      detail={`Album · ${artist}`}
+      detail={strings.library.albumRow(artist)}
       onPress={onPress}
       onLongPress={onLongPress}
       checked={checked}

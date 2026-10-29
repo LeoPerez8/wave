@@ -7,6 +7,7 @@
  * show them, with their badge. Unknown counts as clean and plays.
  */
 
+import { en, type Catalogue } from "./catalogueEn.ts";
 import { isExplicit, type ExplicitFlag } from "./explicit.ts";
 import type { PassOver, QueueCommand, QueueState } from "./queue.ts";
 
@@ -37,7 +38,8 @@ export const queuedPassedOver = (state: QueueState, passOver: PassOver): string[
 ];
 
 /** What an unsearched song found as an explicit one says as it's skipped. */
-export const explicitSkipNotice = (title: string): string => `Skipped "${title}": it's explicit.`;
+export const explicitSkipNotice = (title: string, catalogue: Catalogue = en): string =>
+  catalogue.playbackText.explicitSkipped(title);
 
 /**
  * What [command] says once the queue passed over its songs ([passOver]),
@@ -50,23 +52,26 @@ export const explicitPlayNotice = (
   command: QueueCommand,
   passOver: PassOver,
   titleOf: (trackId: string) => string,
+  catalogue: Catalogue = en,
 ): string | null => {
   if (command.type !== "play" && command.type !== "playNext" && command.type !== "addToQueue") {
     return null;
   }
   const { trackIds } = command;
   const clean = trackIds.some((trackId) => !passOver(trackId));
-  const verb = command.type === "play" ? "play" : "add";
-  const tapped = command.type === "play" ? command.startIndex : undefined;
+  const text = catalogue.playbackText;
+  const play = command.type === "play";
+  const tapped = play ? command.startIndex : undefined;
   const chosen = tapped === undefined ? undefined : trackIds[tapped];
   if (chosen !== undefined && passOver(chosen)) {
     return clean
-      ? explicitSkipNotice(titleOf(chosen))
-      : `Didn't play "${titleOf(chosen)}": it's explicit.`;
+      ? explicitSkipNotice(titleOf(chosen), catalogue)
+      : text.explicitNotPlayed(titleOf(chosen));
   }
   if (clean || trackIds.length === 0) return null;
   const [only] = trackIds;
-  return trackIds.length === 1 && only !== undefined
-    ? `Didn't ${verb} "${titleOf(only)}": it's explicit.`
-    : `Didn't ${verb}: every song is explicit.`;
+  if (trackIds.length === 1 && only !== undefined) {
+    return play ? text.explicitNotPlayed(titleOf(only)) : text.explicitNotAdded(titleOf(only));
+  }
+  return play ? text.allExplicitNotPlayed : text.allExplicitNotAdded;
 };

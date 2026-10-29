@@ -1,3 +1,5 @@
+import { catalogueOf, type AppLanguage } from "./localisation.ts";
+import { formatNumber } from "./formatting.ts";
 /**
  * Settings › Downloads' run panel: how a big run is going. The run is the
  * songs queued since the queue was last empty: a song joins it when it's seen
@@ -233,16 +235,18 @@ export const downloadTimeLeft = (
 };
 
 /** [ms] left as the panel says it: "About 2 h left", "About 15 min left". */
-export const downloadTimeLeftLine = (ms: number): string => {
+export const downloadTimeLeftLine = (ms: number, language: AppLanguage = "en"): string => {
+  const c = catalogueOf(language).downloadNotice;
+  const n = (value: number) => formatNumber(language, value);
   const minutes = Math.round(ms / 60_000);
-  if (minutes < 1) return "Less than a minute left";
-  if (minutes < 60) return `About ${minutes} min left`;
-  if (minutes >= 180) return `About ${Math.round(minutes / 60).toLocaleString("en")} h left`;
+  if (minutes < 1) return c.lessThanMinute;
+  if (minutes < 60) return c.minutes(n(minutes));
+  if (minutes >= 180) return c.hours(n(Math.round(minutes / 60)));
   const hours = Math.floor(minutes / 60);
   const rest = Math.round((minutes % 60) / 10) * 10;
-  if (rest === 0) return `About ${hours} h left`;
-  if (rest === 60) return `About ${hours + 1} h left`;
-  return `About ${hours} h ${rest} min left`;
+  if (rest === 0) return c.hours(n(hours));
+  if (rest === 60) return c.hours(n(hours + 1));
+  return c.hoursMinutes(n(hours), n(rest));
 };
 
 /** A run's (or group's) counts in words, for the panel and the group headers. */
@@ -256,27 +260,31 @@ export interface DownloadRunLines {
 }
 
 /** [counts] in words. */
-export const downloadRunLines = ({
-  done,
-  failed,
-  left,
-  total,
-}: DownloadRunCounts): DownloadRunLines => ({
-  count: `${done.toLocaleString("en")} of ${total.toLocaleString("en")}`,
-  detail: [
-    ...(failed === 0 ? [] : [`${failed.toLocaleString("en")} failed`]),
-    `${left.toLocaleString("en")} left`,
-  ].join(" · "),
-  fraction: total === 0 ? 0 : (done + failed) / total,
-});
+export const downloadRunLines = (
+  { done, failed, left, total }: DownloadRunCounts,
+  language: AppLanguage = "en",
+): DownloadRunLines => {
+  const c = catalogueOf(language).downloadNotice;
+  return {
+    count: c.count(formatNumber(language, done), formatNumber(language, total)),
+    detail: [
+      ...(failed === 0 ? [] : [c.failed(formatNumber(language, failed), failed)]),
+      c.left(formatNumber(language, left), left),
+    ].join(" · "),
+    fraction: total === 0 ? 0 : (done + failed) / total,
+  };
+};
 
 /** [detail] and, when there's one, [time]: "12 failed · 1,254 left · About 2 h left". */
 const withTime = (detail: string, time: string | null): string =>
   time === null ? detail : `${detail} · ${time}`;
 
 /** A group header's line: "40 of 120 · 2 failed · 78 left". */
-export const downloadRunGroupLine = (counts: DownloadRunCounts): string => {
-  const lines = downloadRunLines(counts);
+export const downloadRunGroupLine = (
+  counts: DownloadRunCounts,
+  language: AppLanguage = "en",
+): string => {
+  const lines = downloadRunLines(counts, language);
   return `${lines.count} · ${lines.detail}`;
 };
 
@@ -292,16 +300,17 @@ export const downloadRunPanelLine = (
     paused,
     throttled,
   }: { readonly timeLeft: number | null; readonly paused: boolean; readonly throttled: boolean },
+  language: AppLanguage = "en",
 ): string =>
   withTime(
-    downloadRunLines(counts).detail,
+    downloadRunLines(counts, language).detail,
     throttled
       ? null
       : paused
-        ? "Paused"
+        ? catalogueOf(language).downloadNotice.paused
         : timeLeft === null
           ? null
-          : downloadTimeLeftLine(timeLeft),
+          : downloadTimeLeftLine(timeLeft, language),
   );
 
 /**
@@ -323,12 +332,16 @@ export interface DownloadRunNotice {
 export const downloadRunNotice = (
   overall: DownloadRunCounts | null,
   timeLeft: number | null,
+  language: AppLanguage = "en",
 ): DownloadRunNotice | null => {
   if (overall === null || overall.total <= 1) return null;
-  const lines = downloadRunLines(overall);
+  const lines = downloadRunLines(overall, language);
   return {
-    title: `Downloading ${lines.count}`,
-    text: withTime(lines.detail, timeLeft === null ? null : downloadTimeLeftLine(timeLeft)),
+    title: catalogueOf(language).downloadNotice.title(lines.count),
+    text: withTime(
+      lines.detail,
+      timeLeft === null ? null : downloadTimeLeftLine(timeLeft, language),
+    ),
     finished: overall.done + overall.failed,
     total: overall.total,
   };

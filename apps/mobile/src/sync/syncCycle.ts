@@ -6,7 +6,7 @@
  * this drives it through the service. Kept free of Expo and React Native so
  * the store tests run it against a fake service (`testSyncService.ts`).
  */
-import { pushBatches, readPullPage, type SyncTables } from "@wave/core";
+import { pushBatches, pushBody, readPullPage, type SyncTables } from "@wave/core";
 
 import type { CreditSplits } from "../library/db/credits.ts";
 import type { LibraryDatabase } from "../library/db/database.ts";
@@ -145,6 +145,7 @@ interface Seen {
   playlists: boolean;
   favorites: boolean;
   plays: boolean;
+  follows: boolean;
   preferences: { key: string; value: string | null }[];
 }
 
@@ -153,6 +154,7 @@ const take = (seen: Seen, changes: PulledChanges): void => {
   seen.playlists ||= changes.playlists;
   seen.favorites ||= changes.favorites;
   seen.plays ||= changes.plays;
+  seen.follows ||= changes.follows;
   seen.preferences.push(...changes.preferences);
 };
 
@@ -211,7 +213,7 @@ const pushAll = async (input: SyncCycleInput): Promise<number> => {
     const unpushed = selectUnpushed(db, READ_AT_ONCE, input.preferences.value);
     if (rowCount(unpushed.rows) === 0) break;
     for (const batch of pushBatches(unpushed.rows)) {
-      await send(input, "POST", "/v1/push", JSON.stringify(batch));
+      await send(input, "POST", "/v1/push", pushBody(batch));
       await freeTurn(input);
       markPushed(
         db,
@@ -244,6 +246,7 @@ export const syncCycle = async (input: SyncCycleInput): Promise<SyncCycleResult>
     playlists: false,
     favorites: false,
     plays: false,
+    follows: false,
     preferences: [],
   };
   const pulled = await pullAll(input, seen);

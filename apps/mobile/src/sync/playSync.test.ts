@@ -15,7 +15,6 @@ import {
 } from "../library/db/testDatabase.ts";
 import { deleteTracksById } from "../library/db/tracks.ts";
 import * as schema from "../library/db/schema.ts";
-import { joinAccount } from "../library/db/syncRows.ts";
 import { saveImportedPlays } from "../library/db/blackPlayer.ts";
 import { syncCycle, type SyncTransport } from "./syncCycle.ts";
 import { fakeClock } from "../../../../packages/core/src/testSyncClock.ts";
@@ -284,7 +283,8 @@ test("an upgrade pushes migrated snapshots but leaves already stored play ids al
     album: "OK Computer",
     artworkHash: "old-cover",
   });
-  joinAccount(db, "ana@example.com");
+  // Joined by a Wave from before the follow tables, as that Wave's join left it.
+  db.run(sql`UPDATE sync_state SET account = 'ana@example.com', cursor = NULL WHERE id = 1`);
   db.run(sql`INSERT INTO play_events (track_id, started_at, listened_ms, duration_ms,
     end_reason, counted, recording_key, sync_id, pushed, ongoing)
     VALUES (${track}, ${PLAY.startedAt}, 25000, 284000, 'stopped', 1,

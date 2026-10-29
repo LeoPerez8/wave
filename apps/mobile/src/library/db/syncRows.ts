@@ -18,6 +18,7 @@ import {
   type AccountSongState,
   type PhoneSong,
   type SyncFavorite,
+  type SyncFollow,
   type SyncPlayRow,
   type SyncPlaylist,
   type SyncPlaylistEntry,
@@ -28,6 +29,7 @@ import {
   type SyncSong,
   type SyncSongFields,
   type SyncTables,
+  UNKNOWN_SONG_TITLE,
 } from "@wave/core";
 import { and, asc, eq, getTableColumns, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 
@@ -51,17 +53,28 @@ const state = (db: LibraryDatabase) =>
  * or another account). Joining starts from nothing on the account's side
  * (the whole account is pulled again, what the phone knew of another
  * account's songs goes) and sends every playlist, entry, star, preference
- * and play up again: the two Libraries are joined, never replaced.
+ * play, follow, hidden release and notified show up again: the two
+ * Libraries are joined, never replaced.
  */
 export const joinAccount = (db: LibraryDatabase, account: string): boolean => {
   if (state(db).account === account) return false;
   const { syncState, playlists, playlistItems, favorites, preferenceChanges, playEvents } = schema;
+  const { follows, hiddenFollowReleases, notifiedFollowShows } = schema;
   db.transaction((tx) => {
     tx.insert(syncState)
       .values({ id: 1, account, cursor: null })
       .onConflictDoUpdate({ target: syncState.id, set: { account, cursor: null } })
       .run();
-    for (const table of [playlists, playlistItems, favorites, preferenceChanges, playEvents]) {
+    for (const table of [
+      playlists,
+      playlistItems,
+      favorites,
+      preferenceChanges,
+      playEvents,
+      follows,
+      hiddenFollowReleases,
+      notifiedFollowShows,
+    ]) {
       tx.update(table).set({ pushed: false }).where(eq(table.pushed, true)).run();
     }
     tx.delete(schema.accountSongs).run();
@@ -134,7 +147,11 @@ type PushMark =
   | { readonly table: "songs"; readonly key: string; readonly changedAt: number }
   | { readonly table: "playlists" | "entries"; readonly id: number; readonly changedAt: number }
   | { readonly table: "favorites"; readonly trackId: number; readonly changedAt: number }
-  | { readonly table: "preferences"; readonly key: string; readonly changedAt: number }
+  | {
+      readonly table: "preferences" | "follows" | "hiddenReleases" | "notifiedShows";
+      readonly key: string;
+      readonly changedAt: number;
+    }
   | { readonly table: "plays"; readonly id: number }
   | {
       readonly table: "removals";
@@ -189,7 +206,7 @@ const songRow = (row: {
  * Up to [limit] rows of each table that changed here and aren't on the
  * account yet, as the service's rows: songs by recording key, entries,
  * stars and plays pointing at recording keys, preferences with the value
- * [preferenceValue] gives. A star of two Tracks with one key goes up once,
+ * [preferenceValue] gives, follows by their name key. A star of two Tracks with one key goes up once,
  * the later change. The play going on now waits until it ends.
  */
 export const selectUnpushed = (
@@ -397,7 +414,7 @@ export const selectUnpushed = (
           importedFrom: row.importedFrom,
           snapshot: wireSnapshot(
             row.snapshot ?? {
-              title: row.currentTitle ?? "Unknown song",
+              title: row.currentTitle ?? UNKNOWN_SONG_TITLE,
               artist: row.currentArtist ?? "",
               album: row.currentAlbum,
               artworkPath: null,
@@ -409,6 +426,65 @@ export const selectUnpushed = (
       ];
     });
 
+  const { follows, hiddenFollowReleases, notifiedFollowShows } = schema;
+  const followRows = db
+    .select()
+    .from(follows)
+    .where(eq(follows.pushed, false))
+    .orderBy(asc(follows.key))
+    .limit(limit)
+    .all()
+    .map((row): SyncFollow => {
+      mark("follows", row.key, { table: "follows", key: row.key, changedAt: row.changedAt });
+      return row.deleted
+        ? { id: row.key, ...stamp(row), deleted: true }
+        : {
+            id: row.key,
+            ...stamp(row),
+            deleted: false,
+            name: row.name,
+            level: row.level,
+            followedAt: row.followedAt,
+            deezerId: row.deezerId,
+            ytBrowseId: row.ytBrowseId,
+          };
+    });
+
+  /** Rows of a table whose id is all they carry (a hidden release, a notified show). */
+  const idRows = (
+    table: "hiddenReleases" | "notifiedShows",
+    rows: readonly {
+      readonly id: string;
+      readonly changedAt: number;
+      readonly phoneId: string;
+      readonly deleted: boolean;
+    }[],
+  ) =>
+    rows.map((row) => {
+      mark(table, row.id, { table, key: row.id, changedAt: row.changedAt });
+      return { id: row.id, ...stamp(row) } as SyncTables[typeof table][number];
+    });
+  const hiddenReleases = idRows(
+    "hiddenReleases",
+    db
+      .select({ ...getTableColumns(hiddenFollowReleases), id: hiddenFollowReleases.key })
+      .from(hiddenFollowReleases)
+      .where(eq(hiddenFollowReleases.pushed, false))
+      .orderBy(asc(hiddenFollowReleases.key))
+      .limit(limit)
+      .all(),
+  );
+  const notifiedShows = idRows(
+    "notifiedShows",
+    db
+      .select()
+      .from(notifiedFollowShows)
+      .where(eq(notifiedFollowShows.pushed, false))
+      .orderBy(asc(notifiedFollowShows.id))
+      .limit(limit)
+      .all(),
+  );
+
   return {
     rows: {
       songs,
@@ -418,10 +494,20 @@ export const selectUnpushed = (
       favorites: mergeRows([], [...stars, ...removals("favorites")]).rows,
       preferences,
       plays,
+      follows: followRows,
+      hiddenReleases,
+      notifiedShows,
     },
     marks,
   };
 };
+
+/** The follow tables a push mark names, each row found by one text key. */
+const followRows = {
+  follows: { table: schema.follows, key: schema.follows.key },
+  hiddenReleases: { table: schema.hiddenFollowReleases, key: schema.hiddenFollowReleases.key },
+  notifiedShows: { table: schema.notifiedFollowShows, key: schema.notifiedFollowShows.id },
+} as const;
 
 /**
  * Records that the account has the changes behind [marks] (`selectUnpushed`).
@@ -477,6 +563,16 @@ export const markPushed = (db: LibraryDatabase, marks: readonly PushMark[]): voi
             )
             .run();
           break;
+        case "follows":
+        case "hiddenReleases":
+        case "notifiedShows": {
+          const { table, key } = followRows[from.table];
+          tx.update(table)
+            .set({ pushed: true })
+            .where(and(eq(key, from.key), eq(table.changedAt, from.changedAt)))
+            .run();
+          break;
+        }
         case "plays":
           plays.push(from.id);
           break;
@@ -698,6 +794,8 @@ export interface PulledChanges {
   readonly playlists: boolean;
   readonly favorites: boolean;
   readonly plays: boolean;
+  /** Follows, hidden releases or notified shows changed. */
+  readonly follows: boolean;
   /** The synced preferences whose value changed, with the value (null: none, its default). */
   readonly preferences: readonly { readonly key: string; readonly value: string | null }[];
 }
@@ -707,6 +805,7 @@ interface Changed {
   playlists: boolean;
   favorites: boolean;
   plays: boolean;
+  follows: boolean;
   preferences: { key: string; value: string | null }[];
 }
 
@@ -715,6 +814,7 @@ const nothingChanged = (): Changed => ({
   playlists: false,
   favorites: false,
   plays: false,
+  follows: false,
   preferences: [],
 });
 
@@ -891,6 +991,54 @@ const applyFavorite = (
   return true;
 };
 
+const applyFollow = (tx: LibraryDatabase, row: SyncFollow): boolean => {
+  const { follows } = schema;
+  const held = tx.select().from(follows).where(eq(follows.key, row.id)).get();
+  if (held !== undefined && !wins(row, held)) return false;
+  // A removal of a follow this phone never had has nothing to remove.
+  if (row.deleted && held === undefined) return false;
+  const live = row.deleted
+    ? {}
+    : {
+        name: row.name,
+        level: row.level,
+        followedAt: row.followedAt,
+        deezerId: row.deezerId,
+        ytBrowseId: row.ytBrowseId,
+      };
+  if (held !== undefined) {
+    tx.update(follows)
+      .set({ ...live, ...stamp(row), pushed: true })
+      .where(eq(follows.key, row.id))
+      .run();
+  } else if (!row.deleted) {
+    tx.insert(follows)
+      .values({ key: row.id, ...live, ...stamp(row), pushed: true } as typeof follows.$inferInsert)
+      .run();
+  }
+  return true;
+};
+
+/** A hidden release (by its `key`) or a notified show (by its `id`): a row that carries only its id. */
+const applyIdRow = (
+  tx: LibraryDatabase,
+  row: SyncRow,
+  into:
+    | { readonly table: typeof schema.hiddenFollowReleases; readonly field: "key" }
+    | { readonly table: typeof schema.notifiedFollowShows; readonly field: "id" },
+): boolean => {
+  const id = into.field === "key" ? into.table.key : into.table.id;
+  const held = tx.select().from(into.table).where(eq(id, row.id)).get();
+  if (held !== undefined && !wins(row, held)) return false;
+  if (row.deleted && held === undefined) return false;
+  const values = { ...stamp(row), pushed: true };
+  tx.insert(into.table)
+    .values({ [into.field]: row.id, ...values } as typeof into.table.$inferInsert)
+    .onConflictDoUpdate({ target: id, set: values })
+    .run();
+  return true;
+};
+
 const applyPreference = (
   tx: LibraryDatabase,
   row: SyncPreference,
@@ -965,7 +1113,7 @@ const applyPlay = (
           ? null
           : {
               videoId,
-              title: snapshot?.title ?? "Unknown song",
+              title: snapshot?.title ?? UNKNOWN_SONG_TITLE,
               artists: split(snapshot?.artist ?? ""),
               album: snapshot?.album ?? null,
               artworkUrl: snapshot?.artworkUrl ?? null,
@@ -1043,6 +1191,19 @@ export const applyPulledPage = (
     for (const row of page.preferences) {
       const applied = applyPreference(tx, row);
       if (applied !== null) changed.preferences.push(applied);
+    }
+    for (const row of page.follows) {
+      if (applyFollow(tx, row)) changed.follows = true;
+    }
+    for (const row of page.hiddenReleases) {
+      if (applyIdRow(tx, row, { table: schema.hiddenFollowReleases, field: "key" })) {
+        changed.follows = true;
+      }
+    }
+    for (const row of page.notifiedShows) {
+      if (applyIdRow(tx, row, { table: schema.notifiedFollowShows, field: "id" })) {
+        changed.follows = true;
+      }
     }
     tx.update(schema.syncState)
       .set({ cursor: page.cursor })

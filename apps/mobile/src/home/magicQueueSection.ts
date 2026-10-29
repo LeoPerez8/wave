@@ -1,3 +1,4 @@
+import { currentLocalisation } from "@/localisation/localisation";
 /**
  * Home draws nine random playable Library songs on each visit, independently
  * of recommendations; with none in the Library, nine streamed songs of the
@@ -42,13 +43,13 @@ const videoIdsOf = (songs: readonly YtAlbumSong[]): string[] => songs.map((song)
  * A focus after leaving Home draws again; ordinary re-renders and Now Playing
  * covering the screen keep this visit's songs.
  */
-const useLibraryPicks = () => {
+const useLibraryPicks = (enabled: boolean) => {
   const [read, setRead] = useState(() => randomMagicQueueRead(Math.random));
   const query = useMemo(
     () => libraryQuery(read.key, read.reads, Effect.flatMap(LibraryStore, read.read)),
     [read],
   );
-  const answer = useLibraryQuery<readonly PlayableSongRow[] | null>(query, null);
+  const answer = useLibraryQuery<readonly PlayableSongRow[] | null>(enabled ? query : null, null);
   const [shown, setShown] = useState<readonly PlayableSongRow[] | null>(null);
   if (answer !== null && answer !== shown) setShown(answer);
   return { songs: answer ?? shown, setRead };
@@ -64,31 +65,33 @@ export const useMagicQueueSection = (
   ytMusic: boolean,
   artistMixes: DiscoverMixesSection,
 ): MagicQueueSection => {
-  const { songs: librarySongs, setRead } = useLibraryPicks();
+  const { songs: librarySongs, setRead } = useLibraryPicks(ytMusic);
   // Null: draw afresh from the mixes on the next render.
   const [mixPicks, setMixPicks] = useState<MagicQueueMixPicks | null>(null);
   const opened = useRef(false);
   useFocusEffect(
     useCallback(() => {
+      if (!ytMusic) return;
       if (opened.current) {
         setRead(randomMagicQueueRead(Math.random));
         setMixPicks(null);
       }
       opened.current = true;
-    }, [setRead]),
+    }, [setRead, ytMusic]),
   );
   const row = magicQueueRow({ ytMusic, library: librarySongs, artistMixes });
   const { shown, picks } = magicQueueShown(row, mixPicks, Math.random);
   // Kept for the next render: the same mixes keep these songs.
   if (picks !== mixPicks) setMixPicks(picks);
   const refresh = () => {
+    const { strings } = currentLocalisation();
     if (row.kind === "mixes") {
       const { mixes } = row;
       const previous = videoIdsOf(picks?.songs ?? []);
       const next: MagicQueueMixPicks = { mixes, songs: magicQueueMixPicks(mixes, Math.random) };
       setMixPicks(next);
-      void showToast("New songs", {
-        label: "Undo",
+      void showToast(strings.discover.newSongs, {
+        label: strings.discover.undo,
         run: () =>
           setMixPicks((current) =>
             current === next
@@ -101,8 +104,8 @@ export const useMagicQueueSection = (
     const previous = (librarySongs ?? []).map((song) => song.id);
     const next = randomMagicQueueRead(Math.random);
     setRead(next);
-    void showToast("New songs", {
-      label: "Undo",
+    void showToast(strings.discover.newSongs, {
+      label: strings.discover.undo,
       run: () => {
         setRead((current) =>
           current === next ? randomMagicQueueRead(Math.random, previous) : current,

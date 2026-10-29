@@ -1,6 +1,7 @@
+import { useFollowCount } from "@/library/follows";
+import { useLocalisation } from "@/localisation/localisation";
 import {
   accountsSummary,
-  counted,
   downloadsSummary,
   libraryLookupProgress,
   type SettingsPage,
@@ -76,6 +77,8 @@ const useAccountsSummary = (): string | null => {
  * signed into. Null leaves a row with its title alone.
  */
 export const useSettingsSummaries = (): Record<SettingsPage, string | null> => {
+  const { strings } = useLocalisation();
+  const follows = useFollowCount();
   const roots = useScanRoots();
   const scanning = useScanStatus() === "scanning";
   const lookup = useFixSongsRun();
@@ -85,18 +88,21 @@ export const useSettingsSummaries = (): Record<SettingsPage, string | null> => {
   const swipes = useSwipeSettings().enabled;
   return {
     library: scanning
-      ? "Scanning…"
+      ? strings.settings.scanning
       : roots.length === 0
         ? null
-        : counted(roots.length, "music folder"),
+        : strings.settings.musicFolderCount(roots.length),
     appearance: null,
     layout: null,
-    swipeActions: swipes ? null : "Off",
+    swipeActions: swipes ? null : strings.settings.off,
     playback: null,
     history: null,
+    followedArtists: follows === 0 ? null : strings.settings.artistCount(follows),
     lyricsAndTags:
-      lookup.status === "running" ? libraryLookupProgress(lookup.done, lookup.total).line : null,
-    downloads: downloadsSummary(downloads.failed, downloads.queued),
+      lookup.status === "running"
+        ? libraryLookupProgress(lookup.done, lookup.total, strings).line
+        : null,
+    downloads: downloadsSummary(downloads.failed, downloads.queued, strings),
     accounts,
     developer: null,
   };

@@ -7,6 +7,7 @@ import {
 
 import type { TitleLongPress } from "@/components/TitleLongPress";
 import { persistedSetting } from "@/lib/persistedSetting";
+import { currentLocalisation } from "@/localisation/localisation";
 import { openTitleChoiceGroups, titleChoiceGroup } from "@/overlay/titleChoices";
 import type { ChoiceSetting } from "@/settings/ChoiceRow";
 
@@ -26,8 +27,14 @@ export const usePlaylistLayout = playlistLayout.useValue;
  * Playlists alike.
  */
 export const playlistLayoutChoice: ChoiceSetting<PlaylistLayout> = {
-  label: "Show playlists as",
-  choices: PLAYLIST_LAYOUTS.map(({ layout, label }) => ({ value: layout, label })),
+  // Read when shown, so they're in the language Wave reads in.
+  get label() {
+    return currentLocalisation().strings.playlists.showAs;
+  },
+  get choices() {
+    const { layouts } = currentLocalisation().strings.playlists;
+    return PLAYLIST_LAYOUTS.map(({ layout }) => ({ value: layout, label: layouts[layout] }));
+  },
   setting: playlistLayout,
 };
 
@@ -37,10 +44,12 @@ export const playlistLayoutChoice: ChoiceSetting<PlaylistLayout> = {
  * at once and keeps it across restarts.
  */
 export const playlistLayoutTitleLongPress: TitleLongPress = {
-  label: "Choose how playlists show",
+  get label() {
+    return currentLocalisation().strings.playlists.chooseLayout;
+  },
   open: () =>
     openTitleChoiceGroups({
-      label: "Show and sort playlists",
+      label: currentLocalisation().strings.playlists.showAndSort,
       groups: [
         // No heading: the highlighted title says what the card is about.
         titleChoiceGroup({

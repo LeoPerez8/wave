@@ -8,6 +8,7 @@
  * one such list.
  */
 
+import { catalogueOf, type AppLanguage } from "./localisation.ts";
 import type { PlaylistItem } from "./playlistEntries.ts";
 import type { YtSong } from "./ytMusic.ts";
 import { soulseekRecordingKey } from "./soulseekDownload.ts";
@@ -34,28 +35,21 @@ export type YtSongsDownloadAction = "download" | "retryFailed" | "cancel";
 
 export type YtAlbumDownloadAction = "downloadAlbum" | "retryFailed" | "cancelAlbumDownload";
 
-/** What each album entry says in the album's long-press menu. */
-export const YT_ALBUM_DOWNLOAD_ACTION_LABELS: { readonly [A in YtAlbumDownloadAction]: string } = {
-  downloadAlbum: "Download Album",
-  retryFailed: "Retry Failed",
-  cancelAlbumDownload: "Cancel Album Download",
+/** What each album entry says in the album's long-press menu, in English (`strings.downloads.albumActions`). */
+export const YT_ALBUM_DOWNLOAD_ACTION_LABELS: { readonly [A in YtAlbumDownloadAction]: string } =
+  catalogueOf("en").downloads.albumActions;
+
+/**
+ * Every label an album's or a playlist's page button can say in [language]
+ * (the short entries and Downloaded), so a page can measure them ahead.
+ */
+export const ytDownloadButtonLabels = (language: AppLanguage = "en"): readonly string[] => {
+  const { buttons, downloaded } = catalogueOf(language).downloads;
+  return [...Object.values(buttons), downloaded];
 };
 
-/** The same entries as the page's button beside Play and Shuffle, where room is short. */
-const BUTTON_LABELS: { readonly [A in YtSongsDownloadAction]: string } = {
-  download: "Download",
-  retryFailed: "Retry Failed",
-  cancel: "Cancel",
-};
-
-/** What the page's button says once every song of the list is downloaded. */
-const DOWNLOADED_LABEL = "Downloaded";
-
-/** Every label an album's or a playlist's page button can say, so a page can measure them ahead. */
-export const YT_DOWNLOAD_BUTTON_LABELS: readonly string[] = [
-  ...Object.values(BUTTON_LABELS),
-  DOWNLOADED_LABEL,
-];
+/** The English labels (`ytDownloadButtonLabels`). */
+export const YT_DOWNLOAD_BUTTON_LABELS: readonly string[] = ytDownloadButtonLabels();
 
 /** A song Download or Retry Failed adds to the queue, and the job it shares (null for a job of its own). */
 export interface YtSongsDownloadRequest<S extends YtSong = YtSong> {
@@ -127,6 +121,8 @@ interface SongsDownloadInput<S extends YtSong> {
   readonly inLibrary: (song: S) => boolean;
   /** The download journal's snapshot. */
   readonly jobs: readonly YtDownloadJournalJob<S>[];
+  /** The progress line's language; English when absent. */
+  readonly language?: AppLanguage;
 }
 
 /**
@@ -136,7 +132,7 @@ interface SongsDownloadInput<S extends YtSong> {
  */
 const songsDownload = <S extends YtSong>(
   songs: readonly S[],
-  { inLibrary, jobs }: SongsDownloadInput<S>,
+  { inLibrary, jobs, language = "en" }: SongsDownloadInput<S>,
   downloads: YtDownloads<S>,
   landed: number,
 ): YtSongsDownload<S> => {
@@ -167,7 +163,9 @@ const songsDownload = <S extends YtSong>(
   if (toCancel.length > 0) actions.push("cancel");
   return {
     actions,
-    line: downloading ? `Downloading · ${saved} of ${batch.length + landed}` : null,
+    line: downloading
+      ? catalogueOf(language).downloads.progress(saved, batch.length + landed)
+      : null,
     toDownload,
     toRetry,
     toCancel,
@@ -293,14 +291,10 @@ export const ytPlaylistDownload = <S extends YtSong>(
   return named({ ...view, toCancel, downloaded }, PLAYLIST_ACTIONS);
 };
 
-/** What each playlist entry says in the playlist's long-press menu. */
+/** What each playlist entry says in the playlist's long-press menu, in English (`strings.downloads.playlistActions`). */
 export const YT_PLAYLIST_DOWNLOAD_ACTION_LABELS: {
   readonly [A in YtPlaylistDownloadAction]: string;
-} = {
-  downloadPlaylist: "Download Playlist",
-  retryFailed: "Retry Failed",
-  cancelPlaylistDownload: "Cancel Playlist Download",
-};
+} = catalogueOf("en").downloads.playlistActions;
 
 /** The generic entry each named one stands for. */
 const GENERIC_ACTIONS: {
@@ -322,22 +316,26 @@ export interface YtListDownloadButtonState<A extends string> {
 /**
  * A page's download button: [view]'s first entry, named short; Downloaded
  * (tinted, a tap only says so) once every song is downloaded; null when it
- * offers neither.
+ * offers neither. Labels are in [language].
  */
 const button = <A extends YtAlbumDownloadAction | YtPlaylistDownloadAction>(
   view: YtSongsDownload<YtSong, A>,
+  language: AppLanguage,
 ): YtListDownloadButtonState<A> | null => {
+  const { buttons, downloaded } = catalogueOf(language).downloads;
   const action = view.actions[0];
-  if (action !== undefined) return { action, label: BUTTON_LABELS[GENERIC_ACTIONS[action]] };
-  return view.downloaded ? { action: "downloaded", label: DOWNLOADED_LABEL } : null;
+  if (action !== undefined) return { action, label: buttons[GENERIC_ACTIONS[action]] };
+  return view.downloaded ? { action: "downloaded", label: downloaded } : null;
 };
 
 /** The album page's download button: the album's first entry, Downloaded, or null. */
 export const ytAlbumDownloadButton = (
   view: YtAlbumDownload,
-): YtListDownloadButtonState<YtAlbumDownloadAction> | null => button(view);
+  language: AppLanguage = "en",
+): YtListDownloadButtonState<YtAlbumDownloadAction> | null => button(view, language);
 
 /** The playlist page's download button: the playlist's first entry, Downloaded, or null. */
 export const ytPlaylistDownloadButton = (
   view: YtPlaylistDownload,
-): YtListDownloadButtonState<YtPlaylistDownloadAction> | null => button(view);
+  language: AppLanguage = "en",
+): YtListDownloadButtonState<YtPlaylistDownloadAction> | null => button(view, language);

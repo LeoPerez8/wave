@@ -1,3 +1,4 @@
+import { useLocalisation } from "@/localisation/localisation";
 import {
   GLASS_LEVEL_RANGE,
   glassLevel,
@@ -42,41 +43,49 @@ function GlassLevelSlider({ label, setting, value, format }: LevelSliderProps) {
 
 /** Settings › Appearance › Glass: tunes the glass of the tab bar, mini player, menus and dialogs. */
 export function GlassSettingsSection() {
+  const { strings } = useLocalisation();
   const glass = useGlassSettings();
 
   return (
     <View>
-      <CatalogLine className="mb-2">Glass</CatalogLine>
+      <CatalogLine className="mb-2">{strings.settings.glass}</CatalogLine>
       <View className="mb-3">
         <GlassSample />
       </View>
       <Hairline />
-      <GlassLevelSlider label="Blur" setting="blur" value={glass.blur} format={dp} />
-      <Hairline />
       <GlassLevelSlider
-        label="Refraction"
-        setting="refraction"
-        value={glass.refraction}
-        format={(value) => (value === 0 ? "Off" : dp(value))}
+        label={strings.settings.blur}
+        setting="blur"
+        value={glass.blur}
+        format={dp}
       />
       <Hairline />
-      <GlassLevelSlider label="Tint" setting="tint" value={glass.tint} format={percent} />
+      <GlassLevelSlider
+        label={strings.settings.refraction}
+        setting="refraction"
+        value={glass.refraction}
+        format={(value) => (value === 0 ? strings.settings.off : dp(value))}
+      />
+      <Hairline />
+      <GlassLevelSlider
+        label={strings.settings.tint}
+        setting="tint"
+        value={glass.tint}
+        format={percent}
+      />
       <Hairline />
       <SettingsSwitch
-        label="Rim"
+        label={strings.settings.rim}
         value={glass.rim}
         onValueChange={(value) => setGlassSetting("rim", value)}
       />
       <Hairline />
       <Text className="mt-2 font-sans text-footnote text-secondary">
-        How the tab bar, mini player, menus and dialogs show what&apos;s behind them. Blur softens
-        it, refraction bends it at the edges (off leaves blur, tint and rim), tint lays the surface
-        colour over it so text stays legible, and the rim is the bright edge. The sample shows each
-        change; the app&apos;s glass takes it once you leave Appearance.
+        {strings.settings.howTheTabBarMiniPlayerMenus}
       </Text>
       <View className="mt-4 items-start">
         <TextButton
-          label="Reset to defaults"
+          label={strings.settings.resetToDefaults}
           disabled={isDefaultGlassSettings(glass)}
           onPress={resetGlassSettings}
         />

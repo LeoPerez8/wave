@@ -1,4 +1,6 @@
-import { PLAY_ACTION_LABELS, menuLayout, type DiscoverSong } from "@wave/core";
+import { useFollow } from "@/library/follows";
+import { followMenuPress } from "@/library/FollowButton";
+import { menuLayout, type DiscoverSong } from "@wave/core";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import { Text, View } from "react-native";
@@ -9,10 +11,10 @@ import type { SongRow } from "@/library/LibraryStore";
 import { appRuntime } from "@/library/runtime";
 import { pressedMenuAllowed, pressedRect } from "@/motion/pressedRect";
 import type { NativeYtSong } from "@/native/waveYtMusic";
-import { showMessage } from "@/overlay/alert";
 import { CardHeading } from "@/overlay/CardHeading";
 import { MenuChoices, type MenuChoice } from "@/overlay/MenuChoices";
 import { followUp, openOverlay } from "@/overlay/overlay";
+import { useLocalisation } from "@/localisation/localisation";
 import { playPage, queueDiscoverSongs } from "@/playback/actions";
 
 import { ytArtistPageSongs } from "./artistPage";
@@ -32,8 +34,8 @@ type Song = DiscoverSong<NativeYtSong, SongRow>;
  * Opens a YouTube Music artist's long-press menu next to their row: Play,
  * Play Next and Add to Queue cards, then Shuffle, for the songs their page
  * plays (`ytArtistPageSongs`: what was saved for it, else read now). The
- * songs are read first, so the card opens ready; offline, without an
- * answer or with no songs, a message card says so instead.
+ * songs are read first, so the card opens ready. Follow remains available
+ * offline or when the artist has no playable songs.
  */
 export const openYtArtistActions = (artist: YtArtistTarget): void => {
   const anchor = pressedRect();
@@ -44,23 +46,7 @@ export const openYtArtistActions = (artist: YtArtistTarget): void => {
       Effect.result(ytArtistPageSongs(artist.browseId, find)),
     );
     if (!allowed()) return;
-    if (Result.isFailure(result)) {
-      const offline = "reason" in result.failure && result.failure.reason === "offline";
-      await showMessage(
-        artist.name,
-        offline
-          ? "You're offline. YT Music artists need the network."
-          : "No answer online. Try again in a moment.",
-      );
-      return;
-    }
-    const songs = result.success;
-    // With no songs to play (Core's empty layout), a message, as their page shows no Play.
-    const layout = menuLayout("ytArtist", [], { empty: songs.length === 0 });
-    if (layout.cards.length === 0 && layout.list.length === 0) {
-      await showMessage(artist.name, "No songs online for this artist.");
-      return;
-    }
+    const songs = Result.isSuccess(result) ? result.success : [];
     openOverlay({
       label: artist.name,
       anchor,
@@ -79,6 +65,8 @@ function YtArtistActionsMenu({
   songs: readonly Song[];
   close: () => void;
 }) {
+  const { strings } = useLocalisation();
+  const follow = useFollow(artist.name);
   // As their page plays them: the Library's files for the songs it has, the rest streamed.
   const context = { kind: "ytArtist", id: artist.browseId };
   const closing = (action: () => void) => () => {
@@ -95,10 +83,15 @@ function YtArtistActionsMenu({
   }));
   const entries = layout.list.map(({ action }): MenuChoice => ({
     action,
-    label: PLAY_ACTION_LABELS[action],
+    label: strings.itemActions.playLabels[action],
     onPress: play(true),
   }));
 
+  entries.push({
+    action: "follow",
+    label: follow === null ? strings.library.follow : strings.library.following,
+    onPress: () => followMenuPress({ name: artist.name, ytBrowseId: artist.browseId }, close),
+  });
   return (
     <>
       <CardHeading>

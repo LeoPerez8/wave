@@ -9,6 +9,8 @@ import {
 } from "@tabler/icons-react-native";
 import { LIBRARY_SECTION_SLUGS, type LibrarySectionSlug } from "@wave/core";
 
+import { currentLocalisation } from "@/localisation/localisation";
+
 /** A Library entry: its name, the icon its tab shows, and what its list says while empty. */
 export interface LibrarySection {
   readonly slug: LibrarySectionSlug;
@@ -17,43 +19,29 @@ export interface LibrarySection {
   readonly empty: string;
 }
 
-const COPY: Readonly<Record<LibrarySectionSlug, Omit<LibrarySection, "slug">>> = {
-  playlists: {
-    icon: IconPlaylist,
-    label: "Playlists",
-    empty: "Make a playlist, then add songs, albums or artists to it from their menus.",
-  },
-  artists: {
-    icon: IconMicrophone2,
-    label: "Artists",
-    empty: "Artists appear once Wave has scanned your music.",
-  },
-  albums: {
-    icon: IconDisc,
-    label: "Albums",
-    empty: "Albums appear once Wave has scanned your music.",
-  },
-  songs: {
-    icon: IconMusic,
-    label: "Songs",
-    empty: "Songs appear once Wave has scanned your music.",
-  },
-  genres: {
-    icon: IconCategory,
-    label: "Genres",
-    empty: "Genres appear once Wave has scanned your music.",
-  },
-  favorites: {
-    icon: IconStar,
-    label: "Favorites",
-    empty: "Star a song from its menu or from Now Playing to keep it here.",
-  },
+const ICONS: Readonly<Record<LibrarySectionSlug, Icon>> = {
+  playlists: IconPlaylist,
+  artists: IconMicrophone2,
+  albums: IconDisc,
+  songs: IconMusic,
+  genres: IconCategory,
+  favorites: IconStar,
 };
 
-/** The Library's entries, in the order they are listed (Core's `LIBRARY_SECTION_SLUGS`). */
+/**
+ * The Library's entries, in the order they are listed (Core's `LIBRARY_SECTION_SLUGS`).
+ * Their name and empty line read the catalogue when asked, so they're always in
+ * the language Wave reads in; screens showing them re-render through `useLocalisation`.
+ */
 export const LIBRARY_SECTIONS: readonly LibrarySection[] = LIBRARY_SECTION_SLUGS.map((slug) => ({
   slug,
-  ...COPY[slug],
+  icon: ICONS[slug],
+  get label() {
+    return currentLocalisation().strings.tabs[slug];
+  },
+  get empty() {
+    return currentLocalisation().strings.library.sectionEmpty[slug];
+  },
 }));
 
 export const findSection = (slug: string): LibrarySection | undefined =>

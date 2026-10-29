@@ -1,3 +1,4 @@
+import { currentLocalisation } from "@/localisation/localisation";
 import {
   editNowPlayingButtons,
   readNowPlayingButtons,
@@ -31,16 +32,32 @@ export const editSavedNowPlayingButtons = (edit: NowPlayingButtonsEdit): void =>
 
 /** What each action is called on Settings' rows and pickers. */
 const ACTION_LABELS: Readonly<Record<NowPlayingAction, string>> = {
-  lyrics: "Lyrics",
-  sleepTimer: "Sleep Timer",
-  addToPlaylist: "Add to Playlist",
-  download: "Download",
-  shuffle: "Shuffle",
-  repeat: "Repeat",
-  share: "Share",
-  songMenu: "Song Menu",
+  get lyrics() {
+    return currentLocalisation().strings.playbackText.lyrics;
+  },
+  get sleepTimer() {
+    return currentLocalisation().strings.playbackText.sleepTimer;
+  },
+  get addToPlaylist() {
+    return currentLocalisation().strings.playbackText.addToPlaylist;
+  },
+  get download() {
+    return currentLocalisation().strings.playbackText.download;
+  },
+  get shuffle() {
+    return currentLocalisation().strings.playbackText.shuffle;
+  },
+  get repeat() {
+    return currentLocalisation().strings.playbackText.repeat;
+  },
+  get share() {
+    return currentLocalisation().strings.playbackText.share;
+  },
+  get songMenu() {
+    return currentLocalisation().strings.playbackText.songMenu;
+  },
 };
 
 /** A slot's name for what it holds: its action's, or None. */
 export const nowPlayingSlotLabel = (slot: NowPlayingSlot): string =>
-  slot === null ? "None" : ACTION_LABELS[slot];
+  slot === null ? currentLocalisation().strings.playbackText.none : ACTION_LABELS[slot];

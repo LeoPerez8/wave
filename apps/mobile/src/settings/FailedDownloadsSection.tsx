@@ -9,6 +9,7 @@ import { Text, View } from "react-native";
 
 import { CatalogLine } from "@/catalog/CatalogLine";
 import { CELL } from "@/catalog/grid";
+import { useLocalisation } from "@/localisation/localisation";
 import { Hairline } from "@/catalog/Hairline";
 import { TextButton } from "@/components/TextButton";
 import type { NativeYtSong } from "@/native/waveYtMusic";
@@ -36,25 +37,28 @@ export const FailedSectionHeader = memo(function FailedSectionHeader({
   failed: readonly FailedDownload<NativeYtSong>[];
   onToggle: () => void;
 }) {
+  const { strings } = useLocalisation();
   return (
     <View style={{ marginTop: SECTION_GAP }}>
       <CatalogLine className="mb-2">{row.line}</CatalogLine>
       <View className="flex-row items-center" style={{ gap: CELL * 3 }}>
         <TextButton
           variant="plain"
-          label="Retry All"
+          label={strings.settings.retryAll}
           onPress={() => retryFailedDownloads(failed)}
         />
         <TextButton
           variant="plain"
-          label="Clear All"
+          label={strings.settings.clearAll}
           onPress={() => clearFailedDownloads(failed)}
         />
         <View className="flex-1" />
         <TextButton
           variant="plain"
-          label={row.expanded ? "Hide Songs" : "Show Songs"}
-          accessibilityLabel={row.expanded ? "Hide failed songs" : "Show failed songs"}
+          label={row.expanded ? strings.settings.hideSongs : strings.settings.showSongs}
+          accessibilityLabel={
+            row.expanded ? strings.settings.hideFailedSongs : strings.settings.showFailedSongs
+          }
           onPress={onToggle}
         />
       </View>
@@ -77,6 +81,7 @@ const sameFailedList = (
  */
 export const FailedGroupHeader = memo(
   function FailedGroupHeader({ row }: { row: FailedGroupRow<NativeYtSong> }) {
+    const { strings } = useLocalisation();
     return (
       <View>
         <View className="flex-row items-center" style={{ gap: CELL * 3, paddingTop: CELL }}>
@@ -89,14 +94,14 @@ export const FailedGroupHeader = memo(
           </Text>
           <TextButton
             variant="plain"
-            label="Retry"
-            accessibilityLabel={`Retry ${row.line}`}
+            label={strings.settings.retry}
+            accessibilityLabel={strings.settings.retryLine(row.line)}
             onPress={() => retryFailedDownloads(row.failed)}
           />
           <TextButton
             variant="plain"
-            label="Remove"
-            accessibilityLabel={`Remove ${row.line} from failed downloads`}
+            label={strings.settings.remove}
+            accessibilityLabel={strings.settings.removeFailure(row.line)}
             onPress={() => clearFailedDownloads(row.failed)}
           />
         </View>
@@ -122,14 +127,19 @@ export const FailedDownloadRow = memo(
     failed: FailedDownload<NativeYtSong>;
     covers: boolean;
   }) {
+    const { strings } = useLocalisation();
     const { song, line, detail } = failed;
     return (
       <DownloadSongRow song={song} covers={covers} line={line} detail={detail}>
-        <TextButton variant="plain" label="Retry" onPress={() => retryFailedDownloads([failed])} />
         <TextButton
           variant="plain"
-          label="Remove"
-          accessibilityLabel="Remove from failed downloads"
+          label={strings.settings.retry}
+          onPress={() => retryFailedDownloads([failed])}
+        />
+        <TextButton
+          variant="plain"
+          label={strings.settings.remove}
+          accessibilityLabel={strings.settings.removeFromFailedDownloads}
           onPress={() => clearFailedDownloads([failed])}
         />
       </DownloadSongRow>

@@ -1242,6 +1242,67 @@ ALTER TABLE playback_state ADD COLUMN queue_metadata text;`;
 // A play start ends the ongoing play: only ongoing plays (at most a couple) are indexed.
 const mOngoingPlays = `CREATE INDEX play_events_ongoing_idx ON play_events (ongoing) WHERE ongoing = 1;`;
 
+const m0045 = `CREATE TABLE follows (
+  key text PRIMARY KEY NOT NULL, name text NOT NULL,
+  level text NOT NULL, followed_at integer NOT NULL,
+  deezer_id integer, yt_browse_id text
+);`;
+
+const m0046 = `CREATE TABLE follow_release_cache (key text PRIMARY KEY NOT NULL, releases text NOT NULL, checked_at integer NOT NULL);
+--> statement-breakpoint
+CREATE TABLE hidden_follow_releases (key text PRIMARY KEY NOT NULL);`;
+
+const m0047 = `
+CREATE TABLE follow_show_cache (
+  key text PRIMARY KEY NOT NULL,
+  attraction_id text NOT NULL,
+  country text NOT NULL,
+  shows text NOT NULL,
+  checked_at integer NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE notified_follow_shows (id text PRIMARY KEY NOT NULL);
+`;
+
+// Follows, hidden releases and notified shows sync with the Wave account (#812): each
+// gets Core's SyncRow stamp, made here, waiting to go up. A follow changed when it was
+// made; the others, as far as anyone knows, now.
+const m0048 = `ALTER TABLE follows ADD COLUMN changed_at integer DEFAULT 0 NOT NULL;
+--> statement-breakpoint
+UPDATE follows SET changed_at = followed_at;
+--> statement-breakpoint
+ALTER TABLE follows ADD COLUMN phone_id text DEFAULT '' NOT NULL;
+--> statement-breakpoint
+UPDATE follows SET phone_id = (SELECT phone_id FROM phone);
+--> statement-breakpoint
+ALTER TABLE follows ADD COLUMN deleted integer DEFAULT false NOT NULL;
+--> statement-breakpoint
+ALTER TABLE follows ADD COLUMN pushed integer DEFAULT false NOT NULL;
+--> statement-breakpoint
+ALTER TABLE hidden_follow_releases ADD COLUMN changed_at integer DEFAULT 0 NOT NULL;
+--> statement-breakpoint
+UPDATE hidden_follow_releases SET changed_at = CAST(strftime('%s', 'now') AS integer) * 1000;
+--> statement-breakpoint
+ALTER TABLE hidden_follow_releases ADD COLUMN phone_id text DEFAULT '' NOT NULL;
+--> statement-breakpoint
+UPDATE hidden_follow_releases SET phone_id = (SELECT phone_id FROM phone);
+--> statement-breakpoint
+ALTER TABLE hidden_follow_releases ADD COLUMN deleted integer DEFAULT false NOT NULL;
+--> statement-breakpoint
+ALTER TABLE hidden_follow_releases ADD COLUMN pushed integer DEFAULT false NOT NULL;
+--> statement-breakpoint
+ALTER TABLE notified_follow_shows ADD COLUMN changed_at integer DEFAULT 0 NOT NULL;
+--> statement-breakpoint
+UPDATE notified_follow_shows SET changed_at = CAST(strftime('%s', 'now') AS integer) * 1000;
+--> statement-breakpoint
+ALTER TABLE notified_follow_shows ADD COLUMN phone_id text DEFAULT '' NOT NULL;
+--> statement-breakpoint
+UPDATE notified_follow_shows SET phone_id = (SELECT phone_id FROM phone);
+--> statement-breakpoint
+ALTER TABLE notified_follow_shows ADD COLUMN deleted integer DEFAULT false NOT NULL;
+--> statement-breakpoint
+ALTER TABLE notified_follow_shows ADD COLUMN pushed integer DEFAULT false NOT NULL;`;
+
 export default {
   journal: {
     entries: [
@@ -1300,6 +1361,10 @@ export default {
       { idx: 42, when: 1_795_435_200_000, tag: "0042_streamed_counts", breakpoints: true },
       { idx: 43, when: 1_795_521_600_000, tag: "0043_queue_persistence", breakpoints: true },
       { idx: 44, when: 1_795_608_000_000, tag: "0044_ongoing_plays", breakpoints: true },
+      { idx: 45, when: 1_795_694_400_000, tag: "0045_follows", breakpoints: true },
+      { idx: 46, when: 1_795_780_800_000, tag: "0046_follow_releases", breakpoints: true },
+      { idx: 47, when: 1_795_867_200_000, tag: "0047_follow_shows", breakpoints: true },
+      { idx: 48, when: 1_795_953_600_000, tag: "0048_follow_sync", breakpoints: true },
     ],
   },
   migrations: {
@@ -1348,5 +1413,9 @@ export default {
     m0042: mStreamedCounts,
     m0043: mQueuePersistence,
     m0044: mOngoingPlays,
+    m0045,
+    m0046,
+    m0047,
+    m0048,
   },
 };

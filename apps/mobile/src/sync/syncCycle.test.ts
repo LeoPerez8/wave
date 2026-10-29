@@ -19,6 +19,9 @@ import {
   setFavorites,
 } from "../library/db/playHistory.ts";
 import { stampPreference } from "../library/db/sync.ts";
+import { countFollows, removeFollow, saveFollow, selectFollow } from "../library/db/follows.ts";
+import { hideFollowRelease, readFollowReleases } from "../library/db/followReleases.ts";
+import { markShowNotified, readFollowShows } from "../library/db/followShows.ts";
 import {
   addToPlaylist,
   addToShazam,
@@ -430,6 +433,73 @@ describe("syncCycle", () => {
     await b.sync();
     await a.sync();
     assert.equal(a.stored.get("settings.theme"), '{"primary":"teal"}');
+  });
+
+  test("a follow made on one phone shows on the other with its level, and an unfollow removes it there", async () => {
+    const service = testSyncService();
+    const a = await phone(service);
+    const b = await phone(service);
+    saveFollow(a.db, { name: "Massive Attack", deezerId: 2_163 }, "releases", a.now());
+    await a.sync();
+    const pulled = await b.sync();
+
+    assert.equal(pulled.pulled.follows, true);
+    assert.deepEqual(
+      [selectFollow(b.db, "massive attack")?.name, selectFollow(b.db, "Massive Attack")?.level],
+      ["Massive Attack", "releases"],
+    );
+    assert.equal(selectFollow(b.db, "Massive Attack")?.deezerId, 2_163);
+    // Applied, not changed on b: nothing goes back up, nor when the same follow is saved again.
+    saveFollow(b.db, { name: "Massive Attack", deezerId: 2_163 }, "releases", b.now());
+    assert.equal((await b.sync()).pushed, 0);
+
+    saveFollow(b.db, { name: "Massive Attack" }, "shows", b.now());
+    await b.sync();
+    await a.sync();
+    assert.equal(selectFollow(a.db, "Massive Attack")?.level, "shows");
+
+    removeFollow(a.db, "Massive Attack", a.now());
+    await a.sync();
+    await b.sync();
+    assert.equal(selectFollow(b.db, "Massive Attack"), null);
+    assert.equal(countFollows(b.db), 0);
+  });
+
+  test("a release hidden or a show notified on one phone stays hidden and quiet on the other", async () => {
+    const service = testSyncService();
+    const a = await phone(service);
+    const b = await phone(service);
+    hideFollowRelease(a.db, "deezer:302127", a.now());
+    assert.equal(markShowNotified(a.db, "G5vYZ9Ma1Jb5U", a.now()), true);
+    await a.sync();
+    await b.sync();
+
+    assert.deepEqual(readFollowReleases(b.db).hidden, ["deezer:302127"]);
+    assert.deepEqual(readFollowShows(b.db).notified, ["G5vYZ9Ma1Jb5U"]);
+    // The claim another phone made holds here: this phone doesn't notify it again.
+    assert.equal(markShowNotified(b.db, "G5vYZ9Ma1Jb5U", b.now()), false);
+    assert.equal((await b.sync()).pushed, 0);
+  });
+
+  test("signing out keeps follows on the phone, and signing in again merges them", async () => {
+    const service = testSyncService();
+    const a = await phone(service);
+    const b = await phone(service);
+    saveFollow(a.db, { name: "Portishead" }, "releases", a.now());
+    await a.sync();
+    a.signOut();
+    assert.equal(selectFollow(a.db, "Portishead")?.level, "releases");
+
+    // Signed out, a follow stays here, and goes up with the rest at the next sign-in.
+    saveFollow(a.db, { name: "Tricky" }, "shows", a.now());
+    saveFollow(b.db, { name: "Björk" }, "releases", b.now());
+    assert.equal(service.rows().follows.length, 1);
+    await a.sync();
+    await b.sync();
+    assert.deepEqual(
+      ["Portishead", "Tricky", "Björk"].map((name) => selectFollow(b.db, name)?.level),
+      ["releases", "shows", "releases"],
+    );
   });
 
   test("the synced Shazam id fills the same playlist on a second phone with different local ids", async () => {

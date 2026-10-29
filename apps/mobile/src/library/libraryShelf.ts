@@ -1,4 +1,5 @@
 import {
+  homeSectionTitle,
   LIBRARY_SHELF_CHOICES,
   parseLibraryShelf,
   storedLibraryShelf,
@@ -7,6 +8,7 @@ import {
 
 import type { TitleLongPress } from "@/components/TitleLongPress";
 import { persistedSetting } from "@/lib/persistedSetting";
+import { currentLocalisation } from "@/localisation/localisation";
 import { openTitleChoices } from "@/overlay/titleChoices";
 import type { ChoiceSetting } from "@/settings/ChoiceRow";
 
@@ -24,8 +26,17 @@ export const useLibraryShelf = libraryShelf.useValue;
  * Library alike.
  */
 export const libraryShelfChoice: ChoiceSetting<LibraryShelf> = {
-  label: "Shelf under the Library",
-  choices: LIBRARY_SHELF_CHOICES.map(({ shelf, label }) => ({ value: shelf, label })),
+  // Read when shown, so they're in the language Wave reads in.
+  get label() {
+    return currentLocalisation().strings.library.shelfUnderLibrary;
+  },
+  get choices() {
+    const { strings } = currentLocalisation();
+    return LIBRARY_SHELF_CHOICES.map(({ shelf }) => ({
+      value: shelf,
+      label: shelf === "none" ? strings.library.noShelf : homeSectionTitle(shelf, strings),
+    }));
+  },
   setting: libraryShelf,
 };
 
@@ -35,7 +46,9 @@ export const libraryShelfChoice: ChoiceSetting<LibraryShelf> = {
  * once and keeps it across restarts.
  */
 export const libraryShelfTitleLongPress: TitleLongPress = {
-  label: "Choose the Library's shelf",
+  get label() {
+    return currentLocalisation().strings.library.chooseShelf;
+  },
   open: () =>
     openTitleChoices({
       label: libraryShelfChoice.label,

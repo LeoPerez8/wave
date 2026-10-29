@@ -1,7 +1,13 @@
-import { joinArtists, type YtArtistAlbum, type YtArtistSectionNote } from "@wave/core";
+import {
+  joinArtists,
+  type Catalogue,
+  type YtArtistAlbum,
+  type YtArtistSectionNote,
+} from "@wave/core";
 
 import { AlbumTile } from "@/catalog/AlbumTile";
 import { AlbumCard } from "@/catalog/cards/AlbumCard";
+import { useLocalisation } from "@/localisation/localisation";
 import { selectableRow } from "@/selection/selectableRow";
 import type { ListSelection } from "@/selection/useListSelection";
 
@@ -12,16 +18,23 @@ import { openYtAlbumActions } from "./YtAlbumActions";
  * The quiet line under an artist's page about what YouTube Music has: an
  * outcome. While it loads, skeletons show instead.
  */
-export const YT_ARTIST_NOTE: Readonly<Record<Exclude<YtArtistSectionNote, "loading">, string>> = {
-  allInLibrary: "Your library already has every song of this artist.",
-  noSongs: "No songs online for this artist.",
-  notFound: "Not found online.",
-  offline: "You're offline. Tap Online to try again when you're back online.",
-  failed: "No answer online. Tap Online to try again.",
+export const ytArtistNote = (
+  note: Exclude<YtArtistSectionNote, "loading">,
+  { library }: Catalogue,
+): string => {
+  switch (note) {
+    case "allInLibrary":
+      return library.allInLibrary;
+    case "noSongs":
+      return library.noSongsOnline;
+    case "notFound":
+      return library.notFoundOnline;
+    case "offline":
+      return library.offlineTapOnline;
+    case "failed":
+      return library.noAnswerTapOnline;
+  }
 };
-
-/** A tile's furniture line when YouTube Music gives no year. */
-const UNDATED = { albums: "Album", singles: "Single" } as const;
 
 /**
  * An artist's release on YouTube Music that the Library doesn't have, as a
@@ -39,8 +52,11 @@ export function YtReleaseTile({
   size: number;
   selection: ListSelection<YtArtistAlbum>;
 }) {
+  const { strings } = useLocalisation();
   const line = joinArtists(album.artists);
   const head = { title: album.title, line, artworkUrl: album.artworkUrl };
+  // A tile's furniture line when YouTube Music gives no year.
+  const undated = kind === "albums" ? strings.library.album : strings.library.single;
   return (
     <AlbumTile
       album={{
@@ -52,7 +68,7 @@ export function YtReleaseTile({
         artworkUri: album.artworkUrl ?? undefined,
       }}
       size={size}
-      detail={album.year === null ? UNDATED[kind] : String(album.year)}
+      detail={album.year === null ? undated : String(album.year)}
       {...selectableRow(
         album,
         selection,

@@ -1,3 +1,5 @@
+import { ArtistShows } from "@/library/ArtistShows";
+import { useFollowAction } from "@/library/FollowButton";
 import { useScreenContent } from "@/lib/screenTiming";
 import { IconUser } from "@tabler/icons-react-native";
 import {
@@ -5,6 +7,7 @@ import {
   artistPageItems,
   discoverTrackId,
   type ArtistPageItem,
+  type Catalogue,
   type DiscoverSong,
   type YtArtistPageNote,
   type YtArtistRelease,
@@ -19,7 +22,7 @@ import { AlbumTile } from "@/catalog/AlbumTile";
 import { SECTION_HEAD, SectionHead } from "@/catalog/CatalogLine";
 import { COVER_ROW_TILE, CoverRow } from "@/catalog/CoverRow";
 import { CELL, grid } from "@/catalog/grid";
-import { PlayShuffle } from "@/catalog/PlayShuffle";
+import { PlayShuffle, ListAction } from "@/catalog/PlayShuffle";
 import {
   HiddenSkeletonBox,
   HiddenSkeletonLine,
@@ -51,7 +54,8 @@ import { useYtArtistPage } from "@/ytmusic/artistPage";
 import { mixedSongEntry, mixedPageSongHandlers, songSelection } from "@/songs/mixedSongs";
 import { SongList } from "@/songs/SongList";
 import { occurrenceKeys } from "@/songs/songRowState";
-import { YT_ARTIST_NOTE, YtReleaseTile } from "@/ytmusic/YtArtistSection";
+import { ytArtistNote, YtReleaseTile } from "@/ytmusic/YtArtistSection";
+import { useLocalisation } from "@/localisation/localisation";
 import { YT_ARTIST_BY_NAME } from "@/ytmusic/routes";
 
 type Song = DiscoverSong<NativeYtSong, SongRow>;
@@ -70,21 +74,19 @@ const SHELF_ROW = albumRowHeight(COVER_ROW_TILE);
 
 const NO_SONGS: readonly Song[] = [];
 
-const SHELF_LABEL = { albums: "Albums", singles: "Singles & EPs" } as const;
-
 /** The quiet line in place of what the page can't show (while it loads, skeletons show). */
-const NOTE: Readonly<Record<Exclude<YtArtistPageNote, "loading">, string>> = {
-  offline: YT_ARTIST_NOTE.offline,
-  failed: YT_ARTIST_NOTE.failed,
-  off: "YT Music is off. Turn it on in Settings to see this artist.",
-  notFound: YT_ARTIST_NOTE.notFound,
-};
+const pageNote = (note: Exclude<YtArtistPageNote, "loading">, strings: Catalogue): string =>
+  note === "off" ? strings.library.ytArtistOff : ytArtistNote(note, strings);
 
 /** As the integrated Library artist page lays it out: the releases, then the songs. */
-const pageItems = (shelves: readonly YtArtistShelf<AlbumRow>[], songs: readonly Song[]): Item[] =>
+const pageItems = (
+  shelves: readonly YtArtistShelf<AlbumRow>[],
+  songs: readonly Song[],
+  { library }: Catalogue,
+): Item[] =>
   artistPageItems(
     shelves.map((shelf) => ({
-      label: SHELF_LABEL[shelf.kind],
+      label: shelf.kind === "albums" ? library.albums : library.singlesAndEps,
       covers: shelf.releases.map((release): Cover => ({ kind: shelf.kind, release })),
     })),
     songs,
@@ -177,16 +179,19 @@ function YtArtistImage({ name, uri, size }: { name: string; uri: string | null; 
  * have their skeleton.
  */
 function Head({
+  browseId,
   name,
   artworkUrl,
   loading,
   onPlay,
 }: {
+  browseId: string | null;
   name: string | null;
   artworkUrl: string | null;
   loading: boolean;
   onPlay: ((shuffle: boolean) => void) | null;
 }) {
+  const follow = useFollowAction({ name: name ?? "", ytBrowseId: browseId });
   const { width } = useWindowDimensions();
   // Three fifths of the content width, on the cell grid.
   const size = Math.floor(((width - grid.margin * 2) * 0.6) / CELL) * CELL;
@@ -216,11 +221,15 @@ function Head({
       </View>
       {loading ? (
         <PlayShuffleSkeleton />
-      ) : (
-        onPlay !== null && (
-          <PlayShuffle onPlay={() => onPlay(false)} onShuffle={() => onPlay(true)} />
-        )
-      )}
+      ) : onPlay !== null ? (
+        <PlayShuffle
+          onPlay={() => onPlay(false)}
+          onShuffle={() => onPlay(true)}
+          last={name === null ? null : follow}
+        />
+      ) : name !== null ? (
+        <ListAction {...follow} />
+      ) : null}
     </View>
   );
 }
@@ -235,6 +244,7 @@ function QuietLine({
   retry: boolean;
   onRetry: () => void;
 }) {
+  const { strings } = useLocalisation();
   if (note === null && !retry) return null;
   return (
     <View style={{ paddingTop: CELL * 2 }}>
@@ -243,7 +253,7 @@ function QuietLine({
           <Text className="font-sans text-footnote text-secondary">{note}</Text>
         </View>
       )}
-      {retry && <TextButton label="Try Again" onPress={onRetry} />}
+      {retry && <TextButton label={strings.library.tryAgain} onPress={onRetry} />}
     </View>
   );
 }
@@ -260,12 +270,17 @@ function QuietLine({
  */
 export default function YtArtistScreen() {
   useScreenContent(true);
+  const { strings } = useLocalisation();
   const params = useLocalSearchParams<{ id: string; name?: string; offline?: string }>();
   const browseId = params.id === YT_ARTIST_BY_NAME ? null : (params.id ?? "");
   const knownName = params.name === undefined || params.name === "" ? null : params.name;
   const scrollable = useListScrollable();
   const bottomInset = useChromeInset();
-  const { view, retry } = useYtArtistPage(browseId, knownName, params.offline === "1");
+  const {
+    view,
+    retry,
+    browseId: resolvedBrowseId,
+  } = useYtArtistPage(browseId, knownName, params.offline === "1");
   const songs = view?.songs ?? NO_SONGS;
   const selectable = useMemo(
     () => (view === null ? [] : artistSelectionItems(view.shelves, view.songs)),
@@ -283,7 +298,10 @@ export default function YtArtistScreen() {
       ),
     [selection],
   );
-  const items = useMemo(() => (view === null ? [] : pageItems(view.shelves, view.songs)), [view]);
+  const items = useMemo(
+    () => (view === null ? [] : pageItems(view.shelves, view.songs, strings)),
+    [view, strings],
+  );
   // Songs key by id, a real duplicate by its occurrence, never by place.
   const songKeys = useMemo(() => occurrenceKeys(songs, discoverTrackId), [songs]);
   const itemKey = useCallback(
@@ -311,12 +329,13 @@ export default function YtArtistScreen() {
       name === null && !loading ? null : (
         <Head
           name={name}
+          browseId={resolvedBrowseId}
           artworkUrl={artworkUrl}
           loading={loading}
           onPlay={songs.length === 0 ? null : (shuffle) => play(undefined, shuffle)}
         />
       ),
-    [name, artworkUrl, loading, songs.length, play],
+    [name, resolvedBrowseId, artworkUrl, loading, songs.length, play],
   );
   const footer = useMemo(
     () =>
@@ -324,12 +343,12 @@ export default function YtArtistScreen() {
         <TrackSkeletons />
       ) : view === null ? null : (
         <QuietLine
-          note={view.note === null ? null : NOTE[view.note]}
+          note={view.note === null ? null : pageNote(view.note, strings)}
           retry={view.retry}
           onRetry={retry}
         />
       ),
-    [loading, view, retry],
+    [loading, view, retry, strings],
   );
   const contentStyle = useMemo(
     () => ({ paddingHorizontal: grid.margin, paddingBottom: bottomInset }),
@@ -367,7 +386,12 @@ export default function YtArtistScreen() {
         }}
         {...mixedPageSongHandlers}
         contentContainerStyle={contentStyle}
-        ListHeaderComponent={header}
+        ListHeaderComponent={
+          <>
+            {header}
+            <ArtistShows name={name ?? ""} />
+          </>
+        }
         ListFooterComponent={footer}
       />
     </View>

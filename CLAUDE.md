@@ -6,7 +6,11 @@ Pick tickets whose blockers are closed.
 
 ## Conventions
 
-- Everything in English: UI copy, code, docs, issues, PRs, commits.
+- Code, docs, issues, PRs and commits are in English. UI text comes from Core's catalogue
+  (`packages/core/src/catalogue/`) in English and Brazilian Portuguese, using the glossary in
+  `docs/spec.md` › Language; a PR that adds UI text adds both. The untranslated-text check in the
+  app and Core tests fails on literal UI text; `docs/untranslated-text-check.md` says how to
+  exempt a log line or id.
 - Start work from the latest `main`, on a branch `feat/<issue>-<slug>` (`fix/<issue>-<slug>`
   for a bug fix), and land it on `ti` through a PR. A PR can carry several tickets; its body
   has a `Closes #<issue>` line for each. The PR title is the release's patch-note line: one

@@ -1,3 +1,4 @@
+import { useLocalisation } from "@/localisation/localisation";
 import {
   IconBrandInstagram,
   IconBrandWhatsapp,
@@ -110,6 +111,7 @@ export function useImageShare({
   readonly known: boolean;
   readonly disabled: boolean;
 } {
+  const { strings } = useLocalisation();
   const [busy, setBusy] = useState(false);
   // Two taps in one frame both see busy false; this sees the first.
   const sending = useRef(false);
@@ -154,31 +156,31 @@ export function useImageShare({
   const all: Record<LyricShareDestination, ShareDestination> = {
     instagramStories: {
       key: "instagramStories",
-      label: "Instagram Stories",
+      label: strings.share.instagramStories,
       icon: IconBrandInstagram,
       onPress: () =>
         void sendImage(
           "instagramStories",
           `share ${what} to Instagram Stories`,
           (path) => shareImageToInstagramStory(path, storyBackground, storyFrame),
-          "Couldn't open Instagram",
+          strings.share.instagramFailed,
         ),
     },
     whatsapp: {
       key: "whatsapp",
-      label: "WhatsApp",
+      label: strings.share.whatsApp,
       icon: IconBrandWhatsapp,
       onPress: () =>
         void sendImage(
           "whatsapp",
           `share ${what} to WhatsApp`,
           shareImageToWhatsApp,
-          "Couldn't open WhatsApp",
+          strings.share.whatsAppFailed,
         ),
     },
     save: {
       key: "save",
-      label: "Save image",
+      label: strings.share.saveImage,
       icon: IconPhotoDown,
       onPress: () =>
         void sendImage(
@@ -186,21 +188,21 @@ export function useImageShare({
           `save ${what}`,
           async (path) => {
             await saveImageToGallery(path);
-            void showToast("Saved to your gallery");
+            void showToast(strings.share.savedToGallery);
           },
-          "Couldn't save the image",
+          strings.share.saveImageFailed,
         ),
     },
     more: {
       key: "more",
-      label: "More",
+      label: strings.share.more,
       icon: IconDots,
       onPress: () =>
         void sendImage(
           "more",
           `share ${what}`,
           (path) => openImageShareSheet(path, sheetTitle),
-          "Couldn't share the image",
+          strings.share.shareImageFailed,
         ),
     },
   };

@@ -8,6 +8,7 @@ import {
   readPlaylistEntrySong,
   readPlaylistYtSong,
   UNAVAILABLE_ENTRY_ACTION_LABELS,
+  unavailableEntryActionLabel,
   playlistSongsLine,
   playlistUnplayableNotice,
   unavailableEntryActions,
@@ -427,5 +428,57 @@ describe("playlistSongsLine", () => {
 
   test("a playlist with every song available says only its count", () => {
     assert.equal(playlistSongsLine(24, 0), "24 songs");
+  });
+});
+
+describe("playlist entries in Portuguese", () => {
+  test("a playlist's count says how many songs and how many can't play", () => {
+    assert.equal(playlistSongsLine(0, 0, "pt-BR"), "Nenhuma música");
+    assert.equal(playlistSongsLine(1, 0, "pt-BR"), "1 música");
+    assert.equal(playlistSongsLine(2, 1, "pt-BR"), "2 músicas · 1 indisponível");
+    assert.equal(playlistSongsLine(1234, 3, "pt-BR"), "1.234 músicas · 3 indisponíveis");
+  });
+
+  test("an unavailable entry says why, on its row and when tapped", () => {
+    assert.deepEqual(unavailableEntryView(unavailable("Within").song, "pt-BR"), {
+      line: "Não encontrada online",
+      notice: "O Wave não encontrou esta música online nem na sua Biblioteca.",
+    });
+    assert.deepEqual(
+      unavailableEntryView(unavailable("Untitled", { reason: "localFile" }).song, "pt-BR"),
+      {
+        line: "Arquivo local no Spotify",
+        notice: "Esta música é um arquivo local no Spotify, então o Wave não pôde procurá-la.",
+      },
+    );
+  });
+
+  test("Play on a playlist of unavailable entries says why in Portuguese", () => {
+    const local = (title: string) => unavailable(title, { reason: "localFile" });
+    assert.equal(
+      playlistUnplayableNotice([unavailable("Within")], "pt-BR"),
+      "O Wave não encontrou esta música online nem na sua Biblioteca.",
+    );
+    assert.equal(
+      playlistUnplayableNotice([unavailable("Within"), unavailable("Touch")], "pt-BR"),
+      "O Wave não encontrou estas músicas online nem na sua Biblioteca.",
+    );
+    assert.equal(
+      playlistUnplayableNotice([local("Untitled"), local("Demo")], "pt-BR"),
+      "Estas músicas são arquivos locais no Spotify, então o Wave não pôde procurá-las.",
+    );
+    assert.equal(
+      playlistUnplayableNotice([unavailable("Within"), local("Demo")], "pt-BR"),
+      "O Wave não encontrou estas músicas online nem na sua Biblioteca, ou elas são arquivos locais no Spotify.",
+    );
+  });
+
+  test("an unavailable entry's menu reads in Portuguese", () => {
+    assert.deepEqual(
+      unavailableEntryActionLabel("removeFromPlaylist", "pt-BR"),
+      "Remover da Playlist",
+    );
+    assert.deepEqual(unavailableEntryActionLabel("search", "pt-BR"), "Buscar");
+    assert.equal(unavailableEntryActionLabel("search"), UNAVAILABLE_ENTRY_ACTION_LABELS.search);
   });
 });
