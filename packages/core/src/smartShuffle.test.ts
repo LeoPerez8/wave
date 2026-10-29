@@ -303,7 +303,11 @@ describe("shuffledTrackIds", () => {
 
   test("History's songs aren't ordered: only the current song's and Up Next's are", () => {
     const later = start(["1", "2", "yt:abc", "3", "4"], 2);
-    assert.deepEqual(shuffledTrackIds(later, { type: "setShuffle", on: true }), ["yt:abc", "3", "4"]);
+    assert.deepEqual(shuffledTrackIds(later, { type: "setShuffle", on: true }), [
+      "yt:abc",
+      "3",
+      "4",
+    ]);
     assert.deepEqual(shuffledTrackIds(later, { type: "reshuffle" }), ["yt:abc", "3", "4"]);
   });
 

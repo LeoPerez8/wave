@@ -299,7 +299,9 @@ describe("shuffle", () => {
     assert.equal(state.shuffle, false);
     assert.deepEqual(ids(queueHistory(state)), history);
     assert.equal(currentEntry(state)?.key, current.key);
-    const notPlayed = tracks.split(" ").filter((id) => !history.includes(id) && id !== current.trackId);
+    const notPlayed = tracks
+      .split(" ")
+      .filter((id) => !history.includes(id) && id !== current.trackId);
     assert.deepEqual(ids(upNext(state)), notPlayed);
     assert.equal(playback, "keep");
   });
