@@ -4,9 +4,11 @@ import { Text, View } from "react-native";
 
 import { EntryRow } from "@/catalog/EntryRow";
 import { Hairline } from "@/catalog/Hairline";
+import { SettingsSwitch } from "@/components/SettingsSwitch";
 import { exportAppLog, saveAppLog } from "@/log/appLog";
 import { WaveAppLog } from "@/native/waveAppLog";
 import { showToast } from "@/overlay/toast";
+import { setPortuguesePreview, usePortuguesePreview } from "@/settings/portuguesePreview";
 import { SettingsPageScreen } from "@/settings/SettingsPage";
 
 const exportLogs = (): void => {
@@ -36,9 +38,13 @@ const stallJsThread = (): void => {
   }, 0);
 };
 
-/** Settings › Developer: logs, the Design preview and, in a debug build, the log's triggers. */
+/**
+ * Settings › Developer: logs, the Design preview, Portuguese (preview) and,
+ * in a debug build, the log's triggers.
+ */
 export default function DeveloperSettingsScreen() {
   useScreenContent(true);
+  const portuguese = usePortuguesePreview();
   return (
     <SettingsPageScreen page="developer">
       <View>
@@ -55,6 +61,19 @@ export default function DeveloperSettingsScreen() {
         <EntryRow label="Design preview" onPress={() => router.push("/design-preview")} />
         <Text className="mt-2 font-sans text-footnote text-secondary">
           The Library's components on synthetic data, until Wave can scan your music.
+        </Text>
+      </View>
+      <View>
+        <Hairline />
+        <SettingsSwitch
+          label="Portuguese (preview)"
+          value={portuguese}
+          onValueChange={setPortuguesePreview}
+        />
+        <Hairline />
+        <Text className="mt-2 font-sans text-footnote text-secondary">
+          On a phone in Portuguese, Wave reads in Brazilian Portuguese where it's translated so far.
+          Kept on this phone only.
         </Text>
       </View>
       {__DEV__ && WaveAppLog !== null && (

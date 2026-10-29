@@ -137,6 +137,12 @@ declare class WaveNativeModule extends NativeModule<WaveNativeEvents> {
   /** Absolute path of the shared `Music` folder. */
   getDefaultMusicFolder(): string;
   /**
+   * The phone's preferred languages as BCP 47 tags, in order: Wave's own
+   * language from Android's per-app list when one is set, else the system's.
+   * Absent from an APK built before it (a JS-only repack).
+   */
+  preferredLanguages?(): string[];
+  /**
    * Whether the phone is online (Android checked its default network reaches
    * the internet) and on mobile data rather than Wi-Fi: the native cache,
    * which `onConnectivityChanged` follows. Read once; checks use `online()`.
@@ -333,6 +339,9 @@ const connectivity = connectivityStore({
 
 /** Whether the phone is on mobile data now; Wi-Fi when the module can't tell. */
 export const onMobileData = (): boolean => connectivity.get().onMobileData;
+
+/** The phone's preferred languages, in order (`preferredLanguages`); none from an older APK. */
+export const phoneLanguages = (): readonly string[] => WaveNative.preferredLanguages?.() ?? [];
 
 /** Whether the phone is online now; online when the module can't tell. */
 export const online = (): boolean => connectivity.get().online;

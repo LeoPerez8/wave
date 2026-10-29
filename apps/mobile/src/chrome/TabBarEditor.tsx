@@ -10,6 +10,7 @@ import {
 import { useCallback, useState } from "react";
 
 import { ArrangementEditor, FixedRow } from "@/components/ArrangementEditor";
+import { useLocalisation } from "@/localisation/localisation";
 import { pressedRect } from "@/motion/pressedRect";
 import { openOverlay } from "@/overlay/overlay";
 import { getTabBar, setTabBar } from "@/settings/tabBar";
@@ -17,7 +18,6 @@ import { getTabBar, setTabBar } from "@/settings/tabBar";
 import { tabLook } from "./tabs";
 
 const PLACE = "the tab bar";
-const title = (tab: TabBarTab): string => tabLook(tab).label;
 
 /**
  * The tab bar's editor: Home first (it can't move or go), the tabs after it
@@ -35,6 +35,8 @@ export function TabBarEditor({
   edit: (change: TabBarEdit) => void;
   onDone?: (() => void) | undefined;
 }) {
+  const { strings } = useLocalisation();
+  const title = (tab: TabBarTab): string => tabLook(tab, strings).label;
   const search = bar.includes("search");
   const middle = movableTabs(bar);
   return (
