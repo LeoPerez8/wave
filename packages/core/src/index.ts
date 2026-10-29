@@ -459,9 +459,12 @@ export {
   WHITE_INK,
   MAX_SAVED_INKS,
   chooseCustomInk,
+  chooseSavedInk,
+  chooseThemeSwatch,
   customInkPreview,
   inkSaveState,
   isDefaultThemeChoice,
+  pulledThemeChoice,
   readThemeChoice,
   removeSavedInk,
   resetThemeChoice,
@@ -490,7 +493,9 @@ export {
   LAUNCHER_ICONS,
   LAUNCHER_ICON_ART,
   LAUNCHER_ICON_RADIUS,
+  MANIFEST_LAUNCHER_ICON,
   launcherIconFor,
+  launcherIconOnStart,
   launcherIconSwitch,
   isDefaultThemeState,
   resolveThemeChange,
@@ -501,6 +506,7 @@ export type {
   LauncherBehaviour,
   LauncherIcon,
   LauncherIconSwitch,
+  StartingIconState,
   ThemeState,
 } from "./launcherIcon.ts";
 export { LAUNCH_SPLASH_THEMES, launchTheme, paletteSplashThemeFor } from "./launchTheme.ts";
@@ -2315,12 +2321,22 @@ export type {
 export { planShazamAdd } from "./shazamPlaylist.ts";
 export { bounceDemoSwipe, sampleSwipeActions } from "./motionSample.ts";
 export type { BounceDemoSwipe } from "./motionSample.ts";
-export { LONG_PRESS_SAMPLE_MENU, longPressFill, longPressHoldLasts } from "./touchSample.ts";
+export {
+  LONG_PRESS_SAMPLE_MENU,
+  longPressFill,
+  longPressHoldStep,
+  type HeldFinger,
+  type LongPressHoldStep,
+  type SampleTouch,
+  type SampleTouchEvent,
+} from "./touchSample.ts";
 export type { LongPressFill, SampleMenuEntry } from "./touchSample.ts";
 export {
   NOW_PLAYING_ACTIONS,
   editNowPlayingButtons,
+  nowPlayingSlotShow,
   readNowPlayingButtons,
+  readNowPlayingSlotRoute,
   storedNowPlayingButtons,
 } from "./nowPlayingButtons.ts";
 export type {
@@ -2328,4 +2344,5 @@ export type {
   NowPlayingButtons,
   NowPlayingButtonsEdit,
   NowPlayingSlot,
+  NowPlayingSlotSong,
 } from "./nowPlayingButtons.ts";

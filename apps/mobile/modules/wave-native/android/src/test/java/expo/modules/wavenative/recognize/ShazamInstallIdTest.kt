@@ -26,6 +26,16 @@ class ShazamInstallIdTest {
   }
 
   @Test
+  fun `an id that can't be saved is still sent, the same one for the rest of the run`() {
+    val blocked = File(Fixtures.tempDir(), "recognize").apply { writeText("a file where the folder goes") }
+    val ids = ShazamInstallId(File(blocked, "shazam-install-id"))
+
+    val first = ids.get()
+    assertTrue(first, Regex("[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}").matches(first))
+    assertEquals(first, ids.get())
+  }
+
+  @Test
   fun `an unreadable id is replaced`() {
     file.parentFile.mkdirs()
     file.writeText("not an id\n")

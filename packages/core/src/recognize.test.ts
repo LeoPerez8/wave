@@ -98,6 +98,14 @@ const asks = (...events: readonly RecognizeEvent[]): readonly number[] => {
 };
 
 const heard = (seconds: number): RecognizeEvent => ({ kind: "heard", ms: seconds * 1000 });
+/** The controller's clock at [seconds], with Wave in the foreground or not. */
+const tick = (seconds: number, foreground = true): RecognizeEvent => ({
+  kind: "tick",
+  atMs: seconds * 1000,
+  foreground,
+});
+const captureFailed: RecognizeEvent = { kind: "captureFailed" };
+const CAPTURE_FAILED = { kind: "failed", failure: "capture", status: null } as const;
 const noMatch: RecognizeEvent = { kind: "answer", answer: { kind: "noMatch" } };
 const cancel: RecognizeEvent = { kind: "cancel" };
 const failed = (failure: RecognizeFailure, status: number | null = null): RecognizeEvent => ({
@@ -174,12 +182,49 @@ describe("the session's end", () => {
     assert.deepEqual(refused.session.ended, { kind: "failed", failure: "refused", status: 429 });
   });
 
-  test("a capture that stops ends it as a failure", () => {
-    assert.deepEqual(run(heard(2), { kind: "captureFailed" }).session.ended, {
-      kind: "failed",
-      failure: "capture",
-      status: null,
+  test("a capture that stops ends it as a failure once Wave stays in the foreground for a second", () => {
+    const stopped = run(tick(1), heard(2), tick(2), captureFailed);
+    assert.equal(stopped.session.ended, null);
+    assert.equal(stepRecognize(stopped.session, tick(2.5)).session.ended, null);
+    assert.deepEqual(stepRecognize(stopped.session, tick(3)).session.ended, CAPTURE_FAILED);
+  });
+
+  test("a capture that stops as Wave leaves the foreground ends it as Cancel", () => {
+    // Hiding Wave stops the capture, and either report may reach JS first.
+    const stopped = run(tick(1), heard(2), tick(2), captureFailed);
+    assert.deepEqual(stepRecognize(stopped.session, tick(2.5, false)).session.ended, {
+      kind: "cancelled",
     });
+    const pending = run(tick(1), heard(4), tick(2), captureFailed);
+    assert.equal(pending.session.asking, true);
+    assert.deepEqual(stepRecognize(pending.session, tick(4.5, false)).session.ended, {
+      kind: "cancelled",
+    });
+  });
+
+  test("a capture that stops while an ask is out waits for its answer", () => {
+    const stopped = run(tick(0), heard(4), heard(5), tick(1), captureFailed, tick(9));
+    assert.equal(stopped.session.ended, null);
+    assert.deepEqual(stepRecognize(stopped.session, match).session.ended, {
+      kind: "match",
+      song: SONG,
+    });
+    // No more audio is coming, so a no match can't wait for the next step.
+    const none = stepRecognize(stopped.session, noMatch);
+    assert.deepEqual(none.session.ended, CAPTURE_FAILED);
+    assert.equal(none.ask, null);
+    assert.deepEqual(stepRecognize(stopped.session, failed("refused", 429)).session.ended, {
+      kind: "failed",
+      failure: "refused",
+      status: 429,
+    });
+  });
+
+  test("a no match that comes soon after the capture stopped still waits out the second", () => {
+    const stopped = run(tick(0), heard(4), heard(8), tick(1), captureFailed, noMatch);
+    assert.equal(stopped.session.ended, null);
+    assert.equal(stopped.ask, null);
+    assert.deepEqual(stepRecognize(stopped.session, tick(2)).session.ended, CAPTURE_FAILED);
   });
 
   test("Cancel ends it at any point", () => {
@@ -214,6 +259,55 @@ describe("the session's end", () => {
       kind: "match",
       song: SONG,
     });
+  });
+});
+
+describe("a session that stalls", () => {
+  test("audio that stops advancing for 3 seconds ends it as a capture failure", () => {
+    const quiet = run(tick(0), tick(1), heard(1), tick(3.5));
+    assert.equal(quiet.session.ended, null);
+    assert.deepEqual(stepRecognize(quiet.session, tick(4)).session.ended, CAPTURE_FAILED);
+    // Each step of audio starts the wait again.
+    const going = run(tick(0), tick(2), heard(1), tick(4), heard(2), tick(6), heard(3), tick(8));
+    assert.equal(going.session.ended, null);
+  });
+
+  test("a capture that never starts ends after 3 seconds", () => {
+    assert.equal(run(tick(0), tick(2.5)).session.ended, null);
+    assert.deepEqual(run(tick(0), tick(3)).session.ended, CAPTURE_FAILED);
+  });
+
+  test("time while Wave is hidden, behind Android's consent dialog, doesn't count", () => {
+    const consent = run(tick(0), tick(1, false), tick(30, false), tick(32));
+    assert.equal(consent.session.ended, null);
+    assert.deepEqual(stepRecognize(consent.session, tick(33)).session.ended, CAPTURE_FAILED);
+  });
+
+  test("once every step's audio is heard, only the asks are waited for", () => {
+    const heardAll = run(tick(0), heard(4), heard(12), tick(12), tick(20));
+    assert.equal(heardAll.session.ended, null);
+    const last = run(tick(0), heard(4), noMatch, heard(8), noMatch, heard(12), tick(12), tick(20));
+    assert.equal(last.session.ended, null);
+    assert.deepEqual(stepRecognize(last.session, match).session.ended, {
+      kind: "match",
+      song: SONG,
+    });
+  });
+
+  test("an ask unanswered for 35 seconds ends it as no answer", () => {
+    const asked = run(tick(0), heard(4), noMatch, heard(8), noMatch, tick(2), heard(12));
+    assert.deepEqual(asked.ask, { last: true });
+    assert.equal(stepRecognize(asked.session, tick(36.5)).session.ended, null);
+    assert.deepEqual(stepRecognize(asked.session, tick(37)).session.ended, {
+      kind: "failed",
+      failure: "network",
+      status: null,
+    });
+  });
+
+  test("a clock that goes back changes nothing", () => {
+    const back = run(tick(10), heard(1), tick(5), tick(7));
+    assert.equal(back.session.ended, null);
   });
 });
 

@@ -1,10 +1,13 @@
 import {
   appearanceAccent,
   chooseCustomInk,
+  chooseSavedInk,
+  chooseThemeSwatch,
   createColourPickerPreview,
   launcherIconFor,
   launcherIconSwitch,
   launchTheme,
+  pulledThemeChoice,
   readThemeChoice,
   removeSavedInk as withoutSavedInk,
   resetThemeChoice,
@@ -102,6 +105,8 @@ const theme = persistedSetting<ThemeChoice>({
   key: THEME_KEY,
   synced: true,
   read: readThemeChoice,
+  // A theme from a Wave before saved colours has none: this phone's are kept.
+  readPulled: pulledThemeChoice,
   write: (choice) => JSON.stringify(choice),
   equals: sameThemeChoice,
   onValue: apply,
@@ -115,19 +120,28 @@ followAppearance((appearance) => colourNotification(themeFor(theme.get()), appea
 /** Yes switches the icon too; No keeps it; dismissal cancels the colour change. */
 export type Confirm = (warning: LauncherIconSwitch["warning"]) => Promise<AlertChoice>;
 
+/** The theme choice and this phone's icon as they are now. */
+const themeState = (): ThemeState => ({ choice: theme.get(), icon: getLauncherIcon(theme.get()) });
+
 /**
- * Switches to `next`, asking whether to change the icon when the new colours
- * would differ from this phone's icon. Dismissal keeps both as they were.
+ * Makes `edit` to the colours, asking whether to change the icon when the new
+ * colours would differ from this phone's icon. Dismissal keeps both as they
+ * were. The answer applies `edit` to the colours as they are then, so a theme
+ * pulled while the prompt was open stays.
  */
-const changeTheme = async (next: ThemeChoice, confirm: Confirm): Promise<void> => {
-  const current = { choice: theme.get(), icon: getLauncherIcon(theme.get()) };
-  const change = launcherIconSwitch(current.icon, next, LAUNCHER);
+const changeTheme = async (
+  edit: (choice: ThemeChoice) => ThemeChoice,
+  confirm: Confirm,
+): Promise<void> => {
+  const asked = themeState();
+  const change = launcherIconSwitch(asked.icon, edit(asked.choice), LAUNCHER);
   // No prompt: the new colours give the stored icon, so keeping it is the same as switching.
   const answer = change === null ? "alternative" : await confirm(change.warning);
   if (answer === "dismiss") return;
-  const result = resolveThemeChange(current, next, answer);
+  const current = themeState();
+  const result = resolveThemeChange(current, edit(current.choice), answer);
   setLauncherIcon(result.icon);
-  const unchanged = sameThemeChoice(theme.get(), result.choice);
+  const unchanged = sameThemeChoice(current.choice, result.choice);
   theme.set(result.choice);
   if (unchanged) apply(result.choice);
 };
@@ -138,10 +152,9 @@ export const setThemeSwatch = async (
   id: string,
   confirm: Confirm,
 ): Promise<void> => {
-  // Read back through Core so an unknown id lands on the default.
-  const next = readThemeChoice(JSON.stringify({ ...theme.get(), [group]: id }));
-  if (group === "light" || group === "dark") theme.set(next);
-  else await changeTheme(next, confirm);
+  const edit = (choice: ThemeChoice) => chooseThemeSwatch(choice, group, id);
+  if (group === "light" || group === "dark") theme.set(edit(theme.get()));
+  else await changeTheme(edit, confirm);
 };
 
 let preview: ColourPickerPreview | null = null;
@@ -194,7 +207,7 @@ export const setCustomInk = async (
   confirm: Confirm,
 ): Promise<void> => {
   try {
-    await changeTheme(chooseCustomInk(theme.get(), group, hex), confirm);
+    await changeTheme((choice) => chooseCustomInk(choice, group, hex), confirm);
   } finally {
     endPreview();
   }
@@ -207,9 +220,12 @@ export const setCustomInk = async (
 export const saveCustomInk = (group: InkGroup, hex: string): void =>
   theme.set(saveInk(theme.get(), group, hex));
 
-/** Applies a saved colour (a tap on its swatch), asking first when that switches the icon. */
+/**
+ * Applies a saved colour (a tap on its swatch), asking first when that
+ * switches the icon. The custom swatch keeps its colour.
+ */
 export const setSavedInk = (group: InkGroup, hex: string, confirm: Confirm): Promise<void> =>
-  changeTheme(chooseCustomInk(theme.get(), group, hex), confirm);
+  changeTheme((choice) => chooseSavedInk(choice, group, hex), confirm);
 
 /** Takes a colour out of the group's saved colours; the colours in use stay. */
 export const removeSavedInk = (group: InkGroup, hex: string): void =>
@@ -220,7 +236,7 @@ export const removeSavedInk = (group: InkGroup, hex: string): void =>
  * stored icon isn't the shipped one.
  */
 export const resetTheme = (confirm: Confirm): Promise<void> =>
-  changeTheme(resetThemeChoice(theme.get()), confirm);
+  changeTheme(resetThemeChoice, confirm);
 
 /** The persisted theme choice; re-renders when Settings changes it. */
 export const useThemeChoice = theme.useValue;

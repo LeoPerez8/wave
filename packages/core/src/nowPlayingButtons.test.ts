@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { editNowPlayingButtons, readNowPlayingButtons, storedNowPlayingButtons } from "./index.ts";
+import {
+  NOW_PLAYING_ACTIONS,
+  editNowPlayingButtons,
+  nowPlayingSlotShow,
+  readNowPlayingButtons,
+  readNowPlayingSlotRoute,
+  storedNowPlayingButtons,
+} from "./index.ts";
 
 describe("the saved Now Playing buttons", () => {
   test("with nothing stored, the slots hold today's row: Lyrics, Sleep timer, Add to Playlist, Download", () => {
@@ -97,5 +104,37 @@ describe("setting the Now Playing buttons", () => {
 
   test("Reset to Default brings back today's row", () => {
     assert.deepEqual(editNowPlayingButtons(["share", null, "repeat", "shuffle"], "reset"), today);
+  });
+});
+
+describe("how a Now Playing slot shows", () => {
+  test("with a song on, every action's button shows and runs", () => {
+    for (const action of NOW_PLAYING_ACTIONS)
+      assert.equal(nowPlayingSlotShow(action, "song"), "on");
+  });
+
+  test("with nothing playing, the slots that need a song stay empty and the others show", () => {
+    const shown = NOW_PLAYING_ACTIONS.filter(
+      (action) => nowPlayingSlotShow(action, "nothing") !== "hidden",
+    );
+    assert.deepEqual(shown, ["lyrics", "sleepTimer", "shuffle", "repeat"]);
+    assert.equal(nowPlayingSlotShow("lyrics", "nothing"), "on");
+  });
+
+  test("while an unsearched entry's search runs, Song menu shows off and the rest run", () => {
+    assert.equal(nowPlayingSlotShow("songMenu", "unsearched"), "off");
+    for (const action of NOW_PLAYING_ACTIONS.filter((other) => other !== "songMenu"))
+      assert.equal(nowPlayingSlotShow(action, "unsearched"), "on");
+  });
+});
+
+describe("a slot picker's route", () => {
+  test("slots 1 to 4 are slots 0 to 3, left to right", () => {
+    assert.deepEqual(["1", "2", "3", "4"].map(readNowPlayingSlotRoute), [0, 1, 2, 3]);
+  });
+
+  test("anything else names no slot", () => {
+    for (const param of ["0", "5", "01", " 1", "1.0", "one", "", undefined, ["1"], ["1", "2"]])
+      assert.equal(readNowPlayingSlotRoute(param), null, String(param));
   });
 });

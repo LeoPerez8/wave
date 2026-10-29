@@ -19,7 +19,7 @@ export default function NowPlayingLayoutSettingsScreen() {
       <ChoiceSection
         choice={shuffleKindChoice}
         current={useShuffleKind()}
-        note="Every shuffle uses it. A long press on a shuffle button picks it too."
+        note="Every shuffle uses it. A long press on a shuffle button picks it too, but in a Now Playing slot it changes the button."
       />
     </SettingsPageScreen>
   );

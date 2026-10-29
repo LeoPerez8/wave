@@ -5,11 +5,13 @@ import {
   DEFAULT_THEME_CHOICE,
   LAUNCHER_ICON_ART,
   LAUNCHER_ICONS,
+  MANIFEST_LAUNCHER_ICON,
   THEME_SWATCHES,
   chooseCustomInk,
   contrastRatio,
   isDefaultThemeState,
   launcherIconFor,
+  launcherIconOnStart,
   launcherIconSwitch,
   planAlert,
   readThemeChoice,
@@ -293,5 +295,50 @@ describe("LAUNCHER_ICONS", () => {
       assert.ok(contrastRatio(icon.top, "#000000") >= 3, `${icon.id} top`);
       assert.ok(contrastRatio(icon.bottom, "#000000") >= 3, `${icon.id} bottom`);
     }
+  });
+});
+
+describe("MANIFEST_LAUNCHER_ICON", () => {
+  test("stays teal over ember, which installs from before white show without Wave switching it", () => {
+    assert.equal(MANIFEST_LAUNCHER_ICON.id, "teal_ember");
+    assert.equal(
+      MANIFEST_LAUNCHER_ICON,
+      launcherIconFor(former({ primary: "teal", secondary: "ember" })),
+    );
+  });
+});
+
+describe("launcherIconOnStart", () => {
+  // A cream primary: the shipped build matched it to gold, this one takes white.
+  const cream = choose({ primary: "custom", customPrimary: "#fcddb8" });
+  const update = {
+    storedIcon: null,
+    appliedIcon: "gold_ember",
+    launchThemeSaved: true,
+    choice: cream,
+  };
+
+  test("a stored icon is kept", () => {
+    assert.equal(launcherIconOnStart({ ...update, storedIcon: "rose_sky" }).id, "rose_sky");
+  });
+
+  test("an update keeps the icon the earlier Wave left on, whatever the colours match now", () => {
+    assert.equal(launcherIconFor(cream).id, "white_white");
+    assert.equal(launcherIconOnStart(update).id, "gold_ember");
+  });
+
+  test("an update with no icon left on, or one this Wave lacks, keeps the manifest's", () => {
+    for (const appliedIcon of [null, "neon_ember"])
+      assert.equal(launcherIconOnStart({ ...update, appliedIcon }), MANIFEST_LAUNCHER_ICON);
+  });
+
+  test("a fresh install takes the icon its colours give", () => {
+    const fresh = { ...update, appliedIcon: null, launchThemeSaved: false };
+    assert.equal(launcherIconOnStart({ ...fresh, choice: DEFAULT_THEME_CHOICE }).id, "white_white");
+    assert.equal(launcherIconOnStart(fresh), launcherIconFor(cream));
+  });
+
+  test("an unknown stored icon counts as none", () => {
+    assert.equal(launcherIconOnStart({ ...update, storedIcon: "neon_neon" }).id, "gold_ember");
   });
 });

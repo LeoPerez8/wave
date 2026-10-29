@@ -24,7 +24,11 @@ export type IconButtonProps = Omit<ComponentProps<typeof Press>, "children"> &
     children?: ReactNode | ((color: string) => ReactNode);
   };
 
-/** A shared icon target, with optional caption and the usual press/menu feedback. */
+/**
+ * A shared icon target, with optional caption and the usual press/menu
+ * feedback. Disabled, it ignores taps but keeps a long press it has (a Now
+ * Playing slot's Change Button).
+ */
 export function IconButton({
   icon: Icon,
   label,
@@ -47,8 +51,10 @@ export function IconButton({
   accessibilityState,
   className = "",
   style,
+  onPress,
   ...press
 }: IconButtonProps) {
+  const holds = disabled && press.onLongPress != null;
   const look = iconButtonAppearance({
     size,
     iconSize,
@@ -63,6 +69,7 @@ export function IconButton({
   return (
     <Press
       {...press}
+      onPress={disabled ? undefined : onPress}
       accessibilityRole={accessibilityRole}
       accessibilityLabel={accessibilityLabel}
       accessibilityState={{
@@ -70,8 +77,8 @@ export function IconButton({
         ...(busy === undefined ? {} : { busy }),
         ...accessibilityState,
       }}
-      disabled={disabled}
-      haptic={look.haptic}
+      disabled={disabled && !holds}
+      haptic={disabled ? undefined : look.haptic}
       depth={look.depth}
       className={`items-center justify-center ${layout === "horizontal" ? "flex-row" : ""} ${className}`}
       style={[

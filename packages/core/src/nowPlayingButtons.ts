@@ -98,3 +98,42 @@ export const editNowPlayingButtons = (
   });
   return [a ?? null, b ?? null, c ?? null, d ?? null];
 };
+
+/**
+ * What's on, as the slots see it: nothing, an unsearched entry while its
+ * search runs, or a song.
+ */
+export type NowPlayingSlotSong = "nothing" | "unsearched" | "song";
+
+/** The actions that need a song on to show: with nothing playing their slots stay empty. */
+const NEEDS_SONG: ReadonlySet<NowPlayingAction> = new Set([
+  "addToPlaylist",
+  "download",
+  "share",
+  "songMenu",
+]);
+
+/**
+ * How slot [action]'s button shows with [song] on: hidden, off (it shows
+ * disabled and only long-presses to change the slot), or on. Song menu is off
+ * while an unsearched entry's search runs, since the song has no menu yet.
+ */
+export const nowPlayingSlotShow = (
+  action: NowPlayingAction,
+  song: NowPlayingSlotSong,
+): "hidden" | "off" | "on" => {
+  if (song === "nothing") return NEEDS_SONG.has(action) ? "hidden" : "on";
+  return song === "unsearched" && action === "songMenu" ? "off" : "on";
+};
+
+/** The slot pickers' routes, `1` to `4`, left to right. */
+const SLOT_ROUTES = ["1", "2", "3", "4"];
+
+/**
+ * The slot (0 to 3) a slot picker's route param names, `1` to `4`; null for
+ * anything else, so an old or mistyped link edits no slot.
+ */
+export const readNowPlayingSlotRoute = (param: string | string[] | undefined): number | null => {
+  const index = typeof param === "string" ? SLOT_ROUTES.indexOf(param) : -1;
+  return index === -1 ? null : index;
+};

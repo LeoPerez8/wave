@@ -6,6 +6,7 @@ import {
   IconStarFilled,
 } from "@tabler/icons-react-native";
 import { swipeActionLabels, type RowMenuAction, type RowSwipeSide } from "@wave/core";
+import * as Haptics from "expo-haptics";
 import { memo, useCallback, useMemo, type ReactNode } from "react";
 import {
   Text,
@@ -57,7 +58,11 @@ export const SongRow = memo(function SongRow(props: SongRowPresentation & SongRo
   const { rowKey, onPress, onLongPress, onSwipe, swipeRight, swipeLeft, removes } = props;
   const { extraActions = NO_ACTIONS, onExtraAction } = props;
   const press = useCallback(() => onPress(rowKey), [onPress, rowKey]);
-  const longPress = useCallback(() => onLongPress?.(rowKey), [onLongPress, rowKey]);
+  // The long-press haptic, as the row's menu opens.
+  const longPress = useCallback(() => {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    onLongPress?.(rowKey);
+  }, [onLongPress, rowKey]);
   const extra = useCallback(
     (event: AccessibilityActionEvent) => onExtraAction?.(rowKey, event.nativeEvent.actionName),
     [onExtraAction, rowKey],

@@ -42,7 +42,7 @@ export function AddToPlaylistButton({
   trackId: string | null;
   ytSong: NativeYtSong | null;
   title: string;
-  /** In a slot, a long press changes it. */
+  /** In a slot, a long press changes it, while it waits for the song included. */
   change?: SlotChange | undefined;
 }) {
   const target = usePlayingSongTarget(trackId, ytSong);
@@ -163,6 +163,7 @@ export function DownloadButton({
   const Icon = failed ? IconRefreshAlert : IconDownload;
   return (
     <IconButton
+      {...change}
       icon={Icon}
       label={failed ? "Download failed" : "Download"}
       accessibilityHint={failed ? "Tries the download again" : undefined}

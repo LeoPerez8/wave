@@ -56,6 +56,12 @@ export const recognizeAvailable = recognizeNative !== null;
 
 const depsFor = (native: RecognizeNative): RecognizeDeps<SongRow, NativeYtSong> => ({
   online,
+  foreground: () => AppState.currentState === "active",
+  now: () => performance.now(),
+  every: (ms, tick) => {
+    const timer = setInterval(tick, ms);
+    return () => clearInterval(timer);
+  },
   microphone: microphonePermission,
   holdPlayback,
   native,
@@ -136,10 +142,16 @@ function RecognizeCard({
       closeFromEffect();
       return;
     }
-    const session = startRecognizeSession(depsFor(native), source, (card) => {
-      if (card.kind === "listening" && card.source !== undefined) setActiveSource(card.source);
-      setShown({ attempt, card });
-    });
+    const session = startRecognizeSession(
+      depsFor(native),
+      source,
+      (card) => {
+        if (card.kind === "listening" && card.source !== undefined) setActiveSource(card.source);
+        setShown({ attempt, card });
+      },
+      // The session cancelled itself because Wave was hidden as its capture stopped.
+      () => closeFromEffect(),
+    );
     run.current = session;
     return () => session.cancel();
   }, [native, source, attempt]);
@@ -154,7 +166,8 @@ function RecognizeCard({
     setAttempt((n) => n + 1);
   };
 
-  // Leaving Wave stops capture. A denied card stays for the settings round trip below.
+  // Leaving Wave stops capture, but Android's permission and consent dialogs only pause
+  // it. A denied card stays for the settings round trip below.
   const listening = card.kind === "listening";
   useEffect(() => {
     if (!listening) return;

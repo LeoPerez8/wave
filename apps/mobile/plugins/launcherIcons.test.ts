@@ -128,12 +128,13 @@ describe("addLauncherAliases", () => {
         assert.ok(names.has(`.LauncherIcon_${primary}_${secondary}`), `${primary}_${secondary}`);
   });
 
-  test("only the white-on-black icon is on until Settings picks another, so Wave shows once (#793)", () => {
+  test("only teal over ember is on until Settings picks another, so updates keep their icon", () => {
+    // An install that never switched has that alias on only through the manifest.
     const aliases = application(addLauncherAliases(prebuildManifest()))["activity-alias"] ?? [];
     const on = aliases.filter((alias) => alias.$?.["android:enabled"] === "true");
     assert.deepEqual(
       on.map((alias) => alias.$?.["android:name"]),
-      [".LauncherIcon_white_white"],
+      [".LauncherIcon_teal_ember"],
     );
   });
 
