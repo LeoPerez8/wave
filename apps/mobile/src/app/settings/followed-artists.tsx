@@ -1,3 +1,4 @@
+import { useLocalisation } from "@/localisation/localisation";
 import { useState } from "react";
 import type { FollowedArtist } from "@wave/core";
 import * as Effect from "effect/Effect";
@@ -34,6 +35,8 @@ const openFollowedArtist = async (artist: FollowedArtist): Promise<void> => {
   else openYtArtistNamed(artist.name);
 };
 export default function FollowedArtistsSettingsScreen() {
+  const { strings } = useLocalisation();
+  const searchStrings = strings.followArtistSearch;
   const enabled = useFollowedArtistsEnabled();
   const follows = useFollows();
   const [query, setQuery] = useState("");
@@ -51,13 +54,13 @@ export default function FollowedArtistsSettingsScreen() {
         <SearchField
           value={query}
           onChange={setQuery}
-          placeholder="Find artists to follow"
-          accessibilityLabel="Find artists to follow"
+          placeholder={searchStrings.placeholder}
+          accessibilityLabel={searchStrings.placeholder}
         />
         {searching &&
           results.map((artist) => {
             const following = follows.some((follow) => follow.key === artist.key);
-            const label = following ? "Following" : "Follow";
+            const label = following ? searchStrings.following : searchStrings.follow;
             return (
               <View
                 key={artist.key}
@@ -87,15 +90,17 @@ export default function FollowedArtistsSettingsScreen() {
             );
           })}
         {searching && pending && (
-          <Text className="py-3 font-sans text-footnote text-secondary">Searching Deezer…</Text>
+          <Text className="py-3 font-sans text-footnote text-secondary">
+            {searchStrings.searching}
+          </Text>
         )}
         {searching && failed && (
           <Text className="py-3 font-sans text-footnote text-secondary">
-            Couldn't reach Deezer. Library results are still available.
+            {searchStrings.unavailable}
           </Text>
         )}
         {searching && results.length === 0 && !failed && !pending && (
-          <Text className="py-3 font-sans text-footnote text-secondary">No artists found.</Text>
+          <Text className="py-3 font-sans text-footnote text-secondary">{searchStrings.empty}</Text>
         )}
       </View>
       {!searching && (

@@ -20,6 +20,14 @@ export const en = {
     genres: "Genres",
     favorites: "Favorites",
   } satisfies Record<TabBarTab, string>,
+  followArtistSearch: {
+    placeholder: "Find artists to follow",
+    follow: "Follow",
+    following: "Following",
+    searching: "Searching Deezer…",
+    unavailable: "Couldn't reach Deezer. Library results are still available.",
+    empty: "No artists found.",
+  },
   tabBar: {
     /** TalkBack's hint on every tab. */
     editHint: "Long press to edit the tab bar",
