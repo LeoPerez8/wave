@@ -23,3 +23,17 @@ It needs git and a Rust toolchain too. `make_fixtures.py` says how it works: the
 always resamples, even 16 kHz to 16 kHz, so the samples it fingerprints come from a build
 of shazamio-core's own sources (`signature-tool`), and the script stops unless that
 build and the wheel give the same signature for the same WAV file.
+
+## Answers
+
+`answers/` holds what Shazam's discovery endpoint answered, saved on 2026-10-28 with
+shazamio 0.9.0 (`Shazam(language, endpoint_country).recognize(path)`), indented for reading:
+
+- `match.json`: `en-US`/`US`, for `examples/data/Gloria.ogg` from the
+  [ShazamIO](https://github.com/shazamio/ShazamIO) repository.
+- `match-pt-BR.json`: the same in `pt-BR`/`BR`, where the SONG section's headings are
+  translated ("Álbum", "Selo", "Lançado").
+- `no-match.json`: `en-US`/`US`, for 4 s of a 440 Hz tone.
+- `match-without-album.json`: `match.json` with `track.isrc`, `track.albumadamid`,
+  `track.images.coverarthq` and the SONG section's "Album" entry removed by hand, as
+  Shazam answers for a song with no album.
