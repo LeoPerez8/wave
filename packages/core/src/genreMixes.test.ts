@@ -419,6 +419,7 @@ describe("A genre mix", () => {
     assert.deepEqual(mix.seed, {
       kind: "genre",
       name: "Metal",
+      from: "plays",
       genre: "Metal",
       artists: ["Bad Omens", "Sleep Token"],
     });

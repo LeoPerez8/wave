@@ -38,6 +38,7 @@ import { CardHeading } from "@/overlay/CardHeading";
 import { MenuChoices, type MenuChoice, type PlayCardChoice } from "@/overlay/MenuChoices";
 import { followUp, openOverlay } from "@/overlay/overlay";
 import { addYtToQueue, playYtNext } from "@/playback/actions";
+import { startMagicQueueFromStream } from "@/playback/magicQueueStart";
 import type { MenuOptions } from "@/playback/ActionsMenu";
 import type { RowSwipeOptions } from "@/playback/rowSwipe";
 import { showError } from "@/overlay/alert";
@@ -101,7 +102,13 @@ type Entry =
   | {
       readonly kind: "queue";
       readonly action:
-        "playNext" | "addToQueue" | "addToPlaylist" | "removeFromPlaylist" | "share" | "select";
+        | "playNext"
+        | "addToQueue"
+        | "magicQueue"
+        | "addToPlaylist"
+        | "removeFromPlaylist"
+        | "share"
+        | "select";
     }
   | { readonly kind: "album"; readonly action: "goToAlbum"; readonly album: string }
   | {
@@ -176,6 +183,9 @@ const run = (
       return;
     case "addToQueue":
       void addYtToQueue([song]);
+      return;
+    case "magicQueue":
+      startMagicQueueFromStream(song, find(song));
       return;
     case "addToPlaylist":
       openAddToPlaylist({

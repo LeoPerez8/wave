@@ -146,6 +146,20 @@ describe("Home's Discover mixes section", () => {
     );
   });
 
+  test("Genre mixes stay hidden, no skeleton, while the Library has no tagged songs", () => {
+    const untagged = { ytMusic: true, nothingToBuildFrom: false, blend, noTaggedSongs: true };
+    assert.deepEqual(discoverMixesSection(null, untagged), { kind: "hidden", failed: false });
+    assert.deepEqual(discoverMixesSection(null, { ...untagged, building: true }), {
+      kind: "hidden",
+      failed: false,
+    });
+    assert.deepEqual(discoverMixesSection(null, { ...untagged, failed: true }), {
+      kind: "hidden",
+      failed: false,
+    });
+    assert.deepEqual(discoverMixesSection(saved, untagged), { kind: "hidden", failed: false });
+  });
+
   test("leaves out a mix that blends to fewer than ten songs, and is hidden when none is left", () => {
     const explicitOnes = (mixes: DiscoverMixes): DiscoverMixes => ({
       ...mixes,

@@ -1,5 +1,7 @@
+import type { ImportRing } from "@wave/core";
 import { useColorScheme, View, type PressableProps } from "react-native";
 
+import { CoverRing } from "../CoverRing";
 import { CELL } from "../grid";
 import { Mosaic } from "../Mosaic";
 import { TileCheck } from "../CheckCell";
@@ -20,7 +22,7 @@ export const SLEEVE_ROOM = (TILE_SLEEVES.edge + TILE_SLEEVES.gap) * 2;
  * A playlist's mosaic with two sleeves behind it, showing as edges above: the
  * nearer one 88% of the cover's width, the farther 76%, each a tone quieter.
  * A row's sleeves are smaller than a tile's. A tile's [checked] puts a check
- * over the cover's corner.
+ * over the cover's corner, and an importing playlist's [ring] shows over it.
  */
 function StackedMosaic({
   paths,
@@ -29,6 +31,7 @@ function StackedMosaic({
   radius,
   small = false,
   checked,
+  ring,
 }: {
   paths: readonly string[];
   tints?: readonly (string | undefined)[];
@@ -36,6 +39,7 @@ function StackedMosaic({
   radius: number;
   small?: boolean;
   checked?: boolean | undefined;
+  ring?: ImportRing | null | undefined;
 }) {
   const dark = useColorScheme() === "dark";
   const { edge, gap } = small ? ROW_SLEEVES : TILE_SLEEVES;
@@ -63,6 +67,7 @@ function StackedMosaic({
       <View>
         <Mosaic paths={paths} tints={tints} size={size} radius={radius} />
         {checked !== undefined && <TileCheck checked={checked} />}
+        {ring != null && <CoverRing ring={ring} cover={size} />}
       </View>
     </View>
   );
@@ -82,6 +87,8 @@ type Props = {
   onLongPress?: (() => void) | undefined;
   /** In selection mode, whether it is checked: a check on the cover (tile), a leading check cell (row). */
   checked?: boolean | undefined;
+  /** While the playlist imports, the ring over its cover (Core's `importRing`). */
+  ring?: ImportRing | null | undefined;
   /** Actions for screen readers beyond a tap and a long press (Move up, Move down). */
   accessibilityActions?: PressableProps["accessibilityActions"];
   onAccessibilityAction?: PressableProps["onAccessibilityAction"];
@@ -102,6 +109,7 @@ export function PlaylistCard({
   onPress,
   onLongPress,
   checked,
+  ring,
   accessibilityActions,
   onAccessibilityAction,
   nameInset,
@@ -122,6 +130,7 @@ export function PlaylistCard({
         size={size}
         radius={CELL * 0.75}
         checked={checked}
+        ring={ring}
       />
       <View style={{ paddingTop: CAPTION_TOP, paddingRight: nameInset }}>
         <CardTitle>{name}</CardTitle>
@@ -140,12 +149,22 @@ export function PlaylistCardRow({
   onPress,
   onLongPress,
   checked,
+  ring,
   accessibilityActions,
   onAccessibilityAction,
 }: Props) {
   return (
     <CardRow
-      lead={<StackedMosaic paths={paths} tints={tints} size={THUMB} radius={CELL * 0.375} small />}
+      lead={
+        <StackedMosaic
+          paths={paths}
+          tints={tints}
+          size={THUMB}
+          radius={CELL * 0.375}
+          small
+          ring={ring}
+        />
+      }
       title={name}
       detail={`Playlist · ${detail}`}
       onPress={onPress}

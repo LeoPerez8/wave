@@ -11,6 +11,7 @@ import {
   parseDiscoverMixes,
   storedDiscoverMixes,
   discoverMixSongs,
+  libraryCanSeedArtistMixes,
   playedFinder,
   recordingKey,
 } from "./index.ts";
@@ -228,12 +229,14 @@ describe("A mix", () => {
     assert.deepEqual(discoverMix({ ...portishead, genre: "Trip Hop" }, songs(10))?.seed, {
       kind: "artist",
       name: "Portishead",
+      from: "plays",
       genre: "Trip Hop",
       artists: ["Portishead"],
     });
     assert.deepEqual(discoverMix(portishead, songs(10))?.seed, {
       kind: "artist",
       name: "Portishead",
+      from: "plays",
       artists: ["Portishead"],
     });
   });
@@ -292,6 +295,30 @@ describe("The saved mixes", () => {
 
   test("read back as they were saved", () => {
     assert.deepEqual(parseDiscoverMixes(storedDiscoverMixes(saved)), saved);
+  });
+
+  test("keep a chart artist's seed as one", () => {
+    const chart = [{ name: "Portishead", browseId: "UC-portishead" }];
+    const seeds = artistMixSeeds({ played: [], library: [], chart }, () => 0);
+    const fromTheChart = discoverMixesBuilt(saved.mixes, saved.builtAt, seeds);
+    const read = parseDiscoverMixes(storedDiscoverMixes(fromTheChart!));
+    assert.deepEqual(read?.build?.seeds, [
+      {
+        kind: "artist",
+        id: "artist:portishead",
+        name: "Portishead",
+        from: "chart",
+        browseId: "UC-portishead",
+      },
+    ]);
+  });
+
+  test("keep where each mix's seed came from", () => {
+    const fromTheChart = {
+      ...saved,
+      mixes: [{ ...saved.mixes[0]!, seed: { ...saved.mixes[0]!.seed, from: "chart" as const } }],
+    };
+    assert.deepEqual(parseDiscoverMixes(storedDiscoverMixes(fromTheChart)), fromTheChart);
   });
 
   test("keep each mix's genre and seed artists", () => {
@@ -429,5 +456,35 @@ describe("The mixes are built again", () => {
     const built = discoverMixesBuilt(mixes, now, fromTheLibrary);
     assert.equal(built?.playSeeds, false);
     assert.equal(discoverMixesDue(built ?? null, { now: at(16, 10), played: true }), true);
+  });
+
+  test("once the Library can seed, when the last build was seeded from the chart alone", () => {
+    const now = at(16, 9);
+    const mixes = [{ id: "artist:air", seed: { kind: "artist" as const, name: "Air" }, songs: [] }];
+    const chart = [{ name: "Air", browseId: "UC-air" }];
+    const fromTheChart = discoverMixesBuilt(
+      mixes,
+      now,
+      artistMixSeeds({ played: [], library: [], chart }, () => 0),
+    );
+    const later = { now: at(16, 10), played: false };
+    assert.equal(discoverMixesDue(fromTheChart, later), false);
+    assert.equal(discoverMixesDue(fromTheChart, { ...later, librarySeeds: false }), false);
+    assert.equal(discoverMixesDue(fromTheChart, { ...later, librarySeeds: true }), true);
+    const withTheLibrary = discoverMixesBuilt(
+      mixes,
+      now,
+      artistMixSeeds(
+        { played: [], library: [{ id: 1, name: "Moby", songCount: 3 }], chart },
+        () => 0,
+      ),
+    );
+    assert.equal(discoverMixesDue(withTheLibrary, { ...later, librarySeeds: true }), false);
+  });
+
+  test("the Library can seed once it has an artist whose name is an artist's", () => {
+    assert.equal(libraryCanSeedArtistMixes([]), false);
+    assert.equal(libraryCanSeedArtistMixes([{ name: "Various Artists" }]), false);
+    assert.equal(libraryCanSeedArtistMixes([{ name: "Various Artists" }, { name: "Air" }]), true);
   });
 });

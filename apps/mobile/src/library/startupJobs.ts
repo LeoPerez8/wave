@@ -44,14 +44,21 @@ export const finishLinkImport = (
   turn: Effect.Effect<void>,
   current: () => boolean = () => true,
   saved: () => void = () => {},
+  /** Hears how many of the songs going in have landed, of how many: before the first slice and after each. */
+  added: (done: number, total: number) => void = () => {},
 ) =>
   Effect.gen(function* () {
     const finished = yield* runSteps(finishPlaylistImportSteps(job), turn);
+    const total = finished.songs.length;
+    let done = 0;
+    if (current()) added(done, total);
     for (const songs of slices(finished.songs)) {
       yield* turn;
       if (!current()) return null;
       yield* store.addToPlaylist(job.playlistId, songs);
       saved();
+      done += songs.length;
+      added(done, total);
     }
     return current() ? finished.job : null;
   });

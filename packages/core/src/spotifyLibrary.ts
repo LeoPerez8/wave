@@ -187,11 +187,14 @@ const likedSongsPage = (data: unknown): Page | null => {
  * playlist named "Liked Songs", with no cover. A song Spotify no longer has,
  * or an episode, counts in the total but isn't listed. A page that fails
  * fails the read with its reason; a playlist Spotify no longer has is
- * `missing`; an answer Wave can't read is `failed`.
+ * `missing`; an answer Wave can't read is `failed`. [onPage] hears each
+ * page as it arrives: how many items have been read and Spotify's total
+ * (an importing playlist's "Reading 2,300 of 10,000", Core's `readingProgress`).
  */
 export const readSpotifyAccountPlaylist = async (
   source: string,
   ask: (request: SpotifyAccountRequest) => Promise<SpotifyAccountAnswer>,
+  onPage?: (read: number, total: number) => void,
 ): Promise<SpotifyAccountRead> => {
   const liked = source === SPOTIFY_LIKED_SONGS_SOURCE;
   const songs: SpotifySong[] = [];
@@ -209,6 +212,7 @@ export const readSpotifyAccountPlaylist = async (
       first ??= page;
       last = page;
       songs.push(...page.songs);
+      onPage?.(offset + page.items, page.total);
       return page;
     },
     () => {

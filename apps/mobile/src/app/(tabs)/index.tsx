@@ -92,11 +92,19 @@ function HomeContent({ newRecap }: { newRecap: RecapPeriod | null }) {
   return (
     <>
       {empty && (
-        <EmptyState
-          icon={IconMusic}
-          title="Nothing here yet"
-          message="Your recently added, recently played and most played music will show up here."
-        />
+        <>
+          <EmptyState
+            icon={IconMusic}
+            title="Nothing here yet"
+            message="Your recently added, recently played and most played music will show up here."
+          />
+          {/* Discover's Artist mixes grow from YouTube Music's chart while the Library is empty. */}
+          {homeItems(arrangement, { nothingPlayed, empty }).map((item) =>
+            typeof item === "string" ? null : (
+              <HomeSection key={item.section} id={item.section} home={home} />
+            ),
+          )}
+        </>
       )}
       {!empty && (
         <>

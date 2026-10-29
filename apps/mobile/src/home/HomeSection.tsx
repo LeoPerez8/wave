@@ -2,9 +2,12 @@ import {
   discoverMixCaption,
   discoverRowTitle,
   homeSectionTitle,
+  MAGIC_QUEUE_PICKS,
+  ytSongArtist,
   type BlendedDiscoverMix,
   type DiscoverMixesSection,
   type HomeSectionId,
+  type YtAlbumSong,
 } from "@wave/core";
 import { router } from "@/lib/timingRouter";
 import { useState, type ComponentType, type ReactNode } from "react";
@@ -16,6 +19,7 @@ import { PlaylistCard } from "@/catalog/cards/PlaylistCard";
 import { SongCard } from "@/catalog/cards/SongCard";
 import { CELL, grid } from "@/catalog/grid";
 import { PullRefreshRow } from "@/catalog/PullRefreshRow";
+import { SkeletonGroup, SongCardSkeleton } from "@/catalog/Skeletons";
 import { TitledSection } from "@/catalog/TitledSection";
 import { RecommendationsFailed } from "@/components/RecommendationsFailed";
 import { openStatsSeeAll } from "@/library/routes";
@@ -26,6 +30,7 @@ import { useYtMusicEnabled } from "@/settings/ytMusic";
 import type { Ranked } from "@/stats/Stats";
 import { playCount } from "@/stats/StatsViews";
 import { openDiscoverMix } from "@/ytmusic/routes";
+import { openYtSongActions } from "@/ytmusic/YtSongActions";
 
 import {
   refreshMixes,
@@ -39,6 +44,7 @@ import { DiscoverSettingsButton } from "./DiscoverSettings";
 import { discoverRefreshAccessibility, type DiscoverRefresh } from "./discoverRefresh";
 import {
   startMagicQueueFrom,
+  startStreamedMagicQueueFrom,
   useMagicQueueSection,
   type MagicQueueSection,
 } from "./magicQueueSection";
@@ -97,16 +103,17 @@ const MIXES_UPDATING = "Updating…";
  * row with nothing to show isn't drawn: a mix row shows placeholder tiles
  * while its first mixes build and is gone with YT Music off (Core's
  * `discoverMixesSection`), the Magic Queue row is gone without songs to
- * show. The section is gone only when all three are.
+ * show (Core's `magicQueueRow`). The section is gone only when all three are.
  */
 function Discover({ home, title }: SectionProps) {
   const ytMusic = useYtMusicEnabled();
-  const { played } = homeOpeningState(home);
+  const { played, empty } = homeOpeningState(home);
   useDiscoverMixesFocus(ytMusic, played);
-  const magicQueue = useMagicQueueSection();
   const artistMixes = useDiscoverMixes("artist-mixes");
-  const genreMixes = useDiscoverMixes("genre-mixes");
-  const showsMagicQueue = ytMusic && magicQueue.songs.length > 0;
+  // An empty Library has no tagged songs: Genre mixes stay hidden, no skeleton.
+  const genreMixes = useDiscoverMixes("genre-mixes", empty);
+  const magicQueue = useMagicQueueSection(ytMusic, artistMixes);
+  const showsMagicQueue = magicQueue.shown.kind !== "hidden";
   if (!showsMagicQueue && artistMixes.kind === "hidden" && genreMixes.kind === "hidden")
     return null;
   return (
@@ -253,48 +260,72 @@ function DiscoverMixRow({
 }
 
 /**
- * Discover's Magic Queue row: nine Library songs in an adaptive grid, a tap on one
- * starting a Magic Queue from it, its long-press the song's menu. A new list
- * each visit; pulled right past its start, the row brings other songs, with
- * Undo. Each place crossfades its tile when its song changes. With YT Music
- * off it stays, and its queues play from the Library alone.
+ * Discover's Magic Queue row: nine songs in an adaptive grid, a tap on one
+ * starting a Magic Queue from it, its long-press the song's menu. The
+ * Library's songs, or with none, streamed songs of the Artist mixes, with
+ * placeholder tiles while the first mixes build. A new list each visit;
+ * pulled right past its start, the row brings other songs, with Undo. Each
+ * place crossfades its tile when its song changes. Hidden with YT Music off.
  */
 function MagicQueueRow({ section }: { section: MagicQueueSection }) {
   const { width, fontScale } = useWindowDimensions();
   const [available, setAvailable] = useState(width - grid.margin * 2);
   const { size } = magicQueueGrid(available, fontScale);
+  const { shown } = section;
+  const tiles =
+    shown.kind === "library"
+      ? shown.songs.map((song) => ({
+          key: String(song.id),
+          tile: <LibraryTile song={song} size={size} />,
+        }))
+      : shown.kind === "mixes"
+        ? shown.songs.map((song) => ({
+            key: song.videoId,
+            tile: <StreamedTile song={song} size={size} />,
+          }))
+        : [];
+  const skeleton = shown.kind === "skeleton";
   return (
     <DiscoverRow
       label={discoverRowTitle("magic-queue")}
-      refresh={{ label: "Get other songs", run: section.refresh, enabled: true }}
+      busy={skeleton}
+      refresh={{ label: "Get other songs", run: section.refresh, enabled: !skeleton }}
     >
-      {section.songs.length > 0 && (
-        <View onLayout={(event) => setAvailable(event.nativeEvent.layout.width)}>
+      <View onLayout={(event) => setAvailable(event.nativeEvent.layout.width)}>
+        {skeleton ? (
+          <SkeletonGroup label="Finding songs">
+            <MagicQueueGrid width={available}>
+              {Array.from({ length: MAGIC_QUEUE_PICKS }, (_, place) => (
+                <SongCardSkeleton key={place} size={size} fontScale={fontScale} />
+              ))}
+            </MagicQueueGrid>
+          </SkeletonGroup>
+        ) : (
           <PullRefreshRow onRefresh={section.refresh} enabled>
-            <View
-              style={{
-                width: available,
-                flexDirection: "row",
-                flexWrap: "wrap",
-                gap: CELL,
-              }}
-            >
-              {section.songs.map((song, place) => (
+            <MagicQueueGrid width={available}>
+              {tiles.map(({ key, tile }, place) => (
                 // oxlint-disable-next-line react/no-array-index-key -- a place crossfades between its previous and next seed
-                <Crossfade key={place} swapKey={String(song.id)}>
-                  <MagicQueueTile song={song} size={size} />
+                <Crossfade key={place} swapKey={key}>
+                  {tile}
                 </Crossfade>
               ))}
-            </View>
+            </MagicQueueGrid>
           </PullRefreshRow>
-        </View>
-      )}
+        )}
+      </View>
     </DiscoverRow>
   );
 }
 
-/** A Magic Queue's song as a song card in its grid column; a tap starts the Magic Queue from it. */
-function MagicQueueTile({ song, size }: { song: PlayableSongRow; size: number }) {
+/** The Magic Queue row's wrapping grid, [width] wide. */
+function MagicQueueGrid({ width, children }: { width: number; children: ReactNode }) {
+  return (
+    <View style={{ width, flexDirection: "row", flexWrap: "wrap", gap: CELL }}>{children}</View>
+  );
+}
+
+/** A Library song as a song card in its grid column; a tap starts the Magic Queue from it. */
+function LibraryTile({ song, size }: { song: PlayableSongRow; size: number }) {
   return (
     <SongCard
       title={song.title}
@@ -304,6 +335,22 @@ function MagicQueueTile({ song, size }: { song: PlayableSongRow; size: number })
       label={`${song.title} by ${song.artist}, ${song.album}, start Magic Queue`}
       onPress={() => startMagicQueueFrom(song)}
       onLongPress={() => openTrackActions(song)}
+    />
+  );
+}
+
+/** A mix's streamed song as a song card; a tap starts the Magic Queue from its radio. */
+function StreamedTile({ song, size }: { song: YtAlbumSong; size: number }) {
+  const artist = ytSongArtist(song);
+  return (
+    <SongCard
+      title={song.title}
+      artist={artist}
+      artworkUri={song.artworkUrl ?? undefined}
+      size={size}
+      label={`${song.title} by ${artist}${song.album ? `, ${song.album}` : ""}, start Magic Queue`}
+      onPress={() => startStreamedMagicQueueFrom(song)}
+      onLongPress={() => openYtSongActions(song)}
     />
   );
 }

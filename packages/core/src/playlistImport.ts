@@ -617,7 +617,34 @@ export function* planLinkImportSteps<
   S extends YtSong,
   L extends LibrarySongKey & { readonly id: number },
 >(source: LinkedSource<S>, library: readonly L[]): Generator<void, LinkImportPlan<S>> {
-  const find = yield* libraryImportFinderSteps(library);
+  return yield* planLinkImportWithIndexSteps(source, yield* importLibraryIndexSteps(library));
+}
+
+/**
+ * The Library as an import matches it (`importLibraryIndexSteps`), built once
+ * and shared by every playlist a batch plans while the Library stays as it was.
+ */
+export interface ImportLibraryIndex {
+  readonly find: (
+    song: Pick<YtSong, "title" | "artists" | "durationMs">,
+  ) => Generator<void, { readonly id: number } | null>;
+}
+
+/** Indexes [library] for imports, yielding per song: the costly part of planning a big Library. */
+export function* importLibraryIndexSteps<L extends LibrarySongKey & { readonly id: number }>(
+  library: readonly L[],
+): Generator<void, ImportLibraryIndex> {
+  return { find: yield* libraryImportFinderSteps(library) };
+}
+
+/**
+ * [planLinkImport] over a Library already indexed: yields per source row and
+ * per candidate compared, never per Library song.
+ */
+export function* planLinkImportWithIndexSteps<S extends YtSong>(
+  source: LinkedSource<S>,
+  { find }: ImportLibraryIndex,
+): Generator<void, LinkImportPlan<S>> {
   // Visit both arrays without an unbounded synchronous concatenation for Liked Songs.
   const streams = source.service === "ytMusic" ? source.playlist : null;
   const listedLength = source.playlist.songs.length + (streams?.repeats.length ?? 0);

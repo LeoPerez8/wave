@@ -1,8 +1,10 @@
 import {
   createFindableList,
+  findFieldPlacement,
   findInPlaylistHead,
   findNoMatch,
   findPlaceholder,
+  findScrollOnPin,
   hasFindQuery,
   joinArtists,
   type FindableListKind,
@@ -23,15 +25,16 @@ import { Text, useWindowDimensions, View } from "react-native";
 
 import { CELL, grid } from "@/catalog/grid";
 import { SearchField } from "@/search/SearchField";
+import { useKeepFindVisible } from "@/settings/keepFindVisible";
 
 import type { SongRow } from "./LibraryStore";
 
 /**
  * The Find in Playlist field's height: the list starts scrolled this far
  * down, so the field waits above the page header until the list is pulled
- * down, as in Apple Music.
+ * down, as in Apple Music (unless Keep Find Field Visible pins it).
  */
-export const FIND_FIELD_HEIGHT = grid.row + CELL;
+const FIND_FIELD_HEIGHT = grid.row + CELL;
 
 /** What finds a Library song: its title, artist and album. */
 export const librarySongText = (song: SongRow): PlaylistFindText => song;
@@ -74,18 +77,30 @@ export interface FindInList<T = unknown> {
   /** The place in the whole list of the song shown at [index], for a tap to play from. */
   readonly placeOf: (index: number) => number;
   /**
-   * For the list's content container: tall enough that the field can always
-   * scroll out of sight, however short the list.
+   * Keep Find Field Visible is on (and the list findable): the field is
+   * pinned above the list (`FindFrame`), not at its top (`FindHead`).
    */
-  readonly minHeight: number;
+  readonly pinned: boolean;
+  /**
+   * The scroll the list opens at: just past the field, or its top when the
+   * field is pinned. Read once, as the list opens.
+   */
+  readonly initialOffset: number;
+  /**
+   * For the list's content container: tall enough that the field can always
+   * scroll out of sight, however short the list; none when it's pinned.
+   */
+  readonly minHeight: number | undefined;
 }
 
 /**
  * Find in Playlist over [songs] (Core's `createFindableList`): what the
  * query finds, and the scroll position kept while it's typed. Starting a
  * query remembers where the list was ([offset]); clearing it puts the list
- * back there ([scrollTo]) once the full list is shown again. Off
- * ([findable] false), nothing is prepared and the list shows whole.
+ * back there ([scrollTo]) once the full list is shown again. Keep Find
+ * Field Visible turned on or off moves the open list by the field's height,
+ * so its rows stay put as the field leaves or rejoins it. Off ([findable]
+ * false), nothing is prepared and the list shows whole.
  */
 export function useFindInList<T>(
   songs: readonly T[],
@@ -95,6 +110,15 @@ export function useFindInList<T>(
   findable = true,
 ): FindInList<T> {
   const { height } = useWindowDimensions();
+  const pinned = useKeepFindVisible() && findable;
+  const placement = findFieldPlacement({
+    pinned,
+    fieldHeight: FIND_FIELD_HEIGHT,
+    viewportHeight: height,
+  });
+  const { minHeight } = placement;
+  // Read once, as the list opens.
+  const [initialOffset] = useState(placement.initialOffset);
   const [query, setQuery] = useState("");
   const list = useMemo(
     () => createFindableList(songs, describe, findable),
@@ -126,7 +150,18 @@ export function useFindInList<T>(
     const frame = requestAnimationFrame(() => scroll.current.scrollTo(restore.y));
     return () => cancelAnimationFrame(frame);
   }, [restore]);
-  return { query, onChange, found, shown, placeOf, minHeight: height + FIND_FIELD_HEIGHT };
+  // The field left or rejoined the list: move it by the field, read before the list relays out.
+  const placedPinned = useRef(pinned);
+  useLayoutEffect(() => {
+    if (placedPinned.current === pinned) return;
+    placedPinned.current = pinned;
+    const y = findScrollOnPin(scroll.current.offset(), FIND_FIELD_HEIGHT, pinned);
+    if (saved.current !== null)
+      saved.current = findScrollOnPin(saved.current, FIND_FIELD_HEIGHT, pinned);
+    const frame = requestAnimationFrame(() => scroll.current.scrollTo(y));
+    return () => cancelAnimationFrame(frame);
+  }, [pinned]);
+  return { query, onChange, found, shown, placeOf, pinned, initialOffset, minHeight };
 }
 
 /**
@@ -150,33 +185,68 @@ export function useFindInLegendList<T>(
 
 /**
  * The top of a findable list ([of]: a playlist, the Library's Songs or
- * Artists): the field ("Find in Playlist"), then the list's [header] while
+ * Artists): the field ("Find in Playlist", unless it's pinned above the
+ * list, see `FindFrame`), then the list's [header] while
  * nothing is typed, or "No songs match" ("No artists match") when the query
  * finds nothing (Core's `findInPlaylistHead`, `findNoMatch`). A list still
  * reading what it finds by ([allRead] false: a YT Music playlist's pages,
- * the Library's songs) doesn't say so yet.
+ * the Library's songs) doesn't say so yet. A [lead] sits under the field (first, when
+ * it's pinned), whatever the query (Playlists' import line).
  */
 export function FindHead({
   find,
   header,
   allRead = true,
   of = "playlist",
+  lead = null,
 }: {
   find: FindInList;
   header: ReactNode;
   allRead?: boolean;
   of?: FindableListKind;
+  lead?: ReactNode;
 }) {
   const head = findInPlaylistHead(find.found, allRead);
   return (
     <>
-      <FindField find={find} of={of} />
+      {!find.pinned && <FindField find={find} of={of} />}
+      {lead}
       {head === "header" ? header : head === "noMatch" ? <NoMatch of={of} /> : null}
     </>
   );
 }
 
-/** The Find field, at the top of a findable list. */
+/**
+ * A findable list's frame, filling its parent: with Keep Find Field Visible
+ * on, the field ([of]) pinned above [children] (the list and what's drawn
+ * over it), so the list scrolls under it; else [children] alone. [inset] is
+ * the list's right padding, which an A–Z spine widens.
+ */
+export function FindFrame({
+  find,
+  of = "playlist",
+  inset = grid.margin,
+  children,
+}: {
+  find: FindInList;
+  of?: FindableListKind | undefined;
+  inset?: number;
+  children: ReactNode;
+}) {
+  return (
+    <View className="flex-1">
+      {find.pinned && (
+        <View style={{ paddingLeft: grid.margin, paddingRight: inset }}>
+          <FindField find={find} of={of} />
+        </View>
+      )}
+      {/* The same place either way: switching keeps the list mounted. */}
+      <View className="flex-1">{children}</View>
+    </View>
+  );
+}
+
+/** The Find field, at the top of a findable list or pinned above it. */
 function FindField({ find, of }: { find: FindInList; of: FindableListKind }) {
   const placeholder = findPlaceholder(of);
   return (

@@ -31,19 +31,23 @@ import { registerTimingBackground, timingBackgroundChanged } from "@/lib/timing"
  * one refreshes that playlist as Replace does. Deleting it forgets it.
  */
 import {
+  endYtLibraryRun,
+  importLibraryIndexSteps,
+  importPhaseTimer,
+  importTimingsLogLine,
   isSpotifyLibrarySource,
   isYtLibraryReadQueued,
   liveYtLibraryOrigins,
   nextYtLibraryRead,
-  planLinkImportSteps,
+  planLinkImportWithIndexSteps,
   planYtLibraryImport,
   pruneYtLibraryBatch,
   readSpotifyAccountPlaylist,
   queueYtLibraryReads,
-  readYtLibraryBatch,
+  readingProgress,
   readYtLibraryOrigins,
-  writeYtLibraryBatch,
   writeYtLibraryOrigins,
+  MATCHING_PROGRESS,
   ytLibraryFavoritesSteps,
   ytLibraryPauseLogLine,
   ytLibraryDownloadsQueued,
@@ -52,9 +56,12 @@ import {
   ytLibraryReadFailed,
   ytLibraryReadLogLine,
   ytLibraryReadView,
+  type ImportLibraryIndex,
+  type ImportPhaseTimer,
   type LinkedSource,
   type YtLibraryBatch,
   type YtLibraryOrigins,
+  type YtLibraryPauseReason,
   type YtLibraryPicker,
   type YtLibraryRead,
   playlistDownloadOrigin,
@@ -77,12 +84,16 @@ import { askYtMusic } from "@/ytmusic/askYtMusic";
 import { downloadStarredSongs, runYtPlaylistDownloadAction } from "@/ytmusic/YtDownloads";
 
 import { setFavorites, setPendingFavorites } from "./favorites";
+import { makeImportIndexCache } from "./importIndexCache";
+import { endImportProgress, showImportProgress } from "./importProgress";
+import { libraryVersion } from "./LibraryScan";
 import { LibraryStore } from "./LibraryStore";
 import { listLibrary } from "./playlistImports";
 import { cancelPlaylistImport, settlePlaylistImport, startLinkImport } from "./playlistImports";
 import { createPlaylist, currentPlaylists, replacePlaylistSongs } from "./playlists";
 import { appRuntime } from "./runtime";
 import { downloadSyncedStars } from "./starSongs";
+import { ytLibraryBatch, ytLibraryBatchPause } from "./ytLibraryBatchStore";
 
 const LOG_TAG = "WaveImport";
 
@@ -106,20 +117,31 @@ export const currentYtLibraryOrigins = async (): Promise<YtLibraryOrigins> => {
   return live;
 };
 
-/** After a delete: the deleted playlists forget where they came from. */
-export const forgetDeletedYtLibraryOrigins = async (): Promise<void> => {
+/**
+ * After a delete: the [deleted] playlists leave the batch at once, whatever
+ * their phase, so its line counts them done. One waiting, being read or
+ * matched drops its read (whose answer then goes to nothing) and its
+ * progress; one whose songs were being added already ended its link import
+ * (`cancelPlaylistImport`). They also forget where they came from.
+ */
+export const forgetDeletedYtLibraryPlaylists = async (
+  deleted: readonly number[],
+): Promise<void> => {
+  const gone = new Set(deleted);
+  const current = ytLibraryBatch.get();
+  const kept = current.reads.flatMap((read) =>
+    gone.has(read.playlistId) ? [] : [read.playlistId],
+  );
+  const pruned = pruneYtLibraryBatch(current, kept);
+  if (pruned !== current) {
+    for (const id of deleted) endImportProgress(id);
+    ytLibraryBatch.set(pruned);
+  }
   if (origins.get().size > 0) await currentYtLibraryOrigins();
 };
 
-/** The playlists still to be read, and those whose read failed; phone-local, never synced. */
-const batch = persistedSetting<YtLibraryBatch>({
-  key: "ytLibraryBatch",
-  read: readYtLibraryBatch,
-  write: writeYtLibraryBatch,
-});
-
 /** The batch, for a playlist page's line. */
-export const useYtLibraryBatch = (): YtLibraryBatch => batch.useValue();
+export const useYtLibraryBatch = (): YtLibraryBatch => ytLibraryBatch.useValue();
 
 /** The playlists Try Again is reading now. */
 const readingAgain = makeExternalStore<ReadonlySet<number>>(new Set());
@@ -144,7 +166,7 @@ const downloadPlaylist = async (read: YtLibraryRead): Promise<void> => {
   // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
   const preparing = LibraryStore.use((store) =>
     readImportDownloadInput(store, read.playlistId, startupTurnEffect, () =>
-      isYtLibraryReadQueued(batch.get(), read),
+      isYtLibraryReadQueued(ytLibraryBatch.get(), read),
     ),
   );
   const prepared = await appRuntime.runPromise(preparing);
@@ -168,7 +190,7 @@ const queueDownloads = async (read: YtLibraryRead): Promise<void> => {
     const why = error instanceof Error ? error.message : String(error);
     appLog("warn", LOG_TAG, `Import of "${read.name}" couldn't queue its downloads: ${why}`);
   });
-  batch.set(ytLibraryDownloadsQueued(batch.get(), read));
+  ytLibraryBatch.set(ytLibraryDownloadsQueued(ytLibraryBatch.get(), read));
 };
 
 type SourceRead =
@@ -181,27 +203,66 @@ type SourceRead =
  * any other from YouTube Music, up to the cap unless it's Liked Songs.
  */
 const readSource = async (read: YtLibraryRead): Promise<SourceRead> => {
+  // Each page moves its playlist's "Reading N of M", while the read is still the batch's.
+  const readSoFar = (done: number, total: number | null): void => {
+    if (isYtLibraryReadQueued(ytLibraryBatch.get(), read))
+      showImportProgress(read.playlistId, readingProgress(read, done, total));
+  };
+  readSoFar(0, null);
+  // A page arriving for the batch's read: whatever paused the batch is gone.
+  const onPage = (done: number, total: number | null): void => {
+    if (read.state === "waiting") ytLibraryBatchPause.set(null);
+    readSoFar(done, total);
+  };
   if (isSpotifyLibrarySource(read.source)) {
-    const answer = await readSpotifyAccountPlaylist(read.source, async (request) => {
-      await startupTurn();
-      return askSpotifyAccount((spotify) =>
-        request.kind === "likedSongs"
-          ? spotify.likedSongs(request.offset)
-          : spotify.playlist(request.uri, request.offset),
-      );
-    });
+    const answer = await readSpotifyAccountPlaylist(
+      read.source,
+      async (request) => {
+        await startupTurn();
+        return askSpotifyAccount((spotify) =>
+          request.kind === "likedSongs"
+            ? spotify.likedSongs(request.offset)
+            : spotify.playlist(request.uri, request.offset),
+        );
+      },
+      onPage,
+    );
     if (!answer.ok) return answer;
     // Typed whole, not narrowed to Spotify's side, so the plan's songs are YT Music's as the app reads them.
     const source: LinkedSource<NativeYtSong> = { service: "spotify", playlist: answer.playlist };
     return { ok: true, source };
   }
   const answer = await askYtMusic((ytMusic) =>
-    ytMusic.playlist(read.source, { uncapped: !read.capped }),
+    ytMusic.playlist(read.source, {
+      uncapped: !read.capped,
+      // Rows read, a video listed again included, as the source counts them.
+      onPage: (playlist) => onPage(playlist.songs.length + playlist.repeats.length, null),
+    }),
   );
   return Result.isSuccess(answer)
     ? { ok: true, source: { service: "ytMusic", playlist: answer.success } }
     : { ok: false, reason: answer.failure.reason };
 };
+
+/** The Library indexed for matching, shared by the playlists read while it stays as it was. */
+const libraryIndex = makeImportIndexCache<ImportLibraryIndex>(() => libraryVersion.get());
+
+/** Lists and indexes the Library on free turns, timing each as [timer]'s phase. */
+const buildLibraryIndex = async (timer: ImportPhaseTimer): Promise<ImportLibraryIndex> => {
+  const library = await listLibrary();
+  timer.mark("listing");
+  return appRuntime.runPromise(runSteps(importLibraryIndexSteps(library), startupTurnEffect));
+};
+
+/** Once no import reads, the index (the whole Library's keys) goes. */
+const dropIdleLibraryIndex = (): void => {
+  if (!reading && readingAgain.get().size === 0) libraryIndex.clear();
+};
+
+/** When each playlist was queued this run, for its waiting time in the log. */
+const queuedAt = new Map<number, number>();
+/** When the batch started reading this time: a playlist queued before Wave started waited from then. */
+let readingSince: number | null = null;
 
 /**
  * Reads [read]'s playlist and gives its Wave playlist the songs, as a link
@@ -212,32 +273,49 @@ const readSource = async (read: YtLibraryRead): Promise<SourceRead> => {
  * it resolves the reason: the batch pauses there. Any other failure leaves the playlist empty, marks
  * it failed and says so in the log.
  */
-const fill = async (read: YtLibraryRead): Promise<string | null> => {
+const fill = async (read: YtLibraryRead): Promise<YtLibraryPauseReason | null> => {
   let reason: string;
+  // Each phase's time goes to the app log once the songs are in (#759).
+  const timer = importPhaseTimer(
+    () => performance.now(),
+    queuedAt.get(read.playlistId) ?? readingSince ?? performance.now(),
+  );
   try {
     await startupTurn();
     // A deletion/refresh while waiting for a turn must not send the stale source request.
-    if (!isYtLibraryReadQueued(batch.get(), read)) return null;
+    if (!isYtLibraryReadQueued(ytLibraryBatch.get(), read)) return null;
+    timer.mark("waiting");
     const answer = await readSource(read);
     if (answer.ok) {
-      if (!isYtLibraryReadQueued(batch.get(), read)) return null;
+      if (!isYtLibraryReadQueued(ytLibraryBatch.get(), read)) return null;
+      timer.mark("reading");
+      showImportProgress(read.playlistId, MATCHING_PROGRESS);
       await startupTurn();
-      const library = await listLibrary();
+      // Listed and indexed once for the playlists after it, while the Library stays as it was.
+      let built = false;
+      const index = await libraryIndex.current(() => {
+        built = true;
+        return buildLibraryIndex(timer);
+      });
+      // Another playlist's build (a Try Again read joining the batch's) times its own listing:
+      // the wait for it is one phase here.
+      timer.mark(built ? "indexing" : "joining");
       const plan = await appRuntime.runPromise(
-        runSteps(planLinkImportSteps(answer.source, library), startupTurnEffect),
+        runSteps(planLinkImportWithIndexSteps(answer.source, index), startupTurnEffect),
       );
-      if (!isYtLibraryReadQueued(batch.get(), read)) return null;
+      if (!isYtLibraryReadQueued(ytLibraryBatch.get(), read)) return null;
+      timer.mark("matching");
       // Before it leaves the batch: Wave stopped in between stars again, which changes nothing.
       const favorites = await appRuntime.runPromise(
         runSteps(ytLibraryFavoritesSteps(read, plan), startupTurnEffect),
       );
       await startupTurn();
-      if (!isYtLibraryReadQueued(batch.get(), read)) return null;
+      if (!isYtLibraryReadQueued(ytLibraryBatch.get(), read)) return null;
       // The pending favorites' stars then ask for their downloads, under Favorites (a star
       // means downloaded).
       const dispatched = await dispatchLibraryFavorites(favorites, {
         turn: startupTurn,
-        current: () => isYtLibraryReadQueued(batch.get(), read),
+        current: () => isYtLibraryReadQueued(ytLibraryBatch.get(), read),
         star: (ids) => setFavorites(ids, true),
         syncedStars: () => void downloadSyncedStars(),
         pend: (pending) => setPendingFavorites(pending, true),
@@ -246,11 +324,15 @@ const fill = async (read: YtLibraryRead): Promise<string | null> => {
       if (!dispatched) return null;
       // Checked again with no wait before the link import starts: a refresh from here on
       // empties the playlist and ends that import.
-      if (!isYtLibraryReadQueued(batch.get(), read)) return null;
+      if (!isYtLibraryReadQueued(ytLibraryBatch.get(), read)) return null;
+      timer.mark("starring");
       // Read: the link import, kept on its own, gives it its songs from here. Import &
       // Download's read stays, filled, until its downloads are queued.
-      batch.set(ytLibraryReadDone(batch.get(), read));
+      ytLibraryBatch.set(ytLibraryReadDone(ytLibraryBatch.get(), read));
+      queuedAt.delete(read.playlistId);
       await startLinkImport(plan, { playlistId: read.playlistId, name: read.name });
+      timer.mark("adding");
+      appLog("info", LOG_TAG, importTimingsLogLine(read.name, plan.songs.length, timer.timings()));
       if (read.download) await queueDownloads(read);
       return null;
     }
@@ -258,12 +340,15 @@ const fill = async (read: YtLibraryRead): Promise<string | null> => {
   } catch (error) {
     reason = error instanceof Error ? error.message : String(error);
   }
-  const failure = ytLibraryReadFailed(batch.get(), read, reason);
-  if (failure.pause) return reason;
-  if (isYtLibraryReadQueued(batch.get(), read)) {
+  const failure = ytLibraryReadFailed(ytLibraryBatch.get(), read, reason);
+  if (failure.pausedBy !== null) return failure.pausedBy;
+  if (isYtLibraryReadQueued(ytLibraryBatch.get(), read)) {
     appLog("warn", LOG_TAG, ytLibraryReadLogLine(read, reason));
+    // Its page says "Couldn't read it online" instead.
+    endImportProgress(read.playlistId);
   }
-  batch.set(failure.batch);
+  queuedAt.delete(read.playlistId);
+  ytLibraryBatch.set(failure.batch);
   return null;
 };
 
@@ -273,45 +358,74 @@ const fill = async (read: YtLibraryRead): Promise<string | null> => {
  * since) is left for the next turn.
  */
 const prune = async (): Promise<void> => {
-  const before = batch.get();
+  const before = ytLibraryBatch.get();
   const playlists = await currentPlaylists();
   const pruned = pruneYtLibraryBatch(
     before,
     playlists.map((playlist) => playlist.id),
   );
-  if (batch.get() === before) batch.set(pruned);
+  if (ytLibraryBatch.get() === before) ytLibraryBatch.set(pruned);
 };
 
 /**
  * Reads the waiting playlists one at a time, in order, until none is left,
  * or until a read finds Wave offline or YT Music off: the batch then waits
  * for its next turn (Wave starting again, coming back to the foreground, or
- * another Import). The playlists deleted are dropped once, as it starts; one
- * deleted while it runs is read, and its link import ends at once. First, the
+ * another Import). The playlists deleted are dropped as they are deleted here
+ * (`forgetDeletedYtLibraryPlaylists`), and those deleted on another phone as it
+ * starts; a read under way when its playlist goes answers nothing. First, the
  * playlists Import & Download filled before Wave stopped queue their downloads.
  */
 const readBatch = async (): Promise<void> => {
-  const left = batch.get();
+  const left = ytLibraryBatch.get();
   if (reading) return;
-  if (nextYtLibraryRead(left) === undefined && ytLibraryDownloadsToQueue(left).length === 0) return;
+  if (nextYtLibraryRead(left) === undefined && ytLibraryDownloadsToQueue(left).length === 0) {
+    endRun();
+    return;
+  }
   reading = true;
+  readingSince = performance.now();
   timingBackgroundChanged();
   try {
     await resumeLibraryReads({
       turn: startupTurn,
-      batch: batch.get,
+      batch: ytLibraryBatch.get,
       prune,
       settle: settlePlaylistImport,
       download: queueDownloads,
-      fill,
-      paused: (read, reason) => appLog("info", LOG_TAG, ytLibraryPauseLogLine(read, reason)),
+      fill: async (read) => {
+        const pausedBy = await fill(read);
+        // Read, or failed on its own: the batch got on.
+        if (pausedBy === null) ytLibraryBatchPause.set(null);
+        return pausedBy;
+      },
+      paused: (read, reason) => {
+        ytLibraryBatchPause.set(reason);
+        appLog("info", LOG_TAG, ytLibraryPauseLogLine(read, reason));
+      },
     });
   } catch (error) {
     const why = error instanceof Error ? error.message : String(error);
     appLog("warn", LOG_TAG, `The YouTube Music import's batch stopped: ${why}`);
   } finally {
     reading = false;
+    readingSince = null;
+    dropIdleLibraryIndex();
+    endRun();
   }
+};
+
+/**
+ * With none of the batch's playlists waiting, its run ends (Core's
+ * `endYtLibraryRun`): the line at the top of Playlists goes, and isn't
+ * paused any more.
+ */
+const endRun = (): void => {
+  const current = ytLibraryBatch.get();
+  if (nextYtLibraryRead(current) !== undefined) return;
+  ytLibraryBatchPause.set(null);
+  const ended = endYtLibraryRun(current);
+  if (ended !== current) ytLibraryBatch.set(ended);
 };
 
 /**
@@ -358,8 +472,11 @@ const makeYtLibraryPlaylists = async (
       item.replaces === null
         ? await createPlaylist(item.name)
         : await emptyPlaylist(item.replaces, item.name);
-    batch.set(
-      queueYtLibraryReads(batch.get(), [
+    // A refreshed playlist starts again from Waiting.
+    endImportProgress(made.playlistId);
+    queuedAt.set(made.playlistId, performance.now());
+    ytLibraryBatch.set(
+      queueYtLibraryReads(ytLibraryBatch.get(), [
         {
           source: item.playlistId,
           playlistId: made.playlistId,
@@ -367,6 +484,7 @@ const makeYtLibraryPlaylists = async (
           capped: !item.uncapped,
           favorites: item.favorites,
           download,
+          expected: item.expected,
         },
       ]),
     );
@@ -398,7 +516,7 @@ export const resumeYtLibraryImport = (): void => {
  * batch would have; a failure leaves the line as it was.
  */
 export const readYtLibraryPlaylistAgain = async (playlistId: number): Promise<void> => {
-  const view = ytLibraryReadView(batch.get(), playlistId);
+  const view = ytLibraryReadView(ytLibraryBatch.get(), playlistId);
   if (view === null || readingAgain.get().has(playlistId)) return;
   readingAgain.set(new Set([...readingAgain.get(), playlistId]));
   try {
@@ -407,5 +525,6 @@ export const readYtLibraryPlaylistAgain = async (playlistId: number): Promise<vo
     if (pausedBy !== null) appLog("warn", LOG_TAG, ytLibraryReadLogLine(view.read, pausedBy));
   } finally {
     readingAgain.set(new Set([...readingAgain.get()].filter((id) => id !== playlistId)));
+    dropIdleLibraryIndex();
   }
 };
