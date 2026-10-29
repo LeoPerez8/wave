@@ -1,6 +1,6 @@
 /**
  * Wave's launcher icons on Android: one activity alias of MainActivity per
- * pair of palette inks (Core's `LAUNCHER_ICONS`, 24 × 24), each with an
+ * pair of palette inks (Core's `LAUNCHER_ICONS`, 25 × 25), each with an
  * adaptive icon of vector waves on black. `withLauncherIcons.ts` applies these at prebuild.
  */
 import { LAUNCHER_ICON_ART, LAUNCHER_ICONS, type LauncherIcon } from "@wave/core";
@@ -15,7 +15,7 @@ const MAIN = "android.intent.action.MAIN";
 const LAUNCHER = "android.intent.category.LAUNCHER";
 const MAIN_ACTIVITY = ".MainActivity";
 
-/** The icon on before Settings picks another: the shipped teal over amber. */
+/** The icon on before Settings picks another: the shipped white waves (#793). */
 const DEFAULT_ICON = LAUNCHER_ICONS[0];
 
 const isLauncherFilter = (filter: IntentFilter): boolean =>
