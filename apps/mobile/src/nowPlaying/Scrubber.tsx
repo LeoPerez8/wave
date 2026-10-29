@@ -5,6 +5,7 @@ import {
   extrapolatePosition,
   formatDuration,
   formatRemaining,
+  scrubHitSlop,
   scrubPosition,
 } from "@wave/core";
 import * as Haptics from "expo-haptics";
@@ -42,6 +43,11 @@ import { playhead, usePlayheadDuration } from "./playhead";
 /** How far a screen reader's increment / decrement moves the playhead. */
 const STEP_MS = 10_000;
 
+/** The touch box around the bar, in the layout. */
+const TOUCH_HEIGHT = CELL * 6;
+/** Grows the touch box to Core's grab reach beyond the layout, so nothing around it moves. */
+const HIT_SLOP = scrubHitSlop(TOUCH_HEIGHT);
+
 const BAR = 2;
 const BAR_SCRUBBING = CELL / 2;
 /** The playing-song underline's wave, scaled up (same wavelength : amplitude). */
@@ -71,7 +77,8 @@ const playingKey = (): string | null => currentEntry(queueState.get())?.key ?? n
 /**
  * The playhead: the elapsed part is a still teal wave, the shape of the
  * playing song's underline, that meets a flat graphite line at the playhead;
- * then elapsed and remaining time. Touch anywhere on it and drag to scrub;
+ * then elapsed and remaining time. Touch anywhere on it, or a little above or
+ * below its box (Core's `scrubHitSlop`), and drag to scrub;
  * the bar gets bolder and the track seeks when the finger lifts.
  *
  * The finger is followed on the UI thread: the bar and the times move with it
@@ -134,6 +141,7 @@ export function Scrubber() {
       };
       return {
         enabled,
+        hitSlop: HIT_SLOP,
         minDistance: 0,
         onActivate: (event: { x: number }) => {
           "worklet";
@@ -219,7 +227,7 @@ export function Scrubber() {
             if (enabled) seekTo(Math.min(duration, Math.max(0, positionMs + step)), "scrubber");
           }}
           className="justify-center"
-          style={{ height: CELL * 6 }}
+          style={{ height: TOUCH_HEIGHT }}
           onLayout={(event) => setWidth(event.nativeEvent.layout.width)}
         >
           {width > 0 && (
@@ -238,7 +246,8 @@ export function Scrubber() {
           )}
         </Animated.View>
       </GestureDetector>
-      <View className="flex-row justify-between">
+      {/* The times take no touches, so the grab area's lower edge reaches the bar through them. */}
+      <View pointerEvents="none" className="flex-row justify-between">
         {/* Text reserves the original line box; the native values draw over it. */}
         <Animated.Text
           accessible={false}
