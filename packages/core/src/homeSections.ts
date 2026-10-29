@@ -263,3 +263,15 @@ const parseDiscoverRows = (value: unknown): readonly DiscoverRowId[] => {
   }
   return rows.length === 0 ? DEFAULT_DISCOVER_ROWS : rows;
 };
+
+/**
+ * Owner-shown mixes build and rerank. An empty Library's shown Magic Queue
+ * also needs Artist mixes, even with their row removed. Order affects drawing only.
+ */
+export const discoverMixRowsToBuild = (
+  rows: readonly DiscoverRowId[],
+  { empty }: { readonly empty: boolean },
+): MixRowId[] =>
+  (["artist-mixes", "genre-mixes"] as const).filter(
+    (id) => rows.includes(id) || (id === "artist-mixes" && empty && rows.includes("magic-queue")),
+  );
