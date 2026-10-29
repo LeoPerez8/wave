@@ -195,11 +195,35 @@ export const matchFollowRelease = <
       releaseTitle(a.title) === releaseTitle(release.title) &&
       (a.releaseType ?? "album") === release.type,
   ) ?? null;
-export const checkDue = (
-  last: number | null,
-  now: number,
-  context: "home" | "background",
-): boolean => last === null || now - last >= (context === "home" ? 12 : 24) * 3_600_000;
+/** Home opening checks after 12 hours, the daily background task after 24. */
+export type FollowCheckContext = "home" | "background";
+export const checkDue = (last: number | null, now: number, context: FollowCheckContext): boolean =>
+  last === null || now - last >= (context === "home" ? 12 : 24) * 3_600_000;
+/**
+ * Whether a Follows check has anything to ask for: the switch is on and some follow's releases,
+ * or a shows-level follow's shows in `country` ("" when shows can't be checked), are due.
+ */
+export const followCheckDue = (input: {
+  readonly enabled: boolean;
+  readonly follows: readonly FollowedArtist[];
+  readonly releaseChecks: readonly { readonly key: string; readonly checkedAt: number }[];
+  readonly showChecks: readonly {
+    readonly key: string;
+    readonly country: string;
+    readonly checkedAt: number;
+  }[];
+  readonly country: string;
+  readonly now: number;
+  readonly context: FollowCheckContext;
+}): boolean =>
+  input.enabled &&
+  input.follows.some((follow) => {
+    const releases = input.releaseChecks.find((c) => c.key === follow.key);
+    if (checkDue(releases?.checkedAt ?? null, input.now, input.context)) return true;
+    if (follow.level !== "shows" || input.country === "") return false;
+    const shows = input.showChecks.find((c) => c.key === follow.key);
+    return shows?.country !== input.country || checkDue(shows.checkedAt, input.now, input.context);
+  });
 export const releaseDateLine = (date: string, now: number, strings: Catalogue = en): string => {
   const [year, month, day] = date.split("-").map(Number) as [number, number, number];
   const today = new Date(now);
