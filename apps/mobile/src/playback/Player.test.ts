@@ -11,7 +11,8 @@ const loadPlayer = async (version = 33, os = "android") => {
   const id = ++fixtureId;
   const boundary = `data:text/javascript,${encodeURIComponent(`
     export const fixture = ${id};
-    export const phone = { requests: [], playing: false, answer: null };
+    export const phone = { requests: [], playing: false, answer: null, appState: "active" };
+    export const AppState = { get currentState() { return phone.appState; } };
     export const Platform = { OS: ${JSON.stringify(os)}, Version: ${version} };
     export const PermissionsAndroid = {
       PERMISSIONS: { POST_NOTIFICATIONS: "android.permission.POST_NOTIFICATIONS" },
@@ -61,6 +62,7 @@ const loadPlayer = async (version = 33, os = "android") => {
         requests: string[];
         playing: boolean;
         answer: null | { resolve: (result: string) => void; reject: (error: Error) => void };
+        appState: string;
       };
     };
     const runtime = ManagedRuntime.make(layer);
@@ -148,5 +150,23 @@ test("Android 12 and other platforms play without a notification prompt", async 
     } finally {
       await runtime.dispose();
     }
+  }
+});
+
+test("a play with no Wave activity in front keeps the prompt for the next play in front", async () => {
+  const { phone, runtime, play, pause } = await loadPlayer();
+  try {
+    // Android Auto or media resumption, with Wave's activity not on screen.
+    phone.appState = "background";
+    await play();
+    assert.equal(phone.playing, true);
+    assert.deepEqual(phone.requests, []);
+    await pause();
+    phone.appState = "active";
+    await play();
+    assert.deepEqual(phone.requests, ["android.permission.POST_NOTIFICATIONS"]);
+    phone.answer!.resolve("granted");
+  } finally {
+    await runtime.dispose();
   }
 });
