@@ -10,10 +10,14 @@ let fixtureId = 0;
 /**
  * Loads the settings on a phone holding `stored`. `launchThemeSaved`: an
  * earlier Wave ran here and saved its launch theme natively (an update).
+ * `appliedAlias`: the launcher alias an earlier Wave last left on.
  */
 const loadTheme = async (
   stored: Record<string, string> = {},
-  { launchThemeSaved = false } = {},
+  {
+    launchThemeSaved = false,
+    appliedAlias = null,
+  }: { launchThemeSaved?: boolean; appliedAlias?: string | null } = {},
 ) => {
   const id = ++fixtureId;
   const boundary = `data:text/javascript,${encodeURIComponent(`
@@ -34,6 +38,7 @@ const loadTheme = async (
       setLauncherIcon: async alias => { device.alias = alias; },
       setLaunchTheme: async theme => { device.launch = theme; },
       hasLaunchTheme: () => ${launchThemeSaved},
+      appliedLauncherAlias: () => ${JSON.stringify(appliedAlias)},
     };
     export const WavePlayer = { setNotificationAccent: async () => {} };
     export const AppState = { addEventListener: () => ({ remove: () => {} }) };
@@ -368,4 +373,86 @@ test("reset keeps the saved colours", async () => {
   const stored = JSON.parse(Storage.getItemSync("settings.theme")!);
   assert.deepEqual([stored.primary, stored.customPrimary], ["white", null]);
   assert.deepEqual([stored.savedPrimary, stored.savedSecondary], [["#f08cb0"], ["#7cc4ea"]]);
+});
+
+test("an update keeps the icon the earlier Wave left on, where this Wave would match another", async () => {
+  // 0.36.2-ti matched this cream primary to gold; this Wave's matching takes white.
+  const stored = {
+    "settings.theme": JSON.stringify({
+      ...DEFAULT_THEME_CHOICE,
+      primary: "custom",
+      customPrimary: "#fcddb8",
+      secondary: "ember",
+    }),
+  };
+  const updated = await loadTheme(stored, {
+    launchThemeSaved: true,
+    appliedAlias: "LauncherIcon_gold_ember",
+  });
+  assert.equal(updated.device.alias, "LauncherIcon_gold_ember");
+  assert.equal(updated.Storage.getItemSync("settings.launcherIcon"), "gold_ember");
+  // A fresh install with those colours (pulled, say) takes the icon they give.
+  const fresh = await loadTheme(stored);
+  assert.equal(fresh.device.alias, "LauncherIcon_white_ember");
+});
+
+test("an answer to the icon prompt keeps a theme pulled while it was open", async () => {
+  const { theme, settings, device, Storage } = await loadTheme();
+  const changed: string[] = [];
+  settings.onSyncedSettingChange((key) => changed.push(key));
+  await theme.setCustomInk("primary", "#f08cb0", async () => {
+    settings.applySyncedSetting(
+      "settings.theme",
+      JSON.stringify({ ...DEFAULT_THEME_CHOICE, dark: "forest", savedSecondary: ["#7cc4ea"] }),
+    );
+    return "alternative";
+  });
+  const stored = JSON.parse(Storage.getItemSync("settings.theme")!);
+  assert.equal(stored.dark, "forest");
+  assert.deepEqual(stored.savedSecondary, ["#7cc4ea"]);
+  assert.equal(stored.customPrimary, "#f08cb0");
+  assert.equal(device.css.dark?.["--color-background"], "#0a130d");
+  assert.equal(device.css.dark?.["--color-accent"], "#f08cb0");
+  assert.deepEqual(changed, ["settings.theme"]);
+});
+
+test("Yes stores the icon of the colours as they are when it's answered", async () => {
+  const { theme, settings, device } = await loadTheme();
+  await theme.setCustomInk("primary", "#f08cb0", async () => {
+    settings.applySyncedSetting(
+      "settings.theme",
+      JSON.stringify({ ...DEFAULT_THEME_CHOICE, secondary: "custom", customSecondary: "#7cc4ea" }),
+    );
+    return "action";
+  });
+  assert.equal(device.alias, "LauncherIcon_rose_sky");
+});
+
+test("a theme pulled from a Wave before saved colours keeps this phone's saved colours", async () => {
+  const { settings, Storage } = await loadTheme({
+    "settings.theme": JSON.stringify({
+      ...DEFAULT_THEME_CHOICE,
+      savedPrimary: ["#3a7bd5", "#00aa55"],
+    }),
+  });
+  // That phone picked Blue, a preset it still offers, and pushes no saved colours.
+  settings.applySyncedSetting(
+    "settings.theme",
+    JSON.stringify({ light: "fog", dark: "black", primary: "blue", secondary: "white" }),
+  );
+  const stored = JSON.parse(Storage.getItemSync("settings.theme")!);
+  assert.equal(stored.customPrimary, "#7aaef5");
+  assert.deepEqual(stored.savedPrimary, ["#7aaef5", "#3a7bd5", "#00aa55"]);
+});
+
+test("a saved colour keeps the unsaved custom colour on the Custom swatch, as Default does", async () => {
+  const { theme, Storage } = await loadTheme({
+    "settings.theme": JSON.stringify({ ...DEFAULT_THEME_CHOICE, savedPrimary: ["#ff8800"] }),
+  });
+  const kept = () => JSON.parse(Storage.getItemSync("settings.theme")!);
+  await theme.setCustomInk("primary", "#3366ff", async () => "alternative");
+  await theme.setSavedInk("primary", "#ff8800", async () => "alternative");
+  assert.deepEqual([kept().customPrimary, kept().unsavedPrimary], ["#ff8800", "#3366ff"]);
+  await theme.setThemeSwatch("primary", "white", async () => "alternative");
+  assert.deepEqual([kept().primary, kept().customPrimary], ["white", "#3366ff"]);
 });

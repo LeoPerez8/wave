@@ -225,6 +225,11 @@ declare class WaveNativeModule extends NativeModule<WaveNativeEvents> {
    */
   setLauncherIcon(alias: string, aliases: readonly string[]): Promise<void>;
   /**
+   * The launcher alias an earlier Wave last left on, whichever build it was:
+   * the icon the phone shows on an update. Null when none was recorded.
+   */
+  appliedLauncherAlias(): string | null;
+  /**
    * Saves what the next cold start opens on (Core's `launchTheme`) and, on
    * Android 13+, picks its splash style for Android to draw.
    */

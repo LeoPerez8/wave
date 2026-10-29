@@ -40,6 +40,7 @@ import expo.modules.wavenative.files.AudioLengths
 import expo.modules.wavenative.files.DeleteOutcome
 import expo.modules.wavenative.files.TrackFileDeleter
 import expo.modules.wavenative.folders.TreeUris
+import expo.modules.wavenative.launcher.LauncherIconRecord
 import expo.modules.wavenative.launcher.LauncherIconSwitcher
 import expo.modules.wavenative.launch.LaunchTheme
 import expo.modules.wavenative.launch.LaunchThemeStore
@@ -372,6 +373,12 @@ class WaveNativeModule : Module() {
     AsyncFunction("setLauncherIcon") { alias: String, aliases: List<String> ->
       launcherIcons().request(alias, aliases)
     }.runOnQueue(Queues.MAIN)
+
+    /**
+     * The launcher alias an earlier Wave last left on, whichever build it was;
+     * null when none did. JS keeps that icon on the update (see [LauncherIconRecord]).
+     */
+    Function("appliedLauncherAlias") { LauncherIconRecord.lastApplied(LauncherIconRecord.preferences(context)) }
 
     /**
      * Writes found lyrics (LRC or plain text) and genre into a song's file,

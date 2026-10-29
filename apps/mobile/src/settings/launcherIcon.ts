@@ -1,6 +1,6 @@
 import {
   LAUNCHER_ICONS,
-  launcherIconFor,
+  launcherIconOnStart,
   type LauncherBehaviour,
   type LauncherIcon,
   type ThemeChoice,
@@ -28,11 +28,21 @@ const storedIcon = persistedSetting<LauncherIcon | null>({
   write: (icon) => icon?.id ?? null,
 });
 
-/** On update, keep the icon the existing theme showed before accepting any synced colours. */
+/**
+ * This phone's icon, stored the first time it's asked for: on the update that
+ * brought it, the icon the phone shows (Core's `launcherIconOnStart`), before
+ * any synced colours are accepted.
+ */
 export const getLauncherIcon = (choice: ThemeChoice): LauncherIcon => {
   const kept = storedIcon.get();
   if (kept !== null) return kept;
-  const icon = launcherIconFor(choice);
+  const applied = WaveNative.appliedLauncherAlias();
+  const icon = launcherIconOnStart({
+    storedIcon: null,
+    appliedIcon: LAUNCHER_ICONS.find((each) => launcherAlias(each) === applied)?.id ?? null,
+    launchThemeSaved: WaveNative.hasLaunchTheme(),
+    choice,
+  });
   storedIcon.set(icon);
   return icon;
 };

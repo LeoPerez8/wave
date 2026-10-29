@@ -3,7 +3,12 @@
  * pair of palette inks (Core's `LAUNCHER_ICONS`, 25 × 25), each with an
  * adaptive icon of vector waves on black. `withLauncherIcons.ts` applies these at prebuild.
  */
-import { LAUNCHER_ICON_ART, LAUNCHER_ICONS, type LauncherIcon } from "@wave/core";
+import {
+  LAUNCHER_ICON_ART,
+  LAUNCHER_ICONS,
+  MANIFEST_LAUNCHER_ICON,
+  type LauncherIcon,
+} from "@wave/core";
 import type { AndroidConfig } from "expo/config-plugins";
 
 import { launcherAlias } from "../src/settings/launcherAlias.ts";
@@ -14,9 +19,6 @@ type IntentFilter = AndroidConfig.Manifest.ManifestIntentFilter;
 const MAIN = "android.intent.action.MAIN";
 const LAUNCHER = "android.intent.category.LAUNCHER";
 const MAIN_ACTIVITY = ".MainActivity";
-
-/** The icon on before Settings picks another: the shipped white waves (#793). */
-const DEFAULT_ICON = LAUNCHER_ICONS[0];
 
 const isLauncherFilter = (filter: IntentFilter): boolean =>
   (filter.action ?? []).some((a) => a.$["android:name"] === MAIN) &&
@@ -31,9 +33,12 @@ const iconResource = (icon: LauncherIcon): string => `ic_launcher_${icon.id}`;
 
 /**
  * Moves Wave's app-drawer entry from MainActivity to one alias per icon. Only
- * the default icon's alias is on, so Wave shows once; Settings switches them
- * at runtime (`LauncherIconSwitcher`). Aliases come after MainActivity, as
- * Android requires, and replace any from an earlier run.
+ * Core's `MANIFEST_LAUNCHER_ICON` is on, so Wave shows once; Settings switches
+ * them at runtime (`LauncherIconSwitcher`). It stays teal over ember, not the
+ * white default: an install that never switched icons has that alias on only
+ * through the manifest, and enabling another here would swap its icon on
+ * update, which drops it from the home screen. Aliases come after
+ * MainActivity, as Android requires, and replace any from an earlier run.
  */
 export const addLauncherAliases = (manifest: Manifest): Manifest => {
   const application = manifest.manifest.application?.[0];
@@ -49,7 +54,7 @@ export const addLauncherAliases = (manifest: Manifest): Manifest => {
       $: {
         "android:name": `.${launcherAlias(icon)}`,
         "android:targetActivity": MAIN_ACTIVITY,
-        "android:enabled": icon === DEFAULT_ICON ? ("true" as const) : ("false" as const),
+        "android:enabled": icon === MANIFEST_LAUNCHER_ICON ? ("true" as const) : ("false" as const),
         "android:exported": "true" as const,
         "android:icon": `@mipmap/${iconResource(icon)}`,
         "android:roundIcon": `@mipmap/${iconResource(icon)}`,
