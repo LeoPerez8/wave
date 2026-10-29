@@ -163,6 +163,7 @@ export function DownloadButton({
   const Icon = failed ? IconRefreshAlert : IconDownload;
   return (
     <IconButton
+      {...change}
       icon={Icon}
       label={failed ? "Download failed" : "Download"}
       accessibilityHint={failed ? "Tries the download again" : undefined}
