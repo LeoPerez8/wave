@@ -35,6 +35,20 @@ const ROW_LABEL: Record<ThemeGroup, string> = {
 const SWATCH = 36;
 const TARGET = 48;
 
+/** A swatch's colour dot, ringed and checked when it's the one in use. */
+function SwatchDot({ swatch }: { swatch: { colour: string; mark: string; selected: boolean } }) {
+  return (
+    <View
+      className={`items-center justify-center rounded-full ${
+        swatch.selected ? "border-2 border-foreground" : "border border-separator"
+      }`}
+      style={{ width: SWATCH, height: SWATCH, backgroundColor: swatch.colour }}
+    >
+      {swatch.selected ? <IconCheck size={18} strokeWidth={2.5} color={swatch.mark} /> : null}
+    </View>
+  );
+}
+
 function Swatch({ swatch, group }: { swatch: ThemeSwatchOption; group: ThemeGroup }) {
   return (
     <IconButton
@@ -46,14 +60,7 @@ function Swatch({ swatch, group }: { swatch: ThemeSwatchOption; group: ThemeGrou
       className="items-center justify-center"
       style={{ width: TARGET, height: TARGET }}
     >
-      <View
-        className={`items-center justify-center rounded-full ${
-          swatch.selected ? "border-2 border-foreground" : "border border-separator"
-        }`}
-        style={{ width: SWATCH, height: SWATCH, backgroundColor: swatch.colour }}
-      >
-        {swatch.selected ? <IconCheck size={18} strokeWidth={2.5} color={swatch.mark} /> : null}
-      </View>
+      <SwatchDot swatch={swatch} />
     </IconButton>
   );
 }
@@ -133,14 +140,7 @@ function SavedSwatch({
       className="items-center justify-center"
       style={{ width: TARGET, height: TARGET }}
     >
-      <View
-        className={`items-center justify-center rounded-full ${
-          swatch.selected ? "border-2 border-foreground" : "border border-separator"
-        }`}
-        style={{ width: SWATCH, height: SWATCH, backgroundColor: swatch.colour }}
-      >
-        {swatch.selected ? <IconCheck size={18} strokeWidth={2.5} color={swatch.mark} /> : null}
-      </View>
+      <SwatchDot swatch={swatch} />
     </IconButton>
   );
 }
