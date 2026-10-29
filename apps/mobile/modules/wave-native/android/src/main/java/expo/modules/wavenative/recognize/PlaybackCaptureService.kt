@@ -16,13 +16,20 @@ import android.os.IBinder
 import android.os.Looper
 import expo.modules.wavenative.R
 
-/** Bound only for a phone-audio session, after Android has granted fresh consent. */
+/**
+ * Runs only for a phone-audio session, after Android has granted fresh consent. It is
+ * started as well as bound, so its foreground call doesn't rest on Android tolerating
+ * one from a service that is only bound.
+ */
 class PlaybackCaptureService : Service() {
   inner class LocalBinder : Binder() {
     val service get() = this@PlaybackCaptureService
   }
 
   override fun onBind(intent: Intent): IBinder = LocalBinder()
+
+  /** A session never outlives Wave's process, so Android shouldn't restart the service. */
+  override fun onStartCommand(intent: Intent?, flags: Int, startId: Int) = START_NOT_STICKY
 
   fun open(resultCode: Int, data: Intent, onReleased: () -> Unit): PlaybackAudio {
     getSystemService(NotificationManager::class.java).createNotificationChannel(
@@ -58,7 +65,10 @@ class PlaybackCaptureService : Service() {
   }
 }
 
-/** Main-thread binding. Releasing the audio removes its binding and foreground notification. */
+/**
+ * Main-thread start and binding, while Wave is in the foreground. Releasing the audio
+ * unbinds and stops the service, which removes its foreground notification.
+ */
 fun openPlaybackCapture(
   context: Context,
   resultCode: Int,
@@ -67,20 +77,27 @@ fun openPlaybackCapture(
   failed: (Exception) -> Unit,
 ): () -> Unit {
   val main = Handler(Looper.getMainLooper())
+  val service = Intent(context, PlaybackCaptureService::class.java)
+  var started = false
   var bound = false
   var closed = false
   var audio: PlaybackAudio? = null
   lateinit var connection: ServiceConnection
-  fun unbind() {
-    if (!bound) return
-    bound = false
-    context.unbindService(connection)
+  fun leave() {
+    if (bound) {
+      bound = false
+      context.unbindService(connection)
+    }
+    if (started) {
+      started = false
+      context.stopService(service)
+    }
   }
   fun close() {
     if (closed) return
     closed = true
     audio?.release()
-    unbind()
+    leave()
   }
   connection = object : ServiceConnection {
     override fun onServiceConnected(name: ComponentName, binder: IBinder) {
@@ -111,10 +128,17 @@ fun openPlaybackCapture(
       failed(IllegalStateException("Phone audio service couldn't open"))
     }
   }
-  bound = context.bindService(Intent(context, PlaybackCaptureService::class.java), connection, Context.BIND_AUTO_CREATE)
-  if (!bound) {
-    closed = true
-    failed(IllegalStateException("Phone audio service couldn't bind"))
+  try {
+    started = context.startService(service) != null
+    bound = context.bindService(service, connection, Context.BIND_AUTO_CREATE)
+  } catch (e: Exception) {
+    close()
+    failed(e)
+    return {}
+  }
+  if (!started || !bound) {
+    close()
+    failed(IllegalStateException("Phone audio service couldn't start"))
   }
   return { close() }
 }
