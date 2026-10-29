@@ -150,6 +150,38 @@ const setup = (
 };
 
 describe("a Recognize session", () => {
+  for (const source of ["microphone", "playback"] as const) {
+    test(`leaving Wave cancels active ${source} capture and releases playback`, async () => {
+      const { session, native, playback, lines } = setup({ source, playing: true });
+      await settle();
+      await native.hear(2);
+      assert.equal(session.cancelOnBackground(), true);
+      await session.done;
+      assert.deepEqual(native.stopped, [7]);
+      assert.equal(native.listening, false);
+      assert.equal(playback.playing, true);
+      assert.match(lines[0]!, /cancelled after 2.0 s/);
+    });
+  }
+
+  test("Android's phone-audio consent may pause Wave without cancelling the launch", async () => {
+    const { native, session } = setup({ source: "playback" });
+    let grant!: (id: number) => void;
+    native.start = () =>
+      new Promise<number>((resolve) => {
+        grant = resolve;
+      });
+    await settle();
+    assert.equal(session.cancelOnBackground(), false);
+    assert.deepEqual(native.cancelledStarts, []);
+    grant(7);
+    await settle();
+    assert.equal(session.cancelOnBackground(), true);
+    await session.done;
+    assert.deepEqual(native.stopped, [7]);
+    assert.equal(native.listening, false);
+  });
+
   test("switching sources restarts at four seconds and ignores the previous source's answer", async () => {
     const { deps, native, session, cards, playback } = setup({
       source: "microphone",

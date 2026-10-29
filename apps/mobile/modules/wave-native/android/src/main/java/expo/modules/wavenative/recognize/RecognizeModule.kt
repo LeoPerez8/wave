@@ -43,7 +43,10 @@ class RecognizeModule : Module() {
 
   override fun definition() = ModuleDefinition {
     Name("WaveRecognize")
-    Events(HEARD, CAPTURE_FAILED)
+    Events(HEARD, CAPTURE_FAILED, "onRecognizeRequested")
+
+    OnCreate { RecognizeInbox.onReceived = { sendEvent("onRecognizeRequested") } }
+    Function("takeRequest") { RecognizeInbox.take() }
 
     AsyncFunction("playbackActivity") {
       val media = if (Build.VERSION.SDK_INT < 29) 0 else
@@ -126,6 +129,7 @@ class RecognizeModule : Module() {
     }
 
     OnDestroy {
+      RecognizeInbox.onReceived = null
       main.post { cancelPending() }
       stopCurrent()
     }

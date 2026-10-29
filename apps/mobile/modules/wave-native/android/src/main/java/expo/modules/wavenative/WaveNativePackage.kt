@@ -10,6 +10,7 @@ import expo.modules.core.interfaces.Package
 import expo.modules.core.interfaces.ReactActivityLifecycleListener
 import expo.modules.wavenative.launch.LaunchSplashExit
 import expo.modules.wavenative.log.NativeLog
+import expo.modules.wavenative.recognize.RecognizeInbox
 import expo.modules.wavenative.share.ShareShortcut
 import expo.modules.wavenative.share.SharedTextInbox
 
@@ -34,7 +35,10 @@ class WaveNativePackage : Package {
       override fun onCreate(activity: Activity, savedInstanceState: Bundle?) {
         LaunchSplashExit.install(activity)
         // A share that started Wave. A recreated activity carries the same intent, already handled.
-        if (savedInstanceState == null) SharedTextInbox.receive(activity.intent)
+        if (savedInstanceState == null) {
+          SharedTextInbox.receive(activity.intent)
+          receiveRecognize(activity.intent)
+        }
         // Wave in the share sheet's direct-share row, published again in case it's gone.
         ShareShortcut.publish(activity)
       }
@@ -42,8 +46,16 @@ class WaveNativePackage : Package {
       // A share with Wave already open (the main activity is singleTask).
       override fun onNewIntent(intent: Intent): Boolean {
         SharedTextInbox.receive(intent)
+        receiveRecognize(intent)
         return false
       }
     },
   )
+
+  private fun receiveRecognize(intent: Intent?) {
+    RecognizeInbox.receive(
+      intent?.action,
+      fromHistory = ((intent?.flags ?: 0) and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY) != 0,
+    )
+  }
 }
