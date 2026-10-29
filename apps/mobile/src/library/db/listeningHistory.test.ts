@@ -18,7 +18,6 @@ import { listeningSums, playTotalsDrift, rebuildPlayTotals } from "./playTotals.
 import { songListening, trackPlayTotals, creditedPlayTotals } from "./stats.ts";
 import { mixHistoryPage } from "./mixInputs.ts";
 import { selectUnpushed } from "./syncRows.ts";
-import { markPushed } from "./syncRows.ts";
 import { deleteTracksById } from "./tracks.ts";
 
 const play = (trackId: number, startedAt: number, counted = true): PlayEvent => ({
@@ -357,8 +356,8 @@ test("the snapshot-sync upgrade preserves Library and streamed history and their
   endPlay(db, recordPlay(db, library), library);
   const stream = { ...play(track, 2000), trackId: "yt:history-video" };
   endPlay(db, recordPlay(db, stream, false, streamedSong), stream);
-  const outgoing = selectUnpushed(db, 100, () => null);
-  markPushed(db, [...outgoing.marks.values()].flat());
+  // Pushed as that Wave did: today's sync reads tables a 0040 database doesn't have yet.
+  db.run(sql`UPDATE play_events SET pushed = 1`);
   const before = listeningHistory(db);
   await migrateTestDatabase(db);
   assert.deepEqual(listeningHistory(db), before);
