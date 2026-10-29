@@ -3,11 +3,14 @@ import {
   appearanceAccent,
   chooseCustomInk,
   createColourPickerPreview,
+  launcherIconFor,
   launcherIconSwitch,
   launchTheme,
   readThemeChoice,
+  resolveThemeChange,
   themeFor,
   type Appearance,
+  type AlertChoice,
   type ColourPickerPreview,
   type InkGroup,
   type LauncherIconSwitch,
@@ -15,6 +18,7 @@ import {
   type ThemeChoice,
   type ThemeColors,
   type ThemeGroup,
+  type ThemeState,
 } from "@wave/core";
 import { Uniwind } from "uniwind";
 
@@ -23,7 +27,13 @@ import { WaveNative } from "@/native/waveNative";
 import { WavePlayer } from "@/native/wavePlayer";
 
 import { followAppearance, getAppearance } from "./appearance";
-import { LAUNCHER, showLauncherIconFor } from "./launcherIcon";
+import {
+  LAUNCHER,
+  getLauncherIcon,
+  setLauncherIcon,
+  showLauncherIcon,
+  useStoredLauncherIcon,
+} from "./launcherIcon";
 
 /** The colours as CSS variables (`--color-<token>`), the names global.css declares. */
 const cssVariables = (colors: ThemeColors): Record<string, string> =>
@@ -48,17 +58,18 @@ const recolour = (theme: Theme): void => {
 
 /**
  * Lays the chosen colours over global.css's defaults (`recolour`), the media
- * notification takes the primary, and the launcher icon follows the primary
- * and secondary (custom colours take their palette inks, Core's `inkPairFor`). The choice is also
- * saved natively for the launch splash, which Android draws before this code
- * runs; on every start too, so it never drifts.
+ * notification takes the primary, and the launcher keeps this phone's stored
+ * icon. The launch splash (the choice's grounds, the icon's waves) is also
+ * saved natively, since Android draws it before this code runs; on every start
+ * too, so it never drifts.
  */
 const apply = (choice: ThemeChoice): void => {
   const theme = themeFor(choice);
   recolour(theme);
   colourNotification(theme, getAppearance());
-  showLauncherIconFor(choice);
-  WaveNative.setLaunchTheme(launchTheme(choice)).catch((error: unknown) =>
+  const icon = getLauncherIcon(choice);
+  showLauncherIcon(icon);
+  WaveNative.setLaunchTheme(launchTheme(choice, icon)).catch((error: unknown) =>
     console.warn("[wave] Saving the launch theme failed", error),
   );
 };
@@ -77,24 +88,37 @@ theme.get();
 
 followAppearance((appearance) => colourNotification(themeFor(theme.get()), appearance));
 
-/** Asks the person to agree to a change (`confirmAction`); resolves whether they did. */
-export type Confirm = (warning: NonNullable<LauncherIconSwitch["warning"]>) => Promise<boolean>;
+/** Yes switches the icon too; No keeps it; dismissal cancels the colour change. */
+export type Confirm = (warning: LauncherIconSwitch["warning"]) => Promise<AlertChoice>;
 
 /**
- * Switches to `next`; the whole app recolours at once. When that switches the
- * launcher icon and the launcher drops the home-screen icon on a switch,
- * `confirm` is asked first, and nothing changes unless it agrees.
+ * Switches to `next`, asking whether to change the icon when the new colours
+ * would differ from this phone's icon. Dismissal keeps both as they were.
  */
 const changeTheme = async (next: ThemeChoice, confirm: Confirm): Promise<void> => {
-  const warning = launcherIconSwitch(theme.get(), next, LAUNCHER)?.warning ?? null;
-  if (warning !== null && !(await confirm(warning))) return;
-  theme.set(next);
+  const current = { choice: theme.get(), icon: getLauncherIcon(theme.get()) };
+  const change = launcherIconSwitch(current.icon, next, LAUNCHER);
+  // No prompt: the new colours give the stored icon, so keeping it is the same as switching.
+  const answer = change === null ? "alternative" : await confirm(change.warning);
+  if (answer === "dismiss") return;
+  const result = resolveThemeChange(current, next, answer);
+  setLauncherIcon(result.icon);
+  const unchanged = sameFields(theme.get(), result.choice);
+  theme.set(result.choice);
+  if (unchanged) apply(result.choice);
 };
 
 /** Picks a swatch for one group. */
-export const setThemeSwatch = (group: ThemeGroup, id: string, confirm: Confirm): Promise<void> =>
+export const setThemeSwatch = async (
+  group: ThemeGroup,
+  id: string,
+  confirm: Confirm,
+): Promise<void> => {
   // Read back through Core so an unknown id lands on the default.
-  changeTheme(readThemeChoice(JSON.stringify({ ...theme.get(), [group]: id })), confirm);
+  const next = readThemeChoice(JSON.stringify({ ...theme.get(), [group]: id }));
+  if (group === "light" || group === "dark") theme.set(next);
+  else await changeTheme(next, confirm);
+};
 
 let preview: ColourPickerPreview | null = null;
 
@@ -150,9 +174,16 @@ export const setCustomInk = async (
   }
 };
 
-/** Puts the shipped theme back, teal-over-amber icon and no custom colours. */
+/** Puts the shipped colours back, asking first when the stored icon isn't the shipped one. */
 export const resetTheme = (confirm: Confirm): Promise<void> =>
   changeTheme(DEFAULT_THEME_CHOICE, confirm);
 
 /** The persisted theme choice; re-renders when Settings changes it. */
 export const useThemeChoice = theme.useValue;
+
+/** The persisted theme choice with this phone's icon; re-renders when either changes. */
+export const useThemeState = (): ThemeState => {
+  const choice = theme.useValue();
+  const icon = useStoredLauncherIcon();
+  return { choice, icon: icon ?? launcherIconFor(choice) };
+};

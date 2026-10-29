@@ -1,7 +1,7 @@
 import { Canvas, Circle, SweepGradient, vec } from "@shopify/react-native-skia";
 import { IconCheck } from "@tabler/icons-react-native";
 import {
-  isDefaultThemeChoice,
+  isDefaultThemeState,
   themeSwatchRows,
   type CustomSwatchOption,
   type InkGroup,
@@ -14,10 +14,10 @@ import { CatalogLine } from "@/catalog/CatalogLine";
 import { Hairline } from "@/catalog/Hairline";
 import { TextButton } from "@/components/TextButton";
 import { IconButton } from "@/components/IconButton";
-import { confirmAction } from "@/overlay/alert";
+import { showAlert } from "@/overlay/alert";
 
 import { HUE_STOPS, openColourPicker } from "./ColourPicker";
-import { resetTheme, setThemeSwatch, useThemeChoice } from "./theme";
+import { resetTheme, setThemeSwatch, useThemeState } from "./theme";
 
 const ROW_LABEL: Record<ThemeGroup, string> = {
   light: "Light background",
@@ -35,7 +35,7 @@ function Swatch({ swatch, group }: { swatch: ThemeSwatchOption; group: ThemeGrou
       accessibilityRole="radio"
       accessibilityLabel={swatch.label}
       accessibilityState={{ checked: swatch.selected }}
-      onPress={() => void setThemeSwatch(group, swatch.id, confirmAction)}
+      onPress={() => void setThemeSwatch(group, swatch.id, showAlert)}
       depth={0.04}
       className="items-center justify-center"
       style={{ width: TARGET, height: TARGET }}
@@ -106,7 +106,8 @@ function CustomSwatch({
 
 /** Settings › Appearance › Theme: background (per scheme), primary and secondary colours from swatches. */
 export function ThemeSettingsSection() {
-  const choice = useThemeChoice();
+  const state = useThemeState();
+  const { choice } = state;
   const scheme = useColorScheme() === "dark" ? "dark" : "light";
   const rows = themeSwatchRows(choice, scheme);
 
@@ -153,14 +154,15 @@ export function ThemeSettingsSection() {
         Cards, groups, separators and text follow the background you choose for each mode. Primary
         colours progress, toggles and what&apos;s active; secondary marks favorites and what&apos;s
         playing; the last swatch of each takes any colour. A colour that wouldn&apos;t read on your
-        background is deepened or brightened until it does. The app icon takes your primary and
-        secondary, or the presets closest to custom ones, once you leave Wave.
+        background is deepened or brightened until it does. When new colours would change the app
+        icon, Wave asks first; if you say yes, the icon takes them, or the presets closest to custom
+        ones, once you leave Wave.
       </Text>
       <View className="mt-4 items-start">
         <TextButton
           label="Reset to defaults"
-          disabled={isDefaultThemeChoice(choice)}
-          onPress={() => void resetTheme(confirmAction)}
+          disabled={isDefaultThemeState(state)}
+          onPress={() => void resetTheme(showAlert)}
         />
       </View>
     </View>
