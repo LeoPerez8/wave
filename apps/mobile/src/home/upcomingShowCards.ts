@@ -1,12 +1,13 @@
 import { followFeed, type FollowShow, type FollowedArtist } from "@wave/core";
 import * as Effect from "effect/Effect";
 import { useCallback, useState } from "react";
-import { AppState } from "react-native";
 import { useFocusEffect } from "expo-router";
 
 import { useFollows } from "@/library/follows";
 import { LibraryStore } from "@/library/LibraryStore";
 import { appRuntime } from "@/library/runtime";
+import { everyWhileInSight } from "@/lib/sight";
+import { useScreenSight } from "@/lib/screenSight";
 import { currentFollowCountry, followCountry } from "@/settings/followCountry";
 import { useFollowedArtistsEnabled } from "@/settings/followedArtists";
 
@@ -29,19 +30,18 @@ const readShowFeed = (follows: readonly FollowedArtist[], country: string) =>
   });
 
 /**
- * Home's Upcoming Shows: what the saved checks hold, then a check when one is
- * due (Home's 12-hour window), read again whenever a check saves. A passed
- * show leaves within a minute, even on a Home left open. Empty with the
- * Followed artists switch off or no shows-level follow.
+ * [follows]' upcoming shows in [country] while [watching]: what the saved
+ * checks hold, then a check when one is due, read again whenever a check
+ * saves. A passed show leaves within a minute while the screen is in sight;
+ * out of sight nothing is read, and coming back reads once.
  */
-export const useUpcomingShows = () => {
-  const follows = useFollows();
-  const enabled = useFollowedArtistsEnabled();
-  followCountry.useValue();
-  const country = currentFollowCountry();
+export const useShowCards = (
+  follows: readonly FollowedArtist[],
+  country: string,
+  watching: boolean,
+): readonly FollowShow[] => {
+  const sight = useScreenSight();
   const [cards, setCards] = useState<readonly FollowShow[]>([]);
-  const watching = enabled && country !== "" && follows.some((f) => f.level === "shows");
-
   useFocusEffect(
     useCallback(() => {
       if (!watching) {
@@ -59,18 +59,30 @@ export const useUpcomingShows = () => {
       void read().then(() =>
         appRuntime.runPromise(checkFollowShows(), { signal: controller.signal }).catch(() => {}),
       );
-      const saved = subscribeFollowShows(() => void read());
-      const active = AppState.addEventListener("change", (state) => {
-        if (state === "active") void read();
+      const saved = subscribeFollowShows(() => {
+        if (sight.visible()) void read();
       });
-      const timer = setInterval(() => void read(), 60_000);
+      const timed = everyWhileInSight(sight, 60_000, () => void read());
       return () => {
         controller.abort();
         saved();
-        active.remove();
-        clearInterval(timer);
+        timed();
       };
-    }, [watching, follows, country]),
+    }, [watching, follows, country, sight]),
   );
-  return { cards: watching ? cards : [], follows };
+  return watching ? cards : [];
+};
+
+/**
+ * Home's Upcoming Shows: every shows-level artist's cards (`useShowCards`),
+ * checked in Home's 12-hour window. Empty with the Followed artists switch
+ * off or no shows-level follow.
+ */
+export const useUpcomingShows = () => {
+  const follows = useFollows();
+  const enabled = useFollowedArtistsEnabled();
+  followCountry.useValue();
+  const country = currentFollowCountry();
+  const watching = enabled && country !== "" && follows.some((f) => f.level === "shows");
+  return { cards: useShowCards(follows, country, watching), follows };
 };
