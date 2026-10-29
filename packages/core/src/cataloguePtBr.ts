@@ -12,6 +12,10 @@ import { playbackTextPtBr } from "./catalogue/playbackTextPtBr.ts";
 import { lyricsLanguagesPtBr } from "./catalogue/lyricsLanguagesPtBr.ts";
 import { showsPtBr } from "./catalogue/showsPtBr.ts";
 import { upcomingShowsPtBr } from "./catalogue/upcomingShowsPtBr.ts";
+import { settingsPtBr } from "./catalogue/settingsPtBr.ts";
+import { downloadStatusPtBr } from "./catalogue/downloadStatusPtBr.ts";
+import { alertPtBr } from "./catalogue/alertPtBr.ts";
+import { fixSongsPtBr } from "./catalogue/fixSongsPtBr.ts";
 /**
  * Wave's interface text in Brazilian Portuguese, entry for entry with
  * `catalogueEn.ts`. Terms follow the spec's glossary; until it's approved,
@@ -35,6 +39,10 @@ export const ptBR: Catalogue = {
   recap: recapPtBr,
   listeningHistory: listeningHistoryPtBr,
   share: sharePtBr,
+  settings: settingsPtBr,
+  downloadStatus: downloadStatusPtBr,
+  alert: alertPtBr,
+  fixSongs: fixSongsPtBr,
   tabs: {
     index: "Início",
     library: "Biblioteca",

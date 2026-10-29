@@ -1,6 +1,6 @@
 import {
   SPOTIFY_ACCOUNT_SIGNED_OUT,
-  SPOTIFY_SIGN_IN_FAILURE_LINES,
+  spotifySignInFailureLines,
   stepSpotifyAccount,
 } from "@wave/core";
 
@@ -16,7 +16,7 @@ const spotifyAccount = accountSignIn({
   signedOut: SPOTIFY_ACCOUNT_SIGNED_OUT,
   // Spotify not taking the session it signed in with is its not confirming the sign-in.
   failureOf: (error) => (error.reason === "signedOut" ? "failed" : error.reason),
-  failureLines: SPOTIFY_SIGN_IN_FAILURE_LINES,
+  failureLines: spotifySignInFailureLines,
 });
 
 /**
@@ -35,6 +35,6 @@ export const spotifySignedIn = spotifyAccount.signedIn;
  * Opens Spotify's sign-in page (Settings › Accounts' sign-in), for From
  * Spotify and sharing on Spotify; true once signed in. Backing out of it is
  * false with nothing said; a sign-in that didn't work says why, as Settings
- * does (Core's `SPOTIFY_SIGN_IN_FAILURE_LINES`).
+ * does (Core's `spotifySignInFailureLines`).
  */
 export const signInToSpotify = spotifyAccount.signInTo;

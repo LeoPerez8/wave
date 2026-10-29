@@ -1,4 +1,4 @@
-import { ytAccountView, type YtAccount, type YtAccountNote } from "@wave/core";
+import { ytAccountView, type Catalogue, type YtAccount, type YtAccountNote } from "@wave/core";
 import { Text, View } from "react-native";
 
 import { CatalogLine } from "@/catalog/CatalogLine";
@@ -6,6 +6,7 @@ import { CELL, grid } from "@/catalog/grid";
 import { Hairline } from "@/catalog/Hairline";
 import { SettingsSwitch } from "@/components/SettingsSwitch";
 import { TextButton } from "@/components/TextButton";
+import { useLocalisation } from "@/localisation/localisation";
 
 import { AccountPhoto } from "./AccountPhoto";
 import { ChoiceSection } from "./ChoiceRow";
@@ -14,25 +15,21 @@ import { SignInRows } from "./SignInRows";
 import { useYtAccount } from "./ytAccount";
 import { setYtMusicEnabled, useYtMusicEnabled } from "./ytMusic";
 
-const NOTES: Record<YtAccountNote, string> = {
-  optional:
-    "Signing in is optional. Signed in, Search, playback and Home's mixes use your " +
-    "account. The session stays on this phone. With Download in best quality off, or when Soulseek " +
-    "can't deliver a song, downloads come from YouTube Music: AAC at 256 kbps with Premium, " +
-    "about 128 kbps without.",
-  expired:
-    "Your YouTube session ended, so YT Music is signed out. Sign in again to use your account.",
-  offline: "Couldn't sign in without a connection.",
-  failed: "YouTube didn't confirm the sign-in. Try again.",
-};
+const notes = ({ settings }: Catalogue): Record<YtAccountNote, string> => ({
+  optional: settings.ytMusicNote,
+  expired: settings.yourYouTubeSessionEndedSoYTMusic,
+  offline: settings.couldntSignInWithoutAConnection,
+  failed: settings.youtubeDidntConfirmTheSigninTryAgain,
+});
 
 /** The signed-in account: its picture, name and email, and Sign Out. */
 function AccountRow({ account, onSignOut }: { account: YtAccount; onSignOut: () => void }) {
+  const { strings } = useLocalisation();
   return (
     <>
       <View
         accessible
-        accessibilityLabel={`Signed in as ${account.name}${account.email === null ? "" : `, ${account.email}`}`}
+        accessibilityLabel={strings.settings.signedIn(account.name, account.email)}
         className="flex-row items-center"
         style={{ minHeight: grid.row, gap: CELL * 1.5 }}
       >
@@ -50,10 +47,10 @@ function AccountRow({ account, onSignOut }: { account: YtAccount; onSignOut: () 
       </View>
       <Hairline />
       <View className="mt-4 items-start">
-        <TextButton label="Sign Out" onPress={onSignOut} />
+        <TextButton label={strings.settings.signOut} onPress={onSignOut} />
       </View>
       <Text className="font-sans text-footnote text-secondary">
-        Search, playback and Home's mixes use this account. Signing out forgets it on this phone.
+        {strings.settings.searchPlaybackAndHomesMixesUseThis}
       </Text>
     </>
   );
@@ -61,6 +58,7 @@ function AccountRow({ account, onSignOut }: { account: YtAccount; onSignOut: () 
 
 /** Settings › Accounts › YT Music: whether Search also looks on YouTube Music, and the account it uses. */
 export function YtMusicSettingsSection() {
+  const { strings } = useLocalisation();
   const enabled = useYtMusicEnabled();
   const searchOnline = searchOnlineChoice.setting.useValue();
   const account = useYtAccount();
@@ -70,11 +68,14 @@ export function YtMusicSettingsSection() {
     <View>
       <CatalogLine className="mb-2">YT Music</CatalogLine>
       <Hairline />
-      <SettingsSwitch label="Use YT Music" value={enabled} onValueChange={setYtMusicEnabled} />
+      <SettingsSwitch
+        label={strings.settings.useYTMusic}
+        value={enabled}
+        onValueChange={setYtMusicEnabled}
+      />
       <Hairline />
       <Text className="mt-2 font-sans text-footnote text-secondary">
-        Search also finds songs on YouTube Music, which means sending what you type to YouTube.
-        Nothing from your library is sent. Off, Wave makes no YT Music requests.
+        {strings.settings.searchAlsoFindsSongsOnYouTubeMusic}
       </Text>
 
       {enabled && (
@@ -82,7 +83,7 @@ export function YtMusicSettingsSection() {
           <ChoiceSection
             choice={searchOnlineChoice}
             current={searchOnline}
-            note="Always search online opens albums and artists with Online selected and has Search look online as you type. Always search on Wi-Fi does so only off mobile data. Only on demand waits for Online to be tapped. Long-press the Library | Online toggle to change it there."
+            note={strings.settings.alwaysSearchOnlineOpensAlbumsAndArtists}
           />
         </View>
       )}
@@ -93,7 +94,11 @@ export function YtMusicSettingsSection() {
           {view.kind === "account" ? (
             <AccountRow account={view.account} onSignOut={account.signOut} />
           ) : (
-            <SignInRows action={view.action} note={NOTES[view.note]} onSignIn={account.signIn} />
+            <SignInRows
+              action={view.action}
+              note={notes(strings)[view.note]}
+              onSignIn={account.signIn}
+            />
           )}
         </View>
       )}

@@ -1,3 +1,4 @@
+import { useLocalisation } from "@/localisation/localisation";
 import { useScreenContent } from "@/lib/screenTiming";
 import { IconFolderOpen } from "@tabler/icons-react-native";
 import { ScrollView, Text, View } from "react-native";
@@ -13,6 +14,7 @@ import { useThemeColor } from "@/theme/useThemeColor";
  * swaps to the tabs as soon as access is granted and the app is active again.
  */
 export default function AccessScreen() {
+  const { strings } = useLocalisation();
   useScreenContent(true);
   const insets = useSafeAreaInsets();
   const tertiary = useThemeColor("tertiary");
@@ -35,23 +37,24 @@ export default function AccessScreen() {
         className="font-sans text-large-title font-light text-foreground"
         style={{ letterSpacing: -0.6 }}
       >
-        {denied ? "Wave can't see your music yet" : "Allow access to your music"}
+        {denied
+          ? strings.settings.waveCantSeeYourMusicYet
+          : strings.settings.allowAccessToYourMusic}
       </Text>
       <Text accessibilityLiveRegion="polite" className="font-sans text-body text-secondary">
         {denied
-          ? "All files access is still off. Turn on “Allow access to manage all files” for Wave, then come back."
-          : "Wave plays the audio files on this phone. To find them, it needs “All files access”, which you turn on in Android settings."}
+          ? strings.settings.allFilesAccessIsStillOffTurn
+          : strings.settings.wavePlaysTheAudioFilesOnThis}
       </Text>
       {failed && (
         <Text accessibilityLiveRegion="polite" className="font-sans text-body text-secondary">
-          Couldn't open Android settings. Try again, or find Wave under “All files access” in
-          Android settings.
+          {strings.settings.couldntOpenAndroidSettingsTryAgainOr}
         </Text>
       )}
       <View className="items-start">
         {/* Not disabled while Android opens settings: that lasts a frame, and taps then ask nothing. */}
         <TextButton
-          label={denied || failed ? "Try again" : "Open settings"}
+          label={denied || failed ? strings.settings.tryAgainText : strings.settings.openSettings}
           onPress={() => void request()}
         />
       </View>

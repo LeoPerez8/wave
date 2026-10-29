@@ -795,6 +795,8 @@ export {
 export type { LibrarySongKey, TrackRef, YtSong } from "./ytMusic.ts";
 export {
   CONFIRM_WAVE_ACCOUNT_DELETION,
+  confirmWaveAccountDeletion,
+  waveAccountCard,
   WAVE_ACCOUNT_CARD,
   WAVE_ACCOUNT_SIGNED_OUT,
   stepWaveAccount,
@@ -817,6 +819,7 @@ export {
   SPOTIFY_ACCOUNT_SIGNED_OUT,
   SPOTIFY_CHANGED_LINE,
   SPOTIFY_SIGN_IN_FAILURE_LINES,
+  spotifySignInFailureLines,
   spotifyAccountView,
   stepSpotifyAccount,
 } from "./spotifyAccount.ts";
@@ -1454,6 +1457,7 @@ export type {
 } from "./syncWire.ts";
 export {
   MISSING_SONGS_DOWNLOAD_ACTION_LABELS,
+  missingSongsDownloadActionLabels,
   missingSongJob,
   missingSongJobId,
   missingSongLookup,

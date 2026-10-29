@@ -4,6 +4,7 @@
  * cookie and the tokens it buys) stays native; Core only sees who is signed in.
  */
 
+import { en, type Catalogue } from "./catalogueEn.ts";
 import {
   ACCOUNT_SIGNED_OUT,
   accountView,
@@ -34,15 +35,16 @@ export type SpotifySession = AccountSession<SpotifyAccount>;
  */
 export type SpotifySignInFailure = "offline" | "failed" | "changed";
 
-/** What Wave says when Spotify changed its web player: an update of Wave reads it again. */
-export const SPOTIFY_CHANGED_LINE = "Spotify changed something. Try again after updating Wave.";
+/** Why a sign-in didn't work, as Settings, From Spotify and sharing say it, in [catalogue]'s language. */
+export const spotifySignInFailureLines = (
+  catalogue: Catalogue = en,
+): { readonly [F in SpotifySignInFailure]: string } => catalogue.settings.spotifySignInFailures;
 
-/** Why a sign-in didn't work, as Settings, From Spotify and sharing say it. */
-export const SPOTIFY_SIGN_IN_FAILURE_LINES: { readonly [F in SpotifySignInFailure]: string } = {
-  offline: "Couldn't sign in without a connection.",
-  failed: "Spotify didn't confirm the sign-in. Try again.",
-  changed: SPOTIFY_CHANGED_LINE,
-};
+/** Why a sign-in didn't work, in English. */
+export const SPOTIFY_SIGN_IN_FAILURE_LINES = spotifySignInFailureLines();
+
+/** What Wave says when Spotify changed its web player: an update of Wave reads it again. */
+export const SPOTIFY_CHANGED_LINE = SPOTIFY_SIGN_IN_FAILURE_LINES.changed;
 
 /** The Spotify part of Settings › Accounts, with what's going on right now. */
 export type SpotifyAccountState = AccountSignInState<SpotifyAccount, SpotifySignInFailure>;

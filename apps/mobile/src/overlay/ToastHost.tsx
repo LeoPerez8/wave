@@ -1,3 +1,4 @@
+import { useLocalisation } from "@/localisation/localisation";
 import { RETURN_SPRINGS, toastDuration, toastSwipeDismisses } from "@wave/core";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { AccessibilityInfo, Text, View } from "react-native";
@@ -65,6 +66,7 @@ export function ToastHost() {
  * there, from half the gap before it to the pill's edge, runs it.
  */
 function ToastPill({ toast }: { toast: Toast }) {
+  const { strings } = useLocalisation();
   const insets = useSafeAreaInsets();
   const reduceMotion = useReducedMotion();
   // A swipe up let go short springs back as far past rest as the Bounce amount says.
@@ -173,7 +175,7 @@ function ToastPill({ toast }: { toast: Toast }) {
         <Animated.View
           accessible
           accessibilityLabel={text}
-          accessibilityHint="Dismisses"
+          accessibilityHint={strings.settings.dismisses}
           accessibilityActions={[
             { name: "activate" },
             ...(action === null ? [] : [{ name: "action", label: action.label }]),

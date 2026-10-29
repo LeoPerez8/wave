@@ -7,6 +7,7 @@ import {
 } from "@wave/core";
 
 import { persistedSetting } from "@/lib/persistedSetting";
+import { currentLocalisation } from "@/localisation/localisation";
 import { WavePlayer } from "@/native/wavePlayer";
 
 import type { ChoiceSetting } from "./ChoiceRow";
@@ -38,10 +39,15 @@ export const applyStreamBuffer = (): void => {
 
 /** Buffer as Settings › Playback lists it. */
 export const streamBufferChoice: ChoiceSetting<StreamBufferMinutes> = {
-  label: "Buffer",
-  choices: STREAM_BUFFER_MINUTES.map((minutes) => ({
-    value: minutes,
-    label: minutes === 1 ? "1 minute" : `${minutes} minutes`,
-  })),
+  get label() {
+    return currentLocalisation().strings.settings.buffer;
+  },
+  get choices() {
+    const { strings } = currentLocalisation();
+    return STREAM_BUFFER_MINUTES.map((minutes) => ({
+      value: minutes,
+      label: strings.settings.minutes(minutes),
+    }));
+  },
   setting: streamBuffer,
 };

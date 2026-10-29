@@ -1,3 +1,4 @@
+import { useLocalisation } from "@/localisation/localisation";
 import { useScreenContent } from "@/lib/screenTiming";
 import { shuffleKindChoice } from "@/nowPlaying/ShuffleMenu";
 import { ChoiceSection } from "@/settings/ChoiceRow";
@@ -12,6 +13,7 @@ import { useShuffleKind } from "@/settings/shuffleKind";
  * saved as it's made.
  */
 export default function NowPlayingLayoutSettingsScreen() {
+  const { strings } = useLocalisation();
   useScreenContent(true);
   return (
     <SettingsPageScreen layoutPage="nowPlaying">
@@ -19,7 +21,7 @@ export default function NowPlayingLayoutSettingsScreen() {
       <ChoiceSection
         choice={shuffleKindChoice}
         current={useShuffleKind()}
-        note="Every shuffle uses it. A long press on a shuffle button picks it too, but in a Now Playing slot it changes the button."
+        note={strings.settings.everyShuffleUsesItALongPress}
       />
     </SettingsPageScreen>
   );

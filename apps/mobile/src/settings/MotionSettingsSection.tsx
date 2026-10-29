@@ -1,3 +1,4 @@
+import { useLocalisation } from "@/localisation/localisation";
 import {
   BOUNCE_AMOUNT,
   sampleSwipeActions,
@@ -31,6 +32,7 @@ const sampleSide = (action: RowMenuAction | null): SwipeSide | null =>
  * swipe and spring.
  */
 function BounceSample({ demo }: { demo: number }) {
+  const { strings } = useLocalisation();
   const settings = useSwipeSettings();
   const swipe = useMemo((): RowSwipe => {
     const { right, left } = sampleSwipeActions(settings);
@@ -38,7 +40,7 @@ function BounceSample({ demo }: { demo: number }) {
   }, [settings]);
   return (
     <SwipeableRow swipe={swipe} sample demo={demo}>
-      <SampleSongRow accessibilityHint="Shows the bounce when swiped. It plays nothing." />
+      <SampleSongRow accessibilityHint={strings.settings.showsTheBounceWhenSwipedItPlays} />
     </SwipeableRow>
   );
 }
@@ -50,15 +52,16 @@ function BounceSample({ demo }: { demo: number }) {
  * bounces).
  */
 export function MotionSettingsSection() {
+  const { strings } = useLocalisation();
   const bounce = useBounceAmount();
   const reduceMotion = useReducedMotion();
   const [demo, setDemo] = useState(0);
   return (
     <View>
-      <CatalogLine className="mb-2">Motion</CatalogLine>
+      <CatalogLine className="mb-2">{strings.settings.motion}</CatalogLine>
       <Hairline />
       <SettingsSlider
-        label="Bounce amount"
+        label={strings.settings.bounceAmount}
         value={bounce}
         range={BOUNCE_AMOUNT}
         format={percent}
@@ -69,11 +72,11 @@ export function MotionSettingsSection() {
       <Hairline />
       {reduceMotion && (
         <Text className="mt-2 font-sans text-footnote text-secondary">
-          Android&apos;s Remove animations is on, so nothing bounces.
+          {strings.settings.androidsRemoveAnimationsIsOnSoNothing}
         </Text>
       )}
       <Text className="mt-2 font-sans text-footnote text-secondary">
-        Swipe the sample song to feel the bounce. The default is {BOUNCE_AMOUNT.default}%.
+        {strings.settings.bounceFootnote(BOUNCE_AMOUNT.default)}
       </Text>
     </View>
   );

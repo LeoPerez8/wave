@@ -6,6 +6,7 @@
  * for good once it's in the Library.
  */
 
+import { en, type Catalogue } from "./catalogueEn.ts";
 import type { YtSong } from "./ytMusic.ts";
 import {
   ytDownloadLine,
@@ -126,15 +127,14 @@ export const queuedDownloadCounts = <S extends YtSong>(
  * Downloading section and the Settings row say it ("2 downloading · 5
  * waiting"); null with nothing on its way.
  */
-export const queuedDownloadsSummary = ({
-  downloading,
-  saving,
-  waiting,
-}: QueuedDownloadCounts): string | null => {
+export const queuedDownloadsSummary = (
+  { downloading, saving, waiting }: QueuedDownloadCounts,
+  catalogue: Catalogue = en,
+): string | null => {
   const parts = [
-    ...(downloading === 0 ? [] : [`${downloading.toLocaleString("en")} downloading`]),
-    ...(saving === 0 ? [] : [`${saving.toLocaleString("en")} saving`]),
-    ...(waiting === 0 ? [] : [`${waiting.toLocaleString("en")} waiting`]),
+    ...(downloading === 0 ? [] : [catalogue.downloadStatus.downloadingCount(downloading)]),
+    ...(saving === 0 ? [] : [catalogue.downloadStatus.savingCount(saving)]),
+    ...(waiting === 0 ? [] : [catalogue.downloadStatus.waitingCount(waiting)]),
   ];
   return parts.length === 0 ? null : parts.join(" · ");
 };

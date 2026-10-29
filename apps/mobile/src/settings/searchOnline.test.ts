@@ -13,6 +13,7 @@ import { reactCompilerBuilds, stubModule } from "../perf/reactCompilerBuilds.ts"
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
 const react = JSON.stringify(import.meta.resolve("react"));
+const core = JSON.stringify(import.meta.resolve("@wave/core"));
 const externalStore = JSON.stringify(new URL("../lib/externalStore.ts", import.meta.url).href);
 /** The preference and the network, which counts its reads. */
 const device = stubModule(
@@ -37,6 +38,10 @@ const builds = await reactCompilerBuilds<typeof import("./searchOnline.ts")>(
        export const onMobileData = () => { network.reads += 1; return network.onMobileData; };`,
     ),
     "@/overlay/titleChoices": stubModule(`export const openTitleChoices = () => {};`),
+    "@/localisation/localisation": stubModule(
+      `import { catalogueOf } from ${core};
+       export const currentLocalisation = () => ({ language: "en", strings: catalogueOf("en") });`,
+    ),
   },
 );
 const { preference, network } = (await import(device)) as {

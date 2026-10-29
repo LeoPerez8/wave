@@ -5,6 +5,7 @@
  * between them.
  */
 
+import { en, type Catalogue } from "./catalogueEn.ts";
 import type { AlertChoice, AlertSpec } from "./alert.ts";
 import { LOGO_WAVES, logoIconPaths, logoWaveY } from "./logo.ts";
 import { INK_PAIRS, inkPairFor } from "./inkPalette.ts";
@@ -148,18 +149,17 @@ export const launcherIconSwitch = (
   from: LauncherIcon,
   to: ThemeChoice,
   launcher: LauncherBehaviour,
+  { settings: { launcherIcon: text } }: Catalogue = en,
 ): LauncherIconSwitch | null => {
   const icon = launcherIconFor(to);
   if (icon.id === from.id) return null;
   return {
     icon,
     warning: {
-      title: "Change the app icon too?",
-      message: launcher.dropsHomeScreenIcon
-        ? "Wave's icon takes these colours when you leave the app, and your launcher removes it from the home screen when it changes. Add it back from the app drawer."
-        : "Wave's icon takes these colours when you leave the app.",
-      action: { label: "Yes" },
-      alternativeLabel: "No",
+      title: text.title,
+      message: launcher.dropsHomeScreenIcon ? text.dropsFromHomeScreen : text.message,
+      action: { label: text.yes },
+      alternativeLabel: text.no,
     },
   };
 };

@@ -1,6 +1,7 @@
 import { planBlackPlayerImport, summarizeBlackPlayerImport } from "@wave/core";
 import * as Effect from "effect/Effect";
 
+import { currentLocalisation } from "@/localisation/localisation";
 import { WaveNative } from "@/native/waveNative";
 import { showError } from "@/overlay/alert";
 import { playsImported } from "@/playback/PlayHistory";
@@ -35,7 +36,7 @@ export const importBlackPlayerStats = async (): Promise<void> => {
       // Stats, Home and the artist pages read the history again, and the plays go up.
       playsImported();
     }
-    await showImportSummary(summarizeBlackPlayerImport(plan));
+    await showImportSummary(summarizeBlackPlayerImport(plan, currentLocalisation().strings));
   } catch (error) {
     await showError("Couldn't import the BlackPlayer stats", error);
   }

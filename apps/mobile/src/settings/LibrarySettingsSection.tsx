@@ -1,3 +1,4 @@
+import { useLocalisation } from "@/localisation/localisation";
 import { router } from "@/lib/timingRouter";
 import { useState } from "react";
 import { Text, View } from "react-native";
@@ -11,6 +12,7 @@ import { startRescan } from "@/library/runtime";
 
 /** Import BlackPlayer Stats, with what it does. */
 function BlackPlayerImport() {
+  const { strings } = useLocalisation();
   const [importing, setImporting] = useState(false);
   const start = () => {
     setImporting(true);
@@ -20,14 +22,13 @@ function BlackPlayerImport() {
     <>
       <View className="mt-4 items-start">
         <TextButton
-          label={importing ? "Importing…" : "Import BlackPlayer Stats"}
+          label={importing ? strings.settings.importing : strings.settings.importBlackPlayerStats}
           disabled={importing}
           onPress={start}
         />
       </View>
       <Text className="font-sans text-footnote text-secondary">
-        Adds the plays in BlackPlayer's track stats files to your listening history. Pick every
-        snapshot you have: comparing them dates the plays. Importing again only adds new plays.
+        {strings.settings.addsThePlaysInBlackPlayersTrackStats}
       </Text>
     </>
   );
@@ -35,30 +36,29 @@ function BlackPlayerImport() {
 
 /** Settings › Library: the music folders, Rescan library and Import BlackPlayer Stats. */
 export function LibrarySettingsSection() {
+  const { strings } = useLocalisation();
   const roots = useScanRoots();
   const scanning = useScanStatus() === "scanning";
   return (
     <View>
       <Hairline />
       <EntryRow
-        label="Music folders"
+        label={strings.settings.musicFolders}
         count={roots.length === 0 ? undefined : roots.length}
         onPress={() => router.push("/music-folders")}
       />
       <Text className="mt-2 font-sans text-footnote text-secondary">
-        The folders on your phone that Wave shows songs from, and the folders inside them it
-        ignores.
+        {strings.settings.theFoldersOnYourPhoneThatWave}
       </Text>
       <View className="mt-4 items-start">
         <TextButton
-          label={scanning ? "Scanning…" : "Rescan library"}
+          label={scanning ? strings.settings.scanning : strings.settings.rescanLibrary}
           disabled={scanning}
           onPress={() => void startRescan()}
         />
       </View>
       <Text className="font-sans text-footnote text-secondary">
-        Wave picks up new, changed and removed files each time you open it, and when you pull down
-        in the Library.
+        {strings.settings.wavePicksUpNewChangedAndRemoved}
       </Text>
       <BlackPlayerImport />
     </View>

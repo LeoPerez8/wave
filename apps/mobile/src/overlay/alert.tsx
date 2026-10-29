@@ -1,3 +1,4 @@
+import { currentLocalisation } from "@/localisation/localisation";
 import { planAlert, type AlertChoice, type AlertPlan, type AlertSpec } from "@wave/core";
 import { Text, View } from "react-native";
 
@@ -49,7 +50,7 @@ function AlertCard({
  * with what was chosen. Back or a tap outside chooses Cancel / OK.
  */
 export const showAlert = (spec: AlertSpec): Promise<AlertChoice> => {
-  const plan = planAlert(spec);
+  const plan = planAlert(spec, currentLocalisation().strings);
   return presentOverlay<AlertChoice>({
     label: plan.announcement,
     dismissed: "dismiss",

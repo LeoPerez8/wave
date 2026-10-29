@@ -5,6 +5,7 @@
  * Fetching and writing the tags live in the app and the native module.
  */
 
+import { en, type Catalogue } from "./catalogueEn.ts";
 import { artistPhotoName, artistPhotoQuery } from "./artistPhoto.ts";
 import type { ExplicitFlag } from "./explicit.ts";
 import { UNKNOWN_ALBUM } from "./library.ts";
@@ -462,23 +463,21 @@ export const songTagOutcome = (
   return { kind: "notFound" };
 };
 
-const FAILURES: Record<
-  "lookup" | "write" | "format",
-  (title: string) => { title: string; message: string }
-> = {
-  lookup: (title) => ({
-    title: `Couldn't look up “${title}”`,
-    message: "LRCLIB or Deezer couldn't be reached. The file wasn't changed.",
-  }),
-  write: (title) => ({
-    title: `Couldn't update “${title}”`,
-    message: "Wave couldn't write to the file. It wasn't changed.",
-  }),
-  format: (title) => ({
-    title: `Couldn't update “${title}”`,
-    message:
-      "No lyrics were found, and Wave can't write tags to this file's format. It wasn't changed.",
-  }),
+type FixSongsText = Catalogue["fixSongs"];
+
+const failure = (
+  copy: FixSongsText,
+  reason: "lookup" | "write" | "format",
+  title: string,
+): { title: string; message: string } => {
+  switch (reason) {
+    case "lookup":
+      return { title: copy.lookupFailed(title), message: copy.lookupFailedMessage };
+    case "write":
+      return { title: copy.updateFailed(title), message: copy.writeFailedMessage };
+    case "format":
+      return { title: copy.updateFailed(title), message: copy.formatFailedMessage };
+  }
 };
 
 /** Lookups failing in a row at which the services count as unreachable (no connection). */
@@ -633,74 +632,54 @@ export interface TagLookupStop {
 /** Songs named in a summary's list; the rest are counted. */
 const NAMED_SONGS = 5;
 
-const count = (n: number): string => n.toLocaleString("en");
-const songs = (n: number): string => (n === 1 ? "1 song" : `${count(n)} songs`);
-
-/** "a", "a and b", "a, b and c". */
-const listed = (items: readonly string[]): string =>
-  items.length <= 1 ? (items[0] ?? "") : `${items.slice(0, -1).join(", ")} and ${items.at(-1)}`;
-
 /** The tags of [written] that went to [where], by name: "genre", "track number", "year", "explicit flag". */
-const tagsWent = (written: TagWriteReport, where: TagDestination): string[] => [
-  ...(written.genre === where ? ["genre"] : []),
-  ...(written.trackNumber === where ? ["track number"] : []),
-  ...(written.year === where ? ["year"] : []),
-  ...(written.explicit === where ? ["explicit flag"] : []),
+const tagsWent = (copy: FixSongsText, written: TagWriteReport, where: TagDestination): string[] => [
+  ...(written.genre === where ? [copy.tags.genre] : []),
+  ...(written.trackNumber === where ? [copy.tags.trackNumber] : []),
+  ...(written.year === where ? [copy.tags.year] : []),
+  ...(written.explicit === where ? [copy.tags.explicit] : []),
 ];
 
 /** What one song got, as a sentence about it. */
-const describeUpdate = (title: string, written: TagWriteReport) => {
-  if (written.lyrics === "sidecar") {
-    const skipped = tagsWent(written, "notWritten");
-    const notWritten =
-      skipped.length === 0
-        ? ""
-        : ` and the ${listed(skipped)} ${skipped.length === 1 ? "wasn't" : "weren't"} written`;
+const describeUpdate = (copy: FixSongsText, title: string, written: TagWriteReport) => {
+  if (written.lyrics === "sidecar")
     return {
-      title: "Song fixed",
-      message: `Wave can't write tags to this file's format, so the lyrics were saved beside it as an .lrc file${notWritten}.`,
+      title: copy.songFixed,
+      message: copy.savedAsLrc(tagsWent(copy, written, "notWritten")),
     };
-  }
-  const filled = [...(written.lyrics === "none" ? [] : ["lyrics"]), ...tagsWent(written, "tags")];
-  return { title: "Song fixed", message: `Filled in the ${listed(filled)} of “${title}”.` };
+  const filled = [
+    ...(written.lyrics === "none" ? [] : [copy.tags.lyrics]),
+    ...tagsWent(copy, written, "tags"),
+  ];
+  return { title: copy.songFixed, message: copy.filledIn(filled, title) };
 };
-
-/** What a song Fix Song skips already has (`songsToFix`). */
-const EVERYTHING = "lyrics, a genre, a track number, a year and an explicit flag";
 
 /**
  * The message after Fix Song on [results] (in order): what one song got, or
  * for several the fixed / not found / failed counts and the songs whose
  * lyrics went into a sidecar `.lrc`. [stop] says why a run ended early;
  * [skipped] counts the songs left out as already having lyrics, a genre, a
- * track number, a year and an explicit flag (`songsToFix`).
+ * track number, a year and an explicit flag (`songsToFix`). It reads in
+ * [catalogue]'s language.
  */
 export const describeTagLookups = (
   results: readonly { readonly title: string; readonly outcome: SongTagOutcome }[],
   stop?: TagLookupStop,
   skipped = 0,
+  { fixSongs: copy }: Catalogue = en,
 ): { readonly title: string; readonly message: string } => {
   if (results.length === 0 && stop === undefined && skipped > 0)
-    return {
-      title: "Nothing to fix",
-      message:
-        skipped === 1
-          ? `The only song already has ${EVERYTHING}.`
-          : `All ${count(skipped)} songs already have ${EVERYTHING}.`,
-    };
+    return { title: copy.nothingToFix, message: copy.allComplete(skipped) };
   const only = results.length === 1 && stop === undefined && skipped === 0 ? results[0] : undefined;
   if (only !== undefined) {
     const { title, outcome } = only;
     switch (outcome.kind) {
       case "updated":
-        return describeUpdate(title, outcome.written);
+        return describeUpdate(copy, title, outcome.written);
       case "notFound":
-        return {
-          title: "Nothing found",
-          message: `Nothing “${title}” is missing was found. The file wasn't changed.`,
-        };
+        return { title: copy.nothingFound, message: copy.nothingFoundFor(title) };
       case "failed":
-        return FAILURES[outcome.reason](title);
+        return failure(copy, outcome.reason, title);
     }
   }
   const tally = { updated: 0, notFound: 0, failed: 0 };
@@ -709,45 +688,29 @@ export const describeTagLookups = (
     tally[outcome.kind] += 1;
     if (outcome.kind === "updated" && outcome.written.lyrics === "sidecar") sidecars.push(title);
   }
-  const paragraphs = [
-    `${count(tally.updated)} fixed · ${count(tally.notFound)} not found · ${count(tally.failed)} failed`,
-  ];
-  if (skipped > 0)
-    paragraphs.push(
-      `${songs(skipped)} already had ${EVERYTHING}, so ${skipped === 1 ? "it was" : "they were"} skipped.`,
-    );
-  if (sidecars.length > 0) {
-    const named = sidecars.slice(0, NAMED_SONGS).join(", ");
-    const more = sidecars.length - NAMED_SONGS;
-    paragraphs.push(
-      `Lyrics saved as .lrc files, genre not written (Wave can't write tags to their format): ${named}${more > 0 ? ` and ${count(more)} more` : ""}.`,
-    );
-  }
-  if (stop !== undefined) {
-    const notLookedUp = `${songs(stop.left)} ${stop.left === 1 ? "wasn't" : "weren't"} looked up.`;
-    paragraphs.push(
-      stop.stopped === "unreachable"
-        ? `LRCLIB and Deezer couldn't be reached, so ${notLookedUp}`
-        : notLookedUp.charAt(0).toUpperCase() + notLookedUp.slice(1),
-    );
-  }
+  const paragraphs = [copy.tally(tally.updated, tally.notFound, tally.failed)];
+  if (skipped > 0) paragraphs.push(copy.skipped(skipped));
+  if (sidecars.length > 0)
+    paragraphs.push(copy.sidecars(sidecars.slice(0, NAMED_SONGS), sidecars.length - NAMED_SONGS));
+  if (stop !== undefined)
+    paragraphs.push(copy.notLookedUp(stop.left, stop.stopped === "unreachable"));
   return {
-    title: stop === undefined ? "Songs fixed" : "Fix Songs stopped",
+    title: stop === undefined ? copy.songsFixed : copy.stopped,
     message: paragraphs.join("\n\n"),
   };
 };
 
 /** What one song's Fix Song came to, as a toast says it. */
-const toastAboutSong = (title: string, outcome: SongTagOutcome): string => {
+const toastAboutSong = (copy: FixSongsText, title: string, outcome: SongTagOutcome): string => {
   switch (outcome.kind) {
     case "updated":
       return outcome.written.lyrics === "sidecar"
-        ? `Fixed “${title}” · lyrics saved as .lrc`
-        : `Fixed “${title}”`;
+        ? copy.toast.fixedAsLrc(title)
+        : copy.toast.fixed(title);
     case "notFound":
-      return `Nothing found for “${title}”`;
+      return copy.toast.nothingFoundFor(title);
     case "failed":
-      return FAILURES[outcome.reason](title).title;
+      return failure(copy, outcome.reason, title).title;
   }
 };
 
@@ -761,20 +724,21 @@ export const tagLookupsToast = (
   results: readonly { readonly title: string; readonly outcome: SongTagOutcome }[],
   stop?: TagLookupStop,
   skipped = 0,
+  { fixSongs: copy }: Catalogue = en,
 ): string => {
-  if (results.length === 0 && stop === undefined && skipped > 0) return "Nothing to fix";
+  if (results.length === 0 && stop === undefined && skipped > 0) return copy.nothingToFix;
   const only = results.length === 1 && stop === undefined && skipped === 0 ? results[0] : undefined;
-  if (only !== undefined) return toastAboutSong(only.title, only.outcome);
+  if (only !== undefined) return toastAboutSong(copy, only.title, only.outcome);
   const tally = { updated: 0, notFound: 0, failed: 0 };
   for (const { outcome } of results) tally[outcome.kind] += 1;
-  const parts = [tally.updated === 0 ? "Nothing fixed" : `Fixed ${songs(tally.updated)}`];
-  if (tally.notFound > 0) parts.push(`${count(tally.notFound)} not found`);
-  if (tally.failed > 0) parts.push(`${count(tally.failed)} failed`);
-  if (skipped > 0) parts.push(`${count(skipped)} already complete`);
+  const parts = [
+    tally.updated === 0 ? copy.toast.nothingFixed : copy.toast.fixedSongs(tally.updated),
+  ];
+  if (tally.notFound > 0) parts.push(copy.toast.notFound(tally.notFound));
+  if (tally.failed > 0) parts.push(copy.toast.failed(tally.failed));
+  if (skipped > 0) parts.push(copy.toast.complete(skipped));
   if (stop !== undefined)
-    parts.push(
-      `${count(stop.left)} not looked up${stop.stopped === "unreachable" ? " (offline)" : ""}`,
-    );
+    parts.push(copy.toast.notLookedUp(stop.left, stop.stopped === "unreachable"));
   return parts.join(" · ");
 };
 

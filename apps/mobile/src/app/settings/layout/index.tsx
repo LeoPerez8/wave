@@ -1,4 +1,5 @@
 import { useScreenContent } from "@/lib/screenTiming";
+import { useLocalisation } from "@/localisation/localisation";
 import { LAYOUT_PAGES } from "@wave/core";
 import { router } from "@/lib/timingRouter";
 import { Text, View } from "react-native";
@@ -15,16 +16,17 @@ import { SettingsPageRow, SettingsPageScreen } from "@/settings/SettingsPage";
  * long press; then Keep Find Field Visible.
  */
 export default function LayoutSettingsScreen() {
+  const { strings } = useLocalisation();
   useScreenContent(true);
   const keepFindVisible = useKeepFindVisible();
   return (
     <SettingsPageScreen page="layout">
       <View>
         <Hairline />
-        {LAYOUT_PAGES.map(({ page, title, route }) => (
+        {LAYOUT_PAGES.map(({ page, route }) => (
           <SettingsPageRow
             key={page}
-            title={title}
+            title={strings.settings.layoutPages[page]}
             summary={null}
             onPress={() => router.push(route)}
           />
@@ -33,14 +35,13 @@ export default function LayoutSettingsScreen() {
       <View>
         <Hairline />
         <SettingsSwitch
-          label="Keep Find Field Visible"
+          label={strings.settings.keepFindFieldVisible}
           value={keepFindVisible}
           onValueChange={setKeepFindVisible}
         />
         <Hairline />
         <Text className="mt-2 font-sans text-footnote text-secondary">
-          The Find field stays under the page's header while the list scrolls, instead of waiting
-          above the list until it's pulled down.
+          {strings.settings.theFindFieldStaysUnderThePages}
         </Text>
       </View>
     </SettingsPageScreen>

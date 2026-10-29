@@ -30,7 +30,7 @@ export default function FollowedArtistsSettingsScreen() {
   return (
     <SettingsPageScreen page="followedArtists">
       <SettingsSwitch
-        label="Followed artists"
+        label={strings.settings.followedArtists}
         value={enabled}
         onValueChange={setFollowedArtistsEnabled}
       />
@@ -92,7 +92,7 @@ export default function FollowedArtistsSettingsScreen() {
         <View>
           {follows.length === 0 && (
             <Text className="font-sans text-body text-secondary">
-              You aren't following any artists yet.
+              {strings.settings.youArentFollowingAnyArtistsYet}
             </Text>
           )}
           {follows.map((artist) => (
@@ -118,12 +118,17 @@ export default function FollowedArtistsSettingsScreen() {
                 </View>
               </TextButton>
               <TextButton
-                label="Following"
-                accessibilityLabel={`Manage ${artist.name}, Following, ${artist.level === "shows" ? strings.shows.level(country) : strings.shows.releases}`}
+                label={strings.settings.following}
+                accessibilityLabel={strings.settings.manageFollow(
+                  artist.name,
+                  artist.level === "shows" ? strings.shows.level(country) : strings.shows.releases,
+                )}
                 onPress={() => openFollowCard(artist)}
               >
                 <View className="py-2 pl-3">
-                  <Text className="font-sans text-body text-accent">Following</Text>
+                  <Text className="font-sans text-body text-accent">
+                    {strings.settings.following}
+                  </Text>
                   <Text className="font-sans text-footnote text-secondary">
                     {artist.level === "releases"
                       ? strings.shows.releases

@@ -2,6 +2,7 @@ import { downloadRunLines, downloadRunPanelLine } from "@wave/core";
 import { Text, View } from "react-native";
 
 import { CELL } from "@/catalog/grid";
+import { useLocalisation } from "@/localisation/localisation";
 import type { DownloadRunState } from "@/ytmusic/downloadRun";
 
 const TABULAR = { fontVariant: ["tabular-nums" as const] };
@@ -50,6 +51,7 @@ export function DownloadRunPanel({
   summary: string | null;
   pauseNotice: string | null;
 }) {
+  const { language, strings } = useLocalisation();
   const overall = progress.overall;
   const lines = { gap: CELL, paddingBottom: CELL * 2 };
   if (overall === null) {
@@ -62,14 +64,18 @@ export function DownloadRunPanel({
       </View>
     );
   }
-  const { count, fraction } = downloadRunLines(overall);
-  const line = downloadRunPanelLine(overall, { timeLeft, paused, throttled: pauseNotice !== null });
+  const { count, fraction } = downloadRunLines(overall, language);
+  const line = downloadRunPanelLine(
+    overall,
+    { timeLeft, paused, throttled: pauseNotice !== null },
+    language,
+  );
   return (
     <View style={lines}>
       <View
         accessible
         accessibilityRole="progressbar"
-        accessibilityLabel={`${count} downloaded, ${line}`}
+        accessibilityLabel={strings.settings.downloadedLine(count, line)}
         accessibilityValue={{ min: 0, max: overall.total, now: overall.total - overall.left }}
         style={{ gap: CELL }}
       >

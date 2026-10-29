@@ -1,3 +1,5 @@
+import { currentLocalisation } from "@/localisation/localisation";
+import { useLocalisation } from "@/localisation/localisation";
 import { IconSwipeLeft, IconSwipeRight, type Icon } from "@tabler/icons-react-native";
 import { SWIPE_CHOICES, swipeChoiceLabel, type RowSwipeSide, type SwipeChoice } from "@wave/core";
 import { router } from "expo-router";
@@ -21,8 +23,20 @@ interface SwipeDirection {
 }
 
 const DIRECTIONS: Readonly<Record<RowSwipeSide, SwipeDirection>> = {
-  left: { title: "Swipe left", route: "/settings/swipe-actions/left", icon: IconSwipeLeft },
-  right: { title: "Swipe right", route: "/settings/swipe-actions/right", icon: IconSwipeRight },
+  left: {
+    get title() {
+      return currentLocalisation().strings.settings.swipeLeft;
+    },
+    route: "/settings/swipe-actions/left",
+    icon: IconSwipeLeft,
+  },
+  right: {
+    get title() {
+      return currentLocalisation().strings.settings.swipeRight;
+    },
+    route: "/settings/swipe-actions/right",
+    icon: IconSwipeRight,
+  },
 };
 
 /** The two directions, in the order Settings › Swipe actions lists them. */
@@ -42,6 +56,7 @@ export function SwipeDirectionRow({
   chosen: SwipeChoice;
   enabled: boolean;
 }) {
+  const { strings } = useLocalisation();
   const { title, route, icon: Glyph } = DIRECTIONS[side];
   const foreground = useThemeColor("foreground");
   const tertiary = useThemeColor("tertiary");
@@ -50,7 +65,7 @@ export function SwipeDirectionRow({
     <Press
       accessibilityRole="button"
       accessibilityLabel={`${title}, ${action}`}
-      accessibilityHint={enabled ? `Chooses what swiping ${side} runs` : undefined}
+      accessibilityHint={enabled ? strings.settings.swipeHint(side) : undefined}
       accessibilityState={{ disabled: !enabled }}
       disabled={!enabled}
       onPress={() => router.push(route)}
@@ -89,6 +104,7 @@ const closePicker = (): void => {
  * back to Swipe actions; Back leaves it as it was.
  */
 export function SwipeChoicePickerScreen({ side }: { side: RowSwipeSide }) {
+  const { strings } = useLocalisation();
   const { title } = DIRECTIONS[side];
   const chosen = useSwipeSettings()[side];
   return (
@@ -113,9 +129,7 @@ export function SwipeChoicePickerScreen({ side }: { side: RowSwipeSide }) {
           })}
         </View>
         <Text className="mt-2 font-sans text-footnote text-secondary">
-          Remove takes a song out of the playlist it&apos;s in, and elsewhere asks before deleting
-          it. A song without the chosen action, such as Download on a song already on the phone,
-          doesn&apos;t swipe that way.
+          {strings.settings.removeTakesASongOutOfThe}
         </Text>
       </View>
     </SettingsPageScreen>
