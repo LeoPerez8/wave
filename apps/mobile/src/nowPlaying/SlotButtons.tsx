@@ -64,18 +64,6 @@ export interface SlotContext {
   readonly share: () => void;
 }
 
-/** The actions that need a song on to show: with nothing playing their slots stay empty. */
-const NEEDS_SONG: ReadonlySet<NowPlayingAction> = new Set([
-  "addToPlaylist",
-  "download",
-  "share",
-  "songMenu",
-]);
-
-/** Whether [action]'s button shows, given whether a song is on. */
-export const slotShows = (action: NowPlayingAction, songOn: boolean): boolean =>
-  songOn || !NEEDS_SONG.has(action);
-
 /** Shuffle: teal while on, with the icon and name of the chosen kind of shuffle. */
 function ShuffleSlot({ change }: { change: SlotChange }) {
   const { icon, label } = useShuffleControl();
@@ -108,14 +96,17 @@ function RepeatSlot({ change }: { change: SlotChange }) {
 /**
  * The button slot [slot] of Now Playing's bottom row holds (0 for the first),
  * for [action]. A tap runs it; a long press opens the card that changes it.
+ * Off, it shows disabled and only long-presses (Core's `nowPlayingSlotShow`).
  */
 export function SlotButton({
   slot,
   action,
+  off,
   context,
 }: {
   slot: number;
   action: NowPlayingAction;
+  off: boolean;
   context: SlotContext;
 }) {
   const change = slotChange(slot);
@@ -164,6 +155,7 @@ export function SlotButton({
           icon={IconDots}
           label="Song Menu"
           tone="secondary"
+          disabled={off}
           opensMenu
           onPress={openPlayingActions}
         />

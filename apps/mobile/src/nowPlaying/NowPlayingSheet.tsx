@@ -1,5 +1,6 @@
 import { activeTiming, beginTiming, timingSurfaceCommitted } from "@/lib/timing";
 import { IconChevronDown, IconListNumbers, IconShare3 } from "@tabler/icons-react-native";
+import { isUnsearchedTrackId, nowPlayingSlotShow, type NowPlayingSlotSong } from "@wave/core";
 import type { ReactNode } from "react";
 import {
   Activity,
@@ -53,7 +54,7 @@ import {
   useNowPlayingShown,
   useNowPlayingSettled,
 } from "./sheet";
-import { SlotButton, ViewToggle, slotShows, type SlotContext } from "./SlotButtons";
+import { SlotButton, ViewToggle, type SlotContext } from "./SlotButtons";
 import { Transport } from "./Transport";
 import {
   nowPlayingSongLookup,
@@ -251,10 +252,18 @@ export function NowPlayingSheet() {
     toggleLyrics,
     share,
   };
-  // The slots that aren't None, spread evenly left of Queue.
-  const slots = useNowPlayingButtons().flatMap((action, slot) =>
-    action !== null && slotShows(action, item !== null) ? [{ action, slot }] : [],
-  );
+  const slotSong: NowPlayingSlotSong =
+    item === null
+      ? "nothing"
+      : trackId !== null && isUnsearchedTrackId(trackId)
+        ? "unsearched"
+        : "song";
+  // The slots that aren't None and show for what's on, spread evenly left of Queue.
+  const slots = useNowPlayingButtons().flatMap((action, slot) => {
+    if (action === null) return [];
+    const show = nowPlayingSlotShow(action, slotSong);
+    return show === "hidden" ? [] : [{ action, slot, off: show === "off" }];
+  });
 
   return (
     <Animated.View
@@ -328,8 +337,8 @@ export function NowPlayingSheet() {
           <View
             className={`flex-row items-center ${slots.length === 0 ? "justify-end" : "justify-between"}`}
           >
-            {slots.map(({ action, slot }) => (
-              <SlotButton key={slot} slot={slot} action={action} context={slotContext} />
+            {slots.map(({ action, slot, off }) => (
+              <SlotButton key={slot} slot={slot} action={action} off={off} context={slotContext} />
             ))}
             <ViewToggle
               icon={IconListNumbers}
