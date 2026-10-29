@@ -57,10 +57,62 @@ export const longPressFill = ({
 /** How far a held finger may drift before React Native calls its long-press off (Pressability's). */
 const HOLD_DRIFT = 10;
 
-/**
- * Whether a hold that went down at [start] still counts with the finger at
- * [point] (window dp): a finger that drifts more than 10 dp no longer
- * long-presses the row, so the sample's fill stops there too.
- */
-export const longPressHoldLasts = (start: SlidePoint, point: SlidePoint): boolean =>
+/** Whether a hold that went down at [start] still counts with the finger at [point] (window dp). */
+const holdLasts = (start: SlidePoint, point: SlidePoint): boolean =>
   Math.hypot(point.x - start.x, point.y - start.y) <= HOLD_DRIFT;
+
+/** A finger on the screen during a touch event (window dp), by its identifier. */
+export interface SampleTouch {
+  readonly id: string | number;
+  readonly x: number;
+  readonly y: number;
+}
+
+/** A touch event the sample row sees, with React Native's touch lists. */
+export interface SampleTouchEvent {
+  readonly kind: "start" | "move" | "end" | "cancel";
+  /** Every finger still on the screen after the event (`touches`). */
+  readonly touches: readonly SampleTouch[];
+  /** The fingers the event is about (`changedTouches`). */
+  readonly changed: readonly SampleTouch[];
+}
+
+/** The finger holding the sample row, and where it went down. */
+export interface HeldFinger {
+  readonly id: string | number;
+  readonly start: SlidePoint;
+}
+
+/** The hold after a touch event, and what the fill does: sweep from 0, fade out, or carry on. */
+export interface LongPressHoldStep {
+  readonly hold: HeldFinger | null;
+  readonly fill: "start" | "stop" | "keep";
+}
+
+/**
+ * Follows the finger holding the sample row through a touch event. A hold
+ * starts when a lone finger goes down, and only that finger counts: Android
+ * sends every finger of a gesture to the first one's target, so a second
+ * finger anywhere neither restarts the fill nor ends it. The hold ends when
+ * its finger lifts or is cancelled, or drifts more than 10 dp from where it
+ * went down (when the row's long-press is called off too).
+ */
+export const longPressHoldStep = (
+  hold: HeldFinger | null,
+  event: SampleTouchEvent,
+): LongPressHoldStep => {
+  const keep = { hold, fill: "keep" } as const;
+  const stop = { hold: null, fill: "stop" } as const;
+  if (event.kind === "start") {
+    const [finger] = event.touches;
+    if (hold !== null || event.touches.length !== 1 || finger === undefined) return keep;
+    return { hold: { id: finger.id, start: { x: finger.x, y: finger.y } }, fill: "start" };
+  }
+  if (hold === null) return keep;
+  const own = (touch: SampleTouch): boolean => touch.id === hold.id;
+  if (event.kind === "move") {
+    const finger = event.touches.find(own) ?? event.changed.find(own);
+    return finger === undefined || holdLasts(hold.start, finger) ? keep : stop;
+  }
+  return event.changed.some(own) || !event.touches.some(own) ? stop : keep;
+};
