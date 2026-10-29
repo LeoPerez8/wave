@@ -9,6 +9,8 @@ type WaveRecognizeEvents = {
   onRecognizeHeard: (event: { session: number; heardMs: number }) => void;
   /** Session [session]'s audio stopped on its own. */
   onRecognizeCaptureFailed: (event: { session: number }) => void;
+  /** A tile or launcher shortcut asks the foreground UI to open Recognize. */
+  onRecognizeRequested: () => void;
 };
 
 declare class WaveRecognizeModule extends NativeModule<WaveRecognizeEvents> {
@@ -17,10 +19,23 @@ declare class WaveRecognizeModule extends NativeModule<WaveRecognizeEvents> {
   /** Sends the signature of everything the session heard; [last] stops its capture first. */
   ask(session: number, last: boolean): Promise<RecognizeAnswer>;
   stop(session: number): void;
+  takeRequest(): boolean;
 }
 
 /** Null in a build without it (a JS repack over an older APK): Search then has no Recognize button. */
 const WaveRecognize = requireOptionalNativeModule<WaveRecognizeModule>("WaveRecognize");
+
+/** Null in an older APK that has capture but predates the tile and shortcut. */
+export const recognizeRequests =
+  WaveRecognize === null || typeof WaveRecognize.takeRequest !== "function"
+    ? null
+    : {
+        take: () => WaveRecognize.takeRequest(),
+        subscribe: (listener: () => void) => {
+          const subscription = WaveRecognize.addListener("onRecognizeRequested", listener);
+          return () => subscription.remove();
+        },
+      };
 
 /** The module as `startRecognizeSession` takes it; null without it. */
 export const recognizeNative: RecognizeNative | null =

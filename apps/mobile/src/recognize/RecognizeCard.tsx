@@ -6,7 +6,7 @@ import {
   type RecognizeCardAction,
   type RecognizeSource,
 } from "@wave/core";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { AppState, Linking, Text, View } from "react-native";
 import { useReducedMotion } from "react-native-reanimated";
 
@@ -24,6 +24,7 @@ import { useTapAnimationMs } from "@/settings/tapAnimation";
 import { useThemeColor } from "@/theme/useThemeColor";
 
 import { hasMicrophone, microphonePermission } from "./microphone";
+import { createRecognizeEntry } from "./recognizeEntry";
 import {
   startRecognizeSession,
   type RecognizeDeps,
@@ -51,14 +52,23 @@ const depsFor = (native: RecognizeNative): RecognizeDeps => ({
  * start listening at once (the tile and the app shortcut, #772). Closing the card,
  * by Cancel, Back or a tap outside, ends the session.
  */
-export const openRecognize = (source: RecognizeSource = "microphone"): void => {
-  const native = recognizeNative;
-  if (native === null) return;
-  openOverlay({
-    label: "Recognize Song",
-    render: (close) => <RecognizeCard native={native} source={source} close={close} />,
-  });
-};
+const entry = createRecognizeEntry({
+  foreground: () => AppState.currentState === "active",
+  show: (source, closed) => {
+    const native = recognizeNative;
+    if (native === null) return closed();
+    openOverlay({
+      label: "Recognize Song",
+      render: (close) => (
+        <RecognizeCard native={native} source={source} close={close} onClosed={closed} />
+      ),
+    });
+  },
+});
+
+export const openRecognize = entry.request;
+/** Flushes a launch request once Android has brought Wave into the foreground. */
+export const resumeRecognizeEntry = entry.resume;
 
 /**
  * The glass card: "Listening…" over the moving wave with Cancel, then the song
@@ -70,10 +80,12 @@ function RecognizeCard({
   native,
   source,
   close,
+  onClosed,
 }: {
   native: RecognizeNative;
   source: RecognizeSource;
   close: () => void;
+  onClosed: () => void;
 }) {
   const [attempt, setAttempt] = useState(0);
   // The card for this attempt; an earlier attempt's end never shows over a new one.
@@ -82,8 +94,15 @@ function RecognizeCard({
     card: { kind: "listening" },
   });
   const run = useRef<RecognizeRun | null>(null);
+  const closeFromEffect = useEffectEvent(close);
+
+  useEffect(() => onClosed, [onClosed]);
 
   useEffect(() => {
+    if (AppState.currentState !== "active") {
+      closeFromEffect();
+      return;
+    }
     const session = startRecognizeSession(depsFor(native), source, (card) =>
       setShown({ attempt, card }),
     );
@@ -92,6 +111,18 @@ function RecognizeCard({
   }, [native, source, attempt]);
 
   const card: RecognizeCardState = shown.attempt === attempt ? shown.card : { kind: "listening" };
+
+  // Leaving Wave stops capture. A denied card stays for the settings round trip below.
+  const listening = card.kind === "listening";
+  useEffect(() => {
+    if (!listening) return;
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state !== "background") return;
+      run.current?.cancel();
+      closeFromEffect();
+    });
+    return () => subscription.remove();
+  }, [listening]);
 
   // Back from Android's settings with the microphone allowed: listen at once.
   const denied = card.kind === "denied";
