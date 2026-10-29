@@ -104,11 +104,11 @@ export const followFeed = (input: {
   const byArtist = new Map<string, FollowShow[]>();
   for (const show of eligibleShows) {
     const shows = byArtist.get(show.artistKey) ?? [];
-    if (!shows.some(s => s.id === show.id)) shows.push(show);
+    if (!shows.some((s) => s.id === show.id)) shows.push(show);
     byArtist.set(show.artistKey, shows);
   }
   const artistShows = Object.fromEntries(byArtist);
-  const showCards = eligibleShows.filter(show => {
+  const showCards = eligibleShows.filter((show) => {
     if (showIds.has(show.id)) return false;
     showIds.add(show.id);
     return true;
