@@ -1,3 +1,4 @@
+import { showsEn } from "./catalogue/showsEn.ts";
 /**
  * Wave's interface text in English: the shape every other catalogue must fill
  * (`Catalogue`), so a phrase missing from one fails the type check. Group
@@ -8,6 +9,7 @@
 import type { TabBarTab } from "./tabBar.ts";
 
 export const en = {
+  shows: showsEn,
   /** Each tab's name, in the tab bar, its editor and TalkBack. */
   tabs: {
     index: "Home",
