@@ -1,0 +1,15 @@
+{
+  "data": [
+    {
+      "id": 1,
+      "title": "New Song",
+      "record_type": "single",
+      "release_date": "2026-10-27",
+      "cover_medium": "https://cdn.deezer.com/cover.jpg",
+      "explicit_lyrics": true
+    },
+    { "id": 2, "title": "Small", "record_type": "ep", "release_date": "2026-10-14" },
+    { "id": 3, "title": "Unknown", "record_type": "compilation", "release_date": "2026-10-14" },
+    { "id": 4, "title": "Undated", "record_type": "album" }
+  ]
+}

@@ -62,6 +62,7 @@ export const homePlaceholderHeight = (id: HomeSectionId, fontScale: number): num
     case "most-played":
     case "favorites":
       return grid.row * 10;
+    case "new-releases":
     case "recently-added":
     case "recently-played":
     case "most-played-albums":

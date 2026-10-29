@@ -1,3 +1,5 @@
+import { useLocalisation } from "@/localisation/localisation";
+import { NewReleases } from "./NewReleases";
 import {
   discoverMixCaption,
   discoverMixRowsToBuild,
@@ -390,6 +392,7 @@ function MostPlayedArtists({ title }: SectionProps) {
  */
 const SECTIONS: Record<HomeSectionId, ComponentType<SectionProps>> = {
   discover: Discover,
+  "new-releases": NewReleases,
   "recently-added": ({ home, title }) =>
     home.recentlyAdded !== undefined &&
     home.recentlyAdded.length > 0 && (
@@ -436,7 +439,8 @@ export const SECTION_GAP = CELL * 5;
  * [home] is `useHome`'s answer.
  */
 export function HomeSection({ id, home }: { id: HomeSectionId; home: HomeContent }) {
+  const { strings } = useLocalisation();
   if (homeSectionWaiting(id, home)) return <HomeSectionSkeleton id={id} />;
   const Section = SECTIONS[id];
-  return <Section home={home} title={homeSectionTitle(id)} />;
+  return <Section home={home} title={homeSectionTitle(id, strings)} />;
 }

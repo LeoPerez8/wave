@@ -29,6 +29,7 @@ const homeItems = (sections: HomeArrangement, options: Parameters<typeof items>[
   items(layout(sections), options);
 
 const TODAYS_HOME = [
+  "new-releases",
   "discover",
   "recently-added",
   "recently-played",
@@ -46,6 +47,7 @@ describe("Home's section catalogue", () => {
     assert.deepEqual(
       HOME_SECTIONS.map(({ id, title }) => [id, title]),
       [
+        ["new-releases", "New from Artists You Follow"],
         ["discover", "Discover"],
         ["recently-added", "Recently added"],
         ["recently-played", "Recently played"],
@@ -100,7 +102,7 @@ describe("Home's arrangement", () => {
     // Saved by a Wave whose catalogue had no Most played artists.
     const stored = JSON.stringify({
       shown: ["favorites", "most-played", "recently-added"],
-      hidden: ["recently-played", "most-played-albums", "discover", "stats"],
+      hidden: ["new-releases", "recently-played", "most-played-albums", "discover", "stats"],
     });
     assert.deepEqual(parseHomeArrangement(stored), [
       "favorites",
@@ -113,6 +115,7 @@ describe("Home's arrangement", () => {
   test("Discover takes the place of the Magic Queue and both mix sections, first on any Home arranged before it", () => {
     // Saved by a Wave whose catalogue had the three sections and no Discover.
     const before = [
+      "new-releases",
       "recently-added",
       "recently-played",
       "most-played",
@@ -147,6 +150,7 @@ describe("Home's arrangement", () => {
     const stored = JSON.stringify({
       shown: ["favorites", "discover-mixes", "recently-added"],
       hidden: [
+        "new-releases",
         "recently-played",
         "most-played",
         "most-played-albums",
@@ -198,7 +202,7 @@ describe("what Home lists", () => {
 
   test("with nothing played, the line asking for a play comes before the first section plays fill", () => {
     assert.deepEqual(homeItems(TODAYS_HOME as HomeArrangement, { nothingPlayed: true }), [
-      ...sections("discover", "recently-added"),
+      ...sections("new-releases", "discover", "recently-added"),
       "play-hint",
       ...sections(
         "recently-played",
@@ -215,9 +219,12 @@ describe("what Home lists", () => {
     ]);
   });
 
-  test("with an empty Library, Home lists only Discover, under its empty state, when arranged", () => {
+  test("with an empty Library, Home lists online sections under its empty state when arranged", () => {
     const empty = { nothingPlayed: true, empty: true };
-    assert.deepEqual(homeItems(TODAYS_HOME as HomeArrangement, empty), sections("discover"));
+    assert.deepEqual(
+      homeItems(TODAYS_HOME as HomeArrangement, empty),
+      sections("new-releases", "discover"),
+    );
     assert.deepEqual(homeItems(["favorites", "stats"], empty), []);
     assert.deepEqual(homeItems([], empty), []);
   });
@@ -251,6 +258,7 @@ describe("what Home lists", () => {
 describe("Home's editor", () => {
   test("lists the sections Home doesn't show in catalogue order", () => {
     assert.deepEqual(hiddenHomeSections(["stats", "favorites", "recently-added", "most-played"]), [
+      "new-releases",
       "discover",
       "recently-played",
       "most-played-albums",
@@ -301,6 +309,7 @@ describe("Home's editor", () => {
 describe("merging Home's Stats and Listening overview", () => {
   test("Stats keeps the first shown section's place when both were shown", () => {
     const hidden = [
+      "new-releases",
       "discover",
       "recently-played",
       "most-played",
@@ -418,4 +427,22 @@ test("a reordered Discover survives saving with the default section order", () =
   ]);
   const restored = editArrangement(moved, { discover: { move: { from: 0, to: 2 } } });
   assert.equal(storeArrangement(restored), null);
+});
+
+test("new releases join an existing Home and can be moved or hidden even with an empty Library", () => {
+  const old = JSON.stringify({
+    shown: ["favorites"],
+    hidden: HOME_SECTIONS.filter((s) => s.id !== "favorites" && s.id !== "new-releases").map(
+      (s) => s.id,
+    ),
+  });
+  assert.deepEqual(parseHomeArrangement(old), ["new-releases", "favorites"]);
+  const moved = editHomeArrangement(["new-releases", "discover"], { move: { from: 0, to: 1 } });
+  assert.deepEqual(moved, ["discover", "new-releases"]);
+  assert.deepEqual(
+    parseHomeArrangement(
+      storedHomeArrangement(editHomeArrangement(moved, { remove: "new-releases" })),
+    ),
+    ["discover"],
+  );
 });

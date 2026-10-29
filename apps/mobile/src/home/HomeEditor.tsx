@@ -1,3 +1,4 @@
+import { useLocalisation } from "@/localisation/localisation";
 import {
   editHomeArrangement,
   discoverRowTitle,
@@ -30,11 +31,12 @@ export function HomeEditor({
   edit: (change: HomeArrangementEdit) => void;
   onDone?: (() => void) | undefined;
 }) {
+  const { strings } = useLocalisation();
   return (
     <ArrangementEditor
       shown={arrangement.sections}
       hidden={hiddenHomeSections(arrangement)}
-      title={homeSectionTitle}
+      title={(id) => homeSectionTitle(id, strings)}
       place="Home"
       hiddenHeading="Not on Home"
       edit={edit}
