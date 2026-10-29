@@ -82,6 +82,10 @@ let lastRequest = 0;
 /** How often the session's clock ticks, for Core's deadlines (`stepRecognize`). */
 const TICK_MS = 500;
 
+/** A native rejection's code (`ERR_RECOGNIZE_…`), if it has one. */
+const errorCode = (error: unknown): unknown =>
+  typeof error === "object" && error !== null && "code" in error ? error.code : undefined;
+
 /**
  * Runs one Recognize session from [source], showing each state of its card through
  * [show]: listening, then how it ended (no card for Cancel, which closes it). Offline it
@@ -175,9 +179,18 @@ export const startRecognizeSession = <L extends RecognizeTrack, S extends YtSong
     if (next.ask === null || id === null) return;
     deps.native.ask(id, next.ask.last).then(
       (answer) => step({ kind: "answer", answer }),
-      // The native side couldn't sign or send what it heard (its session is gone): an
-      //  answer that ends the session, even after the last ask, when the capture is over.
-      () => step({ kind: "answer", answer: { kind: "failed", failure: "capture", status: null } }),
+      // The native side couldn't sign or send what it heard: an answer that ends the
+      // session, even after the last ask. A session that's gone means its capture is
+      // over; anything else (ERR_RECOGNIZE_ASK) went wrong reading or sending it.
+      (error: unknown) =>
+        step({
+          kind: "answer",
+          answer: {
+            kind: "failed",
+            failure: errorCode(error) === "ERR_RECOGNIZE_ENDED" ? "capture" : "unreadable",
+            status: null,
+          },
+        }),
     );
   };
 
@@ -241,15 +254,11 @@ export const startRecognizeSession = <L extends RecognizeTrack, S extends YtSong
     } catch (error) {
       startSettled = true;
       early.length = 0;
-      // A start Android ended because Wave was hidden is a capture failure that Core
-      // turns into Cancel when Wave is still hidden a moment later.
-      if (
-        typeof error === "object" &&
-        error !== null &&
-        "code" in error &&
-        error.code === "ERR_RECOGNIZE_CONSENT"
-      )
-        step({ kind: "consentDeclined" });
+      const code = errorCode(error);
+      if (code === "ERR_RECOGNIZE_CONSENT") step({ kind: "consentDeclined" });
+      // Native ends a start still binding its service when Wave goes to the background.
+      else if (code === "ERR_RECOGNIZE_ENDED") step({ kind: "cancel" });
+      // Any other failure is Cancel too when Wave is still hidden a moment later (Core).
       else failCapture();
     } finally {
       awaitingDialog = false;

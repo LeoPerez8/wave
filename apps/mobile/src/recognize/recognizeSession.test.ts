@@ -83,8 +83,8 @@ const fakeNative = (
       await settle();
     },
     /** Rejects the oldest ask still out. */
-    reject: async () => {
-      rejections.shift()?.(new Error("The session has ended"));
+    reject: async (code = "ERR_RECOGNIZE_ENDED") => {
+      rejections.shift()?.(Object.assign(new Error("The ask failed"), { code }));
       answers.shift();
       await settle();
     },
@@ -460,6 +460,23 @@ describe("a Recognize session", () => {
     });
   });
 
+  test("an ask that fails for another reason than an ended session isn't a capture failure", async () => {
+    for (const code of ["ERR_RECOGNIZE_ASK", "ERR_UNEXPECTED"]) {
+      const { native, last, lines, session } = setup();
+      await settle();
+      await native.hear(4);
+      await native.reject(code);
+      await session.done;
+      assert.deepEqual(last(), {
+        kind: "ended",
+        end: { kind: "failed", failure: "unreadable", status: null },
+      });
+      assert.deepEqual(lines, [
+        "Recognize through the microphone: failed after 4.0 s (unreadable)",
+      ]);
+    }
+  });
+
   test("audio that stops on its own ends it as a capture failure", async () => {
     const { native, last, session, clock, app } = setup();
     await settle();
@@ -553,7 +570,27 @@ describe("Android pausing Wave", () => {
     assert.deepEqual(lines, ["Recognize through the microphone: cancelled after 2.0 s"]);
   });
 
-  test("phone audio whose start ends while Wave is hidden ends as Cancel", async () => {
+  test("phone audio whose start ends as Wave is hidden ends as Cancel", async () => {
+    // Native ends a start still binding its service when Wave goes to the background,
+    // and Wave may be back by the time the clock ticks.
+    const { native, session, cards, app, lines } = setup({ source: "playback" });
+    let fail!: (error: unknown) => void;
+    native.start = () =>
+      new Promise<number>((_resolve, reject) => {
+        fail = reject;
+      });
+    await settle();
+    app.foreground = false;
+    assert.equal(session.cancelOnBackground(), false);
+    app.foreground = true;
+    fail({ code: "ERR_RECOGNIZE_ENDED" });
+    await session.done;
+    assert.deepEqual(cards, [{ kind: "listening", source: "playback" }]);
+    assert.equal(app.closes, 1);
+    assert.deepEqual(lines, ["Recognize through this phone: cancelled after 0.0 s"]);
+  });
+
+  test("phone audio whose start fails while Wave is hidden ends as Cancel", async () => {
     const { native, session, cards, app, clock, lines } = setup({ source: "playback" });
     let fail!: (error: unknown) => void;
     native.start = () =>
@@ -563,7 +600,7 @@ describe("Android pausing Wave", () => {
     await settle();
     app.foreground = false;
     assert.equal(session.cancelOnBackground(), false);
-    fail({ code: "ERR_RECOGNIZE_ENDED" });
+    fail({ code: "ERR_RECOGNIZE_CAPTURE" });
     await clock.advance(1);
     await session.done;
     assert.deepEqual(cards, [{ kind: "listening", source: "playback" }]);
