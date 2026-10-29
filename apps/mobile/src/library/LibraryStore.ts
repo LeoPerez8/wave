@@ -575,7 +575,6 @@ export class LibraryStore extends Context.Service<
     readonly ensureDefaultRoot: (
       path: string,
     ) => Effect.Effect<readonly ScanRoot[], LibraryStoreError>;
-    /** Every scan root in the order it was added, with its track count. */
     /** Each shows-level artist's Ticketmaster attraction, country and last shows, and the show ids already notified. */
     readonly followShowCache: Effect.Effect<ReturnType<typeof readFollowShows>, LibraryStoreError>;
     /** Replaces one artist's saved shows (a new country replaces the old country's). */
@@ -600,6 +599,7 @@ export class LibraryStore extends Context.Service<
       level: FollowLevel,
     ) => Effect.Effect<void, LibraryStoreError>;
     readonly unfollow: (name: string) => Effect.Effect<void, LibraryStoreError>;
+    /** Every scan root in the order it was added, with its track count. */
     readonly listRoots: Effect.Effect<readonly ScanRootSummary[], LibraryStoreError>;
     /**
      * Adds [path] as a root the owner picked and removes the roots in [drop]
