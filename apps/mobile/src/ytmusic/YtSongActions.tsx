@@ -326,7 +326,9 @@ export const runYtSongSwipe = (
       if (entry !== undefined)
         run(entry, song, { find, playlistItem, onSelect: undefined }, "swipe");
     })
-    .catch((error: unknown) => showError(currentLocalisation().strings.playbackText.couldntLoadTheSong, error));
+    .catch((error: unknown) =>
+      showError(currentLocalisation().strings.playbackText.couldntLoadTheSong, error),
+    );
 };
 
 const ytSongSwipeEntries = (

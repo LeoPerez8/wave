@@ -1,9 +1,4 @@
-import {
-  checkDue,
-  followFeed,
-  formatDate,
-  type FollowCheckContext,
-} from "@wave/core";
+import { checkDue, followFeed, formatDate, type FollowCheckContext } from "@wave/core";
 import * as Effect from "effect/Effect";
 import { LibraryStore } from "@/library/LibraryStore";
 import { followedArtistsEnabled } from "@/settings/followedArtists";

@@ -6,9 +6,7 @@ import { checkArtistShows, type TicketmasterPath } from "./showsCheck.ts";
 
 const attraction = {
   _embedded: {
-    attractions: [
-      { id: "K1", name: "Aurora", classifications: [{ segment: { name: "Music" } }] },
-    ],
+    attractions: [{ id: "K1", name: "Aurora", classifications: [{ segment: { name: "Music" } }] }],
   },
 };
 const event = (id: string) => ({
@@ -62,8 +60,11 @@ test("a kept attraction id costs one call, even when Ticketmaster has more pages
 });
 
 test("no matching attraction or an unreadable answer saves nothing", async () => {
-  const missing = { ...ticketmaster(manyPages), request: (path: TicketmasterPath) =>
-    Effect.succeed(path === "attractions" ? { page: { totalElements: 0 } } : manyPages) };
+  const missing = {
+    ...ticketmaster(manyPages),
+    request: (path: TicketmasterPath) =>
+      Effect.succeed(path === "attractions" ? { page: { totalElements: 0 } } : manyPages),
+  };
   assert.equal(
     await Effect.runPromise(checkArtistShows({ ...aurora, attractionId: null }, "BR", missing)),
     null,

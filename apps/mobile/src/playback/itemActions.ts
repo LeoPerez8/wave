@@ -356,7 +356,9 @@ export function useItemActions(
             entry,
           )();
         })
-        .catch((error: unknown) => showError(currentLocalisation().strings.playbackText.couldntLoadTheSongs, error));
+        .catch((error: unknown) =>
+          showError(currentLocalisation().strings.playbackText.couldntLoadTheSongs, error),
+        );
     };
   });
 }
@@ -474,7 +476,9 @@ export const itemActionPress = ({
           if (play.playback.kind === "mixed") void queueDiscoverSongs(play.playback.songs, where);
           else void (where === "playNext" ? playNext : addToQueue)(play.playback.tracks);
         })
-        .catch((error: unknown) => showError(currentLocalisation().strings.playbackText.couldntLoadTheSongs, error));
+        .catch((error: unknown) =>
+          showError(currentLocalisation().strings.playbackText.couldntLoadTheSongs, error),
+        );
     });
 
   const star = (on: boolean) =>

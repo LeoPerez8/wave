@@ -15,7 +15,8 @@ const list = makeExternalStore<readonly FollowedArtist[]>([]);
 const artists = new Map<string, ReturnType<typeof makeExternalStore<FollowedArtist | null>>>();
 const run = <A>(read: (store: LibraryStore["Service"]) => Effect.Effect<A, unknown>) =>
   appRuntime.runPromise(Effect.flatMap(LibraryStore, read));
-const failed = (error: unknown) => showError(currentLocalisation().strings.library.couldntReadFollows, error);
+const failed = (error: unknown) =>
+  showError(currentLocalisation().strings.library.couldntReadFollows, error);
 const artistStore = (name: string) => {
   const key = followArtistKey(name);
   let store = artists.get(key);

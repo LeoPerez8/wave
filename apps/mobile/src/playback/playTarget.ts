@@ -53,5 +53,7 @@ export const playTarget = (target: ActionItems, shuffle: boolean): void => {
         return;
     }
   };
-  play().catch((error: unknown) => showError(currentLocalisation().strings.playbackText.couldntLoadTheSongs, error));
+  play().catch((error: unknown) =>
+    showError(currentLocalisation().strings.playbackText.couldntLoadTheSongs, error),
+  );
 };

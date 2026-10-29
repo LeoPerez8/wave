@@ -13,7 +13,10 @@ export const checkArtistShows = <E, K>(
   artist: { readonly key: string; readonly name: string; readonly attractionId: string | null },
   country: string,
   ticketmaster: {
-    readonly request: (path: TicketmasterPath, params: Record<string, string>) => Effect.Effect<unknown, E>;
+    readonly request: (
+      path: TicketmasterPath,
+      params: Record<string, string>,
+    ) => Effect.Effect<unknown, E>;
     readonly keepAttraction: (attractionId: string) => Effect.Effect<void, K>;
   },
 ): Effect.Effect<{ attractionId: string; shows: FollowShow[] } | null, E | K> =>

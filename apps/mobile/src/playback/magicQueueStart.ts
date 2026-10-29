@@ -20,7 +20,9 @@ type AppServices = ManagedRuntime.ManagedRuntime.Services<typeof appRuntime>;
 export const runMagicQueueStart = <A, E>(start: Effect.Effect<A, E, AppServices>): void => {
   appRuntime
     .runPromise(start)
-    .catch((error: unknown) => showError(currentLocalisation().strings.playbackText.couldntStartTheMagicQueue, error));
+    .catch((error: unknown) =>
+      showError(currentLocalisation().strings.playbackText.couldntStartTheMagicQueue, error),
+    );
 };
 
 /**
