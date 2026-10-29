@@ -1,4 +1,9 @@
-import { STATS_FACT_LABELS, homeSectionTitle, type HomeSectionId } from "@wave/core";
+import {
+  STATS_FACT_LABELS,
+  discoverRowTitle,
+  homeSectionTitle,
+  type HomeSectionId,
+} from "@wave/core";
 import { Fragment } from "react";
 import { Text, View, useWindowDimensions } from "react-native";
 
@@ -13,19 +18,25 @@ import { useYtMusicEnabled } from "@/settings/ytMusic";
 import { StatsFactRow } from "./StatsFactRow";
 import { statsSeeAllAction } from "./statsSeeAllAction";
 import { DiscoverMixesSkeleton } from "./DiscoverMixesSkeleton";
+import { useHomeArrangement } from "./homeArrangement";
 import { homePlaceholderHeight } from "./homeOpening";
 
 function DiscoverSkeleton() {
   const enabled = useYtMusicEnabled();
+  const { discoverRows } = useHomeArrangement();
   return (
     <View style={{ gap: CELL * 3 }}>
       {enabled &&
-        ["Artist mixes", "Genre mixes"].map((label) => (
-          <View key={label} style={{ gap: CELL }}>
-            <Text className="font-sans text-footnote font-medium text-secondary">{label}</Text>
-            <DiscoverMixesSkeleton />
-          </View>
-        ))}
+        discoverRows
+          .filter((id) => id !== "magic-queue")
+          .map((id) => (
+            <View key={id} style={{ gap: CELL }}>
+              <Text className="font-sans text-footnote font-medium text-secondary">
+                {discoverRowTitle(id)}
+              </Text>
+              <DiscoverMixesSkeleton />
+            </View>
+          ))}
     </View>
   );
 }
