@@ -130,6 +130,7 @@ class WaveNativeModule : Module() {
 
     // A share can arrive before JS listens: it stays in the inbox until `takeSharedText`.
     OnCreate {
+      expo.modules.wavenative.locale.NativeLanguage.init(context)
       preferredLanguages = PreferredLanguageObserver(context) { sendEvent("onPreferredLanguagesChanged") }
       SharedTextInbox.onReceived = { sendEvent("onShareReceived") }
       // JS keeps its own copy of the cache (`connectivityStore`), pushed on each change.
@@ -180,6 +181,8 @@ class WaveNativeModule : Module() {
       expo.modules.wavenative.shows.ShowNotifications.post(context, id, title, body, url, channel)
     }
     /** The phone's preferred languages, in order: Wave's per-app language when set, else the system's. */
+    Function("setPortuguesePreview") { enabled: Boolean -> expo.modules.wavenative.locale.NativeLanguage.setPreview(context, enabled) }
+
     Function("preferredLanguages") { PreferredLanguages.read(context) }
 
     Function("getDefaultMusicFolder") {

@@ -1,3 +1,6 @@
+import { downloadNoticePtBr } from "./catalogue/downloadNoticePtBr.ts";
+import { nativePtBr } from "./catalogue/nativePtBr.ts";
+import { autoPtBr } from "./catalogue/autoPtBr.ts";
 import { showsPtBr } from "./catalogue/showsPtBr.ts";
 /**
  * Wave's interface text in Brazilian Portuguese, entry for entry with
@@ -8,6 +11,9 @@ import { showsPtBr } from "./catalogue/showsPtBr.ts";
 import type { Catalogue } from "./catalogueEn.ts";
 
 export const ptBR: Catalogue = {
+  downloadNotice: downloadNoticePtBr,
+  native: nativePtBr,
+  auto: autoPtBr,
   shows: showsPtBr,
   tabs: {
     index: "Início",
