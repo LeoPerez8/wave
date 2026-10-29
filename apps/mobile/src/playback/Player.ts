@@ -14,6 +14,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import type * as Scope from "effect/Scope";
 
+import { askForNotifications } from "@/lib/askForNotifications";
 import { makeExternalStore } from "@/lib/externalStore";
 import { perfCount } from "@/perf/perf";
 import { makePlaybackStores } from "./playbackStores";
@@ -199,7 +200,10 @@ export const layer = Layer.effect(
             (subscription) => Effect.sync(() => subscription.remove()),
           ),
         ),
-      play: call("resume playback", () => WavePlayer.play()),
+      play: call("resume playback", () => {
+        askForNotifications();
+        return WavePlayer.play();
+      }),
       pause: call("pause playback", () => WavePlayer.pause(false)),
       pauseForSearch: call("pause playback", () => WavePlayer.pause(true)),
       seekTo: (positionMs, source) => call("seek", () => WavePlayer.seekTo(positionMs, source)),
