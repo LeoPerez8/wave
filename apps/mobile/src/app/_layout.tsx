@@ -18,6 +18,7 @@ import { useAllFilesAccess } from "@/library/hooks";
 import { resumePlaylistImports } from "@/library/playlistImports";
 import { resumeYtLibraryImport } from "@/library/ytLibraryImport";
 import { primePlaylists } from "@/library/playlists";
+import { LocalisationProvider } from "@/localisation/localisation";
 import { OverlayHost } from "@/overlay/OverlayHost";
 import { AndroidBack } from "@/overlay/AndroidBack";
 import { PhotoCropperHost } from "@/library/PhotoCropperHost";
@@ -113,37 +114,43 @@ export default function RootLayout() {
           doesn't follow the route: that would render it and Now Playing on every navigation. */}
       <FollowCurrentRoute />
       <AndroidBack />
-      <SafeAreaProvider>
-        <StatusBar style="auto" />
-        <OverlayHost>
-          <UnderNowPlaying>
-            <Stack
-              screenListeners={timingStackListeners}
-              screenOptions={{ headerShown: false, contentStyle: { backgroundColor: background } }}
-            >
-              <Stack.Protected guard={granted}>
-                <Stack.Screen name="(tabs)" />
-                {/* A Recap's stories cover the whole screen, mini player and tab bar too. */}
-                <Stack.Screen
-                  name="recap/[id]"
-                  options={{ animation: "fade_from_bottom", gestureEnabled: false }}
-                />
-              </Stack.Protected>
-              <Stack.Protected guard={!granted}>
-                <Stack.Screen name="access" options={{ animation: "fade" }} />
-              </Stack.Protected>
-            </Stack>
-          </UnderNowPlaying>
-          {/* Always mounted, out of sight until opened, so a tap only starts its spring. */}
-          {granted ? <NowPlayingSheet /> : null}
-          {/* The song share sheet (Share in Now Playing and song menus), over both. */}
-          <SongShareLayer />
-          {/* Library › Playlists › Import › From YT Music's sheet, while it's up. */}
-          <YtLibraryPickerHost />
-          {/* A playlist image's crop screen (Change Image, Adjust Image), while it's up. */}
-          <PhotoCropperHost />
-        </OverlayHost>
-      </SafeAreaProvider>
+      {/* The language and its text, for every screen and overlay below. */}
+      <LocalisationProvider>
+        <SafeAreaProvider>
+          <StatusBar style="auto" />
+          <OverlayHost>
+            <UnderNowPlaying>
+              <Stack
+                screenListeners={timingStackListeners}
+                screenOptions={{
+                  headerShown: false,
+                  contentStyle: { backgroundColor: background },
+                }}
+              >
+                <Stack.Protected guard={granted}>
+                  <Stack.Screen name="(tabs)" />
+                  {/* A Recap's stories cover the whole screen, mini player and tab bar too. */}
+                  <Stack.Screen
+                    name="recap/[id]"
+                    options={{ animation: "fade_from_bottom", gestureEnabled: false }}
+                  />
+                </Stack.Protected>
+                <Stack.Protected guard={!granted}>
+                  <Stack.Screen name="access" options={{ animation: "fade" }} />
+                </Stack.Protected>
+              </Stack>
+            </UnderNowPlaying>
+            {/* Always mounted, out of sight until opened, so a tap only starts its spring. */}
+            {granted ? <NowPlayingSheet /> : null}
+            {/* The song share sheet (Share in Now Playing and song menus), over both. */}
+            <SongShareLayer />
+            {/* Library › Playlists › Import › From YT Music's sheet, while it's up. */}
+            <YtLibraryPickerHost />
+            {/* A playlist image's crop screen (Change Image, Adjust Image), while it's up. */}
+            <PhotoCropperHost />
+          </OverlayHost>
+        </SafeAreaProvider>
+      </LocalisationProvider>
     </GestureHandlerRootView>
   );
 }
