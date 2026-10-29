@@ -3,6 +3,7 @@ package expo.modules.wavenative.recognize
 import android.Manifest
 import android.app.Activity
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.media.AudioAttributes
 import android.media.AudioManager
@@ -33,9 +34,11 @@ class RecognizeModule : Module() {
   private var lastId = 0
   private var lastRequestCode = 17710
   private var pending: PendingStart? = null
+  private var foreground = true
 
   private class PendingStart(val request: Int, val code: Int, val promise: Promise) {
     var cancelCapture: (() -> Unit)? = null
+    var consent: Pair<Int, Intent>? = null
   }
 
   override fun definition() = ModuleDefinition {
@@ -87,24 +90,8 @@ class RecognizeModule : Module() {
           pending = null
           start.promise.reject("ERR_RECOGNIZE_CONSENT", "Phone audio access declined", null)
         } else {
-          try {
-            start.cancelCapture = openPlaybackCapture(context, result.resultCode, data,
-              opened = { audio ->
-                if (pending !== start) audio.release() else {
-                  pending = null
-                  start.promise.resolve(startAudio(audio))
-                }
-              },
-              failed = { error ->
-                if (pending === start) {
-                  pending = null
-                  start.promise.reject("ERR_RECOGNIZE_CAPTURE", error.message, error)
-                }
-              })
-          } catch (e: Exception) {
-            pending = null
-            start.promise.reject("ERR_RECOGNIZE_CAPTURE", e.message, e)
-          }
+          start.consent = result.resultCode to data
+          startPlaybackWhenForeground(start)
         }
       }
     }
@@ -124,7 +111,15 @@ class RecognizeModule : Module() {
       }
     }
 
+    OnActivityEntersForeground {
+      foreground = true
+      pending?.let(::startPlaybackWhenForeground)
+    }
+
     OnActivityEntersBackground {
+      foreground = false
+      // Consent itself can pause the activity. Only cancel a start already binding its service.
+      if (pending?.cancelCapture != null) cancelPending()
       val id = synchronized(this@RecognizeModule) { current?.first }
       stopCurrent()
       if (id != null) sendEvent(CAPTURE_FAILED, mapOf("session" to id))
@@ -133,6 +128,31 @@ class RecognizeModule : Module() {
     OnDestroy {
       main.post { cancelPending() }
       stopCurrent()
+    }
+  }
+
+  /** Activity results can precede onResume; capture waits for Wave to be visible again. */
+  private fun startPlaybackWhenForeground(start: PendingStart) {
+    if (!foreground || pending !== start || start.cancelCapture != null) return
+    val (code, data) = start.consent ?: return
+    start.consent = null
+    try {
+      start.cancelCapture = openPlaybackCapture(context, code, data,
+        opened = { audio ->
+          if (pending !== start) audio.release() else {
+            pending = null
+            start.promise.resolve(startAudio(audio))
+          }
+        },
+        failed = { error ->
+          if (pending === start) {
+            pending = null
+            start.promise.reject("ERR_RECOGNIZE_CAPTURE", error.message, error)
+          }
+        })
+    } catch (e: Exception) {
+      pending = null
+      start.promise.reject("ERR_RECOGNIZE_CAPTURE", e.message, e)
     }
   }
 
