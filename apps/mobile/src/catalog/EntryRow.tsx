@@ -1,3 +1,5 @@
+import { formatNumber } from "@wave/core";
+import { useLocalisation } from "@/localisation/localisation";
 import { IconCheck } from "@tabler/icons-react-native";
 import { useEffect, useState } from "react";
 import { Text, View } from "react-native";
@@ -53,10 +55,13 @@ export function EntryRow({
   lineShown = false,
 }: Props) {
   const accent = useThemeColor("accent");
+  const { language } = useLocalisation();
   return (
     <Press
       accessibilityRole="button"
-      accessibilityLabel={count === undefined ? label : `${label}, ${count.toLocaleString("en")}`}
+      accessibilityLabel={
+        count === undefined ? label : `${label}, ${formatNumber(language, count)}`
+      }
       accessibilityHint={line}
       onPress={onPress}
       onLongPress={onLongPress}
@@ -81,7 +86,7 @@ export function EntryRow({
             className="font-sans text-subheadline text-secondary"
             style={{ fontVariant: ["tabular-nums"] }}
           >
-            {count === undefined ? "" : count.toLocaleString("en")}
+            {count === undefined ? "" : formatNumber(language, count)}
           </Text>
         )}
       </View>

@@ -1,3 +1,6 @@
+import { formatDate } from "./formatting.ts";
+import type { AppLanguage } from "./localisation.ts";
+
 /** What a play showed when it started, independent of Library membership. */
 export interface PlaySnapshot {
   readonly title: string;
@@ -24,6 +27,7 @@ const calendarDay = (date: Date): number =>
 export const listeningHistoryDays = <T extends { readonly startedAt: number }>(
   plays: readonly T[],
   now = Date.now(),
+  language: AppLanguage = "en",
 ): readonly ListeningHistoryDay<T>[] => {
   const today = new Date(now);
   const groups = new Map<number, { key: string; title: string; plays: T[] }>();
@@ -40,8 +44,8 @@ export const listeningHistoryDays = <T extends { readonly startedAt: number }>(
           : age === 1
             ? "Yesterday"
             : age > 1 && age < 7
-              ? date.toLocaleDateString("en-US", { weekday: "long" })
-              : date.toLocaleDateString("en-US", {
+              ? formatDate(language, date, { weekday: "long" })
+              : formatDate(language, date, {
                   month: "long",
                   day: "numeric",
                   ...(date.getFullYear() === today.getFullYear() ? {} : { year: "numeric" }),

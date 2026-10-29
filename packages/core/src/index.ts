@@ -2352,3 +2352,4 @@ export type {
 } from "./nowPlayingButtons.ts";
 
 export * from "./followedArtists.ts";
+export { formatNumber, formatTime, formatDate } from "./formatting.ts";
