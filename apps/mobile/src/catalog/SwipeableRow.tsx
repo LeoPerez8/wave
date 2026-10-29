@@ -125,7 +125,7 @@ function Uncovered({ action, edge }: { action: SwipeSide; edge: "start" | "end" 
  * [enabled] is false (selection mode) or while a long-pressed finger slides
  * to choose in a menu.
  *
- * A [sample] row (Settings � Appearance � Motion's) swipes the same way but
+ * A [sample] row (Settings › Appearance › Motion's) swipes the same way but
  * runs nothing: it moves both ways, uncovering and arming only towards a
  * side with an action, and letting go always springs it back. Each change
  * of [demo] after the first render plays one short swipe and spring by
