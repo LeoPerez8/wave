@@ -46,7 +46,10 @@ const DEFAULT_INK: InkSwatch = {
   dark: "#ffffff",
 };
 
-/** The presets of each group; the first of each is the shipped theme. */
+/**
+ * The presets of each group; the first of each is the shipped theme. Primary
+ * and Secondary offer only Default; saved and custom colours do the rest.
+ */
 export const THEME_SWATCHES: {
   readonly light: readonly BackgroundSwatch[];
   readonly dark: readonly BackgroundSwatch[];
@@ -69,8 +72,20 @@ export const THEME_SWATCHES: {
     { id: "forest", label: "Forest", colour: "#0a130d" },
     { id: "plum", label: "Plum", colour: "#140c17" },
   ],
+  primary: [DEFAULT_INK],
+  secondary: [DEFAULT_INK],
+};
+
+/**
+ * The primary and secondary presets Settings offered before saved colours
+ * (#794). A stored choice of one reads as its dark tone, custom and saved;
+ * the icon palette keeps their inks in place.
+ */
+export const FORMER_INK_SWATCHES: {
+  readonly primary: readonly InkSwatch[];
+  readonly secondary: readonly InkSwatch[];
+} = {
   primary: [
-    DEFAULT_INK,
     {
       id: "teal",
       label: "Teal",
@@ -84,7 +99,6 @@ export const THEME_SWATCHES: {
     { id: "lime", label: "Lime", light: "#8cc63f", dark: "#b5e36b" },
   ],
   secondary: [
-    DEFAULT_INK,
     {
       id: "ember",
       label: "Ember",
@@ -109,25 +123,36 @@ export type InkGroup = "primary" | "secondary";
 export const CUSTOM_INK = "custom";
 
 /**
- * The chosen swatch id of each group, and the custom primary and secondary
- * (`#rrggbb`, or null when none was picked). A custom colour is kept while a
- * preset is chosen, so its swatch can be picked again.
+ * The chosen swatch id of each group, the custom primary and secondary
+ * (`#rrggbb`, or null when none was picked), and each group's saved colours.
+ * A custom colour is kept while Default is chosen, so its swatch can be
+ * picked again; a saved colour applies as the custom colour.
  */
 export interface ThemeChoice {
   readonly light: string;
   readonly dark: string;
-  /** A primary preset's id, or `CUSTOM_INK` for `customPrimary`. */
+  /** `WHITE_INK` (Default), or `CUSTOM_INK` for `customPrimary`. */
   readonly primary: string;
-  /** A secondary preset's id, or `CUSTOM_INK` for `customSecondary`. */
+  /** `WHITE_INK` (Default), or `CUSTOM_INK` for `customSecondary`. */
   readonly secondary: string;
   readonly customPrimary: string | null;
   readonly customSecondary: string | null;
+  /** Up to `MAX_SAVED_INKS` primaries, `#rrggbb`, in the order saved. */
+  readonly savedPrimary: readonly string[];
+  /** Up to `MAX_SAVED_INKS` secondaries, `#rrggbb`, in the order saved. */
+  readonly savedSecondary: readonly string[];
 }
+
+/** How many colours Primary and Secondary each keep. */
+export const MAX_SAVED_INKS = 4;
 
 const GROUPS: readonly ThemeGroup[] = ["light", "dark", "primary", "secondary"];
 
 /** Where each ink group keeps its custom colour. */
 const CUSTOM_FIELD = { primary: "customPrimary", secondary: "customSecondary" } as const;
+
+/** Where each ink group keeps its saved colours. */
+const SAVED_FIELD = { primary: "savedPrimary", secondary: "savedSecondary" } as const;
 
 const defaultId = (group: ThemeGroup): string => THEME_SWATCHES[group][0]?.id ?? "";
 
@@ -138,6 +163,8 @@ export const DEFAULT_THEME_CHOICE: ThemeChoice = {
   secondary: defaultId("secondary"),
   customPrimary: null,
   customSecondary: null,
+  savedPrimary: [],
+  savedSecondary: [],
 };
 
 const has = (group: ThemeGroup, id: unknown): id is string =>
@@ -146,28 +173,56 @@ const has = (group: ThemeGroup, id: unknown): id is string =>
 const isInk = (group: ThemeGroup): group is InkGroup =>
   group === "primary" || group === "secondary";
 
-/** The theme choice from its stored JSON; anything missing or unknown is its default. */
+/** A stored colour as `#rrggbb`, or null when it isn't one. */
+const storedHex = (value: unknown): string | null =>
+  typeof value === "string" ? parseHexColour(value) : null;
+
+/** Each colour once, in order, at most `MAX_SAVED_INKS`. */
+const savedList = (colours: readonly (string | null)[]): readonly string[] =>
+  [...new Set(colours.filter((colour) => colour !== null))].slice(0, MAX_SAVED_INKS);
+
+/**
+ * The theme choice from its stored JSON; anything missing or unknown is its
+ * default. A former preset (`FORMER_INK_SWATCHES`) reads as its dark tone,
+ * custom and first saved, ahead of the custom colour it kept, so nothing on
+ * screen changes and the colour can be picked again.
+ */
 export const readThemeChoice = (stored: string | null): ThemeChoice => {
   const record = readStoredRecord(stored);
-  const hex = (group: InkGroup): string | null => {
-    const value = record[CUSTOM_FIELD[group]];
-    return typeof value === "string" ? parseHexColour(value) : null;
-  };
-  const customPrimary = hex("primary");
-  const customSecondary = hex("secondary");
-  const custom = { primary: customPrimary, secondary: customSecondary };
-  const pick = (group: ThemeGroup): string => {
+  const read = (group: InkGroup) => {
+    const kept = storedHex(record[CUSTOM_FIELD[group]]);
+    const listed = record[SAVED_FIELD[group]];
+    const saved = Array.isArray(listed) ? listed.map(storedHex) : [];
+    const former = FORMER_INK_SWATCHES[group].find((swatch) => swatch.id === record[group]);
+    if (former !== undefined)
+      return {
+        id: CUSTOM_INK,
+        custom: former.dark,
+        saved: savedList([former.dark, kept, ...saved]),
+      };
     const id = record[group];
-    if (isInk(group) && id === CUSTOM_INK && custom[group] !== null) return CUSTOM_INK;
+    const custom = id === CUSTOM_INK && kept !== null;
+    return {
+      id: custom ? CUSTOM_INK : has(group, id) ? id : DEFAULT_THEME_CHOICE[group],
+      custom: kept,
+      saved: savedList(saved),
+    };
+  };
+  const background = (group: "light" | "dark"): string => {
+    const id = record[group];
     return has(group, id) ? id : DEFAULT_THEME_CHOICE[group];
   };
+  const primary = read("primary");
+  const secondary = read("secondary");
   return {
-    light: pick("light"),
-    dark: pick("dark"),
-    primary: pick("primary"),
-    secondary: pick("secondary"),
-    customPrimary,
-    customSecondary,
+    light: background("light"),
+    dark: background("dark"),
+    primary: primary.id,
+    secondary: secondary.id,
+    customPrimary: primary.custom,
+    customSecondary: secondary.custom,
+    savedPrimary: primary.saved,
+    savedSecondary: secondary.saved,
   };
 };
 
@@ -184,8 +239,9 @@ export interface StartingThemeState {
 /**
  * The theme to store before the first read, or null to leave it. Teal over
  * Ember was the default before white, and an install from then with nothing
- * stored shows it: it keeps it, stored, while a fresh install starts on white.
- * Once this Wave has stored the icon, nothing stored means white was kept.
+ * stored shows it: it keeps it, stored as those former presets read now
+ * (custom and saved), while a fresh install starts on white. Once this Wave
+ * has stored the icon, nothing stored means white was kept.
  */
 export const storedThemeOnStart = ({
   storedTheme,
@@ -193,14 +249,39 @@ export const storedThemeOnStart = ({
   launchThemeSaved,
 }: StartingThemeState): string | null =>
   storedTheme === null && storedIcon === null && launchThemeSaved
-    ? JSON.stringify({ ...DEFAULT_THEME_CHOICE, primary: "teal", secondary: "ember" })
+    ? JSON.stringify(
+        readThemeChoice(
+          JSON.stringify({ ...DEFAULT_THEME_CHOICE, primary: "teal", secondary: "ember" }),
+        ),
+      )
     : null;
 
-/** Whether `choice` is the shipped theme with no custom colour kept (nothing to reset). */
+/**
+ * Whether `choice` is the shipped theme with no custom colour kept (nothing to
+ * reset). Saved colours don't count: Reset keeps them.
+ */
 export const isDefaultThemeChoice = (choice: ThemeChoice): boolean =>
   GROUPS.every((group) => choice[group] === DEFAULT_THEME_CHOICE[group]) &&
   choice.customPrimary === null &&
   choice.customSecondary === null;
+
+/** The shipped theme with `choice`'s saved colours (Reset to defaults). */
+export const resetThemeChoice = (choice: ThemeChoice): ThemeChoice => ({
+  ...DEFAULT_THEME_CHOICE,
+  savedPrimary: choice.savedPrimary,
+  savedSecondary: choice.savedSecondary,
+});
+
+const sameList = (a: readonly string[], b: readonly string[]): boolean =>
+  a.length === b.length && a.every((entry, index) => entry === b[index]);
+
+/** Whether two choices pick the same swatches and colours and save the same colours, in order. */
+export const sameThemeChoice = (a: ThemeChoice, b: ThemeChoice): boolean =>
+  GROUPS.every((group) => a[group] === b[group]) &&
+  a.customPrimary === b.customPrimary &&
+  a.customSecondary === b.customSecondary &&
+  sameList(a.savedPrimary, b.savedPrimary) &&
+  sameList(a.savedSecondary, b.savedSecondary);
 
 /**
  * How close two colours look, in OKLCH. Hue counts in full; lightness and
@@ -224,14 +305,24 @@ const INK_TOKEN = { primary: "accent", secondary: "highlight" } as const satisfi
 
 type Mutable<T> = { -readonly [K in keyof T]: T[K] };
 
+/** A former preset's light tone, by its dark tone (the colour it reads as now). */
+const FORMER_LIGHT_TONE: ReadonlyMap<string, string> = new Map(
+  [...FORMER_INK_SWATCHES.primary, ...FORMER_INK_SWATCHES.secondary].map((swatch) => [
+    swatch.dark,
+    swatch.light,
+  ]),
+);
+
 /**
- * The ink a group asks for before readability: its custom colour, or its
- * preset's tone for `scheme`; null for the Default swatch in light mode, which
- * takes the ground's text colour.
+ * The ink a group asks for before readability: its custom colour (a former
+ * preset's colour keeps that preset's light tone), or its swatch's tone for
+ * `scheme`; null for the Default swatch in light mode, which takes the
+ * ground's text colour.
  */
 const ink = (choice: ThemeChoice, group: InkGroup, scheme: Scheme): string | null => {
   const custom = choice[CUSTOM_FIELD[group]];
-  if (choice[group] === CUSTOM_INK && custom !== null) return custom;
+  if (choice[group] === CUSTOM_INK && custom !== null)
+    return scheme === "light" ? (FORMER_LIGHT_TONE.get(custom) ?? custom) : custom;
   if (choice[group] === WHITE_INK && scheme === "light") return null;
   const swatch =
     THEME_SWATCHES[group].find((candidate) => candidate.id === choice[group]) ??
@@ -369,6 +460,39 @@ export const chooseCustomInk = (choice: ThemeChoice, group: InkGroup, hex: strin
   return { ...choice, [group]: CUSTOM_INK, [CUSTOM_FIELD[group]]: colour };
 };
 
+/** What Save would do with a colour: save it, or why not. */
+export type InkSaveState = "ready" | "saved" | "full" | "invalid";
+
+/** Whether `hex` can join the group's saved colours: not when it isn't a colour, is saved or the row is full. */
+export const inkSaveState = (choice: ThemeChoice, group: InkGroup, hex: string): InkSaveState => {
+  const colour = parseHexColour(hex);
+  const saved = choice[SAVED_FIELD[group]];
+  if (colour === null) return "invalid";
+  if (saved.includes(colour)) return "saved";
+  return saved.length >= MAX_SAVED_INKS ? "full" : "ready";
+};
+
+/**
+ * `choice` with `hex` saved after the group's saved colours, without applying
+ * it (Save in the picker). Unchanged unless `inkSaveState` is ready.
+ */
+export const saveInk = (choice: ThemeChoice, group: InkGroup, hex: string): ThemeChoice => {
+  const colour = parseHexColour(hex);
+  if (colour === null || inkSaveState(choice, group, colour) !== "ready") return choice;
+  return { ...choice, [SAVED_FIELD[group]]: [...choice[SAVED_FIELD[group]], colour] };
+};
+
+/**
+ * `choice` without `hex` among the group's saved colours. The colours in use
+ * stay: a removed colour that applies goes on as the custom colour.
+ */
+export const removeSavedInk = (choice: ThemeChoice, group: InkGroup, hex: string): ThemeChoice => {
+  const colour = parseHexColour(hex);
+  const saved = choice[SAVED_FIELD[group]];
+  if (colour === null || !saved.includes(colour)) return choice;
+  return { ...choice, [SAVED_FIELD[group]]: saved.filter((entry) => entry !== colour) };
+};
+
 /** A custom colour as it would apply in one mode. */
 export interface CustomInkPreview {
   /** The colour that applies, readability adjustments included. */
@@ -407,11 +531,26 @@ export interface ThemeSwatchOption {
   readonly mark: string;
 }
 
+/** A saved colour in the Primary or Secondary row. */
+export interface SavedSwatchOption {
+  /** The colour as saved, `#rrggbb`: what a tap applies and Remove takes out. */
+  readonly hex: string;
+  /** The colour as it would apply in the scheme. */
+  readonly colour: string;
+  /** Whether it's the group's colour now. */
+  readonly selected: boolean;
+  /** The check mark's colour on `colour`. */
+  readonly mark: string;
+}
+
 /** The custom swatch that ends the Primary and Secondary rows. */
 export interface CustomSwatchOption {
   /** The kept custom colour as picked, where the picker opens; null until one is picked. */
   readonly picked: string | null;
-  /** The kept custom colour as it would apply in the scheme; null until one is picked. */
+  /**
+   * The kept custom colour as it would apply in the scheme; null until one is
+   * picked, and while it's a saved colour, whose swatch shows it.
+   */
   readonly colour: string | null;
   readonly selected: boolean;
   /** The check mark's colour on `colour`; null with no colour. */
@@ -421,25 +560,43 @@ export interface CustomSwatchOption {
 export interface ThemeSwatchRow {
   readonly group: ThemeGroup;
   readonly swatches: readonly ThemeSwatchOption[];
+  /** The saved colours, after the swatches; none for the background rows. */
+  readonly saved: readonly SavedSwatchOption[];
   /** The custom swatch; null for the background rows. */
   readonly custom: CustomSwatchOption | null;
 }
 
+/** The custom colour a group applies now, or null while it's on Default. */
+const chosenCustom = (choice: ThemeChoice, group: InkGroup): string | null =>
+  choice[group] === CUSTOM_INK ? choice[CUSTOM_FIELD[group]] : null;
+
+const savedSwatches = (
+  choice: ThemeChoice,
+  group: InkGroup,
+  scheme: Scheme,
+): readonly SavedSwatchOption[] =>
+  choice[SAVED_FIELD[group]].map((hex) => {
+    const colour = customInkPreview(choice, group, hex)[scheme].colour;
+    return { hex, colour, selected: chosenCustom(choice, group) === hex, mark: markOn(colour) };
+  });
+
 const customSwatch = (choice: ThemeChoice, group: InkGroup, scheme: Scheme): CustomSwatchOption => {
   const kept = choice[CUSTOM_FIELD[group]];
-  const colour = kept === null ? null : customInkPreview(choice, group, kept)[scheme].colour;
+  const saved = kept !== null && choice[SAVED_FIELD[group]].includes(kept);
+  const colour =
+    kept === null || saved ? null : customInkPreview(choice, group, kept)[scheme].colour;
   return {
     picked: kept,
     colour,
-    selected: choice[group] === CUSTOM_INK,
+    selected: choice[group] === CUSTOM_INK && !saved,
     mark: colour === null ? null : markOn(colour),
   };
 };
 
 /**
- * The four swatch rows for Settings. Primary and secondary swatches show the
- * colour they'd actually take in `scheme`, readability adjustments included,
- * and end with the custom swatch.
+ * The four swatch rows for Settings. Primary and Secondary show Default, the
+ * saved colours and the custom swatch, each in the colour it would actually
+ * take in `scheme`, readability adjustments included.
  */
 export const themeSwatchRows = (choice: ThemeChoice, scheme: Scheme): readonly ThemeSwatchRow[] =>
   GROUPS.map((group) => ({
@@ -455,5 +612,6 @@ export const themeSwatchRows = (choice: ThemeChoice, scheme: Scheme): readonly T
         mark: markOn(colour),
       };
     }),
+    saved: isInk(group) ? savedSwatches(choice, group, scheme) : [],
     custom: isInk(group) ? customSwatch(choice, group, scheme) : null,
   }));

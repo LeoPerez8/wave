@@ -1,5 +1,4 @@
 import {
-  DEFAULT_THEME_CHOICE,
   appearanceAccent,
   chooseCustomInk,
   createColourPickerPreview,
@@ -7,7 +6,11 @@ import {
   launcherIconSwitch,
   launchTheme,
   readThemeChoice,
+  removeSavedInk as withoutSavedInk,
+  resetThemeChoice,
   resolveThemeChange,
+  sameThemeChoice,
+  saveInk,
   storedThemeOnStart,
   themeFor,
   type Appearance,
@@ -24,7 +27,7 @@ import {
 import { Storage } from "expo-sqlite/kv-store";
 import { Uniwind } from "uniwind";
 
-import { persistedSetting, sameFields } from "@/lib/persistedSetting";
+import { persistedSetting } from "@/lib/persistedSetting";
 import { WaveNative } from "@/native/waveNative";
 import { WavePlayer } from "@/native/wavePlayer";
 
@@ -59,16 +62,22 @@ const recolour = (theme: Theme): void => {
   Uniwind.updateCSSVariables("dark", cssVariables(theme.dark));
 };
 
+/** The custom colour the open picker shows on the app, or null with no picker open. */
+let previewed: { readonly group: InkGroup; readonly hex: string } | null = null;
+
 /**
  * Lays the chosen colours over global.css's defaults (`recolour`), the media
  * notification takes the primary, and the launcher keeps this phone's stored
  * icon. The launch splash (the choice's grounds, the icon's waves) is also
  * saved natively, since Android draws it before this code runs; on every start
- * too, so it never drifts.
+ * too, so it never drifts. While the picker is open the app keeps showing its
+ * colour (a Save, or a theme pulled meanwhile, doesn't drop it).
  */
 const apply = (choice: ThemeChoice): void => {
   const theme = themeFor(choice);
-  recolour(theme);
+  recolour(
+    previewed === null ? theme : themeFor(chooseCustomInk(choice, previewed.group, previewed.hex)),
+  );
   colourNotification(theme, getAppearance());
   const icon = getLauncherIcon(choice);
   showLauncherIcon(icon);
@@ -94,7 +103,7 @@ const theme = persistedSetting<ThemeChoice>({
   synced: true,
   read: readThemeChoice,
   write: (choice) => JSON.stringify(choice),
-  equals: sameFields,
+  equals: sameThemeChoice,
   onValue: apply,
 });
 
@@ -118,7 +127,7 @@ const changeTheme = async (next: ThemeChoice, confirm: Confirm): Promise<void> =
   if (answer === "dismiss") return;
   const result = resolveThemeChange(current, next, answer);
   setLauncherIcon(result.icon);
-  const unchanged = sameFields(theme.get(), result.choice);
+  const unchanged = sameThemeChoice(theme.get(), result.choice);
   theme.set(result.choice);
   if (unchanged) apply(result.choice);
 };
@@ -151,6 +160,7 @@ export const previewCustomInk = (
   preview?.stop();
   preview = createColourPickerPreview({
     apply: (hex) => {
+      previewed = { group, hex };
       recolour(themeFor(chooseCustomInk(theme.get(), group, hex)));
       applied(hex);
     },
@@ -167,6 +177,7 @@ export const previewCustomInk = (
 const endPreview = (): void => {
   preview?.stop();
   preview = null;
+  previewed = null;
   recolour(themeFor(theme.get()));
 };
 
@@ -189,9 +200,27 @@ export const setCustomInk = async (
   }
 };
 
-/** Puts the shipped colours back, asking first when the stored icon isn't the shipped one. */
+/**
+ * Adds `hex` to the group's saved colours without applying it (Save in the
+ * picker, which stays open). Core's `inkSaveState` says when it can't.
+ */
+export const saveCustomInk = (group: InkGroup, hex: string): void =>
+  theme.set(saveInk(theme.get(), group, hex));
+
+/** Applies a saved colour (a tap on its swatch), asking first when that switches the icon. */
+export const setSavedInk = (group: InkGroup, hex: string, confirm: Confirm): Promise<void> =>
+  changeTheme(chooseCustomInk(theme.get(), group, hex), confirm);
+
+/** Takes a colour out of the group's saved colours; the colours in use stay. */
+export const removeSavedInk = (group: InkGroup, hex: string): void =>
+  theme.set(withoutSavedInk(theme.get(), group, hex));
+
+/**
+ * Puts the shipped colours back, keeping the saved ones, asking first when the
+ * stored icon isn't the shipped one.
+ */
 export const resetTheme = (confirm: Confirm): Promise<void> =>
-  changeTheme(DEFAULT_THEME_CHOICE, confirm);
+  changeTheme(resetThemeChoice(theme.get()), confirm);
 
 /** The persisted theme choice; re-renders when Settings changes it. */
 export const useThemeChoice = theme.useValue;
