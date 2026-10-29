@@ -32,4 +32,4 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
 - Typeface: Inter is bundled but no longer binding; confirm or replace during the build (Operate surface, workhorse grotesk is fine).
 - Exact palette values are proposals (#E4E9EA fog, #121A1F night slate, #2E8C80 teal, #D9822B ember) to be validated for contrast in the build.
 - Glass: not part of this world by default; whether the mini player/tab bar get any blur is decided in the build against the 120 Hz budget.
-- Tap animation speed (ms) setting applies to every press feedback in this surface.
+- Every press feedback in this surface runs at the fixed 140 ms and respects reduce motion.

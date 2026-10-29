@@ -514,7 +514,7 @@
       "Do keep teal for active state and ember for favorite / now playing.",
       "Do rank list text by weight and tint at one size, and use tabular figures for counts, durations and furniture lines.",
       "Do reserve every row's state, favorite and duration cells even when empty.",
-      "Do build every tappable element on Press, so the owner's tap animation setting reaches it.",
+      "Do build every tappable element on Press, so every tap gets the same 140 ms feedback and respects reduce motion.",
       "Do keep draggable controls at least 24dp in from the screen edge, clear of the Back gesture zone.",
       "Do give every target at least 48dp, even when the drawn element is smaller."
     ],
