@@ -1,3 +1,5 @@
+import { useFollow } from "@/library/follows";
+import { followMenuPress } from "@/library/FollowButton";
 import {
   PLAY_ACTION_LABELS,
   YT_PLAYLIST_DOWNLOAD_ACTION_LABELS,
@@ -284,6 +286,18 @@ function ActionsMenu({
     collectionSongs,
     playing,
   });
+  const artist = target.kind === "artist" ? target.items[0] : undefined;
+  const follow = useFollow(artist?.name ?? "");
+  const followEntries: readonly MenuChoice[] =
+    artist === undefined
+      ? []
+      : [
+          {
+            action: "follow",
+            label: follow === null ? "Follow" : "Following",
+            onPress: () => followMenuPress(artist, close),
+          },
+        ];
   const playlist = target.kind === "playlist" ? target.items[0] : undefined;
   const downloads = usePlaylistDownloadEntries(
     listed,
@@ -296,6 +310,7 @@ function ActionsMenu({
       sectionSongs={sectionSongs}
       actions={actions}
       downloads={downloads}
+      extraEntries={followEntries}
       play={(shuffle) => {
         close();
         playTarget(target, shuffle);
@@ -315,6 +330,7 @@ export function ItemMenuCard({
   sectionSongs,
   actions,
   downloads = NO_DOWNLOADS,
+  extraEntries = NO_DOWNLOADS,
   play,
 }: {
   target: ActionItems;
@@ -323,6 +339,7 @@ export function ItemMenuCard({
   actions: readonly ActionEntry[];
   /** A playlist's download entries; none for other targets. */
   downloads?: readonly MenuChoice[];
+  extraEntries?: readonly MenuChoice[];
   /** A collection's Play ([shuffle] false) and Shuffle: closes the menu and plays it. */
   play: (shuffle: boolean) => void;
 }) {
@@ -345,7 +362,7 @@ export function ItemMenuCard({
       // A Library entry's heading counts the songs it acts on, which its row doesn't show.
       alwaysHeading={target.kind === "section"}
       cards={cards}
-      entries={entries}
+      entries={[...entries, ...extraEntries]}
     />
   );
 }

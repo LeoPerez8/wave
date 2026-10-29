@@ -2346,3 +2346,5 @@ export type {
   NowPlayingSlot,
   NowPlayingSlotSong,
 } from "./nowPlayingButtons.ts";
+
+export * from "./followedArtists.ts";

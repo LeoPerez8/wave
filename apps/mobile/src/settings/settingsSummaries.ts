@@ -1,3 +1,4 @@
+import { useFollowCount } from "@/library/follows";
 import {
   accountsSummary,
   counted,
@@ -76,6 +77,7 @@ const useAccountsSummary = (): string | null => {
  * signed into. Null leaves a row with its title alone.
  */
 export const useSettingsSummaries = (): Record<SettingsPage, string | null> => {
+  const follows = useFollowCount();
   const roots = useScanRoots();
   const scanning = useScanStatus() === "scanning";
   const lookup = useFixSongsRun();
@@ -94,6 +96,7 @@ export const useSettingsSummaries = (): Record<SettingsPage, string | null> => {
     swipeActions: swipes ? null : "Off",
     playback: null,
     history: null,
+    followedArtists: follows === 0 ? null : counted(follows, "artist"),
     lyricsAndTags:
       lookup.status === "running" ? libraryLookupProgress(lookup.done, lookup.total).line : null,
     downloads: downloadsSummary(downloads.failed, downloads.queued),

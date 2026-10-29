@@ -974,3 +974,13 @@ export const genreOrderRevisions = sqliteTable("genre_order_revisions", {
   genreId: integer("genre_id").primaryKey(),
   revision: integer("revision").notNull(),
 });
+
+/** Follows are independent of the scanned library, so deleting files keeps them. */
+export const follows = sqliteTable("follows", {
+  key: text("key").primaryKey(),
+  name: text("name").notNull(),
+  level: text("level").$type<import("@wave/core").FollowLevel>().notNull(),
+  followedAt: integer("followed_at").notNull(),
+  deezerId: integer("deezer_id"),
+  ytBrowseId: text("yt_browse_id"),
+});

@@ -14,7 +14,7 @@ import { View } from "react-native";
 import { usePositions } from "@/lib/usePositions";
 import { CatalogLine } from "@/catalog/CatalogLine";
 import { CELL, grid } from "@/catalog/grid";
-import { PlayShuffle, type LineToggle } from "@/catalog/PlayShuffle";
+import { PlayShuffle, type LastListAction, type LineToggle } from "@/catalog/PlayShuffle";
 import { useChromeInset } from "@/chrome/chrome";
 import { useRenderCount } from "@/perf/perf";
 import { playSongs } from "@/playback/actions";
@@ -45,6 +45,7 @@ export function ListIntro({
   context,
   sortControl,
   toggle,
+  last,
 }: {
   line: string;
   /**
@@ -62,6 +63,7 @@ export function ListIntro({
   sortControl?: ReactNode;
   /** The Library | Online toggle after Play and Shuffle (an artist's page, YT Music on). */
   toggle?: LineToggle | null;
+  last?: LastListAction | null;
 }) {
   const library = useMemo(
     () => songs?.map((track) => ({ source: "library" as const, track })),
@@ -75,6 +77,7 @@ export function ListIntro({
       onShuffle={() => play(true)}
       sortControl={sortControl}
       toggle={toggle}
+      last={last}
     />
   );
 }
@@ -90,18 +93,20 @@ export function ListIntroLayout({
   onShuffle,
   sortControl,
   toggle,
+  last,
 }: {
   line: string;
   onPlay: () => void;
   onShuffle: () => void;
   sortControl?: ReactNode;
   toggle?: LineToggle | null;
+  last?: LastListAction | null;
 }) {
   return (
     <View style={{ gap: CELL, paddingBottom: CELL }}>
       <CatalogLine>{line}</CatalogLine>
       <View className="flex-row items-center justify-between">
-        <PlayShuffle onPlay={onPlay} onShuffle={onShuffle} toggle={toggle} />
+        <PlayShuffle onPlay={onPlay} onShuffle={onShuffle} toggle={toggle} last={last} />
         {sortControl !== undefined && (
           // Its glyph sits on the right margin, like Back on the left.
           <View className="-mr-3">{sortControl}</View>
