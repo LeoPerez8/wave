@@ -1,8 +1,7 @@
 /**
- * Wave's sharing shortcut on Android (#205): a share target for shared text in the
- * shortcuts resource, so the dynamic "Import to Wave" shortcut that `ShareShortcut.kt`
- * publishes shows in the share sheet's direct-share row. `withShareShortcut.ts` applies
- * these at prebuild.
+ * Android's entry points: the Import to Wave share target (#205), the static
+ * Recognize Song shortcut and its Quick Settings tile (#772). `withShareShortcut.ts`
+ * applies them at prebuild.
  */
 import type { AndroidConfig } from "expo/config-plugins";
 
@@ -31,7 +30,7 @@ export const shareShortcutFiles = (packageName: string): Readonly<Record<string,
   <shortcut android:shortcutId="recognize_song" android:enabled="true"
     android:icon="@drawable/ic_recognize" android:shortcutShortLabel="@string/recognize_song">
     <intent android:action="dev.leoperez.wave.action.RECOGNIZE"
-      android:targetPackage="${packageName}" android:targetClass="${packageName}.MainActivity" />
+      android:targetPackage="${packageName}" android:targetClass="expo.modules.wavenative.recognize.RecognizeShortcutActivity" />
   </shortcut>
   <share-target android:targetClass="${packageName}.MainActivity">
     <data android:mimeType="text/plain" />
@@ -67,6 +66,20 @@ const isLauncherFilter = (filter: IntentFilter): boolean =>
 export const addShareShortcuts = (manifest: Manifest): Manifest => {
   const application = manifest.manifest.application?.[0];
   if (application === undefined) throw new Error("AndroidManifest.xml has no <application>");
+  const forwarder = "expo.modules.wavenative.recognize.RecognizeShortcutActivity";
+  application.activity = [
+    ...(application.activity ?? []).filter((activity) => activity.$["android:name"] !== forwarder),
+    {
+      $: {
+        "android:name": forwarder,
+        "android:exported": "true",
+        "android:taskAffinity": "",
+        "android:theme": "@android:style/Theme.NoDisplay",
+        "android:excludeFromRecents": "true",
+        "android:noHistory": "true",
+      },
+    },
+  ];
   const entries: ManifestEntry[] = [
     ...(application.activity ?? []),
     ...(application["activity-alias"] ?? []),
@@ -82,17 +95,21 @@ export const addShareShortcuts = (manifest: Manifest): Manifest => {
     ];
   }
   const tile = "expo.modules.wavenative.recognize.RecognizeTileService";
+  // Expo omits service labels and icons from its manifest attribute type.
+  const tileAttributes = {
+    "android:name": tile,
+    "android:exported": "true" as const,
+    "android:permission": "android.permission.BIND_QUICK_SETTINGS_TILE",
+    "android:label": "@string/recognize_song",
+    "android:icon": "@drawable/ic_recognize",
+  };
   application.service = [
     ...(application.service ?? []).filter((service) => service.$["android:name"] !== tile),
     {
-      $: {
-        "android:name": tile,
-        "android:exported": "true",
-        "android:permission": "android.permission.BIND_QUICK_SETTINGS_TILE",
-        "android:label": "@string/recognize_song",
-        "android:icon": "@drawable/ic_recognize",
-      },
-      "intent-filter": [{ action: [{ $: { "android:name": "android.service.quicksettings.action.QS_TILE" } }] }],
+      $: tileAttributes,
+      "intent-filter": [
+        { action: [{ $: { "android:name": "android.service.quicksettings.action.QS_TILE" } }] },
+      ],
     },
   ];
   return manifest;

@@ -30,7 +30,10 @@ class RecognizeModule : Module() {
 
   override fun definition() = ModuleDefinition {
     Name("WaveRecognize")
-    Events(HEARD, CAPTURE_FAILED)
+    Events(HEARD, CAPTURE_FAILED, "onRecognizeRequested")
+
+    OnCreate { RecognizeInbox.onReceived = { sendEvent("onRecognizeRequested") } }
+    Function("takeRequest") { RecognizeInbox.take() }
 
     /**
      * Starts capturing from [source] (`microphone`); resolves the session's id. Rejects
@@ -83,6 +86,7 @@ class RecognizeModule : Module() {
     }
 
     OnDestroy {
+      RecognizeInbox.onReceived = null
       synchronized(this@RecognizeModule) {
         current?.second?.stop()
         current = null
