@@ -2254,3 +2254,26 @@ export {
   type ImportPhaseTimer,
   type ImportPhaseTimings,
 } from "./importTimings.ts";
+
+export {
+  RECOGNIZE_CARD_ACTION_LABELS,
+  recognizeCardView,
+  recognizeHoldsPlayback,
+  recognizeLogLine,
+  startRecognize,
+  stepRecognize,
+} from "./recognize.ts";
+export type {
+  RecognizeAnswer,
+  RecognizeCard,
+  RecognizeCardAction,
+  RecognizeCardView,
+  RecognizedSong,
+  RecognizeEnd,
+  RecognizeEvent,
+  RecognizeFailure,
+  RecognizeLogOutcome,
+  RecognizeSession,
+  RecognizeSource,
+  RecognizeStep,
+} from "./recognize.ts";
