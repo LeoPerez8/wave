@@ -30,6 +30,14 @@ const request = (path: string, params: Record<string, string>) =>
     return (await response.json()) as unknown;
   }).pipe(Effect.timeout("20 seconds"), Effect.delay("250 millis"));
 let checking = false;
+const savedListeners = new Set<() => void>();
+/** Runs [listener] each time a check saves an artist's shows; returns the unsubscribe. */
+export const subscribeFollowShows = (listener: () => void): (() => void) => {
+  savedListeners.add(listener);
+  return () => {
+    savedListeners.delete(listener);
+  };
+};
 /** Shared by Home, artist pages and the daily background task (`followCheckTask.ts`). */
 export const checkFollowShows = (context: FollowCheckContext = "home") =>
   Effect.acquireUseRelease(
@@ -109,6 +117,9 @@ export const checkFollowShows = (context: FollowCheckContext = "home") =>
                   country,
                   shows,
                   checkedAt: Date.now(),
+                });
+                yield* Effect.sync(() => {
+                  for (const listener of savedListeners) listener();
                 });
                 const latest = yield* store.followShowCache;
                 const feed = followFeed({

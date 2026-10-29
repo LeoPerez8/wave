@@ -4,6 +4,7 @@ import { autoEn } from "./catalogue/autoEn.ts";
 import { playbackTextEn } from "./catalogue/playbackTextEn.ts";
 import { lyricsLanguagesEn } from "./catalogue/lyricsLanguagesEn.ts";
 import { showsEn } from "./catalogue/showsEn.ts";
+import { upcomingShowsEn } from "./catalogue/upcomingShowsEn.ts";
 /**
  * Wave's interface text in English: the shape every other catalogue must fill
  * (`Catalogue`), so a phrase missing from one fails the type check. Group
@@ -20,6 +21,7 @@ export const en = {
   lyricsLanguages: lyricsLanguagesEn,
   playbackText: playbackTextEn,
   shows: showsEn,
+  upcomingShows: upcomingShowsEn,
   /** Each tab's name, in the tab bar, its editor and TalkBack. */
   tabs: {
     index: "Home",

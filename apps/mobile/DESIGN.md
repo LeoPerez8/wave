@@ -319,6 +319,10 @@ A YT Music song's long-press menu is the track menu's card (quiet entries under 
 
 A square cover at the computed tile width, then 12dp, then the caption: artist as a catalog line, the title in Body 500 with two lines always reserved, then the furniture line in Footnote graphite ("1975 · 9 · 41 min", tabular). Covers without art show a field square with a thin music note in pewter.
 
+### Show Card
+
+Home's Upcoming Shows draws each show as a ticket (`src/home/UpcomingShows.tsx`), the one content card that is a field, so a show never reads as an album, a mix or a playlist. A flat `fill` field on its side (272dp at the standard font size, in a sideways row like Home's shelves): a stub with the day in Large Title 300, the month as a catalog line under it (never over it), the weekday in Footnote graphite and the time in Footnote 500 ink; a perforation of two notches and a column of 2dp holes in the ground's tone; then the artist's 40dp circle, name in Body 500 ink, city in Footnote ink and venue in Footnote graphite. Square, flat, no new colour. It widens and grows with the system font size, and a row's cards share the tallest one's height. Tap opens the ticket page; long press offers Go to Artist and Open Tickets.
+
 ### Text Field
 
 Set like a row, flat on the ground or the card: no box, no fill, no radius. The input is Body ink (Title3 for a playlist's name) with the placeholder in graphite and a teal cursor, a row tall (56dp), over a hairline. The Search tab's field (`src/search/SearchField.tsx`) leads with the search glyph (24dp, graphite) in a 32dp cell, and keeps a 48dp cell at the end for the clear X (24dp, graphite, "Clear search"), reserved while the field is empty so the query never reflows; the X's target reaches 12dp into the margin, so both glyphs sit on the margins. Its hairline turns teal while it has the keyboard. The Design preview's Search shelf shows it empty, filled and focused (`wave://design-preview?state=search-field`).
