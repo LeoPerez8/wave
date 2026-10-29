@@ -10,6 +10,7 @@ import { readStoredRecord } from "./storedJson.ts";
 
 /** A section of Home's catalogue, by id. */
 export type HomeSectionId =
+  | "new-releases"
   | "discover"
   | "recently-added"
   | "recently-played"
@@ -36,6 +37,7 @@ export interface HomeSection {
  * their three sections, so it joins every Home arranged before it on top.
  */
 export const HOME_SECTIONS: readonly HomeSection[] = [
+  { id: "new-releases", title: "New from Artists You Follow", fromPlays: false },
   { id: "discover", title: "Discover", fromPlays: false },
   { id: "recently-added", title: "Recently added", fromPlays: false },
   { id: "recently-played", title: "Recently played", fromPlays: true },
@@ -88,7 +90,10 @@ export const homeItems = (
   { sections: arrangement }: HomeArrangement,
   { nothingPlayed, empty = false }: { readonly nothingPlayed: boolean; readonly empty?: boolean },
 ): readonly HomeItem[] => {
-  if (empty) return arrangement.includes("discover") ? [{ section: "discover" }] : [];
+  if (empty)
+    return arrangement
+      .filter((id) => id === "discover" || id === "new-releases")
+      .map((section) => ({ section }));
   if (arrangement.length === 0) return ["no-sections"];
   const items: HomeItem[] = arrangement.map((id) => ({ section: id }));
   const hintAt = nothingPlayed ? arrangement.findIndex((id) => sectionOf(id)?.fromPlays) : -1;

@@ -22,10 +22,12 @@ sealed interface YtShelfItem {
     val artists: List<String>,
     val year: Int?,
     val artworkUrl: String?,
+    val releaseType: String? = null,
   ) : YtShelfItem {
     override fun toMap(): Map<String, Any?> =
       mapOf(
         "kind" to "album",
+        "releaseType" to releaseType,
         "browseId" to browseId,
         "title" to title,
         "artists" to artists,
@@ -142,6 +144,8 @@ object YtHomeParser {
       ALBUM_PAGE -> YtShelfItem.Album(
         browseId = browseId,
         title = title,
+        releaseType = subtitle.mapNotNull { it["text"].string?.trim()?.lowercase() }
+          .firstOrNull { it in setOf("single", "ep", "album") },
         artists = linkedArtists(subtitle),
         year = subtitle.mapNotNull { it["text"].string?.trim() }.lastOrNull { YEAR.matches(it) }?.toInt(),
         artworkUrl = artworkUrl,

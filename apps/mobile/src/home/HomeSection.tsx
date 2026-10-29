@@ -1,3 +1,4 @@
+import { NewReleases } from "./NewReleases";
 import {
   discoverMixCaption,
   discoverRowTitle,
@@ -385,6 +386,7 @@ function MostPlayedArtists({ title }: SectionProps) {
  */
 const SECTIONS: Record<HomeSectionId, ComponentType<SectionProps>> = {
   discover: Discover,
+  "new-releases": NewReleases,
   "recently-added": ({ home, title }) =>
     home.recentlyAdded !== undefined &&
     home.recentlyAdded.length > 0 && (

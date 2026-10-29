@@ -2348,3 +2348,11 @@ export type {
 } from "./nowPlayingButtons.ts";
 
 export * from "./followedArtists.ts";
+export { followFeed, type FollowRelease, type ReleaseType } from "./followedArtists.ts";
+export {
+  deezerReleases,
+  deezerFollowArtists,
+  matchFollowRelease,
+  checkDue,
+  releaseDateLine,
+} from "./followedArtists.ts";

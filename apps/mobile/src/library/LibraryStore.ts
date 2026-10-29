@@ -1,3 +1,11 @@
+import {
+  readFollowReleases,
+  saveFollowReleases,
+  hideFollowRelease,
+  followReleaseListening,
+  type FollowReleaseCache,
+} from "./db/followReleases";
+import type { FollowRelease } from "@wave/core";
 import type { FollowedArtist, FollowLevel } from "@wave/core";
 import {
   selectFollow,
@@ -555,6 +563,17 @@ export class LibraryStore extends Context.Service<
       path: string,
     ) => Effect.Effect<readonly ScanRoot[], LibraryStoreError>;
     /** Every scan root in the order it was added, with its track count. */
+    readonly followReleaseCache: Effect.Effect<FollowReleaseCache, LibraryStoreError>;
+    readonly saveFollowReleases: (
+      key: string,
+      releases: readonly FollowRelease[],
+      checkedAt: number,
+    ) => Effect.Effect<void, LibraryStoreError>;
+    readonly hideFollowRelease: (key: string) => Effect.Effect<void, LibraryStoreError>;
+    readonly followReleaseListening: (
+      releases: readonly FollowRelease[],
+      names: Readonly<Record<string, string>>,
+    ) => Effect.Effect<ReturnType<typeof followReleaseListening>, LibraryStoreError>;
     readonly listFollows: Effect.Effect<readonly FollowedArtist[], LibraryStoreError>;
     readonly countFollows: Effect.Effect<number, LibraryStoreError>;
     readonly getFollow: (name: string) => Effect.Effect<FollowedArtist | null, LibraryStoreError>;
@@ -1450,6 +1469,13 @@ const make = Effect.gen(function* () {
     writeAttempt(operation, run).pipe(Effect.tap(() => Effect.sync(historyChanged)));
 
   return LibraryStore.of({
+    followReleaseCache: attempt("read follow release cache", () => readFollowReleases(db)),
+    saveFollowReleases: (key, releases, checkedAt) =>
+      writeAttempt("save follow releases", () => saveFollowReleases(db, key, releases, checkedAt)),
+    hideFollowRelease: (key) =>
+      writeAttempt("hide follow release", () => hideFollowRelease(db, key)),
+    followReleaseListening: (releases, names) =>
+      attempt("read release listening", () => followReleaseListening(db, releases, names)),
     listFollows: attempt("list follows", () => selectFollows(db)),
     countFollows: attempt("count follows", () => countFollows(db)),
     getFollow: (name) => attempt("read follow", () => selectFollow(db, name)),

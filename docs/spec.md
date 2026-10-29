@@ -45,6 +45,7 @@ v1 delivers the core player and library. v2 adds the advanced audio and library-
 - **Counted play** — a play event that counts towards play counts: listened to for more than 15 seconds, or, for a song of 15 seconds or less, played to the end. Each play event counts at most once, however long it goes on.
 - **Recap** — a Wrapped-style look back at one calendar month or year of listening (local time), computed on the phone from counted plays and watched as full-screen stories. A month has one once it has ended and holds at least 3 hours of counted listening; a year from 1 December with at least 20 hours (see "Recap"). _Avoid_: Wrapped, summary.
 - **Sidecar** — a `.lrc` lyrics file beside an audio file (`Song.lrc` or `Song.mp3.lrc`).
+- **New release** — a single, EP or album by a followed artist dated within the 30 days before the follow, or later, with no counted play of any of its songs and not hidden.
 - **Follow** — the owner's wish to hear about one artist's news, at a **follow level**: **releases** (new releases only) or **shows** (new releases plus upcoming shows in the owner's country). An artist is followed once, whichever page it was followed from. _Avoid_: subscribe, favorite artist.
 - **Favorite** — a starred track (Apple Music's star).
 - **Artist image** — the circle an artist is shown with: their **artist photo** (downloaded online, see Artist photos) when there is one, else the cover of the album that represents them, else their initial.
@@ -207,10 +208,11 @@ The current-playing row follows the recording across a completed streamed-to-Lib
 
 ### Network
 
-Wave uses the network for four features, each behind its own Settings switch (on by default) that stops every request it makes, for the Wave and Spotify accounts, whose switch is signing in, and for lyrics translation, whose switch is the Lyrics view's Translate button (off by default).
+Wave uses the network for five features, each behind its own Settings switch (on by default) that stops every request it makes, for the Wave and Spotify accounts, whose switch is signing in, and for lyrics translation, whose switch is the Lyrics view's Translate button (off by default).
 
 - **Wave account** (Wave's sync service, see Wave account and sync): while signed in, sends the Library's song list (each song's tags and, for a downloaded one, its YouTube video id, never the file or its path), playlists, favorites, play history and preferences, and the Google ID token once at sign-in. Signed out, Wave sends it nothing, and the Library, play history and stats never leave the phone.
 
+- **Followed artists** (Deezer's open API, free and keyless): sends artist names to resolve followed artists and their ids to read release lists. Matching and playback send artist names, release titles and matched browse ids to YouTube Music, only while YT Music is on. The Followed artists switch stops all follow requests and hides the Home section. Checks run when Home opens after 12 hours; failures keep the saved releases. Releases never notify.
 - **Artist photos** (Deezer's open API, free and keyless; below): sends artist names.
 - **Lyrics and genre** (LRCLIB and Deezer's open API, free and keyless; below): sends a song's title, artist, album and duration. Recommendations use tags, Fix Song data and profiles already stored on the phone; they send no artist names to Deezer. The Lyrics view sends LRCLIB the same about a non-D song, or a Library song whose file has no lyrics, when it searches for its lyrics (see "Lyrics online").
 - **Genius insights** (Genius's public API, `api.genius.com`, with the APK's client access token; see "Genius About"): sends the song's title and artist in a search, then the matched song's Genius id for its description and its annotations (`referents?song_id=<id>`, page by page), only when the Lyrics view opens on a song with lyrics and the phone has no saved answer for it, never on play. The "Genius insights" switch in Settings › Lyrics and tags (on by default) stops every request; a build without the token sends none.

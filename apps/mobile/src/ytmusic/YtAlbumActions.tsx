@@ -10,6 +10,7 @@ import {
 import * as Result from "effect/Result";
 import { Text, View } from "react-native";
 
+import { openAddToPlaylist } from "@/library/PlaylistSheets";
 import { Artwork } from "@/catalog/Artwork";
 import { CELL } from "@/catalog/grid";
 import { pressedMenuAllowed, pressedRect } from "@/motion/pressedRect";
@@ -39,13 +40,38 @@ export interface YtAlbumTarget extends YtListHead {
  * The album's page is read first (once a session, see `readYtAlbum`), so the
  * card opens with every entry it will have.
  */
-export const openYtAlbumActions = (album: YtAlbumTarget, { onSelect }: MenuOptions = {}): void => {
+export interface ReleaseMenuOptions extends MenuOptions {
+  readonly releaseEntries?: readonly MenuChoice[];
+}
+export const openYtAlbumActions = (
+  album: YtAlbumTarget,
+  { onSelect, releaseEntries }: ReleaseMenuOptions = {},
+): void => {
   const anchor = pressedRect();
   const allowed = pressedMenuAllowed();
   void followUp(async () => {
     const result = await askYtMusic((ytMusic) => ytMusic.album(album.browseId));
     if (!allowed()) return;
     if (Result.isFailure(result)) {
+      if (releaseEntries !== undefined) {
+        openOverlay({
+          label: album.title,
+          anchor,
+          render: (close) => (
+            <MenuChoices
+              cards={[]}
+              entries={releaseEntries.map((entry) => ({
+                ...entry,
+                onPress: () => {
+                  close();
+                  entry.onPress();
+                },
+              }))}
+            />
+          ),
+        });
+        return;
+      }
       await showMessage(
         album.title,
         result.failure.reason === "offline"
@@ -59,7 +85,13 @@ export const openYtAlbumActions = (album: YtAlbumTarget, { onSelect }: MenuOptio
       label: album.title,
       anchor,
       render: (close) => (
-        <YtAlbumActionsMenu album={album} songs={songs} close={close} onSelect={onSelect} />
+        <YtAlbumActionsMenu
+          album={album}
+          songs={songs}
+          close={close}
+          onSelect={onSelect}
+          releaseEntries={releaseEntries}
+        />
       ),
     });
   });
@@ -71,7 +103,9 @@ function YtAlbumActionsMenu({
   songs,
   close,
   onSelect,
+  releaseEntries,
 }: {
+  releaseEntries: readonly MenuChoice[] | undefined;
   album: YtAlbumTarget;
   songs: readonly NativeYtSong[];
   close: () => void;
@@ -113,6 +147,26 @@ function YtAlbumActionsMenu({
           ),
         },
   );
+  if (releaseEntries !== undefined) {
+    entries.push({
+      action: "addToPlaylist",
+      label: "Add to Playlist",
+      onPress: closing(() =>
+        openAddToPlaylist({
+          title: album.title,
+          songs: () =>
+            Promise.resolve(
+              listed.map((entry) =>
+                entry.source === "library"
+                  ? { source: "library" as const, trackId: entry.track.id }
+                  : { source: "stream" as const, song: entry.song },
+              ),
+            ),
+        }),
+      ),
+    });
+    entries.push(...releaseEntries.map((entry) => ({ ...entry, onPress: closing(entry.onPress) })));
+  }
   // Select only checks the release: its songs are read when a bar action runs.
   if (onSelect !== undefined)
     entries.push({
