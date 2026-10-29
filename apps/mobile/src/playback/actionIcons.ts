@@ -52,7 +52,8 @@ export type MenuAction =
   | YtAlbumDownloadAction
   | YtPlaylistDownloadAction
   | DiscoverMixAction
-  | UnavailableEntryAction;
+  | UnavailableEntryAction
+  | "addToShazam";
 
 /**
  * Each action's one icon, the same in every menu that offers it and on the
@@ -66,6 +67,7 @@ export const ACTION_ICONS: { readonly [A in MenuAction]: ActionIcon } = {
   addToQueue: IconRowInsertBottom,
   magicQueue: IconSparkles,
   addToPlaylist: IconPlaylistAdd,
+  addToShazam: IconPlaylistAdd,
   favorite: IconStar,
   unfavorite: IconStarOff,
   removeFromPlaylist: IconPlaylistX,

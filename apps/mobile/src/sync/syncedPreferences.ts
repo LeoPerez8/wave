@@ -16,6 +16,7 @@ import "@/settings/keepFindVisible";
 import "@/settings/longPressDelay";
 import "@/settings/lyricsAndGenre";
 import "@/settings/shuffleKind";
+import "@/settings/shazamPlaylist";
 import "@/settings/swipeActions";
 import "@/settings/tabBar";
 import "@/settings/tapAnimation";

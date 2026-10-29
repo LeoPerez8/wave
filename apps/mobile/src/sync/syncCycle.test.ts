@@ -21,6 +21,7 @@ import {
 import { stampPreference } from "../library/db/sync.ts";
 import {
   addToPlaylist,
+  addToShazam,
   createPlaylist,
   deletePlaylist,
   movePlaylistItem,
@@ -401,6 +402,54 @@ describe("syncCycle", () => {
     await b.sync();
     await a.sync();
     assert.equal(a.stored.get("settings.theme"), '{"primary":"teal"}');
+  });
+
+  test("the synced Shazam id fills the same playlist on a second phone with different local ids", async () => {
+    const service = testSyncService();
+    const a = await phone(service);
+    const b = await phone(service);
+    createPlaylist(b.db, "On this phone", [], b.now());
+    const saved = addToShazam(
+      a.db,
+      null,
+      { source: "library", trackId: a.track("Airbag") },
+      a.now(),
+    );
+    a.setPreference("settings.shazamPlaylistId", saved.syncId);
+    await a.sync();
+    await b.sync();
+    assert.equal(b.stored.get("settings.shazamPlaylistId"), saved.syncId);
+    const target = selectPlaylists(b.db).find((playlist) => playlist.name === "Shazam")!;
+    assert.notEqual(target.id, saved.playlistId);
+    renamePlaylist(b.db, target.id, "Recognized songs", b.now());
+    const added = addToShazam(
+      b.db,
+      b.stored.get("settings.shazamPlaylistId") ?? null,
+      { source: "library", trackId: b.track("Lucky") },
+      b.now(),
+    );
+    assert.equal(added.syncId, saved.syncId);
+    await b.sync();
+    await a.sync();
+    const expected = [
+      { name: "On this phone", songs: [] },
+      { name: "Recognized songs", songs: ["Lucky", "Airbag"] },
+    ];
+    assert.deepEqual(
+      playlistTitles(a.db).toSorted((x, y) => x.name.localeCompare(y.name)),
+      expected,
+    );
+    assert.deepEqual(
+      playlistTitles(b.db).toSorted((x, y) => x.name.localeCompare(y.name)),
+      expected,
+    );
+    const duplicate = addToShazam(
+      b.db,
+      saved.syncId,
+      { source: "library", trackId: b.track("Airbag") },
+      b.now(),
+    );
+    assert.equal(duplicate.toast, "Already in Shazam");
   });
 
   test("signing in on a phone with its own Library loses nothing from either side", async () => {

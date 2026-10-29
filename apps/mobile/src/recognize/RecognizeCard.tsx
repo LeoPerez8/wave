@@ -19,6 +19,7 @@ import { NativeWaveUnderline } from "@/glass/waveGlass";
 import { libraryListQueries } from "@/library/hooks";
 import type { SongRow } from "@/library/LibraryStore";
 import { openAddToPlaylist } from "@/library/PlaylistSheets";
+import { addToShazam } from "@/library/playlists";
 import { openAlbum } from "@/library/routes";
 import { appRuntime } from "@/library/runtime";
 import { appLog } from "@/log/appLog";
@@ -185,6 +186,17 @@ function RecognizeCard({
       default:
         if (result === null || !view.actions.includes(action)) return;
         switch (action) {
+          case "addToShazam":
+            void (async () => {
+              const track =
+                result.kind === "stream" ? (await currentLibraryFinder())(result.song) : null;
+              await addToShazam(
+                track === null
+                  ? recognizePlaylistSong(result)
+                  : { source: "library", trackId: track.id },
+              );
+            })().catch((error: unknown) => showError("Couldn't add to Shazam", error));
+            return;
           case "addToPlaylist":
             openAddToPlaylist({
               title: result.song.title,
@@ -301,6 +313,7 @@ function RecognizeCard({
               switch (action) {
                 case "play":
                 case "playNext":
+                case "addToShazam":
                 case "addToPlaylist":
                 case "goToAlbum":
                 case "download":

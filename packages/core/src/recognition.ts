@@ -108,7 +108,13 @@ export const resolveRecognizedSong = <L extends RecognizeTrack, S extends YtSong
 
 /** Actions shared by the result card and any other Recognize entry point. */
 export type RecognizeResultAction =
-  "play" | "playNext" | "addToPlaylist" | "goToAlbum" | YtDownloadAction | "listenAgain";
+  | "play"
+  | "playNext"
+  | "addToShazam"
+  | "addToPlaylist"
+  | "goToAlbum"
+  | YtDownloadAction
+  | "listenAgain";
 
 export interface RecognizeResultOptions {
   readonly ytMusic: boolean;
@@ -128,8 +134,7 @@ export const recognizeResultActions = (
       : result.kind === "stream" && ytMusic
         ? ytDownloadActions(status, { inLibrary })
         : [];
-  // Save actions live here once, so another action can apply to every result kind.
-  return [...play, "addToPlaylist", ...more, "listenAgain"];
+  return [...play, "addToShazam", "addToPlaylist", ...more, "listenAgain"];
 };
 
 /** The picker and one-tap saves both take the existing playlist entry union. */
