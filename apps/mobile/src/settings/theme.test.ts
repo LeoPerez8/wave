@@ -395,3 +395,35 @@ test("an update keeps the icon the earlier Wave left on, where this Wave would m
   const fresh = await loadTheme(stored);
   assert.equal(fresh.device.alias, "LauncherIcon_white_ember");
 });
+
+test("an answer to the icon prompt keeps a theme pulled while it was open", async () => {
+  const { theme, settings, device, Storage } = await loadTheme();
+  const changed: string[] = [];
+  settings.onSyncedSettingChange((key) => changed.push(key));
+  await theme.setCustomInk("primary", "#f08cb0", async () => {
+    settings.applySyncedSetting(
+      "settings.theme",
+      JSON.stringify({ ...DEFAULT_THEME_CHOICE, dark: "forest", savedSecondary: ["#7cc4ea"] }),
+    );
+    return "alternative";
+  });
+  const stored = JSON.parse(Storage.getItemSync("settings.theme")!);
+  assert.equal(stored.dark, "forest");
+  assert.deepEqual(stored.savedSecondary, ["#7cc4ea"]);
+  assert.equal(stored.customPrimary, "#f08cb0");
+  assert.equal(device.css.dark?.["--color-background"], "#0a130d");
+  assert.equal(device.css.dark?.["--color-accent"], "#f08cb0");
+  assert.deepEqual(changed, ["settings.theme"]);
+});
+
+test("Yes stores the icon of the colours as they are when it's answered", async () => {
+  const { theme, settings, device } = await loadTheme();
+  await theme.setCustomInk("primary", "#f08cb0", async () => {
+    settings.applySyncedSetting(
+      "settings.theme",
+      JSON.stringify({ ...DEFAULT_THEME_CHOICE, secondary: "custom", customSecondary: "#7cc4ea" }),
+    );
+    return "action";
+  });
+  assert.equal(device.alias, "LauncherIcon_rose_sky");
+});
