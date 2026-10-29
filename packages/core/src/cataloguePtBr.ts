@@ -18,6 +18,23 @@ export const ptBR: Catalogue = {
     genres: "Gêneros",
     favorites: "Favoritas",
   },
+  newReleases: {
+    title: "Novidades dos Artistas que Você Segue",
+    single: "Single",
+    ep: "EP",
+    album: "Álbum",
+    unavailable: "Ainda não está no YouTube Music",
+    noAnswer: "Sem resposta online. Tente novamente em instantes.",
+    hideFailed: "Não foi possível ocultar este lançamento. Tente novamente.",
+    hide: "Ocultar",
+    goToArtist: "Ir para Artista",
+    addToPlaylist: "Adicionar à Playlist",
+    today: "Hoje",
+    yesterday: "Ontem",
+    daysAgo: (days: number) => `Há ${days} dias`,
+    absoluteDate: (month: number, day: number, year: number | null) =>
+      `${day} de ${["jan.", "fev.", "mar.", "abr.", "mai.", "jun.", "jul.", "ago.", "set.", "out.", "nov.", "dez."][month - 1]}${year === null ? "" : ` de ${year}`}`,
+  },
   followArtistSearch: {
     placeholder: "Buscar artistas para seguir",
     follow: "Seguir",

@@ -116,6 +116,7 @@ object YtSearchParser {
       browseId = browseId,
       title = title,
       artists = artists,
+      releaseType = texts.map { it.lowercase() }.firstOrNull { it in setOf("single", "ep", "album") },
       year = texts.lastOrNull { YEAR.matches(it) }?.toInt(),
       artworkUrl = row.path("thumbnail", "musicThumbnailRenderer", "thumbnail", "thumbnails").arr
         ?.lastOrNull()?.path("url").string,

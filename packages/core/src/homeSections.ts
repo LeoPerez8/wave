@@ -1,3 +1,4 @@
+import { en, type Catalogue } from "./catalogueEn.ts";
 /**
  * Home's sections as a catalogue: every section Home can show, with its id,
  * its title and its place in the default order. The owner arranges Home from
@@ -10,6 +11,7 @@ import { readStoredRecord } from "./storedJson.ts";
 
 /** A section of Home's catalogue, by id. */
 export type HomeSectionId =
+  | "new-releases"
   | "discover"
   | "recently-added"
   | "recently-played"
@@ -36,6 +38,7 @@ export interface HomeSection {
  * their three sections, so it joins every Home arranged before it on top.
  */
 export const HOME_SECTIONS: readonly HomeSection[] = [
+  { id: "new-releases", title: en.newReleases.title, fromPlays: false },
   { id: "discover", title: "Discover", fromPlays: false },
   { id: "recently-added", title: "Recently added", fromPlays: false },
   { id: "recently-played", title: "Recently played", fromPlays: true },
@@ -50,7 +53,8 @@ const sectionOf = (id: HomeSectionId): HomeSection | undefined =>
   HOME_SECTIONS.find((section) => section.id === id);
 
 /** The title of the section [id]. */
-export const homeSectionTitle = (id: HomeSectionId): string => sectionOf(id)?.title ?? id;
+export const homeSectionTitle = (id: HomeSectionId, strings: Catalogue = en): string =>
+  id === "new-releases" ? strings.newReleases.title : (sectionOf(id)?.title ?? id);
 
 /** A row of Home's Discover section. */
 export type DiscoverRowId = "magic-queue" | "artist-mixes" | "genre-mixes";
@@ -88,7 +92,10 @@ export const homeItems = (
   { sections: arrangement }: HomeArrangement,
   { nothingPlayed, empty = false }: { readonly nothingPlayed: boolean; readonly empty?: boolean },
 ): readonly HomeItem[] => {
-  if (empty) return arrangement.includes("discover") ? [{ section: "discover" }] : [];
+  if (empty)
+    return arrangement
+      .filter((id) => id === "discover" || id === "new-releases")
+      .map((section) => ({ section }));
   if (arrangement.length === 0) return ["no-sections"];
   const items: HomeItem[] = arrangement.map((id) => ({ section: id }));
   const hintAt = nothingPlayed ? arrangement.findIndex((id) => sectionOf(id)?.fromPlays) : -1;

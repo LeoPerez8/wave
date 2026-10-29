@@ -20,6 +20,23 @@ export const en = {
     genres: "Genres",
     favorites: "Favorites",
   } satisfies Record<TabBarTab, string>,
+  newReleases: {
+    title: "New from Artists You Follow",
+    single: "Single",
+    ep: "EP",
+    album: "Album",
+    unavailable: "Not on YouTube Music yet",
+    noAnswer: "No answer online. Try again in a moment.",
+    hideFailed: "Couldn't hide this release. Try again.",
+    hide: "Hide",
+    goToArtist: "Go to Artist",
+    addToPlaylist: "Add to Playlist",
+    today: "Today",
+    yesterday: "Yesterday",
+    daysAgo: (days: number) => `${days} days ago`,
+    absoluteDate: (month: number, day: number, year: number | null) =>
+      `${["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][month - 1]} ${day}${year === null ? "" : `, ${year}`}`,
+  },
   followArtistSearch: {
     placeholder: "Find artists to follow",
     follow: "Follow",
