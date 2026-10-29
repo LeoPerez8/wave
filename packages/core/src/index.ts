@@ -2308,3 +2308,15 @@ export { bounceDemoSwipe, sampleSwipeActions } from "./motionSample.ts";
 export type { BounceDemoSwipe } from "./motionSample.ts";
 export { LONG_PRESS_SAMPLE_MENU, longPressFill, longPressHoldLasts } from "./touchSample.ts";
 export type { LongPressFill, SampleMenuEntry } from "./touchSample.ts";
+export {
+  NOW_PLAYING_ACTIONS,
+  editNowPlayingButtons,
+  readNowPlayingButtons,
+  storedNowPlayingButtons,
+} from "./nowPlayingButtons.ts";
+export type {
+  NowPlayingAction,
+  NowPlayingButtons,
+  NowPlayingButtonsEdit,
+  NowPlayingSlot,
+} from "./nowPlayingButtons.ts";
