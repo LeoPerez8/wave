@@ -5,6 +5,7 @@ import {
   DEFAULT_THEME_CHOICE,
   LAUNCHER_ICON_ART,
   LAUNCHER_ICONS,
+  MANIFEST_LAUNCHER_ICON,
   THEME_SWATCHES,
   chooseCustomInk,
   contrastRatio,
@@ -293,5 +294,15 @@ describe("LAUNCHER_ICONS", () => {
       assert.ok(contrastRatio(icon.top, "#000000") >= 3, `${icon.id} top`);
       assert.ok(contrastRatio(icon.bottom, "#000000") >= 3, `${icon.id} bottom`);
     }
+  });
+});
+
+describe("MANIFEST_LAUNCHER_ICON", () => {
+  test("stays teal over ember, which installs from before white show without Wave switching it", () => {
+    assert.equal(MANIFEST_LAUNCHER_ICON.id, "teal_ember");
+    assert.equal(
+      MANIFEST_LAUNCHER_ICON,
+      launcherIconFor(former({ primary: "teal", secondary: "ember" })),
+    );
   });
 });

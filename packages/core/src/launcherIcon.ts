@@ -24,7 +24,7 @@ export interface LauncherIcon {
 
 const shippedPair = inkPairFor(DEFAULT_THEME_CHOICE);
 
-/** Every palette pair; the plugin enables the first, so keep the shipped icon there. */
+/** Every palette pair, the shipped icon first. */
 export const LAUNCHER_ICONS: readonly LauncherIcon[] = [
   shippedPair,
   ...INK_PAIRS.filter((pair) => pair.id !== shippedPair.id),
@@ -35,6 +35,19 @@ export const LAUNCHER_ICONS: readonly LauncherIcon[] = [
   top: primary.dark,
   bottom: secondary.dark,
 }));
+
+/**
+ * The icon the manifest turns on, for good: teal over ember, the shipped icon
+ * before white (#793). Android keeps an alias Wave never switched at its
+ * manifest state, so an install that always showed teal over ember has that
+ * alias on only through the manifest; turning another on there would swap
+ * its icon on update, and the launcher would drop it from the home screen.
+ * A fresh install starts on it and switches to its own icon (white) the
+ * first time Wave leaves the screen.
+ */
+export const MANIFEST_LAUNCHER_ICON: LauncherIcon = LAUNCHER_ICONS.find(
+  (icon) => icon.id === "teal_ember",
+)!;
 
 /** Furthest any stroke edge of the logo reaches from its centre, in the logo's units. */
 const LOGO_EXTENT = (() => {

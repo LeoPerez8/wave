@@ -489,6 +489,7 @@ export {
   LAUNCHER_ICONS,
   LAUNCHER_ICON_ART,
   LAUNCHER_ICON_RADIUS,
+  MANIFEST_LAUNCHER_ICON,
   launcherIconFor,
   launcherIconSwitch,
   isDefaultThemeState,
