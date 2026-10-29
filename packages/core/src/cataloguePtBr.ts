@@ -18,6 +18,15 @@ export const ptBR: Catalogue = {
     genres: "Gêneros",
     favorites: "Favoritas",
   },
+  followArtistSearch: {
+    placeholder: "Buscar artistas para seguir",
+    follow: "Seguir",
+    following: "Seguindo",
+    searching: "Buscando no Deezer…",
+    unavailable:
+      "Não foi possível acessar o Deezer. Os resultados da Biblioteca continuam disponíveis.",
+    empty: "Nenhum artista encontrado.",
+  },
   tabBar: {
     editHint: "Mantenha pressionado para editar a barra de abas",
     edit: "Editar a barra de abas",
