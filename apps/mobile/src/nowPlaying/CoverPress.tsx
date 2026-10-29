@@ -1,3 +1,4 @@
+import { useLocalisation } from "@/localisation/localisation";
 import { IconStarFilled } from "@tabler/icons-react-native";
 import { coverDoubleTap, createCoverTaps, type CoverDoubleTap, type CoverTaps } from "@wave/core";
 import * as Haptics from "expo-haptics";
@@ -47,6 +48,7 @@ type Props = {
  * readers get play/pause as the activate action and Favorite as a custom one.
  */
 export function CoverPress({ size, playing, starred, canStar, addFavorite, children }: Props) {
+  const { strings } = useLocalisation();
   const highlight = useThemeColor("highlight");
   const reduceMotion = useReducedMotion();
   const opacity = useSharedValue(0);
@@ -124,11 +126,16 @@ export function CoverPress({ size, playing, starred, canStar, addFavorite, child
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel="Cover"
-      accessibilityHint={playing ? "Pauses the song" : "Plays the song"}
+      accessibilityLabel={strings.playbackText.cover}
+      accessibilityHint={
+        playing ? strings.playbackText.pausesTheSong : strings.playbackText.playsTheSong
+      }
       accessibilityActions={[
-        { name: "activate", label: playing ? "Pause" : "Play" },
-        { name: "favorite", label: "Favorite" },
+        {
+          name: "activate",
+          label: playing ? strings.playbackText.pause : strings.playbackText.play,
+        },
+        { name: "favorite", label: strings.playbackText.favorite },
       ]}
       onAccessibilityAction={({ nativeEvent }) => {
         if (nativeEvent.actionName === "activate") void togglePlayPause();
@@ -136,7 +143,9 @@ export function CoverPress({ size, playing, starred, canStar, addFavorite, child
           const outcome = doubleTap();
           if (outcome !== "none")
             AccessibilityInfo.announceForAccessibility(
-              outcome === "favorite" ? "Added to Favorites" : "In Favorites",
+              outcome === "favorite"
+                ? strings.playbackText.addedToFavorites
+                : strings.playbackText.inFavorites,
             );
         }
       }}

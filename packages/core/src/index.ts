@@ -2101,6 +2101,7 @@ export {
 } from "./homeSections.ts";
 export type { DiscoverRowId, DiscoverRowEdit, MixRowId } from "./homeSections.ts";
 export {
+  appLyricsTranslationTarget,
   lyricsTranslationKey,
   lyricsTranslationLanguageName,
   lyricsTranslationRequest,
@@ -2292,13 +2293,15 @@ export {
 
 export {
   RECOGNIZE_CARD_ACTION_LABELS,
+  recognizeCardActionLabels,
   recognizeCardView,
   recognizeHoldsPlayback,
-  recognizeLogLine,
   recognizeSource,
   startRecognize,
   stepRecognize,
 } from "./recognize.ts";
+export { recognizeLogLine } from "./recognizeLog.ts";
+export type { RecognizeLogOutcome } from "./recognizeLog.ts";
 export { recognizeEntryAction } from "./recognizeEntry.ts";
 export type {
   RecognizeAnswer,
@@ -2309,7 +2312,6 @@ export type {
   RecognizeEnd,
   RecognizeEvent,
   RecognizeFailure,
-  RecognizeLogOutcome,
   RecognizeSession,
   RecognizeSource,
   RecognizeStep,

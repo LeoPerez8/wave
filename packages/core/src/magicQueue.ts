@@ -1,3 +1,4 @@
+import { en, type Catalogue } from "./catalogueEn.ts";
 import { artistPhotoName } from "./artistPhoto.ts";
 import { DISCOVER_MIX_LEVELS, type DiscoverMixLevel } from "./discoverMixLevels.ts";
 import type { DiscoverRadioSong } from "./discoverMixes.ts";
@@ -682,8 +683,8 @@ export const magicRadioArtists = (
 export type MagicYtCandidate<S extends DiscoverRadioSong> = MagicSong & { readonly song: S };
 
 /** What Up Next says over a Magic Queue: "Magic Queue · from <seed>". */
-export const magicQueueLabel = (session: MagicSession): string =>
-  `Magic Queue · from ${session.seed.title}`;
+export const magicQueueLabel = (session: MagicSession, catalogue: Catalogue = en): string =>
+  catalogue.playbackText.magicQueueFrom(session.seed.title);
 
 const isStrings = (value: unknown): value is string[] =>
   Array.isArray(value) && value.every((item) => typeof item === "string");

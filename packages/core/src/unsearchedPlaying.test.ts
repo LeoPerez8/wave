@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
+import { catalogueOf } from "./localisation.ts";
 import {
   EMPTY_QUEUE,
   PLAYING_SEARCHES,
@@ -224,6 +225,22 @@ describe("the playing song's search answered", () => {
     });
   });
 
+  test("its notices read in the app's language", () => {
+    const pt = catalogueOf("pt-BR");
+    assert.deepEqual(playingAnswerStep(touch, notFound, { chosen: true }, pt), {
+      kind: "skip",
+      notice: `"Touch" foi pulada: não encontrada online.`,
+    });
+    assert.deepEqual(playingAnswerStep(touch, failed("failed"), { chosen: true }, pt), {
+      kind: "skip",
+      notice: `"Touch" foi pulada: sem resposta online.`,
+    });
+    assert.deepEqual(playingAnswerStep(touch, failed("offline"), { chosen: false }, pt), {
+      kind: "stop",
+      notice: "Você está offline. As músicas do YT Music precisam de conexão.",
+    });
+  });
+
   test("tapped offline or with YT Music off, it says what a YT Music song says, and nothing plays", () => {
     assert.deepEqual(playingAnswerStep(touch, failed("offline"), { chosen: true }), {
       kind: "stay",
@@ -250,6 +267,19 @@ describe("the player passing over a song still unsearched", () => {
     assert.equal(passedOverNotice(after, before), null);
     const plain = play("1 2 3");
     assert.equal(passedOverNotice(plain, reduceQueue(plain, { type: "next" }).state), null);
+  });
+
+  test("says it in Portuguese for an app in pt-BR", () => {
+    const pt = catalogueOf("pt-BR");
+    const one = play("1 u:Touch 2", 0);
+    const pastOne = reduceQueue(one, { type: "playerMoved", key: one.entries[2]!.key }).state;
+    assert.equal(passedOverNotice(one, pastOne, pt), `"Touch" foi pulada: sem resposta online.`);
+    const two = play("1 u:A u:B 2", 0);
+    const pastTwo = reduceQueue(two, { type: "playerMoved", key: two.entries[3]!.key }).state;
+    assert.equal(
+      passedOverNotice(two, pastTwo, pt),
+      "2 músicas foram puladas: sem resposta online.",
+    );
   });
 });
 

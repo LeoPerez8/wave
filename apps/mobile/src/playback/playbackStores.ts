@@ -1,4 +1,4 @@
-import { playerErrorNotice, type PositionReport } from "@wave/core";
+import type { PositionReport } from "@wave/core";
 import type { NativePlayerState, PlayerErrorEvent, PlayerPosition } from "../native/wavePlayer.ts";
 import { makeExternalStore } from "../lib/externalStore.ts";
 
@@ -6,8 +6,8 @@ import { makeExternalStore } from "../lib/externalStore.ts";
 export interface PlaybackState extends Omit<NativePlayerState, "index" | keyof PlayerPosition> {
   /** Last error for this item; cleared when it changes or plays again. */
   readonly error: string | null;
-  /** Core's user-facing explanation of a playback error. */
-  readonly notice: string | null;
+  /** The error's code, which Core's `playerErrorNotice` explains in the app's language. */
+  readonly errorCode: string | null;
 }
 
 /** The item key keeps car lyrics paired with the report that selected it. */
@@ -22,7 +22,7 @@ export const makePlaybackStores = (setReportingRequested: (requested: boolean) =
     playWhenReady: false,
     item: null,
     error: null,
-    notice: null,
+    errorCode: null,
   });
   const positions = makeExternalStore<PositionState>({
     positionMs: 0,
@@ -63,7 +63,7 @@ export const makePlaybackStores = (setReportingRequested: (requested: boolean) =
         return {
           ...playback,
           error: errorStands ? previous.error : null,
-          notice: errorStands ? previous.notice : null,
+          errorCode: errorStands ? previous.errorCode : null,
         };
       });
     },
@@ -73,7 +73,7 @@ export const makePlaybackStores = (setReportingRequested: (requested: boolean) =
       playbackState.update((previous) => ({
         ...previous,
         error: event.message,
-        notice: playerErrorNotice(event.code),
+        errorCode: event.code,
       })),
   };
 };

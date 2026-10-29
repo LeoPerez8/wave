@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { describe, test } from "node:test";
 
+import { catalogueOf } from "./localisation.ts";
 import {
+  appLyricsTranslationTarget,
   lyricsTranslationKey,
   lyricsTranslationLanguageName,
   lyricsTranslationRequest,
@@ -167,5 +169,29 @@ describe("a saved translation", () => {
     assert.equal(savedLyricsTranslation(null, ENGLISH), null);
     assert.equal(savedLyricsTranslation("{not json", ENGLISH), null);
     assert.equal(savedLyricsTranslation('{"lyrics":"x"}', ENGLISH), null);
+  });
+});
+
+describe("lyrics in the app's language", () => {
+  test("translate into Portuguese for an app in pt-BR and English for an app in English", () => {
+    assert.equal(appLyricsTranslationTarget("pt-BR"), "pt");
+    assert.equal(appLyricsTranslationTarget("en"), "en");
+  });
+
+  test("keep an English translation saved from an English phone", () => {
+    assert.equal(
+      lyricsTranslationKey("track-1", appLyricsTranslationTarget("en")),
+      lyricsTranslationKey("track-1", lyricsTranslationTarget("en-US")),
+    );
+  });
+
+  test("names the same language in English", () => {
+    assert.equal(lyricsTranslationLanguageName("en", catalogueOf("en")), "English");
+  });
+
+  test("names the same language in Portuguese", () => {
+    assert.equal(lyricsTranslationLanguageName("en", catalogueOf("pt-BR")), "inglês");
+    assert.equal(lyricsTranslationLanguageName("pt", catalogueOf("pt-BR")), "português");
+    assert.equal(lyricsTranslationLanguageName("xx", catalogueOf("pt-BR")), "xx");
   });
 });
