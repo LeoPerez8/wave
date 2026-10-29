@@ -329,7 +329,7 @@ export function NowPlayingSheet() {
             className={`flex-row items-center ${slots.length === 0 ? "justify-end" : "justify-between"}`}
           >
             {slots.map(({ action, slot }) => (
-              <SlotButton key={slot} action={action} context={slotContext} />
+              <SlotButton key={slot} slot={slot} action={action} context={slotContext} />
             ))}
             <ViewToggle
               icon={IconListNumbers}
