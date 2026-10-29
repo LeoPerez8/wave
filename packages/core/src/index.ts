@@ -2089,8 +2089,8 @@ export type { CoverDoubleTap, CoverTaps } from "./coverGestures.ts";
 export { createStarPop } from "./starPop.ts";
 export type { StarPop } from "./starPop.ts";
 export { discoverLevelLabel } from "./discoverMixLevels.ts";
-export { DISCOVER_ROWS, discoverRowTitle } from "./homeSections.ts";
-export type { DiscoverRowId, MixRowId } from "./homeSections.ts";
+export { DISCOVER_ROWS, discoverRowTitle, hiddenDiscoverRows } from "./homeSections.ts";
+export type { DiscoverRowId, DiscoverRowEdit, MixRowId } from "./homeSections.ts";
 export {
   lyricsTranslationKey,
   lyricsTranslationLanguageName,

@@ -85,7 +85,7 @@ export type HomeItem = { readonly section: HomeSectionId } | "play-hint" | "no-s
  * mixes can grow from YouTube Music's chart.
  */
 export const homeItems = (
-  arrangement: HomeArrangement,
+  { sections: arrangement }: HomeArrangement,
   { nothingPlayed, empty = false }: { readonly nothingPlayed: boolean; readonly empty?: boolean },
 ): readonly HomeItem[] => {
   if (empty) return arrangement.includes("discover") ? [{ section: "discover" }] : [];
@@ -96,13 +96,22 @@ export const homeItems = (
   return items;
 };
 
-/** The sections Home shows, top to bottom. */
-export type HomeArrangement = readonly HomeSectionId[];
+/** Home's shown sections and Discover rows, each in the owner's order. */
+export interface HomeArrangement {
+  readonly sections: readonly HomeSectionId[];
+  /** Owner-shown rows, independent of whether they currently have content. */
+  readonly discoverRows: readonly DiscoverRowId[];
+}
 
 /** Home before the owner arranges it: the whole catalogue in its order. */
-const DEFAULT_HOME_ARRANGEMENT: HomeArrangement = HOME_SECTIONS.map(({ id }) => id);
+const DEFAULT_SECTIONS = HOME_SECTIONS.map(({ id }) => id);
+const DEFAULT_DISCOVER_ROWS = DISCOVER_ROWS.map(({ id }) => id);
+const DEFAULT_HOME_ARRANGEMENT: HomeArrangement = {
+  sections: DEFAULT_SECTIONS,
+  discoverRows: DEFAULT_DISCOVER_ROWS,
+};
 
-const sameOrder = (a: HomeArrangement, b: HomeArrangement): boolean =>
+const sameOrder = (a: readonly string[], b: readonly string[]): boolean =>
   a.length === b.length && a.every((id, index) => id === b[index]);
 
 /**
@@ -117,19 +126,19 @@ const sameOrder = (a: HomeArrangement, b: HomeArrangement): boolean =>
  */
 export const parseHomeArrangement = (stored: string | null): HomeArrangement => {
   if (stored === null) return DEFAULT_HOME_ARRANGEMENT;
-  const { shown, hidden } = readStoredRecord(stored);
+  const { shown, hidden, discover } = readStoredRecord(stored);
   if (!Array.isArray(shown)) return DEFAULT_HOME_ARRANGEMENT;
   const arrangement = knownSections(shown);
   const known = new Set([...arrangement, ...knownSections(Array.isArray(hidden) ? hidden : [])]);
   const newer = HOME_SECTIONS.filter(({ id }) => !known.has(id));
   for (const { id } of newer) {
-    const place = DEFAULT_HOME_ARRANGEMENT.indexOf(id);
-    const before = DEFAULT_HOME_ARRANGEMENT.slice(0, place).findLast((earlier) =>
+    const place = DEFAULT_SECTIONS.indexOf(id);
+    const before = DEFAULT_SECTIONS.slice(0, place).findLast((earlier) =>
       arrangement.includes(earlier),
     );
     arrangement.splice(before === undefined ? 0 : arrangement.indexOf(before) + 1, 0, id);
   }
-  return arrangement;
+  return { sections: arrangement, discoverRows: parseDiscoverRows(discover) };
 };
 
 const isSectionId = (value: unknown): value is HomeSectionId =>
@@ -170,12 +179,26 @@ const knownSections = (values: readonly unknown[]): HomeSectionId[] => [
  * can tell it's new.
  */
 export const storedHomeArrangement = (arrangement: HomeArrangement): string | null =>
-  sameOrder(arrangement, DEFAULT_HOME_ARRANGEMENT)
+  sameOrder(arrangement.sections, DEFAULT_SECTIONS) &&
+  sameOrder(arrangement.discoverRows, DEFAULT_DISCOVER_ROWS)
     ? null
-    : JSON.stringify({ shown: arrangement, hidden: hiddenHomeSections(arrangement) });
+    : JSON.stringify({
+        shown: arrangement.sections,
+        hidden: hiddenHomeSections(arrangement),
+        discover: { shown: arrangement.discoverRows, hidden: hiddenDiscoverRows(arrangement) },
+      });
 
 /** A change made in Home's editor. */
+export type DiscoverRowEdit =
+  | { readonly remove: DiscoverRowId }
+  | { readonly add: DiscoverRowId }
+  | { readonly move: { readonly from: number; readonly to: number } };
+
+export const hiddenDiscoverRows = (arrangement: HomeArrangement): DiscoverRowId[] =>
+  DEFAULT_DISCOVER_ROWS.filter((id) => !arrangement.discoverRows.includes(id));
+
 export type HomeArrangementEdit =
+  | { readonly discover: DiscoverRowEdit }
   | { readonly remove: HomeSectionId }
   | { readonly add: HomeSectionId }
   /** A section dragged from one place among those shown to another (0-based). */
@@ -189,12 +212,54 @@ export const editHomeArrangement = (
   arrangement: HomeArrangement,
   edit: HomeArrangementEdit,
 ): HomeArrangement => {
-  if ("remove" in edit) return arrangement.filter((id) => id !== edit.remove);
+  if ("discover" in edit) {
+    const change = edit.discover;
+    const rows = arrangement.discoverRows;
+    const discoverRows =
+      "remove" in change
+        ? rows.length > 1
+          ? rows.filter((id) => id !== change.remove)
+          : rows
+        : "add" in change
+          ? rows.includes(change.add)
+            ? rows
+            : [...rows, change.add]
+          : moveItem(rows, change.move.from, change.move.to);
+    return { ...arrangement, discoverRows };
+  }
+  if ("remove" in edit)
+    return { ...arrangement, sections: arrangement.sections.filter((id) => id !== edit.remove) };
   if ("add" in edit)
-    return arrangement.includes(edit.add) ? arrangement : [...arrangement, edit.add];
-  return moveItem(arrangement, edit.move.from, edit.move.to);
+    return arrangement.sections.includes(edit.add)
+      ? arrangement
+      : { ...arrangement, sections: [...arrangement.sections, edit.add] };
+  return { ...arrangement, sections: moveItem(arrangement.sections, edit.move.from, edit.move.to) };
 };
 
 /** The catalogue's sections [arrangement] doesn't show, in catalogue order. */
 export const hiddenHomeSections = (arrangement: HomeArrangement): HomeSectionId[] =>
-  DEFAULT_HOME_ARRANGEMENT.filter((id) => !arrangement.includes(id));
+  DEFAULT_SECTIONS.filter((id) => !arrangement.sections.includes(id));
+
+/** Missing row metadata predates editable rows. Unknown ids and duplicates are discarded. */
+const parseDiscoverRows = (value: unknown): readonly DiscoverRowId[] => {
+  if (typeof value !== "object" || value === null) return DEFAULT_DISCOVER_ROWS;
+  const { shown, hidden } = value as { shown?: unknown; hidden?: unknown };
+  if (!Array.isArray(shown)) return DEFAULT_DISCOVER_ROWS;
+  const knownRows = (values: readonly unknown[]) => [
+    ...new Set(
+      values.filter((candidate): candidate is DiscoverRowId =>
+        DISCOVER_ROWS.some(({ id }) => id === candidate),
+      ),
+    ),
+  ];
+  const rows = knownRows(shown);
+  const known = new Set([...rows, ...knownRows(Array.isArray(hidden) ? hidden : [])]);
+  for (const id of DEFAULT_DISCOVER_ROWS) {
+    if (known.has(id)) continue;
+    const before = DEFAULT_DISCOVER_ROWS.slice(0, DEFAULT_DISCOVER_ROWS.indexOf(id)).findLast(
+      (earlier) => rows.includes(earlier),
+    );
+    rows.splice(before === undefined ? 0 : rows.indexOf(before) + 1, 0, id);
+  }
+  return rows.length === 0 ? DEFAULT_DISCOVER_ROWS : rows;
+};
