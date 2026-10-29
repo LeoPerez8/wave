@@ -491,6 +491,7 @@ export {
   LAUNCHER_ICON_RADIUS,
   MANIFEST_LAUNCHER_ICON,
   launcherIconFor,
+  launcherIconOnStart,
   launcherIconSwitch,
   isDefaultThemeState,
   resolveThemeChange,
@@ -501,6 +502,7 @@ export type {
   LauncherBehaviour,
   LauncherIcon,
   LauncherIconSwitch,
+  StartingIconState,
   ThemeState,
 } from "./launcherIcon.ts";
 export { LAUNCH_SPLASH_THEMES, launchTheme, paletteSplashThemeFor } from "./launchTheme.ts";

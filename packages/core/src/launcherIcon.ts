@@ -96,6 +96,40 @@ export const launcherIconFor = (choice: ThemeChoice): LauncherIcon => {
   return LAUNCHER_ICONS.find((icon) => icon.id === id)!;
 };
 
+/** What this phone holds when Wave starts, for `launcherIconOnStart`. */
+export interface StartingIconState {
+  /** The stored launcher icon's id (`settings.launcherIcon`); null when none is. */
+  readonly storedIcon: string | null;
+  /**
+   * The id of the icon whose alias an earlier Wave last left on (the native
+   * switcher's record), whatever build wrote it; null when none did.
+   */
+  readonly appliedIcon: string | null;
+  /** Whether an earlier Wave saved a launch theme natively, as it did on every start. */
+  readonly launchThemeSaved: boolean;
+  /** The theme choice Wave starts with. */
+  readonly choice: ThemeChoice;
+}
+
+const iconById = (id: string | null): LauncherIcon | undefined =>
+  LAUNCHER_ICONS.find((icon) => icon.id === id);
+
+/**
+ * This phone's icon when Wave starts: the stored one; on the update that
+ * brought the stored icon, the one the phone shows (the alias the earlier
+ * Wave left on, else the manifest's), since the colours' icon may have moved
+ * with this Wave's matching and switching would drop it from the home
+ * screen; on a fresh install, the one its colours give.
+ */
+export const launcherIconOnStart = ({
+  storedIcon,
+  appliedIcon,
+  launchThemeSaved,
+  choice,
+}: StartingIconState): LauncherIcon =>
+  iconById(storedIcon) ??
+  (launchThemeSaved ? (iconById(appliedIcon) ?? MANIFEST_LAUNCHER_ICON) : launcherIconFor(choice));
+
 /** What the launcher does when Wave switches icons. */
 export interface LauncherBehaviour {
   /** It removes Wave's icon from the home screen (the app drawer gets the new one). */

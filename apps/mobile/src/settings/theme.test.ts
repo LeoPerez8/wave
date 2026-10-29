@@ -10,10 +10,14 @@ let fixtureId = 0;
 /**
  * Loads the settings on a phone holding `stored`. `launchThemeSaved`: an
  * earlier Wave ran here and saved its launch theme natively (an update).
+ * `appliedAlias`: the launcher alias an earlier Wave last left on.
  */
 const loadTheme = async (
   stored: Record<string, string> = {},
-  { launchThemeSaved = false } = {},
+  {
+    launchThemeSaved = false,
+    appliedAlias = null,
+  }: { launchThemeSaved?: boolean; appliedAlias?: string | null } = {},
 ) => {
   const id = ++fixtureId;
   const boundary = `data:text/javascript,${encodeURIComponent(`
@@ -34,6 +38,7 @@ const loadTheme = async (
       setLauncherIcon: async alias => { device.alias = alias; },
       setLaunchTheme: async theme => { device.launch = theme; },
       hasLaunchTheme: () => ${launchThemeSaved},
+      appliedLauncherAlias: () => ${JSON.stringify(appliedAlias)},
     };
     export const WavePlayer = { setNotificationAccent: async () => {} };
     export const AppState = { addEventListener: () => ({ remove: () => {} }) };
@@ -368,4 +373,25 @@ test("reset keeps the saved colours", async () => {
   const stored = JSON.parse(Storage.getItemSync("settings.theme")!);
   assert.deepEqual([stored.primary, stored.customPrimary], ["white", null]);
   assert.deepEqual([stored.savedPrimary, stored.savedSecondary], [["#f08cb0"], ["#7cc4ea"]]);
+});
+
+test("an update keeps the icon the earlier Wave left on, where this Wave would match another", async () => {
+  // 0.36.2-ti matched this cream primary to gold; this Wave's matching takes white.
+  const stored = {
+    "settings.theme": JSON.stringify({
+      ...DEFAULT_THEME_CHOICE,
+      primary: "custom",
+      customPrimary: "#fcddb8",
+      secondary: "ember",
+    }),
+  };
+  const updated = await loadTheme(stored, {
+    launchThemeSaved: true,
+    appliedAlias: "LauncherIcon_gold_ember",
+  });
+  assert.equal(updated.device.alias, "LauncherIcon_gold_ember");
+  assert.equal(updated.Storage.getItemSync("settings.launcherIcon"), "gold_ember");
+  // A fresh install with those colours (pulled, say) takes the icon they give.
+  const fresh = await loadTheme(stored);
+  assert.equal(fresh.device.alias, "LauncherIcon_white_ember");
 });
