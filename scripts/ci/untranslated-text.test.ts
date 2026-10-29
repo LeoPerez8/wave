@@ -33,6 +33,7 @@ test("ignores catalogue reads, brands, symbols, logs, errors, tests and explicit
     "apps/mobile/src/example.test.tsx",
     "packages/core/src/catalogueEn.ts",
     "packages/core/src/cataloguePtBr.ts",
+    "packages/core/src/catalogue/homePtBr.ts",
   ])
     assert.deepEqual(findUntranslatedText(file, fixture("visible.tsx")), []);
   assert.equal(

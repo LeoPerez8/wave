@@ -7,6 +7,7 @@ import {
   songLinkView,
   songShareDestinations,
   SONG_LINKS_LOADING,
+  type Catalogue,
   type LyricStoryBackground,
   type SongLinkOption,
   type SongLinksState,
@@ -44,11 +45,11 @@ const PREVIEW_RADIUS = CELL * 2;
 /** The card's file name, stamped now. */
 const cardFileName = (title: string): string => songCardFileName(title, new Date());
 
-const LINK_LABELS: Record<SongLinkOption, string> = {
-  get copyLink() { return currentLocalisation().strings.home.copyLink; },
+const linkLabels = (strings: Catalogue): Record<SongLinkOption, string> => ({
+  copyLink: strings.share.copyLink,
   spotify: "Spotify",
   ytMusic: "YT Music",
-};
+});
 
 const LINK_ICONS: Record<SongLinkOption, ShareDestination["icon"]> = {
   copyLink: IconLink,
@@ -58,12 +59,13 @@ const LINK_ICONS: Record<SongLinkOption, ShareDestination["icon"]> = {
 
 /** Copies [url] (song.link's page) and says so. */
 const copyLink = async (url: string): Promise<void> => {
+  const { strings } = currentLocalisation();
   try {
-    await WaveNative.writeClipboardText(currentLocalisation().strings.home.songLink, url);
-    void showToast(currentLocalisation().strings.home.linkCopied);
+    await WaveNative.writeClipboardText(strings.share.songLink, url);
+    void showToast(strings.share.linkCopied);
   } catch (error) {
     appLog("warn", LOG_TAG, `Couldn't copy the song's link: ${String(error)}`);
-    void showToast(currentLocalisation().strings.home.couldnTCopyTheLink);
+    void showToast(strings.share.copyFailed);
   }
 };
 
@@ -73,14 +75,18 @@ const shareLink = async (url: string, title: string): Promise<void> => {
     await Share.share({ message: url, title });
   } catch (error) {
     appLog("warn", LOG_TAG, `Couldn't share the song's link: ${String(error)}`);
-    void showToast(currentLocalisation().strings.home.couldnTShareTheLink);
+    void showToast(currentLocalisation().strings.share.linkShareFailed);
   }
 };
 
 /** The link [option] as a destination while the song's links are [state] (Core's `songLinkView`). */
-const linkDestination = (option: SongLinkOption, state: SongLinksState): ShareDestination => {
-  const { url, loading, note } = songLinkView(option, state);
-  const label = LINK_LABELS[option];
+const linkDestination = (
+  option: SongLinkOption,
+  state: SongLinksState,
+  strings: Catalogue,
+): ShareDestination => {
+  const { url, loading, note } = songLinkView(option, state, strings);
+  const label = linkLabels(strings)[option];
   return {
     key: option,
     label,
@@ -120,8 +126,7 @@ function StoryGround({
  * it. Close (or Back) closes it.
  */
 export function SongSharePreview({ content }: { content: SongShareContent }) {
- const localisation = useLocalisation();
-
+  const { strings } = useLocalisation();
   const colours = useMemo(() => songCardColours(content.palette), [content.palette]);
   // A cover still loading would be missing from the image.
   const [loaded, setLoaded] = useState<string | undefined>(undefined);
@@ -144,7 +149,7 @@ export function SongSharePreview({ content }: { content: SongShareContent }) {
     source: card,
     fileName: () => cardFileName(content.title),
     what: "the song",
-    sheetTitle: localisation.strings.home.shareSong,
+    sheetTitle: strings.share.shareSong,
     logTag: LOG_TAG,
     storyBackground: colours.story,
     prepare: (destination) =>
@@ -153,7 +158,7 @@ export function SongSharePreview({ content }: { content: SongShareContent }) {
   });
   const destinations = songShareDestinations(share.apps, { links: links !== null }).map((key) =>
     key === "copyLink" || key === "spotify" || key === "ytMusic"
-      ? linkDestination(key, links ?? SONG_LINKS_LOADING)
+      ? linkDestination(key, links ?? SONG_LINKS_LOADING, strings)
       : share.image[key],
   );
 

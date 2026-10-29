@@ -1,7 +1,13 @@
+import { homeEn } from "./catalogue/homeEn.ts";
+import { arrangementEn } from "./catalogue/arrangementEn.ts";
+import { discoverEn } from "./catalogue/discoverEn.ts";
+import { statsEn } from "./catalogue/statsEn.ts";
+import { recapEn } from "./catalogue/recapEn.ts";
+import { listeningHistoryEn } from "./catalogue/listeningHistoryEn.ts";
+import { shareEn } from "./catalogue/shareEn.ts";
 import { downloadNoticeEn } from "./catalogue/downloadNoticeEn.ts";
 import { nativeEn } from "./catalogue/nativeEn.ts";
 import { autoEn } from "./catalogue/autoEn.ts";
-import { homeEn } from "./catalogue/homeEn.ts";
 /**
  * Wave's interface text in English: the shape every other catalogue must fill
  * (`Catalogue`), so a phrase missing from one fails the type check. Group
@@ -16,6 +22,12 @@ export const en = {
   native: nativeEn,
   auto: autoEn,
   home: homeEn,
+  arrangement: arrangementEn,
+  discover: discoverEn,
+  stats: statsEn,
+  recap: recapEn,
+  listeningHistory: listeningHistoryEn,
+  share: shareEn,
   /** Each tab's name, in the tab bar, its editor and TalkBack. */
   tabs: {
     index: "Home",

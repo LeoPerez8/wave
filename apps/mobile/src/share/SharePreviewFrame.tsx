@@ -27,8 +27,7 @@ export function SharePreviewFrame({
   renderPreview: (area: PreviewArea) => ReactNode;
   children: ReactNode;
 }) {
- const localisation = useLocalisation();
-
+  const { strings } = useLocalisation();
   const insets = useSafeAreaInsets();
   const [area, setArea] = useState<PreviewArea | null>(null);
   const preview = useRef<ComponentRef<typeof View>>(null);
@@ -41,7 +40,7 @@ export function SharePreviewFrame({
     <View
       ref={preview}
       accessibilityViewIsModal
-      accessibilityLabel={localisation.strings.home.sharePreview}
+      accessibilityLabel={strings.share.preview}
       className="bg-background"
       style={[
         StyleSheet.absoluteFill,
@@ -52,7 +51,7 @@ export function SharePreviewFrame({
         className="flex-row items-center"
         style={{ height: CELL * 7, paddingHorizontal: grid.margin - 12 }}
       >
-        <IconButton icon={IconX} label={localisation.strings.home.close} onPress={onClose} />
+        <IconButton icon={IconX} label={strings.share.close} onPress={onClose} />
       </View>
       <View
         className="flex-1 items-center justify-center"

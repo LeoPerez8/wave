@@ -1,3 +1,4 @@
+import { en } from "./catalogueEn.ts";
 import { catalogueOf, type AppLanguage } from "./localisation.ts";
 import { formatNumber } from "./formatting.ts";
 /**
@@ -115,28 +116,29 @@ export type StatsFacts = readonly {
 export const counted = (count: number, singular: string, plural = `${singular}s`): string =>
   `${count.toLocaleString("en")} ${count === 1 ? singular : plural}`;
 
-/** Home's fact labels in display order, also used by the loading placeholder. */
-export const STATS_FACT_LABELS = [
-  "Time listened",
-  "Plays",
-  "Songs listened",
-  "Songs",
-  "Albums",
-  "Artists",
-] as const;
+/** Home's facts in display order. */
+const FACTS = ["timeListened", "plays", "songsListened", "songs", "albums", "artists"] as const;
 
-/** Home's facts, listening first and then the library. */
-export const statsFacts = (library: LibraryTotals, listening: ListeningTotals, language: AppLanguage = "en"): StatsFacts => {
-  const values: Record<(typeof STATS_FACT_LABELS)[number], string> = {
-    "Time listened":
+/** Home's fact labels in English, in display order, also used by the loading placeholder. */
+export const STATS_FACT_LABELS: readonly string[] = FACTS.map((fact) => en.stats.facts[fact]);
+
+/** Home's facts, listening first and then the library, in [language]. */
+export const statsFacts = (
+  library: LibraryTotals,
+  listening: ListeningTotals,
+  language: AppLanguage = "en",
+): StatsFacts => {
+  const values: Record<(typeof FACTS)[number], string> = {
+    timeListened:
       listening.minutesListened < 60
-        ? `${listening.minutesListened} min`
+        ? `${formatNumber(language, listening.minutesListened)} min`
         : `${formatNumber(language, Math.floor(listening.minutesListened / 60))} h`,
-    Plays: formatNumber(language, listening.plays),
-    "Songs listened": formatNumber(language, listening.songsListened),
-    Songs: formatNumber(language, library.songs),
-    Albums: formatNumber(language, library.albums),
-    Artists: formatNumber(language, library.artists),
+    plays: formatNumber(language, listening.plays),
+    songsListened: formatNumber(language, listening.songsListened),
+    songs: formatNumber(language, library.songs),
+    albums: formatNumber(language, library.albums),
+    artists: formatNumber(language, library.artists),
   };
-  return STATS_FACT_LABELS.map((label) => ({ label: catalogueOf(language).home.factLabels[STATS_FACT_LABELS.indexOf(label)]!, value: values[label] }));
+  const labels = catalogueOf(language).stats.facts;
+  return FACTS.map((fact) => ({ label: labels[fact], value: values[fact] }));
 };

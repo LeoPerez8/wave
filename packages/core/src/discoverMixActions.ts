@@ -10,11 +10,10 @@ import type { YtAlbumDownload, YtAlbumDownloadAction } from "./ytSongsDownload.t
 export type DiscoverMixAction =
   "playNext" | "addToQueue" | "saveAsPlaylist" | YtAlbumDownloadAction;
 
-
 /** The mix's menu, following the same download batch as its page. */
 export const discoverMixActions = (
   download: Pick<YtAlbumDownload, "actions">,
-  catalogue: Catalogue = en,
+  strings: Catalogue = en,
 ): { readonly action: DiscoverMixAction; readonly label: string }[] => {
   const actions: DiscoverMixAction[] = [
     "playNext",
@@ -22,18 +21,20 @@ export const discoverMixActions = (
     "saveAsPlaylist",
     ...download.actions,
   ];
-  return actions.map((action) => ({ action, label: ({ playNext: catalogue.home.playNext, addToQueue: catalogue.home.addToQueue, saveAsPlaylist: catalogue.home.saveAsPlaylist, downloadAlbum: catalogue.home.downloadMix, cancelAlbumDownload: catalogue.home.cancelDownload, retryFailed: catalogue.home.retryFailed })[action] }));
+  return actions.map((action) => ({ action, label: strings.discover.actions[action] }));
 };
 
 /**
  * A one-time playlist copy of the mix as the owner's level blends it, in its
  * order: its Library songs as Library entries, its new ones as YT Music entries.
+ * It's named in [strings]' language, the app's when it's saved, and keeps
+ * that name.
  */
 export const discoverMixPlaylist = (
   mix: BlendedDiscoverMix,
-  catalogue: Catalogue = en,
+  strings: Catalogue = en,
 ): { readonly name: string; readonly songs: readonly PlaylistSong<YtAlbumSong>[] } => ({
-  name: importedPlaylistName(discoverMixCaption(mix, catalogue).title),
+  name: importedPlaylistName(discoverMixCaption(mix, strings).title),
   songs: mix.songs.map((song) =>
     song.source === "stream"
       ? { source: "stream", song: song.song }

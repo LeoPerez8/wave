@@ -1,4 +1,4 @@
-import { en, type Catalogue } from "./catalogueEn.ts";
+import { en } from "./catalogueEn.ts";
 /**
  * The Stats rankings and their "See all" lists: which rankings exist, and
  * reading a See all route back into a ranking and a period.
@@ -12,11 +12,10 @@ export type StatsRanking = "songs" | "albums" | "artists";
 export const STATS_RANKINGS: readonly {
   readonly id: StatsRanking;
   readonly title: string;
-}[] = [
-  { id: "songs", title: en.home.topSongs },
-  { id: "albums", title: en.home.topAlbums },
-  { id: "artists", title: en.home.topArtists },
-];
+}[] = (["songs", "albums", "artists"] as const).map((id) => ({
+  id,
+  title: en.stats.rankings[id],
+}));
 
 /** A See all list: one ranking over one period. */
 export interface StatsSeeAll {
@@ -42,9 +41,3 @@ export const statsSeeAll = (ranking: Param, period: Param): StatsSeeAll | undefi
     ? undefined
     : { ranking: foundRanking.id, period: foundPeriod.id };
 };
-
-export const statsRankings = (catalogue: Catalogue = en): typeof STATS_RANKINGS => [
-  { id: "songs", title: catalogue.home.topSongs },
-  { id: "albums", title: catalogue.home.topAlbums },
-  { id: "artists", title: catalogue.home.topArtists },
-];

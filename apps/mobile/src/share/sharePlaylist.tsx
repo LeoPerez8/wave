@@ -301,8 +301,6 @@ interface ShareTarget {
   /** The account's playlists, as sharing the Wave playlist [id] changes them. */
   readonly playlists: (id: number) => SharedPlaylistService;
   readonly url: (playlistId: string) => string;
-  /** What sharing says when none of the songs are on the service. */
-  readonly nothingFound: string;
   /** Why sharing stopped, from what the service failed with; null for anything else. */
   readonly failure: (error: unknown) => SharePlaylistFailure | null;
 }
@@ -314,7 +312,6 @@ const TARGETS: Record<PlaylistShareService, ShareTarget> = {
     match: matchOnYtMusic,
     playlists: ytMusicPlaylists,
     url: ytMusicPlaylistUrl,
-    get nothingFound() { return currentLocalisation().strings.home.noneOfThePlaylistSSongsAreOnYoutubeMusic; },
     failure: ytMusicFailure,
   },
   spotify: {
@@ -323,7 +320,6 @@ const TARGETS: Record<PlaylistShareService, ShareTarget> = {
     match: matchOnSpotify,
     playlists: spotifyPlaylists,
     url: spotifyPlaylistUrl,
-    get nothingFound() { return currentLocalisation().strings.home.noneOfThePlaylistSSongsAreOnSpotify; },
     failure: spotifyFailure,
   },
 };
@@ -332,7 +328,9 @@ const TARGETS: Record<PlaylistShareService, ShareTarget> = {
 const ensureSignedIn = async (service: PlaylistShareService): Promise<boolean> => {
   const { signedIn, signIn } = TARGETS[service];
   if (await signedIn()) return true;
-  if (!(await confirmAction(shareSignInAlert(service)))) return false;
+  if (!(await confirmAction(shareSignInAlert(service, currentLocalisation().strings)))) {
+    return false;
+  }
   return signIn();
 };
 
@@ -340,7 +338,9 @@ const ensureSignedIn = async (service: PlaylistShareService): Promise<boolean> =
 const failureMessage = (service: PlaylistShareService, error: unknown): string => {
   const failure =
     error instanceof SearchFailed ? "noSearchAnswer" : TARGETS[service].failure(error);
-  if (failure !== null) return sharePlaylistFailureLine(service, failure);
+  if (failure !== null) {
+    return sharePlaylistFailureLine(service, failure, currentLocalisation().strings);
+  }
   return error instanceof Error ? error.message : String(error);
 };
 
@@ -355,11 +355,12 @@ const sharePlaylistOn = async (
 ): Promise<void> => {
   if (!(await ensureSignedIn(service))) return;
   const target = TARGETS[service];
-  void showToast(currentLocalisation().strings.home.sharingPlaylist(playlist.name, PLAYLIST_SHARE_LABELS[service]));
+  const { strings } = currentLocalisation();
+  void showToast(strings.share.sharing(playlist.name, PLAYLIST_SHARE_LABELS[service]));
   try {
     const shared = await target.match(playlist.id);
     if (shared.ids.length === 0) {
-      await showMessage(currentLocalisation().strings.home.nothingToShare, target.nothingFound);
+      await showMessage(strings.share.nothingToShare, strings.share.nothingFound[service]);
       return;
     }
     const playlistId = await syncSharedPlaylist(
@@ -367,10 +368,10 @@ const sharePlaylistOn = async (
       playlist.name,
       shared.ids,
     );
-    void showToast(sharedSongsLine(shared));
+    void showToast(sharedSongsLine(shared, strings));
     await Share.share({ message: target.url(playlistId), title: playlist.name });
   } catch (error) {
-    await showError("Couldn't share the playlist", new Error(failureMessage(service, error)));
+    await showError(strings.share.shareFailed, new Error(failureMessage(service, error)));
   }
 };
 
@@ -382,8 +383,7 @@ function ShareMenu({
   services: readonly PlaylistShareService[];
   choose: (service: PlaylistShareService) => void;
 }) {
- const localisation = useLocalisation();
-
+  const { strings } = useLocalisation();
   const flow = useOverlayFlow();
   return (
     <>
@@ -392,7 +392,8 @@ function ShareMenu({
         className="font-sans text-body font-medium text-foreground"
         style={{ paddingBottom: CELL * 1.5 }}
       >
-        {localisation.strings.home.share}</Text>
+        {strings.share.share}
+      </Text>
       <Hairline />
       <CardEntries>
         {services.map((service, index) => (
@@ -416,7 +417,7 @@ function ShareMenu({
 export const openSharePlaylist = (playlist: NamedPlaylist): void => {
   const services = playlistShareServices({ ytMusic: ytMusicEnabled() });
   openOverlay({
-    get label() { return currentLocalisation().strings.home.share; },
+    label: currentLocalisation().strings.share.share,
     anchor: pressedRect(),
     render: (close) => (
       <ShareMenu

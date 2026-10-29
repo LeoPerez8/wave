@@ -7,7 +7,6 @@ import {
   createRecapAvailability,
   rankSongPlays,
   recap,
-  recapTitle,
   recapId,
   recapSlides,
   recapWindow,
@@ -156,7 +155,7 @@ const loadRecap = (
     const slides = yield* Effect.forEach(recapSlides(computed), (slide) =>
       loadSlide(store, rows, slide),
     );
-    return { period, title: recapTitle(period, currentLocalisation().strings), slides: slides.flat() };
+    return { period, title: computed.title, slides: slides.flat() };
   });
 
 /** Stories retain only the requested period, quarter sums unchanged; source reads still yield. */

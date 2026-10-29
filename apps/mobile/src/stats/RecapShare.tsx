@@ -40,8 +40,7 @@ function RecapImage({
   onLayout: () => void;
   children: ReactNode;
 }) {
-const localisation = useLocalisation();
-
+  const { strings } = useLocalisation();
   const unit = width / 100;
   const ink = useThemeColor("on-recap");
   return (
@@ -59,7 +58,7 @@ const localisation = useLocalisation();
       }}
     >
       <Text numberOfLines={1} className="font-sans text-subheadline font-semibold text-on-recap">
-        {title} · {localisation.strings.home.recap}
+        {title} · {strings.recap.recap}
       </Text>
       <View className="flex-1" style={{ paddingVertical: CELL * 2 }}>
         {children}
@@ -97,8 +96,7 @@ export function RecapSharePreview({
   /** The slide to share. */
   children: ReactNode;
 }) {
- const localisation = useLocalisation();
-
+  const { strings } = useLocalisation();
   const image: ImageSource = useRef(null);
   // The slide's images report in: the image waits for every one of them.
   const [pending, setPending] = useState(0);
@@ -122,7 +120,7 @@ export function RecapSharePreview({
     source: image,
     fileName: () => recapCardFileName(title, new Date()),
     what: "the Recap slide",
-    sheetTitle: localisation.strings.home.shareRecap,
+    sheetTitle: strings.share.shareRecap,
     logTag: LOG_TAG,
     storyBackground: recapStoryBackground(colour),
   });
@@ -139,7 +137,7 @@ export function RecapSharePreview({
           <View
             accessible
             accessibilityRole="image"
-            accessibilityLabel={localisation.strings.home.recapSlide(title)}
+            accessibilityLabel={strings.share.recapSlide(title)}
             style={{
               width: fitted,
               height: fitted * EXPORT_ASPECT,

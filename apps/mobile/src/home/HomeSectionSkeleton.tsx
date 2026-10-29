@@ -23,8 +23,7 @@ import { useHomeArrangement } from "./homeArrangement";
 import { homePlaceholderHeight } from "./homeOpening";
 
 function DiscoverSkeleton() {
-const localisation = useLocalisation();
-
+  const { strings } = useLocalisation();
   const enabled = useYtMusicEnabled();
   const { discoverRows } = useHomeArrangement();
   return (
@@ -35,7 +34,7 @@ const localisation = useLocalisation();
           .map((id) => (
             <View key={id} style={{ gap: CELL }}>
               <Text className="font-sans text-footnote font-medium text-secondary">
-                {discoverRowTitle(id, localisation.strings)}
+                {discoverRowTitle(id, strings)}
               </Text>
               <DiscoverMixesSkeleton />
             </View>
@@ -53,7 +52,7 @@ export function HomeSectionSkeleton({ id }: { id: HomeSectionId }) {
   return (
     <TitledSection
       title={homeSectionTitle(id, strings)}
-      {...(id === "stats" ? { action: statsSeeAllAction } : {})}
+      {...(id === "stats" ? { action: statsSeeAllAction(strings) } : {})}
     >
       <View style={{ minHeight: homePlaceholderHeight(id, fontScale) }}>
         {id === "discover" ? (
@@ -61,7 +60,7 @@ export function HomeSectionSkeleton({ id }: { id: HomeSectionId }) {
         ) : songs ? (
           <TrackSkeletons count={10} leading="card" />
         ) : id === "stats" ? (
-          <SkeletonGroup label={localisation.strings.home.loadingStats}>
+          <SkeletonGroup label={strings.home.loadingStats}>
             {STATS_FACT_LABELS.map((label, index) => (
               <Fragment key={label}>
                 {index > 0 && <Hairline />}
@@ -77,7 +76,7 @@ export function HomeSectionSkeleton({ id }: { id: HomeSectionId }) {
             ))}
           </SkeletonGroup>
         ) : (
-          <SkeletonGroup label={artists ? localisation.strings.home.loadingArtists : localisation.strings.home.loadingAlbums}>
+          <SkeletonGroup label={artists ? strings.home.loadingArtists : strings.home.loadingAlbums}>
             <CoverRow>
               {Array.from({ length: 3 }, (_, index) =>
                 artists ? (

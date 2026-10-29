@@ -1,10 +1,6 @@
 import { useLocalisation } from "@/localisation/localisation";
 import { IconAdjustmentsHorizontal } from "@tabler/icons-react-native";
-import {
-  discoverLevelLabel,
-  sliderStep,
-  type SliderRange,
-} from "@wave/core";
+import { discoverLevelLabel, sliderStep, type SliderRange } from "@wave/core";
 import { ScrollView, Text, View } from "react-native";
 
 import { CELL } from "@/catalog/grid";
@@ -25,9 +21,6 @@ import {
 /** Every slider of the card: five steps, from its left end to its right one. */
 const STEPS: SliderRange = { min: 1, max: 5, step: 1 };
 
-/** The card's title: Discover's, as Home heads the section. */
-
-
 /**
  * Discover's level card: three sliders for the Magic Queue, Artist mixes
  * and Genre mixes alike, applied as they move. New music (each step's name
@@ -37,8 +30,7 @@ const STEPS: SliderRange = { min: 1, max: 5, step: 1 };
  * and a drag both show at once.
  */
 function DiscoverCard() {
- const localisation = useLocalisation();
-
+  const { strings } = useLocalisation();
   const level = useDiscoverLevel();
   const sliders = useDiscoverSliders();
   return (
@@ -48,36 +40,37 @@ function DiscoverCard() {
         className="font-sans text-body font-medium text-foreground"
         style={{ paddingBottom: CELL * 1.5 }}
       >
-        {localisation.strings.home.discover}
+        {strings.home.sections.discover}
       </Text>
       <Hairline />
       <View className="pb-1">
         <SettingsSlider
           compact
-          label={localisation.strings.home.newMusic}
+          label={strings.discover.newMusic}
           value={level}
           range={STEPS}
-          format={(value) => discoverLevelLabel(sliderStep(value), localisation.strings)}
+          format={(value) => discoverLevelLabel(sliderStep(value), strings)}
           onChange={(value) => setDiscoverLevel(sliderStep(value))}
         />
         <SettingsSlider
           compact
-          label={localisation.strings.home.genreFaithfulness}
+          label={strings.discover.genreFaithfulness}
           value={sliders.faithfulness}
           range={STEPS}
-          format={(value) => [localisation.strings.home.sameGenres, localisation.strings.home.closeGenres, localisation.strings.home.balanced, localisation.strings.home.neighbours, localisation.strings.home.wander][sliderStep(value) - 1]!}
+          format={(value) => strings.discover.faithfulnessSteps[sliderStep(value)]}
           onChange={(value) =>
             setDiscoverSliders({ ...discoverSlidersNow(), faithfulness: sliderStep(value) })
           }
         />
         <Text className="px-3 pb-2 font-sans text-footnote text-secondary">
-          {localisation.strings.home.sameGenresExcludesKnownUnrelatedGenresCloseBalancedAndNeighboursLowerThemLessAtEachStepWanderIgnoresGenreUnknownGenresAlwaysStay}</Text>
+          {strings.discover.faithfulnessNote}
+        </Text>
         <SettingsSlider
           compact
-          label={localisation.strings.home.popularity}
+          label={strings.discover.popularity}
           value={sliders.popularity}
           range={STEPS}
-          format={(value) => [localisation.strings.home.hits, localisation.strings.home.popular, localisation.strings.home.balanced, localisation.strings.home.lesserKnown, localisation.strings.home.deepCuts][sliderStep(value) - 1]!}
+          format={(value) => strings.discover.popularitySteps[sliderStep(value)]}
           onChange={(value) =>
             setDiscoverSliders({ ...discoverSlidersNow(), popularity: sliderStep(value) })
           }
@@ -97,16 +90,19 @@ function DiscoverCard() {
  * says it needs YT Music.
  */
 export function DiscoverSettingsButton({ ytMusic }: { ytMusic: boolean }) {
- const localisation = useLocalisation();
-
+  const { strings } = useLocalisation();
   return (
     <IconButton
       icon={IconAdjustmentsHorizontal}
-      label={ytMusic ? localisation.strings.home.discoverSettings : localisation.strings.home.discoverSettingsNeedsYtMusic}
+      label={ytMusic ? strings.discover.settings : strings.discover.settingsNeedsYtMusic}
       opensMenu
       disabled={!ytMusic}
       onPress={() => {
-        openOverlay({ label: localisation.strings.home.discover, anchor: pressedRect(), render: () => <DiscoverCard /> });
+        openOverlay({
+          label: strings.home.sections.discover,
+          anchor: pressedRect(),
+          render: () => <DiscoverCard />,
+        });
       }}
     />
   );

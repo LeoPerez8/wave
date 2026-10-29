@@ -1,13 +1,6 @@
-import { useLocalisation } from "@/localisation/localisation";
 import { useScreenContent } from "@/lib/screenTiming";
 import { IconChartBar } from "@tabler/icons-react-native";
-import {
-  statsRankings,
-  STATS_SEE_ALL,
-  statsSeeAll,
-  type StatsPeriod,
-  type StatsSeeAll,
-} from "@wave/core";
+import { STATS_SEE_ALL, statsSeeAll, type StatsPeriod, type StatsSeeAll } from "@wave/core";
 import { useLocalSearchParams } from "expo-router";
 import { View } from "react-native";
 
@@ -16,10 +9,10 @@ import { CELL, grid } from "@/catalog/grid";
 import { TrackSkeletons } from "@/catalog/Skeletons";
 import { EmptyState } from "@/components/EmptyState";
 import { ScreenHeader } from "@/components/ScreenHeader";
+import { useLocalisation } from "@/localisation/localisation";
 import { useTopAlbums, useTopArtists, useTopSongs } from "@/stats/hooks";
 import {
   NothingPlayed,
-  periodLabel,
   RankedAlbumList,
   RankedArtistList,
   RankedSongList,
@@ -27,9 +20,10 @@ import {
 
 /** The list's opening: the period it covers. */
 function PeriodLine({ period }: { period: StatsPeriod }) {
+  const { strings } = useLocalisation();
   return (
     <View style={{ paddingBottom: CELL }}>
-      <CatalogLine>{periodLabel(period)}</CatalogLine>
+      <CatalogLine>{strings.stats.periods[period].label}</CatalogLine>
     </View>
   );
 }
@@ -43,11 +37,10 @@ function NothingPlayedHere({ period }: { period: StatsPeriod }) {
 }
 
 function LoadingRanking() {
- const localisation = useLocalisation();
-
+  const { strings } = useLocalisation();
   return (
     <View style={{ paddingHorizontal: grid.margin }}>
-      <TrackSkeletons label={localisation.strings.home.loadingRanking} />
+      <TrackSkeletons label={strings.stats.loadingRanking} />
     </View>
   );
 }
@@ -80,8 +73,7 @@ function AllTopArtists({ period }: { period: StatsPeriod }) {
 
 /** One ranking's full list; a ranking without one yet shows the "gone" state. */
 function SeeAllList({ seeAll }: { seeAll: StatsSeeAll | undefined }) {
- const localisation = useLocalisation();
-
+  const { strings } = useLocalisation();
   switch (seeAll?.ranking) {
     case "songs":
       return <AllTopSongs period={seeAll.period} />;
@@ -94,8 +86,8 @@ function SeeAllList({ seeAll }: { seeAll: StatsSeeAll | undefined }) {
         <View style={{ paddingHorizontal: grid.margin }}>
           <EmptyState
             icon={IconChartBar}
-            title={localisation.strings.home.nothingHere}
-            message={localisation.strings.home.thisRankingDoesnTExist}
+            title={strings.stats.rankingGoneTitle}
+            message={strings.stats.rankingGoneMessage}
           />
         </View>
       );
@@ -104,14 +96,18 @@ function SeeAllList({ seeAll }: { seeAll: StatsSeeAll | undefined }) {
 
 /** Stats › See all: up to 100 entries of one ranking, for the period selected on Stats. */
 export default function StatsSeeAllScreen() {
- const localisation = useLocalisation();
-
+  const { strings } = useLocalisation();
   const params = useLocalSearchParams<{ ranking: string; period: string }>();
   const seeAll = statsSeeAll(params.ranking, params.period);
-  const title = statsRankings(localisation.strings).find((ranking) => ranking.id === seeAll?.ranking)?.title;
   return (
     <View className="flex-1 bg-background">
-      <ScreenHeader title={title ?? localisation.strings.home.stats} />
+      <ScreenHeader
+        title={
+          seeAll === undefined
+            ? strings.home.sections.stats
+            : strings.stats.rankings[seeAll.ranking]
+        }
+      />
       <SeeAllList seeAll={seeAll} />
     </View>
   );

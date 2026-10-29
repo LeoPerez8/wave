@@ -26,8 +26,7 @@ export function ArtistStatsBlock({
   /** The artist's songs on the page; the block is read again when they change. */
   songs: readonly SongRow[];
 }) {
- const localisation = useLocalisation();
-
+  const { strings } = useLocalisation();
   useRenderCount("ArtistStatsBlock");
   const stats = useArtistStats(artistId, songs);
   const context = useMemo(() => ({ kind: "stats", id: `artist-${artistId}` }), [artistId]);
@@ -42,18 +41,20 @@ export function ArtistStatsBlock({
   if (stats === undefined) return null;
   return (
     <View>
-      <TitledSection title={localisation.strings.home.stats}>
+      <TitledSection title={strings.home.sections.stats}>
         {stats.played ? (
           <View style={{ gap: CELL / 2 }}>
             <TotalsLine totals={[stats.plays, stats.minutesListened, stats.songsListened]} />
             <Text className="font-sans text-subheadline text-secondary">{stats.lastPlayed}</Text>
           </View>
         ) : (
-          <Text className="font-sans text-subheadline text-secondary">{localisation.strings.home.notPlayedYet}</Text>
+          <Text className="font-sans text-subheadline text-secondary">
+            {strings.stats.notPlayedYet}
+          </Text>
         )}
       </TitledSection>
       {stats.played && stats.mostPlayed.length > 0 && (
-        <TitledSection title={localisation.strings.home.mostPlayed}>
+        <TitledSection title={strings.stats.mostPlayed}>
           <RankedSongs ranking={stats.mostPlayed} context={context} />
         </TitledSection>
       )}

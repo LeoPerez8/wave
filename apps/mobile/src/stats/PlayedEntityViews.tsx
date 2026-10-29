@@ -15,6 +15,7 @@ import { NameRow } from "@/catalog/NameRow";
 import type { PlayedAlbum, PlayedArtist, OnlineAlbum } from "@/library/db/playedEntities";
 import { openAlbum, openArtist } from "@/library/routes";
 import { appRuntime } from "@/library/runtime";
+import { currentLocalisation } from "@/localisation/localisation";
 import { showMessage } from "@/overlay/alert";
 import { openAlbumActions, openArtistActions } from "@/playback/ActionsMenu";
 import { ArtworkRow } from "@/search/ArtworkRow";
@@ -36,10 +37,13 @@ const openOnlineAlbum = async (album: OnlineAlbum): Promise<void> => {
           artworkUrl: album.artworkUrl,
         }),
     );
+    const { strings } = currentLocalisation();
     if (result === "missing")
-      await showMessage("Album not found", "This album couldn't be found online.");
+      await showMessage(strings.stats.albumNotFound, strings.stats.albumNotFoundMessage);
   } catch {
-    if (ytMusicEnabled()) await showMessage("Couldn't open album", "Try again when you're online.");
+    const { strings } = currentLocalisation();
+    if (ytMusicEnabled())
+      await showMessage(strings.stats.albumFailed, strings.stats.albumFailedMessage);
   }
 };
 

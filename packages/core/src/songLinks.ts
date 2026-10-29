@@ -5,6 +5,7 @@
  * search as the signed-in account. Each destination stands on its own.
  */
 
+import { en, type Catalogue } from "./catalogueEn.ts";
 import { ytShareMatch } from "./playlistShare.ts";
 import type { SongLinkOption } from "./songShare.ts";
 import { spotifySearchQuery } from "./spotifyImport.ts";
@@ -116,15 +117,9 @@ export const lookUpSpotifyTrack = async (
 export interface SongLinkView {
   readonly url: string | null;
   readonly loading: boolean;
-  readonly note: "Offline" | "Unavailable" | "No Match" | "Signed Out" | null;
+  /** Why it has none ("Offline", "No Match"), in the app's language. */
+  readonly note: string | null;
 }
-
-const NOTES = {
-  offline: "Offline",
-  failed: "Unavailable",
-  notFound: "No Match",
-  signedOut: "Signed Out",
-} as const satisfies Record<string, SongLinkView["note"]>;
 
 /** The song.link page (any platform) and the YT Music page of the video [videoId]. */
 const VIDEO_URLS = {
@@ -135,31 +130,37 @@ const VIDEO_URLS = {
 /**
  * Where one link option's lookup stands: loading, its link, or a reason with
  * a note. A lookup state with a status that has no note isn't one, so it
- * fails to compile until `NOTES` has it.
+ * fails to compile until the catalogue's `share.linkNotes` has it.
  */
 type LinkState =
   | { readonly status: "loading" }
   | { readonly status: "found"; readonly url: string }
-  | { readonly status: keyof typeof NOTES };
+  | { readonly status: keyof Catalogue["share"]["linkNotes"] };
 
 /** How a link option whose lookup is [state] shows. */
-const viewOf = (state: LinkState): SongLinkView => {
+const viewOf = (state: LinkState, strings: Catalogue): SongLinkView => {
   if (state.status === "loading") return { url: null, loading: true, note: null };
   if (state.status === "found") return { url: state.url, loading: false, note: null };
-  return { url: null, loading: false, note: NOTES[state.status] };
+  return { url: null, loading: false, note: strings.share.linkNotes[state.status] };
 };
 
 /**
  * How the link [option] shows in the share sheet while the song's links are
  * [state]: Copy Link shares the song.link page of the song's video, YT Music
  * the video's own page, Spotify the matching track; one with no link is
- * disabled and says why. Each goes by its own lookup only.
+ * disabled and says why, in [strings]' language. Each goes by its own lookup
+ * only.
  */
-export const songLinkView = (option: SongLinkOption, state: SongLinksState): SongLinkView =>
+export const songLinkView = (
+  option: SongLinkOption,
+  state: SongLinksState,
+  strings: Catalogue = en,
+): SongLinkView =>
   viewOf(
     option === "spotify"
       ? state.spotify
       : state.video.status === "found"
         ? { status: "found", url: VIDEO_URLS[option](state.video.videoId) }
         : state.video,
+    strings,
   );

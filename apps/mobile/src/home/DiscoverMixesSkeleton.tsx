@@ -12,11 +12,10 @@ import { AlbumCardSkeleton, SKELETON_TILES, SkeletonGroup } from "@/catalog/Skel
  * every frame (issue #93), and stillness is what reduce motion asks for anyway.
  */
 export function DiscoverMixesSkeleton() {
- const localisation = useLocalisation();
-
+  const { strings } = useLocalisation();
   const { fontScale } = useWindowDimensions();
   return (
-    <SkeletonGroup label={localisation.strings.home.buildingYourMixes}>
+    <SkeletonGroup label={strings.discover.buildingMixes}>
       <CoverRow>
         {Array.from({ length: SKELETON_TILES }, (_, index) => (
           <View key={index} style={{ width: COVER_ROW_TILE, paddingTop: SLEEVE_ROOM }}>

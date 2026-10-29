@@ -101,10 +101,9 @@ export const recapWindow = (period: RecapPeriod): StatsWindow => ({
   to: periodEnd(period) - 1,
 });
 
-
-/** `period` as a Recap's title: "September 2026", or "2026" for the year. */
-export const recapTitle = (period: RecapPeriod, catalogue: Catalogue = en): string =>
-  period.kind === "month" ? `${catalogue.home.months[period.month - 1]} ${period.year}` : String(period.year);
+/** `period` as a Recap's title in [strings]' language: "September 2026", or "2026" for the year. */
+export const recapTitle = (period: RecapPeriod, strings: Catalogue = en): string =>
+  strings.recap.title(period);
 
 /**
  * A shared slide's PNG's file name, the Recap [title]'s (`recapTitle`):
@@ -489,21 +488,11 @@ export const recapSlides = (shown: Recap): RecapSlide[] => {
   return slides;
 };
 
-/** A habit's peak hour (0 to 23) on a 12-hour clock: "10 PM". */
-export function recapHourLabel(hour: number, catalogue: Catalogue): string;
-export function recapHourLabel(hour: number): string;
-export function recapHourLabel(hour: number, catalogue: Catalogue | number = en): string {
- if (typeof catalogue === "number") catalogue = en;
- return catalogue === en ?
-  `${hour % 12 === 0 ? 12 : hour % 12} ${hour < 12 ? "AM" : "PM"}` : `${String(hour).padStart(2, "0")}:00`; }
+/** A habit's peak hour (0 to 23) on a 12-hour clock: "10 PM" (the catalogue's `recap.hour`). */
+export const recapHourLabel = (hour: number): string => en.recap.hour(hour);
 
-
-/** A habit's peak weekday (0 Sunday to 6 Saturday), as a habit says it: "Fridays". */
-export function recapWeekdayLabel(weekday: number, catalogue: Catalogue): string;
-export function recapWeekdayLabel(weekday: number): string;
-export function recapWeekdayLabel(weekday: number, catalogue: Catalogue | number = en): string {
- if (typeof catalogue === "number") catalogue = en;
- return catalogue.home.weekdays[weekday]!; }
+/** A habit's peak weekday (0 Sunday to 6 Saturday), as a habit says it: "Fridays" (`recap.weekdays`). */
+export const recapWeekdayLabel = (weekday: number): string => en.recap.weekdays[weekday]!;
 
 /** How long a slide shows before the stories move on by themselves. */
 export const RECAP_SLIDE_MS = 6000;

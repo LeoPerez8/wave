@@ -400,7 +400,7 @@ const CAPTION_ARTISTS = 3;
  */
 export const discoverMixCaption = (
   mix: BlendedDiscoverMix,
-  catalogue: Catalogue = en,
+  strings: Catalogue = en,
 ): {
   readonly title: string;
   readonly artists: string;
@@ -422,9 +422,9 @@ export const discoverMixCaption = (
   }
   const name = genre === undefined ? mix.seed.name : genreTitle(genre);
   return {
-    title: catalogue.home.mixTitle(name),
+    title: strings.discover.mixTitle(name),
     artists: [...artists.values()].join(", "),
-    line: catalogue.home.songs(mix.songs.length),
+    line: strings.discover.songs(mix.songs.length),
     artworkUrl: mixCover(mix),
   };
 };

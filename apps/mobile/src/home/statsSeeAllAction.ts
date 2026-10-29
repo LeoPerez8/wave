@@ -1,5 +1,9 @@
-import { currentLocalisation } from "@/localisation/localisation";
+import type { Catalogue } from "@wave/core";
+
 import { openStats } from "@/library/routes";
 
 /** Loaded Stats and its placeholder offer the same navigation. */
-export const statsSeeAllAction = { get label() { return currentLocalisation().strings.home.seeAll; }, onPress: openStats };
+export const statsSeeAllAction = (strings: Catalogue) => ({
+  label: strings.home.seeAll,
+  onPress: openStats,
+});

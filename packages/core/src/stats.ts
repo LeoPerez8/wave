@@ -11,18 +11,20 @@ import type { TrackRef } from "./ytMusic.ts";
 /** A stats period: a rolling window ending now. */
 export type StatsPeriod = "week" | "month" | "year" | "all";
 
-/** The periods the Stats screen offers, from the shortest to all time. */
-export const STATS_PERIODS: readonly {
+/** A period as the Stats screen names it. */
+export interface StatsPeriodOption {
   readonly id: StatsPeriod;
   readonly label: string;
   /** The label on the period selector's tab, where four must fit across. */
   readonly tab: string;
-}[] = [
-  { id: "week", label: en.home.last7Days, tab: en.home.period7Days },
-  { id: "month", label: en.home.last30Days, tab: en.home.period30Days },
-  { id: "year", label: en.home.last12Months, tab: en.home.period12Months },
-  { id: "all", label: en.home.allTime, tab: en.home.allTime },
-];
+}
+
+/** The periods the Stats screen offers, from the shortest to all time, in [strings]' language. */
+export const statsPeriods = (strings: Catalogue = en): readonly StatsPeriodOption[] =>
+  (["week", "month", "year", "all"] as const).map((id) => ({ id, ...strings.stats.periods[id] }));
+
+/** The periods the Stats screen offers, in English. */
+export const STATS_PERIODS: readonly StatsPeriodOption[] = statsPeriods(en);
 
 /** The plays a period covers: started at or after `from` (no start for all time) and at or before `to`. */
 export interface StatsWindow {
@@ -224,10 +226,3 @@ export function* rankPlaysSteps<A extends PlayTotals>(
   }
   return (yield* sortSteps(eligible, compareRanked)).slice(0, limit);
 }
-
-export const statsPeriods = (catalogue: Catalogue = en): typeof STATS_PERIODS => [
-  { id: "week", label: catalogue.home.last7Days, tab: catalogue.home.period7Days },
-  { id: "month", label: catalogue.home.last30Days, tab: catalogue.home.period30Days },
-  { id: "year", label: catalogue.home.last12Months, tab: catalogue.home.period12Months },
-  { id: "all", label: catalogue.home.allTime, tab: catalogue.home.allTime },
-];

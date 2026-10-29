@@ -485,7 +485,6 @@ const refresh = (played: boolean, onlyEmpty = false): void => {
 
 /** The toast after a refresh saved new mixes; its Undo puts the previous ones back. */
 
-
 /**
  * Builds [id]'s mixes again now, for new ones (the owner pulled its
  * carousel past its start): only that section, whether or not a build is
@@ -523,8 +522,9 @@ export const refreshMixes = (id: MixSectionId): void => {
       saveBuilt(id, built);
       shown.set(mixesShown(memory, built, Date.now()));
       if (previous === null) return;
-      void showToast(currentLocalisation().strings.home.newMixes, {
-        get label() { return currentLocalisation().strings.home.undo; },
+      const { strings } = currentLocalisation();
+      void showToast(strings.discover.newMixes, {
+        label: strings.discover.undo,
         run: () => {
           // Another build saved since: Undo would throw its mixes away.
           if (saved.get() !== built || building.get()) return;

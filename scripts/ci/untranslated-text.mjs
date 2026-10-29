@@ -49,6 +49,8 @@ export const TEXT_ALLOWLIST = [
   "packages/core/src/overlayOrigin.ts",
   "packages/core/src/catalogueEn.ts",
   "packages/core/src/cataloguePtBr.ts",
+  // The catalogue's per-area files: the text itself, in each language.
+  "packages/core/src/catalogue/",
 ];
 
 export const isTextSource = (file) =>

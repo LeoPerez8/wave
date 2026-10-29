@@ -410,7 +410,7 @@ const readListeningSums = storeQuery(
  * scan batches.
  */
 export const useStatsFacts = (): StatsFacts | undefined => {
- const { language } = useLocalisation();
+  const { language } = useLocalisation();
   const counts = useLibraryCounts();
   const sums = useLibraryQuery<ListeningSums | undefined>(readListeningSums, undefined);
   return useMemo(

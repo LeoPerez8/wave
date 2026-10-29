@@ -11,12 +11,11 @@ import { statsSeeAllAction } from "./statsSeeAllAction";
 
 /** Listening and library facts; only See all opens Library's Stats. */
 export function HomeStats() {
- const localisation = useLocalisation();
-
+  const { strings } = useLocalisation();
   const facts = useStatsFacts();
   if (facts === undefined) return <HomeSectionSkeleton id="stats" />;
   return (
-    <TitledSection title={localisation.strings.home.stats} action={statsSeeAllAction}>
+    <TitledSection title={strings.home.sections.stats} action={statsSeeAllAction(strings)}>
       <View>
         {facts.map(({ label, value }, index) => (
           <Fragment key={label}>

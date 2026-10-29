@@ -29,23 +29,14 @@ export const DEFAULT_MIX_SLIDERS: MixSliders = { faithfulness: 3, popularity: 3 
 export const GENRE_FAITHFULNESS_STEPS: readonly {
   readonly step: MixSliderStep;
   readonly label: string;
-}[] = [
-  { step: 1, label: en.home.sameGenres },
-  { step: 2, label: en.home.close },
-  { step: 3, label: en.home.balanced },
-  { step: 4, label: en.home.neighbours },
-  { step: 5, label: en.home.wander },
-];
+}[] = ([1, 2, 3, 4, 5] as const).map((step) => ({
+  step,
+  label: en.discover.faithfulnessSteps[step],
+}));
 
 /** Popularity shifts the ranking from hits to deep cuts. */
 export const POPULARITY_STEPS: readonly { readonly step: MixSliderStep; readonly label: string }[] =
-  [
-    { step: 1, label: en.home.hits },
-    { step: 2, label: en.home.popular },
-    { step: 3, label: en.home.balanced },
-    { step: 4, label: en.home.lesserKnown },
-    { step: 5, label: en.home.deepCuts },
-  ];
+  ([1, 2, 3, 4, 5] as const).map((step) => ({ step, label: en.discover.popularitySteps[step] }));
 
 const stepOf = <T extends { readonly step: MixSliderStep }>(steps: readonly T[], step: number): T =>
   steps.find((entry) => entry.step === step) ?? steps[2]!;

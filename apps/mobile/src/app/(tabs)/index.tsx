@@ -21,12 +21,13 @@ import { useRecapToAnnounce } from "@/stats/hooks";
 import { RecapCard } from "@/stats/StatsViews";
 
 /** The first section sits a cell under the large title, not a section's gap. */
-const DEV_GLASS_LABEL = "Developer: glass spike";
-
 const FIRST_SECTION = { marginTop: CELL - SECTION_GAP } as const;
 
 /** A new Recap's card sits a cell under the large title, a section's gap above the sections. */
 const RECAP_CARD = { marginTop: CELL } as const;
+
+/** The debug-only link to the glass spike: a dev screen's, so it stays in English. */
+const DEV_GLASS_LABEL = "Developer: glass spike";
 
 function HomeRecap({ period }: { period: RecapPeriod | null }) {
   return period === null ? null : (
@@ -46,8 +47,7 @@ function HomeLine({ children, top }: { children: string; top: number }) {
 }
 
 export default function HomeScreen() {
- const localisation = useLocalisation();
-
+  const { strings } = useLocalisation();
   useRenderCount("HomeScreen");
   const [painted, setPainted] = useState(false);
   const newRecap = useRecapToAnnounce(painted);
@@ -62,10 +62,14 @@ export default function HomeScreen() {
   // Even focus effects in Discover or Recap cannot read before the shell has painted.
   return (
     <LargeTitleScreen
-      title={localisation.strings.home.home}
-      titleLongPress={homeTitleLongPress}
+      title={strings.tabs.index}
+      titleLongPress={homeTitleLongPress(strings)}
       action={
-        <IconButton icon={IconSettings} label={localisation.strings.home.settings} onPress={() => router.push("/settings")} />
+        <IconButton
+          icon={IconSettings}
+          label={strings.home.settings}
+          onPress={() => router.push("/settings")}
+        />
       }
     >
       {painted ? <HomeContent newRecap={newRecap} /> : <HomePlaceholders newRecap={newRecap} />}
@@ -91,8 +95,7 @@ function HomePlaceholders({ newRecap }: { newRecap: RecapPeriod | null }) {
 }
 
 function HomeContent({ newRecap }: { newRecap: RecapPeriod | null }) {
- const localisation = useLocalisation();
-
+  const { strings } = useLocalisation();
   const home = useHomeContent();
   const { empty, nothingPlayed, ready } = homeOpeningState(home);
   useScreenContent(ready);
@@ -104,8 +107,8 @@ function HomeContent({ newRecap }: { newRecap: RecapPeriod | null }) {
         <>
           <EmptyState
             icon={IconMusic}
-            title={localisation.strings.home.nothingHereYet}
-            message={localisation.strings.home.yourRecentlyAddedRecentlyPlayedAndMostPlayedMusicWillShowUpHere}
+            title={strings.home.emptyTitle}
+            message={strings.home.emptyMessage}
           />
           {/* Discover's Artist mixes grow from YouTube Music's chart while the Library is empty. */}
           {homeItems(arrangement, { nothingPlayed, empty }).map((item) =>
@@ -123,10 +126,12 @@ function HomeContent({ newRecap }: { newRecap: RecapPeriod | null }) {
             {homeItems(arrangement, { nothingPlayed }).map((item, index) =>
               item === "no-sections" ? (
                 <HomeLine key={item} top={SECTION_GAP}>
-                  {localisation.strings.home.longPressHomeToAddSectionsBack}</HomeLine>
+                  {strings.home.noSections}
+                </HomeLine>
               ) : item === "play-hint" ? (
                 <HomeLine key={item} top={index === 0 ? SECTION_GAP : CELL * 3}>
-                  {localisation.strings.home.playSomethingAndWhatYouListenToWillShowUpHere}</HomeLine>
+                  {strings.home.playHint}
+                </HomeLine>
               ) : (
                 <HomeSection key={item.section} id={item.section} home={home} />
               ),
@@ -136,9 +141,7 @@ function HomeContent({ newRecap }: { newRecap: RecapPeriod | null }) {
           {__DEV__ && (
             <Link href="/dev/glass" asChild>
               <Pressable className="mt-12 self-center py-2">
-                <Text className="font-sans text-footnote text-tertiary">
-                  {DEV_GLASS_LABEL}
-                </Text>
+                <Text className="font-sans text-footnote text-tertiary">{DEV_GLASS_LABEL}</Text>
               </Pressable>
             </Link>
           )}

@@ -111,8 +111,7 @@ export function useImageShare({
   readonly known: boolean;
   readonly disabled: boolean;
 } {
-const localisation = useLocalisation();
-
+  const { strings } = useLocalisation();
   const [busy, setBusy] = useState(false);
   // Two taps in one frame both see busy false; this sees the first.
   const sending = useRef(false);
@@ -157,31 +156,31 @@ const localisation = useLocalisation();
   const all: Record<LyricShareDestination, ShareDestination> = {
     instagramStories: {
       key: "instagramStories",
-      label: localisation.strings.home.instagramStories,
+      label: strings.share.instagramStories,
       icon: IconBrandInstagram,
       onPress: () =>
         void sendImage(
           "instagramStories",
           `share ${what} to Instagram Stories`,
           (path) => shareImageToInstagramStory(path, storyBackground, storyFrame),
-          localisation.strings.home.couldnTOpenInstagram,
+          strings.share.instagramFailed,
         ),
     },
     whatsapp: {
       key: "whatsapp",
-      label: localisation.strings.home.whatsApp,
+      label: strings.share.whatsApp,
       icon: IconBrandWhatsapp,
       onPress: () =>
         void sendImage(
           "whatsapp",
           `share ${what} to WhatsApp`,
           shareImageToWhatsApp,
-          localisation.strings.home.couldnTOpenWhatsapp,
+          strings.share.whatsAppFailed,
         ),
     },
     save: {
       key: "save",
-      get label() { return localisation.strings.home.saveImage; },
+      label: strings.share.saveImage,
       icon: IconPhotoDown,
       onPress: () =>
         void sendImage(
@@ -189,21 +188,21 @@ const localisation = useLocalisation();
           `save ${what}`,
           async (path) => {
             await saveImageToGallery(path);
-            void showToast(localisation.strings.home.savedToYourGallery);
+            void showToast(strings.share.savedToGallery);
           },
-          localisation.strings.home.couldnTSaveTheImage,
+          strings.share.saveImageFailed,
         ),
     },
     more: {
       key: "more",
-      get label() { return localisation.strings.home.more; },
+      label: strings.share.more,
       icon: IconDots,
       onPress: () =>
         void sendImage(
           "more",
           `share ${what}`,
           (path) => openImageShareSheet(path, sheetTitle),
-          localisation.strings.home.couldnTShareTheImage,
+          strings.share.shareImageFailed,
         ),
     },
   };

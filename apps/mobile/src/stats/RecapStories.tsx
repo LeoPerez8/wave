@@ -7,12 +7,12 @@ import {
   recapAutoForward,
   recapBarFill,
   recapForward,
-  recapHourLabel,
   recapTitle,
-  recapWeekdayLabel,
+  type Catalogue,
   type GenreFamily,
   type RecapGenre,
   type RecapColour,
+  type RecapPeriod,
   ytSongArtist,
 } from "@wave/core";
 import { StatusBar } from "expo-status-bar";
@@ -54,7 +54,6 @@ import { useThemeColor } from "@/theme/useThemeColor";
 import { RecapSharePreview } from "./RecapShare";
 import type { LoadedRecap, LoadedRecapSlide, Ranked, StatsSong } from "./Stats";
 import { useRecapMusic } from "./recapMusic";
-import { playCount } from "./StatsViews";
 
 /** A tap on the screen's left third goes back; anywhere else goes forward. */
 const BACK_ZONE = 1 / 3;
@@ -98,14 +97,14 @@ const BACKDROP: Record<LoadedRecapSlide["kind"], RecapColour> = {
   summary: "indigo",
 };
 
-function MinutesSlide({ title, minutes }: { title: string; minutes: number }) {
- const localisation = useLocalisation();
-
-  const { language } = useLocalisation();
+function MinutesSlide({ period, minutes }: { period: RecapPeriod; minutes: number }) {
+  const { language, strings } = useLocalisation();
   return (
     <View className="flex-1 justify-center" style={{ gap: CELL * 2 }}>
       <Rise step={0}>
-        <Text className="font-sans text-title3 text-on-recap">{localisation.strings.home.listenedIn(title)}</Text>
+        <Text className="font-sans text-title3 text-on-recap">
+          {strings.recap.listenedIn(period)}
+        </Text>
       </Rise>
       <Rise step={1}>
         <Text
@@ -119,7 +118,7 @@ function MinutesSlide({ title, minutes }: { title: string; minutes: number }) {
       </Rise>
       <Rise step={2}>
         <Text className="font-sans text-title1 font-semibold text-on-recap">
-          {minutes === 1 ? localisation.strings.home.minute : localisation.strings.home.minutes}
+          {strings.recap.minutes(minutes)}
         </Text>
       </Rise>
     </View>
@@ -158,21 +157,20 @@ const artistShown = (artist: PlayedArtist, ytMusic: boolean) =>
   "online" in artist ? { ...artist, placeholder: !ytMusic } : artist;
 
 function TopSongsSlide({ songs: ranked }: { songs: readonly Ranked<StatsSong>[] }) {
- const localisation = useLocalisation();
-
+  const { strings } = useLocalisation();
   const ytMusic = useYtMusicEnabled();
   const songs = ranked.map((entry) => ({ ...entry, item: songShown(entry.item, ytMusic) }));
   const [top, ...rest] = songs;
   if (top === undefined) return null;
   return (
     <View className="flex-1 justify-center" style={{ gap: CELL * 3 }}>
-      <Heading>{localisation.strings.home.yourTopSongs}</Heading>
+      <Heading>{strings.recap.topSongs}</Heading>
       <Rise step={1}>
         <View style={{ gap: CELL * 1.5 }}>
           <Artwork uri={top.item.artworkUri} size={CELL * 26} radius={12} />
           <View>
             <Text className="font-sans text-footnote font-semibold text-on-recap opacity-80">
-              #1 · {playCount(top.countedPlays)}
+              #1 · {strings.stats.plays(top.countedPlays)}
             </Text>
             <Text numberOfLines={2} className="font-sans text-title1 font-bold text-on-recap">
               {top.item.title}
@@ -189,7 +187,7 @@ function TopSongsSlide({ songs: ranked }: { songs: readonly Ranked<StatsSong>[] 
         entryKey={(entry) => entry.item.key}
         line={(entry) => ({
           title: entry.item.title,
-          detail: `${entry.item.artist} · ${playCount(entry.countedPlays)}`,
+          detail: `${entry.item.artist} · ${strings.stats.plays(entry.countedPlays)}`,
         })}
       />
     </View>
@@ -278,28 +276,27 @@ const artistKey = (entry: Ranked<PlayedArtist>): Key => entry.item.id;
 
 /** An artist's ranked line: its image, its name over its plays. */
 const artistLine =
-  (ytMusic: boolean) =>
+  (ytMusic: boolean, strings: Catalogue) =>
   (entry: Ranked<PlayedArtist>): RankedLineContent => ({
     image: <ArtistImage artist={artistShown(entry.item, ytMusic)} size={CELL * 5} />,
     title: entry.item.name,
-    detail: playCount(entry.countedPlays),
+    detail: strings.stats.plays(entry.countedPlays),
   });
 
 function TopArtistsSlide({ artists }: { artists: readonly Ranked<PlayedArtist>[] }) {
- const localisation = useLocalisation();
-
+  const { strings } = useLocalisation();
   const ytMusic = useYtMusicEnabled();
   const [top, ...rest] = artists;
   if (top === undefined) return null;
   return (
     <View className="flex-1 justify-center" style={{ gap: CELL * 3 }}>
-      <Heading>{localisation.strings.home.yourTopArtists}</Heading>
+      <Heading>{strings.recap.topArtists}</Heading>
       <Rise step={1}>
         <View style={{ gap: CELL * 1.5 }}>
           <ArtistImage artist={artistShown(top.item, ytMusic)} size={CELL * 22} large />
           <View>
             <Text className="font-sans text-footnote font-semibold text-on-recap opacity-80">
-              #1 · {playCount(top.countedPlays)}
+              #1 · {strings.stats.plays(top.countedPlays)}
             </Text>
             <Text numberOfLines={2} className="font-sans text-title1 font-bold text-on-recap">
               {top.item.name}
@@ -307,18 +304,22 @@ function TopArtistsSlide({ artists }: { artists: readonly Ranked<PlayedArtist>[]
           </View>
         </View>
       </Rise>
-      <RankedLines entries={rest} firstRank={2} entryKey={artistKey} line={artistLine(ytMusic)} />
+      <RankedLines
+        entries={rest}
+        firstRank={2}
+        entryKey={artistKey}
+        line={artistLine(ytMusic, strings)}
+      />
     </View>
   );
 }
 
 function TopAlbumSlide({ album }: { album: Ranked<PlayedAlbum> }) {
- const localisation = useLocalisation();
-
+  const { strings } = useLocalisation();
   const ytMusic = useYtMusicEnabled();
   return (
     <View className="flex-1 justify-center" style={{ gap: CELL * 3 }}>
-      <Heading>{localisation.strings.home.yourTopAlbum}</Heading>
+      <Heading>{strings.recap.topAlbum}</Heading>
       <Rise step={1}>
         <Artwork uri={albumArtworkUri(album.item, ytMusic)} size={CELL * 32} radius={12} />
       </Rise>
@@ -328,7 +329,7 @@ function TopAlbumSlide({ album }: { album: Ranked<PlayedAlbum> }) {
             {album.item.title}
           </Text>
           <Text numberOfLines={1} className="font-sans text-body text-on-recap opacity-80">
-            {album.item.albumArtist} · {playCount(album.countedPlays)}
+            {album.item.albumArtist} · {strings.stats.plays(album.countedPlays)}
           </Text>
         </View>
       </Rise>
@@ -339,17 +340,17 @@ function TopAlbumSlide({ album }: { album: Ranked<PlayedAlbum> }) {
 const percent = (share: number): string => `${Math.round(share * 100)}%`;
 
 function TopGenresSlide({ genres }: { genres: readonly RecapGenre[] }) {
- const localisation = useLocalisation();
-
+  const { strings } = useLocalisation();
   const [top, ...rest] = genres;
   if (top === undefined) return null;
   return (
     <View className="flex-1 justify-center" style={{ gap: CELL * 3 }}>
-      <Heading>{localisation.strings.home.yourTopGenres}</Heading>
+      <Heading>{strings.recap.topGenres}</Heading>
       <Rise step={1}>
         <View>
           <Text className="font-sans text-footnote font-semibold text-on-recap opacity-80">
-            #1 · {percent(top.share)} {localisation.strings.home.ofYourPlays}</Text>
+            #1 · {strings.recap.shareOfPlays(percent(top.share))}
+          </Text>
           <Text
             adjustsFontSizeToFit
             numberOfLines={1}
@@ -379,21 +380,20 @@ function HabitsSlide({
   peakWeekday: number;
   longestStreakDays: number;
 }) {
- const localisation = useLocalisation();
-
+  const { strings } = useLocalisation();
   return (
     <View className="flex-1 justify-center" style={{ gap: CELL * 4 }}>
-      <Heading>{localisation.strings.home.youListenedMost}</Heading>
+      <Heading>{strings.recap.listenedMost}</Heading>
       <Rise step={1}>
         <Text className="font-sans text-title1 font-bold text-on-recap">
-          {localisation.strings.home.onWeekday(recapWeekdayLabel(peakWeekday, localisation.strings))}
+          {strings.recap.onWeekday(peakWeekday)}
         </Text>
         <Text className="font-sans text-title1 font-bold text-on-recap">
-          {localisation.strings.home.aroundHour(recapHourLabel(peakHour, localisation.strings))}
+          {strings.recap.aroundHour(peakHour)}
         </Text>
       </Rise>
       <Rise step={2}>
-        <Text className="font-sans text-title3 text-on-recap">{localisation.strings.home.yourLongestStreak}</Text>
+        <Text className="font-sans text-title3 text-on-recap">{strings.recap.longestStreak}</Text>
         <Text
           className="font-sans font-bold text-on-recap"
           style={{ fontSize: 56, lineHeight: 64, fontVariant: ["tabular-nums"] }}
@@ -401,7 +401,7 @@ function HabitsSlide({
           {longestStreakDays}
         </Text>
         <Text className="font-sans text-title3 font-semibold text-on-recap">
-          {longestStreakDays === 1 ? localisation.strings.home.day : localisation.strings.home.daysInARow}
+          {strings.recap.streakDays(longestStreakDays)}
         </Text>
       </Rise>
     </View>
@@ -415,13 +415,11 @@ function DiscoveredSlide({
   count: number;
   artists: readonly Ranked<PlayedArtist>[];
 }) {
- const localisation = useLocalisation();
-
+  const { language, strings } = useLocalisation();
   const ytMusic = useYtMusicEnabled();
-  const { language } = useLocalisation();
   return (
     <View className="flex-1 justify-center" style={{ gap: CELL * 3 }}>
-      <Heading>{localisation.strings.home.youDiscovered}</Heading>
+      <Heading>{strings.recap.discovered}</Heading>
       <Rise step={1}>
         <Text
           className="font-sans font-bold text-on-recap"
@@ -430,14 +428,14 @@ function DiscoveredSlide({
           {formatNumber(language, count)}
         </Text>
         <Text className="font-sans text-title1 font-semibold text-on-recap">
-          {count === 1 ? localisation.strings.home.newArtist : localisation.strings.home.newArtists}
+          {strings.recap.newArtists(count)}
         </Text>
       </Rise>
       <RankedLines
         entries={artists}
         firstRank={1}
         entryKey={artistKey}
-        line={artistLine(ytMusic)}
+        line={artistLine(ytMusic, strings)}
       />
     </View>
   );
@@ -496,10 +494,8 @@ function SummarySlide({
   artists: readonly Ranked<PlayedArtist>[];
   genre: GenreFamily | null;
 }) {
- const localisation = useLocalisation();
-
+  const { language, strings } = useLocalisation();
   const ytMusic = useYtMusicEnabled();
-  const { language } = useLocalisation();
   const top = artists[0];
   return (
     <View className="flex-1 justify-center" style={{ gap: CELL * 4 }}>
@@ -515,13 +511,13 @@ function SummarySlide({
           <View className="flex-row" style={{ gap: CELL * 2 }}>
             {artists.length > 0 && (
               <SummaryColumn
-                heading={localisation.strings.home.topArtists}
+                heading={strings.recap.summaryTopArtists}
                 names={artists.map((entry) => entry.item.name)}
               />
             )}
             {songs.length > 0 && (
               <SummaryColumn
-                heading={localisation.strings.home.topSongs}
+                heading={strings.recap.summaryTopSongs}
                 names={songs.map(({ item }) =>
                   item.source === "library" ? item.track.title : item.song.title,
                 )}
@@ -532,8 +528,11 @@ function SummarySlide({
       )}
       <Rise step={2}>
         <View className="flex-row" style={{ gap: CELL * 2 }}>
-          <SummaryFigure label={localisation.strings.home.minutesListened} value={formatNumber(language, minutes)} />
-          {genre !== null && <SummaryFigure label={localisation.strings.home.topGenre} value={genre.name} />}
+          <SummaryFigure
+            label={strings.recap.minutesListened}
+            value={formatNumber(language, minutes)}
+          />
+          {genre !== null && <SummaryFigure label={strings.recap.topGenre} value={genre.name} />}
         </View>
       </Rise>
     </View>
@@ -541,11 +540,10 @@ function SummarySlide({
 }
 
 function Slide({ recap, slide }: { recap: LoadedRecap; slide: LoadedRecapSlide }) {
-const localisation = useLocalisation();
-
+  const { strings } = useLocalisation();
   switch (slide.kind) {
     case "minutes":
-      return <MinutesSlide title={recapTitle(recap.period, localisation.strings)} minutes={slide.minutes} />;
+      return <MinutesSlide period={recap.period} minutes={slide.minutes} />;
     case "topSongs":
       return <TopSongsSlide songs={slide.songs} />;
     case "topArtists":
@@ -611,8 +609,7 @@ export function RecapStories({
   recap: LoadedRecap | null | undefined;
   onClose: () => void;
 }) {
- const localisation = useLocalisation();
-
+  const { strings } = useLocalisation();
   const insets = useSafeAreaInsets();
   const [index, setIndex] = useState(0);
   const [held, setPaused] = useState(false);
@@ -759,18 +756,22 @@ export function RecapStories({
           <Text
             accessibilityRole="header"
             accessibilityLabel={
-              recap == null ? localisation.strings.home.recap : localisation.strings.home.slidePosition(recapTitle(recap.period, localisation.strings), index + 1, count)
+              recap == null
+                ? strings.recap.recap
+                : strings.recap.slidePosition(recap.period, index + 1, count)
             }
-            accessibilityValue={{ text: paused ? localisation.strings.home.paused : localisation.strings.home.playing }}
+            accessibilityValue={{ text: paused ? strings.recap.paused : strings.recap.playing }}
             accessibilityActions={
               count === 0
                 ? []
                 : [
-                    { name: "previousSlide", label: localisation.strings.home.previousSlide },
-                    { name: "nextSlide", label: localisation.strings.home.nextSlide },
+                    { name: "previousSlide", label: strings.recap.previousSlide },
+                    { name: "nextSlide", label: strings.recap.nextSlide },
                     {
                       name: "togglePause",
-                      label: readerPaused ? localisation.strings.home.resumeStories : localisation.strings.home.pauseStories,
+                      label: readerPaused
+                        ? strings.recap.resumeStories
+                        : strings.recap.pauseStories,
                     },
                   ]
             }
@@ -782,14 +783,18 @@ export function RecapStories({
             numberOfLines={1}
             className="flex-1 font-sans text-subheadline font-semibold text-on-recap"
           >
-            {recap?.title ?? ""}
+            {recap == null ? "" : recapTitle(recap.period, strings)}
           </Text>
           {recap !== null && recap !== undefined && slide !== undefined && (
-            <IconButton label={localisation.strings.home.shareSlide} onPress={() => setSharing(true)} depth={0.04}>
+            <IconButton
+              label={strings.recap.shareSlide}
+              onPress={() => setSharing(true)}
+              depth={0.04}
+            >
               <IconShare3 size={24} color={ink} strokeWidth={1.5} />
             </IconButton>
           )}
-          <IconButton label={localisation.strings.home.closeRecap} onPress={close} depth={0.04}>
+          <IconButton label={strings.recap.close} onPress={close} depth={0.04}>
             <IconX size={24} color={ink} strokeWidth={1.5} />
           </IconButton>
         </View>
@@ -802,7 +807,8 @@ export function RecapStories({
             {recap === null ? (
               <View className="flex-1 justify-center">
                 <Text className="font-sans text-title3 text-on-recap">
-                  {localisation.strings.home.thisRecapIsnTAvailable}</Text>
+                  {strings.recap.unavailable}
+                </Text>
               </View>
             ) : recap !== undefined && slide !== undefined ? (
               // A new key replays the slide's entrance.
@@ -812,7 +818,7 @@ export function RecapStories({
             ) : (
               <View
                 accessible
-                accessibilityLabel={localisation.strings.home.loadingRecap}
+                accessibilityLabel={strings.recap.loading}
                 accessibilityState={{ busy: true }}
               />
             )}
@@ -820,7 +826,11 @@ export function RecapStories({
         </GestureDetector>
       </Animated.View>
       {sharing && recap !== null && recap !== undefined && slide !== undefined && (
-        <RecapSharePreview title={recapTitle(recap.period, localisation.strings)} colour={backdrop} onClose={closeShare}>
+        <RecapSharePreview
+          title={recapTitle(recap.period, strings)}
+          colour={backdrop}
+          onClose={closeShare}
+        >
           <Slide recap={recap} slide={slide} />
         </RecapSharePreview>
       )}

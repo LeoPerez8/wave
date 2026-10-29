@@ -1,7 +1,13 @@
+import { homePtBr } from "./catalogue/homePtBr.ts";
+import { arrangementPtBr } from "./catalogue/arrangementPtBr.ts";
+import { discoverPtBr } from "./catalogue/discoverPtBr.ts";
+import { statsPtBr } from "./catalogue/statsPtBr.ts";
+import { recapPtBr } from "./catalogue/recapPtBr.ts";
+import { listeningHistoryPtBr } from "./catalogue/listeningHistoryPtBr.ts";
+import { sharePtBr } from "./catalogue/sharePtBr.ts";
 import { downloadNoticePtBr } from "./catalogue/downloadNoticePtBr.ts";
 import { nativePtBr } from "./catalogue/nativePtBr.ts";
 import { autoPtBr } from "./catalogue/autoPtBr.ts";
-import { homePtBr } from "./catalogue/homePtBr.ts";
 /**
  * Wave's interface text in Brazilian Portuguese, entry for entry with
  * `catalogueEn.ts`. Terms follow the spec's glossary; until it's approved,
@@ -15,6 +21,12 @@ export const ptBR: Catalogue = {
   native: nativePtBr,
   auto: autoPtBr,
   home: homePtBr,
+  arrangement: arrangementPtBr,
+  discover: discoverPtBr,
+  stats: statsPtBr,
+  recap: recapPtBr,
+  listeningHistory: listeningHistoryPtBr,
+  share: sharePtBr,
   tabs: {
     index: "Início",
     library: "Biblioteca",
@@ -35,7 +47,7 @@ export const ptBR: Catalogue = {
     noAnswer: "Sem resposta online. Tente novamente em instantes.",
     hideFailed: "Não foi possível ocultar este lançamento. Tente novamente.",
     hide: "Ocultar",
-    goToArtist: "Ir para Artista",
+    goToArtist: "Ir para o Artista",
     addToPlaylist: "Adicionar à Playlist",
     today: "Hoje",
     yesterday: "Ontem",

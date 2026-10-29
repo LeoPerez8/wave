@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import {
+  discoverRowTitle,
+  catalogueOf,
   HOME_SECTIONS,
   hiddenDiscoverRows,
   editHomeArrangement as editArrangement,
@@ -62,6 +64,19 @@ describe("Home's section catalogue", () => {
 
   test("a section's title is found by its id", () => {
     assert.equal(homeSectionTitle("most-played-albums"), "Most played albums");
+  });
+
+  test("in Portuguese, sections and Discover's rows take the catalogue's titles", () => {
+    const pt = catalogueOf("pt-BR");
+    assert.equal(homeSectionTitle("recently-played", pt), "Tocadas recentemente");
+    assert.equal(homeSectionTitle("stats", pt), "Estatísticas");
+    assert.equal(homeSectionTitle("new-releases", pt), pt.newReleases.title);
+    assert.deepEqual(
+      (["magic-queue", "artist-mixes", "genre-mixes"] as const).map((id) =>
+        discoverRowTitle(id, pt),
+      ),
+      ["Fila Mágica", "Mixes de artistas", "Mixes de gêneros"],
+    );
   });
 });
 

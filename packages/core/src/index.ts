@@ -277,9 +277,16 @@ export {
   STATS_TOP,
   rankPlays,
   rankSongPlays,
+  statsPeriods,
   statsWindow,
 } from "./stats.ts";
-export type { PlayTotals, SongPlayTotals, StatsPeriod, StatsWindow } from "./stats.ts";
+export type {
+  PlayTotals,
+  SongPlayTotals,
+  StatsPeriod,
+  StatsPeriodOption,
+  StatsWindow,
+} from "./stats.ts";
 export { compareRefIds, compareTrackRefs } from "./refOrder.ts";
 export type { LibraryIdOrder, RefId } from "./refOrder.ts";
 export { rankMostPlayed } from "./mostPlayed.ts";
@@ -2361,6 +2368,3 @@ export * from "./followArtistSearch.ts";
 
 export { releaseTitle } from "./ytArtist.ts";
 export { formatNumber, formatTime, formatDate } from "./formatting.ts";
-
-export { statsPeriods } from "./stats.ts";
-export { statsRankings } from "./statsSeeAll.ts";
