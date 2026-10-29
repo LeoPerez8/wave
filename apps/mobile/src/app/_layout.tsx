@@ -31,6 +31,7 @@ import { NowPlayingSheet, UnderNowPlaying } from "@/nowPlaying/NowPlayingSheet";
 import { PERF_ENABLED, perfTouch, useRenderCount } from "@/perf/perf";
 import { PerfProbe } from "@/perf/PerfProbe";
 import { startServices } from "@/services";
+import { useRecognizeRequests } from "@/recognize/recognizeRequests";
 import { SongShareLayer } from "@/share/SongShareLayer";
 import { useNavigationBarScheme } from "@/settings/appearance";
 import { startSync } from "@/sync/startSync";
@@ -56,6 +57,7 @@ export default function RootLayout() {
   // A playlist link shared from YT Music or a browser opens its import card, once Wave can
   // read the Library (the import matches against it).
   useOpenSharedText(granted);
+  useRecognizeRequests(granted);
 
   // What the first screen and the player need starts now: the player, the queue it restores,
   // Auto's responder. A no-op when Android Auto already started them headless (src/services.ts).

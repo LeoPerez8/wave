@@ -62,6 +62,8 @@ export interface RecognizeDeps<
 export interface RecognizeRun {
   /** Cancels capture or the pending lookup. Does nothing after the result is shown. */
   readonly cancel: () => void;
+  /** Cancels and closes a hidden listening card, except while Android asks for phone-audio consent. */
+  readonly cancelOnBackground: () => boolean;
   /** Settles after the capture and lookup end and the one session log line is written. */
   readonly done: Promise<void>;
 }
@@ -88,6 +90,7 @@ export const startRecognizeSession = <L extends RecognizeTrack, S extends YtSong
   const unsubscribes: (() => void)[] = [];
   let finished = false;
   let completed = false;
+  let awaitingConsent = false;
   const lookupAbort = new AbortController();
   let resolveDone!: () => void;
   const done = new Promise<void>((resolve) => {
@@ -185,6 +188,7 @@ export const startRecognizeSession = <L extends RecognizeTrack, S extends YtSong
       }),
     );
     try {
+      awaitingConsent = session.source === "playback";
       const id = await deps.native.start(session.source, request);
       if (finished) return deps.native.stop(id);
       nativeId = id;
@@ -198,16 +202,24 @@ export const startRecognizeSession = <L extends RecognizeTrack, S extends YtSong
             ? "consentDeclined"
             : "captureFailed",
       });
+    } finally {
+      awaitingConsent = false;
     }
   };
 
   void run().catch(() => step({ kind: "captureFailed" }));
+  const cancel = (): void => {
+    if (finished && !completed && session.ended?.kind === "match") {
+      lookupAbort.abort();
+      complete(session.ended, "cancelled");
+    } else step({ kind: "cancel" });
+  };
   return {
-    cancel: () => {
-      if (finished && !completed && session.ended?.kind === "match") {
-        lookupAbort.abort();
-        complete(session.ended, "cancelled");
-      } else step({ kind: "cancel" });
+    cancel,
+    cancelOnBackground: () => {
+      if (awaitingConsent && !finished) return false;
+      cancel();
+      return true;
     },
     done,
   };

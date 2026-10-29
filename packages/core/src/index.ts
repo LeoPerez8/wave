@@ -2265,6 +2265,7 @@ export {
   startRecognize,
   stepRecognize,
 } from "./recognize.ts";
+export { recognizeEntryAction } from "./recognizeEntry.ts";
 export type {
   RecognizeAnswer,
   RecognizeCard,
