@@ -258,6 +258,7 @@ const ORDER_TERMS: Record<
   LibrarySongSort["key"],
   readonly [SongOrderField, readonly SongOrderTerm[]]
 > = {
+  // not UI text: a column name
   title: ["titleSort", BY_TITLE],
   artist: ["artistSort", [ascending("albumSort"), ...BY_ALBUM_TRACKS]],
   album: ["albumSort", BY_ALBUM_TRACKS],

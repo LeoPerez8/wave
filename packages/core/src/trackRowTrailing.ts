@@ -5,7 +5,7 @@
  * the song's length.
  */
 
-import { counted } from "./listening.ts";
+import { catalogueOf, type AppLanguage } from "./localisation.ts";
 import { formatDuration } from "./time.ts";
 
 export interface TrackRowTrailingInput {
@@ -15,8 +15,14 @@ export interface TrackRowTrailingInput {
   readonly countedPlays?: number | undefined;
 }
 
-/** "12 plays" / "1 play" on a ranking by plays, else the length ("3:07"), or nothing when unknown. */
-export const trackRowTrailing = ({ durationMs, countedPlays }: TrackRowTrailingInput): string => {
-  if (countedPlays !== undefined) return counted(countedPlays, "play");
+/**
+ * "12 plays" / "1 play" (in [language]) on a ranking by plays, else the
+ * length ("3:07"), or nothing when unknown.
+ */
+export const trackRowTrailing = (
+  { durationMs, countedPlays }: TrackRowTrailingInput,
+  language: AppLanguage = "en",
+): string => {
+  if (countedPlays !== undefined) return catalogueOf(language).stats.plays(countedPlays);
   return durationMs === null ? "" : formatDuration(durationMs);
 };

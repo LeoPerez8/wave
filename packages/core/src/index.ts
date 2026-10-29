@@ -995,6 +995,7 @@ export type {
 export {
   YT_ALBUM_DOWNLOAD_ACTION_LABELS,
   YT_DOWNLOAD_BUTTON_LABELS,
+  ytDownloadButtonLabels,
   YT_PLAYLIST_DOWNLOAD_ACTION_LABELS,
   ytAlbumDownload,
   ytAlbumDownloadButton,
@@ -2139,6 +2140,7 @@ export {
   swipeChoiceAction,
   shownSwipeEntry,
   swipeChoiceLabel,
+  swipeChoiceLabelFor,
   swipeActionLabels,
   swipeActionTone,
   swipesChoose,

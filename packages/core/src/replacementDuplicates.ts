@@ -272,6 +272,7 @@ const WHEN: Record<DuplicateCheckWhen, string> = {
   interruptedRun: "after an interrupted replacement run",
 };
 
+// not UI text: the app log's line
 const outcomeLine = (pair: ReplacementDuplicate, outcome: DuplicateOutcome): string => {
   const song = `"${pair.old.title}"`;
   const files = `(${pair.old.path}, ${pair.new.path})`;
@@ -290,6 +291,7 @@ const outcomeLine = (pair: ReplacementDuplicate, outcome: DuplicateOutcome): str
  * how many pairs it found, fixed and left alone, then a line per song it
  * changed or left.
  */
+// not UI text: the app log's lines
 export const replacementDuplicateLines = (
   when: DuplicateCheckWhen,
   outcomes: readonly { readonly pair: ReplacementDuplicate; readonly outcome: DuplicateOutcome }[],

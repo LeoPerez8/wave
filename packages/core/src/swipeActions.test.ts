@@ -11,6 +11,7 @@ import {
   swipesChoose,
   ytDownloadActions,
   swipeChoiceLabel,
+  swipeChoiceLabelFor,
   swipeActionTone,
   swipeActionLabels,
   shownSwipeEntry,
@@ -282,5 +283,19 @@ describe("swipeActionLabels", () => {
       label: "Search",
       accessibilityLabel: "Search",
     });
+  });
+});
+
+describe("swipe labels in Portuguese", () => {
+  test("a swipe's caption and TalkBack name, and Settings' choices, read in Portuguese", () => {
+    assert.deepEqual(swipeActionLabels("removeFromPlaylist", "pt-BR"), {
+      label: "Remover",
+      accessibilityLabel: "Remover da Playlist",
+    });
+    assert.deepEqual(swipeActionLabels("search", "pt-BR").label, "Buscar");
+    assert.deepEqual(["addToQueue", "remove"].map(swipeChoiceLabelFor("pt-BR")), [
+      "Adicionar à Fila",
+      "Remover",
+    ]);
   });
 });

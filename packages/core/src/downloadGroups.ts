@@ -6,6 +6,7 @@
  * came from, wait under Songs.
  */
 
+import { catalogueOf, type AppLanguage } from "./localisation.ts";
 import { moveItem } from "./playlists.ts";
 import {
   queuedDownloadCounts,
@@ -73,15 +74,25 @@ export interface DownloadingList<S extends YtSong = YtSong> {
   readonly counts: QueuedDownloadCounts;
 }
 
-/** The group songs asked for on their own wait in. */
-export const SONGS_GROUP_NAME = "Songs";
+/** The group songs asked for on their own wait in, in English. */
+export const SONGS_GROUP_NAME = catalogueOf("en").downloads.songsGroup;
 
 /** A group's key (`DownloadGroup.key`) for the jobs from [origin] (null for Songs). */
 export const downloadGroupKey = (origin: DownloadOrigin | null): string =>
   origin === null ? "songs" : `${origin.kind}:${origin.id}`;
 
-const songsLeft = (count: number): string =>
-  `${count.toLocaleString("en")} ${count === 1 ? "song" : "songs"} left`;
+/**
+ * What [origin]'s group is called in [language]: the playlist's, album's or
+ * mix's own name, else Songs, Favorites or the replacement run's.
+ */
+const groupName = (origin: DownloadOrigin | null, language: AppLanguage): string => {
+  const strings = catalogueOf(language);
+  if (origin === null) return strings.downloads.songsGroup;
+  if (origin.kind === "favorites") return strings.tabs.favorites;
+  if (origin.kind === "quality" && (origin.id === "upgrade" || origin.id === "downgrade"))
+    return strings.downloads.qualityGroups[origin.id];
+  return origin.name;
+};
 
 interface Building<S extends YtSong> {
   readonly origin: DownloadOrigin | null;
@@ -96,10 +107,12 @@ interface Building<S extends YtSong> {
  * The Downloading list from the journal's [jobs] (in the order its queue
  * starts them). Groups come in queue order: the one whose next waiting song
  * starts soonest first; a group whose songs are all downloading already comes
- * before them. A group lasts while any of its songs is on its way.
+ * before them. A group lasts while any of its songs is on its way. Group
+ * names and lines are in [language].
  */
 export const downloadingList = <S extends YtSong>(
   jobs: readonly YtDownloadJournalJob<S>[],
+  language: AppLanguage = "en",
 ): DownloadingList<S> => {
   const rows = queuedDownloads(jobs);
   const place = new Map(jobs.map((job, index) => [job.id, index]));
@@ -131,9 +144,9 @@ export const downloadingList = <S extends YtSong>(
     groups: sorted.map(([key, group]) => ({
       key,
       origin: group.origin,
-      name: group.origin?.name ?? SONGS_GROUP_NAME,
+      name: groupName(group.origin, language),
       left: group.left,
-      line: songsLeft(group.left),
+      line: catalogueOf(language).downloads.songsLeft(group.left),
       queued: group.queued,
     })),
   };

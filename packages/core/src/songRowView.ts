@@ -325,7 +325,7 @@ export const songRowView = (source: SongListRowSource, state: SongRowState = {})
         : baseCredit;
   const trailingText =
     state.trailingLabel ??
-    trackRowTrailing({ durationMs: row.durationMs, countedPlays: state.countedPlays });
+    trackRowTrailing({ durationMs: row.durationMs, countedPlays: state.countedPlays }, language);
   const disabled =
     row.disabled || state.disabled === true || fileNotFound || selection === "disabled";
   return {

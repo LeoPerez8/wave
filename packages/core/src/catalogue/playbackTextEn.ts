@@ -21,6 +21,8 @@ export const playbackTextEn = {
   clearSearch: "Clear search",
   closeNowPlaying: "Close Now Playing",
   couldntAddToShazam: "Couldn't add to Shazam",
+  addedToShazam: "Added to Shazam",
+  alreadyInShazam: "Already in Shazam",
   couldntDownloadTheSong: "Couldn't download the song",
   couldntOpenTheArtist: "Couldn't open the artist",
   couldntPlayTheSong: "Couldn't play the song",

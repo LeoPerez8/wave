@@ -128,3 +128,11 @@ test("the newest song goes to the top of the remembered playlist, even after a r
     },
   );
 });
+
+test("the toast is in Portuguese when asked", () => {
+  assert.equal(planShazamAdd("deleted", [], [], song, "pt-BR").toast, "Adicionada ao Shazam");
+  assert.equal(
+    planShazamAdd("s", [{ id: "s", name: "Shazam" }], [song], song, "pt-BR").toast,
+    "Já está no Shazam",
+  );
+});

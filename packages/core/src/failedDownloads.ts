@@ -9,7 +9,7 @@
  */
 
 import { downloadJobKind } from "./downloadJobKind.ts";
-import { counted } from "./listening.ts";
+import { en, type Catalogue } from "./catalogueEn.ts";
 import { foundNoBetterCopy, type QualityDirection } from "./qualityReplacement.ts";
 import type { YtSong } from "./ytMusic.ts";
 import {
@@ -57,6 +57,8 @@ export interface FailedDownloadsInput<S extends YtSong> {
    * a missing song's failure whose Track is no longer missing has settled.
    */
   readonly missingTrackIds: ReadonlySet<number> | null;
+  /** The language each failure's line is in; English when absent. */
+  readonly strings?: Catalogue;
 }
 
 /** Failures whose line already says what to do: their cause adds nothing. */
@@ -141,7 +143,7 @@ export const failedDownloads = <S extends YtSong>(
       {
         id: job.id,
         song: job.song,
-        line: ytDownloadLine(status) ?? "",
+        line: ytDownloadLine(status, input.strings) ?? "",
         detail:
           job.cause === undefined || SELF_EXPLAINED.includes(status.reason)
             ? null
@@ -276,17 +278,18 @@ export type FailedListRow<S extends YtSong = YtSong> =
  * virtualized list, under the songs on their way: the row saying how many
  * failed, then while [expanded] the songs grouped by why they failed (the
  * reason first met first), each group under its header. None while no song
- * has failed.
+ * has failed. The header's line is in [strings]' language.
  */
 export const failedDownloadRows = <S extends YtSong>(
   failed: readonly FailedDownload<S>[],
   { expanded }: { readonly expanded: boolean },
+  strings: Catalogue = en,
 ): readonly FailedListRow<S>[] => {
   if (failed.length === 0) return [];
   const header: FailedHeaderRow = {
     kind: "failedHeader",
     key: "failed",
-    line: `${counted(failed.length, "song")} failed`,
+    line: strings.downloadStatus.failedSongs(failed.length),
     expanded,
   };
   if (!expanded) return [header];

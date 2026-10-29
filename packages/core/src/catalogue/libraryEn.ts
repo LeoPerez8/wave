@@ -217,6 +217,19 @@ export const libraryEn = {
   noAnswer: "No answer online",
   songsNeedNetwork: "These songs need the network.",
   songsCouldntLoad: "The songs couldn't be loaded. Try again.",
+  /** A YT Music playlist whose later pages didn't load (`ytPlaylistRestLine`). */
+  ytPlaylistRestOffline: "You're offline, so the rest of this playlist didn't load.",
+  ytPlaylistRestFailed:
+    "The rest of this playlist didn't load. Go back and open it again to try once more.",
+  /** What a YT Music list page is, before its count and length ("Album · 2013"). */
+  pageKind: {
+    album: "Album",
+    albumOf: (year: number): string => `Album · ${year}`,
+    playlist: "Playlist",
+    mix: "Mix",
+  },
+  /** The explicit badge on a song's row. */
+  explicitBadge: "E",
   /** Unavailable entries: their row's line, what a tap says, their menu, and Try Again. */
   unavailable: {
     notFound: "Not found online",

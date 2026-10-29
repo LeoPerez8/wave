@@ -239,3 +239,16 @@ describe("ytPlaylistRestLine", () => {
     );
   });
 });
+
+describe("ytPlaylistRestLine in Portuguese", () => {
+  test("offline and failed read in Portuguese", () => {
+    assert.equal(
+      ytPlaylistRestLine("offline", "pt-BR"),
+      "Você está offline, então o resto desta playlist não carregou.",
+    );
+    assert.equal(
+      ytPlaylistRestLine("failed", "pt-BR"),
+      "O resto desta playlist não carregou. Volte e abra de novo para tentar outra vez.",
+    );
+  });
+});

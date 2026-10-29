@@ -4,6 +4,7 @@
  */
 
 import type { AlertSpec } from "./alert.ts";
+import { en, type Catalogue } from "./catalogueEn.ts";
 
 /** Why a file couldn't be deleted. */
 export type SongDeleteFailureReason =
@@ -28,20 +29,22 @@ export interface SongDeleteFailure {
 export const confirmSongDeletion = (
   songs: readonly { readonly title: string }[],
   { signedIn = false }: { readonly signedIn?: boolean } = {},
+  strings: Catalogue = en,
 ): AlertSpec & { readonly action: NonNullable<AlertSpec["action"]> } => {
+  const text = strings.songDeletion;
   const only = songs.length === 1 ? songs[0] : undefined;
-  const files =
-    only === undefined
-      ? "The files are removed from your phone"
-      : "The file is removed from your phone";
-  const account = only === undefined ? "the songs" : "the song";
+  const message = text.deleteMessage;
   return {
-    title:
+    title: only === undefined ? text.deleteSongs(songs.length) : text.deleteSong(only.title),
+    message:
       only === undefined
-        ? `Delete ${songs.length.toLocaleString("en")} songs?`
-        : `Delete “${only.title}”?`,
-    message: signedIn ? `${files}, and ${account} from your Wave account.` : `${files}.`,
-    action: { label: "Delete", destructive: true },
+        ? signedIn
+          ? message.severalSignedIn
+          : message.several
+        : signedIn
+          ? message.oneSignedIn
+          : message.one,
+    action: { label: text.delete, destructive: true },
   };
 };
 
@@ -53,26 +56,15 @@ export const confirmSongDeletion = (
  */
 export const confirmSongRemoval = (
   songs: readonly { readonly title: string }[],
+  strings: Catalogue = en,
 ): AlertSpec & { readonly action: NonNullable<AlertSpec["action"]> } => {
+  const text = strings.songDeletion;
   const only = songs.length === 1 ? songs[0] : undefined;
   return {
-    title:
-      only === undefined
-        ? `Remove ${songs.length.toLocaleString("en")} songs from your Library?`
-        : `Remove “${only.title}” from your Library?`,
-    message:
-      only === undefined
-        ? "They leave your Wave account too. Your other phones lose them at their next sync, unless they have their files."
-        : "It leaves your Wave account too. Your other phones lose it at their next sync, unless they have its file.",
-    action: { label: "Remove", destructive: true },
+    title: only === undefined ? text.removeSongs(songs.length) : text.removeSong(only.title),
+    message: only === undefined ? text.removeMessage.several : text.removeMessage.one,
+    action: { label: text.remove, destructive: true },
   };
-};
-
-const REASONS: Record<SongDeleteFailureReason, string> = {
-  missing: "The file is already gone.",
-  denied: "Wave isn't allowed to delete it.",
-  readOnly: "Its storage is read-only.",
-  failed: "The file couldn't be deleted.",
 };
 
 /** Songs named one by one in the error for several; the rest are counted. */
@@ -89,25 +81,27 @@ const lowerFirst = (text: string): string =>
 export const songDeletionFailure = (
   failures: readonly SongDeleteFailure[],
   attempted: number,
+  strings: Catalogue = en,
 ): { readonly title: string; readonly message: string } | null => {
+  const text = strings.songDeletion;
   const [first] = failures;
   if (first === undefined) return null;
   if (attempted === 1 && failures.length === 1) {
     return {
-      title: `Couldn't delete “${first.title}”`,
-      message: `${REASONS[first.reason]} The song stays in your library.`,
+      title: text.couldntDeleteSong(first.title),
+      message: `${text.reasons[first.reason]} ${text.songStays}`,
     };
   }
   const named = failures
     .slice(0, NAMED_FAILURES)
-    .map((failure) => `“${failure.title}”: ${lowerFirst(REASONS[failure.reason])}`);
+    .map((failure) => `“${failure.title}”: ${lowerFirst(text.reasons[failure.reason])}`);
   const more = failures.length - NAMED_FAILURES;
   return {
-    title: `Couldn't delete ${failures.length.toLocaleString("en")} of ${attempted.toLocaleString("en")} songs`,
+    title: text.couldntDeleteSongs(failures.length, attempted),
     message: [
-      failures.length === 1 ? "It stays in your library." : "They stay in your library.",
+      failures.length === 1 ? text.oneStays : text.severalStay,
       ...named,
-      ...(more > 0 ? [`And ${more.toLocaleString("en")} more.`] : []),
+      ...(more > 0 ? [text.more(more)] : []),
     ].join("\n"),
   };
 };

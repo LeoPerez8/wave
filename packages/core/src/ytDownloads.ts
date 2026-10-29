@@ -231,10 +231,11 @@ export const ytDownloadStatuses = (
 
 export type YtDownloadAction = "download" | "cancelDownload" | "retryDownload";
 
+/** A YT Music song's download entries in English (`strings.itemActions.labels`). */
 export const YT_DOWNLOAD_ACTION_LABELS: { readonly [A in YtDownloadAction]: string } = {
-  download: "Download",
-  cancelDownload: "Cancel Download",
-  retryDownload: "Retry Download",
+  download: en.itemActions.labels.download,
+  cancelDownload: en.itemActions.labels.cancelDownload,
+  retryDownload: en.itemActions.labels.retryDownload,
 };
 
 /**

@@ -38,11 +38,16 @@ export const TEXT_ALLOWLIST = [
   "apps/mobile/src/app/dev/",
   "apps/mobile/src/dev/",
   "apps/mobile/src/perf/",
+  // The design preview's synthetic Library and state galleries (only design-preview.tsx uses them).
+  "apps/mobile/src/preview/",
+  // Seeds fixture tracks for the store tests; never part of the app.
+  "apps/mobile/src/library/db/testDatabase.ts",
   // Pure log/diagnostic builders and SVG path geometry; none returns UI copy.
   "packages/core/src/appLog.ts",
   "packages/core/src/failureCause.ts",
   "packages/core/src/importLog.ts",
   "packages/core/src/importTimings.ts",
+  "packages/core/src/networkUse.ts",
   "packages/core/src/lostTap.ts",
   "packages/core/src/magicBatchReport.ts",
   "packages/core/src/slowRead.ts",
@@ -58,6 +63,13 @@ export const isTextSource = (file) =>
   /\.tsx?$/.test(file) &&
   !/\.(?:test|d)\.tsx?$/.test(file) &&
   !TEXT_ALLOWLIST.some((entry) => (entry.endsWith("/") ? file.startsWith(entry) : file === entry));
+
+/**
+ * A comment line "// not UI text: <why>" right above a statement or property
+ * skips it: a log line, a stored placeholder or an id that only looks like
+ * English. The reason is required, so each exemption says what it is.
+ */
+const NOT_UI = /^\/\/ not UI text: \S/;
 
 const hasText = (text) => /\p{L}/u.test(text) && !BRANDS.has(text.trim());
 const textComponent = (node) =>
@@ -127,12 +139,22 @@ export function findUntranslatedText(file, source) {
           value(prop.initializer);
     } else if (ts.isArrayLiteralExpression(node)) node.elements.forEach(value);
   };
+  const marked = (node) =>
+    (ts.isStatement(node) || ts.isPropertyAssignment(node)) &&
+    (ts.getLeadingCommentRanges(source, node.getFullStart()) ?? []).some(({ pos, end }) =>
+      NOT_UI.test(source.slice(pos, end)),
+    );
   const visit = (node) => {
-    if (ts.isThrowStatement(node) || ts.isNewExpression(node)) return;
+    if (ts.isThrowStatement(node) || ts.isNewExpression(node) || marked(node)) return;
     if (ts.isCallExpression(node)) {
       const name = node.expression.getText(tree);
       if (/(?:^|\.)(?:log|debug|info|warn|error|trace|fatal)$/.test(name)) return;
-      if (/(?:^|\.)(?:showToast|toast|alert|confirm)$/.test(name)) node.arguments.forEach(value);
+      if (
+        /(?:^|\.)(?:showToast|toast|alert|confirm|confirmAction|showMessage|showAlert|announce|announceForAccessibility)$/.test(
+          name,
+        )
+      )
+        node.arguments.forEach(value);
     }
     if (ts.isJsxAttribute(node) && UI_PROPERTIES.has(node.name.getText(tree)) && node.initializer)
       value(node.initializer);

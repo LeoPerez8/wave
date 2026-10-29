@@ -70,6 +70,7 @@ export const throttledFailures = <S extends YtSong>(
 };
 
 /** The app log's line for the [count] songs `throttledFailures` sent back to the queue. */
+// not UI text: the app log's line
 export const throttledFailuresLine = (count: number): string =>
   count === 0
     ? "No songs that failed as unavailable while YouTube limited downloads needed to go back to the queue"

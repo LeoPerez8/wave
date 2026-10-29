@@ -151,6 +151,7 @@ export const SYNC_FIELDS: {
   readonly [K in keyof SyncTables]: Readonly<Record<string, SyncFieldKind>>;
 } = {
   songs: {
+    // not UI text: a wire field kind
     title: "text",
     credit: "text",
     album: "text?",

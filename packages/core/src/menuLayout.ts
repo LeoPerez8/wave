@@ -6,7 +6,8 @@
  * `ytSongActions`, `discoverMixActions`…); this decides which become cards.
  */
 
-import { ITEM_ACTION_LABELS, type ItemKind } from "./itemActions.ts";
+import { en } from "./catalogueEn.ts";
+import type { ItemKind } from "./itemActions.ts";
 
 /** A play action shown as a card in a menu's row of cards, in this order. */
 export type PlayCard = "play" | "playNext" | "addToQueue";
@@ -14,13 +15,8 @@ export type PlayCard = "play" | "playNext" | "addToQueue";
 /** What a menu's Shuffle row does: plays the collection shuffled, as its page's Shuffle does. */
 export type PlayAction = PlayCard | "shuffle";
 
-/** What each play action says, on its card or row. */
-export const PLAY_ACTION_LABELS: { readonly [A in PlayAction]: string } = {
-  play: "Play",
-  playNext: ITEM_ACTION_LABELS.playNext,
-  addToQueue: ITEM_ACTION_LABELS.addToQueue,
-  shuffle: "Shuffle",
-};
+/** What each play action says, on its card or row, in English (`strings.itemActions.playLabels`). */
+export const PLAY_ACTION_LABELS: { readonly [A in PlayAction]: string } = en.itemActions.playLabels;
 
 /**
  * What a long-press menu is about: a Library item (`ItemKind`; a track

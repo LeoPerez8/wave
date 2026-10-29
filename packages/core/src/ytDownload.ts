@@ -232,6 +232,7 @@ const tidyEnds = (name: string): string =>
  * [text] as a folder or file name: unsafe characters become "_", it isn't
  * hidden and fits in [maxBytes]; "Unknown" when nothing is left.
  */
+// not UI text: a file or folder name on disk
 const safeName = (text: string, maxBytes = MAX_NAME_BYTES): string => {
   const name = tidyEnds(fitBytes(tidyEnds(text.replace(UNSAFE, "_")), maxBytes));
   return name === "" ? "Unknown" : name;

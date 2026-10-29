@@ -30,6 +30,8 @@ test("ignores catalogue reads, brands, symbols, logs, errors, tests and explicit
     "apps/mobile/src/app/dev/glass.tsx",
     "apps/mobile/src/dev/glass/FrameStatsHud.tsx",
     "apps/mobile/src/perf/PerfProbe.tsx",
+    "apps/mobile/src/preview/KindCards.tsx",
+    "apps/mobile/src/library/db/testDatabase.ts",
     "apps/mobile/src/example.test.tsx",
     "packages/core/src/catalogueEn.ts",
     "packages/core/src/cataloguePtBr.ts",
@@ -67,6 +69,7 @@ test("handles JSX expressions, conditional labels, multiline alerts and confirm 
     '<Input title="Search" label={ready ? "Ready" : strings.wait} placeholder="Find songs" message="Try again" accessibilityHint="Double tap to play" />;',
     'Alert.alert("Delete song?", "This cannot be undone", [{ text: "Delete" }]);',
     'confirm({ title: "Remove songs?", action: { label: "Remove" } });',
+    'void showMessage("Couldn\'t remove the songs", cause.message);',
   ].join("\n");
   assert.deepEqual(
     findUntranslatedText("apps/mobile/src/example.tsx", source).map(({ text }) => text),
@@ -83,6 +86,7 @@ test("handles JSX expressions, conditional labels, multiline alerts and confirm 
       "Delete",
       "Remove songs?",
       "Remove",
+      "Couldn't remove the songs",
     ],
   );
 });
@@ -100,4 +104,22 @@ test("Core enum values, URLs and private diagnostic builders are not UI copy", (
     [],
   );
   assert.deepEqual(findUntranslatedText("packages/core/src/appLog.ts", fixture("core.ts")), []);
+});
+
+test("a marked declaration or property is not UI copy; the marker needs a reason", () => {
+  const source = [
+    "// not UI text: the app log's line",
+    "export const fillLine = (n: number) => `The fill pauses for ${n} s`;",
+    "export const sizes = {",
+    "  // not UI text: a stored field kind",
+    '  title: "text",',
+    '  label: "Visible label",',
+    "};",
+    "// not UI text:",
+    'export const shown = () => "Still visible";',
+  ].join("\n");
+  assert.deepEqual(
+    findUntranslatedText("packages/core/src/example.ts", source).map(({ text }) => text),
+    ["Visible label", "Still visible"],
+  );
 });
