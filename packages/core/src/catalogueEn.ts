@@ -1,3 +1,10 @@
+import { homeEn } from "./catalogue/homeEn.ts";
+import { arrangementEn } from "./catalogue/arrangementEn.ts";
+import { discoverEn } from "./catalogue/discoverEn.ts";
+import { statsEn } from "./catalogue/statsEn.ts";
+import { recapEn } from "./catalogue/recapEn.ts";
+import { listeningHistoryEn } from "./catalogue/listeningHistoryEn.ts";
+import { shareEn } from "./catalogue/shareEn.ts";
 import { downloadNoticeEn } from "./catalogue/downloadNoticeEn.ts";
 import { nativeEn } from "./catalogue/nativeEn.ts";
 import { autoEn } from "./catalogue/autoEn.ts";
@@ -22,6 +29,13 @@ export const en = {
   playbackText: playbackTextEn,
   shows: showsEn,
   upcomingShows: upcomingShowsEn,
+  home: homeEn,
+  arrangement: arrangementEn,
+  discover: discoverEn,
+  stats: statsEn,
+  recap: recapEn,
+  listeningHistory: listeningHistoryEn,
+  share: shareEn,
   /** Each tab's name, in the tab bar, its editor and TalkBack. */
   tabs: {
     index: "Home",

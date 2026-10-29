@@ -1,3 +1,4 @@
+import { currentLocalisation } from "@/localisation/localisation";
 /** Discover's saved mix rows, built and reranked from ordered artist radios. */
 import {
   artistMixNeedsChartSteps,
@@ -483,7 +484,6 @@ const refresh = (played: boolean, onlyEmpty = false): void => {
 };
 
 /** The toast after a refresh saved new mixes; its Undo puts the previous ones back. */
-const NEW_MIXES = "New mixes";
 
 /**
  * Builds [id]'s mixes again now, for new ones (the owner pulled its
@@ -522,8 +522,9 @@ export const refreshMixes = (id: MixSectionId): void => {
       saveBuilt(id, built);
       shown.set(mixesShown(memory, built, Date.now()));
       if (previous === null) return;
-      void showToast(NEW_MIXES, {
-        label: "Undo",
+      const { strings } = currentLocalisation();
+      void showToast(strings.discover.newMixes, {
+        label: strings.discover.undo,
         run: () => {
           // Another build saved since: Undo would throw its mixes away.
           if (saved.get() !== built || building.get()) return;

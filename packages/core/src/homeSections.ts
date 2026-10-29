@@ -41,26 +41,26 @@ export interface HomeSection {
 export const HOME_SECTIONS: readonly HomeSection[] = [
   { id: "new-releases", title: en.newReleases.title, fromPlays: false },
   { id: "upcoming-shows", title: en.upcomingShows.title, fromPlays: false },
-  { id: "discover", title: "Discover", fromPlays: false },
-  { id: "recently-added", title: "Recently added", fromPlays: false },
-  { id: "recently-played", title: "Recently played", fromPlays: true },
-  { id: "most-played", title: "Most played", fromPlays: true },
-  { id: "most-played-albums", title: "Most played albums", fromPlays: true },
-  { id: "most-played-artists", title: "Most played artists", fromPlays: true },
-  { id: "favorites", title: "Favorites", fromPlays: false },
-  { id: "stats", title: "Stats", fromPlays: false },
+  { id: "discover", title: en.home.sections.discover, fromPlays: false },
+  { id: "recently-added", title: en.home.sections["recently-added"], fromPlays: false },
+  { id: "recently-played", title: en.home.sections["recently-played"], fromPlays: true },
+  { id: "most-played", title: en.home.sections["most-played"], fromPlays: true },
+  { id: "most-played-albums", title: en.home.sections["most-played-albums"], fromPlays: true },
+  { id: "most-played-artists", title: en.home.sections["most-played-artists"], fromPlays: true },
+  { id: "favorites", title: en.home.sections.favorites, fromPlays: false },
+  { id: "stats", title: en.home.sections.stats, fromPlays: false },
 ];
 
 const sectionOf = (id: HomeSectionId): HomeSection | undefined =>
   HOME_SECTIONS.find((section) => section.id === id);
 
-/** The title of the section [id]. */
+/** The title of the section [id], in [strings]' language. */
 export const homeSectionTitle = (id: HomeSectionId, strings: Catalogue = en): string =>
   id === "new-releases"
     ? strings.newReleases.title
     : id === "upcoming-shows"
       ? strings.upcomingShows.title
-      : (sectionOf(id)?.title ?? id);
+      : strings.home.sections[id];
 
 /** A row of Home's Discover section. */
 export type DiscoverRowId = "magic-queue" | "artist-mixes" | "genre-mixes";
@@ -69,15 +69,13 @@ export type DiscoverRowId = "magic-queue" | "artist-mixes" | "genre-mixes";
 export type MixRowId = Exclude<DiscoverRowId, "magic-queue">;
 
 /** Discover's rows, top to bottom, each with the label over it. */
-export const DISCOVER_ROWS: readonly { readonly id: DiscoverRowId; readonly title: string }[] = [
-  { id: "magic-queue", title: "Magic Queue" },
-  { id: "artist-mixes", title: "Artist mixes" },
-  { id: "genre-mixes", title: "Genre mixes" },
-];
+export const DISCOVER_ROWS: readonly { readonly id: DiscoverRowId; readonly title: string }[] = (
+  ["magic-queue", "artist-mixes", "genre-mixes"] as const
+).map((id) => ({ id, title: en.discover.rows[id] }));
 
-/** The label over Discover's row [id]. */
-export const discoverRowTitle = (id: DiscoverRowId): string =>
-  DISCOVER_ROWS.find((row) => row.id === id)?.title ?? id;
+/** The label over Discover's row [id], in [strings]' language. */
+export const discoverRowTitle = (id: DiscoverRowId, strings: Catalogue = en): string =>
+  strings.discover.rows[id];
 
 /**
  * One thing Home lists: a section of the catalogue (drawn only when it has

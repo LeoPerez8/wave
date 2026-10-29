@@ -1,3 +1,4 @@
+import { en, type Catalogue } from "./catalogueEn.ts";
 import { indexSteps, finishSteps, sortSteps } from "./buildSteps.ts";
 /**
  * How much of each mix is new music (docs/spec.md, "Artist mixes"): a level
@@ -110,25 +111,19 @@ export const DISCOVER_MIX_LEVELS: readonly {
   readonly label: string;
   /** How much of what Discover plays is new at it ("60% new"). */
   readonly share: string;
-}[] = (
-  [
-    [1, "Mostly familiar"],
-    [2, "More familiar"],
-    [3, "Balanced"],
-    [4, "Mostly new"],
-    [5, "All new"],
-  ] as const
-).map(([level, label]) => ({ level, label, share: `${(level * 100) / LEVELS}% new` }));
+}[] = ([1, 2, 3, 4, 5] as const).map((level) => ({
+  level,
+  label: en.discover.levels[level],
+  share: en.discover.newShare((level * 100) / LEVELS),
+}));
 
 /**
- * What Discover's New music slider says at [level]: the step's name and its
- * share ("Balanced · 60% new"). One scale for the Magic Queue and the mixes
- * (`magicQueueShare`).
+ * What Discover's New music slider says at [level], in [strings]' language:
+ * the step's name and its share ("Balanced · 60% new"). One scale for the
+ * Magic Queue and the mixes (`magicQueueShare`).
  */
-export const discoverLevelLabel = (level: DiscoverMixLevel): string => {
-  const entry = DISCOVER_MIX_LEVELS.find((candidate) => candidate.level === level)!;
-  return `${entry.label} · ${entry.share}`;
-};
+export const discoverLevelLabel = (level: DiscoverMixLevel, strings: Catalogue = en): string =>
+  `${strings.discover.levels[level]} · ${strings.discover.newShare((level * 100) / LEVELS)}`;
 
 /** The level kept on the phone ([stored], null for none): 3 for anything that isn't one. */
 export const readDiscoverMixLevel = (stored: string | null): DiscoverMixLevel =>

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import {
+  catalogueOf,
   STATS_PERIODS,
   STATS_SEE_ALL,
   STATS_TOP,
@@ -15,6 +16,7 @@ import {
   type CreditedPlayTotals,
   type PlayTotals,
   type SongPlayTotals,
+  statsPeriods,
 } from "./index.ts";
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -53,6 +55,18 @@ describe("statsWindow", () => {
         ["month", "Last 30 days", "30 days"],
         ["year", "Last 12 months", "12 months"],
         ["all", "All time", "All time"],
+      ],
+    );
+  });
+
+  test("in Portuguese, the periods take the catalogue's names", () => {
+    assert.deepEqual(
+      statsPeriods(catalogueOf("pt-BR")).map((period) => [period.id, period.label, period.tab]),
+      [
+        ["week", "Últimos 7 dias", "7 dias"],
+        ["month", "Últimos 30 dias", "30 dias"],
+        ["year", "Últimos 12 meses", "12 meses"],
+        ["all", "Todo o período", "Todo o período"],
       ],
     );
   });
