@@ -4,6 +4,7 @@ import {
   ticketmasterAttraction,
   ticketmasterShows,
   formatDate,
+  type FollowCheckContext,
   type FollowShow,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
@@ -29,8 +30,8 @@ const request = (path: string, params: Record<string, string>) =>
     return (await response.json()) as unknown;
   }).pipe(Effect.timeout("20 seconds"), Effect.delay("250 millis"));
 let checking = false;
-/** Shared by Home and artist pages; #810 can select the daily interval. */
-export const checkFollowShows = (context: "home" | "background" = "home") =>
+/** Shared by Home, artist pages and the daily background task (`followCheckTask.ts`). */
+export const checkFollowShows = (context: FollowCheckContext = "home") =>
   Effect.acquireUseRelease(
     Effect.sync(() => {
       if (checking) return false;

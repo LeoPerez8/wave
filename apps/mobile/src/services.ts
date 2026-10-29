@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import { Auto } from "@/auto/Auto";
 import { startAutoLyrics } from "@/auto/autoLyrics";
 import { startAutoResponder } from "@/auto/autoResponder";
+import { scheduleFollowCheck } from "@/home/followCheckTask";
 import { afterFirstSettled } from "@/lib/backgroundWork";
 import { onSyncedSettingChange } from "@/lib/persistedSetting";
 import { startBackgroundFill } from "@/library/backgroundFill";
@@ -65,6 +66,8 @@ export const startServices = (by: ServicesStarter): void => {
   // The app's resume reads the journal and may read the whole Library: after the first screen.
   if (by === "app") afterFirstSettled("downloads", () => startDownloads(true));
   else startDownloads(false);
+  // Registering is idempotent, so it doesn't matter who started the services first.
+  if (by === "app") afterFirstSettled("followCheck", scheduleFollowCheck);
   if (startedBy !== null) {
     console.log(`[wave] services already started by the ${startedBy}; the ${by} reuses them`);
     return;
