@@ -1,4 +1,4 @@
-import { currentLocalisation, useLocalisation } from "@/localisation/localisation";
+import { useLocalisation } from "@/localisation/localisation";
 import type { LegendListRef } from "@legendapp/list/react-native";
 import { AnimatedLegendList } from "@legendapp/list/reanimated";
 import {
@@ -20,6 +20,7 @@ import {
   type QueueState,
   type RepeatMode,
   type SongListRowSource,
+  type Catalogue,
 } from "@wave/core";
 import {
   createContext,
@@ -121,18 +122,9 @@ function Toggle({ icon: Icon, label, on, onPress, onLongPress, accessibilityHint
   );
 }
 
-/** What the repeat toggles say for each mode. */
-export const REPEAT_LABEL: Record<RepeatMode, string> = {
-  get off() {
-    return currentLocalisation().strings.playbackText.repeat;
-  },
-  get all() {
-    return currentLocalisation().strings.playbackText.repeat;
-  },
-  get one() {
-    return currentLocalisation().strings.playbackText.repeatOne;
-  },
-};
+/** What the repeat toggles say for [mode], in [strings]' language. */
+export const repeatLabel = (mode: RepeatMode, strings: Catalogue): string =>
+  mode === "one" ? strings.playbackText.repeatOne : strings.playbackText.repeat;
 
 /**
  * The top of the Queue view, pinned over its list: what's playing (small).
@@ -217,7 +209,7 @@ function UpNextBar() {
         <Toggle {...shuffle} on={queue.shuffle} onPress={toggleShuffle} />
         <Toggle
           icon={queue.repeat === "one" ? IconRepeatOnce : IconRepeat}
-          label={REPEAT_LABEL[queue.repeat]}
+          label={repeatLabel(queue.repeat, strings)}
           on={queue.repeat !== "off"}
           onPress={cycleRepeat}
         />
@@ -252,31 +244,39 @@ const queueSource = (
   history,
 });
 
-/** Screen-reader actions an Up Next row offers, one list per place it can move to. */
-const SONG_ACTIONS = {
-  name: "longpress",
-  get label() {
-    return currentLocalisation().strings.playbackText.songActions;
-  },
-} as const;
-const UP_NEXT_ACTIONS = new Map(
-  [false, true].flatMap((up) =>
-    [false, true].map((down) => [
-      `${up}:${down}`,
-      [
-        SONG_ACTIONS,
-        { name: "remove", label: currentLocalisation().strings.playbackText.removeFromUpNext },
-        ...(up
-          ? [{ name: "moveUp", label: currentLocalisation().strings.playbackText.moveUp }]
-          : []),
-        ...(down
-          ? [{ name: "moveDown", label: currentLocalisation().strings.playbackText.moveDown }]
-          : []),
-      ],
-    ]),
-  ),
-);
-const HISTORY_ACTIONS = [SONG_ACTIONS];
+/**
+ * Screen-reader actions Queue rows offer in [strings]' language: an Up Next
+ * row's, one list per place it can move to, and a History row's. Built once
+ * per language, so rows keep the same lists.
+ */
+const rowActionsByLanguage = new WeakMap<Catalogue, ReturnType<typeof buildRowActions>>();
+const buildRowActions = ({ playbackText: text }: Catalogue) => {
+  const songActions = { name: "longpress", label: text.songActions };
+  return {
+    upNext: new Map(
+      [false, true].flatMap((up) =>
+        [false, true].map((down) => [
+          `${up}:${down}`,
+          [
+            songActions,
+            { name: "remove", label: text.removeFromUpNext },
+            ...(up ? [{ name: "moveUp", label: text.moveUp }] : []),
+            ...(down ? [{ name: "moveDown", label: text.moveDown }] : []),
+          ],
+        ]),
+      ),
+    ),
+    history: [songActions],
+  };
+};
+const rowActions = (strings: Catalogue) => {
+  let actions = rowActionsByLanguage.get(strings);
+  if (actions === undefined) {
+    actions = buildRowActions(strings);
+    rowActionsByLanguage.set(strings, actions);
+  }
+  return actions;
+};
 
 /** What a Queue row's keyed handlers act on: the entries on screen. */
 type QueueRowActions = {
@@ -351,7 +351,7 @@ const UpNextRow = memo(function UpNextRow({
         {...shown}
         onPress={actions.onPress}
         onLongPress={actions.onLongPress}
-        extraActions={UP_NEXT_ACTIONS.get(`${up}:${down}`)}
+        extraActions={rowActions(strings).upNext.get(`${up}:${down}`)}
         onExtraAction={actions.onAction}
         accessibilityHint={strings.playbackText.playsThisSongNowLongPressForSongActions}
         accessory={accessory}
@@ -378,7 +378,7 @@ const HistoryRow = memo(function HistoryRow({
       {...shown}
       onPress={actions.onPress}
       onLongPress={actions.onLongPress}
-      extraActions={HISTORY_ACTIONS}
+      extraActions={rowActions(strings).history}
       onExtraAction={actions.onAction}
       accessibilityHint={strings.playbackText.playsThisSongAgainLongPressForSongActions}
     />

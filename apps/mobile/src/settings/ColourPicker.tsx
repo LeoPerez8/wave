@@ -23,6 +23,7 @@ import {
   type CustomInkPreview,
   type Hsv,
   type InkGroup,
+  type Catalogue,
 } from "@wave/core";
 import { useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Text, TextInput, View } from "react-native";
@@ -57,13 +58,9 @@ export const HUE_STOPS = [
   "#ff0000",
 ];
 
-const TITLE: Record<InkGroup, string> = {
-  get primary() {
-    return currentLocalisation().strings.settings.primaryColour;
-  },
-  get secondary() {
-    return currentLocalisation().strings.settings.secondaryColour;
-  },
+const TITLE: Record<InkGroup, (strings: Catalogue) => string> = {
+  primary: (strings) => strings.settings.primaryColour,
+  secondary: (strings) => strings.settings.secondaryColour,
 };
 
 /** The picker never grows wider than this, however wide the card. */
@@ -83,7 +80,7 @@ export const openColourPicker = (group: InkGroup, initial: string): void => {
   const applied = makeExternalStore(initial);
   const preview = previewCustomInk(group, applied.set);
   void presentOverlay<string | null>({
-    label: TITLE[group],
+    label: TITLE[group](currentLocalisation().strings),
     align: "top",
     dismissed: null,
     render: (finish) => (
@@ -129,7 +126,7 @@ function ColourPickerCard({
 
   return (
     <>
-      <CatalogLine className="mb-2">{TITLE[group]}</CatalogLine>
+      <CatalogLine className="mb-2">{TITLE[group](strings)}</CatalogLine>
       <CardEntries>
         <ColourFields initial={initial} preview={preview} onColour={onColour} />
         <AppliedSamples group={group} applied={applied} valid={valid} />

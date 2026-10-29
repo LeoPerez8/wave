@@ -1,4 +1,3 @@
-import { currentLocalisation } from "@/localisation/localisation";
 import { useLocalisation } from "@/localisation/localisation";
 import { IconSwipeLeft, IconSwipeRight, type Icon } from "@tabler/icons-react-native";
 import {
@@ -6,6 +5,7 @@ import {
   swipeChoiceLabelFor,
   type RowSwipeSide,
   type SwipeChoice,
+  type Catalogue,
 } from "@wave/core";
 import { router } from "expo-router";
 import { Text, View } from "react-native";
@@ -21,7 +21,7 @@ import { setSwipeChoice, useSwipeSettings } from "./swipeActions";
 
 interface SwipeDirection {
   /** Its row's title, its picker's header and what a screen reader calls it. */
-  readonly title: string;
+  readonly title: (strings: Catalogue) => string;
   /** Where its picker is (also `wave://settings/swipe-actions/<side>`). */
   readonly route: "/settings/swipe-actions/left" | "/settings/swipe-actions/right";
   readonly icon: Icon;
@@ -29,16 +29,12 @@ interface SwipeDirection {
 
 const DIRECTIONS: Readonly<Record<RowSwipeSide, SwipeDirection>> = {
   left: {
-    get title() {
-      return currentLocalisation().strings.settings.swipeLeft;
-    },
+    title: (strings) => strings.settings.swipeLeft,
     route: "/settings/swipe-actions/left",
     icon: IconSwipeLeft,
   },
   right: {
-    get title() {
-      return currentLocalisation().strings.settings.swipeRight;
-    },
+    title: (strings) => strings.settings.swipeRight,
     route: "/settings/swipe-actions/right",
     icon: IconSwipeRight,
   },
@@ -62,7 +58,8 @@ export function SwipeDirectionRow({
   enabled: boolean;
 }) {
   const { language, strings } = useLocalisation();
-  const { title, route, icon: Glyph } = DIRECTIONS[side];
+  const { route, icon: Glyph } = DIRECTIONS[side];
+  const title = DIRECTIONS[side].title(strings);
   const foreground = useThemeColor("foreground");
   const tertiary = useThemeColor("tertiary");
   const action = swipeChoiceLabelFor(language)(chosen);
@@ -111,7 +108,7 @@ const closePicker = (): void => {
 export function SwipeChoicePickerScreen({ side }: { side: RowSwipeSide }) {
   const { language, strings } = useLocalisation();
   const choiceLabel = swipeChoiceLabelFor(language);
-  const { title } = DIRECTIONS[side];
+  const title = DIRECTIONS[side].title(strings);
   const chosen = useSwipeSettings()[side];
   return (
     <SettingsPageScreen title={title}>
