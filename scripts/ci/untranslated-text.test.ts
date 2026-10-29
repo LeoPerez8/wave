@@ -70,6 +70,7 @@ test("handles JSX expressions, conditional labels, multiline alerts and confirm 
     'Alert.alert("Delete song?", "This cannot be undone", [{ text: "Delete" }]);',
     'confirm({ title: "Remove songs?", action: { label: "Remove" } });',
     'void showMessage("Couldn\'t remove the songs", cause.message);',
+    'play().catch((error: unknown) => showError("Couldn\'t load the song", error));',
   ].join("\n");
   assert.deepEqual(
     findUntranslatedText("apps/mobile/src/example.tsx", source).map(({ text }) => text),
@@ -87,6 +88,7 @@ test("handles JSX expressions, conditional labels, multiline alerts and confirm 
       "Remove songs?",
       "Remove",
       "Couldn't remove the songs",
+      "Couldn't load the song",
     ],
   );
 });

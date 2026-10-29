@@ -1,5 +1,5 @@
-import { currentLocalisation } from "@/localisation/localisation";
 import { useLocalisation } from "@/localisation/localisation";
+import type { Catalogue } from "@wave/core";
 import { StyleSheet, Text, View } from "react-native";
 
 import { GlassSurface } from "@/glass/Glass";
@@ -27,25 +27,19 @@ const STRIPES = [
 /** Lines of thin and bold text across the stripes: blur softens them, refraction bends them at the card's edge. */
 const LINES = [
   {
-    get text() {
-      return currentLocalisation().strings.settings.theQuickBrownFoxJumpsOverThe;
-    },
+    text: (strings: Catalogue) => strings.settings.theQuickBrownFoxJumpsOverThe,
     color: "#FFFFFF",
     bold: false,
   },
   { text: "WAVE WAVE WAVE WAVE WAVE WAVE", color: "#000000", bold: true },
   {
-    get text() {
-      return currentLocalisation().strings.settings.sphinxOfBlackQuartzJudgeMyVow;
-    },
+    text: (strings: Catalogue) => strings.settings.sphinxOfBlackQuartzJudgeMyVow,
     color: "#FFFFFF",
     bold: false,
   },
   { text: "WAVE WAVE WAVE WAVE WAVE WAVE", color: "#FFFFFF", bold: true },
   {
-    get text() {
-      return currentLocalisation().strings.settings.theQuickBrownFoxJumpsOverThe;
-    },
+    text: (strings: Catalogue) => strings.settings.theQuickBrownFoxJumpsOverThe,
     color: "#000000",
     bold: false,
   },
@@ -82,7 +76,7 @@ export function GlassSample() {
               className={`font-sans ${bold ? "text-title3 font-bold" : "text-footnote"}`}
               style={{ color }}
             >
-              {text}
+              {typeof text === "string" ? text : text(strings)}
             </Text>
           ))}
         </View>

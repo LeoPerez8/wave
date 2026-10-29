@@ -78,6 +78,7 @@ export const importsPtBr: typeof importsEn = {
   truncated: (count: number): string => `Ela passa de ${counted(count)}. Só essas são importadas.`,
   onlyFirst: (count: number, service: string): string =>
     plural("pt-BR", count, {
+      zero: `Nenhuma música veio do ${service}`,
       one: `Só a primeira música veio do ${service}`,
       other: `Só as primeiras ${n(count)} músicas vieram do ${service}`,
     }),

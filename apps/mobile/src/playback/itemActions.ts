@@ -356,7 +356,9 @@ export function useItemActions(
             entry,
           )();
         })
-        .catch((error: unknown) => showError("Couldn't load the songs", error));
+        .catch((error: unknown) =>
+          showError(currentLocalisation().strings.playbackText.couldntLoadTheSongs, error),
+        );
     };
   });
 }
@@ -474,7 +476,9 @@ export const itemActionPress = ({
           if (play.playback.kind === "mixed") void queueDiscoverSongs(play.playback.songs, where);
           else void (where === "playNext" ? playNext : addToQueue)(play.playback.tracks);
         })
-        .catch((error: unknown) => showError("Couldn't load the songs", error));
+        .catch((error: unknown) =>
+          showError(currentLocalisation().strings.playbackText.couldntLoadTheSongs, error),
+        );
     });
 
   const star = (on: boolean) =>
@@ -534,7 +538,7 @@ export const itemActionPress = ({
           const places = allTracks.flatMap(({ playlistItem }) => playlistItem ?? []);
           for (const { playlistId, itemIds } of playlistRemovals(places)) {
             removePlaylistItems(playlistId, itemIds).catch((error: unknown) =>
-              showError("Couldn't remove the songs", error),
+              showError(currentLocalisation().strings.playbackText.couldntRemoveTheSongs, error),
             );
           }
         });

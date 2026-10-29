@@ -16,7 +16,7 @@ import { openPlayingActions } from "@/playback/ActionsMenu";
 import { useQueue } from "@/playback/hooks";
 
 import { slotChange, type SlotChange } from "./ChangeSlotMenu";
-import { REPEAT_LABEL } from "./QueueView";
+import { repeatLabel } from "./QueueView";
 import { useShuffleControl } from "./ShuffleMenu";
 import { SleepTimerButton } from "./SleepTimer";
 import { AddToPlaylistButton, DownloadButton } from "./SongButtons";
@@ -82,12 +82,13 @@ function ShuffleSlot({ change }: { change: SlotChange }) {
 
 /** Repeat: off → all → one, teal while on, with the repeat-one glyph on one. */
 function RepeatSlot({ change }: { change: SlotChange }) {
+  const { strings } = useLocalisation();
   const repeat = useQueue().repeat;
   return (
     <ViewToggle
       change={change}
       icon={repeat === "one" ? IconRepeatOnce : IconRepeat}
-      label={REPEAT_LABEL[repeat]}
+      label={repeatLabel(repeat, strings)}
       on={repeat !== "off"}
       onPress={() => void cycleRepeat()}
     />

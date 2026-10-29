@@ -52,6 +52,6 @@ export const promptForExcludedFolder = async (): Promise<void> => {
         return;
     }
   } catch (error) {
-    await showError("Couldn't exclude the folder", error);
+    await showError(currentLocalisation().strings.settings.couldntExcludeFolder, error);
   }
 };

@@ -599,6 +599,7 @@ export const useDiscoverMixes = (
   id: MixSectionId,
   empty = false,
   active = true,
+  drawn = active,
 ): DiscoverMixesSection => {
   const { saved, nothingToBuildFrom, building, failed } = SECTIONS[id];
   const enabled = useYtMusicEnabled();
@@ -620,7 +621,7 @@ export const useDiscoverMixes = (
     [id, mixes, enabled, active, nothing, blend, rebuilding, buildFailed, empty],
   );
   // The start of what Home shows is fetched ahead on Wi-Fi.
-  useEffect(() => noteMixesShown(id, shown), [id, shown]);
+  useEffect(() => noteMixesShown(id, shown, drawn), [id, shown, drawn]);
   return shown;
 };
 
@@ -682,6 +683,10 @@ export const useDiscoverMixesFocus = (
   empty = false,
 ): void => {
   const { discoverRows } = useHomeArrangement();
+  // Slider reranks and refreshes read it before Home's first focus too.
+  useEffect(() => {
+    emptyLibrary = empty;
+  }, [empty]);
   const focus = useCallback(
     (hasPlays: boolean) => {
       emptyLibrary = empty;

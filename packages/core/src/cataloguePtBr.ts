@@ -72,6 +72,7 @@ export const ptBR: Catalogue = {
     ep: "EP",
     album: "Álbum",
     unavailable: "Ainda não está no YouTube Music",
+    ytMusicOff: "O YT Music está desativado em Ajustes",
     noAnswer: "Sem resposta online. Tente novamente em instantes.",
     hideFailed: "Não foi possível ocultar este lançamento. Tente novamente.",
     hide: "Ocultar",

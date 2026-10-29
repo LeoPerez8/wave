@@ -1,3 +1,4 @@
+import { currentLocalisation } from "@/localisation/localisation";
 import {
   itemActions,
   shownSwipeEntry,
@@ -106,7 +107,9 @@ export const runTrackSwipe = (target: ActionItems, shown: RowMenuAction): void =
   else
     currentLibraryFinder()
       .then(press)
-      .catch((error: unknown) => showError("Couldn't load the song", error));
+      .catch((error: unknown) =>
+        showError(currentLocalisation().strings.playbackText.couldntLoadTheSong, error),
+      );
 };
 
 /** Paged lists read full action metadata only when a swipe runs. */
@@ -115,5 +118,7 @@ export const runSummarySwipe = (id: number, shown: RowMenuAction): void => {
     .then(([song]) => {
       if (song !== undefined) runTrackSwipe({ kind: "track", items: [{ song }] }, shown);
     })
-    .catch((error: unknown) => showError("Couldn't load the song", error));
+    .catch((error: unknown) =>
+      showError(currentLocalisation().strings.playbackText.couldntLoadTheSong, error),
+    );
 };

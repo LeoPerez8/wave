@@ -11,7 +11,7 @@ class NativeTextTest {
   @Test fun controlsAndNotificationsFollowTheResolvedLanguage() {
     try {
       NativeText.publish("pt-BR")
-      assertEquals("Embaralhar desativado", AutoModes.buttons(PlaybackModes()).first().label)
+      assertEquals("Aleatório desativado", AutoModes.buttons(PlaybackModes()).first().label)
       assertEquals("Letra ativada", AutoLyrics.label(true))
       assertEquals("Mais deste artista", MoreFromArtist.LABEL)
       assertEquals("Salvando na Biblioteca", NativeText.get("saving"))

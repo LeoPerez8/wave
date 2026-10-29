@@ -201,6 +201,7 @@ export const libraryEn = {
   ytMusicTurnedOff: "YouTube Music is turned off.",
   ytMusicOffInSettings: "YT Music is off in Settings",
   couldntReadArtists: "Couldn't read the artists",
+  couldntReadFollows: "Couldn't read followed artists",
   /** An artist page's Library | Online toggle, and what Online finds. */
   library: "Library",
   online: "Online",

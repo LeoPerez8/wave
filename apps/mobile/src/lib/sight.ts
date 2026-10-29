@@ -117,6 +117,38 @@ export const attachInSight = (
 };
 
 /**
+ * Runs [run] every [ms] while [sight] holds, and once each time the screen
+ * comes back into sight; out of sight no timer runs. Returns how to stop.
+ */
+export const everyWhileInSight = (
+  sight: ScreenSight,
+  ms: number,
+  run: () => void,
+): (() => void) => {
+  let timer: ReturnType<typeof setInterval> | null = null;
+  const start = (): void => {
+    timer ??= setInterval(run, ms);
+  };
+  const pause = (): void => {
+    if (timer !== null) clearInterval(timer);
+    timer = null;
+  };
+  if (sight.visible()) start();
+  const stopWatching = sight.subscribe((visible) => {
+    if (!visible) {
+      pause();
+      return;
+    }
+    run();
+    start();
+  });
+  return () => {
+    stopWatching();
+    pause();
+  };
+};
+
+/**
  * [subscribe] and [get]'s store as the calling component follows it: through
  * [sight] (`followInSight`), or always when [sight] is null. [subscribe] and
  * [get] must be stable (module functions, or memoized).

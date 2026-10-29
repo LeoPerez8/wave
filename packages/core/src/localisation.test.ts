@@ -82,3 +82,33 @@ describe("catalogueOf", () => {
     );
   });
 });
+
+describe("Portuguese counts at zero", () => {
+  const { settings, library, imports } = catalogueOf("pt-BR");
+
+  test("Settings counts read as plurals, never as one", () => {
+    assert.equal(settings.minutes(0), "0 minutos");
+    assert.equal(settings.minutes(1), "1 minuto");
+    assert.equal(settings.foundFiles("0", 0), "0 arquivos encontrados");
+    assert.equal(settings.foundFiles("1", 1), "1 arquivo encontrado");
+    assert.equal(settings.selected("0", 0), "0 selecionados");
+    assert.match(settings.clearPhotos(0), /^Nenhuma foto baixada pelo Wave será apagada\./);
+    assert.match(settings.clearPhotos(1), /^A foto que o Wave baixou será apagada\./);
+  });
+
+  test("Library counts read as plurals, never as one", () => {
+    assert.equal(library.albumCount(0), "0 álbuns");
+    assert.equal(library.albumCount(1), "1 álbum");
+    assert.equal(library.selected(0), "0 selecionadas");
+    assert.deepEqual(
+      Object.values(library.kindCounts).map((count) => count(0)),
+      ["0 álbuns", "0 artistas", "0 playlists", "0 gêneros", "0 seções", "0 itens"],
+    );
+    assert.equal(library.kindCounts.artist(1), "1 artista");
+  });
+
+  test("an import cut to nothing doesn't say the first song came", () => {
+    assert.equal(imports.onlyFirst(0, "Spotify"), "Nenhuma música veio do Spotify");
+    assert.equal(imports.onlyFirst(1, "Spotify"), "Só a primeira música veio do Spotify");
+  });
+});

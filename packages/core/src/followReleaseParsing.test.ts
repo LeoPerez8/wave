@@ -3,7 +3,10 @@ import assert from "node:assert/strict";
 import {
   checkDue,
   releaseDateLine,
+  deezerArtistAlbumsUrl,
   deezerReleases,
+  deezerReleasesNext,
+  keepFollowReleases,
   resolveDeezerFollowArtist,
   matchFollowRelease,
 } from "./index.ts";
@@ -66,4 +69,52 @@ test("release date lines and type names follow the Portuguese catalogue", async 
     "Há 2 dias",
   );
   assert.equal(strings.newReleases.album, "Álbum");
+});
+
+test("Deezer's next page is followed only for the same artist's albums, over HTTPS", () => {
+  assert.equal(deezerArtistAlbumsUrl(13), "https://api.deezer.com/artist/13/albums?limit=100");
+  const next = (value: unknown) => deezerReleasesNext({ data: [], next: value }, 13);
+  assert.equal(
+    next("http://api.deezer.com/artist/13/albums?limit=100&index=100"),
+    "https://api.deezer.com/artist/13/albums?limit=100&index=100",
+  );
+  assert.equal(
+    next("https://api.deezer.com/artist/13/albums?index=200"),
+    "https://api.deezer.com/artist/13/albums?index=200",
+  );
+  assert.equal(next("https://api.deezer.com/artist/14/albums?index=100"), null);
+  assert.equal(next("https://api.deezer.com/artist/13/albumsx?index=100"), null);
+  assert.equal(next("https://evil.example/artist/13/albums"), null);
+  assert.equal(next("https://api.deezer.com.evil.example/artist/13/albums"), null);
+  assert.equal(next(42), null);
+  assert.equal(deezerReleasesNext({ data: [] }, 13), null);
+  assert.equal(deezerReleasesNext("nope", 13), null);
+});
+
+test("a check keeps earlier YT Music matches and releases Deezer left out", () => {
+  const release = (key: string, browseId: string | null = null) => ({
+    key,
+    artistKey: "abba",
+    title: key,
+    type: "album" as const,
+    releaseDate: "2026-10-01",
+    artworkUrl: null,
+    explicit: false,
+    browseId,
+    videoIds: browseId === null ? [] : [`${key}-video`],
+    recordingKeys: [],
+  });
+  const kept = keepFollowReleases(
+    [release("deezer:1"), release("deezer:2")],
+    [release("deezer:1", "MPREb_1"), release("deezer:3", "MPREb_3")],
+  );
+  assert.deepEqual(
+    kept.map((r) => [r.key, r.browseId, r.videoIds]),
+    [
+      ["deezer:1", "MPREb_1", ["deezer:1-video"]],
+      ["deezer:2", null, []],
+      ["deezer:3", "MPREb_3", ["deezer:3-video"]],
+    ],
+  );
+  assert.deepEqual(keepFollowReleases([release("deezer:1")], undefined).length, 1);
 });

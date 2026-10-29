@@ -109,7 +109,13 @@ function Discover({ home, title }: SectionProps) {
   const { discoverRows } = useHomeArrangement();
   const builds = discoverMixRowsToBuild(discoverRows, { empty });
   useDiscoverMixesFocus(ytMusic, played, empty);
-  const artistMixes = useDiscoverMixes("artist-mixes", empty, builds.includes("artist-mixes"));
+  // An empty Library's Magic Queue builds Artist mixes even when the row is removed.
+  const artistMixes = useDiscoverMixes(
+    "artist-mixes",
+    empty,
+    builds.includes("artist-mixes"),
+    discoverRows.includes("artist-mixes"),
+  );
   // An empty Library has no tagged songs: Genre mixes stay hidden, no skeleton.
   const genreMixes = useDiscoverMixes("genre-mixes", empty, builds.includes("genre-mixes"));
   const magicQueue = useMagicQueueSection(

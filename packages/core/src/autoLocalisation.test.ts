@@ -15,7 +15,7 @@ test("Auto translates the tree, shuffle and empty rows without translating names
   );
   assert.equal(
     autoItem({ type: "shuffle", list: { kind: "artistSongs", id: "1" } }, pt)?.title,
-    "Embaralhar Tudo",
+    "Tudo em Aleatório",
   );
   const empty = autoPageItems({ type: "tab", tab: "playlists" }, 0, [], pt)[0];
   assert.equal(empty?.title, "Nenhuma playlist ainda");

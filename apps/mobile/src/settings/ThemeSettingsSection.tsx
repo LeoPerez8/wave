@@ -1,4 +1,3 @@
-import { currentLocalisation } from "@/localisation/localisation";
 import { useLocalisation } from "@/localisation/localisation";
 import { Canvas, Circle, SweepGradient, vec } from "@shopify/react-native-skia";
 import { IconCheck } from "@tabler/icons-react-native";
@@ -10,6 +9,7 @@ import {
   type SavedSwatchOption,
   type ThemeGroup,
   type ThemeSwatchOption,
+  type Catalogue,
 } from "@wave/core";
 import { Text, useColorScheme, View } from "react-native";
 
@@ -27,19 +27,11 @@ import { openOverlay } from "@/overlay/overlay";
 import { HUE_STOPS, openColourPicker } from "./ColourPicker";
 import { removeSavedInk, resetTheme, setSavedInk, setThemeSwatch, useThemeState } from "./theme";
 
-const ROW_LABEL: Record<ThemeGroup, string> = {
-  get light() {
-    return currentLocalisation().strings.settings.lightBackground;
-  },
-  get dark() {
-    return currentLocalisation().strings.settings.darkBackground;
-  },
-  get primary() {
-    return currentLocalisation().strings.settings.primary;
-  },
-  get secondary() {
-    return currentLocalisation().strings.settings.secondary;
-  },
+const ROW_LABEL: Record<ThemeGroup, (strings: Catalogue) => string> = {
+  light: (strings) => strings.settings.lightBackground,
+  dark: (strings) => strings.settings.darkBackground,
+  primary: (strings) => strings.settings.primary,
+  secondary: (strings) => strings.settings.secondary,
 };
 
 const SWATCH = 36;
@@ -232,11 +224,11 @@ export function ThemeSettingsSection() {
             <View
               className="pt-3"
               accessibilityRole="radiogroup"
-              accessibilityLabel={ROW_LABEL[row.group]}
+              accessibilityLabel={ROW_LABEL[row.group](strings)}
             >
               <View className="flex-row items-baseline">
                 <Text className="flex-1 font-sans text-title3 font-normal text-foreground">
-                  {ROW_LABEL[row.group]}
+                  {ROW_LABEL[row.group](strings)}
                 </Text>
                 <Text className="font-sans text-subheadline text-secondary">
                   {custom?.selected

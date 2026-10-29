@@ -121,6 +121,8 @@ export const settingsPtBr: typeof settingsEn = {
   waveIsScanning: "O Wave está verificando",
   youCanExcludeAFolderOnceThe: "Você pode excluir uma pasta quando a verificação terminar.",
   youCanAddAFolderOnceThe: "Você pode adicionar uma pasta quando a verificação terminar.",
+  couldntAddFolder: "Não foi possível adicionar a pasta",
+  couldntExcludeFolder: "Não foi possível excluir a pasta",
   alreadyInYourLibrary: "Já está na sua biblioteca",
   waveCantReadThisFolder: "O Wave não consegue ler esta pasta",
   pickItFromYourPhonesStorageOr:
@@ -159,6 +161,7 @@ export const settingsPtBr: typeof settingsEn = {
   alwaysSearchOnlineOpensAlbumsAndArtists:
     "Buscar sempre online abre álbuns e artistas com Online selecionado e busca online enquanto você digita. Buscar sempre no Wi-Fi faz isso apenas fora dos dados móveis. Só quando solicitado espera um toque em Online. Mantenha Biblioteca | Online pressionado para alterar essa opção ali.",
   clearArtistPhotos: "Limpar fotos de artistas?",
+  couldntClearArtistPhotos: "Não foi possível limpar as fotos de artistas",
   clear: "Limpar",
   artistPhotos: "Fotos de artistas",
   downloadArtistPhotos: "Baixar fotos de artistas",
@@ -376,19 +379,19 @@ export const settingsPtBr: typeof settingsEn = {
   swipeHint: (side) =>
     `Escolhe a ação de deslizar para a ${side === "left" ? "esquerda" : "direita"}`,
   minutes: (n) =>
-    `${formatNumber("pt-BR", n)} ${plural("pt-BR", n, { one: "minuto", other: "minutos" })}`,
+    `${formatNumber("pt-BR", n)} ${plural("pt-BR", n, { zero: "minutos", one: "minuto", other: "minutos" })}`,
   downloadedLine: (count, line) => `${count} baixadas, ${line}`,
   colourMode: (mode, colour) => `Modo ${mode.toLowerCase()}: ${colour}`,
   adjustedColour: (light, dark) =>
     `Ajustada para ficar legível ${light && dark ? "nos seus fundos" : light ? "no seu fundo claro" : "no seu fundo escuro"}, como na amostra.`,
   clearPhotos: (n) =>
-    `${plural("pt-BR", n, { one: "A foto que o Wave baixou será apagada", other: `As ${formatNumber("pt-BR", n)} fotos que o Wave baixou serão apagadas` })}. Os artistas mostram as capas dos álbuns até as fotos serem baixadas de novo.`,
+    `${plural("pt-BR", n, { zero: "Nenhuma foto baixada pelo Wave será apagada", one: "A foto que o Wave baixou será apagada", other: `As ${formatNumber("pt-BR", n)} fotos que o Wave baixou serão apagadas` })}. Os artistas mostram as capas dos álbuns até as fotos serem baixadas de novo.`,
   newFiles: (read, total) => `${read} de ${total} arquivos novos ou alterados lidos`,
   indexedFiles: (read, total) => `${read} de ${total} arquivos indexados`,
   foundFiles: (n, count) =>
-    `${n} ${plural("pt-BR", count, { one: "arquivo encontrado", other: "arquivos encontrados" })}`,
+    `${n} ${plural("pt-BR", count, { zero: "arquivos encontrados", one: "arquivo encontrado", other: "arquivos encontrados" })}`,
   selected: (n, count) =>
-    `${n} ${plural("pt-BR", count, { one: "selecionado", other: "selecionados" })}`,
+    `${n} ${plural("pt-BR", count, { zero: "selecionados", one: "selecionado", other: "selecionados" })}`,
   folderCovered: (name) => `O Wave já mostra as músicas de ${name}, que inclui esta pasta.`,
   folderIgnored: (name) => `O Wave já ignora ${name}, que inclui esta pasta.`,
   savedColour: (n, hex) => `Cor salva ${n}, ${hex}`,

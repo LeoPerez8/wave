@@ -4,8 +4,11 @@ import {
   followCheckDue,
   resolveDeezerFollowArtist,
   deezerArtistSearchUrl,
+  deezerArtistAlbumsUrl,
   deezerReleases,
+  deezerReleasesNext,
   followFeed,
+  keepFollowReleases,
   matchFollowRelease,
   pickYtArtist,
   type FollowCheckContext,
@@ -36,14 +39,14 @@ const json = (url: string) =>
   }).pipe(Effect.timeout("20 seconds"));
 const allowed = () => followedArtistsEnabled();
 const ytAllowed = () => allowed() && ytMusicEnabled();
-/** All automatic YT reads, including pages, share the search allowance. */
-const ytRead = <A>(read: Effect.Effect<A, YtMusicError>) =>
+/** All automatic YT reads, including pages, share the search allowance; [query] is what [read] asks for. */
+const ytRead = <A>(query: string, read: Effect.Effect<A, YtMusicError>) =>
   Effect.gen(function* () {
     yield* settledTurnEffect;
     if (!ytAllowed()) return undefined;
     return yield* withSearchTurn(
       "discover",
-      "Followed artists",
+      query,
       Effect.gen(function* () {
         if (!ytAllowed()) return undefined;
         return yield* read;
@@ -96,8 +99,8 @@ export const checkFollowReleases = (
           if (current === null || current.followedAt !== follow.followedAt) return;
           yield* store.setFollow({ ...current, deezerId: id }, current.level);
         }
-        let releases: FollowRelease[] = [];
-        let url: string | null = `https://api.deezer.com/artist/${id}/albums?limit=100`;
+        const fresh: FollowRelease[] = [];
+        let url: string | null = deezerArtistAlbumsUrl(id);
         const pages = new Set<string>();
         while (url !== null && !pages.has(url)) {
           pages.add(url);
@@ -106,24 +109,10 @@ export const checkFollowReleases = (
           const response: unknown = yield* json(url);
           const parsed = deezerReleases(response, follow.key);
           if (parsed === null) return;
-          releases.push(...parsed);
-          const next: unknown = (response as { next?: unknown }).next;
-          url =
-            typeof next === "string" &&
-            /^https?:\/\/api\.deezer\.com\//.test(next) &&
-            new URL(next).pathname === `/artist/${id}/albums`
-              ? next.replace(/^http:/, "https:")
-              : null;
+          fresh.push(...parsed);
+          url = deezerReleasesNext(response, id);
         }
-        const known = new Map(previous?.releases.map((r) => [r.key, r]));
-        releases = releases.map((r) =>
-          known.get(r.key)?.browseId
-            ? { ...r, browseId: known.get(r.key)!.browseId, videoIds: known.get(r.key)!.videoIds }
-            : r,
-        );
-        // Keep releases already discovered even when Deezer omits them from later pages.
-        const seen = new Set(releases.map((r) => r.key));
-        releases.push(...(previous?.releases.filter((r) => !seen.has(r.key)) ?? []));
+        let releases = keepFollowReleases(fresh, previous?.releases);
         const eligible = followFeed({
           follows: [follow],
           releases,
@@ -135,7 +124,7 @@ export const checkFollowReleases = (
           const matching = yield* Effect.gen(function* () {
             let browseId = follow.ytBrowseId;
             if (browseId === null) {
-              const candidates = yield* ytRead(yt.searchArtists(follow.name));
+              const candidates = yield* ytRead(follow.name, yt.searchArtists(follow.name));
               browseId = candidates === undefined ? null : pickYtArtist(follow.name, candidates);
             }
             if (browseId === null) return releases;
@@ -145,7 +134,7 @@ export const checkFollowReleases = (
               { ...current, deezerId: id, ytBrowseId: browseId },
               current.level,
             );
-            const page = yield* ytRead(yt.artist(browseId));
+            const page = yield* ytRead(browseId, yt.artist(browseId));
             if (page === undefined) return releases;
             const albums = [
               ...page.albums.map((a) => ({
@@ -164,7 +153,7 @@ export const checkFollowReleases = (
                   if (r.browseId !== null || !eligible.some((e) => e.key === r.key)) return r;
                   const match = matchFollowRelease(r, albums);
                   if (!match) return r;
-                  const album = yield* ytRead(yt.album(match.browseId));
+                  const album = yield* ytRead(match.browseId, yt.album(match.browseId));
                   return album === undefined
                     ? r
                     : {

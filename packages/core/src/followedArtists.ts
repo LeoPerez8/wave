@@ -183,6 +183,35 @@ export const deezerReleases = (value: unknown, artistKey: string): FollowRelease
     ];
   });
 };
+/** The first page of a Deezer artist's releases. */
+export const deezerArtistAlbumsUrl = (deezerId: number): string =>
+  `https://api.deezer.com/artist/${deezerId}/albums?limit=100`;
+/**
+ * The next page of [deezerId]'s releases a Deezer albums reply names, over
+ * HTTPS; null on the last page or when it points anywhere but that artist's albums.
+ */
+export const deezerReleasesNext = (value: unknown, deezerId: number): string | null => {
+  if (!record(value) || typeof value.next !== "string") return null;
+  const next = value.next.replace(/^http:/, "https:");
+  const albums = `https://api.deezer.com/artist/${deezerId}/albums`;
+  return next.startsWith(albums) && /^(?:\?.*)?$/.test(next.slice(albums.length)) ? next : null;
+};
+/**
+ * A check's [fresh] releases with what [previous] knew: YT Music matches made
+ * earlier stay, and releases Deezer no longer lists stay at the end.
+ */
+export const keepFollowReleases = (
+  fresh: readonly FollowRelease[],
+  previous: readonly FollowRelease[] | undefined,
+): FollowRelease[] => {
+  const known = new Map(previous?.map((r) => [r.key, r]));
+  const kept = fresh.map((r) => {
+    const earlier = known.get(r.key);
+    return earlier?.browseId ? { ...r, browseId: earlier.browseId, videoIds: earlier.videoIds } : r;
+  });
+  const seen = new Set(kept.map((r) => r.key));
+  return [...kept, ...(previous?.filter((r) => !seen.has(r.key)) ?? [])];
+};
 export const resolveDeezerFollowArtist = (value: unknown, name: string): number | null => {
   const candidates = deezerFollowArtists(value)
     ?.filter((a) => followArtistKey(a.name) === followArtistKey(name))
@@ -203,6 +232,46 @@ export const matchFollowRelease = <
       releaseTitle(a.title) === releaseTitle(release.title) &&
       (a.releaseType ?? "album") === release.type,
   ) ?? null;
+/** What tapping a new release the Library lacks does (`followReleaseOpening`). */
+export type FollowReleaseOpening =
+  | { readonly kind: "open"; readonly browseId: string }
+  | { readonly kind: "search" }
+  | { readonly kind: "ytMusicOff" }
+  | { readonly kind: "noAnswer" }
+  | { readonly kind: "notFound" };
+/**
+ * Opening a new release the Library lacks: with YT Music off it says so, even
+ * for a matched release; a matched one opens; an unmatched one asks for an
+ * Albums search first. With the search's albums ([found], null when it failed
+ * or was offline) the release by the same artist opens, a failure is no
+ * answer, and only a search that answered without it is "Not on YouTube Music yet".
+ */
+export const followReleaseOpening = (
+  release: FollowRelease,
+  state: {
+    readonly ytMusic: boolean;
+    readonly found?:
+      | readonly {
+          readonly title: string;
+          readonly releaseType?: ReleaseType | null;
+          readonly browseId: string;
+          readonly artists: readonly string[];
+        }[]
+      | null;
+  },
+): FollowReleaseOpening => {
+  if (!state.ytMusic) return { kind: "ytMusicOff" };
+  if (state.found === undefined)
+    return release.browseId ? { kind: "open", browseId: release.browseId } : { kind: "search" };
+  if (state.found === null) return { kind: "noAnswer" };
+  const match = matchFollowRelease(
+    release,
+    state.found.filter((a) =>
+      a.artists.some((name) => followArtistKey(name) === release.artistKey),
+    ),
+  );
+  return match === null ? { kind: "notFound" } : { kind: "open", browseId: match.browseId };
+};
 /** Home opening checks after 12 hours, the daily background task after 24. */
 export type FollowCheckContext = "home" | "background";
 export const checkDue = (last: number | null, now: number, context: FollowCheckContext): boolean =>

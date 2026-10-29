@@ -34,6 +34,6 @@ export const promptForMusicFolder = async (): Promise<void> => {
       );
     }
   } catch (error) {
-    await showError("Couldn't add the folder", error);
+    await showError(currentLocalisation().strings.settings.couldntAddFolder, error);
   }
 };

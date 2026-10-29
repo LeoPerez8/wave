@@ -43,10 +43,18 @@ const handOver = (): void => {
   });
 };
 
-/** Home's mix section [id] shows [section]: the list follows. */
-export const noteMixesShown = (id: MixSectionId, section: DiscoverMixesSection): void => {
-  if (section.kind === "skeleton") return;
-  shown.set(id, section.kind === "mixes" ? section.mixes : []);
+/**
+ * Home's mix section [id] shows [section]: the list follows. A row Home
+ * doesn't draw ([drawn] false: removed, though an empty Library's Magic
+ * Queue still builds Artist mixes) has nothing fetched ahead.
+ */
+export const noteMixesShown = (
+  id: MixSectionId,
+  section: DiscoverMixesSection,
+  drawn: boolean,
+): void => {
+  if (drawn && section.kind === "skeleton") return;
+  shown.set(id, drawn && section.kind === "mixes" ? section.mixes : []);
   if (pending !== null) clearTimeout(pending);
   pending = setTimeout(handOver, SETTLE_MS);
 };

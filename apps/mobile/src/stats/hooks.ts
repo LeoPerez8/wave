@@ -100,11 +100,13 @@ const readTopArtists: ReadRanking<PlayedArtist> = (stats, period, limit) =>
 export const useArtistStats = (
   artistId: number,
   songs: readonly unknown[],
-): ArtistStats | undefined =>
-  useStatsRead(
-    useCallback((stats: Stats["Service"]) => stats.artist(artistId), [artistId]),
+): ArtistStats | undefined => {
+  const { strings } = useLocalisation();
+  return useStatsRead(
+    useCallback((stats: Stats["Service"]) => stats.artist(artistId, strings), [artistId, strings]),
     songs,
   );
+};
 
 /** Top songs: the `limit` songs played most in `period` (10 on Stats, 100 in See all). */
 export const useTopSongs = (

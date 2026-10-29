@@ -182,6 +182,13 @@ export const WHOLE_LIBRARY: Record<string, WholeLibraryException> = {
     reason: "Visible Library Artists list displays all artists.",
     capabilities: ["library/hooks.ts#useArtists"],
   },
+  "library/followArtistSearch.ts#useFollowArtistSearch": {
+    howOften:
+      "Once per shared artists-query version while the Followed artists search is open; the finder is rebuilt only when that list changes, never per keystroke.",
+    reason:
+      "Following an artist searches the Library's artists by name before Deezer answers (#808). It shares the Artists list's query and builds one finder per list version; typing only asks the finder.",
+    capabilities: ["library/hooks.ts#useArtists"],
+  },
   "library/hooks.ts#listArtists": {
     howOften:
       "Once per shared query source version while followed; all active readers share the result.",
@@ -419,6 +426,16 @@ export const WHOLE_LIBRARY: Record<string, WholeLibraryException> = {
   },
 };
 export const OPENING_REQUESTS: Record<string, Exception> = {
+  "home/followShows.ts#request": {
+    kind: "opening",
+    reason:
+      "Home and a followed artist's page start the Ticketmaster shows check only when one is due (checkDue). Each call waits for a settled turn, re-checks the switch, key and country, and fails without asking when Android says the phone is offline. A check costs at most two calls per artist (showsCheck.ts).",
+    deferred: {
+      settlement: "screen",
+      connectivity: "android",
+      tests: ["apps/mobile/src/home/showsCheck.test.ts"],
+    },
+  },
   "stats/PlayedEntityViews.tsx#openOnlineAlbum": {
     kind: "gesture",
     reason:
@@ -827,6 +844,10 @@ export const OWN_PRESS: Record<string, Exception> = {
   },
   "library/YtLibraryPicker.tsx#PickerRow": {
     reason: "The YT Music library picker's checkbox row.",
+  },
+  "home/UpcomingShows.tsx#ShowCard": {
+    reason:
+      "An Upcoming Shows ticket card: the whole card opens the tickets, its long press opens the show's menu.",
   },
   "search/ArtworkRow.tsx#ArtworkRow": {
     reason: "Search's album and artist result row.",

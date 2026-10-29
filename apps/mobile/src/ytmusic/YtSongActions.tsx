@@ -194,7 +194,7 @@ const run = (
     case "removeFromPlaylist":
       if (playlistItem === undefined) return;
       removePlaylistItems(playlistItem.playlistId, [playlistItem.itemId]).catch((error: unknown) =>
-        showError("Couldn't remove the song", error),
+        showError(currentLocalisation().strings.library.couldntRemoveSong, error),
       );
       return;
     case "download":
@@ -326,7 +326,9 @@ export const runYtSongSwipe = (
       if (entry !== undefined)
         run(entry, song, { find, playlistItem, onSelect: undefined }, "swipe");
     })
-    .catch((error: unknown) => showError("Couldn't load the song", error));
+    .catch((error: unknown) =>
+      showError(currentLocalisation().strings.playbackText.couldntLoadTheSong, error),
+    );
 };
 
 const ytSongSwipeEntries = (
