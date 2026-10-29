@@ -5,40 +5,31 @@ import { catalogueOf, plural, resolveAppLanguage } from "./index.ts";
 
 describe("resolveAppLanguage", () => {
   for (const tag of ["pt-BR", "pt-PT", "pt"]) {
-    test(`${tag} reads in Brazilian Portuguese when Portuguese is enabled`, () => {
-      assert.equal(resolveAppLanguage([tag], { portugueseEnabled: true }), "pt-BR");
-    });
-
-    test(`${tag} reads in English when Portuguese isn't enabled`, () => {
-      assert.equal(resolveAppLanguage([tag], { portugueseEnabled: false }), "en");
+    test(`${tag} reads in Brazilian Portuguese`, () => {
+      assert.equal(resolveAppLanguage([tag]), "pt-BR");
     });
   }
 
   test("any other language reads in English", () => {
-    assert.equal(resolveAppLanguage(["es-ES"], { portugueseEnabled: true }), "en");
-    assert.equal(resolveAppLanguage(["en-US"], { portugueseEnabled: true }), "en");
+    assert.equal(resolveAppLanguage(["es-ES"]), "en");
+    assert.equal(resolveAppLanguage(["en-US"]), "en");
   });
 
   test("no language at all reads in English", () => {
-    assert.equal(resolveAppLanguage([], { portugueseEnabled: true }), "en");
+    assert.equal(resolveAppLanguage([]), "en");
   });
 
   test("the first supported language in the phone's list wins", () => {
-    const enabled = { portugueseEnabled: true };
-    assert.equal(resolveAppLanguage(["es-ES", "pt-BR", "en-US"], enabled), "pt-BR");
-    assert.equal(resolveAppLanguage(["es-ES", "en-GB", "pt-BR"], enabled), "en");
-    assert.equal(resolveAppLanguage(["fr-FR", "pt-PT"], enabled), "pt-BR");
-  });
-
-  test("without Portuguese, a Portuguese phone with English further down reads in English", () => {
-    assert.equal(resolveAppLanguage(["pt-BR", "en-US"], { portugueseEnabled: false }), "en");
+    assert.equal(resolveAppLanguage(["es-ES", "pt-BR", "en-US"]), "pt-BR");
+    assert.equal(resolveAppLanguage(["es-ES", "en-GB", "pt-BR"]), "en");
+    assert.equal(resolveAppLanguage(["fr-FR", "pt-PT"]), "pt-BR");
+    assert.equal(resolveAppLanguage(["pt-BR", "en-US"]), "pt-BR");
   });
 
   test("tags are read whatever their case or separator", () => {
-    const enabled = { portugueseEnabled: true };
-    assert.equal(resolveAppLanguage(["PT_br"], enabled), "pt-BR");
-    assert.equal(resolveAppLanguage(["pt-Latn-BR"], enabled), "pt-BR");
-    assert.equal(resolveAppLanguage(["ptx"], enabled), "en");
+    assert.equal(resolveAppLanguage(["PT_br"]), "pt-BR");
+    assert.equal(resolveAppLanguage(["pt-Latn-BR"]), "pt-BR");
+    assert.equal(resolveAppLanguage(["ptx"]), "en");
   });
 });
 

@@ -92,7 +92,8 @@ export function findUntranslatedText(file, source) {
     if (!hasText(text)) return;
     if (
       coreReturn &&
-      (!/^[A-Z][a-z]|\p{L}.*\s|\s.*\p{L}/u.test(text) || /^(?:[a-z][a-z0-9+.-]*:(?!\s)|\/)/i.test(text))
+      (!/^[A-Z][a-z]|\p{L}.*\s|\s.*\p{L}/u.test(text) ||
+        /^(?:[a-z][a-z0-9+.-]*:(?!\s)|\/)/i.test(text))
     )
       return;
     const start = node.getStart(tree);

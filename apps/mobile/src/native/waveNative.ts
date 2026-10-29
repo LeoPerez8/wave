@@ -138,8 +138,6 @@ declare class WaveNativeModule extends NativeModule<WaveNativeEvents> {
   requestAllFilesAccess(): Promise<void>;
   /** Absolute path of the shared `Music` folder. */
   getDefaultMusicFolder(): string;
-  /** Persist the preview gate for native services before JS starts; absent on older APKs. */
-  setPortuguesePreview?(enabled: boolean): void;
   /**
    * The phone's preferred languages as BCP 47 tags, in order: Wave's own
    * language from Android's per-app list when one is set, else the system's.
