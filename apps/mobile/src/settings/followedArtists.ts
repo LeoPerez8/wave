@@ -1,6 +1,7 @@
 import { persistedSetting } from "@/lib/persistedSetting";
 const followedArtists = persistedSetting<boolean>({
   key: "settings.followedArtists",
+  synced: true,
   read: (stored) => stored !== "off",
   write: (on) => (on ? null : "off"),
 });

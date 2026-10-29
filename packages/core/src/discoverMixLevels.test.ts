@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import {
+  catalogueOf,
   DISCOVER_MIX_LEVELS,
   blendDiscoverMix,
   discoverMix,
@@ -423,6 +424,20 @@ describe("Discover's new-music scale", () => {
       ],
     );
   });
+
+  test("in Portuguese, names each step with its share", () => {
+    const pt = catalogueOf("pt-BR");
+    assert.deepEqual(
+      ([1, 2, 3, 4, 5] as const).map((level) => discoverLevelLabel(level, pt)),
+      [
+        "Quase só conhecidas · 20% novas",
+        "Mais conhecidas · 40% novas",
+        "Equilibrado · 60% novas",
+        "Mais novidades · 80% novas",
+        "Só novidades · 100% novas",
+      ],
+    );
+  });
 });
 
 describe("A blended mix", () => {
@@ -495,6 +510,18 @@ describe("A blended mix", () => {
       discoverMixCaption(blendDiscoverMix(mix, { level: 1 })).artworkUrl,
       "https://lh3.googleusercontent.com/0",
     );
+  });
+
+  test("in Portuguese, it's the artist's mix with its songs counted", () => {
+    const caption = discoverMixCaption(blendDiscoverMix(mix, { level: 1 }), catalogueOf("pt-BR"));
+    assert.equal(caption.title, "Mix de Portishead");
+    assert.equal(caption.line, "10 músicas");
+  });
+
+  test("a copy saved in Portuguese keeps its Portuguese name", () => {
+    const blended = blendDiscoverMix(mix, { level: 4 });
+    assert.equal(discoverMixPlaylist(blended, catalogueOf("pt-BR")).name, "Mix de Portishead");
+    assert.equal(discoverMixPlaylist(blended).name, "Portishead mix");
   });
 
   test("saves as a playlist of its Library songs and its new ones, in its order", () => {

@@ -1,3 +1,4 @@
+import { currentLocalisation } from "@/localisation/localisation";
 import type { PlayedAlbum, PlayedArtist } from "@/library/db/playedEntities";
 import {
   ARTIST_MOST_PLAYED,
@@ -231,7 +232,7 @@ export const make = Effect.gen(function* () {
       return Effect.flatMap(
         store.playedArtistSongs(artistId, now),
         (plays): Effect.Effect<ArtistStats, LibraryStoreError> => {
-          const stats = artistStats({ artistId, now, ...plays });
+          const stats = artistStats({ artistId, now, ...plays }, currentLocalisation().strings);
           if (!stats.played) return Effect.succeed(stats);
           const ranking = rankSongPlays(
             [

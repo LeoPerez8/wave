@@ -1,4 +1,4 @@
-import { editHomeArrangement, type HomeArrangementEdit } from "@wave/core";
+import { editHomeArrangement, type Catalogue, type HomeArrangementEdit } from "@wave/core";
 
 import type { TitleLongPress } from "@/components/TitleLongPress";
 import { pressedRect } from "@/motion/pressedRect";
@@ -17,11 +17,11 @@ export const editSavedHomeArrangement = (change: HomeArrangementEdit): void =>
  * The Home title's long press: Home's editor, a card next to the title. Done
  * saves the arrangement; Back or a tap outside leaves Home as it was.
  */
-export const homeTitleLongPress: TitleLongPress = {
-  label: "Edit Home",
+export const homeTitleLongPress = (strings: Catalogue): TitleLongPress => ({
+  label: strings.home.edit,
   open: () => {
     openOverlay({
-      label: "Edit Home",
+      label: strings.home.edit,
       anchor: pressedRect(),
       render: (close) => (
         <HomeEditorCard
@@ -34,4 +34,4 @@ export const homeTitleLongPress: TitleLongPress = {
       ),
     });
   },
-};
+});

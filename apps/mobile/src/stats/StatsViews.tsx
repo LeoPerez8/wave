@@ -1,14 +1,15 @@
+import { useLocalisation } from "@/localisation/localisation";
 import { usePositions } from "@/lib/usePositions";
 import type { PlayedAlbum, PlayedArtist } from "@/library/db/playedEntities";
 import { PlayedAlbumRow, PlayedArtistRow } from "./PlayedEntityViews";
 import { IconChartBar } from "@tabler/icons-react-native";
 import { LegendList } from "@legendapp/list/react-native";
 import {
-  counted,
+  statsPeriods,
   discoverTrackId,
   recapId,
   recapTitle,
-  STATS_PERIODS,
+  type Catalogue,
   type QueueContext,
   type RecapPeriod,
   type RowMenuAction,
@@ -31,9 +32,6 @@ import type { Ranked, StatsSong } from "./Stats";
 import { recapCardHeight } from "./recapAnnouncement";
 import { useListScrollable } from "@/motion/heldTouch";
 
-/** "3 plays", "1 play". */
-export const playCount = (count: number): string => counted(count, "play");
-
 /** What tapping a song in a period's song ranking plays: that ranking. */
 export const statsSongsContext = (period: StatsPeriod): QueueContext => ({
   kind: "stats",
@@ -48,6 +46,7 @@ export function PeriodTabs({
   period: StatsPeriod;
   onChange: (period: StatsPeriod) => void;
 }) {
+  const { strings } = useLocalisation();
   return (
     // Wraps rather than clips at large font scales.
     <View
@@ -55,7 +54,7 @@ export function PeriodTabs({
       className="flex-row flex-wrap"
       style={{ columnGap: CELL * 3 }}
     >
-      {STATS_PERIODS.map((option) => {
+      {statsPeriods(strings).map((option) => {
         const selected = option.id === period;
         return (
           <TextButton
@@ -78,10 +77,13 @@ export function PeriodTabs({
  * the length's cell. A streamed song is a plain streamed row, dimmed with its
  * tap doing nothing while it can't play.
  */
-const rankedSongEntry = (entry: Ranked<StatsSong>, rank: number) =>
+const rankedSongEntry = (entry: Ranked<StatsSong>, rank: number, strings: Catalogue) =>
   mixedSongEntry(
     entry.item,
-    { leading: { kind: "rank", number: rank }, countedPlays: entry.countedPlays },
+    {
+      leading: { kind: "rank", number: rank },
+      trailingLabel: strings.stats.plays(entry.countedPlays),
+    },
     true,
   );
 
@@ -91,10 +93,11 @@ const rankedSongKey = (entry: Ranked<StatsSong>): string => discoverTrackId(entr
 /** A ranking's rows, rank and play order, for a preview or its See all. */
 const useRankedSongRows = (ranking: readonly Ranked<StatsSong>[], context: QueueContext) => {
   const songs = useMemo(() => ranking.map((entry) => entry.item), [ranking]);
+  const { strings } = useLocalisation();
   const places = usePositions(ranking);
   const song = useCallback(
-    (entry: Ranked<StatsSong>) => rankedSongEntry(entry, (places.get(entry) ?? 0) + 1),
-    [places],
+    (entry: Ranked<StatsSong>) => rankedSongEntry(entry, (places.get(entry) ?? 0) + 1, strings),
+    [places, strings],
   );
   return {
     data: ranking,
@@ -125,13 +128,35 @@ export function RankedSongs({
 }
 
 /** A ranked album: rank, cover, title over the album artist and its counted plays. */
-function renderRankedAlbum({ item, countedPlays }: Ranked<PlayedAlbum>, index: number) {
-  return <PlayedAlbumRow album={item} detail={playCount(countedPlays)} index={index} />;
+function RankedAlbumRow({ entry, index }: { entry: Ranked<PlayedAlbum>; index: number }) {
+  const { strings } = useLocalisation();
+  return (
+    <PlayedAlbumRow
+      album={entry.item}
+      detail={strings.stats.plays(entry.countedPlays)}
+      index={index}
+    />
+  );
 }
 
 /** A ranked artist, including a streamed artist absent from the Library. */
-function renderRankedArtist({ item, countedPlays }: Ranked<PlayedArtist>, index: number) {
-  return <PlayedArtistRow artist={item} detail={playCount(countedPlays)} index={index} />;
+function RankedArtistRow({ entry, index }: { entry: Ranked<PlayedArtist>; index: number }) {
+  const { strings } = useLocalisation();
+  return (
+    <PlayedArtistRow
+      artist={entry.item}
+      detail={strings.stats.plays(entry.countedPlays)}
+      index={index}
+    />
+  );
+}
+
+function renderRankedAlbum(entry: Ranked<PlayedAlbum>, index: number) {
+  return <RankedAlbumRow entry={entry} index={index} />;
+}
+
+function renderRankedArtist(entry: Ranked<PlayedArtist>, index: number) {
+  return <RankedArtistRow entry={entry} index={index} />;
 }
 
 /** An album ranking. Tapping an album opens it; long-press opens the album's menu. */
@@ -250,19 +275,13 @@ export function RankedSongList({
 const RECAP_TILE = { width: CELL * 17, height: CELL * 21 } as const;
 
 /**
- * How a Recap's tile and Home's card read, by period kind: a year's stand
- * apart from the months' by their label, their "ready" line and their colour
- * (purple for a year, indigo for a month).
+ * A Recap's tile and Home's card stand a year's apart from the months' by
+ * their label and "ready" line (the catalogue's `recap.kinds`, `recap.ready`)
+ * and their colour: purple for a year, indigo for a month.
  */
-const RECAP_LOOK: {
-  readonly [K in RecapPeriod["kind"]]: {
-    readonly label: string;
-    readonly ready: string;
-    readonly colour: string;
-  };
-} = {
-  month: { label: "Recap", ready: "Your Recap is ready", colour: "bg-recap-indigo" },
-  year: { label: "Year in music", ready: "Your year in music is ready", colour: "bg-recap-purple" },
+const RECAP_COLOUR: { readonly [K in RecapPeriod["kind"]]: string } = {
+  month: "bg-recap-indigo",
+  year: "bg-recap-purple",
 };
 
 /**
@@ -270,12 +289,14 @@ const RECAP_LOOK: {
  * opened. Tapping it plays its stories.
  */
 export function RecapCard({ period }: { period: RecapPeriod }) {
+  const { strings } = useLocalisation();
   const { fontScale } = useWindowDimensions();
-  const { ready, colour } = RECAP_LOOK[period.kind];
+  const ready = strings.recap.ready[period.kind];
+  const colour = RECAP_COLOUR[period.kind];
   return (
     <Press
       accessibilityRole="button"
-      accessibilityLabel={`${ready}: ${recapTitle(period)}`}
+      accessibilityLabel={`${ready}: ${recapTitle(period, strings)}`}
       onPress={() => openRecap(period)}
       haptic="selection"
       className={`rounded-2xl ${colour}`}
@@ -285,9 +306,11 @@ export function RecapCard({ period }: { period: RecapPeriod }) {
         {ready}
       </Text>
       <Text numberOfLines={1} className="font-sans text-title2 font-bold text-on-recap">
-        {recapTitle(period)}
+        {recapTitle(period, strings)}
       </Text>
-      <Text className="font-sans text-subheadline text-on-recap opacity-80">Tap to watch</Text>
+      <Text className="font-sans text-subheadline text-on-recap opacity-80">
+        {strings.recap.tapToWatch}
+      </Text>
     </Press>
   );
 }
@@ -298,6 +321,7 @@ export function RecapCard({ period }: { period: RecapPeriod }) {
  * plays its stories.
  */
 export function RecapsRow({ recaps }: { recaps: readonly RecapPeriod[] }) {
+  const { strings } = useLocalisation();
   const { fontScale } = useWindowDimensions();
   // Keep full month names readable as system type grows, on the catalog's cell grid.
   const tileWidth = Math.ceil((RECAP_TILE.width * Math.max(1, fontScale)) / CELL) * CELL;
@@ -312,17 +336,17 @@ export function RecapsRow({ recaps }: { recaps: readonly RecapPeriod[] }) {
         <Press
           key={recapId(period)}
           accessibilityRole="button"
-          accessibilityLabel={`${recapTitle(period)} ${RECAP_LOOK[period.kind].label}`}
+          accessibilityLabel={strings.recap.tileLabel(period)}
           onPress={() => openRecap(period)}
           haptic="selection"
-          className={`justify-end rounded-2xl ${RECAP_LOOK[period.kind].colour}`}
+          className={`justify-end rounded-2xl ${RECAP_COLOUR[period.kind]}`}
           style={{ width: tileWidth, minHeight: RECAP_TILE.height, padding: CELL * 1.5 }}
         >
           <Text className="font-sans text-footnote font-semibold text-on-recap opacity-80">
-            {RECAP_LOOK[period.kind].label}
+            {strings.recap.kinds[period.kind]}
           </Text>
           <Text className="font-sans text-title3 font-bold text-on-recap">
-            {recapTitle(period).replace(" ", "\n")}
+            {recapTitle(period, strings).replace(" ", "\n")}
           </Text>
         </Press>
       ))}
@@ -330,22 +354,16 @@ export function RecapsRow({ recaps }: { recaps: readonly RecapPeriod[] }) {
   );
 }
 
-/** The period's label: "Last 7 days", "All time"… */
-export const periodLabel = (period: StatsPeriod): string =>
-  STATS_PERIODS.find((option) => option.id === period)?.label ?? "";
-
-/** "No plays in the last 7 days", or "No plays yet" for all time. */
-const nothingPlayed = (period: StatsPeriod): string =>
-  period === "all" ? "No plays yet" : `No plays in the ${periodLabel(period).toLowerCase()}`;
-
 /** A ranking's empty state: nothing was played enough to count in `period`. */
 export function NothingPlayed({ period }: { period: StatsPeriod }) {
+  const { strings } = useLocalisation();
   return (
     <EmptyState
       icon={IconChartBar}
-      title={nothingPlayed(period)}
+      // "No plays in the last 7 days", or "No plays yet" for all time.
+      title={strings.stats.noPlays[period]}
       // Core's counted-play rule (`isCountedPlay`).
-      message="Songs you listen to for more than 15 seconds are counted here."
+      message={strings.stats.countedHint}
     />
   );
 }

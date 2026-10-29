@@ -332,8 +332,6 @@ export const settingsEn = {
   followedArtists: "Followed artists",
   youArentFollowingAnyArtistsYet: "You aren't following any artists yet.",
   following: "Following",
-  newReleases: "New releases",
-  newReleasesAndShows: "New releases and shows",
   developerIsOn: "Developer is on",
   developerHidden: "Developer hidden",
   settings: "Settings",
@@ -349,8 +347,6 @@ export const settingsEn = {
     "Swipe a song sideways in a list to run one of its actions. Up Next doesn't swipe.",
   songRowsDontSwipeEveryActionIs:
     "Song rows don't swipe. Every action is still in a song's long-press menu.",
-  noListeningHistoryYet: "No listening history yet.",
-  couldntLoadListeningHistory: "Couldn't load listening history.",
   keepFindFieldVisible: "Keep Find Field Visible",
   theFindFieldStaysUnderThePages:
     "The Find field stays under the page's header while the list scrolls, instead of waiting above the list until it's pulled down.",

@@ -1,3 +1,4 @@
+import { useLocalisation } from "@/localisation/localisation";
 import {
   IconLanguage,
   IconMicrophone2,
@@ -127,6 +128,7 @@ function TranslationSkeleton({ at }: { at: number }) {
  * (with Try Again). Null otherwise.
  */
 function TranslationNote({ shown, retry }: { shown: TranslationShown | null; retry: () => void }) {
+  const { strings } = useLocalisation();
   if (shown?.kind === "sameLanguage") {
     return (
       <Text
@@ -134,7 +136,7 @@ function TranslationNote({ shown, retry }: { shown: TranslationShown | null; ret
         style={{ paddingBottom: CELL }}
         accessibilityLiveRegion="polite"
       >
-        {`These lyrics are already in ${shown.language}.`}
+        {strings.playbackText.theseLyricsAreAlreadyInValue(shown.language)}
       </Text>
     );
   }
@@ -145,9 +147,9 @@ function TranslationNote({ shown, retry }: { shown: TranslationShown | null; ret
           className="flex-1 font-sans text-footnote text-secondary"
           accessibilityLiveRegion="polite"
         >
-          Couldn't translate the lyrics.
+          {strings.playbackText.couldntTranslateTheLyrics}
         </Text>
-        <TextButton label="Try Again" onPress={retry} />
+        <TextButton label={strings.playbackText.tryAgain} onPress={retry} />
       </View>
     );
   }
@@ -248,6 +250,7 @@ const SyncedLine = memo(function SyncedLine({
   onPick,
   onLayoutLine,
 }: LineProps) {
+  const { strings } = useLocalisation();
   const [foreground, secondary] = useThemeColor(["foreground", "secondary"]);
   const translationLit = withOpacity(foreground, 0.72);
   const selectedFill = useSelectedFill();
@@ -273,12 +276,16 @@ const SyncedLine = memo(function SyncedLine({
         accessibilityRole="button"
         accessibilityLabel={
           line.text === ""
-            ? "Instrumental"
+            ? strings.playbackText.instrumental
             : translation === null
               ? line.text
               : `${line.text}. ${translation}`
         }
-        accessibilityHint={picking ? "Selects this line to share" : "Plays from this line"}
+        accessibilityHint={
+          picking
+            ? strings.playbackText.selectsThisLineToShare
+            : strings.playbackText.playsFromThisLine
+        }
         accessibilityState={{ selected: on }}
         {...annotationActions(highlights)}
         onPress={() => (picking ? onPick(index) : onSeek(line, index))}
@@ -519,6 +526,7 @@ function UnsyncedLyrics({
   about: string | null;
   annotations: GeniusPlacement | null;
 }) {
+  const { strings } = useLocalisation();
   const selectedFill = useSelectedFill();
   return (
     <ScrollView
@@ -556,7 +564,7 @@ function UnsyncedLyrics({
             key={at}
             accessibilityRole="button"
             accessibilityLabel={line}
-            accessibilityHint="Selects this line to share"
+            accessibilityHint={strings.playbackText.selectsThisLineToShare}
             accessibilityState={{ selected }}
             onPress={() => picking.onTap(at)}
             depth={0.015}
@@ -591,10 +599,11 @@ function UnsyncedLyrics({
  * while off, as the sleep timer's glyph.
  */
 function TranslateButton({ on, onPress }: { on: boolean; onPress: () => void }) {
+  const { strings } = useLocalisation();
   return (
     <IconButton
       icon={IconLanguage}
-      label="Translate Lyrics"
+      label={strings.playbackText.translateLyrics}
       accessibilityRole="switch"
       accessibilityState={{ checked: on }}
       tone={on ? "accent" : "secondary"}
@@ -613,21 +622,22 @@ function PickingBar({
   onCancel: () => void;
   onNext: () => void;
 }) {
+  const { strings } = useLocalisation();
   return (
     <View
       className="flex-row items-center justify-between"
       style={{ minHeight: grid.row + CELL * 2, gap: CELL }}
     >
-      <TextButton label="Cancel" onPress={onCancel} />
+      <TextButton label={strings.playbackText.cancel} onPress={onCancel} />
       <Text
         className="flex-1 text-center font-sans text-subheadline text-secondary"
         accessibilityLiveRegion="polite"
       >
         {count === 0
-          ? `Select up to ${MAX_SHARED_LYRIC_LINES} lines`
-          : `${count} of ${MAX_SHARED_LYRIC_LINES}`}
+          ? strings.playbackText.selectUpToValueLines(MAX_SHARED_LYRIC_LINES)
+          : strings.playbackText.valueOfValue(count, MAX_SHARED_LYRIC_LINES)}
       </Text>
-      <TextButton label="Next" onPress={onNext} disabled={count === 0} />
+      <TextButton label={strings.playbackText.next} onPress={onNext} disabled={count === 0} />
     </View>
   );
 }
@@ -641,11 +651,12 @@ const SKELETON_LINES = ["72%", "58%", "84%", "46%", "66%", "78%", "52%", "70%"] 
  * does: a pulse would re-blur the glass on every frame.
  */
 function LyricsSkeleton() {
+  const { strings } = useLocalisation();
   return (
     <DismissArea style={{ flex: 1 }}>
       <View
         accessible
-        accessibilityLabel="Searching for lyrics"
+        accessibilityLabel={strings.playbackText.searchingForLyrics}
         accessibilityState={{ busy: true }}
         style={{ paddingTop: CELL * 2 }}
       >
@@ -683,6 +694,7 @@ function LyricsBody({
   about: string | null;
   annotations: GeniusPlacement | null;
 }) {
+  const { strings } = useLocalisation();
   // Reading takes a moment; an empty field avoids flashing the empty state.
   if (shown === null) {
     return (
@@ -723,8 +735,10 @@ function LyricsBody({
         <DismissArea style={{ flex: 1 }}>
           <EmptyState
             icon={IconQuoteOff}
-            title="No lyrics"
-            message="Add lyrics to this song's tags, or put an .lrc file with the same name beside it."
+            title={strings.playbackText.noLyrics}
+            message={
+              strings.playbackText.addLyricsToThisSongsTagsOrPutAnLrcFileWithTheSameNameBesideIt
+            }
           />
         </DismissArea>
       );
@@ -733,8 +747,10 @@ function LyricsBody({
         <DismissArea style={{ flex: 1 }}>
           <EmptyState
             icon={IconQuoteOff}
-            title="No lyrics"
-            message="Turn on Fix songs online in Settings › Lyrics and tags to find this song's lyrics."
+            title={strings.playbackText.noLyrics}
+            message={
+              strings.playbackText.turnOnFixSongsOnlineInSettingsLyricsAndTagsToFindThisSongsLyrics
+            }
           />
         </DismissArea>
       );
@@ -743,8 +759,8 @@ function LyricsBody({
         <DismissArea style={{ flex: 1 }}>
           <EmptyState
             icon={IconQuoteOff}
-            title="No lyrics found"
-            message="Wave couldn't find lyrics for this song online."
+            title={strings.playbackText.noLyricsFound}
+            message={strings.playbackText.waveCouldntFindLyricsForThisSongOnline}
           />
         </DismissArea>
       );
@@ -753,9 +769,9 @@ function LyricsBody({
         <DismissArea style={{ flex: 1 }}>
           <EmptyState
             icon={IconQuoteOff}
-            title="Couldn't search for lyrics"
-            message="Check your connection and try again."
-            action={<TextButton label="Try Again" onPress={retry} />}
+            title={strings.playbackText.couldntSearchForLyrics}
+            message={strings.playbackText.checkYourConnectionAndTryAgain}
+            action={<TextButton label={strings.playbackText.tryAgain} onPress={retry} />}
           />
         </DismissArea>
       );
@@ -794,6 +810,7 @@ export function LyricsView({
   palette: ArtworkPalette | null;
   onShowPlayer: () => void;
 }) {
+  const { strings } = useLocalisation();
   const path = file?.path ?? null;
   const library = useLibraryLyrics(file?.id ?? null, path);
   const nonD = useNonDLyrics(file === null ? nonDTrackId : null);
@@ -880,8 +897,8 @@ export function LyricsView({
   const next = (): void => {
     if (shared.length === 0) return;
     openLyricCard({
-      title: item.title ?? "Unknown title",
-      artist: item.artist ?? "Unknown Artist",
+      title: item.title ?? strings.playbackText.unknownTitle,
+      artist: item.artist ?? strings.playbackText.unknownArtist,
       artworkUri: item.artworkUri ?? undefined,
       lines: shared,
       colours: lyricCardColours(palette),
@@ -904,7 +921,7 @@ export function LyricsView({
                 {shown?.kind === "synced" && (
                   <IconButton
                     icon={IconMicrophone2}
-                    label="Karaoke"
+                    label={strings.playbackText.karaoke}
                     accessibilityRole="switch"
                     accessibilityState={{ checked: karaokeOn }}
                     tone={karaokeOn ? "accent" : "secondary"}
@@ -917,7 +934,7 @@ export function LyricsView({
                 />
                 <IconButton
                   icon={IconShare3}
-                  label="Share Lyrics"
+                  label={strings.playbackText.shareLyrics}
                   onPress={() => setPicked({ song, selection: null })}
                 />
               </View>

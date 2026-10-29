@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import {
+  catalogueOf,
   lookUpSongVideo,
   lookUpSpotifyTrack,
   songLinkView,
@@ -223,5 +224,17 @@ describe("songLinkView", () => {
       loading: false,
       note: "Offline",
     });
+  });
+
+  test("in Portuguese, says why a destination has no link in Portuguese", () => {
+    const pt = catalogueOf("pt-BR");
+    const view = (status: "failed" | "notFound" | "signedOut" | "offline") =>
+      songLinkView("spotify", { ...SONG_LINKS_LOADING, spotify: { status } }, pt).note;
+    assert.deepEqual((["failed", "notFound", "signedOut", "offline"] as const).map(view), [
+      "Indisponível",
+      "Nenhum Resultado",
+      "Sessão finalizada",
+      "Offline",
+    ]);
   });
 });

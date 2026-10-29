@@ -4,6 +4,7 @@
  * place (docs/spec.md, Playback).
  */
 
+import { en, type Catalogue } from "./catalogueEn.ts";
 import {
   playReplacesQueue,
   type PassOver,
@@ -11,9 +12,6 @@ import {
   type QueuePlayback,
   type QueueState,
 } from "./queue.ts";
-
-/** What the toast says when a play replaced a queue that was playing. */
-const NEW_QUEUE_NOTICE = "New queue playing";
 
 /** The queue a play replaced, and where its current song was, in ms. */
 export interface QueueUndo {
@@ -74,4 +72,6 @@ export const noticeLine = (notices: readonly (string | null)[]): string | null =
 export const newQueueToast = (
   playback: QueuePlayback,
   notices: readonly (string | null)[],
-): string | null => (playback === "stop" ? null : noticeLine([NEW_QUEUE_NOTICE, ...notices]));
+  catalogue: Catalogue = en,
+): string | null =>
+  playback === "stop" ? null : noticeLine([catalogue.playbackText.newQueuePlaying, ...notices]);

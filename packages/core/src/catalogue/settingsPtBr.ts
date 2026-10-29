@@ -324,8 +324,6 @@ export const settingsPtBr: typeof settingsEn = {
   followedArtists: "Artistas seguidos",
   youArentFollowingAnyArtistsYet: "Você ainda não segue nenhum artista.",
   following: "Seguindo",
-  newReleases: "Novos lançamentos",
-  newReleasesAndShows: "Novos lançamentos e shows",
   developerIsOn: "Developer is on",
   developerHidden: "Developer hidden",
   settings: "Ajustes",
@@ -342,8 +340,6 @@ export const settingsPtBr: typeof settingsEn = {
     "Deslize uma música para executar uma ação. A Seguir não aceita esse gesto.",
   songRowsDontSwipeEveryActionIs:
     "As linhas de músicas não deslizam. Todas as ações continuam no menu de toque longo.",
-  noListeningHistoryYet: "Nenhum histórico de audição ainda.",
-  couldntLoadListeningHistory: "Não foi possível carregar o histórico de audição.",
   keepFindFieldVisible: "Manter Campo de Busca Visível",
   theFindFieldStaysUnderThePages:
     "O campo de busca fica sob o cabeçalho enquanto a lista rola, em vez de aparecer apenas ao puxar a lista para baixo.",

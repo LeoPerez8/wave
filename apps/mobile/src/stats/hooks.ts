@@ -1,3 +1,4 @@
+import { useLocalisation } from "@/localisation/localisation";
 import type { PlayedAlbum, PlayedArtist } from "@/library/db/playedEntities";
 import {
   STATS_TOP,
@@ -27,6 +28,7 @@ interface StatsReading<A> {
   readonly value: A;
   readonly plays: number;
   readonly sources: unknown;
+  readonly language: string;
 }
 
 /**
@@ -43,6 +45,7 @@ const useStatsRead = <A>(
   read: (stats: Stats["Service"]) => Effect.Effect<A, LibraryStoreError>,
   sources: unknown = null,
 ): A | undefined => {
+  const { language } = useLocalisation();
   const plays = useFocusedVersion(playHistoryVersion);
   const [reading, setReading] = useState<StatsReading<A> | undefined>(undefined);
 
@@ -53,7 +56,7 @@ const useStatsRead = <A>(
         // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
         .runPromise(Stats.use(read))
         .then((value) => {
-          if (current) setReading({ value, plays, sources });
+          if (current) setReading({ value, plays, sources, language });
         })
         .catch(() => {
           // Keep showing the last good value.
@@ -61,7 +64,7 @@ const useStatsRead = <A>(
       return () => {
         current = false;
       };
-    }, [read, plays, sources]),
+    }, [read, plays, sources, language]),
   );
 
   return reading?.value;

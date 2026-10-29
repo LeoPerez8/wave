@@ -21,6 +21,7 @@ import {
   IconSparkles,
   IconStar,
   IconStarOff,
+  IconTicket,
   IconTrash,
   IconTrashX,
   IconX,
@@ -57,7 +58,8 @@ export type MenuAction =
   | UnavailableEntryAction
   | "addToShazam"
   | "removeColour"
-  | "follow";
+  | "follow"
+  | "openTickets";
 
 /**
  * Each action's one icon, the same in every menu that offers it and on the
@@ -66,6 +68,7 @@ export type MenuAction =
  */
 export const ACTION_ICONS: { readonly [A in MenuAction]: ActionIcon } = {
   follow: IconUserPlus,
+  openTickets: IconTicket,
   play: IconPlayerPlay,
   shuffle: IconArrowsShuffle,
   playNext: IconArrowForwardUp,

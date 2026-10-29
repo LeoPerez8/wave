@@ -1,3 +1,4 @@
+import { currentLocalisation, useLocalisation } from "@/localisation/localisation";
 import { IconMicrophone, IconSearch, IconX } from "@tabler/icons-react-native";
 import { type ComponentRef, type Ref, useState } from "react";
 import { StyleSheet, TextInput, View } from "react-native";
@@ -50,13 +51,14 @@ export function SearchField({
   value,
   onChange,
   onSubmit,
-  placeholder = "Songs, albums, artists, genres",
-  accessibilityLabel = "Search your library",
+  placeholder = currentLocalisation().strings.playbackText.songsAlbumsArtistsGenres,
+  accessibilityLabel = currentLocalisation().strings.playbackText.searchYourLibrary,
   autoFocus = false,
   onLayout,
   onFocusChange,
   onRecognize,
 }: Props) {
+  const { strings } = useLocalisation();
   const secondary = useThemeColor("secondary");
   const accent = useThemeColor("accent");
   const [focused, setFocused] = useState(false);
@@ -96,7 +98,7 @@ export function SearchField({
           {value.length > 0 ? (
             <IconButton
               icon={IconX}
-              label="Clear search"
+              label={strings.playbackText.clearSearch}
               onPress={() => onChange("")}
               tone="secondary"
               size={TARGET}
@@ -106,7 +108,7 @@ export function SearchField({
             onRecognize !== undefined && (
               <IconButton
                 icon={IconMicrophone}
-                label="Recognize Song"
+                label={strings.playbackText.recognizeSong}
                 onPress={onRecognize}
                 tone="secondary"
                 size={TARGET}

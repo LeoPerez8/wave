@@ -277,9 +277,16 @@ export {
   STATS_TOP,
   rankPlays,
   rankSongPlays,
+  statsPeriods,
   statsWindow,
 } from "./stats.ts";
-export type { PlayTotals, SongPlayTotals, StatsPeriod, StatsWindow } from "./stats.ts";
+export type {
+  PlayTotals,
+  SongPlayTotals,
+  StatsPeriod,
+  StatsPeriodOption,
+  StatsWindow,
+} from "./stats.ts";
 export { compareRefIds, compareTrackRefs } from "./refOrder.ts";
 export type { LibraryIdOrder, RefId } from "./refOrder.ts";
 export { rankMostPlayed } from "./mostPlayed.ts";
@@ -1427,12 +1434,16 @@ export {
   SYNC_PUSH_BATCH,
   SYNC_TABLE_NAMES,
   pushBatches,
+  pushBody,
   readPullPage,
   syncFieldFits,
 } from "./syncWire.ts";
 export type {
   SyncFavorite,
   SyncFieldKind,
+  SyncFollow,
+  SyncHiddenRelease,
+  SyncNotifiedShow,
   SyncPullPage,
   SyncPlayEnd,
   SyncPlayRow,
@@ -2105,6 +2116,7 @@ export {
 } from "./homeSections.ts";
 export type { DiscoverRowId, DiscoverRowEdit, MixRowId } from "./homeSections.ts";
 export {
+  appLyricsTranslationTarget,
   lyricsTranslationKey,
   lyricsTranslationLanguageName,
   lyricsTranslationRequest,
@@ -2296,13 +2308,15 @@ export {
 
 export {
   RECOGNIZE_CARD_ACTION_LABELS,
+  recognizeCardActionLabels,
   recognizeCardView,
   recognizeHoldsPlayback,
-  recognizeLogLine,
   recognizeSource,
   startRecognize,
   stepRecognize,
 } from "./recognize.ts";
+export { recognizeLogLine } from "./recognizeLog.ts";
+export type { RecognizeLogOutcome } from "./recognizeLog.ts";
 export { recognizeEntryAction } from "./recognizeEntry.ts";
 export type {
   RecognizeAnswer,
@@ -2313,7 +2327,6 @@ export type {
   RecognizeEnd,
   RecognizeEvent,
   RecognizeFailure,
-  RecognizeLogOutcome,
   RecognizeSession,
   RecognizeSource,
   RecognizeStep,
@@ -2365,3 +2378,5 @@ export * from "./followArtistSearch.ts";
 
 export { releaseTitle } from "./ytArtist.ts";
 export { formatNumber, formatTime, formatDate } from "./formatting.ts";
+export { showCardDate } from "./showCard.ts";
+export type { ShowCardDate } from "./showCard.ts";

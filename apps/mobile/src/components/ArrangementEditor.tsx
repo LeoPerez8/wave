@@ -1,3 +1,4 @@
+import { useLocalisation } from "@/localisation/localisation";
 import { IconMinus, IconPlus } from "@tabler/icons-react-native";
 import { useEffect, useState, type ComponentType, type ReactNode } from "react";
 import { ScrollView, Text, View, type AccessibilityActionEvent } from "react-native";
@@ -77,6 +78,15 @@ const ROW_BOX = { minHeight: ROW } as const;
 const ROW_LINE = { flexGrow: 1 } as const;
 
 /**
+ * Where an editor's items show, with the preposition each button's label
+ * takes, which Portuguese contracts ("do Início", "à barra de abas").
+ */
+export interface ArrangementPlace {
+  readonly from: string;
+  readonly to: string;
+}
+
+/**
  * A row the owner can't drag, above or below those they can: Home on the tab
  * bar (nothing to press), or Search, whose pill stays at the end (a button
  * takes it off when [onRemove] is given).
@@ -88,11 +98,12 @@ export function FixedRow({
   divider,
 }: {
   title: string;
-  /** Where the item sits, for the remove button's label: "Home", "the tab bar". */
-  place: string;
+  /** Where the item sits, for the remove button's label: "from the tab bar". */
+  place: ArrangementPlace;
   onRemove?: () => void;
   divider: boolean;
 }) {
+  const { strings } = useLocalisation();
   return (
     <View style={ROW_BOX}>
       <View className="flex-row items-center" style={ROW_LINE}>
@@ -101,7 +112,7 @@ export function FixedRow({
           <View style={{ marginRight: -CELL * 1.5 }}>
             <RowButton
               icon={IconMinus}
-              label={`Remove ${title} from ${place}`}
+              label={strings.arrangement.remove(title, place.from)}
               onPress={onRemove}
             />
           </View>
@@ -116,7 +127,7 @@ type ShownRowProps<Id> = {
   id: Id;
   title: string;
   detail: string | null;
-  place: string;
+  place: ArrangementPlace;
   index: number;
   count: number;
   /** Draw a hairline under the last row too (a fixed row follows). */
@@ -144,6 +155,7 @@ function ShownRow<Id>({
   canRemove = true,
   children,
 }: ShownRowProps<Id>) {
+  const { strings } = useLocalisation();
   const { style, underline, handle } = useReorderRow({ index, reorder });
 
   const onAccessibilityAction = (event: AccessibilityActionEvent) => {
@@ -162,9 +174,11 @@ function ShownRow<Id>({
         accessible
         accessibilityLabel={title}
         accessibilityActions={[
-          ...(index > 0 ? [{ name: "moveUp", label: "Move up" }] : []),
-          ...(index < count - 1 ? [{ name: "moveDown", label: "Move down" }] : []),
-          ...(canRemove ? [{ name: "remove", label: `Remove from ${place}` }] : []),
+          ...(index > 0 ? [{ name: "moveUp", label: strings.arrangement.moveUp }] : []),
+          ...(index < count - 1 ? [{ name: "moveDown", label: strings.arrangement.moveDown }] : []),
+          ...(canRemove
+            ? [{ name: "remove", label: strings.arrangement.removeAction(place.from) }]
+            : []),
         ]}
         onAccessibilityAction={onAccessibilityAction}
         className="flex-row items-center"
@@ -173,7 +187,7 @@ function ShownRow<Id>({
         <RowLabel title={title} detail={detail} />
         <RowButton
           icon={IconMinus}
-          label={`Remove ${title} from ${place}`}
+          label={strings.arrangement.remove(title, place.from)}
           disabled={!canRemove}
           onPress={() => edit({ remove: id })}
         />
@@ -202,11 +216,12 @@ function HiddenRow<Id>({
   id: Id;
   title: string;
   detail: string | null;
-  place: string;
+  place: ArrangementPlace;
   divider: boolean;
   canAdd: boolean;
   edit: (edit: ArrangementEdit<Id>) => void;
 }) {
+  const { strings } = useLocalisation();
   return (
     <View style={ROW_BOX}>
       <View className="flex-row items-center" style={ROW_LINE}>
@@ -214,7 +229,7 @@ function HiddenRow<Id>({
         <View style={{ marginRight: -CELL * 1.5 }}>
           <RowButton
             icon={IconPlus}
-            label={`Add ${title} to ${place}`}
+            label={strings.arrangement.add(title, place.to)}
             disabled={!canAdd}
             onPress={() => edit({ add: id })}
           />
@@ -233,8 +248,8 @@ export type ArrangementEditorProps<Id extends string> = {
   title: (id: Id) => string;
   /** A line under an item's title, or null for none: what it needs that's off. */
   detail?: (id: Id) => string | null;
-  /** Where the items show, for buttons' labels: "Home", "the tab bar". */
-  place: string;
+  /** Where the items show, for buttons' labels: "from Home", "to the tab bar". */
+  place: ArrangementPlace;
   /** The heading over the items not shown, e.g. "Not on Home". */
   hiddenHeading: string;
   edit: (edit: ArrangementEdit<Id>) => void;
@@ -288,6 +303,7 @@ export function ArrangementEditor<Id extends string>({
   note,
   onDone,
 }: ArrangementEditorProps<Id>) {
+  const { strings } = useLocalisation();
   const reorder = useRowReorder({
     ids: shown,
     rowHeight: ROW,
@@ -363,7 +379,7 @@ export function ArrangementEditor<Id extends string>({
       </View>
       {onDone !== undefined && (
         <View className="flex-row justify-end" style={{ paddingTop: CELL }}>
-          <TextButton label="Done" onPress={onDone} />
+          <TextButton label={strings.arrangement.done} onPress={onDone} />
         </View>
       )}
     </>

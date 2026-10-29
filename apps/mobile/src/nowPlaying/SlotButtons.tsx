@@ -1,3 +1,4 @@
+import { useLocalisation } from "@/localisation/localisation";
 import {
   IconDots,
   IconQuote,
@@ -109,13 +110,14 @@ export function SlotButton({
   off: boolean;
   context: SlotContext;
 }) {
+  const { strings } = useLocalisation();
   const change = slotChange(slot);
   switch (action) {
     case "lyrics":
       return (
         <ViewToggle
           icon={IconQuote}
-          label="Lyrics"
+          label={strings.playbackText.lyrics}
           on={context.lyricsShown}
           onPress={context.toggleLyrics}
           change={change}
@@ -143,7 +145,7 @@ export function SlotButton({
         <IconButton
           {...change}
           icon={IconShare3}
-          label="Share Song"
+          label={strings.playbackText.shareSong}
           tone="secondary"
           onPress={context.share}
         />
@@ -153,7 +155,7 @@ export function SlotButton({
         <IconButton
           {...change}
           icon={IconDots}
-          label="Song Menu"
+          label={strings.playbackText.songMenu}
           tone="secondary"
           disabled={off}
           opensMenu

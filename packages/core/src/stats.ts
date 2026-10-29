@@ -1,3 +1,4 @@
+import { en, type Catalogue } from "./catalogueEn.ts";
 /**
  * Listening stats: rankings of the songs, albums and artists played most over
  * a stats period, a rolling window ending now. Only counted plays (see
@@ -10,18 +11,20 @@ import type { TrackRef } from "./ytMusic.ts";
 /** A stats period: a rolling window ending now. */
 export type StatsPeriod = "week" | "month" | "year" | "all";
 
-/** The periods the Stats screen offers, from the shortest to all time. */
-export const STATS_PERIODS: readonly {
+/** A period as the Stats screen names it. */
+export interface StatsPeriodOption {
   readonly id: StatsPeriod;
   readonly label: string;
   /** The label on the period selector's tab, where four must fit across. */
   readonly tab: string;
-}[] = [
-  { id: "week", label: "Last 7 days", tab: "7 days" },
-  { id: "month", label: "Last 30 days", tab: "30 days" },
-  { id: "year", label: "Last 12 months", tab: "12 months" },
-  { id: "all", label: "All time", tab: "All time" },
-];
+}
+
+/** The periods the Stats screen offers, from the shortest to all time, in [strings]' language. */
+export const statsPeriods = (strings: Catalogue = en): readonly StatsPeriodOption[] =>
+  (["week", "month", "year", "all"] as const).map((id) => ({ id, ...strings.stats.periods[id] }));
+
+/** The periods the Stats screen offers, in English. */
+export const STATS_PERIODS: readonly StatsPeriodOption[] = statsPeriods(en);
 
 /** The plays a period covers: started at or after `from` (no start for all time) and at or before `to`. */
 export interface StatsWindow {

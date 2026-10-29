@@ -1,3 +1,4 @@
+import { en, type Catalogue } from "./catalogueEn.ts";
 import { fileUri } from "./fileUri.ts";
 import { finishSteps } from "./buildSteps.ts";
 /**
@@ -399,6 +400,7 @@ const CAPTION_ARTISTS = 3;
  */
 export const discoverMixCaption = (
   mix: BlendedDiscoverMix,
+  strings: Catalogue = en,
 ): {
   readonly title: string;
   readonly artists: string;
@@ -420,9 +422,9 @@ export const discoverMixCaption = (
   }
   const name = genre === undefined ? mix.seed.name : genreTitle(genre);
   return {
-    title: `${name} mix`,
+    title: strings.discover.mixTitle(name),
     artists: [...artists.values()].join(", "),
-    line: `${mix.songs.length} songs`,
+    line: strings.discover.songs(mix.songs.length),
     artworkUrl: mixCover(mix),
   };
 };

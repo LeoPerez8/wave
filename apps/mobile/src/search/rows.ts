@@ -1,4 +1,4 @@
-import { formatNumber, type AppLanguage } from "@wave/core";
+import { catalogueOf, formatNumber, type AppLanguage } from "@wave/core";
 import type {
   DiscoverSong,
   MixedSong,
@@ -100,13 +100,13 @@ const PREVIEW: Readonly<Record<SearchKind, number>> = {
   genre: 4,
 };
 
-const LABEL: Readonly<Record<SearchKind, string>> = {
-  artist: "Artists",
-  album: "Albums",
-  song: "Songs",
-  playlist: "Playlists",
-  genre: "Genres",
-};
+const labels = (language: AppLanguage): Readonly<Record<SearchKind, string>> => ({
+  artist: catalogueOf(language).playbackText.artists,
+  album: catalogueOf(language).playbackText.albums,
+  song: catalogueOf(language).playbackText.songs,
+  playlist: catalogueOf(language).playbackText.playlists,
+  genre: catalogueOf(language).playbackText.genres,
+});
 
 const hitId = (hit: SearchHit): number => {
   switch (hit.kind) {
@@ -239,11 +239,14 @@ export const resultRows = (
   const ytTop = yt?.top ?? null;
   if (results.top !== null) {
     rows.push(
-      { type: "heading", key: "heading:top", label: "Top result" },
+      { type: "heading", key: "heading:top", label: catalogueOf(language).playbackText.topResult },
       hitRow(results.top, true),
     );
   } else if (ytTop !== null) {
-    rows.push({ type: "heading", key: "heading:top", label: "Top result" }, ytTopRow(ytTop));
+    rows.push(
+      { type: "heading", key: "heading:top", label: catalogueOf(language).playbackText.topResult },
+      ytTopRow(ytTop),
+    );
   }
   const groups: SearchGroup<SearchHit>[] = [...results.groups];
   for (const kind of YT_KINDS)
@@ -255,7 +258,7 @@ export const resultRows = (
     rows.push({
       type: "heading",
       key: `heading:${group.kind}`,
-      label: `${LABEL[group.kind]} · ${formatNumber(language, total)}`,
+      label: `${labels(language)[group.kind]} · ${formatNumber(language, total)}`,
     });
     const groupRows: ResultRow[] = [...group.items.map((hit) => hitRow(hit, false)), ...extra];
     const open = expanded.has(group.kind) || groups.length === 1;
@@ -270,26 +273,31 @@ export const resultRows = (
 };
 
 /** The line standing in for the library's results when nothing in it matches. */
-export const noLibraryResultsRow = (query: string): ResultRow => ({
+export const noLibraryResultsRow = (query: string, language: AppLanguage = "en"): ResultRow => ({
   type: "note",
   key: "note:library",
-  text: `Nothing in your library matches “${query.trim()}”.`,
+  text: catalogueOf(language).playbackText.nothingInYourLibraryMatchesValue(query.trim()),
 });
 
 /** Online's quiet lines. */
-const YT_NOTE: Readonly<Record<YtSectionNote, string>> = {
-  noMatches: "Nothing online matches.",
-  allInLibrary: "Everything found online is already in your library.",
-  offline: "You're offline. Tap Online to try again when you're back online.",
-  failed: "Couldn't search online. Tap Online to try again.",
-};
+const ytNotes = (language: AppLanguage): Readonly<Record<YtSectionNote, string>> => ({
+  noMatches: catalogueOf(language).playbackText.nothingOnlineMatches,
+  allInLibrary: catalogueOf(language).playbackText.everythingFoundOnlineIsAlreadyInYourLibrary,
+  offline: catalogueOf(language).playbackText.youreOfflineTapOnlineToTryAgainWhenYoureBackOnline,
+  failed: catalogueOf(language).playbackText.couldntSearchOnlineTapOnlineToTryAgain,
+});
 
 /**
  * What follows the Library's results for Online: skeleton rows while the
  * query loads (where its results will go), else its quiet line, if any.
  */
-export const ytFooterRows = (view: YtSectionView<NativeYtSong> | null): ResultRow[] => {
+export const ytFooterRows = (
+  view: YtSectionView<NativeYtSong> | null,
+  language: AppLanguage = "en",
+): ResultRow[] => {
   if (view === null) return [];
   if (view.loading) return [{ type: "skeleton", key: "skeleton:yt" }];
-  return view.note === null ? [] : [{ type: "note", key: "note:yt", text: YT_NOTE[view.note] }];
+  return view.note === null
+    ? []
+    : [{ type: "note", key: "note:yt", text: ytNotes(language)[view.note] }];
 };

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import {
+  catalogueOf,
   librarySearchSong,
   matchSharedSongs,
   sharePlaylistFailureLine,
@@ -111,6 +112,16 @@ describe("sharedSongsLine", () => {
     assert.equal(sharedSongsLine({ found: 12, total: 15 }), "12 of 15 songs found");
     assert.equal(sharedSongsLine({ found: 1, total: 1 }), "1 of 1 song found");
     assert.equal(sharedSongsLine({ found: 1200, total: 1500 }), "1,200 of 1,500 songs found");
+  });
+
+  test("says it in Portuguese", () => {
+    const pt = catalogueOf("pt-BR");
+    assert.equal(sharedSongsLine({ found: 12, total: 15 }, pt), "12 de 15 músicas encontradas");
+    assert.equal(sharedSongsLine({ found: 1, total: 1 }, pt), "1 de 1 música encontrada");
+    assert.equal(
+      sharedSongsLine({ found: 1200, total: 1500 }, pt),
+      "1.200 de 1.500 músicas encontradas",
+    );
   });
 });
 
@@ -233,6 +244,15 @@ describe("playlistShareServices", () => {
       message:
         "Sharing a playlist makes a public copy of it on your Spotify account, with a link anyone can open.",
       action: { label: "Sign In" },
+    });
+  });
+
+  test("asks to sign in in Portuguese", () => {
+    assert.deepEqual(shareSignInAlert("spotify", catalogueOf("pt-BR")), {
+      title: "Iniciar Sessão no Spotify",
+      message:
+        "Compartilhar uma playlist cria uma cópia pública dela na sua conta do Spotify, com um link que qualquer pessoa pode abrir.",
+      action: { label: "Iniciar Sessão" },
     });
   });
 
@@ -374,6 +394,22 @@ describe("syncSharedPlaylist", () => {
 });
 
 describe("sharePlaylistFailureLine", () => {
+  test("says why sharing stopped in Portuguese", () => {
+    const pt = catalogueOf("pt-BR");
+    assert.equal(
+      sharePlaylistFailureLine("ytMusic", "noSearchAnswer", pt),
+      "O YouTube Music não respondeu a uma busca. Tente novamente.",
+    );
+    assert.equal(
+      sharePlaylistFailureLine("spotify", "offline", pt),
+      "Compartilhar requer uma conexão.",
+    );
+    assert.equal(
+      sharePlaylistFailureLine("spotify", "signedOut", pt),
+      "O Spotify finalizou sua sessão. Inicie a sessão e compartilhe novamente.",
+    );
+  });
+
   test("says why sharing on YT Music stopped", () => {
     assert.equal(
       sharePlaylistFailureLine("ytMusic", "noSearchAnswer"),

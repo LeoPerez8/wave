@@ -1,6 +1,17 @@
+import { homeEn } from "./catalogue/homeEn.ts";
+import { arrangementEn } from "./catalogue/arrangementEn.ts";
+import { discoverEn } from "./catalogue/discoverEn.ts";
+import { statsEn } from "./catalogue/statsEn.ts";
+import { recapEn } from "./catalogue/recapEn.ts";
+import { listeningHistoryEn } from "./catalogue/listeningHistoryEn.ts";
+import { shareEn } from "./catalogue/shareEn.ts";
 import { downloadNoticeEn } from "./catalogue/downloadNoticeEn.ts";
 import { nativeEn } from "./catalogue/nativeEn.ts";
 import { autoEn } from "./catalogue/autoEn.ts";
+import { playbackTextEn } from "./catalogue/playbackTextEn.ts";
+import { lyricsLanguagesEn } from "./catalogue/lyricsLanguagesEn.ts";
+import { showsEn } from "./catalogue/showsEn.ts";
+import { upcomingShowsEn } from "./catalogue/upcomingShowsEn.ts";
 import { settingsEn } from "./catalogue/settingsEn.ts";
 import { downloadStatusEn } from "./catalogue/downloadStatusEn.ts";
 import { alertEn } from "./catalogue/alertEn.ts";
@@ -18,6 +29,17 @@ export const en = {
   downloadNotice: downloadNoticeEn,
   native: nativeEn,
   auto: autoEn,
+  lyricsLanguages: lyricsLanguagesEn,
+  playbackText: playbackTextEn,
+  shows: showsEn,
+  upcomingShows: upcomingShowsEn,
+  home: homeEn,
+  arrangement: arrangementEn,
+  discover: discoverEn,
+  stats: statsEn,
+  recap: recapEn,
+  listeningHistory: listeningHistoryEn,
+  share: shareEn,
   settings: settingsEn,
   downloadStatus: downloadStatusEn,
   alert: alertEn,

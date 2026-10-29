@@ -37,8 +37,8 @@ export function HomeEditor({
       shown={arrangement.sections}
       hidden={hiddenHomeSections(arrangement)}
       title={(id) => homeSectionTitle(id, strings)}
-      place="Home"
-      hiddenHeading="Not on Home"
+      place={strings.arrangement.home}
+      hiddenHeading={strings.home.notOnHome}
       edit={edit}
       renderNested={(id, onDraggingChange) =>
         id === "discover" ? (
@@ -47,8 +47,8 @@ export function HomeEditor({
               inline
               shown={arrangement.discoverRows}
               hidden={hiddenDiscoverRows(arrangement)}
-              title={discoverRowTitle}
-              place="Discover"
+              title={(row) => discoverRowTitle(row, strings)}
+              place={strings.arrangement.discover}
               hiddenHeading=""
               canRemove={arrangement.discoverRows.length > 1}
               edit={(discover) => edit({ discover })}

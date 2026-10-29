@@ -975,7 +975,10 @@ export const genreOrderRevisions = sqliteTable("genre_order_revisions", {
   revision: integer("revision").notNull(),
 });
 
-/** Follows are independent of the scanned library, so deleting files keeps them. */
+/**
+ * Follows are independent of the scanned library, so deleting files keeps them.
+ * They sync with the Wave account; an unfollow is a tombstone (`deleted`).
+ */
 export const follows = sqliteTable("follows", {
   key: text("key").primaryKey(),
   name: text("name").notNull(),
@@ -983,6 +986,7 @@ export const follows = sqliteTable("follows", {
   followedAt: integer("followed_at").notNull(),
   deezerId: integer("deezer_id"),
   ytBrowseId: text("yt_browse_id"),
+  ...changeStamp(),
 });
 
 export const followReleaseCache = sqliteTable("follow_release_cache", {
@@ -992,6 +996,21 @@ export const followReleaseCache = sqliteTable("follow_release_cache", {
     .notNull(),
   checkedAt: integer("checked_at").notNull(),
 });
+/** Releases hidden from New from Artists You Follow, synced with the Wave account. */
 export const hiddenFollowReleases = sqliteTable("hidden_follow_releases", {
   key: text("key").primaryKey(),
+  ...changeStamp(),
+});
+
+export const followShowCache = sqliteTable("follow_show_cache", {
+  key: text("key").primaryKey(),
+  attractionId: text("attraction_id").notNull(),
+  country: text("country").notNull(),
+  shows: text("shows", { mode: "json" }).$type<import("@wave/core").FollowShow[]>().notNull(),
+  checkedAt: integer("checked_at").notNull(),
+});
+/** Shows that notified here or on another phone of the Wave account, by Ticketmaster event id. */
+export const notifiedFollowShows = sqliteTable("notified_follow_shows", {
+  id: text("id").primaryKey(),
+  ...changeStamp(),
 });

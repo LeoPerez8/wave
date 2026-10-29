@@ -16,6 +16,9 @@ export const SYNC_LIMITS = {
   maxFavorites: 100_000,
   maxPreferences: 200,
   maxPlays: 1_000_000,
+  maxFollows: 5_000,
+  maxHiddenReleases: 50_000,
+  maxNotifiedShows: 50_000,
   /** Requests one session may make per minute. */
   maxRequestsPerMinute: 120,
   /**
