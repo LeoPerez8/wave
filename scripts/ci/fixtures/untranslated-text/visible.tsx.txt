@@ -1,0 +1,2 @@
+const view = <Text accessibilityLabel="Play song">Recently played</Text>;
+showToast(`Added ${count} songs`);
