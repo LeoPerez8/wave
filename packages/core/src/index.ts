@@ -458,6 +458,8 @@ export {
   WHITE_INK,
   MAX_SAVED_INKS,
   chooseCustomInk,
+  chooseSavedInk,
+  chooseThemeSwatch,
   customInkPreview,
   inkSaveState,
   isDefaultThemeChoice,

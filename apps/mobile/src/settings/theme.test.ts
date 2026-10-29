@@ -444,3 +444,15 @@ test("a theme pulled from a Wave before saved colours keeps this phone's saved c
   assert.equal(stored.customPrimary, "#7aaef5");
   assert.deepEqual(stored.savedPrimary, ["#7aaef5", "#3a7bd5", "#00aa55"]);
 });
+
+test("a saved colour keeps the unsaved custom colour on the Custom swatch, as Default does", async () => {
+  const { theme, Storage } = await loadTheme({
+    "settings.theme": JSON.stringify({ ...DEFAULT_THEME_CHOICE, savedPrimary: ["#ff8800"] }),
+  });
+  const kept = () => JSON.parse(Storage.getItemSync("settings.theme")!);
+  await theme.setCustomInk("primary", "#3366ff", async () => "alternative");
+  await theme.setSavedInk("primary", "#ff8800", async () => "alternative");
+  assert.deepEqual([kept().customPrimary, kept().unsavedPrimary], ["#ff8800", "#3366ff"]);
+  await theme.setThemeSwatch("primary", "white", async () => "alternative");
+  assert.deepEqual([kept().primary, kept().customPrimary], ["white", "#3366ff"]);
+});

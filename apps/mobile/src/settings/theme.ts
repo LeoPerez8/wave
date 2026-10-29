@@ -1,6 +1,8 @@
 import {
   appearanceAccent,
   chooseCustomInk,
+  chooseSavedInk,
+  chooseThemeSwatch,
   createColourPickerPreview,
   launcherIconFor,
   launcherIconSwitch,
@@ -150,8 +152,7 @@ export const setThemeSwatch = async (
   id: string,
   confirm: Confirm,
 ): Promise<void> => {
-  // Read back through Core so an unknown id lands on the default.
-  const edit = (choice: ThemeChoice) => readThemeChoice(JSON.stringify({ ...choice, [group]: id }));
+  const edit = (choice: ThemeChoice) => chooseThemeSwatch(choice, group, id);
   if (group === "light" || group === "dark") theme.set(edit(theme.get()));
   else await changeTheme(edit, confirm);
 };
@@ -219,9 +220,12 @@ export const setCustomInk = async (
 export const saveCustomInk = (group: InkGroup, hex: string): void =>
   theme.set(saveInk(theme.get(), group, hex));
 
-/** Applies a saved colour (a tap on its swatch), asking first when that switches the icon. */
+/**
+ * Applies a saved colour (a tap on its swatch), asking first when that
+ * switches the icon. The custom swatch keeps its colour.
+ */
 export const setSavedInk = (group: InkGroup, hex: string, confirm: Confirm): Promise<void> =>
-  changeTheme((choice) => chooseCustomInk(choice, group, hex), confirm);
+  changeTheme((choice) => chooseSavedInk(choice, group, hex), confirm);
 
 /** Takes a colour out of the group's saved colours; the colours in use stay. */
 export const removeSavedInk = (group: InkGroup, hex: string): void =>
