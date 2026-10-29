@@ -36,7 +36,6 @@ import { cancelYtDownload, downloadYtSong, useYtDownloadStatus } from "@/ytmusic
 import type { NativeYtSong } from "@/native/waveYtMusic";
 import { openOverlay } from "@/overlay/overlay";
 import { holdPlayback } from "@/playback/holdPlayback";
-import { useTapAnimationMs } from "@/settings/tapAnimation";
 import { useThemeColor } from "@/theme/useThemeColor";
 
 import { resolveRecognition } from "./resolveRecognition";
@@ -356,13 +355,11 @@ function RecognizeCard({
 /**
  * The moving wave, in the accent colour. It ripples on the RenderThread (a native
  * AnimatedVectorDrawable, as the playing song's underline does), so it never makes
- * the card's glass re-blur (issue #93); it lies still under reduce motion or with the
- * tap animation at 0 ms.
+ * the card's glass re-blur (issue #93); it lies still under reduce motion.
  */
 function ListeningWave() {
   const accent = useThemeColor("accent");
   const reduceMotion = useReducedMotion();
-  const tapAnimationMs = useTapAnimationMs();
   return (
     <NativeWaveUnderline
       pointerEvents="none"
@@ -370,7 +367,7 @@ function ListeningWave() {
       accessibilityElementsHidden
       shape="listening"
       color={accent}
-      animating={!reduceMotion && tapAnimationMs > 0}
+      animating={!reduceMotion}
       style={{ alignSelf: "stretch", height: WAVE_HEIGHT }}
     />
   );

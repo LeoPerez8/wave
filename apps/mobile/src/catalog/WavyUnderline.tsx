@@ -3,7 +3,6 @@ import { useReducedMotion } from "react-native-reanimated";
 
 import { NativeWaveUnderline } from "@/glass/waveGlass";
 import { usePlayWhenReady } from "@/playback/hooks";
-import { useTapAnimationMs } from "@/settings/tapAnimation";
 import { useThemeColor } from "@/theme/useThemeColor";
 
 /**
@@ -17,7 +16,7 @@ const HEIGHT = UNDERLINE_WAVE.amplitude * 2 + UNDERLINE_WAVE.stroke;
  * The ember wave under the playing song's title. Lay it over the title's own
  * box (which hugs the visible, possibly truncated, text): it spans that width.
  * It ripples while music plays and lies still when paused, under reduce
- * motion, or with the tap animation at 0 ms.
+ * motion.
  *
  * The ripple is a native AnimatedVectorDrawable on the RenderThread, not a
  * UI-thread animation: a UI-thread frame would make every glass view re-record
@@ -27,8 +26,7 @@ export function WavyUnderline() {
   const highlight = useThemeColor("highlight");
   const playing = usePlayWhenReady();
   const reduceMotion = useReducedMotion();
-  const tapAnimationMs = useTapAnimationMs();
-  const motion = underlineMotion({ isPlaying: playing, reduceMotion, tapAnimationMs });
+  const motion = underlineMotion({ isPlaying: playing, reduceMotion });
 
   return (
     <NativeWaveUnderline

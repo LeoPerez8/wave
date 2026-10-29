@@ -46,8 +46,8 @@ for that size.
   network features or localisation; all UI copy is in English.
 - Stack: Expo / React Native, Expo Router, uniwind, Effect, Reanimated, Gesture Handler, React Native
   Skia, Media3 native module. Decision-heavy logic lives in `packages/core` (zero runtime dependencies).
-- **Tap animations with adjustable speed.** Touch interactions animate, and the owner can set the
-  animation duration in milliseconds in Settings. (New requirement, not yet in the spec.)
+- **Tap animations.** Touch interactions animate at a fixed 140 ms and respect Android's
+  Remove animations setting.
 - Haptic feedback on key interactions (play/pause, favorite, long-press, end of scrub).
 - Theme follows the system light/dark setting.
 - **Open for the design round** (previously in the spec, no longer binding): the teal/gold palette,
@@ -75,7 +75,7 @@ for that size.
 2. **Playback is always one gesture away**, in the app, on the lock screen and in the car.
 3. **Fast at scale.** Tens of thousands of tracks scroll at 120 Hz, and browsing starts before the
    scan finishes.
-4. **Feel is a feature.** Motion, haptics and touch response are first-class and tunable (animation
-   speed in ms).
+4. **Feel is a feature.** Motion, haptics and touch response follow the same timing across the app;
+   Bounce amount and Long-press delay are tunable.
 5. **Capture now, analyse later.** Every play is recorded in full, even though v1 shows no statistics
    screens.
