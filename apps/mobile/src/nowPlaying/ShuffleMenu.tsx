@@ -1,3 +1,4 @@
+import { currentLocalisation, useLocalisation } from "@/localisation/localisation";
 import { IconArrowsShuffle } from "@tabler/icons-react-native";
 import { entryDivider, shuffleLineShows, type ShuffleKind } from "@wave/core";
 import { View } from "react-native";
@@ -32,30 +33,45 @@ const SHUFFLES: Record<
   }
 > = {
   real: {
-    name: "Real Shuffle",
-    line: "Any order, every one as likely",
-    buttonLabel: "Shuffle",
+    get name() {
+      return currentLocalisation().strings.playbackText.realShuffle;
+    },
+    get line() {
+      return currentLocalisation().strings.playbackText.anyOrderEveryOneAsLikely;
+    },
+    get buttonLabel() {
+      return currentLocalisation().strings.playbackText.shuffle;
+    },
     icon: IconArrowsShuffle,
   },
   smart: {
-    name: "Smart Shuffle",
-    line: "Your most played, spread among the rest",
-    buttonLabel: "Smart Shuffle",
+    get name() {
+      return currentLocalisation().strings.playbackText.smartShuffle;
+    },
+    get line() {
+      return currentLocalisation().strings.playbackText.yourMostPlayedSpreadAmongTheRest;
+    },
+    get buttonLabel() {
+      return currentLocalisation().strings.playbackText.smartShuffle;
+    },
     icon: SmartShuffleIcon,
   },
   even: {
-    name: "Even Shuffle",
-    line: "Artists take turns, never twice in a row",
-    buttonLabel: "Even Shuffle",
+    get name() {
+      return currentLocalisation().strings.playbackText.evenShuffle;
+    },
+    get line() {
+      return currentLocalisation().strings.playbackText.artistsTakeTurnsNeverTwiceInARow;
+    },
+    get buttonLabel() {
+      return currentLocalisation().strings.playbackText.evenShuffle;
+    },
     icon: EvenShuffleIcon,
   },
 };
 
 /** The card's entries, in order. */
 const KINDS = Object.keys(SHUFFLES) as ShuffleKind[];
-
-/** The kinds' names, in the card's order. */
-const KIND_NAMES = KINDS.map((kind) => SHUFFLES[kind].name);
 
 /**
  * The kind of shuffle as Settings › Layout › Now Playing offers it: the
@@ -64,26 +80,28 @@ const KIND_NAMES = KINDS.map((kind) => SHUFFLES[kind].name);
  * the next shuffle uses it.
  */
 export const shuffleKindChoice: ChoiceSetting<ShuffleKind> = {
-  label: "Shuffle",
-  choices: KINDS.map((kind) => ({
-    value: kind,
-    label: SHUFFLES[kind].name,
-    line: SHUFFLES[kind].line,
-  })),
+  get label() {
+    return currentLocalisation().strings.playbackText.shuffle;
+  },
+  get choices() {
+    return KINDS.map((kind) => ({
+      value: kind,
+      label: SHUFFLES[kind].name,
+      line: SHUFFLES[kind].line,
+    }));
+  },
   setting: shuffleKindSetting,
 };
 
-/** The shuffle buttons' hint: "Long press to choose Real Shuffle, Smart Shuffle or Even Shuffle". */
-const LONG_PRESS_HINT = `Long press to choose ${KIND_NAMES.slice(0, -1).join(", ")} or ${KIND_NAMES.at(-1)}`;
-
 /** Every shuffle control follows the saved choice and opens the same card. */
 export const useShuffleControl = () => {
+  const { strings } = useLocalisation();
   const kind = useShuffleKind();
   return {
     icon: SHUFFLES[kind].icon,
     label: SHUFFLES[kind].buttonLabel,
     onLongPress: openShuffleMenu,
-    accessibilityHint: LONG_PRESS_HINT,
+    accessibilityHint: strings.playbackText.longPressShuffle,
   };
 };
 
@@ -128,7 +146,7 @@ function ShuffleMenu({ close, openedBefore }: { close: () => void; openedBefore:
 const openShuffleMenu = (): void => {
   const openedBefore = countShuffleCardOpening();
   openOverlay({
-    label: "Shuffle",
+    label: currentLocalisation().strings.playbackText.shuffle,
     anchor: pressedRect(),
     render: (close) => <ShuffleMenu close={close} openedBefore={openedBefore} />,
   });

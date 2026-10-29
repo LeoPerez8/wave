@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
+import { catalogueOf } from "./localisation.ts";
 import {
   CUSTOM_SLEEP_MINUTES,
   formatSleepMinutes,
@@ -102,5 +103,12 @@ describe("formatSleepMinutes", () => {
     assert.equal(formatSleepMinutes(45), "45 min");
     assert.equal(formatSleepMinutes(90), "1 h 30 min");
     assert.equal(formatSleepMinutes(120), "2 h");
+  });
+
+  test("reads the app's units in Portuguese", () => {
+    const pt = catalogueOf("pt-BR");
+    assert.equal(formatSleepMinutes(45, pt), "45 min");
+    assert.equal(formatSleepMinutes(90, pt), "1 h 30 min");
+    assert.equal(formatSleepMinutes(120, pt), "2 h");
   });
 });

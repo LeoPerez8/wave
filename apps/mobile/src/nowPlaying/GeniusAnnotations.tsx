@@ -1,3 +1,4 @@
+import { currentLocalisation, useLocalisation } from "@/localisation/localisation";
 import {
   geniusLineSegments,
   geniusSection,
@@ -22,9 +23,7 @@ const FOLDED_LINES = 3;
 
 /** "By Ana", "By Ana and Bo", "By Ana, Bo and Cy"; empty with no one named. */
 const byLine = (authors: readonly string[]): string =>
-  authors.length === 0
-    ? ""
-    : `By ${authors.length === 1 ? authors[0] : `${authors.slice(0, -1).join(", ")} and ${authors.at(-1)}`}`;
+  currentLocalisation().strings.playbackText.byAuthors(authors);
 
 /**
  * What an annotation explains: its fragment as Genius quotes it, its lines
@@ -45,6 +44,7 @@ function AnnotationCard({
   referents: readonly GeniusReferent[];
   close: () => void;
 }) {
+  const { strings } = useLocalisation();
   return (
     <>
       <CardEntries>
@@ -64,7 +64,7 @@ function AnnotationCard({
                 <View key={at} style={{ gap: CELL / 2, paddingTop: CELL }}>
                   {annotation.state === "pending" && (
                     <Text className="font-sans text-footnote font-semibold text-secondary">
-                      Unreviewed
+                      {strings.playbackText.unreviewed}
                     </Text>
                   )}
                   <Text className="font-sans text-body text-foreground">{annotation.text}</Text>
@@ -80,7 +80,7 @@ function AnnotationCard({
         </View>
       </CardEntries>
       <View className="flex-row items-center justify-end">
-        <TextButton label="Done" onPress={close} />
+        <TextButton label={strings.playbackText.done} onPress={close} />
       </View>
     </>
   );
@@ -88,7 +88,7 @@ function AnnotationCard({
 
 /** How screen readers name the annotations on [referents]. */
 const annotationLabel = (referents: readonly GeniusReferent[]): string =>
-  `Genius annotation on ${explained(referents[0]!.fragment)}`;
+  currentLocalisation().strings.playbackText.annotationOn(explained(referents[0]!.fragment));
 
 /**
  * Opens [referents]' annotations (a highlight's, or one of More insights) on
@@ -126,6 +126,7 @@ export function HighlightedLine({
   wordStarts?: readonly number[];
   lit?: (word: number) => boolean;
 }) {
+  const { strings } = useLocalisation();
   const fill = useHighlightFill();
   if (highlights.length === 0 && wordStarts === undefined) return text;
   return geniusLineSegments(text, highlights, wordStarts).map((segment) => {
@@ -140,7 +141,7 @@ export function HighlightedLine({
         style={annotated ? { backgroundColor: fill } : undefined}
         onPress={annotated ? () => pressAnnotations(referents) : undefined}
         accessibilityRole={annotated ? "link" : undefined}
-        accessibilityHint={annotated ? "Shows Genius's annotations" : undefined}
+        accessibilityHint={annotated ? strings.playbackText.showsGeniussAnnotations : undefined}
       >
         {text.slice(segment.start, segment.end)}
       </Text>
@@ -187,6 +188,7 @@ export const annotationActions = (
  * name) and the start of its annotation; a tap opens it.
  */
 export function MoreInsights({ referents }: { referents: readonly GeniusReferent[] }) {
+  const { strings } = useLocalisation();
   if (referents.length === 0) return null;
   return (
     <View style={{ paddingTop: CELL * 4, gap: CELL * 2 }}>
@@ -194,14 +196,14 @@ export function MoreInsights({ referents }: { referents: readonly GeniusReferent
         accessibilityRole="header"
         className="font-sans text-title3 font-medium text-foreground"
       >
-        More insights
+        {strings.playbackText.moreInsights}
       </Text>
       {referents.map((referent) => (
         <TextButton
           key={referent.id}
           label={`${explained(referent.fragment)}. ${referent.annotations[0]!.text}`}
           tone="primary"
-          accessibilityHint="Shows Genius's annotation"
+          accessibilityHint={strings.playbackText.showsGeniussAnnotation}
           onPress={() => openAnnotations([referent])}
           className="rounded-2xl bg-surface"
           style={{ padding: CELL * 2 }}

@@ -7,6 +7,7 @@
  * enforces it (so it fires with Wave in the background); JS shows it.
  */
 
+import { en, type Catalogue } from "./catalogueEn.ts";
 import { formatDuration } from "./time.ts";
 
 const MS_PER_SECOND = 1000;
@@ -62,12 +63,8 @@ export const formatSleepRemaining = (ms: number): string => {
 };
 
 /** A duration in whole minutes as the stepper shows it, e.g. `45 min` or `1 h 30 min`. */
-export const formatSleepMinutes = (minutes: number): string => {
-  const hours = Math.floor(minutes / 60);
-  const rest = minutes % 60;
-  if (hours === 0) return `${rest} min`;
-  return rest === 0 ? `${hours} h` : `${hours} h ${rest} min`;
-};
+export const formatSleepMinutes = (minutes: number, catalogue: Catalogue = en): string =>
+  catalogue.playbackText.sleepDuration(Math.floor(minutes / 60), minutes % 60);
 
 /** The clock and the playhead the remaining time is read against. */
 export interface SleepTimerClock {

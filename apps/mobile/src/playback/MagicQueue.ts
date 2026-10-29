@@ -1,3 +1,4 @@
+import { currentLocalisation, useLocalisation } from "@/localisation/localisation";
 import {
   GENRE_FAITHFULNESS_STEPS,
   MAGIC_QUEUE_CONTEXT,
@@ -107,14 +108,16 @@ const activeMagicSession = (state: QueueState = queueState.get()): MagicSession 
 
 const labelNow = (): string | null => {
   const session = activeMagicSession();
-  return session === null ? null : magicQueueLabel(session);
+  return session === null ? null : magicQueueLabel(session, currentLocalisation().strings);
 };
 
 const subscribeLabel = subscribeAll(queueState, magicSession);
 
 /** "Magic Queue · from <seed>" while the queue is a Magic Queue, else null; re-renders on change. */
-export const useMagicQueueLabel = (): string | null =>
-  useSyncExternalStore(subscribeLabel, labelNow);
+export const useMagicQueueLabel = (): string | null => {
+  useLocalisation();
+  return useSyncExternalStore(subscribeLabel, labelNow);
+};
 
 /**
  * The id of the session a batch is being picked for, from the moment it's

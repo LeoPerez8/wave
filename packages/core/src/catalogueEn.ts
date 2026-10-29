@@ -1,6 +1,8 @@
 import { downloadNoticeEn } from "./catalogue/downloadNoticeEn.ts";
 import { nativeEn } from "./catalogue/nativeEn.ts";
 import { autoEn } from "./catalogue/autoEn.ts";
+import { playbackTextEn } from "./catalogue/playbackTextEn.ts";
+import { lyricsLanguagesEn } from "./catalogue/lyricsLanguagesEn.ts";
 import { showsEn } from "./catalogue/showsEn.ts";
 import { upcomingShowsEn } from "./catalogue/upcomingShowsEn.ts";
 /**
@@ -16,6 +18,8 @@ export const en = {
   downloadNotice: downloadNoticeEn,
   native: nativeEn,
   auto: autoEn,
+  lyricsLanguages: lyricsLanguagesEn,
+  playbackText: playbackTextEn,
   shows: showsEn,
   upcomingShows: upcomingShowsEn,
   /** Each tab's name, in the tab bar, its editor and TalkBack. */

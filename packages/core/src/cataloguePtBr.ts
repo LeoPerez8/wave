@@ -1,6 +1,8 @@
 import { downloadNoticePtBr } from "./catalogue/downloadNoticePtBr.ts";
 import { nativePtBr } from "./catalogue/nativePtBr.ts";
 import { autoPtBr } from "./catalogue/autoPtBr.ts";
+import { playbackTextPtBr } from "./catalogue/playbackTextPtBr.ts";
+import { lyricsLanguagesPtBr } from "./catalogue/lyricsLanguagesPtBr.ts";
 import { showsPtBr } from "./catalogue/showsPtBr.ts";
 import { upcomingShowsPtBr } from "./catalogue/upcomingShowsPtBr.ts";
 /**
@@ -15,6 +17,8 @@ export const ptBR: Catalogue = {
   downloadNotice: downloadNoticePtBr,
   native: nativePtBr,
   auto: autoPtBr,
+  lyricsLanguages: lyricsLanguagesPtBr,
+  playbackText: playbackTextPtBr,
   shows: showsPtBr,
   upcomingShows: upcomingShowsPtBr,
   tabs: {

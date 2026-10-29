@@ -4,6 +4,7 @@ import {
   ticketmasterAttraction,
   ticketmasterShows,
   formatDate,
+  type FollowCheckContext,
   type FollowShow,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
@@ -37,8 +38,8 @@ export const subscribeFollowShows = (listener: () => void): (() => void) => {
     savedListeners.delete(listener);
   };
 };
-/** Shared by Home and artist pages; #810 can select the daily interval. */
-export const checkFollowShows = (context: "home" | "background" = "home") =>
+/** Shared by Home, artist pages and the daily background task (`followCheckTask.ts`). */
+export const checkFollowShows = (context: FollowCheckContext = "home") =>
   Effect.acquireUseRelease(
     Effect.sync(() => {
       if (checking) return false;

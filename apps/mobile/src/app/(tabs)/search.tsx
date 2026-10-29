@@ -67,14 +67,15 @@ const NO_TRACKS: ReadonlySet<number> = new Set();
 const trackId = (song: SongRow): number => song.id;
 
 function RecentSearches({ onPick }: { onPick: (query: string) => void }) {
+  const { strings } = useLocalisation();
   const recent = useRecentSearches();
   const bottom = useChromeInset();
   if (recent.length === 0) {
     return (
       <EmptyState
         icon={IconSearch}
-        title="Search your library"
-        message="Find songs, albums, artists, genres and playlists."
+        title={strings.playbackText.searchYourLibrary}
+        message={strings.playbackText.findSongsAlbumsArtistsGenresAndPlaylists}
       />
     );
   }
@@ -86,8 +87,8 @@ function RecentSearches({ onPick }: { onPick: (query: string) => void }) {
       contentContainerStyle={{ paddingHorizontal: grid.margin, paddingBottom: bottom }}
     >
       <View className="flex-row items-center justify-between" style={{ paddingTop: CELL }}>
-        <CatalogLine>Recent searches</CatalogLine>
-        <TextButton label="Clear" onPress={clearRecentSearches} />
+        <CatalogLine>{strings.playbackText.recentSearches}</CatalogLine>
+        <TextButton label={strings.playbackText.clear} onPress={clearRecentSearches} />
       </View>
       <Hairline />
       {recent.map((query) => (
@@ -110,6 +111,7 @@ const recognizeSong = recognizeAvailable ? () => openRecognize() : undefined;
  * Switching between recents and results rises the new content in.
  */
 export default function SearchScreen() {
+  const { strings } = useLocalisation();
   useScreenContent(true);
   useRenderCount("SearchScreen");
   const insets = useSafeAreaInsets();
@@ -189,9 +191,9 @@ export default function SearchScreen() {
       ytView === null ? 0 : ytView.songs.length + ytView.artists.length + ytView.albums.length;
     const ours =
       libraryEmpty && ytFound === 0
-        ? [noLibraryResultsRow(deferredQuery)]
+        ? [noLibraryResultsRow(deferredQuery, language)]
         : resultRows(results, expanded, ytView, placed, topArtistSongs, language);
-    return [...ours, ...ytFooterRows(ytView)];
+    return [...ours, ...ytFooterRows(ytView, language)];
   }, [results, libraryEmpty, deferredQuery, expanded, ytView, placed, topArtistSongs, language]);
 
   // Song results can be selected. The selection lives here, not in the list,
@@ -251,7 +253,7 @@ export default function SearchScreen() {
           className="font-sans text-large-title font-light text-foreground"
           style={{ letterSpacing: -0.6 }}
         >
-          Search
+          {strings.playbackText.search}
         </Text>
         <SearchFieldRow
           toggle={toggle}
@@ -283,13 +285,13 @@ export default function SearchScreen() {
               className="font-sans text-subheadline text-secondary"
               style={{ paddingHorizontal: grid.margin, paddingTop: CELL * 3 }}
             >
-              Getting your library ready to search…
+              {strings.playbackText.gettingYourLibraryReadyToSearch}
             </Text>
           ) : noResults ? (
             <EmptyState
               icon={IconSearch}
-              title="No results"
-              message={`Nothing in your library matches “${query.trim()}”.`}
+              title={strings.playbackText.noResults}
+              message={strings.playbackText.nothingInYourLibraryMatchesValue(query.trim())}
             />
           ) : (
             <SearchResultsList
