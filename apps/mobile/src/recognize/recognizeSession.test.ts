@@ -88,8 +88,8 @@ const fakeNative = (
       answers.shift();
       await settle();
     },
-    failCapture: async () => {
-      captureFailed?.(7);
+    failCapture: async (session = 7) => {
+      captureFailed?.(session);
       await settle();
     },
     get listening() {
@@ -103,6 +103,7 @@ const setup = (
   options: {
     online?: boolean;
     microphone?: "granted" | "denied";
+    askMicrophone?: RecognizeDeps["microphone"];
     playing?: boolean;
     startFails?: boolean;
     otherPlaying?: boolean;
@@ -116,9 +117,14 @@ const setup = (
   const lines: string[] = [];
   const levels: string[] = [];
   const playback = { playing: options.playing ?? false, pauses: 0, resumes: 0 };
+  const clock = fakeClock();
+  const app = { foreground: true, closes: 0 };
   const deps: RecognizeDeps = {
     online: () => options.online ?? true,
-    microphone: async () => options.microphone ?? "granted",
+    foreground: () => app.foreground,
+    now: clock.now,
+    every: clock.every,
+    microphone: options.askMicrophone ?? (async () => options.microphone ?? "granted"),
     holdPlayback: async () => {
       if (!playback.playing) return () => undefined;
       playback.playing = false;
@@ -145,8 +151,52 @@ const setup = (
     deps,
     options.source ?? "microphone",
     (card) => void cards.push(card),
+    () => void app.closes++,
   );
-  return { deps, native, cards, lines, levels, playback, session, last: () => cards.at(-1) };
+  return {
+    deps,
+    native,
+    cards,
+    lines,
+    levels,
+    playback,
+    clock,
+    app,
+    session,
+    last: () => cards.at(-1),
+  };
+};
+
+/** A clock the test moves: `every` timers fire as it passes them. */
+const fakeClock = () => {
+  let now = 0;
+  const timers = new Set<{ ms: number; next: number; tick: () => void }>();
+  return {
+    now: () => now,
+    every: (ms: number, tick: () => void) => {
+      const timer = { ms, next: now + ms, tick };
+      timers.add(timer);
+      return () => void timers.delete(timer);
+    },
+    get running() {
+      return timers.size;
+    },
+    /** Moves the clock on by [seconds], firing each timer it passes, then settles. */
+    advance: async (seconds: number) => {
+      const until = now + seconds * 1000;
+      for (;;) {
+        const due = [...timers].filter((timer) => timer.next <= until);
+        if (due.length === 0) break;
+        const timer = due.reduce((a, b) => (a.next <= b.next ? a : b));
+        now = timer.next;
+        timer.next += timer.ms;
+        timer.tick();
+        await settle();
+      }
+      now = until;
+      await settle();
+    },
+  };
 };
 
 describe("a Recognize session", () => {
@@ -191,7 +241,12 @@ describe("a Recognize session", () => {
     await native.hear(8);
     session.cancel();
     await session.done;
-    const phone = startRecognizeSession(deps, "playback", (card) => void cards.push(card));
+    const phone = startRecognizeSession(
+      deps,
+      "playback",
+      (card) => void cards.push(card),
+      () => undefined,
+    );
     await settle();
     assert.equal(playback.playing, true);
     await native.answer({ kind: "match", song: SONG });
@@ -221,7 +276,12 @@ describe("a Recognize session", () => {
     session.cancel();
     await session.done;
     assert.deepEqual(native.cancelledStarts, [oldRequest]);
-    const microphone = startRecognizeSession(deps, "microphone", () => undefined);
+    const microphone = startRecognizeSession(
+      deps,
+      "microphone",
+      () => undefined,
+      () => undefined,
+    );
     await settle();
     grant(7);
     await settle();
@@ -373,7 +433,9 @@ describe("a Recognize session", () => {
   });
 
   test("a microphone that can't be opened is a capture failure", async () => {
-    const { last, playback, session } = setup({ startFails: true, playing: true });
+    const { last, playback, session, clock } = setup({ startFails: true, playing: true });
+    await settle();
+    await clock.advance(1);
     await session.done;
     assert.deepEqual(last(), {
       kind: "ended",
@@ -399,11 +461,14 @@ describe("a Recognize session", () => {
   });
 
   test("audio that stops on its own ends it as a capture failure", async () => {
-    const { native, last, session } = setup();
+    const { native, last, session, clock, app } = setup();
     await settle();
     await native.hear(2);
     await native.failCapture();
+    assert.equal(last()?.kind, "listening");
+    await clock.advance(1);
     await session.done;
+    assert.equal(app.closes, 0);
     assert.deepEqual(last(), {
       kind: "ended",
       end: { kind: "failed", failure: "capture", status: null },
@@ -434,6 +499,171 @@ describe("a Recognize session", () => {
   });
 });
 
+describe("Android pausing Wave", () => {
+  test("the microphone permission dialog doesn't cancel the session", async () => {
+    let answer!: (permission: "granted" | "denied") => void;
+    const { native, session, app } = setup({
+      askMicrophone: () =>
+        new Promise((resolve) => {
+          answer = resolve;
+        }),
+    });
+    await settle();
+    app.foreground = false;
+    assert.equal(session.cancelOnBackground(), false);
+    answer("granted");
+    app.foreground = true;
+    await settle();
+    assert.equal(native.started, 1);
+    await native.hear(4);
+    assert.deepEqual(native.asks, [{ session: 7, last: false }]);
+    assert.equal(session.cancelOnBackground(), true);
+    await session.done;
+  });
+
+  test("a capture that stops as Wave is hidden ends as Cancel and closes the card", async () => {
+    const { native, session, cards, lines, levels, app, clock, playback } = setup({
+      playing: true,
+    });
+    await settle();
+    await native.hear(2);
+    // The capture's report reaches JS before the app state does.
+    await native.failCapture();
+    app.foreground = false;
+    await clock.advance(0.5);
+    await session.done;
+    assert.deepEqual(cards, [{ kind: "listening" }]);
+    assert.equal(app.closes, 1);
+    assert.deepEqual(lines, ["Recognize through the microphone: cancelled after 2.0 s"]);
+    assert.deepEqual(levels, ["info"]);
+    assert.equal(playback.playing, true);
+  });
+
+  test("a capture that stops, then the app state's Cancel, ends once as Cancel", async () => {
+    const { native, session, cards, lines, app, clock } = setup();
+    await settle();
+    await native.hear(2);
+    await native.failCapture();
+    app.foreground = false;
+    assert.equal(session.cancelOnBackground(), true);
+    await clock.advance(2);
+    await session.done;
+    assert.deepEqual(cards, [{ kind: "listening" }]);
+    assert.equal(app.closes, 0);
+    assert.deepEqual(lines, ["Recognize through the microphone: cancelled after 2.0 s"]);
+  });
+
+  test("phone audio whose start ends while Wave is hidden ends as Cancel", async () => {
+    const { native, session, cards, app, clock, lines } = setup({ source: "playback" });
+    let fail!: (error: unknown) => void;
+    native.start = () =>
+      new Promise<number>((_resolve, reject) => {
+        fail = reject;
+      });
+    await settle();
+    app.foreground = false;
+    assert.equal(session.cancelOnBackground(), false);
+    fail({ code: "ERR_RECOGNIZE_ENDED" });
+    await clock.advance(1);
+    await session.done;
+    assert.deepEqual(cards, [{ kind: "listening", source: "playback" }]);
+    assert.equal(app.closes, 1);
+    assert.deepEqual(lines, ["Recognize through this phone: cancelled after 0.0 s"]);
+  });
+});
+
+describe("a session that stalls", () => {
+  test("a start that never settles ends as a capture failure and stops the clock", async () => {
+    const { native, session, last, clock, playback } = setup({ playing: true });
+    native.start = () => new Promise<number>(() => undefined);
+    await settle();
+    await clock.advance(2.5);
+    assert.equal(last()?.kind, "listening");
+    await clock.advance(0.5);
+    await session.done;
+    assert.deepEqual(last(), {
+      kind: "ended",
+      end: { kind: "failed", failure: "capture", status: null },
+    });
+    assert.equal(native.cancelledStarts.length, 1);
+    assert.equal(playback.playing, true);
+    assert.equal(clock.running, 0);
+  });
+
+  test("audio that stops advancing ends it as a capture failure", async () => {
+    const { native, session, last, lines, clock } = setup();
+    await settle();
+    await native.hear(1);
+    await clock.advance(2);
+    await native.hear(2);
+    await clock.advance(2.5);
+    assert.equal(last()?.kind, "listening");
+    await clock.advance(0.5);
+    await session.done;
+    assert.deepEqual(native.stopped, [7]);
+    assert.deepEqual(lines, ["Recognize through the microphone: failed after 2.0 s (capture)"]);
+  });
+
+  test("the time behind Android's consent dialog doesn't count", async () => {
+    const { native, session, last, app, clock } = setup({ source: "playback" });
+    let grant!: (id: number) => void;
+    native.start = () =>
+      new Promise<number>((resolve) => {
+        grant = resolve;
+      });
+    await settle();
+    app.foreground = false;
+    await clock.advance(20);
+    app.foreground = true;
+    grant(7);
+    await native.hear(1);
+    await clock.advance(2);
+    assert.equal(last()?.kind, "listening");
+    session.cancel();
+    await session.done;
+  });
+});
+
+describe("native reports that come before the session's id", () => {
+  test("a capture failure before the start settles still ends the session", async () => {
+    const { native, session, last, clock } = setup();
+    let started!: (id: number) => void;
+    native.start = () =>
+      new Promise<number>((resolve) => {
+        started = resolve;
+      });
+    await settle();
+    await native.failCapture(7);
+    started(7);
+    await settle();
+    await clock.advance(1);
+    await session.done;
+    assert.deepEqual(last(), {
+      kind: "ended",
+      end: { kind: "failed", failure: "capture", status: null },
+    });
+  });
+
+  test("audio heard before the start settles counts, and another session's doesn't", async () => {
+    const { native, session } = setup();
+    let started!: (id: number) => void;
+    native.start = () =>
+      new Promise<number>((resolve) => {
+        started = resolve;
+      });
+    await settle();
+    await native.hear(4, 6);
+    await native.failCapture(6);
+    await native.hear(4, 7);
+    assert.deepEqual(native.asks, []);
+    started(7);
+    await settle();
+    assert.deepEqual(native.asks, [{ session: 7, last: false }]);
+    await native.answer({ kind: "match", song: SONG });
+    await session.done;
+  });
+});
+
 describe("Wave's playback during a session", () => {
   const endings: readonly [string, (native: ReturnType<typeof fakeNative>) => Promise<void>][] = [
     ["a match", (native) => native.answer({ kind: "match", song: SONG })],
@@ -448,16 +678,23 @@ describe("Wave's playback during a session", () => {
       },
     ],
     ["an error", (native) => native.answer({ kind: "failed", failure: "network", status: null })],
-    ["a capture failure", (native) => native.failCapture()],
+    [
+      "a capture failure",
+      async (native) => {
+        await native.failCapture();
+        await native.answer({ kind: "noMatch" });
+      },
+    ],
   ];
 
   for (const [name, end] of endings) {
     test(`pauses while listening and resumes after ${name}`, async () => {
-      const { native, playback, session } = setup({ playing: true });
+      const { native, playback, session, clock } = setup({ playing: true });
       await settle();
       assert.equal(playback.playing, false);
       await native.hear(4);
       await end(native);
+      await clock.advance(1);
       await session.done;
       assert.deepEqual(playback, { playing: true, pauses: 1, resumes: 1 });
     });
