@@ -6,6 +6,7 @@ import {
   LAUNCHER_ICON_ART,
   LAUNCHER_ICONS,
   THEME_SWATCHES,
+  chooseCustomInk,
   contrastRatio,
   launcherIconFor,
   launcherIconSwitch,
@@ -42,6 +43,33 @@ describe("launcherIconFor", () => {
       launcherIconFor(choose({ light: "sand", dark: "black" })),
       launcherIconFor(DEFAULT_THEME_CHOICE),
     );
+  });
+
+  test("custom primaries and secondaries keep their black-ground icon on every background (#791)", () => {
+    const samples = [
+      ["#1177bb", "vivid239"],
+      ["#330099", "vivid269"],
+      ["#001932", "blue"],
+      ["#00e9ff", "vivid209"],
+      ["#ff0d00", "vivid29"],
+      ["#89cff0", "sky"],
+      ["#f8c8dc", "rose"],
+    ] as const;
+    for (const group of ["primary", "secondary"] as const) {
+      for (const [hex, ink] of samples) {
+        const choice = chooseCustomInk(DEFAULT_THEME_CHOICE, group, hex);
+        const expected = group === "primary" ? `${ink}_ember` : `teal_${ink}`;
+        for (const light of THEME_SWATCHES.light) {
+          for (const dark of THEME_SWATCHES.dark) {
+            assert.equal(
+              launcherIconFor({ ...choice, light: light.id, dark: dark.id }).id,
+              expected,
+              `${group} ${hex} on ${light.id}/${dark.id}`,
+            );
+          }
+        }
+      }
+    }
   });
 
   test("every primary × secondary combination has an icon of its own", () => {
@@ -111,8 +139,33 @@ describe("launcherIconSwitch", () => {
   const keeps = { dropsHomeScreenIcon: false };
   const drops = { dropsHomeScreenIcon: true };
 
-  test("a background change leaves the icon alone", () => {
-    assert.equal(launcherIconSwitch(DEFAULT_THEME_CHOICE, choose({ dark: "black" }), drops), null);
+  test("light or dark background changes never request an icon switch, including custom colours (#791)", () => {
+    const primary = chooseCustomInk(DEFAULT_THEME_CHOICE, "primary", "#1177bb");
+    const secondary = chooseCustomInk(DEFAULT_THEME_CHOICE, "secondary", "#330099");
+    for (const choice of [
+      DEFAULT_THEME_CHOICE,
+      primary,
+      secondary,
+      chooseCustomInk(primary, "secondary", "#330099"),
+    ]) {
+      for (const group of ["light", "dark"] as const) {
+        for (const from of THEME_SWATCHES[group]) {
+          for (const to of THEME_SWATCHES[group]) {
+            for (const launcher of [keeps, drops]) {
+              assert.equal(
+                launcherIconSwitch(
+                  { ...choice, [group]: from.id },
+                  { ...choice, [group]: to.id },
+                  launcher,
+                ),
+                null,
+                `${choice.primary}/${choice.secondary}: ${group} ${from.id} to ${to.id}`,
+              );
+            }
+          }
+        }
+      }
+    }
   });
 
   test("a new primary or secondary switches to its icon", () => {
