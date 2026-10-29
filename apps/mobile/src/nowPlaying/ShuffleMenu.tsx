@@ -18,8 +18,8 @@ import { shuffleKindSetting, useShuffleKind } from "@/settings/shuffleKind";
 
 /**
  * Each kind of shuffle: its name and the line saying what it does, on the
- * card; what the shuffle button says and shows while it's chosen (the plain
- * shuffle arrows, the spark, #320, or the braid, #702). The card lists them
+ * card and Settings page; what the shuffle button says and shows while it's
+ * chosen (the plain shuffle arrows, the spark, #320, or the braid, #702). The card lists them
  * in this order.
  */
 const SHUFFLES: Record<
@@ -65,7 +65,11 @@ const KIND_NAMES = KINDS.map((kind) => SHUFFLES[kind].name);
  */
 export const shuffleKindChoice: ChoiceSetting<ShuffleKind> = {
   label: "Shuffle",
-  choices: KINDS.map((kind) => ({ value: kind, label: SHUFFLES[kind].name })),
+  choices: KINDS.map((kind) => ({
+    value: kind,
+    label: SHUFFLES[kind].name,
+    line: SHUFFLES[kind].line,
+  })),
   setting: shuffleKindSetting,
 };
 

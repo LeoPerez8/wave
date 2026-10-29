@@ -15,11 +15,14 @@ import type { TitleChoice } from "@/overlay/titleChoices";
  */
 export function ChoiceRow({
   label,
+  line,
   chosen,
   onPress,
   accessibilityLabel = label,
 }: {
   label: string;
+  /** Always shown under the label and read as the radio entry's hint. */
+  line?: string | undefined;
   chosen: boolean;
   onPress: () => void;
   accessibilityLabel?: string;
@@ -29,6 +32,7 @@ export function ChoiceRow({
       label={label}
       accessibilityRole="radio"
       accessibilityLabel={accessibilityLabel}
+      accessibilityHint={line}
       accessibilityState={{ checked: chosen }}
       onPress={onPress}
     >
@@ -39,9 +43,18 @@ export function ChoiceRow({
             className="flex-row items-center"
             style={{ minHeight: grid.row, paddingVertical: CELL / 2 }}
           >
-            <Text className="flex-1 font-sans text-title3 font-normal text-foreground">
-              {label}
-            </Text>
+            <View className="flex-1">
+              <Text className="font-sans text-title3 font-normal text-foreground">{label}</Text>
+              {line !== undefined && (
+                <Text
+                  className="font-sans text-subheadline text-secondary"
+                  style={{ paddingTop: CELL / 4 }}
+                  importantForAccessibility="no"
+                >
+                  {line}
+                </Text>
+              )}
+            </View>
             {chosen && <IconCheck size={24} color={accent} strokeWidth={1.5} />}
           </View>
           <Hairline />
@@ -58,7 +71,7 @@ export function ChoiceRow({
  */
 export interface ChoiceSetting<T> {
   readonly label: string;
-  readonly choices: readonly TitleChoice<T>[];
+  readonly choices: readonly (TitleChoice<T> & { readonly line?: string | undefined })[];
   readonly setting: PersistedSetting<T>;
 }
 
@@ -82,10 +95,11 @@ export function ChoiceSection<T>({
       <CatalogLine className="mb-2">{choice.label}</CatalogLine>
       <Hairline />
       <View accessibilityRole="radiogroup" accessibilityLabel={choice.label}>
-        {choice.choices.map(({ value, label }) => (
+        {choice.choices.map(({ value, label, line }) => (
           <ChoiceRow
             key={label}
             label={label}
+            line={line}
             chosen={Object.is(value, current)}
             onPress={() => choice.setting.set(value)}
           />
