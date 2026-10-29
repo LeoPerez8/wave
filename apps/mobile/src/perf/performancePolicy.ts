@@ -874,6 +874,10 @@ export const OWN_PRESS: Record<string, Exception> = {
   "nowPlaying/SleepTimer.tsx#SleepTimerButton": {
     reason: "Its face is the sleep countdown drawn on the UI thread (#718), not a glyph.",
   },
+  "nowPlaying/SongButtons.tsx#DownloadButton": {
+    reason:
+      "While it waits or downloads it has no tap, only a slot's long press (#800), and its face is a progress bar.",
+  },
   "components/TitleLongPress.tsx#TitlePress": {
     reason: "A screen title whose long press runs its action; it has the header role.",
   },
