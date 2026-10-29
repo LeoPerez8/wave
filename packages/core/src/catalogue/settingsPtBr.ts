@@ -379,19 +379,19 @@ export const settingsPtBr: typeof settingsEn = {
   swipeHint: (side) =>
     `Escolhe a ação de deslizar para a ${side === "left" ? "esquerda" : "direita"}`,
   minutes: (n) =>
-    `${formatNumber("pt-BR", n)} ${plural("pt-BR", n, { one: "minuto", other: "minutos" })}`,
+    `${formatNumber("pt-BR", n)} ${plural("pt-BR", n, { zero: "minutos", one: "minuto", other: "minutos" })}`,
   downloadedLine: (count, line) => `${count} baixadas, ${line}`,
   colourMode: (mode, colour) => `Modo ${mode.toLowerCase()}: ${colour}`,
   adjustedColour: (light, dark) =>
     `Ajustada para ficar legível ${light && dark ? "nos seus fundos" : light ? "no seu fundo claro" : "no seu fundo escuro"}, como na amostra.`,
   clearPhotos: (n) =>
-    `${plural("pt-BR", n, { one: "A foto que o Wave baixou será apagada", other: `As ${formatNumber("pt-BR", n)} fotos que o Wave baixou serão apagadas` })}. Os artistas mostram as capas dos álbuns até as fotos serem baixadas de novo.`,
+    `${plural("pt-BR", n, { zero: "Nenhuma foto baixada pelo Wave será apagada", one: "A foto que o Wave baixou será apagada", other: `As ${formatNumber("pt-BR", n)} fotos que o Wave baixou serão apagadas` })}. Os artistas mostram as capas dos álbuns até as fotos serem baixadas de novo.`,
   newFiles: (read, total) => `${read} de ${total} arquivos novos ou alterados lidos`,
   indexedFiles: (read, total) => `${read} de ${total} arquivos indexados`,
   foundFiles: (n, count) =>
-    `${n} ${plural("pt-BR", count, { one: "arquivo encontrado", other: "arquivos encontrados" })}`,
+    `${n} ${plural("pt-BR", count, { zero: "arquivos encontrados", one: "arquivo encontrado", other: "arquivos encontrados" })}`,
   selected: (n, count) =>
-    `${n} ${plural("pt-BR", count, { one: "selecionado", other: "selecionados" })}`,
+    `${n} ${plural("pt-BR", count, { zero: "selecionados", one: "selecionado", other: "selecionados" })}`,
   folderCovered: (name) => `O Wave já mostra as músicas de ${name}, que inclui esta pasta.`,
   folderIgnored: (name) => `O Wave já ignora ${name}, que inclui esta pasta.`,
   savedColour: (n, hex) => `Cor salva ${n}, ${hex}`,

@@ -74,7 +74,11 @@ export const libraryPtBr: typeof libraryEn = {
       other: `${n(count)} músicas`,
     }),
   albumCount: (count: number): string =>
-    plural("pt-BR", count, { one: `${n(count)} álbum`, other: `${n(count)} álbuns` }),
+    plural("pt-BR", count, {
+      zero: `${n(count)} álbuns`,
+      one: `${n(count)} álbum`,
+      other: `${n(count)} álbuns`,
+    }),
   minutes: (count: number): string => `${n(count)} min`,
   disc: (disc: number): string => `Disco ${n(disc)}`,
   goTo: (name: string): string => `Ir para ${name}`,
@@ -111,20 +115,48 @@ export const libraryPtBr: typeof libraryEn = {
   alphabetIndex: "Índice alfabético",
   alphabetHint: "Deslize para cima ou para baixo para ir a uma letra",
   selected: (count: number): string =>
-    plural("pt-BR", count, { one: `${n(count)} selecionada`, other: `${n(count)} selecionadas` }),
+    plural("pt-BR", count, {
+      zero: `${n(count)} selecionadas`,
+      one: `${n(count)} selecionada`,
+      other: `${n(count)} selecionadas`,
+    }),
   kindCounts: {
     album: (count: number): string =>
-      plural("pt-BR", count, { one: `${n(count)} álbum`, other: `${n(count)} álbuns` }),
+      plural("pt-BR", count, {
+        zero: `${n(count)} álbuns`,
+        one: `${n(count)} álbum`,
+        other: `${n(count)} álbuns`,
+      }),
     artist: (count: number): string =>
-      plural("pt-BR", count, { one: `${n(count)} artista`, other: `${n(count)} artistas` }),
+      plural("pt-BR", count, {
+        zero: `${n(count)} artistas`,
+        one: `${n(count)} artista`,
+        other: `${n(count)} artistas`,
+      }),
     playlist: (count: number): string =>
-      plural("pt-BR", count, { one: `${n(count)} playlist`, other: `${n(count)} playlists` }),
+      plural("pt-BR", count, {
+        zero: `${n(count)} playlists`,
+        one: `${n(count)} playlist`,
+        other: `${n(count)} playlists`,
+      }),
     genre: (count: number): string =>
-      plural("pt-BR", count, { one: `${n(count)} gênero`, other: `${n(count)} gêneros` }),
+      plural("pt-BR", count, {
+        zero: `${n(count)} gêneros`,
+        one: `${n(count)} gênero`,
+        other: `${n(count)} gêneros`,
+      }),
     section: (count: number): string =>
-      plural("pt-BR", count, { one: `${n(count)} seção`, other: `${n(count)} seções` }),
+      plural("pt-BR", count, {
+        zero: `${n(count)} seções`,
+        one: `${n(count)} seção`,
+        other: `${n(count)} seções`,
+      }),
     item: (count: number): string =>
-      plural("pt-BR", count, { one: `${n(count)} item`, other: `${n(count)} itens` }),
+      plural("pt-BR", count, {
+        zero: `${n(count)} itens`,
+        one: `${n(count)} item`,
+        other: `${n(count)} itens`,
+      }),
   },
   selectAll: "Selecionar Tudo",
   done: "OK",
