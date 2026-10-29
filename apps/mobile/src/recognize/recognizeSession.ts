@@ -1,9 +1,16 @@
 import {
   recognizeHoldsPlayback,
   recognizeLogLine,
+  recognizeSource,
+  resolveRecognizedSong,
   startRecognize,
   stepRecognize,
   type RecognizeAnswer,
+  type RecognizedSong,
+  type RecognizeLookup,
+  type RecognizeResolution,
+  type RecognizeTrack,
+  type YtSong,
   type RecognizeCard,
   type RecognizeEvent,
   type RecognizeLogOutcome,
@@ -13,35 +20,55 @@ import {
 
 /** The native half of Recognize (`WaveRecognize`, `recognize/RecognizeModule.kt`). */
 export interface RecognizeNative {
+  readonly playbackActivity: () => Promise<{
+    activeMediaPlayers: number;
+    waveMediaPlayers: number;
+  }>;
   /** Starts capturing from [source]; the session's id. Rejects when it can't capture. */
-  readonly start: (source: RecognizeSource) => Promise<number>;
+  readonly start: (source: RecognizeSource, request: number) => Promise<number>;
+  /** Cancels a start still waiting for consent or for its foreground service. */
+  readonly cancelStart: (request: number) => void;
   /** Sends the signature of everything [session] has heard; [last] stops its capture first. */
   readonly ask: (session: number, last: boolean) => Promise<RecognizeAnswer>;
   readonly stop: (session: number) => void;
   /** How much a session has heard in all; returns the unsubscribe. */
-  readonly onHeard: (listener: (session: number, heardMs: number) => void) => () => void;
+  readonly onHeard: (
+    listener: (session: number, heardMs: number, audible: boolean) => void,
+  ) => () => void;
   /** A session's audio stopped on its own. */
   readonly onCaptureFailed: (listener: (session: number) => void) => () => void;
 }
 
-export interface RecognizeDeps {
+export interface RecognizeDeps<
+  L extends RecognizeTrack = RecognizeTrack,
+  S extends YtSong = YtSong,
+> {
   /** Whether the phone is online now. */
   readonly online: () => boolean;
-  /** Whether Wave may use the microphone, asking Android on first use. */
+  /** RECORD_AUDIO permission, required by Android for either source. */
   readonly microphone: () => Promise<"granted" | "denied">;
   /** Pauses Wave's playback if it's playing; the release resumes it (and does nothing otherwise). */
   readonly holdPlayback: () => Promise<() => void>;
   readonly native: RecognizeNative;
+  /** Resolves a match against the Library, then one Songs search under the shared allowance. */
+  readonly resolve: (
+    song: RecognizedSong,
+    signal: AbortSignal,
+  ) => Promise<RecognizeResolution<L, S>>;
   /** Writes one line to the app log: a warning for a failure, information otherwise. */
   readonly log: (level: "info" | "warn", line: string) => void;
 }
 
 export interface RecognizeRun {
-  /** Ends the session as cancelled; the card closes. Nothing once it has ended. */
+  /** Cancels capture or the pending lookup. Does nothing after the result is shown. */
   readonly cancel: () => void;
-  /** Settles once the session has ended, its capture stopped and playback given back. */
+  /** Cancels and closes a hidden listening card, except while Android asks for phone-audio consent. */
+  readonly cancelOnBackground: () => boolean;
+  /** Settles after the capture and lookup end and the one session log line is written. */
   readonly done: Promise<void>;
 }
+
+let lastRequest = 0;
 
 /**
  * Runs one Recognize session from [source], showing each state of its card through
@@ -51,33 +78,70 @@ export interface RecognizeRun {
  * the native capture, pauses Wave's playback while the microphone listens, and
  * writes the session's one app log line.
  */
-export const startRecognizeSession = (
-  deps: RecognizeDeps,
-  source: RecognizeSource,
-  show: (card: RecognizeCard) => void,
+export const startRecognizeSession = <L extends RecognizeTrack, S extends YtSong>(
+  deps: RecognizeDeps<L, S>,
+  source: RecognizeSource | "auto",
+  show: (card: RecognizeCard<L, S>) => void,
 ): RecognizeRun => {
-  let session: RecognizeSession = startRecognize(source);
+  let session: RecognizeSession = startRecognize(source === "auto" ? "microphone" : source);
+  const request = ++lastRequest;
   let nativeId: number | null = null;
   let release: (() => void) | null = null;
   const unsubscribes: (() => void)[] = [];
   let finished = false;
+  let completed = false;
+  let awaitingConsent = false;
+  const lookupAbort = new AbortController();
   let resolveDone!: () => void;
   const done = new Promise<void>((resolve) => {
     resolveDone = resolve;
   });
 
-  /** Ends the session once: stops the capture, gives playback back, logs and shows the end. */
+  const complete = (outcome: RecognizeLogOutcome, lookup?: RecognizeLookup): void => {
+    if (completed) return;
+    completed = true;
+    deps.log(
+      outcome.kind === "failed" || lookup === "failed" ? "warn" : "info",
+      recognizeLogLine({
+        source: session.source,
+        heardMs: session.heardMs,
+        outcome,
+        ...(lookup === undefined ? {} : { lookup }),
+      }),
+    );
+    resolveDone();
+  };
+
+  /** Stops capture and releases playback before looking up a match. */
   const finish = (outcome: RecognizeLogOutcome): void => {
     if (finished) return;
     finished = true;
     for (const unsubscribe of unsubscribes) unsubscribe();
+    deps.native.cancelStart(request);
     if (nativeId !== null) deps.native.stop(nativeId);
     release?.();
-    const line = recognizeLogLine({ source, heardMs: session.heardMs, outcome });
-    deps.log(outcome.kind === "failed" ? "warn" : "info", line);
+    if (outcome.kind === "match") {
+      show({ kind: "resolving", song: outcome.song });
+      void Promise.resolve()
+        .then(() => deps.resolve(outcome.song, lookupAbort.signal))
+        .catch(() => {
+          const fallback = resolveRecognizedSong<L, S>(outcome.song, [], {
+            ok: false,
+            reason: "failed",
+          });
+          if (fallback.kind !== "resolved") throw new Error("Recognition fallback needs no search");
+          return fallback;
+        })
+        .then((resolution) => {
+          if (completed) return;
+          show({ kind: "resolved", result: resolution.result });
+          complete(outcome, resolution.lookup);
+        });
+      return;
+    }
     if (outcome.kind === "offline" || outcome.kind === "denied") show({ kind: outcome.kind });
     else if (outcome.kind !== "cancelled") show({ kind: "ended", end: outcome });
-    resolveDone();
+    complete(outcome);
   };
 
   const step = (event: RecognizeEvent): void => {
@@ -96,35 +160,67 @@ export const startRecognizeSession = (
   };
 
   const run = async (): Promise<void> => {
-    show({ kind: "listening" });
+    show(source === "playback" ? { kind: "listening", source } : { kind: "listening" });
     if (!deps.online()) return finish({ kind: "offline" });
-    if (source === "microphone") {
+    if (source === "auto") {
+      const activity = await deps.native.playbackActivity();
+      if (finished) return;
+      session = startRecognize(recognizeSource(activity));
+      show({ kind: "listening", source: session.source });
+    }
+    // Android requires RECORD_AUDIO for playback capture too, even though no microphone is opened.
+    {
       const permission = await deps.microphone();
       if (finished) return;
       if (permission === "denied") return finish({ kind: "denied" });
     }
-    if (recognizeHoldsPlayback(source)) {
+    if (recognizeHoldsPlayback(session.source)) {
       const held = await deps.holdPlayback();
       if (finished) return held();
       release = held;
     }
     unsubscribes.push(
-      deps.native.onHeard((id, heardMs) => {
-        if (id === nativeId) step({ kind: "heard", ms: heardMs });
+      deps.native.onHeard((id, heardMs, audible) => {
+        if (id === nativeId) step({ kind: "heard", ms: heardMs, audible });
       }),
       deps.native.onCaptureFailed((id) => {
         if (id === nativeId) step({ kind: "captureFailed" });
       }),
     );
     try {
-      const id = await deps.native.start(source);
+      awaitingConsent = session.source === "playback";
+      const id = await deps.native.start(session.source, request);
       if (finished) return deps.native.stop(id);
       nativeId = id;
-    } catch {
-      step({ kind: "captureFailed" });
+    } catch (error) {
+      step({
+        kind:
+          typeof error === "object" &&
+          error !== null &&
+          "code" in error &&
+          error.code === "ERR_RECOGNIZE_CONSENT"
+            ? "consentDeclined"
+            : "captureFailed",
+      });
+    } finally {
+      awaitingConsent = false;
     }
   };
 
-  void run();
-  return { cancel: () => step({ kind: "cancel" }), done };
+  void run().catch(() => step({ kind: "captureFailed" }));
+  const cancel = (): void => {
+    if (finished && !completed && session.ended?.kind === "match") {
+      lookupAbort.abort();
+      complete(session.ended, "cancelled");
+    } else step({ kind: "cancel" });
+  };
+  return {
+    cancel,
+    cancelOnBackground: () => {
+      if (awaitingConsent && !finished) return false;
+      cancel();
+      return true;
+    },
+    done,
+  };
 };

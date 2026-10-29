@@ -6,7 +6,7 @@ import type { RecognizeNative } from "@/recognize/recognizeSession";
 /** Recognize's native half (`modules/wave-native`, `recognize/RecognizeModule.kt`). */
 type WaveRecognizeEvents = {
   /** Session [session] has heard [heardMs] of audio in all; every quarter second. */
-  onRecognizeHeard: (event: { session: number; heardMs: number }) => void;
+  onRecognizeHeard: (event: { session: number; heardMs: number; audible: boolean }) => void;
   /** Session [session]'s audio stopped on its own. */
   onRecognizeCaptureFailed: (event: { session: number }) => void;
   /** A tile or launcher shortcut asks the foreground UI to open Recognize. */
@@ -14,8 +14,10 @@ type WaveRecognizeEvents = {
 };
 
 declare class WaveRecognizeModule extends NativeModule<WaveRecognizeEvents> {
-  /** Starts capturing; the session's id. Rejects without RECORD_AUDIO or a microphone. */
-  start(source: RecognizeSource): Promise<number>;
+  playbackActivity(): Promise<{ activeMediaPlayers: number; waveMediaPlayers: number }>;
+  /** Starts capturing; phone audio waits for fresh Android consent. */
+  start(source: RecognizeSource, request: number): Promise<number>;
+  cancelStart(request: number): void;
   /** Sends the signature of everything the session heard; [last] stops its capture first. */
   ask(session: number, last: boolean): Promise<RecognizeAnswer>;
   stop(session: number): void;
@@ -39,15 +41,17 @@ export const recognizeRequests =
 
 /** The module as `startRecognizeSession` takes it; null without it. */
 export const recognizeNative: RecognizeNative | null =
-  WaveRecognize === null
+  WaveRecognize === null || typeof WaveRecognize.playbackActivity !== "function"
     ? null
     : {
-        start: (source) => WaveRecognize.start(source),
+        playbackActivity: () => WaveRecognize.playbackActivity(),
+        start: (source, request) => WaveRecognize.start(source, request),
+        cancelStart: (request) => WaveRecognize.cancelStart(request),
         ask: (session, last) => WaveRecognize.ask(session, last),
         stop: (session) => WaveRecognize.stop(session),
         onHeard: (listener) => {
           const subscription = WaveRecognize.addListener("onRecognizeHeard", (event) =>
-            listener(event.session, event.heardMs),
+            listener(event.session, event.heardMs, event.audible),
           );
           return () => subscription.remove();
         },

@@ -19,10 +19,10 @@ export const followRecognizeRequests = (
 /** All entry points share this card lifetime, including before React mounts it. */
 export const createRecognizeEntry = (deps: {
   readonly foreground: () => boolean;
-  readonly show: (source: RecognizeSource, closed: () => void) => void;
+  readonly show: (source: RecognizeSource | "auto", closed: () => void) => void;
 }) => {
   let cardOpen = false;
-  let pending: RecognizeSource | null = null;
+  let pending: RecognizeSource | "auto" | null = null;
   const resume = (): void => {
     const action = recognizeEntryAction({
       pending: pending !== null,
@@ -39,7 +39,7 @@ export const createRecognizeEntry = (deps: {
     });
   };
   return {
-    request: (source: RecognizeSource = "microphone"): void => {
+    request: (source: RecognizeSource | "auto" = "auto"): void => {
       pending = source;
       resume();
     },

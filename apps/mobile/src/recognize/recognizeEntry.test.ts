@@ -1,7 +1,27 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import type { RecognizeSource } from "@wave/core";
 
 import { createRecognizeEntry, followRecognizeRequests } from "./recognizeEntry.ts";
+
+test("launches choose the audio source automatically and keep an open card's source", () => {
+  const sources: (RecognizeSource | "auto")[] = [];
+  let close!: () => void;
+  const entry = createRecognizeEntry({
+    foreground: () => true,
+    show: (source, closed) => {
+      sources.push(source);
+      close = closed;
+    },
+  });
+  entry.request();
+  entry.request("microphone");
+  assert.deepEqual(sources, ["auto"]);
+  close();
+  entry.request("playback");
+  entry.request();
+  assert.deepEqual(sources, ["auto", "playback"]);
+});
 
 test("tile, shortcut and Search share one card until it closes", () => {
   const cards: (() => void)[] = [];

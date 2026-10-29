@@ -2260,6 +2260,7 @@ export {
   recognizeCardView,
   recognizeHoldsPlayback,
   recognizeLogLine,
+  recognizeSource,
   startRecognize,
   stepRecognize,
 } from "./recognize.ts";
@@ -2278,3 +2279,17 @@ export type {
   RecognizeSource,
   RecognizeStep,
 } from "./recognize.ts";
+export {
+  resolveRecognizedSong,
+  recognizeResultActions,
+  recognizePlaylistSong,
+} from "./recognition.ts";
+
+export type {
+  RecognizeLookup,
+  RecognizeResolution,
+  RecognizeResult,
+  RecognizeResultAction,
+  RecognizeTrack,
+} from "./recognition.ts";
+export { planShazamAdd } from "./shazamPlaylist.ts";

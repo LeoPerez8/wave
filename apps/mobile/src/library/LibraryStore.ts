@@ -185,6 +185,7 @@ import {
 import {
   addToPlaylist,
   createPlaylist,
+  addToShazam,
   deletePlaylist,
   linkPlaylistEntries,
   movePlaylistItem,
@@ -846,6 +847,11 @@ export class LibraryStore extends Context.Service<
       name: string,
       songs: readonly PlaylistSong[],
     ) => Effect.Effect<PlaylistAddResult, LibraryStoreError>;
+    /** Saves a Recognize result at the top of the playlist remembered by sync id. */
+    readonly addToShazam: (
+      rememberedId: string | null,
+      song: PlaylistSong,
+    ) => Effect.Effect<ReturnType<typeof addToShazam>, LibraryStoreError>;
     readonly renamePlaylist: (id: number, name: string) => Effect.Effect<void, LibraryStoreError>;
     readonly deletePlaylist: (id: number) => Effect.Effect<void, LibraryStoreError>;
     /**
@@ -1804,6 +1810,9 @@ const make = Effect.gen(function* () {
 
     addToPlaylist: (id, songs) =>
       writeAttempt("add to the playlist", () => addToPlaylist(db, id, songs, Date.now())),
+
+    addToShazam: (rememberedId, song) =>
+      writeAttempt("add to Shazam", () => addToShazam(db, rememberedId, song, Date.now())),
 
     movePlaylistItem: (playlistId, itemId, toIndex) =>
       writeAttempt("reorder the playlist", () =>
