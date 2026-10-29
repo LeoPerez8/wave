@@ -11,6 +11,7 @@ import {
   chooseCustomInk,
   customInkPreview,
   readThemeChoice,
+  storedThemeOnStart,
   themeContrastIssues,
   themeFor,
   themeSwatchRows,
@@ -180,6 +181,36 @@ describe("readThemeChoice", () => {
       choose({ dark: "black" }),
     );
     assert.deepEqual(readThemeChoice("{not json"), DEFAULT_THEME_CHOICE);
+  });
+});
+
+describe("storedThemeOnStart", () => {
+  const ranBefore = { storedTheme: null, storedIcon: null, launchThemeSaved: true };
+
+  test("an install that ran an older Wave with nothing stored keeps teal over ember (#793)", () => {
+    const stored = storedThemeOnStart(ranBefore);
+    assert.notEqual(stored, null);
+    assert.deepEqual(readThemeChoice(stored), {
+      light: "fog",
+      dark: "black",
+      primary: "teal",
+      secondary: "ember",
+      customPrimary: null,
+      customSecondary: null,
+    });
+  });
+
+  test("a fresh install stores nothing and starts on the white default", () => {
+    assert.equal(storedThemeOnStart({ ...ranBefore, launchThemeSaved: false }), null);
+  });
+
+  test("a stored theme is kept as it is", () => {
+    const storedTheme = JSON.stringify({ ...DEFAULT_THEME_CHOICE, primary: "rose" });
+    assert.equal(storedThemeOnStart({ ...ranBefore, storedTheme }), null);
+  });
+
+  test("once this Wave has stored its icon, nothing stored means the white default", () => {
+    assert.equal(storedThemeOnStart({ ...ranBefore, storedIcon: "white_white" }), null);
   });
 });
 

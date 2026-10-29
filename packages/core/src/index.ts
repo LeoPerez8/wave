@@ -460,6 +460,7 @@ export {
   customInkPreview,
   isDefaultThemeChoice,
   readThemeChoice,
+  storedThemeOnStart,
   themeFor,
   themeSwatchRows,
 } from "./themeChoice.ts";
@@ -470,6 +471,7 @@ export type {
   InkGroup,
   InkSwatch,
   Scheme,
+  StartingThemeState,
   ThemeChoice,
   ThemeGroup,
   ThemeSwatchOption,

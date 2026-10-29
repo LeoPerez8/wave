@@ -171,6 +171,31 @@ export const readThemeChoice = (stored: string | null): ThemeChoice => {
   };
 };
 
+/** What this phone holds when Wave starts, for `storedThemeOnStart`. */
+export interface StartingThemeState {
+  /** The stored theme choice (`settings.theme`); null when none was ever stored. */
+  readonly storedTheme: string | null;
+  /** The stored launcher icon's id; null until this Wave first applied a theme. */
+  readonly storedIcon: string | null;
+  /** Whether an earlier Wave saved a launch theme natively, as it did on every start. */
+  readonly launchThemeSaved: boolean;
+}
+
+/**
+ * The theme to store before the first read, or null to leave it. Teal over
+ * Ember was the default before white, and an install from then with nothing
+ * stored shows it: it keeps it, stored, while a fresh install starts on white.
+ * Once this Wave has stored the icon, nothing stored means white was kept.
+ */
+export const storedThemeOnStart = ({
+  storedTheme,
+  storedIcon,
+  launchThemeSaved,
+}: StartingThemeState): string | null =>
+  storedTheme === null && storedIcon === null && launchThemeSaved
+    ? JSON.stringify({ ...DEFAULT_THEME_CHOICE, primary: "teal", secondary: "ember" })
+    : null;
+
 /** Whether `choice` is the shipped theme with no custom colour kept (nothing to reset). */
 export const isDefaultThemeChoice = (choice: ThemeChoice): boolean =>
   GROUPS.every((group) => choice[group] === DEFAULT_THEME_CHOICE[group]) &&
