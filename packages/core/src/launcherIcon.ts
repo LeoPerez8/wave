@@ -5,10 +5,10 @@
  * between them.
  */
 
-import type { AlertSpec } from "./alert.ts";
+import type { AlertChoice, AlertSpec } from "./alert.ts";
 import { LOGO_WAVES, logoIconPaths, logoWaveY } from "./logo.ts";
 import { INK_PAIRS, inkPairFor } from "./inkPalette.ts";
-import { DEFAULT_THEME_CHOICE, type ThemeChoice } from "./themeChoice.ts";
+import { DEFAULT_THEME_CHOICE, isDefaultThemeChoice, type ThemeChoice } from "./themeChoice.ts";
 
 /** One launcher icon: a primary × secondary pair and the colours its waves take on black. */
 export interface LauncherIcon {
@@ -92,27 +92,47 @@ export interface LauncherBehaviour {
 /** A theme change that switches the launcher icon. */
 export interface LauncherIconSwitch {
   readonly icon: LauncherIcon;
-  /** Asked before the colours change, when the switch costs the home-screen icon. */
-  readonly warning: (AlertSpec & { readonly action: NonNullable<AlertSpec["action"]> }) | null;
+  /** Asked before the colours change; No keeps the icon, dismissal cancels both. */
+  readonly warning: AlertSpec & { readonly action: NonNullable<AlertSpec["action"]> };
 }
 
-/** Whether going from one theme choice to another switches the icon, and what to say first. */
+/** Whether the next colours differ from this phone's stored icon, and what to ask first. */
 export const launcherIconSwitch = (
-  from: ThemeChoice,
+  from: LauncherIcon,
   to: ThemeChoice,
   launcher: LauncherBehaviour,
 ): LauncherIconSwitch | null => {
   const icon = launcherIconFor(to);
-  if (icon.id === launcherIconFor(from).id) return null;
+  if (icon.id === from.id) return null;
   return {
     icon,
-    warning: launcher.dropsHomeScreenIcon
-      ? {
-          title: "Change the app icon?",
-          message:
-            "Wave's icon takes these colours when you leave the app, and your launcher removes it from the home screen when it changes. Add it back from the app drawer.",
-          action: { label: "Change" },
-        }
-      : null,
+    warning: {
+      title: "Change the app icon too?",
+      message: launcher.dropsHomeScreenIcon
+        ? "Wave's icon takes these colours when you leave the app, and your launcher removes it from the home screen when it changes. Add it back from the app drawer."
+        : "Wave's icon takes these colours when you leave the app.",
+      action: { label: "Yes" },
+      alternativeLabel: "No",
+    },
   };
 };
+
+/** The synced colours alongside the launcher icon kept on this phone. */
+export interface ThemeState {
+  readonly choice: ThemeChoice;
+  readonly icon: LauncherIcon;
+}
+
+/** Applies an explicit answer to the icon prompt. */
+export const resolveThemeChange = (
+  current: ThemeState,
+  next: ThemeChoice,
+  answer: AlertChoice,
+): ThemeState =>
+  answer === "dismiss"
+    ? current
+    : { choice: next, icon: answer === "action" ? launcherIconFor(next) : current.icon };
+
+/** Whether Reset to defaults has nothing to do: the shipped colours and the shipped icon. */
+export const isDefaultThemeState = ({ choice, icon }: ThemeState): boolean =>
+  isDefaultThemeChoice(choice) && icon.id === launcherIconFor(DEFAULT_THEME_CHOICE).id;
