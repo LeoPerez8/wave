@@ -5,7 +5,7 @@
 
 import type { AlertSpec } from "./alert.ts";
 import { foldAccentsAndCase } from "./library.ts";
-import { counted } from "./listening.ts";
+import { catalogueOf, type AppLanguage } from "./localisation.ts";
 import { PLAYLIST_NAME_MAX } from "./playlists.ts";
 
 /** One entry of an M3U file. */
@@ -184,12 +184,16 @@ export const keepBothName = (name: string, names: readonly string[]): string => 
 /** Asks what to do when an imported playlist's name is taken: Replace, or Keep Both (also Back). */
 export const confirmImportReplace = (
   name: string,
-): AlertSpec & { readonly action: NonNullable<AlertSpec["action"]> } => ({
-  title: `Replace ${name}?`,
-  message: `You already have a playlist called ${name}. Replace its songs with the imported ones, or keep both playlists.`,
-  action: { label: "Replace", destructive: true },
-  dismissLabel: "Keep Both",
-});
+  language: AppLanguage = "en",
+): AlertSpec & { readonly action: NonNullable<AlertSpec["action"]> } => {
+  const text = catalogueOf(language).imports;
+  return {
+    title: text.replaceTitle(name),
+    message: text.replaceMessage(name),
+    action: { label: text.replace, destructive: true },
+    dismissLabel: text.keepBoth,
+  };
+};
 
 /** What became of one picked file. */
 export type M3uImportOutcome =
@@ -217,18 +221,18 @@ export interface M3uImportSummary {
   }[];
 }
 
-const notInLibrary = (missing: readonly string[]): string[] =>
-  missing.length === 0 ? [] : [`${missing.length.toLocaleString("en")} not in your library`];
-
-const sectionOf = (outcome: M3uImportOutcome): M3uImportSummary["sections"][number] => {
+const sectionOf = (
+  outcome: M3uImportOutcome,
+  text: ReturnType<typeof catalogueOf>["imports"],
+): M3uImportSummary["sections"][number] => {
   switch (outcome.kind) {
     case "imported":
       return {
         heading: outcome.name,
         detail: [
-          ...(outcome.replaced ? ["Replaced"] : []),
-          counted(outcome.songs, "song"),
-          ...notInLibrary(outcome.missing),
+          ...(outcome.replaced ? [text.replaced] : []),
+          text.songs(outcome.songs),
+          ...(outcome.missing.length === 0 ? [] : [text.notInLibrary(outcome.missing.length)]),
         ].join(" · "),
         missing: outcome.missing,
       };
@@ -237,28 +241,32 @@ const sectionOf = (outcome: M3uImportOutcome): M3uImportSummary["sections"][numb
         heading: outcome.file,
         detail:
           outcome.missing.length === 0
-            ? "It lists no songs"
-            : `None of its ${counted(outcome.missing.length, "song")} ${outcome.missing.length === 1 ? "is" : "are"} in your library`,
+            ? text.listsNoSongs
+            : text.noneInLibrary(outcome.missing.length),
         missing: outcome.missing,
       };
     case "notPlaylist":
-      return { heading: outcome.file, detail: "Not an M3U playlist", missing: [] };
+      return { heading: outcome.file, detail: text.notM3u, missing: [] };
     case "unreadable":
-      return { heading: outcome.file, detail: "Couldn't be read", missing: [] };
+      return { heading: outcome.file, detail: text.couldntBeRead, missing: [] };
   }
 };
 
-export const summarizeM3uImport = (outcomes: readonly M3uImportOutcome[]): M3uImportSummary => {
+export const summarizeM3uImport = (
+  outcomes: readonly M3uImportOutcome[],
+  language: AppLanguage = "en",
+): M3uImportSummary => {
+  const text = catalogueOf(language).imports;
   const imported = outcomes.flatMap((outcome) => (outcome.kind === "imported" ? [outcome] : []));
   const only = imported.length === 1 ? imported[0] : undefined;
   return {
     title:
       only !== undefined
-        ? `Imported ${only.name}`
+        ? text.importedName(only.name)
         : imported.length === 0
-          ? "Nothing imported"
-          : `Imported ${counted(imported.length, "playlist")}`,
-    sections: outcomes.map(sectionOf),
+          ? text.nothingImported
+          : text.importedPlaylists(imported.length),
+    sections: outcomes.map((outcome) => sectionOf(outcome, text)),
   };
 };
 

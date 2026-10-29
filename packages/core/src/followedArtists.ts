@@ -51,7 +51,15 @@ export const followLevelEntries = (
         },
       ]
     : []),
-  ...(level === null ? [] : [{ action: "unfollow" as const, label: "Unfollow", checked: false }]),
+  ...(level === null
+    ? []
+    : [
+        {
+          action: "unfollow" as const,
+          label: (options.strings ?? en).library.unfollow,
+          checked: false,
+        },
+      ]),
 ];
 
 export type ReleaseType = "single" | "ep" | "album";

@@ -4,6 +4,7 @@ import { View } from "react-native";
 
 import { grid } from "@/catalog/grid";
 import { EmptyState } from "@/components/EmptyState";
+import { useLocalisation } from "@/localisation/localisation";
 
 import { LibraryReadFeedback } from "./LibraryReadFeedback";
 import { useFavoriteSongs } from "./hooks";
@@ -16,15 +17,16 @@ const FAVORITES_CONTEXT = { kind: "favorites", id: null } as const;
 
 /** Library › Favorites: every starred song in the sort you chose (most recently starred first until then). */
 export function FavoritesList({ empty }: { empty: string }) {
+  const { strings } = useLocalisation();
   const starred = useFavoriteSongs();
   const { sort, songs } = useSortedSongs("favorites", starred);
   useScreenContent(songs !== undefined);
-  if (songs === undefined) return <LibraryReadFeedback queryKey="favorites" label="favorites" />;
+  if (songs === undefined) return <LibraryReadFeedback queryKey="favorites" list="favorites" />;
 
   if (songs.length === 0) {
     return (
       <View style={{ paddingHorizontal: grid.margin }}>
-        <EmptyState icon={IconStar} title="No favorites yet" message={empty} />
+        <EmptyState icon={IconStar} title={strings.library.noFavorites} message={empty} />
       </View>
     );
   }
@@ -38,7 +40,7 @@ export function FavoritesList({ empty }: { empty: string }) {
       songCards
       header={
         <ListIntro
-          line={songCount(songs.length)}
+          line={songCount(songs.length, strings)}
           songs={songs}
           context={FAVORITES_CONTEXT}
           sortControl={<SongSortButton kind="favorites" />}

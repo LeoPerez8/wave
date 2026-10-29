@@ -4,6 +4,7 @@ import { View } from "react-native";
 import { grid } from "@/catalog/grid";
 import type { LibrarySection } from "@/catalog/sections";
 import { EmptyState } from "@/components/EmptyState";
+import { useLocalisation } from "@/localisation/localisation";
 
 import { AlbumsList, ArtistsList, GenresList } from "./BrowseLists";
 import { FavoritesList } from "./FavoritesList";
@@ -12,6 +13,7 @@ import { SongsList } from "./SongsList";
 
 /** A Library section's list, on its own screen or as a tab. */
 export function SectionList({ section }: { section: LibrarySection | undefined }) {
+  const { strings } = useLocalisation();
   switch (section?.slug) {
     case "songs":
       return <SongsList />;
@@ -30,8 +32,8 @@ export function SectionList({ section }: { section: LibrarySection | undefined }
         <View style={{ paddingHorizontal: grid.margin }}>
           <EmptyState
             icon={IconStack2}
-            title="Nothing here yet"
-            message="This part of the library doesn't exist."
+            title={strings.library.nothingHereYet}
+            message={strings.library.noSuchSection}
           />
         </View>
       );

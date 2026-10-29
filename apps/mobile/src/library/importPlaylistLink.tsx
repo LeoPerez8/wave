@@ -3,14 +3,16 @@ import {
   linkImportView,
   planLinkImport,
   playlistImportSources,
+  playlistLinkReason,
   readSpotifyPlaylist,
   recognisePlaylistLink,
   sharedTextImport,
   spotifyShortLinkTarget,
-  YT_MUSIC_OFF_NOTICE,
+  ytMusicOffNotice,
   type LinkedSource,
   type LinkImportPlan,
   type LinkImportRead,
+  type Catalogue,
   type LinkReadFailure,
   type PlaylistImportSource,
   type PlaylistLink,
@@ -27,6 +29,7 @@ import { EntryRow } from "@/catalog/EntryRow";
 import { CELL, grid } from "@/catalog/grid";
 import { Hairline } from "@/catalog/Hairline";
 import { TextButton } from "@/components/TextButton";
+import { currentLocalisation, useLocalisation } from "@/localisation/localisation";
 import { WaveNative } from "@/native/waveNative";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 import { pressedRect } from "@/motion/pressedRect";
@@ -157,7 +160,8 @@ export const saveLinkImport = async (
  */
 export const openLinkImport = (text: string): void => {
   if (!ytMusicEnabled()) {
-    void showMessage(YT_MUSIC_OFF_NOTICE.title, YT_MUSIC_OFF_NOTICE.message);
+    const notice = ytMusicOffNotice(currentLocalisation().language);
+    void showMessage(notice.title, notice.message);
     return;
   }
   const check = recognisePlaylistLink(text);
@@ -174,7 +178,11 @@ export const openLinkImport = (text: string): void => {
  */
 export const openSharedText = (text: string): void => {
   dismissAllOverlays();
-  const shared = sharedTextImport(text, { ytMusic: ytMusicEnabled() });
+  const shared = sharedTextImport(
+    text,
+    { ytMusic: ytMusicEnabled() },
+    currentLocalisation().language,
+  );
   if (shared.kind === "import") openImportCard(shared.link);
   else void showMessage(shared.title, shared.message);
 };
@@ -208,7 +216,7 @@ export const openSourceMenu = (
   choose: (source: PlaylistImportSource) => void,
 ): void => {
   openOverlay({
-    label: "Import",
+    label: currentLocalisation().strings.imports.import,
     anchor: pressedRect(),
     render: (close) => (
       <SourceMenu
@@ -222,11 +230,17 @@ export const openSourceMenu = (
   });
 };
 
-const SOURCE_LABELS: Record<PlaylistImportSource, string> = {
-  link: "From a Link",
-  files: "From Files",
-  ytMusic: "From YT Music",
-  spotify: "From Spotify",
+const sourceLabel = (source: PlaylistImportSource, { imports }: Catalogue): string => {
+  switch (source) {
+    case "link":
+      return imports.fromLink;
+    case "files":
+      return imports.fromFiles;
+    case "ytMusic":
+      return imports.fromYtMusic;
+    case "spotify":
+      return imports.fromSpotify;
+  }
 };
 
 /** The Import card: one entry per source, each handed to [choose]. */
@@ -238,6 +252,7 @@ function SourceMenu({
   choose: (source: PlaylistImportSource) => void;
 }) {
   const flow = useOverlayFlow();
+  const { strings } = useLocalisation();
   return (
     <>
       <Text
@@ -245,14 +260,14 @@ function SourceMenu({
         className="font-sans text-body font-medium text-foreground"
         style={{ paddingBottom: CELL * 1.5 }}
       >
-        Import
+        {strings.imports.import}
       </Text>
       <Hairline />
       <CardEntries>
         {sources.map((source, index) => (
           <EntryRow
             key={source}
-            label={SOURCE_LABELS[source]}
+            label={sourceLabel(source, strings)}
             divider={entryDivider(index, sources.length, flow)}
             onPress={() => choose(source)}
           />
@@ -278,7 +293,7 @@ const fromClipboard = async (): Promise<string> => {
 /** Asks for a link, [initial] filled in; on Continue, opens the import card for it. */
 const askForLink = async (initial: string): Promise<void> => {
   const link = await presentOverlay<PlaylistLink | null>({
-    label: "Import from a link",
+    label: currentLocalisation().strings.imports.importFromLink,
     align: "top",
     dismissed: null,
     render: (finish) => <LinkCard initial={initial} finish={finish} />,
@@ -296,6 +311,7 @@ function LinkCard({
   const accent = useThemeColor("accent");
   const secondary = useThemeColor("secondary");
   const [value, setValue] = useState(initial);
+  const { language, strings } = useLocalisation();
   const check = recognisePlaylistLink(value);
 
   const confirm = () => {
@@ -315,8 +331,8 @@ function LinkCard({
         keyboardType="url"
         returnKeyType="go"
         onSubmitEditing={confirm}
-        accessibilityLabel="Playlist link"
-        placeholder="YouTube Music or Spotify playlist link"
+        accessibilityLabel={strings.imports.playlistLink}
+        placeholder={strings.imports.linkPlaceholder}
         placeholderTextColor={secondary}
         selectionColor={accent}
         cursorColor={accent}
@@ -331,11 +347,11 @@ function LinkCard({
         className="font-sans text-footnote text-secondary"
         style={{ minHeight: CELL * 3, paddingTop: CELL / 2 }}
       >
-        {check.ok || check.problem === "empty" ? "" : check.reason}
+        {check.ok || check.problem === "empty" ? "" : playlistLinkReason(check.problem, language)}
       </Text>
       <View className="flex-row justify-end" style={{ gap: CELL * 3 }}>
-        <TextButton label="Cancel" onPress={() => finish(null)} />
-        <TextButton label="Continue" onPress={confirm} disabled={!check.ok} />
+        <TextButton label={strings.imports.cancel} onPress={() => finish(null)} />
+        <TextButton label={strings.imports.continue} onPress={confirm} disabled={!check.ok} />
       </View>
     </>
   );
@@ -350,7 +366,7 @@ const READING: LinkRead = { status: "reading" };
 
 const openImportCard = (link: PlaylistLink): void => {
   openOverlay({
-    label: "Import playlist",
+    label: currentLocalisation().strings.imports.importPlaylist,
     render: (close) => <ImportCard link={link} close={close} />,
   });
 };
@@ -361,6 +377,7 @@ const openImportCard = (link: PlaylistLink): void => {
  * read: nothing more is requested.
  */
 function ImportCard({ link, close }: { link: PlaylistLink; close: () => void }) {
+  const { language, strings } = useLocalisation();
   const [attempt, setAttempt] = useState(0);
   // The answer to an earlier attempt isn't shown: Try Again reads as "reading" at once.
   const [answer, setAnswer] = useState<{ readonly attempt: number; readonly read: LinkRead }>();
@@ -374,12 +391,12 @@ function ImportCard({ link, close }: { link: PlaylistLink; close: () => void }) 
   }, [link, attempt]);
 
   const read: LinkRead = answer?.attempt === attempt ? answer.read : READING;
-  const view = linkImportView(read);
+  const view = linkImportView(read, language);
   const importIt = () => {
     if (read.status !== "read") return;
     close();
     void saveLinkImport(read.plan).catch((error: unknown) =>
-      showError("Couldn't import the playlist", error),
+      showError(strings.imports.couldntImportPlaylist, error),
     );
   };
 
@@ -387,7 +404,9 @@ function ImportCard({ link, close }: { link: PlaylistLink; close: () => void }) 
     <>
       <View style={{ paddingTop: CELL, paddingBottom: CELL * 2, gap: CELL * 1.5 }}>
         <CatalogLine>
-          {link.service === "ytMusic" ? "Import from YouTube Music" : "Import from Spotify"}
+          {link.service === "ytMusic"
+            ? strings.imports.importFromYtMusic
+            : strings.imports.importFromSpotify}
         </CatalogLine>
         <View className="flex-row items-center" style={{ gap: CELL * 1.5 }}>
           {view.name !== null && (
@@ -415,9 +434,11 @@ function ImportCard({ link, close }: { link: PlaylistLink; close: () => void }) 
         )}
       </View>
       <View className="flex-row items-center justify-end" style={{ gap: CELL * 3 }}>
-        <TextButton label="Cancel" onPress={close} />
-        {view.retry && <TextButton label="Try Again" onPress={() => setAttempt((n) => n + 1)} />}
-        {view.canImport && <TextButton label="Import" onPress={importIt} />}
+        <TextButton label={strings.imports.cancel} onPress={close} />
+        {view.retry && (
+          <TextButton label={strings.imports.tryAgain} onPress={() => setAttempt((n) => n + 1)} />
+        )}
+        {view.canImport && <TextButton label={strings.imports.import} onPress={importIt} />}
       </View>
     </>
   );

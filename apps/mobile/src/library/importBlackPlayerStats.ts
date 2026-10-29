@@ -38,6 +38,6 @@ export const importBlackPlayerStats = async (): Promise<void> => {
     }
     await showImportSummary(summarizeBlackPlayerImport(plan, currentLocalisation().strings));
   } catch (error) {
-    await showError("Couldn't import the BlackPlayer stats", error);
+    await showError(currentLocalisation().strings.imports.couldntImportBlackPlayer, error);
   }
 };

@@ -2,6 +2,7 @@ import { ytLibraryReadView } from "@wave/core";
 import { Text, View } from "react-native";
 
 import { TextButton } from "@/components/TextButton";
+import { useLocalisation } from "@/localisation/localisation";
 import { useYtMusicEnabled } from "@/settings/ytMusic";
 
 import { readYtLibraryPlaylistAgain, useReadingAgain, useYtLibraryBatch } from "./ytLibraryImport";
@@ -13,7 +14,8 @@ import { readYtLibraryPlaylistAgain, useReadingAgain, useYtLibraryBatch } from "
  * the read ends.
  */
 export function YtLibraryReadLine({ playlistId }: { playlistId: number }) {
-  const view = ytLibraryReadView(useYtLibraryBatch(), playlistId);
+  const { language, strings } = useLocalisation();
+  const view = ytLibraryReadView(useYtLibraryBatch(), playlistId, language);
   const ytMusic = useYtMusicEnabled();
   const trying = useReadingAgain(playlistId);
   if (view === null) return null;
@@ -25,7 +27,7 @@ export function YtLibraryReadLine({ playlistId }: { playlistId: number }) {
       {ytMusic && (
         <View className="flex-row items-center">
           <TextButton
-            label={trying ? "Reading…" : "Try Again"}
+            label={trying ? strings.imports.reading : strings.imports.tryAgain}
             disabled={trying}
             onPress={() => void readYtLibraryPlaylistAgain(playlistId)}
           />

@@ -4,7 +4,8 @@
  * the playlist read makes.
  */
 
-import { counted } from "./listening.ts";
+import type { Catalogue } from "./catalogueEn.ts";
+import { catalogueOf, type AppLanguage } from "./localisation.ts";
 import type { ImportService, LinkImportPlan } from "./playlistImport.ts";
 import type { YtSong } from "./ytMusic.ts";
 import type { YtQuietReason } from "./ytSearch.ts";
@@ -58,20 +59,24 @@ export type PlaylistLinkCheck =
   | { readonly ok: true; readonly link: PlaylistLink }
   | { readonly ok: false; readonly problem: PlaylistLinkProblem; readonly reason: string };
 
-const ASK = "Paste a link to a YouTube Music or Spotify playlist.";
+const REASONS = {
+  empty: "pasteLink",
+  notLink: "pasteLink",
+  otherSite: "otherSite",
+  song: "songLink",
+  notPlaylist: "notPlaylistLink",
+} as const satisfies Record<PlaylistLinkProblem, string>;
 
-const REASONS: Record<PlaylistLinkProblem, string> = {
-  empty: ASK,
-  notLink: ASK,
-  otherSite: "Wave imports playlists from YouTube Music and Spotify links.",
-  song: "This is a link to a song, not a playlist.",
-  notPlaylist: "This link isn't to a playlist.",
-};
+/** Why [problem]'s link can't be imported, in [language]. */
+export const playlistLinkReason = (
+  problem: PlaylistLinkProblem,
+  language: AppLanguage = "en",
+): string => catalogueOf(language).imports[REASONS[problem]];
 
 const rejected = (problem: PlaylistLinkProblem): PlaylistLinkCheck => ({
   ok: false,
   problem,
-  reason: REASONS[problem],
+  reason: playlistLinkReason(problem),
 });
 
 /** `scheme://host/path?query#fragment`, the scheme optional; the host has a dot. */
@@ -218,15 +223,18 @@ export interface ImportNotice {
   readonly message: string;
 }
 
-/** Why a link isn't read with YT Music off, wherever it came from. */
-export const YT_MUSIC_OFF_NOTICE: ImportNotice = {
-  title: "YT Music is off",
-  message: "Turn on YT Music in Settings to import playlists from YouTube Music and Spotify links.",
+/** Why a link isn't read with YT Music off, wherever it came from, in [language]. */
+export const ytMusicOffNotice = (language: AppLanguage = "en"): ImportNotice => {
+  const text = catalogueOf(language).imports;
+  return { title: text.ytMusicOff, message: text.ytMusicOffMessage };
 };
 
-const CANT_IMPORT_NOTICE: ImportNotice = {
-  title: "Can't import this",
-  message: REASONS.otherSite,
+/** Why a link isn't read with YT Music off, in English. */
+export const YT_MUSIC_OFF_NOTICE: ImportNotice = ytMusicOffNotice();
+
+const cantImportNotice = (language: AppLanguage): ImportNotice => {
+  const text = catalogueOf(language).imports;
+  return { title: text.cantImport, message: text.otherSite };
 };
 
 /**
@@ -241,12 +249,13 @@ const CANT_IMPORT_NOTICE: ImportNotice = {
 export const sharedTextImport = (
   text: string,
   { ytMusic }: { readonly ytMusic: boolean },
+  language: AppLanguage = "en",
 ): SharedTextImport => {
-  if (!ytMusic) return { kind: "notice", ...YT_MUSIC_OFF_NOTICE };
+  if (!ytMusic) return { kind: "notice", ...ytMusicOffNotice(language) };
   const address = addressIn(text);
   const check = address === null ? null : recognisePlaylistLink(address);
   if (check?.ok === true) return { kind: "import", link: check.link };
-  return { kind: "notice", ...CANT_IMPORT_NOTICE };
+  return { kind: "notice", ...cantImportNotice(language) };
 };
 
 /** A playlist as read from its service: its name, cover and songs in its order. */
@@ -292,24 +301,25 @@ export type LinkImportRead<S extends YtSong> =
 export type LinkReadFailure =
   YtQuietReason | "disabled" | "missing" | "unreachable" | "spotifyFailed" | "song" | "notPlaylist";
 
-const FAILURES: Record<LinkReadFailure, { readonly line: string; readonly retry: boolean }> = {
-  offline: { line: "You're offline. Try again when you're back online.", retry: true },
+/** The import card's line for each failure: a key of the imports catalogue. */
+type FailureLine =
+  | "offline"
+  | "playlistFailed"
+  | "ytMusicOffInSettings"
+  | "playlistMissing"
+  | "spotifyUnreachable"
+  | "spotifyFailed"
+  | (typeof REASONS)[PlaylistLinkProblem];
+
+const FAILURES: Record<LinkReadFailure, { readonly line: FailureLine; readonly retry: boolean }> = {
+  offline: { line: "offline", retry: true },
   // YouTube Music answers a private or missing playlist as it answers a page it can't
   // serve, so the two share a message.
-  failed: {
-    line: "Couldn't read this playlist. It may be private or deleted, or there was no answer online.",
-    retry: true,
-  },
-  disabled: { line: "YT Music is off in Settings.", retry: false },
-  missing: { line: "This playlist doesn't exist or isn't public.", retry: false },
-  unreachable: {
-    line: "Couldn't reach Spotify. Check your connection and try again.",
-    retry: true,
-  },
-  spotifyFailed: {
-    line: "Couldn't read this playlist. Spotify didn't answer as expected.",
-    retry: true,
-  },
+  failed: { line: "playlistFailed", retry: true },
+  disabled: { line: "ytMusicOffInSettings", retry: false },
+  missing: { line: "playlistMissing", retry: false },
+  unreachable: { line: "spotifyUnreachable", retry: true },
+  spotifyFailed: { line: "spotifyFailed", retry: true },
   song: { line: REASONS.song, retry: false },
   notPlaylist: { line: REASONS.notPlaylist, retry: false },
 };
@@ -344,12 +354,15 @@ const SERVICE_NAMES: Record<ImportService, string> = {
  * Spotify · 21 listed twice go in once · 1 isn't a song". Null when
  * everything it lists goes in.
  */
-const sourceLine = <S extends YtSong>(plan: LinkImportPlan<S>): string | null => {
+const sourceLine = <S extends YtSong>(
+  plan: LinkImportPlan<S>,
+  text: Catalogue["imports"],
+): string | null => {
   const twice = plan.leftOut.filter((left) => left.reason === "listedTwice").length;
   if (twice === 0 && plan.notSongs === 0) return null;
-  const parts = [`${counted(plan.sourceTotal, "song")} on ${SERVICE_NAMES[plan.service]}`];
-  if (twice > 0) parts.push(counted(twice, "listed twice goes in once", "listed twice go in once"));
-  if (plan.notSongs > 0) parts.push(counted(plan.notSongs, "isn't a song", "aren't songs"));
+  const parts = [text.onService(plan.sourceTotal, SERVICE_NAMES[plan.service])];
+  if (twice > 0) parts.push(text.listedTwiceGoInOnce(twice));
+  if (plan.notSongs > 0) parts.push(text.notSongs(plan.notSongs));
   return parts.join(" · ");
 };
 
@@ -369,29 +382,25 @@ const message = (line: string): LinkImportView => ({
  * read it counts the songs and how many the Library has; the rest are found
  * after Import, as the playlist fills in (`PlaylistImport`).
  */
-export const linkImportView = <S extends YtSong>(read: LinkImportRead<S>): LinkImportView => {
-  if (read.status === "reading") return message("Reading the playlist…");
+export const linkImportView = <S extends YtSong>(
+  read: LinkImportRead<S>,
+  language: AppLanguage = "en",
+): LinkImportView => {
+  const text = catalogueOf(language).imports;
+  if (read.status === "reading") return message(text.readingPlaylist);
   if (read.status === "failed") {
     const { line, retry } = FAILURES[read.reason];
-    return { ...message(line), retry };
+    return { ...message(text[line]), retry };
   }
   const { playlist, plan } = read;
   const head = { name: plan.name, artworkUrl: playlist.artworkUrl };
   const total = plan.songs.length;
-  if (total === 0) return { ...message("It has no songs to import."), ...head };
-  const had =
-    plan.inLibrary === 0
-      ? "none"
-      : plan.inLibrary === total
-        ? "all"
-        : plan.inLibrary.toLocaleString("en");
+  if (total === 0) return { ...message(text.noSongsToImport), ...head };
   return {
     ...head,
-    line: `${counted(total, "song")} · ${had} in your Library`,
-    source: sourceLine(plan),
-    note: playlist.truncated
-      ? `It goes on past ${counted(playlist.songs.length, "song")}. Only those are imported.`
-      : null,
+    line: `${text.songs(total)} · ${text.inLibrary(plan.inLibrary, total)}`,
+    source: sourceLine(plan, text),
+    note: playlist.truncated ? text.truncated(playlist.songs.length) : null,
     canImport: true,
     retry: false,
   };

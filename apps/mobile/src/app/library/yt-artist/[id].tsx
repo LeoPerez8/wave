@@ -7,6 +7,7 @@ import {
   artistPageItems,
   discoverTrackId,
   type ArtistPageItem,
+  type Catalogue,
   type DiscoverSong,
   type YtArtistPageNote,
   type YtArtistRelease,
@@ -53,7 +54,8 @@ import { useYtArtistPage } from "@/ytmusic/artistPage";
 import { mixedSongEntry, mixedPageSongHandlers, songSelection } from "@/songs/mixedSongs";
 import { SongList } from "@/songs/SongList";
 import { occurrenceKeys } from "@/songs/songRowState";
-import { YT_ARTIST_NOTE, YtReleaseTile } from "@/ytmusic/YtArtistSection";
+import { ytArtistNote, YtReleaseTile } from "@/ytmusic/YtArtistSection";
+import { useLocalisation } from "@/localisation/localisation";
 import { YT_ARTIST_BY_NAME } from "@/ytmusic/routes";
 
 type Song = DiscoverSong<NativeYtSong, SongRow>;
@@ -72,21 +74,19 @@ const SHELF_ROW = albumRowHeight(COVER_ROW_TILE);
 
 const NO_SONGS: readonly Song[] = [];
 
-const SHELF_LABEL = { albums: "Albums", singles: "Singles & EPs" } as const;
-
 /** The quiet line in place of what the page can't show (while it loads, skeletons show). */
-const NOTE: Readonly<Record<Exclude<YtArtistPageNote, "loading">, string>> = {
-  offline: YT_ARTIST_NOTE.offline,
-  failed: YT_ARTIST_NOTE.failed,
-  off: "YT Music is off. Turn it on in Settings to see this artist.",
-  notFound: YT_ARTIST_NOTE.notFound,
-};
+const pageNote = (note: Exclude<YtArtistPageNote, "loading">, strings: Catalogue): string =>
+  note === "off" ? strings.library.ytArtistOff : ytArtistNote(note, strings);
 
 /** As the integrated Library artist page lays it out: the releases, then the songs. */
-const pageItems = (shelves: readonly YtArtistShelf<AlbumRow>[], songs: readonly Song[]): Item[] =>
+const pageItems = (
+  shelves: readonly YtArtistShelf<AlbumRow>[],
+  songs: readonly Song[],
+  { library }: Catalogue,
+): Item[] =>
   artistPageItems(
     shelves.map((shelf) => ({
-      label: SHELF_LABEL[shelf.kind],
+      label: shelf.kind === "albums" ? library.albums : library.singlesAndEps,
       covers: shelf.releases.map((release): Cover => ({ kind: shelf.kind, release })),
     })),
     songs,
@@ -244,6 +244,7 @@ function QuietLine({
   retry: boolean;
   onRetry: () => void;
 }) {
+  const { strings } = useLocalisation();
   if (note === null && !retry) return null;
   return (
     <View style={{ paddingTop: CELL * 2 }}>
@@ -252,7 +253,7 @@ function QuietLine({
           <Text className="font-sans text-footnote text-secondary">{note}</Text>
         </View>
       )}
-      {retry && <TextButton label="Try Again" onPress={onRetry} />}
+      {retry && <TextButton label={strings.library.tryAgain} onPress={onRetry} />}
     </View>
   );
 }
@@ -269,6 +270,7 @@ function QuietLine({
  */
 export default function YtArtistScreen() {
   useScreenContent(true);
+  const { strings } = useLocalisation();
   const params = useLocalSearchParams<{ id: string; name?: string; offline?: string }>();
   const browseId = params.id === YT_ARTIST_BY_NAME ? null : (params.id ?? "");
   const knownName = params.name === undefined || params.name === "" ? null : params.name;
@@ -296,7 +298,10 @@ export default function YtArtistScreen() {
       ),
     [selection],
   );
-  const items = useMemo(() => (view === null ? [] : pageItems(view.shelves, view.songs)), [view]);
+  const items = useMemo(
+    () => (view === null ? [] : pageItems(view.shelves, view.songs, strings)),
+    [view, strings],
+  );
   // Songs key by id, a real duplicate by its occurrence, never by place.
   const songKeys = useMemo(() => occurrenceKeys(songs, discoverTrackId), [songs]);
   const itemKey = useCallback(
@@ -338,12 +343,12 @@ export default function YtArtistScreen() {
         <TrackSkeletons />
       ) : view === null ? null : (
         <QuietLine
-          note={view.note === null ? null : NOTE[view.note]}
+          note={view.note === null ? null : pageNote(view.note, strings)}
           retry={view.retry}
           onRetry={retry}
         />
       ),
-    [loading, view, retry],
+    [loading, view, retry, strings],
   );
   const contentStyle = useMemo(
     () => ({ paddingHorizontal: grid.margin, paddingBottom: bottomInset }),

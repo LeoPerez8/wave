@@ -2,6 +2,7 @@ import { View } from "react-native";
 
 import { ArtistImage, type ArtistImageSource } from "../ArtistImage";
 import { CELL } from "../grid";
+import { useLocalisation } from "@/localisation/localisation";
 
 import { CardRow, CardTile, CardTitle } from "./CardParts";
 
@@ -19,8 +20,14 @@ type Props = {
 
 /** An artist on a shelf or in a grid: a circle as wide as [size], the name centred under it. */
 export function ArtistCard({ name, artist, size, onPress, onLongPress }: Props & { size: number }) {
+  const { strings } = useLocalisation();
   return (
-    <CardTile width={size} label={`${name}, artist`} onPress={onPress} onLongPress={onLongPress}>
+    <CardTile
+      width={size}
+      label={strings.library.artistLabel(name)}
+      onPress={onPress}
+      onLongPress={onLongPress}
+    >
       <ArtistImage artist={artist} size={size} large />
       <View style={{ paddingTop: CELL }}>
         <CardTitle centred>{name}</CardTitle>
@@ -36,16 +43,17 @@ export function ArtistCard({ name, artist, size, onPress, onLongPress }: Props &
 export function ArtistCardRow({
   name,
   artist,
-  detail = "Artist",
+  detail,
   onPress,
   onLongPress,
   checked,
 }: Props & { detail?: string | undefined; checked?: boolean | undefined }) {
+  const { strings } = useLocalisation();
   return (
     <CardRow
       lead={<ArtistImage artist={artist} size={THUMB} />}
       title={name}
-      detail={detail}
+      detail={detail ?? strings.library.artistRow}
       onPress={onPress}
       onLongPress={onLongPress}
       checked={checked}

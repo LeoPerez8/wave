@@ -10,6 +10,7 @@ import { ytSongArtist, ytSongCredit, ytTrackId, type YtSong } from "./ytMusic.ts
 import type { ExplicitFlag } from "./explicit.ts";
 import { showsExplicitBadge } from "./explicit.ts";
 import { trackRowDownloaded } from "./trackRowDownloaded.ts";
+import { catalogueOf, type AppLanguage } from "./localisation.ts";
 import { trackRowTrailing } from "./trackRowTrailing.ts";
 
 /** Local cover files, not URIs. The app's artwork helper resolves the chosen file. */
@@ -116,6 +117,8 @@ export interface SongRowState {
   readonly disabled?: boolean;
   /** False suppresses remote covers when YT Music is off. Local files still display. */
   readonly remoteArtwork?: boolean;
+  /** The language the row reads in; English unless given. */
+  readonly language?: AppLanguage | undefined;
 }
 
 export interface SongRowView {
@@ -171,7 +174,7 @@ interface RowContent {
   readonly disabled: boolean;
 }
 
-const contentOf = (source: SongRowSource): RowContent => {
+const contentOf = (source: SongRowSource, language: AppLanguage = "en"): RowContent => {
   switch (source.kind) {
     case "library":
     case "librarySummary":
@@ -213,7 +216,7 @@ const contentOf = (source: SongRowSource): RowContent => {
         title: song.title,
         credit:
           source.kind === "unavailable"
-            ? unavailableEntryView(source.song).line
+            ? unavailableEntryView(source.song, language).line
             : ytSongCredit(song),
         durationMs: song.durationMs,
         explicit: source.kind === "ytMusic" && showsExplicitBadge(source.song.explicit),
@@ -266,6 +269,8 @@ export const songRowTrackId = (source: SongListRowSource): string | null =>
 
 /** Computes display values only: no stores, callbacks, queries or native dependencies. */
 export const songRowView = (source: SongListRowSource, state: SongRowState = {}): SongRowView => {
+  const language = state.language ?? "en";
+  const text = catalogueOf(language).library;
   const playing = state.playing === true;
   const selection = state.selection ?? "off";
   const selecting = selection !== "off";
@@ -295,10 +300,10 @@ export const songRowView = (source: SongListRowSource, state: SongRowState = {})
       leading,
       accessibilityState: { disabled: true, selected: false },
       accessibilityRole: source.kind === "discHeader" ? "header" : "text",
-      accessibilityLabel: source.kind === "discHeader" ? title : "Loading song",
+      accessibilityLabel: source.kind === "discHeader" ? title : text.row.loadingSong,
     };
   }
-  const row = contentOf(source);
+  const row = contentOf(source, language);
   const unavailable = row.unavailable || state.unavailable === true;
   const fileNotFound = state.fileNotFound === true;
   const downloaded =
@@ -315,7 +320,9 @@ export const songRowView = (source: SongListRowSource, state: SongRowState = {})
   const credit =
     remoteSong && downloadLine !== null
       ? downloadLine
-      : (state.kindLine ? "Song · " : "") + baseCredit;
+      : state.kindLine
+        ? text.songRow(baseCredit)
+        : baseCredit;
   const trailingText =
     state.trailingLabel ??
     trackRowTrailing({ durationMs: row.durationMs, countedPlays: state.countedPlays });
@@ -325,7 +332,7 @@ export const songRowView = (source: SongListRowSource, state: SongRowState = {})
     key: source.key ?? (source.occurrence ? `${row.key}:occurrence:${source.occurrence}` : row.key),
     recycleType: row.recycleType,
     title: row.title,
-    secondLine: fileNotFound ? "File not found" : (downloadLine ?? credit),
+    secondLine: fileNotFound ? text.row.fileNotFound : (downloadLine ?? credit),
     trailingText,
     badges: { explicit: row.explicit, downloaded },
     artwork:
@@ -351,17 +358,17 @@ export const songRowView = (source: SongListRowSource, state: SongRowState = {})
       ? { disabled, checked: selection === "checked" }
       : { disabled, selected: playing },
     accessibilityLabel: queue
-      ? `${source.track?.title ?? "Song"}, ${source.track?.artist ?? ""}${downloaded ? ", downloaded" : ""}`
+      ? `${source.track?.title ?? text.row.song}, ${source.track?.artist ?? ""}${downloaded ? `, ${text.row.downloaded}` : ""}`
       : [
           row.title,
           credit,
           ...(state.trailingLabel === undefined ? [] : [state.trailingLabel]),
-          ...(row.explicit ? ["explicit"] : []),
+          ...(row.explicit ? [text.row.explicit] : []),
           ...(state.countedPlays === undefined ? [] : [trailingText]),
-          ...(downloaded ? ["downloaded"] : []),
-          ...(row.missing ? [downloadLine ?? "not downloaded"] : []),
-          ...(unavailable ? ["unavailable"] : []),
-          ...(playing ? ["now playing"] : []),
+          ...(downloaded ? [text.row.downloaded] : []),
+          ...(row.missing ? [downloadLine ?? text.row.notDownloaded] : []),
+          ...(unavailable ? [text.row.unavailable] : []),
+          ...(playing ? [text.row.nowPlaying] : []),
         ].join(", "),
   };
 };

@@ -1,8 +1,8 @@
 import { type LegendListRef } from "@legendapp/list/react-native";
 import { useScrollToTop } from "expo-router";
 import {
-  counted,
   songSpineKeys,
+  type Catalogue,
   type MixedSong,
   type QueueContext,
   type SongSort,
@@ -31,7 +31,9 @@ import type { SongRow } from "./LibraryStore";
 import { useSpine } from "./useSpine";
 import { useListScrollable } from "@/motion/heldTouch";
 
-export const songCount = (count: number): string => counted(count, "song");
+/** A list's song count on its opening line ("12 songs"), in [strings]' language. */
+export const songCount = (count: number, strings: Catalogue): string =>
+  strings.library.songCount(count);
 
 /**
  * A list's opening: a catalog line (the count, a path…) over Play and Shuffle

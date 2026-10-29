@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { AppState } from "react-native";
-import { useLocalisation } from "@/localisation/localisation";
+import { currentLocalisation, useLocalisation } from "@/localisation/localisation";
 import { useFollowCountryName } from "@/settings/followCountry";
 import {
   askShowNotifications,
@@ -23,7 +23,7 @@ import { setArtistFollow, useFollow } from "./follows";
 
 export const openFollowCard = (artist: FollowTarget): void => {
   openOverlay({
-    label: `Follow ${artist.name}`,
+    label: currentLocalisation().strings.library.followArtist(artist.name),
     render: (close) => <FollowCard artist={artist} close={close} />,
   });
 };
@@ -53,7 +53,7 @@ function FollowCard({ artist, close }: { artist: FollowTarget; close: () => void
             onPress={() => {
               close();
               void setArtistFollow(artist, null).catch((error) =>
-                showError("Couldn't unfollow artist", error),
+                showError(strings.library.couldntUnfollow, error),
               );
             }}
           />
@@ -68,7 +68,7 @@ function FollowCard({ artist, close }: { artist: FollowTarget; close: () => void
               void (async () => {
                 if (entry.action === "shows") await askShowNotifications();
                 await setArtistFollow(artist, entry.action === "unfollow" ? null : entry.action);
-              })().catch((error) => showError("Couldn't follow artist", error));
+              })().catch((error) => showError(strings.library.couldntFollow, error));
             }}
           />
         ),
@@ -94,9 +94,16 @@ export const useFollowAction = (artist: FollowTarget): LastListAction => {
   const follow = useFollow(artist.name);
   return {
     icon: follow === null ? IconUserPlus : IconUserCheck,
-    label: follow === null ? "Follow" : "Following",
-    labels: ["Follow", "Following"],
-    accessibilityLabel: `${artist.name}, ${follow === null ? "Follow" : "Following, " + (follow.level === "shows" ? strings.shows.level(country) : strings.shows.releases)}`,
+    label: follow === null ? strings.library.follow : strings.library.following,
+    labels: [strings.library.follow, strings.library.following],
+    accessibilityLabel: strings.library.followState(
+      artist.name,
+      follow === null
+        ? null
+        : follow.level === "shows"
+          ? strings.shows.level(country)
+          : strings.shows.releases,
+    ),
     onPress: () => openFollowCard(artist),
   };
 };
@@ -108,6 +115,7 @@ export const openFollowActions = (artist: FollowTarget): void => {
   });
 };
 function FollowActions({ artist, close }: { artist: FollowTarget; close: () => void }) {
+  const { strings } = useLocalisation();
   const follow = useFollow(artist.name);
   return (
     <>
@@ -119,7 +127,7 @@ function FollowActions({ artist, close }: { artist: FollowTarget; close: () => v
         entries={[
           {
             action: "follow",
-            label: follow === null ? "Follow" : "Following",
+            label: follow === null ? strings.library.follow : strings.library.following,
             onPress: () => followMenuPress(artist, close),
           },
         ]}

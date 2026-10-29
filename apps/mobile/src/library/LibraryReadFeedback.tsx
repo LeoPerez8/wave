@@ -1,3 +1,4 @@
+import type { Catalogue } from "@wave/core";
 import { ScrollView, Text, useWindowDimensions, View } from "react-native";
 
 import { CELL, grid } from "@/catalog/grid";
@@ -7,18 +8,23 @@ import { useChromeInset } from "@/chrome/chrome";
 import { ScanProgressBanner } from "@/components/ScanProgressBanner";
 import { TextButton } from "@/components/TextButton";
 import { useScreenContent } from "@/lib/screenTiming";
+import { useLocalisation } from "@/localisation/localisation";
 
 import { libraryQueryState, retryLibraryQuery } from "./sharedQueries";
 
 type Shape = "songs" | "albums" | "artists" | "genres";
 
+/** The list being read, which names it in the loading and failure lines. */
+type ReadList = keyof Catalogue["library"]["loadingList"];
+
 /** Still placeholders matching the list ahead, without preparing any Library data. */
-function LoadingList({ label, shape }: { label: string; shape: Shape }) {
+function LoadingList({ list, shape }: { list: ReadList; shape: Shape }) {
   const { width, fontScale } = useWindowDimensions();
-  if (shape === "songs") return <TrackSkeletons label={`Loading ${label}`} />;
+  const loading = useLocalisation().strings.library.loadingList[list];
+  if (shape === "songs") return <TrackSkeletons label={loading} />;
   const tile = Math.max(0, (width - grid.margin * 2 - grid.gutter) / 2);
   return (
-    <SkeletonGroup label={`Loading ${label}`}>
+    <SkeletonGroup label={loading}>
       {shape === "albums" ? (
         <View className="flex-row" style={{ gap: grid.gutter }}>
           <AlbumCardSkeleton size={tile} fontScale={fontScale} />
@@ -54,12 +60,13 @@ function LoadingList({ label, shape }: { label: string; shape: Shape }) {
  */
 export function LibraryReadFeedback({
   queryKey,
-  label,
+  list,
   shape = "songs",
   scan = false,
 }: {
   queryKey: string;
-  label: string;
+  /** The list being read, which its loading and failure lines name. */
+  list: ReadList;
   shape?: Shape;
   scan?: boolean;
 }) {
@@ -74,7 +81,7 @@ export function LibraryReadFeedback({
       contentContainerStyle={{ paddingHorizontal: grid.margin, paddingBottom: bottomInset }}
     >
       {scan && <ScanProgressBanner />}
-      <LibraryReadNote queryKey={queryKey} label={label} shape={shape} />
+      <LibraryReadNote queryKey={queryKey} list={list} shape={shape} />
     </ScrollView>
   );
 }
@@ -82,22 +89,23 @@ export function LibraryReadFeedback({
 /** Inline feedback keeps Find's field, query and keyboard reachable during a read or retry. */
 export function LibraryReadNote({
   queryKey,
-  label,
+  list,
   shape = "songs",
 }: {
   queryKey: string;
-  label: string;
+  list: ReadList;
   shape?: Shape;
 }) {
+  const { strings } = useLocalisation();
   const state = libraryQueryState(queryKey);
   return state === "error" ? (
     <View style={{ gap: CELL, paddingTop: CELL * 3 }}>
       <Text accessibilityLiveRegion="polite" className="font-sans text-subheadline text-secondary">
-        Couldn't load {label}. Try again.
+        {strings.library.couldntLoadList[list]}
       </Text>
-      <TextButton label="Try Again" onPress={() => retryLibraryQuery(queryKey)} />
+      <TextButton label={strings.library.tryAgain} onPress={() => retryLibraryQuery(queryKey)} />
     </View>
   ) : (
-    <LoadingList label={label} shape={shape} />
+    <LoadingList list={list} shape={shape} />
   );
 }

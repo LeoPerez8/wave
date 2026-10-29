@@ -1,3 +1,6 @@
+import { libraryPtBr } from "./catalogue/libraryPtBr.ts";
+import { playlistsPtBr } from "./catalogue/playlistsPtBr.ts";
+import { importsPtBr } from "./catalogue/importsPtBr.ts";
 import { homePtBr } from "./catalogue/homePtBr.ts";
 import { arrangementPtBr } from "./catalogue/arrangementPtBr.ts";
 import { discoverPtBr } from "./catalogue/discoverPtBr.ts";
@@ -28,6 +31,9 @@ export const ptBR: Catalogue = {
   downloadNotice: downloadNoticePtBr,
   native: nativePtBr,
   auto: autoPtBr,
+  library: libraryPtBr,
+  playlists: playlistsPtBr,
+  imports: importsPtBr,
   lyricsLanguages: lyricsLanguagesPtBr,
   playbackText: playbackTextPtBr,
   shows: showsPtBr,

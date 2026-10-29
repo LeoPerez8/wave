@@ -1,7 +1,7 @@
 import { useScreenContent } from "@/lib/screenTiming";
 import { libraryQueryHasContent } from "./sharedQueries";
 import { IconPlaylist } from "@tabler/icons-react-native";
-import { counted, importProgressLine, importRing, type PlaylistLayout } from "@wave/core";
+import { importProgressLine, importRing, type Catalogue, type PlaylistLayout } from "@wave/core";
 import { useCallback, useMemo, type ReactNode } from "react";
 import { useWindowDimensions, View, type AccessibilityActionEvent } from "react-native";
 
@@ -29,6 +29,7 @@ import { newPlaylist } from "./PlaylistSheets";
 import { useSortedPlaylists } from "./playlistSort";
 import { openPlaylist } from "./routes";
 import { songCount } from "./TrackList";
+import { useLocalisation } from "@/localisation/localisation";
 import { useRenderCount } from "@/perf/perf";
 import { useYtMusicEnabled } from "@/settings/ytMusic";
 
@@ -65,12 +66,17 @@ const playlistPress = (playlist: PlaylistRow, selection: ListSelection<PlaylistR
  * another sort they switch it to Custom from the order shown. None unless
  * [arrangeable] (not while selecting, nor while Find narrows the list).
  */
-const moveActions = (index: number, ids: readonly number[], arrangeable: boolean) => {
+const moveActions = (
+  index: number,
+  ids: readonly number[],
+  arrangeable: boolean,
+  strings: Catalogue,
+) => {
   if (!arrangeable) return {};
   return {
     accessibilityActions: [
-      ...(index > 0 ? [{ name: "moveUp", label: "Move up" }] : []),
-      ...(index < ids.length - 1 ? [{ name: "moveDown", label: "Move down" }] : []),
+      ...(index > 0 ? [{ name: "moveUp", label: strings.playlists.moveUp }] : []),
+      ...(index < ids.length - 1 ? [{ name: "moveDown", label: strings.playlists.moveDown }] : []),
     ],
     onAccessibilityAction: (event: AccessibilityActionEvent) => {
       const action = event.nativeEvent.actionName;
@@ -105,12 +111,16 @@ function PlaylistView({
   tile: number;
   selection: ListSelection<PlaylistRow>;
 }) {
+  const { language, strings } = useLocalisation();
   const press = playlistPress(playlist, selection);
-  const moves = moveActions(index, ids, arrangeable);
+  const moves = moveActions(index, ids, arrangeable, strings);
   // An importing playlist says what its import is doing instead of its count, and shows a
   // ring over its cover (Core's `importProgressLine`, `importRing`).
   const progress = useImportProgress(playlist.id);
-  const detail = progress === null ? songCount(playlist.trackCount) : importProgressLine(progress);
+  const detail =
+    progress === null
+      ? songCount(playlist.trackCount, strings)
+      : importProgressLine(progress, language);
   const ring = importRing(progress);
   if (layout === "list") {
     return (
@@ -161,6 +171,7 @@ const rowHeight = (layout: PlaylistLayout, tile: number, fontScale: number): num
  */
 export function PlaylistsList({ empty }: { empty: string }) {
   useRenderCount("PlaylistsList");
+  const { strings } = useLocalisation();
   const playlists = useSortedPlaylists();
   useScreenContent(libraryQueryHasContent("playlists"));
   const layout = usePlaylistLayout();
@@ -184,14 +195,14 @@ export function PlaylistsList({ empty }: { empty: string }) {
   );
 
   if (playlists.length === 0 && !libraryQueryHasContent("playlists"))
-    return <LibraryReadFeedback queryKey="playlists" label="playlists" />;
+    return <LibraryReadFeedback queryKey="playlists" list="playlists" />;
 
   if (playlists.length === 0) {
     return (
       <View style={{ paddingHorizontal: grid.margin }}>
         <EmptyState
           icon={IconPlaylist}
-          title="No playlists"
+          title={strings.playlists.noPlaylists}
           message={empty}
           action={<PlaylistsActions />}
         />
@@ -224,13 +235,14 @@ export function PlaylistsList({ empty }: { empty: string }) {
  * (its buttons) on the right. The Design preview draws it too.
  */
 export function PlaylistsHeader({ count, children }: { count: number; children: ReactNode }) {
+  const { strings } = useLocalisation();
   return (
     <View
       className="flex-row flex-wrap items-center"
       style={{ paddingBottom: CELL, columnGap: CELL * 3 }}
     >
       <View style={{ flexGrow: 1 }}>
-        <CatalogLine>{counted(count, "playlist")}</CatalogLine>
+        <CatalogLine>{strings.playlists.playlistCount(count)}</CatalogLine>
       </View>
       {children}
     </View>
@@ -273,6 +285,7 @@ export function PlaylistsButtons({
   onNewPlaylist: () => void;
   wrap?: (control: PlaylistsControl, button: ReactNode) => ReactNode;
 }) {
+  const { strings } = useLocalisation();
   return (
     <View
       className="flex-row flex-wrap items-center"
@@ -280,9 +293,16 @@ export function PlaylistsButtons({
     >
       {wrap(
         "importPlaylists",
-        <TextButton label="Import Playlists" opensMenu={importOpensMenu} onPress={onImport} />,
+        <TextButton
+          label={strings.playlists.importPlaylists}
+          opensMenu={importOpensMenu}
+          onPress={onImport}
+        />,
       )}
-      {wrap("newPlaylist", <TextButton label="New Playlist" opensMenu onPress={onNewPlaylist} />)}
+      {wrap(
+        "newPlaylist",
+        <TextButton label={strings.playlists.newPlaylist} opensMenu onPress={onNewPlaylist} />,
+      )}
     </View>
   );
 }

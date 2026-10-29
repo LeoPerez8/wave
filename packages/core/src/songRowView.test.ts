@@ -354,3 +354,24 @@ test("a row's song goes by its queue id; a deleted song's queue entry and a non-
   );
   assert.equal(songRowTrackId({ kind: "loading", key: "3" }), null);
 });
+
+test("Library rows read in Portuguese: unavailable entries, song cards and loading rows", () => {
+  const unavailable = songRowView(
+    { kind: "unavailable", song: { ...ytSong, reason: "localFile" } },
+    { language: "pt-BR" },
+  );
+  assert.equal(unavailable.secondLine, "Arquivo local no Spotify");
+  assert.equal(
+    unavailable.accessibilityLabel,
+    "One More Time, Arquivo local no Spotify, indisponível",
+  );
+  const card = songRowView(
+    { kind: "ytMusic", song: ytSong },
+    { leading: { kind: "trackNumber", number: 3 }, kindLine: true, language: "pt-BR" },
+  );
+  assert.equal(card.secondLine, "Música · Daft Punk & Guest");
+  assert.equal(
+    songRowView({ kind: "loading", key: "42" }, { language: "pt-BR" }).accessibilityLabel,
+    "Carregando música",
+  );
+});

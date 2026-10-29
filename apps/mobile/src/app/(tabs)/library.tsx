@@ -22,6 +22,7 @@ import {
 import { libraryShelfTitleLongPress, useLibraryShelf } from "@/library/libraryShelf";
 import { promptForMusicFolder } from "@/library/promptForMusicFolder";
 import { RescanRefreshControl } from "@/library/RescanRefreshControl";
+import { useLocalisation } from "@/localisation/localisation";
 import { useRenderCount } from "@/perf/perf";
 import { openLibrarySectionActions } from "@/playback/ActionsMenu";
 
@@ -34,6 +35,7 @@ function LibraryShelfSection({ id }: { id: HomeSectionId }) {
 export default function LibraryScreen() {
   useScreenContent(true);
   useRenderCount("LibraryScreen");
+  const { strings } = useLocalisation();
   const scanStatus = useScanStatus();
   const trackCount = useTrackCount();
   const roots = useScanRoots();
@@ -43,7 +45,7 @@ export default function LibraryScreen() {
 
   return (
     <LargeTitleScreen
-      title="Library"
+      title={strings.tabs.library}
       titleLongPress={libraryShelfTitleLongPress}
       refreshControl={<RescanRefreshControl />}
     >
@@ -51,10 +53,13 @@ export default function LibraryScreen() {
       {empty && (
         <EmptyState
           icon={IconStack2}
-          title="No music found"
-          message={`Wave didn't find any audio files in ${folderPhrase(roots)}. Choose the folder your music is in.`}
+          title={strings.library.noMusicFound}
+          message={strings.library.noAudioIn(folderPhrase(roots, strings))}
           action={
-            <TextButton label="Choose music folder" onPress={() => void promptForMusicFolder()} />
+            <TextButton
+              label={strings.library.chooseMusicFolder}
+              onPress={() => void promptForMusicFolder()}
+            />
           }
         />
       )}
@@ -62,7 +67,7 @@ export default function LibraryScreen() {
       {LIBRARY_SECTIONS.map((section) => (
         <EntryRow
           key={section.slug}
-          label={section.label}
+          label={strings.tabs[section.slug]}
           count={counts?.[section.slug]}
           onPress={() => router.push(`/library/${section.slug}`)}
           onLongPress={() => openLibrarySectionActions(section)}

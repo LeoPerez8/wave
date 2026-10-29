@@ -18,7 +18,7 @@ import { useOverlayFlow } from "@/overlay/flow";
 import { MenuRow } from "@/overlay/MenuRow";
 import { openOverlay } from "@/overlay/overlay";
 import { ACTION_ICONS, type ActionIcon } from "@/playback/actionIcons";
-import { targetCount, type ActionItems } from "@/playback/actionTargets";
+import type { ActionItems } from "@/playback/actionTargets";
 import { useItemActions, type ActionEntry } from "@/playback/itemActions";
 
 import { endSelection, selectAllInList, useSelectedTarget, useSelectionSummary } from "./selection";
@@ -181,7 +181,7 @@ export function SelectionHeader() {
           {/* Songs (and albums with songs) say "12 selected"; other kinds name themselves ("3 albums"). */}
           {target === null || target.kind === "track" || target.kind === "mixed"
             ? strings.settings.selected(formatNumber(language, summary.count), summary.count)
-            : targetCount(target)}
+            : strings.library.kindCounts[target.kind](target.items.length)}
         </Text>
         <TextButton
           label={strings.settings.selectAll}

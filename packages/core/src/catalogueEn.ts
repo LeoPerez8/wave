@@ -1,3 +1,6 @@
+import { libraryEn } from "./catalogue/libraryEn.ts";
+import { playlistsEn } from "./catalogue/playlistsEn.ts";
+import { importsEn } from "./catalogue/importsEn.ts";
 import { homeEn } from "./catalogue/homeEn.ts";
 import { arrangementEn } from "./catalogue/arrangementEn.ts";
 import { discoverEn } from "./catalogue/discoverEn.ts";
@@ -29,6 +32,9 @@ export const en = {
   downloadNotice: downloadNoticeEn,
   native: nativeEn,
   auto: autoEn,
+  library: libraryEn,
+  playlists: playlistsEn,
+  imports: importsEn,
   lyricsLanguages: lyricsLanguagesEn,
   playbackText: playbackTextEn,
   shows: showsEn,

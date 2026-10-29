@@ -14,7 +14,8 @@
  * and the live count is back.
  */
 
-import { counted } from "./listening.ts";
+import { formatNumber } from "./formatting.ts";
+import { catalogueOf, type AppLanguage } from "./localisation.ts";
 import { YT_PLAYLIST_SONG_CAP } from "./ytPlaylist.ts";
 import type { YtLibraryBatch, YtLibraryRead } from "./ytLibraryBatch.ts";
 
@@ -124,7 +125,8 @@ export const importRing = (progress: ImportProgress | null): ImportRing | null =
     : { fraction: importProgressFraction(progress), pulses: progress.phase === "matching" };
 
 /** A count as the import lines show it ("2,300"). */
-export const importCount = (count: number): string => count.toLocaleString("en");
+export const importCount = (count: number, language: AppLanguage = "en"): string =>
+  formatNumber(language, count);
 
 /**
  * The line under an importing playlist's name (its Library row) and under
@@ -132,18 +134,23 @@ export const importCount = (count: number): string => count.toLocaleString("en")
  * 2,300 of 10,000" (or "Reading 2,300"), "Matching with Library…", "Adding
  * 340 of 10,000".
  */
-export const importProgressLine = (progress: ImportProgress): string => {
+export const importProgressLine = (
+  progress: ImportProgress,
+  language: AppLanguage = "en",
+): string => {
+  const text = catalogueOf(language).imports;
+  const count = (value: number) => importCount(value, language);
   switch (progress.phase) {
     case "waiting":
-      return progress.total === null ? "Waiting" : `Waiting · ${counted(progress.total, "song")}`;
+      return progress.total === null ? text.waiting : text.waitingSongs(progress.total);
     case "reading":
       return progress.total === null
-        ? `Reading ${importCount(progress.done)}`
-        : `Reading ${importCount(progress.done)} of ${importCount(progress.total)}`;
+        ? text.readingCount(count(progress.done))
+        : text.readingOf(count(progress.done), count(progress.total));
     case "matching":
-      return "Matching with Library…";
+      return text.matching;
     case "adding":
-      return `Adding ${importCount(progress.done)} of ${importCount(progress.total)}`;
+      return text.addingOf(count(progress.done), count(progress.total));
   }
 };
 

@@ -5,6 +5,7 @@
  * it has something to show.
  */
 
+import { en } from "./catalogueEn.ts";
 import { homeSectionTitle, storedHomeSectionId, type HomeSectionId } from "./homeSections.ts";
 
 /** A section of Home's catalogue drawn under the Library's rows, or nothing there. */
@@ -30,7 +31,7 @@ export const LIBRARY_SHELF_CHOICES: readonly {
   readonly label: string;
 }[] = [
   ...SHELVES.map((shelf) => ({ shelf, label: homeSectionTitle(shelf) })),
-  { shelf: "none", label: "None" },
+  { shelf: "none", label: en.library.noShelf },
 ];
 
 /** The shelf of an install that never picked one. */
