@@ -2321,6 +2321,7 @@ export {
   editNowPlayingButtons,
   nowPlayingSlotShow,
   readNowPlayingButtons,
+  readNowPlayingSlotRoute,
   storedNowPlayingButtons,
 } from "./nowPlayingButtons.ts";
 export type {

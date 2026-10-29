@@ -6,6 +6,7 @@ import {
   editNowPlayingButtons,
   nowPlayingSlotShow,
   readNowPlayingButtons,
+  readNowPlayingSlotRoute,
   storedNowPlayingButtons,
 } from "./index.ts";
 
@@ -124,5 +125,16 @@ describe("how a Now Playing slot shows", () => {
     assert.equal(nowPlayingSlotShow("songMenu", "unsearched"), "off");
     for (const action of NOW_PLAYING_ACTIONS.filter((other) => other !== "songMenu"))
       assert.equal(nowPlayingSlotShow(action, "unsearched"), "on");
+  });
+});
+
+describe("a slot picker's route", () => {
+  test("slots 1 to 4 are slots 0 to 3, left to right", () => {
+    assert.deepEqual(["1", "2", "3", "4"].map(readNowPlayingSlotRoute), [0, 1, 2, 3]);
+  });
+
+  test("anything else names no slot", () => {
+    for (const param of ["0", "5", "01", " 1", "1.0", "one", "", undefined, ["1"], ["1", "2"]])
+      assert.equal(readNowPlayingSlotRoute(param), null, String(param));
   });
 });

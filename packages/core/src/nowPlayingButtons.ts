@@ -125,3 +125,15 @@ export const nowPlayingSlotShow = (
   if (song === "nothing") return NEEDS_SONG.has(action) ? "hidden" : "on";
   return song === "unsearched" && action === "songMenu" ? "off" : "on";
 };
+
+/** The slot pickers' routes, `1` to `4`, left to right. */
+const SLOT_ROUTES = ["1", "2", "3", "4"];
+
+/**
+ * The slot (0 to 3) a slot picker's route param names, `1` to `4`; null for
+ * anything else, so an old or mistyped link edits no slot.
+ */
+export const readNowPlayingSlotRoute = (param: string | string[] | undefined): number | null => {
+  const index = typeof param === "string" ? SLOT_ROUTES.indexOf(param) : -1;
+  return index === -1 ? null : index;
+};
