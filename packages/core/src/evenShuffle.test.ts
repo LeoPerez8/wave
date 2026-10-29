@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { EMPTY_QUEUE, currentEntry, readShuffleKind, reduceQueue, upNext } from "./index.ts";
+import {
+  EMPTY_QUEUE,
+  currentEntry,
+  queueHistory,
+  readShuffleKind,
+  reduceQueue,
+  upNext,
+} from "./index.ts";
 import type { QueueCommand, QueueState, Shuffle, ShuffleSong } from "./index.ts";
 
 const songs = { kind: "songs", id: null } as const;
@@ -166,21 +173,25 @@ describe("Even Shuffle", () => {
     }
   });
 
-  // After one of a's songs plays, a and b have three songs each left: they alternate.
+  // While one of a's songs plays, a and b have three songs each left: they alternate.
   const mixed = [...many("a", 4, ["x", "y"], ["rock"]), ...many("b", 3, ["z"], ["pop"])];
 
-  test("keeps the playing song first, the next song by another artist", () => {
+  test("keeps History and the playing song, the next song by another artist", () => {
+    // Two songs of h's played before a's first one.
+    const played = many("h", 2);
+    const tracks = [...played, ...mixed];
     for (const seed of SEEDS) {
       const { state, playback } = run(
-        start(mixed, 2),
+        start(tracks, 2),
         { type: "setShuffle", on: true },
         seed,
-        even(mixed),
+        even(tracks),
       );
       assert.equal(playback, "keep");
-      assert.equal(state.index, 0);
-      assert.equal(currentEntry(state)?.trackId, mixed[2]);
-      const order = ids(state.entries);
+      assert.deepEqual(ids(queueHistory(state)), played);
+      assert.equal(currentEntry(state)?.trackId, mixed[0]);
+      const order = [mixed[0]!, ...ids(upNext(state))];
+      assert.deepEqual(order.toSorted(), mixed.toSorted());
       assert.equal(repeats(order, artistOf), 0, `seed ${seed}: ${order.join(" ")}`);
       assert.equal(artistOf(order[1]!), "b");
     }
@@ -248,8 +259,9 @@ describe("Even Shuffle", () => {
       const { state, playback } = run(start(mixed, 1), { type: "reshuffle" }, seed, even(mixed));
       assert.equal(state.shuffle, true);
       assert.equal(playback, "keep");
+      assert.deepEqual(ids(queueHistory(state)), [mixed[0]]);
       assert.equal(currentEntry(state)?.trackId, mixed[1]);
-      assert.equal(repeats(ids(state.entries), artistOf), 0);
+      assert.equal(repeats([mixed[1]!, ...ids(upNext(state))], artistOf), 0);
     }
   });
 

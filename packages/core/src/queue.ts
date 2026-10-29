@@ -183,7 +183,11 @@ const play = (
     shuffle: false,
     nextKey,
   };
-  return result(shuffle ? shuffleOn(started, random, kind) : started, "play");
+  if (!shuffle) return result(started, "play");
+  // A fresh start has no History: the first song plays first, the rest shuffled after it.
+  const first = entries[index]!;
+  const firstUp = { ...started, entries: [first, ...entries.filter((e) => e !== first)], index: 0 };
+  return result(shuffleOn(firstUp, random, kind), "play");
 };
 
 /** A shuffled copy (Fisher–Yates): every order equally likely. */
@@ -581,21 +585,20 @@ const upcomingQueued = (state: QueueState): QueueEntry[] =>
   state.entries.slice(state.index + 1).filter(isQueued);
 
 /**
- * The current entry goes first, and every other context entry (played or not)
- * is shuffled after it, with the lined-up entries still to play mixed in (they
- * stay lined up, so turning shuffle off puts them back right after the current
- * entry). Lined-up entries that already played are dropped.
+ * Shuffles Up Next only: History and the current entry stay where they are,
+ * and the entries after the current one are shuffled, the lined-up ones mixed
+ * in (they stay lined up, so turning shuffle off puts them back right after
+ * the current entry).
  */
 const shuffleOn = (state: QueueState, random: () => number, shuffle: Shuffle): QueueState => {
   const current = currentEntry(state);
   if (current === null) return { ...state, shuffle: true };
-  const others = state.entries.filter(
-    (entry, i) => entry !== current && (!isQueued(entry) || i > state.index),
-  );
   return {
     ...state,
-    entries: [current, ...shuffleEntries(others, random, shuffle, current)],
-    index: 0,
+    entries: [
+      ...state.entries.slice(0, state.index + 1),
+      ...shuffleEntries(upNext(state), random, shuffle, current),
+    ],
     shuffle: true,
   };
 };
