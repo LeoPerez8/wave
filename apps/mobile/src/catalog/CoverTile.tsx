@@ -6,6 +6,7 @@ import { Artwork } from "./Artwork";
 import { CatalogLine } from "./CatalogLine";
 import { TileCheck } from "./CheckCell";
 import { CELL } from "./grid";
+import { useLocalisation } from "@/localisation/localisation";
 
 type Props = {
   /** The tile's two-line title. */
@@ -44,11 +45,12 @@ export function CoverTile({
   checked,
   detailLabel,
 }: Props) {
+  const { strings } = useLocalisation();
   const selecting = checked !== undefined;
   return (
     <Press
       accessibilityRole={selecting ? "checkbox" : "button"}
-      accessibilityLabel={`${title} by ${byline}, ${detailLabel ?? detail}`}
+      accessibilityLabel={strings.library.coverLabel(title, byline, detailLabel ?? detail)}
       accessibilityState={selecting ? { checked } : undefined}
       onPress={onPress}
       onLongPress={onLongPress}

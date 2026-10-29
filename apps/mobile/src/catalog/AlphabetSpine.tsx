@@ -19,6 +19,7 @@ import { TAP_ANIMATION_MS } from "@/motion/timing";
 import { spineLetterChange } from "./spineLetterChange";
 
 import { CATALOG_TRACKING, CELL, grid } from "./grid";
+import { useLocalisation } from "@/localisation/localisation";
 
 /** Spine type's line height: a drawn letter needs this much of the spine. */
 const LABEL_HEIGHT = 14;
@@ -55,6 +56,7 @@ type Chosen = { readonly letter: string | null; readonly held: boolean };
  * list in view underneath.
  */
 export function AlphabetSpine({ entries, onJump, topRow }: Props) {
+  const { strings } = useLocalisation();
   const reduceMotion = useReducedMotion();
   const chromeInset = useChromeInset();
   const { fontScale } = useWindowDimensions();
@@ -172,8 +174,8 @@ export function AlphabetSpine({ entries, onJump, topRow }: Props) {
           <View
             accessible
             accessibilityRole="adjustable"
-            accessibilityLabel="Alphabet index"
-            accessibilityHint="Swipe up or down to jump to a letter"
+            accessibilityLabel={strings.library.alphabetIndex}
+            accessibilityHint={strings.library.alphabetHint}
             accessibilityValue={{ text: chosen.letter ?? entries[0]?.letter ?? "" }}
             accessibilityActions={[{ name: "increment" }, { name: "decrement" }]}
             onAccessibilityAction={(event) =>

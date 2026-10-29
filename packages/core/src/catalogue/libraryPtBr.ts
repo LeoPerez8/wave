@@ -35,6 +35,8 @@ export const libraryPtBr: typeof libraryEn = {
     artists: "Carregando artistas",
     genres: "Carregando gêneros",
     albums: "Carregando álbuns",
+    songOrder: "Carregando a ordem das músicas",
+    songMatches: "Carregando as músicas encontradas",
   },
   couldntLoadList: {
     songs: "Não foi possível carregar as músicas. Tente novamente.",
@@ -43,6 +45,8 @@ export const libraryPtBr: typeof libraryEn = {
     artists: "Não foi possível carregar os artistas. Tente novamente.",
     genres: "Não foi possível carregar os gêneros. Tente novamente.",
     albums: "Não foi possível carregar os álbuns. Tente novamente.",
+    songOrder: "Não foi possível carregar a ordem das músicas. Tente novamente.",
+    songMatches: "Não foi possível carregar as músicas encontradas. Tente novamente.",
   },
   tryAgain: "Tentar Novamente",
   searching: "Buscando…",
@@ -63,6 +67,15 @@ export const libraryPtBr: typeof libraryEn = {
   },
   filesGone: "Os arquivos não estão mais nas suas pastas de música.",
   play: "Reproduzir",
+  songCount: (count: number): string =>
+    plural("pt-BR", count, {
+      zero: "Nenhuma música",
+      one: `${n(count)} música`,
+      other: `${n(count)} músicas`,
+    }),
+  albumCount: (count: number): string =>
+    plural("pt-BR", count, { one: `${n(count)} álbum`, other: `${n(count)} álbuns` }),
+  minutes: (count: number): string => `${n(count)} min`,
   disc: (disc: number): string => `Disco ${n(disc)}`,
   goTo: (name: string): string => `Ir para ${name}`,
   goToArtist: "Ir para o Artista",
@@ -80,14 +93,37 @@ export const libraryPtBr: typeof libraryEn = {
   songLabel: (title: string, artist: string): string => `${title}, música de ${artist}`,
   coverLabel: (title: string, byline: string, detail: string): string =>
     `${title} de ${byline}, ${detail}`,
+  playlistLabel: (name: string, detail: string): string => `${name}, playlist, ${detail}`,
   artistRow: "Artista",
   albumRow: (artist: string): string => `Álbum · ${artist}`,
   songRow: (artist: string): string => `Música · ${artist}`,
   playlistRow: (detail: string): string => `Playlist · ${detail}`,
+  row: {
+    loadingSong: "Carregando música",
+    song: "Música",
+    fileNotFound: "Arquivo não encontrado",
+    explicit: "explícita",
+    downloaded: "baixada",
+    notDownloaded: "não baixada",
+    unavailable: "indisponível",
+    nowPlaying: "tocando agora",
+  },
   alphabetIndex: "Índice alfabético",
   alphabetHint: "Deslize para cima ou para baixo para ir a uma letra",
   selected: (count: number): string =>
     plural("pt-BR", count, { one: `${n(count)} selecionada`, other: `${n(count)} selecionadas` }),
+  kindCounts: {
+    album: (count: number): string =>
+      plural("pt-BR", count, { one: `${n(count)} álbum`, other: `${n(count)} álbuns` }),
+    artist: (count: number): string =>
+      plural("pt-BR", count, { one: `${n(count)} artista`, other: `${n(count)} artistas` }),
+    playlist: (count: number): string =>
+      plural("pt-BR", count, { one: `${n(count)} playlist`, other: `${n(count)} playlists` }),
+    genre: (count: number): string =>
+      plural("pt-BR", count, { one: `${n(count)} gênero`, other: `${n(count)} gêneros` }),
+    section: (count: number): string =>
+      plural("pt-BR", count, { one: `${n(count)} seção`, other: `${n(count)} seções` }),
+  },
   selectAll: "Selecionar Tudo",
   done: "OK",
   selectionActions: "Ações da seleção",
@@ -140,6 +176,7 @@ export const libraryPtBr: typeof libraryEn = {
   couldntUnfollow: "Não foi possível deixar de seguir o artista",
   couldntOpenArtist: "Não foi possível abrir o artista",
   ytMusicTurnedOff: "O YouTube Music está desativado.",
+  ytMusicOffInSettings: "O YT Music está desativado em Ajustes",
   couldntReadArtists: "Não foi possível ler os artistas",
   library: "Biblioteca",
   online: "Online",
@@ -188,6 +225,8 @@ export const libraryPtBr: typeof libraryEn = {
   photoFraming: "Enquadramento da foto",
   photoFramingHint:
     "Arraste para mover ou faça pinça para ampliar. As ações também movem, ampliam e redefinem a foto.",
+  framingValue: (zoom: number, across: number, down: number): string =>
+    `zoom de ${zoom.toFixed(2).replace(".", ",")} vezes, centro a ${across} por cento na horizontal e ${down} por cento na vertical`,
   movePhotoLeft: "Mover foto para a esquerda",
   movePhotoRight: "Mover foto para a direita",
   movePhotoUp: "Mover foto para cima",

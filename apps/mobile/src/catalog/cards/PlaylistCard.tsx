@@ -5,6 +5,7 @@ import { CoverRing } from "../CoverRing";
 import { CELL } from "../grid";
 import { Mosaic } from "../Mosaic";
 import { TileCheck } from "../CheckCell";
+import { useLocalisation } from "@/localisation/localisation";
 
 import { CAPTION_TOP, CardDetail, CardRow, CardTile, CardTitle } from "./CardParts";
 
@@ -114,10 +115,11 @@ export function PlaylistCard({
   onAccessibilityAction,
   nameInset,
 }: Props & { size: number; nameInset?: number | undefined }) {
+  const { strings } = useLocalisation();
   return (
     <CardTile
       width={size}
-      label={label ?? `${name}, playlist, ${detail}`}
+      label={label ?? strings.library.playlistLabel(name, detail)}
       onPress={onPress}
       onLongPress={onLongPress}
       checked={checked}
@@ -153,6 +155,7 @@ export function PlaylistCardRow({
   accessibilityActions,
   onAccessibilityAction,
 }: Props) {
+  const { strings } = useLocalisation();
   return (
     <CardRow
       lead={
@@ -166,7 +169,7 @@ export function PlaylistCardRow({
         />
       }
       title={name}
-      detail={`Playlist · ${detail}`}
+      detail={strings.library.playlistRow(detail)}
       onPress={onPress}
       onLongPress={onLongPress}
       checked={checked}

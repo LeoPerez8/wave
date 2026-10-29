@@ -43,6 +43,12 @@ export const playlistsPtBr: typeof playlistsEn = {
   addSongsHint: "Toque e segure uma música, um álbum ou um artista e escolha Adicionar à Playlist.",
   deleted: "Ela foi apagada.",
   noPlaylists: "Nenhuma playlist",
+  playlistCount: (count: number): string =>
+    plural("pt-BR", count, {
+      zero: "Nenhuma playlist",
+      one: `${n(count)} playlist`,
+      other: `${n(count)} playlists`,
+    }),
   importPlaylists: "Importar Playlists",
   moveUp: "Mover para cima",
   moveDown: "Mover para baixo",

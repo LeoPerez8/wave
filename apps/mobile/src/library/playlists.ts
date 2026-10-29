@@ -13,6 +13,7 @@ import { Image } from "react-native";
 
 import { artworkUri } from "@/catalog/artworkUri";
 import { makeExternalStore } from "@/lib/externalStore";
+import { currentLocalisation } from "@/localisation/localisation";
 import { WaveNative, type PlaylistPhoto } from "@/native/waveNative";
 
 import { showError } from "@/overlay/alert";
@@ -299,17 +300,15 @@ export const removePlaylistItems = (
     (removal) => {
       const count = removal.entries.length;
       if (count === 0) return;
-      void showToast(
-        count === 1 ? "Song removed from playlist" : `${count} songs removed from playlist`,
-        {
-          label: "Undo",
-          run: () => {
-            void edit((store) => store.restorePlaylistItems(removal), playlistId).catch(
-              (error: unknown) => showError("Couldn't restore the songs", error),
-            );
-          },
+      const text = currentLocalisation().strings.playlists;
+      void showToast(text.removed(count), {
+        label: text.undo,
+        run: () => {
+          void edit((store) => store.restorePlaylistItems(removal), playlistId).catch(
+            (error: unknown) => showError(text.couldntRestore, error),
+          );
         },
-      );
+      });
     },
   );
 };

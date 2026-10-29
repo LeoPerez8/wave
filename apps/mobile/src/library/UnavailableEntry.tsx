@@ -1,8 +1,8 @@
 import {
-  UNAVAILABLE_ENTRY_ACTION_LABELS,
   entryDivider,
   joinArtists,
   tryAgainSearches,
+  unavailableEntryActionLabel,
   unavailableEntryActions,
   unavailableEntryView,
   unavailableSearchQuery,
@@ -16,6 +16,7 @@ import { Text, View } from "react-native";
 import { Artwork } from "@/catalog/Artwork";
 import { CELL } from "@/catalog/grid";
 import { TextButton } from "@/components/TextButton";
+import { currentLocalisation, useLocalisation } from "@/localisation/localisation";
 import { pressedRect } from "@/motion/pressedRect";
 import { CardEntries } from "@/overlay/CardEntries";
 import { CardHeading } from "@/overlay/CardHeading";
@@ -35,7 +36,7 @@ import { tryAgainUnavailable, useTryingAgain } from "./tryAgainUnavailable";
 
 /** Tapping an unavailable entry says why it doesn't play (Core's `unavailableEntryView`). */
 export const explainUnavailable = (song: UnavailableSong): void => {
-  void showToast(unavailableEntryView(song).notice);
+  void showToast(unavailableEntryView(song, currentLocalisation().language).notice);
 };
 
 /**
@@ -65,7 +66,7 @@ const run = (
   switch (action) {
     case "removeFromPlaylist":
       removePlaylistItems(playlistItem.playlistId, [playlistItem.itemId]).catch((error: unknown) =>
-        showError("Couldn't remove the song", error),
+        showError(currentLocalisation().strings.library.couldntRemoveSong, error),
       );
       return;
     case "search":
@@ -85,6 +86,7 @@ function UnavailableEntryMenu({
   close: () => void;
 }) {
   const ytMusic = useYtMusicEnabled();
+  const { language } = useLocalisation();
   const search = useTabBar().includes("search");
   const entries = unavailableEntryActions({ search });
   const choose = (index: number) => {
@@ -106,7 +108,7 @@ function UnavailableEntryMenu({
             {song.title}
           </Text>
           <Text numberOfLines={1} className="font-sans text-body text-secondary">
-            {joinArtists(song.artists) || unavailableEntryView(song).line}
+            {joinArtists(song.artists) || unavailableEntryView(song, language).line}
           </Text>
         </View>
       </CardHeading>
@@ -115,7 +117,7 @@ function UnavailableEntryMenu({
           <View key={action} ref={trackEntry(index)} collapsable={false}>
             <MenuRow
               action={action}
-              label={UNAVAILABLE_ENTRY_ACTION_LABELS[action]}
+              label={unavailableEntryActionLabel(action, language)}
               onPress={() => choose(index)}
               divider={entryDivider(index, entries.length, flow)}
               highlighted={index === underFinger}
@@ -141,6 +143,7 @@ export function UnavailableTryAgain({
   items: readonly PlaylistEntryRow[] | undefined;
 }) {
   const ytMusic = useYtMusicEnabled();
+  const { strings } = useLocalisation();
   const trying = useTryingAgain(playlistId);
   const searchable = useMemo(
     () => items !== undefined && tryAgainSearches(items).length > 0,
@@ -150,7 +153,7 @@ export function UnavailableTryAgain({
   return (
     <View className="flex-row items-center">
       <TextButton
-        label={trying ? "Searching…" : "Try Again"}
+        label={trying ? strings.library.searching : strings.library.tryAgain}
         disabled={trying}
         onPress={() => {
           if (items !== undefined) tryAgainUnavailable(playlistId, items);

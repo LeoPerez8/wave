@@ -4,7 +4,15 @@ import { plural } from "../plural.ts";
 const n = (count: number): string => formatNumber("en", count);
 
 /** The kinds of Library list that read on their own (`LibraryReadFeedback`). */
-type ReadList = "songs" | "favorites" | "playlists" | "artists" | "genres" | "albums";
+type ReadList =
+  | "songs"
+  | "favorites"
+  | "playlists"
+  | "artists"
+  | "genres"
+  | "albums"
+  | "songOrder"
+  | "songMatches";
 
 /** The Library's detail pages (`DetailFrame`). */
 type DetailNoun = "album" | "artist" | "genre" | "playlist";
@@ -43,6 +51,8 @@ export const libraryEn = {
     artists: "Loading artists",
     genres: "Loading genres",
     albums: "Loading albums",
+    songOrder: "Loading song order",
+    songMatches: "Loading song matches",
   } satisfies Record<ReadList, string>,
   couldntLoadList: {
     songs: "Couldn't load songs. Try again.",
@@ -51,6 +61,8 @@ export const libraryEn = {
     artists: "Couldn't load artists. Try again.",
     genres: "Couldn't load genres. Try again.",
     albums: "Couldn't load albums. Try again.",
+    songOrder: "Couldn't load song order. Try again.",
+    songMatches: "Couldn't load song matches. Try again.",
   } satisfies Record<ReadList, string>,
   tryAgain: "Try Again",
   searching: "Searching…",
@@ -71,6 +83,12 @@ export const libraryEn = {
   } satisfies Record<DetailNoun, string>,
   filesGone: "Its files are no longer in your music folders.",
   play: "Play",
+  /** Counts on a list's opening line ("12 songs", "3 albums", "52 min"). */
+  songCount: (count: number): string =>
+    plural("en", count, { one: `${n(count)} song`, other: `${n(count)} songs` }),
+  albumCount: (count: number): string =>
+    plural("en", count, { one: `${n(count)} album`, other: `${n(count)} albums` }),
+  minutes: (count: number): string => `${n(count)} min`,
   disc: (disc: number): string => `Disc ${n(disc)}`,
   goTo: (name: string): string => `Go to ${name}`,
   goToArtist: "Go to Artist",
@@ -89,14 +107,39 @@ export const libraryEn = {
   songLabel: (title: string, artist: string): string => `${title}, song by ${artist}`,
   coverLabel: (title: string, byline: string, detail: string): string =>
     `${title} by ${byline}, ${detail}`,
+  playlistLabel: (name: string, detail: string): string => `${name}, playlist, ${detail}`,
   artistRow: "Artist",
   albumRow: (artist: string): string => `Album · ${artist}`,
   songRow: (artist: string): string => `Song · ${artist}`,
   playlistRow: (detail: string): string => `Playlist · ${detail}`,
+  /** A song row's states, read out after its title and line. */
+  row: {
+    loadingSong: "Loading song",
+    song: "Song",
+    fileNotFound: "File not found",
+    explicit: "explicit",
+    downloaded: "downloaded",
+    notDownloaded: "not downloaded",
+    unavailable: "unavailable",
+    nowPlaying: "now playing",
+  },
   alphabetIndex: "Alphabet index",
   alphabetHint: "Swipe up or down to jump to a letter",
   /** Selection mode's header and bar. */
   selected: (count: number): string => `${n(count)} selected`,
+  /** Counts of a kind ("3 albums"): list heads, and selection mode when it isn't songs. */
+  kindCounts: {
+    album: (count: number): string =>
+      plural("en", count, { one: `${n(count)} album`, other: `${n(count)} albums` }),
+    artist: (count: number): string =>
+      plural("en", count, { one: `${n(count)} artist`, other: `${n(count)} artists` }),
+    playlist: (count: number): string =>
+      plural("en", count, { one: `${n(count)} playlist`, other: `${n(count)} playlists` }),
+    genre: (count: number): string =>
+      plural("en", count, { one: `${n(count)} genre`, other: `${n(count)} genres` }),
+    section: (count: number): string =>
+      plural("en", count, { one: `${n(count)} section`, other: `${n(count)} sections` }),
+  },
   selectAll: "Select All",
   done: "Done",
   selectionActions: "Selection actions",
@@ -153,6 +196,7 @@ export const libraryEn = {
   couldntUnfollow: "Couldn't unfollow artist",
   couldntOpenArtist: "Couldn't open the artist",
   ytMusicTurnedOff: "YouTube Music is turned off.",
+  ytMusicOffInSettings: "YT Music is off in Settings",
   couldntReadArtists: "Couldn't read the artists",
   /** An artist page's Library | Online toggle, and what Online finds. */
   library: "Library",
@@ -199,6 +243,8 @@ export const libraryEn = {
   moveAndScale: "Move and Scale",
   photoFraming: "Photo framing",
   photoFramingHint: "Drag to move or pinch to zoom. Actions also move, zoom and reset the photo.",
+  framingValue: (zoom: number, across: number, down: number): string =>
+    `${zoom.toFixed(2)} times zoom, centre ${across} percent across, ${down} percent down`,
   movePhotoLeft: "Move photo left",
   movePhotoRight: "Move photo right",
   movePhotoUp: "Move photo up",

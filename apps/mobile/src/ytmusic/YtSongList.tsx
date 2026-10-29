@@ -18,6 +18,7 @@ import {
   ytAlbumSongs,
   ytPlaylistDownloadButton,
   ytPlaylistRestLine,
+  type Catalogue,
   type MixedSong,
   type PlaylistItem,
   type QueueContext,
@@ -25,6 +26,7 @@ import {
   type YtPlaylistRest,
   type YtQuietReason,
 } from "@wave/core";
+import { useLocalisation } from "@/localisation/localisation";
 import type { DownloadOrigin } from "@wave/core";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
@@ -206,13 +208,13 @@ export const useYtListPage = (screen: YtListScreen, id: string) => {
 
 type Song = MixedSong<NativeYtSong, SongRow>;
 
-const totalMinutes = (songs: readonly Song[]): string | null => {
+const totalMinutes = (songs: readonly Song[], strings: Catalogue): string | null => {
   const ms = songs.reduce(
     (total, song) =>
       total + ((song.source === "library" ? song.track.durationMs : song.song.durationMs) ?? 0),
     0,
   );
-  return ms === 0 ? null : `${Math.max(1, Math.round(ms / 60_000))} min`;
+  return ms === 0 ? null : strings.library.minutes(Math.max(1, Math.round(ms / 60_000)));
 };
 
 /** What a list's download button can show: an entry to act on, or that every song is downloaded. */
@@ -445,6 +447,7 @@ export function YtSongList({
   /** Repeat the existing online page read after a failure. */
   onRetry?: () => void;
 }) {
+  const { strings } = useLocalisation();
   const scrollable = useListScrollable();
   const bottomInset = useChromeInset();
   const settled = useScreenSettled();
@@ -502,7 +505,7 @@ export function YtSongList({
   const furniture =
     page === null
       ? null
-      : [page.kind, songCount(songs.length), totalMinutes(songs)]
+      : [page.kind, songCount(songs.length, strings), totalMinutes(songs, strings)]
           .filter((part) => part !== null)
           .join(" · ");
 
@@ -522,14 +525,16 @@ export function YtSongList({
         <>
           <EmptyState
             icon={load.reason === "offline" ? IconWifiOff : IconCloudOff}
-            title={load.reason === "offline" ? "You're offline" : "No answer online"}
+            title={load.reason === "offline" ? strings.library.offline : strings.library.noAnswer}
             message={
               load.reason === "offline"
-                ? "These songs need the network."
-                : "The songs couldn't be loaded. Try again."
+                ? strings.library.songsNeedNetwork
+                : strings.library.songsCouldntLoad
             }
           />
-          {onRetry !== undefined && <TextButton label="Try Again" onPress={onRetry} />}
+          {onRetry !== undefined && (
+            <TextButton label={strings.library.tryAgain} onPress={onRetry} />
+          )}
         </>
       )}
     </>

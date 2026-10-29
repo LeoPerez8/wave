@@ -14,6 +14,7 @@ import type { NativeYtSong } from "@/native/waveYtMusic";
 import { CardHeading } from "@/overlay/CardHeading";
 import { MenuChoices, type MenuChoice } from "@/overlay/MenuChoices";
 import { followUp, openOverlay } from "@/overlay/overlay";
+import { useLocalisation } from "@/localisation/localisation";
 import { playPage, queueDiscoverSongs } from "@/playback/actions";
 
 import { ytArtistPageSongs } from "./artistPage";
@@ -64,6 +65,7 @@ function YtArtistActionsMenu({
   songs: readonly Song[];
   close: () => void;
 }) {
+  const { strings } = useLocalisation();
   const follow = useFollow(artist.name);
   // As their page plays them: the Library's files for the songs it has, the rest streamed.
   const context = { kind: "ytArtist", id: artist.browseId };
@@ -87,7 +89,7 @@ function YtArtistActionsMenu({
 
   entries.push({
     action: "follow",
-    label: follow === null ? "Follow" : "Following",
+    label: follow === null ? strings.library.follow : strings.library.following,
     onPress: () => followMenuPress({ name: artist.name, ytBrowseId: artist.browseId }, close),
   });
   return (

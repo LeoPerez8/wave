@@ -1,10 +1,11 @@
 import { IconStack2, IconWorld } from "@tabler/icons-react-native";
-import type { OnlineToggleForm, YtPick } from "@wave/core";
+import type { Catalogue, OnlineToggleForm, YtPick } from "@wave/core";
 import { useMemo, useRef, type ComponentRef, type ComponentType, type RefObject } from "react";
 import { Text, View, type LayoutChangeEvent } from "react-native";
 
 import { CELL, widthOf } from "@/catalog/grid";
 import type { LineToggle } from "@/catalog/PlayShuffle";
+import { useLocalisation } from "@/localisation/localisation";
 import { Press } from "@/motion/Press";
 import { openSearchOnlineChoices } from "@/settings/searchOnline";
 import { useThemeColor } from "@/theme/useThemeColor";
@@ -23,24 +24,16 @@ const RADIUS = HEIGHT / 2;
 const SEGMENT_RADIUS = RADIUS - INSET;
 const GLYPH = 18;
 
-const SEGMENTS: readonly {
+const segments = ({
+  library,
+}: Catalogue): readonly {
   readonly pick: YtPick;
   readonly label: string;
   readonly icon: ComponentType<IconProps>;
   readonly hint: string;
-}[] = [
-  {
-    pick: "library",
-    label: "Library",
-    icon: IconStack2,
-    hint: "Shows only what's in your library",
-  },
-  {
-    pick: "online",
-    label: "Online",
-    icon: IconWorld,
-    hint: "Adds what YouTube Music has",
-  },
+}[] => [
+  { pick: "library", label: library.library, icon: IconStack2, hint: library.libraryHint },
+  { pick: "online", label: library.online, icon: IconWorld, hint: library.onlineHint },
 ];
 
 type Props = {
@@ -63,12 +56,13 @@ export function OnlineToggle({ selected, onPick, form, onLongPress }: Props) {
   // The drawn pill: a long press on either segment highlights all of it, in its own shape,
   // and anchors the card to it (the toggle is one control).
   const pill = useRef<ComponentRef<typeof View>>(null);
+  const { strings } = useLocalisation();
   return (
     // The group is as tall as the segments' targets, as Android delivers no touch outside a
     // parent's bounds; its negative margin keeps the row's layout at the drawn pill's height.
     <View
       accessibilityRole="radiogroup"
-      accessibilityLabel="Search online"
+      accessibilityLabel={strings.library.searchOnline}
       className="flex-row items-center"
       style={{ height: TARGET, marginVertical: -SLOP, paddingHorizontal: INSET }}
     >
@@ -78,7 +72,7 @@ export function OnlineToggle({ selected, onPick, form, onLongPress }: Props) {
         className="absolute left-0 right-0 bg-fill"
         style={{ top: SLOP, bottom: SLOP, borderRadius: RADIUS }}
       />
-      {SEGMENTS.map((segment) => (
+      {segments(strings).map((segment) => (
         <Segment
           key={segment.pick}
           {...segment}
@@ -115,12 +109,13 @@ function Segment({
   /** The toggle's drawn pill, which the long press highlights. */
   pill: RefObject<ComponentRef<typeof View> | null>;
 }) {
+  const { strings } = useLocalisation();
   return (
     <Press
       accessibilityRole="radio"
       accessibilityLabel={label}
       accessibilityHint={
-        onLongPress === undefined ? hint : `${hint}. Long press to choose when to search online`
+        onLongPress === undefined ? hint : strings.library.longPressOnline(hint)
       }
       accessibilityState={{ checked: selected, selected }}
       onPress={onPress}

@@ -16,6 +16,7 @@ import Animated, {
 } from "react-native-reanimated";
 
 import { CELL, grid } from "@/catalog/grid";
+import { useLocalisation } from "@/localisation/localisation";
 import { ControlledTrackRowSkeleton, SkeletonGroup } from "@/catalog/Skeletons";
 import { TitledSection } from "@/catalog/TitledSection";
 import { IconButton } from "@/components/IconButton";
@@ -64,7 +65,6 @@ const CONTROLS = 2;
 const LOW = 10;
 
 /** What a slot's placeholder says while it waits for a replacement of its own. */
-const LOADING_ANOTHER = "Loading another recommendation";
 
 /** Heard by TalkBack without moving its focus. */
 const announce = (message: string): void => AccessibilityInfo.announceForAccessibility(message);
@@ -80,6 +80,7 @@ export function PlaylistRecommendations({
   playlistId: number;
   items: readonly PlaylistEntryRow[];
 }) {
+  const text = useLocalisation().strings.playlists;
   const sight = useScreenSight();
   const [announcingAcceptance] = useState(() => makeExternalStore(false));
   // Keep held offers readable if another offer's refill no longer finds their Library row.
@@ -263,7 +264,7 @@ export function PlaylistRecommendations({
     const acting = kind === "add" ? session.accept(song.key) : session.dismiss(song.key);
     // The session publishes the slot's placeholder synchronously when it takes the tap.
     if (busy || !session.get().pending.includes(song.key)) return;
-    const label = kind === "add" ? `Adding ${title}` : `Dismissing ${title}`;
+    const label = kind === "add" ? text.adding(title) : text.dismissing(title);
     labelSlot(index, label);
     announce(label);
     const saved = await acting;
@@ -271,17 +272,19 @@ export function PlaylistRecommendations({
     const after = session.get();
     if (!saved) {
       if (after.error === "save")
-        announce(`Couldn’t ${kind === "add" ? "add" : "dismiss"} ${title}. Try again.`);
+        announce(kind === "add" ? text.couldntAddSong(title) : text.couldntDismissSong(title));
       return;
     }
-    const done = kind === "add" ? `Added ${title} to the playlist.` : `Dismissed ${title}.`;
+    const done = kind === "add" ? text.addedSong(title) : text.dismissedSong(title);
     const next = after.slots[index];
     announce(
-      after.unfilled.includes(index)
-        ? `${done} Couldn’t load another recommendation.`
-        : next == null
-          ? `${done} No more matching songs right now.`
-          : `${done} Next recommendation: ${next.track.title}.`,
+      `${done} ${
+        after.unfilled.includes(index)
+          ? text.couldntLoadAnother
+          : next == null
+            ? text.noMoreMatching
+            : text.next(next.track.title)
+      }`,
     );
   };
   const retryRefill = () => {
@@ -290,8 +293,8 @@ export function PlaylistRecommendations({
       const after = session.get();
       announce(
         retrying.some((slot) => after.unfilled.includes(slot))
-          ? "Couldn’t load another recommendation."
-          : "Recommendations updated.",
+          ? text.couldntLoadAnother
+          : text.recommendationsUpdated,
       );
     });
   };
@@ -301,7 +304,7 @@ export function PlaylistRecommendations({
         <View className="flex-1">{offers.render(song, 0)}</View>
         <IconButton
           icon={IconPlus}
-          label={`Add ${song.track.title} to playlist`}
+          label={text.addRecommendation(song.track.title)}
           disabled={state.loading}
           onPress={() => {
             void act(song, "add");
@@ -309,7 +312,7 @@ export function PlaylistRecommendations({
         />
         <IconButton
           icon={IconX}
-          label={`Dismiss ${song.track.title} recommendation`}
+          label={text.dismissRecommendation(song.track.title)}
           disabled={state.loading}
           onPress={() => {
             void act(song, "dismiss");
@@ -328,7 +331,7 @@ export function PlaylistRecommendations({
         node: (
           <View
             accessible
-            accessibilityLabel={busyLabels.get(index) ?? LOADING_ANOTHER}
+            accessibilityLabel={busyLabels.get(index) ?? text.loadingAnother}
             accessibilityState={{ busy: true }}
           >
             <ControlledTrackRowSkeleton controls={CONTROLS} />
@@ -348,9 +351,9 @@ export function PlaylistRecommendations({
               accessibilityLiveRegion="polite"
               className="flex-1 font-sans text-subheadline text-secondary"
             >
-              Your choice was saved. Couldn’t load another recommendation.
+              {text.savedButNoAnother}
             </Text>
-            <TextButton label="Try Again" onPress={retryRefill} />
+            <TextButton label={text.tryAgain} onPress={retryRefill} />
           </View>
         ),
       };
@@ -363,12 +366,12 @@ export function PlaylistRecommendations({
   });
   return (
     <TitledSection
-      title="Recommended songs"
-      status={state.loading ? "Loading…" : undefined}
+      title={text.recommendedSongs}
+      status={state.loading ? text.loading : undefined}
       action={
         state.error === "load"
           ? {
-              label: "Try Again",
+              label: text.tryAgain,
               onPress: () => {
                 // Asking afresh draws other seed songs.
                 void session.renew();
@@ -378,7 +381,7 @@ export function PlaylistRecommendations({
       }
     >
       {state.loading && songs.length === 0 ? (
-        <SkeletonGroup label="Loading recommended songs">
+        <SkeletonGroup label={text.loadingRecommended}>
           {Array.from({ length: 5 }, (_, i) => (
             <ControlledTrackRowSkeleton key={i} controls={CONTROLS} />
           ))}
@@ -399,15 +402,15 @@ export function PlaylistRecommendations({
           className="font-sans text-subheadline text-secondary"
         >
           {state.error === "save"
-            ? "Couldn’t save your choice. Try the song’s action again."
-            : "Couldn’t load recommendations. Try again."}
+            ? text.couldntSaveChoice
+            : text.couldntLoadRecommendations}
         </Text>
       )}
       {!state.loading && state.error === null && shownSlots.length === 0 && (
         <Text className="font-sans text-subheadline text-secondary">
           {items.length === 0
-            ? "Add songs to get recommendations for this playlist."
-            : "No more matching songs right now."}
+            ? text.addSongsForRecommendations
+            : text.noMoreMatching}
         </Text>
       )}
     </TitledSection>

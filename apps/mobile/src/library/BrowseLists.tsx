@@ -1,4 +1,5 @@
 import { useScreenContent } from "@/lib/screenTiming";
+import { useLocalisation } from "@/localisation/localisation";
 import { libraryQueryHasContent } from "./sharedQueries";
 import { LibraryReadFeedback } from "./LibraryReadFeedback";
 import { LegendList, type LegendListRef } from "@legendapp/list/react-native";
@@ -7,7 +8,6 @@ import { IconStack2 } from "@tabler/icons-react-native";
 import {
   albumFindText,
   artistFindText,
-  counted,
   genreFindText,
   type FindableListKind,
   type PlaylistFindText,
@@ -25,7 +25,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { ScanProgressBanner } from "@/components/ScanProgressBanner";
 import { openArtistActions, openGenreActions } from "@/playback/ActionsMenu";
 import type { ActionItems } from "@/playback/actionTargets";
-import { selectableRow } from "@/selection/selectableRow";
+import { selectableRow, type SelectableRowProps } from "@/selection/selectableRow";
 import { useListSelection, type ListSelection } from "@/selection/useListSelection";
 
 import {
@@ -54,12 +54,15 @@ function ListHead({ line }: { line: string }) {
 /** Shown while a list has nothing: the scan may still be finding it. */
 function NothingYet({ message }: { message: string }) {
   const scanStatus = useScanStatus();
+  const { strings } = useLocalisation();
   return (
     <View style={{ paddingHorizontal: grid.margin }}>
       <ScanProgressBanner />
       <EmptyState
         icon={IconStack2}
-        title={scanStatus === "scanning" ? "Looking for music" : "Nothing here yet"}
+        title={
+          scanStatus === "scanning" ? strings.library.lookingForMusic : strings.library.nothingHereYet
+        }
         message={message}
       />
     </View>
@@ -68,7 +71,7 @@ function NothingYet({ message }: { message: string }) {
 
 type NameListProps<A> = {
   items: readonly A[];
-  noun: string;
+  noun: "artist" | "genre";
   empty: string;
   sortKey: (item: A) => string;
   keyOf: (item: A) => string;
@@ -98,6 +101,7 @@ function NameList<A>({
   findIn,
 }: NameListProps<A>) {
   const scrollable = useListScrollable();
+  const { strings } = useLocalisation();
   const list = useRef<LegendListRef>(null);
   useScrollToTop(list);
   const bottomInset = useChromeInset();
@@ -112,7 +116,7 @@ function NameList<A>({
   );
 
   if (items.length === 0) return <NothingYet message={empty} />;
-  const head = <ListHead line={counted(items.length, noun)} />;
+  const head = <ListHead line={strings.library.kindCounts[noun](items.length)} />;
   return (
     <FindFrame find={find} of={findIn?.of} inset={spine.paddingRight}>
       <LegendList
@@ -174,7 +178,7 @@ export function ArtistsList({ empty }: { empty: string }) {
   const artists = useArtists();
   useScreenContent(libraryQueryHasContent("artists"));
   if (!libraryQueryHasContent("artists"))
-    return <LibraryReadFeedback queryKey="artists" label="artists" shape="artists" scan />;
+    return <LibraryReadFeedback queryKey="artists" list="artists" shape="artists" scan />;
   return (
     <NameList
       items={artists}
@@ -196,10 +200,17 @@ const findGenres = {
   by: (genre: GenreRow): PlaylistFindText => genreFindText(genre.name),
 } as const;
 const genresOf = (genres: readonly GenreRow[]): ActionItems => ({ kind: "genre", items: genres });
+/** A genre's row, its song count in the language Wave reads in. */
+function GenreNameRow({ genre, ...press }: { genre: GenreRow } & SelectableRowProps) {
+  const { strings } = useLocalisation();
+  return (
+    <NameRow name={genre.name} detail={strings.library.songCount(genre.trackCount)} {...press} />
+  );
+}
+
 const renderGenre = (genre: GenreRow, selection: ListSelection<GenreRow>) => (
-  <NameRow
-    name={genre.name}
-    detail={counted(genre.trackCount, "song")}
+  <GenreNameRow
+    genre={genre}
     {...selectableRow(
       genre,
       selection,
@@ -213,7 +224,7 @@ export function GenresList({ empty }: { empty: string }) {
   const genres = useGenres();
   useScreenContent(libraryQueryHasContent("genres"));
   if (!libraryQueryHasContent("genres"))
-    return <LibraryReadFeedback queryKey="genres" label="genres" shape="genres" scan />;
+    return <LibraryReadFeedback queryKey="genres" list="genres" shape="genres" scan />;
   return (
     <NameList
       items={genres}
@@ -240,6 +251,7 @@ const pairRow = (index: number): number => Math.floor(index / 2);
  */
 export function AlbumsList({ empty }: { empty: string }) {
   const scrollable = useListScrollable();
+  const { strings } = useLocalisation();
   const albums = useAlbums();
   useScreenContent(libraryQueryHasContent("albums"));
   const list = useRef<LegendListRef>(null);
@@ -262,9 +274,9 @@ export function AlbumsList({ empty }: { empty: string }) {
   );
 
   if (!libraryQueryHasContent("albums"))
-    return <LibraryReadFeedback queryKey="albums" label="albums" shape="albums" scan />;
+    return <LibraryReadFeedback queryKey="albums" list="albums" shape="albums" scan />;
   if (albums.length === 0) return <NothingYet message={empty} />;
-  const head = <ListHead line={counted(albums.length, "album")} />;
+  const head = <ListHead line={strings.library.albumCount(albums.length)} />;
   return (
     <FindFrame find={find} of="albums" inset={spine.paddingRight}>
       <LegendList

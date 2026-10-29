@@ -5,6 +5,7 @@ import { useThemeColor } from "@/theme/useThemeColor";
 
 import { Artwork } from "../Artwork";
 import { CELL } from "../grid";
+import { useLocalisation } from "@/localisation/localisation";
 
 import { CardDetail, CardTile, CardTitle } from "./CardParts";
 
@@ -86,11 +87,12 @@ export function SongCard({
   onPress,
   onLongPress,
 }: Props) {
+  const { strings } = useLocalisation();
   const scale = size / TILE.size;
   return (
     <CardTile
       width={size}
-      label={label ?? `${title}, song by ${artist}`}
+      label={label ?? strings.library.songLabel(title, artist)}
       onPress={onPress}
       onLongPress={onLongPress}
     >

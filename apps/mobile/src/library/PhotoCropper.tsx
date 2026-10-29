@@ -28,6 +28,7 @@ import { scheduleOnRN } from "react-native-worklets";
 
 import { artworkUri } from "@/catalog/artworkUri";
 import { CELL, grid } from "@/catalog/grid";
+import { useLocalisation } from "@/localisation/localisation";
 import { TextButton } from "@/components/TextButton";
 
 import type { CropRequest } from "./PhotoCropperHost";
@@ -38,6 +39,7 @@ const SQUARE_MARGIN = grid.margin;
 /** The crop screen over [request]'s photo (`PhotoCropperHost` mounts it while it's up). */
 export function CropScreen({ request: { photo, framing: start, done } }: { request: CropRequest }) {
   const window = useWindowDimensions();
+  const { library } = useLocalisation().strings;
   const insets = useSafeAreaInsets();
   const [stage, setStage] = useState({ width: window.width, height: window.height });
   const side = Math.max(1, Math.min(stage.width, stage.height) - SQUARE_MARGIN * 2);
@@ -114,32 +116,36 @@ export function CropScreen({ request: { photo, framing: start, done } }: { reque
             className="flex-row items-center justify-between"
             style={{ paddingHorizontal: grid.margin }}
           >
-            <TextButton label="Cancel" onPress={cancel} />
+            <TextButton label={library.cancel} onPress={cancel} />
             <Text
               accessibilityRole="header"
               className="font-sans text-body font-medium text-foreground"
             >
-              Move and Scale
+              {library.moveAndScale}
             </Text>
-            <TextButton label="Done" onPress={finish} />
+            <TextButton label={library.done} onPress={finish} />
           </View>
           <GestureDetector gesture={gestures}>
             <View
               className="flex-1 overflow-hidden"
               accessible
-              accessibilityLabel="Photo framing"
-              accessibilityHint="Drag to move or pinch to zoom. Actions also move, zoom and reset the photo."
+              accessibilityLabel={library.photoFraming}
+              accessibilityHint={library.photoFramingHint}
               accessibilityValue={{
-                text: `${spokenFraming.zoom.toFixed(2)} times zoom, centre ${Math.round(spokenFraming.centerX * 100)} percent across, ${Math.round(spokenFraming.centerY * 100)} percent down`,
+                text: library.framingValue(
+                  spokenFraming.zoom,
+                  Math.round(spokenFraming.centerX * 100),
+                  Math.round(spokenFraming.centerY * 100),
+                ),
               }}
               accessibilityActions={[
-                { name: "moveLeft", label: "Move photo left" },
-                { name: "moveRight", label: "Move photo right" },
-                { name: "moveUp", label: "Move photo up" },
-                { name: "moveDown", label: "Move photo down" },
-                { name: "zoomIn", label: "Zoom in" },
-                { name: "zoomOut", label: "Zoom out" },
-                { name: "reset", label: "Reset framing" },
+                { name: "moveLeft", label: library.movePhotoLeft },
+                { name: "moveRight", label: library.movePhotoRight },
+                { name: "moveUp", label: library.movePhotoUp },
+                { name: "moveDown", label: library.movePhotoDown },
+                { name: "zoomIn", label: library.zoomIn },
+                { name: "zoomOut", label: library.zoomOut },
+                { name: "reset", label: library.resetFraming },
               ]}
               onAccessibilityAction={({ nativeEvent: { actionName } }) => {
                 switch (actionName) {

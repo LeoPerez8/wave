@@ -1,4 +1,3 @@
-import { formatNumber } from "@wave/core";
 import { useLocalisation } from "@/localisation/localisation";
 import { IconDots } from "@tabler/icons-react-native";
 import { actionBarLabel, entryDivider, splitActionBar } from "@wave/core";
@@ -18,7 +17,7 @@ import { useOverlayFlow } from "@/overlay/flow";
 import { MenuRow } from "@/overlay/MenuRow";
 import { openOverlay } from "@/overlay/overlay";
 import { ACTION_ICONS, type ActionIcon } from "@/playback/actionIcons";
-import { targetCount, type ActionItems } from "@/playback/actionTargets";
+import type { ActionItems } from "@/playback/actionTargets";
 import { useItemActions, type ActionEntry } from "@/playback/itemActions";
 
 import { endSelection, selectAllInList, useSelectedTarget, useSelectionSummary } from "./selection";
@@ -93,6 +92,7 @@ function MoreCard({ entries, close }: { entries: readonly ActionEntry[]; close: 
 }
 
 function ActionBar({ target, backdropId }: { target: ActionItems; backdropId: string }) {
+  const { strings } = useLocalisation();
   const insets = useSafeAreaInsets();
   const entries = useItemActions(target, { surface: "selection", finish: endSelection });
   const { bar, more } = splitActionBar(entries, BAR_SLOTS);
@@ -100,7 +100,7 @@ function ActionBar({ target, backdropId }: { target: ActionItems; backdropId: st
     <OnFloatingChrome value>
       <View
         accessibilityRole="toolbar"
-        accessibilityLabel="Selection actions"
+        accessibilityLabel={strings.library.selectionActions}
         pointerEvents="box-none"
         className="absolute flex-row"
         style={{
@@ -124,11 +124,11 @@ function ActionBar({ target, backdropId }: { target: ActionItems; backdropId: st
         {more.length > 0 && (
           <BarButton
             icon={IconDots}
-            label="More"
+            label={strings.library.more}
             opensMenu
             onPress={() =>
               openOverlay({
-                label: "More actions",
+                label: strings.library.moreActions,
                 anchor: pressedRect(),
                 render: (close) => <MoreCard entries={more} close={close} />,
               })
@@ -157,7 +157,7 @@ export function SelectionBar({ backdropId }: { backdropId: string }) {
  * and Done, over the screen's own header.
  */
 export function SelectionHeader() {
-  const { language } = useLocalisation();
+  const { strings } = useLocalisation();
   const insets = useSafeAreaInsets();
   const summary = useSelectionSummary();
   const target = useSelectedTarget();
@@ -179,11 +179,15 @@ export function SelectionHeader() {
         >
           {/* Songs (and albums with songs) say "12 selected"; other kinds name themselves ("3 albums"). */}
           {target === null || target.kind === "track" || target.kind === "mixed"
-            ? `${formatNumber(language, summary.count)} selected`
-            : targetCount(target)}
+            ? strings.library.selected(summary.count)
+            : strings.library.kindCounts[target.kind](target.items.length)}
         </Text>
-        <TextButton label="Select All" disabled={summary.all} onPress={selectAllInList} />
-        <TextButton label="Done" onPress={endSelection} />
+        <TextButton
+          label={strings.library.selectAll}
+          disabled={summary.all}
+          onPress={selectAllInList}
+        />
+        <TextButton label={strings.library.done} onPress={endSelection} />
       </View>
     </View>
   );

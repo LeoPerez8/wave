@@ -50,6 +50,7 @@ import { scheduleOnRN } from "react-native-worklets";
 import { Artwork } from "@/catalog/Artwork";
 import { CheckCell } from "@/catalog/CheckCell";
 import { CELL, grid } from "@/catalog/grid";
+import { currentLocalisation, useLocalisation } from "@/localisation/localisation";
 import { Hairline } from "@/catalog/Hairline";
 import { TextButton } from "@/components/TextButton";
 import { Press } from "@/motion/Press";
@@ -75,42 +76,49 @@ const READING: LibraryRead = { status: "reading" };
 
 const readYtLibrary = async (): Promise<LibraryRead> => {
   const answer = await askYtMusic((ytMusic) => ytMusic.libraryPlaylists);
+  // Liked Songs is named in the language Wave reads in as it's read, and saved so.
+  const { language } = currentLocalisation();
   return Result.isFailure(answer)
-    ? { status: "failed", failure: ytLibraryFailure(answer.failure.reason) }
-    : { status: "read", picker: ytLibraryPicker(answer.success, await currentYtLibraryOrigins()) };
+    ? { status: "failed", failure: ytLibraryFailure(answer.failure.reason, language) }
+    : {
+        status: "read",
+        picker: ytLibraryPicker(answer.success, await currentYtLibraryOrigins(), language),
+      };
 };
 
 const readSpotifyAccountLibrary = async (): Promise<LibraryRead> => {
   const answer = await readSpotifyLibrary((offset) =>
     askSpotifyAccount((spotify) => spotify.library(offset)),
   );
+  const { language } = currentLocalisation();
   return answer.ok
     ? {
         status: "read",
-        picker: spotifyLibraryPicker(answer.playlists, await currentYtLibraryOrigins()),
+        picker: spotifyLibraryPicker(answer.playlists, await currentYtLibraryOrigins(), language),
       }
-    : { status: "failed", failure: spotifyLibraryFailure(answer.reason) };
+    : { status: "failed", failure: spotifyLibraryFailure(answer.reason, language) };
 };
 
 /** What differs between the two pickers. */
 const SERVICES: Record<
   LibraryService,
   {
-    readonly title: string;
-    readonly reading: string;
+    /** The imports catalogue's keys for its title and its reading line. */
+    readonly titleKey: "fromYtMusic" | "fromSpotify";
+    readonly readingKey: "readingYtMusicLibrary" | "readingSpotifyLibrary";
     readonly read: () => Promise<LibraryRead>;
     readonly signIn: () => Promise<boolean>;
   }
 > = {
   ytMusic: {
-    title: "From YT Music",
-    reading: "Reading your YouTube Music library",
+    titleKey: "fromYtMusic",
+    readingKey: "readingYtMusicLibrary",
     read: readYtLibrary,
     signIn: signInToYtMusic,
   },
   spotify: {
-    title: "From Spotify",
-    reading: "Reading your Spotify library",
+    titleKey: "fromSpotify",
+    readingKey: "readingSpotifyLibrary",
     read: readSpotifyAccountLibrary,
     signIn: signInToSpotify,
   },
@@ -140,6 +148,7 @@ export function PickerSheet({
   onClosed: () => void;
 }) {
   const config = SERVICES[service];
+  const { strings } = useLocalisation();
   const { height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const accent = useThemeColor("accent");
@@ -235,7 +244,7 @@ export function PickerSheet({
     const picker = read.picker;
     leave(() => {
       void importYtLibrary(picker, { download }).catch((error: unknown) =>
-        showError("Couldn't import the playlists", error),
+        showError(strings.imports.couldntImportPlaylists, error),
       );
     });
   };
@@ -267,12 +276,12 @@ export function PickerSheet({
                 <View className="rounded-full bg-fill" style={{ width: CELL * 5, height: 5 }} />
               </View>
               <View className="flex-row items-center justify-between">
-                <TextButton label="Cancel" onPress={() => leave()} />
+                <TextButton label={strings.imports.cancel} onPress={() => leave()} />
                 <Text
                   accessibilityRole="header"
                   className="font-sans text-body font-medium text-foreground"
                 >
-                  {config.title}
+                  {strings.imports[config.titleKey]}
                 </Text>
                 {/* Balances Cancel, so the title sits in the middle. */}
                 <View style={{ width: CELL * 7 }} />
@@ -280,7 +289,11 @@ export function PickerSheet({
               {view?.selectAll != null && (
                 <View className="flex-row justify-end">
                   <TextButton
-                    label={view.selectAll}
+                    label={
+                      view.selectAll === "Select All"
+                        ? strings.imports.selectAll
+                        : strings.imports.deselectAll
+                    }
                     onPress={() => setPicker(pressYtLibrarySelectAll)}
                   />
                 </View>
@@ -295,7 +308,7 @@ export function PickerSheet({
                 <ActivityIndicator
                   size="large"
                   color={accent}
-                  accessibilityLabel={config.reading}
+                  accessibilityLabel={strings.imports[config.readingKey]}
                 />
               </View>
             )}
@@ -339,12 +352,12 @@ export function PickerSheet({
             style={{ paddingVertical: CELL, paddingHorizontal: grid.margin, gap: CELL * 4 }}
           >
             <TextButton
-              label="Import"
+              label={strings.imports.import}
               onPress={() => importTicked(false)}
               disabled={view?.canImport !== true}
             />
             <TextButton
-              label="Import & Download"
+              label={strings.imports.importDownload}
               onPress={() => importTicked(true)}
               disabled={view?.canImport !== true}
             />
@@ -360,7 +373,8 @@ export function PickerSheet({
  * imported on this phone before, Imported. A tap ticks or unticks it.
  */
 function PickerRow({ row, toggle }: { row: YtLibraryRow; toggle: () => void }) {
-  const label = [row.title, row.line, row.imported ? "Imported" : null]
+  const { strings } = useLocalisation();
+  const label = [row.title, row.line, row.imported ? strings.imports.imported : null]
     .filter((part) => part !== null)
     .join(", ");
   return (
@@ -393,7 +407,9 @@ function PickerRow({ row, toggle }: { row: YtLibraryRow; toggle: () => void }) {
           )}
         </View>
         {row.imported && (
-          <Text className="font-sans text-subheadline text-secondary">Imported</Text>
+          <Text className="font-sans text-subheadline text-secondary">
+            {strings.imports.imported}
+          </Text>
         )}
       </View>
     </Press>
@@ -403,7 +419,6 @@ function PickerRow({ row, toggle }: { row: YtLibraryRow; toggle: () => void }) {
 /** Where a row's name starts: past its tick and cover. */
 const TEXT_INSET = grid.margin - CELL + grid.stateCell + CELL * 1.5 + COVER + CELL * 1.5;
 
-const FAVORITES = "Also add to Favorites";
 
 /**
  * Also add to Favorites, under Liked Songs, lined up with the rows' names:
@@ -418,6 +433,7 @@ function FavoritesSwitch({
   toggle: () => void;
 }) {
   const accent = useThemeColor("accent");
+  const favoritesLabel = useLocalisation().strings.imports.alsoFavorites;
   const fill = useThemeColor("fill");
   const surface = useThemeColor("surface");
   return (
@@ -428,10 +444,10 @@ function FavoritesSwitch({
       <Text
         className={`flex-1 font-sans text-subheadline ${enabled ? "text-foreground" : "text-tertiary"}`}
       >
-        {FAVORITES}
+        {favoritesLabel}
       </Text>
       <Switch
-        accessibilityLabel={FAVORITES}
+        accessibilityLabel={favoritesLabel}
         value={on}
         disabled={!enabled}
         onValueChange={toggle}
@@ -455,6 +471,7 @@ function Failure({
   tryAgain: () => void;
   signIn: () => void;
 }) {
+  const { strings } = useLocalisation();
   return (
     <View
       className="flex-1 items-center justify-center"
@@ -466,8 +483,10 @@ function Failure({
       >
         {line}
       </Text>
-      {action === "tryAgain" && <TextButton label="Try Again" onPress={tryAgain} />}
-      {action === "signIn" && <TextButton label="Sign In Again" onPress={signInAgain} />}
+      {action === "tryAgain" && <TextButton label={strings.imports.tryAgain} onPress={tryAgain} />}
+      {action === "signIn" && (
+        <TextButton label={strings.imports.signInAgain} onPress={signInAgain} />
+      )}
     </View>
   );
 }

@@ -3,14 +3,17 @@ import { ScrollView, Text, View } from "react-native";
 
 import { CELL } from "@/catalog/grid";
 import { TextButton } from "@/components/TextButton";
+import { useLocalisation } from "@/localisation/localisation";
 import { presentOverlay } from "@/overlay/overlay";
 import { useRenderCount } from "@/perf/perf";
 
 import { cancelPlaylistImport, usePlaylistImports } from "./playlistImports";
 
 /** What [playlistId]'s page shows of its link import (Core's `playlistImportView`); null with none. */
-export const usePlaylistImportView = (playlistId: number): PlaylistImportView | null =>
-  playlistImportView(usePlaylistImports(), playlistId);
+export const usePlaylistImportView = (playlistId: number): PlaylistImportView | null => {
+  const { language } = useLocalisation();
+  return playlistImportView(usePlaylistImports(), playlistId, language);
+};
 
 /**
  * The playlist page's import line, under its length, once the import is
@@ -21,6 +24,7 @@ export const usePlaylistImportView = (playlistId: number): PlaylistImportView | 
 export function PlaylistImportLine({ playlistId }: { playlistId: number }) {
   useRenderCount("PlaylistImportLine");
   const view = usePlaylistImportView(playlistId);
+  const { strings } = useLocalisation();
   if (view === null) return null;
   const { leftOut } = view;
   return (
@@ -34,9 +38,16 @@ export function PlaylistImportLine({ playlistId }: { playlistId: number }) {
       </Text>
       <View className="flex-row items-center" style={{ gap: CELL * 3 }}>
         {leftOut === null ? null : (
-          <TextButton label="Show" opensMenu onPress={() => void showLeftOut(leftOut)} />
+          <TextButton
+            label={strings.imports.show}
+            opensMenu
+            onPress={() => void showLeftOut(leftOut)}
+          />
         )}
-        <TextButton label="Dismiss" onPress={() => cancelPlaylistImport(playlistId)} />
+        <TextButton
+          label={strings.imports.dismiss}
+          onPress={() => cancelPlaylistImport(playlistId)}
+        />
       </View>
     </View>
   );
@@ -51,6 +62,7 @@ const showLeftOut = (leftOut: ImportLeftOut): Promise<void> =>
   });
 
 function LeftOutCard({ leftOut, finish }: { leftOut: ImportLeftOut; finish: () => void }) {
+  const { strings } = useLocalisation();
   return (
     <>
       <View style={{ gap: CELL, paddingTop: CELL, paddingBottom: CELL * 2, flexShrink: 1 }}>
@@ -73,7 +85,7 @@ function LeftOutCard({ leftOut, finish }: { leftOut: ImportLeftOut; finish: () =
         </ScrollView>
       </View>
       <View className="flex-row items-center justify-end">
-        <TextButton label="OK" onPress={finish} />
+        <TextButton label={strings.imports.ok} onPress={finish} />
       </View>
     </>
   );

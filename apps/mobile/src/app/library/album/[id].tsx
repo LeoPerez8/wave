@@ -4,6 +4,7 @@ import {
   artistLink,
   ytAlbumSongCount,
   ytTrackId,
+  type Catalogue,
   type MixedSong,
   type YtAlbumEntry,
   type YtLibraryAlbumNote,
@@ -31,6 +32,7 @@ import { useAlbum, useLinkRows } from "@/library/hooks";
 import type { AlbumRow, AlbumTrackRow, SongRow } from "@/library/LibraryStore";
 import { parseId, useKnownRow, useOpenedIntegrated } from "@/library/routes";
 import { songCount } from "@/library/TrackList";
+import { useLocalisation } from "@/localisation/localisation";
 import { useVisitState } from "@/lib/useVisitState";
 import { usePlayPage } from "@/playback/hooks";
 import { useChromeInset } from "@/chrome/chrome";
@@ -113,11 +115,15 @@ const itemKey = (item: Item): string => {
 };
 
 /** The quiet line under the tracks about the album online: an outcome (loading shows skeleton rows). */
-const YT_NOTE: Readonly<Record<Exclude<YtLibraryAlbumNote, "loading">, string>> = {
-  notFound: "Not found online.",
-  offline: "You're offline. Tap Online to try again when you're back online.",
-  failed: "No answer online. Tap Online to try again.",
-};
+const ytNote = (
+  note: Exclude<YtLibraryAlbumNote, "loading">,
+  { library }: Catalogue,
+): string =>
+  note === "notFound"
+    ? library.notFoundOnline
+    : note === "offline"
+      ? library.offlineTapOnline
+      : library.noAnswerTapOnline;
 
 /** The entries as playback takes them: the Library's files, the rest streamed. */
 const mixedSongs = (entries: readonly Entry[]): MixedSong<YtSong, SongRow>[] =>
@@ -145,6 +151,7 @@ function AlbumHead({
   songs: number;
 }) {
   const { width } = useWindowDimensions();
+  const { strings } = useLocalisation();
   const { album, genre, tracks } = shown;
   const context = useMemo(() => ({ kind: "album", id: String(album.id) }) as const, [album.id]);
   // Its tracks, or with YouTube Music's songs joined in the whole list, by `playPage`'s rule.
@@ -171,8 +178,8 @@ function AlbumHead({
   const furniture = [
     genre,
     album.year,
-    songCount(songTotal),
-    `${Math.max(1, Math.round(album.durationMs / 60_000))} min`,
+    songCount(songTotal, strings),
+    strings.library.minutes(Math.max(1, Math.round(album.durationMs / 60_000))),
   ]
     .filter((part) => part !== null)
     .join(" · ");
@@ -189,7 +196,7 @@ function AlbumHead({
         </Text>
         <Press
           accessibilityRole="link"
-          accessibilityLabel={`Go to ${album.albumArtist}`}
+          accessibilityLabel={strings.library.goTo(album.albumArtist)}
           onPress={() => artistTo !== undefined && followArtistLink(artistTo, artist)}
           haptic="selection"
           className="self-start justify-center"
@@ -223,6 +230,7 @@ function AlbumHead({
 }
 
 function AlbumTracks({ shown, openedIntegrated }: { shown: Shown; openedIntegrated: boolean }) {
+  const { strings } = useLocalisation();
   const tracks = shown.tracks ?? NO_TRACKS;
   // The album goes by its first album artist's YouTube Music answer.
   const { artist } = useLinkRows(
@@ -281,7 +289,9 @@ function AlbumTracks({ shown, openedIntegrated }: { shown: Shown; openedIntegrat
 
   const source = useCallback((item: Item): SongListEntry => {
     if (item.type === "disc")
-      return { source: { kind: "discHeader", key: itemKey(item), label: `Disc ${item.disc}` } };
+      return {
+        source: { kind: "discHeader", key: itemKey(item), label: strings.library.disc(item.disc) },
+      };
     if (item.type === "track")
       return librarySongEntry(item.track, {
         leading: { kind: "trackNumber", number: item.track.trackNumber ?? undefined },
@@ -289,7 +299,7 @@ function AlbumTracks({ shown, openedIntegrated }: { shown: Shown; openedIntegrat
     return mixedSongEntry(item.entry, {
       leading: { kind: "trackNumber", number: item.entry.number ?? undefined },
     });
-  }, []);
+  }, [strings]);
   const rowSelection = useMemo(
     () =>
       songSelection(listSelection, (item: Item) => {
@@ -335,7 +345,7 @@ function AlbumTracks({ shown, openedIntegrated }: { shown: Shown; openedIntegrat
         ytView === null ? null : ytView.note === "loading" ? (
           <TrackSkeletons leading="number" />
         ) : (
-          <YtLookupFooter note={ytView.note === null ? null : YT_NOTE[ytView.note]} />
+          <YtLookupFooter note={ytView.note === null ? null : ytNote(ytView.note, strings)} />
         )
       }
     />

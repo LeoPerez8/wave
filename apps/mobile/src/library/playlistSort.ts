@@ -8,6 +8,7 @@ import {
 import * as Effect from "effect/Effect";
 import { useMemo } from "react";
 
+import { currentLocalisation } from "@/localisation/localisation";
 import type { ChoiceSetting } from "@/settings/ChoiceRow";
 
 import { usePlaylists } from "./hooks";
@@ -90,8 +91,14 @@ const pickPlaylistSort = (sort: PlaylistSort): void => {
  * `pickPlaylistSort`.
  */
 export const playlistSortChoice: ChoiceSetting<PlaylistSort> = {
-  label: "Sort by",
-  choices: PLAYLIST_SORTS.map(({ sort, label }) => ({ value: sort, label })),
+  // Read when shown, so they're in the language Wave reads in.
+  get label() {
+    return currentLocalisation().strings.playlists.sortBy;
+  },
+  get choices() {
+    const { sorts } = currentLocalisation().strings.playlists;
+    return PLAYLIST_SORTS.map(({ sort }) => ({ value: sort, label: sorts[sort] }));
+  },
   setting: {
     get: () => playlistOrder.get().sort,
     set: pickPlaylistSort,

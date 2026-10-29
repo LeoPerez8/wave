@@ -37,6 +37,8 @@ export const playlistsEn = {
   addSongsHint: "Long-press a song, an album or an artist and choose Add to Playlist.",
   deleted: "It was deleted.",
   noPlaylists: "No playlists",
+  playlistCount: (count: number): string =>
+    plural("en", count, { one: `${n(count)} playlist`, other: `${n(count)} playlists` }),
   importPlaylists: "Import Playlists",
   moveUp: "Move up",
   moveDown: "Move down",
