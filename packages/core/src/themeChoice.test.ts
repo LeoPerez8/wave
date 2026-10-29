@@ -10,7 +10,12 @@ import {
   isDefaultThemeChoice,
   chooseCustomInk,
   customInkPreview,
+  inkSaveState,
   readThemeChoice,
+  removeSavedInk,
+  resetThemeChoice,
+  sameThemeChoice,
+  saveInk,
   storedThemeOnStart,
   themeContrastIssues,
   themeFor,
@@ -22,6 +27,17 @@ const choose = (change: Partial<ThemeChoice>): ThemeChoice => ({
   ...DEFAULT_THEME_CHOICE,
   ...change,
 });
+
+/** The saved primaries Wave reads from `savedPrimary` as stored. */
+const read = (savedPrimary: unknown) =>
+  readThemeChoice(JSON.stringify({ ...DEFAULT_THEME_CHOICE, savedPrimary })).savedPrimary;
+
+/** A choice as Wave stored it before saved colours, read as Wave reads it now. */
+const former = (stored: Record<string, string>): ThemeChoice =>
+  readThemeChoice(JSON.stringify({ ...DEFAULT_THEME_CHOICE, ...stored }));
+
+const FORMER_PRIMARIES = ["teal", "blue", "violet", "green", "rose", "lime"];
+const FORMER_SECONDARIES = ["ember", "gold", "coral", "magenta", "sky", "lemon"];
 
 /** Lighter than `b`, measured by contrast against black. */
 const brighter = (a: string, b: string): boolean =>
@@ -42,8 +58,8 @@ describe("themeFor", () => {
     });
   });
 
-  test("Teal and Ember still give the theme Wave shipped before", () => {
-    assert.deepEqual(themeFor(choose({ primary: "teal", secondary: "ember" })), DEFAULT_THEME);
+  test("Teal and Ember, stored before saved colours, still give the theme Wave shipped before", () => {
+    assert.deepEqual(themeFor(former({ primary: "teal", secondary: "ember" })), DEFAULT_THEME);
   });
 
   test("the default inks take each light ground's own text colour and stay white on every dark ground", () => {
@@ -57,19 +73,14 @@ describe("themeFor", () => {
       }
   });
 
-  test("every preset combination meets WCAG AA in both schemes", () => {
+  test("every background with Default or a former preset meets WCAG AA in both schemes", () => {
     const failures: string[] = [];
     for (const light of THEME_SWATCHES.light)
       for (const dark of THEME_SWATCHES.dark)
-        for (const primary of THEME_SWATCHES.primary)
-          for (const secondary of THEME_SWATCHES.secondary) {
-            const choice = {
-              light: light.id,
-              dark: dark.id,
-              primary: primary.id,
-              secondary: secondary.id,
-            };
-            const theme = themeFor(choose(choice));
+        for (const primary of ["white", ...FORMER_PRIMARIES])
+          for (const secondary of ["white", ...FORMER_SECONDARIES]) {
+            const choice = { light: light.id, dark: dark.id, primary, secondary };
+            const theme = themeFor(former(choice));
             for (const scheme of ["light", "dark"] as const)
               for (const issue of themeContrastIssues(theme[scheme]))
                 failures.push(
@@ -86,7 +97,7 @@ describe("themeFor", () => {
 
   test("Slate is still offered, and gives the night slate theme Wave shipped before", () => {
     assert.deepEqual(
-      themeFor(choose({ dark: "slate", primary: "teal", secondary: "ember" })).dark,
+      themeFor(former({ dark: "slate", primary: "teal", secondary: "ember" })).dark,
       NIGHT_SLATE,
     );
   });
@@ -116,14 +127,16 @@ describe("themeFor", () => {
     }
   });
 
-  test("a primary chosen in Settings becomes the accent of both schemes", () => {
-    const theme = themeFor(choose({ primary: "blue" }));
+  test("a former preset keeps both of its tones as a custom colour", () => {
+    const theme = themeFor(former({ primary: "blue", secondary: "coral" }));
     assert.equal(theme.light.accent, "#1f5fb8");
     assert.equal(theme.dark.accent, "#7aaef5");
+    assert.equal(theme.light.highlight, "#b2402c");
+    assert.equal(theme.dark.highlight, "#f5917e");
   });
 
   test("a swatch too light for a light ground is darkened until it reads, with a readable label on it", () => {
-    const light = themeFor(choose({ secondary: "lemon", primary: "lime" })).light;
+    const light = themeFor(former({ secondary: "lemon", primary: "lime" })).light;
     assert.notEqual(light.highlight, "#f2d22e");
     assert.ok(contrastRatio(light.highlight, light.background) >= 4.5);
     assert.ok(contrastRatio(light.highlight, light.surface) >= 4.5);
@@ -158,20 +171,25 @@ describe("readThemeChoice", () => {
     const stored = {
       light: "sage",
       dark: "black",
-      primary: "violet",
-      secondary: "gold",
+      primary: "custom",
+      secondary: "white",
       customPrimary: "#3a7bd5",
       customSecondary: null,
+      savedPrimary: ["#3a7bd5", "#a99af0"],
+      savedSecondary: ["#e8c454"],
     };
     assert.deepEqual(readThemeChoice(JSON.stringify(stored)), stored);
   });
 
-  test("a choice stored before custom colours existed reads back with none", () => {
-    const stored = { light: "sage", dark: "black", primary: "violet", secondary: "gold" };
+  test("a choice stored before custom colours existed reads back with its presets saved", () => {
+    const stored = { light: "sage", dark: "black", primary: "violet", secondary: "white" };
     assert.deepEqual(readThemeChoice(JSON.stringify(stored)), {
       ...stored,
-      customPrimary: null,
+      primary: "custom",
+      customPrimary: "#a99af0",
       customSecondary: null,
+      savedPrimary: ["#a99af0"],
+      savedSecondary: [],
     });
   });
 
@@ -193,11 +211,15 @@ describe("storedThemeOnStart", () => {
     assert.deepEqual(readThemeChoice(stored), {
       light: "fog",
       dark: "black",
-      primary: "teal",
-      secondary: "ember",
-      customPrimary: null,
-      customSecondary: null,
+      primary: "custom",
+      secondary: "custom",
+      customPrimary: "#59c0ad",
+      customSecondary: "#ec9d53",
+      savedPrimary: ["#59c0ad"],
+      savedSecondary: ["#ec9d53"],
     });
+    // Stored in the shape this Wave writes, so nothing is left to migrate.
+    assert.deepEqual(JSON.parse(stored ?? ""), readThemeChoice(stored));
   });
 
   test("a fresh install stores nothing and starts on the white default", () => {
@@ -205,7 +227,7 @@ describe("storedThemeOnStart", () => {
   });
 
   test("a stored theme is kept as it is", () => {
-    const storedTheme = JSON.stringify({ ...DEFAULT_THEME_CHOICE, primary: "rose" });
+    const storedTheme = JSON.stringify(choose({ primary: "custom", customPrimary: "#f08cb0" }));
     assert.equal(storedThemeOnStart({ ...ranBefore, storedTheme }), null);
   });
 
@@ -216,13 +238,13 @@ describe("storedThemeOnStart", () => {
 
 describe("themeSwatchRows", () => {
   test("lists light and dark backgrounds, primary and secondary, with the current choice marked", () => {
-    const rows = themeSwatchRows(choose({ dark: "slate", primary: "rose" }), "dark");
+    const rows = themeSwatchRows(choose({ dark: "slate", light: "sand" }), "dark");
     assert.deepEqual(
       rows.map((row) => [row.group, row.swatches.filter((s) => s.selected).map((s) => s.id)]),
       [
-        ["light", ["fog"]],
+        ["light", ["sand"]],
         ["dark", ["slate"]],
-        ["primary", ["rose"]],
+        ["primary", ["white"]],
         ["secondary", ["white"]],
       ],
     );
@@ -256,19 +278,23 @@ describe("themeSwatchRows", () => {
           mark,
         });
     }
-    const [, , primary, secondary] = themeSwatchRows(choose({ primary: "teal" }), "dark");
+    const [, , primary, secondary] = themeSwatchRows(
+      choose({ primary: "custom", customPrimary: "#59c0ad" }),
+      "dark",
+    );
     assert.equal(primary?.swatches[0]?.selected, false);
     assert.equal(secondary?.swatches[0]?.selected, true);
   });
 
-  test("ink swatches show the colour they would take, readability adjustment included", () => {
-    const [, , primary] = themeSwatchRows(DEFAULT_THEME_CHOICE, "light");
-    const lime = primary?.swatches.find((s) => s.id === "lime");
-    assert.ok(lime !== undefined && lime.colour !== "#8cc63f");
-    assert.ok(contrastRatio(lime.colour, DEFAULT_THEME.light.background) >= 4.5);
-    assert.equal(
-      primary?.swatches.find((s) => s.id === "teal")?.colour,
-      DEFAULT_THEME.light.accent,
+  test("Primary and Secondary offer Default and no presets (#794)", () => {
+    const [, , primary, secondary] = themeSwatchRows(DEFAULT_THEME_CHOICE, "light");
+    assert.deepEqual(
+      primary?.swatches.map((s) => s.label),
+      ["Default"],
+    );
+    assert.deepEqual(
+      secondary?.swatches.map((s) => s.label),
+      ["Default"],
     );
   });
 
@@ -285,7 +311,10 @@ describe("isDefaultThemeChoice", () => {
   test("only the shipped choice is the default, so Reset is off until something changes", () => {
     assert.equal(isDefaultThemeChoice(DEFAULT_THEME_CHOICE), true);
     assert.equal(isDefaultThemeChoice(readThemeChoice(null)), true);
-    assert.equal(isDefaultThemeChoice(choose({ secondary: "gold" })), false);
+    assert.equal(
+      isDefaultThemeChoice(choose({ secondary: "custom", customSecondary: "#e8c454" })),
+      false,
+    );
     assert.equal(isDefaultThemeChoice(choose({ dark: "slate" })), false);
   });
 
@@ -307,7 +336,7 @@ describe("custom primary and secondary", () => {
     assert.equal(choice.customSecondary, null);
   });
 
-  test("a custom choice without a readable colour falls back to the default preset", () => {
+  test("a custom choice without a readable colour falls back to Default", () => {
     for (const customSecondary of [undefined, "orange", "#12345", 42]) {
       const choice = readThemeChoice(
         JSON.stringify({ ...DEFAULT_THEME_CHOICE, secondary: "custom", customSecondary }),
@@ -325,16 +354,19 @@ describe("custom primary and secondary", () => {
     assert.ok(brighter(theme.dark.accent, "#2456a8"));
   });
 
-  test("a kept custom colour doesn't apply while a preset is chosen", () => {
+  test("a kept custom colour doesn't apply while Default is chosen", () => {
     assert.deepEqual(
-      themeFor(choose({ secondary: "gold", customSecondary: "#ff00ff" })),
-      themeFor(choose({ secondary: "gold" })),
+      themeFor(choose({ customSecondary: "#ff00ff" })),
+      themeFor(DEFAULT_THEME_CHOICE),
     );
   });
 
-  test("picking a custom colour keeps it as hex and chooses it", () => {
-    const choice = chooseCustomInk(choose({ primary: "rose" }), "primary", "F0A");
-    assert.deepEqual(choice, choose({ primary: "custom", customPrimary: "#ff00aa" }));
+  test("picking a custom or saved colour keeps it as hex and chooses it, the saved ones kept", () => {
+    const choice = chooseCustomInk(choose({ savedPrimary: ["#f08cb0"] }), "primary", "F0A");
+    assert.deepEqual(
+      choice,
+      choose({ primary: "custom", customPrimary: "#ff00aa", savedPrimary: ["#f08cb0"] }),
+    );
     assert.equal(chooseCustomInk(choice, "primary", "not a colour"), choice);
   });
 
@@ -399,5 +431,154 @@ describe("custom primary and secondary", () => {
               failures.push(`${scheme} ${light.id}/${dark.id} ${hex}: ${issue.ink} on ${issue.on}`);
         }
     assert.deepEqual(failures, []);
+  });
+});
+
+describe("saved colours (#794)", () => {
+  test("a preset stored before saved colours becomes the custom colour and the group's first saved one", () => {
+    const stored = { light: "sand", dark: "slate", primary: "teal", secondary: "gold" };
+    assert.deepEqual(readThemeChoice(JSON.stringify(stored)), {
+      light: "sand",
+      dark: "slate",
+      primary: "custom",
+      secondary: "custom",
+      customPrimary: "#59c0ad",
+      customSecondary: "#e8c454",
+      savedPrimary: ["#59c0ad"],
+      savedSecondary: ["#e8c454"],
+    });
+  });
+
+  test("a colour kept beside a former preset is saved after it, so it can be picked again", () => {
+    const choice = former({
+      primary: "rose",
+      customPrimary: "#2456A8",
+      customSecondary: "#ffeeaa",
+    });
+    assert.equal(choice.primary, "custom");
+    assert.equal(choice.customPrimary, "#f08cb0");
+    assert.deepEqual(choice.savedPrimary, ["#f08cb0", "#2456a8"]);
+    // Default secondary: its kept colour stays kept, nothing is saved.
+    assert.equal(choice.secondary, "white");
+    assert.equal(choice.customSecondary, "#ffeeaa");
+    assert.deepEqual(choice.savedSecondary, []);
+  });
+
+  test("saved colours that aren't colours, repeats and any past four are dropped", () => {
+    for (const bad of [null, "#ff0000", 7, { 0: "#ff0000" }]) assert.deepEqual(read(bad), []);
+    assert.deepEqual(read(["#FF0000", "red", 3, null, "#f00", "#00ff00"]), ["#ff0000", "#00ff00"]);
+    assert.deepEqual(read(["#000001", "#000002", "#000003", "#000004", "#000005"]), [
+      "#000001",
+      "#000002",
+      "#000003",
+      "#000004",
+    ]);
+  });
+
+  test("Primary and Secondary show Default, the saved colours as they apply, then Custom", () => {
+    const choice = choose({
+      primary: "custom",
+      customPrimary: "#8cc63f",
+      savedPrimary: ["#2456a8", "#8cc63f"],
+      savedSecondary: ["#fff3a0"],
+    });
+    const [light, dark, primary, secondary] = themeSwatchRows(choice, "light");
+    assert.deepEqual(light?.saved, []);
+    assert.deepEqual(dark?.saved, []);
+    // Lime is too pale for the light ground, so its swatch shows the deepened tone.
+    const lime = customInkPreview(choice, "primary", "#8cc63f").light.colour;
+    assert.notEqual(lime, "#8cc63f");
+    assert.deepEqual(primary?.saved, [
+      { hex: "#2456a8", colour: "#2456a8", selected: false, mark: "#ffffff" },
+      { hex: "#8cc63f", colour: lime, selected: true, mark: "#ffffff" },
+    ]);
+    assert.equal(primary?.swatches[0]?.selected, false);
+    // Its colour is a saved one, which is marked: the custom swatch shows the hue wheel.
+    assert.deepEqual(primary?.custom, {
+      picked: "#8cc63f",
+      colour: null,
+      selected: false,
+      mark: null,
+    });
+    assert.equal(secondary?.saved[0]?.selected, false);
+    assert.equal(secondary?.swatches[0]?.selected, true);
+  });
+
+  test("a custom colour that isn't saved is marked on the custom swatch", () => {
+    const choice = choose({
+      secondary: "custom",
+      customSecondary: "#ff00aa",
+      savedSecondary: ["#e8c454"],
+    });
+    const [, , , secondary] = themeSwatchRows(choice, "dark");
+    assert.equal(secondary?.custom?.selected, true);
+    assert.equal(secondary?.custom?.colour, "#ff00aa");
+    assert.deepEqual(
+      secondary?.saved.map((s) => s.selected),
+      [false],
+    );
+  });
+
+  test("Save adds the picker's colour to its group's saved colours without applying it", () => {
+    const choice = saveInk(DEFAULT_THEME_CHOICE, "primary", "#3A7BD5");
+    assert.deepEqual(choice, choose({ savedPrimary: ["#3a7bd5"] }));
+    assert.deepEqual(themeFor(choice), themeFor(DEFAULT_THEME_CHOICE));
+    assert.deepEqual(saveInk(choice, "primary", "#a99af0").savedPrimary, ["#3a7bd5", "#a99af0"]);
+    assert.deepEqual(saveInk(choice, "secondary", "#a99af0").savedSecondary, ["#a99af0"]);
+  });
+
+  test("Save takes up to four colours, each once", () => {
+    const four = choose({ savedSecondary: ["#000001", "#000002", "#000003", "#000004"] });
+    assert.equal(inkSaveState(four, "secondary", "#ff0000"), "full");
+    assert.equal(saveInk(four, "secondary", "#ff0000"), four);
+    assert.equal(inkSaveState(four, "primary", "#ff0000"), "ready");
+    const one = choose({ savedPrimary: ["#3a7bd5"] });
+    assert.equal(inkSaveState(one, "primary", "#3A7BD5"), "saved");
+    assert.equal(saveInk(one, "primary", "#3A7BD5"), one);
+    assert.equal(inkSaveState(one, "primary", "not a colour"), "invalid");
+    assert.equal(saveInk(one, "primary", "not a colour"), one);
+    // A colour already saved says so, even in a full row.
+    assert.equal(inkSaveState(four, "secondary", "#000002"), "saved");
+  });
+
+  test("Remove takes a saved colour out and leaves the colours in use as they are", () => {
+    const choice = choose({
+      primary: "custom",
+      customPrimary: "#a99af0",
+      savedPrimary: ["#3a7bd5", "#a99af0", "#59c0ad"],
+    });
+    const removed = removeSavedInk(choice, "primary", "#A99AF0");
+    assert.deepEqual(removed.savedPrimary, ["#3a7bd5", "#59c0ad"]);
+    assert.deepEqual(themeFor(removed), themeFor(choice));
+    // The colour still applies, now from the custom swatch.
+    const [, , primary] = themeSwatchRows(removed, "dark");
+    assert.equal(primary?.custom?.selected, true);
+    assert.equal(primary?.custom?.colour, "#a99af0");
+    assert.equal(removeSavedInk(removed, "primary", "#ffffff"), removed);
+  });
+
+  test("Reset to defaults keeps the saved colours, which leave nothing to reset", () => {
+    const choice = choose({
+      dark: "plum",
+      primary: "custom",
+      customPrimary: "#a99af0",
+      savedPrimary: ["#a99af0"],
+      savedSecondary: ["#e8c454", "#ff00aa"],
+    });
+    const reset = resetThemeChoice(choice);
+    assert.deepEqual(
+      reset,
+      choose({ savedPrimary: ["#a99af0"], savedSecondary: ["#e8c454", "#ff00aa"] }),
+    );
+    assert.equal(isDefaultThemeChoice(reset), true);
+    assert.equal(isDefaultThemeChoice(choice), false);
+  });
+
+  test("two choices are the same when every group and saved colour is, in order", () => {
+    const choice = choose({ savedPrimary: ["#3a7bd5", "#a99af0"] });
+    assert.equal(sameThemeChoice(choice, readThemeChoice(JSON.stringify(choice))), true);
+    assert.equal(sameThemeChoice(choice, choose({ savedPrimary: ["#a99af0", "#3a7bd5"] })), false);
+    assert.equal(sameThemeChoice(choice, { ...choice, savedSecondary: ["#3a7bd5"] }), false);
+    assert.equal(sameThemeChoice(choice, { ...choice, dark: "navy" }), false);
   });
 });
