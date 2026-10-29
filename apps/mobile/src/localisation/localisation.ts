@@ -7,7 +7,7 @@ import {
   type ReactNode,
 } from "react";
 
-import { phoneLanguages } from "@/native/waveNative";
+import { phoneLanguages, subscribePhoneLanguages } from "@/native/waveNative";
 import { portuguesePreview, subscribePortuguesePreview } from "@/settings/portuguesePreview";
 
 /** The language Wave reads in and its text (Core's catalogue). */
@@ -16,7 +16,7 @@ export interface Localisation {
   readonly strings: Catalogue;
 }
 
-/** The phone's languages, read once (Android's per-app language, else the system's). */
+/** Android's per-app language, else the system's; invalidated by native locale changes. */
 let phone: readonly string[] | null = null;
 let current: Localisation | null = null;
 
@@ -32,9 +32,23 @@ export const currentLocalisation = (): Localisation => {
   return current;
 };
 
+const listeners = new Set<() => void>();
+
 /** Calls [listener] when the language may have changed; gives the function that stops it. */
-export const subscribeLocalisation = (listener: () => void): (() => void) =>
-  subscribePortuguesePreview(listener);
+export const subscribeLocalisation = (listener: () => void): (() => void) => {
+  listeners.add(listener);
+  const stopPreview = subscribePortuguesePreview(listener);
+  return () => {
+    listeners.delete(listener);
+    stopPreview();
+  };
+};
+
+// Keep the cache fresh for services too, even before React mounts or between subscribers.
+subscribePhoneLanguages(() => {
+  phone = null;
+  for (const listener of listeners) listener();
+});
 
 const LocalisationContext = createContext<Localisation | null>(null);
 
