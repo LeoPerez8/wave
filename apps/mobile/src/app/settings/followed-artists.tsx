@@ -1,3 +1,5 @@
+import { FollowCountryRow } from "@/settings/FollowCountryRow";
+import { useFollowCountryName } from "@/settings/followCountry";
 import { useLocalisation } from "@/localisation/localisation";
 import { useState } from "react";
 import type { FollowedArtist } from "@wave/core";
@@ -36,6 +38,7 @@ const openFollowedArtist = async (artist: FollowedArtist): Promise<void> => {
 };
 export default function FollowedArtistsSettingsScreen() {
   const { strings } = useLocalisation();
+  const country = useFollowCountryName();
   const searchStrings = strings.followArtistSearch;
   const enabled = useFollowedArtistsEnabled();
   const follows = useFollows();
@@ -50,6 +53,7 @@ export default function FollowedArtistsSettingsScreen() {
         value={enabled}
         onValueChange={setFollowedArtistsEnabled}
       />
+      <FollowCountryRow />
       <View>
         <SearchField
           value={query}
@@ -134,13 +138,15 @@ export default function FollowedArtistsSettingsScreen() {
               </TextButton>
               <TextButton
                 label="Following"
-                accessibilityLabel={`Manage ${artist.name}, Following, New releases`}
+                accessibilityLabel={`Manage ${artist.name}, Following, ${artist.level === "shows" ? strings.shows.level(country) : strings.shows.releases}`}
                 onPress={() => openFollowCard(artist)}
               >
                 <View className="py-2 pl-3">
                   <Text className="font-sans text-body text-accent">Following</Text>
                   <Text className="font-sans text-footnote text-secondary">
-                    {artist.level === "releases" ? "New releases" : "New releases and shows"}
+                    {artist.level === "releases"
+                      ? strings.shows.releases
+                      : strings.shows.level(country)}
                   </Text>
                 </View>
               </TextButton>

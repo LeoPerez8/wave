@@ -1,3 +1,13 @@
+import { useEffect, useState } from "react";
+import { AppState } from "react-native";
+import { useLocalisation } from "@/localisation/localisation";
+import { useFollowCountryName } from "@/settings/followCountry";
+import {
+  askShowNotifications,
+  showsNotificationsEnabled,
+  ticketmasterKey,
+} from "./showNotifications";
+import { WaveNative } from "@/native/waveNative";
 import { MenuChoices } from "@/overlay/MenuChoices";
 import { CardHeading } from "@/overlay/CardHeading";
 import { IconUserPlus, IconUserCheck } from "@tabler/icons-react-native";
@@ -19,10 +29,22 @@ export const openFollowCard = (artist: FollowTarget): void => {
 };
 function FollowCard({ artist, close }: { artist: FollowTarget; close: () => void }) {
   const follow = useFollow(artist.name);
+  const { strings } = useLocalisation();
+  const country = useFollowCountryName();
+  const [denied, setDenied] = useState(!showsNotificationsEnabled());
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", () => setDenied(!showsNotificationsEnabled()));
+    return () => sub.remove();
+  }, []);
   return (
     <View>
       <Text className="mb-2 font-sans text-title3 text-foreground">{artist.name}</Text>
-      {followLevelEntries(follow?.level ?? null).map((entry) =>
+      {followLevelEntries(follow?.level ?? null, {
+        showsAvailable: ticketmasterKey !== "",
+        country,
+        notificationsDenied: denied,
+        strings,
+      }).map((entry) =>
         entry.action === "unfollow" ? (
           <TextButton
             key={entry.action}
@@ -40,14 +62,22 @@ function FollowCard({ artist, close }: { artist: FollowTarget; close: () => void
             key={entry.action}
             label={entry.label}
             chosen={entry.checked}
+            line={entry.line}
             onPress={() => {
               close();
-              void setArtistFollow(artist, entry.action === "unfollow" ? null : entry.action).catch(
-                (error) => showError("Couldn't follow artist", error),
-              );
+              void (async () => {
+                if (entry.action === "shows") await askShowNotifications();
+                await setArtistFollow(artist, entry.action === "unfollow" ? null : entry.action);
+              })().catch((error) => showError("Couldn't follow artist", error));
             }}
           />
         ),
+      )}
+      {ticketmasterKey !== "" && denied && (
+        <TextButton
+          label={strings.shows.notificationSettings}
+          onPress={() => WaveNative.openShowNotificationSettings?.()}
+        />
       )}
     </View>
   );
@@ -59,12 +89,14 @@ export const followMenuPress = (artist: FollowTarget, close: () => void): void =
 };
 
 export const useFollowAction = (artist: FollowTarget): LastListAction => {
+  const { strings } = useLocalisation();
+  const country = useFollowCountryName();
   const follow = useFollow(artist.name);
   return {
     icon: follow === null ? IconUserPlus : IconUserCheck,
     label: follow === null ? "Follow" : "Following",
     labels: ["Follow", "Following"],
-    accessibilityLabel: `${artist.name}, ${follow === null ? "Follow" : "Following, New releases"}`,
+    accessibilityLabel: `${artist.name}, ${follow === null ? "Follow" : "Following, " + (follow.level === "shows" ? strings.shows.level(country) : strings.shows.releases)}`,
     onPress: () => openFollowCard(artist),
   };
 };

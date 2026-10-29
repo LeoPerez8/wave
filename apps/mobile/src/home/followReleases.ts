@@ -1,3 +1,4 @@
+import { checkFollowShows } from "./followShows";
 import {
   checkDue,
   resolveDeezerFollowArtist,
@@ -53,6 +54,8 @@ export const checkFollowReleases = (youtubeEnabled = ytMusicEnabled()) =>
     const store = yield* LibraryStore;
     const yt = yield* YtMusic;
     const follows = yield* store.listFollows;
+    // A shows failure never holds back the releases.
+    yield* checkFollowShows().pipe(Effect.ignore);
     const cache = yield* store.followReleaseCache;
     for (const follow of follows) {
       yield* settledTurnEffect;

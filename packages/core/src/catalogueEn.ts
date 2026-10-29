@@ -3,6 +3,7 @@ import { nativeEn } from "./catalogue/nativeEn.ts";
 import { autoEn } from "./catalogue/autoEn.ts";
 import { playbackTextEn } from "./catalogue/playbackTextEn.ts";
 import { lyricsLanguagesEn } from "./catalogue/lyricsLanguagesEn.ts";
+import { showsEn } from "./catalogue/showsEn.ts";
 /**
  * Wave's interface text in English: the shape every other catalogue must fill
  * (`Catalogue`), so a phrase missing from one fails the type check. Group
@@ -18,6 +19,7 @@ export const en = {
   auto: autoEn,
   lyricsLanguages: lyricsLanguagesEn,
   playbackText: playbackTextEn,
+  shows: showsEn,
   /** Each tab's name, in the tab bar, its editor and TalkBack. */
   tabs: {
     index: "Home",

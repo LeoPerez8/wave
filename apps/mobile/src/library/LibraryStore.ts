@@ -1,4 +1,10 @@
 import {
+  readFollowShows,
+  saveFollowShows,
+  markShowNotified,
+  type FollowShowCacheRow,
+} from "./db/followShows";
+import {
   readFollowReleases,
   saveFollowReleases,
   hideFollowRelease,
@@ -563,6 +569,12 @@ export class LibraryStore extends Context.Service<
       path: string,
     ) => Effect.Effect<readonly ScanRoot[], LibraryStoreError>;
     /** Every scan root in the order it was added, with its track count. */
+    /** Each shows-level artist's Ticketmaster attraction, country and last shows, and the show ids already notified. */
+    readonly followShowCache: Effect.Effect<ReturnType<typeof readFollowShows>, LibraryStoreError>;
+    /** Replaces one artist's saved shows (a new country replaces the old country's). */
+    readonly saveFollowShows: (row: FollowShowCacheRow) => Effect.Effect<void, LibraryStoreError>;
+    /** Claims a show for its one notification: false when it was already claimed. */
+    readonly markShowNotified: (id: string) => Effect.Effect<boolean, LibraryStoreError>;
     readonly followReleaseCache: Effect.Effect<FollowReleaseCache, LibraryStoreError>;
     readonly saveFollowReleases: (
       key: string,
@@ -1468,6 +1480,9 @@ const make = Effect.gen(function* () {
     writeAttempt(operation, run).pipe(Effect.tap(() => Effect.sync(historyChanged)));
 
   return LibraryStore.of({
+    followShowCache: attempt("read shows", () => readFollowShows(db)),
+    saveFollowShows: (row) => writeAttempt("save shows", () => saveFollowShows(db, row)),
+    markShowNotified: (id) => writeAttempt("claim show", () => markShowNotified(db, id)),
     followReleaseCache: attempt("read follow release cache", () => readFollowReleases(db)),
     saveFollowReleases: (key, releases, checkedAt) =>
       writeAttempt("save follow releases", () => saveFollowReleases(db, key, releases, checkedAt)),
