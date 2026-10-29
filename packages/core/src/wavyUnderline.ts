@@ -64,13 +64,11 @@ export type UnderlineMotion = "wriggle" | "still";
 export type UnderlineMotionInput = {
   isPlaying: boolean;
   reduceMotion: boolean;
-  tapAnimationMs: number;
 };
 
 /**
  * Whether the underline ripples along the title or lies still. It only moves
- * while music plays, and motion is off under the system's reduce-motion
- * setting or with the tap animation set to 0 ms (Wave's own "no motion").
+ * while music plays, unless the system's reduce-motion setting is on.
  */
 export const underlineMotion = (input: UnderlineMotionInput): UnderlineMotion =>
-  input.isPlaying && !input.reduceMotion && input.tapAnimationMs > 0 ? "wriggle" : "still";
+  input.isPlaying && !input.reduceMotion ? "wriggle" : "still";

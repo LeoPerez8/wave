@@ -26,30 +26,19 @@ describe("wavePath", () => {
 
 describe("underlineMotion", () => {
   test("the underline wriggles while the song is playing", () => {
-    assert.equal(
-      underlineMotion({ isPlaying: true, reduceMotion: false, tapAnimationMs: 160 }),
-      "wriggle",
-    );
+    assert.equal(underlineMotion({ isPlaying: true, reduceMotion: false }), "wriggle");
   });
 
   test("paused, it lies still", () => {
-    assert.equal(
-      underlineMotion({ isPlaying: false, reduceMotion: false, tapAnimationMs: 160 }),
-      "still",
-    );
+    assert.equal(underlineMotion({ isPlaying: false, reduceMotion: false }), "still");
   });
 
   test("the system's reduce-motion setting keeps it still while playing", () => {
-    assert.equal(
-      underlineMotion({ isPlaying: true, reduceMotion: true, tapAnimationMs: 160 }),
-      "still",
-    );
+    assert.equal(underlineMotion({ isPlaying: true, reduceMotion: true }), "still");
   });
 
-  test("tap animation set to 0 ms keeps it still while playing", () => {
-    assert.equal(
-      underlineMotion({ isPlaying: true, reduceMotion: false, tapAnimationMs: 0 }),
-      "still",
-    );
+  test("a legacy zero tap duration cannot stop the playing wave", () => {
+    const legacyInput = { isPlaying: true, reduceMotion: false, tapAnimationMs: 0 };
+    assert.equal(underlineMotion(legacyInput), "wriggle");
   });
 });
