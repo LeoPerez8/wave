@@ -1,6 +1,6 @@
 import {
   checkDue,
-  deezerFollowArtists,
+  resolveDeezerFollowArtist,
   deezerArtistSearchUrl,
   deezerReleases,
   followFeed,
@@ -61,7 +61,7 @@ export const checkFollowReleases = Effect.gen(function* () {
       let id = follow.deezerId;
       if (id === null) {
         const response = yield* json(deezerArtistSearchUrl(follow.name));
-        id = deezerFollowArtists(response, follow.name);
+        id = resolveDeezerFollowArtist(response, follow.name);
         if (id === null) return;
         const current = yield* store.getFollow(follow.name);
         if (current === null || current.followedAt !== follow.followedAt) return;

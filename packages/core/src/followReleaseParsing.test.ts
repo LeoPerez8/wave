@@ -4,7 +4,7 @@ import {
   checkDue,
   releaseDateLine,
   deezerReleases,
-  deezerFollowArtists,
+  resolveDeezerFollowArtist,
   matchFollowRelease,
 } from "./index.ts";
 import sample from "./fixtures/followReleases.deezer.json" with { type: "json" };
@@ -18,7 +18,7 @@ test("Deezer replies keep dated releases and exact most-followed namesakes", () 
   );
   assert.equal(deezerReleases({ error: {} }, "abba"), null);
   assert.equal(
-    deezerFollowArtists(
+    resolveDeezerFollowArtist(
       {
         data: [
           { id: 1, name: "ABBA", nb_fan: 2 },
@@ -56,4 +56,14 @@ test("date lines use calendar days and short absolute dates", () => {
   const now = new Date(2026, 9, 29, 12).getTime();
   assert.equal(releaseDateLine("2026-10-27", now), "2 days ago");
   assert.equal(releaseDateLine("2026-10-14", now), "Oct 14");
+});
+
+test("release date lines and type names follow the Portuguese catalogue", async () => {
+  const { catalogueOf } = await import("./index.ts");
+  const strings = catalogueOf("pt-BR");
+  assert.equal(
+    releaseDateLine("2026-10-27", new Date(2026, 9, 29, 12).getTime(), strings),
+    "Há 2 dias",
+  );
+  assert.equal(strings.newReleases.album, "Álbum");
 });

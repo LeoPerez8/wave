@@ -1,3 +1,6 @@
+import { releaseTitle } from "./ytArtist.ts";
+import { en, type Catalogue } from "./catalogueEn.ts";
+import { deezerFollowArtists } from "./followArtistSearch.ts";
 import { artistPhotoName } from "./artistPhoto.ts";
 
 /** One follow across Library and online pages; namesakes share this name key. */
@@ -111,17 +114,11 @@ export const deezerReleases = (value: unknown, artistKey: string): FollowRelease
     ];
   });
 };
-export const deezerFollowArtists = (value: unknown, name: string): number | null => {
-  if (!record(value) || !Array.isArray(value.data)) return null;
-  const candidates = value.data.filter(
-    (r: unknown): r is Record<string, unknown> =>
-      record(r) &&
-      typeof r.id === "number" &&
-      typeof r.name === "string" &&
-      followArtistKey(r.name) === followArtistKey(name),
-  );
-  candidates.sort((a, b) => Number(b.nb_fan ?? 0) - Number(a.nb_fan ?? 0));
-  return (candidates[0]?.id as number | undefined) ?? null;
+export const resolveDeezerFollowArtist = (value: unknown, name: string): number | null => {
+  const candidates = deezerFollowArtists(value)
+    ?.filter((a) => followArtistKey(a.name) === followArtistKey(name))
+    .toSorted((a, b) => b.fans - a.fans);
+  return candidates?.[0]?.deezerId ?? null;
 };
 export const matchFollowRelease = <
   A extends {
@@ -134,7 +131,7 @@ export const matchFollowRelease = <
 ): A | null =>
   albums.find(
     (a) =>
-      followArtistKey(a.title) === followArtistKey(release.title) &&
+      releaseTitle(a.title) === releaseTitle(release.title) &&
       (a.releaseType ?? "album") === release.type,
   ) ?? null;
 export const checkDue = (
@@ -142,7 +139,7 @@ export const checkDue = (
   now: number,
   context: "home" | "background",
 ): boolean => last === null || now - last >= (context === "home" ? 12 : 24) * 3_600_000;
-export const releaseDateLine = (date: string, now: number): string => {
+export const releaseDateLine = (date: string, now: number, strings: Catalogue = en): string => {
   const [year, month, day] = date.split("-").map(Number) as [number, number, number];
   const today = new Date(now);
   const days = Math.floor(
@@ -150,8 +147,8 @@ export const releaseDateLine = (date: string, now: number): string => {
       Date.UTC(year, month - 1, day)) /
       DAY,
   );
-  if (days === 0) return "Today";
-  if (days === 1) return "Yesterday";
-  if (days > 1 && days < 7) return `${days} days ago`;
-  return `${["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][month - 1]} ${day}${year !== today.getFullYear() ? `, ${year}` : ""}`;
+  if (days === 0) return strings.newReleases.today;
+  if (days === 1) return strings.newReleases.yesterday;
+  if (days > 1 && days < 7) return strings.newReleases.daysAgo(days);
+  return strings.newReleases.absoluteDate(month, day, year !== today.getFullYear() ? year : null);
 };

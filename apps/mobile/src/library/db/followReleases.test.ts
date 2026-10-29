@@ -20,7 +20,7 @@ import { followReleaseListening } from "./followReleases.ts";
 import { followFeed, type FollowRelease } from "@wave/core";
 test("owned releases open the Library album and a counted song clears the feed after restart", async () => {
   const db = await openTestDatabase();
-  const trackId = addTrack(db, { title: "One", album: "New", artist: "ABBA" });
+  const trackId = addTrack(db, { title: "One", album: "New (Deluxe Edition)", artist: "ABBA" });
   const release: FollowRelease = {
     key: "deezer:1",
     artistKey: "abba",

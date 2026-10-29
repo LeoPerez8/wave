@@ -1,11 +1,9 @@
-import { startTabSwitch, stepTabSwitch, type TabBarTab } from "@wave/core";
+import { catalogueOf, startTabSwitch, stepTabSwitch, type TabBarTab } from "@wave/core";
 import { useCallback, useLayoutEffect, useRef } from "react";
 
 import { TAB_PATH } from "@wave/core";
 import { activeTiming, beginTiming, timingResponse, timingTransitionEnd } from "@/lib/timing";
 import { perfMark } from "@/perf/perf";
-
-import { tabLook } from "./tabs";
 
 /** expo-router's switch to a tab by name (`useTabTrigger().switchTab`). */
 export type SwitchTab = (name: string, options: { resetOnFocus?: boolean }) => void;
@@ -52,7 +50,8 @@ export function useTabSwitches(
     if (step.enter !== null) enter(step.enter.from, step.enter.to);
     if (step.send !== null) switchTab.current?.(step.send, {});
     if (tab !== null && step.state.sent === null) {
-      perfMark("tab.settled", tabLook(tab).label);
+      // The log stays in English.
+      perfMark("tab.settled", catalogueOf("en").tabs[tab]);
       const active = activeTiming();
       if (active?.kind === "tab") {
         timingResponse(active.id);

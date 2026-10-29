@@ -1,3 +1,4 @@
+import { useLocalisation } from "@/localisation/localisation";
 import { openAlbumActions } from "@/playback/ActionsMenu";
 import { useState } from "react";
 import { Text, View } from "react-native";
@@ -81,23 +82,25 @@ function ReleaseTile({
   follow: FollowedArtist;
   refresh: () => void;
 }) {
+  const { strings } = useLocalisation();
+  const copy = strings.newReleases;
   const [busy, setBusy] = useState(false);
   const run = (action: () => Promise<void>) => {
     if (busy) return;
     setBusy(true);
     void action()
-      .catch(() => showMessage(release.title, "No answer online. Try again in a moment."))
+      .catch(() => showMessage(release.title, copy.noAnswer))
       .finally(() => setBusy(false));
   };
   const head = { title: release.title, line: follow.name, artworkUrl: release.artworkUrl };
   const hide = () => {
     void hideRelease(release.key)
       .then(refresh)
-      .catch(() => showMessage(release.title, "Couldn't hide this release. Try again."));
+      .catch(() => showMessage(release.title, copy.hideFailed));
   };
   const entries: MenuChoice[] = [
-    { action: "goToArtist", label: "Go to Artist", onPress: () => openYtArtistNamed(follow.name) },
-    { action: "removeFromLibrary", label: "Hide", onPress: hide },
+    { action: "goToArtist", label: copy.goToArtist, onPress: () => openYtArtistNamed(follow.name) },
+    { action: "removeFromLibrary", label: copy.hide, onPress: hide },
   ];
   const open = () =>
     run(async () => {
@@ -107,7 +110,7 @@ function ReleaseTile({
       }
       const id = await resolve(release, follow.name);
       if (id) openYtAlbum(id, head);
-      else await showMessage(release.title, "Not on YouTube Music yet");
+      else await showMessage(release.title, copy.unavailable);
     });
   const menu = () =>
     run(async () => {
@@ -139,9 +142,10 @@ function ReleaseTile({
           ),
         });
     });
-  const tag = release.type === "ep" ? "EP" : release.type === "single" ? "Single" : "Album";
+  const tag =
+    release.type === "ep" ? copy.ep : release.type === "single" ? copy.single : copy.album;
   const [now] = useState(() => Date.now());
-  const date = releaseDateLine(release.releaseDate, now);
+  const date = releaseDateLine(release.releaseDate, now, strings);
   return (
     <CardTile
       width={COVER_ROW_TILE}

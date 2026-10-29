@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { grid } from "@/catalog/grid";
 import { Glass } from "@/glass/Glass";
+import { useLocalisation } from "@/localisation/localisation";
 import { Press } from "@/motion/Press";
 import { useRenderCount } from "@/perf/perf";
 import { requestSearchFocus } from "@/search/focusRequest";
@@ -42,16 +43,17 @@ function Tab({ name, showLabel = true, onSwitch, onTap }: TabProps) {
   const { triggerProps, switchTab } = useTabTrigger({ name });
   const accent = useThemeColor("accent");
   const secondary = useThemeColor("secondary");
-  const { label, icon: Icon } = tabLook(name);
+  const { strings } = useLocalisation();
+  const { label, icon: Icon } = tabLook(name, strings);
   const focused = triggerProps.isFocused;
   const color = focused ? accent : secondary;
   return (
     <Press
       accessibilityRole="tab"
       accessibilityLabel={label}
-      accessibilityHint="Long press to edit the tab bar"
+      accessibilityHint={strings.tabBar.editHint}
       accessibilityState={{ selected: focused }}
-      accessibilityActions={[{ name: "editTabBar", label: "Edit the tab bar" }]}
+      accessibilityActions={[{ name: "editTabBar", label: strings.tabBar.edit }]}
       onAccessibilityAction={({ nativeEvent: { actionName } }) => {
         if (actionName === "editTabBar") openTabBarEditor();
       }}

@@ -1,3 +1,4 @@
+import { useLocalisation } from "@/localisation/localisation";
 import {
   ITEM_ACTION_LABELS,
   PLAY_ACTION_LABELS,
@@ -111,6 +112,7 @@ function YtAlbumActionsMenu({
   close: () => void;
   onSelect: (() => void) | undefined;
 }) {
+  const { strings } = useLocalisation();
   const find = useLibraryFinder();
   const inLibrary = useLoadedInLibrary();
   const download = useYtAlbumDownload(songs, inLibrary);
@@ -150,7 +152,7 @@ function YtAlbumActionsMenu({
   if (releaseEntries !== undefined) {
     entries.push({
       action: "addToPlaylist",
-      label: "Add to Playlist",
+      label: strings.newReleases.addToPlaylist,
       onPress: closing(() =>
         openAddToPlaylist({
           title: album.title,

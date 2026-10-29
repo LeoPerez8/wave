@@ -1,4 +1,4 @@
-import { followArtistKey, type FollowRelease } from "@wave/core";
+import { followArtistKey, releaseTitle, type FollowRelease } from "@wave/core";
 import { and, eq, gt, inArray } from "drizzle-orm";
 import type { LibraryDatabase } from "./database.ts";
 import {
@@ -41,18 +41,33 @@ export const followReleaseListening = (
   names: Readonly<Record<string, string>>,
 ) => {
   const played = new Set<string>();
+  void names;
+  const wantedArtists = new Set(releases.map((r) => r.artistKey));
+  const idsByArtist = db
+    .select({ id: artists.id, name: artists.name })
+    .from(artists)
+    .all()
+    .filter((a) => wantedArtists.has(followArtistKey(a.name)));
+  const candidates =
+    idsByArtist.length === 0
+      ? []
+      : db
+          .select({ id: albums.id, title: albums.title, artistId: albums.albumArtistId })
+          .from(albums)
+          .where(
+            inArray(
+              albums.albumArtistId,
+              idsByArtist.map((a) => a.id),
+            ),
+          )
+          .all();
+  const artistKeys = new Map(idsByArtist.map((a) => [a.id, followArtistKey(a.name)]));
   const enriched = releases.map((r) => {
-    const owned = db
-      .select({ id: albums.id, name: artists.name })
-      .from(albums)
-      .innerJoin(artists, eq(albums.albumArtistId, artists.id))
-      .where(eq(albums.title, r.title))
-      .all()
-      .find(
-        (a) =>
-          followArtistKey(a.name) === r.artistKey ||
-          followArtistKey(a.name) === followArtistKey(names[r.artistKey] ?? ""),
-      );
+    const owned = candidates.find(
+      (a) =>
+        artistKeys.get(a.artistId) === r.artistKey &&
+        releaseTitle(a.title) === releaseTitle(r.title),
+    );
     const songs =
       owned === undefined
         ? []

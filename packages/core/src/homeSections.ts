@@ -1,3 +1,4 @@
+import { en, type Catalogue } from "./catalogueEn.ts";
 /**
  * Home's sections as a catalogue: every section Home can show, with its id,
  * its title and its place in the default order. The owner arranges Home from
@@ -37,7 +38,7 @@ export interface HomeSection {
  * their three sections, so it joins every Home arranged before it on top.
  */
 export const HOME_SECTIONS: readonly HomeSection[] = [
-  { id: "new-releases", title: "New from Artists You Follow", fromPlays: false },
+  { id: "new-releases", title: en.newReleases.title, fromPlays: false },
   { id: "discover", title: "Discover", fromPlays: false },
   { id: "recently-added", title: "Recently added", fromPlays: false },
   { id: "recently-played", title: "Recently played", fromPlays: true },
@@ -52,7 +53,8 @@ const sectionOf = (id: HomeSectionId): HomeSection | undefined =>
   HOME_SECTIONS.find((section) => section.id === id);
 
 /** The title of the section [id]. */
-export const homeSectionTitle = (id: HomeSectionId): string => sectionOf(id)?.title ?? id;
+export const homeSectionTitle = (id: HomeSectionId, strings: Catalogue = en): string =>
+  id === "new-releases" ? strings.newReleases.title : (sectionOf(id)?.title ?? id);
 
 /** A row of Home's Discover section. */
 export type DiscoverRowId = "magic-queue" | "artist-mixes" | "genre-mixes";
@@ -268,3 +270,15 @@ const parseDiscoverRows = (value: unknown): readonly DiscoverRowId[] => {
   }
   return rows.length === 0 ? DEFAULT_DISCOVER_ROWS : rows;
 };
+
+/**
+ * Owner-shown mixes build and rerank. An empty Library's shown Magic Queue
+ * also needs Artist mixes, even with their row removed. Order affects drawing only.
+ */
+export const discoverMixRowsToBuild = (
+  rows: readonly DiscoverRowId[],
+  { empty }: { readonly empty: boolean },
+): MixRowId[] =>
+  (["artist-mixes", "genre-mixes"] as const).filter(
+    (id) => rows.includes(id) || (id === "artist-mixes" && empty && rows.includes("magic-queue")),
+  );

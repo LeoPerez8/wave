@@ -394,6 +394,10 @@ export {
   tabsOffBar,
 } from "./tabBar.ts";
 export type { TabBar, TabBarEdit, TabBarTab } from "./tabBar.ts";
+export { catalogueOf, resolveAppLanguage } from "./localisation.ts";
+export type { AppLanguage, Catalogue } from "./localisation.ts";
+export { plural } from "./plural.ts";
+export type { PluralForms } from "./plural.ts";
 export { createDeveloperTitleTaps } from "./developerSettings.ts";
 export {
   LAYOUT_PAGES,
@@ -2089,7 +2093,12 @@ export type { CoverDoubleTap, CoverTaps } from "./coverGestures.ts";
 export { createStarPop } from "./starPop.ts";
 export type { StarPop } from "./starPop.ts";
 export { discoverLevelLabel } from "./discoverMixLevels.ts";
-export { DISCOVER_ROWS, discoverRowTitle, hiddenDiscoverRows } from "./homeSections.ts";
+export {
+  DISCOVER_ROWS,
+  discoverRowTitle,
+  hiddenDiscoverRows,
+  discoverMixRowsToBuild,
+} from "./homeSections.ts";
 export type { DiscoverRowId, DiscoverRowEdit, MixRowId } from "./homeSections.ts";
 export {
   lyricsTranslationKey,
@@ -2348,11 +2357,4 @@ export type {
 } from "./nowPlayingButtons.ts";
 
 export * from "./followedArtists.ts";
-export { followFeed, type FollowRelease, type ReleaseType } from "./followedArtists.ts";
-export {
-  deezerReleases,
-  deezerFollowArtists,
-  matchFollowRelease,
-  checkDue,
-  releaseDateLine,
-} from "./followedArtists.ts";
+export * from "./followArtistSearch.ts";

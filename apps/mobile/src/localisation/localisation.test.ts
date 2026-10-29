@@ -1,0 +1,72 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import { createElement, memo, useEffect } from "react";
+import { act, create, type ReactTestRenderer } from "react-test-renderer";
+
+import type { ExternalStore } from "../lib/externalStore.ts";
+import { reactCompilerBuilds, stubModule } from "../perf/reactCompilerBuilds.ts";
+
+// The Portuguese (preview) switch re-renders what reads the catalogue at once,
+// as written and as the React Compiler builds it, without remounting it.
+
+Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+
+const externalStore = JSON.stringify(new URL("../lib/externalStore.ts", import.meta.url).href);
+/** The switch, and the phone's languages (Android's, through the native layer). */
+const device = stubModule(
+  `import { makeExternalStore } from ${externalStore};
+   export const preview = makeExternalStore(false);
+   export const phone = { languages: ["pt-BR", "en-US"] };`,
+);
+const builds = await reactCompilerBuilds<typeof import("./localisation.ts")>(
+  new URL("./localisation.ts", import.meta.url).href,
+  {
+    "@/settings/portuguesePreview": stubModule(
+      `import { preview } from ${JSON.stringify(device)};
+       export const portuguesePreview = preview.get;
+       export const subscribePortuguesePreview = preview.subscribe;`,
+    ),
+    "@/native/waveNative": stubModule(
+      `import { phone } from ${JSON.stringify(device)};
+       export const phoneLanguages = () => phone.languages;`,
+    ),
+  },
+);
+const { preview } = (await import(device)) as { preview: ExternalStore<boolean> };
+
+for (const [build, localisation] of Object.entries(builds)) {
+  const { LocalisationProvider, useLocalisation, currentLocalisation } = localisation;
+
+  test(`${build}: flipping Portuguese (preview) re-renders the tab names in place`, async () => {
+    preview.set(false);
+    const shown: string[] = [];
+    let mounts = 0;
+    // Memoized, as the tab bar is: only the catalogue can re-render it.
+    const Tab = memo(function Tab() {
+      const { language, strings } = useLocalisation();
+      shown.push(`${language} ${strings.tabs.index}`);
+      useEffect(() => {
+        mounts += 1;
+      }, []);
+      return createElement("tab");
+    });
+    let renderer: ReactTestRenderer | undefined;
+    try {
+      await act(() => {
+        renderer = create(createElement(LocalisationProvider, null, createElement(Tab)));
+      });
+      assert.equal(shown.at(-1), "en Home", "off, a Portuguese phone reads in English");
+      assert.equal(currentLocalisation().strings.tabs.index, "Home");
+
+      await act(() => preview.set(true));
+      assert.equal(shown.at(-1), "pt-BR Início", "on, it reads in Portuguese at once");
+      assert.equal(currentLocalisation().language, "pt-BR", "services read the same value");
+
+      await act(() => preview.set(false));
+      assert.equal(shown.at(-1), "en Home");
+      assert.equal(mounts, 1, "the screen isn't remounted");
+    } finally {
+      await act(() => renderer?.unmount());
+    }
+  });
+}
