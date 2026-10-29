@@ -455,6 +455,7 @@ export {
   CUSTOM_INK,
   DEFAULT_THEME_CHOICE,
   THEME_SWATCHES,
+  WHITE_INK,
   chooseCustomInk,
   customInkPreview,
   isDefaultThemeChoice,

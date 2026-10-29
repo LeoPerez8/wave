@@ -32,6 +32,20 @@ export interface InkSwatch {
   readonly dark: string;
 }
 
+/** The id of the Default swatch that leads Primary and Secondary: white in dark mode. */
+export const WHITE_INK = "white";
+
+/**
+ * The Default swatch of Primary and Secondary. Its light tone is the text
+ * colour of the light ground it sits on (this hex is fog's), so it reads.
+ */
+const DEFAULT_INK: InkSwatch = {
+  id: WHITE_INK,
+  label: "Default",
+  light: DEFAULT_THEME.light.foreground,
+  dark: "#ffffff",
+};
+
 /** The presets of each group; the first of each is the shipped theme. */
 export const THEME_SWATCHES: {
   readonly light: readonly BackgroundSwatch[];
@@ -56,6 +70,7 @@ export const THEME_SWATCHES: {
     { id: "plum", label: "Plum", colour: "#140c17" },
   ],
   primary: [
+    DEFAULT_INK,
     {
       id: "teal",
       label: "Teal",
@@ -69,6 +84,7 @@ export const THEME_SWATCHES: {
     { id: "lime", label: "Lime", light: "#8cc63f", dark: "#b5e36b" },
   ],
   secondary: [
+    DEFAULT_INK,
     {
       id: "ember",
       label: "Ember",
@@ -183,10 +199,15 @@ const INK_TOKEN = { primary: "accent", secondary: "highlight" } as const satisfi
 
 type Mutable<T> = { -readonly [K in keyof T]: T[K] };
 
-/** The ink a group asks for before readability: its custom colour, or its preset's tone for `scheme`. */
-const ink = (choice: ThemeChoice, group: InkGroup, scheme: Scheme): string => {
+/**
+ * The ink a group asks for before readability: its custom colour, or its
+ * preset's tone for `scheme`; null for the Default swatch in light mode, which
+ * takes the ground's text colour.
+ */
+const ink = (choice: ThemeChoice, group: InkGroup, scheme: Scheme): string | null => {
   const custom = choice[CUSTOM_FIELD[group]];
   if (choice[group] === CUSTOM_INK && custom !== null) return custom;
+  if (choice[group] === WHITE_INK && scheme === "light") return null;
   const swatch =
     THEME_SWATCHES[group].find((candidate) => candidate.id === choice[group]) ??
     THEME_SWATCHES[group][0];
@@ -268,17 +289,18 @@ const readable = (
   return extreme;
 };
 
-/** One scheme's colours for a background, primary and secondary. */
+/** One scheme's colours for a background, primary and secondary (null: the text colour). */
 const deriveScheme = (
   scheme: Scheme,
   ground: string,
-  accent: string,
-  highlight: string,
+  accent: string | null,
+  highlight: string | null,
 ): ThemeColors => {
+  const neutrals = deriveNeutrals(scheme, ground);
   const colours: Mutable<ThemeColors> = {
-    ...deriveNeutrals(scheme, ground),
-    accent,
-    highlight,
+    ...neutrals,
+    accent: accent ?? neutrals.foreground,
+    highlight: highlight ?? neutrals.foreground,
     destructive: DEFAULT_THEME[scheme].destructive,
   };
   for (const { ink: token, on, minimum } of CONTRAST_REQUIREMENTS) {
