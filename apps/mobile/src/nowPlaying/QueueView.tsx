@@ -64,7 +64,7 @@ import {
   toggleShuffle,
 } from "@/playback/actions";
 import { openQueuedSongActions } from "@/playback/ActionsMenu";
-import { useQueue } from "@/playback/hooks";
+import { useQueue, useUpNextReshuffles } from "@/playback/hooks";
 import {
   retryMagicBatch,
   useMagicBatchEmptySeed,
@@ -75,7 +75,6 @@ import {
 import { queueState } from "@/playback/Queue";
 import type { PlaybackState } from "@/playback/Player";
 import type { QueueTrack } from "@/playback/queueTracks";
-import { useShuffleKind } from "@/settings/shuffleKind";
 import { SongRow } from "@/songs/SongRow";
 import { createSongListModel, type SongRowPresentation } from "@/songs/songListModel";
 import { useThemeColor } from "@/theme/useThemeColor";
@@ -615,14 +614,16 @@ export function UpNextList({
   // Next through Legend List, which draws the rows for that offset even if its
   // queue changed out of sight; while it shows, the place follows History
   // growing or emptying under it. A shuffle toggle, or a kind chosen on the
-  // shuffle card, reorders Up Next with History as it was: the list goes back
-  // to Up Next's start, from wherever it was scrolled.
+  // shuffle card (the one already chosen too), reorders Up Next with History
+  // as it was: the list goes back to Up Next's start, from wherever it was
+  // scrolled. It counts the reorders as they land, not the shuffle setting,
+  // so a kind synced in from another device doesn't move the list.
   const listRef = useRef<LegendListRef>(null);
   const [placement] = useState(() => upNextScroll<QueueState["context"]>());
-  const shuffleOrder = `${queue.shuffle}:${useShuffleKind()}`;
+  const reshuffles = useUpNextReshuffles();
   useLayoutEffect(() => {
-    placement.place(listRef.current, queue.context, start, shuffleOrder);
-  }, [placement, queue.context, start, shuffleOrder]);
+    placement.place(listRef.current, queue.context, start, reshuffles);
+  }, [placement, queue.context, start, reshuffles]);
   useLayoutEffect(() => placement.hide, [placement]);
 
   // The Back to Current Song pill follows the scroll on the UI thread, and a

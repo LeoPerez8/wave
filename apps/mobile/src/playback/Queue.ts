@@ -21,6 +21,7 @@ import {
   queueUndo,
   queueWrite,
   reduceQueue,
+  reshuffledUpNext,
   savedQueueState,
   shuffledTrackIds,
   shufflesQueue,
@@ -83,6 +84,14 @@ export const keptPlayingKey = makeExternalStore<string | null>(null);
  * queue is recorded with it (`PlayHistory`), whoever skips or pauses later.
  */
 export const queueSource = makeExternalStore<PlaySource>("phone");
+
+/**
+ * How many times a shuffle toggle (the app's or Android Auto's) or a kind
+ * picked on the shuffle card reordered Up Next (Core's `reshuffledUpNext`),
+ * counted as each lands: the Queue view goes back to the start of Up Next on
+ * each, a kind picked again included, and on nothing else.
+ */
+export const upNextReshuffles = makeExternalStore(0);
 
 /** Queue changes come in bursts (skips, reorders); the queue is saved once they settle. */
 const QUEUE_SETTLE_MS = 500;
@@ -559,15 +568,19 @@ export const layer = Layer.effect(
     /**
      * What a dispatched command's end does: the queue becomes its state, and
      * the player follows. [cause] is the command, as the app log names the
-     * song change it makes (Core's `songChangeCause`).
+     * song change it makes (Core's `songChangeCause`); [command], when there's
+     * one, says whether it reshuffled Up Next (`upNextReshuffles`).
      */
-    const apply = (cause: SongChangeCause) => (done: Done) =>
+    const apply = (cause: SongChangeCause, command?: QueueCommand) => (done: Done) =>
       Effect.gen(function* () {
         if (done.kind !== "go") return;
         const { state, playback, newQueue } = done;
         const shown = queueState.get();
         if (state === shown && playback === "keep") return;
         queueState.set(state);
+        if (command !== undefined && reshuffledUpNext(shown, command, state)) {
+          upNextReshuffles.update((count) => count + 1);
+        }
         if (state !== shown) queueChanged();
         yield* sync(state, cause);
         yield* applyRepeat(state);
@@ -672,7 +685,7 @@ export const layer = Layer.effect(
           queueSource.set(queueSourceAfter(source, command, "phone"));
           return start(command, added, source);
         }),
-        apply(songChangeCause(command)),
+        apply(songChangeCause(command), command),
       );
 
     // An unsearched song played from Auto is searched first, as on the phone.

@@ -83,6 +83,7 @@ export {
   readShuffleKind,
   playReplacesQueue,
   reduceQueue,
+  reshuffledUpNext,
   shuffledTrackIds,
   shufflesQueue,
   upNext,

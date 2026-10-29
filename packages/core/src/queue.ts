@@ -564,6 +564,18 @@ export const shufflesQueue = (state: QueueState, command: QueueCommand): boolean
   }
 };
 
+/**
+ * Whether [command] took [before] to [after] by reordering Up Next with
+ * History as it was: a shuffle toggle either way, or a kind picked on the
+ * shuffle card, even the one already chosen. The Queue view goes back to the
+ * start of Up Next after one (story 25), however the list was scrolled.
+ */
+export const reshuffledUpNext = (
+  before: QueueState,
+  command: QueueCommand,
+  after: QueueState,
+): boolean => (command.type === "setShuffle" || command.type === "reshuffle") && after !== before;
+
 /** Whether [state] plays its last entry with shuffle and Repeat All on: a shuffled lap comes next. */
 const shuffledLapNext = (state: QueueState): boolean =>
   state.shuffle &&

@@ -11,30 +11,37 @@ const AT_START = 1;
  * Places the Queue's list at the start of Up Next: the offset of its sticky
  * bar, with History above it out of sight. A list showing for the first time
  * lays itself out there (its initial offset). After that each showing, and a
- * new play or a shuffle toggle while it shows (a new [shuffle], which
- * reorders Up Next and leaves History as it is), scroll there through the
- * list, so the rows it draws match the offset on screen, even when it sat out
- * of sight while its queue changed. While it shows, a list sitting at the
+ * new play or a reshuffle while it shows (a new [reshuffles] count: a shuffle
+ * toggle or a kind picked on the shuffle card, even the one already chosen,
+ * which reorders Up Next and leaves History as it is), scroll there through
+ * the list, so the rows it draws match the offset on screen, even when it sat
+ * out of sight while its queue changed. While it shows, a list sitting at the
  * start of Up Next stays there as History grows or empties (the song
  * changed); scrolled anywhere else, the rows on screen hold still.
  *
  * `place` is the call to make on every showing and whenever the play context,
- * the shuffle or the start of Up Next changes while it shows; `hide`, when it
- * goes out of sight.
+ * the reshuffle count or the start of Up Next changes while it shows; `hide`,
+ * when it goes out of sight.
  */
 export function upNextScroll<Context>() {
-  let last: { list: UpNextScroller; context: Context; start: number; shuffle: unknown } | undefined;
+  let last:
+    { list: UpNextScroller; context: Context; start: number; reshuffles: unknown } | undefined;
   let hidden = false;
   return {
-    place(list: UpNextScroller | null, context: Context, start: number, shuffle?: unknown): void {
+    place(
+      list: UpNextScroller | null,
+      context: Context,
+      start: number,
+      reshuffles?: unknown,
+    ): void {
       if (list === null) return;
       const previous = last;
       const showing = hidden;
       hidden = false;
-      last = { list, context, start, shuffle };
+      last = { list, context, start, reshuffles };
       if (previous?.list !== list) return;
       const atStart = Math.abs(list.getState().scroll - previous.start) < AT_START;
-      const reordered = context !== previous.context || shuffle !== previous.shuffle;
+      const reordered = context !== previous.context || reshuffles !== previous.reshuffles;
       if (!showing && !reordered && !atStart) return;
       void list.scrollToOffset({ offset: start, animated: false });
     },

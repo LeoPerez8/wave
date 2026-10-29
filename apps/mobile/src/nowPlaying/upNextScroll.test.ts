@@ -64,6 +64,26 @@ describe("upNextScroll", () => {
     }
   });
 
+  test("each reshuffle while Up Next shows starts it at its start, the same kind picked again too", () => {
+    const { place } = upNextScroll();
+    const { scroller, asked } = list(900);
+    place(scroller, songs, 300, 1);
+    place(scroller, songs, 300, 2);
+    place(scroller, songs, 300, 3);
+    assert.deepEqual(asked, [
+      { offset: 300, animated: false },
+      { offset: 300, animated: false },
+    ]);
+  });
+
+  test("with no reshuffle, scrolled down Up Next, the rows on screen hold still", () => {
+    const { place } = upNextScroll();
+    const { scroller, asked } = list(900);
+    place(scroller, songs, 300, 4);
+    place(scroller, songs, 300, 4);
+    assert.deepEqual(asked, []);
+  });
+
   test("sitting at the start of Up Next, it stays there as History grows or empties", () => {
     const { place } = upNextScroll();
     const { scroller, asked } = list(300);

@@ -8,6 +8,7 @@ import {
   parseQueueState,
   queueHistory,
   reduceQueue,
+  reshuffledUpNext,
   upNext,
   upNextMove,
   withPendingMoves,
@@ -695,5 +696,40 @@ describe("Repeat All's next lap after a shuffle toggle", () => {
       ids(state.entries),
       album.filter((id) => id !== currentEntry(last)!.trackId),
     );
+  });
+});
+
+/** [command] on [state], with the state it leads to. */
+const step = (state: QueueState, command: QueueCommand) => ({
+  state,
+  command,
+  after: reduceQueue(state, command, seeded(3)).state,
+});
+
+/** What `reshuffledUpNext` says of [a step](step). */
+const says = ({ state, command, after }: ReturnType<typeof step>): boolean =>
+  reshuffledUpNext(state, command, after);
+
+describe("reshuffledUpNext", () => {
+  const playing = start("a b c d e", 1);
+
+  test("a shuffle toggle either way reorders Up Next", () => {
+    const on = step(playing, { type: "setShuffle", on: true });
+    assert.equal(says(on), true);
+    assert.equal(says(step(on.after, { type: "setShuffle", on: false })), true);
+  });
+
+  test("a kind picked on the shuffle card does, the one already chosen too", () => {
+    const shuffled = step(playing, { type: "setShuffle", on: true }).after;
+    assert.equal(says(step(playing, { type: "reshuffle" })), true);
+    assert.equal(says(step(shuffled, { type: "reshuffle" })), true);
+  });
+
+  test("a toggle to what shuffle already is, or any other command, doesn't", () => {
+    assert.equal(says(step(playing, { type: "setShuffle", on: false })), false);
+    assert.equal(says(step(playing, { type: "next" })), false);
+    assert.equal(says(step(playing, { type: "addToQueue", trackIds: ["x"] })), false);
+    const play = { type: "play", trackIds: ["p", "q"], context: songs, shuffle: true } as const;
+    assert.equal(says(step(playing, play)), false);
   });
 });
