@@ -19,6 +19,8 @@ type Props = {
   format: (value: number) => string;
   /** Called with each new value while dragging (only when it lands on a different step). */
   onChange: (value: number) => void;
+  /** Called when the finger leaves the slider after a drag or a tap (not for TalkBack's steps). */
+  onRelease?: () => void;
   /** In a card (a section's level card): the label at body size, the rows closer together. */
   compact?: boolean;
 };
@@ -33,7 +35,15 @@ const DRAG_SLOP = 6;
  * Drag or tap the track to choose; values land on the range's steps.
  * Screen readers adjust it one step at a time.
  */
-export function SettingsSlider({ label, value, range, format, onChange, compact = false }: Props) {
+export function SettingsSlider({
+  label,
+  value,
+  range,
+  format,
+  onChange,
+  onRelease,
+  compact = false,
+}: Props) {
   const width = useRef(0);
   const last = useRef(value);
   useEffect(() => {
@@ -55,10 +65,15 @@ export function SettingsSlider({ label, value, range, format, onChange, compact 
     failOffsetY: [-DRAG_SLOP * 2, DRAG_SLOP * 2],
     onActivate: (event) => choose(at(event.x)),
     onUpdate: (event) => choose(at(event.x)),
+    onDeactivate: () => onRelease?.(),
   });
   const tap = useTapGesture({
     runOnJS: true,
-    onActivate: (event) => choose(at(event.x)),
+    // A tap activates as the finger lifts.
+    onActivate: (event) => {
+      choose(at(event.x));
+      onRelease?.();
+    },
   });
   const gesture = useExclusiveGestures(pan, tap);
 

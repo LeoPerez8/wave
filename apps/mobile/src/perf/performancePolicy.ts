@@ -710,6 +710,10 @@ export const SONG_ROW_SITES: Record<string, Exception> = {
   "preview/KindCards.tsx#SongRow": {
     reason: "Developer Design preview cards: synthetic rows from preview/syntheticSongRow.ts.",
   },
+  "settings/SampleSongRow.tsx#SampleSongRow": {
+    reason:
+      "Settings' one fixed fake song (Motion's and Touch's samples), not a list: no Library song, no store.",
+  },
 };
 /** Core's song row view is computed once per song and state, by the song list's model. */
 export const SONG_ROW_VIEW_SITES: Record<string, Exception> = {

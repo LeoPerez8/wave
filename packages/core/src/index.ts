@@ -2301,3 +2301,5 @@ export type {
   RecognizeTrack,
 } from "./recognition.ts";
 export { planShazamAdd } from "./shazamPlaylist.ts";
+export { bounceDemoSwipe, sampleSwipeActions } from "./motionSample.ts";
+export type { BounceDemoSwipe } from "./motionSample.ts";
