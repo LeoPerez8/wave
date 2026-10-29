@@ -2,7 +2,12 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { upNextEndSpace, upNextScroll, type UpNextScroller } from "./upNextScroll.ts";
+import {
+  backToCurrentSong,
+  upNextEndSpace,
+  upNextScroll,
+  type UpNextScroller,
+} from "./upNextScroll.ts";
 
 /** A stand-in for Legend List's handle, scrolled to `scroll`, recording the scrolls asked of it. */
 const list = (scroll: number) => {
@@ -118,5 +123,33 @@ describe("upNextEndSpace", () => {
 
   test("a list not laid out yet needs none", () => {
     assert.equal(upNextEndSpace(0, { ...sizes, count: 3 }), 0);
+  });
+});
+
+describe("backToCurrentSong", () => {
+  // Up Next starts 300 dp down a 600 dp list.
+  const start = 300;
+  const height = 600;
+
+  test("scrolled into History, the pill points down to Up Next", () => {
+    assert.equal(backToCurrentSong(120, start, height), "down");
+    assert.equal(backToCurrentSong(0, start, height), "down");
+  });
+
+  test("more than one screen down Up Next, it points up to its start", () => {
+    assert.equal(backToCurrentSong(901, start, height), "up");
+    assert.equal(backToCurrentSong(5000, start, height), "up");
+  });
+
+  test("at the start of Up Next, or less than a screen down it, there's no pill", () => {
+    assert.equal(backToCurrentSong(300, start, height), null);
+    assert.equal(backToCurrentSong(299.5, start, height), null);
+    assert.equal(backToCurrentSong(600, start, height), null);
+    assert.equal(backToCurrentSong(900, start, height), null);
+  });
+
+  test("a list not laid out yet shows none", () => {
+    assert.equal(backToCurrentSong(120, start, 0), null);
+    assert.equal(backToCurrentSong(5000, start, 0), null);
   });
 });

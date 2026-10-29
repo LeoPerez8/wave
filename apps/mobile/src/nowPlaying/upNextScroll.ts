@@ -58,3 +58,21 @@ export const upNextEndSpace = (
   listHeight: number,
   layout: { bar: number; row: number; count: number; bottomInset: number },
 ): number => Math.max(0, listHeight - layout.bar - layout.count * layout.row - layout.bottomInset);
+
+/**
+ * Where the Queue's Back to Current Song pill points to bring back the start
+ * of Up Next (its sticky bar, at [start] in the list), or null while it's in
+ * sight: down when the list is scrolled up into History, up when it's more
+ * than one screen (the [listHeight] list's height) down Up Next. A little way
+ * down Up Next shows no pill, nor does a list not laid out yet.
+ */
+export const backToCurrentSong = (
+  scroll: number,
+  start: number,
+  listHeight: number,
+): "up" | "down" | null => {
+  "worklet";
+  if (listHeight <= 0) return null;
+  if (scroll < start - AT_START) return "down";
+  return scroll > start + listHeight ? "up" : null;
+};
