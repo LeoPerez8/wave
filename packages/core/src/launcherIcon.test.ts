@@ -139,8 +139,33 @@ describe("launcherIconSwitch", () => {
   const keeps = { dropsHomeScreenIcon: false };
   const drops = { dropsHomeScreenIcon: true };
 
-  test("a background change leaves the icon alone", () => {
-    assert.equal(launcherIconSwitch(DEFAULT_THEME_CHOICE, choose({ dark: "black" }), drops), null);
+  test("light or dark background changes never request an icon switch, including custom colours (#791)", () => {
+    const primary = chooseCustomInk(DEFAULT_THEME_CHOICE, "primary", "#1177bb");
+    const secondary = chooseCustomInk(DEFAULT_THEME_CHOICE, "secondary", "#330099");
+    for (const choice of [
+      DEFAULT_THEME_CHOICE,
+      primary,
+      secondary,
+      chooseCustomInk(primary, "secondary", "#330099"),
+    ]) {
+      for (const group of ["light", "dark"] as const) {
+        for (const from of THEME_SWATCHES[group]) {
+          for (const to of THEME_SWATCHES[group]) {
+            for (const launcher of [keeps, drops]) {
+              assert.equal(
+                launcherIconSwitch(
+                  { ...choice, [group]: from.id },
+                  { ...choice, [group]: to.id },
+                  launcher,
+                ),
+                null,
+                `${choice.primary}/${choice.secondary}: ${group} ${from.id} to ${to.id}`,
+              );
+            }
+          }
+        }
+      }
+    }
   });
 
   test("a new primary or secondary switches to its icon", () => {
