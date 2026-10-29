@@ -10,14 +10,14 @@ import {
   chooseCustomInk,
   launchTheme,
   launcherIconFor,
+  readThemeChoice,
   themeFor,
   type ThemeChoice,
 } from "./index.ts";
 
-const choose = (change: Partial<ThemeChoice>): ThemeChoice => ({
-  ...DEFAULT_THEME_CHOICE,
-  ...change,
-});
+/** A choice; a former preset id (#794) reads as Wave reads it now, custom and saved. */
+const choose = (change: Partial<ThemeChoice>): ThemeChoice =>
+  readThemeChoice(JSON.stringify({ ...DEFAULT_THEME_CHOICE, ...change }));
 
 const choiceKey = (choice: ThemeChoice): string =>
   `${choice.light}/${choice.dark}/${choice.primary}/${choice.secondary}`;
@@ -32,18 +32,14 @@ const splash = (choice: ThemeChoice) => {
   return theme && { light: theme.light, dark: theme.dark };
 };
 
-/** Every choice Settings › Theme can make. */
+/** Every background with Default or a former preset's colour for each ink. */
 const everyChoice = (): ThemeChoice[] =>
   THEME_SWATCHES.light.flatMap((light) =>
     THEME_SWATCHES.dark.flatMap((dark) =>
-      THEME_SWATCHES.primary.flatMap((primary) =>
-        THEME_SWATCHES.secondary.map((secondary) => ({
-          ...DEFAULT_THEME_CHOICE,
-          light: light.id,
-          dark: dark.id,
-          primary: primary.id,
-          secondary: secondary.id,
-        })),
+      ["white", "teal", "blue", "violet", "green", "rose", "lime"].flatMap((primary) =>
+        ["white", "ember", "gold", "coral", "magenta", "sky", "lemon"].map((secondary) =>
+          choose({ light: light.id, dark: dark.id, primary, secondary }),
+        ),
       ),
     ),
   );
@@ -138,7 +134,7 @@ describe("launchTheme", () => {
     assert.equal(splash(choose({ dark: "navy" }))?.dark.background, "#0a0f1f");
   });
 
-  test("every choice Settings offers has a splash theme Android can name", () => {
+  test("every background with Default or a former preset's colour has a splash theme Android can name", () => {
     const names = new Set(LAUNCH_SPLASH_THEMES.map((theme) => theme.name));
     const choices = everyChoice();
     for (const choice of choices) {
@@ -225,7 +221,7 @@ describe("launchTheme", () => {
     const custom = choose({ light: "sand", primary: "custom", customPrimary: "#0d2350" });
     assert.equal(
       launchTheme(custom).splashTheme,
-      launchTheme({ ...custom, primary: "blue" }).splashTheme,
+      launchTheme(choose({ light: "sand", primary: "blue" })).splashTheme,
     );
     assert.equal(launchTheme(custom).light.primary, "#1f5fb8");
   });

@@ -3,6 +3,7 @@ import { toOklch } from "./colour.ts";
 import {
   CUSTOM_INK,
   DEFAULT_THEME_CHOICE,
+  FORMER_INK_SWATCHES,
   THEME_SWATCHES,
   WHITE_INK,
   chooseCustomInk,
@@ -64,14 +65,13 @@ const presetInk = (swatch: InkSwatch): PaletteInk => ({
 const whiteSwatch = THEME_SWATCHES.primary.find((swatch) => swatch.id === WHITE_INK)!;
 
 /**
- * All 25 inks; both waves can use either group's presets, any vivid tone or
- * the Default swatch's white. White comes last, so the 24 inks before it keep
- * the positions splash style names count.
+ * All 25 inks; both waves can use either group's former presets, any vivid
+ * tone or the Default swatch's white. The presets left Settings (#794) but
+ * keep their places, and white comes last, so the inks keep the positions
+ * splash style names count and the ids alias names use.
  */
 export const INK_PALETTE: readonly PaletteInk[] = [
-  ...[...THEME_SWATCHES.primary, ...THEME_SWATCHES.secondary]
-    .filter((swatch) => swatch.id !== WHITE_INK)
-    .map(presetInk),
+  ...[...FORMER_INK_SWATCHES.primary, ...FORMER_INK_SWATCHES.secondary].map(presetInk),
   ...VIVID_SOURCES.map(([hue, hex]) => {
     const theme = themeFor(chooseCustomInk(DEFAULT_THEME_CHOICE, "primary", hex));
     return {
@@ -105,19 +105,26 @@ const NEAR_WHITE = { lightness: 0.9, chroma: 0.06 } as const;
 
 const white = INK_PALETTE.at(-1)!;
 
+/** A former preset's ink, by the preset's dark tone (the colour it reads as now). */
+const FORMER_INK: ReadonlyMap<string, PaletteInk> = new Map(
+  [...FORMER_INK_SWATCHES.primary, ...FORMER_INK_SWATCHES.secondary].map((swatch) => [
+    swatch.dark,
+    INK_PALETTE.find((ink) => ink.id === swatch.id)!,
+  ]),
+);
+
 /**
- * A preset keeps its ink; a custom colour matches its corrected ink on the
+ * Default keeps white; a former preset's colour keeps that preset's ink, so
+ * its icon stays; any other custom colour matches its corrected ink on the
  * icon's black ground: white when it's close to white, else the nearest other ink.
  */
 export const inkPairFor = (choice: ThemeChoice): InkPair => {
   const theme = themeFor({ ...choice, dark: "black" });
   const pick = (group: InkGroup): PaletteInk => {
-    const presets = THEME_SWATCHES[group];
     const custom = group === "primary" ? choice.customPrimary : choice.customSecondary;
-    if (choice[group] !== CUSTOM_INK || custom === null) {
-      const id = presets.find((swatch) => swatch.id === choice[group])?.id ?? presets[0]!.id;
-      return INK_PALETTE.find((ink) => ink.id === id)!;
-    }
+    if (choice[group] !== CUSTOM_INK || custom === null) return white;
+    const former = FORMER_INK.get(custom);
+    if (former !== undefined) return former;
     const hex = theme.dark[group === "primary" ? "accent" : "highlight"];
     const tone = toOklch(hex);
     if (tone.l >= NEAR_WHITE.lightness && tone.c <= NEAR_WHITE.chroma) return white;
