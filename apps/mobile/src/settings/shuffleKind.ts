@@ -6,8 +6,9 @@ import { persistedSetting } from "@/lib/persistedSetting";
  * The kind of shuffle chosen on the card opened by any shuffle button:
  * Real Shuffle unless Smart Shuffle or Even Shuffle was chosen.
  * Every shuffle uses it, the Shuffle buttons and Android Auto's included.
+ * Settings › Layout › Now Playing sets it too (`shuffleKindChoice`).
  */
-const shuffleKindSetting = persistedSetting<ShuffleKind>({
+export const shuffleKindSetting = persistedSetting<ShuffleKind>({
   key: "settings.shuffleKind",
   synced: true,
   read: readShuffleKind,

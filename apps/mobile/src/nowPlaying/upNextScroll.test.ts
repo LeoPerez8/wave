@@ -49,6 +49,16 @@ describe("upNextScroll", () => {
     assert.deepEqual(asked, [{ offset: 0, animated: false }]);
   });
 
+  test("a shuffle toggle while Up Next shows starts it at its start, from wherever it was", () => {
+    for (const scroll of [120, 300, 900]) {
+      const { place } = upNextScroll();
+      const { scroller, asked } = list(scroll);
+      place(scroller, songs, 300, "off");
+      place(scroller, songs, 300, "on");
+      assert.deepEqual(asked, [{ offset: 300, animated: false }], `scrolled to ${scroll}`);
+    }
+  });
+
   test("sitting at the start of Up Next, it stays there as History grows or empties", () => {
     const { place } = upNextScroll();
     const { scroller, asked } = list(300);

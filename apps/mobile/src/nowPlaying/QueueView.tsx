@@ -60,6 +60,7 @@ import {
 import { queueState } from "@/playback/Queue";
 import type { PlaybackState } from "@/playback/Player";
 import type { QueueTrack } from "@/playback/queueTracks";
+import { useShuffleKind } from "@/settings/shuffleKind";
 import { SongRow } from "@/songs/SongRow";
 import { createSongListModel, type SongRowPresentation } from "@/songs/songListModel";
 import { useThemeColor } from "@/theme/useThemeColor";
@@ -106,7 +107,8 @@ function Toggle({ icon: Icon, label, on, onPress, onLongPress, accessibilityHint
   );
 }
 
-const REPEAT_LABEL: Record<RepeatMode, string> = {
+/** What the repeat toggles say for each mode. */
+export const REPEAT_LABEL: Record<RepeatMode, string> = {
   off: "Repeat",
   all: "Repeat",
   one: "Repeat One",
@@ -406,10 +408,10 @@ const barOffset = (history: number): number => (history === 0 ? 0 : SECTION_HEAD
  *
  * The list is Legend List's Reanimated one: its sticky bar follows the
  * scroll as Reanimated reads it. The plain list's follows a scroll event it
- * builds again whenever the bar's index changes, and a reshuffle emptying
- * History moved the bar to the top as the list scrolled there, so the bar
- * missed that scroll and stayed drawn at History's old height, over Up Next
- * (#706).
+ * builds again whenever the bar's index changes, and a reshuffle that
+ * emptied History (as one did before #797) moved the bar to the top as the
+ * list scrolled there, so the bar missed that scroll and stayed drawn at
+ * History's old height, over Up Next (#706).
  *
  * While a Magic Queue picks its next batch, skeleton rows stand where it will
  * land: in place of "Nothing up next.", or under the songs already in Up
@@ -538,12 +540,15 @@ export function UpNextList({
   // again on each showing. Each showing places the list at the start of Up
   // Next through Legend List, which draws the rows for that offset even if its
   // queue changed out of sight; while it shows, the place follows History
-  // growing or emptying under it.
+  // growing or emptying under it. A shuffle toggle, or a kind chosen on the
+  // shuffle card, reorders Up Next with History as it was: the list goes back
+  // to Up Next's start, from wherever it was scrolled.
   const listRef = useRef<LegendListRef>(null);
   const [placement] = useState(() => upNextScroll<QueueState["context"]>());
+  const shuffleOrder = `${queue.shuffle}:${useShuffleKind()}`;
   useLayoutEffect(() => {
-    placement.place(listRef.current, queue.context, start);
-  }, [placement, queue.context, start]);
+    placement.place(listRef.current, queue.context, start, shuffleOrder);
+  }, [placement, queue.context, start, shuffleOrder]);
   useLayoutEffect(() => placement.hide, [placement]);
 
   const renderItem = useCallback(

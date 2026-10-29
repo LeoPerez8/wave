@@ -1,11 +1,6 @@
 import { activeTiming, beginTiming, timingSurfaceCommitted } from "@/lib/timing";
-import {
-  IconChevronDown,
-  IconListNumbers,
-  IconQuote,
-  IconShare3,
-} from "@tabler/icons-react-native";
-import type { ComponentType, ReactNode } from "react";
+import { IconChevronDown, IconListNumbers, IconShare3 } from "@tabler/icons-react-native";
+import type { ReactNode } from "react";
 import {
   Activity,
   memo,
@@ -32,6 +27,7 @@ import { LyricCardLayer } from "@/share/LyricCardLayer";
 import { useLyricCardShown } from "@/share/lyricCard";
 import { useSongShareShown } from "@/share/songShare";
 import { shareNowPlaying } from "@/share/songShare";
+import { useNowPlayingButtons } from "@/settings/nowPlayingButtons";
 
 import { Background, useBackgroundColors, type GroundColors } from "./Background";
 import { DismissArea } from "./DismissArea";
@@ -57,8 +53,7 @@ import {
   useNowPlayingShown,
   useNowPlayingSettled,
 } from "./sheet";
-import { SleepTimerButton } from "./SleepTimer";
-import { AddToPlaylistButton, DownloadButton } from "./SongButtons";
+import { SlotButton, ViewToggle, slotShows, type SlotContext } from "./SlotButtons";
 import { Transport } from "./Transport";
 import {
   nowPlayingSongLookup,
@@ -69,32 +64,6 @@ import {
 
 /** What fills the space above the controls. */
 export type NowPlayingView = "player" | "queue" | "lyrics";
-
-type IconProps = { size?: number; color?: string; strokeWidth?: number };
-
-/** An icon that switches Now Playing's view: teal while its view shows, graphite otherwise. */
-function ViewToggle({
-  icon: Icon,
-  label,
-  on,
-  onPress,
-}: {
-  icon: ComponentType<IconProps>;
-  label: string;
-  on: boolean;
-  onPress: () => void;
-}) {
-  return (
-    <IconButton
-      icon={Icon}
-      label={label}
-      accessibilityRole="switch"
-      accessibilityState={{ checked: on }}
-      onPress={onPress}
-      tone={on ? "accent" : "secondary"}
-    />
-  );
-}
 
 const close = (): void => closeNowPlaying(undefined, "chevron");
 
@@ -261,6 +230,31 @@ export function NowPlayingSheet() {
       void nowPlayingSongLookup.acquire(songTarget).catch(songActionFailed);
     setView((current) => (current === "lyrics" ? "player" : "lyrics"));
   };
+  const share = () => {
+    if (item === null) return;
+    shareNowPlaying(
+      {
+        title: item.title ?? "Unknown title",
+        artist: item.artist ?? "Unknown Artist",
+        artworkUri: item.artworkUri ?? undefined,
+        palette,
+      },
+      trackId,
+      ytSong,
+    );
+  };
+  const slotContext: SlotContext = {
+    trackId,
+    ytSong,
+    title: item?.title ?? "Unknown title",
+    lyricsShown: view === "lyrics",
+    toggleLyrics,
+    share,
+  };
+  // The slots that aren't None, spread evenly left of Queue.
+  const slots = useNowPlayingButtons().flatMap((action, slot) =>
+    action !== null && slotShows(action, item !== null) ? [{ action, slot }] : [],
+  );
 
   return (
     <Animated.View
@@ -292,24 +286,7 @@ export function NowPlayingSheet() {
         >
           <View className="flex-row items-center justify-between" style={{ height: CELL * 7 }}>
             <IconButton icon={IconChevronDown} label="Close Now Playing" onPress={close} />
-            {item !== null && (
-              <IconButton
-                icon={IconShare3}
-                label="Share Song"
-                onPress={() =>
-                  shareNowPlaying(
-                    {
-                      title: item.title ?? "Unknown title",
-                      artist: item.artist ?? "Unknown Artist",
-                      artworkUri: item.artworkUri ?? undefined,
-                      palette,
-                    },
-                    trackId,
-                    ytSong,
-                  )
-                }
-              />
-            )}
+            {item !== null && <IconButton icon={IconShare3} label="Share Song" onPress={share} />}
           </View>
         </DismissArea>
 
@@ -344,25 +321,16 @@ export function NowPlayingSheet() {
         <DismissArea style={{ paddingTop: CELL * 3, gap: CELL * 2 }}>
           <Scrubber />
           <Transport />
-          {/* The song controls share one lookup after settlement or their own early tap. */}
-          <View className="flex-row items-center justify-between">
-            <ViewToggle
-              icon={IconQuote}
-              label="Lyrics"
-              on={view === "lyrics"}
-              onPress={toggleLyrics}
-            />
-            <SleepTimerButton />
-            {item !== null && (
-              <>
-                <AddToPlaylistButton
-                  trackId={trackId}
-                  ytSong={ytSong}
-                  title={item.title ?? "Unknown title"}
-                />
-                <DownloadButton trackId={trackId} ytSong={ytSong} />
-              </>
-            )}
+          {/*
+           * The four slots (Settings › Layout › Now Playing), then Queue on the right. The
+           * song controls share one lookup after settlement or their own early tap.
+           */}
+          <View
+            className={`flex-row items-center ${slots.length === 0 ? "justify-end" : "justify-between"}`}
+          >
+            {slots.map(({ action, slot }) => (
+              <SlotButton key={slot} action={action} context={slotContext} />
+            ))}
             <ViewToggle
               icon={IconListNumbers}
               label="Queue"

@@ -15,6 +15,7 @@ import "@/settings/glass";
 import "@/settings/keepFindVisible";
 import "@/settings/longPressDelay";
 import "@/settings/lyricsAndGenre";
+import "@/settings/nowPlayingButtons";
 import "@/settings/shuffleKind";
 import "@/settings/shazamPlaylist";
 import "@/settings/swipeActions";

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { extrapolatePosition, scrubPosition } from "./index.ts";
+import { extrapolatePosition, scrubHitSlop, scrubPosition } from "./index.ts";
 
 describe("extrapolatePosition", () => {
   test("while playing, the position runs on from the last report", () => {
@@ -37,5 +37,16 @@ describe("scrubPosition", () => {
 
   test("a bar that hasn't been laid out yet seeks to the start", () => {
     assert.equal(scrubPosition({ x: 10, width: 0, durationMs: 200_000 }), 0);
+  });
+});
+
+describe("scrubHitSlop", () => {
+  test("a 48 dp touch box grows 4 dp above and below, so a touch 28 dp from the bar's centre grabs it", () => {
+    assert.deepEqual(scrubHitSlop(48), { top: 4, bottom: 4 });
+  });
+
+  test("a box already 56 dp or taller keeps its own touch area", () => {
+    assert.deepEqual(scrubHitSlop(56), { top: 0, bottom: 0 });
+    assert.deepEqual(scrubHitSlop(64), { top: 0, bottom: 0 });
   });
 });

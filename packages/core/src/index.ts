@@ -122,8 +122,8 @@ export { planExclusion } from "./scanRoots.ts";
 export type { ExclusionPlan } from "./scanRoots.ts";
 export { restorePlayback } from "./playbackRestore.ts";
 export type { RestoredPlayback } from "./playbackRestore.ts";
-export { extrapolatePosition, scrubPosition } from "./position.ts";
-export type { PositionReport, ScrubTouch } from "./position.ts";
+export { extrapolatePosition, scrubHitSlop, scrubPosition } from "./position.ts";
+export type { PositionReport, ScrubTouch, VerticalSlop } from "./position.ts";
 export {
   CENTRE_FRAMING,
   adjustFraming,
@@ -2316,3 +2316,15 @@ export { bounceDemoSwipe, sampleSwipeActions } from "./motionSample.ts";
 export type { BounceDemoSwipe } from "./motionSample.ts";
 export { LONG_PRESS_SAMPLE_MENU, longPressFill, longPressHoldLasts } from "./touchSample.ts";
 export type { LongPressFill, SampleMenuEntry } from "./touchSample.ts";
+export {
+  NOW_PLAYING_ACTIONS,
+  editNowPlayingButtons,
+  readNowPlayingButtons,
+  storedNowPlayingButtons,
+} from "./nowPlayingButtons.ts";
+export type {
+  NowPlayingAction,
+  NowPlayingButtons,
+  NowPlayingButtonsEdit,
+  NowPlayingSlot,
+} from "./nowPlayingButtons.ts";
