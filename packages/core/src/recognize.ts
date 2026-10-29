@@ -25,6 +25,26 @@ export const recognizeSource = (activity: {
 
 /** How much audio each ask covers: everything heard so far, at about 4, 8 and 12 seconds. */
 const RECOGNIZE_STEPS_MS: readonly number[] = [4_000, 8_000, 12_000];
+const LAST_STEP_MS = RECOGNIZE_STEPS_MS.at(-1)!;
+
+/**
+ * The session's clock, counted only while Wave is in the foreground (Android's
+ * consent dialog hides it). Audio that doesn't advance for this long, before every
+ * step's audio is heard, ends the session as a capture failure: a read that blocks,
+ * a start that never settles, a capture failure that never reached JS.
+ */
+const RECOGNIZE_STALL_MS = 3_000;
+/**
+ * An ask unanswered for this long ends the session as no answer. The native request
+ * times out on its own (15 s to connect, 15 s to read); this covers one that never settles.
+ */
+const RECOGNIZE_ASK_DEADLINE_MS = 35_000;
+/**
+ * How long a stopped capture waits before it's a failure. Hiding Wave stops the
+ * capture too, and that report may reach JS before the app state does: a capture
+ * that stopped and is followed by a hidden Wave within this time is Cancel.
+ */
+const RECOGNIZE_CAPTURE_END_GRACE_MS = 1_000;
 
 /** A recognition session as the schedule sees it. */
 export interface RecognizeSession {
@@ -35,6 +55,16 @@ export interface RecognizeSession {
   readonly asked: number;
   /** An ask is out and hasn't been answered. */
   readonly asking: boolean;
+  /** The last tick's clock reading; null before the first. */
+  readonly clockMs: number | null;
+  /** Foreground time since the first tick. */
+  readonly listenedMs: number;
+  /** [listenedMs] when the audio last advanced. */
+  readonly progressMs: number;
+  /** [listenedMs] when the ask out went out. */
+  readonly askedMs: number;
+  /** [listenedMs] when the capture stopped on its own; null while it goes on. */
+  readonly captureEndedMs: number | null;
   /** How it ended; null while it goes on. */
   readonly ended: RecognizeEnd | null;
 }
@@ -83,6 +113,11 @@ export type RecognizeEvent =
   | { readonly kind: "answer"; readonly answer: RecognizeAnswer }
   /** The capture stopped before the audio for every ask was heard. */
   | { readonly kind: "captureFailed" }
+  /**
+   * The controller's clock (any monotonic milliseconds) at [atMs], about twice a
+   * second, and whether Wave is in the foreground now.
+   */
+  | { readonly kind: "tick"; readonly atMs: number; readonly foreground: boolean }
   | { readonly kind: "consentDeclined" }
   | { readonly kind: "cancel" };
 
@@ -98,18 +133,65 @@ export const startRecognize = (source: RecognizeSource): RecognizeSession => ({
   heardMs: 0,
   asked: 0,
   asking: false,
+  clockMs: null,
+  listenedMs: 0,
+  progressMs: 0,
+  askedMs: 0,
+  captureEndedMs: null,
   ended: null,
 });
 
-/** Asks now when nothing is out and the next step's audio is heard. */
+const CAPTURE_FAILURE: RecognizeAnswer = { kind: "failed", failure: "capture", status: null };
+
+/** Asks now when nothing is out and the next step's audio is heard (and can still be signed). */
 const askIfDue = (session: RecognizeSession): RecognizeStep => {
   const due = RECOGNIZE_STEPS_MS[session.asked];
-  if (session.asking || due === undefined || session.heardMs < due) return { session, ask: null };
+  if (
+    session.asking ||
+    session.captureEndedMs !== null ||
+    due === undefined ||
+    session.heardMs < due
+  )
+    return { session, ask: null };
   const asked = session.asked + 1;
   return {
-    session: { ...session, asked, asking: true },
+    session: { ...session, asked, asking: true, askedMs: session.listenedMs },
     ask: { last: asked === RECOGNIZE_STEPS_MS.length },
   };
+};
+
+/** Ends a session whose capture stopped once nothing is out and the grace has passed. */
+const endStoppedCapture = (session: RecognizeSession): RecognizeStep =>
+  session.captureEndedMs !== null &&
+  !session.asking &&
+  session.listenedMs - session.captureEndedMs >= RECOGNIZE_CAPTURE_END_GRACE_MS
+    ? end(session, CAPTURE_FAILURE)
+    : { session, ask: null };
+
+/** Moves the clock to [atMs]; the deadlines it passes end the session. */
+const tickRecognize = (
+  session: RecognizeSession,
+  atMs: number,
+  foreground: boolean,
+): RecognizeStep => {
+  const elapsed = session.clockMs === null ? 0 : Math.max(0, atMs - session.clockMs);
+  const ticked: RecognizeSession = {
+    ...session,
+    clockMs: atMs,
+    listenedMs: session.listenedMs + (foreground ? elapsed : 0),
+  };
+  if (ticked.captureEndedMs !== null) {
+    // Hiding Wave stopped the capture: that's Cancel, whichever report came first.
+    if (!foreground) return end(ticked, { kind: "cancelled" });
+    if (!ticked.asking) return endStoppedCapture(ticked);
+  } else if (
+    ticked.heardMs < LAST_STEP_MS &&
+    ticked.listenedMs - ticked.progressMs >= RECOGNIZE_STALL_MS
+  )
+    return end(ticked, CAPTURE_FAILURE);
+  if (ticked.asking && ticked.listenedMs - ticked.askedMs >= RECOGNIZE_ASK_DEADLINE_MS)
+    return end(ticked, { kind: "failed", failure: "network", status: null });
+  return { session: ticked, ask: null };
 };
 
 const end = (session: RecognizeSession, ended: RecognizeEnd): RecognizeStep => ({
@@ -130,18 +212,24 @@ export const stepRecognize = (session: RecognizeSession, event: RecognizeEvent):
         event.audible === false
       )
         return end({ ...session, heardMs: event.ms }, { kind: "blocked" });
-      return askIfDue({ ...session, heardMs: Math.max(session.heardMs, event.ms) });
+      if (event.ms <= session.heardMs) return { session, ask: null };
+      return askIfDue({ ...session, heardMs: event.ms, progressMs: session.listenedMs });
     case "answer": {
       if (!session.asking) return { session, ask: null };
       const { answer } = event;
       if (answer.kind !== "noMatch" || session.asked === RECOGNIZE_STEPS_MS.length)
         return end(session, answer);
+      // A capture that stopped can't hear the next step: it ends once its grace is over.
+      if (session.captureEndedMs !== null) return endStoppedCapture({ ...session, asking: false });
       return askIfDue({ ...session, asking: false });
     }
     case "captureFailed":
-      return session.asked === RECOGNIZE_STEPS_MS.length
-        ? { session, ask: null }
-        : end(session, { kind: "failed", failure: "capture", status: null });
+      // After the last ask nothing more is needed; with an ask out, its answer still counts.
+      if (session.asked === RECOGNIZE_STEPS_MS.length || session.captureEndedMs !== null)
+        return { session, ask: null };
+      return { session: { ...session, captureEndedMs: session.listenedMs }, ask: null };
+    case "tick":
+      return tickRecognize(session, event.atMs, event.foreground);
     case "cancel":
       return end(session, { kind: "cancelled" });
     case "consentDeclined":
