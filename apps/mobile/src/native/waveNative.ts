@@ -229,6 +229,8 @@ declare class WaveNativeModule extends NativeModule<WaveNativeEvents> {
    * Android 13+, picks its splash style for Android to draw.
    */
   setLaunchTheme(theme: LaunchTheme): Promise<void>;
+  /** Whether a launch theme was ever saved here: an earlier Wave ran on this phone's data. */
+  hasLaunchTheme(): boolean;
   /**
    * Has Android keep Wave in `appearance` (its night mode for Wave alone),
    * across restarts: the launch splash and system bars open in it.

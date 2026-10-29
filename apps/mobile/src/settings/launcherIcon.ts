@@ -39,6 +39,9 @@ export const getLauncherIcon = (choice: ThemeChoice): LauncherIcon => {
 
 export const setLauncherIcon = (icon: LauncherIcon): void => storedIcon.set(icon);
 
+/** This phone's stored icon without seeding it; null until a theme first applied. */
+export const storedLauncherIcon = (): LauncherIcon | null => storedIcon.get();
+
 /** This phone's stored icon; re-renders when it changes. Null only before the theme first applies. */
 export const useStoredLauncherIcon = storedIcon.useValue;
 
