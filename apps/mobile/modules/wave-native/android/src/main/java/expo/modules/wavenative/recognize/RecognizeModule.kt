@@ -23,6 +23,7 @@ import expo.modules.wavenative.player.ActiveWaveAudio
 import java.io.File
 import java.util.Locale
 import java.util.TimeZone
+import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -33,6 +34,8 @@ class RecognizeModule : Module() {
   private val sessions = RecognizeSessions(::recognize,
     onHeard = { id, ms, audible -> sendEvent(HEARD, mapOf("session" to id, "heardMs" to ms, "audible" to audible)) },
     onCaptureFailed = { id -> sendEvent(CAPTURE_FAILED, mapOf("session" to id)) })
+  /** Kept from the first start, so an ask never needs the React context. */
+  private var installId: ShazamInstallId? = null
   private var lastRequestCode = 17710
   private var pending: PendingStart? = null
   private var foreground = true
@@ -67,6 +70,7 @@ class RecognizeModule : Module() {
         if (context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
           throw CodedException("ERR_RECOGNIZE_PERMISSION", "Wave may not capture audio", null)
         }
+        if (installId == null) installId = ShazamInstallId(File(context.filesDir, "recognize/shazam-install-id"))
         if (source == "microphone") {
           sessions.start(request, MicrophoneAudio.open()) { promise.resolve(it) }
         } else {
@@ -105,9 +109,18 @@ class RecognizeModule : Module() {
       main.post { if (pending?.request == request) cancelPending() }
     }
 
+    // ERR_RECOGNIZE_ENDED: the session is gone (its capture is over). ERR_RECOGNIZE_ASK:
+    //  anything else kept the request from going, which says nothing about the capture.
     AsyncFunction("ask") Coroutine { id: Int, last: Boolean ->
-      val session = sessions.get(id) ?: throw CodedException("ERR_RECOGNIZE_ENDED", "The session has ended", null)
-      withContext(Dispatchers.IO) { session.ask(last).toMap() }
+      try {
+        withContext(Dispatchers.IO) { sessions.ask(id, last).toMap() }
+      } catch (_: RecognizeSessionEnded) {
+        throw CodedException("ERR_RECOGNIZE_ENDED", "The session has ended", null)
+      } catch (e: CancellationException) {
+        throw e
+      } catch (e: Exception) {
+        throw CodedException("ERR_RECOGNIZE_ASK", e.message, e)
+      }
     }
 
     Function("stop") { id: Int -> sessions.stop(id) }
@@ -165,7 +178,7 @@ class RecognizeModule : Module() {
   }
 
   private fun recognize(signature: ShazamSignature): RecognizeOutcome {
-    val installId = ShazamInstallId(File(context.filesDir, "recognize/shazam-install-id")).get()
+    val installId = checkNotNull(installId) { "Recognize asked before any start" }.get()
     return ShazamClient(UrlConnectionShazamHttp(), installId, Locale.getDefault(), TimeZone.getDefault().id)
       .recognize(signature)
   }
