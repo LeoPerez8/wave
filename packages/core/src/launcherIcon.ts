@@ -5,10 +5,10 @@
  * between them.
  */
 
-import type { AlertSpec } from "./alert.ts";
+import type { AlertChoice, AlertSpec } from "./alert.ts";
 import { LOGO_WAVES, logoIconPaths, logoWaveY } from "./logo.ts";
 import { INK_PAIRS, inkPairFor } from "./inkPalette.ts";
-import { DEFAULT_THEME_CHOICE, type ThemeChoice } from "./themeChoice.ts";
+import { DEFAULT_THEME_CHOICE, isDefaultThemeChoice, type ThemeChoice } from "./themeChoice.ts";
 
 /** One launcher icon: a primary × secondary pair and the colours its waves take on black. */
 export interface LauncherIcon {
@@ -24,7 +24,7 @@ export interface LauncherIcon {
 
 const shippedPair = inkPairFor(DEFAULT_THEME_CHOICE);
 
-/** Every palette pair; the plugin enables the first, so keep the shipped icon there. */
+/** Every palette pair, the shipped icon first. */
 export const LAUNCHER_ICONS: readonly LauncherIcon[] = [
   shippedPair,
   ...INK_PAIRS.filter((pair) => pair.id !== shippedPair.id),
@@ -35,6 +35,19 @@ export const LAUNCHER_ICONS: readonly LauncherIcon[] = [
   top: primary.dark,
   bottom: secondary.dark,
 }));
+
+/**
+ * The icon the manifest turns on, for good: teal over ember, the shipped icon
+ * before white (#793). Android keeps an alias Wave never switched at its
+ * manifest state, so an install that always showed teal over ember has that
+ * alias on only through the manifest; turning another on there would swap
+ * its icon on update, and the launcher would drop it from the home screen.
+ * A fresh install starts on it and switches to its own icon (white) the
+ * first time Wave leaves the screen.
+ */
+export const MANIFEST_LAUNCHER_ICON: LauncherIcon = LAUNCHER_ICONS.find(
+  (icon) => icon.id === "teal_ember",
+)!;
 
 /** Furthest any stroke edge of the logo reaches from its centre, in the logo's units. */
 const LOGO_EXTENT = (() => {
@@ -83,6 +96,40 @@ export const launcherIconFor = (choice: ThemeChoice): LauncherIcon => {
   return LAUNCHER_ICONS.find((icon) => icon.id === id)!;
 };
 
+/** What this phone holds when Wave starts, for `launcherIconOnStart`. */
+export interface StartingIconState {
+  /** The stored launcher icon's id (`settings.launcherIcon`); null when none is. */
+  readonly storedIcon: string | null;
+  /**
+   * The id of the icon whose alias an earlier Wave last left on (the native
+   * switcher's record), whatever build wrote it; null when none did.
+   */
+  readonly appliedIcon: string | null;
+  /** Whether an earlier Wave saved a launch theme natively, as it did on every start. */
+  readonly launchThemeSaved: boolean;
+  /** The theme choice Wave starts with. */
+  readonly choice: ThemeChoice;
+}
+
+const iconById = (id: string | null): LauncherIcon | undefined =>
+  LAUNCHER_ICONS.find((icon) => icon.id === id);
+
+/**
+ * This phone's icon when Wave starts: the stored one; on the update that
+ * brought the stored icon, the one the phone shows (the alias the earlier
+ * Wave left on, else the manifest's), since the colours' icon may have moved
+ * with this Wave's matching and switching would drop it from the home
+ * screen; on a fresh install, the one its colours give.
+ */
+export const launcherIconOnStart = ({
+  storedIcon,
+  appliedIcon,
+  launchThemeSaved,
+  choice,
+}: StartingIconState): LauncherIcon =>
+  iconById(storedIcon) ??
+  (launchThemeSaved ? (iconById(appliedIcon) ?? MANIFEST_LAUNCHER_ICON) : launcherIconFor(choice));
+
 /** What the launcher does when Wave switches icons. */
 export interface LauncherBehaviour {
   /** It removes Wave's icon from the home screen (the app drawer gets the new one). */
@@ -92,27 +139,47 @@ export interface LauncherBehaviour {
 /** A theme change that switches the launcher icon. */
 export interface LauncherIconSwitch {
   readonly icon: LauncherIcon;
-  /** Asked before the colours change, when the switch costs the home-screen icon. */
-  readonly warning: (AlertSpec & { readonly action: NonNullable<AlertSpec["action"]> }) | null;
+  /** Asked before the colours change; No keeps the icon, dismissal cancels both. */
+  readonly warning: AlertSpec & { readonly action: NonNullable<AlertSpec["action"]> };
 }
 
-/** Whether going from one theme choice to another switches the icon, and what to say first. */
+/** Whether the next colours differ from this phone's stored icon, and what to ask first. */
 export const launcherIconSwitch = (
-  from: ThemeChoice,
+  from: LauncherIcon,
   to: ThemeChoice,
   launcher: LauncherBehaviour,
 ): LauncherIconSwitch | null => {
   const icon = launcherIconFor(to);
-  if (icon.id === launcherIconFor(from).id) return null;
+  if (icon.id === from.id) return null;
   return {
     icon,
-    warning: launcher.dropsHomeScreenIcon
-      ? {
-          title: "Change the app icon?",
-          message:
-            "Wave's icon takes these colours when you leave the app, and your launcher removes it from the home screen when it changes. Add it back from the app drawer.",
-          action: { label: "Change" },
-        }
-      : null,
+    warning: {
+      title: "Change the app icon too?",
+      message: launcher.dropsHomeScreenIcon
+        ? "Wave's icon takes these colours when you leave the app, and your launcher removes it from the home screen when it changes. Add it back from the app drawer."
+        : "Wave's icon takes these colours when you leave the app.",
+      action: { label: "Yes" },
+      alternativeLabel: "No",
+    },
   };
 };
+
+/** The synced colours alongside the launcher icon kept on this phone. */
+export interface ThemeState {
+  readonly choice: ThemeChoice;
+  readonly icon: LauncherIcon;
+}
+
+/** Applies an explicit answer to the icon prompt. */
+export const resolveThemeChange = (
+  current: ThemeState,
+  next: ThemeChoice,
+  answer: AlertChoice,
+): ThemeState =>
+  answer === "dismiss"
+    ? current
+    : { choice: next, icon: answer === "action" ? launcherIconFor(next) : current.icon };
+
+/** Whether Reset to defaults has nothing to do: the shipped colours and the shipped icon. */
+export const isDefaultThemeState = ({ choice, icon }: ThemeState): boolean =>
+  isDefaultThemeChoice(choice) && icon.id === launcherIconFor(DEFAULT_THEME_CHOICE).id;

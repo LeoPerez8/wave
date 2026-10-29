@@ -10,6 +10,7 @@ import {
   compareStrings,
   placeEntries,
   planPlaylistSongs,
+  planShazamAdd,
   playlistArtwork,
   playlistEntryLinks,
   playlistMosaic,
@@ -1427,4 +1428,63 @@ export const addToPlaylist = (
     if (result.added > 0)
       tx.update(playlists).set({ updatedAt: now }).where(eq(playlists.id, id)).run();
     return { playlistId: id, name: playlist.name, ...result };
+  });
+
+/** One explicit Recognize save, using the playlist's shared id rather than its name. */
+export const addToShazam = (
+  db: LibraryDatabase,
+  rememberedId: string | null,
+  song: PlaylistSong,
+  now: number,
+): { readonly playlistId: number; readonly syncId: string; readonly toast: string } =>
+  db.transaction((tx) => {
+    const { playlists, playlistItems } = schema;
+    const available = tx
+      .select({ localId: playlists.id, id: playlists.syncId, name: playlists.name })
+      .from(playlists)
+      .where(livePlaylist)
+      .all();
+    const remembered = available.find((playlist) => playlist.id === rememberedId);
+    const existing: PlaylistSong[] =
+      remembered === undefined
+        ? []
+        : tx
+            .select({ trackId: playlistItems.trackId, ytSong: playlistItems.ytSong })
+            .from(playlistItems)
+            .where(and(eq(playlistItems.playlistId, remembered.localId), live))
+            .all()
+            .flatMap((entry): PlaylistSong[] => {
+              if (entry.ytSong !== null) {
+                const stored = decode(remembered.localId, entry.ytSong);
+                return stored === null ? [] : [stored];
+              }
+              return entry.trackId === null ? [] : [{ source: "library", trackId: entry.trackId }];
+            });
+    const plan = planShazamAdd(rememberedId, available, existing, song);
+    if (plan.kind === "create") {
+      const created = tx
+        .insert(playlists)
+        .values({ name: plan.name, createdAt: now, updatedAt: now, changedAt: now })
+        .returning({ playlistId: playlists.id, syncId: playlists.syncId })
+        .get();
+      placeSongs(tx, created.playlistId, [], plan.index, [plan.song], now);
+      return { ...created, toast: plan.toast };
+    }
+    // The plan can target only the live playlist read in this transaction.
+    if (remembered === undefined) throw new Error("The playlist no longer exists");
+    if (plan.kind === "add") {
+      placeSongs(
+        tx,
+        remembered.localId,
+        orderedEntries(tx, remembered.localId),
+        plan.index,
+        [plan.song],
+        now,
+      );
+      tx.update(playlists)
+        .set({ updatedAt: now })
+        .where(eq(playlists.id, remembered.localId))
+        .run();
+    }
+    return { playlistId: remembered.localId, syncId: remembered.id, toast: plan.toast };
   });

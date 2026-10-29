@@ -42,6 +42,23 @@ const prebuildManifest = (): Manifest => ({
 
 const application = (manifest: Manifest) => manifest.manifest.application![0]!;
 
+/** The 24 inks before white, as their aliases and resources were named. */
+const EARLIER_INKS = [
+  "teal",
+  "blue",
+  "violet",
+  "green",
+  "rose",
+  "lime",
+  "ember",
+  "gold",
+  "coral",
+  "magenta",
+  "sky",
+  "lemon",
+  ...[29, 59, 89, 119, 149, 179, 209, 239, 269, 299, 329, 359].map((hue) => `vivid${hue}`),
+];
+
 const isLauncher = (filter: { category?: { $: { "android:name": string } }[] }): boolean =>
   filter.category?.some((c) => c.$["android:name"] === "android.intent.category.LAUNCHER") === true;
 
@@ -67,13 +84,37 @@ describe("addLauncherAliases", () => {
     }
   });
 
-  test("one alias per pair of the 24 inks, each with its own name", () => {
+  test("one alias per pair of the 25 inks, each with its own name", () => {
     const names = (application(addLauncherAliases(prebuildManifest()))["activity-alias"] ?? []).map(
       (alias) => alias.$?.["android:name"],
     );
-    assert.equal(names.length, 576);
-    assert.equal(new Set(names).size, 576);
+    assert.equal(names.length, 625);
+    assert.equal(new Set(names).size, 625);
     assert.ok(names.includes(".LauncherIcon_vivid209_vivid29"));
+  });
+
+  test("white pairs with itself and with every other ink, in both waves (#793)", () => {
+    const names = new Set(
+      (application(addLauncherAliases(prebuildManifest()))["activity-alias"] ?? []).map(
+        (alias) => alias.$?.["android:name"],
+      ),
+    );
+    assert.ok(names.has(".LauncherIcon_white_white"));
+    for (const ink of EARLIER_INKS) {
+      assert.ok(names.has(`.LauncherIcon_white_${ink}`), `white over ${ink}`);
+      assert.ok(names.has(`.LauncherIcon_${ink}_white`), `${ink} over white`);
+    }
+  });
+
+  test("every alias of the 24 earlier inks keeps its name, so nobody's icon goes missing", () => {
+    const names = new Set(
+      (application(addLauncherAliases(prebuildManifest()))["activity-alias"] ?? []).map(
+        (alias) => alias.$?.["android:name"],
+      ),
+    );
+    for (const primary of EARLIER_INKS)
+      for (const secondary of EARLIER_INKS)
+        assert.ok(names.has(`.LauncherIcon_${primary}_${secondary}`), `${primary}_${secondary}`);
   });
 
   test("every preset pair keeps the alias it had, so nobody on presets switches icons", () => {
@@ -87,7 +128,8 @@ describe("addLauncherAliases", () => {
         assert.ok(names.has(`.LauncherIcon_${primary}_${secondary}`), `${primary}_${secondary}`);
   });
 
-  test("only the teal-over-amber icon is on until Settings picks another, so Wave shows once", () => {
+  test("only teal over ember is on until Settings picks another, so updates keep their icon", () => {
+    // An install that never switched has that alias on only through the manifest.
     const aliases = application(addLauncherAliases(prebuildManifest()))["activity-alias"] ?? [];
     const on = aliases.filter((alias) => alias.$?.["android:enabled"] === "true");
     assert.deepEqual(
@@ -160,15 +202,46 @@ describe("launcherIconFiles", () => {
     }
   });
 
+  test("white waves on black: both of the default icon's waves are white (#793)", () => {
+    const [top, bottom] = foregroundPaths("white_white");
+    assert.match(top!, /android:strokeColor="#ffffff"/);
+    assert.ok(top!.includes(`android:pathData="${LAUNCHER_ICON_ART.top}"`));
+    assert.match(bottom!, /android:strokeColor="#ffffff"/);
+    assert.ok(bottom!.includes(`android:pathData="${LAUNCHER_ICON_ART.bottom}"`));
+    const [rose, white] = foregroundPaths("rose_white");
+    assert.match(rose!, /android:strokeColor="#f08cb0"/);
+    assert.match(white!, /android:strokeColor="#ffffff"/);
+  });
+
+  test("white has a top and a bottom wave drawable of its own", () => {
+    assert.match(files["drawable/ic_launcher_wave_top_white.xml"] ?? "", /strokeColor="#ffffff"/);
+    assert.match(
+      files["drawable/ic_launcher_wave_bottom_white.xml"] ?? "",
+      /strokeColor="#ffffff"/,
+    );
+  });
+
+  test("the earlier inks' wave drawables keep their names", () => {
+    for (const ink of EARLIER_INKS)
+      for (const wave of ["top", "bottom"])
+        assert.ok(files[`drawable/ic_launcher_wave_${wave}_${ink}.xml`], `${wave} ${ink}`);
+  });
+
   test("the wave drawables grow with the inks, not the pairs", () => {
     const vectors = Object.entries(files).filter(([, xml]) => xml.includes("<vector"));
-    // A top and a bottom wave per ink of the 24, plus the monochrome waves.
-    assert.equal(vectors.length, 24 * 2 + 1);
+    // A top and a bottom wave per ink of the 25, plus the monochrome waves.
+    assert.equal(vectors.length, 25 * 2 + 1);
     for (const [path, xml] of vectors) assert.match(xml, /android:viewportWidth="108"/, path);
   });
 
-  test("the monochrome icon is the same two waves", () => {
+  test("the monochrome icon is the same two waves, in white for every pair", () => {
     const monochrome = files["drawable/ic_launcher_wave_monochrome.xml"] ?? "";
+    assert.equal(monochrome.match(/android:strokeColor="#ffffff"/g)?.length, 2);
+    for (const icon of LAUNCHER_ICONS)
+      assert.match(
+        files[`mipmap-anydpi-v26/ic_launcher_${icon.id}.xml`] ?? "",
+        /<monochrome android:drawable="@drawable\/ic_launcher_wave_monochrome"/,
+      );
     assert.ok(monochrome.includes(LAUNCHER_ICON_ART.top));
     assert.ok(monochrome.includes(LAUNCHER_ICON_ART.bottom));
   });

@@ -37,6 +37,19 @@ describe("planAlert", () => {
     ]);
   });
 
+  test("a question can offer No beside Yes, leaving Back to cancel", () => {
+    const plan = planAlert({
+      title: "Change the app icon too?",
+      message: "Wave's icon takes these colours when you leave the app.",
+      action: { label: "Yes" },
+      alternativeLabel: "No",
+    });
+    assert.deepEqual(plan.buttons, [
+      { label: "No", tone: "accent", choice: "alternative" },
+      { label: "Yes", tone: "accent", choice: "action" },
+    ]);
+  });
+
   test("screen readers hear the title, then the message", () => {
     assert.equal(
       planAlert({

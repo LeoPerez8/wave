@@ -14,10 +14,12 @@ export interface AlertSpec {
   };
   /** The label of the button Back or a tap outside also chooses, when not Cancel / OK. */
   readonly dismissLabel?: string;
+  /** A second explicit action; Back and outside taps still dismiss the whole change. */
+  readonly alternativeLabel?: string;
 }
 
 /** What the person chose: the action, or Cancel / OK (which Back or a tap outside the card also chooses). */
-export type AlertChoice = "action" | "dismiss";
+export type AlertChoice = "action" | "alternative" | "dismiss";
 
 export interface AlertButton {
   readonly label: string;
@@ -35,13 +37,21 @@ export interface AlertPlan {
 /** A title reads as a sentence: "Wave is scanning" gets a full stop, "Delete X?" keeps its mark. */
 const asSentence = (title: string): string => (/[.?!…]$/.test(title) ? title : `${title}.`);
 
-export const planAlert = ({ title, message, action, dismissLabel }: AlertSpec): AlertPlan => ({
+export const planAlert = ({
+  title,
+  message,
+  action,
+  dismissLabel,
+  alternativeLabel,
+}: AlertSpec): AlertPlan => ({
   announcement: `${asSentence(title)} ${message}`,
   buttons:
     action === undefined
       ? [{ label: dismissLabel ?? "OK", tone: "accent", choice: "dismiss" }]
       : [
-          { label: dismissLabel ?? "Cancel", tone: "accent", choice: "dismiss" },
+          alternativeLabel === undefined
+            ? { label: dismissLabel ?? "Cancel", tone: "accent", choice: "dismiss" }
+            : { label: alternativeLabel, tone: "accent", choice: "alternative" },
           {
             label: action.label,
             tone: action.destructive === true ? "destructive" : "accent",

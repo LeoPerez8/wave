@@ -15,10 +15,11 @@ import "@/settings/glass";
 import "@/settings/keepFindVisible";
 import "@/settings/longPressDelay";
 import "@/settings/lyricsAndGenre";
+import "@/settings/nowPlayingButtons";
 import "@/settings/shuffleKind";
+import "@/settings/shazamPlaylist";
 import "@/settings/swipeActions";
 import "@/settings/tabBar";
-import "@/settings/tapAnimation";
 import "@/settings/theme";
 import "@/settings/ytMusic";
 /* oxlint-enable import/no-unassigned-import */

@@ -1,4 +1,4 @@
-// Renders Wave's default launcher icons and splash logos: two rounded waves, teal over amber.
+// Renders Wave's default launcher icons and splash logos: two rounded white waves (#793).
 // Zero dependencies: each pixel's coverage comes from its distance to the wave polylines,
 // so the round caps and anti-aliasing are exact. Run with `pnpm --filter @wave/mobile icons`.
 // The icons for other primaries and secondaries are vector drawables written at prebuild
@@ -7,10 +7,11 @@ import { writeFileSync } from "node:fs";
 import { deflateSync } from "node:zlib";
 
 import {
-  DEFAULT_THEME,
+  DEFAULT_THEME_CHOICE,
   LAUNCHER_ICON_RADIUS,
   LAUNCHER_ICONS,
   LOGO_WAVES,
+  launchTheme,
   logoWaveY,
   type LogoWave,
 } from "@wave/core";
@@ -29,14 +30,14 @@ function rgb(hex: string): Rgb {
 
 // The shipped icon: the default primary and secondary (Core's first launcher icon).
 const SHIPPED_ICON = LAUNCHER_ICONS[0]!;
-const TEAL = rgb(SHIPPED_ICON.top);
-const AMBER = rgb(SHIPPED_ICON.bottom);
+const TOP = rgb(SHIPPED_ICON.top);
+const BOTTOM = rgb(SHIPPED_ICON.bottom);
 
-// The light splash background (#E0ECEF) washes out the icon colours, so the light splash
-// uses the light theme's accent and highlight tokens instead (Core's theme, which
-// global.css mirrors).
-const LIGHT_TEAL = rgb(DEFAULT_THEME.light.accent);
-const LIGHT_AMBER = rgb(DEFAULT_THEME.light.highlight);
+// White waves would vanish on the light splash background (#E0ECEF), so the light splash
+// draws them as the shipped light launch theme does: in the text colour.
+const SHIPPED_LIGHT = launchTheme(DEFAULT_THEME_CHOICE).light;
+const LIGHT_TOP = rgb(SHIPPED_LIGHT.primary);
+const LIGHT_BOTTOM = rgb(SHIPPED_LIGHT.secondary);
 
 // The logo's shape is Core's (`LOGO_WAVES`), which the notification icon also draws.
 const STROKE = LOGO_WAVES.stroke;
@@ -163,14 +164,14 @@ function png(size: number, colourType: number, raw: Buffer): Buffer {
 // Splash logos: expo-splash-screen draws the image 160dp wide under a 192dp circle mask
 // (radius 0.6 of the width), so 0.5 leaves a margin.
 const ICONS: Icon[] = [
-  { file: "icon.png", size: 1024, radius: 0.36, background: BLACK, top: TEAL, bottom: AMBER },
+  { file: "icon.png", size: 1024, radius: 0.36, background: BLACK, top: TOP, bottom: BOTTOM },
   {
     file: "adaptive-icon-foreground.png",
     size: 1024,
     radius: LAUNCHER_ICON_RADIUS,
     background: null,
-    top: TEAL,
-    bottom: AMBER,
+    top: TOP,
+    bottom: BOTTOM,
   },
   {
     file: "adaptive-icon-monochrome.png",
@@ -180,14 +181,14 @@ const ICONS: Icon[] = [
     top: WHITE,
     bottom: WHITE,
   },
-  { file: "splash-icon.png", size: 512, radius: 0.5, background: null, top: TEAL, bottom: AMBER },
+  { file: "splash-icon.png", size: 512, radius: 0.5, background: null, top: TOP, bottom: BOTTOM },
   {
     file: "splash-icon-light.png",
     size: 512,
     radius: 0.5,
     background: null,
-    top: LIGHT_TEAL,
-    bottom: LIGHT_AMBER,
+    top: LIGHT_TOP,
+    bottom: LIGHT_BOTTOM,
   },
 ];
 

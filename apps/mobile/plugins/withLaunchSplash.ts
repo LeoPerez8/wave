@@ -1,5 +1,5 @@
 // The launch splash: the moving logo (`launchLogoDrawable.ts`) on every
-// splash, and 36 background pairs × 576 palette ink pairs, so Android 13+
+// splash, and 36 background pairs × 625 palette ink pairs, so Android 13+
 // opens Wave on the chosen ground with the logo in the icon's matched inks
 // (the native module picks one with `SplashScreen.setSplashScreenTheme`).
 // `android/` is generated, so the resources go in through prebuild. It edits

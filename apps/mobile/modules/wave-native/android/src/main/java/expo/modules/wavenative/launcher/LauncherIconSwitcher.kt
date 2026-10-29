@@ -33,7 +33,7 @@ class LauncherIconSwitcher(
 
   // Read on the worker, once per process. An app update invalidates the saved reconciliation:
   // newly shipped aliases may have manifest defaults that must be checked too.
-  private val preferences by lazy { context.getSharedPreferences("launcherIcon", Context.MODE_PRIVATE) }
+  private val preferences by lazy { LauncherIconRecord.preferences(context) }
   private val installedAt by lazy {
     @Suppress("DEPRECATION")
     packageManager.getPackageInfo(context.packageName, 0).lastUpdateTime
@@ -62,15 +62,13 @@ class LauncherIconSwitcher(
 
   private fun apply(target: String, aliases: List<String>) {
     if (!restored) {
-      if (preferences.getLong("installedAt", -1) == installedAt) {
-        appliedAlias = preferences.getString("appliedAlias", null)
-      }
+      appliedAlias = LauncherIconRecord.reconciled(preferences, installedAt)
       restored = true
     }
     if (target == appliedAlias || target !in aliases) return
     val changes = LauncherAliases.plan(target, aliases, appliedAlias) { isEnabled(component(it)) }
     // Clear the durable marker before changing PackageManager, so an interrupted switch retries.
-    check(preferences.edit().remove("appliedAlias").commit())
+    check(LauncherIconRecord.clear(preferences))
     appliedAlias = null
     for (change in changes) {
       packageManager.setComponentEnabledSetting(
@@ -83,7 +81,7 @@ class LauncherIconSwitcher(
         PackageManager.DONT_KILL_APP,
       )
     }
-    check(preferences.edit().putLong("installedAt", installedAt).putString("appliedAlias", target).commit())
+    check(LauncherIconRecord.save(preferences, installedAt, target))
     appliedAlias = target
     if (changes.isNotEmpty()) onSwitched()
   }

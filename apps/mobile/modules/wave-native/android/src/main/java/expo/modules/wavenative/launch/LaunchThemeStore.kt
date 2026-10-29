@@ -35,6 +35,9 @@ object LaunchThemeStore {
     editor.apply()
   }
 
+  /** Whether JS ever saved a launch theme here, whatever its format. */
+  fun isSaved(context: Context): Boolean = prefs(context).all.isNotEmpty()
+
   /** The saved launch theme; null until JS first saved one (the shipped theme). */
   fun load(context: Context): LaunchTheme? = LaunchTheme.fromEntries(prefs(context).all)
 

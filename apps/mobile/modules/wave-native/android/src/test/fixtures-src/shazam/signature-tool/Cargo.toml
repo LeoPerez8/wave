@@ -1,0 +1,16 @@
+# Builds shazamio-core's own fingerprinting sources (cloned by ../make_fixtures.py into
+#  ./shazamio-core) without its Python bindings, its decoders or libopus, so it builds
+#  with nothing but a Rust toolchain. See ../make_fixtures.py.
+[package]
+name = "wave-signature-tool"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+# The versions shazamio-core pins: make_fixtures.py copies its Cargo.lock here first.
+byteorder = "1.5.0"
+crc32fast = "1.5.0"
+base64 = "0.23.1"
+chfft = "0.3.4"
+rubato = { version = "5.0.1", default-features = false }

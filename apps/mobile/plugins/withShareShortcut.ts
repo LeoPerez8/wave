@@ -6,9 +6,9 @@ import { withAndroidManifest, withDangerousMod, type ConfigPlugin } from "expo/c
 import { addShareShortcuts, shareShortcutFiles } from "./shareShortcut.ts";
 
 /**
- * Prebuild: writes the shortcuts file with Wave's share target into the generated
- * Android project and points the launcher entries at it, so the "Import to Wave"
- * sharing shortcut shows in the share sheet's direct-share row (#205). Apply it before
+ * Prebuild: writes Import to Wave's share target and Recognize Song's static shortcut,
+ * points every launcher entry at them, and registers the Recognize Quick Settings tile.
+ * Apply it before
  * `withLauncherIcons`: Expo runs mods in reverse order, and this one needs the
  * launcher icons' aliases declared.
  */

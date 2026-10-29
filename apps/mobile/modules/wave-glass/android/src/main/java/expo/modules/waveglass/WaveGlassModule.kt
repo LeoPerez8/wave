@@ -62,6 +62,7 @@ class WaveGlassModule : Module() {
         view.color = color?.toArgb() ?: Color.TRANSPARENT
       }
       Prop("animating") { view: WaveUnderlineView, animating: Boolean -> view.animating = animating }
+      Prop("shape") { view: WaveUnderlineView, shape: String? -> view.shape = shape ?: "underline" }
     }
   }
 

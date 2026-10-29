@@ -38,6 +38,7 @@ import { useRenderCount } from "@/perf/perf";
 import { positionState, sleepTimerState } from "@/playback/Player";
 import { useThemeColor } from "@/theme/useThemeColor";
 
+import type { SlotChange } from "./ChangeSlotMenu";
 import { isPlayheadLive, playhead } from "./playhead";
 
 const AnimatedTextInput = withUniwind(createAnimatedComponent(TextInput));
@@ -261,11 +262,12 @@ const openSleepTimer = (): void => {
  * Now Playing's sleep timer control: the Zzz glyph (teal while a timer runs,
  * with the time left beside it) that opens the timer menu.
  */
-export function SleepTimerButton() {
+export function SleepTimerButton({ change }: { change?: SlotChange | undefined }) {
   const timer = useSleepTimer();
   const [accent, secondary] = useThemeColor(["accent", "secondary"]);
   return (
     <Press
+      {...change}
       accessibilityRole="button"
       accessibilityLabel="Sleep timer"
       accessibilityValue={{

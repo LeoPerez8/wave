@@ -2,13 +2,13 @@ import { useLayoutEffect } from "react";
 import { Easing, useSharedValue, withTiming, type SharedValue } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
 
-import { useTapAnimationMs } from "@/settings/tapAnimation";
+import { TAP_ANIMATION_MS } from "@/motion/timing";
 
 const EASE = Easing.out(Easing.exp);
 
 /**
  * How far something floating at the root (a card, the toast) has come in,
- * from 0 to 1, over the tap duration (at once when that's 0). It comes in
+ * from 0 to 1, over 140 ms (at once under reduce motion). It comes in
  * once [ready] (measured, so it appears where it settles) and goes back to 0
  * when [leaving], then `remove(id)` takes it off. A layout effect, so the
  * entrance starts with the frame it is first drawn in.
@@ -25,22 +25,16 @@ export const useEnterAndLeave = ({
   /** Module-level, so it never changes. */
   readonly remove: (id: number) => void;
 }): SharedValue<number> => {
-  const ms = useTapAnimationMs();
   const progress = useSharedValue(0);
   useLayoutEffect(() => {
     if (!ready) return;
     const target = leaving ? 0 : 1;
     const gone = () => remove(id);
-    if (ms === 0) {
-      progress.set(target);
-      if (leaving) gone();
-      return;
-    }
     progress.set(
-      withTiming(target, { duration: ms, easing: EASE }, (finished) => {
+      withTiming(target, { duration: TAP_ANIMATION_MS, easing: EASE }, (finished) => {
         if (finished && target === 0) scheduleOnRN(gone);
       }),
     );
-  }, [id, ready, leaving, remove, ms, progress]);
+  }, [id, ready, leaving, remove, progress]);
   return progress;
 };

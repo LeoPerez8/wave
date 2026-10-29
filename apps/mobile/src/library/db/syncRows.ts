@@ -14,6 +14,7 @@ import {
   mergeRows,
   planSongSync,
   songsLeaving,
+  syncsPreference,
   type AccountSongState,
   type PhoneSong,
   type SyncFavorite,
@@ -338,8 +339,10 @@ export const selectUnpushed = (
     .from(preferenceChanges)
     .where(eq(preferenceChanges.pushed, false))
     .orderBy(asc(preferenceChanges.key))
-    .limit(limit)
     .all()
+    // Retired stamps stay stored, but must not fill a batch ahead of active preferences.
+    .filter((row) => syncsPreference(row.key))
+    .slice(0, limit)
     .map((row): SyncPreference => {
       mark("preferences", row.key, {
         table: "preferences",
@@ -892,6 +895,7 @@ const applyPreference = (
   tx: LibraryDatabase,
   row: SyncPreference,
 ): { key: string; value: string | null } | null => {
+  if (!syncsPreference(row.id)) return null;
   const { preferenceChanges } = schema;
   const held = tx.select().from(preferenceChanges).where(eq(preferenceChanges.key, row.id)).get();
   if (held !== undefined && !wins(row, { ...held, deleted: false })) return null;

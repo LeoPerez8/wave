@@ -5,11 +5,13 @@
  */
 
 import type { ThemeColors } from "./theme.ts";
+import { launcherIconFor, type LauncherIcon } from "./launcherIcon.ts";
 import { INK_PALETTE, INK_PAIRS, inkPairFor, type InkPair, type PaletteInk } from "./inkPalette.ts";
 import {
   CUSTOM_INK,
   DEFAULT_THEME_CHOICE,
   THEME_SWATCHES,
+  WHITE_INK,
   isDefaultThemeChoice,
   themeFor,
   type ThemeChoice,
@@ -65,16 +67,19 @@ const launchColors = (scheme: ThemeColors): LaunchColors => ({
 
 // Each mode's tones depend only on its ground and one palette ink, not the
 // other mode or wave. Reuse those corrections across the catalog's pairs.
+// White is chosen as the Default swatch rather than as a hex, so its light
+// tone is the ground's own text colour, as in the app.
 const paletteTones = new Map<string, LaunchColors>();
 const paletteTone = (choice: ThemeChoice, ink: PaletteInk, scheme: Scheme): LaunchColors => {
-  const key = `${scheme}/${choice[scheme]}/${ink[scheme]}`;
+  const id = ink.id === WHITE_INK ? WHITE_INK : CUSTOM_INK;
+  const key = `${scheme}/${choice[scheme]}/${id}/${ink[scheme]}`;
   let colors = paletteTones.get(key);
   if (colors === undefined) {
     colors = launchColors(
       themeFor({
         ...choice,
-        primary: CUSTOM_INK,
-        secondary: CUSTOM_INK,
+        primary: id,
+        secondary: id,
         customPrimary: ink[scheme],
         customSecondary: ink[scheme],
       })[scheme],
@@ -82,6 +87,17 @@ const paletteTone = (choice: ThemeChoice, ink: PaletteInk, scheme: Scheme): Laun
     paletteTones.set(key, colors);
   }
   return colors;
+};
+
+/** One mode's ground with a palette pair's waves, each ink corrected for that ground. */
+const pairColours = (choice: ThemeChoice, pair: InkPair, scheme: Scheme): LaunchColors => {
+  const primary = paletteTone(choice, pair.primary, scheme);
+  const secondary = paletteTone(choice, pair.secondary, scheme);
+  return {
+    background: primary.background,
+    primary: primary.primary,
+    secondary: secondary.secondary,
+  };
 };
 
 /**
@@ -100,33 +116,29 @@ export const paletteSplashThemeFor = (
     customSecondary: null,
   };
   if (isDefaultThemeChoice(matched)) return null;
-  const colours = (scheme: Scheme): LaunchColors => {
-    const primary = paletteTone(choice, pair.primary, scheme);
-    const secondary = paletteTone(choice, pair.secondary, scheme);
-    return {
-      background: primary.background,
-      primary: primary.primary,
-      secondary: secondary.secondary,
-    };
-  };
   return {
     name: splashThemeName(matched),
     choice: matched,
-    light: colours("light"),
-    dark: colours("dark"),
+    light: pairColours(choice, pair, "light"),
+    dark: pairColours(choice, pair, "dark"),
   };
 };
 
 /**
- * The launch theme for a theme choice. The colours are what the app draws; a
- * custom colour opens on the splash of the closest palette ink pair.
+ * The launch theme: the choice's grounds, with the waves of this phone's stored
+ * icon (the icon the choice shows when none is given). The native logo and
+ * Android's splash style take the same palette tones, so the splash matches
+ * the icon even when the app's colours don't.
  */
-export const launchTheme = (choice: ThemeChoice): LaunchTheme => {
-  const theme = themeFor(choice);
+export const launchTheme = (
+  choice: ThemeChoice,
+  icon: LauncherIcon = launcherIconFor(choice),
+): LaunchTheme => {
+  const pair = INK_PAIRS.find((candidate) => candidate.id === icon.id)!;
   return {
-    splashTheme: paletteSplashThemeFor(choice)?.name ?? null,
-    light: launchColors(theme.light),
-    dark: launchColors(theme.dark),
+    splashTheme: paletteSplashThemeFor(choice, pair)?.name ?? null,
+    light: pairColours(choice, pair, "light"),
+    dark: pairColours(choice, pair, "dark"),
   };
 };
 
