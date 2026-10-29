@@ -122,8 +122,8 @@ export { planExclusion } from "./scanRoots.ts";
 export type { ExclusionPlan } from "./scanRoots.ts";
 export { restorePlayback } from "./playbackRestore.ts";
 export type { RestoredPlayback } from "./playbackRestore.ts";
-export { extrapolatePosition, scrubPosition } from "./position.ts";
-export type { PositionReport, ScrubTouch } from "./position.ts";
+export { extrapolatePosition, scrubHitSlop, scrubPosition } from "./position.ts";
+export type { PositionReport, ScrubTouch, VerticalSlop } from "./position.ts";
 export {
   CENTRE_FRAMING,
   adjustFraming,
