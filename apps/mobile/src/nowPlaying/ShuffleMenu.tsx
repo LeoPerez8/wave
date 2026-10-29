@@ -12,8 +12,9 @@ import { openOverlay } from "@/overlay/overlay";
 import { useSlideToChoose } from "@/overlay/useSlideToChoose";
 import { chooseShuffleKind } from "@/playback/actions";
 import type { ActionIcon } from "@/playback/actionIcons";
+import type { ChoiceSetting } from "@/settings/ChoiceRow";
 import { countShuffleCardOpening } from "@/settings/shuffleCardOpenings";
-import { useShuffleKind } from "@/settings/shuffleKind";
+import { shuffleKindSetting, useShuffleKind } from "@/settings/shuffleKind";
 
 /**
  * Each kind of shuffle: its name and the line saying what it does, on the
@@ -55,6 +56,18 @@ const KINDS = Object.keys(SHUFFLES) as ShuffleKind[];
 
 /** The kinds' names, in the card's order. */
 const KIND_NAMES = KINDS.map((kind) => SHUFFLES[kind].name);
+
+/**
+ * The kind of shuffle as Settings › Layout › Now Playing offers it: the
+ * card's kinds, under their card names. It's the card's own preference, so a
+ * choice in either place shows in the other. Choosing here only saves it;
+ * the next shuffle uses it.
+ */
+export const shuffleKindChoice: ChoiceSetting<ShuffleKind> = {
+  label: "Shuffle",
+  choices: KINDS.map((kind) => ({ value: kind, label: SHUFFLES[kind].name })),
+  setting: shuffleKindSetting,
+};
 
 /** The shuffle buttons' hint: "Long press to choose Real Shuffle, Smart Shuffle or Even Shuffle". */
 const LONG_PRESS_HINT = `Long press to choose ${KIND_NAMES.slice(0, -1).join(", ")} or ${KIND_NAMES.at(-1)}`;
