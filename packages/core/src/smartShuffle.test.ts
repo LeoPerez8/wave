@@ -5,6 +5,7 @@ import {
   EMPTY_QUEUE,
   REAL_SHUFFLE,
   currentEntry,
+  queueHistory,
   readShuffleKind,
   reduceQueue,
   shuffledTrackIds,
@@ -55,10 +56,12 @@ const longestRun = (trackIds: readonly string[], inGroup: (id: string) => boolea
 describe("Real Shuffle", () => {
   const tracks = "a b c d e f g h i j".split(" ");
 
-  // The orders the queue gave these seeds before Smart Shuffle existed.
+  // The orders the queue gave these seeds before Smart Shuffle existed. Turning
+  // shuffle on then shuffled the nine songs after the current one ("c h i j f g d
+  // b e a" from c, of a b d…j); it now shuffles Up Next's nine (b…j, from a) alike.
   test("turning shuffle on gives today's order", () => {
-    const { state } = run(start(tracks, 2), { type: "setShuffle", on: true }, 3, REAL_SHUFFLE);
-    assert.equal(ids(state.entries).join(" "), "c h i j f g d b e a");
+    const { state } = run(start(tracks), { type: "setShuffle", on: true }, 3, REAL_SHUFFLE);
+    assert.equal(ids(state.entries).join(" "), "a h i j f g d c e b");
     assert.equal(state.index, 0);
   });
 
@@ -73,8 +76,8 @@ describe("Real Shuffle", () => {
   });
 
   test("is the kind the queue uses when none is given", () => {
-    const { state } = run(start(tracks, 2), { type: "setShuffle", on: true }, 3);
-    assert.equal(ids(state.entries).join(" "), "c h i j f g d b e a");
+    const { state } = run(start(tracks), { type: "setShuffle", on: true }, 3);
+    assert.equal(ids(state.entries).join(" "), "a h i j f g d c e b");
   });
 });
 
@@ -99,6 +102,23 @@ describe("Smart Shuffle", () => {
         1,
         `seed ${seed}: ${rest.join(" ")}`,
       );
+    }
+  });
+
+  test("keeps History and the current song, and interleaves only Up Next", () => {
+    const history = ["p1", "n1"];
+    for (const seed of SEEDS) {
+      const { state } = run(
+        start([...history, ...tracks], 2),
+        { type: "setShuffle", on: true },
+        seed,
+        smart({ ...plays, p1: 50 }),
+      );
+      assert.deepEqual(ids(queueHistory(state)), history);
+      assert.equal(currentEntry(state)?.trackId, "c");
+      const rest = ids(upNext(state));
+      assert.deepEqual(rest.toSorted(), tracks.slice(1).toSorted());
+      assert.equal(longestRun(rest, most), 1, `seed ${seed}: ${rest.join(" ")}`);
     }
   });
 
@@ -279,6 +299,16 @@ describe("shuffledTrackIds", () => {
       "3",
     ]);
     assert.deepEqual(shuffledTrackIds(playing, { type: "reshuffle" }), ["1", "2", "yt:abc", "3"]);
+  });
+
+  test("History's songs aren't ordered: only the current song's and Up Next's are", () => {
+    const later = start(["1", "2", "yt:abc", "3", "4"], 2);
+    assert.deepEqual(shuffledTrackIds(later, { type: "setShuffle", on: true }), [
+      "yt:abc",
+      "3",
+      "4",
+    ]);
+    assert.deepEqual(shuffledTrackIds(later, { type: "reshuffle" }), ["yt:abc", "3", "4"]);
   });
 
   test("a command that doesn't shuffle needs no plays", () => {

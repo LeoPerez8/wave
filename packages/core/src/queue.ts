@@ -183,7 +183,11 @@ const play = (
     shuffle: false,
     nextKey,
   };
-  return result(shuffle ? shuffleOn(started, random, kind) : started, "play");
+  if (!shuffle) return result(started, "play");
+  // A fresh start has no History: the first song plays first, the rest shuffled after it.
+  const first = entries[index]!;
+  const firstUp = { ...started, entries: [first, ...entries.filter((e) => e !== first)], index: 0 };
+  return result(shuffleOn(firstUp, random, kind), "play");
 };
 
 /** A shuffled copy (Fisher–Yates): every order equally likely. */
@@ -546,17 +550,15 @@ export const shufflesQueue = (state: QueueState, command: QueueCommand): boolean
 
 /**
  * The songs [command] orders when it shuffles [state]'s queue, by track id,
- * each once: a play's songs, or the queue's, streamed ones included. Smart
- * Shuffle needs their plays and Even Shuffle their `ShuffleSong`s, and no
+ * each once: a play's songs, or the current song's and Up Next's (History
+ * stays as it is), streamed ones included. Smart Shuffle needs their plays and
+ * Even Shuffle their `ShuffleSong`s (the current song's, to follow it), and no
  * others; a command that doesn't shuffle needs none.
  */
 export const shuffledTrackIds = (state: QueueState, command: QueueCommand): string[] => {
   if (!shufflesQueue(state, command)) return [];
-  return [
-    ...new Set(
-      command.type === "play" ? command.trackIds : state.entries.map((entry) => entry.trackId),
-    ),
-  ];
+  if (command.type === "play") return [...new Set(command.trackIds)];
+  return [...new Set(state.entries.slice(Math.max(0, state.index)).map((entry) => entry.trackId))];
 };
 
 /** [entries] in the order [shuffle] gives them, after [previous] (the song before them, if any). */
@@ -581,53 +583,40 @@ const upcomingQueued = (state: QueueState): QueueEntry[] =>
   state.entries.slice(state.index + 1).filter(isQueued);
 
 /**
- * The current entry goes first, and every other context entry (played or not)
- * is shuffled after it, with the lined-up entries still to play mixed in (they
- * stay lined up, so turning shuffle off puts them back right after the current
- * entry). Lined-up entries that already played are dropped.
+ * Shuffles Up Next only: History and the current entry stay where they are,
+ * and the entries after the current one are shuffled, the lined-up ones mixed
+ * in (they stay lined up, so turning shuffle off puts them back right after
+ * the current entry).
  */
 const shuffleOn = (state: QueueState, random: () => number, shuffle: Shuffle): QueueState => {
   const current = currentEntry(state);
   if (current === null) return { ...state, shuffle: true };
-  const others = state.entries.filter(
-    (entry, i) => entry !== current && (!isQueued(entry) || i > state.index),
-  );
   return {
     ...state,
-    entries: [current, ...shuffleEntries(others, random, shuffle, current)],
-    index: 0,
+    entries: [
+      ...state.entries.slice(0, state.index + 1),
+      ...shuffleEntries(upNext(state), random, shuffle, current),
+    ],
     shuffle: true,
   };
 };
 
 /**
- * Restores the context order (entries removed meanwhile stay removed) around
- * the current entry, with lined-up entries right after it. A lined-up current
- * entry stays after the context entry that played before it.
+ * History stays as it played and the current entry where it is. Up Next goes
+ * back to the context's order, holding the context entries not played yet
+ * (entries removed meanwhile stay removed), with the lined-up entries right
+ * after the current one.
  */
 const shuffleOff = (state: QueueState): QueueState => {
   const current = currentEntry(state);
   if (current === null) return { ...state, shuffle: false };
-  const context = state.entries
+  const context = upNext(state)
     .filter((entry) => !isQueued(entry))
     // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh copy; Hermes lacks toSorted
     .sort((a, b) => a.contextIndex! - b.contextIndex!);
-  let split: number;
-  if (isQueued(current)) {
-    let before: QueueEntry | undefined;
-    for (let i = state.index - 1; i >= 0 && before === undefined; i -= 1) {
-      if (!isQueued(state.entries[i]!)) before = state.entries[i];
-    }
-    split = before === undefined ? 0 : context.indexOf(before) + 1;
-  } else {
-    split = context.indexOf(current);
-  }
-  const head = context.slice(0, split);
-  const tail = context.slice(split).filter((entry) => entry !== current);
   return {
     ...state,
-    entries: [...head, current, ...upcomingQueued(state), ...tail],
-    index: head.length,
+    entries: [...state.entries.slice(0, state.index + 1), ...upcomingQueued(state), ...context],
     shuffle: false,
   };
 };
@@ -952,9 +941,9 @@ export const upNext = (state: QueueState): readonly QueueEntry[] =>
 
 /**
  * The entries behind the current one, oldest first: the queue's History,
- * which Previous steps back through. Not the play log: shuffle on empties
- * it, shuffle off gives back the context entries before the current one
- * (played or not), and a Repeat All wrap empties it.
+ * which Previous steps back through. Not the play log: a jump ahead adds the
+ * entries it skipped, and a Repeat All wrap empties it. Turning shuffle on or
+ * off leaves it as it is.
  */
 export const queueHistory = (state: QueueState): readonly QueueEntry[] =>
   state.entries.slice(0, Math.max(0, state.index));
