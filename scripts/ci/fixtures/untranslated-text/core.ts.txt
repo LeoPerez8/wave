@@ -1,0 +1,6 @@
+export const countLine = (count: number) => `${count} songs`;
+export function failure() { return "Couldn't download the song"; }
+export const state = () => "queued";
+export const actions = [{ title: "Play", label: "Add to Queue" }];
+export const line = () => strings.home.title;
+export const problem = () => new Error("Database is closed");
