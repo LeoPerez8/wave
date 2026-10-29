@@ -222,6 +222,9 @@ describe("POST /v1/push and GET /v1/pull", () => {
         favorites: 0,
         preferences: 1,
         plays: 1,
+        follows: 0,
+        hiddenReleases: 0,
+        notifiedShows: 0,
       },
     });
 
@@ -460,6 +463,76 @@ describe("POST /v1/push and GET /v1/pull", () => {
     });
   });
 
+  test("a follow syncs with its level, the later change wins, and an unfollow is a tombstone", async () => {
+    const service = await harness();
+    const phoneA = await service.signIn();
+    const phoneB = await service.signIn();
+    const follow = (changedAt: number, level: string, phoneId = "phone-a") => ({
+      id: "massive attack",
+      changedAt,
+      phoneId,
+      deleted: false,
+      name: "Massive Attack",
+      level,
+      followedAt: 100,
+      deezerId: 2_163,
+      ytBrowseId: null,
+    });
+    await push(service, phoneA, { follows: [follow(100, "releases")] });
+    assert.deepEqual((await pull(service, phoneB)).follows, [follow(100, "releases")]);
+
+    await push(service, phoneB, { follows: [follow(200, "shows", "phone-b")] });
+    const stale = await push(service, phoneA, { follows: [follow(150, "releases")] });
+    assert.equal((stale.accepted as Record<string, number>).follows, 0);
+    assert.deepEqual((await pull(service, phoneA)).follows, [follow(200, "shows", "phone-b")]);
+
+    const unfollow = { id: "massive attack", changedAt: 300, phoneId: "phone-a", deleted: true };
+    await push(service, phoneA, { follows: [unfollow] });
+    assert.deepEqual((await pull(service, phoneB)).follows, [unfollow]);
+  });
+
+  test("a follow at a level the wire doesn't know is refused", async () => {
+    const service = await harness();
+    const session = await service.signIn();
+    const response = await service.request("POST", "/v1/push", {
+      session,
+      json: {
+        follows: [
+          {
+            id: "tricky",
+            changedAt: 1,
+            phoneId: "phone-a",
+            deleted: false,
+            name: "Tricky",
+            level: "everything",
+            followedAt: 1,
+            deezerId: null,
+            ytBrowseId: null,
+          },
+        ],
+      },
+    });
+    assert.equal(response.status, 400);
+    assert.deepEqual(await response.json(), {
+      error: "bad_request",
+      detail: "follows[0].level isn't one of its values",
+    });
+  });
+
+  test("hidden releases and notified shows reach the other phone", async () => {
+    const service = await harness();
+    const phoneA = await service.signIn();
+    const phoneB = await service.signIn();
+    const marked = (id: string) => ({ id, changedAt: 10, phoneId: "phone-a", deleted: false });
+    await push(service, phoneA, {
+      hiddenReleases: [marked("deezer:302127")],
+      notifiedShows: [marked("G5vYZ9Ma1Jb5U")],
+    });
+    const pulled = await pull(service, phoneB);
+    assert.deepEqual(pulled.hiddenReleases, [marked("deezer:302127")]);
+    assert.deepEqual(pulled.notifiedShows, [marked("G5vYZ9Ma1Jb5U")]);
+  });
+
   test("a pull reads with Core's readPullPage as every table's rows were pushed", async () => {
     const service = await harness();
     const session = await service.signIn();
@@ -492,6 +565,22 @@ describe("POST /v1/push and GET /v1/pull", () => {
           videoId: null,
         }),
       ],
+      follows: [
+        {
+          id: "massive attack",
+          changedAt: 10,
+          phoneId: "phone-a",
+          deleted: false,
+          name: "Massive Attack",
+          level: "releases",
+          followedAt: 10,
+          deezerId: 2_163,
+          ytBrowseId: "UCQ2f9WmyRrpUQ8xv3IxhPOQ",
+        },
+        { id: "portishead", changedAt: 11, phoneId: "phone-a", deleted: true },
+      ],
+      hiddenReleases: [{ id: "deezer:302127", changedAt: 10, phoneId: "phone-a", deleted: false }],
+      notifiedShows: [{ id: "G5vYZ9Ma1Jb5U", changedAt: 10, phoneId: "phone-a", deleted: false }],
     };
     await push(service, session, rows);
     const response = await service.request("GET", "/v1/pull", { session });

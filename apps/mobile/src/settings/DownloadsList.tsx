@@ -1,3 +1,4 @@
+import { currentLocalisation, useLocalisation } from "@/localisation/localisation";
 import { LegendList, type LegendListRef } from "@legendapp/list/react-native";
 import {
   downloadListRows,
@@ -65,8 +66,10 @@ type Handle = Grip | "drawn" | "room";
 
 /** Screen readers' Move up / Move down, for a row that has a place above or below it. */
 const moveActions = (index: number, count: number) => [
-  ...(index > 0 ? [{ name: "moveUp", label: "Move up" }] : []),
-  ...(index < count - 1 ? [{ name: "moveDown", label: "Move down" }] : []),
+  ...(index > 0 ? [{ name: "moveUp", label: currentLocalisation().strings.settings.moveUp }] : []),
+  ...(index < count - 1
+    ? [{ name: "moveDown", label: currentLocalisation().strings.settings.moveDown }]
+    : []),
 ];
 
 /**
@@ -131,6 +134,7 @@ const QueuedDownloadRow = memo(
     count?: number;
     onAccessibilityAction?: (event: AccessibilityActionEvent) => void;
   }) {
+    const { strings } = useLocalisation();
     const { song, line, cancel } = queued;
     return (
       <DownloadSongRow
@@ -141,7 +145,11 @@ const QueuedDownloadRow = memo(
         onAccessibilityAction={onAccessibilityAction}
       >
         {cancel !== null && (
-          <TextButton variant="plain" label="Cancel" onPress={() => cancelQueuedDownload(queued)} />
+          <TextButton
+            variant="plain"
+            label={strings.settings.cancel}
+            onPress={() => cancelQueuedDownload(queued)}
+          />
         )}
         <HandleSlot handle={handle} />
       </DownloadSongRow>
@@ -432,6 +440,7 @@ const typeOf = (row: PageRow) => row.kind;
  * `moveDownloadGroup` / `moveDownloadInGroup`, which the journal then runs; `downloadsDrag.ts`).
  */
 export function DownloadsList({ header }: { header: ReactElement }) {
+  const { strings } = useLocalisation();
   const list = useDownloadingList();
   const run = useDownloadRun();
   const groupProgress = run.progress.groups;
@@ -516,7 +525,7 @@ export function DownloadsList({ header }: { header: ReactElement }) {
       {header}
       {summary !== null && (
         <View>
-          <CatalogLine className="mb-1">Downloading</CatalogLine>
+          <CatalogLine className="mb-1">{strings.settings.downloading}</CatalogLine>
           <DownloadRunPanel run={run} summary={summary} pauseNotice={pauseNotice} />
           <Hairline />
         </View>

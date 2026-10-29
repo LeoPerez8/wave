@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { artistStats, type PlayTotals, type SongListening } from "./index.ts";
+import { artistStats, catalogueOf, type PlayTotals, type SongListening } from "./index.ts";
 
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
@@ -74,6 +74,39 @@ describe("artistStats", () => {
     assert.deepEqual(stats(8, [1]), ["3 plays", "9 minutes listened", "1 of 1 song"]);
   });
 
+  test("in Portuguese, counts read in Portuguese, none and one in the singular", () => {
+    const pt = catalogueOf("pt-BR");
+    const block = (countedPlays: number, listenedMs: number, songs: number) => {
+      const stats = artistStats(
+        {
+          artistId: 7,
+          songIds: Array.from({ length: songs }, (_, index) => index + 1),
+          listening: [listened(1, { countedPlays, listenedMs })],
+          songPlays: [],
+          now,
+        },
+        pt,
+      );
+      return stats.played ? [stats.plays, stats.minutesListened, stats.songsListened] : [];
+    };
+
+    assert.deepEqual(block(1, MINUTE + 5_000, 1), [
+      "1 reprodução",
+      "1 minuto ouvido",
+      "1 de 1 música",
+    ]);
+    assert.deepEqual(block(1_500, 2_000 * MINUTE, 1_200), [
+      "1.500 reproduções",
+      "2.000 minutos ouvidos",
+      "1 de 1.200 músicas",
+    ]);
+    assert.deepEqual(block(1, 10_000, 2), [
+      "1 reprodução",
+      "Nenhum minuto ouvido",
+      "1 de 2 músicas",
+    ]);
+  });
+
   test("one of each reads in the singular, and large totals with separators", () => {
     const one = artistStats({
       artistId: 7,
@@ -133,6 +166,30 @@ describe("artistStats", () => {
     assert.equal(lastPlayed(365 * DAY), "Last played 1 year ago");
     assert.equal(lastPlayed(400 * DAY), "Last played 1 year ago");
     assert.equal(lastPlayed(3 * 365 * DAY), "Last played 1 year ago");
+  });
+
+  test("in Portuguese, last played says how long ago in Portuguese", () => {
+    const lastPlayed = (ago: number): string => {
+      const stats = artistStats(
+        {
+          artistId: 7,
+          songIds: [1],
+          listening: [listened(1, { lastPlayedAt: now - ago })],
+          songPlays: [],
+          now,
+        },
+        catalogueOf("pt-BR"),
+      );
+      return stats.played ? stats.lastPlayed : "";
+    };
+
+    assert.equal(lastPlayed(20_000), "Última reprodução agora mesmo");
+    assert.equal(lastPlayed(MINUTE), "Última reprodução há 1 minuto");
+    assert.equal(lastPlayed(DAY), "Última reprodução ontem");
+    assert.equal(lastPlayed(2 * DAY), "Última reprodução há 2 dias");
+    assert.equal(lastPlayed(30 * DAY), "Última reprodução há 1 mês");
+    assert.equal(lastPlayed(364 * DAY), "Última reprodução há 12 meses");
+    assert.equal(lastPlayed(3 * 365 * DAY), "Última reprodução há 3 anos");
   });
 
   test("years ago count from the latest play", () => {

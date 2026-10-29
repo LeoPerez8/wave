@@ -24,7 +24,7 @@ test("the first follow offers releases; an existing follow checks its level and 
 test("the follow card's levels read in Portuguese", async () => {
   const { followLevelEntries, catalogueOf } = await import("./index.ts");
   assert.deepEqual(
-    followLevelEntries("releases", catalogueOf("pt-BR")).map((entry) => entry.label),
+    followLevelEntries("releases", { strings: catalogueOf("pt-BR") }).map((entry) => entry.label),
     ["Novos lançamentos", "Deixar de Seguir"],
   );
   assert.deepEqual(

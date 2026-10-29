@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
+import { catalogueOf } from "./localisation.ts";
 import {
   RECOGNIZE_CARD_ACTION_LABELS,
+  recognizeCardActionLabels,
   recognizeCardView,
   recognizeHoldsPlayback,
   recognizeLogLine,
@@ -422,4 +424,27 @@ describe("Wave's own playback", () => {
   test("pauses while the microphone listens", () => {
     assert.equal(recognizeHoldsPlayback("microphone"), true);
   });
+});
+
+test("Recognize's buttons follow the app language", () => {
+  const labels = recognizeCardActionLabels(catalogueOf("pt-BR"));
+  assert.equal(labels.listenAgain, "Ouvir Novamente");
+  assert.equal(labels.done, "OK");
+  assert.equal(recognizeCardActionLabels().listenAgain, "Listen Again");
+});
+
+test("Recognize's listening and failure messages follow the app language", () => {
+  const pt = catalogueOf("pt-BR");
+  assert.equal(recognizeCardView({ kind: "listening" }, undefined, pt).title, "Ouvindo…");
+  assert.deepEqual(recognizeCardView({ kind: "offline" }, undefined, pt).lines, [
+    "Conecte-se à internet para reconhecer uma música.",
+  ]);
+  assert.equal(
+    recognizeCardView(
+      { kind: "ended", end: { kind: "failed", failure: "capture", status: null } },
+      undefined,
+      pt,
+    ).lines[0],
+    "A captura de áudio parou de enviar som.",
+  );
 });

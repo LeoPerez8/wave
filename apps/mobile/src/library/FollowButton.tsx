@@ -1,3 +1,13 @@
+import { useEffect, useState } from "react";
+import { AppState } from "react-native";
+import { currentLocalisation, useLocalisation } from "@/localisation/localisation";
+import { useFollowCountryName } from "@/settings/followCountry";
+import {
+  askShowNotifications,
+  showsNotificationsEnabled,
+  ticketmasterKey,
+} from "./showNotifications";
+import { WaveNative } from "@/native/waveNative";
 import { MenuChoices } from "@/overlay/MenuChoices";
 import { CardHeading } from "@/overlay/CardHeading";
 import { IconUserPlus, IconUserCheck } from "@tabler/icons-react-native";
@@ -7,7 +17,6 @@ import { TextButton } from "@/components/TextButton";
 import { ChoiceRow } from "@/settings/ChoiceRow";
 import { showError } from "@/overlay/alert";
 import { followUp, openOverlay } from "@/overlay/overlay";
-import { currentLocalisation, useLocalisation } from "@/localisation/localisation";
 import { View, Text } from "react-native";
 import type { FollowTarget } from "./db/follows";
 import { setArtistFollow, useFollow } from "./follows";
@@ -21,10 +30,21 @@ export const openFollowCard = (artist: FollowTarget): void => {
 function FollowCard({ artist, close }: { artist: FollowTarget; close: () => void }) {
   const follow = useFollow(artist.name);
   const { strings } = useLocalisation();
+  const country = useFollowCountryName();
+  const [denied, setDenied] = useState(!showsNotificationsEnabled());
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", () => setDenied(!showsNotificationsEnabled()));
+    return () => sub.remove();
+  }, []);
   return (
     <View>
       <Text className="mb-2 font-sans text-title3 text-foreground">{artist.name}</Text>
-      {followLevelEntries(follow?.level ?? null, strings).map((entry) =>
+      {followLevelEntries(follow?.level ?? null, {
+        showsAvailable: ticketmasterKey !== "",
+        country,
+        notificationsDenied: denied,
+        strings,
+      }).map((entry) =>
         entry.action === "unfollow" ? (
           <TextButton
             key={entry.action}
@@ -42,14 +62,22 @@ function FollowCard({ artist, close }: { artist: FollowTarget; close: () => void
             key={entry.action}
             label={entry.label}
             chosen={entry.checked}
+            line={entry.line}
             onPress={() => {
               close();
-              void setArtistFollow(artist, entry.action === "unfollow" ? null : entry.action).catch(
-                (error) => showError(strings.library.couldntFollow, error),
-              );
+              void (async () => {
+                if (entry.action === "shows") await askShowNotifications();
+                await setArtistFollow(artist, entry.action === "unfollow" ? null : entry.action);
+              })().catch((error) => showError(strings.library.couldntFollow, error));
             }}
           />
         ),
+      )}
+      {ticketmasterKey !== "" && denied && (
+        <TextButton
+          label={strings.shows.notificationSettings}
+          onPress={() => WaveNative.openShowNotificationSettings?.()}
+        />
       )}
     </View>
   );
@@ -61,14 +89,21 @@ export const followMenuPress = (artist: FollowTarget, close: () => void): void =
 };
 
 export const useFollowAction = (artist: FollowTarget): LastListAction => {
-  const follow = useFollow(artist.name);
   const { strings } = useLocalisation();
-  const { follow: followLabel, following } = strings.library;
+  const country = useFollowCountryName();
+  const follow = useFollow(artist.name);
   return {
     icon: follow === null ? IconUserPlus : IconUserCheck,
-    label: follow === null ? followLabel : following,
-    labels: [followLabel, following],
-    accessibilityLabel: strings.library.followState(artist.name, follow !== null),
+    label: follow === null ? strings.library.follow : strings.library.following,
+    labels: [strings.library.follow, strings.library.following],
+    accessibilityLabel: strings.library.followState(
+      artist.name,
+      follow === null
+        ? null
+        : follow.level === "shows"
+          ? strings.shows.level(country)
+          : strings.shows.releases,
+    ),
     onPress: () => openFollowCard(artist),
   };
 };
@@ -80,8 +115,8 @@ export const openFollowActions = (artist: FollowTarget): void => {
   });
 };
 function FollowActions({ artist, close }: { artist: FollowTarget; close: () => void }) {
-  const follow = useFollow(artist.name);
   const { strings } = useLocalisation();
+  const follow = useFollow(artist.name);
   return (
     <>
       <CardHeading>

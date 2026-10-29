@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { AppState, BackHandler, Platform } from "react-native";
 
 import { beginTiming } from "@/lib/timing";
+import { currentLocalisation } from "@/localisation/localisation";
 import { closeNowPlaying, isNowPlayingShown, onNowPlayingShownChange } from "@/nowPlaying/sheet";
 import { useIsSelecting } from "@/selection/selection";
 
@@ -46,7 +47,7 @@ export function AndroidBack(): null {
         return false;
       }
       if (confirmation.press(performance.now())) BackHandler.exitApp();
-      else void showToast("Press Back again within 2 seconds to exit");
+      else void showToast(currentLocalisation().strings.settings.pressBackAgainWithin2SecondsTo);
       return true;
     });
     return () => {

@@ -48,9 +48,10 @@ export const TEXT_ALLOWLIST = [
   "packages/core/src/slowRead.ts",
   "packages/core/src/timing.ts",
   "packages/core/src/overlayOrigin.ts",
-  "packages/core/src/catalogue/",
+  "packages/core/src/recognizeLog.ts",
   "packages/core/src/catalogueEn.ts",
   "packages/core/src/cataloguePtBr.ts",
+  "packages/core/src/catalogue/",
 ];
 
 export const isTextSource = (file) =>

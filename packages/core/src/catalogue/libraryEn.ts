@@ -188,9 +188,9 @@ export const libraryEn = {
   follow: "Follow",
   following: "Following",
   followArtist: (name: string): string => `Follow ${name}`,
-  followState: (name: string, following: boolean): string =>
-    `${name}, ${following ? "Following, New releases" : "Follow"}`,
-  newReleases: "New releases",
+  /** The follow button's TalkBack label: the artist, then Follow or Following and its level. */
+  followState: (name: string, level: string | null): string =>
+    level === null ? `${name}, Follow` : `${name}, Following, ${level}`,
   unfollow: "Unfollow",
   couldntFollow: "Couldn't follow artist",
   couldntUnfollow: "Couldn't unfollow artist",

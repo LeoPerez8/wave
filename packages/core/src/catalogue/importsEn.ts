@@ -137,23 +137,5 @@ export const importsEn = {
       one: `Imported ${n(count)} playlist`,
       other: `Imported ${n(count)} playlists`,
     }),
-  /** BlackPlayer stats. */
-  nothingNewImported: "Nothing new imported",
-  importedBlackPlayer: "Imported BlackPlayer stats",
-  newPlays: (count: number): string =>
-    plural("en", count, { one: `${n(count)} new play`, other: `${n(count)} new plays` }),
-  allPlaysKnown: "Every play in these files is in your history already",
-  playsFrom: (songCount: number, snapshots: number): string =>
-    `Of ${songs(songCount)}, from ${plural("en", snapshots, {
-      one: `${n(snapshots)} snapshot`,
-      other: `${n(snapshots)} snapshots`,
-    })}`,
-  songsNotInLibrary: (count: number): string => `${songs(count)} not in your library`,
-  playsNotImported: (songCount: number, plays: number): string =>
-    `${songCount === 1 ? "Its" : "Their"} ${plural("en", plays, {
-      one: `${n(plays)} play wasn't`,
-      other: `${n(plays)} plays weren't`,
-    })} imported`,
-  notBlackPlayer: "Not a BlackPlayer stats file",
   couldntImportBlackPlayer: "Couldn't import the BlackPlayer stats",
 };

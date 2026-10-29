@@ -1,3 +1,4 @@
+import { useLocalisation } from "@/localisation/localisation";
 import { useScreenContent } from "@/lib/screenTiming";
 import { Text, View } from "react-native";
 
@@ -12,6 +13,7 @@ import { streamBufferChoice } from "@/settings/streamBuffer";
 
 /** Settings › Playback: how one song gives way to the next, which songs play, and how much streamed audio is loaded ahead. */
 export default function PlaybackSettingsScreen() {
+  const { strings } = useLocalisation();
   useScreenContent(true);
   const seconds = useCrossfadeSeconds();
   const skipExplicit = useDontPlayExplicit();
@@ -21,34 +23,33 @@ export default function PlaybackSettingsScreen() {
       <View>
         <Hairline />
         <SettingsSlider
-          label="Crossfade"
+          label={strings.settings.crossfade}
           value={seconds}
           range={CROSSFADE}
-          format={(value) => (value === 0 ? "Off" : `${value} s`)}
+          format={(value) => (value === 0 ? strings.settings.off : `${value} s`)}
           onChange={setCrossfadeSeconds}
         />
         <Hairline />
         <Text className="mt-2 font-sans text-footnote text-secondary">
-          As a song ends on its own, the next one fades in over it for this long. Skipping or
-          picking a song switches at once. Off plays songs back to back, without a gap.
+          {strings.settings.asASongEndsOnItsOwn}
         </Text>
       </View>
       <View>
         <Hairline />
         <SettingsSwitch
-          label="Don't play explicit"
+          label={strings.settings.dontPlayExplicit}
           value={skipExplicit}
           onValueChange={setDontPlayExplicit}
         />
         <Hairline />
         <Text className="mt-2 font-sans text-footnote text-secondary">
-          Skips songs marked explicit by YouTube Music or Deezer.
+          {strings.settings.skipsSongsMarkedExplicitByYouTubeMusic}
         </Text>
       </View>
       <ChoiceSection
         choice={streamBufferChoice}
         current={bufferMinutes}
-        note="How much of a streamed song Wave loads ahead, carrying on into the next songs in Up Next, so playback keeps going through a dead zone. Longer uses more memory: about 50 MB at 30 minutes. Downloaded songs play from the phone either way."
+        note={strings.settings.howMuchOfAStreamedSongWave}
       />
     </SettingsPageScreen>
   );

@@ -5,7 +5,7 @@
  */
 
 import { foldAccentsAndCase } from "./library.ts";
-import { catalogueOf, type AppLanguage } from "./localisation.ts";
+import { en, type Catalogue } from "./catalogueEn.ts";
 import { libraryPathIndex, pathKey, type M3uImportSummary } from "./m3u.ts";
 import { normalizeSearchText } from "./search.ts";
 import { libraryMatches } from "./ytMusic.ts";
@@ -168,21 +168,20 @@ const tagMatcher = <Id>(
 /** The summary shown once an import is done, in the shape of the M3U import's. */
 export const summarizeBlackPlayerImport = <Id>(
   plan: BlackPlayerImport<Id>,
-  language: AppLanguage = "en",
+  { settings: { blackPlayerImport: text } }: Catalogue = en,
 ): M3uImportSummary => {
-  const text = catalogueOf(language).imports;
   const plays = plan.plays.length;
   const songs = new Set(plan.plays.map((play) => play.trackId)).size;
   const unmatchedPlays = plan.unmatched.reduce((sum, song) => sum + song.plays, 0);
   return {
-    title: plays === 0 ? text.nothingNewImported : text.importedBlackPlayer,
+    title: plays === 0 ? text.nothingNew : text.imported,
     sections: [
       ...(plan.snapshots === 0
         ? []
         : [
             {
               heading: text.newPlays(plays),
-              detail: plays === 0 ? text.allPlaysKnown : text.playsFrom(songs, plan.snapshots),
+              detail: plays === 0 ? text.allInHistory : text.from(songs, plan.snapshots),
               missing: [],
             },
           ]),
@@ -190,8 +189,8 @@ export const summarizeBlackPlayerImport = <Id>(
         ? []
         : [
             {
-              heading: text.songsNotInLibrary(plan.unmatched.length),
-              detail: text.playsNotImported(plan.unmatched.length, unmatchedPlays),
+              heading: text.notInLibrary(plan.unmatched.length),
+              detail: text.notImported(plan.unmatched.length, unmatchedPlays),
               missing: plan.unmatched.map(({ title, artist }) =>
                 artist === "" ? title : `${artist} – ${title}`,
               ),
@@ -199,7 +198,7 @@ export const summarizeBlackPlayerImport = <Id>(
           ]),
       ...plan.skipped.map(({ file, reason }) => ({
         heading: file,
-        detail: reason === "unreadable" ? text.couldntBeRead : text.notBlackPlayer,
+        detail: reason === "unreadable" ? text.unreadable : text.notStats,
         missing: [],
       })),
     ],

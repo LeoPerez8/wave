@@ -14,7 +14,7 @@ import { startRescan } from "@/library/runtime";
  * it failed. Incremental rescans stay quiet unless there are files to read.
  */
 export function ScanProgressBanner() {
-  const { language } = useLocalisation();
+  const { language, strings } = useLocalisation();
   const scan = useScanProgress();
   const count = (value: number) => formatNumber(language, value);
 
@@ -24,11 +24,11 @@ export function ScanProgressBanner() {
         {/* Announced as it appears, and whole: the cause is what tells a retry from a fix.
             Try again stays its own stop after it. */}
         <View accessibilityLiveRegion="polite" style={{ gap: CELL }}>
-          <CatalogLine>Couldn't scan your music</CatalogLine>
+          <CatalogLine>{strings.settings.couldntScanYourMusic}</CatalogLine>
           <Text className="font-sans text-footnote text-secondary">{scan.message}</Text>
         </View>
         <View className="items-start">
-          <TextButton label="Try again" onPress={() => void startRescan()} />
+          <TextButton label={strings.settings.tryAgainText} onPress={() => void startRescan()} />
         </View>
         <Hairline />
       </View>
@@ -43,15 +43,15 @@ export function ScanProgressBanner() {
   if (incremental && (!reading || toRead === 0)) return null;
   const fraction = reading && toRead > 0 ? scan.filesRead / toRead : 0;
   const title = incremental
-    ? "Updating your library"
+    ? strings.settings.updatingYourLibrary
     : reading
-      ? "Adding songs to your library"
-      : "Looking for music";
+      ? strings.settings.addingSongsToYourLibrary
+      : strings.settings.lookingForMusic;
   const detail = incremental
-    ? `${count(scan.filesRead)} of ${count(toRead)} new or changed files read`
+    ? strings.settings.newFiles(count(scan.filesRead), count(toRead))
     : reading
-      ? `${count(scan.filesRead)} of ${count(toRead)} files indexed`
-      : `${count(scan.filesFound)} files found`;
+      ? strings.settings.indexedFiles(count(scan.filesRead), count(toRead))
+      : strings.settings.foundFiles(count(scan.filesFound), scan.filesFound);
   return (
     <View
       accessible

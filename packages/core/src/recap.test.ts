@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import {
+  catalogueOf,
   availableRecaps,
   genreFamily,
   parseRecapId,
@@ -158,6 +159,13 @@ describe("yearly Recaps", () => {
       listened(at(2027, 1, 1, 0, 0), HOUR),
     ];
     assert.equal(recap({ period: year2026, listening, songs: [] }).minutesListened, 120);
+  });
+
+  test("in Portuguese, a month's title names the month before the year", () => {
+    const pt = catalogueOf("pt-BR");
+    assert.equal(recapTitle({ kind: "month", year: 2026, month: 3 }, pt), "Março de 2026");
+    assert.equal(recapTitle({ kind: "month", year: 2026, month: 3 }), "March 2026");
+    assert.equal(recapTitle(year2026, pt), "2026");
   });
 
   test("is titled and named by its year", () => {
@@ -509,6 +517,36 @@ describe("habit labels", () => {
 
   test("a weekday reads by name, its plural for habits", () => {
     assert.deepEqual([0, 5].map(recapWeekdayLabel), ["Sundays", "Fridays"]);
+  });
+
+  test("in Portuguese, the peak weekday and hour read as a habit", () => {
+    const { recap: pt } = catalogueOf("pt-BR");
+    assert.deepEqual(
+      [0, 5, 6].map((weekday) => pt.onWeekday(weekday)),
+      ["aos domingos", "às sextas-feiras", "aos sábados"],
+    );
+    assert.deepEqual(
+      [0, 1, 9, 12, 22].map((hour) => pt.aroundHour(hour)),
+      [
+        "por volta da meia-noite",
+        "por volta da 1h",
+        "por volta das 9h",
+        "por volta do meio-dia",
+        "por volta das 22h",
+      ],
+    );
+    assert.equal(
+      pt.listenedIn({ kind: "month", year: 2026, month: 10 }),
+      "Em outubro de 2026, você ouviu por",
+    );
+    assert.deepEqual(
+      [0, 1, 2].map((count) => [pt.minutes(count), pt.streakDays(count), pt.newArtists(count)]),
+      [
+        ["minutos", "dias seguidos", "novos artistas"],
+        ["minuto", "dia", "novo artista"],
+        ["minutos", "dias seguidos", "novos artistas"],
+      ],
+    );
   });
 });
 

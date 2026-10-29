@@ -168,9 +168,8 @@ export const libraryPtBr: typeof libraryEn = {
   follow: "Seguir",
   following: "Seguindo",
   followArtist: (name: string): string => `Seguir ${name}`,
-  followState: (name: string, following: boolean): string =>
-    `${name}, ${following ? "Seguindo, Novos lançamentos" : "Seguir"}`,
-  newReleases: "Novos lançamentos",
+  followState: (name: string, level: string | null): string =>
+    level === null ? `${name}, Seguir` : `${name}, Seguindo, ${level}`,
   unfollow: "Deixar de Seguir",
   couldntFollow: "Não foi possível seguir o artista",
   couldntUnfollow: "Não foi possível deixar de seguir o artista",

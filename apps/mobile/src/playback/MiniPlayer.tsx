@@ -1,3 +1,5 @@
+import { playerErrorNotice } from "@wave/core";
+import { useLocalisation } from "@/localisation/localisation";
 import {
   IconPlayerPauseFilled,
   IconPlayerPlayFilled,
@@ -82,7 +84,7 @@ const finishOpen = (
 };
 
 // Separate selectors, so position ticks don't re-render the mini player.
-const usePlaybackField = <K extends "item" | "playWhenReady" | "error" | "notice">(key: K) =>
+const usePlaybackField = <K extends "item" | "playWhenReady" | "error" | "errorCode">(key: K) =>
   useSyncExternalStore(playbackState.subscribe, () => playbackState.get()[key]);
 
 type Props = {
@@ -101,11 +103,12 @@ type Props = {
  * navigation, and it needn't (pass a stable `onOpen`).
  */
 export const MiniPlayer = memo(function MiniPlayer({ backdropId, onOpen }: Props) {
+  const { strings } = useLocalisation();
   useRenderCount("MiniPlayer");
   const item = usePlaybackField("item");
   const playing = usePlaybackField("playWhenReady");
   const error = usePlaybackField("error");
-  const notice = usePlaybackField("notice");
+  const code = usePlaybackField("errorCode");
   const bottom = useTabBarTop();
   const reduceMotion = useReducedMotion();
   // A swipe let go short springs back as far past rest as the Bounce amount says.
@@ -220,9 +223,11 @@ export const MiniPlayer = memo(function MiniPlayer({ backdropId, onOpen }: Props
   }));
 
   if (item === null) return null;
-  const title = item.title ?? "Unknown title";
+  const title = item.title ?? strings.playbackText.unknownTitle;
   const subtitle =
-    error === null ? (item.artist ?? "Unknown Artist") : (notice ?? "Couldn't play this file");
+    error === null
+      ? (item.artist ?? strings.playbackText.unknownArtist)
+      : playerErrorNotice(code, strings);
 
   return (
     <OnFloatingChrome value>
@@ -244,11 +249,11 @@ export const MiniPlayer = memo(function MiniPlayer({ backdropId, onOpen }: Props
               <Animated.View className="flex-1 flex-row items-center" style={contentStyle}>
                 <Press
                   accessibilityRole="button"
-                  accessibilityLabel={`Now playing: ${title}, ${subtitle}`}
-                  accessibilityHint="Opens Now Playing"
+                  accessibilityLabel={strings.playbackText.nowPlayingValueValue(title, subtitle)}
+                  accessibilityHint={strings.playbackText.opensNowPlaying}
                   accessibilityActions={[
-                    { name: "next", label: "Next track" },
-                    { name: "previous", label: "Previous track" },
+                    { name: "next", label: strings.playbackText.nextTrack },
+                    { name: "previous", label: strings.playbackText.previousTrack },
                   ]}
                   onAccessibilityAction={(event) =>
                     skip(event.nativeEvent.actionName === "next" ? "next" : "previous")
@@ -277,12 +282,16 @@ export const MiniPlayer = memo(function MiniPlayer({ backdropId, onOpen }: Props
                 <View className="flex-row" style={{ paddingRight: CELL / 2 }}>
                   <IconButton
                     icon={playing ? IconPlayerPauseFilled : IconPlayerPlayFilled}
-                    label={playing ? `Pause ${title}` : `Play ${title}`}
+                    label={
+                      playing
+                        ? strings.playbackText.pauseValue(title)
+                        : strings.playbackText.playValue(title)
+                    }
                     onPress={togglePlayPause}
                   />
                   <IconButton
                     icon={IconPlayerTrackNextFilled}
-                    label="Next track"
+                    label={strings.playbackText.nextTrack}
                     onPress={skipToNext}
                   />
                 </View>

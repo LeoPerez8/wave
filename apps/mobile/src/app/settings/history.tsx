@@ -74,7 +74,7 @@ const historyEntry = (
 
 /** Counted plays, including streamed songs and saved rows for songs that have since left. */
 export default function ListeningHistoryScreen() {
-  const { language } = useLocalisation();
+  const { language, strings } = useLocalisation();
   const { rows: plays, loading, error, loadMore, refresh } = useListeningHistory();
   useScreenContent(!loading || plays.length > 0);
   const bottom = useChromeInset();
@@ -136,7 +136,7 @@ export default function ListeningHistoryScreen() {
         ListEmptyComponent={
           !loading && !error ? (
             <Text className="font-sans text-body text-secondary" style={{ paddingTop: CELL * 3 }}>
-              No listening history yet.
+              {strings.listeningHistory.empty}
             </Text>
           ) : null
         }
@@ -146,9 +146,13 @@ export default function ListeningHistoryScreen() {
             {error && (
               <>
                 <Text className="font-sans text-body text-secondary">
-                  Couldn't load listening history.
+                  {strings.listeningHistory.failed}
                 </Text>
-                <TextButton variant="plain" label="Try again" onPress={refresh} />
+                <TextButton
+                  variant="plain"
+                  label={strings.listeningHistory.tryAgain}
+                  onPress={refresh}
+                />
               </>
             )}
           </View>

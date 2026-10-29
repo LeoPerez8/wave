@@ -7,6 +7,7 @@
  * fills that Track in.
  */
 
+import { en, type Catalogue } from "./catalogueEn.ts";
 import { advisoryTag } from "./explicit.ts";
 import { UNKNOWN_ALBUM } from "./library.ts";
 import { songLookup, type FoundTags, type SongLookup } from "./lyricsAndGenre.ts";
@@ -205,13 +206,16 @@ export const missingSongTags = (
 /** What Settings › Wave Account's Download All offers: Download All, Retry Failed, Cancel. */
 export type MissingSongsDownloadAction = "downloadAll" | "retryFailed" | "cancel";
 
-export const MISSING_SONGS_DOWNLOAD_ACTION_LABELS: {
+/** The entries' labels in [catalogue]'s language. */
+export const missingSongsDownloadActionLabels = ({ settings: { missingSongs } }: Catalogue = en): {
   readonly [A in MissingSongsDownloadAction]: string;
-} = {
-  downloadAll: "Download All",
-  retryFailed: "Retry Failed",
-  cancel: "Cancel",
-};
+} => ({
+  downloadAll: missingSongs.downloadAll,
+  retryFailed: missingSongs.retryFailed,
+  cancel: missingSongs.cancel,
+});
+
+export const MISSING_SONGS_DOWNLOAD_ACTION_LABELS = missingSongsDownloadActionLabels();
 
 /** Where downloading the missing songs stands, and what acting on it does. */
 export interface MissingSongsDownload<S extends YtSong> {
@@ -266,20 +270,18 @@ export const missingSongsDownloadActions = (
   return actions;
 };
 
-const counted = (count: number, one: string, many: string): string =>
-  `${count.toLocaleString("en")} ${count === 1 ? one : many}`;
-
 /**
  * Where downloading the [missing] songs (their jobs, `missingSongJob`)
  * stands, from the download journal's [jobs]: Download All queues the songs
  * not on their way, Cancel stops the ones still cancellable, and once the
  * rest has ended Retry Failed asks again for the failures, as an album's
  * download does. A song filled in is no longer missing; its job still counts
- * as saved on the progress line.
+ * as saved on the progress line. Its lines are in [catalogue]'s language.
  */
 export const missingSongsDownload = <S extends YtSong>(
   missing: readonly S[],
   jobs: readonly YtDownloadJournalJob[],
+  { settings: { missingSongs: text } }: Catalogue = en,
 ): MissingSongsDownload<S> => {
   const downloads = ytDownloadsFromJournal(jobs.filter((job) => job.id.startsWith(JOB_PREFIX)));
   const statuses = missing.map((song) => ytDownloadStatus(downloads, song.videoId));
@@ -308,10 +310,10 @@ export const missingSongsDownload = <S extends YtSong>(
       });
   return {
     line: downloading
-      ? `Downloading · ${saved} of ${batch.length + landed}`
+      ? text.downloading(saved, batch.length + landed)
       : missing.length === 0
         ? null
-        : `${counted(missing.length, "song isn't", "songs aren't")} on this phone`,
+        : text.missing(missing.length),
     actions,
     toDownload,
     toRetry,
@@ -320,7 +322,7 @@ export const missingSongsDownload = <S extends YtSong>(
       notFound.length === 0
         ? null
         : {
-            line: `${counted(notFound.length, "song wasn't", "songs weren't")} found`,
+            line: text.notFound(notFound.length),
             songs: notFound,
           },
   };

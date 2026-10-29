@@ -5,6 +5,7 @@
  * reading a pull's answer.
  */
 
+import type { FollowLevel } from "./followedArtists.ts";
 import type { SyncRow } from "./sync.ts";
 import type { PlaySnapshot } from "./listeningHistory.ts";
 
@@ -58,6 +59,22 @@ export type SyncFavorite = SyncedRow<{ readonly addedAt: number }>;
  */
 export type SyncPreference = SyncedRow<{ readonly value: string | null }>;
 
+/** A follow; its id is the artist's `followArtistKey`. */
+export type SyncFollow = SyncedRow<{
+  /** The artist's name as first followed. */
+  readonly name: string;
+  readonly level: FollowLevel;
+  readonly followedAt: number;
+  readonly deezerId: number | null;
+  readonly ytBrowseId: string | null;
+}>;
+
+/** A New release the owner hid; its id is the release key (`deezer:<albumId>`). */
+export type SyncHiddenRelease = SyncedRow<Readonly<Record<never, never>>>;
+
+/** A Show that already notified on some phone; its id is the Ticketmaster event id. */
+export type SyncNotifiedShow = SyncedRow<Readonly<Record<never, never>>>;
+
 /** How a play ended (Core's `PlayEndReason`). */
 export type SyncPlayEnd = "completed" | "skipped" | "stopped" | "interrupted";
 
@@ -89,6 +106,9 @@ export interface SyncTables {
   readonly favorites: readonly SyncFavorite[];
   readonly preferences: readonly SyncPreference[];
   readonly plays: readonly SyncPlayRow[];
+  readonly follows: readonly SyncFollow[];
+  readonly hiddenReleases: readonly SyncHiddenRelease[];
+  readonly notifiedShows: readonly SyncNotifiedShow[];
 }
 
 export const EMPTY_SYNC_TABLES: SyncTables = {
@@ -98,6 +118,9 @@ export const EMPTY_SYNC_TABLES: SyncTables = {
   favorites: [],
   preferences: [],
   plays: [],
+  follows: [],
+  hiddenReleases: [],
+  notifiedShows: [],
 };
 
 /**
@@ -111,6 +134,9 @@ export const SYNC_TABLE_NAMES = [
   "favorites",
   "preferences",
   "plays",
+  "follows",
+  "hiddenReleases",
+  "notifiedShows",
 ] as const satisfies readonly (keyof SyncTables)[];
 
 /** What one field holds: text, a whole number, a boolean, or one of a few values; `?` allows null. */
@@ -161,6 +187,15 @@ export const SYNC_FIELDS: {
     snapshot: "snapshot?",
     videoId: "text?",
   },
+  follows: {
+    name: "text",
+    level: ["releases", "shows"],
+    followedAt: "int",
+    deezerId: "int?",
+    ytBrowseId: "text?",
+  },
+  hiddenReleases: {},
+  notifiedShows: {},
 };
 
 const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
@@ -290,13 +325,8 @@ export const pushBatches = (
       // The row and the comma before it.
       const size = utf8Length(JSON.stringify(row)) + 1;
       if (open === null || rows >= limits.maxRows || bytes + size > limits.maxBytes) {
-        open = {
-          songs: [],
-          playlists: [],
-          playlistEntries: [],
-          favorites: [],
-          preferences: [],
-          plays: [],
+        open = Object.fromEntries(SYNC_TABLE_NAMES.map((name) => [name, []])) as unknown as {
+          [K in keyof SyncTables]: SyncTables[K][number][];
         };
         batches.push(open);
         bytes = ENVELOPE;
@@ -309,3 +339,14 @@ export const pushBatches = (
   }
   return batches;
 };
+
+/**
+ * [batch] as a push's body: only the tables it has rows of, so a service
+ * from before a table was added still takes a push that has none.
+ */
+export const pushBody = (batch: SyncTables): string =>
+  JSON.stringify(
+    Object.fromEntries(
+      SYNC_TABLE_NAMES.flatMap((name) => (batch[name].length > 0 ? [[name, batch[name]]] : [])),
+    ),
+  );

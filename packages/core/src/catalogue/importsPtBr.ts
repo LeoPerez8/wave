@@ -147,30 +147,5 @@ export const importsPtBr: typeof importsEn = {
       one: `${n(count)} playlist importada`,
       other: `${n(count)} playlists importadas`,
     }),
-  nothingNewImported: "Nada novo importado",
-  importedBlackPlayer: "Estatísticas do BlackPlayer importadas",
-  newPlays: (count: number): string =>
-    plural("pt-BR", count, {
-      zero: "Nenhuma reprodução nova",
-      one: `${n(count)} reprodução nova`,
-      other: `${n(count)} reproduções novas`,
-    }),
-  allPlaysKnown: "Todas as reproduções destes arquivos já estão no seu histórico",
-  playsFrom: (songCount: number, snapshots: number): string =>
-    `De ${counted(songCount)}, ${plural("pt-BR", snapshots, {
-      one: `em ${n(snapshots)} arquivo`,
-      other: `em ${n(snapshots)} arquivos`,
-    })}`,
-  songsNotInLibrary: (count: number): string =>
-    plural("pt-BR", count, {
-      one: `${n(count)} música fora da sua biblioteca`,
-      other: `${n(count)} músicas fora da sua biblioteca`,
-    }),
-  playsNotImported: (songCount: number, plays: number): string =>
-    plural("pt-BR", plays, {
-      one: `A reprodução ${songCount === 1 ? "dela" : "delas"} não foi importada`,
-      other: `As ${n(plays)} reproduções ${songCount === 1 ? "dela" : "delas"} não foram importadas`,
-    }),
-  notBlackPlayer: "Não é um arquivo de estatísticas do BlackPlayer",
   couldntImportBlackPlayer: "Não foi possível importar as estatísticas do BlackPlayer",
 };

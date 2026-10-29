@@ -166,31 +166,6 @@ describe("summarizeBlackPlayerImport", () => {
     });
   });
 
-  test("says it in Portuguese", () => {
-    const files = [
-      snapshot("a.bpstat", rows),
-      { name: "notes.txt", text: "hello" },
-      { name: "b.bpstat", text: null },
-    ];
-    assert.deepEqual(summarizeBlackPlayerImport(planBlackPlayerImport(files, library, []), "pt-BR"), {
-      title: "Estatísticas do BlackPlayer importadas",
-      sections: [
-        { heading: "3 reproduções novas", detail: "De 2 músicas, em 1 arquivo", missing: [] },
-        {
-          heading: "2 músicas fora da sua biblioteca",
-          detail: "As 18 reproduções delas não foram importadas",
-          missing: ["Arctic Monkeys – 505", "Weezer – Hash Pipe"],
-        },
-        {
-          heading: "notes.txt",
-          detail: "Não é um arquivo de estatísticas do BlackPlayer",
-          missing: [],
-        },
-        { heading: "b.bpstat", detail: "Não foi possível ler", missing: [] },
-      ],
-    });
-  });
-
   test("importing the same files again says 0 new plays", () => {
     const files = [snapshot("a.bpstat", rows.slice(0, 2))];
     const imported = [

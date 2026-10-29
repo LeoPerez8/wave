@@ -1,3 +1,4 @@
+import { useLocalisation } from "@/localisation/localisation";
 import { useScreenContent } from "@/lib/screenTiming";
 import { IconCompass } from "@tabler/icons-react-native";
 import { discoverMixCaption, placeDiscoverMixSongs } from "@wave/core";
@@ -20,6 +21,7 @@ import { YtSongList, type YtListLoad } from "@/ytmusic/YtSongList";
  * Songs downloaded since play their files.
  */
 export default function DiscoverMixScreen() {
+  const { strings } = useLocalisation();
   useScreenContent(true);
   const { id } = useLocalSearchParams<{ id: string }>();
   const mixId = id ?? "";
@@ -28,7 +30,7 @@ export default function DiscoverMixScreen() {
   const find = useLibraryFinder();
   const load = useMemo<YtListLoad | null>(() => {
     if (mix === null) return null;
-    const caption = discoverMixCaption(mix);
+    const caption = discoverMixCaption(mix, strings);
     return {
       status: "loaded",
       page: {
@@ -42,7 +44,7 @@ export default function DiscoverMixScreen() {
       },
       rest: "read",
     };
-  }, [mix, find, tracks]);
+  }, [mix, find, tracks, strings]);
   const context = useMemo(() => ({ kind: "discoverMix", id: mixId }) as const, [mixId]);
 
   if (load === null) return <GoneMix />;
@@ -59,6 +61,7 @@ export default function DiscoverMixScreen() {
 
 /** Keep the message reachable in a short window and above the floating player. */
 function GoneMix() {
+  const { strings } = useLocalisation();
   const bottomInset = useChromeInset();
   return (
     <View className="flex-1 bg-background">
@@ -66,8 +69,8 @@ function GoneMix() {
       <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: bottomInset }}>
         <EmptyState
           icon={IconCompass}
-          title="This mix is gone"
-          message="Home has today's mixes while YT Music is on."
+          title={strings.discover.goneTitle}
+          message={strings.discover.goneMessage}
         />
       </ScrollView>
     </View>

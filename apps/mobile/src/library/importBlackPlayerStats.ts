@@ -36,7 +36,7 @@ export const importBlackPlayerStats = async (): Promise<void> => {
       // Stats, Home and the artist pages read the history again, and the plays go up.
       playsImported();
     }
-    await showImportSummary(summarizeBlackPlayerImport(plan, currentLocalisation().language));
+    await showImportSummary(summarizeBlackPlayerImport(plan, currentLocalisation().strings));
   } catch (error) {
     await showError(currentLocalisation().strings.imports.couldntImportBlackPlayer, error);
   }

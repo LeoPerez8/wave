@@ -1,3 +1,4 @@
+import { ArtistShows } from "@/library/ArtistShows";
 import { useFollowAction } from "@/library/FollowButton";
 import { useScreenContent } from "@/lib/screenTiming";
 
@@ -457,6 +458,7 @@ function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegr
             sortControl={<SongSortButton kind="artist" />}
             toggle={loaded ? yt.toggle : null}
           />
+          <ArtistShows name={detail.artist.name} />
           {loaded && <ArtistStatsBlock artistId={detail.artist.id} songs={detail.songs} />}
         </>
       }

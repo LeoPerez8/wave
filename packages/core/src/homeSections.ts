@@ -12,6 +12,7 @@ import { readStoredRecord } from "./storedJson.ts";
 /** A section of Home's catalogue, by id. */
 export type HomeSectionId =
   | "new-releases"
+  | "upcoming-shows"
   | "discover"
   | "recently-added"
   | "recently-played"
@@ -39,22 +40,27 @@ export interface HomeSection {
  */
 export const HOME_SECTIONS: readonly HomeSection[] = [
   { id: "new-releases", title: en.newReleases.title, fromPlays: false },
-  { id: "discover", title: "Discover", fromPlays: false },
-  { id: "recently-added", title: "Recently added", fromPlays: false },
-  { id: "recently-played", title: "Recently played", fromPlays: true },
-  { id: "most-played", title: "Most played", fromPlays: true },
-  { id: "most-played-albums", title: "Most played albums", fromPlays: true },
-  { id: "most-played-artists", title: "Most played artists", fromPlays: true },
-  { id: "favorites", title: "Favorites", fromPlays: false },
-  { id: "stats", title: "Stats", fromPlays: false },
+  { id: "upcoming-shows", title: en.upcomingShows.title, fromPlays: false },
+  { id: "discover", title: en.home.sections.discover, fromPlays: false },
+  { id: "recently-added", title: en.home.sections["recently-added"], fromPlays: false },
+  { id: "recently-played", title: en.home.sections["recently-played"], fromPlays: true },
+  { id: "most-played", title: en.home.sections["most-played"], fromPlays: true },
+  { id: "most-played-albums", title: en.home.sections["most-played-albums"], fromPlays: true },
+  { id: "most-played-artists", title: en.home.sections["most-played-artists"], fromPlays: true },
+  { id: "favorites", title: en.home.sections.favorites, fromPlays: false },
+  { id: "stats", title: en.home.sections.stats, fromPlays: false },
 ];
 
 const sectionOf = (id: HomeSectionId): HomeSection | undefined =>
   HOME_SECTIONS.find((section) => section.id === id);
 
-/** The title of the section [id]. */
+/** The title of the section [id], in [strings]' language. */
 export const homeSectionTitle = (id: HomeSectionId, strings: Catalogue = en): string =>
-  id === "new-releases" ? strings.newReleases.title : (sectionOf(id)?.title ?? id);
+  id === "new-releases"
+    ? strings.newReleases.title
+    : id === "upcoming-shows"
+      ? strings.upcomingShows.title
+      : strings.home.sections[id];
 
 /** A row of Home's Discover section. */
 export type DiscoverRowId = "magic-queue" | "artist-mixes" | "genre-mixes";
@@ -63,15 +69,13 @@ export type DiscoverRowId = "magic-queue" | "artist-mixes" | "genre-mixes";
 export type MixRowId = Exclude<DiscoverRowId, "magic-queue">;
 
 /** Discover's rows, top to bottom, each with the label over it. */
-export const DISCOVER_ROWS: readonly { readonly id: DiscoverRowId; readonly title: string }[] = [
-  { id: "magic-queue", title: "Magic Queue" },
-  { id: "artist-mixes", title: "Artist mixes" },
-  { id: "genre-mixes", title: "Genre mixes" },
-];
+export const DISCOVER_ROWS: readonly { readonly id: DiscoverRowId; readonly title: string }[] = (
+  ["magic-queue", "artist-mixes", "genre-mixes"] as const
+).map((id) => ({ id, title: en.discover.rows[id] }));
 
-/** The label over Discover's row [id]. */
-export const discoverRowTitle = (id: DiscoverRowId): string =>
-  DISCOVER_ROWS.find((row) => row.id === id)?.title ?? id;
+/** The label over Discover's row [id], in [strings]' language. */
+export const discoverRowTitle = (id: DiscoverRowId, strings: Catalogue = en): string =>
+  strings.discover.rows[id];
 
 /**
  * One thing Home lists: a section of the catalogue (drawn only when it has
@@ -85,8 +89,9 @@ export type HomeItem = { readonly section: HomeSectionId } | "play-hint" | "no-s
  * played yet, a line asking for a play comes before the first section plays
  * fill (where those sections would be). With every section removed, the
  * line saying how to add them back. With an [empty] Library, Home shows its
- * empty state and, under it, only Discover (when arranged), whose Artist
- * mixes can grow from YouTube Music's chart.
+ * empty state and, under it, only the sections that need no Library (when
+ * arranged): Discover, whose Artist mixes can grow from YouTube Music's
+ * chart, and the followed artists' New releases and Upcoming Shows.
  */
 export const homeItems = (
   { sections: arrangement }: HomeArrangement,
@@ -94,7 +99,7 @@ export const homeItems = (
 ): readonly HomeItem[] => {
   if (empty)
     return arrangement
-      .filter((id) => id === "discover" || id === "new-releases")
+      .filter((id) => id === "discover" || id === "new-releases" || id === "upcoming-shows")
       .map((section) => ({ section }));
   if (arrangement.length === 0) return ["no-sections"];
   const items: HomeItem[] = arrangement.map((id) => ({ section: id }));

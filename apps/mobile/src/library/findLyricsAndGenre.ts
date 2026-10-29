@@ -1,3 +1,4 @@
+import { currentLocalisation } from "@/localisation/localisation";
 /**
  * Fix Song as the owner starts it: on songs from a menu or the selection bar,
  * or on the whole Library from Settings. Every run goes on in the background
@@ -78,7 +79,7 @@ const showProgress = (run: FixRun): void => {
   const done = run.results.length;
   const total = run.songs.length;
   runState.set({ status: "running", done, total });
-  const { title, detail } = libraryLookupProgress(done, total);
+  const { title, detail } = libraryLookupProgress(done, total, currentLocalisation().strings);
   WaveLibraryLookup.progress(title, detail, done, total);
 };
 
@@ -126,7 +127,12 @@ const fixAll = async (run: FixRun): Promise<RunOutcome> => {
 
 const failedSummary = (error: unknown): LibraryLookupSummary => {
   const message = error instanceof Error ? error.message : String(error);
-  return { title: "Couldn't fix songs", message, toast: `Couldn't fix songs: ${message}` };
+  const { settings } = currentLocalisation().strings;
+  return {
+    title: settings.couldntFixSongs,
+    message,
+    toast: settings.couldntFixSongsToast(message),
+  };
 };
 
 /**
@@ -137,8 +143,18 @@ const summarize = (run: FixRun, outcome: RunOutcome): LibraryLookupSummary =>
   outcome.error !== undefined && run.results.length === 0
     ? failedSummary(outcome.error)
     : {
-        ...describeTagLookups(run.results, outcome.stop, run.skipped),
-        toast: tagLookupsToast(run.results, outcome.stop, run.skipped),
+        ...describeTagLookups(
+          run.results,
+          outcome.stop,
+          run.skipped,
+          currentLocalisation().strings,
+        ),
+        toast: tagLookupsToast(
+          run.results,
+          outcome.stop,
+          run.skipped,
+          currentLocalisation().strings,
+        ),
       };
 
 /**
@@ -197,7 +213,7 @@ const startRun = async (
   runState.set({ status: "running", done: 0, total: 0 });
   let summary: LibraryLookupSummary;
   try {
-    const { title, detail } = libraryLookupProgress(0, 0);
+    const { title, detail } = libraryLookupProgress(0, 0, currentLocalisation().strings);
     WaveLibraryLookup.start(title, detail);
     const added = join(run, await pick());
     appLog("info", TAG, `Fix Songs started on ${added} songs from ${from}`);

@@ -1,3 +1,4 @@
+import { en } from "./catalogueEn.ts";
 /**
  * The sliders of a Home section's level card (docs/spec.md, "Artist mixes",
  * Magic Queue section): beside the new-music level (`DISCOVER_MIX_LEVELS`),
@@ -28,23 +29,14 @@ export const DEFAULT_MIX_SLIDERS: MixSliders = { faithfulness: 3, popularity: 3 
 export const GENRE_FAITHFULNESS_STEPS: readonly {
   readonly step: MixSliderStep;
   readonly label: string;
-}[] = [
-  { step: 1, label: "Same genres" },
-  { step: 2, label: "Close" },
-  { step: 3, label: "Balanced" },
-  { step: 4, label: "Neighbours" },
-  { step: 5, label: "Wander" },
-];
+}[] = ([1, 2, 3, 4, 5] as const).map((step) => ({
+  step,
+  label: en.discover.faithfulnessSteps[step],
+}));
 
 /** Popularity shifts the ranking from hits to deep cuts. */
 export const POPULARITY_STEPS: readonly { readonly step: MixSliderStep; readonly label: string }[] =
-  [
-    { step: 1, label: "Hits" },
-    { step: 2, label: "Popular" },
-    { step: 3, label: "Balanced" },
-    { step: 4, label: "Lesser known" },
-    { step: 5, label: "Deep cuts" },
-  ];
+  ([1, 2, 3, 4, 5] as const).map((step) => ({ step, label: en.discover.popularitySteps[step] }));
 
 const stepOf = <T extends { readonly step: MixSliderStep }>(steps: readonly T[], step: number): T =>
   steps.find((entry) => entry.step === step) ?? steps[2]!;

@@ -1,3 +1,4 @@
+import { useLocalisation } from "@/localisation/localisation";
 import type { ErrorBoundaryProps } from "expo-router";
 import { useState } from "react";
 import { Pressable, ScrollView, Text, ToastAndroid, View } from "react-native";
@@ -24,6 +25,7 @@ function Action({ label, onPress }: { label: string; onPress: () => void }) {
  * outside the app's providers, so it uses nothing but React Native's own views.
  */
 export function ErrorScreen({ retry }: ErrorBoundaryProps) {
+  const { strings } = useLocalisation();
   const [exportFailed, setExportFailed] = useState(false);
   return (
     <ScrollView
@@ -31,36 +33,35 @@ export function ErrorScreen({ retry }: ErrorBoundaryProps) {
       contentContainerStyle={{ flexGrow: 1, justifyContent: "center", padding: 24 }}
     >
       <Text className="font-sans text-title3 font-normal text-foreground">
-        Something went wrong
+        {strings.settings.somethingWentWrong}
       </Text>
       <Text className="mt-2 font-sans text-subheadline text-secondary">
-        Wave noted what happened. Save Logs keeps it in Downloads/Wave. Send to Leo shares it with
-        him.
+        {strings.settings.waveNotedWhatHappenedSaveLogsKeeps}
       </Text>
       {exportFailed && (
         <Text
           accessibilityLiveRegion="polite"
           className="mt-2 font-sans text-subheadline text-secondary"
         >
-          Couldn't send the logs. Try again.
+          {strings.settings.couldntSendTheLogsTryAgain}
         </Text>
       )}
       <View className="mt-4 flex-row flex-wrap" style={{ columnGap: 24 }}>
-        <Action label="Try Again" onPress={() => void retry()} />
+        <Action label={strings.settings.tryAgain} onPress={() => void retry()} />
         <Action
-          label="Save Logs"
+          label={strings.settings.saveLogs}
           onPress={() => {
             saveAppLog().then(
-              () => ToastAndroid.show("Saved to Downloads/Wave", ToastAndroid.LONG),
+              () => ToastAndroid.show(strings.settings.savedToDownloadsWave, ToastAndroid.LONG),
               (error: unknown) => {
                 console.warn("[wave] Couldn't save the logs", error);
-                ToastAndroid.show("Couldn't save the logs", ToastAndroid.LONG);
+                ToastAndroid.show(strings.settings.couldntSaveTheLogs, ToastAndroid.LONG);
               },
             );
           }}
         />
         <Action
-          label="Send to Leo"
+          label={strings.settings.sendToLeo}
           onPress={() => {
             setExportFailed(false);
             exportAppLog().catch((error: unknown) => {

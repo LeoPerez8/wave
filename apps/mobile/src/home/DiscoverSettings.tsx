@@ -1,13 +1,6 @@
+import { useLocalisation } from "@/localisation/localisation";
 import { IconAdjustmentsHorizontal } from "@tabler/icons-react-native";
-import {
-  GENRE_FAITHFULNESS_STEPS,
-  POPULARITY_STEPS,
-  discoverLevelLabel,
-  homeSectionTitle,
-  sliderStep,
-  sliderStepLabel,
-  type SliderRange,
-} from "@wave/core";
+import { discoverLevelLabel, sliderStep, type SliderRange } from "@wave/core";
 import { ScrollView, Text, View } from "react-native";
 
 import { CELL } from "@/catalog/grid";
@@ -28,9 +21,6 @@ import {
 /** Every slider of the card: five steps, from its left end to its right one. */
 const STEPS: SliderRange = { min: 1, max: 5, step: 1 };
 
-/** The card's title: Discover's, as Home heads the section. */
-const TITLE = homeSectionTitle("discover");
-
 /**
  * Discover's level card: three sliders for the Magic Queue, Artist mixes
  * and Genre mixes alike, applied as they move. New music (each step's name
@@ -40,6 +30,7 @@ const TITLE = homeSectionTitle("discover");
  * and a drag both show at once.
  */
 function DiscoverCard() {
+  const { strings } = useLocalisation();
   const level = useDiscoverLevel();
   const sliders = useDiscoverSliders();
   return (
@@ -49,38 +40,37 @@ function DiscoverCard() {
         className="font-sans text-body font-medium text-foreground"
         style={{ paddingBottom: CELL * 1.5 }}
       >
-        {TITLE}
+        {strings.home.sections.discover}
       </Text>
       <Hairline />
       <View className="pb-1">
         <SettingsSlider
           compact
-          label="New music"
+          label={strings.discover.newMusic}
           value={level}
           range={STEPS}
-          format={(value) => discoverLevelLabel(sliderStep(value))}
+          format={(value) => discoverLevelLabel(sliderStep(value), strings)}
           onChange={(value) => setDiscoverLevel(sliderStep(value))}
         />
         <SettingsSlider
           compact
-          label="Genre faithfulness"
+          label={strings.discover.genreFaithfulness}
           value={sliders.faithfulness}
           range={STEPS}
-          format={(value) => sliderStepLabel(GENRE_FAITHFULNESS_STEPS, value)}
+          format={(value) => strings.discover.faithfulnessSteps[sliderStep(value)]}
           onChange={(value) =>
             setDiscoverSliders({ ...discoverSlidersNow(), faithfulness: sliderStep(value) })
           }
         />
         <Text className="px-3 pb-2 font-sans text-footnote text-secondary">
-          Same genres excludes known unrelated genres. Close, Balanced and Neighbours lower them
-          less at each step. Wander ignores genre. Unknown genres always stay.
+          {strings.discover.faithfulnessNote}
         </Text>
         <SettingsSlider
           compact
-          label="Popularity"
+          label={strings.discover.popularity}
           value={sliders.popularity}
           range={STEPS}
-          format={(value) => sliderStepLabel(POPULARITY_STEPS, value)}
+          format={(value) => strings.discover.popularitySteps[sliderStep(value)]}
           onChange={(value) =>
             setDiscoverSliders({ ...discoverSlidersNow(), popularity: sliderStep(value) })
           }
@@ -100,14 +90,19 @@ function DiscoverCard() {
  * says it needs YT Music.
  */
 export function DiscoverSettingsButton({ ytMusic }: { ytMusic: boolean }) {
+  const { strings } = useLocalisation();
   return (
     <IconButton
       icon={IconAdjustmentsHorizontal}
-      label={ytMusic ? "Discover settings" : "Discover settings, needs YT Music"}
+      label={ytMusic ? strings.discover.settings : strings.discover.settingsNeedsYtMusic}
       opensMenu
       disabled={!ytMusic}
       onPress={() => {
-        openOverlay({ label: TITLE, anchor: pressedRect(), render: () => <DiscoverCard /> });
+        openOverlay({
+          label: strings.home.sections.discover,
+          anchor: pressedRect(),
+          render: () => <DiscoverCard />,
+        });
       }}
     />
   );

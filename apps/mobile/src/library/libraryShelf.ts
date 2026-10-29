@@ -1,4 +1,5 @@
 import {
+  homeSectionTitle,
   LIBRARY_SHELF_CHOICES,
   parseLibraryShelf,
   storedLibraryShelf,
@@ -30,10 +31,10 @@ export const libraryShelfChoice: ChoiceSetting<LibraryShelf> = {
     return currentLocalisation().strings.library.shelfUnderLibrary;
   },
   get choices() {
-    const { noShelf } = currentLocalisation().strings.library;
-    return LIBRARY_SHELF_CHOICES.map(({ shelf, label }) => ({
+    const { strings } = currentLocalisation();
+    return LIBRARY_SHELF_CHOICES.map(({ shelf }) => ({
       value: shelf,
-      label: shelf === "none" ? noShelf : label,
+      label: shelf === "none" ? strings.library.noShelf : homeSectionTitle(shelf, strings),
     }));
   },
   setting: libraryShelf,

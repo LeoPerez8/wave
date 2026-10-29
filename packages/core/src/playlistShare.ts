@@ -9,7 +9,7 @@
  */
 
 import type { AlertSpec } from "./alert.ts";
-import { counted } from "./listening.ts";
+import { en, type Catalogue } from "./catalogueEn.ts";
 import type { UnavailableEntry, UnsearchedEntry } from "./playlistEntries.ts";
 import { spotifyYtMatch } from "./spotifyImport.ts";
 import type { SpotifySong } from "./spotifyPlaylist.ts";
@@ -34,20 +34,18 @@ export const playlistShareServices = ({
   readonly ytMusic: boolean;
 }): PlaylistShareService[] => (ytMusic ? ["ytMusic", "spotify"] : ["spotify"]);
 
-/** The copy sharing on each service makes. */
-const SHARED_COPY: { readonly [S in PlaylistShareService]: string } = {
-  ytMusic: "an unlisted copy of it on your YouTube Music account",
-  // Spotify's private playlists don't open for anyone else.
-  spotify: "a public copy of it on your Spotify account",
-};
-
-/** What sharing on [service] signed out asks: signing in, which it needs. */
+/**
+ * What sharing on [service] signed out asks, in [strings]' language: signing
+ * in, which it needs, saying the copy it makes (Spotify's private playlists
+ * don't open for anyone else, so that one is public).
+ */
 export const shareSignInAlert = (
   service: PlaylistShareService,
+  strings: Catalogue = en,
 ): AlertSpec & { readonly action: NonNullable<AlertSpec["action"]> } => ({
-  title: `Sign In to ${PLAYLIST_SHARE_LABELS[service]}`,
-  message: `Sharing a playlist makes ${SHARED_COPY[service]}, with a link anyone can open.`,
-  action: { label: "Sign In" },
+  title: strings.share.signInTitle(PLAYLIST_SHARE_LABELS[service]),
+  message: strings.share.signInMessage[service],
+  action: { label: strings.share.signIn },
 });
 
 /** The link to the YT Music playlist [playlistId], as sharing sends it. */
@@ -110,9 +108,11 @@ export const matchSharedSongs = async <Q>(
   return { ids, found, total: songs.length };
 };
 
-/** What sharing says when it's done: "12 of 15 songs found". */
-export const sharedSongsLine = ({ found, total }: Pick<SharedSongs, "found" | "total">): string =>
-  `${found.toLocaleString("en")} of ${counted(total, "song")} found`;
+/** What sharing says when it's done, in [strings]' language: "12 of 15 songs found". */
+export const sharedSongsLine = (
+  { found, total }: Pick<SharedSongs, "found" | "total">,
+  strings: Catalogue = en,
+): string => strings.share.found(found, total);
 
 /**
  * An entry of a playlist Wave shared, as the service lists it: the song's
@@ -293,25 +293,12 @@ const SERVICE_NAMES: { readonly [S in PlaylistShareService]: string } = {
   spotify: "Spotify",
 };
 
-/** What sharing a playlist on [service] says when it stopped for [failure]. */
+/** What sharing a playlist on [service] says when it stopped for [failure], in [strings]' language. */
 export const sharePlaylistFailureLine = (
   service: PlaylistShareService,
   failure: SharePlaylistFailure,
-): string => {
-  const name = SERVICE_NAMES[service];
-  switch (failure) {
-    case "noSearchAnswer":
-      return `${name} didn't answer a search. Try again.`;
-    case "offline":
-      return "Sharing needs a connection.";
-    case "signedOut":
-      return `${name} signed you out. Sign in and share again.`;
-    case "changed":
-      return `${name} changed something. Try again after updating Wave.`;
-    case "failed":
-      return `${name} didn't take the playlist. Try again.`;
-  }
-};
+  strings: Catalogue = en,
+): string => strings.share.failures[failure](SERVICE_NAMES[service]);
 
 /** A Library song as its playlist's sharing and its links search for it. */
 export interface LibrarySearchTrack {

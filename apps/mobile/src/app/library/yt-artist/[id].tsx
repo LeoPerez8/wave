@@ -1,3 +1,4 @@
+import { ArtistShows } from "@/library/ArtistShows";
 import { useFollowAction } from "@/library/FollowButton";
 import { useScreenContent } from "@/lib/screenTiming";
 import { IconUser } from "@tabler/icons-react-native";
@@ -386,7 +387,12 @@ export default function YtArtistScreen() {
         }}
         {...mixedPageSongHandlers}
         contentContainerStyle={contentStyle}
-        ListHeaderComponent={header}
+        ListHeaderComponent={
+          <>
+            {header}
+            <ArtistShows name={name ?? ""} />
+          </>
+        }
         ListFooterComponent={footer}
       />
     </View>

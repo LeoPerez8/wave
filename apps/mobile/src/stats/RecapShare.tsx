@@ -1,3 +1,4 @@
+import { useLocalisation } from "@/localisation/localisation";
 import { recapCardFileName, recapStoryBackground } from "@wave/core";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -39,6 +40,7 @@ function RecapImage({
   onLayout: () => void;
   children: ReactNode;
 }) {
+  const { strings } = useLocalisation();
   const unit = width / 100;
   const ink = useThemeColor("on-recap");
   return (
@@ -56,7 +58,7 @@ function RecapImage({
       }}
     >
       <Text numberOfLines={1} className="font-sans text-subheadline font-semibold text-on-recap">
-        {title} · Recap
+        {title} · {strings.recap.recap}
       </Text>
       <View className="flex-1" style={{ paddingVertical: CELL * 2 }}>
         {children}
@@ -94,6 +96,7 @@ export function RecapSharePreview({
   /** The slide to share. */
   children: ReactNode;
 }) {
+  const { strings } = useLocalisation();
   const image: ImageSource = useRef(null);
   // The slide's images report in: the image waits for every one of them.
   const [pending, setPending] = useState(0);
@@ -117,7 +120,7 @@ export function RecapSharePreview({
     source: image,
     fileName: () => recapCardFileName(title, new Date()),
     what: "the Recap slide",
-    sheetTitle: "Share Recap",
+    sheetTitle: strings.share.shareRecap,
     logTag: LOG_TAG,
     storyBackground: recapStoryBackground(colour),
   });
@@ -134,7 +137,7 @@ export function RecapSharePreview({
           <View
             accessible
             accessibilityRole="image"
-            accessibilityLabel={`${title} Recap slide`}
+            accessibilityLabel={strings.share.recapSlide(title)}
             style={{
               width: fitted,
               height: fitted * EXPORT_ASPECT,

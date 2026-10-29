@@ -1,4 +1,5 @@
 import { usePositions } from "@/lib/usePositions";
+import { useLocalisation } from "@/localisation/localisation";
 import type { PlayedAlbum, PlayedArtist } from "@/library/db/playedEntities";
 import { PlayedAlbumCard, PlayedArtistCard } from "@/stats/PlayedEntityViews";
 import { discoverTrackId, type QueueContext } from "@wave/core";
@@ -77,9 +78,6 @@ export function SongRows<A extends SongRow>({
   );
 }
 
-const mostPlayedEntry = (row: MostPlayedRow) =>
-  mixedSongEntry(row, { ...SONG_CARD, countedPlays: row.playCount }, true);
-
 /**
  * Most played as song rows, like `SongRows`, each with its counted plays in
  * place of its length: Library songs and streamed ones (a plain streamed
@@ -93,12 +91,22 @@ export function MostPlayedRows({
   rows: readonly MostPlayedRow[];
   context: QueueContext;
 }) {
+  const { strings } = useLocalisation();
   const places = usePositions(rows);
+  const entry = useCallback(
+    (row: MostPlayedRow) =>
+      mixedSongEntry(
+        row,
+        { ...SONG_CARD, trailingLabel: strings.stats.plays(row.playCount) },
+        true,
+      ),
+    [strings],
+  );
   return (
     <SongPreview
       data={rows}
       keyExtractor={discoverTrackId}
-      song={mostPlayedEntry}
+      song={entry}
       context={context}
       onPlay={(row) => void playPlaylist(rows, places.get(row), context)}
       // The menu offers no Select: Home doesn't select.

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
+import { catalogueOf } from "./localisation.ts";
 import {
   radioRankingBatch,
   EMPTY_QUEUE,
@@ -298,6 +299,10 @@ describe("A Magic Queue in the queue", () => {
 
   test("Up Next names the seed", () => {
     assert.equal(magicQueueLabel(session), "Magic Queue · from Seed Song");
+    assert.equal(
+      magicQueueLabel(session, catalogueOf("pt-BR")),
+      "Fila Mágica · a partir de Seed Song",
+    );
   });
 
   test("a session reads back as it was saved", () => {

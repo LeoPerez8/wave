@@ -59,6 +59,38 @@ describe("limits", () => {
     assert.deepEqual(await plays.json(), { error: "limit", limit: "maxPlays" });
   });
 
+  test("follows, hidden releases and notified shows each have a limit", async () => {
+    const service = await harness({
+      limits: { maxFollows: 1, maxHiddenReleases: 1, maxNotifiedShows: 1 },
+    });
+    const session = await service.signIn();
+    const follow = (id: string) => ({
+      id,
+      changedAt: 1,
+      phoneId: "phone-a",
+      deleted: false,
+      name: id,
+      level: "releases",
+      followedAt: 1,
+      deezerId: null,
+      ytBrowseId: null,
+    });
+    const marked = (id: string) => ({ id, changedAt: 1, phoneId: "phone-a", deleted: false });
+    for (const [table, rows, limit] of [
+      ["follows", [follow("a"), follow("b")], "maxFollows"],
+      ["hiddenReleases", [marked("deezer:1"), marked("deezer:2")], "maxHiddenReleases"],
+      ["notifiedShows", [marked("e1"), marked("e2")], "maxNotifiedShows"],
+    ] as const) {
+      const response = await service.request("POST", "/v1/push", {
+        session,
+        json: { [table]: rows },
+      });
+      assert.equal(response.status, 413, table);
+      assert.deepEqual(await response.json(), { error: "limit", limit });
+      await push(service, session, { [table]: rows.slice(0, 1) });
+    }
+  });
+
   test("tombstones don't count against a table's limit", async () => {
     const service = await harness({ limits: { maxFavorites: 2 } });
     const session = await service.signIn();
@@ -145,6 +177,21 @@ describe("DELETE /v1/account", () => {
       favorites: [favorite("song-1", 1)],
       preferences: [{ id: "glass", changedAt: 1, phoneId: "phone-a", deleted: false, value: "on" }],
       plays: [play("play-1")],
+      follows: [
+        {
+          id: "massive attack",
+          changedAt: 1,
+          phoneId: "phone-a",
+          deleted: false,
+          name: "Massive Attack",
+          level: "shows",
+          followedAt: 1,
+          deezerId: null,
+          ytBrowseId: null,
+        },
+      ],
+      hiddenReleases: [{ id: "deezer:1", changedAt: 1, phoneId: "phone-a", deleted: false }],
+      notifiedShows: [{ id: "event-1", changedAt: 1, phoneId: "phone-a", deleted: false }],
     };
     await push(service, ana, everything);
     await push(service, bo, everything);
