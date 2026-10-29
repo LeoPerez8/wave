@@ -22,6 +22,9 @@ const choose = (change: Partial<ThemeChoice>): ThemeChoice => ({
 const choiceKey = (choice: ThemeChoice): string =>
   `${choice.light}/${choice.dark}/${choice.primary}/${choice.secondary}`;
 
+/** The splash style a choice opens with. */
+const named = (choice: Partial<ThemeChoice>) => launchTheme(choose(choice)).splashTheme;
+
 /** The colours of the splash theme a choice opens with. */
 const splash = (choice: ThemeChoice) => {
   const name = launchTheme(choice).splashTheme;
@@ -103,7 +106,6 @@ describe("launchTheme", () => {
   });
 
   test("splash styles keep their names; the white ones are new (#793)", () => {
-    const named = (choice: Partial<ThemeChoice>) => launchTheme(choose(choice)).splashTheme;
     assert.equal(named({ primary: "rose", secondary: "gold" }), "Wl.0.0.4.7");
     assert.equal(
       named({ light: "sand", dark: "navy", primary: "teal", secondary: "ember" }),

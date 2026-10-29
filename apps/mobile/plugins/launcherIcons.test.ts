@@ -44,8 +44,18 @@ const application = (manifest: Manifest) => manifest.manifest.application![0]!;
 
 /** The 24 inks before white, as their aliases and resources were named. */
 const EARLIER_INKS = [
-  ...["teal", "blue", "violet", "green", "rose", "lime"],
-  ...["ember", "gold", "coral", "magenta", "sky", "lemon"],
+  "teal",
+  "blue",
+  "violet",
+  "green",
+  "rose",
+  "lime",
+  "ember",
+  "gold",
+  "coral",
+  "magenta",
+  "sky",
+  "lemon",
   ...[29, 59, 89, 119, 149, 179, 209, 239, 269, 299, 329, 359].map((hue) => `vivid${hue}`),
 ];
 
