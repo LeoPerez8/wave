@@ -30,13 +30,13 @@ import { withUniwind } from "uniwind";
 import { OnFloatingChrome } from "@/chrome/onFloatingChrome";
 import { dismissOverlaysFrom, useIsOverlayOrigin } from "@/overlay/overlay";
 import { useLongPressDelayMs } from "@/settings/longPressDelay";
-import { useTapAnimationMs } from "@/settings/tapAnimation";
 
 import { cancelHeldTouch, holdTouch, moveHeldTouch, releaseHeldTouch } from "./heldTouch";
 import { measurePressed, type Measurable } from "./measureRect";
 import { runPressedAt } from "./pressedRect";
 import { HandOverPress } from "./pressHandle";
 import { traceLongPress } from "./longPressTrace";
+import { TAP_ANIMATION_MS } from "./timing";
 
 const AnimatedPressable = withUniwind(createAnimatedComponent(Pressable));
 
@@ -76,10 +76,10 @@ const pointOf = ({ nativeEvent }: GestureResponderEvent) =>
     : undefined;
 
 /**
- * Every tappable thing in Wave. The press animation takes the duration set in
- * Settings (tap animation, in ms); 0 or the system's reduce-motion setting
- * makes it an instant dim instead. A long-press fires after the delay set in
- * Settings (long-press delay) unless the caller passes its own `delayLongPress`.
+ * Every tappable thing in Wave. The press animation takes 140 ms; the system's
+ * reduce-motion setting makes it an instant dim instead. A long-press fires
+ * after the delay set in Settings (long-press delay) unless the caller passes
+ * its own `delayLongPress`.
  */
 export function Press({
   haptic,
@@ -101,7 +101,6 @@ export function Press({
   accessibilityState,
   ...rest
 }: Props) {
-  const ms = useTapAnimationMs();
   const longPressDelay = useLongPressDelayMs();
   const reduceMotion = useReducedMotion();
   const pressed = useSharedValue(0);
@@ -213,14 +212,14 @@ export function Press({
   });
 
   const animateTo = (value: number) => {
-    pressed.set(ms === 0 ? value : withTiming(value, { duration: ms, easing: EASE }));
+    pressed.set(withTiming(value, { duration: TAP_ANIMATION_MS, easing: EASE }));
   };
 
   // Highlighted sinks and dims just like a press, with the same timing.
   useEffect(() => {
     const value = highlighted ? 1 : 0;
-    lit.set(ms === 0 ? value : withTiming(value, { duration: ms, easing: EASE }));
-  }, [highlighted, lit, ms]);
+    lit.set(withTiming(value, { duration: TAP_ANIMATION_MS, easing: EASE }));
+  }, [highlighted, lit]);
 
   return (
     <AnimatedPressable

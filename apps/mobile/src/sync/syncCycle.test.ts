@@ -383,6 +383,34 @@ describe("syncCycle", () => {
     assert.deepEqual(playCounts(b.db), playCounts(a.db));
   });
 
+  test("a pulled tap duration leaves the old local value alone and never goes back up", async () => {
+    const service = testSyncService();
+    await service.request(
+      "POST",
+      "/v1/push",
+      JSON.stringify({
+        preferences: [
+          {
+            id: "settings.tapAnimationMs",
+            value: "600",
+            changedAt: 9_000,
+            phoneId: "older-wave",
+            deleted: false,
+          },
+        ],
+      }),
+    );
+    const a = await phone(service, []);
+    a.setPreference("settings.tapAnimationMs", "0");
+
+    const result = await a.sync();
+
+    assert.equal(a.stored.get("settings.tapAnimationMs"), "0");
+    assert.deepEqual(result.pulled.preferences, []);
+    assert.equal(result.pushed, 0);
+    assert.equal((await a.sync()).pushed, 0);
+  });
+
   test("a preference picked on one phone applies on the other at its next pull", async () => {
     const service = testSyncService();
     const a = await phone(service);
