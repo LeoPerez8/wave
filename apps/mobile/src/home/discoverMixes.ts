@@ -3,6 +3,7 @@ import {
   artistMixNeedsChartSteps,
   artistMixSeedsSteps,
   discoverMixKeep,
+  discoverMixRowsToBuild,
   discoverMixesBuilt,
   homeMixBuildsDue,
   discoverMixesOfRadiosSteps,
@@ -35,7 +36,7 @@ import {
 } from "@wave/core";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
-import { useEffect, useMemo, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
 
 import { runSteps } from "@/lib/stepped";
 import { settledTurnEffect } from "@/lib/backgroundWork";
@@ -52,6 +53,7 @@ import { latestTasteProfile, tasteProfileForRecommendation } from "@/playback/Ta
 import { useDontPlayExplicit } from "@/settings/dontPlayExplicit";
 import { useYtMusicEnabled } from "@/settings/ytMusic";
 
+import { currentHomeArrangement, useHomeArrangement } from "./homeArrangementSetting";
 import { useDiscoverFocus } from "./discoverFocus";
 import { lookedUpProfileOf } from "./artistGenres";
 import { artistMixPools } from "./artistMixPools";
@@ -74,6 +76,11 @@ import { readMixBuildLibrary } from "./mixBuildLibrary";
 import { knownLibraryFinder } from "@/ytmusic/libraryFinder";
 
 export type { MixSectionId } from "./discoverMixLevel";
+
+// Home's local answer is available before the recommendation index on a cold start.
+let emptyLibrary = false;
+const buildableRows = (): MixSectionId[] =>
+  discoverMixRowsToBuild(currentHomeArrangement().discoverRows, { empty: emptyLibrary });
 
 /** Both mix rows rank only their own radios, including on offline slider reranks. */
 const radioMixes = (
@@ -182,6 +189,7 @@ const sameSliders = (a: MixSliders | null, b: MixSliders): boolean =>
  * ranked at. The re-ranked set replaces itself in what a refresh avoids.
  */
 const rerank = (id: MixSectionId): void => {
+  if (!buildableRows().includes(id)) return;
   const mixSection = SECTIONS[id];
   const saved = mixSection.saved.get();
   if (mixSection.building.get() || mixSection.reranking) {
@@ -425,6 +433,7 @@ const refresh = (played: boolean, onlyEmpty = false): void => {
     {
       now: Date.now(),
       played,
+      discover: { rows: currentHomeArrangement().discoverRows, empty: emptyLibrary },
       // Mixes seeded from the chart alone give way once the Library can seed.
       librarySeeds: libraryCanSeedArtistMixes(recommendationSnapshot.peek().library?.artists ?? []),
     },
@@ -490,7 +499,7 @@ const NEW_MIXES = "New mixes";
  */
 export const refreshMixes = (id: MixSectionId): void => {
   const mixSection = SECTIONS[id];
-  if (mixSection.building.get()) return;
+  if (!buildableRows().includes(id) || mixSection.building.get()) return;
   const { saved, shown, building } = mixSection;
   const now = Date.now();
   const previous = saved.get();
@@ -585,7 +594,11 @@ export const useLibraryTracks = (): ReadonlyMap<number, SongRow> | null => {
  * Music is off, or for Genre mixes while the Library is [empty] (no tagged
  * songs). The screen warms both rows through `useDiscoverMixesFocus`.
  */
-export const useDiscoverMixes = (id: MixSectionId, empty = false): DiscoverMixesSection => {
+export const useDiscoverMixes = (
+  id: MixSectionId,
+  empty = false,
+  active = true,
+): DiscoverMixesSection => {
   const { saved, nothingToBuildFrom, building, failed } = SECTIONS[id];
   const enabled = useYtMusicEnabled();
   const mixes = saved.useValue();
@@ -596,14 +609,14 @@ export const useDiscoverMixes = (id: MixSectionId, empty = false): DiscoverMixes
   const shown = useMemo(
     () =>
       discoverMixesSection(mixes, {
-        ytMusic: enabled,
+        ytMusic: enabled && active,
         nothingToBuildFrom: nothing,
         blend,
         building: rebuilding,
         failed: buildFailed,
         noTaggedSongs: id === "genre-mixes" && empty,
       }),
-    [id, mixes, enabled, nothing, blend, rebuilding, buildFailed, empty],
+    [id, mixes, enabled, active, nothing, blend, rebuilding, buildFailed, empty],
   );
   // The start of what Home shows is fetched ahead on Wi-Fi.
   useEffect(() => noteMixesShown(id, shown), [id, shown]);
@@ -632,8 +645,10 @@ export const useDiscoverMix = (
   );
 };
 
-/** Both mix rows warm their inputs once per screen focus. */
+/** Only buildable rows warm inputs on focus or when the owner adds one back. */
 const focusMixes = (played: boolean): void => {
+  if (buildableRows().length === 0) return;
+  for (const id of buildableRows()) rerank(id);
   refreshKnownVideos();
   const previousLibrary = recommendationSnapshot.peek().library;
   void appRuntime
@@ -645,20 +660,33 @@ const focusMixes = (played: boolean): void => {
     })
     .catch(() => {});
   const previousGraph = recommendationSnapshot.peek().graph;
-  void appRuntime
-    .runPromise(recommendationSnapshot.graph)
-    .then((graph) => {
-      const genre = SECTIONS["genre-mixes"];
-      if (graph !== previousGraph && genre.saved.get() === null) {
-        genre.retryAt = null;
-        refresh(played, true);
-      }
-    })
-    .catch(() => {});
+  if (buildableRows().includes("genre-mixes"))
+    void appRuntime
+      .runPromise(recommendationSnapshot.graph)
+      .then((graph) => {
+        const genre = SECTIONS["genre-mixes"];
+        if (graph !== previousGraph && genre.saved.get() === null) {
+          genre.retryAt = null;
+          refresh(played, true);
+        }
+      })
+      .catch(() => {});
   // Focus changes leave the in-flight attempt running to completion.
   refresh(played);
 };
 
-export const useDiscoverMixesFocus = (enabled: boolean, played: boolean | undefined): void => {
-  useDiscoverFocus(enabled, played, focusMixes);
+export const useDiscoverMixesFocus = (
+  enabled: boolean,
+  played: boolean | undefined,
+  empty = false,
+): void => {
+  const { discoverRows } = useHomeArrangement();
+  const focus = useCallback(
+    (hasPlays: boolean) => {
+      emptyLibrary = empty;
+      if (discoverMixRowsToBuild(discoverRows, { empty }).length > 0) focusMixes(hasPlays);
+    },
+    [empty, discoverRows],
+  );
+  useDiscoverFocus(enabled, played, focus);
 };
