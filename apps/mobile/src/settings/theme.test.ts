@@ -82,7 +82,7 @@ const loadTheme = async (
 
 test("No recolours the app while the launcher and both splash layers keep the stored icon", async () => {
   const { theme, device } = await loadTheme();
-  await theme.setThemeSwatch("primary", "rose", async () => "alternative");
+  await theme.setCustomInk("primary", "#f08cb0", async () => "alternative");
   assert.equal(device.css.dark?.["--color-accent"], "#f08cb0");
   assert.equal(device.alias, "LauncherIcon_white_white");
   assert.equal(device.launch.dark.primary, "#ffffff");
@@ -95,7 +95,7 @@ const unexpected = async (): Promise<never> => {
 
 test("background changes never ask about an icon left different by No", async () => {
   const { theme, device } = await loadTheme();
-  await theme.setThemeSwatch("primary", "rose", async () => "alternative");
+  await theme.setCustomInk("primary", "#f08cb0", async () => "alternative");
   await theme.setThemeSwatch("dark", "forest", unexpected);
   await theme.setThemeSwatch("light", "sand", unexpected);
   assert.equal(device.css.dark?.["--color-background"], "#0a130d");
@@ -113,7 +113,7 @@ test("a preset or custom install keeps its icon on migration and on a later star
     const first = await loadTheme({ "settings.theme": JSON.stringify(choice) });
     assert.equal(first.device.alias, `LauncherIcon_${expected}`);
     assert.equal(first.Storage.getItemSync("settings.launcherIcon"), expected);
-    await first.theme.setThemeSwatch("primary", "rose", async () => "alternative");
+    await first.theme.setCustomInk("primary", "#f08cb0", async () => "alternative");
     const next = await loadTheme({
       "settings.theme": first.Storage.getItemSync("settings.theme")!,
       "settings.launcherIcon": first.Storage.getItemSync("settings.launcherIcon")!,
@@ -147,9 +147,9 @@ test("a pulled theme recolours the app but cannot change or sync this phone's ic
 
 test("Yes saves the selected icon, No asks again on the next colour, and dismissal cancels", async () => {
   const { theme, device, Storage } = await loadTheme();
-  await theme.setThemeSwatch("primary", "rose", async () => "alternative");
+  await theme.setCustomInk("primary", "#f08cb0", async () => "alternative");
   let asked = false;
-  await theme.setThemeSwatch("secondary", "sky", async (prompt) => {
+  await theme.setCustomInk("secondary", "#7cc4ea", async (prompt) => {
     asked = true;
     assert.equal(prompt.title, "Change the app icon too?");
     assert.match(prompt.message, /home screen.*app drawer/);
@@ -178,7 +178,7 @@ test("reset uses the prompt even when only the icon differs from defaults", asyn
 
 test("colours matching the stored icon need no prompt even if the old colours differ", async () => {
   const { theme, device } = await loadTheme({ "settings.launcherIcon": "rose_white" });
-  await theme.setThemeSwatch("primary", "rose", async () => {
+  await theme.setCustomInk("primary", "#f08cb0", async () => {
     throw new Error("Already this icon");
   });
   assert.equal(device.css.dark?.["--color-accent"], "#f08cb0");
@@ -209,7 +209,9 @@ test("an update from before white, with nothing stored, keeps teal over ember an
   assert.equal(first.device.launch.splashTheme, "Wl.0.0.0.6");
   assert.equal(first.Storage.getItemSync("settings.launcherIcon"), "teal_ember");
   const stored = first.Storage.getItemSync("settings.theme");
-  assert.equal(JSON.parse(stored ?? "{}").primary, "teal");
+  // Stored as Teal and Ember read since saved colours (#794): custom, and saved.
+  assert.equal(JSON.parse(stored ?? "{}").customPrimary, "#59c0ad");
+  assert.deepEqual(JSON.parse(stored ?? "{}").savedSecondary, ["#ec9d53"]);
   assert.equal(first.settings.syncedSettingValue("settings.theme"), stored);
   // The next start has the native launch theme too, and keeps what the first stored.
   const next = await loadTheme(
@@ -265,7 +267,11 @@ test("reset lands on white and asks about the icon only when it isn't white yet"
     throw new Error("The icon is already white");
   });
   assert.equal(kept.device.css.dark?.["--color-accent"], "#ffffff");
-  assert.equal(kept.Storage.getItemSync("settings.theme"), JSON.stringify(DEFAULT_THEME_CHOICE));
+  // Rose, a former preset, was read as a saved colour (#794), which reset keeps.
+  assert.equal(
+    kept.Storage.getItemSync("settings.theme"),
+    JSON.stringify({ ...DEFAULT_THEME_CHOICE, savedPrimary: ["#f08cb0"] }),
+  );
 
   const teal = await loadTheme({}, { launchThemeSaved: true });
   let asked = false;
@@ -276,4 +282,90 @@ test("reset lands on white and asks about the icon only when it isn't white yet"
   assert.equal(asked, true);
   assert.equal(teal.device.css.dark?.["--color-accent"], "#ffffff");
   assert.equal(teal.device.alias, "LauncherIcon_white_white");
+});
+
+test("a preset install's colours become saved ones, its icon kept with no prompt on the next change (#794)", async () => {
+  const { theme, device, settings } = await loadTheme({
+    "settings.theme": JSON.stringify({
+      ...DEFAULT_THEME_CHOICE,
+      primary: "violet",
+      secondary: "sky",
+    }),
+  });
+  assert.equal(device.css.dark?.["--color-accent"], "#a99af0");
+  assert.equal(device.css.light?.["--color-accent"], "#5b4bb7");
+  assert.equal(device.alias, "LauncherIcon_violet_sky");
+  const synced = JSON.parse(settings.syncedSettingValue("settings.theme")!);
+  assert.deepEqual([synced.savedPrimary, synced.savedSecondary], [["#a99af0"], ["#7cc4ea"]]);
+  // A background change and picking its own saved colour again leave the icon as it was.
+  await theme.setThemeSwatch("dark", "navy", unexpected);
+  await theme.setSavedInk("primary", "#a99af0", unexpected);
+  assert.equal(device.alias, "LauncherIcon_violet_sky");
+});
+
+test("Save keeps the picker's colour for its row without applying it, and syncs it", async () => {
+  const { theme, device, settings, Storage } = await loadTheme();
+  const changed: string[] = [];
+  settings.onSyncedSettingChange((key) => changed.push(key));
+  const preview = theme.previewCustomInk("primary");
+  preview.pick("#ff0d00");
+  const previewing = device.css.dark?.["--color-accent"];
+  assert.notEqual(previewing, "#ffffff");
+  theme.saveCustomInk("primary", "#ff0d00");
+  // The picker stays open on its colour; Save neither applies nor drops it.
+  assert.equal(device.css.dark?.["--color-accent"], previewing);
+  assert.deepEqual(JSON.parse(Storage.getItemSync("settings.theme")!).savedPrimary, ["#ff0d00"]);
+  assert.deepEqual(changed, ["settings.theme"]);
+  theme.cancelCustomInk();
+  assert.equal(device.css.dark?.["--color-accent"], "#ffffff");
+  assert.equal(device.alias, "LauncherIcon_white_white");
+});
+
+test("a saved colour applies at once, asking about the icon like any colour", async () => {
+  const { theme, device } = await loadTheme({
+    "settings.theme": JSON.stringify({ ...DEFAULT_THEME_CHOICE, savedSecondary: ["#ff0d00"] }),
+  });
+  let asked = 0;
+  await theme.setSavedInk("secondary", "#ff0d00", async () => {
+    asked++;
+    return "action";
+  });
+  assert.equal(asked, 1);
+  assert.notEqual(device.css.dark?.["--color-highlight"], "#ffffff");
+  assert.equal(device.alias, "LauncherIcon_white_vivid29");
+});
+
+test("removing the saved colour in use keeps the app's colours and icon", async () => {
+  const { theme, device, Storage } = await loadTheme({
+    "settings.theme": JSON.stringify({
+      ...DEFAULT_THEME_CHOICE,
+      primary: "custom",
+      customPrimary: "#f08cb0",
+      savedPrimary: ["#3a7bd5", "#f08cb0"],
+    }),
+  });
+  theme.removeSavedInk("primary", "#f08cb0");
+  assert.equal(device.css.dark?.["--color-accent"], "#f08cb0");
+  assert.equal(device.alias, "LauncherIcon_rose_white");
+  const stored = JSON.parse(Storage.getItemSync("settings.theme")!);
+  assert.deepEqual(stored.savedPrimary, ["#3a7bd5"]);
+  assert.equal(stored.customPrimary, "#f08cb0");
+});
+
+test("reset keeps the saved colours", async () => {
+  const { theme, device, Storage } = await loadTheme({
+    "settings.theme": JSON.stringify({
+      ...DEFAULT_THEME_CHOICE,
+      primary: "custom",
+      customPrimary: "#f08cb0",
+      savedPrimary: ["#f08cb0"],
+      savedSecondary: ["#7cc4ea"],
+    }),
+    "settings.launcherIcon": "white_white",
+  });
+  await theme.resetTheme(unexpected);
+  assert.equal(device.css.dark?.["--color-accent"], "#ffffff");
+  const stored = JSON.parse(Storage.getItemSync("settings.theme")!);
+  assert.deepEqual([stored.primary, stored.customPrimary], ["white", null]);
+  assert.deepEqual([stored.savedPrimary, stored.savedSecondary], [["#f08cb0"], ["#7cc4ea"]]);
 });
