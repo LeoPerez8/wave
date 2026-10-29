@@ -1,5 +1,6 @@
 import {
   discoverMixCaption,
+  discoverMixRowsToBuild,
   discoverRowTitle,
   homeSectionTitle,
   MAGIC_QUEUE_PICKS,
@@ -108,12 +109,16 @@ const MIXES_UPDATING = "Updating…";
 function Discover({ home, title }: SectionProps) {
   const ytMusic = useYtMusicEnabled();
   const { played, empty } = homeOpeningState(home);
-  useDiscoverMixesFocus(ytMusic, played);
-  const artistMixes = useDiscoverMixes("artist-mixes");
-  // An empty Library has no tagged songs: Genre mixes stay hidden, no skeleton.
-  const genreMixes = useDiscoverMixes("genre-mixes", empty);
-  const magicQueue = useMagicQueueSection(ytMusic, artistMixes);
   const { discoverRows } = useHomeArrangement();
+  const builds = discoverMixRowsToBuild(discoverRows, { empty });
+  useDiscoverMixesFocus(ytMusic, played, empty);
+  const artistMixes = useDiscoverMixes("artist-mixes", empty, builds.includes("artist-mixes"));
+  // An empty Library has no tagged songs: Genre mixes stay hidden, no skeleton.
+  const genreMixes = useDiscoverMixes("genre-mixes", empty, builds.includes("genre-mixes"));
+  const magicQueue = useMagicQueueSection(
+    ytMusic && discoverRows.includes("magic-queue"),
+    artistMixes,
+  );
   const rows = discoverRows.filter((id) =>
     id === "magic-queue"
       ? magicQueue.shown.kind !== "hidden"
