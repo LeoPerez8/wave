@@ -4,6 +4,8 @@ import {
   RECOGNIZE_CARD_ACTION_LABELS,
   recognizeCardView,
   recognizeLogLine,
+  readPlaylistEntrySong,
+  writePlaylistEntrySong,
   recognizePlaylistSong,
   recognizeResultActions,
   resolveRecognizedSong,
@@ -212,7 +214,15 @@ test("each recognized kind saves as its existing playlist entry and round-trips 
     ],
   ] as const;
   for (const [result, expected] of cases) {
-    assert.deepEqual(recognizePlaylistSong(result), expected);
+    const entry = recognizePlaylistSong(result);
+    assert.deepEqual(entry, expected);
+    if (entry.source !== "library") {
+      const saved = readPlaylistEntrySong(writePlaylistEntrySong(entry));
+      assert.deepEqual(
+        saved,
+        entry.source === "stream" ? { ...entry, song: { ...entry.song, albumId: null } } : entry,
+      );
+    }
   }
 });
 
@@ -247,4 +257,16 @@ test("the Library result displays the Track's written credit", () => {
     "Beyoncé feat. Guest",
     "Library album",
   ]);
+});
+
+test("a finished download stops offering Download once its song is in the Library", () => {
+  const result = resolved({ ok: true, songs: [onlineSong] });
+  assert.deepEqual(
+    recognizeResultActions(result, {
+      ytMusic: true,
+      status: { kind: "done", path: "/music/song.m4a" },
+      inLibrary: true,
+    }),
+    ["play", "playNext", "addToPlaylist", "listenAgain"],
+  );
 });

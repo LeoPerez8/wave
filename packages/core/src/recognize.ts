@@ -4,9 +4,9 @@ import {
   type RecognizeResult,
   type RecognizeTrack,
   type RecognizeResultAction,
+  type RecognizeResultOptions,
 } from "./recognition.ts";
 import { joinArtists, type YtSong } from "./ytMusic.ts";
-import type { YtDownloadStatus } from "./ytDownloads.ts";
 
 /**
  * Recognize: naming a song Wave hears. The native side captures the audio and asks
@@ -201,7 +201,7 @@ const FAILURE_LINES: Readonly<Record<RecognizeFailure, string>> = {
 /** What the card shows for [card]. */
 export const recognizeCardView = (
   card: RecognizeCard,
-  options: { readonly ytMusic: boolean; readonly status?: YtDownloadStatus | null } = {
+  options: RecognizeResultOptions = {
     ytMusic: true,
   },
 ): RecognizeCardView => {

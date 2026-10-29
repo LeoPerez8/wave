@@ -2277,9 +2277,11 @@ export type {
   RecognizeSource,
   RecognizeStep,
 } from "./recognize.ts";
-export { resolveRecognizedSong } from "./recognition.ts";
-export { recognizeResultActions } from "./recognition.ts";
-export { recognizePlaylistSong } from "./recognition.ts";
+export {
+  resolveRecognizedSong,
+  recognizeResultActions,
+  recognizePlaylistSong,
+} from "./recognition.ts";
 
 export type {
   RecognizeLookup,

@@ -12,6 +12,7 @@ import {
   type LibrarySongKey,
 } from "./ytMusic.ts";
 
+/** The Track fields recognition needs; a result preserves the caller's full row. */
 export interface RecognizeTrack extends LibrarySongKey {
   readonly id: number;
   readonly album: string;
@@ -39,6 +40,11 @@ export interface RecognizeResolution<
   readonly result: RecognizeResult<L, S>;
 }
 
+/**
+ * Library first, without a duration tie-break. No answer asks for one Songs search;
+ * disabled or failed answers keep an unsearched entry, and a completed search
+ * keeps its first match or an unavailable entry. Nothing is persisted here.
+ */
 export const resolveRecognizedSong = <L extends RecognizeTrack, S extends YtSong = YtSong>(
   heard: RecognizedSong,
   library: readonly L[],
@@ -75,7 +81,10 @@ export const resolveRecognizedSong = <L extends RecognizeTrack, S extends YtSong
     if (answer !== undefined)
       return {
         kind: "resolved",
-        lookup: answer === "disabled" ? "disabled" : "failed",
+        lookup:
+          answer === "disabled" || (!answer.ok && answer.reason === "disabled")
+            ? "disabled"
+            : "failed",
         result: { kind: "unsearched", song },
       };
     return { kind: "search", query: `${heard.title} ${heard.artist}` };
@@ -97,40 +106,44 @@ export const resolveRecognizedSong = <L extends RecognizeTrack, S extends YtSong
   };
 };
 
-/** Result actions share one list for every kind; #770 can add its save action here. */
+/** Actions shared by the result card and any other Recognize entry point. */
 export type RecognizeResultAction =
   "play" | "playNext" | "addToPlaylist" | "goToAlbum" | YtDownloadAction | "listenAgain";
 
+export interface RecognizeResultOptions {
+  readonly ytMusic: boolean;
+  readonly status?: YtDownloadStatus | null;
+  readonly inLibrary?: boolean;
+}
+
 export const recognizeResultActions = (
   result: RecognizeResult,
-  {
-    ytMusic,
-    status = null,
-  }: { readonly ytMusic: boolean; readonly status?: YtDownloadStatus | null },
+  { ytMusic, status = null, inLibrary = false }: RecognizeResultOptions,
 ): readonly RecognizeResultAction[] => {
-  switch (result.kind) {
-    case "library":
-      return ["play", "playNext", "addToPlaylist", "goToAlbum", "listenAgain"];
-    case "stream":
-      return ytMusic
-        ? [
-            "play",
-            "playNext",
-            "addToPlaylist",
-            ...ytDownloadActions(status, { inLibrary: false }),
-            "listenAgain",
-          ]
-        : ["addToPlaylist", "listenAgain"];
-    case "unavailable":
-    case "unsearched":
-      return ["addToPlaylist", "listenAgain"];
-  }
+  const playable = result.kind === "library" || (result.kind === "stream" && ytMusic);
+  const play: RecognizeResultAction[] = playable ? ["play", "playNext"] : [];
+  const more: RecognizeResultAction[] =
+    result.kind === "library"
+      ? ["goToAlbum"]
+      : result.kind === "stream" && ytMusic
+        ? ytDownloadActions(status, { inLibrary })
+        : [];
+  // Save actions live here once, so another action can apply to every result kind.
+  return [...play, "addToPlaylist", ...more, "listenAgain"];
 };
 
 /** The picker and one-tap saves both take the existing playlist entry union. */
 export const recognizePlaylistSong = <L extends RecognizeTrack, S extends YtSong>(
   result: RecognizeResult<L, S>,
-): PlaylistSong<S> =>
-  result.kind === "library"
-    ? { source: "library", trackId: result.track.id }
-    : ({ source: result.kind, song: result.song } as PlaylistSong<S>);
+): PlaylistSong<S> => {
+  switch (result.kind) {
+    case "library":
+      return { source: "library", trackId: result.track.id };
+    case "stream":
+      return { source: "stream", song: result.song };
+    case "unavailable":
+      return { source: "unavailable", song: result.song };
+    case "unsearched":
+      return { source: "unsearched", song: result.song };
+  }
+};
