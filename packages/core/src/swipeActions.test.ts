@@ -293,7 +293,7 @@ describe("swipe labels in Portuguese", () => {
       accessibilityLabel: "Remover da Playlist",
     });
     assert.deepEqual(swipeActionLabels("search", "pt-BR").label, "Buscar");
-    assert.deepEqual(["addToQueue", "remove"].map(swipeChoiceLabelFor("pt-BR")), [
+    assert.deepEqual((["addToQueue", "remove"] as const).map(swipeChoiceLabelFor("pt-BR")), [
       "Adicionar à Fila",
       "Remover",
     ]);

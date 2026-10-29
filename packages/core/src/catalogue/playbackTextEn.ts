@@ -22,6 +22,8 @@ export const playbackTextEn = {
   closeNowPlaying: "Close Now Playing",
   couldntAddToShazam: "Couldn't add to Shazam",
   addedToShazam: "Added to Shazam",
+  /** A notice's name for a song the queue knows no title of. */
+  thisSong: "This song",
   alreadyInShazam: "Already in Shazam",
   couldntDownloadTheSong: "Couldn't download the song",
   couldntOpenTheArtist: "Couldn't open the artist",

@@ -19,6 +19,7 @@ import { Artwork } from "@/catalog/Artwork";
 import { SONG_ROW_COVER, SongCover } from "@/catalog/cards/SongCard";
 import { ExplicitBadge } from "@/catalog/ExplicitBadge";
 import { CELL, grid } from "@/catalog/grid";
+import { useLocalisation } from "@/localisation/localisation";
 import { RankNumber } from "@/catalog/RankNumber";
 import { SwipeableRow, swipeAccessibility, type SwipeSide } from "@/catalog/SwipeableRow";
 import { WavyUnderline } from "@/catalog/WavyUnderline";
@@ -57,6 +58,7 @@ export const SongRow = memo(function SongRow(props: SongRowPresentation & SongRo
   const [highlight, tertiary, accent] = useThemeColor(["highlight", "tertiary", "accent"]);
   const { rowKey, onPress, onLongPress, onSwipe, swipeRight, swipeLeft, removes } = props;
   const { extraActions = NO_ACTIONS, onExtraAction } = props;
+  const { language } = useLocalisation();
   const press = useCallback(() => onPress(rowKey), [onPress, rowKey]);
   // The long-press haptic, as the row's menu opens.
   const longPress = useCallback(() => {
@@ -77,14 +79,14 @@ export const SongRow = memo(function SongRow(props: SongRowPresentation & SongRo
         ? null
         : {
             action,
-            ...swipeActionLabels(action),
+            ...swipeActionLabels(action, language),
             leaves: removes === true && action === "removeFromPlaylist",
             run: () => onSwipe(rowKey, direction, action),
           };
     const right = side(swipeRight, "right");
     const left = side(swipeLeft, "left");
     return right === null && left === null ? undefined : { right, left };
-  }, [rowKey, onSwipe, swipeRight, swipeLeft, removes, props.selecting, props.disabled]);
+  }, [rowKey, onSwipe, swipeRight, swipeLeft, removes, props.selecting, props.disabled, language]);
   const actions =
     swipe === undefined
       ? extraActions.length === 0

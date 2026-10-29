@@ -15,6 +15,11 @@
 export const UNKNOWN_ARTIST = "Unknown Artist";
 export const UNKNOWN_ALBUM = "Unknown Album";
 export const VARIOUS_ARTISTS = "Various Artists";
+/**
+ * The title a play's stored snapshot holds when its song had none to give.
+ * Stored and synced as it is; screens show `strings.listeningHistory.unknownSong`.
+ */
+export const UNKNOWN_SONG_TITLE = "Unknown song";
 
 /** What the native scanner reports for one audio file. Tag values are raw strings as read from the file. */
 export interface RawTrack {

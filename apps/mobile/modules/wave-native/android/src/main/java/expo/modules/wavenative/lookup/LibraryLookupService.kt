@@ -17,6 +17,7 @@ import android.os.PowerManager
 import android.os.SystemClock
 import expo.modules.wavenative.R
 import expo.modules.wavenative.launcher.LauncherIconSwitcher
+import expo.modules.wavenative.locale.NativeText
 import expo.modules.wavenative.log.ServiceTimeout
 import expo.modules.wavenative.log.WaveLog
 import expo.modules.wavenative.player.JsRuntime
@@ -90,7 +91,7 @@ class LibraryLookupService : Service() {
       .setOnlyAlertOnce(true)
       .setCategory(Notification.CATEGORY_PROGRESS)
       .setForegroundServiceBehavior(Notification.FOREGROUND_SERVICE_IMMEDIATE)
-      .setContentTitle(progress?.title ?: DEFAULT_TITLE)
+      .setContentTitle(progress?.title ?: NativeText.get("fixingSongs"))
     LibraryLookupNotice.openApp(this)?.let(builder::setContentIntent)
     if (progress == null) return builder.build()
     progress.detail?.let(builder::setContentText)
@@ -104,7 +105,7 @@ class LibraryLookupService : Service() {
         PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
       )
       builder.addAction(
-        Notification.Action.Builder(Icon.createWithResource(this, R.drawable.wave_notification), "Cancel", cancel)
+        Notification.Action.Builder(Icon.createWithResource(this, R.drawable.wave_notification), NativeText.get("cancel"), cancel)
           .build(),
       )
     }
@@ -116,7 +117,6 @@ class LibraryLookupService : Service() {
     const val NOTIFICATION_ID = 0x5760
     const val SUMMARY_ID = 0x5761
     const val ACTION_CANCEL = "expo.modules.wavenative.lookup.CANCEL"
-    const val DEFAULT_TITLE = "Fixing songs…"
     /** A safety net: the run releases it long before, when it ends. */
     const val WAKE_LOCK_MAX_MS = 12 * 60 * 60 * 1000L
   }
@@ -216,10 +216,10 @@ internal object LibraryLookupNotice {
   fun createChannel(context: Context) {
     val channel = NotificationChannel(
       LibraryLookupService.CHANNEL,
-      "Fix Songs",
+      NativeText.get("fixSongs"),
       NotificationManager.IMPORTANCE_LOW,
     ).apply {
-      description = "Fixing songs in the whole Library"
+      description = NativeText.get("fixSongsDescription")
       setShowBadge(false)
     }
     context.getSystemService(NotificationManager::class.java).createNotificationChannel(channel)

@@ -29,6 +29,7 @@ import {
   type SyncSong,
   type SyncSongFields,
   type SyncTables,
+  UNKNOWN_SONG_TITLE,
 } from "@wave/core";
 import { and, asc, eq, getTableColumns, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 
@@ -413,7 +414,7 @@ export const selectUnpushed = (
           importedFrom: row.importedFrom,
           snapshot: wireSnapshot(
             row.snapshot ?? {
-              title: row.currentTitle ?? "Unknown song",
+              title: row.currentTitle ?? UNKNOWN_SONG_TITLE,
               artist: row.currentArtist ?? "",
               album: row.currentAlbum,
               artworkPath: null,
@@ -1119,7 +1120,7 @@ const applyPlay = (
           ? null
           : {
               videoId,
-              title: snapshot?.title ?? "Unknown song",
+              title: snapshot?.title ?? UNKNOWN_SONG_TITLE,
               artists: split(snapshot?.artist ?? ""),
               album: snapshot?.album ?? null,
               artworkUrl: snapshot?.artworkUrl ?? null,

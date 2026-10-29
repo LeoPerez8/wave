@@ -1,5 +1,11 @@
 import { useLocalisation } from "@/localisation/localisation";
-import { formatTime, listeningHistoryDays, type AppLanguage } from "@wave/core";
+import {
+  UNKNOWN_SONG_TITLE,
+  catalogueOf,
+  formatTime,
+  listeningHistoryDays,
+  type AppLanguage,
+} from "@wave/core";
 import { useMemo } from "react";
 import { ActivityIndicator, Text, View } from "react-native";
 
@@ -52,7 +58,10 @@ const historyEntry = (
       kind: "history",
       id: play.id,
       trackId: song === null ? undefined : String(song.id),
-      title: snapshot.title,
+      title:
+        snapshot.title === UNKNOWN_SONG_TITLE
+          ? catalogueOf(language).listeningHistory.unknownSong
+          : snapshot.title,
       artist: snapshot.artist,
       durationMs: song?.durationMs ?? null,
       explicit: song?.explicit ?? false,

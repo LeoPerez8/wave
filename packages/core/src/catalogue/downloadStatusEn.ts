@@ -30,6 +30,9 @@ export const downloadStatusEn = {
     ytUnavailable: "This song is unavailable on YouTube Music",
     notFound: "Not found online",
   },
+  /** While YouTube downloads are paused (`ytThrottleNotice`). */
+  youtubePaused: (minutes: number) =>
+    `Paused: YouTube is limiting downloads. Next try in ${formatNumber("en", minutes)} min`,
   downloadingCount: (n: number) => `${formatNumber("en", n)} downloading`,
   savingCount: (n: number) => `${formatNumber("en", n)} saving`,
   waitingCount: (n: number) => `${formatNumber("en", n)} waiting`,

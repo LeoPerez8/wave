@@ -312,7 +312,7 @@ export const songRowView = (source: SongListRowSource, state: SongRowState = {})
   const queue = source.kind === "queue";
   const remoteSong = source.kind === "ytMusic" || source.kind === "unsearched";
   const download = row.missing || remoteSong ? (state.download ?? null) : null;
-  const downloadLine = ytDownloadLine(download);
+  const downloadLine = ytDownloadLine(download, catalogueOf(language));
   const baseCredit =
     source.kind === "ytMusic" && state.leading?.kind === "trackNumber"
       ? ytSongArtist(source.song)

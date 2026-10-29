@@ -68,10 +68,12 @@ const onItsWay = (status: YtDownloadStatus | null): status is YtDownloadStatus =
 /**
  * The songs on their way: the ones downloading (or saving) first, then the
  * waiting ones in queue order. The journal lists jobs in the order they were
- * asked for, which is the order its queue starts them in.
+ * asked for, which is the order its queue starts them in. Each line is in
+ * [catalogue]'s language.
  */
 export const queuedDownloads = <S extends YtSong>(
   jobs: readonly YtDownloadJournalJob<S>[],
+  catalogue: Catalogue = en,
 ): QueuedDownload<S>[] => {
   const rows = jobs.flatMap((job): QueuedDownload<S>[] => {
     const status = statusOf(job);
@@ -80,7 +82,7 @@ export const queuedDownloads = <S extends YtSong>(
       {
         id: job.id,
         song: job.song,
-        line: ytDownloadLine(status) ?? "",
+        line: ytDownloadLine(status, catalogue) ?? "",
         waiting: job.phase === "queued",
         cancel:
           status.kind === "saving"

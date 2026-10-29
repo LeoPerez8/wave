@@ -59,7 +59,11 @@ function SampleMenu({ close }: { close: () => void }) {
       </CardHeading>
       <MenuChoices
         cards={LONG_PRESS_SAMPLE_MENU.cards.map((action) => ({ action, onPress: close }))}
-        entries={LONG_PRESS_SAMPLE_MENU.list.map((entry) => ({ ...entry, onPress: close }))}
+        entries={LONG_PRESS_SAMPLE_MENU.list.map((entry) => ({
+          ...entry,
+          label: strings.itemActions.labels[entry.action],
+          onPress: close,
+        }))}
         accessibilityHint={strings.settings.demoItemItOnlyClosesTheMenu}
       />
     </>

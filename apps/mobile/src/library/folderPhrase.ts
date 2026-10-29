@@ -10,6 +10,6 @@ export const folderPhrase = (
 ): string => {
   const [only] = roots;
   if (roots.length === 1 && only !== undefined)
-    return strings.library.oneFolder(describeFolder(only.path).name);
+    return strings.library.oneFolder(describeFolder(only.path, strings).name);
   return strings.library.folders(roots.length);
 };

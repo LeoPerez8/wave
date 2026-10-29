@@ -1,7 +1,12 @@
 import { currentLocalisation } from "@/localisation/localisation";
 import { useLocalisation } from "@/localisation/localisation";
 import { IconSwipeLeft, IconSwipeRight, type Icon } from "@tabler/icons-react-native";
-import { SWIPE_CHOICES, swipeChoiceLabel, type RowSwipeSide, type SwipeChoice } from "@wave/core";
+import {
+  SWIPE_CHOICES,
+  swipeChoiceLabelFor,
+  type RowSwipeSide,
+  type SwipeChoice,
+} from "@wave/core";
 import { router } from "expo-router";
 import { Text, View } from "react-native";
 
@@ -56,11 +61,11 @@ export function SwipeDirectionRow({
   chosen: SwipeChoice;
   enabled: boolean;
 }) {
-  const { strings } = useLocalisation();
+  const { language, strings } = useLocalisation();
   const { title, route, icon: Glyph } = DIRECTIONS[side];
   const foreground = useThemeColor("foreground");
   const tertiary = useThemeColor("tertiary");
-  const action = swipeChoiceLabel(chosen);
+  const action = swipeChoiceLabelFor(language)(chosen);
   return (
     <Press
       accessibilityRole="button"
@@ -104,7 +109,8 @@ const closePicker = (): void => {
  * back to Swipe actions; Back leaves it as it was.
  */
 export function SwipeChoicePickerScreen({ side }: { side: RowSwipeSide }) {
-  const { strings } = useLocalisation();
+  const { language, strings } = useLocalisation();
+  const choiceLabel = swipeChoiceLabelFor(language);
   const { title } = DIRECTIONS[side];
   const chosen = useSwipeSettings()[side];
   return (
@@ -113,7 +119,7 @@ export function SwipeChoicePickerScreen({ side }: { side: RowSwipeSide }) {
         <Hairline />
         <View accessibilityRole="radiogroup" accessibilityLabel={title}>
           {SWIPE_CHOICES.map((choice) => {
-            const label = swipeChoiceLabel(choice);
+            const label = choiceLabel(choice);
             return (
               <ChoiceRow
                 key={choice}

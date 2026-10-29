@@ -1,9 +1,9 @@
 import { beginTiming } from "@/lib/timing";
+import { currentLocalisation } from "@/localisation/localisation";
 import {
   confirmsFirst,
   isDestructiveAction,
   isDetailPath,
-  ITEM_ACTION_LABELS,
   itemActions,
   playlistPlayback,
   playlistRemovals,
@@ -296,7 +296,7 @@ export const actionEntries = <A extends { readonly id: number; readonly name: st
 ): ActionEntry[] =>
   planned.map((entry) => ({
     action: entry.action,
-    label: ITEM_ACTION_LABELS[entry.action],
+    label: currentLocalisation().strings.itemActions.labels[entry.action],
     onPress: press(entry),
     destructive: isDestructiveAction(entry.action),
   }));

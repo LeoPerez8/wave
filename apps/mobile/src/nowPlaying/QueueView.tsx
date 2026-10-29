@@ -519,7 +519,7 @@ export function UpNextList({
   ground: GroundColors;
   paneTop: number;
 }) {
-  const { strings } = useLocalisation();
+  const { language, strings } = useLocalisation();
   useRenderCount("UpNextList");
   usePerfVisible("queue");
   const queue = useQueue();
@@ -682,7 +682,11 @@ export function UpNextList({
       if (item.kind === "bar") return <UpNextBar />;
       const track = tracks.get(item.entry.trackId);
       const played = item.kind === "history";
-      const row = model.row(queueSource(item.entry, track, missingIds, played), {}, item.entry.key);
+      const row = model.row(
+        queueSource(item.entry, track, missingIds, played),
+        { language },
+        item.entry.key,
+      );
       if (played) return <HistoryRow shown={row} actions={actions} />;
       return (
         <UpNextRow
@@ -698,7 +702,7 @@ export function UpNextList({
         />
       );
     },
-    [tracks, missingIds, drag, rowDrag, entries.length, model, actions, strings],
+    [tracks, missingIds, drag, rowDrag, entries.length, model, actions, strings, language],
   );
   // Legend List re-renders a row only when its item or extraData changes, and a
   // queue picked back up after JS restarted learns its tracks after the first render.
@@ -736,7 +740,7 @@ export function UpNextList({
       ? null
       : model.row(
           queueSource(liftedEntry, tracks.get(liftedEntry.trackId), missingIds, false),
-          {},
+          { language },
           liftedEntry.key,
         );
 

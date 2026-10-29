@@ -1542,7 +1542,11 @@ export const useYtAlbumDownload = (
   inLibrary: InLibrary,
 ): YtAlbumDownload<NativeYtSong> => {
   const jobs = useSyncExternalStore(journal.subscribe, journal.get);
-  return useMemo(() => ytAlbumDownload(songs, { inLibrary, jobs }), [songs, inLibrary, jobs]);
+  const { language } = useLocalisation();
+  return useMemo(
+    () => ytAlbumDownload(songs, { inLibrary, jobs, language }),
+    [songs, inLibrary, jobs, language],
+  );
 };
 
 /**
@@ -1595,9 +1599,10 @@ export const useYtPlaylistDownload = (
   inLibrary: InLibrary,
 ): YtPlaylistDownload<NativeYtSong> => {
   const jobs = useSyncExternalStore(journal.subscribe, journal.get);
+  const { language } = useLocalisation();
   return useMemo(
-    () => ytPlaylistDownload(entries, { inLibrary, jobs }),
-    [entries, inLibrary, jobs],
+    () => ytPlaylistDownload(entries, { inLibrary, jobs, language }),
+    [entries, inLibrary, jobs, language],
   );
 };
 
@@ -1846,7 +1851,8 @@ export const useMissingSongsDownload = (): MissingSongsDownload<MissingSongJob> 
  */
 export const useDownloadingList = (): DownloadingList<NativeYtSong> => {
   const jobs = useSyncExternalStore(journal.subscribe, journal.get);
-  return useMemo(() => downloadingList(jobs), [jobs]);
+  const { language } = useLocalisation();
+  return useMemo(() => downloadingList(jobs, language), [jobs, language]);
 };
 
 /** Whether any download is queued or downloading (Core's `queuedDownloads`), as the journal last said. */
@@ -1897,7 +1903,8 @@ export const moveQueuedDownloads = (ids: readonly string[]): void => {
 export const useFailedDownloads = (): readonly FailedDownload<NativeYtSong>[] => {
   const failed = useSyncExternalStore(journal.subscribe, failedJobsNow);
   const input = useFailedDownloadsInput(failed.length > 0);
-  return useMemo(() => failedDownloads(failed, input), [failed, input]);
+  const { strings } = useLocalisation();
+  return useMemo(() => failedDownloads(failed, { ...input, strings }), [failed, input, strings]);
 };
 
 /**

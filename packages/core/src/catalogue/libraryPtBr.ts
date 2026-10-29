@@ -123,6 +123,8 @@ export const libraryPtBr: typeof libraryEn = {
       plural("pt-BR", count, { one: `${n(count)} gênero`, other: `${n(count)} gêneros` }),
     section: (count: number): string =>
       plural("pt-BR", count, { one: `${n(count)} seção`, other: `${n(count)} seções` }),
+    item: (count: number): string =>
+      plural("pt-BR", count, { one: `${n(count)} item`, other: `${n(count)} itens` }),
   },
   selectAll: "Selecionar Tudo",
   done: "OK",

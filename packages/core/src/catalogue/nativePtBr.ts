@@ -1,6 +1,10 @@
 import type { nativeEn } from "./nativeEn.ts";
 export const nativePtBr: typeof nativeEn = {
   recognize: "Reconhecer Música",
+  listeningToPhone: "Ouvindo o áudio deste celular",
+  fixSongs: "Corrigir Músicas",
+  fixSongsDescription: "Corrigindo músicas da Biblioteca inteira",
+  fixingSongs: "Corrigindo músicas…",
   importWave: "Importar para o Wave",
   downloads: "Downloads",
   downloadsDescription: "Músicas sendo salvas na Biblioteca",

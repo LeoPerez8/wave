@@ -35,7 +35,7 @@ export default function DiscoverMixScreen() {
       status: "loaded",
       page: {
         head: { title: caption.title, line: caption.artists, artworkUrl: caption.artworkUrl },
-        kind: "Mix",
+        kind: { type: "mix" },
         songs: newSongsOf(mix),
         listed: placeDiscoverMixSongs(mix, {
           find,

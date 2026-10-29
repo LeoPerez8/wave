@@ -186,7 +186,8 @@ function DownloadGroupHeader({
   count?: number;
   onAccessibilityAction?: (event: AccessibilityActionEvent) => void;
 }) {
-  const line = progress === undefined ? group.line : downloadRunGroupLine(progress);
+  const { language } = useLocalisation();
+  const line = progress === undefined ? group.line : downloadRunGroupLine(progress, language);
   return (
     <View>
       <View className="flex-row items-center" style={{ gap: CELL * 1.5, paddingTop: CELL }}>
@@ -451,14 +452,14 @@ export function DownloadsList({ header }: { header: ReactElement }) {
   const covers = useYtMusicEnabled();
   const rows = useMemo(() => downloadListRows(list), [list]);
   const failedRows = useMemo(
-    () => failedDownloadRows(failed, { expanded: failedShown }),
-    [failed, failedShown],
+    () => failedDownloadRows(failed, { expanded: failedShown }, strings),
+    [failed, failedShown, strings],
   );
   const pageRows = useMemo<readonly PageRow[]>(
     () => (failedRows.length === 0 ? rows : [...rows, ...failedRows]),
     [rows, failedRows],
   );
-  const summary = useMemo(() => queuedDownloadsSummary(list.counts), [list]);
+  const summary = useMemo(() => queuedDownloadsSummary(list.counts, strings), [list, strings]);
   const pauseNotice = useYoutubePauseNotice();
   const listRef = useRef<LegendListRef>(null);
   const { drag, rowDrag, moveSong, moveGroup, liftedStyle, scrollRef, container, onLayout } =

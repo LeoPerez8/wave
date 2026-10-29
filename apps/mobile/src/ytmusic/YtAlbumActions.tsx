@@ -1,13 +1,5 @@
-import { useLocalisation } from "@/localisation/localisation";
-import {
-  ITEM_ACTION_LABELS,
-  PLAY_ACTION_LABELS,
-  YT_ALBUM_DOWNLOAD_ACTION_LABELS,
-  discoverSongs,
-  menuLayout,
-  ytAlbumSongs,
-  type PlayCard,
-} from "@wave/core";
+import { currentLocalisation, useLocalisation } from "@/localisation/localisation";
+import { discoverSongs, menuLayout, ytAlbumSongs, type PlayCard } from "@wave/core";
 import * as Result from "effect/Result";
 import { Text, View } from "react-native";
 
@@ -76,8 +68,8 @@ export const openYtAlbumActions = (
       await showMessage(
         album.title,
         result.failure.reason === "offline"
-          ? "You're offline. YT Music albums need the network."
-          : "No answer online. Try again in a moment.",
+          ? currentLocalisation().strings.library.albumsNeedNetwork
+          : currentLocalisation().strings.library.noAnswerTryLater,
       );
       return;
     }
@@ -136,10 +128,10 @@ function YtAlbumActionsMenu({
   }));
   const entries: MenuChoice[] = layout.list.map(({ action }): MenuChoice =>
     action === "shuffle"
-      ? { action, label: PLAY_ACTION_LABELS.shuffle, onPress: play(true) }
+      ? { action, label: strings.itemActions.playLabels.shuffle, onPress: play(true) }
       : {
           action,
-          label: YT_ALBUM_DOWNLOAD_ACTION_LABELS[action],
+          label: strings.downloads.albumActions[action],
           onPress: closing(() =>
             runYtDownloadAction(action, songs, inLibrary, {
               kind: "album",
@@ -173,7 +165,7 @@ function YtAlbumActionsMenu({
   if (onSelect !== undefined)
     entries.push({
       action: "select",
-      label: ITEM_ACTION_LABELS.select,
+      label: strings.itemActions.labels.select,
       onPress: closing(onSelect),
     });
 

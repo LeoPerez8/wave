@@ -23,6 +23,7 @@ export const playbackTextPtBr: typeof playbackTextEn = {
   closeNowPlaying: "Fechar Tocando Agora",
   couldntAddToShazam: "Não foi possível adicionar ao Shazam",
   addedToShazam: "Adicionada ao Shazam",
+  thisSong: "Esta música",
   alreadyInShazam: "Já está no Shazam",
   couldntDownloadTheSong: "Não foi possível baixar a música",
   couldntOpenTheArtist: "Não foi possível abrir o artista",

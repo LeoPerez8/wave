@@ -139,6 +139,9 @@ export const libraryEn = {
       plural("en", count, { one: `${n(count)} genre`, other: `${n(count)} genres` }),
     section: (count: number): string =>
       plural("en", count, { one: `${n(count)} section`, other: `${n(count)} sections` }),
+    /** Albums and songs checked together. */
+    item: (count: number): string =>
+      plural("en", count, { one: `${n(count)} item`, other: `${n(count)} items` }),
   },
   selectAll: "Select All",
   done: "Done",

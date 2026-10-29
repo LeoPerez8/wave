@@ -149,3 +149,12 @@ describe("ytThrottleNotice", () => {
     assert.equal(ytThrottleNotice(10 * MIN, 10 * MIN), null);
   });
 });
+
+describe("ytThrottleNotice in Portuguese", () => {
+  test("says the pause and the next try in Portuguese", () => {
+    assert.equal(
+      ytThrottleNotice(10 * MIN, 6 * MIN + 10_000, "pt-BR"),
+      "Pausado: o YouTube está limitando os downloads. Próxima tentativa em 4 min",
+    );
+  });
+});

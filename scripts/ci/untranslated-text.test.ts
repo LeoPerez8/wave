@@ -103,6 +103,14 @@ test("Core enum values, URLs and private diagnostic builders are not UI copy", (
     ),
     [],
   );
+  // A label and a colon is a sentence, not a URL scheme.
+  assert.deepEqual(
+    findUntranslatedText(
+      "packages/core/src/example.ts",
+      "export const paused = (m: number) => `Paused: YouTube is limiting downloads. Next try in ${m} min`;",
+    ).map(({ text }) => text),
+    ["Paused: YouTube is limiting downloads. Next try in ${m} min"],
+  );
   assert.deepEqual(findUntranslatedText("packages/core/src/appLog.ts", fixture("core.ts")), []);
 });
 

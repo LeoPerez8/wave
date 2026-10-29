@@ -1,25 +1,25 @@
-import { currentLocalisation } from "@/localisation/localisation";
+import type { AppLanguage, Catalogue } from "@wave/core";
+import { useMemo, type ReactNode } from "react";
+
 import { useLocalisation } from "@/localisation/localisation";
-import type { ReactNode } from "react";
 import { View, type ViewProps } from "react-native";
 
 import { SongRow } from "@/songs/SongRow";
 import { songRowPresentation } from "@/songs/songListModel";
 
 /** The fixed fake song: plain artwork, no file and no Library id, so it never touches the Library. */
-const SAMPLE = songRowPresentation(
-  {
-    kind: "history",
-    id: "sample",
-    get title() {
-      return currentLocalisation().strings.settings.sampleSong;
+const sample = (strings: Catalogue, language: AppLanguage) =>
+  songRowPresentation(
+    {
+      kind: "history",
+      id: "sample",
+      title: strings.settings.sampleSong,
+      artist: "Wave",
+      durationMs: 200_000,
     },
-    artist: "Wave",
-    durationMs: 200_000,
-  },
-  {},
-  "sample",
-);
+    { language },
+    "sample",
+  );
 
 const nothing = (): void => undefined;
 
@@ -47,7 +47,8 @@ type Props = Pick<
  * the touch handlers see the row's touches as they bubble up.
  */
 export function SampleSongRow({ accessibilityHint, onLongPress, behind, ...rest }: Props) {
-  const { strings } = useLocalisation();
+  const { language, strings } = useLocalisation();
+  const shown = useMemo(() => sample(strings, language), [strings, language]);
   return (
     <View
       {...rest}
@@ -58,7 +59,7 @@ export function SampleSongRow({ accessibilityHint, onLongPress, behind, ...rest 
     >
       {behind}
       <View importantForAccessibility="no-hide-descendants">
-        <SongRow {...SAMPLE} onPress={nothing} onLongPress={onLongPress} />
+        <SongRow {...shown} onPress={nothing} onLongPress={onLongPress} />
       </View>
     </View>
   );

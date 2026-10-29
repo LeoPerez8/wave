@@ -114,7 +114,7 @@ export const downloadingList = <S extends YtSong>(
   jobs: readonly YtDownloadJournalJob<S>[],
   language: AppLanguage = "en",
 ): DownloadingList<S> => {
-  const rows = queuedDownloads(jobs);
+  const rows = queuedDownloads(jobs, catalogueOf(language));
   const place = new Map(jobs.map((job, index) => [job.id, index]));
   const originOf = new Map(jobs.map((job) => [job.id, job.origin ?? null]));
   const groups = new Map<string, Building<S>>();
