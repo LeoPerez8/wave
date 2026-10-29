@@ -19,7 +19,7 @@ whatever it finds.
 
 The AST scanner (`scripts/ci/untranslated-text.mjs`) checks Text-like children, visible
 property values (`accessibilityLabel`, `title`, `label`, `placeholder`, `message`…), and the
-arguments of toast, alert, confirm, `confirmAction`, `showMessage`, `showAlert` and announce
+arguments of toast, alert, confirm, `confirmAction`, `showMessage`, `showError`, `showAlert` and announce
 calls. In Core it also checks English-shaped literals in return statements and arrow
 expressions. It follows conditional and concatenated values, but doesn't trace identifiers,
 imports or function calls: a Core function that builds text takes the catalogue or the

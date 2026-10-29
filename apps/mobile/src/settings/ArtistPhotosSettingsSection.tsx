@@ -30,7 +30,7 @@ const confirmClear = async (count: number): Promise<void> => {
   });
   if (clear)
     await clearArtistPhotoCache().catch((error) =>
-      showError("Couldn't clear artist photos", error),
+      showError(currentLocalisation().strings.settings.couldntClearArtistPhotos, error),
     );
 };
 

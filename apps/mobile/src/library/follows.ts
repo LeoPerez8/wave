@@ -1,3 +1,4 @@
+import { currentLocalisation } from "@/localisation/localisation";
 import { useFocusEffect } from "expo-router";
 import { useSightedStore } from "@/lib/screenSight";
 import { followArtistKey, type FollowedArtist, type FollowLevel } from "@wave/core";
@@ -14,7 +15,7 @@ const list = makeExternalStore<readonly FollowedArtist[]>([]);
 const artists = new Map<string, ReturnType<typeof makeExternalStore<FollowedArtist | null>>>();
 const run = <A>(read: (store: LibraryStore["Service"]) => Effect.Effect<A, unknown>) =>
   appRuntime.runPromise(Effect.flatMap(LibraryStore, read));
-const failed = (error: unknown) => showError("Couldn't read followed artists", error);
+const failed = (error: unknown) => showError(currentLocalisation().strings.library.couldntReadFollows, error);
 const artistStore = (name: string) => {
   const key = followArtistKey(name);
   let store = artists.get(key);

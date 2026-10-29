@@ -179,6 +179,7 @@ export const libraryPtBr: typeof libraryEn = {
   ytMusicTurnedOff: "O YouTube Music está desativado.",
   ytMusicOffInSettings: "O YT Music está desativado em Ajustes",
   couldntReadArtists: "Não foi possível ler os artistas",
+  couldntReadFollows: "Não foi possível ler os artistas seguidos",
   library: "Biblioteca",
   online: "Online",
   libraryHint: "Mostra só o que está na sua biblioteca",

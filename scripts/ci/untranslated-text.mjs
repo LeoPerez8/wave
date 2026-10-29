@@ -151,7 +151,7 @@ export function findUntranslatedText(file, source) {
       const name = node.expression.getText(tree);
       if (/(?:^|\.)(?:log|debug|info|warn|error|trace|fatal)$/.test(name)) return;
       if (
-        /(?:^|\.)(?:showToast|toast|alert|confirm|confirmAction|showMessage|showAlert|announce|announceForAccessibility)$/.test(
+        /(?:^|\.)(?:showToast|toast|alert|confirm|confirmAction|showMessage|showError|showAlert|announce|announceForAccessibility)$/.test(
           name,
         )
       )

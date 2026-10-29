@@ -1,3 +1,4 @@
+import { currentLocalisation } from "@/localisation/localisation";
 import type { LibrarySectionSlug, QueueContext } from "@wave/core";
 
 import { playlistEntries } from "@/library/sectionSongs";
@@ -52,5 +53,5 @@ export const playTarget = (target: ActionItems, shuffle: boolean): void => {
         return;
     }
   };
-  play().catch((error: unknown) => showError("Couldn't load the songs", error));
+  play().catch((error: unknown) => showError(currentLocalisation().strings.playbackText.couldntLoadTheSongs, error));
 };

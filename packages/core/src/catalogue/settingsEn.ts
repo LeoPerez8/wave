@@ -136,6 +136,8 @@ export const settingsEn = {
   waveIsScanning: "Wave is scanning",
   youCanExcludeAFolderOnceThe: "You can exclude a folder once the scan finishes.",
   youCanAddAFolderOnceThe: "You can add a folder once the scan finishes.",
+  couldntAddFolder: "Couldn't add the folder",
+  couldntExcludeFolder: "Couldn't exclude the folder",
   alreadyInYourLibrary: "Already in your library",
   waveCantReadThisFolder: "Wave can't read this folder",
   pickItFromYourPhonesStorageOr:
@@ -173,6 +175,7 @@ export const settingsEn = {
   alwaysSearchOnlineOpensAlbumsAndArtists:
     "Always search online opens albums and artists with Online selected and has Search look online as you type. Always search on Wi-Fi does so only off mobile data. Only on demand waits for Online to be tapped. Long-press the Library | Online toggle to change it there.",
   clearArtistPhotos: "Clear artist photos?",
+  couldntClearArtistPhotos: "Couldn't clear artist photos",
   clear: "Clear",
   artistPhotos: "Artist photos",
   downloadArtistPhotos: "Download artist photos",

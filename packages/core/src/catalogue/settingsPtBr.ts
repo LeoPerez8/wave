@@ -121,6 +121,8 @@ export const settingsPtBr: typeof settingsEn = {
   waveIsScanning: "O Wave está verificando",
   youCanExcludeAFolderOnceThe: "Você pode excluir uma pasta quando a verificação terminar.",
   youCanAddAFolderOnceThe: "Você pode adicionar uma pasta quando a verificação terminar.",
+  couldntAddFolder: "Não foi possível adicionar a pasta",
+  couldntExcludeFolder: "Não foi possível excluir a pasta",
   alreadyInYourLibrary: "Já está na sua biblioteca",
   waveCantReadThisFolder: "O Wave não consegue ler esta pasta",
   pickItFromYourPhonesStorageOr:
@@ -159,6 +161,7 @@ export const settingsPtBr: typeof settingsEn = {
   alwaysSearchOnlineOpensAlbumsAndArtists:
     "Buscar sempre online abre álbuns e artistas com Online selecionado e busca online enquanto você digita. Buscar sempre no Wi-Fi faz isso apenas fora dos dados móveis. Só quando solicitado espera um toque em Online. Mantenha Biblioteca | Online pressionado para alterar essa opção ali.",
   clearArtistPhotos: "Limpar fotos de artistas?",
+  couldntClearArtistPhotos: "Não foi possível limpar as fotos de artistas",
   clear: "Limpar",
   artistPhotos: "Fotos de artistas",
   downloadArtistPhotos: "Baixar fotos de artistas",

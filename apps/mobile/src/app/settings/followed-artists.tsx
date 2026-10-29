@@ -103,7 +103,7 @@ export default function FollowedArtistsSettingsScreen() {
                 className="flex-1"
                 onPress={() =>
                   void openFollowedArtist(artist).catch((error) =>
-                    showError("Couldn't open artist", error),
+                    showError(strings.library.couldntOpenArtist, error),
                   )
                 }
               >
