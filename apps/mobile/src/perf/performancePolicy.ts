@@ -363,6 +363,23 @@ export const WHOLE_LIBRARY: Record<string, WholeLibraryException> = {
       "Download recovery runs on explicit/background work; the failed-download UI follows only while shown.",
     capabilities: ["ytmusic/libraryFinder.ts#useLoadedLibraryFinder"],
   },
+  "recognize/RecognizeCard.tsx#depsFor": {
+    howOften:
+      "Once per recognized match after capture ends, from an explicitly opened card; never while listening.",
+    reason:
+      "Recognition needs the Library before searching online, using the shared songs query. resolveRecognition.test.ts covers one Library read per match and no online search for a Library match.",
+    capabilities: ["library/hooks.ts#songs"],
+  },
+  "recognize/RecognizeCard.tsx#RecognizeCard": {
+    howOften:
+      "Once per shared Library version while a streamed result is visible, plus one current-finder lookup when Add to Playlist saves it.",
+    reason:
+      "The explicitly opened result card follows download membership only for a streamed result and rechecks identity before saving, so a completed download is not offered again or saved as a streamed duplicate.",
+    capabilities: [
+      "ytmusic/libraryFinder.ts#useLoadedInLibrary",
+      "ytmusic/libraryFinder.ts#currentLibraryFinder",
+    ],
+  },
   "ytmusic/YtSongActions.tsx#runYtSongSwipe": {
     howOften: "Once per completed song swipe; finder reads are shared per Library version.",
     reason: "Explicit song menus and completed swipes resolve Library identity for their action.",

@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import type { RecognizeAnswer, RecognizeCard, RecognizedSong, RecognizeSource } from "@wave/core";
+import {
+  resolveRecognizedSong,
+  type RecognizeAnswer,
+  type RecognizeCard,
+  type RecognizedSong,
+  type RecognizeSource,
+} from "@wave/core";
 
 import {
   startRecognizeSession,
@@ -102,6 +108,7 @@ const setup = (
     otherPlaying?: boolean;
     consentDeclined?: boolean;
     source?: RecognizeSource | "auto";
+    resolve?: RecognizeDeps["resolve"];
   } = {},
 ) => {
   const native = fakeNative(options);
@@ -122,6 +129,13 @@ const setup = (
       };
     },
     native,
+    resolve:
+      options.resolve ??
+      (async (song) => {
+        const answer = resolveRecognizedSong(song, [], "disabled");
+        if (answer.kind !== "resolved") throw new Error("Expected a result");
+        return answer;
+      }),
     log: (level, line) => {
       levels.push(level);
       lines.push(line);
@@ -223,7 +237,9 @@ describe("a Recognize session", () => {
     await native.hear(4);
     await native.answer({ kind: "match", song: SONG });
     await session.done;
-    assert.deepEqual(lines, ["Recognize through this phone: a match after 4.0 s"]);
+    assert.deepEqual(lines, [
+      "Recognize through this phone: a match after 4.0 s, YT Music lookup: disabled",
+    ]);
   });
   test("listens, asks at 4 seconds and shows the match", async () => {
     const { native, last, lines, levels, session } = setup();
@@ -238,10 +254,24 @@ describe("a Recognize session", () => {
 
     await native.answer({ kind: "match", song: SONG });
     await session.done;
-    assert.deepEqual(last(), { kind: "ended", end: { kind: "match", song: SONG } });
+    assert.deepEqual(last(), {
+      kind: "resolved",
+      result: {
+        kind: "unsearched",
+        song: {
+          title: SONG.title,
+          artists: [SONG.artist],
+          album: SONG.album,
+          artworkUrl: null,
+          durationMs: null,
+        },
+      },
+    });
     assert.deepEqual(native.stopped, [7]);
     assert.equal(native.listening, false);
-    assert.deepEqual(lines, ["Recognize through the microphone: a match after 4.0 s"]);
+    assert.deepEqual(lines, [
+      "Recognize through the microphone: a match after 4.0 s, YT Music lookup: disabled",
+    ]);
     assert.deepEqual(levels, ["info"]);
   });
 
@@ -418,4 +448,79 @@ describe("Wave's playback during a session", () => {
     await session.done;
     assert.deepEqual(playback, { playing: false, pauses: 0, resumes: 0 });
   });
+});
+
+test("a match stops capturing and resumes playback while the card waits for its playable result", async () => {
+  let deliver!: (value: Awaited<ReturnType<RecognizeDeps["resolve"]>>) => void;
+  const pending = new Promise<Awaited<ReturnType<RecognizeDeps["resolve"]>>>((resolve) => {
+    deliver = resolve;
+  });
+  const { native, last, lines, playback, session } = setup({
+    playing: true,
+    resolve: () => pending,
+  });
+  await settle();
+  await native.hear(4);
+  await native.answer({ kind: "match", song: SONG });
+  assert.equal(playback.playing, true);
+  assert.deepEqual(native.stopped, [7]);
+  assert.deepEqual(last(), { kind: "resolving", song: SONG });
+  assert.deepEqual(lines, []);
+  const answer = resolveRecognizedSong(SONG, [], "disabled");
+  if (answer.kind !== "resolved") throw new Error("Expected a result");
+  deliver(answer);
+  await session.done;
+  assert.deepEqual(last(), { kind: "resolved", result: answer.result });
+  assert.deepEqual(lines, [
+    "Recognize through the microphone: a match after 4.0 s, YT Music lookup: disabled",
+  ]);
+});
+
+test("closing during lookup withdraws the search and ignores its late result, logging once", async () => {
+  let deliver!: (value: Awaited<ReturnType<RecognizeDeps["resolve"]>>) => void;
+  let signal: AbortSignal | undefined;
+  const pending = new Promise<Awaited<ReturnType<RecognizeDeps["resolve"]>>>((resolve) => {
+    deliver = resolve;
+  });
+  const { native, cards, lines, session } = setup({
+    resolve: (_song, abort) => {
+      signal = abort;
+      return pending;
+    },
+  });
+  await settle();
+  await native.hear(4);
+  await native.answer({ kind: "match", song: SONG });
+  session.cancel();
+  await session.done;
+  assert.equal(signal?.aborted, true);
+  const shown = [...cards];
+  const answer = resolveRecognizedSong(SONG, [], "disabled");
+  if (answer.kind !== "resolved") throw new Error("Expected a result");
+  deliver(answer);
+  await settle();
+  assert.deepEqual(cards, shown);
+  assert.deepEqual(lines, [
+    "Recognize through the microphone: a match after 4.0 s, YT Music lookup: cancelled",
+  ]);
+  assert.deepEqual(native.stopped, [7]);
+});
+
+test("a failed lookup still offers an unsearched result and logs a warning", async () => {
+  const { native, last, levels, lines, session } = setup({
+    resolve: async () => {
+      throw new Error("Lookup failed");
+    },
+  });
+  await settle();
+  await native.hear(4);
+  await native.answer({ kind: "match", song: SONG });
+  await session.done;
+  assert.equal(last()?.kind, "resolved");
+  const card = last();
+  if (card?.kind === "resolved") assert.equal(card.result.kind, "unsearched");
+  assert.deepEqual(levels, ["warn"]);
+  assert.deepEqual(lines, [
+    "Recognize through the microphone: a match after 4.0 s, YT Music lookup: failed",
+  ]);
 });
