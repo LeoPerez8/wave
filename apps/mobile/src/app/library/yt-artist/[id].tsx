@@ -20,7 +20,7 @@ import { AlbumTile } from "@/catalog/AlbumTile";
 import { SECTION_HEAD, SectionHead } from "@/catalog/CatalogLine";
 import { COVER_ROW_TILE, CoverRow } from "@/catalog/CoverRow";
 import { CELL, grid } from "@/catalog/grid";
-import { PlayShuffle } from "@/catalog/PlayShuffle";
+import { PlayShuffle, ListAction } from "@/catalog/PlayShuffle";
 import {
   HiddenSkeletonBox,
   HiddenSkeletonLine,
@@ -220,15 +220,15 @@ function Head({
       </View>
       {loading ? (
         <PlayShuffleSkeleton />
-      ) : (
-        onPlay !== null && (
-          <PlayShuffle
-            onPlay={() => onPlay(false)}
-            onShuffle={() => onPlay(true)}
-            last={name === null ? null : follow}
-          />
-        )
-      )}
+      ) : onPlay !== null ? (
+        <PlayShuffle
+          onPlay={() => onPlay(false)}
+          onShuffle={() => onPlay(true)}
+          last={name === null ? null : follow}
+        />
+      ) : name !== null ? (
+        <ListAction {...follow} />
+      ) : null}
     </View>
   );
 }
