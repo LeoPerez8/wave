@@ -1,3 +1,13 @@
+import {
+  recognizeResultActions,
+  type RecognizeLookup,
+  type RecognizeResult,
+  type RecognizeTrack,
+  type RecognizeResultAction,
+} from "./recognition.ts";
+import { joinArtists, type YtSong } from "./ytMusic.ts";
+import type { YtDownloadStatus } from "./ytDownloads.ts";
+
 /**
  * Recognize: naming a song Wave hears. The native side captures the audio and asks
  * Shazam; Core decides when to ask and what the session's answer is.
@@ -127,16 +137,27 @@ export const recognizeHoldsPlayback = (source: RecognizeSource): boolean => sour
  * What the Recognize card shows: listening, the session's end, or why it couldn't
  * listen (no connection before it started, the microphone permission denied).
  */
-export type RecognizeCard =
+export type RecognizeCard<L extends RecognizeTrack = RecognizeTrack, S extends YtSong = YtSong> =
   | { readonly kind: "listening" }
   | { readonly kind: "offline" }
   | { readonly kind: "denied" }
-  | { readonly kind: "ended"; readonly end: RecognizeAnswer };
+  | { readonly kind: "ended"; readonly end: RecognizeAnswer }
+  | { readonly kind: "resolving"; readonly song: RecognizedSong }
+  | { readonly kind: "resolved"; readonly result: RecognizeResult<L, S> };
 
 /** The card's buttons, in order. */
-export type RecognizeCardAction = "cancel" | "done" | "close" | "tryAgain" | "openSettings";
+export type RecognizeCardAction =
+  "cancel" | "done" | "close" | "tryAgain" | "openSettings" | RecognizeResultAction;
 
 export const RECOGNIZE_CARD_ACTION_LABELS: Readonly<Record<RecognizeCardAction, string>> = {
+  play: "Play",
+  playNext: "Play Next",
+  addToPlaylist: "Add to Playlist",
+  goToAlbum: "Go to Album",
+  download: "Download",
+  cancelDownload: "Cancel Download",
+  retryDownload: "Retry Download",
+  listenAgain: "Listen Again",
   cancel: "Cancel",
   done: "Done",
   close: "Close",
@@ -178,8 +199,36 @@ const FAILURE_LINES: Readonly<Record<RecognizeFailure, string>> = {
 };
 
 /** What the card shows for [card]. */
-export const recognizeCardView = (card: RecognizeCard): RecognizeCardView => {
+export const recognizeCardView = (
+  card: RecognizeCard,
+  options: { readonly ytMusic: boolean; readonly status?: YtDownloadStatus | null } = {
+    ytMusic: true,
+  },
+): RecognizeCardView => {
   switch (card.kind) {
+    case "resolving":
+      return {
+        title: card.song.title,
+        lines: [card.song.artist, ...(card.song.album === null ? [] : [card.song.album])],
+        cover: true,
+        coverUrl: card.song.coverUrl,
+        listening: false,
+        actions: ["close", "listenAgain"],
+      };
+    case "resolved": {
+      const { song } = card.result;
+      return {
+        title: song.title,
+        lines: [
+          card.result.kind === "library" ? card.result.track.artist : joinArtists(song.artists),
+          ...(song.album === null ? [] : [song.album]),
+        ],
+        cover: true,
+        coverUrl: song.artworkUrl,
+        listening: false,
+        actions: recognizeResultActions(card.result, options),
+      };
+    }
     case "listening":
       return {
         title: "Listening…",
@@ -240,6 +289,7 @@ export const recognizeLogLine = (session: {
   readonly source: RecognizeSource;
   readonly heardMs: number;
   readonly outcome: RecognizeLogOutcome;
+  readonly lookup?: RecognizeLookup;
 }): string => {
   const { outcome } = session;
   const after = `after ${(session.heardMs / 1000).toFixed(1)} s`;
@@ -259,5 +309,5 @@ export const recognizeLogLine = (session: {
         return `failed ${after} (${outcome.failure}${outcome.status === null ? "" : `, HTTP ${outcome.status}`})`;
     }
   })();
-  return `Recognize through ${SOURCE_NAMES[session.source]}: ${what}`;
+  return `Recognize through ${SOURCE_NAMES[session.source]}: ${what}${session.lookup === undefined ? "" : `, YT Music lookup: ${session.lookup}`}`;
 };
