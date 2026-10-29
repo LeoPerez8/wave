@@ -2361,3 +2361,5 @@ export * from "./followArtistSearch.ts";
 
 export { releaseTitle } from "./ytArtist.ts";
 export { formatNumber, formatTime, formatDate } from "./formatting.ts";
+export { showCardDate } from "./showCard.ts";
+export type { ShowCardDate } from "./showCard.ts";
