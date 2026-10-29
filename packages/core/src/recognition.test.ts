@@ -143,6 +143,7 @@ test("each result offers its useful actions and Listen Again, with online action
     assert.deepEqual(recognizeResultActions(library, { ytMusic }), [
       "play",
       "playNext",
+      "addToShazam",
       "addToPlaylist",
       "goToAlbum",
       "listenAgain",
@@ -150,11 +151,12 @@ test("each result offers its useful actions and Listen Again, with online action
     assert.deepEqual(
       recognizeResultActions(stream, { ytMusic }),
       ytMusic
-        ? ["play", "playNext", "addToPlaylist", "download", "listenAgain"]
-        : ["addToPlaylist", "listenAgain"],
+        ? ["play", "playNext", "addToShazam", "addToPlaylist", "download", "listenAgain"]
+        : ["addToShazam", "addToPlaylist", "listenAgain"],
     );
     for (const result of [unavailable, unsearched]) {
       assert.deepEqual(recognizeResultActions(result, { ytMusic }), [
+        "addToShazam",
         "addToPlaylist",
         "listenAgain",
       ]);
@@ -174,6 +176,7 @@ test("recognized downloads offer cancel or retry from the existing queue status 
     assert.deepEqual(recognizeResultActions(result, { ytMusic: true, status }), [
       "play",
       "playNext",
+      "addToShazam",
       "addToPlaylist",
       ...(action === null ? [] : [action]),
       "listenAgain",
@@ -234,7 +237,7 @@ test("the result card shows the resolved song without a source label and every r
     cover: true,
     coverUrl: "https://youtube/cover",
     listening: false,
-    actions: ["play", "playNext", "addToPlaylist", "download", "listenAgain"],
+    actions: ["play", "playNext", "addToShazam", "addToPlaylist", "download", "listenAgain"],
   });
   assert.equal(RECOGNIZE_CARD_ACTION_LABELS.listenAgain, "Listen Again");
 });
@@ -267,6 +270,6 @@ test("a finished download stops offering Download once its song is in the Librar
       status: { kind: "done", path: "/music/song.m4a" },
       inLibrary: true,
     }),
-    ["play", "playNext", "addToPlaylist", "listenAgain"],
+    ["play", "playNext", "addToShazam", "addToPlaylist", "listenAgain"],
   );
 });

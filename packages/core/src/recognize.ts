@@ -152,6 +152,7 @@ export type RecognizeCardAction =
 export const RECOGNIZE_CARD_ACTION_LABELS: Readonly<Record<RecognizeCardAction, string>> = {
   play: "Play",
   playNext: "Play Next",
+  addToShazam: "Add to Shazam",
   addToPlaylist: "Add to Playlist",
   goToAlbum: "Go to Album",
   download: "Download",

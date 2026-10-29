@@ -2290,3 +2290,4 @@ export type {
   RecognizeResultAction,
   RecognizeTrack,
 } from "./recognition.ts";
+export { planShazamAdd } from "./shazamPlaylist.ts";
