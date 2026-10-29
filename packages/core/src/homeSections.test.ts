@@ -3,15 +3,30 @@ import { describe, test } from "node:test";
 
 import {
   HOME_SECTIONS,
-  editHomeArrangement,
-  hiddenHomeSections,
-  homeItems,
+  hiddenDiscoverRows,
+  editHomeArrangement as editArrangement,
+  hiddenHomeSections as hiddenSections,
+  homeItems as items,
   homeSectionTitle,
-  parseHomeArrangement,
-  storedHomeArrangement,
-  type HomeArrangement,
+  parseHomeArrangement as parseArrangement,
+  storedHomeArrangement as storeArrangement,
+  type HomeArrangementEdit,
   type HomeSectionId,
 } from "./index.ts";
+
+// Section-only fixtures keep the legacy section migration cases readable.
+type HomeArrangement = readonly HomeSectionId[];
+const layout = (sections: HomeArrangement) => ({
+  sections,
+  discoverRows: ["magic-queue", "artist-mixes", "genre-mixes"] as const,
+});
+const parseHomeArrangement = (stored: string | null) => parseArrangement(stored).sections;
+const storedHomeArrangement = (sections: HomeArrangement) => storeArrangement(layout(sections));
+const editHomeArrangement = (sections: HomeArrangement, edit: HomeArrangementEdit) =>
+  editArrangement(layout(sections), edit).sections;
+const hiddenHomeSections = (sections: HomeArrangement) => hiddenSections(layout(sections));
+const homeItems = (sections: HomeArrangement, options: Parameters<typeof items>[1]) =>
+  items(layout(sections), options);
 
 const TODAYS_HOME = [
   "discover",
@@ -323,4 +338,84 @@ test("merged Stats is visible if either old section was shown, and hidden if bot
     assert.deepEqual(arrangement, shown.length > 1 ? ["favorites", "stats"] : shown);
     assert.deepEqual(parseHomeArrangement(storedHomeArrangement(arrangement)), arrangement);
   }
+});
+
+describe("Discover row arrangement", () => {
+  test("fresh and older arrangements show every Discover row in default order", () => {
+    for (const stored of [null, storeArrangement(layout(["stats"]))]) {
+      assert.deepEqual(parseArrangement(stored).discoverRows, [
+        "magic-queue",
+        "artist-mixes",
+        "genre-mixes",
+      ]);
+    }
+  });
+});
+
+test("Discover rows move within Discover, remove until one remains, and add at the end", () => {
+  const initial = parseArrangement(null);
+  const moved = editArrangement(initial, { discover: { move: { from: 2, to: 0 } } });
+  assert.deepEqual(moved.discoverRows, ["genre-mixes", "magic-queue", "artist-mixes"]);
+  assert.deepEqual(moved.sections, initial.sections);
+  const removed = editArrangement(moved, { discover: { remove: "magic-queue" } });
+  assert.deepEqual(removed.discoverRows, ["genre-mixes", "artist-mixes"]);
+  assert.deepEqual(hiddenDiscoverRows(removed), ["magic-queue"]);
+  const last = editArrangement(removed, { discover: { remove: "artist-mixes" } });
+  assert.deepEqual(editArrangement(last, { discover: { remove: "genre-mixes" } }), last);
+  const added = editArrangement(last, { discover: { add: "magic-queue" } });
+  assert.deepEqual(added.discoverRows, ["genre-mixes", "magic-queue"]);
+  assert.deepEqual(editArrangement(added, { discover: { add: "magic-queue" } }), added);
+  assert.deepEqual(initial.discoverRows, ["magic-queue", "artist-mixes", "genre-mixes"]);
+});
+
+test("Done stores rows with sections, keeping them while Discover is removed and added back", () => {
+  const changed = editArrangement(parseArrangement(null), { discover: { remove: "artist-mixes" } });
+  const hidden = editArrangement(changed, { remove: "discover" });
+  const restored = parseArrangement(storeArrangement(hidden));
+  assert.deepEqual(restored, hidden);
+  assert.deepEqual(editArrangement(restored, { add: "discover" }).discoverRows, [
+    "magic-queue",
+    "genre-mixes",
+  ]);
+  assert.notEqual(storeArrangement(changed), null);
+});
+
+const storedRows = (discover: unknown) => JSON.stringify({ shown: ["discover"], discover });
+
+test("stored Discover rows drop unknowns and duplicates and restore missing rows in default place", () => {
+  assert.deepEqual(
+    parseArrangement(
+      storedRows({ shown: ["genre-mixes", "genre-mixes", "junk", null], hidden: ["artist-mixes"] }),
+    ).discoverRows,
+    ["magic-queue", "genre-mixes"],
+  );
+  assert.deepEqual(
+    parseArrangement(storedRows({ shown: ["genre-mixes", "magic-queue"] })).discoverRows,
+    ["genre-mixes", "magic-queue", "artist-mixes"],
+  );
+  assert.deepEqual(
+    parseArrangement(
+      storedRows({ shown: [], hidden: ["magic-queue", "artist-mixes", "genre-mixes"] }),
+    ).discoverRows,
+    ["magic-queue", "artist-mixes", "genre-mixes"],
+  );
+  for (const discover of [null, [], "bad", { shown: "bad" }]) {
+    assert.deepEqual(parseArrangement(storedRows(discover)).discoverRows, [
+      "magic-queue",
+      "artist-mixes",
+      "genre-mixes",
+    ]);
+  }
+});
+
+test("a reordered Discover survives saving with the default section order", () => {
+  const initial = parseArrangement(null);
+  const moved = editArrangement(initial, { discover: { move: { from: 2, to: 0 } } });
+  assert.deepEqual(parseArrangement(storeArrangement(moved)).discoverRows, [
+    "genre-mixes",
+    "magic-queue",
+    "artist-mixes",
+  ]);
+  const restored = editArrangement(moved, { discover: { move: { from: 0, to: 2 } } });
+  assert.equal(storeArrangement(restored), null);
 });

@@ -1,5 +1,5 @@
 import { IconMinus, IconPlus } from "@tabler/icons-react-native";
-import type { ComponentType, ReactNode } from "react";
+import { useEffect, useState, type ComponentType, type ReactNode } from "react";
 import { ScrollView, Text, View, type AccessibilityActionEvent } from "react-native";
 import Animated from "react-native-reanimated";
 
@@ -123,6 +123,8 @@ type ShownRowProps<Id> = {
   divideLast: boolean;
   reorder: RowReorder<Id>;
   edit: (edit: ArrangementEdit<Id>) => void;
+  canRemove?: boolean;
+  children?: ReactNode;
 };
 
 /**
@@ -139,6 +141,8 @@ function ShownRow<Id>({
   divideLast,
   reorder,
   edit,
+  canRemove = true,
+  children,
 }: ShownRowProps<Id>) {
   const { style, underline, handle } = useReorderRow({ index, reorder });
 
@@ -146,7 +150,7 @@ function ShownRow<Id>({
     const action = event.nativeEvent.actionName;
     if (action === "moveUp") edit({ move: { from: index, to: index - 1 } });
     else if (action === "moveDown") edit({ move: { from: index, to: index + 1 } });
-    else if (action === "remove") edit({ remove: id });
+    else if (action === "remove" && canRemove) edit({ remove: id });
   };
 
   return (
@@ -160,7 +164,7 @@ function ShownRow<Id>({
         accessibilityActions={[
           ...(index > 0 ? [{ name: "moveUp", label: "Move up" }] : []),
           ...(index < count - 1 ? [{ name: "moveDown", label: "Move down" }] : []),
-          { name: "remove", label: `Remove from ${place}` },
+          ...(canRemove ? [{ name: "remove", label: `Remove from ${place}` }] : []),
         ]}
         onAccessibilityAction={onAccessibilityAction}
         className="flex-row items-center"
@@ -170,10 +174,12 @@ function ShownRow<Id>({
         <RowButton
           icon={IconMinus}
           label={`Remove ${title} from ${place}`}
+          disabled={!canRemove}
           onPress={() => edit({ remove: id })}
         />
         <ReorderHandle gesture={handle} />
       </View>
+      {children}
       {(divideLast || index < count - 1) && (
         <Animated.View style={underline}>
           <Hairline />
@@ -234,6 +240,12 @@ export type ArrangementEditorProps<Id extends string> = {
   edit: (edit: ArrangementEdit<Id>) => void;
   /** Whether another item fits; while it doesn't, the add buttons are off. */
   canAdd?: boolean;
+  canRemove?: boolean;
+  /** Content grouped with its parent row; it moves with that row. */
+  renderNested?: (id: Id, dragging: (value: boolean) => void) => ReactNode;
+  /** Rows only, inside an existing editor's ScrollView. */
+  inline?: boolean;
+  onDraggingChange?: (dragging: boolean) => void;
   /** A fixed row above the shown items (`FixedRow`). */
   first?: ReactNode;
   /** A fixed row below them (`FixedRow`). */
@@ -267,6 +279,10 @@ export function ArrangementEditor<Id extends string>({
   hiddenHeading,
   edit,
   canAdd = true,
+  canRemove = true,
+  renderNested,
+  inline = false,
+  onDraggingChange,
   first,
   last,
   note,
@@ -277,57 +293,72 @@ export function ArrangementEditor<Id extends string>({
     rowHeight: ROW,
     move: (from, to) => edit({ move: { from, to } }),
   });
+  const [nestedDragging, setNestedDragging] = useState(false);
+  useEffect(() => {
+    onDraggingChange?.(reorder.dragging);
+  }, [onDraggingChange, reorder.dragging]);
   const count = shown.length;
   const empty = count === 0 && first === undefined && last === undefined;
 
+  const rows = (
+    <>
+      {first}
+      {shown.map((id, index) => (
+        <ShownRow
+          key={id}
+          id={id}
+          title={title(id)}
+          detail={detail(id)}
+          place={place}
+          index={index}
+          count={count}
+          divideLast={last !== undefined}
+          reorder={reorder}
+          edit={edit}
+          canRemove={canRemove}
+        >
+          {renderNested?.(id, setNestedDragging)}
+        </ShownRow>
+      ))}
+      {last}
+      {hidden.length > 0 && !inline && (
+        <View
+          style={{ marginTop: empty ? 0 : CELL * 3, paddingBottom: CELL / 2 }}
+          accessibilityRole="header"
+        >
+          <CatalogLine>{hiddenHeading}</CatalogLine>
+        </View>
+      )}
+      <View style={inline ? { opacity: 0.5 } : undefined}>
+        {hidden.map((id, index) => (
+          <HiddenRow
+            key={id}
+            id={id}
+            title={title(id)}
+            detail={detail(id)}
+            place={place}
+            divider={index < hidden.length - 1}
+            canAdd={canAdd}
+            edit={edit}
+          />
+        ))}
+      </View>
+      {note !== undefined && (
+        <Text className="mt-2 font-sans text-footnote text-secondary">{note}</Text>
+      )}
+    </>
+  );
+  if (inline) return rows;
   return (
     <>
       <View style={{ flexShrink: 1 }}>
         <ScrollView
           bounces={false}
           overScrollMode="never"
-          scrollEnabled={!reorder.dragging}
+          scrollEnabled={!reorder.dragging && !nestedDragging}
           contentContainerStyle={onDone === undefined ? PAGE_CONTENT : undefined}
         >
-          {first}
-          {shown.map((id, index) => (
-            <ShownRow
-              key={id}
-              id={id}
-              title={title(id)}
-              detail={detail(id)}
-              place={place}
-              index={index}
-              count={count}
-              divideLast={last !== undefined}
-              reorder={reorder}
-              edit={edit}
-            />
-          ))}
-          {last}
-          {hidden.length > 0 && (
-            <View
-              style={{ marginTop: empty ? 0 : CELL * 3, paddingBottom: CELL / 2 }}
-              accessibilityRole="header"
-            >
-              <CatalogLine>{hiddenHeading}</CatalogLine>
-            </View>
-          )}
-          {hidden.map((id, index) => (
-            <HiddenRow
-              key={id}
-              id={id}
-              title={title(id)}
-              detail={detail(id)}
-              place={place}
-              divider={index < hidden.length - 1}
-              canAdd={canAdd}
-              edit={edit}
-            />
-          ))}
-          {note !== undefined && (
-            <Text className="mt-2 font-sans text-footnote text-secondary">{note}</Text>
-          )}
+          {rows}
         </ScrollView>
       </View>
       {onDone !== undefined && (

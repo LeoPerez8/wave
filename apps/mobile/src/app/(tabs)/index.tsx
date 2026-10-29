@@ -75,7 +75,7 @@ function HomePlaceholders({ newRecap }: { newRecap: RecapPeriod | null }) {
     <>
       <HomeRecap period={newRecap} />
       <View style={newRecap === null ? FIRST_SECTION : undefined}>
-        {arrangement.map((id) => (
+        {arrangement.sections.map((id) => (
           <HomeSectionSkeleton key={id} id={id} />
         ))}
       </View>

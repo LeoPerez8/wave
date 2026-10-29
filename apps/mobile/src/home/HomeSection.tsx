@@ -48,6 +48,7 @@ import {
   useMagicQueueSection,
   type MagicQueueSection,
 } from "./magicQueueSection";
+import { useHomeArrangement } from "./homeArrangement";
 import { useMostPlayedOfAllTime } from "./mostPlayedOfAllTime";
 
 import { AlbumShelf, ArtistShelf, MostPlayedRows, SongRows } from "./HomeSections";
@@ -99,11 +100,10 @@ const MIXES_UPDATING = "Updating…";
 /**
  * Home's Discover section: one header, its adjustments icon opening the
  * settings card all three rows share (`DiscoverSettingsButton`), then the
- * Magic Queue, Artist mixes and Genre mixes rows, each under its label. A
- * row with nothing to show isn't drawn: a mix row shows placeholder tiles
+ * rows in the owner's order, each under its label. A row with nothing to show isn't drawn: a mix row shows placeholder tiles
  * while its first mixes build and is gone with YT Music off (Core's
  * `discoverMixesSection`), the Magic Queue row is gone without songs to
- * show (Core's `magicQueueRow`). The section is gone only when all three are.
+ * show (Core's `magicQueueRow`). The section is gone when every arranged row is gone.
  */
 function Discover({ home, title }: SectionProps) {
   const ytMusic = useYtMusicEnabled();
@@ -113,15 +113,23 @@ function Discover({ home, title }: SectionProps) {
   // An empty Library has no tagged songs: Genre mixes stay hidden, no skeleton.
   const genreMixes = useDiscoverMixes("genre-mixes", empty);
   const magicQueue = useMagicQueueSection(ytMusic, artistMixes);
-  const showsMagicQueue = magicQueue.shown.kind !== "hidden";
-  if (!showsMagicQueue && artistMixes.kind === "hidden" && genreMixes.kind === "hidden")
-    return null;
+  const { discoverRows } = useHomeArrangement();
+  const rows = discoverRows.filter((id) =>
+    id === "magic-queue"
+      ? magicQueue.shown.kind !== "hidden"
+      : (id === "artist-mixes" ? artistMixes : genreMixes).kind !== "hidden",
+  );
+  if (rows.length === 0) return null;
   return (
     <TitledSection title={title} control={<DiscoverSettingsButton ytMusic={ytMusic} />}>
       <View style={{ gap: CELL * 3 }}>
-        {showsMagicQueue && <MagicQueueRow section={magicQueue} />}
-        <MixRow id="artist-mixes" section={artistMixes} />
-        <MixRow id="genre-mixes" section={genreMixes} />
+        {rows.map((id) =>
+          id === "magic-queue" ? (
+            <MagicQueueRow key={id} section={magicQueue} />
+          ) : (
+            <MixRow key={id} id={id} section={id === "artist-mixes" ? artistMixes : genreMixes} />
+          ),
+        )}
       </View>
     </TitledSection>
   );

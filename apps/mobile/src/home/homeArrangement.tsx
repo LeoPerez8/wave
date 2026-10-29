@@ -14,7 +14,10 @@ import { openOverlay } from "@/overlay/overlay";
 import { HomeEditorCard } from "./HomeEditor";
 
 const sameOrder = (a: HomeArrangement, b: HomeArrangement): boolean =>
-  a.length === b.length && a.every((id, index) => id === b[index]);
+  a.sections.length === b.sections.length &&
+  a.sections.every((id, index) => id === b.sections[index]) &&
+  a.discoverRows.length === b.discoverRows.length &&
+  a.discoverRows.every((id, index) => id === b.discoverRows[index]);
 
 const homeArrangement = persistedSetting<HomeArrangement>({
   key: "settings.homeArrangement",
@@ -23,7 +26,7 @@ const homeArrangement = persistedSetting<HomeArrangement>({
   equals: sameOrder,
 });
 
-/** The sections Home shows, in order (Core's default until changed); re-renders when it changes. */
+/** Home's sections and Discover rows in owner-shown order; follows saved edits. */
 export const useHomeArrangement = homeArrangement.useValue;
 
 /** Applies [change] to Home's arrangement and saves it at once (Settings › Layout › Home). */
