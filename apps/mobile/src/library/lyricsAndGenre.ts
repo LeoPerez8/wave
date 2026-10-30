@@ -502,3 +502,32 @@ export const fixEachSong = <S extends TaggableSong>(
     }
     return "done" as const;
   });
+
+/** Deezer alone, requesting only the album genre; never asks for lyrics or a tracklist. */
+export const lookUpStreamedGenre = (
+  song: SongLookup,
+): Effect.Effect<string | null, LookupFailed | LookupsOff> => {
+  if (!lyricsAndGenreLookupsEnabled()) return Effect.fail(new LookupsOff());
+  return Effect.tryPromise({
+    try: async (signal) => {
+      const found = await findDeezerTags(
+        song,
+        {
+          hasLyrics: true,
+          genre: null,
+          trackNumber: 1,
+          year: 2000,
+          explicit: "clean",
+        },
+        signal,
+      );
+      return found?.genre ?? null;
+    },
+    catch: (cause) => new LookupFailed({ cause }),
+  }).pipe(
+    Effect.timeout(LOOKUP_TIMEOUT),
+    Effect.mapError((cause) =>
+      cause instanceof LookupFailed ? cause : new LookupFailed({ cause }),
+    ),
+  );
+};

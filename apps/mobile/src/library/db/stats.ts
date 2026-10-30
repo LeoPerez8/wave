@@ -1,3 +1,4 @@
+import { streamedSongGenres } from "./streamedGenres.ts";
 /**
  * The play totals Stats ranks, as thin queries over the library database:
  * they only filter (counted plays in a window) and sum. Top songs are songs
@@ -298,24 +299,33 @@ const artistListening = (db: LibraryDatabase, artistId: number): SongListening[]
 };
 
 /**
- * The genre tags of the songs [ids] still in the library, in no order: the
+ * The genre tags of Library songs and cached streamed answers by ranking id: the
  * genre each is filed under and, for a multi-value tag, every value (Core's
  * `recap` ranks their families).
  */
-export const songGenres = (db: LibraryDatabase, ids: readonly number[]): RecapSongGenre[] => {
+export const songGenres = (
+  db: LibraryDatabase,
+  ids: readonly (number | string)[],
+  includeStreamed = true,
+): RecapSongGenre[] => {
+  const libraryIds = ids.filter((id): id is number => typeof id === "number");
+  const streamedIds = ids.filter((id): id is string => typeof id === "string");
   const { tracks, genres } = schema;
-  return chunks(ids).flatMap((only) =>
-    db
-      .select({ id: tracks.id, genre: genres.name, genres: tracks.genres })
-      .from(tracks)
-      .leftJoin(genres, eq(tracks.genreId, genres.id))
-      .where(inArray(tracks.id, only))
-      .all()
-      .map((row) => {
-        const values = readStoredGenres(row.genres);
-        return { id: row.id, genre: row.genre, genres: values.length === 0 ? null : values };
-      }),
-  );
+  return [
+    ...(includeStreamed ? streamedSongGenres(db, streamedIds) : []),
+    ...chunks(libraryIds).flatMap((only) =>
+      db
+        .select({ id: tracks.id, genre: genres.name, genres: tracks.genres })
+        .from(tracks)
+        .leftJoin(genres, eq(tracks.genreId, genres.id))
+        .where(inArray(tracks.id, only))
+        .all()
+        .map((row) => {
+          const values = readStoredGenres(row.genres);
+          return { id: row.id, genre: row.genre, genres: values.length === 0 ? null : values };
+        }),
+    ),
+  ];
 };
 
 /**
