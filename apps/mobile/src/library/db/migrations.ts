@@ -1303,6 +1303,8 @@ ALTER TABLE notified_follow_shows ADD COLUMN deleted integer DEFAULT false NOT N
 --> statement-breakpoint
 ALTER TABLE notified_follow_shows ADD COLUMN pushed integer DEFAULT false NOT NULL;`;
 
+const m0049 = `CREATE TABLE streamed_genres (video_id text PRIMARY KEY NOT NULL, genre text);`;
+
 export default {
   journal: {
     entries: [
@@ -1365,6 +1367,7 @@ export default {
       { idx: 46, when: 1_795_780_800_000, tag: "0046_follow_releases", breakpoints: true },
       { idx: 47, when: 1_795_867_200_000, tag: "0047_follow_shows", breakpoints: true },
       { idx: 48, when: 1_795_953_600_000, tag: "0048_follow_sync", breakpoints: true },
+      { idx: 49, when: 1_796_040_000_000, tag: "0049_streamed_genres", breakpoints: true },
     ],
   },
   migrations: {
@@ -1417,5 +1420,6 @@ export default {
     m0046,
     m0047,
     m0048,
+    m0049,
   },
 };

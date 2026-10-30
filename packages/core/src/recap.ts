@@ -240,8 +240,10 @@ const habitsOf = (listening: readonly CountedListening[]): RecapHabits | null =>
 /**
  * The genre families `songs` were played in, by counted plays (Genre mixes'
  * families: a song in n families adds 1/n of its plays to each), then by name.
+ * Returns up to five shares over all known-genre plays, for Recap and Stats.
+ * Numeric ids are Library songs; string ids are streamed video ids.
  */
-const topGenres = (
+export const genrePlayShares = (
   songs: readonly EntityPlayTotals[],
   songGenres: readonly RecapSongGenre[],
 ): RecapGenre[] => {
@@ -301,7 +303,7 @@ export const recap = ({
     topSongs: rankEntityPlays(songs, RECAP_TOP_SONGS),
     topArtists: rankEntityPlays(artists, RECAP_TOP_ARTISTS),
     topAlbum: rankEntityPlays(albums, 1)[0] ?? null,
-    topGenres: topGenres(songs, songGenres),
+    topGenres: genrePlayShares(songs, songGenres),
     habits: habitsOf(within),
     discoveredArtists: rankEntityPlays(
       artists.filter((artist) => discovered.has(artist.id)),

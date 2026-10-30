@@ -187,6 +187,7 @@ export const libraryPtBr: typeof libraryEn = {
     albums: "Buscar em Álbuns",
     genres: "Buscar em Gêneros",
     playlists: "Buscar em Playlists",
+    artist: "Buscar em artista",
   },
   noMatch: {
     playlist: "Nenhuma música encontrada",
@@ -195,6 +196,7 @@ export const libraryPtBr: typeof libraryEn = {
     albums: "Nenhum álbum encontrado",
     genres: "Nenhum gênero encontrado",
     playlists: "Nenhuma playlist encontrada",
+    artist: "Nenhuma música encontrada",
   },
   shelfUnderLibrary: "Seção abaixo da Biblioteca",
   chooseShelf: "Escolher a seção da Biblioteca",

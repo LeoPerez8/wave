@@ -145,7 +145,10 @@ const loadRecap = (
     if (!availableRecaps(listening, now).some((available) => recapId(available) === id)) {
       return null;
     }
-    const plays = yield* store.recapPlays(recapWindow(period));
+    const { lyricsAndGenreLookupsEnabled } = yield* Effect.promise(
+      () => import("@/settings/lyricsAndGenre"),
+    );
+    const plays = yield* store.recapPlays(recapWindow(period), lyricsAndGenreLookupsEnabled());
     const computed = recap({ period, listening, ...plays });
     const rows: RecapRows = {
       artists: new Map(plays.artists.map((entry) => [entry.id, entry.item])),

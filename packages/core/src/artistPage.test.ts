@@ -57,4 +57,32 @@ describe("artistPageItems", () => {
       { type: "shelf", label: "Albums", covers: ["a1"] },
     ]);
   });
+
+  test("while Find in artist narrows the songs, the shelves and the heading step aside", () => {
+    const items = artistPageItems(
+      [{ label: "Albums", covers: ["a1"] }],
+      ["t1", "t2", "t3"],
+      "Songs",
+      [0, 2],
+    );
+    // Each song found keeps its place among the page's songs, so a tap plays the page from it.
+    assert.deepEqual(items, [
+      { type: "song", song: "t1", index: 0 },
+      { type: "song", song: "t3", index: 2 },
+    ]);
+  });
+
+  test("a query that finds nothing leaves the list empty", () => {
+    assert.deepEqual(
+      artistPageItems([{ label: "Albums", covers: ["a1"] }], ["t1"], "Songs", []),
+      [],
+    );
+  });
+
+  test("with nothing typed the whole page shows", () => {
+    assert.deepEqual(artistPageItems([], ["t1"], "Songs", null), [
+      { type: "section", label: "Songs" },
+      { type: "song", song: "t1", index: 0 },
+    ]);
+  });
 });
