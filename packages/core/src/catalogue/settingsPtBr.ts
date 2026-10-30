@@ -282,6 +282,9 @@ export const settingsPtBr: typeof settingsEn = {
   rescanLibrary: "Verificar Biblioteca de Novo",
   wavePicksUpNewChangedAndRemoved:
     "O Wave detecta arquivos novos, alterados e removidos sempre que você o abre e quando você puxa a Biblioteca para baixo.",
+  skipVoiceNotesAndRecordings: "Ignorar mensagens de voz e gravações",
+  leavesWhatsAppVoiceNotesOutOfTheLibrary:
+    "Deixa fora da Biblioteca as mensagens de voz do WhatsApp, as gravações do celular e de chamadas e os áudios de menos de 30 segundos sem artista.",
   geniusInsights: "Informações do Genius",
   openingLyricsOnASongWithLyrics:
     "Abrir Letra em uma música com letra mostra as informações do Genius e destaca os versos com anotações. Isso envia ao Genius o título e o artista da música. Desativado, o Wave não faz solicitações ao Genius.",

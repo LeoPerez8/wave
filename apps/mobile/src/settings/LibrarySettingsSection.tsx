@@ -5,10 +5,12 @@ import { Text, View } from "react-native";
 
 import { EntryRow } from "@/catalog/EntryRow";
 import { Hairline } from "@/catalog/Hairline";
+import { SettingsSwitch } from "@/components/SettingsSwitch";
 import { TextButton } from "@/components/TextButton";
 import { useScanRoots, useScanStatus } from "@/library/hooks";
 import { importBlackPlayerStats } from "@/library/importBlackPlayerStats";
-import { startRescan } from "@/library/runtime";
+import { setSkipVoiceNotes, startRescan } from "@/library/runtime";
+import { useSkipVoiceNotes } from "@/settings/skipVoiceNotes";
 
 /** Import BlackPlayer Stats, with what it does. */
 function BlackPlayerImport() {
@@ -34,7 +36,30 @@ function BlackPlayerImport() {
   );
 }
 
-/** Settings › Library: the music folders, Rescan library and Import BlackPlayer Stats. */
+/** Skip voice notes and recordings, with what it does; changing it rescans. */
+function SkipVoiceNotes() {
+  const { strings } = useLocalisation();
+  const on = useSkipVoiceNotes();
+  return (
+    <View className="mt-4">
+      <Hairline />
+      <SettingsSwitch
+        label={strings.settings.skipVoiceNotesAndRecordings}
+        value={on}
+        onValueChange={setSkipVoiceNotes}
+      />
+      <Hairline />
+      <Text className="mt-2 font-sans text-footnote text-secondary">
+        {strings.settings.leavesWhatsAppVoiceNotesOutOfTheLibrary}
+      </Text>
+    </View>
+  );
+}
+
+/**
+ * Settings › Library: the music folders, Skip voice notes and recordings,
+ * Rescan library and Import BlackPlayer Stats.
+ */
 export function LibrarySettingsSection() {
   const { strings } = useLocalisation();
   const roots = useScanRoots();
@@ -50,6 +75,7 @@ export function LibrarySettingsSection() {
       <Text className="mt-2 font-sans text-footnote text-secondary">
         {strings.settings.theFoldersOnYourPhoneThatWave}
       </Text>
+      <SkipVoiceNotes />
       <View className="mt-4 items-start">
         <TextButton
           label={scanning ? strings.settings.scanning : strings.settings.rescanLibrary}

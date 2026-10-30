@@ -291,6 +291,9 @@ export const settingsEn = {
   rescanLibrary: "Rescan library",
   wavePicksUpNewChangedAndRemoved:
     "Wave picks up new, changed and removed files each time you open it, and when you pull down in the Library.",
+  skipVoiceNotesAndRecordings: "Skip voice notes and recordings",
+  leavesWhatsAppVoiceNotesOutOfTheLibrary:
+    "Leaves WhatsApp voice notes, phone and call recordings, and clips under 30 seconds with no artist out of the Library.",
   geniusInsights: "Genius insights",
   openingLyricsOnASongWithLyrics:
     "Opening Lyrics on a song with lyrics shows what Genius says about it above the lyrics and highlights the lines Genius annotates, which means sending Genius the song's title and artist. Off, Wave makes no requests to Genius.",

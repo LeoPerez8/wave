@@ -1,6 +1,7 @@
 /** Production startup work, with injectable free turns for desktop work-count/clock tests. */
 import {
   finishPlaylistImportSteps,
+  isVoiceNoteOrRecording,
   libraryImportFinderSteps,
   unsearchedSongJob,
   reconcileScanSteps,
@@ -19,7 +20,14 @@ import {
 } from "@wave/core";
 import * as Effect from "effect/Effect";
 import { runSteps } from "../lib/stepped.ts";
-import type { IndexedArtwork, IndexedTrack, LibraryStore } from "./LibraryStore.ts";
+import type { SkippedFile } from "./db/skippedFiles.ts";
+import type {
+  IndexedArtwork,
+  IndexedKnownFile,
+  IndexedTrack,
+  LibraryStore,
+} from "./LibraryStore.ts";
+import type { KnownFile } from "./NativeScanner.ts";
 
 /**
  * Rows one startup write takes: ti's scan save slice. A turn holds one such
@@ -101,27 +109,110 @@ export const dispatchLibraryFavorites = async <S extends YtSong>(
   return true;
 };
 
-/** Source SQLite read is indivisible; building the membership index yields per file. */
+/**
+ * Leaves the voice notes [files] out of the Library (`LibraryStore.skipFiles`),
+ * a 100-file write per turn. Resolves to how many indexed songs left.
+ */
+export const skipVoiceNoteFiles = (
+  store: LibraryStore["Service"],
+  files: readonly SkippedFile[],
+  turn: Effect.Effect<void>,
+) =>
+  Effect.gen(function* () {
+    let left = 0;
+    for (const part of slices(files)) {
+      yield* turn;
+      left += yield* store.skipFiles(part);
+    }
+    return left;
+  });
+
+/** Forgets the skipped files at [paths] (`LibraryStore.unskipFiles`), a 100-file write per turn. */
+export const forgetSkippedFiles = (
+  store: LibraryStore["Service"],
+  paths: readonly string[],
+  turn: Effect.Effect<void>,
+) =>
+  Effect.gen(function* () {
+    for (const part of slices(paths)) {
+      yield* turn;
+      yield* store.unskipFiles(part);
+    }
+  });
+
+/**
+ * Source SQLite read is indivisible; building the membership index yields per file.
+ * [skipVoiceNotes] (Settings › Library's switch): indexed voice notes and recordings
+ * (Core's `isVoiceNoteOrRecording`) leave the Library first, a 100-file write per turn,
+ * and the files scans left out join [scanKnown], so the native scan passes over them
+ * unread while they're unchanged. [left]: how many songs left.
+ */
 export const readScanIndex = (
   store: LibraryStore["Service"],
   roots: readonly string[],
   turn: Effect.Effect<void>,
+  skipVoiceNotes = false,
 ) =>
   Effect.gen(function* () {
     yield* turn;
-    const known = yield* store.knownFiles(roots);
-    const indexed = yield* runSteps(
+    const files = yield* store.knownFiles(roots);
+    const { known, voiceNotes } = skipVoiceNotes
+      ? yield* runSteps(
+          (function* () {
+            const kept: IndexedKnownFile[] = [];
+            const notes: SkippedFile[] = [];
+            for (const file of files) {
+              if (isVoiceNoteOrRecording(file, roots)) {
+                notes.push({
+                  path: file.path,
+                  sizeBytes: file.sizeBytes,
+                  modifiedAt: file.modifiedAt,
+                });
+              } else kept.push(file);
+              yield;
+            }
+            return { known: kept, voiceNotes: notes };
+          })(),
+          turn,
+        )
+      : { known: files, voiceNotes: [] };
+    const left = yield* skipVoiceNoteFiles(store, voiceNotes, turn);
+    let skippedFiles: readonly SkippedFile[] = [];
+    if (skipVoiceNotes) {
+      yield* turn;
+      skippedFiles = yield* store.skippedFiles(roots);
+    }
+    const { indexed, skipped, scanKnown, stale } = yield* runSteps(
       (function* () {
         const paths = new Set<string>();
+        const skippedPaths = new Set<string>();
+        const compared: KnownFile[] = [];
+        // Skipped once, then indexed while the switch was off and music by the rule.
+        const indexedSkipped: string[] = [];
         for (const file of known) {
           paths.add(file.path);
+          compared.push(file);
           yield;
         }
-        return paths;
+        for (const file of skippedFiles) {
+          if (paths.has(file.path)) indexedSkipped.push(file.path);
+          else {
+            skippedPaths.add(file.path);
+            compared.push(file);
+          }
+          yield;
+        }
+        return {
+          indexed: paths,
+          skipped: skippedPaths,
+          scanKnown: compared,
+          stale: indexedSkipped,
+        };
       })(),
       turn,
     );
-    return { known, indexed };
+    yield* forgetSkippedFiles(store, stale, turn);
+    return { known, indexed, skipped, scanKnown, left };
   });
 
 /**

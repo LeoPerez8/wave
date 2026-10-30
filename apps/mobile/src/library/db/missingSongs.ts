@@ -220,19 +220,28 @@ export const removeSongs = (
   now: number,
 ): void => {
   if (trackIds.length === 0) return;
+  db.transaction((tx) => removeTracks(tx, splits, trackIds, now));
+};
+
+/** `removeSongs` inside a transaction of the caller's (a scan skipping voice notes). */
+export const removeTracks = (
+  tx: LibraryDatabase,
+  splits: CreditSplits,
+  trackIds: readonly number[],
+  now: number,
+): void => {
+  if (trackIds.length === 0) return;
   const { tracks } = schema;
-  db.transaction((tx) => {
-    const leaving = chunks(trackIds).flatMap((ids) =>
-      tx
-        .select({ trackId: tracks.id, recordingKey: sql<string>`${tracks.recordingKey}` })
-        .from(tracks)
-        .where(and(inArray(tracks.id, ids), isNotNull(tracks.recordingKey)))
-        .all(),
-    );
-    leaveKeys(tx, leaving, { removed: true, now });
-    deleteTracksById(tx, trackIds);
-    pruneOrphans(tx, splits);
-  });
+  const leaving = chunks(trackIds).flatMap((ids) =>
+    tx
+      .select({ trackId: tracks.id, recordingKey: sql<string>`${tracks.recordingKey}` })
+      .from(tracks)
+      .where(and(inArray(tracks.id, ids), isNotNull(tracks.recordingKey)))
+      .all(),
+  );
+  leaveKeys(tx, leaving, { removed: true, now });
+  deleteTracksById(tx, trackIds);
+  pruneOrphans(tx, splits);
 };
 
 /**

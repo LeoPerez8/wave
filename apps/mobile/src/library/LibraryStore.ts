@@ -228,6 +228,8 @@ import {
   selectPlaylist,
   selectPlaylistEntries,
   selectPlaylistEntriesRevision,
+  selectPlaylistEntrySongs,
+  selectPlaylistEntryVideoIds,
   selectPlaylists,
   selectPlaylistsLastPlayed,
   selectTrackPaths,
@@ -318,6 +320,7 @@ import {
   type SongSummary,
 } from "./db/songOrder";
 import type { KnownFile } from "./NativeScanner";
+import { selectSkippedFiles, skipFiles, unskipFiles, type SkippedFile } from "./db/skippedFiles";
 
 const DATABASE_NAME = "wave.db";
 
@@ -328,6 +331,13 @@ export class LibraryStoreError extends Data.TaggedError("LibraryStoreError")<{
   override get message(): string {
     return `Library store failed to ${this.operation}: ${String(this.cause)}`;
   }
+}
+
+/** An indexed file as a scan starts from it: what the native scan compares, and what tells a voice note. */
+export interface IndexedKnownFile extends KnownFile {
+  readonly durationMs: number;
+  /** The artist credit; "Unknown Artist" without an artist tag. */
+  readonly artist: string;
 }
 
 /** A track as the scanner reported it, after Core normalisation. */
@@ -796,7 +806,19 @@ export class LibraryStore extends Context.Service<
     /** The indexed files under [roots], for an incremental scan to skip the unchanged ones. */
     readonly knownFiles: (
       roots: readonly string[],
-    ) => Effect.Effect<readonly KnownFile[], LibraryStoreError>;
+    ) => Effect.Effect<readonly IndexedKnownFile[], LibraryStoreError>;
+    /** The voice notes and recordings under [roots] that scans left out, for the next one to pass over. */
+    readonly skippedFiles: (
+      roots: readonly string[],
+    ) => Effect.Effect<readonly SkippedFile[], LibraryStoreError>;
+    /**
+     * Leaves [files] (voice notes and recordings) out of the Library: a song
+     * indexed at one of them goes as Remove from Library takes it, never as a
+     * missing song. Resolves to how many songs left.
+     */
+    readonly skipFiles: (files: readonly SkippedFile[]) => Effect.Effect<number, LibraryStoreError>;
+    /** Forgets the skipped files at [paths]: gone, or music after all. */
+    readonly unskipFiles: (paths: readonly string[]) => Effect.Effect<void, LibraryStoreError>;
     /** What identifies the indexed files at [paths] when they turn up elsewhere. */
     readonly indexedFiles: (
       paths: readonly string[],
@@ -840,6 +862,15 @@ export class LibraryStore extends Context.Service<
     ) => Effect.Effect<readonly PlayableSongRow[], LibraryStoreError>;
     /** All playable ids, without metadata or history, for Home's random Magic Queue grid. */
     readonly playableSongIds: Effect.Effect<readonly number[], LibraryStoreError>;
+    /**
+     * The video ids of the playlists' YT Music entries, each once and none the
+     * Library has as a file, without decoding a song, for the same grid.
+     */
+    readonly playlistEntryVideoIds: Effect.Effect<readonly string[], LibraryStoreError>;
+    /** The YT Music songs the playlists hold as these video ids, one per video, in no particular order. */
+    readonly playlistEntrySongs: (
+      videoIds: readonly string[],
+    ) => Effect.Effect<readonly YtAlbumSong[], LibraryStoreError>;
     /** Whether a short Home row has another playable song to fill it (one id at most). */
     readonly hasPlayableSongOutside: (
       ids: readonly number[],
@@ -1776,6 +1807,12 @@ const make = Effect.gen(function* () {
       ),
 
     knownFiles: (roots) => attempt("read the library index", () => selectKnownFiles(db, roots)),
+    skippedFiles: (roots) =>
+      attempt("read skipped voice notes", () => selectSkippedFiles(db, roots)),
+    skipFiles: (files) =>
+      writeAttempt("skip voice notes", () => skipFiles(db, splits, files, Date.now())),
+    unskipFiles: (paths) =>
+      writeAttempt("forget skipped voice notes", () => unskipFiles(db, paths)),
 
     indexedFiles: (paths) =>
       attempt("read missing files", () =>
@@ -1835,6 +1872,11 @@ const make = Effect.gen(function* () {
       attempt("probe Home pick growth", () => hasPlayableSongOutside(db, ids)),
 
     playableSongIds: attempt("read Home seed ids", () => selectPlayableSongIds(db)),
+    playlistEntryVideoIds: attempt("read Home's playlist seed ids", () =>
+      selectPlaylistEntryVideoIds(db),
+    ),
+    playlistEntrySongs: (videoIds) =>
+      attempt("read Home's playlist seeds", () => selectPlaylistEntrySongs(db, videoIds)),
 
     songsByIds: (ids) =>
       attempt("read queued songs", () => selectPlayableSongs(db, ids).filter(songHasFile)),

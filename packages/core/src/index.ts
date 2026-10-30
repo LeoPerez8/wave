@@ -2041,8 +2041,19 @@ export {
 } from "./magicQueueSection.ts";
 export type { MagicQueuePicking, MagicQueuePicks } from "./magicQueueSection.ts";
 export { randomMagicQueuePicks } from "./randomMagicQueuePicks.ts";
-export { magicQueueMixPicks, magicQueueRow, magicQueueShown } from "./magicQueueRow.ts";
-export type { MagicQueueMixPicks, MagicQueueRow, MagicQueueShown } from "./magicQueueRow.ts";
+export type { MagicQueuePool, MagicQueueSeedId } from "./randomMagicQueuePicks.ts";
+export {
+  magicQueueMixPicks,
+  magicQueueRow,
+  magicQueueSeedId,
+  magicQueueShown,
+} from "./magicQueueRow.ts";
+export type {
+  MagicQueueMixPicks,
+  MagicQueueRow,
+  MagicQueueSeed,
+  MagicQueueShown,
+} from "./magicQueueRow.ts";
 export { magicQueueShare } from "./magicQueue.ts";
 export { discoverMixesOfRadios, discoverMixesOfRadiosSteps } from "./discoverMixRadios.ts";
 export type { DiscoverMixRead } from "./discoverMixRadios.ts";
@@ -2390,3 +2401,5 @@ export type { ShowCardDate } from "./showCard.ts";
 export * from "./homeFollow.ts";
 export { genrePlayShares } from "./recap.ts";
 export { statsGenrePodium, countedGenreSongIds } from "./statsGenres.ts";
+export { isVoiceNoteOrRecording } from "./voiceNotes.ts";
+export type { AudioFileFacts } from "./voiceNotes.ts";
