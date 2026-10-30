@@ -37,7 +37,7 @@ test("Settings' pages and Layout's pages read in Portuguese; Developer stays Eng
       "Layout",
       "Ações de deslizar",
       "Reprodução",
-      "Histórico de Audição",
+      "Histórico de Ouvidas",
       "Artistas Seguidos",
       "Letras e tags",
       "Downloads",

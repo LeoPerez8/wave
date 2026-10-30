@@ -9,7 +9,7 @@ export const settingsPtBr: typeof settingsEn = {
     layout: "Layout",
     swipeActions: "Ações de deslizar",
     playback: "Reprodução",
-    history: "Histórico de Audição",
+    history: "Histórico de Ouvidas",
     followedArtists: "Artistas Seguidos",
     lyricsAndTags: "Letras e tags",
     downloads: "Downloads",
@@ -54,7 +54,7 @@ export const settingsPtBr: typeof settingsEn = {
   waveAccountCard: {
     title: "O que vai para o Wave",
     message:
-      "Com a sessão iniciada, sua lista de músicas, playlists, favoritas, histórico de audição e preferências vão para o " +
+      "Com a sessão iniciada, sua lista de músicas, playlists, favoritas, histórico de ouvidas e preferências vão para o " +
       "servidor do Wave, assim como a conta do Soulseek criada por Baixar na melhor qualidade. Áudio, " +
       "caminhos de arquivos e sua sessão do YouTube nunca vão.",
     action: "Continuar",
@@ -362,7 +362,7 @@ export const settingsPtBr: typeof settingsEn = {
   spotifyNote:
     "Iniciar sessão permite ao Wave ler suas playlists do Spotify e compartilhar as suas lá. Use seu e-mail e senha ou um código recebido por e-mail: Continuar com o Google pode não funcionar aqui. A sessão fica neste telefone, e o Wave se comunica com o Spotify como o player da web.",
   waveAccountNote:
-    "Opcional. Guarda sua lista de músicas, playlists, favoritas, histórico de audição e preferências para recuperá-los em outro telefone com a mesma conta.",
+    "Opcional. Guarda sua lista de músicas, playlists, favoritas, histórico de ouvidas e preferências para recuperá-los em outro telefone com a mesma conta.",
   waveAccountSignOutNote:
     "Finalizar sessão mantém tudo neste telefone. Apagar a conta remove o que o servidor do Wave guarda, sem apagar nada deste telefone.",
   longPressFootnote: (ms) =>
