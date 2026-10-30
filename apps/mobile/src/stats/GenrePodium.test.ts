@@ -26,7 +26,7 @@ const hooks = registerHooks({
     return next(specifier, context);
   },
   load(url, context, next) {
-    if (url.endsWith("/GenreStaircase.tsx"))
+    if (url.endsWith("/GenrePodium.tsx"))
       return {
         format: "module",
         shortCircuit: true,
@@ -45,34 +45,38 @@ const hooks = registerHooks({
     return next(url, context);
   },
 });
-const { GenreStaircase } = await import("./GenreStaircase.tsx");
+const { GenrePodium } = await import("./GenrePodium.tsx");
 hooks.deregister();
 
-const layout = (height: number) => ({ nativeEvent: { layout: { width: 360, height } } });
+const layout = { nativeEvent: { layout: { width: 358, height: 0 } } };
+const family = (name: string, share: number): RecapGenre => ({
+  family: { key: name.toLowerCase(), name },
+  share,
+});
 
-test("blocks first appear with measured labels and shrink when the period's labels change", () => {
-  const genres: RecapGenre[] = [{ family: { key: "rock", name: "Rock" }, share: 1 }];
+test("the podium draws #1 in front and reads its families in rank order", () => {
+  const genres = [family("Rock", 0.5), family("Pop", 0.3), family("Jazz", 0.2)];
   let renderer: ReturnType<typeof create> | undefined;
   try {
     act(() => {
-      renderer = create(createElement(GenreStaircase, { genres }));
+      renderer = create(createElement(GenrePodium, { genres }));
     });
-    act(() =>
-      renderer!.root
-        .findAll((node) => (node.type as unknown) === "View")[0]!
-        .props.onLayout(layout(0)),
+    const podium = renderer!.root.findByProps({ accessible: true });
+    assert.equal(podium.props.accessibilityLabel, "Rock 50%; Pop 30%; Jazz 20%");
+    const bars = () => renderer!.root.findAll((node) => node.props.style?.position === "absolute");
+    assert.equal(bars().length, 0);
+    act(() => podium.props.onLayout(layout));
+    // On screen Pop, Rock, Jazz; drawn back to front, so Rock (in the accent) comes last.
+    assert.deepEqual(
+      bars().map((bar) => bar.props.style.left),
+      [216, 58, 124],
     );
-    assert.equal(renderer!.root.findAllByProps({ accessible: true }).length, 0);
-    const measure = () => renderer!.root.findAllByProps({ pointerEvents: "none" })[0]!;
-    act(() => measure().props.onLayout(layout(120)));
-    const block = () => renderer!.root.findAllByProps({ accessible: true })[0]!;
-    assert.equal(block().props.style.minHeight, 248);
-    assert.equal(block().props.style.backgroundColor, "#ffaa00");
-    const next = [{ ...genres[0]!, share: 0.5 }];
-    act(() => renderer!.update(createElement(GenreStaircase, { genres: next })));
-    assert.equal(renderer!.root.findAllByProps({ accessible: true }).length, 0);
-    act(() => measure().props.onLayout(layout(42)));
-    assert.equal(block().props.style.minHeight, 122);
+    assert.equal(bars().at(-1)!.props.style.backgroundColor, "#ffaa00");
+    const names = renderer!.root
+      .findAll((node) => (node.type as unknown) === "Text")
+      .map((node) => node.props.children)
+      .filter((child) => typeof child === "string" && /^[A-Z][a-z]/.test(child));
+    assert.deepEqual(names, ["Pop", "Rock", "Jazz"]);
   } finally {
     act(() => renderer?.unmount());
   }

@@ -12,7 +12,7 @@ import { ScreenHeader } from "@/components/ScreenHeader";
 import { openStatsSeeAll } from "@/library/routes";
 import { useListScrollable } from "@/motion/heldTouch";
 import { useRecaps, useTopAlbums, useTopArtists, useTopSongs, useTopGenres } from "@/stats/hooks";
-import { GenreStaircase } from "@/stats/GenreStaircase";
+import { GenrePodium } from "@/stats/GenrePodium";
 import {
   NothingPlayed,
   PeriodTabs,
@@ -83,7 +83,7 @@ export default function StatsScreen() {
         )}
         {topGenres !== undefined && topGenres.length > 0 && (
           <TitledSection title={strings.stats.genres}>
-            <GenreStaircase genres={topGenres} />
+            <GenrePodium genres={topGenres} />
           </TitledSection>
         )}
       </ScrollView>
