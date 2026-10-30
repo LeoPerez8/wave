@@ -82,7 +82,7 @@ for (const cachedFinder of [false, true])
                 },
               ],
             }),
-          knownVideos: Effect.succeed(["v1"]),
+          knownVideosPage: () => Effect.succeed({ videos: ["v1"], next: null }),
           matchingSong: (song) =>
             cachedFinder
               ? Effect.die("the completed finder already resolves Library recordings")
@@ -182,7 +182,7 @@ test("a cold build seeds from streamed plays as Stats ranks them", async () => {
               { id: 1, item: artist, sortKey: "sleep token", ...totals(5) },
             ],
           }),
-        knownVideos: Effect.succeed([]),
+        knownVideosPage: () => Effect.succeed({ videos: [], next: null }),
         matchingSong: () => Effect.succeed(null),
       },
       Effect.void,

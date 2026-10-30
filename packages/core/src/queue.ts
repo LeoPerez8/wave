@@ -686,7 +686,7 @@ const advance = (state: QueueState, random: () => number, shuffle: Shuffle): Que
 };
 
 /** The entries Repeat All's next lap holds: the context's, as lined-up ones have all played by then. */
-const lapEntries = (state: QueueState): readonly QueueEntry[] => {
+export const lapEntries = (state: QueueState): readonly QueueEntry[] => {
   const context = state.entries.filter((entry) => !isQueued(entry));
   return context.length > 0 ? context : state.entries;
 };
