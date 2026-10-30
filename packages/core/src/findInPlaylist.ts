@@ -12,7 +12,8 @@
  * each song's title, artist and album, Artists by the artist's name alone
  * (`artistFindText`), each keeping its list's order. Albums find by title and
  * album artist (`albumFindText`), Genres by name (`genreFindText`) (#753),
- * Playlists by name alone (`playlistFindText`) (#754).
+ * Playlists by name alone (`playlistFindText`) (#754). The Library's artist
+ * page finds its songs as Songs does (#828).
  */
 
 import { en } from "./catalogueEn.ts";
@@ -46,10 +47,11 @@ export const FIND_IN_PLAYLIST_PLACEHOLDER = en.library.find.playlist;
 export const FIND_IN_PLAYLIST_NO_MATCH = en.library.noMatch.playlist;
 
 /**
- * A list Find narrows: a playlist (Favorites too), or the Library's Songs,
- * Artists, Albums, Genres or Playlists.
+ * A list Find narrows: a playlist (Favorites too), the Library's Songs,
+ * Artists, Albums, Genres or Playlists, or an artist page's songs.
  */
-export type FindableListKind = "playlist" | "songs" | "artists" | "albums" | "genres" | "playlists";
+export type FindableListKind =
+  "playlist" | "songs" | "artists" | "albums" | "genres" | "playlists" | "artist";
 
 /** What [list]'s field says before anything is typed ("Find in Songs"). */
 export const findPlaceholder = (list: FindableListKind, language: AppLanguage = "en"): string =>
