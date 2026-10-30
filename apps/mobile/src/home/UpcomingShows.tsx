@@ -14,7 +14,7 @@ import { showMessage } from "@/overlay/alert";
 import { MenuChoices, type MenuChoice } from "@/overlay/MenuChoices";
 import { openOverlay } from "@/overlay/overlay";
 
-import { useUpcomingShows } from "./upcomingShowCards";
+import { useHomeFollow } from "./useHomeFollow";
 
 /** A stub's width at the standard font size; it grows with the text. */
 const STUB = CELL * 10;
@@ -155,7 +155,7 @@ function ShowCard({ show, artist }: { show: FollowShow; artist: FollowedArtist }
 
 /** Home's Upcoming Shows: absent until a shows-level artist has a show coming in the country. */
 export function UpcomingShows({ title }: { title: string }) {
-  const { cards, follows } = useUpcomingShows();
+  const { showCards: cards, follows } = useHomeFollow();
   if (cards.length === 0) return null;
   return (
     <TitledSection title={title}>

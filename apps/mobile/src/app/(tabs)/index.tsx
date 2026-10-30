@@ -1,3 +1,4 @@
+import { HomeFollowProvider } from "@/home/useHomeFollow";
 import { useLocalisation } from "@/localisation/localisation";
 import { useScreenContent } from "@/lib/screenTiming";
 import { IconMusic, IconSettings } from "@tabler/icons-react-native";
@@ -61,19 +62,21 @@ export default function HomeScreen() {
   );
   // Even focus effects in Discover or Recap cannot read before the shell has painted.
   return (
-    <LargeTitleScreen
-      title={strings.tabs.index}
-      titleLongPress={homeTitleLongPress(strings)}
-      action={
-        <IconButton
-          icon={IconSettings}
-          label={strings.home.settings}
-          onPress={() => router.push("/settings")}
-        />
-      }
-    >
-      {painted ? <HomeContent newRecap={newRecap} /> : <HomePlaceholders newRecap={newRecap} />}
-    </LargeTitleScreen>
+    <HomeFollowProvider reading={painted}>
+      <LargeTitleScreen
+        title={strings.tabs.index}
+        titleLongPress={homeTitleLongPress(strings)}
+        action={
+          <IconButton
+            icon={IconSettings}
+            label={strings.home.settings}
+            onPress={() => router.push("/settings")}
+          />
+        }
+      >
+        {painted ? <HomeContent newRecap={newRecap} /> : <HomePlaceholders newRecap={newRecap} />}
+      </LargeTitleScreen>
+    </HomeFollowProvider>
   );
 }
 
@@ -84,12 +87,13 @@ function HomePlaceholders({ newRecap }: { newRecap: RecapPeriod | null }) {
     <>
       <HomeRecap period={newRecap} />
       <View style={newRecap === null ? FIRST_SECTION : undefined}>
-        {arrangement.sections
-          // Followed artists' sections draw their own wait, if any.
-          .filter((id) => id !== "new-releases" && id !== "upcoming-shows")
-          .map((id) => (
+        {arrangement.sections.map((id) =>
+          id === "new-releases" || id === "upcoming-shows" ? (
+            <HomeSection key={id} id={id} home={{}} />
+          ) : (
             <HomeSectionSkeleton key={id} id={id} />
-          ))}
+          ),
+        )}
       </View>
     </>
   );

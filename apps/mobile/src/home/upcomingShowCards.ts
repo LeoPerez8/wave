@@ -3,13 +3,10 @@ import * as Effect from "effect/Effect";
 import { useCallback, useState } from "react";
 import { useFocusEffect } from "expo-router";
 
-import { useFollows } from "@/library/follows";
 import { LibraryStore } from "@/library/LibraryStore";
 import { appRuntime } from "@/library/runtime";
 import { everyWhileInSight } from "@/lib/sight";
 import { useScreenSight } from "@/lib/screenSight";
-import { currentFollowCountry, followCountry } from "@/settings/followCountry";
-import { useFollowedArtistsEnabled } from "@/settings/followedArtists";
 
 import { checkFollowShows, subscribeFollowShows } from "./followShows";
 
@@ -71,18 +68,4 @@ export const useShowCards = (
     }, [watching, follows, country, sight]),
   );
   return watching ? cards : [];
-};
-
-/**
- * Home's Upcoming Shows: every shows-level artist's cards (`useShowCards`),
- * checked in Home's 12-hour window. Empty with the Followed artists switch
- * off or no shows-level follow.
- */
-export const useUpcomingShows = () => {
-  const follows = useFollows();
-  const enabled = useFollowedArtistsEnabled();
-  followCountry.useValue();
-  const country = currentFollowCountry();
-  const watching = enabled && country !== "" && follows.some((f) => f.level === "shows");
-  return { cards: useShowCards(follows, country, watching), follows };
 };

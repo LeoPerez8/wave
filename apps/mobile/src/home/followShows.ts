@@ -1,3 +1,4 @@
+import { readHomeFollow } from "./knownHomeFollow";
 import { checkDue, followFeed, formatDate, type FollowCheckContext } from "@wave/core";
 import * as Effect from "effect/Effect";
 import { LibraryStore } from "@/library/LibraryStore";
@@ -131,4 +132,8 @@ export const checkFollowShows = (context: FollowCheckContext = "home") =>
       Effect.sync(() => {
         if (acquired) checking = false;
       }),
+  ).pipe(
+    Effect.tap(() =>
+      followedArtistsEnabled() ? Effect.promise(readHomeFollow).pipe(Effect.ignore) : Effect.void,
+    ),
   );

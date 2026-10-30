@@ -1,3 +1,4 @@
+import { HomeFollowProvider, useHomeFollowContext } from "./useHomeFollow";
 import { useLocalisation } from "@/localisation/localisation";
 import { NewReleases } from "./NewReleases";
 import { UpcomingShows } from "./UpcomingShows";
@@ -452,6 +453,13 @@ export const SECTION_GAP = CELL * 5;
  */
 export function HomeSection({ id, home }: { id: HomeSectionId; home: HomeContent }) {
   const { strings } = useLocalisation();
+  const follows = useHomeFollowContext();
+  if (follows === null && (id === "new-releases" || id === "upcoming-shows"))
+    return (
+      <HomeFollowProvider>
+        <HomeSection id={id} home={home} />
+      </HomeFollowProvider>
+    );
   if (homeSectionWaiting(id, home)) return <HomeSectionSkeleton id={id} />;
   const Section = SECTIONS[id];
   return <Section home={home} title={homeSectionTitle(id, strings)} />;
