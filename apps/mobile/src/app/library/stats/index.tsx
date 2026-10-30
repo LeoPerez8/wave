@@ -11,7 +11,8 @@ import { useChromeInset } from "@/chrome/chrome";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { openStatsSeeAll } from "@/library/routes";
 import { useListScrollable } from "@/motion/heldTouch";
-import { useRecaps, useTopAlbums, useTopArtists, useTopSongs } from "@/stats/hooks";
+import { useRecaps, useTopAlbums, useTopArtists, useTopSongs, useTopGenres } from "@/stats/hooks";
+import { GenreStaircase } from "@/stats/GenreStaircase";
 import {
   NothingPlayed,
   PeriodTabs,
@@ -30,6 +31,7 @@ export default function StatsScreen() {
   useScreenContent(topSongs !== undefined);
   const topAlbums = useTopAlbums(period);
   const topArtists = useTopArtists(period);
+  const topGenres = useTopGenres(period);
   const recaps = useRecaps();
   const bottomInset = useChromeInset();
   const scrollable = useListScrollable();
@@ -77,6 +79,11 @@ export default function StatsScreen() {
             }}
           >
             <RankedArtists ranking={topArtists} />
+          </TitledSection>
+        )}
+        {topGenres !== undefined && topGenres.length > 0 && (
+          <TitledSection title={strings.stats.genres}>
+            <GenreStaircase genres={topGenres} />
           </TitledSection>
         )}
       </ScrollView>

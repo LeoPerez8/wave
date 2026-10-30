@@ -23,6 +23,10 @@ const plays = (count: number) =>
 
 /** Stats, Home's Stats facts and an artist page's Stats block. */
 export const statsEn = {
+  genres: "Genres",
+  genrePercent: (share: number) =>
+    share < 0.01 ? "<1%" : `${formatNumber("en", Math.round(share * 1000) / 10)}%`,
+  genreBlockLabel: (rank: number, name: string, percent: string) => `#${rank}, ${name}, ${percent}`,
   recaps: "Recaps",
   loadingListeningStats: "Loading listening stats",
   loadingRanking: "Loading ranking",
