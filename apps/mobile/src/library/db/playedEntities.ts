@@ -538,7 +538,7 @@ export const playedArtistFirstPlays = (
  * included and credited as Stats credits them: each song's counted plays (a
  * Library song by its id, a streamed song the Library hasn't by its video
  * id), each album's and artist's (their rows with them), the genres of the
- * Library's songs (a streamed song's isn't known), and the artists' first plays.
+ * Library's songs and known streamed songs, and the artists' first plays.
  */
 export interface RecapPlays {
   readonly songs: readonly EntityPlayTotals[];
@@ -548,20 +548,22 @@ export interface RecapPlays {
   readonly artistFirstPlays: readonly ArtistFirstPlay[];
 }
 
-export const recapPlays = (db: LibraryDatabase, window: StatsWindow): RecapPlays => {
+export const recapPlays = (
+  db: LibraryDatabase,
+  window: StatsWindow,
+  includeStreamedGenres = true,
+): RecapPlays => {
   const songs = songPlayTotals(db, window).map(({ song, ...totals }) => ({
     ...totals,
     id: song.kind === "library" ? song.id : song.videoId,
   }));
   const { albums, artists } = playedEntityTotals(db, window);
-  const library = songs.flatMap((entry) =>
-    typeof entry.id === "number" && entry.countedPlays > 0 ? [entry.id] : [],
-  );
+  const genreIds = songs.filter((entry) => entry.countedPlays > 0).map((entry) => entry.id);
   return {
     songs,
     artists,
     albums,
-    songGenres: library.length === 0 ? [] : songGenres(db, library),
+    songGenres: songGenres(db, genreIds, includeStreamedGenres),
     artistFirstPlays:
       artists.length === 0
         ? []

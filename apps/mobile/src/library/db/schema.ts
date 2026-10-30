@@ -1014,3 +1014,9 @@ export const notifiedFollowShows = sqliteTable("notified_follow_shows", {
   id: text("id").primaryKey(),
   ...changeStamp(),
 });
+
+/** Deezer genre answers for streamed songs; null records a completed lookup with no genre. */
+export const streamedGenres = sqliteTable("streamed_genres", {
+  videoId: text("video_id").primaryKey(),
+  genre: text("genre"),
+});
