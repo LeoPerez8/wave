@@ -5,4 +5,6 @@ export const scanBatchChange = (trackIds: readonly number[]): LibraryChange => (
   kind: "tracks",
   ids: trackIds,
   burst: true,
+  // A scan's batches link no playlist entry: that's once it ends, announced as its own change.
+  scanned: true,
 });

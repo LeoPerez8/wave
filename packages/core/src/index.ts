@@ -279,7 +279,7 @@ export type {
 } from "./playEvents.ts";
 export { favoriteStar, starWriteSettled, starWriteStarted } from "./favorites.ts";
 export type { FavoriteStar } from "./favorites.ts";
-export { compareStrings } from "./library.ts";
+export { compareStrings, foldAccentsAndCase } from "./library.ts";
 export {
   STATS_PERIODS,
   STATS_SEE_ALL,
@@ -696,6 +696,7 @@ export type { TabScreens } from "./tabScreens.ts";
 export {
   LIBRARY_QUERY_LIMITS,
   createLibraryQueries,
+  longListBurstPace,
   libraryChangeAffects,
 } from "./libraryQueries.ts";
 export type {
@@ -1008,6 +1009,7 @@ export {
   YT_PLAYLIST_DOWNLOAD_ACTION_LABELS,
   ytAlbumDownload,
   ytAlbumDownloadButton,
+  playlistInLibrarySteps,
   ytPlaylistDownload,
   ytPlaylistDownloadButton,
   ytSongsDownload,
