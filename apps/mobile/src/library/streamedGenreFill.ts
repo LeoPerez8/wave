@@ -4,6 +4,7 @@ export interface StreamedGenreFillPorts {
   readonly turn: () => Promise<void>;
   readonly page: (after: string) => Promise<readonly string[]>;
   readonly lookup: (videoId: string) => Promise<string | null>;
+  readonly failed?: (videoId: string, cause: unknown) => void;
   readonly save: (videoId: string, genre: string | null) => Promise<void>;
 }
 
@@ -17,11 +18,16 @@ export const fillStreamedGenres = async (ports: StreamedGenreFillPorts): Promise
     for (const videoId of page) {
       await ports.turn();
       if (!ports.enabled()) return;
-      // A failed request stops the run without recording a permanent miss.
-      const genre = await ports.lookup(videoId);
+      after = videoId;
+      let genre: string | null;
+      try {
+        genre = await ports.lookup(videoId);
+      } catch (cause) {
+        ports.failed?.(videoId, cause);
+        continue;
+      }
       await ports.turn();
       await ports.save(videoId, genre);
-      after = videoId;
     }
   }
 };

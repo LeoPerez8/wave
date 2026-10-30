@@ -14,6 +14,7 @@ export const pendingStreamedGenres = (db: LibraryDatabase, after: string, limit 
     .where(
       and(
         isNotNull(playEvents.videoId),
+        eq(playEvents.counted, true),
         isNull(streamedGenres.videoId),
         gt(playEvents.videoId, after),
       ),

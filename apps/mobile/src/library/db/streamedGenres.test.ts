@@ -51,3 +51,22 @@ test("historical streamed snapshots retain the recorded duration for Deezer matc
     .run();
   assert.equal(streamedSongsOf(db, ["old"]).get("old")?.durationMs, 180_000);
 });
+
+test("skipped-only streams are never sent for lookup; a later counted play makes them eligible", async () => {
+  const db = await openTestDatabase();
+  const play = {
+    videoId: "skip",
+    startedAt: 1,
+    listenedMs: 1000,
+    durationMs: 60000,
+    endReason: "skipped" as const,
+  };
+  db.insert(playEvents)
+    .values({ ...play, counted: false })
+    .run();
+  assert.deepEqual(pendingStreamedGenres(db, ""), []);
+  db.insert(playEvents)
+    .values({ ...play, startedAt: 2, counted: true })
+    .run();
+  assert.deepEqual(pendingStreamedGenres(db, ""), ["skip"]);
+});
