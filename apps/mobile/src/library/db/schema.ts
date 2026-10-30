@@ -426,6 +426,15 @@ export const unsearchedTitleIn = (ytSong: AnySQLiteColumn): SQL =>
   THEN json_extract(${ytSong}, '$.title') END`;
 
 /**
+ * The video id of the YT Music song [ytSong] holds; null for one that isn't
+ * JSON. `playlist_items_video_idx` indexes it for the entries that hold a
+ * song, so queries must write it exactly so.
+ */
+export const videoIdIn = (ytSong: AnySQLiteColumn): SQL =>
+  sql`CASE WHEN json_valid(${ytSong})
+  THEN json_extract(${ytSong}, '$.videoId') END`;
+
+/**
  * A playlist's entries, ordered by `order_key` (Core's `orderKeyBetween`),
  * then `sync_id` for the entries two phones gave one key (Core's
  * `compareOrderKeys`): each a Library track (`track_id`) or a YT Music song
@@ -454,6 +463,9 @@ export const playlistItems = sqliteTable(
     index("playlist_items_changed_at_idx").on(t.changedAt),
     index("playlist_items_pushed_idx").on(t.pushed),
     index("playlist_items_unsearched_title_idx").on(unsearchedTitleIn(t.ytSong)),
+    index("playlist_items_video_idx")
+      .on(videoIdIn(t.ytSong), t.deleted, t.playlistId)
+      .where(sql`${t.ytSong} IS NOT NULL`),
     check("playlist_items_one_song", sql`(${t.trackId} IS NULL) <> (${t.ytSong} IS NULL)`),
   ],
 );

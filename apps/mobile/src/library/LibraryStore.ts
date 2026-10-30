@@ -228,6 +228,8 @@ import {
   selectPlaylist,
   selectPlaylistEntries,
   selectPlaylistEntriesRevision,
+  selectPlaylistEntrySongs,
+  selectPlaylistEntryVideoIds,
   selectPlaylists,
   selectPlaylistsLastPlayed,
   selectTrackPaths,
@@ -860,6 +862,15 @@ export class LibraryStore extends Context.Service<
     ) => Effect.Effect<readonly PlayableSongRow[], LibraryStoreError>;
     /** All playable ids, without metadata or history, for Home's random Magic Queue grid. */
     readonly playableSongIds: Effect.Effect<readonly number[], LibraryStoreError>;
+    /**
+     * The video ids of the playlists' YT Music entries, each once and none the
+     * Library has as a file, without decoding a song, for the same grid.
+     */
+    readonly playlistEntryVideoIds: Effect.Effect<readonly string[], LibraryStoreError>;
+    /** The YT Music songs the playlists hold as these video ids, one per video, in no particular order. */
+    readonly playlistEntrySongs: (
+      videoIds: readonly string[],
+    ) => Effect.Effect<readonly YtAlbumSong[], LibraryStoreError>;
     /** Whether a short Home row has another playable song to fill it (one id at most). */
     readonly hasPlayableSongOutside: (
       ids: readonly number[],
@@ -1861,6 +1872,11 @@ const make = Effect.gen(function* () {
       attempt("probe Home pick growth", () => hasPlayableSongOutside(db, ids)),
 
     playableSongIds: attempt("read Home seed ids", () => selectPlayableSongIds(db)),
+    playlistEntryVideoIds: attempt("read Home's playlist seed ids", () =>
+      selectPlaylistEntryVideoIds(db),
+    ),
+    playlistEntrySongs: (videoIds) =>
+      attempt("read Home's playlist seeds", () => selectPlaylistEntrySongs(db, videoIds)),
 
     songsByIds: (ids) =>
       attempt("read queued songs", () => selectPlayableSongs(db, ids).filter(songHasFile)),

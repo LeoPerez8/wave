@@ -9,6 +9,7 @@ import {
   homeSectionTitle,
   MAGIC_QUEUE_PICKS,
   ytSongArtist,
+  ytTrackId,
   type BlendedDiscoverMix,
   type DiscoverMixesSection,
   type HomeSectionId,
@@ -281,10 +282,11 @@ function DiscoverMixRow({
 /**
  * Discover's Magic Queue row: nine songs in an adaptive grid, a tap on one
  * starting a Magic Queue from it, its long-press the song's menu. The
- * Library's songs, or with none, streamed songs of the Artist mixes, with
- * placeholder tiles while the first mixes build. A new list each visit;
- * pulled right past its start, the row brings other songs, with Undo. Each
- * place crossfades its tile when its song changes. Hidden with YT Music off.
+ * Library's songs and the playlists' YT Music entries, or with neither,
+ * streamed songs of the Artist mixes, with placeholder tiles while the first
+ * mixes build. A new list each visit; pulled right past its start, the row
+ * brings other songs, with Undo. Each place crossfades its tile when its song
+ * changes. Hidden with YT Music off.
  */
 function MagicQueueRow({ section }: { section: MagicQueueSection }) {
   const { strings } = useLocalisation();
@@ -293,11 +295,15 @@ function MagicQueueRow({ section }: { section: MagicQueueSection }) {
   const { size } = magicQueueGrid(available, fontScale);
   const { shown } = section;
   const tiles =
-    shown.kind === "library"
-      ? shown.songs.map((song) => ({
-          key: String(song.id),
-          tile: <LibraryTile song={song} size={size} />,
-        }))
+    shown.kind === "seeds"
+      ? shown.seeds.map((seed) =>
+          seed.source === "library"
+            ? { key: String(seed.song.id), tile: <LibraryTile song={seed.song} size={size} /> }
+            : {
+                key: ytTrackId(seed.song.videoId),
+                tile: <StreamedTile song={seed.song} size={size} />,
+              },
+        )
       : shown.kind === "mixes"
         ? shown.songs.map((song) => ({
             key: song.videoId,
@@ -360,7 +366,7 @@ function LibraryTile({ song, size }: { song: PlayableSongRow; size: number }) {
   );
 }
 
-/** A mix's streamed song as a song card; a tap starts the Magic Queue from its radio. */
+/** A streamed song (a mix's or a playlist's) as a song card; a tap starts the Magic Queue from its radio. */
 function StreamedTile({ song, size }: { song: YtAlbumSong; size: number }) {
   const { strings } = useLocalisation();
   const artist = ytSongArtist(song);

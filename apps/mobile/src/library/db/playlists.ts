@@ -29,7 +29,7 @@ import {
   type UnsearchedSong,
   type YtAlbumSong,
 } from "@wave/core";
-import { and, asc, desc, eq, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, isNull, ne, or, sql, type SQL } from "drizzle-orm";
 
 import type { PlaylistAddResult, PlaylistDetail, PlaylistRow } from "../LibraryStore.ts";
 import type { LibraryDatabase, RowPage } from "./database.ts";
@@ -312,9 +312,8 @@ const placeSongs = (
   );
 };
 
-/** A stored YT Music song's video id, read by SQLite; null for one that isn't JSON. */
-const storedVideoId = sql`CASE WHEN json_valid(${schema.playlistItems.ytSong})
-  THEN json_extract(${schema.playlistItems.ytSong}, '$.videoId') END`;
+/** A stored YT Music song's video id, read by SQLite through its index; null for one that isn't JSON. */
+const storedVideoId = schema.videoIdIn(schema.playlistItems.ytSong);
 
 /** Whether the entry is an unavailable song, as Core's `writePlaylistEntrySong` marks it. */
 const storedUnavailable = sql`(CASE WHEN json_valid(${schema.playlistItems.ytSong})
@@ -842,18 +841,26 @@ export interface PlaylistUnsearched {
 }
 
 /**
+ * The stored songs [which] picks among the entries playlists hold (not
+ * removed, in a playlist not deleted), each with its playlist.
+ */
+const liveStoredSongs = (db: LibraryDatabase, which: SQL | undefined) => {
+  const { playlists, playlistItems } = schema;
+  return db
+    .select({ playlistId: playlistItems.playlistId, ytSong: sql<string>`${playlistItems.ytSong}` })
+    .from(playlistItems)
+    .innerJoin(playlists, eq(playlists.id, playlistItems.playlistId))
+    .where(and(live, livePlaylist, which));
+};
+
+/**
  * Every playlist holding unsearched entries, with them top to bottom, for
  * the background fill (Core's `nextFillStep`). Only those entries are
  * decoded; a deleted playlist's aren't read.
  */
 export const selectUnsearchedEntries = (db: LibraryDatabase): PlaylistUnsearched[] => {
-  const { playlists, playlistItems } = schema;
-  const rows = db
-    .select({ playlistId: playlistItems.playlistId, ytSong: sql<string>`${playlistItems.ytSong}` })
-    .from(playlistItems)
-    .innerJoin(playlists, eq(playlists.id, playlistItems.playlistId))
-    .where(and(live, livePlaylist, storedUnsearched))
-    .orderBy(asc(playlistItems.playlistId), ...IN_ORDER)
+  const rows = liveStoredSongs(db, storedUnsearched)
+    .orderBy(asc(schema.playlistItems.playlistId), ...IN_ORDER)
     .all();
   const byPlaylist = new Map<number, UnsearchedSong[]>();
   for (const { playlistId, ytSong } of rows) {
@@ -864,6 +871,57 @@ export const selectUnsearchedEntries = (db: LibraryDatabase): PlaylistUnsearched
     byPlaylist.set(playlistId, songs);
   }
   return [...byPlaylist].map(([playlistId, songs]) => ({ playlistId, songs }));
+};
+
+/**
+ * The video ids of the YT Music entries in the owner's playlists, each once,
+ * for Discover's Magic Queue row (Core's `MagicQueuePool`): ids only, no song
+ * decoded. A video the Library has as a file is left out (it's in the pool as
+ * the Library's song); unsearched and unavailable entries have no video id.
+ */
+export const selectPlaylistEntryVideoIds = (db: LibraryDatabase): string[] => {
+  const { playlists, playlistItems, tracks } = schema;
+  const videoId = sql<string>`${storedVideoId}`;
+  return db
+    .selectDistinct({ videoId })
+    .from(playlistItems)
+    .innerJoin(playlists, eq(playlists.id, playlistItems.playlistId))
+    .where(
+      and(
+        isNotNull(playlistItems.ytSong),
+        live,
+        livePlaylist,
+        sql`typeof(${videoId}) = 'text' AND ${videoId} <> ''`,
+        sql`${videoId} NOT IN (SELECT ${tracks.videoId} FROM ${tracks}
+          WHERE ${tracks.videoId} IS NOT NULL AND ${hasFile})`,
+      ),
+    )
+    .orderBy(videoId)
+    .all()
+    .map((row) => row.videoId);
+};
+
+/**
+ * The YT Music songs the owner's playlists hold as [videoIds], one per video
+ * (`selectPlaylistEntryVideoIds`), in no particular order; a video no
+ * playlist holds any more is left out. Only those entries are decoded.
+ */
+export const selectPlaylistEntrySongs = (
+  db: LibraryDatabase,
+  videoIds: readonly string[],
+): YtAlbumSong[] => {
+  if (videoIds.length === 0) return [];
+  const rows = liveStoredSongs(
+    db,
+    and(isNotNull(schema.playlistItems.ytSong), sql`${storedVideoId} IN ${jsonList(videoIds)}`),
+  ).all();
+  const songs = new Map<string, YtAlbumSong>();
+  for (const { playlistId, ytSong } of rows) {
+    const stored = decode(playlistId, ytSong);
+    if (stored?.source === "stream" && !songs.has(stored.song.videoId))
+      songs.set(stored.song.videoId, stored.song);
+  }
+  return [...songs.values()];
 };
 
 /** A playlist's mosaic: thumbnails for lists and menus, full-size covers for its screen's header. */
