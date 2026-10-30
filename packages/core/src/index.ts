@@ -106,6 +106,13 @@ export type {
   ShuffleSong,
 } from "./queue.ts";
 export { applyPlayerSync, keysToLoad, planPlayerSync } from "./playerSync.ts";
+export {
+  PLAYER_WINDOW_AHEAD,
+  PLAYER_WINDOW_BEHIND,
+  PLAYER_WINDOW_SIZE,
+  playerQueueWindow,
+  playerRepeatMode,
+} from "./playerWindow.ts";
 export type { PlayerList, QueueList, SyncStep } from "./playerSync.ts";
 export { alphabetIndex, artistAlbums, indexLetter } from "./browse.ts";
 export type { ArtistAlbum, IndexEntry } from "./browse.ts";

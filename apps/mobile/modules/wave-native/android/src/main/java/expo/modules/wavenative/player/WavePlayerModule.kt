@@ -275,18 +275,18 @@ class WavePlayerModule : Module() {
     /**
      * Gives loaded items a cover cached after they were set (a YT Music song's
      * file in place of YouTube's address), so the notification, Auto and Now
-     * Playing show the file. Same media ID and URI, so the player swaps each
-     * item in place without interrupting playback. Keys it doesn't hold are skipped.
+     * Playing show the file. Same media ID and URI, so the player swaps the
+     * items in place without interrupting playback, in one change of its list
+     * ([QueueSync.artworkBatch]). Keys it doesn't hold are skipped.
      */
     AsyncFunction("setItemArtwork") { updates: List<ItemArtworkRecord>, promise: Promise ->
       withController(promise) { player ->
         val byKey = updates.associate { it.key to it.artworkPath }
         syncing = true
         try {
-          for (index in 0 until player.mediaItemCount) {
-            val item = player.getMediaItemAt(index)
-            val artworkPath = byKey[item.mediaId] ?: continue
-            player.replaceMediaItem(index, PlayerMediaItems.withArtwork(item, artworkPath))
+          val items = (0 until player.mediaItemCount).map { player.getMediaItemAt(it) }
+          QueueSync.artworkBatch(items, { it.mediaId }, byKey, PlayerMediaItems::withArtwork)?.let {
+            player.replaceMediaItems(it.from, it.toExclusive, it.items)
           }
           promise.resolve(null)
         } finally {
