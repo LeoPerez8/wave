@@ -2,6 +2,7 @@ import { registerTimingBackground, timingBackgroundChanged } from "@/lib/timing"
 import {
   createLandings,
   explicitFromAdvisory,
+  isVoiceNoteOrRecording,
   normalizeTrack,
   planAddRoot,
   planExclusion,
@@ -16,13 +17,21 @@ import { finishFileDeletions } from "./fileDeletions";
 import * as Stream from "effect/Stream";
 
 import { runSteps } from "@/lib/stepped";
-import { readScanIndex, saveScanBatch, finishScanIndex } from "./startupJobs";
+import {
+  readScanIndex,
+  saveScanBatch,
+  finishScanIndex,
+  forgetSkippedFiles,
+  skipVoiceNoteFiles,
+} from "./startupJobs";
 
 import { startupTurnEffect } from "@/lib/backgroundWork";
 import { makeExternalStore } from "@/lib/externalStore";
 import { argbToHex, type NativeArtwork, type NativeScannedTrack } from "@/native/waveNative";
+import { skipVoiceNotes } from "@/settings/skipVoiceNotes";
 
 import type { ArtworkPalette } from "./db/schema";
+import type { SkippedFile } from "./db/skippedFiles";
 import { publishLibraryChange, publishSavedStars } from "./libraryChanges";
 import { LibraryStore, type IndexedArtwork, type IndexedTrack } from "./LibraryStore";
 import { NativeScanner, type ScanEvent } from "./NativeScanner";
@@ -164,7 +173,10 @@ const reportFailures = <A, E, R>(self: Effect.Effect<A, E, R>): Effect.Effect<A 
 /**
  * Scans [roots] against the index: only new and changed files are read, moved
  * and renamed files keep their rows (Core's `reconcileScan`), and indexed files
- * the scan no longer finds are removed once it completes.
+ * the scan no longer finds are removed once it completes. With Skip voice notes
+ * and recordings on, voice notes and recordings (Core's `isVoiceNoteOrRecording`)
+ * stay out: indexed ones leave first, new ones are never saved, and either kind
+ * is passed over unread by later scans while unchanged.
  */
 const scanFolders = (roots: readonly string[]) =>
   Effect.gen(function* () {
@@ -191,7 +203,15 @@ const scanFolders = (roots: readonly string[]) =>
           );
     yield* startupTurnEffect;
     const excluded = yield* store.excludedFolders;
-    const { known, indexed } = yield* readScanIndex(store, roots, startupTurnEffect);
+    const skipping = skipVoiceNotes();
+    const { known, indexed, skipped, scanKnown, left } = yield* readScanIndex(
+      store,
+      roots,
+      startupTurnEffect,
+      skipping,
+    );
+    // Voice notes indexed before (or before the switch went on) left the Library.
+    if (left > 0) bumpLibraryVersion({ kind: "tracks" });
     const kind = known.length === 0 ? "full" : "incremental";
     // Music folders shows a folder no scan finished yet without its song count.
     yield* startupTurnEffect;
@@ -199,6 +219,8 @@ const scanFolders = (roots: readonly string[]) =>
 
     // Indexed files the scan didn't find that no batch has matched yet.
     let missing: readonly IndexedFile[] = [];
+    /** Skipped files the scan didn't find, forgotten once it completes. */
+    let skippedGone: readonly string[] = [];
     /** Files this scan saved (new, changed, moved). */
     let saved = 0;
     const savedTrackIds: number[] = [];
@@ -228,19 +250,61 @@ const scanFolders = (roots: readonly string[]) =>
           case "Missing":
             yield* startupTurnEffect;
             missing = yield* store.indexedFiles(event.paths);
+            if (skipped.size > 0) {
+              skippedGone = yield* runSteps(
+                (function* () {
+                  const paths: string[] = [];
+                  for (const path of event.paths) {
+                    if (skipped.has(path)) paths.push(path);
+                    yield;
+                  }
+                  return paths;
+                })(),
+                startupTurnEffect,
+              );
+            }
             return;
           case "Batch": {
-            const read = yield* runSteps(
+            const { read, voiceNotes, music } = yield* runSteps(
               (function* () {
                 const tracks: IndexedTrack[] = [];
-                for (const track of event.tracks) {
-                  if (!undeletedRecordedFiles.has(track.path)) tracks.push(toIndexedTrack(track));
+                // Files left out as voice notes, and skipped files that turned out music.
+                const notes: SkippedFile[] = [];
+                const turnedMusic: string[] = [];
+                for (const native of event.tracks) {
+                  if (!undeletedRecordedFiles.has(native.path)) {
+                    const track = toIndexedTrack(native);
+                    if (skipping && isVoiceNoteOrRecording(track, roots)) {
+                      notes.push({
+                        path: track.path,
+                        sizeBytes: track.sizeBytes,
+                        modifiedAt: track.modifiedAt,
+                      });
+                    } else {
+                      tracks.push(track);
+                      if (skipped.has(track.path)) turnedMusic.push(track.path);
+                    }
+                  }
                   yield;
                 }
-                return tracks;
+                return { read: tracks, voiceNotes: notes, music: turnedMusic };
               })(),
               startupTurnEffect,
             );
+            if (voiceNotes.length > 0) {
+              // An indexed file that changed into a voice note leaves with its song.
+              const gone = yield* skipVoiceNoteFiles(store, voiceNotes, startupTurnEffect);
+              for (const file of voiceNotes) {
+                indexed.delete(file.path);
+                skipped.add(file.path);
+              }
+              if (gone > 0) bumpLibraryVersion({ kind: "tracks" });
+            }
+            if (music.length > 0) {
+              yield* startupTurnEffect;
+              yield* store.unskipFiles(music);
+              for (const path of music) skipped.delete(path);
+            }
             const artwork = yield* runSteps(
               (function* () {
                 const rows: IndexedArtwork[] = [];
@@ -291,7 +355,7 @@ const scanFolders = (roots: readonly string[]) =>
     // Assigned from the stream callback; the cast keeps TypeScript from narrowing it to undefined.
     let completed = undefined as Extract<ScanEvent, { _tag: "Complete" }> | undefined;
     yield* startupTurnEffect;
-    yield* scanner.scan(roots, excluded, known).pipe(
+    yield* scanner.scan(roots, excluded, scanKnown).pipe(
       Stream.runForEach((event) => {
         if (event._tag === "Complete") completed = event;
         return handleEvent(event);
@@ -334,6 +398,7 @@ const scanFolders = (roots: readonly string[]) =>
             startupTurnEffect,
           );
     yield* finishScanIndex(store, missingPaths, startupTurnEffect);
+    yield* forgetSkippedFiles(store, skippedGone, startupTurnEffect);
     yield* startupTurnEffect;
     yield* store.markScanned(roots, startedAt);
     // Songs whose files are gone left the Library: every screen drops them now, hidden ones too.

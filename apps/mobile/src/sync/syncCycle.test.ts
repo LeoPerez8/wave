@@ -10,6 +10,7 @@ import { selectAlbumDetail, selectAlbums } from "../library/db/albums.ts";
 import { creditSplits } from "../library/db/credits.ts";
 import { filesGone, removeSongs, signOut } from "../library/db/missingSongs.ts";
 import { saveBatch } from "../library/db/save.ts";
+import { selectSkippedFiles, skipFiles } from "../library/db/skippedFiles.ts";
 import * as schema from "../library/db/schema.ts";
 import {
   endPlay,
@@ -176,6 +177,17 @@ const phone = async (service: TestSyncService, songs: readonly Song[] = OK_COMPU
     /** Remove from Library (a missing song), or Delete once the file is gone (a song with one). */
     remove: (title: string) => {
       removeSongs(db, splits, [track(title)], now());
+      tracks.delete(title);
+    },
+    /** A scan finds [title]'s file is a voice note and leaves it out (Core's `isVoiceNoteOrRecording`). */
+    skipFile: (title: string) => {
+      const row = db
+        .select({ path: schema.tracks.path })
+        .from(schema.tracks)
+        .where(eq(schema.tracks.id, track(title)))
+        .get();
+      if (row?.path == null) throw new Error(`${title} has no file`);
+      skipFiles(db, splits, [{ path: row.path, sizeBytes: 1_000, modifiedAt: 0 }], now());
       tracks.delete(title);
     },
     /** Signs out of the Wave account. */
@@ -776,6 +788,49 @@ describe("syncCycle", () => {
     assert.deepEqual(
       files(a.db).map(([title]) => title),
       ["Airbag", "Paranoid Android", "Exit Music"],
+    );
+  });
+
+  test("a file a scan skips as a voice note leaves the Library and the account with its star and entries, and never comes back as a missing song", async () => {
+    const service = testSyncService();
+    const voiceNote: Song = {
+      title: "PTT-20260412-WA0017",
+      album: "Unknown Album",
+      artist: "Unknown Artist",
+      durationMs: 12_000,
+    };
+    const a = await phone(service, [...OK_COMPUTER, voiceNote]);
+    setFavorites(a.db, [a.track(voiceNote.title)], true, a.now());
+    createPlaylist(
+      a.db,
+      "Night",
+      [
+        { source: "library", trackId: a.track("Airbag") },
+        { source: "library", trackId: a.track(voiceNote.title) },
+      ],
+      a.now(),
+    );
+    await a.sync();
+    const b = await phone(service, []);
+    await b.sync();
+    assert.equal(files(b.db).length, 4);
+
+    a.skipFile(voiceNote.title);
+    await a.sync({ songsChanged: true });
+    await b.sync();
+    await a.sync();
+
+    for (const db of [a.db, b.db]) {
+      assert.deepEqual(
+        files(db).map(([title]) => title),
+        ["Airbag", "Paranoid Android", "Lucky"],
+      );
+      assert.deepEqual(favoriteTitles(db), []);
+      assert.deepEqual(playlistTitles(db), [{ name: "Night", songs: ["Airbag"] }]);
+    }
+    assert.deepEqual(
+      selectSkippedFiles(a.db, ["/Music"]).map((file) => file.path),
+      ["/Music/Unknown Album/PTT-20260412-WA0017.mp3"],
     );
   });
 

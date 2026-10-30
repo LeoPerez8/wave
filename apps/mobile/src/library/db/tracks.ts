@@ -187,7 +187,11 @@ export const selectLibraryLookupSongs = (db: LibraryDatabase) => {
     .all();
 };
 
-/** The indexed files under [roots], for an incremental scan to skip the unchanged ones. */
+/**
+ * The indexed files under [roots], for an incremental scan to skip the
+ * unchanged ones, with the length and artist credit that tell a voice note
+ * (Core's `isVoiceNoteOrRecording`).
+ */
 export const selectKnownFiles = (db: LibraryDatabase, roots: readonly string[]) => {
   if (roots.length === 0) return [];
   const { tracks } = schema;
@@ -195,7 +199,13 @@ export const selectKnownFiles = (db: LibraryDatabase, roots: readonly string[]) 
     (root) => sql`substr(${tracks.path}, 1, length(${root}) + 1) = ${`${root}/`}`,
   );
   return db
-    .select({ path: filePath, sizeBytes: tracks.sizeBytes, modifiedAt: tracks.modifiedAt })
+    .select({
+      path: filePath,
+      sizeBytes: tracks.sizeBytes,
+      modifiedAt: tracks.modifiedAt,
+      durationMs: tracks.durationMs,
+      artist: tracks.artistCredit,
+    })
     .from(tracks)
     .where(and(hasFile, sql.join(under, sql` OR `)))
     .all();

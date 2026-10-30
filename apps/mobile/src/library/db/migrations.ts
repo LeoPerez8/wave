@@ -1312,6 +1312,8 @@ const m0049 = `CREATE TABLE streamed_genres (video_id text PRIMARY KEY NOT NULL,
 // entries without decoding the rest.
 const m0050 = `CREATE INDEX playlist_items_video_idx ON playlist_items ((CASE WHEN json_valid(yt_song)
   THEN json_extract(yt_song, '$.videoId') END), deleted, playlist_id) WHERE yt_song IS NOT NULL;`;
+// Voice notes and recordings a scan left out (\`schema.ts\`'s \`skippedFiles\`, #836).
+const m0051 = `CREATE TABLE skipped_files (path text PRIMARY KEY NOT NULL, size_bytes integer NOT NULL, modified_at integer NOT NULL);`;
 
 export default {
   journal: {
@@ -1377,6 +1379,7 @@ export default {
       { idx: 48, when: 1_795_953_600_000, tag: "0048_follow_sync", breakpoints: true },
       { idx: 49, when: 1_796_040_000_000, tag: "0049_streamed_genres", breakpoints: true },
       { idx: 50, when: 1_796_126_400_000, tag: "0050_playlist_video_ids", breakpoints: true },
+      { idx: 51, when: 1_796_212_800_000, tag: "0051_skipped_files", breakpoints: true },
     ],
   },
   migrations: {
@@ -1431,5 +1434,6 @@ export default {
     m0048,
     m0049,
     m0050,
+    m0051,
   },
 };

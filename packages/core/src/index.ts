@@ -2401,3 +2401,5 @@ export type { ShowCardDate } from "./showCard.ts";
 export * from "./homeFollow.ts";
 export { genrePlayShares } from "./recap.ts";
 export { statsGenrePodium, countedGenreSongIds } from "./statsGenres.ts";
+export { isVoiceNoteOrRecording } from "./voiceNotes.ts";
+export type { AudioFileFacts } from "./voiceNotes.ts";
