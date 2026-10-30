@@ -334,6 +334,24 @@ describe("the songs an import left out", () => {
     ]);
   });
 
+  test("says what was listed twice in Portuguese", () => {
+    const { job } = importSpotify(songs);
+    assert.equal(
+      playlistImportView([job], 7, "pt-BR")?.line,
+      "2 músicas foram listadas duas vezes",
+    );
+    assert.deepEqual(playlistImportView([job], 7, "pt-BR")?.leftOut, {
+      title: "2 músicas foram listadas duas vezes",
+      message: "Cada uma entrou em Late Night uma vez.",
+      sections: [
+        {
+          heading: "Listadas duas vezes",
+          songs: ["Within · Daft Punk", "Touch (feat. Paul Williams) · Daft Punk"],
+        },
+      ],
+    });
+  });
+
   test("the playlist's songs, those listed twice and those not songs add up to Spotify's count", () => {
     const { plan, job, given } = importSpotify(songs, 8);
     const twice = leftOut(job)?.sections[0]?.songs.length ?? 0;

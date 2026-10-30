@@ -23,6 +23,8 @@ import {
 } from "@wave/core";
 import { useSyncExternalStore } from "react";
 
+import { currentLocalisation, useLocalisation } from "@/localisation/localisation";
+
 import { makeExternalStore, subscribeAll } from "@/lib/externalStore";
 
 import { playlistImports } from "./playlistImportsStore";
@@ -75,6 +77,7 @@ const importBatchLineNow = (): ImportBatchLine | null => {
     ytLibraryBatch.get(),
     playlistImports.get(),
     ytLibraryBatchPause.get(),
+    currentLocalisation().language,
   );
   if (next?.text !== batchLine?.text || next?.paused !== batchLine?.paused) batchLine = next;
   return batchLine;
@@ -83,5 +86,8 @@ const importBatchLineNow = (): ImportBatchLine | null => {
 const subscribeImportBatch = subscribeAll(playlistImports, ytLibraryBatch, ytLibraryBatchPause);
 
 /** "Importing playlists · 12 of 80", "Import paused · offline", or null with no batch importing. */
-export const useImportBatchLine = (): ImportBatchLine | null =>
-  useSyncExternalStore(subscribeImportBatch, importBatchLineNow);
+export const useImportBatchLine = (): ImportBatchLine | null => {
+  // A language change draws the line again in the new language.
+  useLocalisation();
+  return useSyncExternalStore(subscribeImportBatch, importBatchLineNow);
+};

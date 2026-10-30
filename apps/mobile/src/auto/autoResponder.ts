@@ -1,3 +1,4 @@
+import { currentLocalisation } from "@/localisation/localisation";
 import { AutoError } from "@/auto/Auto";
 import { WavePlayer, type AutoRequest, type AutoRequestEvent } from "@/native/wavePlayer";
 
@@ -7,8 +8,6 @@ import { WavePlayer, type AutoRequest, type AutoRequestEvent } from "@/native/wa
  */
 export type AutoAnswer = (request: AutoRequest) => Promise<unknown>;
 
-const COULD_NOT_LOAD = "Wave couldn't load this. Try again in a moment.";
-
 /**
  * What Auto shows for a failed request: an `AutoError`'s message, written for
  * the car. Anything else (a store or player failure, a defect, a request that
@@ -17,7 +16,7 @@ const COULD_NOT_LOAD = "Wave couldn't load this. Try again in a moment.";
 const failureMessage = (type: string, error: unknown): string => {
   if (error instanceof AutoError) return error.message;
   console.warn(`[wave] Auto ${type} failed`, error);
-  return COULD_NOT_LOAD;
+  return currentLocalisation().strings.auto.couldNotLoad;
 };
 
 /** The request an event carries, with its payload read. */

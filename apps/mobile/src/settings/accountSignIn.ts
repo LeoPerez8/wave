@@ -1,8 +1,9 @@
-import type { AccountSession, AccountSignInEvent, AccountSignInState } from "@wave/core";
+import type { AccountSession, AccountSignInEvent, AccountSignInState, Catalogue } from "@wave/core";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import { useCallback, useEffect, useReducer } from "react";
 
+import { currentLocalisation } from "@/localisation/localisation";
 import { showMessage } from "@/overlay/alert";
 
 /** What an outside account's service answers about its session (`Spotify`, `YtMusic`). */
@@ -35,7 +36,7 @@ interface AccountSignInConfig<A, F extends string, E> {
   /** Why a sign-in that failed with [error] didn't work. */
   readonly failureOf: (error: E) => F;
   /** What Wave says about each failure. */
-  readonly failureLines: { readonly [K in F]: string };
+  readonly failureLines: (strings: Catalogue) => { readonly [K in F]: string };
 }
 
 /**
@@ -105,7 +106,11 @@ export const accountSignIn = <A, F extends string, E>(config: AccountSignInConfi
   const signInTo = async (): Promise<boolean> => {
     const result = await ask((service) => service.signIn);
     if (Result.isFailure(result)) {
-      void showMessage("Couldn't sign in", config.failureLines[failureOf(result.failure)]);
+      const { strings } = currentLocalisation();
+      void showMessage(
+        strings.settings.couldntSignIn,
+        config.failureLines(strings)[failureOf(result.failure)],
+      );
       return false;
     }
     return result.success?.status === "signedIn";

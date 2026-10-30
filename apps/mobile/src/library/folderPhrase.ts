@@ -1,9 +1,15 @@
-import { describeFolder } from "@wave/core";
+import { describeFolder, type Catalogue } from "@wave/core";
 
-/** Names the scan roots in copy: "your Músicas folder" or "your 3 music folders". */
-export const folderPhrase = (roots: readonly { readonly path: string }[]): string => {
+/**
+ * Names the scan roots in copy, in [strings]' language: "your Músicas folder"
+ * or "your 3 music folders" (Portuguese takes its preposition along).
+ */
+export const folderPhrase = (
+  roots: readonly { readonly path: string }[],
+  strings: Catalogue,
+): string => {
   const [only] = roots;
   if (roots.length === 1 && only !== undefined)
-    return `your ${describeFolder(only.path).name} folder`;
-  return roots.length === 0 ? "your music folders" : `your ${roots.length} music folders`;
+    return strings.library.oneFolder(describeFolder(only.path, strings).name);
+  return strings.library.folders(roots.length);
 };

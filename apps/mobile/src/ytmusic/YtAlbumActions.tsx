@@ -1,15 +1,9 @@
-import {
-  ITEM_ACTION_LABELS,
-  PLAY_ACTION_LABELS,
-  YT_ALBUM_DOWNLOAD_ACTION_LABELS,
-  discoverSongs,
-  menuLayout,
-  ytAlbumSongs,
-  type PlayCard,
-} from "@wave/core";
+import { currentLocalisation, useLocalisation } from "@/localisation/localisation";
+import { discoverSongs, menuLayout, ytAlbumSongs, type PlayCard } from "@wave/core";
 import * as Result from "effect/Result";
 import { Text, View } from "react-native";
 
+import { openAddToPlaylist } from "@/library/PlaylistSheets";
 import { Artwork } from "@/catalog/Artwork";
 import { CELL } from "@/catalog/grid";
 import { pressedMenuAllowed, pressedRect } from "@/motion/pressedRect";
@@ -39,18 +33,43 @@ export interface YtAlbumTarget extends YtListHead {
  * The album's page is read first (once a session, see `readYtAlbum`), so the
  * card opens with every entry it will have.
  */
-export const openYtAlbumActions = (album: YtAlbumTarget, { onSelect }: MenuOptions = {}): void => {
+export interface ReleaseMenuOptions extends MenuOptions {
+  readonly releaseEntries?: readonly MenuChoice[];
+}
+export const openYtAlbumActions = (
+  album: YtAlbumTarget,
+  { onSelect, releaseEntries }: ReleaseMenuOptions = {},
+): void => {
   const anchor = pressedRect();
   const allowed = pressedMenuAllowed();
   void followUp(async () => {
     const result = await askYtMusic((ytMusic) => ytMusic.album(album.browseId));
     if (!allowed()) return;
     if (Result.isFailure(result)) {
+      if (releaseEntries !== undefined) {
+        openOverlay({
+          label: album.title,
+          anchor,
+          render: (close) => (
+            <MenuChoices
+              cards={[]}
+              entries={releaseEntries.map((entry) => ({
+                ...entry,
+                onPress: () => {
+                  close();
+                  entry.onPress();
+                },
+              }))}
+            />
+          ),
+        });
+        return;
+      }
       await showMessage(
         album.title,
         result.failure.reason === "offline"
-          ? "You're offline. YT Music albums need the network."
-          : "No answer online. Try again in a moment.",
+          ? currentLocalisation().strings.library.albumsNeedNetwork
+          : currentLocalisation().strings.library.noAnswerTryLater,
       );
       return;
     }
@@ -59,7 +78,13 @@ export const openYtAlbumActions = (album: YtAlbumTarget, { onSelect }: MenuOptio
       label: album.title,
       anchor,
       render: (close) => (
-        <YtAlbumActionsMenu album={album} songs={songs} close={close} onSelect={onSelect} />
+        <YtAlbumActionsMenu
+          album={album}
+          songs={songs}
+          close={close}
+          onSelect={onSelect}
+          releaseEntries={releaseEntries}
+        />
       ),
     });
   });
@@ -71,12 +96,15 @@ function YtAlbumActionsMenu({
   songs,
   close,
   onSelect,
+  releaseEntries,
 }: {
+  releaseEntries: readonly MenuChoice[] | undefined;
   album: YtAlbumTarget;
   songs: readonly NativeYtSong[];
   close: () => void;
   onSelect: (() => void) | undefined;
 }) {
+  const { strings } = useLocalisation();
   const find = useLibraryFinder();
   const inLibrary = useLoadedInLibrary();
   const download = useYtAlbumDownload(songs, inLibrary);
@@ -100,10 +128,10 @@ function YtAlbumActionsMenu({
   }));
   const entries: MenuChoice[] = layout.list.map(({ action }): MenuChoice =>
     action === "shuffle"
-      ? { action, label: PLAY_ACTION_LABELS.shuffle, onPress: play(true) }
+      ? { action, label: strings.itemActions.playLabels.shuffle, onPress: play(true) }
       : {
           action,
-          label: YT_ALBUM_DOWNLOAD_ACTION_LABELS[action],
+          label: strings.downloads.albumActions[action],
           onPress: closing(() =>
             runYtDownloadAction(action, songs, inLibrary, {
               kind: "album",
@@ -113,11 +141,31 @@ function YtAlbumActionsMenu({
           ),
         },
   );
+  if (releaseEntries !== undefined) {
+    entries.push({
+      action: "addToPlaylist",
+      label: strings.newReleases.addToPlaylist,
+      onPress: closing(() =>
+        openAddToPlaylist({
+          title: album.title,
+          songs: () =>
+            Promise.resolve(
+              listed.map((entry) =>
+                entry.source === "library"
+                  ? { source: "library" as const, trackId: entry.track.id }
+                  : { source: "stream" as const, song: entry.song },
+              ),
+            ),
+        }),
+      ),
+    });
+    entries.push(...releaseEntries.map((entry) => ({ ...entry, onPress: closing(entry.onPress) })));
+  }
   // Select only checks the release: its songs are read when a bar action runs.
   if (onSelect !== undefined)
     entries.push({
       action: "select",
-      label: ITEM_ACTION_LABELS.select,
+      label: strings.itemActions.labels.select,
       onPress: closing(onSelect),
     });
 

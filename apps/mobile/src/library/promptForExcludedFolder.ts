@@ -1,3 +1,4 @@
+import { currentLocalisation } from "@/localisation/localisation";
 import { describeFolder } from "@wave/core";
 
 import { showError, showMessage } from "@/overlay/alert";
@@ -11,7 +12,10 @@ import { chooseExcludedMusicFolder } from "./runtime";
  */
 export const promptForExcludedFolder = async (): Promise<void> => {
   if (scanState.get().status === "scanning") {
-    await showMessage("Wave is scanning", "You can exclude a folder once the scan finishes.");
+    await showMessage(
+      currentLocalisation().strings.settings.waveIsScanning,
+      currentLocalisation().strings.settings.youCanExcludeAFolderOnceThe,
+    );
     return;
   }
   try {
@@ -19,26 +23,28 @@ export const promptForExcludedFolder = async (): Promise<void> => {
     switch (choice.kind) {
       case "outside":
         await showMessage(
-          "Not in your music folders",
-          "Wave only shows songs from your music folders, so there's nothing to exclude here.",
+          currentLocalisation().strings.settings.notInYourMusicFolders,
+          currentLocalisation().strings.settings.waveOnlyShowsSongsFromYourMusic,
         );
         return;
       case "root":
         await showMessage(
-          "This is a music folder",
-          "To stop Wave showing its songs, remove it from your music folders instead.",
+          currentLocalisation().strings.settings.thisIsAMusicFolder,
+          currentLocalisation().strings.settings.toStopWaveShowingItsSongsRemove,
         );
         return;
       case "covered":
         await showMessage(
-          "Already excluded",
-          `Wave already ignores ${describeFolder(choice.by).name}, which includes this folder.`,
+          currentLocalisation().strings.settings.alreadyExcluded,
+          currentLocalisation().strings.settings.folderIgnored(
+            describeFolder(choice.by, currentLocalisation().strings).name,
+          ),
         );
         return;
       case "unsupported":
         await showMessage(
-          "Wave can't read this folder",
-          "Pick it from your phone's storage or SD card in the picker, rather than from a shortcut like Downloads or a cloud drive.",
+          currentLocalisation().strings.settings.waveCantReadThisFolder,
+          currentLocalisation().strings.settings.pickItFromYourPhonesStorageOr,
         );
         return;
       case "added":
@@ -46,6 +52,6 @@ export const promptForExcludedFolder = async (): Promise<void> => {
         return;
     }
   } catch (error) {
-    await showError("Couldn't exclude the folder", error);
+    await showError(currentLocalisation().strings.settings.couldntExcludeFolder, error);
   }
 };

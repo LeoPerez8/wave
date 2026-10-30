@@ -44,6 +44,8 @@ import expo.modules.wavenative.launcher.LauncherIconRecord
 import expo.modules.wavenative.launcher.LauncherIconSwitcher
 import expo.modules.wavenative.launch.LaunchTheme
 import expo.modules.wavenative.launch.LaunchThemeStore
+import expo.modules.wavenative.locale.PreferredLanguages
+import expo.modules.wavenative.locale.PreferredLanguageObserver
 import expo.modules.wavenative.lyrics.LyricsReader
 import expo.modules.wavenative.net.AndroidConnectivity
 import expo.modules.wavenative.net.ConnectivityState
@@ -102,6 +104,7 @@ class WaveNativeModule : Module() {
   private val lyricsReader by lazy {
     LyricsReader(AudioTagReader(primary = JAudioTaggerReader(), fallback = MediaRetrieverTagReader()))
   }
+  private var preferredLanguages: PreferredLanguageObserver? = null
   private var stopConnectivity: (() -> Unit)? = null
   /** Only touched on the main thread, where the pickers start and their results arrive. */
   private var pendingFolderPick: Promise? = null
@@ -122,10 +125,13 @@ class WaveNativeModule : Module() {
       "onScanError",
       "onShareReceived",
       "onConnectivityChanged",
+      "onPreferredLanguagesChanged",
     )
 
     // A share can arrive before JS listens: it stays in the inbox until `takeSharedText`.
     OnCreate {
+      expo.modules.wavenative.locale.NativeLanguage.init(context)
+      preferredLanguages = PreferredLanguageObserver(context) { sendEvent("onPreferredLanguagesChanged") }
       SharedTextInbox.onReceived = { sendEvent("onShareReceived") }
       // JS keeps its own copy of the cache (`connectivityStore`), pushed on each change.
       stopConnectivity = appContext.reactContext?.let { react ->
@@ -158,6 +164,24 @@ class WaveNativeModule : Module() {
      * `onConnectivityChanged`.
      */
     Function("connectivity") { connectivityToMap(AndroidConnectivity.cache(context).current) }
+
+    /** The system region's country code (Settings › Followed Artists › Country starts from it). */
+    Function("phoneCountry") { android.content.res.Resources.getSystem().configuration.locales[0].country }
+    /** Every ISO country, named in [language] and sorted by that name. */
+    Function("showCountries") { language: String ->
+      val display = java.util.Locale.forLanguageTag(language)
+      java.util.Locale.getISOCountries().map { code ->
+        mapOf("code" to code, "name" to java.util.Locale("", code).getDisplayCountry(display))
+      }.sortedWith(compareBy(java.text.Collator.getInstance(display)) { it["name"] })
+    }
+    /** Shows notifications: whether they can post, Android's settings for them, and posting one. */
+    Function("showNotificationsEnabled") { expo.modules.wavenative.shows.ShowNotifications.enabled(context) }
+    Function("openShowNotificationSettings") { expo.modules.wavenative.shows.ShowNotifications.settings(context) }
+    Function("postShowNotification") { id: String, title: String, body: String, url: String, channel: String ->
+      expo.modules.wavenative.shows.ShowNotifications.post(context, id, title, body, url, channel)
+    }
+    /** The phone's preferred languages, in order: Wave's per-app language when set, else the system's. */
+    Function("preferredLanguages") { PreferredLanguages.read(context) }
 
     Function("getDefaultMusicFolder") {
       @Suppress("DEPRECATION")
@@ -471,10 +495,13 @@ class WaveNativeModule : Module() {
 
     // JS may have saved the launch theme without an activity (Android Auto starts it headless).
     OnActivityEntersForeground {
+      preferredLanguages?.refresh()
       appContext.currentActivity?.let { LaunchThemeStore.applySplash(it, LaunchThemeStore.load(context)) }
     }
 
     OnDestroy {
+      preferredLanguages?.close()
+      preferredLanguages = null
       SharedTextInbox.onReceived = null
       stopConnectivity?.invoke()
       stopConnectivity = null

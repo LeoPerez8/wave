@@ -26,7 +26,8 @@ const stats = {
       return [];
     }),
 };
-Object.assign(globalThis, { __statsHooksTest: { stats } });
+const statsHooksTest = { stats, language: "en" };
+Object.assign(globalThis, { __statsHooksTest: statsHooksTest });
 
 const react = JSON.stringify(import.meta.resolve("react"));
 const externalStore = JSON.stringify(new URL("../lib/externalStore.ts", import.meta.url).href);
@@ -58,6 +59,9 @@ const builds = await reactCompilerBuilds<Hooks>(new URL("./hooks.ts", import.met
   ),
   "@/lib/screenSight": stubModule(
     `export const useScreenSight = () => { throw new Error("unused"); };`,
+  ),
+  "@/localisation/localisation": stubModule(
+    `export const useLocalisation = () => ({ language: globalThis.__statsHooksTest.language });`,
   ),
   "./openedRecaps": stubModule(`export const getOpenedRecaps = () => [];`),
   "./recapAvailabilityLive": stubModule(
@@ -108,6 +112,25 @@ for (const [build, hooks] of Object.entries(builds)) {
       await settle();
       assert.deepEqual(reads, ["artist 7", "artist 7", "artist 8"]);
     } finally {
+      await act(() => renderer?.unmount());
+    }
+  });
+
+  test(`${build}: an artist's stats are read again in the app's new language`, async () => {
+    reads.length = 0;
+    const songs = [{ id: 1 }];
+    let renderer: ReactTestRenderer | undefined;
+    try {
+      await act(() => {
+        renderer = create(createElement(Block, { hooks, artistId: 7, songs }));
+      });
+      await settle();
+      statsHooksTest.language = "pt-BR";
+      await act(() => renderer!.update(createElement(Block, { hooks, artistId: 7, songs })));
+      await settle();
+      assert.deepEqual(reads, ["artist 7", "artist 7"]);
+    } finally {
+      statsHooksTest.language = "en";
       await act(() => renderer?.unmount());
     }
   });

@@ -5,6 +5,7 @@
 
 import type { AlertSpec } from "./alert.ts";
 import { foldAccentsAndCase } from "./library.ts";
+import { catalogueOf, type AppLanguage } from "./localisation.ts";
 
 export type PlaylistNameCheck =
   | { readonly ok: true; readonly name: string }
@@ -33,15 +34,20 @@ export const checkPlaylistName = (
   return { ok: true, name };
 };
 
-const NEW_PLAYLIST = "New Playlist";
-
-/** The name a new playlist starts with: New Playlist, then New Playlist 2, 3… */
-export const nextPlaylistName = (names: readonly string[]): string => {
+/**
+ * The name a new playlist starts with: New Playlist, then New Playlist 2, 3…,
+ * in [language]. It's saved as written, so a later language change leaves it.
+ */
+export const nextPlaylistName = (
+  names: readonly string[],
+  language: AppLanguage = "en",
+): string => {
+  const base = catalogueOf(language).playlists.defaultName;
   const taken = new Set(names.map(foldAccentsAndCase));
-  if (!taken.has(foldAccentsAndCase(NEW_PLAYLIST))) return NEW_PLAYLIST;
+  if (!taken.has(foldAccentsAndCase(base))) return base;
   let n = 2;
-  while (taken.has(foldAccentsAndCase(`${NEW_PLAYLIST} ${n}`))) n++;
-  return `${NEW_PLAYLIST} ${n}`;
+  while (taken.has(foldAccentsAndCase(`${base} ${n}`))) n++;
+  return `${base} ${n}`;
 };
 
 export interface PlaylistAdd<T> {
@@ -73,19 +79,21 @@ export const planPlaylistAdd = <T>(
   return { add, alreadyIn };
 };
 
-const songs = (count: number): string => `${count} ${count === 1 ? "song" : "songs"}`;
-
 /** The confirmation shown once songs were added to a playlist. */
-export const describePlaylistAdd = (playlist: string, added: number, alreadyIn: number): string => {
+export const describePlaylistAdd = (
+  playlist: string,
+  added: number,
+  alreadyIn: number,
+  language: AppLanguage = "en",
+): string => {
+  const text = catalogueOf(language).playlists;
   if (added === 0) {
-    if (alreadyIn === 0) return "No songs to add";
-    return alreadyIn === 1
-      ? `Already in ${playlist}`
-      : `All ${alreadyIn} songs are already in ${playlist}`;
+    if (alreadyIn === 0) return text.noSongsToAdd;
+    return alreadyIn === 1 ? text.alreadyIn(playlist) : text.allAlreadyIn(alreadyIn, playlist);
   }
-  const done = `Added ${songs(added)} to ${playlist}`;
+  const done = text.added(added, playlist);
   if (alreadyIn === 0) return done;
-  return `${done} · ${alreadyIn} ${alreadyIn === 1 ? "was" : "were"} already in it`;
+  return `${done} · ${text.someAlreadyIn(alreadyIn)}`;
 };
 
 const clamp = (value: number, min: number, max: number): number =>
@@ -157,15 +165,13 @@ export const playlistRemovals = (places: readonly PlaylistPlace[]): PlaylistRemo
  */
 export const confirmPlaylistDeletion = (
   playlists: readonly { readonly name: string }[],
+  language: AppLanguage = "en",
 ): AlertSpec & { readonly action: NonNullable<AlertSpec["action"]> } => {
+  const text = catalogueOf(language).playlists;
   const only = playlists.length === 1 ? playlists[0] : undefined;
   return {
-    title:
-      only === undefined
-        ? `Delete ${playlists.length.toLocaleString("en")} playlists?`
-        : `Delete ${only.name}?`,
-    message:
-      only === undefined ? "Their songs stay in your library." : "Its songs stay in your library.",
-    action: { label: "Delete", destructive: true },
+    title: only === undefined ? text.deleteMany(playlists.length) : text.deleteOne(only.name),
+    message: only === undefined ? text.theirSongsStay : text.itsSongsStay,
+    action: { label: text.delete, destructive: true },
   };
 };

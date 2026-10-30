@@ -8,6 +8,7 @@
 
 import type { YtSong } from "./ytMusic.ts";
 import type { YtQuietReason } from "./ytSearch.ts";
+import { catalogueOf, type AppLanguage } from "./localisation.ts";
 
 /** A page of a playlist's songs, and the token for the next page (null on the last). */
 export interface YtPlaylistPage<S extends YtSong = YtSong> {
@@ -134,16 +135,19 @@ export type YtPlaylistRest = "reading" | "read" | YtQuietReason;
  * The line under a playlist's songs on Discover when the rest couldn't be
  * read: the songs above stay and play either way. Null while pages are still
  * coming (skeleton rows stand at the list's end instead) and once every page
- * is in.
+ * is in. In [language].
  */
-export const ytPlaylistRestLine = (rest: YtPlaylistRest): string | null => {
+export const ytPlaylistRestLine = (
+  rest: YtPlaylistRest,
+  language: AppLanguage = "en",
+): string | null => {
   switch (rest) {
     case "reading":
     case "read":
       return null;
     case "offline":
-      return "You're offline, so the rest of this playlist didn't load.";
+      return catalogueOf(language).library.ytPlaylistRestOffline;
     case "failed":
-      return "The rest of this playlist didn't load. Go back and open it again to try once more.";
+      return catalogueOf(language).library.ytPlaylistRestFailed;
   }
 };

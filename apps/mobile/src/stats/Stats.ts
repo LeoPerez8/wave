@@ -2,6 +2,7 @@ import type { PlayedAlbum, PlayedArtist } from "@/library/db/playedEntities";
 import {
   statsWindow,
   type ArtistStats as ArtistStatsLines,
+  type Catalogue,
   type GenreFamily,
   type MixedSong,
   type RecapPeriod,
@@ -87,9 +88,13 @@ export class Stats extends Context.Service<
     ) => Effect.Effect<readonly Ranked<PlayedArtist>[], LibraryStoreError>;
     /**
      * The artist page's stats block over all time, over the songs whose credit
-     * names the artist (a collaboration counts for each of its artists).
+     * names the artist (a collaboration counts for each of its artists),
+     * worded in [strings]' language.
      */
-    readonly artist: (artistId: number) => Effect.Effect<ArtistStats, LibraryStoreError>;
+    readonly artist: (
+      artistId: number,
+      strings: Catalogue,
+    ) => Effect.Effect<ArtistStats, LibraryStoreError>;
     /** Every period with a Recap now, newest first (Core's `availableRecaps`). */
     readonly recaps: (
       now: number,

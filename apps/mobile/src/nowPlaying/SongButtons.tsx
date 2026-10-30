@@ -1,3 +1,4 @@
+import { useLocalisation } from "@/localisation/localisation";
 import {
   IconCircleDashed,
   IconDownload,
@@ -45,6 +46,7 @@ export function AddToPlaylistButton({
   /** In a slot, a long press changes it, while it waits for the song included. */
   change?: SlotChange | undefined;
 }) {
+  const { strings } = useLocalisation();
   const target = usePlayingSongTarget(trackId, ytSong);
   const disabled = target === null;
   const songs = () =>
@@ -53,7 +55,7 @@ export function AddToPlaylistButton({
     <IconButton
       {...change}
       icon={IconPlaylistAdd}
-      label="Add to Playlist"
+      label={strings.playbackText.addToPlaylist}
       tone="secondary"
       disabledTone="secondary"
       disabled={disabled}
@@ -115,6 +117,7 @@ export function DownloadButton({
   /** In a slot, a long press changes it, waiting and downloading included. */
   change?: SlotChange | undefined;
 }) {
+  const { strings } = useLocalisation();
   const secondary = useThemeColor("secondary");
   const target = usePlayingSongTarget(trackId, ytSong);
   const answer = usePlayingSongAnswer(target);
@@ -130,7 +133,14 @@ export function DownloadButton({
     void nowPlayingSongActions.download(target).catch(songActionFailed);
   };
   if (state.kind === "downloaded")
-    return <IconButton {...change} icon={IconDownload} label="Downloaded" onPress={download} />;
+    return (
+      <IconButton
+        {...change}
+        icon={IconDownload}
+        label={strings.playbackText.downloaded}
+        onPress={download}
+      />
+    );
 
   if (state.kind === "waiting" || state.kind === "progress") {
     const percent = state.kind === "progress" ? Math.round(state.fraction * 100) : null;
@@ -142,7 +152,10 @@ export function DownloadButton({
       );
     const progress = {
       accessibilityRole: "progressbar",
-      accessibilityLabel: percent === null ? "Waiting to download" : "Downloading",
+      accessibilityLabel:
+        percent === null
+          ? strings.playbackText.waitingToDownload
+          : strings.playbackText.downloading,
       accessibilityValue: percent === null ? undefined : { min: 0, max: 100, now: percent },
       className: "items-center justify-center",
       style: BOX,
@@ -165,8 +178,8 @@ export function DownloadButton({
     <IconButton
       {...change}
       icon={Icon}
-      label={failed ? "Download failed" : "Download"}
-      accessibilityHint={failed ? "Tries the download again" : undefined}
+      label={failed ? strings.playbackText.downloadFailed : strings.playbackText.download}
+      accessibilityHint={failed ? strings.playbackText.triesTheDownloadAgain : undefined}
       tone="secondary"
       onPress={download}
     />

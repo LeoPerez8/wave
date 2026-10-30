@@ -1,4 +1,4 @@
-import type { PlaySnapshot, YtAlbumSong } from "@wave/core";
+import { UNKNOWN_SONG_TITLE, type PlaySnapshot, type YtAlbumSong } from "@wave/core";
 import { and, asc, desc, eq, inArray, isNull, min, sql } from "drizzle-orm";
 
 import type { SongRow } from "../LibraryStore.ts";
@@ -28,7 +28,7 @@ export interface ListeningHistoryPage {
 }
 
 const UNKNOWN: PlaySnapshot = {
-  title: "Unknown song",
+  title: UNKNOWN_SONG_TITLE,
   artist: "",
   album: null,
   artworkPath: null,

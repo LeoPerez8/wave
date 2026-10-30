@@ -202,6 +202,26 @@ describe("statsFacts", () => {
   });
 });
 
+describe("statsFacts in Portuguese", () => {
+  test("labels the facts in Portuguese and groups values with dots", () => {
+    assert.deepEqual(
+      statsFacts(
+        { songs: 2_500, albums: 600, artists: 800 },
+        { minutesListened: 48_119, songsListened: 1_100, plays: 4_200, lastPlayedAt: 1_000 },
+        "pt-BR",
+      ),
+      [
+        { label: "Tempo de audição", value: "801 h" },
+        { label: "Reproduções", value: "4.200" },
+        { label: "Músicas ouvidas", value: "1.100" },
+        { label: "Músicas", value: "2.500" },
+        { label: "Álbuns", value: "600" },
+        { label: "Artistas", value: "800" },
+      ],
+    );
+  });
+});
+
 describe("counted", () => {
   test("a count with thousands separators, the singular for one and the plural otherwise", () => {
     assert.equal(counted(1, "song"), "1 song");

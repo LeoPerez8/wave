@@ -12,6 +12,7 @@ import {
   qualitySongs,
   qualityUpgradeOffer,
   youTubeCopyKbps,
+  type AppLanguage,
   type QualityDirection,
   type QualityFile,
   type QualityMemory,
@@ -21,6 +22,7 @@ import * as Effect from "effect/Effect";
 import { useEffect, useMemo, useSyncExternalStore } from "react";
 
 import { makeExternalStore } from "@/lib/externalStore";
+import { currentLocalisation, useLocalisation } from "@/localisation/localisation";
 import { LibraryStore } from "@/library/LibraryStore";
 import { appRuntime } from "@/library/runtime";
 import { libraryQuery, useLibraryQuery } from "@/library/sharedQueries";
@@ -72,13 +74,19 @@ const offerFor = (
   files: readonly QualityFile[],
   memory: QualityMemory,
   mobileData: boolean,
+  language: AppLanguage,
 ): QualityOffer | null =>
   direction === "upgrade"
-    ? qualityUpgradeOffer(qualitySongs(direction, files, memory), { onMobileData: mobileData })
-    : qualityDowngradeOffer(qualitySongs(direction, files, memory), {
-        onMobileData: mobileData,
-        youTubeKbps: youTubeCopyKbps(files),
-      });
+    ? qualityUpgradeOffer(
+        qualitySongs(direction, files, memory),
+        { onMobileData: mobileData },
+        language,
+      )
+    : qualityDowngradeOffer(
+        qualitySongs(direction, files, memory),
+        { onMobileData: mobileData, youTubeKbps: youTubeCopyKbps(files) },
+        language,
+      );
 
 /**
  * Offers the replacement in [direction]: reads the Library and the download journal as they are
@@ -93,7 +101,7 @@ export const offerQualityReplacement = async (direction: QualityDirection): Prom
     readNoBetterCopy(),
   ]);
   const memory = { noBetterCopy: remembered[direction], jobs: downloadJournal() };
-  const offer = offerFor(direction, files, memory, onMobileData());
+  const offer = offerFor(direction, files, memory, onMobileData(), currentLocalisation().language);
   if (offer === null) return;
   if (await confirmAction(offer.alert)) runQualityReplacements(direction, offer.trackIds);
 };
@@ -114,11 +122,12 @@ export const useQualityOffer = (direction: QualityDirection | null): QualityOffe
     if (asked !== null) reloadNoBetterCopy();
   }, [asked]);
   const jobs = useDownloadJournal();
+  const { language } = useLocalisation();
   return useMemo(
     () =>
       asked === null || files === null || remembered === null
         ? null
-        : offerFor(asked, files, { noBetterCopy: remembered[asked], jobs }, false),
-    [asked, files, remembered, jobs],
+        : offerFor(asked, files, { noBetterCopy: remembered[asked], jobs }, false, language),
+    [asked, files, remembered, jobs, language],
   );
 };

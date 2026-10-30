@@ -2,6 +2,8 @@ import type { WaveSession } from "@wave/core";
 
 import { libraryEdited, libraryVersion } from "@/library/LibraryScan";
 import { onFavoritesSaved, reloadFavorites } from "@/library/favorites";
+import { reloadFollows } from "@/library/follows";
+import { followsSaved } from "@/library/followsSaved";
 import { downloadSyncedStars } from "@/library/starSongs";
 import { onPlaylistsEdited, playlistsChanged } from "@/library/playlists";
 import { appRuntime } from "@/library/runtime";
@@ -34,8 +36,8 @@ const recorded = (what: PlaysRecorded): void => {
 };
 
 /**
- * Shows what the Wave account changed: lists over playlists, stars and plays
- * re-read, and every list once missing songs came in or left. Missing songs
+ * Shows what the Wave account changed: lists over playlists, stars, plays and
+ * follows re-read, and every list once missing songs came in or left. Missing songs
  * with a star download (`downloadSyncedStars`).
  */
 const showPulled = (changes: SyncedChanges): void => {
@@ -43,13 +45,14 @@ const showPulled = (changes: SyncedChanges): void => {
   if (changes.playlists) playlistsChanged();
   if (changes.favorites) reloadFavorites();
   if (changes.plays) playHistoryChanged();
+  if (changes.follows) reloadFollows().catch(() => {});
   if (changes.favorites || changes.library) void downloadSyncedStars();
 };
 
 /**
  * Starts syncing the Library with the Wave account while signed in
  * (`WaveSync`), and tells it of the changes made here: playlist edits,
- * stars, plays (Wave's own in batches, imported ones as edits) and the song
+ * stars, follows, plays (Wave's own in batches, imported ones as edits) and the song
  * list (scans, downloads, deletions). Plays pulled from the account aren't
  * changes made here, so they start no sync. Synced preferences tell it as they're stamped
  * (`startServices`). Missing songs with a star download, those starred
@@ -69,6 +72,7 @@ export const startSync = (): void => {
   void downloadSyncedStars();
   onPlaylistsEdited(changed(false));
   onFavoritesSaved(changed(false));
+  followsSaved.subscribe(changed(false));
   onPlaysRecorded(recorded);
   libraryVersion.subscribe(changed(true));
 };

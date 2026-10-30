@@ -15,6 +15,7 @@ import { useChromeInset } from "@/chrome/chrome";
 import { EmptyState } from "@/components/EmptyState";
 import { ScanProgressBanner } from "@/components/ScanProgressBanner";
 import { TextButton } from "@/components/TextButton";
+import { useLocalisation } from "@/localisation/localisation";
 import { useListScrollable } from "@/motion/heldTouch";
 import { perfMark, useRenderCount } from "@/perf/perf";
 import { playTrackIds } from "@/playback/actions";
@@ -58,9 +59,10 @@ export function SongsList() {
   useScreenContent(order !== null && order.ids.length === 0);
   const scanStatus = useScanStatus();
   const roots = useScanRoots();
+  const { strings } = useLocalisation();
 
   if (order === null)
-    return <LibraryReadFeedback queryKey={songOrderQueryKey(sort)} label="songs" scan />;
+    return <LibraryReadFeedback queryKey={songOrderQueryKey(sort)} list="songs" scan />;
 
   if (order.ids.length === 0) {
     return (
@@ -68,15 +70,20 @@ export function SongsList() {
         <ScanProgressBanner />
         <EmptyState
           icon={IconMusic}
-          title={scanStatus === "scanning" ? "Looking for songs" : "No songs"}
+          title={
+            scanStatus === "scanning" ? strings.library.lookingForSongs : strings.library.noSongs
+          }
           message={
             scanStatus === "scanning"
-              ? "Songs appear here as Wave finds them."
-              : `Wave didn't find any songs in ${folderPhrase(roots)}.`
+              ? strings.library.songsAppearAsFound
+              : strings.library.noSongsIn(folderPhrase(roots, strings))
           }
           action={
             scanStatus === "scanning" ? undefined : (
-              <TextButton label="Choose music folder" onPress={() => void promptForMusicFolder()} />
+              <TextButton
+                label={strings.library.chooseMusicFolder}
+                onPress={() => void promptForMusicFolder()}
+              />
             )
           }
         />
@@ -108,6 +115,7 @@ function PagedSongList({
   order: SongOrder;
   orderError: string | undefined;
 }) {
+  const { strings } = useLocalisation();
   useRenderCount("PagedSongList");
   const scrollable = useListScrollable();
   const list = useRef<LegendListRef>(null);
@@ -198,9 +206,9 @@ function PagedSongList({
   const header: ReactElement = (
     <View>
       <ScanProgressBanner />
-      {orderError !== undefined && <LibraryReadNote queryKey={orderError} label="song order" />}
+      {orderError !== undefined && <LibraryReadNote queryKey={orderError} list="songOrder" />}
       <ListIntroLayout
-        line={songCount(order.ids.length)}
+        line={songCount(order.ids.length, strings)}
         onPlay={() => void playTrackIds(order.ids, missing, undefined, SONGS_CONTEXT)}
         onShuffle={() =>
           void playTrackIds(order.ids, missing, undefined, SONGS_CONTEXT, { shuffle: true })
@@ -241,7 +249,7 @@ function PagedSongList({
           <View>
             <FindHead find={find} header={header} of="songs" allRead={findTexts !== null} />
             {found !== null && findTexts === null && (
-              <LibraryReadNote queryKey="songFindTexts" label="song matches" />
+              <LibraryReadNote queryKey="songFindTexts" list="songMatches" />
             )}
           </View>
         }

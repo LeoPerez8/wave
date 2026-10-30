@@ -5,6 +5,8 @@
  * The native journal carries the pause out; this decides it.
  */
 
+import { catalogueOf, type AppLanguage } from "./localisation.ts";
+
 /** How many different songs refused within [BURST_MS] make a burst. */
 const YT_THROTTLE_BURST = 5;
 /** The window a burst's refusals fall in. */
@@ -126,12 +128,17 @@ export const ytThrottleRefused = (state: YtThrottle, song: string, at: number): 
 
 /**
  * What Settings › Downloads and the download notification say while YouTube downloads are paused
- * until [pausedUntil], at [now]: the minutes to the next try, rounded up. Null when they aren't.
+ * until [pausedUntil], at [now], in [language]: the minutes to the next try, rounded up. Null
+ * when they aren't.
  */
-export const ytThrottleNotice = (pausedUntil: number | null, now: number): string | null => {
+export const ytThrottleNotice = (
+  pausedUntil: number | null,
+  now: number,
+  language: AppLanguage = "en",
+): string | null => {
   if (pausedUntil === null || pausedUntil <= now) return null;
   const minutes = Math.ceil((pausedUntil - now) / 60_000);
-  return `Paused: YouTube is limiting downloads. Next try in ${minutes} min`;
+  return catalogueOf(language).downloadStatus.youtubePaused(minutes);
 };
 
 /** [state] once a YouTube download worked: the backoff starts over. */

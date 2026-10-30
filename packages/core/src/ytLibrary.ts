@@ -6,7 +6,7 @@
  * and what each playlist is named.
  */
 
-import { counted } from "./listening.ts";
+import { catalogueOf, type AppLanguage } from "./localisation.ts";
 import { importNameClash, importedPlaylistName, keepBothName } from "./m3u.ts";
 import {
   isSpotifyLibrarySource,
@@ -116,9 +116,6 @@ export interface YtLibraryPicker {
  */
 export const YT_LIKED_SONGS_ID = "LM";
 
-/** Liked Songs' name in the picker, and its playlist's in Wave. */
-const LIKED_SONGS = "Liked Songs";
-
 /**
  * [rows] as this phone's [origins] mark them: a row imported before says
  * Imported and starts unticked, any other starts ticked. By source id alone,
@@ -136,11 +133,12 @@ const markImported = (
 const pickerRow = (
   { playlistId, artworkUrl, songCount }: Omit<YtLibraryPlaylist, "kind" | "title">,
   title: string,
+  language: AppLanguage,
 ): Omit<YtLibraryRow, "imported" | "ticked"> => ({
   playlistId,
   title,
   artworkUrl,
-  line: songCount === null ? null : counted(songCount, "song"),
+  line: songCount === null ? null : catalogueOf(language).imports.songs(songCount),
   songCount,
 });
 
@@ -156,6 +154,7 @@ const pickerRow = (
 export const ytLibraryPicker = (
   playlists: readonly YtLibraryPlaylist[],
   origins: YtLibraryOrigins = NO_ORIGINS,
+  language: AppLanguage = "en",
 ): YtLibraryPicker => {
   const liked = playlists.find((playlist) => playlist.playlistId === YT_LIKED_SONGS_ID) ?? {
     playlistId: YT_LIKED_SONGS_ID,
@@ -165,13 +164,14 @@ export const ytLibraryPicker = (
   return {
     rows: markImported(
       [
-        pickerRow(liked, LIKED_SONGS),
+        // Liked Songs is Wave's name for it, saved in [language] as its playlist's.
+        pickerRow(liked, catalogueOf(language).imports.likedSongs, language),
         ...playlists
           .filter(
             (playlist) =>
               playlist.kind !== "generated" && playlist.playlistId !== YT_LIKED_SONGS_ID,
           )
-          .map((playlist) => pickerRow(playlist, playlist.title)),
+          .map((playlist) => pickerRow(playlist, playlist.title, language)),
       ],
       origins,
     ),
@@ -183,8 +183,9 @@ export const ytLibraryPicker = (
 const spotifyPickerRow = (
   { source, artworkUrl, songCount }: SpotifyLibraryPlaylist,
   title: string,
+  language: AppLanguage,
 ): Omit<YtLibraryRow, "imported" | "ticked"> =>
-  pickerRow({ playlistId: source, artworkUrl, songCount }, title);
+  pickerRow({ playlistId: source, artworkUrl, songCount }, title, language);
 
 /**
  * The From Spotify picker for the account's library [playlists]
@@ -199,23 +200,26 @@ const spotifyPickerRow = (
 export const spotifyLibraryPicker = (
   playlists: readonly SpotifyLibraryPlaylist[],
   origins: YtLibraryOrigins = NO_ORIGINS,
+  language: AppLanguage = "en",
 ): YtLibraryPicker => {
   const liked = playlists.find((playlist) => playlist.source === SPOTIFY_LIKED_SONGS_SOURCE);
+  const likedSongs = catalogueOf(language).imports.likedSongs;
   return {
     rows: markImported(
       [
         spotifyPickerRow(
           liked ?? {
             source: SPOTIFY_LIKED_SONGS_SOURCE,
-            title: LIKED_SONGS,
+            title: likedSongs,
             artworkUrl: null,
             songCount: null,
           },
-          LIKED_SONGS,
+          likedSongs,
+          language,
         ),
         ...playlists
           .filter((playlist) => playlist !== liked)
-          .map((playlist) => spotifyPickerRow(playlist, playlist.title)),
+          .map((playlist) => spotifyPickerRow(playlist, playlist.title, language)),
       ],
       origins,
     ),
@@ -375,19 +379,21 @@ export interface YtLibraryFailureView {
   readonly action: "tryAgain" | "signIn" | null;
 }
 
-const FAILURES: Record<YtLibraryFailure, YtLibraryFailureView> = {
-  offline: { line: "You're offline. Try again when you're back online.", action: "tryAgain" },
-  failed: {
-    line: "Couldn't read your YouTube Music library. No answer online.",
-    action: "tryAgain",
-  },
-  signedOut: {
-    line: "Your YouTube session ended. Sign in again to see your playlists.",
-    action: "signIn",
-  },
-  disabled: { line: "YT Music is off in Settings.", action: null },
-};
+const FAILURES = {
+  offline: { line: "offline", action: "tryAgain" },
+  failed: { line: "ytLibraryFailed", action: "tryAgain" },
+  signedOut: { line: "ytSignedOut", action: "signIn" },
+  disabled: { line: "ytMusicOffInSettings", action: null },
+} as const satisfies Record<
+  YtLibraryFailure,
+  { line: string; action: YtLibraryFailureView["action"] }
+>;
 
-/** The picker's message for a library page that wasn't read, and what it offers. */
-export const ytLibraryFailure = (reason: YtLibraryFailure): YtLibraryFailureView =>
-  FAILURES[reason];
+/** The picker's message for a library page that wasn't read, and what it offers, in [language]. */
+export const ytLibraryFailure = (
+  reason: YtLibraryFailure,
+  language: AppLanguage = "en",
+): YtLibraryFailureView => {
+  const { line, action } = FAILURES[reason];
+  return { line: catalogueOf(language).imports[line], action };
+};

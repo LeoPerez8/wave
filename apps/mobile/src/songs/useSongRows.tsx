@@ -37,6 +37,7 @@ import { SongRow } from "./SongRow";
 import { createSongListModel, type SongRowPresentation } from "./songListModel";
 import type { SongListEntry } from "./songListSources";
 import { songRowState, type SongListSnapshot } from "./songRowState";
+import { useLocalisation } from "@/localisation/localisation";
 
 export interface SongListSelection<T> {
   readonly selecting: boolean;
@@ -112,6 +113,7 @@ export function useSongRows<T>({
   const settings = useSwipeSettings();
   const here = useCurrentPath(false);
   const ytMusic = useYtMusicEnabled();
+  const { language } = useLocalisation();
   const unplayable = useSightedStore(
     unavailableStreamedVideos.subscribe,
     unavailableStreamedVideos.get,
@@ -131,8 +133,9 @@ export function useSongRows<T>({
       download: (job) => ytDownloadStatus(downloads, job),
       ytMusic,
       unplayable,
+      language,
     }),
-    [currentIds, favorites, pending, downloads, ytMusic, unplayable],
+    [currentIds, favorites, pending, downloads, ytMusic, unplayable, language],
   );
   const latest = useRef({
     items,

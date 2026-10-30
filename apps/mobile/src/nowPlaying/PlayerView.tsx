@@ -1,3 +1,5 @@
+import { playerErrorNotice } from "@wave/core";
+import { useLocalisation } from "@/localisation/localisation";
 import { beginTiming, activeTiming, noteTimingLinkFailure } from "@/lib/timing";
 import { IconMusic, IconStar, IconStarFilled } from "@tabler/icons-react-native";
 import { artistLink, createStarPop, parseTrackId } from "@wave/core";
@@ -231,6 +233,7 @@ const STAR_POP_FROM = 0.6;
  * double-tap pops it; under reduce motion it just fills.
  */
 function FavoriteStar({ title }: { title: string }) {
+  const { strings } = useLocalisation();
   const reduceMotion = useReducedMotion();
   const { song, favorite, disabled, star } = useNowPlayingStar();
   const scale = useSharedValue(1);
@@ -243,7 +246,11 @@ function FavoriteStar({ title }: { title: string }) {
   const popStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.get() }] }));
   return (
     <IconButton
-      label={favorite ? `Remove ${title} from Favorites` : `Favorite ${title}`}
+      label={
+        favorite
+          ? strings.playbackText.removeValueFromFavorites(title)
+          : strings.playbackText.favoriteValue(title)
+      }
       accessibilityState={{ selected: favorite, disabled }}
       tone="highlight"
       disabledTone="highlight"
@@ -308,11 +315,13 @@ type Props = {
  * page, else the YouTube Music artist page) while YT Music is on.
  */
 export function PlayerView({ item, details, playing }: Props) {
+  const { strings } = useLocalisation();
   useRenderCount("PlayerView");
-  const title = item.title ?? "Unknown title";
-  const artist = details?.artist ?? item.artist ?? "Unknown Artist";
-  const album = details?.album ?? item.album ?? "Unknown Album";
-  const notice = useSyncExternalStore(playbackState.subscribe, () => playbackState.get().notice);
+  const title = item.title ?? strings.playbackText.unknownTitle;
+  const artist = details?.artist ?? item.artist ?? strings.playbackText.unknownArtist;
+  const album = details?.album ?? item.album ?? strings.playbackText.unknownAlbum;
+  const failure = useSyncExternalStore(playbackState.subscribe, playbackState.get);
+  const notice = failure.error === null ? null : playerErrorNotice(failure.errorCode, strings);
   // Read ahead, so the screens open header-first; only while the sheet is
   // shown, so track changes behind a closed Now Playing don't pay for it.
   const shown = useNowPlayingShown();
@@ -361,8 +370,8 @@ export function PlayerView({ item, details, playing }: Props) {
               if (timingId !== undefined) noteTimingLinkFailure(timingId, "target gone");
               failNowPlayingLink(timingId);
               showError(
-                "Couldn't open the artist",
-                error ?? "The song is no longer in the Library.",
+                strings.playbackText.couldntOpenTheArtist,
+                error ?? strings.playbackText.theSongIsNoLongerInTheLibrary,
               );
             },
           }).open();
@@ -388,7 +397,7 @@ export function PlayerView({ item, details, playing }: Props) {
                   ? () => followStreamedArtistLink(streamedTo)
                   : null
             }
-            hint="Opens the artist"
+            hint={strings.playbackText.opensTheArtist}
             timingKind="artistLink"
             revealsCurrentScreen={
               openLocalArtist !== null
@@ -401,7 +410,7 @@ export function PlayerView({ item, details, playing }: Props) {
             <MetaLink
               label={album}
               open={details === null ? null : () => openAlbum(details.albumId, links.album)}
-              hint="Opens the album"
+              hint={strings.playbackText.opensTheAlbum}
               timingKind="albumLink"
               className="font-sans text-body text-secondary"
             />

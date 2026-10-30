@@ -1,6 +1,7 @@
 import {
-  SPOTIFY_SIGN_IN_FAILURE_LINES,
   spotifyAccountView,
+  spotifySignInFailureLines,
+  type Catalogue,
   type SpotifyAccount,
   type SpotifyAccountNote,
 } from "@wave/core";
@@ -10,27 +11,26 @@ import { CatalogLine } from "@/catalog/CatalogLine";
 import { CELL, grid } from "@/catalog/grid";
 import { Hairline } from "@/catalog/Hairline";
 import { TextButton } from "@/components/TextButton";
+import { useLocalisation } from "@/localisation/localisation";
 
 import { AccountPhoto } from "./AccountPhoto";
 import { SignInRows } from "./SignInRows";
 import { useSpotifyAccount } from "./spotifyAccount";
 
-const NOTES: Record<SpotifyAccountNote, string> = {
-  optional:
-    "Signing in lets Wave read your Spotify playlists and share yours there. Sign in with " +
-    "your email and password or an emailed code: Continue with Google may not work here. " +
-    "The session stays on this phone, and Wave talks to Spotify the way its web player does.",
-  expired: "Spotify ended your session, so Wave is signed out. Sign in again to use your account.",
-  ...SPOTIFY_SIGN_IN_FAILURE_LINES,
-};
+const notes = (strings: Catalogue): Record<SpotifyAccountNote, string> => ({
+  optional: strings.settings.spotifyNote,
+  expired: strings.settings.spotifyEndedYourSessionSoWaveIs,
+  ...spotifySignInFailureLines(strings),
+});
 
 /** The signed-in account: its photo and name, and Sign Out. */
 function AccountRow({ account, onSignOut }: { account: SpotifyAccount; onSignOut: () => void }) {
+  const { strings } = useLocalisation();
   return (
     <>
       <View
         accessible
-        accessibilityLabel={`Signed in to Spotify as ${account.name}`}
+        accessibilityLabel={strings.settings.spotifySignedIn(account.name)}
         className="flex-row items-center"
         style={{ minHeight: grid.row, gap: CELL * 1.5 }}
       >
@@ -41,10 +41,10 @@ function AccountRow({ account, onSignOut }: { account: SpotifyAccount; onSignOut
       </View>
       <Hairline />
       <View className="mt-4 items-start">
-        <TextButton label="Sign Out" onPress={onSignOut} />
+        <TextButton label={strings.settings.signOut} onPress={onSignOut} />
       </View>
       <Text className="font-sans text-footnote text-secondary">
-        Signing out forgets this account on this phone.
+        {strings.settings.signingOutForgetsThisAccountOnThis}
       </Text>
     </>
   );
@@ -52,6 +52,7 @@ function AccountRow({ account, onSignOut }: { account: SpotifyAccount; onSignOut
 
 /** Settings › Accounts › Spotify: the account Wave reads and shares your Spotify playlists with. */
 export function SpotifySettingsSection() {
+  const { strings } = useLocalisation();
   const account = useSpotifyAccount();
   const view = spotifyAccountView(account.state);
 
@@ -62,7 +63,11 @@ export function SpotifySettingsSection() {
       {view.kind === "account" ? (
         <AccountRow account={view.account} onSignOut={account.signOut} />
       ) : (
-        <SignInRows action={view.action} note={NOTES[view.note]} onSignIn={account.signIn} />
+        <SignInRows
+          action={view.action}
+          note={notes(strings)[view.note]}
+          onSignIn={account.signIn}
+        />
       )}
     </View>
   );

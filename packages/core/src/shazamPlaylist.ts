@@ -1,6 +1,7 @@
 import { playlistSongKey, type PlaylistSong } from "./playlistEntries.ts";
 import { joinArtists, recordingMatches } from "./ytMusic.ts";
 import { checkPlaylistName } from "./playlists.ts";
+import { catalogueOf, type AppLanguage } from "./localisation.ts";
 
 /** Playlist ids here are sync ids, shared by every phone. */
 interface ShazamPlaylist {
@@ -25,13 +26,15 @@ type ShazamAddPlan =
     }
   | { readonly kind: "duplicate"; readonly playlistId: string; readonly toast: string };
 
-/** Plans an explicit save; [existing] holds the remembered playlist's songs. */
+/** Plans an explicit save; [existing] holds the remembered playlist's songs. Its toast is in [language]. */
 export const planShazamAdd = (
   rememberedId: string | null,
   playlists: readonly ShazamPlaylist[],
   existing: readonly PlaylistSong[],
   song: PlaylistSong,
+  language: AppLanguage = "en",
 ): ShazamAddPlan => {
+  const text = catalogueOf(language).playbackText;
   const playlist = playlists.find((candidate) => candidate.id === rememberedId);
   if (playlist !== undefined) {
     if (
@@ -45,11 +48,11 @@ export const planShazamAdd = (
         );
       })
     )
-      return { kind: "duplicate", playlistId: playlist.id, toast: "Already in Shazam" };
-    return { kind: "add", playlistId: playlist.id, song, index: 0, toast: "Added to Shazam" };
+      return { kind: "duplicate", playlistId: playlist.id, toast: text.alreadyInShazam };
+    return { kind: "add", playlistId: playlist.id, song, index: 0, toast: text.addedToShazam };
   }
   const names = playlists.map((candidate) => candidate.name);
   let name = "Shazam";
   for (let n = 2; !checkPlaylistName(name, names).ok; n++) name = `Shazam ${n}`;
-  return { kind: "create", name, song, index: 0, toast: "Added to Shazam" };
+  return { kind: "create", name, song, index: 0, toast: text.addedToShazam };
 };

@@ -1,3 +1,4 @@
+import { useLocalisation } from "@/localisation/localisation";
 import { Canvas, Circle, SweepGradient, vec } from "@shopify/react-native-skia";
 import { IconCheck } from "@tabler/icons-react-native";
 import {
@@ -8,6 +9,7 @@ import {
   type SavedSwatchOption,
   type ThemeGroup,
   type ThemeSwatchOption,
+  type Catalogue,
 } from "@wave/core";
 import { Text, useColorScheme, View } from "react-native";
 
@@ -25,11 +27,11 @@ import { openOverlay } from "@/overlay/overlay";
 import { HUE_STOPS, openColourPicker } from "./ColourPicker";
 import { removeSavedInk, resetTheme, setSavedInk, setThemeSwatch, useThemeState } from "./theme";
 
-const ROW_LABEL: Record<ThemeGroup, string> = {
-  light: "Light background",
-  dark: "Dark background",
-  primary: "Primary",
-  secondary: "Secondary",
+const ROW_LABEL: Record<ThemeGroup, (strings: Catalogue) => string> = {
+  light: (strings) => strings.settings.lightBackground,
+  dark: (strings) => strings.settings.darkBackground,
+  primary: (strings) => strings.settings.primary,
+  secondary: (strings) => strings.settings.secondary,
 };
 
 const SWATCH = 36;
@@ -66,9 +68,6 @@ function Swatch({ swatch, group }: { swatch: ThemeSwatchOption; group: ThemeGrou
 }
 
 /** A saved colour's spoken name: its place in the row and its hex. */
-const savedLabel = (index: number, swatch: SavedSwatchOption): string =>
-  `Saved colour ${index + 1}, ${swatch.hex}`;
-
 /** A saved colour's long-press menu: Remove, which leaves the colours in use as they are. */
 function SavedColourMenu({
   group,
@@ -81,6 +80,7 @@ function SavedColourMenu({
   label: string;
   close: () => void;
 }) {
+  const { strings } = useLocalisation();
   return (
     <>
       <CardHeading>
@@ -97,7 +97,7 @@ function SavedColourMenu({
         entries={[
           {
             action: "removeColour",
-            label: "Remove",
+            label: strings.settings.remove,
             onPress: () => {
               close();
               removeSavedInk(group, swatch.hex);
@@ -119,12 +119,13 @@ function SavedSwatch({
   group: InkGroup;
   index: number;
 }) {
-  const label = savedLabel(index, swatch);
+  const { strings } = useLocalisation();
+  const label = strings.settings.savedColour(index + 1, swatch.hex);
   return (
     <IconButton
       accessibilityRole="radio"
       accessibilityLabel={label}
-      accessibilityHint="Long-press to remove it"
+      accessibilityHint={strings.settings.longpressToRemoveIt}
       accessibilityState={{ checked: swatch.selected }}
       onPress={() => void setSavedInk(group, swatch.hex, showAlert)}
       onLongPress={() =>
@@ -163,12 +164,13 @@ function CustomSwatch({
   group: InkGroup;
   current: string;
 }) {
+  const { strings } = useLocalisation();
   const r = SWATCH / 2;
   return (
     <IconButton
       accessibilityRole="radio"
-      accessibilityLabel="Custom colour"
-      accessibilityHint="Opens the colour picker"
+      accessibilityLabel={strings.settings.customColour}
+      accessibilityHint={strings.settings.opensTheColourPicker}
       accessibilityState={{ checked: custom.selected }}
       onPress={() => openColourPicker(group, custom.picked ?? current)}
       depth={0.04}
@@ -203,14 +205,15 @@ function CustomSwatch({
  * Primary and Secondary from Default, their saved colours and Custom.
  */
 export function ThemeSettingsSection() {
+  const { strings } = useLocalisation();
   const state = useThemeState();
   const { choice } = state;
   const scheme = useColorScheme() === "dark" ? "dark" : "light";
-  const rows = themeSwatchRows(choice, scheme);
+  const rows = themeSwatchRows(choice, scheme, strings);
 
   return (
     <View>
-      <CatalogLine className="mb-2">Theme</CatalogLine>
+      <CatalogLine className="mb-2">{strings.settings.theme}</CatalogLine>
       <Hairline />
       {rows.map((row) => {
         const chosen = row.swatches.find((swatch) => swatch.selected);
@@ -221,14 +224,18 @@ export function ThemeSettingsSection() {
             <View
               className="pt-3"
               accessibilityRole="radiogroup"
-              accessibilityLabel={ROW_LABEL[row.group]}
+              accessibilityLabel={ROW_LABEL[row.group](strings)}
             >
               <View className="flex-row items-baseline">
                 <Text className="flex-1 font-sans text-title3 font-normal text-foreground">
-                  {ROW_LABEL[row.group]}
+                  {ROW_LABEL[row.group](strings)}
                 </Text>
                 <Text className="font-sans text-subheadline text-secondary">
-                  {custom?.selected ? "Custom" : saved !== undefined ? "Saved" : chosen?.label}
+                  {custom?.selected
+                    ? strings.settings.custom
+                    : saved !== undefined
+                      ? strings.settings.saved
+                      : chosen?.label}
                 </Text>
               </View>
               <View className="-mx-1.5 flex-row flex-wrap py-1">
@@ -254,18 +261,11 @@ export function ThemeSettingsSection() {
         );
       })}
       <Text className="mt-2 font-sans text-footnote text-secondary">
-        Cards, groups, separators and text follow the background you choose for each mode. Primary
-        colours progress, toggles and what&apos;s active; secondary marks favorites and what&apos;s
-        playing. Default is white in dark mode and the text colour in light. The last swatch of each
-        takes any colour, and Save in its picker keeps up to four colours in the row; long-press a
-        saved colour to remove it. A colour that wouldn&apos;t read on your background is deepened
-        or brightened until it does. When new colours would change the app icon, Wave asks first; if
-        you say yes, the icon takes them, or the icon colours closest to custom ones, once you leave
-        Wave.
+        {strings.settings.cardsGroupsSeparatorsAndTextFollowThe}
       </Text>
       <View className="mt-4 items-start">
         <TextButton
-          label="Reset to defaults"
+          label={strings.settings.resetToDefaults}
           disabled={isDefaultThemeState(state)}
           onPress={() => void resetTheme(showAlert)}
         />

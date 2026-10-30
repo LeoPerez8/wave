@@ -4,6 +4,7 @@
  * colour is derived from the background so contrast and spacing hold.
  */
 
+import { en, type Catalogue } from "./catalogueEn.ts";
 import { readStoredRecord } from "./storedJson.ts";
 import { luminance, mix, parseHexColour, toOklch, withLuminance } from "./colour.ts";
 import { contrastRatio } from "./palette.ts";
@@ -41,7 +42,7 @@ export const WHITE_INK = "white";
  */
 const DEFAULT_INK: InkSwatch = {
   id: WHITE_INK,
-  label: "Default",
+  label: en.settings.swatches.white,
   light: DEFAULT_THEME.light.foreground,
   dark: "#ffffff",
 };
@@ -57,20 +58,20 @@ export const THEME_SWATCHES: {
   readonly secondary: readonly InkSwatch[];
 } = {
   light: [
-    { id: "fog", label: "Fog", colour: DEFAULT_THEME.light.background },
-    { id: "sand", label: "Sand", colour: "#ede6da" },
-    { id: "sage", label: "Sage", colour: "#e1eadc" },
-    { id: "blush", label: "Blush", colour: "#f1e3e3" },
-    { id: "lilac", label: "Lilac", colour: "#e6e3f1" },
-    { id: "paper", label: "Paper", colour: "#f5f5f3" },
+    { id: "fog", label: en.settings.swatches.fog, colour: DEFAULT_THEME.light.background },
+    { id: "sand", label: en.settings.swatches.sand, colour: "#ede6da" },
+    { id: "sage", label: en.settings.swatches.sage, colour: "#e1eadc" },
+    { id: "blush", label: en.settings.swatches.blush, colour: "#f1e3e3" },
+    { id: "lilac", label: en.settings.swatches.lilac, colour: "#e6e3f1" },
+    { id: "paper", label: en.settings.swatches.paper, colour: "#f5f5f3" },
   ],
   dark: [
-    { id: "black", label: "True black", colour: DEFAULT_THEME.dark.background },
-    { id: "slate", label: "Slate", colour: NIGHT_SLATE.background },
-    { id: "graphite", label: "Graphite", colour: "#141414" },
-    { id: "navy", label: "Navy", colour: "#0a0f1f" },
-    { id: "forest", label: "Forest", colour: "#0a130d" },
-    { id: "plum", label: "Plum", colour: "#140c17" },
+    { id: "black", label: en.settings.swatches.black, colour: DEFAULT_THEME.dark.background },
+    { id: "slate", label: en.settings.swatches.slate, colour: NIGHT_SLATE.background },
+    { id: "graphite", label: en.settings.swatches.graphite, colour: "#141414" },
+    { id: "navy", label: en.settings.swatches.navy, colour: "#0a0f1f" },
+    { id: "forest", label: en.settings.swatches.forest, colour: "#0a130d" },
+    { id: "plum", label: en.settings.swatches.plum, colour: "#140c17" },
   ],
   primary: [DEFAULT_INK],
   secondary: [DEFAULT_INK],
@@ -88,28 +89,28 @@ export const FORMER_INK_SWATCHES: {
   primary: [
     {
       id: "teal",
-      label: "Teal",
+      label: en.settings.swatches.teal,
       light: DEFAULT_THEME.light.accent,
       dark: DEFAULT_THEME.dark.accent,
     },
-    { id: "blue", label: "Blue", light: "#1f5fb8", dark: "#7aaef5" },
-    { id: "violet", label: "Violet", light: "#5b4bb7", dark: "#a99af0" },
-    { id: "green", label: "Green", light: "#2f6b1f", dark: "#8fcf6e" },
-    { id: "rose", label: "Rose", light: "#a8325e", dark: "#f08cb0" },
-    { id: "lime", label: "Lime", light: "#8cc63f", dark: "#b5e36b" },
+    { id: "blue", label: en.settings.swatches.blue, light: "#1f5fb8", dark: "#7aaef5" },
+    { id: "violet", label: en.settings.swatches.violet, light: "#5b4bb7", dark: "#a99af0" },
+    { id: "green", label: en.settings.swatches.green, light: "#2f6b1f", dark: "#8fcf6e" },
+    { id: "rose", label: en.settings.swatches.rose, light: "#a8325e", dark: "#f08cb0" },
+    { id: "lime", label: en.settings.swatches.lime, light: "#8cc63f", dark: "#b5e36b" },
   ],
   secondary: [
     {
       id: "ember",
-      label: "Ember",
+      label: en.settings.swatches.ember,
       light: DEFAULT_THEME.light.highlight,
       dark: DEFAULT_THEME.dark.highlight,
     },
-    { id: "gold", label: "Gold", light: "#866600", dark: "#e8c454" },
-    { id: "coral", label: "Coral", light: "#b2402c", dark: "#f5917e" },
-    { id: "magenta", label: "Magenta", light: "#9c2d8a", dark: "#e78fd6" },
-    { id: "sky", label: "Sky", light: "#1b6a93", dark: "#7cc4ea" },
-    { id: "lemon", label: "Lemon", light: "#f2d22e", dark: "#f5d742" },
+    { id: "gold", label: en.settings.swatches.gold, light: "#866600", dark: "#e8c454" },
+    { id: "coral", label: en.settings.swatches.coral, light: "#b2402c", dark: "#f5917e" },
+    { id: "magenta", label: en.settings.swatches.magenta, light: "#9c2d8a", dark: "#e78fd6" },
+    { id: "sky", label: en.settings.swatches.sky, light: "#1b6a93", dark: "#7cc4ea" },
+    { id: "lemon", label: en.settings.swatches.lemon, light: "#f2d22e", dark: "#f5d742" },
   ],
 };
 
@@ -713,12 +714,25 @@ const customSwatch = (choice: ThemeChoice, group: InkGroup, scheme: Scheme): Cus
   };
 };
 
+/** A swatch's name in [catalogue]'s language; a swatch Wave no longer offers keeps its stored label. */
+const swatchLabel = (
+  swatch: { readonly id: string; readonly label: string },
+  catalogue: Catalogue = en,
+): string =>
+  Object.hasOwn(catalogue.settings.swatches, swatch.id)
+    ? catalogue.settings.swatches[swatch.id as keyof Catalogue["settings"]["swatches"]]
+    : swatch.label;
+
 /**
  * The four swatch rows for Settings. Primary and Secondary show Default, the
  * saved colours and the custom swatch, each in the colour it would actually
- * take in `scheme`, readability adjustments included.
+ * take in `scheme`, readability adjustments included, named in [catalogue]'s language.
  */
-export const themeSwatchRows = (choice: ThemeChoice, scheme: Scheme): readonly ThemeSwatchRow[] =>
+export const themeSwatchRows = (
+  choice: ThemeChoice,
+  scheme: Scheme,
+  catalogue: Catalogue = en,
+): readonly ThemeSwatchRow[] =>
   GROUPS.map((group) => ({
     group,
     swatches: THEME_SWATCHES[group].map((swatch) => {
@@ -726,7 +740,7 @@ export const themeSwatchRows = (choice: ThemeChoice, scheme: Scheme): readonly T
       const colour = isInk(group) ? theme[scheme][INK_TOKEN[group]] : theme[group].background;
       return {
         id: swatch.id,
-        label: swatch.label,
+        label: swatchLabel(swatch, catalogue),
         colour,
         selected: choice[group] === swatch.id,
         mark: markOn(colour),

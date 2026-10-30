@@ -1,3 +1,26 @@
+import {
+  readFollowShows,
+  saveFollowShows,
+  markShowNotified,
+  type FollowShowCacheRow,
+} from "./db/followShows";
+import {
+  readFollowReleases,
+  saveFollowReleases,
+  hideFollowRelease,
+  followReleaseListening,
+  type FollowReleaseCache,
+} from "./db/followReleases";
+import type { FollowRelease } from "@wave/core";
+import type { FollowedArtist, FollowLevel } from "@wave/core";
+import {
+  selectFollow,
+  selectFollows,
+  countFollows,
+  saveFollow,
+  removeFollow,
+  type FollowTarget,
+} from "./db/follows";
 import { selectDownloadsToForget } from "./db/downloadRecovery";
 import {
   playedEntityTotals,
@@ -15,8 +38,15 @@ import {
   recommendationEntriesPage,
   recommendationFeedbackPage,
 } from "./db/recommendationPages";
-import type { QueueWrite, ShuffleSong, YtSong, YtDownloadJournalJob } from "@wave/core";
+import type {
+  AppLanguage,
+  QueueWrite,
+  ShuffleSong,
+  YtSong,
+  YtDownloadJournalJob,
+} from "@wave/core";
 import { makeExternalStore, type ExternalStore } from "@/lib/externalStore";
+import { followSaved } from "./followsSaved";
 import { publishSavedRecordings } from "./libraryChanges";
 import { backfillRecordingTitles, selectMatchingSong } from "./db/matchingSong";
 import {
@@ -545,6 +575,30 @@ export class LibraryStore extends Context.Service<
     readonly ensureDefaultRoot: (
       path: string,
     ) => Effect.Effect<readonly ScanRoot[], LibraryStoreError>;
+    /** Each shows-level artist's Ticketmaster attraction, country and last shows, and the show ids already notified. */
+    readonly followShowCache: Effect.Effect<ReturnType<typeof readFollowShows>, LibraryStoreError>;
+    /** Replaces one artist's saved shows (a new country replaces the old country's). */
+    readonly saveFollowShows: (row: FollowShowCacheRow) => Effect.Effect<void, LibraryStoreError>;
+    /** Claims a show for its one notification: false when it was already claimed. */
+    readonly markShowNotified: (id: string) => Effect.Effect<boolean, LibraryStoreError>;
+    readonly followReleaseCache: Effect.Effect<FollowReleaseCache, LibraryStoreError>;
+    readonly saveFollowReleases: (
+      key: string,
+      releases: readonly FollowRelease[],
+      checkedAt: number,
+    ) => Effect.Effect<void, LibraryStoreError>;
+    readonly hideFollowRelease: (key: string) => Effect.Effect<void, LibraryStoreError>;
+    readonly followReleaseListening: (
+      releases: readonly FollowRelease[],
+    ) => Effect.Effect<ReturnType<typeof followReleaseListening>, LibraryStoreError>;
+    readonly listFollows: Effect.Effect<readonly FollowedArtist[], LibraryStoreError>;
+    readonly countFollows: Effect.Effect<number, LibraryStoreError>;
+    readonly getFollow: (name: string) => Effect.Effect<FollowedArtist | null, LibraryStoreError>;
+    readonly setFollow: (
+      target: FollowTarget,
+      level: FollowLevel,
+    ) => Effect.Effect<void, LibraryStoreError>;
+    readonly unfollow: (name: string) => Effect.Effect<void, LibraryStoreError>;
     /** Every scan root in the order it was added, with its track count. */
     readonly listRoots: Effect.Effect<readonly ScanRootSummary[], LibraryStoreError>;
     /**
@@ -851,6 +905,7 @@ export class LibraryStore extends Context.Service<
     readonly addToShazam: (
       rememberedId: string | null,
       song: PlaylistSong,
+      language: AppLanguage,
     ) => Effect.Effect<ReturnType<typeof addToShazam>, LibraryStoreError>;
     readonly renamePlaylist: (id: number, name: string) => Effect.Effect<void, LibraryStoreError>;
     readonly deletePlaylist: (id: number) => Effect.Effect<void, LibraryStoreError>;
@@ -1433,6 +1488,33 @@ const make = Effect.gen(function* () {
     writeAttempt(operation, run).pipe(Effect.tap(() => Effect.sync(historyChanged)));
 
   return LibraryStore.of({
+    followShowCache: attempt("read shows", () => readFollowShows(db)),
+    saveFollowShows: (row) => writeAttempt("save shows", () => saveFollowShows(db, row)),
+    markShowNotified: (id) =>
+      writeAttempt("claim show", () => markShowNotified(db, id, Date.now())).pipe(
+        Effect.tap((claimed) => Effect.sync(() => claimed && followSaved())),
+      ),
+    followReleaseCache: attempt("read follow release cache", () => readFollowReleases(db)),
+    saveFollowReleases: (key, releases, checkedAt) =>
+      writeAttempt("save follow releases", () => saveFollowReleases(db, key, releases, checkedAt)),
+    hideFollowRelease: (key) =>
+      writeAttempt("hide follow release", () => hideFollowRelease(db, key, Date.now())).pipe(
+        Effect.tap(() => Effect.sync(followSaved)),
+      ),
+    followReleaseListening: (releases) =>
+      attempt("read release listening", () => followReleaseListening(db, releases)),
+    listFollows: attempt("list follows", () => selectFollows(db)),
+    countFollows: attempt("count follows", () => countFollows(db)),
+    getFollow: (name) => attempt("read follow", () => selectFollow(db, name)),
+    setFollow: (target, level) =>
+      writeAttempt("follow artist", () => saveFollow(db, target, level, Date.now())).pipe(
+        Effect.tap((changed) => Effect.sync(() => changed && followSaved())),
+        Effect.asVoid,
+      ),
+    unfollow: (name) =>
+      writeAttempt("unfollow artist", () => removeFollow(db, name, Date.now())).pipe(
+        Effect.tap(() => Effect.sync(followSaved)),
+      ),
     listeningHistoryVersion,
     optimize: (when) => writeAttempt("optimize the database", () => optimizeDatabase(db, when)),
     ensureDefaultRoot: (path) =>
@@ -1811,8 +1893,10 @@ const make = Effect.gen(function* () {
     addToPlaylist: (id, songs) =>
       writeAttempt("add to the playlist", () => addToPlaylist(db, id, songs, Date.now())),
 
-    addToShazam: (rememberedId, song) =>
-      writeAttempt("add to Shazam", () => addToShazam(db, rememberedId, song, Date.now())),
+    addToShazam: (rememberedId, song, language) =>
+      writeAttempt("add to Shazam", () =>
+        addToShazam(db, rememberedId, song, Date.now(), language),
+      ),
 
     movePlaylistItem: (playlistId, itemId, toIndex) =>
       writeAttempt("reorder the playlist", () =>

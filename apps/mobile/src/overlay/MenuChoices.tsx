@@ -1,7 +1,8 @@
-import { PLAY_ACTION_LABELS, entryDivider, type PlayCard } from "@wave/core";
+import { entryDivider, type PlayCard } from "@wave/core";
 import { View } from "react-native";
 
 import { CELL, grid } from "@/catalog/grid";
+import { useLocalisation } from "@/localisation/localisation";
 import { IconButton } from "@/components/IconButton";
 import { useShuffleControl } from "@/nowPlaying/ShuffleMenu";
 import { ACTION_ICONS, type MenuAction } from "@/playback/actionIcons";
@@ -46,7 +47,7 @@ function PlayCardButton({
   accessibilityHint: string | undefined;
 }) {
   const Icon = ACTION_ICONS[action];
-  const label = PLAY_ACTION_LABELS[action];
+  const label = useLocalisation().strings.itemActions.playLabels[action];
   return (
     <IconButton
       icon={Icon}

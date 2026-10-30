@@ -1,3 +1,5 @@
+import { currentLocalisation } from "@/localisation/localisation";
+import { useLocalisation } from "@/localisation/localisation";
 import {
   Canvas,
   Circle,
@@ -21,6 +23,7 @@ import {
   type CustomInkPreview,
   type Hsv,
   type InkGroup,
+  type Catalogue,
 } from "@wave/core";
 import { useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Text, TextInput, View } from "react-native";
@@ -55,9 +58,9 @@ export const HUE_STOPS = [
   "#ff0000",
 ];
 
-const TITLE: Record<InkGroup, string> = {
-  primary: "Primary colour",
-  secondary: "Secondary colour",
+const TITLE: Record<InkGroup, (strings: Catalogue) => string> = {
+  primary: (strings) => strings.settings.primaryColour,
+  secondary: (strings) => strings.settings.secondaryColour,
 };
 
 /** The picker never grows wider than this, however wide the card. */
@@ -77,7 +80,7 @@ export const openColourPicker = (group: InkGroup, initial: string): void => {
   const applied = makeExternalStore(initial);
   const preview = previewCustomInk(group, applied.set);
   void presentOverlay<string | null>({
-    label: TITLE[group],
+    label: TITLE[group](currentLocalisation().strings),
     align: "top",
     dismissed: null,
     render: (finish) => (
@@ -111,6 +114,7 @@ function ColourPickerCard({
   applied: ExternalStore<string>;
   finish: (hex: string | null) => void;
 }) {
+  const { strings } = useLocalisation();
   // What Done keeps: the fields' colour, null while the hex typed isn't one.
   const entered = useRef<string | null>(initial);
   const [valid, setValid] = useState(true);
@@ -122,16 +126,16 @@ function ColourPickerCard({
 
   return (
     <>
-      <CatalogLine className="mb-2">{TITLE[group]}</CatalogLine>
+      <CatalogLine className="mb-2">{TITLE[group](strings)}</CatalogLine>
       <CardEntries>
         <ColourFields initial={initial} preview={preview} onColour={onColour} />
         <AppliedSamples group={group} applied={applied} valid={valid} />
       </CardEntries>
       <View className="flex-row justify-end" style={{ gap: CELL * 3 }}>
-        <TextButton label="Cancel" onPress={() => finish(null)} />
+        <TextButton label={strings.settings.cancel} onPress={() => finish(null)} />
         <SaveButton group={group} applied={applied} valid={valid} entered={entered} />
         <TextButton
-          label="Done"
+          label={strings.settings.done}
           disabled={!valid}
           onPress={() => {
             if (entered.current !== null) finish(entered.current);
@@ -165,11 +169,12 @@ function SaveButton({
   valid: boolean;
   entered: { readonly current: string | null };
 }) {
+  const { strings } = useLocalisation();
   const state = useSaveState(group, applied, valid);
   return (
     <TextButton
-      label="Save"
-      accessibilityHint="Adds this colour to the saved colours without applying it"
+      label={strings.settings.save}
+      accessibilityHint={strings.settings.addsThisColourToTheSavedColours}
       disabled={state !== "ready"}
       onPress={() => {
         if (entered.current !== null) saveCustomInk(group, entered.current);
@@ -188,12 +193,13 @@ function SaveNote({
   applied: ExternalStore<string>;
   valid: boolean;
 }) {
+  const { strings } = useLocalisation();
   const state = useSaveState(group, applied, valid);
   const note =
     state === "full"
-      ? "Four colours are saved. To save this one, long-press a saved colour and remove it."
+      ? strings.settings.fourColoursAreSavedToSaveThis
       : state === "saved"
-        ? "This colour is saved."
+        ? strings.settings.thisColourIsSaved
         : null;
   if (note === null) return null;
   return (
@@ -220,6 +226,7 @@ function ColourFields({
   preview: ColourPickerPreview;
   onColour: (hex: string | null) => void;
 }) {
+  const { strings } = useLocalisation();
   const accent = useThemeColor("accent");
   const secondary = useThemeColor("secondary");
   const [hsv, setHsv] = useState<Hsv>(() => hexToHsv(initial));
@@ -265,8 +272,8 @@ function ColourFields({
           autoCapitalize="none"
           autoCorrect={false}
           returnKeyType="done"
-          accessibilityLabel="Hex colour"
-          placeholder="rrggbb"
+          accessibilityLabel={strings.settings.hexColour}
+          placeholder={strings.settings.hexPlaceholder}
           placeholderTextColor={secondary}
           selectionColor={accent}
           cursorColor={accent}
@@ -292,14 +299,15 @@ function AppliedSamples({
   applied: ExternalStore<string>;
   valid: boolean;
 }) {
+  const { strings } = useLocalisation();
   const choice = useThemeChoice();
   const hex = useSyncExternalStore(applied.subscribe, applied.get);
   const applies = useMemo(() => customInkPreview(choice, group, hex), [choice, group, hex]);
   return (
     <>
       <View className="flex-row flex-wrap" style={{ gap: CELL, paddingBottom: CELL }}>
-        <AppliesAs label="Light" preview={applies.light} />
-        <AppliesAs label="Dark" preview={applies.dark} />
+        <AppliesAs label={strings.settings.light} preview={applies.light} />
+        <AppliesAs label={strings.settings.dark} preview={applies.dark} />
       </View>
       <Hairline />
       {/* The line is reserved so the actions don't jump when the note appears. */}
@@ -309,13 +317,9 @@ function AppliedSamples({
         style={{ minHeight: CELL * 5, paddingTop: CELL / 2 }}
       >
         {!valid
-          ? "Enter a 3- or 6-digit hex colour."
+          ? strings.settings.enterA3Or6digitHexColour
           : applies.light.adjusted || applies.dark.adjusted
-            ? `Adjusted to read on your ${
-                applies.light.adjusted && applies.dark.adjusted
-                  ? "backgrounds"
-                  : `${applies.light.adjusted ? "light" : "dark"} background`
-              }, as shown.`
+            ? strings.settings.adjustedColour(applies.light.adjusted, applies.dark.adjusted)
             : ""}
       </Text>
     </>
@@ -324,10 +328,11 @@ function AppliedSamples({
 
 /** The colour as it will apply in one mode, on that mode's background. */
 function AppliesAs({ label, preview }: { label: string; preview: CustomInkPreview }) {
+  const { strings } = useLocalisation();
   return (
     <View
       accessible
-      accessibilityLabel={`${label} mode: ${preview.colour}`}
+      accessibilityLabel={strings.settings.colourMode(label, preview.colour)}
       className="flex-row items-center rounded-full border border-separator"
       style={{
         backgroundColor: preview.ground,
@@ -363,6 +368,7 @@ function HueAndShade({
   onLift: () => void;
   onStep: (next: Hsv) => void;
 }) {
+  const { strings } = useLocalisation();
   const [size, setSize] = useState(0);
   const layout = colourPickerLayout(size);
   // A drag keeps to the part it started on, even when it strays off it.
@@ -401,8 +407,8 @@ function HueAndShade({
         <View
           accessible
           accessibilityRole="adjustable"
-          accessibilityLabel="Hue"
-          accessibilityHint="Drag the ring for the hue and the square for the shade, or type a hex colour"
+          accessibilityLabel={strings.settings.hue}
+          accessibilityHint={strings.settings.dragTheRingForTheHueAnd}
           accessibilityValue={{ text: `${Math.round(hsv.h)} degrees` }}
           accessibilityActions={[{ name: "increment" }, { name: "decrement" }]}
           onAccessibilityAction={(event) =>

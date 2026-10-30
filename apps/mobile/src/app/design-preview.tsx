@@ -1,5 +1,6 @@
 import { useScreenContent } from "@/lib/screenTiming";
 import {
+  catalogueOf,
   defaultSongSort,
   designPreviewState,
   isDesignPreviewLink,
@@ -213,7 +214,7 @@ function DesignPreview({ opening }: { opening: PreviewState | undefined }) {
             <PlaylistEntry
               key={playlist.id}
               name={playlist.name}
-              detail={songCount(playlist.trackCount)}
+              detail={songCount(playlist.trackCount, catalogueOf("en"))}
               paths={[]}
               onPress={() => undefined}
             />
@@ -225,7 +226,7 @@ function DesignPreview({ opening }: { opening: PreviewState | undefined }) {
             // A song list's opening, as `ListIntro` draws it: the count over Play, Shuffle and Sort.
             <View style={{ paddingHorizontal: grid.margin }}>
               <ListIntroLayout
-                line={songCount(SYNTHETIC_TRACKS.length)}
+                line={songCount(SYNTHETIC_TRACKS.length, catalogueOf("en"))}
                 onPlay={() => undefined}
                 onShuffle={() => undefined}
                 sortControl={anchored(

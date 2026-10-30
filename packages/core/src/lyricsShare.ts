@@ -185,6 +185,7 @@ const two = (n: number): string => String(n).padStart(2, "0");
  * A shared card's PNG's file name: `Wave - <title> - <yyyyMMdd-HHmmss>.png`,
  * local time, [untitled] standing in for a title with nothing usable.
  */
+// not UI text: a PNG's file name
 export const cardFileName = (title: string | null, untitled: string, at: Date): string => {
   const cleaned = (title ?? "").replace(UNSAFE_NAME, " ").replace(/\s+/g, " ").trim();
   const name = cleaned === "" ? untitled : cleaned.slice(0, NAME_TITLE_LENGTH).trim();

@@ -1,5 +1,7 @@
+import { currentLocalisation } from "@/localisation/localisation";
+import { useLocalisation } from "@/localisation/localisation";
 import { useScreenContent } from "@/lib/screenTiming";
-import { counted, describeFolder } from "@wave/core";
+import { describeFolder } from "@wave/core";
 import { IconMinus } from "@tabler/icons-react-native";
 import { ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -22,11 +24,14 @@ const failed = (title: string) => (error: unknown) => showError(title, error);
 
 const confirmRemove = async (path: string, name: string): Promise<void> => {
   const remove = await confirmAction({
-    title: `Remove ${name}?`,
-    message: "Its songs leave your library. The files stay on your phone.",
-    action: { label: "Remove", destructive: true },
+    title: currentLocalisation().strings.settings.removeFolder(name),
+    message: currentLocalisation().strings.settings.itsSongsLeaveYourLibraryTheFiles,
+    action: { label: currentLocalisation().strings.settings.remove, destructive: true },
   });
-  if (remove) await removeMusicFolder(path).catch(failed("Couldn't remove the folder"));
+  if (remove)
+    await removeMusicFolder(path).catch(
+      failed(currentLocalisation().strings.settings.couldntRemoveTheFolder),
+    );
 };
 
 type FolderRowProps = {
@@ -39,7 +44,8 @@ type FolderRowProps = {
 };
 
 function FolderRow({ path, detail, removeLabel, removable, onRemove }: FolderRowProps) {
-  const label = describeFolder(path);
+  const { strings } = useLocalisation();
+  const label = describeFolder(path, strings);
   const parent = label.relativePath.includes("/")
     ? label.relativePath.slice(0, label.relativePath.lastIndexOf("/"))
     : null;
@@ -83,6 +89,7 @@ function FolderRow({ path, detail, removeLabel, removable, onRemove }: FolderRow
  * rescans the library.
  */
 export default function MusicFoldersScreen() {
+  const { strings } = useLocalisation();
   const insets = useSafeAreaInsets();
   const roots = useLoadedScanRoots();
   const excluded = useLoadedExcludedFolders();
@@ -92,7 +99,7 @@ export default function MusicFoldersScreen() {
   const scanning = useScanStatus() === "scanning";
   return (
     <View className="flex-1 bg-background">
-      <ScreenHeader title="Music folders" />
+      <ScreenHeader title={strings.settings.musicFolders} />
       <ScrollView
         contentContainerStyle={{
           paddingHorizontal: grid.margin,
@@ -106,7 +113,7 @@ export default function MusicFoldersScreen() {
           // The moment it takes to read them: blank, as the Library's lists are, but heard.
           <View
             accessible
-            accessibilityLabel="Loading music folders"
+            accessibilityLabel={strings.settings.loadingMusicFolders}
             accessibilityState={{ busy: true }}
             style={{ minHeight: grid.row }}
           />
@@ -125,55 +132,56 @@ function FolderLists({
   excluded: readonly string[];
   scanning: boolean;
 }) {
+  const { strings } = useLocalisation();
   return (
     <>
-      <CatalogLine className="mb-2">Wave shows songs from</CatalogLine>
+      <CatalogLine className="mb-2">{strings.settings.waveShowsSongsFrom}</CatalogLine>
       <Hairline />
       {roots.map((root) => (
         <FolderRow
           key={root.path}
           path={root.path}
-          detail={root.lastScannedAt === null ? undefined : counted(root.trackCount, "song")}
-          removeLabel="Remove"
+          detail={
+            root.lastScannedAt === null ? undefined : strings.library.songCount(root.trackCount)
+          }
+          removeLabel={strings.settings.remove}
           removable={roots.length > 1 && !scanning}
-          onRemove={() => void confirmRemove(root.path, describeFolder(root.path).name)}
+          onRemove={() => void confirmRemove(root.path, describeFolder(root.path, strings).name)}
         />
       ))}
       <View className="items-start">
         <TextButton
-          label="Add folder"
+          label={strings.settings.addFolder}
           disabled={scanning}
           onPress={() => void promptForMusicFolder()}
         />
       </View>
       <Text className="font-sans text-footnote text-secondary">
-        Every folder inside these is included. Wave keeps at least one folder, and folders can't
-        change while a scan runs.
+        {strings.settings.everyFolderInsideTheseIsIncludedWave}
       </Text>
 
-      <CatalogLine className="mb-2 mt-12">Wave ignores</CatalogLine>
+      <CatalogLine className="mb-2 mt-12">{strings.settings.waveIgnores}</CatalogLine>
       <Hairline />
       {excluded.map((path) => (
         <FolderRow
           key={path}
           path={path}
-          removeLabel="Stop excluding"
+          removeLabel={strings.settings.stopExcluding}
           removable={!scanning}
           onRemove={() => {
-            includeMusicFolder(path).catch(failed("Couldn't include the folder"));
+            includeMusicFolder(path).catch(failed(strings.settings.couldntIncludeTheFolder));
           }}
         />
       ))}
       <View className="items-start">
         <TextButton
-          label="Exclude folder"
+          label={strings.settings.excludeFolder}
           disabled={scanning}
           onPress={() => void promptForExcludedFolder()}
         />
       </View>
       <Text className="font-sans text-footnote text-secondary">
-        Songs in excluded folders, and the folders inside them, leave your library. The files stay
-        on your phone.
+        {strings.settings.songsInExcludedFoldersAndTheFolders}
       </Text>
     </>
   );

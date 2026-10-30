@@ -1,3 +1,4 @@
+import { currentLocalisation, useLocalisation } from "@/localisation/localisation";
 import {
   UNDERLINE_WAVE,
   currentEntry,
@@ -86,6 +87,8 @@ const playingKey = (): string | null => currentEntry(queueState.get())?.key ?? n
  * seeks to. The release stays on screen until a render shows the seek.
  */
 export function Scrubber() {
+  const { strings } = useLocalisation();
+  const ofTime = strings.playbackText.ofTime;
   useRenderCount("Scrubber");
   const durationMs = usePlayheadDuration();
   const entryKey = useSyncExternalStore(queueState.subscribe, playingKey);
@@ -205,7 +208,7 @@ export function Scrubber() {
   });
   const accessibilityProps = useAnimatedProps(() => ({
     accessibilityValue: {
-      text: `${formatDuration(shown.get())} of ${formatDuration(bar.get().durationMs)}`,
+      text: `${formatDuration(shown.get())} ${ofTime} ${formatDuration(bar.get().durationMs)}`,
     },
   }));
 
@@ -219,7 +222,7 @@ export function Scrubber() {
           accessible
           accessibilityRole="adjustable"
           accessibilityState={{ disabled: !enabled }}
-          accessibilityLabel="Playback position"
+          accessibilityLabel={currentLocalisation().strings.playbackText.playbackPosition}
           accessibilityActions={[{ name: "increment" }, { name: "decrement" }]}
           onAccessibilityAction={(event) => {
             const step = event.nativeEvent.actionName === "increment" ? STEP_MS : -STEP_MS;

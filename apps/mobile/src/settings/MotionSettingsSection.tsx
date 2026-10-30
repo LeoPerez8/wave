@@ -1,7 +1,9 @@
+import { useLocalisation } from "@/localisation/localisation";
 import {
   BOUNCE_AMOUNT,
   sampleSwipeActions,
   swipeActionLabels,
+  type AppLanguage,
   type RowMenuAction,
 } from "@wave/core";
 import { useMemo, useState } from "react";
@@ -21,8 +23,15 @@ const percent = (value: number) => `${value}%`;
 const nothing = (): void => undefined;
 
 /** A side of the sample's swipe: what it uncovers, running nothing. */
-const sampleSide = (action: RowMenuAction | null): SwipeSide | null =>
-  action === null ? null : { action, ...swipeActionLabels(action), leaves: false, run: nothing };
+const sampleSide = (action: RowMenuAction | null, language: AppLanguage): SwipeSide | null =>
+  action === null
+    ? null
+    : {
+        action,
+        ...swipeActionLabels(action, language),
+        leaves: false,
+        run: nothing,
+      };
 
 /**
  * Bounce amount's sample: the sample song row on the real swipe gesture,
@@ -31,14 +40,15 @@ const sampleSide = (action: RowMenuAction | null): SwipeSide | null =>
  * swipe and spring.
  */
 function BounceSample({ demo }: { demo: number }) {
+  const { language, strings } = useLocalisation();
   const settings = useSwipeSettings();
   const swipe = useMemo((): RowSwipe => {
     const { right, left } = sampleSwipeActions(settings);
-    return { right: sampleSide(right), left: sampleSide(left) };
-  }, [settings]);
+    return { right: sampleSide(right, language), left: sampleSide(left, language) };
+  }, [settings, language]);
   return (
     <SwipeableRow swipe={swipe} sample demo={demo}>
-      <SampleSongRow accessibilityHint="Shows the bounce when swiped. It plays nothing." />
+      <SampleSongRow accessibilityHint={strings.settings.showsTheBounceWhenSwipedItPlays} />
     </SwipeableRow>
   );
 }
@@ -50,15 +60,16 @@ function BounceSample({ demo }: { demo: number }) {
  * bounces).
  */
 export function MotionSettingsSection() {
+  const { strings } = useLocalisation();
   const bounce = useBounceAmount();
   const reduceMotion = useReducedMotion();
   const [demo, setDemo] = useState(0);
   return (
     <View>
-      <CatalogLine className="mb-2">Motion</CatalogLine>
+      <CatalogLine className="mb-2">{strings.settings.motion}</CatalogLine>
       <Hairline />
       <SettingsSlider
-        label="Bounce amount"
+        label={strings.settings.bounceAmount}
         value={bounce}
         range={BOUNCE_AMOUNT}
         format={percent}
@@ -69,11 +80,11 @@ export function MotionSettingsSection() {
       <Hairline />
       {reduceMotion && (
         <Text className="mt-2 font-sans text-footnote text-secondary">
-          Android&apos;s Remove animations is on, so nothing bounces.
+          {strings.settings.androidsRemoveAnimationsIsOnSoNothing}
         </Text>
       )}
       <Text className="mt-2 font-sans text-footnote text-secondary">
-        Swipe the sample song to feel the bounce. The default is {BOUNCE_AMOUNT.default}%.
+        {strings.settings.bounceFootnote(BOUNCE_AMOUNT.default)}
       </Text>
     </View>
   );

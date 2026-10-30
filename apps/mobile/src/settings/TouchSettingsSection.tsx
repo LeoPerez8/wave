@@ -1,3 +1,4 @@
+import { useLocalisation } from "@/localisation/localisation";
 import { useState } from "react";
 import { Text, View } from "react-native";
 import { useReducedMotion } from "react-native-reanimated";
@@ -16,15 +17,16 @@ import { LONG_PRESS_DELAY, setLongPressDelayMs, useLongPressDelayMs } from "./lo
  * a line says why nothing fills).
  */
 export function TouchSettingsSection() {
+  const { strings } = useLocalisation();
   const ms = useLongPressDelayMs();
   const reduceMotion = useReducedMotion();
   const [demo, setDemo] = useState(0);
   return (
     <View>
-      <CatalogLine className="mb-2">Touch</CatalogLine>
+      <CatalogLine className="mb-2">{strings.settings.touch}</CatalogLine>
       <Hairline />
       <SettingsSlider
-        label="Long-press delay"
+        label={strings.settings.longpressDelay}
         value={ms}
         range={LONG_PRESS_DELAY}
         format={(value) => `${value} ms`}
@@ -35,11 +37,11 @@ export function TouchSettingsSection() {
       <Hairline />
       {reduceMotion && (
         <Text className="mt-2 font-sans text-footnote text-secondary">
-          Android&apos;s Remove animations is on, so the sample doesn&apos;t fill.
+          {strings.settings.androidsRemoveAnimationsIsOnSoThe}
         </Text>
       )}
       <Text className="mt-2 font-sans text-footnote text-secondary">
-        Hold the sample song to feel the delay. The default is {LONG_PRESS_DELAY.default} ms.
+        {strings.settings.longPressFootnote(LONG_PRESS_DELAY.default)}
       </Text>
     </View>
   );

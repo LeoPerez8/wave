@@ -1,6 +1,8 @@
 import { importProgressLine } from "@wave/core";
 import { Text } from "react-native";
 
+import { useLocalisation } from "@/localisation/localisation";
+
 import { useImportProgress } from "./importProgress";
 
 /**
@@ -11,6 +13,7 @@ import { useImportProgress } from "./importProgress";
  */
 export function ImportProgressLine({ playlistId }: { playlistId: number }) {
   const progress = useImportProgress(playlistId);
+  const { language } = useLocalisation();
   if (progress === null) return null;
   return (
     <Text
@@ -18,7 +21,7 @@ export function ImportProgressLine({ playlistId }: { playlistId: number }) {
       className="font-sans text-footnote text-accent"
       style={{ fontVariant: ["tabular-nums"] }}
     >
-      {importProgressLine(progress)}
+      {importProgressLine(progress, language)}
     </Text>
   );
 }

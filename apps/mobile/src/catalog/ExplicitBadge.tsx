@@ -1,5 +1,7 @@
 import { Text, View, useWindowDimensions } from "react-native";
 
+import { useLocalisation } from "@/localisation/localisation";
+
 /** The badge's side at font scale 1: a little under the body text's cap height plus its descent. */
 const SIZE = 14;
 const LETTER = 10;
@@ -16,6 +18,7 @@ const CORNER = 3;
  */
 export function ExplicitBadge() {
   const { fontScale } = useWindowDimensions();
+  const { strings } = useLocalisation();
   const size = SIZE * fontScale;
   return (
     <View
@@ -29,7 +32,7 @@ export function ExplicitBadge() {
         style={{ fontSize: LETTER * fontScale, lineHeight: size }}
         allowFontScaling={false}
       >
-        E
+        {strings.library.explicitBadge}
       </Text>
     </View>
   );

@@ -203,3 +203,39 @@ describe("playlistRemovals", () => {
     assert.deepEqual(playlistRemovals([]), []);
   });
 });
+
+describe("playlist text in Portuguese", () => {
+  test("a new playlist is named in the active language", () => {
+    assert.equal(nextPlaylistName([], "pt-BR"), "Nova Playlist");
+    assert.equal(nextPlaylistName(["Nova Playlist", "New Playlist"], "pt-BR"), "Nova Playlist 2");
+  });
+
+  test("adding songs says what went in and what was already there", () => {
+    assert.equal(describePlaylistAdd("Rock", 0, 0, "pt-BR"), "Nenhuma música para adicionar");
+    assert.equal(describePlaylistAdd("Rock", 0, 1, "pt-BR"), "Já está em Rock");
+    assert.equal(describePlaylistAdd("Rock", 0, 3, "pt-BR"), "As 3 músicas já estão em Rock");
+    assert.equal(describePlaylistAdd("Rock", 1, 0, "pt-BR"), "1 música adicionada a Rock");
+    assert.equal(
+      describePlaylistAdd("Rock", 1234, 2, "pt-BR"),
+      "1.234 músicas adicionadas a Rock · 2 já estavam nela",
+    );
+    assert.equal(
+      describePlaylistAdd("Rock", 2, 1, "pt-BR"),
+      "2 músicas adicionadas a Rock · 1 já estava nela",
+    );
+  });
+
+  test("deleting asks in Portuguese, naming one playlist or counting several", () => {
+    assert.deepEqual(confirmPlaylistDeletion([{ name: "Rock" }], "pt-BR"), {
+      title: "Apagar Rock?",
+      message: "As músicas dela continuam na sua biblioteca.",
+      action: { label: "Apagar", destructive: true },
+    });
+    const many = Array.from({ length: 1234 }, (_, index) => ({ name: `P${index}` }));
+    assert.equal(confirmPlaylistDeletion(many, "pt-BR").title, "Apagar 1.234 playlists?");
+    assert.equal(
+      confirmPlaylistDeletion(many, "pt-BR").message,
+      "As músicas delas continuam na sua biblioteca.",
+    );
+  });
+});

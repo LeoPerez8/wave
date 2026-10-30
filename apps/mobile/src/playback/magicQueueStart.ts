@@ -1,3 +1,4 @@
+import { currentLocalisation } from "@/localisation/localisation";
 /**
  * Starting a Magic Queue from a tap or a menu: the start runs on the app's
  * runtime, and a failure says "Couldn't start the Magic Queue". Its own
@@ -19,7 +20,9 @@ type AppServices = ManagedRuntime.ManagedRuntime.Services<typeof appRuntime>;
 export const runMagicQueueStart = <A, E>(start: Effect.Effect<A, E, AppServices>): void => {
   appRuntime
     .runPromise(start)
-    .catch((error: unknown) => showError("Couldn't start the Magic Queue", error));
+    .catch((error: unknown) =>
+      showError(currentLocalisation().strings.playbackText.couldntStartTheMagicQueue, error),
+    );
 };
 
 /**

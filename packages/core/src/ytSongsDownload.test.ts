@@ -7,6 +7,7 @@ import {
   ytPlaylistDownload,
   ytPlaylistDownloadButton,
   ytSongsDownload,
+  ytDownloadButtonLabels,
 } from "./index.ts";
 import type { PlaylistItem, YtDownloadJournalJob, YtSong } from "./index.ts";
 
@@ -365,5 +366,31 @@ describe("downloading a playlist's unsearched entries", () => {
     // Cancel ends the job, not only the YT Music song's place on it.
     assert.deepEqual(view.toCancel, ["touch", touchJob]);
     assert.equal(view.line, "Downloading · 0 of 1");
+  });
+});
+
+describe("a list's download in Portuguese", () => {
+  test("the progress line, the page button and the labels to measure read in Portuguese", () => {
+    const songs = [song("a"), song("b"), song("c")];
+    const going = ytSongsDownload(songs, {
+      inLibrary: nothingInLibrary,
+      jobs: [job("a"), job("b"), job("c")],
+      language: "pt-BR",
+    });
+    assert.equal(going.line, "Baixando · 0 de 3");
+    const playlist = [file("/Music/x.mp3"), stream("a")];
+    assert.deepEqual(
+      ytPlaylistDownloadButton(
+        ytPlaylistDownload(playlist, { inLibrary: nothingInLibrary, jobs: [] }),
+        "pt-BR",
+      ),
+      { action: "downloadPlaylist", label: "Baixar" },
+    );
+    assert.deepEqual(ytDownloadButtonLabels("pt-BR"), [
+      "Baixar",
+      "Tentar Falhas Novamente",
+      "Cancelar",
+      "Baixado",
+    ]);
   });
 });

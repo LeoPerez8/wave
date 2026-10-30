@@ -1,3 +1,4 @@
+import { useLocalisation } from "@/localisation/localisation";
 import { IconArrowLeft } from "@tabler/icons-react-native";
 import { router } from "@/lib/timingRouter";
 import { Text, View } from "react-native";
@@ -23,11 +24,16 @@ export function ScreenHeader({
   titleLongPress?: TitleLongPress | undefined;
   onTitlePress?: () => void;
 }) {
+  const { strings } = useLocalisation();
   const insets = useSafeAreaInsets();
   return (
     <View className="bg-background" style={{ paddingTop: insets.top + 4 }}>
       <View style={{ paddingHorizontal: grid.margin - 12 }}>
-        <IconButton icon={IconArrowLeft} label="Back" onPress={() => router.back()} />
+        <IconButton
+          icon={IconArrowLeft}
+          label={strings.settings.back}
+          onPress={() => router.back()}
+        />
       </View>
       {title !== undefined && (
         <View

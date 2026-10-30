@@ -40,6 +40,8 @@ const loadTheme = async (
       hasLaunchTheme: () => ${launchThemeSaved},
       appliedLauncherAlias: () => ${JSON.stringify(appliedAlias)},
     };
+    export const phoneLanguages = () => [];
+    export const subscribePhoneLanguages = () => () => {};
     export const WavePlayer = { setNotificationAccent: async () => {} };
     export const AppState = { addEventListener: () => ({ remove: () => {} }) };
     export const useColorScheme = () => "dark";

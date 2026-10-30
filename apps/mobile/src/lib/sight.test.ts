@@ -7,6 +7,7 @@ import { createLibraryQueries, type LibraryChange } from "@wave/core";
 import { makeExternalStore } from "./externalStore.ts";
 import {
   attachInSight,
+  everyWhileInSight,
   sightOf,
   useStoreInSight,
   type ScreenSight,
@@ -197,4 +198,41 @@ test("without a sight (a bundle that keeps hidden screens following) it follows 
   act(() => playing.set("song 2"));
   assert.deepEqual(rendered, ["song 1", "song 2"]);
   unmount();
+});
+
+test("a timed re-read runs only while the screen is in sight, and once more on its return", (t) => {
+  t.mock.timers.enable({ apis: ["setInterval"] });
+  const focused = condition(true);
+  const app = condition(true);
+  const sight = sightOf(focused.condition, app.condition);
+  let reads = 0;
+  const stop = everyWhileInSight(sight, 60_000, () => reads++);
+
+  t.mock.timers.tick(60_000);
+  assert.equal(reads, 1);
+  app.set(false);
+  t.mock.timers.tick(10 * 60_000);
+  assert.equal(reads, 1, "nothing runs in the background");
+  app.set(true);
+  assert.equal(reads, 2, "coming back reads once");
+  t.mock.timers.tick(60_000);
+  assert.equal(reads, 3);
+
+  stop();
+  t.mock.timers.tick(10 * 60_000);
+  assert.equal(reads, 3);
+  assert.equal(app.listeners() + focused.listeners(), 0);
+});
+
+test("a timed re-read set up out of sight waits for the screen", (t) => {
+  t.mock.timers.enable({ apis: ["setInterval"] });
+  const focused = condition(false);
+  let reads = 0;
+  const stop = everyWhileInSight(sightOf(focused.condition), 60_000, () => reads++);
+  t.mock.timers.tick(5 * 60_000);
+  assert.equal(reads, 0);
+  focused.set(true);
+  t.mock.timers.tick(60_000);
+  assert.equal(reads, 2);
+  stop();
 });

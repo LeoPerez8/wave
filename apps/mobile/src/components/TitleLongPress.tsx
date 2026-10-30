@@ -1,6 +1,7 @@
 import * as Haptics from "expo-haptics";
 import type { ReactNode } from "react";
 
+import { useLocalisation } from "@/localisation/localisation";
 import { Press } from "@/motion/Press";
 
 /**
@@ -30,11 +31,12 @@ export function TitlePress({
   titleLongPress: TitleLongPress | undefined;
   children: ReactNode;
 }) {
+  const { strings } = useLocalisation();
   if (titleLongPress === undefined) return children;
   return (
     <Press
       accessibilityRole="header"
-      accessibilityHint={`Long press to ${titleLongPress.label.toLowerCase()}`}
+      accessibilityHint={strings.settings.titleLongPressHint(titleLongPress.label)}
       accessibilityActions={[{ name: "activate", label: titleLongPress.label }]}
       onAccessibilityAction={({ nativeEvent: { actionName } }) => {
         if (actionName === "activate") titleLongPress.open();

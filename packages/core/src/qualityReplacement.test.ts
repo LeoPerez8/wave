@@ -613,3 +613,33 @@ function job(id: string, patch: Partial<YtDownloadJournalJob> = {}): YtDownloadJ
     ...patch,
   };
 }
+
+describe("quality offers in Portuguese", () => {
+  test("the upgrade card, row and estimate read in Portuguese, with a decimal comma", () => {
+    const songs = Array.from({ length: 13 }, (_, index) => file(index + 1));
+    const offer = qualityUpgradeOffer(songs, { onMobileData: true }, "pt-BR");
+    assert.deepEqual(offer?.alert, {
+      title: "Substituir 13 músicas pela melhor qualidade?",
+      message: "Cerca de +62 MB. Baixa cerca de 104 MB, e o celular não está no Wi-Fi.",
+      action: { label: "Substituir" },
+      dismissLabel: "Agora não",
+    });
+    assert.equal(offer?.row, "Substituir 13 músicas pela melhor qualidade");
+    assert.equal(formatStorageSize(1_250_000_000, "pt-BR"), "1,3 GB");
+  });
+
+  test("freeing space reads in Portuguese", () => {
+    const offer = qualityDowngradeOffer(
+      mp3s(1),
+      { onMobileData: false, youTubeKbps: 128 },
+      "pt-BR",
+    );
+    assert.equal(
+      offer?.alert.title,
+      "Liberar cerca de 7 MB substituindo 1 música por cópias do YouTube Music?",
+    );
+    assert.equal(offer?.alert.message, "As cópias do YouTube Music são AAC a cerca de 128 kbps.");
+    assert.equal(offer?.row, "Liberar espaço: substituir 1 música");
+    assert.equal(offer?.summary, "Libera cerca de 7 MB");
+  });
+});

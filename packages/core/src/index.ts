@@ -1,5 +1,6 @@
 ﻿export {
   UNKNOWN_ALBUM,
+  UNKNOWN_SONG_TITLE,
   UNKNOWN_ARTIST,
   VARIOUS_ARTISTS,
   albumKey,
@@ -277,9 +278,16 @@ export {
   STATS_TOP,
   rankPlays,
   rankSongPlays,
+  statsPeriods,
   statsWindow,
 } from "./stats.ts";
-export type { PlayTotals, SongPlayTotals, StatsPeriod, StatsWindow } from "./stats.ts";
+export type {
+  PlayTotals,
+  SongPlayTotals,
+  StatsPeriod,
+  StatsPeriodOption,
+  StatsWindow,
+} from "./stats.ts";
 export { compareRefIds, compareTrackRefs } from "./refOrder.ts";
 export type { LibraryIdOrder, RefId } from "./refOrder.ts";
 export { rankMostPlayed } from "./mostPlayed.ts";
@@ -394,6 +402,10 @@ export {
   tabsOffBar,
 } from "./tabBar.ts";
 export type { TabBar, TabBarEdit, TabBarTab } from "./tabBar.ts";
+export { catalogueOf, resolveAppLanguage } from "./localisation.ts";
+export type { AppLanguage, Catalogue } from "./localisation.ts";
+export { plural } from "./plural.ts";
+export type { PluralForms } from "./plural.ts";
 export { createDeveloperTitleTaps } from "./developerSettings.ts";
 export {
   LAYOUT_PAGES,
@@ -573,6 +585,7 @@ export {
   songOrderTerms,
   songSpineField,
   songSortLabel,
+  songSortLabelFor,
   songSortsFor,
   songSpineKeys,
   sortSongs,
@@ -784,6 +797,8 @@ export {
 export type { LibrarySongKey, TrackRef, YtSong } from "./ytMusic.ts";
 export {
   CONFIRM_WAVE_ACCOUNT_DELETION,
+  confirmWaveAccountDeletion,
+  waveAccountCard,
   WAVE_ACCOUNT_CARD,
   WAVE_ACCOUNT_SIGNED_OUT,
   stepWaveAccount,
@@ -806,6 +821,7 @@ export {
   SPOTIFY_ACCOUNT_SIGNED_OUT,
   SPOTIFY_CHANGED_LINE,
   SPOTIFY_SIGN_IN_FAILURE_LINES,
+  spotifySignInFailureLines,
   spotifyAccountView,
   stepSpotifyAccount,
 } from "./spotifyAccount.ts";
@@ -980,6 +996,7 @@ export type {
 export {
   YT_ALBUM_DOWNLOAD_ACTION_LABELS,
   YT_DOWNLOAD_BUTTON_LABELS,
+  ytDownloadButtonLabels,
   YT_PLAYLIST_DOWNLOAD_ACTION_LABELS,
   ytAlbumDownload,
   ytAlbumDownloadButton,
@@ -1198,6 +1215,7 @@ export {
   playlistUnplayableNotice,
   readPlaylistEntrySong,
   UNAVAILABLE_ENTRY_ACTION_LABELS,
+  unavailableEntryActionLabel,
   unavailableEntryActions,
   unavailableEntryView,
   unavailableSearchQuery,
@@ -1234,6 +1252,8 @@ export {
   sharedTextImport,
   spotifyShortLinkTarget,
   YT_MUSIC_OFF_NOTICE,
+  ytMusicOffNotice,
+  playlistLinkReason,
 } from "./playlistLinks.ts";
 export type {
   ImportNotice,
@@ -1420,12 +1440,16 @@ export {
   SYNC_PUSH_BATCH,
   SYNC_TABLE_NAMES,
   pushBatches,
+  pushBody,
   readPullPage,
   syncFieldFits,
 } from "./syncWire.ts";
 export type {
   SyncFavorite,
   SyncFieldKind,
+  SyncFollow,
+  SyncHiddenRelease,
+  SyncNotifiedShow,
   SyncPullPage,
   SyncPlayEnd,
   SyncPlayRow,
@@ -1439,6 +1463,7 @@ export type {
 } from "./syncWire.ts";
 export {
   MISSING_SONGS_DOWNLOAD_ACTION_LABELS,
+  missingSongsDownloadActionLabels,
   missingSongJob,
   missingSongJobId,
   missingSongLookup,
@@ -2089,9 +2114,15 @@ export type { CoverDoubleTap, CoverTaps } from "./coverGestures.ts";
 export { createStarPop } from "./starPop.ts";
 export type { StarPop } from "./starPop.ts";
 export { discoverLevelLabel } from "./discoverMixLevels.ts";
-export { DISCOVER_ROWS, discoverRowTitle } from "./homeSections.ts";
-export type { DiscoverRowId, MixRowId } from "./homeSections.ts";
 export {
+  DISCOVER_ROWS,
+  discoverRowTitle,
+  hiddenDiscoverRows,
+  discoverMixRowsToBuild,
+} from "./homeSections.ts";
+export type { DiscoverRowId, DiscoverRowEdit, MixRowId } from "./homeSections.ts";
+export {
+  appLyricsTranslationTarget,
   lyricsTranslationKey,
   lyricsTranslationLanguageName,
   lyricsTranslationRequest,
@@ -2110,6 +2141,7 @@ export {
   swipeChoiceAction,
   shownSwipeEntry,
   swipeChoiceLabel,
+  swipeChoiceLabelFor,
   swipeActionLabels,
   swipeActionTone,
   swipesChoose,
@@ -2283,13 +2315,15 @@ export {
 
 export {
   RECOGNIZE_CARD_ACTION_LABELS,
+  recognizeCardActionLabels,
   recognizeCardView,
   recognizeHoldsPlayback,
-  recognizeLogLine,
   recognizeSource,
   startRecognize,
   stepRecognize,
 } from "./recognize.ts";
+export { recognizeLogLine } from "./recognizeLog.ts";
+export type { RecognizeLogOutcome } from "./recognizeLog.ts";
 export { recognizeEntryAction } from "./recognizeEntry.ts";
 export type {
   RecognizeAnswer,
@@ -2300,7 +2334,6 @@ export type {
   RecognizeEnd,
   RecognizeEvent,
   RecognizeFailure,
-  RecognizeLogOutcome,
   RecognizeSession,
   RecognizeSource,
   RecognizeStep,
@@ -2346,3 +2379,11 @@ export type {
   NowPlayingSlot,
   NowPlayingSlotSong,
 } from "./nowPlayingButtons.ts";
+
+export * from "./followedArtists.ts";
+export * from "./followArtistSearch.ts";
+
+export { releaseTitle } from "./ytArtist.ts";
+export { formatNumber, formatTime, formatDate } from "./formatting.ts";
+export { showCardDate } from "./showCard.ts";
+export type { ShowCardDate } from "./showCard.ts";

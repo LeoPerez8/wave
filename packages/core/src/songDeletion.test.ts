@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { confirmSongDeletion, confirmSongRemoval, songDeletionFailure } from "./index.ts";
+import {
+  catalogueOf,
+  confirmSongDeletion,
+  confirmSongRemoval,
+  songDeletionFailure,
+} from "./index.ts";
+
+const pt = catalogueOf("pt-BR");
 
 describe("confirmSongDeletion", () => {
   test("names the one song and says the file leaves the phone, in destructive style", () => {
@@ -108,6 +115,41 @@ describe("songDeletionFailure", () => {
         "“B”: Wave isn't allowed to delete it.\n" +
         "“C”: its storage is read-only.\n" +
         "And 2 more.",
+    });
+  });
+});
+
+describe("in Portuguese", () => {
+  test("the confirmations count and name songs, with the glossary's Apagar and Remover", () => {
+    const songs = Array.from({ length: 1200 }, (_, i) => ({ title: `Song ${i}` }));
+    assert.deepEqual(confirmSongDeletion(songs, { signedIn: true }, pt), {
+      title: "Apagar 1.200 músicas?",
+      message: "Os arquivos são removidos do seu celular, e as músicas, da sua Conta Wave.",
+      action: { label: "Apagar", destructive: true },
+    });
+    assert.deepEqual(confirmSongRemoval([{ title: "Hey Jude" }], pt), {
+      title: "Remover “Hey Jude” da sua Biblioteca?",
+      message:
+        "Ela também sai da sua Conta Wave. Seus outros celulares a perdem na próxima sincronização, a menos que tenham o arquivo dela.",
+      action: { label: "Remover", destructive: true },
+    });
+  });
+
+  test("a failed delete says why in Portuguese", () => {
+    assert.deepEqual(songDeletionFailure([{ title: "Hey Jude", reason: "denied" }], 1, pt), {
+      title: "Não foi possível apagar “Hey Jude”",
+      message: "O Wave não tem permissão para apagá-lo. A música continua na sua biblioteca.",
+    });
+    const failures = ["A", "B", "C", "D"].map((title) => ({ title, reason: "missing" as const }));
+    assert.deepEqual(songDeletionFailure(failures, 5, pt), {
+      title: "Não foi possível apagar 4 de 5 músicas",
+      message: [
+        "Elas continuam na sua biblioteca.",
+        "“A”: o arquivo já não existe.",
+        "“B”: o arquivo já não existe.",
+        "“C”: o arquivo já não existe.",
+        "E mais 1.",
+      ].join("\n"),
     });
   });
 });

@@ -1,5 +1,12 @@
+import { useLocalisation } from "@/localisation/localisation";
 import { IconSwipeLeft, IconSwipeRight, type Icon } from "@tabler/icons-react-native";
-import { SWIPE_CHOICES, swipeChoiceLabel, type RowSwipeSide, type SwipeChoice } from "@wave/core";
+import {
+  SWIPE_CHOICES,
+  swipeChoiceLabelFor,
+  type RowSwipeSide,
+  type SwipeChoice,
+  type Catalogue,
+} from "@wave/core";
 import { router } from "expo-router";
 import { Text, View } from "react-native";
 
@@ -14,15 +21,23 @@ import { setSwipeChoice, useSwipeSettings } from "./swipeActions";
 
 interface SwipeDirection {
   /** Its row's title, its picker's header and what a screen reader calls it. */
-  readonly title: string;
+  readonly title: (strings: Catalogue) => string;
   /** Where its picker is (also `wave://settings/swipe-actions/<side>`). */
   readonly route: "/settings/swipe-actions/left" | "/settings/swipe-actions/right";
   readonly icon: Icon;
 }
 
 const DIRECTIONS: Readonly<Record<RowSwipeSide, SwipeDirection>> = {
-  left: { title: "Swipe left", route: "/settings/swipe-actions/left", icon: IconSwipeLeft },
-  right: { title: "Swipe right", route: "/settings/swipe-actions/right", icon: IconSwipeRight },
+  left: {
+    title: (strings) => strings.settings.swipeLeft,
+    route: "/settings/swipe-actions/left",
+    icon: IconSwipeLeft,
+  },
+  right: {
+    title: (strings) => strings.settings.swipeRight,
+    route: "/settings/swipe-actions/right",
+    icon: IconSwipeRight,
+  },
 };
 
 /** The two directions, in the order Settings › Swipe actions lists them. */
@@ -42,15 +57,17 @@ export function SwipeDirectionRow({
   chosen: SwipeChoice;
   enabled: boolean;
 }) {
-  const { title, route, icon: Glyph } = DIRECTIONS[side];
+  const { language, strings } = useLocalisation();
+  const { route, icon: Glyph } = DIRECTIONS[side];
+  const title = DIRECTIONS[side].title(strings);
   const foreground = useThemeColor("foreground");
   const tertiary = useThemeColor("tertiary");
-  const action = swipeChoiceLabel(chosen);
+  const action = swipeChoiceLabelFor(language)(chosen);
   return (
     <Press
       accessibilityRole="button"
       accessibilityLabel={`${title}, ${action}`}
-      accessibilityHint={enabled ? `Chooses what swiping ${side} runs` : undefined}
+      accessibilityHint={enabled ? strings.settings.swipeHint(side) : undefined}
       accessibilityState={{ disabled: !enabled }}
       disabled={!enabled}
       onPress={() => router.push(route)}
@@ -89,7 +106,9 @@ const closePicker = (): void => {
  * back to Swipe actions; Back leaves it as it was.
  */
 export function SwipeChoicePickerScreen({ side }: { side: RowSwipeSide }) {
-  const { title } = DIRECTIONS[side];
+  const { language, strings } = useLocalisation();
+  const choiceLabel = swipeChoiceLabelFor(language);
+  const title = DIRECTIONS[side].title(strings);
   const chosen = useSwipeSettings()[side];
   return (
     <SettingsPageScreen title={title}>
@@ -97,7 +116,7 @@ export function SwipeChoicePickerScreen({ side }: { side: RowSwipeSide }) {
         <Hairline />
         <View accessibilityRole="radiogroup" accessibilityLabel={title}>
           {SWIPE_CHOICES.map((choice) => {
-            const label = swipeChoiceLabel(choice);
+            const label = choiceLabel(choice);
             return (
               <ChoiceRow
                 key={choice}
@@ -113,9 +132,7 @@ export function SwipeChoicePickerScreen({ side }: { side: RowSwipeSide }) {
           })}
         </View>
         <Text className="mt-2 font-sans text-footnote text-secondary">
-          Remove takes a song out of the playlist it&apos;s in, and elsewhere asks before deleting
-          it. A song without the chosen action, such as Download on a song already on the phone,
-          doesn&apos;t swipe that way.
+          {strings.settings.removeTakesASongOutOfThe}
         </Text>
       </View>
     </SettingsPageScreen>

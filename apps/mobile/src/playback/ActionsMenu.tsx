@@ -1,6 +1,7 @@
+import { useFollow } from "@/library/follows";
+import { currentLocalisation, useLocalisation } from "@/localisation/localisation";
+import { followMenuPress } from "@/library/FollowButton";
 import {
-  PLAY_ACTION_LABELS,
-  YT_PLAYLIST_DOWNLOAD_ACTION_LABELS,
   currentEntry,
   menuLayout,
   type DownloadOrigin,
@@ -47,6 +48,7 @@ const NO_DOWNLOADS: readonly MenuChoice[] = [];
 
 /** How a menu was opened. */
 export interface MenuOptions {
+  readonly extraEntries?: readonly MenuChoice[] | undefined;
   /** The list it was opened from can select: the menu offers Select, which calls this. */
   readonly onSelect?: (() => void) | undefined;
   /** The song is the one playing (the mini player's long press): no Play Next or Add to Queue. */
@@ -63,7 +65,12 @@ export const openItemCard = (
   render: (close: () => void) => ReactNode,
   anchor = pressedRect(),
 ): void => {
-  openOverlay({ label: targetHeading(target, undefined)?.title ?? "Actions", anchor, render });
+  openOverlay({
+    label:
+      targetHeading(target, undefined)?.title ?? currentLocalisation().strings.playbackText.actions,
+    anchor,
+    render,
+  });
 };
 
 /**
@@ -86,6 +93,7 @@ const openActions = (
         <ActionsMenu
           target={target}
           close={close}
+          extraEntries={options.extraEntries}
           onSelect={options.onSelect}
           playing={options.playing}
           playlistEntries={entries}
@@ -235,11 +243,12 @@ function usePlaylistDownloadEntries(
   origin: DownloadOrigin | null,
   close: () => void,
 ): MenuChoice[] {
+  const { strings } = useLocalisation();
   const inLibrary = useLoadedInLibrary();
   const download = useYtPlaylistDownload(entries, inLibrary);
   return download.actions.map((action) => ({
     action,
-    label: YT_PLAYLIST_DOWNLOAD_ACTION_LABELS[action],
+    label: strings.downloads.playlistActions[action],
     onPress: () => {
       close();
       runYtPlaylistDownloadAction(action, entries, inLibrary, origin);
@@ -264,8 +273,10 @@ function ActionsMenu({
   playlistEntries: listed,
   collectionSongs,
   playing,
+  extraEntries = [],
 }: {
   target: ActionItems;
+  extraEntries?: readonly MenuChoice[] | undefined;
   close: () => void;
   onSelect: (() => void) | undefined;
   /** The song is the one playing: no Play Next or Add to Queue. */
@@ -284,6 +295,19 @@ function ActionsMenu({
     collectionSongs,
     playing,
   });
+  const { strings } = useLocalisation();
+  const artist = target.kind === "artist" ? target.items[0] : undefined;
+  const follow = useFollow(artist?.name ?? "");
+  const followEntries: readonly MenuChoice[] =
+    artist === undefined
+      ? []
+      : [
+          {
+            action: "follow",
+            label: follow === null ? strings.playbackText.follow : strings.playbackText.following,
+            onPress: () => followMenuPress(artist, close),
+          },
+        ];
   const playlist = target.kind === "playlist" ? target.items[0] : undefined;
   const downloads = usePlaylistDownloadEntries(
     listed,
@@ -296,6 +320,16 @@ function ActionsMenu({
       sectionSongs={sectionSongs}
       actions={actions}
       downloads={downloads}
+      extraEntries={[
+        ...followEntries,
+        ...extraEntries.map((entry) => ({
+          ...entry,
+          onPress: () => {
+            close();
+            entry.onPress();
+          },
+        })),
+      ]}
       play={(shuffle) => {
         close();
         playTarget(target, shuffle);
@@ -315,6 +349,7 @@ export function ItemMenuCard({
   sectionSongs,
   actions,
   downloads = NO_DOWNLOADS,
+  extraEntries = NO_DOWNLOADS,
   play,
 }: {
   target: ActionItems;
@@ -323,9 +358,11 @@ export function ItemMenuCard({
   actions: readonly ActionEntry[];
   /** A playlist's download entries; none for other targets. */
   downloads?: readonly MenuChoice[];
+  extraEntries?: readonly MenuChoice[];
   /** A collection's Play ([shuffle] false) and Shuffle: closes the menu and plays it. */
   play: (shuffle: boolean) => void;
 }) {
+  const { strings } = useLocalisation();
   const layout = menuLayout(target.kind, actions);
   const cards = layout.cards.flatMap((card): PlayCardChoice[] => {
     if (card === "play") return [{ action: card, onPress: () => play(false) }];
@@ -335,7 +372,13 @@ export function ItemMenuCard({
   // A playlist's download entries follow Add to Playlist, before Rename and Delete.
   const entries = layout.list.flatMap((entry): MenuChoice[] =>
     entry.action === "shuffle"
-      ? [{ action: "shuffle", label: PLAY_ACTION_LABELS.shuffle, onPress: () => play(true) }]
+      ? [
+          {
+            action: "shuffle",
+            label: strings.itemActions.playLabels.shuffle,
+            onPress: () => play(true),
+          },
+        ]
       : [entry, ...(entry.action === "addToPlaylist" ? downloads : [])],
   );
 
@@ -345,7 +388,7 @@ export function ItemMenuCard({
       // A Library entry's heading counts the songs it acts on, which its row doesn't show.
       alwaysHeading={target.kind === "section"}
       cards={cards}
-      entries={entries}
+      entries={[...entries, ...extraEntries]}
     />
   );
 }

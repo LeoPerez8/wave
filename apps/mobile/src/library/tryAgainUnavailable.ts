@@ -17,6 +17,7 @@ import {
 import { useSyncExternalStore } from "react";
 
 import { makeExternalStore } from "@/lib/externalStore";
+import { currentLocalisation } from "@/localisation/localisation";
 import { showError } from "@/overlay/alert";
 import { showToast } from "@/overlay/toast";
 import { searchSongsInTurn } from "@/ytmusic/askYtMusic";
@@ -92,9 +93,14 @@ export const tryAgainUnavailable = (
         found += settled.found;
         failed += settled.failed;
       }
-      void showToast(tryAgainNotice({ searched: searches.length, found, failed }));
+      void showToast(
+        tryAgainNotice(
+          { searched: searches.length, found, failed },
+          currentLocalisation().language,
+        ),
+      );
     } catch (error) {
-      void showError("Couldn't save what Try Again found", error);
+      void showError(currentLocalisation().strings.library.unavailable.couldntSave, error);
     } finally {
       running.update((ids) => new Set([...ids].filter((id) => id !== playlistId)));
     }

@@ -1,3 +1,5 @@
+import { useLocalisation } from "@/localisation/localisation";
+import type { Catalogue } from "@wave/core";
 import { StyleSheet, Text, View } from "react-native";
 
 import { GlassSurface } from "@/glass/Glass";
@@ -24,11 +26,23 @@ const STRIPES = [
 
 /** Lines of thin and bold text across the stripes: blur softens them, refraction bends them at the card's edge. */
 const LINES = [
-  { text: "The quick brown fox jumps over the lazy dog", color: "#FFFFFF", bold: false },
+  {
+    text: (strings: Catalogue) => strings.settings.theQuickBrownFoxJumpsOverThe,
+    color: "#FFFFFF",
+    bold: false,
+  },
   { text: "WAVE WAVE WAVE WAVE WAVE WAVE", color: "#000000", bold: true },
-  { text: "Sphinx of black quartz, judge my vow", color: "#FFFFFF", bold: false },
+  {
+    text: (strings: Catalogue) => strings.settings.sphinxOfBlackQuartzJudgeMyVow,
+    color: "#FFFFFF",
+    bold: false,
+  },
   { text: "WAVE WAVE WAVE WAVE WAVE WAVE", color: "#FFFFFF", bold: true },
-  { text: "The quick brown fox jumps over the lazy dog", color: "#000000", bold: false },
+  {
+    text: (strings: Catalogue) => strings.settings.theQuickBrownFoxJumpsOverThe,
+    color: "#000000",
+    bold: false,
+  },
 ] as const;
 
 /**
@@ -38,6 +52,7 @@ const LINES = [
  * the card is the opaque surface the app's glass is there.
  */
 export function GlassSample() {
+  const { strings } = useLocalisation();
   const glass = useGlassSettings();
 
   return (
@@ -45,7 +60,7 @@ export function GlassSample() {
       className="h-44 overflow-hidden rounded-2xl"
       accessible
       accessibilityRole="image"
-      accessibilityLabel="Sample glass card over coloured stripes, drawn with the settings below"
+      accessibilityLabel={strings.settings.sampleGlassCardOverColouredStripesDrawn}
     >
       <View nativeID={BACKDROP_ID} collapsable={false} style={StyleSheet.absoluteFill}>
         <View className="flex-1 flex-row">
@@ -61,14 +76,16 @@ export function GlassSample() {
               className={`font-sans ${bold ? "text-title3 font-bold" : "text-footnote"}`}
               style={{ color }}
             >
-              {text}
+              {typeof text === "string" ? text : text(strings)}
             </Text>
           ))}
         </View>
       </View>
       <View className="absolute inset-x-8 top-10 bottom-10 items-center justify-center">
         <GlassSurface backdropId={BACKDROP_ID} cornerRadius={CARD_RADIUS} glass={glass} />
-        <Text className="font-sans text-body font-semibold text-foreground">Glass</Text>
+        <Text className="font-sans text-body font-semibold text-foreground">
+          {strings.settings.glass}
+        </Text>
       </View>
     </View>
   );

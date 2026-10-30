@@ -1,6 +1,7 @@
 import {
-  MISSING_SONGS_DOWNLOAD_ACTION_LABELS,
+  missingSongsDownloadActionLabels,
   waveAccountView,
+  type Catalogue,
   ytSongArtist,
   type WaveAccount,
   type WaveAccountNote,
@@ -11,33 +12,34 @@ import { CatalogLine } from "@/catalog/CatalogLine";
 import { CELL, grid } from "@/catalog/grid";
 import { Hairline } from "@/catalog/Hairline";
 import { TextButton } from "@/components/TextButton";
+import { useLocalisation } from "@/localisation/localisation";
 import { runMissingSongsDownloadAction, useMissingSongsDownload } from "@/ytmusic/YtDownloads";
 
 import { AccountPhoto } from "./AccountPhoto";
 import { WAVE_ACCOUNT_CONFIG, useWaveAccount } from "./waveAccount";
 
-const NOTES: Record<WaveAccountNote, string> = {
-  about:
-    "Optional. Keeps your song list, playlists, favorites, play history and preferences, so " +
-    "another phone signed in gets them back.",
-  ended: "Your Wave session ended, so this phone is signed out. Sign in again to keep your backup.",
-  deleted: "Your Wave account was deleted. Everything on this phone stays.",
-  offline: "Couldn't sign in without a connection.",
-  noGoogleAccount: "Add a Google account to this phone in Android's settings, then sign in.",
-  notAllowed: "This Google account can't use Wave's server.",
-  failed: "Couldn't sign in. Try again.",
-};
+const notes = ({ settings }: Catalogue): Record<WaveAccountNote, string> => ({
+  about: settings.waveAccountNote,
+  ended: settings.yourWaveSessionEndedSoThisPhone,
+  deleted: settings.yourWaveAccountWasDeletedEverythingOn,
+  offline: settings.couldntSignInWithoutAConnection,
+  noGoogleAccount: settings.addAGoogleAccountToThisPhone,
+  notAllowed: settings.thisGoogleAccountCantUseWavesServer,
+  failed: settings.couldntSignInTryAgain,
+});
 
-const SIGN_IN_LABELS = {
-  signIn: "Sign In with Google",
-  signInAgain: "Sign In Again",
-  signingIn: "Signing In…",
-} as const;
+const signInLabels = ({ settings }: Catalogue) => ({
+  signIn: settings.signInWithGoogle,
+  signInAgain: settings.signInAgain,
+  signingIn: settings.signingIn,
+});
 
-const DELETE_NOTES = {
-  offline: "Couldn't delete the account without a connection.",
-  failed: "Wave's server didn't delete the account. Try again.",
-} as const;
+type DeleteNote = "offline" | "failed";
+
+const deleteNotes = ({ settings }: Catalogue): Record<DeleteNote, string> => ({
+  offline: settings.couldntDeleteTheAccountWithoutAConnection,
+  failed: settings.wavesServerDidntDeleteTheAccountTry,
+});
 
 /** The signed-in account: its picture, name and email, Sign Out and Delete Account. */
 function AccountRow({
@@ -49,16 +51,20 @@ function AccountRow({
 }: {
   account: WaveAccount;
   busy: "signingOut" | "deleting" | null;
-  note: keyof typeof DELETE_NOTES | null;
+  note: DeleteNote | null;
   onSignOut: () => void;
   onDelete: () => void;
 }) {
+  const { strings } = useLocalisation();
   const name = account.name ?? account.email;
   return (
     <>
       <View
         accessible
-        accessibilityLabel={`Signed in as ${name}${account.name === null ? "" : `, ${account.email}`}`}
+        accessibilityLabel={strings.settings.signedIn(
+          name,
+          account.name === null ? null : account.email,
+        )}
         className="flex-row items-center"
         style={{ minHeight: grid.row, gap: CELL * 1.5 }}
       >
@@ -77,22 +83,19 @@ function AccountRow({
       <Hairline />
       <View className="mt-4 flex-row flex-wrap items-center" style={{ columnGap: CELL * 3 }}>
         <TextButton
-          label={busy === "signingOut" ? "Signing Out…" : "Sign Out"}
+          label={busy === "signingOut" ? strings.settings.signingOut : strings.settings.signOut}
           disabled={busy !== null}
           onPress={onSignOut}
         />
         <TextButton
-          label={busy === "deleting" ? "Deleting…" : "Delete Account"}
+          label={busy === "deleting" ? strings.settings.deleting : strings.settings.deleteAccount}
           tone="destructive"
           disabled={busy !== null}
           onPress={onDelete}
         />
       </View>
       <Text accessibilityLiveRegion="polite" className="font-sans text-footnote text-secondary">
-        {note === null
-          ? "Signing out keeps everything on this phone. Deleting the account deletes what " +
-            "Wave's server has of it, not what's on this phone."
-          : DELETE_NOTES[note]}
+        {note === null ? strings.settings.waveAccountSignOutNote : deleteNotes(strings)[note]}
       </Text>
     </>
   );
@@ -104,6 +107,7 @@ function AccountRow({
  * `missingSongsDownload`), then the songs nothing matched, which stay missing.
  */
 function MissingSongsDownloadRows() {
+  const { strings } = useLocalisation();
   const { line, actions, summary } = useMissingSongsDownload();
   if (line === null && summary === null) return null;
   return (
@@ -119,7 +123,7 @@ function MissingSongsDownloadRows() {
           {actions.map((action) => (
             <TextButton
               key={action}
-              label={MISSING_SONGS_DOWNLOAD_ACTION_LABELS[action]}
+              label={missingSongsDownloadActionLabels(strings)[action]}
               onPress={() => runMissingSongsDownloadAction(action)}
             />
           ))}
@@ -148,12 +152,13 @@ function MissingSongsDownloadRows() {
  * the account, and downloading the songs this phone has no file for.
  */
 export function WaveAccountSettingsSection() {
+  const { strings } = useLocalisation();
   const account = useWaveAccount();
   const view = waveAccountView(account.state, WAVE_ACCOUNT_CONFIG !== null);
 
   return (
     <View>
-      <CatalogLine className="mb-2">Wave Account</CatalogLine>
+      <CatalogLine className="mb-2">{strings.settings.waveAccount}</CatalogLine>
       <Hairline />
       {view.kind === "account" ? (
         <>
@@ -170,7 +175,7 @@ export function WaveAccountSettingsSection() {
         <>
           <View className="items-start justify-center" style={{ minHeight: grid.row }}>
             <TextButton
-              label={SIGN_IN_LABELS[view.action]}
+              label={signInLabels(strings)[view.action]}
               disabled={view.action === "signingIn"}
               onPress={account.signIn}
             />
@@ -180,12 +185,12 @@ export function WaveAccountSettingsSection() {
             accessibilityLiveRegion="polite"
             className="mt-2 font-sans text-footnote text-secondary"
           >
-            {NOTES[view.note]}
+            {notes(strings)[view.note]}
           </Text>
         </>
       ) : (
         <Text className="mt-2 font-sans text-footnote text-secondary">
-          Wave accounts aren't set up on this build, so there's nothing to sign in to.
+          {strings.settings.waveAccountsArentSetUpOnThis}
         </Text>
       )}
     </View>

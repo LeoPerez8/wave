@@ -1,5 +1,6 @@
 package expo.modules.wavenative.player
 
+import expo.modules.wavenative.locale.NativeText
 /** Where the Lyrics toggle is kept between drives. */
 interface LyricsToggleStore {
   fun load(): Boolean
@@ -29,7 +30,7 @@ object AutoLyrics {
   const val TOGGLE_ACTION = "expo.modules.wavenative.AUTO_LYRICS"
 
   /** The toggle's label in Auto's overflow menu. */
-  fun label(on: Boolean): String = if (on) "Lyrics on" else "Lyrics off"
+  fun label(on: Boolean): String = if (on) NativeText.get("lyricsOn") else NativeText.get("lyricsOff")
 
   /** The process-wide state: the service and [WavePlayerModule] share it. */
   val state = AutoLyricsState()

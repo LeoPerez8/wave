@@ -20,6 +20,7 @@ import {
   unsearchedSettles,
   unsearchedTrackId,
   writePlaylistEntrySong,
+  type AppLanguage,
   type OrderedEntry,
   type PlaylistItem,
   type PlaylistSong,
@@ -1436,6 +1437,7 @@ export const addToShazam = (
   rememberedId: string | null,
   song: PlaylistSong,
   now: number,
+  language: AppLanguage = "en",
 ): { readonly playlistId: number; readonly syncId: string; readonly toast: string } =>
   db.transaction((tx) => {
     const { playlists, playlistItems } = schema;
@@ -1460,7 +1462,7 @@ export const addToShazam = (
               }
               return entry.trackId === null ? [] : [{ source: "library", trackId: entry.trackId }];
             });
-    const plan = planShazamAdd(rememberedId, available, existing, song);
+    const plan = planShazamAdd(rememberedId, available, existing, song, language);
     if (plan.kind === "create") {
       const created = tx
         .insert(playlists)

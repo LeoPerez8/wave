@@ -1,5 +1,6 @@
+import { useLocalisation } from "@/localisation/localisation";
 import { IconMinus, IconPlus } from "@tabler/icons-react-native";
-import type { ComponentType, ReactNode } from "react";
+import { useEffect, useState, type ComponentType, type ReactNode } from "react";
 import { ScrollView, Text, View, type AccessibilityActionEvent } from "react-native";
 import Animated from "react-native-reanimated";
 
@@ -77,6 +78,15 @@ const ROW_BOX = { minHeight: ROW } as const;
 const ROW_LINE = { flexGrow: 1 } as const;
 
 /**
+ * Where an editor's items show, with the preposition each button's label
+ * takes, which Portuguese contracts ("do Início", "à barra de abas").
+ */
+export interface ArrangementPlace {
+  readonly from: string;
+  readonly to: string;
+}
+
+/**
  * A row the owner can't drag, above or below those they can: Home on the tab
  * bar (nothing to press), or Search, whose pill stays at the end (a button
  * takes it off when [onRemove] is given).
@@ -88,11 +98,12 @@ export function FixedRow({
   divider,
 }: {
   title: string;
-  /** Where the item sits, for the remove button's label: "Home", "the tab bar". */
-  place: string;
+  /** Where the item sits, for the remove button's label: "from the tab bar". */
+  place: ArrangementPlace;
   onRemove?: () => void;
   divider: boolean;
 }) {
+  const { strings } = useLocalisation();
   return (
     <View style={ROW_BOX}>
       <View className="flex-row items-center" style={ROW_LINE}>
@@ -101,7 +112,7 @@ export function FixedRow({
           <View style={{ marginRight: -CELL * 1.5 }}>
             <RowButton
               icon={IconMinus}
-              label={`Remove ${title} from ${place}`}
+              label={strings.arrangement.remove(title, place.from)}
               onPress={onRemove}
             />
           </View>
@@ -116,13 +127,15 @@ type ShownRowProps<Id> = {
   id: Id;
   title: string;
   detail: string | null;
-  place: string;
+  place: ArrangementPlace;
   index: number;
   count: number;
   /** Draw a hairline under the last row too (a fixed row follows). */
   divideLast: boolean;
   reorder: RowReorder<Id>;
   edit: (edit: ArrangementEdit<Id>) => void;
+  canRemove?: boolean;
+  children?: ReactNode;
 };
 
 /**
@@ -139,14 +152,17 @@ function ShownRow<Id>({
   divideLast,
   reorder,
   edit,
+  canRemove = true,
+  children,
 }: ShownRowProps<Id>) {
+  const { strings } = useLocalisation();
   const { style, underline, handle } = useReorderRow({ index, reorder });
 
   const onAccessibilityAction = (event: AccessibilityActionEvent) => {
     const action = event.nativeEvent.actionName;
     if (action === "moveUp") edit({ move: { from: index, to: index - 1 } });
     else if (action === "moveDown") edit({ move: { from: index, to: index + 1 } });
-    else if (action === "remove") edit({ remove: id });
+    else if (action === "remove" && canRemove) edit({ remove: id });
   };
 
   return (
@@ -158,9 +174,11 @@ function ShownRow<Id>({
         accessible
         accessibilityLabel={title}
         accessibilityActions={[
-          ...(index > 0 ? [{ name: "moveUp", label: "Move up" }] : []),
-          ...(index < count - 1 ? [{ name: "moveDown", label: "Move down" }] : []),
-          { name: "remove", label: `Remove from ${place}` },
+          ...(index > 0 ? [{ name: "moveUp", label: strings.arrangement.moveUp }] : []),
+          ...(index < count - 1 ? [{ name: "moveDown", label: strings.arrangement.moveDown }] : []),
+          ...(canRemove
+            ? [{ name: "remove", label: strings.arrangement.removeAction(place.from) }]
+            : []),
         ]}
         onAccessibilityAction={onAccessibilityAction}
         className="flex-row items-center"
@@ -169,11 +187,13 @@ function ShownRow<Id>({
         <RowLabel title={title} detail={detail} />
         <RowButton
           icon={IconMinus}
-          label={`Remove ${title} from ${place}`}
+          label={strings.arrangement.remove(title, place.from)}
+          disabled={!canRemove}
           onPress={() => edit({ remove: id })}
         />
         <ReorderHandle gesture={handle} />
       </View>
+      {children}
       {(divideLast || index < count - 1) && (
         <Animated.View style={underline}>
           <Hairline />
@@ -196,11 +216,12 @@ function HiddenRow<Id>({
   id: Id;
   title: string;
   detail: string | null;
-  place: string;
+  place: ArrangementPlace;
   divider: boolean;
   canAdd: boolean;
   edit: (edit: ArrangementEdit<Id>) => void;
 }) {
+  const { strings } = useLocalisation();
   return (
     <View style={ROW_BOX}>
       <View className="flex-row items-center" style={ROW_LINE}>
@@ -208,7 +229,7 @@ function HiddenRow<Id>({
         <View style={{ marginRight: -CELL * 1.5 }}>
           <RowButton
             icon={IconPlus}
-            label={`Add ${title} to ${place}`}
+            label={strings.arrangement.add(title, place.to)}
             disabled={!canAdd}
             onPress={() => edit({ add: id })}
           />
@@ -227,13 +248,19 @@ export type ArrangementEditorProps<Id extends string> = {
   title: (id: Id) => string;
   /** A line under an item's title, or null for none: what it needs that's off. */
   detail?: (id: Id) => string | null;
-  /** Where the items show, for buttons' labels: "Home", "the tab bar". */
-  place: string;
+  /** Where the items show, for buttons' labels: "from Home", "to the tab bar". */
+  place: ArrangementPlace;
   /** The heading over the items not shown, e.g. "Not on Home". */
   hiddenHeading: string;
   edit: (edit: ArrangementEdit<Id>) => void;
   /** Whether another item fits; while it doesn't, the add buttons are off. */
   canAdd?: boolean;
+  canRemove?: boolean;
+  /** Content grouped with its parent row; it moves with that row. */
+  renderNested?: (id: Id, dragging: (value: boolean) => void) => ReactNode;
+  /** Rows only, inside an existing editor's ScrollView. */
+  inline?: boolean;
+  onDraggingChange?: (dragging: boolean) => void;
   /** A fixed row above the shown items (`FixedRow`). */
   first?: ReactNode;
   /** A fixed row below them (`FixedRow`). */
@@ -267,72 +294,92 @@ export function ArrangementEditor<Id extends string>({
   hiddenHeading,
   edit,
   canAdd = true,
+  canRemove = true,
+  renderNested,
+  inline = false,
+  onDraggingChange,
   first,
   last,
   note,
   onDone,
 }: ArrangementEditorProps<Id>) {
+  const { strings } = useLocalisation();
   const reorder = useRowReorder({
     ids: shown,
     rowHeight: ROW,
     move: (from, to) => edit({ move: { from, to } }),
   });
+  const [nestedDragging, setNestedDragging] = useState(false);
+  useEffect(() => {
+    onDraggingChange?.(reorder.dragging);
+  }, [onDraggingChange, reorder.dragging]);
   const count = shown.length;
   const empty = count === 0 && first === undefined && last === undefined;
 
+  const rows = (
+    <>
+      {first}
+      {shown.map((id, index) => (
+        <ShownRow
+          key={id}
+          id={id}
+          title={title(id)}
+          detail={detail(id)}
+          place={place}
+          index={index}
+          count={count}
+          divideLast={last !== undefined}
+          reorder={reorder}
+          edit={edit}
+          canRemove={canRemove}
+        >
+          {renderNested?.(id, setNestedDragging)}
+        </ShownRow>
+      ))}
+      {last}
+      {hidden.length > 0 && !inline && (
+        <View
+          style={{ marginTop: empty ? 0 : CELL * 3, paddingBottom: CELL / 2 }}
+          accessibilityRole="header"
+        >
+          <CatalogLine>{hiddenHeading}</CatalogLine>
+        </View>
+      )}
+      <View style={inline ? { opacity: 0.5 } : undefined}>
+        {hidden.map((id, index) => (
+          <HiddenRow
+            key={id}
+            id={id}
+            title={title(id)}
+            detail={detail(id)}
+            place={place}
+            divider={index < hidden.length - 1}
+            canAdd={canAdd}
+            edit={edit}
+          />
+        ))}
+      </View>
+      {note !== undefined && (
+        <Text className="mt-2 font-sans text-footnote text-secondary">{note}</Text>
+      )}
+    </>
+  );
+  if (inline) return rows;
   return (
     <>
       <View style={{ flexShrink: 1 }}>
         <ScrollView
           bounces={false}
           overScrollMode="never"
-          scrollEnabled={!reorder.dragging}
+          scrollEnabled={!reorder.dragging && !nestedDragging}
           contentContainerStyle={onDone === undefined ? PAGE_CONTENT : undefined}
         >
-          {first}
-          {shown.map((id, index) => (
-            <ShownRow
-              key={id}
-              id={id}
-              title={title(id)}
-              detail={detail(id)}
-              place={place}
-              index={index}
-              count={count}
-              divideLast={last !== undefined}
-              reorder={reorder}
-              edit={edit}
-            />
-          ))}
-          {last}
-          {hidden.length > 0 && (
-            <View
-              style={{ marginTop: empty ? 0 : CELL * 3, paddingBottom: CELL / 2 }}
-              accessibilityRole="header"
-            >
-              <CatalogLine>{hiddenHeading}</CatalogLine>
-            </View>
-          )}
-          {hidden.map((id, index) => (
-            <HiddenRow
-              key={id}
-              id={id}
-              title={title(id)}
-              detail={detail(id)}
-              place={place}
-              divider={index < hidden.length - 1}
-              canAdd={canAdd}
-              edit={edit}
-            />
-          ))}
-          {note !== undefined && (
-            <Text className="mt-2 font-sans text-footnote text-secondary">{note}</Text>
-          )}
+          {rows}
         </ScrollView>
       </View>
       {onDone !== undefined && (
         <View className="flex-row justify-end" style={{ paddingTop: CELL }}>
-          <TextButton label="Done" onPress={onDone} />
+          <TextButton label={strings.arrangement.done} onPress={onDone} />
         </View>
       )}
     </>

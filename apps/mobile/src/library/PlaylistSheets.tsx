@@ -2,9 +2,9 @@ import { IconPlus } from "@tabler/icons-react-native";
 import {
   checkPlaylistName,
   confirmPlaylistDeletion,
-  counted,
   describePlaylistAdd,
   nextPlaylistName,
+  type Catalogue,
   type PlaylistNameCheck,
   type PlaylistSong,
 } from "@wave/core";
@@ -16,6 +16,7 @@ import { CELL, grid } from "@/catalog/grid";
 import { Hairline } from "@/catalog/Hairline";
 import { PlaylistEntry } from "@/catalog/PlaylistEntry";
 import { TextButton } from "@/components/TextButton";
+import { currentLocalisation, useLocalisation } from "@/localisation/localisation";
 import { confirmAction } from "@/overlay/alert";
 import { CardEntries } from "@/overlay/CardEntries";
 import { followUp, openOverlay, presentOverlay } from "@/overlay/overlay";
@@ -42,7 +43,11 @@ import { forgetDeletedYtLibraryPlaylists } from "./ytLibraryImport";
 
 const toast = (message: string): void => void showToast(message);
 
-const failed = (what: string) => (): void => toast(`Couldn't ${what}`);
+/** A toast for an edit that failed, the text read when it fails. */
+const failed = (text: () => string) => (): void => toast(text());
+
+/** The playlists text in the language Wave reads in now. */
+const text = () => currentLocalisation().strings.playlists;
 
 // ---------------------------------------------------------------------------
 // Name prompt: New Playlist / Rename Playlist
@@ -68,19 +73,25 @@ const askName = (request: NameRequest): Promise<string | null> =>
  * New Playlist's name prompt, the first free "New Playlist" filled in and the
  * playlists' [names] refused. Resolves with the name, or null when cancelled.
  */
-const askNewPlaylistName = (names: readonly string[]): Promise<string | null> =>
-  askName({
-    title: "New playlist",
-    confirmLabel: "Create",
-    initial: nextPlaylistName(names),
+const askNewPlaylistName = (names: readonly string[]): Promise<string | null> => {
+  const { language, strings } = currentLocalisation();
+  return askName({
+    title: strings.playlists.newPlaylistTitle,
+    confirmLabel: strings.playlists.create,
+    initial: nextPlaylistName(names, language),
     otherNames: names,
   });
-
-const PROBLEM: Record<Exclude<PlaylistNameCheck, { ok: true }>["problem"], string> = {
-  empty: "Give the playlist a name.",
-  taken: "Another playlist already has this name.",
-  tooLong: "Names can be up to 100 characters.",
 };
+
+const problemText = (
+  problem: Exclude<PlaylistNameCheck, { ok: true }>["problem"],
+  { playlists }: Catalogue,
+): string =>
+  problem === "empty"
+    ? playlists.nameEmpty
+    : problem === "taken"
+      ? playlists.nameTaken
+      : playlists.nameTooLong;
 
 function NameCard({
   request,
@@ -91,6 +102,7 @@ function NameCard({
 }) {
   const [accent, secondary] = useThemeColor(["accent", "secondary"]);
   const [value, setValue] = useState(request.initial);
+  const { strings } = useLocalisation();
   const check = checkPlaylistName(value, request.otherNames);
 
   const confirm = () => {
@@ -107,8 +119,8 @@ function NameCard({
         selectTextOnFocus
         returnKeyType="done"
         onSubmitEditing={confirm}
-        accessibilityLabel="Playlist name"
-        placeholder="Playlist name"
+        accessibilityLabel={strings.playlists.playlistName}
+        placeholder={strings.playlists.playlistName}
         placeholderTextColor={secondary}
         selectionColor={accent}
         cursorColor={accent}
@@ -122,10 +134,10 @@ function NameCard({
         className="font-sans text-footnote text-secondary"
         style={{ minHeight: CELL * 3, paddingTop: CELL / 2 }}
       >
-        {check.ok || check.problem === "empty" ? "" : PROBLEM[check.problem]}
+        {check.ok || check.problem === "empty" ? "" : problemText(check.problem, strings)}
       </Text>
       <View className="flex-row justify-end" style={{ gap: CELL * 3 }}>
-        <TextButton label="Cancel" onPress={() => finish(null)} />
+        <TextButton label={strings.playlists.cancel} onPress={() => finish(null)} />
         <TextButton label={request.confirmLabel} onPress={confirm} disabled={!check.ok} />
       </View>
     </>
@@ -153,37 +165,53 @@ export interface AddSubject {
 export const openAddToPlaylist = (subject: AddSubject): void => {
   const open = (): void => {
     openOverlay({
-      label: "Add to playlist",
+      label: text().addToPlaylist,
       render: (close) => <AddCard subject={subject} close={close} />,
     });
   };
   if (knownPlaylists() !== undefined) open();
-  else void followUp(() => currentPlaylists().then(open, failed("list the playlists")));
+  else
+    void followUp(() =>
+      currentPlaylists().then(
+        open,
+        failed(() => text().couldntList),
+      ),
+    );
 };
 
 const addSongs = (playlistId: number, songs: () => Promise<readonly PlaylistSong[]>): void => {
   void songs()
     .then((rows) => addToPlaylist(playlistId, rows))
-    .then((result) => toast(describePlaylistAdd(result.name, result.added, result.alreadyIn)))
-    .catch(failed("add to the playlist"));
+    .then((result) =>
+      toast(
+        describePlaylistAdd(
+          result.name,
+          result.added,
+          result.alreadyIn,
+          currentLocalisation().language,
+        ),
+      ),
+    )
+    .catch(failed(() => text().couldntAdd));
 };
 
 function AddCard({ subject, close }: { subject: AddSubject; close: () => void }) {
   const playlists = usePlaylists();
+  const { strings } = useLocalisation();
 
   return (
     <>
       <View style={{ paddingBottom: CELL * 2, gap: CELL / 2 }}>
-        <CatalogLine>Add to playlist</CatalogLine>
+        <CatalogLine>{strings.playlists.addToPlaylist}</CatalogLine>
         <Text numberOfLines={1} className="font-sans text-body font-medium text-foreground">
           {subject.title}
         </Text>
       </View>
       <Hairline />
       <TextButton
-        label="New Playlist"
+        label={strings.playlists.newPlaylist}
         accessibilityRole="button"
-        accessibilityLabel="New Playlist"
+        accessibilityLabel={strings.playlists.newPlaylist}
         onPress={() => {
           close();
           void newPlaylist(subject.songs);
@@ -196,7 +224,9 @@ function AddCard({ subject, close }: { subject: AddSubject; close: () => void })
             <View className="items-center justify-center" style={{ width: CELL * 5 }}>
               <IconPlus size={24} color={accent} strokeWidth={1.5} />
             </View>
-            <Text className="font-sans text-body font-medium text-accent">New Playlist</Text>
+            <Text className="font-sans text-body font-medium text-accent">
+              {strings.playlists.newPlaylist}
+            </Text>
           </>
         )}
       </TextButton>
@@ -208,7 +238,7 @@ function AddCard({ subject, close }: { subject: AddSubject; close: () => void })
             <Hairline />
             <PlaylistEntry
               name={playlist.name}
-              detail={counted(playlist.trackCount, "song")}
+              detail={strings.playlists.songs(playlist.trackCount)}
               paths={playlist.thumbPaths}
               onPress={() => {
                 close();
@@ -262,18 +292,23 @@ const createNamedPlaylist = async (
   try {
     const rows = songs === undefined ? [] : await songs();
     if (songs !== undefined && rows.length === 0) {
-      toast(describePlaylistAdd(name, 0, 0));
+      toast(describePlaylistAdd(name, 0, 0, currentLocalisation().language));
       return null;
     }
     const result = await createPlaylist(name, rows);
     toast(
       songs === undefined
-        ? `Created ${result.name}`
-        : describePlaylistAdd(result.name, result.added, result.alreadyIn),
+        ? text().created(result.name)
+        : describePlaylistAdd(
+            result.name,
+            result.added,
+            result.alreadyIn,
+            currentLocalisation().language,
+          ),
     );
     return { id: result.playlistId, name: result.name };
   } catch {
-    failed("create the playlist")();
+    failed(() => text().couldntCreate)();
     return null;
   }
 };
@@ -287,14 +322,14 @@ export const renamePlaylistFlow = (playlist: NamedPlaylist): Promise<void> =>
 const renameNamedPlaylist = async (playlist: NamedPlaylist): Promise<void> => {
   const names = await playlistNames();
   const name = await askName({
-    title: "Rename playlist",
-    confirmLabel: "Rename",
+    title: text().renamePlaylist,
+    confirmLabel: text().rename,
     initial: playlist.name,
     // Keeping the current name is fine.
     otherNames: names.filter((other) => other !== playlist.name),
   });
   if (name === null || name === playlist.name) return;
-  await renamePlaylist(playlist.id, name).catch(failed("rename the playlist"));
+  await renamePlaylist(playlist.id, name).catch(failed(() => text().couldntRename));
 };
 
 /**
@@ -302,15 +337,21 @@ const renameNamedPlaylist = async (playlist: NamedPlaylist): Promise<void> => {
  * photo, then that square of it in place of the mosaic.
  */
 export const changePlaylistImageFlow = (playlist: NamedPlaylist): Promise<void> =>
-  pickPlaylistImage(playlist.id, framePhoto).then(() => {}, failed("change the image"));
+  pickPlaylistImage(playlist.id, framePhoto).then(
+    () => {},
+    failed(() => text().couldntChangeImage),
+  );
 
 /** Adjust Image: the crop screen on the original photo, at the last framing. */
 export const adjustPlaylistImageFlow = (playlist: NamedPlaylist): Promise<void> =>
-  adjustPlaylistImage(playlist.id, framePhoto).then(() => {}, failed("adjust the image"));
+  adjustPlaylistImage(playlist.id, framePhoto).then(
+    () => {},
+    failed(() => text().couldntAdjustImage),
+  );
 
 /** Remove Image: the playlist's mosaic shows again. */
 export const removePlaylistImageFlow = (playlist: NamedPlaylist): Promise<void> =>
-  removePlaylistImage(playlist.id).catch(failed("remove the image"));
+  removePlaylistImage(playlist.id).catch(failed(() => text().couldntRemoveImage));
 
 /**
  * Asks once before deleting [playlists] ("Delete 3 playlists?"). `onConfirm`
@@ -329,18 +370,20 @@ export const confirmDeletePlaylists = (
   } = {},
 ): void => {
   if (playlists.length === 0) return;
-  void confirmAction(confirmPlaylistDeletion(playlists)).then(async (confirmed) => {
-    if (!confirmed) return;
-    onConfirm?.();
-    try {
-      for (const playlist of playlists) {
-        cancelPlaylistImport(playlist.id);
-        await deletePlaylist(playlist.id);
+  void confirmAction(confirmPlaylistDeletion(playlists, currentLocalisation().language)).then(
+    async (confirmed) => {
+      if (!confirmed) return;
+      onConfirm?.();
+      try {
+        for (const playlist of playlists) {
+          cancelPlaylistImport(playlist.id);
+          await deletePlaylist(playlist.id);
+        }
+        await forgetDeletedYtLibraryPlaylists(playlists.map((playlist) => playlist.id));
+        onDeleted?.();
+      } catch {
+        failed(() => text().couldntDelete(playlists.length))();
       }
-      await forgetDeletedYtLibraryPlaylists(playlists.map((playlist) => playlist.id));
-      onDeleted?.();
-    } catch {
-      failed(playlists.length === 1 ? "delete the playlist" : "delete the playlists")();
-    }
-  });
+    },
+  );
 };

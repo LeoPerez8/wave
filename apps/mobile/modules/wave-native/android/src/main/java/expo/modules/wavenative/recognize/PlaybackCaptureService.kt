@@ -15,6 +15,7 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import expo.modules.wavenative.R
+import expo.modules.wavenative.locale.NativeText
 
 /**
  * Runs only for a phone-audio session, after Android has granted fresh consent. It is
@@ -33,14 +34,14 @@ class PlaybackCaptureService : Service() {
 
   fun open(resultCode: Int, data: Intent, onReleased: () -> Unit): PlaybackAudio {
     getSystemService(NotificationManager::class.java).createNotificationChannel(
-      NotificationChannel(CHANNEL, "Recognize Song", NotificationManager.IMPORTANCE_LOW).apply {
+      NotificationChannel(CHANNEL, NativeText.get("recognize"), NotificationManager.IMPORTANCE_LOW).apply {
         setShowBadge(false)
       },
     )
     startForeground(NOTIFICATION, Notification.Builder(this, CHANNEL)
       .setSmallIcon(R.drawable.wave_notification)
-      .setContentTitle("Recognize Song")
-      .setContentText("Listening to audio from this phone")
+      .setContentTitle(NativeText.get("recognize"))
+      .setContentText(NativeText.get("listeningToPhone"))
       .setOngoing(true)
       .build(), ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION)
     val projection = checkNotNull(getSystemService(MediaProjectionManager::class.java).getMediaProjection(resultCode, data)) {

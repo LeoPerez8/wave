@@ -1,3 +1,4 @@
+import { en, type Catalogue } from "./catalogueEn.ts";
 /**
  * Home's sections as a catalogue: every section Home can show, with its id,
  * its title and its place in the default order. The owner arranges Home from
@@ -10,6 +11,8 @@ import { readStoredRecord } from "./storedJson.ts";
 
 /** A section of Home's catalogue, by id. */
 export type HomeSectionId =
+  | "new-releases"
+  | "upcoming-shows"
   | "discover"
   | "recently-added"
   | "recently-played"
@@ -36,21 +39,28 @@ export interface HomeSection {
  * their three sections, so it joins every Home arranged before it on top.
  */
 export const HOME_SECTIONS: readonly HomeSection[] = [
-  { id: "discover", title: "Discover", fromPlays: false },
-  { id: "recently-added", title: "Recently added", fromPlays: false },
-  { id: "recently-played", title: "Recently played", fromPlays: true },
-  { id: "most-played", title: "Most played", fromPlays: true },
-  { id: "most-played-albums", title: "Most played albums", fromPlays: true },
-  { id: "most-played-artists", title: "Most played artists", fromPlays: true },
-  { id: "favorites", title: "Favorites", fromPlays: false },
-  { id: "stats", title: "Stats", fromPlays: false },
+  { id: "new-releases", title: en.newReleases.title, fromPlays: false },
+  { id: "upcoming-shows", title: en.upcomingShows.title, fromPlays: false },
+  { id: "discover", title: en.home.sections.discover, fromPlays: false },
+  { id: "recently-added", title: en.home.sections["recently-added"], fromPlays: false },
+  { id: "recently-played", title: en.home.sections["recently-played"], fromPlays: true },
+  { id: "most-played", title: en.home.sections["most-played"], fromPlays: true },
+  { id: "most-played-albums", title: en.home.sections["most-played-albums"], fromPlays: true },
+  { id: "most-played-artists", title: en.home.sections["most-played-artists"], fromPlays: true },
+  { id: "favorites", title: en.home.sections.favorites, fromPlays: false },
+  { id: "stats", title: en.home.sections.stats, fromPlays: false },
 ];
 
 const sectionOf = (id: HomeSectionId): HomeSection | undefined =>
   HOME_SECTIONS.find((section) => section.id === id);
 
-/** The title of the section [id]. */
-export const homeSectionTitle = (id: HomeSectionId): string => sectionOf(id)?.title ?? id;
+/** The title of the section [id], in [strings]' language. */
+export const homeSectionTitle = (id: HomeSectionId, strings: Catalogue = en): string =>
+  id === "new-releases"
+    ? strings.newReleases.title
+    : id === "upcoming-shows"
+      ? strings.upcomingShows.title
+      : strings.home.sections[id];
 
 /** A row of Home's Discover section. */
 export type DiscoverRowId = "magic-queue" | "artist-mixes" | "genre-mixes";
@@ -59,15 +69,13 @@ export type DiscoverRowId = "magic-queue" | "artist-mixes" | "genre-mixes";
 export type MixRowId = Exclude<DiscoverRowId, "magic-queue">;
 
 /** Discover's rows, top to bottom, each with the label over it. */
-export const DISCOVER_ROWS: readonly { readonly id: DiscoverRowId; readonly title: string }[] = [
-  { id: "magic-queue", title: "Magic Queue" },
-  { id: "artist-mixes", title: "Artist mixes" },
-  { id: "genre-mixes", title: "Genre mixes" },
-];
+export const DISCOVER_ROWS: readonly { readonly id: DiscoverRowId; readonly title: string }[] = (
+  ["magic-queue", "artist-mixes", "genre-mixes"] as const
+).map((id) => ({ id, title: en.discover.rows[id] }));
 
-/** The label over Discover's row [id]. */
-export const discoverRowTitle = (id: DiscoverRowId): string =>
-  DISCOVER_ROWS.find((row) => row.id === id)?.title ?? id;
+/** The label over Discover's row [id], in [strings]' language. */
+export const discoverRowTitle = (id: DiscoverRowId, strings: Catalogue = en): string =>
+  strings.discover.rows[id];
 
 /**
  * One thing Home lists: a section of the catalogue (drawn only when it has
@@ -81,14 +89,18 @@ export type HomeItem = { readonly section: HomeSectionId } | "play-hint" | "no-s
  * played yet, a line asking for a play comes before the first section plays
  * fill (where those sections would be). With every section removed, the
  * line saying how to add them back. With an [empty] Library, Home shows its
- * empty state and, under it, only Discover (when arranged), whose Artist
- * mixes can grow from YouTube Music's chart.
+ * empty state and, under it, only the sections that need no Library (when
+ * arranged): Discover, whose Artist mixes can grow from YouTube Music's
+ * chart, and the followed artists' New releases and Upcoming Shows.
  */
 export const homeItems = (
-  arrangement: HomeArrangement,
+  { sections: arrangement }: HomeArrangement,
   { nothingPlayed, empty = false }: { readonly nothingPlayed: boolean; readonly empty?: boolean },
 ): readonly HomeItem[] => {
-  if (empty) return arrangement.includes("discover") ? [{ section: "discover" }] : [];
+  if (empty)
+    return arrangement
+      .filter((id) => id === "discover" || id === "new-releases" || id === "upcoming-shows")
+      .map((section) => ({ section }));
   if (arrangement.length === 0) return ["no-sections"];
   const items: HomeItem[] = arrangement.map((id) => ({ section: id }));
   const hintAt = nothingPlayed ? arrangement.findIndex((id) => sectionOf(id)?.fromPlays) : -1;
@@ -96,13 +108,22 @@ export const homeItems = (
   return items;
 };
 
-/** The sections Home shows, top to bottom. */
-export type HomeArrangement = readonly HomeSectionId[];
+/** Home's shown sections and Discover rows, each in the owner's order. */
+export interface HomeArrangement {
+  readonly sections: readonly HomeSectionId[];
+  /** Owner-shown rows, independent of whether they currently have content. */
+  readonly discoverRows: readonly DiscoverRowId[];
+}
 
 /** Home before the owner arranges it: the whole catalogue in its order. */
-const DEFAULT_HOME_ARRANGEMENT: HomeArrangement = HOME_SECTIONS.map(({ id }) => id);
+const DEFAULT_SECTIONS = HOME_SECTIONS.map(({ id }) => id);
+const DEFAULT_DISCOVER_ROWS = DISCOVER_ROWS.map(({ id }) => id);
+const DEFAULT_HOME_ARRANGEMENT: HomeArrangement = {
+  sections: DEFAULT_SECTIONS,
+  discoverRows: DEFAULT_DISCOVER_ROWS,
+};
 
-const sameOrder = (a: HomeArrangement, b: HomeArrangement): boolean =>
+const sameOrder = (a: readonly string[], b: readonly string[]): boolean =>
   a.length === b.length && a.every((id, index) => id === b[index]);
 
 /**
@@ -117,19 +138,19 @@ const sameOrder = (a: HomeArrangement, b: HomeArrangement): boolean =>
  */
 export const parseHomeArrangement = (stored: string | null): HomeArrangement => {
   if (stored === null) return DEFAULT_HOME_ARRANGEMENT;
-  const { shown, hidden } = readStoredRecord(stored);
+  const { shown, hidden, discover } = readStoredRecord(stored);
   if (!Array.isArray(shown)) return DEFAULT_HOME_ARRANGEMENT;
   const arrangement = knownSections(shown);
   const known = new Set([...arrangement, ...knownSections(Array.isArray(hidden) ? hidden : [])]);
   const newer = HOME_SECTIONS.filter(({ id }) => !known.has(id));
   for (const { id } of newer) {
-    const place = DEFAULT_HOME_ARRANGEMENT.indexOf(id);
-    const before = DEFAULT_HOME_ARRANGEMENT.slice(0, place).findLast((earlier) =>
+    const place = DEFAULT_SECTIONS.indexOf(id);
+    const before = DEFAULT_SECTIONS.slice(0, place).findLast((earlier) =>
       arrangement.includes(earlier),
     );
     arrangement.splice(before === undefined ? 0 : arrangement.indexOf(before) + 1, 0, id);
   }
-  return arrangement;
+  return { sections: arrangement, discoverRows: parseDiscoverRows(discover) };
 };
 
 const isSectionId = (value: unknown): value is HomeSectionId =>
@@ -170,12 +191,26 @@ const knownSections = (values: readonly unknown[]): HomeSectionId[] => [
  * can tell it's new.
  */
 export const storedHomeArrangement = (arrangement: HomeArrangement): string | null =>
-  sameOrder(arrangement, DEFAULT_HOME_ARRANGEMENT)
+  sameOrder(arrangement.sections, DEFAULT_SECTIONS) &&
+  sameOrder(arrangement.discoverRows, DEFAULT_DISCOVER_ROWS)
     ? null
-    : JSON.stringify({ shown: arrangement, hidden: hiddenHomeSections(arrangement) });
+    : JSON.stringify({
+        shown: arrangement.sections,
+        hidden: hiddenHomeSections(arrangement),
+        discover: { shown: arrangement.discoverRows, hidden: hiddenDiscoverRows(arrangement) },
+      });
 
 /** A change made in Home's editor. */
+export type DiscoverRowEdit =
+  | { readonly remove: DiscoverRowId }
+  | { readonly add: DiscoverRowId }
+  | { readonly move: { readonly from: number; readonly to: number } };
+
+export const hiddenDiscoverRows = (arrangement: HomeArrangement): DiscoverRowId[] =>
+  DEFAULT_DISCOVER_ROWS.filter((id) => !arrangement.discoverRows.includes(id));
+
 export type HomeArrangementEdit =
+  | { readonly discover: DiscoverRowEdit }
   | { readonly remove: HomeSectionId }
   | { readonly add: HomeSectionId }
   /** A section dragged from one place among those shown to another (0-based). */
@@ -189,12 +224,66 @@ export const editHomeArrangement = (
   arrangement: HomeArrangement,
   edit: HomeArrangementEdit,
 ): HomeArrangement => {
-  if ("remove" in edit) return arrangement.filter((id) => id !== edit.remove);
+  if ("discover" in edit) {
+    const change = edit.discover;
+    const rows = arrangement.discoverRows;
+    const discoverRows =
+      "remove" in change
+        ? rows.length > 1
+          ? rows.filter((id) => id !== change.remove)
+          : rows
+        : "add" in change
+          ? rows.includes(change.add)
+            ? rows
+            : [...rows, change.add]
+          : moveItem(rows, change.move.from, change.move.to);
+    return { ...arrangement, discoverRows };
+  }
+  if ("remove" in edit)
+    return { ...arrangement, sections: arrangement.sections.filter((id) => id !== edit.remove) };
   if ("add" in edit)
-    return arrangement.includes(edit.add) ? arrangement : [...arrangement, edit.add];
-  return moveItem(arrangement, edit.move.from, edit.move.to);
+    return arrangement.sections.includes(edit.add)
+      ? arrangement
+      : { ...arrangement, sections: [...arrangement.sections, edit.add] };
+  return { ...arrangement, sections: moveItem(arrangement.sections, edit.move.from, edit.move.to) };
 };
 
 /** The catalogue's sections [arrangement] doesn't show, in catalogue order. */
 export const hiddenHomeSections = (arrangement: HomeArrangement): HomeSectionId[] =>
-  DEFAULT_HOME_ARRANGEMENT.filter((id) => !arrangement.includes(id));
+  DEFAULT_SECTIONS.filter((id) => !arrangement.sections.includes(id));
+
+/** Missing row metadata predates editable rows. Unknown ids and duplicates are discarded. */
+const parseDiscoverRows = (value: unknown): readonly DiscoverRowId[] => {
+  if (typeof value !== "object" || value === null) return DEFAULT_DISCOVER_ROWS;
+  const { shown, hidden } = value as { shown?: unknown; hidden?: unknown };
+  if (!Array.isArray(shown)) return DEFAULT_DISCOVER_ROWS;
+  const knownRows = (values: readonly unknown[]) => [
+    ...new Set(
+      values.filter((candidate): candidate is DiscoverRowId =>
+        DISCOVER_ROWS.some(({ id }) => id === candidate),
+      ),
+    ),
+  ];
+  const rows = knownRows(shown);
+  const known = new Set([...rows, ...knownRows(Array.isArray(hidden) ? hidden : [])]);
+  for (const id of DEFAULT_DISCOVER_ROWS) {
+    if (known.has(id)) continue;
+    const before = DEFAULT_DISCOVER_ROWS.slice(0, DEFAULT_DISCOVER_ROWS.indexOf(id)).findLast(
+      (earlier) => rows.includes(earlier),
+    );
+    rows.splice(before === undefined ? 0 : rows.indexOf(before) + 1, 0, id);
+  }
+  return rows.length === 0 ? DEFAULT_DISCOVER_ROWS : rows;
+};
+
+/**
+ * Owner-shown mixes build and rerank. An empty Library's shown Magic Queue
+ * also needs Artist mixes, even with their row removed. Order affects drawing only.
+ */
+export const discoverMixRowsToBuild = (
+  rows: readonly DiscoverRowId[],
+  { empty }: { readonly empty: boolean },
+): MixRowId[] =>
+  (["artist-mixes", "genre-mixes"] as const).filter(
+    (id) => rows.includes(id) || (id === "artist-mixes" && empty && rows.includes("magic-queue")),
+  );

@@ -1,5 +1,6 @@
+import { useLocalisation } from "@/localisation/localisation";
 import {
-  counted,
+  formatNumber,
   joinArtists,
   type QueueContext,
   type SearchKind,
@@ -130,6 +131,7 @@ function Hit({
   onOpen: () => void;
   selection: ListSelection<TrackItem>;
 }) {
+  const { strings } = useLocalisation();
   const { selecting } = selection;
   const open = (action: () => void) =>
     selecting
@@ -163,7 +165,7 @@ function Hit({
       return (
         <PlaylistCardRow
           name={hit.name}
-          detail={counted(hit.playlist.trackCount, "song")}
+          detail={strings.playbackText.songCount(hit.playlist.trackCount)}
           paths={hit.playlist.thumbPaths}
           onPress={open(() => openPlaylist(hit.playlist.id, hit.playlist))}
           onLongPress={menu(() => openPlaylistActions(hit.playlist))}
@@ -173,7 +175,7 @@ function Hit({
       return (
         <NameRow
           name={hit.name}
-          detail={`${top ? "Genre · " : ""}${counted(hit.genre.trackCount, "song")}`}
+          detail={`${top ? strings.playbackText.genre : ""}${strings.playbackText.songCount(hit.genre.trackCount)}`}
           onPress={open(() => openGenre(hit.genre.id, hit.genre))}
           onLongPress={menu(() => openGenreActions(hit.genre))}
         />
@@ -186,12 +188,14 @@ function Hit({
  * results and "Show all". Scrolling or tapping a row lets the keyboard go.
  */
 export function SearchResultsList({ rows, onOpen, onShowAll, integrated, selection }: Props) {
+  const { strings } = useLocalisation();
+  const { language } = useLocalisation();
   const scrollable = useListScrollable();
   const bottomInset = useChromeInset();
   const rowSelection = useMemo(() => songSelection(selection, songItem), [selection]);
   const rowState = useMemo(
-    () => ({ selection: selection.selection, integrated }),
-    [selection.selection, integrated],
+    () => ({ selection: selection.selection, integrated, language }),
+    [selection.selection, integrated, language],
   );
 
   const renderSlot = useCallback(
@@ -217,7 +221,7 @@ export function SearchResultsList({ rows, onOpen, onShowAll, integrated, selecti
           return (
             <View style={{ height: HEIGHT.more }}>
               <TextButton
-                label={`Show all ${item.total.toLocaleString("en")}`}
+                label={strings.playbackText.showAllValue(formatNumber(language, item.total))}
                 onPress={() => onShowAll(item.kind)}
               />
             </View>
@@ -229,7 +233,10 @@ export function SearchResultsList({ rows, onOpen, onShowAll, integrated, selecti
               style={{ minHeight: HEIGHT.capped, paddingVertical: CELL }}
             >
               <Text className="font-sans text-footnote text-secondary">
-                {`The best ${item.shown.toLocaleString("en")} of ${item.total.toLocaleString("en")}. Keep typing to narrow them down.`}
+                {strings.playbackText.theBestValueOfValueKeepTypingToNarrowThemDown(
+                  formatNumber(language, item.shown),
+                  formatNumber(language, item.total),
+                )}
               </Text>
             </View>
           );
@@ -246,7 +253,7 @@ export function SearchResultsList({ rows, onOpen, onShowAll, integrated, selecti
                 artworkPath: null,
                 imageUrl: artist.artworkUrl,
               }}
-              detail="Artist · YouTube Music"
+              detail={strings.playbackText.artistYouTubeMusic}
               onPress={
                 selection.selecting
                   ? ignore
@@ -293,10 +300,12 @@ export function SearchResultsList({ rows, onOpen, onShowAll, integrated, selecti
             </View>
           );
         case "skeleton":
-          return <TrackSkeletons label="Loading online results" leading="card" />;
+          return (
+            <TrackSkeletons label={strings.playbackText.loadingOnlineResults} leading="card" />
+          );
       }
     },
-    [onOpen, onShowAll, integrated, selection],
+    [onOpen, onShowAll, integrated, selection, language, strings],
   );
 
   return (

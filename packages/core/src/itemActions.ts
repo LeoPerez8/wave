@@ -6,6 +6,8 @@
  * whenever the items still meet that condition.
  */
 
+import { en } from "./catalogueEn.ts";
+import { catalogueOf, type AppLanguage } from "./localisation.ts";
 import {
   missingSongsDownloadActions,
   type MissingSongsDownloadAction,
@@ -18,11 +20,7 @@ import {
   type StreamedArtistContext,
   type StreamedArtistLink,
 } from "./streamedArtist.ts";
-import {
-  YT_DOWNLOAD_ACTION_LABELS,
-  ytDownloadActions,
-  type YtDownloadStatus,
-} from "./ytDownloads.ts";
+import { ytDownloadActions, type YtDownloadStatus } from "./ytDownloads.ts";
 
 /**
  * What kind of library item the actions are about. `mixed` is items of
@@ -191,33 +189,8 @@ export type ItemActionEntry<A extends LibraryArtistRef = LibraryArtistRef> =
       readonly streamedArtists: Exclude<StreamedArtistLink<A>, { readonly kind: "here" }>;
     };
 
-/** What each entry says. */
-export const ITEM_ACTION_LABELS: { readonly [A in ItemAction]: string } = {
-  playNext: "Play Next",
-  addToQueue: "Add to Queue",
-  magicQueue: "Magic Queue",
-  addToPlaylist: "Add to Playlist",
-  favorite: "Favorite",
-  unfavorite: "Remove from Favorites",
-  removeFromPlaylist: "Remove from Playlist",
-  goToAlbum: "Go to Album",
-  goToArtist: "Go to Artist",
-  renamePlaylist: "Rename Playlist",
-  changeImage: "Change Image",
-  adjustImage: "Adjust Image",
-  removeImage: "Remove Image",
-  share: "Share",
-  deletePlaylist: "Delete Playlist",
-  deletePlaylists: "Delete Playlists",
-  fixSong: "Fix Song",
-  fixSongs: "Fix Songs",
-  select: "Select",
-  delete: "Delete",
-  removeFromLibrary: "Remove from Library",
-  ...YT_DOWNLOAD_ACTION_LABELS,
-  downloadMissingSongs: "Download Missing Songs",
-  retryFailed: "Retry Failed",
-};
+/** What each entry says, in English (`strings.itemActions.labels` in the app's language). */
+export const ITEM_ACTION_LABELS: { readonly [A in ItemAction]: string } = en.itemActions.labels;
 
 /**
  * Entries that delete something for good, shown in the destructive colour:
@@ -553,19 +526,14 @@ const KEPT_ON_BAR: ReadonlySet<ItemAction> = new Set<ItemAction>([
 ]);
 
 /**
- * Shorter captions for labels too long for a bar button (whose accessibility
- * label stays the full one). "Unfavorite" is wider than a button of a
- * seven-button bar: its soft hyphen lets it break into two lines there.
+ * A bar button's caption for [action] in [language]: a shorter one for labels
+ * too long for a bar button (whose accessibility label stays the full one),
+ * else its menu label.
  */
-const BAR_LABELS: { readonly [A in ItemAction]?: string } = {
-  unfavorite: "Un­favorite",
-  removeFromPlaylist: "Remove",
-  downloadMissingSongs: "Download",
+export const actionBarLabel = (action: ItemAction, language: AppLanguage = "en"): string => {
+  const { barLabels, labels } = catalogueOf(language).itemActions;
+  return (barLabels as { readonly [A in ItemAction]?: string })[action] ?? labels[action];
 };
-
-/** A bar button's caption for [action]. */
-export const actionBarLabel = (action: ItemAction): string =>
-  BAR_LABELS[action] ?? ITEM_ACTION_LABELS[action];
 
 /**
  * Fits entries into a bar of [slots] buttons: all of them when they fit,

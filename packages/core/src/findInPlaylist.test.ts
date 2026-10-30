@@ -314,3 +314,15 @@ describe("what a findable list's field and empty line say", () => {
     assert.equal(findNoMatch("playlists"), "No playlists match");
   });
 });
+
+describe("Find's text in Portuguese", () => {
+  test("each list's field and no-match line follow the glossary", () => {
+    assert.equal(findPlaceholder("playlist", "pt-BR"), "Buscar na Playlist");
+    assert.equal(findPlaceholder("songs", "pt-BR"), "Buscar em Músicas");
+    assert.equal(findPlaceholder("albums", "pt-BR"), "Buscar em Álbuns");
+    assert.equal(findNoMatch("songs", "pt-BR"), "Nenhuma música encontrada");
+    assert.equal(findNoMatch("artists", "pt-BR"), "Nenhum artista encontrado");
+    assert.equal(findNoMatch("playlists", "pt-BR"), "Nenhuma playlist encontrada");
+    assert.equal(findPlaceholder("genres"), "Find in Genres");
+  });
+});

@@ -1,5 +1,9 @@
+import { useLocalisation } from "@/localisation/localisation";
+import { NewReleases } from "./NewReleases";
+import { UpcomingShows } from "./UpcomingShows";
 import {
   discoverMixCaption,
+  discoverMixRowsToBuild,
   discoverRowTitle,
   homeSectionTitle,
   MAGIC_QUEUE_PICKS,
@@ -28,7 +32,6 @@ import { Crossfade } from "@/motion/Crossfade";
 import { openTrackActions } from "@/playback/ActionsMenu";
 import { useYtMusicEnabled } from "@/settings/ytMusic";
 import type { Ranked } from "@/stats/Stats";
-import { playCount } from "@/stats/StatsViews";
 import { openDiscoverMix } from "@/ytmusic/routes";
 import { openYtSongActions } from "@/ytmusic/YtSongActions";
 
@@ -48,6 +51,7 @@ import {
   useMagicQueueSection,
   type MagicQueueSection,
 } from "./magicQueueSection";
+import { useHomeArrangement } from "./homeArrangement";
 import { useMostPlayedOfAllTime } from "./mostPlayedOfAllTime";
 
 import { AlbumShelf, ArtistShelf, MostPlayedRows, SongRows } from "./HomeSections";
@@ -64,9 +68,6 @@ import {
 const MOST_PLAYED_CONTEXT = { kind: "home", id: "most-played" } as const;
 const FAVORITES_CONTEXT = { kind: "home", id: "favorites" } as const;
 
-const countedPlays = (entry: { readonly countedPlays: number }): string =>
-  playCount(entry.countedPlays);
-
 /** A ranking's entries with their counted plays, as the rows Home's sections take. */
 const withPlays = <A,>(ranking: readonly Ranked<A>[] | undefined) =>
   (ranking ?? []).map((entry) => ({ ...entry.item, countedPlays: entry.countedPlays }));
@@ -79,6 +80,7 @@ type SectionProps = {
 };
 
 function MostPlayedAlbums({ title }: SectionProps) {
+  const { strings } = useLocalisation();
   const ranking = useMostPlayedOfAllTime();
   if (ranking === undefined) return <HomeSectionSkeleton id="most-played-albums" />;
   const albums = withPlays(ranking.albums);
@@ -86,42 +88,56 @@ function MostPlayedAlbums({ title }: SectionProps) {
   return (
     <TitledSection
       title={title}
-      action={{ label: "See all", onPress: () => openStatsSeeAll("albums", "all") }}
+      action={{ label: strings.home.seeAll, onPress: () => openStatsSeeAll("albums", "all") }}
     >
-      <AlbumShelf albums={albums} detail={countedPlays} />
+      <AlbumShelf albums={albums} detail={(album) => strings.stats.plays(album.countedPlays)} />
     </TitledSection>
   );
 }
 
-/** The quiet line after a mix row's label while its mixes rebuild over the saved ones. */
-const MIXES_UPDATING = "Updating…";
-
 /**
  * Home's Discover section: one header, its adjustments icon opening the
  * settings card all three rows share (`DiscoverSettingsButton`), then the
- * Magic Queue, Artist mixes and Genre mixes rows, each under its label. A
- * row with nothing to show isn't drawn: a mix row shows placeholder tiles
+ * rows in the owner's order, each under its label. A row with nothing to show isn't drawn: a mix row shows placeholder tiles
  * while its first mixes build and is gone with YT Music off (Core's
  * `discoverMixesSection`), the Magic Queue row is gone without songs to
- * show (Core's `magicQueueRow`). The section is gone only when all three are.
+ * show (Core's `magicQueueRow`). The section is gone when every arranged row is gone.
  */
 function Discover({ home, title }: SectionProps) {
   const ytMusic = useYtMusicEnabled();
   const { played, empty } = homeOpeningState(home);
-  useDiscoverMixesFocus(ytMusic, played);
-  const artistMixes = useDiscoverMixes("artist-mixes");
+  const { discoverRows } = useHomeArrangement();
+  const builds = discoverMixRowsToBuild(discoverRows, { empty });
+  useDiscoverMixesFocus(ytMusic, played, empty);
+  // An empty Library's Magic Queue builds Artist mixes even when the row is removed.
+  const artistMixes = useDiscoverMixes(
+    "artist-mixes",
+    empty,
+    builds.includes("artist-mixes"),
+    discoverRows.includes("artist-mixes"),
+  );
   // An empty Library has no tagged songs: Genre mixes stay hidden, no skeleton.
-  const genreMixes = useDiscoverMixes("genre-mixes", empty);
-  const magicQueue = useMagicQueueSection(ytMusic, artistMixes);
-  const showsMagicQueue = magicQueue.shown.kind !== "hidden";
-  if (!showsMagicQueue && artistMixes.kind === "hidden" && genreMixes.kind === "hidden")
-    return null;
+  const genreMixes = useDiscoverMixes("genre-mixes", empty, builds.includes("genre-mixes"));
+  const magicQueue = useMagicQueueSection(
+    ytMusic && discoverRows.includes("magic-queue"),
+    artistMixes,
+  );
+  const rows = discoverRows.filter((id) =>
+    id === "magic-queue"
+      ? magicQueue.shown.kind !== "hidden"
+      : (id === "artist-mixes" ? artistMixes : genreMixes).kind !== "hidden",
+  );
+  if (rows.length === 0) return null;
   return (
     <TitledSection title={title} control={<DiscoverSettingsButton ytMusic={ytMusic} />}>
       <View style={{ gap: CELL * 3 }}>
-        {showsMagicQueue && <MagicQueueRow section={magicQueue} />}
-        <MixRow id="artist-mixes" section={artistMixes} />
-        <MixRow id="genre-mixes" section={genreMixes} />
+        {rows.map((id) =>
+          id === "magic-queue" ? (
+            <MagicQueueRow key={id} section={magicQueue} />
+          ) : (
+            <MixRow key={id} id={id} section={id === "artist-mixes" ? artistMixes : genreMixes} />
+          ),
+        )}
       </View>
     </TitledSection>
   );
@@ -197,16 +213,17 @@ function DiscoverRow({
  * "Updating…" while a rebuild runs.
  */
 function MixRow({ id, section }: { id: MixSectionId; section: DiscoverMixesSection }) {
+  const { strings } = useLocalisation();
   if (section.kind === "hidden") return null;
-  const label = discoverRowTitle(id);
+  const label = discoverRowTitle(id, strings);
   const refresh = () => refreshMixes(id);
   const updating = section.kind === "skeleton" || (section.kind === "mixes" && section.updating);
   return (
     <DiscoverRow
       label={label}
-      status={section.kind === "mixes" && section.updating ? MIXES_UPDATING : undefined}
+      status={section.kind === "mixes" && section.updating ? strings.discover.updating : undefined}
       busy={updating}
-      refresh={{ label: `Get new ${label.toLowerCase()}`, run: refresh, enabled: !updating }}
+      refresh={{ label: strings.discover.refresh[id], run: refresh, enabled: !updating }}
     >
       {section.kind === "skeleton" ? (
         <DiscoverMixesSkeleton />
@@ -235,10 +252,11 @@ function DiscoverMixRow({
   onRefresh: () => void;
   refreshing: boolean;
 }) {
+  const { strings } = useLocalisation();
   return (
     <PullRefreshRow onRefresh={onRefresh} enabled={!refreshing}>
       {mixes.map((mix, place) => {
-        const caption = discoverMixCaption(mix);
+        const caption = discoverMixCaption(mix, strings);
         const shows = [mix.id, caption.artworkUrl, caption.title, caption.artists, caption.line];
         return (
           // oxlint-disable-next-line react/no-array-index-key -- a place crossfades from the mix it had to the one it has now
@@ -268,6 +286,7 @@ function DiscoverMixRow({
  * place crossfades its tile when its song changes. Hidden with YT Music off.
  */
 function MagicQueueRow({ section }: { section: MagicQueueSection }) {
+  const { strings } = useLocalisation();
   const { width, fontScale } = useWindowDimensions();
   const [available, setAvailable] = useState(width - grid.margin * 2);
   const { size } = magicQueueGrid(available, fontScale);
@@ -287,13 +306,13 @@ function MagicQueueRow({ section }: { section: MagicQueueSection }) {
   const skeleton = shown.kind === "skeleton";
   return (
     <DiscoverRow
-      label={discoverRowTitle("magic-queue")}
+      label={discoverRowTitle("magic-queue", strings)}
       busy={skeleton}
-      refresh={{ label: "Get other songs", run: section.refresh, enabled: !skeleton }}
+      refresh={{ label: strings.discover.otherSongs, run: section.refresh, enabled: !skeleton }}
     >
       <View onLayout={(event) => setAvailable(event.nativeEvent.layout.width)}>
         {skeleton ? (
-          <SkeletonGroup label="Finding songs">
+          <SkeletonGroup label={strings.discover.findingSongs}>
             <MagicQueueGrid width={available}>
               {Array.from({ length: MAGIC_QUEUE_PICKS }, (_, place) => (
                 <SongCardSkeleton key={place} size={size} fontScale={fontScale} />
@@ -326,13 +345,14 @@ function MagicQueueGrid({ width, children }: { width: number; children: ReactNod
 
 /** A Library song as a song card in its grid column; a tap starts the Magic Queue from it. */
 function LibraryTile({ song, size }: { song: PlayableSongRow; size: number }) {
+  const { strings } = useLocalisation();
   return (
     <SongCard
       title={song.title}
       artist={song.artist}
       artworkUri={artworkUri(song, "medium")}
       size={size}
-      label={`${song.title} by ${song.artist}, ${song.album}, start Magic Queue`}
+      label={strings.discover.startMagicQueue(song.title, song.artist, song.album)}
       onPress={() => startMagicQueueFrom(song)}
       onLongPress={() => openTrackActions(song)}
     />
@@ -341,6 +361,7 @@ function LibraryTile({ song, size }: { song: PlayableSongRow; size: number }) {
 
 /** A mix's streamed song as a song card; a tap starts the Magic Queue from its radio. */
 function StreamedTile({ song, size }: { song: YtAlbumSong; size: number }) {
+  const { strings } = useLocalisation();
   const artist = ytSongArtist(song);
   return (
     <SongCard
@@ -348,14 +369,28 @@ function StreamedTile({ song, size }: { song: YtAlbumSong; size: number }) {
       artist={artist}
       artworkUri={song.artworkUrl ?? undefined}
       size={size}
-      label={`${song.title} by ${artist}${song.album ? `, ${song.album}` : ""}, start Magic Queue`}
+      label={strings.discover.startMagicQueue(song.title, artist, song.album)}
       onPress={() => startStreamedMagicQueueFrom(song)}
       onLongPress={() => openYtSongActions(song)}
     />
   );
 }
 
+function Favorites({ home, title }: SectionProps) {
+  const { strings } = useLocalisation();
+  if (home.favorites === undefined || home.favorites.length === 0) return null;
+  return (
+    <TitledSection
+      title={title}
+      action={{ label: strings.home.seeAll, onPress: () => router.push("/library/favorites") }}
+    >
+      <SongRows songs={home.favorites} context={FAVORITES_CONTEXT} />
+    </TitledSection>
+  );
+}
+
 function MostPlayedArtists({ title }: SectionProps) {
+  const { strings } = useLocalisation();
   const ranking = useMostPlayedOfAllTime();
   if (ranking === undefined) return <HomeSectionSkeleton id="most-played-artists" />;
   const artists = ranking.artists.map((entry) => entry.item);
@@ -363,7 +398,7 @@ function MostPlayedArtists({ title }: SectionProps) {
   return (
     <TitledSection
       title={title}
-      action={{ label: "See all", onPress: () => openStatsSeeAll("artists", "all") }}
+      action={{ label: strings.home.seeAll, onPress: () => openStatsSeeAll("artists", "all") }}
     >
       <ArtistShelf artists={artists} />
     </TitledSection>
@@ -377,6 +412,8 @@ function MostPlayedArtists({ title }: SectionProps) {
  */
 const SECTIONS: Record<HomeSectionId, ComponentType<SectionProps>> = {
   discover: Discover,
+  "new-releases": NewReleases,
+  "upcoming-shows": UpcomingShows,
   "recently-added": ({ home, title }) =>
     home.recentlyAdded !== undefined &&
     home.recentlyAdded.length > 0 && (
@@ -400,16 +437,7 @@ const SECTIONS: Record<HomeSectionId, ComponentType<SectionProps>> = {
     ),
   "most-played-albums": MostPlayedAlbums,
   "most-played-artists": MostPlayedArtists,
-  favorites: ({ home, title }) =>
-    home.favorites !== undefined &&
-    home.favorites.length > 0 && (
-      <TitledSection
-        title={title}
-        action={{ label: "See all", onPress: () => router.push("/library/favorites") }}
-      >
-        <SongRows songs={home.favorites} context={FAVORITES_CONTEXT} />
-      </TitledSection>
-    ),
+  favorites: Favorites,
   stats: HomeStats,
 };
 
@@ -423,7 +451,8 @@ export const SECTION_GAP = CELL * 5;
  * [home] is `useHome`'s answer.
  */
 export function HomeSection({ id, home }: { id: HomeSectionId; home: HomeContent }) {
+  const { strings } = useLocalisation();
   if (homeSectionWaiting(id, home)) return <HomeSectionSkeleton id={id} />;
   const Section = SECTIONS[id];
-  return <Section home={home} title={homeSectionTitle(id)} />;
+  return <Section home={home} title={homeSectionTitle(id, strings)} />;
 }

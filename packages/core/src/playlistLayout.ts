@@ -4,6 +4,8 @@
  * two columns, or one large cover per playlist.
  */
 
+import { en } from "./catalogueEn.ts";
+
 /** A way to show playlists. */
 export type PlaylistLayout = "list" | "grid" | "large";
 
@@ -12,9 +14,9 @@ export const PLAYLIST_LAYOUTS: readonly {
   readonly layout: PlaylistLayout;
   readonly label: string;
 }[] = [
-  { layout: "list", label: "List" },
-  { layout: "grid", label: "Grid" },
-  { layout: "large", label: "Large Cards" },
+  { layout: "list", label: en.playlists.layouts.list },
+  { layout: "grid", label: en.playlists.layouts.grid },
+  { layout: "large", label: en.playlists.layouts.large },
 ];
 
 /** The layout of an install that never picked one: today's rows. */

@@ -1,0 +1,51 @@
+{
+  "attractions": {
+    "_embedded": {
+      "attractions": [
+        {
+          "id": "sport",
+          "name": "Aurora",
+          "classifications": [{ "segment": { "name": "Sports" } }]
+        },
+        {
+          "id": "wrong",
+          "name": "Aurora Tribute",
+          "classifications": [{ "segment": { "name": "Music" } }]
+        },
+        { "id": "music", "name": "AURORA", "classifications": [{ "segment": { "name": "Music" } }] }
+      ]
+    }
+  },
+  "events": {
+    "_embedded": {
+      "events": [
+        {
+          "id": "show-1",
+          "url": "https://www.ticketmaster.com/show-1",
+          "dates": {
+            "start": { "dateTime": "2026-12-01T23:00:00Z", "localDate": "2026-12-01" },
+            "status": { "code": "onsale" }
+          },
+          "_embedded": {
+            "venues": [
+              {
+                "name": "Arena",
+                "city": { "name": "São Paulo" },
+                "country": { "countryCode": "BR" }
+              }
+            ]
+          }
+        },
+        { "id": "incomplete" },
+        {
+          "id": "cancelled",
+          "url": "https://www.ticketmaster.com/cancelled",
+          "dates": {
+            "start": { "dateTime": "2026-12-02T23:00:00Z" },
+            "status": { "code": "cancelled" }
+          }
+        }
+      ]
+    }
+  }
+}

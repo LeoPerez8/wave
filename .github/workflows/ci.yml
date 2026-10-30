@@ -295,6 +295,9 @@ jobs:
       # Genius's read-only client token (docs/spec.md, "Genius About"). Metro inlines it into the
       # JS bundle, which "Bundle JavaScript" builds once for full builds and repacks alike.
       EXPO_PUBLIC_GENIUS_ACCESS_TOKEN: ${{ secrets.GENIUS_ACCESS_TOKEN }}
+      # Ticketmaster Discovery's client key, inlined the same way; without it the APK never asks
+      # for shows (docs/spec.md, "Followed artists").
+      EXPO_PUBLIC_TICKETMASTER_API_KEY: ${{ secrets.TICKETMASTER_API_KEY }}
       HEAD_SHA: ${{ needs.checks.outputs.sha }}
       # ccache (scripts/ci/ccache.sh) keeps its cache in ~/.cache/ccache.
       # Paths under the checkout are hashed relative to it, and the working directory
@@ -442,6 +445,15 @@ jobs:
         working-directory: apps/mobile/android
         run: ../../../scripts/ci/step.sh "Gradle assembleRelease" ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a --init-script ../../../scripts/ci/prebuilt-bundle.gradle --no-daemon --console=plain --profile --stacktrace
 
+      # Room creates WorkManager's database reflectively before JS starts. Check the
+      # minified artifact on full builds and repacks; a debug/unit test misses this.
+      - name: Check WorkManager's startup constructor
+        run: |
+          built="${REPACKED_APK:-apps/mobile/android/app/build/outputs/apk/release/app-release.apk}"
+          dexdump="$(find "$ANDROID_HOME/build-tools" -name dexdump -type f | sort -V | tail -n 1)"
+          test -n "$dexdump"
+          "$dexdump" -l xml "$built" | node scripts/ci/work-database.ts
+
       # The APK must ship an ART profile, and once apps/mobile/profiles/ has Wave's own, nearly
       # all of it (#317). A repack keeps the kept build's dex and profile, so only full builds check.
       - name: Check the APK's ART profile
@@ -506,6 +518,12 @@ jobs:
             echo "Carries Genius's token"
           else
             echo "::warning::No GENIUS_ACCESS_TOKEN secret: this APK never asks Genius."
+          fi
+          if [ -n "${EXPO_PUBLIC_TICKETMASTER_API_KEY:-}" ]; then
+            grep -qaF -- "$EXPO_PUBLIC_TICKETMASTER_API_KEY" "$bundle"
+            echo "Carries Ticketmaster's key"
+          else
+            echo "::warning::No TICKETMASTER_API_KEY secret: this APK never asks for shows."
           fi
           cp "$built" "$RUNNER_TEMP/$name"
           echo "path=$RUNNER_TEMP/$name" >> "$GITHUB_OUTPUT"

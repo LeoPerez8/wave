@@ -213,6 +213,7 @@ export const searchRoomAt = (
 const clock = (ms: number): string => new Date(ms).toISOString().slice(11, 19);
 
 /** How long [ms] lasted, for the log: "42 s", "13 min 59 s", "14 min", "2 h 5 min". */
+// not UI text: durations for the app log
 export const logDuration = (ms: number): string => {
   const seconds = Math.round(ms / 1000);
   if (seconds < 60) return `${seconds} s`;
@@ -224,12 +225,14 @@ export const logDuration = (ms: number): string => {
 };
 
 /** "1,000 searches in the last 15 min". */
+// not UI text: the app log's wording
 const windowHeld = (held: number): string => {
   const searches = `${held.toLocaleString("en")} ${held === 1 ? "search" : "searches"}`;
   return `${searches} in the last ${SEARCH_WINDOW_MS / 60_000} min`;
 };
 
 /** The app log's line for [wait]: who waited, from when until when, and what the window held. */
+// not UI text: the app log's line
 export const searchWaitLine = (wait: SearchWait): string => {
   const { name, most } = ASKERS[wait.asker];
   const who = name.charAt(0).toUpperCase() + name.slice(1);
@@ -255,6 +258,7 @@ const FAILURE_NAMES: Readonly<Record<SearchFailure, string>> = {
  * Native code logs what it saw of the same failure (the HTTP status, or the
  * exception) on a line of its own.
  */
+// not UI text: the app log's line
 export const searchFailedLine = (
   asker: SearchAsker,
   query: string,

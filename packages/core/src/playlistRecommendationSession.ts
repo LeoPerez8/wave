@@ -53,12 +53,14 @@ export interface PlaylistRecommendationTiming {
   readonly failed: boolean;
 }
 
+// not UI text: times for the app log
 const roundMs = (ms: number) => `${Math.round(ms)} ms`;
 
 /**
  * [timing] as one log line; [sinceOpenMs], the time since the playlist
  * opened, for the renewal that opening asked for.
  */
+// not UI text: the app log's line
 export const playlistSuggestionsLine = (
   { ms, readMs, rankMs, offers, failed }: PlaylistRecommendationTiming,
   sinceOpenMs?: number,

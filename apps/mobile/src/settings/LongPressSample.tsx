@@ -1,3 +1,5 @@
+import { currentLocalisation } from "@/localisation/localisation";
+import { useLocalisation } from "@/localisation/localisation";
 import {
   LONG_PRESS_SAMPLE_MENU,
   longPressFill,
@@ -33,7 +35,6 @@ import { SampleSongRow } from "./SampleSongRow";
 
 /** The fill's wash of the accent: visible under the row's text in either appearance. */
 const FILL_OPACITY = 0.16;
-const DEMO_HINT = "Demo item. It only closes the menu.";
 const OPEN_ACTION = "longpress";
 
 /**
@@ -42,13 +43,14 @@ const OPEN_ACTION = "longpress";
  * as in a real menu, and every item only closes the card.
  */
 function SampleMenu({ close }: { close: () => void }) {
+  const { strings } = useLocalisation();
   return (
     <>
       <CardHeading>
         <Artwork uri={undefined} size={CELL * 5} />
         <View className="flex-1">
           <Text numberOfLines={1} className="font-sans text-body font-medium text-foreground">
-            Sample song
+            {strings.settings.sampleSong}
           </Text>
           <Text numberOfLines={1} className="font-sans text-body text-secondary">
             Wave
@@ -57,8 +59,12 @@ function SampleMenu({ close }: { close: () => void }) {
       </CardHeading>
       <MenuChoices
         cards={LONG_PRESS_SAMPLE_MENU.cards.map((action) => ({ action, onPress: close }))}
-        entries={LONG_PRESS_SAMPLE_MENU.list.map((entry) => ({ ...entry, onPress: close }))}
-        accessibilityHint={DEMO_HINT}
+        entries={LONG_PRESS_SAMPLE_MENU.list.map((entry) => ({
+          ...entry,
+          label: strings.itemActions.labels[entry.action],
+          onPress: close,
+        }))}
+        accessibilityHint={strings.settings.demoItemItOnlyClosesTheMenu}
       />
     </>
   );
@@ -67,7 +73,7 @@ function SampleMenu({ close }: { close: () => void }) {
 /** Opens the sample menu next to the row a long-press is running for (centred from TalkBack). */
 const openSampleMenu = (): void => {
   openOverlay({
-    label: "Sample menu",
+    label: currentLocalisation().strings.settings.sampleMenu,
     anchor: pressedRect(),
     render: (close) => <SampleMenu close={close} />,
   });
@@ -100,6 +106,7 @@ const touchEventOf = (
  * Under reduce motion nothing fills.
  */
 export function LongPressSample({ demo }: { demo: number }) {
+  const { strings } = useLocalisation();
   const delayMs = useLongPressDelayMs();
   const reduceMotion = useReducedMotion();
   const accent = useThemeColor("accent");
@@ -146,8 +153,8 @@ export function LongPressSample({ demo }: { demo: number }) {
 
   return (
     <SampleSongRow
-      accessibilityHint="Shows the long-press delay when held. Opens a sample menu."
-      accessibilityActions={[{ name: OPEN_ACTION, label: "Open the sample menu" }]}
+      accessibilityHint={strings.settings.showsTheLongpressDelayWhenHeldOpens}
+      accessibilityActions={[{ name: OPEN_ACTION, label: strings.settings.openTheSampleMenu }]}
       onAccessibilityAction={({ nativeEvent }) => {
         if (nativeEvent.actionName === OPEN_ACTION) openSampleMenu();
       }}

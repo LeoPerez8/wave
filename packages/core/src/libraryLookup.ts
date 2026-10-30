@@ -4,6 +4,8 @@
  * summary as kept until the owner has seen it.
  */
 
+import { en, type Catalogue } from "./catalogueEn.ts";
+
 /** The run's progress: a title, the "N of M" count once the songs are known, and both on one line. */
 export interface LibraryLookupProgress {
   readonly title: string;
@@ -11,13 +13,18 @@ export interface LibraryLookupProgress {
   readonly line: string;
 }
 
-const TITLE = "Fixing songs…";
-
-/** What the run says with [done] of [total] songs fixed; [total] is 0 until they're known. */
-export const libraryLookupProgress = (done: number, total: number): LibraryLookupProgress => {
-  if (total === 0) return { title: TITLE, detail: null, line: TITLE };
-  const detail = `${done.toLocaleString("en")} of ${total.toLocaleString("en")}`;
-  return { title: TITLE, detail, line: `${TITLE} ${detail}` };
+/**
+ * What the run says with [done] of [total] songs fixed, in [catalogue]'s
+ * language; [total] is 0 until they're known.
+ */
+export const libraryLookupProgress = (
+  done: number,
+  total: number,
+  { fixSongs: text }: Catalogue = en,
+): LibraryLookupProgress => {
+  if (total === 0) return { title: text.progress, detail: null, line: text.progress };
+  const detail = text.progressCount(done, total);
+  return { title: text.progress, detail, line: `${text.progress} ${detail}` };
 };
 
 /**

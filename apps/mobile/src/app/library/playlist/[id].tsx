@@ -1,4 +1,5 @@
 import { useScreenContent } from "@/lib/screenTiming";
+import { useLocalisation } from "@/localisation/localisation";
 import { IconDots } from "@tabler/icons-react-native";
 import { playlistDownloadOrigin, playlistSongsLine } from "@wave/core";
 import { useLocalSearchParams } from "expo-router";
@@ -40,6 +41,7 @@ interface Shown {
 const readPlaylist = (id: number) => LibraryStore.use((store) => store.getPlaylist(id));
 
 function PlaylistHead({ shown }: { shown: Shown }) {
+  const { language, strings } = useLocalisation();
   const { width } = useWindowDimensions();
   const { playlist, items } = shown;
   const cover = width - grid.margin * 2;
@@ -66,14 +68,14 @@ function PlaylistHead({ shown }: { shown: Shown }) {
   // Every entry counts, and the line says how many can't play (Core's `playlistSongsLine`).
   const furniture =
     count === 0
-      ? songCount(0)
-      : `${playlistSongsLine(playlist.trackCount, playlist.unavailableCount)} · ${Math.max(1, Math.round(playlist.durationMs / 60_000))} min`;
+      ? songCount(0, strings)
+      : `${playlistSongsLine(playlist.trackCount, playlist.unavailableCount, language)} · ${strings.library.minutes(Math.max(1, Math.round(playlist.durationMs / 60_000)))}`;
   const menu = (
     // Its glyph sits on the right margin, like Back on the left.
     <View style={{ marginRight: -12 }}>
       <IconButton
         icon={IconDots}
-        label="Playlist actions"
+        label={strings.playlists.playlistActions}
         opensMenu
         onPress={() => openPlaylistActions(playlist)}
       />
@@ -127,11 +129,14 @@ function PlaylistHead({ shown }: { shown: Shown }) {
 }
 
 function NoSongs() {
+  const { strings } = useLocalisation();
   return (
     <View style={{ paddingTop: CELL * 3, gap: CELL / 2 }}>
-      <Text className="font-sans text-title3 font-normal text-foreground">No songs yet</Text>
+      <Text className="font-sans text-title3 font-normal text-foreground">
+        {strings.playlists.noSongsYet}
+      </Text>
       <Text className="font-sans text-subheadline text-secondary">
-        Long-press a song, an album or an artist and choose Add to Playlist.
+        {strings.playlists.addSongsHint}
       </Text>
     </View>
   );
@@ -145,6 +150,7 @@ function NoSongs() {
  */
 export default function PlaylistScreen() {
   useRenderCount("PlaylistScreen");
+  const { strings } = useLocalisation();
   const { id } = useLocalSearchParams<{ id: string }>();
   const playlistId = parseId(id);
   const detail = usePlaylist(playlistId);
@@ -158,7 +164,7 @@ export default function PlaylistScreen() {
   const shown: Shown | null | undefined =
     detail === undefined && known !== undefined ? { playlist: known, items: undefined } : detail;
   return (
-    <DetailFrame detail={shown} noun="playlist" goneMessage="It was deleted.">
+    <DetailFrame detail={shown} noun="playlist" goneMessage={strings.playlists.deleted}>
       {({ playlist, items }) => (
         <PlaylistItems
           playlistId={playlist.id}

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { discoverMixActions, discoverMixPlaylist, ytAlbumDownload } from "./index.ts";
+import { catalogueOf, discoverMixActions, discoverMixPlaylist, ytAlbumDownload } from "./index.ts";
 import type { YtAlbumSong, YtDownloadJournalJob } from "./index.ts";
 
 const song = (videoId: string): YtAlbumSong => ({
@@ -77,4 +77,34 @@ test("Save as Playlist keeps the mix's name and song order as independent YT Mus
       { source: "stream", song: song("a") },
     ],
   });
+});
+
+test("a mix menu reads in Portuguese", () => {
+  const songs = [song("b"), song("a")];
+  const menu = (jobs: readonly YtDownloadJournalJob[]) =>
+    discoverMixActions(
+      ytAlbumDownload(songs, { inLibrary: () => false, jobs }),
+      catalogueOf("pt-BR"),
+    ).map(({ label }) => label);
+  assert.deepEqual(menu([]), [
+    "Reproduzir a Seguir",
+    "Adicionar à Fila",
+    "Salvar como Playlist",
+    "Baixar Mix",
+  ]);
+  assert.equal(
+    menu(songs.map((entry) => ({ id: entry.videoId, song: entry, phase: "queued" }))).at(-1),
+    "Cancelar Download",
+  );
+  assert.equal(
+    menu(
+      songs.map((entry) => ({
+        id: entry.videoId,
+        song: entry,
+        phase: "failed",
+        reason: "offline",
+      })),
+    ).at(-1),
+    "Tentar Falhas Novamente",
+  );
 });

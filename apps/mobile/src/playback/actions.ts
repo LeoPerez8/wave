@@ -31,6 +31,7 @@ import {
   type SongRow,
 } from "@/library/LibraryStore";
 import { appRuntime } from "@/library/runtime";
+import { currentLocalisation } from "@/localisation/localisation";
 import { setShuffleKind } from "@/settings/shuffleKind";
 import { ytMusicEnabled } from "@/settings/ytMusic";
 import { downloadMissingSongs } from "@/ytmusic/YtDownloads";
@@ -353,13 +354,14 @@ export const playPlaylist = async (
   );
   // A missing song tapped (it downloads), or nothing but missing songs.
   if (files === null) return null;
-  const unplayable = playlistUnplayableNotice(files.songs);
+  const { language, strings } = currentLocalisation();
+  const unplayable = playlistUnplayableNotice(files.songs, language);
   if (unplayable !== null) return unplayable;
   const play = playlistPlayback(files.songs, {
     ytMusic: ytMusicEnabled(),
     startIndex: files.startIndex,
   });
-  if (play === null) return "YT Music is off in Settings";
+  if (play === null) return strings.library.ytMusicOffInSettings;
   await startPlayback(play.playback, play.startIndex, context, options);
   return null;
 };

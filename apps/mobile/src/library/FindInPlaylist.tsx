@@ -24,6 +24,7 @@ import {
 import { Text, useWindowDimensions, View } from "react-native";
 
 import { CELL, grid } from "@/catalog/grid";
+import { useLocalisation } from "@/localisation/localisation";
 import { SearchField } from "@/search/SearchField";
 import { useKeepFindVisible } from "@/settings/keepFindVisible";
 
@@ -248,7 +249,7 @@ export function FindFrame({
 
 /** The Find field, at the top of a findable list or pinned above it. */
 function FindField({ find, of }: { find: FindInList; of: FindableListKind }) {
-  const placeholder = findPlaceholder(of);
+  const placeholder = findPlaceholder(of, useLocalisation().language);
   return (
     <View style={{ height: FIND_FIELD_HEIGHT }}>
       <SearchField
@@ -263,9 +264,10 @@ function FindField({ find, of }: { find: FindInList; of: FindableListKind }) {
 
 /** Under the field when the query finds nothing. */
 function NoMatch({ of }: { of: FindableListKind }) {
+  const { language } = useLocalisation();
   return (
     <View style={{ paddingTop: CELL * 3 }}>
-      <Text className="font-sans text-subheadline text-secondary">{findNoMatch(of)}</Text>
+      <Text className="font-sans text-subheadline text-secondary">{findNoMatch(of, language)}</Text>
     </View>
   );
 }

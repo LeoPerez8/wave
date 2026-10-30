@@ -52,3 +52,30 @@ test("a yesterday with 25 hours and a spring day with 23 hours keep their calend
     "Saturday",
   );
 });
+
+test("Portuguese history heads today and yesterday from the catalogue", () => {
+  assert.deepEqual(
+    listeningHistoryDays(
+      [{ startedAt: at(2026, 10, 25, 9) }, { startedAt: at(2026, 10, 24, 22) }],
+      at(2026, 10, 25, 12),
+      "pt-BR",
+    ).map((day) => day.title),
+    ["Hoje", "Ontem"],
+  );
+});
+
+test("Portuguese history formats calendar headings without changing grouping", () => {
+  const days = listeningHistoryDays(
+    [
+      { startedAt: at(2026, 10, 19) },
+      { startedAt: at(2026, 10, 18) },
+      { startedAt: at(2025, 12, 31) },
+    ],
+    at(2026, 10, 25),
+    "pt-BR",
+  );
+  assert.deepEqual(
+    days.map((day) => day.title),
+    ["Segunda-feira", "18 de outubro", "31 de dezembro de 2025"],
+  );
+});

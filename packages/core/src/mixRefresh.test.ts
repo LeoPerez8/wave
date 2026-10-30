@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import {
+  catalogueOf,
   artistMixSeeds,
   artistMixSimilarSource,
   discoverMix,
@@ -386,6 +387,10 @@ describe("A refresh held back by the search allowance", () => {
       "Search limit reached · new mixes in about 5 min",
     );
     assert.equal(mixRefreshWaitNotice(5_000), "Search limit reached · new mixes in about 1 min");
+    assert.equal(
+      mixRefreshWaitNotice(4 * 60_000 + 10_000, catalogueOf("pt-BR")),
+      "Limite de buscas atingido · novos mixes em cerca de 5 min",
+    );
   });
 
   test("is told only when the window has no room for a mix's search", () => {

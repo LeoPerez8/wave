@@ -1,3 +1,4 @@
+import { currentLocalisation } from "@/localisation/localisation";
 import { registerTimingBackground, timingBackgroundChanged } from "@/lib/timing";
 /**
  * Link imports (docs/spec.md, "Importing playlists from a link"): Import
@@ -101,7 +102,7 @@ const give = async (job: Job, resumed: boolean): Promise<void> => {
       endImportProgress(job.playlistId);
       imports.set(withoutPlaylistImport(imports.get(), job.playlistId));
     }
-    if (kept) void showError("Couldn't import the playlist", error);
+    if (kept) void showError(currentLocalisation().strings.imports.couldntImportPlaylist, error);
     return;
   }
   perfMark("import.done", String(job.songs.length - job.added));
