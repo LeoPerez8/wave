@@ -313,8 +313,11 @@ export const WHOLE_LIBRARY: Record<string, WholeLibraryException> = {
     howOften:
       "Lazily on first lookup per rows identity; weakly cached while those rows remain reachable.",
     reason:
-      "One shared finder implementation; following/building callers are inventoried separately.",
-    capabilities: ["../../../packages/core/src/ytMusic.ts#libraryFinder"],
+      "One shared finder implementation, built whole on first lookup or in steps between frames for a long list; following/building callers are inventoried separately.",
+    capabilities: [
+      "../../../packages/core/src/ytMusic.ts#libraryFinder",
+      "../../../packages/core/src/ytMusic.ts#libraryFinderSteps",
+    ],
   },
   "ytmusic/libraryFinder.ts#songsQuery": {
     howOften:
