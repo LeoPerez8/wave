@@ -1,8 +1,8 @@
 export const showsEn = {
   country: "Country",
   phoneRegion: "Phone's region",
-  releases: "New releases",
-  level: (country: string) => `New releases and shows in ${country}`,
+  releases: "New music",
+  level: "New music and shows",
   shelf: (country: string) => `Shows in ${country}`,
   notificationsOff: "Notifications are off",
   notificationSettings: "Open notification settings",

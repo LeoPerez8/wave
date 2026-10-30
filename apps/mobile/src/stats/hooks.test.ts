@@ -15,6 +15,11 @@ Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 /** Every Stats read the hooks start, as `method args`. */
 const reads: string[] = [];
 const stats = {
+  topGenres: (period: string) =>
+    Effect.sync(() => {
+      reads.push(`topGenres ${period}`);
+      return [];
+    }),
   artist: (artistId: number) =>
     Effect.sync(() => {
       reads.push(`artist ${artistId}`);
@@ -152,6 +157,31 @@ for (const [build, hooks] of Object.entries(builds)) {
       await act(() => playHistoryVersion.update((version) => version + 1));
       await settle();
       assert.deepEqual(reads, ["topSongs month 10", "topSongs month 10"], "a play re-reads");
+    } finally {
+      await act(() => renderer?.unmount());
+    }
+  });
+}
+
+function Genres({ hooks, period }: { hooks: Hooks; period: "week" | "all" }) {
+  hooks.useTopGenres(period);
+  return null;
+}
+
+for (const [build, hooks] of Object.entries(builds)) {
+  test(`${build}: genre stats follow the selected period and re-read on counted plays`, async () => {
+    reads.length = 0;
+    let renderer: ReactTestRenderer | undefined;
+    try {
+      await act(() => {
+        renderer = create(createElement(Genres, { hooks, period: "week" }));
+      });
+      await settle();
+      await act(() => renderer!.update(createElement(Genres, { hooks, period: "all" })));
+      await settle();
+      await act(() => playHistoryVersion.update((version) => version + 1));
+      await settle();
+      assert.deepEqual(reads, ["topGenres week", "topGenres all", "topGenres all"]);
     } finally {
       await act(() => renderer?.unmount());
     }

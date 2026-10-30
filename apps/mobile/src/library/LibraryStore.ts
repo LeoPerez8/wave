@@ -1,3 +1,4 @@
+import { pendingStreamedGenres, keepStreamedGenre } from "./db/streamedGenres";
 import {
   readFollowShows,
   saveFollowShows,
@@ -1128,7 +1129,10 @@ export class LibraryStore extends Context.Service<
      * albums' and artists' counted plays, streamed plays included and credited
      * as Stats credits them, the songs' genres and the artists' first plays.
      */
-    readonly recapPlays: (window: StatsWindow) => Effect.Effect<RecapPlays, LibraryStoreError>;
+    readonly recapPlays: (
+      window: StatsWindow,
+      includeStreamedGenres?: boolean,
+    ) => Effect.Effect<RecapPlays, LibraryStoreError>;
     readonly creditedPlayTotals: (
       window: StatsWindow,
     ) => Effect.Effect<readonly CreditedPlayTotals[], LibraryStoreError>;
@@ -1161,9 +1165,19 @@ export class LibraryStore extends Context.Service<
     readonly countedListeningPage: (
       after: number,
     ) => Effect.Effect<CountedListeningPage, LibraryStoreError>;
-    /** The genre tags of these songs still in the library, in no order (Core's `recap` reads them). */
+    /** A bounded page of history video ids with no completed genre lookup. */
+    readonly pendingStreamedGenres: (
+      after: string,
+    ) => Effect.Effect<readonly string[], LibraryStoreError>;
+    /** Keeps a Deezer answer, including a permanent null miss, on this phone only. */
+    readonly keepStreamedGenre: (
+      videoId: string,
+      genre: string | null,
+    ) => Effect.Effect<void, LibraryStoreError>;
+    /** Library tags and cached streamed answers by ranking id; pass the Fix songs online setting. */
     readonly songGenres: (
-      ids: readonly number[],
+      ids: readonly (number | string)[],
+      includeStreamedGenres?: boolean,
     ) => Effect.Effect<readonly RecapSongGenre[], LibraryStoreError>;
     /**
      * When each of these artists had their first counted play ever, deleted
@@ -2041,7 +2055,8 @@ const make = Effect.gen(function* () {
     ),
     playedArtistSongs: (artistId, now) =>
       attempt("read the artist listening", () => playedArtistSongs(db, artistId, now)),
-    recapPlays: (window) => attempt("sum up a Recap's plays", () => recapPlays(db, window)),
+    recapPlays: (window, includeStreamedGenres = true) =>
+      attempt("sum up a Recap's plays", () => recapPlays(db, window, includeStreamedGenres)),
     creditedPlayTotals: (window) =>
       attempt("sum up album and artist plays", () => creditedPlayTotals(db, window)),
 
@@ -2070,7 +2085,12 @@ const make = Effect.gen(function* () {
       ),
     countedListening: attempt("sum up counted listening", () => countedListening(db)),
 
-    songGenres: (ids) => attempt("read the songs' genres", () => songGenres(db, ids)),
+    pendingStreamedGenres: (after) =>
+      attempt("read pending streamed genres", () => pendingStreamedGenres(db, after)),
+    keepStreamedGenre: (videoId, genre) =>
+      writeAttempt("save a streamed genre", () => keepStreamedGenre(db, videoId, genre)),
+    songGenres: (ids, includeStreamedGenres = true) =>
+      attempt("read the songs' genres", () => songGenres(db, ids, includeStreamedGenres)),
 
     artistFirstPlays: (ids) =>
       attempt("read the artists' first plays", () => artistFirstPlays(db, ids)),

@@ -11,8 +11,9 @@ import {
   type RankedArtistSong,
   type YtArtistAlbum,
 } from "@wave/core";
+import type { LegendListRef } from "@legendapp/list/react-native";
 import { useLocalSearchParams } from "expo-router";
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useRef } from "react";
 import { Text, useWindowDimensions, View } from "react-native";
 
 import { ArtistImage } from "@/catalog/ArtistImage";
@@ -42,6 +43,7 @@ import {
 import { albumSelectionOf, ytAlbumSelectionOf } from "@/selection/mixedSelection";
 import { toAlbumSummary } from "@/library/AlbumGrid";
 import { DetailFrame } from "@/library/DetailFrame";
+import { entryText, FindFrame, FindHead, useFindInLegendList } from "@/library/FindInPlaylist";
 
 import { useArtist } from "@/library/hooks";
 import type { AlbumRow, ArtistDetail, ArtistRow, SongRow } from "@/library/LibraryStore";
@@ -115,7 +117,8 @@ const cellKey = (cell: AlbumCell): string => {
 /**
  * The page's shelves and songs, the songs under [songsLabel]. While YouTube
  * Music is asked ([loading]), skeleton tiles follow the Library's albums where
- * its releases will go.
+ * its releases will go. While Find in artist narrows the songs ([found]), only
+ * the songs found show.
  */
 const artistItems = (
   detail: ArtistDetail,
@@ -124,6 +127,7 @@ const artistItems = (
   loading: boolean,
   songsLabel: string,
   { library }: Catalogue,
+  found: readonly number[] | null,
 ): Item[] =>
   artistPageItems(
     [
@@ -144,6 +148,7 @@ const artistItems = (
     ],
     songs,
     songsLabel,
+    found,
   );
 
 const itemKey = (item: Item): string => {
@@ -291,6 +296,7 @@ function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegr
   const loaded = shown.detail !== undefined;
   const detail = useMemo(() => shown.detail ?? unread(shown.artist), [shown.detail, shown.artist]);
   const scrollable = useListScrollable();
+  const list = useRef<LegendListRef>(null);
   const { fontScale } = useWindowDimensions();
   const shelfHeight = shelfRowHeight(fontScale);
   const bottomInset = useChromeInset();
@@ -354,6 +360,9 @@ function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegr
   // streamed; otherwise the Library's songs alone.
   // While YouTube Music is asked, skeletons stand where its releases and songs will go.
   const ytLoading = ytView?.note === "loading";
+  // Find in artist narrows the songs on the page, the Library's or the mixed list with Online.
+  const findInArtist = useFindInLegendList(list, pageSongs, entryText, true);
+  const { found } = findInArtist;
   const items = useMemo(
     () =>
       artistItems(
@@ -363,8 +372,9 @@ function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegr
         ytLoading,
         byPopularity ? strings.library.popular : strings.library.songs,
         strings,
+        found,
       ),
-    [detail, pageSongs, additions, ytLoading, byPopularity, strings],
+    [detail, pageSongs, additions, ytLoading, byPopularity, strings, found],
   );
   // Albums and songs select together; the bar acts on them in page order.
   const selectable = useMemo(
@@ -428,48 +438,65 @@ function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegr
     .filter((part) => part !== null)
     .join(" · ");
 
+  const head = (
+    <>
+      <ArtistHead artist={detail.artist} />
+      <FollowArtistIntro
+        artist={detail.artist}
+        line={line}
+        songs={loaded ? songs : undefined}
+        mixed={loaded ? pageSongs : undefined}
+        context={context}
+        sortControl={<SongSortButton kind="artist" />}
+        toggle={loaded ? yt.toggle : null}
+      />
+      <ArtistShows name={detail.artist.name} />
+      {loaded && <ArtistStatsBlock artistId={detail.artist.id} songs={detail.songs} />}
+    </>
+  );
+
   return (
-    <SongList
-      scrollEnabled={scrollable}
-      className="flex-1"
-      data={items}
-      keyExtractor={itemKey}
-      song={source}
-      context={context}
-      renderSlot={renderSlot}
-      slotType={(item) => item.type}
-      slotSize={(item) => (item.type === "section" ? SECTION_HEAD : shelfHeight)}
-      extraData={{ albumSelection, releaseSelection, integrated, shelfHeight }}
-      selection={rowSelection}
-      onPlay={(item) => {
-        if (item.type === "song") void playPage(pageSongs, item.index, context);
-      }}
-      {...mixedPageSongHandlers}
-      contentContainerStyle={{ paddingHorizontal: grid.margin, paddingBottom: bottomInset }}
-      ListHeaderComponent={
-        <>
-          <ArtistHead artist={detail.artist} />
-          <FollowArtistIntro
-            artist={detail.artist}
-            line={line}
-            songs={loaded ? songs : undefined}
-            mixed={loaded ? pageSongs : undefined}
-            context={context}
-            sortControl={<SongSortButton kind="artist" />}
-            toggle={loaded ? yt.toggle : null}
-          />
-          <ArtistShows name={detail.artist.name} />
-          {loaded && <ArtistStatsBlock artistId={detail.artist.id} songs={detail.songs} />}
-        </>
-      }
-      ListFooterComponent={
-        ytView === null ? null : ytView.note === "loading" ? (
-          <TrackSkeletons leading="card" />
-        ) : (
-          <YtLookupFooter note={ytView.note === null ? null : ytArtistNote(ytView.note, strings)} />
-        )
-      }
-    />
+    <FindFrame find={findInArtist} of="artist">
+      <SongList
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        scrollEnabled={scrollable}
+        ref={list}
+        className="flex-1"
+        data={items}
+        keyExtractor={itemKey}
+        song={source}
+        context={context}
+        renderSlot={renderSlot}
+        slotType={(item) => item.type}
+        slotSize={(item) => (item.type === "section" ? SECTION_HEAD : shelfHeight)}
+        extraData={{ albumSelection, releaseSelection, integrated, shelfHeight }}
+        selection={rowSelection}
+        onPlay={(item) => {
+          if (item.type === "song") void playPage(pageSongs, item.index, context);
+        }}
+        {...mixedPageSongHandlers}
+        contentContainerStyle={{
+          paddingHorizontal: grid.margin,
+          paddingBottom: bottomInset,
+          minHeight: findInArtist.minHeight,
+        }}
+        initialScrollOffset={findInArtist.initialOffset}
+        ListHeaderComponent={
+          // YouTube Music's songs still on their way stand under the skeletons, not "No songs match".
+          <FindHead find={findInArtist} header={head} of="artist" allRead={!ytLoading} />
+        }
+        ListFooterComponent={
+          ytView === null ? null : ytView.note === "loading" ? (
+            <TrackSkeletons leading="card" />
+          ) : (
+            <YtLookupFooter
+              note={ytView.note === null ? null : ytArtistNote(ytView.note, strings)}
+            />
+          )
+        }
+      />
+    </FindFrame>
   );
 }
 
@@ -479,7 +506,8 @@ function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegr
  * Library | Online toggle after Play and Shuffle (asked only once Online is
  * picked): then the releases and every song YouTube Music has of theirs that
  * the Library lacks join the albums and songs, and Play, Shuffle and taps
- * play the mixed list; Library hides them again. Opened integrated
+ * play the mixed list; Library hides them again. Find in artist, over the
+ * page, narrows the songs shown (the shelves and the head step aside). Opened integrated
  * (`openArtist`'s `integrated`, from a streamed song's artist), it opens with
  * Online selected and asks on its own. Opened
  * from a list that knows the artist, the head is there on the first frame and
