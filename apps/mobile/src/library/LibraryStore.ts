@@ -331,7 +331,6 @@ export class LibraryStoreError extends Data.TaggedError("LibraryStoreError")<{
   }
 }
 
-/** A track as the scanner reported it, after Core normalisation. */
 /** An indexed file as a scan starts from it: what the native scan compares, and what tells a voice note. */
 export interface IndexedKnownFile extends KnownFile {
   readonly durationMs: number;
@@ -339,6 +338,7 @@ export interface IndexedKnownFile extends KnownFile {
   readonly artist: string;
 }
 
+/** A track as the scanner reported it, after Core normalisation. */
 export interface IndexedTrack extends LibraryTrack {
   readonly sizeBytes: number;
   readonly modifiedAt: number;

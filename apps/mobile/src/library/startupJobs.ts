@@ -127,6 +127,19 @@ export const skipVoiceNoteFiles = (
     return left;
   });
 
+/** Forgets the skipped files at [paths] (`LibraryStore.unskipFiles`), a 100-file write per turn. */
+export const forgetSkippedFiles = (
+  store: LibraryStore["Service"],
+  paths: readonly string[],
+  turn: Effect.Effect<void>,
+) =>
+  Effect.gen(function* () {
+    for (const part of slices(paths)) {
+      yield* turn;
+      yield* store.unskipFiles(part);
+    }
+  });
+
 /**
  * Source SQLite read is indivisible; building the membership index yields per file.
  * [skipVoiceNotes] (Settings › Library's switch): indexed voice notes and recordings
@@ -149,7 +162,7 @@ export const readScanIndex = (
             const kept: IndexedKnownFile[] = [];
             const notes: SkippedFile[] = [];
             for (const file of files) {
-              if (isVoiceNoteOrRecording(file)) {
+              if (isVoiceNoteOrRecording(file, roots)) {
                 notes.push({
                   path: file.path,
                   sizeBytes: file.sizeBytes,
@@ -169,25 +182,36 @@ export const readScanIndex = (
       yield* turn;
       skippedFiles = yield* store.skippedFiles(roots);
     }
-    const { indexed, skipped, scanKnown } = yield* runSteps(
+    const { indexed, skipped, scanKnown, stale } = yield* runSteps(
       (function* () {
         const paths = new Set<string>();
         const skippedPaths = new Set<string>();
         const compared: KnownFile[] = [];
+        // Skipped once, then indexed while the switch was off and music by the rule.
+        const indexedSkipped: string[] = [];
         for (const file of known) {
           paths.add(file.path);
           compared.push(file);
           yield;
         }
         for (const file of skippedFiles) {
-          skippedPaths.add(file.path);
-          compared.push(file);
+          if (paths.has(file.path)) indexedSkipped.push(file.path);
+          else {
+            skippedPaths.add(file.path);
+            compared.push(file);
+          }
           yield;
         }
-        return { indexed: paths, skipped: skippedPaths, scanKnown: compared };
+        return {
+          indexed: paths,
+          skipped: skippedPaths,
+          scanKnown: compared,
+          stale: indexedSkipped,
+        };
       })(),
       turn,
     );
+    yield* forgetSkippedFiles(store, stale, turn);
     return { known, indexed, skipped, scanKnown, left };
   });
 

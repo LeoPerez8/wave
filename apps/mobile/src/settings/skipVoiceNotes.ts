@@ -16,6 +16,7 @@ const skipVoiceNotesSetting = persistedSetting<boolean>({
 /** Whether scans leave voice notes and recordings out. */
 export const skipVoiceNotes = skipVoiceNotesSetting.get;
 
+/** Saves the switch alone; Settings goes through the runtime's `setSkipVoiceNotes`, which rescans. */
 export const storeSkipVoiceNotes = skipVoiceNotesSetting.set;
 
 /** Whether Skip voice notes and recordings is on; re-renders when it changes. */

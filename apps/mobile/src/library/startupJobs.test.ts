@@ -650,6 +650,14 @@ test("with Skip voice notes on, indexed voice notes leave the Library before a s
     const again = Effect.runSync(readScanIndex(store, ["/Startup"], Effect.void, true));
     assert.equal(again.left, 0);
     assert.deepEqual([...again.skipped], [note.path]);
+
+    // A file skipped once that a scan with the switch off indexed, music by the rule now
+    // (retagged), is compared once, as the indexed file it is, and no longer skipped.
+    Effect.runSync(store.skipFiles([{ path: song.path, sizeBytes: 1, modifiedAt: 1 }]));
+    Effect.runSync(store.saveBatch([song], [], [], { linkEntries: false }));
+    const retagged = Effect.runSync(readScanIndex(store, ["/Startup"], Effect.void, true));
+    assert.deepEqual(paths(retagged.scanKnown).toSorted(), [note.path, song.path].toSorted());
+    assert.deepEqual(paths(Effect.runSync(store.skippedFiles(["/Startup"]))), [note.path]);
   } finally {
     fixture.close();
   }

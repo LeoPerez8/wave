@@ -81,4 +81,13 @@ describe("isVoiceNoteOrRecording", () => {
     assert.equal(isVoiceNoteOrRecording(file(path, 30_000, null)), false);
     assert.equal(isVoiceNoteOrRecording(file(path, 0, null)), false);
   });
+
+  test("only the folders under the music folder holding the file count, so a music folder inside one keeps its songs", () => {
+    const root = `${STORAGE}/Recordings/Band rehearsals`;
+    const song = file(`${root}/Take 3.flac`);
+    assert.equal(isVoiceNoteOrRecording(song, [`${STORAGE}/Music`, root]), false);
+    assert.equal(isVoiceNoteOrRecording(file(`${root}/Call/Mum.m4a`), [root]), true);
+    // Without the music folders, every folder counts.
+    assert.equal(isVoiceNoteOrRecording(song), true);
+  });
 });

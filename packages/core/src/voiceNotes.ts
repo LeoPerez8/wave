@@ -32,9 +32,17 @@ const RECORDING_FOLDERS = new Set([
 
 const folderKey = (name: string): string => name.toLowerCase().replace(/[^\p{L}]/gu, "");
 
-/** Whether the file at [path] is in a recordings folder, at any depth. */
-const inRecordingFolder = (path: string): boolean => {
-  const folders = path.split("/").slice(0, -1);
+/**
+ * Whether the file at [path] is in a recordings folder at any depth under the
+ * music folder of [roots] holding it (the deepest); every folder counts when
+ * none holds it.
+ */
+const inRecordingFolder = (path: string, roots: readonly string[]): boolean => {
+  let root = "";
+  for (const each of roots) {
+    if (each.length > root.length && path.startsWith(`${each}/`)) root = each;
+  }
+  const folders = path.slice(root.length).split("/").slice(0, -1);
   return folders.some((folder) => RECORDING_FOLDERS.has(folderKey(folder)));
 };
 
@@ -74,8 +82,12 @@ const shortUntagged = (file: AudioFileFacts): boolean =>
 
 /**
  * Whether [file] is a voice note or a recording rather than music: it's in a
- * folder WhatsApp or Android keeps them in, its name has the shape they give
- * them, or it's shorter than 30 seconds with no artist tag.
+ * folder WhatsApp or Android keeps them in (under its music folder, one of
+ * [roots]), its name has the shape they give them, or it's shorter than 30
+ * seconds with no artist tag.
  */
-export const isVoiceNoteOrRecording = (file: AudioFileFacts): boolean =>
-  inRecordingFolder(file.path) || namedAsRecording(file.path) || shortUntagged(file);
+export const isVoiceNoteOrRecording = (
+  file: AudioFileFacts,
+  roots: readonly string[] = [],
+): boolean =>
+  inRecordingFolder(file.path, roots) || namedAsRecording(file.path) || shortUntagged(file);

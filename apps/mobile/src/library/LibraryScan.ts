@@ -17,7 +17,13 @@ import { finishFileDeletions } from "./fileDeletions";
 import * as Stream from "effect/Stream";
 
 import { runSteps } from "@/lib/stepped";
-import { readScanIndex, saveScanBatch, finishScanIndex, skipVoiceNoteFiles } from "./startupJobs";
+import {
+  readScanIndex,
+  saveScanBatch,
+  finishScanIndex,
+  forgetSkippedFiles,
+  skipVoiceNoteFiles,
+} from "./startupJobs";
 
 import { startupTurnEffect } from "@/lib/backgroundWork";
 import { makeExternalStore } from "@/lib/externalStore";
@@ -268,7 +274,7 @@ const scanFolders = (roots: readonly string[]) =>
                 for (const native of event.tracks) {
                   if (!undeletedRecordedFiles.has(native.path)) {
                     const track = toIndexedTrack(native);
-                    if (skipping && isVoiceNoteOrRecording(track)) {
+                    if (skipping && isVoiceNoteOrRecording(track, roots)) {
                       notes.push({
                         path: track.path,
                         sizeBytes: track.sizeBytes,
@@ -392,10 +398,7 @@ const scanFolders = (roots: readonly string[]) =>
             startupTurnEffect,
           );
     yield* finishScanIndex(store, missingPaths, startupTurnEffect);
-    if (skippedGone.length > 0) {
-      yield* startupTurnEffect;
-      yield* store.unskipFiles(skippedGone);
-    }
+    yield* forgetSkippedFiles(store, skippedGone, startupTurnEffect);
     yield* startupTurnEffect;
     yield* store.markScanned(roots, startedAt);
     // Songs whose files are gone left the Library: every screen drops them now, hidden ones too.

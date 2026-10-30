@@ -152,7 +152,6 @@ export const chooseExcludedMusicFolder = async (): Promise<ExclusionChoice> => {
   return choice;
 };
 
-/** Stops excluding a folder and rescans to bring its songs back. */
 /**
  * Turns Skip voice notes and recordings [on] or off, then rescans: on, the
  * voice notes and recordings indexed leave the Library; off, they come back.
@@ -163,6 +162,7 @@ export const setSkipVoiceNotes = (on: boolean): void => {
   void startScanAfterCurrent(runRescan);
 };
 
+/** Stops excluding a folder and rescans to bring its songs back. */
 export const includeMusicFolder = async (path: string): Promise<void> => {
   await appRuntime.runPromise(includeFolder(path));
   void startScanAfterCurrent(runRescan);
