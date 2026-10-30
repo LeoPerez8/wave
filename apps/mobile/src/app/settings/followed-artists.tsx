@@ -1,10 +1,10 @@
 import { FollowCountryRow } from "@/settings/FollowCountryRow";
-import { useFollowCountryName } from "@/settings/followCountry";
 import { useLocalisation } from "@/localisation/localisation";
 import { useState } from "react";
 import { Text, View } from "react-native";
 import { ArtistImage } from "@/catalog/ArtistImage";
-import { CELL } from "@/catalog/grid";
+import { CELL, grid } from "@/catalog/grid";
+import { Hairline } from "@/catalog/Hairline";
 import { TextButton } from "@/components/TextButton";
 import { SettingsSwitch } from "@/components/SettingsSwitch";
 import { openFollowCard } from "@/library/FollowButton";
@@ -19,7 +19,6 @@ import { setFollowedArtistsEnabled, useFollowedArtistsEnabled } from "@/settings
 
 export default function FollowedArtistsSettingsScreen() {
   const { strings } = useLocalisation();
-  const country = useFollowCountryName();
   const searchStrings = strings.followArtistSearch;
   const enabled = useFollowedArtistsEnabled();
   const follows = useFollows();
@@ -29,12 +28,16 @@ export default function FollowedArtistsSettingsScreen() {
   useScreenContent(true);
   return (
     <SettingsPageScreen page="followedArtists">
-      <SettingsSwitch
-        label={strings.settings.followedArtists}
-        value={enabled}
-        onValueChange={setFollowedArtistsEnabled}
-      />
-      <FollowCountryRow />
+      <View>
+        <Hairline />
+        <SettingsSwitch
+          label={strings.settings.followedArtists}
+          value={enabled}
+          onValueChange={setFollowedArtistsEnabled}
+        />
+        <Hairline />
+        <FollowCountryRow />
+      </View>
       <View>
         <SearchField
           value={query}
@@ -50,7 +53,7 @@ export default function FollowedArtistsSettingsScreen() {
               <View
                 key={artist.key}
                 className="flex-row items-center"
-                style={{ gap: CELL * 1.5, minHeight: CELL * 8 }}
+                style={{ gap: CELL * 1.5, minHeight: grid.row }}
               >
                 <ArtistImage
                   artist={
@@ -87,15 +90,13 @@ export default function FollowedArtistsSettingsScreen() {
         {searching && results.length === 0 && !failed && !pending && (
           <Text className="py-3 font-sans text-footnote text-secondary">{searchStrings.empty}</Text>
         )}
-      </View>
-      {!searching && (
-        <View>
-          {follows.length === 0 && (
-            <Text className="font-sans text-body text-secondary">
-              {strings.settings.youArentFollowingAnyArtistsYet}
-            </Text>
-          )}
-          {follows.map((artist) => (
+        {!searching && follows.length === 0 && (
+          <Text className="py-3 font-sans text-body text-secondary">
+            {strings.settings.youArentFollowingAnyArtistsYet}
+          </Text>
+        )}
+        {!searching &&
+          follows.map((artist) => (
             <View key={artist.key} className="flex-row items-center">
               <TextButton
                 label={artist.name}
@@ -121,7 +122,7 @@ export default function FollowedArtistsSettingsScreen() {
                 label={strings.settings.following}
                 accessibilityLabel={strings.settings.manageFollow(
                   artist.name,
-                  artist.level === "shows" ? strings.shows.level(country) : strings.shows.releases,
+                  artist.level === "shows" ? strings.shows.level : strings.shows.releases,
                 )}
                 onPress={() => openFollowCard(artist)}
               >
@@ -130,16 +131,13 @@ export default function FollowedArtistsSettingsScreen() {
                     {strings.settings.following}
                   </Text>
                   <Text className="font-sans text-footnote text-secondary">
-                    {artist.level === "releases"
-                      ? strings.shows.releases
-                      : strings.shows.level(country)}
+                    {artist.level === "releases" ? strings.shows.releases : strings.shows.level}
                   </Text>
                 </View>
               </TextButton>
             </View>
           ))}
-        </View>
-      )}
+      </View>
     </SettingsPageScreen>
   );
 }
