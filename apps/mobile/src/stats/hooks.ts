@@ -6,6 +6,7 @@ import {
   startHomeRecap,
   parseRecapId,
   type RecapPeriod,
+  type RecapGenre,
   type StatsPeriod,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
@@ -178,3 +179,7 @@ export const useRecap = (id: string): LoadedRecap | null | undefined =>
       [id],
     ),
   );
+
+/** The period's top five genre shares, refreshed with Stats' other readings. */
+export const useTopGenres = (period: StatsPeriod): readonly RecapGenre[] | undefined =>
+  useStatsRead(useCallback((stats: Stats["Service"]) => stats.topGenres(period), [period]));

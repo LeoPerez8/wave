@@ -5,6 +5,7 @@ import {
   availableRecaps,
   createRecapAvailability,
   rankSongPlays,
+  genrePlayShares,
   recap,
   recapId,
   recapSlides,
@@ -229,6 +230,22 @@ export const make = Effect.gen(function* () {
       Effect.map(store.playedEntityTotals(statsWindow(period, Date.now())), (totals) =>
         totals.artists.slice(0, limit),
       ),
+    topGenres: (period) =>
+      Effect.gen(function* () {
+        const totals = yield* store.songPlayTotals(statsWindow(period, Date.now()));
+        const songs = totals.map(({ song, ...plays }) => ({
+          ...plays,
+          id: song.kind === "library" ? song.id : song.videoId,
+        }));
+        const { lyricsAndGenreLookupsEnabled } = yield* Effect.promise(
+          () => import("@/settings/lyricsAndGenre"),
+        );
+        const genres = yield* store.songGenres(
+          songs.map(({ id }) => id),
+          lyricsAndGenreLookupsEnabled(),
+        );
+        return genrePlayShares(songs, genres);
+      }),
     artist: (artistId, strings) => {
       const now = Date.now();
       return Effect.flatMap(
