@@ -195,3 +195,23 @@ test("forty thousand playlist entries are read as ids, then nine songs", async (
     closeTestDatabase(db);
   }
 });
+
+test("an entry whose song can't be read gives its place to another", async () => {
+  const db = await openTestDatabase();
+  try {
+    const store = await loadLibraryStore(root, db);
+    const songs = Array.from({ length: 9 }, (_, i) => streamed(`v${i}`));
+    const { playlistId } = await Effect.runPromise(store.createPlaylist("Liked Songs", songs));
+    db.run(sql`INSERT INTO playlist_items
+      (playlist_id, yt_song, order_key, added_at, changed_at, sync_id, phone_id)
+      VALUES (${playlistId}, '{"videoId":"a-broken"}', 'zz', 0, 0, 'broken', 'phone')`);
+    const read = randomMagicQueueRead(() => 0);
+    const ids = songs.map((song) => (song.source === "stream" ? song.song.videoId : ""));
+    // "a-broken" sorts first and is drawn first; its place goes to the next one.
+    const shown = [ids[8], ...ids.slice(0, 8)];
+    assert.deepEqual(seedIds(Effect.runSync(read.read(store))), shown);
+    assert.deepEqual(seedIds(Effect.runSync(read.read(store))), shown);
+  } finally {
+    closeTestDatabase(db);
+  }
+});

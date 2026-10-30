@@ -1306,9 +1306,10 @@ ALTER TABLE notified_follow_shows ADD COLUMN pushed integer DEFAULT false NOT NU
 const m0049 = `CREATE TABLE streamed_genres (video_id text PRIMARY KEY NOT NULL, genre text);`;
 
 // The YT Music entries' video ids (\`schema.ts\`'s \`videoIdIn\`, which queries
-// must write exactly so), with what says whether the entry and its playlist are
-// live: Discover's Magic Queue row reads every playlist's videos from the index
-// alone, and finds the picked ones' entries without decoding the rest.
+// must write exactly so), with whether the entry is removed and its playlist:
+// Discover's Magic Queue row reads every playlist's distinct videos in index
+// order without parsing each entry's JSON again, and finds the picked ones'
+// entries without decoding the rest.
 const m0050 = `CREATE INDEX playlist_items_video_idx ON playlist_items ((CASE WHEN json_valid(yt_song)
   THEN json_extract(yt_song, '$.videoId') END), deleted, playlist_id) WHERE yt_song IS NOT NULL;`;
 

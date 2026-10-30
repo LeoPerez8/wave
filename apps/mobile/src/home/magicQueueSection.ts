@@ -8,6 +8,7 @@ import { currentLocalisation } from "@/localisation/localisation";
 import {
   magicQueueMixPicks,
   magicQueueRow,
+  magicQueueSeedId,
   magicQueueShown,
   type DiscoverMixesSection,
   type MagicQueueMixPicks,
@@ -40,9 +41,6 @@ const videoIdsOf = (songs: readonly YtAlbumSong[]): string[] => songs.map((song)
 
 /** A seed of the row: a Library song, or a playlist's YT Music entry. */
 type Seed = MagicQueueSeed<PlayableSongRow>;
-
-/** What a draw keeps of [seed] to put it back in its place (Core's `MagicQueueSeedId`). */
-const seedId = (seed: Seed) => (seed.source === "library" ? seed.song.id : seed.song.videoId);
 
 /**
  * Nine random seeds (Library songs and playlist entries) through the same
@@ -110,7 +108,7 @@ export const useMagicQueueSection = (
       });
       return;
     }
-    const previous = (seeds ?? []).map(seedId);
+    const previous = (seeds ?? []).map(magicQueueSeedId);
     const next = randomMagicQueueRead(Math.random);
     setRead(next);
     void showToast(strings.discover.newSongs, {

@@ -2042,7 +2042,12 @@ export {
 export type { MagicQueuePicking, MagicQueuePicks } from "./magicQueueSection.ts";
 export { randomMagicQueuePicks } from "./randomMagicQueuePicks.ts";
 export type { MagicQueuePool, MagicQueueSeedId } from "./randomMagicQueuePicks.ts";
-export { magicQueueMixPicks, magicQueueRow, magicQueueShown } from "./magicQueueRow.ts";
+export {
+  magicQueueMixPicks,
+  magicQueueRow,
+  magicQueueSeedId,
+  magicQueueShown,
+} from "./magicQueueRow.ts";
 export type {
   MagicQueueMixPicks,
   MagicQueueRow,

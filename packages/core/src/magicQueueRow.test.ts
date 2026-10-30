@@ -4,6 +4,7 @@ import { describe, test } from "node:test";
 import {
   magicQueueMixPicks,
   magicQueueRow,
+  magicQueueSeedId,
   magicQueueShown,
   type BlendedDiscoverMix,
   type DiscoverMixesSection,
@@ -276,4 +277,12 @@ describe("the row as drawn, its mixes' songs picked", () => {
     const skeleton = magicQueueRow<number>({ ytMusic: true, seeds: [], artistMixes: SKELETON });
     assert.deepEqual(magicQueueShown(skeleton, null, () => 0).shown, { kind: "skeleton" });
   });
+});
+
+test("a seed is kept by its Library id or its video id", () => {
+  const seeds: MagicQueueSeed<{ id: number }>[] = [
+    { source: "library", song: { id: 4 } },
+    { source: "stream", song: song("x", "e") },
+  ];
+  assert.deepEqual(seeds.map(magicQueueSeedId), [4, "x"]);
 });

@@ -10,6 +10,7 @@
 import type { BlendedDiscoverMix } from "./discoverMixLevels.ts";
 import type { DiscoverMixesSection } from "./discoverMixesSection.ts";
 import { MAGIC_QUEUE_PICKS } from "./magicQueueSection.ts";
+import type { MagicQueueSeedId } from "./randomMagicQueuePicks.ts";
 import type { RandomSource } from "./weightedPick.ts";
 import type { YtAlbumSong } from "./ytDiscover.ts";
 
@@ -17,6 +18,11 @@ import type { YtAlbumSong } from "./ytDiscover.ts";
 export type MagicQueueSeed<T> =
   | { readonly source: "library"; readonly song: T }
   | { readonly source: "stream"; readonly song: YtAlbumSong };
+
+/** What a draw keeps of [seed] to keep it in its place (`randomMagicQueuePicks`' `previous`). */
+export const magicQueueSeedId = <T extends { readonly id: number }>(
+  seed: MagicQueueSeed<T>,
+): MagicQueueSeedId => (seed.source === "library" ? seed.song.id : seed.song.videoId);
 
 /** What the row draws. */
 export type MagicQueueRow<T> =

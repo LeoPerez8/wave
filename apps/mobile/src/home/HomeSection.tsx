@@ -284,9 +284,9 @@ function DiscoverMixRow({
  * starting a Magic Queue from it, its long-press the song's menu. The
  * Library's songs and the playlists' YT Music entries, or with neither,
  * streamed songs of the Artist mixes, with placeholder tiles while the first
- * mixes build. A new list each visit;
- * pulled right past its start, the row brings other songs, with Undo. Each
- * place crossfades its tile when its song changes. Hidden with YT Music off.
+ * mixes build. A new list each visit; pulled right past its start, the row
+ * brings other songs, with Undo. Each place crossfades its tile when its song
+ * changes. Hidden with YT Music off.
  */
 function MagicQueueRow({ section }: { section: MagicQueueSection }) {
   const { strings } = useLocalisation();
