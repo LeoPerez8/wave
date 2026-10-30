@@ -149,3 +149,25 @@ test("Recap listening counts streamed plays beside the Library's, skips left out
   );
   assert.equal(recapOf(db, september).minutesListened, 30);
 });
+
+test("Recap and Stats period genres include cached streamed answers, respecting the switch", async () => {
+  const { keepStreamedGenre } = await import("./streamedGenres.ts");
+  const { songGenres } = await import("./stats.ts");
+  const db = await openTestDatabase();
+  stream(db, airbag, inSeptember(1));
+  stream(db, airbag, inSeptember(2));
+  stream(db, karma, inSeptember(3));
+  keepStreamedGenre(db, airbag.videoId, "Rock");
+  keepStreamedGenre(db, karma.videoId, null);
+  const window = recapWindow(september);
+  assert.deepEqual(
+    recapOf(db, september).topGenres.map(({ family, share }) => [family.name, share]),
+    [["Rock", 1]],
+  );
+  assert.deepEqual(
+    recap({ period: september, listening: [], ...recapPlays(db, window, false) }).topGenres,
+    [],
+  );
+  assert.deepEqual(songGenres(db, [airbag.videoId]), [{ id: airbag.videoId, genre: "Rock" }]);
+  assert.deepEqual(songGenres(db, [airbag.videoId], false), []);
+});

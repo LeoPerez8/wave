@@ -90,7 +90,6 @@ export const followMenuPress = (artist: FollowTarget, close: () => void): void =
 
 export const useFollowAction = (artist: FollowTarget): LastListAction => {
   const { strings } = useLocalisation();
-  const country = useFollowCountryName();
   const follow = useFollow(artist.name);
   return {
     icon: follow === null ? IconUserPlus : IconUserCheck,
@@ -101,7 +100,7 @@ export const useFollowAction = (artist: FollowTarget): LastListAction => {
       follow === null
         ? null
         : follow.level === "shows"
-          ? strings.shows.level(country)
+          ? strings.shows.level
           : strings.shows.releases,
     ),
     onPress: () => openFollowCard(artist),

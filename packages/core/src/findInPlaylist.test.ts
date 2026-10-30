@@ -303,6 +303,7 @@ describe("what a findable list's field and empty line say", () => {
     assert.equal(findPlaceholder("albums"), "Find in Albums");
     assert.equal(findPlaceholder("genres"), "Find in Genres");
     assert.equal(findPlaceholder("playlists"), "Find in Playlists");
+    assert.equal(findPlaceholder("artist"), "Find in artist");
   });
 
   test("a query that finds nothing says what wasn't found", () => {
@@ -312,6 +313,7 @@ describe("what a findable list's field and empty line say", () => {
     assert.equal(findNoMatch("albums"), "No albums match");
     assert.equal(findNoMatch("genres"), "No genres match");
     assert.equal(findNoMatch("playlists"), "No playlists match");
+    assert.equal(findNoMatch("artist"), findNoMatch("songs"));
   });
 });
 
@@ -323,6 +325,8 @@ describe("Find's text in Portuguese", () => {
     assert.equal(findNoMatch("songs", "pt-BR"), "Nenhuma música encontrada");
     assert.equal(findNoMatch("artists", "pt-BR"), "Nenhum artista encontrado");
     assert.equal(findNoMatch("playlists", "pt-BR"), "Nenhuma playlist encontrada");
+    assert.equal(findPlaceholder("artist", "pt-BR"), "Buscar em artista");
+    assert.equal(findNoMatch("artist", "pt-BR"), "Nenhuma música encontrada");
     assert.equal(findPlaceholder("genres"), "Find in Genres");
   });
 });

@@ -5,6 +5,8 @@ import {
   availableRecaps,
   createRecapAvailability,
   rankSongPlays,
+  genrePlayShares,
+  countedGenreSongIds,
   recap,
   recapId,
   recapSlides,
@@ -145,7 +147,10 @@ const loadRecap = (
     if (!availableRecaps(listening, now).some((available) => recapId(available) === id)) {
       return null;
     }
-    const plays = yield* store.recapPlays(recapWindow(period));
+    const { lyricsAndGenreLookupsEnabled } = yield* Effect.promise(
+      () => import("@/settings/lyricsAndGenre"),
+    );
+    const plays = yield* store.recapPlays(recapWindow(period), lyricsAndGenreLookupsEnabled());
     const computed = recap({ period, listening, ...plays });
     const rows: RecapRows = {
       artists: new Map(plays.artists.map((entry) => [entry.id, entry.item])),
@@ -226,6 +231,22 @@ export const make = Effect.gen(function* () {
       Effect.map(store.playedEntityTotals(statsWindow(period, Date.now())), (totals) =>
         totals.artists.slice(0, limit),
       ),
+    topGenres: (period) =>
+      Effect.gen(function* () {
+        const totals = yield* store.songPlayTotals(statsWindow(period, Date.now()));
+        const songs = totals.map(({ song, ...plays }) => ({
+          ...plays,
+          id: song.kind === "library" ? song.id : song.videoId,
+        }));
+        const { lyricsAndGenreLookupsEnabled } = yield* Effect.promise(
+          () => import("@/settings/lyricsAndGenre"),
+        );
+        const genres = yield* store.songGenres(
+          countedGenreSongIds(songs),
+          lyricsAndGenreLookupsEnabled(),
+        );
+        return genrePlayShares(songs, genres);
+      }),
     artist: (artistId, strings) => {
       const now = Date.now();
       return Effect.flatMap(

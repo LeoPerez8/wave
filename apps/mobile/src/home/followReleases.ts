@@ -1,3 +1,4 @@
+import { readHomeFollow } from "./knownHomeFollow";
 import { checkFollowShows } from "./followShows";
 import {
   checkDue,
@@ -13,20 +14,15 @@ import {
   pickYtArtist,
   type FollowCheckContext,
   type FollowRelease,
-  type FollowedArtist,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
-import { useCallback, useState } from "react";
-import { useFocusEffect } from "expo-router";
 import { LibraryStore } from "@/library/LibraryStore";
 import { appRuntime } from "@/library/runtime";
-import { useFollows } from "@/library/follows";
 import { settledTurnEffect } from "@/lib/backgroundWork";
-import { useFollowedArtistsEnabled, followedArtistsEnabled } from "@/settings/followedArtists";
+import { followedArtistsEnabled } from "@/settings/followedArtists";
 import { currentFollowCountry } from "@/settings/followCountry";
 import { ticketmasterKey } from "@/library/showNotifications";
-import { useYtMusicEnabled, ytMusicEnabled } from "@/settings/ytMusic";
-import { useDontPlayExplicit } from "@/settings/dontPlayExplicit";
+import { ytMusicEnabled } from "@/settings/ytMusic";
 import { withSearchTurn } from "@/ytmusic/searchAllowance";
 import { YtMusic } from "@/ytmusic/YtMusic";
 import type { YtMusicError } from "@/ytmusic/YtMusic";
@@ -62,9 +58,10 @@ const ytRead = <A>(query: string, read: Effect.Effect<A, YtMusicError>) =>
 export const checkFollowReleases = (
   youtubeEnabled = ytMusicEnabled(),
   context: FollowCheckContext = "home",
+  refreshCache = true,
 ) =>
   Effect.gen(function* () {
-    if (!allowed()) return;
+    if (!allowed()) return false;
     const store = yield* LibraryStore;
     const follows = yield* store.listFollows;
     const cache = yield* store.followReleaseCache;
@@ -80,13 +77,13 @@ export const checkFollowReleases = (
         context,
       })
     )
-      return;
+      return false;
     const yt = yield* YtMusic;
     // A shows failure never holds back the releases.
-    yield* checkFollowShows(context).pipe(Effect.ignore);
+    let changed = yield* checkFollowShows(context, false).pipe(Effect.orElseSucceed(() => false));
     for (const follow of follows) {
       yield* settledTurnEffect;
-      if (!allowed()) return;
+      if (!allowed()) break;
       const previous = cache.artists.find((a) => a.key === follow.key);
       if (!checkDue(previous?.checkedAt ?? null, Date.now(), context)) continue;
       yield* Effect.gen(function* () {
@@ -172,78 +169,17 @@ export const checkFollowReleases = (
         const current = yield* store.getFollow(follow.name);
         if (current === null || current.followedAt !== follow.followedAt) return;
         yield* store.saveFollowReleases(follow.key, releases, Date.now());
+        changed = true;
       }).pipe(Effect.ignore);
     }
-  });
+    return changed;
+  }).pipe(
+    Effect.tap((changed) =>
+      changed && refreshCache && allowed()
+        ? Effect.tryPromise(readHomeFollow).pipe(Effect.ignore)
+        : Effect.void,
+    ),
+  );
 
-const readReleaseFeed = (follows: readonly FollowedArtist[]) =>
-  Effect.gen(function* () {
-    const store = yield* LibraryStore;
-    const cache = yield* store.followReleaseCache;
-    const listening = yield* store.followReleaseListening(
-      followFeed({
-        follows,
-        releases: cache.artists.flatMap((a) => a.releases),
-        hidden: cache.hidden,
-        countedPlays: [],
-        now: Date.now(),
-      }).releaseCards,
-    );
-    return followFeed({ follows, ...listening, hidden: cache.hidden, now: Date.now() })
-      .releaseCards;
-  });
 export const hideRelease = (key: string) =>
   appRuntime.runPromise(Effect.flatMap(LibraryStore, (s) => s.hideFollowRelease(key)));
-
-/** A focus owns its work; leaving or changing either network switch interrupts requests. */
-export const useFollowReleases = () => {
-  const follows = useFollows();
-  const enabled = useFollowedArtistsEnabled();
-  const yt = useYtMusicEnabled();
-  const explicit = useDontPlayExplicit();
-  const [cards, setCards] = useState<readonly FollowRelease[] | undefined>();
-
-  useFocusEffect(
-    useCallback(() => {
-      if (!enabled || follows.length === 0) {
-        setCards([]);
-        return;
-      }
-      const controller = new AbortController();
-      const read = (initial = false) =>
-        appRuntime
-          .runPromise(readReleaseFeed(follows), { signal: controller.signal })
-          .then((value) => {
-            if (!controller.signal.aborted)
-              setCards(initial && value.length === 0 ? undefined : value);
-          });
-      void read(true)
-        .then(() => appRuntime.runPromise(checkFollowReleases(yt), { signal: controller.signal }))
-        .then(() => read())
-        .catch(() => {
-          if (!controller.signal.aborted) setCards((current) => current ?? []);
-        });
-      let stop = () => {};
-      void appRuntime.runPromise(LibraryStore).then((s) => {
-        if (!controller.signal.aborted)
-          stop = s.listeningHistoryVersion.subscribe(() => {
-            void read().catch(() => {});
-          });
-      });
-      return () => {
-        controller.abort();
-        stop();
-      };
-    }, [enabled, yt, follows]),
-  );
-  return {
-    cards: !enabled || follows.length === 0 ? [] : cards?.filter((r) => !explicit || !r.explicit),
-    follows,
-    refresh: () => {
-      void appRuntime
-        .runPromise(readReleaseFeed(follows))
-        .then(setCards)
-        .catch(() => {});
-    },
-  };
-};

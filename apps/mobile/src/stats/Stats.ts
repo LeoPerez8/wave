@@ -4,6 +4,7 @@ import {
   type ArtistStats as ArtistStatsLines,
   type Catalogue,
   type GenreFamily,
+  type RecapGenre,
   type MixedSong,
   type RecapPeriod,
   type RecapSlide,
@@ -86,6 +87,10 @@ export class Stats extends Context.Service<
       period: StatsPeriod,
       limit: number,
     ) => Effect.Effect<readonly Ranked<PlayedArtist>[], LibraryStoreError>;
+    /** Top five genre families over known-genre counted plays in this period. */
+    readonly topGenres: (
+      period: StatsPeriod,
+    ) => Effect.Effect<readonly RecapGenre[], LibraryStoreError>;
     /**
      * The artist page's stats block over all time, over the songs whose credit
      * names the artist (a collaboration counts for each of its artists),
