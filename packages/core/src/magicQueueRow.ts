@@ -1,9 +1,10 @@
 /**
  * What Discover's Magic Queue row shows (docs/spec.md, "Discover's Magic
- * Queue row"): nine of the Library's songs with a file, or, while the
- * Library has none, nine streamed songs of the Artist mixes (the cold-start
- * ones seeded from YouTube Music's chart), so someone with nothing to start
- * from still gets songs to start a Magic Queue from.
+ * Queue row"): nine seeds drawn from the Library's songs with a file and the
+ * YT Music entries of the owner's playlists (`randomMagicQueuePicks`), or,
+ * while both are empty, nine streamed songs of the Artist mixes (the
+ * cold-start ones seeded from YouTube Music's chart), so someone with
+ * nothing to start from still gets songs to start a Magic Queue from.
  */
 
 import type { BlendedDiscoverMix } from "./discoverMixLevels.ts";
@@ -12,35 +13,41 @@ import { MAGIC_QUEUE_PICKS } from "./magicQueueSection.ts";
 import type { RandomSource } from "./weightedPick.ts";
 import type { YtAlbumSong } from "./ytDiscover.ts";
 
+/** A seed the row drew from its pool: a Library song ([T]) or a playlist's YT Music entry, streamed. */
+export type MagicQueueSeed<T> =
+  | { readonly source: "library"; readonly song: T }
+  | { readonly source: "stream"; readonly song: YtAlbumSong };
+
 /** What the row draws. */
 export type MagicQueueRow<T> =
   | { readonly kind: "hidden" }
   /** Placeholder tiles in the row's grid: the first mixes are on their way. */
   | { readonly kind: "skeleton" }
-  /** The Library's songs, as Home read them. */
-  | { readonly kind: "library"; readonly songs: readonly T[] }
-  /** Songs of these mixes (`magicQueueMixPicks`): the Library has none to show. */
+  /** Library songs and playlist entries, as Home read them. */
+  | { readonly kind: "seeds"; readonly seeds: readonly MagicQueueSeed<T>[] }
+  /** Songs of these mixes (`magicQueueMixPicks`): the pool is empty. */
   | { readonly kind: "mixes"; readonly mixes: readonly BlendedDiscoverMix[] };
 
 /**
  * What the row shows: nothing while YT Music is off ([ytMusic]) or before
- * the Library's songs are read ([library] null); the Library's songs when it
- * has any; else songs of the Artist mixes seeded from YouTube Music's chart
- * ([artistMixes], what their row shows; a mix seeded from plays or similar
- * artists stays out): a skeleton while the first ones build, nothing when
- * there are none or none has a streamed song to start from.
+ * its pool is read ([seeds] null); the seeds drawn from the Library's files
+ * and the playlists' YT Music entries when there are any; else songs of the
+ * Artist mixes seeded from YouTube Music's chart ([artistMixes], what their
+ * row shows; a mix seeded from plays or similar artists stays out): a
+ * skeleton while the first ones build, nothing when there are none or none
+ * has a streamed song to start from.
  */
 export const magicQueueRow = <T>({
   ytMusic,
-  library,
+  seeds,
   artistMixes,
 }: {
   readonly ytMusic: boolean;
-  readonly library: readonly T[] | null;
+  readonly seeds: readonly MagicQueueSeed<T>[] | null;
   readonly artistMixes: DiscoverMixesSection;
 }): MagicQueueRow<T> => {
-  if (!ytMusic || library === null) return { kind: "hidden" };
-  if (library.length > 0) return { kind: "library", songs: library };
+  if (!ytMusic || seeds === null) return { kind: "hidden" };
+  if (seeds.length > 0) return { kind: "seeds", seeds };
   if (artistMixes.kind === "skeleton") return { kind: "skeleton" };
   if (artistMixes.kind !== "mixes") return { kind: "hidden" };
   const chart = artistMixes.mixes.filter((mix) => mix.seed.from === "chart");

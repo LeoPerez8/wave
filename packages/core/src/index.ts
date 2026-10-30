@@ -2041,8 +2041,14 @@ export {
 } from "./magicQueueSection.ts";
 export type { MagicQueuePicking, MagicQueuePicks } from "./magicQueueSection.ts";
 export { randomMagicQueuePicks } from "./randomMagicQueuePicks.ts";
+export type { MagicQueuePool, MagicQueueSeedId } from "./randomMagicQueuePicks.ts";
 export { magicQueueMixPicks, magicQueueRow, magicQueueShown } from "./magicQueueRow.ts";
-export type { MagicQueueMixPicks, MagicQueueRow, MagicQueueShown } from "./magicQueueRow.ts";
+export type {
+  MagicQueueMixPicks,
+  MagicQueueRow,
+  MagicQueueSeed,
+  MagicQueueShown,
+} from "./magicQueueRow.ts";
 export { magicQueueShare } from "./magicQueue.ts";
 export { discoverMixesOfRadios, discoverMixesOfRadiosSteps } from "./discoverMixRadios.ts";
 export type { DiscoverMixRead } from "./discoverMixRadios.ts";
