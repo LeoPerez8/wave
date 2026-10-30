@@ -22,7 +22,7 @@ export const statsPtBr: typeof statsEn = {
   genres: "Gêneros",
   genrePercent: (share: number) =>
     share < 0.01 ? "<1%" : `${formatNumber("pt-BR", Math.round(share * 1000) / 10)}%`,
-  genreBlockLabel: (rank: number, name: string, percent: string) => `#${rank}, ${name}, ${percent}`,
+  genreBarLabel: (rank: number, name: string, percent: string) => `#${rank}, ${name}, ${percent}`,
   recaps: "Retrospectivas",
   loadingListeningStats: "Carregando estatísticas de audição",
   loadingRanking: "Carregando classificação",

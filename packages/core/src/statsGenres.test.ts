@@ -3,48 +3,98 @@ import { test } from "node:test";
 import { DEFAULT_THEME } from "./theme.ts";
 import { en } from "./catalogueEn.ts";
 import { ptBR } from "./cataloguePtBr.ts";
-import { statsGenreBlocks, countedGenreSongIds, genrePlayShares, contrastRatio } from "./index.ts";
+import { statsGenrePodium, countedGenreSongIds, contrastRatio, type RecapGenre } from "./index.ts";
 
-const genres = genrePlayShares(
-  [
-    { id: 1, countedPlays: 3, sortKey: "", listenedMs: 0, latestPlayAt: 0 },
-    { id: 2, countedPlays: 1, sortKey: "", listenedMs: 0, latestPlayAt: 0 },
-  ],
-  [
-    { id: 1, genre: "Rock" },
-    { id: 2, genre: "Pop" },
-  ],
-);
+const family = (name: string, share: number): RecapGenre => ({
+  family: { key: name.toLowerCase(), name },
+  share,
+});
+const five = [
+  family("Rock", 0.38),
+  family("Pop", 0.24),
+  family("Hip-Hop", 0.17),
+  family("Electronic", 0.12),
+  family("Jazz", 0.09),
+];
 
-test("Stats sizes both block dimensions by share above a common readable label floor", () => {
-  const blocks = statsGenreBlocks(genres, 360, 1, 44, DEFAULT_THEME.light);
+test("the podium stands #1 in the middle, #2 left, #3 right, #4 and #5 at the edges, filling the width", () => {
+  const bars = statsGenrePodium(five, 358, 44, DEFAULT_THEME.dark);
   assert.deepEqual(
-    blocks.map(({ width, height, inset }) => [width, height, inset]),
+    bars.map(({ rank, left, width }) => [rank, left, width]),
     [
-      [294, 148, 0],
-      [226, 100, 8],
+      [4, 0, 76],
+      [2, 58, 84],
+      [1, 124, 110],
+      [3, 216, 84],
+      [5, 282, 76],
     ],
   );
-  assert.deepEqual(statsGenreBlocks([], 360, 1, 44, DEFAULT_THEME.light), []);
 });
 
-for (const mode of ["light", "dark"] as const) {
-  test(`${mode}: all five teal shades keep body labels at AA contrast with large text floors`, () => {
-    const five = Array.from({ length: 5 }, (_, index) => ({
-      ...genres[0]!,
-      share: (5 - index) / 15,
-    }));
-    const blocks = statsGenreBlocks(five, 280, 2, 160, DEFAULT_THEME[mode]);
-    for (const block of blocks) {
-      assert.ok(contrastRatio(block.ink, block.fill) >= 4.5);
-      assert.ok(block.width + block.inset <= 280);
-      assert.ok(block.height >= 192);
-    }
-    assert.equal(new Set(blocks.map((block) => block.fill)).size, 5);
-    assert.ok(blocks[0]!.height > blocks[4]!.height);
-    assert.ok(blocks[0]!.width > blocks[4]!.width);
-  });
-}
+test("fewer than five families keep their podium sizes and stand centred", () => {
+  const place = (count: number) =>
+    statsGenrePodium(five.slice(0, count), 358, 44, DEFAULT_THEME.dark).map(
+      ({ rank, left, width }) => [rank, left, width],
+    );
+  assert.deepEqual(place(3), [
+    [2, 58, 84],
+    [1, 124, 110],
+    [3, 216, 84],
+  ]);
+  assert.deepEqual(place(1), [[1, 124, 110]]);
+  assert.deepEqual(statsGenrePodium([], 358, 44, DEFAULT_THEME.dark), []);
+});
+
+test("each bar tucks under its neighbour toward #1, and its rank and label use the part left showing", () => {
+  const bars = statsGenrePodium(five, 358, 44, DEFAULT_THEME.dark);
+  assert.deepEqual(
+    bars.map(({ rank, visibleLeft, visibleWidth }) => [rank, visibleLeft, visibleWidth]),
+    [
+      [4, 0, 58],
+      [2, 58, 66],
+      [1, 124, 110],
+      [3, 234, 66],
+      [5, 300, 58],
+    ],
+  );
+  const front = (rank: number) => bars.find((bar) => bar.rank === rank)!.layer;
+  assert.ok(front(1) > front(2) && front(1) > front(3));
+  assert.ok(front(2) > front(4) && front(3) > front(5));
+});
+
+test("bar heights follow the share relative to #1 above the floor", () => {
+  const heights = (floor: number) =>
+    statsGenrePodium(
+      [family("Rock", 0.5), family("Pop", 0.25), family("Jazz", 0)],
+      358,
+      floor,
+      DEFAULT_THEME.dark,
+    ).map(({ rank, height }) => [rank, height]);
+  assert.deepEqual(heights(44), [
+    [2, 124],
+    [1, 204],
+    [3, 44],
+  ]);
+  assert.deepEqual(heights(72), [
+    [2, 152],
+    [1, 232],
+    [3, 72],
+  ]);
+});
+
+test("podium fills step from the accent at #1 to quieter shades, rank numbers at AA in both modes", () => {
+  for (const theme of [
+    DEFAULT_THEME.light,
+    DEFAULT_THEME.dark,
+    { accent: "#777777", background: "#eeeedd" },
+  ]) {
+    const bars = statsGenrePodium(five, 358, 44, theme);
+    const byRank = [...bars].sort((a, b) => a.rank - b.rank);
+    assert.equal(byRank[0]!.fill, theme.accent);
+    assert.equal(new Set(bars.map((bar) => bar.fill)).size, 5);
+    for (const bar of bars) assert.ok(contrastRatio(bar.ink, bar.fill) >= 4.5);
+  }
+});
 
 test("Stats genre percentages are localised and a tiny positive share never reads as zero", () => {
   assert.equal(en.stats.genres, "Genres");
@@ -52,15 +102,6 @@ test("Stats genre percentages are localised and a tiny positive share never read
   assert.equal(en.stats.genrePercent(0.125), "12.5%");
   assert.equal(ptBR.stats.genrePercent(0.125), "12,5%");
   assert.equal(en.stats.genrePercent(0.001), "<1%");
-});
-
-test("chosen accent and background determine the shades, with AA ink even for middle grey", () => {
-  for (const accent of ["#777777", "#ffcc00", "#400080"]) {
-    const blocks = statsGenreBlocks(genres, 360, 1, 44, { accent, background: "#eeeedd" });
-    assert.equal(blocks[0]!.fill, accent);
-    assert.notEqual(blocks[1]!.fill, accent);
-    for (const block of blocks) assert.ok(contrastRatio(block.ink, block.fill) >= 4.5);
-  }
 });
 
 test("genre reads omit skipped-only songs and retain counted Library and streamed ids", () => {
