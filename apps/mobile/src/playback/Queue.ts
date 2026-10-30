@@ -66,7 +66,14 @@ import { shuffleKind } from "@/settings/shuffleKind";
 
 import { Player, PlayerError, playbackState, positionState } from "./Player";
 import { searchPlaying } from "./playingSearch";
-import { evenShuffleSongs, learnQueueTracks, queueTracks, type QueueTrack } from "./queueTracks";
+import {
+  evenShuffleSongs,
+  learnQueueTracks,
+  learnTracksToLoad,
+  queueTracks,
+  type QueueTrack,
+} from "./queueTracks";
+import { savedYtQueueTracks } from "./savedYtTracks";
 
 export { toQueueTrack, type QueueTrack } from "./queueTracks";
 
@@ -343,13 +350,14 @@ export const layer = Layer.effect(
         if (steps.length === 0) return;
         // A skip sends no items, so it doesn't look through the whole queue.
         const toLoad = new Set(keysToLoad(native, steps));
-        const items =
-          toLoad.size === 0
-            ? []
-            : yield* Effect.forEach(
-                state.entries.filter((entry) => toLoad.has(entry.key)),
-                itemFor,
-              );
+        const entries = toLoad.size === 0 ? [] : state.entries.filter((e) => toLoad.has(e.key));
+        // A queue picked back up from the player comes without its tracks.
+        yield* learnTracksToLoad(
+          entries.map((entry) => entry.trackId),
+          store.songsByIds,
+          savedYtQueueTracks,
+        );
+        const items = yield* Effect.forEach(entries, itemFor);
         yield* player.applySync(steps.map(toNative), items, cause);
         native = applyPlayerSync(native, steps);
         // The `skip` perf scenario's response: what the plan did, on how long a queue.

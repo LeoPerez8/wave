@@ -110,6 +110,7 @@ export {
   PLAYER_WINDOW_AHEAD,
   PLAYER_WINDOW_BEHIND,
   PLAYER_WINDOW_SIZE,
+  keptQueue,
   playerQueueWindow,
   playerRepeatMode,
 } from "./playerWindow.ts";
@@ -1281,7 +1282,6 @@ export {
   PLAYING_SEARCHES,
   PLAYING_SEARCH_RETRY_MS,
   answerPlayingWalk,
-  keptQueue,
   passedOverNotice,
   playerQueueList,
   searchingAfter,

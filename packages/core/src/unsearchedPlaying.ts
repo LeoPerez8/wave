@@ -118,20 +118,6 @@ export const withHeldCurrent = (state: QueueState, way: PlayingWay = "on"): Queu
   return { ...state, index };
 };
 
-/**
- * The queue to pick back up when JS restarts while the player kept going:
- * [saved], the queue saved last, once the player holds what it holds
- * ([playerKeys]), with its playing entry one the player holds
- * (`withHeldCurrent`: it was saved while its playing song was searched).
- * Null when the player holds something else.
- */
-export const keptQueue = (saved: QueueState, playerKeys: readonly string[]): QueueState | null => {
-  const state = withHeldCurrent(saved);
-  const keys = playerQueueList(state)?.keys ?? [];
-  const same = keys.length === playerKeys.length && keys.every((key, i) => key === playerKeys[i]);
-  return same ? state : null;
-};
-
 /** Which way the queue goes past songs that don't play: on, or back for Previous. */
 export type PlayingWay = "on" | "back";
 

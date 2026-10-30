@@ -24,8 +24,8 @@ fun changedResumeItems(kept: List<ResumeItem>?, reported: List<ResumeItem>): Lis
 /**
  * The last player state, kept on disk so the playback service can resume it
  * after Wave's process died, before JS is up (Media3's playback resumption):
- * the items, the current one and its position, shuffle and repeat (Core's
- * `off`, `all` or `one`), where the queue was started from ([source], `phone`
+ * the items (the window of a long queue), the current one and its position, the
+ * queue's shuffle and repeat (Core's `off`, `all` or `one`), where the queue was started from ([source], `phone`
  * or `auto`, as plays record it), and the queue JS last saved, which JS adopts
  * when it comes up: [queueJson] (Core's `QueueState`), with the index and
  * metadata JS saved apart from it since ([queueIndex], [queueMetadata]; Core's
