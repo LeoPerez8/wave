@@ -1,3 +1,4 @@
+import { lyricsAndGenreLookupsEnabled } from "@/settings/lyricsAndGenre";
 import type { PlayedAlbum, PlayedArtist } from "@/library/db/playedEntities";
 import {
   ARTIST_MOST_PLAYED,
@@ -145,7 +146,7 @@ const loadRecap = (
     if (!availableRecaps(listening, now).some((available) => recapId(available) === id)) {
       return null;
     }
-    const plays = yield* store.recapPlays(recapWindow(period));
+    const plays = yield* store.recapPlays(recapWindow(period), lyricsAndGenreLookupsEnabled());
     const computed = recap({ period, listening, ...plays });
     const rows: RecapRows = {
       artists: new Map(plays.artists.map((entry) => [entry.id, entry.item])),

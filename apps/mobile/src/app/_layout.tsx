@@ -1,3 +1,4 @@
+import { useLyricsAndGenreLookupsEnabled } from "@/settings/lyricsAndGenre";
 import { startMediumCovers } from "@/library/mediumCovers";
 import "../../global.css";
 // Lays the chosen theme colours over global.css's, in the chosen appearance, before anything renders.
@@ -85,6 +86,23 @@ export default function RootLayout() {
       };
     }
   }, [granted]);
+
+  const genreLookups = useLyricsAndGenreLookupsEnabled();
+  useEffect(() => {
+    if (!granted || !genreLookups) return;
+    let disposed = false;
+    let stop: (() => void) | undefined;
+    const cancel = afterFirstSettled("streamedGenres", () => {
+      void import("@/library/streamedGenres").then(({ startStreamedGenres }) => {
+        if (!disposed) stop = startStreamedGenres();
+      });
+    });
+    return () => {
+      disposed = true;
+      cancel();
+      stop?.();
+    };
+  }, [granted, genreLookups]);
 
   // SQLite gathers the planner statistics the Library database lacks (src/library/db/connection.ts).
   useEffect(() => afterFirstSettled("optimize", optimizeLibraryDatabase), []);

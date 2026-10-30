@@ -22,13 +22,19 @@ export const streamedSongsOf = (
   if (wanted.length === 0) return new Map();
   // One read for all the videos: grouped with a single max(), SQLite takes
   // the kept column from the row with the latest start.
+  const durations = new Map<string | null, number>();
   const latest = <K>(
     ids: readonly string[],
     kept: typeof playEvents.streamedSong | typeof playEvents.snapshot,
   ) =>
     new Map(
       db
-        .select({ videoId: playEvents.videoId, kept, startedAt: max(playEvents.startedAt) })
+        .select({
+          videoId: playEvents.videoId,
+          kept,
+          durationMs: playEvents.durationMs,
+          startedAt: max(playEvents.startedAt),
+        })
         .from(playEvents)
         .where(
           and(
@@ -38,7 +44,10 @@ export const streamedSongsOf = (
         )
         .groupBy(playEvents.videoId)
         .all()
-        .map((row) => [row.videoId, row.kept as K | null]),
+        .map((row) => {
+          durations.set(row.videoId, row.durationMs);
+          return [row.videoId, row.kept as K | null] as const;
+        }),
     );
   const kept = latest<YtAlbumSong>(wanted, playEvents.streamedSong);
   const unkept = wanted.filter((videoId) => kept.get(videoId) == null);
@@ -58,7 +67,7 @@ export const streamedSongsOf = (
         title: snapshot.title,
         artists: snapshot.artist === "" ? [] : [snapshot.artist],
         album: snapshot.album,
-        durationMs: null,
+        durationMs: durations.get(videoId) ?? null,
         artworkUrl: snapshot.artworkUrl ?? null,
         explicit: false,
         albumId: null,
