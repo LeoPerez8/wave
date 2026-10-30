@@ -11,12 +11,12 @@ import type { RecapGenre } from "@wave/core";
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 const boundary = `data:text/javascript,${encodeURIComponent(`
-  export const View = "View", Text = "Text", CELL = 4;
+  export const View = "View", Text = "Text", CELL = 8;
   export const useWindowDimensions = () => ({ fontScale: 1 });
   export const useThemeColor = () => ["#ffaa00", "#ffffff"];
   export const useLocalisation = () => ({ strings: { stats: {
     genrePercent: (share) => share * 100 + "%",
-    genreBlockLabel: (_rank, name, percent) => name + " " + percent,
+    genreBarLabel: (_rank, name, percent) => name + " " + percent,
   } } });
 `)}`;
 const hooks = registerHooks({
@@ -75,7 +75,7 @@ test("the podium draws #1 in front and reads its families in rank order", () => 
     const names = renderer!.root
       .findAll((node) => (node.type as unknown) === "Text")
       .map((node) => node.props.children)
-      .filter((child) => typeof child === "string" && /^[A-Z][a-z]/.test(child));
+      .filter((child) => genres.some((genre) => genre.family.name === child));
     assert.deepEqual(names, ["Pop", "Rock", "Jazz"]);
   } finally {
     act(() => renderer?.unmount());

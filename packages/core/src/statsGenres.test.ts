@@ -18,7 +18,7 @@ const five = [
 ];
 
 test("the podium stands #1 in the middle, #2 left, #3 right, #4 and #5 at the edges, filling the width", () => {
-  const bars = statsGenrePodium(five, 358, 1, DEFAULT_THEME.dark);
+  const bars = statsGenrePodium(five, 358, 44, DEFAULT_THEME.dark);
   assert.deepEqual(
     bars.map(({ rank, left, width }) => [rank, left, width]),
     [
@@ -33,7 +33,7 @@ test("the podium stands #1 in the middle, #2 left, #3 right, #4 and #5 at the ed
 
 test("fewer than five families keep their podium sizes and stand centred", () => {
   const place = (count: number) =>
-    statsGenrePodium(five.slice(0, count), 358, 1, DEFAULT_THEME.dark).map(
+    statsGenrePodium(five.slice(0, count), 358, 44, DEFAULT_THEME.dark).map(
       ({ rank, left, width }) => [rank, left, width],
     );
   assert.deepEqual(place(3), [
@@ -42,13 +42,13 @@ test("fewer than five families keep their podium sizes and stand centred", () =>
     [3, 216, 84],
   ]);
   assert.deepEqual(place(1), [[1, 124, 110]]);
-  assert.deepEqual(statsGenrePodium([], 358, 1, DEFAULT_THEME.dark), []);
+  assert.deepEqual(statsGenrePodium([], 358, 44, DEFAULT_THEME.dark), []);
 });
 
-test("each bar tucks under its neighbour toward #1, and its label sits under the part left showing", () => {
-  const bars = statsGenrePodium(five, 358, 1, DEFAULT_THEME.dark);
+test("each bar tucks under its neighbour toward #1, and its rank and label use the part left showing", () => {
+  const bars = statsGenrePodium(five, 358, 44, DEFAULT_THEME.dark);
   assert.deepEqual(
-    bars.map(({ rank, labelLeft, labelWidth }) => [rank, labelLeft, labelWidth]),
+    bars.map(({ rank, visibleLeft, visibleWidth }) => [rank, visibleLeft, visibleWidth]),
     [
       [4, 0, 58],
       [2, 58, 66],
@@ -62,20 +62,20 @@ test("each bar tucks under its neighbour toward #1, and its label sits under the
   assert.ok(front(2) > front(4) && front(3) > front(5));
 });
 
-test("bar heights follow the share relative to #1 above a floor that holds the rank number", () => {
-  const heights = (fontScale: number) =>
+test("bar heights follow the share relative to #1 above the floor", () => {
+  const heights = (floor: number) =>
     statsGenrePodium(
       [family("Rock", 0.5), family("Pop", 0.25), family("Jazz", 0)],
       358,
-      fontScale,
+      floor,
       DEFAULT_THEME.dark,
     ).map(({ rank, height }) => [rank, height]);
-  assert.deepEqual(heights(1), [
+  assert.deepEqual(heights(44), [
     [2, 124],
     [1, 204],
     [3, 44],
   ]);
-  assert.deepEqual(heights(2), [
+  assert.deepEqual(heights(72), [
     [2, 152],
     [1, 232],
     [3, 72],
@@ -88,7 +88,7 @@ test("podium fills step from the accent at #1 to quieter shades, rank numbers at
     DEFAULT_THEME.dark,
     { accent: "#777777", background: "#eeeedd" },
   ]) {
-    const bars = statsGenrePodium(five, 358, 1, theme);
+    const bars = statsGenrePodium(five, 358, 44, theme);
     const byRank = [...bars].sort((a, b) => a.rank - b.rank);
     assert.equal(byRank[0]!.fill, theme.accent);
     assert.equal(new Set(bars.map((bar) => bar.fill)).size, 5);
