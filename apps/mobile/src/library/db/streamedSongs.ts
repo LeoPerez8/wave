@@ -22,7 +22,7 @@ export const streamedSongsOf = (
   if (wanted.length === 0) return new Map();
   // One read for all the videos: grouped with a single max(), SQLite takes
   // the kept column from the row with the latest start.
-  const durations = new Map<string | null, number>();
+  const durations = new Map<string | null, number | null>();
   const latest = <K>(
     ids: readonly string[],
     kept: typeof playEvents.streamedSong | typeof playEvents.snapshot,
