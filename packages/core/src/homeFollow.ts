@@ -22,10 +22,12 @@ export const homeFollowCards = (
     blockExplicit?: boolean;
     country?: string;
     admitted?: HomeFollowSnapshot;
+    hidden?: readonly string[];
+    countedPlays?: readonly string[];
   },
 ) => {
   const feed = followFeed({
-    follows: known?.follows ?? [],
+    follows: options.admitted?.follows ?? known?.follows ?? [],
     releases: known?.releases ?? [],
     shows: known?.shows ?? [],
     country: options.country ?? known?.country ?? "",

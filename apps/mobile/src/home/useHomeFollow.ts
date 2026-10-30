@@ -6,6 +6,7 @@ import {
   useCallback,
   useEffect,
   useState,
+  useRef,
   type ReactNode,
 } from "react";
 import { useScreenSight } from "@/lib/screenSight";
@@ -17,7 +18,7 @@ import { useYtMusicEnabled } from "@/settings/ytMusic";
 import { appRuntime } from "@/library/runtime";
 import { LibraryStore } from "@/library/LibraryStore";
 import { followsSaved } from "@/library/followsSaved";
-import { knownHomeFollow, readHomeFollow } from "./knownHomeFollow";
+import { knownHomeFollow, readHomeFollowForVisit } from "./knownHomeFollow";
 import { checkFollowReleases } from "./followReleases";
 
 const empty: HomeFollowSnapshot = { follows: [], releases: [], shows: [], country: "" };
@@ -33,10 +34,13 @@ const useHomeFollowState = (reading: boolean) => {
     const known = knownHomeFollow.get() ?? empty;
     return { admitted: known, latest: known };
   });
+  const admitted = useRef(visit.admitted);
   const refresh = useCallback(() => {
-    void readHomeFollow()
+    const opening = admitted.current;
+    void readHomeFollowForVisit(opening)
       .then((latest) => {
-        if (sight.visible()) setVisit((current) => ({ ...current, latest }));
+        if (sight.visible() && admitted.current === opening)
+          setVisit((current) => ({ ...current, latest }));
       })
       .catch(() => {});
   }, [sight]);
@@ -50,7 +54,10 @@ const useHomeFollowState = (reading: boolean) => {
       if (!sight.visible()) return;
       const known = knownHomeFollow.get() ?? empty;
       setNow(Date.now());
-      if (opening) setVisit({ admitted: known, latest: known });
+      if (opening) {
+        admitted.current = known;
+        setVisit({ admitted: known, latest: known });
+      }
       refresh();
       controller = new AbortController();
       if (enabled)
@@ -65,8 +72,7 @@ const useHomeFollowState = (reading: boolean) => {
       if (sight.visible()) refresh();
     });
     const stopKnown = knownHomeFollow.subscribe(() => {
-      if (sight.visible())
-        setVisit((current) => ({ ...current, latest: knownHomeFollow.get() ?? empty }));
+      if (sight.visible()) refresh();
     });
     void appRuntime
       .runPromise(LibraryStore)
