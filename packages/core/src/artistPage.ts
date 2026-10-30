@@ -20,13 +20,21 @@ export type ArtistPageItem<C, S> =
 /**
  * The page's list: [shelves] in order, each heading over one row of covers,
  * then [songs] under [songsLabel] ("Songs", or "Popular" when they're in
- * YouTube Music's order).
+ * YouTube Music's order). While Find in artist narrows the songs ([found]:
+ * their places among [songs], a finder's answer), the shelves and the heading
+ * step aside and only the songs found show, each keeping its place, so a tap
+ * plays the page's songs from it.
  */
 export const artistPageItems = <C, S>(
   shelves: readonly ArtistPageShelf<C>[],
   songs: readonly S[],
   songsLabel = "Songs",
+  found: readonly number[] | null = null,
 ): ArtistPageItem<C, S>[] => {
+  if (found !== null)
+    return found.flatMap((index) =>
+      index in songs ? [{ type: "song" as const, song: songs[index]!, index }] : [],
+    );
   const items: ArtistPageItem<C, S>[] = [];
   for (const { label, covers } of shelves) {
     if (covers.length === 0) continue;
