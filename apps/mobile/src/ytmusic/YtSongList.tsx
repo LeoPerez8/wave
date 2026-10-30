@@ -69,7 +69,12 @@ import { occurrenceKeys } from "@/songs/songRowState";
 
 import { artistOpeningRequest } from "./artistOpeningRequest";
 import { askYtMusic } from "./askYtMusic";
-import { useLibraryFinder, useLoadedInLibrary, useLoadedLibraryFinder } from "./libraryFinder";
+import {
+  useInLibraryBetweenFrames,
+  useLibraryFinder,
+  useLoadedInLibrary,
+  useLoadedLibraryFinder,
+} from "./libraryFinder";
 import type { YtListHead, YtListScreen } from "./routes";
 import {
   runYtDownloadAction,
@@ -342,8 +347,7 @@ export const useYtPlaylistDownloadButton = (
   entries: readonly PlaylistItem<NativeYtSong, { readonly path: string | null }>[],
   origin: DownloadOrigin | null,
 ): { readonly progress: string | null; readonly button: YtListDownloadButton | null } => {
-  const inLibrary = useLoadedInLibrary();
-  const loaded = useLoadedLibraryFinder() !== null;
+  const { inLibrary, loaded } = useInLibraryBetweenFrames(entries);
   const download = useYtPlaylistDownload(entries, inLibrary);
   const { language } = useLocalisation();
   const button = ytPlaylistDownloadButton(download, language);

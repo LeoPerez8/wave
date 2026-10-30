@@ -14,11 +14,11 @@ import com.facebook.react.jstasks.HeadlessJsTaskContext
 import expo.modules.wavenative.log.WaveLog
 
 /**
- * Keeps Wave's React Native runtime running for Android Auto, with or without
- * the Activity.
+ * Keeps Wave's React Native runtime running for Android Auto and for a resumed
+ * queue, with or without the Activity.
  *
  * [ensureStarted] starts the app's (single, lazy) `ReactHost` if it isn't
- * running, so a cold start from Auto loads the JS bundle headless. The Activity
+ * running, so a cold start from Auto or a media button loads the JS bundle headless. The Activity
  * opening later attaches to the same host, so there is one JS runtime and one
  * set of app services. It then holds the `WaveService` headless task, whose JS
  * side starts the app services (`apps/mobile/index.ts`). While a headless task

@@ -14,7 +14,9 @@ import {
   noticeLine,
   passedOverNotice,
   planPlayerSync,
-  playerQueueList,
+  playerListEntries,
+  playerQueueWindow,
+  playerRepeatMode,
   queueSourceAfter,
   playReplacesQueue,
   queuedPassedOver,
@@ -65,7 +67,14 @@ import { shuffleKind } from "@/settings/shuffleKind";
 
 import { Player, PlayerError, playbackState, positionState } from "./Player";
 import { searchPlaying } from "./playingSearch";
-import { evenShuffleSongs, learnQueueTracks, queueTracks, type QueueTrack } from "./queueTracks";
+import {
+  evenShuffleSongs,
+  learnQueueTracks,
+  learnTracksToLoad,
+  queueTracks,
+  type QueueTrack,
+} from "./queueTracks";
+import { savedYtQueueTracks } from "./savedYtTracks";
 
 export { toQueueTrack, type QueueTrack } from "./queueTracks";
 
@@ -336,19 +345,20 @@ export const layer = Layer.effect(
     const applyPlan = (state: QueueState, cause: SongChangeCause) =>
       Effect.gen(function* () {
         // The player holds no unsearched entry, and waits while the playing one is searched.
-        const list = playerQueueList(state);
+        const list = playerQueueWindow(state);
         if (list === null) return;
         const steps = planPlayerSync(native, list);
         if (steps.length === 0) return;
         // A skip sends no items, so it doesn't look through the whole queue.
         const toLoad = new Set(keysToLoad(native, steps));
-        const items =
-          toLoad.size === 0
-            ? []
-            : yield* Effect.forEach(
-                state.entries.filter((entry) => toLoad.has(entry.key)),
-                itemFor,
-              );
+        const entries = toLoad.size === 0 ? [] : state.entries.filter((e) => toLoad.has(e.key));
+        // A queue picked back up from the player comes without its tracks.
+        yield* learnTracksToLoad(
+          entries.map((entry) => entry.trackId),
+          store.songsByIds,
+          savedYtQueueTracks,
+        );
+        const items = yield* Effect.forEach(entries, itemFor);
         yield* player.applySync(steps.map(toNative), items, cause);
         native = applyPlayerSync(native, steps);
         // The `skip` perf scenario's response: what the plan did, on how long a queue.
@@ -377,11 +387,13 @@ export const layer = Layer.effect(
         ),
       );
 
+    // The player's own repeat, which stays off for a queue longer than its window.
     const applyRepeat = (state: QueueState) =>
       Effect.gen(function* () {
-        if (state.repeat === appliedRepeat) return;
-        yield* player.setRepeatMode(state.repeat);
-        appliedRepeat = state.repeat;
+        const mode = playerRepeatMode(state);
+        if (mode === appliedRepeat) return;
+        yield* player.setRepeatMode(mode);
+        appliedRepeat = mode;
       });
 
     /**
@@ -713,12 +725,8 @@ export const layer = Layer.effect(
             );
           }
           const { state } = done;
-          const list = playerQueueList(state) ?? { keys: [], index: -1 };
-          const held = new Set(list.keys);
-          const items = yield* Effect.forEach(
-            state.entries.filter((entry) => held.has(entry.key)),
-            itemFor,
-          );
+          const list = playerQueueWindow(state) ?? { keys: [], index: -1 };
+          const items = yield* Effect.forEach(playerListEntries(state, list), itemFor);
           queueSource.update((source) => queueSourceAfter(source, command, "auto"));
           queueState.set(state);
           queueChanged();
@@ -747,7 +755,8 @@ export const layer = Layer.effect(
       const source = yield* player.savedQueueSource;
       if (source !== null) queueSource.set(source);
       queueState.set(saved);
-      appliedRepeat = saved.repeat;
+      // The player kept the repeat it had, which may not be what this queue asks of it.
+      appliedRepeat = null;
       if (native.currentKey !== null) {
         const outcome = yield* start({ type: "playerMoved", key: native.currentKey }, []);
         // The lane is this one's already: a wait (none follows the player) goes on outside it.
@@ -755,6 +764,7 @@ export const layer = Layer.effect(
           Effect.runFork(Effect.ignore(waitOut(outcome.waiting, apply("restore"))));
         else yield* apply("restore")(outcome);
       }
+      yield* applyRepeat(queueState.get());
     }).pipe(Effect.catch(() => Effect.void));
 
     // Auto's shuffle and repeat toggles follow the queue, whether the app or the car changed it.
@@ -825,8 +835,8 @@ export const layer = Layer.effect(
           queueState.set(state);
           // A fresh player stays paused: nothing here asks it to play.
           yield* sync(state, "restore");
-          yield* player.setRepeatMode(state.repeat);
-          appliedRepeat = state.repeat;
+          appliedRepeat = null;
+          yield* applyRepeat(state);
           if (positionMs > 0 && state === saved) yield* player.seekTo(positionMs, "restore");
           settle();
           return true;

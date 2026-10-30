@@ -330,6 +330,35 @@ export const lookupFailed = (ids: readonly string[]): void => {
 };
 
 /**
+ * Reads the tracks the player is about to load that the queue doesn't know,
+ * waiting for them, whatever `tracksToLookUp` asked for already: a queue picked
+ * back up from the player comes without its tracks, and its window moves onto
+ * them. Library tracks come from the library ([songsByIds]), YT Music songs from
+ * the details saved with the queue ([savedYtTracks]). One that can't be read
+ * stays unknown. Reads nothing when every track is known.
+ */
+export const learnTracksToLoad = <E, R>(
+  trackIds: readonly string[],
+  songsByIds: (ids: readonly number[]) => Effect.Effect<readonly PlayableSongRow[], E, R>,
+  savedYtTracks: () => readonly QueueTrack[],
+): Effect.Effect<void, never, R> =>
+  Effect.suspend(() => {
+    const known = queueTracks.get();
+    const missing = trackIds.filter((id) => !known.has(id));
+    if (missing.length === 0) return Effect.void;
+    const wanted = new Set(missing);
+    if (missing.some((id) => parseTrackId(id)?.kind === "yt")) {
+      learnQueueTracks(savedYtTracks().filter((track) => wanted.has(track.id)));
+    }
+    const libraryIds = libraryTrackIds(missing);
+    if (libraryIds.length === 0) return Effect.void;
+    return songsByIds(libraryIds).pipe(
+      Effect.map((songs) => learnQueueTracks(songs.map(toQueueTrack))),
+      Effect.catch(() => Effect.void),
+    );
+  });
+
+/**
  * Looks up, once, the queued tracks the queue doesn't know (it was picked back
  * up from the player after JS restarted), so Up Next can show them: Library
  * tracks in the library, YT Music songs among the details saved with the

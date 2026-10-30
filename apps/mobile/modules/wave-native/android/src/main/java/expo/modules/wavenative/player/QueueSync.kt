@@ -51,7 +51,31 @@ interface PlaylistEditor<T> {
   fun insert(at: Int, items: List<T>)
 }
 
+/** One replacement of the items from [from] up to [toExclusive] with [items]. */
+data class ItemBatch<T>(val from: Int, val toExclusive: Int, val items: List<T>)
+
 object QueueSync {
+  /**
+   * The one replacement that gives [items] the covers in [artworkByKey]: the
+   * range from the first item with a new cover to the last, those in between
+   * as they are. Null when no item has one. One change of the player's list,
+   * however many songs get a cover.
+   */
+  fun <T> artworkBatch(
+    items: List<T>,
+    keyOf: (T) -> String,
+    artworkByKey: Map<String, String>,
+    withArtwork: (T, String) -> T,
+  ): ItemBatch<T>? {
+    val from = items.indexOfFirst { keyOf(it) in artworkByKey }
+    if (from < 0) return null
+    val toExclusive = items.indexOfLast { keyOf(it) in artworkByKey } + 1
+    val batch = items.subList(from, toExclusive).map { item ->
+      artworkByKey[keyOf(item)]?.let { withArtwork(item, it) } ?: item
+    }
+    return ItemBatch(from, toExclusive, batch)
+  }
+
   /**
    * Applies [steps] in order. A key resolves to the item JS sent for it in
    * [incoming], or else to the one the player already holds. Loaded items are

@@ -14,9 +14,14 @@ import {
   traceQueries,
 } from "../library/db/testDatabase.ts";
 import type { PlayableSongRow } from "../library/LibraryStore.ts";
+import { readPlaylistSeedIds } from "./playlistSeedIds.ts";
 import { randomMagicQueueRead } from "./randomMagicQueueRead.ts";
 
 const root = fileURLToPath(new URL("../../../../", import.meta.url));
+
+/** The pool's entries, read at once. */
+const allEntries = (store: Parameters<typeof readPlaylistSeedIds>[0]) =>
+  readPlaylistSeedIds(store, Effect.void);
 
 /** What a seed shows: a Library song's id, or a streamed entry's video id. */
 const seedIds = (seeds: readonly MagicQueueSeed<PlayableSongRow>[]) =>
@@ -49,7 +54,7 @@ test("a Home opening draws nine never-played files with id reads, then their son
     addMissingSong(db, { title: "Missing file" });
     const store = await loadLibraryStore(root, db);
     const read = randomMagicQueueRead(() => 0);
-    const measured = traceQueries(db, () => Effect.runSync(read.read(store)));
+    const measured = traceQueries(db, () => Effect.runSync(read.read(store, allEntries(store))));
     assert.deepEqual(seedIds(measured.result), ids.slice(0, 9));
     assert.deepEqual(
       measured.queries.map((query) => query.rows),
@@ -57,9 +62,12 @@ test("a Home opening draws nine never-played files with id reads, then their son
     );
     assert.ok(measured.queries.every((query) => !/play_events|candidate_catalog/.test(query.sql)));
     const reopened = randomMagicQueueRead(() => 0.999);
-    assert.deepEqual(seedIds(Effect.runSync(reopened.read(store))), [ids[11], ...ids.slice(0, 8)]);
+    assert.deepEqual(seedIds(Effect.runSync(reopened.read(store, allEntries(store)))), [
+      ids[11],
+      ...ids.slice(0, 8),
+    ]);
     const undo = randomMagicQueueRead(() => 0.999, seedIds(measured.result));
-    assert.deepEqual(seedIds(Effect.runSync(undo.read(store))), ids.slice(0, 9));
+    assert.deepEqual(seedIds(Effect.runSync(undo.read(store, allEntries(store)))), ids.slice(0, 9));
   } finally {
     closeTestDatabase(db);
   }
@@ -70,9 +78,12 @@ test("an empty or small Library needs no loading, taste, or recommendation fallb
   try {
     const store = await loadLibraryStore(root, db);
     const read = randomMagicQueueRead(() => 0.999);
-    assert.deepEqual(Effect.runSync(read.read(store)), []);
+    assert.deepEqual(Effect.runSync(read.read(store, allEntries(store))), []);
     const ids = [addTrack(db, { title: "First song" }), addTrack(db, { title: "Second song" })];
-    assert.deepEqual(seedIds(Effect.runSync(read.read(store))), ids.toReversed());
+    assert.deepEqual(
+      seedIds(Effect.runSync(read.read(store, allEntries(store)))),
+      ids.toReversed(),
+    );
   } finally {
     closeTestDatabase(db);
   }
@@ -85,19 +96,22 @@ test("a visit keeps its seeds through re-reads, replacing a removed file and fil
     const store = await loadLibraryStore(root, db);
     let draw = 0;
     const read = randomMagicQueueRead(() => draw);
-    assert.deepEqual(seedIds(Effect.runSync(read.read(store))), ids.slice(0, 9));
+    assert.deepEqual(seedIds(Effect.runSync(read.read(store, allEntries(store)))), ids.slice(0, 9));
     draw = 0.999;
-    assert.deepEqual(seedIds(Effect.runSync(read.read(store))), ids.slice(0, 9));
+    assert.deepEqual(seedIds(Effect.runSync(read.read(store, allEntries(store)))), ids.slice(0, 9));
     await Effect.runPromise(store.removeSongs([ids[3]!]));
-    assert.deepEqual(seedIds(Effect.runSync(read.read(store))), [
+    assert.deepEqual(seedIds(Effect.runSync(read.read(store, allEntries(store)))), [
       ...ids.slice(0, 3),
       ids[9],
       ...ids.slice(4, 9),
     ]);
     await Effect.runPromise(store.removeSongs(ids.slice(4)));
-    assert.deepEqual(seedIds(Effect.runSync(read.read(store))), ids.slice(0, 3));
+    assert.deepEqual(seedIds(Effect.runSync(read.read(store, allEntries(store)))), ids.slice(0, 3));
     const added = addTrack(db, { title: "Just scanned" });
-    assert.deepEqual(seedIds(Effect.runSync(read.read(store))), [...ids.slice(0, 3), added]);
+    assert.deepEqual(seedIds(Effect.runSync(read.read(store, allEntries(store)))), [
+      ...ids.slice(0, 3),
+      added,
+    ]);
   } finally {
     closeTestDatabase(db);
   }
@@ -123,7 +137,7 @@ test("the playlists' YT Music entries join the files, each video once, none the 
     const gone = await Effect.runPromise(store.createPlaylist("Deleted", [streamed("c")]));
     await Effect.runPromise(store.deletePlaylist(gone.playlistId));
     const read = randomMagicQueueRead(() => 0);
-    const measured = traceQueries(db, () => Effect.runSync(read.read(store)));
+    const measured = traceQueries(db, () => Effect.runSync(read.read(store, allEntries(store))));
     assert.deepEqual(seedIds(measured.result), [file, downloaded, "a", "b"]);
     const entry = measured.result.find((seed) => seed.source === "stream");
     assert.deepEqual(entry?.song, { ...ytSong("a"), albumId: null });
@@ -139,7 +153,7 @@ test("with no files the row draws from the playlists' entries", async () => {
     const store = await loadLibraryStore(root, db);
     await Effect.runPromise(store.createPlaylist("Liked Songs", [streamed("x"), streamed("y")]));
     const read = randomMagicQueueRead(() => 0.999);
-    assert.deepEqual(seedIds(Effect.runSync(read.read(store))), ["y", "x"]);
+    assert.deepEqual(seedIds(Effect.runSync(read.read(store, allEntries(store)))), ["y", "x"]);
   } finally {
     closeTestDatabase(db);
   }
@@ -152,7 +166,7 @@ test("an entry removed from its playlist is replaced in its place", async () => 
     const songs = Array.from({ length: 10 }, (_, i) => streamed(`v${i}`));
     const { playlistId } = await Effect.runPromise(store.createPlaylist("Liked Songs", songs));
     const read = randomMagicQueueRead(() => 0);
-    const first = seedIds(Effect.runSync(read.read(store)));
+    const first = seedIds(Effect.runSync(read.read(store, allEntries(store))));
     assert.equal(first.length, 9);
     const detail = await Effect.runPromise(store.getPlaylist(playlistId));
     const item = detail?.items.find(
@@ -163,7 +177,7 @@ test("an entry removed from its playlist is replaced in its place", async () => 
     const left = songs
       .map((song) => (song.source === "stream" ? song.song.videoId : ""))
       .filter((id) => !first.includes(id));
-    assert.deepEqual(seedIds(Effect.runSync(read.read(store))), [
+    assert.deepEqual(seedIds(Effect.runSync(read.read(store, allEntries(store)))), [
       ...first.slice(0, 4),
       ...left,
       ...first.slice(5),
@@ -173,7 +187,7 @@ test("an entry removed from its playlist is replaced in its place", async () => 
   }
 });
 
-test("forty thousand playlist entries are read as ids, then nine songs", async () => {
+test("forty thousand playlist entries are read as ids in bounded pages, then nine songs", async () => {
   const db = await openTestDatabase();
   try {
     const store = await loadLibraryStore(root, db);
@@ -185,12 +199,15 @@ test("forty thousand playlist entries are read as ids, then nine songs", async (
         ),
       );
     const read = randomMagicQueueRead(Math.random);
-    const measured = traceQueries(db, () => Effect.runSync(read.read(store)));
+    const measured = traceQueries(db, () => Effect.runSync(read.read(store, allEntries(store))));
     assert.equal(measured.result.length, 9);
     const entryReads = measured.queries.filter((query) => /playlist_items/.test(query.sql));
-    assert.equal(entryReads.length, 2);
-    assert.equal(entryReads[0]!.rows, 30_000);
-    assert.ok(entryReads[1]!.rows <= 18, `${entryReads[1]!.rows} entries decoded`);
+    assert.ok(
+      entryReads.every((query) => query.rows <= 512),
+      "a page holds at most 512 rows",
+    );
+    assert.equal(Effect.runSync(allEntries(store)).length, 30_000);
+    assert.ok(entryReads.at(-1)!.rows <= 18, `${entryReads.at(-1)!.rows} entries decoded`);
   } finally {
     closeTestDatabase(db);
   }
@@ -205,12 +222,14 @@ test("an entry whose song can't be read gives its place to another", async () =>
     db.run(sql`INSERT INTO playlist_items
       (playlist_id, yt_song, order_key, added_at, changed_at, sync_id, phone_id)
       VALUES (${playlistId}, '{"videoId":"a-broken"}', 'zz', 0, 0, 'broken', 'phone')`);
-    const read = randomMagicQueueRead(() => 0);
-    const ids = songs.map((song) => (song.source === "stream" ? song.song.videoId : ""));
-    // "a-broken" sorts first and is drawn first; its place goes to the next one.
-    const shown = [ids[8], ...ids.slice(0, 8)];
-    assert.deepEqual(seedIds(Effect.runSync(read.read(store))), shown);
-    assert.deepEqual(seedIds(Effect.runSync(read.read(store))), shown);
+    // 0.999 draws the pool's last first, the broken entry; its place goes to another.
+    const read = randomMagicQueueRead(() => 0.999);
+    const shown = seedIds(Effect.runSync(read.read(store, allEntries(store))));
+    assert.deepEqual(
+      shown.toSorted(),
+      songs.map((song) => (song.source === "stream" ? song.song.videoId : "")),
+    );
+    assert.deepEqual(seedIds(Effect.runSync(read.read(store, allEntries(store)))), shown);
   } finally {
     closeTestDatabase(db);
   }

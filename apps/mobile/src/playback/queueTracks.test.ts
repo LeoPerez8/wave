@@ -10,6 +10,7 @@ import {
   YT_COVERS_AT_ONCE,
   cacheYtCoversLater,
   learnQueueTracks,
+  learnTracksToLoad,
   learnUnknownQueueTracks,
   lookupFailed,
   queueTrackDownloaded,
@@ -424,6 +425,61 @@ describe("tracksToLookUp", () => {
     assert.deepEqual(tracksToLookUp([entry("40")]), ["40"]);
     lookupFailed(["40"]);
     assert.deepEqual(tracksToLookUp([entry("40")]), ["40"]);
+  });
+});
+
+describe("learnTracksToLoad", () => {
+  const readSongs = (asked: number[][]) => (ids: readonly number[]) =>
+    Effect.sync(() => {
+      asked.push([...ids]);
+      return ids.map((id) => song(id));
+    });
+
+  test("reads the unknown songs the player is about to load, and only those", async () => {
+    learnQueueTracks([song(1)].map(toQueueTrack), { forgetOthers: true });
+    const asked: number[][] = [];
+    await Effect.runPromise(learnTracksToLoad(["1", "7"], readSongs(asked), () => []));
+    assert.deepEqual(asked, [[7]]);
+    assert.equal(queueTracks.get().get("7")?.title, "Song 7");
+  });
+
+  test("reads a song an earlier lookup is still on its way with", async () => {
+    learnQueueTracks([], { forgetOthers: true });
+    assert.deepEqual(tracksToLookUp([entry("8")]), ["8"]);
+    await Effect.runPromise(learnTracksToLoad(["8"], readSongs([]), () => []));
+    assert.equal(queueTracks.get().get("8")?.title, "Song 8");
+  });
+
+  test("a YT Music song comes from the details saved with the queue", async () => {
+    learnQueueTracks([], { forgetOthers: true });
+    const saved = toYtQueueTrack(
+      {
+        videoId: "v9",
+        title: "Saved",
+        artists: ["A"],
+        album: null,
+        durationMs: null,
+        artworkUrl: null,
+        explicit: false,
+      },
+      null,
+    );
+    const asked: number[][] = [];
+    await Effect.runPromise(learnTracksToLoad([saved.id], readSongs(asked), () => [saved]));
+    assert.deepEqual(asked, []);
+    assert.equal(queueTracks.get().get(saved.id)?.title, "Saved");
+  });
+
+  test("a read that fails leaves the songs unknown, without failing", async () => {
+    learnQueueTracks([], { forgetOthers: true });
+    await Effect.runPromise(
+      learnTracksToLoad(
+        ["9"],
+        () => Effect.fail("no database"),
+        () => [],
+      ),
+    );
+    assert.equal(queueTracks.get().has("9"), false);
   });
 });
 
