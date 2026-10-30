@@ -43,7 +43,7 @@ export const followLevelEntries = (
     ? [
         {
           action: "shows" as const,
-          label: (options.strings ?? en).shows.level(options.country),
+          label: (options.strings ?? en).shows.level,
           checked: level === "shows",
           ...(options.notificationsDenied
             ? { line: (options.strings ?? en).shows.notificationsOff }

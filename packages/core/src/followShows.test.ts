@@ -67,7 +67,7 @@ test("shows are future, country-specific and only for shows follows; notificatio
     ["foreign"],
   );
 });
-test("shows level requires a key and names the country even with notifications denied", () => {
+test("shows level requires a key and a country, and leaves the country to the country row", () => {
   assert.deepEqual(
     followLevelEntries(null).map((e) => e.action),
     ["releases"],
@@ -77,7 +77,7 @@ test("shows level requires a key and names the country even with notifications d
     country: "Brazil",
     notificationsDenied: true,
   });
-  assert.equal(entries[1]?.label, "New releases and shows in Brazil");
+  assert.equal(entries[1]?.label, "New music and shows");
   assert.equal(entries[1]?.checked, true);
   assert.equal(entries[1]?.line, "Notifications are off");
 });
@@ -104,6 +104,6 @@ test("shows choices use the Portuguese catalogue", async () => {
     notificationsDenied: true,
     strings: catalogueOf("pt-BR"),
   });
-  assert.equal(entries[1]?.label, "Novos lançamentos e shows em Brasil");
+  assert.equal(entries[1]?.label, "Novas músicas e shows");
   assert.equal(entries[1]?.line, "As notificações estão desativadas");
 });
