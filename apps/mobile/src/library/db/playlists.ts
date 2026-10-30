@@ -29,7 +29,7 @@ import {
   type UnsearchedSong,
   type YtAlbumSong,
 } from "@wave/core";
-import { and, asc, desc, eq, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, isNull, ne, or, sql, type SQL } from "drizzle-orm";
 
 import type { PlaylistAddResult, PlaylistDetail, PlaylistRow } from "../LibraryStore.ts";
 import type { LibraryDatabase, RowPage } from "./database.ts";
@@ -841,18 +841,26 @@ export interface PlaylistUnsearched {
 }
 
 /**
+ * The stored songs [which] picks among the entries playlists hold (not
+ * removed, in a playlist not deleted), each with its playlist.
+ */
+const liveStoredSongs = (db: LibraryDatabase, which: SQL | undefined) => {
+  const { playlists, playlistItems } = schema;
+  return db
+    .select({ playlistId: playlistItems.playlistId, ytSong: sql<string>`${playlistItems.ytSong}` })
+    .from(playlistItems)
+    .innerJoin(playlists, eq(playlists.id, playlistItems.playlistId))
+    .where(and(live, livePlaylist, which));
+};
+
+/**
  * Every playlist holding unsearched entries, with them top to bottom, for
  * the background fill (Core's `nextFillStep`). Only those entries are
  * decoded; a deleted playlist's aren't read.
  */
 export const selectUnsearchedEntries = (db: LibraryDatabase): PlaylistUnsearched[] => {
-  const { playlists, playlistItems } = schema;
-  const rows = db
-    .select({ playlistId: playlistItems.playlistId, ytSong: sql<string>`${playlistItems.ytSong}` })
-    .from(playlistItems)
-    .innerJoin(playlists, eq(playlists.id, playlistItems.playlistId))
-    .where(and(live, livePlaylist, storedUnsearched))
-    .orderBy(asc(playlistItems.playlistId), ...IN_ORDER)
+  const rows = liveStoredSongs(db, storedUnsearched)
+    .orderBy(asc(schema.playlistItems.playlistId), ...IN_ORDER)
     .all();
   const byPlaylist = new Map<number, UnsearchedSong[]>();
   for (const { playlistId, ytSong } of rows) {
@@ -903,20 +911,10 @@ export const selectPlaylistEntrySongs = (
   videoIds: readonly string[],
 ): YtAlbumSong[] => {
   if (videoIds.length === 0) return [];
-  const { playlists, playlistItems } = schema;
-  const rows = db
-    .select({ playlistId: playlistItems.playlistId, ytSong: sql<string>`${playlistItems.ytSong}` })
-    .from(playlistItems)
-    .innerJoin(playlists, eq(playlists.id, playlistItems.playlistId))
-    .where(
-      and(
-        live,
-        livePlaylist,
-        isNotNull(playlistItems.ytSong),
-        sql`${storedVideoId} IN ${jsonList(videoIds)}`,
-      ),
-    )
-    .all();
+  const rows = liveStoredSongs(
+    db,
+    and(isNotNull(schema.playlistItems.ytSong), sql`${storedVideoId} IN ${jsonList(videoIds)}`),
+  ).all();
   const songs = new Map<string, YtAlbumSong>();
   for (const { playlistId, ytSong } of rows) {
     const stored = decode(playlistId, ytSong);
