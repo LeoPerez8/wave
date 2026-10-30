@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { DEFAULT_THEME } from "./theme.ts";
 import { en } from "./catalogueEn.ts";
 import { ptBR } from "./cataloguePtBr.ts";
-import { statsGenreBlocks, genrePlayShares, contrastRatio } from "./index.ts";
+import { statsGenreBlocks, countedGenreSongIds, genrePlayShares, contrastRatio } from "./index.ts";
 
 const genres = genrePlayShares(
   [
@@ -16,7 +17,7 @@ const genres = genrePlayShares(
 );
 
 test("Stats sizes both block dimensions by share above a common readable label floor", () => {
-  const blocks = statsGenreBlocks(genres, 360, 1, 44, "light");
+  const blocks = statsGenreBlocks(genres, 360, 1, 44, DEFAULT_THEME.light);
   assert.deepEqual(
     blocks.map(({ width, height, inset }) => [width, height, inset]),
     [
@@ -24,7 +25,7 @@ test("Stats sizes both block dimensions by share above a common readable label f
       [226, 100, 8],
     ],
   );
-  assert.deepEqual(statsGenreBlocks([], 360, 1, 44, "light"), []);
+  assert.deepEqual(statsGenreBlocks([], 360, 1, 44, DEFAULT_THEME.light), []);
 });
 
 for (const mode of ["light", "dark"] as const) {
@@ -33,7 +34,7 @@ for (const mode of ["light", "dark"] as const) {
       ...genres[0]!,
       share: (5 - index) / 15,
     }));
-    const blocks = statsGenreBlocks(five, 280, 2, 160, mode);
+    const blocks = statsGenreBlocks(five, 280, 2, 160, DEFAULT_THEME[mode]);
     for (const block of blocks) {
       assert.ok(contrastRatio(block.ink, block.fill) >= 4.5);
       assert.ok(block.width + block.inset <= 280);
@@ -51,4 +52,25 @@ test("Stats genre percentages are localised and a tiny positive share never read
   assert.equal(en.stats.genrePercent(0.125), "12.5%");
   assert.equal(ptBR.stats.genrePercent(0.125), "12,5%");
   assert.equal(en.stats.genrePercent(0.001), "<1%");
+});
+
+test("chosen accent and background determine the shades, with AA ink even for middle grey", () => {
+  for (const accent of ["#777777", "#ffcc00", "#400080"]) {
+    const blocks = statsGenreBlocks(genres, 360, 1, 44, { accent, background: "#eeeedd" });
+    assert.equal(blocks[0]!.fill, accent);
+    assert.notEqual(blocks[1]!.fill, accent);
+    for (const block of blocks) assert.ok(contrastRatio(block.ink, block.fill) >= 4.5);
+  }
+});
+
+test("genre reads omit skipped-only songs and retain counted Library and streamed ids", () => {
+  assert.deepEqual(
+    countedGenreSongIds([
+      { id: 1, countedPlays: 0 },
+      { id: 2, countedPlays: 3 },
+      { id: "skip", countedPlays: 0 },
+      { id: "stream", countedPlays: 1 },
+    ]),
+    [2, "stream"],
+  );
 });

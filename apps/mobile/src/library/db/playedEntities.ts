@@ -1,3 +1,4 @@
+import { countedGenreSongIds } from "@wave/core";
 import {
   albumPlayTotals,
   artistPlayTotals,
@@ -558,7 +559,7 @@ export const recapPlays = (
     id: song.kind === "library" ? song.id : song.videoId,
   }));
   const { albums, artists } = playedEntityTotals(db, window);
-  const genreIds = songs.filter((entry) => entry.countedPlays > 0).map((entry) => entry.id);
+  const genreIds = countedGenreSongIds(songs);
   return {
     songs,
     artists,

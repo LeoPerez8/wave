@@ -2389,4 +2389,4 @@ export { showCardDate } from "./showCard.ts";
 export type { ShowCardDate } from "./showCard.ts";
 export * from "./homeFollow.ts";
 export { genrePlayShares } from "./recap.ts";
-export { statsGenreBlocks } from "./statsGenres.ts";
+export { statsGenreBlocks, countedGenreSongIds } from "./statsGenres.ts";

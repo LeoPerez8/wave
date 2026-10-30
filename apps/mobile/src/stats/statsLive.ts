@@ -6,6 +6,7 @@ import {
   createRecapAvailability,
   rankSongPlays,
   genrePlayShares,
+  countedGenreSongIds,
   recap,
   recapId,
   recapSlides,
@@ -241,7 +242,7 @@ export const make = Effect.gen(function* () {
           () => import("@/settings/lyricsAndGenre"),
         );
         const genres = yield* store.songGenres(
-          songs.map(({ id }) => id),
+          countedGenreSongIds(songs),
           lyricsAndGenreLookupsEnabled(),
         );
         return genrePlayShares(songs, genres);
