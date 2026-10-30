@@ -29,8 +29,8 @@ import { showMessage } from "@/overlay/alert";
 import { openOverlay } from "@/overlay/overlay";
 import { MenuChoices, type MenuChoice } from "@/overlay/MenuChoices";
 import { openYtAlbumActions } from "@/ytmusic/YtAlbumActions";
-import { hideRelease, useFollowReleases } from "./followReleases";
-import { HomeSectionSkeleton } from "./HomeSectionSkeleton";
+import { hideRelease } from "./followReleases";
+import { useHomeFollow } from "./useHomeFollow";
 
 const guardedRequest = <A,>(read: Effect.Effect<A, YtMusicError>) =>
   Effect.gen(function* () {
@@ -181,8 +181,7 @@ function ReleaseTile({
   );
 }
 export function NewReleases({ title }: { title: string }) {
-  const { cards, follows, refresh } = useFollowReleases();
-  if (cards === undefined) return <HomeSectionSkeleton id="new-releases" />;
+  const { releaseCards: cards, follows, refresh } = useHomeFollow();
   if (cards.length === 0) return null;
   return (
     <TitledSection title={title}>
