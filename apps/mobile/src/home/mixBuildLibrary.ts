@@ -8,6 +8,7 @@ import {
 import * as Effect from "effect/Effect";
 import type { ArtistRow, LibraryStore, SongRow } from "../library/LibraryStore.ts";
 import { runSteps } from "../lib/stepped.ts";
+import { readKnownVideos } from "./knownVideosRead.ts";
 import type { MixIndexes, MixSong } from "./mixKnown.ts";
 
 const radioSongKey = (song: Pick<YtSong, "title" | "artists" | "durationMs">): string =>
@@ -23,7 +24,7 @@ export const readMixBuildLibrary = (
     | "countedPlays"
     | "streamedLibraryPlays"
     | "playedEntityTotals"
-    | "knownVideos"
+    | "knownVideosPage"
     | "matchingSong"
   >,
   between: Effect.Effect<void>,
@@ -60,7 +61,7 @@ export const readMixBuildLibrary = (
     const played = yield* store.playedEntityTotals({ from: null, to: Date.now() });
     const ranked = yield* runSteps(rankEntityPlaysSteps(played.artists, 20), between);
     const byId = new Map(artists.map((artist) => [artist.id, artist]));
-    const videos = new Set(yield* store.knownVideos);
+    const videos = new Set(yield* readKnownVideos(store, between));
     const matches = new Map<string, SongRow | null>();
     const inLibrary: MixIndexes["known"]["inLibrary"] = (song) =>
       matches.get(radioSongKey(song)) ?? null;

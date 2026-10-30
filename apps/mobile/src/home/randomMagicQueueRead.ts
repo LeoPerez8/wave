@@ -11,8 +11,8 @@ import type { LibraryStore, PlayableSongRow } from "../library/LibraryStore.ts";
 let nextRead = 0;
 
 /**
- * A fresh Home opening reads ids only (the Library's files and the playlists'
- * YT Music entries), then metadata for its nine random seeds. A video whose
+ * A fresh Home opening reads ids only (the Library's files, and the playlists'
+ * YT Music entries as [videoIds] brings them), then metadata for its nine random seeds. A video whose
  * stored song can't be read leaves the pool for the visit, and its place is
  * drawn again.
  */
@@ -25,10 +25,13 @@ export const randomMagicQueueRead = (
   return {
     key: `randomMagicQueue:${++nextRead}`,
     reads: { tracks: true, favorites: true, playlists: true } satisfies LibraryReads,
-    read: (store: LibraryStore["Service"]) =>
+    read: <E, R>(
+      store: LibraryStore["Service"],
+      entryVideoIds: Effect.Effect<readonly string[], E, R>,
+    ) =>
       Effect.gen(function* () {
         const trackIds = yield* store.playableSongIds;
-        const videoIds = yield* store.playlistEntryVideoIds;
+        const videoIds = yield* entryVideoIds;
         for (;;) {
           const pool = { trackIds, videoIds: videoIds.filter((id) => !unreadable.has(id)) };
           const picked = randomMagicQueuePicks(pool, random, ids);
