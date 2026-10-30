@@ -330,12 +330,35 @@ export const libraryListQueries = {
   playlists: listPlaylists,
 } as const;
 
-/** A playlist screen's data (see `useDetail`), refreshed as soon as it is edited. */
+const playlistTracks = new WeakMap<PlaylistDetail, ReadonlySet<number>>();
+
+/** Whether the playlist as read holds the Library song [trackId] (kept per read). */
+const playlistHoldsTrack = (detail: PlaylistDetail | null, trackId: number): boolean => {
+  if (detail === null) return false;
+  let tracks = playlistTracks.get(detail);
+  if (tracks === undefined) {
+    tracks = new Set(
+      detail.items.flatMap((entry) => (entry.source === "library" ? [entry.track.id] : [])),
+    );
+    playlistTracks.set(detail, tracks);
+  }
+  return tracks.has(trackId);
+};
+
+/**
+ * A playlist screen's data (see `useDetail`), refreshed as soon as it is edited.
+ * A scan's batch of songs it doesn't hold leaves it as read (#842): reading it
+ * costs, and showing a long one far more.
+ */
 export const usePlaylist = (id: number): PlaylistDetail | null | undefined => {
   const query = useMemo(
     () =>
-      storeQuery(`playlist:${id}`, { playlists: [id], tracks: true }, (store) =>
-        store.getPlaylist(id),
+      libraryQuery<PlaylistDetail | null>(
+        `playlist:${id}`,
+        { playlists: [id], tracks: true },
+        // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
+        LibraryStore.use((store) => store.getPlaylist(id)),
+        playlistHoldsTrack,
       ),
     [id],
   );

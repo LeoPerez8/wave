@@ -89,6 +89,21 @@ const playlistEntry = (item: PlaylistEntryRow): SongListEntry => {
   }
 };
 
+const shownEntries = new WeakMap<PlaylistEntryRow, SongListEntry>();
+
+/**
+ * [playlistEntry], kept per row as read: the list asks for every row's type and
+ * height on each layout, thousands of times over on a long playlist (#842).
+ */
+const shownEntry = (item: PlaylistEntryRow): SongListEntry => {
+  let shown = shownEntries.get(item);
+  if (shown === undefined) {
+    shown = playlistEntry(item);
+    shownEntries.set(item, shown);
+  }
+  return shown;
+};
+
 const NO_MOVES: readonly AccessibilityActionInfo[] = [];
 
 /** The grip, 48dp of target drawn in the 32dp state cell. */
@@ -314,7 +329,7 @@ export function PlaylistItems({ playlistId, items, header, empty }: Props) {
   );
   const song = useCallback((item: Item) => {
     const entry = entryOf(item);
-    return entry === null ? null : playlistEntry(entry);
+    return entry === null ? null : shownEntry(entry);
   }, []);
   const selection = useMemo(
     (): SongListSelection<Item> => ({

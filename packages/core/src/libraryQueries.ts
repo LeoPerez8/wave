@@ -43,6 +43,13 @@ export interface LibraryChange {
    * none shows a removed item when it comes back.
    */
   readonly burst?: boolean;
+  /**
+   * A scan's batch: it saves the tracks [ids] and moves no playlist entry onto
+   * them, so a query that says which tracks it holds (`holdsTrack`) can stay
+   * as it is when it holds none of them. A download landing isn't one: a
+   * song it lands can take over entries.
+   */
+  readonly scanned?: boolean;
 }
 
 /**
@@ -75,6 +82,13 @@ export const LIBRARY_QUERY_LIMITS: LibraryQueryLimits = {
   retainMs: 30_000,
   maxRetained: 8,
 };
+
+/**
+ * How long bursts leave a list of [rows] entries alone after a read (ms): showing
+ * it again costs per row, and a phone showing thousands of rows takes longer
+ * than `throttleMs` to, so reads would follow each other with nothing in between.
+ */
+export const longListBurstPace = (rows: number): number => rows * 4;
 
 /** How a read ended: its result, or a failure (the last result stands). */
 export type LibraryQueryOutcome<V> =
@@ -130,6 +144,8 @@ export interface LibraryQueries<V> {
       readonly visible: boolean;
       readonly onChange: () => void;
       readonly onStateChange?: () => void;
+      /** Whether this query's [value] holds the track [trackId], for a scan's batch (`scanned`). */
+      readonly holdsTrack?: (value: V, trackId: number) => boolean;
     },
   ) => LibraryQueryConsumer;
   /** The query's current result, or undefined before its first read. The same box until it changes. */
@@ -154,6 +170,7 @@ interface ConsumerState {
 interface Entry<V> {
   readonly key: string;
   readonly reads: LibraryReads;
+  readonly holdsTrack: ((value: V, trackId: number) => boolean) | undefined;
   readonly consumers: Set<ConsumerState>;
   result: LibraryQueryResult<V> | undefined;
   failed: boolean;
@@ -169,6 +186,8 @@ interface Entry<V> {
   outdated: boolean;
   /** When the last read started. */
   readAt: number;
+  /** When the last read ended; what its result sets for the next burst is counted from here. */
+  settledAt: number;
   /** The throttle's wait, or null. */
   cancelWait: (() => void) | null;
   /** When the last consumer left (for retention). */
@@ -202,6 +221,12 @@ export const createLibraryQueries = <V>(options: {
   /** Query [key] is gone (no consumer, no kept result): what the app holds for it can go. */
   readonly dropped?: (key: string) => void;
   readonly limits?: Partial<LibraryQueryLimits>;
+  /**
+   * How long bursts leave a query alone after a read gave [value] (ms): a long
+   * result costs far more to show than `throttleMs` leaves between reads. Below
+   * `throttleMs` it changes nothing. Edits don't wait for it.
+   */
+  readonly burstPace?: (value: V) => number;
 }): LibraryQueries<V> => {
   const { now, schedule, read } = options;
   const limits: LibraryQueryLimits = { ...LIBRARY_QUERY_LIMITS, ...options.limits };
@@ -304,6 +329,7 @@ export const createLibraryQueries = <V>(options: {
   const settle = (entry: Entry<V>, number: number, outcome: LibraryQueryOutcome<V>): void => {
     if (entry.reading !== number) return;
     entry.reading = null;
+    entry.settledAt = now();
     if (entries.get(entry.key) !== entry) return;
     if (entry.outdated) counts.discarded++;
     else {
@@ -317,14 +343,28 @@ export const createLibraryQueries = <V>(options: {
     plan(entry);
   };
 
+  /** When bursts may next re-read [entry]. */
+  const burstReadAt = (entry: Entry<V>): number => {
+    const throttled = entry.readAt + limits.throttleMs;
+    if (options.burstPace === undefined || entry.result === undefined) return throttled;
+    return Math.max(throttled, entry.settledAt + options.burstPace(entry.result.value));
+  };
+
+  /** Whether [change] is a scan's batch of tracks [entry]'s current result doesn't hold. */
+  const scanPasses = (entry: Entry<V>, change: LibraryChange): boolean => {
+    const { holdsTrack, result } = entry;
+    if (change.scanned !== true || change.ids === undefined) return false;
+    if (holdsTrack === undefined || result === undefined || entry.reading !== null) return false;
+    return !change.ids.some((id) => holdsTrack(result.value, id));
+  };
+
   /** Starts, schedules or leaves the entry's next read, as its state asks. */
   const plan = (entry: Entry<V>): void => {
     if (entry.reading !== null) return;
     if (!entry.stale) return;
     // Paused: bursts wait while only hidden screens show it. Edits and its first read don't.
     if (entry.result !== undefined && !entry.urgent && !inSight(entry)) return;
-    const wait =
-      entry.urgent || entry.result === undefined ? 0 : entry.readAt + limits.throttleMs - now();
+    const wait = entry.urgent || entry.result === undefined ? 0 : burstReadAt(entry) - now();
     if (wait > 0) {
       entry.cancelWait ??= schedule(wait, () => {
         entry.cancelWait = null;
@@ -338,12 +378,13 @@ export const createLibraryQueries = <V>(options: {
   };
 
   return {
-    attach: (key, reads, { visible, onChange, onStateChange }) => {
+    attach: (key, reads, { visible, onChange, onStateChange, holdsTrack }) => {
       let entry = entries.get(key);
       if (entry === undefined) {
         entry = {
           key,
           reads,
+          holdsTrack,
           consumers: new Set(),
           result: undefined,
           failed: false,
@@ -353,6 +394,7 @@ export const createLibraryQueries = <V>(options: {
           forEdit: false,
           outdated: false,
           readAt: 0,
+          settledAt: 0,
           cancelWait: null,
           releasedAt: 0,
           cancelExpiry: null,
@@ -408,7 +450,7 @@ export const createLibraryQueries = <V>(options: {
       const edit = change.burst !== true;
       const hidden: Entry<V>[] = [];
       for (const entry of entries.values()) {
-        if (!libraryChangeAffects(entry.reads, change)) continue;
+        if (!libraryChangeAffects(entry.reads, change) || scanPasses(entry, change)) continue;
         if (entry.consumers.size === 0) {
           // Nobody shows it: drop it rather than read it for nobody.
           drop(entry);

@@ -103,11 +103,13 @@ export const attachInSight = (
   reads: LibraryReads,
   sight: ScreenSight,
   onChange: () => void,
+  holdsTrack?: (value: unknown, trackId: number) => boolean,
 ): (() => void) => {
   const attached = queries.attach(key, reads, {
     visible: sight.visible(),
     onChange,
     onStateChange: onChange,
+    ...(holdsTrack === undefined ? {} : { holdsTrack }),
   });
   const stopWatching = sight.subscribe((visible) => (visible ? attached.show() : attached.hide()));
   return () => {

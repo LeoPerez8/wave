@@ -1,6 +1,14 @@
-import { libraryFinder, type YtSong } from "@wave/core";
-import { useMemo } from "react";
+import {
+  libraryFinder,
+  libraryFinderSteps,
+  playlistInLibrarySteps,
+  type PlaylistItem,
+  type YtSong,
+} from "@wave/core";
+import { useEffect, useMemo, useState } from "react";
 
+import { freeTurnEffect } from "@/lib/backgroundWork";
+import { runSteps } from "@/lib/stepped";
 import { libraryListQueries } from "@/library/hooks";
 import { libraryVersion } from "@/library/LibraryScan";
 import type { SongRow } from "@/library/LibraryStore";
@@ -14,10 +22,19 @@ export type FindInLibrary = (song: YtSong) => SongRow | null;
 
 const nothing: FindInLibrary = () => null;
 
+/** How to build a finder between frames, before its first use would build it all at once. */
+const preparations = new WeakMap<FindInLibrary, () => Generator<void, void>>();
+
 /** Core's `libraryFinder` over [songs], built on its first use: a list may never ask. */
 const finderOver = (songs: readonly SongRow[]): FindInLibrary => {
   let built: FindInLibrary | null = null;
-  return (song) => (built ??= libraryFinder(songs))(song);
+  const find: FindInLibrary = (song) => (built ??= libraryFinder(songs))(song);
+  preparations.set(find, function* () {
+    if (built !== null) return;
+    const stepped = yield* libraryFinderSteps(songs);
+    built ??= stepped;
+  });
+  return find;
 };
 
 const songsQuery = libraryListQueries.songs;
@@ -75,4 +92,54 @@ const everything: InLibrary = () => true;
 export const useLoadedInLibrary = (active = true): InLibrary => {
   const find = useLoadedLibraryFinder(active);
   return useMemo(() => (find === null ? everything : (song) => find(song) !== null), [find]);
+};
+
+/** Whether the Library has a song, once it's been worked out for a whole list. */
+export interface InLibraryAnswer {
+  readonly inLibrary: InLibrary;
+  /** False until it's worked out: every song counts as the Library's, as before its first read. */
+  readonly loaded: boolean;
+}
+
+const NOT_YET: InLibraryAnswer = { inLibrary: everything, loaded: false };
+
+/** A list this short asks in its render, as ever: its button is there on its first frame. */
+const ASKED_AT_ONCE = 500;
+
+/**
+ * `useLoadedInLibrary` for a list that may be long ([entries]): past a few hundred
+ * songs it works out which the Library has between frames, so opening the list
+ * doesn't search the Library for each of them in one render (#842). The last
+ * answer stands while a new one is worked out.
+ */
+export const useInLibraryBetweenFrames = (
+  entries: readonly PlaylistItem<YtSong, unknown>[],
+): InLibraryAnswer => {
+  const find = useLoadedLibraryFinder();
+  const atOnce = entries.length <= ASKED_AT_ONCE;
+  const direct = useMemo(
+    (): InLibraryAnswer | null =>
+      find === null
+        ? NOT_YET
+        : atOnce
+          ? { inLibrary: (song) => find(song) !== null, loaded: true }
+          : null,
+    [find, atOnce],
+  );
+  const [answer, setAnswer] = useState<InLibraryAnswer | null>(null);
+  useEffect(() => {
+    if (find === null || atOnce) return;
+    const working = new AbortController();
+    const steps = function* (): Generator<void, InLibrary> {
+      yield* preparations.get(find)?.() ?? [];
+      return yield* playlistInLibrarySteps(entries, (song) => find(song) !== null);
+    };
+    appRuntime
+      .runPromise(runSteps(steps(), freeTurnEffect), { signal: working.signal })
+      .then((inLibrary) => setAnswer({ inLibrary, loaded: true }))
+      .catch(() => {});
+    return () => working.abort();
+  }, [entries, find, atOnce]);
+  if (direct !== null) return direct;
+  return answer ?? NOT_YET;
 };

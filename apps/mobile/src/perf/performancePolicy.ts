@@ -35,6 +35,7 @@ export const LIBRARY_SEEDS = [
     "useLoadedLibraryFinder",
     "useLibraryFinder",
     "useLoadedInLibrary",
+    "useInLibraryBetweenFrames",
   ].map((name) => `ytmusic/libraryFinder.ts#${name}`),
   "../../../packages/core/src/ytMusic.ts#libraryFinder",
   "../../../packages/core/src/ytMusic.ts#libraryFinderSteps",
@@ -322,6 +323,12 @@ export const WHOLE_LIBRARY: Record<string, WholeLibraryException> = {
       "One shared finder implementation; following/building callers are inventoried separately.",
     capabilities: ["library/hooks.ts#songs"],
   },
+  "ytmusic/libraryFinder.ts#useInLibraryBetweenFrames": {
+    howOften: FOLLOWED_FINDER,
+    reason:
+      "A long list asks about its songs in free turns, so opening it builds nothing in a render; its one caller is a visible playlist's download button.",
+    capabilities: ["ytmusic/libraryFinder.ts#useLoadedLibraryFinder"],
+  },
   "ytmusic/libraryFinder.ts#useLibraryFinder": {
     howOften:
       "Follows the shared songs query only while active; one finder per rows identity, never per row.",
@@ -412,11 +419,8 @@ export const WHOLE_LIBRARY: Record<string, WholeLibraryException> = {
   "ytmusic/YtSongList.tsx#useYtPlaylistDownloadButton": {
     howOften: FOLLOWED_FINDER,
     reason:
-      "Visible online lists and their download buttons resolve local files; they are not the hidden Now Playing subtree.",
-    capabilities: [
-      "ytmusic/libraryFinder.ts#useLoadedInLibrary",
-      "ytmusic/libraryFinder.ts#useLoadedLibraryFinder",
-    ],
+      "Visible online lists and their download buttons resolve local files between frames, once per list read; they are not the hidden Now Playing subtree.",
+    capabilities: ["ytmusic/libraryFinder.ts#useInLibraryBetweenFrames"],
   },
   "ytmusic/YtSongList.tsx#YtSongList": {
     howOften: FOLLOWED_FINDER,
