@@ -874,36 +874,44 @@ export const selectUnsearchedEntries = (db: LibraryDatabase): PlaylistUnsearched
 };
 
 /**
- * The video ids of the YT Music entries in the owner's playlists, each once,
+ * Rows of a page of the Magic Queue pool's entries: small enough for a phone's
+ * JavaScript thread between turns at any playlist size.
+ */
+const SEED_PAGE = 512;
+
+/**
+ * A page of the video ids of the YT Music entries in the owner's playlists,
  * for Discover's Magic Queue row (Core's `MagicQueuePool`): ids only, no song
  * decoded. A video the Library has as a file is left out (it's in the pool as
  * the Library's song); unsearched and unavailable entries have no video id.
+ * Walks entry ids, so a page's rows are bounded whatever the entries hold; a
+ * video in several entries can come back on several pages. Next page: `next`.
  */
-export const selectPlaylistEntryVideoIds = (db: LibraryDatabase): string[] => {
+export const selectPlaylistEntryVideoIdsPage = (
+  db: LibraryDatabase,
+  after: number,
+): { readonly videos: string[]; readonly next: number | null } => {
   const { playlists, playlistItems, tracks } = schema;
-  const videoId = sql<string>`${storedVideoId}`;
-  return db
-    .selectDistinct({ videoId })
-    .from(playlistItems)
-    .innerJoin(playlists, eq(playlists.id, playlistItems.playlistId))
-    .where(
-      and(
-        isNotNull(playlistItems.ytSong),
-        live,
-        livePlaylist,
-        sql`typeof(${videoId}) = 'text' AND ${videoId} <> ''`,
-        sql`${videoId} NOT IN (SELECT ${tracks.videoId} FROM ${tracks}
-          WHERE ${tracks.videoId} IS NOT NULL AND ${hasFile})`,
-      ),
-    )
-    .orderBy(videoId)
-    .all()
-    .map((row) => row.videoId);
+  const rows = db.all<{ id: number; videoId: unknown }>(sql`
+    SELECT ${playlistItems.id} AS id, CASE
+      WHEN ${playlistItems.ytSong} IS NOT NULL AND ${live} AND ${livePlaylist}
+        AND NOT EXISTS (SELECT 1 FROM ${tracks}
+          WHERE ${tracks.videoId} = ${storedVideoId} AND ${hasFile})
+      THEN ${storedVideoId} END AS videoId
+    FROM ${playlistItems} JOIN ${playlists} ON ${playlists.id} = ${playlistItems.playlistId}
+    WHERE ${playlistItems.id} > ${after}
+    ORDER BY ${playlistItems.id} LIMIT ${SEED_PAGE}`);
+  return {
+    videos: rows.flatMap(({ videoId }) =>
+      typeof videoId === "string" && videoId !== "" ? [videoId] : [],
+    ),
+    next: rows.at(-1)?.id ?? null,
+  };
 };
 
 /**
  * The YT Music songs the owner's playlists hold as [videoIds], one per video
- * (`selectPlaylistEntryVideoIds`), in no particular order; a video no
+ * (`selectPlaylistEntryVideoIdsPage`), in no particular order; a video no
  * playlist holds any more is left out. Only those entries are decoded.
  */
 export const selectPlaylistEntrySongs = (

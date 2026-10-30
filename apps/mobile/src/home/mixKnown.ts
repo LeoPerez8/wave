@@ -12,7 +12,7 @@ import { settledTurnEffect } from "@/lib/backgroundWork";
 import { makeExternalStore } from "@/lib/externalStore";
 import { LibraryStore, type ArtistRow, type SongRow } from "@/library/LibraryStore";
 import { onLibraryChange } from "@/library/libraryChanges";
-import { createKnownVideosRead } from "./knownVideosRead";
+import { createKnownVideosRead, readKnownVideos } from "./knownVideosRead";
 import { appRuntime } from "@/library/runtime";
 
 /** A Library song as a mix build reads it: with every value of its genre tag when it has several. */
@@ -36,7 +36,8 @@ export interface MixIndexes {
 const knownVideos = makeExternalStore<ReadonlySet<string> | null>(null);
 
 /**
- * Refreshes only a changed source version: a re-blend (a level change,
+ * Reads in pages, each on a settled turn, and
+ * refreshes only a changed source version: a re-blend (a level change,
  * opening a mix's page or menu, Home coming into focus) leaves the new songs
  * played or added to a playlist since the build out. Offline; a failed read
  * keeps the last ones.
@@ -44,7 +45,7 @@ const knownVideos = makeExternalStore<ReadonlySet<string> | null>(null);
 const videoRead = createKnownVideosRead(
   Effect.gen(function* () {
     yield* settledTurnEffect;
-    return yield* (yield* LibraryStore).knownVideos;
+    return yield* readKnownVideos(yield* LibraryStore, settledTurnEffect);
   }),
 );
 onLibraryChange(videoRead.change);
