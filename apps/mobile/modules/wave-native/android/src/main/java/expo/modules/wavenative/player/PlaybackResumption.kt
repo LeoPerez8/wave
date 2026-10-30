@@ -17,7 +17,9 @@ object PlaybackResumption {
    * The resumption for [snapshot], with each item built by [build]; null when
    * there's nothing to resume. A current item that isn't there anymore starts
    * the first one from the top. Plays resumed [byAuto] come from Auto;
-   * otherwise from wherever the queue was started.
+   * otherwise from wherever the queue was started. The player runs the queue's
+   * repeat until JS is up: a long queue's window then repeats instead of ending,
+   * and JS, adopting the whole queue, takes the player's repeat over.
    */
   fun <T> plan(snapshot: ResumeSnapshot?, byAuto: Boolean, build: (ResumeItem) -> T): Resumption<T>? {
     if (snapshot == null || snapshot.items.isEmpty()) return null

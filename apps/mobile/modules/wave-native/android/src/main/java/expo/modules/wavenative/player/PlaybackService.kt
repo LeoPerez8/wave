@@ -503,7 +503,11 @@ class PlaybackService : MediaLibraryService() {
       for (parent in languageParents.toList()) session?.notifyChildrenChanged(parent, Int.MAX_VALUE, null)
     }
     showModes(AutoModes.state.current)
-    stopModes = AutoModes.state.listen(::showModes)
+    stopModes = AutoModes.state.listen { modes ->
+      showModes(modes)
+      // Repeat All on a long queue leaves the player's repeat off, so no player event saves it.
+      exoPlayer?.let { ResumeStore.savePlayer(it, withItems = false) }
+    }
     stopLyrics = AutoLyrics.state.listen {
       shown?.refresh()
       showModes(AutoModes.state.current)
@@ -912,12 +916,11 @@ class PlaybackService : MediaLibraryService() {
   }
 
   private companion object {
-    /** Player changes that move the snapshot's current item, position or repeat. */
+    /** Player changes that move the snapshot's current item or position. */
     val RESUME_EVENTS = intArrayOf(
       Player.EVENT_MEDIA_ITEM_TRANSITION,
       Player.EVENT_IS_PLAYING_CHANGED,
       Player.EVENT_POSITION_DISCONTINUITY,
-      Player.EVENT_REPEAT_MODE_CHANGED,
     )
 
     const val RESUME_SAVE_INTERVAL_MS = 10_000L

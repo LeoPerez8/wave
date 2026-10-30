@@ -9,7 +9,7 @@
 import type { QueueList } from "./playerSync.ts";
 import { isUnsearchedTrackId } from "./playlistEntries.ts";
 import { lapEntries, type QueueState, type RepeatMode } from "./queue.ts";
-import { playerQueueList } from "./unsearchedPlaying.ts";
+import { playerQueueList, withHeldCurrent } from "./unsearchedPlaying.ts";
 
 /** The most songs the player holds; a queue this short or shorter loads whole. */
 export const PLAYER_WINDOW_SIZE = 100;
@@ -76,3 +76,24 @@ export const playerRepeatMode = (state: QueueState): RepeatMode =>
   state.entries.filter((entry) => !isUnsearchedTrackId(entry.trackId)).length > PLAYER_WINDOW_SIZE
     ? "off"
     : state.repeat;
+
+/**
+ * The queue to pick back up when JS restarts while the player kept going:
+ * [saved], the queue saved last, with its playing entry one the player holds
+ * (`withHeldCurrent`: it was saved while its playing song was searched), whole
+ * however little of it the player holds. The player's list ([playerKeys]) must
+ * be the queue's whole list, or, for a queue longer than the window, songs of
+ * the queue that fit a window; the window itself can be some songs behind, so
+ * where it starts doesn't count. Null when the player holds something else.
+ */
+export const keptQueue = (saved: QueueState, playerKeys: readonly string[]): QueueState | null => {
+  const state = withHeldCurrent(saved);
+  const keys = playerQueueList(state)?.keys ?? [];
+  if (keys.length === playerKeys.length && keys.every((key, i) => key === playerKeys[i])) {
+    return state;
+  }
+  if (keys.length <= PLAYER_WINDOW_SIZE) return null;
+  if (playerKeys.length === 0 || playerKeys.length > PLAYER_WINDOW_SIZE) return null;
+  const queued = new Set(keys);
+  return playerKeys.every((key) => queued.has(key)) ? state : null;
+};

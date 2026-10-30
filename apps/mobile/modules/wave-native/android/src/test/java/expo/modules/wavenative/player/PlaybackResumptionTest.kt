@@ -39,6 +39,12 @@ class PlaybackResumptionTest {
   }
 
   @Test
+  fun `a window of a long queue with Repeat All resumes repeating`() {
+    val resumption = PlaybackResumption.plan(snapshot.copy(repeat = "all"), byAuto = false) { it.id }
+    assertEquals(Player.REPEAT_MODE_ALL, resumption?.repeatMode)
+  }
+
+  @Test
   fun `a negative position starts from the top and an unknown repeat is off`() {
     val resumption = PlaybackResumption.plan(snapshot.copy(positionMs = -5, repeat = "sideways"), byAuto = false) { it.id }
 

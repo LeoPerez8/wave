@@ -4,11 +4,13 @@ import { describe, test } from "node:test";
 import {
   EMPTY_QUEUE,
   applyPlayerSync,
+  keptQueue,
   keysToLoad,
   planPlayerSync,
   playerQueueWindow,
   playerRepeatMode,
   reduceQueue,
+  restorePlayback,
   unsearchedTrackId,
   type PlayerList,
   type QueueState,
@@ -241,5 +243,77 @@ describe("moving the window with the sync plan", () => {
     assert.ok(!steps.some((step) => step.type === "replace" || step.type === "seek"));
     assert.equal(held.keys[31], key);
     assert.deepEqual(held.keys, mirrored(after).keys);
+  });
+});
+
+describe("picking a long queue back up", () => {
+  /** What the player holds of [state]. */
+  const held = (state: QueueState): readonly string[] => playerQueueWindow(state)!.keys;
+
+  test("a player holding the window adopts all 4,875 songs on the same song", () => {
+    const saved = queueOf(4875, 2000);
+    const kept = keptQueue(saved, held(saved))!;
+    assert.equal(kept.entries.length, 4875);
+    assert.equal(kept.entries[kept.index]!.key, saved.entries[2000]!.key);
+  });
+
+  test("a window from a song or two earlier is still this queue's", () => {
+    const saved = queueOf(4875, 2000);
+    assert.equal(keptQueue(saved, held(queueOf(4875, 1998)))!.entries.length, 4875);
+  });
+
+  test("a Repeat All window wrapped through the queue's start is adopted", () => {
+    const saved = reduceQueue(queueOf(4875, 4870), { type: "setRepeat", mode: "all" }).state;
+    const kept = keptQueue(saved, held(saved))!;
+    assert.equal(kept.entries.length, 4875);
+    assert.equal(kept.repeat, "all");
+  });
+
+  test("a player still holding the whole queue, from before the window, adopts it", () => {
+    const saved = queueOf(150, 3);
+    const keys = saved.entries.map((entry) => entry.key);
+    assert.equal(keptQueue(saved, keys), saved);
+  });
+
+  test("a player holding any song outside the saved queue holds something else", () => {
+    const saved = queueOf(4875, 2000);
+    assert.equal(keptQueue(saved, [...held(saved).slice(0, 99), "not-in-queue"]), null);
+    assert.equal(keptQueue(saved, ["not-in-queue"]), null);
+  });
+
+  test("an empty player, or one holding more than a window, doesn't take the long queue", () => {
+    const saved = queueOf(4875, 2000);
+    assert.equal(keptQueue(saved, []), null);
+    const tooMany = saved.entries.slice(0, 101).map((entry) => entry.key);
+    assert.equal(keptQueue(saved, tooMany), null);
+  });
+
+  test("a queue that fits the window still needs the player's list to be exactly its own", () => {
+    const saved = queueOf(100, 3);
+    const keys = saved.entries.map((entry) => entry.key);
+    assert.equal(keptQueue(saved, keys), saved);
+    assert.equal(keptQueue(saved, keys.slice(0, 99)), null);
+  });
+
+  test("the player having gone on while JS was away moves the window without a song change", () => {
+    const saved = queueOf(4875, 2000);
+    const keys = held(saved);
+    const kept = keptQueue(saved, keys)!;
+    const moved = saved.entries[2040]!.key;
+    const after = reduceQueue(kept, { type: "playerMoved", key: moved }).state;
+    assert.equal(after.entries.length, 4875);
+    assert.equal(after.index, 2040);
+    const steps = planPlayerSync({ keys, currentKey: moved }, playerQueueWindow(after)!);
+    assert.ok(steps.length > 0);
+    assert.ok(steps.every((step) => step.type === "edit"));
+  });
+
+  test("a queue restored after Wave's process ended keeps every song and its place", () => {
+    const saved = queueOf(4875, 2000);
+    const restored = restorePlayback(saved, 61_000, () => true)!;
+    assert.equal(restored.state.entries.length, 4875);
+    assert.equal(restored.state.entries[restored.state.index]!.key, saved.entries[2000]!.key);
+    assert.equal(restored.positionMs, 61_000);
+    assert.equal(playerQueueWindow(restored.state)!.keys.length, 100);
   });
 });
