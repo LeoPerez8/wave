@@ -8,17 +8,21 @@
 
 import type { QueueList } from "./playerSync.ts";
 import { isUnsearchedTrackId } from "./playlistEntries.ts";
-import { lapEntries, type QueueState, type RepeatMode } from "./queue.ts";
+import { lapEntries, type QueueEntry, type QueueState, type RepeatMode } from "./queue.ts";
 import { playerQueueList, withHeldCurrent } from "./unsearchedPlaying.ts";
 
 /** The most songs the player holds; a queue this short or shorter loads whole. */
-export const PLAYER_WINDOW_SIZE = 100;
+const PLAYER_WINDOW_SIZE = 100;
 
 /** How many songs the window keeps behind the playing one. */
-export const PLAYER_WINDOW_BEHIND = 30;
+const PLAYER_WINDOW_BEHIND = 30;
 
 /** How many songs the window keeps after the playing one, which takes the last of its 100 places. */
-export const PLAYER_WINDOW_AHEAD = PLAYER_WINDOW_SIZE - PLAYER_WINDOW_BEHIND - 1;
+const PLAYER_WINDOW_AHEAD = PLAYER_WINDOW_SIZE - PLAYER_WINDOW_BEHIND - 1;
+
+/** Whether the queue holds more songs the player can hold than fit the window (unsearched ones it can't). */
+const longerThanWindow = (state: QueueState): boolean =>
+  state.entries.filter((entry) => !isUnsearchedTrackId(entry.trackId)).length > PLAYER_WINDOW_SIZE;
 
 /**
  * The window around the playing song of a queue with Repeat All: past the
@@ -57,7 +61,7 @@ const wrappedWindow = (list: QueueList, state: QueueState): QueueList => {
  */
 export const playerQueueWindow = (state: QueueState): QueueList | null => {
   const list = playerQueueList(state);
-  if (list === null || list.index < 0 || list.keys.length <= PLAYER_WINDOW_SIZE) return list;
+  if (list === null || list.index < 0 || !longerThanWindow(state)) return list;
   if (state.repeat === "all") return wrappedWindow(list, state);
   const from = Math.max(0, list.index - PLAYER_WINDOW_BEHIND);
   return {
@@ -67,15 +71,24 @@ export const playerQueueWindow = (state: QueueState): QueueList | null => {
 };
 
 /**
+ * The entries of [list] in its own order, so its index holds for them: a window
+ * through a repeat-all lap isn't in the queue's order.
+ */
+export const playerListEntries = (state: QueueState, list: QueueList): QueueEntry[] => {
+  const byKey = new Map(state.entries.map((entry) => [entry.key, entry]));
+  return list.keys.flatMap((key) => {
+    const entry = byKey.get(key);
+    return entry === undefined ? [] : [entry];
+  });
+};
+
+/**
  * The repeat mode the player itself should run. Repeat All on a queue longer
  * than the window stays off there, since the player would only repeat its
  * window; the window wraps through the queue's start instead.
  */
 export const playerRepeatMode = (state: QueueState): RepeatMode =>
-  state.repeat === "all" &&
-  state.entries.filter((entry) => !isUnsearchedTrackId(entry.trackId)).length > PLAYER_WINDOW_SIZE
-    ? "off"
-    : state.repeat;
+  state.repeat === "all" && longerThanWindow(state) ? "off" : state.repeat;
 
 /**
  * The queue to pick back up when JS restarts while the player kept going:

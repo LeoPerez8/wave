@@ -2,6 +2,7 @@
 import * as Effect from "effect/Effect";
 import { createSourceRead } from "../lib/sourceRead.ts";
 import { KNOWN_VIDEOS_START } from "../library/db/mixKnown.ts";
+import { readVideoPages } from "../library/db/videoPages.ts";
 import type { LibraryStore } from "../library/LibraryStore.ts";
 
 export const createKnownVideosRead = <E, R>(read: Effect.Effect<readonly string[], E, R>) =>
@@ -11,14 +12,4 @@ export const createKnownVideosRead = <E, R>(read: Effect.Effect<readonly string[
 export const readKnownVideos = <E, R>(
   store: Pick<LibraryStore["Service"], "knownVideosPage">,
   between: Effect.Effect<void, E, R>,
-) =>
-  Effect.gen(function* () {
-    const videos = new Set<string>();
-    let page = yield* store.knownVideosPage(KNOWN_VIDEOS_START);
-    for (;;) {
-      for (const video of page.videos) videos.add(video);
-      if (page.next === null) return [...videos];
-      yield* between;
-      page = yield* store.knownVideosPage(page.next);
-    }
-  });
+) => readVideoPages(KNOWN_VIDEOS_START, store.knownVideosPage, between);

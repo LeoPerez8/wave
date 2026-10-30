@@ -117,7 +117,7 @@ export const useInLibraryBetweenFrames = (
 ): InLibraryAnswer => {
   const find = useLoadedLibraryFinder();
   const atOnce = entries.length <= ASKED_AT_ONCE;
-  const direct = useMemo(
+  const inRender = useMemo(
     (): InLibraryAnswer | null =>
       find === null
         ? NOT_YET
@@ -140,6 +140,6 @@ export const useInLibraryBetweenFrames = (
       .catch(() => {});
     return () => working.abort();
   }, [entries, find, atOnce]);
-  if (direct !== null) return direct;
+  if (inRender !== null) return inRender;
   return answer ?? NOT_YET;
 };

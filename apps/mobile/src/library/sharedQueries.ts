@@ -1,4 +1,4 @@
-import { createLibraryQueries, longListBurstPace, type LibraryReads } from "@wave/core";
+import { createLibraryQueries, type LibraryQueryTraits, type LibraryReads } from "@wave/core";
 import type * as Effect from "effect/Effect";
 import { useCallback, useContext, useEffect, useSyncExternalStore } from "react";
 
@@ -21,8 +21,7 @@ export interface LibraryQuery<A> {
   readonly key: string;
   readonly reads: LibraryReads;
   readonly read: Effect.Effect<A, LibraryStoreError, LibraryStore>;
-  /** Whether a result holds the track, so a scan's batch of other songs leaves it as read. */
-  holdsTrack?(value: A, trackId: number): boolean;
+  readonly traits: LibraryQueryTraits<A>;
 }
 
 /** Declares a shared Library query. Make it once (a module constant, or `useMemo` over its key). */
@@ -30,16 +29,10 @@ export const libraryQuery = <A>(
   key: string,
   reads: LibraryReads,
   read: Effect.Effect<A, LibraryStoreError, LibraryStore>,
-  holdsTrack?: (value: A, trackId: number) => boolean,
-): LibraryQuery<A> => ({ key, reads, read, ...(holdsTrack === undefined ? {} : { holdsTrack }) });
+  traits: LibraryQueryTraits<A> = {},
+): LibraryQuery<A> => ({ key, reads, read, traits });
 
 type AnyQuery = LibraryQuery<unknown>;
-
-/** The entries of a result that lists them (a playlist's page), which is what costs to show. */
-const entriesIn = (value: unknown): number =>
-  typeof value === "object" && value !== null && "items" in value && Array.isArray(value.items)
-    ? value.items.length
-    : 0;
 
 /** What each key reads, while the registry holds it. */
 const definitions = new Map<string, AnyQuery>();
@@ -67,7 +60,6 @@ const registry = createLibraryQueries<unknown>({
       );
     }, 0);
   },
-  burstPace: (value) => longListBurstPace(entriesIn(value)),
   dropped: (key) => {
     definitions.delete(key);
     if (definitions.size === 0) {
@@ -103,7 +95,7 @@ export const useLibraryQuery = <A>(query: LibraryQuery<A> | null, initial: A): A
       const { key } = definition;
       definitions.set(key, definition);
       stopFollowing ??= onLibraryChange(registry.change);
-      return attachInSight(registry, key, definition.reads, sight, onChange, definition.holdsTrack);
+      return attachInSight(registry, key, definition.reads, sight, onChange, definition.traits);
     },
     [definition, sight],
   );

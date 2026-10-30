@@ -1,5 +1,6 @@
 import { useLocalisation } from "@/localisation/localisation";
 import {
+  longListBurstPace,
   statsFacts,
   summedListeningTotals,
   type CollectionKind,
@@ -358,7 +359,10 @@ export const usePlaylist = (id: number): PlaylistDetail | null | undefined => {
         { playlists: [id], tracks: true },
         // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
         LibraryStore.use((store) => store.getPlaylist(id)),
-        playlistHoldsTrack,
+        {
+          holdsTrack: playlistHoldsTrack,
+          burstPace: (detail) => longListBurstPace(detail?.items.length ?? 0),
+        },
       ),
     [id],
   );

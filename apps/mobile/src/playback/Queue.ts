@@ -14,6 +14,7 @@ import {
   noticeLine,
   passedOverNotice,
   planPlayerSync,
+  playerListEntries,
   playerQueueWindow,
   playerRepeatMode,
   queueSourceAfter,
@@ -725,11 +726,7 @@ export const layer = Layer.effect(
           }
           const { state } = done;
           const list = playerQueueWindow(state) ?? { keys: [], index: -1 };
-          const held = new Set(list.keys);
-          const items = yield* Effect.forEach(
-            state.entries.filter((entry) => held.has(entry.key)),
-            itemFor,
-          );
+          const items = yield* Effect.forEach(playerListEntries(state, list), itemFor);
           queueSource.update((source) => queueSourceAfter(source, command, "auto"));
           queueState.set(state);
           queueChanged();

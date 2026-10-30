@@ -107,10 +107,8 @@ export type {
 } from "./queue.ts";
 export { applyPlayerSync, keysToLoad, planPlayerSync } from "./playerSync.ts";
 export {
-  PLAYER_WINDOW_AHEAD,
-  PLAYER_WINDOW_BEHIND,
-  PLAYER_WINDOW_SIZE,
   keptQueue,
+  playerListEntries,
   playerQueueWindow,
   playerRepeatMode,
 } from "./playerWindow.ts";
@@ -279,7 +277,7 @@ export type {
 } from "./playEvents.ts";
 export { favoriteStar, starWriteSettled, starWriteStarted } from "./favorites.ts";
 export type { FavoriteStar } from "./favorites.ts";
-export { compareStrings, foldAccentsAndCase } from "./library.ts";
+export { compareStrings } from "./library.ts";
 export {
   STATS_PERIODS,
   STATS_SEE_ALL,
@@ -709,6 +707,7 @@ export type {
   LibraryQueryResult,
   LibraryQueryState,
   LibraryQueryStats,
+  LibraryQueryTraits,
   LibraryReads,
 } from "./libraryQueries.ts";
 export { BACKGROUND_WORK_LIMITS, createBackgroundWork } from "./backgroundWork.ts";

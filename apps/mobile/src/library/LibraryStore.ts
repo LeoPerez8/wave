@@ -268,6 +268,7 @@ import {
   selectPlaylistedSongs,
   selectStreamedSongs,
 } from "./db/mixKnown";
+import type { VideoPage } from "./db/videoPages";
 import { addCandidates, selectCandidateCatalog } from "./db/candidateCatalog";
 import { hasUnscannedRoot, pruneOrphans, saveBatch, type SavedBatch } from "./db/save";
 import * as schema from "./db/schema";
@@ -875,10 +876,7 @@ export class LibraryStore extends Context.Service<
      */
     readonly playlistEntryVideoIdsPage: (
       after: number,
-    ) => Effect.Effect<
-      { readonly videos: readonly string[]; readonly next: number | null },
-      LibraryStoreError
-    >;
+    ) => Effect.Effect<VideoPage<number>, LibraryStoreError>;
     /** The YT Music songs the playlists hold as these video ids, one per video, in no particular order. */
     readonly playlistEntrySongs: (
       videoIds: readonly string[],
@@ -1316,10 +1314,7 @@ export class LibraryStore extends Context.Service<
     /** A page of `knownVideos`: what the app reads, so a long list doesn't hold the JavaScript thread. */
     readonly knownVideosPage: (
       cursor: KnownVideosCursor,
-    ) => Effect.Effect<
-      { readonly videos: readonly string[]; readonly next: KnownVideosCursor | null },
-      LibraryStoreError
-    >;
+    ) => Effect.Effect<VideoPage<KnownVideosCursor>, LibraryStoreError>;
     /**
      * Adds what a radio or an artist page brought at [at] to the candidate
      * catalog (Core's `catalogSeen`), and takes out what leaves

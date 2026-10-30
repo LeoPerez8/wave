@@ -14,9 +14,11 @@ import {
   type YtAlbumSong,
 } from "@wave/core";
 import { sql, type SQL } from "drizzle-orm";
+import * as Effect from "effect/Effect";
 
 import type { LibraryDatabase } from "./database.ts";
 import * as schema from "./schema.ts";
+import { VIDEO_PAGE_ROWS, readVideoPages, videoIdsOf, type VideoPage } from "./videoPages.ts";
 
 /**
  * Notes that the owner started streaming [song] at [at]: once more, and first
@@ -74,9 +76,6 @@ export const selectPlaylistedSongs = (db: LibraryDatabase): MixPlaylistEntry[] =
       return song === null ? [] : [{ song, addedAt: row.addedAt }];
     });
 
-/** Rows of a page of the known videos: small enough for a phone's JavaScript thread between turns. */
-const KNOWN_PAGE = 512;
-
 /** Where a walk of the known videos is: which source, and the last key read of it. */
 export interface KnownVideosCursor {
   readonly source: number;
@@ -93,12 +92,12 @@ const KNOWN_SOURCES: readonly {
   {
     start: "",
     page: (after) => sql`SELECT video_id AS key, video_id AS videoId FROM streamed_songs
-      WHERE video_id > ${after} ORDER BY video_id LIMIT ${KNOWN_PAGE}`,
+      WHERE video_id > ${after} ORDER BY video_id LIMIT ${VIDEO_PAGE_ROWS}`,
   },
   {
     start: "",
     page: (after) => sql`SELECT DISTINCT video_id AS key, video_id AS videoId FROM streamed_totals
-      WHERE video_id > ${after} ORDER BY video_id LIMIT ${KNOWN_PAGE}`,
+      WHERE video_id > ${after} ORDER BY video_id LIMIT ${VIDEO_PAGE_ROWS}`,
   },
   {
     start: 0,
@@ -106,7 +105,7 @@ const KNOWN_SOURCES: readonly {
         WHEN pi.yt_song IS NOT NULL AND NOT pi.deleted AND NOT p.deleted AND json_valid(pi.yt_song)
         THEN json_extract(pi.yt_song, '$.videoId') END AS videoId
       FROM playlist_items pi JOIN playlists p ON p.id = pi.playlist_id
-      WHERE pi.id > ${after} ORDER BY pi.id LIMIT ${KNOWN_PAGE}`,
+      WHERE pi.id > ${after} ORDER BY pi.id LIMIT ${VIDEO_PAGE_ROWS}`,
   },
   {
     start: 0,
@@ -116,7 +115,7 @@ const KNOWN_SOURCES: readonly {
           SELECT 1 FROM playlist_items pi JOIN playlists p ON p.id = pi.playlist_id
           WHERE pi.track_id = t.id AND NOT pi.deleted AND NOT p.deleted
         ) THEN t.video_id END AS videoId
-      FROM tracks t WHERE t.id > ${after} ORDER BY t.id LIMIT ${KNOWN_PAGE}`,
+      FROM tracks t WHERE t.id > ${after} ORDER BY t.id LIMIT ${VIDEO_PAGE_ROWS}`,
   },
 ];
 
@@ -131,16 +130,14 @@ const KNOWN_SOURCES: readonly {
 export const selectKnownVideosPage = (
   db: LibraryDatabase,
   { source, after }: KnownVideosCursor,
-): { readonly videos: string[]; readonly next: KnownVideosCursor | null } => {
+): VideoPage<KnownVideosCursor> => {
   const rows = db.all<{ key: string | number; videoId: unknown }>(
     KNOWN_SOURCES[source]!.page(after),
   );
   const last = rows.at(-1);
   const following = KNOWN_SOURCES[source + 1];
   return {
-    videos: rows.flatMap(({ videoId }) =>
-      typeof videoId === "string" && videoId !== "" ? [videoId] : [],
-    ),
+    videos: videoIdsOf(rows),
     next:
       last !== undefined
         ? { source, after: last.key }
@@ -151,13 +148,11 @@ export const selectKnownVideosPage = (
 };
 
 /** All the videos the owner knows at once (`selectKnownVideosPage`), each once. */
-export const selectKnownVideos = (db: LibraryDatabase): string[] => {
-  const videos = new Set<string>();
-  let cursor: KnownVideosCursor | null = KNOWN_VIDEOS_START;
-  while (cursor !== null) {
-    const page = selectKnownVideosPage(db, cursor);
-    for (const video of page.videos) videos.add(video);
-    cursor = page.next;
-  }
-  return [...videos];
-};
+export const selectKnownVideos = (db: LibraryDatabase): string[] =>
+  Effect.runSync(
+    readVideoPages(
+      KNOWN_VIDEOS_START,
+      (cursor) => Effect.sync(() => selectKnownVideosPage(db, cursor)),
+      Effect.void,
+    ),
+  );

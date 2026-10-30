@@ -7,6 +7,7 @@ import {
   keptQueue,
   keysToLoad,
   planPlayerSync,
+  playerListEntries,
   playerQueueWindow,
   playerRepeatMode,
   reduceQueue,
@@ -315,5 +316,31 @@ describe("picking a long queue back up", () => {
     assert.equal(restored.state.entries[restored.state.index]!.key, saved.entries[2000]!.key);
     assert.equal(restored.positionMs, 61_000);
     assert.equal(playerQueueWindow(restored.state)!.keys.length, 100);
+  });
+});
+
+describe("playerListEntries", () => {
+  /** The song at the list's index: what a media session handed the entries starts. */
+  const startingSong = (state: QueueState): string | undefined => {
+    const list = playerQueueWindow(state)!;
+    return playerListEntries(state, list)[list.index]?.trackId;
+  };
+
+  const repeating = (size: number, startIndex: number): QueueState =>
+    reduceQueue(queueOf(size, startIndex), { type: "setRepeat", mode: "all" }).state;
+
+  test("with Repeat All, a start in the queue's first 30 songs starts that song", () => {
+    assert.equal(startingSong(repeating(200, 5)), "5");
+  });
+
+  test("with Repeat All, a start in the queue's last 69 songs starts that song", () => {
+    assert.equal(startingSong(repeating(200, 190)), "190");
+  });
+
+  test("the entries come in the list's order, not the queue's", () => {
+    const state = queueOf(3, 0);
+    const [a, b, c] = state.entries;
+    const list = { keys: [c!.key, a!.key, b!.key], index: 1 };
+    assert.deepEqual(playerListEntries(state, list), [c, a, b]);
   });
 });

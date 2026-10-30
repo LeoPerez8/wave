@@ -10,10 +10,10 @@ import { startServices } from "./src/services";
 
 /**
  * …and `WaveService`, the headless task the media library service holds while
- * Android Auto is connected (modules/wave-native, `JsRuntime`). It starts the
- * app services when Auto starts Wave without the Activity, and stays pending
- * so React Native keeps JS timers running; native finishes the task when Auto
- * disconnects.
+ * Android Auto is connected or after it resumed the queue (modules/wave-native,
+ * `JsRuntime`). It starts the app services when either starts Wave without the
+ * Activity, and stays pending so React Native keeps JS timers running; native
+ * finishes the task when Auto disconnects or the service ends.
  */
 AppRegistry.registerHeadlessTask("WaveService", () => async () => {
   startServices("headless");

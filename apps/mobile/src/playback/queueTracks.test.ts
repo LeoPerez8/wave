@@ -438,7 +438,7 @@ describe("learnTracksToLoad", () => {
   test("reads the unknown songs the player is about to load, and only those", async () => {
     learnQueueTracks([song(1)].map(toQueueTrack), { forgetOthers: true });
     const asked: number[][] = [];
-    await Effect.runPromise(learnTracksToLoad(["1", "7"], readSongs(asked)));
+    await Effect.runPromise(learnTracksToLoad(["1", "7"], readSongs(asked), () => []));
     assert.deepEqual(asked, [[7]]);
     assert.equal(queueTracks.get().get("7")?.title, "Song 7");
   });
@@ -446,7 +446,7 @@ describe("learnTracksToLoad", () => {
   test("reads a song an earlier lookup is still on its way with", async () => {
     learnQueueTracks([], { forgetOthers: true });
     assert.deepEqual(tracksToLookUp([entry("8")]), ["8"]);
-    await Effect.runPromise(learnTracksToLoad(["8"], readSongs([])));
+    await Effect.runPromise(learnTracksToLoad(["8"], readSongs([]), () => []));
     assert.equal(queueTracks.get().get("8")?.title, "Song 8");
   });
 
@@ -472,7 +472,13 @@ describe("learnTracksToLoad", () => {
 
   test("a read that fails leaves the songs unknown, without failing", async () => {
     learnQueueTracks([], { forgetOthers: true });
-    await Effect.runPromise(learnTracksToLoad(["9"], () => Effect.fail("no database")));
+    await Effect.runPromise(
+      learnTracksToLoad(
+        ["9"],
+        () => Effect.fail("no database"),
+        () => [],
+      ),
+    );
     assert.equal(queueTracks.get().has("9"), false);
   });
 });

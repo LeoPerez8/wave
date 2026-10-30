@@ -43,6 +43,7 @@ import {
 import * as schema from "./schema.ts";
 import { stamped } from "./sync.ts";
 import { filePath, hasFile, inScope, songColumns, type TrackScope } from "./tracks.ts";
+import { VIDEO_PAGE_ROWS, videoIdsOf, type VideoPage } from "./videoPages.ts";
 
 /** Playlist order: by order key, then by entry id for entries two phones gave one key (Core's `compareOrderKeys`). */
 const IN_ORDER = [asc(schema.playlistItems.orderKey), asc(schema.playlistItems.syncId)] as const;
@@ -874,12 +875,6 @@ export const selectUnsearchedEntries = (db: LibraryDatabase): PlaylistUnsearched
 };
 
 /**
- * Rows of a page of the Magic Queue pool's entries: small enough for a phone's
- * JavaScript thread between turns at any playlist size.
- */
-const SEED_PAGE = 512;
-
-/**
  * A page of the video ids of the YT Music entries in the owner's playlists,
  * for Discover's Magic Queue row (Core's `MagicQueuePool`): ids only, no song
  * decoded. A video the Library has as a file is left out (it's in the pool as
@@ -890,7 +885,7 @@ const SEED_PAGE = 512;
 export const selectPlaylistEntryVideoIdsPage = (
   db: LibraryDatabase,
   after: number,
-): { readonly videos: string[]; readonly next: number | null } => {
+): VideoPage<number> => {
   const { playlists, playlistItems, tracks } = schema;
   const rows = db.all<{ id: number; videoId: unknown }>(sql`
     SELECT ${playlistItems.id} AS id, CASE
@@ -900,11 +895,9 @@ export const selectPlaylistEntryVideoIdsPage = (
       THEN ${storedVideoId} END AS videoId
     FROM ${playlistItems} JOIN ${playlists} ON ${playlists.id} = ${playlistItems.playlistId}
     WHERE ${playlistItems.id} > ${after}
-    ORDER BY ${playlistItems.id} LIMIT ${SEED_PAGE}`);
+    ORDER BY ${playlistItems.id} LIMIT ${VIDEO_PAGE_ROWS}`);
   return {
-    videos: rows.flatMap(({ videoId }) =>
-      typeof videoId === "string" && videoId !== "" ? [videoId] : [],
-    ),
+    videos: videoIdsOf(rows),
     next: rows.at(-1)?.id ?? null,
   };
 };

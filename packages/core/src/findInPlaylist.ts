@@ -208,19 +208,19 @@ export const createFindableList = <T>(
       prepare: function* () {},
     };
   }
-  let steps: Generator<void, PlaylistFinder> | null = null;
+  let build: Generator<void, PlaylistFinder> | null = null;
   let finder: PlaylistFinder | null = null;
-  const stepsNow = (): Generator<void, PlaylistFinder> =>
-    (steps ??= playlistFinderSteps(songs, describe));
+  const sharedBuild = (): Generator<void, PlaylistFinder> =>
+    (build ??= playlistFinderSteps(songs, describe));
   return {
     show: (query) => {
       if (!hasFindQuery(query)) return whole;
-      finder ??= finishFinder(stepsNow());
+      finder ??= finishFinder(sharedBuild());
       const found = finder.find(query);
       return { found, ...foundInPlaylist(songs, found) };
     },
     prepare: function* () {
-      const building = stepsNow();
+      const building = sharedBuild();
       while (finder === null) {
         const next = building.next();
         if (next.done === true) {

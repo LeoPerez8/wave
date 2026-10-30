@@ -4,13 +4,13 @@ import { describe, mock, test } from "node:test";
 import {
   createFindableList,
   createLibraryQueries,
-  foldAccentsAndCase,
   LIBRARY_QUERY_LIMITS,
   longListBurstPace,
   playlistInLibrarySteps,
   type LibraryQueryOutcome,
   type YtSong,
 } from "./index.ts";
+import { foldAccentsAndCase } from "./library.ts";
 
 /** Opening a 4,875-song playlist (#842): what its first render must not do. */
 const TEXTS = [
@@ -108,7 +108,7 @@ describe("folding text", () => {
 });
 
 /** A registry on a virtual clock whose reads wait until the test settles them. */
-const registry = (paceOf?: (value: string) => number) => {
+const registry = () => {
   let time = 0;
   const timers: { at: number; run: () => void; cancelled: boolean }[] = [];
   const reads: ((outcome: LibraryQueryOutcome<string>) => void)[] = [];
@@ -125,7 +125,6 @@ const registry = (paceOf?: (value: string) => number) => {
       reads.push(settle);
     },
     limits: { throttleMs: 1500 },
-    ...(paceOf === undefined ? {} : { burstPace: paceOf }),
   });
   const advance = (ms: number): void => {
     const end = time + ms;
@@ -148,8 +147,8 @@ const PLAYLIST = { playlists: [54], tracks: true } as const;
 const holdsTwoAndThree = (_value: string, trackId: number): boolean =>
   trackId === 2 || trackId === 3;
 
-const opened = (paceOf?: (value: string) => number) => {
-  const setup = registry(paceOf);
+const opened = () => {
+  const setup = registry();
   setup.queries.attach("playlist:54", PLAYLIST, {
     visible: true,
     onChange: () => {},
@@ -205,8 +204,12 @@ describe("how often a long list's bursts re-read it", () => {
   const LONG_PACE = 20_000;
 
   test("a burst waits the pace the last result sets, counted from when its read ended", () => {
-    const { queries, reads, advance, answer } = registry(() => LONG_PACE);
-    queries.attach("playlist:54", PLAYLIST, { visible: true, onChange: () => {} });
+    const { queries, reads, advance, answer } = registry();
+    queries.attach("playlist:54", PLAYLIST, {
+      visible: true,
+      onChange: () => {},
+      burstPace: () => LONG_PACE,
+    });
     advance(500);
     answer("rows");
     queries.change({ kind: "playlists", ids: [54], burst: true });
@@ -217,8 +220,12 @@ describe("how often a long list's bursts re-read it", () => {
   });
 
   test("a pace shorter than the throttle leaves the throttle", () => {
-    const { queries, reads, advance, answer } = registry(() => 10);
-    queries.attach("playlist:54", PLAYLIST, { visible: true, onChange: () => {} });
+    const { queries, reads, advance, answer } = registry();
+    queries.attach("playlist:54", PLAYLIST, {
+      visible: true,
+      onChange: () => {},
+      burstPace: () => 10,
+    });
     answer("rows");
     queries.change({ kind: "playlists", ids: [54], burst: true });
     advance(1499);
@@ -228,8 +235,12 @@ describe("how often a long list's bursts re-read it", () => {
   });
 
   test("an edit doesn't wait for the pace", () => {
-    const { queries, reads, answer } = registry(() => LONG_PACE);
-    queries.attach("playlist:54", PLAYLIST, { visible: true, onChange: () => {} });
+    const { queries, reads, answer } = registry();
+    queries.attach("playlist:54", PLAYLIST, {
+      visible: true,
+      onChange: () => {},
+      burstPace: () => LONG_PACE,
+    });
     answer("rows");
     queries.change({ kind: "playlists", ids: [54] });
     assert.equal(reads.length, 1);

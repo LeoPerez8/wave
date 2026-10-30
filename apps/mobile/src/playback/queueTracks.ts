@@ -340,7 +340,7 @@ export const lookupFailed = (ids: readonly string[]): void => {
 export const learnTracksToLoad = <E, R>(
   trackIds: readonly string[],
   songsByIds: (ids: readonly number[]) => Effect.Effect<readonly PlayableSongRow[], E, R>,
-  savedYtTracks: () => readonly QueueTrack[] = () => [],
+  savedYtTracks: () => readonly QueueTrack[],
 ): Effect.Effect<void, never, R> =>
   Effect.suspend(() => {
     const known = queueTracks.get();
