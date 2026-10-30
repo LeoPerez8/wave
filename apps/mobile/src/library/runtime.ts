@@ -17,6 +17,7 @@ import * as Stats from "@/stats/Stats";
 import * as Auto from "@/auto/Auto";
 import * as YtMusic from "@/ytmusic/YtMusic";
 import * as WaveSync from "@/sync/WaveSync";
+import { skipVoiceNotes, storeSkipVoiceNotes } from "@/settings/skipVoiceNotes";
 
 import {
   chooseExcludedFolder,
@@ -152,6 +153,16 @@ export const chooseExcludedMusicFolder = async (): Promise<ExclusionChoice> => {
 };
 
 /** Stops excluding a folder and rescans to bring its songs back. */
+/**
+ * Turns Skip voice notes and recordings [on] or off, then rescans: on, the
+ * voice notes and recordings indexed leave the Library; off, they come back.
+ */
+export const setSkipVoiceNotes = (on: boolean): void => {
+  if (on === skipVoiceNotes()) return;
+  storeSkipVoiceNotes(on);
+  void startScanAfterCurrent(runRescan);
+};
+
 export const includeMusicFolder = async (path: string): Promise<void> => {
   await appRuntime.runPromise(includeFolder(path));
   void startScanAfterCurrent(runRescan);

@@ -1305,6 +1305,10 @@ ALTER TABLE notified_follow_shows ADD COLUMN pushed integer DEFAULT false NOT NU
 
 const m0049 = `CREATE TABLE streamed_genres (video_id text PRIMARY KEY NOT NULL, genre text);`;
 
+// Voice notes and recordings a scan left out (\`schema.ts\`'s \`skippedFiles\`, #836).
+// Self-contained, so it can take any number when merged.
+const m0050 = `CREATE TABLE skipped_files (path text PRIMARY KEY NOT NULL, size_bytes integer NOT NULL, modified_at integer NOT NULL);`;
+
 export default {
   journal: {
     entries: [
@@ -1368,6 +1372,7 @@ export default {
       { idx: 47, when: 1_795_867_200_000, tag: "0047_follow_shows", breakpoints: true },
       { idx: 48, when: 1_795_953_600_000, tag: "0048_follow_sync", breakpoints: true },
       { idx: 49, when: 1_796_040_000_000, tag: "0049_streamed_genres", breakpoints: true },
+      { idx: 50, when: 1_796_126_400_000, tag: "0050_skipped_files", breakpoints: true },
     ],
   },
   migrations: {
@@ -1421,5 +1426,6 @@ export default {
     m0047,
     m0048,
     m0049,
+    m0050,
   },
 };

@@ -623,3 +623,34 @@ test("resuming filled import downloads builds its Library matches in steps and i
     fixture.close();
   }
 });
+
+test("with Skip voice notes on, indexed voice notes leave the Library before a scan, and skipped files are passed over unread; off, every file is indexed as before", async () => {
+  const { readScanIndex } = await import("./startupJobs.ts");
+  const fixture = await createFastAgainFixture();
+  try {
+    const store = await loadLibraryStore(root, fixture.db);
+    const note = await scanned("/Startup/PTT-20260412-WA0017.opus", "PTT-20260412-WA0017");
+    const song = await scanned("/Startup/Airbag.mp3", "Airbag", { artist: "Radiohead" });
+    Effect.runSync(store.saveBatch([note, song], [], [], { linkEntries: false }));
+    const paths = (files: readonly { readonly path: string }[]) => files.map((file) => file.path);
+
+    const off = Effect.runSync(readScanIndex(store, ["/Startup"], Effect.void));
+    assert.deepEqual(paths(off.known).toSorted(), [note.path, song.path].toSorted());
+    assert.equal(off.left, 0);
+
+    const on = Effect.runSync(readScanIndex(store, ["/Startup"], Effect.void, true));
+    assert.equal(on.left, 1);
+    assert.deepEqual(paths(on.known), [song.path]);
+    assert.deepEqual([...on.indexed], [song.path]);
+    assert.deepEqual([...on.skipped], [note.path]);
+    // The native scan compares the skipped file too, so it isn't read while unchanged.
+    assert.deepEqual(paths(on.scanKnown).toSorted(), [note.path, song.path].toSorted());
+    assert.deepEqual(paths(Effect.runSync(store.knownFiles(["/Startup"]))), [song.path]);
+
+    const again = Effect.runSync(readScanIndex(store, ["/Startup"], Effect.void, true));
+    assert.equal(again.left, 0);
+    assert.deepEqual([...again.skipped], [note.path]);
+  } finally {
+    fixture.close();
+  }
+});

@@ -226,11 +226,17 @@ describe("saveBatch", () => {
 });
 
 describe("selectKnownFiles", () => {
-  test("gives an incremental scan the indexed files under the roots", async () => {
+  test("gives an incremental scan the indexed files under the roots, with what tells a voice note", async () => {
     const db = await openTestDatabase();
-    addTrack(db, { title: "Airbag", album: "OK Computer", addedAt: 1_234 });
+    addTrack(db, { title: "Airbag", album: "OK Computer", artist: "Radiohead", addedAt: 1_234 });
     assert.deepEqual(selectKnownFiles(db, ["/Music"]), [
-      { path: "/Music/OK Computer/Airbag.mp3", sizeBytes: 1_000, modifiedAt: 1_234 },
+      {
+        path: "/Music/OK Computer/Airbag.mp3",
+        sizeBytes: 1_000,
+        modifiedAt: 1_234,
+        durationMs: 180_000,
+        artist: "Radiohead",
+      },
     ]);
     assert.deepEqual(selectKnownFiles(db, ["/Other"]), []);
   });

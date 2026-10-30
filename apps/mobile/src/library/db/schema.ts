@@ -310,6 +310,17 @@ export const excludedFolders = sqliteTable("excluded_folders", {
   addedAt: integer("added_at").notNull(),
 });
 
+/**
+ * Voice notes and recordings a scan left out of the Library (Core's
+ * `isVoiceNoteOrRecording`), with the size and date it found, so the next
+ * scan passes over them unread. This phone only, never synced.
+ */
+export const skippedFiles = sqliteTable("skipped_files", {
+  path: text("path").primaryKey(),
+  sizeBytes: integer("size_bytes").notNull(),
+  modifiedAt: integer("modified_at").notNull(),
+});
+
 /** The queue and position restored (paused) on launch. A single row, id 1. */
 export const savedPlayback = sqliteTable("playback_state", {
   id: integer("id").primaryKey(),

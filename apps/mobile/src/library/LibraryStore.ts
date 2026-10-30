@@ -318,6 +318,7 @@ import {
   type SongSummary,
 } from "./db/songOrder";
 import type { KnownFile } from "./NativeScanner";
+import { selectSkippedFiles, skipFiles, unskipFiles, type SkippedFile } from "./db/skippedFiles";
 
 const DATABASE_NAME = "wave.db";
 
@@ -331,6 +332,13 @@ export class LibraryStoreError extends Data.TaggedError("LibraryStoreError")<{
 }
 
 /** A track as the scanner reported it, after Core normalisation. */
+/** An indexed file as a scan starts from it: what the native scan compares, and what tells a voice note. */
+export interface IndexedKnownFile extends KnownFile {
+  readonly durationMs: number;
+  /** The artist credit; "Unknown Artist" without an artist tag. */
+  readonly artist: string;
+}
+
 export interface IndexedTrack extends LibraryTrack {
   readonly sizeBytes: number;
   readonly modifiedAt: number;
@@ -796,7 +804,19 @@ export class LibraryStore extends Context.Service<
     /** The indexed files under [roots], for an incremental scan to skip the unchanged ones. */
     readonly knownFiles: (
       roots: readonly string[],
-    ) => Effect.Effect<readonly KnownFile[], LibraryStoreError>;
+    ) => Effect.Effect<readonly IndexedKnownFile[], LibraryStoreError>;
+    /** The voice notes and recordings under [roots] that scans left out, for the next one to pass over. */
+    readonly skippedFiles: (
+      roots: readonly string[],
+    ) => Effect.Effect<readonly SkippedFile[], LibraryStoreError>;
+    /**
+     * Leaves [files] (voice notes and recordings) out of the Library: a song
+     * indexed at one of them goes as Remove from Library takes it, never as a
+     * missing song. Resolves to how many songs left.
+     */
+    readonly skipFiles: (files: readonly SkippedFile[]) => Effect.Effect<number, LibraryStoreError>;
+    /** Forgets the skipped files at [paths]: gone, or music after all. */
+    readonly unskipFiles: (paths: readonly string[]) => Effect.Effect<void, LibraryStoreError>;
     /** What identifies the indexed files at [paths] when they turn up elsewhere. */
     readonly indexedFiles: (
       paths: readonly string[],
@@ -1776,6 +1796,12 @@ const make = Effect.gen(function* () {
       ),
 
     knownFiles: (roots) => attempt("read the library index", () => selectKnownFiles(db, roots)),
+    skippedFiles: (roots) =>
+      attempt("read skipped voice notes", () => selectSkippedFiles(db, roots)),
+    skipFiles: (files) =>
+      writeAttempt("skip voice notes", () => skipFiles(db, splits, files, Date.now())),
+    unskipFiles: (paths) =>
+      writeAttempt("forget skipped voice notes", () => unskipFiles(db, paths)),
 
     indexedFiles: (paths) =>
       attempt("read missing files", () =>
