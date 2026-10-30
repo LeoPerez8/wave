@@ -1,5 +1,4 @@
 import {
-  followFeed,
   parseHomeFollowSnapshot,
   storedHomeFollowSnapshot,
   type HomeFollowSnapshot,
@@ -8,6 +7,7 @@ import * as Effect from "effect/Effect";
 import { LibraryStore } from "@/library/LibraryStore";
 import { appRuntime } from "@/library/runtime";
 import { persistedSetting } from "@/lib/persistedSetting";
+import { readHomeFollowSnapshot } from "./readHomeFollowSnapshot";
 import { currentFollowCountry } from "@/settings/followCountry";
 
 export const knownHomeFollow = persistedSetting<HomeFollowSnapshot | undefined>({
@@ -16,42 +16,33 @@ export const knownHomeFollow = persistedSetting<HomeFollowSnapshot | undefined>(
   write: (value) => (value === undefined ? null : storedHomeFollowSnapshot(value)),
   equals: (a, b) => JSON.stringify(a) === JSON.stringify(b),
 });
-let reading: Promise<HomeFollowSnapshot> | undefined;
-/** One shared database read; failures leave the previous phone-local answer intact. */
-export const readHomeFollow = (): Promise<HomeFollowSnapshot> => {
-  reading ??= appRuntime
+const reading = new Map<HomeFollowSnapshot | undefined, Promise<HomeFollowSnapshot>>();
+/** Coalesce reads for the same visit; persist current follows for the next opening. */
+export const readHomeFollowForVisit = (
+  admitted?: HomeFollowSnapshot,
+): Promise<HomeFollowSnapshot> => {
+  const pending = reading.get(admitted);
+  if (pending) return pending;
+  const request = appRuntime
     .runPromise(
       Effect.gen(function* () {
         const store = yield* LibraryStore;
-        const follows = yield* store.listFollows;
-        const releases = yield* store.followReleaseCache;
-        const shows = yield* store.followShowCache;
-        const now = Date.now();
-        const eligible = followFeed({
-          follows,
-          releases: releases.artists.flatMap((a) => a.releases),
-          hidden: releases.hidden,
-          countedPlays: [],
-          now,
-        }).releaseCards;
-        const listening = yield* store.followReleaseListening(eligible);
-        const country = currentFollowCountry();
-        const feed = followFeed({
-          follows,
-          ...listening,
-          hidden: releases.hidden,
-          shows: shows.artists.flatMap((a) => a.shows),
-          country,
-          now,
-        });
-        const value = { follows, releases: feed.releaseCards, shows: feed.showCards, country };
-        const bounded = parseHomeFollowSnapshot(storedHomeFollowSnapshot(value))!;
-        knownHomeFollow.set(bounded);
-        return bounded;
+        const result = yield* readHomeFollowSnapshot(
+          store,
+          currentFollowCountry(),
+          Date.now(),
+          admitted,
+        );
+        knownHomeFollow.set(result.known);
+        return result.visit;
       }),
     )
     .finally(() => {
-      reading = undefined;
+      reading.delete(admitted);
     });
-  return reading;
+  reading.set(admitted, request);
+  return request;
 };
+
+/** Refresh the phone cache without admitting cards to a visible visit. */
+export const readHomeFollow = (): Promise<HomeFollowSnapshot> => readHomeFollowForVisit();

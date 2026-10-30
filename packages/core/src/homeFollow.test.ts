@@ -114,3 +114,33 @@ test("the phone cache bounds each shelf and keeps only the artists needed to dra
     ["a"],
   );
 });
+
+test("following and unfollowing keep the opening cards until the next Home visit", () => {
+  const unfollowed = { ...known, follows: [] };
+  const visible = homeFollowCards(unfollowed, { now, admitted: known });
+  assert.deepEqual(
+    visible.releaseCards.map((r) => r.key),
+    ["r"],
+  );
+  assert.deepEqual(
+    visible.showCards.map((s) => s.id),
+    ["s"],
+  );
+  assert.deepEqual(homeFollowCards(unfollowed, { now }), { releaseCards: [], showCards: [] });
+});
+
+test("an unfollowed visit still removes hidden releases, counted plays and expired shows", () => {
+  const source = { ...known, follows: [], releases: [{ ...known.releases[0]!, videoIds: ["v"] }] };
+  assert.equal(
+    homeFollowCards(source, { now, admitted: known, hidden: ["r"] }).releaseCards.length,
+    0,
+  );
+  assert.equal(
+    homeFollowCards(source, { now, admitted: known, countedPlays: ["v"] }).releaseCards.length,
+    0,
+  );
+  assert.equal(
+    homeFollowCards(source, { now: Date.parse("2026-11-02"), admitted: known }).showCards.length,
+    0,
+  );
+});
