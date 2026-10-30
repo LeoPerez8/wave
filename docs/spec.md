@@ -808,7 +808,7 @@ Every translation ticket follows it, so one English term always gets the same Po
 | Layout                                                                          | Layout                                                                          |
 | Swipe actions                                                                   | Ações de deslizar                                                               |
 | Playback                                                                        | Reprodução                                                                      |
-| Listening History                                                               | Histórico de Audição                                                            |
+| Listening History                                                               | Histórico de Ouvidas                                                            |
 | Lyrics and tags                                                                 | Letras e tags                                                                   |
 | Downloads                                                                       | Downloads                                                                       |
 | Accounts                                                                        | Contas                                                                          |
@@ -837,7 +837,7 @@ Every translation ticket follows it, so one English term always gets the same Po
 | Recap                                                                           | Retrospectiva                                                                   |
 | Stats                                                                           | Estatísticas                                                                    |
 | Last 7 days, Last 30 days, Last 12 months, All time                             | Últimos 7 dias, Últimos 30 dias, Últimos 12 meses, Todo o período               |
-| Listening History                                                               | Histórico de Audição                                                            |
+| Listening History                                                               | Histórico de Ouvidas                                                            |
 | Find in Playlist (Find in Songs, Find in Albums…)                               | Buscar na Playlist (Buscar em Músicas, Buscar em Álbuns…)                       |
 | Keep Find Field Visible                                                         | Manter Campo de Busca Visível                                                   |
 | Recognize Song                                                                  | Reconhecer Música                                                               |
