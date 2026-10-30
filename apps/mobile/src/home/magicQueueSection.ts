@@ -1,15 +1,18 @@
 import { currentLocalisation } from "@/localisation/localisation";
 /**
- * Home draws nine random playable Library songs on each visit, independently
- * of recommendations; with none in the Library, nine streamed songs of the
- * Artist mixes (Core's `magicQueueRow`).
+ * Home draws nine random seeds on each visit, from the Library's playable
+ * songs and the playlists' YT Music entries together, independently of
+ * recommendations; with neither, nine streamed songs of the Artist mixes
+ * (Core's `magicQueueRow`).
  */
 import {
   magicQueueMixPicks,
   magicQueueRow,
+  magicQueueSeedId,
   magicQueueShown,
   type DiscoverMixesSection,
   type MagicQueueMixPicks,
+  type MagicQueueSeed,
   type MagicQueueShown as CoreMagicQueueShown,
   type YtAlbumSong,
 } from "@wave/core";
@@ -36,36 +39,40 @@ export interface MagicQueueSection {
 
 const videoIdsOf = (songs: readonly YtAlbumSong[]): string[] => songs.map((song) => song.videoId);
 
+/** A seed of the row: a Library song, or a playlist's YT Music entry. */
+type Seed = MagicQueueSeed<PlayableSongRow>;
+
 /**
- * Nine random Library songs through the same immediate local-query path as
- * the rest of Home: no saved daily picks, taste profile, recommendation
- * deadline, settlement or free turns. Null until the Library is first read.
- * A focus after leaving Home draws again; ordinary re-renders and Now Playing
- * covering the screen keep this visit's songs.
+ * Nine random seeds (Library songs and playlist entries) through the same
+ * immediate local-query path as the rest of Home: no saved daily picks,
+ * taste profile, recommendation deadline, settlement or free turns. Null
+ * until they're first read. A focus after leaving Home draws again; ordinary
+ * re-renders and Now Playing covering the screen keep this visit's seeds.
  */
-const useLibraryPicks = (enabled: boolean) => {
+const usePoolPicks = (enabled: boolean) => {
   const [read, setRead] = useState(() => randomMagicQueueRead(Math.random));
   const query = useMemo(
     () => libraryQuery(read.key, read.reads, Effect.flatMap(LibraryStore, read.read)),
     [read],
   );
-  const answer = useLibraryQuery<readonly PlayableSongRow[] | null>(enabled ? query : null, null);
-  const [shown, setShown] = useState<readonly PlayableSongRow[] | null>(null);
+  const answer = useLibraryQuery<readonly Seed[] | null>(enabled ? query : null, null);
+  const [shown, setShown] = useState<readonly Seed[] | null>(null);
   if (answer !== null && answer !== shown) setShown(answer);
-  return { songs: answer ?? shown, setRead };
+  return { seeds: answer ?? shown, setRead };
 };
 
 /**
- * The row's songs and their refresh: the Library's when it has songs with a
- * file, else nine of [artistMixes]' streamed songs (what the Artist mixes
- * row shows), drawn again on each visit and kept in their places while the
- * mixes rebuild or re-rank. Hidden while [ytMusic] is off.
+ * The row's songs and their refresh: nine seeds of the Library's songs with
+ * a file and the playlists' YT Music entries when there are any, else nine
+ * of [artistMixes]' streamed songs (what the Artist mixes row shows), drawn
+ * again on each visit and kept in their places while the mixes rebuild or
+ * re-rank. Hidden while [ytMusic] is off.
  */
 export const useMagicQueueSection = (
   ytMusic: boolean,
   artistMixes: DiscoverMixesSection,
 ): MagicQueueSection => {
-  const { songs: librarySongs, setRead } = useLibraryPicks(ytMusic);
+  const { seeds, setRead } = usePoolPicks(ytMusic);
   // Null: draw afresh from the mixes on the next render.
   const [mixPicks, setMixPicks] = useState<MagicQueueMixPicks | null>(null);
   const opened = useRef(false);
@@ -79,7 +86,7 @@ export const useMagicQueueSection = (
       opened.current = true;
     }, [setRead, ytMusic]),
   );
-  const row = magicQueueRow({ ytMusic, library: librarySongs, artistMixes });
+  const row = magicQueueRow({ ytMusic, seeds, artistMixes });
   const { shown, picks } = magicQueueShown(row, mixPicks, Math.random);
   // Kept for the next render: the same mixes keep these songs.
   if (picks !== mixPicks) setMixPicks(picks);
@@ -101,7 +108,7 @@ export const useMagicQueueSection = (
       });
       return;
     }
-    const previous = (librarySongs ?? []).map((song) => song.id);
+    const previous = (seeds ?? []).map(magicQueueSeedId);
     const next = randomMagicQueueRead(Math.random);
     setRead(next);
     void showToast(strings.discover.newSongs, {
@@ -122,6 +129,6 @@ export const startMagicQueueFrom = (song: PlayableSongRow): void =>
     startMagicQueue({ kind: "track", id: String(song.id), title: song.title }, [song]),
   );
 
-/** Starts a Magic Queue from a mix's streamed [song], as its long-press menu's Magic Queue does. */
+/** Starts a Magic Queue from a streamed [song] (a mix's or a playlist's), as its long-press menu's Magic Queue does. */
 export const startStreamedMagicQueueFrom = (song: YtAlbumSong): void =>
   runMagicQueueStart(startStreamedMagicQueue(song));
