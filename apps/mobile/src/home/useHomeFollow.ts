@@ -35,7 +35,14 @@ const useHomeFollowState = (reading: boolean) => {
     return { admitted: known, latest: known };
   });
   const admitted = useRef(visit.admitted);
+  const entering = useRef(false);
+  const entered = useRef(false);
+  const pendingRefresh = useRef(false);
   const refresh = useCallback(() => {
+    if (entering.current) {
+      pendingRefresh.current = true;
+      return;
+    }
     const opening = admitted.current;
     void readHomeFollowForVisit(opening)
       .then((latest) => {
@@ -49,29 +56,42 @@ const useHomeFollowState = (reading: boolean) => {
     let active = true;
     let controller: AbortController | undefined;
     let stopHistory = () => {};
+    let entry = 0;
     const enter = (opening: boolean) => {
+      const turn = ++entry;
       controller?.abort();
       if (!sight.visible()) return;
-      const known = knownHomeFollow.get() ?? empty;
+      entered.current = true;
+      entering.current = true;
       setNow(Date.now());
-      if (opening) {
-        admitted.current = known;
-        setVisit({ admitted: known, latest: known });
-      }
-      refresh();
-      controller = new AbortController();
-      if (enabled)
-        void appRuntime
-          .runPromise(checkFollowReleases(yt), { signal: controller.signal })
-          .then(refresh)
-          .catch(() => {});
+      // Read saved follows/levels/country before admitting this visit or starting network checks.
+      const previous = admitted.current;
+      void readHomeFollowForVisit(opening ? undefined : previous)
+        .then((known) => {
+          if (!active || !sight.visible() || entry !== turn) return;
+          if (opening) admitted.current = known;
+          entering.current = false;
+          setVisit({ admitted: opening ? known : previous, latest: known });
+          if (pendingRefresh.current) {
+            pendingRefresh.current = false;
+            refresh();
+          }
+          controller = new AbortController();
+          if (enabled)
+            void appRuntime
+              .runPromise(checkFollowReleases(yt, "home", false), { signal: controller.signal })
+              .then((changed) => {
+                if (changed && entry === turn) refresh();
+              })
+              .catch(() => {});
+        })
+        .catch(() => {
+          if (entry === turn) entering.current = false;
+        });
     };
-    enter(false);
+    enter(!entered.current);
     const stopSight = sight.subscribe(() => enter(true));
     const stopSaved = followsSaved.subscribe(() => {
-      if (sight.visible()) refresh();
-    });
-    const stopKnown = knownHomeFollow.subscribe(() => {
       if (sight.visible()) refresh();
     });
     void appRuntime
@@ -88,11 +108,12 @@ const useHomeFollowState = (reading: boolean) => {
     });
     return () => {
       active = false;
+      ++entry;
+      entering.current = false;
       controller?.abort();
       stopHistory();
       stopSight();
       stopSaved();
-      stopKnown();
       stopTimer();
     };
   }, [sight, enabled, yt, refresh, reading]);
@@ -106,6 +127,8 @@ const useHomeFollowState = (reading: boolean) => {
   return { ...cards, follows: visit.latest.follows, refresh };
 };
 
+const HomeFollowPresence = createContext(false);
+export const useHomeFollowPresence = () => useContext(HomeFollowPresence);
 const HomeFollowContext = createContext<ReturnType<typeof useHomeFollowState> | null>(null);
 export function HomeFollowProvider({
   children,
@@ -115,7 +138,11 @@ export function HomeFollowProvider({
   reading?: boolean;
 }) {
   const value = useHomeFollowState(reading);
-  return createElement(HomeFollowContext.Provider, { value }, children);
+  return createElement(
+    HomeFollowPresence.Provider,
+    { value: true },
+    createElement(HomeFollowContext.Provider, { value }, children),
+  );
 }
 export const useHomeFollowContext = () => useContext(HomeFollowContext);
 export const useHomeFollow = () => {

@@ -58,9 +58,10 @@ const ytRead = <A>(query: string, read: Effect.Effect<A, YtMusicError>) =>
 export const checkFollowReleases = (
   youtubeEnabled = ytMusicEnabled(),
   context: FollowCheckContext = "home",
+  refreshCache = true,
 ) =>
   Effect.gen(function* () {
-    if (!allowed()) return;
+    if (!allowed()) return false;
     const store = yield* LibraryStore;
     const follows = yield* store.listFollows;
     const cache = yield* store.followReleaseCache;
@@ -76,13 +77,13 @@ export const checkFollowReleases = (
         context,
       })
     )
-      return;
+      return false;
     const yt = yield* YtMusic;
     // A shows failure never holds back the releases.
-    yield* checkFollowShows(context).pipe(Effect.ignore);
+    let changed = yield* checkFollowShows(context, false).pipe(Effect.orElseSucceed(() => false));
     for (const follow of follows) {
       yield* settledTurnEffect;
-      if (!allowed()) return;
+      if (!allowed()) break;
       const previous = cache.artists.find((a) => a.key === follow.key);
       if (!checkDue(previous?.checkedAt ?? null, Date.now(), context)) continue;
       yield* Effect.gen(function* () {
@@ -168,11 +169,15 @@ export const checkFollowReleases = (
         const current = yield* store.getFollow(follow.name);
         if (current === null || current.followedAt !== follow.followedAt) return;
         yield* store.saveFollowReleases(follow.key, releases, Date.now());
+        changed = true;
       }).pipe(Effect.ignore);
     }
+    return changed;
   }).pipe(
-    Effect.tap(() =>
-      allowed() ? Effect.promise(readHomeFollow).pipe(Effect.ignore) : Effect.void,
+    Effect.tap((changed) =>
+      changed && refreshCache && allowed()
+        ? Effect.tryPromise(readHomeFollow).pipe(Effect.ignore)
+        : Effect.void,
     ),
   );
 

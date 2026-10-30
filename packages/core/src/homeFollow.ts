@@ -60,17 +60,20 @@ const nullableString = (v: unknown): boolean => v === null || typeof v === "stri
 const fields = (v: Record<string, unknown>, keys: string[]): boolean =>
   keys.every((k) => typeof v[k] === "string");
 /** Keep at most 200 cards per shelf; this is a first-paint cache, not the source of truth. */
-export const storedHomeFollowSnapshot = (value: HomeFollowSnapshot): string => {
+export const boundHomeFollowSnapshot = (value: HomeFollowSnapshot): HomeFollowSnapshot => {
   const releases = value.releases.slice(0, 200);
   const shows = value.shows.slice(0, 200);
   const keys = new Set([...releases, ...shows].map((c) => c.artistKey));
-  return JSON.stringify({
+  return {
     ...value,
     releases,
     shows,
     follows: value.follows.filter((f) => keys.has(f.key)),
-  });
+  };
 };
+export const storedHomeFollowSnapshot = (value: HomeFollowSnapshot): string =>
+  JSON.stringify(boundHomeFollowSnapshot(value));
+
 export const parseHomeFollowSnapshot = (stored: string | null): HomeFollowSnapshot | undefined => {
   try {
     const v: unknown = JSON.parse(stored ?? "null");

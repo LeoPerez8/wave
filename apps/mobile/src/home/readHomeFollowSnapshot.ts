@@ -1,8 +1,7 @@
 import {
   followFeed,
   homeFollowCards,
-  parseHomeFollowSnapshot,
-  storedHomeFollowSnapshot,
+  boundHomeFollowSnapshot,
   type HomeFollowSnapshot,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
@@ -36,7 +35,7 @@ export const readHomeFollowSnapshot = (
     const eligibility = { ...options, countedPlays: listening.countedPlays };
     const feed = followFeed({ ...source, ...eligibility });
     const value = { follows, releases: feed.releaseCards, shows: feed.showCards, country };
-    const bounded = parseHomeFollowSnapshot(storedHomeFollowSnapshot(value))!;
+    const bounded = boundHomeFollowSnapshot(value);
     if (admitted === undefined) return { known: bounded, visit: bounded };
     const cards = homeFollowCards(source, { ...eligibility, admitted });
     return {
