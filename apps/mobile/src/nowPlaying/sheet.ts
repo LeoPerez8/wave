@@ -3,6 +3,7 @@ import {
   dismissTiming,
   noteTimingLinkClose,
   beginTiming,
+  timingBackPressed,
   timingResponse,
   timingTransitionEnd,
   timingSurfaceCommitted,
@@ -234,6 +235,7 @@ export const releaseNowPlaying = (offset: number, velocity: number): void => {
  */
 export const closeNowPlaying = (then?: () => void, source?: "Back" | "chevron" | "card"): void => {
   if (source !== undefined) noteTimingLinkClose(source);
+  if (source === "Back") timingBackPressed();
   afterClose = then ?? null;
   if (
     isNowPlayingShown() &&

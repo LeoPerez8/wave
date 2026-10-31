@@ -50,28 +50,19 @@ export const registerTimingBackground = (name: string, read: () => string | null
 /** A work item starting/ending in the timing window is retained even when it ends before settlement. */
 export const timingBackgroundChanged = (): void => session.backgroundChanged();
 
-let touchAt: number | undefined;
 /** RN's native timestamps and performance.now share the monotonic clock on Android. */
-export const timingTouch = (event: GestureResponderEvent): void => {
-  const now = performance.now();
-  const native = event.nativeEvent.timestamp;
-  // Older RN's epoch timestamp must not produce a negative duration.
-  touchAt = native <= now && now - native < 60_000 ? native : now;
-};
-export const hasTimingTouch = (): boolean => touchAt !== undefined;
-const takeTouch = (): number => {
-  const now = performance.now();
-  const at = touchAt !== undefined && now - touchAt < 60_000 ? touchAt : now;
-  touchAt = undefined;
-  return at;
-};
+export const timingTouch = (event: GestureResponderEvent): void =>
+  session.touch(event.nativeEvent.timestamp);
+export const hasTimingTouch = session.hasTouch;
+/** Android's Back has no touch: what it begins counts from now, not from the last scroll. */
+export const timingBackPressed = session.forgetTouch;
 
 let surface: string | undefined;
 export const setTimingSurface = (name: string | undefined): void => {
   surface = name;
 };
 export const beginTiming = (kind: TimingKind, to: string): number => {
-  const id = session.begin(kind, to, takeTouch(), true, surface);
+  const id = session.beginTouched(kind, to, surface);
   if (surface === "Now Playing" && (kind === "artistLink" || kind === "albumLink"))
     linkTaps.begin(id, { kind, from: surface, to });
   return id;
@@ -85,7 +76,7 @@ export const continueTiming = (
   if (
     active !== null &&
     ["artistLink", "albumLink", "goToArtist", "choiceCard"].includes(active.kind) &&
-    touchAt === undefined
+    !session.hasTouch()
   ) {
     return kind === "choiceCard" ? session.reclassify(kind, to)! : active.id;
   }
@@ -143,6 +134,8 @@ export const timingStackListeners = {
   transitionStart: (event: { target?: string; data: { closing: boolean } }): void => {
     let active = session.active();
     if (active === null && event.data.closing) {
+      // No press of ours started this close: nothing says it came from a touch.
+      timingBackPressed();
       beginTiming("pop", "Back");
       active = session.active();
     }
@@ -167,7 +160,7 @@ AppState.addEventListener("change", (state) => {
     if (frameCollection === null) session.leave();
     else void frameCollection.flush().then(() => session.leave());
     nativeTransitions.clear();
-    touchAt = undefined;
+    session.forgetTouch();
   }
   if (state === "active" && appState !== "active") timingRouteCommitted(session.route());
   appState = state;

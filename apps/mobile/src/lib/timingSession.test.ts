@@ -341,3 +341,53 @@ test("the real slow-read boundary contributes its operation to the opening scree
   flush();
   assert.match(lines.at(-1)!, /Read "artist songs" held JS 450 ms \(2 rows\) on \/artist\/12$/);
 });
+
+/** A pop drawn 20 ms after it began, as the phone's are (#866). */
+const finishPop = (h: ReturnType<typeof setup>, id: number, began: number) => {
+  h.at(began + 10);
+  h.session.response(id);
+  h.at(began + 20);
+  h.session.frame(id);
+  h.session.content(id);
+  h.at(began + 450);
+  h.session.end(id);
+};
+
+test("a Back press counts from itself, not from the last touch on the screen", () => {
+  const h = setup();
+  h.at(100);
+  h.session.touch(100); // A scroll of the playlist; nothing timed starts from it.
+  h.at(3000);
+  h.session.forgetTouch();
+  assert.equal(h.session.hasTouch(), false);
+  const id = h.session.beginTouched("pop", "/playlists");
+  finishPop(h, id, 3000);
+  assert.deepEqual(h.lines, []);
+});
+
+test("an on-screen press counts from its touch, which it uses up", () => {
+  const h = setup();
+  h.at(100);
+  h.session.touch(90);
+  assert.equal(h.session.hasTouch(), true);
+  h.at(3000);
+  const id = h.session.beginTouched("pop", "/playlists");
+  assert.equal(h.session.hasTouch(), false);
+  finishPop(h, id, 3000);
+  assert.match(h.lines[0]!, /^Slow pop to \/playlists from \/: response 2\.9 s/);
+  h.lines.length = 0;
+  const next = h.session.beginTouched("pop", "/");
+  finishPop(h, next, 3450);
+  assert.deepEqual(h.lines, []);
+});
+
+test("a touch stamped in another clock or a minute ago counts as now", () => {
+  for (const stamp of [1_700_000_000_000, 1000]) {
+    const h = setup();
+    h.at(100_000);
+    h.session.touch(stamp);
+    const id = h.session.beginTouched("pop", "/playlists");
+    finishPop(h, id, 100_000);
+    assert.deepEqual(h.lines, []);
+  }
+});
