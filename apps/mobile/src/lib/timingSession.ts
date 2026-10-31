@@ -48,10 +48,14 @@ interface Pending {
   missedFrames: number;
 }
 
+/** A touch older than this made nothing that's beginning now. */
+const TOUCH_LIFE_MS = 60_000;
+
 export const createTimingSession = (ports: Ports) => {
   let nextId = 0;
   let route = "/";
   let pending: Pending | null = null;
+  let touchAt: number | undefined;
   let settled = false;
   let since = ports.wallNow();
   let lastSummary: number | null = null;
@@ -163,6 +167,12 @@ export const createTimingSession = (ports: Ports) => {
     emit(pending, "start");
     return pending.id;
   };
+  const takeTouch = (): number => {
+    const now = ports.now();
+    const at = touchAt !== undefined && now - touchAt < TOUCH_LIFE_MS ? touchAt : now;
+    touchAt = undefined;
+    return at;
+  };
   const update = (id: number | undefined, set: (p: Pending) => void) => {
     if (pending === null || (id !== undefined && pending.id !== id)) return;
     set(pending);
@@ -171,6 +181,23 @@ export const createTimingSession = (ports: Ports) => {
   const session = {
     begin,
     cancel,
+    /** A touch began, at its native timestamp; the press it turns into counts from there. */
+    touch: (timestamp: number): void => {
+      const now = ports.now();
+      // Older RN's epoch timestamp must not produce a negative duration.
+      touchAt = timestamp <= now && now - timestamp < TOUCH_LIFE_MS ? timestamp : now;
+    },
+    hasTouch: (): boolean => touchAt !== undefined,
+    /**
+     * What's next begun has no touch of its own: Android's Back. Otherwise it would count
+     * from the last touch on the screen, a scroll seconds ago, and read as a stall (#866).
+     */
+    forgetTouch: (): void => {
+      touchAt = undefined;
+    },
+    /** A gesture counted from the touch that made it (or from now, with none), using that touch up. */
+    beginTouched: (kind: TimingKind, to: string, from?: string): number =>
+      begin(kind, to, takeTouch(), true, from ?? route),
     /** [id]'s tap opened nothing: it ends unmeasured, and the screen it was made on is settled. */
     dismiss: (id: number): void => {
       if (pending === null || pending.id !== id) return;
