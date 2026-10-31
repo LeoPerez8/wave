@@ -1,5 +1,6 @@
 import {
   geniusAbout,
+  geniusReferents,
   geniusTranslationTarget,
   songLookup,
   type GeniusReferent,
@@ -134,10 +135,10 @@ export const useGenius = (
   const saved = ask !== null && answer?.ask === ask ? answer.saved : null;
   return useMemo(() => {
     if (saved === null) return null;
-    const { description: original, referents } = saved;
+    const { description: original } = saved;
     const shown = geniusAbout(saved, target);
     return {
-      referents,
+      referents: geniusReferents(saved, target),
       about: original === null || shown === null ? null : { original, shown },
     };
   }, [saved, target]);

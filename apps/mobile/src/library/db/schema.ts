@@ -390,7 +390,8 @@ export const playlists = sqliteTable(
     updatedAt: integer("updated_at").notNull(),
     /**
      * The image the owner gave the playlist, square, shown in place of its
-     * mosaic (`imageThumbPath` in lists). Files in Wave's own storage; they stay
+     * mosaic (`imageThumbPath` in lists, and `catalog/artworkUri.ts` picks the
+     * file by the size shown). Files in Wave's own storage; they stay
      * on this phone, so setting one isn't a change (no stamp, never synced).
      */
     imagePath: text("image_path"),

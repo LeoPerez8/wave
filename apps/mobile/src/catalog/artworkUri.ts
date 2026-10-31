@@ -32,8 +32,14 @@ export function artworkUri(
   if (input == null) return undefined;
   const source = typeof input === "string" ? { artworkPath: input } : input;
   const requested = typeof size === "number" ? artworkSize(size) : size;
-  // Only embedded artwork uses derived sizes. Photos and playlist images keep their own files.
   const cachedPath = source.artworkPath ?? source.thumbPath;
+  // A playlist's own image is a pair of files, `<hash>_thumb.jpg` and `<hash>.jpg`, and has no medium.
+  const playlistImage = cachedPath?.match(
+    /^((?:file:\/\/)?\/(?:[^/]+\/)*artwork\/playlists\/[0-9a-f]{40})(?:_thumb)?\.jpg$/,
+  );
+  if (playlistImage != null)
+    return fileUri(`${playlistImage[1]}${requested === "thumbnail" ? "_thumb" : ""}.jpg`);
+  // Only embedded artwork uses derived sizes. Photos keep their own files.
   const local = cachedPath?.match(
     /^(?:file:\/\/)?\/(?:[^/]+\/)*artwork\/([0-9a-f]{40})(?:_(thumb|medium)\.jpg|\.(?:jpg|png|webp|gif|bmp|img))$/,
   );

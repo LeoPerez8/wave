@@ -29,6 +29,8 @@ import {
 } from "@/catalog/Skeletons";
 
 import { useChromeInset } from "@/chrome/chrome";
+import { CompactTitleHead, CompactTitleMark, useCompactTitleList } from "@/components/CompactTitle";
+import { useListScroll } from "@/lib/useListScroll";
 import { playPage } from "@/playback/actions";
 
 import { openAlbumActions } from "@/playback/ActionsMenu";
@@ -257,14 +259,16 @@ function ArtistHead({ artist }: { artist: ArtistRow }) {
   return (
     <View className="items-center" style={{ gap: CELL * 2, paddingBottom: CELL * 2 }}>
       <ArtistImage artist={artist} size={size} large />
-      <Text
-        accessibilityRole="header"
-        numberOfLines={2}
-        className="text-center font-sans text-title1 font-light text-foreground"
-        style={{ letterSpacing: -0.4 }}
-      >
-        {artist.name}
-      </Text>
+      <CompactTitleMark>
+        <Text
+          accessibilityRole="header"
+          numberOfLines={2}
+          className="text-center font-sans text-title1 font-light text-foreground"
+          style={{ letterSpacing: -0.4 }}
+        >
+          {artist.name}
+        </Text>
+      </CompactTitleMark>
     </View>
   );
 }
@@ -363,6 +367,8 @@ function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegr
   // Find in artist narrows the songs on the page, the Library's or the mixed list with Online.
   const findInArtist = useFindInLegendList(list, pageSongs, entryText, true);
   const { found } = findInArtist;
+  const { scrollRef, scroll } = useListScroll(findInArtist.initialOffset);
+  useCompactTitleList({ list, find: findInArtist, scroll });
   const items = useMemo(
     () =>
       artistItems(
@@ -458,10 +464,13 @@ function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegr
   return (
     <FindFrame find={findInArtist} of="artist">
       <SongList
+        animated
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
         scrollEnabled={scrollable}
+        scrollEventThrottle={16}
         ref={list}
+        refScrollView={scrollRef}
         className="flex-1"
         data={items}
         keyExtractor={itemKey}
@@ -484,7 +493,9 @@ function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegr
         initialScrollOffset={findInArtist.initialOffset}
         ListHeaderComponent={
           // YouTube Music's songs still on their way stand under the skeletons, not "No songs match".
-          <FindHead find={findInArtist} header={head} of="artist" allRead={!ytLoading} />
+          <CompactTitleHead>
+            <FindHead find={findInArtist} header={head} of="artist" allRead={!ytLoading} />
+          </CompactTitleHead>
         }
         ListFooterComponent={
           ytView === null ? null : ytView.note === "loading" ? (
@@ -529,7 +540,7 @@ export default function ArtistScreen() {
         ? null
         : { artist: detail.artist, detail };
   return (
-    <DetailFrame detail={shown} noun="artist">
+    <DetailFrame detail={shown} noun="artist" compactTitle={({ artist }) => artist.name}>
       {(artist) => <ArtistContent shown={artist} openedIntegrated={openedIntegrated} />}
     </DetailFrame>
   );

@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { readFileSync } from "node:fs";
-import { GENIUS_REFERENTS_PER_PAGE, geniusAbout, storedGenius } from "@wave/core";
+import {
+  GENIUS_REFERENTS_PER_PAGE,
+  geniusAbout,
+  geniusReferents,
+  savedGenius,
+  storedGenius,
+  type SavedGenius,
+} from "@wave/core";
 
 import {
   geniusStorageKey,
@@ -47,7 +54,7 @@ const phone = () => {
     },
     post: async (_url, body) => {
       posts.push(body);
-      return [["Uma canção sobre um mundo em paz.", "en"]];
+      return body.split("&").map(() => ["Uma canção sobre um mundo em paz.", "en"]);
     },
   };
   return { service, requests, posts, storage };
@@ -233,6 +240,14 @@ test("Google's translation is saved with the answer and reopens offline", async 
   const first = await open(service);
   assert.ok(first);
   assert.equal(geniusAbout(first, "pt"), IN_PORTUGUESE);
+  const shown = geniusReferents(first, "pt")!;
+  assert.ok(shown.length > 0);
+  for (const { annotations } of shown)
+    assert.ok(annotations.every(({ text }) => text === IN_PORTUGUESE));
+  assert.deepEqual(
+    shown.map(({ fragment }) => fragment),
+    first.referents!.map(({ fragment }) => fragment),
+  );
   assert.equal(posts.length, 1);
   const asked = requests.length;
   service.get = async () => {
@@ -290,9 +305,10 @@ test("insights turned off during the translation save nothing", async () => {
   const saved = await loadGenius(inPortuguese, service, 100);
   assert.ok(saved);
   const stored = storage.get(geniusStorageKey(ask.key));
-  service.post = async () => {
+  const { post } = service;
+  service.post = async (url, body) => {
     service.enabled = () => false;
-    return [[IN_PORTUGUESE, "en"]];
+    return post(url, body);
   };
   assert.equal(await translateGenius(inPortuguese, saved, service), saved);
   assert.equal(storage.get(geniusStorageKey(ask.key)), stored);
@@ -309,4 +325,71 @@ test("an answer saved before this feature is translated on the next opening", as
   assert.equal(saved && geniusAbout(saved, "pt"), IN_PORTUGUESE);
   assert.deepEqual(posts, ["q=About"]);
   assert.equal(requests.length, 0);
+});
+
+const replyTo = (body: string): unknown =>
+  body.split("&").map((field) => [`pt ${decodeURIComponent(field.slice(2))}`, "en"]);
+const manyAnnotations = (saved: SavedGenius): SavedGenius => ({
+  ...saved,
+  referents: Array.from({ length: 900 }, (_, id) => ({
+    id,
+    fragment: `line ${id}`,
+    annotations: [
+      { text: `${id}: ${"a long explanation ".repeat(40)}end.`, authors: [], state: "accepted" },
+    ],
+  })),
+});
+
+test("a song with many annotations is translated whole, over several requests", async () => {
+  const { service, posts, storage } = phone();
+  const saved = manyAnnotations((await loadGenius(inPortuguese, service, 100))!);
+  service.post = async (_url, body) => {
+    posts.push(body);
+    return replyTo(body);
+  };
+  const translated = await translateGenius(inPortuguese, saved, service);
+  assert.ok(posts.length > 1);
+  geniusReferents(translated, "pt")!.forEach(({ annotations }, at) =>
+    assert.equal(annotations[0]!.text, `pt ${saved.referents![at]!.annotations[0]!.text}`),
+  );
+  assert.deepEqual(savedGenius(storage.get(geniusStorageKey(ask.key))!, 200, ask.song), translated);
+  const opened = posts.length;
+  service.post = async () => {
+    throw Error("offline");
+  };
+  assert.equal(await translateGenius(inPortuguese, translated, service), translated);
+  assert.equal(posts.length, opened);
+});
+
+test("one failed request of a long song keeps every original and is retried whole", async () => {
+  const { service, storage } = phone();
+  const saved = manyAnnotations((await loadGenius(inPortuguese, service, 100))!);
+  const stored = storage.get(geniusStorageKey(ask.key));
+  for (const failed of [
+    () => {
+      throw Error("offline");
+    },
+    () => [],
+    (body: string) => body.split("&").map(() => [""]),
+  ]) {
+    let asked = 0;
+    service.post = async (_url, body) => (++asked === 2 ? failed(body) : replyTo(body));
+    assert.equal(await translateGenius(inPortuguese, saved, service), saved);
+    assert.equal(storage.get(geniusStorageKey(ask.key)), stored);
+  }
+  service.post = async (_url, body) => replyTo(body);
+  const retried = await translateGenius(inPortuguese, saved, service);
+  assert.ok(geniusReferents(retried, "pt")![899]!.annotations[0]!.text.startsWith("pt 899:"));
+});
+
+test("insights turned off between a long song's requests stop the rest", async () => {
+  const { service, posts } = phone();
+  const saved = manyAnnotations((await loadGenius(inPortuguese, service, 100))!);
+  service.post = async (_url, body) => {
+    posts.push(body);
+    service.enabled = () => false;
+    return replyTo(body);
+  };
+  assert.equal(await translateGenius(inPortuguese, saved, service), saved);
+  assert.equal(posts.length, 1);
 });
