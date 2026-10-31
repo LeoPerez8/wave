@@ -36,9 +36,6 @@ import {
 import { Text, View, useWindowDimensions } from "react-native";
 import { GestureDetector } from "react-native-gesture-handler";
 import Animated, {
-  FadeIn,
-  FadeOut,
-  ReduceMotion,
   useAnimatedReaction,
   useAnimatedStyle,
   useReducedMotion,
@@ -54,8 +51,7 @@ import { TrackSkeletons } from "@/catalog/Skeletons";
 import { RecommendationsFailed } from "@/components/RecommendationsFailed";
 import { useMissingSongs } from "@/library/hooks";
 import { IconButton } from "@/components/IconButton";
-import { TextButton } from "@/components/TextButton";
-import { TAP_ANIMATION_MS } from "@/motion/timing";
+import { FLOATING_PILL_ROOM, FloatingPill } from "@/components/FloatingPill";
 import { usePerfVisible, useRenderCount } from "@/perf/perf";
 import {
   cycleRepeat,
@@ -385,60 +381,6 @@ const HistoryRow = memo(function HistoryRow({
   );
 });
 
-/** The Back to Current Song pill's height, and the room it takes over the list's bottom. */
-const PILL = CELL * 6;
-const PILL_ROOM = PILL + CELL;
-
-const pillIn = FadeIn.duration(TAP_ANIMATION_MS).reduceMotion(ReduceMotion.Never);
-const pillOut = FadeOut.duration(TAP_ANIMATION_MS).reduceMotion(ReduceMotion.Never);
-
-/**
- * The pill floating over the Queue list's bottom that brings back the start of
- * Up Next: its arrow points the way there ([direction], `backToCurrentSong`).
- * It fades in and out with the tap animation, or just appears and goes under
- * reduce motion.
- */
-function BackToCurrentSong({
-  direction,
-  bottom,
-  onPress,
-}: {
-  direction: "up" | "down";
-  bottom: number;
-  onPress: () => void;
-}) {
-  const { strings } = useLocalisation();
-  const reduceMotion = useReducedMotion();
-  const Arrow = direction === "up" ? IconArrowUp : IconArrowDown;
-  return (
-    <Animated.View
-      entering={reduceMotion ? undefined : pillIn}
-      exiting={reduceMotion ? undefined : pillOut}
-      pointerEvents="box-none"
-      className="absolute left-0 right-0 items-center"
-      style={{ bottom }}
-    >
-      <TextButton
-        variant="pill"
-        label={strings.playbackText.currentSong}
-        accessibilityLabel={strings.playbackText.backToCurrentSong}
-        onPress={onPress}
-        className="flex-row items-center"
-        style={{ height: PILL, gap: CELL }}
-      >
-        {(color) => (
-          <>
-            <Arrow size={16} color={color} strokeWidth={2} />
-            <Text className="font-sans text-subheadline font-semibold" style={{ color }}>
-              {strings.playbackText.currentSong}
-            </Text>
-          </>
-        )}
-      </TextButton>
-    </Animated.View>
-  );
-}
-
 /** The lifted copy only follows the finger. */
 const ignore = (): void => undefined;
 
@@ -500,7 +442,7 @@ const barOffset = (history: number): number => (history === 0 ? 0 : SECTION_HEAD
  * History's old height, over Up Next (#706).
  *
  * Scrolled into History, or more than a screen down Up Next, a pill over the
- * list's bottom brings back the start of Up Next (`BackToCurrentSong`); the
+ * list's bottom brings back the start of Up Next (`FloatingPill`); the
  * list's end leaves room for it, so the last row can scroll clear of it.
  *
  * While a Magic Queue picks its next batch, skeleton rows stand where it will
@@ -556,7 +498,7 @@ export function UpNextList({
   // with the room already there.
   const [listHeight, setListHeight] = useState(lastListHeight);
   // Under the last row, room for the Back to Current Song pill too.
-  const endInset = bottomInset + PILL_ROOM;
+  const endInset = bottomInset + FLOATING_PILL_ROOM;
   const endSpace = upNextEndSpace(listHeight, {
     bar: BAR,
     row: ROW,
@@ -781,7 +723,13 @@ export function UpNextList({
         />
       </BarGroundContext>
       {pill !== null && drag === null && (
-        <BackToCurrentSong direction={pill} bottom={bottomInset} onPress={backToStart} />
+        <FloatingPill
+          icon={pill === "up" ? IconArrowUp : IconArrowDown}
+          label={strings.playbackText.currentSong}
+          accessibilityLabel={strings.playbackText.backToCurrentSong}
+          bottom={bottomInset}
+          onPress={backToStart}
+        />
       )}
       {drag !== null && (
         <Animated.View

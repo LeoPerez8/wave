@@ -2183,6 +2183,7 @@ export type {
   PlaylistRecommendationFeedback,
 } from "./playlistRecommendations.ts";
 export * from "./playlistRecommendationSession.ts";
+export * from "./goToSuggestions.ts";
 export * from "./playlistSuggestionsSight.ts";
 export * from "./playlistSavedOffers.ts";
 export * from "./playlistSeeds.ts";

@@ -1,7 +1,19 @@
-import { PlaylistRecommendations, usePlaylistSuggestionsVisit } from "./PlaylistRecommendations";
+import {
+  GoToSuggestions,
+  PlaylistRecommendations,
+  SUGGESTIONS_SECTION_HEIGHT,
+  usePlaylistSuggestionsVisit,
+} from "./PlaylistRecommendations";
 import { IconGripVertical } from "@tabler/icons-react-native";
 import type { LegendListRef } from "@legendapp/list/react-native";
-import { moveItem, type PlaylistPlace, type QueueContext, type RowMenuAction } from "@wave/core";
+import {
+  goToSuggestionsScroll,
+  moveItem,
+  playlistSuggestionsPlace,
+  type PlaylistPlace,
+  type QueueContext,
+  type RowMenuAction,
+} from "@wave/core";
 import {
   cloneElement,
   memo,
@@ -14,9 +26,15 @@ import {
 } from "react";
 import { View, type AccessibilityActionInfo } from "react-native";
 import { GestureDetector } from "react-native-gesture-handler";
-import Animated, { useAnimatedReaction, useSharedValue } from "react-native-reanimated";
+import Animated, {
+  useAnimatedReaction,
+  useReducedMotion,
+  useSharedValue,
+} from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
 
+import { FLOATING_PILL_ROOM } from "@/components/FloatingPill";
+import { afterPaint } from "@/lib/afterPaint";
 import { makeExternalStore } from "@/lib/externalStore";
 import { usePositions } from "@/lib/usePositions";
 import { CELL, grid } from "@/catalog/grid";
@@ -294,33 +312,69 @@ export function PlaylistItems({ playlistId, items, header, empty }: Props) {
   // (the footer out of sight) sees nothing move.
   const recommendationsTop = useSharedValue(Number.POSITIVE_INFINITY);
   const [anchored, setAnchored] = useState(false);
-  // A store: the section hears its sight without a render of the list.
+  // Stores: the section and the pill hear where it is without a render of the list.
   const [sectionSight] = useState(() => makeExternalStore<number | null>(null));
-  const sightChanged = useCallback(
-    (inSight: boolean, at: number) => {
+  const [sectionAway] = useState(() => makeExternalStore(false));
+  const placeChanged = useCallback(
+    (place: ReturnType<typeof playlistSuggestionsPlace>, at: number) => {
+      const inSight = place === "inSight";
       setAnchored(inSight);
       sectionSight.set(inSight ? at : null);
+      sectionAway.set(place === "away");
     },
-    [sectionSight],
+    [sectionSight, sectionAway],
   );
   useAnimatedReaction(
-    () => recommendationsTop.get() < scroll.get() + height.get() - bottomInset,
-    (inSight, previous) => {
+    () =>
+      playlistSuggestionsPlace({
+        top: recommendationsTop.get(),
+        scroll: scroll.get(),
+        listHeight: height.get(),
+        bottomInset,
+      }),
+    (place, previous) => {
       // Stamped here: the JS thread may be busy when it hears, and its wait is what's measured.
-      if (inSight !== previous) scheduleOnRN(sightChanged, inSight, Date.now());
+      if (place !== previous) scheduleOnRN(placeChanged, place, Date.now());
     },
-    [bottomInset, sightChanged],
+    [bottomInset, placeChanged],
   );
   // Suggestions come from YouTube Music radios: with YT Music off there are none.
   const ytMusic = useYtMusicEnabled();
   const recommending = ytMusic && items !== undefined && found === null && !selecting;
   const suggestions = usePlaylistSuggestionsVisit(playlistId, recommending, sectionSight, items);
+  const suggestionsTop = lead + shown.length * ROW;
   useLayoutEffect(() => {
     // Before the head's height is known the section's place would read too high, as in sight.
-    recommendationsTop.set(
-      recommending && lead > 0 ? lead + shown.length * ROW : Number.POSITIVE_INFINITY,
-    );
-  }, [recommendationsTop, recommending, lead, shown.length]);
+    recommendationsTop.set(recommending && lead > 0 ? suggestionsTop : Number.POSITIVE_INFINITY);
+  }, [recommendationsTop, recommending, lead, suggestionsTop]);
+
+  // A section never mounted counts as one row, and the list won't scroll past what it counts.
+  const sectionMeasured = useRef(false);
+  const onSectionLayout = useCallback(() => {
+    sectionMeasured.current = true;
+  }, []);
+  const reduceMotion = useReducedMotion();
+  const goToSuggestions = () => {
+    const handle = list.current;
+    if (handle === null) return;
+    const { scroll: from, scrollLength } = handle.getState();
+    const going = goToSuggestionsScroll({
+      top: suggestionsTop,
+      scroll: from,
+      listHeight: scrollLength,
+      reduceMotion,
+    });
+    if (sectionMeasured.current) {
+      void handle.scrollToOffset(going);
+      return;
+    }
+    // Its real height replaces this on mounting; the native list takes the room in a frame.
+    handle.setItemSize(itemKey(RECOMMENDATIONS), {
+      width: 0,
+      height: SUGGESTIONS_SECTION_HEIGHT,
+    });
+    void afterPaint().then(() => list.current?.scrollToOffset(going));
+  };
 
   const onRemove = (item: PlaylistEntryRow) => {
     setOrder((current) => current.filter((row) => row.itemId !== item.itemId));
@@ -404,7 +458,9 @@ export function PlaylistItems({ playlistId, items, header, empty }: Props) {
       item.kind === "empty" ? (
         empty
       ) : (
-        <PlaylistRecommendations playlistId={playlistId} items={read} visit={suggestions} />
+        <View onLayout={onSectionLayout}>
+          <PlaylistRecommendations playlistId={playlistId} items={read} visit={suggestions} />
+        </View>
       )
     ) : null;
 
@@ -494,7 +550,8 @@ export function PlaylistItems({ playlistId, items, header, empty }: Props) {
           }
           contentContainerStyle={{
             paddingHorizontal: grid.margin,
-            paddingBottom: bottomInset,
+            // Under the last row, room for the Go to Suggestions pill too.
+            paddingBottom: bottomInset + (recommending ? FLOATING_PILL_ROOM : 0),
             minHeight: find.minHeight,
           }}
           initialScrollOffset={find.initialOffset}
@@ -504,6 +561,14 @@ export function PlaylistItems({ playlistId, items, header, empty }: Props) {
             </View>
           }
         />
+        {recommending && drag === null && (
+          <GoToSuggestions
+            visit={suggestions}
+            away={sectionAway}
+            bottom={bottomInset}
+            onPress={goToSuggestions}
+          />
+        )}
       </View>
     </FindFrame>
   );
