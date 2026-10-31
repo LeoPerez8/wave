@@ -259,7 +259,8 @@ test("scan writes while a playlist reads neither fail nor restart its read; the 
     });
 
     try {
-      await until(() => reads === 2 && !session.get().loading);
+      // The catch-up runs behind the first read's offers, so it shows no loading of its own.
+      await until(() => reads === 2 && songPasses === 2 && !session.get().loading);
       assert.equal(writes, 4);
       assert.deepEqual(errors, [], "the scan never reaches the retry line");
       assert.ok(session.get().slots.some((slot) => slot !== null));

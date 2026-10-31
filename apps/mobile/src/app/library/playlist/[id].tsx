@@ -167,6 +167,7 @@ export default function PlaylistScreen() {
     <DetailFrame detail={shown} noun="playlist" goneMessage={strings.playlists.deleted}>
       {({ playlist, items }) => (
         <PlaylistItems
+          key={playlist.id}
           playlistId={playlist.id}
           items={items}
           header={<PlaylistHead shown={{ playlist, items }} />}

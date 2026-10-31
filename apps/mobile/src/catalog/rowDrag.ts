@@ -29,6 +29,7 @@ import { scheduleOnRN, scheduleOnUI } from "react-native-worklets";
 
 import { grid } from "@/catalog/grid";
 import { liftedTop } from "@/catalog/liftedRow";
+import { handleHold } from "@/motion/handleHold";
 import { perfCount } from "@/perf/perf";
 
 /**
@@ -502,8 +503,8 @@ export function useDraggedRow(rowDrag: DragRows, key: string, index: number, ena
   const pan = usePanGesture(
     useMemo(
       () => ({
+        ...handleHold,
         enabled,
-        minDistance: 0,
         onActivate: (event: { translationY: number }) => {
           "worklet";
           // A drop still landing has the old order's indices: wait for the new one.

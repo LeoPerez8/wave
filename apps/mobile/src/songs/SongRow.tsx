@@ -46,6 +46,8 @@ export interface SongRowActions {
    * grip, Up Next's remove and grip). Keep the node stable, or the row renders again.
    */
   readonly accessory?: ReactNode;
+  /** How much of the row's end its drag handle takes, in dp: no swipe begins there. */
+  readonly handleWidth?: number | undefined;
   /** The placeholder cover's colour (the Design preview's synthetic songs). */
   readonly tint?: string | undefined;
 }
@@ -219,5 +221,11 @@ export const SongRow = memo(function SongRow(props: SongRowPresentation & SongRo
         {props.accessory}
       </View>
     );
-  return swipe === undefined ? full : <SwipeableRow swipe={swipe}>{full}</SwipeableRow>;
+  return swipe === undefined ? (
+    full
+  ) : (
+    <SwipeableRow swipe={swipe} handleWidth={props.handleWidth}>
+      {full}
+    </SwipeableRow>
+  );
 });

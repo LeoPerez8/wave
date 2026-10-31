@@ -52,6 +52,9 @@ export interface PlaylistRecommendationSources {
   readonly ytMusicEnabled?: boolean;
 }
 
+/** How many slots a playlist's suggestions section has: the offers it shows at once. */
+export const PLAYLIST_SHOWN_OFFERS = 5;
+
 /** How many of the visible suggestions one artist may hold. */
 export const PLAYLIST_ARTIST_CAP = 2;
 
@@ -68,7 +71,7 @@ const PLAYLIST_FEEDBACK_WEIGHT = 4;
 export const playlistRecordingMatch = (tracks: readonly PlaylistRecommendationTrack[]) =>
   finishSteps(playlistRecordingMatchSteps(tracks));
 
-function* playlistRecordingMatchSteps(tracks: readonly PlaylistRecommendationTrack[]) {
+export function* playlistRecordingMatchSteps(tracks: readonly PlaylistRecommendationTrack[]) {
   const byId = yield* indexSteps(tracks, (track) => [track.id, track]);
   const byVideo = new Map<string, PlaylistRecommendationTrack>();
   for (const track of tracks) {
@@ -326,13 +329,14 @@ export const playlistOfferFits = (shown: readonly PlaylistRecommendationTrack[])
 export function* playlistRecommendationsSteps(
   playlist: readonly PlaylistRecommendationTrack[],
   sources: PlaylistRecommendationSources,
+  count = PLAYLIST_SHOWN_OFFERS,
 ): Generator<void, PlaylistRecommendation[]> {
   const picked: PlaylistRecommendation[] = [];
   for (const candidate of yield* rankedPlaylistRecommendationsSteps(playlist, sources)) {
     yield;
     if (!playlistOfferFits(picked.map((item) => item.track))(candidate.track)) continue;
     picked.push(candidate);
-    if (picked.length === 5) break;
+    if (picked.length === count) break;
   }
   return picked;
 }
@@ -340,4 +344,5 @@ export function* playlistRecommendationsSteps(
 export const playlistRecommendations = (
   playlist: readonly PlaylistRecommendationTrack[],
   sources: PlaylistRecommendationSources,
-): PlaylistRecommendation[] => finishSteps(playlistRecommendationsSteps(playlist, sources));
+  count = PLAYLIST_SHOWN_OFFERS,
+): PlaylistRecommendation[] => finishSteps(playlistRecommendationsSteps(playlist, sources, count));

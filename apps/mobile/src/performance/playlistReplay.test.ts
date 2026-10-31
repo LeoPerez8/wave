@@ -27,7 +27,8 @@ for (const variant of ["before", "after"] as const) {
         // Ti finishes one renewal and one queued catch-up; the deferred visit coalesces first.
         const renewals = variant === "before" ? 2 : 1;
         assert.equal(replay.work.reads, renewals);
-        assert.equal(replay.work.notifications, 3 * renewals);
+        // After #850 a renewal behind offers on screen publishes nothing.
+        assert.equal(replay.work.notifications, variant === "before" ? 3 * renewals : 0);
         assert.equal(replay.work.ranks, renewals);
         assert.equal(replay.sessions[0]!.get().slots.filter((slot) => slot !== null).length, 5);
       } finally {

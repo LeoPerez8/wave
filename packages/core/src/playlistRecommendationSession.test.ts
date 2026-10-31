@@ -49,10 +49,11 @@ test("the next refill reads newly favorited or downloaded candidates ahead of or
   assert.equal(session.get().slots[3]?.track.id, "g");
 });
 
-test("full renewal includes newly favorited and downloaded matches even when all five slots are occupied", async () => {
+test("a renewal saves newly favorited and downloaded matches first, leaving all five slots as they are", async () => {
   const seed = track("seed");
   let library = [seed, ..."abcdefgh".split("").map(track)];
   let id = 0;
+  let saved: readonly PlaylistRecommendationTrack[] = [];
   const session = playlistRecommendationSession({
     newId: () => String(++id),
     read: async () => ({
@@ -60,20 +61,23 @@ test("full renewal includes newly favorited and downloaded matches even when all
       sources: { library, pages: radioOf(library), graph: null },
     }),
     dismiss: async () => {},
+    saved: {
+      offers: [],
+      online: () => true,
+      write: (offers) => {
+        saved = offers;
+      },
+    },
   });
-  const selectedIds = () =>
-    session
-      .get()
-      .slots.flatMap((offer) => offer?.track.id ?? [])
-      .toSorted();
   await session.renew();
-  assert.deepEqual(selectedIds(), ["a", "b", "c", "d", "e"]);
+  const shown = session.get().slots;
   library = library.map((song) => ({ ...song, favorite: song.id === "h" }));
   await session.renew();
-  assert.deepEqual(selectedIds(), ["a", "b", "c", "d", "h"]);
+  assert.equal(saved[0]?.id, "h");
   library = library.map((song) => ({ ...song, favorite: false, downloaded: song.id === "g" }));
   await session.renew();
-  assert.deepEqual(selectedIds(), ["a", "b", "c", "d", "g"]);
+  assert.equal(saved[0]?.id, "g");
+  assert.equal(session.get().slots, shown);
 });
 
 test("unchanged playlist membership does not keep removed Library candidates offered", async () => {
@@ -140,7 +144,7 @@ for (const timing of ["before snapshot", "after snapshot"]) {
   });
 }
 
-test("acceptance preserves the four held offers and keys; a later external edit renews priority", async () => {
+test("acceptance preserves the four held offers and keys; a later external edit leaves them", async () => {
   const seed = track("seed");
   let playlist = [seed];
   let library = [seed, ..."abcdefgh".split("").map(track)];
@@ -161,14 +165,9 @@ test("acceptance preserves the four held offers and keys; a later external edit 
   // The adapter announces its own Add synchronously without requesting a full renewal.
   for (const index of [0, 1, 3, 4]) assert.equal(session.get().slots[index], before[index]);
   playlist = [...playlist, track("external")];
+  const after = session.get().slots;
   await session.renew();
-  assert.deepEqual(
-    session
-      .get()
-      .slots.flatMap((offer) => offer?.track.id ?? [])
-      .toSorted(),
-    ["a", "b", "d", "g", "h"],
-  );
+  assert.equal(session.get().slots, after);
 });
 
 test("an external addition of a held offer is not acknowledged as Add's own notification", async () => {
@@ -219,7 +218,7 @@ test("initial read failure stays retryable and an empty or exhausted playlist ha
   assert.equal(session.get().slots.filter((x) => x !== null).length, 0);
 });
 
-test("favorite and download source changes during Add renew priority after the single-slot refill", async () => {
+test("favorite and download source changes during Add reach the single-slot refill, not the others", async () => {
   const seed = track("seed");
   let playlist = [seed];
   let library = [seed, ..."abcdefgh".split("").map(track)];
@@ -252,7 +251,7 @@ test("favorite and download source changes during Add renew priority after the s
       .get()
       .slots.flatMap((offer) => offer?.track.id ?? [])
       .toSorted(),
-    ["a", "b", "d", "g", "h"],
+    ["a", "b", "d", "e", "g"],
   );
 });
 
@@ -1061,21 +1060,6 @@ test("a renewal asked for during concurrent actions runs once, after the last re
   );
 });
 
-test("Add and Dismiss wait for a full renewal's offers", async () => {
-  const { session, gate } = gatedSession();
-  await session.renew();
-  const before = session.get().slots;
-  gate.hold = Promise.withResolvers();
-  const hold = gate.hold;
-  const renewing = session.renew();
-  assert.equal(session.get().loading, true);
-  assert.equal(await session.dismiss(before[0]!.key), false);
-  assert.deepEqual(session.get().pending, []);
-  hold.resolve();
-  await renewing;
-  assert.equal(await session.dismiss(before[0]!.key), true);
-});
-
 test("a slot whose replacement failed is filled by the refill already waiting, and a failed save keeps its message", async () => {
   // The renewal reads first, then the first refill, which fails.
   const { session, gate } = gatedSession({
@@ -1132,4 +1116,79 @@ test("closing the playlist during concurrent actions still writes every tapped c
   assert.deepEqual(await Promise.all([adding, dismissing]), [true, true]);
   assert.deepEqual(written, ["a", "c"]);
   assert.deepEqual([gate.reads, notifications], [1, heard]);
+});
+
+test("a renewal asked for with a turn shows it's loading, then reads on that turn", async () => {
+  const seed = track("seed");
+  const turn = Promise.withResolvers<void>();
+  const turns: string[] = [];
+  let reads = 0;
+  const session = playlistRecommendationSession({
+    newId: () => "id",
+    read: async () => {
+      reads++;
+      return { playlist: [seed], sources: { library: [], graph: null } };
+    },
+    dismiss: async () => {},
+    yieldTurn: (kind) => {
+      turns.push(kind);
+      return kind === "free" ? turn.promise : Promise.resolve();
+    },
+  });
+  const renewed = session.renew({ turn: "free" });
+  assert.equal(session.get().loading, true);
+  assert.deepEqual(turns, ["free"]);
+  assert.equal(reads, 0, "the read waits for its turn");
+  turn.resolve();
+  await renewed;
+  assert.equal(reads, 1);
+  assert.equal(session.get().loading, false);
+});
+
+test("hiding during a renewal's turn cancels it before it reads", async () => {
+  const seed = track("seed");
+  const turn = Promise.withResolvers<void>();
+  let reads = 0;
+  const session = playlistRecommendationSession({
+    newId: () => "id",
+    read: async () => {
+      reads++;
+      return { playlist: [seed], sources: { library: [], graph: null } };
+    },
+    dismiss: async () => {},
+    yieldTurn: () => turn.promise,
+  });
+  const renewed = session.renew({ turn: "paint" });
+  session.pause();
+  turn.resolve();
+  await renewed;
+  assert.equal(reads, 0);
+  assert.equal(session.get().error, null);
+});
+
+test("a renewal held for a save reads on a free turn once the save is done", async () => {
+  const seed = track("seed");
+  const library = [seed, ..."abcdefg".split("").map(track)];
+  const saved = Promise.withResolvers<void>();
+  const log: string[] = [];
+  let id = 0;
+  const session = playlistRecommendationSession({
+    newId: () => String(++id),
+    read: async () => {
+      log.push("read");
+      return { playlist: [seed], sources: { library, pages: radioOf(library), graph: null } };
+    },
+    dismiss: async () => saved.promise,
+    yieldTurn: async (kind) => {
+      log.push(kind);
+    },
+  });
+  await session.renew();
+  const dismissed = session.dismiss(session.get().slots[0]!.key);
+  await session.renew();
+  log.length = 0;
+  saved.resolve();
+  await dismissed;
+  // The refill's own free turn and read, then the held renewal's.
+  assert.deepEqual(log, ["free", "read", "paint", "free", "read", "paint"]);
 });

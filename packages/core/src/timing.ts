@@ -69,6 +69,10 @@ export interface TimingWindow {
   readonly hitches?: readonly number[];
 }
 
+/** Whole milliseconds at any length, for an app log line. */
+// not UI text: times for the app log
+export const roundMs = (ms: number): string => `${Math.round(ms)} ms`;
+
 /** Same units as the log's waits: whole milliseconds, then seconds with one decimal. */
 export const timingDuration = (ms: number): string =>
   ms < 1000 ? `${Math.round(ms)} ms` : `${(Math.round(ms / 100) / 10).toFixed(1)} s`;

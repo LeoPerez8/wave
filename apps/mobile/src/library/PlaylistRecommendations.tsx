@@ -1,12 +1,10 @@
-import { IconPlus, IconX } from "@tabler/icons-react-native";
+import { IconArrowDown, IconPlus, IconX } from "@tabler/icons-react-native";
 import {
-  playlistRecommendationsSteps,
-  playlistRecommendationSession,
-  playlistSuggestionsLine,
+  goToSuggestionsOffered,
+  PLAYLIST_SHOWN_OFFERS,
   type PlaylistRecommendationSlot,
 } from "@wave/core";
-import * as Effect from "effect/Effect";
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useLayoutEffect, useState, useSyncExternalStore } from "react";
 import { AccessibilityInfo, Text, View } from "react-native";
 import Animated, {
   FadeIn,
@@ -19,24 +17,13 @@ import { CELL, grid } from "@/catalog/grid";
 import { useLocalisation } from "@/localisation/localisation";
 import { ControlledTrackRowSkeleton, SkeletonGroup } from "@/catalog/Skeletons";
 import { TitledSection } from "@/catalog/TitledSection";
+import { FloatingPill } from "@/components/FloatingPill";
 import { IconButton } from "@/components/IconButton";
 import { TextButton } from "@/components/TextButton";
 import { lookedUpProfileOf } from "@/home/artistGenres";
+import { makeExternalStore, type ExternalStore } from "@/lib/externalStore";
 import { useScreenSight } from "@/lib/screenSight";
-import { settledTurnEffect } from "@/lib/backgroundWork";
-import { recommendationTurn, recommendationTurnEffect } from "@/lib/recommendationWork";
-import { runSteps } from "@/lib/stepped";
-import { afterPaint } from "@/lib/afterPaint";
-import { appLog } from "@/log/appLog";
-import { followPlaylistRecommendations } from "./playlistRecommendationVisit";
-import {
-  playlistRecommendationGraph,
-  playlistRecommendationInput,
-} from "./playlistRecommendationSource";
-import { playlistSuggestionRadios, playlistSuggestionSeeds } from "./playlistSuggestionRadios";
-import { makeExternalStore } from "@/lib/externalStore";
 import { CROSSFADE_MS } from "@/motion/Crossfade";
-import { online as phoneOnline } from "@/native/waveNative";
 import { playTrackIds, playYtSongs } from "@/playback/actions";
 import {
   mixedSongEntry,
@@ -46,185 +33,108 @@ import {
 } from "@/songs/mixedSongs";
 import { useSongRows } from "@/songs/useSongRows";
 
-import { LibraryStore, type PlaylistEntryRow, type SongRow } from "./LibraryStore";
-import { onLibraryChange } from "./libraryChanges";
-import { appRuntime } from "./runtime";
-import { playlistsChanged } from "./playlists";
-
-let nextOffer = 0;
+import type { PlaylistEntryRow } from "./LibraryStore";
+import {
+  createPlaylistSuggestionsVisit,
+  type PlaylistSuggestionsVisit,
+} from "./playlistSuggestionsVisit";
 
 const offerKey = (song: PlaylistRecommendationSlot): string => song.key;
 
 /** A replacement fades into its slot; with reduce motion on it just appears. */
 const arrive = FadeIn.duration(CROSSFADE_MS).reduceMotion(ReduceMotion.Never);
 
+/**
+ * The section's height with its heading and five offers: what a list that never mounted it
+ * should expect, so a tap can scroll the section up rather than stop at its first line.
+ */
+export const SUGGESTIONS_SECTION_HEIGHT = CELL * 12.5 + PLAYLIST_SHOWN_OFFERS * grid.row;
+
 /** Add and Dismiss: the controls each offer row ends with. */
 const CONTROLS = 2;
-
-/** Fewer eligible suggestions left than this, and a refill reads the radios' next pages. */
-const LOW = 10;
-
-/** What a slot's placeholder says while it waits for a replacement of its own. */
 
 /** Heard by TalkBack without moving its focus. */
 const announce = (message: string): void => AccessibilityInfo.announceForAccessibility(message);
 
 /**
- * One controller per playlist visit; offer keys protect against stale/repeated
- * actions. Shown only with YT Music on: its suggestions come from radios.
+ * The suggestions of the calling screen's playlist visit. They load from the opening on,
+ * while [wanted] (the list would show the section) and the screen is in sight, whether or not
+ * the section ever mounts. [sectionSight] is when the section came into sight in its list
+ * (`Date.now()`), null while it's out of sight. [items] are the playlist's entries as read:
+ * while wanted, an offer they now hold leaves before the frame paints. Following them renders
+ * nothing here.
+ */
+export const usePlaylistSuggestionsVisit = (
+  playlistId: number,
+  wanted: boolean,
+  sectionSight: ExternalStore<number | null>,
+  items: readonly PlaylistEntryRow[] | undefined,
+): PlaylistSuggestionsVisit => {
+  const screen = useScreenSight();
+  const [visit] = useState(() => createPlaylistSuggestionsVisit(playlistId));
+  const [wantedStore] = useState(() => makeExternalStore(wanted));
+  useLayoutEffect(() => wantedStore.set(wanted), [wantedStore, wanted]);
+  useLayoutEffect(() => {
+    if (wanted && items !== undefined) visit.playlistRead(items);
+  }, [visit, wanted, items]);
+  useEffect(
+    () => visit.follow(screen, wantedStore, sectionSight),
+    [visit, screen, wantedStore, sectionSight],
+  );
+  return visit;
+};
+
+/**
+ * The pill that takes a long playlist to its suggestions, while the section is [away] and has
+ * something to go to (offers, a load or a failure line). Following both renders only this.
+ */
+export function GoToSuggestions({
+  visit,
+  away,
+  bottom,
+  onPress,
+}: {
+  visit: PlaylistSuggestionsVisit;
+  away: ExternalStore<boolean>;
+  bottom: number;
+  onPress: () => void;
+}) {
+  const { session } = visit;
+  const label = useLocalisation().strings.playlists.goToSuggestions;
+  const offered = useSyncExternalStore(session.subscribe, () =>
+    goToSuggestionsOffered(session.get()),
+  );
+  const isAway = useSyncExternalStore(away.subscribe, away.get);
+  if (!offered || !isAway) return null;
+  return <FloatingPill icon={IconArrowDown} label={label} bottom={bottom} onPress={onPress} />;
+}
+
+/**
+ * The section showing a [visit]'s offers: it holds nothing of its own, so the list can
+ * recycle it away and back. Shown only with YT Music on: its suggestions come from radios.
  */
 export function PlaylistRecommendations({
   playlistId,
   items,
+  visit,
 }: {
   playlistId: number;
   items: readonly PlaylistEntryRow[];
+  visit: PlaylistSuggestionsVisit;
 }) {
   const text = useLocalisation().strings.playlists;
-  const sight = useScreenSight();
-  const [announcingAcceptance] = useState(() => makeExternalStore(false));
-  // Keep held offers readable if another offer's refill no longer finds their Library row.
-  const [libraryRows] = useState(() => makeExternalStore<ReadonlyMap<string, SongRow>>(new Map()));
+  const { session, libraryRows, busyLabels: labels } = visit;
   const libraryById = useSyncExternalStore(libraryRows.subscribe, libraryRows.get);
-  const [latestRows] = useState(() => makeExternalStore<ReadonlyMap<string, SongRow>>(new Map()));
-  const [session] = useState(() => {
-    // The first renewal is the one opening the playlist asked for; its line counts from here.
-    let openedAt: number | undefined = performance.now();
-    // This visit's radio readers: each radio's live first page is read once a visit.
-    const visitId = `playlist:${playlistId}:${Date.now().toString(36)}-${++nextOffer}`;
-    let remaining = Number.POSITIVE_INFINITY;
-    return playlistRecommendationSession({
-      newId: () =>
-        `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${++nextOffer}`,
-      read: (signal) =>
-        appRuntime.runPromise(
-          Effect.gen(function* () {
-            const input = yield* playlistRecommendationInput(playlistId);
-            const graph = yield* playlistRecommendationGraph;
-            // Source rows are retained for the five visible offers only, never a copy of the Library.
-            latestRows.set(input.songById);
-            const seeds = playlistSuggestionSeeds(playlistId, input.playlist);
-            const online = phoneOnline();
-            const pages = yield* playlistSuggestionRadios(visitId, seeds, {
-              online,
-              low: remaining < LOW,
-            });
-            return {
-              playlist: input.playlist,
-              sources: {
-                ...input,
-                pages,
-                seeds,
-                graph,
-                profileOf: lookedUpProfileOf,
-                online,
-              },
-            };
-          }),
-          { signal },
-        ),
-      rank: async (input, signal) => {
-        const ranked = await appRuntime
-          .runPromise(
-            runSteps(
-              playlistRecommendationsSteps(input.playlist, input.sources),
-              recommendationTurnEffect,
-            ),
-            { signal },
-          )
-          .catch((error: unknown) => {
-            // A cancelled rank must not keep the whole Library index reachable from this visit.
-            latestRows.set(new Map());
-            throw error;
-          });
-        remaining = ranked.length;
-        const held = new Map<string, SongRow>();
-        for (const offer of ranked) {
-          const row = latestRows.get().get(offer.track.id);
-          if (row !== undefined) held.set(offer.track.id, row);
-        }
-        latestRows.set(held);
-        return ranked;
-      },
-      dismiss: (offer) =>
-        appRuntime.runPromise(
-          Effect.gen(function* () {
-            const store = yield* LibraryStore;
-            return yield* store.dismissPlaylistRecommendation(playlistId, offer);
-          }),
-        ),
-      accept: (offer) =>
-        appRuntime
-          .runPromise(
-            Effect.gen(function* () {
-              const store = yield* LibraryStore;
-              return yield* store.acceptPlaylistRecommendation(playlistId, offer);
-            }),
-          )
-          .then((added) => {
-            if (added) {
-              // Both notification functions are synchronous; this Add already refills its slot.
-              announcingAcceptance.set(true);
-              try {
-                playlistsChanged([playlistId]);
-              } finally {
-                announcingAcceptance.set(false);
-              }
-            }
-            return added;
-          }),
-      // The tap's placeholder paints before the write; the replacement's read
-      // gives rendering its frame when due (Core's `PlaylistRecommendationTurn`).
-      yieldTurn: (kind) => (kind === "paint" ? afterPaint() : recommendationTurn()),
-      timed: {
-        now: () => performance.now(),
-        report: (timing) => {
-          const sinceOpen = openedAt === undefined ? undefined : performance.now() - openedAt;
-          openedAt = undefined;
-          appLog("info", "WaveTiming", playlistSuggestionsLine(timing, sinceOpen));
-        },
-      },
-    });
-  });
   const state = useSyncExternalStore(session.subscribe, session.get);
   const reduceMotion = useReducedMotion();
-  // What a tapped slot's placeholder says until its action ends ("Adding Song"), by slot;
-  // any other placeholder is loading a replacement.
-  const [busyLabels, setBusyLabels] = useState<ReadonlyMap<number, string>>(new Map());
+  const busyLabels = useSyncExternalStore(labels.subscribe, labels.get);
   const labelSlot = (slot: number, label: string | undefined) =>
-    setBusyLabels((previous) => {
+    labels.update((previous) => {
       const next = new Map(previous);
       if (label === undefined) next.delete(slot);
       else next.set(slot, label);
       return next;
     });
-  // The visit follows the write's cause (#599): source changes revalidate even when playlist
-  // IDs stay the same, once the playlist is in sight and settled. Catalog writes (its own
-  // radios' among them) don't: the suggestions read their radios, not the catalog.
-  useEffect(() => {
-    const following = followPlaylistRecommendations(session, {
-      playlistId,
-      sight,
-      start: (signal) => appRuntime.runPromise(settledTurnEffect, { signal }),
-      subscribe: onLibraryChange,
-      ignore: (change) => change.kind === "playlists" && announcingAcceptance.get(),
-    });
-    return () => following.dispose();
-  }, [session, playlistId, sight, announcingAcceptance]);
-  useEffect(() => {
-    libraryRows.update((previous) => {
-      const held = new Map<string, SongRow>();
-      const wanted = new Set(
-        state.slots.flatMap((offer) => (offer?.track.source === "library" ? [offer.track.id] : [])),
-      );
-      // At most five lookups; don't synchronously index/copy the complete source on publication.
-      for (const id of wanted) {
-        const row = latestRows.get().get(id) ?? previous.get(id);
-        if (row !== undefined) held.set(id, row);
-      }
-      return held;
-    });
-  }, [state.slots, libraryRows, latestRows]);
   const play = ({ track }: PlaylistRecommendationSlot) => {
     const context = { kind: "playlist", id: String(playlistId) } as const;
     if (track.source === "library") void playTrackIds([Number(track.id)], new Set(), 0, context);
@@ -373,8 +283,8 @@ export function PlaylistRecommendations({
           ? {
               label: text.tryAgain,
               onPress: () => {
-                // Asking afresh draws other seed songs.
-                void session.renew();
+                // Asking afresh draws other seed songs, once "Loading…" has painted.
+                void session.renew({ turn: "paint" });
               },
             }
           : undefined
@@ -382,7 +292,7 @@ export function PlaylistRecommendations({
     >
       {state.loading && songs.length === 0 ? (
         <SkeletonGroup label={text.loadingRecommended}>
-          {Array.from({ length: 5 }, (_, i) => (
+          {Array.from({ length: PLAYLIST_SHOWN_OFFERS }, (_, i) => (
             <ControlledTrackRowSkeleton key={i} controls={CONTROLS} />
           ))}
         </SkeletonGroup>

@@ -2172,6 +2172,7 @@ export type { FavoriteSource } from "./favoriteToast.ts";
 
 export {
   PLAYLIST_ARTIST_CAP,
+  PLAYLIST_SHOWN_OFFERS,
   playlistOfferFits,
   playlistRecommendations,
   playlistRecordingMatch,
@@ -2183,6 +2184,9 @@ export type {
   PlaylistRecommendationFeedback,
 } from "./playlistRecommendations.ts";
 export * from "./playlistRecommendationSession.ts";
+export * from "./goToSuggestions.ts";
+export * from "./playlistSuggestionsSight.ts";
+export * from "./playlistSavedOffers.ts";
 export * from "./playlistSeeds.ts";
 export { playingTrackIds } from "./playingIdentity.ts";
 export { createLongPressIntent } from "./longPressIntent.ts";

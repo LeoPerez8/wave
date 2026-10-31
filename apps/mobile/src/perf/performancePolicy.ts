@@ -97,11 +97,11 @@ const FOLLOWED_FINDER =
   "Once per shared Library query version while this visible page or menu follows it; unchanged renders reuse the finder.";
 
 export const WHOLE_LIBRARY: Record<string, WholeLibraryException> = {
-  "library/PlaylistRecommendations.tsx#PlaylistRecommendations": {
+  "library/playlistSuggestionsVisit.ts#openPlaylistSuggestionsVisit": {
     howOften:
-      "Once per settled visible playlist visit; source edits coalesce into one refresh, never while hidden.",
+      "Once per settled visible playlist visit, whether or not the section ever mounts; source edits coalesce into one refresh, never while hidden.",
     reason:
-      "The visit's read/refill waits for screen settlement, is aborted on loss of screen sight (including Now Playing), and reads the shared recommendation snapshot plus stepped Core ranking. Public behavior/work counts: playlistRecommendationVisit.test.ts and db/regressionSweep.test.ts.",
+      "The visit's renewal waits for screen settlement once and a refill for a free turn; either is aborted on loss of screen sight (including Now Playing), and reads the shared recommendation snapshot plus stepped Core ranking. Public behavior/work counts: playlistRecommendationVisit.test.ts and db/regressionSweep.test.ts.",
     capabilities: ["library/playlistRecommendationSource.ts#playlistRecommendationInput"],
   },
   "library/playlistRecommendationSource.ts#inputs": {
