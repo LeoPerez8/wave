@@ -17,6 +17,24 @@ test("recommendation pages run back to back until the display needs its frame", 
   assert.equal(budget.due(), false, "the next page shares the new frame budget");
 });
 
+test("someone waiting for offers gets a longer run before the frame, at every refresh rate", () => {
+  for (const [rate, runMs] of [
+    [120, 12],
+    [90, 12],
+    [60, 1000 / 60 - 4],
+    [30, 1000 / 30 - 4],
+  ] as const) {
+    let now = 0;
+    const budget = recommendationFrameBudget({ now: () => now, intervalMs: () => 1000 / rate });
+    now = runMs - 0.01;
+    assert.equal(budget.dueAwaited(), false, `${rate} Hz, before ${runMs} ms`);
+    now = runMs;
+    assert.equal(budget.dueAwaited(), true, `${rate} Hz, at ${runMs} ms`);
+    budget.yielded();
+    assert.equal(budget.dueAwaited(), false, "the next run starts with its frame");
+  }
+});
+
 test("a recommendation deadline includes time spent suspended and expires at its boundary", () => {
   let now = 1000;
   const deadline = recommendationDeadline(60_000, () => now);

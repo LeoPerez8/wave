@@ -179,21 +179,30 @@ export const libraryMatches = <L extends LibrarySongKey>(
 export function* libraryMatchesSteps<L extends LibrarySongKey>(
   library: readonly L[],
 ): Generator<void, (song: Pick<YtSong, "title" | "artists" | "durationMs">) => L[]> {
-  const byTitle = new Map<string, Candidate<L>[]>();
+  const { add, matches } = growingLibraryMatches<L>();
   for (const song of library) {
     yield;
-    addCandidate(byTitle, song);
+    add(song);
   }
-  return (song) => {
-    const candidates = byTitle.get(recordingMatchTitle(song.title));
-    if (candidates === undefined) return [];
-    const artists = song.artists.flatMap(artistNames);
-    const length = knownLength(song.durationMs);
-    return candidates
-      .filter((candidate) => candidateMatches(candidate, artists, length))
-      .map((candidate) => candidate.song);
-  };
+  return matches;
 }
+
+/** [libraryMatches] over songs still arriving: [add] files one, and [matches] sees it from then on. */
+export const growingLibraryMatches = <L extends LibrarySongKey>() => {
+  const byTitle = new Map<string, Candidate<L>[]>();
+  return {
+    add: (song: L): void => addCandidate(byTitle, song),
+    matches: (song: Pick<YtSong, "title" | "artists" | "durationMs">): L[] => {
+      const candidates = byTitle.get(recordingMatchTitle(song.title));
+      if (candidates === undefined) return [];
+      const artists = song.artists.flatMap(artistNames);
+      const length = knownLength(song.durationMs);
+      return candidates
+        .filter((candidate) => candidateMatches(candidate, artists, length))
+        .map((candidate) => candidate.song);
+    },
+  };
+};
 
 /**
  * Whether a YT Music song is already in the Library (see [libraryFinder]),

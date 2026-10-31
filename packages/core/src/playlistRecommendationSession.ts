@@ -8,12 +8,17 @@ import {
 } from "./playlistRecommendations.ts";
 import {
   PLAYLIST_SAVED_OFFERS,
+  PLAYLIST_SPARES_LOW,
   playlistOfferGone,
+  playlistOffersHaveRoom,
   playlistOffersToSave,
   playlistOffersToShow,
+  playlistOffersWithSpares,
   playlistOffersWithout,
+  playlistSpareCount,
   playlistSpareOffer,
 } from "./playlistSavedOffers.ts";
+import type { RadioRankingPage } from "./radioRanking.ts";
 import { roundMs } from "./timing.ts";
 
 export interface PlaylistRecommendationSlot {
@@ -39,9 +44,28 @@ export interface PlaylistRecommendationState {
   readonly unfilled: readonly number[];
   readonly error: "load" | "save" | "refill" | null;
 }
+/**
+ * Whether the owner is waiting for offers: the section shows it's loading, or a slot its
+ * placeholder. A later radio or a refill with every slot showing runs with no one waiting.
+ */
+export const playlistOffersAwaited = ({
+  loading,
+  pendingSlots,
+}: Pick<PlaylistRecommendationState, "loading" | "pendingSlots">): boolean =>
+  loading || pendingSlots.length > 0;
+
 export interface PlaylistRecommendationSessionInput {
   readonly playlist: readonly PlaylistRecommendationTrack[];
   readonly sources: PlaylistRecommendationSources;
+}
+/**
+ * A fresh suggestion's read: all but the radios, and how to start them. The session starts
+ * them only if it still wants them, listening from that moment on, so a read overtaken or
+ * cancelled downloads nothing. A radio answers null, or fails, when it has no page to give.
+ */
+export interface PlaylistRecommendationFreshRead {
+  readonly input: PlaylistRecommendationSessionInput;
+  readonly radios: () => readonly Promise<RadioRankingPage | null>[];
 }
 
 /**
@@ -85,6 +109,80 @@ export const playlistSuggestionsLine = (
     : `Playlist suggestions renewed: ${shown} in ${roundMs(ms)} ${parts}`;
 };
 
+/**
+ * What an Add or Dismiss made the owner wait for (ms): from the tap until the slot showed
+ * its next offer or gave up. Only "offer" is an offer shown.
+ */
+export interface PlaylistSlotWait {
+  readonly action: "add" | "dismiss";
+  readonly ms: number;
+  readonly outcome: "offer" | "no offer" | "refill failed" | "cancelled" | "save failed";
+  /** Where the slot's offer came from; "placeholder", none came. */
+  readonly from: "spare" | "ranking" | "placeholder";
+}
+
+/** [wait] as one log line, under `WaveTiming`. */
+// not UI text: the app log's line
+export const playlistSlotWaitLine = ({ action, ms, outcome, from }: PlaylistSlotWait): string =>
+  `Playlist slot wait: ${action === "add" ? "Add" : "Dismiss"} ${outcome} after ${roundMs(ms)} (from ${from})`;
+
+/**
+ * Takes the pages of [radios] as they answer: each call gives those that answered since the
+ * last one, waiting for one if there are none, and nothing once every radio has settled.
+ */
+const radioAnswers = (
+  radios: readonly Promise<RadioRankingPage | null>[],
+  signal: AbortSignal,
+): (() => Promise<readonly RadioRankingPage[]>) => {
+  let unsettled = radios.length;
+  let answered: RadioRankingPage[] = [];
+  let wake = () => {};
+  const settled = (page: RadioRankingPage | null) => {
+    unsettled--;
+    if (page !== null) answered.push(page);
+    wake();
+  };
+  for (const radio of radios)
+    radio.then(settled, () => {
+      settled(null);
+    });
+  signal.addEventListener("abort", () => wake(), { once: true });
+  return async () => {
+    while (answered.length === 0 && unsettled > 0) {
+      signal.throwIfAborted();
+      await new Promise<void>((resolve) => {
+        wake = resolve;
+      });
+    }
+    signal.throwIfAborted();
+    const pages = answered;
+    answered = [];
+    return pages;
+  };
+};
+
+/** What one read and ranking did for the reserve; a refill cancelled by leaving reports nothing. */
+export interface PlaylistReserveRefill {
+  readonly ms: number;
+  /** Offers it saved that weren't saved before. */
+  readonly added: number;
+  /** The spares ready afterwards. */
+  readonly spares: number;
+  readonly failed: boolean;
+}
+
+/** [refill] as one log line, under `WaveTiming`. */
+// not UI text: the app log's line
+export const playlistReserveRefillLine = ({
+  ms,
+  added,
+  spares,
+  failed,
+}: PlaylistReserveRefill): string =>
+  failed
+    ? `Playlist reserve refill failed after ${roundMs(ms)}`
+    : `Playlist reserve refill: ${added} new ${added === 1 ? "spare" : "spares"}, ${spares} ready after ${roundMs(ms)}`;
+
 /** Whether a row would show [b] otherwise than [a]; what only ranking reads doesn't count. */
 const showsOtherwise = (a: PlaylistRecommendationTrack, b: PlaylistRecommendationTrack): boolean =>
   a.videoId !== b.videoId ||
@@ -115,6 +213,15 @@ const latestTracks = (
 };
 
 /**
+ * Whether [input]'s radios all failed or timed out, with no page to give. Offline, or with
+ * nothing to seed a radio, no read failed: Library files can still join.
+ */
+const noRadioAnswered = ({ sources }: PlaylistRecommendationSessionInput): boolean =>
+  (sources.seeds?.length ?? 0) > 0 &&
+  sources.online !== false &&
+  (sources.pages?.length ?? 0) === 0;
+
+/**
  * Owns visible offers and save-before-replace ordering; storage is a system boundary.
  * Only a renewal with nothing to show publishes its offers; over offers already showing
  * it runs behind them (docs/spec.md, "Saved offers").
@@ -122,6 +229,11 @@ const latestTracks = (
 export const playlistRecommendationSession = (options: {
   readonly newId: () => string;
   readonly read: (signal?: AbortSignal) => Promise<PlaylistRecommendationSessionInput>;
+  /**
+   * With nothing showing, a renewal's read in place of [read], so offers can show from the
+   * first radio to answer; absent, it reads and ranks all the radios together.
+   */
+  readonly readFresh?: (signal?: AbortSignal) => Promise<PlaylistRecommendationFreshRead>;
   readonly rank?: (
     input: PlaylistRecommendationSessionInput,
     signal?: AbortSignal,
@@ -134,18 +246,30 @@ export const playlistRecommendationSession = (options: {
   readonly timed?: {
     readonly now: () => number;
     readonly report: (timing: PlaylistRecommendationTiming) => void;
+    /** Told once for each Add or Dismiss the session took, by the same clock. */
+    readonly slotWait?: (wait: PlaylistSlotWait) => void;
+    /** Told once for each read and ranking that refilled the reserve, or failed to; and a later radio's ranking that failed. */
+    readonly reserveRefill?: (refill: PlaylistReserveRefill) => void;
   };
   /** Which offers a read says can no longer stand; absent, it's worked out at once. */
   readonly gone?: (
     input: PlaylistRecommendationSessionInput,
     signal?: AbortSignal,
   ) => Promise<(offer: PlaylistRecommendationTrack) => boolean>;
-  /** The offers an earlier visit saved, shown from the start, and where changes to them go. */
+  /**
+   * The offers an earlier visit saved, shown from the start, and where changes to them go.
+   * Without it nothing is kept: no spares, so every freed slot waits for its refill.
+   */
   readonly saved?: {
     readonly offers: readonly PlaylistRecommendationTrack[];
     readonly online: () => boolean;
     readonly write: (offers: readonly PlaylistRecommendationTrack[]) => void;
   };
+  /**
+   * Whether the host's screen has settled. Until it has, an offer leaving or a low reserve
+   * reads nothing: the renewal the host then asks for goes first. Absent, it always has.
+   */
+  readonly settled?: () => boolean;
 }) => {
   const slot = (track: PlaylistRecommendationTrack): PlaylistRecommendationSlot => ({
     key: options.newId(),
@@ -153,10 +277,31 @@ export const playlistRecommendationSession = (options: {
   });
   let savedOffers = options.saved?.offers ?? [];
   const online = () => options.saved?.online() ?? true;
-  const saveOffers = (next: readonly PlaylistRecommendationTrack[]) => {
-    if (next === savedOffers) return;
+  const spareCount = () => playlistSpareCount(savedOffers, held(), { online: online() });
+  /**
+   * The spares below which a tap refills the reserve. A ranking that left it short has already
+   * found what it could, so another waits for the last spare, not the next tap, until spares
+   * are plentiful again.
+   */
+  let refillBelow = PLAYLIST_SPARES_LOW;
+  const keepOffers = (next: readonly PlaylistRecommendationTrack[]) => {
     savedOffers = next;
-    options.saved?.write(next);
+    if (spareCount() >= PLAYLIST_SPARES_LOW) refillBelow = PLAYLIST_SPARES_LOW;
+  };
+  /** A tap's change to the saved offers, not yet written. */
+  let writeOwed = false;
+  let writeTurnAsked = false;
+  const writeOffers = () => {
+    writeOwed = false;
+    options.saved?.write(savedOffers);
+  };
+  const flushOffers = () => {
+    if (writeOwed) writeOffers();
+  };
+  const saveOffers = (next: readonly PlaylistRecommendationTrack[]) => {
+    if (options.saved === undefined || next === savedOffers) return;
+    keepOffers(next);
+    writeOffers();
   };
   const firstShown = playlistOffersToShow(savedOffers, { online: online() }).map(slot);
   let state: PlaylistRecommendationState = {
@@ -179,6 +324,8 @@ export const playlistRecommendationSession = (options: {
   // Freed slots, their choice saved, that the next refill fills.
   const waiting: number[] = [];
   let refilling = false;
+  // The reserve is low: the next batch reads and ranks even with no slot waiting.
+  let reserveWanted = false;
   // Who waits for each freed slot's refill to end.
   const holeWaiters = new Map<number, (() => void)[]>();
   let disposed = false;
@@ -190,6 +337,13 @@ export const playlistRecommendationSession = (options: {
   let renewalPending = false;
   /** A renewal running behind the offers on screen: anything touching a slot goes first. */
   let behind: AbortController | undefined;
+  /** A fresh renewal's offers show and its other radios feed the spares: taps don't stop those. */
+  let later: AbortController | undefined;
+  /** A refill was wanted while those radios answered: it runs, if still wanted, once they've settled. */
+  let refillOwed = false;
+  /** The reserve went low before the screen settled: looked at again after the renewal that follows. */
+  let lowPointOwed = false;
+  const settled = () => options.settled?.() ?? true;
   /** Stops the renewal behind the offers, to run again after what's about to change them. */
   const holdRenewal = () => {
     if (behind === undefined) return;
@@ -197,7 +351,51 @@ export const playlistRecommendationSession = (options: {
     behind = undefined;
     renewalPending = true;
   };
-  const busy = () => renewing || refilling || savesRunning > 0;
+  /** The Adds and Dismisses whose slot hasn't ended its wait, by slot, with when they were tapped. */
+  const slotWaits = new Map<number, { action: PlaylistSlotWait["action"]; at: number }>();
+  const slotWaitEnded = (hole: number, outcome: Exclude<PlaylistSlotWait["outcome"], "offer">) => {
+    const wait = slotWaits.get(hole);
+    if (wait === undefined) return;
+    slotWaits.delete(hole);
+    const { timed } = options;
+    timed?.slotWait?.({
+      action: wait.action,
+      ms: timed.now() - wait.at,
+      outcome,
+      from: "placeholder",
+    });
+  };
+  /** The offer just published counts once its frame has had its turn, without holding up the refill. */
+  const slotWaitFilled = (hole: number, from: PlaylistSlotWait["from"]) => {
+    const wait = slotWaits.get(hole);
+    if (wait === undefined) return;
+    slotWaits.delete(hole);
+    const report = () => {
+      const { timed } = options;
+      timed?.slotWait?.({ action: wait.action, ms: timed.now() - wait.at, outcome: "offer", from });
+    };
+    if (yieldTurn === undefined) report();
+    else void yieldTurn("paint").then(report, report);
+  };
+  /**
+   * Writes the tap's saved offers once its frame has had its turn: taps before then share one
+   * write, of what's left after them all. Leaving writes at once, so the next visit has it.
+   */
+  const writeOffersSoon = () => {
+    writeOwed = true;
+    if (yieldTurn === undefined || disposed || paused) {
+      flushOffers();
+      return;
+    }
+    if (writeTurnAsked) return;
+    writeTurnAsked = true;
+    const turn = () => {
+      writeTurnAsked = false;
+      flushOffers();
+    };
+    void yieldTurn("paint").then(turn, turn);
+  };
+  const busy = () => renewing || refilling || later !== undefined || savesRunning > 0;
   const notify = () => {
     for (const listener of listeners) listener();
   };
@@ -215,6 +413,21 @@ export const playlistRecommendationSession = (options: {
     options.rank?.(input, signal) ??
     Promise.resolve(playlistRecommendations(input.playlist, input.sources, PLAYLIST_SAVED_OFFERS));
   const held = () => state.slots.flatMap((offer) => (offer === null ? [] : [offer.track]));
+  /** [input] to rank just [pages], without the offers already taken or showing. */
+  const radiosInput = (
+    input: PlaylistRecommendationSessionInput,
+    pages: readonly RadioRankingPage[],
+  ): PlaylistRecommendationSessionInput => ({
+    ...input,
+    sources: { ...input.sources, pages, exclude: [...consumed, ...held()] },
+  });
+  /** [input] ranking for the reserve: only what's new, without any offer taken, showing or saved. */
+  const newOffersInput = (
+    input: PlaylistRecommendationSessionInput,
+  ): PlaylistRecommendationSessionInput => ({
+    ...input,
+    sources: { ...input.sources, exclude: [...consumed, ...held(), ...savedOffers] },
+  });
   const pendingSlotsBut = (holes: readonly number[]) =>
     state.pendingSlots.filter((pending) => !holes.includes(pending));
   const releaseHoles = (holes: readonly number[]) => {
@@ -223,38 +436,151 @@ export const playlistRecommendationSession = (options: {
       holeWaiters.delete(hole);
     }
   };
+  /**
+   * Fills what it can of [holes], empty slots of [slots], from the saved spares, with no read
+   * or ranking, and returns the rest. A spare fits the offers kept and those it just placed.
+   */
+  const fillFromSpares = (
+    slots: (PlaylistRecommendationSlot | null)[],
+    holes: readonly number[],
+  ): readonly number[] => {
+    const kept = slots.flatMap((offer) => (offer === null ? [] : [offer.track]));
+    return holes.filter((hole) => {
+      const spare = playlistSpareOffer(savedOffers, kept, { online: online() });
+      if (spare === undefined) return true;
+      kept.push(spare);
+      slots[hole] = slot(spare);
+      return false;
+    });
+  };
+  /** Slots waiting on a placeholder take the spares that have come since they began waiting. */
+  const fillWaitingFromSpares = () => {
+    if (waiting.length === 0 || savedOffers.length === 0) return;
+    const holes = waiting.splice(0);
+    const slots = [...state.slots];
+    const rest = fillFromSpares(slots, holes);
+    waiting.push(...rest);
+    const filled = holes.filter((hole) => !rest.includes(hole));
+    if (filled.length === 0) return;
+    publish({ slots, pendingSlots: pendingSlotsBut(filled) });
+    for (const hole of filled) slotWaitFilled(hole, "spare");
+    releaseHoles(filled);
+  };
+  const spareContext = () => ({ shown: held(), online: online() });
+  const reserveReported = (startedAt: number, added: number, failed: boolean) => {
+    const { timed } = options;
+    if (timed === undefined || options.saved === undefined) return;
+    timed.reserveRefill?.({ ms: timed.now() - startedAt, added, spares: spareCount(), failed });
+  };
+  /**
+   * Ranks each later radio's answer ([next], those answering during a ranking together) and
+   * adds its offers to the spares. Offers showing stay; a slot waiting on a placeholder, or one
+   * with no offer, takes a spare. A failed ranking costs only its own spares, and is logged.
+   * This is work under way, so no refill runs beside it: one wanted meanwhile runs after it.
+   */
+  const addSpares = async (
+    next: () => Promise<readonly RadioRankingPage[]>,
+    input: PlaylistRecommendationSessionInput,
+    current: () => boolean,
+    controller: AbortController,
+  ) => {
+    const openSlots = () =>
+      state.slots.flatMap((offer, index) =>
+        offer === null && !state.pendingSlots.includes(index) ? [index] : [],
+      );
+    later = controller;
+    try {
+      for (;;) {
+        const pages = await next();
+        if (pages.length === 0 || !current()) return;
+        // A reserve full of usable offers with every slot held: ranking this radio would add nothing.
+        if (!playlistOffersHaveRoom(savedOffers, spareContext()) && openSlots().length === 0)
+          continue;
+        if (yieldTurn !== undefined) await yieldTurn("free");
+        if (!current()) return;
+        const startedAt = options.timed?.now() ?? 0;
+        let ranked: readonly PlaylistRecommendation[];
+        try {
+          ranked = await rank(newOffersInput(radiosInput(input, pages)), controller.signal);
+        } catch {
+          // This ranking's spares don't come; the radios still to answer may bring theirs.
+          if (!current()) return;
+          reserveReported(startedAt, 0, true);
+          continue;
+        }
+        if (!current()) return;
+        saveOffers(
+          playlistOffersWithSpares(
+            savedOffers,
+            ranked.map((offer) => offer.track),
+            spareContext(),
+          ),
+        );
+        fillWaitingFromSpares();
+        const slots = [...state.slots];
+        const open = openSlots();
+        if (fillFromSpares(slots, open).length === open.length) continue;
+        const unfilled = state.unfilled.filter((hole) => slots[hole] === null);
+        publish({
+          slots,
+          unfilled,
+          error: state.error === "refill" && unfilled.length === 0 ? null : state.error,
+        });
+      }
+    } catch {
+      // Stopped: what the radios would have added just doesn't come.
+    } finally {
+      later = undefined;
+      if (refillOwed) {
+        refillOwed = false;
+        // Hidden or gone, the refill only hands its waiting slots back.
+        void refill("free").then(settle);
+        reserveLowPoint();
+      }
+    }
+  };
   /** The freed slots' choices are saved: the slots leave no placeholder, waiting for a retry. */
   const leaveUnfilled = (holes: readonly number[]) =>
     publish({ pendingSlots: pendingSlotsBut(holes), unfilled: [...state.unfilled, ...holes] });
   /**
-   * Fills the waiting slots, a batch at a time: slots freed while one batch is
-   * read and ranked wait for the next. [turn] is the first batch's first step.
+   * Fills the waiting slots and the reserve, a batch at a time: what a batch ranks past its
+   * slots joins the spares, and slots freed while it's read and ranked take those, else wait
+   * for the next batch. With no slot waiting, nothing showing changes and a failure only
+   * logs. No batch asks for another: only a tap or an offer leaving finds the reserve low.
+   * [turn] is the first batch's first step.
    */
   const refill = async (turn: PlaylistRecommendationTurn) => {
     if (refilling) return;
+    if (later !== undefined) {
+      refillOwed = true;
+      return;
+    }
     refilling = true;
-    while (waiting.length > 0) {
+    while (waiting.length > 0 || reserveWanted) {
       // Hidden or gone mid-way (an earlier batch's turns): stop before reading again.
       if (disposed || paused) break;
+      fillWaitingFromSpares();
+      if (waiting.length === 0 && !reserveWanted) break;
+      reserveWanted = false;
       // A slot whose replacement failed meanwhile is retried with this batch, after its own.
-      const retried = state.unfilled;
+      const retried = waiting.length > 0 ? state.unfilled : [];
       if (retried.length > 0)
         publish({ pendingSlots: [...state.pendingSlots, ...retried], unfilled: [] });
       const holes = [...waiting.splice(0), ...retried];
       const controller = new AbortController();
       active = controller;
+      const startedAt = options.timed?.now() ?? 0;
       try {
         // The write's own list refresh and any scroll go first; then read and rank on separate turns.
         if (yieldTurn !== undefined) await yieldTurn(turn);
         turn = "free";
         controller.signal.throwIfAborted();
         const input = await read(controller.signal);
+        if (noRadioAnswered(input)) throw new Error("No radio answered");
         if (yieldTurn !== undefined) await yieldTurn("paint");
-        // Offers still showing, their saves under way among them, stay out of the ranking.
-        const ranked = await rank(
-          { ...input, sources: { ...input.sources, exclude: [...consumed, ...held()] } },
-          controller.signal,
-        );
+        // Offers still showing, their saves under way among them, and the spares stay out of the
+        // ranking: all it brings is new, and nothing tapped from now on can be among it.
+        const ranked = await rank(newOffersInput(input), controller.signal);
         controller.signal.throwIfAborted();
         const slots = [...state.slots];
         const kept = held();
@@ -268,12 +594,29 @@ export const playlistRecommendationSession = (options: {
           taken.push(next.track);
           slots[hole] = slot(next.track);
         }
-        publish({ slots, pendingSlots: pendingSlotsBut(holes) });
+        if (holes.length > 0) publish({ slots, pendingSlots: pendingSlotsBut(holes) });
+        const before = savedOffers;
+        // What filled a slot goes first: the next visit shows it, if there's room for only some.
+        const others = ranked.flatMap(({ track }) => (taken.includes(track) ? [] : [track]));
+        saveOffers(playlistOffersWithSpares(savedOffers, [...taken, ...others], spareContext()));
+        // No more than this to be found for now: the next read waits for the last spare.
+        if (spareCount() < PLAYLIST_SPARES_LOW) refillBelow = 1;
+        const added = savedOffers.filter((offer) => !before.includes(offer)).length;
+        reserveReported(startedAt, added, false);
+        for (const hole of holes) {
+          if (slots[hole] === null) slotWaitEnded(hole, "no offer");
+          else slotWaitFilled(hole, "ranking");
+        }
       } catch {
-        // Paused or disposed mid-refill: the choices are saved, so their holes wait unfilled, without an error.
-        leaveUnfilled(holes);
-        // A failed save's message stays: its offer still waits for another try.
-        if (!controller.signal.aborted && state.error !== "save") publish({ error: "refill" });
+        if (holes.length > 0) {
+          // Paused or disposed mid-refill: the choices are saved, so their holes wait unfilled, without an error.
+          leaveUnfilled(holes);
+          // A failed save's message stays: its offer still waits for another try.
+          if (!controller.signal.aborted && state.error !== "save") publish({ error: "refill" });
+        }
+        if (!controller.signal.aborted) reserveReported(startedAt, 0, true);
+        for (const hole of holes)
+          slotWaitEnded(hole, controller.signal.aborted ? "cancelled" : "refill failed");
       } finally {
         if (active === controller) active = undefined;
         releaseHoles(holes);
@@ -282,8 +625,32 @@ export const playlistRecommendationSession = (options: {
     // Hidden or gone: what's left waits for the next refill or renewal.
     const left = waiting.splice(0);
     if (left.length > 0) leaveUnfilled(left);
+    for (const hole of left) slotWaitEnded(hole, "cancelled");
     releaseHoles(left);
+    reserveWanted = false;
     refilling = false;
+  };
+  /**
+   * After a slot took a spare: below the mark, the reserve refills behind the screen, and no
+   * one waits for it. A renewal under way or owed saves new offers anyway, so it goes instead;
+   * later radios still answering go first, and it's looked at again once they've settled. So
+   * does the renewal that follows the screen settling, with the same second look.
+   */
+  const reserveLowPoint = () => {
+    if (options.saved === undefined || disposed || paused) return;
+    if (refilling || renewing || renewalPending || behind !== undefined) return;
+    lowPointOwed = false;
+    if (spareCount() >= refillBelow) return;
+    if (!settled()) {
+      lowPointOwed = true;
+      return;
+    }
+    if (later !== undefined) {
+      refillOwed = true;
+      return;
+    }
+    reserveWanted = true;
+    void refill("free").then(settle);
   };
   /** Refills [holes] (their choices saved), then runs a renewal asked for meanwhile. */
   const replace = async (holes: readonly number[], turn: PlaylistRecommendationTurn) => {
@@ -305,6 +672,7 @@ export const playlistRecommendationSession = (options: {
     if (renewalPending && !busy()) await session.renew({ turn: "free" });
   };
   const act = async (
+    action: PlaylistSlotWait["action"],
     key: string,
     save: ((offer: PlaylistRecommendationSlot) => Promise<unknown>) | undefined,
   ): Promise<boolean> => {
@@ -312,6 +680,8 @@ export const playlistRecommendationSession = (options: {
     const offer = state.slots[index];
     if (disposed || paused || renewing || offer == null || save === undefined) return false;
     if (state.pending.includes(key)) return false;
+    if (options.timed?.slotWait !== undefined)
+      slotWaits.set(index, { action, at: options.timed.now() });
     holdRenewal();
     // Slots whose replacement failed earlier are filled by this action's refill too.
     const earlier = state.unfilled;
@@ -340,28 +710,49 @@ export const playlistRecommendationSession = (options: {
         unfilled: [...state.unfilled, ...earlier],
         error: "save",
       });
+      slotWaitEnded(index, "save failed");
       await settle();
       return false;
     }
     savesRunning--;
     consumed.push(offer.track);
-    if (savedOffers.length > 0) saveOffers(playlistOffersWithout(savedOffers, [offer.track]));
+    const hadSaved = savedOffers.length > 0;
+    if (hadSaved) keepOffers(playlistOffersWithout(savedOffers, [offer.track]));
     const slots = [...state.slots];
     slots[index] = null;
-    publish({ pending: state.pending.filter((pending) => pending !== key), slots });
-    await replace([index, ...earlier], "free");
+    const holes = [index, ...earlier];
+    // Closed meanwhile, nothing would show it: the refill says the wait was cancelled.
+    const unspared = disposed ? holes : fillFromSpares(slots, holes);
+    const spared = holes.filter((hole) => !unspared.includes(hole));
+    publish({
+      pending: state.pending.filter((pending) => pending !== key),
+      slots,
+      pendingSlots: pendingSlotsBut(spared),
+    });
+    for (const hole of spared) slotWaitFilled(hole, "spare");
+    if (hadSaved) writeOffersSoon();
+    if (unspared.length > 0) await replace(unspared, "free");
+    else {
+      // Its slot is filled: a renewal held for this tap runs behind it, with no one waiting.
+      void settle();
+      reserveLowPoint();
+    }
     return true;
   };
   const session = {
     get: () => state,
     dispose: () => {
       disposed = true;
+      flushOffers();
       active?.abort();
+      later?.abort();
       listeners.clear();
     },
     pause: () => {
       paused = true;
+      flushOffers();
       active?.abort();
+      later?.abort();
     },
     resume: () => {
       if (disposed) return;
@@ -371,19 +762,16 @@ export const playlistRecommendationSession = (options: {
       notify();
     },
     /** Whether a renewal is running behind the offers, or was held off and hasn't run. */
-    renewalOwed: () => renewalPending || behind !== undefined,
+    renewalOwed: () => renewalPending || behind !== undefined || later !== undefined,
     /** The offers showing and those saved: all `leave` could take out. */
     offers: (): readonly PlaylistRecommendationTrack[] => [...held(), ...savedOffers],
     /**
      * [gone] offers left outside the suggestions (the playlist now holds them): each
      * showing one's slot takes a saved spare at once, else a refill. The others stay.
-     * With [read] false nothing may read yet (the screen hasn't settled): a slot with no
-     * spare keeps its placeholder for the next renewal, or an action's refill.
+     * Before the screen settles nothing may read: a slot with no spare keeps its placeholder
+     * for the next renewal, or an action's refill.
      */
-    leave: (
-      gone: (offer: PlaylistRecommendationTrack) => boolean,
-      { read = true }: { readonly read?: boolean } = {},
-    ): void => {
+    leave: (gone: (offer: PlaylistRecommendationTrack) => boolean): void => {
       if (disposed) return;
       if (savedOffers.some(gone)) saveOffers(savedOffers.filter((offer) => !gone(offer)));
       const slots = [...state.slots];
@@ -394,20 +782,13 @@ export const playlistRecommendationSession = (options: {
         holes.push(index);
       }
       if (holes.length === 0) return;
-      const kept = slots.flatMap((offer) => (offer === null ? [] : [offer.track]));
-      const unspared: number[] = [];
-      for (const hole of holes) {
-        const spare = playlistSpareOffer(savedOffers, kept, { online: online() });
-        if (spare === undefined) {
-          unspared.push(hole);
-          continue;
-        }
-        kept.push(spare);
-        slots[hole] = slot(spare);
-      }
+      const unspared = fillFromSpares(slots, holes);
       publish({ slots, pendingSlots: [...state.pendingSlots, ...unspared] });
-      if (unspared.length === 0) return;
-      if (!read) {
+      if (unspared.length === 0) {
+        reserveLowPoint();
+        return;
+      }
+      if (!settled()) {
         waiting.push(...unspared);
         return;
       }
@@ -426,7 +807,9 @@ export const playlistRecommendationSession = (options: {
      * visit. With offers showing it runs behind them: they stay, Add and Dismiss go
      * first, a failure is only reported, and it fills only empty slots and those whose
      * offer its read says is gone, refreshing the tags of the others in place. With none,
-     * it shows its loading, offers or failure.
+     * it shows its loading, offers or failure: with [readFresh], the offers of the first
+     * radio to answer, the others only adding spares, and the failure once no radio has
+     * answered. It ends when the last radio has.
      * Slots that waited for it (`leave`) go with a failure, leaving the list.
      * [refillOnly] retries the slots whose replacement failed, alongside any running
      * actions. [turn], the host's turn a full renewal reads on, once it shows it's
@@ -455,6 +838,7 @@ export const playlistRecommendationSession = (options: {
         return;
       }
       const revision = ++version;
+      later?.abort();
       if (busy()) {
         renewalPending = true;
         return;
@@ -469,6 +853,8 @@ export const playlistRecommendationSession = (options: {
       request.signal?.addEventListener("abort", cancel, { once: true });
       const current = () => !disposed && !controller.signal.aborted && revision === version;
       const unfilledBefore = state.unfilled;
+      /** Nothing showing yet: the section reads as loading, and Add and Dismiss wait. */
+      let holding = !showing;
       if (!showing) {
         renewing = true;
         publish({ loading: true, unfilled: [], error: null });
@@ -492,24 +878,62 @@ export const playlistRecommendationSession = (options: {
           await yieldTurn(request.turn);
           if (!current()) return;
         }
-        let phase = clock?.() ?? 0;
+        const reading = async <T>(step: () => Promise<T>) => {
+          const from = clock?.() ?? 0;
+          try {
+            return await step();
+          } finally {
+            if (clock !== undefined) readMs += clock() - from;
+          }
+        };
+        /** Ranks [from] on its own turn, once it's had its frame; null if that's no longer wanted. */
+        const ranking = async (from: PlaylistRecommendationSessionInput) => {
+          if (yieldTurn !== undefined) await yieldTurn("paint");
+          if (!current()) return null;
+          const started = clock?.() ?? 0;
+          try {
+            const result = await rank(from, controller.signal);
+            return current() ? result : null;
+          } finally {
+            if (clock !== undefined) rankMs += clock() - started;
+          }
+        };
+        const { readFresh } = options;
         let input: PlaylistRecommendationSessionInput;
-        try {
-          input = await read(controller.signal);
-        } finally {
-          if (clock !== undefined) readMs = clock() - phase;
+        let ranked: readonly PlaylistRecommendation[] | null = [];
+        let laterRadios: (() => Promise<readonly RadioRankingPage[]>) | undefined;
+        if (showing || readFresh === undefined) {
+          input = await reading(() => read(controller.signal));
+          if (!current()) return;
+          if (noRadioAnswered(input)) throw new Error("No radio answered");
+          ranked = await ranking(input);
+          if (ranked === null) return;
+        } else {
+          const opened = await reading(() => readFresh(controller.signal));
+          if (!current()) return;
+          input = opened.input;
+          const radios = opened.radios();
+          const nextAnswers = radioAnswers(radios, controller.signal);
+          laterRadios = nextAnswers;
+          let answered = false;
+          // A radio with nothing eligible shows nothing: the next one to answer may.
+          while (ranked.length === 0) {
+            const pages = await reading(nextAnswers);
+            if (!current()) return;
+            if (pages.length === 0) break;
+            answered = true;
+            ranked = await ranking(radiosInput(input, pages));
+            if (ranked === null) return;
+          }
+          if (!answered) {
+            // Offline, or with nothing to seed a radio, no read failed: Library files can still join.
+            if (radios.length > 0 && input.sources.online !== false)
+              throw new Error("No radio answered");
+            ranked = await ranking(radiosInput(input, []));
+            if (ranked === null) return;
+          }
         }
-        if (!current()) return;
-        if (yieldTurn !== undefined) await yieldTurn("paint");
-        if (!current()) return;
-        phase = clock?.() ?? 0;
-        let ranked: readonly PlaylistRecommendation[];
-        try {
-          ranked = await rank(input, controller.signal);
-        } finally {
-          if (clock !== undefined) rankMs = clock() - phase;
-        }
-        if (!current()) return;
+        const offers = ranked;
         const gone =
           showing || savedOffers.length > 0
             ? await (options.gone?.(input, controller.signal) ??
@@ -522,7 +946,7 @@ export const playlistRecommendationSession = (options: {
         saveOffers(
           playlistOffersToSave(
             stillSaved,
-            ranked.map((offer) => offer.track),
+            offers.map((offer) => offer.track),
             { online: input.sources.online ?? true },
           ),
         );
@@ -533,7 +957,7 @@ export const playlistRecommendationSession = (options: {
         );
         // With nothing showing, the section's loading ends whatever this finds.
         let changed = !showing || state.unfilled.length > 0 || waited.length > 0;
-        const reread = latestTracks(slots, ranked, input.sources.library);
+        const reread = latestTracks(slots, offers, input.sources.library);
         for (const [index, offer] of slots.entries()) {
           if (offer === null) continue;
           if (gone(offer.track)) {
@@ -552,7 +976,7 @@ export const playlistRecommendationSession = (options: {
         for (const [index, offer] of slots.entries()) {
           if (offer !== null) continue;
           const fits = playlistOfferFits(taken);
-          const next = ranked.find((candidate) => fits(candidate.track));
+          const next = offers.find((candidate) => fits(candidate.track));
           if (next === undefined) break;
           taken.push(next.track);
           slots[index] = slot(next.track);
@@ -566,6 +990,13 @@ export const playlistRecommendationSession = (options: {
             error: state.error === "refill" ? null : state.error,
           });
         timed(false);
+        if (laterRadios !== undefined) {
+          // The owner's wait ends here: Add and Dismiss needn't wait for the other radios.
+          holding = false;
+          renewing = false;
+          publish({ loading: false });
+          await addSpares(laterRadios, input, current, controller);
+        }
       } catch {
         if (current()) {
           const waited = waiting.splice(0);
@@ -574,8 +1005,9 @@ export const playlistRecommendationSession = (options: {
           timed(true);
         }
       } finally {
+        const ended = current();
         if (behind === controller) behind = undefined;
-        if (!showing) {
+        if (holding) {
           renewing = false;
           // Cancelled, a renewal is still owed, so the section keeps reading as loading until it
           // runs, and the holes it was to fill stay unfilled for the next refill.
@@ -588,12 +1020,15 @@ export const playlistRecommendationSession = (options: {
         }
         request.signal?.removeEventListener("abort", cancel);
         if (active === controller) active = undefined;
+        // Radios still answering have no one left to hear them.
+        controller.abort();
         if (renewalPending && !disposed && !request.signal?.aborted)
           await session.renew({ signal: request.signal, turn: "free" });
+        else if (ended && lowPointOwed) reserveLowPoint();
       }
     },
-    dismiss: (key: string) => act(key, options.dismiss),
-    accept: (key: string) => act(key, options.accept),
+    dismiss: (key: string) => act("dismiss", key, options.dismiss),
+    accept: (key: string) => act("add", key, options.accept),
   };
   return session;
 };

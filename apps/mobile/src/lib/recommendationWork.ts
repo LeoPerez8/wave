@@ -2,15 +2,14 @@
 import * as Effect from "effect/Effect";
 import { AppState } from "react-native";
 import { WaveAppLog } from "../native/waveAppLog";
-import { createRecommendationTurn } from "./recommendationTurn.ts";
+import { createRecommendationWork } from "./recommendationTurn.ts";
 import { checkRadioDeadlines } from "./radioDeadline.ts";
 
 AppState.addEventListener("change", (state) => {
   if (state === "active") checkRadioDeadlines();
 });
 
-/** Shared by all recommendation jobs; a cheap page or four-ms slice need not wait. */
-export const recommendationTurnEffect = createRecommendationTurn({
+const work = createRecommendationWork({
   now: () => performance.now(),
   intervalMs: () => {
     try {
@@ -40,6 +39,12 @@ export const recommendationTurnEffect = createRecommendationTurn({
     };
   },
 });
+
+/** Shared by all recommendation jobs; a cheap page or four-ms slice need not wait. */
+export const recommendationTurnEffect = work.turn;
+
+/** Ranking steps that may have someone waiting for them: see `createRecommendationWork`. */
+export const recommendationSteps = work.steps;
 
 /** Promise boundary for playlist replacement work. */
 export const recommendationTurn = (): Promise<void> => Effect.runPromise(recommendationTurnEffect);

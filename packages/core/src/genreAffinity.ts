@@ -154,16 +154,32 @@ export const parseArtistProfiles = (stored: string | null): ArtistProfiles => {
   );
 };
 
-/** Eager profiles avoid a first lookup doing a whole artist's work inside a candidate step. */
-export function* genreProfileSteps(
+/** Songs' genres added up, on their way to a profile. */
+export interface GenreTally {
+  readonly weights: ReadonlyMap<string, number>;
+  /** How many of the songs had a genre that counts. */
+  readonly total: number;
+}
+
+/** [from] with [songs] added, which profiles them as if they had all come together. */
+export function* genreTallySteps(
   songs: Iterable<GenreTagged>,
-): Generator<void, GenreProfile | null> {
-  const weights = new Map<string, number>();
-  let total = 0;
+  from?: GenreTally,
+): Generator<void, GenreTally> {
+  const weights = new Map(from?.weights);
+  let total = from?.total ?? 0;
   for (const song of songs) {
     if (weighFamilies(weights, song)) total++;
     yield;
   }
+  return { weights, total };
+}
+
+/** The profile a [tally] adds up to; null with no genre counted. */
+export function* tallyProfileSteps({
+  weights,
+  total,
+}: GenreTally): Generator<void, GenreProfile | null> {
   if (total === 0) return null;
   const result = new Map<string, number>();
   for (const [key, weight] of weights) {
@@ -171,6 +187,13 @@ export function* genreProfileSteps(
     yield;
   }
   return result;
+}
+
+/** Eager profiles avoid a first lookup doing a whole artist's work inside a candidate step. */
+export function* genreProfileSteps(
+  songs: Iterable<GenreTagged>,
+): Generator<void, GenreProfile | null> {
+  return yield* tallyProfileSteps(yield* genreTallySteps(songs));
 }
 function* songsByArtistSteps(
   library: GenreProfileLibrary,

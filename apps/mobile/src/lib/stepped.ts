@@ -1,23 +1,34 @@
-/** Shared bounded CPU adapter (#593/#594): four-ms work, two-ms headroom, 512 operations. */
+/** Shared bounded CPU adapter (#593/#594). */
 import * as Effect from "effect/Effect";
 
-export const runSteps = <A>(
+/** One slice of stepped work, and what comes before it. */
+export interface StepPace {
+  readonly between: Effect.Effect<void>;
+  readonly sliceMs: number;
+  /** A work cap also bounds deterministic tests and exceptionally cheap operations. */
+  readonly maxSteps: number;
+}
+
+/** Four-ms work, two-ms headroom, 512 operations. */
+export const GENTLE_STEPS = { sliceMs: 4, maxSteps: 512 };
+
+/** Runs [steps] in slices, each paced as [pace] says when it comes up. */
+export const pacedSteps = <A>(
   steps: Generator<void, A>,
-  between: Effect.Effect<void>,
+  pace: () => StepPace,
   now: () => number = () => performance.now(),
 ): Effect.Effect<A> =>
   Effect.gen(function* () {
-    // A new CPU stage must not append its budget to the preceding stage's last task.
-    yield* between;
     for (;;) {
+      const { between, sliceMs, maxSteps } = pace();
+      // A new CPU stage must not append its budget to the preceding stage's last task.
+      yield* between;
       const start = now();
-      // A work cap also bounds deterministic tests and exceptionally cheap operations.
-      for (let work = 0; work < 512; work++) {
+      for (let work = 0; work < maxSteps; work++) {
         const next = steps.next();
         if (next.done) return next.value;
-        if (now() - start >= 4) break;
+        if (now() - start >= sliceMs) break;
       }
-      yield* between;
     }
   }).pipe(
     Effect.ensuring(
@@ -26,3 +37,9 @@ export const runSteps = <A>(
       }),
     ),
   );
+
+export const runSteps = <A>(
+  steps: Generator<void, A>,
+  between: Effect.Effect<void>,
+  now?: () => number,
+): Effect.Effect<A> => pacedSteps(steps, () => ({ ...GENTLE_STEPS, between }), now);

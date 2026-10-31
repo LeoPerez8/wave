@@ -7,11 +7,15 @@ import {
   PLAYLIST_SAVED_OFFERS,
   playlistOfferGoneSteps,
   playlistOfferHeld,
+  playlistOffersAwaited,
   playlistRecommendationsSteps,
   playlistRecommendationSession,
+  playlistReserveRefillLine,
+  playlistSlotWaitLine,
   playlistSuggestionsLine,
   playlistSuggestionsSightLine,
   playlistSuggestionsSightWatch,
+  type PlaylistRecommendationSessionInput,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
 
@@ -19,9 +23,8 @@ import { lookedUpProfileOf } from "@/home/artistGenres";
 import { afterPaint } from "@/lib/afterPaint";
 import { settledTurnEffect } from "@/lib/backgroundWork";
 import { makeExternalStore, type ExternalStore } from "@/lib/externalStore";
-import { recommendationTurn, recommendationTurnEffect } from "@/lib/recommendationWork";
+import { recommendationSteps, recommendationTurn } from "@/lib/recommendationWork";
 import { sightOf, type ScreenSight } from "@/lib/sight";
-import { runSteps } from "@/lib/stepped";
 import { appLog } from "@/log/appLog";
 import { online as phoneOnline } from "@/native/waveNative";
 
@@ -39,13 +42,20 @@ import { appRuntime } from "./runtime";
 
 let nextOffer = 0;
 
-/** Fewer eligible suggestions left than this, and a refill reads the radios' next pages. */
+/** The last ranking found fewer new suggestions than this: the next read adds next pages. */
 const LOW = 10;
+
+/** How long loading waits for the screen to settle and a free turn, against the 3 s other work allows. */
+const SETTLE_WAIT_MS = 600;
 
 const entryLibraryId = (entry: PlaylistEntryRow) =>
   entry.source === "library" ? String(entry.track.id) : undefined;
 const entryVideoId = (entry: PlaylistEntryRow) =>
   entry.source === "stream" ? entry.song.videoId : undefined;
+
+/** The rows the read behind [input] brought: the session passes a read's sources along as they are. */
+const rowsOfInput = ({ sources }: PlaylistRecommendationSessionInput) =>
+  (sources as typeof sources & { readonly songById: ReadonlyMap<string, SongRow> }).songById;
 
 /** The visit proper, from the first moment its section is wanted; [openingAt], the playlist's opening. */
 const openPlaylistSuggestionsVisit = (playlistId: number, openingAt: number) => {
@@ -69,11 +79,35 @@ const openPlaylistSuggestionsVisit = (playlistId: number, openingAt: number) => 
   // This visit's radio readers: each radio's live first page is read once a visit.
   const visitId = `playlist:${playlistId}:${Date.now().toString(36)}-${++nextOffer}`;
   let remaining = Number.POSITIVE_INFINITY;
-  // Nothing reads before the screen has settled, not even a slot's refill: the renewal fills it.
+  // Before the settle wait ends only a tap with no spare reads: its owner is waiting on the
+  // placeholder. A low reserve's refill, or a slot an offer left, waits for the renewal.
   let settled = false;
   const rowOf = (id: string) =>
     latestRows.get().get(id) ?? libraryRows.get().get(id) ?? savedRows.get(id);
+  const readSources = Effect.gen(function* () {
+    const input = yield* playlistRecommendationInput(playlistId);
+    const graph = yield* playlistRecommendationGraph;
+    const seeds = playlistSuggestionSeeds(playlistId, input.playlist);
+    const online = phoneOnline();
+    return {
+      input: {
+        playlist: input.playlist,
+        sources: {
+          ...input,
+          pages: [],
+          seeds,
+          graph,
+          profileOf: lookedUpProfileOf,
+          online,
+        },
+      },
+      when: { online, low: remaining < LOW },
+    };
+  });
+  /** Whether someone waits is asked at each slice: a tap can start a wait mid-ranking. */
+  const awaited = () => playlistOffersAwaited(session.get());
   const session = playlistRecommendationSession({
+    settled: () => settled,
     saved: {
       offers: saved.tracks,
       online: phoneOnline,
@@ -89,7 +123,7 @@ const openPlaylistSuggestionsVisit = (playlistId: number, openingAt: number) => 
     },
     gone: (input, signal) =>
       appRuntime.runPromise(
-        runSteps(playlistOfferGoneSteps(input.playlist, input.sources), recommendationTurnEffect),
+        recommendationSteps(playlistOfferGoneSteps(input.playlist, input.sources), awaited),
         { signal },
       ),
     newId: () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${++nextOffer}`,
@@ -97,27 +131,28 @@ const openPlaylistSuggestionsVisit = (playlistId: number, openingAt: number) => 
       sightWatch.waiting("read");
       return appRuntime.runPromise(
         Effect.gen(function* () {
-          const input = yield* playlistRecommendationInput(playlistId);
-          const graph = yield* playlistRecommendationGraph;
-          // Source rows are retained for the five visible offers only, never a copy of the Library.
-          latestRows.set(input.songById);
-          const seeds = playlistSuggestionSeeds(playlistId, input.playlist);
-          const online = phoneOnline();
-          const pages = yield* playlistSuggestionRadios(visitId, seeds, {
-            online,
-            low: remaining < LOW,
-          });
+          const { input, when } = yield* readSources;
+          const pages = yield* playlistSuggestionRadios(visitId, input.sources.seeds, when);
           sightWatch.waiting(null);
+          return { ...input, sources: { ...input.sources, pages } };
+        }),
+        { signal },
+      );
+    },
+    // Each radio on its own: the session shows offers from the first to answer.
+    readFresh: (signal) => {
+      sightWatch.waiting("read");
+      return appRuntime.runPromise(
+        Effect.gen(function* () {
+          const { input, when } = yield* readSources;
           return {
-            playlist: input.playlist,
-            sources: {
-              ...input,
-              pages,
-              seeds,
-              graph,
-              profileOf: lookedUpProfileOf,
-              online,
-            },
+            input,
+            radios: () =>
+              input.sources.seeds.map((seed) =>
+                appRuntime
+                  .runPromise(playlistSuggestionRadios(visitId, [seed], when), { signal })
+                  .then((pages) => pages[0] ?? null),
+              ),
           };
         }),
         { signal },
@@ -125,24 +160,20 @@ const openPlaylistSuggestionsVisit = (playlistId: number, openingAt: number) => 
     },
     rank: async (input, signal) => {
       sightWatch.waiting("rank");
-      const ranked = await appRuntime
-        .runPromise(
-          runSteps(
-            playlistRecommendationsSteps(input.playlist, input.sources, PLAYLIST_SAVED_OFFERS),
-            recommendationTurnEffect,
-          ),
-          { signal },
-        )
-        .catch((error: unknown) => {
-          // A cancelled rank must not keep the whole Library index reachable from this visit.
-          latestRows.set(new Map());
-          throw error;
-        });
+      const ranked = await appRuntime.runPromise(
+        recommendationSteps(
+          playlistRecommendationsSteps(input.playlist, input.sources, PLAYLIST_SAVED_OFFERS),
+          awaited,
+        ),
+        { signal },
+      );
       sightWatch.waiting(null);
       remaining = ranked.length;
       const held = new Map<string, SongRow>();
+      // The read's whole rows live only as long as its input: the visit keeps these few.
+      const rows = rowsOfInput(input);
       const keep = (id: string) => {
-        const row = latestRows.get().get(id);
+        const row = rows.get(id);
         if (row !== undefined) held.set(id, row);
       };
       for (const offer of ranked) keep(offer.track.id);
@@ -194,6 +225,8 @@ const openPlaylistSuggestionsVisit = (playlistId: number, openingAt: number) => 
         const { offers, failed } = timing;
         void afterPaint().then(() => sightWatch.shown({ offers, failed }));
       },
+      slotWait: (wait) => appLog("info", "WaveTiming", playlistSlotWaitLine(wait)),
+      reserveRefill: (refill) => appLog("info", "WaveTiming", playlistReserveRefillLine(refill)),
     },
   });
   // Saved offers are showing from the start: the wait for them is over, and what runs next renews.
@@ -232,9 +265,7 @@ const openPlaylistSuggestionsVisit = (playlistId: number, openingAt: number) => 
     playlistRead: (items: readonly PlaylistEntryRow[]): void => {
       const offers = session.offers();
       if (offers.length === 0) return;
-      session.leave(playlistOfferHeld(offers, items, entryLibraryId, entryVideoId), {
-        read: settled,
-      });
+      session.leave(playlistOfferHeld(offers, items, entryLibraryId, entryVideoId));
     },
     /**
      * Loads while [screen] is in sight and the section is [wanted]; the section's
@@ -257,9 +288,13 @@ const openPlaylistSuggestionsVisit = (playlistId: number, openingAt: number) => 
         sight,
         start: (signal) => {
           sightWatch.waiting("settle");
-          return appRuntime.runPromise(settledTurnEffect, { signal }).then(() => {
-            settled = true;
-          });
+          return appRuntime
+            .runPromise(Effect.raceFirst(settledTurnEffect, Effect.sleep(SETTLE_WAIT_MS)), {
+              signal,
+            })
+            .then(() => {
+              settled = true;
+            });
         },
         // The visit follows the write's cause (#599): source changes revalidate even when
         // playlist IDs stay the same, once the playlist is in sight and settled. Catalog writes

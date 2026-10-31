@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
 import { test } from "node:test";
 import { setImmediate } from "node:timers/promises";
+import { setFlagsFromString } from "node:v8";
+import { runInNewContext } from "node:vm";
 
 import { goToSuggestionsOffered } from "@wave/core";
 
@@ -19,8 +21,18 @@ const app = {
   storageReads: 0,
   letters: "abcdefghijkl",
   radio: "abcdefghijkl",
+  seeds: ["seed"],
+  radios: new Map<string, string>(),
+  radioWait: async (_seed: string): Promise<void> => {},
   playlist: ["seed"],
   retitled: new Map<string, string>(),
+  /** One Library array across reads, as reads between Library changes give; else one per read. */
+  sameLibrary: false,
+  theLibrary: null as unknown,
+  /** Whether someone waited at the start of each ranking. */
+  rankings: [] as { readonly awaited: boolean }[],
+  /** Each read's whole Library of rows, weakly: whether something still holds it. */
+  readRows: [] as WeakRef<object>[],
 };
 Object.assign(globalThis, { playlistVisitApp: app });
 
@@ -35,7 +47,11 @@ const boundary = `data:text/javascript,${encodeURIComponent(`
     addedAt: 0, albumId: 1, artistId: 1, artistIds: [1], discNumber: null, trackNumber: null, year: null,
     genre: "Rock", hasLyrics: false, explicit: "unknown" });
   const seed = song("seed");
-  const libraryNow = () => [seed, ...app.letters.split("").map(song)];
+  const freshLibrary = () => [seed, ...app.letters.split("").map(song)];
+  const libraryNow = () => {
+    if (!app.sameLibrary) return freshLibrary();
+    return (app.theLibrary ??= freshLibrary());
+  };
   export class LibraryStore extends Context.Service()("test/LibraryStore") {}
   const store = {
     dismissPlaylistRecommendation: () => Effect.void,
@@ -59,6 +75,14 @@ const boundary = `data:text/javascript,${encodeURIComponent(`
   });
   export const recommendationTurnEffect = Effect.void;
   export const recommendationTurn = async () => {};
+  export const recommendationSteps = (steps, awaited) =>
+    Effect.sync(() => {
+      app.rankings.push({ awaited: awaited() });
+      for (;;) {
+        const next = steps.next();
+        if (next.done) return next.value;
+      }
+    });
   export const afterPaint = async () => {};
   export const appLog = (_level, _tag, line) => { app.lines.push(line); };
   export const online = () => app.online;
@@ -76,18 +100,19 @@ const boundary = `data:text/javascript,${encodeURIComponent(`
         app.reads++;
         await app.read(signal);
         const library = libraryNow();
-        return {
-          playlist: app.playlist.map(song),
-          library,
-          songById: new Map(library.map(({ id }) => [id, row(id)])),
-        };
+        const songById = new Map(library.map(({ id }) => [id, row(id)]));
+        app.readRows.push(new WeakRef(songById));
+        return { playlist: app.playlist.map(song), library, songById };
       }),
   });
-  export const playlistSuggestionSeeds = () => [seed];
-  export const playlistSuggestionRadios = () =>
-    Effect.succeed([{ id: "song:seed", artists: seed.artists, songs: app.radio.split("").map(song) }]);
+  export const playlistSuggestionSeeds = () => app.seeds.map(song);
+  export const playlistSuggestionRadios = (_visit, seeds) =>
+    Effect.promise(() => Promise.all(seeds.map(async ({ id }) => {
+      await app.radioWait(id);
+      return { id: "song:" + id, artists: ["Artist " + id], songs: (app.radios.get(id) ?? app.radio).split("").map(song) };
+    })));
 `)}`;
-const REAL = new Set(["@/lib/externalStore", "@/lib/sight", "@/lib/stepped"]);
+const REAL = new Set(["@/lib/externalStore", "@/lib/sight"]);
 const MOCKED = new Set([
   "expo-sqlite/kv-store",
   "./LibraryStore",
@@ -150,8 +175,15 @@ const reset = () => {
   app.storageReads = 0;
   app.letters = "abcdefghijkl";
   app.radio = "abcdefghijkl";
+  app.seeds = ["seed"];
+  app.radios = new Map();
+  app.radioWait = async () => {};
   app.playlist = ["seed"];
   app.retitled = new Map();
+  app.sameLibrary = false;
+  app.theLibrary = null;
+  app.rankings = [];
+  app.readRows = [];
 };
 const offerIds = (visit: ReturnType<typeof createPlaylistSuggestionsVisit>) =>
   visit.session.get().slots.map((offer) => offer?.track.id ?? null);
@@ -646,4 +678,211 @@ test("a row changed with no change to its offer's tags still refreshes", async (
   assert.notEqual(visit.libraryRows.get().get("a"), saved);
   assert.equal(visit.libraryRows.get().get("a")?.id, "a");
   stop();
+});
+
+test("an Add and a Dismiss each fill from a spare, read nothing and write one timing line", async () => {
+  reset();
+  const { visit, screen, wanted, sectionSight } = opened();
+  const stop = visit.follow(screen, wanted, sectionSight);
+  await settledFrames();
+  const lines = () => app.lines.filter((line) => line.startsWith("Playlist slot wait:"));
+  assert.deepEqual(lines(), []);
+  const reads = app.reads;
+  const [first, second] = visit.session.get().slots;
+  await visit.session.accept(first!.key);
+  await visit.session.dismiss(second!.key);
+  await settledFrames();
+  assert.equal(app.reads, reads);
+  assert.deepEqual(offerIds(visit).slice(0, 2), ["f", "g"]);
+  assert.equal(visit.libraryRows.get().get("f")?.id, "f", "the spare's row is there to list it");
+  assert.equal(lines().length, 2);
+  assert.match(lines()[0]!, /^Playlist slot wait: Add offer after \d+ ms \(from spare\)$/);
+  assert.match(lines()[1]!, /^Playlist slot wait: Dismiss offer after \d+ ms \(from spare\)$/);
+  stop();
+});
+
+test("a screen that never settles lets the opening read at 600 ms", async (t) => {
+  reset();
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  app.settle = () => new Promise(() => {});
+  const { visit, screen, wanted, sectionSight } = opened();
+  const stop = visit.follow(screen, wanted, sectionSight);
+  await settledFrames();
+  t.mock.timers.tick(599);
+  await settledFrames();
+  assert.equal(app.reads, 0);
+  t.mock.timers.tick(1);
+  await settledFrames();
+  assert.equal(app.reads, 1);
+  assert.deepEqual(offerIds(visit), ["a", "b", "c", "d", "e"]);
+  stop();
+});
+
+test("leaving within the 600 ms reads nothing, then or later", async (t) => {
+  reset();
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  app.settle = () => new Promise(() => {});
+  const { visit, screen, wanted, sectionSight } = opened();
+  const stop = visit.follow(screen, wanted, sectionSight);
+  await settledFrames();
+  t.mock.timers.tick(300);
+  await settledFrames();
+  stop();
+  t.mock.timers.tick(5000);
+  await settledFrames();
+  assert.equal(app.reads, 0);
+});
+
+test("a fresh suggestion shows from the first radio to answer, and a later radio's offer has its Library row", async () => {
+  reset();
+  app.seeds = ["one", "two", "three"];
+  app.radios = new Map([
+    ["one", "de"],
+    ["two", "ab"],
+    ["three", "fg"],
+  ]);
+  const slow = Promise.withResolvers<void>();
+  app.radioWait = async (seed) => {
+    if (seed !== "two") await slow.promise;
+  };
+  const { visit, screen, wanted, sectionSight } = opened();
+  const stop = visit.follow(screen, wanted, sectionSight);
+  await settledFrames();
+  assert.deepEqual(offerIds(visit), ["a", "b", null, null, null]);
+  assert.equal(visit.session.get().loading, false);
+  assert.ok(visit.libraryRows.get().has("a"));
+  assert.match(app.lines.find((line) => line.includes("Playlist suggestions:")) ?? "", /2 offers/);
+
+  slow.resolve();
+  await settledFrames();
+  // The two that answered together interleave by position, as radios do.
+  assert.deepEqual(offerIds(visit), ["a", "b", "d", "f", "e"]);
+  assert.ok(visit.libraryRows.get().has("f"), "a later radio's offer keeps its row");
+  stop();
+});
+
+test("the first radio's ranking is awaited; the later radios' isn't", async () => {
+  reset();
+  app.seeds = ["one", "two"];
+  app.radios = new Map([
+    ["one", "abcde"],
+    ["two", "fghij"],
+  ]);
+  const slow = Promise.withResolvers<void>();
+  app.radioWait = async (seed) => {
+    if (seed === "two") await slow.promise;
+  };
+  const { visit, screen, wanted, sectionSight } = opened();
+  const stop = visit.follow(screen, wanted, sectionSight);
+  await settledFrames();
+  assert.deepEqual(app.rankings, [{ awaited: true }]);
+  slow.resolve();
+  await settledFrames();
+  assert.deepEqual(app.rankings, [{ awaited: true }, { awaited: false }]);
+  stop();
+});
+
+test("a ranking on a Library read before still finds its rows, once the reads have moved on", async () => {
+  reset();
+  app.sameLibrary = true;
+  app.seeds = ["one"];
+  app.radios = new Map([["one", "ab"]]);
+  const { visit, screen, wanted, sectionSight } = opened();
+  const stop = visit.follow(screen, wanted, sectionSight);
+  await settledFrames();
+  assert.deepEqual(offerIds(visit), ["a", "b", null, null, null]);
+  // A tap frees a slot: a second read of the same Library array ranks a new radio's offer.
+  app.radios = new Map([["one", "c"]]);
+  await visit.session.dismiss(visit.session.get().slots[0]!.key);
+  await settledFrames();
+  assert.deepEqual(offerIds(visit), ["c", "b", null, null, null]);
+  assert.ok(visit.libraryRows.get().has("c"), "the new offer's row comes from the earlier read");
+  stop();
+});
+
+test("a tap that finds the reserve low within the settle wait reads nothing until it ends", async () => {
+  reset();
+  // Saved by an older version: ten offers, so one tap leaves 4 spares.
+  app.radio = "abcdefghij";
+  await visited();
+  app.reads = 0;
+  app.radio = "abcdefghijkl";
+  app.letters = "abcdefghijkl";
+  const settled = Promise.withResolvers<void>();
+  app.settle = () => settled.promise;
+  const { visit, screen, wanted, sectionSight } = opened();
+  const stop = visit.follow(screen, wanted, sectionSight);
+  await visit.session.dismiss(visit.session.get().slots[0]!.key);
+  await settledFrames();
+  assert.equal(offerIds(visit)[0], "f");
+  assert.equal(app.reads, 0);
+  settled.resolve();
+  await settledFrames();
+  assert.ok(app.reads >= 1);
+  stop();
+});
+
+test("leaving as a fresh read's radios start leaves no rejection unhandled", async () => {
+  reset();
+  app.seeds = ["one", "two", "three"];
+  const unhandled: unknown[] = [];
+  const heard = (reason: unknown) => unhandled.push(reason);
+  process.on("unhandledRejection", heard);
+  const { visit, screen, wanted, sectionSight } = opened();
+  let stop = () => {};
+  app.radioWait = async () => {
+    stop();
+    await new Promise(() => {});
+  };
+  stop = visit.follow(screen, wanted, sectionSight);
+  await settledFrames();
+  process.off("unhandledRejection", heard);
+  assert.deepEqual(unhandled, []);
+});
+
+test("leaving right after a tap, its saved offers don't hold the song on the next visit", async () => {
+  reset();
+  await visited();
+  const { visit, screen, wanted, sectionSight } = opened();
+  const stop = visit.follow(screen, wanted, sectionSight);
+  await settledFrames();
+  const tapped = visit.session.get().slots[0]!;
+  await visit.session.dismiss(tapped.key);
+  stop();
+  assert.equal(offerIds(opened().visit).includes(tapped.track.id), false);
+});
+
+setFlagsFromString("--expose-gc");
+const collectGarbage = runInNewContext("gc") as () => void;
+
+/** How many reads' whole rows something still holds, once nothing under way needs them. */
+const heldReadRows = async () => {
+  await settledFrames();
+  collectGarbage();
+  return app.readRows.filter((rows) => rows.deref() !== undefined).length;
+};
+
+test("a finished ranking lets go of the read's whole rows, on a Library array that stands", async () => {
+  reset();
+  app.sameLibrary = true;
+  const { visit, screen, wanted, sectionSight } = opened();
+  const stop = visit.follow(screen, wanted, sectionSight);
+  await settledFrames();
+  assert.equal(app.readRows.length, 1);
+  assert.equal(await heldReadRows(), 0);
+  assert.deepEqual(offerIds(visit), ["a", "b", "c", "d", "e"]);
+  stop();
+});
+
+test("a read cancelled in its radio wait lets go of its whole rows", async () => {
+  reset();
+  app.seeds = ["one", "two"];
+  app.radioWait = () => new Promise(() => {});
+  const { visit, screen, wanted, sectionSight } = opened();
+  const stop = visit.follow(screen, wanted, sectionSight);
+  await settledFrames();
+  assert.equal(app.readRows.length, 1);
+  stop();
+  assert.equal(await heldReadRows(), 0);
+  assert.equal(visit.session.get().slots.length, 0);
 });

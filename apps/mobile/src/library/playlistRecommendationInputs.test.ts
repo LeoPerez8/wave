@@ -132,6 +132,43 @@ test("a star reaches the next suggestions without paging the Library again", asy
   }
 });
 
+test("a write that leaves the Library's tracks as they were keeps its array, and its ranking indexes", async () => {
+  const { setFavorites } = await import("./db/playHistory.ts");
+  const fixture = await createFastAgainFixture();
+  try {
+    const store = await loadLibraryStore(root, fixture.db);
+    let songPasses = 0;
+    const counted: Store = {
+      ...store,
+      mixSongsPage: (after: number) => {
+        if (after === 0) songPasses++;
+        return store.mixSongsPage(after);
+      },
+    };
+    const source = snapshotOf(counted, Effect.void);
+    const first = await Effect.runPromise(source.get(fixture.playlistId));
+    // An Add writes the playlist, and a counted play the plays: the Library part reads again.
+    source.write("playlists");
+    const read = await Effect.runPromise(source.get(fixture.playlistId));
+    assert.equal(songPasses, 2, "the Library part read again");
+    assert.equal(read.library, first.library);
+    source.write("plays");
+    assert.equal((await Effect.runPromise(source.get(fixture.playlistId))).library, first.library);
+    assert.equal(songPasses, 3);
+    // A star changes a track: a new array, with the star.
+    const id = fixture.songIds.at(-1)!;
+    const oldStar = first.library.find((track) => track.id === String(id))!.favorite;
+    setFavorites(fixture.db, [id], !oldStar, 1);
+    source.write("favorites");
+    const starred = await Effect.runPromise(source.get(fixture.playlistId));
+    assert.notEqual(starred.library, first.library);
+    assert.equal(starred.library.find((track) => track.id === String(id))!.favorite, !oldStar);
+    source.dispose();
+  } finally {
+    fixture.close();
+  }
+});
+
 test("paged input preserves stream/missing membership, multi-genres and playlist feedback order", async () => {
   const { openTestDatabase, addTrack } = await import("./db/testDatabase.ts");
   const { createPlaylist, addToPlaylist } = await import("./db/playlists.ts");
