@@ -648,20 +648,24 @@ test("a row changed with no change to its offer's tags still refreshes", async (
   stop();
 });
 
-test("an Add and a Dismiss each write one timing line to the app log", async () => {
+test("an Add and a Dismiss each fill from a spare, read nothing and write one timing line", async () => {
   reset();
   const { visit, screen, wanted, sectionSight } = opened();
   const stop = visit.follow(screen, wanted, sectionSight);
   await settledFrames();
   const lines = () => app.lines.filter((line) => line.startsWith("Playlist slot wait:"));
   assert.deepEqual(lines(), []);
+  const reads = app.reads;
   const [first, second] = visit.session.get().slots;
   await visit.session.accept(first!.key);
   await visit.session.dismiss(second!.key);
   await settledFrames();
+  assert.equal(app.reads, reads);
+  assert.deepEqual(offerIds(visit).slice(0, 2), ["f", "g"]);
+  assert.equal(visit.libraryRows.get().get("f")?.id, "f", "the spare's row is there to list it");
   assert.equal(lines().length, 2);
-  assert.match(lines()[0]!, /^Playlist slot wait: Add offer after \d+ ms \(from ranking\)$/);
-  assert.match(lines()[1]!, /^Playlist slot wait: Dismiss offer after \d+ ms \(from ranking\)$/);
+  assert.match(lines()[0]!, /^Playlist slot wait: Add offer after \d+ ms \(from spare\)$/);
+  assert.match(lines()[1]!, /^Playlist slot wait: Dismiss offer after \d+ ms \(from spare\)$/);
   stop();
 });
 
