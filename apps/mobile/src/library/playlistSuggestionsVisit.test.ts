@@ -14,6 +14,7 @@ const app = {
   lines: [] as string[],
   online: true,
   stored: new Map<string, string>(),
+  storageReads: 0,
   letters: "abcdefghijkl",
   radio: "abcdefghijkl",
   playlist: ["seed"],
@@ -41,7 +42,7 @@ const boundary = `data:text/javascript,${encodeURIComponent(`
     }),
   };
   export const Storage = {
-    getItemSync: (key) => app.stored.get(key) ?? null,
+    getItemSync: (key) => { app.storageReads++; return app.stored.get(key) ?? null; },
     setItemSync: (key, value) => { app.stored.set(key, value); },
     removeItemSync: (key) => app.stored.delete(key),
   };
@@ -143,6 +144,7 @@ const reset = () => {
   app.lines = [];
   app.online = true;
   app.stored = new Map();
+  app.storageReads = 0;
   app.letters = "abcdefghijkl";
   app.radio = "abcdefghijkl";
   app.playlist = ["seed"];
@@ -371,6 +373,50 @@ test("a song the playlist holds, with no spare to take its slot, reads nothing b
   assert.deepEqual(visit.session.get().pendingSlots, []);
   assert.deepEqual(offerIds(visit), ["a", "b", "f", "d", "e"]);
   stop();
+});
+
+test("opening reads nothing saved until the section is wanted, then shows it at once", async () => {
+  reset();
+  await visited();
+  app.reads = 0;
+  app.storageReads = 0;
+  const { visit, screen, wanted, sectionSight } = opened();
+  wanted.set(false);
+  const stop = visit.follow(screen, wanted, sectionSight);
+  await settledFrames();
+  assert.equal(app.storageReads, 0, "YT Music off, Find or selecting costs no saved read");
+  wanted.set(true);
+  assert.equal(app.storageReads, 1);
+  assert.deepEqual(offerIds(visit), ["a", "b", "c", "d", "e"]);
+  assert.equal(visit.session.get().loading, false);
+  await settledFrames();
+  assert.equal(app.reads, 1);
+  stop();
+});
+
+test("the visit's saved read happens once, whatever asks first", async () => {
+  reset();
+  await visited();
+  app.storageReads = 0;
+  const { visit, screen, wanted, sectionSight } = opened();
+  assert.equal(app.storageReads, 0, "creating the visit reads nothing");
+  visit.session.get();
+  visit.playlistRead([]);
+  const stop = visit.follow(screen, wanted, sectionSight);
+  assert.equal(app.storageReads, 1);
+  stop();
+});
+
+test("with no offers to check, the playlist's entries aren't walked", () => {
+  reset();
+  const { visit } = opened();
+  const untouchable = new Proxy([], {
+    get: () => {
+      throw new Error("walked the entries");
+    },
+  });
+  visit.playlistRead(untouchable);
+  assert.equal(visit.session.get().slots.length, 0);
 });
 
 test("a failed renewal over saved offers logs a line and shows nothing", async () => {

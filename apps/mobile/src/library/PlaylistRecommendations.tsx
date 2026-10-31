@@ -57,7 +57,8 @@ const announce = (message: string): void => AccessibilityInfo.announceForAccessi
  * while [wanted] (the list would show the section) and the screen is in sight, whether or not
  * the section ever mounts. [sectionSight] is when the section came into sight in its list
  * (`Date.now()`), null while it's out of sight. [items] are the playlist's entries as read:
- * an offer they now hold leaves before the frame paints. Following them renders nothing here.
+ * while wanted, an offer they now hold leaves before the frame paints. Following them renders
+ * nothing here.
  */
 export const usePlaylistSuggestionsVisit = (
   playlistId: number,
@@ -70,8 +71,8 @@ export const usePlaylistSuggestionsVisit = (
   const [wantedStore] = useState(() => makeExternalStore(wanted));
   useLayoutEffect(() => wantedStore.set(wanted), [wantedStore, wanted]);
   useLayoutEffect(() => {
-    if (items !== undefined) visit.playlistRead(items);
-  }, [visit, items]);
+    if (wanted && items !== undefined) visit.playlistRead(items);
+  }, [visit, wanted, items]);
   useEffect(
     () => visit.follow(screen, wantedStore, sectionSight),
     [visit, screen, wantedStore, sectionSight],

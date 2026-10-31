@@ -334,6 +334,8 @@ export const playlistRecommendationSession = (options: {
     },
     /** Whether a renewal is running behind the offers, or was held off and hasn't run. */
     renewalOwed: () => renewalPending || behind !== undefined,
+    /** The offers showing and those saved: all `leave` could take out. */
+    offers: (): readonly PlaylistRecommendationTrack[] => [...held(), ...savedOffers],
     /**
      * [gone] offers left outside the suggestions (the playlist now holds them): each
      * showing one's slot takes a saved spare at once, else a refill. The others stay.

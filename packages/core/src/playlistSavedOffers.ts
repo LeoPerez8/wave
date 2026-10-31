@@ -120,20 +120,29 @@ export const playlistOfferGone = (
   finishSteps(playlistOfferGoneSteps(playlist, sources));
 
 /**
- * Whether an offer is one of a playlist's [entries], by Library id or video id: cheap
- * enough for when they've just been read. Another recording of it waits for
- * `playlistOfferGone`, whose index a long playlist needs turns for.
+ * Which of [offers] are among a playlist's [entries], by Library id or video id: cheap
+ * enough for when they've just been read, on a playlist of thousands. It walks the entries
+ * once, copying none of them, and knows only [offers]. Another recording of an offer waits
+ * for `playlistOfferGone`, whose index a long playlist needs turns for.
  */
-export const playlistOfferHeld = (
-  entries: readonly { readonly id?: string; readonly videoId?: string }[],
+export const playlistOfferHeld = <Entry>(
+  offers: readonly PlaylistRecommendationTrack[],
+  entries: readonly Entry[],
+  idOf: (entry: Entry) => string | undefined,
+  videoIdOf: (entry: Entry) => string | undefined,
 ): ((offer: PlaylistRecommendationTrack) => boolean) => {
-  const ids = new Set<string>();
-  const videos = new Set<string>();
-  for (const { id, videoId } of entries) {
-    if (id !== undefined) ids.add(id);
-    if (videoId !== undefined && videoId !== "") videos.add(videoId);
+  const ids = new Set(offers.map((offer) => offer.id));
+  const videos = new Set(offers.map((offer) => offer.videoId));
+  videos.delete("");
+  const heldIds = new Set<string>();
+  const heldVideos = new Set<string>();
+  for (const entry of entries) {
+    const id = idOf(entry);
+    if (id !== undefined && ids.has(id)) heldIds.add(id);
+    const videoId = videoIdOf(entry);
+    if (videoId !== undefined && videos.has(videoId)) heldVideos.add(videoId);
   }
-  return (offer) => ids.has(offer.id) || videos.has(offer.videoId);
+  return (offer) => heldIds.has(offer.id) || heldVideos.has(offer.videoId);
 };
 
 /**

@@ -273,6 +273,16 @@ test("an Add's refill also fills a slot waiting for reads", async () => {
   assert.deepEqual(shown(), ["b", "w", "a", "y", "z"]);
 });
 
+test("a session's offers are those showing and those saved, none before anything's saved", async () => {
+  const empty = savedSession([]);
+  assert.deepEqual(empty.session.offers(), []);
+  const { session } = savedSession(lettered("vwxyzq"));
+  assert.deepEqual(
+    new Set(session.offers().map((offer) => offer.id)),
+    new Set("vwxyzq".split("")),
+  );
+});
+
 test("a song that isn't showing leaves what's saved without touching the screen", () => {
   const { session, written } = savedSession(lettered("vwxyzq"));
   const before = session.get();
