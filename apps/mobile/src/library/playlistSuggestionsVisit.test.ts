@@ -12,6 +12,11 @@ const app = {
   reads: 0,
   read: async (_signal: AbortSignal): Promise<void> => {},
   lines: [] as string[],
+  online: true,
+  stored: new Map<string, string>(),
+  letters: "abcdefghijkl",
+  radio: "abcdefghijkl",
+  playlist: ["seed"],
 };
 Object.assign(globalThis, { playlistVisitApp: app });
 
@@ -22,9 +27,20 @@ const boundary = `data:text/javascript,${encodeURIComponent(`
   const song = (id) => ({ id, source: "library", videoId: "", title: id, artists: ["Artist " + id],
     album: null, albumId: null, durationMs: 180000, artworkUrl: null, explicit: false, genre: "Rock" });
   const seed = song("seed");
-  const library = [seed, ..."abcdefghijkl".split("").map(song)];
+  const libraryNow = () => [seed, ...app.letters.split("").map(song)];
   export class LibraryStore extends Context.Service()("test/LibraryStore") {}
-  const store = { dismissPlaylistRecommendation: () => Effect.void };
+  const store = {
+    dismissPlaylistRecommendation: () => Effect.void,
+    acceptPlaylistRecommendation: (_id, offer) => Effect.sync(() => {
+      app.playlist = [...app.playlist, offer.track.id];
+      return true;
+    }),
+  };
+  export const Storage = {
+    getItemSync: (key) => app.stored.get(key) ?? null,
+    setItemSync: (key, value) => { app.stored.set(key, value); },
+    removeItemSync: (key) => app.stored.delete(key),
+  };
   export const appRuntime = {
     runPromise: (effect, options) =>
       Effect.runPromise(Effect.provideService(effect, LibraryStore, store), options),
@@ -37,7 +53,7 @@ const boundary = `data:text/javascript,${encodeURIComponent(`
   export const recommendationTurn = async () => {};
   export const afterPaint = async () => {};
   export const appLog = (_level, _tag, line) => { app.lines.push(line); };
-  export const online = () => true;
+  export const online = () => app.online;
   export const lookedUpProfileOf = () => undefined;
   export const playlistsChanged = () => {};
   export const recommendationSnapshot = {
@@ -51,8 +67,9 @@ const boundary = `data:text/javascript,${encodeURIComponent(`
       Effect.promise(async (signal) => {
         app.reads++;
         await app.read(signal);
+        const library = libraryNow();
         return {
-          playlist: [seed],
+          playlist: app.playlist.map(song),
           library,
           songById: new Map(library.map((row) => [row.id, row])),
         };
@@ -60,10 +77,11 @@ const boundary = `data:text/javascript,${encodeURIComponent(`
   });
   export const playlistSuggestionSeeds = () => [seed];
   export const playlistSuggestionRadios = () =>
-    Effect.succeed([{ id: "song:seed", artists: seed.artists, songs: library }]);
+    Effect.succeed([{ id: "song:seed", artists: seed.artists, songs: app.radio.split("").map(song) }]);
 `)}`;
 const REAL = new Set(["@/lib/externalStore", "@/lib/sight", "@/lib/stepped"]);
 const MOCKED = new Set([
+  "expo-sqlite/kv-store",
   "./LibraryStore",
   "./runtime",
   "./playlists",
@@ -119,6 +137,11 @@ const reset = () => {
   app.reads = 0;
   app.read = async () => {};
   app.lines = [];
+  app.online = true;
+  app.stored = new Map();
+  app.letters = "abcdefghijkl";
+  app.radio = "abcdefghijkl";
+  app.playlist = ["seed"];
 };
 const offerIds = (visit: ReturnType<typeof createPlaylistSuggestionsVisit>) =>
   visit.session.get().slots.map((offer) => offer?.track.id ?? null);
@@ -247,4 +270,189 @@ test("an offer's Library row stays readable through refills with the section unm
   for (const id of shown)
     assert.equal(visit.libraryRows.get().get(id)?.id, id, `the row of offer ${id}`);
   stop();
+});
+
+/** A whole visit: opened, its renewal done, left. */
+const visited = async () => {
+  const { visit, screen, wanted, sectionSight } = opened();
+  const stop = visit.follow(screen, wanted, sectionSight);
+  await settledFrames();
+  stop();
+  return visit;
+};
+
+test("coming back shows the last offers before anything reads, with their Library rows", async () => {
+  reset();
+  await visited();
+  app.reads = 0;
+  const { visit } = opened();
+  assert.deepEqual(offerIds(visit), ["a", "b", "c", "d", "e"]);
+  assert.equal(visit.session.get().loading, false);
+  assert.equal(app.reads, 0);
+  for (const id of offerIds(visit))
+    assert.equal(visit.libraryRows.get().get(id!)?.id, id, `the row of offer ${id}`);
+});
+
+test("a first visit with nothing saved waits for its offers", () => {
+  reset();
+  const { visit } = opened();
+  assert.deepEqual(offerIds(visit), []);
+  assert.equal(visit.session.get().loading, true);
+});
+
+test("a renewal over saved offers leaves them, and its offers show on the next visit", async () => {
+  reset();
+  await visited();
+  app.letters = "abcdefghijklmnopqrstuvwx";
+  app.radio = "mnopqrstuvwx";
+  const { visit, screen, wanted, sectionSight } = opened();
+  const offers = visit.session.get().slots;
+  const stop = visit.follow(screen, wanted, sectionSight);
+  await settledFrames();
+  assert.equal(app.reads, 2);
+  assert.equal(visit.session.get().slots, offers);
+  stop();
+  const { visit: next } = opened();
+  assert.deepEqual(offerIds(next), ["m", "n", "o", "p", "q"]);
+});
+
+test("a dismissed or added song isn't offered from saved offers on the next visit", async () => {
+  reset();
+  await visited();
+  const { visit, screen, wanted, sectionSight } = opened();
+  const stop = visit.follow(screen, wanted, sectionSight);
+  await settledFrames();
+  const [first, second] = visit.session.get().slots;
+  assert.equal(await visit.session.dismiss(first!.key), true);
+  assert.equal(await visit.session.accept(second!.key), true);
+  stop();
+  const ids = offerIds(opened().visit);
+  assert.equal(ids.includes(first!.track.id), false);
+  assert.equal(ids.includes(second!.track.id), false);
+  assert.equal(ids.length, 5, "spares take their places");
+});
+
+test("a song the playlist now holds leaves the first read of its entries, with no reads", async () => {
+  reset();
+  await visited();
+  app.reads = 0;
+  const { visit } = opened();
+  const held = (id: string) => ({ source: "library", track: { id } }) as never;
+  visit.playlistRead([held("c"), held("zz")]);
+  assert.deepEqual(offerIds(visit), ["a", "b", "f", "d", "e"]);
+  assert.equal(visit.libraryRows.get().get("f")?.id, "f");
+  assert.equal(app.reads, 0);
+  assert.equal(offerIds(opened().visit).includes("c"), false);
+});
+
+test("a failed renewal over saved offers logs a line and shows nothing", async () => {
+  reset();
+  await visited();
+  app.lines = [];
+  app.read = async () => {
+    throw new Error("no network");
+  };
+  const { visit, screen, wanted, sectionSight } = opened();
+  const offers = visit.session.get();
+  const stop = visit.follow(screen, wanted, sectionSight);
+  await settledFrames();
+  assert.equal(visit.session.get(), offers);
+  assert.equal(visit.session.get().error, null);
+  assert.ok(app.lines.some((line) => /Playlist suggestions failed renewing/.test(line)));
+  stop();
+});
+
+test("offers shown at once log a wait of 0 ms and the renewal behind them as a renewal", async () => {
+  reset();
+  await visited();
+  app.lines = [];
+  const { visit, screen, wanted, sectionSight } = opened();
+  const stop = visit.follow(screen, wanted, sectionSight);
+  await settledFrames();
+  sectionSight.set(Date.now());
+  assert.ok(app.lines.some((line) => /in sight: 5 offers after 0 ms/.test(line)));
+  assert.ok(app.lines.some((line) => /Playlist suggestions renewed/.test(line)));
+  stop();
+});
+
+test("unreadable saved offers count as nothing saved", async () => {
+  reset();
+  await visited();
+  for (const key of app.stored.keys()) app.stored.set(key, "not json");
+  const { visit } = opened();
+  assert.deepEqual(offerIds(visit), []);
+  assert.equal(visit.session.get().loading, true);
+});
+
+test("a saved Library offer without a readable row isn't shown", async () => {
+  reset();
+  await visited();
+  for (const [key, text] of app.stored)
+    if (text.startsWith("[{"))
+      app.stored.set(
+        key,
+        JSON.stringify(JSON.parse(text).map(({ track }: { track: unknown }) => ({ track }))),
+      );
+  assert.deepEqual(offerIds(opened().visit), []);
+});
+
+test("saved offers keep the latest 200 playlists and drop the rest from the phone", async () => {
+  reset();
+  for (let id = 1; id <= 201; id++) {
+    const { screen, wanted, sectionSight } = opened();
+    const visit = createPlaylistSuggestionsVisit(id);
+    const stop = visit.follow(screen, wanted, sectionSight);
+    await settledFrames();
+    stop();
+  }
+  assert.deepEqual(offerIds(createPlaylistSuggestionsVisit(1)), []);
+  assert.equal(offerIds(createPlaylistSuggestionsVisit(2)).length, 5);
+  assert.equal(app.stored.size, 201, "200 playlists and their order");
+});
+
+test("a Library file gone since it was saved leaves when the read finds it, its slot filling", async () => {
+  reset();
+  await visited();
+  app.letters = "bcdefghijklm";
+  const { visit, screen, wanted, sectionSight } = opened();
+  const stop = visit.follow(screen, wanted, sectionSight);
+  await settledFrames();
+  assert.equal(offerIds(visit).includes("a"), false);
+  assert.deepEqual(offerIds(visit).slice(1), ["b", "c", "d", "e"]);
+  stop();
+});
+
+test("offline, saved streamed offers stay hidden, and back online they show again", async () => {
+  reset();
+  const stream = (id: string) => ({
+    id: `yt:${id}`,
+    source: "stream",
+    videoId: id,
+    title: id,
+    artists: [`Artist ${id}`],
+    album: null,
+    albumId: null,
+    durationMs: 180000,
+    artworkUrl: null,
+    explicit: false,
+  });
+  const row = (id: string) => ({ id, title: id });
+  const library = (id: string) => ({ ...stream(id), id, source: "library", videoId: "" });
+  app.stored.set(
+    "playlistSuggestions.savedOffers.7",
+    JSON.stringify([
+      { track: stream("v") },
+      { track: library("a"), row: row("a") },
+      { track: stream("w") },
+    ]),
+  );
+  app.online = false;
+  const { visit, screen, wanted, sectionSight } = opened();
+  assert.deepEqual(offerIds(visit), ["a"]);
+  const stop = visit.follow(screen, wanted, sectionSight);
+  await settledFrames();
+  assert.deepEqual(offerIds(visit), ["a"]);
+  stop();
+  app.online = true;
+  assert.deepEqual(offerIds(opened().visit), ["yt:v", "a", "yt:w"]);
 });

@@ -4,6 +4,9 @@
  * outlive the section scrolling out of sight or being recycled away.
  */
 import {
+  PLAYLIST_SAVED_OFFERS,
+  playlistOfferGoneSteps,
+  playlistOfferHeld,
   playlistRecommendationsSteps,
   playlistRecommendationSession,
   playlistSuggestionsLine,
@@ -22,13 +25,14 @@ import { runSteps } from "@/lib/stepped";
 import { appLog } from "@/log/appLog";
 import { online as phoneOnline } from "@/native/waveNative";
 
-import { LibraryStore, type SongRow } from "./LibraryStore";
+import { LibraryStore, type PlaylistEntryRow, type SongRow } from "./LibraryStore";
 import { onLibraryChange } from "./libraryChanges";
 import { followPlaylistRecommendations } from "./playlistRecommendationVisit";
 import {
   playlistRecommendationGraph,
   playlistRecommendationInput,
 } from "./playlistRecommendationSource";
+import { readSavedOffers, writeSavedOffers } from "./playlistSavedOffers";
 import { playlistSuggestionRadios, playlistSuggestionSeeds } from "./playlistSuggestionRadios";
 import { playlistsChanged } from "./playlists";
 import { appRuntime } from "./runtime";
@@ -44,7 +48,10 @@ export const createPlaylistSuggestionsVisit = (playlistId: number) => {
   // any other placeholder is loading a replacement.
   const busyLabels = makeExternalStore<ReadonlyMap<number, string>>(new Map());
   // Keep held offers readable if another offer's refill no longer finds their Library row.
-  const libraryRows = makeExternalStore<ReadonlyMap<string, SongRow>>(new Map());
+  const saved = readSavedOffers(playlistId);
+  // The rows of what's saved, spares among them, whichever read last held them.
+  let savedRows = saved.rows;
+  const libraryRows = makeExternalStore<ReadonlyMap<string, SongRow>>(saved.rows);
   const latestRows = makeExternalStore<ReadonlyMap<string, SongRow>>(new Map());
   // Date.now(): the list notices the section's sight on the UI thread, whose clock is this one.
   const sightWatch = playlistSuggestionsSightWatch({
@@ -56,7 +63,27 @@ export const createPlaylistSuggestionsVisit = (playlistId: number) => {
   // This visit's radio readers: each radio's live first page is read once a visit.
   const visitId = `playlist:${playlistId}:${Date.now().toString(36)}-${++nextOffer}`;
   let remaining = Number.POSITIVE_INFINITY;
+  const rowOf = (id: string) =>
+    latestRows.get().get(id) ?? libraryRows.get().get(id) ?? savedRows.get(id);
   const session = playlistRecommendationSession({
+    saved: {
+      offers: saved.tracks,
+      online: phoneOnline,
+      write: (offers) => {
+        const rows = new Map<string, SongRow>();
+        for (const { id } of offers) {
+          const row = rowOf(id);
+          if (row !== undefined) rows.set(id, row);
+        }
+        savedRows = rows;
+        writeSavedOffers(playlistId, offers, (id) => rows.get(id));
+      },
+    },
+    gone: (input, signal) =>
+      appRuntime.runPromise(
+        runSteps(playlistOfferGoneSteps(input.playlist, input.sources), recommendationTurnEffect),
+        { signal },
+      ),
     newId: () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${++nextOffer}`,
     read: (signal) => {
       sightWatch.waiting("read");
@@ -93,7 +120,7 @@ export const createPlaylistSuggestionsVisit = (playlistId: number) => {
       const ranked = await appRuntime
         .runPromise(
           runSteps(
-            playlistRecommendationsSteps(input.playlist, input.sources),
+            playlistRecommendationsSteps(input.playlist, input.sources, PLAYLIST_SAVED_OFFERS),
             recommendationTurnEffect,
           ),
           { signal },
@@ -154,6 +181,12 @@ export const createPlaylistSuggestionsVisit = (playlistId: number) => {
       },
     },
   });
+  // Saved offers are showing from the start: the wait for them is over, and what runs next renews.
+  const shownAtOnce = session.get().slots.length;
+  if (shownAtOnce > 0) {
+    openedAt = undefined;
+    sightWatch.shown({ offers: shownAtOnce, failed: false });
+  }
   // Here, not in the section: slots can change with the section unmounted.
   let heldSlots = session.get().slots;
   session.subscribe(() => {
@@ -167,7 +200,7 @@ export const createPlaylistSuggestionsVisit = (playlistId: number) => {
       );
       // At most five lookups; don't synchronously index/copy the complete source on publication.
       for (const id of wanted) {
-        const row = latestRows.get().get(id) ?? previous.get(id);
+        const row = latestRows.get().get(id) ?? previous.get(id) ?? savedRows.get(id);
         if (row !== undefined) held.set(id, row);
       }
       return held;
@@ -177,6 +210,23 @@ export const createPlaylistSuggestionsVisit = (playlistId: number) => {
     session,
     libraryRows,
     busyLabels,
+    /**
+     * The playlist's entries as just read: an offer it now holds leaves, and only its
+     * slot fills. Other recordings of the song leave once a renewal's read has found them.
+     */
+    playlistRead: (items: readonly PlaylistEntryRow[]): void => {
+      session.leave(
+        playlistOfferHeld(
+          items.map((entry) =>
+            entry.source === "library"
+              ? { id: String(entry.track.id) }
+              : entry.source === "stream"
+                ? { videoId: entry.song.videoId }
+                : {},
+          ),
+        ),
+      );
+    },
     /**
      * Loads while [screen] is in sight and the section is [wanted]; the section's
      * own sight only times the wait. Returns how to stop, cancelling what's under way.

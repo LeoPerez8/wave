@@ -314,7 +314,7 @@ export function PlaylistItems({ playlistId, items, header, empty }: Props) {
   // Suggestions come from YouTube Music radios: with YT Music off there are none.
   const ytMusic = useYtMusicEnabled();
   const recommending = ytMusic && items !== undefined && found === null && !selecting;
-  const suggestions = usePlaylistSuggestionsVisit(playlistId, recommending, sectionSight);
+  const suggestions = usePlaylistSuggestionsVisit(playlistId, recommending, sectionSight, items);
   useLayoutEffect(() => {
     // Before the head's height is known the section's place would read too high, as in sight.
     recommendationsTop.set(

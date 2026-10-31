@@ -68,7 +68,7 @@ const PLAYLIST_FEEDBACK_WEIGHT = 4;
 export const playlistRecordingMatch = (tracks: readonly PlaylistRecommendationTrack[]) =>
   finishSteps(playlistRecordingMatchSteps(tracks));
 
-function* playlistRecordingMatchSteps(tracks: readonly PlaylistRecommendationTrack[]) {
+export function* playlistRecordingMatchSteps(tracks: readonly PlaylistRecommendationTrack[]) {
   const byId = yield* indexSteps(tracks, (track) => [track.id, track]);
   const byVideo = new Map<string, PlaylistRecommendationTrack>();
   for (const track of tracks) {
@@ -326,13 +326,14 @@ export const playlistOfferFits = (shown: readonly PlaylistRecommendationTrack[])
 export function* playlistRecommendationsSteps(
   playlist: readonly PlaylistRecommendationTrack[],
   sources: PlaylistRecommendationSources,
+  count = 5,
 ): Generator<void, PlaylistRecommendation[]> {
   const picked: PlaylistRecommendation[] = [];
   for (const candidate of yield* rankedPlaylistRecommendationsSteps(playlist, sources)) {
     yield;
     if (!playlistOfferFits(picked.map((item) => item.track))(candidate.track)) continue;
     picked.push(candidate);
-    if (picked.length === 5) break;
+    if (picked.length === count) break;
   }
   return picked;
 }
@@ -340,4 +341,5 @@ export function* playlistRecommendationsSteps(
 export const playlistRecommendations = (
   playlist: readonly PlaylistRecommendationTrack[],
   sources: PlaylistRecommendationSources,
-): PlaylistRecommendation[] => finishSteps(playlistRecommendationsSteps(playlist, sources));
+  count = 5,
+): PlaylistRecommendation[] => finishSteps(playlistRecommendationsSteps(playlist, sources, count));
