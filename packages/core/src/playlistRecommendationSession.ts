@@ -337,8 +337,13 @@ export const playlistRecommendationSession = (options: {
     /**
      * [gone] offers left outside the suggestions (the playlist now holds them): each
      * showing one's slot takes a saved spare at once, else a refill. The others stay.
+     * With [read] false nothing may read yet (the screen hasn't settled): a slot with no
+     * spare keeps its placeholder for the next renewal, or an action's refill.
      */
-    leave: (gone: (offer: PlaylistRecommendationTrack) => boolean): void => {
+    leave: (
+      gone: (offer: PlaylistRecommendationTrack) => boolean,
+      { read = true }: { readonly read?: boolean } = {},
+    ): void => {
       if (disposed) return;
       if (savedOffers.some(gone)) saveOffers(savedOffers.filter((offer) => !gone(offer)));
       const slots = [...state.slots];
@@ -362,6 +367,10 @@ export const playlistRecommendationSession = (options: {
       }
       publish({ slots, pendingSlots: [...state.pendingSlots, ...unspared] });
       if (unspared.length === 0) return;
+      if (!read) {
+        waiting.push(...unspared);
+        return;
+      }
       holdRenewal();
       void replace(unspared, "free");
     },
@@ -377,6 +386,7 @@ export const playlistRecommendationSession = (options: {
      * visit. With offers showing it runs behind them: they stay, Add and Dismiss go
      * first, a failure is only reported, and it fills only slots already free or whose
      * offer its read says is gone. With none, it shows its loading, offers or failure.
+     * Slots that waited for it (`leave`) go with a failure, leaving the list.
      * [refillOnly] retries the slots whose replacement failed, alongside any running
      * actions. [turn], the host's turn a full renewal reads on, once it shows it's
      * loading; a renewal whose asker has already waited for its turn (the playlist
@@ -478,7 +488,8 @@ export const playlistRecommendationSession = (options: {
         const slots: (PlaylistRecommendationSlot | null)[] = showing
           ? [...state.slots]
           : Array.from({ length: 5 }, () => null);
-        const holes = showing ? [...state.unfilled] : slots.map((_, index) => index);
+        const waited = waiting.splice(0);
+        const holes = showing ? [...state.unfilled, ...waited] : slots.map((_, index) => index);
         for (const [index, offer] of slots.entries())
           if (offer !== null && gone(offer.track)) {
             slots[index] = null;
@@ -495,12 +506,15 @@ export const playlistRecommendationSession = (options: {
         if (holes.length > 0)
           publish({
             slots,
+            pendingSlots: pendingSlotsBut(holes),
             unfilled: [],
             error: state.error === "refill" ? null : state.error,
           });
         timed(false);
       } catch {
         if (current()) {
+          const waited = waiting.splice(0);
+          if (waited.length > 0) publish({ pendingSlots: pendingSlotsBut(waited) });
           if (!showing) publish({ error: "load" });
           timed(true);
         }

@@ -63,6 +63,8 @@ export const createPlaylistSuggestionsVisit = (playlistId: number) => {
   // This visit's radio readers: each radio's live first page is read once a visit.
   const visitId = `playlist:${playlistId}:${Date.now().toString(36)}-${++nextOffer}`;
   let remaining = Number.POSITIVE_INFINITY;
+  // Nothing reads before the screen has settled, not even a slot's refill: the renewal fills it.
+  let settled = false;
   const rowOf = (id: string) =>
     latestRows.get().get(id) ?? libraryRows.get().get(id) ?? savedRows.get(id);
   const session = playlistRecommendationSession({
@@ -225,6 +227,7 @@ export const createPlaylistSuggestionsVisit = (playlistId: number) => {
                 : {},
           ),
         ),
+        { read: settled },
       );
     },
     /**
@@ -248,7 +251,9 @@ export const createPlaylistSuggestionsVisit = (playlistId: number) => {
         sight,
         start: (signal) => {
           sightWatch.waiting("settle");
-          return appRuntime.runPromise(settledTurnEffect, { signal });
+          return appRuntime.runPromise(settledTurnEffect, { signal }).then(() => {
+            settled = true;
+          });
         },
         // The visit follows the write's cause (#599): source changes revalidate even when
         // playlist IDs stay the same, once the playlist is in sight and settled. Catalog writes

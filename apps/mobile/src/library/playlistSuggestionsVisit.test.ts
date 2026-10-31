@@ -349,6 +349,30 @@ test("a song the playlist now holds leaves the first read of its entries, with n
   assert.equal(offerIds(opened().visit).includes("c"), false);
 });
 
+test("a song the playlist holds, with no spare to take its slot, reads nothing before settling", async () => {
+  reset();
+  app.radio = "abcde";
+  await visited();
+  app.reads = 0;
+  app.radio = "fghij";
+  const settled = Promise.withResolvers<void>();
+  app.settle = () => settled.promise;
+  const { visit, screen, wanted, sectionSight } = opened();
+  const held = (id: string) => ({ source: "library", track: { id } }) as never;
+  // The list's first commit with its entries already read: the layout effect before follow's.
+  visit.playlistRead([held("c")]);
+  const stop = visit.follow(screen, wanted, sectionSight);
+  await settledFrames();
+  assert.equal(app.reads, 0);
+  assert.deepEqual(visit.session.get().pendingSlots, [2]);
+  settled.resolve();
+  await settledFrames();
+  assert.equal(app.reads, 1, "the opening's renewal fills the slot, on its one read");
+  assert.deepEqual(visit.session.get().pendingSlots, []);
+  assert.deepEqual(offerIds(visit), ["a", "b", "f", "d", "e"]);
+  stop();
+});
+
 test("a failed renewal over saved offers logs a line and shows nothing", async () => {
   reset();
   await visited();

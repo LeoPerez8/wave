@@ -222,6 +222,57 @@ test("a song leaving with no spare holds its slot's placeholder until a refill f
   assert.deepEqual(shown(), ["v", "w", "a", "y", "z"]);
 });
 
+test("a song leaving while reads must wait holds its placeholder, and the renewal fills it", async () => {
+  const { session, gate, shown } = savedSession(lettered("vwxyz"));
+  const before = session.get().slots;
+  session.leave((offer) => offer.id === "x", { read: false });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(gate.reads, 0);
+  assert.deepEqual(session.get().pendingSlots, [2]);
+  await session.renew();
+  assert.equal(gate.reads, 1);
+  assert.deepEqual(session.get().pendingSlots, []);
+  assert.deepEqual(shown(), ["v", "w", "a", "y", "z"]);
+  for (const index of [0, 1, 3, 4]) assert.equal(session.get().slots[index], before[index]);
+});
+
+test("a song leaving while reads must wait still takes a saved spare at once", () => {
+  const { session, gate, shown } = savedSession(lettered("vwxyzq"));
+  session.leave((offer) => offer.id === "x", { read: false });
+  assert.deepEqual(shown(), ["v", "w", "q", "y", "z"]);
+  assert.deepEqual(session.get().pendingSlots, []);
+  assert.equal(gate.reads, 0);
+});
+
+test("every showing song leaving while reads must wait: the renewal is a first visit's", async () => {
+  const { session, gate, shown } = savedSession(lettered("vw"));
+  session.leave(() => true, { read: false });
+  assert.deepEqual(session.get().pendingSlots, [0, 1]);
+  await session.renew();
+  assert.equal(gate.reads, 1);
+  assert.deepEqual(session.get().pendingSlots, []);
+  assert.deepEqual(shown(), ["a", "b", "c", "d", "e"]);
+});
+
+test("a renewal failing over a slot that waited for it lets the slot go, with no message", async () => {
+  const { session, gate, shown } = savedSession(lettered("vwxyz"));
+  session.leave((offer) => offer.id === "x", { read: false });
+  gate.fail = true;
+  await session.renew();
+  assert.deepEqual(session.get().pendingSlots, []);
+  assert.deepEqual(session.get().unfilled, []);
+  assert.equal(session.get().error, null);
+  assert.equal(shown()[2], null);
+});
+
+test("an Add's refill also fills a slot waiting for reads", async () => {
+  const { session, shown } = savedSession(lettered("vwxyz"));
+  session.leave((offer) => offer.id === "x", { read: false });
+  await session.accept(session.get().slots[0]!.key);
+  assert.deepEqual(session.get().pendingSlots, []);
+  assert.deepEqual(shown(), ["b", "w", "a", "y", "z"]);
+});
+
 test("a song that isn't showing leaves what's saved without touching the screen", () => {
   const { session, written } = savedSession(lettered("vwxyzq"));
   const before = session.get();
