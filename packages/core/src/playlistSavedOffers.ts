@@ -4,6 +4,7 @@
  */
 import { finishSteps } from "./buildSteps.ts";
 import {
+  PLAYLIST_SHOWN_OFFERS,
   playlistOfferFits,
   playlistRecordingMatch,
   playlistRecordingMatchSteps,
@@ -17,14 +18,11 @@ export const PLAYLIST_SAVED_OFFERS = 10;
 /** How many playlists keep their offers: the latest ones saved. */
 export const PLAYLIST_SAVED_PLAYLISTS = 200;
 
-/** The offers shown at once: as many as the section has slots. */
-const SHOWN = 5;
-
-/** The first offers of [offers] that fit together, [SHOWN] at most: what a section holds. */
+/** The first offers of [offers] that fit together, a section's slots at most: what it holds. */
 const fitting = (offers: readonly PlaylistRecommendationTrack[]) => {
   const shown: PlaylistRecommendationTrack[] = [];
   for (const offer of offers) {
-    if (shown.length === SHOWN) break;
+    if (shown.length === PLAYLIST_SHOWN_OFFERS) break;
     if (playlistOfferFits(shown)(offer)) shown.push(offer);
   }
   return shown;

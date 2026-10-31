@@ -46,6 +46,8 @@ const savedSession = (
     signals: [] as (AbortSignal | undefined)[],
     playlist: [seed],
     library: [seed, ...lettered("abcdefghijklmnopqrstuvwxyz")],
+    /** What the radios bring, when it isn't the Library. */
+    radio: undefined as readonly PlaylistRecommendationTrack[] | undefined,
     feedback: [] as PlaylistRecommendationFeedback[],
     written: [] as (readonly PlaylistRecommendationTrack[])[],
   };
@@ -64,7 +66,7 @@ const savedSession = (
         sources: {
           // The radios bring what the Library holds of a through z, not the saved offers' copies.
           library: gate.library,
-          pages: [{ id: "song:seed", artists: ["Artist seed"], songs: gate.library }],
+          pages: [{ id: "song:seed", artists: ["Artist seed"], songs: gate.radio ?? gate.library }],
           graph: null,
           feedback: gate.feedback,
           online: gate.online,
@@ -255,7 +257,7 @@ test("offline, saved streamed offers stay hidden, and an offline renewal keeps t
   const { session, shown, gate } = savedSession(saved, { online: false });
   assert.deepEqual(shown(), ["w", "y"]);
   await session.renew();
-  assert.deepEqual(shown(), ["w", "y"]);
+  assert.deepEqual(shown(), ["w", "y", "a", "b", "c"], "free slots take Library files");
   assert.deepEqual(gate.written, []);
 });
 
@@ -316,4 +318,136 @@ test("a renewal held for a tap and then hidden stays owed until a later one runs
   session.resume();
   await session.renew();
   assert.equal(session.renewalOwed(), false);
+});
+
+test("a first load cancelled by hiding still reads as loading, for the renewal it's owed", async () => {
+  const { session, gate } = savedSession([]);
+  const held = Promise.withResolvers<void>();
+  gate.hold = held;
+  const renewing = session.renew();
+  session.pause();
+  held.resolve();
+  await renewing;
+  session.resume();
+  assert.equal(session.get().loading, true);
+  assert.deepEqual(session.get().slots, []);
+  await session.renew();
+  assert.equal(session.get().loading, false);
+  assert.equal(session.get().slots[0]?.track.id, "a");
+});
+
+test("a first load cancelled by its asker still reads as loading", async () => {
+  const { session, gate } = savedSession([]);
+  const held = Promise.withResolvers<void>();
+  gate.hold = held;
+  const asker = new AbortController();
+  const renewing = session.renew({ signal: asker.signal });
+  asker.abort();
+  held.resolve();
+  await renewing;
+  assert.equal(session.get().loading, true);
+});
+
+test("a cancelled Try Again goes back to loading, not to an empty section", async () => {
+  const { session, gate } = savedSession([]);
+  gate.fail = true;
+  await session.renew();
+  assert.equal(session.get().error, "load");
+  gate.fail = false;
+  const held = Promise.withResolvers<void>();
+  gate.hold = held;
+  const retrying = session.renew({ turn: "paint" });
+  session.pause();
+  held.resolve();
+  await retrying;
+  assert.equal(session.get().loading, true);
+  assert.equal(session.get().error, null);
+});
+
+test("what changed while paused is heard on resuming, once", () => {
+  const { session } = savedSession(lettered("vwxyzqr"));
+  let notified = 0;
+  session.subscribe(() => notified++);
+  session.pause();
+  session.leave((offer) => offer.id === "x");
+  session.leave((offer) => offer.id === "y");
+  assert.equal(notified, 0);
+  session.resume();
+  assert.equal(notified, 1);
+  session.pause();
+  session.resume();
+  assert.equal(notified, 1, "nothing changed this time");
+});
+
+test("a short section grows from a renewal, the offers showing staying as they are", async () => {
+  const { session, shown } = savedSession(lettered("vw"));
+  const before = session.get().slots;
+  await session.renew();
+  assert.deepEqual(shown(), ["v", "w", "a", "b", "c"]);
+  assert.equal(session.get().slots[0], before[0]);
+  assert.equal(session.get().slots[1], before[1]);
+});
+
+test("a slot left empty with nothing to replace it fills on a later renewal", async () => {
+  const { session, gate, shown } = savedSession(lettered("vwxyz"));
+  const library = gate.library;
+  gate.library = [library[0]!];
+  await session.dismiss(session.get().slots[1]!.key);
+  assert.deepEqual(shown(), ["v", null, "x", "y", "z"]);
+  assert.deepEqual(session.get().unfilled, []);
+  const before = session.get().slots;
+  gate.library = library;
+  await session.renew();
+  assert.deepEqual(shown(), ["v", "a", "x", "y", "z"]);
+  for (const index of [0, 2, 3, 4]) assert.equal(session.get().slots[index], before[index]);
+});
+
+test("filling free slots keeps to the artist cap with the offers showing", async () => {
+  const saved = [
+    { ...track("v"), artists: ["Artist a"] },
+    { ...track("w"), artists: ["Artist a"] },
+  ];
+  const { session, gate, shown } = savedSession(saved);
+  gate.library = [gate.library[0]!, ...saved, ...lettered("abcd")];
+  await session.renew();
+  assert.deepEqual(shown(), ["v", "w", "b", "c", "d"]);
+});
+
+test("a renewal with nothing to fill a short section's free slots publishes nothing", async () => {
+  const { session, gate } = savedSession(lettered("vw"));
+  gate.library = [gate.library[0]!, ...lettered("vw")];
+  const before = session.get();
+  let notified = 0;
+  session.subscribe(() => notified++);
+  await session.renew();
+  assert.equal(session.get(), before);
+  assert.equal(notified, 0);
+});
+
+test("a renewal refreshes a showing offer's tags in place, on its slot and key, ranked or not", async () => {
+  const { session, gate, shown } = savedSession(lettered("vwxyz"));
+  const before = session.get().slots;
+  gate.library = gate.library.map((song) =>
+    song.id === "x" ? { ...song, title: "Fixed", artworkUrl: "fixed.jpg" } : song,
+  );
+  let notified = 0;
+  session.subscribe(() => notified++);
+  await session.renew();
+  const after = session.get().slots;
+  assert.deepEqual(shown(), ["v", "w", "x", "y", "z"]);
+  assert.equal(after[2]?.key, before[2]?.key);
+  assert.equal(after[2]?.track.title, "Fixed");
+  assert.equal(after[2]?.track.artworkUrl, "fixed.jpg");
+  for (const index of [0, 1, 3, 4]) assert.equal(after[index], before[index]);
+  assert.equal(notified, 1);
+});
+
+test("a streamed offer's tags refresh from the ranking", async () => {
+  const offer = { ...stream("v"), id: "yt:v" };
+  const { session, gate } = savedSession([offer]);
+  const before = session.get().slots[0];
+  gate.radio = [{ ...offer, title: "Fixed" }];
+  await session.renew();
+  assert.equal(session.get().slots[0]?.key, before?.key);
+  assert.equal(session.get().slots[0]?.track.title, "Fixed");
 });

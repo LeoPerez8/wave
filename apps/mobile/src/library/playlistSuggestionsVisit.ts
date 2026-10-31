@@ -133,11 +133,18 @@ export const createPlaylistSuggestionsVisit = (playlistId: number) => {
       sightWatch.waiting(null);
       remaining = ranked.length;
       const held = new Map<string, SongRow>();
-      for (const offer of ranked) {
-        const row = latestRows.get().get(offer.track.id);
-        if (row !== undefined) held.set(offer.track.id, row);
-      }
+      const keep = (id: string) => {
+        const row = latestRows.get().get(id);
+        if (row !== undefined) held.set(id, row);
+      };
+      for (const offer of ranked) keep(offer.track.id);
+      for (const offer of session.get().slots) if (offer !== null) keep(offer.track.id);
       latestRows.set(held);
+      // The rows showing take what was just read, offers the ranking dropped among them.
+      libraryRows.update((previous) => {
+        if (![...previous].some(([id, row]) => (held.get(id) ?? row) !== row)) return previous;
+        return new Map([...previous].map(([id, row]) => [id, held.get(id) ?? row]));
+      });
       return ranked;
     },
     dismiss: (offer) =>

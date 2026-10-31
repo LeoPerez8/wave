@@ -3,6 +3,8 @@ import { registerHooks } from "node:module";
 import { test } from "node:test";
 import { setImmediate } from "node:timers/promises";
 
+import { goToSuggestionsOffered } from "@wave/core";
+
 import { makeExternalStore } from "../lib/externalStore.ts";
 
 /** What the app's boundaries answer in this file. */
@@ -17,6 +19,7 @@ const app = {
   letters: "abcdefghijkl",
   radio: "abcdefghijkl",
   playlist: ["seed"],
+  retitled: new Map<string, string>(),
 };
 Object.assign(globalThis, { playlistVisitApp: app });
 
@@ -24,7 +27,7 @@ const boundary = `data:text/javascript,${encodeURIComponent(`
   import * as Effect from ${JSON.stringify(import.meta.resolve("effect/Effect"))};
   import * as Context from ${JSON.stringify(import.meta.resolve("effect/Context"))};
   const app = globalThis.playlistVisitApp;
-  const song = (id) => ({ id, source: "library", videoId: "", title: id, artists: ["Artist " + id],
+  const song = (id) => ({ id, source: "library", videoId: "", title: app.retitled.get(id) ?? id, artists: ["Artist " + id],
     album: null, albumId: null, durationMs: 180000, artworkUrl: null, explicit: false, genre: "Rock" });
   const seed = song("seed");
   const libraryNow = () => [seed, ...app.letters.split("").map(song)];
@@ -142,6 +145,7 @@ const reset = () => {
   app.letters = "abcdefghijkl";
   app.radio = "abcdefghijkl";
   app.playlist = ["seed"];
+  app.retitled = new Map();
 };
 const offerIds = (visit: ReturnType<typeof createPlaylistSuggestionsVisit>) =>
   visit.session.get().slots.map((offer) => offer?.track.id ?? null);
@@ -451,8 +455,82 @@ test("offline, saved streamed offers stay hidden, and back online they show agai
   assert.deepEqual(offerIds(visit), ["a"]);
   const stop = visit.follow(screen, wanted, sectionSight);
   await settledFrames();
-  assert.deepEqual(offerIds(visit), ["a"]);
+  // Free slots take Library files; the streamed ones stay hidden, and saved.
+  assert.deepEqual(offerIds(visit), ["a", "b", "c", "d", "e"]);
   stop();
   app.online = true;
   assert.deepEqual(offerIds(opened().visit), ["yt:v", "a", "yt:w"]);
+});
+
+test("Find opening over a first load, then clearing, keeps the skeleton and the pill until it renews", async () => {
+  reset();
+  const held = Promise.withResolvers<void>();
+  app.read = () => held.promise;
+  const { visit, screen, wanted, sectionSight } = opened();
+  const stop = visit.follow(screen, wanted, sectionSight);
+  await settledFrames();
+  assert.equal(app.reads, 1);
+  wanted.set(false);
+  await settledFrames();
+  const settling = Promise.withResolvers<void>();
+  app.settle = () => settling.promise;
+  app.read = async () => {};
+  wanted.set(true);
+  await settledFrames();
+  assert.equal(visit.session.get().loading, true, "the section's skeleton stays");
+  assert.equal(goToSuggestionsOffered(visit.session.get()), true, "the pill stays");
+  settling.resolve();
+  await settledFrames();
+  assert.equal(visit.session.get().loading, false);
+  assert.deepEqual(offerIds(visit), ["a", "b", "c", "d", "e"]);
+  stop();
+});
+
+test("a spare taking a slot while Find is open has its Library row once Find closes", async () => {
+  reset();
+  await visited();
+  const { visit, screen, wanted, sectionSight } = opened();
+  const held = (...ids: string[]) =>
+    ids.map((id) => ({ source: "library", track: { id } })) as never;
+  // A first spare in sight narrows the rows to what shows, spares out.
+  visit.playlistRead(held("c"));
+  const stop = visit.follow(screen, wanted, sectionSight);
+  await settledFrames();
+  wanted.set(false);
+  await settledFrames();
+  visit.playlistRead(held("c", "d"));
+  const spare = offerIds(visit)[3]!;
+  assert.notEqual(spare, "d");
+  wanted.set(true);
+  assert.equal(visit.libraryRows.get().get(spare)?.id, spare);
+  stop();
+});
+
+test("a tag change reaches a showing offer and its row, even one the renewal didn't rank", async () => {
+  reset();
+  await visited();
+  app.letters = "abcdefghijklmnopqrstuvwx";
+  app.radio = "mnopqrstuvwx";
+  app.retitled.set("a", "Fixed");
+  const { visit, screen, wanted, sectionSight } = opened();
+  const key = visit.session.get().slots[0]?.key;
+  const stop = visit.follow(screen, wanted, sectionSight);
+  await settledFrames();
+  assert.deepEqual(offerIds(visit), ["a", "b", "c", "d", "e"]);
+  assert.equal(visit.session.get().slots[0]?.key, key);
+  assert.equal(visit.session.get().slots[0]?.track.title, "Fixed");
+  assert.equal(visit.libraryRows.get().get("a")?.title, "Fixed");
+  stop();
+});
+
+test("a row changed with no change to its offer's tags still refreshes", async () => {
+  reset();
+  await visited();
+  const { visit, screen, wanted, sectionSight } = opened();
+  const saved = visit.libraryRows.get().get("a");
+  const stop = visit.follow(screen, wanted, sectionSight);
+  await settledFrames();
+  assert.notEqual(visit.libraryRows.get().get("a"), saved);
+  assert.equal(visit.libraryRows.get().get("a")?.id, "a");
+  stop();
 });

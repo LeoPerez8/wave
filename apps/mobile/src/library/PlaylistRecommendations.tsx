@@ -1,5 +1,9 @@
 import { IconArrowDown, IconPlus, IconX } from "@tabler/icons-react-native";
-import { goToSuggestionsOffered, type PlaylistRecommendationSlot } from "@wave/core";
+import {
+  goToSuggestionsOffered,
+  PLAYLIST_SHOWN_OFFERS,
+  type PlaylistRecommendationSlot,
+} from "@wave/core";
 import { useEffect, useLayoutEffect, useState, useSyncExternalStore } from "react";
 import { AccessibilityInfo, Text, View } from "react-native";
 import Animated, {
@@ -44,7 +48,7 @@ const arrive = FadeIn.duration(CROSSFADE_MS).reduceMotion(ReduceMotion.Never);
  * The section's height with its heading and five offers: what a list that never mounted it
  * should expect, so a tap can scroll the section up rather than stop at its first line.
  */
-export const SUGGESTIONS_SECTION_HEIGHT = CELL * 12.5 + 5 * grid.row;
+export const SUGGESTIONS_SECTION_HEIGHT = CELL * 12.5 + PLAYLIST_SHOWN_OFFERS * grid.row;
 
 /** Add and Dismiss: the controls each offer row ends with. */
 const CONTROLS = 2;
@@ -287,7 +291,7 @@ export function PlaylistRecommendations({
     >
       {state.loading && songs.length === 0 ? (
         <SkeletonGroup label={text.loadingRecommended}>
-          {Array.from({ length: 5 }, (_, i) => (
+          {Array.from({ length: PLAYLIST_SHOWN_OFFERS }, (_, i) => (
             <ControlledTrackRowSkeleton key={i} controls={CONTROLS} />
           ))}
         </SkeletonGroup>

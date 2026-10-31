@@ -2172,6 +2172,7 @@ export type { FavoriteSource } from "./favoriteToast.ts";
 
 export {
   PLAYLIST_ARTIST_CAP,
+  PLAYLIST_SHOWN_OFFERS,
   playlistOfferFits,
   playlistRecommendations,
   playlistRecordingMatch,
