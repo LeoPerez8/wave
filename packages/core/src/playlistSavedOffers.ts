@@ -48,6 +48,22 @@ export const playlistOffersToSave = (
   });
 };
 
+/**
+ * [saved] with what a later radio's ranking [ranked] adds as spares, after them and in
+ * ranked order: no second recording of an offer, and no more than a playlist saves.
+ */
+export const playlistOffersWithSpares = (
+  saved: readonly PlaylistRecommendationTrack[],
+  ranked: readonly PlaylistRecommendationTrack[],
+): readonly PlaylistRecommendationTrack[] => {
+  const next = [...saved];
+  for (const offer of ranked) {
+    if (next.length === PLAYLIST_SAVED_OFFERS) break;
+    if (playlistRecordingMatch(next)(offer) === null) next.push(offer);
+  }
+  return next.length === saved.length ? saved : next;
+};
+
 /** Whether a visit may show saved [offer]: a song with a file and, offline, not a streamed one. */
 const showable = (offer: PlaylistRecommendationTrack, online: boolean) =>
   offer.available !== false && (online || offer.source !== "stream");

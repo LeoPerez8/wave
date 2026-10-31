@@ -19,6 +19,9 @@ const app = {
   storageReads: 0,
   letters: "abcdefghijkl",
   radio: "abcdefghijkl",
+  seeds: ["seed"],
+  radios: new Map<string, string>(),
+  radioWait: async (_seed: string): Promise<void> => {},
   playlist: ["seed"],
   retitled: new Map<string, string>(),
 };
@@ -83,9 +86,12 @@ const boundary = `data:text/javascript,${encodeURIComponent(`
         };
       }),
   });
-  export const playlistSuggestionSeeds = () => [seed];
-  export const playlistSuggestionRadios = () =>
-    Effect.succeed([{ id: "song:seed", artists: seed.artists, songs: app.radio.split("").map(song) }]);
+  export const playlistSuggestionSeeds = () => app.seeds.map(song);
+  export const playlistSuggestionRadios = (_visit, seeds) =>
+    Effect.promise(() => Promise.all(seeds.map(async ({ id }) => {
+      await app.radioWait(id);
+      return { id: "song:" + id, artists: ["Artist " + id], songs: (app.radios.get(id) ?? app.radio).split("").map(song) };
+    })));
 `)}`;
 const REAL = new Set(["@/lib/externalStore", "@/lib/sight", "@/lib/stepped"]);
 const MOCKED = new Set([
@@ -150,6 +156,9 @@ const reset = () => {
   app.storageReads = 0;
   app.letters = "abcdefghijkl";
   app.radio = "abcdefghijkl";
+  app.seeds = ["seed"];
+  app.radios = new Map();
+  app.radioWait = async () => {};
   app.playlist = ["seed"];
   app.retitled = new Map();
 };
@@ -699,4 +708,32 @@ test("leaving within the 600 ms reads nothing, then or later", async (t) => {
   t.mock.timers.tick(5000);
   await settledFrames();
   assert.equal(app.reads, 0);
+});
+
+test("a fresh suggestion shows from the first radio to answer, and a later radio's offer has its Library row", async () => {
+  reset();
+  app.seeds = ["one", "two", "three"];
+  app.radios = new Map([
+    ["one", "de"],
+    ["two", "ab"],
+    ["three", "fg"],
+  ]);
+  const slow = Promise.withResolvers<void>();
+  app.radioWait = async (seed) => {
+    if (seed !== "two") await slow.promise;
+  };
+  const { visit, screen, wanted, sectionSight } = opened();
+  const stop = visit.follow(screen, wanted, sectionSight);
+  await settledFrames();
+  assert.deepEqual(offerIds(visit), ["a", "b", null, null, null]);
+  assert.equal(visit.session.get().loading, false);
+  assert.ok(visit.libraryRows.get().has("a"));
+  assert.match(app.lines.find((line) => line.includes("Playlist suggestions:")) ?? "", /2 offers/);
+
+  slow.resolve();
+  await settledFrames();
+  // The two that answered together interleave by position, as radios do.
+  assert.deepEqual(offerIds(visit), ["a", "b", "d", "f", "e"]);
+  assert.ok(visit.libraryRows.get().has("f"), "a later radio's offer keeps its row");
+  stop();
 });
