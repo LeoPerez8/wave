@@ -1409,19 +1409,33 @@ test("an offer's wait lasts until the frame showing it, and a later tap doesn't 
   assert.deepEqual(waits[1], { action: "dismiss", ms: 1_066, outcome: "offer", from: "ranking" });
 });
 
-/** A fresh suggestion's session whose radios answer when the test says, with its offers saved. */
-const freshSuggestion = (library: readonly PlaylistRecommendationTrack[], radios: number) => {
+/**
+ * A fresh suggestion's session whose radios answer when the test says, with its offers saved.
+ * A read after that, a refill's, brings [refillIds], or fails without any.
+ */
+const freshSuggestion = (
+  library: readonly PlaylistRecommendationTrack[],
+  radios: number,
+  refillIds?: string,
+) => {
   const answers = Array.from({ length: radios }, () =>
     Promise.withResolvers<RadioRankingPage | null>(),
   );
   const ranks: (readonly string[])[] = [];
+  const excluded: (readonly string[])[] = [];
   const reports: PlaylistRecommendationTiming[] = [];
+  const counts = { reads: 0 };
   const saved: { offers: readonly PlaylistRecommendationTrack[] } = { offers: [] };
   let id = 0;
   const session = playlistRecommendationSession({
     newId: () => String(++id),
     read: async () => {
-      throw new Error("a fresh suggestion reads its radios one by one");
+      counts.reads++;
+      if (refillIds === undefined)
+        throw new Error("a fresh suggestion reads its radios one by one");
+      const songs = refillIds.split("").map(track);
+      const pages = [{ id: "refill", artists: ["Seed"], songs }];
+      return { playlist: [track("seed")], sources: { library, pages, graph: null } };
     },
     readFresh: async () => ({
       input: { playlist: [track("seed")], sources: { library, pages: [], graph: null } },
@@ -1429,6 +1443,7 @@ const freshSuggestion = (library: readonly PlaylistRecommendationTrack[], radios
     }),
     rank: async (input) => {
       ranks.push((input.sources.pages ?? []).map((page) => page.id));
+      excluded.push((input.sources.exclude ?? []).map((offer) => offer.id));
       return playlistRecommendations(input.playlist, input.sources, 20);
     },
     dismiss: async () => {},
@@ -1444,7 +1459,9 @@ const freshSuggestion = (library: readonly PlaylistRecommendationTrack[], radios
   return {
     session,
     ranks,
+    excluded,
     reports,
+    counts,
     saved,
     answer: (radio: number, ids: string) =>
       answers[radio]!.resolve({
@@ -1688,4 +1705,138 @@ test("a later ranking that fails costs only its spares", async () => {
   await renewal;
   assert.equal(session.get().error, null);
   assert.equal(session.get().slots[0]?.track.id, "a");
+});
+
+test("a low reserve while later radios answer starts no refill beside them, and one follows if it's still low", async () => {
+  const fresh = freshSuggestion(LETTERS, 3, "uvwxyz");
+  const renewal = fresh.session.renew();
+  fresh.answer(0, "abcdefg");
+  await quiet();
+
+  assert.equal(await fresh.session.dismiss(fresh.session.get().slots[0]!.key), true, "no waiting");
+  assert.deepEqual(fresh.showing(), ["f", "b", "c", "d", "e"]);
+  await quiet();
+  assert.equal(fresh.counts.reads, 0, "1 spare left, but the radios are still answering");
+
+  fresh.answer(1, "hi");
+  await quiet();
+  assert.equal(fresh.counts.reads, 0);
+  assert.deepEqual(fresh.excluded.at(-1), [..."afbcde", ..."bcdefg"], "new offers only");
+  const shown = fresh.session.get().slots;
+
+  fresh.noAnswer(2);
+  await renewal;
+  await quiet();
+  assert.equal(fresh.counts.reads, 1, "3 spares left once the last radio has settled");
+  assert.deepEqual(fresh.ranks, [["song:0"], ["song:1"], ["refill"]]);
+  assert.equal(fresh.session.get().slots, shown, "the refill changes nothing showing");
+  assert.deepEqual(
+    fresh.saved.offers.map((offer) => offer.id),
+    [..."bcdefghiuvwxyz"],
+  );
+});
+
+test("later radios that bring the reserve back leave no refill to run", async () => {
+  const fresh = freshSuggestion(LETTERS, 2, "uvwxyz");
+  const renewal = fresh.session.renew();
+  fresh.answer(0, "abcdefg");
+  await quiet();
+  await fresh.session.dismiss(fresh.session.get().slots[0]!.key);
+
+  fresh.answer(1, "hijklm");
+  await renewal;
+  await quiet();
+  assert.equal(fresh.counts.reads, 0);
+});
+
+test("a short reserve no tap has found low starts no refill when the later radios settle", async () => {
+  const fresh = freshSuggestion(LETTERS, 2, "uvwxyz");
+  const renewal = fresh.session.renew();
+  fresh.answer(0, "abcdef");
+  await quiet();
+  fresh.noAnswer(1);
+  await renewal;
+  await quiet();
+  assert.equal(fresh.counts.reads, 0);
+});
+
+test("a tap with no spare holds its placeholder for what the later radios bring, with no read", async () => {
+  const fresh = freshSuggestion(LETTERS, 3, "uvwxyz");
+  const renewal = fresh.session.renew();
+  fresh.answer(0, "abcde");
+  await quiet();
+
+  const tap = fresh.session.dismiss(fresh.session.get().slots[0]!.key);
+  await quiet();
+  assert.deepEqual(fresh.showing(), [null, "b", "c", "d", "e"]);
+  assert.deepEqual(fresh.session.get().pendingSlots, [0]);
+  assert.equal(fresh.counts.reads, 0);
+
+  fresh.answer(1, "fg");
+  assert.equal(await tap, true);
+  assert.deepEqual(fresh.showing(), ["f", "b", "c", "d", "e"]);
+  assert.deepEqual(fresh.session.get().pendingSlots, []);
+  assert.equal(fresh.counts.reads, 0);
+
+  fresh.noAnswer(2);
+  await renewal;
+});
+
+test("a slot still waiting when the last radio settles takes the refill that follows", async () => {
+  const fresh = freshSuggestion(LETTERS, 2, "uvw");
+  const renewal = fresh.session.renew();
+  fresh.answer(0, "abcde");
+  await quiet();
+  const tap = fresh.session.dismiss(fresh.session.get().slots[0]!.key);
+  await quiet();
+
+  fresh.fail(1);
+  await renewal;
+  assert.equal(await tap, true);
+  assert.equal(fresh.counts.reads, 1);
+  assert.deepEqual(fresh.showing(), ["u", "b", "c", "d", "e"]);
+  assert.deepEqual(fresh.session.get().pendingSlots, []);
+  assert.deepEqual(
+    fresh.saved.offers.map((offer) => offer.id),
+    [..."bcdeuvw"],
+  );
+});
+
+test("hiding the playlist with a slot waiting on later radios leaves it unfilled, reading nothing", async () => {
+  const fresh = freshSuggestion(LETTERS, 2, "uvw");
+  const renewal = fresh.session.renew();
+  fresh.answer(0, "abcde");
+  await quiet();
+  const tap = fresh.session.dismiss(fresh.session.get().slots[0]!.key);
+  await quiet();
+
+  fresh.session.pause();
+  await renewal;
+  assert.equal(await tap, true);
+  assert.equal(fresh.counts.reads, 0);
+  assert.deepEqual(fresh.session.get().unfilled, [0]);
+  assert.deepEqual(fresh.session.get().pendingSlots, []);
+});
+
+test("a renewal asked for while later radios answer stops them and runs after them, never beside", async () => {
+  const fresh = freshSuggestion(LETTERS, 2, "uvwxyz");
+  const renewal = fresh.session.renew();
+  fresh.answer(0, "abcde");
+  await quiet();
+  const tap = fresh.session.dismiss(fresh.session.get().slots[0]!.key);
+  await quiet();
+
+  void fresh.session.renew();
+  await renewal;
+  assert.equal(await tap, true, "the slot waiting isn't left behind");
+  await quiet();
+  assert.deepEqual(fresh.showing(), ["u", "b", "c", "d", "e"]);
+  assert.deepEqual(
+    fresh.ranks,
+    [["song:0"], ["refill"], ["refill"]],
+    "its refill, then the renewal",
+  );
+  fresh.answer(1, "fgh");
+  await quiet();
+  assert.equal(fresh.ranks.length, 3, "the stopped radio stays stopped");
 });
