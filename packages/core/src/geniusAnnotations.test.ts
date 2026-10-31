@@ -226,7 +226,13 @@ test("referents are saved with the song's Genius answer; an answer saved before 
   const { savedGenius, storedGenius } = await import("./index.ts");
   const song = { title: "Paper Lanterns", artist: "The Example Band" };
   const match = { id: 10356, title: "Paper Lanterns", artist: "The Example Band", url: "u" };
-  const answer = { checkedAt: 100, match, description: null, referents: allReferents() };
+  const answer = {
+    checkedAt: 100,
+    match,
+    description: null,
+    referents: allReferents(),
+    translations: {},
+  };
   assert.deepEqual(savedGenius(storedGenius(song, answer), 200, song), answer);
   const before = JSON.parse(storedGenius(song, answer));
   delete before.referents;

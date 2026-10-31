@@ -5,18 +5,23 @@ import { Text, View } from "react-native";
 import { CELL } from "@/catalog/grid";
 import { TextButton } from "@/components/TextButton";
 
+import type { GeniusAboutText } from "./useGenius";
+
 /** How many lines of the description show until the card is tapped. */
 const FOLDED_LINES = 3;
 
 /**
  * The About card at the top of the lyrics (docs/spec.md, "Genius About"):
  * the first lines of Genius's description of the song, and all of it after
- * a tap (another tap folds it again). Nothing without a description.
+ * a tap (another tap folds it again). Nothing without a description. Keyed
+ * by its original, a translation arriving replaces the text and keeps the
+ * card as it is.
  */
-export function GeniusAbout({ description }: { description: string | null }) {
+export function GeniusAbout({ about }: { about: GeniusAboutText | null }) {
   const { strings } = useLocalisation();
   const [expanded, setExpanded] = useState(false);
-  if (description === null) return null;
+  if (about === null) return null;
+  const description = about.shown;
   return (
     <TextButton
       label={strings.playbackText.aboutThisSongFromGeniusValue(description)}

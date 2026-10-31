@@ -2317,6 +2317,12 @@ export {
 } from "./genius.ts";
 export type { GeniusHit, GeniusMatch, SavedGenius } from "./genius.ts";
 export {
+  geniusAbout,
+  geniusTranslationRequest,
+  geniusTranslationTarget,
+  withGeniusTranslation,
+} from "./geniusTranslation.ts";
+export {
   GENIUS_REFERENTS_MAX_PAGES,
   GENIUS_REFERENTS_PER_PAGE,
   geniusLineSegments,
