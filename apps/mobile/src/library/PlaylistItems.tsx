@@ -17,6 +17,7 @@ import { GestureDetector } from "react-native-gesture-handler";
 import Animated, { useAnimatedReaction, useSharedValue } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
 
+import { makeExternalStore } from "@/lib/externalStore";
 import { usePositions } from "@/lib/usePositions";
 import { CELL, grid } from "@/catalog/grid";
 import { useLocalisation } from "@/localisation/localisation";
@@ -293,18 +294,31 @@ export function PlaylistItems({ playlistId, items, header, empty }: Props) {
   // (the footer out of sight) sees nothing move.
   const recommendationsTop = useSharedValue(Number.POSITIVE_INFINITY);
   const [anchored, setAnchored] = useState(false);
+  // A store: the section hears its sight without a render of the list.
+  const [sectionSight] = useState(() => makeExternalStore<number | null>(null));
+  const sightChanged = useCallback(
+    (inSight: boolean, at: number) => {
+      setAnchored(inSight);
+      sectionSight.set(inSight ? at : null);
+    },
+    [sectionSight],
+  );
   useAnimatedReaction(
     () => recommendationsTop.get() < scroll.get() + height.get() - bottomInset,
     (inSight, previous) => {
-      if (inSight !== previous) scheduleOnRN(setAnchored, inSight);
+      // Stamped here: the JS thread may be busy when it hears, and its wait is what's measured.
+      if (inSight !== previous) scheduleOnRN(sightChanged, inSight, Date.now());
     },
-    [bottomInset],
+    [bottomInset, sightChanged],
   );
   // Suggestions come from YouTube Music radios: with YT Music off there are none.
   const ytMusic = useYtMusicEnabled();
   const recommending = ytMusic && items !== undefined && found === null && !selecting;
   useLayoutEffect(() => {
-    recommendationsTop.set(recommending ? lead + shown.length * ROW : Number.POSITIVE_INFINITY);
+    // Before the head's height is known the section's place would read too high, as in sight.
+    recommendationsTop.set(
+      recommending && lead > 0 ? lead + shown.length * ROW : Number.POSITIVE_INFINITY,
+    );
   }, [recommendationsTop, recommending, lead, shown.length]);
 
   const onRemove = (item: PlaylistEntryRow) => {
@@ -389,7 +403,12 @@ export function PlaylistItems({ playlistId, items, header, empty }: Props) {
       item.kind === "empty" ? (
         empty
       ) : (
-        <PlaylistRecommendations key={playlistId} playlistId={playlistId} items={read} />
+        <PlaylistRecommendations
+          key={playlistId}
+          playlistId={playlistId}
+          items={read}
+          sectionSight={sectionSight}
+        />
       )
     ) : null;
 
