@@ -7,6 +7,7 @@ import {
   playlistSlotWaitLine,
   playlistSuggestionsLine,
   type PlaylistRecommendationTiming,
+  type PlaylistReserveRefill,
   type PlaylistSlotWait,
   type PlaylistRecommendationFeedback,
   type PlaylistRecommendationSessionInput,
@@ -1440,7 +1441,7 @@ const freshSuggestion = (
     },
     readFresh: async () => ({
       input: { playlist: [track("seed")], sources: { library, pages: [], graph: null } },
-      radios: answers.map((answer) => answer.promise),
+      radios: () => answers.map((answer) => answer.promise),
     }),
     rank: async (input) => {
       ranks.push((input.sources.pages ?? []).map((page) => page.id));
@@ -1617,7 +1618,7 @@ test("offline, or with nothing to seed a radio, no radio answering isn't a failu
         playlist: [track("seed")],
         sources: { library: [song], pages: [], graph: null, online: false },
       },
-      radios: [Promise.resolve(null)],
+      radios: () => [Promise.resolve(null)],
     }),
     dismiss: async () => {},
   });
@@ -1677,6 +1678,47 @@ test("a full reserve doesn't rank a later radio that could add nothing", async (
   assert.deepEqual(fresh.ranks, [["song:0"]]);
 });
 
+test("a later radio is still ranked when the reserve is full of spares it can't use", async () => {
+  const band = (id: string) => ({ ...track(id), artists: ["Band"] });
+  const first = [band("a"), band("b"), track("c"), track("d"), track("e")];
+  const spares = "fghijklmnopqrst".split("").map(band);
+  const answers = [0, 1].map(() => Promise.withResolvers<RadioRankingPage | null>());
+  const saved: { offers: readonly PlaylistRecommendationTrack[] } = { offers: [] };
+  let rankings = 0;
+  let id = 0;
+  const session = playlistRecommendationSession({
+    newId: () => String(++id),
+    read: async () => {
+      throw new Error("a fresh suggestion reads its radios one by one");
+    },
+    readFresh: async () => ({
+      input: { playlist: [track("seed")], sources: { library: LETTERS, pages: [], graph: null } },
+      radios: () => answers.map((answer) => answer.promise),
+    }),
+    rank: async () =>
+      ++rankings === 1
+        ? [...first, ...spares].map((offer) => ({ track: offer, score: 1 }))
+        : [{ track: track("new"), score: 1 }],
+    dismiss: async () => {},
+    saved: {
+      offers: [],
+      online: () => true,
+      write: (offers) => {
+        saved.offers = offers;
+      },
+    },
+  });
+  const renewal = session.renew();
+  answers[0]!.resolve({ id: "song:0", artists: [], songs: [] });
+  await quiet();
+  assert.equal(saved.offers.length, 20);
+  answers[1]!.resolve({ id: "song:1", artists: [], songs: [] });
+  await renewal;
+  assert.equal(rankings, 2);
+  assert.equal(saved.offers.at(-1)?.id, "new");
+  assert.equal(saved.offers.length, 20);
+});
+
 test("a later ranking that fails costs only its spares", async () => {
   let rankings = 0;
   const answers = [
@@ -1691,7 +1733,7 @@ test("a later ranking that fails costs only its spares", async () => {
     },
     readFresh: async () => ({
       input: { playlist: [track("seed")], sources: { library: LETTERS, pages: [], graph: null } },
-      radios: answers.map((answer) => answer.promise),
+      radios: () => answers.map((answer) => answer.promise),
     }),
     rank: async (input) => {
       if (++rankings > 1) throw new Error("rank failed");
@@ -1706,6 +1748,98 @@ test("a later ranking that fails costs only its spares", async () => {
   await renewal;
   assert.equal(session.get().error, null);
   assert.equal(session.get().slots[0]?.track.id, "a");
+});
+
+test("a later ranking that fails is logged, and the radios still to come rank as usual", async () => {
+  const answers = [0, 1, 2].map(() => Promise.withResolvers<RadioRankingPage | null>());
+  const refills: PlaylistReserveRefill[] = [];
+  const saved: { offers: readonly PlaylistRecommendationTrack[] } = { offers: [] };
+  let clock = 0;
+  let id = 0;
+  const session = playlistRecommendationSession({
+    newId: () => String(++id),
+    read: async () => {
+      throw new Error("a fresh suggestion reads its radios one by one");
+    },
+    readFresh: async () => ({
+      input: { playlist: [track("seed")], sources: { library: LETTERS, pages: [], graph: null } },
+      radios: () => answers.map((answer) => answer.promise),
+    }),
+    rank: async (input) => {
+      if (input.sources.pages?.[0]?.id === "song:1") {
+        clock += 40;
+        throw new Error("rank failed");
+      }
+      return playlistRecommendations(input.playlist, input.sources, 20);
+    },
+    dismiss: async () => {},
+    saved: {
+      offers: [],
+      online: () => true,
+      write: (offers) => {
+        saved.offers = offers;
+      },
+    },
+    timed: { now: () => clock, report: () => {}, reserveRefill: (refill) => refills.push(refill) },
+  });
+  const page = (radio: number, ids: string) => ({
+    id: `song:${radio}`,
+    artists: [],
+    songs: [...ids].map(track),
+  });
+  const renewal = session.renew();
+  answers[0]!.resolve(page(0, "abcde"));
+  await quiet();
+  answers[1]!.resolve(page(1, "fg"));
+  await quiet();
+  assert.deepEqual(refills, [{ ms: 40, added: 0, spares: 0, failed: true }]);
+  answers[2]!.resolve(page(2, "hi"));
+  await renewal;
+  assert.deepEqual(
+    saved.offers.map((offer) => offer.id),
+    [..."abcdehi"],
+  );
+  assert.equal(refills.length, 1);
+  assert.equal(session.get().error, null);
+});
+
+test("hiding the playlist during a later ranking logs no failure", async () => {
+  const ranking = Promise.withResolvers<readonly never[]>();
+  const answers = [0, 1].map(() => Promise.withResolvers<RadioRankingPage | null>());
+  const refills: PlaylistReserveRefill[] = [];
+  let rankings = 0;
+  let id = 0;
+  const session = playlistRecommendationSession({
+    newId: () => String(++id),
+    read: async () => {
+      throw new Error("a fresh suggestion reads its radios one by one");
+    },
+    readFresh: async () => ({
+      input: { playlist: [track("seed")], sources: { library: LETTERS, pages: [], graph: null } },
+      radios: () => answers.map((answer) => answer.promise),
+    }),
+    rank: async (input) =>
+      ++rankings === 1
+        ? playlistRecommendations(input.playlist, input.sources, 20)
+        : ranking.promise,
+    dismiss: async () => {},
+    saved: { offers: [], online: () => true, write: () => {} },
+    timed: { now: () => 0, report: () => {}, reserveRefill: (refill) => refills.push(refill) },
+  });
+  const page = (radio: number, ids: string) => ({
+    id: `song:${radio}`,
+    artists: [],
+    songs: [...ids].map(track),
+  });
+  const renewal = session.renew();
+  answers[0]!.resolve(page(0, "abcde"));
+  await quiet();
+  answers[1]!.resolve(page(1, "fg"));
+  await quiet();
+  session.pause();
+  ranking.reject(new Error("aborted"));
+  await renewal;
+  assert.deepEqual(refills, []);
 });
 
 test("a low reserve while later radios answer starts no refill beside them, and one follows if it's still low", async () => {
@@ -1859,7 +1993,7 @@ test("offers are awaited with nothing showing or a slot on its placeholder, and 
     }),
     readFresh: async () => ({
       input: { playlist: [seed], sources: { library, pages: [], graph: null } },
-      radios: [Promise.resolve(answer("first")), second.promise],
+      radios: () => [Promise.resolve(answer("first")), second.promise],
     }),
     rank: async ({ playlist, sources }) => {
       seen.push({
@@ -1891,4 +2025,82 @@ test("offers are awaited with nothing showing or a slot on its placeholder, and 
   assert.ok(seen.length > ranked);
   assert.equal(seen.at(-1)?.awaited, true);
   assert.equal(playlistOffersAwaited(session.get()), false);
+});
+
+/** A fresh suggestion's session whose read waits on [opening], its radios counted as they start. */
+const heldFreshRead = () => {
+  const opening = Promise.withResolvers<void>();
+  const answers = [0, 1, 2].map(() => Promise.withResolvers<RadioRankingPage | null>());
+  const signals: (AbortSignal | undefined)[] = [];
+  const started = { radios: 0 };
+  let id = 0;
+  const session = playlistRecommendationSession({
+    newId: () => String(++id),
+    read: async () => {
+      throw new Error("a fresh suggestion reads its radios one by one");
+    },
+    readFresh: async (signal) => {
+      signals.push(signal);
+      if (signals.length === 1) await opening.promise;
+      return {
+        input: { playlist: [track("seed")], sources: { library: LETTERS, pages: [], graph: null } },
+        radios: () => {
+          started.radios += answers.length;
+          return answers.map((answer) => answer.promise);
+        },
+      };
+    },
+    dismiss: async () => {},
+  });
+  return { session, opening, answers, signals, started };
+};
+
+test("a fresh read overtaken by another renewal starts no radios of its own", async () => {
+  const { session, opening, answers, started, signals } = heldFreshRead();
+  const renewal = session.renew();
+  await quiet();
+  void session.renew();
+  opening.resolve();
+  await quiet();
+  assert.equal(signals.length, 2, "the second renewal runs");
+  assert.equal(started.radios, 3, "for it alone");
+  for (const answer of answers) answer.resolve(null);
+  await renewal;
+});
+
+test("a fresh read cancelled before its radios start never starts them", async () => {
+  const { session, opening, started } = heldFreshRead();
+  const leaving = new AbortController();
+  const renewal = session.renew({ signal: leaving.signal });
+  await quiet();
+  leaving.abort();
+  opening.resolve();
+  await renewal;
+  assert.equal(started.radios, 0);
+});
+
+test("a renewal overtaken with radios still answering stops them", async () => {
+  const { session, opening, answers, signals } = heldFreshRead();
+  opening.resolve();
+  const renewal = session.renew();
+  await quiet();
+  void session.renew();
+  assert.equal(signals[0]?.aborted, false);
+  answers[0]!.resolve({ id: "song:0", artists: [], songs: [track("a")] });
+  await quiet();
+  assert.equal(signals[0]?.aborted, true, "the two left download for no one");
+  for (const answer of answers) answer.resolve(null);
+  await renewal;
+});
+
+test("radios rejecting on an abort right after they start are handled", async () => {
+  const { session, opening, answers } = heldFreshRead();
+  const leaving = new AbortController();
+  opening.resolve();
+  const renewal = session.renew({ signal: leaving.signal });
+  await quiet();
+  leaving.abort();
+  for (const answer of answers) answer.reject(new Error("aborted"));
+  await renewal;
+  assert.equal(session.get().error, null);
 });

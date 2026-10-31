@@ -10,6 +10,7 @@ import {
   playlistOffersToSave,
   playlistOffersToShow,
   playlistOffersWithout,
+  playlistOffersHaveRoom,
   playlistOffersWithSpares,
   storedPlaylistOfferOrder,
   storedSavedPlaylistOffers,
@@ -35,6 +36,8 @@ const track = (
 });
 const ids = (tracks: readonly PlaylistRecommendationTrack[]) => tracks.map((t) => t.id);
 const letters = (text: string) => text.split("").map((id) => track(id));
+
+const onlineBeside = (shown: readonly PlaylistRecommendationTrack[]) => ({ shown, online: true });
 
 test("a renewal saves the five it would show, then spares in ranked order, twenty at most", () => {
   const saved = playlistOffersToSave([], letters("abcdefghijklmnopqrstuvwxyz"), { online: true });
@@ -216,10 +219,73 @@ test("an unreadable order reads as none", () => {
 test("spares from a later radio go after what's saved, with no second recording and at most 20", () => {
   const saved = [track("a"), track("b")];
   assert.deepEqual(
-    playlistOffersWithSpares(saved, [track("b"), track("c")]).map((offer) => offer.id),
+    playlistOffersWithSpares(saved, [track("b"), track("c")], onlineBeside(saved)).map(
+      (offer) => offer.id,
+    ),
     ["a", "b", "c"],
   );
-  assert.equal(playlistOffersWithSpares(saved, [track("a")]), saved);
+  assert.equal(playlistOffersWithSpares(saved, [track("a")], onlineBeside(saved)), saved);
   const full = Array.from({ length: 20 }, (_, index) => track(`t${index}`));
-  assert.equal(playlistOffersWithSpares(full, [track("c")]), full);
+  assert.equal(playlistOffersWithSpares(full, [track("c")], onlineBeside(full.slice(0, 5))), full);
+});
+
+test("a full reserve makes room for usable offers by dropping the last it can't use", () => {
+  const library = Array.from({ length: 5 }, (_, index) => track(`s${index}`));
+  const hidden = Array.from({ length: 15 }, (_, index) =>
+    track(`h${index}`, { source: "stream", videoId: `h${index}` }),
+  );
+  const saved = [...library, ...hidden];
+  const next = playlistOffersWithSpares(saved, [track("n1"), track("n2")], {
+    shown: library,
+    online: false,
+  });
+  assert.deepEqual(
+    next.map((offer) => offer.id),
+    [...saved.slice(0, 18).map((offer) => offer.id), "n1", "n2"],
+  );
+  assert.equal(
+    playlistOffersWithSpares(saved, [track("n1")], { shown: library, online: true }),
+    saved,
+    "online they can all step in",
+  );
+});
+
+const band = (id: string) => track(id, { artists: ["Band"] });
+const bandShowing = [band("b1"), band("b2"), track("s1"), track("s2"), track("s3")];
+const bandSpares = Array.from({ length: 15 }, (_, index) => band(`c${index}`));
+
+test("spares that break the artist cap give way; the offers showing never do", () => {
+  const next = playlistOffersWithSpares([...bandShowing, ...bandSpares], [track("n1")], {
+    shown: bandShowing,
+    online: true,
+  });
+  assert.deepEqual(next.slice(0, 5), bandShowing);
+  assert.deepEqual(
+    next.slice(5).map((offer) => offer.id),
+    [...bandSpares.slice(0, 14).map((offer) => offer.id), "n1"],
+  );
+});
+
+test("in a full reserve a new offer that couldn't step in finds no room, and one just shown does", () => {
+  const saved = [...bandShowing, ...bandSpares];
+  const context = { shown: bandShowing, online: true };
+  assert.equal(playlistOffersWithSpares(saved, [band("n")], context), saved);
+  const taken = track("taken");
+  const next = playlistOffersWithSpares(saved, [taken], {
+    shown: [...bandShowing, taken],
+    online: true,
+  });
+  assert.equal(next.includes(taken), true);
+  assert.equal(next.length, 20);
+});
+
+test("a reserve has room until it's full of offers showing or able to step in", () => {
+  const library = Array.from({ length: 5 }, (_, index) => track(`s${index}`));
+  const spares = Array.from({ length: 15 }, (_, index) =>
+    track(`h${index}`, { source: "stream", videoId: `h${index}` }),
+  );
+  const full = [...library, ...spares];
+  assert.equal(playlistOffersHaveRoom(full, { shown: library, online: true }), false);
+  assert.equal(playlistOffersHaveRoom(full, { shown: library, online: false }), true);
+  assert.equal(playlistOffersHaveRoom(library, { shown: library, online: true }), true);
 });

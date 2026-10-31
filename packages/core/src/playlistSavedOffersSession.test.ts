@@ -43,10 +43,13 @@ const savedSession = (
     readonly online?: boolean;
     readonly report?: (timing: PlaylistRecommendationTiming) => void;
     readonly yieldTurn?: (kind: "paint" | "free") => Promise<void>;
+    /** The screen is still settling: nothing reads on its own yet. */
+    readonly settling?: boolean;
   } = {},
 ) => {
   const seed = track("seed");
   const gate = {
+    settled: options.settling !== true,
     reads: 0,
     ranks: 0,
     online: options.online ?? true,
@@ -57,6 +60,9 @@ const savedSession = (
     library: [seed, ...lettered("abcdefghijklmnopqrstuvwxyz")],
     /** What the radios bring, when it isn't the Library. */
     radio: undefined as readonly PlaylistRecommendationTrack[] | undefined,
+    /** Every radio timed out or failed: the read has no page to give. */
+    noRadio: false,
+    seeds: [seed],
     feedback: [] as PlaylistRecommendationFeedback[],
     written: [] as (readonly PlaylistRecommendationTrack[])[],
     /** Each choice as it's written, in order. */
@@ -92,7 +98,10 @@ const savedSession = (
         sources: {
           // The radios bring what the Library holds of a through z, not the saved offers' copies.
           library: gate.library,
-          pages: [{ id: "song:seed", artists: ["Artist seed"], songs: gate.radio ?? gate.library }],
+          pages: gate.noRadio
+            ? []
+            : [{ id: "song:seed", artists: ["Artist seed"], songs: gate.radio ?? gate.library }],
+          seeds: gate.seeds,
           graph: null,
           feedback: gate.feedback,
           online: gate.online,
@@ -114,6 +123,7 @@ const savedSession = (
       online: () => gate.online,
       write: (offers) => gate.written.push(offers),
     },
+    settled: () => gate.settled,
     ...(options.yieldTurn === undefined ? {} : { yieldTurn: options.yieldTurn }),
     timed: {
       now: () => gate.clock,
@@ -263,9 +273,9 @@ test("a song leaving with no spare holds its slot's placeholder until a refill f
 });
 
 test("a song leaving while reads must wait holds its placeholder, and the renewal fills it", async () => {
-  const { session, gate, shown } = savedSession(lettered("vwxyz"));
+  const { session, gate, shown } = savedSession(lettered("vwxyz"), { settling: true });
   const before = session.get().slots;
-  session.leave((offer) => offer.id === "x", { read: false });
+  session.leave((offer) => offer.id === "x");
   await new Promise((resolve) => setImmediate(resolve));
   assert.equal(gate.reads, 0);
   assert.deepEqual(session.get().pendingSlots, [2]);
@@ -277,16 +287,16 @@ test("a song leaving while reads must wait holds its placeholder, and the renewa
 });
 
 test("a song leaving while reads must wait still takes a saved spare at once", () => {
-  const { session, gate, shown } = savedSession(lettered("vwxyzq"));
-  session.leave((offer) => offer.id === "x", { read: false });
+  const { session, gate, shown } = savedSession(lettered("vwxyzq"), { settling: true });
+  session.leave((offer) => offer.id === "x");
   assert.deepEqual(shown(), ["v", "w", "q", "y", "z"]);
   assert.deepEqual(session.get().pendingSlots, []);
   assert.equal(gate.reads, 0);
 });
 
 test("every showing song leaving while reads must wait: the renewal is a first visit's", async () => {
-  const { session, gate, shown } = savedSession(lettered("vw"));
-  session.leave(() => true, { read: false });
+  const { session, gate, shown } = savedSession(lettered("vw"), { settling: true });
+  session.leave(() => true);
   assert.deepEqual(session.get().pendingSlots, [0, 1]);
   await session.renew();
   assert.equal(gate.reads, 1);
@@ -295,8 +305,8 @@ test("every showing song leaving while reads must wait: the renewal is a first v
 });
 
 test("a renewal failing over a slot that waited for it lets the slot go, with no message", async () => {
-  const { session, gate, shown } = savedSession(lettered("vwxyz"));
-  session.leave((offer) => offer.id === "x", { read: false });
+  const { session, gate, shown } = savedSession(lettered("vwxyz"), { settling: true });
+  session.leave((offer) => offer.id === "x");
   gate.fail = true;
   await session.renew();
   assert.deepEqual(session.get().pendingSlots, []);
@@ -306,8 +316,8 @@ test("a renewal failing over a slot that waited for it lets the slot go, with no
 });
 
 test("an Add's refill also fills a slot waiting for reads", async () => {
-  const { session, shown } = savedSession(lettered("vwxyz"));
-  session.leave((offer) => offer.id === "x", { read: false });
+  const { session, shown } = savedSession(lettered("vwxyz"), { settling: true });
+  session.leave((offer) => offer.id === "x");
   await session.accept(session.get().slots[0]!.key);
   assert.deepEqual(session.get().pendingSlots, []);
   assert.deepEqual(shown(), ["b", "w", "a", "y", "z"]);
@@ -630,7 +640,8 @@ test("a spare keeps to the artist cap with the offers showing, the tapped one no
     capped("q"),
     track("r"),
   ];
-  const { session, shown } = savedSession(saved);
+  const { session, gate, shown } = savedSession(saved);
+  gate.radio = [];
   await session.dismiss(session.get().slots[2]!.key);
   assert.deepEqual(shown(), ["v", "w", "r", "y", "z"], "q would be a third by Artist a");
   await session.dismiss(session.get().slots[0]!.key);
@@ -666,6 +677,7 @@ test("another recording of a song just added doesn't step in as its spare", asyn
 test("offline, a streamed spare stays hidden: a Library spare goes first, and without one a refill", async () => {
   const saved = [...lettered("vwxyz"), stream("q"), track("r")];
   const { session, gate, shown, written } = savedSession(saved, { online: false });
+  gate.radio = lettered("abcdef");
   await session.dismiss(session.get().slots[0]!.key);
   assert.equal(shown()[0], "r");
   assert.deepEqual(
@@ -1037,8 +1049,8 @@ test("an offer leaving takes a spare and, with reads allowed, is a low point too
   await nextTurn();
   assert.equal(reading.gate.reads, 1);
 
-  const settling = savedSession(withSpares("qrstu"));
-  settling.session.leave((offer) => offer.id === "v", { read: false });
+  const settling = savedSession(withSpares("qrstu"), { settling: true });
+  settling.session.leave((offer) => offer.id === "v");
   await nextTurn();
   assert.equal(settling.shown()[0], "q");
   assert.equal(settling.gate.reads, 0);
@@ -1092,4 +1104,258 @@ test("a refill reads as one log line", () => {
     playlistReserveRefillLine({ ms: 900, added: 0, spares: 4, failed: true }),
     "Playlist reserve refill failed after 900 ms",
   );
+});
+
+test("a renewal behind offers whose radios all gave no page fails, leaving the reserve and logging it", async () => {
+  const reports: PlaylistRecommendationTiming[] = [];
+  const spares = "qrstuABCDEFGHIJ";
+  const { session, gate, written } = savedSession(withSpares(spares), {
+    report: (timing) => reports.push(timing),
+  });
+  const before = session.get();
+  gate.noRadio = true;
+  gate.library = [gate.library[0]!, track("a"), track("b")];
+  await session.renew();
+  assert.equal(gate.ranks, 0);
+  assert.equal(written(), undefined, "the 15 spares stay");
+  assert.equal(session.get(), before);
+  assert.equal(reports[0]?.failed, true);
+});
+
+test("a refill whose radios all gave no page fails: a waiting slot gets Try Again, and an idle one a log line", async () => {
+  const waiting = savedSession(lettered("vwxyz"));
+  waiting.gate.noRadio = true;
+  await waiting.session.dismiss(waiting.session.get().slots[0]!.key);
+  assert.deepEqual(waiting.session.get().unfilled, [0]);
+  assert.equal(waiting.session.get().error, "refill");
+  assert.deepEqual(
+    waiting.gate.waits.map((wait) => wait.outcome),
+    ["refill failed"],
+  );
+  assert.equal(waiting.gate.refills[0]?.failed, true);
+
+  const idle = savedSession(withSpares("qrstu"));
+  idle.gate.noRadio = true;
+  await idle.session.dismiss(idle.session.get().slots[0]!.key);
+  await nextTurn();
+  assert.equal(idle.gate.refills[0]?.failed, true);
+  assert.equal(idle.session.get().error, null);
+});
+
+test("offline, no page isn't a failure: a refill still ranks Library files by the seeds' artists", async () => {
+  const { session, gate, shown } = savedSession(lettered("vwxyz"), { online: false });
+  gate.noRadio = true;
+  gate.library = [gate.library[0]!, { ...track("mine"), artists: ["Artist seed"] }];
+  await session.dismiss(session.get().slots[0]!.key);
+  assert.equal(gate.refills[0]?.failed, false);
+  assert.equal(session.get().error, null);
+  assert.equal(shown()[0], "mine");
+});
+
+test("with no seed to read a radio for, no page isn't a failure", async () => {
+  const { session, gate } = savedSession(lettered("vwxyz"));
+  gate.seeds = [];
+  gate.noRadio = true;
+  await session.dismiss(session.get().slots[0]!.key);
+  assert.equal(gate.ranks, 1);
+  assert.equal(gate.refills[0]?.failed, false);
+  assert.equal(session.get().error, null);
+});
+
+test("offline, a reserve full of hidden streamed spares takes the refill's Library files, and the next tap reads nothing", async () => {
+  const hidden = Array.from({ length: 15 }, (_, index) => stream(`hidden ${index}`));
+  const { session, gate, shown, written } = savedSession([...lettered("vwxyz"), ...hidden], {
+    online: false,
+  });
+  gate.radio = lettered("abc");
+  await session.dismiss(session.get().slots[0]!.key);
+  assert.equal(shown()[0], "a");
+  assert.equal(gate.reads, 1);
+  assert.equal(written()?.length, 20);
+  assert.deepEqual(written()?.slice(0, 5), ["w", "x", "y", "z", "hidden 0"]);
+  assert.deepEqual(written()?.slice(-3), ["a", "b", "c"]);
+  assert.equal(gate.refills.at(-1)?.added, 3, "the new ones, though the length held");
+  await session.dismiss(session.get().slots[1]!.key);
+  assert.equal(shown()[1], "b");
+  assert.equal(gate.reads, 1, "the slot took a spare");
+});
+
+test("online, spares that break the artist cap give way to a ranking's, and the next tap reads nothing", async () => {
+  const band = (id: string) => ({ ...track(id), artists: ["Band"] });
+  const showing = [band("v"), band("w"), track("x"), track("y"), track("z")];
+  const capped = "ABCDEFGHIJKLMNO".split("").map(band);
+  const { session, gate, shown } = savedSession([...showing, ...capped]);
+  gate.radio = lettered("abc");
+  await session.dismiss(session.get().slots[2]!.key);
+  assert.equal(shown()[2], "a");
+  assert.equal(gate.reads, 1);
+  await session.dismiss(session.get().slots[3]!.key);
+  assert.equal(shown()[3], "b");
+  assert.equal(gate.reads, 1, "the slot took a spare");
+  assert.deepEqual(shown().slice(0, 2), ["v", "w"], "offers showing stay");
+});
+
+test("a low point before the screen settles reads nothing; the opening's renewal goes instead", async () => {
+  const { session, gate, shown } = savedSession(withSpares("qrstu"), { settling: true });
+  await session.dismiss(session.get().slots[0]!.key);
+  await nextTurn();
+  assert.equal(shown()[0], "q");
+  assert.equal(gate.reads, 0, "4 spares left, but the screen hasn't settled");
+  gate.settled = true;
+  await session.renew();
+  await nextTurn();
+  assert.equal(gate.reads, 1, "the renewal saved plenty: no refill follows");
+});
+
+test("a low point before the screen settles isn't dropped: still low after the renewal, the refill runs", async () => {
+  const { session, gate } = savedSession(withSpares("qrstu"), { settling: true });
+  await session.dismiss(session.get().slots[0]!.key);
+  gate.settled = true;
+  gate.fail = true;
+  await session.renew();
+  await nextTurn();
+  assert.equal(gate.reads, 2, "the renewal failed, so the refill it held back runs");
+  assert.equal(gate.refills.length, 1);
+});
+
+test("a low point held back past a hide waits for the renewal on the return", async () => {
+  const { session, gate } = savedSession(withSpares("qrstu"), { settling: true });
+  await session.dismiss(session.get().slots[0]!.key);
+  session.pause();
+  gate.settled = true;
+  await nextTurn();
+  assert.equal(gate.reads, 0);
+  session.resume();
+  gate.fail = true;
+  await session.renew();
+  await nextTurn();
+  assert.equal(gate.reads, 2);
+});
+
+test("an offer leaving before the screen settles is a low point held back too", async () => {
+  const { session, gate } = savedSession(withSpares("qrstu"), { settling: true });
+  session.leave((offer) => offer.id === "v");
+  await nextTurn();
+  assert.equal(gate.reads, 0);
+  gate.settled = true;
+  gate.fail = true;
+  await session.renew();
+  await nextTurn();
+  assert.equal(gate.reads, 2);
+});
+
+/** A session opening on [saved] whose paint turns wait for [frames] to be run. */
+const framedSession = (saved: readonly PlaylistRecommendationTrack[]) => {
+  const frames: (() => void)[] = [];
+  const opened = savedSession(saved, {
+    yieldTurn: (kind) =>
+      kind === "paint" ? new Promise<void>((resolve) => frames.push(resolve)) : Promise.resolve(),
+  });
+  /** Runs every frame due, and those they ask for, until nothing's waiting. */
+  const paintAll = async () => {
+    for (await nextTurn(); frames.length > 0; await nextTurn()) frames.shift()!();
+  };
+  return { ...opened, frames, paintAll };
+};
+
+test("a tap's spare is published before the saved offers are written, on a later turn", async () => {
+  const { session, gate, frames, paintAll, shown, written } = framedSession(withSpares("qrstuAB"));
+  let writesAtPublish = -1;
+  const tapped = session.get().slots[0]!;
+  const dismissing = session.dismiss(tapped.key);
+  session.subscribe(() => {
+    if (shown()[0] === "q" && writesAtPublish === -1) writesAtPublish = gate.written.length;
+  });
+  await nextTurn();
+  frames.shift()!();
+  await dismissing;
+  assert.equal(shown()[0], "q");
+  assert.equal(writesAtPublish, 0, "the write is no part of the tap's publish");
+  assert.equal(gate.written.length, 0, "nor of its turn");
+  await paintAll();
+  assert.equal(gate.written.length, 1);
+  assert.equal(written()?.includes(tapped.track.id), false);
+});
+
+test("taps before the write's turn share one write, of what's left after both", async () => {
+  const { session, gate, frames, paintAll, written } = framedSession(withSpares("qrstuAB"));
+  const [first, second] = session.get().slots;
+  const firstTap = session.dismiss(first!.key);
+  await nextTurn();
+  frames.shift()!();
+  await firstTap;
+  const secondTap = session.dismiss(second!.key);
+  await nextTurn();
+  // The second tap's own paint turn, asked for last: the write's is still waiting.
+  frames.pop()!();
+  await secondTap;
+  assert.equal(gate.written.length, 0);
+  await paintAll();
+  assert.equal(gate.written.length, 1);
+  assert.equal(written()?.includes(first!.track.id), false);
+  assert.equal(written()?.includes(second!.track.id), false);
+});
+
+for (const leaving of ["pause", "dispose"] as const) {
+  test(`a write waiting for its turn survives leaving the playlist: ${leaving}`, async () => {
+    const { session, gate, frames, paintAll, written } = framedSession(withSpares("qrstuAB"));
+    const tapped = session.get().slots[0]!;
+    const dismissing = session.dismiss(tapped.key);
+    await nextTurn();
+    frames.shift()!();
+    await dismissing;
+    assert.equal(gate.written.length, 0);
+    session[leaving]();
+    assert.equal(gate.written.length, 1, "before the frames stop");
+    assert.equal(written()?.includes(tapped.track.id), false);
+    await paintAll();
+    assert.equal(gate.written.length, 1, "and only once");
+  });
+}
+
+test("a save ending after the playlist closed still writes, at once", async () => {
+  const { session, gate, frames, written } = framedSession(withSpares("qrstuAB"));
+  const held = Promise.withResolvers<void>();
+  gate.holdSave = held;
+  const tapped = session.get().slots[0]!;
+  const dismissing = session.dismiss(tapped.key);
+  await nextTurn();
+  frames.shift()!();
+  await nextTurn();
+  session.dispose();
+  held.resolve();
+  await dismissing;
+  assert.equal(gate.written.length, 1);
+  assert.equal(written()?.includes(tapped.track.id), false);
+});
+
+test("a refill's save writes the tap's waiting too, with no second write on its turn", async () => {
+  const { session, gate, frames, paintAll, written } = framedSession(withSpares("qrstu"));
+  const tapped = session.get().slots[0]!;
+  const dismissing = session.dismiss(tapped.key);
+  await nextTurn();
+  frames.shift()!();
+  await dismissing;
+  // The tap left 4 spares: its refill read, and ranks on the turn after the write's.
+  await paintAll();
+  assert.equal(gate.reads, 1);
+  assert.equal(written()?.includes(tapped.track.id), false);
+  assert.equal(written()?.includes("a"), true);
+  const last = gate.written.at(-1);
+  await paintAll();
+  assert.equal(gate.written.at(-1), last);
+});
+
+test("a failed save restores its offer and writes nothing", async () => {
+  const { session, gate, frames, paintAll, shown } = framedSession(withSpares("qrstuAB"));
+  gate.saveFails = true;
+  const tapped = session.get().slots[0]!;
+  const dismissing = session.dismiss(tapped.key);
+  await nextTurn();
+  frames.shift()!();
+  assert.equal(await dismissing, false);
+  assert.equal(shown()[0], tapped.track.id);
+  assert.equal(session.get().error, "save");
+  await paintAll();
+  assert.equal(gate.written.length, 0);
 });
