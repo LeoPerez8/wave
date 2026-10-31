@@ -664,3 +664,35 @@ test("an Add and a Dismiss each write one timing line to the app log", async () 
   assert.match(lines()[1]!, /^Playlist slot wait: Dismiss offer after \d+ ms \(from ranking\)$/);
   stop();
 });
+
+test("a screen that never settles lets the opening read at 600 ms", async (t) => {
+  reset();
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  app.settle = () => new Promise(() => {});
+  const { visit, screen, wanted, sectionSight } = opened();
+  const stop = visit.follow(screen, wanted, sectionSight);
+  await settledFrames();
+  t.mock.timers.tick(599);
+  await settledFrames();
+  assert.equal(app.reads, 0);
+  t.mock.timers.tick(1);
+  await settledFrames();
+  assert.equal(app.reads, 1);
+  assert.deepEqual(offerIds(visit), ["a", "b", "c", "d", "e"]);
+  stop();
+});
+
+test("leaving within the 600 ms reads nothing, then or later", async (t) => {
+  reset();
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  app.settle = () => new Promise(() => {});
+  const { visit, screen, wanted, sectionSight } = opened();
+  const stop = visit.follow(screen, wanted, sectionSight);
+  await settledFrames();
+  t.mock.timers.tick(300);
+  await settledFrames();
+  stop();
+  t.mock.timers.tick(5000);
+  await settledFrames();
+  assert.equal(app.reads, 0);
+});
