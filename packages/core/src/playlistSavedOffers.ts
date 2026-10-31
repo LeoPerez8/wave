@@ -49,26 +49,58 @@ export const playlistOffersToSave = (
   });
 };
 
+/** Whether a visit may show saved [offer]: a song with a file and, offline, not a streamed one. */
+const showable = (offer: PlaylistRecommendationTrack, online: boolean) =>
+  offer.available !== false && (online || offer.source !== "stream");
+
+/** The offers showing, and whether the phone is online: what decides which spares are any use. */
+export interface PlaylistSpareContext {
+  readonly shown: readonly PlaylistRecommendationTrack[];
+  readonly online: boolean;
+}
+
+/** Whether a saved offer is of no use for now: not one showing, and it couldn't step in. */
+const ofNoUse = ({ shown, online }: PlaylistSpareContext) => {
+  const fits = playlistOfferFits(shown);
+  const showing = playlistRecordingMatch(shown);
+  return (offer: PlaylistRecommendationTrack) =>
+    showing(offer) === null && !(showable(offer, online) && fits(offer));
+};
+
 /**
  * [saved] with what a refill or a later radio ranked after it: those kept stay first and in
- * their order, no recording is saved twice, and no more than a playlist saves. With no room,
- * or nothing new, [saved] itself comes back.
+ * their order, no recording is saved twice, and no more than a playlist saves. Once full, an
+ * offer showing or able to step in takes the place of the last saved offer of no use (hidden
+ * while offline, or over the artist cap); offers showing always stay. With nothing to add,
+ * [saved] itself comes back.
  */
 export const playlistOffersWithSpares = (
   saved: readonly PlaylistRecommendationTrack[],
   ranked: readonly PlaylistRecommendationTrack[],
+  context: PlaylistSpareContext,
 ): readonly PlaylistRecommendationTrack[] => {
+  const noUse = ofNoUse(context);
   const next = [...saved];
+  let changed = false;
   for (const offer of ranked) {
-    if (next.length === PLAYLIST_SAVED_OFFERS) break;
-    if (playlistRecordingMatch(next)(offer) === null) next.push(offer);
+    if (playlistRecordingMatch(next)(offer) !== null) continue;
+    if (next.length === PLAYLIST_SAVED_OFFERS) {
+      if (noUse(offer)) continue;
+      const giving = next.map(noUse).lastIndexOf(true);
+      if (giving === -1) break;
+      next.splice(giving, 1);
+    }
+    next.push(offer);
+    changed = true;
   }
-  return next.length === saved.length ? saved : next;
+  return changed ? next : saved;
 };
 
-/** Whether a visit may show saved [offer]: a song with a file and, offline, not a streamed one. */
-const showable = (offer: PlaylistRecommendationTrack, online: boolean) =>
-  offer.available !== false && (online || offer.source !== "stream");
+/** Whether `playlistOffersWithSpares` could add to [saved] an offer able to step in. */
+export const playlistOffersHaveRoom = (
+  saved: readonly PlaylistRecommendationTrack[],
+  context: PlaylistSpareContext,
+): boolean => saved.length < PLAYLIST_SAVED_OFFERS || saved.some(ofNoUse(context));
 
 /**
  * The offers a visit shows of [saved], in their saved order. Offline, the

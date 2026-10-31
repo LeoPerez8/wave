@@ -636,7 +636,8 @@ test("a spare keeps to the artist cap with the offers showing, the tapped one no
     capped("q"),
     track("r"),
   ];
-  const { session, shown } = savedSession(saved);
+  const { session, gate, shown } = savedSession(saved);
+  gate.radio = [];
   await session.dismiss(session.get().slots[2]!.key);
   assert.deepEqual(shown(), ["v", "w", "r", "y", "z"], "q would be a third by Artist a");
   await session.dismiss(session.get().slots[0]!.key);
@@ -672,6 +673,7 @@ test("another recording of a song just added doesn't step in as its spare", asyn
 test("offline, a streamed spare stays hidden: a Library spare goes first, and without one a refill", async () => {
   const saved = [...lettered("vwxyz"), stream("q"), track("r")];
   const { session, gate, shown, written } = savedSession(saved, { online: false });
+  gate.radio = lettered("abcdef");
   await session.dismiss(session.get().slots[0]!.key);
   assert.equal(shown()[0], "r");
   assert.deepEqual(
@@ -1154,4 +1156,37 @@ test("with no seed to read a radio for, no page isn't a failure", async () => {
   assert.equal(gate.ranks, 1);
   assert.equal(gate.refills[0]?.failed, false);
   assert.equal(session.get().error, null);
+});
+
+test("offline, a reserve full of hidden streamed spares takes the refill's Library files, and the next tap reads nothing", async () => {
+  const hidden = Array.from({ length: 15 }, (_, index) => stream(`hidden ${index}`));
+  const { session, gate, shown, written } = savedSession([...lettered("vwxyz"), ...hidden], {
+    online: false,
+  });
+  gate.radio = lettered("abc");
+  await session.dismiss(session.get().slots[0]!.key);
+  assert.equal(shown()[0], "a");
+  assert.equal(gate.reads, 1);
+  assert.equal(written()?.length, 20);
+  assert.deepEqual(written()?.slice(0, 5), ["w", "x", "y", "z", "hidden 0"]);
+  assert.deepEqual(written()?.slice(-3), ["a", "b", "c"]);
+  assert.equal(gate.refills.at(-1)?.added, 3, "the new ones, though the length held");
+  await session.dismiss(session.get().slots[1]!.key);
+  assert.equal(shown()[1], "b");
+  assert.equal(gate.reads, 1, "the slot took a spare");
+});
+
+test("online, spares that break the artist cap give way to a ranking's, and the next tap reads nothing", async () => {
+  const band = (id: string) => ({ ...track(id), artists: ["Band"] });
+  const showing = [band("v"), band("w"), track("x"), track("y"), track("z")];
+  const capped = "ABCDEFGHIJKLMNO".split("").map(band);
+  const { session, gate, shown } = savedSession([...showing, ...capped]);
+  gate.radio = lettered("abc");
+  await session.dismiss(session.get().slots[2]!.key);
+  assert.equal(shown()[2], "a");
+  assert.equal(gate.reads, 1);
+  await session.dismiss(session.get().slots[3]!.key);
+  assert.equal(shown()[3], "b");
+  assert.equal(gate.reads, 1, "the slot took a spare");
+  assert.deepEqual(shown().slice(0, 2), ["v", "w"], "offers showing stay");
 });

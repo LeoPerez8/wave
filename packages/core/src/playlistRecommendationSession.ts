@@ -10,6 +10,7 @@ import {
   PLAYLIST_SAVED_OFFERS,
   PLAYLIST_SPARES_LOW,
   playlistOfferGone,
+  playlistOffersHaveRoom,
   playlistOffersToSave,
   playlistOffersToShow,
   playlistOffersWithSpares,
@@ -423,6 +424,7 @@ export const playlistRecommendationSession = (options: {
     for (const hole of filled) slotWaitFilled(hole, "spare");
     releaseHoles(filled);
   };
+  const spareContext = () => ({ shown: held(), online: online() });
   const reserveReported = (startedAt: number, added: number, failed: boolean) => {
     const { timed } = options;
     if (timed === undefined || options.saved === undefined) return;
@@ -449,8 +451,9 @@ export const playlistRecommendationSession = (options: {
       for (;;) {
         const pages = await next();
         if (pages.length === 0 || !current()) return;
-        // A full reserve with every slot held: ranking this radio would add nothing.
-        if (savedOffers.length >= PLAYLIST_SAVED_OFFERS && openSlots().length === 0) continue;
+        // A reserve full of usable offers with every slot held: ranking this radio would add nothing.
+        if (!playlistOffersHaveRoom(savedOffers, spareContext()) && openSlots().length === 0)
+          continue;
         if (yieldTurn !== undefined) await yieldTurn("free");
         if (!current()) return;
         const startedAt = options.timed?.now() ?? 0;
@@ -468,6 +471,7 @@ export const playlistRecommendationSession = (options: {
           playlistOffersWithSpares(
             savedOffers,
             ranked.map((offer) => offer.track),
+            spareContext(),
           ),
         );
         fillWaitingFromSpares();
@@ -552,10 +556,11 @@ export const playlistRecommendationSession = (options: {
         const before = savedOffers;
         // What filled a slot goes first: the next visit shows it, if there's room for only some.
         const others = ranked.flatMap(({ track }) => (taken.includes(track) ? [] : [track]));
-        saveOffers(playlistOffersWithSpares(savedOffers, [...taken, ...others]));
+        saveOffers(playlistOffersWithSpares(savedOffers, [...taken, ...others], spareContext()));
         // No more than this to be found for now: the next read waits for the last spare.
         if (spareCount() < PLAYLIST_SPARES_LOW) refillBelow = 1;
-        reserveReported(startedAt, savedOffers.length - before.length, false);
+        const added = savedOffers.filter((offer) => !before.includes(offer)).length;
+        reserveReported(startedAt, added, false);
         for (const hole of holes) {
           if (slots[hole] === null) slotWaitEnded(hole, "no offer");
           else slotWaitFilled(hole, "ranking");

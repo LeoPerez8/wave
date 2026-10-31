@@ -1678,6 +1678,47 @@ test("a full reserve doesn't rank a later radio that could add nothing", async (
   assert.deepEqual(fresh.ranks, [["song:0"]]);
 });
 
+test("a later radio is still ranked when the reserve is full of spares it can't use", async () => {
+  const band = (id: string) => ({ ...track(id), artists: ["Band"] });
+  const first = [band("a"), band("b"), track("c"), track("d"), track("e")];
+  const spares = "fghijklmnopqrst".split("").map(band);
+  const answers = [0, 1].map(() => Promise.withResolvers<RadioRankingPage | null>());
+  const saved: { offers: readonly PlaylistRecommendationTrack[] } = { offers: [] };
+  let rankings = 0;
+  let id = 0;
+  const session = playlistRecommendationSession({
+    newId: () => String(++id),
+    read: async () => {
+      throw new Error("a fresh suggestion reads its radios one by one");
+    },
+    readFresh: async () => ({
+      input: { playlist: [track("seed")], sources: { library: LETTERS, pages: [], graph: null } },
+      radios: answers.map((answer) => answer.promise),
+    }),
+    rank: async () =>
+      ++rankings === 1
+        ? [...first, ...spares].map((offer) => ({ track: offer, score: 1 }))
+        : [{ track: track("new"), score: 1 }],
+    dismiss: async () => {},
+    saved: {
+      offers: [],
+      online: () => true,
+      write: (offers) => {
+        saved.offers = offers;
+      },
+    },
+  });
+  const renewal = session.renew();
+  answers[0]!.resolve({ id: "song:0", artists: [], songs: [] });
+  await quiet();
+  assert.equal(saved.offers.length, 20);
+  answers[1]!.resolve({ id: "song:1", artists: [], songs: [] });
+  await renewal;
+  assert.equal(rankings, 2);
+  assert.equal(saved.offers.at(-1)?.id, "new");
+  assert.equal(saved.offers.length, 20);
+});
+
 test("a later ranking that fails costs only its spares", async () => {
   let rankings = 0;
   const answers = [
