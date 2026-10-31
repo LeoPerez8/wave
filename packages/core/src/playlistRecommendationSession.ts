@@ -5,6 +5,14 @@ import {
   type PlaylistRecommendationTrack,
   type PlaylistRecommendation,
 } from "./playlistRecommendations.ts";
+import {
+  PLAYLIST_SAVED_OFFERS,
+  playlistOfferGone,
+  playlistOffersToSave,
+  playlistOffersToShow,
+  playlistOffersWithout,
+  playlistSpareOffer,
+} from "./playlistSavedOffers.ts";
 
 export interface PlaylistRecommendationSlot {
   readonly key: string;
@@ -78,7 +86,11 @@ export const playlistSuggestionsLine = (
     : `Playlist suggestions renewed: ${shown} in ${roundMs(ms)} ${parts}`;
 };
 
-/** Owns visible offers and save-before-replace ordering; storage is a system boundary. */
+/**
+ * Owns visible offers and save-before-replace ordering; storage is a system boundary.
+ * Only a renewal with nothing to show publishes its offers; over offers already showing
+ * it runs behind them (docs/spec.md, "Saved offers").
+ */
 export const playlistRecommendationSession = (options: {
   readonly newId: () => string;
   readonly read: (signal?: AbortSignal) => Promise<PlaylistRecommendationSessionInput>;
@@ -95,10 +107,33 @@ export const playlistRecommendationSession = (options: {
     readonly now: () => number;
     readonly report: (timing: PlaylistRecommendationTiming) => void;
   };
+  /** Which offers a read says can no longer stand; absent, it's worked out at once. */
+  readonly gone?: (
+    input: PlaylistRecommendationSessionInput,
+    signal?: AbortSignal,
+  ) => Promise<(offer: PlaylistRecommendationTrack) => boolean>;
+  /** The offers an earlier visit saved, shown from the start, and where changes to them go. */
+  readonly saved?: {
+    readonly offers: readonly PlaylistRecommendationTrack[];
+    readonly online: () => boolean;
+    readonly write: (offers: readonly PlaylistRecommendationTrack[]) => void;
+  };
 }) => {
+  const slot = (track: PlaylistRecommendationTrack): PlaylistRecommendationSlot => ({
+    key: options.newId(),
+    track,
+  });
+  let savedOffers = options.saved?.offers ?? [];
+  const online = () => options.saved?.online() ?? true;
+  const saveOffers = (next: readonly PlaylistRecommendationTrack[]) => {
+    if (next === savedOffers) return;
+    savedOffers = next;
+    options.saved?.write(next);
+  };
+  const firstShown = playlistOffersToShow(savedOffers, { online: online() }).map(slot);
   let state: PlaylistRecommendationState = {
-    slots: [],
-    loading: true,
+    slots: firstShown,
+    loading: firstShown.length === 0,
     pending: [],
     pendingSlots: [],
     unfilled: [],
@@ -123,6 +158,15 @@ export const playlistRecommendationSession = (options: {
   let version = 0;
   let active: AbortController | undefined;
   let renewalPending = false;
+  /** A renewal running behind the offers on screen: anything touching a slot goes first. */
+  let behind: AbortController | undefined;
+  /** Stops the renewal behind the offers, to run again after what's about to change them. */
+  const holdRenewal = () => {
+    if (behind === undefined) return;
+    behind.abort();
+    behind = undefined;
+    renewalPending = true;
+  };
   const busy = () => renewing || refilling || savesRunning > 0;
   const publish = (patch: Partial<PlaylistRecommendationState>) => {
     if (disposed) return;
@@ -135,11 +179,7 @@ export const playlistRecommendationSession = (options: {
   };
   const rank = (input: PlaylistRecommendationSessionInput, signal?: AbortSignal) =>
     options.rank?.(input, signal) ??
-    Promise.resolve(playlistRecommendations(input.playlist, input.sources));
-  const slot = (track: PlaylistRecommendationTrack): PlaylistRecommendationSlot => ({
-    key: options.newId(),
-    track,
-  });
+    Promise.resolve(playlistRecommendations(input.playlist, input.sources, PLAYLIST_SAVED_OFFERS));
   const held = () => state.slots.flatMap((offer) => (offer === null ? [] : [offer.track]));
   const pendingSlotsBut = (holes: readonly number[]) =>
     state.pendingSlots.filter((pending) => !holes.includes(pending));
@@ -238,6 +278,7 @@ export const playlistRecommendationSession = (options: {
     const offer = state.slots[index];
     if (disposed || paused || renewing || offer == null || save === undefined) return false;
     if (state.pending.includes(key)) return false;
+    holdRenewal();
     // Slots whose replacement failed earlier are filled by this action's refill too.
     const earlier = state.unfilled;
     // Published before any work, so the tap's placeholder can paint on the next frame.
@@ -270,6 +311,7 @@ export const playlistRecommendationSession = (options: {
     }
     savesRunning--;
     consumed.push(offer.track);
+    if (savedOffers.length > 0) saveOffers(playlistOffersWithout(savedOffers, [offer.track]));
     const slots = [...state.slots];
     slots[index] = null;
     publish({ pending: state.pending.filter((pending) => pending !== key), slots });
@@ -290,6 +332,39 @@ export const playlistRecommendationSession = (options: {
     resume: () => {
       if (!disposed) paused = false;
     },
+    /** Whether a renewal is running behind the offers, or was held off and hasn't run. */
+    renewalOwed: () => renewalPending || behind !== undefined,
+    /**
+     * [gone] offers left outside the suggestions (the playlist now holds them): each
+     * showing one's slot takes a saved spare at once, else a refill. The others stay.
+     */
+    leave: (gone: (offer: PlaylistRecommendationTrack) => boolean): void => {
+      if (disposed) return;
+      if (savedOffers.some(gone)) saveOffers(savedOffers.filter((offer) => !gone(offer)));
+      const slots = [...state.slots];
+      const holes: number[] = [];
+      for (const [index, offer] of slots.entries()) {
+        if (offer === null || state.pending.includes(offer.key) || !gone(offer.track)) continue;
+        slots[index] = null;
+        holes.push(index);
+      }
+      if (holes.length === 0) return;
+      const kept = slots.flatMap((offer) => (offer === null ? [] : [offer.track]));
+      const unspared: number[] = [];
+      for (const hole of holes) {
+        const spare = playlistSpareOffer(savedOffers, kept, { online: online() });
+        if (spare === undefined) {
+          unspared.push(hole);
+          continue;
+        }
+        kept.push(spare);
+        slots[hole] = slot(spare);
+      }
+      publish({ slots, pendingSlots: [...state.pendingSlots, ...unspared] });
+      if (unspared.length === 0) return;
+      holdRenewal();
+      void replace(unspared, "free");
+    },
     subscribe: (listener: () => void) => {
       if (!disposed) listeners.add(listener);
       return () => {
@@ -297,11 +372,15 @@ export const playlistRecommendationSession = (options: {
       };
     },
     /**
-     * A full renewal re-ranks every offer, after the saves and refills under way
-     * (external invalidations are retained until then). [refillOnly] retries the
-     * slots whose replacement failed, alongside any running actions. [turn], the
-     * host's turn a full renewal reads on, once it shows it's loading; a renewal
-     * whose asker has already waited for its turn (the playlist visit) has none.
+     * A full renewal re-ranks the offers, after the saves and refills under way
+     * (external invalidations are retained until then), and saves them for the next
+     * visit. With offers showing it runs behind them: they stay, Add and Dismiss go
+     * first, a failure is only reported, and it fills only slots already free or whose
+     * offer its read says is gone. With none, it shows its loading, offers or failure.
+     * [refillOnly] retries the slots whose replacement failed, alongside any running
+     * actions. [turn], the host's turn a full renewal reads on, once it shows it's
+     * loading; a renewal whose asker has already waited for its turn (the playlist
+     * visit) has none.
      */
     renew: async (
       request: {
@@ -313,6 +392,7 @@ export const playlistRecommendationSession = (options: {
       if (disposed || paused || request.signal?.aborted) return;
       if (request.refillOnly === true) {
         if (renewing || state.unfilled.length === 0) return;
+        holdRenewal();
         // A refill retry holds its slots' placeholders; only a full renewal reads as loading.
         const retrying = state.unfilled;
         publish({
@@ -329,14 +409,19 @@ export const playlistRecommendationSession = (options: {
         return;
       }
       renewalPending = false;
+      const showing = state.slots.some((offer) => offer !== null);
+      behind?.abort();
       const controller = new AbortController();
       active = controller;
+      behind = showing ? controller : undefined;
       const cancel = () => controller.abort();
       request.signal?.addEventListener("abort", cancel, { once: true });
       const current = () => !disposed && !controller.signal.aborted && revision === version;
-      renewing = true;
       const unfilledBefore = state.unfilled;
-      publish({ loading: true, unfilled: [], error: null });
+      if (!showing) {
+        renewing = true;
+        publish({ loading: true, unfilled: [], error: null });
+      }
       const clock = options.timed?.now;
       const startedAt = clock?.() ?? 0;
       let readMs = 0;
@@ -374,40 +459,64 @@ export const playlistRecommendationSession = (options: {
           if (clock !== undefined) rankMs = clock() - phase;
         }
         if (!current()) return;
-        const eligible = new Map(ranked.map((x) => [x.track.id, x.track]));
-        const slots = Array.from({ length: 5 }, (_, index) => {
-          const previous = state.slots[index];
-          const track = previous == null ? undefined : eligible.get(previous.track.id);
-          return track === undefined || previous == null
-            ? null
-            : track === previous.track
-              ? previous
-              : { ...previous, track };
-        });
-        for (let index = 0; index < slots.length; index++) {
-          if (slots[index] !== null) continue;
-          const shown = slots.flatMap((x) => (x === null ? [] : [x.track]));
-          const fits = playlistOfferFits(shown);
+        const gone =
+          showing || savedOffers.length > 0
+            ? await (options.gone?.(input, controller.signal) ??
+                Promise.resolve(playlistOfferGone(input.playlist, input.sources)))
+            : () => false;
+        if (!current()) return;
+        const stillSaved = savedOffers.some(gone)
+          ? savedOffers.filter((offer) => !gone(offer))
+          : savedOffers;
+        saveOffers(
+          playlistOffersToSave(
+            stillSaved,
+            ranked.map((offer) => offer.track),
+            { online: input.sources.online ?? true },
+          ),
+        );
+        const slots: (PlaylistRecommendationSlot | null)[] = showing
+          ? [...state.slots]
+          : Array.from({ length: 5 }, () => null);
+        const holes = showing ? [...state.unfilled] : slots.map((_, index) => index);
+        for (const [index, offer] of slots.entries())
+          if (offer !== null && gone(offer.track)) {
+            slots[index] = null;
+            holes.push(index);
+          }
+        const taken = slots.flatMap((offer) => (offer === null ? [] : [offer.track]));
+        for (const hole of holes) {
+          const fits = playlistOfferFits(taken);
           const next = ranked.find((candidate) => fits(candidate.track));
-          if (next !== undefined) slots[index] = slot(next.track);
+          if (next === undefined) continue;
+          taken.push(next.track);
+          slots[hole] = slot(next.track);
         }
-        publish({ slots });
+        if (holes.length > 0)
+          publish({
+            slots,
+            unfilled: [],
+            error: state.error === "refill" ? null : state.error,
+          });
         timed(false);
       } catch {
         if (current()) {
-          publish({ error: "load" });
+          if (!showing) publish({ error: "load" });
           timed(true);
         }
       } finally {
-        renewing = false;
-        // Cancellation retains offers, and the holes it was to fill stay unfilled for the next refill.
-        if (current()) publish({ loading: false });
-        else
-          state = {
-            ...state,
-            loading: false,
-            unfilled: unfilledBefore.filter((hole) => state.slots[hole] === null),
-          };
+        if (behind === controller) behind = undefined;
+        if (!showing) {
+          renewing = false;
+          // Cancellation retains offers, and the holes it was to fill stay unfilled for the next refill.
+          if (current()) publish({ loading: false });
+          else
+            state = {
+              ...state,
+              loading: false,
+              unfilled: unfilledBefore.filter((hole) => state.slots[hole] === null),
+            };
+        }
         request.signal?.removeEventListener("abort", cancel);
         if (active === controller) active = undefined;
         if (renewalPending && !disposed && !request.signal?.aborted)
