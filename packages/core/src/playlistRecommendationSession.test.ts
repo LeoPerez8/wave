@@ -7,6 +7,7 @@ import {
   playlistSlotWaitLine,
   playlistSuggestionsLine,
   type PlaylistRecommendationTiming,
+  type PlaylistReserveRefill,
   type PlaylistSlotWait,
   type PlaylistRecommendationFeedback,
   type PlaylistRecommendationSessionInput,
@@ -1706,6 +1707,98 @@ test("a later ranking that fails costs only its spares", async () => {
   await renewal;
   assert.equal(session.get().error, null);
   assert.equal(session.get().slots[0]?.track.id, "a");
+});
+
+test("a later ranking that fails is logged, and the radios still to come rank as usual", async () => {
+  const answers = [0, 1, 2].map(() => Promise.withResolvers<RadioRankingPage | null>());
+  const refills: PlaylistReserveRefill[] = [];
+  const saved: { offers: readonly PlaylistRecommendationTrack[] } = { offers: [] };
+  let clock = 0;
+  let id = 0;
+  const session = playlistRecommendationSession({
+    newId: () => String(++id),
+    read: async () => {
+      throw new Error("a fresh suggestion reads its radios one by one");
+    },
+    readFresh: async () => ({
+      input: { playlist: [track("seed")], sources: { library: LETTERS, pages: [], graph: null } },
+      radios: answers.map((answer) => answer.promise),
+    }),
+    rank: async (input) => {
+      if (input.sources.pages?.[0]?.id === "song:1") {
+        clock += 40;
+        throw new Error("rank failed");
+      }
+      return playlistRecommendations(input.playlist, input.sources, 20);
+    },
+    dismiss: async () => {},
+    saved: {
+      offers: [],
+      online: () => true,
+      write: (offers) => {
+        saved.offers = offers;
+      },
+    },
+    timed: { now: () => clock, report: () => {}, reserveRefill: (refill) => refills.push(refill) },
+  });
+  const page = (radio: number, ids: string) => ({
+    id: `song:${radio}`,
+    artists: [],
+    songs: [...ids].map(track),
+  });
+  const renewal = session.renew();
+  answers[0]!.resolve(page(0, "abcde"));
+  await quiet();
+  answers[1]!.resolve(page(1, "fg"));
+  await quiet();
+  assert.deepEqual(refills, [{ ms: 40, added: 0, spares: 0, failed: true }]);
+  answers[2]!.resolve(page(2, "hi"));
+  await renewal;
+  assert.deepEqual(
+    saved.offers.map((offer) => offer.id),
+    [..."abcdehi"],
+  );
+  assert.equal(refills.length, 1);
+  assert.equal(session.get().error, null);
+});
+
+test("hiding the playlist during a later ranking logs no failure", async () => {
+  const ranking = Promise.withResolvers<readonly never[]>();
+  const answers = [0, 1].map(() => Promise.withResolvers<RadioRankingPage | null>());
+  const refills: PlaylistReserveRefill[] = [];
+  let rankings = 0;
+  let id = 0;
+  const session = playlistRecommendationSession({
+    newId: () => String(++id),
+    read: async () => {
+      throw new Error("a fresh suggestion reads its radios one by one");
+    },
+    readFresh: async () => ({
+      input: { playlist: [track("seed")], sources: { library: LETTERS, pages: [], graph: null } },
+      radios: answers.map((answer) => answer.promise),
+    }),
+    rank: async (input) =>
+      ++rankings === 1
+        ? playlistRecommendations(input.playlist, input.sources, 20)
+        : ranking.promise,
+    dismiss: async () => {},
+    saved: { offers: [], online: () => true, write: () => {} },
+    timed: { now: () => 0, report: () => {}, reserveRefill: (refill) => refills.push(refill) },
+  });
+  const page = (radio: number, ids: string) => ({
+    id: `song:${radio}`,
+    artists: [],
+    songs: [...ids].map(track),
+  });
+  const renewal = session.renew();
+  answers[0]!.resolve(page(0, "abcde"));
+  await quiet();
+  answers[1]!.resolve(page(1, "fg"));
+  await quiet();
+  session.pause();
+  ranking.reject(new Error("aborted"));
+  await renewal;
+  assert.deepEqual(refills, []);
 });
 
 test("a low reserve while later radios answer starts no refill beside them, and one follows if it's still low", async () => {
