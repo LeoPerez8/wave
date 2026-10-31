@@ -275,7 +275,10 @@ test("picking offers reads each one taken once, however many candidates follow i
         videoId: "",
       }),
     );
-    const input = { playlist: [entry("own", "Air", "Electronic")], sources: { library, graph: null } };
+    const input = {
+      playlist: [entry("own", "Air", "Electronic")],
+      sources: { library, graph: null },
+    };
     const picked = playlistRecommendations(input.playlist, input.sources, 20);
     assert.equal(picked.length, 2);
     // The Library's indexes stand from here: what's read now is this ranking's own.
