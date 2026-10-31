@@ -228,7 +228,7 @@ export const playlistRecommendationSession = (options: {
   };
   /** A renewal asked for while offers were being saved or replaced runs once they're done. */
   const settle = async () => {
-    if (renewalPending && !busy()) await session.renew();
+    if (renewalPending && !busy()) await session.renew({ turn: "free" });
   };
   const act = async (
     key: string,
@@ -299,10 +299,16 @@ export const playlistRecommendationSession = (options: {
     /**
      * A full renewal re-ranks every offer, after the saves and refills under way
      * (external invalidations are retained until then). [refillOnly] retries the
-     * slots whose replacement failed, alongside any running actions.
+     * slots whose replacement failed, alongside any running actions. [turn], the
+     * host's turn a full renewal reads on, once it shows it's loading; a renewal
+     * whose asker has already waited for its turn (the playlist visit) has none.
      */
     renew: async (
-      request: { readonly refillOnly?: boolean; readonly signal?: AbortSignal | undefined } = {},
+      request: {
+        readonly refillOnly?: boolean;
+        readonly signal?: AbortSignal | undefined;
+        readonly turn?: PlaylistRecommendationTurn;
+      } = {},
     ): Promise<void> => {
       if (disposed || paused || request.signal?.aborted) return;
       if (request.refillOnly === true) {
@@ -346,6 +352,10 @@ export const playlistRecommendationSession = (options: {
         });
       };
       try {
+        if (request.turn !== undefined && yieldTurn !== undefined) {
+          await yieldTurn(request.turn);
+          if (!current()) return;
+        }
         let phase = clock?.() ?? 0;
         let input: PlaylistRecommendationSessionInput;
         try {
@@ -401,7 +411,7 @@ export const playlistRecommendationSession = (options: {
         request.signal?.removeEventListener("abort", cancel);
         if (active === controller) active = undefined;
         if (renewalPending && !disposed && !request.signal?.aborted)
-          await session.renew({ signal: request.signal });
+          await session.renew({ signal: request.signal, turn: "free" });
       }
     },
     dismiss: (key: string) => act(key, options.dismiss),
