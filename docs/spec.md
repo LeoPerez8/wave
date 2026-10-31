@@ -248,7 +248,7 @@ A song can be found inside a playlist (#477): a local playlist, a YT Music playl
 
 ### Compact title
 
-On a pushed page whose title sits in its scrolling content, the title appears beside the Back arrow once scrolled past (#873). A Library playlist has it. The genre page's title is already fixed in the header, so it has none.
+On a pushed page whose title sits in its scrolling content, the title appears beside the Back arrow once scrolled past (#873). A Library playlist has it, and so do both artist pages, the Library's and YouTube Music's. The genre page's title is already fixed in the header, so it has none.
 
 - **Showing.** Once the large title has fully scrolled out from under the header, the title fades in beside Back; it fades out when the large title comes back, so the two never show at once (Core's `compactTitleShown`, followed on the UI thread, JavaScript hearing only a change). It stays on one line and ends in an ellipsis. Screen readers reach it only while it shows, as a button with the title as its label and "Goes back to the top" ("Volta ao topo") as its hint.
 - **Tapping it** scrolls the list, animated, to where the page opens: head at the top and a hidden Find field still hidden. With Keep Find Field Visible on, the list goes to its top and the field stays pinned. From further than two list heights away, the list jumps to two list heights from there first and animates the rest, so a playlist of thousands of songs doesn't sweep past blank rows. Under reduce motion it jumps straight there (Core's `compactTitleScroll`).
