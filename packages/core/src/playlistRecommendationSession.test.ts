@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   playlistRecommendations,
+  playlistOffersAwaited,
   playlistRecommendationSession,
   playlistSlotWaitLine,
   playlistSuggestionsLine,
@@ -1839,4 +1840,55 @@ test("a renewal asked for while later radios answer stops them and runs after th
   fresh.answer(1, "fgh");
   await quiet();
   assert.equal(fresh.ranks.length, 3, "the stopped radio stays stopped");
+});
+
+test("offers are awaited with nothing showing or a slot on its placeholder, and not by what runs behind", async () => {
+  const seed = track("seed");
+  const library = [seed, ..."abcdefghijklmnopqrstuvwxyz".split("").map(track)];
+  const answer = (id: string) => ({ id, artists: ["Artist seed"], songs: library });
+  const seen: { readonly pages: string; readonly awaited: boolean }[] = [];
+  let spares = 0;
+  let id = 0;
+  const second = Promise.withResolvers<RadioRankingPage>();
+  const session = playlistRecommendationSession({
+    newId: () => String(++id),
+    saved: { offers: [], online: () => true, write: (offers) => (spares = offers.length - 5) },
+    read: async () => ({
+      playlist: [seed],
+      sources: { library, pages: [answer("refill")], graph: null },
+    }),
+    readFresh: async () => ({
+      input: { playlist: [seed], sources: { library, pages: [], graph: null } },
+      radios: [Promise.resolve(answer("first")), second.promise],
+    }),
+    rank: async ({ playlist, sources }) => {
+      seen.push({
+        pages: sources.pages?.map((page) => page.id).join() ?? "",
+        awaited: playlistOffersAwaited(session.get()),
+      });
+      return playlistRecommendations(playlist, sources, 7);
+    },
+    dismiss: async () => {},
+  });
+  assert.equal(playlistOffersAwaited(session.get()), true, "nothing showing yet");
+  const renewal = session.renew();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(seen, [{ pages: "first", awaited: true }]);
+  assert.equal(playlistOffersAwaited(session.get()), false, "the first radio's offers show");
+  second.resolve(answer("second"));
+  await renewal;
+  assert.deepEqual(seen[1], { pages: "second", awaited: false });
+  // The spares run out: the taps that take them start a refill no one waits for.
+  while (spares > 0) await session.dismiss(session.get().slots[0]!.key);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(seen.at(-1)?.pages, "refill");
+  assert.equal(seen.at(-1)?.awaited, false);
+  const ranked = seen.length;
+  // With none left, the next tap's slot waits on its placeholder for its ranking.
+  const dismissed = session.dismiss(session.get().slots[1]!.key);
+  assert.equal(playlistOffersAwaited(session.get()), true, "the slot's placeholder shows");
+  await dismissed;
+  assert.ok(seen.length > ranked);
+  assert.equal(seen.at(-1)?.awaited, true);
+  assert.equal(playlistOffersAwaited(session.get()), false);
 });

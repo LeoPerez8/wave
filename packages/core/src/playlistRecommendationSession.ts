@@ -43,6 +43,16 @@ export interface PlaylistRecommendationState {
   readonly unfilled: readonly number[];
   readonly error: "load" | "save" | "refill" | null;
 }
+/**
+ * Whether the owner is waiting for offers: the section shows it's loading, or a slot its
+ * placeholder. A later radio or a refill with every slot showing runs with no one waiting.
+ */
+export const playlistOffersAwaited = ({
+  loading,
+  pendingSlots,
+}: Pick<PlaylistRecommendationState, "loading" | "pendingSlots">): boolean =>
+  loading || pendingSlots.length > 0;
+
 export interface PlaylistRecommendationSessionInput {
   readonly playlist: readonly PlaylistRecommendationTrack[];
   readonly sources: PlaylistRecommendationSources;

@@ -7,6 +7,7 @@ import {
   PLAYLIST_SAVED_OFFERS,
   playlistOfferGoneSteps,
   playlistOfferHeld,
+  playlistOffersAwaited,
   playlistRecommendationsSteps,
   playlistRecommendationSession,
   playlistReserveRefillLine,
@@ -21,9 +22,8 @@ import { lookedUpProfileOf } from "@/home/artistGenres";
 import { afterPaint } from "@/lib/afterPaint";
 import { settledTurnEffect } from "@/lib/backgroundWork";
 import { makeExternalStore, type ExternalStore } from "@/lib/externalStore";
-import { recommendationTurn, recommendationTurnEffect } from "@/lib/recommendationWork";
+import { recommendationSteps, recommendationTurn } from "@/lib/recommendationWork";
 import { sightOf, type ScreenSight } from "@/lib/sight";
-import { runSteps } from "@/lib/stepped";
 import { appLog } from "@/log/appLog";
 import { online as phoneOnline } from "@/native/waveNative";
 
@@ -103,6 +103,8 @@ const openPlaylistSuggestionsVisit = (playlistId: number, openingAt: number) => 
       when: { online, low: remaining < LOW },
     };
   });
+  /** Whether someone waits is asked at each slice: a tap can start a wait mid-ranking. */
+  const awaited = () => playlistOffersAwaited(session.get());
   const session = playlistRecommendationSession({
     saved: {
       offers: saved.tracks,
@@ -119,7 +121,7 @@ const openPlaylistSuggestionsVisit = (playlistId: number, openingAt: number) => 
     },
     gone: (input, signal) =>
       appRuntime.runPromise(
-        runSteps(playlistOfferGoneSteps(input.playlist, input.sources), recommendationTurnEffect),
+        recommendationSteps(playlistOfferGoneSteps(input.playlist, input.sources), awaited),
         { signal },
       ),
     newId: () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${++nextOffer}`,
@@ -157,9 +159,9 @@ const openPlaylistSuggestionsVisit = (playlistId: number, openingAt: number) => 
       sightWatch.waiting("rank");
       const ranked = await appRuntime
         .runPromise(
-          runSteps(
+          recommendationSteps(
             playlistRecommendationsSteps(input.playlist, input.sources, PLAYLIST_SAVED_OFFERS),
-            recommendationTurnEffect,
+            awaited,
           ),
           { signal },
         )

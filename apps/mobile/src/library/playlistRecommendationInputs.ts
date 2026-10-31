@@ -10,6 +10,7 @@ import {
   mapSteps,
   readPlaylistEntrySong,
   RECOMMENDATION_SNAPSHOT,
+  samePlaylistTracksSteps,
   snapshotVersionsAfter,
   sortSteps,
   type LibraryChange,
@@ -202,6 +203,18 @@ export const sharePlaylistRecommendationInputs = <R>(
         favorites: stars,
         tracks: sharedRead(
           libraryTracks(indexes, stars, between).pipe(
+            // Tracks as they were keep their array: ranking's Library indexes go by it.
+            Effect.flatMap((tracks) =>
+              Effect.gen(function* () {
+                const last = completed?.library;
+                if (last === undefined) return tracks;
+                const same = yield* runSteps(
+                  samePlaylistTracksSteps(last, tracks.library),
+                  between,
+                );
+                return same ? { ...tracks, library: last } : tracks;
+              }),
+            ),
             Effect.tap((tracks) =>
               Effect.sync(() => {
                 if (derived?.library === indexes && derived.favorites === stars) completed = tracks;

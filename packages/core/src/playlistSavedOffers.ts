@@ -5,6 +5,7 @@
 import { finishSteps } from "./buildSteps.ts";
 import {
   PLAYLIST_SHOWN_OFFERS,
+  playlistLibraryIndexSteps,
   playlistOfferFits,
   playlistRecordingMatch,
   playlistRecordingMatchSteps,
@@ -126,11 +127,7 @@ export function* playlistOfferGoneSteps(
       signal.value === -1 && accepted(signal.track) === null ? [signal.track] : [],
     ),
   );
-  const withFile = new Set<string>();
-  for (const song of library) {
-    if (song.available !== false) withFile.add(song.id);
-    yield;
-  }
+  const { withFile } = yield* playlistLibraryIndexSteps(library);
   return (offer) => {
     if (held(offer) !== null || dismissed(offer) !== null) return true;
     return offer.source === "library" && library.length > 0 && !withFile.has(offer.id);
