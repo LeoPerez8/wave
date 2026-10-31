@@ -6,6 +6,22 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class QueueSyncTest {
+  @Test
+  fun `covers on several songs are one replacement, the songs between them kept`() {
+    val batch = QueueSync.artworkBatch(
+      listOf("a", "b", "c", "d", "e"),
+      { it },
+      mapOf("b" to "1.jpg", "d" to "2.jpg", "gone" to "3.jpg"),
+    ) { item, artwork -> "$item+$artwork" }
+    assertEquals(ItemBatch(1, 4, listOf("b+1.jpg", "c", "d+2.jpg")), batch)
+  }
+
+  @Test
+  fun `covers for songs the player doesn't hold change nothing`() {
+    val batch = QueueSync.artworkBatch(listOf("a"), { it }, mapOf("gone" to "1.jpg")) { item, _ -> item }
+    assertEquals(null, batch)
+  }
+
   /**
    * A player list holding item names ("old:1", "new:4"), recording what was
    * done to it and how many loaded items were read.

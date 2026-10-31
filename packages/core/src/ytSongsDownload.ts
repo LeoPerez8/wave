@@ -230,6 +230,25 @@ const unsearchedJobsFound = (downloads: YtDownloads): Map<string, string> => {
 };
 
 /**
+ * Asks [ask] about each of a playlist's YT Music songs a step at a time, and
+ * keeps the answers: what `ytPlaylistDownload` takes as `inLibrary`, so working
+ * out a long playlist's download never searches the Library on the way (#842).
+ */
+export function* playlistInLibrarySteps<S extends YtSong>(
+  entries: readonly PlaylistItem<S, unknown>[],
+  ask: (song: S | UnsearchedSongJob) => boolean,
+): Generator<void, (song: Pick<YtSong, "videoId">) => boolean> {
+  const inLibrary = new Set<string>();
+  for (const entry of entries) {
+    if (entry.source === "library") continue;
+    const song = entry.source === "stream" ? entry.song : unsearchedSongJob(entry.song);
+    if (ask(song)) inLibrary.add(song.videoId);
+    yield;
+  }
+  return (song) => inLibrary.has(song.videoId);
+}
+
+/**
  * Where downloading a playlist holding [entries] stands: its YT Music and
  * unsearched entries are the list, in playlist order, an unsearched one as
  * the job named after what Spotify listed (`unsearchedSongJob`). An

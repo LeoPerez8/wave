@@ -3,7 +3,7 @@
  * (src/lib/screenSight.ts) puts together, and how a screen follows an
  * external store only while it's in sight (#722).
  */
-import type { LibraryQueries, LibraryReads } from "@wave/core";
+import type { LibraryQueries, LibraryQueryTraits, LibraryReads } from "@wave/core";
 import { useMemo, useSyncExternalStore } from "react";
 
 /**
@@ -103,11 +103,13 @@ export const attachInSight = (
   reads: LibraryReads,
   sight: ScreenSight,
   onChange: () => void,
+  traits: LibraryQueryTraits<unknown> = {},
 ): (() => void) => {
   const attached = queries.attach(key, reads, {
     visible: sight.visible(),
     onChange,
     onStateChange: onChange,
+    ...traits,
   });
   const stopWatching = sight.subscribe((visible) => (visible ? attached.show() : attached.hide()));
   return () => {

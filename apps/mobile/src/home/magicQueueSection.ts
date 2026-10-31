@@ -20,12 +20,15 @@ import * as Effect from "effect/Effect";
 import { useFocusEffect } from "expo-router";
 import { useCallback, useMemo, useRef, useState } from "react";
 
+import { freeTurnEffect } from "@/lib/backgroundWork";
+import { onLibraryChange } from "@/library/libraryChanges";
 import { LibraryStore, type PlayableSongRow } from "@/library/LibraryStore";
 import { libraryQuery, useLibraryQuery } from "@/library/sharedQueries";
 import { showToast } from "@/overlay/toast";
 import { startMagicQueue, startStreamedMagicQueue } from "@/playback/MagicQueue";
 import { runMagicQueueStart } from "@/playback/magicQueueStart";
 
+import { createPlaylistSeedIdsRead, readPlaylistSeedIds } from "./playlistSeedIds";
 import { randomMagicQueueRead } from "./randomMagicQueueRead";
 
 /** What the row draws (Core's `magicQueueShown`), its mixes' songs picked. */
@@ -36,6 +39,12 @@ export interface MagicQueueSection {
   /** Brings another random set, with Undo. */
   readonly refresh: () => void;
 }
+
+/** The row's playlist entries, read in pages between free turns: it's waiting to be shown. */
+const seedIds = createPlaylistSeedIdsRead(
+  Effect.flatMap(LibraryStore, (store) => readPlaylistSeedIds(store, freeTurnEffect)),
+);
+onLibraryChange(seedIds.change);
 
 const videoIdsOf = (songs: readonly YtAlbumSong[]): string[] => songs.map((song) => song.videoId);
 
@@ -52,7 +61,12 @@ type Seed = MagicQueueSeed<PlayableSongRow>;
 const usePoolPicks = (enabled: boolean) => {
   const [read, setRead] = useState(() => randomMagicQueueRead(Math.random));
   const query = useMemo(
-    () => libraryQuery(read.key, read.reads, Effect.flatMap(LibraryStore, read.read)),
+    () =>
+      libraryQuery(
+        read.key,
+        read.reads,
+        Effect.flatMap(LibraryStore, (store) => read.read(store, seedIds.get.pipe(Effect.orDie))),
+      ),
     [read],
   );
   const answer = useLibraryQuery<readonly Seed[] | null>(enabled ? query : null, null);

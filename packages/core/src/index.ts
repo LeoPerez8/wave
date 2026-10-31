@@ -106,6 +106,12 @@ export type {
   ShuffleSong,
 } from "./queue.ts";
 export { applyPlayerSync, keysToLoad, planPlayerSync } from "./playerSync.ts";
+export {
+  keptQueue,
+  playerListEntries,
+  playerQueueWindow,
+  playerRepeatMode,
+} from "./playerWindow.ts";
 export type { PlayerList, QueueList, SyncStep } from "./playerSync.ts";
 export { alphabetIndex, artistAlbums, indexLetter } from "./browse.ts";
 export type { ArtistAlbum, IndexEntry } from "./browse.ts";
@@ -688,6 +694,7 @@ export type { TabScreens } from "./tabScreens.ts";
 export {
   LIBRARY_QUERY_LIMITS,
   createLibraryQueries,
+  longListBurstPace,
   libraryChangeAffects,
 } from "./libraryQueries.ts";
 export type {
@@ -700,6 +707,7 @@ export type {
   LibraryQueryResult,
   LibraryQueryState,
   LibraryQueryStats,
+  LibraryQueryTraits,
   LibraryReads,
 } from "./libraryQueries.ts";
 export { BACKGROUND_WORK_LIMITS, createBackgroundWork } from "./backgroundWork.ts";
@@ -1000,6 +1008,7 @@ export {
   YT_PLAYLIST_DOWNLOAD_ACTION_LABELS,
   ytAlbumDownload,
   ytAlbumDownloadButton,
+  playlistInLibrarySteps,
   ytPlaylistDownload,
   ytPlaylistDownloadButton,
   ytSongsDownload,
@@ -1274,7 +1283,6 @@ export {
   PLAYING_SEARCHES,
   PLAYING_SEARCH_RETRY_MS,
   answerPlayingWalk,
-  keptQueue,
   passedOverNotice,
   playerQueueList,
   searchingAfter,

@@ -10,7 +10,7 @@ import { playbackState } from "./Player";
 import { Queue, currentPositionMs, queueState, settledQueue, toQueueTrack } from "./Queue";
 import { observeQueueSaves } from "./queueSaves";
 import { learnUnknownQueueTracks, queueTracks, type QueueTrack } from "./queueTracks";
-import { savedYtQueueTracks, saveYtQueueTracks } from "./ytQueueTracks";
+import { savedYtQueueTracks, saveYtQueueTracks } from "./savedYtTracks";
 
 /** Saving is best effort: a failed write must never disturb playback. */
 const run = (effect: Effect.Effect<void, unknown>): void => {

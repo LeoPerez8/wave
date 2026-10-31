@@ -229,7 +229,7 @@ import {
   selectPlaylistEntries,
   selectPlaylistEntriesRevision,
   selectPlaylistEntrySongs,
-  selectPlaylistEntryVideoIds,
+  selectPlaylistEntryVideoIdsPage,
   selectPlaylists,
   selectPlaylistsLastPlayed,
   selectTrackPaths,
@@ -261,7 +261,14 @@ import {
   type DuplicateFixToApply,
 } from "./db/replacementDuplicates";
 import { keepLyricsMiss, selectLyricsSearchTrack, type LyricsSearchTrack } from "./db/lyricsMisses";
-import { selectKnownVideos, selectPlaylistedSongs, selectStreamedSongs } from "./db/mixKnown";
+import {
+  type KnownVideosCursor,
+  selectKnownVideos,
+  selectKnownVideosPage,
+  selectPlaylistedSongs,
+  selectStreamedSongs,
+} from "./db/mixKnown";
+import type { VideoPage } from "./db/videoPages";
 import { addCandidates, selectCandidateCatalog } from "./db/candidateCatalog";
 import { hasUnscannedRoot, pruneOrphans, saveBatch, type SavedBatch } from "./db/save";
 import * as schema from "./db/schema";
@@ -863,10 +870,13 @@ export class LibraryStore extends Context.Service<
     /** All playable ids, without metadata or history, for Home's random Magic Queue grid. */
     readonly playableSongIds: Effect.Effect<readonly number[], LibraryStoreError>;
     /**
-     * The video ids of the playlists' YT Music entries, each once and none the
-     * Library has as a file, without decoding a song, for the same grid.
+     * A page of the video ids of the playlists' YT Music entries, none the
+     * Library has as a file, without decoding a song, for the same grid. Start
+     * after 0; [next] is null past the last.
      */
-    readonly playlistEntryVideoIds: Effect.Effect<readonly string[], LibraryStoreError>;
+    readonly playlistEntryVideoIdsPage: (
+      after: number,
+    ) => Effect.Effect<VideoPage<number>, LibraryStoreError>;
     /** The YT Music songs the playlists hold as these video ids, one per video, in no particular order. */
     readonly playlistEntrySongs: (
       videoIds: readonly string[],
@@ -1301,6 +1311,10 @@ export class LibraryStore extends Context.Service<
      * them out (Core's `discoverMixKeep`).
      */
     readonly knownVideos: Effect.Effect<readonly string[], LibraryStoreError>;
+    /** A page of `knownVideos`: what the app reads, so a long list doesn't hold the JavaScript thread. */
+    readonly knownVideosPage: (
+      cursor: KnownVideosCursor,
+    ) => Effect.Effect<VideoPage<KnownVideosCursor>, LibraryStoreError>;
     /**
      * Adds what a radio or an artist page brought at [at] to the candidate
      * catalog (Core's `catalogSeen`), and takes out what leaves
@@ -1872,9 +1886,10 @@ const make = Effect.gen(function* () {
       attempt("probe Home pick growth", () => hasPlayableSongOutside(db, ids)),
 
     playableSongIds: attempt("read Home seed ids", () => selectPlayableSongIds(db)),
-    playlistEntryVideoIds: attempt("read Home's playlist seed ids", () =>
-      selectPlaylistEntryVideoIds(db),
-    ),
+    playlistEntryVideoIdsPage: (after) =>
+      attempt("read a page of Home's playlist seed ids", () =>
+        selectPlaylistEntryVideoIdsPage(db, after),
+      ),
     playlistEntrySongs: (videoIds) =>
       attempt("read Home's playlist seeds", () => selectPlaylistEntrySongs(db, videoIds)),
 
@@ -2196,6 +2211,8 @@ const make = Effect.gen(function* () {
     playlistedSongs: attempt("read the playlists' songs", () => selectPlaylistedSongs(db)),
 
     knownVideos: attempt("read the videos the owner knows", () => selectKnownVideos(db)),
+    knownVideosPage: (cursor) =>
+      attempt("read a page of the videos the owner knows", () => selectKnownVideosPage(db, cursor)),
 
     addCandidates: (page, at) =>
       writeAttempt("add to the candidate catalog", () => {
