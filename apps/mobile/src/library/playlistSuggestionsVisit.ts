@@ -146,11 +146,12 @@ const openPlaylistSuggestionsVisit = (playlistId: number, openingAt: number) => 
           const { input, when } = yield* readSources;
           return {
             input,
-            radios: input.sources.seeds.map((seed) =>
-              appRuntime
-                .runPromise(playlistSuggestionRadios(visitId, [seed], when), { signal })
-                .then((pages) => pages[0] ?? null),
-            ),
+            radios: () =>
+              input.sources.seeds.map((seed) =>
+                appRuntime
+                  .runPromise(playlistSuggestionRadios(visitId, [seed], when), { signal })
+                  .then((pages) => pages[0] ?? null),
+              ),
           };
         }),
         { signal },

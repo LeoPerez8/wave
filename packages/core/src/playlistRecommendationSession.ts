@@ -59,12 +59,13 @@ export interface PlaylistRecommendationSessionInput {
   readonly sources: PlaylistRecommendationSources;
 }
 /**
- * A fresh suggestion's read: all but the radios, and the radios still answering.
- * A radio answers null, or fails, when it has no page to give.
+ * A fresh suggestion's read: all but the radios, and how to start them. The session starts
+ * them only if it still wants them, listening from that moment on, so a read overtaken or
+ * cancelled downloads nothing. A radio answers null, or fails, when it has no page to give.
  */
 export interface PlaylistRecommendationFreshRead {
   readonly input: PlaylistRecommendationSessionInput;
-  readonly radios: readonly Promise<RadioRankingPage | null>[];
+  readonly radios: () => readonly Promise<RadioRankingPage | null>[];
 }
 
 /**
@@ -874,7 +875,8 @@ export const playlistRecommendationSession = (options: {
           const opened = await reading(() => readFresh(controller.signal));
           if (!current()) return;
           input = opened.input;
-          const nextAnswers = radioAnswers(opened.radios, controller.signal);
+          const radios = opened.radios();
+          const nextAnswers = radioAnswers(radios, controller.signal);
           laterRadios = nextAnswers;
           let answered = false;
           // A radio with nothing eligible shows nothing: the next one to answer may.
@@ -888,7 +890,7 @@ export const playlistRecommendationSession = (options: {
           }
           if (!answered) {
             // Offline, or with nothing to seed a radio, no read failed: Library files can still join.
-            if (opened.radios.length > 0 && input.sources.online !== false)
+            if (radios.length > 0 && input.sources.online !== false)
               throw new Error("No radio answered");
             ranked = await ranking(radiosInput(input, []));
             if (ranked === null) return;
@@ -981,6 +983,8 @@ export const playlistRecommendationSession = (options: {
         }
         request.signal?.removeEventListener("abort", cancel);
         if (active === controller) active = undefined;
+        // Radios still answering have no one left to hear them.
+        controller.abort();
         if (renewalPending && !disposed && !request.signal?.aborted)
           await session.renew({ signal: request.signal, turn: "free" });
         else if (ended && lowPointOwed) reserveLowPoint();

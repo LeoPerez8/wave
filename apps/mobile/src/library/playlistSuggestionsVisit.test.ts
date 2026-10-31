@@ -818,3 +818,21 @@ test("a tap that finds the reserve low within the settle wait reads nothing unti
   assert.ok(app.reads >= 1);
   stop();
 });
+
+test("leaving as a fresh read's radios start leaves no rejection unhandled", async () => {
+  reset();
+  app.seeds = ["one", "two", "three"];
+  const unhandled: unknown[] = [];
+  const heard = (reason: unknown) => unhandled.push(reason);
+  process.on("unhandledRejection", heard);
+  const { visit, screen, wanted, sectionSight } = opened();
+  let stop = () => {};
+  app.radioWait = async () => {
+    stop();
+    await new Promise(() => {});
+  };
+  stop = visit.follow(screen, wanted, sectionSight);
+  await settledFrames();
+  process.off("unhandledRejection", heard);
+  assert.deepEqual(unhandled, []);
+});
