@@ -15,6 +15,7 @@ import {
   playlistSuggestionsLine,
   playlistSuggestionsSightLine,
   playlistSuggestionsSightWatch,
+  type PlaylistRecommendationSessionInput,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
 
@@ -52,6 +53,10 @@ const entryLibraryId = (entry: PlaylistEntryRow) =>
 const entryVideoId = (entry: PlaylistEntryRow) =>
   entry.source === "stream" ? entry.song.videoId : undefined;
 
+/** The rows the read behind [input] brought: the session passes a read's sources along as they are. */
+const rowsOfInput = ({ sources }: PlaylistRecommendationSessionInput) =>
+  (sources as typeof sources & { readonly songById: ReadonlyMap<string, SongRow> }).songById;
+
 /** The visit proper, from the first moment its section is wanted; [openingAt], the playlist's opening. */
 const openPlaylistSuggestionsVisit = (playlistId: number, openingAt: number) => {
   const announcingAcceptance = makeExternalStore(false);
@@ -78,14 +83,9 @@ const openPlaylistSuggestionsVisit = (playlistId: number, openingAt: number) => 
   let settled = false;
   const rowOf = (id: string) =>
     latestRows.get().get(id) ?? libraryRows.get().get(id) ?? savedRows.get(id);
-  // By the read's Library, so the rows go when the read does.
-  const rowsOfRead = new WeakMap<object, ReadonlyMap<string, SongRow>>();
   const readSources = Effect.gen(function* () {
     const input = yield* playlistRecommendationInput(playlistId);
     const graph = yield* playlistRecommendationGraph;
-    // Source rows are retained for the five visible offers only, never a copy of the Library.
-    latestRows.set(input.songById);
-    rowsOfRead.set(input.library, input.songById);
     const seeds = playlistSuggestionSeeds(playlistId, input.playlist);
     const online = phoneOnline();
     return {
@@ -159,24 +159,18 @@ const openPlaylistSuggestionsVisit = (playlistId: number, openingAt: number) => 
     },
     rank: async (input, signal) => {
       sightWatch.waiting("rank");
-      const ranked = await appRuntime
-        .runPromise(
-          recommendationSteps(
-            playlistRecommendationsSteps(input.playlist, input.sources, PLAYLIST_SAVED_OFFERS),
-            awaited,
-          ),
-          { signal },
-        )
-        .catch((error: unknown) => {
-          // A cancelled rank must not keep the whole Library index reachable from this visit.
-          latestRows.set(new Map());
-          throw error;
-        });
+      const ranked = await appRuntime.runPromise(
+        recommendationSteps(
+          playlistRecommendationsSteps(input.playlist, input.sources, PLAYLIST_SAVED_OFFERS),
+          awaited,
+        ),
+        { signal },
+      );
       sightWatch.waiting(null);
       remaining = ranked.length;
       const held = new Map<string, SongRow>();
-      // A read's own rows: a later radio ranks after the first one's ranking let go of the rest.
-      const rows = rowsOfRead.get(input.sources.library) ?? latestRows.get();
+      // The read's whole rows live only as long as its input: the visit keeps these few.
+      const rows = rowsOfInput(input);
       const keep = (id: string) => {
         const row = rows.get(id);
         if (row !== undefined) held.set(id, row);

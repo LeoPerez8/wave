@@ -252,3 +252,42 @@ test("two reads of a Library hold the same tracks until a field of one differs",
   while (steps.next().done !== true) count++;
   assert.ok(count >= 30, "a long Library compares across turns");
 });
+
+test("picking offers reads each one taken once, however many candidates follow it", () => {
+  const readsOfPicked = (candidates: number) => {
+    const reads = new Map<string, number>();
+    const counted = (track: PlaylistRecommendationTrack) => {
+      const { title, ...rest } = track;
+      return Object.defineProperty(rest, "title", {
+        enumerable: true,
+        get: () => {
+          reads.set(track.id, (reads.get(track.id) ?? 0) + 1);
+          return title;
+        },
+      }) as PlaylistRecommendationTrack;
+    };
+    // One artist: its cap fills at two offers, and every candidate after them is checked and left.
+    const library = Array.from({ length: candidates }, (_, index) =>
+      counted({
+        ...entry(`lib${index}`, "Air", "Electronic"),
+        title: `Song ${index}`,
+        source: "library",
+        videoId: "",
+      }),
+    );
+    const input = {
+      playlist: [entry("own", "Air", "Electronic")],
+      sources: { library, graph: null },
+    };
+    const picked = playlistRecommendations(input.playlist, input.sources, 20);
+    assert.equal(picked.length, 2);
+    // The Library's indexes stand from here: what's read now is this ranking's own.
+    reads.clear();
+    assert.deepEqual(
+      playlistRecommendations(input.playlist, input.sources, 20).map(({ track }) => track.id),
+      picked.map(({ track }) => track.id),
+    );
+    return picked.map(({ track }) => reads.get(track.id));
+  };
+  assert.deepEqual(readsOfPicked(300), readsOfPicked(30));
+});
