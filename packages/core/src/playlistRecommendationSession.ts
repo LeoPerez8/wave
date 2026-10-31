@@ -1,4 +1,5 @@
 import {
+  PLAYLIST_SHOWN_OFFERS,
   playlistOfferFits,
   playlistRecommendations,
   type PlaylistRecommendationSources,
@@ -13,6 +14,7 @@ import {
   playlistOffersWithout,
   playlistSpareOffer,
 } from "./playlistSavedOffers.ts";
+import { roundMs } from "./timing.ts";
 
 export interface PlaylistRecommendationSlot {
   readonly key: string;
@@ -61,9 +63,6 @@ export interface PlaylistRecommendationTiming {
   readonly failed: boolean;
 }
 
-// not UI text: times for the app log
-const roundMs = (ms: number) => `${Math.round(ms)} ms`;
-
 /**
  * [timing] as one log line; [sinceOpenMs], the time since the playlist
  * opened, for the renewal that opening asked for.
@@ -84,6 +83,35 @@ export const playlistSuggestionsLine = (
   return failed
     ? `Playlist suggestions failed renewing after ${roundMs(ms)} ${parts}`
     : `Playlist suggestions renewed: ${shown} in ${roundMs(ms)} ${parts}`;
+};
+
+/** Whether a row would show [b] otherwise than [a]; what only ranking reads doesn't count. */
+const showsOtherwise = (a: PlaylistRecommendationTrack, b: PlaylistRecommendationTrack): boolean =>
+  a.videoId !== b.videoId ||
+  a.title !== b.title ||
+  a.album !== b.album ||
+  a.albumId !== b.albumId ||
+  a.durationMs !== b.durationMs ||
+  a.artworkUrl !== b.artworkUrl ||
+  a.explicit !== b.explicit ||
+  a.artists.length !== b.artists.length ||
+  a.artists.some((artist, index) => artist !== b.artists[index]);
+
+/**
+ * The newly read tracks of the offers in [slots]: as [ranked], or as the [library] holds an
+ * offer a renewal no longer ranks. One pass, looking up five ids, however long the Library.
+ */
+const latestTracks = (
+  slots: readonly (PlaylistRecommendationSlot | null)[],
+  ranked: readonly PlaylistRecommendation[],
+  library: readonly PlaylistRecommendationTrack[],
+): ReadonlyMap<string, PlaylistRecommendationTrack> => {
+  const showing = new Set(slots.flatMap((offer) => (offer === null ? [] : [offer.track.id])));
+  const latest = new Map<string, PlaylistRecommendationTrack>();
+  if (showing.size === 0) return latest;
+  for (const song of library) if (showing.has(song.id)) latest.set(song.id, song);
+  for (const { track } of ranked) if (showing.has(track.id)) latest.set(track.id, track);
+  return latest;
 };
 
 /**
@@ -385,8 +413,9 @@ export const playlistRecommendationSession = (options: {
      * A full renewal re-ranks the offers, after the saves and refills under way
      * (external invalidations are retained until then), and saves them for the next
      * visit. With offers showing it runs behind them: they stay, Add and Dismiss go
-     * first, a failure is only reported, and it fills only slots already free or whose
-     * offer its read says is gone. With none, it shows its loading, offers or failure.
+     * first, a failure is only reported, and it fills only empty slots and those whose
+     * offer its read says is gone, refreshing the tags of the others in place. With none,
+     * it shows its loading, offers or failure.
      * [refillOnly] retries the slots whose replacement failed, alongside any running
      * actions. [turn], the host's turn a full renewal reads on, once it shows it's
      * loading; a renewal whose asker has already waited for its turn (the playlist
@@ -485,24 +514,38 @@ export const playlistRecommendationSession = (options: {
             { online: input.sources.online ?? true },
           ),
         );
-        const slots: (PlaylistRecommendationSlot | null)[] = showing
-          ? [...state.slots]
-          : Array.from({ length: 5 }, () => null);
-        const holes = showing ? [...state.unfilled] : slots.map((_, index) => index);
-        for (const [index, offer] of slots.entries())
-          if (offer !== null && gone(offer.track)) {
+        const slots = Array.from(
+          { length: PLAYLIST_SHOWN_OFFERS },
+          (_, index): PlaylistRecommendationSlot | null => state.slots[index] ?? null,
+        );
+        // With nothing showing, the section's loading ends whatever this finds.
+        let changed = !showing || state.unfilled.length > 0;
+        const reread = latestTracks(slots, ranked, input.sources.library);
+        for (const [index, offer] of slots.entries()) {
+          if (offer === null) continue;
+          if (gone(offer.track)) {
             slots[index] = null;
-            holes.push(index);
+            changed = true;
+            continue;
           }
+          // Fix Song or a scan changed its tags: the same offer, in its place, with what's true now.
+          const latest = reread.get(offer.track.id);
+          if (latest === undefined || !showsOtherwise(offer.track, latest)) continue;
+          slots[index] = { ...offer, track: latest };
+          changed = true;
+        }
+        // Empty slots take its offers, whatever emptied them or never filled them; an offer showing stays.
         const taken = slots.flatMap((offer) => (offer === null ? [] : [offer.track]));
-        for (const hole of holes) {
+        for (const [index, offer] of slots.entries()) {
+          if (offer !== null) continue;
           const fits = playlistOfferFits(taken);
           const next = ranked.find((candidate) => fits(candidate.track));
-          if (next === undefined) continue;
+          if (next === undefined) break;
           taken.push(next.track);
-          slots[hole] = slot(next.track);
+          slots[index] = slot(next.track);
+          changed = true;
         }
-        if (holes.length > 0)
+        if (changed)
           publish({
             slots,
             unfilled: [],

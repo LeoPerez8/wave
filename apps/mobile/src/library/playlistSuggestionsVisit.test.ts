@@ -19,6 +19,7 @@ const app = {
   letters: "abcdefghijkl",
   radio: "abcdefghijkl",
   playlist: ["seed"],
+  retitled: new Map<string, string>(),
 };
 Object.assign(globalThis, { playlistVisitApp: app });
 
@@ -26,7 +27,7 @@ const boundary = `data:text/javascript,${encodeURIComponent(`
   import * as Effect from ${JSON.stringify(import.meta.resolve("effect/Effect"))};
   import * as Context from ${JSON.stringify(import.meta.resolve("effect/Context"))};
   const app = globalThis.playlistVisitApp;
-  const song = (id) => ({ id, source: "library", videoId: "", title: id, artists: ["Artist " + id],
+  const song = (id) => ({ id, source: "library", videoId: "", title: app.retitled.get(id) ?? id, artists: ["Artist " + id],
     album: null, albumId: null, durationMs: 180000, artworkUrl: null, explicit: false, genre: "Rock" });
   const seed = song("seed");
   const libraryNow = () => [seed, ...app.letters.split("").map(song)];
@@ -144,6 +145,7 @@ const reset = () => {
   app.letters = "abcdefghijkl";
   app.radio = "abcdefghijkl";
   app.playlist = ["seed"];
+  app.retitled = new Map();
 };
 const offerIds = (visit: ReturnType<typeof createPlaylistSuggestionsVisit>) =>
   visit.session.get().slots.map((offer) => offer?.track.id ?? null);
@@ -453,7 +455,8 @@ test("offline, saved streamed offers stay hidden, and back online they show agai
   assert.deepEqual(offerIds(visit), ["a"]);
   const stop = visit.follow(screen, wanted, sectionSight);
   await settledFrames();
-  assert.deepEqual(offerIds(visit), ["a"]);
+  // Free slots take Library files; the streamed ones stay hidden, and saved.
+  assert.deepEqual(offerIds(visit), ["a", "b", "c", "d", "e"]);
   stop();
   app.online = true;
   assert.deepEqual(offerIds(opened().visit), ["yt:v", "a", "yt:w"]);
@@ -500,5 +503,34 @@ test("a spare taking a slot while Find is open has its Library row once Find clo
   assert.notEqual(spare, "d");
   wanted.set(true);
   assert.equal(visit.libraryRows.get().get(spare)?.id, spare);
+  stop();
+});
+
+test("a tag change reaches a showing offer and its row, even one the renewal didn't rank", async () => {
+  reset();
+  await visited();
+  app.letters = "abcdefghijklmnopqrstuvwx";
+  app.radio = "mnopqrstuvwx";
+  app.retitled.set("a", "Fixed");
+  const { visit, screen, wanted, sectionSight } = opened();
+  const key = visit.session.get().slots[0]?.key;
+  const stop = visit.follow(screen, wanted, sectionSight);
+  await settledFrames();
+  assert.deepEqual(offerIds(visit), ["a", "b", "c", "d", "e"]);
+  assert.equal(visit.session.get().slots[0]?.key, key);
+  assert.equal(visit.session.get().slots[0]?.track.title, "Fixed");
+  assert.equal(visit.libraryRows.get().get("a")?.title, "Fixed");
+  stop();
+});
+
+test("a row changed with no change to its offer's tags still refreshes", async () => {
+  reset();
+  await visited();
+  const { visit, screen, wanted, sectionSight } = opened();
+  const saved = visit.libraryRows.get().get("a");
+  const stop = visit.follow(screen, wanted, sectionSight);
+  await settledFrames();
+  assert.notEqual(visit.libraryRows.get().get("a"), saved);
+  assert.equal(visit.libraryRows.get().get("a")?.id, "a");
   stop();
 });
