@@ -9,7 +9,10 @@ import {
   genreAffinity,
   genreProfile,
   genreProfileSteps,
+  genreTallySteps,
+  tallyProfileSteps,
   type GenreProfileOf,
+  type GenreTally,
 } from "./genreAffinity.ts";
 import { magicArtistKey, type MagicSong } from "./magicQueue.ts";
 import { rankRadioSongs, type RadioRankingPage } from "./radioRanking.ts";
@@ -95,6 +98,79 @@ export function* playlistRecordingMatchSteps(tracks: readonly PlaylistRecommenda
     find(song);
 }
 
+/** What ranking looks up in a Library, whichever playlist it ranks for. */
+interface PlaylistLibraryIndex {
+  /** The genres of the Library's songs under each artist key, added up and as a profile. */
+  readonly artistTallies: ReadonlyMap<string, GenreTally>;
+  readonly artistProfiles: ReadonlyMap<string, ReturnType<typeof genreProfile>>;
+  readonly recording: ReturnType<typeof playlistRecordingMatch>;
+  readonly magicOf: ReadonlyMap<string, MagicSong>;
+  readonly magicSongs: readonly MagicSong[];
+  /** The songs with a file, by id. */
+  readonly withFile: ReadonlyMap<string, PlaylistRecommendationTrack>;
+}
+
+/**
+ * By the Library array, which a new read replaces when the Library or its stars change, so an
+ * index lives as long as its Library. Only a finished build is kept: cancelled, the next starts over.
+ */
+const libraryIndexes = new WeakMap<readonly PlaylistRecommendationTrack[], PlaylistLibraryIndex>();
+
+/** [library]'s index, built once however many rankings and playlists read it. */
+export function* playlistLibraryIndexSteps(
+  library: readonly PlaylistRecommendationTrack[],
+): Generator<void, PlaylistLibraryIndex> {
+  const known = libraryIndexes.get(library);
+  if (known !== undefined) return known;
+  const songsOfArtist = new Map<string, PlaylistRecommendationTrack[]>();
+  for (const track of library) {
+    for (const artist of track.artists) {
+      const key = catalogSeedKey(artist);
+      if (key === null) continue;
+      const songs = songsOfArtist.get(key) ?? [];
+      songs.push(track);
+      songsOfArtist.set(key, songs);
+      yield;
+    }
+    yield;
+  }
+  const artistTallies = new Map<string, GenreTally>();
+  const artistProfiles = new Map<string, ReturnType<typeof genreProfile>>();
+  for (const [name, songs] of songsOfArtist) {
+    const tally = yield* genreTallySteps(songs);
+    artistTallies.set(name, tally);
+    artistProfiles.set(name, yield* tallyProfileSteps(tally));
+    yield;
+  }
+  const local: PlaylistRecommendationTrack[] = [];
+  for (const track of library) {
+    if (track.available !== false) local.push(track);
+    yield;
+  }
+  const recording = yield* playlistRecordingMatchSteps(local);
+  const magicOf = new Map<string, MagicSong>();
+  for (const track of local) {
+    magicOf.set(track.id, {
+      trackId: track.id,
+      artists: track.artists.map(magicArtistKey),
+      genre: null,
+      style: null,
+    });
+    yield;
+  }
+  const withFile = yield* indexSteps(local, (track) => [track.id, track]);
+  const index: PlaylistLibraryIndex = {
+    artistTallies,
+    artistProfiles,
+    recording,
+    magicOf,
+    magicSongs: [...magicOf.values()],
+    withFile,
+  };
+  libraryIndexes.set(library, index);
+  return index;
+}
+
 /** Full eligible order, shared with the visible-slot controller. */
 function* rankedPlaylistRecommendationsSteps(
   playlist: readonly PlaylistRecommendationTrack[],
@@ -102,28 +178,33 @@ function* rankedPlaylistRecommendationsSteps(
 ): Generator<void, PlaylistRecommendation[]> {
   if (playlist.length === 0) return [];
   const { library, graph } = sources;
-  const profiles = new Map<string, PlaylistRecommendationTrack[]>();
-  for (const track of (function* () {
-    yield* library;
-    yield* playlist;
-  })()) {
+  const index = yield* playlistLibraryIndexSteps(library);
+  // A playlist's own songs lean its artists' genres, and no other playlist's: added per ranking.
+  const ownSongs = new Map<string, PlaylistRecommendationTrack[]>();
+  for (const track of playlist) {
     for (const artist of track.artists) {
       const key = catalogSeedKey(artist);
       if (key === null) continue;
-      const songs = profiles.get(key) ?? [];
+      const songs = ownSongs.get(key) ?? [];
       songs.push(track);
-      profiles.set(key, songs);
+      ownSongs.set(key, songs);
       yield;
     }
     yield;
   }
-  const taggedProfiles = new Map<string, ReturnType<typeof genreProfile>>();
-  for (const [name, songs] of profiles) {
-    taggedProfiles.set(name, yield* genreProfileSteps(songs));
+  const ownProfiles = new Map<string, ReturnType<typeof genreProfile>>();
+  for (const [name, songs] of ownSongs) {
+    const tally = yield* genreTallySteps(songs, index.artistTallies.get(name));
+    ownProfiles.set(name, yield* tallyProfileSteps(tally));
     yield;
   }
-  const profileOf: GenreProfileOf = (name) =>
-    taggedProfiles.get(catalogSeedKey(name) ?? "") ?? sources.profileOf?.(name);
+  const profileOf: GenreProfileOf = (name) => {
+    const key = catalogSeedKey(name) ?? "";
+    return (
+      (ownProfiles.has(key) ? ownProfiles.get(key) : index.artistProfiles.get(key)) ??
+      sources.profileOf?.(name)
+    );
+  };
   let profile = yield* genreProfileSteps(playlist);
   if (profile === null) {
     const weights = new Map<string, number>();
@@ -192,23 +273,6 @@ function* rankedPlaylistRecommendationsSteps(
       signal.value === -1 && accepted(signal.track) === null ? [signal.track] : [],
     ),
   );
-  const local: PlaylistRecommendationTrack[] = [];
-  for (const track of library) {
-    if (track.available !== false) local.push(track);
-    yield;
-  }
-  const localRecording = yield* playlistRecordingMatchSteps(local);
-  const magicOf = new Map<string, MagicSong>();
-  for (const track of local) {
-    magicOf.set(track.id, {
-      trackId: track.id,
-      artists: track.artists.map(magicArtistKey),
-      genre: null,
-      style: null,
-    });
-    yield;
-  }
-  const byId = yield* indexSteps(local, (track) => [track.id, track]);
   const playlistArtists = new Set<string>();
   for (const track of playlist) {
     for (const artist of track.artists) {
@@ -233,10 +297,10 @@ function* rankedPlaylistRecommendationsSteps(
       pages: sources.pages ?? [],
       graph,
       profileOf,
-      library: [...magicOf.values()],
+      library: index.magicSongs,
       inLibrary: (song) => {
-        const found = localRecording(song);
-        return found === null ? null : (magicOf.get(found.id) ?? null);
+        const found = index.recording(song);
+        return found === null ? null : (index.magicOf.get(found.id) ?? null);
       },
     },
   );
@@ -276,7 +340,7 @@ function* rankedPlaylistRecommendationsSteps(
     yield;
     const track =
       candidate.source === "library"
-        ? byId.get(candidate.trackId)
+        ? index.withFile.get(candidate.trackId)
         : candidate.song === null || !streams
           ? undefined
           : {
