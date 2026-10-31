@@ -8,27 +8,23 @@ import {
   useReducer,
   useRef,
   useState,
-  type RefObject,
 } from "react";
-import type { ScrollView } from "react-native";
 import { usePanGesture } from "react-native-gesture-handler";
 import {
   Easing,
   scrollTo,
   useAnimatedReaction,
-  useAnimatedRef,
   useAnimatedStyle,
   useFrameCallback,
-  useScrollOffset,
   useSharedValue,
   withTiming,
-  type AnimatedRef,
   type SharedValue,
 } from "react-native-reanimated";
 import { scheduleOnRN, scheduleOnUI } from "react-native-worklets";
 
 import { grid } from "@/catalog/grid";
 import { liftedTop } from "@/catalog/liftedRow";
+import { useListScroll } from "@/lib/useListScroll";
 import { handleHold } from "@/motion/handleHold";
 import { perfCount } from "@/perf/perf";
 
@@ -160,9 +156,8 @@ export function useRowDrag({
   counter: string;
   onDrop: (key: string, from: number, to: number) => void;
 }) {
-  const scrollRef = useAnimatedRef<ScrollView>();
   // The list's scroll, and the rows' (counted from the first row), which the drag works in.
-  const listScroll = useScrollOffset(scrollRef, useSharedValue(initialScroll));
+  const { scrollRef, scroll: listScroll } = useListScroll(initialScroll);
   const leadAt = useSharedValue(lead);
   const floorAt = useSharedValue(scrollFloor);
   const height = useSharedValue(0);
@@ -436,7 +431,7 @@ export function useRowDrag({
     liftedStyle,
     height,
     scroll: listScroll,
-    scrollRef: scrollRef as AnimatedRef<ScrollView> & RefObject<ScrollView | null>,
+    scrollRef,
   };
 }
 

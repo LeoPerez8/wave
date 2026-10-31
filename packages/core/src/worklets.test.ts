@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
+  compactTitleShown,
   currentLyricIndex,
   currentLyricWordIndex,
   extrapolatePosition,
@@ -34,6 +35,7 @@ import {
 // any other function there throws. Node ignores the directive, so these tests
 // are the only check short of running the app.
 const onUiThread = {
+  compactTitleShown,
   currentLyricIndex,
   currentLyricWordIndex,
   extrapolatePosition,

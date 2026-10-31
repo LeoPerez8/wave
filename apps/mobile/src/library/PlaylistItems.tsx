@@ -33,6 +33,7 @@ import Animated, {
 } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
 
+import { CompactTitleHead, useCompactTitleList } from "@/components/CompactTitle";
 import { FLOATING_PILL_ROOM } from "@/components/FloatingPill";
 import { afterPaint } from "@/lib/afterPaint";
 import { makeExternalStore } from "@/lib/externalStore";
@@ -309,6 +310,7 @@ export function PlaylistItems({ playlistId, items, header, empty }: Props) {
     counter: "playlist",
     onDrop: (_key, from, to) => void reorder(from, to),
   });
+  useCompactTitleList({ list, find, scroll });
 
   // Recommendations hold their screen position only while some of them are in sight: an Add
   // grows the list above them without pushing them down, and someone reading the rows above
@@ -559,9 +561,9 @@ export function PlaylistItems({ playlistId, items, header, empty }: Props) {
           }}
           initialScrollOffset={find.initialOffset}
           ListHeaderComponent={
-            <View onLayout={(event) => setLead(event.nativeEvent.layout.height)}>
+            <CompactTitleHead onLayout={(event) => setLead(event.nativeEvent.layout.height)}>
               <FindHead find={find} header={header} />
-            </View>
+            </CompactTitleHead>
           }
         />
         {recommending && drag === null && (
