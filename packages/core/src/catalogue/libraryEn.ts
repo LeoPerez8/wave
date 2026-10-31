@@ -125,6 +125,7 @@ export const libraryEn = {
   },
   alphabetIndex: "Alphabet index",
   alphabetHint: "Swipe up or down to jump to a letter",
+  compactTitleHint: "Goes back to the top",
   /** Selection mode's header and bar. */
   selected: (count: number): string => `${n(count)} selected`,
   /** Counts of a kind ("3 albums"): list heads, and selection mode when it isn't songs. */

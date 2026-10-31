@@ -2187,6 +2187,7 @@ export type {
 } from "./playlistRecommendations.ts";
 export * from "./playlistRecommendationSession.ts";
 export * from "./goToSuggestions.ts";
+export { compactTitleScroll, compactTitleShown } from "./compactTitle.ts";
 export * from "./playlistSuggestionsSight.ts";
 export * from "./playlistSavedOffers.ts";
 export * from "./playlistSeeds.ts";
