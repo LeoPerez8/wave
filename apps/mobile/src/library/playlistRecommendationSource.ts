@@ -5,7 +5,6 @@
  * for a derivation, including on a cold start.
  */
 import * as Effect from "effect/Effect";
-import { settledTurnEffect } from "@/lib/backgroundWork";
 import { recommendationTurnEffect } from "@/lib/recommendationWork";
 import { recommendationFavorites, recommendationSnapshot } from "@/home/recommendationSnapshot";
 import { LibraryStore } from "./LibraryStore";
@@ -24,12 +23,12 @@ const inputs = sharePlaylistRecommendationInputs(
   recommendationTurnEffect,
 );
 
-/** Only the deferred playlist visit/refill invokes this whole-source capability. */
-export const playlistRecommendationInput = (id: number) =>
-  Effect.gen(function* () {
-    yield* settledTurnEffect;
-    return yield* inputs.latest(id);
-  });
+/**
+ * Only the deferred playlist visit/refill invokes this whole-source capability.
+ * Its askers wait for their turn first (a visit for the app to settle, a refill
+ * for a free turn), so it adds no wait of its own.
+ */
+export const playlistRecommendationInput = (id: number) => inputs.latest(id);
 
 /** The artist graph's last derivation (null before the first), warming a newer one meanwhile. */
 export const playlistRecommendationGraph = Effect.gen(function* () {

@@ -92,6 +92,7 @@ export const playlistsPtBr: typeof playlistsEn = {
     played: "Tocadas Recentemente",
     custom: "Personalizada",
   },
+  goToSuggestions: "Ir para sugestões",
   recommendedSongs: "Músicas recomendadas",
   loading: "Carregando…",
   loadingRecommended: "Carregando músicas recomendadas",

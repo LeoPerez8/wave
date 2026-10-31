@@ -34,6 +34,7 @@ import {
 import { scheduleOnRN } from "react-native-worklets";
 
 import { CELL, grid } from "@/catalog/grid";
+import { handleHold } from "@/motion/handleHold";
 import { measureRect, type Measurable } from "@/motion/measureRect";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 import { moveQueuedDownloads } from "@/ytmusic/YtDownloads";
@@ -383,7 +384,8 @@ export function useDragGrip(
   return usePanGesture(
     useMemo(
       () => ({
-        minDistance: 0,
+        activateAfterLongPress: handleHold.activateAfterLongPress,
+        minDistance: handleHold.minDistance,
         onActivate: () => {
           "worklet";
           travel.set(0);

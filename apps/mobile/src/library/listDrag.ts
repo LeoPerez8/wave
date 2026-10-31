@@ -29,6 +29,7 @@ import Animated, {
 import { scheduleOnRN } from "react-native-worklets";
 
 import { CELL, grid } from "@/catalog/grid";
+import { handleHold } from "@/motion/handleHold";
 
 /**
  * Dragging an item of a list or a grid to a new place by its handle (a
@@ -325,8 +326,9 @@ export const useDragCell = ({
   });
 
   const grip = usePanGesture({
+    activateAfterLongPress: handleHold.activateAfterLongPress,
+    minDistance: handleHold.minDistance,
     enabled,
-    minDistance: 0,
     onActivate: (event) => {
       "worklet";
       startScroll.set(scroll.get());
