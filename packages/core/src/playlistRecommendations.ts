@@ -17,7 +17,12 @@ import {
 import { magicArtistKey, type MagicSong } from "./magicQueue.ts";
 import { rankRadioSongs, type RadioRankingPage } from "./radioRanking.ts";
 import { normalizeSearchText } from "./search.ts";
-import { libraryFinderSteps, libraryMatchesSteps } from "./ytMusic.ts";
+import {
+  growingLibraryMatches,
+  libraryFinderSteps,
+  libraryMatchesSteps,
+  type LibrarySongKey,
+} from "./ytMusic.ts";
 import type { YtAlbumSong } from "./ytDiscover.ts";
 
 export interface PlaylistRecommendationTrack extends YtAlbumSong {
@@ -70,6 +75,13 @@ const PLAYLIST_ALBUM_WEIGHT = 0.5;
 /** How far the playlist's own feedback moves a radio score (the adjustment stays within ±0.35). */
 const PLAYLIST_FEEDBACK_WEIGHT = 4;
 
+/** How recording matching sees [track]. */
+const recordingKey = (track: PlaylistRecommendationTrack) => ({
+  ...track,
+  artist: track.artists.join(" & "),
+  durationMs: track.durationMs ?? 0,
+});
+
 /** Same recording rules as integrated Library/YT Music pages, including remasters and duration. */
 export const playlistRecordingMatch = (tracks: readonly PlaylistRecommendationTrack[]) =>
   finishSteps(playlistRecordingMatchSteps(tracks));
@@ -81,11 +93,7 @@ export function* playlistRecordingMatchSteps(tracks: readonly PlaylistRecommenda
     if (track.videoId !== "") byVideo.set(track.videoId, track);
     yield;
   }
-  const keys = yield* mapSteps(tracks, (track) => ({
-    ...track,
-    artist: track.artists.join(" & "),
-    durationMs: track.durationMs ?? 0,
-  }));
+  const keys = yield* mapSteps(tracks, recordingKey);
   const find = yield* libraryFinderSteps(keys);
   return (
     song: Pick<PlaylistRecommendationTrack, "title" | "artists" | "durationMs"> & {
@@ -415,17 +423,34 @@ const artistKeys = (track: PlaylistRecommendationTrack) =>
   new Set(track.artists.flatMap((name) => catalogSeedKey(name) ?? []));
 
 /**
- * Whether a suggestion may join the [shown] ones: not a recording they
+ * What a suggestion is checked against, as offers join: not a recording they
  * hold, and by no artist already holding `PLAYLIST_ARTIST_CAP` of them.
  */
-export const playlistOfferFits = (shown: readonly PlaylistRecommendationTrack[]) => {
-  const occupied = playlistRecordingMatch(shown);
+const offerPicks = () => {
+  const ids = new Set<string>();
+  const videos = new Set<string>();
+  const recordings = growingLibraryMatches<LibrarySongKey>();
   const counts = new Map<string, number>();
-  for (const track of shown)
-    for (const key of artistKeys(track)) counts.set(key, (counts.get(key) ?? 0) + 1);
-  return (track: PlaylistRecommendationTrack): boolean =>
-    occupied(track) === null &&
-    [...artistKeys(track)].every((key) => (counts.get(key) ?? 0) < PLAYLIST_ARTIST_CAP);
+  return {
+    add: (track: PlaylistRecommendationTrack): void => {
+      ids.add(track.id);
+      if (track.videoId !== "") videos.add(track.videoId);
+      recordings.add(recordingKey(track));
+      for (const key of artistKeys(track)) counts.set(key, (counts.get(key) ?? 0) + 1);
+    },
+    fits: (track: PlaylistRecommendationTrack): boolean =>
+      !ids.has(track.id) &&
+      !videos.has(track.videoId) &&
+      recordings.matches(track).length === 0 &&
+      [...artistKeys(track)].every((key) => (counts.get(key) ?? 0) < PLAYLIST_ARTIST_CAP),
+  };
+};
+
+/** Whether a suggestion may join the [shown] ones (`offerPicks`). */
+export const playlistOfferFits = (shown: readonly PlaylistRecommendationTrack[]) => {
+  const picks = offerPicks();
+  for (const track of shown) picks.add(track);
+  return picks.fits;
 };
 
 export function* playlistRecommendationsSteps(
@@ -434,9 +459,11 @@ export function* playlistRecommendationsSteps(
   count = PLAYLIST_SHOWN_OFFERS,
 ): Generator<void, PlaylistRecommendation[]> {
   const picked: PlaylistRecommendation[] = [];
+  const picks = offerPicks();
   for (const candidate of yield* rankedPlaylistRecommendationsSteps(playlist, sources)) {
     yield;
-    if (!playlistOfferFits(picked.map((item) => item.track))(candidate.track)) continue;
+    if (!picks.fits(candidate.track)) continue;
+    picks.add(candidate.track);
     picked.push(candidate);
     if (picked.length === count) break;
   }
