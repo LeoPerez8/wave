@@ -503,7 +503,8 @@ export function useDraggedRow(rowDrag: DragRows, key: string, index: number, ena
   const pan = usePanGesture(
     useMemo(
       () => ({
-        ...handleHold,
+        activateAfterLongPress: handleHold.activateAfterLongPress,
+        minDistance: handleHold.minDistance,
         enabled,
         onActivate: (event: { translationY: number }) => {
           "worklet";

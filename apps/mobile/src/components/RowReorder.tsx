@@ -179,7 +179,8 @@ export const useReorderRow = <Id,>({
   const handle = usePanGesture(
     useMemo(
       () => ({
-        ...handleHold,
+        activateAfterLongPress: handleHold.activateAfterLongPress,
+        minDistance: handleHold.minDistance,
         onActivate: () => {
           "worklet";
           travel.set(0);

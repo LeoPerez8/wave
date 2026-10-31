@@ -28,8 +28,11 @@ for (const file of [
     const source = readFileSync(join(src, file), "utf8");
     const pans = source.split("usePanGesture(").slice(1);
     assert.equal(pans.length, 1, "one pan in the file");
-    assert.match(pans[0]!, /^[^}]*\.\.\.handleHold,/);
-    assert.doesNotMatch(source, /minDistance/);
+    // Spelled out: the worklets Babel plugin fails the JS bundle on a spread in a gesture hook's object.
+    assert.match(pans[0]!, /^[^}]*activateAfterLongPress: handleHold\.activateAfterLongPress,/);
+    assert.match(pans[0]!, /^[^}]*minDistance: handleHold\.minDistance,/);
+    assert.doesNotMatch(pans[0]!, /^[^}]*\.\.\./);
+    assert.doesNotMatch(source, /minDistance: [^h]/);
   });
 }
 

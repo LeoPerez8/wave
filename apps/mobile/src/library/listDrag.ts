@@ -326,7 +326,8 @@ export const useDragCell = ({
   });
 
   const grip = usePanGesture({
-    ...handleHold,
+    activateAfterLongPress: handleHold.activateAfterLongPress,
+    minDistance: handleHold.minDistance,
     enabled,
     onActivate: (event) => {
       "worklet";
