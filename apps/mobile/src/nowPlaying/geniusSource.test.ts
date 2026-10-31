@@ -1,9 +1,15 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { readFileSync } from "node:fs";
-import { GENIUS_REFERENTS_PER_PAGE, storedGenius } from "@wave/core";
+import { GENIUS_REFERENTS_PER_PAGE, geniusAbout, storedGenius } from "@wave/core";
 
-import { geniusStorageKey, loadGenius, type GeniusService } from "./geniusSource.ts";
+import {
+  geniusStorageKey,
+  loadGenius,
+  translateGenius,
+  type GeniusAsk,
+  type GeniusService,
+} from "./geniusSource.ts";
 
 const fixture = (name: string) =>
   JSON.parse(
@@ -16,6 +22,7 @@ const ask = {
   key: "library:1",
   song: { title: "Imagine", artist: "John Lennon", album: null, durationMs: 0 },
   token: "test-token",
+  target: null,
 };
 
 /** A fake phone whose network and switch each test can swap. */
@@ -24,6 +31,7 @@ type FakeService = { -readonly [K in keyof GeniusService]: GeniusService[K] };
 const phone = () => {
   const storage = new Map<string, string>();
   const requests: string[] = [];
+  const posts: string[] = [];
   const service: FakeService = {
     read: async (key) => storage.get(key) ?? null,
     keep: async (key, value) => {
@@ -37,8 +45,12 @@ const phone = () => {
         url.includes("/search?") ? "search" : url.includes("/referents?") ? "referents-1" : "song",
       );
     },
+    post: async (_url, body) => {
+      posts.push(body);
+      return [["Uma canção sobre um mundo em paz.", "en"]];
+    },
   };
-  return { service, requests, storage };
+  return { service, requests, posts, storage };
 };
 
 test("a Genius match and About reopen offline for the same song only", async () => {
@@ -159,7 +171,7 @@ test("an answer saved before annotations asks only for them, once", async () => 
     artist: "John Lennon",
     url: "https://genius.com/John-lennon-imagine-lyrics",
   };
-  const old = { checkedAt: 100, match, description: "About", referents: null };
+  const old = { checkedAt: 100, match, description: "About", referents: null, translations: {} };
   storage.set(geniusStorageKey(ask.key), storedGenius(ask.song, old));
   const saved = await loadGenius(ask, service, 200);
   assert.equal(saved?.description, "About");
@@ -207,4 +219,94 @@ test("no match asks for no annotations, and insights turned off stop them", asyn
   assert.equal(await loadGenius(ask, other.service), null);
   assert.equal(other.storage.size, 0);
   assert.equal(storage.size, 1);
+});
+
+const inPortuguese = { ...ask, target: "pt" };
+const IN_PORTUGUESE = "Uma canção sobre um mundo em paz.";
+const open = async (service: GeniusService, target: GeniusAsk = inPortuguese, now = 100) => {
+  const saved = await loadGenius(target, service, now);
+  return saved === null ? null : translateGenius(target, saved, service);
+};
+
+test("Google's translation is saved with the answer and reopens offline", async () => {
+  const { service, posts, requests } = phone();
+  const first = await open(service);
+  assert.ok(first);
+  assert.equal(geniusAbout(first, "pt"), IN_PORTUGUESE);
+  assert.equal(posts.length, 1);
+  const asked = requests.length;
+  service.get = async () => {
+    throw Error("offline");
+  };
+  service.post = async () => {
+    throw Error("offline");
+  };
+  assert.deepEqual(await open(service, inPortuguese, 200), first);
+  assert.equal(posts.length, 1);
+  assert.equal(requests.length, asked);
+});
+
+test("an app in English sends Google nothing", async () => {
+  const { service, posts } = phone();
+  const saved = await open(service, ask);
+  assert.ok(saved?.description);
+  assert.equal(posts.length, 0);
+});
+
+test("no token or insights off sends Google nothing", async () => {
+  const { service, posts } = phone();
+  const saved = await loadGenius(inPortuguese, service, 100);
+  assert.ok(saved);
+  assert.equal(await translateGenius({ ...inPortuguese, token: "" }, saved, service), saved);
+  service.enabled = () => false;
+  assert.equal(await translateGenius(inPortuguese, saved, service), saved);
+  assert.equal(posts.length, 0);
+});
+
+test("a failed translation keeps the original, saves nothing and is retried", async () => {
+  const { service, posts, storage } = phone();
+  const post = service.post;
+  const before = await loadGenius(inPortuguese, service, 100);
+  assert.ok(before);
+  const stored = storage.get(geniusStorageKey(ask.key));
+  for (const failing of [
+    async () => {
+      throw Error("offline");
+    },
+    async () => ({ error: "unreadable" }),
+  ]) {
+    service.post = failing;
+    assert.equal(await translateGenius(inPortuguese, before, service), before);
+    assert.equal(storage.get(geniusStorageKey(ask.key)), stored);
+  }
+  service.post = post;
+  const retried = await open(service, inPortuguese, 200);
+  assert.equal(retried && geniusAbout(retried, "pt"), IN_PORTUGUESE);
+  assert.equal(posts.length, 1);
+});
+
+test("insights turned off during the translation save nothing", async () => {
+  const { service, storage } = phone();
+  const saved = await loadGenius(inPortuguese, service, 100);
+  assert.ok(saved);
+  const stored = storage.get(geniusStorageKey(ask.key));
+  service.post = async () => {
+    service.enabled = () => false;
+    return [[IN_PORTUGUESE, "en"]];
+  };
+  assert.equal(await translateGenius(inPortuguese, saved, service), saved);
+  assert.equal(storage.get(geniusStorageKey(ask.key)), stored);
+});
+
+test("an answer saved before this feature is translated on the next opening", async () => {
+  const { service, posts, storage, requests } = phone();
+  const old = { version: 1, asked: { title: "Imagine", artist: "John Lennon" }, checkedAt: 100 };
+  storage.set(
+    geniusStorageKey(ask.key),
+    JSON.stringify({ ...old, match: null, description: "About", referents: null }),
+  );
+  const saved = await open(service);
+  assert.equal(saved && geniusAbout(saved, "pt"), IN_PORTUGUESE);
+  assert.deepEqual(posts, ["q=About"]);
+  assert.equal(requests.length, 0);
 });
