@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   playlistRecommendationSession,
+  playlistSlotWaitLine,
   playlistSuggestionsLine,
   type PlaylistRecommendationTiming,
+  type PlaylistSlotWait,
   type PlaylistRecommendationFeedback,
   type PlaylistRecommendationSessionInput,
   type PlaylistRecommendationTrack,
@@ -1191,4 +1193,216 @@ test("a renewal held for a save reads on a free turn once the save is done", asy
   await dismissed;
   // The refill's own free turn and read, then the held renewal's.
   assert.deepEqual(log, ["free", "read", "paint", "free", "read", "paint"]);
+});
+
+/** A session on a hand-moved clock: reading takes 700 ms and ranking 300, and [host] says what fails. */
+const slotWaitSession = (
+  host: {
+    readFails?: () => boolean;
+    saveFails?: () => boolean;
+    letters?: string;
+    beforeRead?: () => Promise<void>;
+    yieldTurn?: (kind: "paint" | "free") => Promise<void>;
+  } = {},
+) => {
+  const seed = track("seed");
+  const library = [seed, ...(host.letters ?? "abcdefghij").split("").map(track)];
+  const waits: PlaylistSlotWait[] = [];
+  let clock = 0;
+  let id = 0;
+  const save = async () => {
+    clock += 50;
+    if (host.saveFails?.() === true) throw new Error("no write");
+  };
+  const session = playlistRecommendationSession({
+    newId: () => String(++id),
+    read: async () => {
+      await host.beforeRead?.();
+      clock += 700;
+      if (host.readFails?.() === true) throw new Error("timed out");
+      return { playlist: [seed], sources: { library, pages: radioOf(library), graph: null } };
+    },
+    rank: async (input) => {
+      clock += 300;
+      const taken = input.sources.exclude ?? [];
+      return input.sources.library
+        .slice(1)
+        .filter((offer) => !taken.some((other) => other.id === offer.id))
+        .map((offer) => ({ track: offer, score: 1 }));
+    },
+    dismiss: save,
+    accept: save,
+    ...(host.yieldTurn === undefined ? {} : { yieldTurn: host.yieldTurn }),
+    timed: { now: () => clock, report: () => {}, slotWait: (wait) => waits.push(wait) },
+  });
+  return {
+    session,
+    waits,
+    pass: (ms: number) => {
+      clock += ms;
+    },
+  };
+};
+
+test("an Add and a Dismiss each time their wait from the tap until the ranking's offer shows", async () => {
+  const { session, waits } = slotWaitSession();
+  await session.renew();
+  assert.deepEqual(waits, []);
+  await session.accept(session.get().slots[0]!.key);
+  await session.dismiss(session.get().slots[1]!.key);
+  assert.deepEqual(waits, [
+    { action: "add", ms: 1_050, outcome: "offer", from: "ranking" },
+    { action: "dismiss", ms: 1_050, outcome: "offer", from: "ranking" },
+  ]);
+});
+
+test("a slot's wait reads as one log line saying what came of it and where its offer came from", () => {
+  const line = playlistSlotWaitLine;
+  assert.equal(
+    line({ action: "add", ms: 8_204.4, outcome: "offer", from: "ranking" }),
+    "Playlist slot wait: Add offer after 8204 ms (from ranking)",
+  );
+  assert.equal(
+    line({ action: "dismiss", ms: 120, outcome: "offer", from: "spare" }),
+    "Playlist slot wait: Dismiss offer after 120 ms (from spare)",
+  );
+  assert.equal(
+    line({ action: "add", ms: 900, outcome: "no offer", from: "placeholder" }),
+    "Playlist slot wait: Add no offer after 900 ms (from placeholder)",
+  );
+  assert.equal(
+    line({ action: "dismiss", ms: 8_000, outcome: "refill failed", from: "placeholder" }),
+    "Playlist slot wait: Dismiss refill failed after 8000 ms (from placeholder)",
+  );
+  assert.equal(
+    line({ action: "add", ms: 300, outcome: "cancelled", from: "placeholder" }),
+    "Playlist slot wait: Add cancelled after 300 ms (from placeholder)",
+  );
+  assert.equal(
+    line({ action: "add", ms: 40, outcome: "save failed", from: "placeholder" }),
+    "Playlist slot wait: Add save failed after 40 ms (from placeholder)",
+  );
+});
+
+test("a slot nothing can fill ends its wait with no offer", async () => {
+  const { session, waits } = slotWaitSession({ letters: "abcde" });
+  await session.renew();
+  await session.dismiss(session.get().slots[0]!.key);
+  assert.deepEqual(waits, [
+    { action: "dismiss", ms: 1_050, outcome: "no offer", from: "placeholder" },
+  ]);
+});
+
+test("a failed refill says so once, and its retry isn't another wait", async () => {
+  let readFails = false;
+  const { session, waits } = slotWaitSession({ readFails: () => readFails });
+  await session.renew();
+  readFails = true;
+  await session.accept(session.get().slots[0]!.key);
+  assert.deepEqual(waits, [
+    { action: "add", ms: 750, outcome: "refill failed", from: "placeholder" },
+  ]);
+  readFails = false;
+  await session.renew({ refillOnly: true });
+  assert.notEqual(session.get().slots[0], null);
+  assert.equal(waits.length, 1);
+});
+
+test("a refill cancelled by hiding the screen says so, as does one cancelled before it read", async () => {
+  const reading = Promise.withResolvers<void>();
+  let hold = false;
+  const { session, waits } = slotWaitSession({
+    beforeRead: () => (hold ? reading.promise : Promise.resolve()),
+  });
+  await session.renew();
+  hold = true;
+  const during = session.dismiss(session.get().slots[0]!.key);
+  await new Promise((resolve) => setImmediate(resolve));
+  session.pause();
+  reading.resolve();
+  await during;
+  assert.deepEqual(
+    waits.map((wait) => wait.outcome),
+    ["cancelled"],
+  );
+  assert.equal(waits[0]?.from, "placeholder");
+  session.resume();
+  hold = false;
+  const saving = session.accept(session.get().slots[1]!.key);
+  session.dispose();
+  await saving;
+  assert.deepEqual(
+    waits.map((wait) => wait.outcome),
+    ["cancelled", "cancelled"],
+  );
+});
+
+test("a failed save ends the wait with its offer back, not as an offer shown", async () => {
+  let saveFails = true;
+  const { session, waits } = slotWaitSession({ saveFails: () => saveFails });
+  await session.renew();
+  const offer = session.get().slots[0]!;
+  assert.equal(await session.accept(offer.key), false);
+  assert.deepEqual(waits, [{ action: "add", ms: 50, outcome: "save failed", from: "placeholder" }]);
+  saveFails = false;
+  assert.equal(await session.accept(offer.key), true);
+  assert.deepEqual(waits[1], { action: "add", ms: 1_050, outcome: "offer", from: "ranking" });
+});
+
+test("quick taps each time their own slot, and a repeated tap adds no wait", async () => {
+  const reading = Promise.withResolvers<void>();
+  let hold = false;
+  const { session, waits, pass } = slotWaitSession({
+    beforeRead: () => (hold ? reading.promise : Promise.resolve()),
+  });
+  await session.renew();
+  hold = true;
+  const [first, second] = session.get().slots;
+  const firstTap = session.accept(first!.key);
+  assert.equal(await session.accept(first!.key), false);
+  await new Promise((resolve) => setImmediate(resolve));
+  pass(1_000);
+  const secondTap = session.dismiss(second!.key);
+  await new Promise((resolve) => setImmediate(resolve));
+  reading.resolve();
+  hold = false;
+  await Promise.all([firstTap, secondTap]);
+  // The first refill ends at 2,100 by the clock, tapped at 0. The second slot waits for it
+  // and reads again, ending at 3,100, tapped at 1,050.
+  assert.deepEqual(waits, [
+    { action: "add", ms: 2_100, outcome: "offer", from: "ranking" },
+    { action: "dismiss", ms: 2_050, outcome: "offer", from: "ranking" },
+  ]);
+});
+
+test("an offer's wait lasts until the frame showing it, and a later tap doesn't wait for that frame", async () => {
+  const frames: (() => void)[] = [];
+  let holdFrames = false;
+  const { session, waits, pass } = slotWaitSession({
+    yieldTurn: (kind) =>
+      holdFrames && kind === "paint"
+        ? new Promise((resolve) => frames.push(resolve))
+        : Promise.resolve(),
+  });
+  await session.renew();
+  const acting = session.accept(session.get().slots[0]!.key);
+  await new Promise((resolve) => setImmediate(resolve));
+  // The offer landed; its frame is the turn held from here on.
+  await acting;
+  assert.notEqual(session.get().slots[0], null);
+  assert.equal(waits.length, 1);
+  holdFrames = true;
+  const next = session.dismiss(session.get().slots[1]!.key);
+  // The write's own paint turn.
+  await new Promise((resolve) => setImmediate(resolve));
+  frames.shift()!();
+  await new Promise((resolve) => setImmediate(resolve));
+  // The read's paint turn before ranking.
+  frames.shift()!();
+  await next;
+  assert.equal(waits.length, 1);
+  pass(16);
+  frames.shift()!();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(waits[1], { action: "dismiss", ms: 1_066, outcome: "offer", from: "ranking" });
 });

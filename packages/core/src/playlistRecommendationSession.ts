@@ -85,6 +85,23 @@ export const playlistSuggestionsLine = (
     : `Playlist suggestions renewed: ${shown} in ${roundMs(ms)} ${parts}`;
 };
 
+/**
+ * What an Add or Dismiss made the owner wait for (ms): from the tap until the slot showed
+ * its next offer or gave up. Only "offer" is an offer shown.
+ */
+export interface PlaylistSlotWait {
+  readonly action: "add" | "dismiss";
+  readonly ms: number;
+  readonly outcome: "offer" | "no offer" | "refill failed" | "cancelled" | "save failed";
+  /** Where the slot's offer came from; "placeholder", none came. */
+  readonly from: "spare" | "ranking" | "placeholder";
+}
+
+/** [wait] as one log line, under `WaveTiming`. */
+// not UI text: the app log's line
+export const playlistSlotWaitLine = ({ action, ms, outcome, from }: PlaylistSlotWait): string =>
+  `Playlist slot wait: ${action === "add" ? "Add" : "Dismiss"} ${outcome} after ${roundMs(ms)} (from ${from})`;
+
 /** Whether a row would show [b] otherwise than [a]; what only ranking reads doesn't count. */
 const showsOtherwise = (a: PlaylistRecommendationTrack, b: PlaylistRecommendationTrack): boolean =>
   a.videoId !== b.videoId ||
@@ -134,6 +151,8 @@ export const playlistRecommendationSession = (options: {
   readonly timed?: {
     readonly now: () => number;
     readonly report: (timing: PlaylistRecommendationTiming) => void;
+    /** Told once for each Add or Dismiss the session took, by the same clock. */
+    readonly slotWait?: (wait: PlaylistSlotWait) => void;
   };
   /** Which offers a read says can no longer stand; absent, it's worked out at once. */
   readonly gone?: (
@@ -196,6 +215,32 @@ export const playlistRecommendationSession = (options: {
     behind.abort();
     behind = undefined;
     renewalPending = true;
+  };
+  /** The Adds and Dismisses whose slot hasn't ended its wait, by slot, with when they were tapped. */
+  const slotWaits = new Map<number, { action: PlaylistSlotWait["action"]; at: number }>();
+  const slotWaitEnded = (hole: number, outcome: Exclude<PlaylistSlotWait["outcome"], "offer">) => {
+    const wait = slotWaits.get(hole);
+    if (wait === undefined) return;
+    slotWaits.delete(hole);
+    const { timed } = options;
+    timed?.slotWait?.({
+      action: wait.action,
+      ms: timed.now() - wait.at,
+      outcome,
+      from: "placeholder",
+    });
+  };
+  /** The offer just published counts once its frame has had its turn, without holding up the refill. */
+  const slotWaitFilled = (hole: number, from: PlaylistSlotWait["from"]) => {
+    const wait = slotWaits.get(hole);
+    if (wait === undefined) return;
+    slotWaits.delete(hole);
+    const report = () => {
+      const { timed } = options;
+      timed?.slotWait?.({ action: wait.action, ms: timed.now() - wait.at, outcome: "offer", from });
+    };
+    if (yieldTurn === undefined) report();
+    else void yieldTurn("paint").then(report, report);
   };
   const busy = () => renewing || refilling || savesRunning > 0;
   const notify = () => {
@@ -269,11 +314,17 @@ export const playlistRecommendationSession = (options: {
           slots[hole] = slot(next.track);
         }
         publish({ slots, pendingSlots: pendingSlotsBut(holes) });
+        for (const hole of holes) {
+          if (slots[hole] === null) slotWaitEnded(hole, "no offer");
+          else slotWaitFilled(hole, "ranking");
+        }
       } catch {
         // Paused or disposed mid-refill: the choices are saved, so their holes wait unfilled, without an error.
         leaveUnfilled(holes);
         // A failed save's message stays: its offer still waits for another try.
         if (!controller.signal.aborted && state.error !== "save") publish({ error: "refill" });
+        for (const hole of holes)
+          slotWaitEnded(hole, controller.signal.aborted ? "cancelled" : "refill failed");
       } finally {
         if (active === controller) active = undefined;
         releaseHoles(holes);
@@ -282,6 +333,7 @@ export const playlistRecommendationSession = (options: {
     // Hidden or gone: what's left waits for the next refill or renewal.
     const left = waiting.splice(0);
     if (left.length > 0) leaveUnfilled(left);
+    for (const hole of left) slotWaitEnded(hole, "cancelled");
     releaseHoles(left);
     refilling = false;
   };
@@ -305,6 +357,7 @@ export const playlistRecommendationSession = (options: {
     if (renewalPending && !busy()) await session.renew({ turn: "free" });
   };
   const act = async (
+    action: PlaylistSlotWait["action"],
     key: string,
     save: ((offer: PlaylistRecommendationSlot) => Promise<unknown>) | undefined,
   ): Promise<boolean> => {
@@ -312,6 +365,8 @@ export const playlistRecommendationSession = (options: {
     const offer = state.slots[index];
     if (disposed || paused || renewing || offer == null || save === undefined) return false;
     if (state.pending.includes(key)) return false;
+    if (options.timed?.slotWait !== undefined)
+      slotWaits.set(index, { action, at: options.timed.now() });
     holdRenewal();
     // Slots whose replacement failed earlier are filled by this action's refill too.
     const earlier = state.unfilled;
@@ -340,6 +395,7 @@ export const playlistRecommendationSession = (options: {
         unfilled: [...state.unfilled, ...earlier],
         error: "save",
       });
+      slotWaitEnded(index, "save failed");
       await settle();
       return false;
     }
@@ -592,8 +648,8 @@ export const playlistRecommendationSession = (options: {
           await session.renew({ signal: request.signal, turn: "free" });
       }
     },
-    dismiss: (key: string) => act(key, options.dismiss),
-    accept: (key: string) => act(key, options.accept),
+    dismiss: (key: string) => act("dismiss", key, options.dismiss),
+    accept: (key: string) => act("add", key, options.accept),
   };
   return session;
 };

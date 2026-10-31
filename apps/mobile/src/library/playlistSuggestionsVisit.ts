@@ -9,6 +9,7 @@ import {
   playlistOfferHeld,
   playlistRecommendationsSteps,
   playlistRecommendationSession,
+  playlistSlotWaitLine,
   playlistSuggestionsLine,
   playlistSuggestionsSightLine,
   playlistSuggestionsSightWatch,
@@ -197,6 +198,7 @@ const openPlaylistSuggestionsVisit = (playlistId: number, openingAt: number) => 
         const { offers, failed } = timing;
         void afterPaint().then(() => sightWatch.shown({ offers, failed }));
       },
+      slotWait: (wait) => appLog("info", "WaveTiming", playlistSlotWaitLine(wait)),
     },
   });
   // Saved offers are showing from the start: the wait for them is over, and what runs next renews.
