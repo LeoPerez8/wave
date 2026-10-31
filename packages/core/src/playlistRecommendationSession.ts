@@ -262,6 +262,11 @@ export const playlistRecommendationSession = (options: {
     readonly online: () => boolean;
     readonly write: (offers: readonly PlaylistRecommendationTrack[]) => void;
   };
+  /**
+   * Whether the host's screen has settled. Until it has, an offer leaving or a low reserve
+   * reads nothing: the renewal the host then asks for goes first. Absent, it always has.
+   */
+  readonly settled?: () => boolean;
 }) => {
   const slot = (track: PlaylistRecommendationTrack): PlaylistRecommendationSlot => ({
     key: options.newId(),
@@ -320,6 +325,9 @@ export const playlistRecommendationSession = (options: {
   let later: AbortController | undefined;
   /** A refill was wanted while those radios answered: it runs, if still wanted, once they've settled. */
   let refillOwed = false;
+  /** The reserve went low before the screen settled: looked at again after the renewal that follows. */
+  let lowPointOwed = false;
+  const settled = () => options.settled?.() ?? true;
   /** Stops the renewal behind the offers, to run again after what's about to change them. */
   const holdRenewal = () => {
     if (behind === undefined) return;
@@ -591,12 +599,18 @@ export const playlistRecommendationSession = (options: {
   /**
    * After a slot took a spare: below the mark, the reserve refills behind the screen, and no
    * one waits for it. A renewal under way or owed saves new offers anyway, so it goes instead;
-   * later radios still answering go first, and it's looked at again once they've settled.
+   * later radios still answering go first, and it's looked at again once they've settled. So
+   * does the renewal that follows the screen settling, with the same second look.
    */
   const reserveLowPoint = () => {
     if (options.saved === undefined || disposed || paused) return;
     if (refilling || renewing || renewalPending || behind !== undefined) return;
+    lowPointOwed = false;
     if (spareCount() >= refillBelow) return;
+    if (!settled()) {
+      lowPointOwed = true;
+      return;
+    }
     if (later !== undefined) {
       refillOwed = true;
       return;
@@ -716,13 +730,10 @@ export const playlistRecommendationSession = (options: {
     /**
      * [gone] offers left outside the suggestions (the playlist now holds them): each
      * showing one's slot takes a saved spare at once, else a refill. The others stay.
-     * With [read] false nothing may read yet (the screen hasn't settled): a slot with no
-     * spare keeps its placeholder for the next renewal, or an action's refill.
+     * Before the screen settles nothing may read: a slot with no spare keeps its placeholder
+     * for the next renewal, or an action's refill.
      */
-    leave: (
-      gone: (offer: PlaylistRecommendationTrack) => boolean,
-      { read = true }: { readonly read?: boolean } = {},
-    ): void => {
+    leave: (gone: (offer: PlaylistRecommendationTrack) => boolean): void => {
       if (disposed) return;
       if (savedOffers.some(gone)) saveOffers(savedOffers.filter((offer) => !gone(offer)));
       const slots = [...state.slots];
@@ -736,10 +747,10 @@ export const playlistRecommendationSession = (options: {
       const unspared = fillFromSpares(slots, holes);
       publish({ slots, pendingSlots: [...state.pendingSlots, ...unspared] });
       if (unspared.length === 0) {
-        if (read) reserveLowPoint();
+        reserveLowPoint();
         return;
       }
-      if (!read) {
+      if (!settled()) {
         waiting.push(...unspared);
         return;
       }
@@ -955,6 +966,7 @@ export const playlistRecommendationSession = (options: {
           timed(true);
         }
       } finally {
+        const ended = current();
         if (behind === controller) behind = undefined;
         if (holding) {
           renewing = false;
@@ -971,6 +983,7 @@ export const playlistRecommendationSession = (options: {
         if (active === controller) active = undefined;
         if (renewalPending && !disposed && !request.signal?.aborted)
           await session.renew({ signal: request.signal, turn: "free" });
+        else if (ended && lowPointOwed) reserveLowPoint();
       }
     },
     dismiss: (key: string) => act("dismiss", key, options.dismiss),

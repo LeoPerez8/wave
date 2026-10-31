@@ -796,3 +796,25 @@ test("a ranking on a Library read before still finds its rows, once the reads ha
   assert.ok(visit.libraryRows.get().has("c"), "the new offer's row comes from the earlier read");
   stop();
 });
+
+test("a tap that finds the reserve low within the settle wait reads nothing until it ends", async () => {
+  reset();
+  // Saved by an older version: ten offers, so one tap leaves 4 spares.
+  app.radio = "abcdefghij";
+  await visited();
+  app.reads = 0;
+  app.radio = "abcdefghijkl";
+  app.letters = "abcdefghijkl";
+  const settled = Promise.withResolvers<void>();
+  app.settle = () => settled.promise;
+  const { visit, screen, wanted, sectionSight } = opened();
+  const stop = visit.follow(screen, wanted, sectionSight);
+  await visit.session.dismiss(visit.session.get().slots[0]!.key);
+  await settledFrames();
+  assert.equal(offerIds(visit)[0], "f");
+  assert.equal(app.reads, 0);
+  settled.resolve();
+  await settledFrames();
+  assert.ok(app.reads >= 1);
+  stop();
+});

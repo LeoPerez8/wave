@@ -106,6 +106,7 @@ const openPlaylistSuggestionsVisit = (playlistId: number, openingAt: number) => 
   /** Whether someone waits is asked at each slice: a tap can start a wait mid-ranking. */
   const awaited = () => playlistOffersAwaited(session.get());
   const session = playlistRecommendationSession({
+    settled: () => settled,
     saved: {
       offers: saved.tracks,
       online: phoneOnline,
@@ -268,9 +269,7 @@ const openPlaylistSuggestionsVisit = (playlistId: number, openingAt: number) => 
     playlistRead: (items: readonly PlaylistEntryRow[]): void => {
       const offers = session.offers();
       if (offers.length === 0) return;
-      session.leave(playlistOfferHeld(offers, items, entryLibraryId, entryVideoId), {
-        read: settled,
-      });
+      session.leave(playlistOfferHeld(offers, items, entryLibraryId, entryVideoId));
     },
     /**
      * Loads while [screen] is in sight and the section is [wanted]; the section's

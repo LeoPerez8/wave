@@ -43,10 +43,13 @@ const savedSession = (
     readonly online?: boolean;
     readonly report?: (timing: PlaylistRecommendationTiming) => void;
     readonly yieldTurn?: (kind: "paint" | "free") => Promise<void>;
+    /** The screen is still settling: nothing reads on its own yet. */
+    readonly settling?: boolean;
   } = {},
 ) => {
   const seed = track("seed");
   const gate = {
+    settled: options.settling !== true,
     reads: 0,
     ranks: 0,
     online: options.online ?? true,
@@ -120,6 +123,7 @@ const savedSession = (
       online: () => gate.online,
       write: (offers) => gate.written.push(offers),
     },
+    settled: () => gate.settled,
     ...(options.yieldTurn === undefined ? {} : { yieldTurn: options.yieldTurn }),
     timed: {
       now: () => gate.clock,
@@ -269,9 +273,9 @@ test("a song leaving with no spare holds its slot's placeholder until a refill f
 });
 
 test("a song leaving while reads must wait holds its placeholder, and the renewal fills it", async () => {
-  const { session, gate, shown } = savedSession(lettered("vwxyz"));
+  const { session, gate, shown } = savedSession(lettered("vwxyz"), { settling: true });
   const before = session.get().slots;
-  session.leave((offer) => offer.id === "x", { read: false });
+  session.leave((offer) => offer.id === "x");
   await new Promise((resolve) => setImmediate(resolve));
   assert.equal(gate.reads, 0);
   assert.deepEqual(session.get().pendingSlots, [2]);
@@ -283,16 +287,16 @@ test("a song leaving while reads must wait holds its placeholder, and the renewa
 });
 
 test("a song leaving while reads must wait still takes a saved spare at once", () => {
-  const { session, gate, shown } = savedSession(lettered("vwxyzq"));
-  session.leave((offer) => offer.id === "x", { read: false });
+  const { session, gate, shown } = savedSession(lettered("vwxyzq"), { settling: true });
+  session.leave((offer) => offer.id === "x");
   assert.deepEqual(shown(), ["v", "w", "q", "y", "z"]);
   assert.deepEqual(session.get().pendingSlots, []);
   assert.equal(gate.reads, 0);
 });
 
 test("every showing song leaving while reads must wait: the renewal is a first visit's", async () => {
-  const { session, gate, shown } = savedSession(lettered("vw"));
-  session.leave(() => true, { read: false });
+  const { session, gate, shown } = savedSession(lettered("vw"), { settling: true });
+  session.leave(() => true);
   assert.deepEqual(session.get().pendingSlots, [0, 1]);
   await session.renew();
   assert.equal(gate.reads, 1);
@@ -301,8 +305,8 @@ test("every showing song leaving while reads must wait: the renewal is a first v
 });
 
 test("a renewal failing over a slot that waited for it lets the slot go, with no message", async () => {
-  const { session, gate, shown } = savedSession(lettered("vwxyz"));
-  session.leave((offer) => offer.id === "x", { read: false });
+  const { session, gate, shown } = savedSession(lettered("vwxyz"), { settling: true });
+  session.leave((offer) => offer.id === "x");
   gate.fail = true;
   await session.renew();
   assert.deepEqual(session.get().pendingSlots, []);
@@ -312,8 +316,8 @@ test("a renewal failing over a slot that waited for it lets the slot go, with no
 });
 
 test("an Add's refill also fills a slot waiting for reads", async () => {
-  const { session, shown } = savedSession(lettered("vwxyz"));
-  session.leave((offer) => offer.id === "x", { read: false });
+  const { session, shown } = savedSession(lettered("vwxyz"), { settling: true });
+  session.leave((offer) => offer.id === "x");
   await session.accept(session.get().slots[0]!.key);
   assert.deepEqual(session.get().pendingSlots, []);
   assert.deepEqual(shown(), ["b", "w", "a", "y", "z"]);
@@ -1045,8 +1049,8 @@ test("an offer leaving takes a spare and, with reads allowed, is a low point too
   await nextTurn();
   assert.equal(reading.gate.reads, 1);
 
-  const settling = savedSession(withSpares("qrstu"));
-  settling.session.leave((offer) => offer.id === "v", { read: false });
+  const settling = savedSession(withSpares("qrstu"), { settling: true });
+  settling.session.leave((offer) => offer.id === "v");
   await nextTurn();
   assert.equal(settling.shown()[0], "q");
   assert.equal(settling.gate.reads, 0);
@@ -1189,4 +1193,53 @@ test("online, spares that break the artist cap give way to a ranking's, and the 
   assert.equal(shown()[3], "b");
   assert.equal(gate.reads, 1, "the slot took a spare");
   assert.deepEqual(shown().slice(0, 2), ["v", "w"], "offers showing stay");
+});
+
+test("a low point before the screen settles reads nothing; the opening's renewal goes instead", async () => {
+  const { session, gate, shown } = savedSession(withSpares("qrstu"), { settling: true });
+  await session.dismiss(session.get().slots[0]!.key);
+  await nextTurn();
+  assert.equal(shown()[0], "q");
+  assert.equal(gate.reads, 0, "4 spares left, but the screen hasn't settled");
+  gate.settled = true;
+  await session.renew();
+  await nextTurn();
+  assert.equal(gate.reads, 1, "the renewal saved plenty: no refill follows");
+});
+
+test("a low point before the screen settles isn't dropped: still low after the renewal, the refill runs", async () => {
+  const { session, gate } = savedSession(withSpares("qrstu"), { settling: true });
+  await session.dismiss(session.get().slots[0]!.key);
+  gate.settled = true;
+  gate.fail = true;
+  await session.renew();
+  await nextTurn();
+  assert.equal(gate.reads, 2, "the renewal failed, so the refill it held back runs");
+  assert.equal(gate.refills.length, 1);
+});
+
+test("a low point held back past a hide waits for the renewal on the return", async () => {
+  const { session, gate } = savedSession(withSpares("qrstu"), { settling: true });
+  await session.dismiss(session.get().slots[0]!.key);
+  session.pause();
+  gate.settled = true;
+  await nextTurn();
+  assert.equal(gate.reads, 0);
+  session.resume();
+  gate.fail = true;
+  await session.renew();
+  await nextTurn();
+  assert.equal(gate.reads, 2);
+});
+
+test("an offer leaving before the screen settles is a low point held back too", async () => {
+  const { session, gate } = savedSession(withSpares("qrstu"), { settling: true });
+  session.leave((offer) => offer.id === "v");
+  await nextTurn();
+  assert.equal(gate.reads, 0);
+  gate.settled = true;
+  gate.fail = true;
+  await session.renew();
+  await nextTurn();
+  assert.equal(gate.reads, 2);
 });
