@@ -236,6 +236,8 @@ export { currentLyricIndex, parseLyrics, pickLyrics } from "./lyrics.ts";
 export type { LyricLine, LyricWord, Lyrics, LyricsSources } from "./lyrics.ts";
 export { currentLyricWordIndex, karaokeLyricLines } from "./karaoke.ts";
 export type { KaraokeLyricLine } from "./karaoke.ts";
+export { lyricsFollowStart, lyricsFollowStep } from "./lyricsFollow.ts";
+export type { LyricsFollow, LyricsFollowEvent, LyricsMove } from "./lyricsFollow.ts";
 export { AUTO_LYRIC_LINE_MAX, autoLyricLines } from "./autoLyricLines.ts";
 export type { AutoLyricLines, AutoLyricLinesInput, AutoLyricsText } from "./autoLyricLines.ts";
 export {
@@ -2315,6 +2317,12 @@ export {
   storedGenius,
 } from "./genius.ts";
 export type { GeniusHit, GeniusMatch, SavedGenius } from "./genius.ts";
+export {
+  geniusAbout,
+  geniusTranslationRequest,
+  geniusTranslationTarget,
+  withGeniusTranslation,
+} from "./geniusTranslation.ts";
 export {
   GENIUS_REFERENTS_MAX_PAGES,
   GENIUS_REFERENTS_PER_PAGE,

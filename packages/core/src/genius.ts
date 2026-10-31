@@ -93,13 +93,15 @@ export const GENIUS_MISS_MS = 7 * 24 * 60 * 60 * 1000;
  * was asked, the Genius song it matched, kept without a description too so
  * its annotations can be asked, the description, and the annotated
  * fragments (`geniusReferentsPage`; null while not asked yet, as an answer
- * saved before annotations came, or after they failed).
+ * saved before annotations came, or after they failed), and Genius's text in
+ * the app's language (`geniusTranslation.ts`; empty until translated).
  */
 export interface SavedGenius {
   readonly checkedAt: number;
   readonly match: GeniusMatch | null;
   readonly description: string | null;
   readonly referents: readonly GeniusReferent[] | null;
+  readonly translations: Readonly<Record<string, string>>;
 }
 
 /** [song]'s Genius answer as the phone stores it, with the title and artist it was asked for. */
@@ -114,6 +116,7 @@ export const storedGenius = (
     match: answer.match,
     description: answer.description,
     referents: answer.referents,
+    translations: answer.translations,
   });
 
 const isMatch = (value: unknown): value is GeniusMatch =>
@@ -122,6 +125,12 @@ const isMatch = (value: unknown): value is GeniusMatch =>
   typeof value.title === "string" &&
   typeof value.artist === "string" &&
   typeof value.url === "string";
+
+/** Translations that can't be read are lost alone: they're only asked again. */
+const savedTranslations = (value: unknown): Readonly<Record<string, string>> =>
+  isRecord(value) && Object.values(value).every((text) => typeof text === "string")
+    ? (value as Readonly<Record<string, string>>)
+    : {};
 
 /**
  * [song]'s Genius answer read back from [stored] (`storedGenius`): null when
@@ -149,5 +158,11 @@ export const savedGenius = (
   const referents = saved.referents == null ? null : savedGeniusReferents(saved.referents);
   if (saved.referents != null && referents === null) return null;
   if (description === null && now - checkedAt >= GENIUS_MISS_MS) return null;
-  return { checkedAt, match, description, referents };
+  return {
+    checkedAt,
+    match,
+    description,
+    referents,
+    translations: savedTranslations(saved.translations),
+  };
 };
