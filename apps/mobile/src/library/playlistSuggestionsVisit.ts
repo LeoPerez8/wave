@@ -79,7 +79,8 @@ const openPlaylistSuggestionsVisit = (playlistId: number, openingAt: number) => 
   // This visit's radio readers: each radio's live first page is read once a visit.
   const visitId = `playlist:${playlistId}:${Date.now().toString(36)}-${++nextOffer}`;
   let remaining = Number.POSITIVE_INFINITY;
-  // Nothing reads before the settle wait ends, not even a slot's refill: the renewal fills it.
+  // Before the settle wait ends only a tap with no spare reads: its owner is waiting on the
+  // placeholder. A low reserve's refill, or a slot an offer left, waits for the renewal.
   let settled = false;
   const rowOf = (id: string) =>
     latestRows.get().get(id) ?? libraryRows.get().get(id) ?? savedRows.get(id);
