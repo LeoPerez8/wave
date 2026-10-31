@@ -384,7 +384,8 @@ export function useDragGrip(
   return usePanGesture(
     useMemo(
       () => ({
-        ...handleHold,
+        activateAfterLongPress: handleHold.activateAfterLongPress,
+        minDistance: handleHold.minDistance,
         onActivate: () => {
           "worklet";
           travel.set(0);
