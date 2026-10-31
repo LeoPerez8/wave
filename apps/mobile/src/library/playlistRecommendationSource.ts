@@ -24,10 +24,14 @@ const inputs = sharePlaylistRecommendationInputs(
   recommendationTurnEffect,
 );
 
-/** Only the deferred playlist visit/refill invokes this whole-source capability. */
-export const playlistRecommendationInput = (id: number) =>
+/**
+ * Only the deferred playlist visit/refill invokes this whole-source capability.
+ * [onSettled] hears when its wait for the app to settle ends and the read starts.
+ */
+export const playlistRecommendationInput = (id: number, onSettled: () => void) =>
   Effect.gen(function* () {
     yield* settledTurnEffect;
+    onSettled();
     return yield* inputs.latest(id);
   });
 

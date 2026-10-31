@@ -3,6 +3,8 @@ import {
   playlistRecommendationsSteps,
   playlistRecommendationSession,
   playlistSuggestionsLine,
+  playlistSuggestionsSightLine,
+  playlistSuggestionsSightWatch,
   type PlaylistRecommendationSlot,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
@@ -34,7 +36,7 @@ import {
   playlistRecommendationInput,
 } from "./playlistRecommendationSource";
 import { playlistSuggestionRadios, playlistSuggestionSeeds } from "./playlistSuggestionRadios";
-import { makeExternalStore } from "@/lib/externalStore";
+import { makeExternalStore, type ExternalStore } from "@/lib/externalStore";
 import { CROSSFADE_MS } from "@/motion/Crossfade";
 import { online as phoneOnline } from "@/native/waveNative";
 import { playTrackIds, playYtSongs } from "@/playback/actions";
@@ -76,9 +78,12 @@ const announce = (message: string): void => AccessibilityInfo.announceForAccessi
 export function PlaylistRecommendations({
   playlistId,
   items,
+  sectionSight,
 }: {
   playlistId: number;
   items: readonly PlaylistEntryRow[];
+  /** When the section came into sight in its list (`Date.now()`); null while it's out of sight. */
+  sectionSight: ExternalStore<number | null>;
 }) {
   const text = useLocalisation().strings.playlists;
   const sight = useScreenSight();
@@ -87,6 +92,13 @@ export function PlaylistRecommendations({
   const [libraryRows] = useState(() => makeExternalStore<ReadonlyMap<string, SongRow>>(new Map()));
   const libraryById = useSyncExternalStore(libraryRows.subscribe, libraryRows.get);
   const [latestRows] = useState(() => makeExternalStore<ReadonlyMap<string, SongRow>>(new Map()));
+  // Date.now(): the list notices the section's sight on the UI thread, whose clock is this one.
+  const [sightWatch] = useState(() =>
+    playlistSuggestionsSightWatch({
+      now: Date.now,
+      report: (timing) => appLog("info", "WaveTiming", playlistSuggestionsSightLine(timing)),
+    }),
+  );
   const [session] = useState(() => {
     // The first renewal is the one opening the playlist asked for; its line counts from here.
     let openedAt: number | undefined = performance.now();
@@ -96,10 +108,13 @@ export function PlaylistRecommendations({
     return playlistRecommendationSession({
       newId: () =>
         `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${++nextOffer}`,
-      read: (signal) =>
-        appRuntime.runPromise(
+      read: (signal) => {
+        sightWatch.waiting("settle");
+        return appRuntime.runPromise(
           Effect.gen(function* () {
-            const input = yield* playlistRecommendationInput(playlistId);
+            const input = yield* playlistRecommendationInput(playlistId, () =>
+              sightWatch.waiting("read"),
+            );
             const graph = yield* playlistRecommendationGraph;
             // Source rows are retained for the five visible offers only, never a copy of the Library.
             latestRows.set(input.songById);
@@ -109,6 +124,7 @@ export function PlaylistRecommendations({
               online,
               low: remaining < LOW,
             });
+            sightWatch.waiting(null);
             return {
               playlist: input.playlist,
               sources: {
@@ -122,8 +138,10 @@ export function PlaylistRecommendations({
             };
           }),
           { signal },
-        ),
+        );
+      },
       rank: async (input, signal) => {
+        sightWatch.waiting("rank");
         const ranked = await appRuntime
           .runPromise(
             runSteps(
@@ -137,6 +155,7 @@ export function PlaylistRecommendations({
             latestRows.set(new Map());
             throw error;
           });
+        sightWatch.waiting(null);
         remaining = ranked.length;
         const held = new Map<string, SongRow>();
         for (const offer of ranked) {
@@ -182,6 +201,8 @@ export function PlaylistRecommendations({
           const sinceOpen = openedAt === undefined ? undefined : performance.now() - openedAt;
           openedAt = undefined;
           appLog("info", "WaveTiming", playlistSuggestionsLine(timing, sinceOpen));
+          const { offers, failed } = timing;
+          void afterPaint().then(() => sightWatch.shown({ offers, failed }));
         },
       },
     });
@@ -205,12 +226,32 @@ export function PlaylistRecommendations({
     const following = followPlaylistRecommendations(session, {
       playlistId,
       sight,
-      start: (signal) => appRuntime.runPromise(settledTurnEffect, { signal }),
+      start: (signal) => {
+        sightWatch.waiting("settle");
+        return appRuntime.runPromise(settledTurnEffect, { signal });
+      },
       subscribe: onLibraryChange,
       ignore: (change) => change.kind === "playlists" && announcingAcceptance.get(),
     });
     return () => following.dispose();
-  }, [session, playlistId, sight, announcingAcceptance]);
+  }, [session, sightWatch, playlistId, sight, announcingAcceptance]);
+  // Sight here is the list's and the screen's: Now Playing over a wait starts it over.
+  useEffect(() => {
+    const listSight = () => {
+      const at = sectionSight.get();
+      if (at !== null && sight.visible()) sightWatch.inSight(at);
+    };
+    listSight();
+    const stopList = sectionSight.subscribe(listSight);
+    const stopScreen = sight.subscribe(() => {
+      if (!sight.visible()) sightWatch.hidden();
+      else if (sectionSight.get() !== null) sightWatch.inSight();
+    });
+    return () => {
+      stopList();
+      stopScreen();
+    };
+  }, [sectionSight, sight, sightWatch]);
   useEffect(() => {
     libraryRows.update((previous) => {
       const held = new Map<string, SongRow>();
