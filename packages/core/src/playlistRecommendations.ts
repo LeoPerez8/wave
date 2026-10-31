@@ -98,6 +98,44 @@ export function* playlistRecordingMatchSteps(tracks: readonly PlaylistRecommenda
     find(song);
 }
 
+const sameTrackField = (a: unknown, b: unknown): boolean =>
+  a === b ||
+  (Array.isArray(a) &&
+    Array.isArray(b) &&
+    a.length === b.length &&
+    a.every((value, index) => value === b[index]));
+
+const sameTrack = (a: PlaylistRecommendationTrack, b: PlaylistRecommendationTrack): boolean => {
+  const fields = Object.keys(a) as (keyof PlaylistRecommendationTrack)[];
+  return (
+    fields.length === Object.keys(b).length &&
+    fields.every((field) => sameTrackField(a[field], b[field]))
+  );
+};
+
+/**
+ * Whether two reads hold the same tracks, in the same order. A play or a playlist write makes the
+ * Library read again without changing a track: the same answer lets its first array, and so its
+ * ranking indexes, stand.
+ */
+export function* samePlaylistTracksSteps(
+  a: readonly PlaylistRecommendationTrack[],
+  b: readonly PlaylistRecommendationTrack[],
+): Generator<void, boolean> {
+  if (a.length !== b.length) return false;
+  for (const [index, track] of a.entries()) {
+    if (!sameTrack(track, b[index]!)) return false;
+    yield;
+  }
+  return true;
+}
+
+/** `samePlaylistTracksSteps` all at once. */
+export const samePlaylistTracks = (
+  a: readonly PlaylistRecommendationTrack[],
+  b: readonly PlaylistRecommendationTrack[],
+): boolean => finishSteps(samePlaylistTracksSteps(a, b));
+
 /** What ranking looks up in a Library, whichever playlist it ranks for. */
 interface PlaylistLibraryIndex {
   /** The genres of the Library's songs under each artist key, added up and as a profile. */

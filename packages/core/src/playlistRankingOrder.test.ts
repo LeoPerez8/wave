@@ -5,6 +5,8 @@ import {
   playlistOfferGoneSteps,
   playlistRecommendations,
   playlistRecommendationsSteps,
+  samePlaylistTracks,
+  samePlaylistTracksSteps,
   type PlaylistRecommendationSources,
   type PlaylistRecommendationTrack,
   type RadioRankingPage,
@@ -231,4 +233,22 @@ test("telling which offers are gone reuses the Library's indexes and keeps its a
   assert.equal(gone(library[13]!), true, "its file is gone");
   assert.equal(gone(library[14]!), false);
   assert.equal(gone(entry("elsewhere", "Air", null)), false);
+});
+
+test("two reads of a Library hold the same tracks until a field of one differs", () => {
+  const library = libraryOf(30);
+  assert.equal(samePlaylistTracks(library, libraryOf(30)), true);
+  assert.equal(samePlaylistTracks(library, libraryOf(29)), false);
+  const changed = (index: number, fields: Partial<PlaylistRecommendationTrack>) =>
+    libraryOf(30).map((track, at) => (at === index ? { ...track, ...fields } : track));
+  assert.equal(samePlaylistTracks(library, changed(4, { title: "Retitled" })), false);
+  assert.equal(samePlaylistTracks(library, changed(4, { favorite: true })), false);
+  assert.equal(samePlaylistTracks(library, changed(4, { artists: ["Someone Else"] })), false);
+  assert.equal(samePlaylistTracks(library, changed(4, { genres: ["Rock"] })), false);
+  const reordered = libraryOf(30).toReversed();
+  assert.equal(samePlaylistTracks(library, reordered), false, "ranking ties follow the order");
+  const steps = samePlaylistTracksSteps(library, libraryOf(30));
+  let count = 0;
+  while (steps.next().done !== true) count++;
+  assert.ok(count >= 30, "a long Library compares across turns");
 });

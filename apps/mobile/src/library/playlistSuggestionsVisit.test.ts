@@ -24,6 +24,11 @@ const app = {
   radioWait: async (_seed: string): Promise<void> => {},
   playlist: ["seed"],
   retitled: new Map<string, string>(),
+  /** One Library array across reads, as reads between Library changes give; else one per read. */
+  sameLibrary: false,
+  theLibrary: null as unknown,
+  /** Whether someone waited at the start of each ranking. */
+  rankings: [] as { readonly awaited: boolean }[],
 };
 Object.assign(globalThis, { playlistVisitApp: app });
 
@@ -38,7 +43,11 @@ const boundary = `data:text/javascript,${encodeURIComponent(`
     addedAt: 0, albumId: 1, artistId: 1, artistIds: [1], discNumber: null, trackNumber: null, year: null,
     genre: "Rock", hasLyrics: false, explicit: "unknown" });
   const seed = song("seed");
-  const libraryNow = () => [seed, ...app.letters.split("").map(song)];
+  const freshLibrary = () => [seed, ...app.letters.split("").map(song)];
+  const libraryNow = () => {
+    if (!app.sameLibrary) return freshLibrary();
+    return (app.theLibrary ??= freshLibrary());
+  };
   export class LibraryStore extends Context.Service()("test/LibraryStore") {}
   const store = {
     dismissPlaylistRecommendation: () => Effect.void,
@@ -62,6 +71,14 @@ const boundary = `data:text/javascript,${encodeURIComponent(`
   });
   export const recommendationTurnEffect = Effect.void;
   export const recommendationTurn = async () => {};
+  export const recommendationSteps = (steps, awaited) =>
+    Effect.sync(() => {
+      app.rankings.push({ awaited: awaited() });
+      for (;;) {
+        const next = steps.next();
+        if (next.done) return next.value;
+      }
+    });
   export const afterPaint = async () => {};
   export const appLog = (_level, _tag, line) => { app.lines.push(line); };
   export const online = () => app.online;
@@ -93,7 +110,7 @@ const boundary = `data:text/javascript,${encodeURIComponent(`
       return { id: "song:" + id, artists: ["Artist " + id], songs: (app.radios.get(id) ?? app.radio).split("").map(song) };
     })));
 `)}`;
-const REAL = new Set(["@/lib/externalStore", "@/lib/sight", "@/lib/stepped"]);
+const REAL = new Set(["@/lib/externalStore", "@/lib/sight"]);
 const MOCKED = new Set([
   "expo-sqlite/kv-store",
   "./LibraryStore",
@@ -161,6 +178,9 @@ const reset = () => {
   app.radioWait = async () => {};
   app.playlist = ["seed"];
   app.retitled = new Map();
+  app.sameLibrary = false;
+  app.theLibrary = null;
+  app.rankings = [];
 };
 const offerIds = (visit: ReturnType<typeof createPlaylistSuggestionsVisit>) =>
   visit.session.get().slots.map((offer) => offer?.track.id ?? null);
@@ -735,5 +755,44 @@ test("a fresh suggestion shows from the first radio to answer, and a later radio
   // The two that answered together interleave by position, as radios do.
   assert.deepEqual(offerIds(visit), ["a", "b", "d", "f", "e"]);
   assert.ok(visit.libraryRows.get().has("f"), "a later radio's offer keeps its row");
+  stop();
+});
+
+test("the first radio's ranking is awaited; the later radios' isn't", async () => {
+  reset();
+  app.seeds = ["one", "two"];
+  app.radios = new Map([
+    ["one", "abcde"],
+    ["two", "fghij"],
+  ]);
+  const slow = Promise.withResolvers<void>();
+  app.radioWait = async (seed) => {
+    if (seed === "two") await slow.promise;
+  };
+  const { visit, screen, wanted, sectionSight } = opened();
+  const stop = visit.follow(screen, wanted, sectionSight);
+  await settledFrames();
+  assert.deepEqual(app.rankings, [{ awaited: true }]);
+  slow.resolve();
+  await settledFrames();
+  assert.deepEqual(app.rankings, [{ awaited: true }, { awaited: false }]);
+  stop();
+});
+
+test("a ranking on a Library read before still finds its rows, once the reads have moved on", async () => {
+  reset();
+  app.sameLibrary = true;
+  app.seeds = ["one"];
+  app.radios = new Map([["one", "ab"]]);
+  const { visit, screen, wanted, sectionSight } = opened();
+  const stop = visit.follow(screen, wanted, sectionSight);
+  await settledFrames();
+  assert.deepEqual(offerIds(visit), ["a", "b", null, null, null]);
+  // A tap frees a slot: a second read of the same Library array ranks a new radio's offer.
+  app.radios = new Map([["one", "c"]]);
+  await visit.session.dismiss(visit.session.get().slots[0]!.key);
+  await settledFrames();
+  assert.deepEqual(offerIds(visit), ["c", "b", null, null, null]);
+  assert.ok(visit.libraryRows.get().has("c"), "the new offer's row comes from the earlier read");
   stop();
 });
