@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
 import { test } from "node:test";
 import { setImmediate } from "node:timers/promises";
+import { setFlagsFromString } from "node:v8";
+import { runInNewContext } from "node:vm";
 
 import { goToSuggestionsOffered } from "@wave/core";
 
@@ -29,6 +31,8 @@ const app = {
   theLibrary: null as unknown,
   /** Whether someone waited at the start of each ranking. */
   rankings: [] as { readonly awaited: boolean }[],
+  /** Each read's whole Library of rows, weakly: whether something still holds it. */
+  readRows: [] as WeakRef<object>[],
 };
 Object.assign(globalThis, { playlistVisitApp: app });
 
@@ -96,11 +100,9 @@ const boundary = `data:text/javascript,${encodeURIComponent(`
         app.reads++;
         await app.read(signal);
         const library = libraryNow();
-        return {
-          playlist: app.playlist.map(song),
-          library,
-          songById: new Map(library.map(({ id }) => [id, row(id)])),
-        };
+        const songById = new Map(library.map(({ id }) => [id, row(id)]));
+        app.readRows.push(new WeakRef(songById));
+        return { playlist: app.playlist.map(song), library, songById };
       }),
   });
   export const playlistSuggestionSeeds = () => app.seeds.map(song);
@@ -181,6 +183,7 @@ const reset = () => {
   app.sameLibrary = false;
   app.theLibrary = null;
   app.rankings = [];
+  app.readRows = [];
 };
 const offerIds = (visit: ReturnType<typeof createPlaylistSuggestionsVisit>) =>
   visit.session.get().slots.map((offer) => offer?.track.id ?? null);
@@ -795,4 +798,39 @@ test("a ranking on a Library read before still finds its rows, once the reads ha
   assert.deepEqual(offerIds(visit), ["c", "b", null, null, null]);
   assert.ok(visit.libraryRows.get().has("c"), "the new offer's row comes from the earlier read");
   stop();
+});
+
+setFlagsFromString("--expose-gc");
+const collectGarbage = runInNewContext("gc") as () => void;
+
+/** How many reads' whole rows something still holds, once nothing under way needs them. */
+const heldReadRows = async () => {
+  await settledFrames();
+  collectGarbage();
+  return app.readRows.filter((rows) => rows.deref() !== undefined).length;
+};
+
+test("a finished ranking lets go of the read's whole rows, on a Library array that stands", async () => {
+  reset();
+  app.sameLibrary = true;
+  const { visit, screen, wanted, sectionSight } = opened();
+  const stop = visit.follow(screen, wanted, sectionSight);
+  await settledFrames();
+  assert.equal(app.readRows.length, 1);
+  assert.equal(await heldReadRows(), 0);
+  assert.deepEqual(offerIds(visit), ["a", "b", "c", "d", "e"]);
+  stop();
+});
+
+test("a read cancelled in its radio wait lets go of its whole rows", async () => {
+  reset();
+  app.seeds = ["one", "two"];
+  app.radioWait = () => new Promise(() => {});
+  const { visit, screen, wanted, sectionSight } = opened();
+  const stop = visit.follow(screen, wanted, sectionSight);
+  await settledFrames();
+  assert.equal(app.readRows.length, 1);
+  stop();
+  assert.equal(await heldReadRows(), 0);
+  assert.equal(visit.session.get().slots.length, 0);
 });
