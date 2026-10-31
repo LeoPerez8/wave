@@ -230,7 +230,7 @@ export const layer = Layer.effect(
           return sortedPlaylists(store).pipe(
             Effect.map((playlists) =>
               pageOf(playlists, page).map((row) =>
-                autoPlaylistItem(row, currentLocalisation().strings),
+                autoPlaylistItem(row, currentLocalisation().strings, ytMusicEnabled()),
               ),
             ),
           );
@@ -295,7 +295,11 @@ export const layer = Layer.effect(
               const detail = yield* store.getPlaylist(Number(node.list.id), "files");
               return detail === null
                 ? yield* notFound
-                : autoPlaylistItem(detail.playlist, currentLocalisation().strings);
+                : autoPlaylistItem(
+                    detail.playlist,
+                    currentLocalisation().strings,
+                    ytMusicEnabled(),
+                  );
             }
           }
         }

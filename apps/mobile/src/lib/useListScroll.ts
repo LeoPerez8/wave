@@ -9,11 +9,15 @@ import {
 
 /**
  * A list's scroll on the UI thread, from [initialOffset] (where it opens). The
- * list takes `animated`, `scrollRef` as its `refScrollView` and a
- * `scrollEventThrottle` of 16.
+ * list spreads [listProps].
  */
 export const useListScroll = (initialOffset: number) => {
   const scrollRef = useAnimatedRef<ScrollView>();
   const scroll = useScrollOffset(scrollRef, useSharedValue(initialOffset));
-  return { scrollRef: scrollRef as AnimatedRef<ScrollView> & RefObject<ScrollView | null>, scroll };
+  const listRef = scrollRef as AnimatedRef<ScrollView> & RefObject<ScrollView | null>;
+  return {
+    scrollRef: listRef,
+    scroll,
+    listProps: { animated: true, refScrollView: listRef, scrollEventThrottle: 16 } as const,
+  };
 };

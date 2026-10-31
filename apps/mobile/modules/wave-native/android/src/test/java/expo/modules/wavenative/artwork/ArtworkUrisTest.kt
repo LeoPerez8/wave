@@ -161,6 +161,36 @@ class ArtworkUrisTest {
   }
 
   @Test
+  fun onlyCoverHostsAreServed() {
+    assertNull(ArtworkUris.forCovers(authority, listOf(listOf("https://image-cdn-ak.spotifycdn.com/image/x"))))
+    val spotify = listOf("https://i.scdn.co/image/ab67616d00001e02abc")
+    val uri = ArtworkUris.forCovers(authority, listOf(spotify))
+    assertEquals(ArtworkRequest.Online(spotify), ArtworkUris.parse(authority, uri!!))
+  }
+
+  @Test
+  fun theOldestOnlineCoversGoPastTheCap() {
+    val dir = Fixtures.tempDir()
+    val (old, middle, new) = listOf(1_000L, 2_000L, 3_000L).mapIndexed { index, modified ->
+      File(dir, "$index.img").apply {
+        writeBytes(ByteArray(10))
+        setLastModified(modified)
+      }
+    }
+    val partial = File(dir, ".partial.img.tmp").apply { writeBytes(ByteArray(10)) }
+    ArtworkUris.trimOnlineCovers(dir, new, maxBytes = 20)
+    assertEquals(listOf(false, true, true, true), listOf(old, middle, new, partial).map(File::exists))
+  }
+
+  @Test
+  fun theCoverJustWrittenStaysEvenOverTheCap() {
+    val dir = Fixtures.tempDir()
+    val cover = File(dir, "a.img").apply { writeBytes(ByteArray(10)) }
+    ArtworkUris.trimOnlineCovers(dir, cover, maxBytes = 1)
+    assertEquals(true, cover.exists())
+  }
+
+  @Test
   fun aForgedOnlineUriIsRejected() {
     val forged = Base64.getUrlEncoder().withoutPadding().encodeToString("https://example.com/x.jpg".toByteArray())
     assertNull(ArtworkUris.parse(authority, "content://$authority/o.$forged"))

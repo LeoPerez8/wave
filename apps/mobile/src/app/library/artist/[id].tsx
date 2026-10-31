@@ -367,7 +367,7 @@ function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegr
   // Find in artist narrows the songs on the page, the Library's or the mixed list with Online.
   const findInArtist = useFindInLegendList(list, pageSongs, entryText, true);
   const { found } = findInArtist;
-  const { scrollRef, scroll } = useListScroll(findInArtist.initialOffset);
+  const { scroll, listProps } = useListScroll(findInArtist.initialOffset);
   useCompactTitleList({ list, find: findInArtist, scroll });
   const items = useMemo(
     () =>
@@ -464,13 +464,11 @@ function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegr
   return (
     <FindFrame find={findInArtist} of="artist">
       <SongList
-        animated
+        {...listProps}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
         scrollEnabled={scrollable}
-        scrollEventThrottle={16}
         ref={list}
-        refScrollView={scrollRef}
         className="flex-1"
         data={items}
         keyExtractor={itemKey}

@@ -55,6 +55,19 @@ const withTimeout = async <T>(
   }
 };
 
+/** The JSON [url] answers with, from [source] (named in the error of an answer that isn't OK). */
+const askJson = (
+  controller: AbortController,
+  source: string,
+  url: string,
+  init: RequestInit,
+): Promise<unknown> =>
+  withTimeout(controller, async () => {
+    const response = await fetch(url, { ...init, signal: controller.signal });
+    if (!response.ok) throw new Error(`HTTP ${response.status} from ${source}`);
+    return (await response.json()) as unknown;
+  });
+
 /**
  * What Genius says about the song the Lyrics view shows (docs/spec.md,
  * "Genius About"): its saved answer, or Genius's, asked only while the view
@@ -97,24 +110,14 @@ export const useGenius = (
       enabled: () =>
         current && !controller.signal.aborted && geniusInsightsEnabled() && isPlayheadLive(),
       get: (url, token) =>
-        withTimeout(controller, async () => {
-          const response = await fetch(url, {
-            headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
-            signal: controller.signal,
-          });
-          if (!response.ok) throw new Error(`HTTP ${response.status} from Genius`);
-          return (await response.json()) as unknown;
+        askJson(controller, "Genius", url, {
+          headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
         }),
       post: (url, body) =>
-        withTimeout(controller, async () => {
-          const response = await fetch(url, {
-            method: "POST",
-            headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
-            body,
-            signal: controller.signal,
-          });
-          if (!response.ok) throw new Error(`HTTP ${response.status} from Google Translate`);
-          return (await response.json()) as unknown;
+        askJson(controller, "Google Translate", url, {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
+          body,
         }),
     };
     void loadGenius(ask, service).then(async (saved) => {

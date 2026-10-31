@@ -131,16 +131,18 @@ export function CompactTitleMark({ children }: { children: ReactNode }) {
  * The list's side of the compact title, inside a `CompactTitleFrame`: follows
  * [scroll] (`useListScroll`, or `useRowDrag`'s) on the UI thread and takes the
  * title's tap to the list's opening place. [find] is the list's Find in
- * Playlist, null when it has no field.
+ * Playlist, null when it has no field. [onGoUp] hears the tap before the list moves.
  */
 export function useCompactTitleList({
   list,
   find,
   scroll,
+  onGoUp,
 }: {
   list: RefObject<LegendListRef | null>;
   find: { readonly found: unknown; readonly openingOffset: number } | null;
   scroll: SharedValue<number>;
+  onGoUp?: () => void;
 }): void {
   const state = use(CompactTitleContext);
   // A list rendered outside a frame has nothing to show its title in.
@@ -167,6 +169,7 @@ export function useCompactTitleList({
     setGoUp(() => {
       const handle = list.current;
       if (handle === null) return;
+      onGoUp?.();
       const { scroll: from, scrollLength } = handle.getState();
       const { jumpTo, offset, animated } = compactTitleScroll({
         scroll: from,
@@ -184,7 +187,7 @@ export function useCompactTitleList({
       void afterPaint().then(() => list.current?.scrollToOffset({ offset, animated }));
     });
     return () => setGoUp(null);
-  }, [setGoUp, list, openingOffset, querying, reduceMotion]);
+  }, [setGoUp, list, openingOffset, querying, reduceMotion, onGoUp]);
 }
 
 /** The header's side, beside Back: nothing outside a `CompactTitleFrame`. */
@@ -220,12 +223,12 @@ function CompactTitleLine({
   const fade = useAnimatedStyle(() => ({ opacity: withTiming(shown.get() ? 1 : 0, FADE) }));
   return (
     <Animated.View
-      className="flex-1"
+      className="mr-3 flex-1"
       pointerEvents={visible ? "auto" : "none"}
       accessibilityElementsHidden={!visible}
       importantForAccessibility={visible ? "auto" : "no-hide-descendants"}
       // Back's glyph sits on the margin; the title stops at the page's other one.
-      style={[{ marginRight: 12 }, fade]}
+      style={fade}
     >
       <Press
         className="justify-center"

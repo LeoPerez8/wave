@@ -480,19 +480,30 @@ export interface AutoPlaylist {
  */
 const AUTO_COVER_SIDE = 640;
 
-/** [paths] as Auto's covers: files as they are, online addresses at the size Auto draws them. */
-const autoPlaylistCovers = (paths: readonly string[]): AutoArtwork => {
+/**
+ * [paths] as Auto's covers: files as they are, online addresses at the size
+ * Auto draws them, or dropped with YT Music off, when Wave asks the web for no
+ * cover (docs/spec.md).
+ */
+const autoPlaylistCovers = (paths: readonly string[], ytMusic: boolean): AutoArtwork => {
   const side = paths.length > 1 ? AUTO_COVER_SIDE / 2 : AUTO_COVER_SIDE;
-  return paths.map((path) => (/^https?:\/\//.test(path) ? sizedCoverUrls(path, side) : path));
+  return paths.flatMap((path): AutoCover[] => {
+    if (!/^https?:\/\//.test(path)) return [path];
+    return ytMusic ? [sizedCoverUrls(path, side)] : [];
+  });
 };
 
-/** A playlist in a list (the Playlists tab): opens its tracks. */
-export const autoPlaylistItem = (playlist: AutoPlaylist, c: Catalogue = en): AutoItem =>
+/** A playlist in a list (the Playlists tab): opens its tracks. [ytMusic] is the YT Music switch. */
+export const autoPlaylistItem = (
+  playlist: AutoPlaylist,
+  c: Catalogue = en,
+  ytMusic = false,
+): AutoItem =>
   folder(
     { type: "list", list: { kind: "playlist", id: String(playlist.id) } },
     playlist.name,
     c.auto.songs(playlist.trackCount),
-    autoPlaylistCovers(playlist.thumbPaths ?? []),
+    autoPlaylistCovers(playlist.thumbPaths ?? [], ytMusic),
   );
 
 /**

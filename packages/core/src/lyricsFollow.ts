@@ -28,6 +28,8 @@ export type LyricsFollowEvent =
   | "resumeDue"
   /** The screen went away. */
   | "hidden"
+  /** The screen came back. */
+  | "shown"
   | "pickStarted"
   | "pickEnded"
   | "karaokeOn"
@@ -60,13 +62,17 @@ export const lyricsFollowStep = (
         ? { state: { ...state, following: true }, move: "slide" }
         : { state, move: "stay" };
     case "fingerDown":
-      return { state: { ...state, following: false }, move: "stay" };
+      // Whatever the finger does stands: nothing still waiting to be placed moves the lyrics.
+      return { state: { ...state, following: false, placed: true }, move: "stay" };
     case "resumeDue":
       return karaoke && !picking
         ? { state: { ...state, following: true }, move: "slide" }
         : { state, move: "stay" };
     case "hidden":
       return { state: { ...state, following: karaoke && !picking }, move: "stay" };
+    // Lyrics that opened while away couldn't place the sung line then.
+    case "shown":
+      return { state, move: placed ? "stay" : "place" };
     case "pickStarted":
       return { state: { ...state, picking: true, following: false }, move: "stay" };
     case "pickEnded":

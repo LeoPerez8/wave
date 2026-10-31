@@ -91,6 +91,10 @@ const useLibraryReleases = (
 
 export interface YtArtistPageShown {
   readonly browseId: string | null;
+  /** The page's name, or the one the opener knew until it says; null with neither. */
+  readonly name: string | null;
+  /** The playing context's id: the browse id it opened by, or the name. */
+  readonly contextId: string;
   /**
    * Offline/failure/loading renders independently of the Library. A found
    * online page waits for settled matching so local songs never show streamed first.
@@ -164,6 +168,8 @@ export const useYtArtistPage = (
   }, [work.finder, work.view, find, state, enabled, openedAt, libraryAlbum]);
   return {
     browseId: saved?.outcome === "found" ? saved.browseId : browseId,
+    name: view?.name ?? knownName,
+    contextId: browseId ?? `name:${knownName ?? ""}`,
     view,
     retry: useCallback(() => {
       setOfflineHint(false);

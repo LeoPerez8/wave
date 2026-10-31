@@ -1,3 +1,4 @@
+import { jumpBeforeAnimating } from "./animatedScroll.ts";
 import type { PlaylistRecommendationState } from "./playlistRecommendationSession.ts";
 
 /**
@@ -82,9 +83,6 @@ export const goToSuggestionsOffered = (
   state.unfilled.length > 0 ||
   state.slots.some((slot) => slot !== null);
 
-/** The travel an animated scroll covers without sweeping past blank rows, in list heights. */
-export const ANIMATED_SCREENS = 2;
-
 /**
  * Where a tap takes the list, the section's [top] at the list's top (the list
  * stops short of that at its end): animated when near, a jump when far, so a
@@ -102,5 +100,5 @@ export const goToSuggestionsScroll = ({
   readonly reduceMotion: boolean;
 }): { readonly offset: number; readonly animated: boolean } => ({
   offset: top,
-  animated: !reduceMotion && Math.abs(top - scroll) <= listHeight * ANIMATED_SCREENS,
+  animated: !reduceMotion && jumpBeforeAnimating({ scroll, offset: top, listHeight }) === null,
 });

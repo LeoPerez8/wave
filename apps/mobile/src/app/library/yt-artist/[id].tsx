@@ -270,21 +270,15 @@ function QuietLine({
 
 /** The page's list, inside the screen's `CompactTitleFrame`. */
 function YtArtistList({
-  page: { view, retry, browseId: resolvedBrowseId },
-  browseId,
-  knownName,
-  name,
+  page: { view, retry, browseId, name, contextId },
 }: {
   page: ReturnType<typeof useYtArtistPage>;
-  browseId: string | null;
-  knownName: string | null;
-  name: string | null;
 }) {
   const { strings } = useLocalisation();
   const scrollable = useListScrollable();
   const bottomInset = useChromeInset();
   const list = useRef<LegendListRef>(null);
-  const { scrollRef, scroll } = useListScroll(0);
+  const { scroll, listProps } = useListScroll(0);
   useCompactTitleList({ list, find: null, scroll });
   const songs = view?.songs ?? NO_SONGS;
   const selectable = useMemo(
@@ -318,7 +312,6 @@ function YtArtistList({
           : (songKeys.get(item.song) ?? discoverTrackId(item.song)),
     [songKeys],
   );
-  const contextId = browseId ?? `name:${knownName ?? ""}`;
   const context = useMemo(() => ({ kind: "ytArtist", id: contextId }) as const, [contextId]);
   const play = useCallback(
     (startIndex: number | undefined, shuffle = false) =>
@@ -333,13 +326,13 @@ function YtArtistList({
       name === null && !loading ? null : (
         <Head
           name={name}
-          browseId={resolvedBrowseId}
+          browseId={browseId}
           artworkUrl={artworkUrl}
           loading={loading}
           onPlay={songs.length === 0 ? null : (shuffle) => play(undefined, shuffle)}
         />
       ),
-    [name, resolvedBrowseId, artworkUrl, loading, songs.length, play],
+    [name, browseId, artworkUrl, loading, songs.length, play],
   );
   const footer = useMemo(
     () =>
@@ -372,11 +365,9 @@ function YtArtistList({
 
   return (
     <SongList
-      animated
+      {...listProps}
       ref={list}
-      refScrollView={scrollRef}
       scrollEnabled={scrollable}
-      scrollEventThrottle={16}
       className="flex-1"
       data={items}
       keyExtractor={itemKey}
@@ -419,12 +410,11 @@ export default function YtArtistScreen() {
   const browseId = params.id === YT_ARTIST_BY_NAME ? null : (params.id ?? "");
   const knownName = params.name === undefined || params.name === "" ? null : params.name;
   const page = useYtArtistPage(browseId, knownName, params.offline === "1");
-  const name = page.view?.name ?? knownName;
   return (
-    <CompactTitleFrame title={name ?? undefined}>
+    <CompactTitleFrame title={page.name ?? undefined}>
       <View className="flex-1 bg-background">
         <ScreenHeader />
-        <YtArtistList page={page} browseId={browseId} knownName={knownName} name={name} />
+        <YtArtistList page={page} />
       </View>
     </CompactTitleFrame>
   );

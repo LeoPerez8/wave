@@ -1,4 +1,4 @@
-import { ANIMATED_SCREENS } from "./goToSuggestions.ts";
+import { jumpBeforeAnimating } from "./animatedScroll.ts";
 
 /**
  * The compact title beside a pushed page's Back (docs/spec.md "Compact title"):
@@ -50,9 +50,8 @@ export const compactTitleScroll = ({
 } => {
   const offset = querying ? 0 : openingOffset;
   if (reduceMotion) return { jumpTo: null, offset, animated: false };
-  const reach = listHeight * ANIMATED_SCREENS;
   return {
-    jumpTo: Math.abs(scroll - offset) > reach ? offset + reach : null,
+    jumpTo: jumpBeforeAnimating({ scroll, offset, listHeight }),
     offset,
     animated: true,
   };

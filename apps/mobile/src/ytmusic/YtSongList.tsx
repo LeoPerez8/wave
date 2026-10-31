@@ -536,7 +536,7 @@ function YtSongListPage({
   const list = useRef<LegendListRef>(null);
   const findInList = useFindInLegendList(list, songs, entryText, findable);
   const { shown } = findInList;
-  const { scrollRef, scroll } = useListScroll(findable ? findInList.initialOffset : 0);
+  const { scroll, listProps } = useListScroll(findable ? findInList.initialOffset : 0);
   useCompactTitleList({ list, find: findable ? findInList : null, scroll });
   // Rows key by song, a real duplicate by its occurrence: a playlist filling in keeps its keys.
   const keys = useMemo(() => occurrenceKeys(songs, discoverTrackId), [songs]);
@@ -605,13 +605,11 @@ function YtSongListPage({
       <ScreenHeader />
       <FindFrame find={findInList}>
         <SongList
-          animated
+          {...listProps}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
           scrollEnabled={scrollable}
-          scrollEventThrottle={16}
           ref={list}
-          refScrollView={scrollRef}
           className="flex-1"
           data={shown}
           keyExtractor={keyOf}
