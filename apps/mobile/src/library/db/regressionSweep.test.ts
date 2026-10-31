@@ -129,7 +129,8 @@ test("one/two retained hidden playlists do no recommendation work and catch up o
     replay.begin();
     for (let i = 0; i < 12; i++) replay.publish("tracks");
     await replay.end();
-    assert.deepEqual([replay.work.reads, replay.work.ranks, replay.work.notifications], [2, 2, 6]);
+    // Both renew behind their offers, which stay: nothing to notify.
+    assert.deepEqual([replay.work.reads, replay.work.ranks, replay.work.notifications], [2, 2, 0]);
     assert.ok(replay.work.rowsRead < versionRows * 1.5, "one shared source version, not two");
     replay.begin();
     replay.publish("playlists", [fixture.playlistId + 1]);

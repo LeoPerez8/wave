@@ -49,17 +49,22 @@ const announce = (message: string): void => AccessibilityInfo.announceForAccessi
  * The suggestions of the calling screen's playlist visit. They load from the opening on,
  * while [wanted] (the list would show the section) and the screen is in sight, whether or not
  * the section ever mounts. [sectionSight] is when the section came into sight in its list
- * (`Date.now()`), null while it's out of sight. Following them renders nothing here.
+ * (`Date.now()`), null while it's out of sight. [items] are the playlist's entries as read:
+ * an offer they now hold leaves before the frame paints. Following them renders nothing here.
  */
 export const usePlaylistSuggestionsVisit = (
   playlistId: number,
   wanted: boolean,
   sectionSight: ExternalStore<number | null>,
+  items: readonly PlaylistEntryRow[] | undefined,
 ): PlaylistSuggestionsVisit => {
   const screen = useScreenSight();
   const [visit] = useState(() => createPlaylistSuggestionsVisit(playlistId));
   const [wantedStore] = useState(() => makeExternalStore(wanted));
   useLayoutEffect(() => wantedStore.set(wanted), [wantedStore, wanted]);
+  useLayoutEffect(() => {
+    if (items !== undefined) visit.playlistRead(items);
+  }, [visit, items]);
   useEffect(
     () => visit.follow(screen, wantedStore, sectionSight),
     [visit, screen, wantedStore, sectionSight],
