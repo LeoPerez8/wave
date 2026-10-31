@@ -619,7 +619,8 @@ get medium covers from their cached originals, one image per free turn, without 
 audio tags again. The pass resumes after interruption and records completion on disk.
 
 The app's `catalog/artworkUri.ts` selects by display size: thumbnail through 300 physical
-pixels, medium through 640, otherwise original. Artist photos take precedence, then the
+pixels, medium through 640, otherwise original. A playlist's own image is a pair of files,
+so above 300 physical pixels it shows the large one. Artist photos take precedence, then the
 requested size, the next larger size, and the existing placeholder. Sized content URIs
 resolve available files in that order, so a pending medium keeps showing its original.
 Rows, tiles, mosaics and artist images share this helper. Now Playing and image captures
