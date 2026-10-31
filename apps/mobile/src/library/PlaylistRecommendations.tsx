@@ -20,7 +20,6 @@ import { TitledSection } from "@/catalog/TitledSection";
 import { FloatingPill } from "@/components/FloatingPill";
 import { IconButton } from "@/components/IconButton";
 import { TextButton } from "@/components/TextButton";
-import { lookedUpProfileOf } from "@/home/artistGenres";
 import { makeExternalStore, type ExternalStore } from "@/lib/externalStore";
 import { useScreenSight } from "@/lib/screenSight";
 import { CROSSFADE_MS } from "@/motion/Crossfade";
