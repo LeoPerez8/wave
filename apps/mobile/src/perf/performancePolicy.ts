@@ -906,6 +906,9 @@ export const OWN_PRESS: Record<string, Exception> = {
     reason:
       "While it waits or downloads it has no tap, only a slot's long press (#800), and its face is a progress bar.",
   },
+  "components/CompactTitle.tsx#CompactTitleLine": {
+    reason: "The page's title beside Back: a line of text whose tap returns the list to the top.",
+  },
   "components/TitleLongPress.tsx#TitlePress": {
     reason: "A screen title whose long press runs its action; it has the header role.",
   },
