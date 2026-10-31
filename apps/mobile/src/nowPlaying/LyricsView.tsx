@@ -443,7 +443,16 @@ function SyncedLyrics({
         if (!playheadVisibility.get()) {
           stopResume();
           step("hidden");
+          return;
         }
+        // Opened while away: the song has moved on from the line they opened on.
+        if (!follow.current.placed) {
+          currentIndex.current = currentLyricIndex(
+            latestLines.current,
+            extrapolatePosition(positionState.get(), Date.now()),
+          );
+        }
+        step("shown");
       }),
     [step, stopResume],
   );

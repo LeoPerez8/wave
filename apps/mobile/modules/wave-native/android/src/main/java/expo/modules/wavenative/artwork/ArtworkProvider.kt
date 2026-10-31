@@ -68,13 +68,14 @@ class ArtworkProvider : ContentProvider() {
    */
   private fun onlineCover(cache: File, addresses: List<String>): File? =
     addresses.firstNotNullOfOrNull { address ->
-      val target = File(cache, "${ArtworkStore.hash(address.toByteArray(Charsets.UTF_8))}.img")
+      val target = File(cache, "${ArtworkStore.hash(address.toByteArray(Charsets.UTF_8))}${ArtworkUris.ONLINE_FILE}")
       if (target.isFile) return@firstNotNullOfOrNull target
       runCatching {
         val image = ArtistPhotoStore.httpGet(address)
         if (ArtworkStore.extensionOf(image) == "img") return@runCatching null
         cache.mkdirs()
         ArtworkStore.writeAtomically(target, image)
+        ArtworkUris.trimOnlineCovers(cache, target, ONLINE_CACHE_BYTES)
         target
       }.getOrNull()
     }
@@ -145,6 +146,9 @@ class ArtworkProvider : ContentProvider() {
     const val ARTWORK_DIR = "artwork"
     private const val MOSAIC_DIR = "artwork-mosaic"
     private const val ONLINE_DIR = "artwork-online"
+
+    /** How much the online covers may take; the oldest go past it. */
+    private const val ONLINE_CACHE_BYTES = 50L * 1024 * 1024
 
     /** This app's artwork authority, once the provider has started (always, before any player item). */
     @Volatile

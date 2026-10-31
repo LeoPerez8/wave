@@ -313,7 +313,9 @@ export function PlaylistItems({ playlistId, items, header, empty }: Props) {
     counter: "playlist",
     onDrop: (_key, from, to) => void reorder(from, to),
   });
-  useCompactTitleList({ list, find, scroll });
+  const pill = useGoToSuggestionsPill(scrollRef);
+  // The title's scroll is a tap's: it doesn't keep the pill.
+  useCompactTitleList({ list, find, scroll, onGoUp: pill.tapped });
 
   // Recommendations hold their screen position only while some of them are in sight: an Add
   // grows the list above them without pushing them down, and someone reading the rows above
@@ -349,7 +351,6 @@ export function PlaylistItems({ playlistId, items, header, empty }: Props) {
     },
     [placeChanged],
   );
-  const pill = useGoToSuggestionsPill(scrollRef);
   const setPillWanted = useCallback((wanted: boolean) => pillWanted.set(wanted), [pillWanted]);
   useAnimatedReaction(
     () => goToSuggestionsPillShown(pill.phase.get(), place.get()),

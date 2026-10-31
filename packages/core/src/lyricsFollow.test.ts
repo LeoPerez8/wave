@@ -113,3 +113,26 @@ test("lyrics that open on a pick don't follow until it ends", () => {
   assert.equal(lastMove(picking, "lineChanged"), "stay");
   assert.equal(lastMove(picking, "pickEnded"), "slide");
 });
+
+test("lyrics opened while the screen was away place the sung line when it comes back", () => {
+  const away = lyricsFollowStart({ karaoke: false, picking: false });
+  const back = lyricsFollowStep(away, "shown");
+  assert.equal(back.move, "place");
+  const placed = lyricsFollowStep(back.state, "placed").state;
+  assert.equal(lyricsFollowStep(placed, "shown").move, "stay");
+  assert.equal(lyricsFollowStep(placed, "laidOut").move, "stay");
+});
+
+test("coming back to lyrics already placed leaves them where they are", () => {
+  for (const karaoke of [false, true]) {
+    const open = lyricsFollowStep(lyricsFollowStart({ karaoke, picking: false }), "placed").state;
+    assert.equal(lyricsFollowStep(open, "shown").move, "stay");
+  }
+});
+
+test("a finger on lyrics not placed yet ends the placing: a late layout change never moves them", () => {
+  const start = lyricsFollowStart({ karaoke: false, picking: false });
+  const held = lyricsFollowStep(start, "fingerDown").state;
+  assert.equal(lyricsFollowStep(held, "laidOut").move, "stay");
+  assert.equal(lyricsFollowStep(held, "shown").move, "stay");
+});

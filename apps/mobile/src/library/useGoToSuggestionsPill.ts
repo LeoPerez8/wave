@@ -63,9 +63,9 @@ export function useGoToSuggestionsPill(scrollRef: AnimatedRef<ScrollView>) {
     () =>
       scrollRef.observe((tag) => {
         if (tag === null) return;
-        const handler = (onScrollEvent as unknown as Registered).workletEventHandler;
-        handler.registerForEvents(tag);
-        return () => handler.unregisterFromEvents(tag);
+        const handler = registeredHandler(onScrollEvent);
+        handler?.registerForEvents(tag);
+        return () => handler?.unregisterFromEvents(tag);
       }),
     [scrollRef, onScrollEvent],
   );
@@ -80,10 +80,22 @@ export function useGoToSuggestionsPill(scrollRef: AnimatedRef<ScrollView>) {
   return { phase, tapped };
 }
 
-/** What `useEvent` returns, as `useScrollOffset` reads it. */
-type Registered = {
-  readonly workletEventHandler: {
-    registerForEvents(tag: number): void;
-    unregisterFromEvents(tag: number): void;
-  };
+/** What `useEvent` returns holds this, as `useScrollOffset` reads it; its type doesn't say so. */
+type EventRegistration = {
+  registerForEvents(tag: number): void;
+  unregisterFromEvents(tag: number): void;
+};
+
+const registeredHandler = (event: unknown): EventRegistration | null => {
+  if (typeof event !== "object" && typeof event !== "function") return null;
+  if (event === null || !("workletEventHandler" in event)) return null;
+  const handler = event.workletEventHandler;
+  return typeof handler === "object" &&
+    handler !== null &&
+    "registerForEvents" in handler &&
+    typeof handler.registerForEvents === "function" &&
+    "unregisterFromEvents" in handler &&
+    typeof handler.unregisterFromEvents === "function"
+    ? (handler as EventRegistration)
+    : null;
 };

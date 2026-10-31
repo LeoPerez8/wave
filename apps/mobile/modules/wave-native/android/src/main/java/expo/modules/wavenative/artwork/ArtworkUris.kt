@@ -46,6 +46,9 @@ object ArtworkUris {
   private const val SCHEME = "content://"
   private const val MOSAIC = "mosaic"
   private const val ONLINE = "o."
+
+  /** The ending of an online cover's cached file. */
+  const val ONLINE_FILE = ".img"
   const val MOSAIC_TILES = 4
 
   /**
@@ -57,9 +60,13 @@ object ArtworkUris {
 
   private val HASH = Regex("^[0-9a-f]{40}$")
 
-  /** The image servers of YT Music and Spotify, the covers `yt_song` stores. */
+  /**
+   * The image servers of YT Music and Spotify, the covers `yt_song` stores. A
+   * Spotify song's cover is on `i.scdn.co` (docs/spotify-samples); `spotifycdn.com`
+   * only has the playlist's own image, which an entry never stores.
+   */
   private val ONLINE_COVER =
-    Regex("^https://[\\w.-]+\\.(?:googleusercontent\\.com|ggpht\\.com|ytimg\\.com|scdn\\.co|spotifycdn\\.com)/\\S*$")
+    Regex("^https://(?:[\\w.-]+\\.(?:googleusercontent\\.com|ggpht\\.com|ytimg\\.com)|i\\.scdn\\.co)/\\S*$")
 
   /** The original's extensions, as [ArtworkStore.extensionOf] names them. */
   private val EXTENSIONS = listOf("jpg", "png", "webp", "gif", "bmp", "img")
@@ -155,6 +162,21 @@ object ArtworkUris {
   fun mediumFile(directory: File, hash: String): File? {
     if (!isHash(hash)) return null
     return File(directory, "${hash}_medium.jpg").takeIf { it.isFile } ?: coverFile(directory, hash)
+  }
+
+  /**
+   * Deletes the oldest of [folder]'s [ONLINE_FILE] files until the rest take up to
+   * [maxBytes]. Never [keep], the one just written.
+   */
+  fun trimOnlineCovers(folder: File, keep: File, maxBytes: Long) {
+    val files = folder.listFiles { file -> file.name.endsWith(ONLINE_FILE) }.orEmpty()
+    var total = files.sumOf { it.length() }
+    for (file in files.sortedBy { it.lastModified() }) {
+      if (total <= maxBytes) return
+      if (file == keep) continue
+      total -= file.length()
+      file.delete()
+    }
   }
 
   /** The thumbnail a mosaic draws cached cover [hash] from. */

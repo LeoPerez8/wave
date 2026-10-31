@@ -269,7 +269,7 @@ function AlbumTracks({ shown, openedIntegrated }: { shown: Shown; openedIntegrat
   const scrollable = useListScrollable();
   const bottomInset = useChromeInset();
   const list = useRef<LegendListRef>(null);
-  const { scrollRef, scroll } = useListScroll(0);
+  const { scroll, listProps } = useListScroll(0);
   useCompactTitleList({ list, find: null, scroll });
   // Selection keys the tracks themselves (every disc), not the disc heads.
   const selectable = useMemo(
@@ -323,10 +323,8 @@ function AlbumTracks({ shown, openedIntegrated }: { shown: Shown; openedIntegrat
 
   return (
     <SongList
-      animated
+      {...listProps}
       ref={list}
-      refScrollView={scrollRef}
-      scrollEventThrottle={16}
       scrollEnabled={scrollable}
       className="flex-1"
       data={items}
