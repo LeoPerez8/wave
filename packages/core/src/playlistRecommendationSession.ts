@@ -155,6 +155,8 @@ export const playlistRecommendationSession = (options: {
   const holeWaiters = new Map<number, (() => void)[]>();
   let disposed = false;
   let paused = false;
+  /** Something was published while paused: listeners hear it on resuming. */
+  let unheard = false;
   let version = 0;
   let active: AbortController | undefined;
   let renewalPending = false;
@@ -168,10 +170,14 @@ export const playlistRecommendationSession = (options: {
     renewalPending = true;
   };
   const busy = () => renewing || refilling || savesRunning > 0;
+  const notify = () => {
+    for (const listener of listeners) listener();
+  };
   const publish = (patch: Partial<PlaylistRecommendationState>) => {
     if (disposed) return;
     state = { ...state, ...patch };
-    if (!paused) for (const listener of listeners) listener();
+    if (paused) unheard = true;
+    else notify();
   };
   const read = async (signal?: AbortSignal) => {
     const input = await options.read(signal);
@@ -330,7 +336,11 @@ export const playlistRecommendationSession = (options: {
       active?.abort();
     },
     resume: () => {
-      if (!disposed) paused = false;
+      if (disposed) return;
+      paused = false;
+      if (!unheard) return;
+      unheard = false;
+      notify();
     },
     /** Whether a renewal is running behind the offers, or was held off and hasn't run. */
     renewalOwed: () => renewalPending || behind !== undefined,
@@ -508,12 +518,12 @@ export const playlistRecommendationSession = (options: {
         if (behind === controller) behind = undefined;
         if (!showing) {
           renewing = false;
-          // Cancellation retains offers, and the holes it was to fill stay unfilled for the next refill.
+          // Cancelled, a renewal is still owed, so the section keeps reading as loading until it
+          // runs, and the holes it was to fill stay unfilled for the next refill.
           if (current()) publish({ loading: false });
           else
             state = {
               ...state,
-              loading: false,
               unfilled: unfilledBefore.filter((hole) => state.slots[hole] === null),
             };
         }

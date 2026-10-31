@@ -317,3 +317,62 @@ test("a renewal held for a tap and then hidden stays owed until a later one runs
   await session.renew();
   assert.equal(session.renewalOwed(), false);
 });
+
+test("a first load cancelled by hiding still reads as loading, for the renewal it's owed", async () => {
+  const { session, gate } = savedSession([]);
+  const held = Promise.withResolvers<void>();
+  gate.hold = held;
+  const renewing = session.renew();
+  session.pause();
+  held.resolve();
+  await renewing;
+  session.resume();
+  assert.equal(session.get().loading, true);
+  assert.deepEqual(session.get().slots, []);
+  await session.renew();
+  assert.equal(session.get().loading, false);
+  assert.equal(session.get().slots[0]?.track.id, "a");
+});
+
+test("a first load cancelled by its asker still reads as loading", async () => {
+  const { session, gate } = savedSession([]);
+  const held = Promise.withResolvers<void>();
+  gate.hold = held;
+  const asker = new AbortController();
+  const renewing = session.renew({ signal: asker.signal });
+  asker.abort();
+  held.resolve();
+  await renewing;
+  assert.equal(session.get().loading, true);
+});
+
+test("a cancelled Try Again goes back to loading, not to an empty section", async () => {
+  const { session, gate } = savedSession([]);
+  gate.fail = true;
+  await session.renew();
+  assert.equal(session.get().error, "load");
+  gate.fail = false;
+  const held = Promise.withResolvers<void>();
+  gate.hold = held;
+  const retrying = session.renew({ turn: "paint" });
+  session.pause();
+  held.resolve();
+  await retrying;
+  assert.equal(session.get().loading, true);
+  assert.equal(session.get().error, null);
+});
+
+test("what changed while paused is heard on resuming, once", () => {
+  const { session } = savedSession(lettered("vwxyzqr"));
+  let notified = 0;
+  session.subscribe(() => notified++);
+  session.pause();
+  session.leave((offer) => offer.id === "x");
+  session.leave((offer) => offer.id === "y");
+  assert.equal(notified, 0);
+  session.resume();
+  assert.equal(notified, 1);
+  session.pause();
+  session.resume();
+  assert.equal(notified, 1, "nothing changed this time");
+});
