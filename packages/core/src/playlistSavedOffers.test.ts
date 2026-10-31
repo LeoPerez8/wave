@@ -35,20 +35,25 @@ const track = (
 const ids = (tracks: readonly PlaylistRecommendationTrack[]) => tracks.map((t) => t.id);
 const letters = (text: string) => text.split("").map((id) => track(id));
 
-test("a renewal saves the five it would show, then spares in ranked order, ten at most", () => {
-  const saved = playlistOffersToSave([], letters("abcdefghijklmn"), { online: true });
-  assert.equal(PLAYLIST_SAVED_OFFERS, 10);
-  assert.deepEqual(ids(saved), ids(letters("abcdefghij")));
+test("a renewal saves the five it would show, then spares in ranked order, twenty at most", () => {
+  const saved = playlistOffersToSave([], letters("abcdefghijklmnopqrstuvwxyz"), { online: true });
+  assert.equal(PLAYLIST_SAVED_OFFERS, 20);
+  assert.deepEqual(ids(saved), ids(letters("abcdefghijklmnopqrst")));
 });
 
 test("the artist cap can't crowd out the five offers: they're saved ahead of same-artist spares", () => {
   const same = (id: string) => track(id, { artists: ["Same Artist"] });
-  const ranked = [..."abcdefghijkl".split("").map(same), track("x"), track("y"), track("z")];
+  const ranked = [
+    ..."abcdefghijklmnopqrstuvw".split("").map(same),
+    track("x"),
+    track("y"),
+    track("z"),
+  ];
   const saved = playlistOffersToSave([], ranked, { online: true });
   assert.deepEqual(ids(playlistOffersToShow(saved, { online: true })), ["a", "b", "x", "y", "z"]);
-  assert.equal(saved.length, 10);
+  assert.equal(saved.length, 20);
   // Still in ranked order, so what shows comes out the same however it's filtered.
-  assert.deepEqual(ids(saved), ["a", "b", "c", "d", "e", "f", "g", "x", "y", "z"]);
+  assert.deepEqual(ids(saved), [..."abcdefghijklmnopq".split(""), "x", "y", "z"]);
 });
 
 test("a renewal made offline or finding nothing leaves what's saved", () => {

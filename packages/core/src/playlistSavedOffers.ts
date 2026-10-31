@@ -13,8 +13,8 @@ import {
 } from "./playlistRecommendations.ts";
 import type { YtAlbumSong } from "./ytDiscover.ts";
 
-/** How many offers a playlist saves: the five it shows, and spares for those that leave. */
-export const PLAYLIST_SAVED_OFFERS = 10;
+/** How many offers a playlist saves: the five it shows, and 15 spares for those that leave. */
+export const PLAYLIST_SAVED_OFFERS = 20;
 
 /** How many playlists keep their offers: the latest ones saved. */
 export const PLAYLIST_SAVED_PLAYLISTS = 200;

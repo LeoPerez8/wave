@@ -159,7 +159,10 @@ export const playlistRecommendationSession = (options: {
     input: PlaylistRecommendationSessionInput,
     signal?: AbortSignal,
   ) => Promise<(offer: PlaylistRecommendationTrack) => boolean>;
-  /** The offers an earlier visit saved, shown from the start, and where changes to them go. */
+  /**
+   * The offers an earlier visit saved, shown from the start, and where changes to them go.
+   * Without it nothing is kept: no spares, so every freed slot waits for its refill.
+   */
   readonly saved?: {
     readonly offers: readonly PlaylistRecommendationTrack[];
     readonly online: () => boolean;
@@ -173,7 +176,7 @@ export const playlistRecommendationSession = (options: {
   let savedOffers = options.saved?.offers ?? [];
   const online = () => options.saved?.online() ?? true;
   const saveOffers = (next: readonly PlaylistRecommendationTrack[]) => {
-    if (next === savedOffers) return;
+    if (options.saved === undefined || next === savedOffers) return;
     savedOffers = next;
     options.saved?.write(next);
   };
@@ -267,6 +270,23 @@ export const playlistRecommendationSession = (options: {
       for (const resolve of holeWaiters.get(hole) ?? []) resolve();
       holeWaiters.delete(hole);
     }
+  };
+  /**
+   * Fills what it can of [holes], empty slots of [slots], from the saved spares, with no read
+   * or ranking, and returns the rest. A spare fits the offers kept and those it just placed.
+   */
+  const fillFromSpares = (
+    slots: (PlaylistRecommendationSlot | null)[],
+    holes: readonly number[],
+  ): readonly number[] => {
+    const kept = slots.flatMap((offer) => (offer === null ? [] : [offer.track]));
+    return holes.filter((hole) => {
+      const spare = playlistSpareOffer(savedOffers, kept, { online: online() });
+      if (spare === undefined) return true;
+      kept.push(spare);
+      slots[hole] = slot(spare);
+      return false;
+    });
   };
   /** The freed slots' choices are saved: the slots leave no placeholder, waiting for a retry. */
   const leaveUnfilled = (holes: readonly number[]) =>
@@ -404,8 +424,19 @@ export const playlistRecommendationSession = (options: {
     if (savedOffers.length > 0) saveOffers(playlistOffersWithout(savedOffers, [offer.track]));
     const slots = [...state.slots];
     slots[index] = null;
-    publish({ pending: state.pending.filter((pending) => pending !== key), slots });
-    await replace([index, ...earlier], "free");
+    const holes = [index, ...earlier];
+    // Closed meanwhile, nothing would show it: the refill says the wait was cancelled.
+    const unspared = disposed ? holes : fillFromSpares(slots, holes);
+    const spared = holes.filter((hole) => !unspared.includes(hole));
+    publish({
+      pending: state.pending.filter((pending) => pending !== key),
+      slots,
+      pendingSlots: pendingSlotsBut(spared),
+    });
+    for (const hole of spared) slotWaitFilled(hole, "spare");
+    if (unspared.length > 0) await replace(unspared, "free");
+    // Its slot is filled: a renewal held for this tap runs behind it, with no one waiting.
+    else void settle();
     return true;
   };
   const session = {
@@ -450,17 +481,7 @@ export const playlistRecommendationSession = (options: {
         holes.push(index);
       }
       if (holes.length === 0) return;
-      const kept = slots.flatMap((offer) => (offer === null ? [] : [offer.track]));
-      const unspared: number[] = [];
-      for (const hole of holes) {
-        const spare = playlistSpareOffer(savedOffers, kept, { online: online() });
-        if (spare === undefined) {
-          unspared.push(hole);
-          continue;
-        }
-        kept.push(spare);
-        slots[hole] = slot(spare);
-      }
+      const unspared = fillFromSpares(slots, holes);
       publish({ slots, pendingSlots: [...state.pendingSlots, ...unspared] });
       if (unspared.length === 0) return;
       if (!read) {
