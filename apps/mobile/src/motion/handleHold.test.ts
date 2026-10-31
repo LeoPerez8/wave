@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
-import { handleHold } from "./handleHold.ts";
+import { handleHold, handleSwipeSlop } from "./handleHold.ts";
 
 const src = join(import.meta.dirname, "..");
 
@@ -32,3 +32,29 @@ for (const file of [
     assert.doesNotMatch(source, /minDistance/);
   });
 }
+
+/** Where Gesture Handler lets a pan begin along a view [width] wide: `right += slop.right`. */
+const swipeBeginsAt = (x: number, width: number, slop: { readonly right: number }): boolean =>
+  x >= 0 && x <= width + slop.right;
+
+test("a row's swipe can't begin on its handle, and begins anywhere else on the row", () => {
+  const slop = handleSwipeSlop(48);
+  assert.equal(swipeBeginsAt(0, 360, slop), true);
+  assert.equal(swipeBeginsAt(311, 360, slop), true);
+  assert.equal(swipeBeginsAt(313, 360, slop), false);
+  assert.equal(swipeBeginsAt(359, 360, slop), false);
+});
+
+test("a row with no handle showing swipes from its whole width", () => {
+  assert.equal(swipeBeginsAt(359, 360, handleSwipeSlop(0)), true);
+});
+
+test("a playlist's grip keeps the row's swipe off it only while it shows", () => {
+  const swipeable = readFileSync(join(src, "catalog/SwipeableRow.tsx"), "utf8");
+  // Always sent: left out of an update, a hit slop keeps its previous value on the native side.
+  assert.match(swipeable, /usePanGesture\(\{[^}]*hitSlop: handleSwipeSlop\(handleWidth\),/);
+  const row = readFileSync(join(src, "songs/SongRow.tsx"), "utf8");
+  assert.match(row, /<SwipeableRow swipe=\{swipe\} handleWidth=\{props\.handleWidth\}>/);
+  const playlist = readFileSync(join(src, "library/PlaylistItems.tsx"), "utf8");
+  assert.match(playlist, /handleWidth: grip \? GRIP_WIDTH : 0/);
+});

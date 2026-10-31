@@ -27,6 +27,7 @@ import Animated, {
 import { scheduleOnRN } from "react-native-worklets";
 
 import { useBounceSpring } from "@/motion/bounce";
+import { handleSwipeSlop } from "@/motion/handleHold";
 import { useListScrollable } from "@/motion/heldTouch";
 import { ACTION_ICONS } from "@/playback/actionIcons";
 import { useThemeColor } from "@/theme/useThemeColor";
@@ -123,7 +124,8 @@ function Uncovered({ action, edge }: { action: SwipeSide; edge: "start" | "end" 
  * once). The threshold is the finger's travel at every amount. A direction without an action doesn't move. Vertical drags stay
  * the list's; taps and long-presses stay the row's. No swipe while
  * [enabled] is false (selection mode) or while a long-pressed finger slides
- * to choose in a menu.
+ * to choose in a menu. A swipe can't begin on the [handleWidth] dp at the
+ * row's end, where its drag handle is.
  *
  * A [sample] row (Settings › Appearance › Motion's) swipes the same way but
  * runs nothing: it moves both ways, uncovering and arming only towards a
@@ -136,12 +138,14 @@ export function SwipeableRow({
   enabled = true,
   sample = false,
   demo = 0,
+  handleWidth = 0,
   children,
 }: {
   swipe: RowSwipe;
   enabled?: boolean;
   sample?: boolean;
   demo?: number;
+  handleWidth?: number | undefined;
   children: ReactNode;
 }) {
   const scrollable = useListScrollable();
@@ -227,6 +231,7 @@ export function SwipeableRow({
 
   const pan = usePanGesture({
     enabled: active,
+    hitSlop: handleSwipeSlop(handleWidth),
     // Only towards the sides with an action; a vertical move belongs to the list.
     activeOffsetX:
       movesRight && movesLeft ? [-DRAG_SLOP, DRAG_SLOP] : movesRight ? DRAG_SLOP : -DRAG_SLOP,
