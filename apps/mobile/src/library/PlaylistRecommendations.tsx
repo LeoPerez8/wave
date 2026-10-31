@@ -1,5 +1,5 @@
-import { IconPlus, IconX } from "@tabler/icons-react-native";
-import type { PlaylistRecommendationSlot } from "@wave/core";
+import { IconArrowDown, IconPlus, IconX } from "@tabler/icons-react-native";
+import { goToSuggestionsOffered, type PlaylistRecommendationSlot } from "@wave/core";
 import { useEffect, useLayoutEffect, useState, useSyncExternalStore } from "react";
 import { AccessibilityInfo, Text, View } from "react-native";
 import Animated, {
@@ -13,6 +13,7 @@ import { CELL, grid } from "@/catalog/grid";
 import { useLocalisation } from "@/localisation/localisation";
 import { ControlledTrackRowSkeleton, SkeletonGroup } from "@/catalog/Skeletons";
 import { TitledSection } from "@/catalog/TitledSection";
+import { FloatingPill } from "@/components/FloatingPill";
 import { IconButton } from "@/components/IconButton";
 import { TextButton } from "@/components/TextButton";
 import { lookedUpProfileOf } from "@/home/artistGenres";
@@ -38,6 +39,12 @@ const offerKey = (song: PlaylistRecommendationSlot): string => song.key;
 
 /** A replacement fades into its slot; with reduce motion on it just appears. */
 const arrive = FadeIn.duration(CROSSFADE_MS).reduceMotion(ReduceMotion.Never);
+
+/**
+ * The section's height with its heading and five offers: what a list that never mounted it
+ * should expect, so a tap can scroll the section up rather than stop at its first line.
+ */
+export const SUGGESTIONS_SECTION_HEIGHT = CELL * 12.5 + 5 * grid.row;
 
 /** Add and Dismiss: the controls each offer row ends with. */
 const CONTROLS = 2;
@@ -66,6 +73,31 @@ export const usePlaylistSuggestionsVisit = (
   );
   return visit;
 };
+
+/**
+ * The pill that takes a long playlist to its suggestions, while the section is [away] and has
+ * something to go to (offers, a load or a failure line). Following both renders only this.
+ */
+export function GoToSuggestions({
+  visit,
+  away,
+  bottom,
+  onPress,
+}: {
+  visit: PlaylistSuggestionsVisit;
+  away: ExternalStore<boolean>;
+  bottom: number;
+  onPress: () => void;
+}) {
+  const { session } = visit;
+  const label = useLocalisation().strings.playlists.goToSuggestions;
+  const offered = useSyncExternalStore(session.subscribe, () =>
+    goToSuggestionsOffered(session.get()),
+  );
+  const isAway = useSyncExternalStore(away.subscribe, away.get);
+  if (!offered || !isAway) return null;
+  return <FloatingPill icon={IconArrowDown} label={label} bottom={bottom} onPress={onPress} />;
+}
 
 /**
  * The section showing a [visit]'s offers: it holds nothing of its own, so the list can

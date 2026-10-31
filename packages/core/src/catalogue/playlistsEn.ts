@@ -76,6 +76,8 @@ export const playlistsEn = {
   layouts: { list: "List", grid: "Grid", large: "Large Cards" },
   sortBy: "Sort by",
   sorts: { name: "Name", added: "Recently Added", played: "Recently Played", custom: "Custom" },
+  /** The floating pill that takes a long playlist to its suggestions. */
+  goToSuggestions: "Go to Suggestions",
   /** Recommended songs under a playlist. */
   recommendedSongs: "Recommended songs",
   loading: "Loading…",
