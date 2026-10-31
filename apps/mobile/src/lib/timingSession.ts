@@ -50,12 +50,15 @@ interface Pending {
 
 /** A touch older than this made nothing that's beginning now. */
 const TOUCH_LIFE_MS = 60_000;
+/** A press's handler runs as JS hears its touch end; what begins later than this has another cause. */
+const TOUCH_GRACE_MS = 300;
 
 export const createTimingSession = (ports: Ports) => {
   let nextId = 0;
   let route = "/";
   let pending: Pending | null = null;
   let touchAt: number | undefined;
+  let touchEndedAt: number | undefined;
   let settled = false;
   let since = ports.wallNow();
   let lastSummary: number | null = null;
@@ -167,10 +170,19 @@ export const createTimingSession = (ports: Ports) => {
     emit(pending, "start");
     return pending.id;
   };
-  const takeTouch = (): number => {
+  const liveTouch = (): number | undefined => {
     const now = ports.now();
-    const at = touchAt !== undefined && now - touchAt < TOUCH_LIFE_MS ? touchAt : now;
+    if (touchAt === undefined || now - touchAt >= TOUCH_LIFE_MS) return undefined;
+    if (touchEndedAt !== undefined && now - touchEndedAt >= TOUCH_GRACE_MS) return undefined;
+    return touchAt;
+  };
+  const forgetTouch = (): void => {
     touchAt = undefined;
+    touchEndedAt = undefined;
+  };
+  const takeTouch = (): number => {
+    const at = liveTouch() ?? ports.now();
+    forgetTouch();
     return at;
   };
   const update = (id: number | undefined, set: (p: Pending) => void) => {
@@ -186,15 +198,19 @@ export const createTimingSession = (ports: Ports) => {
       const now = ports.now();
       // Older RN's epoch timestamp must not produce a negative duration.
       touchAt = timestamp <= now && now - timestamp < TOUCH_LIFE_MS ? timestamp : now;
+      touchEndedAt = undefined;
     },
-    hasTouch: (): boolean => touchAt !== undefined,
     /**
-     * What's next begun has no touch of its own: Android's Back. Otherwise it would count
-     * from the last touch on the screen, a scroll seconds ago, and read as a stall (#866).
+     * The finger lifted, or a native scroll or gesture took the touch over. Timed by when JS
+     * hears it, not by the event's timestamp, so blocked JS doesn't expire the press it delays.
+     * Past the grace, a Back press or a timer doesn't count from an old scroll (#866).
      */
-    forgetTouch: (): void => {
-      touchAt = undefined;
+    touchEnded: (): void => {
+      if (touchAt !== undefined) touchEndedAt ??= ports.now();
     },
+    hasTouch: (): boolean => liveTouch() !== undefined,
+    /** The app left the screen: the touch's end may never come. */
+    forgetTouch,
     /** A gesture counted from the touch that made it (or from now, with none), using that touch up. */
     beginTouched: (kind: TimingKind, to: string, from?: string): number =>
       begin(kind, to, takeTouch(), true, from ?? route),

@@ -353,16 +353,71 @@ const finishPop = (h: ReturnType<typeof setup>, id: number, began: number) => {
   h.session.end(id);
 };
 
-test("a Back press counts from itself, not from the last touch on the screen", () => {
+test("a Back press after a scroll counts from itself, not from the scroll (#866)", () => {
   const h = setup();
   h.at(100);
-  h.session.touch(100); // A scroll of the playlist; nothing timed starts from it.
-  h.at(3000);
-  h.session.forgetTouch();
+  h.session.touch(100);
+  h.at(150);
+  h.session.touchEnded(); // The list's native scroll takes the touch over, finger still down.
+  h.at(2650);
   assert.equal(h.session.hasTouch(), false);
   const id = h.session.beginTouched("pop", "/playlists");
-  finishPop(h, id, 3000);
+  finishPop(h, id, 2650);
   assert.deepEqual(h.lines, []);
+});
+
+test("a touch lasts 300 ms past its end, then whatever begins counts from now", () => {
+  const h = setup();
+  h.at(100);
+  h.session.touch(100);
+  h.at(200);
+  h.session.touchEnded();
+  h.at(499);
+  assert.equal(h.session.hasTouch(), true);
+  h.at(500);
+  assert.equal(h.session.hasTouch(), false);
+});
+
+test("a press whose JS was blocked counts from its touch, however late JS heard the lift", () => {
+  const h = setup();
+  // Touch at 100, lift at 150; JS was blocked until 900, then hears both and the press together.
+  h.at(900);
+  h.session.touch(100);
+  h.at(905);
+  h.session.touchEnded();
+  h.at(910);
+  const id = h.session.beginTouched("pop", "/playlists");
+  finishPop(h, id, 910);
+  assert.match(h.lines[0]!, /^Slow pop to \/playlists from \/: response 820 ms/);
+});
+
+test("a press handled before the root hears the lift leaves no touch behind", () => {
+  const h = setup();
+  h.at(100);
+  h.session.touch(100);
+  h.at(110);
+  h.session.beginTouched("pop", "/playlists");
+  h.session.touchEnded();
+  assert.equal(h.session.hasTouch(), false);
+});
+
+test("a new touch doesn't inherit the end of the one before it", () => {
+  const h = setup();
+  h.at(100);
+  h.session.touch(100);
+  h.session.touchEnded();
+  h.at(1000);
+  h.session.touch(1000);
+  h.at(2000);
+  assert.equal(h.session.hasTouch(), true);
+});
+
+test("leaving the app forgets a touch whose end may never come", () => {
+  const h = setup();
+  h.at(100);
+  h.session.touch(100);
+  h.session.forgetTouch();
+  assert.equal(h.session.hasTouch(), false);
 });
 
 test("an on-screen press counts from its touch, which it uses up", () => {

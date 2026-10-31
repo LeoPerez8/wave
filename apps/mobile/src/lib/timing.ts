@@ -53,9 +53,13 @@ export const timingBackgroundChanged = (): void => session.backgroundChanged();
 /** RN's native timestamps and performance.now share the monotonic clock on Android. */
 export const timingTouch = (event: GestureResponderEvent): void =>
   session.touch(event.nativeEvent.timestamp);
+export const timingTouchEnded = (event: GestureResponderEvent): void => {
+  // Another finger still down keeps the touch going.
+  if (event.nativeEvent.touches.length === 0) session.touchEnded();
+};
+/** A native scroll or gesture took the touch over: its lift goes unheard, so this is its end. */
+export const timingTouchTakenOver = session.touchEnded;
 export const hasTimingTouch = session.hasTouch;
-/** Android's Back has no touch: what it begins counts from now, not from the last scroll. */
-export const timingBackPressed = session.forgetTouch;
 
 let surface: string | undefined;
 export const setTimingSurface = (name: string | undefined): void => {
@@ -134,8 +138,6 @@ export const timingStackListeners = {
   transitionStart: (event: { target?: string; data: { closing: boolean } }): void => {
     let active = session.active();
     if (active === null && event.data.closing) {
-      // No press of ours started this close: nothing says it came from a touch.
-      timingBackPressed();
       beginTiming("pop", "Back");
       active = session.active();
     }
