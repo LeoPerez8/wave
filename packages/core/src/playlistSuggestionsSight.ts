@@ -1,3 +1,5 @@
+import { roundMs } from "./timing.ts";
+
 /** How long the suggestions section, once in sight, took to show its offers (ms). */
 export interface PlaylistSuggestionsSightTiming {
   readonly ms: number;
@@ -7,9 +9,6 @@ export interface PlaylistSuggestionsSightTiming {
   readonly offers: number;
   readonly failed: boolean;
 }
-
-// not UI text: times for the app log
-const roundMs = (ms: number) => `${Math.round(ms)} ms`;
 
 /** [timing] as one log line, under `WaveTiming`. */
 // not UI text: the app log's line
