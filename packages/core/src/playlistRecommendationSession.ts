@@ -211,6 +211,13 @@ const latestTracks = (
 };
 
 /**
+ * Whether [input]'s radios all failed or timed out, with no page to give. Offline, or with
+ * nothing to seed a radio, no read failed: Library files can still join.
+ */
+const noRadioAnswered = ({ sources }: PlaylistRecommendationSessionInput): boolean =>
+  (sources.seeds?.length ?? 0) > 0 && sources.online !== false && (sources.pages?.length ?? 0) === 0;
+
+/**
  * Owns visible offers and save-before-replace ordering; storage is a system boundary.
  * Only a renewal with nothing to show publishes its offers; over offers already showing
  * it runs behind them (docs/spec.md, "Saved offers").
@@ -514,6 +521,7 @@ export const playlistRecommendationSession = (options: {
         turn = "free";
         controller.signal.throwIfAborted();
         const input = await read(controller.signal);
+        if (noRadioAnswered(input)) throw new Error("No radio answered");
         if (yieldTurn !== undefined) await yieldTurn("paint");
         // Offers still showing, their saves under way among them, and the spares stay out of the
         // ranking: all it brings is new, and nothing tapped from now on can be among it.
@@ -834,6 +842,7 @@ export const playlistRecommendationSession = (options: {
         if (showing || readFresh === undefined) {
           input = await reading(() => read(controller.signal));
           if (!current()) return;
+          if (noRadioAnswered(input)) throw new Error("No radio answered");
           ranked = await ranking(input);
           if (ranked === null) return;
         } else {

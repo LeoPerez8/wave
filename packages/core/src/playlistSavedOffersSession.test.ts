@@ -57,6 +57,9 @@ const savedSession = (
     library: [seed, ...lettered("abcdefghijklmnopqrstuvwxyz")],
     /** What the radios bring, when it isn't the Library. */
     radio: undefined as readonly PlaylistRecommendationTrack[] | undefined,
+    /** Every radio timed out or failed: the read has no page to give. */
+    noRadio: false,
+    seeds: [seed],
     feedback: [] as PlaylistRecommendationFeedback[],
     written: [] as (readonly PlaylistRecommendationTrack[])[],
     /** Each choice as it's written, in order. */
@@ -92,7 +95,10 @@ const savedSession = (
         sources: {
           // The radios bring what the Library holds of a through z, not the saved offers' copies.
           library: gate.library,
-          pages: [{ id: "song:seed", artists: ["Artist seed"], songs: gate.radio ?? gate.library }],
+          pages: gate.noRadio
+            ? []
+            : [{ id: "song:seed", artists: ["Artist seed"], songs: gate.radio ?? gate.library }],
+          seeds: gate.seeds,
           graph: null,
           feedback: gate.feedback,
           online: gate.online,
@@ -1092,4 +1098,60 @@ test("a refill reads as one log line", () => {
     playlistReserveRefillLine({ ms: 900, added: 0, spares: 4, failed: true }),
     "Playlist reserve refill failed after 900 ms",
   );
+});
+
+test("a renewal behind offers whose radios all gave no page fails, leaving the reserve and logging it", async () => {
+  const reports: PlaylistRecommendationTiming[] = [];
+  const spares = "qrstuABCDEFGHIJ";
+  const { session, gate, written } = savedSession(withSpares(spares), {
+    report: (timing) => reports.push(timing),
+  });
+  const before = session.get();
+  gate.noRadio = true;
+  gate.library = [gate.library[0]!, track("a"), track("b")];
+  await session.renew();
+  assert.equal(gate.ranks, 0);
+  assert.equal(written(), undefined, "the 15 spares stay");
+  assert.equal(session.get(), before);
+  assert.equal(reports[0]?.failed, true);
+});
+
+test("a refill whose radios all gave no page fails: a waiting slot gets Try Again, and an idle one a log line", async () => {
+  const waiting = savedSession(lettered("vwxyz"));
+  waiting.gate.noRadio = true;
+  await waiting.session.dismiss(waiting.session.get().slots[0]!.key);
+  assert.deepEqual(waiting.session.get().unfilled, [0]);
+  assert.equal(waiting.session.get().error, "refill");
+  assert.deepEqual(
+    waiting.gate.waits.map((wait) => wait.outcome),
+    ["refill failed"],
+  );
+  assert.equal(waiting.gate.refills[0]?.failed, true);
+
+  const idle = savedSession(withSpares("qrstu"));
+  idle.gate.noRadio = true;
+  await idle.session.dismiss(idle.session.get().slots[0]!.key);
+  await nextTurn();
+  assert.equal(idle.gate.refills[0]?.failed, true);
+  assert.equal(idle.session.get().error, null);
+});
+
+test("offline, no page isn't a failure: a refill still ranks Library files by the seeds' artists", async () => {
+  const { session, gate, shown } = savedSession(lettered("vwxyz"), { online: false });
+  gate.noRadio = true;
+  gate.library = [gate.library[0]!, { ...track("mine"), artists: ["Artist seed"] }];
+  await session.dismiss(session.get().slots[0]!.key);
+  assert.equal(gate.refills[0]?.failed, false);
+  assert.equal(session.get().error, null);
+  assert.equal(shown()[0], "mine");
+});
+
+test("with no seed to read a radio for, no page isn't a failure", async () => {
+  const { session, gate } = savedSession(lettered("vwxyz"));
+  gate.seeds = [];
+  gate.noRadio = true;
+  await session.dismiss(session.get().slots[0]!.key);
+  assert.equal(gate.ranks, 1);
+  assert.equal(gate.refills[0]?.failed, false);
+  assert.equal(session.get().error, null);
 });
