@@ -4,9 +4,11 @@ import {
   SUGGESTIONS_SECTION_HEIGHT,
   usePlaylistSuggestionsVisit,
 } from "./PlaylistRecommendations";
+import { useGoToSuggestionsPill } from "./useGoToSuggestionsPill";
 import { IconGripVertical } from "@tabler/icons-react-native";
 import type { LegendListRef } from "@legendapp/list/react-native";
 import {
+  goToSuggestionsPillShown,
   goToSuggestionsScroll,
   moveItem,
   playlistSuggestionsPlace,
@@ -28,6 +30,7 @@ import { View, type AccessibilityActionInfo } from "react-native";
 import { GestureDetector } from "react-native-gesture-handler";
 import Animated, {
   useAnimatedReaction,
+  useDerivedValue,
   useReducedMotion,
   useSharedValue,
 } from "react-native-reanimated";
@@ -317,17 +320,16 @@ export function PlaylistItems({ playlistId, items, header, empty }: Props) {
   const [anchored, setAnchored] = useState(false);
   // Stores: the section and the pill hear where it is without a render of the list.
   const [sectionSight] = useState(() => makeExternalStore<number | null>(null));
-  const [sectionAway] = useState(() => makeExternalStore(false));
+  const [pillWanted] = useState(() => makeExternalStore(false));
   const placeChanged = useCallback(
     (place: ReturnType<typeof playlistSuggestionsPlace>, at: number) => {
       const inSight = place === "inSight";
       setAnchored(inSight);
       sectionSight.set(inSight ? at : null);
-      sectionAway.set(place === "away");
     },
-    [sectionSight, sectionAway],
+    [sectionSight],
   );
-  useAnimatedReaction(
+  const place = useDerivedValue(
     () =>
       playlistSuggestionsPlace({
         top: recommendationsTop.get(),
@@ -335,11 +337,24 @@ export function PlaylistItems({ playlistId, items, header, empty }: Props) {
         listHeight: height.get(),
         bottomInset,
       }),
-    (place, previous) => {
+    [bottomInset],
+  );
+  useAnimatedReaction(
+    () => place.get(),
+    (now, previous) => {
       // Stamped here: the JS thread may be busy when it hears, and its wait is what's measured.
-      if (place !== previous) scheduleOnRN(placeChanged, place, Date.now());
+      if (now !== previous) scheduleOnRN(placeChanged, now, Date.now());
     },
-    [bottomInset, placeChanged],
+    [placeChanged],
+  );
+  const pill = useGoToSuggestionsPill(scrollRef);
+  const setPillWanted = useCallback((wanted: boolean) => pillWanted.set(wanted), [pillWanted]);
+  useAnimatedReaction(
+    () => goToSuggestionsPillShown(pill.phase.get(), place.get()),
+    (now, previous) => {
+      if (now !== previous) scheduleOnRN(setPillWanted, now);
+    },
+    [setPillWanted],
   );
   // Suggestions come from YouTube Music radios: with YT Music off there are none.
   const ytMusic = useYtMusicEnabled();
@@ -360,6 +375,7 @@ export function PlaylistItems({ playlistId, items, header, empty }: Props) {
   const goToSuggestions = () => {
     const handle = list.current;
     if (handle === null) return;
+    pill.tapped();
     const { scroll: from, scrollLength } = handle.getState();
     const going = goToSuggestionsScroll({
       top: suggestionsTop,
@@ -567,7 +583,7 @@ export function PlaylistItems({ playlistId, items, header, empty }: Props) {
         {recommending && drag === null && (
           <GoToSuggestions
             visit={suggestions}
-            away={sectionAway}
+            wanted={pillWanted}
             bottom={bottomInset}
             onPress={goToSuggestions}
           />
