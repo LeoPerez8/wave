@@ -33,6 +33,7 @@ import * as Result from "effect/Result";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Text, useWindowDimensions, View } from "react-native";
 
+import { useListScroll } from "@/lib/useListScroll";
 import { usePositions } from "@/lib/usePositions";
 import { Artwork } from "@/catalog/Artwork";
 import { CELL, grid } from "@/catalog/grid";
@@ -44,6 +45,12 @@ import {
   TrackSkeletons,
 } from "@/catalog/Skeletons";
 import { useChromeInset } from "@/chrome/chrome";
+import {
+  CompactTitleFrame,
+  CompactTitleHead,
+  CompactTitleMark,
+  useCompactTitleList,
+} from "@/components/CompactTitle";
 import { EmptyState } from "@/components/EmptyState";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { TextButton } from "@/components/TextButton";
@@ -83,6 +90,7 @@ import {
   useYtPlaylistDownload,
   type YtListDownloadAction,
 } from "./YtDownloads";
+import { shownYtListHead } from "./ytListHead";
 import type { YtMusic, YtMusicError } from "./YtMusic";
 
 const NO_SONGS: readonly NativeYtSong[] = [];
@@ -395,13 +403,15 @@ function Head({
         {head === undefined ? (
           <HiddenSkeletonLine lineHeight={34} width="70%" />
         ) : (
-          <Text
-            accessibilityRole="header"
-            className="font-sans text-title1 font-light text-foreground"
-            style={{ letterSpacing: -0.4 }}
-          >
-            {head.title}
-          </Text>
+          <CompactTitleMark>
+            <Text
+              accessibilityRole="header"
+              className="font-sans text-title1 font-light text-foreground"
+              style={{ letterSpacing: -0.4 }}
+            >
+              {head.title}
+            </Text>
+          </CompactTitleMark>
         )}
         {head !== undefined && head.line !== "" && (
           <Text className="font-sans text-body font-medium text-secondary">{head.line}</Text>
@@ -442,24 +452,7 @@ function Head({
 /** Skeleton rows for a page's songs while it loads: enough to fill the screen under the head. */
 const PAGE_SKELETON_ROWS = 6;
 
-/**
- * A YT Music album, playlist or Discover mix: its cover, title, maker
- * and furniture, Play / Shuffle, then its songs. Songs the Library has play
- * its files; the rest stream. Offline, or when YouTube fails, a quiet empty
- * state takes the songs' place. While the page loads, still skeletons stand
- * for its detail line, Play / Shuffle and songs. A playlist's songs show page
- * by page, with skeleton rows under them while more come and a line when the
- * rest didn't load; Play, Shuffle and taps play the songs shown.
- */
-export function YtSongList({
-  known,
-  load,
-  context,
-  numbered,
-  albumDownload,
-  findable = false,
-  onRetry,
-}: {
+interface YtSongListProps {
   /** What the tapped cover knew, shown until the page arrives. */
   known: YtListHead | undefined;
   load: YtListLoad;
@@ -479,7 +472,35 @@ export function YtSongList({
   findable?: boolean;
   /** Repeat the existing online page read after a failure. */
   onRetry?: () => void;
-}) {
+}
+
+/**
+ * A YT Music album, playlist or Discover mix: its cover, title, maker
+ * and furniture, Play / Shuffle, then its songs. Songs the Library has play
+ * its files; the rest stream. Offline, or when YouTube fails, a quiet empty
+ * state takes the songs' place. While the page loads, still skeletons stand
+ * for its detail line, Play / Shuffle and songs. A playlist's songs show page
+ * by page, with skeleton rows under them while more come and a line when the
+ * rest didn't load; Play, Shuffle and taps play the songs shown. Its title
+ * shows beside Back once scrolled past.
+ */
+export function YtSongList(props: YtSongListProps) {
+  return (
+    <CompactTitleFrame title={shownYtListHead(props.load, props.known)?.title}>
+      <YtSongListPage {...props} />
+    </CompactTitleFrame>
+  );
+}
+
+function YtSongListPage({
+  known,
+  load,
+  context,
+  numbered,
+  albumDownload,
+  findable = false,
+  onRetry,
+}: YtSongListProps) {
   const { language, strings } = useLocalisation();
   const scrollable = useListScrollable();
   const bottomInset = useChromeInset();
@@ -515,6 +536,8 @@ export function YtSongList({
   const list = useRef<LegendListRef>(null);
   const findInList = useFindInLegendList(list, songs, entryText, findable);
   const { shown } = findInList;
+  const { scrollRef, scroll } = useListScroll(findable ? findInList.initialOffset : 0);
+  useCompactTitleList({ list, find: findable ? findInList : null, scroll });
   // Rows key by song, a real duplicate by its occurrence: a playlist filling in keeps its keys.
   const keys = useMemo(() => occurrenceKeys(songs, discoverTrackId), [songs]);
   const keyOf = useCallback((song: Song) => keys.get(song) ?? discoverTrackId(song), [keys]);
@@ -530,7 +553,7 @@ export function YtSongList({
     [numbered, places],
   );
   const rowSelection = useMemo(() => songSelection(selection, listedTrackItem), [selection]);
-  const head = page?.head ?? known;
+  const head = shownYtListHead(load, known);
   const loading = load.status === "loading";
   // More of a playlist's pages on their way.
   const reading = load.status === "loaded" && load.rest === "reading";
@@ -582,10 +605,13 @@ export function YtSongList({
       <ScreenHeader />
       <FindFrame find={findInList}>
         <SongList
+          animated
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
           scrollEnabled={scrollable}
+          scrollEventThrottle={16}
           ref={list}
+          refScrollView={scrollRef}
           className="flex-1"
           data={shown}
           keyExtractor={keyOf}
@@ -603,12 +629,14 @@ export function YtSongList({
           }}
           initialScrollOffset={findable ? findInList.initialOffset : undefined}
           ListHeaderComponent={
-            findable ? (
-              // Pages still on their way may hold matches: no "No songs match" until they're all in.
-              <FindHead find={findInList} header={pageHead} allRead={!reading} />
-            ) : (
-              pageHead
-            )
+            <CompactTitleHead>
+              {findable ? (
+                // Pages still on their way may hold matches: no "No songs match" until they're all in.
+                <FindHead find={findInList} header={pageHead} allRead={!reading} />
+              ) : (
+                pageHead
+              )}
+            </CompactTitleHead>
           }
           ListFooterComponent={
             loading ? (
