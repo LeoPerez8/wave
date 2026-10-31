@@ -7,6 +7,7 @@ import { useAnimatedStyle, useSharedValue, type SharedValue } from "react-native
 import { scheduleOnRN } from "react-native-worklets";
 
 import { CELL, grid } from "@/catalog/grid";
+import { handleHold } from "@/motion/handleHold";
 import { useThemeColor } from "@/theme/useThemeColor";
 
 /**
@@ -178,7 +179,7 @@ export const useReorderRow = <Id,>({
   const handle = usePanGesture(
     useMemo(
       () => ({
-        minDistance: 0,
+        ...handleHold,
         onActivate: () => {
           "worklet";
           travel.set(0);
