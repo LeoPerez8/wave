@@ -97,7 +97,7 @@ const FOLLOWED_FINDER =
   "Once per shared Library query version while this visible page or menu follows it; unchanged renders reuse the finder.";
 
 export const WHOLE_LIBRARY: Record<string, WholeLibraryException> = {
-  "library/playlistSuggestionsVisit.ts#createPlaylistSuggestionsVisit": {
+  "library/playlistSuggestionsVisit.ts#openPlaylistSuggestionsVisit": {
     howOften:
       "Once per settled visible playlist visit, whether or not the section ever mounts; source edits coalesce into one refresh, never while hidden.",
     reason:

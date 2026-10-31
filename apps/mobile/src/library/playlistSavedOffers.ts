@@ -25,10 +25,50 @@ export interface SavedOffers {
   readonly rows: ReadonlyMap<string, SongRow>;
 }
 
+type Check = (value: unknown) => boolean;
+const isNumber: Check = (value) => typeof value === "number";
+const isString: Check = (value) => typeof value === "string";
+const orNull =
+  (check: Check): Check =>
+  (value) =>
+    value === null || check(value);
+
+/**
+ * Each field a row must hold. A field added to `SongRow` doesn't compile until it's
+ * checked here, so a row saved before it reads as not saved: no version to remember.
+ * The id is checked against its offer's.
+ */
+const ROW_FIELDS: { readonly [Field in keyof SongRow]-?: Check } = {
+  id: () => true,
+  path: orNull(isString),
+  title: isString,
+  artist: isString,
+  album: isString,
+  durationMs: isNumber,
+  thumbPath: orNull(isString),
+  artworkPath: orNull(isString),
+  titleSort: isString,
+  artistSort: isString,
+  albumSort: isString,
+  addedAt: isNumber,
+  albumId: isNumber,
+  artistId: isNumber,
+  artistIds: (value) => Array.isArray(value) && value.every(isNumber),
+  discNumber: orNull(isNumber),
+  trackNumber: orNull(isNumber),
+  year: orNull(isNumber),
+  genre: orNull(isString),
+  hasLyrics: (value) => typeof value === "boolean",
+  explicit: (value) => value === "explicit" || value === "clean" || value === "unknown",
+};
+const ROW_CHECKS = Object.entries(ROW_FIELDS);
+
 const isRowOf = (track: PlaylistRecommendationTrack, row: unknown): row is SongRow => {
   if (typeof row !== "object" || row === null) return false;
-  const { id, title } = row as { readonly id?: unknown; readonly title?: unknown };
-  return String(id) === track.id && typeof title === "string";
+  const fields = row as Readonly<Record<string, unknown>>;
+  return (
+    String(fields["id"]) === track.id && ROW_CHECKS.every(([name, check]) => check(fields[name]))
+  );
 };
 
 /** Playlist [playlistId]'s saved offers; a Library offer without its row can't be listed. */

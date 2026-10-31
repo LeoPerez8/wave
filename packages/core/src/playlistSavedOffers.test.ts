@@ -125,11 +125,38 @@ test("a Library offer is gone once its file is, but not while the Library isn't 
 });
 
 test("an offer is held by a playlist's entries by Library id or video id", () => {
-  const held = playlistOfferHeld([{ id: "7" }, { videoId: "v1" }, { videoId: "" }]);
-  assert.equal(held(track("7")), true);
-  assert.equal(held(track("yt:v1", { source: "stream", videoId: "v1" })), true);
-  assert.equal(held(track("8", { videoId: "v1" })), true);
-  assert.equal(held(track("9")), false, "an offer without a video id matches no entry by it");
+  const library = track("7");
+  const stream = track("yt:v1", { source: "stream", videoId: "v1" });
+  const sameVideo = track("8", { videoId: "v1" });
+  const elsewhere = track("9");
+  const held = playlistOfferHeld(
+    [library, stream, sameVideo, elsewhere],
+    [{ id: "7" }, { videoId: "v1" }, { videoId: "" }, {}],
+    (entry: { id?: string }) => entry.id,
+    (entry: { videoId?: string }) => entry.videoId,
+  );
+  assert.equal(held(library), true);
+  assert.equal(held(stream), true);
+  assert.equal(held(sameVideo), true);
+  assert.equal(held(elsewhere), false, "an offer without a video id matches no entry by it");
+});
+
+test("checking offers reads each entry's ids once and keeps no copy of the entries", () => {
+  let reads = 0;
+  const entries = Array.from({ length: 1000 }, (_, id) => id);
+  const held = playlistOfferHeld(
+    [track("999")],
+    entries,
+    (entry) => {
+      reads++;
+      return String(entry);
+    },
+    () => undefined,
+  );
+  assert.equal(reads, 1000);
+  assert.equal(held(track("999")), true);
+  assert.equal(held(track("5")), false, "only the offers asked about are known");
+  assert.equal(reads, 1000);
 });
 
 test("saved offers and each's row read back as they were stored", () => {
@@ -148,6 +175,13 @@ test("unreadable saved offers count as nothing saved", () => {
 test("an offer that can't be read drops alone", () => {
   const good = { track: track("a") };
   const text = JSON.stringify([good, { track: { ...track("b"), artists: "x" } }]);
+  assert.deepEqual(parseSavedPlaylistOffers(text), [good]);
+});
+
+test("an offer saved without a field every track now has drops alone", () => {
+  const good = { track: track("a") };
+  const { durationMs: _gone, ...older } = track("b");
+  const text = JSON.stringify([good, { track: older }]);
   assert.deepEqual(parseSavedPlaylistOffers(text), [good]);
 });
 

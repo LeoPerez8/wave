@@ -372,11 +372,18 @@ export const playlistRecommendationSession = (options: {
     },
     /** Whether a renewal is running behind the offers, or was held off and hasn't run. */
     renewalOwed: () => renewalPending || behind !== undefined,
+    /** The offers showing and those saved: all `leave` could take out. */
+    offers: (): readonly PlaylistRecommendationTrack[] => [...held(), ...savedOffers],
     /**
      * [gone] offers left outside the suggestions (the playlist now holds them): each
      * showing one's slot takes a saved spare at once, else a refill. The others stay.
+     * With [read] false nothing may read yet (the screen hasn't settled): a slot with no
+     * spare keeps its placeholder for the next renewal, or an action's refill.
      */
-    leave: (gone: (offer: PlaylistRecommendationTrack) => boolean): void => {
+    leave: (
+      gone: (offer: PlaylistRecommendationTrack) => boolean,
+      { read = true }: { readonly read?: boolean } = {},
+    ): void => {
       if (disposed) return;
       if (savedOffers.some(gone)) saveOffers(savedOffers.filter((offer) => !gone(offer)));
       const slots = [...state.slots];
@@ -400,6 +407,10 @@ export const playlistRecommendationSession = (options: {
       }
       publish({ slots, pendingSlots: [...state.pendingSlots, ...unspared] });
       if (unspared.length === 0) return;
+      if (!read) {
+        waiting.push(...unspared);
+        return;
+      }
       holdRenewal();
       void replace(unspared, "free");
     },
@@ -416,6 +427,7 @@ export const playlistRecommendationSession = (options: {
      * first, a failure is only reported, and it fills only empty slots and those whose
      * offer its read says is gone, refreshing the tags of the others in place. With none,
      * it shows its loading, offers or failure.
+     * Slots that waited for it (`leave`) go with a failure, leaving the list.
      * [refillOnly] retries the slots whose replacement failed, alongside any running
      * actions. [turn], the host's turn a full renewal reads on, once it shows it's
      * loading; a renewal whose asker has already waited for its turn (the playlist
@@ -514,12 +526,13 @@ export const playlistRecommendationSession = (options: {
             { online: input.sources.online ?? true },
           ),
         );
+        const waited = waiting.splice(0);
         const slots = Array.from(
           { length: PLAYLIST_SHOWN_OFFERS },
           (_, index): PlaylistRecommendationSlot | null => state.slots[index] ?? null,
         );
         // With nothing showing, the section's loading ends whatever this finds.
-        let changed = !showing || state.unfilled.length > 0;
+        let changed = !showing || state.unfilled.length > 0 || waited.length > 0;
         const reread = latestTracks(slots, ranked, input.sources.library);
         for (const [index, offer] of slots.entries()) {
           if (offer === null) continue;
@@ -548,12 +561,15 @@ export const playlistRecommendationSession = (options: {
         if (changed)
           publish({
             slots,
+            pendingSlots: pendingSlotsBut(waited),
             unfilled: [],
             error: state.error === "refill" ? null : state.error,
           });
         timed(false);
       } catch {
         if (current()) {
+          const waited = waiting.splice(0);
+          if (waited.length > 0) publish({ pendingSlots: pendingSlotsBut(waited) });
           if (!showing) publish({ error: "load" });
           timed(true);
         }

@@ -42,7 +42,13 @@ let nextOffer = 0;
 /** Fewer eligible suggestions left than this, and a refill reads the radios' next pages. */
 const LOW = 10;
 
-export const createPlaylistSuggestionsVisit = (playlistId: number) => {
+const entryLibraryId = (entry: PlaylistEntryRow) =>
+  entry.source === "library" ? String(entry.track.id) : undefined;
+const entryVideoId = (entry: PlaylistEntryRow) =>
+  entry.source === "stream" ? entry.song.videoId : undefined;
+
+/** The visit proper, from the first moment its section is wanted; [openingAt], the playlist's opening. */
+const openPlaylistSuggestionsVisit = (playlistId: number, openingAt: number) => {
   const announcingAcceptance = makeExternalStore(false);
   // What a tapped slot's placeholder says until its action ends ("Adding Song"), by slot;
   // any other placeholder is loading a replacement.
@@ -59,10 +65,12 @@ export const createPlaylistSuggestionsVisit = (playlistId: number) => {
     report: (timing) => appLog("info", "WaveTiming", playlistSuggestionsSightLine(timing)),
   });
   // The first renewal is the one opening the playlist asked for; its line counts from here.
-  let openedAt: number | undefined = performance.now();
+  let openedAt: number | undefined = openingAt;
   // This visit's radio readers: each radio's live first page is read once a visit.
   const visitId = `playlist:${playlistId}:${Date.now().toString(36)}-${++nextOffer}`;
   let remaining = Number.POSITIVE_INFINITY;
+  // Nothing reads before the screen has settled, not even a slot's refill: the renewal fills it.
+  let settled = false;
   const rowOf = (id: string) =>
     latestRows.get().get(id) ?? libraryRows.get().get(id) ?? savedRows.get(id);
   const session = playlistRecommendationSession({
@@ -222,17 +230,11 @@ export const createPlaylistSuggestionsVisit = (playlistId: number) => {
      * slot fills. Other recordings of the song leave once a renewal's read has found them.
      */
     playlistRead: (items: readonly PlaylistEntryRow[]): void => {
-      session.leave(
-        playlistOfferHeld(
-          items.map((entry) =>
-            entry.source === "library"
-              ? { id: String(entry.track.id) }
-              : entry.source === "stream"
-                ? { videoId: entry.song.videoId }
-                : {},
-          ),
-        ),
-      );
+      const offers = session.offers();
+      if (offers.length === 0) return;
+      session.leave(playlistOfferHeld(offers, items, entryLibraryId, entryVideoId), {
+        read: settled,
+      });
     },
     /**
      * Loads while [screen] is in sight and the section is [wanted]; the section's
@@ -255,7 +257,9 @@ export const createPlaylistSuggestionsVisit = (playlistId: number) => {
         sight,
         start: (signal) => {
           sightWatch.waiting("settle");
-          return appRuntime.runPromise(settledTurnEffect, { signal });
+          return appRuntime.runPromise(settledTurnEffect, { signal }).then(() => {
+            settled = true;
+          });
         },
         // The visit follows the write's cause (#599): source changes revalidate even when
         // playlist IDs stay the same, once the playlist is in sight and settled. Catalog writes
@@ -278,6 +282,45 @@ export const createPlaylistSuggestionsVisit = (playlistId: number) => {
         following.dispose();
         stopList();
         stopSight();
+      };
+    },
+  };
+};
+
+/**
+ * A playlist visit's suggestions, costing nothing until they're wanted: its saved offers are
+ * read, and its session made, the first time something asks for them or its section is wanted.
+ * With YT Music off, or Find or selection open throughout, that's never.
+ */
+export const createPlaylistSuggestionsVisit = (playlistId: number) => {
+  const openingAt = performance.now();
+  let opened: ReturnType<typeof openPlaylistSuggestionsVisit> | undefined;
+  const open = () => (opened ??= openPlaylistSuggestionsVisit(playlistId, openingAt));
+  return {
+    get session() {
+      return open().session;
+    },
+    get libraryRows() {
+      return open().libraryRows;
+    },
+    get busyLabels() {
+      return open().busyLabels;
+    },
+    playlistRead: (items: readonly PlaylistEntryRow[]): void => open().playlistRead(items),
+    /** See the visit's own; while [wanted] hasn't held yet, it only waits for it. */
+    follow: (
+      screen: ScreenSight,
+      wanted: Pick<ExternalStore<boolean>, "get" | "subscribe">,
+      sectionSight: Pick<ExternalStore<number | null>, "get" | "subscribe">,
+    ): (() => void) => {
+      if (wanted.get()) return open().follow(screen, wanted, sectionSight);
+      let stop: (() => void) | undefined;
+      const stopWaiting = wanted.subscribe(() => {
+        if (wanted.get()) stop ??= open().follow(screen, wanted, sectionSight);
+      });
+      return () => {
+        stopWaiting();
+        stop?.();
       };
     },
   };

@@ -11,6 +11,7 @@ import {
   type PlaylistRecommendationSources,
   type PlaylistRecommendationTrack,
 } from "./playlistRecommendations.ts";
+import type { YtAlbumSong } from "./ytDiscover.ts";
 
 /** How many offers a playlist saves: the five it shows, and spares for those that leave. */
 export const PLAYLIST_SAVED_OFFERS = 10;
@@ -117,20 +118,29 @@ export const playlistOfferGone = (
   finishSteps(playlistOfferGoneSteps(playlist, sources));
 
 /**
- * Whether an offer is one of a playlist's [entries], by Library id or video id: cheap
- * enough for when they've just been read. Another recording of it waits for
- * `playlistOfferGone`, whose index a long playlist needs turns for.
+ * Which of [offers] are among a playlist's [entries], by Library id or video id: cheap
+ * enough for when they've just been read, on a playlist of thousands. It walks the entries
+ * once, copying none of them, and knows only [offers]. Another recording of an offer waits
+ * for `playlistOfferGone`, whose index a long playlist needs turns for.
  */
-export const playlistOfferHeld = (
-  entries: readonly { readonly id?: string; readonly videoId?: string }[],
+export const playlistOfferHeld = <Entry>(
+  offers: readonly PlaylistRecommendationTrack[],
+  entries: readonly Entry[],
+  idOf: (entry: Entry) => string | undefined,
+  videoIdOf: (entry: Entry) => string | undefined,
 ): ((offer: PlaylistRecommendationTrack) => boolean) => {
-  const ids = new Set<string>();
-  const videos = new Set<string>();
-  for (const { id, videoId } of entries) {
-    if (id !== undefined) ids.add(id);
-    if (videoId !== undefined && videoId !== "") videos.add(videoId);
+  const ids = new Set(offers.map((offer) => offer.id));
+  const videos = new Set(offers.map((offer) => offer.videoId));
+  videos.delete("");
+  const heldIds = new Set<string>();
+  const heldVideos = new Set<string>();
+  for (const entry of entries) {
+    const id = idOf(entry);
+    if (id !== undefined && ids.has(id)) heldIds.add(id);
+    const videoId = videoIdOf(entry);
+    if (videoId !== undefined && videos.has(videoId)) heldVideos.add(videoId);
   }
-  return (offer) => ids.has(offer.id) || videos.has(offer.videoId);
+  return (offer) => heldIds.has(offer.id) || heldVideos.has(offer.videoId);
 };
 
 /**
@@ -146,19 +156,38 @@ export interface SavedPlaylistOffer {
 export const storedSavedPlaylistOffers = (offers: readonly SavedPlaylistOffer[]): string =>
   JSON.stringify(offers);
 
-const isStrings = (value: unknown): boolean =>
-  Array.isArray(value) && value.every((item) => typeof item === "string");
+type Check = (value: unknown) => boolean;
+const isString: Check = (value) => typeof value === "string";
+const orNull =
+  (check: Check): Check =>
+  (value) =>
+    value === null || check(value);
+
+/**
+ * Each field a saved track must hold. One added to `YtAlbumSong` doesn't compile until
+ * it's checked here, so a track saved before it reads as not saved.
+ */
+const TRACK_FIELDS: { readonly [Field in keyof YtAlbumSong]-?: Check } & {
+  readonly id: Check;
+  readonly source: Check;
+} = {
+  id: isString,
+  source: (value) => value === "library" || value === "stream",
+  videoId: isString,
+  title: isString,
+  artists: (value) => Array.isArray(value) && value.every(isString),
+  album: orNull(isString),
+  albumId: orNull(isString),
+  durationMs: orNull((value) => typeof value === "number"),
+  artworkUrl: orNull(isString),
+  explicit: (value) => typeof value === "boolean",
+};
+const TRACK_CHECKS = Object.entries(TRACK_FIELDS);
 
 const isTrack = (value: unknown): value is PlaylistRecommendationTrack => {
   if (typeof value !== "object" || value === null) return false;
-  const track = value as Record<string, unknown>;
-  return (
-    typeof track["id"] === "string" &&
-    (track["source"] === "library" || track["source"] === "stream") &&
-    typeof track["videoId"] === "string" &&
-    typeof track["title"] === "string" &&
-    isStrings(track["artists"])
-  );
+  const track = value as Readonly<Record<string, unknown>>;
+  return TRACK_CHECKS.every(([name, check]) => check(track[name]));
 };
 
 /** The offers [text] stored; anything unreadable reads as not saved. */

@@ -16,6 +16,7 @@ const app = {
   lines: [] as string[],
   online: true,
   stored: new Map<string, string>(),
+  storageReads: 0,
   letters: "abcdefghijkl",
   radio: "abcdefghijkl",
   playlist: ["seed"],
@@ -29,6 +30,10 @@ const boundary = `data:text/javascript,${encodeURIComponent(`
   const app = globalThis.playlistVisitApp;
   const song = (id) => ({ id, source: "library", videoId: "", title: app.retitled.get(id) ?? id, artists: ["Artist " + id],
     album: null, albumId: null, durationMs: 180000, artworkUrl: null, explicit: false, genre: "Rock" });
+  const row = (id) => ({ id, path: "/" + id, title: app.retitled.get(id) ?? id, artist: "Artist " + id, album: "",
+    durationMs: 180000, thumbPath: null, artworkPath: null, titleSort: id, artistSort: id, albumSort: id,
+    addedAt: 0, albumId: 1, artistId: 1, artistIds: [1], discNumber: null, trackNumber: null, year: null,
+    genre: "Rock", hasLyrics: false, explicit: "unknown" });
   const seed = song("seed");
   const libraryNow = () => [seed, ...app.letters.split("").map(song)];
   export class LibraryStore extends Context.Service()("test/LibraryStore") {}
@@ -40,7 +45,7 @@ const boundary = `data:text/javascript,${encodeURIComponent(`
     }),
   };
   export const Storage = {
-    getItemSync: (key) => app.stored.get(key) ?? null,
+    getItemSync: (key) => { app.storageReads++; return app.stored.get(key) ?? null; },
     setItemSync: (key, value) => { app.stored.set(key, value); },
     removeItemSync: (key) => app.stored.delete(key),
   };
@@ -74,7 +79,7 @@ const boundary = `data:text/javascript,${encodeURIComponent(`
         return {
           playlist: app.playlist.map(song),
           library,
-          songById: new Map(library.map((row) => [row.id, row])),
+          songById: new Map(library.map(({ id }) => [id, row(id)])),
         };
       }),
   });
@@ -142,6 +147,7 @@ const reset = () => {
   app.lines = [];
   app.online = true;
   app.stored = new Map();
+  app.storageReads = 0;
   app.letters = "abcdefghijkl";
   app.radio = "abcdefghijkl";
   app.playlist = ["seed"];
@@ -349,6 +355,74 @@ test("a song the playlist now holds leaves the first read of its entries, with n
   assert.equal(offerIds(opened().visit).includes("c"), false);
 });
 
+test("a song the playlist holds, with no spare to take its slot, reads nothing before settling", async () => {
+  reset();
+  app.radio = "abcde";
+  await visited();
+  app.reads = 0;
+  app.radio = "fghij";
+  const settled = Promise.withResolvers<void>();
+  app.settle = () => settled.promise;
+  const { visit, screen, wanted, sectionSight } = opened();
+  const held = (id: string) => ({ source: "library", track: { id } }) as never;
+  // The list's first commit with its entries already read: the layout effect before follow's.
+  visit.playlistRead([held("c")]);
+  const stop = visit.follow(screen, wanted, sectionSight);
+  await settledFrames();
+  assert.equal(app.reads, 0);
+  assert.deepEqual(visit.session.get().pendingSlots, [2]);
+  settled.resolve();
+  await settledFrames();
+  assert.equal(app.reads, 1, "the opening's renewal fills the slot, on its one read");
+  assert.deepEqual(visit.session.get().pendingSlots, []);
+  assert.deepEqual(offerIds(visit), ["a", "b", "f", "d", "e"]);
+  stop();
+});
+
+test("opening reads nothing saved until the section is wanted, then shows it at once", async () => {
+  reset();
+  await visited();
+  app.reads = 0;
+  app.storageReads = 0;
+  const { visit, screen, wanted, sectionSight } = opened();
+  wanted.set(false);
+  const stop = visit.follow(screen, wanted, sectionSight);
+  await settledFrames();
+  assert.equal(app.storageReads, 0, "YT Music off, Find or selecting costs no saved read");
+  wanted.set(true);
+  assert.equal(app.storageReads, 1);
+  assert.deepEqual(offerIds(visit), ["a", "b", "c", "d", "e"]);
+  assert.equal(visit.session.get().loading, false);
+  await settledFrames();
+  assert.equal(app.reads, 1);
+  stop();
+});
+
+test("the visit's saved read happens once, whatever asks first", async () => {
+  reset();
+  await visited();
+  app.storageReads = 0;
+  const { visit, screen, wanted, sectionSight } = opened();
+  assert.equal(app.storageReads, 0, "creating the visit reads nothing");
+  visit.session.get();
+  visit.playlistRead([]);
+  const stop = visit.follow(screen, wanted, sectionSight);
+  assert.equal(app.storageReads, 1);
+  stop();
+});
+
+test("with no offers to check, the playlist's entries aren't walked", () => {
+  reset();
+  const { visit } = opened();
+  const untouchable = new Proxy([], {
+    get: () => {
+      throw new Error("walked the entries");
+    },
+  });
+  visit.playlistRead(untouchable);
+  assert.equal(visit.session.get().slots.length, 0);
+});
+
 test("a failed renewal over saved offers logs a line and shows nothing", async () => {
   reset();
   await visited();
@@ -400,6 +474,23 @@ test("a saved Library offer without a readable row isn't shown", async () => {
   assert.deepEqual(offerIds(opened().visit), []);
 });
 
+test("a saved row an older version wrote, without a field rows now have, isn't shown", async () => {
+  reset();
+  await visited();
+  for (const [key, text] of app.stored)
+    if (text.startsWith("[{"))
+      app.stored.set(
+        key,
+        JSON.stringify(
+          JSON.parse(text).map((offer: { track: { id: string }; row: { hasLyrics?: boolean } }) => {
+            if (offer.track.id === "b") delete offer.row.hasLyrics;
+            return offer;
+          }),
+        ),
+      );
+  assert.deepEqual(offerIds(opened().visit), ["a", "c", "d", "e", "f"]);
+});
+
 test("saved offers keep the latest 200 playlists and drop the rest from the phone", async () => {
   reset();
   for (let id = 1; id <= 201; id++) {
@@ -440,7 +531,29 @@ test("offline, saved streamed offers stay hidden, and back online they show agai
     artworkUrl: null,
     explicit: false,
   });
-  const row = (id: string) => ({ id, title: id });
+  const row = (id: string) => ({
+    id,
+    path: `/${id}`,
+    title: id,
+    artist: id,
+    album: "",
+    durationMs: 180000,
+    thumbPath: null,
+    artworkPath: null,
+    titleSort: id,
+    artistSort: id,
+    albumSort: id,
+    addedAt: 0,
+    albumId: 1,
+    artistId: 1,
+    artistIds: [1],
+    discNumber: null,
+    trackNumber: null,
+    year: null,
+    genre: null,
+    hasLyrics: false,
+    explicit: "unknown",
+  });
   const library = (id: string) => ({ ...stream(id), id, source: "library", videoId: "" });
   app.stored.set(
     "playlistSuggestions.savedOffers.7",
