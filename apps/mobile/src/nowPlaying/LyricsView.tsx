@@ -67,7 +67,7 @@ import {
 import type { LibraryFile } from "./hooks";
 import { isPlayheadLive, playhead, playheadVisibility } from "./playhead";
 import { TrackHeader } from "./TrackHeader";
-import { useGenius } from "./useGenius";
+import { useGenius, type GeniusAboutText } from "./useGenius";
 import { useLibraryLyrics, type LibraryLyricsShown } from "./useLibraryLyrics";
 import { useLyricsTranslation, type TranslationShown } from "./useLyricsTranslation";
 import { useNonDLyrics, type NonDLyricsShown } from "./useNonDLyrics";
@@ -346,7 +346,7 @@ function SyncedLyrics({
   picking: Picking | null;
   translation: TranslationShown | null;
   retryTranslation: () => void;
-  about: string | null;
+  about: GeniusAboutText | null;
   annotations: GeniusPlacement | null;
 }) {
   useRenderCount("SyncedLyrics");
@@ -493,7 +493,7 @@ function SyncedLyrics({
       contentContainerStyle={{ paddingTop: CELL * 2, paddingBottom: height * (1 - ANCHOR) }}
     >
       {/* Above the lines, so their offsets (where they rest) count them in. */}
-      <GeniusAbout key={about} description={about} />
+      <GeniusAbout key={about?.original} about={about} />
       <TranslationNote shown={translation} retry={retryTranslation} />
       {lines.map((line, at) => (
         <SyncedLine
@@ -536,7 +536,7 @@ function UnsyncedLyrics({
   picking: Picking | null;
   translation: TranslationShown | null;
   retryTranslation: () => void;
-  about: string | null;
+  about: GeniusAboutText | null;
   annotations: GeniusPlacement | null;
 }) {
   const { strings } = useLocalisation();
@@ -547,7 +547,7 @@ function UnsyncedLyrics({
       showsVerticalScrollIndicator={false}
       contentContainerStyle={{ paddingTop: CELL * 2, paddingBottom: CELL * 6 }}
     >
-      <GeniusAbout key={about} description={about} />
+      <GeniusAbout key={about?.original} about={about} />
       <TranslationNote shown={translation} retry={retryTranslation} />
       {lines.map((line, at) => {
         if (line === "") {
@@ -706,7 +706,7 @@ function LyricsBody({
   retry: () => void;
   translation: TranslationShown | null;
   retryTranslation: () => void;
-  about: string | null;
+  about: GeniusAboutText | null;
   annotations: GeniusPlacement | null;
 }) {
   const { strings } = useLocalisation();
@@ -967,7 +967,7 @@ export function LyricsView({
         retry={nonD.shown === null ? library.retry : nonD.retry}
         translation={translation.shown}
         retryTranslation={translation.retry}
-        about={genius?.description ?? null}
+        about={genius?.about ?? null}
         annotations={annotations}
       />
     </View>

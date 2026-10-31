@@ -608,7 +608,7 @@ export const OPENING_REQUESTS: Record<string, Exception> = {
   "nowPlaying/useGenius.ts#useGenius": {
     kind: "gesture",
     reason:
-      "Genius is asked only in the explicitly selected Lyrics view showing lyrics, with Genius insights on, and only while Now Playing is visible. Each sheet opening starts on player; api.genius.com is outside the three guarded hosts.",
+      "Genius is asked only in the explicitly selected Lyrics view showing lyrics, with Genius insights on, and only while Now Playing is visible. Each sheet opening starts on player; api.genius.com and Google Translate are outside the three guarded hosts.",
   },
   "nowPlaying/useLyricsTranslation.ts#useLyricsTranslation": {
     kind: "gesture",
