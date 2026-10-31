@@ -9,6 +9,7 @@ import { Text, useWindowDimensions, View } from "react-native";
 import { CELL, grid } from "@/catalog/grid";
 import { Mosaic } from "@/catalog/Mosaic";
 import { PlayShuffle } from "@/catalog/PlayShuffle";
+import { CompactTitleMark } from "@/components/CompactTitle";
 import { IconButton } from "@/components/IconButton";
 import { useRenderCount } from "@/perf/perf";
 import { openPlaylistActions } from "@/playback/ActionsMenu";
@@ -88,13 +89,15 @@ function PlaylistHead({ shown }: { shown: Shown }) {
         <ImportCoverRing playlistId={playlist.id} cover={cover} />
       </View>
       <View style={{ gap: CELL / 2 }}>
-        <Text
-          accessibilityRole="header"
-          className="font-sans text-title1 font-light text-foreground"
-          style={{ letterSpacing: -0.4 }}
-        >
-          {playlist.name}
-        </Text>
+        <CompactTitleMark>
+          <Text
+            accessibilityRole="header"
+            className="font-sans text-title1 font-light text-foreground"
+            style={{ letterSpacing: -0.4 }}
+          >
+            {playlist.name}
+          </Text>
+        </CompactTitleMark>
         <Text
           className="font-sans text-footnote text-secondary"
           style={{ fontVariant: ["tabular-nums"] }}
@@ -164,7 +167,12 @@ export default function PlaylistScreen() {
   const shown: Shown | null | undefined =
     detail === undefined && known !== undefined ? { playlist: known, items: undefined } : detail;
   return (
-    <DetailFrame detail={shown} noun="playlist" goneMessage={strings.playlists.deleted}>
+    <DetailFrame
+      detail={shown}
+      noun="playlist"
+      compactTitle={({ playlist }) => playlist.name}
+      goneMessage={strings.playlists.deleted}
+    >
       {({ playlist, items }) => (
         <PlaylistItems
           key={playlist.id}

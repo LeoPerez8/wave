@@ -83,7 +83,7 @@ export const goToSuggestionsOffered = (
   state.slots.some((slot) => slot !== null);
 
 /** The travel an animated scroll covers without sweeping past blank rows, in list heights. */
-const ANIMATED_SCREENS = 2;
+export const ANIMATED_SCREENS = 2;
 
 /**
  * Where a tap takes the list, the section's [top] at the list's top (the list

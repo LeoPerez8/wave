@@ -114,6 +114,7 @@ export const libraryPtBr: typeof libraryEn = {
   },
   alphabetIndex: "Índice alfabético",
   alphabetHint: "Deslize para cima ou para baixo para ir a uma letra",
+  compactTitleHint: "Volta ao topo",
   selected: (count: number): string =>
     plural("pt-BR", count, {
       zero: `${n(count)} selecionadas`,
