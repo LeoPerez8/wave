@@ -10,6 +10,7 @@ import {
   playlistOffersToSave,
   playlistOffersToShow,
   playlistOffersWithout,
+  playlistOffersWithSpares,
   storedPlaylistOfferOrder,
   storedSavedPlaylistOffers,
   type PlaylistRecommendationTrack,
@@ -210,4 +211,15 @@ test("the latest 200 playlists keep their saved offers", () => {
 test("an unreadable order reads as none", () => {
   for (const text of [null, "not json", "{}", '["a"]'])
     assert.deepEqual(parsePlaylistOfferOrder(text), [], String(text));
+});
+
+test("spares from a later radio go after what's saved, with no second recording and at most 20", () => {
+  const saved = [track("a"), track("b")];
+  assert.deepEqual(
+    playlistOffersWithSpares(saved, [track("b"), track("c")]).map((offer) => offer.id),
+    ["a", "b", "c"],
+  );
+  assert.equal(playlistOffersWithSpares(saved, [track("a")]), saved);
+  const full = Array.from({ length: 20 }, (_, index) => track(`t${index}`));
+  assert.equal(playlistOffersWithSpares(full, [track("c")]), full);
 });

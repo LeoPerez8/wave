@@ -48,6 +48,23 @@ export const playlistOffersToSave = (
   });
 };
 
+/**
+ * [saved] with what a refill or a later radio ranked after it: those kept stay first and in
+ * their order, no recording is saved twice, and no more than a playlist saves. With no room,
+ * or nothing new, [saved] itself comes back.
+ */
+export const playlistOffersWithSpares = (
+  saved: readonly PlaylistRecommendationTrack[],
+  ranked: readonly PlaylistRecommendationTrack[],
+): readonly PlaylistRecommendationTrack[] => {
+  const next = [...saved];
+  for (const offer of ranked) {
+    if (next.length === PLAYLIST_SAVED_OFFERS) break;
+    if (playlistRecordingMatch(next)(offer) === null) next.push(offer);
+  }
+  return next.length === saved.length ? saved : next;
+};
+
 /** Whether a visit may show saved [offer]: a song with a file and, offline, not a streamed one. */
 const showable = (offer: PlaylistRecommendationTrack, online: boolean) =>
   offer.available !== false && (online || offer.source !== "stream");
@@ -80,18 +97,6 @@ export const playlistSpareCount = (
   shown: readonly PlaylistRecommendationTrack[],
   { online }: { readonly online: boolean },
 ): number => playlistOffersWithout(saved, shown).filter((offer) => showable(offer, online)).length;
-
-/**
- * [saved] with what a refill ranked after it: those kept stay first and in their order, and
- * no recording is saved twice. With no room, or nothing new, [saved] itself comes back.
- */
-export const playlistOffersWithSpares = (
-  saved: readonly PlaylistRecommendationTrack[],
-  ranked: readonly PlaylistRecommendationTrack[],
-): readonly PlaylistRecommendationTrack[] => {
-  const added = playlistOffersWithout(ranked, saved).slice(0, PLAYLIST_SAVED_OFFERS - saved.length);
-  return added.length === 0 ? saved : [...saved, ...added];
-};
 
 /** [saved] without [songs], any recording of them: they were added, dismissed or left. */
 export const playlistOffersWithout = (

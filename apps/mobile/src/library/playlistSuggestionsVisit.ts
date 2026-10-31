@@ -78,6 +78,31 @@ const openPlaylistSuggestionsVisit = (playlistId: number, openingAt: number) => 
   let settled = false;
   const rowOf = (id: string) =>
     latestRows.get().get(id) ?? libraryRows.get().get(id) ?? savedRows.get(id);
+  // By the read's Library, so the rows go when the read does.
+  const rowsOfRead = new WeakMap<object, ReadonlyMap<string, SongRow>>();
+  const readSources = Effect.gen(function* () {
+    const input = yield* playlistRecommendationInput(playlistId);
+    const graph = yield* playlistRecommendationGraph;
+    // Source rows are retained for the five visible offers only, never a copy of the Library.
+    latestRows.set(input.songById);
+    rowsOfRead.set(input.library, input.songById);
+    const seeds = playlistSuggestionSeeds(playlistId, input.playlist);
+    const online = phoneOnline();
+    return {
+      input: {
+        playlist: input.playlist,
+        sources: {
+          ...input,
+          pages: [],
+          seeds,
+          graph,
+          profileOf: lookedUpProfileOf,
+          online,
+        },
+      },
+      when: { online, low: remaining < LOW },
+    };
+  });
   const session = playlistRecommendationSession({
     saved: {
       offers: saved.tracks,
@@ -102,27 +127,27 @@ const openPlaylistSuggestionsVisit = (playlistId: number, openingAt: number) => 
       sightWatch.waiting("read");
       return appRuntime.runPromise(
         Effect.gen(function* () {
-          const input = yield* playlistRecommendationInput(playlistId);
-          const graph = yield* playlistRecommendationGraph;
-          // Source rows are retained for the five visible offers only, never a copy of the Library.
-          latestRows.set(input.songById);
-          const seeds = playlistSuggestionSeeds(playlistId, input.playlist);
-          const online = phoneOnline();
-          const pages = yield* playlistSuggestionRadios(visitId, seeds, {
-            online,
-            low: remaining < LOW,
-          });
+          const { input, when } = yield* readSources;
+          const pages = yield* playlistSuggestionRadios(visitId, input.sources.seeds, when);
           sightWatch.waiting(null);
+          return { ...input, sources: { ...input.sources, pages } };
+        }),
+        { signal },
+      );
+    },
+    // Each radio on its own: the session shows offers from the first to answer.
+    readFresh: (signal) => {
+      sightWatch.waiting("read");
+      return appRuntime.runPromise(
+        Effect.gen(function* () {
+          const { input, when } = yield* readSources;
           return {
-            playlist: input.playlist,
-            sources: {
-              ...input,
-              pages,
-              seeds,
-              graph,
-              profileOf: lookedUpProfileOf,
-              online,
-            },
+            input,
+            radios: input.sources.seeds.map((seed) =>
+              appRuntime
+                .runPromise(playlistSuggestionRadios(visitId, [seed], when), { signal })
+                .then((pages) => pages[0] ?? null),
+            ),
           };
         }),
         { signal },
@@ -146,8 +171,10 @@ const openPlaylistSuggestionsVisit = (playlistId: number, openingAt: number) => 
       sightWatch.waiting(null);
       remaining = ranked.length;
       const held = new Map<string, SongRow>();
+      // A read's own rows: a later radio ranks after the first one's ranking let go of the rest.
+      const rows = rowsOfRead.get(input.sources.library) ?? latestRows.get();
       const keep = (id: string) => {
-        const row = latestRows.get().get(id);
+        const row = rows.get(id);
         if (row !== undefined) held.set(id, row);
       };
       for (const offer of ranked) keep(offer.track.id);
