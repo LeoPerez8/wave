@@ -125,6 +125,9 @@ const shownEntry = (item: PlaylistEntryRow): SongListEntry => {
 
 const NO_MOVES: readonly AccessibilityActionInfo[] = [];
 
+/** The grip's target. */
+const GRIP_WIDTH = grid.stateCell + CELL * 2;
+
 /** The grip, 48dp of target drawn in the 32dp state cell. */
 function Grip({ shown, color }: { shown: boolean; color: string }) {
   return (
@@ -132,7 +135,7 @@ function Grip({ shown, color }: { shown: boolean; color: string }) {
       accessible={false}
       importantForAccessibility="no-hide-descendants"
       className="items-end justify-center"
-      style={{ width: grid.stateCell + CELL * 2, height: ROW, marginLeft: -CELL * 2 }}
+      style={{ width: GRIP_WIDTH, height: ROW, marginLeft: -CELL * 2 }}
     >
       {/* Hidden, not removed, while selecting or finding: the rows keep their width. */}
       {shown && <IconGripVertical size={20} color={color} strokeWidth={1.5} />}
@@ -174,7 +177,7 @@ const DraggableEntry = memo(function DraggableEntry({
   );
   return (
     <Animated.View style={[{ height: ROW, opacity: lifted ? 0 : 1 }, style]}>
-      {cloneElement(row, { accessory })}
+      {cloneElement(row, { accessory, handleWidth: grip ? GRIP_WIDTH : 0 })}
     </Animated.View>
   );
 });

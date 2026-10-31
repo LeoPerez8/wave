@@ -13,3 +13,12 @@ export const handleHold = {
   activateAfterLongPress: 150,
   minDistance: 1_000_000,
 } as const;
+
+/**
+ * The hit slop of a row's swipe, for a row with a handle [width] wide at its
+ * end (0 with none showing). The handle's pan fails on an early move, so a
+ * sideways swipe from the handle would otherwise run the row's action, which
+ * can be Remove from Playlist. Only where the touch lands counts: a swipe that
+ * starts on the rest of the row goes on over the handle.
+ */
+export const handleSwipeSlop = (width: number): { readonly right: number } => ({ right: -width });
