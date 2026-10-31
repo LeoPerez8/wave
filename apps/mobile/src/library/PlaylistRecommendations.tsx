@@ -84,17 +84,18 @@ export const usePlaylistSuggestionsVisit = (
 };
 
 /**
- * The pill that takes a long playlist to its suggestions, while the section is [away] and has
- * something to go to (offers, a load or a failure line). Following both renders only this.
+ * The pill that takes a long playlist to its suggestions, while the list's scrolling [wanted] it
+ * and the section has something to go to (offers, a load or a failure line). Following both
+ * renders only this.
  */
 export function GoToSuggestions({
   visit,
-  away,
+  wanted,
   bottom,
   onPress,
 }: {
   visit: PlaylistSuggestionsVisit;
-  away: ExternalStore<boolean>;
+  wanted: ExternalStore<boolean>;
   bottom: number;
   onPress: () => void;
 }) {
@@ -103,8 +104,8 @@ export function GoToSuggestions({
   const offered = useSyncExternalStore(session.subscribe, () =>
     goToSuggestionsOffered(session.get()),
   );
-  const isAway = useSyncExternalStore(away.subscribe, away.get);
-  if (!offered || !isAway) return null;
+  const isWanted = useSyncExternalStore(wanted.subscribe, wanted.get);
+  if (!offered || !isWanted) return null;
   return <FloatingPill icon={IconArrowDown} label={label} bottom={bottom} onPress={onPress} />;
 }
 

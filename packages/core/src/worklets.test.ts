@@ -10,6 +10,8 @@ import {
   formatRemaining,
   formatSleepRemaining,
   framingView,
+  goToSuggestionsPillAfter,
+  goToSuggestionsPillShown,
   mixPull,
   panFraming,
   pinchFraming,
@@ -28,7 +30,8 @@ import {
 // The app calls these on the UI thread, inside Reanimated worklets: the
 // scrubber while a finger drags it, the crop screen while fingers frame a
 // photo, the Lyrics view's karaoke while a line is sung, the mini player's
-// pans while a long-press menu may own the touch, and Up Next or the
+// pans while a long-press menu may own the touch, a playlist's Go to Suggestions pill
+// while the list scrolls, and Up Next or the
 // Playlists list while a row or tile is dragged. The worklets Babel plugin copies a function to the
 // UI thread only when its body starts with the "worklet" directive; calling
 // any other function there throws. Node ignores the directive, so these tests
@@ -42,6 +45,8 @@ const onUiThread = {
   formatRemaining,
   formatSleepRemaining,
   framingView,
+  goToSuggestionsPillAfter,
+  goToSuggestionsPillShown,
   mixPull,
   panFraming,
   pinchFraming,
