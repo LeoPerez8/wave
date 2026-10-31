@@ -1133,3 +1133,78 @@ test("closing the playlist during concurrent actions still writes every tapped c
   assert.deepEqual(written, ["a", "c"]);
   assert.deepEqual([gate.reads, notifications], [1, heard]);
 });
+
+test("a renewal asked for with a turn shows it's loading, then reads on that turn", async () => {
+  const seed = track("seed");
+  const turn = Promise.withResolvers<void>();
+  const turns: string[] = [];
+  let reads = 0;
+  const session = playlistRecommendationSession({
+    newId: () => "id",
+    read: async () => {
+      reads++;
+      return { playlist: [seed], sources: { library: [], graph: null } };
+    },
+    dismiss: async () => {},
+    yieldTurn: (kind) => {
+      turns.push(kind);
+      return kind === "free" ? turn.promise : Promise.resolve();
+    },
+  });
+  const renewed = session.renew({ turn: "free" });
+  assert.equal(session.get().loading, true);
+  assert.deepEqual(turns, ["free"]);
+  assert.equal(reads, 0, "the read waits for its turn");
+  turn.resolve();
+  await renewed;
+  assert.equal(reads, 1);
+  assert.equal(session.get().loading, false);
+});
+
+test("hiding during a renewal's turn cancels it before it reads", async () => {
+  const seed = track("seed");
+  const turn = Promise.withResolvers<void>();
+  let reads = 0;
+  const session = playlistRecommendationSession({
+    newId: () => "id",
+    read: async () => {
+      reads++;
+      return { playlist: [seed], sources: { library: [], graph: null } };
+    },
+    dismiss: async () => {},
+    yieldTurn: () => turn.promise,
+  });
+  const renewed = session.renew({ turn: "paint" });
+  session.pause();
+  turn.resolve();
+  await renewed;
+  assert.equal(reads, 0);
+  assert.equal(session.get().error, null);
+});
+
+test("a renewal held for a save reads on a free turn once the save is done", async () => {
+  const seed = track("seed");
+  const library = [seed, ..."abcdefg".split("").map(track)];
+  const saved = Promise.withResolvers<void>();
+  const log: string[] = [];
+  let id = 0;
+  const session = playlistRecommendationSession({
+    newId: () => String(++id),
+    read: async () => {
+      log.push("read");
+      return { playlist: [seed], sources: { library, pages: radioOf(library), graph: null } };
+    },
+    dismiss: async () => saved.promise,
+    yieldTurn: async (kind) => {
+      log.push(kind);
+    },
+  });
+  await session.renew();
+  const dismissed = session.dismiss(session.get().slots[0]!.key);
+  await session.renew();
+  log.length = 0;
+  saved.resolve();
+  await dismissed;
+  // The refill's own free turn and read, then the held renewal's.
+  assert.deepEqual(log, ["free", "read", "paint", "free", "read", "paint"]);
+});

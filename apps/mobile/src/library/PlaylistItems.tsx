@@ -1,4 +1,4 @@
-import { PlaylistRecommendations } from "./PlaylistRecommendations";
+import { PlaylistRecommendations, usePlaylistSuggestionsVisit } from "./PlaylistRecommendations";
 import { IconGripVertical } from "@tabler/icons-react-native";
 import type { LegendListRef } from "@legendapp/list/react-native";
 import { moveItem, type PlaylistPlace, type QueueContext, type RowMenuAction } from "@wave/core";
@@ -314,6 +314,7 @@ export function PlaylistItems({ playlistId, items, header, empty }: Props) {
   // Suggestions come from YouTube Music radios: with YT Music off there are none.
   const ytMusic = useYtMusicEnabled();
   const recommending = ytMusic && items !== undefined && found === null && !selecting;
+  const suggestions = usePlaylistSuggestionsVisit(playlistId, recommending, sectionSight);
   useLayoutEffect(() => {
     // Before the head's height is known the section's place would read too high, as in sight.
     recommendationsTop.set(
@@ -403,12 +404,7 @@ export function PlaylistItems({ playlistId, items, header, empty }: Props) {
       item.kind === "empty" ? (
         empty
       ) : (
-        <PlaylistRecommendations
-          key={playlistId}
-          playlistId={playlistId}
-          items={read}
-          sectionSight={sectionSight}
-        />
+        <PlaylistRecommendations playlistId={playlistId} items={read} visit={suggestions} />
       )
     ) : null;
 
