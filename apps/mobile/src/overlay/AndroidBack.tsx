@@ -3,7 +3,7 @@ import { useNavigationContainerRef } from "expo-router";
 import { useEffect, useState } from "react";
 import { AppState, BackHandler, Platform } from "react-native";
 
-import { beginTiming, timingBackPressed } from "@/lib/timing";
+import { beginTiming } from "@/lib/timing";
 import { currentLocalisation } from "@/localisation/localisation";
 import { closeNowPlaying, isNowPlayingShown, onNowPlayingShownChange } from "@/nowPlaying/sheet";
 import { useIsSelecting } from "@/selection/selection";
@@ -42,7 +42,6 @@ export function AndroidBack(): null {
       }
       // The navigator may be registered before or after this fallback.
       if (navigation.canGoBack()) {
-        timingBackPressed();
         beginTiming("pop", "Back");
         reset();
         return false;

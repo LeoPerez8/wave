@@ -7,11 +7,11 @@ import {
   type SwipeChoice,
   type Catalogue,
 } from "@wave/core";
-import { router } from "expo-router";
 import { Text, View } from "react-native";
 
 import { CELL, grid } from "@/catalog/grid";
 import { Hairline } from "@/catalog/Hairline";
+import { router } from "@/lib/timingRouter";
 import { Press } from "@/motion/Press";
 import { useThemeColor } from "@/theme/useThemeColor";
 
