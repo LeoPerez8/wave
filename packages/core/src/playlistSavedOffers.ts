@@ -71,6 +71,28 @@ export const playlistSpareOffer = (
   return saved.find((offer) => showable(offer, online) && fits(offer));
 };
 
+/** Fewer spares left than this, and the reserve refills behind the screen. */
+export const PLAYLIST_SPARES_LOW = 5;
+
+/** How many of [saved] could still step in beside the [shown] ones, the artist cap aside. */
+export const playlistSpareCount = (
+  saved: readonly PlaylistRecommendationTrack[],
+  shown: readonly PlaylistRecommendationTrack[],
+  { online }: { readonly online: boolean },
+): number => playlistOffersWithout(saved, shown).filter((offer) => showable(offer, online)).length;
+
+/**
+ * [saved] with what a refill ranked after it: those kept stay first and in their order, and
+ * no recording is saved twice. With no room, or nothing new, [saved] itself comes back.
+ */
+export const playlistOffersWithSpares = (
+  saved: readonly PlaylistRecommendationTrack[],
+  ranked: readonly PlaylistRecommendationTrack[],
+): readonly PlaylistRecommendationTrack[] => {
+  const added = playlistOffersWithout(ranked, saved).slice(0, PLAYLIST_SAVED_OFFERS - saved.length);
+  return added.length === 0 ? saved : [...saved, ...added];
+};
+
 /** [saved] without [songs], any recording of them: they were added, dismissed or left. */
 export const playlistOffersWithout = (
   saved: readonly PlaylistRecommendationTrack[],

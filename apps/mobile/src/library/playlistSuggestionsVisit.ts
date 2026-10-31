@@ -9,6 +9,7 @@ import {
   playlistOfferHeld,
   playlistRecommendationsSteps,
   playlistRecommendationSession,
+  playlistReserveRefillLine,
   playlistSlotWaitLine,
   playlistSuggestionsLine,
   playlistSuggestionsSightLine,
@@ -40,7 +41,7 @@ import { appRuntime } from "./runtime";
 
 let nextOffer = 0;
 
-/** Fewer eligible suggestions left than this, and a refill reads the radios' next pages. */
+/** The last ranking found fewer new suggestions than this: the next read adds next pages. */
 const LOW = 10;
 
 /** How long loading waits for the screen to settle and a free turn, against the 3 s other work allows. */
@@ -199,6 +200,7 @@ const openPlaylistSuggestionsVisit = (playlistId: number, openingAt: number) => 
         void afterPaint().then(() => sightWatch.shown({ offers, failed }));
       },
       slotWait: (wait) => appLog("info", "WaveTiming", playlistSlotWaitLine(wait)),
+      reserveRefill: (refill) => appLog("info", "WaveTiming", playlistReserveRefillLine(refill)),
     },
   });
   // Saved offers are showing from the start: the wait for them is over, and what runs next renews.
