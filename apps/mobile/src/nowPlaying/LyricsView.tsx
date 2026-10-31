@@ -12,6 +12,8 @@ import {
   extrapolatePosition,
   isLyricLineSelected,
   karaokeLyricLines,
+  lyricsFollowStart,
+  lyricsFollowStep,
   lyricCardColours,
   placeGeniusReferents,
   shareableLyricLines,
@@ -23,6 +25,7 @@ import {
   type GeniusPlacement,
   type LyricLine,
   type LyricSelection,
+  type LyricsFollowEvent,
 } from "@wave/core";
 import * as Haptics from "expo-haptics";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -322,10 +325,12 @@ const SyncedLine = memo(function SyncedLine({
 });
 
 /**
- * Synced lyrics: the sung line lights up and rests a third of the way down,
- * scrolling along with the song. Scrolling by hand stops the follow until a
- * few seconds after the finger lifts; tapping a line seeks there. While Share
- * picks lines they don't follow the song.
+ * Synced lyrics: the sung line lights up, and opens resting a third of the
+ * way down. With Karaoke on the lyrics scroll along with the song: scrolling
+ * by hand stops the follow until a few seconds after the finger lifts, and
+ * while Share picks lines they don't follow it. With Karaoke off they stay
+ * where the finger leaves them. Tapping a line seeks there. Core's
+ * `lyricsFollowStep` decides when they move.
  */
 function SyncedLyrics({
   lines: sourceLines,
@@ -384,65 +389,75 @@ function SyncedLyrics({
   const scroll = useRef<ScrollViewInstance>(null);
   const [height, setHeight] = useState(0);
   const offsets = useRef<number[]>([]);
-  const following = useRef(true);
+  const isPicking = picking !== null;
+  const follow = useRef(lyricsFollowStart({ karaoke, picking: isPicking }));
   const resume = useRef<ReturnType<typeof setTimeout> | null>(null);
   // The sung line, for scrolls that start outside a render (timers, layout callbacks).
   const currentIndex = useRef(index);
-  const isPicking = picking !== null;
-  const pickingNow = useRef(isPicking);
 
-  const scrollToCurrent = useCallback(
-    (animated: boolean) => {
-      if (!isPlayheadLive() || !following.current || height === 0) return;
+  const step = useCallback(
+    (event: LyricsFollowEvent) => {
+      const { state, move } = lyricsFollowStep(follow.current, event);
+      follow.current = state;
+      if (move === "stay" || !isPlayheadLive() || height === 0) return;
       const at = currentIndex.current;
       const y = at < 0 ? 0 : offsets.current[at];
       if (y === undefined) return;
-      scroll.current?.scrollTo({ y: Math.max(0, y - height * ANCHOR), animated });
+      scroll.current?.scrollTo({
+        y: Math.max(0, y - height * ANCHOR),
+        animated: move === "slide" && !reduceMotion,
+      });
+      if (move === "place") follow.current = lyricsFollowStep(state, "placed").state;
     },
-    [height],
+    [height, reduceMotion],
   );
 
-  // Picking stops the follow; done picking, the sung line comes back to rest.
+  // Picking stops the follow; done picking, the sung line comes back to rest with Karaoke on.
   useEffect(() => {
-    if (pickingNow.current === isPicking) return;
-    pickingNow.current = isPicking;
-    following.current = !isPicking;
-    if (!isPicking) scrollToCurrent(!reduceMotion);
-  }, [isPicking, scrollToCurrent, reduceMotion]);
+    if (follow.current.picking === isPicking) return;
+    step(isPicking ? "pickStarted" : "pickEnded");
+  }, [isPicking, step]);
 
   // Follow the song from line to line.
   useEffect(() => {
+    if (currentIndex.current === index) return;
     currentIndex.current = index;
-    scrollToCurrent(!reduceMotion);
-  }, [index, scrollToCurrent, reduceMotion]);
+    step("lineChanged");
+  }, [index, step]);
 
   const stopResume = useCallback((): void => {
     if (resume.current !== null) clearTimeout(resume.current);
     resume.current = null;
   }, []);
+
+  // After the sung line's update above: turning Karaoke on goes to that line.
   useEffect(() => {
-    const stop = playheadVisibility.subscribe(() => {
-      if (!playheadVisibility.get()) {
-        stopResume();
-        following.current = !pickingNow.current;
-      }
-    });
-    return () => {
-      stop();
-      stopResume();
-    };
-  }, [stopResume]);
+    if (follow.current.karaoke === karaoke) return;
+    stopResume();
+    step(karaoke ? "karaokeOn" : "karaokeOff");
+  }, [karaoke, step, stopResume]);
+
+  useEffect(
+    () =>
+      playheadVisibility.subscribe(() => {
+        if (!playheadVisibility.get()) {
+          stopResume();
+          step("hidden");
+        }
+      }),
+    [step, stopResume],
+  );
+  useEffect(() => stopResume, [stopResume]);
 
   const onSeek = useCallback(
     (line: LyricLine, at: number) => {
       stopResume();
-      following.current = true;
       seekTo(line.timeMs, "lyric");
       // Brings the tapped line to rest even when it's the one already sung.
       currentIndex.current = at;
-      scrollToCurrent(!reduceMotion);
+      step("lineTapped");
     },
-    [stopResume, scrollToCurrent, reduceMotion],
+    [stopResume, step],
   );
 
   const onLayoutLine = useCallback((at: number, y: number) => {
@@ -463,18 +478,16 @@ function SyncedLyrics({
       showsVerticalScrollIndicator={false}
       onLayout={(event) => setHeight(event.nativeEvent.layout.height)}
       // Lines laid out (or the view resized): put the sung line in place without a slide.
-      onContentSizeChange={() => scrollToCurrent(false)}
+      onContentSizeChange={() => step("laidOut")}
       onScrollBeginDrag={() => {
         stopResume();
-        following.current = false;
+        step("fingerDown");
       }}
       onScrollEndDrag={() => {
         stopResume();
         if (!isPlayheadLive()) return;
         resume.current = setTimeout(() => {
-          if (!isPlayheadLive() || pickingNow.current) return;
-          following.current = true;
-          scrollToCurrent(!reduceMotion);
+          if (isPlayheadLive()) step("resumeDue");
         }, RESUME_FOLLOW_MS);
       }}
       contentContainerStyle={{ paddingTop: CELL * 2, paddingBottom: height * (1 - ANCHOR) }}
@@ -677,6 +690,7 @@ type Shown = LibraryLyricsShown | Exclude<NonDLyricsShown, { kind: "lyrics" }>;
 /** The lyrics themselves, the search's skeleton, or the empty state. */
 function LyricsBody({
   shown,
+  song,
   karaoke,
   picking,
   retry,
@@ -686,6 +700,7 @@ function LyricsBody({
   annotations,
 }: {
   shown: Shown | null;
+  song: string | null;
   karaoke: boolean;
   picking: Picking | null;
   retry: () => void;
@@ -708,6 +723,8 @@ function LyricsBody({
     case "synced":
       return (
         <SyncedLyrics
+          // Each song opens afresh, placing its sung line without a slide.
+          key={song}
           lines={shown.lines}
           karaoke={karaoke}
           picking={picking}
@@ -944,6 +961,7 @@ export function LyricsView({
       </DismissArea>
       <LyricsBody
         shown={shown}
+        song={song}
         karaoke={karaokeOn}
         picking={picking}
         retry={nonD.shown === null ? library.retry : nonD.retry}
