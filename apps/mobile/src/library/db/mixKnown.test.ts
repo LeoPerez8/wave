@@ -14,7 +14,7 @@ import {
 import { recordPlay } from "./playHistory.ts";
 import { createPlaylist, deletePlaylist, removePlaylistItems } from "./playlists.ts";
 import * as schema from "./schema.ts";
-import { addTrack, openTestDatabase, type TestDatabase } from "./testDatabase.ts";
+import { addTrack, openTestDatabase, traceQueries, type TestDatabase } from "./testDatabase.ts";
 
 let db: TestDatabase;
 
@@ -149,5 +149,21 @@ describe("The videos the owner knows now, for re-blending mixes", () => {
       yt("skipped"),
     );
     assert.deepEqual(selectKnownVideos(db), ["skipped"]);
+  });
+});
+
+describe("The videos the owner knows, in pages", () => {
+  test("a thousand-entry playlist reads whole, no page over 512 rows", () => {
+    createPlaylist(
+      db,
+      "Long",
+      Array.from({ length: 1_000 }, (_, i) => ({ source: "stream" as const, song: yt(`v${i}`) })),
+      1_000,
+    );
+    noteStreamedSong(db, yt("streamed"), 2_000);
+    const traced = traceQueries(db, () => selectKnownVideos(db));
+    assert.equal(traced.result.length, 1_001);
+    assert.equal(new Set(traced.result).size, 1_001);
+    assert.ok(traced.queries.every((query) => query.rows <= 512));
   });
 });

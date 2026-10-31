@@ -122,11 +122,16 @@ const SPECIAL_LETTERS: Readonly<Record<string, string>> = {
   ı: "i",
 };
 
+/**
+ * Anything Unicode normalization could change. It's the slow part of folding on
+ * the phone, and a long playlist folds thousands of names as it opens (#842).
+ */
+// oxlint-disable-next-line no-control-regex -- the whole of ASCII, control characters too
+const BEYOND_ASCII = /[^\u0000-\u007f]/;
+
 /** Lower-cases and strips accents (`Émilie` → `emilie`, `Straße` → `strasse`); collapses whitespace. */
 export const foldAccentsAndCase = (value: string): string =>
-  value
-    .normalize("NFKD")
-    .replace(/\p{M}/gu, "")
+  (BEYOND_ASCII.test(value) ? value.normalize("NFKD").replace(/\p{M}/gu, "") : value)
     .toLowerCase()
     .replace(/[ßæœøđðłþı]/g, (letter) => SPECIAL_LETTERS[letter] ?? letter)
     .replace(/\s+/g, " ")

@@ -12,8 +12,9 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Keeps the [ResumeSnapshot] files in `filesDir` ([ResumeFiles]) up to date:
- * [PlaybackService] reports the player (items, current item, position, repeat,
- * and JS's shuffle from [AutoModes.state]) and [WavePlayerModule] the queue
+ * [PlaybackService] reports the player (items, current item, position, and
+ * JS's shuffle and repeat from [AutoModes.state]: the player's own repeat stays
+ * off for a queue longer than its window) and [WavePlayerModule] the queue
  * parts JS saves (with where it was started from). Writes are coalesced on a
  * background thread; the last one wins. Only a change of items or of JS's
  * queue JSON rewrites the items part: a song change or a position save
@@ -71,7 +72,7 @@ object ResumeStore {
   /**
    * Records the player's state. [withItems] re-reads the item list (its
    * timeline changed), and rewrites the items part only when the list did;
-   * otherwise only the current item, position and repeat are read. An empty
+   * otherwise only the current item and position are read. An empty
    * player that didn't just change keeps the last snapshot, so a service that
    * started and stopped without playing doesn't erase it. Call it on the main
    * thread (it reads [AutoModes.state]).
@@ -89,12 +90,9 @@ object ResumeStore {
       }
       index = if (player.mediaItemCount == 0) -1 else player.currentMediaItemIndex
       positionMs = player.currentPosition
-      shuffle = AutoModes.state.current.shuffle
-      repeat = when (player.repeatMode) {
-        Player.REPEAT_MODE_ALL -> "all"
-        Player.REPEAT_MODE_ONE -> "one"
-        else -> "off"
-      }
+      val modes = AutoModes.state.current
+      shuffle = modes.shuffle
+      repeat = modes.repeat.wire
     }
     write(itemsNew)
   }

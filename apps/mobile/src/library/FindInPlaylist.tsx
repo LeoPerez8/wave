@@ -24,11 +24,14 @@ import {
 import { Text, useWindowDimensions, View } from "react-native";
 
 import { CELL, grid } from "@/catalog/grid";
+import { freeTurnEffect } from "@/lib/backgroundWork";
+import { runSteps } from "@/lib/stepped";
 import { useLocalisation } from "@/localisation/localisation";
 import { SearchField } from "@/search/SearchField";
 import { useKeepFindVisible } from "@/settings/keepFindVisible";
 
 import type { SongRow } from "./LibraryStore";
+import { appRuntime } from "./runtime";
 
 /**
  * The Find in Playlist field's height: the list starts scrolled this far
@@ -126,6 +129,14 @@ export function useFindInList<T>(
     [songs, describe, findable],
   );
   const { found, songs: shown, placeOf } = useMemo(() => list.show(query), [list, query]);
+  // Ready for the first letter, prepared between frames: never in the render that opens the list.
+  useEffect(() => {
+    const preparing = new AbortController();
+    appRuntime
+      .runPromise(runSteps(list.prepare(), freeTurnEffect), { signal: preparing.signal })
+      .catch(() => {});
+    return () => preparing.abort();
+  }, [list]);
   // The list's latest scroll handles, for a change made after the render that passed them.
   const scroll = useRef({ offset, scrollTo });
   useLayoutEffect(() => {

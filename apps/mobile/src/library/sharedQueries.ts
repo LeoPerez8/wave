@@ -1,4 +1,4 @@
-import { createLibraryQueries, type LibraryReads } from "@wave/core";
+import { createLibraryQueries, type LibraryQueryTraits, type LibraryReads } from "@wave/core";
 import type * as Effect from "effect/Effect";
 import { useCallback, useContext, useEffect, useSyncExternalStore } from "react";
 
@@ -21,6 +21,7 @@ export interface LibraryQuery<A> {
   readonly key: string;
   readonly reads: LibraryReads;
   readonly read: Effect.Effect<A, LibraryStoreError, LibraryStore>;
+  readonly traits: LibraryQueryTraits<A>;
 }
 
 /** Declares a shared Library query. Make it once (a module constant, or `useMemo` over its key). */
@@ -28,7 +29,8 @@ export const libraryQuery = <A>(
   key: string,
   reads: LibraryReads,
   read: Effect.Effect<A, LibraryStoreError, LibraryStore>,
-): LibraryQuery<A> => ({ key, reads, read });
+  traits: LibraryQueryTraits<A> = {},
+): LibraryQuery<A> => ({ key, reads, read, traits });
 
 type AnyQuery = LibraryQuery<unknown>;
 
@@ -93,7 +95,7 @@ export const useLibraryQuery = <A>(query: LibraryQuery<A> | null, initial: A): A
       const { key } = definition;
       definitions.set(key, definition);
       stopFollowing ??= onLibraryChange(registry.change);
-      return attachInSight(registry, key, definition.reads, sight, onChange);
+      return attachInSight(registry, key, definition.reads, sight, onChange, definition.traits);
     },
     [definition, sight],
   );

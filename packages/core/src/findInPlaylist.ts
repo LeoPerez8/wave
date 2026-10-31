@@ -18,7 +18,14 @@
 
 import { en } from "./catalogueEn.ts";
 import { catalogueOf, type AppLanguage } from "./localisation.ts";
-import { createSearchIndex, normalizeSearchText, type SearchEntry } from "./search.ts";
+import {
+  memoize,
+  normalizeSearchText,
+  prepareSearchEntry,
+  searchIndexOver,
+  type Indexed,
+  type SearchEntry,
+} from "./search.ts";
 
 /** What finds a song in a playlist; null for an entry nothing finds. */
 export interface PlaylistFindText {
@@ -125,27 +132,44 @@ export const findInPlaylistHead = (
 export const createPlaylistFinder = <T>(
   songs: readonly T[],
   describe: (song: T) => PlaylistFindText | null,
-): PlaylistFinder => {
-  const entries: Entry[] = [];
-  songs.forEach((song, index) => {
+): PlaylistFinder => finishFinder(playlistFinderSteps(songs, describe));
+
+const finishFinder = (steps: Generator<void, PlaylistFinder>): PlaylistFinder => {
+  for (;;) {
+    const next = steps.next();
+    if (next.done === true) return next.value;
+  }
+};
+
+/** Builds [createPlaylistFinder]'s finder a song at a step. */
+function* playlistFinderSteps<T>(
+  songs: readonly T[],
+  describe: (song: T) => PlaylistFindText | null,
+): Generator<void, PlaylistFinder> {
+  const normalize = memoize(normalizeSearchText);
+  const prepared: Indexed<Entry>[] = [];
+  for (const [index, song] of songs.entries()) {
     const text = describe(song);
-    if (text === null) return;
-    const also: string[] = [];
-    if (text.artist != null && text.artist !== "") also.push(text.artist);
-    if (text.album != null && text.album !== "") also.push(text.album);
-    entries.push({ kind: "song", name: text.title, also, index });
-  });
-  const index = createSearchIndex(entries);
+    if (text !== null) {
+      const also: string[] = [];
+      if (text.artist != null && text.artist !== "") also.push(text.artist);
+      if (text.album != null && text.album !== "") also.push(text.album);
+      const entry: Entry = { kind: "song", name: text.title, also, index };
+      prepared.push(prepareSearchEntry(entry, 0, prepared.length, normalize));
+    }
+    yield;
+  }
+  const search = searchIndexOver(prepared);
   return {
     find: (query) => {
       if (!hasFindQuery(query)) return null;
-      const results = index.search(query);
+      const results = search.search(query);
       const found = results.groups.flatMap((group) => group.items.map((entry) => entry.index));
       // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh array; Hermes lacks toSorted
       return found.sort((a, b) => a - b);
     },
   };
-};
+}
 
 /** What a song list shows for a query: the places found, and the rows. */
 export interface ShownInPlaylist<T> extends FoundInPlaylist<T> {
@@ -157,28 +181,54 @@ export interface ShownInPlaylist<T> extends FoundInPlaylist<T> {
 export interface FindableList<T> {
   /** What the list shows while [query] is typed. */
   readonly show: (query: string) => ShownInPlaylist<T>;
+  /**
+   * Prepares for the first query a song at a step, to run between frames. A
+   * query that comes first finishes it at once, and these steps then just end.
+   */
+  readonly prepare: () => Generator<void, void>;
 }
 
 /**
  * A song list over [songs], findable or not. With Find on ([findable]), each
- * query narrows it as a finder does (`createPlaylistFinder`). With Find off,
- * nothing for Find is prepared and the list always shows all its songs in
- * their order.
+ * query narrows it as a finder does (`createPlaylistFinder`); nothing is
+ * prepared until a query or `prepare` asks, so a long list opens without
+ * folding every song's text in its first render (#842). With Find off, nothing
+ * for Find is ever prepared and the list always shows all its songs in their
+ * order.
  */
 export const createFindableList = <T>(
   songs: readonly T[],
   describe: (song: T) => PlaylistFindText | null,
   findable: boolean,
 ): FindableList<T> => {
+  const whole: ShownInPlaylist<T> = { found: null, ...foundInPlaylist(songs, null) };
   if (!findable) {
-    const whole: ShownInPlaylist<T> = { found: null, ...foundInPlaylist(songs, null) };
-    return { show: () => whole };
+    return {
+      show: () => whole,
+      prepare: function* () {},
+    };
   }
-  const finder = createPlaylistFinder(songs, describe);
+  let build: Generator<void, PlaylistFinder> | null = null;
+  let finder: PlaylistFinder | null = null;
+  const sharedBuild = (): Generator<void, PlaylistFinder> =>
+    (build ??= playlistFinderSteps(songs, describe));
   return {
     show: (query) => {
+      if (!hasFindQuery(query)) return whole;
+      finder ??= finishFinder(sharedBuild());
       const found = finder.find(query);
       return { found, ...foundInPlaylist(songs, found) };
+    },
+    prepare: function* () {
+      const building = sharedBuild();
+      while (finder === null) {
+        const next = building.next();
+        if (next.done === true) {
+          finder = next.value;
+          return;
+        }
+        yield;
+      }
     },
   };
 };

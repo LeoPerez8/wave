@@ -503,7 +503,11 @@ class PlaybackService : MediaLibraryService() {
       for (parent in languageParents.toList()) session?.notifyChildrenChanged(parent, Int.MAX_VALUE, null)
     }
     showModes(AutoModes.state.current)
-    stopModes = AutoModes.state.listen(::showModes)
+    stopModes = AutoModes.state.listen { modes ->
+      showModes(modes)
+      // Repeat All on a long queue leaves the player's repeat off, so no player event saves it.
+      exoPlayer?.let { ResumeStore.savePlayer(it, withItems = false) }
+    }
     stopLyrics = AutoLyrics.state.listen {
       shown?.refresh()
       showModes(AutoModes.state.current)
@@ -603,6 +607,7 @@ class PlaybackService : MediaLibraryService() {
     AutoLibrary.onChildrenRecovered = null
     browsers.clear()
     JsRuntime.release()
+    JsRuntime.release(RESUME_JS_OWNER)
     main.removeCallbacks(sleepCheck)
     main.removeCallbacks(resumePositionSave)
     main.removeCallbacks(crossfadeTick)
@@ -848,7 +853,9 @@ class PlaybackService : MediaLibraryService() {
      * Resumes the last queue from the snapshot ([ResumeStore]) when a
      * controller asks to play with nothing loaded: Auto or the system media
      * controls after Wave's process died, before JS is up. The queue JS saved
-     * with it is kept for JS to adopt when it comes up (see [QueueSnapshot]).
+     * with it is kept for JS to adopt, and a resume that plays starts JS to do
+     * so whoever asked: the snapshot may hold only a window of the queue, and
+     * only JS moves it on (see [QueueSnapshot]).
      */
     override fun onPlaybackResumption(
       mediaSession: MediaSession,
@@ -876,6 +883,7 @@ class PlaybackService : MediaLibraryService() {
             QueueSnapshot.metadata = snapshot?.queueMetadata
             QueueSnapshot.source = resumption.source
             QueueSnapshot.resumed = true
+            JsRuntime.ensureStarted(this@PlaybackService, RESUME_JS_OWNER)
           }
           Log.i(JsRuntime.LOG_TAG, "Resuming ${resumption.items.size} items at ${resumption.startIndex}")
           MediaSession.MediaItemsWithStartPosition(resumption.items, resumption.startIndex, resumption.positionMs)
@@ -912,12 +920,14 @@ class PlaybackService : MediaLibraryService() {
   }
 
   private companion object {
-    /** Player changes that move the snapshot's current item, position or repeat. */
+    /** Holds JS for a resume, whoever asked for it, as long as the service runs. */
+    const val RESUME_JS_OWNER = "resume"
+
+    /** Player changes that move the snapshot's current item or position. */
     val RESUME_EVENTS = intArrayOf(
       Player.EVENT_MEDIA_ITEM_TRANSITION,
       Player.EVENT_IS_PLAYING_CHANGED,
       Player.EVENT_POSITION_DISCONTINUITY,
-      Player.EVENT_REPEAT_MODE_CHANGED,
     )
 
     const val RESUME_SAVE_INTERVAL_MS = 10_000L
