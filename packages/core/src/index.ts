@@ -2235,7 +2235,11 @@ export { playlistImportCompletionSteps } from "./playlistImport.ts";
 
 export { ytLibraryFavoritesSteps } from "./ytLibraryBatch.ts";
 
-export { playlistRecommendationsSteps } from "./playlistRecommendations.ts";
+export {
+  playlistRecommendationsSteps,
+  samePlaylistTracks,
+  samePlaylistTracksSteps,
+} from "./playlistRecommendations.ts";
 
 export { createMenuTouchOwnership, playerTouchAllowed } from "./menuTouchOwnership.ts";
 export type { MenuTouchOwnership } from "./menuTouchOwnership.ts";

@@ -50,28 +50,23 @@ export const registerTimingBackground = (name: string, read: () => string | null
 /** A work item starting/ending in the timing window is retained even when it ends before settlement. */
 export const timingBackgroundChanged = (): void => session.backgroundChanged();
 
-let touchAt: number | undefined;
 /** RN's native timestamps and performance.now share the monotonic clock on Android. */
-export const timingTouch = (event: GestureResponderEvent): void => {
-  const now = performance.now();
-  const native = event.nativeEvent.timestamp;
-  // Older RN's epoch timestamp must not produce a negative duration.
-  touchAt = native <= now && now - native < 60_000 ? native : now;
+export const timingTouch = (event: GestureResponderEvent): void =>
+  session.touch(event.nativeEvent.timestamp);
+export const timingTouchEnded = (event: GestureResponderEvent): void => {
+  // Another finger still down keeps the touch going.
+  if (event.nativeEvent.touches.length === 0) session.touchEnded();
 };
-export const hasTimingTouch = (): boolean => touchAt !== undefined;
-const takeTouch = (): number => {
-  const now = performance.now();
-  const at = touchAt !== undefined && now - touchAt < 60_000 ? touchAt : now;
-  touchAt = undefined;
-  return at;
-};
+/** A native scroll or gesture took the touch over: its lift goes unheard, so this is its end. */
+export const timingTouchTakenOver = session.touchEnded;
+export const hasTimingTouch = session.hasTouch;
 
 let surface: string | undefined;
 export const setTimingSurface = (name: string | undefined): void => {
   surface = name;
 };
 export const beginTiming = (kind: TimingKind, to: string): number => {
-  const id = session.begin(kind, to, takeTouch(), true, surface);
+  const id = session.beginTouched(kind, to, surface);
   if (surface === "Now Playing" && (kind === "artistLink" || kind === "albumLink"))
     linkTaps.begin(id, { kind, from: surface, to });
   return id;
@@ -85,7 +80,7 @@ export const continueTiming = (
   if (
     active !== null &&
     ["artistLink", "albumLink", "goToArtist", "choiceCard"].includes(active.kind) &&
-    touchAt === undefined
+    !session.hasTouch()
   ) {
     return kind === "choiceCard" ? session.reclassify(kind, to)! : active.id;
   }
@@ -167,7 +162,7 @@ AppState.addEventListener("change", (state) => {
     if (frameCollection === null) session.leave();
     else void frameCollection.flush().then(() => session.leave());
     nativeTransitions.clear();
-    touchAt = undefined;
+    session.forgetTouch();
   }
   if (state === "active" && appState !== "active") timingRouteCommitted(session.route());
   appState = state;

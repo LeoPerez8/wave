@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import * as Effect from "effect/Effect";
-import { createRecommendationTurn } from "./recommendationTurn.ts";
+import { createRecommendationWork } from "./recommendationTurn.ts";
 import { runSteps } from "./stepped.ts";
 
 test("pages and ranking share a frame budget without queuing a turn per page or slice", async () => {
   let now = 0;
   const frames: (() => void)[] = [];
-  const turn = createRecommendationTurn({
+  const { turn } = createRecommendationWork({
     now: () => now,
     intervalMs: () => 1000 / 120,
     request: (run) => {
@@ -50,7 +50,7 @@ test("pages and ranking share a frame budget without queuing a turn per page or 
 test("concurrent readers share rendering frames and cancellation releases the last pending frame", async () => {
   let now = 0;
   const frames = new Set<() => void>();
-  const turn = createRecommendationTurn({
+  const { turn } = createRecommendationWork({
     now: () => now,
     intervalMs: () => 1000 / 120,
     request: (run) => {

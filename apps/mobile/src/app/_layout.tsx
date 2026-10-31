@@ -6,7 +6,13 @@ import "../../global.css";
 import "@/settings/theme";
 
 import { Stack } from "expo-router";
-import { timingTouch, timingStackListeners, startTimingFrameCollection } from "@/lib/timing";
+import {
+  timingTouch,
+  timingTouchEnded,
+  timingTouchTakenOver,
+  timingStackListeners,
+  startTimingFrameCollection,
+} from "@/lib/timing";
 import { StatusBar } from "expo-status-bar";
 import { useEffect } from "react";
 import type { GestureResponderEvent } from "react-native";
@@ -44,6 +50,14 @@ const onRootTouchStart = (event: GestureResponderEvent): void => {
   timingTouch(event);
   touchStarted();
   if (PERF_ENABLED) perfTouch(event);
+};
+const onRootTouchEnd = (event: GestureResponderEvent): void => {
+  timingTouchEnded(event);
+  touchEnded(event);
+};
+const onRootTouchCancel = (): void => {
+  timingTouchTakenOver();
+  touchTakenOver();
 };
 
 /** A render error shows a screen to try again or send the logs from, instead of closing Wave. */
@@ -124,8 +138,8 @@ export default function RootLayout() {
     <GestureHandlerRootView
       style={{ flex: 1, backgroundColor: background }}
       onTouchStart={onRootTouchStart}
-      onTouchEnd={touchEnded}
-      onTouchCancel={touchTakenOver}
+      onTouchEnd={onRootTouchEnd}
+      onTouchCancel={onRootTouchCancel}
     >
       {PERF_ENABLED ? <PerfProbe /> : null}
       {/* Lets library screens open inside the tab they were opened from. The root itself
