@@ -217,7 +217,9 @@ const latestTracks = (
  * nothing to seed a radio, no read failed: Library files can still join.
  */
 const noRadioAnswered = ({ sources }: PlaylistRecommendationSessionInput): boolean =>
-  (sources.seeds?.length ?? 0) > 0 && sources.online !== false && (sources.pages?.length ?? 0) === 0;
+  (sources.seeds?.length ?? 0) > 0 &&
+  sources.online !== false &&
+  (sources.pages?.length ?? 0) === 0;
 
 /**
  * Owns visible offers and save-before-replace ordering; storage is a system boundary.
@@ -282,11 +284,24 @@ export const playlistRecommendationSession = (options: {
    * are plentiful again.
    */
   let refillBelow = PLAYLIST_SPARES_LOW;
+  const keepOffers = (next: readonly PlaylistRecommendationTrack[]) => {
+    savedOffers = next;
+    if (spareCount() >= PLAYLIST_SPARES_LOW) refillBelow = PLAYLIST_SPARES_LOW;
+  };
+  /** A tap's change to the saved offers, not yet written. */
+  let writeOwed = false;
+  let writeTurnAsked = false;
+  const writeOffers = () => {
+    writeOwed = false;
+    options.saved?.write(savedOffers);
+  };
+  const flushOffers = () => {
+    if (writeOwed) writeOffers();
+  };
   const saveOffers = (next: readonly PlaylistRecommendationTrack[]) => {
     if (options.saved === undefined || next === savedOffers) return;
-    savedOffers = next;
-    options.saved?.write(next);
-    if (spareCount() >= PLAYLIST_SPARES_LOW) refillBelow = PLAYLIST_SPARES_LOW;
+    keepOffers(next);
+    writeOffers();
   };
   const firstShown = playlistOffersToShow(savedOffers, { online: online() }).map(slot);
   let state: PlaylistRecommendationState = {
@@ -361,6 +376,24 @@ export const playlistRecommendationSession = (options: {
     };
     if (yieldTurn === undefined) report();
     else void yieldTurn("paint").then(report, report);
+  };
+  /**
+   * Writes the tap's saved offers once its frame has had its turn: taps before then share one
+   * write, of what's left after them all. Leaving writes at once, so the next visit has it.
+   */
+  const writeOffersSoon = () => {
+    writeOwed = true;
+    if (yieldTurn === undefined || disposed || paused) {
+      flushOffers();
+      return;
+    }
+    if (writeTurnAsked) return;
+    writeTurnAsked = true;
+    const turn = () => {
+      writeTurnAsked = false;
+      flushOffers();
+    };
+    void yieldTurn("paint").then(turn, turn);
   };
   const busy = () => renewing || refilling || later !== undefined || savesRunning > 0;
   const notify = () => {
@@ -683,7 +716,8 @@ export const playlistRecommendationSession = (options: {
     }
     savesRunning--;
     consumed.push(offer.track);
-    if (savedOffers.length > 0) saveOffers(playlistOffersWithout(savedOffers, [offer.track]));
+    const hadSaved = savedOffers.length > 0;
+    if (hadSaved) keepOffers(playlistOffersWithout(savedOffers, [offer.track]));
     const slots = [...state.slots];
     slots[index] = null;
     const holes = [index, ...earlier];
@@ -696,6 +730,7 @@ export const playlistRecommendationSession = (options: {
       pendingSlots: pendingSlotsBut(spared),
     });
     for (const hole of spared) slotWaitFilled(hole, "spare");
+    if (hadSaved) writeOffersSoon();
     if (unspared.length > 0) await replace(unspared, "free");
     else {
       // Its slot is filled: a renewal held for this tap runs behind it, with no one waiting.
@@ -708,12 +743,14 @@ export const playlistRecommendationSession = (options: {
     get: () => state,
     dispose: () => {
       disposed = true;
+      flushOffers();
       active?.abort();
       later?.abort();
       listeners.clear();
     },
     pause: () => {
       paused = true;
+      flushOffers();
       active?.abort();
       later?.abort();
     },

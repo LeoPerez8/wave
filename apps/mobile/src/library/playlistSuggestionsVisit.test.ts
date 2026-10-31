@@ -836,3 +836,15 @@ test("leaving as a fresh read's radios start leaves no rejection unhandled", asy
   process.off("unhandledRejection", heard);
   assert.deepEqual(unhandled, []);
 });
+
+test("leaving right after a tap, its saved offers don't hold the song on the next visit", async () => {
+  reset();
+  await visited();
+  const { visit, screen, wanted, sectionSight } = opened();
+  const stop = visit.follow(screen, wanted, sectionSight);
+  await settledFrames();
+  const tapped = visit.session.get().slots[0]!;
+  await visit.session.dismiss(tapped.key);
+  stop();
+  assert.equal(offerIds(opened().visit).includes(tapped.track.id), false);
+});

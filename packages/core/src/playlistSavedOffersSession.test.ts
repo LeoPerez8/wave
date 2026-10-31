@@ -1243,3 +1243,119 @@ test("an offer leaving before the screen settles is a low point held back too", 
   await nextTurn();
   assert.equal(gate.reads, 2);
 });
+
+/** A session opening on [saved] whose paint turns wait for [frames] to be run. */
+const framedSession = (saved: readonly PlaylistRecommendationTrack[]) => {
+  const frames: (() => void)[] = [];
+  const opened = savedSession(saved, {
+    yieldTurn: (kind) =>
+      kind === "paint" ? new Promise<void>((resolve) => frames.push(resolve)) : Promise.resolve(),
+  });
+  /** Runs every frame due, and those they ask for, until nothing's waiting. */
+  const paintAll = async () => {
+    for (await nextTurn(); frames.length > 0; await nextTurn()) frames.shift()!();
+  };
+  return { ...opened, frames, paintAll };
+};
+
+test("a tap's spare is published before the saved offers are written, on a later turn", async () => {
+  const { session, gate, frames, paintAll, shown, written } = framedSession(withSpares("qrstuAB"));
+  let writesAtPublish = -1;
+  const tapped = session.get().slots[0]!;
+  const dismissing = session.dismiss(tapped.key);
+  session.subscribe(() => {
+    if (shown()[0] === "q" && writesAtPublish === -1) writesAtPublish = gate.written.length;
+  });
+  await nextTurn();
+  frames.shift()!();
+  await dismissing;
+  assert.equal(shown()[0], "q");
+  assert.equal(writesAtPublish, 0, "the write is no part of the tap's publish");
+  assert.equal(gate.written.length, 0, "nor of its turn");
+  await paintAll();
+  assert.equal(gate.written.length, 1);
+  assert.equal(written()?.includes(tapped.track.id), false);
+});
+
+test("taps before the write's turn share one write, of what's left after both", async () => {
+  const { session, gate, frames, paintAll, written } = framedSession(withSpares("qrstuAB"));
+  const [first, second] = session.get().slots;
+  const firstTap = session.dismiss(first!.key);
+  await nextTurn();
+  frames.shift()!();
+  await firstTap;
+  const secondTap = session.dismiss(second!.key);
+  await nextTurn();
+  // The second tap's own paint turn, asked for last: the write's is still waiting.
+  frames.pop()!();
+  await secondTap;
+  assert.equal(gate.written.length, 0);
+  await paintAll();
+  assert.equal(gate.written.length, 1);
+  assert.equal(written()?.includes(first!.track.id), false);
+  assert.equal(written()?.includes(second!.track.id), false);
+});
+
+for (const leaving of ["pause", "dispose"] as const) {
+  test(`a write waiting for its turn survives leaving the playlist: ${leaving}`, async () => {
+    const { session, gate, frames, paintAll, written } = framedSession(withSpares("qrstuAB"));
+    const tapped = session.get().slots[0]!;
+    const dismissing = session.dismiss(tapped.key);
+    await nextTurn();
+    frames.shift()!();
+    await dismissing;
+    assert.equal(gate.written.length, 0);
+    session[leaving]();
+    assert.equal(gate.written.length, 1, "before the frames stop");
+    assert.equal(written()?.includes(tapped.track.id), false);
+    await paintAll();
+    assert.equal(gate.written.length, 1, "and only once");
+  });
+}
+
+test("a save ending after the playlist closed still writes, at once", async () => {
+  const { session, gate, frames, written } = framedSession(withSpares("qrstuAB"));
+  const held = Promise.withResolvers<void>();
+  gate.holdSave = held;
+  const tapped = session.get().slots[0]!;
+  const dismissing = session.dismiss(tapped.key);
+  await nextTurn();
+  frames.shift()!();
+  await nextTurn();
+  session.dispose();
+  held.resolve();
+  await dismissing;
+  assert.equal(gate.written.length, 1);
+  assert.equal(written()?.includes(tapped.track.id), false);
+});
+
+test("a refill's save writes the tap's waiting too, with no second write on its turn", async () => {
+  const { session, gate, frames, paintAll, written } = framedSession(withSpares("qrstu"));
+  const tapped = session.get().slots[0]!;
+  const dismissing = session.dismiss(tapped.key);
+  await nextTurn();
+  frames.shift()!();
+  await dismissing;
+  // The tap left 4 spares: its refill read, and ranks on the turn after the write's.
+  await paintAll();
+  assert.equal(gate.reads, 1);
+  assert.equal(written()?.includes(tapped.track.id), false);
+  assert.equal(written()?.includes("a"), true);
+  const last = gate.written.at(-1);
+  await paintAll();
+  assert.equal(gate.written.at(-1), last);
+});
+
+test("a failed save restores its offer and writes nothing", async () => {
+  const { session, gate, frames, paintAll, shown } = framedSession(withSpares("qrstuAB"));
+  gate.saveFails = true;
+  const tapped = session.get().slots[0]!;
+  const dismissing = session.dismiss(tapped.key);
+  await nextTurn();
+  frames.shift()!();
+  assert.equal(await dismissing, false);
+  assert.equal(shown()[0], tapped.track.id);
+  assert.equal(session.get().error, "save");
+  await paintAll();
+  assert.equal(gate.written.length, 0);
+});
