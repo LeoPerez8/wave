@@ -2,6 +2,7 @@ package expo.modules.wavenative.artwork
 
 import expo.modules.wavenative.Fixtures
 import java.io.File
+import java.util.Base64
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -29,7 +30,10 @@ class ArtworkUrisTest {
   fun fourHashesMapToAMosaicAndBack() {
     val uri = ArtworkUris.uri(authority, listOf(a, b, c, d))
     assertEquals("content://$authority/mosaic/$a/$b/$c/$d", uri)
-    assertEquals(ArtworkRequest.Mosaic(listOf(a, b, c, d)), ArtworkUris.parse(authority, uri!!))
+    assertEquals(
+      ArtworkRequest.Mosaic(listOf(a, b, c, d).map(ArtworkTile::Cached)),
+      ArtworkUris.parse(authority, uri!!),
+    )
   }
 
   @Test
@@ -124,12 +128,74 @@ class ArtworkUrisTest {
   }
 
   @Test
-  fun aMosaicIsMadeOfTheFourThumbnails() {
-    val dir = File("/files/artwork")
+  fun aMosaicIsMadeOfThumbnails() {
+    assertEquals(File("/files/artwork/${a}_thumb.jpg"), ArtworkUris.mosaicTile(File("/files/artwork"), a))
+  }
+
+  @Test
+  fun anOnlineCoverMapsToAUriAndBackWithItsAddressesInOrder() {
+    val addresses = listOf("https://lh3.googleusercontent.com/x=w640-h640", "https://lh3.googleusercontent.com/x=w120-h120")
+    val uri = ArtworkUris.forCovers(authority, listOf(addresses))
+    assertEquals(ArtworkRequest.Online(addresses), ArtworkUris.parse(authority, uri!!))
+  }
+
+  @Test
+  fun aMosaicMixesCachedAndOnlineCovers() {
+    val online = listOf("https://i.ytimg.com/vi/abc/hqdefault.jpg")
+    val uri = ArtworkUris.forCovers(authority, listOf(listOf("/x/${a}_thumb.jpg"), online, listOf("/x/$c.jpg"), listOf("/x/$d.jpg")))
     assertEquals(
-      listOf(a, b, c, d).map { File(dir, "${it}_thumb.jpg") },
-      ArtworkUris.mosaicTiles(dir, listOf(a, b, c, d)),
+      ArtworkRequest.Mosaic(
+        listOf(ArtworkTile.Cached(a), ArtworkTile.Online(online), ArtworkTile.Cached(c), ArtworkTile.Cached(d)),
+      ),
+      ArtworkUris.parse(authority, uri!!),
     )
+  }
+
+  @Test
+  fun anAddressOfAnotherHostIsNotServed() {
+    assertNull(ArtworkUris.forCovers(authority, listOf(listOf("https://example.com/x.jpg"))))
+    assertEquals(
+      "content://$authority/$b",
+      ArtworkUris.forCovers(authority, listOf(listOf("http://10.0.0.1/x.jpg"), listOf("/x/$b.jpg"))),
+    )
+  }
+
+  @Test
+  fun onlyCoverHostsAreServed() {
+    assertNull(ArtworkUris.forCovers(authority, listOf(listOf("https://image-cdn-ak.spotifycdn.com/image/x"))))
+    val spotify = listOf("https://i.scdn.co/image/ab67616d00001e02abc")
+    val uri = ArtworkUris.forCovers(authority, listOf(spotify))
+    assertEquals(ArtworkRequest.Online(spotify), ArtworkUris.parse(authority, uri!!))
+  }
+
+  @Test
+  fun theOldestOnlineCoversGoPastTheCap() {
+    val dir = Fixtures.tempDir()
+    val (old, middle, new) = listOf(1_000L, 2_000L, 3_000L).mapIndexed { index, modified ->
+      File(dir, "$index.img").apply {
+        writeBytes(ByteArray(10))
+        setLastModified(modified)
+      }
+    }
+    val partial = File(dir, ".partial.img.tmp").apply { writeBytes(ByteArray(10)) }
+    ArtworkUris.trimOnlineCovers(dir, new, maxBytes = 20)
+    assertEquals(listOf(false, true, true, true), listOf(old, middle, new, partial).map(File::exists))
+  }
+
+  @Test
+  fun theCoverJustWrittenStaysEvenOverTheCap() {
+    val dir = Fixtures.tempDir()
+    val cover = File(dir, "a.img").apply { writeBytes(ByteArray(10)) }
+    ArtworkUris.trimOnlineCovers(dir, cover, maxBytes = 1)
+    assertEquals(true, cover.exists())
+  }
+
+  @Test
+  fun aForgedOnlineUriIsRejected() {
+    val forged = Base64.getUrlEncoder().withoutPadding().encodeToString("https://example.com/x.jpg".toByteArray())
+    assertNull(ArtworkUris.parse(authority, "content://$authority/o.$forged"))
+    assertNull(ArtworkUris.parse(authority, "content://$authority/o."))
+    assertNull(ArtworkUris.parse(authority, "content://$authority/o.%%%"))
   }
   @Test
   fun mediumCoversFallBackToOriginalsUntilTheBackfillArrives() {

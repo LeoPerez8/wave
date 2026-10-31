@@ -1,9 +1,13 @@
 package expo.modules.wavenative.artwork
 
 import java.io.File
+import java.util.Base64
 
 /** What an artwork content URI asks [ArtworkProvider] for. */
 sealed interface ArtworkRequest {
+  /** One online cover, from the first of its [addresses] that loads. */
+  data class Online(val addresses: List<String>) : ArtworkRequest
+
   /** One cover: the original image of artwork [hash]. */
   data class Cover(val hash: String) : ArtworkRequest
 
@@ -14,7 +18,14 @@ sealed interface ArtworkRequest {
   data class Medium(val hash: String) : ArtworkRequest
 
   /** A playlist's 2×2 mosaic of four covers (Core's `playlistMosaic`), in reading order. */
-  data class Mosaic(val hashes: List<String>) : ArtworkRequest
+  data class Mosaic(val tiles: List<ArtworkTile>) : ArtworkRequest
+}
+
+/** A mosaic's tile: a cached cover, or an online one. */
+sealed interface ArtworkTile {
+  data class Cached(val hash: String) : ArtworkTile
+
+  data class Online(val addresses: List<String>) : ArtworkTile
 }
 
 /**
@@ -24,13 +35,20 @@ sealed interface ArtworkRequest {
  * `content://<package>.artwork/medium/<hash>` and `/thumbnail/<hash>` for sized covers, and
  * `content://<package>.artwork/mosaic/<h1>/<h2>/<h3>/<h4>` for a mosaic. A
  * hash is [ArtworkStore]'s 40 lowercase hex chars; anything else is rejected,
- * so the provider never serves a file outside its folders.
+ * so the provider never serves a file outside its folders. In place of a
+ * hash, `o.<base64url>` is an online cover's addresses: Auto only takes
+ * content URIs, so the provider loads them. Only image hosts Wave's covers
+ * come from are accepted, so the exported provider fetches nothing else.
  *
  * Plain strings and files only, so it runs in JVM tests.
  */
 object ArtworkUris {
   private const val SCHEME = "content://"
   private const val MOSAIC = "mosaic"
+  private const val ONLINE = "o."
+
+  /** The ending of an online cover's cached file. */
+  const val ONLINE_FILE = ".img"
   const val MOSAIC_TILES = 4
 
   /**
@@ -41,6 +59,14 @@ object ArtworkUris {
   const val PLAYLIST_IMAGES = "playlists"
 
   private val HASH = Regex("^[0-9a-f]{40}$")
+
+  /**
+   * The image servers of YT Music and Spotify, the covers `yt_song` stores. A
+   * Spotify song's cover is on `i.scdn.co` (docs/spotify-samples); `spotifycdn.com`
+   * only has the playlist's own image, which an entry never stores.
+   */
+  private val ONLINE_COVER =
+    Regex("^https://(?:[\\w.-]+\\.(?:googleusercontent\\.com|ggpht\\.com|ytimg\\.com)|i\\.scdn\\.co)/\\S*$")
 
   /** The original's extensions, as [ArtworkStore.extensionOf] names them. */
   private val EXTENSIONS = listOf("jpg", "png", "webp", "gif", "bmp", "img")
@@ -56,35 +82,65 @@ object ArtworkUris {
   /** The hash of a cached artwork file (original or thumbnail) at [path]; null for any other file. */
   fun hashOf(path: String): String? = CACHED_FILE.find(path.substringAfterLast('/'))?.groupValues?.get(1)
 
-  /** The URI showing [hashes]: a mosaic of four, else the first cover; null without any. */
-  fun uri(authority: String, hashes: List<String>): String? =
+  /** The URI showing [tiles] (hashes or online segments): a mosaic of four, else the first cover; null without any. */
+  fun uri(authority: String, tiles: List<String>): String? =
     when {
-      hashes.isEmpty() -> null
-      hashes.size >= MOSAIC_TILES ->
-        "$SCHEME$authority/$MOSAIC/${hashes.take(MOSAIC_TILES).joinToString("/")}"
-      else -> "$SCHEME$authority/${hashes.first()}"
+      tiles.isEmpty() -> null
+      tiles.size >= MOSAIC_TILES ->
+        "$SCHEME$authority/$MOSAIC/${tiles.take(MOSAIC_TILES).joinToString("/")}"
+      else -> "$SCHEME$authority/${tiles.first()}"
     }
 
   /** The URI showing cached artwork [files] (Core's `AutoArtwork`); files that aren't cached artwork are skipped. */
   fun forFiles(authority: String, files: List<String>): String? = uri(authority, files.mapNotNull(::hashOf))
+
+  /**
+   * The URI showing [covers] (Core's `AutoArtwork`), each a cached file or an
+   * online cover's addresses, best first; covers that are neither are skipped.
+   */
+  fun forCovers(authority: String, covers: List<List<String>>): String? =
+    uri(authority, covers.mapNotNull { cover -> cover.singleOrNull()?.let(::hashOf) ?: onlineSegment(cover) })
+
+  /** [addresses] as a URI segment, without those of other hosts; null when none is left. */
+  private fun onlineSegment(addresses: List<String>): String? {
+    val allowed = addresses.filter(ONLINE_COVER::matches)
+    if (allowed.isEmpty()) return null
+    val text = allowed.joinToString("\n").toByteArray(Charsets.UTF_8)
+    return ONLINE + Base64.getUrlEncoder().withoutPadding().encodeToString(text)
+  }
+
+  private fun tile(segment: String): ArtworkTile? =
+    when {
+      isHash(segment) -> ArtworkTile.Cached(segment)
+      segment.startsWith(ONLINE) -> onlineAddresses(segment.removePrefix(ONLINE))?.let(ArtworkTile::Online)
+      else -> null
+    }
+
+  /** The addresses [encoded] holds; null when it isn't one of [onlineSegment]'s, so a forged URI fetches nothing. */
+  private fun onlineAddresses(encoded: String): List<String>? {
+    val text = runCatching { String(Base64.getUrlDecoder().decode(encoded), Charsets.UTF_8) }.getOrNull()
+    return text?.split('\n')?.takeIf { addresses -> addresses.all(ONLINE_COVER::matches) }
+  }
 
   /** What [uri] asks for, or null when it isn't a well-formed artwork URI of [authority]. */
   fun parse(authority: String, uri: String): ArtworkRequest? {
     val prefix = "$SCHEME$authority/"
     if (!uri.startsWith(prefix)) return null
     val segments = uri.substring(prefix.length).split('/')
-    if (!segments.all(::isSegment)) return null
     return when {
       segments.size == 2 && segments[0] == "thumbnail" && isHash(segments[1]) -> ArtworkRequest.Thumbnail(segments[1])
       segments.size == 2 && segments[0] == "medium" && isHash(segments[1]) -> ArtworkRequest.Medium(segments[1])
-      segments.size == 1 && isHash(segments[0]) -> ArtworkRequest.Cover(segments[0])
-      segments.size == MOSAIC_TILES + 1 && segments[0] == MOSAIC && segments.drop(1).all(::isHash) ->
-        ArtworkRequest.Mosaic(segments.drop(1))
+      segments.size == 1 ->
+        when (val cover = tile(segments[0])) {
+          is ArtworkTile.Cached -> ArtworkRequest.Cover(cover.hash)
+          is ArtworkTile.Online -> ArtworkRequest.Online(cover.addresses)
+          null -> null
+        }
+      segments.size == MOSAIC_TILES + 1 && segments[0] == MOSAIC ->
+        segments.drop(1).map(::tile).takeIf { null !in it }?.let { ArtworkRequest.Mosaic(it.filterNotNull()) }
       else -> null
     }
   }
-
-  private fun isSegment(segment: String): Boolean = segment == MOSAIC || segment == "thumbnail" || segment == "medium" || isHash(segment)
 
   /**
    * The original image of cover [hash] in [directory], whatever its format, or
@@ -108,7 +164,21 @@ object ArtworkUris {
     return File(directory, "${hash}_medium.jpg").takeIf { it.isFile } ?: coverFile(directory, hash)
   }
 
-  /** The thumbnails a mosaic of [hashes] is drawn from, in reading order. */
-  fun mosaicTiles(directory: File, hashes: List<String>): List<File> =
-    hashes.map { File(directory, "${it}_thumb.jpg") }
+  /**
+   * Deletes the oldest of [folder]'s [ONLINE_FILE] files until the rest take up to
+   * [maxBytes]. Never [keep], the one just written.
+   */
+  fun trimOnlineCovers(folder: File, keep: File, maxBytes: Long) {
+    val files = folder.listFiles { file -> file.name.endsWith(ONLINE_FILE) }.orEmpty()
+    var total = files.sumOf { it.length() }
+    for (file in files.sortedBy { it.lastModified() }) {
+      if (total <= maxBytes) return
+      if (file == keep) continue
+      total -= file.length()
+      file.delete()
+    }
+  }
+
+  /** The thumbnail a mosaic draws cached cover [hash] from. */
+  fun mosaicTile(directory: File, hash: String): File = File(directory, "${hash}_thumb.jpg")
 }

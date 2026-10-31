@@ -236,6 +236,8 @@ export { currentLyricIndex, parseLyrics, pickLyrics } from "./lyrics.ts";
 export type { LyricLine, LyricWord, Lyrics, LyricsSources } from "./lyrics.ts";
 export { currentLyricWordIndex, karaokeLyricLines } from "./karaoke.ts";
 export type { KaraokeLyricLine } from "./karaoke.ts";
+export { lyricsFollowStart, lyricsFollowStep } from "./lyricsFollow.ts";
+export type { LyricsFollow, LyricsFollowEvent, LyricsMove } from "./lyricsFollow.ts";
 export { AUTO_LYRIC_LINE_MAX, autoLyricLines } from "./autoLyricLines.ts";
 export type { AutoLyricLines, AutoLyricLinesInput, AutoLyricsText } from "./autoLyricLines.ts";
 export {
@@ -373,6 +375,7 @@ export type {
   AutoAlbum,
   AutoArtist,
   AutoArtwork,
+  AutoCover,
   AutoChildren,
   AutoFetch,
   AutoHomeList,
@@ -1688,7 +1691,7 @@ export type {
 } from "./ytLibraryBatch.ts";
 export { discoverMixesSection, savedDiscoverMix } from "./discoverMixesSection.ts";
 export type { DiscoverMixesSection } from "./discoverMixesSection.ts";
-export { streamedCoverUrl, streamedCoverUrls } from "./streamedCover.ts";
+export { sizedCoverUrls, streamedCoverUrl, streamedCoverUrls } from "./streamedCover.ts";
 export { advisoryTag, explicitFromAdvisory, isExplicit, showsExplicitBadge } from "./explicit.ts";
 export type { ExplicitFlag } from "./explicit.ts";
 export {
@@ -2185,6 +2188,7 @@ export type {
 } from "./playlistRecommendations.ts";
 export * from "./playlistRecommendationSession.ts";
 export * from "./goToSuggestions.ts";
+export { compactTitleScroll, compactTitleShown } from "./compactTitle.ts";
 export * from "./playlistSuggestionsSight.ts";
 export * from "./playlistSavedOffers.ts";
 export * from "./playlistSeeds.ts";
@@ -2314,6 +2318,13 @@ export {
   storedGenius,
 } from "./genius.ts";
 export type { GeniusHit, GeniusMatch, SavedGenius } from "./genius.ts";
+export {
+  geniusAbout,
+  geniusReferents,
+  geniusTranslationRequests,
+  geniusTranslationTarget,
+  withGeniusTranslation,
+} from "./geniusTranslation.ts";
 export {
   GENIUS_REFERENTS_MAX_PAGES,
   GENIUS_REFERENTS_PER_PAGE,

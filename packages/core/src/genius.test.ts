@@ -55,12 +55,14 @@ test("saved Genius misses expire at one week while matches survive offline", asy
     match: null,
     description: null,
     referents: null,
+    translations: {},
   });
   assert.deepEqual(savedGenius(miss, 100 + GENIUS_MISS_MS - 1, song), {
     checkedAt: 100,
     match: null,
     description: null,
     referents: null,
+    translations: {},
   });
   assert.equal(savedGenius(miss, 100 + GENIUS_MISS_MS, song), null);
   assert.equal(savedGenius("bad", 100, song), null);
@@ -80,7 +82,13 @@ test("saved Genius misses expire at one week while matches survive offline", asy
     null,
   );
   const match = pickGeniusSong(song, geniusCandidates(search)!);
-  const found = { checkedAt: 100, match, description: "About", referents: null };
+  const found = {
+    checkedAt: 100,
+    match,
+    description: "About",
+    referents: null,
+    translations: {},
+  };
   assert.deepEqual(savedGenius(storedGenius(song, found), 100 + GENIUS_MISS_MS, song), found);
 });
 
@@ -106,6 +114,7 @@ test("a song's saved Genius answer stands only for the title and artist it was a
     match: null,
     description: null,
     referents: null,
+    translations: {},
   });
   assert.equal(savedGenius(stored, 100, song)?.checkedAt, 100);
   assert.equal(savedGenius(stored, 100, { ...song, title: "Jealous Guy" }), null);

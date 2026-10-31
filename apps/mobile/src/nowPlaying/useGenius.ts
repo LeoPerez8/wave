@@ -1,14 +1,22 @@
-import { songLookup, type SavedGenius } from "@wave/core";
+import {
+  geniusAbout,
+  geniusReferents,
+  geniusTranslationTarget,
+  songLookup,
+  type GeniusReferent,
+  type SavedGenius,
+} from "@wave/core";
 import { Storage } from "expo-sqlite/kv-store";
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 
+import { useLocalisation } from "@/localisation/localisation";
 import {
   geniusInsightsEnabled,
   subscribeGeniusInsights,
   useGeniusInsightsEnabled,
 } from "@/settings/genius";
 
-import { loadGenius, type GeniusAsk } from "./geniusSource";
+import { loadGenius, translateGenius, type GeniusAsk, type GeniusService } from "./geniusSource";
 import { keepGenius } from "./geniusStorage";
 import { isPlayheadLive, playheadVisibility } from "./playhead";
 
@@ -22,20 +30,61 @@ const GENIUS_TOKEN = process.env.EXPO_PUBLIC_GENIUS_ACCESS_TOKEN?.trim() ?? "";
 /** A request that takes longer than this has failed. */
 const REQUEST_TIMEOUT_MS = 15_000;
 
+/** The About card's text: [shown] is [original] or its translation, which replaces it in place. */
+export interface GeniusAboutText {
+  readonly original: string;
+  readonly shown: string;
+}
+
+/** What the Lyrics view shows of Genius's answer. */
+export interface GeniusShown {
+  readonly about: GeniusAboutText | null;
+  readonly referents: readonly GeniusReferent[] | null;
+}
+
+/** A request that takes longer than this has failed; aborted through [controller]. */
+const withTimeout = async <T>(
+  controller: AbortController,
+  request: () => Promise<T>,
+): Promise<T> => {
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    return await request();
+  } finally {
+    clearTimeout(timeout);
+  }
+};
+
+/** The JSON [url] answers with, from [source] (named in the error of an answer that isn't OK). */
+const askJson = (
+  controller: AbortController,
+  source: string,
+  url: string,
+  init: RequestInit,
+): Promise<unknown> =>
+  withTimeout(controller, async () => {
+    const response = await fetch(url, { ...init, signal: controller.signal });
+    if (!response.ok) throw new Error(`HTTP ${response.status} from ${source}`);
+    return (await response.json()) as unknown;
+  });
+
 /**
  * What Genius says about the song the Lyrics view shows (docs/spec.md,
  * "Genius About"): its saved answer, or Genius's, asked only while the view
  * shows lyrics ([hasLyrics]) on screen with "Genius insights" on and a token
- * in the build. [song] keys its saved answer: a Library track by its id, a
- * non-D song by its track id. Null until the answer comes, and for a miss
- * or a failure. The lyrics never wait for it.
+ * in the build, and in the app's language once Google's translation comes.
+ * [song] keys its saved answer: a Library track by its id, a non-D song by
+ * its track id. Null until the answer comes, and for a miss or a failure.
+ * The lyrics never wait for it.
  */
 export const useGenius = (
   song: string | null,
   title: string,
   artist: string,
   hasLyrics: boolean,
-): SavedGenius | null => {
+): GeniusShown | null => {
+  const { language } = useLocalisation();
+  const target = geniusTranslationTarget(language);
   const on = useGeniusInsightsEnabled();
   const visible = useSyncExternalStore(playheadVisibility.subscribe, playheadVisibility.get);
   const asking = on && hasLyrics && GENIUS_TOKEN !== "";
@@ -43,8 +92,8 @@ export const useGenius = (
   const ask = useMemo((): GeniusAsk | null => {
     if (!asking || song === null) return null;
     const lookup = songLookup({ title, artist, album: "", durationMs: 0 });
-    return lookup === null ? null : { key: song, song: lookup, token: GENIUS_TOKEN };
-  }, [asking, song, title, artist]);
+    return lookup === null ? null : { key: song, song: lookup, token: GENIUS_TOKEN, target };
+  }, [asking, song, title, artist, target]);
   const [answer, setAnswer] = useState<{ ask: GeniusAsk; saved: SavedGenius | null } | null>(null);
 
   // Asks only while Now Playing shows on screen; an answer already in stays while it's hidden.
@@ -55,27 +104,29 @@ export const useGenius = (
     const stop = subscribeGeniusInsights(() => {
       if (!geniusInsightsEnabled()) controller.abort();
     });
-    void loadGenius(ask, {
+    const service: GeniusService = {
       read: (key) => Storage.getItemAsync(key),
       keep: keepGenius,
       enabled: () =>
         current && !controller.signal.aborted && geniusInsightsEnabled() && isPlayheadLive(),
-      get: async (url, token) => {
-        const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-        try {
-          const response = await fetch(url, {
-            headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
-            signal: controller.signal,
-          });
-          if (!response.ok) throw new Error(`HTTP ${response.status} from Genius`);
-          return (await response.json()) as unknown;
-        } finally {
-          clearTimeout(timeout);
-        }
-      },
-    }).then((saved) => {
+      get: (url, token) =>
+        askJson(controller, "Genius", url, {
+          headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+        }),
+      post: (url, body) =>
+        askJson(controller, "Google Translate", url, {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
+          body,
+        }),
+    };
+    void loadGenius(ask, service).then(async (saved) => {
       // A failure while an answer for this song is already in (shown before Now Playing hid) keeps it.
       if (current) setAnswer((was) => (saved === null && was?.ask === ask ? was : { ask, saved }));
+      if (saved === null) return;
+      // The original shows meanwhile; a failure leaves it.
+      const translated = await translateGenius(ask, saved, service);
+      if (current && translated !== saved) setAnswer({ ask, saved: translated });
     });
     return () => {
       current = false;
@@ -84,5 +135,14 @@ export const useGenius = (
     };
   }, [ask, visible]);
 
-  return ask !== null && answer?.ask === ask ? answer.saved : null;
+  const saved = ask !== null && answer?.ask === ask ? answer.saved : null;
+  return useMemo(() => {
+    if (saved === null) return null;
+    const { description: original } = saved;
+    const shown = geniusAbout(saved, target);
+    return {
+      referents: geniusReferents(saved, target),
+      about: original === null || shown === null ? null : { original, shown },
+    };
+  }, [saved, target]);
 };

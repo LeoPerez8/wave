@@ -6,6 +6,7 @@ import {
   autoAlbumItem,
   autoArtistItem,
   autoChildren,
+  catalogueOf,
   autoItem,
   autoPageItems,
   autoPlayList,
@@ -322,6 +323,8 @@ describe("Auto album", () => {
 });
 
 describe("Auto artwork", () => {
+  const en = catalogueOf("en");
+
   const cover = "/data/artwork/0123456789abcdef0123456789abcdef01234567.jpg";
 
   test("an album shows its cover", () => {
@@ -371,6 +374,66 @@ describe("Auto artwork", () => {
     assert.deepEqual(single.artwork, [cover]);
     const empty = autoPlaylistItem({ id: 7, name: "Drive", trackCount: 0, thumbPaths: [] });
     assert.equal("artwork" in empty, false);
+  });
+
+  test("a playlist asks for its online covers at the size Auto draws them", () => {
+    const stored = "https://lh3.googleusercontent.com/abc=w120-h120-l90-rj";
+    const single = autoPlaylistItem(
+      { id: 7, name: "Drive", trackCount: 1, thumbPaths: [stored] },
+      en,
+      true,
+    );
+    assert.deepEqual(single.artwork, [
+      ["https://lh3.googleusercontent.com/abc=w640-h640-l90-rj", stored],
+    ]);
+    const mosaic = autoPlaylistItem(
+      {
+        id: 7,
+        name: "Drive",
+        trackCount: 9,
+        thumbPaths: ["/a_thumb.jpg", stored, "/c_thumb.jpg", "/d_thumb.jpg"],
+      },
+      en,
+      true,
+    );
+    assert.deepEqual(mosaic.artwork, [
+      "/a_thumb.jpg",
+      ["https://lh3.googleusercontent.com/abc=w320-h320-l90-rj", stored],
+      "/c_thumb.jpg",
+      "/d_thumb.jpg",
+    ]);
+  });
+
+  test("an online cover that is already large only has its stored address", () => {
+    const stored = "https://i.scdn.co/image/ab67616d0000b273abc";
+    const row = autoPlaylistItem(
+      { id: 7, name: "Drive", trackCount: 1, thumbPaths: [stored] },
+      en,
+      true,
+    );
+    assert.deepEqual(row.artwork, [[stored]]);
+  });
+
+  test("with YT Music off a playlist keeps its files and asks for no online cover", () => {
+    const stored = "https://lh3.googleusercontent.com/abc=w120-h120-l90-rj";
+    const spotify = "https://i.scdn.co/image/ab67616d00001e02abc";
+    const online = autoPlaylistItem(
+      { id: 7, name: "Drive", trackCount: 2, thumbPaths: [stored, spotify] },
+      en,
+      false,
+    );
+    assert.equal("artwork" in online, false);
+    const mixed = autoPlaylistItem(
+      { id: 7, name: "Drive", trackCount: 9, thumbPaths: ["/a.jpg", stored, "/c.jpg", "/d.jpg"] },
+      en,
+      false,
+    );
+    assert.deepEqual(mixed.artwork, ["/a.jpg", "/c.jpg", "/d.jpg"]);
+    assert.equal(
+      "artwork" in autoPlaylistItem({ id: 7, name: "Drive", trackCount: 1, thumbPaths: [stored] }),
+      false,
+      "off unless told otherwise",
+    );
   });
 
   test("an artist shows a cover of theirs when there is one", () => {

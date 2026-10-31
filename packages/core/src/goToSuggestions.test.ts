@@ -3,7 +3,11 @@ import { test } from "node:test";
 
 import {
   goToSuggestionsOffered,
+  goToSuggestionsPillAfter,
+  goToSuggestionsPillShown,
   goToSuggestionsScroll,
+  type GoToSuggestionsPill,
+  type GoToSuggestionsPillEvent,
   playlistSuggestionsPlace,
   type PlaylistRecommendationSlot,
 } from "./index.ts";
@@ -77,4 +81,48 @@ test("up to two screens of travel animates; further jumps straight there", () =>
 test("under reduce motion a tap always jumps", () => {
   const near = goToSuggestionsScroll({ top: 900, scroll: 0, listHeight: 800, reduceMotion: true });
   assert.deepEqual(near, { offset: 900, animated: false });
+});
+
+const after = (...events: readonly GoToSuggestionsPillEvent[]): GoToSuggestionsPill =>
+  events.reduce(goToSuggestionsPillAfter, "hidden" as GoToSuggestionsPill);
+
+test("opening a long playlist shows no pill, whatever the list reports while it opens", () => {
+  assert.equal(after(), "hidden");
+  assert.equal(after("scrolled", "scrolled"), "hidden");
+  assert.equal(goToSuggestionsPillShown(after("scrolled"), "away"), false);
+});
+
+test("the pill shows during a drag, and stays there however long the finger holds", () => {
+  assert.equal(goToSuggestionsPillShown(after("dragStarted"), "away"), true);
+  assert.equal(after("dragStarted", "scrolled", "waited"), "dragging");
+});
+
+test("the pill shows through the fling after a drag, then leaves when the wait ends", () => {
+  const flinging = after("dragStarted", "dragEnded", "scrolled", "scrolled");
+  assert.equal(goToSuggestionsPillShown(flinging, "away"), true);
+  assert.equal(goToSuggestionsPillAfter(flinging, "waited"), "hidden");
+});
+
+test("a new drag takes the pill back from the wait", () => {
+  assert.equal(after("dragStarted", "dragEnded", "dragStarted"), "dragging");
+  assert.equal(after("dragStarted", "dragEnded", "waited", "dragStarted"), "dragging");
+});
+
+test("the pill leaves once the section is in sight, and returns if a drag leaves it", () => {
+  const dragging = after("dragStarted");
+  assert.equal(goToSuggestionsPillShown(dragging, "inSight"), false);
+  assert.equal(goToSuggestionsPillShown(dragging, "unknown"), false);
+  assert.equal(goToSuggestionsPillShown(after("dragStarted", "scrolled"), "away"), true);
+});
+
+test("the scroll from a tap doesn't keep the pill, nor bring it back after it left", () => {
+  const tapped = after("dragStarted", "dragEnded", "tapped");
+  assert.equal(goToSuggestionsPillShown(tapped, "away"), true, "it still leaves with the section");
+  assert.equal(goToSuggestionsPillAfter(tapped, "scrolled"), "tapped");
+  assert.equal(after("dragStarted", "dragEnded", "tapped", "scrolled", "waited"), "hidden");
+  assert.equal(after("dragStarted", "dragEnded", "tapped", "waited", "scrolled"), "hidden");
+});
+
+test("a drag after a tap counts as the owner's scroll again", () => {
+  assert.equal(after("dragStarted", "dragEnded", "tapped", "dragStarted"), "dragging");
 });

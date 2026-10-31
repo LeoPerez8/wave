@@ -90,6 +90,8 @@ export interface FindInList<T = unknown> {
    * field is pinned. Read once, as the list opens.
    */
   readonly initialOffset: number;
+  /** Where the list opens with the field as it is now, which Keep Find Field Visible can change. */
+  readonly openingOffset: number;
   /**
    * For the list's content container: tall enough that the field can always
    * scroll out of sight, however short the list; none when it's pinned.
@@ -173,7 +175,17 @@ export function useFindInList<T>(
     const frame = requestAnimationFrame(() => scroll.current.scrollTo(y));
     return () => cancelAnimationFrame(frame);
   }, [pinned]);
-  return { query, onChange, found, shown, placeOf, pinned, initialOffset, minHeight };
+  return {
+    query,
+    onChange,
+    found,
+    shown,
+    placeOf,
+    pinned,
+    initialOffset,
+    openingOffset: placement.initialOffset,
+    minHeight,
+  };
 }
 
 /**

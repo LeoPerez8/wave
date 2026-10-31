@@ -38,6 +38,7 @@ export function Mosaic({ paths, tints, size, radius }: Props) {
         tint={tints?.[0]}
         size={size}
         radius={radius}
+        sharp
       />
     );
   const half = size / 2;
@@ -50,7 +51,7 @@ export function Mosaic({ paths, tints, size, radius }: Props) {
       {tints === undefined
         ? paths
             .slice(0, 4)
-            .map((path) => <Artwork key={path} uri={uri(path, ytMusic)} size={half} />)
+            .map((path) => <Artwork key={path} uri={uri(path, ytMusic)} size={half} sharp />)
         : tints.slice(0, 4).map((tint, i) => (
             // oxlint-disable-next-line react/no-array-index-key -- a fixed 2×2 grid
             <Artwork key={i} tint={tint} size={half} />

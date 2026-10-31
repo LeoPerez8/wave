@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { grid } from "@/catalog/grid";
 
+import { CompactTitle } from "./CompactTitle";
 import { IconButton } from "./IconButton";
 import { TitlePress, type TitleLongPress } from "./TitleLongPress";
 
@@ -14,6 +15,7 @@ import { TitlePress, type TitleLongPress } from "./TitleLongPress";
  * Screens that set their title in their content (an album under its cover) omit it.
  * Given [titleLongPress], a long press on the title opens the screen's options
  * next to it, as on a large title. [onTitlePress] handles taps and accessibility activation.
+ * Inside a `CompactTitleFrame`, the page's title appears beside Back once scrolled past.
  */
 export function ScreenHeader({
   title,
@@ -28,12 +30,13 @@ export function ScreenHeader({
   const insets = useSafeAreaInsets();
   return (
     <View className="bg-background" style={{ paddingTop: insets.top + 4 }}>
-      <View style={{ paddingHorizontal: grid.margin - 12 }}>
+      <View className="flex-row items-center" style={{ paddingHorizontal: grid.margin - 12 }}>
         <IconButton
           icon={IconArrowLeft}
           label={strings.settings.back}
           onPress={() => router.back()}
         />
+        <CompactTitle />
       </View>
       {title !== undefined && (
         <View

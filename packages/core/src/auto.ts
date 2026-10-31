@@ -14,8 +14,8 @@ import { en, type Catalogue } from "./catalogueEn.ts";
  * - another browsable node (say, an artist): add an `AutoNode` variant, its
  *   segments in `encodeAutoMediaId`/`decodeAutoMediaId`, its children in
  *   `listing` and, if it plays, its list in `autoPlayList`;
- * - artwork on an item built from a row: pass the row's artwork files as the
- *   last argument of `folder`/`playable` (a cover, or `playlistMosaic`'s four);
+ * - artwork on an item built from a row: pass the row's covers as the last
+ *   argument of `folder`/`playable` (a cover, or `playlistMosaic`'s four);
  * - an explicit item for a list with nothing in it: its titles in `emptyTitles`.
  *
  * The app side (`apps/mobile/src/auto/Auto.ts`) loads a source's rows in
@@ -24,6 +24,7 @@ import { en, type Catalogue } from "./catalogueEn.ts";
 
 import { playlistPlayback, queueSongTrackId, type QueueSong } from "./playlistEntries.ts";
 import type { QueueContext } from "./queue.ts";
+import { sizedCoverUrls } from "./streamedCover.ts";
 import type { YtSong } from "./ytMusic.ts";
 
 /** Auto's tabs: the root's children, in order. */
@@ -208,23 +209,32 @@ export interface AutoItem {
   /** Starts playback. */
   readonly playable: boolean;
   /**
-   * Cached artwork files to show (paths as the library stores them): one
-   * cover, or four for a mosaic (Core's `playlistMosaic`). Absent without
-   * artwork, so Auto shows its placeholder.
+   * Covers to show: one, or four for a mosaic (Core's `playlistMosaic`).
+   * Absent without artwork, so Auto shows its placeholder.
    */
   readonly artwork?: AutoArtwork;
 }
 
-/** An item's artwork files: one cover, or four for a 2×2 mosaic. */
-export type AutoArtwork = readonly string[];
+/**
+ * One cover: a cached artwork file (its path as the library stores it), or an
+ * online cover's addresses, best first (Core's `sizedCoverUrls`).
+ */
+export type AutoCover = string | readonly string[];
+
+/** An item's covers: one, or four for a 2×2 mosaic. */
+export type AutoArtwork = readonly AutoCover[];
 
 /**
- * The artwork part of an item: the known files among [files] (missing ones
+ * The artwork part of an item: the known covers among [covers] (missing ones
  * are skipped), or nothing at all when none is known. Every item builder
  * passes its row's artwork here.
  */
-const artworkOf = (files: readonly (string | null | undefined)[]): { artwork?: AutoArtwork } => {
-  const known = files.filter((file): file is string => typeof file === "string" && file !== "");
+const artworkOf = (
+  covers: readonly (AutoCover | null | undefined)[],
+): { artwork?: AutoArtwork } => {
+  const known = covers.filter(
+    (cover): cover is AutoCover => cover !== null && cover !== undefined && cover !== "",
+  );
   return known.length === 0 ? {} : { artwork: known };
 };
 
@@ -232,7 +242,7 @@ const folder = (
   node: AutoNode,
   title: string,
   subtitle: string | null = null,
-  artwork: readonly (string | null | undefined)[] = [],
+  artwork: readonly (AutoCover | null | undefined)[] = [],
 ): AutoItem => ({
   mediaId: encodeAutoMediaId(node),
   title,
@@ -246,7 +256,7 @@ const playable = (
   node: AutoNode,
   title: string,
   subtitle: string | null = null,
-  artwork: readonly (string | null | undefined)[] = [],
+  artwork: readonly (AutoCover | null | undefined)[] = [],
 ): AutoItem => ({
   mediaId: encodeAutoMediaId(node),
   title,
@@ -463,13 +473,37 @@ export interface AutoPlaylist {
   readonly thumbPaths?: readonly string[];
 }
 
-/** A playlist in a list (the Playlists tab): opens its tracks. */
-export const autoPlaylistItem = (playlist: AutoPlaylist, c: Catalogue = en): AutoItem =>
+/**
+ * The side, in physical pixels, a playlist's online cover is asked for at.
+ * The car's host doesn't say what it draws, so it's the size Library covers
+ * reach Auto's tiles at (the medium cover). A mosaic's tile takes half.
+ */
+const AUTO_COVER_SIDE = 640;
+
+/**
+ * [paths] as Auto's covers: files as they are, online addresses at the size
+ * Auto draws them, or dropped with YT Music off, when Wave asks the web for no
+ * cover (docs/spec.md).
+ */
+const autoPlaylistCovers = (paths: readonly string[], ytMusic: boolean): AutoArtwork => {
+  const side = paths.length > 1 ? AUTO_COVER_SIDE / 2 : AUTO_COVER_SIDE;
+  return paths.flatMap((path): AutoCover[] => {
+    if (!/^https?:\/\//.test(path)) return [path];
+    return ytMusic ? [sizedCoverUrls(path, side)] : [];
+  });
+};
+
+/** A playlist in a list (the Playlists tab): opens its tracks. [ytMusic] is the YT Music switch. */
+export const autoPlaylistItem = (
+  playlist: AutoPlaylist,
+  c: Catalogue = en,
+  ytMusic = false,
+): AutoItem =>
   folder(
     { type: "list", list: { kind: "playlist", id: String(playlist.id) } },
     playlist.name,
     c.auto.songs(playlist.trackCount),
-    playlist.thumbPaths ?? [],
+    autoPlaylistCovers(playlist.thumbPaths ?? [], ytMusic),
   );
 
 /**
