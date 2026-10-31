@@ -5,9 +5,12 @@ import {
   parseSavedPlaylistOffers,
   playlistRecommendationSession,
   playlistRecommendations,
+  playlistReserveRefillLine,
   type PlaylistRecommendationFeedback,
+  type PlaylistRecommendationSessionInput,
   type PlaylistRecommendationTiming,
   type PlaylistRecommendationTrack,
+  type PlaylistReserveRefill,
   type PlaylistSlotWait,
 } from "./index.ts";
 
@@ -62,6 +65,9 @@ const savedSession = (
     holdSave: undefined as PromiseWithResolvers<void> | undefined,
     saveFails: false,
     waits: [] as PlaylistSlotWait[],
+    refills: [] as PlaylistReserveRefill[],
+    /** What each ranking was asked to rank. */
+    ranked: [] as PlaylistRecommendationSessionInput[],
     clock: 0,
   };
   const save = async (songId: string) => {
@@ -95,6 +101,7 @@ const savedSession = (
     },
     rank: async (input) => {
       gate.ranks++;
+      gate.ranked.push(input);
       return playlistRecommendations(input.playlist, input.sources, PLAYLIST_SAVED_OFFERS);
     },
     dismiss: (offer) => save(offer.track.id),
@@ -112,6 +119,7 @@ const savedSession = (
       now: () => gate.clock,
       report: options.report ?? (() => {}),
       slotWait: (wait) => gate.waits.push(wait),
+      reserveRefill: (refill) => gate.refills.push(refill),
     },
   });
   const shown = () => session.get().slots.map((offer) => offer?.track.id ?? null);
@@ -182,11 +190,11 @@ test("Add and Dismiss work at once over a renewal under way, which starts over a
 });
 
 test("an Add or Dismiss takes its song out of what's saved at once", async () => {
-  const { session, written } = savedSession(lettered("vwxyz"));
+  const { session, written } = savedSession(lettered("vwxyzqrstuAB"));
   await session.dismiss(session.get().slots[0]!.key);
-  assert.deepEqual(written(), ["w", "x", "y", "z"]);
+  assert.deepEqual(written(), "wxyzqrstuAB".split(""));
   await session.accept(session.get().slots[2]!.key);
-  assert.deepEqual(written(), ["w", "y", "z"]);
+  assert.deepEqual(written(), "wyzqrstuAB".split(""));
 });
 
 test("a failed renewal over saved offers shows nothing, reports it and keeps what's saved", async () => {
@@ -233,14 +241,14 @@ test("a read that finds an offer dismissed removes it and fills only its slot", 
 });
 
 test("a song leaving takes a spare at once when one is saved, moving nothing else", () => {
-  const { session, gate, shown, written } = savedSession(lettered("vwxyzqr"));
+  const { session, gate, shown, written } = savedSession(lettered("vwxyzqrstuAB"));
   const before = session.get().slots;
   session.leave((offer) => offer.id === "x");
   assert.deepEqual(shown(), ["v", "w", "q", "y", "z"]);
   for (const index of [0, 1, 3, 4]) assert.equal(session.get().slots[index], before[index]);
   assert.deepEqual(session.get().pendingSlots, []);
   assert.equal(gate.reads, 0);
-  assert.deepEqual(written(), ["v", "w", "y", "z", "q", "r"]);
+  assert.deepEqual(written(), "vwyzqrstuAB".split(""));
 });
 
 test("a song leaving with no spare holds its slot's placeholder until a refill fills it", async () => {
@@ -541,7 +549,7 @@ test("a streamed offer's tags refresh from the ranking", async () => {
 });
 
 test("an Add with a spare fills its slot from it, with no read or ranking, moving nothing else", async () => {
-  const { session, gate, shown, written } = savedSession(lettered("vwxyzqrs"));
+  const { session, gate, shown, written } = savedSession(lettered("vwxyzqrstuAB"));
   const before = session.get().slots;
   assert.equal(await session.accept(before[1]!.key), true);
   assert.deepEqual(shown(), ["v", "q", "x", "y", "z"]);
@@ -551,11 +559,11 @@ test("an Add with a spare fills its slot from it, with no read or ranking, movin
   assert.equal(gate.reads, 0);
   assert.equal(gate.ranks, 0);
   assert.deepEqual(gate.choices, ["w"]);
-  assert.deepEqual(written(), "vxyzqrs".split(""));
+  assert.deepEqual(written(), "vxyzqrstuAB".split(""));
 });
 
 test("a Dismiss with a spare does too, and its wait says the offer came from a spare", async () => {
-  const { session, gate, shown } = savedSession(lettered("vwxyzqrs"));
+  const { session, gate, shown } = savedSession(lettered("vwxyzqrstuAB"));
   const dismissing = session.dismiss(session.get().slots[4]!.key);
   gate.clock = 120;
   await dismissing;
@@ -598,7 +606,7 @@ test("the slot holds its placeholder until the choice is saved, then takes the s
 });
 
 test("a failed save keeps its offer and leaves the spare for the retry", async () => {
-  const { session, gate, shown } = savedSession(lettered("vwxyzq"));
+  const { session, gate, shown } = savedSession(lettered("vwxyzqrstuA"));
   gate.saveFails = true;
   const offer = session.get().slots[0]!;
   assert.equal(await session.dismiss(offer.key), false);
@@ -660,7 +668,13 @@ test("offline, a streamed spare stays hidden: a Library spare goes first, and wi
   const { session, gate, shown, written } = savedSession(saved, { online: false });
   await session.dismiss(session.get().slots[0]!.key);
   assert.equal(shown()[0], "r");
-  assert.equal(gate.reads, 0);
+  assert.deepEqual(
+    gate.waits.map((wait) => wait.from),
+    ["spare"],
+  );
+  // r was the last spare that can show: the reserve refills, and the next slot takes from that.
+  assert.equal(gate.reads, 1);
+  await new Promise((resolve) => setImmediate(resolve));
   await session.dismiss(session.get().slots[1]!.key);
   assert.equal(shown()[1], "a");
   assert.equal(gate.reads, 1);
@@ -672,7 +686,7 @@ test("offline, a streamed spare stays hidden: a Library spare goes first, and wi
 });
 
 test("quick taps each fill their own slot with their own spare, and nothing is written twice", async () => {
-  const { session, gate, shown } = savedSession(lettered("vwxyzqrs"));
+  const { session, gate, shown } = savedSession(lettered("vwxyzqrstuABCD"));
   const held = Promise.withResolvers<void>();
   gate.holdSave = held;
   const [first, second, third] = session.get().slots;
@@ -695,10 +709,7 @@ test("quick taps each fill their own slot with their own spare, and nothing is w
 });
 
 test("with no spare left, the slot holds its placeholder and fills from the next ranking", async () => {
-  const { session, gate, shown } = savedSession(lettered("vwxyzq"));
-  await session.dismiss(session.get().slots[0]!.key);
-  assert.equal(shown()[0], "q");
-  assert.equal(gate.reads, 0);
+  const { session, gate, shown } = savedSession(lettered("vwxyz"));
   const held = Promise.withResolvers<void>();
   gate.hold = held;
   const dismissing = session.dismiss(session.get().slots[1]!.key);
@@ -712,7 +723,7 @@ test("with no spare left, the slot holds its placeholder and fills from the next
   assert.equal(gate.reads, 1);
   assert.deepEqual(
     gate.waits.map((wait) => wait.from),
-    ["spare", "ranking"],
+    ["ranking"],
   );
 });
 
@@ -795,5 +806,290 @@ test("offers saved before the reserve, ten at most, load and serve as spares", a
   assert.deepEqual(shown(), ["v", "w", "x", "y", "z"]);
   await session.dismiss(session.get().slots[0]!.key);
   assert.deepEqual(shown(), ["q", "w", "x", "y", "z"]);
+  assert.equal(gate.waits[0]?.from, "spare");
+});
+
+/** Five showing and the [spares]. */
+const withSpares = (spares: string) => lettered(`vwxyz${spares}`);
+
+const nextTurn = () => new Promise((resolve) => setImmediate(resolve));
+
+test("a tap leaving 5 spares reads nothing; the one leaving 4 refills behind the screen", async () => {
+  const { session, gate, shown } = savedSession(withSpares("qrstuA"));
+  await session.dismiss(session.get().slots[0]!.key);
+  assert.equal(gate.reads, 0, "5 spares left");
+  const hold = Promise.withResolvers<void>();
+  gate.hold = hold;
+  assert.equal(await session.dismiss(session.get().slots[1]!.key), true, "the tap doesn't wait");
+  assert.deepEqual(shown(), ["q", "r", "x", "y", "z"]);
+  assert.equal(gate.reads, 1, "4 spares left");
+  assert.equal(gate.ranks, 0);
+  hold.resolve();
+  await nextTurn();
+  assert.equal(gate.ranks, 1);
+});
+
+test("a refill adds to the spares it keeps, up to 20 offers, and changes nothing showing", async () => {
+  const { session, gate, written } = savedSession(withSpares("qrstu"));
+  const hold = Promise.withResolvers<void>();
+  gate.hold = hold;
+  await session.dismiss(session.get().slots[0]!.key);
+  const before = session.get();
+  let notified = 0;
+  session.subscribe(() => notified++);
+  hold.resolve();
+  await nextTurn();
+  assert.equal(session.get(), before);
+  assert.equal(notified, 0);
+  assert.deepEqual(written(), "wxyzqrstuabcdefghijk".split(""));
+  assert.deepEqual(gate.refills, [{ ms: 0, added: 11, spares: 15, failed: false }]);
+});
+
+test("a tap during a refill takes a spare left, without waiting or a second refill", async () => {
+  const { session, gate, shown } = savedSession(withSpares("qrstu"));
+  const hold = Promise.withResolvers<void>();
+  gate.hold = hold;
+  await session.dismiss(session.get().slots[0]!.key);
+  assert.equal(gate.reads, 1);
+  assert.equal(await session.dismiss(session.get().slots[1]!.key), true);
+  assert.deepEqual(shown(), ["q", "r", "x", "y", "z"]);
+  assert.equal(gate.reads, 1, "one refill at a time");
+  hold.resolve();
+  await nextTurn();
+  assert.equal(gate.reads, 1);
+});
+
+test("new spares reflect the Adds and Dismisses saved before the refill ranks", async () => {
+  const { session, gate, written } = savedSession(withSpares("qrstu"));
+  const hold = Promise.withResolvers<void>();
+  gate.hold = hold;
+  await session.accept(session.get().slots[0]!.key);
+  // Taken while the refill reads: its ranking comes after this choice.
+  await session.dismiss(session.get().slots[1]!.key);
+  hold.resolve();
+  await nextTurn();
+  const input = gate.ranked.at(-1)!;
+  assert.deepEqual(
+    input.playlist.map((offer) => offer.id),
+    ["seed", "v"],
+  );
+  const excluded = input.sources.exclude?.map((offer) => offer.id) ?? [];
+  for (const id of ["v", "w"]) {
+    assert.equal(excluded.includes(id), true, id);
+    assert.equal(written()?.includes(id), false, id);
+  }
+});
+
+test("a slot waiting on its placeholder takes the refill's new spares with no second read", async () => {
+  const capped = (id: string) => ({ ...track(id), artists: ["Band"] });
+  const saved = [
+    capped("v"),
+    capped("w"),
+    track("x"),
+    track("y"),
+    track("z"),
+    track("q"),
+    ...["B1", "B2", "B3", "B4"].map(capped),
+  ];
+  const { session, gate, shown } = savedSession(saved);
+  const hold = Promise.withResolvers<void>();
+  gate.hold = hold;
+  // q takes x's slot and leaves 4 spares, all by Band, whose cap is full.
+  await session.dismiss(session.get().slots[2]!.key);
+  assert.equal(gate.reads, 1);
+  const waiting = session.dismiss(session.get().slots[3]!.key);
+  await nextTurn();
+  assert.deepEqual(session.get().pendingSlots, [3]);
+  const before = session.get().slots;
+  hold.resolve();
+  await waiting;
+  assert.deepEqual(shown(), ["v", "w", "q", "a", "z"]);
+  assert.deepEqual(session.get().pendingSlots, []);
+  assert.equal(gate.reads, 1);
+  for (const index of [0, 1, 2, 4]) assert.equal(session.get().slots[index], before[index]);
+  assert.deepEqual(
+    gate.waits.map((wait) => wait.from),
+    ["spare", "spare"],
+  );
+});
+
+test("a slot refilled from a ranking keeps what didn't fill it as spares", async () => {
+  const { session, gate, shown, written } = savedSession(lettered("vwxyz"));
+  await session.dismiss(session.get().slots[0]!.key);
+  assert.equal(shown()[0], "a");
+  assert.equal(gate.reads, 1);
+  assert.deepEqual(written(), "wxyzabcdefghijklmnop".split(""));
+  await session.dismiss(session.get().slots[1]!.key);
+  assert.equal(shown()[1], "b");
+  assert.equal(gate.reads, 1, "the spares just kept fill it");
+});
+
+test("a reserve the ranking leaves short doesn't read again on that tap, or while spares are left", async () => {
+  const { session, gate, shown, written } = savedSession(withSpares("qrs"));
+  // The radios bring only one song more: the reserve stays short of 5 spares.
+  gate.library = [gate.library[0]!, track("a")];
+  await session.dismiss(session.get().slots[0]!.key);
+  await nextTurn();
+  assert.equal(gate.reads, 1, "one tap, one refill");
+  assert.deepEqual(written(), "wxyzqrsa".split(""));
+  await session.dismiss(session.get().slots[1]!.key);
+  await session.dismiss(session.get().slots[2]!.key);
+  await nextTurn();
+  assert.equal(gate.reads, 1, "a spare is left");
+  assert.deepEqual(shown(), ["q", "r", "s", "y", "z"]);
+});
+
+test("a short reserve refills again when its last spare goes, and with 5 spares back the rule is too", async () => {
+  const { session, gate } = savedSession(withSpares("qr"));
+  gate.radio = [];
+  await session.dismiss(session.get().slots[0]!.key);
+  await nextTurn();
+  assert.equal(gate.reads, 1);
+  await session.dismiss(session.get().slots[1]!.key);
+  await nextTurn();
+  assert.equal(gate.reads, 2, "the last spare taken");
+  // A renewal saves a to k: 11 spares, none of them showing.
+  gate.radio = lettered("abcdefghijk");
+  await session.renew();
+  assert.equal(gate.reads, 3);
+  for (let taps = 0; taps < 6; taps++) await session.dismiss(session.get().slots[0]!.key);
+  await nextTurn();
+  assert.equal(gate.reads, 3, "5 spares left");
+  await session.dismiss(session.get().slots[0]!.key);
+  await nextTurn();
+  assert.equal(gate.reads, 4, "4 spares left");
+});
+
+test("a failed refill shows nothing, is logged, and the next low point tries again", async () => {
+  const { session, gate } = savedSession(withSpares("qrstu"));
+  gate.fail = true;
+  const hold = Promise.withResolvers<void>();
+  gate.hold = hold;
+  await session.dismiss(session.get().slots[0]!.key);
+  const before = session.get();
+  gate.clock = 900;
+  hold.resolve();
+  await nextTurn();
+  assert.equal(session.get(), before);
+  assert.equal(session.get().error, null);
+  assert.deepEqual(gate.refills, [{ ms: 900, added: 0, spares: 4, failed: true }]);
+  gate.fail = false;
+  await session.dismiss(session.get().slots[1]!.key);
+  await nextTurn();
+  assert.equal(gate.reads, 2);
+  assert.equal(gate.refills.at(-1)?.failed, false);
+});
+
+for (const leaving of ["pause", "dispose"] as const) {
+  test(`leaving the playlist cancels a refill, saving and logging nothing: ${leaving}`, async () => {
+    const { session, gate } = savedSession(withSpares("qrstu"));
+    const hold = Promise.withResolvers<void>();
+    gate.hold = hold;
+    await session.dismiss(session.get().slots[0]!.key);
+    const writes = gate.written.length;
+    session[leaving]();
+    assert.equal(gate.signals.at(-1)?.aborted, true);
+    gate.fail = true;
+    hold.resolve();
+    await nextTurn();
+    assert.equal(gate.ranks, 0);
+    assert.equal(gate.written.length, writes);
+    assert.deepEqual(gate.refills, []);
+    assert.equal(session.get().error, null);
+  });
+}
+
+test("hidden, a tap whose save ends takes its spare but starts no refill", async () => {
+  const { session, gate, shown } = savedSession(withSpares("qrstu"));
+  const held = Promise.withResolvers<void>();
+  gate.holdSave = held;
+  const dismissing = session.dismiss(session.get().slots[0]!.key);
+  session.pause();
+  held.resolve();
+  await dismissing;
+  assert.equal(shown()[0], "q");
   assert.equal(gate.reads, 0);
+});
+
+test("a renewal owed goes instead of a refill, and one asked for during a refill runs after it", async () => {
+  const first = savedSession(withSpares("qrstu"));
+  const renewing = first.session.renew();
+  await first.session.dismiss(first.session.get().slots[0]!.key);
+  await renewing;
+  await nextTurn();
+  assert.equal(first.gate.reads, 2, "the renewal the tap stopped, then its rerun");
+  assert.deepEqual(first.gate.refills, []);
+
+  const second = savedSession(withSpares("qrstu"));
+  const hold = Promise.withResolvers<void>();
+  second.gate.hold = hold;
+  await second.session.dismiss(second.session.get().slots[0]!.key);
+  await second.session.renew();
+  assert.equal(second.gate.reads, 1, "it waits for the refill");
+  hold.resolve();
+  await nextTurn();
+  assert.equal(second.gate.reads, 2);
+});
+
+test("an offer leaving takes a spare and, with reads allowed, is a low point too", async () => {
+  const reading = savedSession(withSpares("qrstu"));
+  reading.session.leave((offer) => offer.id === "v");
+  await nextTurn();
+  assert.equal(reading.gate.reads, 1);
+
+  const settling = savedSession(withSpares("qrstu"));
+  settling.session.leave((offer) => offer.id === "v", { read: false });
+  await nextTurn();
+  assert.equal(settling.shown()[0], "q");
+  assert.equal(settling.gate.reads, 0);
+});
+
+test("offline, hidden streamed spares don't count towards the 5", async () => {
+  const saved = [...withSpares("qrstu"), ...["A", "B", "C"].map(stream)];
+  const { session, gate } = savedSession(saved, { online: false });
+  await session.dismiss(session.get().slots[0]!.key);
+  await nextTurn();
+  assert.equal(gate.reads, 1);
+});
+
+test("a session with nowhere to keep spares starts no refill of its own", async () => {
+  const seed = track("seed");
+  const library = [seed, ...lettered("abcdefghijklmnop")];
+  let reads = 0;
+  let id = 0;
+  const session = playlistRecommendationSession({
+    newId: () => String(++id),
+    read: async () => {
+      reads++;
+      return {
+        playlist: [seed],
+        sources: {
+          library,
+          pages: [{ id: "song:seed", artists: ["Artist seed"], songs: library }],
+          graph: null,
+        },
+      };
+    },
+    dismiss: async () => {},
+  });
+  await session.renew();
+  await session.dismiss(session.get().slots[0]!.key);
+  await session.dismiss(session.get().slots[1]!.key);
+  await nextTurn();
+  assert.equal(reads, 3, "the renewal and each slot's own");
+});
+
+test("a refill reads as one log line", () => {
+  assert.equal(
+    playlistReserveRefillLine({ ms: 2410.4, added: 11, spares: 15, failed: false }),
+    "Playlist reserve refill: 11 new spares, 15 ready after 2410 ms",
+  );
+  assert.equal(
+    playlistReserveRefillLine({ ms: 900, added: 1, spares: 1, failed: false }),
+    "Playlist reserve refill: 1 new spare, 1 ready after 900 ms",
+  );
+  assert.equal(
+    playlistReserveRefillLine({ ms: 900, added: 0, spares: 4, failed: true }),
+    "Playlist reserve refill failed after 900 ms",
+  );
 });
