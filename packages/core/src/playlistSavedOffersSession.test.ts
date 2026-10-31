@@ -277,10 +277,7 @@ test("a session's offers are those showing and those saved, none before anything
   const empty = savedSession([]);
   assert.deepEqual(empty.session.offers(), []);
   const { session } = savedSession(lettered("vwxyzq"));
-  assert.deepEqual(
-    new Set(session.offers().map((offer) => offer.id)),
-    new Set("vwxyzq".split("")),
-  );
+  assert.deepEqual(new Set(session.offers().map((offer) => offer.id)), new Set("vwxyzq".split("")));
 });
 
 test("a song that isn't showing leaves what's saved without touching the screen", () => {
