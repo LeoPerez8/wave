@@ -622,8 +622,22 @@ pixels, medium through 640, otherwise original. Artist photos take precedence, t
 requested size, the next larger size, and the existing placeholder. Sized content URIs
 resolve available files in that order, so a pending medium keeps showing its original.
 Rows, tiles, mosaics and artist images share this helper. Now Playing and image captures
-use originals. The media session's bitmap loader caps decoding at 640 px for the
-notification and Android Auto.
+use originals.
+
+An online entry's cover in a playlist cover (page, grid, large card, Home, Search, menus)
+asks for the physical pixels it shows, a mosaic's cover for half the side. The stored address
+never changes; Core's `sizedCoverUrls(url, pixels)` works out the sharper ones from it, best
+first, ending with the stored one. YouTube Music's image server takes the size in the address,
+up to the 1200 px downloads embed, and asks nothing when the stored cover is already as large.
+A video thumbnail goes from the smallest of maxres (720 px cropped), sd (480) and hq (360) that
+covers the size down to hq, and a cover up to 180 px (a list row) keeps its stored thumbnail.
+Spotify's 300 px album cover goes to its 640 px one when the size is over 300 px; other Spotify
+images and other hosts stay as they are. The stored cover shows underneath until a sharper one
+loads, and stays when none does, so a sharp cover needs the network or the ordinary image cache
+and no new storage.
+
+The media session's bitmap loader caps decoding at 640 px for the notification and Android
+Auto.
 
 ### Play event shape
 

@@ -1690,7 +1690,7 @@ export type {
 } from "./ytLibraryBatch.ts";
 export { discoverMixesSection, savedDiscoverMix } from "./discoverMixesSection.ts";
 export type { DiscoverMixesSection } from "./discoverMixesSection.ts";
-export { streamedCoverUrl, streamedCoverUrls } from "./streamedCover.ts";
+export { sizedCoverUrls, streamedCoverUrl, streamedCoverUrls } from "./streamedCover.ts";
 export { advisoryTag, explicitFromAdvisory, isExplicit, showsExplicitBadge } from "./explicit.ts";
 export type { ExplicitFlag } from "./explicit.ts";
 export {
