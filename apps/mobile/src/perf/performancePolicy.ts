@@ -425,7 +425,7 @@ export const WHOLE_LIBRARY: Record<string, WholeLibraryException> = {
       "Visible online lists and their download buttons resolve local files between frames, once per list read; they are not the hidden Now Playing subtree.",
     capabilities: ["ytmusic/libraryFinder.ts#useInLibraryBetweenFrames"],
   },
-  "ytmusic/YtSongList.tsx#YtSongList": {
+  "ytmusic/YtSongList.tsx#YtSongListPage": {
     howOften: FOLLOWED_FINDER,
     reason:
       "Only a loaded remote list after screen settlement follows the finder; offline/loading pages render without acquiring it.",
