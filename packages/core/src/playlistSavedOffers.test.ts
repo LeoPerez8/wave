@@ -151,6 +151,13 @@ test("an offer that can't be read drops alone", () => {
   assert.deepEqual(parseSavedPlaylistOffers(text), [good]);
 });
 
+test("an offer saved without a field every track now has drops alone", () => {
+  const good = { track: track("a") };
+  const { durationMs: _gone, ...older } = track("b");
+  const text = JSON.stringify([good, { track: older }]);
+  assert.deepEqual(parseSavedPlaylistOffers(text), [good]);
+});
+
 test("the latest 200 playlists keep their saved offers", () => {
   let order: readonly number[] = [];
   for (let id = 0; id < 200; id++) {

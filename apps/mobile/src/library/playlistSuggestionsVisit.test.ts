@@ -26,6 +26,10 @@ const boundary = `data:text/javascript,${encodeURIComponent(`
   const app = globalThis.playlistVisitApp;
   const song = (id) => ({ id, source: "library", videoId: "", title: id, artists: ["Artist " + id],
     album: null, albumId: null, durationMs: 180000, artworkUrl: null, explicit: false, genre: "Rock" });
+  const row = (id) => ({ id, path: "/" + id, title: id, artist: "Artist " + id, album: "",
+    durationMs: 180000, thumbPath: null, artworkPath: null, titleSort: id, artistSort: id, albumSort: id,
+    addedAt: 0, albumId: 1, artistId: 1, artistIds: [1], discNumber: null, trackNumber: null, year: null,
+    genre: "Rock", hasLyrics: false, explicit: "unknown" });
   const seed = song("seed");
   const libraryNow = () => [seed, ...app.letters.split("").map(song)];
   export class LibraryStore extends Context.Service()("test/LibraryStore") {}
@@ -71,7 +75,7 @@ const boundary = `data:text/javascript,${encodeURIComponent(`
         return {
           playlist: app.playlist.map(song),
           library,
-          songById: new Map(library.map((row) => [row.id, row])),
+          songById: new Map(library.map(({ id }) => [id, row(id)])),
         };
       }),
   });
@@ -396,6 +400,23 @@ test("a saved Library offer without a readable row isn't shown", async () => {
   assert.deepEqual(offerIds(opened().visit), []);
 });
 
+test("a saved row an older version wrote, without a field rows now have, isn't shown", async () => {
+  reset();
+  await visited();
+  for (const [key, text] of app.stored)
+    if (text.startsWith("[{"))
+      app.stored.set(
+        key,
+        JSON.stringify(
+          JSON.parse(text).map((offer: { track: { id: string }; row: { hasLyrics?: boolean } }) => {
+            if (offer.track.id === "b") delete offer.row.hasLyrics;
+            return offer;
+          }),
+        ),
+      );
+  assert.deepEqual(offerIds(opened().visit), ["a", "c", "d", "e", "f"]);
+});
+
 test("saved offers keep the latest 200 playlists and drop the rest from the phone", async () => {
   reset();
   for (let id = 1; id <= 201; id++) {
@@ -436,7 +457,29 @@ test("offline, saved streamed offers stay hidden, and back online they show agai
     artworkUrl: null,
     explicit: false,
   });
-  const row = (id: string) => ({ id, title: id });
+  const row = (id: string) => ({
+    id,
+    path: `/${id}`,
+    title: id,
+    artist: id,
+    album: "",
+    durationMs: 180000,
+    thumbPath: null,
+    artworkPath: null,
+    titleSort: id,
+    artistSort: id,
+    albumSort: id,
+    addedAt: 0,
+    albumId: 1,
+    artistId: 1,
+    artistIds: [1],
+    discNumber: null,
+    trackNumber: null,
+    year: null,
+    genre: null,
+    hasLyrics: false,
+    explicit: "unknown",
+  });
   const library = (id: string) => ({ ...stream(id), id, source: "library", videoId: "" });
   app.stored.set(
     "playlistSuggestions.savedOffers.7",

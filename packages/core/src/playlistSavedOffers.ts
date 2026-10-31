@@ -10,6 +10,7 @@ import {
   type PlaylistRecommendationSources,
   type PlaylistRecommendationTrack,
 } from "./playlistRecommendations.ts";
+import type { YtAlbumSong } from "./ytDiscover.ts";
 
 /** How many offers a playlist saves: the five it shows, and spares for those that leave. */
 export const PLAYLIST_SAVED_OFFERS = 10;
@@ -148,19 +149,38 @@ export interface SavedPlaylistOffer {
 export const storedSavedPlaylistOffers = (offers: readonly SavedPlaylistOffer[]): string =>
   JSON.stringify(offers);
 
-const isStrings = (value: unknown): boolean =>
-  Array.isArray(value) && value.every((item) => typeof item === "string");
+type Check = (value: unknown) => boolean;
+const isString: Check = (value) => typeof value === "string";
+const orNull =
+  (check: Check): Check =>
+  (value) =>
+    value === null || check(value);
+
+/**
+ * Each field a saved track must hold. One added to `YtAlbumSong` doesn't compile until
+ * it's checked here, so a track saved before it reads as not saved.
+ */
+const TRACK_FIELDS: { readonly [Field in keyof YtAlbumSong]-?: Check } & {
+  readonly id: Check;
+  readonly source: Check;
+} = {
+  id: isString,
+  source: (value) => value === "library" || value === "stream",
+  videoId: isString,
+  title: isString,
+  artists: (value) => Array.isArray(value) && value.every(isString),
+  album: orNull(isString),
+  albumId: orNull(isString),
+  durationMs: orNull((value) => typeof value === "number"),
+  artworkUrl: orNull(isString),
+  explicit: (value) => typeof value === "boolean",
+};
+const TRACK_CHECKS = Object.entries(TRACK_FIELDS);
 
 const isTrack = (value: unknown): value is PlaylistRecommendationTrack => {
   if (typeof value !== "object" || value === null) return false;
-  const track = value as Record<string, unknown>;
-  return (
-    typeof track["id"] === "string" &&
-    (track["source"] === "library" || track["source"] === "stream") &&
-    typeof track["videoId"] === "string" &&
-    typeof track["title"] === "string" &&
-    isStrings(track["artists"])
-  );
+  const track = value as Readonly<Record<string, unknown>>;
+  return TRACK_CHECKS.every(([name, check]) => check(track[name]));
 };
 
 /** The offers [text] stored; anything unreadable reads as not saved. */
