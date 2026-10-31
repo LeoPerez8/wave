@@ -6,7 +6,7 @@ import {
   geniusReferentsUrl,
   geniusSearchUrl,
   geniusSongUrl,
-  geniusTranslationRequest,
+  geniusTranslationRequests,
   pickGeniusSong,
   savedGenius,
   storedGenius,
@@ -136,10 +136,11 @@ export const loadGenius = async (
 
 /**
  * [saved] with its text translated into [ask]'s target (docs/spec.md, "Genius
- * About"), saved with the answer. [saved] as it is when there's nothing to
- * ask (no target, no token, insights off, already translated) and when Google
- * can't be reached or answers something unreadable, which saves nothing, so
- * the next opening asks again. Never rejects.
+ * About" and "Genius annotations"), saved with the answer. [saved] as it is
+ * when there's nothing to ask (no target, no token, insights off, already
+ * translated) and when Google can't be reached or answers something
+ * unreadable, or asking stops being allowed, on any of a long song's
+ * requests: nothing is saved, so the next opening asks again. Never rejects.
  */
 export const translateGenius = async (
   ask: GeniusAsk,
@@ -147,17 +148,18 @@ export const translateGenius = async (
   service: GeniusService,
 ): Promise<SavedGenius> => {
   if (ask.target === null || ask.token.trim() === "" || !service.enabled()) return saved;
-  const request = geniusTranslationRequest(saved, ask.target);
-  if (request === null) return saved;
-  let reply: unknown;
+  const replies: unknown[] = [];
   try {
-    reply = await service.post(request.url, request.body);
+    for (const request of geniusTranslationRequests(saved, ask.target)) {
+      if (!service.enabled()) return saved;
+      replies.push(await service.post(request.url, request.body));
+    }
   } catch (cause) {
     console.warn("[wave] couldn't translate Genius's text", cause);
     return saved;
   }
-  if (!service.enabled()) return saved;
-  const translated = withGeniusTranslation(saved, ask.target, reply);
+  if (replies.length === 0 || !service.enabled()) return saved;
+  const translated = withGeniusTranslation(saved, ask.target, replies);
   if (translated === null) {
     console.warn("[wave] Google Translate's reply couldn't be read");
     return saved;
