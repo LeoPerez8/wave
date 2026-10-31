@@ -42,6 +42,9 @@ let nextOffer = 0;
 /** Fewer eligible suggestions left than this, and a refill reads the radios' next pages. */
 const LOW = 10;
 
+/** How long loading waits for the screen to settle and a free turn, against the 3 s other work allows. */
+const SETTLE_WAIT_MS = 600;
+
 const entryLibraryId = (entry: PlaylistEntryRow) =>
   entry.source === "library" ? String(entry.track.id) : undefined;
 const entryVideoId = (entry: PlaylistEntryRow) =>
@@ -69,7 +72,7 @@ const openPlaylistSuggestionsVisit = (playlistId: number, openingAt: number) => 
   // This visit's radio readers: each radio's live first page is read once a visit.
   const visitId = `playlist:${playlistId}:${Date.now().toString(36)}-${++nextOffer}`;
   let remaining = Number.POSITIVE_INFINITY;
-  // Nothing reads before the screen has settled, not even a slot's refill: the renewal fills it.
+  // Nothing reads before the settle wait ends, not even a slot's refill: the renewal fills it.
   let settled = false;
   const rowOf = (id: string) =>
     latestRows.get().get(id) ?? libraryRows.get().get(id) ?? savedRows.get(id);
@@ -257,9 +260,13 @@ const openPlaylistSuggestionsVisit = (playlistId: number, openingAt: number) => 
         sight,
         start: (signal) => {
           sightWatch.waiting("settle");
-          return appRuntime.runPromise(settledTurnEffect, { signal }).then(() => {
-            settled = true;
-          });
+          return appRuntime
+            .runPromise(Effect.raceFirst(settledTurnEffect, Effect.sleep(SETTLE_WAIT_MS)), {
+              signal,
+            })
+            .then(() => {
+              settled = true;
+            });
         },
         // The visit follows the write's cause (#599): source changes revalidate even when
         // playlist IDs stay the same, once the playlist is in sight and settled. Catalog writes
