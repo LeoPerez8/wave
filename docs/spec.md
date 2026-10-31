@@ -638,6 +638,13 @@ images and other hosts stay as they are. The stored cover shows underneath until
 loads, and stays when none does, so a sharp cover needs the network or the ordinary image cache
 and no new storage.
 
+Android Auto takes artwork only as content URIs, so a playlist's online covers reach it through
+`ArtworkProvider`: Core's `autoPlaylistItem` sends `sizedCoverUrls` at 640 px (320 for a mosaic's
+tile), and the provider loads the first address that answers when Auto asks, into the app's cache,
+where the OS can reclaim it. It only fetches YT Music's and Spotify's image hosts. With an online
+tile that can't load, a mosaic shows its first cover that can, and nothing but Auto's placeholder
+shows when none can. Song rows in Auto stay without an online cover.
+
 The media session's bitmap loader caps decoding at 640 px for the notification and Android
 Auto.
 

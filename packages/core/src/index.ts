@@ -375,6 +375,7 @@ export type {
   AutoAlbum,
   AutoArtist,
   AutoArtwork,
+  AutoCover,
   AutoChildren,
   AutoFetch,
   AutoHomeList,
