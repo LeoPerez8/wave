@@ -41,10 +41,9 @@ export const followRecognizeTile = <L extends RecognizeTrack, S extends YtSong>(
       tile.listeningEnded(tap);
     };
     running++;
-    // Phone audio is #901's: it needs Android's consent dialog, with Core's source choice.
     const run = startRecognizeSession(
       { ...deps, foreground: () => true },
-      "microphone",
+      "auto",
       (card) => {
         if (card.kind === "listening") return;
         end();

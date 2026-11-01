@@ -58,6 +58,13 @@
       android:theme="@android:style/Theme.Translucent.NoTitleBar"
       android:excludeFromRecents="true"
       android:noHistory="true" />
+    <!-- Stays alive behind Android's phone-audio consent, without opening Wave's screen. -->
+    <activity
+      android:name="expo.modules.wavenative.recognize.RecognizeConsentActivity"
+      android:exported="false"
+      android:taskAffinity=""
+      android:theme="@android:style/Theme.Translucent.NoTitleBar"
+      android:excludeFromRecents="true" />
     <!-- A media library service: Android Auto browses Wave through it (docs/auto-spike.md). -->
     <service
       android:name="expo.modules.wavenative.player.PlaybackService"
