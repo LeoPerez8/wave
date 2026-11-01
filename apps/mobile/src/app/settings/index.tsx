@@ -19,6 +19,7 @@ import {
 import { SettingsPageRow } from "@/settings/SettingsPage";
 import { useSettingsSummaries } from "@/settings/settingsSummaries";
 import { RUNNING_VERSION } from "@/updates/runningVersion";
+import { UpdateButton } from "@/updates/UpdateButton";
 
 /** A row for each page, in Core's order; a handful, so a plain list. */
 function SettingsPageRows({
@@ -64,9 +65,12 @@ export default function SettingsScreen() {
         <Hairline />
         <SettingsPageRows summaries={summaries} developerVisible={developerVisible} />
         {RUNNING_VERSION !== null && (
-          <Text className="pt-6 text-center font-sans text-footnote text-secondary" selectable>
-            {strings.appUpdates.version(RUNNING_VERSION)}
-          </Text>
+          <View className="flex-row items-center justify-center pt-6">
+            <Text className="text-center font-sans text-footnote text-secondary" selectable>
+              {strings.appUpdates.version(RUNNING_VERSION)}
+            </Text>
+            <UpdateButton />
+          </View>
         )}
       </ScrollView>
     </View>

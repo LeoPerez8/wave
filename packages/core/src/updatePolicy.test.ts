@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import {
   UPDATE_APK_RETRY_INTERVAL_MS,
   UPDATE_CHECK_INTERVAL_MS,
+  afterRequestedCheck,
   installTapAfter,
   latestApkUrl,
   nativeUpdateIsNew,
@@ -12,6 +13,9 @@ import {
   playerKeepsPlaying,
   readLatestApk,
   readSignedApk,
+  strandedUpdateRequest,
+  updateButtonAction,
+  updateButtonLook,
   updatePillShown,
   updatePillSwipeDismisses,
   versionOrder,
@@ -37,6 +41,7 @@ const state = (changes: Partial<UpdateState> = {}): UpdateState => ({
   apkChecked: true,
   offeredApkVersion: "1.3.0-ti",
   lastApkAttempt: null,
+  updateRequest: "none",
   ...changes,
 });
 
@@ -557,5 +562,159 @@ describe("a version's place in the sequence", () => {
     assert.equal(versionOrder("1.2"), null);
     assert.equal(versionOrder("1.100.0"), null);
     assert.equal(versionOrder("1.2.3-beta"), null);
+  });
+});
+
+describe("the update button in Settings", () => {
+  const idle = {
+    nativeUpdate: "none",
+    installTap: "none",
+    updateRequest: "none",
+    downloadingApk: false,
+  } as const;
+
+  describe("a tap", () => {
+    it("installs a downloaded APK", () => {
+      assert.equal(updateButtonAction({ ...idle, nativeUpdate: "downloaded" }), "install");
+    });
+
+    it("checks when no APK is ready", () => {
+      assert.equal(updateButtonAction(idle), "check");
+      assert.equal(updateButtonAction({ ...idle, nativeUpdate: "available" }), "check");
+    });
+
+    it("joins a download already running, to install what it brings", () => {
+      assert.equal(
+        updateButtonAction({ ...idle, nativeUpdate: "available", downloadingApk: true }),
+        "followDownload",
+      );
+    });
+
+    it("does nothing while an earlier tap is under way", () => {
+      assert.equal(updateButtonAction({ ...idle, updateRequest: "check" }), "none");
+      assert.equal(updateButtonAction({ ...idle, updateRequest: "download" }), "none");
+      assert.equal(
+        updateButtonAction({ ...idle, nativeUpdate: "downloaded", installTap: "handedOver" }),
+        "none",
+      );
+    });
+  });
+
+  describe("what it asks of the policy", () => {
+    it("checks at once, inside the 15 minutes", () => {
+      const justChecked = { lastCheckAt: NOW - MINUTE };
+      assert.equal(nextUpdateStep(state({ ...justChecked, updateRequest: "check" })), "check");
+    });
+
+    it("waits for a step under way before checking", () => {
+      assert.equal(nextUpdateStep(state({ working: true, updateRequest: "check" })), "wait");
+    });
+
+    it("asks with Wave in front before using mobile data", () => {
+      const asking = state({
+        network: "metered",
+        nativeUpdate: "available",
+        updateRequest: "askMobileData",
+      });
+      assert.equal(nextUpdateStep(asking), "askMobileData");
+      assert.equal(nextUpdateStep({ ...asking, visible: false }), "wait");
+    });
+
+    it("downloads on mobile data once allowed, unlike the automatic path", () => {
+      const onMobileData = state({ network: "metered", nativeUpdate: "available" });
+      assert.equal(nextUpdateStep(onMobileData), "wait");
+      assert.equal(nextUpdateStep({ ...onMobileData, updateRequest: "download" }), "downloadApk");
+    });
+
+    it("downloads a version the automatic path holds off for a day", () => {
+      const heldOff = state({
+        nativeUpdate: "available",
+        lastApkAttempt: { version: "1.3.0-ti", at: NOW - MINUTE },
+      });
+      assert.equal(nextUpdateStep(heldOff), "wait");
+      assert.equal(nextUpdateStep({ ...heldOff, updateRequest: "download" }), "downloadApk");
+    });
+  });
+
+  describe("what a requested check leads to", () => {
+    const found = {
+      nativeUpdate: "none",
+      network: "unmetered",
+      bundleAvailable: false,
+      bundleDownloaded: false,
+      checkFailed: false,
+    } as const;
+
+    it("installs an APK already on the phone", () => {
+      assert.deepEqual(afterRequestedCheck({ ...found, nativeUpdate: "downloaded" }), {
+        next: "install",
+        outcome: null,
+      });
+    });
+
+    it("downloads a found APK off mobile data", () => {
+      assert.deepEqual(afterRequestedCheck({ ...found, nativeUpdate: "available" }), {
+        next: "download",
+        outcome: null,
+      });
+    });
+
+    it("asks first on mobile data", () => {
+      assert.deepEqual(
+        afterRequestedCheck({ ...found, nativeUpdate: "available", network: "metered" }),
+        { next: "askMobileData", outcome: null },
+      );
+    });
+
+    it("says Wave is up to date when nothing was found", () => {
+      assert.deepEqual(afterRequestedCheck(found), { next: "none", outcome: "upToDate" });
+    });
+
+    it("leaves a bundle to its silent path, found or already downloaded", () => {
+      const silent = { next: "none", outcome: "bundleOnItsWay" };
+      assert.deepEqual(afterRequestedCheck({ ...found, bundleAvailable: true }), silent);
+      assert.deepEqual(afterRequestedCheck({ ...found, bundleDownloaded: true }), silent);
+    });
+
+    it("says the check failed rather than up to date", () => {
+      assert.deepEqual(afterRequestedCheck({ ...found, checkFailed: true }), {
+        next: "none",
+        outcome: "checkFailed",
+      });
+    });
+
+    it("acts on what a half-failed check did find", () => {
+      assert.equal(
+        afterRequestedCheck({ ...found, nativeUpdate: "available", checkFailed: true }).next,
+        "download",
+      );
+    });
+  });
+
+  describe("a request with no network", () => {
+    it("ends with what couldn't happen", () => {
+      assert.equal(strandedUpdateRequest("check", "none"), "checkFailed");
+      assert.equal(strandedUpdateRequest("download", "none"), "downloadFailed");
+      assert.equal(strandedUpdateRequest("askMobileData", "none"), "downloadFailed");
+    });
+
+    it("carries on with one, and with no request there's nothing to end", () => {
+      assert.equal(strandedUpdateRequest("check", "metered"), null);
+      assert.equal(strandedUpdateRequest("none", "none"), null);
+    });
+  });
+
+  describe("its face", () => {
+    it("spins while a tap's check is under way", () => {
+      assert.equal(updateButtonLook({ updateRequest: "check", downloadPercent: null }), "checking");
+    });
+
+    it("shows the percentage of any download", () => {
+      assert.equal(updateButtonLook({ updateRequest: "none", downloadPercent: 42 }), 42);
+    });
+
+    it("rests otherwise", () => {
+      assert.equal(updateButtonLook({ updateRequest: "none", downloadPercent: null }), "idle");
+    });
   });
 });

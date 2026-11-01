@@ -69,6 +69,10 @@ private fun yesNo(value: Boolean) = if (value) "yes" else "no"
  */
 fun keepsApkAfter(status: Int): Boolean = status == -1 || status == 3 || status == 0
 
+/** How far a download is, in whole percent: what the update button in Settings shows. */
+fun downloadPercent(done: Long, size: Long): Int =
+  if (size <= 0) 0 else (done.toDouble() / size * 100).toInt().coerceIn(0, 100)
+
 /** The step of [DOWNLOAD_LOG_STEP] percent a download just reached past [logged], if it did. */
 fun downloadProgressToLog(done: Long, size: Long, logged: Int): Int? {
   if (size <= 0) return null

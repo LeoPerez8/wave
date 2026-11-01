@@ -18,7 +18,10 @@ class SelfInstallStatusReceiver : BroadcastReceiver() {
     val session = intent.getIntExtra(PackageInstaller.EXTRA_SESSION_ID, -1)
     val message = intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE)
     WaveLog.i(SELF_INSTALL_TAG, "Session $session status ${installStatusName(status)}: ${message ?: "no message"}")
-    if (!keepsApkAfter(status)) SelfInstaller.deleteApks(context)
+    if (!keepsApkAfter(status)) {
+      SelfInstaller.deleteApks(context)
+      SelfInstaller.onInstallRefused?.invoke()
+    }
     if (status != PackageInstaller.STATUS_PENDING_USER_ACTION) return
     if (!SelfInstaller.isInForeground()) {
       WaveLog.i(SELF_INSTALL_TAG, "Android asks for a confirmation with Wave behind; it waits for Wave in front")
