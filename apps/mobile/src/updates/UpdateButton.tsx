@@ -49,9 +49,9 @@ export function UpdateButton() {
   const text = strings.appUpdates;
   const offered = useOfferedAppUpdate();
   const look = useUpdateButtonLook();
-  const downloading = typeof look === "number";
+  const downloading = typeof look === "object";
   const label = downloading
-    ? text.downloading(look)
+    ? text.downloading(look.downloading)
     : offered !== null
       ? text.updateTheApp
       : text.checkForUpdates;
@@ -60,7 +60,7 @@ export function UpdateButton() {
       {(color) =>
         downloading ? (
           <Text className="font-sans text-footnote" style={{ color }}>
-            {text.percent(look)}
+            {text.percent(look.downloading)}
           </Text>
         ) : (
           <Spinner spinning={look === "checking"} color={color} />

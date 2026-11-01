@@ -113,6 +113,14 @@ class SelfInstallLinesTest {
   }
 
   @Test
+  fun `only a declined or dropped session counts as abandoned`() {
+    assertTrue(isInstallAbandoned(3))
+    assertFalse(isInstallAbandoned(-1))
+    assertFalse(isInstallAbandoned(0))
+    assertFalse(isInstallAbandoned(1))
+  }
+
+  @Test
   fun aDownloadsPercentStaysWhole() {
     assertEquals(0, downloadPercent(done = 10, size = 0))
     assertEquals(41, downloadPercent(done = 419, size = 1000))

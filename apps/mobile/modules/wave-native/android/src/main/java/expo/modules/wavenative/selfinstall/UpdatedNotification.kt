@@ -5,9 +5,9 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
 import expo.modules.wavenative.R
-import expo.modules.wavenative.locale.NativeText
 import expo.modules.wavenative.log.WaveLog
-import expo.modules.wavenative.lookup.LibraryLookupNotice
+import expo.modules.wavenative.launcher.openAppIntent
+import expo.modules.wavenative.locale.NativeText
 
 /**
  * "Wave updated", posted once an APK has replaced the app. Android won't let a receiver reopen the
@@ -34,7 +34,7 @@ object UpdatedNotification {
       .setContentText(NativeText.get("tapToOpen"))
       .setCategory(Notification.CATEGORY_STATUS)
       .setAutoCancel(true)
-    LibraryLookupNotice.openApp(context)?.let { builder.setContentIntent(it) }
+    openAppIntent(context)?.let { builder.setContentIntent(it) }
     manager.notify(TAG, ID, builder.build())
   }
 }

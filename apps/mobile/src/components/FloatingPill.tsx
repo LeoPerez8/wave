@@ -1,11 +1,11 @@
 import type { Icon } from "@tabler/icons-react-native";
-import { useEffect, type ComponentProps, type ReactNode } from "react";
+import { type ComponentProps, type ReactNode } from "react";
 import { Text } from "react-native";
 import Animated, { FadeIn, FadeOut, ReduceMotion, useReducedMotion } from "react-native-reanimated";
 
 import { CELL } from "@/catalog/grid";
 import { TextButton } from "@/components/TextButton";
-import { makeExternalStore } from "@/lib/externalStore";
+import { useListPillOnScreen } from "@/components/listPills";
 import { TAP_ANIMATION_MS } from "@/motion/timing";
 
 /** The pill's height. */
@@ -15,9 +15,6 @@ export const FLOATING_PILL_ROOM = PILL + CELL;
 
 const pillIn = FadeIn.duration(TAP_ANIMATION_MS).reduceMotion(ReduceMotion.Never);
 const pillOut = FadeOut.duration(TAP_ANIMATION_MS).reduceMotion(ReduceMotion.Never);
-
-/** How many list pills are up. The update pill waits for them to leave. */
-export const listPillsUp = makeExternalStore(0);
 
 type PillProps = {
   icon: Icon;
@@ -32,20 +29,20 @@ type PillProps = {
 };
 
 /**
- * A pill floating over a list's bottom, [bottom] up, that takes the list somewhere
- * out of sight (the Queue's Current Song, a playlist's Go to Suggestions). It fades
- * in and out with the tap animation, or just appears and goes under reduce motion.
- * [accessibilityLabel] is what a screen reader hears, when not the [label].
+ * A pill over a screen's list, which the update pill waits for while that screen is in front (a
+ * playlist's Go to Suggestions). It has to sit inside a navigator's screen.
  */
-export function FloatingPill(props: PillProps) {
-  useEffect(() => {
-    listPillsUp.set(listPillsUp.get() + 1);
-    return () => listPillsUp.set(listPillsUp.get() - 1);
-  }, []);
+export function FloatingPill(props: Pick<PillProps, "icon" | "label" | "bottom" | "onPress">) {
+  useListPillOnScreen();
   return <FloatingPillLook {...props} />;
 }
 
-/** The pill's look and placement, for one that isn't over a list and so holds nothing back. */
+/**
+ * A pill floating, [bottom] up, that holds nothing back: the Queue's Current Song, which only shows
+ * in Now Playing where the update pill is already hidden, and the update pill itself. It fades in and
+ * out with the tap animation, or just appears and goes under reduce motion. [accessibilityLabel] is
+ * what a screen reader hears, when not the [label].
+ */
 export function FloatingPillLook({
   icon: Arrow,
   label,

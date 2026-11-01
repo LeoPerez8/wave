@@ -4,7 +4,9 @@ import { describe, it } from "node:test";
 import {
   UPDATE_APK_RETRY_INTERVAL_MS,
   UPDATE_CHECK_INTERVAL_MS,
+  afterApkDownload,
   afterRequestedCheck,
+  installTapWhenHandoverEnds,
   installTapAfter,
   latestApkUrl,
   nativeUpdateIsNew,
@@ -14,16 +16,22 @@ import {
   readLatestApk,
   readSignedApk,
   strandedUpdateRequest,
+  stoppedStepNotice,
   updateButtonAction,
   updateButtonLook,
   updatePillShown,
   updatePillSwipeDismisses,
+  updateRequestAfter,
   versionOrder,
   type UpdateState,
 } from "./index.ts";
 
 const NOW = 1_000_000_000;
 const MINUTE = 60_000;
+
+const tried = (ago: number, version = "1.3.0-ti") => ({
+  lastApkAttempt: { version, at: NOW - ago },
+});
 
 /** Wave open on Wi-Fi, silent, checked a moment ago, with nothing pending. */
 const state = (changes: Partial<UpdateState> = {}): UpdateState => ({
@@ -218,15 +226,10 @@ describe("a tap on Update the app", () => {
     assert.equal(nextUpdateStep(state({ ...tapped, working: true })), "wait");
   });
 
-  it("keeps a confirmation for Wave in front, since no app may show it behind", () => {
-    assert.equal(
-      nextUpdateStep(state({ ...tapped, installAccess: "needsConfirmation", visible: false })),
-      "wait",
-    );
-    assert.equal(
-      nextUpdateStep(state({ ...tapped, installAccess: "silent", visible: false })),
-      "installApk",
-    );
+  it("starts no install with Wave behind, on any access, so it never closes under another app", () => {
+    for (const installAccess of ["needsConfirmation", "silent"] as const) {
+      assert.equal(nextUpdateStep(state({ ...tapped, installAccess, visible: false })), "wait");
+    }
   });
 
   it("opens Android's permission screen without the permission", () => {
@@ -279,9 +282,100 @@ describe("what becomes of a tap", () => {
     assert.equal(installTapAfter("handedOver", behind), "none");
   });
 
-  it("leaves no tap and a fresh tap as they are", () => {
+  it("ends a tap that hasn't reached Android when Wave leaves, on any access", () => {
+    for (const installAccess of ["needsPermission", "needsConfirmation", "silent"] as const) {
+      assert.equal(installTapAfter("tapped", { visible: false, installAccess }), "none");
+    }
+  });
+
+  it("leaves no tap as it is, and a tap with Wave in front", () => {
     assert.equal(installTapAfter("none", behind), "none");
-    assert.equal(installTapAfter("tapped", behind), "tapped");
+    assert.equal(installTapAfter("tapped", front), "tapped");
+  });
+
+  it("ends once Android's installer has let go, or Wave is back in front", () => {
+    assert.equal(installTapWhenHandoverEnds("handedOver"), "none");
+  });
+
+  it("isn't ended by that if it isn't a handover: a new tap, or the permission screen", () => {
+    for (const tap of ["none", "tapped", "atPermissionScreen", "awayAtPermissionScreen"] as const) {
+      assert.equal(installTapWhenHandoverEnds(tap), tap);
+    }
+  });
+});
+
+describe("what becomes of a request from the update button", () => {
+  it("ends when Wave leaves, whatever it wanted", () => {
+    for (const request of ["check", "askMobileData", "download"] as const) {
+      assert.equal(updateRequestAfter(request, { visible: false }), "none");
+    }
+  });
+
+  it("stands while Wave is in front", () => {
+    for (const request of ["none", "check", "askMobileData", "download"] as const) {
+      assert.equal(updateRequestAfter(request, { visible: true }), request);
+    }
+  });
+});
+
+describe("what an APK download ends in", () => {
+  const front = { updateRequest: "download", visible: true } as const;
+
+  it("becomes a tap when it's signed and asked for, with Wave in front", () => {
+    assert.deepEqual(afterApkDownload({ ...front, download: "signed" }), {
+      tapped: true,
+      outcome: null,
+    });
+  });
+
+  it("is only an offer when nobody asked", () => {
+    assert.deepEqual(afterApkDownload({ ...front, download: "signed", updateRequest: "none" }), {
+      tapped: false,
+      outcome: null,
+    });
+  });
+
+  it("is only an offer with Wave behind, even if the request hasn't been ended yet", () => {
+    assert.deepEqual(afterApkDownload({ ...front, download: "signed", visible: false }), {
+      tapped: false,
+      outcome: null,
+    });
+  });
+
+  it("says so when it fails and was asked for", () => {
+    assert.deepEqual(afterApkDownload({ ...front, download: "failed" }), {
+      tapped: false,
+      outcome: "downloadFailed",
+    });
+  });
+
+  it("says nothing when it fails unasked, or with nobody there", () => {
+    const quiet = { tapped: false, outcome: null };
+    assert.deepEqual(
+      afterApkDownload({ ...front, download: "failed", updateRequest: "none" }),
+      quiet,
+    );
+    assert.deepEqual(afterApkDownload({ ...front, download: "failed", visible: false }), quiet);
+  });
+});
+
+describe("what a step stopped by a throw tells the person", () => {
+  it("always says an install or the permission screen failed", () => {
+    for (const step of ["installApk", "openInstallPermission"] as const) {
+      assert.equal(stoppedStepNotice({ step, updateRequest: "none" }), "installFailed");
+    }
+  });
+
+  it("says a requested check or download failed", () => {
+    assert.equal(stoppedStepNotice({ step: "check", updateRequest: "check" }), "checkFailed");
+    assert.equal(
+      stoppedStepNotice({ step: "downloadApk", updateRequest: "download" }),
+      "downloadFailed",
+    );
+  });
+
+  it("says nothing of a step nobody asked for", () => {
+    assert.equal(stoppedStepNotice({ step: "check", updateRequest: "none" }), null);
   });
 });
 
@@ -522,10 +616,6 @@ describe("the service's latest APK", () => {
 
 describe("an APK whose last install or download came to nothing", () => {
   const found = { nativeUpdate: "available", offeredApkVersion: "1.3.0-ti" } as const;
-  const tried = (ago: number, version = "1.3.0-ti") => ({
-    lastApkAttempt: { version, at: NOW - ago },
-  });
-
   it("isn't downloaded again for a day", () => {
     assert.equal(UPDATE_APK_RETRY_INTERVAL_MS, 24 * 60 * MINUTE);
     const soon = state({ ...found, ...tried(UPDATE_APK_RETRY_INTERVAL_MS - 1) });
@@ -638,12 +728,22 @@ describe("the update button in Settings", () => {
 
   describe("what a requested check leads to", () => {
     const found = {
+      visible: true,
       nativeUpdate: "none",
       network: "unmetered",
       bundleAvailable: false,
       bundleDownloaded: false,
       checkFailed: false,
     } as const;
+
+    it("leads nowhere and tells nobody with Wave behind, whatever it found", () => {
+      for (const nativeUpdate of ["none", "available", "downloaded"] as const) {
+        assert.deepEqual(afterRequestedCheck({ ...found, nativeUpdate, visible: false }), {
+          next: "none",
+          outcome: null,
+        });
+      }
+    });
 
     it("installs an APK already on the phone", () => {
       assert.deepEqual(afterRequestedCheck({ ...found, nativeUpdate: "downloaded" }), {
@@ -710,7 +810,9 @@ describe("the update button in Settings", () => {
     });
 
     it("shows the percentage of any download", () => {
-      assert.equal(updateButtonLook({ updateRequest: "none", downloadPercent: 42 }), 42);
+      assert.deepEqual(updateButtonLook({ updateRequest: "none", downloadPercent: 42 }), {
+        downloading: 42,
+      });
     });
 
     it("rests otherwise", () => {

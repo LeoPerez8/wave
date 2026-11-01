@@ -26,11 +26,17 @@ class SelfInstallModule : Module() {
   override fun definition() = ModuleDefinition {
     Name("WaveSelfInstall")
 
-    Events("onApkDownloadProgress", "onInstallRefused")
+    Events("onApkDownloadProgress", "onInstallRefused", "onInstallAbandoned")
 
-    OnCreate { SelfInstaller.onInstallRefused = { sendEvent("onInstallRefused", emptyMap<String, Any>()) } }
+    OnCreate {
+      SelfInstaller.onInstallRefused = { sendEvent("onInstallRefused", emptyMap<String, Any>()) }
+      SelfInstaller.onInstallAbandoned = { failed -> sendEvent("onInstallAbandoned", mapOf("failed" to failed)) }
+    }
 
-    OnDestroy { SelfInstaller.onInstallRefused = null }
+    OnDestroy {
+      SelfInstaller.onInstallRefused = null
+      SelfInstaller.onInstallAbandoned = null
+    }
 
     // Async, as they're binder calls and preference reads and Wave asks at every AppState change.
     AsyncFunction("installAccess") { SelfInstaller.access(context).policyName }
@@ -47,10 +53,10 @@ class SelfInstallModule : Module() {
 
     Function("openPermissionScreen") { SelfInstaller.openPermissionScreen(context) }
 
-    AsyncFunction("downloadApk") { url: String, version: String, size: Double, sha256: String, onMobileData: Boolean, promise: Promise ->
+    AsyncFunction("downloadApk") { url: String, version: String, size: Double, sha256: String, allowMetered: Boolean, promise: Promise ->
       val context = context
       inBackground(promise) {
-        SelfInstaller.download(context, url, version, size.toLong(), sha256, onMobileData) { percent ->
+        SelfInstaller.download(context, url, version, size.toLong(), sha256, allowMetered) { percent ->
           sendEvent("onApkDownloadProgress", mapOf("percent" to percent))
         }
       }

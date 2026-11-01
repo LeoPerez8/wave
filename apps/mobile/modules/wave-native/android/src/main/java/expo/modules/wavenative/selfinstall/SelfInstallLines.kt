@@ -69,6 +69,9 @@ private fun yesNo(value: Boolean) = if (value) "yes" else "no"
  */
 fun keepsApkAfter(status: Int): Boolean = status == -1 || status == 3 || status == 0
 
+/** Whether the session was declined or dropped: no failure of the file's, and no more will come of it. */
+fun isInstallAbandoned(status: Int): Boolean = status == 3
+
 /** How far a download is, in whole percent: what the update button in Settings shows. */
 fun downloadPercent(done: Long, size: Long): Int =
   if (size <= 0) 0 else (done.toDouble() / size * 100).toInt().coerceIn(0, 100)

@@ -78,6 +78,11 @@ const network = (): UpdateNetwork => {
 /** What the last check found, which the download and the install act on. */
 let latestApk: LatestApk | null = null;
 
+const needInstaller = (): NonNullable<typeof WaveSelfInstall> => {
+  if (WaveSelfInstall === null) throw new Error("No installer in this build");
+  return WaveSelfInstall;
+};
+
 const needLatestApk = (): LatestApk => {
   if (latestApk === null) throw new Error("No APK found yet");
   return latestApk;
@@ -146,11 +151,10 @@ const refreshInstallAccess = async (): Promise<void> => {
   }
 };
 
-const downloadLatestApk = (onMobileData: boolean): Effect.Effect<boolean, unknown> =>
+const downloadLatestApk = (allowMetered: boolean): Effect.Effect<boolean, unknown> =>
   Effect.tryPromise(() => {
-    if (WaveSelfInstall === null) throw new Error("No installer in this build");
     const { url, version, size, sha256 } = needLatestApk();
-    return WaveSelfInstall.downloadApk(url, version, size, sha256, onMobileData);
+    return needInstaller().downloadApk(url, version, size, sha256, allowMetered);
   });
 
 const askMobileData = (): Promise<boolean> => {
@@ -178,20 +182,16 @@ const runner = createUpdateRunner({
       return Updates.reloadAsync();
     }),
     checkNative,
-    downloadApk: downloadLatestApk(false),
-    downloadApkOnMobileData: downloadLatestApk(true),
+    downloadApk: downloadLatestApk,
     askMobileData: Effect.tryPromise(askMobileData),
     // Coming back from Android's screen brings Wave to the front, which asks the policy again.
-    openInstallPermission: Effect.try(() => {
-      if (WaveSelfInstall === null) throw new Error("No installer in this build");
-      WaveSelfInstall.openPermissionScreen();
-    }),
+    openInstallPermission: Effect.try(() => needInstaller().openPermissionScreen()),
     installApk: Effect.tryPromise(() => {
-      if (WaveSelfInstall === null) throw new Error("No installer in this build");
+      const installer = needInstaller();
       // The install takes the waiting lines with it.
       flushAppLogNow();
       const { version, sha256 } = needLatestApk();
-      return WaveSelfInstall.install(version, sha256);
+      return installer.install(version, sha256);
     }),
     offeredApkVersion: () => latestApk?.version ?? null,
   },
@@ -212,14 +212,16 @@ WaveSelfInstall?.addListener("onApkDownloadProgress", ({ percent }) =>
   runner.downloadProgress(percent),
 );
 WaveSelfInstall?.addListener("onInstallRefused", runner.installRefused);
+WaveSelfInstall?.addListener("onInstallAbandoned", ({ failed }) => runner.installAbandoned(failed));
 
 const reconsiderWithFreshAccess = (): void => {
   void refreshInstallAccess().then(runner.reconsider);
 };
 
 /**
- * What "Update the app" does, wherever it's offered: installs the downloaded APK now, or opens
- * Android's permission screen first. It's the only thing that installs an APK.
+ * A tap on the "Update the app" pill: installs the downloaded APK now, or opens Android's permission
+ * screen first. Nothing installs but from a tap, this one or the update button's (`tapUpdateButton`),
+ * whose check or download becomes one when it ends with Wave still in front.
  */
 export const installAppUpdate = (): void => {
   runner.requestInstall();
@@ -267,8 +269,11 @@ export const startAppUpdates = (): void => {
       stopFollowingPlayer ??= playbackState.subscribe(runner.reconsider);
     }
   };
-  AppState.addEventListener("change", () => {
+  AppState.addEventListener("change", (appState) => {
     followPlayerIfHidden();
+    // On the spot, as a quick return could beat the fresh answers and hide that Wave ever left.
+    if (appState === "active") runner.cameToFront();
+    else runner.reconsider();
     reconsiderWithFreshAccess();
   });
   followPlayerIfHidden();
